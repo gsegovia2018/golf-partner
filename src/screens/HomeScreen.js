@@ -1,5 +1,5 @@
-import React, { useEffect, useState, useCallback, useRef } from 'react';
-import { View, Text, TouchableOpacity, StyleSheet, ScrollView, Switch, Alert, FlatList } from 'react-native';
+import React, { useEffect, useState, useCallback } from 'react';
+import { View, Text, TouchableOpacity, StyleSheet, ScrollView, Switch, Alert, FlatList, Platform } from 'react-native';
 import { Feather } from '@expo/vector-icons';
 
 import { useTheme } from '../theme/ThemeContext';
@@ -42,23 +42,24 @@ export default function HomeScreen({ navigation }) {
     setTournament(null);
   }
 
-  function confirmDelete(t) {
-    Alert.alert('Delete Tournament', `Delete "${t.name}"? This cannot be undone.`, [
-      { text: 'Cancel', style: 'cancel' },
-      {
-        text: 'Delete', style: 'destructive',
-        onPress: async () => {
-          try {
-            await deleteTournament(t.id);
-            const all = await loadAllTournaments();
-            setAllTournaments(all);
-            setTournament(null);
-          } catch (err) {
-            Alert.alert('Error', err.message ?? 'Could not delete tournament');
-          }
-        },
-      },
-    ]);
+  async function confirmDelete(t) {
+    const confirmed = Platform.OS === 'web'
+      ? window.confirm(`Delete "${t.name}"? This cannot be undone.`)
+      : await new Promise((resolve) => Alert.alert(
+          'Delete Tournament', `Delete "${t.name}"? This cannot be undone.`,
+          [{ text: 'Cancel', style: 'cancel', onPress: () => resolve(false) },
+           { text: 'Delete', style: 'destructive', onPress: () => resolve(true) }],
+        ));
+    if (!confirmed) return;
+    try {
+      await deleteTournament(t.id);
+      const all = await loadAllTournaments();
+      setAllTournaments(all);
+      setTournament(null);
+    } catch (err) {
+      if (Platform.OS === 'web') window.alert(err.message ?? 'Could not delete tournament');
+      else Alert.alert('Error', err.message ?? 'Could not delete tournament');
+    }
   }
 
   const s = makeStyles(theme);
@@ -109,7 +110,7 @@ export default function HomeScreen({ navigation }) {
                 const played = t.rounds.filter((r) => r.scores && Object.keys(r.scores).length > 0).length;
                 const isActive = played < t.rounds.length;
                 return (
-                  <View key={t.id}>
+                  <View key={t.id} style={s.tournamentCardWrapper}>
                     <TouchableOpacity style={s.tournamentCard} onPress={() => selectTournament(t.id)} activeOpacity={0.7}>
                       <View style={s.tournamentCardLeft}>
                         <View style={s.tournamentCardHeader}>
@@ -128,9 +129,9 @@ export default function HomeScreen({ navigation }) {
                       <View style={s.tournamentCardRight}>
                         <Feather name="chevron-right" size={18} color={theme.text.muted} />
                       </View>
-                      <TouchableOpacity style={s.deleteCardBtn} onPress={() => confirmDelete(t)} hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}>
-                        <Feather name="trash-2" size={14} color={theme.destructive} />
-                      </TouchableOpacity>
+                    </TouchableOpacity>
+                    <TouchableOpacity style={s.deleteCardBtn} onPress={() => confirmDelete(t)} hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}>
+                      <Feather name="trash-2" size={14} color={theme.destructive} />
                     </TouchableOpacity>
                   </View>
                 );
@@ -577,6 +578,7 @@ const makeStyles = (t) => StyleSheet.create({
   libraryBtnText: { fontFamily: 'PlusJakartaSans-SemiBold', color: t.text.secondary, fontSize: 13 },
 
   // Delete
+  tournamentCardWrapper: { position: 'relative' },
   deleteCardBtn: { position: 'absolute', top: 8, right: 8, padding: 6 },
   deleteBtn: {
     borderRadius: 12, borderWidth: 1, borderColor: t.destructive + '44',

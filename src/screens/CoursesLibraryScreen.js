@@ -1,6 +1,6 @@
 import React, { useCallback, useState } from 'react';
 import {
-  ActivityIndicator, Alert, ScrollView, StyleSheet,
+  ActivityIndicator, Alert, Platform, ScrollView, StyleSheet,
   Text, TextInput, TouchableOpacity, View,
 } from 'react-native';
 import { useFocusEffect } from '@react-navigation/native';
@@ -49,20 +49,21 @@ export default function CoursesLibraryScreen({ navigation }) {
   }
 
   async function remove(c) {
-    Alert.alert('Remove Course', `Remove "${c.name}" from the library?`, [
-      { text: 'Cancel', style: 'cancel' },
-      {
-        text: 'Remove', style: 'destructive',
-        onPress: async () => {
-          try {
-            await deleteCourse(c.id);
-            await load();
-          } catch (err) {
-            Alert.alert('Error', err.message ?? 'Could not delete course');
-          }
-        },
-      },
-    ]);
+    const confirmed = Platform.OS === 'web'
+      ? window.confirm(`Remove "${c.name}" from the library?`)
+      : await new Promise((resolve) => Alert.alert(
+          'Remove Course', `Remove "${c.name}" from the library?`,
+          [{ text: 'Cancel', style: 'cancel', onPress: () => resolve(false) },
+           { text: 'Remove', style: 'destructive', onPress: () => resolve(true) }],
+        ));
+    if (!confirmed) return;
+    try {
+      await deleteCourse(c.id);
+      await load();
+    } catch (err) {
+      if (Platform.OS === 'web') window.alert(err.message ?? 'Could not delete course');
+      else Alert.alert('Error', err.message ?? 'Could not delete course');
+    }
   }
 
   return (

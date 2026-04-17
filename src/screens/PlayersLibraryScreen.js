@@ -1,6 +1,6 @@
 import React, { useCallback, useState } from 'react';
 import {
-  ActivityIndicator, Alert, ScrollView, StyleSheet,
+  ActivityIndicator, Alert, Platform, ScrollView, StyleSheet,
   Text, TextInput, TouchableOpacity, View,
 } from 'react-native';
 import { useFocusEffect, useNavigation } from '@react-navigation/native';
@@ -63,20 +63,21 @@ export default function PlayersLibraryScreen() {
   }
 
   async function remove(p) {
-    Alert.alert('Remove Player', `Remove ${p.name} from the library?`, [
-      { text: 'Cancel', style: 'cancel' },
-      {
-        text: 'Remove', style: 'destructive',
-        onPress: async () => {
-          try {
-            await deletePlayer(p.id);
-            await load();
-          } catch (err) {
-            Alert.alert('Error', err.message ?? 'Could not delete player');
-          }
-        },
-      },
-    ]);
+    const confirmed = Platform.OS === 'web'
+      ? window.confirm(`Remove ${p.name} from the library?`)
+      : await new Promise((resolve) => Alert.alert(
+          'Remove Player', `Remove ${p.name} from the library?`,
+          [{ text: 'Cancel', style: 'cancel', onPress: () => resolve(false) },
+           { text: 'Remove', style: 'destructive', onPress: () => resolve(true) }],
+        ));
+    if (!confirmed) return;
+    try {
+      await deletePlayer(p.id);
+      await load();
+    } catch (err) {
+      if (Platform.OS === 'web') window.alert(err.message ?? 'Could not delete player');
+      else Alert.alert('Error', err.message ?? 'Could not delete player');
+    }
   }
 
   return (
