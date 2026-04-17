@@ -20,6 +20,8 @@ export default function HomeScreen({ navigation }) {
   const [activeRoundTab, setActiveRoundTab] = useState(0);
   const [selectedRound, setSelectedRound] = useState(0);
   const [showSettings, setShowSettings] = useState(false);
+  const [leaderboardBestBall, setLeaderboardBestBall] = useState(false);
+  const [roundBestBall, setRoundBestBall] = useState(true);
 
   useEffect(() => {
     const unsubscribe = navigation.addListener('focus', async () => {
@@ -145,8 +147,6 @@ export default function HomeScreen({ navigation }) {
   }
 
   const settings = { ...DEFAULT_SETTINGS, ...tournament.settings };
-  const [leaderboardBestBall, setLeaderboardBestBall] = useState(false);
-  const [roundBestBall, setRoundBestBall] = useState(true);
 
   const completedRounds = tournament.rounds.filter(
     (r) => r.scores && Object.keys(r.scores).length > 0,
