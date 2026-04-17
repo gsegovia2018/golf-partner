@@ -4,7 +4,7 @@ import {
   StyleSheet, ScrollView,
 } from 'react-native';
 import { Feather } from '@expo/vector-icons';
-import Animated, { FadeInDown, FadeIn } from 'react-native-reanimated';
+
 import { useTheme } from '../theme/ThemeContext';
 import { loadTournament, saveTournament, DEFAULT_SETTINGS, randomPairs } from '../store/tournamentStore';
 
@@ -158,7 +158,7 @@ export default function EditTournamentScreen({ navigation }) {
 
       <ScrollView style={s.container} contentContainerStyle={s.content} automaticallyAdjustKeyboardInsets>
         {/* Base handicap indexes */}
-        <Animated.View entering={FadeInDown.delay(50).duration(300).springify()}>
+        <View>
           <Text style={s.sectionTitle}>Handicap Index</Text>
           <Text style={s.hint}>Base index used when no slope is set for a course.</Text>
           {players.map((p, i) => (
@@ -177,11 +177,11 @@ export default function EditTournamentScreen({ navigation }) {
               <Text style={s.hcpLabel}>index</Text>
             </View>
           ))}
-        </Animated.View>
+        </View>
 
         {/* Per-round playing handicaps */}
         {rounds.map((r, ri) => (
-          <Animated.View key={r.id} entering={FadeInDown.delay(100 + ri * 50).duration(300).springify()}>
+          <View key={r.id}>
             <View style={s.roundHeader}>
               <Text style={s.sectionTitle}>Round {ri + 1}{r.slope ? `  --  Slope ${r.slope}` : ''}</Text>
               {rounds.length > 1 && (
@@ -254,17 +254,17 @@ export default function EditTournamentScreen({ navigation }) {
                 </View>
               </TouchableOpacity>
             </View>
-          </Animated.View>
+          </View>
         ))}
 
-        <Animated.View entering={FadeInDown.delay(200).duration(300).springify()}>
+        <View>
           <TouchableOpacity style={s.addRoundBtn} onPress={addRound}>
             <Feather name="plus-circle" size={16} color={theme.accent.primary} style={{ marginRight: 8 }} />
             <Text style={s.addRoundBtnText}>Add Round</Text>
           </TouchableOpacity>
-        </Animated.View>
+        </View>
 
-        <Animated.View entering={FadeInDown.delay(250).duration(300).springify()}>
+        <View>
           <Text style={s.sectionTitle}>Scoring Mode</Text>
           <View style={s.modeRow}>
             {['stableford', 'bestball'].map((mode) => (
@@ -317,14 +317,14 @@ export default function EditTournamentScreen({ navigation }) {
               </View>
             </View>
           )}
-        </Animated.View>
+        </View>
       </ScrollView>
     </View>
   );
 }
 
 const makeStyles = (theme) => StyleSheet.create({
-  screen: { flex: 1, backgroundColor: theme.bg.primary },
+  screen: { flex: 1, backgroundColor: theme.bg.primary, overflow: 'hidden' },
   header: {
     flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
     paddingHorizontal: 20, paddingTop: 16, paddingBottom: 12, backgroundColor: theme.bg.primary,

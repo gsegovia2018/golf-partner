@@ -5,7 +5,7 @@ import {
 } from 'react-native';
 import { useFocusEffect } from '@react-navigation/native';
 import { Feather } from '@expo/vector-icons';
-import Animated, { FadeInDown, FadeIn } from 'react-native-reanimated';
+
 import { useTheme } from '../theme/ThemeContext';
 import { deleteCourse, fetchCourses, upsertCourse } from '../store/libraryStore';
 
@@ -100,7 +100,7 @@ export default function CoursesLibraryScreen({ navigation }) {
               </View>
             )
             : courses.map((c, index) => (
-              <Animated.View key={c.id} entering={FadeInDown.delay(index * 50).duration(300).springify()}>
+              <View key={c.id}>
                 <View style={s.row}>
                   <TouchableOpacity
                     style={s.rowLeft}
@@ -124,7 +124,7 @@ export default function CoursesLibraryScreen({ navigation }) {
                     <Feather name="trash-2" size={16} color={theme.destructive} />
                   </TouchableOpacity>
                 </View>
-              </Animated.View>
+              </View>
             ))}
       </ScrollView>
     </View>
@@ -132,7 +132,7 @@ export default function CoursesLibraryScreen({ navigation }) {
 }
 
 const makeStyles = (theme) => StyleSheet.create({
-  container: { flex: 1, backgroundColor: theme.bg.primary },
+  container: { flex: 1, backgroundColor: theme.bg.primary, overflow: 'hidden' },
   header: {
     flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
     paddingHorizontal: 20, paddingTop: 16, paddingBottom: 12, backgroundColor: theme.bg.primary,

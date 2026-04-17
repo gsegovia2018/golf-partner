@@ -5,7 +5,7 @@ import {
 } from 'react-native';
 import { useFocusEffect, useNavigation } from '@react-navigation/native';
 import { Feather } from '@expo/vector-icons';
-import Animated, { FadeInDown, FadeIn } from 'react-native-reanimated';
+
 import { useTheme } from '../theme/ThemeContext';
 import { deletePlayer, fetchPlayers, upsertPlayer } from '../store/libraryStore';
 
@@ -129,7 +129,7 @@ export default function PlayersLibraryScreen() {
               </View>
             )
             : players.map((p, index) => (
-              <Animated.View key={p.id} entering={FadeInDown.delay(index * 50).duration(300).springify()}>
+              <View key={p.id}>
                 <View style={s.row}>
                   <View style={s.rowLeft}>
                     <Text style={s.playerName}>{p.name}</Text>
@@ -142,7 +142,7 @@ export default function PlayersLibraryScreen() {
                     <Feather name="trash-2" size={16} color={theme.destructive} />
                   </TouchableOpacity>
                 </View>
-              </Animated.View>
+              </View>
             ))}
       </ScrollView>
     </View>
@@ -150,7 +150,7 @@ export default function PlayersLibraryScreen() {
 }
 
 const makeStyles = (theme) => StyleSheet.create({
-  container: { flex: 1, backgroundColor: theme.bg.primary },
+  container: { flex: 1, backgroundColor: theme.bg.primary, overflow: 'hidden' },
   header: {
     flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
     paddingHorizontal: 20, paddingTop: 16, paddingBottom: 12, backgroundColor: theme.bg.primary,

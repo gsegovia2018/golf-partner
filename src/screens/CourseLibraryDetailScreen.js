@@ -4,7 +4,7 @@ import {
   Text, TextInput, TouchableOpacity, View,
 } from 'react-native';
 import { Feather } from '@expo/vector-icons';
-import Animated, { FadeInDown, FadeIn } from 'react-native-reanimated';
+
 import { useTheme } from '../theme/ThemeContext';
 import { fetchCourses, saveCourseHoles, upsertCourse } from '../store/libraryStore';
 
@@ -123,7 +123,7 @@ export default function CourseLibraryDetailScreen({ navigation, route }) {
 
         <Text style={s.sectionTitle}>Holes  ·  Par {totalPar}</Text>
 
-        <Animated.View entering={FadeIn.duration(300)}>
+        <View>
           <View style={s.tableCard}>
             <View style={s.tableHeaderRow}>
               <Text style={[s.col, s.holeCol, s.tableHeaderText]}>Hole</Text>
@@ -132,7 +132,7 @@ export default function CourseLibraryDetailScreen({ navigation, route }) {
             </View>
 
             {holes.map((hole, i) => (
-              <Animated.View key={hole.number} entering={FadeInDown.delay(i * 50).duration(300).springify()}>
+              <View key={hole.number}>
                 <View style={[s.tableRow, i % 2 === 1 && s.altRow]}>
                   <Text style={[s.col, s.holeCol, s.holeNum]}>{hole.number}</Text>
                   <View style={[s.col, s.parCol, s.parPicker]}>
@@ -157,10 +157,10 @@ export default function CourseLibraryDetailScreen({ navigation, route }) {
                     onChangeText={(v) => setSI(i, v)}
                   />
                 </View>
-              </Animated.View>
+              </View>
             ))}
           </View>
-        </Animated.View>
+        </View>
 
         <TouchableOpacity
           style={[s.saveBtn, saving && s.saveBtnDisabled]}

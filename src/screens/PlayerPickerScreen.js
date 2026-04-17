@@ -5,7 +5,7 @@ import {
 } from 'react-native';
 import { useFocusEffect } from '@react-navigation/native';
 import { Feather } from '@expo/vector-icons';
-import Animated, { FadeInDown, FadeIn } from 'react-native-reanimated';
+
 import { useTheme } from '../theme/ThemeContext';
 import { fetchPlayers, upsertPlayer } from '../store/libraryStore';
 import { setPendingPlayers } from '../lib/selectionBridge';
@@ -111,9 +111,9 @@ export default function PlayerPickerScreen({ navigation, route }) {
               const picked = pickedIds.includes(p.id);
               const disabled = alreadyAdded || (!picked && pickedIds.length >= maxSelectable);
               return (
-                <Animated.View
+                <View
                   key={p.id}
-                  entering={FadeInDown.delay(index * 50).duration(300).springify()}
+                 
                 >
                   <TouchableOpacity
                     style={[s.row, alreadyAdded && s.rowAdded, picked && s.rowPicked]}
@@ -135,26 +135,26 @@ export default function PlayerPickerScreen({ navigation, route }) {
                         )
                         : <View style={s.emptyCircle} />}
                   </TouchableOpacity>
-                </Animated.View>
+                </View>
               );
             })}
       </ScrollView>
 
       {pickedIds.length > 0 && (
-        <Animated.View entering={FadeIn.duration(250)} style={s.footer}>
+        <View style={s.footer}>
           <TouchableOpacity style={s.confirmBtn} onPress={confirm}>
             <Text style={s.confirmBtnText}>
               Add {pickedIds.length} Player{pickedIds.length !== 1 ? 's' : ''}
             </Text>
           </TouchableOpacity>
-        </Animated.View>
+        </View>
       )}
     </View>
   );
 }
 
 const makeStyles = (theme) => StyleSheet.create({
-  container: { flex: 1, backgroundColor: theme.bg.primary },
+  container: { flex: 1, backgroundColor: theme.bg.primary, overflow: 'hidden' },
   header: {
     flexDirection: 'row',
     alignItems: 'center',
