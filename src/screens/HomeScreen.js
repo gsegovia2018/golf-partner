@@ -5,7 +5,7 @@ import { Feather } from '@expo/vector-icons';
 import { useTheme } from '../theme/ThemeContext';
 import { ShareableLeaderboard, shareView } from '../components/ShareableCard';
 import {
-  loadTournament, loadAllTournaments, saveTournament,
+  loadTournament, loadAllTournaments,
   setActiveTournament, clearActiveTournament,
   deleteTournament,
   tournamentLeaderboard, tournamentBestWorstLeaderboard,
@@ -144,18 +144,13 @@ export default function HomeScreen({ navigation }) {
   }
 
   const settings = { ...DEFAULT_SETTINGS, ...tournament.settings };
-  const isBestBall = settings.scoringMode === 'bestball';
-
-  async function toggleScoringMode() {
-    const next = { ...tournament, settings: { ...settings, scoringMode: isBestBall ? 'stableford' : 'bestball' } };
-    await saveTournament(next);
-    setTournament(next);
-  }
+  const [leaderboardBestBall, setLeaderboardBestBall] = useState(false);
+  const [roundBestBall, setRoundBestBall] = useState(true);
 
   const completedRounds = tournament.rounds.filter(
     (r) => r.scores && Object.keys(r.scores).length > 0,
   );
-  const leaderboard = isBestBall
+  const leaderboard = leaderboardBestBall
     ? tournamentBestWorstLeaderboard(tournament)
     : tournamentLeaderboard(tournament);
 
@@ -165,8 +160,8 @@ export default function HomeScreen({ navigation }) {
         <View style={s.headerLeft}>
           <TouchableOpacity onPress={goToList} style={s.backBtn} activeOpacity={0.7}>
             <Feather name="chevron-left" size={20} color={theme.accent.primary} />
-            <Text style={s.backBtnText}>All</Text>
           </TouchableOpacity>
+          <Text style={s.headerTitle} numberOfLines={1}>{tournament.name}</Text>
         </View>
         <View style={s.headerActions}>
           <TouchableOpacity style={s.iconBtn} onPress={toggle} activeOpacity={0.7}>
@@ -176,20 +171,6 @@ export default function HomeScreen({ navigation }) {
       </View>
 
       <ScrollView style={s.scrollView} contentContainerStyle={s.content}>
-      <View>
-        <Text style={s.tournamentDetailName}>{tournament.name}</Text>
-      </View>
-
-      <View style={s.modeToggle}>
-        <Text style={[s.modeLabel, !isBestBall && s.modeLabelActive]}>Stableford</Text>
-        <Switch
-          value={isBestBall}
-          onValueChange={toggleScoringMode}
-          trackColor={{ false: theme.border.default, true: theme.accent.primary }}
-          thumbColor="#fff"
-        />
-        <Text style={[s.modeLabel, isBestBall && s.modeLabelActive]}>Best Ball</Text>
-      </View>
 
       <View style={s.card}>
         <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }}>
@@ -197,6 +178,16 @@ export default function HomeScreen({ navigation }) {
           <TouchableOpacity onPress={() => shareView(leaderboardRef)} activeOpacity={0.7} hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}>
             <Feather name="share-2" size={16} color={theme.accent.primary} />
           </TouchableOpacity>
+        </View>
+        <View style={s.cardModeToggle}>
+          <Text style={[s.modeLabel, !leaderboardBestBall && s.modeLabelActive]}>Stableford</Text>
+          <Switch
+            value={leaderboardBestBall}
+            onValueChange={setLeaderboardBestBall}
+            trackColor={{ false: theme.border.default, true: theme.accent.primary }}
+            thumbColor="#fff"
+          />
+          <Text style={[s.modeLabel, leaderboardBestBall && s.modeLabelActive]}>Best Ball</Text>
         </View>
         {leaderboard.map((entry, i) => {
           const rankColors = [theme.semantic.rank.gold, theme.semantic.rank.silver, theme.semantic.rank.bronze];
@@ -208,7 +199,7 @@ export default function HomeScreen({ navigation }) {
               </View>
               <Text style={[s.playerName, i === 0 && { color: theme.text.primary, fontFamily: 'PlusJakartaSans-Bold' }]}>{entry.player.name}</Text>
               <Text style={[s.points, i === 0 && { fontSize: 18 }]}>{entry.points} pts</Text>
-              {isBestBall
+              {leaderboardBestBall
                 ? <Text style={s.subStat}>{entry.bestWins + entry.worstWins} holes</Text>
                 : <Text style={s.subStat}>{entry.strokes} str</Text>}
             </View>
@@ -219,6 +210,16 @@ export default function HomeScreen({ navigation }) {
       {completedRounds.length > 0 && (
         <View style={s.card}>
           <Text style={s.cardTitle}>ROUND SCORES</Text>
+          <View style={s.cardModeToggle}>
+            <Text style={[s.modeLabel, !roundBestBall && s.modeLabelActive]}>Stableford</Text>
+            <Switch
+              value={roundBestBall}
+              onValueChange={setRoundBestBall}
+              trackColor={{ false: theme.border.default, true: theme.accent.primary }}
+              thumbColor="#fff"
+            />
+            <Text style={[s.modeLabel, roundBestBall && s.modeLabelActive]}>Best Ball</Text>
+          </View>
           <FlatList
             horizontal
             showsHorizontalScrollIndicator={false}
@@ -242,7 +243,7 @@ export default function HomeScreen({ navigation }) {
             return round ? (
               <>
                 <Text style={s.tabRoundTitle}>{round.courseName}</Text>
-                {isBestBall
+                {roundBestBall
                   ? <BestBallRoundCard round={round} players={tournament.players} settings={settings} theme={theme} s={s} />
                   : <StablefordRoundCard round={round} players={tournament.players} theme={theme} s={s} />}
               </>
@@ -419,8 +420,8 @@ const makeStyles = (t) => StyleSheet.create({
   headerActions: { flexDirection: 'row', gap: 8 },
   title: { fontFamily: 'PlusJakartaSans-ExtraBold', fontSize: 28, color: t.text.primary, letterSpacing: -0.5 },
   subtitle: { fontFamily: 'PlusJakartaSans-Regular', fontSize: 12, color: t.text.muted, marginTop: 2 },
-  backBtn: { flexDirection: 'row', alignItems: 'center', gap: 4 },
-  backBtnText: { fontFamily: 'PlusJakartaSans-SemiBold', color: t.accent.primary, fontSize: 16 },
+  backBtn: { flexDirection: 'row', alignItems: 'center' },
+  headerTitle: { fontFamily: 'PlusJakartaSans-Bold', fontSize: 18, color: t.text.primary, flexShrink: 1 },
   iconBtn: {
     width: 36, height: 36, borderRadius: 10,
     backgroundColor: t.isDark ? t.bg.secondary : t.bg.card,
@@ -486,14 +487,9 @@ const makeStyles = (t) => StyleSheet.create({
   emptyTitle: { fontFamily: 'PlusJakartaSans-Bold', color: t.text.primary, fontSize: 18 },
   emptySubtitle: { fontFamily: 'PlusJakartaSans-Regular', color: t.text.muted, fontSize: 14, textAlign: 'center' },
 
-  // Tournament detail
-  tournamentDetailName: {
-    fontFamily: 'PlusJakartaSans-Bold', fontSize: 18, color: t.text.secondary, marginBottom: 16,
-  },
-
-  // Scoring mode toggle
-  modeToggle: { flexDirection: 'row', alignItems: 'center', gap: 12, marginBottom: 20 },
-  modeLabel: { fontFamily: 'PlusJakartaSans-SemiBold', color: t.text.muted, fontSize: 13 },
+  // Scoring mode toggle (inside cards)
+  cardModeToggle: { flexDirection: 'row', alignItems: 'center', gap: 10, marginBottom: 14 },
+  modeLabel: { fontFamily: 'PlusJakartaSans-SemiBold', color: t.text.muted, fontSize: 12 },
   modeLabelActive: { color: t.text.primary },
 
   // Cards
