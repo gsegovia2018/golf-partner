@@ -1,8 +1,9 @@
-import React, { useEffect, useState, useCallback } from 'react';
+import React, { useEffect, useState, useCallback, useRef } from 'react';
 import { View, Text, TouchableOpacity, StyleSheet, ScrollView, Switch, Alert, FlatList } from 'react-native';
 import { Feather } from '@expo/vector-icons';
 
 import { useTheme } from '../theme/ThemeContext';
+import { ShareableLeaderboard, shareView } from '../components/ShareableCard';
 import {
   loadTournament, loadAllTournaments, saveTournament,
   setActiveTournament, clearActiveTournament,
@@ -61,6 +62,7 @@ export default function HomeScreen({ navigation }) {
   }
 
   const s = makeStyles(theme);
+  const leaderboardRef = useRef();
 
   if (!tournament) {
     return (
@@ -189,7 +191,12 @@ export default function HomeScreen({ navigation }) {
       </View>
 
       <View style={s.card}>
-        <Text style={s.cardTitle}>LEADERBOARD</Text>
+        <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }}>
+          <Text style={s.cardTitle}>LEADERBOARD</Text>
+          <TouchableOpacity onPress={() => shareView(leaderboardRef)} activeOpacity={0.7} hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}>
+            <Feather name="share-2" size={16} color={theme.accent.primary} />
+          </TouchableOpacity>
+        </View>
         {leaderboard.map((entry, i) => {
           const rankColors = [theme.semantic.rank.gold, theme.semantic.rank.silver, theme.semantic.rank.bronze];
           const rankColor = rankColors[i] || theme.text.muted;
@@ -311,6 +318,19 @@ export default function HomeScreen({ navigation }) {
           <Feather name="settings" size={16} color={theme.accent.primary} />
           <Text style={s.secondaryBtnText}>Edit Tournament</Text>
         </TouchableOpacity>
+
+        <TouchableOpacity
+          style={s.secondaryBtn}
+          onPress={() => navigation.navigate('Stats')}
+          activeOpacity={0.7}
+        >
+          <Feather name="bar-chart-2" size={16} color={theme.accent.primary} />
+          <Text style={s.secondaryBtnText}>Statistics</Text>
+        </TouchableOpacity>
+      </View>
+
+      <View style={{ position: 'absolute', left: -9999 }}>
+        <ShareableLeaderboard ref={leaderboardRef} tournamentName={tournament.name} leaderboard={leaderboard} />
       </View>
 
       <View style={s.libraryRow}>

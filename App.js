@@ -26,6 +26,7 @@ import CoursesLibraryScreen from './src/screens/CoursesLibraryScreen';
 import CourseLibraryDetailScreen from './src/screens/CourseLibraryDetailScreen';
 import PlayerPickerScreen from './src/screens/PlayerPickerScreen';
 import CoursePickerScreen from './src/screens/CoursePickerScreen';
+import StatsScreen from './src/screens/StatsScreen';
 
 const Stack = createStackNavigator();
 
@@ -58,6 +59,7 @@ function AppNavigator() {
         <Stack.Screen name="CourseLibraryDetail" component={CourseLibraryDetailScreen} />
         <Stack.Screen name="PlayerPicker" component={PlayerPickerScreen} />
         <Stack.Screen name="CoursePicker" component={CoursePickerScreen} />
+        <Stack.Screen name="Stats" component={StatsScreen} />
       </Stack.Navigator>
     </>
   );
