@@ -3,7 +3,7 @@ import {
   View, Text, TextInput, TouchableOpacity,
   StyleSheet, ScrollView, Alert,
 } from 'react-native';
-import Animated, { FadeInDown, FadeIn } from 'react-native-reanimated';
+
 import { Feather } from '@expo/vector-icons';
 import { useFocusEffect } from '@react-navigation/native';
 import { createTournament, saveTournament, randomPairs, DEFAULT_SETTINGS } from '../store/tournamentStore';
@@ -128,16 +128,16 @@ export default function SetupScreen({ navigation }) {
   return (
     <ScrollView style={s.container} contentContainerStyle={s.content} keyboardShouldPersistTaps="handled">
       {/* Header */}
-      <Animated.View entering={FadeIn.duration(300)} style={s.header}>
+      <View style={s.header}>
         <TouchableOpacity onPress={() => navigation.goBack()} style={s.backBtn}>
           <Feather name="chevron-left" size={22} color={theme.accent.primary} />
         </TouchableOpacity>
         <Text style={s.headerTitle}>New Tournament</Text>
         <View style={{ width: 22 }} />
-      </Animated.View>
+      </View>
 
       {/* Tournament Name */}
-      <Animated.View entering={FadeInDown.delay(100).duration(300).springify()}>
+      <View>
         <Text style={s.label}>Tournament Name</Text>
         <TextInput
           style={s.input}
@@ -147,10 +147,10 @@ export default function SetupScreen({ navigation }) {
           keyboardAppearance={theme.isDark ? 'dark' : 'light'}
           selectionColor={theme.accent.primary}
         />
-      </Animated.View>
+      </View>
 
       {/* Players */}
-      <Animated.View entering={FadeInDown.delay(200).duration(300).springify()}>
+      <View>
         <Text style={s.sectionTitle}>Players ({players.length}/4)</Text>
         {players.map((p) => (
           <View key={p.id} style={s.playerCard}>
@@ -174,10 +174,10 @@ export default function SetupScreen({ navigation }) {
             <Text style={s.pickBtnText}>Add Player from Library</Text>
           </TouchableOpacity>
         )}
-      </Animated.View>
+      </View>
 
       {/* Rounds */}
-      <Animated.View entering={FadeInDown.delay(300).duration(300).springify()}>
+      <View>
         <Text style={s.sectionTitle}>Rounds</Text>
         {rounds.map((r, i) => {
           const totalPar = r.holes.reduce((sum, h) => sum + h.par, 0);
@@ -248,10 +248,10 @@ export default function SetupScreen({ navigation }) {
           <Feather name="plus-circle" size={16} color={theme.accent.primary} style={{ marginRight: 6 }} />
           <Text style={s.addRoundBtnText}>Add Round</Text>
         </TouchableOpacity>
-      </Animated.View>
+      </View>
 
       {/* Scoring */}
-      <Animated.View entering={FadeInDown.delay(400).duration(300).springify()}>
+      <View>
         <Text style={s.sectionTitle}>Scoring</Text>
         <View style={s.modeRow}>
           {['stableford', 'bestball'].map((mode) => (
@@ -267,7 +267,7 @@ export default function SetupScreen({ navigation }) {
           ))}
         </View>
         {settings.scoringMode === 'bestball' && (
-          <Animated.View entering={FadeInDown.duration(250).springify()} style={s.valueRow}>
+          <View style={s.valueRow}>
             <View style={s.valueBlock}>
               <Text style={s.valueLabel}>Best Ball</Text>
               <TextInput
@@ -294,17 +294,17 @@ export default function SetupScreen({ navigation }) {
               />
               <Text style={s.valueSuffix}>pts / hole</Text>
             </View>
-          </Animated.View>
+          </View>
         )}
-      </Animated.View>
+      </View>
 
       {/* Start Button */}
-      <Animated.View entering={FadeInDown.delay(500).duration(300).springify()}>
+      <View>
         <TouchableOpacity style={s.primaryBtn} onPress={handleStart}>
           <Feather name="play" size={18} color={theme.isDark ? theme.accent.primary : theme.text.inverse} style={{ marginRight: 8 }} />
           <Text style={s.primaryBtnText}>Start Tournament</Text>
         </TouchableOpacity>
-      </Animated.View>
+      </View>
     </ScrollView>
   );
 }
@@ -314,6 +314,7 @@ function makeStyles(theme) {
     container: {
       flex: 1,
       backgroundColor: theme.bg.primary,
+      overflow: 'hidden',
     },
     content: {
       padding: 20,

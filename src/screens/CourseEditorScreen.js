@@ -4,7 +4,7 @@ import {
   StyleSheet, ScrollView,
 } from 'react-native';
 import { Feather } from '@expo/vector-icons';
-import Animated, { FadeInDown, FadeIn } from 'react-native-reanimated';
+
 import { useTheme } from '../theme/ThemeContext';
 import { updateCourseFromEditor } from '../store/libraryStore';
 
@@ -105,13 +105,13 @@ export default function CourseEditorScreen({ navigation, route }) {
       </View>
 
       <ScrollView style={s.container} contentContainerStyle={s.content} automaticallyAdjustKeyboardInsets>
-        <Animated.View entering={FadeInDown.delay(50).duration(300).springify()}>
+        <View>
           <Text style={s.title}>{courseName || `Round ${roundIndex + 1}`}</Text>
           <Text style={s.subtitle}>Total par: {totalPar}</Text>
-        </Animated.View>
+        </View>
 
         {/* Slope */}
-        <Animated.View entering={FadeInDown.delay(100).duration(300).springify()} style={s.slopeCard}>
+        <View style={s.slopeCard}>
           <View style={s.slopeRow}>
             <Text style={s.slopeLabel}>Course Slope</Text>
             <TextInput
@@ -127,11 +127,11 @@ export default function CourseEditorScreen({ navigation, route }) {
             />
             <Text style={s.slopeHint}>std 113</Text>
           </View>
-        </Animated.View>
+        </View>
 
         {/* Per-player playing handicaps */}
         {players.length > 0 && (
-          <Animated.View entering={FadeInDown.delay(150).duration(300).springify()} style={s.hcpSection}>
+          <View style={s.hcpSection}>
             <Text style={s.sectionTitle}>Playing Handicaps</Text>
             {slopeNum > 0 && (
               <Text style={s.hcpHint}>
@@ -163,11 +163,11 @@ export default function CourseEditorScreen({ navigation, route }) {
                 </View>
               );
             })}
-          </Animated.View>
+          </View>
         )}
 
         {/* Hole table */}
-        <Animated.View entering={FadeInDown.delay(200).duration(300).springify()}>
+        <View>
           <Text style={s.sectionTitle}>Holes</Text>
           <View style={s.tableCard}>
             <View style={s.headerRow}>
@@ -204,9 +204,9 @@ export default function CourseEditorScreen({ navigation, route }) {
               </View>
             ))}
           </View>
-        </Animated.View>
+        </View>
 
-        <Animated.View entering={FadeInDown.delay(250).duration(300).springify()}>
+        <View>
           <TouchableOpacity
             style={s.btn}
             onPress={async () => {
@@ -219,14 +219,14 @@ export default function CourseEditorScreen({ navigation, route }) {
             <Feather name="check" size={18} color={theme.isDark ? theme.accent.primary : theme.text.inverse} style={{ marginRight: 8 }} />
             <Text style={s.btnText}>Done</Text>
           </TouchableOpacity>
-        </Animated.View>
+        </View>
       </ScrollView>
     </View>
   );
 }
 
 const makeStyles = (theme) => StyleSheet.create({
-  screen: { flex: 1, backgroundColor: theme.bg.primary },
+  screen: { flex: 1, backgroundColor: theme.bg.primary, overflow: 'hidden' },
   header: {
     flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
     paddingHorizontal: 20, paddingTop: 16, paddingBottom: 12, backgroundColor: theme.bg.primary,

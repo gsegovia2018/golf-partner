@@ -3,7 +3,7 @@ import {
   View, Text, TextInput, TouchableOpacity,
   StyleSheet, ScrollView,
 } from 'react-native';
-import Animated, { FadeInDown, FadeIn } from 'react-native-reanimated';
+
 import { Feather } from '@expo/vector-icons';
 import {
   loadTournament, saveTournament,
@@ -135,7 +135,7 @@ export default function ScorecardScreen({ navigation, route }) {
       </View>
 
       {/* View toggle */}
-      <Animated.View entering={FadeIn.duration(300)} style={s.toggleBar}>
+      <View style={s.toggleBar}>
         <View style={s.togglePill}>
           <TouchableOpacity
             style={[s.toggleBtn, view === 'hole' && s.toggleBtnActive]}
@@ -150,7 +150,7 @@ export default function ScorecardScreen({ navigation, route }) {
             <Text style={[s.toggleText, view === 'grid' && s.toggleTextActive]}>All Holes</Text>
           </TouchableOpacity>
         </View>
-      </Animated.View>
+      </View>
 
       {view === 'hole' ? (
         <HoleView
@@ -198,7 +198,7 @@ function HoleView({ round, roundIndex, players, scores, notes, currentHole, hole
   return (
     <View style={s.flex}>
       {/* Hole header */}
-      <Animated.View entering={FadeInDown.duration(350).springify()} style={s.holeHeaderCard}>
+      <View style={s.holeHeaderCard}>
         <View style={s.holeHeaderLeft}>
           <Text style={s.holeHeaderRound}>{round.courseName} -- Round {roundIndex + 1}</Text>
           <View style={s.holeNumberRow}>
@@ -216,7 +216,7 @@ function HoleView({ round, roundIndex, players, scores, notes, currentHole, hole
             <Text style={s.holeMetaValue}>{hole.strokeIndex}</Text>
           </View>
         </View>
-      </Animated.View>
+      </View>
 
       {/* Hole navigation */}
       <View style={s.holeNav}>
@@ -282,7 +282,7 @@ function HoleView({ round, roundIndex, players, scores, notes, currentHole, hole
                 {isFirstOfPair && (
                   <Text style={[s.pairLabel, { color: pairColor, marginTop: idx === 0 ? 0 : 16 }]}>{pairLabelText}</Text>
                 )}
-                <Animated.View entering={FadeInDown.delay(idx * 60).duration(300)} style={[s.playerCard, { borderLeftColor: pairColor, borderLeftWidth: 3 }]}>
+                <View style={[s.playerCard, { borderLeftColor: pairColor, borderLeftWidth: 3 }]}>
                   <View style={s.playerCardLeft}>
                     <View style={[s.playerAvatar, { backgroundColor: pairColor }]}>
                       <Text style={s.playerAvatarText}>{player.name[0].toUpperCase()}</Text>
@@ -310,7 +310,7 @@ function HoleView({ round, roundIndex, players, scores, notes, currentHole, hole
                       <Feather name="plus" size={18} color={theme.text.primary} />
                     </TouchableOpacity>
                   </View>
-                </Animated.View>
+                </View>
               </React.Fragment>
             );
           });
@@ -398,7 +398,7 @@ function MatchPanel({ bbResult, currentHole, settings }) {
   const roundWinner = p1Round > p2Round ? 1 : p2Round > p1Round ? 2 : 0;
 
   return (
-    <Animated.View entering={FadeInDown.duration(300)} style={s.matchPanel}>
+    <View style={s.matchPanel}>
       {/* Column headers */}
       <View style={s.matchPanelHeaderRow}>
         <View style={s.matchPanelNameCol} />
@@ -431,7 +431,7 @@ function MatchPanel({ bbResult, currentHole, settings }) {
           {p2Round}
         </Text>
       </View>
-    </Animated.View>
+    </View>
   );
 }
 
@@ -441,10 +441,10 @@ function GridView({ round, roundIndex, players, scores, isBestBall, bbResult, se
 
   return (
     <ScrollView style={s.flex} contentContainerStyle={s.gridContent} automaticallyAdjustKeyboardInsets>
-      <Animated.View entering={FadeIn.duration(300)}>
+      <View>
         <Text style={s.title}>{round.courseName}</Text>
         <Text style={s.subtitle}>Round {roundIndex + 1}</Text>
-      </Animated.View>
+      </View>
 
       <ScrollView horizontal showsHorizontalScrollIndicator={false}>
         <View>
@@ -475,7 +475,7 @@ function GridView({ round, roundIndex, players, scores, isBestBall, bbResult, se
               ? [...pairs[0], ...pairs[1]].map((pp) => players.find((p) => p.id === pp.id)).filter(Boolean)
               : players;
             return (
-              <Animated.View key={hole.number} entering={FadeInDown.delay(holeIdx * 20).duration(200)} style={[s.holeRow, hole.number % 2 === 0 && s.altRow]}>
+              <View key={hole.number} style={[s.holeRow, hole.number % 2 === 0 && s.altRow]}>
                 <Text style={[s.cell, s.holeCell]}>{hole.number}</Text>
                 <Text style={[s.cell, s.parCell]}>{hole.par}</Text>
                 <Text style={[s.cell, s.siCell]}>{hole.strokeIndex}</Text>
@@ -511,7 +511,7 @@ function GridView({ round, roundIndex, players, scores, isBestBall, bbResult, se
                     </View>
                   );
                 })}
-              </Animated.View>
+              </View>
             );
           })}
 
@@ -569,7 +569,7 @@ function LiveMatchStrip({ bbResult, settings }) {
   const p2Round = roundTeamPts(bbResult, 2, bbVal, wbVal);
   const roundWinner = p1Round > p2Round ? 1 : p2Round > p1Round ? 2 : 0;
   return (
-    <Animated.View entering={FadeInDown.duration(350)} style={s.liveMatch}>
+    <View style={s.liveMatch}>
       <Text style={s.liveMatchTitle}>Match Score</Text>
       <View style={s.liveRow}>
         <Text style={[s.liveName, roundWinner === 1 && s.liveWin]}>{p1Name}</Text>
@@ -578,7 +578,7 @@ function LiveMatchStrip({ bbResult, settings }) {
         <Text style={[s.liveScore, roundWinner === 2 && s.liveWin]}>{p2Round}</Text>
         <Text style={[s.liveName, s.liveNameRight, roundWinner === 2 && s.liveWin]}>{p2Name}</Text>
       </View>
-    </Animated.View>
+    </View>
   );
 }
 
