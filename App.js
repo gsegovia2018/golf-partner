@@ -1,7 +1,19 @@
 import React from 'react';
+import { ActivityIndicator, View } from 'react-native';
 import { NavigationContainer } from '@react-navigation/native';
-import { createStackNavigator } from '@react-navigation/stack';
+import { createStackNavigator, CardStyleInterpolators } from '@react-navigation/stack';
 import { StatusBar } from 'expo-status-bar';
+import { useFonts } from 'expo-font';
+import {
+  PlusJakartaSans_300Light,
+  PlusJakartaSans_400Regular,
+  PlusJakartaSans_500Medium,
+  PlusJakartaSans_600SemiBold,
+  PlusJakartaSans_700Bold,
+  PlusJakartaSans_800ExtraBold,
+} from '@expo-google-fonts/plus-jakarta-sans';
+
+import { ThemeProvider, useTheme } from './src/theme/ThemeContext';
 
 import HomeScreen from './src/screens/HomeScreen';
 import SetupScreen from './src/screens/SetupScreen';
@@ -17,37 +29,63 @@ import CoursePickerScreen from './src/screens/CoursePickerScreen';
 
 const Stack = createStackNavigator();
 
-export default function App() {
+function AppNavigator() {
+  const { theme, mode } = useTheme();
+
   return (
-    <NavigationContainer>
-      <StatusBar style="light" />
+    <>
+      <StatusBar style={mode === 'dark' ? 'light' : 'dark'} />
       <Stack.Navigator
         initialRouteName="Home"
         screenOptions={{
-          headerStyle: {
-            backgroundColor: '#070d15',
-            shadowColor: 'transparent',
-            elevation: 0,
-            borderBottomWidth: 1,
-            borderBottomColor: '#1c3250',
+          headerShown: false,
+          cardStyle: { backgroundColor: theme.bg.primary },
+          cardStyleInterpolator: CardStyleInterpolators.forFadeFromBottomAndroid,
+          transitionSpec: {
+            open: { animation: 'timing', config: { duration: 250 } },
+            close: { animation: 'timing', config: { duration: 200 } },
           },
-          headerTintColor: '#4ade80',
-          headerTitleStyle: { fontWeight: '700', color: '#f1f5f9', fontSize: 17 },
-          cardStyle: { backgroundColor: '#070d15' },
         }}
       >
-        <Stack.Screen name="Home" component={HomeScreen} options={{ title: 'Golf' }} />
-        <Stack.Screen name="Setup" component={SetupScreen} options={{ title: 'New Tournament' }} />
-        <Stack.Screen name="Scorecard" component={ScorecardScreen} options={{ title: 'Scorecard' }} />
-        <Stack.Screen name="NextRound" component={NextRoundScreen} options={{ title: 'Next Round' }} />
-        <Stack.Screen name="CourseEditor" component={CourseEditorScreen} options={{ title: 'Configure Holes' }} />
-        <Stack.Screen name="EditTournament" component={EditTournamentScreen} options={{ title: 'Edit Tournament' }} />
-        <Stack.Screen name="PlayersLibrary" component={PlayersLibraryScreen} options={{ title: 'Players Library' }} />
-        <Stack.Screen name="CoursesLibrary" component={CoursesLibraryScreen} options={{ title: 'Courses Library' }} />
-        <Stack.Screen name="CourseLibraryDetail" component={CourseLibraryDetailScreen} options={{ title: 'Edit Course' }} />
-        <Stack.Screen name="PlayerPicker" component={PlayerPickerScreen} options={{ title: 'Pick Player' }} />
-        <Stack.Screen name="CoursePicker" component={CoursePickerScreen} options={{ title: 'Pick Course' }} />
+        <Stack.Screen name="Home" component={HomeScreen} />
+        <Stack.Screen name="Setup" component={SetupScreen} />
+        <Stack.Screen name="Scorecard" component={ScorecardScreen} />
+        <Stack.Screen name="NextRound" component={NextRoundScreen} />
+        <Stack.Screen name="CourseEditor" component={CourseEditorScreen} />
+        <Stack.Screen name="EditTournament" component={EditTournamentScreen} />
+        <Stack.Screen name="PlayersLibrary" component={PlayersLibraryScreen} />
+        <Stack.Screen name="CoursesLibrary" component={CoursesLibraryScreen} />
+        <Stack.Screen name="CourseLibraryDetail" component={CourseLibraryDetailScreen} />
+        <Stack.Screen name="PlayerPicker" component={PlayerPickerScreen} />
+        <Stack.Screen name="CoursePicker" component={CoursePickerScreen} />
       </Stack.Navigator>
-    </NavigationContainer>
+    </>
+  );
+}
+
+export default function App() {
+  const [fontsLoaded] = useFonts({
+    'PlusJakartaSans-Light': PlusJakartaSans_300Light,
+    'PlusJakartaSans-Regular': PlusJakartaSans_400Regular,
+    'PlusJakartaSans-Medium': PlusJakartaSans_500Medium,
+    'PlusJakartaSans-SemiBold': PlusJakartaSans_600SemiBold,
+    'PlusJakartaSans-Bold': PlusJakartaSans_700Bold,
+    'PlusJakartaSans-ExtraBold': PlusJakartaSans_800ExtraBold,
+  });
+
+  if (!fontsLoaded) {
+    return (
+      <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: '#f6f3ee' }}>
+        <ActivityIndicator size="large" color="#1a6b4a" />
+      </View>
+    );
+  }
+
+  return (
+    <ThemeProvider>
+      <NavigationContainer>
+        <AppNavigator />
+      </NavigationContainer>
+    </ThemeProvider>
   );
 }

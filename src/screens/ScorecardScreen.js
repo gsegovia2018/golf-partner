@@ -3,12 +3,17 @@ import {
   View, Text, TextInput, TouchableOpacity,
   StyleSheet, ScrollView,
 } from 'react-native';
+import Animated, { FadeInDown, FadeIn } from 'react-native-reanimated';
+import { Feather } from '@expo/vector-icons';
 import {
   loadTournament, saveTournament,
   calcStablefordPoints, calcBestWorstBall, DEFAULT_SETTINGS,
 } from '../store/tournamentStore';
+import { useTheme } from '../theme/ThemeContext';
 
 export default function ScorecardScreen({ navigation, route }) {
+  const { theme } = useTheme();
+  const s = makeStyles(theme);
   const { roundIndex } = route.params;
   const [tournament, setTournament] = useState(null);
   const [scores, setScores] = useState({});
@@ -105,10 +110,10 @@ export default function ScorecardScreen({ navigation, route }) {
     let str = 0;
     const handicap = round.playerHandicaps?.[player.id] ?? player.handicap;
     round.holes.forEach((hole) => {
-      const s = scores[player.id]?.[hole.number];
-      if (s) {
-        str += s;
-        pts += calcStablefordPoints(hole.par, s, handicap, hole.strokeIndex);
+      const sc = scores[player.id]?.[hole.number];
+      if (sc) {
+        str += sc;
+        pts += calcStablefordPoints(hole.par, sc, handicap, hole.strokeIndex);
       }
     });
     return { pts, str };
@@ -119,24 +124,33 @@ export default function ScorecardScreen({ navigation, route }) {
   const bbResult = isBestBall ? calcBestWorstBall(liveRound, players) : null;
 
   return (
-    <View style={styles.container}>
+    <View style={s.container}>
+      {/* Header */}
+      <View style={s.header}>
+        <TouchableOpacity onPress={() => navigation.goBack()} style={s.backBtn}>
+          <Feather name="chevron-left" size={22} color={theme.accent.primary} />
+        </TouchableOpacity>
+        <Text style={s.headerTitle}>Scorecard</Text>
+        <View style={{ width: 22 }} />
+      </View>
+
       {/* View toggle */}
-      <View style={styles.toggleBar}>
-        <View style={styles.togglePill}>
+      <Animated.View entering={FadeIn.duration(300)} style={s.toggleBar}>
+        <View style={s.togglePill}>
           <TouchableOpacity
-            style={[styles.toggleBtn, view === 'hole' && styles.toggleBtnActive]}
+            style={[s.toggleBtn, view === 'hole' && s.toggleBtnActive]}
             onPress={() => setView('hole')}
           >
-            <Text style={[styles.toggleText, view === 'hole' && styles.toggleTextActive]}>Hole by Hole</Text>
+            <Text style={[s.toggleText, view === 'hole' && s.toggleTextActive]}>Hole by Hole</Text>
           </TouchableOpacity>
           <TouchableOpacity
-            style={[styles.toggleBtn, view === 'grid' && styles.toggleBtnActive]}
+            style={[s.toggleBtn, view === 'grid' && s.toggleBtnActive]}
             onPress={() => setView('grid')}
           >
-            <Text style={[styles.toggleText, view === 'grid' && styles.toggleTextActive]}>All Holes</Text>
+            <Text style={[s.toggleText, view === 'grid' && s.toggleTextActive]}>All Holes</Text>
           </TouchableOpacity>
         </View>
-      </View>
+      </Animated.View>
 
       {view === 'hole' ? (
         <HoleView
@@ -176,64 +190,68 @@ export default function ScorecardScreen({ navigation, route }) {
 }
 
 function HoleView({ round, roundIndex, players, scores, notes, currentHole, hole, isBestBall, bbResult, settings, onStep, onSetScore, onNotesChange, onPrev, onNext, onGoToHole, onGoBack, playerTotals }) {
+  const { theme } = useTheme();
+  const s = makeStyles(theme);
+
   if (!hole) return null;
 
   return (
-    <View style={styles.flex}>
+    <View style={s.flex}>
       {/* Hole header */}
-      <View style={styles.holeHeader}>
-        <View style={styles.holeHeaderLeft}>
-          <Text style={styles.holeHeaderRound}>{round.courseName} · Round {roundIndex + 1}</Text>
-          <View style={styles.holeNumberRow}>
-            <Text style={styles.holeNumberLabel}>HOLE</Text>
-            <Text style={styles.holeNumber}>{currentHole}</Text>
+      <Animated.View entering={FadeInDown.duration(350).springify()} style={s.holeHeaderCard}>
+        <View style={s.holeHeaderLeft}>
+          <Text style={s.holeHeaderRound}>{round.courseName} -- Round {roundIndex + 1}</Text>
+          <View style={s.holeNumberRow}>
+            <Text style={s.holeNumberLabel}>HOLE</Text>
+            <Text style={s.holeNumber}>{currentHole}</Text>
           </View>
         </View>
-        <View style={styles.holeHeaderRight}>
-          <View style={styles.holeMetaItem}>
-            <Text style={styles.holeMetaLabel}>PAR</Text>
-            <Text style={styles.holeMetaValue}>{hole.par}</Text>
+        <View style={s.holeHeaderRight}>
+          <View style={s.holeMetaItem}>
+            <Text style={s.holeMetaLabel}>PAR</Text>
+            <Text style={s.holeMetaValue}>{hole.par}</Text>
           </View>
-          <View style={styles.holeMetaItem}>
-            <Text style={styles.holeMetaLabel}>SI</Text>
-            <Text style={styles.holeMetaValue}>{hole.strokeIndex}</Text>
+          <View style={s.holeMetaItem}>
+            <Text style={s.holeMetaLabel}>SI</Text>
+            <Text style={s.holeMetaValue}>{hole.strokeIndex}</Text>
           </View>
         </View>
-      </View>
+      </Animated.View>
 
       {/* Hole navigation */}
-      <View style={styles.holeNav}>
+      <View style={s.holeNav}>
         <TouchableOpacity
-          style={[styles.holeNavBtn, currentHole === 1 && styles.holeNavBtnDisabled]}
+          style={[s.holeNavBtn, currentHole === 1 && s.holeNavBtnDisabled]}
           onPress={onPrev}
           disabled={currentHole === 1}
         >
-          <Text style={[styles.holeNavBtnText, currentHole === 1 && styles.holeNavBtnTextDisabled]}>← Prev</Text>
+          <Feather name="chevron-left" size={16} color={currentHole === 1 ? theme.text.muted : theme.accent.primary} />
+          <Text style={[s.holeNavBtnText, currentHole === 1 && s.holeNavBtnTextDisabled]}>Prev</Text>
         </TouchableOpacity>
-        <View style={styles.holePips}>
+        <View style={s.holePips}>
           {Array.from({ length: 18 }, (_, i) => {
             const n = i + 1;
             const hasAnyScore = players.some((p) => scores[p.id]?.[n] != null);
             return (
               <TouchableOpacity key={n} onPress={() => onGoToHole(n)}>
-                <View style={[styles.pip, n === currentHole && styles.pipActive, hasAnyScore && n !== currentHole && styles.pipDone]} />
+                <View style={[s.pip, n === currentHole && s.pipActive, hasAnyScore && n !== currentHole && s.pipDone]} />
               </TouchableOpacity>
             );
           })}
         </View>
         <TouchableOpacity
-          style={[styles.holeNavBtn, currentHole === 18 && styles.holeNavBtnDisabled]}
+          style={[s.holeNavBtn, currentHole === 18 && s.holeNavBtnDisabled]}
           onPress={onNext}
           disabled={currentHole === 18}
         >
-          <Text style={[styles.holeNavBtnText, currentHole === 18 && styles.holeNavBtnTextDisabled]}>Next →</Text>
+          <Text style={[s.holeNavBtnText, currentHole === 18 && s.holeNavBtnTextDisabled]}>Next</Text>
+          <Feather name="chevron-right" size={16} color={currentHole === 18 ? theme.text.muted : theme.accent.primary} />
         </TouchableOpacity>
       </View>
 
       {/* Player score cards */}
-      <ScrollView style={styles.flex} contentContainerStyle={styles.playerCardsContent}>
+      <ScrollView style={s.flex} contentContainerStyle={s.playerCardsContent}>
         {(() => {
-          const PAIR_COLORS = ['#4caf50', '#f9a825'];
           const pairs = round.pairs ?? [];
           const orderedPlayers = pairs.length === 2
             ? [...pairs[0], ...pairs[1]].map((pp) => players.find((p) => p.id === pp.id)).filter(Boolean)
@@ -241,9 +259,9 @@ function HoleView({ round, roundIndex, players, scores, notes, currentHole, hole
 
           return orderedPlayers.map((player, idx) => {
             const pairIndex = pairs.findIndex((pair) => pair.some((pp) => pp.id === player.id));
-            const pairColor = pairIndex >= 0 ? PAIR_COLORS[pairIndex] : '#30363d';
+            const pairColor = pairIndex === 0 ? theme.pairA : pairIndex === 1 ? theme.pairB : theme.text.muted;
             const isFirstOfPair = pairs.length === 2 && (idx === 0 || idx === 2);
-            const pairLabel = pairIndex === 0 ? 'Pair A' : 'Pair B';
+            const pairLabelText = pairIndex === 0 ? 'Pair A' : 'Pair B';
 
             const handicap = round.playerHandicaps?.[player.id] ?? player.handicap;
             const strokes = scores[player.id]?.[currentHole];
@@ -251,48 +269,48 @@ function HoleView({ round, roundIndex, players, scores, notes, currentHole, hole
               ? calcStablefordPoints(hole.par, strokes, handicap, hole.strokeIndex)
               : null;
 
-            const ptsColor = pts == null ? '#8b949e'
-              : pts >= 3 ? '#1565c0'
-              : pts >= 2 ? '#4caf50'
-              : pts === 1 ? '#8b949e'
-              : '#da3633';
+            const ptsColor = pts == null ? theme.text.muted
+              : pts >= 3 ? theme.scoreColor('excellent')
+              : pts >= 2 ? theme.scoreColor('good')
+              : pts === 1 ? theme.scoreColor('neutral')
+              : theme.scoreColor('poor');
 
             const extraShots = handicap >= hole.strokeIndex ? (Math.floor(handicap / 18) + (handicap % 18 >= hole.strokeIndex ? 1 : 0)) : 0;
 
             return (
               <React.Fragment key={player.id}>
                 {isFirstOfPair && (
-                  <Text style={[styles.pairLabel, { color: pairColor, marginTop: idx === 0 ? 0 : 16 }]}>{pairLabel}</Text>
+                  <Text style={[s.pairLabel, { color: pairColor, marginTop: idx === 0 ? 0 : 16 }]}>{pairLabelText}</Text>
                 )}
-                <View style={[styles.playerCard, { borderLeftColor: pairColor, borderLeftWidth: 3 }]}>
-                  <View style={styles.playerCardLeft}>
-                    <View style={[styles.playerAvatar, { backgroundColor: pairColor }]}>
-                      <Text style={styles.playerAvatarText}>{player.name[0].toUpperCase()}</Text>
+                <Animated.View entering={FadeInDown.delay(idx * 60).duration(300)} style={[s.playerCard, { borderLeftColor: pairColor, borderLeftWidth: 3 }]}>
+                  <View style={s.playerCardLeft}>
+                    <View style={[s.playerAvatar, { backgroundColor: pairColor }]}>
+                      <Text style={s.playerAvatarText}>{player.name[0].toUpperCase()}</Text>
                     </View>
                     <View>
-                      <Text style={styles.playerCardName}>{player.name}</Text>
-                      <Text style={styles.playerCardHcp}>HCP {handicap}{extraShots > 0 ? ` · +${extraShots}` : ''}</Text>
+                      <Text style={s.playerCardName}>{player.name}</Text>
+                      <Text style={s.playerCardHcp}>HCP {handicap}{extraShots > 0 ? ` +${extraShots}` : ''}</Text>
                     </View>
                   </View>
-                  <View style={styles.playerCardRight}>
-                    <TouchableOpacity style={styles.stepBtn} onPress={() => onStep(player.id, currentHole, -1)}>
-                      <Text style={styles.stepBtnText}>−</Text>
+                  <View style={s.playerCardRight}>
+                    <TouchableOpacity style={s.stepBtn} onPress={() => onStep(player.id, currentHole, -1)}>
+                      <Feather name="minus" size={18} color={theme.text.primary} />
                     </TouchableOpacity>
-                    <View style={styles.scoreDisplay}>
-                      <Text style={styles.scoreDisplayNum}>
+                    <View style={s.scoreDisplay}>
+                      <Text style={s.scoreDisplayNum}>
                         {strokes ?? hole.par}
                       </Text>
                       {pts !== null && (
-                        <Text style={[styles.scoreDisplayPts, { color: ptsColor }]}>
+                        <Text style={[s.scoreDisplayPts, { color: ptsColor }]}>
                           {pts} {pts === 1 ? 'pt' : 'pts'}
                         </Text>
                       )}
                     </View>
-                    <TouchableOpacity style={styles.stepBtn} onPress={() => onStep(player.id, currentHole, 1)}>
-                      <Text style={styles.stepBtnText}>+</Text>
+                    <TouchableOpacity style={s.stepBtn} onPress={() => onStep(player.id, currentHole, 1)}>
+                      <Feather name="plus" size={18} color={theme.text.primary} />
                     </TouchableOpacity>
                   </View>
-                </View>
+                </Animated.View>
               </React.Fragment>
             );
           });
@@ -300,11 +318,11 @@ function HoleView({ round, roundIndex, players, scores, notes, currentHole, hole
       </ScrollView>
 
       <TextInput
-        style={styles.notesInput}
-        placeholder="Round notes…"
-        placeholderTextColor="#484f58"
-        keyboardAppearance="dark"
-        selectionColor="#4caf50"
+        style={s.notesInput}
+        placeholder="Round notes..."
+        placeholderTextColor={theme.text.muted}
+        keyboardAppearance={theme.isDark ? 'dark' : 'light'}
+        selectionColor={theme.accent.primary}
         multiline
         value={notes}
         onChangeText={onNotesChange}
@@ -313,16 +331,16 @@ function HoleView({ round, roundIndex, players, scores, notes, currentHole, hole
       {isBestBall && bbResult
         ? <MatchPanel bbResult={bbResult} currentHole={currentHole} settings={settings} />
         : (
-          <View style={styles.totalsStrip}>
-            <Text style={styles.totalStripLabel}>ROUND TOTALS</Text>
-            <View style={styles.totalStripRow}>
+          <View style={s.totalsStrip}>
+            <Text style={s.totalStripLabel}>ROUND TOTALS</Text>
+            <View style={s.totalStripRow}>
               {players.map((player) => {
                 const { pts, str } = playerTotals(player);
                 return (
-                  <View key={player.id} style={styles.totalStripPlayer}>
-                    <Text style={styles.totalStripName}>{player.name.split(' ')[0]}</Text>
-                    <Text style={styles.totalStripPts}>{pts}</Text>
-                    <Text style={styles.totalStripStr}>{str || '-'}</Text>
+                  <View key={player.id} style={s.totalStripPlayer}>
+                    <Text style={s.totalStripName}>{player.name.split(' ')[0]}</Text>
+                    <Text style={s.totalStripPts}>{pts}</Text>
+                    <Text style={s.totalStripStr}>{str || '-'}</Text>
                   </View>
                 );
               })}
@@ -332,12 +350,16 @@ function HoleView({ round, roundIndex, players, scores, notes, currentHole, hole
       }
 
       <TouchableOpacity
-        style={styles.saveBtn}
+        style={s.saveBtn}
         onPress={currentHole < 18 ? onNext : onGoBack}
+        activeOpacity={0.8}
       >
-        <Text style={styles.saveBtnText}>
-          {currentHole < 18 ? `Hole ${currentHole + 1} →` : 'Finish Round'}
+        <Text style={s.saveBtnText}>
+          {currentHole < 18 ? `Hole ${currentHole + 1}` : 'Finish Round'}
         </Text>
+        {currentHole < 18 && (
+          <Feather name="chevron-right" size={18} color={theme.text.inverse} />
+        )}
       </TouchableOpacity>
     </View>
   );
@@ -359,6 +381,8 @@ function roundTeamPts(bbResult, team, bbVal, wbVal) {
 }
 
 function MatchPanel({ bbResult, currentHole, settings }) {
+  const { theme } = useTheme();
+  const s = makeStyles(theme);
   const { pair1, pair2, holes } = bbResult;
   const { bestBallValue: bbVal, worstBallValue: wbVal } = settings;
   const holeData = holes.find((h) => h.number === currentHole);
@@ -374,66 +398,70 @@ function MatchPanel({ bbResult, currentHole, settings }) {
   const roundWinner = p1Round > p2Round ? 1 : p2Round > p1Round ? 2 : 0;
 
   return (
-    <View style={styles.matchPanel}>
+    <Animated.View entering={FadeInDown.duration(300)} style={s.matchPanel}>
       {/* Column headers */}
-      <View style={styles.matchPanelHeaderRow}>
-        <View style={styles.matchPanelNameCol} />
-        <Text style={styles.matchPanelColLabel}>HOLE {currentHole}</Text>
-        <Text style={styles.matchPanelColLabel}>ROUND</Text>
+      <View style={s.matchPanelHeaderRow}>
+        <View style={s.matchPanelNameCol} />
+        <Text style={s.matchPanelColLabel}>HOLE {currentHole}</Text>
+        <Text style={s.matchPanelColLabel}>ROUND</Text>
       </View>
 
       {/* Pair 1 row */}
-      <View style={styles.matchPanelDataRow}>
-        <Text style={[styles.matchPanelName, roundWinner === 1 && styles.matchPanelWinner]} numberOfLines={1}>
+      <View style={s.matchPanelDataRow}>
+        <Text style={[s.matchPanelName, roundWinner === 1 && { color: theme.accent.primary }]} numberOfLines={1}>
           {p1Name}
         </Text>
-        <Text style={[styles.matchPanelStat, holeWinner === 1 && styles.matchPanelWinner, holeWinner === 2 && styles.matchPanelLoser]}>
-          {p1Hole ?? '–'}
+        <Text style={[s.matchPanelStat, holeWinner === 1 && { color: theme.accent.primary }, holeWinner === 2 && { color: theme.destructive }]}>
+          {p1Hole ?? '-'}
         </Text>
-        <Text style={[styles.matchPanelStat, styles.matchPanelStatRound, roundWinner === 1 && styles.matchPanelWinner]}>
+        <Text style={[s.matchPanelStat, s.matchPanelStatRound, roundWinner === 1 && { color: theme.accent.primary }]}>
           {p1Round}
         </Text>
       </View>
 
       {/* Pair 2 row */}
-      <View style={styles.matchPanelDataRow}>
-        <Text style={[styles.matchPanelName, roundWinner === 2 && styles.matchPanelWinner]} numberOfLines={1}>
+      <View style={s.matchPanelDataRow}>
+        <Text style={[s.matchPanelName, roundWinner === 2 && { color: theme.accent.primary }]} numberOfLines={1}>
           {p2Name}
         </Text>
-        <Text style={[styles.matchPanelStat, holeWinner === 2 && styles.matchPanelWinner, holeWinner === 1 && styles.matchPanelLoser]}>
-          {p2Hole ?? '–'}
+        <Text style={[s.matchPanelStat, holeWinner === 2 && { color: theme.accent.primary }, holeWinner === 1 && { color: theme.destructive }]}>
+          {p2Hole ?? '-'}
         </Text>
-        <Text style={[styles.matchPanelStat, styles.matchPanelStatRound, roundWinner === 2 && styles.matchPanelWinner]}>
+        <Text style={[s.matchPanelStat, s.matchPanelStatRound, roundWinner === 2 && { color: theme.accent.primary }]}>
           {p2Round}
         </Text>
       </View>
-    </View>
+    </Animated.View>
   );
 }
 
 function GridView({ round, roundIndex, players, scores, isBestBall, bbResult, settings, onSetScore }) {
+  const { theme } = useTheme();
+  const s = makeStyles(theme);
+
   return (
-    <ScrollView style={styles.flex} contentContainerStyle={styles.gridContent} automaticallyAdjustKeyboardInsets>
-      <Text style={styles.title}>{round.courseName}</Text>
-      <Text style={styles.subtitle}>Round {roundIndex + 1}</Text>
+    <ScrollView style={s.flex} contentContainerStyle={s.gridContent} automaticallyAdjustKeyboardInsets>
+      <Animated.View entering={FadeIn.duration(300)}>
+        <Text style={s.title}>{round.courseName}</Text>
+        <Text style={s.subtitle}>Round {roundIndex + 1}</Text>
+      </Animated.View>
 
       <ScrollView horizontal showsHorizontalScrollIndicator={false}>
         <View>
-          <View style={styles.headerRow}>
-            <Text style={[styles.cell, styles.holeCell, styles.headerText]}>Hole</Text>
-            <Text style={[styles.cell, styles.parCell, styles.headerText]}>Par</Text>
-            <Text style={[styles.cell, styles.siCell, styles.headerText]}>SI</Text>
+          <View style={s.headerRow}>
+            <Text style={[s.cell, s.holeCell, s.headerText]}>Hole</Text>
+            <Text style={[s.cell, s.parCell, s.headerText]}>Par</Text>
+            <Text style={[s.cell, s.siCell, s.headerText]}>SI</Text>
             {(() => {
-              const PAIR_COLORS = ['#4caf50', '#f9a825'];
               const pairs = round.pairs ?? [];
               const orderedPlayers = pairs.length === 2
                 ? [...pairs[0], ...pairs[1]].map((pp) => players.find((p) => p.id === pp.id)).filter(Boolean)
                 : players;
               return orderedPlayers.map((p) => {
                 const pairIndex = pairs.findIndex((pair) => pair.some((pp) => pp.id === p.id));
-                const color = pairIndex >= 0 ? PAIR_COLORS[pairIndex] : '#4caf50';
+                const color = pairIndex === 0 ? theme.pairA : pairIndex === 1 ? theme.pairB : theme.accent.primary;
                 return (
-                  <Text key={p.id} style={[styles.cell, styles.playerCell, styles.headerText, { color }]}>
+                  <Text key={p.id} style={[s.cell, s.playerCell, s.headerText, { color }]}>
                     {p.name.split(' ')[0]}
                   </Text>
                 );
@@ -441,58 +469,59 @@ function GridView({ round, roundIndex, players, scores, isBestBall, bbResult, se
             })()}
           </View>
 
-          {round.holes.map((hole) => {
-            const PAIR_COLORS = ['#4caf50', '#f9a825'];
+          {round.holes.map((hole, holeIdx) => {
             const pairs = round.pairs ?? [];
             const orderedPlayers = pairs.length === 2
               ? [...pairs[0], ...pairs[1]].map((pp) => players.find((p) => p.id === pp.id)).filter(Boolean)
               : players;
             return (
-              <View key={hole.number} style={[styles.holeRow, hole.number % 2 === 0 && styles.altRow]}>
-                <Text style={[styles.cell, styles.holeCell]}>{hole.number}</Text>
-                <Text style={[styles.cell, styles.parCell]}>{hole.par}</Text>
-                <Text style={[styles.cell, styles.siCell]}>{hole.strokeIndex}</Text>
+              <Animated.View key={hole.number} entering={FadeInDown.delay(holeIdx * 20).duration(200)} style={[s.holeRow, hole.number % 2 === 0 && s.altRow]}>
+                <Text style={[s.cell, s.holeCell]}>{hole.number}</Text>
+                <Text style={[s.cell, s.parCell]}>{hole.par}</Text>
+                <Text style={[s.cell, s.siCell]}>{hole.strokeIndex}</Text>
                 {orderedPlayers.map((p) => {
                   const strokes = scores[p.id]?.[hole.number];
                   const handicap = round.playerHandicaps?.[p.id] ?? p.handicap;
                   const pts = strokes != null
                     ? calcStablefordPoints(hole.par, strokes, handicap, hole.strokeIndex)
                     : null;
-                  const pairIndex = pairs.findIndex((pair) => pair.some((pp) => pp.id === p.id));
-                  const ptsGoodColor = pairIndex >= 0 ? PAIR_COLORS[pairIndex] : '#4caf50';
+                  const ptsColor = pts == null ? theme.text.muted
+                    : pts >= 3 ? theme.scoreColor('excellent')
+                    : pts >= 2 ? theme.scoreColor('good')
+                    : pts === 1 ? theme.scoreColor('neutral')
+                    : theme.scoreColor('poor');
                   return (
-                    <View key={p.id} style={[styles.cell, styles.playerCell, styles.inputCell]}>
+                    <View key={p.id} style={[s.cell, s.playerCell, s.inputCell]}>
                       <TextInput
-                        style={styles.scoreInput}
+                        style={s.scoreInput}
                         keyboardType="numeric"
-                        keyboardAppearance="dark"
-                        selectionColor="#4caf50"
+                        keyboardAppearance={theme.isDark ? 'dark' : 'light'}
+                        selectionColor={theme.accent.primary}
                         maxLength={2}
                         value={strokes != null ? String(strokes) : ''}
                         onChangeText={(v) => onSetScore(p.id, hole.number, v)}
                         placeholder="-"
-                        placeholderTextColor="#484f58"
+                        placeholderTextColor={theme.text.muted}
                       />
                       {pts !== null && (
-                        <Text style={[styles.pts, pts >= 2 && { color: ptsGoodColor }, pts === 0 && styles.zeroPts]}>
+                        <Text style={[s.pts, { color: ptsColor }]}>
                           {pts}
                         </Text>
                       )}
                     </View>
                   );
                 })}
-              </View>
+              </Animated.View>
             );
           })}
 
-          <View style={[styles.holeRow, styles.totalsRow]}>
-            <Text style={[styles.cell, styles.holeCell, styles.totalText]}>Total</Text>
-            <Text style={[styles.cell, styles.parCell, styles.totalText]}>
-              {round.holes.reduce((s, h) => s + h.par, 0)}
+          <View style={[s.holeRow, s.totalsRow]}>
+            <Text style={[s.cell, s.holeCell, s.totalText]}>Total</Text>
+            <Text style={[s.cell, s.parCell, s.totalText]}>
+              {round.holes.reduce((sum, h) => sum + h.par, 0)}
             </Text>
-            <Text style={[styles.cell, styles.siCell]} />
+            <Text style={[s.cell, s.siCell]} />
             {(() => {
-              const PAIR_COLORS = ['#4caf50', '#f9a825'];
               const pairs = round.pairs ?? [];
               const orderedPlayers = pairs.length === 2
                 ? [...pairs[0], ...pairs[1]].map((pp) => players.find((p) => p.id === pp.id)).filter(Boolean)
@@ -509,11 +538,11 @@ function GridView({ round, roundIndex, players, scores, isBestBall, bbResult, se
                   }
                 });
                 const pairIndex = pairs.findIndex((pair) => pair.some((pp) => pp.id === p.id));
-                const ptsColor = pairIndex >= 0 ? PAIR_COLORS[pairIndex] : '#4caf50';
+                const ptsColor = pairIndex === 0 ? theme.pairA : pairIndex === 1 ? theme.pairB : theme.accent.primary;
                 return (
-                  <View key={p.id} style={[styles.cell, styles.playerCell]}>
-                    <Text style={[styles.totalPts, { color: ptsColor }]}>{totalPts} pts</Text>
-                    <Text style={styles.totalStr}>{totalStr || '-'}</Text>
+                  <View key={p.id} style={[s.cell, s.playerCell]}>
+                    <Text style={[s.totalPts, { color: ptsColor }]}>{totalPts} pts</Text>
+                    <Text style={s.totalStr}>{totalStr || '-'}</Text>
                   </View>
                 );
               });
@@ -528,6 +557,9 @@ function GridView({ round, roundIndex, players, scores, isBestBall, bbResult, se
 }
 
 function LiveMatchStrip({ bbResult, settings }) {
+  const { theme } = useTheme();
+  const s = makeStyles(theme);
+
   if (!bbResult) return null;
   const { pair1, pair2 } = bbResult;
   const { bestBallValue: bbVal, worstBallValue: wbVal } = settings;
@@ -537,163 +569,468 @@ function LiveMatchStrip({ bbResult, settings }) {
   const p2Round = roundTeamPts(bbResult, 2, bbVal, wbVal);
   const roundWinner = p1Round > p2Round ? 1 : p2Round > p1Round ? 2 : 0;
   return (
-    <View style={styles.liveMatch}>
-      <Text style={styles.liveMatchTitle}>Match Score</Text>
-      <View style={styles.liveRow}>
-        <Text style={[styles.liveName, roundWinner === 1 && styles.liveWin]}>{p1Name}</Text>
-        <Text style={[styles.liveScore, roundWinner === 1 && styles.liveWin]}>{p1Round}</Text>
-        <Text style={styles.liveDash}>–</Text>
-        <Text style={[styles.liveScore, roundWinner === 2 && styles.liveWin]}>{p2Round}</Text>
-        <Text style={[styles.liveName, styles.liveNameRight, roundWinner === 2 && styles.liveWin]}>{p2Name}</Text>
+    <Animated.View entering={FadeInDown.duration(350)} style={s.liveMatch}>
+      <Text style={s.liveMatchTitle}>Match Score</Text>
+      <View style={s.liveRow}>
+        <Text style={[s.liveName, roundWinner === 1 && s.liveWin]}>{p1Name}</Text>
+        <Text style={[s.liveScore, roundWinner === 1 && s.liveWin]}>{p1Round}</Text>
+        <Text style={s.liveDash}>-</Text>
+        <Text style={[s.liveScore, roundWinner === 2 && s.liveWin]}>{p2Round}</Text>
+        <Text style={[s.liveName, s.liveNameRight, roundWinner === 2 && s.liveWin]}>{p2Name}</Text>
       </View>
-    </View>
+    </Animated.View>
   );
 }
 
-const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: '#070d15' },
-  flex: { flex: 1 },
+function makeStyles(theme) {
+  return StyleSheet.create({
+    container: { flex: 1, backgroundColor: theme.bg.primary },
+    flex: { flex: 1 },
 
-  // Toggle
-  toggleBar: {
-    backgroundColor: '#070d15', borderBottomWidth: 1,
-    borderBottomColor: '#1c3250', paddingTop: 10, paddingHorizontal: 16, paddingBottom: 10,
-  },
-  togglePill: {
-    flexDirection: 'row', backgroundColor: '#0c1a28', borderRadius: 12,
-    borderWidth: 1, borderColor: '#1c3250', padding: 3,
-  },
-  toggleBtn: { flex: 1, paddingVertical: 9, alignItems: 'center', borderRadius: 10 },
-  toggleBtnActive: { backgroundColor: '#22c55e' },
-  toggleText: { color: '#364f68', fontWeight: '600', fontSize: 14 },
-  toggleTextActive: { color: '#fff', fontWeight: '700' },
+    // Header
+    header: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      justifyContent: 'space-between',
+      paddingHorizontal: 16,
+      paddingTop: 12,
+      paddingBottom: 10,
+      backgroundColor: theme.bg.primary,
+      borderBottomWidth: 1,
+      borderBottomColor: theme.isDark ? theme.glass?.border : theme.border.default,
+    },
+    backBtn: {
+      width: 36,
+      height: 36,
+      borderRadius: 10,
+      backgroundColor: theme.isDark ? theme.bg.elevated : theme.bg.secondary,
+      alignItems: 'center',
+      justifyContent: 'center',
+    },
+    headerTitle: {
+      fontFamily: 'PlusJakartaSans-Bold',
+      fontSize: 17,
+      color: theme.text.primary,
+      letterSpacing: -0.3,
+    },
 
-  // Hole view
-  holeHeader: {
-    flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center',
-    backgroundColor: '#0c1a28', borderBottomWidth: 1, borderBottomColor: '#1c3250',
-    paddingHorizontal: 20, paddingVertical: 14,
-  },
-  holeHeaderLeft: { gap: 2 },
-  holeHeaderRound: { color: '#364f68', fontSize: 11, fontWeight: '600', letterSpacing: 0.5 },
-  holeNumberRow: { flexDirection: 'row', alignItems: 'baseline', gap: 8 },
-  holeNumberLabel: { color: '#364f68', fontSize: 11, fontWeight: '700', letterSpacing: 1.5 },
-  holeNumber: { color: '#f1f5f9', fontSize: 44, fontWeight: '900', lineHeight: 48, letterSpacing: -1 },
-  holeHeaderRight: { flexDirection: 'row', gap: 20 },
-  holeMetaItem: { alignItems: 'center', gap: 4 },
-  holeMetaLabel: { color: '#364f68', fontSize: 10, fontWeight: '700', letterSpacing: 1.5 },
-  holeMetaValue: { color: '#f1f5f9', fontSize: 22, fontWeight: '800' },
+    // Toggle
+    toggleBar: {
+      backgroundColor: theme.bg.primary,
+      paddingTop: 10,
+      paddingHorizontal: 16,
+      paddingBottom: 10,
+    },
+    togglePill: {
+      flexDirection: 'row',
+      backgroundColor: theme.isDark ? theme.bg.elevated : theme.bg.secondary,
+      borderRadius: 14,
+      borderWidth: 1,
+      borderColor: theme.isDark ? theme.glass?.border : theme.border.default,
+      padding: 3,
+    },
+    toggleBtn: {
+      flex: 1,
+      paddingVertical: 9,
+      alignItems: 'center',
+      borderRadius: 11,
+    },
+    toggleBtnActive: {
+      backgroundColor: theme.accent.primary,
+    },
+    toggleText: {
+      color: theme.text.muted,
+      fontFamily: 'PlusJakartaSans-SemiBold',
+      fontSize: 14,
+    },
+    toggleTextActive: {
+      color: theme.text.inverse,
+      fontFamily: 'PlusJakartaSans-Bold',
+    },
 
-  holeNav: {
-    flexDirection: 'row', alignItems: 'center', paddingHorizontal: 14,
-    paddingVertical: 10, backgroundColor: '#070d15', gap: 8,
-  },
-  holeNavBtn: { paddingHorizontal: 16, paddingVertical: 8, borderRadius: 10, backgroundColor: '#0c1a28', borderWidth: 1, borderColor: '#1c3250' },
-  holeNavBtnDisabled: { opacity: 0.25 },
-  holeNavBtnText: { color: '#4ade80', fontWeight: '700', fontSize: 13 },
-  holeNavBtnTextDisabled: { color: '#364f68' },
-  holePips: { flex: 1, flexDirection: 'row', flexWrap: 'nowrap', justifyContent: 'center', gap: 4 },
-  pip: { width: 6, height: 6, borderRadius: 3, backgroundColor: '#1c3250' },
-  pipActive: { backgroundColor: '#4ade80', width: 9, height: 9, borderRadius: 5 },
-  pipDone: { backgroundColor: '#22c55e' },
+    // Hole view header card
+    holeHeaderCard: {
+      flexDirection: 'row',
+      justifyContent: 'space-between',
+      alignItems: 'center',
+      backgroundColor: theme.bg.card,
+      borderBottomWidth: 1,
+      borderBottomColor: theme.isDark ? theme.glass?.border : theme.border.default,
+      paddingHorizontal: 20,
+      paddingVertical: 14,
+      ...(theme.isDark ? {} : theme.shadow.card),
+    },
+    holeHeaderLeft: { gap: 2 },
+    holeHeaderRound: {
+      color: theme.text.muted,
+      fontSize: 11,
+      fontFamily: 'PlusJakartaSans-SemiBold',
+      letterSpacing: 0.5,
+    },
+    holeNumberRow: { flexDirection: 'row', alignItems: 'baseline', gap: 8 },
+    holeNumberLabel: {
+      color: theme.text.muted,
+      fontSize: 10,
+      fontFamily: 'PlusJakartaSans-Bold',
+      letterSpacing: 1.5,
+    },
+    holeNumber: {
+      color: theme.text.primary,
+      fontSize: 44,
+      fontFamily: 'PlusJakartaSans-ExtraBold',
+      lineHeight: 48,
+      letterSpacing: -1,
+    },
+    holeHeaderRight: { flexDirection: 'row', gap: 20 },
+    holeMetaItem: { alignItems: 'center', gap: 4 },
+    holeMetaLabel: {
+      color: theme.text.muted,
+      fontSize: 10,
+      fontFamily: 'PlusJakartaSans-Bold',
+      letterSpacing: 1.5,
+    },
+    holeMetaValue: {
+      color: theme.text.primary,
+      fontSize: 22,
+      fontFamily: 'PlusJakartaSans-ExtraBold',
+    },
 
-  playerCardsContent: { padding: 14, paddingTop: 10, gap: 8 },
-  pairLabel: { fontSize: 10, fontWeight: '700', letterSpacing: 1.5, marginBottom: 4, marginLeft: 2, textTransform: 'uppercase' },
-  playerCard: {
-    backgroundColor: '#0c1a28', borderRadius: 14, borderWidth: 1, borderColor: '#1c3250',
-    paddingVertical: 14, paddingHorizontal: 16, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
-    overflow: 'hidden',
-    shadowColor: '#000', shadowOffset: { width: 0, height: 3 }, shadowOpacity: 0.3, shadowRadius: 8, elevation: 5,
-  },
-  playerCardLeft: { flexDirection: 'row', alignItems: 'center', gap: 12 },
-  playerAvatar: {
-    width: 38, height: 38, borderRadius: 19,
-    alignItems: 'center', justifyContent: 'center',
-  },
-  playerAvatarText: { color: '#fff', fontWeight: '900', fontSize: 15 },
-  playerCardName: { color: '#f1f5f9', fontWeight: '700', fontSize: 15 },
-  playerCardHcp: { color: '#7a8fa8', fontSize: 12, marginTop: 2, fontWeight: '500' },
-  playerCardRight: { flexDirection: 'row', alignItems: 'center', gap: 8 },
-  stepBtn: {
-    width: 38, height: 38, borderRadius: 10,
-    backgroundColor: '#112038', borderWidth: 1, borderColor: '#1c3250',
-    alignItems: 'center', justifyContent: 'center',
-  },
-  stepBtnText: { color: '#f1f5f9', fontSize: 20, fontWeight: '700', lineHeight: 22 },
-  scoreDisplay: { width: 52, alignItems: 'center' },
-  scoreDisplayNum: { color: '#f1f5f9', fontSize: 26, fontWeight: '900' },
-  scoreDisplayDefault: { color: '#364f68' },
-  scoreDisplayPts: { fontSize: 11, fontWeight: '700', marginTop: -1 },
+    // Hole navigation
+    holeNav: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      paddingHorizontal: 14,
+      paddingVertical: 10,
+      backgroundColor: theme.bg.primary,
+      gap: 8,
+    },
+    holeNavBtn: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: 4,
+      paddingHorizontal: 12,
+      paddingVertical: 8,
+      borderRadius: 10,
+      backgroundColor: theme.bg.card,
+      borderWidth: 1,
+      borderColor: theme.isDark ? theme.glass?.border : theme.border.default,
+    },
+    holeNavBtnDisabled: { opacity: 0.3 },
+    holeNavBtnText: {
+      color: theme.accent.primary,
+      fontFamily: 'PlusJakartaSans-Bold',
+      fontSize: 13,
+    },
+    holeNavBtnTextDisabled: { color: theme.text.muted },
+    holePips: {
+      flex: 1,
+      flexDirection: 'row',
+      flexWrap: 'nowrap',
+      justifyContent: 'center',
+      gap: 4,
+    },
+    pip: {
+      width: 6,
+      height: 6,
+      borderRadius: 3,
+      backgroundColor: theme.isDark ? theme.bg.elevated : theme.border.default,
+    },
+    pipActive: {
+      backgroundColor: theme.accent.primary,
+      width: 9,
+      height: 9,
+      borderRadius: 5,
+    },
+    pipDone: { backgroundColor: theme.accent.primary },
 
-  notesInput: {
-    backgroundColor: '#0c1a28', color: '#f1f5f9', borderTopWidth: 1, borderTopColor: '#1c3250',
-    paddingHorizontal: 18, paddingVertical: 12, fontSize: 14, minHeight: 44,
-    textAlignVertical: 'top',
-  },
-  // Round totals strip
-  totalsStrip: {
-    backgroundColor: '#0c1a28', borderTopWidth: 1, borderTopColor: '#1c3250',
-    paddingHorizontal: 18, paddingVertical: 12,
-  },
-  totalStripLabel: { color: '#364f68', fontSize: 10, fontWeight: '700', letterSpacing: 1.5, marginBottom: 8, textTransform: 'uppercase' },
-  totalStripRow: { flexDirection: 'row', justifyContent: 'space-around' },
-  totalStripPlayer: { alignItems: 'center', gap: 2 },
-  totalStripName: { color: '#7a8fa8', fontSize: 11, fontWeight: '600' },
-  totalStripPts: { color: '#4ade80', fontSize: 18, fontWeight: '900' },
-  totalStripStr: { color: '#364f68', fontSize: 11 },
+    // Player cards
+    playerCardsContent: { padding: 14, paddingTop: 10, gap: 8 },
+    pairLabel: {
+      fontSize: 10,
+      fontFamily: 'PlusJakartaSans-Bold',
+      letterSpacing: 1.5,
+      marginBottom: 4,
+      marginLeft: 2,
+      textTransform: 'uppercase',
+    },
+    playerCard: {
+      backgroundColor: theme.bg.card,
+      borderRadius: 16,
+      borderWidth: 1,
+      borderColor: theme.isDark ? theme.glass?.border : theme.border.default,
+      paddingVertical: 14,
+      paddingHorizontal: 16,
+      flexDirection: 'row',
+      alignItems: 'center',
+      justifyContent: 'space-between',
+      overflow: 'hidden',
+      ...(theme.isDark ? {} : theme.shadow.card),
+    },
+    playerCardLeft: { flexDirection: 'row', alignItems: 'center', gap: 12 },
+    playerAvatar: {
+      width: 38,
+      height: 38,
+      borderRadius: 19,
+      alignItems: 'center',
+      justifyContent: 'center',
+    },
+    playerAvatarText: {
+      color: '#fff',
+      fontFamily: 'PlusJakartaSans-ExtraBold',
+      fontSize: 15,
+    },
+    playerCardName: {
+      color: theme.text.primary,
+      fontFamily: 'PlusJakartaSans-Bold',
+      fontSize: 15,
+    },
+    playerCardHcp: {
+      color: theme.text.secondary,
+      fontSize: 12,
+      marginTop: 2,
+      fontFamily: 'PlusJakartaSans-Medium',
+    },
+    playerCardRight: { flexDirection: 'row', alignItems: 'center', gap: 8 },
+    stepBtn: {
+      width: 38,
+      height: 38,
+      borderRadius: 10,
+      backgroundColor: theme.isDark ? theme.bg.elevated : theme.bg.secondary,
+      borderWidth: 1,
+      borderColor: theme.isDark ? theme.glass?.border : theme.border.default,
+      alignItems: 'center',
+      justifyContent: 'center',
+    },
+    scoreDisplay: { width: 52, alignItems: 'center' },
+    scoreDisplayNum: {
+      color: theme.text.primary,
+      fontSize: 26,
+      fontFamily: 'PlusJakartaSans-ExtraBold',
+    },
+    scoreDisplayPts: {
+      fontSize: 11,
+      fontFamily: 'PlusJakartaSans-Bold',
+      marginTop: -1,
+    },
 
-  // Match panel (hole-by-hole best ball)
-  matchPanel: {
-    backgroundColor: '#0c1a28', borderTopWidth: 1, borderTopColor: '#1c3250',
-    paddingHorizontal: 18, paddingVertical: 12,
-  },
-  matchPanelHeaderRow: { flexDirection: 'row', alignItems: 'center', marginBottom: 6 },
-  matchPanelNameCol: { flex: 1 },
-  matchPanelColLabel: { width: 56, textAlign: 'center', color: '#364f68', fontSize: 10, fontWeight: '700', letterSpacing: 1.5, textTransform: 'uppercase' },
-  matchPanelDataRow: { flexDirection: 'row', alignItems: 'center', paddingVertical: 4 },
-  matchPanelName: { flex: 1, color: '#7a8fa8', fontSize: 13, fontWeight: '600' },
-  matchPanelStat: { width: 56, textAlign: 'center', color: '#7a8fa8', fontSize: 20, fontWeight: '800' },
-  matchPanelStatRound: { color: '#c8d6e5' },
-  matchPanelWinner: { color: '#4ade80' },
-  matchPanelLoser: { color: '#f87171' },
+    // Notes input
+    notesInput: {
+      backgroundColor: theme.bg.card,
+      color: theme.text.primary,
+      borderTopWidth: 1,
+      borderTopColor: theme.isDark ? theme.glass?.border : theme.border.default,
+      paddingHorizontal: 18,
+      paddingVertical: 12,
+      fontSize: 14,
+      fontFamily: 'PlusJakartaSans-Regular',
+      minHeight: 44,
+      textAlignVertical: 'top',
+    },
 
-  saveBtn: { backgroundColor: '#22c55e', marginHorizontal: 14, marginVertical: 12, borderRadius: 14, padding: 17, alignItems: 'center' },
-  saveBtnText: { color: '#fff', fontWeight: '800', fontSize: 16 },
+    // Round totals strip
+    totalsStrip: {
+      backgroundColor: theme.bg.card,
+      borderTopWidth: 1,
+      borderTopColor: theme.isDark ? theme.glass?.border : theme.border.default,
+      paddingHorizontal: 18,
+      paddingVertical: 12,
+    },
+    totalStripLabel: {
+      color: theme.text.muted,
+      fontSize: 10,
+      fontFamily: 'PlusJakartaSans-Bold',
+      letterSpacing: 1.5,
+      marginBottom: 8,
+      textTransform: 'uppercase',
+    },
+    totalStripRow: { flexDirection: 'row', justifyContent: 'space-around' },
+    totalStripPlayer: { alignItems: 'center', gap: 2 },
+    totalStripName: {
+      color: theme.text.secondary,
+      fontSize: 11,
+      fontFamily: 'PlusJakartaSans-SemiBold',
+    },
+    totalStripPts: {
+      color: theme.accent.primary,
+      fontSize: 18,
+      fontFamily: 'PlusJakartaSans-ExtraBold',
+    },
+    totalStripStr: {
+      color: theme.text.muted,
+      fontSize: 11,
+      fontFamily: 'PlusJakartaSans-Regular',
+    },
 
-  // Grid view
-  gridContent: { padding: 16, paddingTop: 12, paddingBottom: 40 },
-  title: { fontSize: 22, fontWeight: '900', color: '#4ade80', letterSpacing: -0.5 },
-  subtitle: { color: '#7a8fa8', marginBottom: 16, fontWeight: '500' },
-  headerRow: { flexDirection: 'row', borderBottomWidth: 1, borderBottomColor: '#1c3250', paddingBottom: 8, marginBottom: 2 },
-  holeRow: { flexDirection: 'row', alignItems: 'center', paddingVertical: 5 },
-  altRow: { backgroundColor: '#0c1a28' },
-  totalsRow: { borderTopWidth: 1, borderTopColor: '#1c3250', marginTop: 4, paddingTop: 8 },
-  headerText: { fontWeight: '700', fontSize: 12 },
-  cell: { justifyContent: 'center', alignItems: 'center', paddingHorizontal: 2 },
-  holeCell: { width: 36, color: '#7a8fa8', fontSize: 13 },
-  parCell: { width: 32, color: '#c8d6e5', textAlign: 'center', fontSize: 13 },
-  siCell: { width: 32, color: '#364f68', fontSize: 11, textAlign: 'center' },
-  playerCell: { width: 60 },
-  inputCell: { alignItems: 'center' },
-  scoreInput: {
-    backgroundColor: '#112038', color: '#f1f5f9', borderRadius: 8, borderWidth: 1, borderColor: '#1c3250',
-    width: 42, textAlign: 'center', fontSize: 16, fontWeight: '600', padding: 5,
-  },
-  pts: { fontSize: 10, color: '#364f68', marginTop: 2, fontWeight: '600' },
-  goodPts: { color: '#4ade80' },
-  zeroPts: { color: '#f87171' },
-  totalText: { color: '#f1f5f9', fontWeight: '700', fontSize: 13, textAlign: 'center' },
-  totalPts: { fontWeight: '800', fontSize: 13, textAlign: 'center' },
-  totalStr: { color: '#364f68', fontSize: 11, textAlign: 'center' },
+    // Match panel (hole-by-hole best ball)
+    matchPanel: {
+      backgroundColor: theme.bg.card,
+      borderTopWidth: 1,
+      borderTopColor: theme.isDark ? theme.glass?.border : theme.border.default,
+      paddingHorizontal: 18,
+      paddingVertical: 12,
+    },
+    matchPanelHeaderRow: { flexDirection: 'row', alignItems: 'center', marginBottom: 6 },
+    matchPanelNameCol: { flex: 1 },
+    matchPanelColLabel: {
+      width: 56,
+      textAlign: 'center',
+      color: theme.text.muted,
+      fontSize: 10,
+      fontFamily: 'PlusJakartaSans-Bold',
+      letterSpacing: 1.5,
+      textTransform: 'uppercase',
+    },
+    matchPanelDataRow: { flexDirection: 'row', alignItems: 'center', paddingVertical: 4 },
+    matchPanelName: {
+      flex: 1,
+      color: theme.text.secondary,
+      fontSize: 13,
+      fontFamily: 'PlusJakartaSans-SemiBold',
+    },
+    matchPanelStat: {
+      width: 56,
+      textAlign: 'center',
+      color: theme.text.secondary,
+      fontSize: 20,
+      fontFamily: 'PlusJakartaSans-ExtraBold',
+    },
+    matchPanelStatRound: { color: theme.text.primary },
 
-  // Live match
-  liveMatch: { backgroundColor: '#031a0a', borderRadius: 14, borderWidth: 1, borderColor: '#1a4a2e', padding: 16, margin: 16, gap: 10 },
-  liveMatchTitle: { color: '#4ade80', fontWeight: '700', fontSize: 12, marginBottom: 2, letterSpacing: 1, textTransform: 'uppercase' },
-  liveRow: { flexDirection: 'row', alignItems: 'center', gap: 6 },
-  liveName: { flex: 1, color: '#7a8fa8', fontSize: 12 },
-  liveNameRight: { textAlign: 'right' },
-  liveWin: { color: '#4ade80', fontWeight: '700' },
-  liveLabel: { color: '#364f68', fontSize: 11, width: 68, textAlign: 'center' },
-  liveScore: { color: '#f1f5f9', fontWeight: '900', fontSize: 22, width: 32, textAlign: 'center' },
-  liveDash: { color: '#364f68', fontSize: 18 },
-});
+    // Save / next button
+    saveBtn: {
+      backgroundColor: theme.accent.primary,
+      marginHorizontal: 14,
+      marginVertical: 12,
+      borderRadius: 16,
+      padding: 17,
+      alignItems: 'center',
+      justifyContent: 'center',
+      flexDirection: 'row',
+      gap: 6,
+      ...(theme.isDark ? {} : theme.shadow.accent),
+    },
+    saveBtnText: {
+      color: theme.text.inverse,
+      fontFamily: 'PlusJakartaSans-ExtraBold',
+      fontSize: 16,
+    },
+
+    // Grid view
+    gridContent: { padding: 16, paddingTop: 12, paddingBottom: 40 },
+    title: {
+      fontSize: 22,
+      fontFamily: 'PlusJakartaSans-ExtraBold',
+      color: theme.accent.primary,
+      letterSpacing: -0.5,
+    },
+    subtitle: {
+      color: theme.text.secondary,
+      marginBottom: 16,
+      fontFamily: 'PlusJakartaSans-Medium',
+    },
+    headerRow: {
+      flexDirection: 'row',
+      borderBottomWidth: 1,
+      borderBottomColor: theme.isDark ? theme.glass?.border : theme.border.default,
+      paddingBottom: 8,
+      marginBottom: 2,
+    },
+    holeRow: { flexDirection: 'row', alignItems: 'center', paddingVertical: 5 },
+    altRow: { backgroundColor: theme.bg.card },
+    totalsRow: {
+      borderTopWidth: 1,
+      borderTopColor: theme.isDark ? theme.glass?.border : theme.border.default,
+      marginTop: 4,
+      paddingTop: 8,
+    },
+    headerText: {
+      fontFamily: 'PlusJakartaSans-Bold',
+      fontSize: 12,
+    },
+    cell: { justifyContent: 'center', alignItems: 'center', paddingHorizontal: 2 },
+    holeCell: { width: 36, color: theme.text.secondary, fontSize: 13, fontFamily: 'PlusJakartaSans-Medium' },
+    parCell: { width: 32, color: theme.text.primary, textAlign: 'center', fontSize: 13, fontFamily: 'PlusJakartaSans-Medium' },
+    siCell: { width: 32, color: theme.text.muted, fontSize: 11, textAlign: 'center', fontFamily: 'PlusJakartaSans-Regular' },
+    playerCell: { width: 60 },
+    inputCell: { alignItems: 'center' },
+    scoreInput: {
+      backgroundColor: theme.isDark ? theme.bg.elevated : theme.bg.secondary,
+      color: theme.text.primary,
+      borderRadius: 10,
+      borderWidth: 1,
+      borderColor: theme.isDark ? theme.glass?.border : theme.border.default,
+      width: 48,
+      height: 48,
+      textAlign: 'center',
+      fontSize: 16,
+      fontFamily: 'PlusJakartaSans-Bold',
+      padding: 5,
+    },
+    pts: {
+      fontSize: 10,
+      fontFamily: 'PlusJakartaSans-SemiBold',
+      marginTop: 2,
+    },
+    totalText: {
+      color: theme.text.primary,
+      fontFamily: 'PlusJakartaSans-Bold',
+      fontSize: 13,
+      textAlign: 'center',
+    },
+    totalPts: {
+      fontFamily: 'PlusJakartaSans-ExtraBold',
+      fontSize: 13,
+      textAlign: 'center',
+    },
+    totalStr: {
+      color: theme.text.muted,
+      fontSize: 11,
+      textAlign: 'center',
+      fontFamily: 'PlusJakartaSans-Regular',
+    },
+
+    // Live match
+    liveMatch: {
+      backgroundColor: theme.isDark ? theme.bg.elevated : theme.accent.light,
+      borderRadius: 16,
+      borderWidth: 1,
+      borderColor: theme.isDark ? theme.glass?.border : theme.border.default,
+      padding: 16,
+      margin: 16,
+      gap: 10,
+      ...(theme.isDark ? {} : theme.shadow.card),
+    },
+    liveMatchTitle: {
+      color: theme.accent.primary,
+      fontFamily: 'PlusJakartaSans-Bold',
+      fontSize: 12,
+      marginBottom: 2,
+      letterSpacing: 1,
+      textTransform: 'uppercase',
+    },
+    liveRow: { flexDirection: 'row', alignItems: 'center', gap: 6 },
+    liveName: {
+      flex: 1,
+      color: theme.text.secondary,
+      fontSize: 12,
+      fontFamily: 'PlusJakartaSans-Medium',
+    },
+    liveNameRight: { textAlign: 'right' },
+    liveWin: {
+      color: theme.accent.primary,
+      fontFamily: 'PlusJakartaSans-Bold',
+    },
+    liveScore: {
+      color: theme.text.primary,
+      fontFamily: 'PlusJakartaSans-ExtraBold',
+      fontSize: 22,
+      width: 32,
+      textAlign: 'center',
+    },
+    liveDash: {
+      color: theme.text.muted,
+      fontSize: 18,
+      fontFamily: 'PlusJakartaSans-Regular',
+    },
+  });
+}
