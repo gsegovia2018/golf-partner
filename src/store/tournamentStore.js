@@ -1,24 +1,53 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import { supabase } from '../lib/supabase';
 
-const TOURNAMENTS_KEY = '@golf_tournaments';
 const ACTIVE_ID_KEY = '@golf_active_id';
+const LEGACY_TOURNAMENTS_KEY = '@golf_tournaments';
 const LEGACY_KEY = '@golf_tournament';
 
+// Runs once: pushes any locally-stored tournaments up to Supabase then clears local keys.
 async function migrate() {
-  const legacy = await AsyncStorage.getItem(LEGACY_KEY);
-  if (!legacy) return;
-  const t = JSON.parse(legacy);
-  await AsyncStorage.multiSet([
-    [TOURNAMENTS_KEY, JSON.stringify([t])],
-    [ACTIVE_ID_KEY, t.id],
+  const [legacy, legacyAll] = await Promise.all([
+    AsyncStorage.getItem(LEGACY_KEY),
+    AsyncStorage.getItem(LEGACY_TOURNAMENTS_KEY),
   ]);
-  await AsyncStorage.removeItem(LEGACY_KEY);
+
+  const toUpsert = [];
+
+  if (legacyAll) {
+    const ts = JSON.parse(legacyAll);
+    ts.forEach((t) => toUpsert.push({ id: t.id, name: t.name, created_at: t.createdAt, data: t }));
+    await AsyncStorage.removeItem(LEGACY_TOURNAMENTS_KEY);
+  }
+
+  if (legacy) {
+    const t = JSON.parse(legacy);
+    if (!toUpsert.find((r) => r.id === t.id)) {
+      toUpsert.push({ id: t.id, name: t.name, created_at: t.createdAt, data: t });
+    }
+    await AsyncStorage.removeItem(LEGACY_KEY);
+  }
+
+  if (toUpsert.length > 0) {
+    await supabase.from('tournaments').upsert(toUpsert);
+  }
+}
+
+let _migrated = false;
+async function ensureMigrated() {
+  if (_migrated) return;
+  await migrate();
+  _migrated = true;
 }
 
 export async function loadAllTournaments() {
-  await migrate();
-  const raw = await AsyncStorage.getItem(TOURNAMENTS_KEY);
-  return raw ? JSON.parse(raw) : [];
+  await ensureMigrated();
+  const { data, error } = await supabase
+    .from('tournaments')
+    .select('data')
+    .order('created_at', { ascending: false });
+  if (error) throw error;
+  return data.map((row) => row.data);
 }
 
 export async function loadTournament() {
@@ -31,13 +60,14 @@ export async function loadTournament() {
 }
 
 export async function saveTournament(tournament) {
-  const all = await loadAllTournaments();
-  const idx = all.findIndex((t) => t.id === tournament.id);
-  if (idx >= 0) all[idx] = tournament; else all.push(tournament);
-  await AsyncStorage.multiSet([
-    [TOURNAMENTS_KEY, JSON.stringify(all)],
-    [ACTIVE_ID_KEY, tournament.id],
-  ]);
+  const { error } = await supabase.from('tournaments').upsert({
+    id: tournament.id,
+    name: tournament.name,
+    created_at: tournament.createdAt,
+    data: tournament,
+  });
+  if (error) throw error;
+  await AsyncStorage.setItem(ACTIVE_ID_KEY, tournament.id);
 }
 
 export async function setActiveTournament(id) {
@@ -49,12 +79,9 @@ export async function clearActiveTournament() {
 }
 
 export async function deleteTournament(id) {
-  const all = await loadAllTournaments();
-  const filtered = all.filter((t) => t.id !== id);
   const activeId = await AsyncStorage.getItem(ACTIVE_ID_KEY);
-  const ops = [[TOURNAMENTS_KEY, JSON.stringify(filtered)]];
-  if (activeId === id) ops.push([ACTIVE_ID_KEY, '']);
-  await AsyncStorage.multiSet(ops);
+  const { error } = await supabase.from('tournaments').delete().eq('id', id);
+  if (error) throw error;
   if (activeId === id) await AsyncStorage.removeItem(ACTIVE_ID_KEY);
 }
 
