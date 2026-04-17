@@ -98,12 +98,21 @@ export function calcStablefordPoints(par, strokes, playerHandicap, holeStrokeInd
   return Math.max(0, points);
 }
 
+// Lowest stroke count that still yields 0 Stableford points on this hole for this
+// player. Use as the recorded score when a player picks up the ball.
+export function pickupStrokes(par, playerHandicap, holeStrokeIndex) {
+  const extra = calcExtraShots(playerHandicap, holeStrokeIndex);
+  return par + 2 + extra;
+}
+
 export function randomPairs(players) {
   const shuffled = [...players].sort(() => Math.random() - 0.5);
-  return [
-    [shuffled[0], shuffled[1]],
-    [shuffled[2], shuffled[3]],
-  ];
+  const pairs = [];
+  for (let i = 0; i < shuffled.length; i += 2) {
+    const pair = [shuffled[i], shuffled[i + 1]].filter(Boolean);
+    if (pair.length > 0) pairs.push(pair);
+  }
+  return pairs;
 }
 
 export const DEFAULT_SETTINGS = {
@@ -165,8 +174,9 @@ export function roundPairLeaderboard(round, players) {
 //   bestBall: { pair1: holes won, pair2: holes won, halved }
 //   worstBall: same
 export function calcBestWorstBall(round, players) {
-  if (!round.pairs?.length) return null;
+  if (!round.pairs || round.pairs.length < 2) return null;
   const [pair1, pair2] = round.pairs;
+  if (!pair1 || !pair2 || pair1.length < 2 || pair2.length < 2) return null;
   const playersById = Object.fromEntries(players.map((p) => [p.id, p]));
 
   const pts = (playerId, hole) => {

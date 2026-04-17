@@ -29,7 +29,7 @@ export function playerAvgStableford(tournament, playerId) {
   return +(history.reduce((s, r) => s + r.points, 0) / history.length).toFixed(1);
 }
 
-export function playerScoreDistribution(tournament, playerId) {
+export function playerScoreDistribution(tournament, playerId, { useNet = false } = {}) {
   const dist = { eagles: 0, birdies: 0, pars: 0, bogeys: 0, doubles: 0, worse: 0, total: 0 };
   tournament.rounds.forEach(round => {
     if (!round.scores?.[playerId]) return;
@@ -38,14 +38,14 @@ export function playerScoreDistribution(tournament, playerId) {
     round.holes.forEach(hole => {
       const sc = round.scores[playerId]?.[hole.number];
       if (!sc) return;
-      const extra = calcExtraShots(handicap, hole.strokeIndex);
-      const netVsPar = sc - extra - hole.par;
+      const extra = useNet ? calcExtraShots(handicap, hole.strokeIndex) : 0;
+      const vsPar = sc - extra - hole.par;
       dist.total++;
-      if (netVsPar <= -2) dist.eagles++;
-      else if (netVsPar === -1) dist.birdies++;
-      else if (netVsPar === 0) dist.pars++;
-      else if (netVsPar === 1) dist.bogeys++;
-      else if (netVsPar === 2) dist.doubles++;
+      if (vsPar <= -2) dist.eagles++;
+      else if (vsPar === -1) dist.birdies++;
+      else if (vsPar === 0) dist.pars++;
+      else if (vsPar === 1) dist.bogeys++;
+      else if (vsPar === 2) dist.doubles++;
       else dist.worse++;
     });
   });
@@ -54,8 +54,8 @@ export function playerScoreDistribution(tournament, playerId) {
 
 // ── Streaks ──
 
-export function playerStreaks(tournament, playerId) {
-  const results = []; // array of net-vs-par per hole across all rounds
+export function playerStreaks(tournament, playerId, { useNet = false } = {}) {
+  const results = []; // array of vs-par per hole across all rounds
   tournament.rounds.forEach(round => {
     if (!round.scores?.[playerId]) return;
     const handicap = round.playerHandicaps?.[playerId]
@@ -63,7 +63,7 @@ export function playerStreaks(tournament, playerId) {
     round.holes.forEach(hole => {
       const sc = round.scores[playerId]?.[hole.number];
       if (!sc) return;
-      const extra = calcExtraShots(handicap, hole.strokeIndex);
+      const extra = useNet ? calcExtraShots(handicap, hole.strokeIndex) : 0;
       results.push(sc - extra - hole.par);
     });
   });
@@ -179,7 +179,7 @@ export function pairPerformance(tournament) {
 
 // ── Tournament Highlights ──
 
-export function tournamentHighlights(tournament) {
+export function tournamentHighlights(tournament, { useNet = false } = {}) {
   let bestRound = null, mostBirdies = null, longestParStreak = null;
 
   tournament.players.forEach(p => {
@@ -188,12 +188,12 @@ export function tournamentHighlights(tournament) {
       if (!bestRound || r.points > bestRound.points) bestRound = { player: p, ...r };
     });
 
-    const dist = playerScoreDistribution(tournament, p.id);
+    const dist = playerScoreDistribution(tournament, p.id, { useNet });
     if (!mostBirdies || dist.birdies + dist.eagles > mostBirdies.count) {
       mostBirdies = { player: p, count: dist.birdies + dist.eagles };
     }
 
-    const streaks = playerStreaks(tournament, p.id);
+    const streaks = playerStreaks(tournament, p.id, { useNet });
     if (!longestParStreak || streaks.bestParStreak > longestParStreak.count) {
       longestParStreak = { player: p, count: streaks.bestParStreak };
     }

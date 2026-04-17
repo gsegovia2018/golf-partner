@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { View, Text, TouchableOpacity, StyleSheet, ScrollView, FlatList } from 'react-native';
+import { View, Text, TouchableOpacity, StyleSheet, ScrollView, FlatList, Switch } from 'react-native';
 import { Feather } from '@expo/vector-icons';
 import { useTheme } from '../theme/ThemeContext';
 import { loadTournament } from '../store/tournamentStore';
@@ -18,6 +18,7 @@ export default function StatsScreen({ navigation }) {
   const [tab, setTab] = useState(0);
   const [selectedPlayer, setSelectedPlayer] = useState(0);
   const [h2hPlayer, setH2hPlayer] = useState(1);
+  const [useNet, setUseNet] = useState(false);
 
   useEffect(() => {
     loadTournament().then(t => { setTournament(t); });
@@ -46,9 +47,22 @@ export default function StatsScreen({ navigation }) {
         ))}
       </View>
 
+      {(tab === 0 || tab === 1) && (
+        <View style={s.scoringToggle}>
+          <Text style={[s.scoringLabel, !useNet && s.scoringLabelActive]}>Gross</Text>
+          <Switch
+            value={useNet}
+            onValueChange={setUseNet}
+            trackColor={{ false: theme.border.default, true: theme.accent.primary }}
+            thumbColor="#fff"
+          />
+          <Text style={[s.scoringLabel, useNet && s.scoringLabelActive]}>Net</Text>
+        </View>
+      )}
+
       <ScrollView style={s.scrollView} contentContainerStyle={s.content}>
-        {tab === 0 && <OverviewTab tournament={tournament} theme={theme} s={s} />}
-        {tab === 1 && <PlayersTab tournament={tournament} players={players} selectedPlayer={selectedPlayer} setSelectedPlayer={setSelectedPlayer} theme={theme} s={s} />}
+        {tab === 0 && <OverviewTab tournament={tournament} useNet={useNet} theme={theme} s={s} />}
+        {tab === 1 && <PlayersTab tournament={tournament} players={players} selectedPlayer={selectedPlayer} setSelectedPlayer={setSelectedPlayer} useNet={useNet} theme={theme} s={s} />}
         {tab === 2 && <HolesTab tournament={tournament} completedRounds={completedRounds} theme={theme} s={s} />}
         {tab === 3 && <PairsTab tournament={tournament} players={players} h2hPlayer={h2hPlayer} setH2hPlayer={setH2hPlayer} selectedPlayer={selectedPlayer} setSelectedPlayer={setSelectedPlayer} theme={theme} s={s} />}
       </ScrollView>
@@ -57,8 +71,9 @@ export default function StatsScreen({ navigation }) {
 }
 
 // ── Overview Tab ──
-function OverviewTab({ tournament, theme, s }) {
-  const highlights = tournamentHighlights(tournament);
+function OverviewTab({ tournament, useNet, theme, s }) {
+  const highlights = tournamentHighlights(tournament, { useNet });
+  const modeLabel = useNet ? 'net' : 'gross';
   if (!highlights.bestRound) {
     return <Text style={s.emptyText}>No scores entered yet. Play a round first!</Text>;
   }
@@ -69,10 +84,10 @@ function OverviewTab({ tournament, theme, s }) {
         <HighlightCard icon="award" label="Best Round" value={`${highlights.bestRound.player.name} — ${highlights.bestRound.points} pts`} sub={highlights.bestRound.courseName} theme={theme} s={s} />
       )}
       {highlights.mostBirdies && highlights.mostBirdies.count > 0 && (
-        <HighlightCard icon="zap" label="Most Birdies+" value={`${highlights.mostBirdies.player.name} — ${highlights.mostBirdies.count}`} sub="Birdies + Eagles (net)" theme={theme} s={s} />
+        <HighlightCard icon="zap" label="Most Birdies+" value={`${highlights.mostBirdies.player.name} — ${highlights.mostBirdies.count}`} sub={`Birdies + Eagles (${modeLabel})`} theme={theme} s={s} />
       )}
       {highlights.longestParStreak && highlights.longestParStreak.count > 1 && (
-        <HighlightCard icon="trending-up" label="Longest Par Streak" value={`${highlights.longestParStreak.player.name} — ${highlights.longestParStreak.count} holes`} sub="Consecutive holes at par or better (net)" theme={theme} s={s} />
+        <HighlightCard icon="trending-up" label="Longest Par Streak" value={`${highlights.longestParStreak.player.name} — ${highlights.longestParStreak.count} holes`} sub={`Consecutive holes at par or better (${modeLabel})`} theme={theme} s={s} />
       )}
       {highlights.bestHole && (
         <HighlightCard icon="thumbs-up" label="Easiest Hole" value={`Hole ${highlights.bestHole.holeNumber} — ${highlights.bestHole.avgPoints} avg pts`} sub={`${highlights.bestHole.courseName} · Par ${highlights.bestHole.par}`} theme={theme} s={s} />
@@ -100,12 +115,12 @@ function HighlightCard({ icon, label, value, sub, theme, s }) {
 }
 
 // ── Players Tab ──
-function PlayersTab({ tournament, players, selectedPlayer, setSelectedPlayer, theme, s }) {
+function PlayersTab({ tournament, players, selectedPlayer, setSelectedPlayer, useNet, theme, s }) {
   const player = players[selectedPlayer];
   if (!player) return null;
 
-  const dist = playerScoreDistribution(tournament, player.id);
-  const streaks = playerStreaks(tournament, player.id);
+  const dist = playerScoreDistribution(tournament, player.id, { useNet });
+  const streaks = playerStreaks(tournament, player.id, { useNet });
   const history = playerRoundHistory(tournament, player.id);
   const avg = playerAvgStableford(tournament, player.id);
 
@@ -368,6 +383,12 @@ const makeStyles = (t) => StyleSheet.create({
 
   // Tabs
   tabBar: { flexDirection: 'row', paddingHorizontal: 16, gap: 6, paddingBottom: 8 },
+  scoringToggle: {
+    flexDirection: 'row', alignItems: 'center', justifyContent: 'center',
+    gap: 10, paddingVertical: 6, paddingHorizontal: 16,
+  },
+  scoringLabel: { fontFamily: 'PlusJakartaSans-SemiBold', color: t.text.muted, fontSize: 12 },
+  scoringLabelActive: { color: t.text.primary },
   tab: { paddingVertical: 6, paddingHorizontal: 14, borderRadius: 20, backgroundColor: t.bg.secondary, borderWidth: 1, borderColor: t.border.default },
   tabActive: { backgroundColor: t.accent.primary, borderColor: t.accent.primary },
   tabText: { fontFamily: 'PlusJakartaSans-SemiBold', fontSize: 12, color: t.text.muted },

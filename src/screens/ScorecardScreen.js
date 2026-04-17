@@ -7,7 +7,7 @@ import {
 import { Feather } from '@expo/vector-icons';
 import {
   loadTournament, saveTournament,
-  calcStablefordPoints, calcBestWorstBall, DEFAULT_SETTINGS,
+  calcStablefordPoints, calcBestWorstBall, pickupStrokes, DEFAULT_SETTINGS,
 } from '../store/tournamentStore';
 import { useTheme } from '../theme/ThemeContext';
 
@@ -277,39 +277,58 @@ function HoleView({ round, roundIndex, players, scores, notes, currentHole, hole
 
             const extraShots = handicap >= hole.strokeIndex ? (Math.floor(handicap / 18) + (handicap % 18 >= hole.strokeIndex ? 1 : 0)) : 0;
 
+            const pickup = pickupStrokes(hole.par, handicap, hole.strokeIndex);
+            const isPickup = strokes != null && strokes >= pickup;
+
             return (
               <React.Fragment key={player.id}>
                 {isFirstOfPair && (
                   <Text style={[s.pairLabel, { color: pairColor, marginTop: idx === 0 ? 0 : 16 }]}>{pairLabelText}</Text>
                 )}
                 <View style={[s.playerCard, { borderLeftColor: pairColor, borderLeftWidth: 3 }]}>
-                  <View style={s.playerCardLeft}>
-                    <View style={[s.playerAvatar, { backgroundColor: pairColor }]}>
-                      <Text style={s.playerAvatarText}>{player.name[0].toUpperCase()}</Text>
+                  <View style={s.playerCardRow}>
+                    <View style={s.playerCardLeft}>
+                      <View style={[s.playerAvatar, { backgroundColor: pairColor }]}>
+                        <Text style={s.playerAvatarText}>{player.name[0].toUpperCase()}</Text>
+                      </View>
+                      <View>
+                        <Text style={s.playerCardName}>{player.name}</Text>
+                        <Text style={s.playerCardHcp}>HCP {handicap}{extraShots > 0 ? ` +${extraShots}` : ''}</Text>
+                      </View>
                     </View>
-                    <View>
-                      <Text style={s.playerCardName}>{player.name}</Text>
-                      <Text style={s.playerCardHcp}>HCP {handicap}{extraShots > 0 ? ` +${extraShots}` : ''}</Text>
-                    </View>
-                  </View>
-                  <View style={s.playerCardRight}>
-                    <TouchableOpacity style={s.stepBtn} onPress={() => onStep(player.id, currentHole, -1)}>
-                      <Feather name="minus" size={18} color={theme.text.primary} />
-                    </TouchableOpacity>
-                    <View style={s.scoreDisplay}>
-                      <Text style={s.scoreDisplayNum}>
-                        {strokes ?? hole.par}
-                      </Text>
-                      {pts !== null && (
-                        <Text style={[s.scoreDisplayPts, { color: ptsColor }]}>
-                          {pts} {pts === 1 ? 'pt' : 'pts'}
+                    <View style={s.playerCardRight}>
+                      <TouchableOpacity style={s.stepBtn} onPress={() => onStep(player.id, currentHole, -1)}>
+                        <Feather name="minus" size={18} color={theme.text.primary} />
+                      </TouchableOpacity>
+                      <View style={s.scoreDisplay}>
+                        <Text style={s.scoreDisplayNum}>
+                          {strokes ?? hole.par}
                         </Text>
-                      )}
+                        {pts !== null && (
+                          <Text style={[s.scoreDisplayPts, { color: ptsColor }]}>
+                            {pts} {pts === 1 ? 'pt' : 'pts'}
+                          </Text>
+                        )}
+                      </View>
+                      <TouchableOpacity style={s.stepBtn} onPress={() => onStep(player.id, currentHole, 1)}>
+                        <Feather name="plus" size={18} color={theme.text.primary} />
+                      </TouchableOpacity>
                     </View>
-                    <TouchableOpacity style={s.stepBtn} onPress={() => onStep(player.id, currentHole, 1)}>
-                      <Feather name="plus" size={18} color={theme.text.primary} />
-                    </TouchableOpacity>
                   </View>
+                  <TouchableOpacity
+                    style={[s.pickupBtn, isPickup && s.pickupBtnActive]}
+                    onPress={() => onSetScore(player.id, currentHole, pickup)}
+                    activeOpacity={0.7}
+                  >
+                    <Feather
+                      name={isPickup ? 'check-circle' : 'x-circle'}
+                      size={12}
+                      color={isPickup ? theme.accent.primary : theme.text.muted}
+                    />
+                    <Text style={[s.pickupBtnText, isPickup && s.pickupBtnTextActive]}>
+                      {isPickup ? `Picked up · ${pickup} strokes` : `Pickup (${pickup} strokes)`}
+                    </Text>
+                  </TouchableOpacity>
                 </View>
               </React.Fragment>
             );
@@ -758,13 +777,42 @@ function makeStyles(theme) {
       borderRadius: 16,
       borderWidth: 1,
       borderColor: theme.isDark ? theme.glass?.border : theme.border.default,
-      paddingVertical: 14,
+      paddingVertical: 12,
       paddingHorizontal: 16,
+      overflow: 'hidden',
+      ...(theme.isDark ? {} : theme.shadow.card),
+    },
+    playerCardRow: {
       flexDirection: 'row',
       alignItems: 'center',
       justifyContent: 'space-between',
-      overflow: 'hidden',
-      ...(theme.isDark ? {} : theme.shadow.card),
+    },
+    pickupBtn: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      alignSelf: 'flex-end',
+      gap: 5,
+      paddingVertical: 5,
+      paddingHorizontal: 10,
+      marginTop: 6,
+      borderRadius: 999,
+      borderWidth: 1,
+      borderColor: theme.isDark ? theme.glass?.border : theme.border.default,
+      backgroundColor: theme.isDark ? theme.bg.elevated : theme.bg.secondary,
+    },
+    pickupBtnActive: {
+      borderColor: theme.accent.primary + '55',
+      backgroundColor: theme.isDark ? theme.accent.primary + '15' : theme.accent.light,
+    },
+    pickupBtnText: {
+      color: theme.text.muted,
+      fontSize: 11,
+      fontFamily: 'PlusJakartaSans-SemiBold',
+      letterSpacing: 0.2,
+    },
+    pickupBtnTextActive: {
+      color: theme.accent.primary,
+      fontFamily: 'PlusJakartaSans-Bold',
     },
     playerCardLeft: { flexDirection: 'row', alignItems: 'center', gap: 12 },
     playerAvatar: {

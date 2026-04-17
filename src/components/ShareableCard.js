@@ -1,18 +1,45 @@
 import React from 'react';
-import { View, Text, StyleSheet } from 'react-native';
+import { View, Text, StyleSheet, Platform } from 'react-native';
 import { captureRef } from 'react-native-view-shot';
 import * as Sharing from 'expo-sharing';
 import { useTheme } from '../theme/ThemeContext';
 
 // ---------------------------------------------------------------------------
 // shareView  --  capture a view ref as PNG and open the native share sheet
+// (with web fallback to Web Share API or file download)
 // ---------------------------------------------------------------------------
-export async function shareView(viewRef) {
+export async function shareView(viewRef, fileName = 'leaderboard.png') {
   try {
+    if (Platform.OS === 'web') {
+      const uri = await captureRef(viewRef, { format: 'png', quality: 1, result: 'data-uri' });
+      const blob = await (await fetch(uri)).blob();
+      const file = new File([blob], fileName, { type: 'image/png' });
+
+      if (typeof navigator !== 'undefined' && navigator.canShare && navigator.canShare({ files: [file] })) {
+        await navigator.share({ files: [file], title: 'Leaderboard' });
+        return;
+      }
+
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = fileName;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      URL.revokeObjectURL(url);
+      return;
+    }
+
     const uri = await captureRef(viewRef, { format: 'png', quality: 1 });
-    await Sharing.shareAsync(uri);
+    if (await Sharing.isAvailableAsync()) {
+      await Sharing.shareAsync(uri);
+    }
   } catch (e) {
     console.warn('Share failed:', e);
+    if (Platform.OS === 'web' && typeof window !== 'undefined') {
+      window.alert('Could not share. Try again or take a screenshot.');
+    }
   }
 }
 

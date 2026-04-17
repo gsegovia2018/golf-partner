@@ -23,12 +23,18 @@ export default function NextRoundScreen({ navigation, route }) {
 
   const countdownOpacity = useRef(new Animated.Value(0)).current;
   const countdownScale = useRef(new Animated.Value(1.4)).current;
-  const pair1Opacity = useRef(new Animated.Value(0)).current;
-  const pair1Scale = useRef(new Animated.Value(1.4)).current;
-  const pair2Opacity = useRef(new Animated.Value(0)).current;
-  const pair2Scale = useRef(new Animated.Value(1.4)).current;
+  const pairAnimsRef = useRef([]);
   const actionsOpacity = useRef(new Animated.Value(0)).current;
   const actionsTranslateY = useRef(new Animated.Value(20)).current;
+
+  function ensurePairAnims(count) {
+    while (pairAnimsRef.current.length < count) {
+      pairAnimsRef.current.push({
+        opacity: new Animated.Value(0),
+        scale: new Animated.Value(1.5),
+      });
+    }
+  }
 
   useEffect(() => {
     (async () => {
@@ -72,39 +78,37 @@ export default function NextRoundScreen({ navigation, route }) {
   }
 
   function revealPairs() {
-    pair1Opacity.setValue(0);
-    pair1Scale.setValue(1.5);
-    pair2Opacity.setValue(0);
-    pair2Scale.setValue(1.5);
+    ensurePairAnims(nextPairs.length);
+    nextPairs.forEach((_, i) => {
+      pairAnimsRef.current[i].opacity.setValue(0);
+      pairAnimsRef.current[i].scale.setValue(1.5);
+    });
     actionsOpacity.setValue(0);
     actionsTranslateY.setValue(20);
 
-    Animated.sequence([
-      Animated.parallel([
-        Animated.timing(pair1Opacity, { toValue: 1, duration: 350, useNativeDriver: true }),
-        Animated.spring(pair1Scale, {
-          toValue: 1,
-          damping: 12,
-          stiffness: 100,
-          useNativeDriver: true,
-        }),
-      ]),
-      Animated.delay(700),
-      Animated.parallel([
-        Animated.timing(pair2Opacity, { toValue: 1, duration: 350, useNativeDriver: true }),
-        Animated.spring(pair2Scale, {
-          toValue: 1,
-          damping: 12,
-          stiffness: 100,
-          useNativeDriver: true,
-        }),
-      ]),
-      Animated.delay(500),
+    const sequence = [];
+    nextPairs.forEach((_, i) => {
+      sequence.push(
+        Animated.parallel([
+          Animated.timing(pairAnimsRef.current[i].opacity, { toValue: 1, duration: 350, useNativeDriver: true }),
+          Animated.spring(pairAnimsRef.current[i].scale, {
+            toValue: 1,
+            damping: 12,
+            stiffness: 100,
+            useNativeDriver: true,
+          }),
+        ]),
+      );
+      if (i < nextPairs.length - 1) sequence.push(Animated.delay(700));
+    });
+    sequence.push(Animated.delay(500));
+    sequence.push(
       Animated.parallel([
         Animated.timing(actionsOpacity, { toValue: 1, duration: 400, useNativeDriver: true }),
         Animated.timing(actionsTranslateY, { toValue: 0, duration: 400, useNativeDriver: true }),
       ]),
-    ]).start();
+    );
+    Animated.sequence(sequence).start();
   }
 
   async function reshuffle() {
@@ -113,6 +117,7 @@ export default function NextRoundScreen({ navigation, route }) {
     if (revealOnly) {
       const updated = { ...tournament };
       updated.rounds[roundIndex].pairs = newPairs;
+      updated.rounds[roundIndex].revealed = true;
       await saveTournament(updated);
     }
     setPhase('reveal');
@@ -122,6 +127,7 @@ export default function NextRoundScreen({ navigation, route }) {
   async function handleConfirm() {
     const updated = { ...tournament };
     updated.rounds[roundIndex].pairs = nextPairs;
+    updated.rounds[roundIndex].revealed = true;
     if (!revealOnly) {
       updated.currentRound = roundIndex;
     }
@@ -150,41 +156,40 @@ export default function NextRoundScreen({ navigation, route }) {
 
   /* ─── Reveal phase ─── */
   if (phase === 'reveal') {
+    ensurePairAnims(nextPairs.length);
+    const pairColors = [theme.pairA, theme.pairB, theme.accent.primary, theme.accent.primary];
     return (
       <View style={s.revealContainer}>
         <View style={s.pairsContainer}>
-          <View
-            style={[
-              s.revealPairCard,
-              {
-                opacity: pair1Opacity,
-                transform: [{ scale: pair1Scale }],
-                borderLeftColor: theme.pairA,
-              },
-            ]}
-          >
-            <Text style={[s.revealPairLabel, { color: theme.pairA }]}>PAIR 1</Text>
-            <Text style={s.revealPairNames}>{nextPairs[0][0].name}</Text>
-            <Text style={s.revealAmpersand}>&</Text>
-            <Text style={s.revealPairNames}>{nextPairs[0][1].name}</Text>
-          </View>
-
-          <View
-            style={[
-              s.revealPairCard,
-              s.revealPairCard2,
-              {
-                opacity: pair2Opacity,
-                transform: [{ scale: pair2Scale }],
-                borderLeftColor: theme.pairB,
-              },
-            ]}
-          >
-            <Text style={[s.revealPairLabel, { color: theme.pairB }]}>PAIR 2</Text>
-            <Text style={s.revealPairNames}>{nextPairs[1][0].name}</Text>
-            <Text style={s.revealAmpersand}>&</Text>
-            <Text style={s.revealPairNames}>{nextPairs[1][1].name}</Text>
-          </View>
+          {nextPairs.map((pair, i) => {
+            const anim = pairAnimsRef.current[i];
+            const color = pairColors[i] ?? theme.accent.primary;
+            const isLast = i === nextPairs.length - 1;
+            return (
+              <Animated.View
+                key={i}
+                style={[
+                  s.revealPairCard,
+                  isLast && s.revealPairCard2,
+                  {
+                    opacity: anim?.opacity ?? 1,
+                    transform: [{ scale: anim?.scale ?? 1 }],
+                    borderLeftColor: color,
+                  },
+                ]}
+              >
+                <Text style={[s.revealPairLabel, { color }]}>
+                  {pair.length === 1 ? `SOLO ${i + 1}` : `PAIR ${i + 1}`}
+                </Text>
+                {pair.map((p, j) => (
+                  <React.Fragment key={p.id}>
+                    <Text style={s.revealPairNames}>{p.name}</Text>
+                    {j < pair.length - 1 && <Text style={s.revealAmpersand}>&</Text>}
+                  </React.Fragment>
+                ))}
+              </Animated.View>
+            );
+          })}
         </View>
 
         <View

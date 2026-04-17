@@ -4,6 +4,7 @@ import { Feather } from '@expo/vector-icons';
 
 import { useTheme } from '../theme/ThemeContext';
 import { ShareableLeaderboard, shareView } from '../components/ShareableCard';
+import PullToRefresh from '../components/PullToRefresh';
 import {
   loadTournament, loadAllTournaments,
   setActiveTournament, clearActiveTournament,
@@ -22,16 +23,24 @@ export default function HomeScreen({ navigation }) {
   const [showSettings, setShowSettings] = useState(false);
   const [leaderboardBestBall, setLeaderboardBestBall] = useState(false);
   const [roundBestBall, setRoundBestBall] = useState(true);
+  const [refreshing, setRefreshing] = useState(false);
+
+  const reload = useCallback(async () => {
+    const [t, all] = await Promise.all([loadTournament(), loadAllTournaments()]);
+    setTournament(t);
+    setAllTournaments(all);
+    if (t) setSelectedRound(t.currentRound);
+  }, []);
+
+  const onRefresh = useCallback(async () => {
+    setRefreshing(true);
+    try { await reload(); } finally { setRefreshing(false); }
+  }, [reload]);
 
   useEffect(() => {
-    const unsubscribe = navigation.addListener('focus', async () => {
-      const [t, all] = await Promise.all([loadTournament(), loadAllTournaments()]);
-      setTournament(t);
-      setAllTournaments(all);
-      if (t) setSelectedRound(t.currentRound);
-    });
+    const unsubscribe = navigation.addListener('focus', reload);
     return unsubscribe;
-  }, [navigation]);
+  }, [navigation, reload]);
 
   async function selectTournament(id) {
     await setActiveTournament(id);
@@ -89,7 +98,12 @@ export default function HomeScreen({ navigation }) {
           </View>
         </View>
 
-        <ScrollView style={s.scrollView} contentContainerStyle={s.content}>
+        <PullToRefresh
+          style={s.scrollView}
+          contentContainerStyle={s.content}
+          refreshing={refreshing}
+          onRefresh={onRefresh}
+        >
         <View>
           <TouchableOpacity style={s.primaryBtn} onPress={() => navigation.navigate('Setup')} activeOpacity={0.8}>
             <Feather name="plus" size={18} color={theme.isDark ? theme.accent.primary : theme.text.inverse} />
@@ -141,7 +155,7 @@ export default function HomeScreen({ navigation }) {
               })}
           </>
         )}
-        </ScrollView>
+        </PullToRefresh>
       </View>
     );
   }
@@ -174,7 +188,12 @@ export default function HomeScreen({ navigation }) {
         </View>
       </View>
 
-      <ScrollView style={s.scrollView} contentContainerStyle={s.content}>
+      <PullToRefresh
+        style={s.scrollView}
+        contentContainerStyle={s.content}
+        refreshing={refreshing}
+        onRefresh={onRefresh}
+      >
 
       <View style={s.card}>
         <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }}>
@@ -312,7 +331,7 @@ export default function HomeScreen({ navigation }) {
       <View style={{ position: 'absolute', left: -9999 }}>
         <ShareableLeaderboard ref={leaderboardRef} tournamentName={tournament.name} leaderboard={leaderboard} />
       </View>
-    </ScrollView>
+    </PullToRefresh>
 
     <Modal
       visible={showSettings}
@@ -325,15 +344,31 @@ export default function HomeScreen({ navigation }) {
           <View style={s.modalHandle} />
           <Text style={s.modalTitle}>Tournament Settings</Text>
 
-          <TouchableOpacity
-            style={s.menuItem}
-            onPress={() => { setShowSettings(false); navigation.navigate('NextRound', { revealOnly: true, roundIndex: selectedRound }); }}
-            activeOpacity={0.7}
-          >
-            <Feather name="eye" size={18} color={theme.accent.primary} />
-            <Text style={s.menuItemText}>Reveal Teams</Text>
-            <Feather name="chevron-right" size={16} color={theme.text.muted} />
-          </TouchableOpacity>
+          {(() => {
+            const r = tournament.rounds[selectedRound];
+            const alreadyRevealed = r?.revealed || selectedRound <= tournament.currentRound;
+            return alreadyRevealed ? (
+              <TouchableOpacity
+                style={s.menuItem}
+                onPress={() => { setShowSettings(false); navigation.navigate('EditTeams', { roundIndex: selectedRound }); }}
+                activeOpacity={0.7}
+              >
+                <Feather name="users" size={18} color={theme.accent.primary} />
+                <Text style={s.menuItemText}>Edit Teams</Text>
+                <Feather name="chevron-right" size={16} color={theme.text.muted} />
+              </TouchableOpacity>
+            ) : (
+              <TouchableOpacity
+                style={s.menuItem}
+                onPress={() => { setShowSettings(false); navigation.navigate('NextRound', { revealOnly: true, roundIndex: selectedRound }); }}
+                activeOpacity={0.7}
+              >
+                <Feather name="eye" size={18} color={theme.accent.primary} />
+                <Text style={s.menuItemText}>Reveal Teams</Text>
+                <Feather name="chevron-right" size={16} color={theme.text.muted} />
+              </TouchableOpacity>
+            );
+          })()}
 
           <TouchableOpacity
             style={s.menuItem}
@@ -523,7 +558,7 @@ const makeStyles = (t) => StyleSheet.create({
   emptySubtitle: { fontFamily: 'PlusJakartaSans-Regular', color: t.text.muted, fontSize: 14, textAlign: 'center' },
 
   // Scoring mode toggle (inside cards)
-  cardModeToggle: { flexDirection: 'row', alignItems: 'center', gap: 10, marginBottom: 14 },
+  cardModeToggle: { flexDirection: 'row', alignItems: 'center', justifyContent: 'flex-end', gap: 10, marginBottom: 14 },
   modeLabel: { fontFamily: 'PlusJakartaSans-SemiBold', color: t.text.muted, fontSize: 12 },
   modeLabelActive: { color: t.text.primary },
 

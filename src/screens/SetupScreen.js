@@ -86,8 +86,8 @@ export default function SetupScreen({ navigation }) {
   }
 
   async function handleStart() {
-    if (players.length !== 4) {
-      Alert.alert('Missing info', 'Select exactly 4 players.');
+    if (players.length < 1) {
+      Alert.alert('Missing info', 'Select at least 1 player.');
       return;
     }
     if (rounds.some((r) => !r.courseName.trim())) {
@@ -153,7 +153,7 @@ export default function SetupScreen({ navigation }) {
 
       {/* Players */}
       <View>
-        <Text style={s.sectionTitle}>Players ({players.length}/4)</Text>
+        <Text style={s.sectionTitle}>Players ({players.length}/4 max)</Text>
         {players.map((p) => (
           <View key={p.id} style={s.playerCard}>
             <View style={s.playerInfo}>
