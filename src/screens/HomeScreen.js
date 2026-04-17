@@ -47,10 +47,14 @@ export default function HomeScreen({ navigation }) {
       {
         text: 'Delete', style: 'destructive',
         onPress: async () => {
-          await deleteTournament(t.id);
-          const all = await loadAllTournaments();
-          setAllTournaments(all);
-          setTournament(null);
+          try {
+            await deleteTournament(t.id);
+            const all = await loadAllTournaments();
+            setAllTournaments(all);
+            setTournament(null);
+          } catch (err) {
+            Alert.alert('Error', err.message ?? 'Could not delete tournament');
+          }
         },
       },
     ]);

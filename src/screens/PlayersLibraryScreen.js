@@ -68,8 +68,12 @@ export default function PlayersLibraryScreen() {
       {
         text: 'Remove', style: 'destructive',
         onPress: async () => {
-          await deletePlayer(p.id);
-          await load();
+          try {
+            await deletePlayer(p.id);
+            await load();
+          } catch (err) {
+            Alert.alert('Error', err.message ?? 'Could not delete player');
+          }
         },
       },
     ]);

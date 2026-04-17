@@ -54,8 +54,12 @@ export default function CoursesLibraryScreen({ navigation }) {
       {
         text: 'Remove', style: 'destructive',
         onPress: async () => {
-          await deleteCourse(c.id);
-          await load();
+          try {
+            await deleteCourse(c.id);
+            await load();
+          } catch (err) {
+            Alert.alert('Error', err.message ?? 'Could not delete course');
+          }
         },
       },
     ]);
