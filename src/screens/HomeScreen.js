@@ -1,7 +1,7 @@
 import React, { useEffect, useState, useCallback } from 'react';
 import { View, Text, TouchableOpacity, StyleSheet, ScrollView, Switch, Alert, FlatList } from 'react-native';
 import { Feather } from '@expo/vector-icons';
-import Animated, { FadeInDown, FadeIn } from 'react-native-reanimated';
+
 import { useTheme } from '../theme/ThemeContext';
 import {
   loadTournament, loadAllTournaments, saveTournament,
@@ -60,11 +60,11 @@ export default function HomeScreen({ navigation }) {
 
   if (!tournament) {
     return (
-      <ScrollView style={s.container} contentContainerStyle={s.content}>
-        <Animated.View entering={FadeIn.duration(300)} style={s.header}>
+      <View style={s.screen}>
+        <View style={s.header}>
           <View>
             <Text style={s.title}>Golf Partner</Text>
-            <Text style={s.subtitle}>{allTournaments.length} {allTournaments.length === 1 ? 'torneo' : 'torneos'}</Text>
+            <Text style={s.subtitle}>{allTournaments.length} {allTournaments.length === 1 ? 'tournament' : 'tournaments'}</Text>
           </View>
           <View style={s.headerActions}>
             <TouchableOpacity style={s.iconBtn} onPress={toggle} activeOpacity={0.7}>
@@ -77,24 +77,25 @@ export default function HomeScreen({ navigation }) {
               <Feather name="map" size={18} color={theme.accent.primary} />
             </TouchableOpacity>
           </View>
-        </Animated.View>
+        </View>
 
-        <Animated.View entering={FadeInDown.delay(100).duration(300).springify()}>
+        <ScrollView style={s.scrollView} contentContainerStyle={s.content}>
+        <View>
           <TouchableOpacity style={s.primaryBtn} onPress={() => navigation.navigate('Setup')} activeOpacity={0.8}>
             <Feather name="plus" size={18} color={theme.isDark ? theme.accent.primary : theme.text.inverse} />
-            <Text style={s.primaryBtnText}>Nuevo Torneo</Text>
+            <Text style={s.primaryBtnText}>New Tournament</Text>
           </TouchableOpacity>
-        </Animated.View>
+        </View>
 
         {allTournaments.length === 0 ? (
-          <Animated.View entering={FadeInDown.delay(200).duration(400)} style={s.emptyState}>
+          <View style={s.emptyState}>
             <Feather name="flag" size={48} color={theme.text.muted} />
-            <Text style={s.emptyTitle}>Sin torneos aún</Text>
-            <Text style={s.emptySubtitle}>Crea tu primer torneo para empezar a jugar</Text>
-          </Animated.View>
+            <Text style={s.emptyTitle}>No tournaments yet</Text>
+            <Text style={s.emptySubtitle}>Create your first tournament to start playing</Text>
+          </View>
         ) : (
           <>
-            <Text style={s.sectionLabel}>TORNEOS</Text>
+            <Text style={s.sectionLabel}>TOURNAMENTS</Text>
             {allTournaments
               .slice()
               .sort((a, b) => b.id - a.id)
@@ -102,21 +103,21 @@ export default function HomeScreen({ navigation }) {
                 const played = t.rounds.filter((r) => r.scores && Object.keys(r.scores).length > 0).length;
                 const isActive = played < t.rounds.length;
                 return (
-                  <Animated.View key={t.id} entering={FadeInDown.delay(150 + index * 50).duration(300).springify()}>
+                  <View key={t.id}>
                     <TouchableOpacity style={s.tournamentCard} onPress={() => selectTournament(t.id)} activeOpacity={0.7}>
                       <View style={s.tournamentCardLeft}>
                         <View style={s.tournamentCardHeader}>
                           <Text style={s.tournamentCardName}>{t.name}</Text>
                           <View style={[s.statusBadge, !isActive && s.statusBadgeFinished]}>
                             <Text style={[s.statusBadgeText, !isActive && s.statusBadgeTextFinished]}>
-                              {isActive ? 'En juego' : 'Finalizado'}
+                              {isActive ? 'Active' : 'Finished'}
                             </Text>
                           </View>
                         </View>
                         <Text style={s.tournamentCardMeta}>
                           {t.players.map((p) => p.name.split(' ')[0]).join(' · ')}
                         </Text>
-                        <Text style={s.tournamentCardRound}>Ronda {played}/{t.rounds.length}</Text>
+                        <Text style={s.tournamentCardRound}>Round {played}/{t.rounds.length}</Text>
                       </View>
                       <View style={s.tournamentCardRight}>
                         <Feather name="chevron-right" size={18} color={theme.text.muted} />
@@ -125,12 +126,13 @@ export default function HomeScreen({ navigation }) {
                         <Feather name="trash-2" size={14} color={theme.destructive} />
                       </TouchableOpacity>
                     </TouchableOpacity>
-                  </Animated.View>
+                  </View>
                 );
               })}
           </>
         )}
-      </ScrollView>
+        </ScrollView>
+      </View>
     );
   }
 
@@ -151,12 +153,12 @@ export default function HomeScreen({ navigation }) {
     : tournamentLeaderboard(tournament);
 
   return (
-    <ScrollView style={s.container} contentContainerStyle={s.content}>
-      <Animated.View entering={FadeIn.duration(300)} style={s.header}>
+    <View style={s.screen}>
+      <View style={s.header}>
         <View style={s.headerLeft}>
           <TouchableOpacity onPress={goToList} style={s.backBtn} activeOpacity={0.7}>
             <Feather name="chevron-left" size={20} color={theme.accent.primary} />
-            <Text style={s.backBtnText}>Todos</Text>
+            <Text style={s.backBtnText}>All</Text>
           </TouchableOpacity>
         </View>
         <View style={s.headerActions}>
@@ -164,13 +166,14 @@ export default function HomeScreen({ navigation }) {
             <Feather name={mode === 'dark' ? 'sun' : 'moon'} size={18} color={theme.accent.primary} />
           </TouchableOpacity>
         </View>
-      </Animated.View>
+      </View>
 
-      <Animated.View entering={FadeInDown.delay(50).duration(300)}>
+      <ScrollView style={s.scrollView} contentContainerStyle={s.content}>
+      <View>
         <Text style={s.tournamentDetailName}>{tournament.name}</Text>
-      </Animated.View>
+      </View>
 
-      <Animated.View entering={FadeInDown.delay(100).duration(300)} style={s.modeToggle}>
+      <View style={s.modeToggle}>
         <Text style={[s.modeLabel, !isBestBall && s.modeLabelActive]}>Stableford</Text>
         <Switch
           value={isBestBall}
@@ -179,9 +182,9 @@ export default function HomeScreen({ navigation }) {
           thumbColor="#fff"
         />
         <Text style={[s.modeLabel, isBestBall && s.modeLabelActive]}>Best Ball</Text>
-      </Animated.View>
+      </View>
 
-      <Animated.View entering={FadeInDown.delay(150).duration(300).springify()} style={s.card}>
+      <View style={s.card}>
         <Text style={s.cardTitle}>LEADERBOARD</Text>
         {leaderboard.map((entry, i) => {
           const rankColors = [theme.semantic.rank.gold, theme.semantic.rank.silver, theme.semantic.rank.bronze];
@@ -199,11 +202,11 @@ export default function HomeScreen({ navigation }) {
             </View>
           );
         })}
-      </Animated.View>
+      </View>
 
       {completedRounds.length > 0 && (
-        <Animated.View entering={FadeInDown.delay(200).duration(300).springify()} style={s.card}>
-          <Text style={s.cardTitle}>RESULTADOS POR RONDA</Text>
+        <View style={s.card}>
+          <Text style={s.cardTitle}>ROUND SCORES</Text>
           <FlatList
             horizontal
             showsHorizontalScrollIndicator={false}
@@ -233,7 +236,7 @@ export default function HomeScreen({ navigation }) {
               </>
             ) : null;
           })()}
-        </Animated.View>
+        </View>
       )}
 
       {(() => {
@@ -242,7 +245,7 @@ export default function HomeScreen({ navigation }) {
         const canPrev = selectedRound > 0;
         const canNext = selectedRound < tournament.rounds.length - 1;
         return (
-          <Animated.View entering={FadeInDown.delay(250).duration(300).springify()} style={s.card}>
+          <View style={s.card}>
             <View style={s.roundNavHeader}>
               <TouchableOpacity
                 style={[s.roundNavBtn, !canPrev && s.roundNavBtnDisabled]}
@@ -271,7 +274,7 @@ export default function HomeScreen({ navigation }) {
               activeOpacity={0.7}
             >
               <Feather name="eye" size={16} color={theme.accent.primary} />
-              <Text style={s.secondaryBtnText}>Ver Equipos</Text>
+              <Text style={s.secondaryBtnText}>Reveal Teams</Text>
             </TouchableOpacity>
             <TouchableOpacity
               style={s.primaryBtn}
@@ -279,7 +282,7 @@ export default function HomeScreen({ navigation }) {
               activeOpacity={0.8}
             >
               <Feather name="edit-2" size={16} color={theme.isDark ? theme.accent.primary : theme.text.inverse} />
-              <Text style={s.primaryBtnText}>{isCurrentRound ? 'Scorecard' : 'Editar Scores'}</Text>
+              <Text style={s.primaryBtnText}>{isCurrentRound ? 'Scorecard' : 'Edit Scores'}</Text>
             </TouchableOpacity>
             {isCurrentRound && tournament.currentRound < tournament.rounds.length - 1 && (
               <TouchableOpacity
@@ -288,40 +291,41 @@ export default function HomeScreen({ navigation }) {
                 activeOpacity={0.7}
               >
                 <Feather name="skip-forward" size={16} color={theme.accent.primary} />
-                <Text style={s.secondaryBtnText}>Siguiente Ronda</Text>
+                <Text style={s.secondaryBtnText}>Next Round</Text>
               </TouchableOpacity>
             )}
-          </Animated.View>
+          </View>
         );
       })()}
 
-      <Animated.View entering={FadeInDown.delay(300).duration(300)}>
+      <View>
         <TouchableOpacity
           style={s.secondaryBtn}
           onPress={() => navigation.navigate('EditTournament')}
           activeOpacity={0.7}
         >
           <Feather name="settings" size={16} color={theme.accent.primary} />
-          <Text style={s.secondaryBtnText}>Editar Torneo</Text>
+          <Text style={s.secondaryBtnText}>Edit Tournament</Text>
         </TouchableOpacity>
-      </Animated.View>
+      </View>
 
-      <Animated.View entering={FadeInDown.delay(350).duration(300)} style={s.libraryRow}>
+      <View style={s.libraryRow}>
         <TouchableOpacity style={s.libraryBtn} onPress={() => navigation.navigate('PlayersLibrary')} activeOpacity={0.7}>
           <Feather name="users" size={16} color={theme.text.secondary} />
-          <Text style={s.libraryBtnText}>Jugadores</Text>
+          <Text style={s.libraryBtnText}>Players</Text>
         </TouchableOpacity>
         <TouchableOpacity style={s.libraryBtn} onPress={() => navigation.navigate('CoursesLibrary')} activeOpacity={0.7}>
           <Feather name="map" size={16} color={theme.text.secondary} />
-          <Text style={s.libraryBtnText}>Campos</Text>
+          <Text style={s.libraryBtnText}>Courses</Text>
         </TouchableOpacity>
-      </Animated.View>
+      </View>
 
       <TouchableOpacity style={s.deleteBtn} onPress={() => confirmDelete(tournament)} activeOpacity={0.7}>
         <Feather name="trash-2" size={16} color={theme.destructive} />
-        <Text style={s.deleteBtnText}>Eliminar Torneo</Text>
+        <Text style={s.deleteBtnText}>Delete Tournament</Text>
       </TouchableOpacity>
     </ScrollView>
+    </View>
   );
 }
 
@@ -331,7 +335,7 @@ function StablefordRoundCard({ round, players, theme, s }) {
     <>
       {pairResults.map((pair, pi) => (
         <View key={pi} style={[s.pairBlock, pi === 0 && s.winnerBlock]}>
-          {pi === 0 && <Text style={s.winnerBadge}>GANADOR</Text>}
+          {pi === 0 && <Text style={s.winnerBadge}>WINNER</Text>}
           <View style={s.pairHeader}>
             <Text style={s.pairNames}>{pair.members.map((m) => m.player.name).join(' & ')}</Text>
             <Text style={s.pairPoints}>{pair.combinedPoints} pts</Text>
@@ -349,7 +353,7 @@ function StablefordRoundCard({ round, players, theme, s }) {
 
 function BestBallRoundCard({ round, players, settings, theme, s }) {
   const result = calcBestWorstBall(round, players);
-  if (!result) return <Text style={s.pairMember}>Sin resultados aún</Text>;
+  if (!result) return <Text style={s.pairMember}>No results yet</Text>;
 
   const { pair1, pair2, bestBall, worstBall } = result;
   const p1Names = pair1.map((p) => p.name).join(' & ');
@@ -362,14 +366,14 @@ function BestBallRoundCard({ round, players, settings, theme, s }) {
   return (
     <>
       <View style={[s.pairBlock, winner === 1 && s.winnerBlock]}>
-        {winner === 1 && <Text style={s.winnerBadge}>GANADOR</Text>}
+        {winner === 1 && <Text style={s.winnerBadge}>WINNER</Text>}
         <View style={s.pairHeader}>
           <Text style={s.pairNames}>{p1Names}</Text>
           <Text style={s.pairPoints}>{p1Points} pts</Text>
         </View>
       </View>
       <View style={[s.pairBlock, winner === 2 && s.winnerBlock]}>
-        {winner === 2 && <Text style={s.winnerBadge}>GANADOR</Text>}
+        {winner === 2 && <Text style={s.winnerBadge}>WINNER</Text>}
         <View style={s.pairHeader}>
           <Text style={s.pairNames}>{p2Names}</Text>
           <Text style={s.pairPoints}>{p2Points} pts</Text>
@@ -380,11 +384,12 @@ function BestBallRoundCard({ round, players, settings, theme, s }) {
 }
 
 const makeStyles = (t) => StyleSheet.create({
-  container: { flex: 1, backgroundColor: t.bg.primary },
-  content: { padding: 20, paddingTop: 16, paddingBottom: 40 },
+  screen: { flex: 1, backgroundColor: t.bg.primary, overflow: 'hidden' },
+  scrollView: { flex: 1 },
+  content: { padding: 20, paddingTop: 16, paddingBottom: 100 },
 
   // Header
-  header: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 20, paddingTop: 8 },
+  header: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingHorizontal: 20, paddingTop: 16, paddingBottom: 12, backgroundColor: t.bg.primary },
   headerLeft: { flexDirection: 'row', alignItems: 'center' },
   headerActions: { flexDirection: 'row', gap: 8 },
   title: { fontFamily: 'PlusJakartaSans-ExtraBold', fontSize: 28, color: t.text.primary, letterSpacing: -0.5 },

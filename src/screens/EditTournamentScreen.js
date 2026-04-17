@@ -215,7 +215,7 @@ export default function EditTournamentScreen({ navigation }) {
                     placeholder="0"
                     placeholderTextColor={theme.text.muted}
                   />
-                  <Text style={s.hcpLabel}>playing</Text>
+                  <Text style={s.hcpLabel}>p.hcp</Text>
                 </View>
               ))}
               <TextInput

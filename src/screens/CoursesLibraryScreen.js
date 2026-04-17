@@ -67,16 +67,16 @@ export default function CoursesLibraryScreen({ navigation }) {
         <TouchableOpacity onPress={() => navigation.goBack()} style={s.backBtn}>
           <Feather name="chevron-left" size={22} color={theme.accent.primary} />
         </TouchableOpacity>
-        <Text style={s.headerTitle}>Campos</Text>
+        <Text style={s.headerTitle}>Courses</Text>
         <View style={{ width: 22 }} />
       </View>
 
       <ScrollView style={s.scroll} contentContainerStyle={s.content} automaticallyAdjustKeyboardInsets>
-        <Text style={s.sectionTitle}>Nuevo campo</Text>
+        <Text style={s.sectionTitle}>New Course</Text>
         <View style={s.form}>
           <TextInput
             style={[s.input, s.flex]}
-            placeholder="Nombre del campo"
+            placeholder="Course name"
             placeholderTextColor={theme.text.muted}
             keyboardAppearance={theme.isDark ? 'dark' : 'light'}
             selectionColor={theme.accent.primary}
@@ -88,15 +88,15 @@ export default function CoursesLibraryScreen({ navigation }) {
           </TouchableOpacity>
         </View>
 
-        <Text style={s.sectionTitle}>Lista</Text>
+        <Text style={s.sectionTitle}>List</Text>
         {loading
           ? <ActivityIndicator color={theme.accent.primary} style={{ marginTop: 20 }} />
           : courses.length === 0
             ? (
               <View style={s.emptyState}>
                 <Feather name="map" size={48} color={theme.text.muted} />
-                <Text style={s.emptyTitle}>Sin campos</Text>
-                <Text style={s.emptySubtitle}>Añade campos de golf para configurar tus rondas</Text>
+                <Text style={s.emptyTitle}>No courses yet</Text>
+                <Text style={s.emptySubtitle}>Add golf courses to set up your rounds</Text>
               </View>
             )
             : courses.map((c, index) => (
