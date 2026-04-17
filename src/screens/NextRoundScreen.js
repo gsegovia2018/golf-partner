@@ -151,41 +151,43 @@ export default function NextRoundScreen({ navigation, route }) {
   /* ─── Reveal phase ─── */
   if (phase === 'reveal') {
     return (
-      <View style={s.fullscreen}>
-        <Animated.View
-          style={[
-            s.revealPairCard,
-            {
-              opacity: pair1Opacity,
-              transform: [{ scale: pair1Scale }],
-              borderLeftColor: theme.pairA,
-            },
-          ]}
-        >
-          <Text style={[s.revealPairLabel, { color: theme.pairA }]}>PAIR 1</Text>
-          <Text style={s.revealPairNames}>{nextPairs[0][0].name}</Text>
-          <Text style={s.revealAmpersand}>&</Text>
-          <Text style={s.revealPairNames}>{nextPairs[0][1].name}</Text>
-        </Animated.View>
+      <View style={s.revealContainer}>
+        <View style={s.pairsContainer}>
+          <View
+            style={[
+              s.revealPairCard,
+              {
+                opacity: pair1Opacity,
+                transform: [{ scale: pair1Scale }],
+                borderLeftColor: theme.pairA,
+              },
+            ]}
+          >
+            <Text style={[s.revealPairLabel, { color: theme.pairA }]}>PAIR 1</Text>
+            <Text style={s.revealPairNames}>{nextPairs[0][0].name}</Text>
+            <Text style={s.revealAmpersand}>&</Text>
+            <Text style={s.revealPairNames}>{nextPairs[0][1].name}</Text>
+          </View>
 
-        <Animated.View
-          style={[
-            s.revealPairCard,
-            s.revealPairCard2,
-            {
-              opacity: pair2Opacity,
-              transform: [{ scale: pair2Scale }],
-              borderLeftColor: theme.pairB,
-            },
-          ]}
-        >
-          <Text style={[s.revealPairLabel, { color: theme.pairB }]}>PAIR 2</Text>
-          <Text style={s.revealPairNames}>{nextPairs[1][0].name}</Text>
-          <Text style={s.revealAmpersand}>&</Text>
-          <Text style={s.revealPairNames}>{nextPairs[1][1].name}</Text>
-        </Animated.View>
+          <View
+            style={[
+              s.revealPairCard,
+              s.revealPairCard2,
+              {
+                opacity: pair2Opacity,
+                transform: [{ scale: pair2Scale }],
+                borderLeftColor: theme.pairB,
+              },
+            ]}
+          >
+            <Text style={[s.revealPairLabel, { color: theme.pairB }]}>PAIR 2</Text>
+            <Text style={s.revealPairNames}>{nextPairs[1][0].name}</Text>
+            <Text style={s.revealAmpersand}>&</Text>
+            <Text style={s.revealPairNames}>{nextPairs[1][1].name}</Text>
+          </View>
+        </View>
 
-        <Animated.View
+        <View
           style={[
             s.revealActions,
             {
@@ -209,7 +211,7 @@ export default function NextRoundScreen({ navigation, route }) {
               {revealOnly ? "Let's Play!" : `Start Round ${roundIndex + 1}`}
             </Text>
           </TouchableOpacity>
-        </Animated.View>
+        </View>
       </View>
     );
   }
@@ -247,6 +249,17 @@ function makeStyles(theme) {
       alignItems: 'center',
       justifyContent: 'center',
       padding: 32,
+    },
+    revealContainer: {
+      flex: 1,
+      flexDirection: 'column',
+      backgroundColor: theme.bg.primary,
+      padding: 32,
+    },
+    pairsContainer: {
+      flex: 1,
+      alignItems: 'center',
+      justifyContent: 'center',
     },
 
     /* Initial phase */
@@ -357,11 +370,9 @@ function makeStyles(theme) {
 
     /* Action buttons */
     revealActions: {
-      position: 'absolute',
-      bottom: 60,
-      left: 32,
-      right: 32,
+      marginTop: 24,
       gap: 12,
+      alignSelf: 'stretch',
     },
     btnPrimary: {
       backgroundColor: theme.isDark ? theme.accent.light : theme.accent.primary,

@@ -81,16 +81,16 @@ export default function PlayersLibraryScreen() {
         <TouchableOpacity onPress={() => navigation.goBack()} style={s.backBtn}>
           <Feather name="chevron-left" size={22} color={theme.accent.primary} />
         </TouchableOpacity>
-        <Text style={s.headerTitle}>Jugadores</Text>
+        <Text style={s.headerTitle}>Players</Text>
         <View style={{ width: 22 }} />
       </View>
 
       <ScrollView style={s.scroll} contentContainerStyle={s.content} automaticallyAdjustKeyboardInsets>
-        <Text style={s.sectionTitle}>{editingId ? 'Editar jugador' : 'Nuevo jugador'}</Text>
+        <Text style={s.sectionTitle}>{editingId ? 'Edit player' : 'New player'}</Text>
         <View style={s.form}>
           <TextInput
             style={[s.input, s.flex]}
-            placeholder="Nombre"
+            placeholder="Name"
             placeholderTextColor={theme.text.muted}
             keyboardAppearance={theme.isDark ? 'dark' : 'light'}
             selectionColor={theme.accent.primary}
@@ -117,15 +117,15 @@ export default function PlayersLibraryScreen() {
           )}
         </View>
 
-        <Text style={s.sectionTitle}>Lista</Text>
+        <Text style={s.sectionTitle}>List</Text>
         {loading
           ? <ActivityIndicator color={theme.accent.primary} style={{ marginTop: 20 }} />
           : players.length === 0
             ? (
               <View style={s.emptyState}>
                 <Feather name="users" size={48} color={theme.text.muted} />
-                <Text style={s.emptyTitle}>Sin jugadores</Text>
-                <Text style={s.emptySubtitle}>Añade jugadores para usarlos en tus torneos</Text>
+                <Text style={s.emptyTitle}>No players yet</Text>
+                <Text style={s.emptySubtitle}>Add players to use in your tournaments</Text>
               </View>
             )
             : players.map((p, index) => (

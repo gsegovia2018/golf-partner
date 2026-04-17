@@ -90,7 +90,7 @@ export default function CourseLibraryDetailScreen({ navigation, route }) {
         <TouchableOpacity onPress={() => navigation.goBack()} style={s.backBtn}>
           <Feather name="chevron-left" size={22} color={theme.accent.primary} />
         </TouchableOpacity>
-        <Text style={s.headerTitle}>Detalle del campo</Text>
+        <Text style={s.headerTitle}>Course Details</Text>
         <View style={{ width: 22 }} />
       </View>
 
@@ -99,7 +99,7 @@ export default function CourseLibraryDetailScreen({ navigation, route }) {
           style={s.nameInput}
           value={name}
           onChangeText={setName}
-          placeholder="Nombre del campo"
+          placeholder="Course name"
           placeholderTextColor={theme.text.muted}
           keyboardAppearance={theme.isDark ? 'dark' : 'light'}
           selectionColor={theme.accent.primary}
@@ -121,12 +121,12 @@ export default function CourseLibraryDetailScreen({ navigation, route }) {
           <Text style={s.slopeHint}>std 113</Text>
         </View>
 
-        <Text style={s.sectionTitle}>Hoyos  ·  Par {totalPar}</Text>
+        <Text style={s.sectionTitle}>Holes  ·  Par {totalPar}</Text>
 
         <Animated.View entering={FadeIn.duration(300)}>
           <View style={s.tableCard}>
             <View style={s.tableHeaderRow}>
-              <Text style={[s.col, s.holeCol, s.tableHeaderText]}>Hoyo</Text>
+              <Text style={[s.col, s.holeCol, s.tableHeaderText]}>Hole</Text>
               <Text style={[s.col, s.parCol, s.tableHeaderText]}>Par</Text>
               <Text style={[s.col, s.siCol, s.tableHeaderText]}>SI</Text>
             </View>
@@ -169,7 +169,7 @@ export default function CourseLibraryDetailScreen({ navigation, route }) {
           activeOpacity={0.7}
         >
           <Feather name="check" size={18} color={theme.isDark ? theme.accent.primary : theme.text.inverse} style={{ marginRight: 8 }} />
-          <Text style={s.saveBtnText}>{saving ? 'Guardando...' : 'Guardar campo'}</Text>
+          <Text style={s.saveBtnText}>{saving ? 'Saving...' : 'Save course'}</Text>
         </TouchableOpacity>
       </ScrollView>
     </View>
