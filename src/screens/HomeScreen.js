@@ -1,5 +1,5 @@
 import React, { useEffect, useState, useCallback, useRef } from 'react';
-import { View, Text, TouchableOpacity, StyleSheet, ScrollView, Switch, Alert, FlatList, Platform } from 'react-native';
+import { View, Text, TouchableOpacity, StyleSheet, ScrollView, Switch, Alert, FlatList, Platform, Modal, Pressable } from 'react-native';
 import { Feather } from '@expo/vector-icons';
 
 import { useTheme } from '../theme/ThemeContext';
@@ -19,6 +19,7 @@ export default function HomeScreen({ navigation }) {
   const [allTournaments, setAllTournaments] = useState([]);
   const [activeRoundTab, setActiveRoundTab] = useState(0);
   const [selectedRound, setSelectedRound] = useState(0);
+  const [showSettings, setShowSettings] = useState(false);
 
   useEffect(() => {
     const unsubscribe = navigation.addListener('focus', async () => {
@@ -167,6 +168,9 @@ export default function HomeScreen({ navigation }) {
           <TouchableOpacity style={s.iconBtn} onPress={toggle} activeOpacity={0.7}>
             <Feather name={mode === 'dark' ? 'sun' : 'moon'} size={18} color={theme.accent.primary} />
           </TouchableOpacity>
+          <TouchableOpacity style={s.iconBtn} onPress={() => setShowSettings(true)} activeOpacity={0.7}>
+            <Feather name="settings" size={18} color={theme.accent.primary} />
+          </TouchableOpacity>
         </View>
       </View>
 
@@ -281,76 +285,107 @@ export default function HomeScreen({ navigation }) {
                 <Feather name="chevron-right" size={18} color={canNext ? theme.accent.primary : theme.text.muted} />
               </TouchableOpacity>
             </View>
-            <TouchableOpacity
-              style={s.secondaryBtn}
-              onPress={() => navigation.navigate('NextRound', { revealOnly: true, roundIndex: selectedRound })}
-              activeOpacity={0.7}
-            >
-              <Feather name="eye" size={16} color={theme.accent.primary} />
-              <Text style={s.secondaryBtnText}>Reveal Teams</Text>
-            </TouchableOpacity>
-            <TouchableOpacity
-              style={s.primaryBtn}
-              onPress={() => navigation.navigate('Scorecard', { roundIndex: selectedRound })}
-              activeOpacity={0.8}
-            >
-              <Feather name="edit-2" size={16} color={theme.isDark ? theme.accent.primary : theme.text.inverse} />
-              <Text style={s.primaryBtnText}>{isCurrentRound ? 'Scorecard' : 'Edit Scores'}</Text>
-            </TouchableOpacity>
-            {isCurrentRound && tournament.currentRound < tournament.rounds.length - 1 && (
+            <View style={s.roundActionsRow}>
               <TouchableOpacity
-                style={s.secondaryBtn}
-                onPress={() => navigation.navigate('NextRound')}
-                activeOpacity={0.7}
+                style={[s.primaryBtn, s.roundActionBtn]}
+                onPress={() => navigation.navigate('Scorecard', { roundIndex: selectedRound })}
+                activeOpacity={0.8}
               >
-                <Feather name="skip-forward" size={16} color={theme.accent.primary} />
-                <Text style={s.secondaryBtnText}>Next Round</Text>
+                <Feather name="edit-2" size={16} color={theme.isDark ? theme.accent.primary : theme.text.inverse} />
+                <Text style={s.primaryBtnText}>{isCurrentRound ? 'Scorecard' : 'Edit Scores'}</Text>
               </TouchableOpacity>
-            )}
+              {isCurrentRound && tournament.currentRound < tournament.rounds.length - 1 && (
+                <TouchableOpacity
+                  style={[s.secondaryBtn, s.roundActionBtn]}
+                  onPress={() => navigation.navigate('NextRound')}
+                  activeOpacity={0.7}
+                >
+                  <Feather name="skip-forward" size={16} color={theme.accent.primary} />
+                  <Text style={s.secondaryBtnText}>Next Round</Text>
+                </TouchableOpacity>
+              )}
+            </View>
           </View>
         );
       })()}
 
-      <View>
-        <TouchableOpacity
-          style={s.secondaryBtn}
-          onPress={() => navigation.navigate('EditTournament')}
-          activeOpacity={0.7}
-        >
-          <Feather name="settings" size={16} color={theme.accent.primary} />
-          <Text style={s.secondaryBtnText}>Edit Tournament</Text>
-        </TouchableOpacity>
-
-        <TouchableOpacity
-          style={s.secondaryBtn}
-          onPress={() => navigation.navigate('Stats')}
-          activeOpacity={0.7}
-        >
-          <Feather name="bar-chart-2" size={16} color={theme.accent.primary} />
-          <Text style={s.secondaryBtnText}>Statistics</Text>
-        </TouchableOpacity>
-      </View>
-
       <View style={{ position: 'absolute', left: -9999 }}>
         <ShareableLeaderboard ref={leaderboardRef} tournamentName={tournament.name} leaderboard={leaderboard} />
       </View>
-
-      <View style={s.libraryRow}>
-        <TouchableOpacity style={s.libraryBtn} onPress={() => navigation.navigate('PlayersLibrary')} activeOpacity={0.7}>
-          <Feather name="users" size={16} color={theme.text.secondary} />
-          <Text style={s.libraryBtnText}>Players</Text>
-        </TouchableOpacity>
-        <TouchableOpacity style={s.libraryBtn} onPress={() => navigation.navigate('CoursesLibrary')} activeOpacity={0.7}>
-          <Feather name="map" size={16} color={theme.text.secondary} />
-          <Text style={s.libraryBtnText}>Courses</Text>
-        </TouchableOpacity>
-      </View>
-
-      <TouchableOpacity style={s.deleteBtn} onPress={() => confirmDelete(tournament)} activeOpacity={0.7}>
-        <Feather name="trash-2" size={16} color={theme.destructive} />
-        <Text style={s.deleteBtnText}>Delete Tournament</Text>
-      </TouchableOpacity>
     </ScrollView>
+
+    <Modal
+      visible={showSettings}
+      transparent
+      animationType="slide"
+      onRequestClose={() => setShowSettings(false)}
+    >
+      <Pressable style={s.modalBackdrop} onPress={() => setShowSettings(false)}>
+        <Pressable style={s.modalSheet} onPress={() => {}}>
+          <View style={s.modalHandle} />
+          <Text style={s.modalTitle}>Tournament Settings</Text>
+
+          <TouchableOpacity
+            style={s.menuItem}
+            onPress={() => { setShowSettings(false); navigation.navigate('NextRound', { revealOnly: true, roundIndex: selectedRound }); }}
+            activeOpacity={0.7}
+          >
+            <Feather name="eye" size={18} color={theme.accent.primary} />
+            <Text style={s.menuItemText}>Reveal Teams</Text>
+            <Feather name="chevron-right" size={16} color={theme.text.muted} />
+          </TouchableOpacity>
+
+          <TouchableOpacity
+            style={s.menuItem}
+            onPress={() => { setShowSettings(false); navigation.navigate('Stats'); }}
+            activeOpacity={0.7}
+          >
+            <Feather name="bar-chart-2" size={18} color={theme.accent.primary} />
+            <Text style={s.menuItemText}>Statistics</Text>
+            <Feather name="chevron-right" size={16} color={theme.text.muted} />
+          </TouchableOpacity>
+
+          <TouchableOpacity
+            style={s.menuItem}
+            onPress={() => { setShowSettings(false); navigation.navigate('PlayersLibrary'); }}
+            activeOpacity={0.7}
+          >
+            <Feather name="users" size={18} color={theme.accent.primary} />
+            <Text style={s.menuItemText}>Players</Text>
+            <Feather name="chevron-right" size={16} color={theme.text.muted} />
+          </TouchableOpacity>
+
+          <TouchableOpacity
+            style={s.menuItem}
+            onPress={() => { setShowSettings(false); navigation.navigate('CoursesLibrary'); }}
+            activeOpacity={0.7}
+          >
+            <Feather name="map" size={18} color={theme.accent.primary} />
+            <Text style={s.menuItemText}>Courses</Text>
+            <Feather name="chevron-right" size={16} color={theme.text.muted} />
+          </TouchableOpacity>
+
+          <TouchableOpacity
+            style={s.menuItem}
+            onPress={() => { setShowSettings(false); navigation.navigate('EditTournament'); }}
+            activeOpacity={0.7}
+          >
+            <Feather name="edit-3" size={18} color={theme.accent.primary} />
+            <Text style={s.menuItemText}>Edit Tournament</Text>
+            <Feather name="chevron-right" size={16} color={theme.text.muted} />
+          </TouchableOpacity>
+
+          <TouchableOpacity
+            style={[s.menuItem, s.menuItemDestructive]}
+            onPress={() => { setShowSettings(false); confirmDelete(tournament); }}
+            activeOpacity={0.7}
+          >
+            <Feather name="trash-2" size={18} color={theme.destructive} />
+            <Text style={[s.menuItemText, { color: theme.destructive }]}>Delete Tournament</Text>
+          </TouchableOpacity>
+        </Pressable>
+      </Pressable>
+    </Modal>
     </View>
   );
 }
@@ -562,25 +597,42 @@ const makeStyles = (t) => StyleSheet.create({
   pairPoints: { fontFamily: 'PlusJakartaSans-ExtraBold', color: t.accent.primary, fontSize: 20 },
   pairMember: { fontFamily: 'PlusJakartaSans-Medium', color: t.text.secondary, fontSize: 12, paddingTop: 3 },
 
-  // Library row
-  libraryRow: { flexDirection: 'row', gap: 10, marginTop: 12 },
-  libraryBtn: {
-    flex: 1,
-    backgroundColor: t.isDark ? t.bg.card : t.bg.card,
-    borderRadius: 12, borderWidth: 1, borderColor: t.border.default,
-    padding: 14, alignItems: 'center', flexDirection: 'row', justifyContent: 'center', gap: 8,
-    ...(t.isDark ? {} : t.shadow.card),
-  },
-  libraryBtnText: { fontFamily: 'PlusJakartaSans-SemiBold', color: t.text.secondary, fontSize: 13 },
+  // Round action row (Scorecard + Next Round side-by-side)
+  roundActionsRow: { flexDirection: 'row', gap: 10 },
+  roundActionBtn: { flex: 1, marginTop: 0 },
 
-  // Delete
+  // Delete (tournament list cards)
   tournamentCardWrapper: { position: 'relative' },
   deleteCardBtn: { position: 'absolute', top: 8, right: 8, padding: 6 },
-  deleteBtn: {
-    borderRadius: 12, borderWidth: 1, borderColor: t.destructive + '44',
-    backgroundColor: t.isDark ? 'rgba(248,113,113,0.06)' : 'transparent',
-    padding: 14, alignItems: 'center', marginTop: 12,
-    flexDirection: 'row', justifyContent: 'center', gap: 8,
+
+  // Settings modal (bottom sheet)
+  modalBackdrop: {
+    flex: 1, backgroundColor: 'rgba(0,0,0,0.5)', justifyContent: 'flex-end',
   },
-  deleteBtnText: { fontFamily: 'PlusJakartaSans-SemiBold', color: t.destructive, fontSize: 14 },
+  modalSheet: {
+    backgroundColor: t.bg.primary,
+    borderTopLeftRadius: 24, borderTopRightRadius: 24,
+    paddingTop: 10, paddingBottom: 32, paddingHorizontal: 16,
+    borderTopWidth: 1, borderLeftWidth: 1, borderRightWidth: 1,
+    borderColor: t.border.default,
+  },
+  modalHandle: {
+    alignSelf: 'center', width: 40, height: 4, borderRadius: 2,
+    backgroundColor: t.border.default, marginBottom: 12,
+  },
+  modalTitle: {
+    fontFamily: 'PlusJakartaSans-SemiBold',
+    fontSize: 10, color: t.accent.primary, marginBottom: 8,
+    letterSpacing: 1.5, textTransform: 'uppercase', paddingHorizontal: 4,
+  },
+  menuItem: {
+    flexDirection: 'row', alignItems: 'center', gap: 14,
+    paddingVertical: 14, paddingHorizontal: 4,
+    borderBottomWidth: 1, borderBottomColor: t.border.subtle,
+  },
+  menuItemText: {
+    flex: 1, fontFamily: 'PlusJakartaSans-SemiBold',
+    color: t.text.primary, fontSize: 14,
+  },
+  menuItemDestructive: { borderBottomWidth: 0 },
 });
