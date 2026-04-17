@@ -3,12 +3,18 @@ import {
   View, Text, TextInput, TouchableOpacity,
   StyleSheet, ScrollView, Alert,
 } from 'react-native';
+import Animated, { FadeInDown, FadeIn } from 'react-native-reanimated';
+import { Feather } from '@expo/vector-icons';
 import { useFocusEffect } from '@react-navigation/native';
 import { createTournament, saveTournament, randomPairs, DEFAULT_SETTINGS } from '../store/tournamentStore';
 import { defaultHoles } from '../store/libraryStore';
 import { consumePendingPlayers, consumePendingCourses } from '../lib/selectionBridge';
+import { useTheme } from '../theme/ThemeContext';
 
 export default function SetupScreen({ navigation }) {
+  const { theme } = useTheme();
+  const s = makeStyles(theme);
+
   const [tournamentName, setTournamentName] = useState('Weekend Golf');
   const [players, setPlayers] = useState([]);
   const [rounds, setRounds] = useState([{ courseName: '', holes: defaultHoles(), slope: null, playerHandicaps: null }]);
@@ -120,204 +126,463 @@ export default function SetupScreen({ navigation }) {
   }
 
   return (
-    <ScrollView style={styles.container} contentContainerStyle={styles.content} automaticallyAdjustKeyboardInsets>
-      <Text style={styles.title}>New Tournament</Text>
-
-      <Text style={styles.label}>Tournament Name</Text>
-      <TextInput
-        style={styles.input}
-        value={tournamentName}
-        onChangeText={setTournamentName}
-        placeholderTextColor="#484f58"
-        keyboardAppearance="dark"
-        selectionColor="#4caf50"
-      />
-
-      <Text style={styles.sectionTitle}>Players ({players.length}/4)</Text>
-      {players.map((p) => (
-        <View key={p.id} style={styles.playerRow}>
-          <View style={styles.playerInfo}>
-            <Text style={styles.playerName}>{p.name}</Text>
-            <Text style={styles.playerHcp}>HCP {p.handicap}</Text>
-          </View>
-          <TouchableOpacity onPress={() => removePlayer(p.id)} style={styles.removeBtn}>
-            <Text style={styles.removeBtnText}>✕</Text>
-          </TouchableOpacity>
-        </View>
-      ))}
-      {players.length < 4 && (
-        <TouchableOpacity
-          style={styles.pickBtn}
-          onPress={() => navigation.navigate('PlayerPicker', {
-            alreadySelectedIds: players.map((p) => p.id),
-          })}
-        >
-          <Text style={styles.pickBtnText}>+ Add Player from Library</Text>
+    <ScrollView style={s.container} contentContainerStyle={s.content} keyboardShouldPersistTaps="handled">
+      {/* Header */}
+      <Animated.View entering={FadeIn.duration(300)} style={s.header}>
+        <TouchableOpacity onPress={() => navigation.goBack()} style={s.backBtn}>
+          <Feather name="chevron-left" size={22} color={theme.accent.primary} />
         </TouchableOpacity>
-      )}
+        <Text style={s.headerTitle}>New Tournament</Text>
+        <View style={{ width: 22 }} />
+      </Animated.View>
 
-      <Text style={styles.sectionTitle}>Rounds</Text>
-      {rounds.map((r, i) => {
-        const totalPar = r.holes.reduce((s, h) => s + h.par, 0);
-        return (
-          <View key={i} style={styles.courseBlock}>
-            <View style={styles.roundHeader}>
-              <Text style={styles.roundLabel}>Round {i + 1}</Text>
-              {rounds.length > 1 && (
-                <TouchableOpacity onPress={() => removeRound(i)} style={styles.removeRoundBtn}>
-                  <Text style={styles.removeBtnText}>Remove</Text>
-                </TouchableOpacity>
-              )}
+      {/* Tournament Name */}
+      <Animated.View entering={FadeInDown.delay(100).duration(300).springify()}>
+        <Text style={s.label}>Tournament Name</Text>
+        <TextInput
+          style={s.input}
+          value={tournamentName}
+          onChangeText={setTournamentName}
+          placeholderTextColor={theme.text.muted}
+          keyboardAppearance={theme.isDark ? 'dark' : 'light'}
+          selectionColor={theme.accent.primary}
+        />
+      </Animated.View>
+
+      {/* Players */}
+      <Animated.View entering={FadeInDown.delay(200).duration(300).springify()}>
+        <Text style={s.sectionTitle}>Players ({players.length}/4)</Text>
+        {players.map((p) => (
+          <View key={p.id} style={s.playerCard}>
+            <View style={s.playerInfo}>
+              <Text style={s.playerName}>{p.name}</Text>
+              <Text style={s.playerHcp}>HCP {p.handicap}</Text>
             </View>
+            <TouchableOpacity onPress={() => removePlayer(p.id)} style={s.removeBtn}>
+              <Feather name="x" size={16} color={theme.destructive} />
+            </TouchableOpacity>
+          </View>
+        ))}
+        {players.length < 4 && (
+          <TouchableOpacity
+            style={s.pickBtn}
+            onPress={() => navigation.navigate('PlayerPicker', {
+              alreadySelectedIds: players.map((p) => p.id),
+            })}
+          >
+            <Feather name="plus" size={16} color={theme.accent.primary} style={{ marginRight: 6 }} />
+            <Text style={s.pickBtnText}>Add Player from Library</Text>
+          </TouchableOpacity>
+        )}
+      </Animated.View>
+
+      {/* Rounds */}
+      <Animated.View entering={FadeInDown.delay(300).duration(300).springify()}>
+        <Text style={s.sectionTitle}>Rounds</Text>
+        {rounds.map((r, i) => {
+          const totalPar = r.holes.reduce((sum, h) => sum + h.par, 0);
+          return (
+            <View key={i} style={s.courseBlock}>
+              <View style={s.roundHeader}>
+                <Text style={s.roundLabel}>Round {i + 1}</Text>
+                {rounds.length > 1 && (
+                  <TouchableOpacity onPress={() => removeRound(i)} style={s.removeRoundBtn}>
+                    <Feather name="trash-2" size={14} color={theme.destructive} />
+                    <Text style={s.removeRoundText}>Remove</Text>
+                  </TouchableOpacity>
+                )}
+              </View>
+              <TouchableOpacity
+                style={s.pickBtn}
+                onPress={() => navigation.navigate('CoursePicker', { roundIndex: i })}
+              >
+                <Feather
+                  name={r.courseName ? 'map-pin' : 'plus'}
+                  size={16}
+                  color={theme.accent.primary}
+                  style={{ marginRight: 6 }}
+                />
+                <Text style={s.pickBtnText}>
+                  {r.courseName ? `Course: ${r.courseName}` : 'Pick Course from Library'}
+                </Text>
+              </TouchableOpacity>
+              {r.courseName ? (
+                <>
+                  <TextInput
+                    style={s.input}
+                    placeholder="Override course name"
+                    placeholderTextColor={theme.text.muted}
+                    keyboardAppearance={theme.isDark ? 'dark' : 'light'}
+                    selectionColor={theme.accent.primary}
+                    value={r.courseName}
+                    onChangeText={(v) => updateCourseName(i, v)}
+                  />
+                  <TouchableOpacity
+                    style={s.editHolesBtn}
+                    onPress={() =>
+                      navigation.navigate('CourseEditor', {
+                        roundIndex: i,
+                        courseName: r.courseName || `Round ${i + 1}`,
+                        initialHoles: r.holes,
+                        onSave: handleHolesSaved,
+                        players: players,
+                        initialSlope: r.slope,
+                        initialPlayerHandicaps: r.playerHandicaps,
+                        courseId: r.courseId ?? null,
+                      })
+                    }
+                  >
+                    <Feather name="settings" size={14} color={theme.accent.primary} style={{ marginRight: 6 }} />
+                    <Text style={s.editHolesBtnText}>
+                      Configure Holes  {'\u00B7'}  Par {totalPar}
+                    </Text>
+                    <Feather name="chevron-right" size={16} color={theme.accent.primary} style={{ marginLeft: 'auto' }} />
+                  </TouchableOpacity>
+                </>
+              ) : null}
+            </View>
+          );
+        })}
+
+        <TouchableOpacity style={s.addRoundBtn} onPress={addRound}>
+          <Feather name="plus-circle" size={16} color={theme.accent.primary} style={{ marginRight: 6 }} />
+          <Text style={s.addRoundBtnText}>Add Round</Text>
+        </TouchableOpacity>
+      </Animated.View>
+
+      {/* Scoring */}
+      <Animated.View entering={FadeInDown.delay(400).duration(300).springify()}>
+        <Text style={s.sectionTitle}>Scoring</Text>
+        <View style={s.modeRow}>
+          {['stableford', 'bestball'].map((mode) => (
             <TouchableOpacity
-              style={styles.pickBtn}
-              onPress={() => navigation.navigate('CoursePicker', { roundIndex: i })}
+              key={mode}
+              style={[s.modeBtn, settings.scoringMode === mode && s.modeBtnActive]}
+              onPress={() => setSettings((prev) => ({ ...prev, scoringMode: mode }))}
             >
-              <Text style={styles.pickBtnText}>
-                {r.courseName ? `Course: ${r.courseName}` : '+ Pick Course from Library'}
+              <Text style={[s.modeBtnText, settings.scoringMode === mode && s.modeBtnTextActive]}>
+                {mode === 'stableford' ? 'Individual Stableford' : 'Best Ball / Worst Ball'}
               </Text>
             </TouchableOpacity>
-            {r.courseName ? (
-              <>
-                <TextInput
-                  style={styles.input}
-                  placeholder="Override course name"
-                  placeholderTextColor="#484f58"
-                  keyboardAppearance="dark"
-                  selectionColor="#4caf50"
-                  value={r.courseName}
-                  onChangeText={(v) => updateCourseName(i, v)}
-                />
-                <TouchableOpacity
-                  style={styles.editHolesBtn}
-                  onPress={() =>
-                    navigation.navigate('CourseEditor', {
-                      roundIndex: i,
-                      courseName: r.courseName || `Round ${i + 1}`,
-                      initialHoles: r.holes,
-                      onSave: handleHolesSaved,
-                      players: players,
-                      initialSlope: r.slope,
-                      initialPlayerHandicaps: r.playerHandicaps,
-                      courseId: r.courseId ?? null,
-                    })
-                  }
-                >
-                  <Text style={styles.editHolesBtnText}>
-                    Configure Holes  ·  Par {totalPar}
-                  </Text>
-                </TouchableOpacity>
-              </>
-            ) : null}
-          </View>
-        );
-      })}
-
-      <TouchableOpacity style={styles.addRoundBtn} onPress={addRound}>
-        <Text style={styles.addRoundBtnText}>+ Add Round</Text>
-      </TouchableOpacity>
-
-      <Text style={styles.sectionTitle}>Scoring</Text>
-      <View style={styles.modeRow}>
-        {['stableford', 'bestball'].map((mode) => (
-          <TouchableOpacity
-            key={mode}
-            style={[styles.modeBtn, settings.scoringMode === mode && styles.modeBtnActive]}
-            onPress={() => setSettings((s) => ({ ...s, scoringMode: mode }))}
-          >
-            <Text style={[styles.modeBtnText, settings.scoringMode === mode && styles.modeBtnTextActive]}>
-              {mode === 'stableford' ? 'Individual Stableford' : 'Best Ball / Worst Ball'}
-            </Text>
-          </TouchableOpacity>
-        ))}
-      </View>
-      {settings.scoringMode === 'bestball' && (
-        <View style={styles.valueRow}>
-          <View style={styles.valueBlock}>
-            <Text style={styles.valueLabel}>Best Ball</Text>
-            <TextInput
-              style={styles.valueInput}
-              keyboardType="numeric"
-              keyboardAppearance="dark"
-              selectionColor="#4caf50"
-              maxLength={2}
-              value={String(settings.bestBallValue)}
-              onChangeText={(v) => setSettings((s) => ({ ...s, bestBallValue: v }))}
-            />
-            <Text style={styles.valueSuffix}>pts / hole</Text>
-          </View>
-          <View style={styles.valueBlock}>
-            <Text style={styles.valueLabel}>Worst Ball</Text>
-            <TextInput
-              style={styles.valueInput}
-              keyboardType="numeric"
-              keyboardAppearance="dark"
-              selectionColor="#4caf50"
-              maxLength={2}
-              value={String(settings.worstBallValue)}
-              onChangeText={(v) => setSettings((s) => ({ ...s, worstBallValue: v }))}
-            />
-            <Text style={styles.valueSuffix}>pts / hole</Text>
-          </View>
+          ))}
         </View>
-      )}
+        {settings.scoringMode === 'bestball' && (
+          <Animated.View entering={FadeInDown.duration(250).springify()} style={s.valueRow}>
+            <View style={s.valueBlock}>
+              <Text style={s.valueLabel}>Best Ball</Text>
+              <TextInput
+                style={s.valueInput}
+                keyboardType="numeric"
+                keyboardAppearance={theme.isDark ? 'dark' : 'light'}
+                selectionColor={theme.accent.primary}
+                maxLength={2}
+                value={String(settings.bestBallValue)}
+                onChangeText={(v) => setSettings((prev) => ({ ...prev, bestBallValue: v }))}
+              />
+              <Text style={s.valueSuffix}>pts / hole</Text>
+            </View>
+            <View style={s.valueBlock}>
+              <Text style={s.valueLabel}>Worst Ball</Text>
+              <TextInput
+                style={s.valueInput}
+                keyboardType="numeric"
+                keyboardAppearance={theme.isDark ? 'dark' : 'light'}
+                selectionColor={theme.accent.primary}
+                maxLength={2}
+                value={String(settings.worstBallValue)}
+                onChangeText={(v) => setSettings((prev) => ({ ...prev, worstBallValue: v }))}
+              />
+              <Text style={s.valueSuffix}>pts / hole</Text>
+            </View>
+          </Animated.View>
+        )}
+      </Animated.View>
 
-      <TouchableOpacity style={styles.btn} onPress={handleStart}>
-        <Text style={styles.btnText}>Start Tournament</Text>
-      </TouchableOpacity>
+      {/* Start Button */}
+      <Animated.View entering={FadeInDown.delay(500).duration(300).springify()}>
+        <TouchableOpacity style={s.primaryBtn} onPress={handleStart}>
+          <Feather name="play" size={18} color={theme.isDark ? theme.accent.primary : theme.text.inverse} style={{ marginRight: 8 }} />
+          <Text style={s.primaryBtnText}>Start Tournament</Text>
+        </TouchableOpacity>
+      </Animated.View>
     </ScrollView>
   );
 }
 
-const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: '#070d15' },
-  content: { padding: 20, paddingTop: 16, paddingBottom: 40 },
-  title: { fontSize: 32, fontWeight: '900', color: '#4ade80', marginBottom: 24, letterSpacing: -0.5 },
-  label: { color: '#7a8fa8', marginBottom: 8, fontSize: 13, fontWeight: '600', letterSpacing: 0.3 },
-  sectionTitle: { color: '#4ade80', fontWeight: '700', fontSize: 11, marginTop: 24, marginBottom: 12, letterSpacing: 1.8, textTransform: 'uppercase' },
-  input: {
-    backgroundColor: '#0c1a28', color: '#f1f5f9', borderRadius: 12, borderWidth: 1, borderColor: '#1c3250',
-    padding: 14, marginBottom: 10, fontSize: 15, fontWeight: '500',
-  },
-  playerRow: {
-    flexDirection: 'row', alignItems: 'center', backgroundColor: '#0c1a28',
-    borderRadius: 14, borderWidth: 1, borderColor: '#1c3250', padding: 14, marginBottom: 8,
-    shadowColor: '#000', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.25, shadowRadius: 8, elevation: 4,
-  },
-  playerInfo: { flex: 1 },
-  playerName: { color: '#f1f5f9', fontSize: 16, fontWeight: '700' },
-  playerHcp: { color: '#7a8fa8', fontSize: 12, marginTop: 3, fontWeight: '500' },
-  removeBtn: { paddingHorizontal: 10, paddingVertical: 6 },
-  removeRoundBtn: { paddingVertical: 4, paddingHorizontal: 10 },
-  removeBtnText: { color: '#f87171', fontSize: 13, fontWeight: '700' },
-  pickBtn: {
-    borderRadius: 12, borderWidth: 1, borderColor: '#1a4a2e', borderStyle: 'dashed',
-    backgroundColor: '#031a0a', padding: 14, alignItems: 'center', marginBottom: 8,
-  },
-  pickBtnText: { color: '#4ade80', fontSize: 14, fontWeight: '700' },
-  courseBlock: { marginBottom: 12 },
-  roundHeader: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 8 },
-  roundLabel: { color: '#7a8fa8', fontSize: 13, fontWeight: '700', letterSpacing: 0.5 },
-  addRoundBtn: {
-    borderRadius: 12, borderWidth: 1, borderColor: '#1c3250', borderStyle: 'dashed',
-    padding: 14, alignItems: 'center', marginTop: 4,
-  },
-  addRoundBtnText: { color: '#4ade80', fontSize: 14, fontWeight: '700' },
-  editHolesBtn: {
-    backgroundColor: '#031a0a', borderRadius: 12, borderWidth: 1,
-    borderColor: '#1a4a2e', padding: 12, alignItems: 'center', marginBottom: 4,
-  },
-  editHolesBtnText: { color: '#4ade80', fontSize: 14, fontWeight: '700' },
-  modeRow: { gap: 8 },
-  modeBtn: { backgroundColor: '#0c1a28', borderRadius: 12, borderWidth: 1, borderColor: '#1c3250', padding: 14, alignItems: 'center', marginBottom: 6 },
-  modeBtnActive: { backgroundColor: '#22c55e', borderColor: '#22c55e' },
-  modeBtnText: { color: '#364f68', fontWeight: '600', fontSize: 14 },
-  modeBtnTextActive: { color: '#fff', fontWeight: '700' },
-  valueRow: { flexDirection: 'row', gap: 12, marginTop: 10 },
-  valueBlock: { flex: 1, backgroundColor: '#0c1a28', borderRadius: 14, borderWidth: 1, borderColor: '#1c3250', padding: 16, alignItems: 'center', gap: 8 },
-  valueLabel: { color: '#4ade80', fontSize: 12, fontWeight: '700', letterSpacing: 0.5 },
-  valueInput: { backgroundColor: '#070d15', color: '#f1f5f9', borderRadius: 8, borderWidth: 1, borderColor: '#1c3250', width: 56, textAlign: 'center', fontSize: 22, fontWeight: '800', padding: 8 },
-  valueSuffix: { color: '#364f68', fontSize: 11 },
-  btn: { backgroundColor: '#22c55e', borderRadius: 14, padding: 18, alignItems: 'center', marginTop: 24 },
-  btnText: { color: '#fff', fontWeight: '800', fontSize: 16 },
-});
+function makeStyles(theme) {
+  return StyleSheet.create({
+    container: {
+      flex: 1,
+      backgroundColor: theme.bg.primary,
+    },
+    content: {
+      padding: 20,
+      paddingTop: 16,
+      paddingBottom: 100,
+    },
+
+    /* Header */
+    header: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      justifyContent: 'space-between',
+      marginBottom: 24,
+      paddingTop: 4,
+    },
+    backBtn: {
+      width: 36,
+      height: 36,
+      borderRadius: 10,
+      backgroundColor: theme.isDark ? theme.bg.secondary : theme.bg.card,
+      borderWidth: 1,
+      borderColor: theme.isDark ? theme.glass?.border : theme.border.default,
+      alignItems: 'center',
+      justifyContent: 'center',
+    },
+    headerTitle: {
+      fontFamily: 'PlusJakartaSans-Bold',
+      fontSize: 18,
+      color: theme.text.primary,
+      letterSpacing: -0.3,
+    },
+
+    /* Labels & Sections */
+    label: {
+      fontFamily: 'PlusJakartaSans-SemiBold',
+      color: theme.text.secondary,
+      marginBottom: 8,
+      fontSize: 13,
+      letterSpacing: 0.3,
+    },
+    sectionTitle: {
+      fontFamily: 'PlusJakartaSans-Bold',
+      color: theme.accent.primary,
+      fontSize: 11,
+      marginTop: 24,
+      marginBottom: 12,
+      letterSpacing: 1.8,
+      textTransform: 'uppercase',
+    },
+
+    /* Input */
+    input: {
+      backgroundColor: theme.isDark ? theme.bg.secondary : theme.bg.card,
+      color: theme.text.primary,
+      borderRadius: 10,
+      borderWidth: 1,
+      borderColor: theme.border.default,
+      padding: 14,
+      marginBottom: 10,
+      fontSize: 15,
+      fontFamily: 'PlusJakartaSans-Medium',
+    },
+
+    /* Player Cards */
+    playerCard: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      backgroundColor: theme.bg.card,
+      borderRadius: 16,
+      borderWidth: 1,
+      borderColor: theme.isDark ? theme.glass?.border : theme.border.default,
+      padding: 16,
+      marginBottom: 8,
+      ...(theme.isDark ? {} : theme.shadow.card),
+    },
+    playerInfo: {
+      flex: 1,
+    },
+    playerName: {
+      fontFamily: 'PlusJakartaSans-Bold',
+      color: theme.text.primary,
+      fontSize: 16,
+    },
+    playerHcp: {
+      fontFamily: 'PlusJakartaSans-Medium',
+      color: theme.text.secondary,
+      fontSize: 12,
+      marginTop: 3,
+    },
+    removeBtn: {
+      width: 32,
+      height: 32,
+      borderRadius: 10,
+      backgroundColor: theme.isDark ? theme.bg.secondary : theme.bg.secondary,
+      borderWidth: 1,
+      borderColor: theme.border.default,
+      alignItems: 'center',
+      justifyContent: 'center',
+    },
+
+    /* Pick / Dashed Buttons */
+    pickBtn: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      justifyContent: 'center',
+      borderRadius: 12,
+      borderWidth: 1,
+      borderColor: theme.accent.primary + '40',
+      borderStyle: 'dashed',
+      backgroundColor: theme.isDark ? theme.accent.light : theme.accent.light,
+      padding: 14,
+      marginBottom: 8,
+    },
+    pickBtnText: {
+      fontFamily: 'PlusJakartaSans-SemiBold',
+      color: theme.accent.primary,
+      fontSize: 14,
+    },
+
+    /* Rounds */
+    courseBlock: {
+      marginBottom: 12,
+    },
+    roundHeader: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      justifyContent: 'space-between',
+      marginBottom: 8,
+    },
+    roundLabel: {
+      fontFamily: 'PlusJakartaSans-SemiBold',
+      color: theme.text.secondary,
+      fontSize: 13,
+      letterSpacing: 0.5,
+    },
+    removeRoundBtn: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      paddingVertical: 4,
+      paddingHorizontal: 10,
+    },
+    removeRoundText: {
+      fontFamily: 'PlusJakartaSans-SemiBold',
+      color: theme.destructive,
+      fontSize: 13,
+      marginLeft: 4,
+    },
+
+    /* Add Round */
+    addRoundBtn: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      justifyContent: 'center',
+      borderRadius: 12,
+      borderWidth: 1,
+      borderColor: theme.border.default,
+      borderStyle: 'dashed',
+      backgroundColor: theme.isDark ? theme.bg.secondary : theme.bg.primary,
+      padding: 14,
+      marginTop: 4,
+    },
+    addRoundBtnText: {
+      fontFamily: 'PlusJakartaSans-SemiBold',
+      color: theme.accent.primary,
+      fontSize: 14,
+    },
+
+    /* Edit Holes */
+    editHolesBtn: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      backgroundColor: theme.isDark ? theme.accent.light : theme.accent.light,
+      borderRadius: 12,
+      borderWidth: 1,
+      borderColor: theme.accent.primary + '40',
+      padding: 12,
+      marginBottom: 4,
+    },
+    editHolesBtnText: {
+      fontFamily: 'PlusJakartaSans-SemiBold',
+      color: theme.accent.primary,
+      fontSize: 14,
+    },
+
+    /* Scoring Mode Tabs */
+    modeRow: {
+      gap: 8,
+    },
+    modeBtn: {
+      backgroundColor: theme.bg.secondary,
+      borderRadius: 12,
+      borderWidth: 1,
+      borderColor: theme.border.default,
+      padding: 14,
+      alignItems: 'center',
+      marginBottom: 6,
+    },
+    modeBtnActive: {
+      backgroundColor: theme.accent.primary,
+      borderColor: theme.accent.primary,
+    },
+    modeBtnText: {
+      fontFamily: 'PlusJakartaSans-SemiBold',
+      color: theme.text.muted,
+      fontSize: 14,
+    },
+    modeBtnTextActive: {
+      fontFamily: 'PlusJakartaSans-Bold',
+      color: theme.text.inverse,
+    },
+
+    /* Value Inputs (Best/Worst ball) */
+    valueRow: {
+      flexDirection: 'row',
+      gap: 12,
+      marginTop: 10,
+    },
+    valueBlock: {
+      flex: 1,
+      backgroundColor: theme.bg.card,
+      borderRadius: 16,
+      borderWidth: 1,
+      borderColor: theme.isDark ? theme.glass?.border : theme.border.default,
+      padding: 16,
+      alignItems: 'center',
+      gap: 8,
+      ...(theme.isDark ? {} : theme.shadow.card),
+    },
+    valueLabel: {
+      fontFamily: 'PlusJakartaSans-Bold',
+      color: theme.accent.primary,
+      fontSize: 12,
+      letterSpacing: 0.5,
+    },
+    valueInput: {
+      backgroundColor: theme.isDark ? theme.bg.primary : theme.bg.secondary,
+      color: theme.text.primary,
+      borderRadius: 8,
+      borderWidth: 1,
+      borderColor: theme.border.default,
+      width: 56,
+      textAlign: 'center',
+      fontSize: 22,
+      fontFamily: 'PlusJakartaSans-ExtraBold',
+      padding: 8,
+    },
+    valueSuffix: {
+      fontFamily: 'PlusJakartaSans-Regular',
+      color: theme.text.muted,
+      fontSize: 11,
+    },
+
+    /* Primary Button */
+    primaryBtn: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      justifyContent: 'center',
+      backgroundColor: theme.isDark ? theme.accent.light : theme.accent.primary,
+      borderRadius: 14,
+      borderWidth: theme.isDark ? 1 : 0,
+      borderColor: theme.isDark ? theme.accent.primary + '33' : 'transparent',
+      padding: 18,
+      marginTop: 24,
+      ...(theme.isDark ? {} : theme.shadow.accent),
+    },
+    primaryBtnText: {
+      fontFamily: 'PlusJakartaSans-ExtraBold',
+      color: theme.isDark ? theme.accent.primary : theme.text.inverse,
+      fontSize: 16,
+    },
+  });
+}

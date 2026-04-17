@@ -4,10 +4,16 @@ import {
   Text, TextInput, TouchableOpacity, View, Alert,
 } from 'react-native';
 import { useFocusEffect } from '@react-navigation/native';
+import { Feather } from '@expo/vector-icons';
+import Animated, { FadeInDown, FadeIn } from 'react-native-reanimated';
+import { useTheme } from '../theme/ThemeContext';
 import { fetchPlayers, upsertPlayer } from '../store/libraryStore';
 import { setPendingPlayers } from '../lib/selectionBridge';
 
 export default function PlayerPickerScreen({ navigation, route }) {
+  const { theme } = useTheme();
+  const s = makeStyles(theme);
+
   const { alreadySelectedIds = [] } = route.params;
   const maxSelectable = 4 - alreadySelectedIds.length;
 
@@ -58,114 +64,226 @@ export default function PlayerPickerScreen({ navigation, route }) {
   }
 
   return (
-    <View style={styles.container}>
-      <ScrollView contentContainerStyle={styles.content} automaticallyAdjustKeyboardInsets>
-        <Text style={styles.sectionTitle}>New Player</Text>
-        <View style={styles.form}>
+    <View style={s.container}>
+      <View style={s.header}>
+        <TouchableOpacity onPress={() => navigation.goBack()} style={s.backBtn}>
+          <Feather name="chevron-left" size={22} color={theme.accent.primary} />
+        </TouchableOpacity>
+        <Text style={s.headerTitle}>Select Players</Text>
+        <View style={{ width: 22 }} />
+      </View>
+
+      <ScrollView contentContainerStyle={s.content} automaticallyAdjustKeyboardInsets>
+        <Text style={s.sectionTitle}>New Player</Text>
+        <View style={s.form}>
           <TextInput
-            style={[styles.input, styles.flex]}
+            style={[s.input, s.flex]}
             placeholder="Name"
-            placeholderTextColor="#364f68"
-            keyboardAppearance="dark"
-            selectionColor="#4ade80"
+            placeholderTextColor={theme.text.muted}
+            keyboardAppearance={theme.isDark ? 'dark' : 'light'}
+            selectionColor={theme.accent.primary}
             value={newName}
             onChangeText={setNewName}
           />
           <TextInput
-            style={[styles.input, styles.hcpInput]}
+            style={[s.input, s.hcpInput]}
             placeholder="HCP"
-            placeholderTextColor="#364f68"
+            placeholderTextColor={theme.text.muted}
             keyboardType="numeric"
-            keyboardAppearance="dark"
-            selectionColor="#4ade80"
+            keyboardAppearance={theme.isDark ? 'dark' : 'light'}
+            selectionColor={theme.accent.primary}
             value={newHcp}
             onChangeText={setNewHcp}
           />
-          <TouchableOpacity style={styles.addBtn} onPress={addAndSelect} disabled={saving || !newName.trim()}>
-            <Text style={styles.addBtnText}>Add</Text>
+          <TouchableOpacity style={s.addBtn} onPress={addAndSelect} disabled={saving || !newName.trim()}>
+            <Feather name="plus" size={18} color={theme.isDark ? theme.accent.primary : theme.text.inverse} />
+            <Text style={s.addBtnText}>Add</Text>
           </TouchableOpacity>
         </View>
 
-        <Text style={styles.sectionTitle}>Library</Text>
+        <Text style={s.sectionTitle}>Library</Text>
         {loading
-          ? <ActivityIndicator color="#4ade80" style={{ marginTop: 20 }} />
+          ? <ActivityIndicator color={theme.accent.primary} style={{ marginTop: 20 }} />
           : players.length === 0
-            ? <Text style={styles.empty}>No players in library yet.</Text>
-            : players.map((p) => {
+            ? <Text style={s.empty}>No players in library yet.</Text>
+            : players.map((p, index) => {
               const alreadyAdded = alreadySelectedIds.includes(p.id);
               const picked = pickedIds.includes(p.id);
               const disabled = alreadyAdded || (!picked && pickedIds.length >= maxSelectable);
               return (
-                <TouchableOpacity
+                <Animated.View
                   key={p.id}
-                  style={[styles.row, alreadyAdded && styles.rowAdded, picked && styles.rowPicked]}
-                  onPress={() => !alreadyAdded && togglePlayer(p)}
-                  disabled={alreadyAdded}
-                  activeOpacity={disabled ? 1 : 0.7}
+                  entering={FadeInDown.delay(index * 50).duration(300).springify()}
                 >
-                  <View style={styles.rowLeft}>
-                    <Text style={[styles.playerName, alreadyAdded && styles.textMuted]}>{p.name}</Text>
-                    <Text style={styles.hcpLabel}>HCP {p.handicap}</Text>
-                  </View>
-                  {alreadyAdded
-                    ? <Text style={styles.addedBadge}>Added</Text>
-                    : picked
-                      ? <View style={styles.checkCircle}><Text style={styles.checkMark}>✓</Text></View>
-                      : <View style={styles.emptyCircle} />}
-                </TouchableOpacity>
+                  <TouchableOpacity
+                    style={[s.row, alreadyAdded && s.rowAdded, picked && s.rowPicked]}
+                    onPress={() => !alreadyAdded && togglePlayer(p)}
+                    disabled={alreadyAdded}
+                    activeOpacity={disabled ? 1 : 0.7}
+                  >
+                    <View style={s.rowLeft}>
+                      <Text style={[s.playerName, alreadyAdded && s.textMuted]}>{p.name}</Text>
+                      <Text style={s.hcpLabel}>HCP {p.handicap}</Text>
+                    </View>
+                    {alreadyAdded
+                      ? <Text style={s.addedBadge}>Added</Text>
+                      : picked
+                        ? (
+                          <View style={s.checkCircle}>
+                            <Feather name="check" size={14} color={theme.text.inverse} />
+                          </View>
+                        )
+                        : <View style={s.emptyCircle} />}
+                  </TouchableOpacity>
+                </Animated.View>
               );
             })}
       </ScrollView>
 
       {pickedIds.length > 0 && (
-        <View style={styles.footer}>
-          <TouchableOpacity style={styles.confirmBtn} onPress={confirm}>
-            <Text style={styles.confirmBtnText}>
+        <Animated.View entering={FadeIn.duration(250)} style={s.footer}>
+          <TouchableOpacity style={s.confirmBtn} onPress={confirm}>
+            <Text style={s.confirmBtnText}>
               Add {pickedIds.length} Player{pickedIds.length !== 1 ? 's' : ''}
             </Text>
           </TouchableOpacity>
-        </View>
+        </Animated.View>
       )}
     </View>
   );
 }
 
-const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: '#070d15' },
-  content: { padding: 20, paddingTop: 16, paddingBottom: 40 },
-  sectionTitle: { color: '#364f68', fontWeight: '700', fontSize: 11, marginBottom: 12, marginTop: 8, letterSpacing: 1.8, textTransform: 'uppercase' },
+const makeStyles = (theme) => StyleSheet.create({
+  container: { flex: 1, backgroundColor: theme.bg.primary },
+  header: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingHorizontal: 20,
+    paddingTop: 16,
+    paddingBottom: 12,
+    backgroundColor: theme.bg.primary,
+  },
+  backBtn: {},
+  headerTitle: {
+    fontFamily: 'PlusJakartaSans-Bold',
+    fontSize: 17,
+    color: theme.text.primary,
+  },
+  content: { padding: 20, paddingTop: 8, paddingBottom: 40 },
+  sectionTitle: {
+    color: theme.text.muted,
+    fontFamily: 'PlusJakartaSans-SemiBold',
+    fontSize: 11,
+    marginBottom: 12,
+    marginTop: 8,
+    letterSpacing: 1.8,
+    textTransform: 'uppercase',
+  },
   form: { flexDirection: 'row', gap: 8, alignItems: 'center' },
   flex: { flex: 1 },
   input: {
-    backgroundColor: '#0c1a28', color: '#f1f5f9', borderRadius: 12, borderWidth: 1,
-    borderColor: '#1c3250', padding: 13, fontSize: 15, fontWeight: '500',
+    backgroundColor: theme.isDark ? theme.bg.secondary : theme.bg.card,
+    color: theme.text.primary,
+    borderRadius: 10,
+    borderWidth: 1,
+    borderColor: theme.border.default,
+    padding: 13,
+    fontSize: 15,
+    fontFamily: 'PlusJakartaSans-Medium',
   },
   hcpInput: { width: 64, textAlign: 'center' },
-  addBtn: { backgroundColor: '#22c55e', borderRadius: 12, paddingHorizontal: 16, height: 44, alignItems: 'center', justifyContent: 'center' },
-  addBtnText: { color: '#fff', fontSize: 14, fontWeight: '700' },
-  empty: { color: '#364f68', fontSize: 14, marginTop: 12 },
+  addBtn: {
+    backgroundColor: theme.isDark ? theme.accent.light : theme.accent.primary,
+    borderRadius: 12,
+    paddingHorizontal: 16,
+    height: 44,
+    alignItems: 'center',
+    justifyContent: 'center',
+    flexDirection: 'row',
+    gap: 4,
+    borderWidth: theme.isDark ? 1 : 0,
+    borderColor: theme.isDark ? theme.accent.primary + '33' : 'transparent',
+  },
+  addBtnText: {
+    color: theme.isDark ? theme.accent.primary : theme.text.inverse,
+    fontSize: 14,
+    fontFamily: 'PlusJakartaSans-Bold',
+  },
+  empty: {
+    color: theme.text.muted,
+    fontSize: 14,
+    fontFamily: 'PlusJakartaSans-Regular',
+    marginTop: 12,
+  },
   row: {
-    flexDirection: 'row', alignItems: 'center', backgroundColor: '#0c1a28',
-    borderRadius: 14, borderWidth: 1, borderColor: '#1c3250', padding: 16, marginBottom: 8,
-    shadowColor: '#000', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.2, shadowRadius: 6, elevation: 3,
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: theme.bg.card,
+    borderRadius: 16,
+    borderWidth: 1,
+    borderColor: theme.isDark ? theme.glass?.border : theme.border.default,
+    padding: 16,
+    marginBottom: 8,
+    ...(theme.isDark ? {} : theme.shadow.card),
   },
   rowAdded: { opacity: 0.35 },
-  rowPicked: { borderColor: '#22c55e', backgroundColor: '#031a0a' },
+  rowPicked: {
+    borderColor: theme.accent.primary,
+    backgroundColor: theme.isDark ? theme.accent.primary + '10' : theme.accent.light,
+  },
   rowLeft: { flex: 1 },
-  playerName: { color: '#f1f5f9', fontSize: 16, fontWeight: '700' },
-  textMuted: { color: '#7a8fa8' },
-  hcpLabel: { color: '#7a8fa8', fontSize: 12, marginTop: 3, fontWeight: '500' },
-  addedBadge: { color: '#364f68', fontSize: 12, fontWeight: '700' },
+  playerName: {
+    color: theme.text.primary,
+    fontSize: 16,
+    fontFamily: 'PlusJakartaSans-Bold',
+  },
+  textMuted: { color: theme.text.muted },
+  hcpLabel: {
+    color: theme.text.secondary,
+    fontSize: 12,
+    marginTop: 3,
+    fontFamily: 'PlusJakartaSans-Medium',
+  },
+  addedBadge: {
+    color: theme.text.muted,
+    fontSize: 12,
+    fontFamily: 'PlusJakartaSans-Bold',
+  },
   checkCircle: {
-    width: 26, height: 26, borderRadius: 13,
-    backgroundColor: '#22c55e', alignItems: 'center', justifyContent: 'center',
+    width: 26,
+    height: 26,
+    borderRadius: 13,
+    backgroundColor: theme.accent.primary,
+    alignItems: 'center',
+    justifyContent: 'center',
   },
-  checkMark: { color: '#fff', fontSize: 14, fontWeight: '900' },
-  emptyCircle: { width: 26, height: 26, borderRadius: 13, borderWidth: 2, borderColor: '#1c3250' },
+  emptyCircle: {
+    width: 26,
+    height: 26,
+    borderRadius: 13,
+    borderWidth: 1,
+    borderColor: theme.border.default,
+    backgroundColor: theme.bg.secondary,
+  },
   footer: {
-    paddingHorizontal: 20, paddingVertical: 14, borderTopWidth: 1, borderTopColor: '#1c3250',
-    backgroundColor: '#070d15',
+    paddingHorizontal: 20,
+    paddingVertical: 14,
+    borderTopWidth: 1,
+    borderTopColor: theme.border.subtle,
+    backgroundColor: theme.bg.primary,
   },
-  confirmBtn: { backgroundColor: '#22c55e', borderRadius: 14, padding: 16, alignItems: 'center' },
-  confirmBtnText: { color: '#fff', fontWeight: '800', fontSize: 16 },
+  confirmBtn: {
+    backgroundColor: theme.isDark ? theme.accent.light : theme.accent.primary,
+    borderRadius: 14,
+    padding: 16,
+    alignItems: 'center',
+    borderWidth: theme.isDark ? 1 : 0,
+    borderColor: theme.isDark ? theme.accent.primary + '33' : 'transparent',
+  },
+  confirmBtnText: {
+    color: theme.isDark ? theme.accent.primary : theme.text.inverse,
+    fontFamily: 'PlusJakartaSans-ExtraBold',
+    fontSize: 16,
+  },
 });

@@ -3,6 +3,9 @@ import {
   View, Text, TextInput, TouchableOpacity,
   StyleSheet, ScrollView,
 } from 'react-native';
+import { Feather } from '@expo/vector-icons';
+import Animated, { FadeInDown, FadeIn } from 'react-native-reanimated';
+import { useTheme } from '../theme/ThemeContext';
 import { loadTournament, saveTournament, DEFAULT_SETTINGS, randomPairs } from '../store/tournamentStore';
 
 function defaultHoles() {
@@ -14,6 +17,9 @@ function defaultHoles() {
 }
 
 export default function EditTournamentScreen({ navigation }) {
+  const { theme } = useTheme();
+  const s = makeStyles(theme);
+
   const [tournament, setTournament] = useState(null);
   const [players, setPlayers] = useState([]);
   const [rounds, setRounds] = useState([]);
@@ -140,193 +146,296 @@ export default function EditTournamentScreen({ navigation }) {
   if (!tournament) return null;
 
   return (
-    <ScrollView style={styles.container} contentContainerStyle={styles.content} automaticallyAdjustKeyboardInsets>
-      <Text style={styles.title}>Edit Tournament</Text>
+    <View style={s.screen}>
+      {/* Header */}
+      <View style={s.header}>
+        <TouchableOpacity onPress={() => navigation.goBack()} style={s.backBtn}>
+          <Feather name="chevron-left" size={22} color={theme.accent.primary} />
+        </TouchableOpacity>
+        <Text style={s.headerTitle}>Edit Tournament</Text>
+        <View style={{ width: 22 }} />
+      </View>
 
-      {/* Base handicap indexes */}
-      <Text style={styles.sectionTitle}>Handicap Index</Text>
-      <Text style={styles.hint}>Base index used when no slope is set for a course.</Text>
-      {players.map((p, i) => (
-        <View key={p.id} style={styles.row}>
-          <Text style={styles.playerName}>{p.name}</Text>
-          <TextInput
-            style={styles.hcpInput}
-            keyboardType="numeric"
-            keyboardAppearance="dark"
-            selectionColor="#4caf50"
-            value={p.handicap}
-            onChangeText={(v) => updateBaseHandicap(i, v)}
-            placeholder="0"
-            placeholderTextColor="#484f58"
-          />
-          <Text style={styles.hcpLabel}>index</Text>
-        </View>
-      ))}
-
-      {/* Per-round playing handicaps */}
-      {rounds.map((r, ri) => (
-        <View key={r.id}>
-          <View style={styles.roundHeader}>
-            <Text style={styles.sectionTitle}>Round {ri + 1}{r.slope ? `  ·  Slope ${r.slope}` : ''}</Text>
-            {rounds.length > 1 && (
-              <TouchableOpacity onPress={() => removeRound(ri)} style={styles.removeBtn}>
-                <Text style={styles.removeBtnText}>Remove</Text>
-              </TouchableOpacity>
-            )}
-          </View>
-          <TextInput
-            style={styles.input}
-            placeholder="Course name"
-            placeholderTextColor="#484f58"
-            keyboardAppearance="dark"
-            selectionColor="#4caf50"
-            value={r.courseName}
-            onChangeText={(v) => updateCourseName(ri, v)}
-          />
-          {players.map((p) => (
-            <View key={p.id} style={styles.row}>
-              <Text style={styles.playerName}>{p.name}</Text>
+      <ScrollView style={s.container} contentContainerStyle={s.content} automaticallyAdjustKeyboardInsets>
+        {/* Base handicap indexes */}
+        <Animated.View entering={FadeInDown.delay(50).duration(300).springify()}>
+          <Text style={s.sectionTitle}>Handicap Index</Text>
+          <Text style={s.hint}>Base index used when no slope is set for a course.</Text>
+          {players.map((p, i) => (
+            <View key={p.id} style={s.playerCard}>
+              <Text style={s.playerName}>{p.name}</Text>
               <TextInput
-                style={styles.hcpInput}
+                style={s.hcpInput}
                 keyboardType="numeric"
-                keyboardAppearance="dark"
-                selectionColor="#4caf50"
-                value={r.playerHandicaps?.[p.id] ?? ''}
-                onChangeText={(v) => updatePlayingHandicap(ri, p.id, v)}
+                keyboardAppearance={theme.isDark ? 'dark' : 'light'}
+                selectionColor={theme.accent.primary}
+                value={p.handicap}
+                onChangeText={(v) => updateBaseHandicap(i, v)}
                 placeholder="0"
-                placeholderTextColor="#484f58"
+                placeholderTextColor={theme.text.muted}
               />
-              <Text style={styles.hcpLabel}>playing</Text>
+              <Text style={s.hcpLabel}>index</Text>
             </View>
           ))}
-          <TextInput
-            style={[styles.input, styles.notesInput]}
-            placeholder="Round notes…"
-            placeholderTextColor="#484f58"
-            keyboardAppearance="dark"
-            selectionColor="#4caf50"
-            multiline
-            value={r.notes ?? ''}
-            onChangeText={(v) => updateNotes(ri, v)}
-          />
-          <TouchableOpacity
-            style={styles.editHolesBtn}
-            onPress={() =>
-              navigation.navigate('CourseEditor', {
-                roundIndex: ri,
-                courseName: r.courseName,
-                initialHoles: r.holes,
-                initialSlope: r.slope,
-                initialPlayerHandicaps: Object.fromEntries(
-                  Object.entries(r.playerHandicaps ?? {}).map(([id, v]) => [id, parseInt(v, 10) || 0]),
-                ),
-                players: tournament.players,
-                onSave: handleHolesSaved,
-                courseId: r.courseId ?? null,
-              })
-            }
-          >
-            <Text style={styles.editHolesBtnText}>
-              Edit Holes & Slope  ·  Par {r.holes.reduce((s, h) => s + h.par, 0)}
-            </Text>
-          </TouchableOpacity>
-        </View>
-      ))}
+        </Animated.View>
 
-      <TouchableOpacity style={styles.addRoundBtn} onPress={addRound}>
-        <Text style={styles.addRoundBtnText}>+ Add Round</Text>
-      </TouchableOpacity>
+        {/* Per-round playing handicaps */}
+        {rounds.map((r, ri) => (
+          <Animated.View key={r.id} entering={FadeInDown.delay(100 + ri * 50).duration(300).springify()}>
+            <View style={s.roundHeader}>
+              <Text style={s.sectionTitle}>Round {ri + 1}{r.slope ? `  --  Slope ${r.slope}` : ''}</Text>
+              {rounds.length > 1 && (
+                <TouchableOpacity onPress={() => removeRound(ri)} style={s.removeBtn}>
+                  <Feather name="trash-2" size={14} color={theme.destructive} style={{ marginRight: 4 }} />
+                  <Text style={s.removeBtnText}>Remove</Text>
+                </TouchableOpacity>
+              )}
+            </View>
 
-      <Text style={styles.sectionTitle}>Scoring Mode</Text>
-      <View style={styles.modeRow}>
-        {['stableford', 'bestball'].map((mode) => (
-          <TouchableOpacity
-            key={mode}
-            style={[styles.modeBtn, settings.scoringMode === mode && styles.modeBtnActive]}
-            onPress={() => setSettings((s) => ({ ...s, scoringMode: mode }))}
-          >
-            <Text style={[styles.modeBtnText, settings.scoringMode === mode && styles.modeBtnTextActive]}>
-              {mode === 'stableford' ? 'Individual Stableford' : 'Best Ball / Worst Ball'}
-            </Text>
-          </TouchableOpacity>
+            <View style={s.roundCard}>
+              <TextInput
+                style={s.input}
+                placeholder="Course name"
+                placeholderTextColor={theme.text.muted}
+                keyboardAppearance={theme.isDark ? 'dark' : 'light'}
+                selectionColor={theme.accent.primary}
+                value={r.courseName}
+                onChangeText={(v) => updateCourseName(ri, v)}
+              />
+              {players.map((p) => (
+                <View key={p.id} style={s.hcpRow}>
+                  <Text style={s.hcpRowName}>{p.name}</Text>
+                  <TextInput
+                    style={s.hcpInput}
+                    keyboardType="numeric"
+                    keyboardAppearance={theme.isDark ? 'dark' : 'light'}
+                    selectionColor={theme.accent.primary}
+                    value={r.playerHandicaps?.[p.id] ?? ''}
+                    onChangeText={(v) => updatePlayingHandicap(ri, p.id, v)}
+                    placeholder="0"
+                    placeholderTextColor={theme.text.muted}
+                  />
+                  <Text style={s.hcpLabel}>playing</Text>
+                </View>
+              ))}
+              <TextInput
+                style={[s.input, s.notesInput]}
+                placeholder="Round notes..."
+                placeholderTextColor={theme.text.muted}
+                keyboardAppearance={theme.isDark ? 'dark' : 'light'}
+                selectionColor={theme.accent.primary}
+                multiline
+                value={r.notes ?? ''}
+                onChangeText={(v) => updateNotes(ri, v)}
+              />
+              <TouchableOpacity
+                style={s.editHolesBtn}
+                onPress={() =>
+                  navigation.navigate('CourseEditor', {
+                    roundIndex: ri,
+                    courseName: r.courseName,
+                    initialHoles: r.holes,
+                    initialSlope: r.slope,
+                    initialPlayerHandicaps: Object.fromEntries(
+                      Object.entries(r.playerHandicaps ?? {}).map(([id, v]) => [id, parseInt(v, 10) || 0]),
+                    ),
+                    players: tournament.players,
+                    onSave: handleHolesSaved,
+                    courseId: r.courseId ?? null,
+                  })
+                }
+              >
+                <Feather name="edit-3" size={14} color={theme.accent.primary} style={{ marginRight: 8 }} />
+                <Text style={s.editHolesBtnText}>
+                  Edit Holes & Slope
+                </Text>
+                <View style={s.parBadge}>
+                  <Text style={s.parBadgeText}>Par {r.holes.reduce((sum, h) => sum + h.par, 0)}</Text>
+                </View>
+              </TouchableOpacity>
+            </View>
+          </Animated.View>
         ))}
-      </View>
-      {settings.scoringMode === 'bestball' && (
-        <View style={styles.valueRow}>
-          <View style={styles.valueBlock}>
-            <Text style={styles.valueLabel}>Best Ball</Text>
-            <TextInput
-              style={styles.valueInput}
-              keyboardType="numeric"
-              maxLength={2}
-              keyboardAppearance="dark"
-              selectionColor="#4caf50"
-              value={String(settings.bestBallValue)}
-              onChangeText={(v) => setSettings((s) => ({ ...s, bestBallValue: v }))}
-            />
-            <Text style={styles.valueSuffix}>pts / hole</Text>
-          </View>
-          <View style={styles.valueBlock}>
-            <Text style={styles.valueLabel}>Worst Ball</Text>
-            <TextInput
-              style={styles.valueInput}
-              keyboardType="numeric"
-              maxLength={2}
-              keyboardAppearance="dark"
-              selectionColor="#4caf50"
-              value={String(settings.worstBallValue)}
-              onChangeText={(v) => setSettings((s) => ({ ...s, worstBallValue: v }))}
-            />
-            <Text style={styles.valueSuffix}>pts / hole</Text>
-          </View>
-        </View>
-      )}
 
-    </ScrollView>
+        <Animated.View entering={FadeInDown.delay(200).duration(300).springify()}>
+          <TouchableOpacity style={s.addRoundBtn} onPress={addRound}>
+            <Feather name="plus-circle" size={16} color={theme.accent.primary} style={{ marginRight: 8 }} />
+            <Text style={s.addRoundBtnText}>Add Round</Text>
+          </TouchableOpacity>
+        </Animated.View>
+
+        <Animated.View entering={FadeInDown.delay(250).duration(300).springify()}>
+          <Text style={s.sectionTitle}>Scoring Mode</Text>
+          <View style={s.modeRow}>
+            {['stableford', 'bestball'].map((mode) => (
+              <TouchableOpacity
+                key={mode}
+                style={[s.modeBtn, settings.scoringMode === mode && s.modeBtnActive]}
+                onPress={() => setSettings((sv) => ({ ...sv, scoringMode: mode }))}
+              >
+                <Feather
+                  name={mode === 'stableford' ? 'user' : 'users'}
+                  size={16}
+                  color={settings.scoringMode === mode
+                    ? (theme.isDark ? theme.accent.primary : theme.text.inverse)
+                    : theme.text.muted}
+                  style={{ marginRight: 8 }}
+                />
+                <Text style={[s.modeBtnText, settings.scoringMode === mode && s.modeBtnTextActive]}>
+                  {mode === 'stableford' ? 'Individual Stableford' : 'Best Ball / Worst Ball'}
+                </Text>
+              </TouchableOpacity>
+            ))}
+          </View>
+          {settings.scoringMode === 'bestball' && (
+            <View style={s.valueRow}>
+              <View style={s.valueBlock}>
+                <Text style={s.valueLabel}>Best Ball</Text>
+                <TextInput
+                  style={s.valueInput}
+                  keyboardType="numeric"
+                  maxLength={2}
+                  keyboardAppearance={theme.isDark ? 'dark' : 'light'}
+                  selectionColor={theme.accent.primary}
+                  value={String(settings.bestBallValue)}
+                  onChangeText={(v) => setSettings((sv) => ({ ...sv, bestBallValue: v }))}
+                />
+                <Text style={s.valueSuffix}>pts / hole</Text>
+              </View>
+              <View style={s.valueBlock}>
+                <Text style={s.valueLabel}>Worst Ball</Text>
+                <TextInput
+                  style={s.valueInput}
+                  keyboardType="numeric"
+                  maxLength={2}
+                  keyboardAppearance={theme.isDark ? 'dark' : 'light'}
+                  selectionColor={theme.accent.primary}
+                  value={String(settings.worstBallValue)}
+                  onChangeText={(v) => setSettings((sv) => ({ ...sv, worstBallValue: v }))}
+                />
+                <Text style={s.valueSuffix}>pts / hole</Text>
+              </View>
+            </View>
+          )}
+        </Animated.View>
+      </ScrollView>
+    </View>
   );
 }
 
-const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: '#070d15' },
-  content: { padding: 20, paddingTop: 16, paddingBottom: 40 },
-  title: { fontSize: 28, fontWeight: '900', color: '#4ade80', marginBottom: 20, letterSpacing: -0.5 },
-  sectionTitle: { color: '#4ade80', fontWeight: '700', fontSize: 11, marginTop: 24, marginBottom: 8, flex: 1, letterSpacing: 1.8, textTransform: 'uppercase' },
-  hint: { color: '#364f68', fontSize: 12, marginBottom: 10 },
-  row: { flexDirection: 'row', alignItems: 'center', backgroundColor: '#0c1a28', borderRadius: 14, borderWidth: 1, borderColor: '#1c3250', padding: 14, marginBottom: 8 },
-  playerName: { flex: 1, color: '#f1f5f9', fontSize: 16, fontWeight: '600' },
+const makeStyles = (theme) => StyleSheet.create({
+  screen: { flex: 1, backgroundColor: theme.bg.primary },
+  header: {
+    flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
+    paddingHorizontal: 20, paddingTop: 16, paddingBottom: 12, backgroundColor: theme.bg.primary,
+  },
+  backBtn: {},
+  headerTitle: { fontFamily: 'PlusJakartaSans-Bold', fontSize: 17, color: theme.text.primary },
+  container: { flex: 1 },
+  content: { padding: 20, paddingTop: 4, paddingBottom: 40 },
+  sectionTitle: {
+    fontFamily: 'PlusJakartaSans-Bold', color: theme.accent.primary,
+    fontSize: 11, marginTop: 24, marginBottom: 8, flex: 1,
+    letterSpacing: 1.8, textTransform: 'uppercase',
+  },
+  hint: { fontFamily: 'PlusJakartaSans-Regular', color: theme.text.muted, fontSize: 12, marginBottom: 10 },
+  playerCard: {
+    flexDirection: 'row', alignItems: 'center',
+    backgroundColor: theme.bg.card, borderRadius: 16, borderWidth: 1,
+    borderColor: theme.isDark ? theme.glass?.border : theme.border.default,
+    padding: 14, marginBottom: 8,
+    ...(theme.isDark ? {} : theme.shadow.card),
+  },
+  playerName: { flex: 1, fontFamily: 'PlusJakartaSans-SemiBold', color: theme.text.primary, fontSize: 16 },
   hcpInput: {
-    backgroundColor: '#070d15', color: '#f1f5f9', borderRadius: 8, borderWidth: 1, borderColor: '#1c3250',
-    width: 54, textAlign: 'center', fontSize: 16, fontWeight: '700', padding: 7,
+    backgroundColor: theme.isDark ? theme.bg.secondary : theme.bg.card,
+    color: theme.text.primary, borderRadius: 10, borderWidth: 1,
+    borderColor: theme.border.default,
+    width: 54, textAlign: 'center', fontSize: 16,
+    fontFamily: 'PlusJakartaSans-Bold', padding: 7,
   },
-  hcpLabel: { color: '#7a8fa8', marginLeft: 6, fontSize: 13, width: 44 },
+  hcpLabel: { fontFamily: 'PlusJakartaSans-Regular', color: theme.text.secondary, marginLeft: 6, fontSize: 13, width: 44 },
+  roundHeader: {
+    flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
+    marginTop: 24, marginBottom: 8,
+  },
+  removeBtn: { flexDirection: 'row', alignItems: 'center', paddingVertical: 4, paddingHorizontal: 10 },
+  removeBtnText: { fontFamily: 'PlusJakartaSans-Bold', color: theme.destructive, fontSize: 13 },
+  roundCard: {
+    backgroundColor: theme.bg.card, borderRadius: 16, borderWidth: 1,
+    borderColor: theme.isDark ? theme.glass?.border : theme.border.default,
+    padding: 16,
+    ...(theme.isDark ? {} : theme.shadow.card),
+  },
   input: {
-    backgroundColor: '#0c1a28', color: '#f1f5f9', borderRadius: 12, borderWidth: 1, borderColor: '#1c3250',
-    padding: 14, marginBottom: 8, fontSize: 15, fontWeight: '500',
+    backgroundColor: theme.isDark ? theme.bg.secondary : theme.bg.card,
+    color: theme.text.primary, borderRadius: 10, borderWidth: 1,
+    borderColor: theme.border.default,
+    padding: 14, marginBottom: 8, fontSize: 15,
+    fontFamily: 'PlusJakartaSans-Medium',
   },
-  roundHeader: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginTop: 24, marginBottom: 8 },
-  removeBtn: { paddingVertical: 4, paddingHorizontal: 10 },
-  removeBtnText: { color: '#f87171', fontSize: 13, fontWeight: '700' },
-  addRoundBtn: {
-    borderRadius: 12, borderWidth: 1, borderColor: '#1c3250', borderStyle: 'dashed',
-    padding: 14, alignItems: 'center', marginTop: 8, marginBottom: 4,
+  hcpRow: {
+    flexDirection: 'row', alignItems: 'center',
+    paddingVertical: 8,
+    borderBottomWidth: 1, borderBottomColor: theme.border.subtle,
   },
-  addRoundBtnText: { color: '#4ade80', fontSize: 14, fontWeight: '700' },
-  notesInput: { minHeight: 60, textAlignVertical: 'top' },
+  hcpRowName: { flex: 1, fontFamily: 'PlusJakartaSans-SemiBold', color: theme.text.primary, fontSize: 15 },
+  notesInput: { minHeight: 60, textAlignVertical: 'top', marginTop: 8 },
   editHolesBtn: {
-    backgroundColor: '#031a0a', borderRadius: 12, borderWidth: 1,
-    borderColor: '#1a4a2e', padding: 12, alignItems: 'center', marginBottom: 4,
+    backgroundColor: theme.isDark ? theme.bg.secondary : theme.bg.primary,
+    borderRadius: 12, borderWidth: 1,
+    borderColor: theme.border.default,
+    padding: 12, alignItems: 'center', marginTop: 10,
+    flexDirection: 'row', justifyContent: 'center',
   },
-  editHolesBtnText: { color: '#4ade80', fontSize: 14, fontWeight: '700' },
+  editHolesBtnText: { fontFamily: 'PlusJakartaSans-Bold', color: theme.accent.primary, fontSize: 14 },
+  parBadge: {
+    backgroundColor: theme.accent.light, borderRadius: 8,
+    paddingHorizontal: 8, paddingVertical: 3, marginLeft: 8,
+  },
+  parBadgeText: { fontFamily: 'PlusJakartaSans-SemiBold', color: theme.accent.primary, fontSize: 12 },
+  addRoundBtn: {
+    borderRadius: 14, borderWidth: 1,
+    borderColor: theme.border.default, borderStyle: 'dashed',
+    padding: 14, alignItems: 'center', marginTop: 8, marginBottom: 4,
+    flexDirection: 'row', justifyContent: 'center',
+  },
+  addRoundBtnText: { fontFamily: 'PlusJakartaSans-Bold', color: theme.accent.primary, fontSize: 14 },
   modeRow: { gap: 8 },
-  modeBtn: { backgroundColor: '#0c1a28', borderRadius: 12, borderWidth: 1, borderColor: '#1c3250', padding: 14, alignItems: 'center', marginBottom: 6 },
-  modeBtnActive: { backgroundColor: '#22c55e', borderColor: '#22c55e' },
-  modeBtnText: { color: '#364f68', fontWeight: '600', fontSize: 14 },
-  modeBtnTextActive: { color: '#fff', fontWeight: '700' },
+  modeBtn: {
+    backgroundColor: theme.isDark ? theme.bg.secondary : theme.bg.primary,
+    borderRadius: 12, borderWidth: 1,
+    borderColor: theme.border.default,
+    padding: 14, alignItems: 'center', marginBottom: 6,
+    flexDirection: 'row', justifyContent: 'center',
+  },
+  modeBtnActive: {
+    backgroundColor: theme.isDark ? theme.accent.light : theme.accent.primary,
+    borderWidth: theme.isDark ? 1 : 0,
+    borderColor: theme.isDark ? theme.accent.primary + '33' : 'transparent',
+  },
+  modeBtnText: { fontFamily: 'PlusJakartaSans-SemiBold', color: theme.text.muted, fontSize: 14 },
+  modeBtnTextActive: {
+    fontFamily: 'PlusJakartaSans-Bold',
+    color: theme.isDark ? theme.accent.primary : theme.text.inverse,
+  },
   valueRow: { flexDirection: 'row', gap: 12, marginTop: 10 },
-  valueBlock: { flex: 1, backgroundColor: '#0c1a28', borderRadius: 14, borderWidth: 1, borderColor: '#1c3250', padding: 14, alignItems: 'center', gap: 8 },
-  valueLabel: { color: '#4ade80', fontSize: 12, fontWeight: '700', letterSpacing: 0.5 },
-  valueInput: { backgroundColor: '#070d15', color: '#f1f5f9', borderRadius: 8, borderWidth: 1, borderColor: '#1c3250', width: 56, textAlign: 'center', fontSize: 22, fontWeight: '800', padding: 8 },
-  valueSuffix: { color: '#364f68', fontSize: 11 },
-  btn: { backgroundColor: '#22c55e', borderRadius: 14, padding: 17, alignItems: 'center', marginTop: 24 },
-  btnText: { color: '#fff', fontWeight: '800', fontSize: 16 },
+  valueBlock: {
+    flex: 1, backgroundColor: theme.bg.card, borderRadius: 16, borderWidth: 1,
+    borderColor: theme.isDark ? theme.glass?.border : theme.border.default,
+    padding: 14, alignItems: 'center', gap: 8,
+    ...(theme.isDark ? {} : theme.shadow.card),
+  },
+  valueLabel: {
+    fontFamily: 'PlusJakartaSans-Bold', color: theme.accent.primary,
+    fontSize: 12, letterSpacing: 0.5,
+  },
+  valueInput: {
+    backgroundColor: theme.isDark ? theme.bg.secondary : theme.bg.card,
+    color: theme.text.primary, borderRadius: 10, borderWidth: 1,
+    borderColor: theme.border.default,
+    width: 56, textAlign: 'center', fontSize: 22,
+    fontFamily: 'PlusJakartaSans-ExtraBold', padding: 8,
+  },
+  valueSuffix: { fontFamily: 'PlusJakartaSans-Regular', color: theme.text.muted, fontSize: 11 },
 });
