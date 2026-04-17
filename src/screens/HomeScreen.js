@@ -384,7 +384,7 @@ function BestBallRoundCard({ round, players, settings, theme, s }) {
 }
 
 const makeStyles = (t) => StyleSheet.create({
-  screen: { flex: 1, backgroundColor: t.bg.primary, overflow: 'hidden' },
+  screen: { ...StyleSheet.absoluteFillObject, backgroundColor: t.bg.primary },
   scrollView: { flex: 1 },
   content: { padding: 20, paddingTop: 16, paddingBottom: 100 },
 

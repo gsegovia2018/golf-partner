@@ -132,7 +132,7 @@ export default function CoursesLibraryScreen({ navigation }) {
 }
 
 const makeStyles = (theme) => StyleSheet.create({
-  container: { flex: 1, backgroundColor: theme.bg.primary, overflow: 'hidden' },
+  container: { ...StyleSheet.absoluteFillObject, backgroundColor: theme.bg.primary },
   header: {
     flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
     paddingHorizontal: 20, paddingTop: 16, paddingBottom: 12, backgroundColor: theme.bg.primary,

@@ -154,7 +154,7 @@ export default function PlayerPickerScreen({ navigation, route }) {
 }
 
 const makeStyles = (theme) => StyleSheet.create({
-  container: { flex: 1, backgroundColor: theme.bg.primary, overflow: 'hidden' },
+  container: { ...StyleSheet.absoluteFillObject, backgroundColor: theme.bg.primary },
   header: {
     flexDirection: 'row',
     alignItems: 'center',

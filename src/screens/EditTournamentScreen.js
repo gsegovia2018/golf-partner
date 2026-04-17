@@ -324,7 +324,7 @@ export default function EditTournamentScreen({ navigation }) {
 }
 
 const makeStyles = (theme) => StyleSheet.create({
-  screen: { flex: 1, backgroundColor: theme.bg.primary, overflow: 'hidden' },
+  screen: { ...StyleSheet.absoluteFillObject, backgroundColor: theme.bg.primary },
   header: {
     flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
     paddingHorizontal: 20, paddingTop: 16, paddingBottom: 12, backgroundColor: theme.bg.primary,

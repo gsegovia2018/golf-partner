@@ -39,7 +39,7 @@ function AppNavigator() {
         initialRouteName="Home"
         screenOptions={{
           headerShown: false,
-          cardStyle: { backgroundColor: theme.bg.primary },
+          cardStyle: { flex: 1, backgroundColor: theme.bg.primary },
           cardStyleInterpolator: CardStyleInterpolators.forFadeFromBottomAndroid,
           transitionSpec: {
             open: { animation: 'timing', config: { duration: 250 } },

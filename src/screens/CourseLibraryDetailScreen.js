@@ -178,7 +178,7 @@ export default function CourseLibraryDetailScreen({ navigation, route }) {
 
 const makeStyles = (theme) => StyleSheet.create({
   centered: { flex: 1, backgroundColor: theme.bg.primary, alignItems: 'center', justifyContent: 'center' },
-  container: { flex: 1, backgroundColor: theme.bg.primary },
+  container: { ...StyleSheet.absoluteFillObject, backgroundColor: theme.bg.primary },
   header: {
     flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
     paddingHorizontal: 20, paddingTop: 16, paddingBottom: 12, backgroundColor: theme.bg.primary,

@@ -584,7 +584,7 @@ function LiveMatchStrip({ bbResult, settings }) {
 
 function makeStyles(theme) {
   return StyleSheet.create({
-    container: { flex: 1, backgroundColor: theme.bg.primary },
+    container: { ...StyleSheet.absoluteFillObject, backgroundColor: theme.bg.primary },
     flex: { flex: 1 },
 
     // Header
