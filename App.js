@@ -20,6 +20,8 @@ import {
 
 import { ThemeProvider, useTheme } from './src/theme/ThemeContext';
 import LoadingSplash from './src/components/LoadingSplash';
+import { AuthProvider, useAuth } from './src/context/AuthContext';
+import AuthScreen from './src/screens/AuthScreen';
 
 import HomeScreen from './src/screens/HomeScreen';
 import SetupScreen from './src/screens/SetupScreen';
@@ -34,11 +36,23 @@ import PlayerPickerScreen from './src/screens/PlayerPickerScreen';
 import CoursePickerScreen from './src/screens/CoursePickerScreen';
 import StatsScreen from './src/screens/StatsScreen';
 import EditTeamsScreen from './src/screens/EditTeamsScreen';
+import JoinTournamentScreen from './src/screens/JoinTournamentScreen';
 
 const Stack = createStackNavigator();
 
 function AppNavigator() {
   const { theme, mode } = useTheme();
+  const { session, loading } = useAuth();
+
+  if (loading) {
+    return (
+      <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: '#006747' }}>
+        <ActivityIndicator size="large" color="#ffd700" />
+      </View>
+    );
+  }
+
+  if (!session) return <AuthScreen />;
 
   return (
     <>
@@ -69,6 +83,7 @@ function AppNavigator() {
         <Stack.Screen name="CoursePicker" component={CoursePickerScreen} />
         <Stack.Screen name="Stats" component={StatsScreen} />
         <Stack.Screen name="EditTeams" component={EditTeamsScreen} />
+        <Stack.Screen name="JoinTournament" component={JoinTournamentScreen} />
       </Stack.Navigator>
     </>
   );
