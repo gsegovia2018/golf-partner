@@ -32,8 +32,14 @@ export async function fetchCourses() {
   return data.map(normalizeCourse);
 }
 
-export async function upsertCourse({ id, name, slope }) {
-  const row = { name, slope: slope ? parseInt(slope, 10) : null };
+export async function upsertCourse({ id, name, slope, rating, city, province }) {
+  const row = {
+    name,
+    slope: slope ? parseInt(slope, 10) : null,
+    rating: rating ? parseFloat(rating) : null,
+    city: city?.trim() || null,
+    province: province?.trim() || null,
+  };
   if (id) row.id = id;
   const { data, error } = await supabase.from('courses').upsert(row).select().single();
   if (error) throw error;
@@ -69,12 +75,16 @@ export async function updateCourseFromEditor(courseId, slope, holes) {
   await saveCourseHoles(courseId, holes);
 }
 
+
 // Convert Supabase course row → app-friendly shape
 export function normalizeCourse(c) {
   return {
     id: c.id,
     name: c.name,
     slope: c.slope,
+    rating: c.rating,
+    city: c.city,
+    province: c.province,
     holes: (c.course_holes ?? [])
       .sort((a, b) => a.number - b.number)
       .map((h) => ({ number: h.number, par: h.par, strokeIndex: h.stroke_index })),

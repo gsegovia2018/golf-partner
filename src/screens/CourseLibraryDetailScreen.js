@@ -26,6 +26,9 @@ export default function CourseLibraryDetailScreen({ navigation, route }) {
 
   const [name, setName] = useState(initialName ?? '');
   const [slope, setSlope] = useState('');
+  const [rating, setRating] = useState('');
+  const [city, setCity] = useState('');
+  const [province, setProvince] = useState('');
   const [holes, setHoles] = useState(defaultHoles());
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
@@ -38,6 +41,9 @@ export default function CourseLibraryDetailScreen({ navigation, route }) {
       if (course) {
         setName(course.name);
         setSlope(course.slope ? String(course.slope) : '');
+        setRating(course.rating ? String(course.rating) : '');
+        setCity(course.city ?? '');
+        setProvince(course.province ?? '');
         if (course.holes.length === 18) setHoles(course.holes.map((h) => ({ ...h })));
       }
       setLoading(false);
@@ -48,7 +54,7 @@ export default function CourseLibraryDetailScreen({ navigation, route }) {
     if (!name.trim()) return;
     setSaving(true);
     try {
-      await upsertCourse({ id: courseId, name: name.trim(), slope: slope || null });
+      await upsertCourse({ id: courseId, name: name.trim(), slope: slope || null, rating: rating || null, city, province });
       await saveCourseHoles(courseId, holes);
       navigation.goBack();
     } catch (e) {
@@ -105,20 +111,56 @@ export default function CourseLibraryDetailScreen({ navigation, route }) {
           selectionColor={theme.accent.primary}
         />
 
-        <View style={s.slopeRow}>
-          <Text style={s.slopeLabel}>Course Slope</Text>
+        <View style={s.ratingRow}>
+          <View style={s.ratingHalf}>
+            <Text style={s.slopeLabel}>Slope</Text>
+            <TextInput
+              style={s.slopeInput}
+              keyboardType="numeric"
+              maxLength={3}
+              placeholder="128"
+              placeholderTextColor={theme.text.muted}
+              keyboardAppearance={theme.isDark ? 'dark' : 'light'}
+              selectionColor={theme.accent.primary}
+              value={slope}
+              onChangeText={setSlope}
+            />
+          </View>
+          <View style={s.ratingHalf}>
+            <Text style={s.slopeLabel}>Course Rating</Text>
+            <TextInput
+              style={s.slopeInput}
+              keyboardType="decimal-pad"
+              maxLength={5}
+              placeholder="71.5"
+              placeholderTextColor={theme.text.muted}
+              keyboardAppearance={theme.isDark ? 'dark' : 'light'}
+              selectionColor={theme.accent.primary}
+              value={rating}
+              onChangeText={setRating}
+            />
+          </View>
+        </View>
+
+        <View style={s.locationRow}>
           <TextInput
-            style={s.slopeInput}
-            keyboardType="numeric"
-            maxLength={3}
-            placeholder="e.g. 128"
+            style={[s.locationInput, s.flex]}
+            placeholder="City"
             placeholderTextColor={theme.text.muted}
             keyboardAppearance={theme.isDark ? 'dark' : 'light'}
             selectionColor={theme.accent.primary}
-            value={slope}
-            onChangeText={setSlope}
+            value={city}
+            onChangeText={setCity}
           />
-          <Text style={s.slopeHint}>std 113</Text>
+          <TextInput
+            style={[s.locationInput, { width: 100 }]}
+            placeholder="Province"
+            placeholderTextColor={theme.text.muted}
+            keyboardAppearance={theme.isDark ? 'dark' : 'light'}
+            selectionColor={theme.accent.primary}
+            value={province}
+            onChangeText={setProvince}
+          />
         </View>
 
         <Text style={s.sectionTitle}>Holes  ·  Par {totalPar}</Text>
@@ -193,15 +235,23 @@ const makeStyles = (theme) => StyleSheet.create({
     borderColor: theme.border.default, padding: 14, fontSize: 18,
     fontFamily: 'PlusJakartaSans-Bold', marginBottom: 16,
   },
-  slopeRow: { flexDirection: 'row', alignItems: 'center', marginBottom: 20, gap: 12 },
-  slopeLabel: { fontFamily: 'PlusJakartaSans-SemiBold', color: theme.text.primary, fontSize: 15, flex: 1 },
+  ratingRow: { flexDirection: 'row', gap: 12, marginBottom: 12 },
+  ratingHalf: { flex: 1, flexDirection: 'row', alignItems: 'center', gap: 8 },
+  locationRow: { flexDirection: 'row', gap: 8, marginBottom: 20 },
+  locationInput: {
+    backgroundColor: theme.isDark ? theme.bg.secondary : theme.bg.card,
+    color: theme.text.primary, borderRadius: 10, borderWidth: 1,
+    borderColor: theme.border.default, padding: 11, fontSize: 14,
+    fontFamily: 'PlusJakartaSans-Medium',
+  },
+  flex: { flex: 1 },
+  slopeLabel: { fontFamily: 'PlusJakartaSans-SemiBold', color: theme.text.primary, fontSize: 14 },
   slopeInput: {
     backgroundColor: theme.isDark ? theme.bg.secondary : theme.bg.card,
     color: theme.text.primary, borderRadius: 10, borderWidth: 1,
-    borderColor: theme.border.default, width: 76, textAlign: 'center', fontSize: 16,
+    borderColor: theme.border.default, width: 72, textAlign: 'center', fontSize: 16,
     fontFamily: 'PlusJakartaSans-Bold', padding: 9,
   },
-  slopeHint: { fontFamily: 'PlusJakartaSans-Regular', color: theme.text.muted, fontSize: 12 },
   sectionTitle: {
     fontFamily: 'PlusJakartaSans-SemiBold', color: theme.accent.primary, fontSize: 11,
     marginBottom: 10, letterSpacing: 1.5, textTransform: 'uppercase',

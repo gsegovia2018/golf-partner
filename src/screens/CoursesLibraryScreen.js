@@ -114,8 +114,11 @@ export default function CoursesLibraryScreen({ navigation }) {
                   >
                     <Text style={s.courseName}>{c.name}</Text>
                     <Text style={s.courseMeta}>
+                      {[c.city, c.province].filter(Boolean).join(', ')}
+                      {(c.city || c.province) ? '  ·  ' : ''}
                       Par {c.holes.reduce((sum, h) => sum + h.par, 0)}
                       {c.slope ? `  ·  Slope ${c.slope}` : ''}
+                      {c.rating ? `  ·  CR ${c.rating}` : ''}
                     </Text>
                   </TouchableOpacity>
                   <TouchableOpacity
