@@ -6,6 +6,7 @@ import { Feather } from '@expo/vector-icons';
 import { useTheme } from '../theme/ThemeContext';
 import { ShareableLeaderboard, shareLeaderboard } from '../components/ShareableCard';
 import PullToRefresh from '../components/PullToRefresh';
+import LoadingSplash from '../components/LoadingSplash';
 import {
   loadTournament, loadAllTournaments,
   setActiveTournament, clearActiveTournament,
@@ -40,6 +41,7 @@ export default function HomeScreen({ navigation, route }) {
   const { theme, mode, toggle } = useTheme();
   const [tournament, setTournament] = useState(null);
   const [allTournaments, setAllTournaments] = useState([]);
+  const [loading, setLoading] = useState(true);
   const [selectedRound, setSelectedRound] = useState(0);
   const [roundPagerWidth, setRoundPagerWidth] = useState(0);
   const roundPagerRef = useRef(null);
@@ -68,10 +70,14 @@ export default function HomeScreen({ navigation, route }) {
   const [refreshing, setRefreshing] = useState(false);
 
   const reload = useCallback(async () => {
-    const [t, all] = await Promise.all([loadTournament(), loadAllTournaments()]);
-    setTournament(t);
-    setAllTournaments(all);
-    if (t) setSelectedRound(t.currentRound);
+    try {
+      const [t, all] = await Promise.all([loadTournament(), loadAllTournaments()]);
+      setTournament(t);
+      setAllTournaments(all);
+      if (t) setSelectedRound(t.currentRound);
+    } finally {
+      setLoading(false);
+    }
   }, []);
 
   const onRefresh = useCallback(async () => {
@@ -294,6 +300,10 @@ export default function HomeScreen({ navigation, route }) {
 
   const showList = viewMode === 'list' || (viewMode === 'auto' && !tournament);
   const showTournament = viewMode === 'tournament' || (viewMode === 'auto' && !!tournament);
+
+  if (loading) {
+    return <LoadingSplash />;
+  }
 
   if (showList) {
     return (
