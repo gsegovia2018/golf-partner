@@ -5,6 +5,25 @@ import { Feather } from '@expo/vector-icons';
 import { useTheme } from '../theme/ThemeContext';
 import { ShareableLeaderboard, shareLeaderboard } from '../components/ShareableCard';
 import PullToRefresh from '../components/PullToRefresh';
+
+// Web-only CSS scroll-snap. See ScorecardScreen.js for the rationale:
+// RNW 0.21's `pagingEnabled` omits `scroll-snap-stop: always`, so a
+// fast swipe can skip past one page. On web we drive snap ourselves.
+const PAGER_SNAP_TYPE_STYLE = Platform.OS === 'web' ? { scrollSnapType: 'x mandatory', overflowX: 'auto' } : null;
+const PAGER_PAGE_SNAP_STYLE = Platform.OS === 'web' ? { scrollSnapAlign: 'start', scrollSnapStop: 'always' } : null;
+
+// Belt-and-braces: inject the snap rules via a real <style> tag so they
+// apply even if RNW's atomic-CSS pipeline ever filters an unknown CSS
+// property. Targeted by a data attribute we set on each page.
+if (Platform.OS === 'web' && typeof document !== 'undefined') {
+  const id = 'golf-partner-pager-snap-stop';
+  if (!document.getElementById(id)) {
+    const styleEl = document.createElement('style');
+    styleEl.id = id;
+    styleEl.textContent = '[data-pagerpage="1"]{scroll-snap-align:start !important;scroll-snap-stop:always !important;}';
+    document.head.appendChild(styleEl);
+  }
+}
 import {
   loadTournament, loadAllTournaments,
   setActiveTournament, clearActiveTournament,
@@ -29,6 +48,12 @@ export default function HomeScreen({ navigation, viewMode = 'auto' }) {
   // pager fight its own scroll). User drags/momentum are NOT suppressed.
   const suppressRoundOnScroll = useRef(false);
   const suppressRoundTimer = useRef(null);
+  // True when the latest selectedRound change came from a scroll commit
+  // (onScroll / onMomentumScrollEnd). The sync effect uses this to skip
+  // the scrollTo — the scroll is already at the right place. Without
+  // this guard, a transition commit lagging behind the scroll settle can
+  // trigger a visible mini-scroll back to an intermediate page.
+  const selectedRoundFromScroll = useRef(false);
   const [showSettings, setShowSettings] = useState(false);
   const [showRoundEdit, setShowRoundEdit] = useState(false);
   const [leaderboardBestBall, setLeaderboardBestBall] = useState(false);
@@ -53,9 +78,14 @@ export default function HomeScreen({ navigation, viewMode = 'auto' }) {
   }, [navigation, reload]);
 
   // Keep round pager in sync with selectedRound (tab taps, arrow buttons).
-  // Skip while the user is dragging, and skip if already at target.
-  // Animate so taps slide smoothly instead of snapping.
+  // Skip while the user is dragging, and skip if this commit came from a
+  // scroll (the pager is already at the right place). Animate so taps
+  // slide smoothly instead of snapping.
   useEffect(() => {
+    if (selectedRoundFromScroll.current) {
+      selectedRoundFromScroll.current = false;
+      return;
+    }
     if (!roundPagerRef.current || roundPagerWidth <= 0) return;
     if (isUserScrollingRound.current) return;
     const target = selectedRound * roundPagerWidth;
@@ -152,6 +182,14 @@ export default function HomeScreen({ navigation, viewMode = 'auto' }) {
       : null),
     [tournament, selectedRoundData, selectedRoundHasScores, leaderboardBestBall],
   );
+
+  // Stable callbacks for the memoised round pager pages. Keep references
+  // stable across swipes so <RoundPage /> memoisation holds.
+  const goToRound = useCallback((i) => setSelectedRound(i), []);
+  const openRoundEdit = useCallback((i) => {
+    setSelectedRound(i);
+    setShowRoundEdit(true);
+  }, []);
 
   const showList = viewMode === 'list' || (viewMode === 'auto' && !tournament);
   const showTournament = viewMode === 'tournament' || (viewMode === 'auto' && !!tournament);
@@ -384,7 +422,8 @@ export default function HomeScreen({ navigation, viewMode = 'auto' }) {
               <ScrollView
                 ref={roundPagerRef}
                 horizontal
-                pagingEnabled
+                pagingEnabled={Platform.OS !== 'web'}
+                style={PAGER_SNAP_TYPE_STYLE}
                 showsHorizontalScrollIndicator={false}
                 scrollEventThrottle={16}
                 onScrollBeginDrag={() => {
@@ -403,6 +442,9 @@ export default function HomeScreen({ navigation, viewMode = 'auto' }) {
                   if (suppressRoundOnScroll.current) return;
                   const idx = Math.round(x / roundPagerWidth);
                   if (idx !== selectedRound) {
+                    // Tag so the sync effect skips scrollTo — the pager is
+                    // already at `idx`; a scrollTo would fight the scroll.
+                    selectedRoundFromScroll.current = true;
                     // Non-urgent: let the native scroll keep running smoothly
                     // while React reconciles leaderboard / tabs / round card.
                     startTransition(() => setSelectedRound(idx));
@@ -418,56 +460,30 @@ export default function HomeScreen({ navigation, viewMode = 'auto' }) {
                   suppressRoundOnScroll.current = false;
                   clearTimeout(suppressRoundTimer.current);
                   const idx = Math.round(x / roundPagerWidth);
-                  if (idx !== selectedRound) setSelectedRound(idx);
+                  if (idx !== selectedRound) {
+                    selectedRoundFromScroll.current = true;
+                    setSelectedRound(idx);
+                  }
                 }}
                 contentOffset={{ x: selectedRound * roundPagerWidth, y: 0 }}
               >
-                {tournament.rounds.map((round, i) => {
-                  const hasScores = round.scores && Object.keys(round.scores).length > 0;
-                  const isCurrentRound = i === tournament.currentRound;
-                  const hasPrev = i > 0;
-                  const hasNext = i < tournament.rounds.length - 1;
-                  return (
-                    <View key={round.id} style={{ width: roundPagerWidth }}>
-                      <View style={s.pagerTitleRow}>
-                        <TouchableOpacity
-                          style={[s.pagerArrow, !hasPrev && s.pagerArrowHidden]}
-                          onPress={() => hasPrev && setSelectedRound(i - 1)}
-                          disabled={!hasPrev}
-                          activeOpacity={0.7}
-                          accessibilityLabel="Previous round"
-                        >
-                          <Feather name="chevron-left" size={18} color={theme.accent.primary} />
-                        </TouchableOpacity>
-                        <Text style={s.tabRoundTitle}>RONDA {i + 1} · {round.courseName || '—'}</Text>
-                        <TouchableOpacity
-                          onPress={() => { setSelectedRound(i); setShowRoundEdit(true); }}
-                          style={s.roundEditBtn}
-                          hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
-                          accessibilityLabel="Round options"
-                        >
-                          <Feather name="settings" size={14} color={theme.text.muted} />
-                        </TouchableOpacity>
-                        <TouchableOpacity
-                          style={[s.pagerArrow, !hasNext && s.pagerArrowHidden]}
-                          onPress={() => hasNext && setSelectedRound(i + 1)}
-                          disabled={!hasNext}
-                          activeOpacity={0.7}
-                          accessibilityLabel="Next round"
-                        >
-                          <Feather name="chevron-right" size={18} color={theme.accent.primary} />
-                        </TouchableOpacity>
-                      </View>
-                      {hasScores ? (
-                        roundBestBall
-                          ? <BestBallRoundCard round={round} players={tournament.players} settings={settings} theme={theme} s={s} />
-                          : <StablefordRoundCard round={round} players={tournament.players} theme={theme} s={s} />
-                      ) : (
-                        <Text style={s.emptyRoundHint}>No scores yet for this round.</Text>
-                      )}
-                    </View>
-                  );
-                })}
+                {tournament.rounds.map((round, i) => (
+                  <RoundPage
+                    key={round.id}
+                    round={round}
+                    index={i}
+                    width={roundPagerWidth}
+                    hasPrev={i > 0}
+                    hasNext={i < tournament.rounds.length - 1}
+                    roundBestBall={roundBestBall}
+                    players={tournament.players}
+                    settings={settings}
+                    theme={theme}
+                    s={s}
+                    onGoToRound={goToRound}
+                    onOpenEdit={openRoundEdit}
+                  />
+                ))}
               </ScrollView>
             )}
           </View>
@@ -679,6 +695,60 @@ export default function HomeScreen({ navigation, viewMode = 'auto' }) {
     </View>
   );
 }
+
+// Memoized round pager page. Extracted so changing selectedRound during
+// a swipe only re-renders the outside leaderboard / tab bar — the 3
+// round pages stay memoized with stable refs.
+const RoundPage = React.memo(function RoundPage({
+  round, index, width, hasPrev, hasNext, roundBestBall,
+  players, settings, theme, s,
+  onGoToRound, onOpenEdit,
+}) {
+  const hasScores = round.scores && Object.keys(round.scores).length > 0;
+  return (
+    <View
+      style={[{ width }, PAGER_PAGE_SNAP_STYLE]}
+      dataSet={Platform.OS === 'web' ? { pagerpage: '1' } : undefined}
+    >
+      <View style={s.pagerTitleRow}>
+        <TouchableOpacity
+          style={[s.pagerArrow, !hasPrev && s.pagerArrowHidden]}
+          onPress={() => hasPrev && onGoToRound(index - 1)}
+          disabled={!hasPrev}
+          activeOpacity={0.7}
+          accessibilityLabel="Previous round"
+        >
+          <Feather name="chevron-left" size={18} color={theme.accent.primary} />
+        </TouchableOpacity>
+        <Text style={s.tabRoundTitle}>RONDA {index + 1} · {round.courseName || '—'}</Text>
+        <TouchableOpacity
+          onPress={() => onOpenEdit(index)}
+          style={s.roundEditBtn}
+          hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+          accessibilityLabel="Round options"
+        >
+          <Feather name="settings" size={14} color={theme.text.muted} />
+        </TouchableOpacity>
+        <TouchableOpacity
+          style={[s.pagerArrow, !hasNext && s.pagerArrowHidden]}
+          onPress={() => hasNext && onGoToRound(index + 1)}
+          disabled={!hasNext}
+          activeOpacity={0.7}
+          accessibilityLabel="Next round"
+        >
+          <Feather name="chevron-right" size={18} color={theme.accent.primary} />
+        </TouchableOpacity>
+      </View>
+      {hasScores ? (
+        roundBestBall
+          ? <BestBallRoundCard round={round} players={players} settings={settings} theme={theme} s={s} />
+          : <StablefordRoundCard round={round} players={players} theme={theme} s={s} />
+      ) : (
+        <Text style={s.emptyRoundHint}>No scores yet for this round.</Text>
+      )}
+    </View>
+  );
+});
 
 const StablefordRoundCard = React.memo(function StablefordRoundCard({ round, players, theme, s }) {
   const pairResults = roundPairLeaderboard(round, players);
