@@ -51,14 +51,14 @@ export default function StatsScreen({ navigation }) {
 
       {(tab === 0 || tab === 1 || tab === 4) && (
         <View style={s.scoringToggle}>
-          <Text style={[s.scoringLabel, !useNet && s.scoringLabelActive]}>Gross</Text>
+          <Text style={[s.scoringLabel, !useNet && s.scoringLabelActive]}>Strokes</Text>
           <Switch
             value={useNet}
             onValueChange={setUseNet}
             trackColor={{ false: theme.border.default, true: theme.accent.primary }}
             thumbColor="#fff"
           />
-          <Text style={[s.scoringLabel, useNet && s.scoringLabelActive]}>Net</Text>
+          <Text style={[s.scoringLabel, useNet && s.scoringLabelActive]}>Points</Text>
         </View>
       )}
 
@@ -75,11 +75,17 @@ export default function StatsScreen({ navigation }) {
 
 // ── Overview Tab ──
 function OverviewTab({ tournament, useNet, theme, s }) {
-  const highlights = tournamentHighlights(tournament, { useNet });
-  const modeLabel = useNet ? 'net' : 'gross';
+  const [roundIndex, setRoundIndex] = useState(null);
+  const highlights = tournamentHighlights(tournament, { useNet, roundIndex });
+  const modeLabel = useNet ? 'points' : 'strokes';
   const [sheet, setSheet] = useState(null);
 
-  if (!highlights.bestRound) {
+  const scope = roundIndex === null
+    ? 'Tournament · all rounds'
+    : `R${roundIndex + 1} · ${tournament.rounds[roundIndex]?.courseName || ''}`;
+
+  const hasAnyData = tournament.rounds.some(r => r.scores && Object.keys(r.scores).length > 0);
+  if (!hasAnyData) {
     return <Text style={s.emptyText}>No scores entered yet. Play a round first!</Text>;
   }
 
@@ -144,9 +150,14 @@ function OverviewTab({ tournament, useNet, theme, s }) {
 
   return (
     <View>
-      <Text style={s.sectionTitle}>TOURNAMENT HIGHLIGHTS</Text>
+      <RoundSelector tournament={tournament} selected={roundIndex} onSelect={setRoundIndex} theme={theme} s={s} />
+      <Text style={s.sectionTitle}>{roundIndex === null ? 'TOURNAMENT HIGHLIGHTS' : 'ROUND HIGHLIGHTS'}</Text>
+      <Text style={s.scopeText}>{scope}</Text>
+      {!highlights.bestRound && (
+        <Text style={s.emptyText}>No scores for this round yet.</Text>
+      )}
       {highlights.bestRound && (
-        <HighlightCard icon="award" label="Best Round" value={`${highlights.bestRound.player.name} — ${highlights.bestRound.points} pts`} sub={highlights.bestRound.courseName} onPress={openBestRound} theme={theme} s={s} />
+        <HighlightCard icon="award" label={roundIndex === null ? 'Best Round' : 'Top Scorer'} value={`${highlights.bestRound.player.name} — ${highlights.bestRound.points} pts`} sub={highlights.bestRound.courseName} onPress={openBestRound} theme={theme} s={s} />
       )}
       {highlights.mostBirdies && highlights.mostBirdies.count > 0 && (
         <HighlightCard icon="zap" label="Most Birdies+" value={`${highlights.mostBirdies.player.name} — ${highlights.mostBirdies.count}`} sub={`Birdies + Eagles (${modeLabel})`} onPress={openBirdies} theme={theme} s={s} />
@@ -168,6 +179,34 @@ function OverviewTab({ tournament, useNet, theme, s }) {
         subtitle={sheet?.subtitle}
         rows={sheet?.rows || []}
       />
+    </View>
+  );
+}
+
+function RoundSelector({ tournament, selected, onSelect, theme, s }) {
+  return (
+    <View style={s.roundSelector}>
+      <TouchableOpacity
+        style={[s.roundChip, selected === null && s.roundChipActive]}
+        onPress={() => onSelect(null)}
+        activeOpacity={0.7}
+      >
+        <Text style={[s.roundChipText, selected === null && s.roundChipTextActive]}>Total</Text>
+      </TouchableOpacity>
+      {tournament.rounds.map((r, i) => {
+        const hasData = r.scores && Object.keys(r.scores).length > 0;
+        return (
+          <TouchableOpacity
+            key={i}
+            style={[s.roundChip, selected === i && s.roundChipActive, !hasData && s.roundChipDisabled]}
+            onPress={() => hasData && onSelect(i)}
+            disabled={!hasData}
+            activeOpacity={0.7}
+          >
+            <Text style={[s.roundChipText, selected === i && s.roundChipTextActive, !hasData && s.roundChipTextDisabled]}>R{i + 1}</Text>
+          </TouchableOpacity>
+        );
+      })}
     </View>
   );
 }
@@ -199,7 +238,7 @@ function PlayersTab({ tournament, players, selectedPlayer, setSelectedPlayer, us
   const streaks = playerStreaks(tournament, player.id, { useNet });
   const history = playerRoundHistory(tournament, player.id);
   const avg = playerAvgStableford(tournament, player.id);
-  const modeLabel = useNet ? 'net' : 'gross';
+  const modeLabel = useNet ? 'points' : 'strokes';
 
   const defaultTone = (b) => b.points >= 3 ? 'excellent' : b.points === 2 ? 'good' : b.points === 1 ? 'neutral' : 'poor';
 
@@ -446,7 +485,8 @@ function HolesTab({ tournament, completedRounds, theme, s }) {
 // ── Pairs Tab ──
 function PairsTab({ tournament, players, h2hPlayer, setH2hPlayer, selectedPlayer, setSelectedPlayer, theme, s }) {
   const pairs = pairPerformance(tournament);
-  const holeWins = pairHoleWins(tournament);
+  const [hwRound, setHwRound] = useState(null);
+  const holeWins = pairHoleWins(tournament, { roundIndex: hwRound });
   const p1 = players[selectedPlayer];
   const p2Idx = h2hPlayer >= players.length ? 0 : h2hPlayer;
   const p2 = players[p2Idx];
@@ -527,33 +567,44 @@ function PairsTab({ tournament, players, h2hPlayer, setH2hPlayer, selectedPlayer
         </>
       )}
 
-      {holeWins.some(r => r.total.W + r.total.T + r.total.L > 0) && (
+      {tournament.rounds.some(r => r.pairs && r.scores && Object.keys(r.scores).length > 0) && (
         <>
           <Text style={s.sectionTitle}>HOLE WINS ON POINTS</Text>
-          <View style={s.card}>
-            <View style={s.hwHeader}>
-              <Text style={[s.hwCell, s.hwHeaderText, { flex: 1.2 }]}>Jugador</Text>
-              <Text style={[s.hwCell, s.hwHeaderText]}>MB G·E·P</Text>
-              <Text style={[s.hwCell, s.hwHeaderText]}>PB G·E·P</Text>
-              <Text style={[s.hwCell, s.hwHeaderText]}>Tot G·E·P</Text>
+          <RoundSelector tournament={tournament} selected={hwRound} onSelect={setHwRound} theme={theme} s={s} />
+          <View style={s.hwCard}>
+            <View style={s.hwGroupHeader}>
+              <View style={{ flex: 1.2 }} />
+              <Text style={s.hwGroupTitle}>TOTAL</Text>
+              <Text style={s.hwGroupTitle}>MB</Text>
+              <Text style={s.hwGroupTitle}>PB</Text>
             </View>
-            {holeWins.map(row => {
-              const empty = row.total.W + row.total.T + row.total.L === 0;
-              return (
-                <TouchableOpacity
-                  key={row.player.id}
-                  style={s.hwRow}
-                  onPress={() => !empty && openHoleWins(row)}
-                  activeOpacity={0.7}
-                  disabled={empty}
-                >
-                  <Text style={[s.hwCell, s.hwName, { flex: 1.2 }]}>{row.player.name.split(' ')[0]}</Text>
-                  <Text style={[s.hwCell, s.hwValue]}>{row.best.W}·{row.best.T}·{row.best.L}</Text>
-                  <Text style={[s.hwCell, s.hwValue]}>{row.worst.W}·{row.worst.T}·{row.worst.L}</Text>
-                  <Text style={[s.hwCell, s.hwValueStrong]}>{row.total.W}·{row.total.T}·{row.total.L}</Text>
-                </TouchableOpacity>
-              );
-            })}
+            <View style={s.hwSubHeader}>
+              <View style={{ flex: 1.2 }} />
+              <HwGEPLabels theme={theme} s={s} />
+              <HwGEPLabels theme={theme} s={s} />
+              <HwGEPLabels theme={theme} s={s} />
+            </View>
+            {holeWins.length === 0 || holeWins.every(r => r.total.W + r.total.T + r.total.L === 0) ? (
+              <Text style={s.hwEmpty}>No data for this view.</Text>
+            ) : (
+              holeWins.map(row => {
+                const empty = row.total.W + row.total.T + row.total.L === 0;
+                return (
+                  <TouchableOpacity
+                    key={row.player.id}
+                    style={s.hwBigRow}
+                    onPress={() => !empty && openHoleWins(row)}
+                    activeOpacity={0.7}
+                    disabled={empty}
+                  >
+                    <Text style={[s.hwPlayerName, empty && s.hwDimmed]}>{row.player.name.split(' ')[0]}</Text>
+                    <HwGEPCells stats={row.total} strong theme={theme} s={s} />
+                    <HwGEPCells stats={row.best} theme={theme} s={s} />
+                    <HwGEPCells stats={row.worst} theme={theme} s={s} />
+                  </TouchableOpacity>
+                );
+              })
+            )}
           </View>
         </>
       )}
@@ -612,12 +663,47 @@ function PairsTab({ tournament, players, h2hPlayer, setH2hPlayer, selectedPlayer
   );
 }
 
+function HwGEPLabels({ theme, s }) {
+  return (
+    <View style={s.hwGepRow}>
+      <Text style={[s.hwGepLabel, { color: theme.scoreColor('excellent') }]}>G</Text>
+      <Text style={[s.hwGepLabel, { color: theme.text.muted }]}>E</Text>
+      <Text style={[s.hwGepLabel, { color: theme.scoreColor('poor') }]}>P</Text>
+    </View>
+  );
+}
+
+function HwGEPCells({ stats, strong, theme, s }) {
+  const cell = (value, tone) => {
+    const color = tone === 'win'
+      ? theme.scoreColor('excellent')
+      : tone === 'loss'
+        ? theme.scoreColor('poor')
+        : theme.text.muted;
+    const dim = value === 0;
+    return (
+      <View style={[s.hwCellBox, { backgroundColor: color + (dim ? '0A' : '1F') }]}>
+        <Text style={[strong ? s.hwCellNumStrong : s.hwCellNum, { color: dim ? theme.text.muted : color }]}>
+          {value}
+        </Text>
+      </View>
+    );
+  };
+  return (
+    <View style={s.hwGepRow}>
+      {cell(stats.W, 'win')}
+      {cell(stats.T, 'tie')}
+      {cell(stats.L, 'loss')}
+    </View>
+  );
+}
+
 // ── Shame Tab ──
 
 function ShameTab({ tournament, useNet, theme, s }) {
   const shame = hallOfShame(tournament, { useNet });
   const [sheet, setSheet] = useState(null);
-  const modeLabel = useNet ? 'net' : 'gross';
+  const modeLabel = useNet ? 'points' : 'strokes';
 
   const holeRows = (holes) => holes.map((b, i) => ({
     key: `${b.roundIndex}-${b.holeNumber}-${i}`,
@@ -871,12 +957,60 @@ const makeStyles = (t) => StyleSheet.create({
   h2hTies: { fontFamily: 'PlusJakartaSans-Medium', color: t.text.muted, fontSize: 13 },
   h2hSub: { fontFamily: 'PlusJakartaSans-Regular', color: t.text.muted, fontSize: 11, textAlign: 'center', marginTop: 8 },
 
-  // Hole Wins table
-  hwHeader: { flexDirection: 'row', paddingBottom: 6, borderBottomWidth: 1, borderBottomColor: t.border.subtle },
-  hwRow: { flexDirection: 'row', paddingVertical: 8, borderBottomWidth: 1, borderBottomColor: t.border.subtle },
-  hwCell: { flex: 1, textAlign: 'center' },
-  hwHeaderText: { fontFamily: 'PlusJakartaSans-SemiBold', color: t.text.muted, fontSize: 10, letterSpacing: 1 },
-  hwName: { fontFamily: 'PlusJakartaSans-Bold', color: t.text.primary, fontSize: 13, textAlign: 'left' },
-  hwValue: { fontFamily: 'PlusJakartaSans-Medium', color: t.text.secondary, fontSize: 13 },
-  hwValueStrong: { fontFamily: 'PlusJakartaSans-Bold', color: t.accent.primary, fontSize: 13 },
+  // Round selector
+  roundSelector: { flexDirection: 'row', gap: 6, marginBottom: 12, flexWrap: 'wrap' },
+  roundChip: {
+    paddingVertical: 5, paddingHorizontal: 12, borderRadius: 14,
+    backgroundColor: t.bg.secondary, borderWidth: 1, borderColor: t.border.default,
+  },
+  roundChipActive: { backgroundColor: t.accent.primary, borderColor: t.accent.primary },
+  roundChipDisabled: { opacity: 0.4 },
+  roundChipText: { fontFamily: 'PlusJakartaSans-SemiBold', fontSize: 11, color: t.text.muted, letterSpacing: 0.5 },
+  roundChipTextActive: { color: t.text.inverse },
+  roundChipTextDisabled: { color: t.text.muted },
+  scopeText: {
+    fontFamily: 'PlusJakartaSans-Medium', color: t.text.muted, fontSize: 11,
+    marginTop: -6, marginBottom: 10,
+  },
+
+  // Hole Wins table (new visual layout)
+  hwCard: {
+    backgroundColor: t.isDark ? t.bg.card : t.bg.card, borderRadius: 16, borderWidth: 1,
+    borderColor: t.isDark ? t.glass?.border || t.border.default : t.border.default,
+    padding: 12, marginBottom: 12, ...(t.isDark ? {} : t.shadow.card),
+  },
+  hwGroupHeader: { flexDirection: 'row', alignItems: 'center', paddingBottom: 2 },
+  hwGroupTitle: {
+    flex: 1, textAlign: 'center',
+    fontFamily: 'PlusJakartaSans-ExtraBold', fontSize: 10, letterSpacing: 1.2,
+    color: t.accent.primary,
+  },
+  hwSubHeader: {
+    flexDirection: 'row', alignItems: 'center', paddingBottom: 6,
+    borderBottomWidth: 1, borderBottomColor: t.border.subtle, marginBottom: 4,
+  },
+  hwBigRow: {
+    flexDirection: 'row', alignItems: 'center',
+    paddingVertical: 8, borderBottomWidth: 1, borderBottomColor: t.border.subtle,
+  },
+  hwPlayerName: {
+    flex: 1.2,
+    fontFamily: 'PlusJakartaSans-Bold', color: t.text.primary, fontSize: 14,
+  },
+  hwDimmed: { color: t.text.muted },
+  hwGepRow: { flex: 1, flexDirection: 'row', justifyContent: 'center', gap: 4 },
+  hwGepLabel: {
+    width: 22, textAlign: 'center',
+    fontFamily: 'PlusJakartaSans-Bold', fontSize: 10, letterSpacing: 0.5,
+  },
+  hwCellBox: {
+    width: 22, height: 26, borderRadius: 6,
+    alignItems: 'center', justifyContent: 'center',
+  },
+  hwCellNum: { fontFamily: 'PlusJakartaSans-Bold', fontSize: 13 },
+  hwCellNumStrong: { fontFamily: 'PlusJakartaSans-ExtraBold', fontSize: 15 },
+  hwEmpty: {
+    fontFamily: 'PlusJakartaSans-Regular', color: t.text.muted, fontSize: 12,
+    textAlign: 'center', paddingVertical: 16,
+  },
 });

@@ -29,13 +29,14 @@ export function playerAvgStableford(tournament, playerId) {
   return +(history.reduce((s, r) => s + r.points, 0) / history.length).toFixed(1);
 }
 
-export function playerScoreDistribution(tournament, playerId, { useNet = false } = {}) {
+export function playerScoreDistribution(tournament, playerId, { useNet = false, roundIndex = null } = {}) {
   const dist = {
     eagles: 0, birdies: 0, pars: 0, bogeys: 0, doubles: 0, worse: 0, total: 0,
     eagleHoles: [], birdieHoles: [], parHoles: [], bogeyHoles: [], doubleHoles: [], worseHoles: [],
   };
   const player = tournament.players.find(p => p.id === playerId);
-  tournament.rounds.forEach((round, roundIndex) => {
+  tournament.rounds.forEach((round, ri) => {
+    if (roundIndex !== null && ri !== roundIndex) return;
     if (!round.scores?.[playerId]) return;
     const handicap = player ? getPlayingHandicap(round, player) : 0;
     round.holes.forEach(hole => {
@@ -45,7 +46,7 @@ export function playerScoreDistribution(tournament, playerId, { useNet = false }
       const vsPar = sc - extra - hole.par;
       const points = calcStablefordPoints(hole.par, sc, useNet ? handicap : 0, hole.strokeIndex);
       const entry = {
-        roundIndex, courseName: round.courseName,
+        roundIndex: ri, courseName: round.courseName,
         holeNumber: hole.number, par: hole.par, strokes: sc, points, vsPar,
       };
       dist.total++;
@@ -62,10 +63,11 @@ export function playerScoreDistribution(tournament, playerId, { useNet = false }
 
 // ── Streaks ──
 
-export function playerStreaks(tournament, playerId, { useNet = false } = {}) {
+export function playerStreaks(tournament, playerId, { useNet = false, roundIndex = null } = {}) {
   const entries = [];
   const player = tournament.players.find(p => p.id === playerId);
-  tournament.rounds.forEach((round, roundIndex) => {
+  tournament.rounds.forEach((round, ri) => {
+    if (roundIndex !== null && ri !== roundIndex) return;
     if (!round.scores?.[playerId]) return;
     const handicap = player ? getPlayingHandicap(round, player) : 0;
     round.holes.forEach(hole => {
@@ -75,7 +77,7 @@ export function playerStreaks(tournament, playerId, { useNet = false } = {}) {
       const vsPar = sc - extra - hole.par;
       const points = calcStablefordPoints(hole.par, sc, useNet ? handicap : 0, hole.strokeIndex);
       entries.push({
-        roundIndex, courseName: round.courseName,
+        roundIndex: ri, courseName: round.courseName,
         holeNumber: hole.number, par: hole.par, strokes: sc, points, vsPar,
       });
     });
@@ -115,9 +117,10 @@ export function playerStreaks(tournament, playerId, { useNet = false } = {}) {
 
 // ── Hole Analysis ──
 
-export function bestWorstHoles(tournament) {
+export function bestWorstHoles(tournament, { roundIndex = null } = {}) {
   const holeMap = {};
   tournament.rounds.forEach((round, ri) => {
+    if (roundIndex !== null && ri !== roundIndex) return;
     if (!round.scores || Object.keys(round.scores).length === 0) return;
     round.holes.forEach(hole => {
       const key = `${ri}-${hole.number}`;
@@ -232,11 +235,12 @@ export function pairPerformance(tournament) {
 
 // ── Tournament Highlights ──
 
-export function tournamentHighlights(tournament, { useNet = false } = {}) {
+export function tournamentHighlights(tournament, { useNet = false, roundIndex = null } = {}) {
   let bestRound = null, mostBirdies = null, longestParStreak = null;
 
   tournament.players.forEach(p => {
-    const history = playerRoundHistory(tournament, p.id);
+    const history = playerRoundHistory(tournament, p.id)
+      .filter(r => roundIndex === null || r.roundIndex === roundIndex);
     history.forEach(r => {
       if (!bestRound || r.points > bestRound.points) {
         const round = tournament.rounds[r.roundIndex];
@@ -256,26 +260,26 @@ export function tournamentHighlights(tournament, { useNet = false } = {}) {
       }
     });
 
-    const dist = playerScoreDistribution(tournament, p.id, { useNet });
+    const dist = playerScoreDistribution(tournament, p.id, { useNet, roundIndex });
     const birdiesAndEagles = [...dist.eagleHoles, ...dist.birdieHoles];
     if (!mostBirdies || birdiesAndEagles.length > mostBirdies.count) {
       mostBirdies = { player: p, count: birdiesAndEagles.length, breakdown: birdiesAndEagles };
     }
 
-    const streaks = playerStreaks(tournament, p.id, { useNet });
+    const streaks = playerStreaks(tournament, p.id, { useNet, roundIndex });
     if (!longestParStreak || streaks.bestParStreak > longestParStreak.count) {
       longestParStreak = { player: p, count: streaks.bestParStreak, breakdown: streaks.parStreakHoles };
     }
   });
 
-  const holes = bestWorstHoles(tournament);
+  const holes = bestWorstHoles(tournament, { roundIndex });
 
   return { bestRound, mostBirdies, longestParStreak, bestHole: holes.best[0] || null, worstHole: holes.worst[0] || null };
 }
 
 // ── Pair Hole Wins (Best Ball / Worst Ball) ──
 
-export function pairHoleWins(tournament) {
+export function pairHoleWins(tournament, { roundIndex = null } = {}) {
   const stats = {};
   tournament.players.forEach(p => {
     stats[p.id] = {
@@ -287,7 +291,8 @@ export function pairHoleWins(tournament) {
     };
   });
 
-  tournament.rounds.forEach((round, roundIndex) => {
+  tournament.rounds.forEach((round, ri) => {
+    if (roundIndex !== null && ri !== roundIndex) return;
     if (!round.scores || !round.pairs || round.pairs.length < 2) return;
     const [pair1, pair2] = round.pairs;
     if (!pair1 || !pair2 || pair1.length < 2 || pair2.length < 2) return;
@@ -321,7 +326,7 @@ export function pairHoleWins(tournament) {
       const credit = (playerId, pairScore, pairMax, pairMin, bestOutcome, worstOutcome, oppBest, oppWorst) => {
         const rec = stats[playerId];
         const entry = {
-          roundIndex, courseName: round.courseName, holeNumber: hole.number, par: hole.par,
+          roundIndex: ri, courseName: round.courseName, holeNumber: hole.number, par: hole.par,
           playerPoints: pairScore, teamBest: pairMax, teamWorst: pairMin,
           oppBest, oppWorst,
           bestRole: null, bestOutcome: null,
