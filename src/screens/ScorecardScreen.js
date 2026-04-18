@@ -216,6 +216,8 @@ export default function ScorecardScreen({ navigation, route }) {
           roundIndex={roundIndex}
           players={players}
           scores={scores}
+          notes={notes}
+          onNotesChange={saveNotes}
           isBestBall={isBestBall}
           bbResult={bbResult}
           settings={settings}
@@ -232,6 +234,14 @@ function HoleView({ round, roundIndex, players, scores, notes, currentHole, hole
   const { theme } = useTheme();
   const s = makeStyles(theme);
   const [notesOpen, setNotesOpen] = useState(false);
+  const [holePickerOpen, setHolePickerOpen] = useState(false);
+  const [pagerWidth, setPagerWidth] = useState(0);
+  const pagerRef = useRef(null);
+
+  useEffect(() => {
+    if (!pagerRef.current || pagerWidth <= 0) return;
+    pagerRef.current.scrollTo({ x: (currentHole - 1) * pagerWidth, animated: false });
+  }, [currentHole, pagerWidth]);
 
   if (!hole) return null;
 
@@ -243,110 +253,132 @@ function HoleView({ round, roundIndex, players, scores, notes, currentHole, hole
         refreshing={refreshing}
         onRefresh={onRefresh}
       >
-      {/* Hole header */}
-      <View style={s.holeHeaderCard}>
-        <View style={s.holeHeaderLeft}>
-          <Text style={s.holeHeaderRound}>{round.courseName} -- Round {roundIndex + 1}</Text>
-          <View style={s.holeNumberRow}>
-            <Text style={s.holeNumberLabel}>HOLE</Text>
-            <Text style={s.holeNumber}>{currentHole}</Text>
-          </View>
-        </View>
-        <View style={s.holeHeaderRight}>
-          <View style={s.holeMetaItem}>
-            <Text style={s.holeMetaLabel}>PAR</Text>
-            <Text style={s.holeMetaValue}>{hole.par}</Text>
-          </View>
-          <View style={s.holeMetaItem}>
-            <Text style={s.holeMetaLabel}>SI</Text>
-            <Text style={s.holeMetaValue}>{hole.strokeIndex}</Text>
-          </View>
-        </View>
-      </View>
-
-      {/* Player score cards (always visible — no inner scroll) */}
-      <View style={s.playerCardsContent}>
-        {(() => {
-          const pairs = round.pairs ?? [];
-          const orderedPlayers = pairs.length === 2
-            ? [...pairs[0], ...pairs[1]].map((pp) => players.find((p) => p.id === pp.id)).filter(Boolean)
-            : players;
-
-          return orderedPlayers.map((player, idx) => {
-            const pairIndex = pairs.findIndex((pair) => pair.some((pp) => pp.id === player.id));
-            const pairColor = pairIndex === 0 ? theme.pairA : pairIndex === 1 ? theme.pairB : theme.text.muted;
-            const isFirstOfPair = pairs.length === 2 && (idx === 0 || idx === 2);
-            const pairLabelText = pairIndex === 0 ? 'Pair A' : 'Pair B';
-
-            const handicap = round.playerHandicaps?.[player.id] ?? player.handicap;
-            const strokes = scores[player.id]?.[currentHole];
-            const pts = strokes != null
-              ? calcStablefordPoints(hole.par, strokes, handicap, hole.strokeIndex)
-              : null;
-
-            const ptsColor = pts == null ? theme.text.muted
-              : pts >= 3 ? theme.scoreColor('excellent')
-              : pts >= 2 ? theme.scoreColor('good')
-              : pts === 1 ? theme.scoreColor('neutral')
-              : theme.scoreColor('poor');
-
-            const extraShots = handicap >= hole.strokeIndex ? (Math.floor(handicap / 18) + (handicap % 18 >= hole.strokeIndex ? 1 : 0)) : 0;
-
-            const pickup = pickupStrokes(hole.par, handicap, hole.strokeIndex);
-            const isPickup = strokes != null && strokes >= pickup;
-
-            return (
-              <React.Fragment key={player.id}>
-                {isFirstOfPair && (
-                  <Text style={[s.pairLabel, { color: pairColor, marginTop: idx === 0 ? 0 : 16 }]}>{pairLabelText}</Text>
-                )}
-                <View style={[s.playerCard, { borderLeftColor: pairColor, borderLeftWidth: 3 }]}>
-                  <View style={s.playerCardRow}>
-                    <View style={s.playerCardLeft}>
-                      <View style={[s.playerAvatar, { backgroundColor: pairColor }]}>
-                        <Text style={s.playerAvatarText}>{player.name[0].toUpperCase()}</Text>
-                      </View>
-                      <View>
-                        <Text style={s.playerCardName}>{player.name}</Text>
-                        <Text style={s.playerCardHcp}>HCP {handicap}{extraShots > 0 ? ` +${extraShots}` : ''}</Text>
-                      </View>
+      {/* Horizontal pager: one page per hole (swipe to change hole) */}
+      <View style={s.pagerWrap} onLayout={(e) => setPagerWidth(e.nativeEvent.layout.width)}>
+        {pagerWidth > 0 && (
+          <ScrollView
+            ref={pagerRef}
+            horizontal
+            pagingEnabled
+            showsHorizontalScrollIndicator={false}
+            onMomentumScrollEnd={(e) => {
+              const idx = Math.round(e.nativeEvent.contentOffset.x / pagerWidth);
+              const newHole = idx + 1;
+              if (newHole !== currentHole) onGoToHole(newHole);
+            }}
+            contentOffset={{ x: (currentHole - 1) * pagerWidth, y: 0 }}
+          >
+            {round.holes.map((pageHole) => (
+              <View key={pageHole.number} style={{ width: pagerWidth }}>
+                {/* Hole header */}
+                <View style={s.holeHeaderCard}>
+                  <View style={s.holeHeaderLeft}>
+                    <Text style={s.holeHeaderRound}>{round.courseName} -- Round {roundIndex + 1}</Text>
+                    <View style={s.holeNumberRow}>
+                      <Text style={s.holeNumberLabel}>HOLE</Text>
+                      <Text style={s.holeNumber}>{pageHole.number}</Text>
                     </View>
-                    <View style={s.playerCardRight}>
-                      <TouchableOpacity style={s.stepBtn} onPress={() => onStep(player.id, currentHole, -1)}>
-                        <Feather name="minus" size={18} color={theme.text.primary} />
-                      </TouchableOpacity>
-                      <Animated.View style={[s.scoreDisplay, { transform: [{ scale: getScoreAnim(player.id) }] }]}>
-                        <Text style={s.scoreDisplayNum}>
-                          {strokes ?? hole.par}
-                        </Text>
-                        {pts !== null && (
-                          <Text style={[s.scoreDisplayPts, { color: ptsColor }]}>
-                            {pts} {pts === 1 ? 'pt' : 'pts'}
-                          </Text>
-                        )}
-                      </Animated.View>
-                      <TouchableOpacity style={s.stepBtn} onPress={() => onStep(player.id, currentHole, 1)}>
-                        <Feather name="plus" size={18} color={theme.text.primary} />
-                      </TouchableOpacity>
-                      <TouchableOpacity
-                        style={[s.pickupBtn, isPickup && s.pickupBtnActive]}
-                        onPress={() => onSetScore(player.id, currentHole, pickup)}
-                        activeOpacity={0.7}
-                        accessibilityLabel={isPickup ? `Picked up at ${pickup} strokes` : `Pickup at ${pickup} strokes`}
-                      >
-                        <Feather
-                          name="hash"
-                          size={14}
-                          color={isPickup ? theme.accent.primary : theme.text.muted}
-                        />
-                      </TouchableOpacity>
+                  </View>
+                  <View style={s.holeHeaderRight}>
+                    <View style={s.holeMetaItem}>
+                      <Text style={s.holeMetaLabel}>PAR</Text>
+                      <Text style={s.holeMetaValue}>{pageHole.par}</Text>
+                    </View>
+                    <View style={s.holeMetaItem}>
+                      <Text style={s.holeMetaLabel}>SI</Text>
+                      <Text style={s.holeMetaValue}>{pageHole.strokeIndex}</Text>
                     </View>
                   </View>
                 </View>
-              </React.Fragment>
-            );
-          });
-        })()}
+
+                {/* Player score cards */}
+                <View style={s.playerCardsContent}>
+                  {(() => {
+                    const pairs = round.pairs ?? [];
+                    const orderedPlayers = pairs.length === 2
+                      ? [...pairs[0], ...pairs[1]].map((pp) => players.find((p) => p.id === pp.id)).filter(Boolean)
+                      : players;
+
+                    return orderedPlayers.map((player, idx) => {
+                      const pairIndex = pairs.findIndex((pair) => pair.some((pp) => pp.id === player.id));
+                      const pairColor = pairIndex === 0 ? theme.pairA : pairIndex === 1 ? theme.pairB : theme.text.muted;
+                      const isFirstOfPair = pairs.length === 2 && (idx === 0 || idx === 2);
+                      const pairLabelText = pairIndex === 0 ? 'Pair A' : 'Pair B';
+
+                      const handicap = round.playerHandicaps?.[player.id] ?? player.handicap;
+                      const strokes = scores[player.id]?.[pageHole.number];
+                      const pts = strokes != null
+                        ? calcStablefordPoints(pageHole.par, strokes, handicap, pageHole.strokeIndex)
+                        : null;
+
+                      const ptsColor = pts == null ? theme.text.muted
+                        : pts >= 3 ? theme.scoreColor('excellent')
+                        : pts >= 2 ? theme.scoreColor('good')
+                        : pts === 1 ? theme.scoreColor('neutral')
+                        : theme.scoreColor('poor');
+
+                      const extraShots = handicap >= pageHole.strokeIndex ? (Math.floor(handicap / 18) + (handicap % 18 >= pageHole.strokeIndex ? 1 : 0)) : 0;
+
+                      const pickup = pickupStrokes(pageHole.par, handicap, pageHole.strokeIndex);
+                      const isPickup = strokes != null && strokes >= pickup;
+
+                      return (
+                        <React.Fragment key={player.id}>
+                          {isFirstOfPair && (
+                            <Text style={[s.pairLabel, { color: pairColor, marginTop: idx === 0 ? 0 : 16 }]}>{pairLabelText}</Text>
+                          )}
+                          <View style={[s.playerCard, { borderLeftColor: pairColor, borderLeftWidth: 3 }]}>
+                            <View style={s.playerCardRow}>
+                              <View style={s.playerCardLeft}>
+                                <View style={[s.playerAvatar, { backgroundColor: pairColor }]}>
+                                  <Text style={s.playerAvatarText}>{player.name[0].toUpperCase()}</Text>
+                                </View>
+                                <View>
+                                  <Text style={s.playerCardName}>{player.name}</Text>
+                                  <Text style={s.playerCardHcp}>HCP {handicap}{extraShots > 0 ? ` +${extraShots}` : ''}</Text>
+                                </View>
+                              </View>
+                              <View style={s.playerCardRight}>
+                                <TouchableOpacity style={s.stepBtn} onPress={() => onStep(player.id, pageHole.number, -1)}>
+                                  <Feather name="minus" size={18} color={theme.text.primary} />
+                                </TouchableOpacity>
+                                <Animated.View style={[s.scoreDisplay, { transform: [{ scale: getScoreAnim(player.id) }] }]}>
+                                  <Text style={s.scoreDisplayNum}>
+                                    {strokes ?? pageHole.par}
+                                  </Text>
+                                  {pts !== null && (
+                                    <Text style={[s.scoreDisplayPts, { color: ptsColor }]}>
+                                      {pts} {pts === 1 ? 'pt' : 'pts'}
+                                    </Text>
+                                  )}
+                                </Animated.View>
+                                <TouchableOpacity style={s.stepBtn} onPress={() => onStep(player.id, pageHole.number, 1)}>
+                                  <Feather name="plus" size={18} color={theme.text.primary} />
+                                </TouchableOpacity>
+                                <TouchableOpacity
+                                  style={[s.pickupBtn, isPickup && s.pickupBtnActive]}
+                                  onPress={() => onSetScore(player.id, pageHole.number, pickup)}
+                                  activeOpacity={0.7}
+                                  accessibilityLabel={isPickup ? `Picked up at ${pickup} strokes` : `Pickup at ${pickup} strokes`}
+                                >
+                                  <Feather
+                                    name="flag"
+                                    size={14}
+                                    color={isPickup ? theme.accent.primary : theme.text.muted}
+                                  />
+                                </TouchableOpacity>
+                              </View>
+                            </View>
+                          </View>
+                        </React.Fragment>
+                      );
+                    });
+                  })()}
+                </View>
+              </View>
+            ))}
+          </ScrollView>
+        )}
       </View>
 
       {/* Round totals / live match — pinned above the bottom controls */}
@@ -371,36 +403,18 @@ function HoleView({ round, roundIndex, players, scores, notes, currentHole, hole
         )
       }
 
-      {/* Bottom controls: hole nav + notes + save */}
+      {/* Bottom controls: pips + actions (notes / go-to-hole / next) */}
       <View style={s.bottomBar}>
-        <View style={s.holeNav}>
-          <TouchableOpacity
-            style={[s.holeNavBtn, currentHole === 1 && s.holeNavBtnDisabled]}
-            onPress={onPrev}
-            disabled={currentHole === 1}
-          >
-            <Feather name="chevron-left" size={16} color={currentHole === 1 ? theme.text.muted : theme.accent.primary} />
-            <Text style={[s.holeNavBtnText, currentHole === 1 && s.holeNavBtnTextDisabled]}>Prev</Text>
-          </TouchableOpacity>
-          <View style={s.holePips}>
-            {Array.from({ length: 18 }, (_, i) => {
-              const n = i + 1;
-              const hasAnyScore = players.some((p) => scores[p.id]?.[n] != null);
-              return (
-                <TouchableOpacity key={n} onPress={() => onGoToHole(n)}>
-                  <View style={[s.pip, n === currentHole && s.pipActive, hasAnyScore && n !== currentHole && s.pipDone]} />
-                </TouchableOpacity>
-              );
-            })}
-          </View>
-          <TouchableOpacity
-            style={[s.holeNavBtn, currentHole === 18 && s.holeNavBtnDisabled]}
-            onPress={onNext}
-            disabled={currentHole === 18}
-          >
-            <Text style={[s.holeNavBtnText, currentHole === 18 && s.holeNavBtnTextDisabled]}>Next</Text>
-            <Feather name="chevron-right" size={16} color={currentHole === 18 ? theme.text.muted : theme.accent.primary} />
-          </TouchableOpacity>
+        <View style={s.holePips}>
+          {Array.from({ length: 18 }, (_, i) => {
+            const n = i + 1;
+            const hasAnyScore = players.some((p) => scores[p.id]?.[n] != null);
+            return (
+              <TouchableOpacity key={n} onPress={() => onGoToHole(n)} hitSlop={{ top: 8, bottom: 8, left: 4, right: 4 }}>
+                <View style={[s.pip, n === currentHole && s.pipActive, hasAnyScore && n !== currentHole && s.pipDone]} />
+              </TouchableOpacity>
+            );
+          })}
         </View>
 
         <View style={s.bottomActionsRow}>
@@ -415,8 +429,17 @@ function HoleView({ round, roundIndex, players, scores, notes, currentHole, hole
               color={notes?.trim() ? theme.accent.primary : theme.text.muted}
             />
             <Text style={[s.notesPillBtnText, notes?.trim() && s.notesPillBtnTextActive]}>
-              {notes?.trim() ? 'Notes' : 'Add notes'}
+              {notes?.trim() ? 'Notes' : 'Notes'}
             </Text>
+          </TouchableOpacity>
+          <TouchableOpacity
+            style={s.notesPillBtn}
+            onPress={() => setHolePickerOpen(true)}
+            activeOpacity={0.7}
+            accessibilityLabel="Jump to hole"
+          >
+            <Feather name="list" size={14} color={theme.text.muted} />
+            <Text style={s.notesPillBtnText}>Go to hole</Text>
           </TouchableOpacity>
           <TouchableOpacity
             style={s.saveBtn}
@@ -424,7 +447,7 @@ function HoleView({ round, roundIndex, players, scores, notes, currentHole, hole
             activeOpacity={0.8}
           >
             <Text style={s.saveBtnText}>
-              {currentHole < 18 ? `Hole ${currentHole + 1}` : 'Finish Round'}
+              {currentHole < 18 ? `Hole ${currentHole + 1}` : 'Finish'}
             </Text>
             {currentHole < 18 && (
               <Feather name="chevron-right" size={18} color={theme.text.inverse} />
@@ -468,6 +491,40 @@ function HoleView({ round, roundIndex, players, scores, notes, currentHole, hole
             </Pressable>
           </Pressable>
         </KeyboardAvoidingView>
+      </Modal>
+
+      {/* Go-to-hole modal */}
+      <Modal
+        visible={holePickerOpen}
+        transparent
+        animationType="fade"
+        onRequestClose={() => setHolePickerOpen(false)}
+      >
+        <Pressable style={s.notesBackdrop} onPress={() => setHolePickerOpen(false)}>
+          <Pressable style={s.holePickerSheet} onPress={() => {}}>
+            <Text style={s.notesTitle}>Jump to hole</Text>
+            <View style={s.holePickerGrid}>
+              {Array.from({ length: 18 }, (_, i) => {
+                const n = i + 1;
+                const hasAnyScore = players.some((p) => scores[p.id]?.[n] != null);
+                return (
+                  <TouchableOpacity
+                    key={n}
+                    style={[
+                      s.holePickerBtn,
+                      n === currentHole && s.holePickerBtnActive,
+                      hasAnyScore && n !== currentHole && s.holePickerBtnDone,
+                    ]}
+                    onPress={() => { onGoToHole(n); setHolePickerOpen(false); }}
+                    activeOpacity={0.7}
+                  >
+                    <Text style={[s.holePickerBtnText, n === currentHole && s.holePickerBtnTextActive]}>{n}</Text>
+                  </TouchableOpacity>
+                );
+              })}
+            </View>
+          </Pressable>
+        </Pressable>
       </Modal>
     </View>
   );
@@ -543,9 +600,10 @@ function MatchPanel({ bbResult, currentHole, settings }) {
   );
 }
 
-function GridView({ round, roundIndex, players, scores, isBestBall, bbResult, settings, onSetScore, refreshing, onRefresh }) {
+function GridView({ round, roundIndex, players, scores, notes, onNotesChange, isBestBall, bbResult, settings, onSetScore, refreshing, onRefresh }) {
   const { theme } = useTheme();
   const s = makeStyles(theme);
+  const [notesOpen, setNotesOpen] = useState(false);
 
   return (
     <PullToRefresh
@@ -555,9 +613,25 @@ function GridView({ round, roundIndex, players, scores, isBestBall, bbResult, se
       refreshing={refreshing}
       onRefresh={onRefresh}
     >
-      <View>
-        <Text style={s.title}>{round.courseName}</Text>
-        <Text style={s.subtitle}>Round {roundIndex + 1}</Text>
+      <View style={s.gridHeaderRow}>
+        <View style={{ flex: 1 }}>
+          <Text style={s.title}>{round.courseName}</Text>
+          <Text style={s.subtitle}>Round {roundIndex + 1}</Text>
+        </View>
+        <TouchableOpacity
+          style={s.notesPillBtn}
+          onPress={() => setNotesOpen(true)}
+          activeOpacity={0.7}
+        >
+          <Feather
+            name={notes?.trim() ? 'edit-3' : 'edit-2'}
+            size={14}
+            color={notes?.trim() ? theme.accent.primary : theme.text.muted}
+          />
+          <Text style={[s.notesPillBtnText, notes?.trim() && s.notesPillBtnTextActive]}>
+            {notes?.trim() ? 'Notes' : 'Notes'}
+          </Text>
+        </TouchableOpacity>
       </View>
 
       <ScrollView horizontal showsHorizontalScrollIndicator={false}>
@@ -666,6 +740,42 @@ function GridView({ round, roundIndex, players, scores, isBestBall, bbResult, se
       </ScrollView>
 
       {isBestBall && bbResult && <LiveMatchStrip bbResult={bbResult} settings={settings} />}
+
+      {/* Notes modal — same as HoleView */}
+      <Modal
+        visible={notesOpen}
+        transparent
+        animationType="slide"
+        onRequestClose={() => setNotesOpen(false)}
+      >
+        <KeyboardAvoidingView
+          behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+          style={s.notesModalKav}
+        >
+          <Pressable style={s.notesBackdrop} onPress={() => setNotesOpen(false)}>
+            <Pressable style={s.notesSheet} onPress={() => {}}>
+              <View style={s.notesHandle} />
+              <View style={s.notesHeader}>
+                <Text style={s.notesTitle}>Round Notes</Text>
+                <TouchableOpacity onPress={() => setNotesOpen(false)} style={s.notesCloseBtn}>
+                  <Feather name="x" size={18} color={theme.text.secondary} />
+                </TouchableOpacity>
+              </View>
+              <TextInput
+                style={s.notesModalInput}
+                placeholder="What happened this round?"
+                placeholderTextColor={theme.text.muted}
+                keyboardAppearance={theme.isDark ? 'dark' : 'light'}
+                selectionColor={theme.accent.primary}
+                multiline
+                value={notes}
+                onChangeText={onNotesChange}
+                autoFocus
+              />
+            </Pressable>
+          </Pressable>
+        </KeyboardAvoidingView>
+      </Modal>
     </PullToRefresh>
   );
 }
@@ -1008,6 +1118,59 @@ function makeStyles(theme) {
       fontSize: 14,
       fontFamily: 'PlusJakartaSans-Regular',
       textAlignVertical: 'top',
+    },
+
+    // Horizontal pager — each hole is a full-width page
+    pagerWrap: { flex: 1 },
+
+    // Grid view header row (course title + Notes pill)
+    gridHeaderRow: {
+      flexDirection: 'row',
+      alignItems: 'flex-start',
+      justifyContent: 'space-between',
+      gap: 12,
+      marginBottom: 8,
+    },
+
+    // Go-to-hole picker (centered modal with 18-hole grid)
+    holePickerSheet: {
+      alignSelf: 'center',
+      backgroundColor: theme.bg.primary,
+      borderRadius: 20,
+      borderWidth: 1,
+      borderColor: theme.border.default,
+      paddingVertical: 20,
+      paddingHorizontal: 20,
+      marginHorizontal: 24,
+      marginVertical: 'auto',
+      gap: 16,
+    },
+    holePickerGrid: {
+      flexDirection: 'row',
+      flexWrap: 'wrap',
+      gap: 8,
+      justifyContent: 'center',
+    },
+    holePickerBtn: {
+      width: 48, height: 48, borderRadius: 12,
+      alignItems: 'center', justifyContent: 'center',
+      backgroundColor: theme.isDark ? theme.bg.elevated : theme.bg.secondary,
+      borderWidth: 1, borderColor: theme.border.default,
+    },
+    holePickerBtnActive: {
+      backgroundColor: theme.accent.primary,
+      borderColor: theme.accent.primary,
+    },
+    holePickerBtnDone: {
+      borderColor: theme.accent.primary,
+    },
+    holePickerBtnText: {
+      color: theme.text.primary,
+      fontSize: 16,
+      fontFamily: 'PlusJakartaSans-Bold',
+    },
+    holePickerBtnTextActive: {
+      color: theme.text.inverse,
     },
 
     // Round totals strip

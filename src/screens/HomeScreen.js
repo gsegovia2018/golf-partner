@@ -18,8 +18,9 @@ export default function HomeScreen({ navigation, viewMode = 'auto' }) {
   const { theme, mode, toggle } = useTheme();
   const [tournament, setTournament] = useState(null);
   const [allTournaments, setAllTournaments] = useState([]);
-  const [activeRoundTab, setActiveRoundTab] = useState(0);
   const [selectedRound, setSelectedRound] = useState(0);
+  const [roundPagerWidth, setRoundPagerWidth] = useState(0);
+  const roundPagerRef = useRef(null);
   const [showSettings, setShowSettings] = useState(false);
   const [leaderboardBestBall, setLeaderboardBestBall] = useState(false);
   const [roundBestBall, setRoundBestBall] = useState(true);
@@ -41,6 +42,12 @@ export default function HomeScreen({ navigation, viewMode = 'auto' }) {
     const unsubscribe = navigation.addListener('focus', reload);
     return unsubscribe;
   }, [navigation, reload]);
+
+  // Keep round pager in sync with selectedRound (from tab taps)
+  useEffect(() => {
+    if (!roundPagerRef.current || roundPagerWidth <= 0) return;
+    roundPagerRef.current.scrollTo({ x: selectedRound * roundPagerWidth, animated: false });
+  }, [selectedRound, roundPagerWidth]);
 
   async function selectTournament(id) {
     await setActiveTournament(id);
@@ -247,7 +254,7 @@ export default function HomeScreen({ navigation, viewMode = 'auto' }) {
         })}
       </View>
 
-      {completedRounds.length > 0 && (
+      {tournament.rounds.length > 0 && (
         <View style={s.card}>
           <View style={s.cardTitleRow}>
             <Text style={s.cardTitle}>ROUND SCORES</Text>
@@ -265,100 +272,90 @@ export default function HomeScreen({ navigation, viewMode = 'auto' }) {
           <FlatList
             horizontal
             showsHorizontalScrollIndicator={false}
-            data={completedRounds}
+            data={tournament.rounds}
             keyExtractor={(r) => r.id}
             style={s.tabBar}
             renderItem={({ item: round, index }) => (
               <TouchableOpacity
-                style={[s.tab, activeRoundTab === index && s.tabActive]}
-                onPress={() => setActiveRoundTab(index)}
+                style={[s.tab, selectedRound === index && s.tabActive]}
+                onPress={() => setSelectedRound(index)}
                 activeOpacity={0.7}
               >
-                <Text style={[s.tabText, activeRoundTab === index && s.tabTextActive]}>
-                  R{tournament.rounds.indexOf(round) + 1}
+                <Text style={[s.tabText, selectedRound === index && s.tabTextActive]}>
+                  R{index + 1}
                 </Text>
               </TouchableOpacity>
             )}
           />
-          {(() => {
-            const round = completedRounds[activeRoundTab];
-            return round ? (
-              <>
-                <Text style={s.tabRoundTitle}>{round.courseName}</Text>
-                {roundBestBall
-                  ? <BestBallRoundCard round={round} players={tournament.players} settings={settings} theme={theme} s={s} />
-                  : <StablefordRoundCard round={round} players={tournament.players} theme={theme} s={s} />}
-              </>
-            ) : null;
-          })()}
+
+          {/* Horizontal pager — swipe to change round, stays in sync with tabs */}
+          <View style={s.roundPagerWrap} onLayout={(e) => setRoundPagerWidth(e.nativeEvent.layout.width)}>
+            {roundPagerWidth > 0 && (
+              <ScrollView
+                ref={roundPagerRef}
+                horizontal
+                pagingEnabled
+                showsHorizontalScrollIndicator={false}
+                onMomentumScrollEnd={(e) => {
+                  const idx = Math.round(e.nativeEvent.contentOffset.x / roundPagerWidth);
+                  if (idx !== selectedRound) setSelectedRound(idx);
+                }}
+                contentOffset={{ x: selectedRound * roundPagerWidth, y: 0 }}
+              >
+                {tournament.rounds.map((round, i) => {
+                  const hasScores = round.scores && Object.keys(round.scores).length > 0;
+                  const isCurrentRound = i === tournament.currentRound;
+                  return (
+                    <View key={round.id} style={{ width: roundPagerWidth }}>
+                      <Text style={s.tabRoundTitle}>RONDA {i + 1} · {round.courseName || '—'}</Text>
+                      {hasScores ? (
+                        roundBestBall
+                          ? <BestBallRoundCard round={round} players={tournament.players} settings={settings} theme={theme} s={s} />
+                          : <StablefordRoundCard round={round} players={tournament.players} theme={theme} s={s} />
+                      ) : (
+                        <Text style={s.emptyRoundHint}>No scores yet for this round.</Text>
+                      )}
+                      <View style={s.roundActionsRow}>
+                        <TouchableOpacity
+                          style={[s.primaryBtn, s.roundActionBtn]}
+                          onPress={() => navigation.navigate('Scorecard', { roundIndex: i })}
+                          activeOpacity={0.8}
+                        >
+                          <Feather name="edit-2" size={16} color={theme.isDark ? theme.accent.primary : theme.text.inverse} />
+                          <Text style={s.primaryBtnText}>{isCurrentRound ? 'Scorecard' : 'Edit Scores'}</Text>
+                        </TouchableOpacity>
+                        {isCurrentRound && tournament.currentRound < tournament.rounds.length - 1 && (() => {
+                          const nextRound = tournament.rounds[tournament.currentRound + 1];
+                          const nextRevealed = nextRound?.revealed;
+                          return nextRevealed ? (
+                            <TouchableOpacity
+                              style={[s.secondaryBtn, s.roundActionBtn]}
+                              onPress={() => navigation.navigate('NextRound', { revealOnly: true, roundIndex: tournament.currentRound + 1 })}
+                              activeOpacity={0.7}
+                            >
+                              <Feather name="eye" size={16} color={theme.accent.primary} />
+                              <Text style={s.secondaryBtnText}>Next Round</Text>
+                            </TouchableOpacity>
+                          ) : (
+                            <TouchableOpacity
+                              style={[s.primaryBtn, s.roundActionBtn]}
+                              onPress={() => navigation.navigate('NextRound')}
+                              activeOpacity={0.8}
+                            >
+                              <Feather name="play" size={16} color={theme.isDark ? theme.accent.primary : theme.text.inverse} />
+                              <Text style={s.primaryBtnText}>Start Next Round</Text>
+                            </TouchableOpacity>
+                          );
+                        })()}
+                      </View>
+                    </View>
+                  );
+                })}
+              </ScrollView>
+            )}
+          </View>
         </View>
       )}
-
-      {(() => {
-        const dispRound = tournament.rounds[selectedRound];
-        const isCurrentRound = selectedRound === tournament.currentRound;
-        const canPrev = selectedRound > 0;
-        const canNext = selectedRound < tournament.rounds.length - 1;
-        return (
-          <View style={s.card}>
-            <View style={s.roundNavHeader}>
-              <TouchableOpacity
-                style={[s.roundNavBtn, !canPrev && s.roundNavBtnDisabled]}
-                onPress={() => canPrev && setSelectedRound((r) => r - 1)}
-                disabled={!canPrev}
-                activeOpacity={0.7}
-              >
-                <Feather name="chevron-left" size={18} color={canPrev ? theme.accent.primary : theme.text.muted} />
-              </TouchableOpacity>
-              <View style={s.roundNavCenter}>
-                <Text style={s.cardTitle}>RONDA {selectedRound + 1}</Text>
-                <Text style={s.roundNavCourse}>{dispRound?.courseName}</Text>
-              </View>
-              <TouchableOpacity
-                style={[s.roundNavBtn, !canNext && s.roundNavBtnDisabled]}
-                onPress={() => canNext && setSelectedRound((r) => r + 1)}
-                disabled={!canNext}
-                activeOpacity={0.7}
-              >
-                <Feather name="chevron-right" size={18} color={canNext ? theme.accent.primary : theme.text.muted} />
-              </TouchableOpacity>
-            </View>
-            <View style={s.roundActionsRow}>
-              <TouchableOpacity
-                style={[s.primaryBtn, s.roundActionBtn]}
-                onPress={() => navigation.navigate('Scorecard', { roundIndex: selectedRound })}
-                activeOpacity={0.8}
-              >
-                <Feather name="edit-2" size={16} color={theme.isDark ? theme.accent.primary : theme.text.inverse} />
-                <Text style={s.primaryBtnText}>{isCurrentRound ? 'Scorecard' : 'Edit Scores'}</Text>
-              </TouchableOpacity>
-              {isCurrentRound && tournament.currentRound < tournament.rounds.length - 1 && (() => {
-                const nextRound = tournament.rounds[tournament.currentRound + 1];
-                const nextRevealed = nextRound?.revealed;
-                return nextRevealed ? (
-                  <TouchableOpacity
-                    style={[s.secondaryBtn, s.roundActionBtn]}
-                    onPress={() => navigation.navigate('NextRound', { revealOnly: true, roundIndex: tournament.currentRound + 1 })}
-                    activeOpacity={0.7}
-                  >
-                    <Feather name="eye" size={16} color={theme.accent.primary} />
-                    <Text style={s.secondaryBtnText}>Next Round</Text>
-                  </TouchableOpacity>
-                ) : (
-                  <TouchableOpacity
-                    style={[s.primaryBtn, s.roundActionBtn]}
-                    onPress={() => navigation.navigate('NextRound')}
-                    activeOpacity={0.8}
-                  >
-                    <Feather name="play" size={16} color={theme.isDark ? theme.accent.primary : theme.text.inverse} />
-                    <Text style={s.primaryBtnText}>Start Next Round</Text>
-                  </TouchableOpacity>
-                );
-              })()}
-            </View>
-          </View>
-        );
-      })()}
 
       <View style={{ position: 'absolute', left: -9999 }}>
         <ShareableLeaderboard ref={leaderboardRef} tournamentName={tournament.name} leaderboard={leaderboard} />
@@ -642,6 +639,14 @@ const makeStyles = (t) => StyleSheet.create({
   tabText: { fontFamily: 'PlusJakartaSans-Bold', color: t.text.muted, fontSize: 12 },
   tabTextActive: { color: t.text.inverse },
   tabRoundTitle: { fontFamily: 'PlusJakartaSans-Medium', color: t.text.secondary, fontSize: 12, marginBottom: 12 },
+  roundPagerWrap: {},
+  emptyRoundHint: {
+    fontFamily: 'PlusJakartaSans-Regular',
+    color: t.text.muted,
+    fontSize: 13,
+    textAlign: 'center',
+    paddingVertical: 24,
+  },
 
   // Masters leaderboard
   mastersCard: {
