@@ -1,9 +1,10 @@
 import React, { useEffect, useState, useCallback, useRef, useMemo, startTransition } from 'react';
-import { View, Text, TouchableOpacity, StyleSheet, ScrollView, Switch, Alert, FlatList, Platform, Modal, Pressable } from 'react-native';
+import { View, Text, TouchableOpacity, StyleSheet, ScrollView, Switch, Alert, FlatList, Platform, Modal, Pressable, ActivityIndicator, Share } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Feather } from '@expo/vector-icons';
 
 import { useTheme } from '../theme/ThemeContext';
+import { useAuth } from '../context/AuthContext';
 import { ShareableLeaderboard, shareLeaderboard } from '../components/ShareableCard';
 import PullToRefresh from '../components/PullToRefresh';
 import {
@@ -13,7 +14,7 @@ import {
   tournamentLeaderboard, tournamentBestWorstLeaderboard,
   roundPairLeaderboard, calcBestWorstBall, roundTotals,
   playerRoundBestWorstPoints,
-  DEFAULT_SETTINGS,
+  DEFAULT_SETTINGS, generateInviteCode,
 } from '../store/tournamentStore';
 
 // Web-only CSS scroll-snap. See ScorecardScreen.js for the rationale:
@@ -38,6 +39,7 @@ if (Platform.OS === 'web' && typeof document !== 'undefined') {
 export default function HomeScreen({ navigation, route }) {
   const viewMode = route?.params?.viewMode ?? 'auto';
   const { theme, mode, toggle } = useTheme();
+  const { user } = useAuth();
   const [tournament, setTournament] = useState(null);
   const [allTournaments, setAllTournaments] = useState([]);
   const [selectedRound, setSelectedRound] = useState(0);
@@ -66,6 +68,9 @@ export default function HomeScreen({ navigation, route }) {
   const [leaderboardBestBall, setLeaderboardBestBall] = useState(false);
   const [roundBestBall, setRoundBestBall] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
+  const [showInvite, setShowInvite] = useState(false);
+  const [inviteCode, setInviteCode] = useState('');
+  const [inviteLoading, setInviteLoading] = useState(false);
 
   const reload = useCallback(async () => {
     const [t, all] = await Promise.all([loadTournament(), loadAllTournaments()]);
@@ -255,6 +260,21 @@ export default function HomeScreen({ navigation, route }) {
   const s = useMemo(() => makeStyles(theme), [theme]);
   const leaderboardRef = useRef();
 
+  async function handleInvite() {
+    if (!tournament) return;
+    setInviteLoading(true);
+    setShowInvite(true);
+    try {
+      const code = await generateInviteCode(tournament.id);
+      setInviteCode(code);
+    } catch (err) {
+      setShowInvite(false);
+      Alert.alert('Error', err.message);
+    } finally {
+      setInviteLoading(false);
+    }
+  }
+
   // Hoist memoised derivations above the early returns so the hook order
   // stays stable across showList / showTournament toggles.
   const settings = useMemo(
@@ -294,6 +314,8 @@ export default function HomeScreen({ navigation, route }) {
 
   const showList = viewMode === 'list' || (viewMode === 'auto' && !tournament);
   const showTournament = viewMode === 'tournament' || (viewMode === 'auto' && !!tournament);
+  const isViewer = tournament?._role === 'viewer';
+  const userInitials = user?.email ? user.email.slice(0, 2).toUpperCase() : '?';
 
   if (showList) {
     return (
@@ -313,6 +335,9 @@ export default function HomeScreen({ navigation, route }) {
             <TouchableOpacity style={s.iconBtn} onPress={() => navigation.navigate('CoursesLibrary')} activeOpacity={0.7}>
               <Feather name="map" size={18} color={theme.accent.primary} />
             </TouchableOpacity>
+            <TouchableOpacity style={s.avatarBtn} onPress={() => navigation.navigate('Profile')} activeOpacity={0.7}>
+              <Text style={s.avatarText}>{userInitials}</Text>
+            </TouchableOpacity>
           </View>
         </View>
 
@@ -322,10 +347,14 @@ export default function HomeScreen({ navigation, route }) {
           refreshing={refreshing}
           onRefresh={onRefresh}
         >
-        <View>
-          <TouchableOpacity style={s.primaryBtn} onPress={() => navigation.navigate('Setup')} activeOpacity={0.8}>
+        <View style={{ flexDirection: 'row', gap: 8 }}>
+          <TouchableOpacity style={[s.primaryBtn, { flex: 1, marginTop: 0 }]} onPress={() => navigation.navigate('Setup')} activeOpacity={0.8}>
             <Feather name="plus" size={18} color={theme.isDark ? theme.accent.primary : theme.text.inverse} />
             <Text style={s.primaryBtnText}>New Tournament</Text>
+          </TouchableOpacity>
+          <TouchableOpacity style={[s.secondaryBtn, { marginTop: 0, paddingHorizontal: 16 }]} onPress={() => navigation.navigate('JoinTournament')} activeOpacity={0.7}>
+            <Feather name="link" size={18} color={theme.accent.primary} />
+            <Text style={s.secondaryBtnText}>Join</Text>
           </TouchableOpacity>
         </View>
 
@@ -355,6 +384,12 @@ export default function HomeScreen({ navigation, route }) {
                               {isActive ? 'Active' : 'Finished'}
                             </Text>
                           </View>
+                          {t._role === 'viewer' && (
+                            <View style={s.viewerBadge}>
+                              <Feather name="eye" size={9} color={theme.text.muted} />
+                              <Text style={s.viewerBadgeText}>Viewer</Text>
+                            </View>
+                          )}
                         </View>
                         <Text style={s.tournamentCardMeta}>
                           {t.players.map((p) => p.name.split(' ')[0]).join(' · ')}
@@ -365,9 +400,11 @@ export default function HomeScreen({ navigation, route }) {
                         <Feather name="chevron-right" size={18} color={theme.text.muted} />
                       </View>
                     </TouchableOpacity>
-                    <TouchableOpacity style={s.deleteCardBtn} onPress={() => confirmDelete(t)} hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}>
-                      <Feather name="trash-2" size={14} color={theme.destructive} />
-                    </TouchableOpacity>
+                    {t._role !== 'viewer' && (
+                      <TouchableOpacity style={s.deleteCardBtn} onPress={() => confirmDelete(t)} hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}>
+                        <Feather name="trash-2" size={14} color={theme.destructive} />
+                      </TouchableOpacity>
+                    )}
                   </View>
                 );
               })}
@@ -421,6 +458,11 @@ export default function HomeScreen({ navigation, route }) {
           <TouchableOpacity style={s.iconBtn} onPress={toggle} activeOpacity={0.7}>
             <Feather name={mode === 'dark' ? 'sun' : 'moon'} size={18} color={theme.accent.primary} />
           </TouchableOpacity>
+          {!isViewer && (
+            <TouchableOpacity style={s.iconBtn} onPress={handleInvite} activeOpacity={0.7}>
+              <Feather name="share" size={18} color={theme.accent.primary} />
+            </TouchableOpacity>
+          )}
           <TouchableOpacity style={s.iconBtn} onPress={() => setShowSettings(true)} activeOpacity={0.7}>
             <Feather name="settings" size={18} color={theme.accent.primary} />
           </TouchableOpacity>
@@ -583,7 +625,7 @@ export default function HomeScreen({ navigation, route }) {
                     theme={theme}
                     s={s}
                     onGoToRound={goToRound}
-                    onOpenEdit={openRoundEdit}
+                    onOpenEdit={isViewer ? null : openRoundEdit}
                   />
                 ))}
               </ScrollView>
@@ -612,6 +654,7 @@ export default function HomeScreen({ navigation, route }) {
       const canShowNext = isCurrentRound && tournament.currentRound < tournament.rounds.length - 1;
       const nextRound = canShowNext ? tournament.rounds[tournament.currentRound + 1] : null;
       const nextRevealed = nextRound?.revealed;
+      if (isViewer) return null;
       return (
         <View style={s.tournamentBottomBar}>
           <TouchableOpacity
@@ -646,6 +689,38 @@ export default function HomeScreen({ navigation, route }) {
         </View>
       );
     })()}
+
+    <Modal
+      visible={showInvite}
+      transparent
+      animationType="slide"
+      onRequestClose={() => setShowInvite(false)}
+    >
+      <Pressable style={s.modalBackdrop} onPress={() => setShowInvite(false)}>
+        <Pressable style={s.modalSheet} onPress={() => {}}>
+          <View style={s.modalHandle} />
+          <Text style={s.modalTitle}>Invite Viewers</Text>
+          <Text style={s.inviteSubtitle}>Share this code — anyone who enters it can follow this tournament.</Text>
+          {inviteLoading
+            ? <ActivityIndicator color={theme.accent.primary} style={{ marginVertical: 24 }} />
+            : (
+              <View style={s.inviteCodeBox}>
+                <Text style={s.inviteCode}>{inviteCode}</Text>
+              </View>
+            )}
+          <TouchableOpacity
+            style={[s.menuItem, { borderBottomWidth: 0 }]}
+            onPress={() => Share.share({ message: `Join my golf tournament! Code: ${inviteCode}` })}
+            activeOpacity={0.7}
+            disabled={!inviteCode}
+          >
+            <Feather name="share-2" size={18} color={theme.accent.primary} />
+            <Text style={s.menuItemText}>Share Code</Text>
+            <Feather name="chevron-right" size={16} color={theme.text.muted} />
+          </TouchableOpacity>
+        </Pressable>
+      </Pressable>
+    </Modal>
 
     <Modal
       visible={showRoundEdit}
@@ -774,7 +849,7 @@ export default function HomeScreen({ navigation, route }) {
           <View style={s.modalHandle} />
           <Text style={s.modalTitle}>Tournament Settings</Text>
 
-          {(() => {
+          {!isViewer && (() => {
             const r = tournament.rounds[selectedRound];
             const alreadyRevealed = r?.revealed || selectedRound <= tournament.currentRound;
             return alreadyRevealed ? (
@@ -822,6 +897,22 @@ export default function HomeScreen({ navigation, route }) {
 
           <TouchableOpacity
             style={s.menuItem}
+            onPress={() => {
+              setShowSettings(false);
+              navigation.navigate('Members', {
+                tournamentId: tournament.id,
+                tournamentName: tournament.name,
+              });
+            }}
+            activeOpacity={0.7}
+          >
+            <Feather name="user-check" size={18} color={theme.accent.primary} />
+            <Text style={s.menuItemText}>Members</Text>
+            <Feather name="chevron-right" size={16} color={theme.text.muted} />
+          </TouchableOpacity>
+
+          <TouchableOpacity
+            style={s.menuItem}
             onPress={() => { setShowSettings(false); navigation.navigate('PlayersLibrary'); }}
             activeOpacity={0.7}
           >
@@ -840,24 +931,28 @@ export default function HomeScreen({ navigation, route }) {
             <Feather name="chevron-right" size={16} color={theme.text.muted} />
           </TouchableOpacity>
 
-          <TouchableOpacity
-            style={s.menuItem}
-            onPress={() => { setShowSettings(false); navigation.navigate('EditTournament'); }}
-            activeOpacity={0.7}
-          >
-            <Feather name="edit-3" size={18} color={theme.accent.primary} />
-            <Text style={s.menuItemText}>Edit Tournament</Text>
-            <Feather name="chevron-right" size={16} color={theme.text.muted} />
-          </TouchableOpacity>
+          {!isViewer && (
+            <TouchableOpacity
+              style={s.menuItem}
+              onPress={() => { setShowSettings(false); navigation.navigate('EditTournament'); }}
+              activeOpacity={0.7}
+            >
+              <Feather name="edit-3" size={18} color={theme.accent.primary} />
+              <Text style={s.menuItemText}>Edit Tournament</Text>
+              <Feather name="chevron-right" size={16} color={theme.text.muted} />
+            </TouchableOpacity>
+          )}
 
-          <TouchableOpacity
-            style={[s.menuItem, s.menuItemDestructive]}
-            onPress={() => { setShowSettings(false); confirmDelete(tournament); }}
-            activeOpacity={0.7}
-          >
-            <Feather name="trash-2" size={18} color={theme.destructive} />
-            <Text style={[s.menuItemText, { color: theme.destructive }]}>Delete Tournament</Text>
-          </TouchableOpacity>
+          {!isViewer && (
+            <TouchableOpacity
+              style={[s.menuItem, s.menuItemDestructive]}
+              onPress={() => { setShowSettings(false); confirmDelete(tournament); }}
+              activeOpacity={0.7}
+            >
+              <Feather name="trash-2" size={18} color={theme.destructive} />
+              <Text style={[s.menuItemText, { color: theme.destructive }]}>Delete Tournament</Text>
+            </TouchableOpacity>
+          )}
         </Pressable>
       </Pressable>
     </Modal>
@@ -891,14 +986,16 @@ const RoundPage = React.memo(function RoundPage({
           <Feather name="chevron-left" size={18} color={theme.accent.primary} />
         </TouchableOpacity>
         <Text style={s.tabRoundTitle}>RONDA {index + 1} · {round.courseName || '—'}</Text>
-        <TouchableOpacity
-          onPress={() => onOpenEdit(index)}
-          style={s.roundEditBtn}
-          hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
-          accessibilityLabel="Round options"
-        >
-          <Feather name="settings" size={14} color={theme.text.muted} />
-        </TouchableOpacity>
+        {onOpenEdit && (
+          <TouchableOpacity
+            onPress={() => onOpenEdit(index)}
+            style={s.roundEditBtn}
+            hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+            accessibilityLabel="Round options"
+          >
+            <Feather name="settings" size={14} color={theme.text.muted} />
+          </TouchableOpacity>
+        )}
         <TouchableOpacity
           style={[s.pagerArrow, !hasNext && s.pagerArrowHidden]}
           onPress={() => hasNext && onGoToRound(index + 1)}
@@ -1279,4 +1376,36 @@ const makeStyles = (t) => StyleSheet.create({
     color: t.text.primary, fontSize: 14,
   },
   menuItemDestructive: { borderBottomWidth: 0 },
+
+  // Viewer badge
+  viewerBadge: {
+    flexDirection: 'row', alignItems: 'center', gap: 3,
+    paddingHorizontal: 6, paddingVertical: 2, borderRadius: 20,
+    backgroundColor: t.bg.secondary, borderWidth: 1, borderColor: t.border.default,
+  },
+  viewerBadgeText: { fontFamily: 'PlusJakartaSans-SemiBold', color: t.text.muted, fontSize: 9, letterSpacing: 0.5 },
+
+  // User avatar
+  avatarBtn: {
+    width: 36, height: 36, borderRadius: 18,
+    backgroundColor: '#006747',
+    borderWidth: 1, borderColor: t.accent.primary + '66',
+    alignItems: 'center', justifyContent: 'center',
+  },
+  avatarText: { fontFamily: 'PlusJakartaSans-Bold', color: '#ffd700', fontSize: 13 },
+
+  // Invite modal
+  inviteSubtitle: {
+    fontFamily: 'PlusJakartaSans-Regular', color: t.text.secondary,
+    fontSize: 13, paddingHorizontal: 4, marginBottom: 16,
+  },
+  inviteCodeBox: {
+    backgroundColor: t.isDark ? t.bg.secondary : t.bg.secondary,
+    borderRadius: 16, borderWidth: 1, borderColor: t.border.default,
+    padding: 20, alignItems: 'center', marginBottom: 16,
+  },
+  inviteCode: {
+    fontFamily: 'PlusJakartaSans-ExtraBold', color: t.accent.primary,
+    fontSize: 36, letterSpacing: 10,
+  },
 });

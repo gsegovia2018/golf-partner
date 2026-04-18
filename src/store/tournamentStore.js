@@ -40,6 +40,11 @@ async function ensureMigrated() {
   _migrated = true;
 }
 
+async function getCurrentUserId() {
+  const { data: { user } } = await supabase.auth.getUser();
+  return user?.id ?? null;
+}
+
 const _subs = new Set();
 function _emitChange() {
   _subs.forEach((fn) => { try { fn(); } catch (_) {} });
@@ -51,12 +56,37 @@ export function subscribeTournamentChanges(fn) {
 
 export async function loadAllTournaments() {
   await ensureMigrated();
-  const { data, error } = await supabase
-    .from('tournaments')
-    .select('data')
-    .order('created_at', { ascending: false });
-  if (error) throw error;
-  return data.map((row) => row.data);
+  const userId = await getCurrentUserId();
+
+  if (!userId) {
+    const { data, error } = await supabase
+      .from('tournaments').select('data')
+      .order('created_at', { ascending: false });
+    if (error) throw error;
+    return data.map((row) => ({ ...row.data, _role: 'owner' }));
+  }
+
+  const [{ data: owned, error: ownedErr }, { data: memberships, error: memberErr }] = await Promise.all([
+    supabase.from('tournaments').select('data')
+      .or(`created_by.eq.${userId},created_by.is.null`)
+      .order('created_at', { ascending: false }),
+    supabase.from('tournament_members')
+      .select('role, tournaments(data)')
+      .eq('user_id', userId),
+  ]);
+  if (ownedErr) throw ownedErr;
+  if (memberErr) throw memberErr;
+
+  const ownedIds = new Set();
+  const result = (owned ?? []).map((row) => {
+    ownedIds.add(row.data.id);
+    return { ...row.data, _role: 'owner' };
+  });
+  (memberships ?? []).forEach((m) => {
+    if (!m.tournaments?.data || ownedIds.has(m.tournaments.data.id)) return;
+    result.push({ ...m.tournaments.data, _role: m.role });
+  });
+  return result.sort((a, b) => b.id - a.id);
 }
 
 export async function loadTournament() {
@@ -69,12 +99,11 @@ export async function loadTournament() {
 }
 
 async function persistTournament(tournament) {
-  const { error } = await supabase.from('tournaments').upsert({
-    id: tournament.id,
-    name: tournament.name,
-    created_at: tournament.createdAt,
-    data: tournament,
-  });
+  const userId = await getCurrentUserId();
+  const { _role, ...cleanData } = tournament;
+  const row = { id: cleanData.id, name: cleanData.name, created_at: cleanData.createdAt, data: cleanData };
+  if (userId) row.created_by = userId;
+  const { error } = await supabase.from('tournaments').upsert(row);
   if (error) throw error;
 }
 
@@ -485,6 +514,100 @@ export function tournamentLeaderboard(tournament) {
   });
 
   return totals.sort((a, b) => b.points - a.points);
+}
+
+export async function generateInviteCode(tournamentId) {
+  const { data: existing } = await supabase
+    .from('tournament_invites').select('code')
+    .eq('tournament_id', tournamentId).maybeSingle();
+  if (existing?.code) return existing.code;
+
+  const userId = await getCurrentUserId();
+  const code = Math.random().toString(36).substring(2, 8).toUpperCase();
+  const { data, error } = await supabase
+    .from('tournament_invites')
+    .insert({ tournament_id: tournamentId, code, created_by: userId })
+    .select('code').single();
+  if (error) throw error;
+  return data.code;
+}
+
+// Members list for a tournament: owner + everyone who joined via an invite
+// code. Profile fields are joined client-side since PostgREST can't traverse
+// tournament_members → auth.users → profiles automatically.
+export async function loadTournamentMembers(tournamentId) {
+  const [{ data: members, error: memErr }, { data: tournament, error: tErr }] = await Promise.all([
+    supabase.from('tournament_members')
+      .select('user_id, role, created_at')
+      .eq('tournament_id', tournamentId)
+      .order('created_at'),
+    supabase.from('tournaments')
+      .select('created_by, created_at')
+      .eq('id', tournamentId)
+      .maybeSingle(),
+  ]);
+  if (memErr) throw memErr;
+  if (tErr) throw tErr;
+
+  const ids = [...new Set(
+    [tournament?.created_by, ...(members ?? []).map((m) => m.user_id)].filter(Boolean),
+  )];
+
+  let byId = {};
+  if (ids.length > 0) {
+    const { data: profiles, error: pErr } = await supabase
+      .from('profiles')
+      .select('user_id, display_name, handicap, avatar_color')
+      .in('user_id', ids);
+    if (pErr) throw pErr;
+    byId = Object.fromEntries((profiles ?? []).map((p) => [p.user_id, p]));
+  }
+
+  const rows = [];
+  if (tournament?.created_by) {
+    rows.push({
+      userId: tournament.created_by,
+      role: 'owner',
+      joinedAt: tournament.created_at,
+      profile: byId[tournament.created_by] ?? null,
+    });
+  }
+  (members ?? []).forEach((m) => {
+    if (m.user_id === tournament?.created_by) return;
+    rows.push({
+      userId: m.user_id,
+      role: m.role,
+      joinedAt: m.created_at,
+      profile: byId[m.user_id] ?? null,
+    });
+  });
+  return rows;
+}
+
+export async function removeTournamentMember(tournamentId, userId) {
+  const { error } = await supabase
+    .from('tournament_members')
+    .delete()
+    .eq('tournament_id', tournamentId)
+    .eq('user_id', userId);
+  if (error) throw error;
+}
+
+export async function joinTournamentByCode(code) {
+  const userId = await getCurrentUserId();
+  if (!userId) throw new Error('Must be signed in to join');
+
+  const { data: invite, error: inviteErr } = await supabase
+    .from('tournament_invites').select('tournament_id')
+    .eq('code', code.toUpperCase().trim()).maybeSingle();
+  if (inviteErr) throw inviteErr;
+  if (!invite) throw new Error('Invalid code — check with the tournament owner');
+
+  const { error } = await supabase
+    .from('tournament_members')
+    .upsert({ tournament_id: invite.tournament_id, user_id: userId, role: 'viewer' });
+  if (error) throw error;
+  return invite.tournament_id;
 }
 
 export function isRoundInProgress(tournament) {
