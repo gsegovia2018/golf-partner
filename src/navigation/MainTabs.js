@@ -5,10 +5,8 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Feather } from '@expo/vector-icons';
 
 import HomeScreen from '../screens/HomeScreen';
-import ScorecardScreen from '../screens/ScorecardScreen';
 import { useTheme } from '../theme/ThemeContext';
 import { useActiveTournament } from '../store/useActiveTournament';
-import { isRoundInProgress } from '../store/tournamentStore';
 import { typography, spacing, radius } from '../theme/tokens';
 
 const Tab = createBottomTabNavigator();
@@ -80,7 +78,6 @@ function TabBar({ state, descriptors, navigation }) {
 export default function MainTabs() {
   const { tournament } = useActiveTournament();
   const showTournament = !!tournament;
-  const showScorecard = isRoundInProgress(tournament);
 
   return (
     <Tab.Navigator
@@ -96,11 +93,6 @@ export default function MainTabs() {
         name="Tournament"
         component={HomeTournamentTab}
         options={{ tabBarLabel: 'Tournament', tabBarIconName: 'flag', tabBarHidden: !showTournament }}
-      />
-      <Tab.Screen
-        name="ScorecardTab"
-        component={ScorecardScreen}
-        options={{ tabBarLabel: 'Scorecard', tabBarIconName: 'edit-3', tabBarHidden: !showScorecard }}
       />
     </Tab.Navigator>
   );
