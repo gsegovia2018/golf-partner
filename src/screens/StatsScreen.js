@@ -15,10 +15,15 @@ const TABS = ['Overview', 'Players', 'Holes', 'Pairs', 'Shame'];
 
 const firstName = (p) => p.name.split(' ')[0];
 const joinNames = (players) => {
-  const names = players.map(firstName);
-  if (names.length <= 1) return names[0] || '';
-  if (names.length === 2) return `${names[0]} & ${names[1]}`;
-  return `${names.slice(0, -1).join(', ')} & ${names[names.length - 1]}`;
+  const counts = new Map();
+  players.forEach(p => {
+    const n = firstName(p);
+    counts.set(n, (counts.get(n) || 0) + 1);
+  });
+  const tokens = [...counts.entries()].map(([n, c]) => c > 1 ? `${n} ×${c}` : n);
+  if (tokens.length <= 1) return tokens[0] || '';
+  if (tokens.length === 2) return `${tokens[0]} & ${tokens[1]}`;
+  return `${tokens.slice(0, -1).join(', ')} & ${tokens[tokens.length - 1]}`;
 };
 const toneForPoints = (p) => p >= 3 ? 'excellent' : p === 2 ? 'good' : p === 1 ? 'neutral' : 'poor';
 const holeRowFromBreakdown = (b, i, tone) => ({
@@ -31,10 +36,23 @@ const holeRowFromBreakdown = (b, i, tone) => ({
 const sectionRow = (key, label, rightLabel) => ({ key: `sec-${key}`, section: true, label, rightLabel });
 const tiedRowsByPlayer = (entries, makeRows, headerRight) => {
   if (entries.length === 1) return makeRows(entries[0]);
-  return entries.flatMap((e, idx) => [
-    sectionRow(`${idx}`, firstName(e.player), headerRight ? headerRight(e) : null),
-    ...makeRows(e),
-  ]);
+  const groups = new Map();
+  entries.forEach(e => {
+    const list = groups.get(e.player.id) || { player: e.player, items: [] };
+    list.items.push(e);
+    groups.set(e.player.id, list);
+  });
+  const result = [];
+  let idx = 0;
+  for (const { player, items } of groups.values()) {
+    const count = items.length;
+    const label = count > 1 ? `${firstName(player)} ×${count}` : firstName(player);
+    const right = count === 1 && headerRight ? headerRight(items[0]) : null;
+    result.push(sectionRow(`${idx}`, label, right));
+    items.forEach(e => result.push(...makeRows(e)));
+    idx++;
+  }
+  return result;
 };
 
 export default function StatsScreen({ navigation }) {
