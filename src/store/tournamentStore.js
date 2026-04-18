@@ -59,7 +59,7 @@ export async function loadTournament() {
   return all.find((t) => t.id === activeId) ?? null;
 }
 
-export async function saveTournament(tournament) {
+async function persistTournament(tournament) {
   const { error } = await supabase.from('tournaments').upsert({
     id: tournament.id,
     name: tournament.name,
@@ -67,6 +67,10 @@ export async function saveTournament(tournament) {
     data: tournament,
   });
   if (error) throw error;
+}
+
+export async function saveTournament(tournament) {
+  await persistTournament(tournament);
   await AsyncStorage.setItem(ACTIVE_ID_KEY, tournament.id);
 }
 
@@ -83,6 +87,76 @@ export async function deleteTournament(id) {
   const { error } = await supabase.from('tournaments').delete().eq('id', id);
   if (error) throw error;
   if (activeId === id) await AsyncStorage.removeItem(ACTIVE_ID_KEY);
+}
+
+export const STANDARD_SLOPE = 113;
+
+// Course playing handicap = index × slope / 113 (rounded). No slope → raw index.
+export function calcPlayingHandicap(index, slope) {
+  const idx = parseInt(index, 10) || 0;
+  const sv = parseInt(slope, 10) || 0;
+  if (sv <= 0) return idx;
+  return Math.round(idx * (sv / STANDARD_SLOPE));
+}
+
+// Ensure every current player has an entry in round.playerHandicaps. Missing
+// entries are backfilled from the player's base index applied to round.slope.
+// For legacy rounds lacking manualHandicaps, infer manual overrides by
+// comparing stored value to the slope-derived value.
+export function normalizeRoundHandicaps(round, players) {
+  const playerHandicaps = { ...(round.playerHandicaps ?? {}) };
+  const manualHandicaps = { ...(round.manualHandicaps ?? {}) };
+  const hasLegacyFlags = round.manualHandicaps != null;
+  players.forEach((p) => {
+    const auto = calcPlayingHandicap(p.handicap, round.slope);
+    const current = playerHandicaps[p.id];
+    if (current == null) {
+      playerHandicaps[p.id] = auto;
+    } else if (!hasLegacyFlags && round.slope && Number(current) !== auto) {
+      manualHandicaps[p.id] = true;
+    }
+  });
+  return { ...round, playerHandicaps, manualHandicaps };
+}
+
+// Recompute playerHandicaps for non-manual entries when base index or slope
+// changes. Preserves manual overrides.
+export function recomputeRoundPlayingHandicaps(round, players) {
+  const playerHandicaps = { ...(round.playerHandicaps ?? {}) };
+  const manual = round.manualHandicaps ?? {};
+  players.forEach((p) => {
+    if (manual[p.id]) return;
+    playerHandicaps[p.id] = calcPlayingHandicap(p.handicap, round.slope);
+  });
+  return { ...round, playerHandicaps };
+}
+
+// Push a course library edit (slope/holes) into every tournament round that
+// references this courseId. Holes are deep-copied per round. Non-manual
+// playing handicaps are re-derived from the new slope.
+export async function propagateCourseToTournaments(courseId, { slope, holes }) {
+  if (!courseId) return [];
+  const tournaments = await loadAllTournaments();
+  const updatedIds = [];
+  for (const t of tournaments) {
+    let changed = false;
+    const nextRounds = t.rounds.map((round) => {
+      if (round.courseId !== courseId) return round;
+      changed = true;
+      const nextRound = {
+        ...round,
+        holes: holes.map((h) => ({ ...h })),
+        slope: slope ?? null,
+      };
+      return recomputeRoundPlayingHandicaps(nextRound, t.players);
+    });
+    if (changed) {
+      const next = { ...t, rounds: nextRounds };
+      await persistTournament(next);
+      updatedIds.push(next.id);
+    }
+  }
+  return updatedIds;
 }
 
 export function calcExtraShots(playerHandicap, holeStrokeIndex) {

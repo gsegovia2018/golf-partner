@@ -57,10 +57,14 @@ export default function SetupScreen({ navigation }) {
     }
   }, []));
 
-  const handleHolesSaved = useCallback((roundIndex, holes, slope, playerHandicaps) => {
+  const handleHolesSaved = useCallback((roundIndex, holes, slope, playerHandicaps, manualHandicaps) => {
     setRounds((prev) => {
       const next = [...prev];
-      next[roundIndex] = { ...next[roundIndex], holes, slope, playerHandicaps };
+      next[roundIndex] = {
+        ...next[roundIndex],
+        holes, slope, playerHandicaps,
+        manualHandicaps: { ...(manualHandicaps ?? {}) },
+      };
       return next;
     });
   }, []);
@@ -78,7 +82,7 @@ export default function SetupScreen({ navigation }) {
   }
 
   function addRound() {
-    setRounds((prev) => [...prev, { courseName: '', holes: defaultHoles(), slope: null, playerHandicaps: null }]);
+    setRounds((prev) => [...prev, { courseName: '', holes: defaultHoles(), slope: null, playerHandicaps: null, manualHandicaps: {} }]);
   }
 
   function removeRound(index) {
@@ -100,10 +104,12 @@ export default function SetupScreen({ navigation }) {
         ?? Object.fromEntries(players.map((p) => [p.id, p.handicap]));
       return {
         id: `r${i}`,
+        courseId: r.courseId ?? null,
         courseName: r.courseName.trim(),
         holes: r.holes,
         slope: r.slope ?? null,
         playerHandicaps,
+        manualHandicaps: { ...(r.manualHandicaps ?? {}) },
         notes: '',
         pairs: randomPairs(players),
         scores: {},
@@ -230,6 +236,7 @@ export default function SetupScreen({ navigation }) {
                         players: players,
                         initialSlope: r.slope,
                         initialPlayerHandicaps: r.playerHandicaps,
+                        initialManualHandicaps: r.manualHandicaps ?? {},
                         courseId: r.courseId ?? null,
                       })
                     }

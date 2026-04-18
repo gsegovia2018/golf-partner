@@ -195,36 +195,37 @@ export default function HomeScreen({ navigation }) {
         onRefresh={onRefresh}
       >
 
-      <View style={s.card}>
+      <View style={s.mastersCard}>
         <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }}>
-          <Text style={s.cardTitle}>LEADERBOARD</Text>
+          <Text style={s.mastersCardTitle}>LEADERBOARD</Text>
           <TouchableOpacity onPress={() => shareLeaderboard({ tournamentName: tournament.name, leaderboard, theme, viewRef: leaderboardRef })} activeOpacity={0.7} hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}>
-            <Feather name="share-2" size={16} color={theme.accent.primary} />
+            <Feather name="share-2" size={16} color="rgba(255,255,255,0.6)" />
           </TouchableOpacity>
         </View>
-        <View style={s.cardModeToggle}>
-          <Text style={[s.modeLabel, !leaderboardBestBall && s.modeLabelActive]}>Stableford</Text>
+        <View style={s.mastersToggle}>
+          <Text style={[s.mastersToggleLabel, !leaderboardBestBall && s.mastersToggleLabelActive]}>Stableford</Text>
           <Switch
             value={leaderboardBestBall}
             onValueChange={setLeaderboardBestBall}
-            trackColor={{ false: theme.border.default, true: theme.accent.primary }}
+            trackColor={{ false: 'rgba(255,255,255,0.2)', true: 'rgba(255,215,0,0.4)' }}
             thumbColor="#fff"
           />
-          <Text style={[s.modeLabel, leaderboardBestBall && s.modeLabelActive]}>Best Ball</Text>
+          <Text style={[s.mastersToggleLabel, leaderboardBestBall && s.mastersToggleLabelActive]}>Best Ball</Text>
         </View>
         {leaderboard.map((entry, i) => {
-          const rankColors = [theme.semantic.rank.gold, theme.semantic.rank.silver, theme.semantic.rank.bronze];
-          const rankColor = rankColors[i] || theme.text.muted;
+          const rankColors = ['#ffd700', '#c0c8d4', '#daa06d'];
+          const rankColor = rankColors[i] || 'rgba(255,255,255,0.4)';
+          const rankBg = i === 0 ? 'rgba(255,215,0,0.2)' : i === 1 ? 'rgba(192,200,212,0.15)' : i === 2 ? 'rgba(218,160,109,0.15)' : 'rgba(255,255,255,0.08)';
           return (
-            <View key={entry.player.id} style={[s.leaderRow, i === leaderboard.length - 1 && { borderBottomWidth: 0 }]}>
-              <View style={[s.rankBadge, { backgroundColor: rankColor + '18' }]}>
-                <Text style={[s.rankText, { color: rankColor }]}>{i + 1}</Text>
+            <View key={entry.player.id} style={[s.mastersRow, i === 0 && s.mastersRowFirst, i === leaderboard.length - 1 && { borderBottomWidth: 0 }]}>
+              <View style={[s.mastersRankBadge, { backgroundColor: rankBg }]}>
+                <Text style={[s.mastersRankText, { color: rankColor }]}>{i + 1}</Text>
               </View>
-              <Text style={[s.playerName, i === 0 && { color: theme.text.primary, fontFamily: 'PlusJakartaSans-Bold' }]}>{entry.player.name}</Text>
-              <Text style={[s.points, i === 0 && { fontSize: 18 }]}>{entry.points} pts</Text>
+              <Text style={[s.mastersName, i === 0 && { fontFamily: 'PlusJakartaSans-Bold' }]}>{entry.player.name}</Text>
+              <Text style={[s.mastersPoints, i === 0 && { fontSize: 18 }]}>{entry.points} pts</Text>
               {leaderboardBestBall
-                ? <Text style={s.subStat}>{entry.bestWins + entry.worstWins} holes</Text>
-                : <Text style={s.subStat}>{entry.strokes} str</Text>}
+                ? <Text style={s.mastersSub}>{entry.bestWins + entry.worstWins} holes</Text>
+                : <Text style={s.mastersSub}>{entry.strokes} str</Text>}
             </View>
           );
         })}
@@ -540,7 +541,7 @@ const makeStyles = (t) => StyleSheet.create({
   },
   tournamentCardLeft: { flex: 1 },
   tournamentCardHeader: { flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: 4 },
-  tournamentCardName: { fontFamily: 'PlusJakartaSans-Bold', color: t.text.primary, fontSize: 15 },
+  tournamentCardName: { fontFamily: 'PlayfairDisplay-Bold', color: t.text.primary, fontSize: 16 },
   tournamentCardMeta: { fontFamily: 'PlusJakartaSans-Medium', color: t.text.secondary, fontSize: 12, marginBottom: 2 },
   tournamentCardRound: { fontFamily: 'PlusJakartaSans-Medium', color: t.text.muted, fontSize: 11 },
   tournamentCardRight: { paddingLeft: 12 },
@@ -600,16 +601,30 @@ const makeStyles = (t) => StyleSheet.create({
   tabTextActive: { color: t.text.inverse },
   tabRoundTitle: { fontFamily: 'PlusJakartaSans-Medium', color: t.text.secondary, fontSize: 12, marginBottom: 12 },
 
-  // Leaderboard
-  leaderRow: {
-    flexDirection: 'row', alignItems: 'center', paddingVertical: 10,
-    borderBottomWidth: 1, borderBottomColor: t.border.subtle,
+  // Masters leaderboard
+  mastersCard: {
+    backgroundColor: '#006747',
+    borderRadius: 20, padding: 16, marginBottom: 16,
+    ...(t.isDark ? {} : { shadowColor: '#004030', shadowOpacity: 0.3, shadowOffset: { width: 0, height: 4 }, shadowRadius: 12, elevation: 6 }),
   },
-  rankBadge: { width: 26, height: 26, borderRadius: 8, alignItems: 'center', justifyContent: 'center', marginRight: 10 },
-  rankText: { fontFamily: 'PlusJakartaSans-ExtraBold', fontSize: 12 },
-  playerName: { fontFamily: 'PlusJakartaSans-Medium', flex: 1, color: t.text.secondary, fontSize: 14 },
-  points: { fontFamily: 'PlusJakartaSans-ExtraBold', color: t.accent.primary, fontSize: 16, marginRight: 8 },
-  subStat: { fontFamily: 'PlusJakartaSans-Medium', color: t.text.muted, fontSize: 11, width: 60, textAlign: 'right' },
+  mastersCardTitle: {
+    fontFamily: 'PlusJakartaSans-SemiBold',
+    fontSize: 10, color: 'rgba(255,255,255,0.6)', marginBottom: 14,
+    letterSpacing: 2, textTransform: 'uppercase',
+  },
+  mastersToggle: { flexDirection: 'row', alignItems: 'center', justifyContent: 'flex-end', gap: 10, marginBottom: 14 },
+  mastersToggleLabel: { fontFamily: 'PlusJakartaSans-SemiBold', color: 'rgba(255,255,255,0.4)', fontSize: 12 },
+  mastersToggleLabelActive: { color: 'rgba(255,255,255,0.9)' },
+  mastersRow: {
+    flexDirection: 'row', alignItems: 'center', paddingVertical: 10,
+    borderBottomWidth: 1, borderBottomColor: 'rgba(255,255,255,0.12)',
+  },
+  mastersRowFirst: { borderLeftWidth: 3, borderLeftColor: '#ffd700', paddingLeft: 8, marginLeft: -8 },
+  mastersRankBadge: { width: 28, height: 28, borderRadius: 14, alignItems: 'center', justifyContent: 'center', marginRight: 10 },
+  mastersRankText: { fontFamily: 'PlusJakartaSans-ExtraBold', fontSize: 12 },
+  mastersName: { fontFamily: 'PlusJakartaSans-Medium', flex: 1, color: '#ffffff', fontSize: 14 },
+  mastersPoints: { fontFamily: 'PlusJakartaSans-ExtraBold', color: '#ffd700', fontSize: 16, marginRight: 8 },
+  mastersSub: { fontFamily: 'PlusJakartaSans-Medium', color: 'rgba(255,255,255,0.45)', fontSize: 11, width: 60, textAlign: 'right' },
 
   // Pair blocks
   pairBlock: {

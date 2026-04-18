@@ -1,6 +1,6 @@
 import React, { createContext, useContext, useState, useEffect } from 'react';
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import { light, dark, semantic, typography, spacing, radius } from './tokens';
+import { light, dark, semantic, typography, fonts, spacing, radius } from './tokens';
 
 const STORAGE_KEY = '@golf_theme_mode';
 
@@ -34,11 +34,13 @@ export function ThemeProvider({ children }) {
   const theme = {
     ...colors,
     semantic,
+    masters: semantic.masters,
     destructive,
     pairA,
     pairB,
     scoreColor,
     typography,
+    fonts,
     spacing,
     radius,
     mode,

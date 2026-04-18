@@ -7,13 +7,7 @@ import { Feather } from '@expo/vector-icons';
 
 import { useTheme } from '../theme/ThemeContext';
 import { updateCourseFromEditor } from '../store/libraryStore';
-
-const STANDARD_SLOPE = 113;
-
-function calcPlayingHandicap(index, slope) {
-  if (!slope || slope <= 0) return index;
-  return Math.round(index * (slope / STANDARD_SLOPE));
-}
+import { calcPlayingHandicap } from '../store/tournamentStore';
 
 function defaultHoles() {
   return Array.from({ length: 18 }, (_, i) => ({
@@ -29,7 +23,7 @@ export default function CourseEditorScreen({ navigation, route }) {
 
   const {
     roundIndex, courseName,
-    initialHoles, initialSlope, initialPlayerHandicaps,
+    initialHoles, initialSlope, initialPlayerHandicaps, initialManualHandicaps,
     courseId,
     players = [],
     onSave,
@@ -49,6 +43,9 @@ export default function CourseEditorScreen({ navigation, route }) {
     });
     return init;
   });
+  const [manualHandicaps, setManualHandicaps] = useState(
+    () => ({ ...(initialManualHandicaps ?? {}) }),
+  );
 
   const isFirstRender = useRef(true);
   const onSaveRef = useRef(onSave);
@@ -58,8 +55,8 @@ export default function CourseEditorScreen({ navigation, route }) {
     if (isFirstRender.current) { isFirstRender.current = false; return; }
     const parsedHandicaps = {};
     players.forEach((p) => { parsedHandicaps[p.id] = parseInt(playerHandicaps[p.id], 10) || 0; });
-    onSaveRef.current(roundIndex, holes, parseInt(slope, 10) || null, parsedHandicaps);
-  }, [holes, slope, playerHandicaps]);
+    onSaveRef.current(roundIndex, holes, parseInt(slope, 10) || null, parsedHandicaps, manualHandicaps);
+  }, [holes, slope, playerHandicaps, manualHandicaps]);
 
   function applySlope(rawSlope) {
     setSlope(rawSlope);
@@ -72,6 +69,9 @@ export default function CourseEditorScreen({ navigation, route }) {
       });
       return next;
     });
+    // Applying the slope is an explicit "recompute from slope" action — any
+    // prior manual overrides are cleared so Fix A / Fix B can cascade.
+    setManualHandicaps({});
   }
 
   function setPar(holeIndex, par) {
@@ -156,9 +156,10 @@ export default function CourseEditorScreen({ navigation, route }) {
                     keyboardAppearance={theme.isDark ? 'dark' : 'light'}
                     selectionColor={theme.accent.primary}
                     value={playerHandicaps[p.id] ?? ''}
-                    onChangeText={(v) =>
-                      setPlayerHandicaps((prev) => ({ ...prev, [p.id]: v }))
-                    }
+                    onChangeText={(v) => {
+                      setPlayerHandicaps((prev) => ({ ...prev, [p.id]: v }));
+                      setManualHandicaps((prev) => ({ ...prev, [p.id]: true }));
+                    }}
                   />
                 </View>
               );

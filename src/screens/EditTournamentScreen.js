@@ -6,7 +6,10 @@ import {
 import { Feather } from '@expo/vector-icons';
 
 import { useTheme } from '../theme/ThemeContext';
-import { loadTournament, saveTournament, DEFAULT_SETTINGS, randomPairs } from '../store/tournamentStore';
+import {
+  loadTournament, saveTournament, DEFAULT_SETTINGS, randomPairs,
+  calcPlayingHandicap, normalizeRoundHandicaps,
+} from '../store/tournamentStore';
 
 function defaultHoles() {
   return Array.from({ length: 18 }, (_, i) => ({
@@ -36,14 +39,18 @@ export default function EditTournamentScreen({ navigation }) {
       setTournament(t);
       setPlayers(t.players.map((p) => ({ ...p, handicap: String(p.handicap) })));
       setSettings({ ...DEFAULT_SETTINGS, ...t.settings, bestBallValue: String((t.settings ?? DEFAULT_SETTINGS).bestBallValue ?? 1), worstBallValue: String((t.settings ?? DEFAULT_SETTINGS).worstBallValue ?? 1) });
-      setRounds(t.rounds.map((r) => ({
-        ...r,
-        holes: [...r.holes],
-        notes: r.notes ?? '',
-        playerHandicaps: Object.fromEntries(
-          t.players.map((p) => [p.id, String(r.playerHandicaps?.[p.id] ?? p.handicap)]),
-        ),
-      })));
+      setRounds(t.rounds.map((r) => {
+        const normalized = normalizeRoundHandicaps(r, t.players);
+        return {
+          ...normalized,
+          holes: [...normalized.holes],
+          notes: normalized.notes ?? '',
+          playerHandicaps: Object.fromEntries(
+            t.players.map((p) => [p.id, String(normalized.playerHandicaps[p.id] ?? p.handicap)]),
+          ),
+          manualHandicaps: { ...(normalized.manualHandicaps ?? {}) },
+        };
+      }));
     })();
   }, []);
 
@@ -58,6 +65,7 @@ export default function EditTournamentScreen({ navigation }) {
         playerHandicaps: Object.fromEntries(
           Object.entries(r.playerHandicaps).map(([id, v]) => [id, parseInt(v, 10) || 0]),
         ),
+        manualHandicaps: { ...(r.manualHandicaps ?? {}) },
       }));
       await saveTournament({
         ...tournamentRef.current,
@@ -72,7 +80,7 @@ export default function EditTournamentScreen({ navigation }) {
     }, 400);
   }, [players, rounds, settings]);
 
-  const handleHolesSaved = useCallback((roundIndex, holes, slope, playerHandicaps) => {
+  const handleHolesSaved = useCallback((roundIndex, holes, slope, playerHandicaps, manualHandicaps) => {
     setRounds((prev) => {
       const next = [...prev];
       next[roundIndex] = {
@@ -83,17 +91,30 @@ export default function EditTournamentScreen({ navigation }) {
         playerHandicaps: Object.fromEntries(
           Object.entries(playerHandicaps).map(([id, v]) => [id, String(v)]),
         ),
+        manualHandicaps: { ...(manualHandicaps ?? {}) },
       };
       return next;
     });
   }, []);
 
-  function updateBaseHandicap(index, value) {
+  function updateBaseHandicap(playerIndex, value) {
+    const playerId = players[playerIndex]?.id;
     setPlayers((prev) => {
       const next = [...prev];
-      next[index] = { ...next[index], handicap: value };
+      next[playerIndex] = { ...next[playerIndex], handicap: value };
       return next;
     });
+    if (!playerId) return;
+    const parsedIndex = parseInt(value, 10) || 0;
+    setRounds((prev) => prev.map((r) => {
+      if (r.manualHandicaps?.[playerId]) return r;
+      const slopeNum = parseInt(r.slope, 10) || 0;
+      const derived = calcPlayingHandicap(parsedIndex, slopeNum);
+      return {
+        ...r,
+        playerHandicaps: { ...r.playerHandicaps, [playerId]: String(derived) },
+      };
+    }));
   }
 
   function updateCourseName(roundIndex, value) {
@@ -113,6 +134,7 @@ export default function EditTournamentScreen({ navigation }) {
         holes: defaultHoles(),
         slope: null,
         playerHandicaps: Object.fromEntries(builtPlayers.map((p) => [p.id, String(p.handicap)])),
+        manualHandicaps: {},
         pairs: randomPairs(builtPlayers),
         scores: {},
       };
@@ -138,6 +160,7 @@ export default function EditTournamentScreen({ navigation }) {
       next[roundIndex] = {
         ...next[roundIndex],
         playerHandicaps: { ...next[roundIndex].playerHandicaps, [playerId]: value },
+        manualHandicaps: { ...(next[roundIndex].manualHandicaps ?? {}), [playerId]: true },
       };
       return next;
     });
@@ -239,7 +262,8 @@ export default function EditTournamentScreen({ navigation }) {
                     initialPlayerHandicaps: Object.fromEntries(
                       Object.entries(r.playerHandicaps ?? {}).map(([id, v]) => [id, parseInt(v, 10) || 0]),
                     ),
-                    players: tournament.players,
+                    initialManualHandicaps: r.manualHandicaps ?? {},
+                    players: players.map((p) => ({ ...p, handicap: parseInt(p.handicap, 10) || 0 })),
                     onSave: handleHolesSaved,
                     courseId: r.courseId ?? null,
                   })
