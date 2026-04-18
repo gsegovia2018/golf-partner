@@ -99,7 +99,7 @@ export default function HomeScreen({ navigation, viewMode = 'auto' }) {
     if (hasContent) {
       if (undoTimerRef.current) clearTimeout(undoTimerRef.current);
       setUndoSnack({ roundIndex: idx, snapshot });
-      undoTimerRef.current = setTimeout(() => setUndoSnack(null), 10000);
+      undoTimerRef.current = setTimeout(() => setUndoSnack(null), 3000);
     }
   }
 
