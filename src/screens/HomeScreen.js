@@ -320,7 +320,10 @@ export default function HomeScreen({ navigation, viewMode = 'auto' }) {
                       <View style={s.roundActionsRow}>
                         <TouchableOpacity
                           style={[s.primaryBtn, s.roundActionBtn]}
-                          onPress={() => navigation.navigate('Scorecard', { roundIndex: i })}
+                          onPress={() => {
+                            const parent = navigation.getParent?.() ?? navigation;
+                            parent.navigate('Scorecard', { roundIndex: i });
+                          }}
                           activeOpacity={0.8}
                         >
                           <Feather name="edit-2" size={16} color={theme.isDark ? theme.accent.primary : theme.text.inverse} />
