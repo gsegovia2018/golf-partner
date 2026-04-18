@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useEffect } from 'react';
 import { NavigationContainer } from '@react-navigation/native';
 import { createStackNavigator, CardStyleInterpolators } from '@react-navigation/stack';
 import { SafeAreaProvider, initialWindowMetrics } from 'react-native-safe-area-context';
@@ -34,6 +34,8 @@ import PlayerPickerScreen from './src/screens/PlayerPickerScreen';
 import CoursePickerScreen from './src/screens/CoursePickerScreen';
 import StatsScreen from './src/screens/StatsScreen';
 import EditTeamsScreen from './src/screens/EditTeamsScreen';
+import GalleryScreen from './src/screens/GalleryScreen';
+import { startUploadWorker } from './src/lib/uploadWorker';
 
 const Stack = createStackNavigator();
 
@@ -69,6 +71,7 @@ function AppNavigator() {
         <Stack.Screen name="CoursePicker" component={CoursePickerScreen} />
         <Stack.Screen name="Stats" component={StatsScreen} />
         <Stack.Screen name="EditTeams" component={EditTeamsScreen} />
+        <Stack.Screen name="Gallery" component={GalleryScreen} />
       </Stack.Navigator>
     </>
   );
@@ -86,6 +89,8 @@ export default function App() {
     'PlayfairDisplay-Bold': PlayfairDisplay_700Bold,
     'PlayfairDisplay-Black': PlayfairDisplay_900Black,
   });
+
+  useEffect(() => { startUploadWorker(); }, []);
 
   if (!fontsLoaded) {
     return <LoadingSplash />;

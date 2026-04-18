@@ -6,6 +6,8 @@ import { Feather } from '@expo/vector-icons';
 import { useTheme } from '../theme/ThemeContext';
 import { ShareableLeaderboard, shareLeaderboard } from '../components/ShareableCard';
 import PullToRefresh from '../components/PullToRefresh';
+import TournamentMemoriesSection from '../components/TournamentMemoriesSection';
+import MediaLightbox from '../components/MediaLightbox';
 import {
   loadTournament, loadAllTournaments,
   setActiveTournament, clearActiveTournament,
@@ -64,6 +66,9 @@ export default function HomeScreen({ navigation, route }) {
   const [undoSnack, setUndoSnack] = useState(null); // { roundIndex, snapshot, at }
   const undoTimerRef = useRef(null);
   const [leaderboardBestBall, setLeaderboardBestBall] = useState(false);
+  const [memLightboxItems, setMemLightboxItems] = useState([]);
+  const [memLightboxIndex, setMemLightboxIndex] = useState(0);
+  const [memLightboxVisible, setMemLightboxVisible] = useState(false);
   const [roundBestBall, setRoundBestBall] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
 
@@ -473,6 +478,18 @@ export default function HomeScreen({ navigation, route }) {
         })}
       </View>
 
+      {tournament && (
+        <TournamentMemoriesSection
+          tournamentId={tournament.id}
+          onOpenGallery={() => navigation.navigate('Gallery', { tournamentId: tournament.id })}
+          onOpenLightbox={(items, i) => {
+            setMemLightboxItems(items);
+            setMemLightboxIndex(i);
+            setMemLightboxVisible(true);
+          }}
+        />
+      )}
+
       {tournament.rounds.length > 0 && (
         <View style={s.card}>
           <View style={s.cardTitleRow}>
@@ -858,6 +875,13 @@ export default function HomeScreen({ navigation, route }) {
         </Pressable>
       </Pressable>
     </Modal>
+
+    <MediaLightbox
+      visible={memLightboxVisible}
+      items={memLightboxItems}
+      initialIndex={memLightboxIndex}
+      onClose={() => setMemLightboxVisible(false)}
+    />
     </SafeAreaView>
   );
 }
