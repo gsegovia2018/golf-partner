@@ -24,16 +24,16 @@ function TabBar({ state, descriptors, navigation }) {
   const { theme } = useTheme();
   const insets = useSafeAreaInsets();
   const fade = React.useRef(new Animated.Value(1)).current;
-  const routeCount = state.routes.length;
-  const prevCount = React.useRef(routeCount);
+  const visibleCount = state.routes.filter((r) => !descriptors[r.key].options.tabBarHidden).length;
+  const prevCount = React.useRef(visibleCount);
 
   React.useEffect(() => {
-    if (prevCount.current !== routeCount) {
+    if (prevCount.current !== visibleCount) {
       fade.setValue(0);
       Animated.timing(fade, { toValue: 1, duration: 200, useNativeDriver: true }).start();
-      prevCount.current = routeCount;
+      prevCount.current = visibleCount;
     }
-  }, [routeCount, fade]);
+  }, [visibleCount, fade]);
 
   const s = makeBarStyles(theme);
 
@@ -49,6 +49,7 @@ function TabBar({ state, descriptors, navigation }) {
     >
       {state.routes.map((route, index) => {
         const { options } = descriptors[route.key];
+        if (options.tabBarHidden) return null;
         const focused = state.index === index;
         const iconName = options.tabBarIconName;
         const label = options.tabBarLabel ?? route.name;
@@ -91,20 +92,16 @@ export default function MainTabs() {
         component={HomeListTab}
         options={{ tabBarLabel: 'Home', tabBarIconName: 'home' }}
       />
-      {showTournament && (
-        <Tab.Screen
-          name="Tournament"
-          component={HomeTournamentTab}
-          options={{ tabBarLabel: 'Tournament', tabBarIconName: 'flag' }}
-        />
-      )}
-      {showScorecard && (
-        <Tab.Screen
-          name="ScorecardTab"
-          component={ScorecardScreen}
-          options={{ tabBarLabel: 'Scorecard', tabBarIconName: 'edit-3' }}
-        />
-      )}
+      <Tab.Screen
+        name="Tournament"
+        component={HomeTournamentTab}
+        options={{ tabBarLabel: 'Tournament', tabBarIconName: 'flag', tabBarHidden: !showTournament }}
+      />
+      <Tab.Screen
+        name="ScorecardTab"
+        component={ScorecardScreen}
+        options={{ tabBarLabel: 'Scorecard', tabBarIconName: 'edit-3', tabBarHidden: !showScorecard }}
+      />
     </Tab.Navigator>
   );
 }

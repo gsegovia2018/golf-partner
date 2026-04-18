@@ -54,9 +54,8 @@ export default function HomeScreen({ navigation, viewMode = 'auto' }) {
     const all = await loadAllTournaments();
     const t = all.find((x) => x.id === id) ?? null;
     setTournament(t);
-    if (t) {
-      try { navigation.navigate('Tournament'); } catch (_) {}
-    }
+    if (!t) return;
+    navigation.navigate('Tournament');
   }
 
   async function goToList() {
