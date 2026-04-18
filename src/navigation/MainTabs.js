@@ -106,7 +106,7 @@ export default function MainTabs() {
       )}
       {showScorecard && (
         <Tab.Screen
-          name="Scorecard"
+          name="ScorecardTab"
           component={ScorecardScreen}
           options={{ tabBarLabel: 'Scorecard', tabBarIconName: 'edit-3' }}
         />
