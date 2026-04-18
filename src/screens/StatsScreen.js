@@ -615,8 +615,7 @@ function HolesTab({ tournament, completedRounds, metric, theme, s }) {
 function PairsTab({ tournament, players, h2hPlayer, setH2hPlayer, selectedPlayer, setSelectedPlayer, metric, theme, s }) {
   const pairs = pairPerformance(tournament);
   const [hwRound, setHwRound] = useState(null);
-  const holeWinsPts = pairHoleWins(tournament, { metric: 'points', roundIndex: hwRound });
-  const holeWinsStr = pairHoleWins(tournament, { metric: 'strokes', roundIndex: hwRound });
+  const holeWins = pairHoleWins(tournament, { metric, roundIndex: hwRound });
   const [h2hRound, setH2hRound] = useState(null);
   const p1 = players[selectedPlayer];
   const p2Idx = h2hPlayer >= players.length ? 0 : h2hPlayer;
@@ -716,10 +715,9 @@ function PairsTab({ tournament, players, h2hPlayer, setH2hPlayer, selectedPlayer
 
       {tournament.rounds.some(r => r.pairs && r.scores && Object.keys(r.scores).length > 0) && (
         <>
-          <Text style={s.sectionTitle}>HOLE WINS</Text>
+          <Text style={s.sectionTitle}>{metric === 'strokes' ? 'HOLE WINS ON STROKES' : 'HOLE WINS ON POINTS'}</Text>
           <RoundSelector tournament={tournament} selected={hwRound} onSelect={setHwRound} theme={theme} s={s} />
-          <HoleWinsTable title="By Points" rows={holeWinsPts} metricMode="points" openRow={openHoleWins} theme={theme} s={s} />
-          <HoleWinsTable title="By Strokes" rows={holeWinsStr} metricMode="strokes" openRow={openHoleWins} theme={theme} s={s} />
+          <HoleWinsTable rows={holeWins} metricMode={metric} openRow={openHoleWins} theme={theme} s={s} />
         </>
       )}
 
@@ -749,22 +747,16 @@ function PairsTab({ tournament, players, h2hPlayer, setH2hPlayer, selectedPlayer
         <>
           <RoundSelector tournament={tournament} selected={h2hRound} onSelect={setH2hRound} theme={theme} s={s} />
           <H2HCard
-            label="Holes won by points"
-            explainer="Higher Stableford points on the hole"
-            p1={p1} p2={p2} bucket={h2h.points}
-            onPress={() => openH2H('points')}
-            theme={theme} s={s}
-          />
-          <H2HCard
-            label="Holes won by strokes"
-            explainer="Fewer strokes on the hole"
-            p1={p1} p2={p2} bucket={h2h.strokes}
-            onPress={() => openH2H('strokes')}
+            label={metric === 'strokes' ? 'Holes won by strokes' : 'Holes won by points'}
+            explainer={metric === 'strokes' ? 'Fewer strokes on the hole' : 'Higher Stableford points on the hole'}
+            p1={p1} p2={p2}
+            bucket={metric === 'strokes' ? h2h.strokes : h2h.points}
+            onPress={() => openH2H(metric)}
             theme={theme} s={s}
           />
           <View style={s.h2hTotals}>
             <Text style={s.h2hTotalsText}>
-              Totals · {firstName(p1)} {h2h.totals.p1Points} pts / {h2h.totals.p1Strokes} str · {firstName(p2)} {h2h.totals.p2Points} pts / {h2h.totals.p2Strokes} str
+              Totals · {firstName(p1)} {metric === 'strokes' ? `${h2h.totals.p1Strokes} str` : `${h2h.totals.p1Points} pts`} · {firstName(p2)} {metric === 'strokes' ? `${h2h.totals.p2Strokes} str` : `${h2h.totals.p2Points} pts`}
             </Text>
             <Text style={s.h2hTotalsSub}>{h2h.totals.holesCompared} holes compared</Text>
           </View>
@@ -785,11 +777,10 @@ function PairsTab({ tournament, players, h2hPlayer, setH2hPlayer, selectedPlayer
   );
 }
 
-function HoleWinsTable({ title, rows, metricMode, openRow, theme, s }) {
+function HoleWinsTable({ rows, metricMode, openRow, theme, s }) {
   const empty = rows.length === 0 || rows.every(r => r.total.W + r.total.T + r.total.L === 0);
   return (
     <View style={s.hwSubSection}>
-      <Text style={s.hwSubTitle}>{title}</Text>
       <View style={s.hwCard}>
         <View style={s.hwGroupHeader}>
           <View style={{ flex: 1.2 }} />
