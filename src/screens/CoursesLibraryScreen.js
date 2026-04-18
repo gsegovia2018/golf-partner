@@ -221,9 +221,10 @@ const makeStyles = (theme) => StyleSheet.create({
   },
   searchIcon: { marginRight: 8 },
   searchInput: {
-    flex: 1, paddingVertical: 12,
+    flex: 1, paddingVertical: 12, paddingHorizontal: 4,
     color: theme.text.primary, fontSize: 15,
     fontFamily: 'PlusJakartaSans-Medium',
+    ...(Platform.OS === 'web' ? { outlineStyle: 'none' } : {}),
   },
   searchClear: { paddingHorizontal: 6, paddingVertical: 4 },
   emptyState: { alignItems: 'center', paddingVertical: 60, gap: 12 },
