@@ -3,7 +3,7 @@ import { View, Text, TouchableOpacity, StyleSheet, ScrollView, Switch, Alert, Fl
 import { Feather } from '@expo/vector-icons';
 
 import { useTheme } from '../theme/ThemeContext';
-import { ShareableLeaderboard, shareView } from '../components/ShareableCard';
+import { ShareableLeaderboard, shareLeaderboard } from '../components/ShareableCard';
 import PullToRefresh from '../components/PullToRefresh';
 import {
   loadTournament, loadAllTournaments,
@@ -198,7 +198,7 @@ export default function HomeScreen({ navigation }) {
       <View style={s.card}>
         <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }}>
           <Text style={s.cardTitle}>LEADERBOARD</Text>
-          <TouchableOpacity onPress={() => shareView(leaderboardRef)} activeOpacity={0.7} hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}>
+          <TouchableOpacity onPress={() => shareLeaderboard({ tournamentName: tournament.name, leaderboard, theme, viewRef: leaderboardRef })} activeOpacity={0.7} hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}>
             <Feather name="share-2" size={16} color={theme.accent.primary} />
           </TouchableOpacity>
         </View>
@@ -488,10 +488,10 @@ const makeStyles = (t) => StyleSheet.create({
   header: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingHorizontal: 20, paddingTop: 16, paddingBottom: 12, backgroundColor: t.bg.primary },
   headerLeft: { flexDirection: 'row', alignItems: 'center' },
   headerActions: { flexDirection: 'row', gap: 8 },
-  title: { fontFamily: 'PlusJakartaSans-ExtraBold', fontSize: 28, color: t.text.primary, letterSpacing: -0.5 },
+  title: { fontFamily: 'PlayfairDisplay-Black', fontSize: 30, color: t.text.primary, letterSpacing: -0.5 },
   subtitle: { fontFamily: 'PlusJakartaSans-Regular', fontSize: 12, color: t.text.muted, marginTop: 2 },
   backBtn: { flexDirection: 'row', alignItems: 'center' },
-  headerTitle: { fontFamily: 'PlusJakartaSans-Bold', fontSize: 18, color: t.text.primary, flexShrink: 1 },
+  headerTitle: { fontFamily: 'PlayfairDisplay-Bold', fontSize: 20, color: t.text.primary, flexShrink: 1 },
   iconBtn: {
     width: 36, height: 36, borderRadius: 10,
     backgroundColor: t.isDark ? t.bg.secondary : t.bg.card,
