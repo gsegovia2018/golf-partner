@@ -214,40 +214,25 @@ export default function HomeScreen({ navigation, viewMode = 'auto' }) {
     );
   }
 
-  const settings = useMemo(
-    () => ({ ...DEFAULT_SETTINGS, ...tournament.settings }),
-    [tournament.settings],
-  );
+  const settings = { ...DEFAULT_SETTINGS, ...tournament.settings };
 
   const completedRounds = tournament.rounds.filter(
     (r) => r.scores && Object.keys(r.scores).length > 0,
   );
 
-  const leaderboard = useMemo(() => tournamentLeaderboard(tournament), [tournament]);
-  const bestWorstLeaderboard = useMemo(
-    () => (leaderboardBestBall ? tournamentBestWorstLeaderboard(tournament) : null),
-    [leaderboardBestBall, tournament],
-  );
-  const strokesByPlayer = useMemo(
-    () => Object.fromEntries(leaderboard.map((e) => [e.player.id, e.strokes])),
-    [leaderboard],
-  );
+  const leaderboard = tournamentLeaderboard(tournament);
+  const bestWorstLeaderboard = leaderboardBestBall ? tournamentBestWorstLeaderboard(tournament) : null;
+  const strokesByPlayer = Object.fromEntries(leaderboard.map((e) => [e.player.id, e.strokes]));
   const displayedBoard = leaderboardBestBall && bestWorstLeaderboard ? bestWorstLeaderboard : leaderboard;
 
   const selectedRoundData = tournament.rounds[selectedRound];
   const selectedRoundHasScores = !!(selectedRoundData?.scores && Object.keys(selectedRoundData.scores).length > 0);
-  const selectedRoundPlayerTotals = useMemo(
-    () => (selectedRoundHasScores && !leaderboardBestBall
-      ? roundTotals(selectedRoundData, tournament.players)
-      : null),
-    [selectedRoundHasScores, leaderboardBestBall, selectedRoundData, tournament.players],
-  );
-  const selectedRoundBB = useMemo(
-    () => (selectedRoundHasScores && leaderboardBestBall && selectedRoundData.pairs?.length
-      ? calcBestWorstBall(selectedRoundData, tournament.players)
-      : null),
-    [selectedRoundHasScores, leaderboardBestBall, selectedRoundData, tournament.players],
-  );
+  const selectedRoundPlayerTotals = selectedRoundHasScores && !leaderboardBestBall
+    ? roundTotals(selectedRoundData, tournament.players)
+    : null;
+  const selectedRoundBB = selectedRoundHasScores && leaderboardBestBall && selectedRoundData.pairs?.length
+    ? calcBestWorstBall(selectedRoundData, tournament.players)
+    : null;
   const getSelectedRoundValue = (playerId) => {
     if (leaderboardBestBall) {
       if (!selectedRoundBB) return null;
