@@ -7,8 +7,6 @@ import { useTheme } from '../theme/ThemeContext';
 import { useAuth } from '../context/AuthContext';
 import { ShareableLeaderboard, shareLeaderboard } from '../components/ShareableCard';
 import PullToRefresh from '../components/PullToRefresh';
-import TournamentMemoriesSection from '../components/TournamentMemoriesSection';
-import MediaLightbox from '../components/MediaLightbox';
 import {
   loadTournament, loadAllTournaments,
   setActiveTournament, clearActiveTournament,
@@ -68,9 +66,6 @@ export default function HomeScreen({ navigation, route }) {
   const [undoSnack, setUndoSnack] = useState(null); // { roundIndex, snapshot, at }
   const undoTimerRef = useRef(null);
   const [leaderboardBestBall, setLeaderboardBestBall] = useState(false);
-  const [memLightboxItems, setMemLightboxItems] = useState([]);
-  const [memLightboxIndex, setMemLightboxIndex] = useState(0);
-  const [memLightboxVisible, setMemLightboxVisible] = useState(false);
   const [roundBestBall, setRoundBestBall] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [showInvite, setShowInvite] = useState(false);
@@ -468,6 +463,14 @@ export default function HomeScreen({ navigation, route }) {
               <Feather name="share" size={18} color={theme.accent.primary} />
             </TouchableOpacity>
           )}
+          <TouchableOpacity
+            style={s.iconBtn}
+            onPress={() => navigation.navigate('Gallery', { tournamentId: tournament.id })}
+            activeOpacity={0.7}
+            accessibilityLabel="Recuerdos"
+          >
+            <Feather name="image" size={18} color={theme.accent.primary} />
+          </TouchableOpacity>
           <TouchableOpacity style={s.iconBtn} onPress={() => setShowSettings(true)} activeOpacity={0.7}>
             <Feather name="settings" size={18} color={theme.accent.primary} />
           </TouchableOpacity>
@@ -519,18 +522,6 @@ export default function HomeScreen({ navigation, route }) {
           );
         })}
       </View>
-
-      {tournament && (
-        <TournamentMemoriesSection
-          tournamentId={tournament.id}
-          onOpenGallery={() => navigation.navigate('Gallery', { tournamentId: tournament.id })}
-          onOpenLightbox={(items, i) => {
-            setMemLightboxItems(items);
-            setMemLightboxIndex(i);
-            setMemLightboxVisible(true);
-          }}
-        />
-      )}
 
       {tournament.rounds.length > 0 && (
         <View style={s.card}>
@@ -974,12 +965,6 @@ export default function HomeScreen({ navigation, route }) {
       </Pressable>
     </Modal>
 
-    <MediaLightbox
-      visible={memLightboxVisible}
-      items={memLightboxItems}
-      initialIndex={memLightboxIndex}
-      onClose={() => setMemLightboxVisible(false)}
-    />
     </SafeAreaView>
   );
 }
