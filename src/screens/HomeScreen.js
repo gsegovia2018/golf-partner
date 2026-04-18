@@ -884,6 +884,22 @@ export default function HomeScreen({ navigation, route }) {
 
           <TouchableOpacity
             style={s.menuItem}
+            onPress={() => {
+              setShowSettings(false);
+              navigation.navigate('Members', {
+                tournamentId: tournament.id,
+                tournamentName: tournament.name,
+              });
+            }}
+            activeOpacity={0.7}
+          >
+            <Feather name="user-check" size={18} color={theme.accent.primary} />
+            <Text style={s.menuItemText}>Members</Text>
+            <Feather name="chevron-right" size={16} color={theme.text.muted} />
+          </TouchableOpacity>
+
+          <TouchableOpacity
+            style={s.menuItem}
             onPress={() => { setShowSettings(false); navigation.navigate('PlayersLibrary'); }}
             activeOpacity={0.7}
           >

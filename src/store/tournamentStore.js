@@ -416,6 +416,67 @@ export async function generateInviteCode(tournamentId) {
   return data.code;
 }
 
+// Members list for a tournament: owner + everyone who joined via an invite
+// code. Profile fields are joined client-side since PostgREST can't traverse
+// tournament_members → auth.users → profiles automatically.
+export async function loadTournamentMembers(tournamentId) {
+  const [{ data: members, error: memErr }, { data: tournament, error: tErr }] = await Promise.all([
+    supabase.from('tournament_members')
+      .select('user_id, role, created_at')
+      .eq('tournament_id', tournamentId)
+      .order('created_at'),
+    supabase.from('tournaments')
+      .select('created_by, created_at')
+      .eq('id', tournamentId)
+      .maybeSingle(),
+  ]);
+  if (memErr) throw memErr;
+  if (tErr) throw tErr;
+
+  const ids = [...new Set(
+    [tournament?.created_by, ...(members ?? []).map((m) => m.user_id)].filter(Boolean),
+  )];
+
+  let byId = {};
+  if (ids.length > 0) {
+    const { data: profiles, error: pErr } = await supabase
+      .from('profiles')
+      .select('user_id, display_name, handicap, avatar_color')
+      .in('user_id', ids);
+    if (pErr) throw pErr;
+    byId = Object.fromEntries((profiles ?? []).map((p) => [p.user_id, p]));
+  }
+
+  const rows = [];
+  if (tournament?.created_by) {
+    rows.push({
+      userId: tournament.created_by,
+      role: 'owner',
+      joinedAt: tournament.created_at,
+      profile: byId[tournament.created_by] ?? null,
+    });
+  }
+  (members ?? []).forEach((m) => {
+    if (m.user_id === tournament?.created_by) return;
+    rows.push({
+      userId: m.user_id,
+      role: m.role,
+      joinedAt: m.created_at,
+      profile: byId[m.user_id] ?? null,
+    });
+  });
+  return rows;
+}
+
+export async function removeTournamentMember(tournamentId, userId) {
+  const { error } = await supabase
+    .from('tournament_members')
+    .delete()
+    .eq('tournament_id', tournamentId)
+    .eq('user_id', userId);
+  if (error) throw error;
+}
+
 export async function joinTournamentByCode(code) {
   const userId = await getCurrentUserId();
   if (!userId) throw new Error('Must be signed in to join');

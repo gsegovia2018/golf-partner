@@ -39,6 +39,7 @@ import StatsScreen from './src/screens/StatsScreen';
 import EditTeamsScreen from './src/screens/EditTeamsScreen';
 import JoinTournamentScreen from './src/screens/JoinTournamentScreen';
 import ProfileScreen from './src/screens/ProfileScreen';
+import MembersScreen from './src/screens/MembersScreen';
 
 const Stack = createStackNavigator();
 
@@ -87,6 +88,7 @@ function AppNavigator() {
         <Stack.Screen name="EditTeams" component={EditTeamsScreen} />
         <Stack.Screen name="JoinTournament" component={JoinTournamentScreen} />
         <Stack.Screen name="Profile" component={ProfileScreen} />
+        <Stack.Screen name="Members" component={MembersScreen} />
       </Stack.Navigator>
     </>
   );
