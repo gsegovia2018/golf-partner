@@ -1,4 +1,5 @@
-import React from 'react';
+import React, { useEffect } from 'react';
+import { View, ActivityIndicator } from 'react-native';
 import { NavigationContainer } from '@react-navigation/native';
 import { createStackNavigator, CardStyleInterpolators } from '@react-navigation/stack';
 import { SafeAreaProvider, initialWindowMetrics } from 'react-native-safe-area-context';
@@ -20,6 +21,8 @@ import {
 
 import { ThemeProvider, useTheme } from './src/theme/ThemeContext';
 import LoadingSplash from './src/components/LoadingSplash';
+import { AuthProvider, useAuth } from './src/context/AuthContext';
+import AuthScreen from './src/screens/AuthScreen';
 
 import HomeScreen from './src/screens/HomeScreen';
 import SetupScreen from './src/screens/SetupScreen';
@@ -34,11 +37,27 @@ import PlayerPickerScreen from './src/screens/PlayerPickerScreen';
 import CoursePickerScreen from './src/screens/CoursePickerScreen';
 import StatsScreen from './src/screens/StatsScreen';
 import EditTeamsScreen from './src/screens/EditTeamsScreen';
+import GalleryScreen from './src/screens/GalleryScreen';
+import JoinTournamentScreen from './src/screens/JoinTournamentScreen';
+import ProfileScreen from './src/screens/ProfileScreen';
+import MembersScreen from './src/screens/MembersScreen';
+import { startUploadWorker } from './src/lib/uploadWorker';
 
 const Stack = createStackNavigator();
 
 function AppNavigator() {
   const { theme, mode } = useTheme();
+  const { session, loading } = useAuth();
+
+  if (loading) {
+    return (
+      <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: '#006747' }}>
+        <ActivityIndicator size="large" color="#ffd700" />
+      </View>
+    );
+  }
+
+  if (!session) return <AuthScreen />;
 
   return (
     <>
@@ -69,6 +88,10 @@ function AppNavigator() {
         <Stack.Screen name="CoursePicker" component={CoursePickerScreen} />
         <Stack.Screen name="Stats" component={StatsScreen} />
         <Stack.Screen name="EditTeams" component={EditTeamsScreen} />
+        <Stack.Screen name="Gallery" component={GalleryScreen} />
+        <Stack.Screen name="JoinTournament" component={JoinTournamentScreen} />
+        <Stack.Screen name="Profile" component={ProfileScreen} />
+        <Stack.Screen name="Members" component={MembersScreen} />
       </Stack.Navigator>
     </>
   );
@@ -87,6 +110,8 @@ export default function App() {
     'PlayfairDisplay-Black': PlayfairDisplay_900Black,
   });
 
+  useEffect(() => { startUploadWorker(); }, []);
+
   if (!fontsLoaded) {
     return <LoadingSplash />;
   }
@@ -94,9 +119,11 @@ export default function App() {
   return (
     <SafeAreaProvider initialMetrics={initialWindowMetrics}>
       <ThemeProvider>
-        <NavigationContainer>
-          <AppNavigator />
-        </NavigationContainer>
+        <AuthProvider>
+          <NavigationContainer>
+            <AppNavigator />
+          </NavigationContainer>
+        </AuthProvider>
       </ThemeProvider>
     </SafeAreaProvider>
   );

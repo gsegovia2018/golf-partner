@@ -14,6 +14,12 @@ import {
 } from '../store/tournamentStore';
 import { useTheme } from '../theme/ThemeContext';
 import PullToRefresh from '../components/PullToRefresh';
+import MediaLightbox from '../components/MediaLightbox';
+import AttachMediaSheet from '../components/AttachMediaSheet';
+import CaptureMenuSheet from '../components/CaptureMenuSheet';
+import { pickMedia, attachMedia } from '../lib/mediaCapture';
+import { useRoundMedia } from '../hooks/useRoundMedia';
+import { Alert } from 'react-native';
 
 // Web-only CSS scroll-snap. On native, `pagingEnabled` is handled by the
 // platform. On web, react-native-web 0.21's `pagingEnabled` only sets
@@ -75,6 +81,13 @@ export default function ScorecardScreen({ navigation, route }) {
   const hasAutoJumpedRef = useRef(false);
   const [celebration, setCelebration] = useState({ playerId: null, holeNumber: null, label: null });
   const celebrationAnim = useRef(new Animated.Value(0)).current;
+  const [pickerAsset, setPickerAsset] = useState(null);
+  const [lightboxItems, setLightboxItems] = useState([]);
+  const [lightboxIndex, setLightboxIndex] = useState(0);
+  const [lightboxVisible, setLightboxVisible] = useState(false);
+  const [captureMenuVisible, setCaptureMenuVisible] = useState(false);
+  const { items: roundMediaItems } = useRoundMedia(tournament?.rounds?.[paramRoundIndex ?? tournament?.currentRound ?? 0]?.id);
+  const roundMediaCount = roundMediaItems.length;
   const roundIndex = paramRoundIndex ?? tournament?.currentRound ?? 0;
 
   useEffect(() => { tournamentRef.current = tournament; }, [tournament]);
@@ -289,6 +302,40 @@ export default function ScorecardScreen({ navigation, route }) {
 
   const goBack = useCallback(() => navigation.goBack(), [navigation]);
 
+  const openCapturePicker = useCallback(() => {
+    setCaptureMenuVisible(true);
+  }, []);
+
+  const handleCaptureMenuSelect = useCallback(async ({ source, mediaTypes }) => {
+    setCaptureMenuVisible(false);
+    try {
+      const asset = await pickMedia({ source, mediaTypes });
+      if (asset) setPickerAsset(asset);
+    } catch (e) {
+      Alert.alert('No se pudo capturar', String(e?.message ?? e));
+    }
+  }, []);
+
+  const onAttachConfirm = useCallback(async ({ holeIndex, caption, uploaderLabel }) => {
+    const asset = pickerAsset;
+    setPickerAsset(null);
+    if (!asset || !tournament || !round) return;
+    try {
+      await attachMedia({
+        tournamentId: tournament.id,
+        roundId: round.id,
+        holeIndex,
+        kind: asset.kind,
+        localUri: asset.localUri,
+        durationS: asset.durationS,
+        caption,
+        uploaderLabel,
+      });
+    } catch (e) {
+      Alert.alert('No se pudo adjuntar', String(e?.message ?? e));
+    }
+  }, [pickerAsset, tournament, round]);
+
   if (!tournament || !round) return null;
 
   const hole = round.holes.find((h) => h.number === currentHole);
@@ -301,28 +348,37 @@ export default function ScorecardScreen({ navigation, route }) {
           <Feather name="chevron-left" size={22} color={theme.accent.primary} />
         </TouchableOpacity>
         <Text style={s.headerTitle}>Scorecard</Text>
-        <View style={s.togglePill}>
+        <View style={s.headerRight}>
+          <View style={s.togglePill}>
+            <TouchableOpacity
+              style={[s.toggleBtn, view === 'hole' && s.toggleBtnActive]}
+              onPress={() => setView('hole')}
+              accessibilityLabel="Hole by hole view"
+            >
+              <Feather
+                name="circle"
+                size={12}
+                color={view === 'hole' ? theme.text.inverse : theme.text.muted}
+              />
+            </TouchableOpacity>
+            <TouchableOpacity
+              style={[s.toggleBtn, view === 'grid' && s.toggleBtnActive]}
+              onPress={() => setView('grid')}
+              accessibilityLabel="All holes grid view"
+            >
+              <Feather
+                name="grid"
+                size={12}
+                color={view === 'grid' ? theme.text.inverse : theme.text.muted}
+              />
+            </TouchableOpacity>
+          </View>
           <TouchableOpacity
-            style={[s.toggleBtn, view === 'hole' && s.toggleBtnActive]}
-            onPress={() => setView('hole')}
-            accessibilityLabel="Hole by hole view"
+            onPress={openCapturePicker}
+            style={s.cameraBtn}
+            accessibilityLabel="Adjuntar recuerdo"
           >
-            <Feather
-              name="circle"
-              size={12}
-              color={view === 'hole' ? theme.text.inverse : theme.text.muted}
-            />
-          </TouchableOpacity>
-          <TouchableOpacity
-            style={[s.toggleBtn, view === 'grid' && s.toggleBtnActive]}
-            onPress={() => setView('grid')}
-            accessibilityLabel="All holes grid view"
-          >
-            <Feather
-              name="grid"
-              size={12}
-              color={view === 'grid' ? theme.text.inverse : theme.text.muted}
-            />
+            <Feather name="camera" size={20} color={theme.accent.primary} />
           </TouchableOpacity>
         </View>
       </View>
@@ -369,6 +425,37 @@ export default function ScorecardScreen({ navigation, route }) {
           onRefresh={onRefresh}
         />
       )}
+
+      <CaptureMenuSheet
+        visible={captureMenuVisible}
+        onSelect={handleCaptureMenuSelect}
+        onClose={() => setCaptureMenuVisible(false)}
+        extraActions={roundMediaCount > 0 ? [{
+          key: 'view',
+          icon: 'image',
+          label: `Ver recuerdos de esta ronda (${roundMediaCount})`,
+          onPress: () => {
+            setCaptureMenuVisible(false);
+            setLightboxItems(roundMediaItems);
+            setLightboxIndex(0);
+            setLightboxVisible(true);
+          },
+        }] : []}
+      />
+      <AttachMediaSheet
+        visible={!!pickerAsset}
+        asset={pickerAsset}
+        holes={round.holes ?? []}
+        defaultHoleIndex={typeof currentHole === 'number' ? currentHole - 1 : null}
+        onCancel={() => setPickerAsset(null)}
+        onConfirm={onAttachConfirm}
+      />
+      <MediaLightbox
+        visible={lightboxVisible}
+        items={lightboxItems}
+        initialIndex={lightboxIndex}
+        onClose={() => setLightboxVisible(false)}
+      />
     </SafeAreaView>
   );
 }
@@ -1264,6 +1351,17 @@ function makeStyles(theme) {
       height: 36,
       borderRadius: 10,
       backgroundColor: theme.isDark ? theme.bg.elevated : theme.bg.secondary,
+      alignItems: 'center',
+      justifyContent: 'center',
+    },
+    headerRight: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: 8,
+    },
+    cameraBtn: {
+      width: 32,
+      height: 32,
       alignItems: 'center',
       justifyContent: 'center',
     },

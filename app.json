@@ -25,6 +25,16 @@
     },
     "web": {
       "favicon": "./assets/favicon.png"
-    }
+    },
+    "plugins": [
+      [
+        "expo-image-picker",
+        {
+          "photosPermission": "Necesitamos acceder a tu galería para añadir fotos a la ronda.",
+          "cameraPermission": "Necesitamos acceder a la cámara para capturar fotos durante la ronda.",
+          "microphonePermission": "Necesitamos acceder al micrófono para grabar el audio de los videos."
+        }
+      ]
+    ]
   }
 }
