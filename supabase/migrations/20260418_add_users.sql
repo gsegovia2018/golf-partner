@@ -2,13 +2,17 @@
 -- Users + sharing schema for the `gs/users` branch.
 -- ============================================================================
 --
--- HOW TO RUN
--- ----------
--- 1. Open: https://supabase.com/dashboard/project/cxqugzmgbcknlxfipfse/sql/new
+-- STATUS
+-- ------
+-- Applied to project cxqugzmgbcknlxfipfse on 2026-04-19.
+-- Kept in the repo for fresh installs and as an audit trail; safe to re-run
+-- (every statement is idempotent).
+--
+-- HOW TO RUN (fresh project)
+-- --------------------------
+-- 1. Open: https://supabase.com/dashboard/project/<ref>/sql/new
 -- 2. Paste this entire file and click "Run".
 -- 3. Run the verification queries at the bottom (inside /* VERIFY */).
---
--- The script is idempotent — safe to re-run if something fails partway.
 --
 -- WHAT IT ADDS
 -- ------------
