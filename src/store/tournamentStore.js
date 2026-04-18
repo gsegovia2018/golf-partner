@@ -60,15 +60,30 @@ export async function loadAllTournaments() {
 }
 
 export async function loadTournament() {
-  const [all, activeId] = await Promise.all([
-    loadAllTournaments(),
-    AsyncStorage.getItem(ACTIVE_ID_KEY),
-  ]);
+  const activeId = await AsyncStorage.getItem(ACTIVE_ID_KEY);
   if (!activeId) return null;
-  return all.find((t) => t.id === activeId) ?? null;
+
+  const cached = await readLocal(activeId);
+  if (cached) {
+    // Kick remote refresh in background; do not block the UI.
+    loadAllTournaments()
+      .then((all) => {
+        const remote = all.find((t) => t.id === activeId);
+        if (remote) saveLocal(remote).catch(() => {});
+      })
+      .catch(() => {});
+    return cached;
+  }
+
+  const all = await loadAllTournaments();
+  const remote = all.find((t) => t.id === activeId) ?? null;
+  if (remote) await saveLocal(remote);
+  return remote;
 }
 
-async function persistTournament(tournament) {
+const ACTIVE_TOURNAMENT_KEY = '@golf_tournament_'; // + id
+
+async function persistRemote(tournament) {
   const { error } = await supabase.from('tournaments').upsert({
     id: tournament.id,
     name: tournament.name,
@@ -78,10 +93,54 @@ async function persistTournament(tournament) {
   if (error) throw error;
 }
 
-export async function saveTournament(tournament) {
-  await persistTournament(tournament);
-  await AsyncStorage.setItem(ACTIVE_ID_KEY, tournament.id);
+export async function saveLocal(tournament) {
+  await AsyncStorage.multiSet([
+    [ACTIVE_ID_KEY, tournament.id],
+    [ACTIVE_TOURNAMENT_KEY + tournament.id, JSON.stringify(tournament)],
+  ]);
   _emitChange();
+}
+
+export async function readLocal(id) {
+  const raw = await AsyncStorage.getItem(ACTIVE_TOURNAMENT_KEY + id);
+  if (!raw) return null;
+  try { return JSON.parse(raw); } catch { return null; }
+}
+
+// Backwards-compatible entry: local first, then attempt remote. Never throws on
+// remote failure — the sync worker will retry later.
+export async function saveTournament(tournament) {
+  await saveLocal(tournament);
+  try {
+    await persistRemote(tournament);
+  } catch (_) {
+    // Swallow: the sync worker will retry.
+  }
+}
+
+// Worker-only: used by syncWorker when pushing a merged blob.
+export async function pushRemote(tournament) {
+  await persistRemote(tournament);
+}
+
+// ── Sync status observable ───────────────────────────────────────────────────
+
+const SYNC_STATES = ['idle', 'syncing', 'pending', 'error'];
+let _syncStatus = 'idle';
+const _syncSubs = new Set();
+
+export function getSyncStatus() { return _syncStatus; }
+
+export function subscribeSyncStatus(fn) {
+  _syncSubs.add(fn);
+  try { fn(_syncStatus); } catch (_) {}
+  return () => _syncSubs.delete(fn);
+}
+
+export function _setSyncStatus(next) {
+  if (!SYNC_STATES.includes(next) || next === _syncStatus) return;
+  _syncStatus = next;
+  _syncSubs.forEach((fn) => { try { fn(next); } catch (_) {} });
 }
 
 export async function setActiveTournament(id) {
@@ -179,7 +238,7 @@ export async function propagatePlayerToTournaments(playerId, { name, handicap })
       return recomputeRoundPlayingHandicaps(patched, nextPlayers);
     });
 
-    await persistTournament({ ...t, players: nextPlayers, rounds: nextRounds });
+    await persistRemote({ ...t, players: nextPlayers, rounds: nextRounds });
     updatedIds.push(t.id);
   }
   if (updatedIds.length > 0) _emitChange();
@@ -207,7 +266,7 @@ export async function propagateCourseToTournaments(courseId, { slope, holes }) {
     });
     if (changed) {
       const next = { ...t, rounds: nextRounds };
-      await persistTournament(next);
+      await persistRemote(next);
       updatedIds.push(next.id);
     }
   }
