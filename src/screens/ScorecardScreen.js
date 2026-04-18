@@ -278,13 +278,17 @@ function HoleView({ round, roundIndex, players, scores, notes, currentHole, hole
   const [pagerWidth, setPagerWidth] = useState(0);
   const pagerRef = useRef(null);
   const holeScrollOffset = useRef(0);
+  const isUserScrollingHole = useRef(false);
+  const holePagerInitialized = useRef(false);
 
   useEffect(() => {
     if (!pagerRef.current || pagerWidth <= 0) return;
+    if (isUserScrollingHole.current) return;
     const target = (currentHole - 1) * pagerWidth;
     if (Math.abs(holeScrollOffset.current - target) < 1) return;
-    pagerRef.current.scrollTo({ x: target, animated: false });
+    pagerRef.current.scrollTo({ x: target, animated: holePagerInitialized.current });
     holeScrollOffset.current = target;
+    holePagerInitialized.current = true;
   }, [currentHole, pagerWidth]);
 
   if (!hole) return null;
@@ -298,7 +302,14 @@ function HoleView({ round, roundIndex, players, scores, notes, currentHole, hole
         onRefresh={onRefresh}
       >
       {/* Horizontal pager: one page per hole (swipe to change hole) */}
-      <View style={s.pagerWrap} onLayout={(e) => setPagerWidth(e.nativeEvent.layout.width)}>
+      <View
+        style={s.pagerWrap}
+        onLayout={(e) => {
+          const w = e.nativeEvent.layout.width;
+          holeScrollOffset.current = (currentHole - 1) * w;
+          setPagerWidth(w);
+        }}
+      >
         {pagerWidth > 0 && (
           <ScrollView
             ref={pagerRef}
@@ -306,11 +317,24 @@ function HoleView({ round, roundIndex, players, scores, notes, currentHole, hole
             pagingEnabled
             showsHorizontalScrollIndicator={false}
             scrollEventThrottle={16}
+            onScrollBeginDrag={() => { isUserScrollingHole.current = true; }}
             onScroll={(e) => {
+              holeScrollOffset.current = e.nativeEvent.contentOffset.x;
+            }}
+            onScrollEndDrag={(e) => {
               const x = e.nativeEvent.contentOffset.x;
               holeScrollOffset.current = x;
-              const idx = Math.round(x / pagerWidth);
-              const newHole = idx + 1;
+              if (Math.abs(x - Math.round(x / pagerWidth) * pagerWidth) < 1) {
+                isUserScrollingHole.current = false;
+                const newHole = Math.round(x / pagerWidth) + 1;
+                if (newHole !== currentHole) onGoToHole(newHole);
+              }
+            }}
+            onMomentumScrollEnd={(e) => {
+              const x = e.nativeEvent.contentOffset.x;
+              holeScrollOffset.current = x;
+              isUserScrollingHole.current = false;
+              const newHole = Math.round(x / pagerWidth) + 1;
               if (newHole !== currentHole) onGoToHole(newHole);
             }}
             contentOffset={{ x: (currentHole - 1) * pagerWidth, y: 0 }}
