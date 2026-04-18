@@ -10,6 +10,7 @@ import { Feather } from '@expo/vector-icons';
 import {
   loadTournament, saveTournament, subscribeTournamentChanges,
   calcStablefordPoints, calcBestWorstBall, pickupStrokes, DEFAULT_SETTINGS,
+  roundPairLeaderboard,
 } from '../store/tournamentStore';
 import { useTheme } from '../theme/ThemeContext';
 import PullToRefresh from '../components/PullToRefresh';
@@ -71,7 +72,7 @@ export default function ScorecardScreen({ navigation, route }) {
   // scheduled, cleared after the save finishes.
   const pendingSaveRef = useRef(false);
   const scoreAnims = useRef({});
-  const prevHoleRef = useRef(null);
+  const hasAutoJumpedRef = useRef(false);
   const [celebration, setCelebration] = useState({ playerId: null, holeNumber: null, label: null });
   const celebrationAnim = useRef(new Animated.Value(0)).current;
   const roundIndex = paramRoundIndex ?? tournament?.currentRound ?? 0;
@@ -82,10 +83,22 @@ export default function ScorecardScreen({ navigation, route }) {
     const t = await loadTournament();
     if (!t) return;
     const idx = paramRoundIndex ?? t.currentRound;
+    const round = t.rounds[idx];
+    const roundScores = round?.scores ?? {};
     setTournament(t);
     if (!preserveLocalEdits) {
-      setScores(t.rounds[idx]?.scores ?? {});
-      setNotes(t.rounds[idx]?.notes ?? '');
+      setScores(roundScores);
+      setNotes(round?.notes ?? '');
+
+      // Only on first load: jump to the first hole with no scores entered.
+      if (!hasAutoJumpedRef.current && round?.holes?.length) {
+        hasAutoJumpedRef.current = true;
+        const firstEmpty = round.holes.find((h) =>
+          t.players.every((p) => roundScores[p.id]?.[h.number] == null)
+        );
+        if (firstEmpty) setCurrentHole(firstEmpty.number);
+        else setCurrentHole(round.holes[round.holes.length - 1].number);
+      }
     }
   }, [paramRoundIndex]);
 
@@ -101,32 +114,6 @@ export default function ScorecardScreen({ navigation, route }) {
     setRefreshing(true);
     try { await reload(); } finally { setRefreshing(false); }
   }, [reload]);
-
-  // Record par for the hole the user just *left* (not the one they arrived at).
-  // This means a hole only counts in the leaderboard once the user advances
-  // past it — merely opening the scorecard on hole 1 no longer inflates totals.
-  useEffect(() => {
-    const leavingHole = prevHoleRef.current;
-    prevHoleRef.current = currentHole;
-    if (leavingHole == null || leavingHole === currentHole) return;
-    if (!tournament) return;
-    const r = tournament.rounds[roundIndex];
-    const h = r.holes.find((x) => x.number === leavingHole);
-    if (!h) return;
-    setScores((prev) => {
-      let changed = false;
-      const next = { ...prev };
-      tournament.players.forEach((p) => {
-        if (next[p.id]?.[leavingHole] == null) {
-          next[p.id] = { ...(next[p.id] ?? {}), [leavingHole]: h.par };
-          changed = true;
-        }
-      });
-      if (!changed) return prev;
-      autoSave(next);
-      return next;
-    });
-  }, [currentHole, tournament, roundIndex]);
 
   const autoSave = useCallback((newScores) => {
     if (saveTimeoutRef.current) clearTimeout(saveTimeoutRef.current);
@@ -192,15 +179,21 @@ export default function ScorecardScreen({ navigation, route }) {
   );
 
   const triggerCelebration = useCallback((playerId, holeNumber, label) => {
-    const holdMs = label === 'BIRDIE' ? 550 : label === 'EAGLE' ? 750 : 1000;
+    const holdMs =
+      label === 'BIRDIE' ? 900 :
+      label === 'EAGLE' ? 1200 :
+      label === 'ALBATROSS' ? 1500 :
+      1800; // HOLE IN ONE
     haptic('success');
     celebrationAnim.stopAnimation();
     celebrationAnim.setValue(0);
     setCelebration({ playerId, holeNumber, label });
     Animated.sequence([
-      Animated.timing(celebrationAnim, { toValue: 1, duration: 220, useNativeDriver: true }),
+      Animated.spring(celebrationAnim, {
+        toValue: 1, friction: 6, tension: 80, useNativeDriver: true,
+      }),
       Animated.delay(holdMs),
-      Animated.timing(celebrationAnim, { toValue: 0, duration: 380, useNativeDriver: true }),
+      Animated.timing(celebrationAnim, { toValue: 0, duration: 420, useNativeDriver: true }),
     ]).start(({ finished }) => {
       if (finished) setCelebration({ playerId: null, holeNumber: null, label: null });
     });
@@ -234,8 +227,15 @@ export default function ScorecardScreen({ navigation, route }) {
 
     const holePar = round?.holes?.find((h) => h.number === holeNumber)?.par ?? 4;
     setScores((prev) => {
-      const current = prev[playerId]?.[holeNumber] ?? holePar;
-      const newStrokes = Math.max(1, current + delta);
+      const current = prev[playerId]?.[holeNumber];
+      // First interaction on an un-scored hole: + lands on par, - lands on birdie.
+      // After that, +/- step by one as usual. Minimum is 1 stroke.
+      let newStrokes;
+      if (current == null) {
+        newStrokes = delta > 0 ? holePar : Math.max(1, holePar - 1);
+      } else {
+        newStrokes = Math.max(1, current + delta);
+      }
       const next = { ...prev, [playerId]: { ...prev[playerId], [holeNumber]: newStrokes } };
       autoSave(next);
       if (newStrokes !== current) {
@@ -380,7 +380,6 @@ const HolePage = React.memo(function HolePage({
   pageHole, width, height, courseName, roundIndex,
   round, players, scores,
   theme, s,
-  celebration, celebrationAnim,
   onStep, onSetScore, getScoreAnim,
 }) {
   const pairs = round.pairs ?? [];
@@ -445,24 +444,6 @@ const HolePage = React.memo(function HolePage({
                 <Text style={[s.pairLabel, { color: pairColor, marginTop: idx === 0 ? 0 : 16 }]}>{pairLabelText}</Text>
               )}
               <View style={[s.playerCard, { borderLeftColor: pairColor, borderLeftWidth: 3 }]}>
-                {celebration?.playerId === player.id
-                  && celebration?.holeNumber === pageHole.number
-                  && celebration?.label && (
-                  <Animated.View
-                    pointerEvents="none"
-                    style={[
-                      s.celebrationBanner,
-                      {
-                        opacity: celebrationAnim,
-                        transform: [
-                          { scale: celebrationAnim.interpolate({ inputRange: [0, 1], outputRange: [0.85, 1] }) },
-                        ],
-                      },
-                    ]}
-                  >
-                    <Text style={s.celebrationLabel}>{celebration.label}</Text>
-                  </Animated.View>
-                )}
                 <View style={s.playerCardRow}>
                   <View style={s.playerCardLeft}>
                     <View style={[s.playerAvatar, { backgroundColor: pairColor }]}>
@@ -478,8 +459,8 @@ const HolePage = React.memo(function HolePage({
                       <Feather name="minus" size={18} color={theme.text.primary} />
                     </TouchableOpacity>
                     <Animated.View style={[s.scoreDisplay, { transform: [{ scale: getScoreAnim(player.id) }] }]}>
-                      <Text style={s.scoreDisplayNum}>
-                        {strokes ?? pageHole.par}
+                      <Text style={[s.scoreDisplayNum, strokes == null && s.scoreDisplayNumEmpty]}>
+                        {strokes ?? '—'}
                       </Text>
                       {pts !== null && (
                         <Text style={[s.scoreDisplayPts, { color: ptsColor }]}>
@@ -627,8 +608,6 @@ function HoleView({ round, roundIndex, players, scores, notes, currentHole, hole
                 scores={scores}
                 theme={theme}
                 s={s}
-                celebration={celebration?.holeNumber === pageHole.number ? celebration : null}
-                celebrationAnim={celebrationAnim}
                 onStep={onStep}
                 onSetScore={onSetScore}
                 getScoreAnim={getScoreAnim}
@@ -643,6 +622,7 @@ function HoleView({ round, roundIndex, players, scores, notes, currentHole, hole
         ? <MatchPanel bbResult={bbResult} currentHole={currentHole} settings={settings} />
         : (
           <View style={s.totalsStrip}>
+            <StablefordWinnerBanner round={round} scores={scores} players={players} />
             <Text style={s.totalStripLabel}>ROUND TOTALS</Text>
             <View style={s.totalStripRow}>
               {players.map((player) => {
@@ -770,6 +750,8 @@ function HoleView({ round, roundIndex, players, scores, notes, currentHole, hole
           </Pressable>
         </Pressable>
       </Modal>
+
+      <CelebrationOverlay celebration={celebration} celebrationAnim={celebrationAnim} players={players} />
     </View>
   );
 }
@@ -806,8 +788,20 @@ const MatchPanel = React.memo(function MatchPanel({ bbResult, currentHole, setti
   const holeWinner = p1Hole === null ? null : p1Hole > p2Hole ? 1 : p2Hole > p1Hole ? 2 : 0;
   const roundWinner = p1Round > p2Round ? 1 : p2Round > p1Round ? 2 : 0;
 
+  // "Clinched" — lead is greater than anything the trailing pair could still
+  // claw back on the remaining (un-fully-scored) holes.
+  const holesRemaining = holes.filter((h) => h.bestWinner === null).length;
+  const maxCatchup = holesRemaining * (bbVal + wbVal);
+  const lead = Math.abs(p1Round - p2Round);
+  const clinched = roundWinner !== 0 && lead > maxCatchup;
+  const winnerName = roundWinner === 1 ? p1Name : roundWinner === 2 ? p2Name : null;
+
   return (
     <View style={s.matchPanel}>
+      {clinched && winnerName && (
+        <WinnerBadge name={winnerName} />
+      )}
+
       {/* Column headers */}
       <View style={s.matchPanelHeaderRow}>
         <View style={s.matchPanelNameCol} />
@@ -817,9 +811,14 @@ const MatchPanel = React.memo(function MatchPanel({ bbResult, currentHole, setti
 
       {/* Pair 1 row */}
       <View style={s.matchPanelDataRow}>
-        <Text style={[s.matchPanelName, roundWinner === 1 && { color: theme.accent.primary }]} numberOfLines={1}>
-          {p1Name}
-        </Text>
+        <View style={s.matchPanelNameWrap}>
+          <Text style={[s.matchPanelName, roundWinner === 1 && { color: theme.accent.primary }]} numberOfLines={1}>
+            {p1Name}
+          </Text>
+          {clinched && roundWinner === 1 && (
+            <Feather name="award" size={14} color={theme.accent.primary} />
+          )}
+        </View>
         <Text style={[s.matchPanelStat, holeWinner === 1 && { color: theme.accent.primary }, holeWinner === 2 && { color: theme.destructive }]}>
           {p1Hole ?? '-'}
         </Text>
@@ -830,9 +829,14 @@ const MatchPanel = React.memo(function MatchPanel({ bbResult, currentHole, setti
 
       {/* Pair 2 row */}
       <View style={s.matchPanelDataRow}>
-        <Text style={[s.matchPanelName, roundWinner === 2 && { color: theme.accent.primary }]} numberOfLines={1}>
-          {p2Name}
-        </Text>
+        <View style={s.matchPanelNameWrap}>
+          <Text style={[s.matchPanelName, roundWinner === 2 && { color: theme.accent.primary }]} numberOfLines={1}>
+            {p2Name}
+          </Text>
+          {clinched && roundWinner === 2 && (
+            <Feather name="award" size={14} color={theme.accent.primary} />
+          )}
+        </View>
         <Text style={[s.matchPanelStat, holeWinner === 2 && { color: theme.accent.primary }, holeWinner === 1 && { color: theme.destructive }]}>
           {p2Hole ?? '-'}
         </Text>
@@ -843,6 +847,135 @@ const MatchPanel = React.memo(function MatchPanel({ bbResult, currentHole, setti
     </View>
   );
 });
+
+function WinnerBadge({ name }) {
+  const { theme } = useTheme();
+  const s = useMemo(() => makeStyles(theme), [theme]);
+  return (
+    <View style={s.winnerBadgeRow}>
+      <Feather name="award" size={14} color="#ffd700" />
+      <Text style={s.winnerBadgeText}>
+        {name} · CHAMPIONS
+      </Text>
+    </View>
+  );
+}
+
+// Shown above the Stableford totals strip when the pair result is decided
+// (either mathematically clinched or all 18 holes fully scored).
+function StablefordWinnerBanner({ round, scores, players }) {
+  const pairs = round?.pairs ?? [];
+  if (pairs.length !== 2) return null;
+
+  // Round is considered "decided" only once every player has entered scores
+  // on every hole. Stableford has no clinching shortcut (a 5-point eagle
+  // could always swing the result), so we wait until the round is complete.
+  const allScored = players.every((p) =>
+    round.holes.every((h) => scores[p.id]?.[h.number] != null)
+  );
+  if (!allScored) return null;
+
+  const liveRound = { ...round, scores };
+  const pairResults = roundPairLeaderboard(liveRound, players);
+  if (pairResults.length < 2) return null;
+  const [first, second] = pairResults;
+  if (first.combinedPoints === second.combinedPoints) return null;
+
+  const name = first.members.map((m) => m.player.name.split(' ')[0]).join(' & ');
+  return <WinnerBadge name={name} />;
+}
+
+const CELEBRATION_TIERS = {
+  BIRDIE: {
+    eyebrow: 'A BIRDIE',
+    accent: '#f0c419', // soft gold
+    glow: 'rgba(240,196,25,0.35)',
+    icon: 'star',
+  },
+  EAGLE: {
+    eyebrow: 'AN EAGLE',
+    accent: '#ffd700', // Augusta gold
+    glow: 'rgba(255,215,0,0.45)',
+    icon: 'award',
+  },
+  ALBATROSS: {
+    eyebrow: 'AN ALBATROSS',
+    accent: '#ffffff',
+    glow: 'rgba(255,255,255,0.55)',
+    icon: 'star',
+  },
+  'HOLE IN ONE': {
+    eyebrow: 'A HOLE IN ONE',
+    accent: '#ffd700',
+    glow: 'rgba(255,215,0,0.65)',
+    icon: 'target',
+  },
+};
+
+function CelebrationOverlay({ celebration, celebrationAnim, players }) {
+  const { theme } = useTheme();
+  const s = useMemo(() => makeStyles(theme), [theme]);
+
+  if (!celebration?.label) return null;
+  const tier = CELEBRATION_TIERS[celebration.label] ?? CELEBRATION_TIERS.BIRDIE;
+  const player = players.find((p) => p.id === celebration.playerId);
+  const firstName = player?.name?.split(' ')[0] ?? '';
+
+  const scrimOpacity = celebrationAnim.interpolate({
+    inputRange: [0, 1], outputRange: [0, 0.55],
+  });
+  const cardOpacity = celebrationAnim;
+  const cardScale = celebrationAnim.interpolate({
+    inputRange: [0, 1], outputRange: [0.75, 1],
+  });
+  const cardTranslate = celebrationAnim.interpolate({
+    inputRange: [0, 1], outputRange: [16, 0],
+  });
+  const ringScale = celebrationAnim.interpolate({
+    inputRange: [0, 1], outputRange: [0.6, 1.35],
+  });
+  const ringOpacity = celebrationAnim.interpolate({
+    inputRange: [0, 0.5, 1], outputRange: [0, 0.6, 0],
+  });
+
+  return (
+    <View pointerEvents="none" style={s.celebrationRoot}>
+      <Animated.View style={[s.celebrationScrim, { opacity: scrimOpacity }]} />
+      <Animated.View
+        style={[
+          s.celebrationRing,
+          {
+            borderColor: tier.glow,
+            opacity: ringOpacity,
+            transform: [{ scale: ringScale }],
+          },
+        ]}
+      />
+      <Animated.View
+        style={[
+          s.celebrationCard,
+          {
+            opacity: cardOpacity,
+            borderColor: tier.accent,
+            shadowColor: tier.accent,
+            transform: [{ scale: cardScale }, { translateY: cardTranslate }],
+          },
+        ]}
+      >
+        <View style={[s.celebrationIconWrap, { borderColor: tier.accent }]}>
+          <Feather name={tier.icon} size={22} color={tier.accent} />
+        </View>
+        <Text style={[s.celebrationEyebrow, { color: tier.accent }]}>{tier.eyebrow}</Text>
+        <Text style={s.celebrationLabelBig}>{celebration.label}</Text>
+        {!!firstName && (
+          <Text style={s.celebrationSubtitle}>
+            {firstName} · Hole {celebration.holeNumber}
+          </Text>
+        )}
+      </Animated.View>
+    </View>
+  );
+}
 
 function GridView({ round, roundIndex, players, scores, notes, onNotesChange, isBestBall, bbResult, settings, onSetScore, refreshing, onRefresh }) {
   const { theme } = useTheme();
@@ -1237,43 +1370,122 @@ function makeStyles(theme) {
     },
     holeNavBtnTextDisabled: { color: theme.text.muted },
 
-    // Player cards (compact — must fit 4 + 2 pair labels with no inner scroll)
-    playerCardsContent: { flex: 1, paddingHorizontal: 12, paddingTop: 8, paddingBottom: 4, gap: 6 },
+    // Player cards (must fit 4 + 2 pair labels with no inner scroll)
+    playerCardsContent: { flex: 1, paddingHorizontal: 14, paddingTop: 10, paddingBottom: 6, gap: 8 },
     pairLabel: {
       fontSize: 10,
       fontFamily: 'PlusJakartaSans-Bold',
-      letterSpacing: 1.5,
-      marginBottom: 2,
+      letterSpacing: 1.8,
+      marginBottom: 4,
       marginLeft: 2,
       textTransform: 'uppercase',
     },
     playerCard: {
       backgroundColor: theme.bg.card,
-      borderRadius: 12,
+      borderRadius: 14,
       borderWidth: 1,
       borderColor: theme.isDark ? theme.glass?.border : theme.border.default,
-      paddingVertical: 8,
-      paddingHorizontal: 12,
+      paddingVertical: 12,
+      paddingHorizontal: 14,
       overflow: 'hidden',
       ...(theme.isDark ? {} : theme.shadow.card),
     },
-    celebrationBanner: {
-      position: 'absolute',
-      top: 4,
-      right: 8,
-      paddingHorizontal: 8,
-      paddingVertical: 3,
-      backgroundColor: '#006747',
-      borderRadius: 999,
-      borderWidth: 1,
-      borderColor: '#ffd700',
-      zIndex: 10,
+
+    // Full-scorecard celebration overlay
+    celebrationRoot: {
+      ...StyleSheet.absoluteFillObject,
+      alignItems: 'center',
+      justifyContent: 'center',
+      zIndex: 50,
+      elevation: 50,
     },
-    celebrationLabel: {
-      color: '#ffd700',
-      fontSize: 9,
+    celebrationScrim: {
+      ...StyleSheet.absoluteFillObject,
+      backgroundColor: '#000',
+    },
+    celebrationCard: {
+      minWidth: 240,
+      paddingVertical: 22,
+      paddingHorizontal: 28,
+      borderRadius: 22,
+      borderWidth: 1.5,
+      backgroundColor: '#003d27', // Augusta deep green
+      alignItems: 'center',
+      shadowOpacity: 0.55,
+      shadowRadius: 28,
+      shadowOffset: { width: 0, height: 8 },
+      elevation: 18,
+    },
+    celebrationRing: {
+      position: 'absolute',
+      width: 260,
+      height: 260,
+      borderRadius: 130,
+      borderWidth: 2,
+      left: '50%',
+      top: '50%',
+      marginLeft: -130,
+      marginTop: -130,
+    },
+    celebrationIconWrap: {
+      width: 44,
+      height: 44,
+      borderRadius: 22,
+      borderWidth: 1.5,
+      alignItems: 'center',
+      justifyContent: 'center',
+      marginBottom: 12,
+      backgroundColor: 'rgba(255,255,255,0.05)',
+    },
+    celebrationEyebrow: {
+      fontFamily: 'PlusJakartaSans-SemiBold',
+      fontSize: 10,
+      letterSpacing: 3,
+      textTransform: 'uppercase',
+      marginBottom: 6,
+    },
+    celebrationLabelBig: {
+      color: '#ffffff',
+      fontSize: 34,
       fontFamily: 'PlayfairDisplay-Black',
+      letterSpacing: 2,
+      textAlign: 'center',
+      marginBottom: 8,
+    },
+    celebrationSubtitle: {
+      color: 'rgba(255,255,255,0.7)',
+      fontSize: 12,
+      fontFamily: 'PlusJakartaSans-Medium',
+      letterSpacing: 0.6,
+      textAlign: 'center',
+    },
+
+    // Pair winner badge (above totals strip / match panel)
+    winnerBadgeRow: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      alignSelf: 'flex-start',
+      gap: 6,
+      paddingHorizontal: 10,
+      paddingVertical: 4,
+      borderRadius: 999,
+      backgroundColor: theme.isDark ? 'rgba(255,215,0,0.14)' : 'rgba(255,215,0,0.18)',
+      borderWidth: 1,
+      borderColor: 'rgba(255,215,0,0.45)',
+      marginBottom: 8,
+    },
+    winnerBadgeText: {
+      color: theme.isDark ? '#ffd700' : '#8a6d00',
+      fontSize: 10,
       letterSpacing: 1.5,
+      fontFamily: 'PlusJakartaSans-ExtraBold',
+      textTransform: 'uppercase',
+    },
+    matchPanelNameWrap: {
+      flex: 1,
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: 6,
     },
     playerCardRow: {
       flexDirection: 'row',
@@ -1294,52 +1506,57 @@ function makeStyles(theme) {
       borderColor: theme.accent.primary,
       backgroundColor: theme.accent.primary,
     },
-    playerCardLeft: { flexDirection: 'row', alignItems: 'center', gap: 10, flex: 1, minWidth: 0 },
+    playerCardLeft: { flexDirection: 'row', alignItems: 'center', gap: 12, flex: 1, minWidth: 0 },
     playerAvatar: {
-      width: 30,
-      height: 30,
-      borderRadius: 15,
+      width: 36,
+      height: 36,
+      borderRadius: 18,
       alignItems: 'center',
       justifyContent: 'center',
     },
     playerAvatarText: {
       color: '#fff',
       fontFamily: 'PlusJakartaSans-ExtraBold',
-      fontSize: 13,
+      fontSize: 15,
     },
     playerCardName: {
       color: theme.text.primary,
       fontFamily: 'PlusJakartaSans-Bold',
-      fontSize: 14,
+      fontSize: 15,
     },
     playerCardHcp: {
       color: theme.text.secondary,
-      fontSize: 11,
-      marginTop: 1,
+      fontSize: 12,
+      marginTop: 2,
       fontFamily: 'PlusJakartaSans-Medium',
     },
-    playerCardRight: { flexDirection: 'row', alignItems: 'center', gap: 6 },
+    playerCardRight: { flexDirection: 'row', alignItems: 'center', gap: 8 },
     stepBtn: {
-      width: 32,
-      height: 32,
-      borderRadius: 10,
+      width: 36,
+      height: 36,
+      borderRadius: 12,
       backgroundColor: theme.isDark ? theme.bg.elevated : theme.bg.secondary,
       borderWidth: 1,
       borderColor: theme.isDark ? theme.glass?.border : theme.border.default,
       alignItems: 'center',
       justifyContent: 'center',
     },
-    scoreDisplay: { width: 46, alignItems: 'center' },
+    scoreDisplay: { width: 52, alignItems: 'center' },
     scoreDisplayNum: {
       color: theme.text.primary,
-      fontSize: 22,
+      fontSize: 26,
       fontFamily: 'PlusJakartaSans-ExtraBold',
-      lineHeight: 24,
+      lineHeight: 28,
+    },
+    scoreDisplayNumEmpty: {
+      color: theme.text.muted,
+      fontSize: 26,
+      lineHeight: 28,
     },
     scoreDisplayPts: {
       fontSize: 10,
       fontFamily: 'PlusJakartaSans-Bold',
-      marginTop: 0,
+      marginTop: 1,
     },
 
     // Bottom bar (hole nav + actions row)
