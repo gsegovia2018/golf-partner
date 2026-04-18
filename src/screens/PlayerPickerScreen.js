@@ -7,9 +7,12 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { useFocusEffect } from '@react-navigation/native';
 import { Feather } from '@expo/vector-icons';
 
+import { v4 as uuidv4 } from 'uuid';
+
 import { useTheme } from '../theme/ThemeContext';
-import { fetchPlayers, upsertPlayer } from '../store/libraryStore';
+import { fetchPlayers } from '../store/libraryStore';
 import { setPendingPlayers } from '../lib/selectionBridge';
+import { mutate } from '../store/mutate';
 
 export default function PlayerPickerScreen({ navigation, route }) {
   const { theme } = useTheme();
@@ -49,7 +52,15 @@ export default function PlayerPickerScreen({ navigation, route }) {
     if (!newName.trim()) return;
     setSaving(true);
     try {
-      const player = await upsertPlayer({ name: newName.trim(), handicap: newHcp });
+      const playerId = uuidv4();
+      const hcp = parseInt(newHcp, 10) || 0;
+      const player = { id: playerId, name: newName.trim(), handicap: hcp };
+      await mutate(null, {
+        type: 'player.upsertLibrary',
+        playerId,
+        name: player.name,
+        handicap: hcp,
+      });
       setPlayers((prev) => [...prev, player]);
       setNewName('');
       setNewHcp('');
