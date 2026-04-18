@@ -110,12 +110,25 @@ export default function ScorecardScreen({ navigation, route }) {
     }, 400);
   }
 
-  if (!tournament) return null;
-
-  const round = tournament.rounds[roundIndex];
-  const { players } = tournament;
-  const settings = { ...DEFAULT_SETTINGS, ...tournament.settings };
+  // Hoist memoised derivations above the early return so the hook order
+  // stays stable while the tournament loads.
+  const round = tournament?.rounds?.[roundIndex] ?? null;
+  const players = tournament?.players ?? [];
+  const settings = useMemo(
+    () => ({ ...DEFAULT_SETTINGS, ...(tournament?.settings ?? {}) }),
+    [tournament?.settings],
+  );
   const isBestBall = settings.scoringMode === 'bestball';
+  const liveRound = useMemo(
+    () => (round ? { ...round, scores } : null),
+    [round, scores],
+  );
+  const bbResult = useMemo(
+    () => (isBestBall && liveRound ? calcBestWorstBall(liveRound, players) : null),
+    [isBestBall, liveRound, players],
+  );
+
+  if (!tournament || !round) return null;
 
   function triggerCelebration(playerId, holeNumber, label) {
     const holdMs = label === 'BIRDIE' ? 550 : label === 'EAGLE' ? 750 : 1000;
@@ -187,8 +200,6 @@ export default function ScorecardScreen({ navigation, route }) {
   }
 
   const hole = round.holes.find((h) => h.number === currentHole);
-  const liveRound = { ...round, scores };
-  const bbResult = isBestBall ? calcBestWorstBall(liveRound, players) : null;
 
   return (
     <View style={s.container}>
@@ -315,6 +326,10 @@ function HoleView({ round, roundIndex, players, scores, notes, currentHole, hole
             onScroll={(e) => {
               const x = e.nativeEvent.contentOffset.x;
               holeScrollOffset.current = x;
+              // Only commit during a real user drag. Programmatic scrollTo
+              // from the go-to-hole picker / arrow buttons also fires
+              // onScroll and would make the pager fight its own animation.
+              if (!isUserScrollingHole.current) return;
               const newHole = Math.round(x / pagerSize.width) + 1;
               if (newHole !== currentHole) {
                 // Non-urgent: keep the native swipe running smoothly while
