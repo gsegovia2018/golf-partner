@@ -8,7 +8,7 @@ import PullToRefresh from '../components/PullToRefresh';
 import {
   loadTournament, loadAllTournaments,
   setActiveTournament, clearActiveTournament,
-  deleteTournament,
+  deleteTournament, saveTournament,
   tournamentLeaderboard, tournamentBestWorstLeaderboard,
   roundPairLeaderboard, calcBestWorstBall,
   DEFAULT_SETTINGS,
@@ -21,7 +21,9 @@ export default function HomeScreen({ navigation, viewMode = 'auto' }) {
   const [selectedRound, setSelectedRound] = useState(0);
   const [roundPagerWidth, setRoundPagerWidth] = useState(0);
   const roundPagerRef = useRef(null);
+  const isUserScrollingRound = useRef(false);
   const [showSettings, setShowSettings] = useState(false);
+  const [showRoundEdit, setShowRoundEdit] = useState(false);
   const [leaderboardBestBall, setLeaderboardBestBall] = useState(false);
   const [roundBestBall, setRoundBestBall] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
@@ -43,19 +45,36 @@ export default function HomeScreen({ navigation, viewMode = 'auto' }) {
     return unsubscribe;
   }, [navigation, reload]);
 
-  // Keep round pager in sync with selectedRound (from tab taps)
+  // Keep round pager in sync with selectedRound (from tab taps).
+  // Skip when the user is actively scrolling — they're driving the pager.
   useEffect(() => {
     if (!roundPagerRef.current || roundPagerWidth <= 0) return;
+    if (isUserScrollingRound.current) return;
     roundPagerRef.current.scrollTo({ x: selectedRound * roundPagerWidth, animated: false });
   }, [selectedRound, roundPagerWidth]);
+
+  async function resetCurrentRound() {
+    if (!tournament) return;
+    const idx = selectedRound;
+    const confirmed = Platform.OS === 'web'
+      ? window.confirm(`Reset Round ${idx + 1}? Scores and notes will be cleared.`)
+      : await new Promise((resolve) => Alert.alert(
+          'Reset Round', `Reset Round ${idx + 1}? Scores and notes will be cleared.`,
+          [{ text: 'Cancel', style: 'cancel', onPress: () => resolve(false) },
+           { text: 'Reset', style: 'destructive', onPress: () => resolve(true) }],
+        ));
+    if (!confirmed) return;
+    const updated = { ...tournament };
+    updated.rounds = updated.rounds.map((r, i) => i === idx ? { ...r, scores: {}, notes: '' } : r);
+    await saveTournament(updated);
+    await reload();
+  }
 
   async function selectTournament(id) {
     await setActiveTournament(id);
     const all = await loadAllTournaments();
     const t = all.find((x) => x.id === id) ?? null;
     setTournament(t);
-    if (!t) return;
-    navigation.navigate('Tournament');
   }
 
   async function goToList() {
@@ -179,7 +198,7 @@ export default function HomeScreen({ navigation, viewMode = 'auto' }) {
         <Text style={[s.emptyTitle, { marginTop: 16 }]}>No active tournament</Text>
         <TouchableOpacity
           style={[s.primaryBtn, { marginTop: 20 }]}
-          onPress={() => navigation.navigate('Home')}
+          onPress={goToList}
           activeOpacity={0.8}
         >
           <Text style={s.primaryBtnText}>Go to Home</Text>
@@ -298,9 +317,22 @@ export default function HomeScreen({ navigation, viewMode = 'auto' }) {
                 horizontal
                 pagingEnabled
                 showsHorizontalScrollIndicator={false}
+                scrollEventThrottle={16}
+                onScrollBeginDrag={() => { isUserScrollingRound.current = true; }}
+                onScroll={(e) => {
+                  if (!isUserScrollingRound.current) return;
+                  const idx = Math.round(e.nativeEvent.contentOffset.x / roundPagerWidth);
+                  if (idx !== selectedRound) setSelectedRound(idx);
+                }}
+                onScrollEndDrag={(e) => {
+                  const idx = Math.round(e.nativeEvent.contentOffset.x / roundPagerWidth);
+                  if (idx !== selectedRound) setSelectedRound(idx);
+                  setTimeout(() => { isUserScrollingRound.current = false; }, 250);
+                }}
                 onMomentumScrollEnd={(e) => {
                   const idx = Math.round(e.nativeEvent.contentOffset.x / roundPagerWidth);
                   if (idx !== selectedRound) setSelectedRound(idx);
+                  isUserScrollingRound.current = false;
                 }}
                 contentOffset={{ x: selectedRound * roundPagerWidth, y: 0 }}
               >
@@ -309,7 +341,17 @@ export default function HomeScreen({ navigation, viewMode = 'auto' }) {
                   const isCurrentRound = i === tournament.currentRound;
                   return (
                     <View key={round.id} style={{ width: roundPagerWidth }}>
-                      <Text style={s.tabRoundTitle}>RONDA {i + 1} · {round.courseName || '—'}</Text>
+                      <View style={s.roundHeaderRow}>
+                        <Text style={s.tabRoundTitle}>RONDA {i + 1} · {round.courseName || '—'}</Text>
+                        <TouchableOpacity
+                          onPress={() => { setSelectedRound(i); setShowRoundEdit(true); }}
+                          style={s.roundEditBtn}
+                          hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+                          accessibilityLabel="Edit round"
+                        >
+                          <Feather name="edit-2" size={14} color={theme.text.muted} />
+                        </TouchableOpacity>
+                      </View>
                       {hasScores ? (
                         roundBestBall
                           ? <BestBallRoundCard round={round} players={tournament.players} settings={settings} theme={theme} s={s} />
@@ -320,10 +362,7 @@ export default function HomeScreen({ navigation, viewMode = 'auto' }) {
                       <View style={s.roundActionsRow}>
                         <TouchableOpacity
                           style={[s.primaryBtn, s.roundActionBtn]}
-                          onPress={() => {
-                            const parent = navigation.getParent?.() ?? navigation;
-                            parent.navigate('Scorecard', { roundIndex: i });
-                          }}
+                          onPress={() => navigation.navigate('Scorecard', { roundIndex: i })}
                           activeOpacity={0.8}
                         >
                           <Feather name="edit-2" size={16} color={theme.isDark ? theme.accent.primary : theme.text.inverse} />
@@ -366,6 +405,55 @@ export default function HomeScreen({ navigation, viewMode = 'auto' }) {
         <ShareableLeaderboard ref={leaderboardRef} tournamentName={tournament.name} leaderboard={leaderboard} />
       </View>
     </PullToRefresh>
+
+    <Modal
+      visible={showRoundEdit}
+      transparent
+      animationType="slide"
+      onRequestClose={() => setShowRoundEdit(false)}
+    >
+      <Pressable style={s.modalBackdrop} onPress={() => setShowRoundEdit(false)}>
+        <Pressable style={s.modalSheet} onPress={() => {}}>
+          <View style={s.modalHandle} />
+          <Text style={s.modalTitle}>Round {selectedRound + 1}</Text>
+
+          {(() => {
+            const r = tournament.rounds[selectedRound];
+            const alreadyRevealed = r?.revealed || selectedRound <= tournament.currentRound;
+            return alreadyRevealed ? (
+              <TouchableOpacity
+                style={s.menuItem}
+                onPress={() => { setShowRoundEdit(false); navigation.navigate('EditTeams', { roundIndex: selectedRound }); }}
+                activeOpacity={0.7}
+              >
+                <Feather name="users" size={18} color={theme.accent.primary} />
+                <Text style={s.menuItemText}>Edit Teams</Text>
+                <Feather name="chevron-right" size={16} color={theme.text.muted} />
+              </TouchableOpacity>
+            ) : (
+              <TouchableOpacity
+                style={s.menuItem}
+                onPress={() => { setShowRoundEdit(false); navigation.navigate('NextRound', { revealOnly: true, roundIndex: selectedRound }); }}
+                activeOpacity={0.7}
+              >
+                <Feather name="eye" size={18} color={theme.accent.primary} />
+                <Text style={s.menuItemText}>Reveal Teams</Text>
+                <Feather name="chevron-right" size={16} color={theme.text.muted} />
+              </TouchableOpacity>
+            );
+          })()}
+
+          <TouchableOpacity
+            style={[s.menuItem, s.menuItemDestructive]}
+            onPress={() => { setShowRoundEdit(false); resetCurrentRound(); }}
+            activeOpacity={0.7}
+          >
+            <Feather name="rotate-ccw" size={18} color={theme.destructive} />
+            <Text style={[s.menuItemText, { color: theme.destructive }]}>Reset Round</Text>
+          </TouchableOpacity>
+        </Pressable>
+      </Pressable>
+    </Modal>
 
     <Modal
       visible={showSettings}
@@ -643,7 +731,14 @@ const makeStyles = (t) => StyleSheet.create({
   tabActive: { backgroundColor: t.accent.primary, borderColor: t.accent.primary },
   tabText: { fontFamily: 'PlusJakartaSans-Bold', color: t.text.muted, fontSize: 12 },
   tabTextActive: { color: t.text.inverse },
-  tabRoundTitle: { fontFamily: 'PlusJakartaSans-Medium', color: t.text.secondary, fontSize: 12, marginBottom: 12 },
+  tabRoundTitle: { fontFamily: 'PlusJakartaSans-Medium', color: t.text.secondary, fontSize: 12 },
+  roundHeaderRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 12 },
+  roundEditBtn: {
+    width: 28, height: 28, borderRadius: 8,
+    backgroundColor: t.isDark ? t.bg.secondary : t.bg.secondary,
+    borderWidth: 1, borderColor: t.border.default,
+    alignItems: 'center', justifyContent: 'center',
+  },
   roundPagerWrap: {},
   emptyRoundHint: {
     fontFamily: 'PlusJakartaSans-Regular',
