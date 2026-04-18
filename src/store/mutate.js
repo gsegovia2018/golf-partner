@@ -50,6 +50,8 @@ function applyToTournament(t, m) {
       const round = t.rounds.find((r) => r.id === m.roundId);
       if (!round) return;
       round.pairs = m.pairs;
+      // `revealed` is monotonic — setting pairs always reveals them.
+      round.revealed = true;
       break;
     }
     case 'handicap.set': {
