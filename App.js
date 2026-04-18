@@ -1,7 +1,8 @@
 import React from 'react';
+import { View } from 'react-native';
 import { NavigationContainer } from '@react-navigation/native';
 import { createStackNavigator, CardStyleInterpolators } from '@react-navigation/stack';
-import { SafeAreaProvider, initialWindowMetrics } from 'react-native-safe-area-context';
+import { SafeAreaProvider, initialWindowMetrics, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { StatusBar } from 'expo-status-bar';
 import { useFonts } from 'expo-font';
 import {
@@ -20,6 +21,7 @@ import {
 
 import { ThemeProvider, useTheme } from './src/theme/ThemeContext';
 import LoadingSplash from './src/components/LoadingSplash';
+import SyncStatusIcon from './src/components/SyncStatusIcon';
 
 import HomeScreen from './src/screens/HomeScreen';
 import SetupScreen from './src/screens/SetupScreen';
@@ -39,10 +41,22 @@ const Stack = createStackNavigator();
 
 function AppNavigator() {
   const { theme, mode } = useTheme();
+  const insets = useSafeAreaInsets();
 
   return (
     <>
       <StatusBar style={mode === 'dark' ? 'light' : 'dark'} />
+      <View
+        pointerEvents="box-none"
+        style={{
+          position: 'absolute',
+          top: insets.top + 8,
+          right: insets.right + 12,
+          zIndex: 1000,
+        }}
+      >
+        <SyncStatusIcon />
+      </View>
       <Stack.Navigator
         initialRouteName="Home"
         screenOptions={{
