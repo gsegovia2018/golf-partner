@@ -7,6 +7,7 @@ import { useTheme } from '../theme/ThemeContext';
 import { useAuth } from '../context/AuthContext';
 import { ShareableLeaderboard, shareLeaderboard } from '../components/ShareableCard';
 import PullToRefresh from '../components/PullToRefresh';
+import LoadingSplash from '../components/LoadingSplash';
 import TournamentMemoriesSection from '../components/TournamentMemoriesSection';
 import MediaLightbox from '../components/MediaLightbox';
 import {
@@ -44,6 +45,7 @@ export default function HomeScreen({ navigation, route }) {
   const { user } = useAuth();
   const [tournament, setTournament] = useState(null);
   const [allTournaments, setAllTournaments] = useState([]);
+  const [loading, setLoading] = useState(true);
   const [selectedRound, setSelectedRound] = useState(0);
   const [roundPagerWidth, setRoundPagerWidth] = useState(0);
   const roundPagerRef = useRef(null);
@@ -78,10 +80,14 @@ export default function HomeScreen({ navigation, route }) {
   const [inviteLoading, setInviteLoading] = useState(false);
 
   const reload = useCallback(async () => {
-    const [t, all] = await Promise.all([loadTournament(), loadAllTournaments()]);
-    setTournament(t);
-    setAllTournaments(all);
-    if (t) setSelectedRound(t.currentRound);
+    try {
+      const [t, all] = await Promise.all([loadTournament(), loadAllTournaments()]);
+      setTournament(t);
+      setAllTournaments(all);
+      if (t) setSelectedRound(t.currentRound);
+    } finally {
+      setLoading(false);
+    }
   }, []);
 
   const onRefresh = useCallback(async () => {
@@ -321,6 +327,10 @@ export default function HomeScreen({ navigation, route }) {
   const showTournament = viewMode === 'tournament' || (viewMode === 'auto' && !!tournament);
   const isViewer = tournament?._role === 'viewer';
   const userInitials = user?.email ? user.email.slice(0, 2).toUpperCase() : '?';
+
+  if (loading) {
+    return <LoadingSplash />;
+  }
 
   if (showList) {
     return (
