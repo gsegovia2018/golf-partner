@@ -14,11 +14,12 @@ import {
 } from '../store/tournamentStore';
 import { useTheme } from '../theme/ThemeContext';
 import PullToRefresh from '../components/PullToRefresh';
-import RoundMediaStrip from '../components/RoundMediaStrip';
 import MediaLightbox from '../components/MediaLightbox';
 import AttachMediaSheet from '../components/AttachMediaSheet';
+import CaptureMenuSheet from '../components/CaptureMenuSheet';
 import { pickMedia, attachMedia } from '../lib/mediaCapture';
-import { ActionSheetIOS, Alert } from 'react-native';
+import { useRoundMedia } from '../hooks/useRoundMedia';
+import { Alert } from 'react-native';
 
 // Web-only CSS scroll-snap. On native, `pagingEnabled` is handled by the
 // platform. On web, react-native-web 0.21's `pagingEnabled` only sets
@@ -84,6 +85,9 @@ export default function ScorecardScreen({ navigation, route }) {
   const [lightboxItems, setLightboxItems] = useState([]);
   const [lightboxIndex, setLightboxIndex] = useState(0);
   const [lightboxVisible, setLightboxVisible] = useState(false);
+  const [captureMenuVisible, setCaptureMenuVisible] = useState(false);
+  const { items: roundMediaItems } = useRoundMedia(tournament?.rounds?.[paramRoundIndex ?? tournament?.currentRound ?? 0]?.id);
+  const roundMediaCount = roundMediaItems.length;
   const roundIndex = paramRoundIndex ?? tournament?.currentRound ?? 0;
 
   useEffect(() => { tournamentRef.current = tournament; }, [tournament]);
@@ -299,31 +303,16 @@ export default function ScorecardScreen({ navigation, route }) {
   const goBack = useCallback(() => navigation.goBack(), [navigation]);
 
   const openCapturePicker = useCallback(() => {
-    const choose = (source, mediaTypes) => async () => {
-      try {
-        const asset = await pickMedia({ source, mediaTypes });
-        if (asset) setPickerAsset(asset);
-      } catch (e) {
-        Alert.alert('No se pudo capturar', String(e?.message ?? e));
-      }
-    };
+    setCaptureMenuVisible(true);
+  }, []);
 
-    if (Platform.OS === 'ios') {
-      ActionSheetIOS.showActionSheetWithOptions(
-        { options: ['Cancelar', 'Tomar foto', 'Grabar video', 'Elegir de galería'], cancelButtonIndex: 0 },
-        (i) => {
-          if (i === 1) choose('camera', 'photo')();
-          if (i === 2) choose('camera', 'video')();
-          if (i === 3) choose('library', 'all')();
-        },
-      );
-    } else {
-      Alert.alert('Adjuntar recuerdo', undefined, [
-        { text: 'Tomar foto', onPress: choose('camera', 'photo') },
-        { text: 'Grabar video', onPress: choose('camera', 'video') },
-        { text: 'Elegir de galería', onPress: choose('library', 'all') },
-        { text: 'Cancelar', style: 'cancel' },
-      ]);
+  const handleCaptureMenuSelect = useCallback(async ({ source, mediaTypes }) => {
+    setCaptureMenuVisible(false);
+    try {
+      const asset = await pickMedia({ source, mediaTypes });
+      if (asset) setPickerAsset(asset);
+    } catch (e) {
+      Alert.alert('No se pudo capturar', String(e?.message ?? e));
     }
   }, []);
 
@@ -437,16 +426,22 @@ export default function ScorecardScreen({ navigation, route }) {
         />
       )}
 
-      <RoundMediaStrip
-        roundId={round.id}
-        onAdd={openCapturePicker}
-        onOpenLightbox={(items, i) => {
-          setLightboxItems(items);
-          setLightboxIndex(i);
-          setLightboxVisible(true);
-        }}
+      <CaptureMenuSheet
+        visible={captureMenuVisible}
+        onSelect={handleCaptureMenuSelect}
+        onClose={() => setCaptureMenuVisible(false)}
+        extraActions={roundMediaCount > 0 ? [{
+          key: 'view',
+          icon: 'image',
+          label: `Ver recuerdos de esta ronda (${roundMediaCount})`,
+          onPress: () => {
+            setCaptureMenuVisible(false);
+            setLightboxItems(roundMediaItems);
+            setLightboxIndex(0);
+            setLightboxVisible(true);
+          },
+        }] : []}
       />
-
       <AttachMediaSheet
         visible={!!pickerAsset}
         asset={pickerAsset}
@@ -1365,10 +1360,8 @@ function makeStyles(theme) {
       gap: 8,
     },
     cameraBtn: {
-      width: 36,
-      height: 36,
-      borderRadius: 10,
-      backgroundColor: theme.isDark ? theme.bg.elevated : theme.bg.secondary,
+      width: 32,
+      height: 32,
       alignItems: 'center',
       justifyContent: 'center',
     },
