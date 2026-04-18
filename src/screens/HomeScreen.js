@@ -1,4 +1,4 @@
-import React, { useEffect, useState, useCallback, useRef } from 'react';
+import React, { useEffect, useState, useCallback, useRef, useMemo, startTransition } from 'react';
 import { View, Text, TouchableOpacity, StyleSheet, ScrollView, Switch, Alert, FlatList, Platform, Modal, Pressable } from 'react-native';
 import { Feather } from '@expo/vector-icons';
 
@@ -22,6 +22,8 @@ export default function HomeScreen({ navigation, viewMode = 'auto' }) {
   const [roundPagerWidth, setRoundPagerWidth] = useState(0);
   const roundPagerRef = useRef(null);
   const roundScrollOffset = useRef(0);
+  const isUserScrollingRound = useRef(false);
+  const roundPagerInitialized = useRef(false);
   const [showSettings, setShowSettings] = useState(false);
   const [showRoundEdit, setShowRoundEdit] = useState(false);
   const [leaderboardBestBall, setLeaderboardBestBall] = useState(false);
@@ -45,15 +47,17 @@ export default function HomeScreen({ navigation, viewMode = 'auto' }) {
     return unsubscribe;
   }, [navigation, reload]);
 
-  // Keep round pager in sync with selectedRound (from tab taps).
-  // Skip if the pager is already at the right offset — that means the
-  // change came from onScroll and reissuing scrollTo would fight the drag.
+  // Keep round pager in sync with selectedRound (tab taps, arrow buttons).
+  // Skip while the user is dragging, and skip if already at target.
+  // Animate so taps slide smoothly instead of snapping.
   useEffect(() => {
     if (!roundPagerRef.current || roundPagerWidth <= 0) return;
+    if (isUserScrollingRound.current) return;
     const target = selectedRound * roundPagerWidth;
     if (Math.abs(roundScrollOffset.current - target) < 1) return;
-    roundPagerRef.current.scrollTo({ x: target, animated: false });
+    roundPagerRef.current.scrollTo({ x: target, animated: roundPagerInitialized.current });
     roundScrollOffset.current = target;
+    roundPagerInitialized.current = true;
   }, [selectedRound, roundPagerWidth]);
 
   async function resetCurrentRound() {
@@ -105,7 +109,7 @@ export default function HomeScreen({ navigation, viewMode = 'auto' }) {
     }
   }
 
-  const s = makeStyles(theme);
+  const s = useMemo(() => makeStyles(theme), [theme]);
   const leaderboardRef = useRef();
 
   const showList = viewMode === 'list' || (viewMode === 'auto' && !tournament);
@@ -210,25 +214,40 @@ export default function HomeScreen({ navigation, viewMode = 'auto' }) {
     );
   }
 
-  const settings = { ...DEFAULT_SETTINGS, ...tournament.settings };
+  const settings = useMemo(
+    () => ({ ...DEFAULT_SETTINGS, ...tournament.settings }),
+    [tournament.settings],
+  );
 
   const completedRounds = tournament.rounds.filter(
     (r) => r.scores && Object.keys(r.scores).length > 0,
   );
 
-  const leaderboard = tournamentLeaderboard(tournament);
-  const bestWorstLeaderboard = leaderboardBestBall ? tournamentBestWorstLeaderboard(tournament) : null;
-  const strokesByPlayer = Object.fromEntries(leaderboard.map((e) => [e.player.id, e.strokes]));
+  const leaderboard = useMemo(() => tournamentLeaderboard(tournament), [tournament]);
+  const bestWorstLeaderboard = useMemo(
+    () => (leaderboardBestBall ? tournamentBestWorstLeaderboard(tournament) : null),
+    [leaderboardBestBall, tournament],
+  );
+  const strokesByPlayer = useMemo(
+    () => Object.fromEntries(leaderboard.map((e) => [e.player.id, e.strokes])),
+    [leaderboard],
+  );
   const displayedBoard = leaderboardBestBall && bestWorstLeaderboard ? bestWorstLeaderboard : leaderboard;
 
   const selectedRoundData = tournament.rounds[selectedRound];
   const selectedRoundHasScores = !!(selectedRoundData?.scores && Object.keys(selectedRoundData.scores).length > 0);
-  const selectedRoundPlayerTotals = selectedRoundHasScores && !leaderboardBestBall
-    ? roundTotals(selectedRoundData, tournament.players)
-    : null;
-  const selectedRoundBB = selectedRoundHasScores && leaderboardBestBall && selectedRoundData.pairs?.length
-    ? calcBestWorstBall(selectedRoundData, tournament.players)
-    : null;
+  const selectedRoundPlayerTotals = useMemo(
+    () => (selectedRoundHasScores && !leaderboardBestBall
+      ? roundTotals(selectedRoundData, tournament.players)
+      : null),
+    [selectedRoundHasScores, leaderboardBestBall, selectedRoundData, tournament.players],
+  );
+  const selectedRoundBB = useMemo(
+    () => (selectedRoundHasScores && leaderboardBestBall && selectedRoundData.pairs?.length
+      ? calcBestWorstBall(selectedRoundData, tournament.players)
+      : null),
+    [selectedRoundHasScores, leaderboardBestBall, selectedRoundData, tournament.players],
+  );
   const getSelectedRoundValue = (playerId) => {
     if (leaderboardBestBall) {
       if (!selectedRoundBB) return null;
@@ -341,7 +360,14 @@ export default function HomeScreen({ navigation, viewMode = 'auto' }) {
           />
 
           {/* Horizontal pager — swipe to change round, stays in sync with tabs */}
-          <View style={s.roundPagerWrap} onLayout={(e) => setRoundPagerWidth(e.nativeEvent.layout.width)}>
+          <View
+            style={s.roundPagerWrap}
+            onLayout={(e) => {
+              const w = e.nativeEvent.layout.width;
+              roundScrollOffset.current = selectedRound * w;
+              setRoundPagerWidth(w);
+            }}
+          >
             {roundPagerWidth > 0 && (
               <ScrollView
                 ref={roundPagerRef}
@@ -349,9 +375,23 @@ export default function HomeScreen({ navigation, viewMode = 'auto' }) {
                 pagingEnabled
                 showsHorizontalScrollIndicator={false}
                 scrollEventThrottle={16}
+                onScrollBeginDrag={() => { isUserScrollingRound.current = true; }}
                 onScroll={(e) => {
                   const x = e.nativeEvent.contentOffset.x;
                   roundScrollOffset.current = x;
+                  const idx = Math.round(x / roundPagerWidth);
+                  if (idx !== selectedRound) {
+                    // Non-urgent: let the native swipe keep running smoothly
+                    // while React reconciles leaderboard/tabs/match panel in
+                    // the background.
+                    startTransition(() => setSelectedRound(idx));
+                  }
+                }}
+                onScrollEndDrag={() => { isUserScrollingRound.current = false; }}
+                onMomentumScrollEnd={(e) => {
+                  const x = e.nativeEvent.contentOffset.x;
+                  roundScrollOffset.current = x;
+                  isUserScrollingRound.current = false;
                   const idx = Math.round(x / roundPagerWidth);
                   if (idx !== selectedRound) setSelectedRound(idx);
                 }}
@@ -608,7 +648,7 @@ export default function HomeScreen({ navigation, viewMode = 'auto' }) {
   );
 }
 
-function StablefordRoundCard({ round, players, theme, s }) {
+const StablefordRoundCard = React.memo(function StablefordRoundCard({ round, players, theme, s }) {
   const pairResults = roundPairLeaderboard(round, players);
   return (
     <>
@@ -623,9 +663,9 @@ function StablefordRoundCard({ round, players, theme, s }) {
       ))}
     </>
   );
-}
+});
 
-function BestBallRoundCard({ round, players, settings, theme, s }) {
+const BestBallRoundCard = React.memo(function BestBallRoundCard({ round, players, settings, theme, s }) {
   const result = calcBestWorstBall(round, players);
   if (!result) return <Text style={s.pairMember}>No results yet</Text>;
 
@@ -655,7 +695,7 @@ function BestBallRoundCard({ round, players, settings, theme, s }) {
       </View>
     </>
   );
-}
+});
 
 const makeStyles = (t) => StyleSheet.create({
   screen: { ...StyleSheet.absoluteFillObject, backgroundColor: t.bg.primary },
