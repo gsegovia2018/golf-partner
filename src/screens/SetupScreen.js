@@ -3,6 +3,7 @@ import {
   View, Text, TextInput, TouchableOpacity,
   StyleSheet, ScrollView, Alert,
 } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { Feather } from '@expo/vector-icons';
 import { useFocusEffect } from '@react-navigation/native';
@@ -132,7 +133,7 @@ export default function SetupScreen({ navigation }) {
   }
 
   return (
-    <View style={s.container}>
+    <SafeAreaView style={s.container} edges={['top', 'bottom']}>
       {/* Header */}
       <View style={s.header}>
         <TouchableOpacity onPress={() => navigation.goBack()} style={s.backBtn}>
@@ -315,7 +316,7 @@ export default function SetupScreen({ navigation }) {
         </TouchableOpacity>
       </View>
     </ScrollView>
-    </View>
+    </SafeAreaView>
   );
 }
 

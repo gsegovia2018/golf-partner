@@ -3,6 +3,7 @@ import {
   View, Text, TextInput, TouchableOpacity,
   StyleSheet, ScrollView, Modal, Pressable, KeyboardAvoidingView, Platform, Animated,
 } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
 import * as Haptics from 'expo-haptics';
 
 import { Feather } from '@expo/vector-icons';
@@ -208,7 +209,7 @@ export default function ScorecardScreen({ navigation, route }) {
   const hole = round.holes.find((h) => h.number === currentHole);
 
   return (
-    <View style={s.container}>
+    <SafeAreaView style={s.container} edges={['top', 'bottom']}>
       {/* Header with inline view toggle (small, doesn't take a full row) */}
       <View style={s.header}>
         <TouchableOpacity onPress={() => navigation.goBack()} style={s.backBtn}>
@@ -283,7 +284,7 @@ export default function ScorecardScreen({ navigation, route }) {
           onRefresh={onRefresh}
         />
       )}
-    </View>
+    </SafeAreaView>
   );
 }
 
