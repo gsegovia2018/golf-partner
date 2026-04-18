@@ -26,6 +26,9 @@ export default function HomeScreen({ navigation, viewMode = 'auto' }) {
   const roundPagerInitialized = useRef(false);
   const [showSettings, setShowSettings] = useState(false);
   const [showRoundEdit, setShowRoundEdit] = useState(false);
+  const [showResetHistory, setShowResetHistory] = useState(false);
+  const [undoSnack, setUndoSnack] = useState(null); // { roundIndex, snapshot, at }
+  const undoTimerRef = useRef(null);
   const [leaderboardBestBall, setLeaderboardBestBall] = useState(false);
   const [roundBestBall, setRoundBestBall] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
@@ -71,11 +74,77 @@ export default function HomeScreen({ navigation, viewMode = 'auto' }) {
            { text: 'Reset', style: 'destructive', onPress: () => resolve(true) }],
         ));
     if (!confirmed) return;
+
+    const roundBefore = tournament.rounds[idx];
+    const prevScores = roundBefore?.scores ?? {};
+    const prevNotes = roundBefore?.notes ?? '';
+    const hasContent = Object.keys(prevScores).length > 0 || (prevNotes?.trim?.() ?? '').length > 0;
+    const snapshot = { scores: prevScores, notes: prevNotes, at: new Date().toISOString() };
+
     const updated = { ...tournament };
-    updated.rounds = updated.rounds.map((r, i) => i === idx ? { ...r, scores: {}, notes: '' } : r);
+    updated.rounds = updated.rounds.map((r, i) => {
+      if (i !== idx) return r;
+      const history = [...(r.resetHistory ?? [])];
+      if (hasContent) {
+        history.push(snapshot);
+        // Cap to last 10 entries to avoid unbounded growth
+        if (history.length > 10) history.splice(0, history.length - 10);
+      }
+      return { ...r, scores: {}, notes: '', resetHistory: history };
+    });
     await saveTournament(updated);
     await reload();
+
+    if (hasContent) {
+      if (undoTimerRef.current) clearTimeout(undoTimerRef.current);
+      setUndoSnack({ roundIndex: idx, snapshot });
+      undoTimerRef.current = setTimeout(() => setUndoSnack(null), 10000);
+    }
   }
+
+  async function performUndoReset() {
+    if (!undoSnack || !tournament) return;
+    const { roundIndex, snapshot } = undoSnack;
+    if (undoTimerRef.current) { clearTimeout(undoTimerRef.current); undoTimerRef.current = null; }
+    const updated = { ...tournament };
+    updated.rounds = updated.rounds.map((r, i) => {
+      if (i !== roundIndex) return r;
+      // Pop the entry we just pushed (the snapshot we're restoring)
+      const history = [...(r.resetHistory ?? [])];
+      if (history.length > 0 && history[history.length - 1].at === snapshot.at) history.pop();
+      return { ...r, scores: snapshot.scores, notes: snapshot.notes, resetHistory: history };
+    });
+    await saveTournament(updated);
+    await reload();
+    setUndoSnack(null);
+  }
+
+  async function restoreFromHistory(entryIndex) {
+    if (!tournament) return;
+    const idx = selectedRound;
+    const round = tournament.rounds[idx];
+    const entry = round?.resetHistory?.[entryIndex];
+    if (!entry) return;
+    const confirmed = Platform.OS === 'web'
+      ? window.confirm('Restore this snapshot? Current scores for this round will be overwritten.')
+      : await new Promise((resolve) => Alert.alert(
+          'Restore snapshot', 'Restore this snapshot? Current scores for this round will be overwritten.',
+          [{ text: 'Cancel', style: 'cancel', onPress: () => resolve(false) },
+           { text: 'Restore', style: 'default', onPress: () => resolve(true) }],
+        ));
+    if (!confirmed) return;
+    const updated = { ...tournament };
+    updated.rounds = updated.rounds.map((r, i) => (
+      i === idx ? { ...r, scores: entry.scores ?? {}, notes: entry.notes ?? '' } : r
+    ));
+    await saveTournament(updated);
+    await reload();
+    setShowResetHistory(false);
+  }
+
+  useEffect(() => () => {
+    if (undoTimerRef.current) clearTimeout(undoTimerRef.current);
+  }, []);
 
   async function selectTournament(id) {
     await setActiveTournament(id);
@@ -454,6 +523,16 @@ export default function HomeScreen({ navigation, viewMode = 'auto' }) {
       </View>
     </PullToRefresh>
 
+    {undoSnack && (
+      <View style={s.undoSnack}>
+        <Feather name="rotate-ccw" size={16} color={theme.accent.primary} />
+        <Text style={s.undoSnackText}>Round {undoSnack.roundIndex + 1} reset</Text>
+        <TouchableOpacity onPress={performUndoReset} style={s.undoSnackBtn} activeOpacity={0.7}>
+          <Text style={s.undoSnackBtnText}>UNDO</Text>
+        </TouchableOpacity>
+      </View>
+    )}
+
     {tournament.rounds.length > 0 && (() => {
       const isCurrentRound = selectedRound === tournament.currentRound;
       const canShowNext = isCurrentRound && tournament.currentRound < tournament.rounds.length - 1;
@@ -541,6 +620,22 @@ export default function HomeScreen({ navigation, viewMode = 'auto' }) {
             <Feather name="chevron-right" size={16} color={theme.text.muted} />
           </TouchableOpacity>
 
+          {(() => {
+            const historyCount = tournament.rounds[selectedRound]?.resetHistory?.length ?? 0;
+            if (historyCount === 0) return null;
+            return (
+              <TouchableOpacity
+                style={s.menuItem}
+                onPress={() => { setShowRoundEdit(false); setShowResetHistory(true); }}
+                activeOpacity={0.7}
+              >
+                <Feather name="rotate-cw" size={18} color={theme.accent.primary} />
+                <Text style={s.menuItemText}>Restore previous scores ({historyCount})</Text>
+                <Feather name="chevron-right" size={16} color={theme.text.muted} />
+              </TouchableOpacity>
+            );
+          })()}
+
           <TouchableOpacity
             style={[s.menuItem, s.menuItemDestructive]}
             onPress={() => { setShowRoundEdit(false); resetCurrentRound(); }}
@@ -549,6 +644,47 @@ export default function HomeScreen({ navigation, viewMode = 'auto' }) {
             <Feather name="rotate-ccw" size={18} color={theme.destructive} />
             <Text style={[s.menuItemText, { color: theme.destructive }]}>Reset Round</Text>
           </TouchableOpacity>
+        </Pressable>
+      </Pressable>
+    </Modal>
+
+    <Modal
+      visible={showResetHistory}
+      transparent
+      animationType="fade"
+      onRequestClose={() => setShowResetHistory(false)}
+    >
+      <Pressable style={s.modalBackdrop} onPress={() => setShowResetHistory(false)}>
+        <Pressable style={s.modalSheet} onPress={() => {}}>
+          <View style={s.modalHandle} />
+          <Text style={s.modalTitle}>Restore Round {selectedRound + 1}</Text>
+          <Text style={s.modalSubtitle}>Pick a pre-reset snapshot to restore.</Text>
+          {(tournament.rounds[selectedRound]?.resetHistory ?? [])
+            .map((entry, idx) => ({ entry, idx }))
+            .reverse()
+            .map(({ entry, idx }) => {
+              const playerCount = Object.keys(entry.scores ?? {}).length;
+              const holeCount = Object.values(entry.scores ?? {})
+                .reduce((max, pScores) => Math.max(max, Object.keys(pScores ?? {}).length), 0);
+              const when = (() => {
+                try { return new Date(entry.at).toLocaleString(); } catch { return entry.at; }
+              })();
+              return (
+                <TouchableOpacity
+                  key={entry.at ?? idx}
+                  style={s.menuItem}
+                  onPress={() => restoreFromHistory(idx)}
+                  activeOpacity={0.7}
+                >
+                  <Feather name="clock" size={18} color={theme.accent.primary} />
+                  <View style={{ flex: 1 }}>
+                    <Text style={s.menuItemText}>{when}</Text>
+                    <Text style={s.modalSubtle}>{playerCount} players · up to hole {holeCount}</Text>
+                  </View>
+                  <Feather name="chevron-right" size={16} color={theme.text.muted} />
+                </TouchableOpacity>
+              );
+            })}
         </Pressable>
       </Pressable>
     </Modal>
@@ -936,6 +1072,46 @@ const makeStyles = (t) => StyleSheet.create({
     fontFamily: 'PlusJakartaSans-SemiBold',
     fontSize: 10, color: t.accent.primary, marginBottom: 8,
     letterSpacing: 1.5, textTransform: 'uppercase', paddingHorizontal: 4,
+  },
+  modalSubtitle: {
+    fontFamily: 'PlusJakartaSans-Regular',
+    fontSize: 13, color: t.text.secondary,
+    paddingHorizontal: 4, marginBottom: 8,
+  },
+  modalSubtle: {
+    fontFamily: 'PlusJakartaSans-Regular',
+    fontSize: 11, color: t.text.muted, marginTop: 2,
+  },
+  undoSnack: {
+    position: 'absolute',
+    left: 16, right: 16, bottom: 80,
+    flexDirection: 'row', alignItems: 'center', gap: 10,
+    paddingHorizontal: 14, paddingVertical: 12,
+    backgroundColor: t.isDark ? t.bg.elevated : '#1a1a1a',
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: t.accent.primary + '40',
+    ...(t.isDark ? {} : t.shadow.elevated),
+    zIndex: 20,
+  },
+  undoSnackText: {
+    flex: 1,
+    color: '#ffffff',
+    fontFamily: 'PlusJakartaSans-SemiBold',
+    fontSize: 13,
+  },
+  undoSnackBtn: {
+    paddingHorizontal: 10, paddingVertical: 6,
+    borderRadius: 8,
+    backgroundColor: t.accent.primary + '22',
+    borderWidth: 1,
+    borderColor: t.accent.primary + '55',
+  },
+  undoSnackBtnText: {
+    color: t.accent.primary,
+    fontFamily: 'PlusJakartaSans-ExtraBold',
+    fontSize: 12,
+    letterSpacing: 1,
   },
   menuItem: {
     flexDirection: 'row', alignItems: 'center', gap: 14,
