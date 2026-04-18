@@ -112,6 +112,35 @@ export default function HomeScreen({ navigation, viewMode = 'auto' }) {
   const s = useMemo(() => makeStyles(theme), [theme]);
   const leaderboardRef = useRef();
 
+  // Hoist memoised derivations above the early returns so the hook order
+  // stays stable across showList / showTournament toggles.
+  const settings = useMemo(
+    () => ({ ...DEFAULT_SETTINGS, ...(tournament?.settings ?? {}) }),
+    [tournament?.settings],
+  );
+  const leaderboard = useMemo(
+    () => (tournament ? tournamentLeaderboard(tournament) : []),
+    [tournament],
+  );
+  const bestWorstLeaderboard = useMemo(
+    () => (tournament && leaderboardBestBall ? tournamentBestWorstLeaderboard(tournament) : null),
+    [tournament, leaderboardBestBall],
+  );
+  const selectedRoundData = tournament?.rounds?.[selectedRound] ?? null;
+  const selectedRoundHasScores = !!(selectedRoundData?.scores && Object.keys(selectedRoundData.scores).length > 0);
+  const selectedRoundPlayerTotals = useMemo(
+    () => (tournament && selectedRoundData && selectedRoundHasScores && !leaderboardBestBall
+      ? roundTotals(selectedRoundData, tournament.players)
+      : null),
+    [tournament, selectedRoundData, selectedRoundHasScores, leaderboardBestBall],
+  );
+  const selectedRoundBB = useMemo(
+    () => (tournament && selectedRoundData && selectedRoundHasScores && leaderboardBestBall && selectedRoundData.pairs?.length
+      ? calcBestWorstBall(selectedRoundData, tournament.players)
+      : null),
+    [tournament, selectedRoundData, selectedRoundHasScores, leaderboardBestBall],
+  );
+
   const showList = viewMode === 'list' || (viewMode === 'auto' && !tournament);
   const showTournament = viewMode === 'tournament' || (viewMode === 'auto' && !!tournament);
 
@@ -214,25 +243,11 @@ export default function HomeScreen({ navigation, viewMode = 'auto' }) {
     );
   }
 
-  const settings = { ...DEFAULT_SETTINGS, ...tournament.settings };
-
   const completedRounds = tournament.rounds.filter(
     (r) => r.scores && Object.keys(r.scores).length > 0,
   );
-
-  const leaderboard = tournamentLeaderboard(tournament);
-  const bestWorstLeaderboard = leaderboardBestBall ? tournamentBestWorstLeaderboard(tournament) : null;
   const strokesByPlayer = Object.fromEntries(leaderboard.map((e) => [e.player.id, e.strokes]));
   const displayedBoard = leaderboardBestBall && bestWorstLeaderboard ? bestWorstLeaderboard : leaderboard;
-
-  const selectedRoundData = tournament.rounds[selectedRound];
-  const selectedRoundHasScores = !!(selectedRoundData?.scores && Object.keys(selectedRoundData.scores).length > 0);
-  const selectedRoundPlayerTotals = selectedRoundHasScores && !leaderboardBestBall
-    ? roundTotals(selectedRoundData, tournament.players)
-    : null;
-  const selectedRoundBB = selectedRoundHasScores && leaderboardBestBall && selectedRoundData.pairs?.length
-    ? calcBestWorstBall(selectedRoundData, tournament.players)
-    : null;
   const getSelectedRoundValue = (playerId) => {
     if (leaderboardBestBall) {
       if (!selectedRoundBB) return null;
@@ -364,6 +379,10 @@ export default function HomeScreen({ navigation, viewMode = 'auto' }) {
                 onScroll={(e) => {
                   const x = e.nativeEvent.contentOffset.x;
                   roundScrollOffset.current = x;
+                  // Only commit during a real user drag. Programmatic
+                  // scrollTo from tab taps also fires onScroll and would
+                  // make the pager fight its own animation.
+                  if (!isUserScrollingRound.current) return;
                   const idx = Math.round(x / roundPagerWidth);
                   if (idx !== selectedRound) {
                     // Non-urgent: let the native swipe keep running smoothly
@@ -425,39 +444,6 @@ export default function HomeScreen({ navigation, viewMode = 'auto' }) {
                       ) : (
                         <Text style={s.emptyRoundHint}>No scores yet for this round.</Text>
                       )}
-                      <View style={s.roundActionsRow}>
-                        <TouchableOpacity
-                          style={[s.primaryBtn, s.roundActionBtn]}
-                          onPress={() => navigation.navigate('Scorecard', { roundIndex: i })}
-                          activeOpacity={0.8}
-                        >
-                          <Feather name="edit-2" size={16} color={theme.isDark ? theme.accent.primary : theme.text.inverse} />
-                          <Text style={s.primaryBtnText}>{isCurrentRound ? 'Scorecard' : 'Edit Scores'}</Text>
-                        </TouchableOpacity>
-                        {isCurrentRound && tournament.currentRound < tournament.rounds.length - 1 && (() => {
-                          const nextRound = tournament.rounds[tournament.currentRound + 1];
-                          const nextRevealed = nextRound?.revealed;
-                          return nextRevealed ? (
-                            <TouchableOpacity
-                              style={[s.secondaryBtn, s.roundActionBtn]}
-                              onPress={() => navigation.navigate('NextRound', { revealOnly: true, roundIndex: tournament.currentRound + 1 })}
-                              activeOpacity={0.7}
-                            >
-                              <Feather name="eye" size={16} color={theme.accent.primary} />
-                              <Text style={s.secondaryBtnText}>Next Round</Text>
-                            </TouchableOpacity>
-                          ) : (
-                            <TouchableOpacity
-                              style={[s.primaryBtn, s.roundActionBtn]}
-                              onPress={() => navigation.navigate('NextRound')}
-                              activeOpacity={0.8}
-                            >
-                              <Feather name="play" size={16} color={theme.isDark ? theme.accent.primary : theme.text.inverse} />
-                              <Text style={s.primaryBtnText}>Start Next Round</Text>
-                            </TouchableOpacity>
-                          );
-                        })()}
-                      </View>
                     </View>
                   );
                 })}
@@ -471,6 +457,46 @@ export default function HomeScreen({ navigation, viewMode = 'auto' }) {
         <ShareableLeaderboard ref={leaderboardRef} tournamentName={tournament.name} leaderboard={leaderboard} />
       </View>
     </PullToRefresh>
+
+    {tournament.rounds.length > 0 && (() => {
+      const isCurrentRound = selectedRound === tournament.currentRound;
+      const canShowNext = isCurrentRound && tournament.currentRound < tournament.rounds.length - 1;
+      const nextRound = canShowNext ? tournament.rounds[tournament.currentRound + 1] : null;
+      const nextRevealed = nextRound?.revealed;
+      return (
+        <View style={s.tournamentBottomBar}>
+          <TouchableOpacity
+            style={[s.primaryBtn, s.roundActionBtn]}
+            onPress={() => navigation.navigate('Scorecard', { roundIndex: selectedRound })}
+            activeOpacity={0.8}
+          >
+            <Feather name="edit-2" size={16} color={theme.isDark ? theme.accent.primary : theme.text.inverse} />
+            <Text style={s.primaryBtnText}>{isCurrentRound ? 'Scorecard' : 'Edit Scores'}</Text>
+          </TouchableOpacity>
+          {canShowNext && (
+            nextRevealed ? (
+              <TouchableOpacity
+                style={[s.secondaryBtn, s.roundActionBtn]}
+                onPress={() => navigation.navigate('NextRound', { revealOnly: true, roundIndex: tournament.currentRound + 1 })}
+                activeOpacity={0.7}
+              >
+                <Feather name="eye" size={16} color={theme.accent.primary} />
+                <Text style={s.secondaryBtnText}>Next Round</Text>
+              </TouchableOpacity>
+            ) : (
+              <TouchableOpacity
+                style={[s.primaryBtn, s.roundActionBtn]}
+                onPress={() => navigation.navigate('NextRound')}
+                activeOpacity={0.8}
+              >
+                <Feather name="play" size={16} color={theme.isDark ? theme.accent.primary : theme.text.inverse} />
+                <Text style={s.primaryBtnText}>Start Next Round</Text>
+              </TouchableOpacity>
+            )
+          )}
+        </View>
+      );
+    })()}
 
     <Modal
       visible={showRoundEdit}
@@ -881,6 +907,15 @@ const makeStyles = (t) => StyleSheet.create({
   // Round action row (Scorecard + Next Round side-by-side)
   roundActionsRow: { flexDirection: 'row', gap: 10 },
   roundActionBtn: { flex: 1, marginTop: 0 },
+  tournamentBottomBar: {
+    flexDirection: 'row',
+    gap: 10,
+    paddingHorizontal: 16,
+    paddingVertical: 12,
+    backgroundColor: theme.bg.primary,
+    borderTopWidth: 1,
+    borderTopColor: theme.isDark ? theme.glass?.border : theme.border.default,
+  },
 
   // Delete (tournament list cards)
   tournamentCardWrapper: { position: 'relative' },
