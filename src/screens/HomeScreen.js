@@ -912,9 +912,9 @@ const makeStyles = (t) => StyleSheet.create({
     gap: 10,
     paddingHorizontal: 16,
     paddingVertical: 12,
-    backgroundColor: theme.bg.primary,
+    backgroundColor: t.bg.primary,
     borderTopWidth: 1,
-    borderTopColor: theme.isDark ? theme.glass?.border : theme.border.default,
+    borderTopColor: t.isDark ? t.glass?.border : t.border.default,
   },
 
   // Delete (tournament list cards)
