@@ -402,7 +402,7 @@ const makeStyles = (t) => StyleSheet.create({
   },
   cardLabel: { fontFamily: 'PlusJakartaSans-SemiBold', color: t.text.muted, fontSize: 11, letterSpacing: 1, textTransform: 'uppercase', marginBottom: 4 },
   cardSub: { fontFamily: 'PlusJakartaSans-Regular', color: t.text.muted, fontSize: 12, marginTop: 2 },
-  bigNumber: { fontFamily: 'PlusJakartaSans-ExtraBold', color: t.accent.primary, fontSize: 36 },
+  bigNumber: { fontFamily: 'PlayfairDisplay-Black', color: t.accent.primary, fontSize: 36 },
 
   sectionTitle: { fontFamily: 'PlusJakartaSans-SemiBold', color: t.text.muted, fontSize: 10, letterSpacing: 1.5, textTransform: 'uppercase', marginBottom: 12, marginTop: 20 },
   emptyText: { fontFamily: 'PlusJakartaSans-Regular', color: t.text.muted, fontSize: 14, textAlign: 'center', paddingVertical: 40 },
@@ -417,7 +417,7 @@ const makeStyles = (t) => StyleSheet.create({
   highlightIcon: { width: 40, height: 40, borderRadius: 12, backgroundColor: t.accent.light, alignItems: 'center', justifyContent: 'center', marginRight: 14 },
   highlightContent: { flex: 1 },
   highlightLabel: { fontFamily: 'PlusJakartaSans-SemiBold', color: t.text.muted, fontSize: 10, letterSpacing: 1, textTransform: 'uppercase' },
-  highlightValue: { fontFamily: 'PlusJakartaSans-Bold', color: t.text.primary, fontSize: 15, marginTop: 2 },
+  highlightValue: { fontFamily: 'PlayfairDisplay-Black', color: t.text.primary, fontSize: 15, marginTop: 2 },
   highlightSub: { fontFamily: 'PlusJakartaSans-Regular', color: t.text.muted, fontSize: 11, marginTop: 1 },
 
   // Player selector
@@ -438,7 +438,7 @@ const makeStyles = (t) => StyleSheet.create({
   // Streaks
   streakRow: { flexDirection: 'row', justifyContent: 'space-around' },
   streakItem: { alignItems: 'center' },
-  streakNumber: { fontFamily: 'PlusJakartaSans-ExtraBold', fontSize: 28 },
+  streakNumber: { fontFamily: 'PlayfairDisplay-Black', fontSize: 28 },
   streakLabel: { fontFamily: 'PlusJakartaSans-Medium', color: t.text.muted, fontSize: 11, marginTop: 4 },
 
   // Round history
@@ -494,7 +494,7 @@ const makeStyles = (t) => StyleSheet.create({
   h2hResult: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-around' },
   h2hPlayer: { alignItems: 'center', gap: 4 },
   h2hName: { fontFamily: 'PlusJakartaSans-SemiBold', color: t.text.secondary, fontSize: 13 },
-  h2hScore: { fontFamily: 'PlusJakartaSans-ExtraBold', color: t.text.primary, fontSize: 32 },
+  h2hScore: { fontFamily: 'PlayfairDisplay-Black', color: t.text.primary, fontSize: 32 },
   h2hCenter: { alignItems: 'center' },
   h2hTies: { fontFamily: 'PlusJakartaSans-Medium', color: t.text.muted, fontSize: 13 },
   h2hSub: { fontFamily: 'PlusJakartaSans-Regular', color: t.text.muted, fontSize: 11, textAlign: 'center', marginTop: 8 },

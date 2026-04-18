@@ -17,13 +17,13 @@ function drawLeaderboardCanvas({ tournamentName, leaderboard, theme }) {
   canvas.height = H;
   const ctx = canvas.getContext('2d');
 
-  const bg = theme?.bg?.primary ?? '#ffffff';
-  const card = theme?.bg?.card ?? '#ffffff';
-  const text = theme?.text?.primary ?? '#111111';
-  const sub = theme?.text?.secondary ?? '#555555';
-  const muted = theme?.text?.muted ?? '#888888';
-  const border = theme?.border?.default ?? '#dddddd';
-  const accent = theme?.accent?.primary ?? '#1a6b4a';
+  const bg = '#006747';
+  const card = 'rgba(255,255,255,0.08)';
+  const text = '#ffffff';
+  const sub = 'rgba(255,255,255,0.5)';
+  const muted = 'rgba(255,255,255,0.5)';
+  const border = 'rgba(255,215,0,0.4)';
+  const accent = '#ffd700';
 
   ctx.fillStyle = bg;
   ctx.fillRect(0, 0, W, H);
@@ -34,7 +34,7 @@ function drawLeaderboardCanvas({ tournamentName, leaderboard, theme }) {
   ctx.textBaseline = 'alphabetic';
   ctx.fillText(truncate(ctx, tournamentName ?? 'Tournament', W - 80), 40, 90);
 
-  ctx.fillStyle = muted;
+  ctx.fillStyle = '#ffd700';
   ctx.font = '600 18px system-ui, -apple-system, "Segoe UI", Roboto, sans-serif';
   ctx.fillText('LEADERBOARD', 40, 124);
 
@@ -51,7 +51,7 @@ function drawLeaderboardCanvas({ tournamentName, leaderboard, theme }) {
   ctx.fillText('STRK', 1140, 188);
   ctx.textAlign = 'left';
 
-  const RANK_BG = ['#d4af37', '#94a3b8', '#c47c3a'];
+  const RANK_BG = ['rgba(212,175,55,0.3)', 'rgba(148,163,184,0.3)', 'rgba(196,124,58,0.3)'];
   const RANK_LBL = ['1st', '2nd', '3rd'];
   const players = (leaderboard ?? []).slice(0, 4);
   let y = 250;
@@ -102,7 +102,7 @@ function drawLeaderboardCanvas({ tournamentName, leaderboard, theme }) {
   });
 
   // Branding
-  ctx.fillStyle = muted;
+  ctx.fillStyle = '#ffd700';
   ctx.font = '700 16px system-ui, -apple-system, "Segoe UI", Roboto, sans-serif';
   ctx.textAlign = 'center';
   ctx.fillText('GOLF PARTNER', W / 2, H - 28);
@@ -258,8 +258,8 @@ export const ShareableLeaderboard = React.forwardRef(
         style={[
           styles.card,
           {
-            backgroundColor: theme.bg.primary,
-            borderColor: theme.border.default,
+            backgroundColor: '#006747',
+            borderColor: 'rgba(255,215,0,0.4)',
           },
         ]}
       >
@@ -269,7 +269,7 @@ export const ShareableLeaderboard = React.forwardRef(
             style={[
               styles.tournamentName,
               {
-                color: theme.text.primary,
+                color: '#ffffff',
                 fontFamily: 'PlusJakartaSans-ExtraBold',
               },
             ]}
@@ -282,7 +282,7 @@ export const ShareableLeaderboard = React.forwardRef(
             style={[
               styles.subtitle,
               {
-                color: theme.text.muted,
+                color: '#ffd700',
                 fontFamily: 'PlusJakartaSans-Medium',
               },
             ]}
@@ -292,7 +292,7 @@ export const ShareableLeaderboard = React.forwardRef(
         </View>
 
         {/* ---- Divider ---- */}
-        <View style={[styles.divider, { backgroundColor: theme.border.default }]} />
+        <View style={[styles.divider, { backgroundColor: 'rgba(255,215,0,0.4)' }]} />
 
         {/* ---- Column labels ---- */}
         <View style={styles.columnLabels}>
@@ -300,7 +300,7 @@ export const ShareableLeaderboard = React.forwardRef(
             style={[
               styles.colLabel,
               styles.colLabelPlayer,
-              { color: theme.text.muted, fontFamily: 'PlusJakartaSans-SemiBold' },
+              { color: 'rgba(255,255,255,0.5)', fontFamily: 'PlusJakartaSans-SemiBold' },
             ]}
           >
             Player
@@ -308,7 +308,7 @@ export const ShareableLeaderboard = React.forwardRef(
           <Text
             style={[
               styles.colLabel,
-              { color: theme.text.muted, fontFamily: 'PlusJakartaSans-SemiBold' },
+              { color: 'rgba(255,255,255,0.5)', fontFamily: 'PlusJakartaSans-SemiBold' },
             ]}
           >
             Pts
@@ -316,7 +316,7 @@ export const ShareableLeaderboard = React.forwardRef(
           <Text
             style={[
               styles.colLabel,
-              { color: theme.text.muted, fontFamily: 'PlusJakartaSans-SemiBold' },
+              { color: 'rgba(255,255,255,0.5)', fontFamily: 'PlusJakartaSans-SemiBold' },
             ]}
           >
             Strk
@@ -341,7 +341,7 @@ export const ShareableLeaderboard = React.forwardRef(
               style={[
                 styles.playerName,
                 {
-                  color: theme.text.primary,
+                  color: '#ffffff',
                   fontFamily: 'PlusJakartaSans-SemiBold',
                 },
               ]}
@@ -354,7 +354,7 @@ export const ShareableLeaderboard = React.forwardRef(
               style={[
                 styles.stat,
                 {
-                  color: theme.accent.primary,
+                  color: '#ffd700',
                   fontFamily: 'PlusJakartaSans-Bold',
                 },
               ]}
@@ -366,7 +366,7 @@ export const ShareableLeaderboard = React.forwardRef(
               style={[
                 styles.stat,
                 {
-                  color: theme.text.secondary,
+                  color: 'rgba(255,255,255,0.5)',
                   fontFamily: 'PlusJakartaSans-Medium',
                 },
               ]}
@@ -382,7 +382,7 @@ export const ShareableLeaderboard = React.forwardRef(
             style={[
               styles.brandText,
               {
-                color: theme.text.muted,
+                color: '#ffd700',
                 fontFamily: 'PlusJakartaSans-SemiBold',
               },
             ]}

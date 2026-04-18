@@ -139,17 +139,19 @@ export default function NextRoundScreen({ navigation, route }) {
   if (phase === 'countdown') {
     return (
       <View style={s.fullscreen}>
-        <Animated.Text
-          style={[
-            s.countdownNum,
-            {
-              opacity: countdownOpacity,
-              transform: [{ scale: countdownScale }],
-            },
-          ]}
-        >
-          {countdownNum}
-        </Animated.Text>
+        <View style={s.countdownCircle}>
+          <Animated.Text
+            style={[
+              s.countdownNum,
+              {
+                opacity: countdownOpacity,
+                transform: [{ scale: countdownScale }],
+              },
+            ]}
+          >
+            {countdownNum}
+          </Animated.Text>
+        </View>
       </View>
     );
   }
@@ -166,8 +168,11 @@ export default function NextRoundScreen({ navigation, route }) {
             const color = pairColors[i] ?? theme.accent.primary;
             const isLast = i === nextPairs.length - 1;
             return (
+              <React.Fragment key={i}>
+              {i > 0 && (
+                <Text style={s.vsDivider}>vs</Text>
+              )}
               <Animated.View
-                key={i}
                 style={[
                   s.revealPairCard,
                   isLast && s.revealPairCard2,
@@ -188,6 +193,7 @@ export default function NextRoundScreen({ navigation, route }) {
                   </React.Fragment>
                 ))}
               </Animated.View>
+              </React.Fragment>
             );
           })}
         </View>
@@ -311,7 +317,7 @@ function makeStyles(theme) {
     },
     course: {
       fontSize: 24,
-      fontFamily: 'PlusJakartaSans-ExtraBold',
+      fontFamily: 'PlayfairDisplay-Bold',
       color: theme.text.primary,
       marginBottom: 48,
       textAlign: 'center',
@@ -331,10 +337,28 @@ function makeStyles(theme) {
     },
 
     /* Countdown */
+    countdownCircle: {
+      width: 200,
+      height: 200,
+      borderRadius: 100,
+      backgroundColor: 'rgba(0,103,71,0.3)',
+      alignItems: 'center',
+      justifyContent: 'center',
+    },
     countdownNum: {
       fontSize: 140,
-      fontFamily: 'PlusJakartaSans-ExtraBold',
-      color: theme.accent.primary,
+      fontFamily: 'PlayfairDisplay-Black',
+      color: '#ffd700',
+    },
+
+    /* VS divider */
+    vsDivider: {
+      fontFamily: 'PlayfairDisplay-Regular',
+      fontStyle: 'italic',
+      fontSize: 16,
+      color: theme.text.muted,
+      textAlign: 'center',
+      marginVertical: 8,
     },
 
     /* Reveal pairs */
@@ -343,7 +367,7 @@ function makeStyles(theme) {
       borderRadius: 16,
       borderWidth: 1,
       borderColor: theme.isDark ? theme.glass?.border : theme.border.default,
-      borderLeftWidth: 4,
+      borderLeftWidth: 6,
       alignItems: 'center',
       paddingVertical: 24,
       paddingHorizontal: 32,

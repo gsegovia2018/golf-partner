@@ -1,8 +1,9 @@
-import React, { useEffect, useRef, useState } from 'react';
+import React, { useEffect, useRef, useState, useCallback } from 'react';
 import {
   View, Text, TextInput, TouchableOpacity,
-  StyleSheet, ScrollView, Modal, Pressable, KeyboardAvoidingView, Platform,
+  StyleSheet, ScrollView, Modal, Pressable, KeyboardAvoidingView, Platform, Animated,
 } from 'react-native';
+import * as Haptics from 'expo-haptics';
 
 import { Feather } from '@expo/vector-icons';
 import {
@@ -10,6 +11,14 @@ import {
   calcStablefordPoints, calcBestWorstBall, pickupStrokes, DEFAULT_SETTINGS,
 } from '../store/tournamentStore';
 import { useTheme } from '../theme/ThemeContext';
+import PullToRefresh from '../components/PullToRefresh';
+
+const haptic = (style = 'light') => {
+  if (Platform.OS === 'web') return;
+  if (style === 'light') Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+  else if (style === 'medium') Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+  else if (style === 'success') Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+};
 
 export default function ScorecardScreen({ navigation, route }) {
   const { theme } = useTheme();
@@ -20,20 +29,27 @@ export default function ScorecardScreen({ navigation, route }) {
   const [notes, setNotes] = useState('');
   const [view, setView] = useState('hole'); // 'grid' | 'hole'
   const [currentHole, setCurrentHole] = useState(1);
+  const [refreshing, setRefreshing] = useState(false);
   const tournamentRef = useRef(null);
   const saveTimeoutRef = useRef(null);
   const notesSaveTimeoutRef = useRef(null);
 
   useEffect(() => { tournamentRef.current = tournament; }, [tournament]);
 
-  useEffect(() => {
-    (async () => {
-      const t = await loadTournament();
-      setTournament(t);
-      setScores(t.rounds[roundIndex].scores ?? {});
-      setNotes(t.rounds[roundIndex].notes ?? '');
-    })();
+  const reload = useCallback(async () => {
+    const t = await loadTournament();
+    if (!t) return;
+    setTournament(t);
+    setScores(t.rounds[roundIndex].scores ?? {});
+    setNotes(t.rounds[roundIndex].notes ?? '');
   }, [roundIndex]);
+
+  useEffect(() => { reload(); }, [reload]);
+
+  const onRefresh = useCallback(async () => {
+    setRefreshing(true);
+    try { await reload(); } finally { setRefreshing(false); }
+  }, [reload]);
 
   // Auto-initialize current hole scores to par so "leaving it" records par
   useEffect(() => {
@@ -95,7 +111,18 @@ export default function ScorecardScreen({ navigation, route }) {
     });
   }
 
+  const scoreAnims = useRef({});
+  function getScoreAnim(playerId) {
+    if (!scoreAnims.current[playerId]) scoreAnims.current[playerId] = new Animated.Value(1);
+    return scoreAnims.current[playerId];
+  }
+
   function stepScore(playerId, holeNumber, delta) {
+    haptic('light');
+    const anim = getScoreAnim(playerId);
+    anim.setValue(1.18);
+    Animated.spring(anim, { toValue: 1, friction: 5, useNativeDriver: true }).start();
+
     const holePar = round.holes.find((h) => h.number === holeNumber)?.par ?? 4;
     setScores((prev) => {
       const current = prev[playerId]?.[holeNumber] ?? holePar;
@@ -172,11 +199,14 @@ export default function ScorecardScreen({ navigation, route }) {
           onStep={stepScore}
           onSetScore={setScore}
           onNotesChange={saveNotes}
-          onPrev={() => setCurrentHole((h) => Math.max(1, h - 1))}
-          onNext={() => setCurrentHole((h) => Math.min(18, h + 1))}
-          onGoToHole={setCurrentHole}
+          onPrev={() => { haptic('medium'); setCurrentHole((h) => Math.max(1, h - 1)); }}
+          onNext={() => { haptic('medium'); setCurrentHole((h) => Math.min(18, h + 1)); }}
+          onGoToHole={(h) => { haptic('light'); setCurrentHole(h); }}
           onGoBack={() => navigation.goBack()}
           playerTotals={playerTotals}
+          getScoreAnim={getScoreAnim}
+          refreshing={refreshing}
+          onRefresh={onRefresh}
         />
       ) : (
         <GridView
@@ -188,13 +218,15 @@ export default function ScorecardScreen({ navigation, route }) {
           bbResult={bbResult}
           settings={settings}
           onSetScore={setScore}
+          refreshing={refreshing}
+          onRefresh={onRefresh}
         />
       )}
     </View>
   );
 }
 
-function HoleView({ round, roundIndex, players, scores, notes, currentHole, hole, isBestBall, bbResult, settings, onStep, onSetScore, onNotesChange, onPrev, onNext, onGoToHole, onGoBack, playerTotals }) {
+function HoleView({ round, roundIndex, players, scores, notes, currentHole, hole, isBestBall, bbResult, settings, onStep, onSetScore, onNotesChange, onPrev, onNext, onGoToHole, onGoBack, playerTotals, getScoreAnim, refreshing, onRefresh }) {
   const { theme } = useTheme();
   const s = makeStyles(theme);
   const [notesOpen, setNotesOpen] = useState(false);
@@ -203,6 +235,12 @@ function HoleView({ round, roundIndex, players, scores, notes, currentHole, hole
 
   return (
     <View style={s.flex}>
+      <PullToRefresh
+        style={s.flex}
+        contentContainerStyle={s.holeScrollContent}
+        refreshing={refreshing}
+        onRefresh={onRefresh}
+      >
       {/* Hole header */}
       <View style={s.holeHeaderCard}>
         <View style={s.holeHeaderLeft}>
@@ -275,7 +313,7 @@ function HoleView({ round, roundIndex, players, scores, notes, currentHole, hole
                       <TouchableOpacity style={s.stepBtn} onPress={() => onStep(player.id, currentHole, -1)}>
                         <Feather name="minus" size={18} color={theme.text.primary} />
                       </TouchableOpacity>
-                      <View style={s.scoreDisplay}>
+                      <Animated.View style={[s.scoreDisplay, { transform: [{ scale: getScoreAnim(player.id) }] }]}>
                         <Text style={s.scoreDisplayNum}>
                           {strokes ?? hole.par}
                         </Text>
@@ -284,7 +322,7 @@ function HoleView({ round, roundIndex, players, scores, notes, currentHole, hole
                             {pts} {pts === 1 ? 'pt' : 'pts'}
                           </Text>
                         )}
-                      </View>
+                      </Animated.View>
                       <TouchableOpacity style={s.stepBtn} onPress={() => onStep(player.id, currentHole, 1)}>
                         <Feather name="plus" size={18} color={theme.text.primary} />
                       </TouchableOpacity>
@@ -392,6 +430,7 @@ function HoleView({ round, roundIndex, players, scores, notes, currentHole, hole
           </TouchableOpacity>
         </View>
       </View>
+      </PullToRefresh>
 
       {/* Notes modal — only shown on demand */}
       <Modal
@@ -731,7 +770,7 @@ function makeStyles(theme) {
     holeNumber: {
       color: theme.text.primary,
       fontSize: 44,
-      fontFamily: 'PlusJakartaSans-ExtraBold',
+      fontFamily: 'PlayfairDisplay-Black',
       lineHeight: 48,
       letterSpacing: -1,
     },

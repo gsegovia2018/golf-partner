@@ -353,7 +353,7 @@ function makeStyles(theme) {
       justifyContent: 'center',
     },
     headerTitle: {
-      fontFamily: 'PlusJakartaSans-Bold',
+      fontFamily: 'PlayfairDisplay-Bold',
       fontSize: 18,
       color: theme.text.primary,
       letterSpacing: -0.3,

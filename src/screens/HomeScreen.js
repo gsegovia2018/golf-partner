@@ -534,7 +534,7 @@ const makeStyles = (t) => StyleSheet.create({
   },
   tournamentCard: {
     backgroundColor: t.isDark ? t.bg.card : t.bg.card,
-    borderRadius: 16, borderWidth: 1,
+    borderRadius: 20, borderWidth: t.isDark ? 1 : 0,
     borderColor: t.isDark ? t.glass?.border || t.border.default : t.border.default,
     padding: 16, marginBottom: 10, flexDirection: 'row', alignItems: 'center',
     ...(t.isDark ? {} : t.shadow.card),
@@ -547,9 +547,9 @@ const makeStyles = (t) => StyleSheet.create({
   tournamentCardRight: { paddingLeft: 12 },
   statusBadge: {
     paddingHorizontal: 8, paddingVertical: 2, borderRadius: 20,
-    backgroundColor: t.accent.light,
+    backgroundColor: 'rgba(212,175,55,0.15)',
   },
-  statusBadgeText: { fontFamily: 'PlusJakartaSans-SemiBold', color: t.accent.primary, fontSize: 9, letterSpacing: 0.5 },
+  statusBadgeText: { fontFamily: 'PlusJakartaSans-SemiBold', color: '#d4af37', fontSize: 9, letterSpacing: 0.5 },
   statusBadgeFinished: { backgroundColor: t.bg.secondary },
   statusBadgeTextFinished: { color: t.text.muted },
 
@@ -566,7 +566,7 @@ const makeStyles = (t) => StyleSheet.create({
   // Cards
   card: {
     backgroundColor: t.isDark ? t.bg.card : t.bg.card,
-    borderRadius: 16, borderWidth: 1,
+    borderRadius: 20, borderWidth: t.isDark ? 1 : 0,
     borderColor: t.isDark ? t.glass?.border || t.border.default : t.border.default,
     padding: 16, marginBottom: 16,
     ...(t.isDark ? {} : t.shadow.card),
