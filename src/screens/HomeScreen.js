@@ -1,4 +1,4 @@
-import React, { useEffect, useState, useCallback, useRef } from 'react';
+import React, { useEffect, useState, useCallback, useRef, useMemo, startTransition } from 'react';
 import { View, Text, TouchableOpacity, StyleSheet, ScrollView, Switch, Alert, FlatList, Platform, Modal, Pressable } from 'react-native';
 import { Feather } from '@expo/vector-icons';
 
@@ -109,7 +109,7 @@ export default function HomeScreen({ navigation, viewMode = 'auto' }) {
     }
   }
 
-  const s = makeStyles(theme);
+  const s = useMemo(() => makeStyles(theme), [theme]);
   const leaderboardRef = useRef();
 
   const showList = viewMode === 'list' || (viewMode === 'auto' && !tournament);
@@ -214,23 +214,35 @@ export default function HomeScreen({ navigation, viewMode = 'auto' }) {
     );
   }
 
-  const settings = { ...DEFAULT_SETTINGS, ...tournament.settings };
+  const settings = useMemo(
+    () => ({ ...DEFAULT_SETTINGS, ...tournament.settings }),
+    [tournament.settings],
+  );
 
   const completedRounds = tournament.rounds.filter(
     (r) => r.scores && Object.keys(r.scores).length > 0,
   );
 
-  const leaderboard = tournamentLeaderboard(tournament);
-  const bestWorstLeaderboard = leaderboardBestBall ? tournamentBestWorstLeaderboard(tournament) : null;
+  const leaderboard = useMemo(() => tournamentLeaderboard(tournament), [tournament]);
+  const bestWorstLeaderboard = useMemo(
+    () => (leaderboardBestBall ? tournamentBestWorstLeaderboard(tournament) : null),
+    [leaderboardBestBall, tournament],
+  );
 
   const selectedRoundData = tournament.rounds[selectedRound];
   const selectedRoundHasScores = !!(selectedRoundData?.scores && Object.keys(selectedRoundData.scores).length > 0);
-  const selectedRoundPlayerTotals = selectedRoundHasScores && !leaderboardBestBall
-    ? roundTotals(selectedRoundData, tournament.players)
-    : null;
-  const selectedRoundBB = selectedRoundHasScores && leaderboardBestBall && selectedRoundData.pairs?.length
-    ? calcBestWorstBall(selectedRoundData, tournament.players)
-    : null;
+  const selectedRoundPlayerTotals = useMemo(
+    () => (selectedRoundHasScores && !leaderboardBestBall
+      ? roundTotals(selectedRoundData, tournament.players)
+      : null),
+    [selectedRoundHasScores, leaderboardBestBall, selectedRoundData, tournament.players],
+  );
+  const selectedRoundBB = useMemo(
+    () => (selectedRoundHasScores && leaderboardBestBall && selectedRoundData.pairs?.length
+      ? calcBestWorstBall(selectedRoundData, tournament.players)
+      : null),
+    [selectedRoundHasScores, leaderboardBestBall, selectedRoundData, tournament.players],
+  );
   const getSelectedRoundValue = (playerId) => {
     if (leaderboardBestBall) {
       if (!selectedRoundBB) return null;
@@ -361,18 +373,17 @@ export default function HomeScreen({ navigation, viewMode = 'auto' }) {
                 scrollEventThrottle={16}
                 onScrollBeginDrag={() => { isUserScrollingRound.current = true; }}
                 onScroll={(e) => {
-                  roundScrollOffset.current = e.nativeEvent.contentOffset.x;
-                }}
-                onScrollEndDrag={(e) => {
                   const x = e.nativeEvent.contentOffset.x;
                   roundScrollOffset.current = x;
-                  // If already settled at a page boundary, no momentum will fire.
-                  if (Math.abs(x - Math.round(x / roundPagerWidth) * roundPagerWidth) < 1) {
-                    isUserScrollingRound.current = false;
-                    const idx = Math.round(x / roundPagerWidth);
-                    if (idx !== selectedRound) setSelectedRound(idx);
+                  const idx = Math.round(x / roundPagerWidth);
+                  if (idx !== selectedRound) {
+                    // Non-urgent: let the native swipe keep running smoothly
+                    // while React reconciles leaderboard/tabs/match panel in
+                    // the background.
+                    startTransition(() => setSelectedRound(idx));
                   }
                 }}
+                onScrollEndDrag={() => { isUserScrollingRound.current = false; }}
                 onMomentumScrollEnd={(e) => {
                   const x = e.nativeEvent.contentOffset.x;
                   roundScrollOffset.current = x;
@@ -633,7 +644,7 @@ export default function HomeScreen({ navigation, viewMode = 'auto' }) {
   );
 }
 
-function StablefordRoundCard({ round, players, theme, s }) {
+const StablefordRoundCard = React.memo(function StablefordRoundCard({ round, players, theme, s }) {
   const pairResults = roundPairLeaderboard(round, players);
   return (
     <>
@@ -653,9 +664,9 @@ function StablefordRoundCard({ round, players, theme, s }) {
       ))}
     </>
   );
-}
+});
 
-function BestBallRoundCard({ round, players, settings, theme, s }) {
+const BestBallRoundCard = React.memo(function BestBallRoundCard({ round, players, settings, theme, s }) {
   const result = calcBestWorstBall(round, players);
   if (!result) return <Text style={s.pairMember}>No results yet</Text>;
 
@@ -685,7 +696,7 @@ function BestBallRoundCard({ round, players, settings, theme, s }) {
       </View>
     </>
   );
-}
+});
 
 const makeStyles = (t) => StyleSheet.create({
   screen: { ...StyleSheet.absoluteFillObject, backgroundColor: t.bg.primary },

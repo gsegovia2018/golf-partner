@@ -1,4 +1,4 @@
-import React, { useEffect, useRef, useState, useCallback } from 'react';
+import React, { useEffect, useRef, useState, useCallback, useMemo, startTransition } from 'react';
 import {
   View, Text, TextInput, TouchableOpacity,
   StyleSheet, ScrollView, Modal, Pressable, KeyboardAvoidingView, Platform, Animated,
@@ -32,7 +32,7 @@ function celebrationFor(par, strokes) {
 
 export default function ScorecardScreen({ navigation, route }) {
   const { theme } = useTheme();
-  const s = makeStyles(theme);
+  const s = useMemo(() => makeStyles(theme), [theme]);
   const paramRoundIndex = route.params?.roundIndex;
   const [tournament, setTournament] = useState(null);
   const [scores, setScores] = useState({});
@@ -114,7 +114,10 @@ export default function ScorecardScreen({ navigation, route }) {
 
   const round = tournament.rounds[roundIndex];
   const { players } = tournament;
-  const settings = { ...DEFAULT_SETTINGS, ...tournament.settings };
+  const settings = useMemo(
+    () => ({ ...DEFAULT_SETTINGS, ...tournament.settings }),
+    [tournament.settings],
+  );
   const isBestBall = settings.scoringMode === 'bestball';
 
   function triggerCelebration(playerId, holeNumber, label) {
@@ -187,8 +190,11 @@ export default function ScorecardScreen({ navigation, route }) {
   }
 
   const hole = round.holes.find((h) => h.number === currentHole);
-  const liveRound = { ...round, scores };
-  const bbResult = isBestBall ? calcBestWorstBall(liveRound, players) : null;
+  const liveRound = useMemo(() => ({ ...round, scores }), [round, scores]);
+  const bbResult = useMemo(
+    () => (isBestBall ? calcBestWorstBall(liveRound, players) : null),
+    [isBestBall, liveRound, players],
+  );
 
   return (
     <View style={s.container}>
@@ -272,7 +278,7 @@ export default function ScorecardScreen({ navigation, route }) {
 
 function HoleView({ round, roundIndex, players, scores, notes, currentHole, hole, isBestBall, bbResult, settings, onStep, onSetScore, onNotesChange, onPrev, onNext, onGoToHole, onGoBack, playerTotals, getScoreAnim, celebration, celebrationAnim, refreshing, onRefresh }) {
   const { theme } = useTheme();
-  const s = makeStyles(theme);
+  const s = useMemo(() => makeStyles(theme), [theme]);
   const [notesOpen, setNotesOpen] = useState(false);
   const [holePickerOpen, setHolePickerOpen] = useState(false);
   const [pagerWidth, setPagerWidth] = useState(0);
@@ -319,17 +325,16 @@ function HoleView({ round, roundIndex, players, scores, notes, currentHole, hole
             scrollEventThrottle={16}
             onScrollBeginDrag={() => { isUserScrollingHole.current = true; }}
             onScroll={(e) => {
-              holeScrollOffset.current = e.nativeEvent.contentOffset.x;
-            }}
-            onScrollEndDrag={(e) => {
               const x = e.nativeEvent.contentOffset.x;
               holeScrollOffset.current = x;
-              if (Math.abs(x - Math.round(x / pagerWidth) * pagerWidth) < 1) {
-                isUserScrollingHole.current = false;
-                const newHole = Math.round(x / pagerWidth) + 1;
-                if (newHole !== currentHole) onGoToHole(newHole);
+              const newHole = Math.round(x / pagerWidth) + 1;
+              if (newHole !== currentHole) {
+                // Non-urgent: keep the native swipe running smoothly while
+                // match panel / totals / next-hole button reconcile.
+                startTransition(() => onGoToHole(newHole));
               }
             }}
+            onScrollEndDrag={() => { isUserScrollingHole.current = false; }}
             onMomentumScrollEnd={(e) => {
               const x = e.nativeEvent.contentOffset.x;
               holeScrollOffset.current = x;
@@ -624,7 +629,7 @@ function roundTeamPts(bbResult, team, bbVal, wbVal) {
 
 function MatchPanel({ bbResult, currentHole, settings }) {
   const { theme } = useTheme();
-  const s = makeStyles(theme);
+  const s = useMemo(() => makeStyles(theme), [theme]);
   const { pair1, pair2, holes } = bbResult;
   const { bestBallValue: bbVal, worstBallValue: wbVal } = settings;
   const holeData = holes.find((h) => h.number === currentHole);
@@ -679,7 +684,7 @@ function MatchPanel({ bbResult, currentHole, settings }) {
 
 function GridView({ round, roundIndex, players, scores, notes, onNotesChange, isBestBall, bbResult, settings, onSetScore, refreshing, onRefresh }) {
   const { theme } = useTheme();
-  const s = makeStyles(theme);
+  const s = useMemo(() => makeStyles(theme), [theme]);
   const [notesOpen, setNotesOpen] = useState(false);
 
   return (
@@ -919,7 +924,7 @@ function GridView({ round, roundIndex, players, scores, notes, onNotesChange, is
 
 function LiveMatchStrip({ bbResult, settings }) {
   const { theme } = useTheme();
-  const s = makeStyles(theme);
+  const s = useMemo(() => makeStyles(theme), [theme]);
 
   if (!bbResult) return null;
   const { pair1, pair2 } = bbResult;
