@@ -633,14 +633,17 @@ export async function joinTournamentByCode(code) {
   if (!userId) throw new Error('Must be signed in to join');
 
   const { data: invite, error: inviteErr } = await supabase
-    .from('tournament_invites').select('tournament_id')
+    .from('tournament_invites').select('tournament_id, role')
     .eq('code', code.toUpperCase().trim()).maybeSingle();
   if (inviteErr) throw inviteErr;
   if (!invite) throw new Error('Invalid code — check with the tournament owner');
 
+  // Default = editor: the common use case is friends scoring a tournament
+  // together. Viewer-only invites are a future per-invite opt-in.
+  const role = invite.role ?? 'editor';
   const { error } = await supabase
     .from('tournament_members')
-    .upsert({ tournament_id: invite.tournament_id, user_id: userId, role: 'viewer' });
+    .upsert({ tournament_id: invite.tournament_id, user_id: userId, role });
   if (error) throw error;
   return invite.tournament_id;
 }
