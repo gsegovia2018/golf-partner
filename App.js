@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useEffect } from 'react';
 import { View, ActivityIndicator } from 'react-native';
 import { NavigationContainer } from '@react-navigation/native';
 import { createStackNavigator, CardStyleInterpolators } from '@react-navigation/stack';
@@ -37,9 +37,11 @@ import PlayerPickerScreen from './src/screens/PlayerPickerScreen';
 import CoursePickerScreen from './src/screens/CoursePickerScreen';
 import StatsScreen from './src/screens/StatsScreen';
 import EditTeamsScreen from './src/screens/EditTeamsScreen';
+import GalleryScreen from './src/screens/GalleryScreen';
 import JoinTournamentScreen from './src/screens/JoinTournamentScreen';
 import ProfileScreen from './src/screens/ProfileScreen';
 import MembersScreen from './src/screens/MembersScreen';
+import { startUploadWorker } from './src/lib/uploadWorker';
 
 const Stack = createStackNavigator();
 
@@ -86,6 +88,7 @@ function AppNavigator() {
         <Stack.Screen name="CoursePicker" component={CoursePickerScreen} />
         <Stack.Screen name="Stats" component={StatsScreen} />
         <Stack.Screen name="EditTeams" component={EditTeamsScreen} />
+        <Stack.Screen name="Gallery" component={GalleryScreen} />
         <Stack.Screen name="JoinTournament" component={JoinTournamentScreen} />
         <Stack.Screen name="Profile" component={ProfileScreen} />
         <Stack.Screen name="Members" component={MembersScreen} />
@@ -106,6 +109,8 @@ export default function App() {
     'PlayfairDisplay-Bold': PlayfairDisplay_700Bold,
     'PlayfairDisplay-Black': PlayfairDisplay_900Black,
   });
+
+  useEffect(() => { startUploadWorker(); }, []);
 
   if (!fontsLoaded) {
     return <LoadingSplash />;
