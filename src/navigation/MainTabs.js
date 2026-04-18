@@ -35,14 +35,14 @@ function TabBar({ state, descriptors, navigation }) {
     }
   }, [routeCount, fade]);
 
+  const s = makeBarStyles(theme);
+
   return (
     <Animated.View
       style={[
-        styles.bar,
+        s.bar,
         {
-          backgroundColor: theme.bg.card,
-          borderTopColor: theme.border.default,
-          paddingBottom: insets.bottom,
+          paddingBottom: Math.max(insets.bottom, 8),
           opacity: fade,
         },
       ]}
@@ -52,7 +52,6 @@ function TabBar({ state, descriptors, navigation }) {
         const focused = state.index === index;
         const iconName = options.tabBarIconName;
         const label = options.tabBarLabel ?? route.name;
-        const color = focused ? theme.accent.primary : theme.text.muted;
 
         return (
           <Pressable
@@ -64,17 +63,12 @@ function TabBar({ state, descriptors, navigation }) {
               const event = navigation.emit({ type: 'tabPress', target: route.key, canPreventDefault: true });
               if (!focused && !event.defaultPrevented) navigation.navigate(route.name);
             }}
-            style={({ pressed }) => [styles.tab, { opacity: pressed ? 0.7 : 1 }]}
+            style={({ pressed }) => [s.tab, { opacity: pressed ? 0.7 : 1 }]}
           >
-            <View
-              style={[
-                styles.iconPill,
-                focused && { backgroundColor: theme.accent.light },
-              ]}
-            >
-              <Feather name={iconName} size={20} color={color} />
+            <View style={[s.iconWrap, focused && s.iconWrapActive]}>
+              <Feather name={iconName} size={18} color={focused ? (theme.isDark ? theme.accent.primary : '#ffffff') : theme.text.muted} />
             </View>
-            <Text style={[styles.label, typography.caption, { color }]}>{label}</Text>
+            <Text style={[s.label, focused && s.labelActive]}>{label}</Text>
           </Pressable>
         );
       })}
@@ -115,30 +109,47 @@ export default function MainTabs() {
   );
 }
 
-const styles = StyleSheet.create({
+const makeBarStyles = (t) => StyleSheet.create({
   bar: {
     flexDirection: 'row',
-    borderTopWidth: 1,
-    paddingTop: spacing.xs,
-    ...Platform.select({
-      ios: {},
-      android: { elevation: 0 },
+    backgroundColor: t.isDark ? t.bg.primary : '#ffffff',
+    borderTopWidth: StyleSheet.hairlineWidth,
+    borderTopColor: t.isDark ? t.border.default : '#ece8e1',
+    paddingTop: 8,
+    ...(t.isDark ? {} : {
+      shadowColor: '#000',
+      shadowOpacity: 0.06,
+      shadowOffset: { width: 0, height: -2 },
+      shadowRadius: 8,
+      elevation: 8,
     }),
   },
   tab: {
     flex: 1,
     alignItems: 'center',
     justifyContent: 'center',
-    paddingVertical: spacing.xs,
-    minHeight: 44,
+    paddingVertical: 2,
+    minHeight: 48,
   },
-  iconPill: {
-    paddingHorizontal: spacing.md,
-    paddingVertical: spacing.xs,
-    borderRadius: radius.pill,
-    marginBottom: 2,
+  iconWrap: {
+    width: 40,
+    height: 28,
+    borderRadius: 14,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginBottom: 3,
+  },
+  iconWrapActive: {
+    backgroundColor: t.isDark ? t.accent.light : t.accent.primary,
   },
   label: {
+    fontFamily: 'PlusJakartaSans-SemiBold',
+    fontSize: 10,
+    letterSpacing: 0.3,
+    color: t.text.muted,
     textAlign: 'center',
+  },
+  labelActive: {
+    color: t.accent.primary,
   },
 });

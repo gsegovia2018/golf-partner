@@ -646,10 +646,8 @@ function GridView({ round, roundIndex, players, scores, notes, onNotesChange, is
                 ? [...pairs[0], ...pairs[1]].map((pp) => players.find((p) => p.id === pp.id)).filter(Boolean)
                 : players;
               return orderedPlayers.map((p) => {
-                const pairIndex = pairs.findIndex((pair) => pair.some((pp) => pp.id === p.id));
-                const color = pairIndex === 0 ? theme.pairA : pairIndex === 1 ? theme.pairB : theme.accent.primary;
                 return (
-                  <Text key={p.id} style={[s.cell, s.playerCell, s.headerText, { color }]}>
+                  <Text key={p.id} style={[s.cell, s.playerCell, s.headerText]}>
                     {p.name.split(' ')[0]}
                   </Text>
                 );
@@ -1121,7 +1119,7 @@ function makeStyles(theme) {
     },
 
     // Horizontal pager — each hole is a full-width page
-    pagerWrap: { flex: 1 },
+    pagerWrap: {},
 
     // Grid view header row (course title + Notes pill)
     gridHeaderRow: {
@@ -1265,57 +1263,80 @@ function makeStyles(theme) {
     gridContent: { padding: 16, paddingTop: 12, paddingBottom: 40 },
     title: {
       fontSize: 22,
-      fontFamily: 'PlusJakartaSans-ExtraBold',
+      fontFamily: 'PlayfairDisplay-Bold',
       color: theme.accent.primary,
-      letterSpacing: -0.5,
+      letterSpacing: -0.3,
     },
     subtitle: {
-      color: theme.text.secondary,
+      color: theme.text.muted,
       marginBottom: 16,
       fontFamily: 'PlusJakartaSans-Medium',
+      fontSize: 12,
+      letterSpacing: 0.5,
+      textTransform: 'uppercase',
     },
     headerRow: {
       flexDirection: 'row',
-      borderBottomWidth: 1,
-      borderBottomColor: theme.isDark ? theme.glass?.border : theme.border.default,
-      paddingBottom: 8,
-      marginBottom: 2,
+      backgroundColor: '#006747',
+      borderRadius: 8,
+      paddingVertical: 8,
+      marginBottom: 4,
     },
-    holeRow: { flexDirection: 'row', alignItems: 'center', paddingVertical: 5 },
-    altRow: { backgroundColor: theme.bg.card },
+    holeRow: { flexDirection: 'row', alignItems: 'center', paddingVertical: 4, borderRadius: 6 },
+    altRow: {
+      backgroundColor: theme.isDark ? 'rgba(79,174,138,0.04)' : 'rgba(0,103,71,0.03)',
+    },
     totalsRow: {
-      borderTopWidth: 1,
-      borderTopColor: theme.isDark ? theme.glass?.border : theme.border.default,
-      marginTop: 4,
-      paddingTop: 8,
+      borderTopWidth: 2,
+      borderTopColor: theme.accent.primary,
+      marginTop: 6,
+      paddingTop: 10,
     },
     headerText: {
       fontFamily: 'PlusJakartaSans-Bold',
-      fontSize: 12,
+      fontSize: 11,
+      color: 'rgba(255,255,255,0.85)',
+      letterSpacing: 0.5,
     },
     cell: { justifyContent: 'center', alignItems: 'center', paddingHorizontal: 2 },
-    holeCell: { width: 36, color: theme.text.secondary, fontSize: 13, fontFamily: 'PlusJakartaSans-Medium' },
-    parCell: { width: 32, color: theme.text.primary, textAlign: 'center', fontSize: 13, fontFamily: 'PlusJakartaSans-Medium' },
-    siCell: { width: 32, color: theme.text.muted, fontSize: 11, textAlign: 'center', fontFamily: 'PlusJakartaSans-Regular' },
-    playerCell: { width: 60 },
+    holeCell: {
+      width: 36, fontSize: 13,
+      fontFamily: 'PlusJakartaSans-SemiBold',
+      color: theme.text.secondary,
+      textAlign: 'center',
+    },
+    parCell: {
+      width: 32, fontSize: 12,
+      fontFamily: 'PlusJakartaSans-SemiBold',
+      color: theme.text.primary,
+      textAlign: 'center',
+    },
+    siCell: {
+      width: 32, fontSize: 10,
+      fontFamily: 'PlusJakartaSans-Regular',
+      color: theme.text.muted,
+      textAlign: 'center',
+    },
+    playerCell: { width: 62 },
     inputCell: { alignItems: 'center' },
     scoreInput: {
-      backgroundColor: theme.isDark ? theme.bg.elevated : theme.bg.secondary,
+      backgroundColor: theme.isDark ? theme.bg.elevated : '#ffffff',
       color: theme.text.primary,
-      borderRadius: 10,
+      borderRadius: 8,
       borderWidth: 1,
-      borderColor: theme.isDark ? theme.glass?.border : theme.border.default,
-      width: 48,
-      height: 48,
+      borderColor: theme.isDark ? theme.glass?.border : theme.border.subtle,
+      width: 46,
+      height: 38,
       textAlign: 'center',
-      fontSize: 16,
+      fontSize: 15,
       fontFamily: 'PlusJakartaSans-Bold',
-      padding: 5,
+      padding: 2,
     },
     pts: {
-      fontSize: 10,
-      fontFamily: 'PlusJakartaSans-SemiBold',
-      marginTop: 2,
+      fontSize: 9,
+      fontFamily: 'PlusJakartaSans-Bold',
+      marginTop: 1,
+      letterSpacing: 0.2,
     },
     totalText: {
       color: theme.text.primary,
@@ -1324,15 +1345,15 @@ function makeStyles(theme) {
       textAlign: 'center',
     },
     totalPts: {
-      fontFamily: 'PlusJakartaSans-ExtraBold',
-      fontSize: 13,
+      fontFamily: 'PlayfairDisplay-Bold',
+      fontSize: 15,
       textAlign: 'center',
     },
     totalStr: {
       color: theme.text.muted,
-      fontSize: 11,
+      fontSize: 10,
       textAlign: 'center',
-      fontFamily: 'PlusJakartaSans-Regular',
+      fontFamily: 'PlusJakartaSans-Medium',
     },
 
     // Live match
