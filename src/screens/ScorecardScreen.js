@@ -14,6 +14,28 @@ import {
 import { useTheme } from '../theme/ThemeContext';
 import PullToRefresh from '../components/PullToRefresh';
 
+// Web-only CSS scroll-snap. On native, `pagingEnabled` is handled by the
+// platform. On web, react-native-web 0.21's `pagingEnabled` only sets
+// `scroll-snap-align: start` on its auto-wrapper — missing
+// `scroll-snap-stop: always`, so a fast swipe can carry past one page.
+// We disable the auto-wrapper on web (pagingEnabled={false}) and apply
+// the snap properties directly on the ScrollView + each page.
+const PAGER_SNAP_TYPE_STYLE = Platform.OS === 'web' ? { scrollSnapType: 'x mandatory', overflowX: 'auto' } : null;
+const PAGER_PAGE_SNAP_STYLE = Platform.OS === 'web' ? { scrollSnapAlign: 'start', scrollSnapStop: 'always' } : null;
+
+// Belt-and-braces: inject the snap rules via a real <style> tag so they
+// apply even if RNW's atomic-CSS pipeline ever filters an unknown CSS
+// property. Targeted by a data attribute we set on each page.
+if (Platform.OS === 'web' && typeof document !== 'undefined') {
+  const id = 'golf-partner-pager-snap-stop';
+  if (!document.getElementById(id)) {
+    const styleEl = document.createElement('style');
+    styleEl.id = id;
+    styleEl.textContent = '[data-pagerpage="1"]{scroll-snap-align:start !important;scroll-snap-stop:always !important;}';
+    document.head.appendChild(styleEl);
+  }
+}
+
 const haptic = (style = 'light') => {
   if (Platform.OS === 'web') return;
   if (style === 'light') Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
@@ -94,7 +116,7 @@ export default function ScorecardScreen({ navigation, route }) {
     });
   }, [currentHole, tournament, roundIndex]);
 
-  function autoSave(newScores) {
+  const autoSave = useCallback((newScores) => {
     if (saveTimeoutRef.current) clearTimeout(saveTimeoutRef.current);
     saveTimeoutRef.current = setTimeout(async () => {
       if (!tournamentRef.current) return;
@@ -103,9 +125,9 @@ export default function ScorecardScreen({ navigation, route }) {
       updated.rounds[roundIndex] = { ...updated.rounds[roundIndex], scores: newScores };
       await saveTournament(updated);
     }, 300);
-  }
+  }, [roundIndex]);
 
-  function saveNotes(value) {
+  const saveNotes = useCallback((value) => {
     setNotes(value);
     if (notesSaveTimeoutRef.current) clearTimeout(notesSaveTimeoutRef.current);
     notesSaveTimeoutRef.current = setTimeout(async () => {
@@ -115,7 +137,7 @@ export default function ScorecardScreen({ navigation, route }) {
       updated.rounds[roundIndex] = { ...updated.rounds[roundIndex], notes: value };
       await saveTournament(updated);
     }, 400);
-  }
+  }, [roundIndex]);
 
   // Hoist memoised derivations above the early return so the hook order
   // stays stable while the tournament loads.
@@ -135,9 +157,7 @@ export default function ScorecardScreen({ navigation, route }) {
     [isBestBall, liveRound, players],
   );
 
-  if (!tournament || !round) return null;
-
-  function triggerCelebration(playerId, holeNumber, label) {
+  const triggerCelebration = useCallback((playerId, holeNumber, label) => {
     const holdMs = label === 'BIRDIE' ? 550 : label === 'EAGLE' ? 750 : 1000;
     haptic('success');
     celebrationAnim.stopAnimation();
@@ -150,11 +170,16 @@ export default function ScorecardScreen({ navigation, route }) {
     ]).start(({ finished }) => {
       if (finished) setCelebration({ playerId: null, holeNumber: null, label: null });
     });
-  }
+  }, [celebrationAnim]);
 
-  function setScore(playerId, holeNumber, value) {
+  const getScoreAnim = useCallback((playerId) => {
+    if (!scoreAnims.current[playerId]) scoreAnims.current[playerId] = new Animated.Value(1);
+    return scoreAnims.current[playerId];
+  }, []);
+
+  const setScore = useCallback((playerId, holeNumber, value) => {
     const parsed = value === '' ? undefined : parseInt(value, 10) || undefined;
-    const holePar = round.holes.find((h) => h.number === holeNumber)?.par ?? 4;
+    const holePar = round?.holes?.find((h) => h.number === holeNumber)?.par ?? 4;
     setScores((prev) => {
       const current = prev[playerId]?.[holeNumber];
       const next = { ...prev, [playerId]: { ...prev[playerId], [holeNumber]: parsed } };
@@ -165,20 +190,15 @@ export default function ScorecardScreen({ navigation, route }) {
       }
       return next;
     });
-  }
+  }, [round, autoSave, triggerCelebration]);
 
-  function getScoreAnim(playerId) {
-    if (!scoreAnims.current[playerId]) scoreAnims.current[playerId] = new Animated.Value(1);
-    return scoreAnims.current[playerId];
-  }
-
-  function stepScore(playerId, holeNumber, delta) {
+  const stepScore = useCallback((playerId, holeNumber, delta) => {
     haptic('light');
     const anim = getScoreAnim(playerId);
     anim.setValue(1.18);
     Animated.spring(anim, { toValue: 1, friction: 5, useNativeDriver: true }).start();
 
-    const holePar = round.holes.find((h) => h.number === holeNumber)?.par ?? 4;
+    const holePar = round?.holes?.find((h) => h.number === holeNumber)?.par ?? 4;
     setScores((prev) => {
       const current = prev[playerId]?.[holeNumber] ?? holePar;
       const newStrokes = Math.max(1, current + delta);
@@ -190,21 +210,52 @@ export default function ScorecardScreen({ navigation, route }) {
       }
       return next;
     });
-  }
+  }, [round, autoSave, triggerCelebration, getScoreAnim]);
 
-  function playerTotals(player) {
-    let pts = 0;
-    let str = 0;
-    const handicap = round.playerHandicaps?.[player.id] ?? player.handicap;
-    round.holes.forEach((hole) => {
-      const sc = scores[player.id]?.[hole.number];
-      if (sc) {
-        str += sc;
-        pts += calcStablefordPoints(hole.par, sc, handicap, hole.strokeIndex);
-      }
+  // Totals computed once per (round, players, scores) change. The per-hole
+  // pager pages do NOT read this — it only feeds the outside totals strip.
+  const playerTotalsMap = useMemo(() => {
+    const map = new Map();
+    if (!round) return map;
+    players.forEach((player) => {
+      const handicap = round.playerHandicaps?.[player.id] ?? player.handicap;
+      let pts = 0;
+      let str = 0;
+      round.holes.forEach((hole) => {
+        const sc = scores[player.id]?.[hole.number];
+        if (sc) {
+          str += sc;
+          pts += calcStablefordPoints(hole.par, sc, handicap, hole.strokeIndex);
+        }
+      });
+      map.set(player.id, { pts, str });
     });
-    return { pts, str };
-  }
+    return map;
+  }, [round, players, scores]);
+
+  const playerTotals = useCallback(
+    (player) => playerTotalsMap.get(player.id) ?? { pts: 0, str: 0 },
+    [playerTotalsMap],
+  );
+
+  const goToPrevHole = useCallback(() => {
+    haptic('medium');
+    setCurrentHole((h) => Math.max(1, h - 1));
+  }, []);
+
+  const goToNextHole = useCallback(() => {
+    haptic('medium');
+    setCurrentHole((h) => Math.min(18, h + 1));
+  }, []);
+
+  const goToHole = useCallback((h) => {
+    haptic('light');
+    setCurrentHole(h);
+  }, []);
+
+  const goBack = useCallback(() => navigation.goBack(), [navigation]);
+
+  if (!tournament || !round) return null;
 
   const hole = round.holes.find((h) => h.number === currentHole);
 
@@ -257,10 +308,10 @@ export default function ScorecardScreen({ navigation, route }) {
           onStep={stepScore}
           onSetScore={setScore}
           onNotesChange={saveNotes}
-          onPrev={() => { haptic('medium'); setCurrentHole((h) => Math.max(1, h - 1)); }}
-          onNext={() => { haptic('medium'); setCurrentHole((h) => Math.min(18, h + 1)); }}
-          onGoToHole={(h) => { haptic('light'); setCurrentHole(h); }}
-          onGoBack={() => navigation.goBack()}
+          onPrev={goToPrevHole}
+          onNext={goToNextHole}
+          onGoToHole={goToHole}
+          onGoBack={goBack}
           playerTotals={playerTotals}
           getScoreAnim={getScoreAnim}
           celebration={celebration}
@@ -288,6 +339,146 @@ export default function ScorecardScreen({ navigation, route }) {
   );
 }
 
+// Memoized per-hole page. Extracted so a swipe that only changes the
+// outside `currentHole` indicator does NOT re-render the other 17 pages
+// in the pager — that's the main source of swipe lag.
+const HolePage = React.memo(function HolePage({
+  pageHole, width, height, courseName, roundIndex,
+  round, players, scores,
+  theme, s,
+  celebration, celebrationAnim,
+  onStep, onSetScore, getScoreAnim,
+}) {
+  const pairs = round.pairs ?? [];
+  const orderedPlayers = pairs.length === 2
+    ? [...pairs[0], ...pairs[1]].map((pp) => players.find((p) => p.id === pp.id)).filter(Boolean)
+    : players;
+
+  return (
+    <View
+      style={[{ width, height }, PAGER_PAGE_SNAP_STYLE]}
+      dataSet={Platform.OS === 'web' ? { pagerpage: '1' } : undefined}
+    >
+      {/* Hole header */}
+      <View style={s.holeHeaderCard}>
+        <View style={s.holeHeaderLeft}>
+          <Text style={s.holeHeaderRound}>{courseName} -- Round {roundIndex + 1}</Text>
+          <View style={s.holeNumberRow}>
+            <Text style={s.holeNumberLabel}>HOLE</Text>
+            <Text style={s.holeNumber}>{pageHole.number}</Text>
+          </View>
+        </View>
+        <View style={s.holeHeaderRight}>
+          <View style={s.holeMetaItem}>
+            <Text style={s.holeMetaLabel}>PAR</Text>
+            <Text style={s.holeMetaValue}>{pageHole.par}</Text>
+          </View>
+          <View style={s.holeMetaItem}>
+            <Text style={s.holeMetaLabel}>SI</Text>
+            <Text style={s.holeMetaValue}>{pageHole.strokeIndex}</Text>
+          </View>
+        </View>
+      </View>
+
+      {/* Player score cards */}
+      <View style={s.playerCardsContent}>
+        {orderedPlayers.map((player, idx) => {
+          const pairIndex = pairs.findIndex((pair) => pair.some((pp) => pp.id === player.id));
+          const pairColor = pairIndex === 0 ? theme.pairA : pairIndex === 1 ? theme.pairB : theme.text.muted;
+          const isFirstOfPair = pairs.length === 2 && (idx === 0 || idx === 2);
+          const pairLabelText = pairIndex === 0 ? 'Pair A' : 'Pair B';
+
+          const handicap = round.playerHandicaps?.[player.id] ?? player.handicap;
+          const strokes = scores[player.id]?.[pageHole.number];
+          const pts = strokes != null
+            ? calcStablefordPoints(pageHole.par, strokes, handicap, pageHole.strokeIndex)
+            : null;
+
+          const ptsColor = pts == null ? theme.text.muted
+            : pts >= 3 ? theme.scoreColor('excellent')
+            : pts >= 2 ? theme.scoreColor('good')
+            : pts === 1 ? theme.scoreColor('neutral')
+            : theme.scoreColor('poor');
+
+          const extraShots = handicap >= pageHole.strokeIndex ? (Math.floor(handicap / 18) + (handicap % 18 >= pageHole.strokeIndex ? 1 : 0)) : 0;
+
+          const pickup = pickupStrokes(pageHole.par, handicap, pageHole.strokeIndex);
+          const isPickup = strokes != null && strokes >= pickup;
+
+          return (
+            <React.Fragment key={player.id}>
+              {isFirstOfPair && (
+                <Text style={[s.pairLabel, { color: pairColor, marginTop: idx === 0 ? 0 : 16 }]}>{pairLabelText}</Text>
+              )}
+              <View style={[s.playerCard, { borderLeftColor: pairColor, borderLeftWidth: 3 }]}>
+                {celebration?.playerId === player.id
+                  && celebration?.holeNumber === pageHole.number
+                  && celebration?.label && (
+                  <Animated.View
+                    pointerEvents="none"
+                    style={[
+                      s.celebrationBanner,
+                      {
+                        opacity: celebrationAnim,
+                        transform: [
+                          { scale: celebrationAnim.interpolate({ inputRange: [0, 1], outputRange: [0.85, 1] }) },
+                        ],
+                      },
+                    ]}
+                  >
+                    <Text style={s.celebrationLabel}>{celebration.label}</Text>
+                  </Animated.View>
+                )}
+                <View style={s.playerCardRow}>
+                  <View style={s.playerCardLeft}>
+                    <View style={[s.playerAvatar, { backgroundColor: pairColor }]}>
+                      <Text style={s.playerAvatarText}>{player.name[0].toUpperCase()}</Text>
+                    </View>
+                    <View>
+                      <Text style={s.playerCardName}>{player.name}</Text>
+                      <Text style={s.playerCardHcp}>HCP {handicap}{extraShots > 0 ? ` +${extraShots}` : ''}</Text>
+                    </View>
+                  </View>
+                  <View style={s.playerCardRight}>
+                    <TouchableOpacity style={s.stepBtn} onPress={() => onStep(player.id, pageHole.number, -1)}>
+                      <Feather name="minus" size={18} color={theme.text.primary} />
+                    </TouchableOpacity>
+                    <Animated.View style={[s.scoreDisplay, { transform: [{ scale: getScoreAnim(player.id) }] }]}>
+                      <Text style={s.scoreDisplayNum}>
+                        {strokes ?? pageHole.par}
+                      </Text>
+                      {pts !== null && (
+                        <Text style={[s.scoreDisplayPts, { color: ptsColor }]}>
+                          {pts} {pts === 1 ? 'pt' : 'pts'}
+                        </Text>
+                      )}
+                    </Animated.View>
+                    <TouchableOpacity style={s.stepBtn} onPress={() => onStep(player.id, pageHole.number, 1)}>
+                      <Feather name="plus" size={18} color={theme.text.primary} />
+                    </TouchableOpacity>
+                    <TouchableOpacity
+                      style={[s.pickupBtn, isPickup && s.pickupBtnActive]}
+                      onPress={() => onSetScore(player.id, pageHole.number, isPickup ? pageHole.par : pickup)}
+                      activeOpacity={0.7}
+                      accessibilityLabel={isPickup ? `Picked up at ${pickup} strokes — tap to clear` : `Pickup at ${pickup} strokes`}
+                    >
+                      <Feather
+                        name="arrow-up-circle"
+                        size={16}
+                        color={isPickup ? theme.text.inverse : theme.text.muted}
+                      />
+                    </TouchableOpacity>
+                  </View>
+                </View>
+              </View>
+            </React.Fragment>
+          );
+        })}
+      </View>
+    </View>
+  );
+});
+
 function HoleView({ round, roundIndex, players, scores, notes, currentHole, hole, isBestBall, bbResult, settings, onStep, onSetScore, onNotesChange, onPrev, onNext, onGoToHole, onGoBack, playerTotals, getScoreAnim, celebration, celebrationAnim, refreshing, onRefresh }) {
   const { theme } = useTheme();
   const s = useMemo(() => makeStyles(theme), [theme]);
@@ -303,8 +494,17 @@ function HoleView({ round, roundIndex, players, scores, notes, currentHole, hole
   // are NOT suppressed.
   const suppressHoleOnScroll = useRef(false);
   const suppressHoleTimer = useRef(null);
+  // True when the latest currentHole prop change was driven by our own
+  // scroll (onScroll / onMomentumScrollEnd). The sync effect uses this
+  // to skip scrollTo — the pager is already where it needs to be, and
+  // a scrollTo would cause a visible mini-scroll after the gesture.
+  const currentHoleFromScroll = useRef(false);
 
   useEffect(() => {
+    if (currentHoleFromScroll.current) {
+      currentHoleFromScroll.current = false;
+      return;
+    }
     if (!pagerRef.current || pagerSize.width <= 0) return;
     if (isUserScrollingHole.current) return;
     const target = (currentHole - 1) * pagerSize.width;
@@ -337,7 +537,8 @@ function HoleView({ round, roundIndex, players, scores, notes, currentHole, hole
           <ScrollView
             ref={pagerRef}
             horizontal
-            pagingEnabled
+            pagingEnabled={Platform.OS !== 'web'}
+            style={PAGER_SNAP_TYPE_STYLE}
             showsHorizontalScrollIndicator={false}
             scrollEventThrottle={16}
             onScrollBeginDrag={() => {
@@ -354,6 +555,9 @@ function HoleView({ round, roundIndex, players, scores, notes, currentHole, hole
               if (suppressHoleOnScroll.current) return;
               const newHole = Math.round(x / pagerSize.width) + 1;
               if (newHole !== currentHole) {
+                // Tag so the sync effect skips scrollTo — the pager is
+                // already at `newHole`; a scrollTo would fight the scroll.
+                currentHoleFromScroll.current = true;
                 // Non-urgent: keep the native scroll running smoothly while
                 // React reconciles match panel / totals / bottom button.
                 startTransition(() => onGoToHole(newHole));
@@ -369,136 +573,32 @@ function HoleView({ round, roundIndex, players, scores, notes, currentHole, hole
               suppressHoleOnScroll.current = false;
               clearTimeout(suppressHoleTimer.current);
               const newHole = Math.round(x / pagerSize.width) + 1;
-              if (newHole !== currentHole) onGoToHole(newHole);
+              if (newHole !== currentHole) {
+                currentHoleFromScroll.current = true;
+                onGoToHole(newHole);
+              }
             }}
             contentOffset={{ x: (currentHole - 1) * pagerSize.width, y: 0 }}
           >
             {round.holes.map((pageHole) => (
-              <View key={pageHole.number} style={{ width: pagerSize.width, height: pagerSize.height }}>
-                {/* Hole header */}
-                <View style={s.holeHeaderCard}>
-                  <View style={s.holeHeaderLeft}>
-                    <Text style={s.holeHeaderRound}>{round.courseName} -- Round {roundIndex + 1}</Text>
-                    <View style={s.holeNumberRow}>
-                      <Text style={s.holeNumberLabel}>HOLE</Text>
-                      <Text style={s.holeNumber}>{pageHole.number}</Text>
-                    </View>
-                  </View>
-                  <View style={s.holeHeaderRight}>
-                    <View style={s.holeMetaItem}>
-                      <Text style={s.holeMetaLabel}>PAR</Text>
-                      <Text style={s.holeMetaValue}>{pageHole.par}</Text>
-                    </View>
-                    <View style={s.holeMetaItem}>
-                      <Text style={s.holeMetaLabel}>SI</Text>
-                      <Text style={s.holeMetaValue}>{pageHole.strokeIndex}</Text>
-                    </View>
-                  </View>
-                </View>
-
-                {/* Player score cards */}
-                <View style={s.playerCardsContent}>
-                  {(() => {
-                    const pairs = round.pairs ?? [];
-                    const orderedPlayers = pairs.length === 2
-                      ? [...pairs[0], ...pairs[1]].map((pp) => players.find((p) => p.id === pp.id)).filter(Boolean)
-                      : players;
-
-                    return orderedPlayers.map((player, idx) => {
-                      const pairIndex = pairs.findIndex((pair) => pair.some((pp) => pp.id === player.id));
-                      const pairColor = pairIndex === 0 ? theme.pairA : pairIndex === 1 ? theme.pairB : theme.text.muted;
-                      const isFirstOfPair = pairs.length === 2 && (idx === 0 || idx === 2);
-                      const pairLabelText = pairIndex === 0 ? 'Pair A' : 'Pair B';
-
-                      const handicap = round.playerHandicaps?.[player.id] ?? player.handicap;
-                      const strokes = scores[player.id]?.[pageHole.number];
-                      const pts = strokes != null
-                        ? calcStablefordPoints(pageHole.par, strokes, handicap, pageHole.strokeIndex)
-                        : null;
-
-                      const ptsColor = pts == null ? theme.text.muted
-                        : pts >= 3 ? theme.scoreColor('excellent')
-                        : pts >= 2 ? theme.scoreColor('good')
-                        : pts === 1 ? theme.scoreColor('neutral')
-                        : theme.scoreColor('poor');
-
-                      const extraShots = handicap >= pageHole.strokeIndex ? (Math.floor(handicap / 18) + (handicap % 18 >= pageHole.strokeIndex ? 1 : 0)) : 0;
-
-                      const pickup = pickupStrokes(pageHole.par, handicap, pageHole.strokeIndex);
-                      const isPickup = strokes != null && strokes >= pickup;
-
-                      return (
-                        <React.Fragment key={player.id}>
-                          {isFirstOfPair && (
-                            <Text style={[s.pairLabel, { color: pairColor, marginTop: idx === 0 ? 0 : 16 }]}>{pairLabelText}</Text>
-                          )}
-                          <View style={[s.playerCard, { borderLeftColor: pairColor, borderLeftWidth: 3 }]}>
-                            {celebration?.playerId === player.id
-                              && celebration?.holeNumber === pageHole.number
-                              && celebration?.label && (
-                              <Animated.View
-                                pointerEvents="none"
-                                style={[
-                                  s.celebrationBanner,
-                                  {
-                                    opacity: celebrationAnim,
-                                    transform: [
-                                      { scale: celebrationAnim.interpolate({ inputRange: [0, 1], outputRange: [0.85, 1] }) },
-                                    ],
-                                  },
-                                ]}
-                              >
-                                <Text style={s.celebrationLabel}>{celebration.label}</Text>
-                              </Animated.View>
-                            )}
-                            <View style={s.playerCardRow}>
-                              <View style={s.playerCardLeft}>
-                                <View style={[s.playerAvatar, { backgroundColor: pairColor }]}>
-                                  <Text style={s.playerAvatarText}>{player.name[0].toUpperCase()}</Text>
-                                </View>
-                                <View>
-                                  <Text style={s.playerCardName}>{player.name}</Text>
-                                  <Text style={s.playerCardHcp}>HCP {handicap}{extraShots > 0 ? ` +${extraShots}` : ''}</Text>
-                                </View>
-                              </View>
-                              <View style={s.playerCardRight}>
-                                <TouchableOpacity style={s.stepBtn} onPress={() => onStep(player.id, pageHole.number, -1)}>
-                                  <Feather name="minus" size={18} color={theme.text.primary} />
-                                </TouchableOpacity>
-                                <Animated.View style={[s.scoreDisplay, { transform: [{ scale: getScoreAnim(player.id) }] }]}>
-                                  <Text style={s.scoreDisplayNum}>
-                                    {strokes ?? pageHole.par}
-                                  </Text>
-                                  {pts !== null && (
-                                    <Text style={[s.scoreDisplayPts, { color: ptsColor }]}>
-                                      {pts} {pts === 1 ? 'pt' : 'pts'}
-                                    </Text>
-                                  )}
-                                </Animated.View>
-                                <TouchableOpacity style={s.stepBtn} onPress={() => onStep(player.id, pageHole.number, 1)}>
-                                  <Feather name="plus" size={18} color={theme.text.primary} />
-                                </TouchableOpacity>
-                                <TouchableOpacity
-                                  style={[s.pickupBtn, isPickup && s.pickupBtnActive]}
-                                  onPress={() => onSetScore(player.id, pageHole.number, isPickup ? pageHole.par : pickup)}
-                                  activeOpacity={0.7}
-                                  accessibilityLabel={isPickup ? `Picked up at ${pickup} strokes — tap to clear` : `Pickup at ${pickup} strokes`}
-                                >
-                                  <Feather
-                                    name="arrow-up-circle"
-                                    size={16}
-                                    color={isPickup ? theme.text.inverse : theme.text.muted}
-                                  />
-                                </TouchableOpacity>
-                              </View>
-                            </View>
-                          </View>
-                        </React.Fragment>
-                      );
-                    });
-                  })()}
-                </View>
-              </View>
+              <HolePage
+                key={pageHole.number}
+                pageHole={pageHole}
+                width={pagerSize.width}
+                height={pagerSize.height}
+                courseName={round.courseName}
+                roundIndex={roundIndex}
+                round={round}
+                players={players}
+                scores={scores}
+                theme={theme}
+                s={s}
+                celebration={celebration?.holeNumber === pageHole.number ? celebration : null}
+                celebrationAnim={celebrationAnim}
+                onStep={onStep}
+                onSetScore={onSetScore}
+                getScoreAnim={getScoreAnim}
+              />
             ))}
           </ScrollView>
         )}
@@ -655,7 +755,7 @@ function roundTeamPts(bbResult, team, bbVal, wbVal) {
        + (team === 1 ? worstBall.pair1 : worstBall.pair2) * wbVal;
 }
 
-function MatchPanel({ bbResult, currentHole, settings }) {
+const MatchPanel = React.memo(function MatchPanel({ bbResult, currentHole, settings }) {
   const { theme } = useTheme();
   const s = useMemo(() => makeStyles(theme), [theme]);
   const { pair1, pair2, holes } = bbResult;
@@ -708,7 +808,7 @@ function MatchPanel({ bbResult, currentHole, settings }) {
       </View>
     </View>
   );
-}
+});
 
 function GridView({ round, roundIndex, players, scores, notes, onNotesChange, isBestBall, bbResult, settings, onSetScore, refreshing, onRefresh }) {
   const { theme } = useTheme();
