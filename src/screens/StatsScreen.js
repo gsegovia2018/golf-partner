@@ -8,7 +8,7 @@ import {
   playerRoundHistory, playerAvgStableford, playerScoreDistribution,
   playerStreaks, bestWorstHoles, holeDifficultyMap,
   headToHead, pairPerformance, tournamentHighlights,
-  hallOfShame, pairHoleWins,
+  hallOfShame, pairHoleWins, pairDifferenceByHole,
 } from '../store/statsEngine';
 import StatDetailSheet from '../components/StatDetailSheet';
 
@@ -617,6 +617,9 @@ function PairsTab({ tournament, players, h2hPlayer, setH2hPlayer, selectedPlayer
   const pairs = pairPerformance(tournament);
   const [hwRound, setHwRound] = useState(null);
   const holeWins = pairHoleWins(tournament, { metric, roundIndex: hwRound });
+  const firstCompletedRound = tournament.rounds.findIndex(r => r.scores && Object.keys(r.scores).length > 0);
+  const [pdRound, setPdRound] = useState(firstCompletedRound >= 0 ? firstCompletedRound : null);
+  const pdData = pdRound != null ? pairDifferenceByHole(tournament, pdRound, { metric }) : null;
   const [h2hRound, setH2hRound] = useState(null);
   const p1 = players[selectedPlayer];
   const p2Idx = h2hPlayer >= players.length ? 0 : h2hPlayer;
@@ -635,6 +638,28 @@ function PairsTab({ tournament, players, h2hPlayer, setH2hPlayer, selectedPlayer
       rightPrimary: `${r.combinedPoints} pts`,
       rightSecondary: `${r.combinedStrokes} strokes`,
     })),
+  });
+
+  const openHoleWinsInfo = () => setSheet({
+    title: 'Hole Wins — how W·T·L works',
+    subtitle: 'Total · Best Ball · Worst Ball',
+    explainer:
+      (metric === 'strokes'
+        ? 'Each hole your pair plays against the other pair. Best Ball (BB) = the lower-strokes score of the two partners. Worst Ball (WB) = the higher. Your pair wins BB (or WB) by beating the other pair\'s corresponding score; equal = tie. You earn a BB W/T/L only when your score is your pair\'s BB; a WB W/T/L only when it is your pair\'s WB. Total = BB + WB credits.'
+        : 'Each hole your pair plays against the other pair. Best Ball (BB) = the higher-points score of the two partners. Worst Ball (WB) = the lower. Your pair wins BB (or WB) by beating the other pair\'s corresponding score; equal = tie. You earn a BB W/T/L only when your score is your pair\'s BB; a WB W/T/L only when it is your pair\'s WB. Total = BB + WB credits.')
+      + '\n\nRole tiebreaker within a pair (when partners tie on the metric): lower playing handicap is BB. If handicap ties, the partner who did better on the previous hole is BB — walking backwards hole by hole until broken. Final fallback is a stable id sort.\n\nHoles where any of the 4 scores is missing are skipped entirely, so W+T+L may be below 18 if the round is incomplete.',
+    rows: [],
+  });
+
+  const openPairDiffInfo = () => setSheet({
+    title: 'Pair difference — how the chart works',
+    subtitle: 'Cumulative advantage, hole by hole',
+    explainer:
+      (metric === 'strokes'
+        ? 'At each hole we sum both partners\' strokes per pair, then track the running strokes-saved advantage (pair2 strokes − pair1 strokes). Bars above the baseline mean Pair 1 is ahead (taking fewer strokes); bars below mean Pair 2 is ahead. '
+        : 'At each hole we sum both partners\' Stableford points per pair, then track the running points-difference (pair1 − pair2). Bars above the baseline mean Pair 1 is ahead; bars below mean Pair 2 is ahead. ')
+      + 'Height is proportional to the absolute cumulative gap, so longer bars = bigger distance. Crossovers are the holes where the lead flips. Tap any hole for the exact split.',
+    rows: [],
   });
 
   const openHoleWins = (row, metricMode) => {
@@ -662,6 +687,33 @@ function PairsTab({ tournament, players, h2hPlayer, setH2hPlayer, selectedPlayer
           tone,
         };
       }),
+    });
+  };
+
+  const openPairDiffHole = (holeEntry) => {
+    if (!pdData) return;
+    const unit = metric === 'strokes' ? 'str' : 'pts';
+    const isStr = metric === 'strokes';
+    const pair1Label = pdData.pair1.map(p => firstName(p)).join(' & ');
+    const pair2Label = pdData.pair2.map(p => firstName(p)).join(' & ');
+    const cum = holeEntry.cumulative;
+    const leader = cum > 0 ? pair1Label : cum < 0 ? pair2Label : 'Tied';
+    const leadText = cum === 0 ? 'Level' : `${leader} +${Math.abs(cum)} ${unit}`;
+    const holeSplit = holeEntry.pair1Total != null
+      ? `${pair1Label} ${holeEntry.pair1Total} · ${pair2Label} ${holeEntry.pair2Total}`
+      : 'hole not played';
+    const holeDeltaLabel = holeEntry.holeDelta == null
+      ? '—'
+      : holeEntry.holeDelta === 0
+        ? 'even'
+        : holeEntry.holeDelta > 0
+          ? `${pair1Label} +${holeEntry.holeDelta}`
+          : `${pair2Label} +${Math.abs(holeEntry.holeDelta)}`;
+    setSheet({
+      title: `Hole ${holeEntry.holeNumber} — pair split`,
+      subtitle: `${pdData.courseName} · Par ${holeEntry.par} · ${isStr ? 'strokes' : 'points'}`,
+      explainer: `After this hole: ${leadText}. Hole result: ${holeDeltaLabel}. Combined totals: ${holeSplit}.`,
+      rows: [],
     });
   };
 
@@ -716,9 +768,39 @@ function PairsTab({ tournament, players, h2hPlayer, setH2hPlayer, selectedPlayer
 
       {tournament.rounds.some(r => r.pairs && r.scores && Object.keys(r.scores).length > 0) && (
         <>
-          <Text style={s.sectionTitle}>{metric === 'strokes' ? 'HOLE WINS ON STROKES' : 'HOLE WINS ON POINTS'}</Text>
+          <View style={s.sectionTitleRow}>
+            <Text style={s.sectionTitle}>{metric === 'strokes' ? 'HOLE WINS ON STROKES' : 'HOLE WINS ON POINTS'}</Text>
+            <TouchableOpacity
+              onPress={openHoleWinsInfo}
+              hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+              style={s.sectionTitleInfo}
+            >
+              <Feather name="info" size={14} color={theme.text.muted} />
+            </TouchableOpacity>
+          </View>
           <RoundSelector tournament={tournament} selected={hwRound} onSelect={setHwRound} theme={theme} s={s} />
           <HoleWinsTable rows={holeWins} metricMode={metric} openRow={openHoleWins} theme={theme} s={s} />
+        </>
+      )}
+
+      {firstCompletedRound >= 0 && tournament.rounds.some(r => r.pairs && r.scores && Object.keys(r.scores).length > 0) && (
+        <>
+          <View style={s.sectionTitleRow}>
+            <Text style={s.sectionTitle}>{metric === 'strokes' ? 'PAIR DIFFERENCE ON STROKES' : 'PAIR DIFFERENCE ON POINTS'}</Text>
+            <TouchableOpacity
+              onPress={openPairDiffInfo}
+              hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+              style={s.sectionTitleInfo}
+            >
+              <Feather name="info" size={14} color={theme.text.muted} />
+            </TouchableOpacity>
+          </View>
+          <PairRoundSelector tournament={tournament} selected={pdRound} onSelect={setPdRound} theme={theme} s={s} />
+          {pdData ? (
+            <PairDifferenceChart data={pdData} metric={metric} onHolePress={openPairDiffHole} theme={theme} s={s} />
+          ) : (
+            <Text style={s.emptyText}>No pair data for this round.</Text>
+          )}
         </>
       )}
 
@@ -774,6 +856,128 @@ function PairsTab({ tournament, players, h2hPlayer, setH2hPlayer, selectedPlayer
         explainer={sheet?.explainer}
         rows={sheet?.rows || []}
       />
+    </View>
+  );
+}
+
+// Round selector that requires a round (no "Total" option) — used by the
+// pair-difference chart, since the cumulative view is inherently per-round.
+function PairRoundSelector({ tournament, selected, onSelect, theme, s }) {
+  return (
+    <View style={s.roundSelector}>
+      {tournament.rounds.map((r, i) => {
+        const hasData = r.scores && Object.keys(r.scores).length > 0 && r.pairs && r.pairs.length >= 2;
+        return (
+          <TouchableOpacity
+            key={i}
+            style={[s.roundChip, selected === i && s.roundChipActive, !hasData && s.roundChipDisabled]}
+            onPress={() => hasData && onSelect(i)}
+            disabled={!hasData}
+            activeOpacity={0.7}
+          >
+            <Text style={[s.roundChipText, selected === i && s.roundChipTextActive, !hasData && s.roundChipTextDisabled]}>R{i + 1}</Text>
+          </TouchableOpacity>
+        );
+      })}
+    </View>
+  );
+}
+
+function PairDifferenceChart({ data, metric, onHolePress, theme, s }) {
+  const CHART_HEIGHT = 160;
+  const HALF = CHART_HEIGHT / 2;
+  const PADDING = 10;
+  const unit = metric === 'strokes' ? 'str' : 'pts';
+  const pair1Label = data.pair1.map(p => p.name.split(' ')[0]).join(' & ');
+  const pair2Label = data.pair2.map(p => p.name.split(' ')[0]).join(' & ');
+  const scale = data.maxAbs > 0 ? (HALF - PADDING) / data.maxAbs : 0;
+
+  const maxLeadHole = data.holes.reduce((best, h) => {
+    if (h.cumulative == null) return best;
+    if (!best || Math.abs(h.cumulative) > Math.abs(best.cumulative)) return h;
+    return best;
+  }, null);
+  const leaderLabel = data.finalDelta > 0 ? pair1Label : data.finalDelta < 0 ? pair2Label : 'Level';
+  const maxLeadLabel = maxLeadHole && maxLeadHole.cumulative !== 0
+    ? `${maxLeadHole.cumulative > 0 ? pair1Label : pair2Label} +${Math.abs(maxLeadHole.cumulative)} ${unit} @ H${maxLeadHole.holeNumber}`
+    : 'Never apart';
+
+  return (
+    <View style={s.pdCard}>
+      <View style={s.pdLegend}>
+        <View style={s.pdLegendItem}>
+          <View style={[s.pdLegendDot, { backgroundColor: theme.pairA }]} />
+          <Text style={s.pdLegendText}>{pair1Label}</Text>
+        </View>
+        <Text style={s.pdLegendVs}>vs</Text>
+        <View style={s.pdLegendItem}>
+          <View style={[s.pdLegendDot, { backgroundColor: theme.pairB }]} />
+          <Text style={s.pdLegendText}>{pair2Label}</Text>
+        </View>
+      </View>
+
+      <View style={[s.pdChart, { height: CHART_HEIGHT }]}>
+        <View style={[s.pdBaseline, { top: HALF }]} />
+        <View style={s.pdBarsRow}>
+          {data.holes.map((h) => {
+            const isPlayed = h.cumulative != null && h.holeDelta != null;
+            const absDelta = isPlayed ? Math.abs(h.cumulative) : 0;
+            const barH = Math.max(isPlayed && absDelta > 0 ? 2 : 0, absDelta * scale);
+            const positive = isPlayed && h.cumulative > 0;
+            const negative = isPlayed && h.cumulative < 0;
+            return (
+              <TouchableOpacity
+                key={h.holeNumber}
+                style={[s.pdCol, { height: CHART_HEIGHT }]}
+                onPress={() => onHolePress(h)}
+                activeOpacity={0.6}
+                disabled={!isPlayed}
+              >
+                {positive && (
+                  <View style={[s.pdBarPos, {
+                    bottom: HALF,
+                    height: barH,
+                    backgroundColor: theme.pairA,
+                  }]} />
+                )}
+                {negative && (
+                  <View style={[s.pdBarNeg, {
+                    top: HALF,
+                    height: barH,
+                    backgroundColor: theme.pairB,
+                  }]} />
+                )}
+                {isPlayed && h.cumulative === 0 && (
+                  <View style={[s.pdBarZero, { top: HALF - 1 }]} />
+                )}
+              </TouchableOpacity>
+            );
+          })}
+        </View>
+      </View>
+
+      <View style={s.pdAxis}>
+        {data.holes.map(h => (
+          <Text key={h.holeNumber} style={s.pdAxisLabel}>{h.holeNumber}</Text>
+        ))}
+      </View>
+
+      <View style={s.pdSummary}>
+        <View style={s.pdSummaryCell}>
+          <Text style={s.pdSummaryLabel}>Max lead</Text>
+          <Text style={s.pdSummaryValue}>{maxLeadLabel}</Text>
+        </View>
+        <View style={s.pdSummaryCell}>
+          <Text style={s.pdSummaryLabel}>Final</Text>
+          <Text style={s.pdSummaryValue}>
+            {data.finalDelta === 0 ? 'Tied' : `${leaderLabel} +${Math.abs(data.finalDelta)} ${unit}`}
+          </Text>
+        </View>
+        <View style={s.pdSummaryCell}>
+          <Text style={s.pdSummaryLabel}>Crossovers</Text>
+          <Text style={s.pdSummaryValue}>{data.crossovers}</Text>
+        </View>
+      </View>
     </View>
   );
 }
@@ -1118,6 +1322,55 @@ const makeStyles = (t) => StyleSheet.create({
   bigNumber: { fontFamily: 'PlayfairDisplay-Black', color: t.accent.primary, fontSize: 36 },
 
   sectionTitle: { fontFamily: 'PlusJakartaSans-SemiBold', color: t.text.muted, fontSize: 10, letterSpacing: 1.5, textTransform: 'uppercase', marginBottom: 12, marginTop: 20 },
+  sectionTitleRow: { flexDirection: 'row', alignItems: 'center' },
+  sectionTitleInfo: { marginLeft: 6, marginBottom: 12, marginTop: 20, padding: 2 },
+
+  // Pair Difference chart
+  pdCard: {
+    backgroundColor: t.bg.card, borderRadius: 16, borderWidth: 1,
+    borderColor: t.isDark ? t.glass?.border || t.border.default : t.border.default,
+    padding: 14, marginBottom: 12, ...(t.isDark ? {} : t.shadow.card),
+  },
+  pdLegend: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 10, marginBottom: 10 },
+  pdLegendItem: { flexDirection: 'row', alignItems: 'center', gap: 6 },
+  pdLegendDot: { width: 8, height: 8, borderRadius: 4 },
+  pdLegendText: { fontFamily: 'PlusJakartaSans-SemiBold', fontSize: 12, color: t.text.primary },
+  pdLegendVs: { fontFamily: 'PlusJakartaSans-Medium', fontSize: 11, color: t.text.muted, marginHorizontal: 2 },
+  pdChart: { position: 'relative', marginBottom: 4 },
+  pdBaseline: {
+    position: 'absolute', left: 0, right: 0, height: 1,
+    backgroundColor: t.border.default,
+  },
+  pdBarsRow: { flexDirection: 'row', alignItems: 'stretch' },
+  pdCol: { flex: 1, alignItems: 'center', position: 'relative' },
+  pdBarPos: {
+    position: 'absolute', width: '62%', borderTopLeftRadius: 2, borderTopRightRadius: 2,
+  },
+  pdBarNeg: {
+    position: 'absolute', width: '62%', borderBottomLeftRadius: 2, borderBottomRightRadius: 2,
+  },
+  pdBarZero: {
+    position: 'absolute', width: '62%', height: 2, borderRadius: 1,
+    backgroundColor: t.text.muted,
+  },
+  pdAxis: { flexDirection: 'row', marginTop: 2 },
+  pdAxisLabel: {
+    flex: 1, textAlign: 'center',
+    fontFamily: 'PlusJakartaSans-Medium', fontSize: 9, color: t.text.muted,
+  },
+  pdSummary: {
+    flexDirection: 'row', justifyContent: 'space-between',
+    marginTop: 14, paddingTop: 10, borderTopWidth: 1, borderTopColor: t.border.subtle,
+  },
+  pdSummaryCell: { flex: 1, alignItems: 'center', paddingHorizontal: 4 },
+  pdSummaryLabel: {
+    fontFamily: 'PlusJakartaSans-SemiBold', fontSize: 9, letterSpacing: 1,
+    color: t.text.muted, textTransform: 'uppercase', marginBottom: 4,
+  },
+  pdSummaryValue: {
+    fontFamily: 'PlusJakartaSans-Bold', fontSize: 12, color: t.text.primary,
+    textAlign: 'center',
+  },
   emptyText: { fontFamily: 'PlusJakartaSans-Regular', color: t.text.muted, fontSize: 14, textAlign: 'center', paddingVertical: 40 },
 
   // Highlights

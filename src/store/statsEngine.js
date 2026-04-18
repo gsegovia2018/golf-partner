@@ -324,6 +324,44 @@ export function tournamentHighlights(tournament, { metric = 'points', roundIndex
 
 // ── Pair Hole Wins (Best Ball / Worst Ball) ──
 
+// Decide which of two partners (a, b) holds the MB role on `hole` when they
+// tie on the metric value. Rule order (per house rules):
+//   1) Lower playing handicap.
+//   2) Better score on the previous hole, walking backwards until broken.
+//   3) Final fallback: lexicographic player.id (deterministic, stable).
+// Returns the player.id chosen as MB.
+function pickMBTiebreak(aPlayer, bPlayer, round, holeOrderIndex, isStrokes) {
+  const aHcp = getPlayingHandicap(round, aPlayer);
+  const bHcp = getPlayingHandicap(round, bPlayer);
+  if (aHcp !== bHcp) return aHcp < bHcp ? aPlayer.id : bPlayer.id;
+  for (let i = holeOrderIndex - 1; i >= 0; i--) {
+    const prev = round.holes[i];
+    const aSc = round.scores[aPlayer.id]?.[prev.number];
+    const bSc = round.scores[bPlayer.id]?.[prev.number];
+    if (!aSc || !bSc) continue;
+    if (isStrokes) {
+      if (aSc !== bSc) return aSc < bSc ? aPlayer.id : bPlayer.id;
+    } else {
+      const aPts = calcStablefordPoints(prev.par, aSc, aHcp, prev.strokeIndex);
+      const bPts = calcStablefordPoints(prev.par, bSc, bHcp, prev.strokeIndex);
+      if (aPts !== bPts) return aPts > bPts ? aPlayer.id : bPlayer.id;
+    }
+  }
+  return aPlayer.id < bPlayer.id ? aPlayer.id : bPlayer.id;
+}
+
+// Assigns each pair member a unique MB/PB role on a hole, using the tiebreaker
+// above when the two partners share the same metric value. Returns ids.
+function assignPairRoles(aPlayer, aValue, bPlayer, bValue, round, holeOrderIndex, isStrokes) {
+  const aIsBetter = isStrokes ? aValue < bValue : aValue > bValue;
+  const bIsBetter = isStrokes ? bValue < aValue : bValue > aValue;
+  if (aIsBetter) return { mbId: aPlayer.id, pbId: bPlayer.id };
+  if (bIsBetter) return { mbId: bPlayer.id, pbId: aPlayer.id };
+  const mbId = pickMBTiebreak(aPlayer, bPlayer, round, holeOrderIndex, isStrokes);
+  const pbId = mbId === aPlayer.id ? bPlayer.id : aPlayer.id;
+  return { mbId, pbId };
+}
+
 export function pairHoleWins(tournament, { metric = 'points', roundIndex = null } = {}) {
   const isStrokes = metric === 'strokes';
   const stats = {};
@@ -353,12 +391,11 @@ export function pairHoleWins(tournament, { metric = 'points', roundIndex = null 
       return calcStablefordPoints(hole.par, sc, handicap, hole.strokeIndex);
     };
 
-    // When using strokes, lower is better. When using points, higher is better.
     const better = (a, b) => isStrokes ? a < b : a > b;
     const pickBest = (a, b) => isStrokes ? Math.min(a, b) : Math.max(a, b);
     const pickWorst = (a, b) => isStrokes ? Math.max(a, b) : Math.min(a, b);
 
-    round.holes.forEach(hole => {
+    round.holes.forEach((hole, hi) => {
       const p1a = valueOf(pair1[0].id, hole);
       const p1b = valueOf(pair1[1].id, hole);
       const p2a = valueOf(pair2[0].id, hole);
@@ -370,27 +407,32 @@ export function pairHoleWins(tournament, { metric = 'points', roundIndex = null 
       const pair2Best = pickBest(p2a, p2b);
       const pair2Worst = pickWorst(p2a, p2b);
 
+      const r1 = assignPairRoles(pair1[0], p1a, pair1[1], p1b, round, hi, isStrokes);
+      const r2 = assignPairRoles(pair2[0], p2a, pair2[1], p2b, round, hi, isStrokes);
+
       const bestOutcomePair1 = better(pair1Best, pair2Best) ? 'W' : better(pair2Best, pair1Best) ? 'L' : 'T';
       const bestOutcomePair2 = bestOutcomePair1 === 'W' ? 'L' : bestOutcomePair1 === 'L' ? 'W' : 'T';
       const worstOutcomePair1 = better(pair1Worst, pair2Worst) ? 'W' : better(pair2Worst, pair1Worst) ? 'L' : 'T';
       const worstOutcomePair2 = worstOutcomePair1 === 'W' ? 'L' : worstOutcomePair1 === 'L' ? 'W' : 'T';
 
-      const credit = (playerId, playerValue, pairBest, pairWorst, bestOutcome, worstOutcome, oppBest, oppWorst) => {
+      const valueById = { [pair1[0].id]: p1a, [pair1[1].id]: p1b, [pair2[0].id]: p2a, [pair2[1].id]: p2b };
+
+      const credit = (playerId, roles, pairBest, pairWorst, bestOutcome, worstOutcome, oppBest, oppWorst) => {
         const rec = stats[playerId];
         const entry = {
           roundIndex: ri, courseName: round.courseName, holeNumber: hole.number, par: hole.par,
-          playerValue, teamBest: pairBest, teamWorst: pairWorst,
+          playerValue: valueById[playerId], teamBest: pairBest, teamWorst: pairWorst,
           oppBest, oppWorst, metric,
           bestRole: null, bestOutcome: null,
           worstRole: null, worstOutcome: null,
         };
-        if (playerValue === pairBest) {
+        if (roles.mbId === playerId) {
           rec.best[bestOutcome]++;
           rec.total[bestOutcome]++;
           entry.bestRole = 'MB';
           entry.bestOutcome = bestOutcome;
         }
-        if (playerValue === pairWorst) {
+        if (roles.pbId === playerId) {
           rec.worst[worstOutcome]++;
           rec.total[worstOutcome]++;
           entry.worstRole = 'PB';
@@ -399,14 +441,74 @@ export function pairHoleWins(tournament, { metric = 'points', roundIndex = null 
         if (entry.bestRole || entry.worstRole) rec.breakdown.push(entry);
       };
 
-      credit(pair1[0].id, p1a, pair1Best, pair1Worst, bestOutcomePair1, worstOutcomePair1, pair2Best, pair2Worst);
-      credit(pair1[1].id, p1b, pair1Best, pair1Worst, bestOutcomePair1, worstOutcomePair1, pair2Best, pair2Worst);
-      credit(pair2[0].id, p2a, pair2Best, pair2Worst, bestOutcomePair2, worstOutcomePair2, pair1Best, pair1Worst);
-      credit(pair2[1].id, p2b, pair2Best, pair2Worst, bestOutcomePair2, worstOutcomePair2, pair1Best, pair1Worst);
+      credit(pair1[0].id, r1, pair1Best, pair1Worst, bestOutcomePair1, worstOutcomePair1, pair2Best, pair2Worst);
+      credit(pair1[1].id, r1, pair1Best, pair1Worst, bestOutcomePair1, worstOutcomePair1, pair2Best, pair2Worst);
+      credit(pair2[0].id, r2, pair2Best, pair2Worst, bestOutcomePair2, worstOutcomePair2, pair1Best, pair1Worst);
+      credit(pair2[1].id, r2, pair2Best, pair2Worst, bestOutcomePair2, worstOutcomePair2, pair1Best, pair1Worst);
     });
   });
 
   return Object.values(stats).sort((a, b) => b.total.W - a.total.W);
+}
+
+// ── Pair Difference by Hole ──
+// Returns the hole-by-hole combined-pair totals and the cumulative pair1 − pair2
+// advantage in the requested metric. For strokes, `delta` is pair2_strokes −
+// pair1_strokes so that a positive number still means pair1 is ahead (fewer
+// strokes). Null when the round has no pairs or no scores.
+export function pairDifferenceByHole(tournament, roundIndex, { metric = 'points' } = {}) {
+  const round = tournament.rounds?.[roundIndex];
+  if (!round || !round.scores || !round.pairs || round.pairs.length < 2) return null;
+  const [pair1, pair2] = round.pairs;
+  if (!pair1 || !pair2 || pair1.length < 2 || pair2.length < 2) return null;
+  const isStrokes = metric === 'strokes';
+
+  const sumPair = (pair, hole) => {
+    let total = 0;
+    for (const member of pair) {
+      const player = tournament.players.find(p => p.id === member.id);
+      if (!player) return null;
+      const sc = round.scores[player.id]?.[hole.number];
+      if (!sc) return null;
+      if (isStrokes) total += sc;
+      else total += calcStablefordPoints(hole.par, sc, getPlayingHandicap(round, player), hole.strokeIndex);
+    }
+    return total;
+  };
+
+  let cumulative = 0;
+  const holes = round.holes.map(hole => {
+    const p1Total = sumPair(pair1, hole);
+    const p2Total = sumPair(pair2, hole);
+    if (p1Total == null || p2Total == null) {
+      return { holeNumber: hole.number, par: hole.par, pair1Total: null, pair2Total: null, holeDelta: null, cumulative };
+    }
+    const holeDelta = isStrokes ? p2Total - p1Total : p1Total - p2Total;
+    cumulative += holeDelta;
+    return { holeNumber: hole.number, par: hole.par, pair1Total: p1Total, pair2Total: p2Total, holeDelta, cumulative };
+  });
+
+  const completed = holes.filter(h => h.holeDelta !== null);
+  const playedDeltas = completed.map(h => h.cumulative);
+  const maxLead = playedDeltas.length ? Math.max(0, ...playedDeltas) : 0;
+  const maxDeficit = playedDeltas.length ? Math.min(0, ...playedDeltas) : 0;
+  const finalDelta = completed.length ? completed[completed.length - 1].cumulative : 0;
+
+  let crossovers = 0;
+  let prevSign = 0;
+  for (const h of completed) {
+    const sign = h.cumulative > 0 ? 1 : h.cumulative < 0 ? -1 : 0;
+    if (sign !== 0 && prevSign !== 0 && sign !== prevSign) crossovers++;
+    if (sign !== 0) prevSign = sign;
+  }
+
+  return {
+    pair1, pair2, metric,
+    courseName: round.courseName,
+    holes,
+    maxLead, maxDeficit, finalDelta, crossovers,
+    maxAbs: Math.max(Math.abs(maxLead), Math.abs(maxDeficit)),
+  };
 }
 
 // ── Hall of Shame ──
