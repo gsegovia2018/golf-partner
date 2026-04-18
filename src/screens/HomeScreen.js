@@ -378,9 +378,9 @@ export default function HomeScreen({ navigation, viewMode = 'auto' }) {
                           onPress={() => { setSelectedRound(i); setShowRoundEdit(true); }}
                           style={s.roundEditBtn}
                           hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
-                          accessibilityLabel="Edit round"
+                          accessibilityLabel="Round options"
                         >
-                          <Feather name="edit-2" size={14} color={theme.text.muted} />
+                          <Feather name="settings" size={14} color={theme.text.muted} />
                         </TouchableOpacity>
                         <TouchableOpacity
                           style={[s.pagerArrow, !hasNext && s.pagerArrowHidden]}
@@ -449,7 +449,7 @@ export default function HomeScreen({ navigation, viewMode = 'auto' }) {
     <Modal
       visible={showRoundEdit}
       transparent
-      animationType="slide"
+      animationType="fade"
       onRequestClose={() => setShowRoundEdit(false)}
     >
       <Pressable style={s.modalBackdrop} onPress={() => setShowRoundEdit(false)}>
@@ -482,6 +482,16 @@ export default function HomeScreen({ navigation, viewMode = 'auto' }) {
               </TouchableOpacity>
             );
           })()}
+
+          <TouchableOpacity
+            style={s.menuItem}
+            onPress={() => { setShowRoundEdit(false); navigation.navigate('EditTournament'); }}
+            activeOpacity={0.7}
+          >
+            <Feather name="map" size={18} color={theme.accent.primary} />
+            <Text style={s.menuItemText}>Edit Course</Text>
+            <Feather name="chevron-right" size={16} color={theme.text.muted} />
+          </TouchableOpacity>
 
           <TouchableOpacity
             style={[s.menuItem, s.menuItemDestructive]}
