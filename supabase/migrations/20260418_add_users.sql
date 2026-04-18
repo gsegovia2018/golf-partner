@@ -15,6 +15,8 @@
 --   1. tournaments.created_by   → owner of a tournament (FK → auth.users)
 --   2. tournament_members       → who else can view a tournament (role)
 --   3. tournament_invites       → 6-char invite codes to join
+--   4. profiles                 → per-user display_name, handicap, avatar_color
+--                                 (auto-created by trigger on auth.users insert)
 --   + RLS policies so owners/members only see their own data, and invite
 --     codes are lookupable by any signed-in user (needed by
 --     joinTournamentByCode in src/store/tournamentStore.js).
@@ -176,6 +178,90 @@ CREATE POLICY invites_insert_owner ON public.tournament_invites
     )
   );
 
+-- ============================================================================
+-- profiles: per-user display info (display_name, handicap, avatar_color)
+-- ============================================================================
+
+-- Handles both fresh install and a pre-existing legacy profiles table
+-- (earlier iterations had column `id` instead of `user_id` and lacked
+-- avatar_color / updated_at). Rename + add columns in place rather than
+-- drop — the legacy row is the real user's profile.
+DO $$
+BEGIN
+  IF EXISTS (
+    SELECT 1 FROM information_schema.columns
+     WHERE table_schema='public' AND table_name='profiles' AND column_name='id'
+  ) AND NOT EXISTS (
+    SELECT 1 FROM information_schema.columns
+     WHERE table_schema='public' AND table_name='profiles' AND column_name='user_id'
+  ) THEN
+    EXECUTE 'ALTER TABLE public.profiles RENAME COLUMN id TO user_id';
+  END IF;
+END $$;
+
+CREATE TABLE IF NOT EXISTS public.profiles (
+  user_id       uuid PRIMARY KEY REFERENCES auth.users(id) ON DELETE CASCADE,
+  display_name  text,
+  handicap      int,
+  avatar_color  text,
+  created_at    timestamptz NOT NULL DEFAULT now(),
+  updated_at    timestamptz NOT NULL DEFAULT now()
+);
+
+-- Add any columns the legacy table was missing
+ALTER TABLE public.profiles ADD COLUMN IF NOT EXISTS avatar_color text;
+ALTER TABLE public.profiles ADD COLUMN IF NOT EXISTS updated_at timestamptz NOT NULL DEFAULT now();
+
+ALTER TABLE public.profiles ENABLE ROW LEVEL SECURITY;
+
+DROP POLICY IF EXISTS profiles_select ON public.profiles;
+DROP POLICY IF EXISTS profiles_insert ON public.profiles;
+DROP POLICY IF EXISTS profiles_update ON public.profiles;
+
+-- Any authenticated user can read profiles (so UIs can show "John joined your
+-- tournament"). Only the profile owner can insert/update their own row.
+CREATE POLICY profiles_select ON public.profiles
+  FOR SELECT TO authenticated USING (true);
+
+CREATE POLICY profiles_insert ON public.profiles
+  FOR INSERT TO authenticated
+  WITH CHECK (user_id = auth.uid());
+
+CREATE POLICY profiles_update ON public.profiles
+  FOR UPDATE TO authenticated
+  USING (user_id = auth.uid())
+  WITH CHECK (user_id = auth.uid());
+
+-- Trigger: auto-create a profile row whenever a new auth.users row is
+-- inserted. Pre-fills display_name with the email local-part so the first
+-- sign-in already has something sensible.
+CREATE OR REPLACE FUNCTION public.handle_new_user()
+RETURNS trigger
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = public
+AS $$
+BEGIN
+  INSERT INTO public.profiles (user_id, display_name)
+  VALUES (new.id, split_part(new.email, '@', 1))
+  ON CONFLICT (user_id) DO NOTHING;
+  RETURN new;
+END;
+$$;
+
+DROP TRIGGER IF EXISTS on_auth_user_created ON auth.users;
+CREATE TRIGGER on_auth_user_created
+  AFTER INSERT ON auth.users
+  FOR EACH ROW EXECUTE FUNCTION public.handle_new_user();
+
+-- One-off back-fill: create rows for any users that already existed before
+-- the trigger was installed. Safe to re-run.
+INSERT INTO public.profiles (user_id, display_name)
+SELECT u.id, split_part(u.email, '@', 1)
+  FROM auth.users u
+  LEFT JOIN public.profiles p ON p.user_id = u.id
+ WHERE p.user_id IS NULL;
+
 /* =========================================================================
    VERIFY — run these one at a time after the migration to confirm success.
    =========================================================================
@@ -184,19 +270,24 @@ CREATE POLICY invites_insert_owner ON public.tournament_invites
 SELECT table_name, column_name, data_type
   FROM information_schema.columns
  WHERE table_schema = 'public'
-   AND table_name IN ('tournaments', 'tournament_members', 'tournament_invites')
+   AND table_name IN ('tournaments', 'tournament_members', 'tournament_invites', 'profiles')
  ORDER BY table_name, ordinal_position;
 
--- (b) RLS is enabled on all three
+-- (b) RLS is enabled on all four
 SELECT relname, relrowsecurity
   FROM pg_class
- WHERE relname IN ('tournaments', 'tournament_members', 'tournament_invites');
+ WHERE relname IN ('tournaments', 'tournament_members', 'tournament_invites', 'profiles');
 
 -- (c) Policies are in place
 SELECT tablename, policyname, cmd
   FROM pg_policies
  WHERE schemaname = 'public'
-   AND tablename IN ('tournaments', 'tournament_members', 'tournament_invites')
+   AND tablename IN ('tournaments', 'tournament_members', 'tournament_invites', 'profiles')
  ORDER BY tablename, policyname;
+
+-- (d) Trigger installed + back-fill worked (count should equal auth.users count)
+SELECT tgname FROM pg_trigger WHERE tgname = 'on_auth_user_created';
+SELECT (SELECT count(*) FROM auth.users)     AS auth_users,
+       (SELECT count(*) FROM public.profiles) AS profiles;
 
 ========================================================================= */
