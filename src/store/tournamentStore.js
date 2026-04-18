@@ -153,6 +153,39 @@ export function recomputeRoundPlayingHandicaps(round, players) {
   return { ...round, playerHandicaps };
 }
 
+// Push a player library edit (name/handicap) into every tournament that
+// references this player id. Updates tournament.players and the player
+// snapshot embedded in each round.pairs. Non-manual round playing handicaps
+// are re-derived from the new base index.
+export async function propagatePlayerToTournaments(playerId, { name, handicap }) {
+  if (!playerId) return [];
+  const parsedIndex = parseInt(handicap, 10) || 0;
+  const tournaments = await loadAllTournaments();
+  const updatedIds = [];
+  for (const t of tournaments) {
+    const hasPlayer = t.players?.some((p) => p.id === playerId);
+    if (!hasPlayer) continue;
+
+    const nextPlayers = t.players.map((p) =>
+      p.id === playerId ? { ...p, name, handicap: parsedIndex } : p,
+    );
+    const nextRounds = t.rounds.map((round) => {
+      const nextPairs = round.pairs?.map((pair) =>
+        pair.map((pp) =>
+          pp.id === playerId ? { ...pp, name, handicap: parsedIndex } : pp,
+        ),
+      );
+      const patched = { ...round, pairs: nextPairs ?? round.pairs };
+      return recomputeRoundPlayingHandicaps(patched, nextPlayers);
+    });
+
+    await persistTournament({ ...t, players: nextPlayers, rounds: nextRounds });
+    updatedIds.push(t.id);
+  }
+  if (updatedIds.length > 0) _emitChange();
+  return updatedIds;
+}
+
 // Push a course library edit (slope/holes) into every tournament round that
 // references this courseId. Holes are deep-copied per round. Non-manual
 // playing handicaps are re-derived from the new slope.
@@ -178,6 +211,7 @@ export async function propagateCourseToTournaments(courseId, { slope, holes }) {
       updatedIds.push(next.id);
     }
   }
+  if (updatedIds.length > 0) _emitChange();
   return updatedIds;
 }
 

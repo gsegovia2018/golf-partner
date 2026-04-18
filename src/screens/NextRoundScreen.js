@@ -8,7 +8,9 @@ import {
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Feather } from '@expo/vector-icons';
-import { loadTournament, randomPairs, saveTournament } from '../store/tournamentStore';
+import {
+  loadTournament, randomPairs, saveTournament, subscribeTournamentChanges,
+} from '../store/tournamentStore';
 import { useTheme } from '../theme/ThemeContext';
 
 export default function NextRoundScreen({ navigation, route }) {
@@ -37,17 +39,27 @@ export default function NextRoundScreen({ navigation, route }) {
     }
   }
 
+  const phaseRef = useRef('initial');
+  useEffect(() => { phaseRef.current = phase; }, [phase]);
+
   useEffect(() => {
-    (async () => {
+    let cancelled = false;
+    async function load({ initial }) {
       const t = await loadTournament();
+      if (cancelled || !t) return;
       setTournament(t);
-      if (revealOnly) {
-        setNextPairs(t.rounds[paramRoundIndex].pairs);
-      } else {
-        setNextPairs(randomPairs(t.players));
+      if (!initial) {
+        if (phaseRef.current !== 'initial') return;
+        if (revealOnly) setNextPairs(t.rounds[paramRoundIndex].pairs);
+        return;
       }
-    })();
-  }, []);
+      if (revealOnly) setNextPairs(t.rounds[paramRoundIndex].pairs);
+      else setNextPairs(randomPairs(t.players));
+    }
+    load({ initial: true });
+    const unsub = subscribeTournamentChanges(() => load({ initial: false }));
+    return () => { cancelled = true; unsub(); };
+  }, [revealOnly, paramRoundIndex]);
 
   if (!tournament || !nextPairs) return null;
 
@@ -187,12 +199,16 @@ export default function NextRoundScreen({ navigation, route }) {
                 <Text style={[s.revealPairLabel, { color }]}>
                   {pair.length === 1 ? `SOLO ${i + 1}` : `PAIR ${i + 1}`}
                 </Text>
-                {pair.map((p, j) => (
-                  <React.Fragment key={p.id}>
-                    <Text style={s.revealPairNames}>{p.name}</Text>
-                    {j < pair.length - 1 && <Text style={s.revealAmpersand}>&</Text>}
-                  </React.Fragment>
-                ))}
+                {pair.map((p, j) => {
+                  const live = tournament.players?.find((x) => x.id === p.id);
+                  const displayName = live?.name ?? p.name;
+                  return (
+                    <React.Fragment key={p.id}>
+                      <Text style={s.revealPairNames}>{displayName}</Text>
+                      {j < pair.length - 1 && <Text style={s.revealAmpersand}>&</Text>}
+                    </React.Fragment>
+                  );
+                })}
               </Animated.View>
               </React.Fragment>
             );
