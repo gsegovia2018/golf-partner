@@ -14,6 +14,7 @@ import {
   playerNemesisAndCrushed, chaosHoles, collectiveExtremes,
   pairSynergy, pairCarryRatio, swingHole,
   par3Heartbreak, pickupChampion, anchor, zeroHero,
+  skinsLeaderboard, matchPlayResults, pairConfigMatrix,
 } from '../store/statsEngine';
 import StatDetailSheet from '../components/StatDetailSheet';
 
@@ -129,6 +130,7 @@ function OverviewTab({ tournament, metric, theme, s }) {
   const clutch = clutchOnHardest(tournament, { topN: 3 });
   const consistency = playerConsistency(tournament);
   const dna = courseDNA(tournament);
+  const skins = skinsLeaderboard(tournament, { metric });
   const isStrokes = metric === 'strokes';
   const modeLabel = isStrokes ? 'strokes (gross)' : 'points (net Stableford)';
   const fmtValue = (v, unit) => `${v} ${unit}`;
@@ -249,6 +251,26 @@ function OverviewTab({ tournament, metric, theme, s }) {
     rows: [],
   });
 
+  const openSkins = (player) => {
+    const rec = skins.leaderboard.find(r => r.player.id === player.id);
+    if (!rec) return;
+    setSheet({
+      title: `${player.name} — ${rec.skins} skin${rec.skins === 1 ? '' : 's'}`,
+      subtitle: `${rec.ties} tied holes · ${skins.totalSkins} total skins awarded`,
+      explainer:
+        (isStrokes
+          ? 'A skin on a hole goes to the player with the strictly lowest strokes. Ties on a hole = no skin awarded (no carry-over).'
+          : 'A skin on a hole goes to the player with the strictly highest Stableford points. Ties on a hole = no skin awarded (no carry-over).'),
+      rows: rec.breakdown.map(b => ({
+        key: `${b.roundIndex}-${b.holeNumber}`,
+        primary: `R${b.roundIndex + 1} · ${b.courseName} · Hole ${b.holeNumber}`,
+        secondary: `Par ${b.par} · SI ${b.si}`,
+        rightPrimary: isStrokes ? `${b.bestVal} str` : `${b.bestVal} pts`,
+        tone: 'excellent',
+      })),
+    });
+  };
+
   const openDna = (row) => setSheet({
     title: `${row.player.name} — Course DNA`,
     subtitle: 'Avg pts per hole by course',
@@ -364,6 +386,35 @@ function OverviewTab({ tournament, metric, theme, s }) {
                 <Text key={r.roundIndex} style={s.momentumLegendLabel}>R{r.roundIndex + 1}</Text>
               ))}
             </View>
+          </View>
+        </>
+      )}
+
+      {roundIndex === null && skins.totalSkins > 0 && (
+        <>
+          <Text style={s.sectionTitle}>SKINS LEADERBOARD</Text>
+          <Text style={s.scopeText}>
+            Outright winner of each hole ({isStrokes ? 'fewer strokes' : 'more points'}) takes 1 skin · ties = no skin
+          </Text>
+          <View style={s.card}>
+            {skins.leaderboard.map((rec, i) => (
+              <TouchableOpacity
+                key={rec.player.id}
+                style={s.leaderRow}
+                onPress={() => openSkins(rec.player)}
+                activeOpacity={0.7}
+                disabled={rec.skins === 0}
+              >
+                <Text style={[s.leaderRank, { color: i === 0 && rec.skins > 0 ? theme.semantic.rank.gold : theme.text.muted }]}>#{i + 1}</Text>
+                <Text style={s.leaderName}>{firstName(rec.player)}</Text>
+                <Text style={s.leaderValue}>
+                  {rec.skins} <Text style={s.leaderUnit}>{rec.skins === 1 ? 'skin' : 'skins'}</Text>
+                </Text>
+              </TouchableOpacity>
+            ))}
+            <Text style={s.skinsFooter}>
+              {skins.rounds.map(r => `R${r.roundIndex + 1}: ${Object.values(r.skinsPerPlayer).reduce((a, b) => a + b, 0)}`).join(' · ')} skins · {skins.totalSkins} total
+            </Text>
           </View>
         </>
       )}
@@ -1035,6 +1086,8 @@ function PairsTab({ tournament, players, h2hPlayer, setH2hPlayer, selectedPlayer
   const synergy = pairSynergy(tournament);
   const carry = pairCarryRatio(tournament);
   const swing = pdRound != null ? swingHole(tournament, pdRound) : null;
+  const matchPlay = matchPlayResults(tournament, { metric });
+  const configMatrix = pairConfigMatrix(tournament);
   const [h2hRound, setH2hRound] = useState(null);
   const p1 = players[selectedPlayer];
   const p2Idx = h2hPlayer >= players.length ? 0 : h2hPlayer;
@@ -1124,6 +1177,46 @@ function PairsTab({ tournament, players, h2hPlayer, setH2hPlayer, selectedPlayer
       tone: sh.share >= 0.55 ? 'excellent' : sh.share >= 0.45 ? 'good' : 'poor',
     })),
   });
+
+  const openMatchPlay = (round) => {
+    if (!round.available) return;
+    const p1Label = round.pair1.map(p => firstName(p)).join(' & ');
+    const p2Label = round.pair2.map(p => firstName(p)).join(' & ');
+    const winner = round.winnerPair ? round.winnerPair.map(p => firstName(p)).join(' & ') : 'Halved';
+    setSheet({
+      title: `R${round.roundIndex + 1} · ${p1Label} vs ${p2Label}`,
+      subtitle: `${round.scoreline} · Winner: ${winner}`,
+      explainer: (metric === 'strokes'
+        ? 'Match play scoring: each hole the pair with the lower combined strokes wins a hole. "3&2" means 3 holes up with 2 to play — the match closes early.'
+        : 'Match play scoring: each hole the pair with the higher combined Stableford points wins a hole. "3&2" means 3 holes up with 2 to play — the match closes early.')
+        + (round.closedAt ? ` Closed at hole ${round.closedAt}.` : ''),
+      rows: round.holes.map((h, i) => ({
+        key: `${i}`,
+        primary: `Hole ${h.holeNumber}`,
+        secondary: `${p1Label} ${h.pair1Score ?? '—'} · ${p2Label} ${h.pair2Score ?? '—'}`,
+        rightPrimary: h.winner === 'pair1' ? p1Label : h.winner === 'pair2' ? p2Label : h.winner == null ? '—' : 'halve',
+        rightSecondary: `${h.pair1UpAfter > 0 ? p1Label + ' +' + h.pair1UpAfter : h.pair1UpAfter < 0 ? p2Label + ' +' + Math.abs(h.pair1UpAfter) : 'AS'}`,
+        tone: h.winner === 'pair1' ? 'excellent' : h.winner === 'pair2' ? 'good' : 'neutral',
+      })),
+    });
+  };
+
+  const openConfig = (cfg) => {
+    const sideALabel = cfg.sideA.map(p => firstName(p)).join(' & ');
+    const sideBLabel = cfg.sideB.map(p => firstName(p)).join(' & ');
+    setSheet({
+      title: `${sideALabel} vs ${sideBLabel}`,
+      subtitle: `${cfg.holeWins.A}·${cfg.holeWins.T}·${cfg.holeWins.B} holes · ${cfg.pointsA}/${cfg.pointsB} pts`,
+      explainer: 'Per-hole W/T/L between this specific 2-vs-2 configuration across every round they played together. Pair points = sum of both partners\' Stableford points on the hole.',
+      rows: cfg.rounds.map(r => ({
+        key: `r${r.roundIndex}`,
+        primary: `R${r.roundIndex + 1} · ${r.courseName}`,
+        secondary: `${r.wins.A}·${r.wins.T}·${r.wins.B} holes`,
+        rightPrimary: `${r.points.A} / ${r.points.B}`,
+        tone: r.points.A > r.points.B ? 'excellent' : r.points.A < r.points.B ? 'poor' : 'neutral',
+      })),
+    });
+  };
 
   const openSwing = () => swing && setSheet({
     title: `Swing Hole · H${swing.holeNumber}`,
@@ -1308,6 +1401,79 @@ function PairsTab({ tournament, players, h2hPlayer, setH2hPlayer, selectedPlayer
               <Text style={s.carryMeta}>{pair.totalPoints} combined pts · imbalance {pair.imbalance}</Text>
             </TouchableOpacity>
           ))}
+        </>
+      )}
+
+      {matchPlay.some(r => r.available) && (
+        <>
+          <Text style={s.sectionTitle}>MATCH PLAY</Text>
+          <Text style={s.scopeText}>Per round, hole-by-hole up/down — closes when lead > holes remaining</Text>
+          {matchPlay.filter(r => r.available).map(round => {
+            const p1Label = round.pair1.map(p => firstName(p)).join(' + ');
+            const p2Label = round.pair2.map(p => firstName(p)).join(' + ');
+            const isTie = round.finalPair1Up === 0;
+            const p1Won = round.finalPair1Up > 0;
+            return (
+              <TouchableOpacity key={round.roundIndex} style={s.matchCard} onPress={() => openMatchPlay(round)} activeOpacity={0.7}>
+                <View style={s.matchHeader}>
+                  <Text style={s.matchRound}>R{round.roundIndex + 1}</Text>
+                  <Text style={s.matchCourse}>{round.courseName}</Text>
+                  <Text style={[s.matchScoreline, {
+                    color: isTie ? theme.text.muted : theme.scoreColor('excellent'),
+                  }]}>{round.scoreline}</Text>
+                </View>
+                <View style={s.matchTeams}>
+                  <Text style={[s.matchTeam, {
+                    color: p1Won ? theme.scoreColor('excellent') : isTie ? theme.text.primary : theme.text.muted,
+                    fontFamily: p1Won ? 'PlusJakartaSans-ExtraBold' : 'PlusJakartaSans-SemiBold',
+                  }]}>{p1Label}</Text>
+                  <Text style={s.matchVs}>vs</Text>
+                  <Text style={[s.matchTeam, {
+                    color: !p1Won && !isTie ? theme.scoreColor('excellent') : isTie ? theme.text.primary : theme.text.muted,
+                    fontFamily: !p1Won && !isTie ? 'PlusJakartaSans-ExtraBold' : 'PlusJakartaSans-SemiBold',
+                  }]}>{p2Label}</Text>
+                </View>
+                {round.closedAt && (
+                  <Text style={s.matchSub}>Closed at hole {round.closedAt}</Text>
+                )}
+              </TouchableOpacity>
+            );
+          })}
+        </>
+      )}
+
+      {configMatrix.length > 0 && (
+        <>
+          <Text style={s.sectionTitle}>PAIR CONFIG MATRIX</Text>
+          <Text style={s.scopeText}>The 2-vs-2 combinations that actually played · W·T·L by holes won</Text>
+          {configMatrix.map((cfg, i) => {
+            const aWon = cfg.holeWins.A > cfg.holeWins.B;
+            const bWon = cfg.holeWins.B > cfg.holeWins.A;
+            return (
+              <TouchableOpacity key={i} style={s.configCard} onPress={() => openConfig(cfg)} activeOpacity={0.7}>
+                <View style={s.configRow}>
+                  <Text style={[s.configSide, {
+                    color: aWon ? theme.scoreColor('excellent') : bWon ? theme.text.muted : theme.text.primary,
+                  }]}>
+                    {cfg.sideA.map(p => firstName(p)).join(' + ')}
+                  </Text>
+                  <View style={s.configWTL}>
+                    <Text style={s.configScore}>{cfg.holeWins.A}</Text>
+                    <Text style={s.configSep}>·</Text>
+                    <Text style={s.configScoreT}>{cfg.holeWins.T}</Text>
+                    <Text style={s.configSep}>·</Text>
+                    <Text style={s.configScore}>{cfg.holeWins.B}</Text>
+                  </View>
+                  <Text style={[s.configSide, { textAlign: 'right',
+                    color: bWon ? theme.scoreColor('excellent') : aWon ? theme.text.muted : theme.text.primary,
+                  }]}>
+                    {cfg.sideB.map(p => firstName(p)).join(' + ')}
+                  </Text>
+                </View>
+                <Text style={s.configSub}>{cfg.pointsA} / {cfg.pointsB} combined pts · {cfg.rounds.length} round{cfg.rounds.length === 1 ? '' : 's'}</Text>
+              </TouchableOpacity>
+            );
+          })}
         </>
       )}
 
@@ -2126,6 +2292,76 @@ const makeStyles = (t) => StyleSheet.create({
   carryLabels: { flexDirection: 'row', justifyContent: 'space-between' },
   carryName: { fontFamily: 'PlusJakartaSans-SemiBold', fontSize: 12, color: t.text.primary },
   carryMeta: {
+    fontFamily: 'PlusJakartaSans-Medium', fontSize: 10, color: t.text.muted,
+    marginTop: 6, textAlign: 'center',
+  },
+
+  // Skins footer
+  skinsFooter: {
+    fontFamily: 'PlusJakartaSans-Medium', fontSize: 10, color: t.text.muted,
+    marginTop: 8, textAlign: 'center',
+  },
+
+  // Match Play cards
+  matchCard: {
+    backgroundColor: t.bg.card, borderRadius: 14, borderWidth: 1,
+    borderColor: t.border.default, padding: 12, marginBottom: 8,
+    ...(t.isDark ? {} : t.shadow.card),
+  },
+  matchHeader: {
+    flexDirection: 'row', alignItems: 'center', marginBottom: 6,
+  },
+  matchRound: {
+    fontFamily: 'PlusJakartaSans-ExtraBold', fontSize: 11,
+    color: t.accent.primary, letterSpacing: 1, marginRight: 8,
+  },
+  matchCourse: {
+    flex: 1, fontFamily: 'PlusJakartaSans-SemiBold', fontSize: 12,
+    color: t.text.secondary,
+  },
+  matchScoreline: {
+    fontFamily: 'PlayfairDisplay-Black', fontSize: 16,
+  },
+  matchTeams: {
+    flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
+  },
+  matchTeam: {
+    flex: 1, fontSize: 13, color: t.text.primary,
+  },
+  matchVs: {
+    fontFamily: 'PlusJakartaSans-Medium', fontSize: 11, color: t.text.muted,
+    marginHorizontal: 8,
+  },
+  matchSub: {
+    fontFamily: 'PlusJakartaSans-Medium', fontSize: 10, color: t.text.muted,
+    marginTop: 6,
+  },
+
+  // Pair Config Matrix
+  configCard: {
+    backgroundColor: t.bg.card, borderRadius: 14, borderWidth: 1,
+    borderColor: t.border.default, padding: 12, marginBottom: 8,
+    ...(t.isDark ? {} : t.shadow.card),
+  },
+  configRow: {
+    flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
+  },
+  configSide: {
+    flex: 1, fontFamily: 'PlusJakartaSans-SemiBold', fontSize: 13,
+  },
+  configWTL: {
+    flexDirection: 'row', alignItems: 'center', paddingHorizontal: 10,
+  },
+  configScore: {
+    fontFamily: 'PlusJakartaSans-ExtraBold', fontSize: 18, color: t.text.primary,
+    minWidth: 22, textAlign: 'center',
+  },
+  configScoreT: {
+    fontFamily: 'PlusJakartaSans-Bold', fontSize: 14, color: t.text.muted,
+    minWidth: 18, textAlign: 'center',
+  },
+  configSep: { color: t.text.muted, fontSize: 14, marginHorizontal: 2 },
+  configSub: {
     fontFamily: 'PlusJakartaSans-Medium', fontSize: 10, color: t.text.muted,
     marginTop: 6, textAlign: 'center',
   },

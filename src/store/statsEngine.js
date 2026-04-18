@@ -1197,3 +1197,173 @@ export function zeroHero(tournament) {
   const max = Math.max(...entries.map(e => e.count));
   return { value: max, entries: entries.sort((a, b) => b.count - a.count) };
 }
+
+// ── Skins Leaderboard ──
+// Per-hole skins: the player with the strictly best score wins 1 skin. Ties
+// award nothing (no carry-over to keep scoring simple and deterministic).
+// Uses Stableford points in points mode, strokes in strokes mode.
+export function skinsLeaderboard(tournament, { metric = 'points' } = {}) {
+  const isStrokes = metric === 'strokes';
+  const perPlayer = {};
+  tournament.players.forEach(p => { perPlayer[p.id] = { player: p, skins: 0, ties: 0, breakdown: [] }; });
+  const rounds = [];
+
+  tournament.rounds.forEach((round, roundIndex) => {
+    if (!round.scores) return;
+    const roundRec = { roundIndex, courseName: round.courseName, skinsPerPlayer: {}, holes: [] };
+    tournament.players.forEach(p => { roundRec.skinsPerPlayer[p.id] = 0; });
+
+    round.holes.forEach(hole => {
+      const candidates = [];
+      tournament.players.forEach(player => {
+        const sc = round.scores[player.id]?.[hole.number];
+        if (!sc) return;
+        const handicap = getPlayingHandicap(round, player);
+        const points = calcStablefordPoints(hole.par, sc, handicap, hole.strokeIndex);
+        candidates.push({ player, strokes: sc, points });
+      });
+      if (candidates.length < 2) return;
+      const values = candidates.map(c => isStrokes ? c.strokes : c.points);
+      const bestVal = isStrokes ? Math.min(...values) : Math.max(...values);
+      const leaders = candidates.filter(c => (isStrokes ? c.strokes : c.points) === bestVal);
+
+      const holeEntry = {
+        roundIndex, courseName: round.courseName, holeNumber: hole.number, par: hole.par, si: hole.strokeIndex,
+        bestVal, winner: leaders.length === 1 ? leaders[0].player : null,
+        tiedLeaders: leaders.length > 1 ? leaders.map(l => l.player) : null,
+        players: candidates.map(c => ({ playerId: c.player.id, playerName: c.player.name, strokes: c.strokes, points: c.points })),
+      };
+      roundRec.holes.push(holeEntry);
+
+      if (leaders.length === 1) {
+        const winner = leaders[0].player;
+        perPlayer[winner.id].skins++;
+        perPlayer[winner.id].breakdown.push(holeEntry);
+        roundRec.skinsPerPlayer[winner.id]++;
+      } else {
+        leaders.forEach(l => { perPlayer[l.player.id].ties++; });
+      }
+    });
+    rounds.push(roundRec);
+  });
+
+  return {
+    leaderboard: Object.values(perPlayer).sort((a, b) => b.skins - a.skins),
+    rounds,
+    totalSkins: Object.values(perPlayer).reduce((s, p) => s + p.skins, 0),
+  };
+}
+
+// ── Match Play Results (pair vs pair) ──
+// Walks the holes of a round and tracks up/down between pair1 and pair2 using
+// their combined stableford points per hole (or combined strokes when
+// metric='strokes'). Returns the scoreline in classic match-play format.
+export function matchPlayResults(tournament, { metric = 'points' } = {}) {
+  const isStrokes = metric === 'strokes';
+  return tournament.rounds.map((round, roundIndex) => {
+    if (!round.scores || !round.pairs || round.pairs.length < 2) {
+      return { roundIndex, courseName: round.courseName, available: false };
+    }
+    const [pair1, pair2] = round.pairs;
+    if (pair1.length < 2 || pair2.length < 2) {
+      return { roundIndex, courseName: round.courseName, available: false };
+    }
+    const sumPair = (pair, hole) => {
+      let total = 0;
+      for (const member of pair) {
+        const player = tournament.players.find(p => p.id === member.id);
+        const sc = round.scores[player?.id]?.[hole.number];
+        if (!sc || !player) return null;
+        if (isStrokes) total += sc;
+        else total += calcStablefordPoints(hole.par, sc, getPlayingHandicap(round, player), hole.strokeIndex);
+      }
+      return total;
+    };
+
+    let pair1Up = 0; // pair1 holes won − pair2 holes won
+    const holes = [];
+    let closedAt = null, closedScore = null;
+    const totalHoles = round.holes.length;
+    round.holes.forEach((hole, hi) => {
+      const p1 = sumPair(pair1, hole);
+      const p2 = sumPair(pair2, hole);
+      if (p1 == null || p2 == null) {
+        holes.push({ holeNumber: hole.number, winner: null, pair1Score: p1, pair2Score: p2, pair1UpAfter: pair1Up });
+        return;
+      }
+      const p1Better = isStrokes ? p1 < p2 : p1 > p2;
+      const p2Better = isStrokes ? p2 < p1 : p2 > p1;
+      let winner = null;
+      if (p1Better) { pair1Up++; winner = 'pair1'; }
+      else if (p2Better) { pair1Up--; winner = 'pair2'; }
+      holes.push({ holeNumber: hole.number, winner, pair1Score: p1, pair2Score: p2, pair1UpAfter: pair1Up });
+      const remaining = totalHoles - (hi + 1);
+      if (closedAt === null && Math.abs(pair1Up) > remaining) {
+        closedAt = hole.number;
+        closedScore = { up: Math.abs(pair1Up), remaining, winner: pair1Up > 0 ? 'pair1' : 'pair2' };
+      }
+    });
+
+    const winnerPair = pair1Up > 0 ? pair1 : pair1Up < 0 ? pair2 : null;
+    const scoreline = closedScore
+      ? `${closedScore.up}&${closedScore.remaining}`
+      : pair1Up === 0 ? 'Halved' : `${Math.abs(pair1Up)} up`;
+
+    return {
+      roundIndex, courseName: round.courseName, available: true,
+      pair1, pair2,
+      pair1Up, finalPair1Up: pair1Up,
+      holes, closedAt, closedScore, scoreline,
+      winnerPair, metric,
+    };
+  });
+}
+
+// ── Pair Config Matrix ──
+// For every 2-vs-2 pair configuration encountered, aggregates hole-by-hole
+// W/T/L between the two sides using combined stableford points. Each round's
+// pairing defines one config; rounds using the same config accumulate.
+export function pairConfigMatrix(tournament) {
+  const configs = {};
+  tournament.rounds.forEach((round, roundIndex) => {
+    if (!round.scores || !round.pairs || round.pairs.length < 2) return;
+    const [pair1, pair2] = round.pairs;
+    if (pair1.length < 2 || pair2.length < 2) return;
+    const sideA = [pair1[0].id, pair1[1].id].sort();
+    const sideB = [pair2[0].id, pair2[1].id].sort();
+    const key = [sideA.join('+'), sideB.join('+')].sort().join(' vs ');
+    if (!configs[key]) configs[key] = { sideA: pair1, sideB: pair2, holeWins: { A: 0, B: 0, T: 0 }, pointsA: 0, pointsB: 0, rounds: [] };
+
+    const cur = configs[key];
+    let roundA = 0, roundB = 0, roundT = 0, roundPtsA = 0, roundPtsB = 0;
+    round.holes.forEach(hole => {
+      let aPts = 0, bPts = 0, complete = true;
+      for (const member of pair1) {
+        const player = tournament.players.find(p => p.id === member.id);
+        const sc = round.scores[player?.id]?.[hole.number];
+        if (!sc || !player) { complete = false; break; }
+        aPts += calcStablefordPoints(hole.par, sc, getPlayingHandicap(round, player), hole.strokeIndex);
+      }
+      if (!complete) return;
+      for (const member of pair2) {
+        const player = tournament.players.find(p => p.id === member.id);
+        const sc = round.scores[player?.id]?.[hole.number];
+        if (!sc || !player) { complete = false; break; }
+        bPts += calcStablefordPoints(hole.par, sc, getPlayingHandicap(round, player), hole.strokeIndex);
+      }
+      if (!complete) return;
+      roundPtsA += aPts; roundPtsB += bPts;
+      if (aPts > bPts) { cur.holeWins.A++; roundA++; }
+      else if (bPts > aPts) { cur.holeWins.B++; roundB++; }
+      else { cur.holeWins.T++; roundT++; }
+    });
+    cur.pointsA += roundPtsA; cur.pointsB += roundPtsB;
+    cur.rounds.push({ roundIndex, courseName: round.courseName, wins: { A: roundA, B: roundB, T: roundT }, points: { A: roundPtsA, B: roundPtsB } });
+  });
+
+  return Object.values(configs).map(c => ({
+    ...c,
+    totalHoles: c.holeWins.A + c.holeWins.B + c.holeWins.T,
+    pointDiff: c.pointsA - c.pointsB,
+  }));
+}
