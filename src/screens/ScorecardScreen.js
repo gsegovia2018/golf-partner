@@ -1,7 +1,7 @@
 import React, { useEffect, useRef, useState } from 'react';
 import {
   View, Text, TextInput, TouchableOpacity,
-  StyleSheet, ScrollView,
+  StyleSheet, ScrollView, Modal, Pressable, KeyboardAvoidingView, Platform,
 } from 'react-native';
 
 import { Feather } from '@expo/vector-icons';
@@ -125,29 +125,34 @@ export default function ScorecardScreen({ navigation, route }) {
 
   return (
     <View style={s.container}>
-      {/* Header */}
+      {/* Header with inline view toggle (small, doesn't take a full row) */}
       <View style={s.header}>
         <TouchableOpacity onPress={() => navigation.goBack()} style={s.backBtn}>
           <Feather name="chevron-left" size={22} color={theme.accent.primary} />
         </TouchableOpacity>
         <Text style={s.headerTitle}>Scorecard</Text>
-        <View style={{ width: 22 }} />
-      </View>
-
-      {/* View toggle */}
-      <View style={s.toggleBar}>
         <View style={s.togglePill}>
           <TouchableOpacity
             style={[s.toggleBtn, view === 'hole' && s.toggleBtnActive]}
             onPress={() => setView('hole')}
+            accessibilityLabel="Hole by hole view"
           >
-            <Text style={[s.toggleText, view === 'hole' && s.toggleTextActive]}>Hole by Hole</Text>
+            <Feather
+              name="circle"
+              size={12}
+              color={view === 'hole' ? theme.text.inverse : theme.text.muted}
+            />
           </TouchableOpacity>
           <TouchableOpacity
             style={[s.toggleBtn, view === 'grid' && s.toggleBtnActive]}
             onPress={() => setView('grid')}
+            accessibilityLabel="All holes grid view"
           >
-            <Text style={[s.toggleText, view === 'grid' && s.toggleTextActive]}>All Holes</Text>
+            <Feather
+              name="grid"
+              size={12}
+              color={view === 'grid' ? theme.text.inverse : theme.text.muted}
+            />
           </TouchableOpacity>
         </View>
       </View>
@@ -192,6 +197,7 @@ export default function ScorecardScreen({ navigation, route }) {
 function HoleView({ round, roundIndex, players, scores, notes, currentHole, hole, isBestBall, bbResult, settings, onStep, onSetScore, onNotesChange, onPrev, onNext, onGoToHole, onGoBack, playerTotals }) {
   const { theme } = useTheme();
   const s = makeStyles(theme);
+  const [notesOpen, setNotesOpen] = useState(false);
 
   if (!hole) return null;
 
@@ -218,39 +224,8 @@ function HoleView({ round, roundIndex, players, scores, notes, currentHole, hole
         </View>
       </View>
 
-      {/* Hole navigation */}
-      <View style={s.holeNav}>
-        <TouchableOpacity
-          style={[s.holeNavBtn, currentHole === 1 && s.holeNavBtnDisabled]}
-          onPress={onPrev}
-          disabled={currentHole === 1}
-        >
-          <Feather name="chevron-left" size={16} color={currentHole === 1 ? theme.text.muted : theme.accent.primary} />
-          <Text style={[s.holeNavBtnText, currentHole === 1 && s.holeNavBtnTextDisabled]}>Prev</Text>
-        </TouchableOpacity>
-        <View style={s.holePips}>
-          {Array.from({ length: 18 }, (_, i) => {
-            const n = i + 1;
-            const hasAnyScore = players.some((p) => scores[p.id]?.[n] != null);
-            return (
-              <TouchableOpacity key={n} onPress={() => onGoToHole(n)}>
-                <View style={[s.pip, n === currentHole && s.pipActive, hasAnyScore && n !== currentHole && s.pipDone]} />
-              </TouchableOpacity>
-            );
-          })}
-        </View>
-        <TouchableOpacity
-          style={[s.holeNavBtn, currentHole === 18 && s.holeNavBtnDisabled]}
-          onPress={onNext}
-          disabled={currentHole === 18}
-        >
-          <Text style={[s.holeNavBtnText, currentHole === 18 && s.holeNavBtnTextDisabled]}>Next</Text>
-          <Feather name="chevron-right" size={16} color={currentHole === 18 ? theme.text.muted : theme.accent.primary} />
-        </TouchableOpacity>
-      </View>
-
-      {/* Player score cards */}
-      <ScrollView style={s.flex} contentContainerStyle={s.playerCardsContent}>
+      {/* Player score cards (always visible — no inner scroll) */}
+      <View style={s.playerCardsContent}>
         {(() => {
           const pairs = round.pairs ?? [];
           const orderedPlayers = pairs.length === 2
@@ -313,40 +288,28 @@ function HoleView({ round, roundIndex, players, scores, notes, currentHole, hole
                       <TouchableOpacity style={s.stepBtn} onPress={() => onStep(player.id, currentHole, 1)}>
                         <Feather name="plus" size={18} color={theme.text.primary} />
                       </TouchableOpacity>
+                      <TouchableOpacity
+                        style={[s.pickupBtn, isPickup && s.pickupBtnActive]}
+                        onPress={() => onSetScore(player.id, currentHole, pickup)}
+                        activeOpacity={0.7}
+                        accessibilityLabel={isPickup ? `Picked up at ${pickup} strokes` : `Pickup at ${pickup} strokes`}
+                      >
+                        <Feather
+                          name="hash"
+                          size={14}
+                          color={isPickup ? theme.accent.primary : theme.text.muted}
+                        />
+                      </TouchableOpacity>
                     </View>
                   </View>
-                  <TouchableOpacity
-                    style={[s.pickupBtn, isPickup && s.pickupBtnActive]}
-                    onPress={() => onSetScore(player.id, currentHole, pickup)}
-                    activeOpacity={0.7}
-                  >
-                    <Feather
-                      name={isPickup ? 'check-circle' : 'x-circle'}
-                      size={12}
-                      color={isPickup ? theme.accent.primary : theme.text.muted}
-                    />
-                    <Text style={[s.pickupBtnText, isPickup && s.pickupBtnTextActive]}>
-                      {isPickup ? `Picked up · ${pickup} strokes` : `Pickup (${pickup} strokes)`}
-                    </Text>
-                  </TouchableOpacity>
                 </View>
               </React.Fragment>
             );
           });
         })()}
-      </ScrollView>
+      </View>
 
-      <TextInput
-        style={s.notesInput}
-        placeholder="Round notes..."
-        placeholderTextColor={theme.text.muted}
-        keyboardAppearance={theme.isDark ? 'dark' : 'light'}
-        selectionColor={theme.accent.primary}
-        multiline
-        value={notes}
-        onChangeText={onNotesChange}
-      />
-
+      {/* Round totals / live match — pinned above the bottom controls */}
       {isBestBall && bbResult
         ? <MatchPanel bbResult={bbResult} currentHole={currentHole} settings={settings} />
         : (
@@ -368,18 +331,103 @@ function HoleView({ round, roundIndex, players, scores, notes, currentHole, hole
         )
       }
 
-      <TouchableOpacity
-        style={s.saveBtn}
-        onPress={currentHole < 18 ? onNext : onGoBack}
-        activeOpacity={0.8}
+      {/* Bottom controls: hole nav + notes + save */}
+      <View style={s.bottomBar}>
+        <View style={s.holeNav}>
+          <TouchableOpacity
+            style={[s.holeNavBtn, currentHole === 1 && s.holeNavBtnDisabled]}
+            onPress={onPrev}
+            disabled={currentHole === 1}
+          >
+            <Feather name="chevron-left" size={16} color={currentHole === 1 ? theme.text.muted : theme.accent.primary} />
+            <Text style={[s.holeNavBtnText, currentHole === 1 && s.holeNavBtnTextDisabled]}>Prev</Text>
+          </TouchableOpacity>
+          <View style={s.holePips}>
+            {Array.from({ length: 18 }, (_, i) => {
+              const n = i + 1;
+              const hasAnyScore = players.some((p) => scores[p.id]?.[n] != null);
+              return (
+                <TouchableOpacity key={n} onPress={() => onGoToHole(n)}>
+                  <View style={[s.pip, n === currentHole && s.pipActive, hasAnyScore && n !== currentHole && s.pipDone]} />
+                </TouchableOpacity>
+              );
+            })}
+          </View>
+          <TouchableOpacity
+            style={[s.holeNavBtn, currentHole === 18 && s.holeNavBtnDisabled]}
+            onPress={onNext}
+            disabled={currentHole === 18}
+          >
+            <Text style={[s.holeNavBtnText, currentHole === 18 && s.holeNavBtnTextDisabled]}>Next</Text>
+            <Feather name="chevron-right" size={16} color={currentHole === 18 ? theme.text.muted : theme.accent.primary} />
+          </TouchableOpacity>
+        </View>
+
+        <View style={s.bottomActionsRow}>
+          <TouchableOpacity
+            style={s.notesPillBtn}
+            onPress={() => setNotesOpen(true)}
+            activeOpacity={0.7}
+          >
+            <Feather
+              name={notes?.trim() ? 'edit-3' : 'edit-2'}
+              size={14}
+              color={notes?.trim() ? theme.accent.primary : theme.text.muted}
+            />
+            <Text style={[s.notesPillBtnText, notes?.trim() && s.notesPillBtnTextActive]}>
+              {notes?.trim() ? 'Notes' : 'Add notes'}
+            </Text>
+          </TouchableOpacity>
+          <TouchableOpacity
+            style={s.saveBtn}
+            onPress={currentHole < 18 ? onNext : onGoBack}
+            activeOpacity={0.8}
+          >
+            <Text style={s.saveBtnText}>
+              {currentHole < 18 ? `Hole ${currentHole + 1}` : 'Finish Round'}
+            </Text>
+            {currentHole < 18 && (
+              <Feather name="chevron-right" size={18} color={theme.text.inverse} />
+            )}
+          </TouchableOpacity>
+        </View>
+      </View>
+
+      {/* Notes modal — only shown on demand */}
+      <Modal
+        visible={notesOpen}
+        transparent
+        animationType="slide"
+        onRequestClose={() => setNotesOpen(false)}
       >
-        <Text style={s.saveBtnText}>
-          {currentHole < 18 ? `Hole ${currentHole + 1}` : 'Finish Round'}
-        </Text>
-        {currentHole < 18 && (
-          <Feather name="chevron-right" size={18} color={theme.text.inverse} />
-        )}
-      </TouchableOpacity>
+        <KeyboardAvoidingView
+          behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+          style={s.notesModalKav}
+        >
+          <Pressable style={s.notesBackdrop} onPress={() => setNotesOpen(false)}>
+            <Pressable style={s.notesSheet} onPress={() => {}}>
+              <View style={s.notesHandle} />
+              <View style={s.notesHeader}>
+                <Text style={s.notesTitle}>Round Notes</Text>
+                <TouchableOpacity onPress={() => setNotesOpen(false)} style={s.notesCloseBtn}>
+                  <Feather name="x" size={18} color={theme.text.secondary} />
+                </TouchableOpacity>
+              </View>
+              <TextInput
+                style={s.notesModalInput}
+                placeholder="What happened this round?"
+                placeholderTextColor={theme.text.muted}
+                keyboardAppearance={theme.isDark ? 'dark' : 'light'}
+                selectionColor={theme.accent.primary}
+                multiline
+                value={notes}
+                onChangeText={onNotesChange}
+                autoFocus
+              />
+            </Pressable>
+          </Pressable>
+        </KeyboardAvoidingView>
+      </Modal>
     </View>
   );
 }
@@ -633,38 +681,25 @@ function makeStyles(theme) {
       letterSpacing: -0.3,
     },
 
-    // Toggle
-    toggleBar: {
-      backgroundColor: theme.bg.primary,
-      paddingTop: 10,
-      paddingHorizontal: 16,
-      paddingBottom: 10,
-    },
+    // Inline view toggle (small, lives in header)
     togglePill: {
       flexDirection: 'row',
       backgroundColor: theme.isDark ? theme.bg.elevated : theme.bg.secondary,
-      borderRadius: 14,
+      borderRadius: 999,
       borderWidth: 1,
       borderColor: theme.isDark ? theme.glass?.border : theme.border.default,
-      padding: 3,
+      padding: 2,
+      gap: 2,
     },
     toggleBtn: {
-      flex: 1,
-      paddingVertical: 9,
+      width: 32,
+      height: 28,
       alignItems: 'center',
-      borderRadius: 11,
+      justifyContent: 'center',
+      borderRadius: 999,
     },
     toggleBtnActive: {
       backgroundColor: theme.accent.primary,
-    },
-    toggleText: {
-      color: theme.text.muted,
-      fontFamily: 'PlusJakartaSans-SemiBold',
-      fontSize: 14,
-    },
-    toggleTextActive: {
-      color: theme.text.inverse,
-      fontFamily: 'PlusJakartaSans-Bold',
     },
 
     // Hole view header card
@@ -762,23 +797,23 @@ function makeStyles(theme) {
     },
     pipDone: { backgroundColor: theme.accent.primary },
 
-    // Player cards
-    playerCardsContent: { padding: 14, paddingTop: 10, gap: 8 },
+    // Player cards (compact — must fit 4 + 2 pair labels with no inner scroll)
+    playerCardsContent: { flex: 1, paddingHorizontal: 12, paddingTop: 8, paddingBottom: 4, gap: 6 },
     pairLabel: {
       fontSize: 10,
       fontFamily: 'PlusJakartaSans-Bold',
       letterSpacing: 1.5,
-      marginBottom: 4,
+      marginBottom: 2,
       marginLeft: 2,
       textTransform: 'uppercase',
     },
     playerCard: {
       backgroundColor: theme.bg.card,
-      borderRadius: 16,
+      borderRadius: 12,
       borderWidth: 1,
       borderColor: theme.isDark ? theme.glass?.border : theme.border.default,
-      paddingVertical: 12,
-      paddingHorizontal: 16,
+      paddingVertical: 8,
+      paddingHorizontal: 12,
       overflow: 'hidden',
       ...(theme.isDark ? {} : theme.shadow.card),
     },
@@ -788,60 +823,47 @@ function makeStyles(theme) {
       justifyContent: 'space-between',
     },
     pickupBtn: {
-      flexDirection: 'row',
-      alignItems: 'center',
-      alignSelf: 'flex-end',
-      gap: 5,
-      paddingVertical: 5,
-      paddingHorizontal: 10,
-      marginTop: 6,
+      width: 30,
+      height: 30,
       borderRadius: 999,
       borderWidth: 1,
       borderColor: theme.isDark ? theme.glass?.border : theme.border.default,
       backgroundColor: theme.isDark ? theme.bg.elevated : theme.bg.secondary,
+      alignItems: 'center',
+      justifyContent: 'center',
     },
     pickupBtnActive: {
-      borderColor: theme.accent.primary + '55',
-      backgroundColor: theme.isDark ? theme.accent.primary + '15' : theme.accent.light,
+      borderColor: theme.accent.primary + '66',
+      backgroundColor: theme.isDark ? theme.accent.primary + '20' : theme.accent.light,
     },
-    pickupBtnText: {
-      color: theme.text.muted,
-      fontSize: 11,
-      fontFamily: 'PlusJakartaSans-SemiBold',
-      letterSpacing: 0.2,
-    },
-    pickupBtnTextActive: {
-      color: theme.accent.primary,
-      fontFamily: 'PlusJakartaSans-Bold',
-    },
-    playerCardLeft: { flexDirection: 'row', alignItems: 'center', gap: 12 },
+    playerCardLeft: { flexDirection: 'row', alignItems: 'center', gap: 10, flex: 1, minWidth: 0 },
     playerAvatar: {
-      width: 38,
-      height: 38,
-      borderRadius: 19,
+      width: 30,
+      height: 30,
+      borderRadius: 15,
       alignItems: 'center',
       justifyContent: 'center',
     },
     playerAvatarText: {
       color: '#fff',
       fontFamily: 'PlusJakartaSans-ExtraBold',
-      fontSize: 15,
+      fontSize: 13,
     },
     playerCardName: {
       color: theme.text.primary,
       fontFamily: 'PlusJakartaSans-Bold',
-      fontSize: 15,
+      fontSize: 14,
     },
     playerCardHcp: {
       color: theme.text.secondary,
-      fontSize: 12,
-      marginTop: 2,
+      fontSize: 11,
+      marginTop: 1,
       fontFamily: 'PlusJakartaSans-Medium',
     },
-    playerCardRight: { flexDirection: 'row', alignItems: 'center', gap: 8 },
+    playerCardRight: { flexDirection: 'row', alignItems: 'center', gap: 6 },
     stepBtn: {
-      width: 38,
-      height: 38,
+      width: 32,
+      height: 32,
       borderRadius: 10,
       backgroundColor: theme.isDark ? theme.bg.elevated : theme.bg.secondary,
       borderWidth: 1,
@@ -849,29 +871,91 @@ function makeStyles(theme) {
       alignItems: 'center',
       justifyContent: 'center',
     },
-    scoreDisplay: { width: 52, alignItems: 'center' },
+    scoreDisplay: { width: 46, alignItems: 'center' },
     scoreDisplayNum: {
       color: theme.text.primary,
-      fontSize: 26,
+      fontSize: 22,
       fontFamily: 'PlusJakartaSans-ExtraBold',
+      lineHeight: 24,
     },
     scoreDisplayPts: {
-      fontSize: 11,
+      fontSize: 10,
       fontFamily: 'PlusJakartaSans-Bold',
-      marginTop: -1,
+      marginTop: 0,
     },
 
-    // Notes input
-    notesInput: {
-      backgroundColor: theme.bg.card,
-      color: theme.text.primary,
+    // Bottom bar (hole nav + actions row)
+    bottomBar: {
+      backgroundColor: theme.bg.primary,
       borderTopWidth: 1,
       borderTopColor: theme.isDark ? theme.glass?.border : theme.border.default,
-      paddingHorizontal: 18,
+    },
+    bottomActionsRow: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: 10,
+      paddingHorizontal: 14,
+      paddingTop: 4,
+      paddingBottom: 12,
+    },
+    notesPillBtn: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: 6,
+      paddingHorizontal: 12,
       paddingVertical: 12,
+      borderRadius: 999,
+      borderWidth: 1,
+      borderColor: theme.isDark ? theme.glass?.border : theme.border.default,
+      backgroundColor: theme.isDark ? theme.bg.elevated : theme.bg.secondary,
+    },
+    notesPillBtnText: {
+      color: theme.text.muted,
+      fontSize: 12,
+      fontFamily: 'PlusJakartaSans-SemiBold',
+    },
+    notesPillBtnTextActive: { color: theme.accent.primary, fontFamily: 'PlusJakartaSans-Bold' },
+
+    // Notes modal (bottom sheet)
+    notesModalKav: { flex: 1, justifyContent: 'flex-end' },
+    notesBackdrop: { flex: 1, backgroundColor: 'rgba(0,0,0,0.5)', justifyContent: 'flex-end' },
+    notesSheet: {
+      backgroundColor: theme.bg.primary,
+      borderTopLeftRadius: 24,
+      borderTopRightRadius: 24,
+      paddingTop: 10,
+      paddingBottom: 24,
+      paddingHorizontal: 16,
+      borderTopWidth: 1,
+      borderLeftWidth: 1,
+      borderRightWidth: 1,
+      borderColor: theme.border.default,
+    },
+    notesHandle: {
+      alignSelf: 'center', width: 40, height: 4, borderRadius: 2,
+      backgroundColor: theme.border.default, marginBottom: 12,
+    },
+    notesHeader: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 10 },
+    notesTitle: {
+      fontFamily: 'PlusJakartaSans-Bold',
+      color: theme.text.primary,
+      fontSize: 16,
+    },
+    notesCloseBtn: {
+      width: 32, height: 32, borderRadius: 16,
+      alignItems: 'center', justifyContent: 'center',
+      backgroundColor: theme.isDark ? theme.bg.elevated : theme.bg.secondary,
+    },
+    notesModalInput: {
+      minHeight: 160,
+      backgroundColor: theme.isDark ? theme.bg.elevated : theme.bg.card,
+      color: theme.text.primary,
+      borderRadius: 12,
+      borderWidth: 1,
+      borderColor: theme.border.default,
+      padding: 14,
       fontSize: 14,
       fontFamily: 'PlusJakartaSans-Regular',
-      minHeight: 44,
       textAlignVertical: 'top',
     },
 
@@ -944,13 +1028,13 @@ function makeStyles(theme) {
     },
     matchPanelStatRound: { color: theme.text.primary },
 
-    // Save / next button
+    // Save / next button (now sits inside bottomActionsRow)
     saveBtn: {
+      flex: 1,
       backgroundColor: theme.accent.primary,
-      marginHorizontal: 14,
-      marginVertical: 12,
-      borderRadius: 16,
-      padding: 17,
+      borderRadius: 14,
+      paddingVertical: 14,
+      paddingHorizontal: 16,
       alignItems: 'center',
       justifyContent: 'center',
       flexDirection: 'row',
