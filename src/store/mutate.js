@@ -12,7 +12,7 @@ function metaPathFor(m) {
         ? `rounds.${m.roundId}.notes.hole.${m.hole}`
         : `rounds.${m.roundId}.notes.round`;
     case 'pairs.set':    return `rounds.${m.roundId}.pairs`;
-    case 'handicap.set': return `playerHandicaps.${m.playerId}`;
+    case 'handicap.set': return `rounds.${m.roundId}.playerHandicaps.${m.playerId}`;
     // Players array LWW's as a single unit. Two concurrent offline adds
     // from different devices → last sync wins; this edge case is out of v1
     // scope per the spec's conflict section.
@@ -55,7 +55,10 @@ function applyToTournament(t, m) {
       break;
     }
     case 'handicap.set': {
-      t.playerHandicaps = { ...(t.playerHandicaps ?? {}), [m.playerId]: m.handicap };
+      const round = t.rounds.find((r) => r.id === m.roundId);
+      if (!round) return;
+      round.playerHandicaps = { ...(round.playerHandicaps ?? {}), [m.playerId]: m.handicap };
+      round.manualHandicaps = { ...(round.manualHandicaps ?? {}), [m.playerId]: true };
       break;
     }
     case 'tournament.addPlayer': {

@@ -11,6 +11,7 @@ import {
   loadTournament, saveTournament, subscribeTournamentChanges, DEFAULT_SETTINGS, randomPairs,
   calcPlayingHandicap, normalizeRoundHandicaps,
 } from '../store/tournamentStore';
+import { mutate } from '../store/mutate';
 
 function defaultHoles() {
   return Array.from({ length: 18 }, (_, i) => ({
@@ -104,8 +105,24 @@ export default function EditTournamentScreen({ navigation }) {
         ),
         manualHandicaps: { ...(r.manualHandicaps ?? {}) },
       }));
+
+      // Emit per-cell handicap.set mutations so offline edits are queued and
+      // the relevant _meta paths are stamped for LWW merge. The rest of the
+      // tournament (players, settings, notes, etc.) rides on the saveTournament
+      // call below, which is offline-safe since Task 5.
+      let t = tournamentRef.current;
+      for (const r of builtRounds) {
+        const prevRound = t.rounds.find((pr) => pr.id === r.id);
+        if (!prevRound) continue;
+        for (const [pid, v] of Object.entries(r.playerHandicaps)) {
+          const before = prevRound.playerHandicaps?.[pid];
+          if (before === v) continue;
+          t = await mutate(t, { type: 'handicap.set', roundId: r.id, playerId: pid, handicap: v });
+        }
+      }
+
       await saveTournament({
-        ...tournamentRef.current,
+        ...t,
         players: builtPlayers,
         rounds: builtRounds,
         settings: {
