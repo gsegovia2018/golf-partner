@@ -318,6 +318,14 @@ export function calcBestWorstBall(round, players) {
   return { pair1, pair2, holes, bestBall, worstBall };
 }
 
+// Rounds count towards tournament totals only once the user has advanced to
+// them — otherwise auto-par scores from incidental navigation would inflate
+// the tournament total.
+function isRoundPlayed(round, index, tournament) {
+  if (index > (tournament.currentRound ?? 0)) return false;
+  return !!round.scores;
+}
+
 // Individual leaderboard for best ball mode.
 // Each player earns win-points from their pair's hole wins per round.
 export function tournamentBestWorstLeaderboard(tournament) {
@@ -325,8 +333,8 @@ export function tournamentBestWorstLeaderboard(tournament) {
   const { bestBallValue, worstBallValue } = { ...DEFAULT_SETTINGS, ...settings };
   const totals = Object.fromEntries(players.map((p) => [p.id, { player: p, points: 0, bestWins: 0, worstWins: 0 }]));
 
-  rounds.forEach((round) => {
-    if (!round.scores || !round.pairs?.length) return;
+  rounds.forEach((round, index) => {
+    if (!isRoundPlayed(round, index, tournament) || !round.pairs?.length) return;
     const result = calcBestWorstBall(round, players);
     if (!result) return;
     const { pair1, pair2, bestBall, worstBall } = result;
@@ -351,8 +359,8 @@ export function tournamentLeaderboard(tournament) {
   const { players, rounds } = tournament;
   const totals = players.map((p) => ({ player: p, points: 0, strokes: 0 }));
 
-  rounds.forEach((round) => {
-    if (!round.scores) return;
+  rounds.forEach((round, index) => {
+    if (!isRoundPlayed(round, index, tournament)) return;
     roundTotals(round, players).forEach(({ player, totalPoints, totalStrokes }) => {
       const entry = totals.find((t) => t.player.id === player.id);
       entry.points += totalPoints;

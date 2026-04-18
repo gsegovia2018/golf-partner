@@ -440,39 +440,6 @@ export default function HomeScreen({ navigation, viewMode = 'auto' }) {
                       ) : (
                         <Text style={s.emptyRoundHint}>No scores yet for this round.</Text>
                       )}
-                      <View style={s.roundActionsRow}>
-                        <TouchableOpacity
-                          style={[s.primaryBtn, s.roundActionBtn]}
-                          onPress={() => navigation.navigate('Scorecard', { roundIndex: i })}
-                          activeOpacity={0.8}
-                        >
-                          <Feather name="edit-2" size={16} color={theme.isDark ? theme.accent.primary : theme.text.inverse} />
-                          <Text style={s.primaryBtnText}>{isCurrentRound ? 'Scorecard' : 'Edit Scores'}</Text>
-                        </TouchableOpacity>
-                        {isCurrentRound && tournament.currentRound < tournament.rounds.length - 1 && (() => {
-                          const nextRound = tournament.rounds[tournament.currentRound + 1];
-                          const nextRevealed = nextRound?.revealed;
-                          return nextRevealed ? (
-                            <TouchableOpacity
-                              style={[s.secondaryBtn, s.roundActionBtn]}
-                              onPress={() => navigation.navigate('NextRound', { revealOnly: true, roundIndex: tournament.currentRound + 1 })}
-                              activeOpacity={0.7}
-                            >
-                              <Feather name="eye" size={16} color={theme.accent.primary} />
-                              <Text style={s.secondaryBtnText}>Next Round</Text>
-                            </TouchableOpacity>
-                          ) : (
-                            <TouchableOpacity
-                              style={[s.primaryBtn, s.roundActionBtn]}
-                              onPress={() => navigation.navigate('NextRound')}
-                              activeOpacity={0.8}
-                            >
-                              <Feather name="play" size={16} color={theme.isDark ? theme.accent.primary : theme.text.inverse} />
-                              <Text style={s.primaryBtnText}>Start Next Round</Text>
-                            </TouchableOpacity>
-                          );
-                        })()}
-                      </View>
                     </View>
                   );
                 })}
@@ -486,6 +453,46 @@ export default function HomeScreen({ navigation, viewMode = 'auto' }) {
         <ShareableLeaderboard ref={leaderboardRef} tournamentName={tournament.name} leaderboard={leaderboard} />
       </View>
     </PullToRefresh>
+
+    {tournament.rounds.length > 0 && (() => {
+      const isCurrentRound = selectedRound === tournament.currentRound;
+      const canShowNext = isCurrentRound && tournament.currentRound < tournament.rounds.length - 1;
+      const nextRound = canShowNext ? tournament.rounds[tournament.currentRound + 1] : null;
+      const nextRevealed = nextRound?.revealed;
+      return (
+        <View style={s.tournamentBottomBar}>
+          <TouchableOpacity
+            style={[s.primaryBtn, s.roundActionBtn]}
+            onPress={() => navigation.navigate('Scorecard', { roundIndex: selectedRound })}
+            activeOpacity={0.8}
+          >
+            <Feather name="edit-2" size={16} color={theme.isDark ? theme.accent.primary : theme.text.inverse} />
+            <Text style={s.primaryBtnText}>{isCurrentRound ? 'Scorecard' : 'Edit Scores'}</Text>
+          </TouchableOpacity>
+          {canShowNext && (
+            nextRevealed ? (
+              <TouchableOpacity
+                style={[s.secondaryBtn, s.roundActionBtn]}
+                onPress={() => navigation.navigate('NextRound', { revealOnly: true, roundIndex: tournament.currentRound + 1 })}
+                activeOpacity={0.7}
+              >
+                <Feather name="eye" size={16} color={theme.accent.primary} />
+                <Text style={s.secondaryBtnText}>Next Round</Text>
+              </TouchableOpacity>
+            ) : (
+              <TouchableOpacity
+                style={[s.primaryBtn, s.roundActionBtn]}
+                onPress={() => navigation.navigate('NextRound')}
+                activeOpacity={0.8}
+              >
+                <Feather name="play" size={16} color={theme.isDark ? theme.accent.primary : theme.text.inverse} />
+                <Text style={s.primaryBtnText}>Start Next Round</Text>
+              </TouchableOpacity>
+            )
+          )}
+        </View>
+      );
+    })()}
 
     <Modal
       visible={showRoundEdit}
@@ -896,6 +903,15 @@ const makeStyles = (t) => StyleSheet.create({
   // Round action row (Scorecard + Next Round side-by-side)
   roundActionsRow: { flexDirection: 'row', gap: 10 },
   roundActionBtn: { flex: 1, marginTop: 0 },
+  tournamentBottomBar: {
+    flexDirection: 'row',
+    gap: 10,
+    paddingHorizontal: 16,
+    paddingVertical: 12,
+    backgroundColor: theme.bg.primary,
+    borderTopWidth: 1,
+    borderTopColor: theme.isDark ? theme.glass?.border : theme.border.default,
+  },
 
   // Delete (tournament list cards)
   tournamentCardWrapper: { position: 'relative' },
