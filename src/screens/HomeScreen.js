@@ -163,11 +163,6 @@ export default function HomeScreen({ navigation, viewMode = 'auto' }) {
     );
   }
 
-  const settings = { ...DEFAULT_SETTINGS, ...tournament.settings };
-
-  const completedRounds = tournament.rounds.filter(
-    (r) => r.scores && Object.keys(r.scores).length > 0,
-  );
   if (showTournament && !tournament) {
     return (
       <View style={[s.screen, { alignItems: 'center', justifyContent: 'center' }]}>
@@ -183,6 +178,12 @@ export default function HomeScreen({ navigation, viewMode = 'auto' }) {
       </View>
     );
   }
+
+  const settings = { ...DEFAULT_SETTINGS, ...tournament.settings };
+
+  const completedRounds = tournament.rounds.filter(
+    (r) => r.scores && Object.keys(r.scores).length > 0,
+  );
 
   const leaderboard = tournamentLeaderboard(tournament);
   const bestWorstLeaderboard = leaderboardBestBall ? tournamentBestWorstLeaderboard(tournament) : null;
