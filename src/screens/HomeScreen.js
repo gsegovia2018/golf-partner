@@ -14,7 +14,7 @@ import {
   DEFAULT_SETTINGS,
 } from '../store/tournamentStore';
 
-export default function HomeScreen({ navigation }) {
+export default function HomeScreen({ navigation, viewMode = 'auto' }) {
   const { theme, mode, toggle } = useTheme();
   const [tournament, setTournament] = useState(null);
   const [allTournaments, setAllTournaments] = useState([]);
@@ -77,7 +77,10 @@ export default function HomeScreen({ navigation }) {
   const s = makeStyles(theme);
   const leaderboardRef = useRef();
 
-  if (!tournament) {
+  const showList = viewMode === 'list' || (viewMode === 'auto' && !tournament);
+  const showTournament = viewMode === 'tournament' || (viewMode === 'auto' && !!tournament);
+
+  if (showList) {
     return (
       <View style={s.screen}>
         <View style={s.header}>
@@ -165,6 +168,22 @@ export default function HomeScreen({ navigation }) {
   const completedRounds = tournament.rounds.filter(
     (r) => r.scores && Object.keys(r.scores).length > 0,
   );
+  if (showTournament && !tournament) {
+    return (
+      <View style={[s.screen, { alignItems: 'center', justifyContent: 'center' }]}>
+        <Feather name="flag" size={48} color={theme.text.muted} />
+        <Text style={[s.emptyTitle, { marginTop: 16 }]}>No active tournament</Text>
+        <TouchableOpacity
+          style={[s.primaryBtn, { marginTop: 20 }]}
+          onPress={() => navigation.navigate('Home')}
+          activeOpacity={0.8}
+        >
+          <Text style={s.primaryBtnText}>Go to Home</Text>
+        </TouchableOpacity>
+      </View>
+    );
+  }
+
   const leaderboard = leaderboardBestBall
     ? tournamentBestWorstLeaderboard(tournament)
     : tournamentLeaderboard(tournament);
