@@ -62,7 +62,7 @@ export default function StatsScreen({ navigation }) {
   const [tab, setTab] = useState(0);
   const [selectedPlayer, setSelectedPlayer] = useState(0);
   const [h2hPlayer, setH2hPlayer] = useState(1);
-  const [useNet, setUseNet] = useState(false);
+  const [metric, setMetric] = useState('points');
 
   useEffect(() => {
     loadTournament().then(t => { setTournament(t); });
@@ -91,35 +91,37 @@ export default function StatsScreen({ navigation }) {
         ))}
       </View>
 
-      {(tab === 0 || tab === 1 || tab === 4) && (
+      {(tab === 0 || tab === 1 || tab === 2 || tab === 3 || tab === 4) && (
         <View style={s.scoringToggle}>
-          <Text style={[s.scoringLabel, !useNet && s.scoringLabelActive]}>Strokes</Text>
+          <Text style={[s.scoringLabel, metric === 'strokes' && s.scoringLabelActive]}>Strokes</Text>
           <Switch
-            value={useNet}
-            onValueChange={setUseNet}
+            value={metric === 'points'}
+            onValueChange={(v) => setMetric(v ? 'points' : 'strokes')}
             trackColor={{ false: theme.border.default, true: theme.accent.primary }}
             thumbColor="#fff"
           />
-          <Text style={[s.scoringLabel, useNet && s.scoringLabelActive]}>Points</Text>
+          <Text style={[s.scoringLabel, metric === 'points' && s.scoringLabelActive]}>Points</Text>
         </View>
       )}
 
       <ScrollView style={s.scrollView} contentContainerStyle={s.content}>
-        {tab === 0 && <OverviewTab tournament={tournament} useNet={useNet} theme={theme} s={s} />}
-        {tab === 1 && <PlayersTab tournament={tournament} players={players} selectedPlayer={selectedPlayer} setSelectedPlayer={setSelectedPlayer} useNet={useNet} theme={theme} s={s} />}
-        {tab === 2 && <HolesTab tournament={tournament} completedRounds={completedRounds} theme={theme} s={s} />}
-        {tab === 3 && <PairsTab tournament={tournament} players={players} h2hPlayer={h2hPlayer} setH2hPlayer={setH2hPlayer} selectedPlayer={selectedPlayer} setSelectedPlayer={setSelectedPlayer} theme={theme} s={s} />}
-        {tab === 4 && <ShameTab tournament={tournament} useNet={useNet} theme={theme} s={s} />}
+        {tab === 0 && <OverviewTab tournament={tournament} metric={metric} theme={theme} s={s} />}
+        {tab === 1 && <PlayersTab tournament={tournament} players={players} selectedPlayer={selectedPlayer} setSelectedPlayer={setSelectedPlayer} metric={metric} theme={theme} s={s} />}
+        {tab === 2 && <HolesTab tournament={tournament} completedRounds={completedRounds} metric={metric} theme={theme} s={s} />}
+        {tab === 3 && <PairsTab tournament={tournament} players={players} h2hPlayer={h2hPlayer} setH2hPlayer={setH2hPlayer} selectedPlayer={selectedPlayer} setSelectedPlayer={setSelectedPlayer} metric={metric} theme={theme} s={s} />}
+        {tab === 4 && <ShameTab tournament={tournament} metric={metric} theme={theme} s={s} />}
       </ScrollView>
     </View>
   );
 }
 
 // ── Overview Tab ──
-function OverviewTab({ tournament, useNet, theme, s }) {
+function OverviewTab({ tournament, metric, theme, s }) {
   const [roundIndex, setRoundIndex] = useState(null);
-  const highlights = tournamentHighlights(tournament, { useNet, roundIndex });
-  const modeLabel = useNet ? 'points (handicap-adjusted)' : 'strokes (scratch)';
+  const highlights = tournamentHighlights(tournament, { metric, roundIndex });
+  const isStrokes = metric === 'strokes';
+  const modeLabel = isStrokes ? 'strokes (gross)' : 'points (net Stableford)';
+  const fmtValue = (v, unit) => `${v} ${unit}`;
   const [sheet, setSheet] = useState(null);
 
   const scope = roundIndex === null
@@ -133,21 +135,23 @@ function OverviewTab({ tournament, useNet, theme, s }) {
 
   const openBestRound = () => {
     const h = highlights.bestRound;
-    const value = h.value;
+    const unit = isStrokes ? 'strokes' : 'pts';
     setSheet({
-      title: `${joinNames(h.entries.map(e => e.player))} — ${value} pts`,
+      title: `${joinNames(h.entries.map(e => e.player))} — ${h.value} ${unit}`,
       subtitle: `${roundIndex === null ? 'Best round' : 'Top scorer'} · ${modeLabel}`,
-      explainer: 'The player(s) with the highest Stableford points total in the selected scope. If multiple players tie, all are listed.',
+      explainer: isStrokes
+        ? 'The player(s) with the lowest total strokes in the selected scope.'
+        : 'The player(s) with the highest Stableford points total in the selected scope. Points are handicap-adjusted (net).',
       rows: tiedRowsByPlayer(
         h.entries,
         (e) => e.breakdown.map(b => ({
           key: `${e.player.id}-${b.holeNumber}`,
           primary: `Hole ${b.holeNumber}`,
           secondary: `Par ${b.par} · ${b.strokes} strokes`,
-          rightPrimary: `${b.points} pts`,
+          rightPrimary: isStrokes ? `${b.strokes} str` : `${b.points} pts`,
           tone: toneForPoints(b.points),
         })),
-        (e) => `${e.courseName} · ${e.points} pts`,
+        (e) => `${e.courseName} · ${isStrokes ? e.strokes + ' str' : e.points + ' pts'}`,
       ),
     });
   };
@@ -193,15 +197,16 @@ function OverviewTab({ tournament, useNet, theme, s }) {
   };
 
   const openHole = (h, label, explainer) => {
+    const avg = isStrokes ? `${h.avgStrokes ?? '—'} avg str (${h.avgVsPar >= 0 ? '+' : ''}${h.avgVsPar ?? 0} vs par)` : `${h.avgPoints} avg pts`;
     setSheet({
       title: `Hole ${h.holeNumber} · ${h.courseName}`,
-      subtitle: `${label} · Par ${h.par} · ${h.avgPoints} avg pts`,
+      subtitle: `${label} · Par ${h.par} · SI ${h.si} · ${avg}`,
       explainer,
       rows: h.playerScores.map(ps => ({
         key: ps.playerId,
         primary: ps.playerName,
         secondary: `${ps.strokes} strokes`,
-        rightPrimary: `${ps.points} pts`,
+        rightPrimary: isStrokes ? `${ps.strokes} str` : `${ps.points} pts`,
         tone: toneForPoints(ps.points),
       })),
     });
@@ -222,7 +227,7 @@ function OverviewTab({ tournament, useNet, theme, s }) {
         <HighlightCard
           icon="award"
           label={bestRoundLabel}
-          value={`${joinNames(br.entries.map(e => e.player))} — ${br.value} pts`}
+          value={`${joinNames(br.entries.map(e => e.player))} — ${br.value} ${isStrokes ? 'str' : 'pts'}`}
           sub={br.entries.length === 1 ? br.entries[0].courseName : `${br.entries.length} tied`}
           onPress={openBestRound} theme={theme} s={s}
         />
@@ -249,9 +254,9 @@ function OverviewTab({ tournament, useNet, theme, s }) {
         <HighlightCard
           icon="thumbs-up"
           label="Easiest Hole"
-          value={`Hole ${highlights.bestHole.holeNumber} — ${highlights.bestHole.avgPoints} avg pts`}
-          sub={`${highlights.bestHole.courseName} · Par ${highlights.bestHole.par}`}
-          onPress={() => openHole(highlights.bestHole, 'Easiest Hole', 'Hole with the highest average Stableford points across all players in scope.')}
+          value={`Hole ${highlights.bestHole.holeNumber} — ${isStrokes ? `${highlights.bestHole.avgVsPar >= 0 ? '+' : ''}${highlights.bestHole.avgVsPar} avg` : `${highlights.bestHole.avgPoints} avg pts`}`}
+          sub={`${highlights.bestHole.courseName} · Par ${highlights.bestHole.par} · SI ${highlights.bestHole.si}`}
+          onPress={() => openHole(highlights.bestHole, 'Easiest Hole', isStrokes ? 'Hole with the lowest average strokes-vs-par across all players in scope.' : 'Hole with the highest average Stableford points across all players in scope.')}
           theme={theme} s={s}
         />
       )}
@@ -259,9 +264,9 @@ function OverviewTab({ tournament, useNet, theme, s }) {
         <HighlightCard
           icon="thumbs-down"
           label="Hardest Hole"
-          value={`Hole ${highlights.worstHole.holeNumber} — ${highlights.worstHole.avgPoints} avg pts`}
-          sub={`${highlights.worstHole.courseName} · Par ${highlights.worstHole.par}`}
-          onPress={() => openHole(highlights.worstHole, 'Hardest Hole', 'Hole with the lowest average Stableford points across all players in scope.')}
+          value={`Hole ${highlights.worstHole.holeNumber} — ${isStrokes ? `${highlights.worstHole.avgVsPar >= 0 ? '+' : ''}${highlights.worstHole.avgVsPar} avg` : `${highlights.worstHole.avgPoints} avg pts`}`}
+          sub={`${highlights.worstHole.courseName} · Par ${highlights.worstHole.par} · SI ${highlights.worstHole.si}`}
+          onPress={() => openHole(highlights.worstHole, 'Hardest Hole', isStrokes ? 'Hole with the highest average strokes-vs-par across all players in scope.' : 'Hole with the lowest average Stableford points across all players in scope.')}
           theme={theme} s={s}
         />
       )}
@@ -324,16 +329,17 @@ function HighlightCard({ icon, label, value, sub, onPress, theme, s }) {
 }
 
 // ── Players Tab ──
-function PlayersTab({ tournament, players, selectedPlayer, setSelectedPlayer, useNet, theme, s }) {
+function PlayersTab({ tournament, players, selectedPlayer, setSelectedPlayer, metric, theme, s }) {
   const player = players[selectedPlayer];
   const [sheet, setSheet] = useState(null);
   if (!player) return null;
 
-  const dist = playerScoreDistribution(tournament, player.id, { useNet });
-  const streaks = playerStreaks(tournament, player.id, { useNet });
+  const isStrokes = metric === 'strokes';
+  const dist = playerScoreDistribution(tournament, player.id, { metric });
+  const streaks = playerStreaks(tournament, player.id, { metric });
   const history = playerRoundHistory(tournament, player.id);
   const avg = playerAvgStableford(tournament, player.id);
-  const modeLabel = useNet ? 'points' : 'strokes';
+  const modeLabel = isStrokes ? 'strokes (gross)' : 'points (net Stableford)';
 
   const defaultTone = (b) => toneForPoints(b.points);
 
@@ -413,13 +419,13 @@ function PlayersTab({ tournament, players, selectedPlayer, setSelectedPlayer, us
           <Text style={s.sectionTitle}>STREAKS</Text>
           <View style={s.card}>
             <View style={s.streakRow}>
-              <TouchableOpacity style={s.streakItem} onPress={() => streaks.bestParStreak > 0 && openStreak(`Par streak — ${streaks.bestParStreak} holes`, streaks.parStreakHoles, defaultTone, 'Longest run of consecutive holes at par or better.')} activeOpacity={0.7}>
-                <Text style={[s.streakNumber, { color: theme.scoreColor('excellent') }]}>{streaks.bestParStreak}</Text>
-                <Text style={s.streakLabel}>Par streak</Text>
-              </TouchableOpacity>
               <TouchableOpacity style={s.streakItem} onPress={() => streaks.bestBirdieStreak > 0 && openStreak(`Birdie streak — ${streaks.bestBirdieStreak} holes`, streaks.birdieStreakHoles, () => 'excellent', 'Longest run of consecutive holes at birdie or better.')} activeOpacity={0.7}>
                 <Text style={[s.streakNumber, { color: theme.scoreColor('excellent') }]}>{streaks.bestBirdieStreak}</Text>
                 <Text style={s.streakLabel}>Birdie streak</Text>
+              </TouchableOpacity>
+              <TouchableOpacity style={s.streakItem} onPress={() => streaks.bestParStreak > 0 && openStreak(`Par streak — ${streaks.bestParStreak} holes`, streaks.parStreakHoles, defaultTone, 'Longest run of consecutive holes at par or better.')} activeOpacity={0.7}>
+                <Text style={[s.streakNumber, { color: theme.scoreColor('good') }]}>{streaks.bestParStreak}</Text>
+                <Text style={s.streakLabel}>Par streak</Text>
               </TouchableOpacity>
               <TouchableOpacity style={s.streakItem} onPress={() => streaks.bogeyOnlyStreak > 0 && openStreak(`Bogey streak — ${streaks.bogeyOnlyStreak} holes`, streaks.bogeyOnlyStreakHoles, () => 'neutral', 'Longest run of consecutive holes at exactly 1 over par.')} activeOpacity={0.7}>
                 <Text style={[s.streakNumber, { color: theme.scoreColor('neutral') }]}>{streaks.bogeyOnlyStreak}</Text>
@@ -471,21 +477,27 @@ function DistBar({ label, count, total, color, onPress, s }) {
 }
 
 // ── Holes Tab ──
-function HolesTab({ tournament, completedRounds, theme, s }) {
-  const bw = bestWorstHoles(tournament);
-  const firstRoundIdx = tournament.rounds.indexOf(completedRounds[0]);
-  const heatmap = firstRoundIdx >= 0 ? holeDifficultyMap(tournament, firstRoundIdx) : [];
+function HolesTab({ tournament, completedRounds, metric, theme, s }) {
+  const isStrokes = metric === 'strokes';
+  const bw = bestWorstHoles(tournament, { metric });
+  const firstCompletedIdx = tournament.rounds.findIndex(r => r.scores && Object.keys(r.scores).length > 0);
+  const [heatRound, setHeatRound] = useState(firstCompletedIdx >= 0 ? firstCompletedIdx : 0);
+  const heatmap = holeDifficultyMap(tournament, heatRound);
   const [sheet, setSheet] = useState(null);
+
+  const renderAvg = (h) => isStrokes
+    ? `${h.avgVsPar >= 0 ? '+' : ''}${h.avgVsPar} avg`
+    : `${h.avgPoints} avg pts`;
 
   const openHole = (h, label, explainer) => setSheet({
     title: `Hole ${h.holeNumber} · ${h.courseName}`,
-    subtitle: `${label} · Par ${h.par} · ${h.avgPoints} avg pts`,
+    subtitle: `${label} · Par ${h.par} · SI ${h.si} · ${renderAvg(h)}`,
     explainer,
     rows: h.playerScores.map(ps => ({
       key: ps.playerId,
       primary: ps.playerName,
       secondary: `${ps.strokes} strokes`,
-      rightPrimary: `${ps.points} pts`,
+      rightPrimary: isStrokes ? `${ps.strokes} str` : `${ps.points} pts`,
       tone: toneForPoints(ps.points),
     })),
   });
@@ -496,15 +508,15 @@ function HolesTab({ tournament, completedRounds, theme, s }) {
         <>
           <Text style={s.sectionTitle}>EASIEST HOLES</Text>
           {bw.best.map((h, i) => (
-            <TouchableOpacity key={`b${i}`} style={s.holeCard} onPress={() => openHole(h, 'Easiest Hole', 'Hole with the highest average Stableford points across all players who played it.')} activeOpacity={0.7}>
+            <TouchableOpacity key={`b${i}`} style={s.holeCard} onPress={() => openHole(h, 'Easiest Hole', isStrokes ? 'Hole with the lowest average strokes-vs-par.' : 'Hole with the highest average Stableford points.')} activeOpacity={0.7}>
               <View style={[s.holeRank, { backgroundColor: theme.scoreColor('excellent') + '20' }]}>
                 <Text style={[s.holeRankText, { color: theme.scoreColor('excellent') }]}>#{i + 1}</Text>
               </View>
               <View style={s.holeInfo}>
-                <Text style={s.holeName}>Hole {h.holeNumber} · Par {h.par}</Text>
+                <Text style={s.holeName}>Hole {h.holeNumber} · Par {h.par} · SI {h.si}</Text>
                 <Text style={s.holeCourse}>{h.courseName}</Text>
               </View>
-              <Text style={[s.holeAvg, { color: theme.scoreColor('excellent') }]}>{h.avgPoints} avg</Text>
+              <Text style={[s.holeAvg, { color: theme.scoreColor('excellent') }]}>{renderAvg(h)}</Text>
             </TouchableOpacity>
           ))}
         </>
@@ -514,37 +526,55 @@ function HolesTab({ tournament, completedRounds, theme, s }) {
         <>
           <Text style={s.sectionTitle}>HARDEST HOLES</Text>
           {bw.worst.map((h, i) => (
-            <TouchableOpacity key={`w${i}`} style={s.holeCard} onPress={() => openHole(h, 'Hardest Hole', 'Hole with the lowest average Stableford points across all players who played it.')} activeOpacity={0.7}>
+            <TouchableOpacity key={`w${i}`} style={s.holeCard} onPress={() => openHole(h, 'Hardest Hole', isStrokes ? 'Hole with the highest average strokes-vs-par.' : 'Hole with the lowest average Stableford points.')} activeOpacity={0.7}>
               <View style={[s.holeRank, { backgroundColor: theme.scoreColor('poor') + '20' }]}>
                 <Text style={[s.holeRankText, { color: theme.scoreColor('poor') }]}>#{i + 1}</Text>
               </View>
               <View style={s.holeInfo}>
-                <Text style={s.holeName}>Hole {h.holeNumber} · Par {h.par}</Text>
+                <Text style={s.holeName}>Hole {h.holeNumber} · Par {h.par} · SI {h.si}</Text>
                 <Text style={s.holeCourse}>{h.courseName}</Text>
               </View>
-              <Text style={[s.holeAvg, { color: theme.scoreColor('poor') }]}>{h.avgPoints} avg</Text>
+              <Text style={[s.holeAvg, { color: theme.scoreColor('poor') }]}>{renderAvg(h)}</Text>
             </TouchableOpacity>
           ))}
         </>
       )}
 
-      {heatmap.length > 0 && (
+      {completedRounds.length > 0 && (
         <>
-          <Text style={s.sectionTitle}>HOLE HEATMAP — {completedRounds[0]?.courseName}</Text>
+          <Text style={s.sectionTitle}>HOLE HEATMAP</Text>
+          <RoundSelector tournament={tournament} selected={heatRound} onSelect={(v) => v !== null && setHeatRound(v)} theme={theme} s={s} />
+          <Text style={s.scopeText}>{tournament.rounds[heatRound]?.courseName}</Text>
           <ScrollView horizontal showsHorizontalScrollIndicator={false}>
             <View>
               <View style={s.heatRow}>
-                <Text style={[s.heatCell, s.heatHeader]}>Hole</Text>
+                <Text style={[s.heatCell, s.heatHeader, s.heatHoleCol]}>Hole</Text>
+                <Text style={[s.heatCell, s.heatHeader, s.heatSiCol]}>SI</Text>
                 {tournament.players.map(p => (
-                  <Text key={p.id} style={[s.heatCell, s.heatHeader]}>{p.name.split(' ')[0]}</Text>
+                  <Text key={p.id} style={[s.heatCell, s.heatHeader]}>{firstName(p)}</Text>
                 ))}
                 <Text style={[s.heatCell, s.heatHeader]}>Avg</Text>
               </View>
               {heatmap.map(h => (
                 <View key={h.holeNumber} style={s.heatRow}>
-                  <Text style={[s.heatCell, s.heatHoleNum]}>{h.holeNumber}</Text>
+                  <Text style={[s.heatCell, s.heatHoleNum, s.heatHoleCol]}>{h.holeNumber}</Text>
+                  <Text style={[s.heatCell, s.heatSiCol, s.heatSi]}>{h.si}</Text>
                   {tournament.players.map(p => {
                     const ps = h.playerScores.find(x => x.playerId === p.id);
+                    if (isStrokes) {
+                      const strokes = ps?.strokes ?? null;
+                      const vsPar = strokes != null ? strokes - h.par : null;
+                      const color = vsPar == null ? theme.text.muted
+                        : vsPar < 0 ? theme.scoreColor('excellent')
+                        : vsPar === 0 ? theme.scoreColor('good')
+                        : vsPar === 1 ? theme.scoreColor('neutral')
+                        : theme.scoreColor('poor');
+                      return (
+                        <View key={p.id} style={[s.heatCell, s.heatValue, { backgroundColor: color + '18' }]}>
+                          <Text style={[s.heatValueText, { color }]}>{strokes ?? '-'}</Text>
+                        </View>
+                      );
+                    }
                     const pts = ps?.points ?? '-';
                     const color = pts === '-' ? theme.text.muted
                       : pts >= 3 ? theme.scoreColor('excellent')
@@ -558,7 +588,7 @@ function HolesTab({ tournament, completedRounds, theme, s }) {
                     );
                   })}
                   <View style={[s.heatCell, s.heatValue]}>
-                    <Text style={s.heatAvgText}>{h.avgPoints}</Text>
+                    <Text style={s.heatAvgText}>{isStrokes ? (h.avgStrokes ?? '-') : h.avgPoints}</Text>
                   </View>
                 </View>
               ))}
@@ -582,14 +612,16 @@ function HolesTab({ tournament, completedRounds, theme, s }) {
 }
 
 // ── Pairs Tab ──
-function PairsTab({ tournament, players, h2hPlayer, setH2hPlayer, selectedPlayer, setSelectedPlayer, theme, s }) {
+function PairsTab({ tournament, players, h2hPlayer, setH2hPlayer, selectedPlayer, setSelectedPlayer, metric, theme, s }) {
   const pairs = pairPerformance(tournament);
   const [hwRound, setHwRound] = useState(null);
-  const holeWins = pairHoleWins(tournament, { roundIndex: hwRound });
+  const holeWinsPts = pairHoleWins(tournament, { metric: 'points', roundIndex: hwRound });
+  const holeWinsStr = pairHoleWins(tournament, { metric: 'strokes', roundIndex: hwRound });
+  const [h2hRound, setH2hRound] = useState(null);
   const p1 = players[selectedPlayer];
   const p2Idx = h2hPlayer >= players.length ? 0 : h2hPlayer;
   const p2 = players[p2Idx];
-  const h2h = p1 && p2 && p1.id !== p2.id ? headToHead(tournament, p1.id, p2.id) : null;
+  const h2h = p1 && p2 && p1.id !== p2.id ? headToHead(tournament, p1.id, p2.id, { roundIndex: h2hRound }) : null;
   const [sheet, setSheet] = useState(null);
 
   const openPair = (pair) => setSheet({
@@ -605,42 +637,55 @@ function PairsTab({ tournament, players, h2hPlayer, setH2hPlayer, selectedPlayer
     })),
   });
 
-  const openHoleWins = (row) => setSheet({
-    title: `${row.player.name} — hole-by-hole wins`,
-    subtitle: `Total ${row.total.W}·${row.total.T}·${row.total.L}  MB ${row.best.W}·${row.best.T}·${row.best.L}  PB ${row.worst.W}·${row.worst.T}·${row.worst.L}`,
-    explainer: 'On each hole, pairs are compared head-to-head. MB (Best Ball) = the higher scorer of your pair vs theirs; PB (Worst Ball) = the lower scorer. W/T/L = Won/Tied/Lost. Total sums both roles.',
-    rows: row.breakdown.map((b, i) => {
-      const roleParts = [];
-      if (b.bestRole) roleParts.push(`MB ${b.bestOutcome}`);
-      if (b.worstRole) roleParts.push(`PB ${b.worstOutcome}`);
-      const tone = roleParts.some(p => p.endsWith('W')) && !roleParts.some(p => p.endsWith('L'))
-        ? 'excellent'
-        : roleParts.every(p => p.endsWith('L'))
-          ? 'poor'
-          : 'neutral';
-      return {
-        key: `${b.roundIndex}-${b.holeNumber}-${i}`,
-        primary: `R${b.roundIndex + 1} · ${b.courseName} · Hole ${b.holeNumber}`,
-        secondary: `Par ${b.par} · ${b.playerPoints} pts (team ${b.teamBest}/${b.teamWorst} · opp ${b.oppBest}/${b.oppWorst})`,
-        rightPrimary: roleParts.join(' · '),
-        tone,
-      };
-    }),
-  });
-
-  const openH2H = () => {
-    if (!h2h) return;
+  const openHoleWins = (row, metricMode) => {
+    const unit = metricMode === 'strokes' ? 'str' : 'pts';
     setSheet({
-      title: `${firstName(p1)} vs ${firstName(p2)}`,
-      subtitle: `${h2h.p1Wins} - ${h2h.p2Wins} (${h2h.ties} ties)`,
-      explainer: 'Hole-by-hole comparison across all rounds where both players played. Count of holes where each player scored more Stableford points.',
-      rows: h2h.holes.map((h, i) => {
-        const winner = h.p1Points > h.p2Points ? firstName(p1) : h.p2Points > h.p1Points ? firstName(p2) : 'Tie';
-        const tone = h.p1Points === h.p2Points ? 'neutral' : 'good';
+      title: `${row.player.name} — hole-by-hole wins`,
+      subtitle: `Total ${row.total.W}·${row.total.T}·${row.total.L}  BB ${row.best.W}·${row.best.T}·${row.best.L}  WB ${row.worst.W}·${row.worst.T}·${row.worst.L}`,
+      explainer: metricMode === 'strokes'
+        ? 'On each hole, pairs compare strokes (lower is better). BB (Best Ball) = fewer-strokes player of your pair vs theirs; WB (Worst Ball) = higher-strokes player. W/T/L = Won/Tied/Lost. Total sums both roles.'
+        : 'On each hole, pairs compare Stableford points (higher is better). BB (Best Ball) = higher-scorer of your pair vs theirs; WB (Worst Ball) = lower-scorer. W/T/L = Won/Tied/Lost. Total sums both roles.',
+      rows: row.breakdown.map((b, i) => {
+        const roleParts = [];
+        if (b.bestRole) roleParts.push(`BB ${b.bestOutcome}`);
+        if (b.worstRole) roleParts.push(`WB ${b.worstOutcome}`);
+        const tone = roleParts.some(p => p.endsWith('W')) && !roleParts.some(p => p.endsWith('L'))
+          ? 'excellent'
+          : roleParts.every(p => p.endsWith('L'))
+            ? 'poor'
+            : 'neutral';
         return {
-          key: `${h.courseName}-${h.holeNumber}-${i}`,
-          primary: `${h.courseName} · Hole ${h.holeNumber}`,
-          secondary: `${firstName(p1)} ${h.p1Points} · ${firstName(p2)} ${h.p2Points}`,
+          key: `${b.roundIndex}-${b.holeNumber}-${i}`,
+          primary: `R${b.roundIndex + 1} · ${b.courseName} · Hole ${b.holeNumber}`,
+          secondary: `Par ${b.par} · you ${b.playerValue} ${unit} (team ${b.teamBest}/${b.teamWorst} · opp ${b.oppBest}/${b.oppWorst})`,
+          rightPrimary: roleParts.join(' · '),
+          tone,
+        };
+      }),
+    });
+  };
+
+  const openH2H = (metricMode) => {
+    if (!h2h) return;
+    const isStr = metricMode === 'strokes';
+    const bucket = isStr ? h2h.strokes : h2h.points;
+    setSheet({
+      title: `${firstName(p1)} vs ${firstName(p2)} — by ${isStr ? 'strokes' : 'points'}`,
+      subtitle: `Holes won: ${firstName(p1)} ${bucket.p1Wins} · ${firstName(p2)} ${bucket.p2Wins} · ${bucket.ties} ties`,
+      explainer: isStr
+        ? "On each hole both players played, we count who took fewer strokes. Fewer = win. Equal strokes = tie."
+        : "On each hole both players played, we count who scored more Stableford points (handicap-adjusted). Higher = win. Equal = tie.",
+      rows: h2h.holes.map((h, i) => {
+        const v1 = isStr ? h.p1Strokes : h.p1Points;
+        const v2 = isStr ? h.p2Strokes : h.p2Points;
+        const p1Won = isStr ? v1 < v2 : v1 > v2;
+        const p2Won = isStr ? v2 < v1 : v2 > v1;
+        const winner = p1Won ? firstName(p1) : p2Won ? firstName(p2) : 'Tie';
+        const tone = v1 === v2 ? 'neutral' : 'good';
+        return {
+          key: `${h.roundIndex}-${h.courseName}-${h.holeNumber}-${i}`,
+          primary: `R${h.roundIndex + 1} · ${h.courseName} · Hole ${h.holeNumber}`,
+          secondary: `${firstName(p1)} ${v1} · ${firstName(p2)} ${v2}`,
           rightPrimary: winner,
           tone,
         };
@@ -671,43 +716,10 @@ function PairsTab({ tournament, players, h2hPlayer, setH2hPlayer, selectedPlayer
 
       {tournament.rounds.some(r => r.pairs && r.scores && Object.keys(r.scores).length > 0) && (
         <>
-          <Text style={s.sectionTitle}>HOLE WINS ON POINTS</Text>
+          <Text style={s.sectionTitle}>HOLE WINS</Text>
           <RoundSelector tournament={tournament} selected={hwRound} onSelect={setHwRound} theme={theme} s={s} />
-          <View style={s.hwCard}>
-            <View style={s.hwGroupHeader}>
-              <View style={{ flex: 1.2 }} />
-              <Text style={s.hwGroupTitle}>TOTAL</Text>
-              <Text style={s.hwGroupTitle}>MB</Text>
-              <Text style={s.hwGroupTitle}>PB</Text>
-            </View>
-            <View style={s.hwSubHeader}>
-              <View style={{ flex: 1.2 }} />
-              <HwGEPLabels theme={theme} s={s} />
-              <HwGEPLabels theme={theme} s={s} />
-              <HwGEPLabels theme={theme} s={s} />
-            </View>
-            {holeWins.length === 0 || holeWins.every(r => r.total.W + r.total.T + r.total.L === 0) ? (
-              <Text style={s.hwEmpty}>No data for this view.</Text>
-            ) : (
-              holeWins.map(row => {
-                const empty = row.total.W + row.total.T + row.total.L === 0;
-                return (
-                  <TouchableOpacity
-                    key={row.player.id}
-                    style={s.hwBigRow}
-                    onPress={() => !empty && openHoleWins(row)}
-                    activeOpacity={0.7}
-                    disabled={empty}
-                  >
-                    <Text style={[s.hwPlayerName, empty && s.hwDimmed]}>{row.player.name.split(' ')[0]}</Text>
-                    <HwGEPCells stats={row.total} strong theme={theme} s={s} />
-                    <HwGEPCells stats={row.best} theme={theme} s={s} />
-                    <HwGEPCells stats={row.worst} theme={theme} s={s} />
-                  </TouchableOpacity>
-                );
-              })
-            )}
-          </View>
+          <HoleWinsTable title="By Points" rows={holeWinsPts} metricMode="points" openRow={openHoleWins} theme={theme} s={s} />
+          <HoleWinsTable title="By Strokes" rows={holeWinsStr} metricMode="strokes" openRow={openHoleWins} theme={theme} s={s} />
         </>
       )}
 
@@ -734,22 +746,29 @@ function PairsTab({ tournament, players, h2hPlayer, setH2hPlayer, selectedPlayer
       </View>
 
       {h2h ? (
-        <TouchableOpacity style={s.card} onPress={openH2H} activeOpacity={0.7}>
-          <View style={s.h2hResult}>
-            <View style={s.h2hPlayer}>
-              <Text style={s.h2hName}>{p1.name.split(' ')[0]}</Text>
-              <Text style={[s.h2hScore, h2h.p1Wins > h2h.p2Wins && { color: theme.accent.primary }]}>{h2h.p1Wins}</Text>
-            </View>
-            <View style={s.h2hCenter}>
-              <Text style={s.h2hTies}>{h2h.ties} ties</Text>
-            </View>
-            <View style={s.h2hPlayer}>
-              <Text style={s.h2hName}>{p2.name.split(' ')[0]}</Text>
-              <Text style={[s.h2hScore, h2h.p2Wins > h2h.p1Wins && { color: theme.accent.primary }]}>{h2h.p2Wins}</Text>
-            </View>
+        <>
+          <RoundSelector tournament={tournament} selected={h2hRound} onSelect={setH2hRound} theme={theme} s={s} />
+          <H2HCard
+            label="Holes won by points"
+            explainer="Higher Stableford points on the hole"
+            p1={p1} p2={p2} bucket={h2h.points}
+            onPress={() => openH2H('points')}
+            theme={theme} s={s}
+          />
+          <H2HCard
+            label="Holes won by strokes"
+            explainer="Fewer strokes on the hole"
+            p1={p1} p2={p2} bucket={h2h.strokes}
+            onPress={() => openH2H('strokes')}
+            theme={theme} s={s}
+          />
+          <View style={s.h2hTotals}>
+            <Text style={s.h2hTotalsText}>
+              Totals · {firstName(p1)} {h2h.totals.p1Points} pts / {h2h.totals.p1Strokes} str · {firstName(p2)} {h2h.totals.p2Points} pts / {h2h.totals.p2Strokes} str
+            </Text>
+            <Text style={s.h2hTotalsSub}>{h2h.totals.holesCompared} holes compared</Text>
           </View>
-          <Text style={s.h2hSub}>{h2h.holes.length} holes compared</Text>
-        </TouchableOpacity>
+        </>
       ) : (
         <Text style={s.emptyText}>Select two different players to compare.</Text>
       )}
@@ -763,6 +782,73 @@ function PairsTab({ tournament, players, h2hPlayer, setH2hPlayer, selectedPlayer
         rows={sheet?.rows || []}
       />
     </View>
+  );
+}
+
+function HoleWinsTable({ title, rows, metricMode, openRow, theme, s }) {
+  const empty = rows.length === 0 || rows.every(r => r.total.W + r.total.T + r.total.L === 0);
+  return (
+    <View style={s.hwSubSection}>
+      <Text style={s.hwSubTitle}>{title}</Text>
+      <View style={s.hwCard}>
+        <View style={s.hwGroupHeader}>
+          <View style={{ flex: 1.2 }} />
+          <Text style={s.hwGroupTitle}>TOTAL</Text>
+          <Text style={s.hwGroupTitle}>BB</Text>
+          <Text style={s.hwGroupTitle}>WB</Text>
+        </View>
+        <View style={s.hwSubHeader}>
+          <View style={{ flex: 1.2 }} />
+          <HwGEPLabels theme={theme} s={s} />
+          <HwGEPLabels theme={theme} s={s} />
+          <HwGEPLabels theme={theme} s={s} />
+        </View>
+        {empty ? (
+          <Text style={s.hwEmpty}>No data for this view.</Text>
+        ) : (
+          rows.map(row => {
+            const rowEmpty = row.total.W + row.total.T + row.total.L === 0;
+            return (
+              <TouchableOpacity
+                key={row.player.id}
+                style={s.hwBigRow}
+                onPress={() => !rowEmpty && openRow(row, metricMode)}
+                activeOpacity={0.7}
+                disabled={rowEmpty}
+              >
+                <Text style={[s.hwPlayerName, rowEmpty && s.hwDimmed]}>{row.player.name.split(' ')[0]}</Text>
+                <HwGEPCells stats={row.total} strong theme={theme} s={s} />
+                <HwGEPCells stats={row.best} theme={theme} s={s} />
+                <HwGEPCells stats={row.worst} theme={theme} s={s} />
+              </TouchableOpacity>
+            );
+          })
+        )}
+      </View>
+    </View>
+  );
+}
+
+function H2HCard({ label, explainer, p1, p2, bucket, onPress, theme, s }) {
+  return (
+    <TouchableOpacity style={s.h2hMetricCard} onPress={onPress} activeOpacity={0.7}>
+      <View style={s.h2hMetricHeader}>
+        <Text style={s.h2hMetricLabel}>{label}</Text>
+        <Feather name="chevron-right" size={16} color={theme.text.muted} />
+      </View>
+      <View style={s.h2hMetricRow}>
+        <View style={s.h2hMetricPlayer}>
+          <Text style={s.h2hMetricName}>{firstName(p1)}</Text>
+          <Text style={[s.h2hMetricScore, bucket.p1Wins > bucket.p2Wins && { color: theme.accent.primary }]}>{bucket.p1Wins}</Text>
+        </View>
+        <Text style={s.h2hMetricTies}>{bucket.ties} ties</Text>
+        <View style={s.h2hMetricPlayer}>
+          <Text style={s.h2hMetricName}>{firstName(p2)}</Text>
+          <Text style={[s.h2hMetricScore, bucket.p2Wins > bucket.p1Wins && { color: theme.accent.primary }]}>{bucket.p2Wins}</Text>
+        </View>
+      </View>
+      <Text style={s.h2hMetricExplainer}>{explainer}</Text>
+    </TouchableOpacity>
   );
 }
 
@@ -803,10 +889,10 @@ function HwGEPCells({ stats, strong, theme, s }) {
 
 // ── Shame Tab ──
 
-function ShameTab({ tournament, useNet, theme, s }) {
-  const shame = hallOfShame(tournament, { useNet });
+function ShameTab({ tournament, metric, theme, s }) {
+  const shame = hallOfShame(tournament, { metric });
   const [sheet, setSheet] = useState(null);
-  const modeLabel = useNet ? 'points' : 'strokes';
+  const modeLabel = metric === 'strokes' ? 'strokes (gross)' : 'points (net Stableford)';
 
   const holeRows = (holes, playerId) => holes.map((b, i) => ({
     key: `${playerId || ''}-${b.roundIndex}-${b.holeNumber}-${i}`,
@@ -1105,6 +1191,9 @@ const makeStyles = (t) => StyleSheet.create({
   heatCell: { width: 52, paddingVertical: 6, alignItems: 'center', justifyContent: 'center' },
   heatHeader: { fontFamily: 'PlusJakartaSans-SemiBold', color: t.text.muted, fontSize: 10, paddingBottom: 8 },
   heatHoleNum: { fontFamily: 'PlusJakartaSans-Bold', color: t.text.secondary, fontSize: 12 },
+  heatHoleCol: { width: 40 },
+  heatSiCol: { width: 36 },
+  heatSi: { fontFamily: 'PlusJakartaSans-Medium', color: t.text.muted, fontSize: 11 },
   heatValue: { borderRadius: 6, margin: 1, paddingVertical: 8 },
   heatValueText: { fontFamily: 'PlusJakartaSans-Bold', fontSize: 14 },
   heatAvgText: { fontFamily: 'PlusJakartaSans-Medium', color: t.text.muted, fontSize: 12 },
@@ -1189,5 +1278,46 @@ const makeStyles = (t) => StyleSheet.create({
   hwEmpty: {
     fontFamily: 'PlusJakartaSans-Regular', color: t.text.muted, fontSize: 12,
     textAlign: 'center', paddingVertical: 16,
+  },
+  hwSubSection: { marginBottom: 4 },
+  hwSubTitle: {
+    fontFamily: 'PlusJakartaSans-Bold', color: t.accent.primary, fontSize: 12,
+    letterSpacing: 0.5, marginBottom: 6, marginTop: 6,
+  },
+  h2hMetricCard: {
+    backgroundColor: t.isDark ? t.bg.card : t.bg.card, borderRadius: 14, borderWidth: 1,
+    borderColor: t.isDark ? t.glass?.border || t.border.default : t.border.default,
+    padding: 14, marginBottom: 8, ...(t.isDark ? {} : t.shadow.card),
+  },
+  h2hMetricHeader: {
+    flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center',
+    marginBottom: 4,
+  },
+  h2hMetricLabel: {
+    fontFamily: 'PlusJakartaSans-SemiBold', color: t.text.muted, fontSize: 10,
+    letterSpacing: 1, textTransform: 'uppercase',
+  },
+  h2hMetricRow: {
+    flexDirection: 'row', alignItems: 'center', justifyContent: 'space-around',
+    paddingVertical: 4,
+  },
+  h2hMetricPlayer: { alignItems: 'center', gap: 2 },
+  h2hMetricName: { fontFamily: 'PlusJakartaSans-SemiBold', color: t.text.secondary, fontSize: 12 },
+  h2hMetricScore: { fontFamily: 'PlayfairDisplay-Black', color: t.text.primary, fontSize: 28 },
+  h2hMetricTies: { fontFamily: 'PlusJakartaSans-Medium', color: t.text.muted, fontSize: 12 },
+  h2hMetricExplainer: {
+    fontFamily: 'PlusJakartaSans-Medium', color: t.text.muted, fontSize: 11,
+    textAlign: 'center', marginTop: 4,
+  },
+  h2hTotals: {
+    backgroundColor: t.bg.secondary, borderRadius: 10, padding: 10, marginTop: 6,
+  },
+  h2hTotalsText: {
+    fontFamily: 'PlusJakartaSans-SemiBold', color: t.text.secondary, fontSize: 12,
+    textAlign: 'center',
+  },
+  h2hTotalsSub: {
+    fontFamily: 'PlusJakartaSans-Medium', color: t.text.muted, fontSize: 11,
+    textAlign: 'center', marginTop: 2,
   },
 });
