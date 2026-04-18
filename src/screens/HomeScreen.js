@@ -13,6 +13,7 @@ import {
   deleteTournament, saveTournament,
   tournamentLeaderboard, tournamentBestWorstLeaderboard,
   roundPairLeaderboard, calcBestWorstBall, roundTotals,
+  playerRoundBestWorstPoints,
   DEFAULT_SETTINGS, generateInviteCode,
 } from '../store/tournamentStore';
 
@@ -87,6 +88,17 @@ export default function HomeScreen({ navigation, route }) {
     const unsubscribe = navigation.addListener('focus', reload);
     return unsubscribe;
   }, [navigation, reload]);
+
+  // Keep the round pager pinned to the round being played: whenever the
+  // tournament's currentRound advances (e.g. the user started the next
+  // round in another screen), snap the selection back to it. This also
+  // covers the initial Tournament mount where selectedRound is briefly 0
+  // before the tournament has loaded.
+  useEffect(() => {
+    if (tournament?.currentRound != null) {
+      setSelectedRound(tournament.currentRound);
+    }
+  }, [tournament?.currentRound]);
 
   // Auto-push Tournament once on the first Home mount if there's an active
   // tournament, so the back gesture / browser back can pop us to the list.
@@ -426,11 +438,8 @@ export default function HomeScreen({ navigation, route }) {
   const displayedBoard = leaderboardBestBall && bestWorstLeaderboard ? bestWorstLeaderboard : leaderboard;
   const getSelectedRoundValue = (playerId) => {
     if (leaderboardBestBall) {
-      if (!selectedRoundBB) return null;
-      const { pair1, pair2, bestBall, worstBall } = selectedRoundBB;
-      if (pair1.some((p) => p.id === playerId)) return bestBall.pair1 + worstBall.pair1;
-      if (pair2.some((p) => p.id === playerId)) return bestBall.pair2 + worstBall.pair2;
-      return 0;
+      if (!selectedRoundData || !selectedRoundHasScores || !selectedRoundData.pairs?.length) return null;
+      return playerRoundBestWorstPoints(selectedRoundData, playerId, tournament.players, settings);
     }
     if (!selectedRoundPlayerTotals) return null;
     return selectedRoundPlayerTotals.find((e) => e.player.id === playerId)?.totalPoints ?? 0;
@@ -486,7 +495,7 @@ export default function HomeScreen({ navigation, route }) {
           const rankColor = rankColors[i] || 'rgba(255,255,255,0.4)';
           const rankBg = i === 0 ? 'rgba(255,215,0,0.2)' : i === 1 ? 'rgba(192,200,212,0.15)' : i === 2 ? 'rgba(218,160,109,0.15)' : 'rgba(255,255,255,0.08)';
           const roundValue = getSelectedRoundValue(entry.player.id);
-          const roundUnit = leaderboardBestBall ? 'holes' : 'pts';
+          const roundUnit = 'pts';
           const strokes = strokesByPlayer[entry.player.id] ?? 0;
           return (
             <View key={entry.player.id} style={[s.mastersRow, i === 0 && s.mastersRowFirst, i === displayedBoard.length - 1 && { borderBottomWidth: 0 }]}>
@@ -544,9 +553,12 @@ export default function HomeScreen({ navigation, route }) {
           <View
             style={s.roundPagerWrap}
             onLayout={(e) => {
-              const w = e.nativeEvent.layout.width;
-              roundScrollOffset.current = selectedRound * w;
-              setRoundPagerWidth(w);
+              // Don't prefill roundScrollOffset from selectedRound — on web
+              // the ScrollView's contentOffset can't position before the
+              // children lay out, and if we lie that we're already there the
+              // sync effect below skips its scrollTo. Leave the ref at its
+              // actual value (0 on first mount) so the effect corrects it.
+              setRoundPagerWidth(e.nativeEvent.layout.width);
             }}
           >
             {roundPagerWidth > 0 && (
@@ -606,6 +618,7 @@ export default function HomeScreen({ navigation, route }) {
                     width={roundPagerWidth}
                     hasPrev={i > 0}
                     hasNext={i < tournament.rounds.length - 1}
+                    revealed={!!round.revealed || i <= tournament.currentRound}
                     roundBestBall={roundBestBall}
                     players={tournament.players}
                     settings={settings}
@@ -951,11 +964,12 @@ export default function HomeScreen({ navigation, route }) {
 // a swipe only re-renders the outside leaderboard / tab bar — the 3
 // round pages stay memoized with stable refs.
 const RoundPage = React.memo(function RoundPage({
-  round, index, width, hasPrev, hasNext, roundBestBall,
+  round, index, width, hasPrev, hasNext, revealed, roundBestBall,
   players, settings, theme, s,
   onGoToRound, onOpenEdit,
 }) {
   const hasScores = round.scores && Object.keys(round.scores).length > 0;
+  const hasPairs = Array.isArray(round.pairs) && round.pairs.length > 0;
   return (
     <View
       style={[{ width }, PAGER_PAGE_SNAP_STYLE]}
@@ -996,10 +1010,29 @@ const RoundPage = React.memo(function RoundPage({
         roundBestBall
           ? <BestBallRoundCard round={round} players={players} settings={settings} theme={theme} s={s} />
           : <StablefordRoundCard round={round} players={players} theme={theme} s={s} />
+      ) : revealed && hasPairs ? (
+        <PairsPreviewCard pairs={round.pairs} theme={theme} s={s} />
       ) : (
         <Text style={s.emptyRoundHint}>No scores yet for this round.</Text>
       )}
     </View>
+  );
+});
+
+// Fallback card shown when a round has revealed pairs but no scores yet.
+const PairsPreviewCard = React.memo(function PairsPreviewCard({ pairs, theme, s }) {
+  return (
+    <>
+      {pairs.map((pair, pi) => (
+        <View key={pi} style={s.pairBlock}>
+          <View style={s.pairHeader}>
+            <Text style={s.pairNames}>{pair.map((p) => p.name).join(' & ')}</Text>
+            <Text style={s.pairPoints}>—</Text>
+          </View>
+        </View>
+      ))}
+      <Text style={s.pairsPreviewHint}>No scores yet. Teams are set for this round.</Text>
+    </>
   );
 });
 
@@ -1193,6 +1226,14 @@ const makeStyles = (t) => StyleSheet.create({
     fontSize: 13,
     textAlign: 'center',
     paddingVertical: 24,
+  },
+  pairsPreviewHint: {
+    fontFamily: 'PlusJakartaSans-Regular',
+    color: t.text.muted,
+    fontSize: 12,
+    textAlign: 'center',
+    marginTop: 4,
+    marginBottom: 4,
   },
 
   // Masters leaderboard

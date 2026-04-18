@@ -29,7 +29,6 @@ export default function CourseLibraryDetailScreen({ navigation, route }) {
   const [saving, setSaving] = useState(false);
 
   useEffect(() => {
-    navigation.setOptions({ title: initialName || 'Course' });
     (async () => {
       const courses = await fetchCourses();
       const course = courses.find((c) => c.id === courseId);
@@ -44,6 +43,10 @@ export default function CourseLibraryDetailScreen({ navigation, route }) {
       setLoading(false);
     })();
   }, [courseId]);
+
+  useEffect(() => {
+    navigation.setOptions({ title: name || initialName || 'Course' });
+  }, [navigation, name, initialName]);
 
   async function handleSave() {
     if (!name.trim()) return;
