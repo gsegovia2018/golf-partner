@@ -15,7 +15,8 @@ import {
   DEFAULT_SETTINGS,
 } from '../store/tournamentStore';
 
-export default function HomeScreen({ navigation, viewMode = 'auto' }) {
+export default function HomeScreen({ navigation, route }) {
+  const viewMode = route?.params?.viewMode ?? 'auto';
   const { theme, mode, toggle } = useTheme();
   const [tournament, setTournament] = useState(null);
   const [allTournaments, setAllTournaments] = useState([]);
@@ -25,6 +26,7 @@ export default function HomeScreen({ navigation, viewMode = 'auto' }) {
   const roundScrollOffset = useRef(0);
   const isUserScrollingRound = useRef(false);
   const roundPagerInitialized = useRef(false);
+  const hasAutoOpenedRef = useRef(false);
   const [showSettings, setShowSettings] = useState(false);
   const [showRoundEdit, setShowRoundEdit] = useState(false);
   const [showResetHistory, setShowResetHistory] = useState(false);
@@ -50,6 +52,16 @@ export default function HomeScreen({ navigation, viewMode = 'auto' }) {
     const unsubscribe = navigation.addListener('focus', reload);
     return unsubscribe;
   }, [navigation, reload]);
+
+  // Auto-push Tournament once on the first Home mount if there's an active
+  // tournament, so the back gesture / browser back can pop us to the list.
+  useEffect(() => {
+    if (viewMode !== 'list') return;
+    if (hasAutoOpenedRef.current) return;
+    if (!tournament) return;
+    hasAutoOpenedRef.current = true;
+    navigation.navigate('Tournament');
+  }, [viewMode, tournament, navigation]);
 
   // Keep round pager in sync with selectedRound (tab taps, arrow buttons).
   // Skip while the user is dragging, and skip if already at target.
@@ -152,11 +164,15 @@ export default function HomeScreen({ navigation, viewMode = 'auto' }) {
     const all = await loadAllTournaments();
     const t = all.find((x) => x.id === id) ?? null;
     setTournament(t);
+    navigation.navigate('Tournament');
   }
 
   async function goToList() {
-    await clearActiveTournament();
-    setTournament(null);
+    if (navigation.canGoBack()) {
+      navigation.goBack();
+    } else {
+      navigation.navigate('Home');
+    }
   }
 
   async function confirmDelete(t) {
@@ -173,6 +189,9 @@ export default function HomeScreen({ navigation, viewMode = 'auto' }) {
       const all = await loadAllTournaments();
       setAllTournaments(all);
       setTournament(null);
+      if (viewMode === 'tournament' && navigation.canGoBack()) {
+        navigation.goBack();
+      }
     } catch (err) {
       if (Platform.OS === 'web') window.alert(err.message ?? 'Could not delete tournament');
       else Alert.alert('Error', err.message ?? 'Could not delete tournament');
