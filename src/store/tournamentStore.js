@@ -40,6 +40,15 @@ async function ensureMigrated() {
   _migrated = true;
 }
 
+const _subs = new Set();
+function _emitChange() {
+  _subs.forEach((fn) => { try { fn(); } catch (_) {} });
+}
+export function subscribeTournamentChanges(fn) {
+  _subs.add(fn);
+  return () => _subs.delete(fn);
+}
+
 export async function loadAllTournaments() {
   await ensureMigrated();
   const { data, error } = await supabase
@@ -72,14 +81,17 @@ async function persistTournament(tournament) {
 export async function saveTournament(tournament) {
   await persistTournament(tournament);
   await AsyncStorage.setItem(ACTIVE_ID_KEY, tournament.id);
+  _emitChange();
 }
 
 export async function setActiveTournament(id) {
   await AsyncStorage.setItem(ACTIVE_ID_KEY, id);
+  _emitChange();
 }
 
 export async function clearActiveTournament() {
   await AsyncStorage.removeItem(ACTIVE_ID_KEY);
+  _emitChange();
 }
 
 export async function deleteTournament(id) {
@@ -87,6 +99,7 @@ export async function deleteTournament(id) {
   const { error } = await supabase.from('tournaments').delete().eq('id', id);
   if (error) throw error;
   if (activeId === id) await AsyncStorage.removeItem(ACTIVE_ID_KEY);
+  _emitChange();
 }
 
 export const STANDARD_SLOPE = 113;
@@ -348,4 +361,22 @@ export function tournamentLeaderboard(tournament) {
   });
 
   return totals.sort((a, b) => b.points - a.points);
+}
+
+export function isRoundInProgress(tournament) {
+  if (!tournament) return false;
+  const round = tournament.rounds?.[tournament.currentRound];
+  if (!round || !round.scores) return false;
+
+  const playerIds = tournament.players.map((p) => p.id);
+  const holeCount = round.course?.holes?.length ?? 18;
+  const expected = playerIds.length * holeCount;
+
+  let entered = 0;
+  for (const pid of playerIds) {
+    const perPlayer = round.scores[pid];
+    if (!perPlayer) continue;
+    entered += Object.keys(perPlayer).length;
+  }
+  return entered > 0 && entered < expected;
 }
