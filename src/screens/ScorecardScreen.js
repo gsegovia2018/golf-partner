@@ -237,10 +237,14 @@ function HoleView({ round, roundIndex, players, scores, notes, currentHole, hole
   const [holePickerOpen, setHolePickerOpen] = useState(false);
   const [pagerWidth, setPagerWidth] = useState(0);
   const pagerRef = useRef(null);
+  const holeScrollOffset = useRef(0);
 
   useEffect(() => {
     if (!pagerRef.current || pagerWidth <= 0) return;
-    pagerRef.current.scrollTo({ x: (currentHole - 1) * pagerWidth, animated: false });
+    const target = (currentHole - 1) * pagerWidth;
+    if (Math.abs(holeScrollOffset.current - target) < 1) return;
+    pagerRef.current.scrollTo({ x: target, animated: false });
+    holeScrollOffset.current = target;
   }, [currentHole, pagerWidth]);
 
   if (!hole) return null;
@@ -261,8 +265,11 @@ function HoleView({ round, roundIndex, players, scores, notes, currentHole, hole
             horizontal
             pagingEnabled
             showsHorizontalScrollIndicator={false}
-            onMomentumScrollEnd={(e) => {
-              const idx = Math.round(e.nativeEvent.contentOffset.x / pagerWidth);
+            scrollEventThrottle={16}
+            onScroll={(e) => {
+              const x = e.nativeEvent.contentOffset.x;
+              holeScrollOffset.current = x;
+              const idx = Math.round(x / pagerWidth);
               const newHole = idx + 1;
               if (newHole !== currentHole) onGoToHole(newHole);
             }}
@@ -357,14 +364,14 @@ function HoleView({ round, roundIndex, players, scores, notes, currentHole, hole
                                 </TouchableOpacity>
                                 <TouchableOpacity
                                   style={[s.pickupBtn, isPickup && s.pickupBtnActive]}
-                                  onPress={() => onSetScore(player.id, pageHole.number, pickup)}
+                                  onPress={() => onSetScore(player.id, pageHole.number, isPickup ? pageHole.par : pickup)}
                                   activeOpacity={0.7}
-                                  accessibilityLabel={isPickup ? `Picked up at ${pickup} strokes` : `Pickup at ${pickup} strokes`}
+                                  accessibilityLabel={isPickup ? `Picked up at ${pickup} strokes — tap to clear` : `Pickup at ${pickup} strokes`}
                                 >
                                   <Feather
-                                    name="flag"
-                                    size={14}
-                                    color={isPickup ? theme.accent.primary : theme.text.muted}
+                                    name="arrow-up-circle"
+                                    size={16}
+                                    color={isPickup ? theme.text.inverse : theme.text.muted}
                                   />
                                 </TouchableOpacity>
                               </View>
@@ -403,20 +410,8 @@ function HoleView({ round, roundIndex, players, scores, notes, currentHole, hole
         )
       }
 
-      {/* Bottom controls: pips + actions (notes / go-to-hole / next) */}
+      {/* Bottom controls: actions (notes / go-to-hole / next) */}
       <View style={s.bottomBar}>
-        <View style={s.holePips}>
-          {Array.from({ length: 18 }, (_, i) => {
-            const n = i + 1;
-            const hasAnyScore = players.some((p) => scores[p.id]?.[n] != null);
-            return (
-              <TouchableOpacity key={n} onPress={() => onGoToHole(n)} hitSlop={{ top: 8, bottom: 8, left: 4, right: 4 }}>
-                <View style={[s.pip, n === currentHole && s.pipActive, hasAnyScore && n !== currentHole && s.pipDone]} />
-              </TouchableOpacity>
-            );
-          })}
-        </View>
-
         <View style={s.bottomActionsRow}>
           <TouchableOpacity
             style={s.notesPillBtn}
@@ -642,61 +637,101 @@ function GridView({ round, roundIndex, players, scores, notes, onNotesChange, is
             <Text style={[s.cell, s.siCell, s.headerText]}>SI</Text>
             {(() => {
               const pairs = round.pairs ?? [];
-              const orderedPlayers = pairs.length === 2
-                ? [...pairs[0], ...pairs[1]].map((pp) => players.find((p) => p.id === pp.id)).filter(Boolean)
-                : players;
-              return orderedPlayers.map((p) => {
-                return (
+              if (pairs.length !== 2) {
+                return players.map((p) => (
                   <Text key={p.id} style={[s.cell, s.playerCell, s.headerText]}>
                     {p.name.split(' ')[0]}
                   </Text>
-                );
+                ));
+              }
+              return pairs.flatMap((pair, pi) => {
+                const members = pair.map((pp) => players.find((p) => p.id === pp.id)).filter(Boolean);
+                return [
+                  ...members.map((p) => (
+                    <Text key={p.id} style={[s.cell, s.playerCell, s.headerText]}>
+                      {p.name.split(' ')[0]}
+                    </Text>
+                  )),
+                  <Text key={`pair-h-${pi}`} style={[s.cell, s.pairCell, s.headerText]}>
+                    {pi === 0 ? 'Pair A' : 'Pair B'}
+                  </Text>,
+                ];
               });
             })()}
           </View>
 
           {round.holes.map((hole, holeIdx) => {
             const pairs = round.pairs ?? [];
-            const orderedPlayers = pairs.length === 2
-              ? [...pairs[0], ...pairs[1]].map((pp) => players.find((p) => p.id === pp.id)).filter(Boolean)
-              : players;
+            const renderPlayerCell = (p) => {
+              const strokes = scores[p.id]?.[hole.number];
+              const handicap = round.playerHandicaps?.[p.id] ?? p.handicap;
+              const pts = strokes != null
+                ? calcStablefordPoints(hole.par, strokes, handicap, hole.strokeIndex)
+                : null;
+              const ptsColor = pts == null ? theme.text.muted
+                : pts >= 3 ? theme.scoreColor('excellent')
+                : pts >= 2 ? theme.scoreColor('good')
+                : pts === 1 ? theme.scoreColor('neutral')
+                : theme.scoreColor('poor');
+              return (
+                <View key={p.id} style={[s.cell, s.playerCell, s.inputCell]}>
+                  <TextInput
+                    style={s.scoreInput}
+                    keyboardType="numeric"
+                    keyboardAppearance={theme.isDark ? 'dark' : 'light'}
+                    selectionColor={theme.accent.primary}
+                    maxLength={2}
+                    value={strokes != null ? String(strokes) : ''}
+                    onChangeText={(v) => onSetScore(p.id, hole.number, v)}
+                    placeholder="-"
+                    placeholderTextColor={theme.text.muted}
+                  />
+                  {pts !== null && (
+                    <Text style={[s.pts, { color: ptsColor }]}>
+                      {pts}
+                    </Text>
+                  )}
+                </View>
+              );
+            };
+
             return (
               <View key={hole.number} style={[s.holeRow, hole.number % 2 === 0 && s.altRow]}>
                 <Text style={[s.cell, s.holeCell]}>{hole.number}</Text>
                 <Text style={[s.cell, s.parCell]}>{hole.par}</Text>
                 <Text style={[s.cell, s.siCell]}>{hole.strokeIndex}</Text>
-                {orderedPlayers.map((p) => {
-                  const strokes = scores[p.id]?.[hole.number];
-                  const handicap = round.playerHandicaps?.[p.id] ?? p.handicap;
-                  const pts = strokes != null
-                    ? calcStablefordPoints(hole.par, strokes, handicap, hole.strokeIndex)
-                    : null;
-                  const ptsColor = pts == null ? theme.text.muted
-                    : pts >= 3 ? theme.scoreColor('excellent')
-                    : pts >= 2 ? theme.scoreColor('good')
-                    : pts === 1 ? theme.scoreColor('neutral')
-                    : theme.scoreColor('poor');
-                  return (
-                    <View key={p.id} style={[s.cell, s.playerCell, s.inputCell]}>
-                      <TextInput
-                        style={s.scoreInput}
-                        keyboardType="numeric"
-                        keyboardAppearance={theme.isDark ? 'dark' : 'light'}
-                        selectionColor={theme.accent.primary}
-                        maxLength={2}
-                        value={strokes != null ? String(strokes) : ''}
-                        onChangeText={(v) => onSetScore(p.id, hole.number, v)}
-                        placeholder="-"
-                        placeholderTextColor={theme.text.muted}
-                      />
-                      {pts !== null && (
-                        <Text style={[s.pts, { color: ptsColor }]}>
-                          {pts}
-                        </Text>
-                      )}
-                    </View>
-                  );
-                })}
+                {pairs.length !== 2
+                  ? players.map(renderPlayerCell)
+                  : pairs.flatMap((pair, pi) => {
+                      const members = pair.map((pp) => players.find((p) => p.id === pp.id)).filter(Boolean);
+                      let pairPts = 0;
+                      let hasAny = false;
+                      if (isBestBall && bbResult) {
+                        const hd = bbResult.holes.find((h) => h.number === hole.number);
+                        if (hd && hd.bestWinner !== null) {
+                          hasAny = true;
+                          pairPts = holeTeamPts(hd, pi + 1, settings.bestBallValue, settings.worstBallValue) ?? 0;
+                        }
+                      } else {
+                        members.forEach((m) => {
+                          const str = scores[m.id]?.[hole.number];
+                          if (str != null) {
+                            hasAny = true;
+                            const hcp = round.playerHandicaps?.[m.id] ?? m.handicap;
+                            pairPts += calcStablefordPoints(hole.par, str, hcp, hole.strokeIndex);
+                          }
+                        });
+                      }
+                      const pairColor = pi === 0 ? theme.pairA : theme.pairB;
+                      return [
+                        ...members.map(renderPlayerCell),
+                        <View key={`pair-c-${pi}`} style={[s.cell, s.pairCell]}>
+                          <Text style={[s.pairHolePts, { color: hasAny ? pairColor : theme.text.muted }]}>
+                            {hasAny ? pairPts : '-'}
+                          </Text>
+                        </View>,
+                      ];
+                    })}
               </View>
             );
           })}
@@ -709,10 +744,7 @@ function GridView({ round, roundIndex, players, scores, notes, onNotesChange, is
             <Text style={[s.cell, s.siCell]} />
             {(() => {
               const pairs = round.pairs ?? [];
-              const orderedPlayers = pairs.length === 2
-                ? [...pairs[0], ...pairs[1]].map((pp) => players.find((p) => p.id === pp.id)).filter(Boolean)
-                : players;
-              return orderedPlayers.map((p) => {
+              const playerTotalCell = (p, pi) => {
                 let totalPts = 0;
                 let totalStr = 0;
                 const handicap = round.playerHandicaps?.[p.id] ?? p.handicap;
@@ -723,14 +755,39 @@ function GridView({ round, roundIndex, players, scores, notes, onNotesChange, is
                     totalPts += calcStablefordPoints(hole.par, str, handicap, hole.strokeIndex);
                   }
                 });
-                const pairIndex = pairs.findIndex((pair) => pair.some((pp) => pp.id === p.id));
-                const ptsColor = pairIndex === 0 ? theme.pairA : pairIndex === 1 ? theme.pairB : theme.accent.primary;
+                const ptsColor = pi === 0 ? theme.pairA : pi === 1 ? theme.pairB : theme.accent.primary;
                 return (
                   <View key={p.id} style={[s.cell, s.playerCell]}>
                     <Text style={[s.totalPts, { color: ptsColor }]}>{totalPts} pts</Text>
                     <Text style={s.totalStr}>{totalStr || '-'}</Text>
                   </View>
                 );
+              };
+
+              if (pairs.length !== 2) {
+                return players.map((p) => playerTotalCell(p, -1));
+              }
+              return pairs.flatMap((pair, pi) => {
+                const members = pair.map((pp) => players.find((p) => p.id === pp.id)).filter(Boolean);
+                let pairTotal = 0;
+                if (isBestBall && bbResult) {
+                  pairTotal = roundTeamPts(bbResult, pi + 1, settings.bestBallValue, settings.worstBallValue);
+                } else {
+                  members.forEach((m) => {
+                    const hcp = round.playerHandicaps?.[m.id] ?? m.handicap;
+                    round.holes.forEach((hole) => {
+                      const str = scores[m.id]?.[hole.number];
+                      if (str) pairTotal += calcStablefordPoints(hole.par, str, hcp, hole.strokeIndex);
+                    });
+                  });
+                }
+                const pairColor = pi === 0 ? theme.pairA : theme.pairB;
+                return [
+                  ...members.map((p) => playerTotalCell(p, pi)),
+                  <View key={`pair-t-${pi}`} style={[s.cell, s.pairCell]}>
+                    <Text style={[s.totalPts, { color: pairColor }]}>{pairTotal} pts</Text>
+                  </View>,
+                ];
               });
             })()}
           </View>
@@ -935,26 +992,6 @@ function makeStyles(theme) {
       fontSize: 13,
     },
     holeNavBtnTextDisabled: { color: theme.text.muted },
-    holePips: {
-      flex: 1,
-      flexDirection: 'row',
-      flexWrap: 'nowrap',
-      justifyContent: 'center',
-      gap: 4,
-    },
-    pip: {
-      width: 6,
-      height: 6,
-      borderRadius: 3,
-      backgroundColor: theme.isDark ? theme.bg.elevated : theme.border.default,
-    },
-    pipActive: {
-      backgroundColor: theme.accent.primary,
-      width: 9,
-      height: 9,
-      borderRadius: 5,
-    },
-    pipDone: { backgroundColor: theme.accent.primary },
 
     // Player cards (compact — must fit 4 + 2 pair labels with no inner scroll)
     playerCardsContent: { flex: 1, paddingHorizontal: 12, paddingTop: 8, paddingBottom: 4, gap: 6 },
@@ -992,8 +1029,8 @@ function makeStyles(theme) {
       justifyContent: 'center',
     },
     pickupBtnActive: {
-      borderColor: theme.accent.primary + '66',
-      backgroundColor: theme.isDark ? theme.accent.primary + '20' : theme.accent.light,
+      borderColor: theme.accent.primary,
+      backgroundColor: theme.accent.primary,
     },
     playerCardLeft: { flexDirection: 'row', alignItems: 'center', gap: 10, flex: 1, minWidth: 0 },
     playerAvatar: {
@@ -1054,7 +1091,7 @@ function makeStyles(theme) {
       alignItems: 'center',
       gap: 10,
       paddingHorizontal: 14,
-      paddingTop: 4,
+      paddingTop: 12,
       paddingBottom: 12,
     },
     notesPillBtn: {
@@ -1318,6 +1355,16 @@ function makeStyles(theme) {
       textAlign: 'center',
     },
     playerCell: { width: 62 },
+    pairCell: {
+      width: 58,
+      borderLeftWidth: 1,
+      borderLeftColor: theme.isDark ? theme.glass?.border : theme.border.default,
+    },
+    pairHolePts: {
+      fontSize: 14,
+      fontFamily: 'PlusJakartaSans-ExtraBold',
+      textAlign: 'center',
+    },
     inputCell: { alignItems: 'center' },
     scoreInput: {
       backgroundColor: theme.isDark ? theme.bg.elevated : '#ffffff',

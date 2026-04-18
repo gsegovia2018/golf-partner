@@ -20,6 +20,8 @@ export default function PullToRefresh({
   const { theme } = useTheme();
   const scrollRef = useRef(null);
   const startY = useRef(null);
+  const startX = useRef(null);
+  const directionLocked = useRef(null); // 'v' | 'h' | null
   const pulling = useRef(false);
   const currentDistance = useRef(0);
   const pullAnim = useRef(new Animated.Value(0)).current;
@@ -49,6 +51,8 @@ export default function PullToRefresh({
       if (refreshingRef.current) return;
       if (node.scrollTop <= 0 && e.touches.length === 1) {
         startY.current = e.touches[0].clientY;
+        startX.current = e.touches[0].clientX;
+        directionLocked.current = null;
         pulling.current = true;
       }
     };
@@ -56,6 +60,25 @@ export default function PullToRefresh({
     const onTouchMove = (e) => {
       if (!pulling.current || startY.current === null || refreshingRef.current) return;
       const dy = e.touches[0].clientY - startY.current;
+      const dx = e.touches[0].clientX - startX.current;
+
+      // Lock direction once gesture is unambiguous (>= 8px on dominant axis)
+      // and bail out completely on horizontal — let the inner pager handle it.
+      if (directionLocked.current === null) {
+        const absX = Math.abs(dx);
+        const absY = Math.abs(dy);
+        if (absX >= 8 || absY >= 8) {
+          directionLocked.current = absX > absY ? 'h' : 'v';
+          if (directionLocked.current === 'h') {
+            pulling.current = false;
+            startY.current = null;
+            startX.current = null;
+            return;
+          }
+        }
+      }
+      if (directionLocked.current !== 'v') return;
+
       if (dy <= 0 || node.scrollTop > 0) {
         if (currentDistance.current > 0) {
           currentDistance.current = 0;
@@ -72,9 +95,15 @@ export default function PullToRefresh({
     };
 
     const finishGesture = async () => {
-      if (!pulling.current) return;
+      if (!pulling.current) {
+        directionLocked.current = null;
+        startX.current = null;
+        return;
+      }
       pulling.current = false;
       startY.current = null;
+      startX.current = null;
+      directionLocked.current = null;
       const finalDistance = currentDistance.current;
       if (finalDistance >= PULL_THRESHOLD && onRefresh && !refreshingRef.current) {
         Animated.timing(pullAnim, { toValue: PULL_THRESHOLD, duration: 120, useNativeDriver: false }).start();

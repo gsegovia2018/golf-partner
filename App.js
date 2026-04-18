@@ -20,7 +20,7 @@ import {
 
 import { ThemeProvider, useTheme } from './src/theme/ThemeContext';
 
-import MainTabs from './src/navigation/MainTabs';
+import HomeScreen from './src/screens/HomeScreen';
 import SetupScreen from './src/screens/SetupScreen';
 import ScorecardScreen from './src/screens/ScorecardScreen';
 import NextRoundScreen from './src/screens/NextRoundScreen';
@@ -43,7 +43,7 @@ function AppNavigator() {
     <>
       <StatusBar style={mode === 'dark' ? 'light' : 'dark'} />
       <Stack.Navigator
-        initialRouteName="MainTabs"
+        initialRouteName="Home"
         screenOptions={{
           headerShown: false,
           cardStyle: { flex: 1, backgroundColor: theme.bg.primary },
@@ -54,7 +54,7 @@ function AppNavigator() {
           },
         }}
       >
-        <Stack.Screen name="MainTabs" component={MainTabs} />
+        <Stack.Screen name="Home" component={HomeScreen} />
         <Stack.Screen name="Setup" component={SetupScreen} />
         <Stack.Screen name="Scorecard" component={ScorecardScreen} options={{ cardStyleInterpolator: CardStyleInterpolators.forHorizontalIOS }} />
         <Stack.Screen name="NextRound" component={NextRoundScreen} options={{ transitionSpec: { open: { animation: 'timing', config: { duration: 400 } }, close: { animation: 'timing', config: { duration: 300 } } } }} />

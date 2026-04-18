@@ -8,9 +8,9 @@ import PullToRefresh from '../components/PullToRefresh';
 import {
   loadTournament, loadAllTournaments,
   setActiveTournament, clearActiveTournament,
-  deleteTournament,
+  deleteTournament, saveTournament,
   tournamentLeaderboard, tournamentBestWorstLeaderboard,
-  roundPairLeaderboard, calcBestWorstBall,
+  roundPairLeaderboard, calcBestWorstBall, roundTotals,
   DEFAULT_SETTINGS,
 } from '../store/tournamentStore';
 
@@ -21,7 +21,9 @@ export default function HomeScreen({ navigation, viewMode = 'auto' }) {
   const [selectedRound, setSelectedRound] = useState(0);
   const [roundPagerWidth, setRoundPagerWidth] = useState(0);
   const roundPagerRef = useRef(null);
+  const roundScrollOffset = useRef(0);
   const [showSettings, setShowSettings] = useState(false);
+  const [showRoundEdit, setShowRoundEdit] = useState(false);
   const [leaderboardBestBall, setLeaderboardBestBall] = useState(false);
   const [roundBestBall, setRoundBestBall] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
@@ -43,19 +45,39 @@ export default function HomeScreen({ navigation, viewMode = 'auto' }) {
     return unsubscribe;
   }, [navigation, reload]);
 
-  // Keep round pager in sync with selectedRound (from tab taps)
+  // Keep round pager in sync with selectedRound (from tab taps).
+  // Skip if the pager is already at the right offset — that means the
+  // change came from onScroll and reissuing scrollTo would fight the drag.
   useEffect(() => {
     if (!roundPagerRef.current || roundPagerWidth <= 0) return;
-    roundPagerRef.current.scrollTo({ x: selectedRound * roundPagerWidth, animated: false });
+    const target = selectedRound * roundPagerWidth;
+    if (Math.abs(roundScrollOffset.current - target) < 1) return;
+    roundPagerRef.current.scrollTo({ x: target, animated: false });
+    roundScrollOffset.current = target;
   }, [selectedRound, roundPagerWidth]);
+
+  async function resetCurrentRound() {
+    if (!tournament) return;
+    const idx = selectedRound;
+    const confirmed = Platform.OS === 'web'
+      ? window.confirm(`Reset Round ${idx + 1}? Scores and notes will be cleared.`)
+      : await new Promise((resolve) => Alert.alert(
+          'Reset Round', `Reset Round ${idx + 1}? Scores and notes will be cleared.`,
+          [{ text: 'Cancel', style: 'cancel', onPress: () => resolve(false) },
+           { text: 'Reset', style: 'destructive', onPress: () => resolve(true) }],
+        ));
+    if (!confirmed) return;
+    const updated = { ...tournament };
+    updated.rounds = updated.rounds.map((r, i) => i === idx ? { ...r, scores: {}, notes: '' } : r);
+    await saveTournament(updated);
+    await reload();
+  }
 
   async function selectTournament(id) {
     await setActiveTournament(id);
     const all = await loadAllTournaments();
     const t = all.find((x) => x.id === id) ?? null;
     setTournament(t);
-    if (!t) return;
-    navigation.navigate('Tournament');
   }
 
   async function goToList() {
@@ -179,7 +201,7 @@ export default function HomeScreen({ navigation, viewMode = 'auto' }) {
         <Text style={[s.emptyTitle, { marginTop: 16 }]}>No active tournament</Text>
         <TouchableOpacity
           style={[s.primaryBtn, { marginTop: 20 }]}
-          onPress={() => navigation.navigate('Home')}
+          onPress={goToList}
           activeOpacity={0.8}
         >
           <Text style={s.primaryBtnText}>Go to Home</Text>
@@ -196,6 +218,26 @@ export default function HomeScreen({ navigation, viewMode = 'auto' }) {
 
   const leaderboard = tournamentLeaderboard(tournament);
   const bestWorstLeaderboard = leaderboardBestBall ? tournamentBestWorstLeaderboard(tournament) : null;
+
+  const selectedRoundData = tournament.rounds[selectedRound];
+  const selectedRoundHasScores = !!(selectedRoundData?.scores && Object.keys(selectedRoundData.scores).length > 0);
+  const selectedRoundPlayerTotals = selectedRoundHasScores && !leaderboardBestBall
+    ? roundTotals(selectedRoundData, tournament.players)
+    : null;
+  const selectedRoundBB = selectedRoundHasScores && leaderboardBestBall && selectedRoundData.pairs?.length
+    ? calcBestWorstBall(selectedRoundData, tournament.players)
+    : null;
+  const getSelectedRoundValue = (playerId) => {
+    if (leaderboardBestBall) {
+      if (!selectedRoundBB) return null;
+      const { pair1, pair2, bestBall, worstBall } = selectedRoundBB;
+      if (pair1.some((p) => p.id === playerId)) return bestBall.pair1 + worstBall.pair1;
+      if (pair2.some((p) => p.id === playerId)) return bestBall.pair2 + worstBall.pair2;
+      return 0;
+    }
+    if (!selectedRoundPlayerTotals) return null;
+    return selectedRoundPlayerTotals.find((e) => e.player.id === playerId)?.totalPoints ?? 0;
+  };
 
   return (
     <View style={s.screen}>
@@ -241,12 +283,19 @@ export default function HomeScreen({ navigation, viewMode = 'auto' }) {
           const rankColors = ['#ffd700', '#c0c8d4', '#daa06d'];
           const rankColor = rankColors[i] || 'rgba(255,255,255,0.4)';
           const rankBg = i === 0 ? 'rgba(255,215,0,0.2)' : i === 1 ? 'rgba(192,200,212,0.15)' : i === 2 ? 'rgba(218,160,109,0.15)' : 'rgba(255,255,255,0.08)';
+          const roundValue = getSelectedRoundValue(entry.player.id);
+          const roundUnit = leaderboardBestBall ? 'holes' : 'pts';
           return (
             <View key={entry.player.id} style={[s.mastersRow, i === 0 && s.mastersRowFirst, i === leaderboard.length - 1 && { borderBottomWidth: 0 }]}>
               <View style={[s.mastersRankBadge, { backgroundColor: rankBg }]}>
                 <Text style={[s.mastersRankText, { color: rankColor }]}>{i + 1}</Text>
               </View>
-              <Text style={[s.mastersName, i === 0 && { fontFamily: 'PlusJakartaSans-Bold' }]}>{entry.player.name}</Text>
+              <View style={s.mastersNameCol}>
+                <Text style={[s.mastersName, i === 0 && { fontFamily: 'PlusJakartaSans-Bold' }]}>{entry.player.name}</Text>
+                <Text style={s.mastersRoundSub}>
+                  R{selectedRound + 1} · {roundValue == null ? '—' : `${roundValue} ${roundUnit}`}
+                </Text>
+              </View>
               <Text style={[s.mastersPoints, i === 0 && { fontSize: 18 }]}>{entry.points} pts</Text>
               {leaderboardBestBall
                 ? <Text style={s.mastersSub}>{(bestWorstLeaderboard?.find((e) => e.player.id === entry.player.id)?.bestWins ?? 0) + (bestWorstLeaderboard?.find((e) => e.player.id === entry.player.id)?.worstWins ?? 0)} holes</Text>
@@ -298,8 +347,11 @@ export default function HomeScreen({ navigation, viewMode = 'auto' }) {
                 horizontal
                 pagingEnabled
                 showsHorizontalScrollIndicator={false}
-                onMomentumScrollEnd={(e) => {
-                  const idx = Math.round(e.nativeEvent.contentOffset.x / roundPagerWidth);
+                scrollEventThrottle={16}
+                onScroll={(e) => {
+                  const x = e.nativeEvent.contentOffset.x;
+                  roundScrollOffset.current = x;
+                  const idx = Math.round(x / roundPagerWidth);
                   if (idx !== selectedRound) setSelectedRound(idx);
                 }}
                 contentOffset={{ x: selectedRound * roundPagerWidth, y: 0 }}
@@ -307,9 +359,39 @@ export default function HomeScreen({ navigation, viewMode = 'auto' }) {
                 {tournament.rounds.map((round, i) => {
                   const hasScores = round.scores && Object.keys(round.scores).length > 0;
                   const isCurrentRound = i === tournament.currentRound;
+                  const hasPrev = i > 0;
+                  const hasNext = i < tournament.rounds.length - 1;
                   return (
                     <View key={round.id} style={{ width: roundPagerWidth }}>
-                      <Text style={s.tabRoundTitle}>RONDA {i + 1} · {round.courseName || '—'}</Text>
+                      <View style={s.pagerTitleRow}>
+                        <TouchableOpacity
+                          style={[s.pagerArrow, !hasPrev && s.pagerArrowHidden]}
+                          onPress={() => hasPrev && setSelectedRound(i - 1)}
+                          disabled={!hasPrev}
+                          activeOpacity={0.7}
+                          accessibilityLabel="Previous round"
+                        >
+                          <Feather name="chevron-left" size={18} color={theme.accent.primary} />
+                        </TouchableOpacity>
+                        <Text style={s.tabRoundTitle}>RONDA {i + 1} · {round.courseName || '—'}</Text>
+                        <TouchableOpacity
+                          onPress={() => { setSelectedRound(i); setShowRoundEdit(true); }}
+                          style={s.roundEditBtn}
+                          hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+                          accessibilityLabel="Round options"
+                        >
+                          <Feather name="settings" size={14} color={theme.text.muted} />
+                        </TouchableOpacity>
+                        <TouchableOpacity
+                          style={[s.pagerArrow, !hasNext && s.pagerArrowHidden]}
+                          onPress={() => hasNext && setSelectedRound(i + 1)}
+                          disabled={!hasNext}
+                          activeOpacity={0.7}
+                          accessibilityLabel="Next round"
+                        >
+                          <Feather name="chevron-right" size={18} color={theme.accent.primary} />
+                        </TouchableOpacity>
+                      </View>
                       {hasScores ? (
                         roundBestBall
                           ? <BestBallRoundCard round={round} players={tournament.players} settings={settings} theme={theme} s={s} />
@@ -320,10 +402,7 @@ export default function HomeScreen({ navigation, viewMode = 'auto' }) {
                       <View style={s.roundActionsRow}>
                         <TouchableOpacity
                           style={[s.primaryBtn, s.roundActionBtn]}
-                          onPress={() => {
-                            const parent = navigation.getParent?.() ?? navigation;
-                            parent.navigate('Scorecard', { roundIndex: i });
-                          }}
+                          onPress={() => navigation.navigate('Scorecard', { roundIndex: i })}
                           activeOpacity={0.8}
                         >
                           <Feather name="edit-2" size={16} color={theme.isDark ? theme.accent.primary : theme.text.inverse} />
@@ -366,6 +445,65 @@ export default function HomeScreen({ navigation, viewMode = 'auto' }) {
         <ShareableLeaderboard ref={leaderboardRef} tournamentName={tournament.name} leaderboard={leaderboard} />
       </View>
     </PullToRefresh>
+
+    <Modal
+      visible={showRoundEdit}
+      transparent
+      animationType="fade"
+      onRequestClose={() => setShowRoundEdit(false)}
+    >
+      <Pressable style={s.modalBackdrop} onPress={() => setShowRoundEdit(false)}>
+        <Pressable style={s.modalSheet} onPress={() => {}}>
+          <View style={s.modalHandle} />
+          <Text style={s.modalTitle}>Round {selectedRound + 1}</Text>
+
+          {(() => {
+            const r = tournament.rounds[selectedRound];
+            const alreadyRevealed = r?.revealed || selectedRound <= tournament.currentRound;
+            return alreadyRevealed ? (
+              <TouchableOpacity
+                style={s.menuItem}
+                onPress={() => { setShowRoundEdit(false); navigation.navigate('EditTeams', { roundIndex: selectedRound }); }}
+                activeOpacity={0.7}
+              >
+                <Feather name="users" size={18} color={theme.accent.primary} />
+                <Text style={s.menuItemText}>Edit Teams</Text>
+                <Feather name="chevron-right" size={16} color={theme.text.muted} />
+              </TouchableOpacity>
+            ) : (
+              <TouchableOpacity
+                style={s.menuItem}
+                onPress={() => { setShowRoundEdit(false); navigation.navigate('NextRound', { revealOnly: true, roundIndex: selectedRound }); }}
+                activeOpacity={0.7}
+              >
+                <Feather name="eye" size={18} color={theme.accent.primary} />
+                <Text style={s.menuItemText}>Reveal Teams</Text>
+                <Feather name="chevron-right" size={16} color={theme.text.muted} />
+              </TouchableOpacity>
+            );
+          })()}
+
+          <TouchableOpacity
+            style={s.menuItem}
+            onPress={() => { setShowRoundEdit(false); navigation.navigate('EditTournament'); }}
+            activeOpacity={0.7}
+          >
+            <Feather name="map" size={18} color={theme.accent.primary} />
+            <Text style={s.menuItemText}>Edit Course</Text>
+            <Feather name="chevron-right" size={16} color={theme.text.muted} />
+          </TouchableOpacity>
+
+          <TouchableOpacity
+            style={[s.menuItem, s.menuItemDestructive]}
+            onPress={() => { setShowRoundEdit(false); resetCurrentRound(); }}
+            activeOpacity={0.7}
+          >
+            <Feather name="rotate-ccw" size={18} color={theme.destructive} />
+            <Text style={[s.menuItemText, { color: theme.destructive }]}>Reset Round</Text>
+          </TouchableOpacity>
+        </Pressable>
+      </Pressable>
+    </Modal>
 
     <Modal
       visible={showSettings}
@@ -643,7 +781,20 @@ const makeStyles = (t) => StyleSheet.create({
   tabActive: { backgroundColor: t.accent.primary, borderColor: t.accent.primary },
   tabText: { fontFamily: 'PlusJakartaSans-Bold', color: t.text.muted, fontSize: 12 },
   tabTextActive: { color: t.text.inverse },
-  tabRoundTitle: { fontFamily: 'PlusJakartaSans-Medium', color: t.text.secondary, fontSize: 12, marginBottom: 12 },
+  tabRoundTitle: { fontFamily: 'PlusJakartaSans-Medium', color: t.text.secondary, fontSize: 12, flex: 1, textAlign: 'center' },
+  pagerTitleRow: { flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: 12 },
+  pagerArrow: {
+    width: 28, height: 28, borderRadius: 14,
+    alignItems: 'center', justifyContent: 'center',
+    backgroundColor: t.isDark ? 'rgba(255,255,255,0.06)' : 'rgba(0,0,0,0.04)',
+  },
+  pagerArrowHidden: { opacity: 0 },
+  roundEditBtn: {
+    width: 28, height: 28, borderRadius: 8,
+    backgroundColor: t.isDark ? t.bg.secondary : t.bg.secondary,
+    borderWidth: 1, borderColor: t.border.default,
+    alignItems: 'center', justifyContent: 'center',
+  },
   roundPagerWrap: {},
   emptyRoundHint: {
     fontFamily: 'PlusJakartaSans-Regular',
@@ -673,7 +824,15 @@ const makeStyles = (t) => StyleSheet.create({
   mastersRowFirst: { borderLeftWidth: 3, borderLeftColor: '#ffd700', paddingLeft: 8, marginLeft: -8 },
   mastersRankBadge: { width: 28, height: 28, borderRadius: 14, alignItems: 'center', justifyContent: 'center', marginRight: 10 },
   mastersRankText: { fontFamily: 'PlusJakartaSans-ExtraBold', fontSize: 12 },
-  mastersName: { fontFamily: 'PlusJakartaSans-Medium', flex: 1, color: '#ffffff', fontSize: 14 },
+  mastersNameCol: { flex: 1, minWidth: 0, marginRight: 8 },
+  mastersName: { fontFamily: 'PlusJakartaSans-Medium', color: '#ffffff', fontSize: 14 },
+  mastersRoundSub: {
+    fontFamily: 'PlusJakartaSans-Medium',
+    color: 'rgba(255,255,255,0.5)',
+    fontSize: 10,
+    letterSpacing: 0.5,
+    marginTop: 2,
+  },
   mastersPoints: { fontFamily: 'PlusJakartaSans-ExtraBold', color: '#ffd700', fontSize: 16, marginRight: 8 },
   mastersSub: { fontFamily: 'PlusJakartaSans-Medium', color: 'rgba(255,255,255,0.45)', fontSize: 11, width: 60, textAlign: 'right' },
 
