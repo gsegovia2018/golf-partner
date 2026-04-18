@@ -24,6 +24,11 @@ export default function HomeScreen({ navigation, viewMode = 'auto' }) {
   const roundScrollOffset = useRef(0);
   const isUserScrollingRound = useRef(false);
   const roundPagerInitialized = useRef(false);
+  // True while a programmatic scrollTo animation is in flight. Used to
+  // stop onScroll from committing mid-animation (which would make the
+  // pager fight its own scroll). User drags/momentum are NOT suppressed.
+  const suppressRoundOnScroll = useRef(false);
+  const suppressRoundTimer = useRef(null);
   const [showSettings, setShowSettings] = useState(false);
   const [showRoundEdit, setShowRoundEdit] = useState(false);
   const [leaderboardBestBall, setLeaderboardBestBall] = useState(false);
@@ -55,6 +60,13 @@ export default function HomeScreen({ navigation, viewMode = 'auto' }) {
     if (isUserScrollingRound.current) return;
     const target = selectedRound * roundPagerWidth;
     if (Math.abs(roundScrollOffset.current - target) < 1) return;
+    // Suppress onScroll commits while the animation runs, so intermediate
+    // offsets don't reset selectedRound and make the pager fight itself.
+    suppressRoundOnScroll.current = true;
+    clearTimeout(suppressRoundTimer.current);
+    suppressRoundTimer.current = setTimeout(() => {
+      suppressRoundOnScroll.current = false;
+    }, 450);
     roundPagerRef.current.scrollTo({ x: target, animated: roundPagerInitialized.current });
     roundScrollOffset.current = target;
     roundPagerInitialized.current = true;
@@ -375,27 +387,36 @@ export default function HomeScreen({ navigation, viewMode = 'auto' }) {
                 pagingEnabled
                 showsHorizontalScrollIndicator={false}
                 scrollEventThrottle={16}
-                onScrollBeginDrag={() => { isUserScrollingRound.current = true; }}
+                onScrollBeginDrag={() => {
+                  isUserScrollingRound.current = true;
+                  // User gesture overrides any in-flight programmatic scroll.
+                  suppressRoundOnScroll.current = false;
+                  clearTimeout(suppressRoundTimer.current);
+                }}
                 onScroll={(e) => {
                   const x = e.nativeEvent.contentOffset.x;
                   roundScrollOffset.current = x;
-                  // Only commit during a real user drag. Programmatic
-                  // scrollTo from tab taps also fires onScroll and would
-                  // make the pager fight its own animation.
-                  if (!isUserScrollingRound.current) return;
+                  // Skip only during a programmatic scrollTo animation.
+                  // Live-commit throughout the user's drag AND its momentum
+                  // so the leaderboard / bubbles update during the whole
+                  // swipe, not just the drag phase.
+                  if (suppressRoundOnScroll.current) return;
                   const idx = Math.round(x / roundPagerWidth);
                   if (idx !== selectedRound) {
-                    // Non-urgent: let the native swipe keep running smoothly
-                    // while React reconciles leaderboard/tabs/match panel in
-                    // the background.
+                    // Non-urgent: let the native scroll keep running smoothly
+                    // while React reconciles leaderboard / tabs / round card.
                     startTransition(() => setSelectedRound(idx));
                   }
                 }}
-                onScrollEndDrag={() => { isUserScrollingRound.current = false; }}
+                // Keep isUserScrollingRound true through the momentum phase
+                // so the sync effect doesn't scrollTo on top of the inertia.
+                onScrollEndDrag={() => {}}
                 onMomentumScrollEnd={(e) => {
                   const x = e.nativeEvent.contentOffset.x;
                   roundScrollOffset.current = x;
                   isUserScrollingRound.current = false;
+                  suppressRoundOnScroll.current = false;
+                  clearTimeout(suppressRoundTimer.current);
                   const idx = Math.round(x / roundPagerWidth);
                   if (idx !== selectedRound) setSelectedRound(idx);
                 }}

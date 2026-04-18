@@ -291,12 +291,23 @@ function HoleView({ round, roundIndex, players, scores, notes, currentHole, hole
   const holeScrollOffset = useRef(0);
   const isUserScrollingHole = useRef(false);
   const holePagerInitialized = useRef(false);
+  // True while a programmatic scrollTo animation is in flight. Stops
+  // onScroll from committing mid-animation; user drag and momentum
+  // are NOT suppressed.
+  const suppressHoleOnScroll = useRef(false);
+  const suppressHoleTimer = useRef(null);
 
   useEffect(() => {
     if (!pagerRef.current || pagerSize.width <= 0) return;
     if (isUserScrollingHole.current) return;
     const target = (currentHole - 1) * pagerSize.width;
     if (Math.abs(holeScrollOffset.current - target) < 1) return;
+    // Suppress onScroll commits while the animation runs.
+    suppressHoleOnScroll.current = true;
+    clearTimeout(suppressHoleTimer.current);
+    suppressHoleTimer.current = setTimeout(() => {
+      suppressHoleOnScroll.current = false;
+    }, 450);
     pagerRef.current.scrollTo({ x: target, animated: holePagerInitialized.current });
     holeScrollOffset.current = target;
     holePagerInitialized.current = true;
@@ -322,26 +333,34 @@ function HoleView({ round, roundIndex, players, scores, notes, currentHole, hole
             pagingEnabled
             showsHorizontalScrollIndicator={false}
             scrollEventThrottle={16}
-            onScrollBeginDrag={() => { isUserScrollingHole.current = true; }}
+            onScrollBeginDrag={() => {
+              isUserScrollingHole.current = true;
+              suppressHoleOnScroll.current = false;
+              clearTimeout(suppressHoleTimer.current);
+            }}
             onScroll={(e) => {
               const x = e.nativeEvent.contentOffset.x;
               holeScrollOffset.current = x;
-              // Only commit during a real user drag. Programmatic scrollTo
-              // from the go-to-hole picker / arrow buttons also fires
-              // onScroll and would make the pager fight its own animation.
-              if (!isUserScrollingHole.current) return;
+              // Skip only during a programmatic scrollTo animation; live
+              // commit during user drag AND its momentum so the match
+              // panel / totals / next-hole button update the whole swipe.
+              if (suppressHoleOnScroll.current) return;
               const newHole = Math.round(x / pagerSize.width) + 1;
               if (newHole !== currentHole) {
-                // Non-urgent: keep the native swipe running smoothly while
-                // match panel / totals / next-hole button reconcile.
+                // Non-urgent: keep the native scroll running smoothly while
+                // React reconciles match panel / totals / bottom button.
                 startTransition(() => onGoToHole(newHole));
               }
             }}
-            onScrollEndDrag={() => { isUserScrollingHole.current = false; }}
+            // Keep isUserScrollingHole true through the momentum phase so
+            // the sync effect doesn't scrollTo on top of the inertia.
+            onScrollEndDrag={() => {}}
             onMomentumScrollEnd={(e) => {
               const x = e.nativeEvent.contentOffset.x;
               holeScrollOffset.current = x;
               isUserScrollingHole.current = false;
+              suppressHoleOnScroll.current = false;
+              clearTimeout(suppressHoleTimer.current);
               const newHole = Math.round(x / pagerSize.width) + 1;
               if (newHole !== currentHole) onGoToHole(newHole);
             }}
