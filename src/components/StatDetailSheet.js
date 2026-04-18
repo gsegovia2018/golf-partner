@@ -3,7 +3,7 @@ import { Modal, View, Text, TouchableOpacity, TouchableWithoutFeedback, ScrollVi
 import { Feather } from '@expo/vector-icons';
 import { useTheme } from '../theme/ThemeContext';
 
-export default function StatDetailSheet({ visible, onClose, title, subtitle, rows = [] }) {
+export default function StatDetailSheet({ visible, onClose, title, subtitle, explainer, rows = [] }) {
   const { theme } = useTheme();
   const s = makeStyles(theme);
 
@@ -34,22 +34,38 @@ export default function StatDetailSheet({ visible, onClose, title, subtitle, row
           </TouchableOpacity>
         </View>
         <ScrollView style={s.scroll} contentContainerStyle={s.scrollContent}>
+          {explainer ? (
+            <View style={s.explainerBox}>
+              <Feather name="info" size={14} color={theme.text.muted} />
+              <Text style={s.explainerText}>{explainer}</Text>
+            </View>
+          ) : null}
           {rows.length === 0 ? (
             <Text style={s.empty}>No details available.</Text>
-          ) : rows.map(r => (
-            <View key={r.key} style={s.row}>
-              <View style={s.rowLeft}>
-                <Text style={s.rowPrimary}>{r.primary}</Text>
-                {r.secondary ? <Text style={s.rowSecondary}>{r.secondary}</Text> : null}
+          ) : rows.map(r => {
+            if (r.section) {
+              return (
+                <View key={r.key} style={s.sectionHeader}>
+                  <Text style={s.sectionHeaderText}>{r.label}</Text>
+                  {r.rightLabel ? <Text style={s.sectionHeaderRight}>{r.rightLabel}</Text> : null}
+                </View>
+              );
+            }
+            return (
+              <View key={r.key} style={s.row}>
+                <View style={s.rowLeft}>
+                  <Text style={s.rowPrimary}>{r.primary}</Text>
+                  {r.secondary ? <Text style={s.rowSecondary}>{r.secondary}</Text> : null}
+                </View>
+                <View style={s.rowRight}>
+                  {r.rightPrimary != null ? (
+                    <Text style={[s.rowRightPrimary, { color: toneColor(r.tone) }]}>{r.rightPrimary}</Text>
+                  ) : null}
+                  {r.rightSecondary ? <Text style={s.rowRightSecondary}>{r.rightSecondary}</Text> : null}
+                </View>
               </View>
-              <View style={s.rowRight}>
-                {r.rightPrimary != null ? (
-                  <Text style={[s.rowRightPrimary, { color: toneColor(r.tone) }]}>{r.rightPrimary}</Text>
-                ) : null}
-                {r.rightSecondary ? <Text style={s.rowRightSecondary}>{r.rightSecondary}</Text> : null}
-              </View>
-            </View>
-          ))}
+            );
+          })}
         </ScrollView>
       </View>
     </Modal>
@@ -92,4 +108,25 @@ const makeStyles = (t) => StyleSheet.create({
   rowRight: { alignItems: 'flex-end' },
   rowRightPrimary: { fontFamily: 'PlusJakartaSans-Bold', fontSize: 14 },
   rowRightSecondary: { fontFamily: 'PlusJakartaSans-Medium', color: t.text.muted, fontSize: 11, marginTop: 2 },
+  explainerBox: {
+    flexDirection: 'row', alignItems: 'flex-start', gap: 8,
+    backgroundColor: t.bg.secondary, borderRadius: 10, padding: 12,
+    marginBottom: 12,
+  },
+  explainerText: {
+    flex: 1,
+    fontFamily: 'PlusJakartaSans-Medium', color: t.text.secondary, fontSize: 12, lineHeight: 18,
+  },
+  sectionHeader: {
+    flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
+    paddingTop: 14, paddingBottom: 6, marginTop: 2,
+    borderBottomWidth: 1, borderBottomColor: t.accent.primary + '30',
+  },
+  sectionHeaderText: {
+    fontFamily: 'PlusJakartaSans-ExtraBold', color: t.accent.primary,
+    fontSize: 11, letterSpacing: 1.2, textTransform: 'uppercase',
+  },
+  sectionHeaderRight: {
+    fontFamily: 'PlusJakartaSans-Bold', color: t.text.muted, fontSize: 11,
+  },
 });
