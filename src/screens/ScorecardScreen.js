@@ -281,42 +281,36 @@ function HoleView({ round, roundIndex, players, scores, notes, currentHole, hole
   const s = useMemo(() => makeStyles(theme), [theme]);
   const [notesOpen, setNotesOpen] = useState(false);
   const [holePickerOpen, setHolePickerOpen] = useState(false);
-  const [pagerWidth, setPagerWidth] = useState(0);
+  const [pagerSize, setPagerSize] = useState({ width: 0, height: 0 });
   const pagerRef = useRef(null);
   const holeScrollOffset = useRef(0);
   const isUserScrollingHole = useRef(false);
   const holePagerInitialized = useRef(false);
 
   useEffect(() => {
-    if (!pagerRef.current || pagerWidth <= 0) return;
+    if (!pagerRef.current || pagerSize.width <= 0) return;
     if (isUserScrollingHole.current) return;
-    const target = (currentHole - 1) * pagerWidth;
+    const target = (currentHole - 1) * pagerSize.width;
     if (Math.abs(holeScrollOffset.current - target) < 1) return;
     pagerRef.current.scrollTo({ x: target, animated: holePagerInitialized.current });
     holeScrollOffset.current = target;
     holePagerInitialized.current = true;
-  }, [currentHole, pagerWidth]);
+  }, [currentHole, pagerSize.width]);
 
   if (!hole) return null;
 
   return (
     <View style={s.flex}>
-      <PullToRefresh
-        style={s.flex}
-        contentContainerStyle={s.holeScrollContent}
-        refreshing={refreshing}
-        onRefresh={onRefresh}
-      >
-      {/* Horizontal pager: one page per hole (swipe to change hole) */}
+      {/* Horizontal pager: flex:1, one page per hole (swipe to change hole) */}
       <View
         style={s.pagerWrap}
         onLayout={(e) => {
-          const w = e.nativeEvent.layout.width;
-          holeScrollOffset.current = (currentHole - 1) * w;
-          setPagerWidth(w);
+          const { width, height } = e.nativeEvent.layout;
+          holeScrollOffset.current = (currentHole - 1) * width;
+          setPagerSize({ width, height });
         }}
       >
-        {pagerWidth > 0 && (
+        {pagerSize.width > 0 && pagerSize.height > 0 && (
           <ScrollView
             ref={pagerRef}
             horizontal
@@ -327,7 +321,7 @@ function HoleView({ round, roundIndex, players, scores, notes, currentHole, hole
             onScroll={(e) => {
               const x = e.nativeEvent.contentOffset.x;
               holeScrollOffset.current = x;
-              const newHole = Math.round(x / pagerWidth) + 1;
+              const newHole = Math.round(x / pagerSize.width) + 1;
               if (newHole !== currentHole) {
                 // Non-urgent: keep the native swipe running smoothly while
                 // match panel / totals / next-hole button reconcile.
@@ -339,13 +333,13 @@ function HoleView({ round, roundIndex, players, scores, notes, currentHole, hole
               const x = e.nativeEvent.contentOffset.x;
               holeScrollOffset.current = x;
               isUserScrollingHole.current = false;
-              const newHole = Math.round(x / pagerWidth) + 1;
+              const newHole = Math.round(x / pagerSize.width) + 1;
               if (newHole !== currentHole) onGoToHole(newHole);
             }}
-            contentOffset={{ x: (currentHole - 1) * pagerWidth, y: 0 }}
+            contentOffset={{ x: (currentHole - 1) * pagerSize.width, y: 0 }}
           >
             {round.holes.map((pageHole) => (
-              <View key={pageHole.number} style={{ width: pagerWidth }}>
+              <View key={pageHole.number} style={{ width: pagerSize.width, height: pagerSize.height }}>
                 {/* Hole header */}
                 <View style={s.holeHeaderCard}>
                   <View style={s.holeHeaderLeft}>
@@ -537,7 +531,6 @@ function HoleView({ round, roundIndex, players, scores, notes, currentHole, hole
           </TouchableOpacity>
         </View>
       </View>
-      </PullToRefresh>
 
       {/* Notes modal — only shown on demand */}
       <Modal
@@ -718,38 +711,14 @@ function GridView({ round, roundIndex, players, scores, notes, onNotesChange, is
 
       <ScrollView horizontal showsHorizontalScrollIndicator={false}>
         <View>
-          <View style={s.headerRow}>
-            <Text style={[s.cell, s.holeCell, s.headerText]}>Hole</Text>
-            <Text style={[s.cell, s.parCell, s.headerText]}>Par</Text>
-            <Text style={[s.cell, s.siCell, s.headerText]}>SI</Text>
-            {(() => {
-              const pairs = round.pairs ?? [];
-              if (pairs.length !== 2) {
-                return players.map((p) => (
-                  <Text key={p.id} style={[s.cell, s.playerCell, s.headerText]}>
-                    {p.name.split(' ')[0]}
-                  </Text>
-                ));
-              }
-              return pairs.flatMap((pair, pi) => {
-                const members = pair.map((pp) => players.find((p) => p.id === pp.id)).filter(Boolean);
-                return [
-                  ...members.map((p) => (
-                    <Text key={p.id} style={[s.cell, s.playerCell, s.headerText]}>
-                      {p.name.split(' ')[0]}
-                    </Text>
-                  )),
-                  <Text key={`pair-h-${pi}`} style={[s.cell, s.pairCell, s.headerText]}>
-                    {pi === 0 ? 'Pair A' : 'Pair B'}
-                  </Text>,
-                ];
-              });
-            })()}
-          </View>
-
-          {round.holes.map((hole, holeIdx) => {
+          {(() => {
             const pairs = round.pairs ?? [];
-            const renderPlayerCell = (p) => {
+            const hasPairs = pairs.length === 2;
+            const orderedPlayers = hasPairs
+              ? [...pairs[0], ...pairs[1]].map((pp) => players.find((p) => p.id === pp.id)).filter(Boolean)
+              : players;
+
+            const renderPlayerCell = (p, hole) => {
               const strokes = scores[p.id]?.[hole.number];
               const handicap = round.playerHandicaps?.[p.id] ?? p.handicap;
               const pts = strokes != null
@@ -774,110 +743,133 @@ function GridView({ round, roundIndex, players, scores, notes, onNotesChange, is
                     placeholderTextColor={theme.text.muted}
                   />
                   {pts !== null && (
-                    <Text style={[s.pts, { color: ptsColor }]}>
-                      {pts}
-                    </Text>
+                    <Text style={[s.pts, { color: ptsColor }]}>{pts}</Text>
                   )}
                 </View>
               );
             };
 
-            return (
-              <View key={hole.number} style={[s.holeRow, hole.number % 2 === 0 && s.altRow]}>
-                <Text style={[s.cell, s.holeCell]}>{hole.number}</Text>
-                <Text style={[s.cell, s.parCell]}>{hole.par}</Text>
-                <Text style={[s.cell, s.siCell]}>{hole.strokeIndex}</Text>
-                {pairs.length !== 2
-                  ? players.map(renderPlayerCell)
-                  : pairs.flatMap((pair, pi) => {
-                      const members = pair.map((pp) => players.find((p) => p.id === pp.id)).filter(Boolean);
-                      let pairPts = 0;
-                      let hasAny = false;
-                      if (isBestBall && bbResult) {
-                        const hd = bbResult.holes.find((h) => h.number === hole.number);
-                        if (hd && hd.bestWinner !== null) {
-                          hasAny = true;
-                          pairPts = holeTeamPts(hd, pi + 1, settings.bestBallValue, settings.worstBallValue) ?? 0;
-                        }
-                      } else {
-                        members.forEach((m) => {
-                          const str = scores[m.id]?.[hole.number];
-                          if (str != null) {
-                            hasAny = true;
-                            const hcp = round.playerHandicaps?.[m.id] ?? m.handicap;
-                            pairPts += calcStablefordPoints(hole.par, str, hcp, hole.strokeIndex);
-                          }
-                        });
-                      }
-                      const pairColor = pi === 0 ? theme.pairA : theme.pairB;
-                      return [
-                        ...members.map(renderPlayerCell),
-                        <View key={`pair-c-${pi}`} style={[s.cell, s.pairCell]}>
-                          <Text style={[s.pairHolePts, { color: hasAny ? pairColor : theme.text.muted }]}>
-                            {hasAny ? pairPts : '-'}
-                          </Text>
-                        </View>,
-                      ];
-                    })}
-              </View>
-            );
-          })}
-
-          <View style={[s.holeRow, s.totalsRow]}>
-            <Text style={[s.cell, s.holeCell, s.totalText]}>Total</Text>
-            <Text style={[s.cell, s.parCell, s.totalText]}>
-              {round.holes.reduce((sum, h) => sum + h.par, 0)}
-            </Text>
-            <Text style={[s.cell, s.siCell]} />
-            {(() => {
-              const pairs = round.pairs ?? [];
-              const playerTotalCell = (p, pi) => {
-                let totalPts = 0;
-                let totalStr = 0;
-                const handicap = round.playerHandicaps?.[p.id] ?? p.handicap;
-                round.holes.forEach((hole) => {
-                  const str = scores[p.id]?.[hole.number];
-                  if (str) {
-                    totalStr += str;
-                    totalPts += calcStablefordPoints(hole.par, str, handicap, hole.strokeIndex);
+            const pairHolePts = (pi, hole) => {
+              const pair = pairs[pi];
+              const members = pair.map((pp) => players.find((p) => p.id === pp.id)).filter(Boolean);
+              let pts = 0;
+              let hasAny = false;
+              if (isBestBall && bbResult) {
+                const hd = bbResult.holes.find((h) => h.number === hole.number);
+                if (hd && hd.bestWinner !== null) {
+                  hasAny = true;
+                  pts = holeTeamPts(hd, pi + 1, settings.bestBallValue, settings.worstBallValue) ?? 0;
+                }
+              } else {
+                members.forEach((m) => {
+                  const str = scores[m.id]?.[hole.number];
+                  if (str != null) {
+                    hasAny = true;
+                    const hcp = round.playerHandicaps?.[m.id] ?? m.handicap;
+                    pts += calcStablefordPoints(hole.par, str, hcp, hole.strokeIndex);
                   }
                 });
-                const ptsColor = pi === 0 ? theme.pairA : pi === 1 ? theme.pairB : theme.accent.primary;
-                return (
-                  <View key={p.id} style={[s.cell, s.playerCell]}>
-                    <Text style={[s.totalPts, { color: ptsColor }]}>{totalPts} pts</Text>
-                    <Text style={s.totalStr}>{totalStr || '-'}</Text>
-                  </View>
-                );
-              };
-
-              if (pairs.length !== 2) {
-                return players.map((p) => playerTotalCell(p, -1));
               }
-              return pairs.flatMap((pair, pi) => {
-                const members = pair.map((pp) => players.find((p) => p.id === pp.id)).filter(Boolean);
-                let pairTotal = 0;
-                if (isBestBall && bbResult) {
-                  pairTotal = roundTeamPts(bbResult, pi + 1, settings.bestBallValue, settings.worstBallValue);
-                } else {
-                  members.forEach((m) => {
-                    const hcp = round.playerHandicaps?.[m.id] ?? m.handicap;
-                    round.holes.forEach((hole) => {
-                      const str = scores[m.id]?.[hole.number];
-                      if (str) pairTotal += calcStablefordPoints(hole.par, str, hcp, hole.strokeIndex);
-                    });
-                  });
-                }
-                const pairColor = pi === 0 ? theme.pairA : theme.pairB;
-                return [
-                  ...members.map((p) => playerTotalCell(p, pi)),
-                  <View key={`pair-t-${pi}`} style={[s.cell, s.pairCell]}>
-                    <Text style={[s.totalPts, { color: pairColor }]}>{pairTotal} pts</Text>
-                  </View>,
-                ];
+              return { pts, hasAny };
+            };
+
+            const pairTotalRound = (pi) => {
+              const pair = pairs[pi];
+              const members = pair.map((pp) => players.find((p) => p.id === pp.id)).filter(Boolean);
+              if (isBestBall && bbResult) {
+                return roundTeamPts(bbResult, pi + 1, settings.bestBallValue, settings.worstBallValue);
+              }
+              let tot = 0;
+              members.forEach((m) => {
+                const hcp = round.playerHandicaps?.[m.id] ?? m.handicap;
+                round.holes.forEach((hole) => {
+                  const str = scores[m.id]?.[hole.number];
+                  if (str) tot += calcStablefordPoints(hole.par, str, hcp, hole.strokeIndex);
+                });
               });
-            })()}
-          </View>
+              return tot;
+            };
+
+            return (
+              <>
+                {/* Header */}
+                <View style={s.headerRow}>
+                  <Text style={[s.cell, s.holeCell, s.headerText]}>Hole</Text>
+                  <Text style={[s.cell, s.parCell, s.headerText]}>Par</Text>
+                  <Text style={[s.cell, s.siCell, s.headerText]}>SI</Text>
+                  {orderedPlayers.map((p) => (
+                    <Text key={p.id} style={[s.cell, s.playerCell, s.headerText]} numberOfLines={1}>
+                      {p.name.split(' ')[0]}
+                    </Text>
+                  ))}
+                  {hasPairs && (
+                    <Text style={[s.cell, s.pairCombinedCell, s.headerText]}>Pair</Text>
+                  )}
+                </View>
+
+                {/* Hole rows */}
+                {round.holes.map((hole) => {
+                  const h1 = hasPairs ? pairHolePts(0, hole) : null;
+                  const h2 = hasPairs ? pairHolePts(1, hole) : null;
+                  return (
+                    <View key={hole.number} style={[s.holeRow, hole.number % 2 === 0 && s.altRow]}>
+                      <Text style={[s.cell, s.holeCell]}>{hole.number}</Text>
+                      <Text style={[s.cell, s.parCell]}>{hole.par}</Text>
+                      <Text style={[s.cell, s.siCell]}>{hole.strokeIndex}</Text>
+                      {orderedPlayers.map((p) => renderPlayerCell(p, hole))}
+                      {hasPairs && (
+                        <View style={[s.cell, s.pairCombinedCell]}>
+                          <Text style={[s.pairInlinePts, { color: h1.hasAny ? theme.pairA : theme.text.muted }]}>
+                            {h1.hasAny ? h1.pts : '-'}
+                          </Text>
+                          <Text style={s.pairInlineSep}>·</Text>
+                          <Text style={[s.pairInlinePts, { color: h2.hasAny ? theme.pairB : theme.text.muted }]}>
+                            {h2.hasAny ? h2.pts : '-'}
+                          </Text>
+                        </View>
+                      )}
+                    </View>
+                  );
+                })}
+
+                {/* Totals row */}
+                <View style={[s.holeRow, s.totalsRow]}>
+                  <Text style={[s.cell, s.holeCell, s.totalText]}>Total</Text>
+                  <Text style={[s.cell, s.parCell, s.totalText]}>
+                    {round.holes.reduce((sum, h) => sum + h.par, 0)}
+                  </Text>
+                  <Text style={[s.cell, s.siCell]} />
+                  {orderedPlayers.map((p) => {
+                    let totalPts = 0;
+                    let totalStr = 0;
+                    const handicap = round.playerHandicaps?.[p.id] ?? p.handicap;
+                    round.holes.forEach((hole) => {
+                      const str = scores[p.id]?.[hole.number];
+                      if (str) {
+                        totalStr += str;
+                        totalPts += calcStablefordPoints(hole.par, str, handicap, hole.strokeIndex);
+                      }
+                    });
+                    const pi = hasPairs ? (pairs[0].some((pp) => pp.id === p.id) ? 0 : 1) : -1;
+                    const ptsColor = pi === 0 ? theme.pairA : pi === 1 ? theme.pairB : theme.accent.primary;
+                    return (
+                      <View key={p.id} style={[s.cell, s.playerCell]}>
+                        <Text style={[s.totalPts, { color: ptsColor }]}>{totalPts} pts</Text>
+                        <Text style={s.totalStr}>{totalStr || '-'}</Text>
+                      </View>
+                    );
+                  })}
+                  {hasPairs && (
+                    <View style={[s.cell, s.pairCombinedCell]}>
+                      <Text style={[s.pairInlineTotal, { color: theme.pairA }]}>{pairTotalRound(0)}</Text>
+                      <Text style={s.pairInlineSep}>·</Text>
+                      <Text style={[s.pairInlineTotal, { color: theme.pairB }]}>{pairTotalRound(1)}</Text>
+                    </View>
+                  )}
+                </View>
+              </>
+            );
+          })()}
         </View>
       </ScrollView>
 
@@ -952,10 +944,6 @@ function makeStyles(theme) {
   return StyleSheet.create({
     container: { ...StyleSheet.absoluteFillObject, backgroundColor: theme.bg.primary },
     flex: { flex: 1 },
-
-    // PullToRefresh content container for HoleView — fills the viewport so
-    // bottomBar stays at the bottom even when there's nothing to scroll.
-    holeScrollContent: { flexGrow: 1 },
 
     // Header
     header: {
@@ -1260,8 +1248,8 @@ function makeStyles(theme) {
       textAlignVertical: 'top',
     },
 
-    // Horizontal pager — each hole is a full-width page
-    pagerWrap: {},
+    // Horizontal pager — flexes to fill between fixed top card and bottom bar
+    pagerWrap: { flex: 1 },
 
     // Grid view header row (course title + Notes pill)
     gridHeaderRow: {
@@ -1459,16 +1447,28 @@ function makeStyles(theme) {
       color: theme.text.muted,
       textAlign: 'center',
     },
-    playerCell: { width: 62 },
-    pairCell: {
-      width: 58,
+    playerCell: { width: 50 },
+    pairCombinedCell: {
+      width: 62,
+      flexDirection: 'row',
+      alignItems: 'center',
+      justifyContent: 'center',
+      gap: 4,
       borderLeftWidth: 1,
       borderLeftColor: theme.isDark ? theme.glass?.border : theme.border.default,
     },
-    pairHolePts: {
-      fontSize: 14,
+    pairInlinePts: {
+      fontSize: 13,
       fontFamily: 'PlusJakartaSans-ExtraBold',
-      textAlign: 'center',
+    },
+    pairInlineTotal: {
+      fontSize: 14,
+      fontFamily: 'PlayfairDisplay-Bold',
+    },
+    pairInlineSep: {
+      fontSize: 11,
+      color: theme.text.muted,
+      fontFamily: 'PlusJakartaSans-Regular',
     },
     inputCell: { alignItems: 'center' },
     scoreInput: {
@@ -1477,7 +1477,7 @@ function makeStyles(theme) {
       borderRadius: 8,
       borderWidth: 1,
       borderColor: theme.isDark ? theme.glass?.border : theme.border.subtle,
-      width: 46,
+      width: 40,
       height: 38,
       textAlign: 'center',
       fontSize: 15,

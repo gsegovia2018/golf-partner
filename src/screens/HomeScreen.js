@@ -228,6 +228,11 @@ export default function HomeScreen({ navigation, viewMode = 'auto' }) {
     () => (leaderboardBestBall ? tournamentBestWorstLeaderboard(tournament) : null),
     [leaderboardBestBall, tournament],
   );
+  const strokesByPlayer = useMemo(
+    () => Object.fromEntries(leaderboard.map((e) => [e.player.id, e.strokes])),
+    [leaderboard],
+  );
+  const displayedBoard = leaderboardBestBall && bestWorstLeaderboard ? bestWorstLeaderboard : leaderboard;
 
   const selectedRoundData = tournament.rounds[selectedRound];
   const selectedRoundHasScores = !!(selectedRoundData?.scores && Object.keys(selectedRoundData.scores).length > 0);
@@ -295,14 +300,15 @@ export default function HomeScreen({ navigation, viewMode = 'auto' }) {
             <Text style={[s.mastersToggleLabel, leaderboardBestBall && s.mastersToggleLabelActive]}>Best Ball</Text>
           </View>
         </View>
-        {leaderboard.map((entry, i) => {
+        {displayedBoard.map((entry, i) => {
           const rankColors = ['#ffd700', '#c0c8d4', '#daa06d'];
           const rankColor = rankColors[i] || 'rgba(255,255,255,0.4)';
           const rankBg = i === 0 ? 'rgba(255,215,0,0.2)' : i === 1 ? 'rgba(192,200,212,0.15)' : i === 2 ? 'rgba(218,160,109,0.15)' : 'rgba(255,255,255,0.08)';
           const roundValue = getSelectedRoundValue(entry.player.id);
           const roundUnit = leaderboardBestBall ? 'holes' : 'pts';
+          const strokes = strokesByPlayer[entry.player.id] ?? 0;
           return (
-            <View key={entry.player.id} style={[s.mastersRow, i === 0 && s.mastersRowFirst, i === leaderboard.length - 1 && { borderBottomWidth: 0 }]}>
+            <View key={entry.player.id} style={[s.mastersRow, i === 0 && s.mastersRowFirst, i === displayedBoard.length - 1 && { borderBottomWidth: 0 }]}>
               <View style={[s.mastersRankBadge, { backgroundColor: rankBg }]}>
                 <Text style={[s.mastersRankText, { color: rankColor }]}>{i + 1}</Text>
               </View>
@@ -313,9 +319,7 @@ export default function HomeScreen({ navigation, viewMode = 'auto' }) {
                 </Text>
               </View>
               <Text style={[s.mastersPoints, i === 0 && { fontSize: 18 }]}>{entry.points} pts</Text>
-              {leaderboardBestBall
-                ? <Text style={s.mastersSub}>{(bestWorstLeaderboard?.find((e) => e.player.id === entry.player.id)?.bestWins ?? 0) + (bestWorstLeaderboard?.find((e) => e.player.id === entry.player.id)?.worstWins ?? 0)} holes</Text>
-                : <Text style={s.mastersSub}>{entry.strokes} str</Text>}
+              <Text style={s.mastersSub}>{strokes || '-'} str</Text>
             </View>
           );
         })}
@@ -655,11 +659,6 @@ const StablefordRoundCard = React.memo(function StablefordRoundCard({ round, pla
             <Text style={s.pairNames}>{pair.members.map((m) => m.player.name).join(' & ')}</Text>
             <Text style={s.pairPoints}>{pair.combinedPoints} pts</Text>
           </View>
-          {pair.members.map((m) => (
-            <Text key={m.player.id} style={s.pairMember}>
-              {m.player.name}  {m.totalPoints} pts · {m.totalStrokes} strokes
-            </Text>
-          ))}
         </View>
       ))}
     </>
