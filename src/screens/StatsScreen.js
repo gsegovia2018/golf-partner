@@ -1,5 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { View, Text, TouchableOpacity, StyleSheet, ScrollView, FlatList, Switch } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
 import { Feather } from '@expo/vector-icons';
 import { useTheme } from '../theme/ThemeContext';
 import { loadTournament, getPlayingHandicap, calcStablefordPoints } from '../store/tournamentStore';
@@ -79,7 +80,7 @@ export default function StatsScreen({ navigation }) {
   const completedRounds = tournament.rounds.filter(r => r.scores && Object.keys(r.scores).length > 0);
 
   return (
-    <View style={s.container}>
+    <SafeAreaView style={s.container} edges={['top', 'bottom']}>
       <View style={s.header}>
         <TouchableOpacity onPress={() => navigation.goBack()} style={s.backBtn}>
           <Feather name="chevron-left" size={22} color={theme.accent.primary} />
@@ -116,7 +117,7 @@ export default function StatsScreen({ navigation }) {
         {tab === 3 && <PairsTab tournament={tournament} players={players} h2hPlayer={h2hPlayer} setH2hPlayer={setH2hPlayer} selectedPlayer={selectedPlayer} setSelectedPlayer={setSelectedPlayer} metric={metric} theme={theme} s={s} />}
         {tab === 4 && <ShameTab tournament={tournament} metric={metric} theme={theme} s={s} />}
       </ScrollView>
-    </View>
+    </SafeAreaView>
   );
 }
 

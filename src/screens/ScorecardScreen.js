@@ -3,15 +3,39 @@ import {
   View, Text, TextInput, TouchableOpacity,
   StyleSheet, ScrollView, Modal, Pressable, KeyboardAvoidingView, Platform, Animated,
 } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
 import * as Haptics from 'expo-haptics';
 
 import { Feather } from '@expo/vector-icons';
 import {
-  loadTournament, saveTournament,
+  loadTournament, saveTournament, subscribeTournamentChanges,
   calcStablefordPoints, calcBestWorstBall, pickupStrokes, DEFAULT_SETTINGS,
+  roundPairLeaderboard,
 } from '../store/tournamentStore';
 import { useTheme } from '../theme/ThemeContext';
 import PullToRefresh from '../components/PullToRefresh';
+
+// Web-only CSS scroll-snap. On native, `pagingEnabled` is handled by the
+// platform. On web, react-native-web 0.21's `pagingEnabled` only sets
+// `scroll-snap-align: start` on its auto-wrapper — missing
+// `scroll-snap-stop: always`, so a fast swipe can carry past one page.
+// We disable the auto-wrapper on web (pagingEnabled={false}) and apply
+// the snap properties directly on the ScrollView + each page.
+const PAGER_SNAP_TYPE_STYLE = Platform.OS === 'web' ? { scrollSnapType: 'x mandatory', overflowX: 'auto' } : null;
+const PAGER_PAGE_SNAP_STYLE = Platform.OS === 'web' ? { scrollSnapAlign: 'start', scrollSnapStop: 'always' } : null;
+
+// Belt-and-braces: inject the snap rules via a real <style> tag so they
+// apply even if RNW's atomic-CSS pipeline ever filters an unknown CSS
+// property. Targeted by a data attribute we set on each page.
+if (Platform.OS === 'web' && typeof document !== 'undefined') {
+  const id = 'golf-partner-pager-snap-stop';
+  if (!document.getElementById(id)) {
+    const styleEl = document.createElement('style');
+    styleEl.id = id;
+    styleEl.textContent = '[data-pagerpage="1"]{scroll-snap-align:start !important;scroll-snap-stop:always !important;}';
+    document.head.appendChild(styleEl);
+  }
+}
 
 const haptic = (style = 'light') => {
   if (Platform.OS === 'web') return;
@@ -43,72 +67,98 @@ export default function ScorecardScreen({ navigation, route }) {
   const tournamentRef = useRef(null);
   const saveTimeoutRef = useRef(null);
   const notesSaveTimeoutRef = useRef(null);
+  // Tracks whether the user has an unsaved edit (scores or notes) that a
+  // subscription-driven reload must not clobber. Set when a debounce is
+  // scheduled, cleared after the save finishes.
+  const pendingSaveRef = useRef(false);
   const scoreAnims = useRef({});
+  const hasAutoJumpedRef = useRef(false);
   const [celebration, setCelebration] = useState({ playerId: null, holeNumber: null, label: null });
   const celebrationAnim = useRef(new Animated.Value(0)).current;
   const roundIndex = paramRoundIndex ?? tournament?.currentRound ?? 0;
 
   useEffect(() => { tournamentRef.current = tournament; }, [tournament]);
 
-  const reload = useCallback(async () => {
+  const reload = useCallback(async ({ preserveLocalEdits = false } = {}) => {
     const t = await loadTournament();
     if (!t) return;
     const idx = paramRoundIndex ?? t.currentRound;
+    const round = t.rounds[idx];
+    const roundScores = round?.scores ?? {};
     setTournament(t);
-    setScores(t.rounds[idx]?.scores ?? {});
-    setNotes(t.rounds[idx]?.notes ?? '');
+    if (!preserveLocalEdits) {
+      setScores(roundScores);
+      setNotes(round?.notes ?? '');
+
+      // Only on first load: jump to the first hole with no scores entered.
+      if (!hasAutoJumpedRef.current && round?.holes?.length) {
+        hasAutoJumpedRef.current = true;
+        const firstEmpty = round.holes.find((h) =>
+          t.players.every((p) => roundScores[p.id]?.[h.number] == null)
+        );
+        if (firstEmpty) setCurrentHole(firstEmpty.number);
+        else setCurrentHole(round.holes[round.holes.length - 1].number);
+      }
+    }
   }, [paramRoundIndex]);
 
-  useEffect(() => { reload(); }, [reload]);
+  useEffect(() => {
+    reload();
+    const unsub = subscribeTournamentChanges(() => {
+      reload({ preserveLocalEdits: pendingSaveRef.current });
+    });
+    return unsub;
+  }, [reload]);
 
   const onRefresh = useCallback(async () => {
     setRefreshing(true);
     try { await reload(); } finally { setRefreshing(false); }
   }, [reload]);
 
-  // Auto-initialize current hole scores to par so "leaving it" records par
-  useEffect(() => {
-    if (!tournament) return;
-    const r = tournament.rounds[roundIndex];
-    const h = r.holes.find((x) => x.number === currentHole);
-    if (!h) return;
-    setScores((prev) => {
-      let changed = false;
-      const next = { ...prev };
-      tournament.players.forEach((p) => {
-        if (next[p.id]?.[currentHole] == null) {
-          next[p.id] = { ...(next[p.id] ?? {}), [currentHole]: h.par };
-          changed = true;
-        }
-      });
-      if (!changed) return prev;
-      autoSave(next);
-      return next;
-    });
-  }, [currentHole, tournament]);
-
-  function autoSave(newScores) {
+  const autoSave = useCallback((newScores) => {
     if (saveTimeoutRef.current) clearTimeout(saveTimeoutRef.current);
+    pendingSaveRef.current = true;
     saveTimeoutRef.current = setTimeout(async () => {
-      if (!tournamentRef.current) return;
+      saveTimeoutRef.current = null;
+      if (!tournamentRef.current) {
+        if (!notesSaveTimeoutRef.current) pendingSaveRef.current = false;
+        return;
+      }
       const updated = { ...tournamentRef.current };
       updated.rounds = [...updated.rounds];
       updated.rounds[roundIndex] = { ...updated.rounds[roundIndex], scores: newScores };
-      await saveTournament(updated);
+      try {
+        await saveTournament(updated);
+      } finally {
+        if (!saveTimeoutRef.current && !notesSaveTimeoutRef.current) {
+          pendingSaveRef.current = false;
+        }
+      }
     }, 300);
-  }
+  }, [roundIndex]);
 
-  function saveNotes(value) {
+  const saveNotes = useCallback((value) => {
     setNotes(value);
     if (notesSaveTimeoutRef.current) clearTimeout(notesSaveTimeoutRef.current);
+    pendingSaveRef.current = true;
     notesSaveTimeoutRef.current = setTimeout(async () => {
-      if (!tournamentRef.current) return;
+      notesSaveTimeoutRef.current = null;
+      if (!tournamentRef.current) {
+        if (!saveTimeoutRef.current) pendingSaveRef.current = false;
+        return;
+      }
       const updated = { ...tournamentRef.current };
       updated.rounds = [...updated.rounds];
       updated.rounds[roundIndex] = { ...updated.rounds[roundIndex], notes: value };
-      await saveTournament(updated);
+      try {
+        await saveTournament(updated);
+      } finally {
+        if (!saveTimeoutRef.current && !notesSaveTimeoutRef.current) {
+          pendingSaveRef.current = false;
+        }
+      }
     }, 400);
-  }
+  }, [roundIndex]);
 
   // Hoist memoised derivations above the early return so the hook order
   // stays stable while the tournament loads.
@@ -128,26 +178,35 @@ export default function ScorecardScreen({ navigation, route }) {
     [isBestBall, liveRound, players],
   );
 
-  if (!tournament || !round) return null;
-
-  function triggerCelebration(playerId, holeNumber, label) {
-    const holdMs = label === 'BIRDIE' ? 550 : label === 'EAGLE' ? 750 : 1000;
+  const triggerCelebration = useCallback((playerId, holeNumber, label) => {
+    const holdMs =
+      label === 'BIRDIE' ? 900 :
+      label === 'EAGLE' ? 1200 :
+      label === 'ALBATROSS' ? 1500 :
+      1800; // HOLE IN ONE
     haptic('success');
     celebrationAnim.stopAnimation();
     celebrationAnim.setValue(0);
     setCelebration({ playerId, holeNumber, label });
     Animated.sequence([
-      Animated.timing(celebrationAnim, { toValue: 1, duration: 220, useNativeDriver: true }),
+      Animated.spring(celebrationAnim, {
+        toValue: 1, friction: 6, tension: 80, useNativeDriver: true,
+      }),
       Animated.delay(holdMs),
-      Animated.timing(celebrationAnim, { toValue: 0, duration: 380, useNativeDriver: true }),
+      Animated.timing(celebrationAnim, { toValue: 0, duration: 420, useNativeDriver: true }),
     ]).start(({ finished }) => {
       if (finished) setCelebration({ playerId: null, holeNumber: null, label: null });
     });
-  }
+  }, [celebrationAnim]);
 
-  function setScore(playerId, holeNumber, value) {
+  const getScoreAnim = useCallback((playerId) => {
+    if (!scoreAnims.current[playerId]) scoreAnims.current[playerId] = new Animated.Value(1);
+    return scoreAnims.current[playerId];
+  }, []);
+
+  const setScore = useCallback((playerId, holeNumber, value) => {
     const parsed = value === '' ? undefined : parseInt(value, 10) || undefined;
-    const holePar = round.holes.find((h) => h.number === holeNumber)?.par ?? 4;
+    const holePar = round?.holes?.find((h) => h.number === holeNumber)?.par ?? 4;
     setScores((prev) => {
       const current = prev[playerId]?.[holeNumber];
       const next = { ...prev, [playerId]: { ...prev[playerId], [holeNumber]: parsed } };
@@ -158,23 +217,25 @@ export default function ScorecardScreen({ navigation, route }) {
       }
       return next;
     });
-  }
+  }, [round, autoSave, triggerCelebration]);
 
-  function getScoreAnim(playerId) {
-    if (!scoreAnims.current[playerId]) scoreAnims.current[playerId] = new Animated.Value(1);
-    return scoreAnims.current[playerId];
-  }
-
-  function stepScore(playerId, holeNumber, delta) {
+  const stepScore = useCallback((playerId, holeNumber, delta) => {
     haptic('light');
     const anim = getScoreAnim(playerId);
     anim.setValue(1.18);
     Animated.spring(anim, { toValue: 1, friction: 5, useNativeDriver: true }).start();
 
-    const holePar = round.holes.find((h) => h.number === holeNumber)?.par ?? 4;
+    const holePar = round?.holes?.find((h) => h.number === holeNumber)?.par ?? 4;
     setScores((prev) => {
-      const current = prev[playerId]?.[holeNumber] ?? holePar;
-      const newStrokes = Math.max(1, current + delta);
+      const current = prev[playerId]?.[holeNumber];
+      // First interaction on an un-scored hole: + lands on par, - lands on birdie.
+      // After that, +/- step by one as usual. Minimum is 1 stroke.
+      let newStrokes;
+      if (current == null) {
+        newStrokes = delta > 0 ? holePar : Math.max(1, holePar - 1);
+      } else {
+        newStrokes = Math.max(1, current + delta);
+      }
       const next = { ...prev, [playerId]: { ...prev[playerId], [holeNumber]: newStrokes } };
       autoSave(next);
       if (newStrokes !== current) {
@@ -183,26 +244,57 @@ export default function ScorecardScreen({ navigation, route }) {
       }
       return next;
     });
-  }
+  }, [round, autoSave, triggerCelebration, getScoreAnim]);
 
-  function playerTotals(player) {
-    let pts = 0;
-    let str = 0;
-    const handicap = round.playerHandicaps?.[player.id] ?? player.handicap;
-    round.holes.forEach((hole) => {
-      const sc = scores[player.id]?.[hole.number];
-      if (sc) {
-        str += sc;
-        pts += calcStablefordPoints(hole.par, sc, handicap, hole.strokeIndex);
-      }
+  // Totals computed once per (round, players, scores) change. The per-hole
+  // pager pages do NOT read this — it only feeds the outside totals strip.
+  const playerTotalsMap = useMemo(() => {
+    const map = new Map();
+    if (!round) return map;
+    players.forEach((player) => {
+      const handicap = round.playerHandicaps?.[player.id] ?? player.handicap;
+      let pts = 0;
+      let str = 0;
+      round.holes.forEach((hole) => {
+        const sc = scores[player.id]?.[hole.number];
+        if (sc) {
+          str += sc;
+          pts += calcStablefordPoints(hole.par, sc, handicap, hole.strokeIndex);
+        }
+      });
+      map.set(player.id, { pts, str });
     });
-    return { pts, str };
-  }
+    return map;
+  }, [round, players, scores]);
+
+  const playerTotals = useCallback(
+    (player) => playerTotalsMap.get(player.id) ?? { pts: 0, str: 0 },
+    [playerTotalsMap],
+  );
+
+  const goToPrevHole = useCallback(() => {
+    haptic('medium');
+    setCurrentHole((h) => Math.max(1, h - 1));
+  }, []);
+
+  const goToNextHole = useCallback(() => {
+    haptic('medium');
+    setCurrentHole((h) => Math.min(18, h + 1));
+  }, []);
+
+  const goToHole = useCallback((h) => {
+    haptic('light');
+    setCurrentHole(h);
+  }, []);
+
+  const goBack = useCallback(() => navigation.goBack(), [navigation]);
+
+  if (!tournament || !round) return null;
 
   const hole = round.holes.find((h) => h.number === currentHole);
 
   return (
-    <View style={s.container}>
+    <SafeAreaView style={s.container} edges={['top', 'bottom']}>
       {/* Header with inline view toggle (small, doesn't take a full row) */}
       <View style={s.header}>
         <TouchableOpacity onPress={() => navigation.goBack()} style={s.backBtn}>
@@ -250,10 +342,10 @@ export default function ScorecardScreen({ navigation, route }) {
           onStep={stepScore}
           onSetScore={setScore}
           onNotesChange={saveNotes}
-          onPrev={() => { haptic('medium'); setCurrentHole((h) => Math.max(1, h - 1)); }}
-          onNext={() => { haptic('medium'); setCurrentHole((h) => Math.min(18, h + 1)); }}
-          onGoToHole={(h) => { haptic('light'); setCurrentHole(h); }}
-          onGoBack={() => navigation.goBack()}
+          onPrev={goToPrevHole}
+          onNext={goToNextHole}
+          onGoToHole={goToHole}
+          onGoBack={goBack}
           playerTotals={playerTotals}
           getScoreAnim={getScoreAnim}
           celebration={celebration}
@@ -277,9 +369,130 @@ export default function ScorecardScreen({ navigation, route }) {
           onRefresh={onRefresh}
         />
       )}
-    </View>
+    </SafeAreaView>
   );
 }
+
+// Memoized per-hole page. Extracted so a swipe that only changes the
+// outside `currentHole` indicator does NOT re-render the other 17 pages
+// in the pager — that's the main source of swipe lag.
+const HolePage = React.memo(function HolePage({
+  pageHole, width, height, courseName, roundIndex,
+  round, players, scores,
+  theme, s,
+  onStep, onSetScore, getScoreAnim,
+}) {
+  const pairs = round.pairs ?? [];
+  const orderedPlayers = pairs.length === 2
+    ? [...pairs[0], ...pairs[1]].map((pp) => players.find((p) => p.id === pp.id)).filter(Boolean)
+    : players;
+
+  return (
+    <View
+      style={[{ width, height }, PAGER_PAGE_SNAP_STYLE]}
+      dataSet={Platform.OS === 'web' ? { pagerpage: '1' } : undefined}
+    >
+      {/* Hole header */}
+      <View style={s.holeHeaderCard}>
+        <View style={s.holeHeaderLeft}>
+          <Text style={s.holeHeaderRound}>{courseName} -- Round {roundIndex + 1}</Text>
+          <View style={s.holeNumberRow}>
+            <Text style={s.holeNumberLabel}>HOLE</Text>
+            <Text style={s.holeNumber}>{pageHole.number}</Text>
+          </View>
+        </View>
+        <View style={s.holeHeaderRight}>
+          <View style={s.holeMetaItem}>
+            <Text style={s.holeMetaLabel}>PAR</Text>
+            <Text style={s.holeMetaValue}>{pageHole.par}</Text>
+          </View>
+          <View style={s.holeMetaItem}>
+            <Text style={s.holeMetaLabel}>SI</Text>
+            <Text style={s.holeMetaValue}>{pageHole.strokeIndex}</Text>
+          </View>
+        </View>
+      </View>
+
+      {/* Player score cards */}
+      <View style={s.playerCardsContent}>
+        {orderedPlayers.map((player, idx) => {
+          const pairIndex = pairs.findIndex((pair) => pair.some((pp) => pp.id === player.id));
+          const pairColor = pairIndex === 0 ? theme.pairA : pairIndex === 1 ? theme.pairB : theme.text.muted;
+          const isFirstOfPair = pairs.length === 2 && (idx === 0 || idx === 2);
+          const pairLabelText = pairIndex === 0 ? 'Pair A' : 'Pair B';
+
+          const handicap = round.playerHandicaps?.[player.id] ?? player.handicap;
+          const strokes = scores[player.id]?.[pageHole.number];
+          const pts = strokes != null
+            ? calcStablefordPoints(pageHole.par, strokes, handicap, pageHole.strokeIndex)
+            : null;
+
+          const ptsColor = pts == null ? theme.text.muted
+            : pts >= 3 ? theme.scoreColor('excellent')
+            : pts >= 2 ? theme.scoreColor('good')
+            : pts === 1 ? theme.scoreColor('neutral')
+            : theme.scoreColor('poor');
+
+          const extraShots = handicap >= pageHole.strokeIndex ? (Math.floor(handicap / 18) + (handicap % 18 >= pageHole.strokeIndex ? 1 : 0)) : 0;
+
+          const pickup = pickupStrokes(pageHole.par, handicap, pageHole.strokeIndex);
+          const isPickup = strokes != null && strokes >= pickup;
+
+          return (
+            <React.Fragment key={player.id}>
+              {isFirstOfPair && (
+                <Text style={[s.pairLabel, { color: pairColor, marginTop: idx === 0 ? 0 : 16 }]}>{pairLabelText}</Text>
+              )}
+              <View style={[s.playerCard, { borderLeftColor: pairColor, borderLeftWidth: 3 }]}>
+                <View style={s.playerCardRow}>
+                  <View style={s.playerCardLeft}>
+                    <View style={[s.playerAvatar, { backgroundColor: pairColor }]}>
+                      <Text style={s.playerAvatarText}>{player.name[0].toUpperCase()}</Text>
+                    </View>
+                    <View>
+                      <Text style={s.playerCardName}>{player.name}</Text>
+                      <Text style={s.playerCardHcp}>HCP {handicap}{extraShots > 0 ? ` +${extraShots}` : ''}</Text>
+                    </View>
+                  </View>
+                  <View style={s.playerCardRight}>
+                    <TouchableOpacity style={s.stepBtn} onPress={() => onStep(player.id, pageHole.number, -1)}>
+                      <Feather name="minus" size={18} color={theme.text.primary} />
+                    </TouchableOpacity>
+                    <Animated.View style={[s.scoreDisplay, { transform: [{ scale: getScoreAnim(player.id) }] }]}>
+                      <Text style={[s.scoreDisplayNum, strokes == null && s.scoreDisplayNumEmpty]}>
+                        {strokes ?? '—'}
+                      </Text>
+                      {pts !== null && (
+                        <Text style={[s.scoreDisplayPts, { color: ptsColor }]}>
+                          {pts} {pts === 1 ? 'pt' : 'pts'}
+                        </Text>
+                      )}
+                    </Animated.View>
+                    <TouchableOpacity style={s.stepBtn} onPress={() => onStep(player.id, pageHole.number, 1)}>
+                      <Feather name="plus" size={18} color={theme.text.primary} />
+                    </TouchableOpacity>
+                    <TouchableOpacity
+                      style={[s.pickupBtn, isPickup && s.pickupBtnActive]}
+                      onPress={() => onSetScore(player.id, pageHole.number, isPickup ? pageHole.par : pickup)}
+                      activeOpacity={0.7}
+                      accessibilityLabel={isPickup ? `Picked up at ${pickup} strokes — tap to clear` : `Pickup at ${pickup} strokes`}
+                    >
+                      <Feather
+                        name="arrow-up-circle"
+                        size={16}
+                        color={isPickup ? theme.text.inverse : theme.text.muted}
+                      />
+                    </TouchableOpacity>
+                  </View>
+                </View>
+              </View>
+            </React.Fragment>
+          );
+        })}
+      </View>
+    </View>
+  );
+});
 
 function HoleView({ round, roundIndex, players, scores, notes, currentHole, hole, isBestBall, bbResult, settings, onStep, onSetScore, onNotesChange, onPrev, onNext, onGoToHole, onGoBack, playerTotals, getScoreAnim, celebration, celebrationAnim, refreshing, onRefresh }) {
   const { theme } = useTheme();
@@ -291,12 +504,32 @@ function HoleView({ round, roundIndex, players, scores, notes, currentHole, hole
   const holeScrollOffset = useRef(0);
   const isUserScrollingHole = useRef(false);
   const holePagerInitialized = useRef(false);
+  // True while a programmatic scrollTo animation is in flight. Stops
+  // onScroll from committing mid-animation; user drag and momentum
+  // are NOT suppressed.
+  const suppressHoleOnScroll = useRef(false);
+  const suppressHoleTimer = useRef(null);
+  // True when the latest currentHole prop change was driven by our own
+  // scroll (onScroll / onMomentumScrollEnd). The sync effect uses this
+  // to skip scrollTo — the pager is already where it needs to be, and
+  // a scrollTo would cause a visible mini-scroll after the gesture.
+  const currentHoleFromScroll = useRef(false);
 
   useEffect(() => {
+    if (currentHoleFromScroll.current) {
+      currentHoleFromScroll.current = false;
+      return;
+    }
     if (!pagerRef.current || pagerSize.width <= 0) return;
     if (isUserScrollingHole.current) return;
     const target = (currentHole - 1) * pagerSize.width;
     if (Math.abs(holeScrollOffset.current - target) < 1) return;
+    // Suppress onScroll commits while the animation runs.
+    suppressHoleOnScroll.current = true;
+    clearTimeout(suppressHoleTimer.current);
+    suppressHoleTimer.current = setTimeout(() => {
+      suppressHoleOnScroll.current = false;
+    }, 450);
     pagerRef.current.scrollTo({ x: target, animated: holePagerInitialized.current });
     holeScrollOffset.current = target;
     holePagerInitialized.current = true;
@@ -319,160 +552,66 @@ function HoleView({ round, roundIndex, players, scores, notes, currentHole, hole
           <ScrollView
             ref={pagerRef}
             horizontal
-            pagingEnabled
+            pagingEnabled={Platform.OS !== 'web'}
+            style={PAGER_SNAP_TYPE_STYLE}
             showsHorizontalScrollIndicator={false}
             scrollEventThrottle={16}
-            onScrollBeginDrag={() => { isUserScrollingHole.current = true; }}
+            onScrollBeginDrag={() => {
+              isUserScrollingHole.current = true;
+              suppressHoleOnScroll.current = false;
+              clearTimeout(suppressHoleTimer.current);
+            }}
             onScroll={(e) => {
               const x = e.nativeEvent.contentOffset.x;
               holeScrollOffset.current = x;
-              // Only commit during a real user drag. Programmatic scrollTo
-              // from the go-to-hole picker / arrow buttons also fires
-              // onScroll and would make the pager fight its own animation.
-              if (!isUserScrollingHole.current) return;
+              // Skip only during a programmatic scrollTo animation; live
+              // commit during user drag AND its momentum so the match
+              // panel / totals / next-hole button update the whole swipe.
+              if (suppressHoleOnScroll.current) return;
               const newHole = Math.round(x / pagerSize.width) + 1;
               if (newHole !== currentHole) {
-                // Non-urgent: keep the native swipe running smoothly while
-                // match panel / totals / next-hole button reconcile.
+                // Tag so the sync effect skips scrollTo — the pager is
+                // already at `newHole`; a scrollTo would fight the scroll.
+                currentHoleFromScroll.current = true;
+                // Non-urgent: keep the native scroll running smoothly while
+                // React reconciles match panel / totals / bottom button.
                 startTransition(() => onGoToHole(newHole));
               }
             }}
-            onScrollEndDrag={() => { isUserScrollingHole.current = false; }}
+            // Keep isUserScrollingHole true through the momentum phase so
+            // the sync effect doesn't scrollTo on top of the inertia.
+            onScrollEndDrag={() => {}}
             onMomentumScrollEnd={(e) => {
               const x = e.nativeEvent.contentOffset.x;
               holeScrollOffset.current = x;
               isUserScrollingHole.current = false;
+              suppressHoleOnScroll.current = false;
+              clearTimeout(suppressHoleTimer.current);
               const newHole = Math.round(x / pagerSize.width) + 1;
-              if (newHole !== currentHole) onGoToHole(newHole);
+              if (newHole !== currentHole) {
+                currentHoleFromScroll.current = true;
+                onGoToHole(newHole);
+              }
             }}
             contentOffset={{ x: (currentHole - 1) * pagerSize.width, y: 0 }}
           >
             {round.holes.map((pageHole) => (
-              <View key={pageHole.number} style={{ width: pagerSize.width, height: pagerSize.height }}>
-                {/* Hole header */}
-                <View style={s.holeHeaderCard}>
-                  <View style={s.holeHeaderLeft}>
-                    <Text style={s.holeHeaderRound}>{round.courseName} -- Round {roundIndex + 1}</Text>
-                    <View style={s.holeNumberRow}>
-                      <Text style={s.holeNumberLabel}>HOLE</Text>
-                      <Text style={s.holeNumber}>{pageHole.number}</Text>
-                    </View>
-                  </View>
-                  <View style={s.holeHeaderRight}>
-                    <View style={s.holeMetaItem}>
-                      <Text style={s.holeMetaLabel}>PAR</Text>
-                      <Text style={s.holeMetaValue}>{pageHole.par}</Text>
-                    </View>
-                    <View style={s.holeMetaItem}>
-                      <Text style={s.holeMetaLabel}>SI</Text>
-                      <Text style={s.holeMetaValue}>{pageHole.strokeIndex}</Text>
-                    </View>
-                  </View>
-                </View>
-
-                {/* Player score cards */}
-                <View style={s.playerCardsContent}>
-                  {(() => {
-                    const pairs = round.pairs ?? [];
-                    const orderedPlayers = pairs.length === 2
-                      ? [...pairs[0], ...pairs[1]].map((pp) => players.find((p) => p.id === pp.id)).filter(Boolean)
-                      : players;
-
-                    return orderedPlayers.map((player, idx) => {
-                      const pairIndex = pairs.findIndex((pair) => pair.some((pp) => pp.id === player.id));
-                      const pairColor = pairIndex === 0 ? theme.pairA : pairIndex === 1 ? theme.pairB : theme.text.muted;
-                      const isFirstOfPair = pairs.length === 2 && (idx === 0 || idx === 2);
-                      const pairLabelText = pairIndex === 0 ? 'Pair A' : 'Pair B';
-
-                      const handicap = round.playerHandicaps?.[player.id] ?? player.handicap;
-                      const strokes = scores[player.id]?.[pageHole.number];
-                      const pts = strokes != null
-                        ? calcStablefordPoints(pageHole.par, strokes, handicap, pageHole.strokeIndex)
-                        : null;
-
-                      const ptsColor = pts == null ? theme.text.muted
-                        : pts >= 3 ? theme.scoreColor('excellent')
-                        : pts >= 2 ? theme.scoreColor('good')
-                        : pts === 1 ? theme.scoreColor('neutral')
-                        : theme.scoreColor('poor');
-
-                      const extraShots = handicap >= pageHole.strokeIndex ? (Math.floor(handicap / 18) + (handicap % 18 >= pageHole.strokeIndex ? 1 : 0)) : 0;
-
-                      const pickup = pickupStrokes(pageHole.par, handicap, pageHole.strokeIndex);
-                      const isPickup = strokes != null && strokes >= pickup;
-
-                      return (
-                        <React.Fragment key={player.id}>
-                          {isFirstOfPair && (
-                            <Text style={[s.pairLabel, { color: pairColor, marginTop: idx === 0 ? 0 : 16 }]}>{pairLabelText}</Text>
-                          )}
-                          <View style={[s.playerCard, { borderLeftColor: pairColor, borderLeftWidth: 3 }]}>
-                            {celebration?.playerId === player.id
-                              && celebration?.holeNumber === pageHole.number
-                              && celebration?.label && (
-                              <Animated.View
-                                pointerEvents="none"
-                                style={[
-                                  s.celebrationBanner,
-                                  {
-                                    opacity: celebrationAnim,
-                                    transform: [
-                                      { scale: celebrationAnim.interpolate({ inputRange: [0, 1], outputRange: [0.85, 1] }) },
-                                    ],
-                                  },
-                                ]}
-                              >
-                                <Text style={s.celebrationLabel}>{celebration.label}</Text>
-                              </Animated.View>
-                            )}
-                            <View style={s.playerCardRow}>
-                              <View style={s.playerCardLeft}>
-                                <View style={[s.playerAvatar, { backgroundColor: pairColor }]}>
-                                  <Text style={s.playerAvatarText}>{player.name[0].toUpperCase()}</Text>
-                                </View>
-                                <View>
-                                  <Text style={s.playerCardName}>{player.name}</Text>
-                                  <Text style={s.playerCardHcp}>HCP {handicap}{extraShots > 0 ? ` +${extraShots}` : ''}</Text>
-                                </View>
-                              </View>
-                              <View style={s.playerCardRight}>
-                                <TouchableOpacity style={s.stepBtn} onPress={() => onStep(player.id, pageHole.number, -1)}>
-                                  <Feather name="minus" size={18} color={theme.text.primary} />
-                                </TouchableOpacity>
-                                <Animated.View style={[s.scoreDisplay, { transform: [{ scale: getScoreAnim(player.id) }] }]}>
-                                  <Text style={s.scoreDisplayNum}>
-                                    {strokes ?? pageHole.par}
-                                  </Text>
-                                  {pts !== null && (
-                                    <Text style={[s.scoreDisplayPts, { color: ptsColor }]}>
-                                      {pts} {pts === 1 ? 'pt' : 'pts'}
-                                    </Text>
-                                  )}
-                                </Animated.View>
-                                <TouchableOpacity style={s.stepBtn} onPress={() => onStep(player.id, pageHole.number, 1)}>
-                                  <Feather name="plus" size={18} color={theme.text.primary} />
-                                </TouchableOpacity>
-                                <TouchableOpacity
-                                  style={[s.pickupBtn, isPickup && s.pickupBtnActive]}
-                                  onPress={() => onSetScore(player.id, pageHole.number, isPickup ? pageHole.par : pickup)}
-                                  activeOpacity={0.7}
-                                  accessibilityLabel={isPickup ? `Picked up at ${pickup} strokes — tap to clear` : `Pickup at ${pickup} strokes`}
-                                >
-                                  <Feather
-                                    name="arrow-up-circle"
-                                    size={16}
-                                    color={isPickup ? theme.text.inverse : theme.text.muted}
-                                  />
-                                </TouchableOpacity>
-                              </View>
-                            </View>
-                          </View>
-                        </React.Fragment>
-                      );
-                    });
-                  })()}
-                </View>
-              </View>
+              <HolePage
+                key={pageHole.number}
+                pageHole={pageHole}
+                width={pagerSize.width}
+                height={pagerSize.height}
+                courseName={round.courseName}
+                roundIndex={roundIndex}
+                round={round}
+                players={players}
+                scores={scores}
+                theme={theme}
+                s={s}
+                onStep={onStep}
+                onSetScore={onSetScore}
+                getScoreAnim={getScoreAnim}
+              />
             ))}
           </ScrollView>
         )}
@@ -483,6 +622,7 @@ function HoleView({ round, roundIndex, players, scores, notes, currentHole, hole
         ? <MatchPanel bbResult={bbResult} currentHole={currentHole} settings={settings} />
         : (
           <View style={s.totalsStrip}>
+            <StablefordWinnerBanner round={round} scores={scores} players={players} />
             <Text style={s.totalStripLabel}>ROUND TOTALS</Text>
             <View style={s.totalStripRow}>
               {players.map((player) => {
@@ -610,6 +750,8 @@ function HoleView({ round, roundIndex, players, scores, notes, currentHole, hole
           </Pressable>
         </Pressable>
       </Modal>
+
+      <CelebrationOverlay celebration={celebration} celebrationAnim={celebrationAnim} players={players} />
     </View>
   );
 }
@@ -629,7 +771,7 @@ function roundTeamPts(bbResult, team, bbVal, wbVal) {
        + (team === 1 ? worstBall.pair1 : worstBall.pair2) * wbVal;
 }
 
-function MatchPanel({ bbResult, currentHole, settings }) {
+const MatchPanel = React.memo(function MatchPanel({ bbResult, currentHole, settings }) {
   const { theme } = useTheme();
   const s = useMemo(() => makeStyles(theme), [theme]);
   const { pair1, pair2, holes } = bbResult;
@@ -646,8 +788,20 @@ function MatchPanel({ bbResult, currentHole, settings }) {
   const holeWinner = p1Hole === null ? null : p1Hole > p2Hole ? 1 : p2Hole > p1Hole ? 2 : 0;
   const roundWinner = p1Round > p2Round ? 1 : p2Round > p1Round ? 2 : 0;
 
+  // "Clinched" — lead is greater than anything the trailing pair could still
+  // claw back on the remaining (un-fully-scored) holes.
+  const holesRemaining = holes.filter((h) => h.bestWinner === null).length;
+  const maxCatchup = holesRemaining * (bbVal + wbVal);
+  const lead = Math.abs(p1Round - p2Round);
+  const clinched = roundWinner !== 0 && lead > maxCatchup;
+  const winnerName = roundWinner === 1 ? p1Name : roundWinner === 2 ? p2Name : null;
+
   return (
     <View style={s.matchPanel}>
+      {clinched && winnerName && (
+        <WinnerBadge name={winnerName} />
+      )}
+
       {/* Column headers */}
       <View style={s.matchPanelHeaderRow}>
         <View style={s.matchPanelNameCol} />
@@ -657,9 +811,14 @@ function MatchPanel({ bbResult, currentHole, settings }) {
 
       {/* Pair 1 row */}
       <View style={s.matchPanelDataRow}>
-        <Text style={[s.matchPanelName, roundWinner === 1 && { color: theme.accent.primary }]} numberOfLines={1}>
-          {p1Name}
-        </Text>
+        <View style={s.matchPanelNameWrap}>
+          <Text style={[s.matchPanelName, roundWinner === 1 && { color: theme.accent.primary }]} numberOfLines={1}>
+            {p1Name}
+          </Text>
+          {clinched && roundWinner === 1 && (
+            <Feather name="award" size={14} color={theme.accent.primary} />
+          )}
+        </View>
         <Text style={[s.matchPanelStat, holeWinner === 1 && { color: theme.accent.primary }, holeWinner === 2 && { color: theme.destructive }]}>
           {p1Hole ?? '-'}
         </Text>
@@ -670,9 +829,14 @@ function MatchPanel({ bbResult, currentHole, settings }) {
 
       {/* Pair 2 row */}
       <View style={s.matchPanelDataRow}>
-        <Text style={[s.matchPanelName, roundWinner === 2 && { color: theme.accent.primary }]} numberOfLines={1}>
-          {p2Name}
-        </Text>
+        <View style={s.matchPanelNameWrap}>
+          <Text style={[s.matchPanelName, roundWinner === 2 && { color: theme.accent.primary }]} numberOfLines={1}>
+            {p2Name}
+          </Text>
+          {clinched && roundWinner === 2 && (
+            <Feather name="award" size={14} color={theme.accent.primary} />
+          )}
+        </View>
         <Text style={[s.matchPanelStat, holeWinner === 2 && { color: theme.accent.primary }, holeWinner === 1 && { color: theme.destructive }]}>
           {p2Hole ?? '-'}
         </Text>
@@ -680,6 +844,135 @@ function MatchPanel({ bbResult, currentHole, settings }) {
           {p2Round}
         </Text>
       </View>
+    </View>
+  );
+});
+
+function WinnerBadge({ name }) {
+  const { theme } = useTheme();
+  const s = useMemo(() => makeStyles(theme), [theme]);
+  return (
+    <View style={s.winnerBadgeRow}>
+      <Feather name="award" size={14} color="#ffd700" />
+      <Text style={s.winnerBadgeText}>
+        {name} · CHAMPIONS
+      </Text>
+    </View>
+  );
+}
+
+// Shown above the Stableford totals strip when the pair result is decided
+// (either mathematically clinched or all 18 holes fully scored).
+function StablefordWinnerBanner({ round, scores, players }) {
+  const pairs = round?.pairs ?? [];
+  if (pairs.length !== 2) return null;
+
+  // Round is considered "decided" only once every player has entered scores
+  // on every hole. Stableford has no clinching shortcut (a 5-point eagle
+  // could always swing the result), so we wait until the round is complete.
+  const allScored = players.every((p) =>
+    round.holes.every((h) => scores[p.id]?.[h.number] != null)
+  );
+  if (!allScored) return null;
+
+  const liveRound = { ...round, scores };
+  const pairResults = roundPairLeaderboard(liveRound, players);
+  if (pairResults.length < 2) return null;
+  const [first, second] = pairResults;
+  if (first.combinedPoints === second.combinedPoints) return null;
+
+  const name = first.members.map((m) => m.player.name.split(' ')[0]).join(' & ');
+  return <WinnerBadge name={name} />;
+}
+
+const CELEBRATION_TIERS = {
+  BIRDIE: {
+    eyebrow: 'A BIRDIE',
+    accent: '#f0c419', // soft gold
+    glow: 'rgba(240,196,25,0.35)',
+    icon: 'star',
+  },
+  EAGLE: {
+    eyebrow: 'AN EAGLE',
+    accent: '#ffd700', // Augusta gold
+    glow: 'rgba(255,215,0,0.45)',
+    icon: 'award',
+  },
+  ALBATROSS: {
+    eyebrow: 'AN ALBATROSS',
+    accent: '#ffffff',
+    glow: 'rgba(255,255,255,0.55)',
+    icon: 'star',
+  },
+  'HOLE IN ONE': {
+    eyebrow: 'A HOLE IN ONE',
+    accent: '#ffd700',
+    glow: 'rgba(255,215,0,0.65)',
+    icon: 'target',
+  },
+};
+
+function CelebrationOverlay({ celebration, celebrationAnim, players }) {
+  const { theme } = useTheme();
+  const s = useMemo(() => makeStyles(theme), [theme]);
+
+  if (!celebration?.label) return null;
+  const tier = CELEBRATION_TIERS[celebration.label] ?? CELEBRATION_TIERS.BIRDIE;
+  const player = players.find((p) => p.id === celebration.playerId);
+  const firstName = player?.name?.split(' ')[0] ?? '';
+
+  const scrimOpacity = celebrationAnim.interpolate({
+    inputRange: [0, 1], outputRange: [0, 0.55],
+  });
+  const cardOpacity = celebrationAnim;
+  const cardScale = celebrationAnim.interpolate({
+    inputRange: [0, 1], outputRange: [0.75, 1],
+  });
+  const cardTranslate = celebrationAnim.interpolate({
+    inputRange: [0, 1], outputRange: [16, 0],
+  });
+  const ringScale = celebrationAnim.interpolate({
+    inputRange: [0, 1], outputRange: [0.6, 1.35],
+  });
+  const ringOpacity = celebrationAnim.interpolate({
+    inputRange: [0, 0.5, 1], outputRange: [0, 0.6, 0],
+  });
+
+  return (
+    <View pointerEvents="none" style={s.celebrationRoot}>
+      <Animated.View style={[s.celebrationScrim, { opacity: scrimOpacity }]} />
+      <Animated.View
+        style={[
+          s.celebrationRing,
+          {
+            borderColor: tier.glow,
+            opacity: ringOpacity,
+            transform: [{ scale: ringScale }],
+          },
+        ]}
+      />
+      <Animated.View
+        style={[
+          s.celebrationCard,
+          {
+            opacity: cardOpacity,
+            borderColor: tier.accent,
+            shadowColor: tier.accent,
+            transform: [{ scale: cardScale }, { translateY: cardTranslate }],
+          },
+        ]}
+      >
+        <View style={[s.celebrationIconWrap, { borderColor: tier.accent }]}>
+          <Feather name={tier.icon} size={22} color={tier.accent} />
+        </View>
+        <Text style={[s.celebrationEyebrow, { color: tier.accent }]}>{tier.eyebrow}</Text>
+        <Text style={s.celebrationLabelBig}>{celebration.label}</Text>
+        {!!firstName && (
+          <Text style={s.celebrationSubtitle}>
+            {firstName} · Hole {celebration.holeNumber}
+          </Text>
+        )}
+      </Animated.View>
     </View>
   );
 }
@@ -1077,43 +1370,122 @@ function makeStyles(theme) {
     },
     holeNavBtnTextDisabled: { color: theme.text.muted },
 
-    // Player cards (compact — must fit 4 + 2 pair labels with no inner scroll)
-    playerCardsContent: { flex: 1, paddingHorizontal: 12, paddingTop: 8, paddingBottom: 4, gap: 6 },
+    // Player cards (must fit 4 + 2 pair labels with no inner scroll)
+    playerCardsContent: { flex: 1, paddingHorizontal: 14, paddingTop: 10, paddingBottom: 6, gap: 8 },
     pairLabel: {
       fontSize: 10,
       fontFamily: 'PlusJakartaSans-Bold',
-      letterSpacing: 1.5,
-      marginBottom: 2,
+      letterSpacing: 1.8,
+      marginBottom: 4,
       marginLeft: 2,
       textTransform: 'uppercase',
     },
     playerCard: {
       backgroundColor: theme.bg.card,
-      borderRadius: 12,
+      borderRadius: 14,
       borderWidth: 1,
       borderColor: theme.isDark ? theme.glass?.border : theme.border.default,
-      paddingVertical: 8,
-      paddingHorizontal: 12,
+      paddingVertical: 12,
+      paddingHorizontal: 14,
       overflow: 'hidden',
       ...(theme.isDark ? {} : theme.shadow.card),
     },
-    celebrationBanner: {
-      position: 'absolute',
-      top: 4,
-      right: 8,
-      paddingHorizontal: 8,
-      paddingVertical: 3,
-      backgroundColor: '#006747',
-      borderRadius: 999,
-      borderWidth: 1,
-      borderColor: '#ffd700',
-      zIndex: 10,
+
+    // Full-scorecard celebration overlay
+    celebrationRoot: {
+      ...StyleSheet.absoluteFillObject,
+      alignItems: 'center',
+      justifyContent: 'center',
+      zIndex: 50,
+      elevation: 50,
     },
-    celebrationLabel: {
-      color: '#ffd700',
-      fontSize: 9,
+    celebrationScrim: {
+      ...StyleSheet.absoluteFillObject,
+      backgroundColor: '#000',
+    },
+    celebrationCard: {
+      minWidth: 240,
+      paddingVertical: 22,
+      paddingHorizontal: 28,
+      borderRadius: 22,
+      borderWidth: 1.5,
+      backgroundColor: '#003d27', // Augusta deep green
+      alignItems: 'center',
+      shadowOpacity: 0.55,
+      shadowRadius: 28,
+      shadowOffset: { width: 0, height: 8 },
+      elevation: 18,
+    },
+    celebrationRing: {
+      position: 'absolute',
+      width: 260,
+      height: 260,
+      borderRadius: 130,
+      borderWidth: 2,
+      left: '50%',
+      top: '50%',
+      marginLeft: -130,
+      marginTop: -130,
+    },
+    celebrationIconWrap: {
+      width: 44,
+      height: 44,
+      borderRadius: 22,
+      borderWidth: 1.5,
+      alignItems: 'center',
+      justifyContent: 'center',
+      marginBottom: 12,
+      backgroundColor: 'rgba(255,255,255,0.05)',
+    },
+    celebrationEyebrow: {
+      fontFamily: 'PlusJakartaSans-SemiBold',
+      fontSize: 10,
+      letterSpacing: 3,
+      textTransform: 'uppercase',
+      marginBottom: 6,
+    },
+    celebrationLabelBig: {
+      color: '#ffffff',
+      fontSize: 34,
       fontFamily: 'PlayfairDisplay-Black',
+      letterSpacing: 2,
+      textAlign: 'center',
+      marginBottom: 8,
+    },
+    celebrationSubtitle: {
+      color: 'rgba(255,255,255,0.7)',
+      fontSize: 12,
+      fontFamily: 'PlusJakartaSans-Medium',
+      letterSpacing: 0.6,
+      textAlign: 'center',
+    },
+
+    // Pair winner badge (above totals strip / match panel)
+    winnerBadgeRow: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      alignSelf: 'flex-start',
+      gap: 6,
+      paddingHorizontal: 10,
+      paddingVertical: 4,
+      borderRadius: 999,
+      backgroundColor: theme.isDark ? 'rgba(255,215,0,0.14)' : 'rgba(255,215,0,0.18)',
+      borderWidth: 1,
+      borderColor: 'rgba(255,215,0,0.45)',
+      marginBottom: 8,
+    },
+    winnerBadgeText: {
+      color: theme.isDark ? '#ffd700' : '#8a6d00',
+      fontSize: 10,
       letterSpacing: 1.5,
+      fontFamily: 'PlusJakartaSans-ExtraBold',
+      textTransform: 'uppercase',
+    },
+    matchPanelNameWrap: {
+      flex: 1,
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: 6,
     },
     playerCardRow: {
       flexDirection: 'row',
@@ -1134,52 +1506,57 @@ function makeStyles(theme) {
       borderColor: theme.accent.primary,
       backgroundColor: theme.accent.primary,
     },
-    playerCardLeft: { flexDirection: 'row', alignItems: 'center', gap: 10, flex: 1, minWidth: 0 },
+    playerCardLeft: { flexDirection: 'row', alignItems: 'center', gap: 12, flex: 1, minWidth: 0 },
     playerAvatar: {
-      width: 30,
-      height: 30,
-      borderRadius: 15,
+      width: 36,
+      height: 36,
+      borderRadius: 18,
       alignItems: 'center',
       justifyContent: 'center',
     },
     playerAvatarText: {
       color: '#fff',
       fontFamily: 'PlusJakartaSans-ExtraBold',
-      fontSize: 13,
+      fontSize: 15,
     },
     playerCardName: {
       color: theme.text.primary,
       fontFamily: 'PlusJakartaSans-Bold',
-      fontSize: 14,
+      fontSize: 15,
     },
     playerCardHcp: {
       color: theme.text.secondary,
-      fontSize: 11,
-      marginTop: 1,
+      fontSize: 12,
+      marginTop: 2,
       fontFamily: 'PlusJakartaSans-Medium',
     },
-    playerCardRight: { flexDirection: 'row', alignItems: 'center', gap: 6 },
+    playerCardRight: { flexDirection: 'row', alignItems: 'center', gap: 8 },
     stepBtn: {
-      width: 32,
-      height: 32,
-      borderRadius: 10,
+      width: 36,
+      height: 36,
+      borderRadius: 12,
       backgroundColor: theme.isDark ? theme.bg.elevated : theme.bg.secondary,
       borderWidth: 1,
       borderColor: theme.isDark ? theme.glass?.border : theme.border.default,
       alignItems: 'center',
       justifyContent: 'center',
     },
-    scoreDisplay: { width: 46, alignItems: 'center' },
+    scoreDisplay: { width: 52, alignItems: 'center' },
     scoreDisplayNum: {
       color: theme.text.primary,
-      fontSize: 22,
+      fontSize: 26,
       fontFamily: 'PlusJakartaSans-ExtraBold',
-      lineHeight: 24,
+      lineHeight: 28,
+    },
+    scoreDisplayNumEmpty: {
+      color: theme.text.muted,
+      fontSize: 26,
+      lineHeight: 28,
     },
     scoreDisplayPts: {
       fontSize: 10,
       fontFamily: 'PlusJakartaSans-Bold',
-      marginTop: 0,
+      marginTop: 1,
     },
 
     // Bottom bar (hole nav + actions row)

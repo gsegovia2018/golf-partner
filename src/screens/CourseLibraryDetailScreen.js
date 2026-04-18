@@ -3,6 +3,7 @@ import {
   ActivityIndicator, Alert, ScrollView, StyleSheet,
   Text, TextInput, TouchableOpacity, View,
 } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
 import { Feather } from '@expo/vector-icons';
 
 import { useTheme } from '../theme/ThemeContext';
@@ -28,7 +29,6 @@ export default function CourseLibraryDetailScreen({ navigation, route }) {
   const [saving, setSaving] = useState(false);
 
   useEffect(() => {
-    navigation.setOptions({ title: initialName || 'Course' });
     (async () => {
       const courses = await fetchCourses();
       const course = courses.find((c) => c.id === courseId);
@@ -43,6 +43,10 @@ export default function CourseLibraryDetailScreen({ navigation, route }) {
       setLoading(false);
     })();
   }, [courseId]);
+
+  useEffect(() => {
+    navigation.setOptions({ title: name || initialName || 'Course' });
+  }, [navigation, name, initialName]);
 
   async function handleSave() {
     if (!name.trim()) return;
@@ -79,14 +83,14 @@ export default function CourseLibraryDetailScreen({ navigation, route }) {
 
   if (loading) {
     return (
-      <View style={s.centered}>
+      <SafeAreaView style={s.centered} edges={['top', 'bottom']}>
         <ActivityIndicator color={theme.accent.primary} />
-      </View>
+      </SafeAreaView>
     );
   }
 
   return (
-    <View style={s.container}>
+    <SafeAreaView style={s.container} edges={['top', 'bottom']}>
       <View style={s.header}>
         <TouchableOpacity onPress={() => navigation.goBack()} style={s.backBtn}>
           <Feather name="chevron-left" size={22} color={theme.accent.primary} />
@@ -209,7 +213,7 @@ export default function CourseLibraryDetailScreen({ navigation, route }) {
           <Text style={s.saveBtnText}>{saving ? 'Saving...' : 'Save course'}</Text>
         </TouchableOpacity>
       </ScrollView>
-    </View>
+    </SafeAreaView>
   );
 }
 

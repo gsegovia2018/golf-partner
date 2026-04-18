@@ -1,5 +1,6 @@
 import React, { useEffect, useState, useCallback, useRef, useMemo, startTransition } from 'react';
 import { View, Text, TouchableOpacity, StyleSheet, ScrollView, Switch, Alert, FlatList, Platform, Modal, Pressable } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
 import { Feather } from '@expo/vector-icons';
 
 import { useTheme } from '../theme/ThemeContext';
@@ -11,10 +12,31 @@ import {
   deleteTournament, saveTournament,
   tournamentLeaderboard, tournamentBestWorstLeaderboard,
   roundPairLeaderboard, calcBestWorstBall, roundTotals,
+  playerRoundBestWorstPoints,
   DEFAULT_SETTINGS,
 } from '../store/tournamentStore';
 
-export default function HomeScreen({ navigation, viewMode = 'auto' }) {
+// Web-only CSS scroll-snap. See ScorecardScreen.js for the rationale:
+// RNW 0.21's `pagingEnabled` omits `scroll-snap-stop: always`, so a
+// fast swipe can skip past one page. On web we drive snap ourselves.
+const PAGER_SNAP_TYPE_STYLE = Platform.OS === 'web' ? { scrollSnapType: 'x mandatory', overflowX: 'auto' } : null;
+const PAGER_PAGE_SNAP_STYLE = Platform.OS === 'web' ? { scrollSnapAlign: 'start', scrollSnapStop: 'always' } : null;
+
+// Belt-and-braces: inject the snap rules via a real <style> tag so they
+// apply even if RNW's atomic-CSS pipeline ever filters an unknown CSS
+// property. Targeted by a data attribute we set on each page.
+if (Platform.OS === 'web' && typeof document !== 'undefined') {
+  const id = 'golf-partner-pager-snap-stop';
+  if (!document.getElementById(id)) {
+    const styleEl = document.createElement('style');
+    styleEl.id = id;
+    styleEl.textContent = '[data-pagerpage="1"]{scroll-snap-align:start !important;scroll-snap-stop:always !important;}';
+    document.head.appendChild(styleEl);
+  }
+}
+
+export default function HomeScreen({ navigation, route }) {
+  const viewMode = route?.params?.viewMode ?? 'auto';
   const { theme, mode, toggle } = useTheme();
   const [tournament, setTournament] = useState(null);
   const [allTournaments, setAllTournaments] = useState([]);
@@ -24,8 +46,23 @@ export default function HomeScreen({ navigation, viewMode = 'auto' }) {
   const roundScrollOffset = useRef(0);
   const isUserScrollingRound = useRef(false);
   const roundPagerInitialized = useRef(false);
+  const hasAutoOpenedRef = useRef(false);
+  // True while a programmatic scrollTo animation is in flight. Used to
+  // stop onScroll from committing mid-animation (which would make the
+  // pager fight its own scroll). User drags/momentum are NOT suppressed.
+  const suppressRoundOnScroll = useRef(false);
+  const suppressRoundTimer = useRef(null);
+  // True when the latest selectedRound change came from a scroll commit
+  // (onScroll / onMomentumScrollEnd). The sync effect uses this to skip
+  // the scrollTo — the scroll is already at the right place. Without
+  // this guard, a transition commit lagging behind the scroll settle can
+  // trigger a visible mini-scroll back to an intermediate page.
+  const selectedRoundFromScroll = useRef(false);
   const [showSettings, setShowSettings] = useState(false);
   const [showRoundEdit, setShowRoundEdit] = useState(false);
+  const [showResetHistory, setShowResetHistory] = useState(false);
+  const [undoSnack, setUndoSnack] = useState(null); // { roundIndex, snapshot, at }
+  const undoTimerRef = useRef(null);
   const [leaderboardBestBall, setLeaderboardBestBall] = useState(false);
   const [roundBestBall, setRoundBestBall] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
@@ -47,14 +84,47 @@ export default function HomeScreen({ navigation, viewMode = 'auto' }) {
     return unsubscribe;
   }, [navigation, reload]);
 
-  // Keep round pager in sync with selectedRound (tab taps, arrow buttons).
-  // Skip while the user is dragging, and skip if already at target.
-  // Animate so taps slide smoothly instead of snapping.
+  // Keep the round pager pinned to the round being played: whenever the
+  // tournament's currentRound advances (e.g. the user started the next
+  // round in another screen), snap the selection back to it. This also
+  // covers the initial Tournament mount where selectedRound is briefly 0
+  // before the tournament has loaded.
   useEffect(() => {
+    if (tournament?.currentRound != null) {
+      setSelectedRound(tournament.currentRound);
+    }
+  }, [tournament?.currentRound]);
+
+  // Auto-push Tournament once on the first Home mount if there's an active
+  // tournament, so the back gesture / browser back can pop us to the list.
+  useEffect(() => {
+    if (viewMode !== 'list') return;
+    if (hasAutoOpenedRef.current) return;
+    if (!tournament) return;
+    hasAutoOpenedRef.current = true;
+    navigation.navigate('Tournament');
+  }, [viewMode, tournament, navigation]);
+
+  // Keep round pager in sync with selectedRound (tab taps, arrow buttons).
+  // Skip while the user is dragging, and skip if this commit came from a
+  // scroll (the pager is already at the right place). Animate so taps
+  // slide smoothly instead of snapping.
+  useEffect(() => {
+    if (selectedRoundFromScroll.current) {
+      selectedRoundFromScroll.current = false;
+      return;
+    }
     if (!roundPagerRef.current || roundPagerWidth <= 0) return;
     if (isUserScrollingRound.current) return;
     const target = selectedRound * roundPagerWidth;
     if (Math.abs(roundScrollOffset.current - target) < 1) return;
+    // Suppress onScroll commits while the animation runs, so intermediate
+    // offsets don't reset selectedRound and make the pager fight itself.
+    suppressRoundOnScroll.current = true;
+    clearTimeout(suppressRoundTimer.current);
+    suppressRoundTimer.current = setTimeout(() => {
+      suppressRoundOnScroll.current = false;
+    }, 450);
     roundPagerRef.current.scrollTo({ x: target, animated: roundPagerInitialized.current });
     roundScrollOffset.current = target;
     roundPagerInitialized.current = true;
@@ -71,22 +141,92 @@ export default function HomeScreen({ navigation, viewMode = 'auto' }) {
            { text: 'Reset', style: 'destructive', onPress: () => resolve(true) }],
         ));
     if (!confirmed) return;
+
+    const roundBefore = tournament.rounds[idx];
+    const prevScores = roundBefore?.scores ?? {};
+    const prevNotes = roundBefore?.notes ?? '';
+    const hasContent = Object.keys(prevScores).length > 0 || (prevNotes?.trim?.() ?? '').length > 0;
+    const snapshot = { scores: prevScores, notes: prevNotes, at: new Date().toISOString() };
+
     const updated = { ...tournament };
-    updated.rounds = updated.rounds.map((r, i) => i === idx ? { ...r, scores: {}, notes: '' } : r);
+    updated.rounds = updated.rounds.map((r, i) => {
+      if (i !== idx) return r;
+      const history = [...(r.resetHistory ?? [])];
+      if (hasContent) {
+        history.push(snapshot);
+        // Cap to last 10 entries to avoid unbounded growth
+        if (history.length > 10) history.splice(0, history.length - 10);
+      }
+      return { ...r, scores: {}, notes: '', resetHistory: history };
+    });
     await saveTournament(updated);
     await reload();
+
+    if (hasContent) {
+      if (undoTimerRef.current) clearTimeout(undoTimerRef.current);
+      setUndoSnack({ roundIndex: idx, snapshot });
+      undoTimerRef.current = setTimeout(() => setUndoSnack(null), 3000);
+    }
   }
+
+  async function performUndoReset() {
+    if (!undoSnack || !tournament) return;
+    const { roundIndex, snapshot } = undoSnack;
+    if (undoTimerRef.current) { clearTimeout(undoTimerRef.current); undoTimerRef.current = null; }
+    const updated = { ...tournament };
+    updated.rounds = updated.rounds.map((r, i) => {
+      if (i !== roundIndex) return r;
+      // Pop the entry we just pushed (the snapshot we're restoring)
+      const history = [...(r.resetHistory ?? [])];
+      if (history.length > 0 && history[history.length - 1].at === snapshot.at) history.pop();
+      return { ...r, scores: snapshot.scores, notes: snapshot.notes, resetHistory: history };
+    });
+    await saveTournament(updated);
+    await reload();
+    setUndoSnack(null);
+  }
+
+  async function restoreFromHistory(entryIndex) {
+    if (!tournament) return;
+    const idx = selectedRound;
+    const round = tournament.rounds[idx];
+    const entry = round?.resetHistory?.[entryIndex];
+    if (!entry) return;
+    const confirmed = Platform.OS === 'web'
+      ? window.confirm('Restore this snapshot? Current scores for this round will be overwritten.')
+      : await new Promise((resolve) => Alert.alert(
+          'Restore snapshot', 'Restore this snapshot? Current scores for this round will be overwritten.',
+          [{ text: 'Cancel', style: 'cancel', onPress: () => resolve(false) },
+           { text: 'Restore', style: 'default', onPress: () => resolve(true) }],
+        ));
+    if (!confirmed) return;
+    const updated = { ...tournament };
+    updated.rounds = updated.rounds.map((r, i) => (
+      i === idx ? { ...r, scores: entry.scores ?? {}, notes: entry.notes ?? '' } : r
+    ));
+    await saveTournament(updated);
+    await reload();
+    setShowResetHistory(false);
+  }
+
+  useEffect(() => () => {
+    if (undoTimerRef.current) clearTimeout(undoTimerRef.current);
+  }, []);
 
   async function selectTournament(id) {
     await setActiveTournament(id);
     const all = await loadAllTournaments();
     const t = all.find((x) => x.id === id) ?? null;
     setTournament(t);
+    navigation.navigate('Tournament');
   }
 
   async function goToList() {
-    await clearActiveTournament();
-    setTournament(null);
+    if (navigation.canGoBack()) {
+      navigation.goBack();
+    } else {
+      navigation.navigate('Home');
+    }
   }
 
   async function confirmDelete(t) {
@@ -103,6 +243,9 @@ export default function HomeScreen({ navigation, viewMode = 'auto' }) {
       const all = await loadAllTournaments();
       setAllTournaments(all);
       setTournament(null);
+      if (viewMode === 'tournament' && navigation.canGoBack()) {
+        navigation.goBack();
+      }
     } catch (err) {
       if (Platform.OS === 'web') window.alert(err.message ?? 'Could not delete tournament');
       else Alert.alert('Error', err.message ?? 'Could not delete tournament');
@@ -141,12 +284,20 @@ export default function HomeScreen({ navigation, viewMode = 'auto' }) {
     [tournament, selectedRoundData, selectedRoundHasScores, leaderboardBestBall],
   );
 
+  // Stable callbacks for the memoised round pager pages. Keep references
+  // stable across swipes so <RoundPage /> memoisation holds.
+  const goToRound = useCallback((i) => setSelectedRound(i), []);
+  const openRoundEdit = useCallback((i) => {
+    setSelectedRound(i);
+    setShowRoundEdit(true);
+  }, []);
+
   const showList = viewMode === 'list' || (viewMode === 'auto' && !tournament);
   const showTournament = viewMode === 'tournament' || (viewMode === 'auto' && !!tournament);
 
   if (showList) {
     return (
-      <View style={s.screen}>
+      <SafeAreaView style={s.screen} edges={['top', 'bottom']}>
         <View style={s.header}>
           <View>
             <Text style={s.title}>Golf Partner</Text>
@@ -223,13 +374,13 @@ export default function HomeScreen({ navigation, viewMode = 'auto' }) {
           </>
         )}
         </PullToRefresh>
-      </View>
+      </SafeAreaView>
     );
   }
 
   if (showTournament && !tournament) {
     return (
-      <View style={[s.screen, { alignItems: 'center', justifyContent: 'center' }]}>
+      <SafeAreaView style={[s.screen, { alignItems: 'center', justifyContent: 'center' }]} edges={['top', 'bottom']}>
         <Feather name="flag" size={48} color={theme.text.muted} />
         <Text style={[s.emptyTitle, { marginTop: 16 }]}>No active tournament</Text>
         <TouchableOpacity
@@ -239,7 +390,7 @@ export default function HomeScreen({ navigation, viewMode = 'auto' }) {
         >
           <Text style={s.primaryBtnText}>Go to Home</Text>
         </TouchableOpacity>
-      </View>
+      </SafeAreaView>
     );
   }
 
@@ -250,18 +401,15 @@ export default function HomeScreen({ navigation, viewMode = 'auto' }) {
   const displayedBoard = leaderboardBestBall && bestWorstLeaderboard ? bestWorstLeaderboard : leaderboard;
   const getSelectedRoundValue = (playerId) => {
     if (leaderboardBestBall) {
-      if (!selectedRoundBB) return null;
-      const { pair1, pair2, bestBall, worstBall } = selectedRoundBB;
-      if (pair1.some((p) => p.id === playerId)) return bestBall.pair1 + worstBall.pair1;
-      if (pair2.some((p) => p.id === playerId)) return bestBall.pair2 + worstBall.pair2;
-      return 0;
+      if (!selectedRoundData || !selectedRoundHasScores || !selectedRoundData.pairs?.length) return null;
+      return playerRoundBestWorstPoints(selectedRoundData, playerId, tournament.players, settings);
     }
     if (!selectedRoundPlayerTotals) return null;
     return selectedRoundPlayerTotals.find((e) => e.player.id === playerId)?.totalPoints ?? 0;
   };
 
   return (
-    <View style={s.screen}>
+    <SafeAreaView style={s.screen} edges={['top', 'bottom']}>
       <View style={s.header}>
         <View style={s.headerLeft}>
           <TouchableOpacity onPress={goToList} style={s.backBtn} activeOpacity={0.7}>
@@ -305,7 +453,7 @@ export default function HomeScreen({ navigation, viewMode = 'auto' }) {
           const rankColor = rankColors[i] || 'rgba(255,255,255,0.4)';
           const rankBg = i === 0 ? 'rgba(255,215,0,0.2)' : i === 1 ? 'rgba(192,200,212,0.15)' : i === 2 ? 'rgba(218,160,109,0.15)' : 'rgba(255,255,255,0.08)';
           const roundValue = getSelectedRoundValue(entry.player.id);
-          const roundUnit = leaderboardBestBall ? 'holes' : 'pts';
+          const roundUnit = 'pts';
           const strokes = strokesByPlayer[entry.player.id] ?? 0;
           return (
             <View key={entry.player.id} style={[s.mastersRow, i === 0 && s.mastersRowFirst, i === displayedBoard.length - 1 && { borderBottomWidth: 0 }]}>
@@ -363,90 +511,81 @@ export default function HomeScreen({ navigation, viewMode = 'auto' }) {
           <View
             style={s.roundPagerWrap}
             onLayout={(e) => {
-              const w = e.nativeEvent.layout.width;
-              roundScrollOffset.current = selectedRound * w;
-              setRoundPagerWidth(w);
+              // Don't prefill roundScrollOffset from selectedRound — on web
+              // the ScrollView's contentOffset can't position before the
+              // children lay out, and if we lie that we're already there the
+              // sync effect below skips its scrollTo. Leave the ref at its
+              // actual value (0 on first mount) so the effect corrects it.
+              setRoundPagerWidth(e.nativeEvent.layout.width);
             }}
           >
             {roundPagerWidth > 0 && (
               <ScrollView
                 ref={roundPagerRef}
                 horizontal
-                pagingEnabled
+                pagingEnabled={Platform.OS !== 'web'}
+                style={PAGER_SNAP_TYPE_STYLE}
                 showsHorizontalScrollIndicator={false}
                 scrollEventThrottle={16}
-                onScrollBeginDrag={() => { isUserScrollingRound.current = true; }}
+                onScrollBeginDrag={() => {
+                  isUserScrollingRound.current = true;
+                  // User gesture overrides any in-flight programmatic scroll.
+                  suppressRoundOnScroll.current = false;
+                  clearTimeout(suppressRoundTimer.current);
+                }}
                 onScroll={(e) => {
                   const x = e.nativeEvent.contentOffset.x;
                   roundScrollOffset.current = x;
-                  // Only commit during a real user drag. Programmatic
-                  // scrollTo from tab taps also fires onScroll and would
-                  // make the pager fight its own animation.
-                  if (!isUserScrollingRound.current) return;
+                  // Skip only during a programmatic scrollTo animation.
+                  // Live-commit throughout the user's drag AND its momentum
+                  // so the leaderboard / bubbles update during the whole
+                  // swipe, not just the drag phase.
+                  if (suppressRoundOnScroll.current) return;
                   const idx = Math.round(x / roundPagerWidth);
                   if (idx !== selectedRound) {
-                    // Non-urgent: let the native swipe keep running smoothly
-                    // while React reconciles leaderboard/tabs/match panel in
-                    // the background.
+                    // Tag so the sync effect skips scrollTo — the pager is
+                    // already at `idx`; a scrollTo would fight the scroll.
+                    selectedRoundFromScroll.current = true;
+                    // Non-urgent: let the native scroll keep running smoothly
+                    // while React reconciles leaderboard / tabs / round card.
                     startTransition(() => setSelectedRound(idx));
                   }
                 }}
-                onScrollEndDrag={() => { isUserScrollingRound.current = false; }}
+                // Keep isUserScrollingRound true through the momentum phase
+                // so the sync effect doesn't scrollTo on top of the inertia.
+                onScrollEndDrag={() => {}}
                 onMomentumScrollEnd={(e) => {
                   const x = e.nativeEvent.contentOffset.x;
                   roundScrollOffset.current = x;
                   isUserScrollingRound.current = false;
+                  suppressRoundOnScroll.current = false;
+                  clearTimeout(suppressRoundTimer.current);
                   const idx = Math.round(x / roundPagerWidth);
-                  if (idx !== selectedRound) setSelectedRound(idx);
+                  if (idx !== selectedRound) {
+                    selectedRoundFromScroll.current = true;
+                    setSelectedRound(idx);
+                  }
                 }}
                 contentOffset={{ x: selectedRound * roundPagerWidth, y: 0 }}
               >
-                {tournament.rounds.map((round, i) => {
-                  const hasScores = round.scores && Object.keys(round.scores).length > 0;
-                  const isCurrentRound = i === tournament.currentRound;
-                  const hasPrev = i > 0;
-                  const hasNext = i < tournament.rounds.length - 1;
-                  return (
-                    <View key={round.id} style={{ width: roundPagerWidth }}>
-                      <View style={s.pagerTitleRow}>
-                        <TouchableOpacity
-                          style={[s.pagerArrow, !hasPrev && s.pagerArrowHidden]}
-                          onPress={() => hasPrev && setSelectedRound(i - 1)}
-                          disabled={!hasPrev}
-                          activeOpacity={0.7}
-                          accessibilityLabel="Previous round"
-                        >
-                          <Feather name="chevron-left" size={18} color={theme.accent.primary} />
-                        </TouchableOpacity>
-                        <Text style={s.tabRoundTitle}>RONDA {i + 1} · {round.courseName || '—'}</Text>
-                        <TouchableOpacity
-                          onPress={() => { setSelectedRound(i); setShowRoundEdit(true); }}
-                          style={s.roundEditBtn}
-                          hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
-                          accessibilityLabel="Round options"
-                        >
-                          <Feather name="settings" size={14} color={theme.text.muted} />
-                        </TouchableOpacity>
-                        <TouchableOpacity
-                          style={[s.pagerArrow, !hasNext && s.pagerArrowHidden]}
-                          onPress={() => hasNext && setSelectedRound(i + 1)}
-                          disabled={!hasNext}
-                          activeOpacity={0.7}
-                          accessibilityLabel="Next round"
-                        >
-                          <Feather name="chevron-right" size={18} color={theme.accent.primary} />
-                        </TouchableOpacity>
-                      </View>
-                      {hasScores ? (
-                        roundBestBall
-                          ? <BestBallRoundCard round={round} players={tournament.players} settings={settings} theme={theme} s={s} />
-                          : <StablefordRoundCard round={round} players={tournament.players} theme={theme} s={s} />
-                      ) : (
-                        <Text style={s.emptyRoundHint}>No scores yet for this round.</Text>
-                      )}
-                    </View>
-                  );
-                })}
+                {tournament.rounds.map((round, i) => (
+                  <RoundPage
+                    key={round.id}
+                    round={round}
+                    index={i}
+                    width={roundPagerWidth}
+                    hasPrev={i > 0}
+                    hasNext={i < tournament.rounds.length - 1}
+                    revealed={!!round.revealed || i <= tournament.currentRound}
+                    roundBestBall={roundBestBall}
+                    players={tournament.players}
+                    settings={settings}
+                    theme={theme}
+                    s={s}
+                    onGoToRound={goToRound}
+                    onOpenEdit={openRoundEdit}
+                  />
+                ))}
               </ScrollView>
             )}
           </View>
@@ -457,6 +596,16 @@ export default function HomeScreen({ navigation, viewMode = 'auto' }) {
         <ShareableLeaderboard ref={leaderboardRef} tournamentName={tournament.name} leaderboard={leaderboard} />
       </View>
     </PullToRefresh>
+
+    {undoSnack && (
+      <View style={s.undoSnack}>
+        <Feather name="rotate-ccw" size={16} color={theme.accent.primary} />
+        <Text style={s.undoSnackText}>Round {undoSnack.roundIndex + 1} reset</Text>
+        <TouchableOpacity onPress={performUndoReset} style={s.undoSnackBtn} activeOpacity={0.7}>
+          <Text style={s.undoSnackBtnText}>UNDO</Text>
+        </TouchableOpacity>
+      </View>
+    )}
 
     {tournament.rounds.length > 0 && (() => {
       const isCurrentRound = selectedRound === tournament.currentRound;
@@ -545,6 +694,22 @@ export default function HomeScreen({ navigation, viewMode = 'auto' }) {
             <Feather name="chevron-right" size={16} color={theme.text.muted} />
           </TouchableOpacity>
 
+          {(() => {
+            const historyCount = tournament.rounds[selectedRound]?.resetHistory?.length ?? 0;
+            if (historyCount === 0) return null;
+            return (
+              <TouchableOpacity
+                style={s.menuItem}
+                onPress={() => { setShowRoundEdit(false); setShowResetHistory(true); }}
+                activeOpacity={0.7}
+              >
+                <Feather name="rotate-cw" size={18} color={theme.accent.primary} />
+                <Text style={s.menuItemText}>Restore previous scores ({historyCount})</Text>
+                <Feather name="chevron-right" size={16} color={theme.text.muted} />
+              </TouchableOpacity>
+            );
+          })()}
+
           <TouchableOpacity
             style={[s.menuItem, s.menuItemDestructive]}
             onPress={() => { setShowRoundEdit(false); resetCurrentRound(); }}
@@ -553,6 +718,47 @@ export default function HomeScreen({ navigation, viewMode = 'auto' }) {
             <Feather name="rotate-ccw" size={18} color={theme.destructive} />
             <Text style={[s.menuItemText, { color: theme.destructive }]}>Reset Round</Text>
           </TouchableOpacity>
+        </Pressable>
+      </Pressable>
+    </Modal>
+
+    <Modal
+      visible={showResetHistory}
+      transparent
+      animationType="fade"
+      onRequestClose={() => setShowResetHistory(false)}
+    >
+      <Pressable style={s.modalBackdrop} onPress={() => setShowResetHistory(false)}>
+        <Pressable style={s.modalSheet} onPress={() => {}}>
+          <View style={s.modalHandle} />
+          <Text style={s.modalTitle}>Restore Round {selectedRound + 1}</Text>
+          <Text style={s.modalSubtitle}>Pick a pre-reset snapshot to restore.</Text>
+          {(tournament.rounds[selectedRound]?.resetHistory ?? [])
+            .map((entry, idx) => ({ entry, idx }))
+            .reverse()
+            .map(({ entry, idx }) => {
+              const playerCount = Object.keys(entry.scores ?? {}).length;
+              const holeCount = Object.values(entry.scores ?? {})
+                .reduce((max, pScores) => Math.max(max, Object.keys(pScores ?? {}).length), 0);
+              const when = (() => {
+                try { return new Date(entry.at).toLocaleString(); } catch { return entry.at; }
+              })();
+              return (
+                <TouchableOpacity
+                  key={entry.at ?? idx}
+                  style={s.menuItem}
+                  onPress={() => restoreFromHistory(idx)}
+                  activeOpacity={0.7}
+                >
+                  <Feather name="clock" size={18} color={theme.accent.primary} />
+                  <View style={{ flex: 1 }}>
+                    <Text style={s.menuItemText}>{when}</Text>
+                    <Text style={s.modalSubtle}>{playerCount} players · up to hole {holeCount}</Text>
+                  </View>
+                  <Feather name="chevron-right" size={16} color={theme.text.muted} />
+                </TouchableOpacity>
+              );
+            })}
         </Pressable>
       </Pressable>
     </Modal>
@@ -655,9 +861,83 @@ export default function HomeScreen({ navigation, viewMode = 'auto' }) {
         </Pressable>
       </Pressable>
     </Modal>
-    </View>
+    </SafeAreaView>
   );
 }
+
+// Memoized round pager page. Extracted so changing selectedRound during
+// a swipe only re-renders the outside leaderboard / tab bar — the 3
+// round pages stay memoized with stable refs.
+const RoundPage = React.memo(function RoundPage({
+  round, index, width, hasPrev, hasNext, revealed, roundBestBall,
+  players, settings, theme, s,
+  onGoToRound, onOpenEdit,
+}) {
+  const hasScores = round.scores && Object.keys(round.scores).length > 0;
+  const hasPairs = Array.isArray(round.pairs) && round.pairs.length > 0;
+  return (
+    <View
+      style={[{ width }, PAGER_PAGE_SNAP_STYLE]}
+      dataSet={Platform.OS === 'web' ? { pagerpage: '1' } : undefined}
+    >
+      <View style={s.pagerTitleRow}>
+        <TouchableOpacity
+          style={[s.pagerArrow, !hasPrev && s.pagerArrowHidden]}
+          onPress={() => hasPrev && onGoToRound(index - 1)}
+          disabled={!hasPrev}
+          activeOpacity={0.7}
+          accessibilityLabel="Previous round"
+        >
+          <Feather name="chevron-left" size={18} color={theme.accent.primary} />
+        </TouchableOpacity>
+        <Text style={s.tabRoundTitle}>RONDA {index + 1} · {round.courseName || '—'}</Text>
+        <TouchableOpacity
+          onPress={() => onOpenEdit(index)}
+          style={s.roundEditBtn}
+          hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+          accessibilityLabel="Round options"
+        >
+          <Feather name="settings" size={14} color={theme.text.muted} />
+        </TouchableOpacity>
+        <TouchableOpacity
+          style={[s.pagerArrow, !hasNext && s.pagerArrowHidden]}
+          onPress={() => hasNext && onGoToRound(index + 1)}
+          disabled={!hasNext}
+          activeOpacity={0.7}
+          accessibilityLabel="Next round"
+        >
+          <Feather name="chevron-right" size={18} color={theme.accent.primary} />
+        </TouchableOpacity>
+      </View>
+      {hasScores ? (
+        roundBestBall
+          ? <BestBallRoundCard round={round} players={players} settings={settings} theme={theme} s={s} />
+          : <StablefordRoundCard round={round} players={players} theme={theme} s={s} />
+      ) : revealed && hasPairs ? (
+        <PairsPreviewCard pairs={round.pairs} theme={theme} s={s} />
+      ) : (
+        <Text style={s.emptyRoundHint}>No scores yet for this round.</Text>
+      )}
+    </View>
+  );
+});
+
+// Fallback card shown when a round has revealed pairs but no scores yet.
+const PairsPreviewCard = React.memo(function PairsPreviewCard({ pairs, theme, s }) {
+  return (
+    <>
+      {pairs.map((pair, pi) => (
+        <View key={pi} style={s.pairBlock}>
+          <View style={s.pairHeader}>
+            <Text style={s.pairNames}>{pair.map((p) => p.name).join(' & ')}</Text>
+            <Text style={s.pairPoints}>—</Text>
+          </View>
+        </View>
+      ))}
+      <Text style={s.pairsPreviewHint}>No scores yet. Teams are set for this round.</Text>
+    </>
+  );
+});
 
 const StablefordRoundCard = React.memo(function StablefordRoundCard({ round, players, theme, s }) {
   const pairResults = roundPairLeaderboard(round, players);
@@ -850,6 +1130,14 @@ const makeStyles = (t) => StyleSheet.create({
     textAlign: 'center',
     paddingVertical: 24,
   },
+  pairsPreviewHint: {
+    fontFamily: 'PlusJakartaSans-Regular',
+    color: t.text.muted,
+    fontSize: 12,
+    textAlign: 'center',
+    marginTop: 4,
+    marginBottom: 4,
+  },
 
   // Masters leaderboard
   mastersCard: {
@@ -912,9 +1200,9 @@ const makeStyles = (t) => StyleSheet.create({
     gap: 10,
     paddingHorizontal: 16,
     paddingVertical: 12,
-    backgroundColor: theme.bg.primary,
+    backgroundColor: t.bg.primary,
     borderTopWidth: 1,
-    borderTopColor: theme.isDark ? theme.glass?.border : theme.border.default,
+    borderTopColor: t.isDark ? t.glass?.border : t.border.default,
   },
 
   // Delete (tournament list cards)
@@ -940,6 +1228,46 @@ const makeStyles = (t) => StyleSheet.create({
     fontFamily: 'PlusJakartaSans-SemiBold',
     fontSize: 10, color: t.accent.primary, marginBottom: 8,
     letterSpacing: 1.5, textTransform: 'uppercase', paddingHorizontal: 4,
+  },
+  modalSubtitle: {
+    fontFamily: 'PlusJakartaSans-Regular',
+    fontSize: 13, color: t.text.secondary,
+    paddingHorizontal: 4, marginBottom: 8,
+  },
+  modalSubtle: {
+    fontFamily: 'PlusJakartaSans-Regular',
+    fontSize: 11, color: t.text.muted, marginTop: 2,
+  },
+  undoSnack: {
+    position: 'absolute',
+    left: 16, right: 16, bottom: 80,
+    flexDirection: 'row', alignItems: 'center', gap: 10,
+    paddingHorizontal: 14, paddingVertical: 12,
+    backgroundColor: t.isDark ? t.bg.elevated : '#1a1a1a',
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: t.accent.primary + '40',
+    ...(t.isDark ? {} : t.shadow.elevated),
+    zIndex: 20,
+  },
+  undoSnackText: {
+    flex: 1,
+    color: '#ffffff',
+    fontFamily: 'PlusJakartaSans-SemiBold',
+    fontSize: 13,
+  },
+  undoSnackBtn: {
+    paddingHorizontal: 10, paddingVertical: 6,
+    borderRadius: 8,
+    backgroundColor: t.accent.primary + '22',
+    borderWidth: 1,
+    borderColor: t.accent.primary + '55',
+  },
+  undoSnackBtnText: {
+    color: t.accent.primary,
+    fontFamily: 'PlusJakartaSans-ExtraBold',
+    fontSize: 12,
+    letterSpacing: 1,
   },
   menuItem: {
     flexDirection: 'row', alignItems: 'center', gap: 14,

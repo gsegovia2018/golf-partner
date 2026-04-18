@@ -3,11 +3,12 @@ import {
   View, Text, TextInput, TouchableOpacity,
   StyleSheet, ScrollView,
 } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
 import { Feather } from '@expo/vector-icons';
 
 import { useTheme } from '../theme/ThemeContext';
 import {
-  loadTournament, saveTournament, DEFAULT_SETTINGS, randomPairs,
+  loadTournament, saveTournament, subscribeTournamentChanges, DEFAULT_SETTINGS, randomPairs,
   calcPlayingHandicap, normalizeRoundHandicaps,
 } from '../store/tournamentStore';
 
@@ -30,12 +31,18 @@ export default function EditTournamentScreen({ navigation }) {
   const tournamentRef = useRef(null);
   const saveTimeoutRef = useRef(null);
   const isFirstRender = useRef(true);
+  // Set when a subscription-driven reload pushes fresh display-only data
+  // into local state so the debounced save effect doesn't echo it back.
+  const skipNextSaveRef = useRef(false);
 
   useEffect(() => { tournamentRef.current = tournament; }, [tournament]);
 
   useEffect(() => {
-    (async () => {
+    let cancelled = false;
+
+    async function initialLoad() {
       const t = await loadTournament();
+      if (cancelled) return;
       setTournament(t);
       setPlayers(t.players.map((p) => ({ ...p, handicap: String(p.handicap) })));
       setSettings({ ...DEFAULT_SETTINGS, ...t.settings, bestBallValue: String((t.settings ?? DEFAULT_SETTINGS).bestBallValue ?? 1), worstBallValue: String((t.settings ?? DEFAULT_SETTINGS).worstBallValue ?? 1) });
@@ -51,11 +58,41 @@ export default function EditTournamentScreen({ navigation }) {
           manualHandicaps: { ...(normalized.manualHandicaps ?? {}) },
         };
       }));
-    })();
+    }
+
+    // On subscription-driven reloads we only refresh display-only fields
+    // (player names) so ongoing local edits are preserved. Any change that
+    // originates from external writes (library rename, course slope
+    // propagation, another screen's save) should not discard the user's
+    // in-flight handicap/course-name/notes edits on this screen.
+    async function mergeLoad() {
+      const t = await loadTournament();
+      if (cancelled || !t) return;
+      setTournament(t);
+      setPlayers((prev) => {
+        let changed = false;
+        const next = prev.map((p) => {
+          const fresh = t.players.find((x) => x.id === p.id);
+          if (fresh && fresh.name !== p.name) {
+            changed = true;
+            return { ...p, name: fresh.name };
+          }
+          return p;
+        });
+        if (!changed) return prev;
+        skipNextSaveRef.current = true;
+        return next;
+      });
+    }
+
+    initialLoad();
+    const unsub = subscribeTournamentChanges(mergeLoad);
+    return () => { cancelled = true; unsub(); };
   }, []);
 
   useEffect(() => {
     if (isFirstRender.current) { isFirstRender.current = false; return; }
+    if (skipNextSaveRef.current) { skipNextSaveRef.current = false; return; }
     if (!tournamentRef.current) return;
     if (saveTimeoutRef.current) clearTimeout(saveTimeoutRef.current);
     saveTimeoutRef.current = setTimeout(async () => {
@@ -169,7 +206,7 @@ export default function EditTournamentScreen({ navigation }) {
   if (!tournament) return null;
 
   return (
-    <View style={s.screen}>
+    <SafeAreaView style={s.screen} edges={['top', 'bottom']}>
       {/* Header */}
       <View style={s.header}>
         <TouchableOpacity onPress={() => navigation.goBack()} style={s.backBtn}>
@@ -343,7 +380,7 @@ export default function EditTournamentScreen({ navigation }) {
           )}
         </View>
       </ScrollView>
-    </View>
+    </SafeAreaView>
   );
 }
 

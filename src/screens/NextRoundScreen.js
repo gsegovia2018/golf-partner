@@ -6,8 +6,11 @@ import {
   TouchableOpacity,
   View,
 } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
 import { Feather } from '@expo/vector-icons';
-import { loadTournament, randomPairs, saveTournament } from '../store/tournamentStore';
+import {
+  loadTournament, randomPairs, saveTournament, subscribeTournamentChanges,
+} from '../store/tournamentStore';
 import { useTheme } from '../theme/ThemeContext';
 
 export default function NextRoundScreen({ navigation, route }) {
@@ -36,17 +39,27 @@ export default function NextRoundScreen({ navigation, route }) {
     }
   }
 
+  const phaseRef = useRef('initial');
+  useEffect(() => { phaseRef.current = phase; }, [phase]);
+
   useEffect(() => {
-    (async () => {
+    let cancelled = false;
+    async function load({ initial }) {
       const t = await loadTournament();
+      if (cancelled || !t) return;
       setTournament(t);
-      if (revealOnly) {
-        setNextPairs(t.rounds[paramRoundIndex].pairs);
-      } else {
-        setNextPairs(randomPairs(t.players));
+      if (!initial) {
+        if (phaseRef.current !== 'initial') return;
+        if (revealOnly) setNextPairs(t.rounds[paramRoundIndex].pairs);
+        return;
       }
-    })();
-  }, []);
+      if (revealOnly) setNextPairs(t.rounds[paramRoundIndex].pairs);
+      else setNextPairs(randomPairs(t.players));
+    }
+    load({ initial: true });
+    const unsub = subscribeTournamentChanges(() => load({ initial: false }));
+    return () => { cancelled = true; unsub(); };
+  }, [revealOnly, paramRoundIndex]);
 
   if (!tournament || !nextPairs) return null;
 
@@ -138,7 +151,7 @@ export default function NextRoundScreen({ navigation, route }) {
   /* ─── Countdown phase ─── */
   if (phase === 'countdown') {
     return (
-      <View style={s.fullscreen}>
+      <SafeAreaView style={s.fullscreen} edges={['top', 'bottom']}>
         <View style={s.countdownCircle}>
           <Animated.Text
             style={[
@@ -152,7 +165,7 @@ export default function NextRoundScreen({ navigation, route }) {
             {countdownNum}
           </Animated.Text>
         </View>
-      </View>
+      </SafeAreaView>
     );
   }
 
@@ -161,7 +174,7 @@ export default function NextRoundScreen({ navigation, route }) {
     ensurePairAnims(nextPairs.length);
     const pairColors = [theme.pairA, theme.pairB, theme.accent.primary, theme.accent.primary];
     return (
-      <View style={s.revealContainer}>
+      <SafeAreaView style={s.revealContainer} edges={['top', 'bottom']}>
         <View style={s.pairsContainer}>
           {nextPairs.map((pair, i) => {
             const anim = pairAnimsRef.current[i];
@@ -186,12 +199,16 @@ export default function NextRoundScreen({ navigation, route }) {
                 <Text style={[s.revealPairLabel, { color }]}>
                   {pair.length === 1 ? `SOLO ${i + 1}` : `PAIR ${i + 1}`}
                 </Text>
-                {pair.map((p, j) => (
-                  <React.Fragment key={p.id}>
-                    <Text style={s.revealPairNames}>{p.name}</Text>
-                    {j < pair.length - 1 && <Text style={s.revealAmpersand}>&</Text>}
-                  </React.Fragment>
-                ))}
+                {pair.map((p, j) => {
+                  const live = tournament.players?.find((x) => x.id === p.id);
+                  const displayName = live?.name ?? p.name;
+                  return (
+                    <React.Fragment key={p.id}>
+                      <Text style={s.revealPairNames}>{displayName}</Text>
+                      {j < pair.length - 1 && <Text style={s.revealAmpersand}>&</Text>}
+                    </React.Fragment>
+                  );
+                })}
               </Animated.View>
               </React.Fragment>
             );
@@ -223,13 +240,13 @@ export default function NextRoundScreen({ navigation, route }) {
             </Text>
           </TouchableOpacity>
         </View>
-      </View>
+      </SafeAreaView>
     );
   }
 
   /* ─── Initial phase ─── */
   return (
-    <View style={s.container}>
+    <SafeAreaView style={s.container} edges={['top', 'bottom']}>
       <View style={s.header}>
         <TouchableOpacity onPress={() => navigation.goBack()} style={s.backBtn}>
           <Feather name="chevron-left" size={22} color={theme.accent.primary} />
@@ -246,7 +263,7 @@ export default function NextRoundScreen({ navigation, route }) {
           <Text style={s.revealBtnText}>Reveal Teams</Text>
         </TouchableOpacity>
       </View>
-    </View>
+    </SafeAreaView>
   );
 }
 

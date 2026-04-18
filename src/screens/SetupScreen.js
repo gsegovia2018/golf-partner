@@ -3,11 +3,12 @@ import {
   View, Text, TextInput, TouchableOpacity,
   StyleSheet, ScrollView, Alert,
 } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { Feather } from '@expo/vector-icons';
 import { useFocusEffect } from '@react-navigation/native';
 import { createTournament, saveTournament, randomPairs, DEFAULT_SETTINGS } from '../store/tournamentStore';
-import { defaultHoles } from '../store/libraryStore';
+import { defaultHoles, fetchCourses, fetchPlayers } from '../store/libraryStore';
 import { consumePendingPlayers, consumePendingCourses } from '../lib/selectionBridge';
 import { useTheme } from '../theme/ThemeContext';
 
@@ -21,40 +22,69 @@ export default function SetupScreen({ navigation }) {
   const [settings, setSettings] = useState({ ...DEFAULT_SETTINGS });
 
   useFocusEffect(useCallback(() => {
+    let cancelled = false;
+
     const picked = consumePendingPlayers();
     if (picked && picked.length > 0) {
-      setPlayers((prev) => {
-        const next = [...prev];
-        for (const p of picked) {
-          if (next.length >= 4 || next.find((x) => x.id === p.id)) continue;
-          next.push({ id: p.id, name: p.name, handicap: p.handicap });
-        }
-        return next;
-      });
+      (async () => {
+        // Re-fetch from the library to pick up renames / handicap edits that
+        // may have happened between the picker tap and this screen gaining
+        // focus. Fall back to the picker snapshot if the library read fails.
+        let fresh = picked;
+        try {
+          const all = await fetchPlayers();
+          fresh = picked.map((p) => {
+            const latest = all.find((x) => x.id === p.id);
+            return latest ? { ...p, name: latest.name, handicap: latest.handicap } : p;
+          });
+        } catch (_) { /* keep snapshot */ }
+        if (cancelled) return;
+        setPlayers((prev) => {
+          const next = [...prev];
+          for (const p of fresh) {
+            if (next.length >= 4 || next.find((x) => x.id === p.id)) continue;
+            next.push({ id: p.id, name: p.name, handicap: p.handicap });
+          }
+          return next;
+        });
+      })();
     }
+
     const pc = consumePendingCourses();
     if (pc && pc.courses.length > 0) {
       const { startRoundIndex, courses } = pc;
-      setRounds((prev) => {
-        const next = [...prev];
-        courses.forEach((course, i) => {
-          const idx = startRoundIndex + i;
-          const roundData = {
-            courseId: course.id,
-            courseName: course.name,
-            holes: course.holes,
-            slope: course.slope,
-            playerHandicaps: null,
-          };
-          if (idx < next.length) {
-            next[idx] = { ...next[idx], ...roundData };
-          } else {
-            next.push({ ...roundData });
-          }
+      (async () => {
+        let freshCourses = courses;
+        try {
+          const all = await fetchCourses();
+          freshCourses = courses.map((c) => all.find((x) => x.id === c.id) ?? c);
+        } catch (_) { /* keep snapshot */ }
+        if (cancelled) return;
+        setRounds((prev) => {
+          const next = [...prev];
+          freshCourses.forEach((course, i) => {
+            const idx = startRoundIndex + i;
+            const roundData = {
+              courseId: course.id,
+              courseName: course.name,
+              // Deep-copy so later edits in CourseEditor don't mutate the
+              // library's in-memory hole objects.
+              holes: course.holes.map((h) => ({ ...h })),
+              slope: course.slope,
+              playerHandicaps: null,
+            };
+            if (idx < next.length) {
+              next[idx] = { ...next[idx], ...roundData };
+            } else {
+              next.push({ ...roundData });
+            }
+          });
+          return next;
         });
-        return next;
-      });
+      })();
     }
+
+    return () => { cancelled = true; };
   }, []));
 
   const handleHolesSaved = useCallback((roundIndex, holes, slope, playerHandicaps, manualHandicaps) => {
@@ -132,7 +162,7 @@ export default function SetupScreen({ navigation }) {
   }
 
   return (
-    <View style={s.container}>
+    <SafeAreaView style={s.container} edges={['top', 'bottom']}>
       {/* Header */}
       <View style={s.header}>
         <TouchableOpacity onPress={() => navigation.goBack()} style={s.backBtn}>
@@ -315,7 +345,7 @@ export default function SetupScreen({ navigation }) {
         </TouchableOpacity>
       </View>
     </ScrollView>
-    </View>
+    </SafeAreaView>
   );
 }
 

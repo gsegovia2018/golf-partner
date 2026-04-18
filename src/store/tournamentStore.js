@@ -153,6 +153,39 @@ export function recomputeRoundPlayingHandicaps(round, players) {
   return { ...round, playerHandicaps };
 }
 
+// Push a player library edit (name/handicap) into every tournament that
+// references this player id. Updates tournament.players and the player
+// snapshot embedded in each round.pairs. Non-manual round playing handicaps
+// are re-derived from the new base index.
+export async function propagatePlayerToTournaments(playerId, { name, handicap }) {
+  if (!playerId) return [];
+  const parsedIndex = parseInt(handicap, 10) || 0;
+  const tournaments = await loadAllTournaments();
+  const updatedIds = [];
+  for (const t of tournaments) {
+    const hasPlayer = t.players?.some((p) => p.id === playerId);
+    if (!hasPlayer) continue;
+
+    const nextPlayers = t.players.map((p) =>
+      p.id === playerId ? { ...p, name, handicap: parsedIndex } : p,
+    );
+    const nextRounds = t.rounds.map((round) => {
+      const nextPairs = round.pairs?.map((pair) =>
+        pair.map((pp) =>
+          pp.id === playerId ? { ...pp, name, handicap: parsedIndex } : pp,
+        ),
+      );
+      const patched = { ...round, pairs: nextPairs ?? round.pairs };
+      return recomputeRoundPlayingHandicaps(patched, nextPlayers);
+    });
+
+    await persistTournament({ ...t, players: nextPlayers, rounds: nextRounds });
+    updatedIds.push(t.id);
+  }
+  if (updatedIds.length > 0) _emitChange();
+  return updatedIds;
+}
+
 // Push a course library edit (slope/holes) into every tournament round that
 // references this courseId. Holes are deep-copied per round. Non-manual
 // playing handicaps are re-derived from the new slope.
@@ -178,6 +211,7 @@ export async function propagateCourseToTournaments(courseId, { slope, holes }) {
       updatedIds.push(next.id);
     }
   }
+  if (updatedIds.length > 0) _emitChange();
   return updatedIds;
 }
 
@@ -326,8 +360,97 @@ function isRoundPlayed(round, index, tournament) {
   return !!round.scores;
 }
 
-// Individual leaderboard for best ball mode.
-// Each player earns win-points from their pair's hole wins per round.
+// Per-pair, per-hole assign each member a role: exactly one is the "best
+// ball" (higher Stableford on that hole) and the other is the "worst ball".
+//
+// Tiebreaker when Stableford points tie on a hole:
+//   1. Lower playing handicap is best.
+//   2. Same handicap → whoever was best on the previous hole (cascade
+//      backwards through prior holes, skipping any hole where either
+//      player is unscored).
+//   3. Everything tied → default to the first-listed pair member.
+//
+// Returns: { [playerId]: { best: number, worst: number } }. Holes that
+// aren't scored for both members of a pair don't contribute to either
+// count (neither player gets a role for that hole).
+export function assignBestWorstRoles(round, players) {
+  const roles = Object.fromEntries(players.map((p) => [p.id, { best: 0, worst: 0 }]));
+  if (!round?.pairs?.length) return roles;
+
+  const playersById = Object.fromEntries(players.map((p) => [p.id, p]));
+
+  // Precompute Stableford points per (player, hole). null = unscored.
+  const points = {};
+  players.forEach((p) => { points[p.id] = {}; });
+  round.holes.forEach((hole) => {
+    players.forEach((p) => {
+      const strokes = round.scores?.[p.id]?.[hole.number];
+      if (strokes == null) {
+        points[p.id][hole.number] = null;
+      } else {
+        const hcp = getPlayingHandicap(round, p);
+        points[p.id][hole.number] = calcStablefordPoints(hole.par, strokes, hcp, hole.strokeIndex);
+      }
+    });
+  });
+
+  round.pairs.forEach((pair) => {
+    if (pair.length < 2) return;
+    const m1 = playersById[pair[0].id];
+    const m2 = playersById[pair[1].id];
+    if (!m1 || !m2) return;
+    const hcp1 = getPlayingHandicap(round, m1);
+    const hcp2 = getPlayingHandicap(round, m2);
+
+    round.holes.forEach((hole, holeIdx) => {
+      const p1 = points[m1.id][hole.number];
+      const p2 = points[m2.id][hole.number];
+      if (p1 == null || p2 == null) return;
+
+      let bestId, worstId;
+      if (p1 > p2) {
+        bestId = m1.id; worstId = m2.id;
+      } else if (p2 > p1) {
+        bestId = m2.id; worstId = m1.id;
+      } else if (hcp1 < hcp2) {
+        bestId = m1.id; worstId = m2.id;
+      } else if (hcp2 < hcp1) {
+        bestId = m2.id; worstId = m1.id;
+      } else {
+        // Walk backwards through prior holes.
+        let decided = false;
+        for (let k = holeIdx - 1; k >= 0; k--) {
+          const prev = round.holes[k];
+          const q1 = points[m1.id][prev.number];
+          const q2 = points[m2.id][prev.number];
+          if (q1 == null || q2 == null) continue;
+          if (q1 > q2) { bestId = m1.id; worstId = m2.id; decided = true; break; }
+          if (q2 > q1) { bestId = m2.id; worstId = m1.id; decided = true; break; }
+        }
+        if (!decided) { bestId = m1.id; worstId = m2.id; }
+      }
+
+      roles[bestId].best += 1;
+      roles[worstId].worst += 1;
+    });
+  });
+
+  return roles;
+}
+
+// Points earned by a single player in a round from their best/worst-ball
+// role across the pair's scored holes.
+export function playerRoundBestWorstPoints(round, playerId, players, settings) {
+  const { bestBallValue, worstBallValue } = { ...DEFAULT_SETTINGS, ...settings };
+  const roles = assignBestWorstRoles(round, players);
+  const r = roles[playerId];
+  if (!r) return 0;
+  return r.best * bestBallValue + r.worst * worstBallValue;
+}
+
+// Individual leaderboard for best-ball mode: each player is tallied by how
+// many holes they were the best vs worst ball inside their pair, scaled by
+// the tournament's bestBallValue / worstBallValue.
 export function tournamentBestWorstLeaderboard(tournament) {
   const { players, rounds, settings } = tournament;
   const { bestBallValue, worstBallValue } = { ...DEFAULT_SETTINGS, ...settings };
@@ -335,21 +458,14 @@ export function tournamentBestWorstLeaderboard(tournament) {
 
   rounds.forEach((round, index) => {
     if (!isRoundPlayed(round, index, tournament) || !round.pairs?.length) return;
-    const result = calcBestWorstBall(round, players);
-    if (!result) return;
-    const { pair1, pair2, bestBall, worstBall } = result;
-
-    // Attribute hole wins to each player in the winning pair
-    const awardPair = (pair, bestWins, worstWins) => {
-      pair.forEach((p) => {
-        totals[p.id].points += bestWins * bestBallValue + worstWins * worstBallValue;
-        totals[p.id].bestWins += bestWins;
-        totals[p.id].worstWins += worstWins;
-      });
-    };
-
-    awardPair(pair1, bestBall.pair1, worstBall.pair1);
-    awardPair(pair2, bestBall.pair2, worstBall.pair2);
+    const roles = assignBestWorstRoles(round, players);
+    players.forEach((p) => {
+      const r = roles[p.id];
+      if (!r) return;
+      totals[p.id].points += r.best * bestBallValue + r.worst * worstBallValue;
+      totals[p.id].bestWins += r.best;
+      totals[p.id].worstWins += r.worst;
+    });
   });
 
   return Object.values(totals).sort((a, b) => b.points - a.points);

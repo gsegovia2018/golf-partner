@@ -3,11 +3,13 @@ import {
   ActivityIndicator, Alert, Platform, ScrollView, StyleSheet,
   Text, TextInput, TouchableOpacity, View,
 } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
 import { useFocusEffect, useNavigation } from '@react-navigation/native';
 import { Feather } from '@expo/vector-icons';
 
 import { useTheme } from '../theme/ThemeContext';
 import { deletePlayer, fetchPlayers, upsertPlayer } from '../store/libraryStore';
+import { propagatePlayerToTournaments } from '../store/tournamentStore';
 
 export default function PlayersLibraryScreen() {
   const navigation = useNavigation();
@@ -52,7 +54,10 @@ export default function PlayersLibraryScreen() {
     if (!name.trim()) return;
     setSaving(true);
     try {
-      await upsertPlayer({ id: editingId ?? undefined, name: name.trim(), handicap });
+      const saved = await upsertPlayer({ id: editingId ?? undefined, name: name.trim(), handicap });
+      if (editingId) {
+        await propagatePlayerToTournaments(saved.id, { name: saved.name, handicap: saved.handicap });
+      }
       cancelEdit();
       await load();
     } catch (e) {
@@ -81,7 +86,7 @@ export default function PlayersLibraryScreen() {
   }
 
   return (
-    <View style={s.container}>
+    <SafeAreaView style={s.container} edges={['top', 'bottom']}>
       <View style={s.header}>
         <TouchableOpacity onPress={() => navigation.goBack()} style={s.backBtn}>
           <Feather name="chevron-left" size={22} color={theme.accent.primary} />
@@ -150,7 +155,7 @@ export default function PlayersLibraryScreen() {
               </View>
             ))}
       </ScrollView>
-    </View>
+    </SafeAreaView>
   );
 }
 
