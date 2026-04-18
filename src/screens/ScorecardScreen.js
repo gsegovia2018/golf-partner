@@ -114,10 +114,7 @@ export default function ScorecardScreen({ navigation, route }) {
 
   const round = tournament.rounds[roundIndex];
   const { players } = tournament;
-  const settings = useMemo(
-    () => ({ ...DEFAULT_SETTINGS, ...tournament.settings }),
-    [tournament.settings],
-  );
+  const settings = { ...DEFAULT_SETTINGS, ...tournament.settings };
   const isBestBall = settings.scoringMode === 'bestball';
 
   function triggerCelebration(playerId, holeNumber, label) {
@@ -190,11 +187,8 @@ export default function ScorecardScreen({ navigation, route }) {
   }
 
   const hole = round.holes.find((h) => h.number === currentHole);
-  const liveRound = useMemo(() => ({ ...round, scores }), [round, scores]);
-  const bbResult = useMemo(
-    () => (isBestBall ? calcBestWorstBall(liveRound, players) : null),
-    [isBestBall, liveRound, players],
-  );
+  const liveRound = { ...round, scores };
+  const bbResult = isBestBall ? calcBestWorstBall(liveRound, players) : null;
 
   return (
     <View style={s.container}>
