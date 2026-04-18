@@ -22,6 +22,8 @@ export default function HomeScreen({ navigation, viewMode = 'auto' }) {
   const [roundPagerWidth, setRoundPagerWidth] = useState(0);
   const roundPagerRef = useRef(null);
   const roundScrollOffset = useRef(0);
+  const isUserScrollingRound = useRef(false);
+  const roundPagerInitialized = useRef(false);
   const [showSettings, setShowSettings] = useState(false);
   const [showRoundEdit, setShowRoundEdit] = useState(false);
   const [leaderboardBestBall, setLeaderboardBestBall] = useState(false);
@@ -45,15 +47,17 @@ export default function HomeScreen({ navigation, viewMode = 'auto' }) {
     return unsubscribe;
   }, [navigation, reload]);
 
-  // Keep round pager in sync with selectedRound (from tab taps).
-  // Skip if the pager is already at the right offset — that means the
-  // change came from onScroll and reissuing scrollTo would fight the drag.
+  // Keep round pager in sync with selectedRound (tab taps, arrow buttons).
+  // Skip while the user is dragging, and skip if already at target.
+  // Animate so taps slide smoothly instead of snapping.
   useEffect(() => {
     if (!roundPagerRef.current || roundPagerWidth <= 0) return;
+    if (isUserScrollingRound.current) return;
     const target = selectedRound * roundPagerWidth;
     if (Math.abs(roundScrollOffset.current - target) < 1) return;
-    roundPagerRef.current.scrollTo({ x: target, animated: false });
+    roundPagerRef.current.scrollTo({ x: target, animated: roundPagerInitialized.current });
     roundScrollOffset.current = target;
+    roundPagerInitialized.current = true;
   }, [selectedRound, roundPagerWidth]);
 
   async function resetCurrentRound() {
@@ -340,7 +344,14 @@ export default function HomeScreen({ navigation, viewMode = 'auto' }) {
           />
 
           {/* Horizontal pager — swipe to change round, stays in sync with tabs */}
-          <View style={s.roundPagerWrap} onLayout={(e) => setRoundPagerWidth(e.nativeEvent.layout.width)}>
+          <View
+            style={s.roundPagerWrap}
+            onLayout={(e) => {
+              const w = e.nativeEvent.layout.width;
+              roundScrollOffset.current = selectedRound * w;
+              setRoundPagerWidth(w);
+            }}
+          >
             {roundPagerWidth > 0 && (
               <ScrollView
                 ref={roundPagerRef}
@@ -348,9 +359,24 @@ export default function HomeScreen({ navigation, viewMode = 'auto' }) {
                 pagingEnabled
                 showsHorizontalScrollIndicator={false}
                 scrollEventThrottle={16}
+                onScrollBeginDrag={() => { isUserScrollingRound.current = true; }}
                 onScroll={(e) => {
+                  roundScrollOffset.current = e.nativeEvent.contentOffset.x;
+                }}
+                onScrollEndDrag={(e) => {
                   const x = e.nativeEvent.contentOffset.x;
                   roundScrollOffset.current = x;
+                  // If already settled at a page boundary, no momentum will fire.
+                  if (Math.abs(x - Math.round(x / roundPagerWidth) * roundPagerWidth) < 1) {
+                    isUserScrollingRound.current = false;
+                    const idx = Math.round(x / roundPagerWidth);
+                    if (idx !== selectedRound) setSelectedRound(idx);
+                  }
+                }}
+                onMomentumScrollEnd={(e) => {
+                  const x = e.nativeEvent.contentOffset.x;
+                  roundScrollOffset.current = x;
+                  isUserScrollingRound.current = false;
                   const idx = Math.round(x / roundPagerWidth);
                   if (idx !== selectedRound) setSelectedRound(idx);
                 }}
