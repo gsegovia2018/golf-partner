@@ -9,6 +9,7 @@ import { Feather } from '@expo/vector-icons';
 
 import { useTheme } from '../theme/ThemeContext';
 import { deletePlayer, fetchPlayers, upsertPlayer } from '../store/libraryStore';
+import { propagatePlayerToTournaments } from '../store/tournamentStore';
 
 export default function PlayersLibraryScreen() {
   const navigation = useNavigation();
@@ -53,7 +54,10 @@ export default function PlayersLibraryScreen() {
     if (!name.trim()) return;
     setSaving(true);
     try {
-      await upsertPlayer({ id: editingId ?? undefined, name: name.trim(), handicap });
+      const saved = await upsertPlayer({ id: editingId ?? undefined, name: name.trim(), handicap });
+      if (editingId) {
+        await propagatePlayerToTournaments(saved.id, { name: saved.name, handicap: saved.handicap });
+      }
       cancelEdit();
       await load();
     } catch (e) {

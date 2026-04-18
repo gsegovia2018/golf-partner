@@ -1,9 +1,9 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { View, Text, TouchableOpacity, StyleSheet } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Feather } from '@expo/vector-icons';
 import { useTheme } from '../theme/ThemeContext';
-import { loadTournament, saveTournament } from '../store/tournamentStore';
+import { loadTournament, saveTournament, subscribeTournamentChanges } from '../store/tournamentStore';
 
 export default function EditTeamsScreen({ navigation, route }) {
   const { theme } = useTheme();
@@ -14,15 +14,26 @@ export default function EditTeamsScreen({ navigation, route }) {
   const [pairs, setPairs] = useState(null);
   const [selected, setSelected] = useState(null);
   const [saving, setSaving] = useState(false);
+  // Set when the user performs a local swap so a subscription-driven
+  // reload (e.g. a player rename in the library) doesn't discard it.
+  const hasLocalEdits = useRef(false);
 
   useEffect(() => {
-    loadTournament().then((t) => {
+    let cancelled = false;
+    async function load({ force }) {
+      const t = await loadTournament();
+      if (cancelled) return;
       setTournament(t);
       const current = t?.rounds?.[roundIndex]?.pairs;
-      if (current && current.length === 2) {
+      if (!current || current.length !== 2) return;
+      if (force || !hasLocalEdits.current) {
         setPairs([[...current[0]], [...current[1]]]);
       }
-    });
+    }
+    hasLocalEdits.current = false;
+    load({ force: true });
+    const unsub = subscribeTournamentChanges(() => load({ force: false }));
+    return () => { cancelled = true; unsub(); };
   }, [roundIndex]);
 
   if (!tournament || !pairs) return null;
@@ -43,6 +54,7 @@ export default function EditTeamsScreen({ navigation, route }) {
     const b = next[pairIdx][slotIdx];
     next[selected.pairIdx][selected.slotIdx] = b;
     next[pairIdx][slotIdx] = a;
+    hasLocalEdits.current = true;
     setPairs(next);
     setSelected(null);
   }
@@ -85,21 +97,25 @@ export default function EditTeamsScreen({ navigation, route }) {
           return (
             <View key={pi} style={[s.pairCard, { borderLeftColor: accent }]}>
               <Text style={[s.pairLabel, { color: accent }]}>PAIR {pi + 1}</Text>
-              {pair.map((player, si) => (
-                <TouchableOpacity
-                  key={`${pi}-${si}-${player.id}`}
-                  style={[s.playerChip, isSelected(pi, si) && s.playerChipSelected]}
-                  onPress={() => onTapPlayer(pi, si)}
-                  activeOpacity={0.7}
-                >
-                  <Text style={[s.playerName, isSelected(pi, si) && s.playerNameSelected]}>
-                    {player.name}
-                  </Text>
-                  {isSelected(pi, si) && (
-                    <Feather name="repeat" size={16} color={theme.accent.primary} />
-                  )}
-                </TouchableOpacity>
-              ))}
+              {pair.map((player, si) => {
+                const live = tournament.players?.find((p) => p.id === player.id);
+                const displayName = live?.name ?? player.name;
+                return (
+                  <TouchableOpacity
+                    key={`${pi}-${si}-${player.id}`}
+                    style={[s.playerChip, isSelected(pi, si) && s.playerChipSelected]}
+                    onPress={() => onTapPlayer(pi, si)}
+                    activeOpacity={0.7}
+                  >
+                    <Text style={[s.playerName, isSelected(pi, si) && s.playerNameSelected]}>
+                      {displayName}
+                    </Text>
+                    {isSelected(pi, si) && (
+                      <Feather name="repeat" size={16} color={theme.accent.primary} />
+                    )}
+                  </TouchableOpacity>
+                );
+              })}
             </View>
           );
         })}

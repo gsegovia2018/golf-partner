@@ -8,7 +8,7 @@ import * as Haptics from 'expo-haptics';
 
 import { Feather } from '@expo/vector-icons';
 import {
-  loadTournament, saveTournament,
+  loadTournament, saveTournament, subscribeTournamentChanges,
   calcStablefordPoints, calcBestWorstBall, pickupStrokes, DEFAULT_SETTINGS,
 } from '../store/tournamentStore';
 import { useTheme } from '../theme/ThemeContext';
@@ -66,6 +66,10 @@ export default function ScorecardScreen({ navigation, route }) {
   const tournamentRef = useRef(null);
   const saveTimeoutRef = useRef(null);
   const notesSaveTimeoutRef = useRef(null);
+  // Tracks whether the user has an unsaved edit (scores or notes) that a
+  // subscription-driven reload must not clobber. Set when a debounce is
+  // scheduled, cleared after the save finishes.
+  const pendingSaveRef = useRef(false);
   const scoreAnims = useRef({});
   const prevHoleRef = useRef(null);
   const [celebration, setCelebration] = useState({ playerId: null, holeNumber: null, label: null });
@@ -74,16 +78,24 @@ export default function ScorecardScreen({ navigation, route }) {
 
   useEffect(() => { tournamentRef.current = tournament; }, [tournament]);
 
-  const reload = useCallback(async () => {
+  const reload = useCallback(async ({ preserveLocalEdits = false } = {}) => {
     const t = await loadTournament();
     if (!t) return;
     const idx = paramRoundIndex ?? t.currentRound;
     setTournament(t);
-    setScores(t.rounds[idx]?.scores ?? {});
-    setNotes(t.rounds[idx]?.notes ?? '');
+    if (!preserveLocalEdits) {
+      setScores(t.rounds[idx]?.scores ?? {});
+      setNotes(t.rounds[idx]?.notes ?? '');
+    }
   }, [paramRoundIndex]);
 
-  useEffect(() => { reload(); }, [reload]);
+  useEffect(() => {
+    reload();
+    const unsub = subscribeTournamentChanges(() => {
+      reload({ preserveLocalEdits: pendingSaveRef.current });
+    });
+    return unsub;
+  }, [reload]);
 
   const onRefresh = useCallback(async () => {
     setRefreshing(true);
@@ -118,24 +130,46 @@ export default function ScorecardScreen({ navigation, route }) {
 
   const autoSave = useCallback((newScores) => {
     if (saveTimeoutRef.current) clearTimeout(saveTimeoutRef.current);
+    pendingSaveRef.current = true;
     saveTimeoutRef.current = setTimeout(async () => {
-      if (!tournamentRef.current) return;
+      saveTimeoutRef.current = null;
+      if (!tournamentRef.current) {
+        if (!notesSaveTimeoutRef.current) pendingSaveRef.current = false;
+        return;
+      }
       const updated = { ...tournamentRef.current };
       updated.rounds = [...updated.rounds];
       updated.rounds[roundIndex] = { ...updated.rounds[roundIndex], scores: newScores };
-      await saveTournament(updated);
+      try {
+        await saveTournament(updated);
+      } finally {
+        if (!saveTimeoutRef.current && !notesSaveTimeoutRef.current) {
+          pendingSaveRef.current = false;
+        }
+      }
     }, 300);
   }, [roundIndex]);
 
   const saveNotes = useCallback((value) => {
     setNotes(value);
     if (notesSaveTimeoutRef.current) clearTimeout(notesSaveTimeoutRef.current);
+    pendingSaveRef.current = true;
     notesSaveTimeoutRef.current = setTimeout(async () => {
-      if (!tournamentRef.current) return;
+      notesSaveTimeoutRef.current = null;
+      if (!tournamentRef.current) {
+        if (!saveTimeoutRef.current) pendingSaveRef.current = false;
+        return;
+      }
       const updated = { ...tournamentRef.current };
       updated.rounds = [...updated.rounds];
       updated.rounds[roundIndex] = { ...updated.rounds[roundIndex], notes: value };
-      await saveTournament(updated);
+      try {
+        await saveTournament(updated);
+      } finally {
+        if (!saveTimeoutRef.current && !notesSaveTimeoutRef.current) {
+          pendingSaveRef.current = false;
+        }
+      }
     }, 400);
   }, [roundIndex]);
 
