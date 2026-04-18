@@ -112,6 +112,35 @@ export default function HomeScreen({ navigation, viewMode = 'auto' }) {
   const s = useMemo(() => makeStyles(theme), [theme]);
   const leaderboardRef = useRef();
 
+  // Hoist memoised derivations above the early returns so the hook order
+  // stays stable across showList / showTournament toggles.
+  const settings = useMemo(
+    () => ({ ...DEFAULT_SETTINGS, ...(tournament?.settings ?? {}) }),
+    [tournament?.settings],
+  );
+  const leaderboard = useMemo(
+    () => (tournament ? tournamentLeaderboard(tournament) : []),
+    [tournament],
+  );
+  const bestWorstLeaderboard = useMemo(
+    () => (tournament && leaderboardBestBall ? tournamentBestWorstLeaderboard(tournament) : null),
+    [tournament, leaderboardBestBall],
+  );
+  const selectedRoundData = tournament?.rounds?.[selectedRound] ?? null;
+  const selectedRoundHasScores = !!(selectedRoundData?.scores && Object.keys(selectedRoundData.scores).length > 0);
+  const selectedRoundPlayerTotals = useMemo(
+    () => (tournament && selectedRoundData && selectedRoundHasScores && !leaderboardBestBall
+      ? roundTotals(selectedRoundData, tournament.players)
+      : null),
+    [tournament, selectedRoundData, selectedRoundHasScores, leaderboardBestBall],
+  );
+  const selectedRoundBB = useMemo(
+    () => (tournament && selectedRoundData && selectedRoundHasScores && leaderboardBestBall && selectedRoundData.pairs?.length
+      ? calcBestWorstBall(selectedRoundData, tournament.players)
+      : null),
+    [tournament, selectedRoundData, selectedRoundHasScores, leaderboardBestBall],
+  );
+
   const showList = viewMode === 'list' || (viewMode === 'auto' && !tournament);
   const showTournament = viewMode === 'tournament' || (viewMode === 'auto' && !!tournament);
 
@@ -214,25 +243,11 @@ export default function HomeScreen({ navigation, viewMode = 'auto' }) {
     );
   }
 
-  const settings = { ...DEFAULT_SETTINGS, ...tournament.settings };
-
   const completedRounds = tournament.rounds.filter(
     (r) => r.scores && Object.keys(r.scores).length > 0,
   );
-
-  const leaderboard = tournamentLeaderboard(tournament);
-  const bestWorstLeaderboard = leaderboardBestBall ? tournamentBestWorstLeaderboard(tournament) : null;
   const strokesByPlayer = Object.fromEntries(leaderboard.map((e) => [e.player.id, e.strokes]));
   const displayedBoard = leaderboardBestBall && bestWorstLeaderboard ? bestWorstLeaderboard : leaderboard;
-
-  const selectedRoundData = tournament.rounds[selectedRound];
-  const selectedRoundHasScores = !!(selectedRoundData?.scores && Object.keys(selectedRoundData.scores).length > 0);
-  const selectedRoundPlayerTotals = selectedRoundHasScores && !leaderboardBestBall
-    ? roundTotals(selectedRoundData, tournament.players)
-    : null;
-  const selectedRoundBB = selectedRoundHasScores && leaderboardBestBall && selectedRoundData.pairs?.length
-    ? calcBestWorstBall(selectedRoundData, tournament.players)
-    : null;
   const getSelectedRoundValue = (playerId) => {
     if (leaderboardBestBall) {
       if (!selectedRoundBB) return null;
@@ -364,6 +379,10 @@ export default function HomeScreen({ navigation, viewMode = 'auto' }) {
                 onScroll={(e) => {
                   const x = e.nativeEvent.contentOffset.x;
                   roundScrollOffset.current = x;
+                  // Only commit during a real user drag. Programmatic
+                  // scrollTo from tab taps also fires onScroll and would
+                  // make the pager fight its own animation.
+                  if (!isUserScrollingRound.current) return;
                   const idx = Math.round(x / roundPagerWidth);
                   if (idx !== selectedRound) {
                     // Non-urgent: let the native swipe keep running smoothly
