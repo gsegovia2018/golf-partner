@@ -541,12 +541,18 @@ function MatchPanel({ bbResult, currentHole, settings }) {
   );
 }
 
-function GridView({ round, roundIndex, players, scores, isBestBall, bbResult, settings, onSetScore }) {
+function GridView({ round, roundIndex, players, scores, isBestBall, bbResult, settings, onSetScore, refreshing, onRefresh }) {
   const { theme } = useTheme();
   const s = makeStyles(theme);
 
   return (
-    <ScrollView style={s.flex} contentContainerStyle={s.gridContent} automaticallyAdjustKeyboardInsets>
+    <PullToRefresh
+      style={s.flex}
+      contentContainerStyle={s.gridContent}
+      automaticallyAdjustKeyboardInsets
+      refreshing={refreshing}
+      onRefresh={onRefresh}
+    >
       <View>
         <Text style={s.title}>{round.courseName}</Text>
         <Text style={s.subtitle}>Round {roundIndex + 1}</Text>
@@ -658,7 +664,7 @@ function GridView({ round, roundIndex, players, scores, isBestBall, bbResult, se
       </ScrollView>
 
       {isBestBall && bbResult && <LiveMatchStrip bbResult={bbResult} settings={settings} />}
-    </ScrollView>
+    </PullToRefresh>
   );
 }
 
@@ -692,6 +698,10 @@ function makeStyles(theme) {
   return StyleSheet.create({
     container: { ...StyleSheet.absoluteFillObject, backgroundColor: theme.bg.primary },
     flex: { flex: 1 },
+
+    // PullToRefresh content container for HoleView — fills the viewport so
+    // bottomBar stays at the bottom even when there's nothing to scroll.
+    holeScrollContent: { flexGrow: 1 },
 
     // Header
     header: {

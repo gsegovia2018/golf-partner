@@ -1,4 +1,4 @@
-import { calcStablefordPoints, calcExtraShots, roundPairLeaderboard } from './tournamentStore';
+import { calcStablefordPoints, calcExtraShots, roundPairLeaderboard, getPlayingHandicap } from './tournamentStore';
 
 // ── Player Stats ──
 
@@ -6,8 +6,8 @@ export function playerRoundHistory(tournament, playerId) {
   return tournament.rounds
     .map((round, ri) => {
       if (!round.scores || !round.scores[playerId]) return null;
-      const handicap = round.playerHandicaps?.[playerId]
-        ?? tournament.players.find(p => p.id === playerId)?.handicap ?? 0;
+      const player = tournament.players.find(p => p.id === playerId);
+      const handicap = player ? getPlayingHandicap(round, player) : 0;
       let points = 0, strokes = 0, holesPlayed = 0;
       round.holes.forEach(hole => {
         const sc = round.scores[playerId]?.[hole.number];
@@ -31,10 +31,10 @@ export function playerAvgStableford(tournament, playerId) {
 
 export function playerScoreDistribution(tournament, playerId, { useNet = false } = {}) {
   const dist = { eagles: 0, birdies: 0, pars: 0, bogeys: 0, doubles: 0, worse: 0, total: 0 };
+  const player = tournament.players.find(p => p.id === playerId);
   tournament.rounds.forEach(round => {
     if (!round.scores?.[playerId]) return;
-    const handicap = round.playerHandicaps?.[playerId]
-      ?? tournament.players.find(p => p.id === playerId)?.handicap ?? 0;
+    const handicap = player ? getPlayingHandicap(round, player) : 0;
     round.holes.forEach(hole => {
       const sc = round.scores[playerId]?.[hole.number];
       if (!sc) return;
@@ -56,10 +56,10 @@ export function playerScoreDistribution(tournament, playerId, { useNet = false }
 
 export function playerStreaks(tournament, playerId, { useNet = false } = {}) {
   const results = []; // array of vs-par per hole across all rounds
+  const player = tournament.players.find(p => p.id === playerId);
   tournament.rounds.forEach(round => {
     if (!round.scores?.[playerId]) return;
-    const handicap = round.playerHandicaps?.[playerId]
-      ?? tournament.players.find(p => p.id === playerId)?.handicap ?? 0;
+    const handicap = player ? getPlayingHandicap(round, player) : 0;
     round.holes.forEach(hole => {
       const sc = round.scores[playerId]?.[hole.number];
       if (!sc) return;
@@ -98,7 +98,7 @@ export function bestWorstHoles(tournament) {
       tournament.players.forEach(p => {
         const sc = round.scores[p.id]?.[hole.number];
         if (!sc) return;
-        const handicap = round.playerHandicaps?.[p.id] ?? p.handicap;
+        const handicap = getPlayingHandicap(round, p);
         totalPts += calcStablefordPoints(hole.par, sc, handicap, hole.strokeIndex);
         count++;
       });
@@ -123,7 +123,7 @@ export function holeDifficultyMap(tournament, roundIndex) {
     const playerScores = tournament.players.map(p => {
       const sc = round.scores[p.id]?.[hole.number];
       if (!sc) return null;
-      const handicap = round.playerHandicaps?.[p.id] ?? p.handicap;
+      const handicap = getPlayingHandicap(round, p);
       return { playerId: p.id, playerName: p.name, points: calcStablefordPoints(hole.par, sc, handicap, hole.strokeIndex), strokes: sc };
     }).filter(Boolean);
     const avg = playerScores.length > 0 ? +(playerScores.reduce((s, x) => s + x.points, 0) / playerScores.length).toFixed(2) : 0;
@@ -136,10 +136,12 @@ export function holeDifficultyMap(tournament, roundIndex) {
 export function headToHead(tournament, p1Id, p2Id) {
   let p1Wins = 0, p2Wins = 0, ties = 0;
   const holes = [];
+  const p1 = tournament.players.find(p => p.id === p1Id);
+  const p2 = tournament.players.find(p => p.id === p2Id);
   tournament.rounds.forEach(round => {
     if (!round.scores?.[p1Id] || !round.scores?.[p2Id]) return;
-    const h1 = round.playerHandicaps?.[p1Id] ?? tournament.players.find(p => p.id === p1Id)?.handicap ?? 0;
-    const h2 = round.playerHandicaps?.[p2Id] ?? tournament.players.find(p => p.id === p2Id)?.handicap ?? 0;
+    const h1 = p1 ? getPlayingHandicap(round, p1) : 0;
+    const h2 = p2 ? getPlayingHandicap(round, p2) : 0;
     round.holes.forEach(hole => {
       const s1 = round.scores[p1Id]?.[hole.number];
       const s2 = round.scores[p2Id]?.[hole.number];

@@ -7,13 +7,7 @@ import { Feather } from '@expo/vector-icons';
 
 import { useTheme } from '../theme/ThemeContext';
 import { fetchCourses, saveCourseHoles, upsertCourse } from '../store/libraryStore';
-
-const STANDARD_SLOPE = 113;
-
-function calcPlayingHandicap(index, slope) {
-  if (!slope || slope <= 0) return index;
-  return Math.round(index * (slope / STANDARD_SLOPE));
-}
+import { propagateCourseToTournaments } from '../store/tournamentStore';
 
 function defaultHoles() {
   return Array.from({ length: 18 }, (_, i) => ({ number: i + 1, par: 4, strokeIndex: i + 1 }));
@@ -56,6 +50,7 @@ export default function CourseLibraryDetailScreen({ navigation, route }) {
     try {
       await upsertCourse({ id: courseId, name: name.trim(), slope: slope || null, rating: rating || null, city, province });
       await saveCourseHoles(courseId, holes);
+      await propagateCourseToTournaments(courseId, { slope: slope || null, holes });
       navigation.goBack();
     } catch (e) {
       Alert.alert('Error', e.message);

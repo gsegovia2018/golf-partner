@@ -119,6 +119,15 @@ export function normalizeRoundHandicaps(round, players) {
   return { ...round, playerHandicaps, manualHandicaps };
 }
 
+// Read the playing handicap for a player in a round. Falls back to deriving
+// from the player's base index × round slope when the round has no stored
+// entry (e.g. legacy data).
+export function getPlayingHandicap(round, player) {
+  const stored = round.playerHandicaps?.[player.id];
+  if (stored != null) return Number(stored);
+  return calcPlayingHandicap(player.handicap, round.slope);
+}
+
 // Recompute playerHandicaps for non-manual entries when base index or slope
 // changes. Preserves manual overrides.
 export function recomputeRoundPlayingHandicaps(round, players) {
@@ -210,7 +219,7 @@ export function createTournament({ name, players, rounds, settings }) {
 // scores shape: { [playerId]: { [holeNumber]: strokes } }
 export function roundTotals(round, players) {
   return players.map((player) => {
-    const handicap = round.playerHandicaps?.[player.id] ?? player.handicap;
+    const handicap = getPlayingHandicap(round, player);
     let totalPoints = 0;
     let totalStrokes = 0;
     round.holes.forEach((hole) => {
@@ -256,7 +265,7 @@ export function calcBestWorstBall(round, players) {
   const pts = (playerId, hole) => {
     const player = playersById[playerId];
     if (!player) return null;
-    const handicap = round.playerHandicaps?.[playerId] ?? player.handicap;
+    const handicap = getPlayingHandicap(round, player);
     const strokes = round.scores?.[playerId]?.[hole.number];
     if (!strokes) return null;
     return calcStablefordPoints(hole.par, strokes, handicap, hole.strokeIndex);
