@@ -27,6 +27,11 @@ export default function HomeScreen({ navigation, route }) {
   const isUserScrollingRound = useRef(false);
   const roundPagerInitialized = useRef(false);
   const hasAutoOpenedRef = useRef(false);
+  // True while a programmatic scrollTo animation is in flight. Used to
+  // stop onScroll from committing mid-animation (which would make the
+  // pager fight its own scroll). User drags/momentum are NOT suppressed.
+  const suppressRoundOnScroll = useRef(false);
+  const suppressRoundTimer = useRef(null);
   const [showSettings, setShowSettings] = useState(false);
   const [showRoundEdit, setShowRoundEdit] = useState(false);
   const [showResetHistory, setShowResetHistory] = useState(false);
@@ -71,6 +76,13 @@ export default function HomeScreen({ navigation, route }) {
     if (isUserScrollingRound.current) return;
     const target = selectedRound * roundPagerWidth;
     if (Math.abs(roundScrollOffset.current - target) < 1) return;
+    // Suppress onScroll commits while the animation runs, so intermediate
+    // offsets don't reset selectedRound and make the pager fight itself.
+    suppressRoundOnScroll.current = true;
+    clearTimeout(suppressRoundTimer.current);
+    suppressRoundTimer.current = setTimeout(() => {
+      suppressRoundOnScroll.current = false;
+    }, 450);
     roundPagerRef.current.scrollTo({ x: target, animated: roundPagerInitialized.current });
     roundScrollOffset.current = target;
     roundPagerInitialized.current = true;
@@ -201,6 +213,35 @@ export default function HomeScreen({ navigation, route }) {
   const s = useMemo(() => makeStyles(theme), [theme]);
   const leaderboardRef = useRef();
 
+  // Hoist memoised derivations above the early returns so the hook order
+  // stays stable across showList / showTournament toggles.
+  const settings = useMemo(
+    () => ({ ...DEFAULT_SETTINGS, ...(tournament?.settings ?? {}) }),
+    [tournament?.settings],
+  );
+  const leaderboard = useMemo(
+    () => (tournament ? tournamentLeaderboard(tournament) : []),
+    [tournament],
+  );
+  const bestWorstLeaderboard = useMemo(
+    () => (tournament && leaderboardBestBall ? tournamentBestWorstLeaderboard(tournament) : null),
+    [tournament, leaderboardBestBall],
+  );
+  const selectedRoundData = tournament?.rounds?.[selectedRound] ?? null;
+  const selectedRoundHasScores = !!(selectedRoundData?.scores && Object.keys(selectedRoundData.scores).length > 0);
+  const selectedRoundPlayerTotals = useMemo(
+    () => (tournament && selectedRoundData && selectedRoundHasScores && !leaderboardBestBall
+      ? roundTotals(selectedRoundData, tournament.players)
+      : null),
+    [tournament, selectedRoundData, selectedRoundHasScores, leaderboardBestBall],
+  );
+  const selectedRoundBB = useMemo(
+    () => (tournament && selectedRoundData && selectedRoundHasScores && leaderboardBestBall && selectedRoundData.pairs?.length
+      ? calcBestWorstBall(selectedRoundData, tournament.players)
+      : null),
+    [tournament, selectedRoundData, selectedRoundHasScores, leaderboardBestBall],
+  );
+
   const showList = viewMode === 'list' || (viewMode === 'auto' && !tournament);
   const showTournament = viewMode === 'tournament' || (viewMode === 'auto' && !!tournament);
 
@@ -303,40 +344,11 @@ export default function HomeScreen({ navigation, route }) {
     );
   }
 
-  const settings = useMemo(
-    () => ({ ...DEFAULT_SETTINGS, ...tournament.settings }),
-    [tournament.settings],
-  );
-
   const completedRounds = tournament.rounds.filter(
     (r) => r.scores && Object.keys(r.scores).length > 0,
   );
-
-  const leaderboard = useMemo(() => tournamentLeaderboard(tournament), [tournament]);
-  const bestWorstLeaderboard = useMemo(
-    () => (leaderboardBestBall ? tournamentBestWorstLeaderboard(tournament) : null),
-    [leaderboardBestBall, tournament],
-  );
-  const strokesByPlayer = useMemo(
-    () => Object.fromEntries(leaderboard.map((e) => [e.player.id, e.strokes])),
-    [leaderboard],
-  );
+  const strokesByPlayer = Object.fromEntries(leaderboard.map((e) => [e.player.id, e.strokes]));
   const displayedBoard = leaderboardBestBall && bestWorstLeaderboard ? bestWorstLeaderboard : leaderboard;
-
-  const selectedRoundData = tournament.rounds[selectedRound];
-  const selectedRoundHasScores = !!(selectedRoundData?.scores && Object.keys(selectedRoundData.scores).length > 0);
-  const selectedRoundPlayerTotals = useMemo(
-    () => (selectedRoundHasScores && !leaderboardBestBall
-      ? roundTotals(selectedRoundData, tournament.players)
-      : null),
-    [selectedRoundHasScores, leaderboardBestBall, selectedRoundData, tournament.players],
-  );
-  const selectedRoundBB = useMemo(
-    () => (selectedRoundHasScores && leaderboardBestBall && selectedRoundData.pairs?.length
-      ? calcBestWorstBall(selectedRoundData, tournament.players)
-      : null),
-    [selectedRoundHasScores, leaderboardBestBall, selectedRoundData, tournament.players],
-  );
   const getSelectedRoundValue = (playerId) => {
     if (leaderboardBestBall) {
       if (!selectedRoundBB) return null;
@@ -464,23 +476,36 @@ export default function HomeScreen({ navigation, route }) {
                 pagingEnabled
                 showsHorizontalScrollIndicator={false}
                 scrollEventThrottle={16}
-                onScrollBeginDrag={() => { isUserScrollingRound.current = true; }}
+                onScrollBeginDrag={() => {
+                  isUserScrollingRound.current = true;
+                  // User gesture overrides any in-flight programmatic scroll.
+                  suppressRoundOnScroll.current = false;
+                  clearTimeout(suppressRoundTimer.current);
+                }}
                 onScroll={(e) => {
                   const x = e.nativeEvent.contentOffset.x;
                   roundScrollOffset.current = x;
+                  // Skip only during a programmatic scrollTo animation.
+                  // Live-commit throughout the user's drag AND its momentum
+                  // so the leaderboard / bubbles update during the whole
+                  // swipe, not just the drag phase.
+                  if (suppressRoundOnScroll.current) return;
                   const idx = Math.round(x / roundPagerWidth);
                   if (idx !== selectedRound) {
-                    // Non-urgent: let the native swipe keep running smoothly
-                    // while React reconciles leaderboard/tabs/match panel in
-                    // the background.
+                    // Non-urgent: let the native scroll keep running smoothly
+                    // while React reconciles leaderboard / tabs / round card.
                     startTransition(() => setSelectedRound(idx));
                   }
                 }}
-                onScrollEndDrag={() => { isUserScrollingRound.current = false; }}
+                // Keep isUserScrollingRound true through the momentum phase
+                // so the sync effect doesn't scrollTo on top of the inertia.
+                onScrollEndDrag={() => {}}
                 onMomentumScrollEnd={(e) => {
                   const x = e.nativeEvent.contentOffset.x;
                   roundScrollOffset.current = x;
                   isUserScrollingRound.current = false;
+                  suppressRoundOnScroll.current = false;
+                  clearTimeout(suppressRoundTimer.current);
                   const idx = Math.round(x / roundPagerWidth);
                   if (idx !== selectedRound) setSelectedRound(idx);
                 }}
@@ -1064,9 +1089,9 @@ const makeStyles = (t) => StyleSheet.create({
     gap: 10,
     paddingHorizontal: 16,
     paddingVertical: 12,
-    backgroundColor: theme.bg.primary,
+    backgroundColor: t.bg.primary,
     borderTopWidth: 1,
-    borderTopColor: theme.isDark ? theme.glass?.border : theme.border.default,
+    borderTopColor: t.isDark ? t.glass?.border : t.border.default,
   },
 
   // Delete (tournament list cards)
