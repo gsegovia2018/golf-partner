@@ -511,9 +511,12 @@ export default function HomeScreen({ navigation, route }) {
           <View
             style={s.roundPagerWrap}
             onLayout={(e) => {
-              const w = e.nativeEvent.layout.width;
-              roundScrollOffset.current = selectedRound * w;
-              setRoundPagerWidth(w);
+              // Don't prefill roundScrollOffset from selectedRound — on web
+              // the ScrollView's contentOffset can't position before the
+              // children lay out, and if we lie that we're already there the
+              // sync effect below skips its scrollTo. Leave the ref at its
+              // actual value (0 on first mount) so the effect corrects it.
+              setRoundPagerWidth(e.nativeEvent.layout.width);
             }}
           >
             {roundPagerWidth > 0 && (
