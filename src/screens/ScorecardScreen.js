@@ -23,7 +23,7 @@ const haptic = (style = 'light') => {
 export default function ScorecardScreen({ navigation, route }) {
   const { theme } = useTheme();
   const s = makeStyles(theme);
-  const { roundIndex } = route.params;
+  const paramRoundIndex = route.params?.roundIndex;
   const [tournament, setTournament] = useState(null);
   const [scores, setScores] = useState({});
   const [notes, setNotes] = useState('');
@@ -33,16 +33,18 @@ export default function ScorecardScreen({ navigation, route }) {
   const tournamentRef = useRef(null);
   const saveTimeoutRef = useRef(null);
   const notesSaveTimeoutRef = useRef(null);
+  const roundIndex = paramRoundIndex ?? tournament?.currentRound ?? 0;
 
   useEffect(() => { tournamentRef.current = tournament; }, [tournament]);
 
   const reload = useCallback(async () => {
     const t = await loadTournament();
     if (!t) return;
+    const idx = paramRoundIndex ?? t.currentRound;
     setTournament(t);
-    setScores(t.rounds[roundIndex].scores ?? {});
-    setNotes(t.rounds[roundIndex].notes ?? '');
-  }, [roundIndex]);
+    setScores(t.rounds[idx]?.scores ?? {});
+    setNotes(t.rounds[idx]?.notes ?? '');
+  }, [paramRoundIndex]);
 
   useEffect(() => { reload(); }, [reload]);
 
