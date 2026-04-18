@@ -103,15 +103,18 @@ export function playerStreaks(tournament, playerId, { useNet = false, roundIndex
 
   const par = longestRun(e => e.vsPar <= 0);
   const birdie = longestRun(e => e.vsPar <= -1);
-  const bogey = longestRun(e => e.vsPar >= 1);
+  const bogeyOnly = longestRun(e => e.vsPar === 1);
+  const doubleBogeyPlus = longestRun(e => e.vsPar >= 2);
 
   return {
     bestParStreak: par.count,
     bestBirdieStreak: birdie.count,
-    worstBogeyStreak: bogey.count,
+    bogeyOnlyStreak: bogeyOnly.count,
+    doubleBogeyPlusStreak: doubleBogeyPlus.count,
     parStreakHoles: par.holes,
     birdieStreakHoles: birdie.holes,
-    bogeyStreakHoles: bogey.holes,
+    bogeyOnlyStreakHoles: bogeyOnly.holes,
+    doubleBogeyPlusStreakHoles: doubleBogeyPlus.holes,
   };
 }
 
@@ -236,45 +239,56 @@ export function pairPerformance(tournament) {
 // ── Tournament Highlights ──
 
 export function tournamentHighlights(tournament, { useNet = false, roundIndex = null } = {}) {
-  let bestRound = null, mostBirdies = null, longestParStreak = null;
+  let bestRound = { value: -Infinity, entries: [] };
+  let mostBirdies = { value: -1, entries: [] };
+  let longestParStreak = { value: 0, entries: [] };
+
+  const pushTied = (holder, value, entry) => {
+    if (value > holder.value) {
+      holder.value = value;
+      holder.entries = [entry];
+    } else if (value === holder.value) {
+      holder.entries.push(entry);
+    }
+  };
 
   tournament.players.forEach(p => {
     const history = playerRoundHistory(tournament, p.id)
       .filter(r => roundIndex === null || r.roundIndex === roundIndex);
     history.forEach(r => {
-      if (!bestRound || r.points > bestRound.points) {
-        const round = tournament.rounds[r.roundIndex];
-        const handicap = getPlayingHandicap(round, p);
-        const holes = round.holes
-          .map(h => {
-            const sc = round.scores?.[p.id]?.[h.number];
-            if (!sc) return null;
-            return {
-              roundIndex: r.roundIndex, courseName: round.courseName,
-              holeNumber: h.number, par: h.par, strokes: sc,
-              points: calcStablefordPoints(h.par, sc, handicap, h.strokeIndex),
-            };
-          })
-          .filter(Boolean);
-        bestRound = { player: p, ...r, breakdown: holes };
-      }
+      const round = tournament.rounds[r.roundIndex];
+      const handicap = getPlayingHandicap(round, p);
+      const holes = round.holes
+        .map(h => {
+          const sc = round.scores?.[p.id]?.[h.number];
+          if (!sc) return null;
+          return {
+            roundIndex: r.roundIndex, courseName: round.courseName,
+            holeNumber: h.number, par: h.par, strokes: sc,
+            points: calcStablefordPoints(h.par, sc, handicap, h.strokeIndex),
+          };
+        })
+        .filter(Boolean);
+      pushTied(bestRound, r.points, { player: p, points: r.points, courseName: r.courseName, roundIndex: r.roundIndex, breakdown: holes });
     });
 
     const dist = playerScoreDistribution(tournament, p.id, { useNet, roundIndex });
     const birdiesAndEagles = [...dist.eagleHoles, ...dist.birdieHoles];
-    if (!mostBirdies || birdiesAndEagles.length > mostBirdies.count) {
-      mostBirdies = { player: p, count: birdiesAndEagles.length, breakdown: birdiesAndEagles };
-    }
+    pushTied(mostBirdies, birdiesAndEagles.length, { player: p, count: birdiesAndEagles.length, breakdown: birdiesAndEagles });
 
     const streaks = playerStreaks(tournament, p.id, { useNet, roundIndex });
-    if (!longestParStreak || streaks.bestParStreak > longestParStreak.count) {
-      longestParStreak = { player: p, count: streaks.bestParStreak, breakdown: streaks.parStreakHoles };
-    }
+    pushTied(longestParStreak, streaks.bestParStreak, { player: p, count: streaks.bestParStreak, breakdown: streaks.parStreakHoles });
   });
 
   const holes = bestWorstHoles(tournament, { roundIndex });
 
-  return { bestRound, mostBirdies, longestParStreak, bestHole: holes.best[0] || null, worstHole: holes.worst[0] || null };
+  return {
+    bestRound: bestRound.entries.length ? { value: bestRound.value, entries: bestRound.entries } : null,
+    mostBirdies: mostBirdies.value > 0 ? { value: mostBirdies.value, entries: mostBirdies.entries } : null,
+    longestParStreak: longestParStreak.value > 1 ? { value: longestParStreak.value, entries: longestParStreak.entries } : null,
+    bestHole: holes.best[0] || null,
+    worstHole: holes.worst[0] || null,
+  };
 }
 
 // ── Pair Hole Wins (Best Ball / Worst Ball) ──
@@ -360,15 +374,6 @@ export function pairHoleWins(tournament, { roundIndex = null } = {}) {
 // ── Hall of Shame ──
 
 export function hallOfShame(tournament, { useNet = false } = {}) {
-  const result = {
-    tripleBogey: null,
-    shameStreak: null,
-    ceroPatatero: null,
-    regalo: null,
-    desmoronamiento: null,
-    bucketazo: null,
-  };
-
   const perPlayerEntries = {};
   tournament.players.forEach(p => { perPlayerEntries[p.id] = []; });
   tournament.rounds.forEach((round, roundIndex) => {
@@ -391,60 +396,61 @@ export function hallOfShame(tournament, { useNet = false } = {}) {
     });
   });
 
+  const tied = (minValue = 1) => ({ value: -Infinity, entries: [], minValue });
+  const push = (holder, value, entry) => {
+    if (value < holder.minValue) return;
+    if (value > holder.value) { holder.value = value; holder.entries = [entry]; }
+    else if (value === holder.value) holder.entries.push(entry);
+  };
+  const finalize = (holder) => holder.entries.length ? { value: holder.value, entries: holder.entries } : null;
+
   // 1. Triple Bogey Club — worst single hole by vsPar
+  const tripleBogey = tied(3);
   tournament.players.forEach(p => {
-    perPlayerEntries[p.id].forEach(e => {
-      if (!result.tripleBogey || e.vsPar > result.tripleBogey.vsPar) {
-        result.tripleBogey = { player: p, ...e, breakdown: [e] };
-      }
-    });
+    perPlayerEntries[p.id].forEach(e => push(tripleBogey, e.vsPar, { player: p, ...e, breakdown: [e] }));
   });
 
-  // 2. Racha de la Vergüenza — longest bogey-or-worse streak
-  tournament.players.forEach(p => {
-    const entries = perPlayerEntries[p.id];
-    let curStart = -1, bestCount = 0, bestStart = -1, bestEnd = -1;
-    entries.forEach((e, i) => {
-      if (e.vsPar >= 1) {
-        if (curStart === -1) curStart = i;
-        const curCount = i - curStart + 1;
-        if (curCount > bestCount) { bestCount = curCount; bestStart = curStart; bestEnd = i; }
-      } else {
-        curStart = -1;
+  // longest-run helper per-player
+  const longestRunPerPlayer = (predicate) => {
+    const holder = tied(1);
+    tournament.players.forEach(p => {
+      const entries = perPlayerEntries[p.id];
+      let curStart = -1, bestCount = 0, bestStart = -1, bestEnd = -1;
+      entries.forEach((e, i) => {
+        if (predicate(e)) {
+          if (curStart === -1) curStart = i;
+          const curCount = i - curStart + 1;
+          if (curCount > bestCount) { bestCount = curCount; bestStart = curStart; bestEnd = i; }
+        } else { curStart = -1; }
+      });
+      if (bestCount > 0) {
+        push(holder, bestCount, {
+          player: p, count: bestCount,
+          breakdown: entries.slice(bestStart, bestEnd + 1),
+        });
       }
     });
-    if (bestCount > 0 && (!result.shameStreak || bestCount > result.shameStreak.count)) {
-      result.shameStreak = {
-        player: p,
-        count: bestCount,
-        breakdown: entries.slice(bestStart, bestEnd + 1),
-      };
-    }
-  });
+    return holder;
+  };
 
-  // 3. Cero Patatero — longest 0-stableford-points streak
-  tournament.players.forEach(p => {
-    const entries = perPlayerEntries[p.id];
-    let curStart = -1, bestCount = 0, bestStart = -1, bestEnd = -1;
-    entries.forEach((e, i) => {
-      if (e.points === 0) {
-        if (curStart === -1) curStart = i;
-        const curCount = i - curStart + 1;
-        if (curCount > bestCount) { bestCount = curCount; bestStart = curStart; bestEnd = i; }
-      } else {
-        curStart = -1;
-      }
-    });
-    if (bestCount > 0 && (!result.ceroPatatero || bestCount > result.ceroPatatero.count)) {
-      result.ceroPatatero = {
-        player: p,
-        count: bestCount,
-        breakdown: entries.slice(bestStart, bestEnd + 1),
-      };
-    }
-  });
+  // 2. Bogey Streak — longest run of exactly-bogey holes
+  const bogeyStreak = longestRunPerPlayer(e => e.vsPar === 1);
+  // Require at least 2 to be meaningful
+  bogeyStreak.minValue = 2;
+  if (bogeyStreak.value < 2) bogeyStreak.entries = [];
 
-  // 4. El Regalo — hole where a player's stableford is lowest by largest margin vs others' avg
+  // 3. Double Bogey+ Streak — longest run of 2-over-or-worse
+  const doubleBogeyStreak = longestRunPerPlayer(e => e.vsPar >= 2);
+  doubleBogeyStreak.minValue = 2;
+  if (doubleBogeyStreak.value < 2) doubleBogeyStreak.entries = [];
+
+  // 4. Pointless Streak — longest 0-stableford-points streak
+  const pointlessStreak = longestRunPerPlayer(e => e.points === 0);
+  pointlessStreak.minValue = 2;
+  if (pointlessStreak.value < 2) pointlessStreak.entries = [];
+
+  // 5. The Gift — biggest gap between others' avg and this player's points on a hole
+  const gift = { value: -Infinity, entries: [] };
   tournament.rounds.forEach((round, roundIndex) => {
     if (!round.scores) return;
     round.holes.forEach(hole => {
@@ -460,30 +466,31 @@ export function hallOfShame(tournament, { useNet = false } = {}) {
       scores.forEach(entry => {
         const others = scores.filter(s => s.player.id !== entry.player.id);
         const othersAvg = others.reduce((s, o) => s + o.points, 0) / others.length;
-        const gap = othersAvg - entry.points;
-        if (!result.regalo || gap > result.regalo.gap) {
-          result.regalo = {
-            player: entry.player,
-            gap: +gap.toFixed(2),
-            playerPoints: entry.points,
-            othersAvg: +othersAvg.toFixed(2),
-            roundIndex,
-            courseName: round.courseName,
-            holeNumber: hole.number,
-            par: hole.par,
-            breakdown: scores.map(s => ({
-              playerId: s.player.id,
-              playerName: s.player.name,
-              strokes: s.strokes,
-              points: s.points,
-            })),
-          };
-        }
+        const gap = +(othersAvg - entry.points).toFixed(2);
+        const payload = {
+          player: entry.player,
+          gap,
+          playerPoints: entry.points,
+          othersAvg: +othersAvg.toFixed(2),
+          roundIndex,
+          courseName: round.courseName,
+          holeNumber: hole.number,
+          par: hole.par,
+          breakdown: scores.map(s => ({
+            playerId: s.player.id,
+            playerName: s.player.name,
+            strokes: s.strokes,
+            points: s.points,
+          })),
+        };
+        if (gap > gift.value) { gift.value = gap; gift.entries = [payload]; }
+        else if (gap === gift.value) gift.entries.push(payload);
       });
     });
   });
 
-  // 5. El Desmoronamiento — round with biggest front9 − back9 drop (18 holes required)
+  // 6. The Collapse — biggest front9 − back9 drop (18 holes required)
+  const collapse = { value: 0, entries: [] };
   tournament.rounds.forEach((round, roundIndex) => {
     if (!round.scores || round.holes.length < 18) return;
     tournament.players.forEach(p => {
@@ -503,27 +510,30 @@ export function hallOfShame(tournament, { useNet = false } = {}) {
       });
       if (frontComplete < 9 || backComplete < 9) return;
       const drop = front - back;
-      if (drop > 0 && (!result.desmoronamiento || drop > result.desmoronamiento.drop)) {
-        result.desmoronamiento = {
-          player: p,
-          drop,
-          front, back,
-          roundIndex,
-          courseName: round.courseName,
-          breakdown: holeEntries,
-        };
-      }
+      if (drop <= 0) return;
+      const payload = { player: p, drop, front, back, roundIndex, courseName: round.courseName, breakdown: holeEntries };
+      if (drop > collapse.value) { collapse.value = drop; collapse.entries = [payload]; }
+      else if (drop === collapse.value) collapse.entries.push(payload);
     });
   });
 
-  // 6. Bucketazo — highest raw stroke count on any hole
+  // 7. Blow-up Hole — highest raw stroke count on any hole
+  const blowup = { value: 0, entries: [] };
   tournament.players.forEach(p => {
     perPlayerEntries[p.id].forEach(e => {
-      if (!result.bucketazo || e.strokes > result.bucketazo.strokes) {
-        result.bucketazo = { player: p, ...e, breakdown: [e] };
-      }
+      const payload = { player: p, ...e, breakdown: [e] };
+      if (e.strokes > blowup.value) { blowup.value = e.strokes; blowup.entries = [payload]; }
+      else if (e.strokes === blowup.value) blowup.entries.push(payload);
     });
   });
 
-  return result;
+  return {
+    tripleBogey: finalize(tripleBogey),
+    bogeyStreak: bogeyStreak.entries.length ? { value: bogeyStreak.value, entries: bogeyStreak.entries } : null,
+    doubleBogeyStreak: doubleBogeyStreak.entries.length ? { value: doubleBogeyStreak.value, entries: doubleBogeyStreak.entries } : null,
+    pointlessStreak: pointlessStreak.entries.length ? { value: pointlessStreak.value, entries: pointlessStreak.entries } : null,
+    gift: gift.entries.length ? { value: gift.value, entries: gift.entries } : null,
+    collapse: collapse.entries.length ? { value: collapse.value, entries: collapse.entries } : null,
+    blowup: blowup.entries.length ? { value: blowup.value, entries: blowup.entries } : null,
+  };
 }

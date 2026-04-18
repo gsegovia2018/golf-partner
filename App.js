@@ -1,5 +1,4 @@
 import React from 'react';
-import { ActivityIndicator, View } from 'react-native';
 import { NavigationContainer } from '@react-navigation/native';
 import { createStackNavigator, CardStyleInterpolators } from '@react-navigation/stack';
 import { StatusBar } from 'expo-status-bar';
@@ -19,6 +18,7 @@ import {
 } from '@expo-google-fonts/playfair-display';
 
 import { ThemeProvider, useTheme } from './src/theme/ThemeContext';
+import LoadingSplash from './src/components/LoadingSplash';
 
 import HomeScreen from './src/screens/HomeScreen';
 import SetupScreen from './src/screens/SetupScreen';
@@ -86,11 +86,7 @@ export default function App() {
   });
 
   if (!fontsLoaded) {
-    return (
-      <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: '#006747' }}>
-        <ActivityIndicator size="large" color="#ffd700" />
-      </View>
-    );
+    return <LoadingSplash />;
   }
 
   return (

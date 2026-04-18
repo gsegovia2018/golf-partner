@@ -20,6 +20,16 @@ const haptic = (style = 'light') => {
   else if (style === 'success') Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
 };
 
+function celebrationFor(par, strokes) {
+  if (!par || !strokes) return null;
+  if (strokes === 1 && par > 1) return 'HOLE IN ONE';
+  const diff = par - strokes;
+  if (diff >= 3) return 'ALBATROSS';
+  if (diff === 2) return 'EAGLE';
+  if (diff === 1) return 'BIRDIE';
+  return null;
+}
+
 export default function ScorecardScreen({ navigation, route }) {
   const { theme } = useTheme();
   const s = makeStyles(theme);
@@ -34,6 +44,8 @@ export default function ScorecardScreen({ navigation, route }) {
   const saveTimeoutRef = useRef(null);
   const notesSaveTimeoutRef = useRef(null);
   const scoreAnims = useRef({});
+  const [celebration, setCelebration] = useState({ playerId: null, holeNumber: null, label: null });
+  const celebrationAnim = useRef(new Animated.Value(0)).current;
   const roundIndex = paramRoundIndex ?? tournament?.currentRound ?? 0;
 
   useEffect(() => { tournamentRef.current = tournament; }, [tournament]);
@@ -105,11 +117,32 @@ export default function ScorecardScreen({ navigation, route }) {
   const settings = { ...DEFAULT_SETTINGS, ...tournament.settings };
   const isBestBall = settings.scoringMode === 'bestball';
 
+  function triggerCelebration(playerId, holeNumber, label) {
+    const holdMs = label === 'BIRDIE' ? 550 : label === 'EAGLE' ? 750 : 1000;
+    haptic('success');
+    celebrationAnim.stopAnimation();
+    celebrationAnim.setValue(0);
+    setCelebration({ playerId, holeNumber, label });
+    Animated.sequence([
+      Animated.timing(celebrationAnim, { toValue: 1, duration: 220, useNativeDriver: true }),
+      Animated.delay(holdMs),
+      Animated.timing(celebrationAnim, { toValue: 0, duration: 380, useNativeDriver: true }),
+    ]).start(({ finished }) => {
+      if (finished) setCelebration({ playerId: null, holeNumber: null, label: null });
+    });
+  }
+
   function setScore(playerId, holeNumber, value) {
     const parsed = value === '' ? undefined : parseInt(value, 10) || undefined;
+    const holePar = round.holes.find((h) => h.number === holeNumber)?.par ?? 4;
     setScores((prev) => {
+      const current = prev[playerId]?.[holeNumber];
       const next = { ...prev, [playerId]: { ...prev[playerId], [holeNumber]: parsed } };
       autoSave(next);
+      if (parsed != null && parsed !== current) {
+        const label = celebrationFor(holePar, parsed);
+        if (label) triggerCelebration(playerId, holeNumber, label);
+      }
       return next;
     });
   }
@@ -128,8 +161,13 @@ export default function ScorecardScreen({ navigation, route }) {
     const holePar = round.holes.find((h) => h.number === holeNumber)?.par ?? 4;
     setScores((prev) => {
       const current = prev[playerId]?.[holeNumber] ?? holePar;
-      const next = { ...prev, [playerId]: { ...prev[playerId], [holeNumber]: Math.max(1, current + delta) } };
+      const newStrokes = Math.max(1, current + delta);
+      const next = { ...prev, [playerId]: { ...prev[playerId], [holeNumber]: newStrokes } };
       autoSave(next);
+      if (newStrokes !== current) {
+        const label = celebrationFor(holePar, newStrokes);
+        if (label) triggerCelebration(playerId, holeNumber, label);
+      }
       return next;
     });
   }
@@ -207,6 +245,8 @@ export default function ScorecardScreen({ navigation, route }) {
           onGoBack={() => navigation.goBack()}
           playerTotals={playerTotals}
           getScoreAnim={getScoreAnim}
+          celebration={celebration}
+          celebrationAnim={celebrationAnim}
           refreshing={refreshing}
           onRefresh={onRefresh}
         />
@@ -230,7 +270,7 @@ export default function ScorecardScreen({ navigation, route }) {
   );
 }
 
-function HoleView({ round, roundIndex, players, scores, notes, currentHole, hole, isBestBall, bbResult, settings, onStep, onSetScore, onNotesChange, onPrev, onNext, onGoToHole, onGoBack, playerTotals, getScoreAnim, refreshing, onRefresh }) {
+function HoleView({ round, roundIndex, players, scores, notes, currentHole, hole, isBestBall, bbResult, settings, onStep, onSetScore, onNotesChange, onPrev, onNext, onGoToHole, onGoBack, playerTotals, getScoreAnim, celebration, celebrationAnim, refreshing, onRefresh }) {
   const { theme } = useTheme();
   const s = makeStyles(theme);
   const [notesOpen, setNotesOpen] = useState(false);
@@ -359,6 +399,24 @@ function HoleView({ round, roundIndex, players, scores, notes, currentHole, hole
                             <Text style={[s.pairLabel, { color: pairColor, marginTop: idx === 0 ? 0 : 16 }]}>{pairLabelText}</Text>
                           )}
                           <View style={[s.playerCard, { borderLeftColor: pairColor, borderLeftWidth: 3 }]}>
+                            {celebration?.playerId === player.id
+                              && celebration?.holeNumber === pageHole.number
+                              && celebration?.label && (
+                              <Animated.View
+                                pointerEvents="none"
+                                style={[
+                                  s.celebrationBanner,
+                                  {
+                                    opacity: celebrationAnim,
+                                    transform: [
+                                      { scale: celebrationAnim.interpolate({ inputRange: [0, 1], outputRange: [0.85, 1] }) },
+                                    ],
+                                  },
+                                ]}
+                              >
+                                <Text style={s.celebrationLabel}>{celebration.label}</Text>
+                              </Animated.View>
+                            )}
                             <View style={s.playerCardRow}>
                               <View style={s.playerCardLeft}>
                                 <View style={[s.playerAvatar, { backgroundColor: pairColor }]}>
@@ -1036,6 +1094,24 @@ function makeStyles(theme) {
       paddingHorizontal: 12,
       overflow: 'hidden',
       ...(theme.isDark ? {} : theme.shadow.card),
+    },
+    celebrationBanner: {
+      position: 'absolute',
+      top: 4,
+      right: 8,
+      paddingHorizontal: 8,
+      paddingVertical: 3,
+      backgroundColor: '#006747',
+      borderRadius: 999,
+      borderWidth: 1,
+      borderColor: '#ffd700',
+      zIndex: 10,
+    },
+    celebrationLabel: {
+      color: '#ffd700',
+      fontSize: 9,
+      fontFamily: 'PlayfairDisplay-Black',
+      letterSpacing: 1.5,
     },
     playerCardRow: {
       flexDirection: 'row',
