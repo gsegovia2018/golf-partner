@@ -184,9 +184,8 @@ export default function HomeScreen({ navigation, viewMode = 'auto' }) {
     );
   }
 
-  const leaderboard = leaderboardBestBall
-    ? tournamentBestWorstLeaderboard(tournament)
-    : tournamentLeaderboard(tournament);
+  const leaderboard = tournamentLeaderboard(tournament);
+  const bestWorstLeaderboard = leaderboardBestBall ? tournamentBestWorstLeaderboard(tournament) : null;
 
   return (
     <View style={s.screen}>
@@ -215,21 +214,18 @@ export default function HomeScreen({ navigation, viewMode = 'auto' }) {
       >
 
       <View style={s.mastersCard}>
-        <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }}>
+        <View style={s.cardTitleRow}>
           <Text style={s.mastersCardTitle}>LEADERBOARD</Text>
-          <TouchableOpacity onPress={() => shareLeaderboard({ tournamentName: tournament.name, leaderboard, theme, viewRef: leaderboardRef })} activeOpacity={0.7} hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}>
-            <Feather name="share-2" size={16} color="rgba(255,255,255,0.6)" />
-          </TouchableOpacity>
-        </View>
-        <View style={s.mastersToggle}>
-          <Text style={[s.mastersToggleLabel, !leaderboardBestBall && s.mastersToggleLabelActive]}>Stableford</Text>
-          <Switch
-            value={leaderboardBestBall}
-            onValueChange={setLeaderboardBestBall}
-            trackColor={{ false: 'rgba(255,255,255,0.2)', true: 'rgba(255,215,0,0.4)' }}
-            thumbColor="#fff"
-          />
-          <Text style={[s.mastersToggleLabel, leaderboardBestBall && s.mastersToggleLabelActive]}>Best Ball</Text>
+          <View style={s.inlineToggle}>
+            <Text style={[s.mastersToggleLabel, !leaderboardBestBall && s.mastersToggleLabelActive]}>Stableford</Text>
+            <Switch
+              value={leaderboardBestBall}
+              onValueChange={setLeaderboardBestBall}
+              trackColor={{ false: 'rgba(255,255,255,0.2)', true: 'rgba(255,215,0,0.4)' }}
+              thumbColor="#fff"
+            />
+            <Text style={[s.mastersToggleLabel, leaderboardBestBall && s.mastersToggleLabelActive]}>Best Ball</Text>
+          </View>
         </View>
         {leaderboard.map((entry, i) => {
           const rankColors = ['#ffd700', '#c0c8d4', '#daa06d'];
@@ -243,7 +239,7 @@ export default function HomeScreen({ navigation, viewMode = 'auto' }) {
               <Text style={[s.mastersName, i === 0 && { fontFamily: 'PlusJakartaSans-Bold' }]}>{entry.player.name}</Text>
               <Text style={[s.mastersPoints, i === 0 && { fontSize: 18 }]}>{entry.points} pts</Text>
               {leaderboardBestBall
-                ? <Text style={s.mastersSub}>{entry.bestWins + entry.worstWins} holes</Text>
+                ? <Text style={s.mastersSub}>{(bestWorstLeaderboard?.find((e) => e.player.id === entry.player.id)?.bestWins ?? 0) + (bestWorstLeaderboard?.find((e) => e.player.id === entry.player.id)?.worstWins ?? 0)} holes</Text>
                 : <Text style={s.mastersSub}>{entry.strokes} str</Text>}
             </View>
           );
@@ -252,16 +248,18 @@ export default function HomeScreen({ navigation, viewMode = 'auto' }) {
 
       {completedRounds.length > 0 && (
         <View style={s.card}>
-          <Text style={s.cardTitle}>ROUND SCORES</Text>
-          <View style={s.cardModeToggle}>
-            <Text style={[s.modeLabel, !roundBestBall && s.modeLabelActive]}>Stableford</Text>
-            <Switch
-              value={roundBestBall}
-              onValueChange={setRoundBestBall}
-              trackColor={{ false: theme.border.default, true: theme.accent.primary }}
-              thumbColor="#fff"
-            />
-            <Text style={[s.modeLabel, roundBestBall && s.modeLabelActive]}>Best Ball</Text>
+          <View style={s.cardTitleRow}>
+            <Text style={s.cardTitle}>ROUND SCORES</Text>
+            <View style={s.inlineToggle}>
+              <Text style={[s.modeLabel, !roundBestBall && s.modeLabelActive]}>Stableford</Text>
+              <Switch
+                value={roundBestBall}
+                onValueChange={setRoundBestBall}
+                trackColor={{ false: theme.border.default, true: theme.accent.primary }}
+                thumbColor="#fff"
+              />
+              <Text style={[s.modeLabel, roundBestBall && s.modeLabelActive]}>Best Ball</Text>
+            </View>
           </View>
           <FlatList
             horizontal
@@ -333,16 +331,29 @@ export default function HomeScreen({ navigation, viewMode = 'auto' }) {
                 <Feather name="edit-2" size={16} color={theme.isDark ? theme.accent.primary : theme.text.inverse} />
                 <Text style={s.primaryBtnText}>{isCurrentRound ? 'Scorecard' : 'Edit Scores'}</Text>
               </TouchableOpacity>
-              {isCurrentRound && tournament.currentRound < tournament.rounds.length - 1 && (
-                <TouchableOpacity
-                  style={[s.secondaryBtn, s.roundActionBtn]}
-                  onPress={() => navigation.navigate('NextRound')}
-                  activeOpacity={0.7}
-                >
-                  <Feather name="skip-forward" size={16} color={theme.accent.primary} />
-                  <Text style={s.secondaryBtnText}>Next Round</Text>
-                </TouchableOpacity>
-              )}
+              {isCurrentRound && tournament.currentRound < tournament.rounds.length - 1 && (() => {
+                const nextRound = tournament.rounds[tournament.currentRound + 1];
+                const nextRevealed = nextRound?.revealed;
+                return nextRevealed ? (
+                  <TouchableOpacity
+                    style={[s.secondaryBtn, s.roundActionBtn]}
+                    onPress={() => navigation.navigate('NextRound', { revealOnly: true, roundIndex: tournament.currentRound + 1 })}
+                    activeOpacity={0.7}
+                  >
+                    <Feather name="eye" size={16} color={theme.accent.primary} />
+                    <Text style={s.secondaryBtnText}>Next Round</Text>
+                  </TouchableOpacity>
+                ) : (
+                  <TouchableOpacity
+                    style={[s.primaryBtn, s.roundActionBtn]}
+                    onPress={() => navigation.navigate('NextRound')}
+                    activeOpacity={0.8}
+                  >
+                    <Feather name="play" size={16} color={theme.isDark ? theme.accent.primary : theme.text.inverse} />
+                    <Text style={s.primaryBtnText}>Start Next Round</Text>
+                  </TouchableOpacity>
+                );
+              })()}
             </View>
           </View>
         );
@@ -389,6 +400,16 @@ export default function HomeScreen({ navigation, viewMode = 'auto' }) {
               </TouchableOpacity>
             );
           })()}
+
+          <TouchableOpacity
+            style={s.menuItem}
+            onPress={() => { setShowSettings(false); shareLeaderboard({ tournamentName: tournament.name, leaderboard, theme, viewRef: leaderboardRef }); }}
+            activeOpacity={0.7}
+          >
+            <Feather name="share-2" size={18} color={theme.accent.primary} />
+            <Text style={s.menuItemText}>Share Leaderboard</Text>
+            <Feather name="chevron-right" size={16} color={theme.text.muted} />
+          </TouchableOpacity>
 
           <TouchableOpacity
             style={s.menuItem}
@@ -577,9 +598,10 @@ const makeStyles = (t) => StyleSheet.create({
   emptyTitle: { fontFamily: 'PlusJakartaSans-Bold', color: t.text.primary, fontSize: 18 },
   emptySubtitle: { fontFamily: 'PlusJakartaSans-Regular', color: t.text.muted, fontSize: 14, textAlign: 'center' },
 
-  // Scoring mode toggle (inside cards)
-  cardModeToggle: { flexDirection: 'row', alignItems: 'center', justifyContent: 'flex-end', gap: 10, marginBottom: 14 },
-  modeLabel: { fontFamily: 'PlusJakartaSans-SemiBold', color: t.text.muted, fontSize: 12 },
+  // Card title row with inline toggle
+  cardTitleRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 14 },
+  inlineToggle: { flexDirection: 'row', alignItems: 'center', gap: 8 },
+  modeLabel: { fontFamily: 'PlusJakartaSans-SemiBold', color: t.text.muted, fontSize: 11 },
   modeLabelActive: { color: t.text.primary },
 
   // Cards
@@ -592,7 +614,7 @@ const makeStyles = (t) => StyleSheet.create({
   },
   cardTitle: {
     fontFamily: 'PlusJakartaSans-SemiBold',
-    fontSize: 10, color: t.accent.primary, marginBottom: 14,
+    fontSize: 10, color: t.accent.primary,
     letterSpacing: 1.5, textTransform: 'uppercase',
   },
 
@@ -628,11 +650,10 @@ const makeStyles = (t) => StyleSheet.create({
   },
   mastersCardTitle: {
     fontFamily: 'PlusJakartaSans-SemiBold',
-    fontSize: 10, color: 'rgba(255,255,255,0.6)', marginBottom: 14,
+    fontSize: 10, color: 'rgba(255,255,255,0.6)',
     letterSpacing: 2, textTransform: 'uppercase',
   },
-  mastersToggle: { flexDirection: 'row', alignItems: 'center', justifyContent: 'flex-end', gap: 10, marginBottom: 14 },
-  mastersToggleLabel: { fontFamily: 'PlusJakartaSans-SemiBold', color: 'rgba(255,255,255,0.4)', fontSize: 12 },
+  mastersToggleLabel: { fontFamily: 'PlusJakartaSans-SemiBold', color: 'rgba(255,255,255,0.4)', fontSize: 11 },
   mastersToggleLabelActive: { color: 'rgba(255,255,255,0.9)' },
   mastersRow: {
     flexDirection: 'row', alignItems: 'center', paddingVertical: 10,
