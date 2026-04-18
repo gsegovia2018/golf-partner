@@ -391,19 +391,29 @@ function isRoundPlayed(round, index, tournament) {
 
 // Per-pair, per-hole assign each member a role: exactly one is the "best
 // ball" (higher Stableford on that hole) and the other is the "worst ball".
+// Then compares each pair's best / worst against the other pair's to decide
+// whether that hole was won, tied, or lost inter-pair — and credits the
+// player who was carrying the role for their pair.
 //
-// Tiebreaker when Stableford points tie on a hole:
+// Within-pair tiebreaker when Stableford points tie:
 //   1. Lower playing handicap is best.
-//   2. Same handicap → whoever was best on the previous hole (cascade
-//      backwards through prior holes, skipping any hole where either
-//      player is unscored).
+//   2. Same handicap → whoever was best on the previous hole (walk back).
 //   3. Everything tied → default to the first-listed pair member.
 //
-// Returns: { [playerId]: { best: number, worst: number } }. Holes that
-// aren't scored for both members of a pair don't contribute to either
-// count (neither player gets a role for that hole).
+// Returns per player:
+//   { best, worst,                               // role assignments
+//     bestWon, bestTied, bestLost,               // inter-pair BB outcomes
+//     worstWon, worstTied, worstLost }           // inter-pair WB outcomes
+// Only holes where all four players have scored contribute to the inter-pair
+// outcome counts; holes missing any score still contribute to within-pair
+// role counts when the pair itself has both members' scores.
 export function assignBestWorstRoles(round, players) {
-  const roles = Object.fromEntries(players.map((p) => [p.id, { best: 0, worst: 0 }]));
+  const emptyBucket = () => ({
+    best: 0, worst: 0,
+    bestWon: 0, bestTied: 0, bestLost: 0,
+    worstWon: 0, worstTied: 0, worstLost: 0,
+  });
+  const roles = Object.fromEntries(players.map((p) => [p.id, emptyBucket()]));
   if (!round?.pairs?.length) return roles;
 
   const playersById = Object.fromEntries(players.map((p) => [p.id, p]));
@@ -423,67 +433,88 @@ export function assignBestWorstRoles(round, players) {
     });
   });
 
-  round.pairs.forEach((pair) => {
-    if (pair.length < 2) return;
+  const pickPairRoles = (pair, hole, holeIdx) => {
+    if (pair.length < 2) return null;
     const m1 = playersById[pair[0].id];
     const m2 = playersById[pair[1].id];
-    if (!m1 || !m2) return;
+    if (!m1 || !m2) return null;
+    const p1 = points[m1.id][hole.number];
+    const p2 = points[m2.id][hole.number];
+    if (p1 == null || p2 == null) return null;
     const hcp1 = getPlayingHandicap(round, m1);
     const hcp2 = getPlayingHandicap(round, m2);
 
-    round.holes.forEach((hole, holeIdx) => {
-      const p1 = points[m1.id][hole.number];
-      const p2 = points[m2.id][hole.number];
-      if (p1 == null || p2 == null) return;
-
-      let bestId, worstId;
-      if (p1 > p2) {
-        bestId = m1.id; worstId = m2.id;
-      } else if (p2 > p1) {
-        bestId = m2.id; worstId = m1.id;
-      } else if (hcp1 < hcp2) {
-        bestId = m1.id; worstId = m2.id;
-      } else if (hcp2 < hcp1) {
-        bestId = m2.id; worstId = m1.id;
-      } else {
-        // Walk backwards through prior holes.
-        let decided = false;
-        for (let k = holeIdx - 1; k >= 0; k--) {
-          const prev = round.holes[k];
-          const q1 = points[m1.id][prev.number];
-          const q2 = points[m2.id][prev.number];
-          if (q1 == null || q2 == null) continue;
-          if (q1 > q2) { bestId = m1.id; worstId = m2.id; decided = true; break; }
-          if (q2 > q1) { bestId = m2.id; worstId = m1.id; decided = true; break; }
-        }
-        if (!decided) { bestId = m1.id; worstId = m2.id; }
+    let bestId, worstId;
+    if (p1 > p2) { bestId = m1.id; worstId = m2.id; }
+    else if (p2 > p1) { bestId = m2.id; worstId = m1.id; }
+    else if (hcp1 < hcp2) { bestId = m1.id; worstId = m2.id; }
+    else if (hcp2 < hcp1) { bestId = m2.id; worstId = m1.id; }
+    else {
+      let decided = false;
+      for (let k = holeIdx - 1; k >= 0; k--) {
+        const prev = round.holes[k];
+        const q1 = points[m1.id][prev.number];
+        const q2 = points[m2.id][prev.number];
+        if (q1 == null || q2 == null) continue;
+        if (q1 > q2) { bestId = m1.id; worstId = m2.id; decided = true; break; }
+        if (q2 > q1) { bestId = m2.id; worstId = m1.id; decided = true; break; }
       }
+      if (!decided) { bestId = m1.id; worstId = m2.id; }
+    }
+    return {
+      bestId, worstId,
+      bestVal: Math.max(p1, p2),
+      worstVal: Math.min(p1, p2),
+    };
+  };
 
-      roles[bestId].best += 1;
-      roles[worstId].worst += 1;
+  round.holes.forEach((hole, holeIdx) => {
+    const pairResults = round.pairs.map((pair) => pickPairRoles(pair, hole, holeIdx));
+
+    pairResults.forEach((r) => {
+      if (!r) return;
+      roles[r.bestId].best += 1;
+      roles[r.worstId].worst += 1;
     });
+
+    if (pairResults.length >= 2 && pairResults[0] && pairResults[1]) {
+      const [a, b] = pairResults;
+      if (a.bestVal > b.bestVal) { roles[a.bestId].bestWon += 1; roles[b.bestId].bestLost += 1; }
+      else if (b.bestVal > a.bestVal) { roles[b.bestId].bestWon += 1; roles[a.bestId].bestLost += 1; }
+      else { roles[a.bestId].bestTied += 1; roles[b.bestId].bestTied += 1; }
+
+      if (a.worstVal > b.worstVal) { roles[a.worstId].worstWon += 1; roles[b.worstId].worstLost += 1; }
+      else if (b.worstVal > a.worstVal) { roles[b.worstId].worstWon += 1; roles[a.worstId].worstLost += 1; }
+      else { roles[a.worstId].worstTied += 1; roles[b.worstId].worstTied += 1; }
+    }
   });
 
   return roles;
 }
 
 // Points earned by a single player in a round from their best/worst-ball
-// role across the pair's scored holes.
+// role — only holes their pair won outright count (ties and losses score
+// nothing), scaled by the tournament's bestBallValue / worstBallValue.
 export function playerRoundBestWorstPoints(round, playerId, players, settings) {
   const { bestBallValue, worstBallValue } = { ...DEFAULT_SETTINGS, ...settings };
   const roles = assignBestWorstRoles(round, players);
   const r = roles[playerId];
   if (!r) return 0;
-  return r.best * bestBallValue + r.worst * worstBallValue;
+  return r.bestWon * bestBallValue + r.worstWon * worstBallValue;
 }
 
-// Individual leaderboard for best-ball mode: each player is tallied by how
-// many holes they were the best vs worst ball inside their pair, scaled by
-// the tournament's bestBallValue / worstBallValue.
+// Individual leaderboard for best-ball mode: each player is tallied by the
+// holes they *won* carrying the best / worst ball for their pair (ties and
+// losses do not count), scaled by bestBallValue / worstBallValue. Also
+// exposes bestTies/bestLosses and worstTies/worstLosses for display.
 export function tournamentBestWorstLeaderboard(tournament) {
   const { players, rounds, settings } = tournament;
   const { bestBallValue, worstBallValue } = { ...DEFAULT_SETTINGS, ...settings };
-  const totals = Object.fromEntries(players.map((p) => [p.id, { player: p, points: 0, bestWins: 0, worstWins: 0 }]));
+  const totals = Object.fromEntries(players.map((p) => [p.id, {
+    player: p, points: 0,
+    bestWins: 0, bestTies: 0, bestLosses: 0,
+    worstWins: 0, worstTies: 0, worstLosses: 0,
+  }]));
 
   rounds.forEach((round, index) => {
     if (!isRoundPlayed(round, index, tournament) || !round.pairs?.length) return;
@@ -491,9 +522,13 @@ export function tournamentBestWorstLeaderboard(tournament) {
     players.forEach((p) => {
       const r = roles[p.id];
       if (!r) return;
-      totals[p.id].points += r.best * bestBallValue + r.worst * worstBallValue;
-      totals[p.id].bestWins += r.best;
-      totals[p.id].worstWins += r.worst;
+      totals[p.id].points += r.bestWon * bestBallValue + r.worstWon * worstBallValue;
+      totals[p.id].bestWins += r.bestWon;
+      totals[p.id].bestTies += r.bestTied;
+      totals[p.id].bestLosses += r.bestLost;
+      totals[p.id].worstWins += r.worstWon;
+      totals[p.id].worstTies += r.worstTied;
+      totals[p.id].worstLosses += r.worstLost;
     });
   });
 
