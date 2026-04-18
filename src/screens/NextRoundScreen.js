@@ -6,6 +6,7 @@ import {
   TouchableOpacity,
   View,
 } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
 import { Feather } from '@expo/vector-icons';
 import { loadTournament, randomPairs, saveTournament } from '../store/tournamentStore';
 import { useTheme } from '../theme/ThemeContext';
@@ -138,7 +139,7 @@ export default function NextRoundScreen({ navigation, route }) {
   /* ─── Countdown phase ─── */
   if (phase === 'countdown') {
     return (
-      <View style={s.fullscreen}>
+      <SafeAreaView style={s.fullscreen} edges={['top', 'bottom']}>
         <View style={s.countdownCircle}>
           <Animated.Text
             style={[
@@ -152,7 +153,7 @@ export default function NextRoundScreen({ navigation, route }) {
             {countdownNum}
           </Animated.Text>
         </View>
-      </View>
+      </SafeAreaView>
     );
   }
 
@@ -161,7 +162,7 @@ export default function NextRoundScreen({ navigation, route }) {
     ensurePairAnims(nextPairs.length);
     const pairColors = [theme.pairA, theme.pairB, theme.accent.primary, theme.accent.primary];
     return (
-      <View style={s.revealContainer}>
+      <SafeAreaView style={s.revealContainer} edges={['top', 'bottom']}>
         <View style={s.pairsContainer}>
           {nextPairs.map((pair, i) => {
             const anim = pairAnimsRef.current[i];
@@ -223,13 +224,13 @@ export default function NextRoundScreen({ navigation, route }) {
             </Text>
           </TouchableOpacity>
         </View>
-      </View>
+      </SafeAreaView>
     );
   }
 
   /* ─── Initial phase ─── */
   return (
-    <View style={s.container}>
+    <SafeAreaView style={s.container} edges={['top', 'bottom']}>
       <View style={s.header}>
         <TouchableOpacity onPress={() => navigation.goBack()} style={s.backBtn}>
           <Feather name="chevron-left" size={22} color={theme.accent.primary} />
@@ -246,7 +247,7 @@ export default function NextRoundScreen({ navigation, route }) {
           <Text style={s.revealBtnText}>Reveal Teams</Text>
         </TouchableOpacity>
       </View>
-    </View>
+    </SafeAreaView>
   );
 }
 

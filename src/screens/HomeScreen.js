@@ -1,5 +1,6 @@
 import React, { useEffect, useState, useCallback, useRef, useMemo, startTransition } from 'react';
 import { View, Text, TouchableOpacity, StyleSheet, ScrollView, Switch, Alert, FlatList, Platform, Modal, Pressable } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
 import { Feather } from '@expo/vector-icons';
 
 import { useTheme } from '../theme/ThemeContext';
@@ -186,7 +187,7 @@ export default function HomeScreen({ navigation, viewMode = 'auto' }) {
 
   if (showList) {
     return (
-      <View style={s.screen}>
+      <SafeAreaView style={s.screen} edges={['top', 'bottom']}>
         <View style={s.header}>
           <View>
             <Text style={s.title}>Golf Partner</Text>
@@ -263,13 +264,13 @@ export default function HomeScreen({ navigation, viewMode = 'auto' }) {
           </>
         )}
         </PullToRefresh>
-      </View>
+      </SafeAreaView>
     );
   }
 
   if (showTournament && !tournament) {
     return (
-      <View style={[s.screen, { alignItems: 'center', justifyContent: 'center' }]}>
+      <SafeAreaView style={[s.screen, { alignItems: 'center', justifyContent: 'center' }]} edges={['top', 'bottom']}>
         <Feather name="flag" size={48} color={theme.text.muted} />
         <Text style={[s.emptyTitle, { marginTop: 16 }]}>No active tournament</Text>
         <TouchableOpacity
@@ -279,7 +280,7 @@ export default function HomeScreen({ navigation, viewMode = 'auto' }) {
         >
           <Text style={s.primaryBtnText}>Go to Home</Text>
         </TouchableOpacity>
-      </View>
+      </SafeAreaView>
     );
   }
 
@@ -330,7 +331,7 @@ export default function HomeScreen({ navigation, viewMode = 'auto' }) {
   };
 
   return (
-    <View style={s.screen}>
+    <SafeAreaView style={s.screen} edges={['top', 'bottom']}>
       <View style={s.header}>
         <View style={s.headerLeft}>
           <TouchableOpacity onPress={goToList} style={s.backBtn} activeOpacity={0.7}>
@@ -787,7 +788,7 @@ export default function HomeScreen({ navigation, viewMode = 'auto' }) {
         </Pressable>
       </Pressable>
     </Modal>
-    </View>
+    </SafeAreaView>
   );
 }
 

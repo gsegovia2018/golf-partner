@@ -3,6 +3,7 @@ import {
   View, Text, TextInput, TouchableOpacity,
   StyleSheet, ScrollView,
 } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
 import { Feather } from '@expo/vector-icons';
 
 import { useTheme } from '../theme/ThemeContext';
@@ -169,7 +170,7 @@ export default function EditTournamentScreen({ navigation }) {
   if (!tournament) return null;
 
   return (
-    <View style={s.screen}>
+    <SafeAreaView style={s.screen} edges={['top', 'bottom']}>
       {/* Header */}
       <View style={s.header}>
         <TouchableOpacity onPress={() => navigation.goBack()} style={s.backBtn}>
@@ -343,7 +344,7 @@ export default function EditTournamentScreen({ navigation }) {
           )}
         </View>
       </ScrollView>
-    </View>
+    </SafeAreaView>
   );
 }
 

@@ -3,6 +3,7 @@ import {
   ActivityIndicator, Alert, Platform, ScrollView, StyleSheet,
   Text, TextInput, TouchableOpacity, View,
 } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
 import { useFocusEffect, useNavigation } from '@react-navigation/native';
 import { Feather } from '@expo/vector-icons';
 
@@ -81,7 +82,7 @@ export default function PlayersLibraryScreen() {
   }
 
   return (
-    <View style={s.container}>
+    <SafeAreaView style={s.container} edges={['top', 'bottom']}>
       <View style={s.header}>
         <TouchableOpacity onPress={() => navigation.goBack()} style={s.backBtn}>
           <Feather name="chevron-left" size={22} color={theme.accent.primary} />
@@ -150,7 +151,7 @@ export default function PlayersLibraryScreen() {
               </View>
             ))}
       </ScrollView>
-    </View>
+    </SafeAreaView>
   );
 }
 

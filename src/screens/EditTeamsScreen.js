@@ -1,5 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { View, Text, TouchableOpacity, StyleSheet } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
 import { Feather } from '@expo/vector-icons';
 import { useTheme } from '../theme/ThemeContext';
 import { loadTournament, saveTournament } from '../store/tournamentStore';
@@ -63,7 +64,7 @@ export default function EditTeamsScreen({ navigation, route }) {
   const isSelected = (pi, si) => selected?.pairIdx === pi && selected?.slotIdx === si;
 
   return (
-    <View style={s.screen}>
+    <SafeAreaView style={s.screen} edges={['top', 'bottom']}>
       <View style={s.header}>
         <TouchableOpacity onPress={() => navigation.goBack()} style={s.backBtn}>
           <Feather name="chevron-left" size={22} color={theme.accent.primary} />
@@ -113,7 +114,7 @@ export default function EditTeamsScreen({ navigation, route }) {
           <Text style={s.saveBtnText}>{saving ? 'Saving…' : 'Save Teams'}</Text>
         </TouchableOpacity>
       </View>
-    </View>
+    </SafeAreaView>
   );
 }
 
