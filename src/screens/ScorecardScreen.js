@@ -3,6 +3,7 @@ import {
   View, Text, TextInput, TouchableOpacity,
   StyleSheet, ScrollView, Modal, Pressable, KeyboardAvoidingView, Platform, Animated,
 } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
 import * as Haptics from 'expo-haptics';
 
 import { Feather } from '@expo/vector-icons';
@@ -66,6 +67,7 @@ export default function ScorecardScreen({ navigation, route }) {
   const saveTimeoutRef = useRef(null);
   const notesSaveTimeoutRef = useRef(null);
   const scoreAnims = useRef({});
+  const prevHoleRef = useRef(null);
   const [celebration, setCelebration] = useState({ playerId: null, holeNumber: null, label: null });
   const celebrationAnim = useRef(new Animated.Value(0)).current;
   const roundIndex = paramRoundIndex ?? tournament?.currentRound ?? 0;
@@ -88,18 +90,23 @@ export default function ScorecardScreen({ navigation, route }) {
     try { await reload(); } finally { setRefreshing(false); }
   }, [reload]);
 
-  // Auto-initialize current hole scores to par so "leaving it" records par
+  // Record par for the hole the user just *left* (not the one they arrived at).
+  // This means a hole only counts in the leaderboard once the user advances
+  // past it — merely opening the scorecard on hole 1 no longer inflates totals.
   useEffect(() => {
+    const leavingHole = prevHoleRef.current;
+    prevHoleRef.current = currentHole;
+    if (leavingHole == null || leavingHole === currentHole) return;
     if (!tournament) return;
     const r = tournament.rounds[roundIndex];
-    const h = r.holes.find((x) => x.number === currentHole);
+    const h = r.holes.find((x) => x.number === leavingHole);
     if (!h) return;
     setScores((prev) => {
       let changed = false;
       const next = { ...prev };
       tournament.players.forEach((p) => {
-        if (next[p.id]?.[currentHole] == null) {
-          next[p.id] = { ...(next[p.id] ?? {}), [currentHole]: h.par };
+        if (next[p.id]?.[leavingHole] == null) {
+          next[p.id] = { ...(next[p.id] ?? {}), [leavingHole]: h.par };
           changed = true;
         }
       });
@@ -107,7 +114,7 @@ export default function ScorecardScreen({ navigation, route }) {
       autoSave(next);
       return next;
     });
-  }, [currentHole, tournament]);
+  }, [currentHole, tournament, roundIndex]);
 
   const autoSave = useCallback((newScores) => {
     if (saveTimeoutRef.current) clearTimeout(saveTimeoutRef.current);
@@ -253,7 +260,7 @@ export default function ScorecardScreen({ navigation, route }) {
   const hole = round.holes.find((h) => h.number === currentHole);
 
   return (
-    <View style={s.container}>
+    <SafeAreaView style={s.container} edges={['top', 'bottom']}>
       {/* Header with inline view toggle (small, doesn't take a full row) */}
       <View style={s.header}>
         <TouchableOpacity onPress={() => navigation.goBack()} style={s.backBtn}>
@@ -328,7 +335,7 @@ export default function ScorecardScreen({ navigation, route }) {
           onRefresh={onRefresh}
         />
       )}
-    </View>
+    </SafeAreaView>
   );
 }
 
