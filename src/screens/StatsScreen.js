@@ -2,14 +2,16 @@ import React, { useEffect, useState } from 'react';
 import { View, Text, TouchableOpacity, StyleSheet, ScrollView, FlatList, Switch } from 'react-native';
 import { Feather } from '@expo/vector-icons';
 import { useTheme } from '../theme/ThemeContext';
-import { loadTournament } from '../store/tournamentStore';
+import { loadTournament, getPlayingHandicap, calcStablefordPoints } from '../store/tournamentStore';
 import {
   playerRoundHistory, playerAvgStableford, playerScoreDistribution,
   playerStreaks, bestWorstHoles, holeDifficultyMap,
   headToHead, pairPerformance, tournamentHighlights,
+  hallOfShame, pairHoleWins,
 } from '../store/statsEngine';
+import StatDetailSheet from '../components/StatDetailSheet';
 
-const TABS = ['Overview', 'Players', 'Holes', 'Pairs'];
+const TABS = ['Overview', 'Players', 'Holes', 'Pairs', 'Shame'];
 
 export default function StatsScreen({ navigation }) {
   const { theme } = useTheme();
@@ -47,7 +49,7 @@ export default function StatsScreen({ navigation }) {
         ))}
       </View>
 
-      {(tab === 0 || tab === 1) && (
+      {(tab === 0 || tab === 1 || tab === 4) && (
         <View style={s.scoringToggle}>
           <Text style={[s.scoringLabel, !useNet && s.scoringLabelActive]}>Gross</Text>
           <Switch
@@ -65,6 +67,7 @@ export default function StatsScreen({ navigation }) {
         {tab === 1 && <PlayersTab tournament={tournament} players={players} selectedPlayer={selectedPlayer} setSelectedPlayer={setSelectedPlayer} useNet={useNet} theme={theme} s={s} />}
         {tab === 2 && <HolesTab tournament={tournament} completedRounds={completedRounds} theme={theme} s={s} />}
         {tab === 3 && <PairsTab tournament={tournament} players={players} h2hPlayer={h2hPlayer} setH2hPlayer={setH2hPlayer} selectedPlayer={selectedPlayer} setSelectedPlayer={setSelectedPlayer} theme={theme} s={s} />}
+        {tab === 4 && <ShameTab tournament={tournament} useNet={useNet} theme={theme} s={s} />}
       </ScrollView>
     </View>
   );
@@ -74,34 +77,105 @@ export default function StatsScreen({ navigation }) {
 function OverviewTab({ tournament, useNet, theme, s }) {
   const highlights = tournamentHighlights(tournament, { useNet });
   const modeLabel = useNet ? 'net' : 'gross';
+  const [sheet, setSheet] = useState(null);
+
   if (!highlights.bestRound) {
     return <Text style={s.emptyText}>No scores entered yet. Play a round first!</Text>;
   }
+
+  const openBestRound = () => {
+    const h = highlights.bestRound;
+    setSheet({
+      title: `${h.player.name} — ${h.points} pts`,
+      subtitle: `Best round · ${h.courseName} · ${modeLabel}`,
+      rows: h.breakdown.map(b => ({
+        key: `${b.holeNumber}`,
+        primary: `Hoyo ${b.holeNumber}`,
+        secondary: `Par ${b.par} · ${b.strokes} golpes`,
+        rightPrimary: `${b.points} pts`,
+        tone: b.points >= 3 ? 'excellent' : b.points === 2 ? 'good' : b.points === 1 ? 'neutral' : 'poor',
+      })),
+    });
+  };
+
+  const openBirdies = () => {
+    const h = highlights.mostBirdies;
+    setSheet({
+      title: `${h.player.name} — ${h.count} birdies+`,
+      subtitle: `Birdies & Eagles · ${modeLabel}`,
+      rows: h.breakdown.map((b, i) => ({
+        key: `${b.roundIndex}-${b.holeNumber}-${i}`,
+        primary: `R${b.roundIndex + 1} · ${b.courseName} · Hoyo ${b.holeNumber}`,
+        secondary: `Par ${b.par} · ${b.strokes} golpes`,
+        rightPrimary: b.vsPar <= -2 ? 'Eagle' : 'Birdie',
+        tone: 'excellent',
+      })),
+    });
+  };
+
+  const openParStreak = () => {
+    const h = highlights.longestParStreak;
+    setSheet({
+      title: `${h.player.name} — ${h.count} hoyos`,
+      subtitle: `Longest par streak · ${modeLabel}`,
+      rows: h.breakdown.map((b, i) => ({
+        key: `${b.roundIndex}-${b.holeNumber}-${i}`,
+        primary: `R${b.roundIndex + 1} · ${b.courseName} · Hoyo ${b.holeNumber}`,
+        secondary: `Par ${b.par} · ${b.strokes} golpes`,
+        rightPrimary: `${b.points} pts`,
+        tone: b.vsPar <= -1 ? 'excellent' : 'good',
+      })),
+    });
+  };
+
+  const openHole = (h, label) => {
+    setSheet({
+      title: `Hoyo ${h.holeNumber} · ${h.courseName}`,
+      subtitle: `${label} · Par ${h.par} · ${h.avgPoints} avg pts`,
+      rows: h.playerScores.map(ps => ({
+        key: ps.playerId,
+        primary: ps.playerName,
+        secondary: `${ps.strokes} golpes`,
+        rightPrimary: `${ps.points} pts`,
+        tone: ps.points >= 3 ? 'excellent' : ps.points === 2 ? 'good' : ps.points === 1 ? 'neutral' : 'poor',
+      })),
+    });
+  };
+
   return (
     <View>
       <Text style={s.sectionTitle}>TOURNAMENT HIGHLIGHTS</Text>
       {highlights.bestRound && (
-        <HighlightCard icon="award" label="Best Round" value={`${highlights.bestRound.player.name} — ${highlights.bestRound.points} pts`} sub={highlights.bestRound.courseName} theme={theme} s={s} />
+        <HighlightCard icon="award" label="Best Round" value={`${highlights.bestRound.player.name} — ${highlights.bestRound.points} pts`} sub={highlights.bestRound.courseName} onPress={openBestRound} theme={theme} s={s} />
       )}
       {highlights.mostBirdies && highlights.mostBirdies.count > 0 && (
-        <HighlightCard icon="zap" label="Most Birdies+" value={`${highlights.mostBirdies.player.name} — ${highlights.mostBirdies.count}`} sub={`Birdies + Eagles (${modeLabel})`} theme={theme} s={s} />
+        <HighlightCard icon="zap" label="Most Birdies+" value={`${highlights.mostBirdies.player.name} — ${highlights.mostBirdies.count}`} sub={`Birdies + Eagles (${modeLabel})`} onPress={openBirdies} theme={theme} s={s} />
       )}
       {highlights.longestParStreak && highlights.longestParStreak.count > 1 && (
-        <HighlightCard icon="trending-up" label="Longest Par Streak" value={`${highlights.longestParStreak.player.name} — ${highlights.longestParStreak.count} holes`} sub={`Consecutive holes at par or better (${modeLabel})`} theme={theme} s={s} />
+        <HighlightCard icon="trending-up" label="Longest Par Streak" value={`${highlights.longestParStreak.player.name} — ${highlights.longestParStreak.count} holes`} sub={`Consecutive holes at par or better (${modeLabel})`} onPress={openParStreak} theme={theme} s={s} />
       )}
       {highlights.bestHole && (
-        <HighlightCard icon="thumbs-up" label="Easiest Hole" value={`Hole ${highlights.bestHole.holeNumber} — ${highlights.bestHole.avgPoints} avg pts`} sub={`${highlights.bestHole.courseName} · Par ${highlights.bestHole.par}`} theme={theme} s={s} />
+        <HighlightCard icon="thumbs-up" label="Easiest Hole" value={`Hole ${highlights.bestHole.holeNumber} — ${highlights.bestHole.avgPoints} avg pts`} sub={`${highlights.bestHole.courseName} · Par ${highlights.bestHole.par}`} onPress={() => openHole(highlights.bestHole, 'Easiest Hole')} theme={theme} s={s} />
       )}
       {highlights.worstHole && (
-        <HighlightCard icon="thumbs-down" label="Hardest Hole" value={`Hole ${highlights.worstHole.holeNumber} — ${highlights.worstHole.avgPoints} avg pts`} sub={`${highlights.worstHole.courseName} · Par ${highlights.worstHole.par}`} theme={theme} s={s} />
+        <HighlightCard icon="thumbs-down" label="Hardest Hole" value={`Hole ${highlights.worstHole.holeNumber} — ${highlights.worstHole.avgPoints} avg pts`} sub={`${highlights.worstHole.courseName} · Par ${highlights.worstHole.par}`} onPress={() => openHole(highlights.worstHole, 'Hardest Hole')} theme={theme} s={s} />
       )}
+
+      <StatDetailSheet
+        visible={!!sheet}
+        onClose={() => setSheet(null)}
+        title={sheet?.title || ''}
+        subtitle={sheet?.subtitle}
+        rows={sheet?.rows || []}
+      />
     </View>
   );
 }
 
-function HighlightCard({ icon, label, value, sub, theme, s }) {
+function HighlightCard({ icon, label, value, sub, onPress, theme, s }) {
+  const Container = onPress ? TouchableOpacity : View;
   return (
-    <View style={s.highlightCard}>
+    <Container style={s.highlightCard} onPress={onPress} activeOpacity={0.7}>
       <View style={s.highlightIcon}>
         <Feather name={icon} size={20} color={theme.accent.primary} />
       </View>
@@ -110,23 +184,72 @@ function HighlightCard({ icon, label, value, sub, theme, s }) {
         <Text style={s.highlightValue}>{value}</Text>
         {sub && <Text style={s.highlightSub}>{sub}</Text>}
       </View>
-    </View>
+      {onPress && <Feather name="chevron-right" size={18} color={theme.text.muted} />}
+    </Container>
   );
 }
 
 // ── Players Tab ──
 function PlayersTab({ tournament, players, selectedPlayer, setSelectedPlayer, useNet, theme, s }) {
   const player = players[selectedPlayer];
+  const [sheet, setSheet] = useState(null);
   if (!player) return null;
 
   const dist = playerScoreDistribution(tournament, player.id, { useNet });
   const streaks = playerStreaks(tournament, player.id, { useNet });
   const history = playerRoundHistory(tournament, player.id);
   const avg = playerAvgStableford(tournament, player.id);
+  const modeLabel = useNet ? 'net' : 'gross';
+
+  const defaultTone = (b) => b.points >= 3 ? 'excellent' : b.points === 2 ? 'good' : b.points === 1 ? 'neutral' : 'poor';
+
+  const holeRows = (holes, toneFn) => holes.map((b, i) => ({
+    key: `${b.roundIndex}-${b.holeNumber}-${i}`,
+    primary: `R${b.roundIndex + 1} · ${b.courseName} · Hoyo ${b.holeNumber}`,
+    secondary: `Par ${b.par} · ${b.strokes} golpes`,
+    rightPrimary: `${b.points} pts`,
+    tone: toneFn(b),
+  }));
+
+  const openStreak = (title, holes, toneFn) => setSheet({
+    title,
+    subtitle: `${player.name} · ${modeLabel}`,
+    rows: holeRows(holes, toneFn),
+  });
+
+  const openBucket = (label, holes) => {
+    if (holes.length === 0) return;
+    setSheet({
+      title: `${player.name} — ${holes.length} ${label}`,
+      subtitle: `${modeLabel}`,
+      rows: holeRows(holes, defaultTone),
+    });
+  };
+
+  const openRound = (r) => {
+    const round = tournament.rounds[r.roundIndex];
+    const handicap = getPlayingHandicap(round, player);
+    const rows = round.holes.map(h => {
+      const sc = round.scores?.[player.id]?.[h.number];
+      if (!sc) return null;
+      const pts = calcStablefordPoints(h.par, sc, handicap, h.strokeIndex);
+      return {
+        key: `${h.number}`,
+        primary: `Hoyo ${h.number}`,
+        secondary: `Par ${h.par} · ${sc} golpes`,
+        rightPrimary: `${pts} pts`,
+        tone: pts >= 3 ? 'excellent' : pts === 2 ? 'good' : pts === 1 ? 'neutral' : 'poor',
+      };
+    }).filter(Boolean);
+    setSheet({
+      title: `R${r.roundIndex + 1} · ${r.courseName}`,
+      subtitle: `${player.name} — ${r.points} pts · ${r.strokes} golpes`,
+      rows,
+    });
+  };
 
   return (
     <View>
-      {/* Player selector */}
       <View style={s.playerSelector}>
         {players.map((p, i) => (
           <TouchableOpacity key={p.id} style={[s.playerChip, selectedPlayer === i && s.playerChipActive]} onPress={() => setSelectedPlayer(i)} activeOpacity={0.7}>
@@ -139,70 +262,75 @@ function PlayersTab({ tournament, players, selectedPlayer, setSelectedPlayer, us
         <Text style={s.emptyText}>No scores for {player.name} yet.</Text>
       ) : (
         <>
-          {/* Avg */}
           <View style={s.card}>
             <Text style={s.cardLabel}>Average per Round</Text>
             <Text style={s.bigNumber}>{avg}</Text>
             <Text style={s.cardSub}>Stableford points</Text>
           </View>
 
-          {/* Score Distribution */}
           <Text style={s.sectionTitle}>SCORE DISTRIBUTION</Text>
           <View style={s.card}>
             <View style={s.distRow}>
-              <DistBar label="Eagle+" count={dist.eagles} total={dist.total} color={theme.scoreColor('excellent')} s={s} />
-              <DistBar label="Birdie" count={dist.birdies} total={dist.total} color={theme.scoreColor('excellent')} s={s} />
-              <DistBar label="Par" count={dist.pars} total={dist.total} color={theme.scoreColor('good')} s={s} />
-              <DistBar label="Bogey" count={dist.bogeys} total={dist.total} color={theme.scoreColor('neutral')} s={s} />
-              <DistBar label="Dbl+" count={dist.doubles + dist.worse} total={dist.total} color={theme.scoreColor('poor')} s={s} />
+              <DistBar label="Eagle+" count={dist.eagles} total={dist.total} color={theme.scoreColor('excellent')} onPress={() => openBucket('Eagles', dist.eagleHoles)} s={s} />
+              <DistBar label="Birdie" count={dist.birdies} total={dist.total} color={theme.scoreColor('excellent')} onPress={() => openBucket('Birdies', dist.birdieHoles)} s={s} />
+              <DistBar label="Par" count={dist.pars} total={dist.total} color={theme.scoreColor('good')} onPress={() => openBucket('Pares', dist.parHoles)} s={s} />
+              <DistBar label="Bogey" count={dist.bogeys} total={dist.total} color={theme.scoreColor('neutral')} onPress={() => openBucket('Bogeys', dist.bogeyHoles)} s={s} />
+              <DistBar label="Dbl+" count={dist.doubles + dist.worse} total={dist.total} color={theme.scoreColor('poor')} onPress={() => openBucket('Dobles o peor', [...dist.doubleHoles, ...dist.worseHoles])} s={s} />
             </View>
           </View>
 
-          {/* Streaks */}
           <Text style={s.sectionTitle}>STREAKS</Text>
           <View style={s.card}>
             <View style={s.streakRow}>
-              <View style={s.streakItem}>
+              <TouchableOpacity style={s.streakItem} onPress={() => streaks.bestParStreak > 0 && openStreak(`Par streak — ${streaks.bestParStreak} hoyos`, streaks.parStreakHoles, defaultTone)} activeOpacity={0.7}>
                 <Text style={[s.streakNumber, { color: theme.scoreColor('excellent') }]}>{streaks.bestParStreak}</Text>
                 <Text style={s.streakLabel}>Par streak</Text>
-              </View>
-              <View style={s.streakItem}>
+              </TouchableOpacity>
+              <TouchableOpacity style={s.streakItem} onPress={() => streaks.bestBirdieStreak > 0 && openStreak(`Birdie streak — ${streaks.bestBirdieStreak} hoyos`, streaks.birdieStreakHoles, () => 'excellent')} activeOpacity={0.7}>
                 <Text style={[s.streakNumber, { color: theme.scoreColor('excellent') }]}>{streaks.bestBirdieStreak}</Text>
                 <Text style={s.streakLabel}>Birdie streak</Text>
-              </View>
-              <View style={s.streakItem}>
+              </TouchableOpacity>
+              <TouchableOpacity style={s.streakItem} onPress={() => streaks.worstBogeyStreak > 0 && openStreak(`Bogey streak — ${streaks.worstBogeyStreak} hoyos`, streaks.bogeyStreakHoles, () => 'poor')} activeOpacity={0.7}>
                 <Text style={[s.streakNumber, { color: theme.scoreColor('poor') }]}>{streaks.worstBogeyStreak}</Text>
                 <Text style={s.streakLabel}>Bogey streak</Text>
-              </View>
+              </TouchableOpacity>
             </View>
           </View>
 
-          {/* Round history */}
           <Text style={s.sectionTitle}>ROUND HISTORY</Text>
           {history.map((r, i) => (
-            <View key={i} style={s.historyRow}>
+            <TouchableOpacity key={i} style={s.historyRow} onPress={() => openRound(r)} activeOpacity={0.7}>
               <Text style={s.historyRound}>R{r.roundIndex + 1}</Text>
               <Text style={s.historyCourse}>{r.courseName}</Text>
               <Text style={s.historyPts}>{r.points} pts</Text>
               <Text style={s.historyStr}>{r.strokes} str</Text>
-            </View>
+            </TouchableOpacity>
           ))}
         </>
       )}
+
+      <StatDetailSheet
+        visible={!!sheet}
+        onClose={() => setSheet(null)}
+        title={sheet?.title || ''}
+        subtitle={sheet?.subtitle}
+        rows={sheet?.rows || []}
+      />
     </View>
   );
 }
 
-function DistBar({ label, count, total, color, s }) {
+function DistBar({ label, count, total, color, onPress, s }) {
   const pct = total > 0 ? (count / total) * 100 : 0;
+  const Container = onPress && count > 0 ? TouchableOpacity : View;
   return (
-    <View style={s.distItem}>
+    <Container style={s.distItem} onPress={onPress} activeOpacity={0.7}>
       <View style={s.distBarBg}>
         <View style={[s.distBarFill, { height: `${Math.max(pct, 2)}%`, backgroundColor: color }]} />
       </View>
       <Text style={s.distCount}>{count}</Text>
       <Text style={s.distLabel}>{label}</Text>
-    </View>
+    </Container>
   );
 }
 
@@ -211,6 +339,19 @@ function HolesTab({ tournament, completedRounds, theme, s }) {
   const bw = bestWorstHoles(tournament);
   const firstRoundIdx = tournament.rounds.indexOf(completedRounds[0]);
   const heatmap = firstRoundIdx >= 0 ? holeDifficultyMap(tournament, firstRoundIdx) : [];
+  const [sheet, setSheet] = useState(null);
+
+  const openHole = (h, label) => setSheet({
+    title: `Hoyo ${h.holeNumber} · ${h.courseName}`,
+    subtitle: `${label} · Par ${h.par} · ${h.avgPoints} avg pts`,
+    rows: h.playerScores.map(ps => ({
+      key: ps.playerId,
+      primary: ps.playerName,
+      secondary: `${ps.strokes} golpes`,
+      rightPrimary: `${ps.points} pts`,
+      tone: ps.points >= 3 ? 'excellent' : ps.points === 2 ? 'good' : ps.points === 1 ? 'neutral' : 'poor',
+    })),
+  });
 
   return (
     <View>
@@ -218,7 +359,7 @@ function HolesTab({ tournament, completedRounds, theme, s }) {
         <>
           <Text style={s.sectionTitle}>EASIEST HOLES</Text>
           {bw.best.map((h, i) => (
-            <View key={`b${i}`} style={s.holeCard}>
+            <TouchableOpacity key={`b${i}`} style={s.holeCard} onPress={() => openHole(h, 'Easiest Hole')} activeOpacity={0.7}>
               <View style={[s.holeRank, { backgroundColor: theme.scoreColor('excellent') + '20' }]}>
                 <Text style={[s.holeRankText, { color: theme.scoreColor('excellent') }]}>#{i + 1}</Text>
               </View>
@@ -227,7 +368,7 @@ function HolesTab({ tournament, completedRounds, theme, s }) {
                 <Text style={s.holeCourse}>{h.courseName}</Text>
               </View>
               <Text style={[s.holeAvg, { color: theme.scoreColor('excellent') }]}>{h.avgPoints} avg</Text>
-            </View>
+            </TouchableOpacity>
           ))}
         </>
       )}
@@ -236,7 +377,7 @@ function HolesTab({ tournament, completedRounds, theme, s }) {
         <>
           <Text style={s.sectionTitle}>HARDEST HOLES</Text>
           {bw.worst.map((h, i) => (
-            <View key={`w${i}`} style={s.holeCard}>
+            <TouchableOpacity key={`w${i}`} style={s.holeCard} onPress={() => openHole(h, 'Hardest Hole')} activeOpacity={0.7}>
               <View style={[s.holeRank, { backgroundColor: theme.scoreColor('poor') + '20' }]}>
                 <Text style={[s.holeRankText, { color: theme.scoreColor('poor') }]}>#{i + 1}</Text>
               </View>
@@ -245,7 +386,7 @@ function HolesTab({ tournament, completedRounds, theme, s }) {
                 <Text style={s.holeCourse}>{h.courseName}</Text>
               </View>
               <Text style={[s.holeAvg, { color: theme.scoreColor('poor') }]}>{h.avgPoints} avg</Text>
-            </View>
+            </TouchableOpacity>
           ))}
         </>
       )}
@@ -290,6 +431,14 @@ function HolesTab({ tournament, completedRounds, theme, s }) {
       )}
 
       {bw.best.length === 0 && <Text style={s.emptyText}>No scores entered yet.</Text>}
+
+      <StatDetailSheet
+        visible={!!sheet}
+        onClose={() => setSheet(null)}
+        title={sheet?.title || ''}
+        subtitle={sheet?.subtitle}
+        rows={sheet?.rows || []}
+      />
     </View>
   );
 }
@@ -297,10 +446,65 @@ function HolesTab({ tournament, completedRounds, theme, s }) {
 // ── Pairs Tab ──
 function PairsTab({ tournament, players, h2hPlayer, setH2hPlayer, selectedPlayer, setSelectedPlayer, theme, s }) {
   const pairs = pairPerformance(tournament);
+  const holeWins = pairHoleWins(tournament);
   const p1 = players[selectedPlayer];
   const p2Idx = h2hPlayer >= players.length ? 0 : h2hPlayer;
   const p2 = players[p2Idx];
   const h2h = p1 && p2 && p1.id !== p2.id ? headToHead(tournament, p1.id, p2.id) : null;
+  const [sheet, setSheet] = useState(null);
+
+  const openPair = (pair) => setSheet({
+    title: `${pair.players[0].name} & ${pair.players[1].name}`,
+    subtitle: `${pair.avgPoints} avg pts · ${pair.rounds} round${pair.rounds !== 1 ? 's' : ''}`,
+    rows: pair.roundList.map(r => ({
+      key: `r${r.roundIndex}`,
+      primary: `R${r.roundIndex + 1} · ${r.courseName}`,
+      secondary: r.memberPoints.map(m => `${m.playerName.split(' ')[0]} ${m.points}`).join(' · '),
+      rightPrimary: `${r.combinedPoints} pts`,
+      rightSecondary: `${r.combinedStrokes} golpes`,
+    })),
+  });
+
+  const openHoleWins = (row) => setSheet({
+    title: `${row.player.name} — hoyos a puntos`,
+    subtitle: `MB ${row.best.W}·${row.best.T}·${row.best.L}  PB ${row.worst.W}·${row.worst.T}·${row.worst.L}  Tot ${row.total.W}·${row.total.T}·${row.total.L}`,
+    rows: row.breakdown.map((b, i) => {
+      const roleParts = [];
+      if (b.bestRole) roleParts.push(`MB ${b.bestOutcome}`);
+      if (b.worstRole) roleParts.push(`PB ${b.worstOutcome}`);
+      const tone = roleParts.some(p => p.endsWith('W')) && !roleParts.some(p => p.endsWith('L'))
+        ? 'excellent'
+        : roleParts.every(p => p.endsWith('L'))
+          ? 'poor'
+          : 'neutral';
+      return {
+        key: `${b.roundIndex}-${b.holeNumber}-${i}`,
+        primary: `R${b.roundIndex + 1} · ${b.courseName} · Hoyo ${b.holeNumber}`,
+        secondary: `Par ${b.par} · ${b.playerPoints} pts (equipo ${b.teamBest}/${b.teamWorst} · rival ${b.oppBest}/${b.oppWorst})`,
+        rightPrimary: roleParts.join(' · '),
+        tone,
+      };
+    }),
+  });
+
+  const openH2H = () => {
+    if (!h2h) return;
+    setSheet({
+      title: `${p1.name.split(' ')[0]} vs ${p2.name.split(' ')[0]}`,
+      subtitle: `${h2h.p1Wins} - ${h2h.p2Wins} (${h2h.ties} empates)`,
+      rows: h2h.holes.map((h, i) => {
+        const winner = h.p1Points > h.p2Points ? p1.name.split(' ')[0] : h.p2Points > h.p1Points ? p2.name.split(' ')[0] : 'Empate';
+        const tone = h.p1Points === h.p2Points ? 'neutral' : 'good';
+        return {
+          key: `${h.courseName}-${h.holeNumber}-${i}`,
+          primary: `${h.courseName} · Hoyo ${h.holeNumber}`,
+          secondary: `${p1.name.split(' ')[0]} ${h.p1Points} · ${p2.name.split(' ')[0]} ${h.p2Points}`,
+          rightPrimary: winner,
+          tone,
+        };
+      }),
+    });
+  };
 
   return (
     <View>
@@ -308,7 +512,7 @@ function PairsTab({ tournament, players, h2hPlayer, setH2hPlayer, selectedPlayer
         <>
           <Text style={s.sectionTitle}>PAIR CHEMISTRY</Text>
           {pairs.map((p, i) => (
-            <View key={i} style={s.pairCard}>
+            <TouchableOpacity key={i} style={s.pairCard} onPress={() => openPair(p)} activeOpacity={0.7}>
               <View style={s.pairNames}>
                 <Text style={s.pairName}>{p.players[0].name}</Text>
                 <Text style={s.pairAmp}>&</Text>
@@ -318,8 +522,39 @@ function PairsTab({ tournament, players, h2hPlayer, setH2hPlayer, selectedPlayer
                 <Text style={s.pairAvg}>{p.avgPoints} avg pts</Text>
                 <Text style={s.pairRounds}>{p.rounds} round{p.rounds !== 1 ? 's' : ''}</Text>
               </View>
-            </View>
+            </TouchableOpacity>
           ))}
+        </>
+      )}
+
+      {holeWins.some(r => r.total.W + r.total.T + r.total.L > 0) && (
+        <>
+          <Text style={s.sectionTitle}>HOLE WINS ON POINTS</Text>
+          <View style={s.card}>
+            <View style={s.hwHeader}>
+              <Text style={[s.hwCell, s.hwHeaderText, { flex: 1.2 }]}>Jugador</Text>
+              <Text style={[s.hwCell, s.hwHeaderText]}>MB G·E·P</Text>
+              <Text style={[s.hwCell, s.hwHeaderText]}>PB G·E·P</Text>
+              <Text style={[s.hwCell, s.hwHeaderText]}>Tot G·E·P</Text>
+            </View>
+            {holeWins.map(row => {
+              const empty = row.total.W + row.total.T + row.total.L === 0;
+              return (
+                <TouchableOpacity
+                  key={row.player.id}
+                  style={s.hwRow}
+                  onPress={() => !empty && openHoleWins(row)}
+                  activeOpacity={0.7}
+                  disabled={empty}
+                >
+                  <Text style={[s.hwCell, s.hwName, { flex: 1.2 }]}>{row.player.name.split(' ')[0]}</Text>
+                  <Text style={[s.hwCell, s.hwValue]}>{row.best.W}·{row.best.T}·{row.best.L}</Text>
+                  <Text style={[s.hwCell, s.hwValue]}>{row.worst.W}·{row.worst.T}·{row.worst.L}</Text>
+                  <Text style={[s.hwCell, s.hwValueStrong]}>{row.total.W}·{row.total.T}·{row.total.L}</Text>
+                </TouchableOpacity>
+              );
+            })}
+          </View>
         </>
       )}
 
@@ -334,7 +569,7 @@ function PairsTab({ tournament, players, h2hPlayer, setH2hPlayer, selectedPlayer
         </View>
         <Text style={s.h2hVs}>vs</Text>
         <View style={s.h2hCol}>
-          {players.filter((_, i) => i !== selectedPlayer).map((p, i) => {
+          {players.filter((_, i) => i !== selectedPlayer).map((p) => {
             const realIdx = players.indexOf(p);
             return (
               <TouchableOpacity key={p.id} style={[s.playerChip, p2Idx === realIdx && s.playerChipActive]} onPress={() => setH2hPlayer(realIdx)} activeOpacity={0.7}>
@@ -346,7 +581,7 @@ function PairsTab({ tournament, players, h2hPlayer, setH2hPlayer, selectedPlayer
       </View>
 
       {h2h ? (
-        <View style={s.card}>
+        <TouchableOpacity style={s.card} onPress={openH2H} activeOpacity={0.7}>
           <View style={s.h2hResult}>
             <View style={s.h2hPlayer}>
               <Text style={s.h2hName}>{p1.name.split(' ')[0]}</Text>
@@ -361,10 +596,147 @@ function PairsTab({ tournament, players, h2hPlayer, setH2hPlayer, selectedPlayer
             </View>
           </View>
           <Text style={s.h2hSub}>{h2h.holes.length} holes compared</Text>
-        </View>
+        </TouchableOpacity>
       ) : (
         <Text style={s.emptyText}>Select two different players to compare.</Text>
       )}
+
+      <StatDetailSheet
+        visible={!!sheet}
+        onClose={() => setSheet(null)}
+        title={sheet?.title || ''}
+        subtitle={sheet?.subtitle}
+        rows={sheet?.rows || []}
+      />
+    </View>
+  );
+}
+
+// ── Shame Tab ──
+
+function ShameTab({ tournament, useNet, theme, s }) {
+  const shame = hallOfShame(tournament, { useNet });
+  const [sheet, setSheet] = useState(null);
+  const modeLabel = useNet ? 'net' : 'gross';
+
+  const holeRows = (holes) => holes.map((b, i) => ({
+    key: `${b.roundIndex}-${b.holeNumber}-${i}`,
+    primary: `R${b.roundIndex + 1} · ${b.courseName} · Hoyo ${b.holeNumber}`,
+    secondary: `Par ${b.par} · ${b.strokes} golpes`,
+    rightPrimary: `${b.points} pts`,
+    tone: b.points === 0 ? 'poor' : b.vsPar >= 1 ? 'neutral' : 'good',
+  }));
+
+  const openTripleBogey = () => {
+    const x = shame.tripleBogey;
+    setSheet({
+      title: `${x.player.name} — +${x.vsPar} sobre par`,
+      subtitle: `R${x.roundIndex + 1} · ${x.courseName} · Hoyo ${x.holeNumber} · ${modeLabel}`,
+      rows: [{
+        key: 'sole',
+        primary: `Par ${x.par} · SI ${x.si}`,
+        secondary: `${x.strokes} golpes`,
+        rightPrimary: `${x.points} pts`,
+        tone: 'poor',
+      }],
+    });
+  };
+
+  const openShameStreak = () => {
+    const x = shame.shameStreak;
+    setSheet({
+      title: `${x.player.name} — ${x.count} bogeys+ seguidos`,
+      subtitle: `Racha de la vergüenza · ${modeLabel}`,
+      rows: holeRows(x.breakdown),
+    });
+  };
+
+  const openCero = () => {
+    const x = shame.ceroPatatero;
+    setSheet({
+      title: `${x.player.name} — ${x.count} hoyos a 0 pts`,
+      subtitle: `Cero patatero · ${modeLabel}`,
+      rows: holeRows(x.breakdown),
+    });
+  };
+
+  const openRegalo = () => {
+    const x = shame.regalo;
+    setSheet({
+      title: `${x.player.name} — ${x.playerPoints} vs avg ${x.othersAvg}`,
+      subtitle: `R${x.roundIndex + 1} · ${x.courseName} · Hoyo ${x.holeNumber} · ${modeLabel}`,
+      rows: x.breakdown.map(b => ({
+        key: b.playerId,
+        primary: b.playerName,
+        secondary: `${b.strokes} golpes`,
+        rightPrimary: `${b.points} pts`,
+        tone: b.playerId === x.player.id ? 'poor' : b.points >= 3 ? 'excellent' : b.points === 2 ? 'good' : b.points === 1 ? 'neutral' : 'poor',
+      })),
+    });
+  };
+
+  const openDesmoronamiento = () => {
+    const x = shame.desmoronamiento;
+    setSheet({
+      title: `${x.player.name} — ${x.front} / ${x.back}`,
+      subtitle: `R${x.roundIndex + 1} · ${x.courseName} · caída de ${x.drop} pts · ${modeLabel}`,
+      rows: x.breakdown.map(b => ({
+        key: `${b.holeNumber}`,
+        primary: `Hoyo ${b.holeNumber} ${b.holeNumber <= 9 ? '(ida)' : '(vuelta)'}`,
+        secondary: `Par ${b.par} · ${b.strokes} golpes`,
+        rightPrimary: `${b.points} pts`,
+        tone: b.points >= 3 ? 'excellent' : b.points === 2 ? 'good' : b.points === 1 ? 'neutral' : 'poor',
+      })),
+    });
+  };
+
+  const openBucketazo = () => {
+    const x = shame.bucketazo;
+    setSheet({
+      title: `${x.player.name} — ${x.strokes} golpes en un hoyo`,
+      subtitle: `R${x.roundIndex + 1} · ${x.courseName} · Hoyo ${x.holeNumber} · ${modeLabel}`,
+      rows: [{
+        key: 'sole',
+        primary: `Par ${x.par} · SI ${x.si}`,
+        secondary: `${x.strokes} golpes · +${x.vsPar} sobre par`,
+        rightPrimary: `${x.points} pts`,
+        tone: 'poor',
+      }],
+    });
+  };
+
+  const any = shame.tripleBogey || shame.shameStreak || shame.ceroPatatero || shame.regalo || shame.desmoronamiento || shame.bucketazo;
+
+  return (
+    <View>
+      {!any && <Text style={s.emptyText}>No hay suficientes datos todavía. ¡Juega alguna ronda primero!</Text>}
+
+      {shame.tripleBogey && (
+        <HighlightCard icon="alert-triangle" label="🏌️ Triple Bogey Club" value={`${shame.tripleBogey.player.name} — +${shame.tripleBogey.vsPar} sobre par`} sub={`${shame.tripleBogey.courseName} · Hoyo ${shame.tripleBogey.holeNumber}`} onPress={openTripleBogey} theme={theme} s={s} />
+      )}
+      {shame.shameStreak && shame.shameStreak.count > 1 && (
+        <HighlightCard icon="trending-down" label="💀 Racha de la Vergüenza" value={`${shame.shameStreak.player.name} — ${shame.shameStreak.count} bogeys+`} sub={`Consecutivos (${modeLabel})`} onPress={openShameStreak} theme={theme} s={s} />
+      )}
+      {shame.ceroPatatero && shame.ceroPatatero.count > 0 && (
+        <HighlightCard icon="minus-circle" label="🕳️ Cero Patatero" value={`${shame.ceroPatatero.player.name} — ${shame.ceroPatatero.count} hoyos`} sub={`Sin sumar puntos (${modeLabel})`} onPress={openCero} theme={theme} s={s} />
+      )}
+      {shame.regalo && (
+        <HighlightCard icon="gift" label="🎁 El Regalo" value={`${shame.regalo.player.name} — brecha ${shame.regalo.gap} pts`} sub={`${shame.regalo.courseName} · Hoyo ${shame.regalo.holeNumber}`} onPress={openRegalo} theme={theme} s={s} />
+      )}
+      {shame.desmoronamiento && (
+        <HighlightCard icon="activity" label="📉 El Desmoronamiento" value={`${shame.desmoronamiento.player.name} — caída ${shame.desmoronamiento.drop} pts`} sub={`${shame.desmoronamiento.courseName} · ida ${shame.desmoronamiento.front} vs vuelta ${shame.desmoronamiento.back}`} onPress={openDesmoronamiento} theme={theme} s={s} />
+      )}
+      {shame.bucketazo && (
+        <HighlightCard icon="flag" label="🪣 El Bucketazo" value={`${shame.bucketazo.player.name} — ${shame.bucketazo.strokes} golpes`} sub={`${shame.bucketazo.courseName} · Hoyo ${shame.bucketazo.holeNumber}`} onPress={openBucketazo} theme={theme} s={s} />
+      )}
+
+      <StatDetailSheet
+        visible={!!sheet}
+        onClose={() => setSheet(null)}
+        title={sheet?.title || ''}
+        subtitle={sheet?.subtitle}
+        rows={sheet?.rows || []}
+      />
     </View>
   );
 }
@@ -498,4 +870,13 @@ const makeStyles = (t) => StyleSheet.create({
   h2hCenter: { alignItems: 'center' },
   h2hTies: { fontFamily: 'PlusJakartaSans-Medium', color: t.text.muted, fontSize: 13 },
   h2hSub: { fontFamily: 'PlusJakartaSans-Regular', color: t.text.muted, fontSize: 11, textAlign: 'center', marginTop: 8 },
+
+  // Hole Wins table
+  hwHeader: { flexDirection: 'row', paddingBottom: 6, borderBottomWidth: 1, borderBottomColor: t.border.subtle },
+  hwRow: { flexDirection: 'row', paddingVertical: 8, borderBottomWidth: 1, borderBottomColor: t.border.subtle },
+  hwCell: { flex: 1, textAlign: 'center' },
+  hwHeaderText: { fontFamily: 'PlusJakartaSans-SemiBold', color: t.text.muted, fontSize: 10, letterSpacing: 1 },
+  hwName: { fontFamily: 'PlusJakartaSans-Bold', color: t.text.primary, fontSize: 13, textAlign: 'left' },
+  hwValue: { fontFamily: 'PlusJakartaSans-Medium', color: t.text.secondary, fontSize: 13 },
+  hwValueStrong: { fontFamily: 'PlusJakartaSans-Bold', color: t.accent.primary, fontSize: 13 },
 });

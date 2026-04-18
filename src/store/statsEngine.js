@@ -30,9 +30,12 @@ export function playerAvgStableford(tournament, playerId) {
 }
 
 export function playerScoreDistribution(tournament, playerId, { useNet = false } = {}) {
-  const dist = { eagles: 0, birdies: 0, pars: 0, bogeys: 0, doubles: 0, worse: 0, total: 0 };
+  const dist = {
+    eagles: 0, birdies: 0, pars: 0, bogeys: 0, doubles: 0, worse: 0, total: 0,
+    eagleHoles: [], birdieHoles: [], parHoles: [], bogeyHoles: [], doubleHoles: [], worseHoles: [],
+  };
   const player = tournament.players.find(p => p.id === playerId);
-  tournament.rounds.forEach(round => {
+  tournament.rounds.forEach((round, roundIndex) => {
     if (!round.scores?.[playerId]) return;
     const handicap = player ? getPlayingHandicap(round, player) : 0;
     round.holes.forEach(hole => {
@@ -40,13 +43,18 @@ export function playerScoreDistribution(tournament, playerId, { useNet = false }
       if (!sc) return;
       const extra = useNet ? calcExtraShots(handicap, hole.strokeIndex) : 0;
       const vsPar = sc - extra - hole.par;
+      const points = calcStablefordPoints(hole.par, sc, useNet ? handicap : 0, hole.strokeIndex);
+      const entry = {
+        roundIndex, courseName: round.courseName,
+        holeNumber: hole.number, par: hole.par, strokes: sc, points, vsPar,
+      };
       dist.total++;
-      if (vsPar <= -2) dist.eagles++;
-      else if (vsPar === -1) dist.birdies++;
-      else if (vsPar === 0) dist.pars++;
-      else if (vsPar === 1) dist.bogeys++;
-      else if (vsPar === 2) dist.doubles++;
-      else dist.worse++;
+      if (vsPar <= -2) { dist.eagles++; dist.eagleHoles.push(entry); }
+      else if (vsPar === -1) { dist.birdies++; dist.birdieHoles.push(entry); }
+      else if (vsPar === 0) { dist.pars++; dist.parHoles.push(entry); }
+      else if (vsPar === 1) { dist.bogeys++; dist.bogeyHoles.push(entry); }
+      else if (vsPar === 2) { dist.doubles++; dist.doubleHoles.push(entry); }
+      else { dist.worse++; dist.worseHoles.push(entry); }
     });
   });
   return dist;
@@ -55,55 +63,85 @@ export function playerScoreDistribution(tournament, playerId, { useNet = false }
 // ── Streaks ──
 
 export function playerStreaks(tournament, playerId, { useNet = false } = {}) {
-  const results = []; // array of vs-par per hole across all rounds
+  const entries = [];
   const player = tournament.players.find(p => p.id === playerId);
-  tournament.rounds.forEach(round => {
+  tournament.rounds.forEach((round, roundIndex) => {
     if (!round.scores?.[playerId]) return;
     const handicap = player ? getPlayingHandicap(round, player) : 0;
     round.holes.forEach(hole => {
       const sc = round.scores[playerId]?.[hole.number];
       if (!sc) return;
       const extra = useNet ? calcExtraShots(handicap, hole.strokeIndex) : 0;
-      results.push(sc - extra - hole.par);
+      const vsPar = sc - extra - hole.par;
+      const points = calcStablefordPoints(hole.par, sc, useNet ? handicap : 0, hole.strokeIndex);
+      entries.push({
+        roundIndex, courseName: round.courseName,
+        holeNumber: hole.number, par: hole.par, strokes: sc, points, vsPar,
+      });
     });
   });
 
-  let bestParStreak = 0, bestBirdieStreak = 0, worstBogeyStreak = 0;
-  let curPar = 0, curBirdie = 0, curBogey = 0;
+  const longestRun = (predicate) => {
+    let bestCount = 0, bestStart = -1, bestEnd = -1;
+    let curStart = -1;
+    entries.forEach((e, i) => {
+      if (predicate(e)) {
+        if (curStart === -1) curStart = i;
+        const curCount = i - curStart + 1;
+        if (curCount > bestCount) { bestCount = curCount; bestStart = curStart; bestEnd = i; }
+      } else {
+        curStart = -1;
+      }
+    });
+    return {
+      count: bestCount,
+      holes: bestCount > 0 ? entries.slice(bestStart, bestEnd + 1) : [],
+    };
+  };
 
-  results.forEach(net => {
-    // Par or better streak (net <= 0)
-    if (net <= 0) { curPar++; bestParStreak = Math.max(bestParStreak, curPar); }
-    else curPar = 0;
-    // Birdie or better streak (net <= -1)
-    if (net <= -1) { curBirdie++; bestBirdieStreak = Math.max(bestBirdieStreak, curBirdie); }
-    else curBirdie = 0;
-    // Bogey or worse streak (net >= 1)
-    if (net >= 1) { curBogey++; worstBogeyStreak = Math.max(worstBogeyStreak, curBogey); }
-    else curBogey = 0;
-  });
+  const par = longestRun(e => e.vsPar <= 0);
+  const birdie = longestRun(e => e.vsPar <= -1);
+  const bogey = longestRun(e => e.vsPar >= 1);
 
-  return { bestParStreak, bestBirdieStreak, worstBogeyStreak };
+  return {
+    bestParStreak: par.count,
+    bestBirdieStreak: birdie.count,
+    worstBogeyStreak: bogey.count,
+    parStreakHoles: par.holes,
+    birdieStreakHoles: birdie.holes,
+    bogeyStreakHoles: bogey.holes,
+  };
 }
 
 // ── Hole Analysis ──
 
 export function bestWorstHoles(tournament) {
-  const holeMap = {}; // key: "roundIndex-holeNumber"
+  const holeMap = {};
   tournament.rounds.forEach((round, ri) => {
     if (!round.scores || Object.keys(round.scores).length === 0) return;
     round.holes.forEach(hole => {
       const key = `${ri}-${hole.number}`;
       let totalPts = 0, count = 0;
+      const playerScores = [];
       tournament.players.forEach(p => {
         const sc = round.scores[p.id]?.[hole.number];
         if (!sc) return;
         const handicap = getPlayingHandicap(round, p);
-        totalPts += calcStablefordPoints(hole.par, sc, handicap, hole.strokeIndex);
+        const pts = calcStablefordPoints(hole.par, sc, handicap, hole.strokeIndex);
+        totalPts += pts;
         count++;
+        playerScores.push({ playerId: p.id, playerName: p.name, strokes: sc, points: pts });
       });
       if (count > 0) {
-        holeMap[key] = { holeNumber: hole.number, courseName: round.courseName, par: hole.par, si: hole.strokeIndex, avgPoints: +(totalPts / count).toFixed(2) };
+        holeMap[key] = {
+          roundIndex: ri,
+          holeNumber: hole.number,
+          courseName: round.courseName,
+          par: hole.par,
+          si: hole.strokeIndex,
+          avgPoints: +(totalPts / count).toFixed(2),
+          playerScores,
+        };
       }
     });
   });
@@ -161,16 +199,29 @@ export function headToHead(tournament, p1Id, p2Id) {
 
 export function pairPerformance(tournament) {
   const pairMap = {};
-  tournament.rounds.forEach(round => {
+  tournament.rounds.forEach((round, roundIndex) => {
     if (!round.pairs || !round.scores || Object.keys(round.scores).length === 0) return;
     round.pairs.forEach(pair => {
       const key = [pair[0].id, pair[1].id].sort().join('-');
-      if (!pairMap[key]) pairMap[key] = { players: [pair[0], pair[1]], rounds: 0, totalPoints: 0 };
+      if (!pairMap[key]) {
+        pairMap[key] = { players: [pair[0], pair[1]], rounds: 0, totalPoints: 0, roundList: [] };
+      }
       const results = roundPairLeaderboard(round, tournament.players);
       const match = results.find(r => r.members.some(m => m.player.id === pair[0].id));
       if (match) {
         pairMap[key].rounds++;
         pairMap[key].totalPoints += match.combinedPoints;
+        pairMap[key].roundList.push({
+          roundIndex,
+          courseName: round.courseName,
+          combinedPoints: match.combinedPoints,
+          combinedStrokes: match.combinedStrokes,
+          memberPoints: match.members.map(m => ({
+            playerId: m.player.id,
+            playerName: m.player.name,
+            points: m.totalPoints,
+          })),
+        });
       }
     });
   });
@@ -187,21 +238,287 @@ export function tournamentHighlights(tournament, { useNet = false } = {}) {
   tournament.players.forEach(p => {
     const history = playerRoundHistory(tournament, p.id);
     history.forEach(r => {
-      if (!bestRound || r.points > bestRound.points) bestRound = { player: p, ...r };
+      if (!bestRound || r.points > bestRound.points) {
+        const round = tournament.rounds[r.roundIndex];
+        const handicap = getPlayingHandicap(round, p);
+        const holes = round.holes
+          .map(h => {
+            const sc = round.scores?.[p.id]?.[h.number];
+            if (!sc) return null;
+            return {
+              roundIndex: r.roundIndex, courseName: round.courseName,
+              holeNumber: h.number, par: h.par, strokes: sc,
+              points: calcStablefordPoints(h.par, sc, handicap, h.strokeIndex),
+            };
+          })
+          .filter(Boolean);
+        bestRound = { player: p, ...r, breakdown: holes };
+      }
     });
 
     const dist = playerScoreDistribution(tournament, p.id, { useNet });
-    if (!mostBirdies || dist.birdies + dist.eagles > mostBirdies.count) {
-      mostBirdies = { player: p, count: dist.birdies + dist.eagles };
+    const birdiesAndEagles = [...dist.eagleHoles, ...dist.birdieHoles];
+    if (!mostBirdies || birdiesAndEagles.length > mostBirdies.count) {
+      mostBirdies = { player: p, count: birdiesAndEagles.length, breakdown: birdiesAndEagles };
     }
 
     const streaks = playerStreaks(tournament, p.id, { useNet });
     if (!longestParStreak || streaks.bestParStreak > longestParStreak.count) {
-      longestParStreak = { player: p, count: streaks.bestParStreak };
+      longestParStreak = { player: p, count: streaks.bestParStreak, breakdown: streaks.parStreakHoles };
     }
   });
 
   const holes = bestWorstHoles(tournament);
 
   return { bestRound, mostBirdies, longestParStreak, bestHole: holes.best[0] || null, worstHole: holes.worst[0] || null };
+}
+
+// ── Pair Hole Wins (Best Ball / Worst Ball) ──
+
+export function pairHoleWins(tournament) {
+  const stats = {};
+  tournament.players.forEach(p => {
+    stats[p.id] = {
+      player: p,
+      best: { W: 0, T: 0, L: 0 },
+      worst: { W: 0, T: 0, L: 0 },
+      total: { W: 0, T: 0, L: 0 },
+      breakdown: [],
+    };
+  });
+
+  tournament.rounds.forEach((round, roundIndex) => {
+    if (!round.scores || !round.pairs || round.pairs.length < 2) return;
+    const [pair1, pair2] = round.pairs;
+    if (!pair1 || !pair2 || pair1.length < 2 || pair2.length < 2) return;
+
+    const scoreOf = (playerId, hole) => {
+      const player = tournament.players.find(x => x.id === playerId);
+      if (!player) return null;
+      const sc = round.scores[playerId]?.[hole.number];
+      if (!sc) return null;
+      const handicap = getPlayingHandicap(round, player);
+      return calcStablefordPoints(hole.par, sc, handicap, hole.strokeIndex);
+    };
+
+    round.holes.forEach(hole => {
+      const p1a = scoreOf(pair1[0].id, hole);
+      const p1b = scoreOf(pair1[1].id, hole);
+      const p2a = scoreOf(pair2[0].id, hole);
+      const p2b = scoreOf(pair2[1].id, hole);
+      if (p1a === null || p1b === null || p2a === null || p2b === null) return;
+
+      const pair1Max = Math.max(p1a, p1b);
+      const pair1Min = Math.min(p1a, p1b);
+      const pair2Max = Math.max(p2a, p2b);
+      const pair2Min = Math.min(p2a, p2b);
+
+      const bestOutcomePair1 = pair1Max > pair2Max ? 'W' : pair1Max < pair2Max ? 'L' : 'T';
+      const bestOutcomePair2 = bestOutcomePair1 === 'W' ? 'L' : bestOutcomePair1 === 'L' ? 'W' : 'T';
+      const worstOutcomePair1 = pair1Min > pair2Min ? 'W' : pair1Min < pair2Min ? 'L' : 'T';
+      const worstOutcomePair2 = worstOutcomePair1 === 'W' ? 'L' : worstOutcomePair1 === 'L' ? 'W' : 'T';
+
+      const credit = (playerId, pairScore, pairMax, pairMin, bestOutcome, worstOutcome, oppBest, oppWorst) => {
+        const rec = stats[playerId];
+        const entry = {
+          roundIndex, courseName: round.courseName, holeNumber: hole.number, par: hole.par,
+          playerPoints: pairScore, teamBest: pairMax, teamWorst: pairMin,
+          oppBest, oppWorst,
+          bestRole: null, bestOutcome: null,
+          worstRole: null, worstOutcome: null,
+        };
+        if (pairScore === pairMax) {
+          rec.best[bestOutcome]++;
+          rec.total[bestOutcome]++;
+          entry.bestRole = 'MB';
+          entry.bestOutcome = bestOutcome;
+        }
+        if (pairScore === pairMin) {
+          rec.worst[worstOutcome]++;
+          rec.total[worstOutcome]++;
+          entry.worstRole = 'PB';
+          entry.worstOutcome = worstOutcome;
+        }
+        if (entry.bestRole || entry.worstRole) rec.breakdown.push(entry);
+      };
+
+      credit(pair1[0].id, p1a, pair1Max, pair1Min, bestOutcomePair1, worstOutcomePair1, pair2Max, pair2Min);
+      credit(pair1[1].id, p1b, pair1Max, pair1Min, bestOutcomePair1, worstOutcomePair1, pair2Max, pair2Min);
+      credit(pair2[0].id, p2a, pair2Max, pair2Min, bestOutcomePair2, worstOutcomePair2, pair1Max, pair1Min);
+      credit(pair2[1].id, p2b, pair2Max, pair2Min, bestOutcomePair2, worstOutcomePair2, pair1Max, pair1Min);
+    });
+  });
+
+  return Object.values(stats).sort((a, b) => b.total.W - a.total.W);
+}
+
+// ── Hall of Shame ──
+
+export function hallOfShame(tournament, { useNet = false } = {}) {
+  const result = {
+    tripleBogey: null,
+    shameStreak: null,
+    ceroPatatero: null,
+    regalo: null,
+    desmoronamiento: null,
+    bucketazo: null,
+  };
+
+  const perPlayerEntries = {};
+  tournament.players.forEach(p => { perPlayerEntries[p.id] = []; });
+  tournament.rounds.forEach((round, roundIndex) => {
+    if (!round.scores) return;
+    tournament.players.forEach(p => {
+      if (!round.scores[p.id]) return;
+      const handicap = getPlayingHandicap(round, p);
+      round.holes.forEach(hole => {
+        const sc = round.scores[p.id]?.[hole.number];
+        if (!sc) return;
+        const extra = useNet ? calcExtraShots(handicap, hole.strokeIndex) : 0;
+        const vsPar = sc - extra - hole.par;
+        const points = calcStablefordPoints(hole.par, sc, useNet ? handicap : 0, hole.strokeIndex);
+        perPlayerEntries[p.id].push({
+          roundIndex, courseName: round.courseName,
+          holeNumber: hole.number, par: hole.par, si: hole.strokeIndex,
+          strokes: sc, vsPar, points,
+        });
+      });
+    });
+  });
+
+  // 1. Triple Bogey Club — worst single hole by vsPar
+  tournament.players.forEach(p => {
+    perPlayerEntries[p.id].forEach(e => {
+      if (!result.tripleBogey || e.vsPar > result.tripleBogey.vsPar) {
+        result.tripleBogey = { player: p, ...e, breakdown: [e] };
+      }
+    });
+  });
+
+  // 2. Racha de la Vergüenza — longest bogey-or-worse streak
+  tournament.players.forEach(p => {
+    const entries = perPlayerEntries[p.id];
+    let curStart = -1, bestCount = 0, bestStart = -1, bestEnd = -1;
+    entries.forEach((e, i) => {
+      if (e.vsPar >= 1) {
+        if (curStart === -1) curStart = i;
+        const curCount = i - curStart + 1;
+        if (curCount > bestCount) { bestCount = curCount; bestStart = curStart; bestEnd = i; }
+      } else {
+        curStart = -1;
+      }
+    });
+    if (bestCount > 0 && (!result.shameStreak || bestCount > result.shameStreak.count)) {
+      result.shameStreak = {
+        player: p,
+        count: bestCount,
+        breakdown: entries.slice(bestStart, bestEnd + 1),
+      };
+    }
+  });
+
+  // 3. Cero Patatero — longest 0-stableford-points streak
+  tournament.players.forEach(p => {
+    const entries = perPlayerEntries[p.id];
+    let curStart = -1, bestCount = 0, bestStart = -1, bestEnd = -1;
+    entries.forEach((e, i) => {
+      if (e.points === 0) {
+        if (curStart === -1) curStart = i;
+        const curCount = i - curStart + 1;
+        if (curCount > bestCount) { bestCount = curCount; bestStart = curStart; bestEnd = i; }
+      } else {
+        curStart = -1;
+      }
+    });
+    if (bestCount > 0 && (!result.ceroPatatero || bestCount > result.ceroPatatero.count)) {
+      result.ceroPatatero = {
+        player: p,
+        count: bestCount,
+        breakdown: entries.slice(bestStart, bestEnd + 1),
+      };
+    }
+  });
+
+  // 4. El Regalo — hole where a player's stableford is lowest by largest margin vs others' avg
+  tournament.rounds.forEach((round, roundIndex) => {
+    if (!round.scores) return;
+    round.holes.forEach(hole => {
+      const scores = tournament.players.map(p => {
+        const sc = round.scores[p.id]?.[hole.number];
+        if (!sc) return null;
+        const handicap = getPlayingHandicap(round, p);
+        const extra = useNet ? calcExtraShots(handicap, hole.strokeIndex) : 0;
+        const points = calcStablefordPoints(hole.par, sc, useNet ? handicap : 0, hole.strokeIndex);
+        return { player: p, strokes: sc, points, netVsPar: sc - extra - hole.par };
+      }).filter(Boolean);
+      if (scores.length < 4) return;
+      scores.forEach(entry => {
+        const others = scores.filter(s => s.player.id !== entry.player.id);
+        const othersAvg = others.reduce((s, o) => s + o.points, 0) / others.length;
+        const gap = othersAvg - entry.points;
+        if (!result.regalo || gap > result.regalo.gap) {
+          result.regalo = {
+            player: entry.player,
+            gap: +gap.toFixed(2),
+            playerPoints: entry.points,
+            othersAvg: +othersAvg.toFixed(2),
+            roundIndex,
+            courseName: round.courseName,
+            holeNumber: hole.number,
+            par: hole.par,
+            breakdown: scores.map(s => ({
+              playerId: s.player.id,
+              playerName: s.player.name,
+              strokes: s.strokes,
+              points: s.points,
+            })),
+          };
+        }
+      });
+    });
+  });
+
+  // 5. El Desmoronamiento — round with biggest front9 − back9 drop (18 holes required)
+  tournament.rounds.forEach((round, roundIndex) => {
+    if (!round.scores || round.holes.length < 18) return;
+    tournament.players.forEach(p => {
+      if (!round.scores[p.id]) return;
+      const handicap = getPlayingHandicap(round, p);
+      let front = 0, back = 0, frontComplete = 0, backComplete = 0;
+      const holeEntries = [];
+      round.holes.forEach(hole => {
+        const sc = round.scores[p.id]?.[hole.number];
+        if (!sc) return;
+        const points = calcStablefordPoints(hole.par, sc, useNet ? handicap : 0, hole.strokeIndex);
+        if (hole.number <= 9) { front += points; frontComplete++; } else { back += points; backComplete++; }
+        holeEntries.push({
+          roundIndex, courseName: round.courseName,
+          holeNumber: hole.number, par: hole.par, strokes: sc, points,
+        });
+      });
+      if (frontComplete < 9 || backComplete < 9) return;
+      const drop = front - back;
+      if (drop > 0 && (!result.desmoronamiento || drop > result.desmoronamiento.drop)) {
+        result.desmoronamiento = {
+          player: p,
+          drop,
+          front, back,
+          roundIndex,
+          courseName: round.courseName,
+          breakdown: holeEntries,
+        };
+      }
+    });
+  });
+
+  // 6. Bucketazo — highest raw stroke count on any hole
+  tournament.players.forEach(p => {
+    perPlayerEntries[p.id].forEach(e => {
+      if (!result.bucketazo || e.strokes > result.bucketazo.strokes) {
+        result.bucketazo = { player: p, ...e, breakdown: [e] };
+      }
+    });
+  });
+
+  return result;
 }
