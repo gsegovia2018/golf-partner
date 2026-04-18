@@ -8,7 +8,13 @@ import {
   playerRoundHistory, playerAvgStableford, playerScoreDistribution,
   playerStreaks, bestWorstHoles, holeDifficultyMap,
   headToHead, pairPerformance, tournamentHighlights,
-  hallOfShame, pairHoleWins,
+  hallOfShame, pairHoleWins, pairDifferenceByHole,
+  tournamentMomentum, clutchOnHardest, playerConsistency, courseDNA,
+  parTypeSplit, warmupVsClosing, handicapROI,
+  playerNemesisAndCrushed, chaosHoles, collectiveExtremes,
+  pairSynergy, pairCarryRatio, swingHole,
+  par3Heartbreak, pickupChampion, anchor, zeroHero,
+  skinsLeaderboard, matchPlayResults, pairConfigMatrix,
 } from '../store/statsEngine';
 import StatDetailSheet from '../components/StatDetailSheet';
 
@@ -120,6 +126,11 @@ export default function StatsScreen({ navigation }) {
 function OverviewTab({ tournament, metric, theme, s }) {
   const [roundIndex, setRoundIndex] = useState(null);
   const highlights = tournamentHighlights(tournament, { metric, roundIndex });
+  const momentum = tournamentMomentum(tournament);
+  const clutch = clutchOnHardest(tournament, { topN: 3 });
+  const consistency = playerConsistency(tournament);
+  const dna = courseDNA(tournament);
+  const skins = skinsLeaderboard(tournament, { metric });
   const isStrokes = metric === 'strokes';
   const modeLabel = isStrokes ? 'strokes (gross)' : 'points (net Stableford)';
   const fmtValue = (v, unit) => `${v} ${unit}`;
@@ -213,6 +224,67 @@ function OverviewTab({ tournament, metric, theme, s }) {
     });
   };
 
+  const openMomentum = (row) => setSheet({
+    title: `${row.player.name} — momentum`,
+    subtitle: `Points by round`,
+    explainer: 'Stableford points each round, to see trajectory across the weekend.',
+    rows: row.rounds.filter(r => r.points != null).map(r => ({
+      key: `r${r.roundIndex}`,
+      primary: `R${r.roundIndex + 1} · ${r.courseName}`,
+      secondary: `${r.strokes} strokes over ${r.holesPlayed} holes`,
+      rightPrimary: `${r.points} pts`,
+      tone: toneForPoints(Math.round(r.points / Math.max(r.holesPlayed, 1))),
+    })),
+  });
+
+  const openClutch = (row) => setSheet({
+    title: `${row.player.name} — SI top-3 holes`,
+    subtitle: `${row.avgPoints} avg pts · ${row.holesPlayed} hardest holes`,
+    explainer: 'Performance on the three lowest-stroke-index (hardest) holes of each round.',
+    rows: row.breakdown.map((b, i) => holeRowFromBreakdown(b, i)),
+  });
+
+  const openConsistency = (row) => setSheet({
+    title: `${row.player.name} — consistency`,
+    subtitle: `σ ${row.stdev} · mean ${row.mean} pts/hole`,
+    explainer: 'Standard deviation of Stableford points across every hole played. Lower numbers mean fewer big swings.',
+    rows: [],
+  });
+
+  const openSkins = (player) => {
+    const rec = skins.leaderboard.find(r => r.player.id === player.id);
+    if (!rec) return;
+    setSheet({
+      title: `${player.name} — ${rec.skins} skin${rec.skins === 1 ? '' : 's'}`,
+      subtitle: `${rec.ties} tied holes · ${skins.totalSkins} total skins awarded`,
+      explainer:
+        (isStrokes
+          ? 'A skin on a hole goes to the player with the strictly lowest strokes. Ties on a hole = no skin awarded (no carry-over).'
+          : 'A skin on a hole goes to the player with the strictly highest Stableford points. Ties on a hole = no skin awarded (no carry-over).'),
+      rows: rec.breakdown.map(b => ({
+        key: `${b.roundIndex}-${b.holeNumber}`,
+        primary: `R${b.roundIndex + 1} · ${b.courseName} · Hole ${b.holeNumber}`,
+        secondary: `Par ${b.par} · SI ${b.si}`,
+        rightPrimary: isStrokes ? `${b.bestVal} str` : `${b.bestVal} pts`,
+        tone: 'excellent',
+      })),
+    });
+  };
+
+  const openDna = (row) => setSheet({
+    title: `${row.player.name} — Course DNA`,
+    subtitle: 'Avg pts per hole by course',
+    explainer: 'Average Stableford points on each course. Surfaces which tracks suit the player.',
+    rows: row.courses.map(c => ({
+      key: c.courseName,
+      primary: c.courseName,
+      secondary: `${c.rounds} round${c.rounds === 1 ? '' : 's'} · ${c.holesPlayed} holes`,
+      rightPrimary: `${c.avgPoints} pts/hole`,
+      rightSecondary: `${c.roundPoints} pts/round`,
+      tone: c.avgPoints >= 2 ? 'good' : c.avgPoints >= 1.5 ? 'neutral' : 'poor',
+    })),
+  });
+
   const bestRoundLabel = roundIndex === null ? 'Best Round' : 'Top Scorer';
   const br = highlights.bestRound;
   const mb = highlights.mostBirdies;
@@ -270,6 +342,142 @@ function OverviewTab({ tournament, metric, theme, s }) {
           onPress={() => openHole(highlights.worstHole, 'Hardest Hole', isStrokes ? 'Hole with the highest average strokes-vs-par across all players in scope.' : 'Hole with the lowest average Stableford points across all players in scope.')}
           theme={theme} s={s}
         />
+      )}
+
+      {roundIndex === null && momentum.some(m => m.rounds.some(r => r.points != null)) && (
+        <>
+          <Text style={s.sectionTitle}>TOURNAMENT MOMENTUM</Text>
+          <View style={s.card}>
+            {momentum.map(row => (
+              <TouchableOpacity
+                key={row.player.id}
+                style={s.momentumRow}
+                onPress={() => openMomentum(row)}
+                activeOpacity={0.7}
+              >
+                <Text style={s.momentumName}>{firstName(row.player)}</Text>
+                <View style={s.momentumBars}>
+                  {row.rounds.map(r => {
+                    const played = r.points != null;
+                    const range = Math.max(row.maxPts - row.minPts, 1);
+                    const pct = played ? Math.max(0.12, (r.points - row.minPts + 2) / (range + 4)) : 0;
+                    return (
+                      <View key={r.roundIndex} style={s.momentumBarWrap}>
+                        <View
+                          style={[
+                            s.momentumBar,
+                            {
+                              height: 32 * pct,
+                              backgroundColor: played ? theme.scoreColor(
+                                r.points >= 32 ? 'excellent' : r.points >= 28 ? 'good' : r.points >= 22 ? 'neutral' : 'poor'
+                              ) : theme.border.default,
+                            },
+                          ]}
+                        />
+                        <Text style={s.momentumBarLabel}>{played ? r.points : '—'}</Text>
+                      </View>
+                    );
+                  })}
+                </View>
+              </TouchableOpacity>
+            ))}
+            <View style={s.momentumLegend}>
+              {momentum[0]?.rounds.map(r => (
+                <Text key={r.roundIndex} style={s.momentumLegendLabel}>R{r.roundIndex + 1}</Text>
+              ))}
+            </View>
+          </View>
+        </>
+      )}
+
+      {roundIndex === null && skins.totalSkins > 0 && (
+        <>
+          <Text style={s.sectionTitle}>SKINS LEADERBOARD</Text>
+          <Text style={s.scopeText}>
+            Outright winner of each hole ({isStrokes ? 'fewer strokes' : 'more points'}) takes 1 skin · ties = no skin
+          </Text>
+          <View style={s.card}>
+            {skins.leaderboard.map((rec, i) => (
+              <TouchableOpacity
+                key={rec.player.id}
+                style={s.leaderRow}
+                onPress={() => openSkins(rec.player)}
+                activeOpacity={0.7}
+                disabled={rec.skins === 0}
+              >
+                <Text style={[s.leaderRank, { color: i === 0 && rec.skins > 0 ? theme.semantic.rank.gold : theme.text.muted }]}>#{i + 1}</Text>
+                <Text style={s.leaderName}>{firstName(rec.player)}</Text>
+                <Text style={s.leaderValue}>
+                  {rec.skins} <Text style={s.leaderUnit}>{rec.skins === 1 ? 'skin' : 'skins'}</Text>
+                </Text>
+              </TouchableOpacity>
+            ))}
+            <Text style={s.skinsFooter}>
+              {skins.rounds.map(r => `R${r.roundIndex + 1}: ${Object.values(r.skinsPerPlayer).reduce((a, b) => a + b, 0)}`).join(' · ')} skins · {skins.totalSkins} total
+            </Text>
+          </View>
+        </>
+      )}
+
+      {roundIndex === null && clutch.length > 0 && (
+        <>
+          <Text style={s.sectionTitle}>CLUTCH ON HARDEST HOLES</Text>
+          <Text style={s.scopeText}>Avg points on the 3 lowest-SI holes of each round</Text>
+          <View style={s.card}>
+            {clutch.map((row, i) => (
+              <TouchableOpacity key={row.player.id} style={s.leaderRow} onPress={() => openClutch(row)} activeOpacity={0.7}>
+                <Text style={[s.leaderRank, { color: i === 0 ? theme.semantic.rank.gold : theme.text.muted }]}>#{i + 1}</Text>
+                <Text style={s.leaderName}>{firstName(row.player)}</Text>
+                <Text style={s.leaderValue}>{row.avgPoints} <Text style={s.leaderUnit}>pts/hole</Text></Text>
+              </TouchableOpacity>
+            ))}
+          </View>
+        </>
+      )}
+
+      {roundIndex === null && consistency.length > 0 && (
+        <>
+          <Text style={s.sectionTitle}>CONSISTENCY INDEX</Text>
+          <Text style={s.scopeText}>Stdev of pts per hole — lower is steadier</Text>
+          <View style={s.card}>
+            {consistency.map((row, i) => (
+              <TouchableOpacity key={row.player.id} style={s.leaderRow} onPress={() => openConsistency(row)} activeOpacity={0.7}>
+                <Text style={[s.leaderRank, { color: i === 0 ? theme.semantic.rank.gold : theme.text.muted }]}>#{i + 1}</Text>
+                <Text style={s.leaderName}>{firstName(row.player)}</Text>
+                <Text style={s.leaderValue}>σ {row.stdev} <Text style={s.leaderUnit}>μ {row.mean}</Text></Text>
+              </TouchableOpacity>
+            ))}
+          </View>
+        </>
+      )}
+
+      {roundIndex === null && dna.length > 0 && dna[0].courses.length > 0 && (
+        <>
+          <Text style={s.sectionTitle}>COURSE DNA</Text>
+          <Text style={s.scopeText}>Avg pts/hole per course · tap a player</Text>
+          {dna.map(row => {
+            if (row.courses.length === 0) return null;
+            const top = row.courses[0];
+            return (
+              <TouchableOpacity
+                key={row.player.id}
+                style={s.dnaCard}
+                onPress={() => openDna(row)}
+                activeOpacity={0.7}
+              >
+                <Text style={s.dnaName}>{firstName(row.player)}</Text>
+                <View style={s.dnaChips}>
+                  {row.courses.map(c => (
+                    <View key={c.courseName} style={[s.dnaChip, { backgroundColor: theme.scoreColor(c.avgPoints >= 2 ? 'good' : c.avgPoints >= 1.5 ? 'neutral' : 'poor') + '22' }]}>
+                      <Text style={[s.dnaChipCourse, { color: theme.scoreColor(c.avgPoints >= 2 ? 'good' : c.avgPoints >= 1.5 ? 'neutral' : 'poor') }]}>{c.courseName}</Text>
+                      <Text style={[s.dnaChipValue, { color: theme.scoreColor(c.avgPoints >= 2 ? 'good' : c.avgPoints >= 1.5 ? 'neutral' : 'poor') }]}>{c.avgPoints}</Text>
+                    </View>
+                  ))}
+                </View>
+              </TouchableOpacity>
+            );
+          })}
+        </>
       )}
 
       <StatDetailSheet
@@ -340,6 +548,9 @@ function PlayersTab({ tournament, players, selectedPlayer, setSelectedPlayer, me
   const streaks = playerStreaks(tournament, player.id, { metric });
   const history = playerRoundHistory(tournament, player.id);
   const avg = playerAvgStableford(tournament, player.id);
+  const parSplit = parTypeSplit(tournament, player.id);
+  const wc = warmupVsClosing(tournament, player.id);
+  const roi = handicapROI(tournament, player.id);
   const modeLabel = isStrokes ? 'strokes (gross)' : 'points (net Stableford)';
 
   const defaultTone = (b) => toneForPoints(b.points);
@@ -362,6 +573,44 @@ function PlayersTab({ tournament, players, selectedPlayer, setSelectedPlayer, me
       rows: holeRows(holes, defaultTone),
     });
   };
+
+  const openWarmupClosing = () => setSheet({
+    title: `${player.name} — warm-up vs closing`,
+    subtitle: `${wc.warmup.avgPoints} pts on H1-3 · ${wc.closing.avgPoints} pts on closing 3`,
+    explainer: 'Average Stableford points on the opening 3 holes compared with the closing 3 holes across every round. Surfaces nerves on tee one or fatigue at the finish.',
+    rows: [
+      { key: 'sec-w', section: true, label: 'Warm-up (H1-3)' },
+      ...wc.warmup.breakdown.map((b, i) => ({
+        key: `w-${i}`,
+        primary: `${b.courseName} · H${b.holeNumber}`,
+        secondary: `Par ${b.par} · ${b.strokes} strokes`,
+        rightPrimary: `${b.points} pts`,
+        tone: toneForPoints(b.points),
+      })),
+      { key: 'sec-c', section: true, label: 'Closing (H16-18)' },
+      ...wc.closing.breakdown.map((b, i) => ({
+        key: `c-${i}`,
+        primary: `${b.courseName} · H${b.holeNumber}`,
+        secondary: `Par ${b.par} · ${b.strokes} strokes`,
+        rightPrimary: `${b.points} pts`,
+        tone: toneForPoints(b.points),
+      })),
+    ],
+  });
+
+  const openROI = () => roi && setSheet({
+    title: `${player.name} — handicap ROI`,
+    subtitle: `${roi.actual} actual / ${roi.expected} expected`,
+    explainer: 'Ratio of actual Stableford points to the 2 pts/hole baseline a player whose handicap exactly matches their level would score. Above 1.00 means they are outplaying their handicap.',
+    rows: [],
+  });
+
+  const openParSplit = (label, bucket) => bucket.holes > 0 && setSheet({
+    title: `${player.name} — ${label}`,
+    subtitle: `${bucket.avgPoints} avg pts · ${bucket.avgStrokes} avg str · ${bucket.holes} holes`,
+    explainer: `Aggregated performance across every ${label} hole played in this tournament.`,
+    rows: [],
+  });
 
   const openRound = (r) => {
     const round = tournament.rounds[r.roundIndex];
@@ -439,6 +688,89 @@ function PlayersTab({ tournament, players, selectedPlayer, setSelectedPlayer, me
             </View>
           </View>
 
+          <Text style={s.sectionTitle}>PAR-TYPE SPLIT</Text>
+          <View style={s.card}>
+            <View style={s.parSplitRow}>
+              {[
+                { key: 'par3', label: 'Par 3', bucket: parSplit.par3 },
+                { key: 'par4', label: 'Par 4', bucket: parSplit.par4 },
+                { key: 'par5', label: 'Par 5', bucket: parSplit.par5 },
+              ].map(({ key, label, bucket }) => (
+                <TouchableOpacity
+                  key={key}
+                  style={s.parSplitCell}
+                  onPress={() => openParSplit(label, bucket)}
+                  activeOpacity={0.7}
+                  disabled={bucket.holes === 0}
+                >
+                  <Text style={s.parSplitLabel}>{label}</Text>
+                  <Text style={[s.parSplitValue, {
+                    color: bucket.holes === 0
+                      ? theme.text.muted
+                      : theme.scoreColor(bucket.avgPoints >= 2 ? 'good' : bucket.avgPoints >= 1.5 ? 'neutral' : 'poor'),
+                  }]}>
+                    {bucket.holes === 0 ? '—' : bucket.avgPoints}
+                  </Text>
+                  <Text style={s.parSplitSub}>{bucket.holes} holes</Text>
+                </TouchableOpacity>
+              ))}
+            </View>
+          </View>
+
+          {(wc.warmup.holes > 0 || wc.closing.holes > 0) && (
+            <>
+              <Text style={s.sectionTitle}>WARM-UP vs CLOSING</Text>
+              <TouchableOpacity style={s.card} onPress={openWarmupClosing} activeOpacity={0.7}>
+                <View style={s.wcRow}>
+                  <View style={s.wcCol}>
+                    <Text style={s.wcLabel}>Warm-up (H1-3)</Text>
+                    <Text style={[s.wcValue, { color: theme.scoreColor(wc.warmup.avgPoints >= 2 ? 'good' : 'neutral') }]}>{wc.warmup.avgPoints}</Text>
+                    <Text style={s.wcSub}>{wc.warmup.holes} holes</Text>
+                  </View>
+                  <View style={s.wcCol}>
+                    <Text style={s.wcLabel}>Closing (H16-18)</Text>
+                    <Text style={[s.wcValue, { color: theme.scoreColor(wc.closing.avgPoints >= 2 ? 'good' : 'neutral') }]}>{wc.closing.avgPoints}</Text>
+                    <Text style={s.wcSub}>{wc.closing.holes} holes</Text>
+                  </View>
+                  <View style={s.wcCol}>
+                    <Text style={s.wcLabel}>Δ</Text>
+                    <Text style={[s.wcValue, {
+                      color: wc.delta > 0 ? theme.scoreColor('excellent') : wc.delta < 0 ? theme.scoreColor('poor') : theme.text.primary,
+                    }]}>
+                      {wc.delta > 0 ? '+' : ''}{wc.delta}
+                    </Text>
+                    <Text style={s.wcSub}>close − warm</Text>
+                  </View>
+                </View>
+              </TouchableOpacity>
+            </>
+          )}
+
+          {roi && (
+            <>
+              <Text style={s.sectionTitle}>HANDICAP ROI</Text>
+              <TouchableOpacity style={s.card} onPress={openROI} activeOpacity={0.7}>
+                <View style={s.roiRow}>
+                  <View style={s.roiCol}>
+                    <Text style={s.roiLabel}>Actual</Text>
+                    <Text style={s.roiValue}>{roi.actual}</Text>
+                  </View>
+                  <View style={s.roiCol}>
+                    <Text style={s.roiLabel}>Expected</Text>
+                    <Text style={s.roiValue}>{roi.expected}</Text>
+                  </View>
+                  <View style={s.roiCol}>
+                    <Text style={s.roiLabel}>Ratio</Text>
+                    <Text style={[s.roiValue, {
+                      color: roi.ratio >= 1 ? theme.scoreColor('excellent') : roi.ratio >= 0.75 ? theme.scoreColor('neutral') : theme.scoreColor('poor'),
+                    }]}>{roi.ratio}</Text>
+                  </View>
+                </View>
+                <Text style={s.roiSub}>Baseline: 2 pts/hole (a handicap that matches the player's level)</Text>
+              </TouchableOpacity>
+            </>
+          )}
+
           <Text style={s.sectionTitle}>ROUND HISTORY</Text>
           {history.map((r, i) => (
             <TouchableOpacity key={i} style={s.historyRow} onPress={() => openRound(r)} activeOpacity={0.7}>
@@ -484,6 +816,9 @@ function HolesTab({ tournament, completedRounds, metric, theme, s }) {
   const firstCompletedIdx = tournament.rounds.findIndex(r => r.scores && Object.keys(r.scores).length > 0);
   const [heatRound, setHeatRound] = useState(firstCompletedIdx >= 0 ? firstCompletedIdx : 0);
   const heatmap = holeDifficultyMap(tournament, heatRound);
+  const nemesisCrushed = playerNemesisAndCrushed(tournament);
+  const chaos = chaosHoles(tournament);
+  const extremes = collectiveExtremes(tournament);
   const [sheet, setSheet] = useState(null);
 
   const renderAvg = (h) => isStrokes
@@ -500,6 +835,56 @@ function HolesTab({ tournament, completedRounds, metric, theme, s }) {
       secondary: `${ps.strokes} strokes`,
       rightPrimary: isStrokes ? `${ps.strokes} str` : `${ps.points} pts`,
       tone: toneForPoints(ps.points),
+    })),
+  });
+
+  const openNemesis = (row) => setSheet({
+    title: `${row.player.name} — Nemesis hole`,
+    subtitle: `R${row.nemesis.roundIndex + 1} · ${row.nemesis.courseName} · Hole ${row.nemesis.holeNumber}`,
+    explainer: 'Single worst hole for this player in the tournament, by Stableford points (ties broken by strokes over par).',
+    rows: [{
+      key: 'n', primary: `Par ${row.nemesis.par} · SI ${row.nemesis.si}`,
+      secondary: `${row.nemesis.strokes} strokes (+${row.nemesis.vsPar} vs par)`,
+      rightPrimary: `${row.nemesis.points} pts`, tone: 'poor',
+    }],
+  });
+
+  const openCrushed = (row) => setSheet({
+    title: `${row.player.name} — Crushed it`,
+    subtitle: `R${row.crushed.roundIndex + 1} · ${row.crushed.courseName} · Hole ${row.crushed.holeNumber}`,
+    explainer: 'Single best hole for this player in the tournament, by Stableford points (ties broken by strokes below par).',
+    rows: [{
+      key: 'c', primary: `Par ${row.crushed.par} · SI ${row.crushed.si}`,
+      secondary: `${row.crushed.strokes} strokes (${row.crushed.vsPar >= 0 ? '+' : ''}${row.crushed.vsPar} vs par)`,
+      rightPrimary: `${row.crushed.points} pts`, tone: 'excellent',
+    }],
+  });
+
+  const openChaos = (hole) => setSheet({
+    title: `Chaos · Hole ${hole.holeNumber}`,
+    subtitle: `R${hole.roundIndex + 1} · ${hole.courseName} · Par ${hole.par} · SI ${hole.si}`,
+    explainer: `Range of ${hole.range} strokes (${hole.minStrokes} → ${hole.maxStrokes}) across the group — the biggest split the group produced on a single hole.`,
+    rows: hole.scores.map(ps => ({
+      key: ps.playerId,
+      primary: ps.playerName,
+      secondary: `${ps.strokes} strokes`,
+      rightPrimary: `${ps.points} pts`,
+      tone: toneForPoints(ps.points),
+    })),
+  });
+
+  const openCollective = (hole, kind) => setSheet({
+    title: `${kind === 'disaster' ? 'Collective disaster' : 'Everybody easy'} · Hole ${hole.holeNumber}`,
+    subtitle: `R${hole.roundIndex + 1} · ${hole.courseName} · Par ${hole.par} · SI ${hole.si}`,
+    explainer: kind === 'disaster'
+      ? 'Hole where every player in the field scored 0 Stableford points.'
+      : 'Hole where every player in the field netted at least 2 Stableford points (par-or-better net).',
+    rows: hole.scores.map(ps => ({
+      key: ps.playerId,
+      primary: ps.playerName,
+      secondary: `${ps.strokes} strokes`,
+      rightPrimary: `${ps.points} pts`,
+      tone: ps.points === 0 ? 'poor' : toneForPoints(ps.points),
     })),
   });
 
@@ -598,6 +983,84 @@ function HolesTab({ tournament, completedRounds, metric, theme, s }) {
         </>
       )}
 
+      {nemesisCrushed.length > 0 && (
+        <>
+          <Text style={s.sectionTitle}>NEMESIS & CRUSHED</Text>
+          <Text style={s.scopeText}>Each player's single worst and best hole</Text>
+          {nemesisCrushed.map(row => (
+            <View key={row.player.id} style={s.ncRow}>
+              <Text style={s.ncName}>{firstName(row.player)}</Text>
+              <TouchableOpacity style={s.ncCell} onPress={() => openNemesis(row)} activeOpacity={0.7}>
+                <Text style={[s.ncLabel, { color: theme.scoreColor('poor') }]}>Nemesis</Text>
+                <Text style={s.ncValue}>H{row.nemesis.holeNumber} · {row.nemesis.points} pts</Text>
+                <Text style={s.ncSub}>{row.nemesis.courseName}</Text>
+              </TouchableOpacity>
+              <TouchableOpacity style={s.ncCell} onPress={() => openCrushed(row)} activeOpacity={0.7}>
+                <Text style={[s.ncLabel, { color: theme.scoreColor('excellent') }]}>Crushed</Text>
+                <Text style={s.ncValue}>H{row.crushed.holeNumber} · {row.crushed.points} pts</Text>
+                <Text style={s.ncSub}>{row.crushed.courseName}</Text>
+              </TouchableOpacity>
+            </View>
+          ))}
+        </>
+      )}
+
+      {chaos.length > 0 && (
+        <>
+          <Text style={s.sectionTitle}>CHAOS HOLES</Text>
+          <Text style={s.scopeText}>Where the group diverged most in strokes</Text>
+          {chaos.map((hole, i) => (
+            <TouchableOpacity key={`c${i}`} style={s.holeCard} onPress={() => openChaos(hole)} activeOpacity={0.7}>
+              <View style={[s.holeRank, { backgroundColor: theme.scoreColor('neutral') + '20' }]}>
+                <Text style={[s.holeRankText, { color: theme.scoreColor('neutral') }]}>Δ{hole.range}</Text>
+              </View>
+              <View style={s.holeInfo}>
+                <Text style={s.holeName}>R{hole.roundIndex + 1} · Hole {hole.holeNumber} · Par {hole.par} · SI {hole.si}</Text>
+                <Text style={s.holeCourse}>{hole.courseName} · {hole.minStrokes} → {hole.maxStrokes} strokes</Text>
+              </View>
+            </TouchableOpacity>
+          ))}
+        </>
+      )}
+
+      {(extremes.disasters.length > 0 || extremes.gimmes.length > 0) && (
+        <>
+          <Text style={s.sectionTitle}>COLLECTIVE EXTREMES</Text>
+          {extremes.disasters.length > 0 && (
+            <>
+              <Text style={s.scopeText}>Everybody scored 0 pts</Text>
+              {extremes.disasters.map((hole, i) => (
+                <TouchableOpacity key={`d${i}`} style={s.holeCard} onPress={() => openCollective(hole, 'disaster')} activeOpacity={0.7}>
+                  <View style={[s.holeRank, { backgroundColor: theme.scoreColor('poor') + '20' }]}>
+                    <Text style={[s.holeRankText, { color: theme.scoreColor('poor') }]}>🫠</Text>
+                  </View>
+                  <View style={s.holeInfo}>
+                    <Text style={s.holeName}>R{hole.roundIndex + 1} · Hole {hole.holeNumber} · Par {hole.par} · SI {hole.si}</Text>
+                    <Text style={s.holeCourse}>{hole.courseName}</Text>
+                  </View>
+                </TouchableOpacity>
+              ))}
+            </>
+          )}
+          {extremes.gimmes.length > 0 && (
+            <>
+              <Text style={s.scopeText}>Everybody cruised (≥2 pts each)</Text>
+              {extremes.gimmes.map((hole, i) => (
+                <TouchableOpacity key={`g${i}`} style={s.holeCard} onPress={() => openCollective(hole, 'gimme')} activeOpacity={0.7}>
+                  <View style={[s.holeRank, { backgroundColor: theme.scoreColor('excellent') + '20' }]}>
+                    <Text style={[s.holeRankText, { color: theme.scoreColor('excellent') }]}>🧁</Text>
+                  </View>
+                  <View style={s.holeInfo}>
+                    <Text style={s.holeName}>R{hole.roundIndex + 1} · Hole {hole.holeNumber} · Par {hole.par} · SI {hole.si}</Text>
+                    <Text style={s.holeCourse}>{hole.courseName}</Text>
+                  </View>
+                </TouchableOpacity>
+              ))}
+            </>
+          )}
+        </>
+      )}
+
       {bw.best.length === 0 && <Text style={s.emptyText}>No scores entered yet.</Text>}
 
       <StatDetailSheet
@@ -617,6 +1080,14 @@ function PairsTab({ tournament, players, h2hPlayer, setH2hPlayer, selectedPlayer
   const pairs = pairPerformance(tournament);
   const [hwRound, setHwRound] = useState(null);
   const holeWins = pairHoleWins(tournament, { metric, roundIndex: hwRound });
+  const firstCompletedRound = tournament.rounds.findIndex(r => r.scores && Object.keys(r.scores).length > 0);
+  const [pdRound, setPdRound] = useState(firstCompletedRound >= 0 ? firstCompletedRound : null);
+  const pdData = pdRound != null ? pairDifferenceByHole(tournament, pdRound, { metric }) : null;
+  const synergy = pairSynergy(tournament);
+  const carry = pairCarryRatio(tournament);
+  const swing = pdRound != null ? swingHole(tournament, pdRound) : null;
+  const matchPlay = matchPlayResults(tournament, { metric });
+  const configMatrix = pairConfigMatrix(tournament);
   const [h2hRound, setH2hRound] = useState(null);
   const p1 = players[selectedPlayer];
   const p2Idx = h2hPlayer >= players.length ? 0 : h2hPlayer;
@@ -635,6 +1106,28 @@ function PairsTab({ tournament, players, h2hPlayer, setH2hPlayer, selectedPlayer
       rightPrimary: `${r.combinedPoints} pts`,
       rightSecondary: `${r.combinedStrokes} strokes`,
     })),
+  });
+
+  const openHoleWinsInfo = () => setSheet({
+    title: 'Hole Wins — how W·T·L works',
+    subtitle: 'Total · Best Ball · Worst Ball',
+    explainer:
+      (metric === 'strokes'
+        ? 'Each hole your pair plays against the other pair. Best Ball (BB) = the lower-strokes score of the two partners. Worst Ball (WB) = the higher. Your pair wins BB (or WB) by beating the other pair\'s corresponding score; equal = tie. You earn a BB W/T/L only when your score is your pair\'s BB; a WB W/T/L only when it is your pair\'s WB. Total = BB + WB credits.'
+        : 'Each hole your pair plays against the other pair. Best Ball (BB) = the higher-points score of the two partners. Worst Ball (WB) = the lower. Your pair wins BB (or WB) by beating the other pair\'s corresponding score; equal = tie. You earn a BB W/T/L only when your score is your pair\'s BB; a WB W/T/L only when it is your pair\'s WB. Total = BB + WB credits.')
+      + '\n\nRole tiebreaker within a pair (when partners tie on the metric): lower playing handicap is BB. If handicap ties, the partner who did better on the previous hole is BB — walking backwards hole by hole until broken. Final fallback is a stable id sort.\n\nHoles where any of the 4 scores is missing are skipped entirely, so W+T+L may be below 18 if the round is incomplete.',
+    rows: [],
+  });
+
+  const openPairDiffInfo = () => setSheet({
+    title: 'Pair difference — how the chart works',
+    subtitle: 'Cumulative advantage, hole by hole',
+    explainer:
+      (metric === 'strokes'
+        ? 'At each hole we sum both partners\' strokes per pair, then track the running strokes-saved advantage (pair2 strokes − pair1 strokes). Bars above the baseline mean Pair 1 is ahead (taking fewer strokes); bars below mean Pair 2 is ahead. '
+        : 'At each hole we sum both partners\' Stableford points per pair, then track the running points-difference (pair1 − pair2). Bars above the baseline mean Pair 1 is ahead; bars below mean Pair 2 is ahead. ')
+      + 'Height is proportional to the absolute cumulative gap, so longer bars = bigger distance. Crossovers are the holes where the lead flips. Tap any hole for the exact split.',
+    rows: [],
   });
 
   const openHoleWins = (row, metricMode) => {
@@ -662,6 +1155,103 @@ function PairsTab({ tournament, players, h2hPlayer, setH2hPlayer, selectedPlayer
           tone,
         };
       }),
+    });
+  };
+
+  const openSynergy = (pair) => setSheet({
+    title: `${pair.members[0].name} & ${pair.members[1].name} — synergy`,
+    subtitle: `${pair.synergy}× baseline · ${pair.rounds} round${pair.rounds === 1 ? '' : 's'}`,
+    explainer: `Actual combined Stableford (${pair.combined}) over expected-from-each-members-average (${pair.expected}). 1.00 = as expected, above = lift each other, below = drag each other.`,
+    rows: [],
+  });
+
+  const openCarry = (pair) => setSheet({
+    title: `${pair.members[0].name} & ${pair.members[1].name} — carry split`,
+    subtitle: `${pair.totalPoints} combined pts`,
+    explainer: 'Share of the pair\'s total points contributed by each member across every round they played together.',
+    rows: pair.shares.map(sh => ({
+      key: sh.player.id,
+      primary: sh.player.name,
+      secondary: `${sh.points} pts`,
+      rightPrimary: `${Math.round(sh.share * 100)}%`,
+      tone: sh.share >= 0.55 ? 'excellent' : sh.share >= 0.45 ? 'good' : 'poor',
+    })),
+  });
+
+  const openMatchPlay = (round) => {
+    if (!round.available) return;
+    const p1Label = round.pair1.map(p => firstName(p)).join(' & ');
+    const p2Label = round.pair2.map(p => firstName(p)).join(' & ');
+    const winner = round.winnerPair ? round.winnerPair.map(p => firstName(p)).join(' & ') : 'Halved';
+    setSheet({
+      title: `R${round.roundIndex + 1} · ${p1Label} vs ${p2Label}`,
+      subtitle: `${round.scoreline} · Winner: ${winner}`,
+      explainer: (metric === 'strokes'
+        ? 'Match play scoring: each hole the pair with the lower combined strokes wins a hole. "3&2" means 3 holes up with 2 to play — the match closes early.'
+        : 'Match play scoring: each hole the pair with the higher combined Stableford points wins a hole. "3&2" means 3 holes up with 2 to play — the match closes early.')
+        + (round.closedAt ? ` Closed at hole ${round.closedAt}.` : ''),
+      rows: round.holes.map((h, i) => ({
+        key: `${i}`,
+        primary: `Hole ${h.holeNumber}`,
+        secondary: `${p1Label} ${h.pair1Score ?? '—'} · ${p2Label} ${h.pair2Score ?? '—'}`,
+        rightPrimary: h.winner === 'pair1' ? p1Label : h.winner === 'pair2' ? p2Label : h.winner == null ? '—' : 'halve',
+        rightSecondary: `${h.pair1UpAfter > 0 ? p1Label + ' +' + h.pair1UpAfter : h.pair1UpAfter < 0 ? p2Label + ' +' + Math.abs(h.pair1UpAfter) : 'AS'}`,
+        tone: h.winner === 'pair1' ? 'excellent' : h.winner === 'pair2' ? 'good' : 'neutral',
+      })),
+    });
+  };
+
+  const openConfig = (cfg) => {
+    const sideALabel = cfg.sideA.map(p => firstName(p)).join(' & ');
+    const sideBLabel = cfg.sideB.map(p => firstName(p)).join(' & ');
+    setSheet({
+      title: `${sideALabel} vs ${sideBLabel}`,
+      subtitle: `${cfg.holeWins.A}·${cfg.holeWins.T}·${cfg.holeWins.B} holes · ${cfg.pointsA}/${cfg.pointsB} pts`,
+      explainer: 'Per-hole W/T/L between this specific 2-vs-2 configuration across every round they played together. Pair points = sum of both partners\' Stableford points on the hole.',
+      rows: cfg.rounds.map(r => ({
+        key: `r${r.roundIndex}`,
+        primary: `R${r.roundIndex + 1} · ${r.courseName}`,
+        secondary: `${r.wins.A}·${r.wins.T}·${r.wins.B} holes`,
+        rightPrimary: `${r.points.A} / ${r.points.B}`,
+        tone: r.points.A > r.points.B ? 'excellent' : r.points.A < r.points.B ? 'poor' : 'neutral',
+      })),
+    });
+  };
+
+  const openSwing = () => swing && setSheet({
+    title: `Swing Hole · H${swing.holeNumber}`,
+    subtitle: `${swing.courseName} · Par ${swing.par}`,
+    explainer: `The hole with the biggest one-hole swing in this round's cumulative pair-vs-pair gap. Outcome: ${swing.holeDelta > 0 ? swing.pair1.map(p=>firstName(p)).join('+') : swing.pair2.map(p=>firstName(p)).join('+')} +${Math.abs(swing.holeDelta)} pts on this hole alone.`,
+    rows: [
+      { key: 'p1', primary: swing.pair1.map(p => p.name).join(' & '), secondary: `Combined ${swing.pair1Total} pts`, rightPrimary: swing.holeDelta > 0 ? 'Swing +' : swing.holeDelta < 0 ? '—' : 'Even', tone: swing.holeDelta > 0 ? 'excellent' : 'neutral' },
+      { key: 'p2', primary: swing.pair2.map(p => p.name).join(' & '), secondary: `Combined ${swing.pair2Total} pts`, rightPrimary: swing.holeDelta < 0 ? 'Swing +' : swing.holeDelta > 0 ? '—' : 'Even', tone: swing.holeDelta < 0 ? 'excellent' : 'neutral' },
+    ],
+  });
+
+  const openPairDiffHole = (holeEntry) => {
+    if (!pdData) return;
+    const unit = metric === 'strokes' ? 'str' : 'pts';
+    const isStr = metric === 'strokes';
+    const pair1Label = pdData.pair1.map(p => firstName(p)).join(' & ');
+    const pair2Label = pdData.pair2.map(p => firstName(p)).join(' & ');
+    const cum = holeEntry.cumulative;
+    const leader = cum > 0 ? pair1Label : cum < 0 ? pair2Label : 'Tied';
+    const leadText = cum === 0 ? 'Level' : `${leader} +${Math.abs(cum)} ${unit}`;
+    const holeSplit = holeEntry.pair1Total != null
+      ? `${pair1Label} ${holeEntry.pair1Total} · ${pair2Label} ${holeEntry.pair2Total}`
+      : 'hole not played';
+    const holeDeltaLabel = holeEntry.holeDelta == null
+      ? '—'
+      : holeEntry.holeDelta === 0
+        ? 'even'
+        : holeEntry.holeDelta > 0
+          ? `${pair1Label} +${holeEntry.holeDelta}`
+          : `${pair2Label} +${Math.abs(holeEntry.holeDelta)}`;
+    setSheet({
+      title: `Hole ${holeEntry.holeNumber} — pair split`,
+      subtitle: `${pdData.courseName} · Par ${holeEntry.par} · ${isStr ? 'strokes' : 'points'}`,
+      explainer: `After this hole: ${leadText}. Hole result: ${holeDeltaLabel}. Combined totals: ${holeSplit}.`,
+      rows: [],
     });
   };
 
@@ -716,9 +1306,174 @@ function PairsTab({ tournament, players, h2hPlayer, setH2hPlayer, selectedPlayer
 
       {tournament.rounds.some(r => r.pairs && r.scores && Object.keys(r.scores).length > 0) && (
         <>
-          <Text style={s.sectionTitle}>{metric === 'strokes' ? 'HOLE WINS ON STROKES' : 'HOLE WINS ON POINTS'}</Text>
+          <View style={s.sectionTitleRow}>
+            <Text style={s.sectionTitle}>{metric === 'strokes' ? 'HOLE WINS ON STROKES' : 'HOLE WINS ON POINTS'}</Text>
+            <TouchableOpacity
+              onPress={openHoleWinsInfo}
+              hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+              style={s.sectionTitleInfo}
+            >
+              <Feather name="info" size={14} color={theme.text.muted} />
+            </TouchableOpacity>
+          </View>
           <RoundSelector tournament={tournament} selected={hwRound} onSelect={setHwRound} theme={theme} s={s} />
           <HoleWinsTable rows={holeWins} metricMode={metric} openRow={openHoleWins} theme={theme} s={s} />
+        </>
+      )}
+
+      {firstCompletedRound >= 0 && tournament.rounds.some(r => r.pairs && r.scores && Object.keys(r.scores).length > 0) && (
+        <>
+          <View style={s.sectionTitleRow}>
+            <Text style={s.sectionTitle}>{metric === 'strokes' ? 'PAIR DIFFERENCE ON STROKES' : 'PAIR DIFFERENCE ON POINTS'}</Text>
+            <TouchableOpacity
+              onPress={openPairDiffInfo}
+              hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+              style={s.sectionTitleInfo}
+            >
+              <Feather name="info" size={14} color={theme.text.muted} />
+            </TouchableOpacity>
+          </View>
+          <PairRoundSelector tournament={tournament} selected={pdRound} onSelect={setPdRound} theme={theme} s={s} />
+          {pdData ? (
+            <PairDifferenceChart data={pdData} metric={metric} onHolePress={openPairDiffHole} theme={theme} s={s} />
+          ) : (
+            <Text style={s.emptyText}>No pair data for this round.</Text>
+          )}
+          {swing && (
+            <TouchableOpacity style={s.swingCard} onPress={openSwing} activeOpacity={0.7}>
+              <View>
+                <Text style={s.swingLabel}>SWING HOLE</Text>
+                <Text style={s.swingValue}>
+                  Hole {swing.holeNumber} · {swing.holeDelta > 0 ? firstName(swing.pair1[0]) + '+' + firstName(swing.pair1[1]) : swing.holeDelta < 0 ? firstName(swing.pair2[0]) + '+' + firstName(swing.pair2[1]) : 'Even'} {swing.holeDelta !== 0 ? `+${Math.abs(swing.holeDelta)} pts` : ''}
+                </Text>
+                <Text style={s.swingSub}>Par {swing.par} · cum. after: {swing.cumulativeAfter > 0 ? '+' : ''}{swing.cumulativeAfter} pts</Text>
+              </View>
+              <Feather name="chevron-right" size={16} color={theme.text.muted} />
+            </TouchableOpacity>
+          )}
+        </>
+      )}
+
+      {synergy.length > 0 && (
+        <>
+          <Text style={s.sectionTitle}>PAIR SYNERGY</Text>
+          <Text style={s.scopeText}>Combined pts vs expected from each partner's average</Text>
+          {synergy.map((pair, i) => (
+            <TouchableOpacity key={i} style={s.pairCard} onPress={() => openSynergy(pair)} activeOpacity={0.7}>
+              <View style={s.pairNames}>
+                <Text style={s.pairName}>{pair.members[0].name}</Text>
+                <Text style={s.pairAmp}>&</Text>
+                <Text style={s.pairName}>{pair.members[1].name}</Text>
+              </View>
+              <View style={s.pairStats}>
+                <Text style={[s.pairAvg, {
+                  color: pair.synergy >= 1.05 ? theme.scoreColor('excellent')
+                    : pair.synergy >= 0.95 ? theme.scoreColor('good')
+                    : theme.scoreColor('poor'),
+                }]}>×{pair.synergy}</Text>
+                <Text style={s.pairRounds}>{pair.combined} / {pair.expected} pts</Text>
+              </View>
+            </TouchableOpacity>
+          ))}
+        </>
+      )}
+
+      {carry.length > 0 && (
+        <>
+          <Text style={s.sectionTitle}>CARRY RATIO</Text>
+          <Text style={s.scopeText}>Who contributed more inside the pair</Text>
+          {carry.map((pair, i) => (
+            <TouchableOpacity key={i} style={s.carryCard} onPress={() => openCarry(pair)} activeOpacity={0.7}>
+              <View style={s.carryBar}>
+                <View style={[s.carryFill, {
+                  width: `${Math.round(pair.shares[0].share * 100)}%`,
+                  backgroundColor: theme.pairA,
+                }]} />
+                <View style={[s.carryFill, {
+                  width: `${Math.round(pair.shares[1].share * 100)}%`,
+                  backgroundColor: theme.pairB,
+                }]} />
+              </View>
+              <View style={s.carryLabels}>
+                <Text style={s.carryName}>{firstName(pair.shares[0].player)} {Math.round(pair.shares[0].share * 100)}%</Text>
+                <Text style={s.carryName}>{Math.round(pair.shares[1].share * 100)}% {firstName(pair.shares[1].player)}</Text>
+              </View>
+              <Text style={s.carryMeta}>{pair.totalPoints} combined pts · imbalance {pair.imbalance}</Text>
+            </TouchableOpacity>
+          ))}
+        </>
+      )}
+
+      {matchPlay.some(r => r.available) && (
+        <>
+          <Text style={s.sectionTitle}>MATCH PLAY</Text>
+          <Text style={s.scopeText}>Per round, hole-by-hole up/down — closes when lead > holes remaining</Text>
+          {matchPlay.filter(r => r.available).map(round => {
+            const p1Label = round.pair1.map(p => firstName(p)).join(' + ');
+            const p2Label = round.pair2.map(p => firstName(p)).join(' + ');
+            const isTie = round.finalPair1Up === 0;
+            const p1Won = round.finalPair1Up > 0;
+            return (
+              <TouchableOpacity key={round.roundIndex} style={s.matchCard} onPress={() => openMatchPlay(round)} activeOpacity={0.7}>
+                <View style={s.matchHeader}>
+                  <Text style={s.matchRound}>R{round.roundIndex + 1}</Text>
+                  <Text style={s.matchCourse}>{round.courseName}</Text>
+                  <Text style={[s.matchScoreline, {
+                    color: isTie ? theme.text.muted : theme.scoreColor('excellent'),
+                  }]}>{round.scoreline}</Text>
+                </View>
+                <View style={s.matchTeams}>
+                  <Text style={[s.matchTeam, {
+                    color: p1Won ? theme.scoreColor('excellent') : isTie ? theme.text.primary : theme.text.muted,
+                    fontFamily: p1Won ? 'PlusJakartaSans-ExtraBold' : 'PlusJakartaSans-SemiBold',
+                  }]}>{p1Label}</Text>
+                  <Text style={s.matchVs}>vs</Text>
+                  <Text style={[s.matchTeam, {
+                    color: !p1Won && !isTie ? theme.scoreColor('excellent') : isTie ? theme.text.primary : theme.text.muted,
+                    fontFamily: !p1Won && !isTie ? 'PlusJakartaSans-ExtraBold' : 'PlusJakartaSans-SemiBold',
+                  }]}>{p2Label}</Text>
+                </View>
+                {round.closedAt && (
+                  <Text style={s.matchSub}>Closed at hole {round.closedAt}</Text>
+                )}
+              </TouchableOpacity>
+            );
+          })}
+        </>
+      )}
+
+      {configMatrix.length > 0 && (
+        <>
+          <Text style={s.sectionTitle}>PAIR CONFIG MATRIX</Text>
+          <Text style={s.scopeText}>The 2-vs-2 combinations that actually played · W·T·L by holes won</Text>
+          {configMatrix.map((cfg, i) => {
+            const aWon = cfg.holeWins.A > cfg.holeWins.B;
+            const bWon = cfg.holeWins.B > cfg.holeWins.A;
+            return (
+              <TouchableOpacity key={i} style={s.configCard} onPress={() => openConfig(cfg)} activeOpacity={0.7}>
+                <View style={s.configRow}>
+                  <Text style={[s.configSide, {
+                    color: aWon ? theme.scoreColor('excellent') : bWon ? theme.text.muted : theme.text.primary,
+                  }]}>
+                    {cfg.sideA.map(p => firstName(p)).join(' + ')}
+                  </Text>
+                  <View style={s.configWTL}>
+                    <Text style={s.configScore}>{cfg.holeWins.A}</Text>
+                    <Text style={s.configSep}>·</Text>
+                    <Text style={s.configScoreT}>{cfg.holeWins.T}</Text>
+                    <Text style={s.configSep}>·</Text>
+                    <Text style={s.configScore}>{cfg.holeWins.B}</Text>
+                  </View>
+                  <Text style={[s.configSide, { textAlign: 'right',
+                    color: bWon ? theme.scoreColor('excellent') : aWon ? theme.text.muted : theme.text.primary,
+                  }]}>
+                    {cfg.sideB.map(p => firstName(p)).join(' + ')}
+                  </Text>
+                </View>
+                <Text style={s.configSub}>{cfg.pointsA} / {cfg.pointsB} combined pts · {cfg.rounds.length} round{cfg.rounds.length === 1 ? '' : 's'}</Text>
+              </TouchableOpacity>
+            );
+          })}
         </>
       )}
 
@@ -774,6 +1529,128 @@ function PairsTab({ tournament, players, h2hPlayer, setH2hPlayer, selectedPlayer
         explainer={sheet?.explainer}
         rows={sheet?.rows || []}
       />
+    </View>
+  );
+}
+
+// Round selector that requires a round (no "Total" option) — used by the
+// pair-difference chart, since the cumulative view is inherently per-round.
+function PairRoundSelector({ tournament, selected, onSelect, theme, s }) {
+  return (
+    <View style={s.roundSelector}>
+      {tournament.rounds.map((r, i) => {
+        const hasData = r.scores && Object.keys(r.scores).length > 0 && r.pairs && r.pairs.length >= 2;
+        return (
+          <TouchableOpacity
+            key={i}
+            style={[s.roundChip, selected === i && s.roundChipActive, !hasData && s.roundChipDisabled]}
+            onPress={() => hasData && onSelect(i)}
+            disabled={!hasData}
+            activeOpacity={0.7}
+          >
+            <Text style={[s.roundChipText, selected === i && s.roundChipTextActive, !hasData && s.roundChipTextDisabled]}>R{i + 1}</Text>
+          </TouchableOpacity>
+        );
+      })}
+    </View>
+  );
+}
+
+function PairDifferenceChart({ data, metric, onHolePress, theme, s }) {
+  const CHART_HEIGHT = 160;
+  const HALF = CHART_HEIGHT / 2;
+  const PADDING = 10;
+  const unit = metric === 'strokes' ? 'str' : 'pts';
+  const pair1Label = data.pair1.map(p => p.name.split(' ')[0]).join(' & ');
+  const pair2Label = data.pair2.map(p => p.name.split(' ')[0]).join(' & ');
+  const scale = data.maxAbs > 0 ? (HALF - PADDING) / data.maxAbs : 0;
+
+  const maxLeadHole = data.holes.reduce((best, h) => {
+    if (h.cumulative == null) return best;
+    if (!best || Math.abs(h.cumulative) > Math.abs(best.cumulative)) return h;
+    return best;
+  }, null);
+  const leaderLabel = data.finalDelta > 0 ? pair1Label : data.finalDelta < 0 ? pair2Label : 'Level';
+  const maxLeadLabel = maxLeadHole && maxLeadHole.cumulative !== 0
+    ? `${maxLeadHole.cumulative > 0 ? pair1Label : pair2Label} +${Math.abs(maxLeadHole.cumulative)} ${unit} @ H${maxLeadHole.holeNumber}`
+    : 'Never apart';
+
+  return (
+    <View style={s.pdCard}>
+      <View style={s.pdLegend}>
+        <View style={s.pdLegendItem}>
+          <View style={[s.pdLegendDot, { backgroundColor: theme.pairA }]} />
+          <Text style={s.pdLegendText}>{pair1Label}</Text>
+        </View>
+        <Text style={s.pdLegendVs}>vs</Text>
+        <View style={s.pdLegendItem}>
+          <View style={[s.pdLegendDot, { backgroundColor: theme.pairB }]} />
+          <Text style={s.pdLegendText}>{pair2Label}</Text>
+        </View>
+      </View>
+
+      <View style={[s.pdChart, { height: CHART_HEIGHT }]}>
+        <View style={[s.pdBaseline, { top: HALF }]} />
+        <View style={s.pdBarsRow}>
+          {data.holes.map((h) => {
+            const isPlayed = h.cumulative != null && h.holeDelta != null;
+            const absDelta = isPlayed ? Math.abs(h.cumulative) : 0;
+            const barH = Math.max(isPlayed && absDelta > 0 ? 2 : 0, absDelta * scale);
+            const positive = isPlayed && h.cumulative > 0;
+            const negative = isPlayed && h.cumulative < 0;
+            return (
+              <TouchableOpacity
+                key={h.holeNumber}
+                style={[s.pdCol, { height: CHART_HEIGHT }]}
+                onPress={() => onHolePress(h)}
+                activeOpacity={0.6}
+                disabled={!isPlayed}
+              >
+                {positive && (
+                  <View style={[s.pdBarPos, {
+                    bottom: HALF,
+                    height: barH,
+                    backgroundColor: theme.pairA,
+                  }]} />
+                )}
+                {negative && (
+                  <View style={[s.pdBarNeg, {
+                    top: HALF,
+                    height: barH,
+                    backgroundColor: theme.pairB,
+                  }]} />
+                )}
+                {isPlayed && h.cumulative === 0 && (
+                  <View style={[s.pdBarZero, { top: HALF - 1 }]} />
+                )}
+              </TouchableOpacity>
+            );
+          })}
+        </View>
+      </View>
+
+      <View style={s.pdAxis}>
+        {data.holes.map(h => (
+          <Text key={h.holeNumber} style={s.pdAxisLabel}>{h.holeNumber}</Text>
+        ))}
+      </View>
+
+      <View style={s.pdSummary}>
+        <View style={s.pdSummaryCell}>
+          <Text style={s.pdSummaryLabel}>Max lead</Text>
+          <Text style={s.pdSummaryValue}>{maxLeadLabel}</Text>
+        </View>
+        <View style={s.pdSummaryCell}>
+          <Text style={s.pdSummaryLabel}>Final</Text>
+          <Text style={s.pdSummaryValue}>
+            {data.finalDelta === 0 ? 'Tied' : `${leaderLabel} +${Math.abs(data.finalDelta)} ${unit}`}
+          </Text>
+        </View>
+        <View style={s.pdSummaryCell}>
+          <Text style={s.pdSummaryLabel}>Crossovers</Text>
+          <Text style={s.pdSummaryValue}>{data.crossovers}</Text>
+        </View>
+      </View>
     </View>
   );
 }
@@ -883,6 +1760,10 @@ function HwGEPCells({ stats, strong, theme, s }) {
 
 function ShameTab({ tournament, metric, theme, s }) {
   const shame = hallOfShame(tournament, { metric });
+  const par3 = par3Heartbreak(tournament);
+  const pickup = pickupChampion(tournament);
+  const anchorStat = anchor(tournament);
+  const zero = zeroHero(tournament);
   const [sheet, setSheet] = useState(null);
   const modeLabel = metric === 'strokes' ? 'strokes (gross)' : 'points (net Stableford)';
 
@@ -1000,7 +1881,66 @@ function ShameTab({ tournament, metric, theme, s }) {
     }],
   );
 
-  const any = shame.tripleBogey || shame.bogeyStreak || shame.doubleBogeyStreak || shame.pointlessStreak || shame.gift || shame.collapse || shame.blowup;
+  const openPar3 = () => par3 && setSheet({
+    title: `${par3.player.name} — Par-3 heartbreak`,
+    subtitle: `${par3.avgStrokes} avg str on ${par3.holes} par-3 holes`,
+    explainer: 'Highest average strokes on par-3 holes. Par-3s are meant to be the free lunch of a round.',
+    rows: par3.breakdown.map((b, i) => ({
+      key: `${i}`,
+      primary: `R${b.roundIndex + 1} · ${b.courseName} · Hole ${b.holeNumber}`,
+      secondary: `Par ${b.par} · SI ${b.si}`,
+      rightPrimary: `${b.strokes} str · ${b.points} pts`,
+      tone: b.points === 0 ? 'poor' : b.points === 1 ? 'neutral' : 'good',
+    })),
+  });
+
+  const openPickup = () => pickup && setSheet({
+    title: `${joinNames(pickup.entries.map(e => e.player))} — ${pickup.value} pickups`,
+    subtitle: 'Ball-in-pocket champion',
+    explainer: 'Holes where the recorded strokes equal the "pickup" value (par + 2 + extra shots) — i.e. the player bailed out of that hole. Ties listed together.',
+    rows: tiedRowsByPlayer(
+      pickup.entries,
+      (e) => e.breakdown.map((b, i) => ({
+        key: `${e.player.id}-${i}`,
+        primary: `R${b.roundIndex + 1} · ${b.courseName} · Hole ${b.holeNumber}`,
+        secondary: `Par ${b.par} · SI ${b.si} · ${b.strokes} strokes`,
+        rightPrimary: '0 pts',
+        tone: 'poor',
+      })),
+      (e) => `${e.pickups} pickups`,
+    ),
+  });
+
+  const openAnchor = () => anchorStat && setSheet({
+    title: `${joinNames(anchorStat.entries.map(e => e.player))} — the anchor`,
+    subtitle: `${anchorStat.value} more PB than MB`,
+    explainer: 'Player who was their pair\'s worst ball (PB) far more often than the best ball (MB). Tiebreakers inside the pair: lower handicap → better prior hole → stable id sort.',
+    rows: anchorStat.all.filter(a => a.mbCount + a.pbCount > 0).map(a => ({
+      key: a.player.id,
+      primary: a.player.name,
+      secondary: `MB ${a.mbCount} · PB ${a.pbCount}`,
+      rightPrimary: `${a.anchorScore >= 0 ? '+' : ''}${a.anchorScore}`,
+      tone: a.anchorScore >= 5 ? 'poor' : a.anchorScore > 0 ? 'neutral' : 'good',
+    })),
+  });
+
+  const openZero = () => zero && setSheet({
+    title: `${joinNames([...new Set(zero.entries.map(e => e.player.id))].map(id => zero.entries.find(e => e.player.id === id).player))} — Zero Hero`,
+    subtitle: `Rounds with 3+ zero-point holes`,
+    explainer: 'Rounds where the player scored zero Stableford points on three or more holes. Tap through the rounds below to see which holes drowned the round.',
+    rows: zero.entries.flatMap((e, i) => [
+      { key: `sec-${i}`, section: true, label: `${e.player.name} · R${e.roundIndex + 1} · ${e.courseName}`, rightLabel: `${e.count} zero-pt holes` },
+      ...e.breakdown.map((b, j) => ({
+        key: `${i}-${j}`,
+        primary: `Hole ${b.holeNumber}`,
+        secondary: `Par ${b.par} · SI ${b.si} · ${b.strokes} strokes`,
+        rightPrimary: '0 pts',
+        tone: 'poor',
+      })),
+    ]),
+  });
+
+  const any = shame.tripleBogey || shame.bogeyStreak || shame.doubleBogeyStreak || shame.pointlessStreak || shame.gift || shame.collapse || shame.blowup || par3 || pickup || anchorStat || zero;
 
   return (
     <View>
@@ -1069,6 +2009,42 @@ function ShameTab({ tournament, metric, theme, s }) {
           onPress={openBlowup} theme={theme} s={s}
         />
       )}
+      {par3 && (
+        <HighlightCard
+          icon="target"
+          label="⛳ Par-3 Heartbreak"
+          value={`${firstName(par3.player)} — ${par3.avgStrokes} avg str`}
+          sub={`${par3.holes} par-3 holes · ${par3.totalPoints} total pts`}
+          onPress={openPar3} theme={theme} s={s}
+        />
+      )}
+      {pickup && (
+        <HighlightCard
+          icon="hand"
+          label="🥄 Pickup Champion"
+          value={`${joinNames(pickup.entries.map(e => e.player))} — ${pickup.value} pickups`}
+          sub={pickup.entries.length === 1 ? 'Ball-in-pocket specialist' : `${pickup.entries.length} tied`}
+          onPress={openPickup} theme={theme} s={s}
+        />
+      )}
+      {anchorStat && (
+        <HighlightCard
+          icon="anchor"
+          label="⚓ The Anchor"
+          value={`${joinNames(anchorStat.entries.map(e => e.player))} — +${anchorStat.value} PB`}
+          sub={'More worst-ball than best-ball across the tournament'}
+          onPress={openAnchor} theme={theme} s={s}
+        />
+      )}
+      {zero && (
+        <HighlightCard
+          icon="slash"
+          label="🧟 Zero Hero"
+          value={`${zero.entries.length} round${zero.entries.length === 1 ? '' : 's'} with ≥3 zero-pt holes`}
+          sub={`Worst: ${zero.value} zero-point holes in one round`}
+          onPress={openZero} theme={theme} s={s}
+        />
+      )}
 
       <StatDetailSheet
         visible={!!sheet}
@@ -1118,6 +2094,277 @@ const makeStyles = (t) => StyleSheet.create({
   bigNumber: { fontFamily: 'PlayfairDisplay-Black', color: t.accent.primary, fontSize: 36 },
 
   sectionTitle: { fontFamily: 'PlusJakartaSans-SemiBold', color: t.text.muted, fontSize: 10, letterSpacing: 1.5, textTransform: 'uppercase', marginBottom: 12, marginTop: 20 },
+  sectionTitleRow: { flexDirection: 'row', alignItems: 'center' },
+  sectionTitleInfo: { marginLeft: 6, marginBottom: 12, marginTop: 20, padding: 2 },
+
+  // Pair Difference chart
+  pdCard: {
+    backgroundColor: t.bg.card, borderRadius: 16, borderWidth: 1,
+    borderColor: t.isDark ? t.glass?.border || t.border.default : t.border.default,
+    padding: 14, marginBottom: 12, ...(t.isDark ? {} : t.shadow.card),
+  },
+  pdLegend: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 10, marginBottom: 10 },
+  pdLegendItem: { flexDirection: 'row', alignItems: 'center', gap: 6 },
+  pdLegendDot: { width: 8, height: 8, borderRadius: 4 },
+  pdLegendText: { fontFamily: 'PlusJakartaSans-SemiBold', fontSize: 12, color: t.text.primary },
+  pdLegendVs: { fontFamily: 'PlusJakartaSans-Medium', fontSize: 11, color: t.text.muted, marginHorizontal: 2 },
+  pdChart: { position: 'relative', marginBottom: 4 },
+  pdBaseline: {
+    position: 'absolute', left: 0, right: 0, height: 1,
+    backgroundColor: t.border.default,
+  },
+  pdBarsRow: { flexDirection: 'row', alignItems: 'stretch' },
+  pdCol: { flex: 1, alignItems: 'center', position: 'relative' },
+  pdBarPos: {
+    position: 'absolute', width: '62%', borderTopLeftRadius: 2, borderTopRightRadius: 2,
+  },
+  pdBarNeg: {
+    position: 'absolute', width: '62%', borderBottomLeftRadius: 2, borderBottomRightRadius: 2,
+  },
+  pdBarZero: {
+    position: 'absolute', width: '62%', height: 2, borderRadius: 1,
+    backgroundColor: t.text.muted,
+  },
+  pdAxis: { flexDirection: 'row', marginTop: 2 },
+  pdAxisLabel: {
+    flex: 1, textAlign: 'center',
+    fontFamily: 'PlusJakartaSans-Medium', fontSize: 9, color: t.text.muted,
+  },
+  pdSummary: {
+    flexDirection: 'row', justifyContent: 'space-between',
+    marginTop: 14, paddingTop: 10, borderTopWidth: 1, borderTopColor: t.border.subtle,
+  },
+  pdSummaryCell: { flex: 1, alignItems: 'center', paddingHorizontal: 4 },
+  pdSummaryLabel: {
+    fontFamily: 'PlusJakartaSans-SemiBold', fontSize: 9, letterSpacing: 1,
+    color: t.text.muted, textTransform: 'uppercase', marginBottom: 4,
+  },
+  pdSummaryValue: {
+    fontFamily: 'PlusJakartaSans-Bold', fontSize: 12, color: t.text.primary,
+    textAlign: 'center',
+  },
+
+  // Tournament momentum
+  momentumRow: {
+    flexDirection: 'row', alignItems: 'center',
+    paddingVertical: 6,
+  },
+  momentumName: {
+    flex: 1.2, fontFamily: 'PlusJakartaSans-SemiBold',
+    color: t.text.primary, fontSize: 13,
+  },
+  momentumBars: {
+    flex: 3, flexDirection: 'row', alignItems: 'flex-end',
+    justifyContent: 'space-around', height: 36,
+  },
+  momentumBarWrap: { alignItems: 'center', flex: 1 },
+  momentumBar: { width: '70%', borderRadius: 3, minHeight: 2 },
+  momentumBarLabel: {
+    fontFamily: 'PlusJakartaSans-SemiBold', fontSize: 10, color: t.text.muted, marginTop: 2,
+  },
+  momentumLegend: {
+    flexDirection: 'row', justifyContent: 'space-around',
+    paddingLeft: '30%', marginTop: 4, paddingTop: 4,
+    borderTopWidth: 1, borderTopColor: t.border.subtle,
+  },
+  momentumLegendLabel: {
+    flex: 1, textAlign: 'center',
+    fontFamily: 'PlusJakartaSans-SemiBold', fontSize: 9,
+    color: t.text.muted, letterSpacing: 1,
+  },
+
+  // Leader rows (clutch / consistency)
+  leaderRow: {
+    flexDirection: 'row', alignItems: 'center',
+    paddingVertical: 8, borderBottomWidth: 1, borderBottomColor: t.border.subtle,
+  },
+  leaderRank: {
+    width: 28, fontFamily: 'PlusJakartaSans-ExtraBold', fontSize: 13,
+  },
+  leaderName: {
+    flex: 1, fontFamily: 'PlusJakartaSans-SemiBold', fontSize: 14,
+    color: t.text.primary,
+  },
+  leaderValue: {
+    fontFamily: 'PlusJakartaSans-Bold', fontSize: 14, color: t.text.primary,
+  },
+  leaderUnit: {
+    fontFamily: 'PlusJakartaSans-Medium', fontSize: 11, color: t.text.muted,
+  },
+
+  // Course DNA
+  dnaCard: {
+    backgroundColor: t.bg.card, borderRadius: 14, borderWidth: 1,
+    borderColor: t.border.default, padding: 12, marginBottom: 8,
+    ...(t.isDark ? {} : t.shadow.card),
+  },
+  dnaName: {
+    fontFamily: 'PlusJakartaSans-Bold', fontSize: 13, color: t.text.primary,
+    marginBottom: 8,
+  },
+  dnaChips: { flexDirection: 'row', flexWrap: 'wrap', gap: 6 },
+  dnaChip: {
+    paddingHorizontal: 10, paddingVertical: 6, borderRadius: 10,
+    flexDirection: 'row', alignItems: 'center', gap: 6,
+  },
+  dnaChipCourse: { fontFamily: 'PlusJakartaSans-SemiBold', fontSize: 11 },
+  dnaChipValue: { fontFamily: 'PlusJakartaSans-ExtraBold', fontSize: 12 },
+
+  // Par-type split + warmup-closing + ROI (Players tab)
+  parSplitRow: { flexDirection: 'row' },
+  parSplitCell: { flex: 1, alignItems: 'center', paddingVertical: 4 },
+  parSplitLabel: {
+    fontFamily: 'PlusJakartaSans-SemiBold', fontSize: 10, letterSpacing: 1,
+    color: t.text.muted, textTransform: 'uppercase',
+  },
+  parSplitValue: {
+    fontFamily: 'PlayfairDisplay-Black', fontSize: 26, marginVertical: 2,
+  },
+  parSplitSub: { fontFamily: 'PlusJakartaSans-Medium', fontSize: 10, color: t.text.muted },
+  wcRow: { flexDirection: 'row' },
+  wcCol: { flex: 1, alignItems: 'center', paddingVertical: 4 },
+  wcLabel: {
+    fontFamily: 'PlusJakartaSans-SemiBold', fontSize: 10, letterSpacing: 1,
+    color: t.text.muted, textTransform: 'uppercase',
+  },
+  wcValue: { fontFamily: 'PlayfairDisplay-Black', fontSize: 24, marginVertical: 2 },
+  wcSub: { fontFamily: 'PlusJakartaSans-Medium', fontSize: 10, color: t.text.muted },
+  roiRow: { flexDirection: 'row' },
+  roiCol: { flex: 1, alignItems: 'center', paddingVertical: 4 },
+  roiLabel: {
+    fontFamily: 'PlusJakartaSans-SemiBold', fontSize: 10, letterSpacing: 1,
+    color: t.text.muted, textTransform: 'uppercase',
+  },
+  roiValue: { fontFamily: 'PlayfairDisplay-Black', fontSize: 24, color: t.text.primary },
+  roiSub: {
+    fontFamily: 'PlusJakartaSans-Medium', fontSize: 10, color: t.text.muted,
+    textAlign: 'center', marginTop: 6,
+  },
+
+  // Nemesis/Crushed (Holes tab)
+  ncRow: {
+    flexDirection: 'row', alignItems: 'center', paddingVertical: 6,
+    borderBottomWidth: 1, borderBottomColor: t.border.subtle,
+  },
+  ncName: {
+    flex: 1, fontFamily: 'PlusJakartaSans-Bold', fontSize: 13,
+    color: t.text.primary,
+  },
+  ncCell: { flex: 1.5, alignItems: 'center', paddingHorizontal: 4 },
+  ncLabel: {
+    fontFamily: 'PlusJakartaSans-SemiBold', fontSize: 9, letterSpacing: 1,
+    textTransform: 'uppercase',
+  },
+  ncValue: {
+    fontFamily: 'PlusJakartaSans-Bold', fontSize: 12,
+    color: t.text.primary, marginTop: 2,
+  },
+  ncSub: { fontFamily: 'PlusJakartaSans-Medium', fontSize: 10, color: t.text.muted },
+
+  // Swing hole card
+  swingCard: {
+    flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
+    backgroundColor: t.bg.card, borderRadius: 14, borderWidth: 1,
+    borderColor: t.border.default, padding: 14, marginBottom: 12,
+    ...(t.isDark ? {} : t.shadow.card),
+  },
+  swingLabel: {
+    fontFamily: 'PlusJakartaSans-SemiBold', fontSize: 9, letterSpacing: 1.2,
+    color: t.text.muted, textTransform: 'uppercase',
+  },
+  swingValue: {
+    fontFamily: 'PlusJakartaSans-Bold', fontSize: 14, color: t.text.primary,
+    marginTop: 4,
+  },
+  swingSub: { fontFamily: 'PlusJakartaSans-Medium', fontSize: 11, color: t.text.muted, marginTop: 2 },
+
+  // Carry ratio bar
+  carryCard: {
+    backgroundColor: t.bg.card, borderRadius: 14, borderWidth: 1,
+    borderColor: t.border.default, padding: 12, marginBottom: 8,
+    ...(t.isDark ? {} : t.shadow.card),
+  },
+  carryBar: {
+    flexDirection: 'row', height: 10, borderRadius: 5,
+    backgroundColor: t.bg.secondary, overflow: 'hidden', marginBottom: 6,
+  },
+  carryFill: { height: '100%' },
+  carryLabels: { flexDirection: 'row', justifyContent: 'space-between' },
+  carryName: { fontFamily: 'PlusJakartaSans-SemiBold', fontSize: 12, color: t.text.primary },
+  carryMeta: {
+    fontFamily: 'PlusJakartaSans-Medium', fontSize: 10, color: t.text.muted,
+    marginTop: 6, textAlign: 'center',
+  },
+
+  // Skins footer
+  skinsFooter: {
+    fontFamily: 'PlusJakartaSans-Medium', fontSize: 10, color: t.text.muted,
+    marginTop: 8, textAlign: 'center',
+  },
+
+  // Match Play cards
+  matchCard: {
+    backgroundColor: t.bg.card, borderRadius: 14, borderWidth: 1,
+    borderColor: t.border.default, padding: 12, marginBottom: 8,
+    ...(t.isDark ? {} : t.shadow.card),
+  },
+  matchHeader: {
+    flexDirection: 'row', alignItems: 'center', marginBottom: 6,
+  },
+  matchRound: {
+    fontFamily: 'PlusJakartaSans-ExtraBold', fontSize: 11,
+    color: t.accent.primary, letterSpacing: 1, marginRight: 8,
+  },
+  matchCourse: {
+    flex: 1, fontFamily: 'PlusJakartaSans-SemiBold', fontSize: 12,
+    color: t.text.secondary,
+  },
+  matchScoreline: {
+    fontFamily: 'PlayfairDisplay-Black', fontSize: 16,
+  },
+  matchTeams: {
+    flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
+  },
+  matchTeam: {
+    flex: 1, fontSize: 13, color: t.text.primary,
+  },
+  matchVs: {
+    fontFamily: 'PlusJakartaSans-Medium', fontSize: 11, color: t.text.muted,
+    marginHorizontal: 8,
+  },
+  matchSub: {
+    fontFamily: 'PlusJakartaSans-Medium', fontSize: 10, color: t.text.muted,
+    marginTop: 6,
+  },
+
+  // Pair Config Matrix
+  configCard: {
+    backgroundColor: t.bg.card, borderRadius: 14, borderWidth: 1,
+    borderColor: t.border.default, padding: 12, marginBottom: 8,
+    ...(t.isDark ? {} : t.shadow.card),
+  },
+  configRow: {
+    flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
+  },
+  configSide: {
+    flex: 1, fontFamily: 'PlusJakartaSans-SemiBold', fontSize: 13,
+  },
+  configWTL: {
+    flexDirection: 'row', alignItems: 'center', paddingHorizontal: 10,
+  },
+  configScore: {
+    fontFamily: 'PlusJakartaSans-ExtraBold', fontSize: 18, color: t.text.primary,
+    minWidth: 22, textAlign: 'center',
+  },
+  configScoreT: {
+    fontFamily: 'PlusJakartaSans-Bold', fontSize: 14, color: t.text.muted,
+    minWidth: 18, textAlign: 'center',
+  },
+  configSep: { color: t.text.muted, fontSize: 14, marginHorizontal: 2 },
+  configSub: {
+    fontFamily: 'PlusJakartaSans-Medium', fontSize: 10, color: t.text.muted,
+    marginTop: 6, textAlign: 'center',
+  },
   emptyText: { fontFamily: 'PlusJakartaSans-Regular', color: t.text.muted, fontSize: 14, textAlign: 'center', paddingVertical: 40 },
 
   // Highlights

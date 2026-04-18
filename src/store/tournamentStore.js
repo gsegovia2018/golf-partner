@@ -40,6 +40,11 @@ async function ensureMigrated() {
   _migrated = true;
 }
 
+async function getCurrentUserId() {
+  const { data: { user } } = await supabase.auth.getUser();
+  return user?.id ?? null;
+}
+
 const _subs = new Set();
 function _emitChange() {
   _subs.forEach((fn) => { try { fn(); } catch (_) {} });
@@ -51,12 +56,37 @@ export function subscribeTournamentChanges(fn) {
 
 export async function loadAllTournaments() {
   await ensureMigrated();
-  const { data, error } = await supabase
-    .from('tournaments')
-    .select('data')
-    .order('created_at', { ascending: false });
-  if (error) throw error;
-  return data.map((row) => row.data);
+  const userId = await getCurrentUserId();
+
+  if (!userId) {
+    const { data, error } = await supabase
+      .from('tournaments').select('data')
+      .order('created_at', { ascending: false });
+    if (error) throw error;
+    return data.map((row) => ({ ...row.data, _role: 'owner' }));
+  }
+
+  const [{ data: owned, error: ownedErr }, { data: memberships, error: memberErr }] = await Promise.all([
+    supabase.from('tournaments').select('data')
+      .or(`created_by.eq.${userId},created_by.is.null`)
+      .order('created_at', { ascending: false }),
+    supabase.from('tournament_members')
+      .select('role, tournaments(data)')
+      .eq('user_id', userId),
+  ]);
+  if (ownedErr) throw ownedErr;
+  if (memberErr) throw memberErr;
+
+  const ownedIds = new Set();
+  const result = (owned ?? []).map((row) => {
+    ownedIds.add(row.data.id);
+    return { ...row.data, _role: 'owner' };
+  });
+  (memberships ?? []).forEach((m) => {
+    if (!m.tournaments?.data || ownedIds.has(m.tournaments.data.id)) return;
+    result.push({ ...m.tournaments.data, _role: m.role });
+  });
+  return result.sort((a, b) => b.id - a.id);
 }
 
 export async function loadTournament() {
@@ -69,12 +99,11 @@ export async function loadTournament() {
 }
 
 async function persistTournament(tournament) {
-  const { error } = await supabase.from('tournaments').upsert({
-    id: tournament.id,
-    name: tournament.name,
-    created_at: tournament.createdAt,
-    data: tournament,
-  });
+  const userId = await getCurrentUserId();
+  const { _role, ...cleanData } = tournament;
+  const row = { id: cleanData.id, name: cleanData.name, created_at: cleanData.createdAt, data: cleanData };
+  if (userId) row.created_by = userId;
+  const { error } = await supabase.from('tournaments').upsert(row);
   if (error) throw error;
 }
 
@@ -362,19 +391,29 @@ function isRoundPlayed(round, index, tournament) {
 
 // Per-pair, per-hole assign each member a role: exactly one is the "best
 // ball" (higher Stableford on that hole) and the other is the "worst ball".
+// Then compares each pair's best / worst against the other pair's to decide
+// whether that hole was won, tied, or lost inter-pair — and credits the
+// player who was carrying the role for their pair.
 //
-// Tiebreaker when Stableford points tie on a hole:
+// Within-pair tiebreaker when Stableford points tie:
 //   1. Lower playing handicap is best.
-//   2. Same handicap → whoever was best on the previous hole (cascade
-//      backwards through prior holes, skipping any hole where either
-//      player is unscored).
+//   2. Same handicap → whoever was best on the previous hole (walk back).
 //   3. Everything tied → default to the first-listed pair member.
 //
-// Returns: { [playerId]: { best: number, worst: number } }. Holes that
-// aren't scored for both members of a pair don't contribute to either
-// count (neither player gets a role for that hole).
+// Returns per player:
+//   { best, worst,                               // role assignments
+//     bestWon, bestTied, bestLost,               // inter-pair BB outcomes
+//     worstWon, worstTied, worstLost }           // inter-pair WB outcomes
+// Only holes where all four players have scored contribute to the inter-pair
+// outcome counts; holes missing any score still contribute to within-pair
+// role counts when the pair itself has both members' scores.
 export function assignBestWorstRoles(round, players) {
-  const roles = Object.fromEntries(players.map((p) => [p.id, { best: 0, worst: 0 }]));
+  const emptyBucket = () => ({
+    best: 0, worst: 0,
+    bestWon: 0, bestTied: 0, bestLost: 0,
+    worstWon: 0, worstTied: 0, worstLost: 0,
+  });
+  const roles = Object.fromEntries(players.map((p) => [p.id, emptyBucket()]));
   if (!round?.pairs?.length) return roles;
 
   const playersById = Object.fromEntries(players.map((p) => [p.id, p]));
@@ -394,67 +433,88 @@ export function assignBestWorstRoles(round, players) {
     });
   });
 
-  round.pairs.forEach((pair) => {
-    if (pair.length < 2) return;
+  const pickPairRoles = (pair, hole, holeIdx) => {
+    if (pair.length < 2) return null;
     const m1 = playersById[pair[0].id];
     const m2 = playersById[pair[1].id];
-    if (!m1 || !m2) return;
+    if (!m1 || !m2) return null;
+    const p1 = points[m1.id][hole.number];
+    const p2 = points[m2.id][hole.number];
+    if (p1 == null || p2 == null) return null;
     const hcp1 = getPlayingHandicap(round, m1);
     const hcp2 = getPlayingHandicap(round, m2);
 
-    round.holes.forEach((hole, holeIdx) => {
-      const p1 = points[m1.id][hole.number];
-      const p2 = points[m2.id][hole.number];
-      if (p1 == null || p2 == null) return;
-
-      let bestId, worstId;
-      if (p1 > p2) {
-        bestId = m1.id; worstId = m2.id;
-      } else if (p2 > p1) {
-        bestId = m2.id; worstId = m1.id;
-      } else if (hcp1 < hcp2) {
-        bestId = m1.id; worstId = m2.id;
-      } else if (hcp2 < hcp1) {
-        bestId = m2.id; worstId = m1.id;
-      } else {
-        // Walk backwards through prior holes.
-        let decided = false;
-        for (let k = holeIdx - 1; k >= 0; k--) {
-          const prev = round.holes[k];
-          const q1 = points[m1.id][prev.number];
-          const q2 = points[m2.id][prev.number];
-          if (q1 == null || q2 == null) continue;
-          if (q1 > q2) { bestId = m1.id; worstId = m2.id; decided = true; break; }
-          if (q2 > q1) { bestId = m2.id; worstId = m1.id; decided = true; break; }
-        }
-        if (!decided) { bestId = m1.id; worstId = m2.id; }
+    let bestId, worstId;
+    if (p1 > p2) { bestId = m1.id; worstId = m2.id; }
+    else if (p2 > p1) { bestId = m2.id; worstId = m1.id; }
+    else if (hcp1 < hcp2) { bestId = m1.id; worstId = m2.id; }
+    else if (hcp2 < hcp1) { bestId = m2.id; worstId = m1.id; }
+    else {
+      let decided = false;
+      for (let k = holeIdx - 1; k >= 0; k--) {
+        const prev = round.holes[k];
+        const q1 = points[m1.id][prev.number];
+        const q2 = points[m2.id][prev.number];
+        if (q1 == null || q2 == null) continue;
+        if (q1 > q2) { bestId = m1.id; worstId = m2.id; decided = true; break; }
+        if (q2 > q1) { bestId = m2.id; worstId = m1.id; decided = true; break; }
       }
+      if (!decided) { bestId = m1.id; worstId = m2.id; }
+    }
+    return {
+      bestId, worstId,
+      bestVal: Math.max(p1, p2),
+      worstVal: Math.min(p1, p2),
+    };
+  };
 
-      roles[bestId].best += 1;
-      roles[worstId].worst += 1;
+  round.holes.forEach((hole, holeIdx) => {
+    const pairResults = round.pairs.map((pair) => pickPairRoles(pair, hole, holeIdx));
+
+    pairResults.forEach((r) => {
+      if (!r) return;
+      roles[r.bestId].best += 1;
+      roles[r.worstId].worst += 1;
     });
+
+    if (pairResults.length >= 2 && pairResults[0] && pairResults[1]) {
+      const [a, b] = pairResults;
+      if (a.bestVal > b.bestVal) { roles[a.bestId].bestWon += 1; roles[b.bestId].bestLost += 1; }
+      else if (b.bestVal > a.bestVal) { roles[b.bestId].bestWon += 1; roles[a.bestId].bestLost += 1; }
+      else { roles[a.bestId].bestTied += 1; roles[b.bestId].bestTied += 1; }
+
+      if (a.worstVal > b.worstVal) { roles[a.worstId].worstWon += 1; roles[b.worstId].worstLost += 1; }
+      else if (b.worstVal > a.worstVal) { roles[b.worstId].worstWon += 1; roles[a.worstId].worstLost += 1; }
+      else { roles[a.worstId].worstTied += 1; roles[b.worstId].worstTied += 1; }
+    }
   });
 
   return roles;
 }
 
 // Points earned by a single player in a round from their best/worst-ball
-// role across the pair's scored holes.
+// role — only holes their pair won outright count (ties and losses score
+// nothing), scaled by the tournament's bestBallValue / worstBallValue.
 export function playerRoundBestWorstPoints(round, playerId, players, settings) {
   const { bestBallValue, worstBallValue } = { ...DEFAULT_SETTINGS, ...settings };
   const roles = assignBestWorstRoles(round, players);
   const r = roles[playerId];
   if (!r) return 0;
-  return r.best * bestBallValue + r.worst * worstBallValue;
+  return r.bestWon * bestBallValue + r.worstWon * worstBallValue;
 }
 
-// Individual leaderboard for best-ball mode: each player is tallied by how
-// many holes they were the best vs worst ball inside their pair, scaled by
-// the tournament's bestBallValue / worstBallValue.
+// Individual leaderboard for best-ball mode: each player is tallied by the
+// holes they *won* carrying the best / worst ball for their pair (ties and
+// losses do not count), scaled by bestBallValue / worstBallValue. Also
+// exposes bestTies/bestLosses and worstTies/worstLosses for display.
 export function tournamentBestWorstLeaderboard(tournament) {
   const { players, rounds, settings } = tournament;
   const { bestBallValue, worstBallValue } = { ...DEFAULT_SETTINGS, ...settings };
-  const totals = Object.fromEntries(players.map((p) => [p.id, { player: p, points: 0, bestWins: 0, worstWins: 0 }]));
+  const totals = Object.fromEntries(players.map((p) => [p.id, {
+    player: p, points: 0,
+    bestWins: 0, bestTies: 0, bestLosses: 0,
+    worstWins: 0, worstTies: 0, worstLosses: 0,
+  }]));
 
   rounds.forEach((round, index) => {
     if (!isRoundPlayed(round, index, tournament) || !round.pairs?.length) return;
@@ -462,9 +522,13 @@ export function tournamentBestWorstLeaderboard(tournament) {
     players.forEach((p) => {
       const r = roles[p.id];
       if (!r) return;
-      totals[p.id].points += r.best * bestBallValue + r.worst * worstBallValue;
-      totals[p.id].bestWins += r.best;
-      totals[p.id].worstWins += r.worst;
+      totals[p.id].points += r.bestWon * bestBallValue + r.worstWon * worstBallValue;
+      totals[p.id].bestWins += r.bestWon;
+      totals[p.id].bestTies += r.bestTied;
+      totals[p.id].bestLosses += r.bestLost;
+      totals[p.id].worstWins += r.worstWon;
+      totals[p.id].worstTies += r.worstTied;
+      totals[p.id].worstLosses += r.worstLost;
     });
   });
 
@@ -485,6 +549,100 @@ export function tournamentLeaderboard(tournament) {
   });
 
   return totals.sort((a, b) => b.points - a.points);
+}
+
+export async function generateInviteCode(tournamentId) {
+  const { data: existing } = await supabase
+    .from('tournament_invites').select('code')
+    .eq('tournament_id', tournamentId).maybeSingle();
+  if (existing?.code) return existing.code;
+
+  const userId = await getCurrentUserId();
+  const code = Math.random().toString(36).substring(2, 8).toUpperCase();
+  const { data, error } = await supabase
+    .from('tournament_invites')
+    .insert({ tournament_id: tournamentId, code, created_by: userId })
+    .select('code').single();
+  if (error) throw error;
+  return data.code;
+}
+
+// Members list for a tournament: owner + everyone who joined via an invite
+// code. Profile fields are joined client-side since PostgREST can't traverse
+// tournament_members → auth.users → profiles automatically.
+export async function loadTournamentMembers(tournamentId) {
+  const [{ data: members, error: memErr }, { data: tournament, error: tErr }] = await Promise.all([
+    supabase.from('tournament_members')
+      .select('user_id, role, created_at')
+      .eq('tournament_id', tournamentId)
+      .order('created_at'),
+    supabase.from('tournaments')
+      .select('created_by, created_at')
+      .eq('id', tournamentId)
+      .maybeSingle(),
+  ]);
+  if (memErr) throw memErr;
+  if (tErr) throw tErr;
+
+  const ids = [...new Set(
+    [tournament?.created_by, ...(members ?? []).map((m) => m.user_id)].filter(Boolean),
+  )];
+
+  let byId = {};
+  if (ids.length > 0) {
+    const { data: profiles, error: pErr } = await supabase
+      .from('profiles')
+      .select('user_id, display_name, handicap, avatar_color')
+      .in('user_id', ids);
+    if (pErr) throw pErr;
+    byId = Object.fromEntries((profiles ?? []).map((p) => [p.user_id, p]));
+  }
+
+  const rows = [];
+  if (tournament?.created_by) {
+    rows.push({
+      userId: tournament.created_by,
+      role: 'owner',
+      joinedAt: tournament.created_at,
+      profile: byId[tournament.created_by] ?? null,
+    });
+  }
+  (members ?? []).forEach((m) => {
+    if (m.user_id === tournament?.created_by) return;
+    rows.push({
+      userId: m.user_id,
+      role: m.role,
+      joinedAt: m.created_at,
+      profile: byId[m.user_id] ?? null,
+    });
+  });
+  return rows;
+}
+
+export async function removeTournamentMember(tournamentId, userId) {
+  const { error } = await supabase
+    .from('tournament_members')
+    .delete()
+    .eq('tournament_id', tournamentId)
+    .eq('user_id', userId);
+  if (error) throw error;
+}
+
+export async function joinTournamentByCode(code) {
+  const userId = await getCurrentUserId();
+  if (!userId) throw new Error('Must be signed in to join');
+
+  const { data: invite, error: inviteErr } = await supabase
+    .from('tournament_invites').select('tournament_id')
+    .eq('code', code.toUpperCase().trim()).maybeSingle();
+  if (inviteErr) throw inviteErr;
+  if (!invite) throw new Error('Invalid code — check with the tournament owner');
+
+  const { error } = await supabase
+    .from('tournament_members')
+    .upsert({ tournament_id: invite.tournament_id, user_id: userId, role: 'viewer' });
+  if (error) throw error;
+  return invite.tournament_id;
 }
 
 export function isRoundInProgress(tournament) {
