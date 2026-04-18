@@ -1,4 +1,4 @@
-import React, { useEffect, useState, useCallback, useRef } from 'react';
+import React, { useEffect, useState, useCallback, useRef, useMemo, startTransition } from 'react';
 import { View, Text, TouchableOpacity, StyleSheet, ScrollView, Switch, Alert, FlatList, Platform, Modal, Pressable } from 'react-native';
 import { Feather } from '@expo/vector-icons';
 
@@ -109,7 +109,7 @@ export default function HomeScreen({ navigation, viewMode = 'auto' }) {
     }
   }
 
-  const s = makeStyles(theme);
+  const s = useMemo(() => makeStyles(theme), [theme]);
   const leaderboardRef = useRef();
 
   const showList = viewMode === 'list' || (viewMode === 'auto' && !tournament);
@@ -222,6 +222,8 @@ export default function HomeScreen({ navigation, viewMode = 'auto' }) {
 
   const leaderboard = tournamentLeaderboard(tournament);
   const bestWorstLeaderboard = leaderboardBestBall ? tournamentBestWorstLeaderboard(tournament) : null;
+  const strokesByPlayer = Object.fromEntries(leaderboard.map((e) => [e.player.id, e.strokes]));
+  const displayedBoard = leaderboardBestBall && bestWorstLeaderboard ? bestWorstLeaderboard : leaderboard;
 
   const selectedRoundData = tournament.rounds[selectedRound];
   const selectedRoundHasScores = !!(selectedRoundData?.scores && Object.keys(selectedRoundData.scores).length > 0);
@@ -283,14 +285,15 @@ export default function HomeScreen({ navigation, viewMode = 'auto' }) {
             <Text style={[s.mastersToggleLabel, leaderboardBestBall && s.mastersToggleLabelActive]}>Best Ball</Text>
           </View>
         </View>
-        {leaderboard.map((entry, i) => {
+        {displayedBoard.map((entry, i) => {
           const rankColors = ['#ffd700', '#c0c8d4', '#daa06d'];
           const rankColor = rankColors[i] || 'rgba(255,255,255,0.4)';
           const rankBg = i === 0 ? 'rgba(255,215,0,0.2)' : i === 1 ? 'rgba(192,200,212,0.15)' : i === 2 ? 'rgba(218,160,109,0.15)' : 'rgba(255,255,255,0.08)';
           const roundValue = getSelectedRoundValue(entry.player.id);
           const roundUnit = leaderboardBestBall ? 'holes' : 'pts';
+          const strokes = strokesByPlayer[entry.player.id] ?? 0;
           return (
-            <View key={entry.player.id} style={[s.mastersRow, i === 0 && s.mastersRowFirst, i === leaderboard.length - 1 && { borderBottomWidth: 0 }]}>
+            <View key={entry.player.id} style={[s.mastersRow, i === 0 && s.mastersRowFirst, i === displayedBoard.length - 1 && { borderBottomWidth: 0 }]}>
               <View style={[s.mastersRankBadge, { backgroundColor: rankBg }]}>
                 <Text style={[s.mastersRankText, { color: rankColor }]}>{i + 1}</Text>
               </View>
@@ -301,9 +304,7 @@ export default function HomeScreen({ navigation, viewMode = 'auto' }) {
                 </Text>
               </View>
               <Text style={[s.mastersPoints, i === 0 && { fontSize: 18 }]}>{entry.points} pts</Text>
-              {leaderboardBestBall
-                ? <Text style={s.mastersSub}>{(bestWorstLeaderboard?.find((e) => e.player.id === entry.player.id)?.bestWins ?? 0) + (bestWorstLeaderboard?.find((e) => e.player.id === entry.player.id)?.worstWins ?? 0)} holes</Text>
-                : <Text style={s.mastersSub}>{entry.strokes} str</Text>}
+              <Text style={s.mastersSub}>{strokes || '-'} str</Text>
             </View>
           );
         })}
@@ -361,18 +362,17 @@ export default function HomeScreen({ navigation, viewMode = 'auto' }) {
                 scrollEventThrottle={16}
                 onScrollBeginDrag={() => { isUserScrollingRound.current = true; }}
                 onScroll={(e) => {
-                  roundScrollOffset.current = e.nativeEvent.contentOffset.x;
-                }}
-                onScrollEndDrag={(e) => {
                   const x = e.nativeEvent.contentOffset.x;
                   roundScrollOffset.current = x;
-                  // If already settled at a page boundary, no momentum will fire.
-                  if (Math.abs(x - Math.round(x / roundPagerWidth) * roundPagerWidth) < 1) {
-                    isUserScrollingRound.current = false;
-                    const idx = Math.round(x / roundPagerWidth);
-                    if (idx !== selectedRound) setSelectedRound(idx);
+                  const idx = Math.round(x / roundPagerWidth);
+                  if (idx !== selectedRound) {
+                    // Non-urgent: let the native swipe keep running smoothly
+                    // while React reconciles leaderboard/tabs/match panel in
+                    // the background.
+                    startTransition(() => setSelectedRound(idx));
                   }
                 }}
+                onScrollEndDrag={() => { isUserScrollingRound.current = false; }}
                 onMomentumScrollEnd={(e) => {
                   const x = e.nativeEvent.contentOffset.x;
                   roundScrollOffset.current = x;
@@ -633,7 +633,7 @@ export default function HomeScreen({ navigation, viewMode = 'auto' }) {
   );
 }
 
-function StablefordRoundCard({ round, players, theme, s }) {
+const StablefordRoundCard = React.memo(function StablefordRoundCard({ round, players, theme, s }) {
   const pairResults = roundPairLeaderboard(round, players);
   return (
     <>
@@ -644,18 +644,13 @@ function StablefordRoundCard({ round, players, theme, s }) {
             <Text style={s.pairNames}>{pair.members.map((m) => m.player.name).join(' & ')}</Text>
             <Text style={s.pairPoints}>{pair.combinedPoints} pts</Text>
           </View>
-          {pair.members.map((m) => (
-            <Text key={m.player.id} style={s.pairMember}>
-              {m.player.name}  {m.totalPoints} pts · {m.totalStrokes} strokes
-            </Text>
-          ))}
         </View>
       ))}
     </>
   );
-}
+});
 
-function BestBallRoundCard({ round, players, settings, theme, s }) {
+const BestBallRoundCard = React.memo(function BestBallRoundCard({ round, players, settings, theme, s }) {
   const result = calcBestWorstBall(round, players);
   if (!result) return <Text style={s.pairMember}>No results yet</Text>;
 
@@ -685,7 +680,7 @@ function BestBallRoundCard({ round, players, settings, theme, s }) {
       </View>
     </>
   );
-}
+});
 
 const makeStyles = (t) => StyleSheet.create({
   screen: { ...StyleSheet.absoluteFillObject, backgroundColor: t.bg.primary },
