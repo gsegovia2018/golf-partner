@@ -33,6 +33,7 @@ export default function ScorecardScreen({ navigation, route }) {
   const tournamentRef = useRef(null);
   const saveTimeoutRef = useRef(null);
   const notesSaveTimeoutRef = useRef(null);
+  const scoreAnims = useRef({});
   const roundIndex = paramRoundIndex ?? tournament?.currentRound ?? 0;
 
   useEffect(() => { tournamentRef.current = tournament; }, [tournament]);
@@ -113,7 +114,6 @@ export default function ScorecardScreen({ navigation, route }) {
     });
   }
 
-  const scoreAnims = useRef({});
   function getScoreAnim(playerId) {
     if (!scoreAnims.current[playerId]) scoreAnims.current[playerId] = new Animated.Value(1);
     return scoreAnims.current[playerId];
