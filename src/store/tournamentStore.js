@@ -1,5 +1,6 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { supabase } from '../lib/supabase';
+import { tournamentsIndex } from './tournamentsIndex';
 
 const ACTIVE_ID_KEY = '@golf_active_id';
 const LEGACY_TOURNAMENTS_KEY = '@golf_tournaments';
@@ -69,7 +70,9 @@ export async function loadAllTournaments() {
       .from('tournaments').select('data')
       .order('created_at', { ascending: false });
     if (error) throw error;
-    return data.map((row) => ({ ...row.data, _role: 'owner' }));
+    const list = data.map((row) => ({ ...row.data, _role: 'owner' }));
+    tournamentsIndex.writeIndex(list).catch(() => {});
+    return list;
   }
 
   const [{ data: owned, error: ownedErr }, { data: memberships, error: memberErr }] = await Promise.all([
@@ -92,7 +95,37 @@ export async function loadAllTournaments() {
     if (!m.tournaments?.data || ownedIds.has(m.tournaments.data.id)) return;
     result.push({ ...m.tournaments.data, _role: m.role });
   });
-  return result.sort((a, b) => b.id - a.id);
+  const sorted = result.sort((a, b) => b.id - a.id);
+  // Fire-and-forget: keep the offline index in sync with the latest remote list.
+  tournamentsIndex.writeIndex(sorted).catch(() => {});
+  return sorted;
+}
+
+// Used by Home. Tries remote first; on failure, returns the last-known index
+// marked with `_stale: true` plus a `_openableIds` set for rendering
+// non-openable cards. Never throws.
+export async function loadAllTournamentsWithFallback() {
+  try {
+    const list = await loadAllTournaments();
+    return { list, stale: false, openableIds: null };
+  } catch (_) {
+    const [index, openable] = await Promise.all([
+      tournamentsIndex.readIndex(),
+      tournamentsIndex.getLocalBlobIds(),
+    ]);
+    return {
+      list: index.map((row) => ({
+        id: row.id,
+        name: row.name,
+        createdAt: row.createdAt,
+        _role: row.role,
+        updatedAt: row.updatedAt,
+        _stale: true,
+      })),
+      stale: true,
+      openableIds: new Set(openable),
+    };
+  }
 }
 
 export async function loadTournament() {
