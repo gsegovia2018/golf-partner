@@ -15,7 +15,7 @@ import AttachMediaSheet from '../components/AttachMediaSheet';
 import BatchAttachSheet from '../components/BatchAttachSheet';
 import { pickMedia, attachMedia, attachManyMedia } from '../lib/mediaCapture';
 import {
-  loadTournament, loadAllTournaments,
+  loadTournament, loadAllTournaments, loadAllTournamentsWithFallback,
   setActiveTournament, clearActiveTournament,
   deleteTournament, saveTournament,
   tournamentLeaderboard, tournamentBestWorstLeaderboard,
@@ -72,6 +72,8 @@ export default function HomeScreen({ navigation, route }) {
   const { user } = useAuth();
   const [tournament, setTournament] = useState(null);
   const [allTournaments, setAllTournaments] = useState([]);
+  const [listStale, setListStale] = useState(false);
+  const [openableIds, setOpenableIds] = useState(null); // null = all openable
   const [loading, setLoading] = useState(true);
   const [selectedRound, setSelectedRound] = useState(0);
   const [roundPagerWidth, setRoundPagerWidth] = useState(0);
@@ -111,9 +113,14 @@ export default function HomeScreen({ navigation, route }) {
   const reload = useCallback(async () => {
     setLoading(true);
     try {
-      const [t, all] = await Promise.all([loadTournament(), loadAllTournaments()]);
+      const [t, listResult] = await Promise.all([
+        loadTournament(),
+        loadAllTournamentsWithFallback(),
+      ]);
       setTournament(t);
-      setAllTournaments(all);
+      setAllTournaments(listResult.list);
+      setListStale(listResult.stale);
+      setOpenableIds(listResult.openableIds);
       if (t) setSelectedRound(chooseInitialRound(t));
     } finally {
       setLoading(false);
@@ -363,8 +370,10 @@ export default function HomeScreen({ navigation, route }) {
     if (!confirmed) return;
     try {
       await deleteTournament(t.id);
-      const all = await loadAllTournaments();
-      setAllTournaments(all);
+      const listResult = await loadAllTournamentsWithFallback();
+      setAllTournaments(listResult.list);
+      setListStale(listResult.stale);
+      setOpenableIds(listResult.openableIds);
       setTournament(null);
       if (viewMode === 'tournament' && navigation.canGoBack()) {
         navigation.goBack();
@@ -530,23 +539,44 @@ export default function HomeScreen({ navigation, route }) {
           </TouchableOpacity>
         </View>
 
+        {listStale && allTournaments.length > 0 && (
+          <View style={s.staleBanner}>
+            <Feather name="cloud-off" size={14} color="#c77a0a" />
+            <Text style={s.staleBannerText}>Sin conexión · mostrando última lista guardada</Text>
+          </View>
+        )}
+
         {(() => {
           const renderCard = (t) => {
+            const openable = !openableIds || openableIds.has(t.id);
+            const rounds = t.rounds ?? [];
+            const players = t.players ?? [];
             const isGameKind = t.kind === 'game';
-            const played = t.rounds.filter((r) => r.scores && Object.keys(r.scores).length > 0).length;
-            const isActive = played < t.rounds.length;
-            const courseName = isGameKind ? (t.rounds[0]?.courseName ?? '') : null;
+            const played = rounds.filter((r) => r.scores && Object.keys(r.scores).length > 0).length;
+            const totalRounds = rounds.length;
+            const isActive = totalRounds > 0 && played < totalRounds;
+            const courseName = isGameKind ? (rounds[0]?.courseName ?? '') : null;
+            const metaText = players.length > 0
+              ? players.map((p) => p.name.split(' ')[0]).join(' · ')
+              : '';
             return (
               <View key={t.id} style={s.tournamentCardWrapper}>
-                <TouchableOpacity style={s.tournamentCard} onPress={() => selectTournament(t.id)} activeOpacity={0.7}>
+                <TouchableOpacity
+                  style={[s.tournamentCard, !openable && s.tournamentCardDisabled]}
+                  onPress={() => { if (openable) selectTournament(t.id); }}
+                  disabled={!openable}
+                  activeOpacity={openable ? 0.7 : 1}
+                >
                   <View style={s.tournamentCardLeft}>
                     <View style={s.tournamentCardHeader}>
                       <Text style={s.tournamentCardName}>{t.name}</Text>
-                      <View style={[s.statusBadge, !isActive && s.statusBadgeFinished]}>
-                        <Text style={[s.statusBadgeText, !isActive && s.statusBadgeTextFinished]}>
-                          {isActive ? 'Active' : 'Finished'}
-                        </Text>
-                      </View>
+                      {totalRounds > 0 && (
+                        <View style={[s.statusBadge, !isActive && s.statusBadgeFinished]}>
+                          <Text style={[s.statusBadgeText, !isActive && s.statusBadgeTextFinished]}>
+                            {isActive ? 'Active' : 'Finished'}
+                          </Text>
+                        </View>
+                      )}
                       {t._role === 'viewer' && (
                         <View style={s.viewerBadge}>
                           <Feather name="eye" size={9} color={theme.text.muted} />
@@ -554,18 +584,25 @@ export default function HomeScreen({ navigation, route }) {
                         </View>
                       )}
                     </View>
-                    <Text style={s.tournamentCardMeta}>
-                      {t.players.map((p) => p.name.split(' ')[0]).join(' · ')}
-                    </Text>
-                    <Text style={s.tournamentCardRound}>
-                      {isGameKind ? (courseName || 'Single round') : `Round ${played}/${t.rounds.length}`}
-                    </Text>
+                    {metaText ? <Text style={s.tournamentCardMeta}>{metaText}</Text> : null}
+                    {totalRounds > 0 && (
+                      <Text style={s.tournamentCardRound}>
+                        {isGameKind ? (courseName || 'Single round') : `Round ${played}/${totalRounds}`}
+                      </Text>
+                    )}
                   </View>
                   <View style={s.tournamentCardRight}>
-                    <Feather name="chevron-right" size={18} color={theme.text.muted} />
+                    {!openable ? (
+                      <View style={s.offlineBadge}>
+                        <Feather name="cloud-off" size={12} color="#c77a0a" />
+                        <Text style={s.offlineBadgeText}>Requiere conexión</Text>
+                      </View>
+                    ) : (
+                      <Feather name="chevron-right" size={18} color={theme.text.muted} />
+                    )}
                   </View>
                 </TouchableOpacity>
-                {t._role !== 'viewer' && (
+                {openable && t._role !== 'viewer' && (
                   <TouchableOpacity style={s.deleteCardBtn} onPress={() => confirmDelete(t)} hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}>
                     <Feather name="trash-2" size={14} color={theme.destructive} />
                   </TouchableOpacity>
@@ -577,6 +614,14 @@ export default function HomeScreen({ navigation, route }) {
           const games = sorted.filter((t) => t.kind === 'game');
           const tournaments = sorted.filter((t) => t.kind !== 'game');
           if (sorted.length === 0) {
+            if (listStale) {
+              return (
+                <View style={s.staleEmpty}>
+                  <Feather name="cloud-off" size={32} color={theme.text.muted} />
+                  <Text style={s.staleEmptyText}>Sin conexión · aún no hay torneos guardados</Text>
+                </View>
+              );
+            }
             return (
               <View style={s.emptyState}>
                 <Feather name="flag" size={48} color={theme.text.muted} />
@@ -1509,6 +1554,33 @@ const makeStyles = (t) => StyleSheet.create({
   statusBadgeText: { fontFamily: 'PlusJakartaSans-SemiBold', color: '#d4af37', fontSize: 9, letterSpacing: 0.5 },
   statusBadgeFinished: { backgroundColor: t.bg.secondary },
   statusBadgeTextFinished: { color: t.text.muted },
+
+  staleBanner: {
+    flexDirection: 'row', alignItems: 'center', gap: 8,
+    paddingVertical: 8, paddingHorizontal: 14,
+    backgroundColor: 'rgba(199, 122, 10, 0.12)',
+    borderRadius: 8, marginBottom: 10, marginTop: 4,
+  },
+  staleBannerText: {
+    fontFamily: 'PlusJakartaSans-Medium',
+    fontSize: 13, color: '#c77a0a',
+  },
+  tournamentCardDisabled: { opacity: 0.5 },
+  offlineBadge: {
+    flexDirection: 'row', alignItems: 'center', gap: 4,
+    paddingVertical: 2, paddingHorizontal: 6, borderRadius: 6,
+    backgroundColor: 'rgba(199, 122, 10, 0.15)',
+  },
+  offlineBadgeText: {
+    fontSize: 10, fontFamily: 'PlusJakartaSans-SemiBold', color: '#c77a0a',
+  },
+  staleEmpty: {
+    alignItems: 'center', paddingVertical: 48, paddingHorizontal: 24, gap: 12,
+  },
+  staleEmptyText: {
+    fontFamily: 'PlusJakartaSans-Medium',
+    fontSize: 14, color: t.text.muted, textAlign: 'center',
+  },
 
   // Empty state
   emptyState: { alignItems: 'center', paddingVertical: 60, gap: 12 },

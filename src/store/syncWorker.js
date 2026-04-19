@@ -1,7 +1,10 @@
 import { supabase } from '../lib/supabase';
 import { syncQueue } from './syncQueue';
 import { mergeTournaments } from './merge';
-import { saveLocal, pushRemote, readLocal, _setSyncStatus } from './tournamentStore';
+import {
+  saveLocal, pushRemote, readLocal, _setSyncStatus,
+  _appendConflicts, _setLastSyncAt,
+} from './tournamentStore';
 import { upsertPlayer } from './libraryStore';
 import { isOnline, subscribeConnectivity } from '../lib/connectivity';
 
@@ -39,10 +42,14 @@ async function drainTournament(tournamentId, entries) {
     return;
   }
   const remote = await fetchRemote(tournamentId);
-  const merged = mergeTournaments(local, remote);
+  const { merged, conflicts } = mergeTournaments(local, remote);
 
   await saveLocal(merged);
   await pushRemote(merged);
+
+  if (conflicts.length > 0) {
+    await _appendConflicts(conflicts);
+  }
 
   for (const e of entries) {
     const pathTs = merged._meta?.[e.path] ?? 0;
@@ -75,7 +82,12 @@ async function drainOnce() {
   }
 
   const remaining = await syncQueue.all();
-  _setSyncStatus(remaining.length === 0 ? 'idle' : 'pending');
+  if (remaining.length === 0) {
+    await _setLastSyncAt(Date.now());
+    _setSyncStatus('idle');
+  } else {
+    _setSyncStatus('pending');
+  }
 }
 
 export function scheduleSync() {

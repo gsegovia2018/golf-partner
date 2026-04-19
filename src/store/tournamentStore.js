@@ -1,9 +1,16 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { supabase } from '../lib/supabase';
+import { tournamentsIndex } from './tournamentsIndex';
 
 const ACTIVE_ID_KEY = '@golf_active_id';
 const LEGACY_TOURNAMENTS_KEY = '@golf_tournaments';
 const LEGACY_KEY = '@golf_tournament';
+
+const CONFLICT_LOG_KEY = '@golf_conflict_log';       // array of conflict entries, cap 20 FIFO
+const CONFLICT_UNREAD_KEY = '@golf_conflict_unread'; // integer
+const LAST_SYNC_AT_KEY = '@golf_last_sync_at';       // ms epoch of last successful drain
+
+const CONFLICT_LOG_CAP = 20;
 
 // Runs once: pushes any locally-stored tournaments up to Supabase then clears local keys.
 async function migrate() {
@@ -63,7 +70,9 @@ export async function loadAllTournaments() {
       .from('tournaments').select('data')
       .order('created_at', { ascending: false });
     if (error) throw error;
-    return data.map((row) => ({ ...row.data, _role: 'owner' }));
+    const list = data.map((row) => ({ ...row.data, _role: 'owner' }));
+    tournamentsIndex.writeIndex(list).catch(() => {});
+    return list;
   }
 
   const [{ data: owned, error: ownedErr }, { data: memberships, error: memberErr }] = await Promise.all([
@@ -86,7 +95,37 @@ export async function loadAllTournaments() {
     if (!m.tournaments?.data || ownedIds.has(m.tournaments.data.id)) return;
     result.push({ ...m.tournaments.data, _role: m.role });
   });
-  return result.sort((a, b) => b.id - a.id);
+  const sorted = result.sort((a, b) => b.id - a.id);
+  // Fire-and-forget: keep the offline index in sync with the latest remote list.
+  tournamentsIndex.writeIndex(sorted).catch(() => {});
+  return sorted;
+}
+
+// Used by Home. Tries remote first; on failure, returns the last-known index
+// marked with `_stale: true` plus a `_openableIds` set for rendering
+// non-openable cards. Never throws.
+export async function loadAllTournamentsWithFallback() {
+  try {
+    const list = await loadAllTournaments();
+    return { list, stale: false, openableIds: null };
+  } catch (_) {
+    const [index, openable] = await Promise.all([
+      tournamentsIndex.readIndex(),
+      tournamentsIndex.getLocalBlobIds(),
+    ]);
+    return {
+      list: index.map((row) => ({
+        id: row.id,
+        name: row.name,
+        createdAt: row.createdAt,
+        _role: row.role,
+        updatedAt: row.updatedAt,
+        _stale: true,
+      })),
+      stale: true,
+      openableIds: new Set(openable),
+    };
+  }
 }
 
 export async function loadTournament() {
@@ -187,6 +226,18 @@ export async function deleteTournament(id) {
   const { error } = await supabase.from('tournaments').delete().eq('id', id);
   if (error) throw error;
   if (activeId === id) await AsyncStorage.removeItem(ACTIVE_ID_KEY);
+  // Mirror the delete into the offline layer: drop the blob cache and
+  // remove the id from the tournaments index so Home doesn't show a
+  // phantom card after next cold start.
+  await AsyncStorage.removeItem(ACTIVE_TOURNAMENT_KEY + id);
+  try {
+    const current = await tournamentsIndex.readIndex();
+    const next = current.filter((row) => row.id !== id);
+    await tournamentsIndex.writeIndex(next.map((row) => ({
+      id: row.id, name: row.name, createdAt: row.createdAt,
+      _role: row.role, updatedAt: row.updatedAt,
+    })));
+  } catch (_) { /* index cleanup is best-effort */ }
   _emitChange();
 }
 
@@ -921,4 +972,102 @@ export function isRoundInProgress(tournament) {
     entered += Object.keys(perPlayer).length;
   }
   return entered > 0 && entered < expected;
+}
+
+// ── Conflict log observable ──────────────────────────────────────────────────
+
+let _conflictLog = null;      // lazy-loaded array
+let _conflictUnread = null;   // lazy-loaded integer
+let _lastSyncAt = null;       // lazy-loaded number | null
+const _conflictSubs = new Set();
+let _hydrationPromise = null;
+
+async function _ensureConflictLoaded() {
+  if (_conflictLog != null) return;
+  if (!_hydrationPromise) {
+    _hydrationPromise = (async () => {
+      const [rawLog, rawUnread, rawLast] = await Promise.all([
+        AsyncStorage.getItem(CONFLICT_LOG_KEY),
+        AsyncStorage.getItem(CONFLICT_UNREAD_KEY),
+        AsyncStorage.getItem(LAST_SYNC_AT_KEY),
+      ]);
+      try { _conflictLog = rawLog ? JSON.parse(rawLog) : []; }
+      catch { _conflictLog = []; }
+      if (!Array.isArray(_conflictLog)) _conflictLog = [];
+      const n = parseInt(rawUnread ?? '0', 10);
+      _conflictUnread = Number.isFinite(n) && n >= 0 ? n : 0;
+      const t = parseInt(rawLast ?? '0', 10);
+      _lastSyncAt = Number.isFinite(t) && t > 0 ? t : null;
+    })();
+  }
+  return _hydrationPromise;
+}
+
+function _emitConflicts() {
+  const snapshot = { log: _conflictLog.slice(), unread: _conflictUnread, lastSyncAt: _lastSyncAt };
+  _conflictSubs.forEach((fn) => { try { fn(snapshot); } catch (_) {} });
+}
+
+export async function getConflicts() {
+  await _ensureConflictLoaded();
+  return _conflictLog.slice();
+}
+
+export async function getConflictUnreadCount() {
+  await _ensureConflictLoaded();
+  return _conflictUnread;
+}
+
+export async function getLastSyncAt() {
+  await _ensureConflictLoaded();
+  return _lastSyncAt;
+}
+
+export function subscribeConflicts(fn) {
+  _conflictSubs.add(fn);
+  _ensureConflictLoaded().then(() => {
+    try { fn({ log: _conflictLog.slice(), unread: _conflictUnread, lastSyncAt: _lastSyncAt }); }
+    catch (_) {}
+  });
+  return () => _conflictSubs.delete(fn);
+}
+
+// INVARIANT: the writer helpers below (_appendConflicts, _setLastSyncAt,
+// markConflictsRead) are expected to run serially. The sync worker drains
+// through `drainOnce` which is itself guarded by the `_running` flag in
+// syncWorker.js, and markConflictsRead is only called from UI open events.
+// If a second concurrent writer is introduced, add a write-chain mutex here.
+
+// Worker-only: append a batch of conflicts and bump unread. FIFO cap.
+export async function _appendConflicts(entries) {
+  if (!entries || entries.length === 0) return;
+  await _ensureConflictLoaded();
+  const next = _conflictLog.concat(entries);
+  // Drop oldest if we exceed cap.
+  const trimmed = next.length > CONFLICT_LOG_CAP
+    ? next.slice(next.length - CONFLICT_LOG_CAP)
+    : next;
+  _conflictLog = trimmed;
+  _conflictUnread = _conflictUnread + entries.length;
+  await AsyncStorage.multiSet([
+    [CONFLICT_LOG_KEY, JSON.stringify(_conflictLog)],
+    [CONFLICT_UNREAD_KEY, String(_conflictUnread)],
+  ]);
+  _emitConflicts();
+}
+
+// Worker-only: record a successful drain timestamp.
+export async function _setLastSyncAt(ts) {
+  await _ensureConflictLoaded();
+  _lastSyncAt = ts;
+  await AsyncStorage.setItem(LAST_SYNC_AT_KEY, String(ts));
+  _emitConflicts();
+}
+
+export async function markConflictsRead() {
+  await _ensureConflictLoaded();
+  if (_conflictUnread === 0) return;
+  _conflictUnread = 0;
+  await AsyncStorage.setItem(CONFLICT_UNREAD_KEY, '0');
+  _emitConflicts();
 }
