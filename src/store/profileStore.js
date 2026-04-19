@@ -1,3 +1,4 @@
+import * as ImageManipulator from 'expo-image-manipulator';
 import { supabase } from '../lib/supabase';
 import {
   loadAllTournaments,
@@ -6,28 +7,30 @@ import {
 } from './tournamentStore';
 
 // One row per auth.users.id — created by a trigger on signup, edited from
-// ProfileScreen. `display_name` is also what we match against the
-// per-tournament player entries to compute personal stats.
+// ProfileScreen. `username` is a unique lowercase handle; `display_name`
+// is the free-text name shown in UIs.
 export async function loadProfile() {
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) return null;
   const { data, error } = await supabase
     .from('profiles')
-    .select('user_id, display_name, handicap, avatar_color, updated_at')
+    .select('user_id, username, display_name, handicap, avatar_color, avatar_url, updated_at')
     .eq('user_id', user.id)
     .maybeSingle();
   if (error) throw error;
   return {
     userId: user.id,
     email: user.email,
+    username: data?.username ?? '',
     displayName: data?.display_name ?? '',
     handicap: data?.handicap ?? null,
     avatarColor: data?.avatar_color ?? null,
+    avatarUrl: data?.avatar_url ?? null,
     updatedAt: data?.updated_at ?? null,
   };
 }
 
-export async function upsertProfile({ displayName, handicap, avatarColor }) {
+export async function upsertProfile({ username, displayName, handicap, avatarColor, avatarUrl }) {
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) throw new Error('Not signed in');
   const row = {
@@ -37,18 +40,57 @@ export async function upsertProfile({ displayName, handicap, avatarColor }) {
     avatar_color: avatarColor || null,
     updated_at: new Date().toISOString(),
   };
+  if (avatarUrl !== undefined) row.avatar_url = avatarUrl || null;
+  // Only write username if provided — blank means "don't touch". Keep it
+  // lowercased so the unique(lower(username)) index can't fail silently.
+  if (username !== undefined && username !== null && username !== '') {
+    row.username = String(username).trim().toLowerCase();
+  }
   const { error } = await supabase.from('profiles').upsert(row);
   if (error) throw error;
 }
 
-// Match on player name (case-insensitive, trimmed). 4-friends app, names
-// are distinct; if that ever stops being true we can layer an explicit
-// claim table on top. Returns null entries when the name isn't found in
-// the tournament's player list.
-function findPlayerByName(tournament, displayName) {
-  if (!displayName) return null;
-  const target = displayName.trim().toLowerCase();
-  return tournament.players.find((p) => p.name.trim().toLowerCase() === target) ?? null;
+// Upload a locally-picked image to the `avatars` bucket under the user's
+// own folder (RLS enforces this) and return the public URL. Shrinks to
+// 256px first so we're not shipping 4 MB originals around.
+export async function uploadAvatar(localUri) {
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user) throw new Error('Not signed in');
+
+  const resized = await ImageManipulator.manipulateAsync(
+    localUri,
+    [{ resize: { width: 256, height: 256 } }],
+    { compress: 0.82, format: ImageManipulator.SaveFormat.JPEG },
+  );
+
+  // fetch(uri) resolves file:// / content:// / data: URIs on both native
+  // and web, giving us a Blob we can hand directly to supabase-js.
+  const resp = await fetch(resized.uri);
+  const blob = await resp.blob();
+
+  const path = `${user.id}/avatar-${Date.now()}.jpg`;
+  const { error } = await supabase.storage
+    .from('avatars')
+    .upload(path, blob, { contentType: 'image/jpeg', upsert: true });
+  if (error) throw error;
+
+  const { data: pub } = supabase.storage.from('avatars').getPublicUrl(path);
+  return pub.publicUrl;
+}
+
+// Resolve "me" inside a tournament: prefer the embedded player with
+// user_id === current user. Fall back to name match for legacy data
+// written before user_id was stamped onto embedded players.
+function findMyPlayer(tournament, userId, displayName) {
+  if (userId) {
+    const byId = tournament.players.find((p) => p.user_id === userId);
+    if (byId) return byId;
+  }
+  if (displayName) {
+    const target = displayName.trim().toLowerCase();
+    return tournament.players.find((p) => p.name.trim().toLowerCase() === target) ?? null;
+  }
+  return null;
 }
 
 function isRoundPlayed(round, index, tournament) {
@@ -59,8 +101,8 @@ function isRoundPlayed(round, index, tournament) {
 // Aggregates: per-user stats computed client-side from tournaments the
 // user can see (own + invited). Keeping this client-side avoids a new
 // server-side aggregation table while the data volume is tiny.
-export async function computePersonalStats(displayName) {
-  if (!displayName?.trim()) {
+export async function computePersonalStats({ userId, displayName }) {
+  if (!userId && !displayName?.trim()) {
     return {
       tournamentsPlayed: 0,
       roundsPlayed: 0,
@@ -78,7 +120,7 @@ export async function computePersonalStats(displayName) {
   let wins = 0;
 
   for (const t of tournaments) {
-    const me = findPlayerByName(t, displayName);
+    const me = findMyPlayer(t, userId, displayName);
     if (!me) continue;
     tournamentsPlayed += 1;
 

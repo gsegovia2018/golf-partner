@@ -7,11 +7,14 @@ import { Feather } from '@expo/vector-icons';
 import { useTheme } from '../theme/ThemeContext';
 import { joinTournamentByCode, setActiveTournament } from '../store/tournamentStore';
 
-export default function JoinTournamentScreen({ navigation }) {
+export default function JoinTournamentScreen({ navigation, route }) {
   const { theme } = useTheme();
   const s = makeStyles(theme);
 
-  const [code, setCode] = useState('');
+  // Allow deep-links / share URLs to pre-fill the code (e.g. `?invite=ABC123`
+  // is picked up by AppNavigator and forwarded as route.params.code).
+  const initialCode = (route?.params?.code ?? '').toString().toUpperCase().slice(0, 6);
+  const [code, setCode] = useState(initialCode);
   const [loading, setLoading] = useState(false);
 
   async function handleJoin() {

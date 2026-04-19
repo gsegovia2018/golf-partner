@@ -1,15 +1,16 @@
 import React, { useCallback, useState } from 'react';
 import {
   View, Text, TextInput, TouchableOpacity, StyleSheet, ScrollView,
-  ActivityIndicator, Alert, Platform,
+  ActivityIndicator, Alert, Platform, Image,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useFocusEffect } from '@react-navigation/native';
 import { Feather } from '@expo/vector-icons';
+import * as ImagePicker from 'expo-image-picker';
 
 import { useTheme } from '../theme/ThemeContext';
 import { supabase } from '../lib/supabase';
-import { loadProfile, upsertProfile, computePersonalStats } from '../store/profileStore';
+import { loadProfile, upsertProfile, uploadAvatar, computePersonalStats } from '../store/profileStore';
 
 const AVATAR_COLORS = ['#006747', '#c77b38', '#1b4965', '#7b3f6b', '#4a6d3f', '#b33951'];
 
@@ -22,9 +23,12 @@ export default function ProfileScreen({ navigation }) {
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
 
+  const [username, setUsername] = useState('');
   const [displayName, setDisplayName] = useState('');
   const [handicap, setHandicap] = useState('');
   const [avatarColor, setAvatarColor] = useState(null);
+  const [avatarUrl, setAvatarUrl] = useState(null);
+  const [uploadingAvatar, setUploadingAvatar] = useState(false);
   const [dirty, setDirty] = useState(false);
 
   const load = useCallback(async () => {
@@ -32,12 +36,14 @@ export default function ProfileScreen({ navigation }) {
     try {
       const p = await loadProfile();
       setProfile(p);
+      setUsername(p?.username ?? '');
       setDisplayName(p?.displayName ?? '');
       setHandicap(p?.handicap != null ? String(p.handicap) : '');
       setAvatarColor(p?.avatarColor ?? null);
+      setAvatarUrl(p?.avatarUrl ?? null);
       setDirty(false);
-      if (p?.displayName) {
-        setStats(await computePersonalStats(p.displayName));
+      if (p?.userId || p?.displayName) {
+        setStats(await computePersonalStats({ userId: p?.userId, displayName: p?.displayName }));
       } else {
         setStats(null);
       }
@@ -51,14 +57,72 @@ export default function ProfileScreen({ navigation }) {
   useFocusEffect(useCallback(() => { load(); }, [load]));
 
   async function save() {
+    // Username: 3-20 chars, lowercase letters/digits/underscore only. Keeps
+    // it safe to drop into URLs and @-mentions later.
+    const trimmedUsername = username.trim().toLowerCase();
+    if (trimmedUsername && !/^[a-z0-9_]{3,20}$/.test(trimmedUsername)) {
+      Alert.alert(
+        'Invalid username',
+        'Username must be 3–20 characters: lowercase letters, digits or underscores.',
+      );
+      return;
+    }
+
+    // Golf handicap range: scratch/low-single digits up to 54 (max index
+    // allowed by WHS). Reject clearly wrong values so nobody saves 200
+    // and wrecks their Stableford math downstream.
+    if (handicap.trim() !== '') {
+      const n = parseInt(handicap, 10);
+      if (!Number.isFinite(n) || n < 0 || n > 54) {
+        Alert.alert('Invalid handicap', 'Handicap must be a whole number between 0 and 54.');
+        return;
+      }
+    }
     setSaving(true);
     try {
-      await upsertProfile({ displayName, handicap, avatarColor });
+      await upsertProfile({ username: trimmedUsername, displayName, handicap, avatarColor, avatarUrl });
       await load();
     } catch (err) {
-      Alert.alert('Error', err.message ?? 'Could not save profile');
+      const msg = err?.message ?? 'Could not save profile';
+      // Unique-constraint violation on (lower(username)) surfaces as 23505.
+      if (err?.code === '23505' || /duplicate|unique/i.test(msg)) {
+        Alert.alert('Username taken', 'Pick another username.');
+      } else {
+        Alert.alert('Error', msg);
+      }
     } finally {
       setSaving(false);
+    }
+  }
+
+  async function pickAvatar() {
+    if (Platform.OS !== 'web') {
+      const perm = await ImagePicker.requestMediaLibraryPermissionsAsync();
+      if (!perm.granted) {
+        Alert.alert('Permission needed', 'Allow photo library access to change your avatar.');
+        return;
+      }
+    }
+    const result = await ImagePicker.launchImageLibraryAsync({
+      mediaTypes: ImagePicker.MediaTypeOptions.Images,
+      allowsEditing: true,
+      aspect: [1, 1],
+      quality: 1,
+    });
+    if (result.canceled) return;
+    setUploadingAvatar(true);
+    try {
+      const uri = result.assets[0].uri;
+      const publicUrl = await uploadAvatar(uri);
+      // Persist immediately so other screens (Members / PlayerPicker)
+      // see the new photo on their next reload, without waiting for the
+      // user to tap Save.
+      await upsertProfile({ avatarUrl: publicUrl });
+      setAvatarUrl(publicUrl);
+    } catch (err) {
+      Alert.alert('Error', err.message ?? 'Could not upload avatar');
+    } finally {
+      setUploadingAvatar(false);
     }
   }
 
@@ -94,13 +158,48 @@ export default function ProfileScreen({ navigation }) {
       ) : (
         <ScrollView style={s.scroll} contentContainerStyle={s.content} automaticallyAdjustKeyboardInsets>
           <View style={s.heroCard}>
-            <View style={[s.avatar, { backgroundColor: resolvedAvatarColor }]}>
-              <Text style={s.avatarText}>{initials}</Text>
-            </View>
+            <TouchableOpacity
+              style={[s.avatar, { backgroundColor: resolvedAvatarColor, overflow: 'hidden' }]}
+              onPress={pickAvatar}
+              activeOpacity={0.8}
+              disabled={uploadingAvatar}
+            >
+              {avatarUrl
+                ? <Image source={{ uri: avatarUrl }} style={{ width: '100%', height: '100%' }} />
+                : <Text style={s.avatarText}>{initials}</Text>}
+              {uploadingAvatar && (
+                <View style={s.avatarOverlay}>
+                  <ActivityIndicator color="#fff" />
+                </View>
+              )}
+              {!uploadingAvatar && (
+                <View style={s.avatarEditBadge}>
+                  <Feather name="camera" size={12} color="#fff" />
+                </View>
+              )}
+            </TouchableOpacity>
             <Text style={s.email}>{profile?.email}</Text>
           </View>
 
           <Text style={s.sectionLabel}>ACCOUNT</Text>
+
+          <View style={s.fieldGroup}>
+            <Text style={s.fieldLabel}>Username</Text>
+            <TextInput
+              style={s.input}
+              placeholder="shorthandle"
+              placeholderTextColor={theme.text.muted}
+              keyboardAppearance={theme.isDark ? 'dark' : 'light'}
+              selectionColor={theme.accent.primary}
+              value={username}
+              onChangeText={(v) => { setUsername(v.toLowerCase()); setDirty(true); }}
+              autoCapitalize="none"
+              autoCorrect={false}
+            />
+            <Text style={s.fieldHint}>
+              Unique, lowercase. 3–20 letters, digits or underscores. Used in links.
+            </Text>
+          </View>
 
           <View style={s.fieldGroup}>
             <Text style={s.fieldLabel}>Display name</Text>
@@ -115,7 +214,7 @@ export default function ProfileScreen({ navigation }) {
               autoCapitalize="words"
             />
             <Text style={s.fieldHint}>
-              Used to match you to players in tournaments for personal stats.
+              Shown in tournaments and on the leaderboard.
             </Text>
           </View>
 
@@ -251,10 +350,22 @@ const makeStyles = (theme) => StyleSheet.create({
 
   heroCard: { alignItems: 'center', marginBottom: 20 },
   avatar: {
-    width: 72, height: 72, borderRadius: 36,
+    width: 84, height: 84, borderRadius: 42,
     alignItems: 'center', justifyContent: 'center', marginBottom: 10,
   },
-  avatarText: { fontFamily: 'PlusJakartaSans-ExtraBold', fontSize: 24, color: '#ffd700' },
+  avatarText: { fontFamily: 'PlusJakartaSans-ExtraBold', fontSize: 26, color: '#ffd700' },
+  avatarEditBadge: {
+    position: 'absolute', right: -2, bottom: -2,
+    width: 26, height: 26, borderRadius: 13,
+    backgroundColor: theme.accent.primary,
+    alignItems: 'center', justifyContent: 'center',
+    borderWidth: 2, borderColor: theme.bg.primary,
+  },
+  avatarOverlay: {
+    ...StyleSheet.absoluteFillObject,
+    backgroundColor: 'rgba(0,0,0,0.4)',
+    alignItems: 'center', justifyContent: 'center',
+  },
   email: { fontFamily: 'PlusJakartaSans-Medium', color: theme.text.secondary, fontSize: 13 },
 
   sectionLabel: {

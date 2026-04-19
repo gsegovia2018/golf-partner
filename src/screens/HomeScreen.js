@@ -15,7 +15,8 @@ import {
   tournamentLeaderboard, tournamentBestWorstLeaderboard,
   roundPairLeaderboard, calcBestWorstBall, roundTotals,
   playerRoundBestWorstPoints,
-  DEFAULT_SETTINGS, generateInviteCode,
+  tournamentPlayerClinched, roundPairClinched,
+  DEFAULT_SETTINGS, generateInviteCode, setInviteRole,
 } from '../store/tournamentStore';
 
 // Web-only CSS scroll-snap. See ScorecardScreen.js for the rationale:
@@ -94,9 +95,11 @@ export default function HomeScreen({ navigation, route }) {
   const [refreshing, setRefreshing] = useState(false);
   const [showInvite, setShowInvite] = useState(false);
   const [inviteCode, setInviteCode] = useState('');
+  const [inviteRoleState, setInviteRoleState] = useState('editor');
   const [inviteLoading, setInviteLoading] = useState(false);
 
   const reload = useCallback(async () => {
+    setLoading(true);
     try {
       const [t, all] = await Promise.all([loadTournament(), loadAllTournaments()]);
       setTournament(t);
@@ -116,6 +119,19 @@ export default function HomeScreen({ navigation, route }) {
     const unsubscribe = navigation.addListener('focus', reload);
     return unsubscribe;
   }, [navigation, reload]);
+
+  // Web deep-link: if the URL has ?invite=CODE, auto-open the Join screen
+  // with the code pre-filled once the user is signed in. Strip the param
+  // from the URL afterwards so a refresh doesn't re-trigger.
+  useEffect(() => {
+    if (Platform.OS !== 'web' || typeof window === 'undefined') return;
+    const url = new URL(window.location.href);
+    const code = url.searchParams.get('invite');
+    if (!code) return;
+    url.searchParams.delete('invite');
+    window.history.replaceState({}, '', url.toString());
+    navigation.navigate('JoinTournament', { code: code.toUpperCase() });
+  }, [navigation]);
 
   // Keep the round pager pinned to the round play is actually on:
   // whenever `currentRound` advances (e.g. the user started the next
@@ -296,13 +312,26 @@ export default function HomeScreen({ navigation, route }) {
     setInviteLoading(true);
     setShowInvite(true);
     try {
-      const code = await generateInviteCode(tournament.id);
+      const { code, role } = await generateInviteCode(tournament.id);
       setInviteCode(code);
+      setInviteRoleState(role);
     } catch (err) {
       setShowInvite(false);
       Alert.alert('Error', err.message);
     } finally {
       setInviteLoading(false);
+    }
+  }
+
+  async function changeInviteRole(next) {
+    if (!tournament || next === inviteRoleState) return;
+    const prev = inviteRoleState;
+    setInviteRoleState(next); // optimistic
+    try {
+      await setInviteRole(tournament.id, next);
+    } catch (err) {
+      setInviteRoleState(prev);
+      Alert.alert('Error', err.message ?? 'Could not change invite role');
     }
   }
 
@@ -334,6 +363,11 @@ export default function HomeScreen({ navigation, route }) {
       : null),
     [tournament, selectedRoundData, selectedRoundHasScores, leaderboardBestBall],
   );
+  const tournamentMode = settings.scoringMode === 'bestball' ? 'bestball' : 'stableford';
+  const tournamentClinchedId = useMemo(
+    () => (tournament ? tournamentPlayerClinched(tournament, tournamentMode) : null),
+    [tournament, tournamentMode],
+  );
 
   // Stable callbacks for the memoised round pager pages. Keep references
   // stable across swipes so <RoundPage /> memoisation holds.
@@ -348,7 +382,15 @@ export default function HomeScreen({ navigation, route }) {
   const isViewer = tournament?._role === 'viewer';
   const userInitials = user?.email ? user.email.slice(0, 2).toUpperCase() : '?';
 
-  if (loading) {
+  // Show the green splash whenever a reload is in flight AND there's no
+  // data to render yet — covers initial mount (cold open) and re-focus
+  // cases where the cached state would otherwise flash an empty page
+  // (e.g. after deletion). When data IS already present, skip the splash
+  // so quick navigations don't blink the green panel.
+  const wouldRenderEmpty =
+    (showTournament && !tournament) ||
+    (showList && allTournaments.length === 0);
+  if (loading && wouldRenderEmpty) {
     return <LoadingSplash />;
   }
 
@@ -546,7 +588,14 @@ export default function HomeScreen({ navigation, route }) {
                 <Text style={[s.mastersRankText, { color: rankColor }]}>{i + 1}</Text>
               </View>
               <View style={s.mastersNameCol}>
-                <Text style={[s.mastersName, i === 0 && { fontFamily: 'PlusJakartaSans-Bold' }]}>{entry.player.name}</Text>
+                <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+                  <Text style={[s.mastersName, i === 0 && { fontFamily: 'PlusJakartaSans-Bold' }]} numberOfLines={1}>
+                    {entry.player.name}
+                  </Text>
+                  {entry.player.id === tournamentClinchedId && (
+                    <Feather name="award" size={12} color="#ffd700" />
+                  )}
+                </View>
                 <Text style={s.mastersRoundSub}>
                   R{selectedRound + 1} · {roundValue == null ? '—' : `${roundValue} ${roundUnit}`}
                 </Text>
@@ -742,8 +791,12 @@ export default function HomeScreen({ navigation, route }) {
       <Pressable style={s.modalBackdrop} onPress={() => setShowInvite(false)}>
         <Pressable style={s.modalSheet} onPress={() => {}}>
           <View style={s.modalHandle} />
-          <Text style={s.modalTitle}>Invite Viewers</Text>
-          <Text style={s.inviteSubtitle}>Share this code — anyone who enters it can follow this tournament.</Text>
+          <Text style={s.modalTitle}>Invite</Text>
+          <Text style={s.inviteSubtitle}>
+            {inviteRoleState === 'editor'
+              ? 'Anyone with this code can enter scores for this tournament.'
+              : 'Anyone with this code can view this tournament (read-only).'}
+          </Text>
           {inviteLoading
             ? <ActivityIndicator color={theme.accent.primary} style={{ marginVertical: 24 }} />
             : (
@@ -751,14 +804,49 @@ export default function HomeScreen({ navigation, route }) {
                 <Text style={s.inviteCode}>{inviteCode}</Text>
               </View>
             )}
+          <View style={s.inviteRoleRow}>
+            <TouchableOpacity
+              style={[s.inviteRoleBtn, inviteRoleState === 'editor' && s.inviteRoleBtnActive]}
+              onPress={() => changeInviteRole('editor')}
+              activeOpacity={0.7}
+              disabled={!inviteCode}
+            >
+              <Text style={[s.inviteRoleText, inviteRoleState === 'editor' && s.inviteRoleTextActive]}>
+                Editor
+              </Text>
+            </TouchableOpacity>
+            <TouchableOpacity
+              style={[s.inviteRoleBtn, inviteRoleState === 'viewer' && s.inviteRoleBtnActive]}
+              onPress={() => changeInviteRole('viewer')}
+              activeOpacity={0.7}
+              disabled={!inviteCode}
+            >
+              <Text style={[s.inviteRoleText, inviteRoleState === 'viewer' && s.inviteRoleTextActive]}>
+                Viewer
+              </Text>
+            </TouchableOpacity>
+          </View>
           <TouchableOpacity
             style={[s.menuItem, { borderBottomWidth: 0 }]}
-            onPress={() => Share.share({ message: `Join my golf tournament! Code: ${inviteCode}` })}
+            onPress={() => {
+              const origin = Platform.OS === 'web' && typeof window !== 'undefined'
+                ? window.location.origin
+                : null;
+              // On web the link auto-prefills the join code (see
+              // AppNavigator's ?invite handler). On native we share just
+              // the code until deep-linking is wired up.
+              // Blank line before the URL keeps WhatsApp from wrapping the
+              // text into the middle of the link and breaking the tap target.
+              const message = origin
+                ? `Join my golf tournament 🏌️\n\n${origin}/?invite=${inviteCode}`
+                : `Join my golf tournament! Code: ${inviteCode}`;
+              Share.share({ message });
+            }}
             activeOpacity={0.7}
             disabled={!inviteCode}
           >
             <Feather name="share-2" size={18} color={theme.accent.primary} />
-            <Text style={s.menuItemText}>Share Code</Text>
+            <Text style={s.menuItemText}>Share link</Text>
             <Feather name="chevron-right" size={16} color={theme.text.muted} />
           </TouchableOpacity>
         </Pressable>
@@ -1014,6 +1102,10 @@ const RoundPage = React.memo(function RoundPage({
 }) {
   const hasScores = round.scores && Object.keys(round.scores).length > 0;
   const hasPairs = Array.isArray(round.pairs) && round.pairs.length > 0;
+  const tournamentMode = settings?.scoringMode === 'bestball' ? 'bestball' : 'stableford';
+  const clinchedPairIdx = hasScores
+    ? roundPairClinched(round, players, settings, tournamentMode)
+    : null;
   return (
     <View
       style={[{ width }, PAGER_PAGE_SNAP_STYLE]}
@@ -1052,8 +1144,8 @@ const RoundPage = React.memo(function RoundPage({
       </View>
       {hasScores ? (
         roundBestBall
-          ? <BestBallRoundCard round={round} players={players} settings={settings} theme={theme} s={s} />
-          : <StablefordRoundCard round={round} players={players} theme={theme} s={s} />
+          ? <BestBallRoundCard round={round} players={players} settings={settings} clinchedPairIdx={clinchedPairIdx} theme={theme} s={s} />
+          : <StablefordRoundCard round={round} players={players} clinchedPairIdx={clinchedPairIdx} theme={theme} s={s} />
       ) : revealed && hasPairs ? (
         <PairsPreviewCard pairs={round.pairs} theme={theme} s={s} />
       ) : (
@@ -1080,24 +1172,37 @@ const PairsPreviewCard = React.memo(function PairsPreviewCard({ pairs, theme, s 
   );
 });
 
-const StablefordRoundCard = React.memo(function StablefordRoundCard({ round, players, theme, s }) {
+const StablefordRoundCard = React.memo(function StablefordRoundCard({ round, players, clinchedPairIdx, theme, s }) {
   const pairResults = roundPairLeaderboard(round, players);
+  // Map sorted-leaderboard position back to round.pairs index so we can
+  // tag the winner row with a crown when that pair is mathematically
+  // clinched. The leader row (pi === 0) is always first in pairResults.
+  const pairIdxFor = (members) => round.pairs.findIndex((pr) => (
+    pr.length === members.length && pr.every((p) => members.some((m) => m.player.id === p.id))
+  ));
   return (
     <>
-      {pairResults.map((pair, pi) => (
-        <View key={pi} style={[s.pairBlock, pi === 0 && s.winnerBlock]}>
-          {pi === 0 && <Text style={s.winnerBadge}>WINNER</Text>}
-          <View style={s.pairHeader}>
-            <Text style={s.pairNames}>{pair.members.map((m) => m.player.name).join(' & ')}</Text>
-            <Text style={s.pairPoints}>{pair.combinedPoints} pts</Text>
+      {pairResults.map((pair, pi) => {
+        const origIdx = pairIdxFor(pair.members);
+        const isClinched = clinchedPairIdx != null && origIdx === clinchedPairIdx;
+        return (
+          <View key={pi} style={[s.pairBlock, pi === 0 && s.winnerBlock]}>
+            {pi === 0 && <Text style={s.winnerBadge}>WINNER</Text>}
+            <View style={s.pairHeader}>
+              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6, flex: 1 }}>
+                <Text style={s.pairNames}>{pair.members.map((m) => m.player.name).join(' & ')}</Text>
+                {isClinched && <Feather name="award" size={14} color="#ffd700" />}
+              </View>
+              <Text style={s.pairPoints}>{pair.combinedPoints} pts</Text>
+            </View>
           </View>
-        </View>
-      ))}
+        );
+      })}
     </>
   );
 });
 
-const BestBallRoundCard = React.memo(function BestBallRoundCard({ round, players, settings, theme, s }) {
+const BestBallRoundCard = React.memo(function BestBallRoundCard({ round, players, settings, clinchedPairIdx, theme, s }) {
   const result = calcBestWorstBall(round, players);
   if (!result) return <Text style={s.pairMember}>No results yet</Text>;
 
@@ -1108,20 +1213,28 @@ const BestBallRoundCard = React.memo(function BestBallRoundCard({ round, players
   const p1Points = bestBall.pair1 * settings.bestBallValue + worstBall.pair1 * settings.worstBallValue;
   const p2Points = bestBall.pair2 * settings.bestBallValue + worstBall.pair2 * settings.worstBallValue;
   const winner = p1Points > p2Points ? 1 : p2Points > p1Points ? 2 : 0;
+  const p1Clinched = clinchedPairIdx === 0;
+  const p2Clinched = clinchedPairIdx === 1;
 
   return (
     <>
       <View style={[s.pairBlock, winner === 1 && s.winnerBlock]}>
         {winner === 1 && <Text style={s.winnerBadge}>WINNER</Text>}
         <View style={s.pairHeader}>
-          <Text style={s.pairNames}>{p1Names}</Text>
+          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6, flex: 1 }}>
+            <Text style={s.pairNames}>{p1Names}</Text>
+            {p1Clinched && <Feather name="award" size={14} color="#ffd700" />}
+          </View>
           <Text style={s.pairPoints}>{p1Points} pts</Text>
         </View>
       </View>
       <View style={[s.pairBlock, winner === 2 && s.winnerBlock]}>
         {winner === 2 && <Text style={s.winnerBadge}>WINNER</Text>}
         <View style={s.pairHeader}>
-          <Text style={s.pairNames}>{p2Names}</Text>
+          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6, flex: 1 }}>
+            <Text style={s.pairNames}>{p2Names}</Text>
+            {p2Clinched && <Feather name="award" size={14} color="#ffd700" />}
+          </View>
           <Text style={s.pairPoints}>{p2Points} pts</Text>
         </View>
       </View>
@@ -1452,4 +1565,19 @@ const makeStyles = (t) => StyleSheet.create({
     fontFamily: 'PlusJakartaSans-ExtraBold', color: t.accent.primary,
     fontSize: 36, letterSpacing: 10,
   },
+  inviteRoleRow: {
+    flexDirection: 'row', gap: 8, marginBottom: 12, paddingHorizontal: 4,
+  },
+  inviteRoleBtn: {
+    flex: 1, paddingVertical: 10, borderRadius: 10,
+    borderWidth: 1, borderColor: t.border.default,
+    alignItems: 'center', backgroundColor: t.bg.secondary,
+  },
+  inviteRoleBtnActive: {
+    backgroundColor: t.accent.primary, borderColor: t.accent.primary,
+  },
+  inviteRoleText: {
+    fontFamily: 'PlusJakartaSans-SemiBold', fontSize: 13, color: t.text.muted,
+  },
+  inviteRoleTextActive: { color: t.text.inverse },
 });

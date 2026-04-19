@@ -1,7 +1,7 @@
 import React, { useCallback, useState } from 'react';
 import {
   View, Text, TextInput, TouchableOpacity,
-  StyleSheet, ScrollView, Alert,
+  StyleSheet, ScrollView, Alert, Platform,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
@@ -157,8 +157,14 @@ export default function SetupScreen({ navigation }) {
       },
     });
 
-    await saveTournament(tournament);
-    navigation.replace('Home');
+    try {
+      await saveTournament(tournament);
+      navigation.replace('Home');
+    } catch (err) {
+      const msg = err?.message ?? 'Could not create tournament';
+      if (Platform.OS === 'web') window.alert(msg);
+      else Alert.alert('Error', msg);
+    }
   }
 
   return (

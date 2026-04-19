@@ -1,7 +1,7 @@
 import React, { useCallback, useState } from 'react';
 import {
   View, Text, TouchableOpacity, StyleSheet, ScrollView,
-  ActivityIndicator, Alert, Platform,
+  ActivityIndicator, Alert, Platform, Image,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useFocusEffect } from '@react-navigation/native';
@@ -81,16 +81,25 @@ export default function MembersScreen({ navigation, route }) {
           <Text style={s.sectionLabel}>{rows.length} {rows.length === 1 ? 'member' : 'members'}</Text>
 
           {rows.map((row) => {
-            const name = row.profile?.display_name || '(no display name)';
+            // Fallback chain: display_name → the signed-in user's own email
+            // (when the row is ourselves) → short user_id. Avoids the
+            // unhelpful "(no display name)" that shipped before.
+            const fallbackEmail = row.userId === user?.id ? user?.email : null;
+            const name = row.profile?.display_name
+              || fallbackEmail
+              || `Player ${row.userId.slice(0, 6)}`;
             const color = row.profile?.avatar_color || theme.accent.primary;
-            const initials = (row.profile?.display_name ?? '?').slice(0, 2).toUpperCase();
+            const initials = (row.profile?.display_name || fallbackEmail || '?')
+              .slice(0, 2).toUpperCase();
             const joined = formatDate(row.joinedAt);
             const isSelf = row.userId === user?.id;
             const canRemove = iAmOwner && row.role !== 'owner' && !isSelf;
             return (
               <View key={row.userId} style={s.row}>
                 <View style={[s.avatar, { backgroundColor: color }]}>
-                  <Text style={s.avatarText}>{initials}</Text>
+                  {row.profile?.avatar_url
+                    ? <Image source={{ uri: row.profile.avatar_url }} style={s.avatarImg} />
+                    : <Text style={s.avatarText}>{initials}</Text>}
                 </View>
                 <View style={s.info}>
                   <View style={s.nameRow}>
@@ -172,8 +181,9 @@ const makeStyles = (theme) => StyleSheet.create({
   },
   avatar: {
     width: 44, height: 44, borderRadius: 22,
-    alignItems: 'center', justifyContent: 'center',
+    alignItems: 'center', justifyContent: 'center', overflow: 'hidden',
   },
+  avatarImg: { width: '100%', height: '100%' },
   avatarText: { fontFamily: 'PlusJakartaSans-ExtraBold', color: '#ffd700', fontSize: 15 },
   info: { flex: 1 },
   nameRow: { flexDirection: 'row', alignItems: 'center', gap: 8 },

@@ -1,15 +1,18 @@
 import React, { useCallback, useState } from 'react';
 import {
   ActivityIndicator, ScrollView, StyleSheet,
-  Text, TextInput, TouchableOpacity, View, Alert,
+  Text, TextInput, TouchableOpacity, View, Alert, Image,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useFocusEffect } from '@react-navigation/native';
 import { Feather } from '@expo/vector-icons';
 
+import { v4 as uuidv4 } from 'uuid';
+
 import { useTheme } from '../theme/ThemeContext';
-import { fetchPlayers, upsertPlayer } from '../store/libraryStore';
+import { fetchPlayers } from '../store/libraryStore';
 import { setPendingPlayers } from '../lib/selectionBridge';
+import { mutate } from '../store/mutate';
 
 export default function PlayerPickerScreen({ navigation, route }) {
   const { theme } = useTheme();
@@ -49,7 +52,15 @@ export default function PlayerPickerScreen({ navigation, route }) {
     if (!newName.trim()) return;
     setSaving(true);
     try {
-      const player = await upsertPlayer({ name: newName.trim(), handicap: newHcp });
+      const playerId = uuidv4();
+      const hcp = parseInt(newHcp, 10) || 0;
+      const player = { id: playerId, name: newName.trim(), handicap: hcp };
+      await mutate(null, {
+        type: 'player.upsertLibrary',
+        playerId,
+        name: player.name,
+        handicap: hcp,
+      });
       setPlayers((prev) => [...prev, player]);
       setNewName('');
       setNewHcp('');
@@ -122,6 +133,11 @@ export default function PlayerPickerScreen({ navigation, route }) {
                     disabled={alreadyAdded}
                     activeOpacity={disabled ? 1 : 0.7}
                   >
+                    <View style={s.pickerAvatar}>
+                      {p.avatar_url
+                        ? <Image source={{ uri: p.avatar_url }} style={s.pickerAvatarImg} />
+                        : <Text style={s.pickerAvatarText}>{(p.name ?? '?').slice(0, 2).toUpperCase()}</Text>}
+                    </View>
                     <View style={s.rowLeft}>
                       <Text style={[s.playerName, alreadyAdded && s.textMuted]}>{p.name}</Text>
                       <Text style={s.hcpLabel}>HCP {p.handicap}</Text>
@@ -234,6 +250,15 @@ const makeStyles = (theme) => StyleSheet.create({
     backgroundColor: theme.isDark ? theme.accent.primary + '10' : theme.accent.light,
   },
   rowLeft: { flex: 1 },
+  pickerAvatar: {
+    width: 36, height: 36, borderRadius: 18, marginRight: 12,
+    backgroundColor: theme.isDark ? theme.bg.secondary : '#006747',
+    alignItems: 'center', justifyContent: 'center', overflow: 'hidden',
+  },
+  pickerAvatarImg: { width: '100%', height: '100%' },
+  pickerAvatarText: {
+    fontFamily: 'PlusJakartaSans-ExtraBold', color: '#ffd700', fontSize: 13,
+  },
   playerName: {
     color: theme.text.primary,
     fontSize: 16,
