@@ -46,6 +46,8 @@ export async function pickMedia({ source, mediaTypes, multi = false, selectionLi
     localUri: asset.uri,
     kind: asset.type === 'video' ? 'video' : 'photo',
     durationS: asset.duration ? asset.duration / 1000 : null,
+    mimeType: asset.mimeType ?? null,
+    fileName: asset.fileName ?? null,
   }));
 
   return multi ? mapped : mapped[0];
@@ -53,12 +55,12 @@ export async function pickMedia({ source, mediaTypes, multi = false, selectionLi
 
 export async function attachMedia({
   tournamentId, roundId, holeIndex, kind, localUri,
-  durationS, caption, uploaderLabel,
+  durationS, caption, uploaderLabel, mimeType, fileName,
 }) {
   const id = uuid();
   await enqueueMedia({
     id, tournamentId, roundId, holeIndex, kind, localUri,
-    durationS, caption, uploaderLabel,
+    durationS, caption, uploaderLabel, mimeType, fileName,
   });
   kickUploadWorker();
   return { id };
@@ -77,6 +79,8 @@ export async function attachManyMedia({ tournamentId, items }) {
       durationS: it.asset.durationS,
       caption: it.caption,
       uploaderLabel: it.uploaderLabel,
+      mimeType: it.asset.mimeType,
+      fileName: it.asset.fileName,
     });
     ids.push(id);
   }

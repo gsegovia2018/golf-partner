@@ -121,12 +121,19 @@ function LightboxItem({ item, active, styles }) {
 }
 
 function LightboxVideo({ uri, active, style }) {
+  // muted on first load so browsers don't block autoplay on web; the
+  // native controls let the user unmute. When the item scrolls out of
+  // view we pause it so audio doesn't bleed from off-screen pages.
   const player = useVideoPlayer(uri, (p) => {
     p.loop = false;
+    p.muted = true;
   });
   useEffect(() => {
-    if (active) player.play();
-    else player.pause();
+    if (active) {
+      try { player.play(); } catch (_) { /* autoplay may still be blocked; controls remain */ }
+    } else {
+      player.pause();
+    }
   }, [active, player]);
   return (
     <VideoView
