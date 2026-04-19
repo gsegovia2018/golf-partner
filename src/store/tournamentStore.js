@@ -552,19 +552,38 @@ export function tournamentLeaderboard(tournament) {
 }
 
 export async function generateInviteCode(tournamentId) {
-  const { data: existing } = await supabase
-    .from('tournament_invites').select('code')
-    .eq('tournament_id', tournamentId).maybeSingle();
-  if (existing?.code) return existing.code;
+  // Pick the oldest existing invite if there are several (historical data
+  // may have multiple rows before the "one invite per tournament" intent
+  // was enforced). maybeSingle() throws on multiple rows, so use limit(1).
+  const { data: existing, error: existingErr } = await supabase
+    .from('tournament_invites').select('code, role')
+    .eq('tournament_id', tournamentId)
+    .order('created_at', { ascending: true })
+    .limit(1);
+  if (existingErr) throw existingErr;
+  if (existing?.[0]) return { code: existing[0].code, role: existing[0].role ?? 'editor' };
 
   const userId = await getCurrentUserId();
   const code = Math.random().toString(36).substring(2, 8).toUpperCase();
   const { data, error } = await supabase
     .from('tournament_invites')
-    .insert({ tournament_id: tournamentId, code, created_by: userId })
-    .select('code').single();
+    .insert({ tournament_id: tournamentId, code, created_by: userId, role: 'editor' })
+    .select('code, role').single();
   if (error) throw error;
-  return data.code;
+  return { code: data.code, role: data.role ?? 'editor' };
+}
+
+// Flip an existing invite code between editor / viewer so owners can decide
+// whether a shared link gives read-only access or scoring rights.
+export async function setInviteRole(tournamentId, role) {
+  if (role !== 'editor' && role !== 'viewer') {
+    throw new Error(`Unknown role: ${role}`);
+  }
+  const { error } = await supabase
+    .from('tournament_invites')
+    .update({ role })
+    .eq('tournament_id', tournamentId);
+  if (error) throw error;
 }
 
 // Members list for a tournament: owner + everyone who joined via an invite

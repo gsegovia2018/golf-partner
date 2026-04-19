@@ -51,6 +51,16 @@ export default function ProfileScreen({ navigation }) {
   useFocusEffect(useCallback(() => { load(); }, [load]));
 
   async function save() {
+    // Golf handicap range: scratch/low-single digits up to 54 (max index
+    // allowed by WHS). Reject clearly wrong values so nobody saves 200
+    // and wrecks their Stableford math downstream.
+    if (handicap.trim() !== '') {
+      const n = parseInt(handicap, 10);
+      if (!Number.isFinite(n) || n < 0 || n > 54) {
+        Alert.alert('Invalid handicap', 'Handicap must be a whole number between 0 and 54.');
+        return;
+      }
+    }
     setSaving(true);
     try {
       await upsertProfile({ displayName, handicap, avatarColor });
