@@ -1,3 +1,4 @@
+import * as ImageManipulator from 'expo-image-manipulator';
 import { supabase } from '../lib/supabase';
 import {
   loadAllTournaments,
@@ -13,7 +14,7 @@ export async function loadProfile() {
   if (!user) return null;
   const { data, error } = await supabase
     .from('profiles')
-    .select('user_id, username, display_name, handicap, avatar_color, updated_at')
+    .select('user_id, username, display_name, handicap, avatar_color, avatar_url, updated_at')
     .eq('user_id', user.id)
     .maybeSingle();
   if (error) throw error;
@@ -24,11 +25,12 @@ export async function loadProfile() {
     displayName: data?.display_name ?? '',
     handicap: data?.handicap ?? null,
     avatarColor: data?.avatar_color ?? null,
+    avatarUrl: data?.avatar_url ?? null,
     updatedAt: data?.updated_at ?? null,
   };
 }
 
-export async function upsertProfile({ username, displayName, handicap, avatarColor }) {
+export async function upsertProfile({ username, displayName, handicap, avatarColor, avatarUrl }) {
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) throw new Error('Not signed in');
   const row = {
@@ -38,6 +40,7 @@ export async function upsertProfile({ username, displayName, handicap, avatarCol
     avatar_color: avatarColor || null,
     updated_at: new Date().toISOString(),
   };
+  if (avatarUrl !== undefined) row.avatar_url = avatarUrl || null;
   // Only write username if provided — blank means "don't touch". Keep it
   // lowercased so the unique(lower(username)) index can't fail silently.
   if (username !== undefined && username !== null && username !== '') {
@@ -45,6 +48,34 @@ export async function upsertProfile({ username, displayName, handicap, avatarCol
   }
   const { error } = await supabase.from('profiles').upsert(row);
   if (error) throw error;
+}
+
+// Upload a locally-picked image to the `avatars` bucket under the user's
+// own folder (RLS enforces this) and return the public URL. Shrinks to
+// 256px first so we're not shipping 4 MB originals around.
+export async function uploadAvatar(localUri) {
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user) throw new Error('Not signed in');
+
+  const resized = await ImageManipulator.manipulateAsync(
+    localUri,
+    [{ resize: { width: 256, height: 256 } }],
+    { compress: 0.82, format: ImageManipulator.SaveFormat.JPEG },
+  );
+
+  // fetch(uri) resolves file:// / content:// / data: URIs on both native
+  // and web, giving us a Blob we can hand directly to supabase-js.
+  const resp = await fetch(resized.uri);
+  const blob = await resp.blob();
+
+  const path = `${user.id}/avatar-${Date.now()}.jpg`;
+  const { error } = await supabase.storage
+    .from('avatars')
+    .upload(path, blob, { contentType: 'image/jpeg', upsert: true });
+  if (error) throw error;
+
+  const { data: pub } = supabase.storage.from('avatars').getPublicUrl(path);
+  return pub.publicUrl;
 }
 
 // Resolve "me" inside a tournament: prefer the embedded player with

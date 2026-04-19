@@ -1,7 +1,7 @@
 import React, { useCallback, useState } from 'react';
 import {
   ActivityIndicator, ScrollView, StyleSheet,
-  Text, TextInput, TouchableOpacity, View, Alert,
+  Text, TextInput, TouchableOpacity, View, Alert, Image,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useFocusEffect } from '@react-navigation/native';
@@ -133,6 +133,11 @@ export default function PlayerPickerScreen({ navigation, route }) {
                     disabled={alreadyAdded}
                     activeOpacity={disabled ? 1 : 0.7}
                   >
+                    <View style={s.pickerAvatar}>
+                      {p.avatar_url
+                        ? <Image source={{ uri: p.avatar_url }} style={s.pickerAvatarImg} />
+                        : <Text style={s.pickerAvatarText}>{(p.name ?? '?').slice(0, 2).toUpperCase()}</Text>}
+                    </View>
                     <View style={s.rowLeft}>
                       <Text style={[s.playerName, alreadyAdded && s.textMuted]}>{p.name}</Text>
                       <Text style={s.hcpLabel}>HCP {p.handicap}</Text>
@@ -245,6 +250,15 @@ const makeStyles = (theme) => StyleSheet.create({
     backgroundColor: theme.isDark ? theme.accent.primary + '10' : theme.accent.light,
   },
   rowLeft: { flex: 1 },
+  pickerAvatar: {
+    width: 36, height: 36, borderRadius: 18, marginRight: 12,
+    backgroundColor: theme.isDark ? theme.bg.secondary : '#006747',
+    alignItems: 'center', justifyContent: 'center', overflow: 'hidden',
+  },
+  pickerAvatarImg: { width: '100%', height: '100%' },
+  pickerAvatarText: {
+    fontFamily: 'PlusJakartaSans-ExtraBold', color: '#ffd700', fontSize: 13,
+  },
   playerName: {
     color: theme.text.primary,
     fontSize: 16,

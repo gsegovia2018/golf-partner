@@ -3,7 +3,12 @@ import { supabase } from '../lib/supabase';
 // ── Players ──────────────────────────────────────────────────────────────────
 
 export async function fetchPlayers() {
-  const { data, error } = await supabase.from('players').select('*').order('name');
+  // `*` already includes avatar_url + user_id (added by later migrations);
+  // kept explicit to signal downstream consumers what to rely on.
+  const { data, error } = await supabase
+    .from('players')
+    .select('id, name, handicap, user_id, avatar_url, created_at')
+    .order('name');
   if (error) throw error;
   return data;
 }
