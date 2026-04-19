@@ -1,7 +1,9 @@
+import { Platform } from 'react-native';
 import * as ImageManipulator from 'expo-image-manipulator';
 import * as VideoThumbnails from 'expo-video-thumbnails';
 import { supabase } from './supabase';
 import { insertMediaRow } from '../store/mediaStore';
+import { generateVideoThumbWeb } from './videoThumbWeb';
 
 const BUCKET = 'tournament-media';
 
@@ -36,7 +38,12 @@ async function makeThumbnail(uri, kind) {
     );
     return result.uri;
   }
-  const { uri: thumbUri } = await VideoThumbnails.getThumbnailAsync(uri, { time: 500 });
+  const thumbUri = Platform.OS === 'web'
+    ? await generateVideoThumbWeb(uri, { timeSeconds: 0.5, quality: 0.7 })
+    : (await VideoThumbnails.getThumbnailAsync(uri, { time: 500 })).uri;
+  // ImageManipulator supports web too, but re-encoding an already-compressed
+  // canvas JPEG offers little; on web we ship the canvas output directly.
+  if (Platform.OS === 'web') return thumbUri;
   const resized = await ImageManipulator.manipulateAsync(
     thumbUri,
     [{ resize: { width: 400 } }],

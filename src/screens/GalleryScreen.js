@@ -1,11 +1,15 @@
-import React, { useEffect, useMemo, useState } from 'react';
-import { View, Text, TouchableOpacity, ScrollView, Image, FlatList, Dimensions, StyleSheet, Modal } from 'react-native';
+import React, { useCallback, useEffect, useMemo, useState } from 'react';
+import { View, Text, TouchableOpacity, ScrollView, Image, FlatList, Dimensions, StyleSheet, Modal, Alert } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Feather } from '@expo/vector-icons';
 import { useTheme } from '../theme/ThemeContext';
 import { useTournamentMedia } from '../hooks/useTournamentMedia';
 import { loadTournament } from '../store/tournamentStore';
 import MediaLightbox from '../components/MediaLightbox';
+import CaptureMenuSheet from '../components/CaptureMenuSheet';
+import AttachMediaSheet from '../components/AttachMediaSheet';
+import BatchAttachSheet from '../components/BatchAttachSheet';
+import { pickMedia, attachMedia, attachManyMedia } from '../lib/mediaCapture';
 
 const { width } = Dimensions.get('window');
 const GAP = 4;
@@ -22,8 +26,73 @@ export default function GalleryScreen({ route, navigation }) {
   const [filter, setFilter] = useState({ kind: 'all' });
   const [holePickerVisible, setHolePickerVisible] = useState(false);
   const [lightbox, setLightbox] = useState({ visible: false, index: 0 });
+  const [captureMenuVisible, setCaptureMenuVisible] = useState(false);
+  const [singleAsset, setSingleAsset] = useState(null);
+  const [batchAssets, setBatchAssets] = useState(null);
 
   useEffect(() => { loadTournament().then(setTournament); }, []);
+
+  const defaultRoundIndex = useMemo(() => {
+    if (!tournament?.rounds?.length) return 0;
+    // If filter is pinned to a specific round, prefer that; else currentRound.
+    if (filter.kind === 'round') return filter.roundIndex;
+    return Math.min(tournament.currentRound ?? 0, tournament.rounds.length - 1);
+  }, [tournament, filter]);
+
+  const openAdd = useCallback(() => setCaptureMenuVisible(true), []);
+
+  const handleCaptureSelect = useCallback(async ({ source, mediaTypes }) => {
+    setCaptureMenuVisible(false);
+    try {
+      const result = await pickMedia({
+        source,
+        mediaTypes,
+        multi: source === 'library',
+      });
+      if (!result) return;
+      if (Array.isArray(result)) {
+        if (result.length === 0) return;
+        if (result.length === 1) setSingleAsset(result[0]);
+        else setBatchAssets(result);
+      } else {
+        setSingleAsset(result);
+      }
+    } catch (e) {
+      Alert.alert('No se pudo capturar', String(e?.message ?? e));
+    }
+  }, []);
+
+  const onSingleConfirm = useCallback(async ({ holeIndex, caption, uploaderLabel }) => {
+    const asset = singleAsset;
+    setSingleAsset(null);
+    if (!asset || !tournament) return;
+    const round = tournament.rounds?.[defaultRoundIndex];
+    if (!round) return;
+    try {
+      await attachMedia({
+        tournamentId: tournament.id,
+        roundId: round.id,
+        holeIndex,
+        kind: asset.kind,
+        localUri: asset.localUri,
+        durationS: asset.durationS,
+        caption,
+        uploaderLabel,
+      });
+    } catch (e) {
+      Alert.alert('No se pudo adjuntar', String(e?.message ?? e));
+    }
+  }, [singleAsset, tournament, defaultRoundIndex]);
+
+  const onBatchConfirm = useCallback(async (payload) => {
+    setBatchAssets(null);
+    if (!tournament) return;
+    try {
+      await attachManyMedia({ tournamentId: tournament.id, items: payload });
+    } catch (e) {
+      Alert.alert('No se pudieron adjuntar', String(e?.message ?? e));
+    }
+  }, [tournament]);
 
   const filtered = useMemo(() => {
     if (!tournament) return items;
@@ -124,6 +193,32 @@ export default function GalleryScreen({ route, navigation }) {
         initialIndex={lightbox.index}
         onClose={() => setLightbox({ visible: false, index: 0 })}
       />
+
+      <TouchableOpacity style={s.fab} onPress={openAdd} accessibilityLabel="Añadir recuerdo" activeOpacity={0.85}>
+        <Feather name="plus" size={26} color={theme.text.inverse} />
+      </TouchableOpacity>
+
+      <CaptureMenuSheet
+        visible={captureMenuVisible}
+        onSelect={handleCaptureSelect}
+        onClose={() => setCaptureMenuVisible(false)}
+      />
+      <AttachMediaSheet
+        visible={!!singleAsset}
+        asset={singleAsset}
+        holes={tournament?.rounds?.[defaultRoundIndex]?.holes ?? []}
+        defaultHoleIndex={null}
+        onCancel={() => setSingleAsset(null)}
+        onConfirm={onSingleConfirm}
+      />
+      <BatchAttachSheet
+        visible={!!batchAssets}
+        assets={batchAssets ?? []}
+        rounds={tournament?.rounds ?? []}
+        defaultRoundIndex={defaultRoundIndex}
+        onCancel={() => setBatchAssets(null)}
+        onConfirm={onBatchConfirm}
+      />
     </SafeAreaView>
   );
 }
@@ -167,4 +262,13 @@ const makeStyles = (theme) => StyleSheet.create({
   holeBtnLabel: { fontFamily: 'PlusJakartaSans-SemiBold', color: theme.text.primary },
   modalCancel: { marginTop: 16, paddingVertical: 12, alignItems: 'center' },
   modalCancelLabel: { fontFamily: 'PlusJakartaSans-SemiBold', color: theme.accent.primary },
+  fab: {
+    position: 'absolute',
+    right: 20, bottom: 28,
+    width: 56, height: 56, borderRadius: 28,
+    backgroundColor: theme.accent.primary,
+    alignItems: 'center', justifyContent: 'center',
+    shadowColor: '#000', shadowOpacity: 0.25, shadowRadius: 8, shadowOffset: { width: 0, height: 3 },
+    elevation: 6,
+  },
 });
