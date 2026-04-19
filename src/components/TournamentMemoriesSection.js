@@ -9,7 +9,7 @@ const GAP = 4;
 const HORIZONTAL_PAD = 16;
 const TILE = (width - HORIZONTAL_PAD * 2 - GAP * 2) / 3;
 
-export default function TournamentMemoriesSection({ tournamentId, onOpenGallery, onOpenLightbox }) {
+export default function TournamentMemoriesSection({ tournamentId, onOpenGallery, onOpenLightbox, onAdd }) {
   const { theme } = useTheme();
   const s = makeStyles(theme);
   const { items } = useTournamentMedia(tournamentId);
@@ -17,7 +17,14 @@ export default function TournamentMemoriesSection({ tournamentId, onOpenGallery,
 
   return (
     <View style={s.wrap}>
-      <Text style={s.title}>Recuerdos</Text>
+      <View style={s.titleRow}>
+        <Text style={s.title}>Recuerdos</Text>
+        {onAdd && (
+          <TouchableOpacity onPress={onAdd} style={s.addBtn} accessibilityLabel="Añadir recuerdo">
+            <Feather name="plus" size={18} color={theme.accent.primary} />
+          </TouchableOpacity>
+        )}
+      </View>
       {visible.length === 0 ? (
         <View style={s.empty}>
           <Feather name="image" size={28} color={theme.text.muted} />
@@ -53,7 +60,13 @@ export default function TournamentMemoriesSection({ tournamentId, onOpenGallery,
 
 const makeStyles = (theme) => StyleSheet.create({
   wrap: { paddingHorizontal: HORIZONTAL_PAD, paddingVertical: 16 },
-  title: { fontFamily: 'PlayfairDisplay-Bold', fontSize: 18, color: theme.text.primary, marginBottom: 12 },
+  titleRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 12 },
+  title: { fontFamily: 'PlayfairDisplay-Bold', fontSize: 18, color: theme.text.primary },
+  addBtn: {
+    width: 32, height: 32, borderRadius: 16,
+    alignItems: 'center', justifyContent: 'center',
+    backgroundColor: theme.bg.secondary,
+  },
   empty: { padding: 20, alignItems: 'center', backgroundColor: theme.bg.secondary, borderRadius: 12 },
   emptyText: { color: theme.text.muted, fontFamily: 'PlusJakartaSans-Regular', textAlign: 'center', marginTop: 6 },
   grid: { flexDirection: 'row', flexWrap: 'wrap', rowGap: GAP },

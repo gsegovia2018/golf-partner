@@ -8,6 +8,12 @@ import { useAuth } from '../context/AuthContext';
 import { ShareableLeaderboard, shareLeaderboard } from '../components/ShareableCard';
 import PullToRefresh from '../components/PullToRefresh';
 import LoadingSplash from '../components/LoadingSplash';
+import TournamentMemoriesSection from '../components/TournamentMemoriesSection';
+import MediaLightbox from '../components/MediaLightbox';
+import CaptureMenuSheet from '../components/CaptureMenuSheet';
+import AttachMediaSheet from '../components/AttachMediaSheet';
+import BatchAttachSheet from '../components/BatchAttachSheet';
+import { pickMedia, attachMedia, attachManyMedia } from '../lib/mediaCapture';
 import {
   loadTournament, loadAllTournaments, loadAllTournamentsWithFallback,
   setActiveTournament, clearActiveTournament,
@@ -15,6 +21,7 @@ import {
   tournamentLeaderboard, tournamentBestWorstLeaderboard,
   roundPairLeaderboard, calcBestWorstBall, roundTotals,
   playerRoundBestWorstPoints,
+  tournamentPlayerClinched, roundPairClinched,
   DEFAULT_SETTINGS, generateInviteCode, setInviteRole,
 } from '../store/tournamentStore';
 
@@ -23,6 +30,28 @@ import {
 // fast swipe can skip past one page. On web we drive snap ourselves.
 const PAGER_SNAP_TYPE_STYLE = Platform.OS === 'web' ? { scrollSnapType: 'x mandatory', overflowX: 'auto' } : null;
 const PAGER_PAGE_SNAP_STYLE = Platform.OS === 'web' ? { scrollSnapAlign: 'start', scrollSnapStop: 'always' } : null;
+
+// Pick the round to land on when entering the tournament view:
+// - Default is `currentRound`.
+// - If that round is fully played (every player scored every hole) AND
+//   a next round exists, jump to the next one. Keeps the UI pointing at
+//   where play is actually headed.
+function chooseInitialRound(tournament) {
+  const cur = tournament?.currentRound ?? 0;
+  const rounds = tournament?.rounds ?? [];
+  const round = rounds[cur];
+  if (!round) return cur;
+  const playersCount = tournament?.players?.length ?? 0;
+  const holeCount = round.holes?.length ?? 18;
+  const expected = playersCount * holeCount;
+  if (expected === 0) return cur;
+  let entered = 0;
+  for (const pid in (round.scores ?? {})) {
+    entered += Object.keys(round.scores[pid] ?? {}).length;
+  }
+  if (entered >= expected && cur < rounds.length - 1) return cur + 1;
+  return cur;
+}
 
 // Belt-and-braces: inject the snap rules via a real <style> tag so they
 // apply even if RNW's atomic-CSS pipeline ever filters an unknown CSS
@@ -39,7 +68,7 @@ if (Platform.OS === 'web' && typeof document !== 'undefined') {
 
 export default function HomeScreen({ navigation, route }) {
   const viewMode = route?.params?.viewMode ?? 'auto';
-  const { theme, mode, toggle } = useTheme();
+  const { theme } = useTheme();
   const { user } = useAuth();
   const [tournament, setTournament] = useState(null);
   const [allTournaments, setAllTournaments] = useState([]);
@@ -76,6 +105,10 @@ export default function HomeScreen({ navigation, route }) {
   const [inviteCode, setInviteCode] = useState('');
   const [inviteRoleState, setInviteRoleState] = useState('editor');
   const [inviteLoading, setInviteLoading] = useState(false);
+  const [memLightbox, setMemLightbox] = useState({ visible: false, items: [], index: 0 });
+  const [captureMenuVisible, setCaptureMenuVisible] = useState(false);
+  const [singleAsset, setSingleAsset] = useState(null);
+  const [batchAssets, setBatchAssets] = useState(null);
 
   const reload = useCallback(async () => {
     setLoading(true);
@@ -88,7 +121,7 @@ export default function HomeScreen({ navigation, route }) {
       setAllTournaments(listResult.list);
       setListStale(listResult.stale);
       setOpenableIds(listResult.openableIds);
-      if (t) setSelectedRound(t.currentRound);
+      if (t) setSelectedRound(chooseInitialRound(t));
     } finally {
       setLoading(false);
     }
@@ -99,20 +132,97 @@ export default function HomeScreen({ navigation, route }) {
     try { await reload(); } finally { setRefreshing(false); }
   }, [reload]);
 
+  const defaultRoundIndexForAdd = useCallback(() => {
+    if (!tournament?.rounds?.length) return 0;
+    return Math.min(tournament.currentRound ?? 0, tournament.rounds.length - 1);
+  }, [tournament]);
+
+  const openAddMemory = useCallback(() => setCaptureMenuVisible(true), []);
+
+  const handleCaptureSelect = useCallback(async ({ source, mediaTypes }) => {
+    setCaptureMenuVisible(false);
+    try {
+      const result = await pickMedia({
+        source,
+        mediaTypes,
+        multi: source === 'library',
+      });
+      if (!result) return;
+      if (Array.isArray(result)) {
+        if (result.length === 0) return;
+        if (result.length === 1) setSingleAsset(result[0]);
+        else setBatchAssets(result);
+      } else {
+        setSingleAsset(result);
+      }
+    } catch (e) {
+      Alert.alert('No se pudo capturar', String(e?.message ?? e));
+    }
+  }, []);
+
+  const onSingleConfirm = useCallback(async ({ holeIndex, caption, uploaderLabel }) => {
+    const asset = singleAsset;
+    setSingleAsset(null);
+    if (!asset || !tournament) return;
+    const roundIdx = defaultRoundIndexForAdd();
+    const round = tournament.rounds?.[roundIdx];
+    if (!round) return;
+    try {
+      await attachMedia({
+        tournamentId: tournament.id,
+        roundId: round.id,
+        holeIndex,
+        kind: asset.kind,
+        localUri: asset.localUri,
+        durationS: asset.durationS,
+        caption,
+        uploaderLabel,
+      });
+    } catch (e) {
+      Alert.alert('No se pudo adjuntar', String(e?.message ?? e));
+    }
+  }, [singleAsset, tournament, defaultRoundIndexForAdd]);
+
+  const onBatchConfirm = useCallback(async (items) => {
+    setBatchAssets(null);
+    if (!tournament) return;
+    try {
+      await attachManyMedia({ tournamentId: tournament.id, items });
+    } catch (e) {
+      Alert.alert('No se pudieron adjuntar', String(e?.message ?? e));
+    }
+  }, [tournament]);
+
   useEffect(() => {
     const unsubscribe = navigation.addListener('focus', reload);
     return unsubscribe;
   }, [navigation, reload]);
 
-  // Keep the round pager pinned to the round being played: whenever the
-  // tournament's currentRound advances (e.g. the user started the next
-  // round in another screen), snap the selection back to it. This also
-  // covers the initial Tournament mount where selectedRound is briefly 0
-  // before the tournament has loaded.
+  // Web deep-link: if the URL has ?invite=CODE, auto-open the Join screen
+  // with the code pre-filled once the user is signed in. Strip the param
+  // from the URL afterwards so a refresh doesn't re-trigger.
   useEffect(() => {
-    if (tournament?.currentRound != null) {
-      setSelectedRound(tournament.currentRound);
+    if (Platform.OS !== 'web' || typeof window === 'undefined') return;
+    const url = new URL(window.location.href);
+    const code = url.searchParams.get('invite');
+    if (!code) return;
+    url.searchParams.delete('invite');
+    window.history.replaceState({}, '', url.toString());
+    navigation.navigate('JoinTournament', { code: code.toUpperCase() });
+  }, [navigation]);
+
+  // Keep the round pager pinned to the round play is actually on:
+  // whenever `currentRound` advances (e.g. the user started the next
+  // round from another screen), snap to the smart default. This also
+  // covers the initial Tournament mount where selectedRound is briefly
+  // 0 before the tournament has loaded.
+  useEffect(() => {
+    if (tournament) {
+      setSelectedRound(chooseInitialRound(tournament));
     }
+    // Intentionally only re-run when currentRound advances; editing a
+    // scorecard doesn't force the pager off the user's manual choice.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [tournament?.currentRound]);
 
   // Auto-push Tournament once on the first Home mount if there's an active
@@ -333,6 +443,11 @@ export default function HomeScreen({ navigation, route }) {
       : null),
     [tournament, selectedRoundData, selectedRoundHasScores, leaderboardBestBall],
   );
+  const tournamentMode = settings.scoringMode === 'bestball' ? 'bestball' : 'stableford';
+  const tournamentClinchedId = useMemo(
+    () => (tournament ? tournamentPlayerClinched(tournament, tournamentMode) : null),
+    [tournament, tournamentMode],
+  );
 
   // Stable callbacks for the memoised round pager pages. Keep references
   // stable across swipes so <RoundPage /> memoisation holds.
@@ -365,11 +480,17 @@ export default function HomeScreen({ navigation, route }) {
         <View style={s.header}>
           <View>
             <Text style={s.title}>Golf Partner</Text>
-            <Text style={s.subtitle}>{allTournaments.length} {allTournaments.length === 1 ? 'tournament' : 'tournaments'}</Text>
+            <Text style={s.subtitle}>{(() => {
+              const games = allTournaments.filter((t) => t.kind === 'game').length;
+              const tourn = allTournaments.length - games;
+              if (games === 0) return `${tourn} ${tourn === 1 ? 'tournament' : 'tournaments'}`;
+              if (tourn === 0) return `${games} ${games === 1 ? 'game' : 'games'}`;
+              return `${games} ${games === 1 ? 'game' : 'games'} · ${tourn} ${tourn === 1 ? 'tournament' : 'tournaments'}`;
+            })()}</Text>
           </View>
           <View style={s.headerActions}>
-            <TouchableOpacity style={s.iconBtn} onPress={toggle} activeOpacity={0.7}>
-              <Feather name={mode === 'dark' ? 'sun' : 'moon'} size={18} color={theme.accent.primary} />
+            <TouchableOpacity style={s.iconBtn} onPress={() => navigation.navigate('JoinTournament')} activeOpacity={0.7} accessibilityLabel="Join">
+              <Feather name="link" size={18} color={theme.accent.primary} />
             </TouchableOpacity>
             <TouchableOpacity style={s.iconBtn} onPress={() => navigation.navigate('PlayersLibrary')} activeOpacity={0.7}>
               <Feather name="users" size={18} color={theme.accent.primary} />
@@ -389,14 +510,32 @@ export default function HomeScreen({ navigation, route }) {
           refreshing={refreshing}
           onRefresh={onRefresh}
         >
-        <View style={{ flexDirection: 'row', gap: 8 }}>
-          <TouchableOpacity style={[s.primaryBtn, { flex: 1, marginTop: 0 }]} onPress={() => navigation.navigate('Setup')} activeOpacity={0.8}>
-            <Feather name="plus" size={18} color={theme.isDark ? theme.accent.primary : theme.text.inverse} />
-            <Text style={s.primaryBtnText}>New Tournament</Text>
+        <View style={s.startTilesRow}>
+          <TouchableOpacity
+            style={[s.startTile, s.startTileFeatured]}
+            onPress={() => navigation.navigate('Setup', { kind: 'game' })}
+            activeOpacity={0.85}
+          >
+            <View style={s.startTileIconWrap}>
+              <Feather name="flag" size={18} color={theme.accent.primary} />
+            </View>
+            <View style={s.startTileText}>
+              <Text style={s.startTileTitle}>Game</Text>
+              <Text style={s.startTileSub}>Single round</Text>
+            </View>
           </TouchableOpacity>
-          <TouchableOpacity style={[s.secondaryBtn, { marginTop: 0, paddingHorizontal: 16 }]} onPress={() => navigation.navigate('JoinTournament')} activeOpacity={0.7}>
-            <Feather name="link" size={18} color={theme.accent.primary} />
-            <Text style={s.secondaryBtnText}>Join</Text>
+          <TouchableOpacity
+            style={s.startTile}
+            onPress={() => navigation.navigate('Setup', { kind: 'tournament' })}
+            activeOpacity={0.85}
+          >
+            <View style={s.startTileIconWrap}>
+              <Feather name="award" size={18} color={theme.accent.primary} />
+            </View>
+            <View style={s.startTileText}>
+              <Text style={s.startTileTitle}>Tournament</Text>
+              <Text style={s.startTileSub}>Multi-day event</Text>
+            </View>
           </TouchableOpacity>
         </View>
 
@@ -407,86 +546,107 @@ export default function HomeScreen({ navigation, route }) {
           </View>
         )}
 
-        {allTournaments.length === 0 ? (
-          listStale ? (
-            <View style={s.staleEmpty}>
-              <Feather name="cloud-off" size={32} color={theme.text.muted} />
-              <Text style={s.staleEmptyText}>Sin conexión · aún no hay torneos guardados</Text>
-            </View>
-          ) : (
-            <View style={s.emptyState}>
-              <Feather name="flag" size={48} color={theme.text.muted} />
-              <Text style={s.emptyTitle}>No tournaments yet</Text>
-              <Text style={s.emptySubtitle}>Create your first tournament to start playing</Text>
-            </View>
-          )
-        ) : (
-          <>
-            <Text style={s.sectionLabel}>TOURNAMENTS</Text>
-            {allTournaments
-              .slice()
-              .sort((a, b) => b.id - a.id)
-              .map((t, index) => {
-                const openable = !openableIds || openableIds.has(t.id);
-                const rounds = t.rounds ?? [];
-                const players = t.players ?? [];
-                const played = rounds.filter((r) => r.scores && Object.keys(r.scores).length > 0).length;
-                const totalRounds = rounds.length;
-                const isActive = totalRounds > 0 && played < totalRounds;
-                const metaText = players.length > 0
-                  ? players.map((p) => p.name.split(' ')[0]).join(' · ')
-                  : '';
-                return (
-                  <View key={t.id} style={s.tournamentCardWrapper}>
-                    <TouchableOpacity
-                      style={[s.tournamentCard, !openable && s.tournamentCardDisabled]}
-                      onPress={() => { if (openable) selectTournament(t.id); }}
-                      disabled={!openable}
-                      activeOpacity={openable ? 0.7 : 1}
-                    >
-                      <View style={s.tournamentCardLeft}>
-                        <View style={s.tournamentCardHeader}>
-                          <Text style={s.tournamentCardName}>{t.name}</Text>
-                          {totalRounds > 0 && (
-                            <View style={[s.statusBadge, !isActive && s.statusBadgeFinished]}>
-                              <Text style={[s.statusBadgeText, !isActive && s.statusBadgeTextFinished]}>
-                                {isActive ? 'Active' : 'Finished'}
-                              </Text>
-                            </View>
-                          )}
-                          {t._role === 'viewer' && (
-                            <View style={s.viewerBadge}>
-                              <Feather name="eye" size={9} color={theme.text.muted} />
-                              <Text style={s.viewerBadgeText}>Viewer</Text>
-                            </View>
-                          )}
+        {(() => {
+          const renderCard = (t) => {
+            const openable = !openableIds || openableIds.has(t.id);
+            const rounds = t.rounds ?? [];
+            const players = t.players ?? [];
+            const isGameKind = t.kind === 'game';
+            const played = rounds.filter((r) => r.scores && Object.keys(r.scores).length > 0).length;
+            const totalRounds = rounds.length;
+            const isActive = totalRounds > 0 && played < totalRounds;
+            const courseName = isGameKind ? (rounds[0]?.courseName ?? '') : null;
+            const metaText = players.length > 0
+              ? players.map((p) => p.name.split(' ')[0]).join(' · ')
+              : '';
+            return (
+              <View key={t.id} style={s.tournamentCardWrapper}>
+                <TouchableOpacity
+                  style={[s.tournamentCard, !openable && s.tournamentCardDisabled]}
+                  onPress={() => { if (openable) selectTournament(t.id); }}
+                  disabled={!openable}
+                  activeOpacity={openable ? 0.7 : 1}
+                >
+                  <View style={s.tournamentCardLeft}>
+                    <View style={s.tournamentCardHeader}>
+                      <Text style={s.tournamentCardName}>{t.name}</Text>
+                      {totalRounds > 0 && (
+                        <View style={[s.statusBadge, !isActive && s.statusBadgeFinished]}>
+                          <Text style={[s.statusBadgeText, !isActive && s.statusBadgeTextFinished]}>
+                            {isActive ? 'Active' : 'Finished'}
+                          </Text>
                         </View>
-                        {metaText ? <Text style={s.tournamentCardMeta}>{metaText}</Text> : null}
-                        {totalRounds > 0 && (
-                          <Text style={s.tournamentCardRound}>Round {played}/{totalRounds}</Text>
-                        )}
-                      </View>
-                      <View style={s.tournamentCardRight}>
-                        {!openable ? (
-                          <View style={s.offlineBadge}>
-                            <Feather name="cloud-off" size={12} color="#c77a0a" />
-                            <Text style={s.offlineBadgeText}>Requiere conexión</Text>
-                          </View>
-                        ) : (
-                          <Feather name="chevron-right" size={18} color={theme.text.muted} />
-                        )}
-                      </View>
-                    </TouchableOpacity>
-                    {openable && t._role !== 'viewer' && (
-                      <TouchableOpacity style={s.deleteCardBtn} onPress={() => confirmDelete(t)} hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}>
-                        <Feather name="trash-2" size={14} color={theme.destructive} />
-                      </TouchableOpacity>
+                      )}
+                      {t._role === 'viewer' && (
+                        <View style={s.viewerBadge}>
+                          <Feather name="eye" size={9} color={theme.text.muted} />
+                          <Text style={s.viewerBadgeText}>Viewer</Text>
+                        </View>
+                      )}
+                    </View>
+                    {metaText ? <Text style={s.tournamentCardMeta}>{metaText}</Text> : null}
+                    {totalRounds > 0 && (
+                      <Text style={s.tournamentCardRound}>
+                        {isGameKind ? (courseName || 'Single round') : `Round ${played}/${totalRounds}`}
+                      </Text>
                     )}
                   </View>
-                );
-              })}
-          </>
-        )}
+                  <View style={s.tournamentCardRight}>
+                    {!openable ? (
+                      <View style={s.offlineBadge}>
+                        <Feather name="cloud-off" size={12} color="#c77a0a" />
+                        <Text style={s.offlineBadgeText}>Requiere conexión</Text>
+                      </View>
+                    ) : (
+                      <Feather name="chevron-right" size={18} color={theme.text.muted} />
+                    )}
+                  </View>
+                </TouchableOpacity>
+                {openable && t._role !== 'viewer' && (
+                  <TouchableOpacity style={s.deleteCardBtn} onPress={() => confirmDelete(t)} hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}>
+                    <Feather name="trash-2" size={14} color={theme.destructive} />
+                  </TouchableOpacity>
+                )}
+              </View>
+            );
+          };
+          const sorted = allTournaments.slice().sort((a, b) => b.id - a.id);
+          const games = sorted.filter((t) => t.kind === 'game');
+          const tournaments = sorted.filter((t) => t.kind !== 'game');
+          if (sorted.length === 0) {
+            if (listStale) {
+              return (
+                <View style={s.staleEmpty}>
+                  <Feather name="cloud-off" size={32} color={theme.text.muted} />
+                  <Text style={s.staleEmptyText}>Sin conexión · aún no hay torneos guardados</Text>
+                </View>
+              );
+            }
+            return (
+              <View style={s.emptyState}>
+                <Feather name="flag" size={48} color={theme.text.muted} />
+                <Text style={s.emptyTitle}>Nothing here yet</Text>
+                <Text style={s.emptySubtitle}>Create your first game or tournament to start playing</Text>
+              </View>
+            );
+          }
+          return (
+            <>
+              {games.length > 0 && (
+                <>
+                  <Text style={s.sectionLabel}>GAMES</Text>
+                  {games.map(renderCard)}
+                </>
+              )}
+              {tournaments.length > 0 && (
+                <>
+                  <Text style={s.sectionLabel}>TOURNAMENTS</Text>
+                  {tournaments.map(renderCard)}
+                </>
+              )}
+            </>
+          );
+        })()}
         </PullToRefresh>
       </SafeAreaView>
     );
@@ -508,6 +668,7 @@ export default function HomeScreen({ navigation, route }) {
     );
   }
 
+  const isGame = tournament.kind === 'game';
   const completedRounds = tournament.rounds.filter(
     (r) => r.scores && Object.keys(r.scores).length > 0,
   );
@@ -532,9 +693,6 @@ export default function HomeScreen({ navigation, route }) {
           <Text style={s.headerTitle} numberOfLines={1}>{tournament.name}</Text>
         </View>
         <View style={s.headerActions}>
-          <TouchableOpacity style={s.iconBtn} onPress={toggle} activeOpacity={0.7}>
-            <Feather name={mode === 'dark' ? 'sun' : 'moon'} size={18} color={theme.accent.primary} />
-          </TouchableOpacity>
           {!isViewer && (
             <TouchableOpacity style={s.iconBtn} onPress={handleInvite} activeOpacity={0.7}>
               <Feather name="share" size={18} color={theme.accent.primary} />
@@ -561,6 +719,7 @@ export default function HomeScreen({ navigation, route }) {
         onRefresh={onRefresh}
       >
 
+      {!isGame && (
       <View style={s.mastersCard}>
         <View style={s.cardTitleRow}>
           <Text style={s.mastersCardTitle}>LEADERBOARD</Text>
@@ -588,7 +747,14 @@ export default function HomeScreen({ navigation, route }) {
                 <Text style={[s.mastersRankText, { color: rankColor }]}>{i + 1}</Text>
               </View>
               <View style={s.mastersNameCol}>
-                <Text style={[s.mastersName, i === 0 && { fontFamily: 'PlusJakartaSans-Bold' }]}>{entry.player.name}</Text>
+                <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+                  <Text style={[s.mastersName, i === 0 && { fontFamily: 'PlusJakartaSans-Bold' }]} numberOfLines={1}>
+                    {entry.player.name}
+                  </Text>
+                  {entry.player.id === tournamentClinchedId && (
+                    <Feather name="award" size={12} color="#ffd700" />
+                  )}
+                </View>
                 <Text style={s.mastersRoundSub}>
                   R{selectedRound + 1} · {roundValue == null ? '—' : `${roundValue} ${roundUnit}`}
                 </Text>
@@ -599,6 +765,7 @@ export default function HomeScreen({ navigation, route }) {
           );
         })}
       </View>
+      )}
 
       {tournament.rounds.length > 0 && (
         <View style={s.card}>
@@ -615,24 +782,26 @@ export default function HomeScreen({ navigation, route }) {
               <Text style={[s.modeLabel, roundBestBall && s.modeLabelActive]}>Best Ball</Text>
             </View>
           </View>
-          <FlatList
-            horizontal
-            showsHorizontalScrollIndicator={false}
-            data={tournament.rounds}
-            keyExtractor={(r) => r.id}
-            style={s.tabBar}
-            renderItem={({ item: round, index }) => (
-              <TouchableOpacity
-                style={[s.tab, selectedRound === index && s.tabActive]}
-                onPress={() => setSelectedRound(index)}
-                activeOpacity={0.7}
-              >
-                <Text style={[s.tabText, selectedRound === index && s.tabTextActive]}>
-                  R{index + 1}
-                </Text>
-              </TouchableOpacity>
-            )}
-          />
+          {!isGame && (
+            <FlatList
+              horizontal
+              showsHorizontalScrollIndicator={false}
+              data={tournament.rounds}
+              keyExtractor={(r) => r.id}
+              style={s.tabBar}
+              renderItem={({ item: round, index }) => (
+                <TouchableOpacity
+                  style={[s.tab, selectedRound === index && s.tabActive]}
+                  onPress={() => setSelectedRound(index)}
+                  activeOpacity={0.7}
+                >
+                  <Text style={[s.tabText, selectedRound === index && s.tabTextActive]}>
+                    R{index + 1}
+                  </Text>
+                </TouchableOpacity>
+              )}
+            />
+          )}
 
           {/* Horizontal pager — swipe to change round, stays in sync with tabs */}
           <View
@@ -646,7 +815,23 @@ export default function HomeScreen({ navigation, route }) {
               setRoundPagerWidth(e.nativeEvent.layout.width);
             }}
           >
-            {roundPagerWidth > 0 && (
+            {roundPagerWidth > 0 && (isGame ? (
+              <RoundPage
+                round={tournament.rounds[0]}
+                index={0}
+                width={roundPagerWidth}
+                hasPrev={false}
+                hasNext={false}
+                revealed
+                roundBestBall={roundBestBall}
+                players={tournament.players}
+                settings={settings}
+                theme={theme}
+                s={s}
+                onGoToRound={goToRound}
+                onOpenEdit={isViewer ? null : openRoundEdit}
+              />
+            ) : (
               <ScrollView
                 ref={roundPagerRef}
                 horizontal
@@ -714,10 +899,17 @@ export default function HomeScreen({ navigation, route }) {
                   />
                 ))}
               </ScrollView>
-            )}
+            ))}
           </View>
         </View>
       )}
+
+      <TournamentMemoriesSection
+        tournamentId={tournament.id}
+        onOpenGallery={() => navigation.navigate('Gallery', { tournamentId: tournament.id })}
+        onOpenLightbox={(items, i) => setMemLightbox({ visible: true, items, index: i })}
+        onAdd={isViewer ? null : openAddMemory}
+      />
 
       <View style={{ position: 'absolute', left: -9999 }}>
         <ShareableLeaderboard ref={leaderboardRef} tournamentName={tournament.name} leaderboard={leaderboard} />
@@ -821,12 +1013,25 @@ export default function HomeScreen({ navigation, route }) {
           </View>
           <TouchableOpacity
             style={[s.menuItem, { borderBottomWidth: 0 }]}
-            onPress={() => Share.share({ message: `Join my golf tournament! Code: ${inviteCode}` })}
+            onPress={() => {
+              const origin = Platform.OS === 'web' && typeof window !== 'undefined'
+                ? window.location.origin
+                : null;
+              // On web the link auto-prefills the join code (see
+              // AppNavigator's ?invite handler). On native we share just
+              // the code until deep-linking is wired up.
+              // Blank line before the URL keeps WhatsApp from wrapping the
+              // text into the middle of the link and breaking the tap target.
+              const message = origin
+                ? `Join my golf tournament 🏌️\n\n${origin}/?invite=${inviteCode}`
+                : `Join my golf tournament! Code: ${inviteCode}`;
+              Share.share({ message });
+            }}
             activeOpacity={0.7}
             disabled={!inviteCode}
           >
             <Feather name="share-2" size={18} color={theme.accent.primary} />
-            <Text style={s.menuItemText}>Share Code</Text>
+            <Text style={s.menuItemText}>Share link</Text>
             <Feather name="chevron-right" size={16} color={theme.text.muted} />
           </TouchableOpacity>
         </Pressable>
@@ -1068,6 +1273,34 @@ export default function HomeScreen({ navigation, route }) {
       </Pressable>
     </Modal>
 
+    <CaptureMenuSheet
+      visible={captureMenuVisible}
+      onSelect={handleCaptureSelect}
+      onClose={() => setCaptureMenuVisible(false)}
+    />
+    <AttachMediaSheet
+      visible={!!singleAsset}
+      asset={singleAsset}
+      holes={tournament?.rounds?.[defaultRoundIndexForAdd()]?.holes ?? []}
+      defaultHoleIndex={null}
+      onCancel={() => setSingleAsset(null)}
+      onConfirm={onSingleConfirm}
+    />
+    <BatchAttachSheet
+      visible={!!batchAssets}
+      assets={batchAssets ?? []}
+      rounds={tournament?.rounds ?? []}
+      defaultRoundIndex={defaultRoundIndexForAdd()}
+      onCancel={() => setBatchAssets(null)}
+      onConfirm={onBatchConfirm}
+    />
+    <MediaLightbox
+      visible={memLightbox.visible}
+      items={memLightbox.items}
+      initialIndex={memLightbox.index}
+      onClose={() => setMemLightbox({ visible: false, items: [], index: 0 })}
+    />
+
     </SafeAreaView>
   );
 }
@@ -1082,6 +1315,10 @@ const RoundPage = React.memo(function RoundPage({
 }) {
   const hasScores = round.scores && Object.keys(round.scores).length > 0;
   const hasPairs = Array.isArray(round.pairs) && round.pairs.length > 0;
+  const tournamentMode = settings?.scoringMode === 'bestball' ? 'bestball' : 'stableford';
+  const clinchedPairIdx = hasScores
+    ? roundPairClinched(round, players, settings, tournamentMode)
+    : null;
   return (
     <View
       style={[{ width }, PAGER_PAGE_SNAP_STYLE]}
@@ -1120,8 +1357,8 @@ const RoundPage = React.memo(function RoundPage({
       </View>
       {hasScores ? (
         roundBestBall
-          ? <BestBallRoundCard round={round} players={players} settings={settings} theme={theme} s={s} />
-          : <StablefordRoundCard round={round} players={players} theme={theme} s={s} />
+          ? <BestBallRoundCard round={round} players={players} settings={settings} clinchedPairIdx={clinchedPairIdx} theme={theme} s={s} />
+          : <StablefordRoundCard round={round} players={players} clinchedPairIdx={clinchedPairIdx} theme={theme} s={s} />
       ) : revealed && hasPairs ? (
         <PairsPreviewCard pairs={round.pairs} theme={theme} s={s} />
       ) : (
@@ -1148,24 +1385,37 @@ const PairsPreviewCard = React.memo(function PairsPreviewCard({ pairs, theme, s 
   );
 });
 
-const StablefordRoundCard = React.memo(function StablefordRoundCard({ round, players, theme, s }) {
+const StablefordRoundCard = React.memo(function StablefordRoundCard({ round, players, clinchedPairIdx, theme, s }) {
   const pairResults = roundPairLeaderboard(round, players);
+  // Map sorted-leaderboard position back to round.pairs index so we can
+  // tag the winner row with a crown when that pair is mathematically
+  // clinched. The leader row (pi === 0) is always first in pairResults.
+  const pairIdxFor = (members) => round.pairs.findIndex((pr) => (
+    pr.length === members.length && pr.every((p) => members.some((m) => m.player.id === p.id))
+  ));
   return (
     <>
-      {pairResults.map((pair, pi) => (
-        <View key={pi} style={[s.pairBlock, pi === 0 && s.winnerBlock]}>
-          {pi === 0 && <Text style={s.winnerBadge}>WINNER</Text>}
-          <View style={s.pairHeader}>
-            <Text style={s.pairNames}>{pair.members.map((m) => m.player.name).join(' & ')}</Text>
-            <Text style={s.pairPoints}>{pair.combinedPoints} pts</Text>
+      {pairResults.map((pair, pi) => {
+        const origIdx = pairIdxFor(pair.members);
+        const isClinched = clinchedPairIdx != null && origIdx === clinchedPairIdx;
+        return (
+          <View key={pi} style={[s.pairBlock, pi === 0 && s.winnerBlock]}>
+            {pi === 0 && <Text style={s.winnerBadge}>WINNER</Text>}
+            <View style={s.pairHeader}>
+              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6, flex: 1 }}>
+                <Text style={s.pairNames}>{pair.members.map((m) => m.player.name).join(' & ')}</Text>
+                {isClinched && <Feather name="award" size={14} color="#ffd700" />}
+              </View>
+              <Text style={s.pairPoints}>{pair.combinedPoints} pts</Text>
+            </View>
           </View>
-        </View>
-      ))}
+        );
+      })}
     </>
   );
 });
 
-const BestBallRoundCard = React.memo(function BestBallRoundCard({ round, players, settings, theme, s }) {
+const BestBallRoundCard = React.memo(function BestBallRoundCard({ round, players, settings, clinchedPairIdx, theme, s }) {
   const result = calcBestWorstBall(round, players);
   if (!result) return <Text style={s.pairMember}>No results yet</Text>;
 
@@ -1176,20 +1426,28 @@ const BestBallRoundCard = React.memo(function BestBallRoundCard({ round, players
   const p1Points = bestBall.pair1 * settings.bestBallValue + worstBall.pair1 * settings.worstBallValue;
   const p2Points = bestBall.pair2 * settings.bestBallValue + worstBall.pair2 * settings.worstBallValue;
   const winner = p1Points > p2Points ? 1 : p2Points > p1Points ? 2 : 0;
+  const p1Clinched = clinchedPairIdx === 0;
+  const p2Clinched = clinchedPairIdx === 1;
 
   return (
     <>
       <View style={[s.pairBlock, winner === 1 && s.winnerBlock]}>
         {winner === 1 && <Text style={s.winnerBadge}>WINNER</Text>}
         <View style={s.pairHeader}>
-          <Text style={s.pairNames}>{p1Names}</Text>
+          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6, flex: 1 }}>
+            <Text style={s.pairNames}>{p1Names}</Text>
+            {p1Clinched && <Feather name="award" size={14} color="#ffd700" />}
+          </View>
           <Text style={s.pairPoints}>{p1Points} pts</Text>
         </View>
       </View>
       <View style={[s.pairBlock, winner === 2 && s.winnerBlock]}>
         {winner === 2 && <Text style={s.winnerBadge}>WINNER</Text>}
         <View style={s.pairHeader}>
-          <Text style={s.pairNames}>{p2Names}</Text>
+          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6, flex: 1 }}>
+            <Text style={s.pairNames}>{p2Names}</Text>
+            {p2Clinched && <Feather name="award" size={14} color="#ffd700" />}
+          </View>
           <Text style={s.pairPoints}>{p2Points} pts</Text>
         </View>
       </View>
@@ -1241,6 +1499,33 @@ const makeStyles = (t) => StyleSheet.create({
   secondaryBtnText: {
     fontFamily: 'PlusJakartaSans-SemiBold',
     color: t.accent.primary, fontSize: 14,
+  },
+
+  // Start tiles (Game / Tournament)
+  startTilesRow: { flexDirection: 'row', gap: 10 },
+  startTile: {
+    flex: 1, flexDirection: 'row', alignItems: 'center', gap: 12,
+    backgroundColor: t.bg.card,
+    borderRadius: 16, borderWidth: 1, borderColor: t.border.default,
+    paddingVertical: 12, paddingHorizontal: 14,
+    ...(t.isDark ? {} : t.shadow.card),
+  },
+  startTileFeatured: {
+    borderColor: t.accent.primary + '55',
+  },
+  startTileIconWrap: {
+    width: 36, height: 36, borderRadius: 12,
+    backgroundColor: t.accent.light,
+    alignItems: 'center', justifyContent: 'center',
+  },
+  startTileText: { flex: 1 },
+  startTileTitle: {
+    fontFamily: 'PlayfairDisplay-Bold', color: t.text.primary, fontSize: 16,
+    letterSpacing: -0.2,
+  },
+  startTileSub: {
+    fontFamily: 'PlusJakartaSans-Medium', color: t.text.muted, fontSize: 11,
+    marginTop: 2, letterSpacing: 0.2,
   },
 
   // Tournament list
