@@ -1,17 +1,18 @@
 import React, { useEffect, useRef, useState } from 'react';
 import {
-  Modal, View, Text, Pressable, TouchableOpacity, StyleSheet, Dimensions,
+  Modal, View, Text, Pressable, TouchableOpacity, StyleSheet,
 } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Feather } from '@expo/vector-icons';
 import { Image as ExpoImage } from 'expo-image';
 import { Video, ResizeMode } from 'expo-av';
 import { findParForHole } from '../lib/memoriesGalleryData';
 
-const { width, height } = Dimensions.get('window');
 const PHOTO_MS = 4000;
 const TICK_MS = 50;
 
 export default function MemoriesStoriesViewer({ visible, entry, round, onClose }) {
+  const insets = useSafeAreaInsets();
   const [index, setIndex] = useState(0);
   const [progress, setProgress] = useState(0);
   const [paused, setPaused] = useState(false);
@@ -103,31 +104,7 @@ export default function MemoriesStoriesViewer({ visible, entry, round, onClose }
           />
         )}
 
-        <View style={s.bars}>
-          {items.map((_, i) => {
-            const fill = i < index ? 1 : i === index ? progress : 0;
-            return (
-              <View key={i} style={s.bar}>
-                <View style={[s.barFill, { width: `${fill * 100}%` }]} />
-              </View>
-            );
-          })}
-        </View>
-
-        <View style={s.top}>
-          <View style={s.topLeft}>
-            <Text style={s.topLabel}>
-              R{(entry?.roundIndex ?? 0) + 1}
-              {entry?.courseName ? ` · ${entry.courseName}` : ''}
-              {` · ${index + 1}/${items.length}`}
-            </Text>
-          </View>
-          <TouchableOpacity onPress={onClose} style={s.closeBtn} accessibilityLabel="Cerrar">
-            <Feather name="x" size={22} color="#fff" />
-          </TouchableOpacity>
-        </View>
-
-        <View style={s.tapRow}>
+        <View style={s.tapRow} pointerEvents="box-none">
           <Pressable
             style={s.tapLeft}
             onPress={back}
@@ -144,7 +121,36 @@ export default function MemoriesStoriesViewer({ visible, entry, round, onClose }
           />
         </View>
 
-        <View style={s.footer}>
+        <View style={[s.bars, { top: insets.top + 10 }]} pointerEvents="none">
+          {items.map((_, i) => {
+            const fill = i < index ? 1 : i === index ? progress : 0;
+            return (
+              <View key={i} style={s.bar}>
+                <View style={[s.barFill, { width: `${fill * 100}%` }]} />
+              </View>
+            );
+          })}
+        </View>
+
+        <View style={[s.top, { top: insets.top + 20 }]} pointerEvents="box-none">
+          <View style={s.topLeft} pointerEvents="none">
+            <Text style={s.topLabel}>
+              R{(entry?.roundIndex ?? 0) + 1}
+              {entry?.courseName ? ` · ${entry.courseName}` : ''}
+              {` · ${index + 1}/${items.length}`}
+            </Text>
+          </View>
+          <TouchableOpacity
+            onPress={onClose}
+            style={s.closeBtn}
+            accessibilityLabel="Cerrar"
+            hitSlop={12}
+          >
+            <Feather name="x" size={22} color="#fff" />
+          </TouchableOpacity>
+        </View>
+
+        <View style={[s.footer, { bottom: insets.bottom + 24 }]} pointerEvents="none">
           {holeLabel ? (
             <View style={s.holeChip}><Text style={s.holeChipText}>{holeLabel}</Text></View>
           ) : null}
@@ -161,29 +167,33 @@ export default function MemoriesStoriesViewer({ visible, entry, round, onClose }
 }
 
 const s = StyleSheet.create({
-  container: { flex: 1, backgroundColor: '#000', width, height },
+  container: { flex: 1, backgroundColor: '#000' },
+  tapRow: { ...StyleSheet.absoluteFillObject, flexDirection: 'row', zIndex: 2 },
+  tapLeft: { flex: 1 },
+  tapRight: { flex: 2 },
   bars: {
-    position: 'absolute', top: 10, left: 8, right: 8,
-    flexDirection: 'row', gap: 3, zIndex: 3,
+    position: 'absolute', left: 8, right: 8,
+    flexDirection: 'row', gap: 3, zIndex: 10,
   },
   bar: { flex: 1, height: 2.5, backgroundColor: 'rgba(255,255,255,0.3)', borderRadius: 99, overflow: 'hidden' },
   barFill: { height: '100%', backgroundColor: '#fff' },
   top: {
-    position: 'absolute', top: 24, left: 12, right: 12, zIndex: 3,
+    position: 'absolute', left: 12, right: 12, zIndex: 10,
     flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center',
   },
   topLeft: {
-    backgroundColor: 'rgba(0,0,0,0.4)',
+    backgroundColor: 'rgba(0,0,0,0.55)',
     paddingHorizontal: 10, paddingVertical: 4, borderRadius: 99,
   },
   topLabel: { color: '#fff', fontFamily: 'PlusJakartaSans-SemiBold', fontSize: 12 },
-  closeBtn: { padding: 6, backgroundColor: 'rgba(0,0,0,0.4)', borderRadius: 99 },
-  tapRow: { ...StyleSheet.absoluteFillObject, flexDirection: 'row', zIndex: 2 },
-  tapLeft: { flex: 1 },
-  tapRight: { flex: 2 },
+  closeBtn: {
+    width: 36, height: 36, borderRadius: 99,
+    alignItems: 'center', justifyContent: 'center',
+    backgroundColor: 'rgba(0,0,0,0.55)',
+  },
   footer: {
-    position: 'absolute', bottom: 32, left: 16, right: 16, zIndex: 3,
-    backgroundColor: 'rgba(0,0,0,0.45)', borderRadius: 12, padding: 12,
+    position: 'absolute', left: 16, right: 16, zIndex: 10,
+    backgroundColor: 'rgba(0,0,0,0.55)', borderRadius: 12, padding: 12,
   },
   holeChip: {
     alignSelf: 'flex-start',
