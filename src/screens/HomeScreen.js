@@ -62,7 +62,7 @@ if (Platform.OS === 'web' && typeof document !== 'undefined') {
 
 export default function HomeScreen({ navigation, route }) {
   const viewMode = route?.params?.viewMode ?? 'auto';
-  const { theme, mode, toggle } = useTheme();
+  const { theme } = useTheme();
   const { user } = useAuth();
   const [tournament, setTournament] = useState(null);
   const [allTournaments, setAllTournaments] = useState([]);
@@ -409,8 +409,8 @@ export default function HomeScreen({ navigation, route }) {
             })()}</Text>
           </View>
           <View style={s.headerActions}>
-            <TouchableOpacity style={s.iconBtn} onPress={toggle} activeOpacity={0.7}>
-              <Feather name={mode === 'dark' ? 'sun' : 'moon'} size={18} color={theme.accent.primary} />
+            <TouchableOpacity style={s.iconBtn} onPress={() => navigation.navigate('JoinTournament')} activeOpacity={0.7} accessibilityLabel="Join">
+              <Feather name="link" size={18} color={theme.accent.primary} />
             </TouchableOpacity>
             <TouchableOpacity style={s.iconBtn} onPress={() => navigation.navigate('PlayersLibrary')} activeOpacity={0.7}>
               <Feather name="users" size={18} color={theme.accent.primary} />
@@ -430,26 +430,32 @@ export default function HomeScreen({ navigation, route }) {
           refreshing={refreshing}
           onRefresh={onRefresh}
         >
-        <TouchableOpacity
-          style={[s.primaryBtn, { marginTop: 0 }]}
-          onPress={() => navigation.navigate('Setup', { kind: 'game' })}
-          activeOpacity={0.8}
-        >
-          <Feather name="plus" size={18} color={theme.isDark ? theme.accent.primary : theme.text.inverse} />
-          <Text style={s.primaryBtnText}>New Game</Text>
-        </TouchableOpacity>
-        <View style={{ flexDirection: 'row', gap: 8, marginTop: 8 }}>
+        <View style={s.startTilesRow}>
           <TouchableOpacity
-            style={[s.primaryBtn, { flex: 1, marginTop: 0 }]}
-            onPress={() => navigation.navigate('Setup', { kind: 'tournament' })}
-            activeOpacity={0.8}
+            style={[s.startTile, s.startTileFeatured]}
+            onPress={() => navigation.navigate('Setup', { kind: 'game' })}
+            activeOpacity={0.85}
           >
-            <Feather name="plus" size={18} color={theme.isDark ? theme.accent.primary : theme.text.inverse} />
-            <Text style={s.primaryBtnText}>New Tournament</Text>
+            <View style={s.startTileIconWrap}>
+              <Feather name="flag" size={18} color={theme.accent.primary} />
+            </View>
+            <View style={s.startTileText}>
+              <Text style={s.startTileTitle}>Game</Text>
+              <Text style={s.startTileSub}>Single round</Text>
+            </View>
           </TouchableOpacity>
-          <TouchableOpacity style={[s.secondaryBtn, { marginTop: 0, paddingHorizontal: 16 }]} onPress={() => navigation.navigate('JoinTournament')} activeOpacity={0.7}>
-            <Feather name="link" size={18} color={theme.accent.primary} />
-            <Text style={s.secondaryBtnText}>Join</Text>
+          <TouchableOpacity
+            style={s.startTile}
+            onPress={() => navigation.navigate('Setup', { kind: 'tournament' })}
+            activeOpacity={0.85}
+          >
+            <View style={s.startTileIconWrap}>
+              <Feather name="award" size={18} color={theme.accent.primary} />
+            </View>
+            <View style={s.startTileText}>
+              <Text style={s.startTileTitle}>Tournament</Text>
+              <Text style={s.startTileSub}>Multi-day event</Text>
+            </View>
           </TouchableOpacity>
         </View>
 
@@ -571,9 +577,6 @@ export default function HomeScreen({ navigation, route }) {
           <Text style={s.headerTitle} numberOfLines={1}>{tournament.name}</Text>
         </View>
         <View style={s.headerActions}>
-          <TouchableOpacity style={s.iconBtn} onPress={toggle} activeOpacity={0.7}>
-            <Feather name={mode === 'dark' ? 'sun' : 'moon'} size={18} color={theme.accent.primary} />
-          </TouchableOpacity>
           {!isViewer && (
             <TouchableOpacity style={s.iconBtn} onPress={handleInvite} activeOpacity={0.7}>
               <Feather name="share" size={18} color={theme.accent.primary} />
@@ -1345,6 +1348,33 @@ const makeStyles = (t) => StyleSheet.create({
   secondaryBtnText: {
     fontFamily: 'PlusJakartaSans-SemiBold',
     color: t.accent.primary, fontSize: 14,
+  },
+
+  // Start tiles (Game / Tournament)
+  startTilesRow: { flexDirection: 'row', gap: 10 },
+  startTile: {
+    flex: 1, flexDirection: 'row', alignItems: 'center', gap: 12,
+    backgroundColor: t.bg.card,
+    borderRadius: 16, borderWidth: 1, borderColor: t.border.default,
+    paddingVertical: 12, paddingHorizontal: 14,
+    ...(t.isDark ? {} : t.shadow.card),
+  },
+  startTileFeatured: {
+    borderColor: t.accent.primary + '55',
+  },
+  startTileIconWrap: {
+    width: 36, height: 36, borderRadius: 12,
+    backgroundColor: t.accent.light,
+    alignItems: 'center', justifyContent: 'center',
+  },
+  startTileText: { flex: 1 },
+  startTileTitle: {
+    fontFamily: 'PlayfairDisplay-Bold', color: t.text.primary, fontSize: 16,
+    letterSpacing: -0.2,
+  },
+  startTileSub: {
+    fontFamily: 'PlusJakartaSans-Medium', color: t.text.muted, fontSize: 11,
+    marginTop: 2, letterSpacing: 0.2,
   },
 
   // Tournament list

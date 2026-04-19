@@ -15,7 +15,7 @@ import { loadProfile, upsertProfile, uploadAvatar, computePersonalStats } from '
 const AVATAR_COLORS = ['#006747', '#c77b38', '#1b4965', '#7b3f6b', '#4a6d3f', '#b33951'];
 
 export default function ProfileScreen({ navigation }) {
-  const { theme } = useTheme();
+  const { theme, mode, toggle } = useTheme();
   const s = makeStyles(theme);
 
   const [profile, setProfile] = useState(null);
@@ -261,6 +261,34 @@ export default function ProfileScreen({ navigation }) {
               : <Text style={s.saveBtnText}>Save changes</Text>}
           </TouchableOpacity>
 
+          <Text style={s.sectionLabel}>APPEARANCE</Text>
+
+          <View style={s.appearanceRow}>
+            {[
+              { value: 'light', label: 'Light', icon: 'sun' },
+              { value: 'dark', label: 'Dark', icon: 'moon' },
+            ].map((opt) => {
+              const active = mode === opt.value;
+              return (
+                <TouchableOpacity
+                  key={opt.value}
+                  style={[s.appearanceTile, active && s.appearanceTileActive]}
+                  onPress={() => { if (!active) toggle(); }}
+                  activeOpacity={0.7}
+                >
+                  <Feather
+                    name={opt.icon}
+                    size={18}
+                    color={active ? theme.accent.primary : theme.text.muted}
+                  />
+                  <Text style={[s.appearanceLabel, active && s.appearanceLabelActive]}>
+                    {opt.label}
+                  </Text>
+                </TouchableOpacity>
+              );
+            })}
+          </View>
+
           <Text style={s.sectionLabel}>PERSONAL STATS</Text>
 
           {!profile?.displayName ? (
@@ -438,6 +466,26 @@ const makeStyles = (theme) => StyleSheet.create({
   },
   bestRoundMeta: { fontFamily: 'PlusJakartaSans-Bold', color: theme.text.primary, fontSize: 15, marginTop: 2 },
   bestRoundSub: { fontFamily: 'PlusJakartaSans-Medium', color: theme.text.secondary, fontSize: 12, marginTop: 2 },
+
+  appearanceRow: { flexDirection: 'row', gap: 10 },
+  appearanceTile: {
+    flex: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8,
+    backgroundColor: theme.bg.card,
+    borderRadius: 14, borderWidth: 1, borderColor: theme.border.default,
+    paddingVertical: 14,
+    ...(theme.isDark ? {} : theme.shadow.card),
+  },
+  appearanceTileActive: {
+    borderColor: theme.accent.primary,
+    backgroundColor: theme.isDark ? theme.accent.light : theme.accent.light,
+  },
+  appearanceLabel: {
+    fontFamily: 'PlusJakartaSans-SemiBold', color: theme.text.muted, fontSize: 14,
+  },
+  appearanceLabelActive: {
+    color: theme.accent.primary,
+    fontFamily: 'PlusJakartaSans-Bold',
+  },
 
   signOutBtn: {
     flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8,
