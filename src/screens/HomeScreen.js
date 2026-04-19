@@ -24,6 +24,28 @@ import {
 const PAGER_SNAP_TYPE_STYLE = Platform.OS === 'web' ? { scrollSnapType: 'x mandatory', overflowX: 'auto' } : null;
 const PAGER_PAGE_SNAP_STYLE = Platform.OS === 'web' ? { scrollSnapAlign: 'start', scrollSnapStop: 'always' } : null;
 
+// Pick the round to land on when entering the tournament view:
+// - Default is `currentRound`.
+// - If that round is fully played (every player scored every hole) AND
+//   a next round exists, jump to the next one. Keeps the UI pointing at
+//   where play is actually headed.
+function chooseInitialRound(tournament) {
+  const cur = tournament?.currentRound ?? 0;
+  const rounds = tournament?.rounds ?? [];
+  const round = rounds[cur];
+  if (!round) return cur;
+  const playersCount = tournament?.players?.length ?? 0;
+  const holeCount = round.holes?.length ?? 18;
+  const expected = playersCount * holeCount;
+  if (expected === 0) return cur;
+  let entered = 0;
+  for (const pid in (round.scores ?? {})) {
+    entered += Object.keys(round.scores[pid] ?? {}).length;
+  }
+  if (entered >= expected && cur < rounds.length - 1) return cur + 1;
+  return cur;
+}
+
 // Belt-and-braces: inject the snap rules via a real <style> tag so they
 // apply even if RNW's atomic-CSS pipeline ever filters an unknown CSS
 // property. Targeted by a data attribute we set on each page.
@@ -79,7 +101,7 @@ export default function HomeScreen({ navigation, route }) {
       const [t, all] = await Promise.all([loadTournament(), loadAllTournaments()]);
       setTournament(t);
       setAllTournaments(all);
-      if (t) setSelectedRound(t.currentRound);
+      if (t) setSelectedRound(chooseInitialRound(t));
     } finally {
       setLoading(false);
     }
@@ -95,15 +117,18 @@ export default function HomeScreen({ navigation, route }) {
     return unsubscribe;
   }, [navigation, reload]);
 
-  // Keep the round pager pinned to the round being played: whenever the
-  // tournament's currentRound advances (e.g. the user started the next
-  // round in another screen), snap the selection back to it. This also
-  // covers the initial Tournament mount where selectedRound is briefly 0
-  // before the tournament has loaded.
+  // Keep the round pager pinned to the round play is actually on:
+  // whenever `currentRound` advances (e.g. the user started the next
+  // round from another screen), snap to the smart default. This also
+  // covers the initial Tournament mount where selectedRound is briefly
+  // 0 before the tournament has loaded.
   useEffect(() => {
-    if (tournament?.currentRound != null) {
-      setSelectedRound(tournament.currentRound);
+    if (tournament) {
+      setSelectedRound(chooseInitialRound(tournament));
     }
+    // Intentionally only re-run when currentRound advances; editing a
+    // scorecard doesn't force the pager off the user's manual choice.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [tournament?.currentRound]);
 
   // Auto-push Tournament once on the first Home mount if there's an active
