@@ -76,6 +76,7 @@ export default function HomeScreen({ navigation, route }) {
   const [inviteLoading, setInviteLoading] = useState(false);
 
   const reload = useCallback(async () => {
+    setLoading(true);
     try {
       const [t, all] = await Promise.all([loadTournament(), loadAllTournaments()]);
       setTournament(t);
@@ -337,7 +338,15 @@ export default function HomeScreen({ navigation, route }) {
   const isViewer = tournament?._role === 'viewer';
   const userInitials = user?.email ? user.email.slice(0, 2).toUpperCase() : '?';
 
-  if (loading) {
+  // Show the green splash whenever a reload is in flight AND there's no
+  // data to render yet — covers initial mount (cold open) and re-focus
+  // cases where the cached state would otherwise flash an empty page
+  // (e.g. after deletion). When data IS already present, skip the splash
+  // so quick navigations don't blink the green panel.
+  const wouldRenderEmpty =
+    (showTournament && !tournament) ||
+    (showList && allTournaments.length === 0);
+  if (loading && wouldRenderEmpty) {
     return <LoadingSplash />;
   }
 
