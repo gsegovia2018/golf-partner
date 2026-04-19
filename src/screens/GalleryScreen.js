@@ -10,6 +10,7 @@ import MemoriesRoundRow from '../components/MemoriesRoundRow';
 import MemoriesHoleStrip from '../components/MemoriesHoleStrip';
 import MemoriesKindChips from '../components/MemoriesKindChips';
 import MemoryCard from '../components/MemoryCard';
+import MemoriesStoriesViewer from '../components/MemoriesStoriesViewer';
 import {
   deriveRoundEntries,
   deriveHolesWithMedia,
@@ -29,6 +30,7 @@ export default function GalleryScreen({ route, navigation }) {
   const [activeHole, setActiveHole] = useState(null);
   const [activeKind, setActiveKind] = useState('all');
   const [lightbox, setLightbox] = useState({ visible: false, index: 0 });
+  const [stories, setStories] = useState({ visible: false, entry: null });
 
   useEffect(() => { loadTournament().then(setTournament); }, []);
 
@@ -68,7 +70,7 @@ export default function GalleryScreen({ route, navigation }) {
         {rounds?.length ? (
           <MemoriesRoundRow
             entries={roundEntries}
-            onOpenRound={() => {}}
+            onOpenRound={(entry) => setStories({ visible: true, entry })}
           />
         ) : null}
 
@@ -121,6 +123,13 @@ export default function GalleryScreen({ route, navigation }) {
         items={filtered}
         initialIndex={lightbox.index}
         onClose={() => setLightbox({ visible: false, index: 0 })}
+      />
+
+      <MemoriesStoriesViewer
+        visible={stories.visible}
+        entry={stories.entry}
+        round={rounds?.[stories.entry?.roundIndex ?? -1] ?? null}
+        onClose={() => setStories({ visible: false, entry: null })}
       />
     </SafeAreaView>
   );
