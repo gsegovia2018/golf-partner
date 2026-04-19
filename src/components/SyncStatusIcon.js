@@ -25,24 +25,30 @@ export default function SyncStatusIcon() {
   const [sheetOpen, setSheetOpen] = useState(false);
   const pulse = useRef(new Animated.Value(1)).current;
   const lastUnreadRef = useRef(0);
-  const seededRef = useRef(false);
 
   useEffect(() => subscribeSyncStatus(setStatus), []);
-  useEffect(() => subscribeConflicts(({ unread: nextUnread }) => {
-    setUnread(nextUnread);
-  }), []);
 
-  // Fire a single pulse animation on 0 -> n transitions (live only).
-  // Skip the first observation: it carries the persisted value from
-  // AsyncStorage hydration, not a live change. We only want to pulse on
-  // genuine 0 → n transitions that happen within a running session.
+  // Seed `lastUnreadRef` from the FIRST subscribe callback (which carries
+  // the persisted-on-disk unread count after AsyncStorage hydration). That
+  // way the pulse effect sees `prev === unread` on its first run and does
+  // not fire. Subsequent live deltas (prev=0 → n>0) fire normally.
+  useEffect(() => {
+    let seeded = false;
+    return subscribeConflicts(({ unread: nextUnread }) => {
+      if (!seeded) {
+        seeded = true;
+        lastUnreadRef.current = nextUnread;
+      }
+      setUnread(nextUnread);
+    });
+  }, []);
+
+  // Fire a single pulse animation on genuine 0 → n transitions within a
+  // running session. The hydration snapshot from AsyncStorage does not
+  // trigger this because `lastUnreadRef` was pre-seeded above.
   useEffect(() => {
     const prev = lastUnreadRef.current;
     lastUnreadRef.current = unread;
-    if (!seededRef.current) {
-      seededRef.current = true;
-      return;
-    }
     if (prev === 0 && unread > 0) {
       pulse.setValue(1);
       Animated.sequence([
