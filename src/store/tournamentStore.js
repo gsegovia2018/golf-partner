@@ -535,6 +535,184 @@ export function tournamentBestWorstLeaderboard(tournament) {
   return Object.values(totals).sort((a, b) => b.points - a.points);
 }
 
+// Maximum additional Stableford points a player could score on a round's
+// remaining (unscored) holes. Assumes 1 stroke (hole-in-one) on each.
+export function roundMaxRemainingStableford(round, player) {
+  const handicap = getPlayingHandicap(round, player);
+  let max = 0;
+  round.holes.forEach((hole) => {
+    if (round.scores?.[player.id]?.[hole.number] != null) return;
+    max += calcStablefordPoints(hole.par, 1, handicap, hole.strokeIndex);
+  });
+  return max;
+}
+
+// Best-ball: per-pair max additional points on remaining holes. A hole is
+// "remaining" if any of the four players has not scored it. Cap per hole
+// is bestBallValue + worstBallValue (a pair winning both roles).
+export function roundMaxRemainingBestBall(round, settings) {
+  if (!round.pairs || round.pairs.length < 2) return { pair1: 0, pair2: 0 };
+  const { bestBallValue, worstBallValue } = { ...DEFAULT_SETTINGS, ...settings };
+  const cap = bestBallValue + worstBallValue;
+  const allIds = round.pairs.flat().map((p) => p.id);
+  let remaining = 0;
+  round.holes.forEach((hole) => {
+    const allScored = allIds.every((id) => round.scores?.[id]?.[hole.number] != null);
+    if (!allScored) remaining += cap;
+  });
+  return { pair1: remaining, pair2: remaining };
+}
+
+// Returns the index (0 or 1) of the pair that has clinched the round, or
+// null if neither has. mode: 'stableford' | 'bestball'.
+export function roundPairClinched(round, players, settings, mode) {
+  if (!round?.pairs || round.pairs.length < 2) return null;
+  const hasAnyScore = round.scores && Object.keys(round.scores).length > 0;
+  if (!hasAnyScore) return null;
+
+  if (mode === 'bestball') {
+    const bw = calcBestWorstBall(round, players);
+    if (!bw) return null;
+    const { bestBallValue, worstBallValue } = { ...DEFAULT_SETTINGS, ...settings };
+    const p1 = bw.bestBall.pair1 * bestBallValue + bw.worstBall.pair1 * worstBallValue;
+    const p2 = bw.bestBall.pair2 * bestBallValue + bw.worstBall.pair2 * worstBallValue;
+    const rem = roundMaxRemainingBestBall(round, settings);
+    if (p1 > p2 && p1 >= p2 + rem.pair2) return 0;
+    if (p2 > p1 && p2 >= p1 + rem.pair1) return 1;
+    return null;
+  }
+
+  const lb = roundPairLeaderboard(round, players);
+  if (lb.length < 2) return null;
+  const pairIdxOf = (members) => round.pairs.findIndex((pr) => (
+    pr.length === members.length && pr.every((p) => members.some((m) => m.player.id === p.id))
+  ));
+  const leaderIdx = pairIdxOf(lb[0].members);
+  const otherIdx = pairIdxOf(lb[1].members);
+  if (leaderIdx < 0 || otherIdx < 0) return null;
+  let otherMax = 0;
+  round.pairs[otherIdx].forEach((p) => {
+    otherMax += roundMaxRemainingStableford(round, p);
+  });
+  if (lb[0].combinedPoints > lb[1].combinedPoints
+    && lb[0].combinedPoints >= lb[1].combinedPoints + otherMax) return leaderIdx;
+  return null;
+}
+
+// Returns the player id who has clinched the tournament, or null. Considers
+// remaining holes in scored rounds AND every hole of any future rounds the
+// user has not yet advanced to.
+export function tournamentPlayerClinched(tournament, mode) {
+  const { players, rounds, settings } = tournament;
+  const lb = mode === 'bestball'
+    ? tournamentBestWorstLeaderboard(tournament)
+    : tournamentLeaderboard(tournament);
+  if (lb.length < 2) return null;
+  const hasAnyScore = rounds.some((r) => r.scores && Object.keys(r.scores).length > 0);
+  if (!hasAnyScore) return null;
+
+  const { bestBallValue, worstBallValue } = { ...DEFAULT_SETTINGS, ...settings };
+  const bbCap = bestBallValue + worstBallValue;
+  const remainingPerPlayer = new Map(players.map((p) => [p.id, 0]));
+
+  rounds.forEach((round, idx) => {
+    const future = idx > (tournament.currentRound ?? 0);
+    if (mode === 'bestball') {
+      if (future) {
+        players.forEach((p) => {
+          remainingPerPlayer.set(p.id, remainingPerPlayer.get(p.id) + round.holes.length * bbCap);
+        });
+        return;
+      }
+      const rem = roundMaxRemainingBestBall(round, settings);
+      round.pairs?.forEach((pair, pairIdx) => {
+        const r = pairIdx === 0 ? rem.pair1 : rem.pair2;
+        pair.forEach((p) => remainingPerPlayer.set(p.id, remainingPerPlayer.get(p.id) + r));
+      });
+      return;
+    }
+    if (future) {
+      players.forEach((p) => {
+        const handicap = getPlayingHandicap(round, p);
+        let max = 0;
+        round.holes.forEach((h) => { max += calcStablefordPoints(h.par, 1, handicap, h.strokeIndex); });
+        remainingPerPlayer.set(p.id, remainingPerPlayer.get(p.id) + max);
+      });
+      return;
+    }
+    players.forEach((p) => {
+      remainingPerPlayer.set(p.id, remainingPerPlayer.get(p.id) + roundMaxRemainingStableford(round, p));
+    });
+  });
+
+  const leaderId = lb[0].player.id;
+  const leaderPts = lb[0].points;
+  for (let i = 1; i < lb.length; i++) {
+    const otherPts = lb[i].points;
+    const otherRem = remainingPerPlayer.get(lb[i].player.id) ?? 0;
+    if (leaderPts <= otherPts + otherRem) return null;
+  }
+  return leaderId;
+}
+
+// For a given player, returns one entry per partner with the player's
+// average individual Stableford points across rounds they played together,
+// the player's overall baseline average, and the signed delta between them.
+export function playerPartnerSplits(tournament, playerId) {
+  const { players, rounds } = tournament;
+  const player = players.find((p) => p.id === playerId);
+  if (!player) return { baseline: 0, partners: [] };
+
+  const playerRoundPoints = [];
+  rounds.forEach((round, idx) => {
+    if (!isRoundPlayed(round, idx, tournament)) return;
+    const hasAnyScore = Object.values(round.scores?.[playerId] ?? {}).some((s) => s != null);
+    if (!hasAnyScore) return;
+    const totals = roundTotals(round, players);
+    const me = totals.find((t) => t.player.id === playerId);
+    if (!me) return;
+    playerRoundPoints.push({ roundIndex: idx, points: me.totalPoints });
+  });
+
+  const baseline = playerRoundPoints.length
+    ? playerRoundPoints.reduce((s, r) => s + r.points, 0) / playerRoundPoints.length
+    : 0;
+
+  const buckets = new Map();
+  rounds.forEach((round, idx) => {
+    if (!isRoundPlayed(round, idx, tournament) || !round.pairs?.length) return;
+    const myPair = round.pairs.find((pr) => pr.some((p) => p.id === playerId));
+    if (!myPair) return;
+    const partner = myPair.find((p) => p.id !== playerId);
+    if (!partner) return;
+    const hasAnyScore = Object.values(round.scores?.[playerId] ?? {}).some((s) => s != null);
+    if (!hasAnyScore) return;
+    const totals = roundTotals(round, players);
+    const me = totals.find((t) => t.player.id === playerId);
+    if (!me) return;
+    if (!buckets.has(partner.id)) {
+      buckets.set(partner.id, { partner, points: [], roundIndices: [] });
+    }
+    const bucket = buckets.get(partner.id);
+    bucket.points.push(me.totalPoints);
+    bucket.roundIndices.push(idx);
+  });
+
+  const partners = [...buckets.values()].map(({ partner, points, roundIndices }) => {
+    const avg = points.reduce((s, p) => s + p, 0) / points.length;
+    return {
+      partner,
+      rounds: points.length,
+      avgPlayerPoints: Math.round(avg * 10) / 10,
+      delta: Math.round((avg - baseline) * 10) / 10,
+      roundIndices,
+      perRoundPoints: points,
+    };
+  }).sort((a, b) => b.avgPlayerPoints - a.avgPlayerPoints);
+
+  return { baseline: Math.round(baseline * 10) / 10, partners };
+}
+
 export function tournamentLeaderboard(tournament) {
   const { players, rounds } = tournament;
   const totals = players.map((p) => ({ player: p, points: 0, strokes: 0 }));
