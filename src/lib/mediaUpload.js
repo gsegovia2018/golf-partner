@@ -20,6 +20,36 @@ async function uriToBody(uri) {
   return res.blob();
 }
 
+// Resolve the content-type + storage extension for a video upload.
+// Priority:
+//   1) mimeType from the picker (most reliable on web)
+//   2) extension sniffed from the URI (native file paths)
+//   3) mp4 fallback
+// Returns { contentType, ext } where ext is used only for the storage path.
+function resolveVideoType({ mimeType, fileName, localUri }) {
+  const fromMime = (mt) => {
+    if (!mt) return null;
+    // handles "video/webm", "video/mp4", "video/quicktime", etc.
+    const m = mt.match(/^video\/([a-z0-9.+-]+)$/i);
+    if (!m) return null;
+    const sub = m[1].toLowerCase();
+    const extMap = { quicktime: 'mov', 'x-matroska': 'mkv', 'mp2t': 'ts' };
+    return { contentType: mt, ext: extMap[sub] ?? sub };
+  };
+  const fromName = (name) => {
+    if (!name) return null;
+    const m = name.match(/\.([a-z0-9]+)$/i);
+    if (!m) return null;
+    const ext = m[1].toLowerCase();
+    const typeMap = { mov: 'video/quicktime', mp4: 'video/mp4', webm: 'video/webm', mkv: 'video/x-matroska' };
+    return { contentType: typeMap[ext] ?? `video/${ext}`, ext };
+  };
+  return fromMime(mimeType)
+    ?? fromName(fileName)
+    ?? fromName(localUri)
+    ?? { contentType: 'video/mp4', ext: 'mp4' };
+}
+
 async function compressPhoto(uri) {
   const result = await ImageManipulator.manipulateAsync(
     uri,
@@ -62,16 +92,22 @@ async function uploadFile(path, uri, contentType) {
 
 export async function processUpload(entry) {
   const { id, tournamentId, roundId, holeIndex, kind, localUri, durationS,
-          caption, uploaderLabel } = entry;
+          caption, uploaderLabel, mimeType, fileName } = entry;
 
-  const ext = kind === 'photo' ? 'jpg' : extFromUri(localUri, 'mp4');
+  let ext, contentType;
+  if (kind === 'photo') {
+    ext = 'jpg';
+    contentType = 'image/jpeg';
+  } else {
+    ({ ext, contentType } = resolveVideoType({ mimeType, fileName, localUri }));
+  }
+
   const storagePath = `${tournamentId}/${roundId}/${id}.${ext}`;
   const thumbPath = `${tournamentId}/${roundId}/thumbs/${id}.jpg`;
 
   const finalUri = kind === 'photo' ? await compressPhoto(localUri) : localUri;
   const thumbUri = await makeThumbnail(localUri, kind);
 
-  const contentType = kind === 'photo' ? 'image/jpeg' : `video/${ext === 'mov' ? 'quicktime' : ext}`;
   await uploadFile(storagePath, finalUri, contentType);
   await uploadFile(thumbPath, thumbUri, 'image/jpeg');
 
