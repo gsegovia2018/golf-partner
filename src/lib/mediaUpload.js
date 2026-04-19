@@ -1,4 +1,3 @@
-import * as FileSystem from 'expo-file-system';
 import * as ImageManipulator from 'expo-image-manipulator';
 import * as VideoThumbnails from 'expo-video-thumbnails';
 import { supabase } from './supabase';
@@ -11,12 +10,12 @@ function extFromUri(uri, fallback) {
   return (m ? m[1] : fallback).toLowerCase();
 }
 
-async function uriToArrayBuffer(uri) {
-  const base64 = await FileSystem.readAsStringAsync(uri, { encoding: FileSystem.EncodingType.Base64 });
-  const binary = atob(base64);
-  const bytes = new Uint8Array(binary.length);
-  for (let i = 0; i < binary.length; i++) bytes[i] = binary.charCodeAt(i);
-  return bytes.buffer;
+async function uriToBody(uri) {
+  // fetch() works for file://, blob:, data:, and http(s) URIs on both web
+  // and native, so we use it as the single path to get a Blob for upload.
+  const res = await fetch(uri);
+  if (!res.ok) throw new Error(`Failed to read media (${res.status})`);
+  return res.blob();
 }
 
 async function compressPhoto(uri) {
@@ -47,7 +46,7 @@ async function makeThumbnail(uri, kind) {
 }
 
 async function uploadFile(path, uri, contentType) {
-  const body = await uriToArrayBuffer(uri);
+  const body = await uriToBody(uri);
   const { error } = await supabase.storage
     .from(BUCKET)
     .upload(path, body, { contentType, upsert: true });

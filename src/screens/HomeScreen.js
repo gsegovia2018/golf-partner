@@ -8,8 +8,6 @@ import { useAuth } from '../context/AuthContext';
 import { ShareableLeaderboard, shareLeaderboard } from '../components/ShareableCard';
 import PullToRefresh from '../components/PullToRefresh';
 import LoadingSplash from '../components/LoadingSplash';
-import TournamentMemoriesSection from '../components/TournamentMemoriesSection';
-import MediaLightbox from '../components/MediaLightbox';
 import {
   loadTournament, loadAllTournaments,
   setActiveTournament, clearActiveTournament,
@@ -18,7 +16,7 @@ import {
   roundPairLeaderboard, calcBestWorstBall, roundTotals,
   playerRoundBestWorstPoints,
   tournamentPlayerClinched, roundPairClinched,
-  DEFAULT_SETTINGS, generateInviteCode,
+  DEFAULT_SETTINGS, generateInviteCode, setInviteRole,
 } from '../store/tournamentStore';
 
 // Web-only CSS scroll-snap. See ScorecardScreen.js for the rationale:
@@ -26,6 +24,28 @@ import {
 // fast swipe can skip past one page. On web we drive snap ourselves.
 const PAGER_SNAP_TYPE_STYLE = Platform.OS === 'web' ? { scrollSnapType: 'x mandatory', overflowX: 'auto' } : null;
 const PAGER_PAGE_SNAP_STYLE = Platform.OS === 'web' ? { scrollSnapAlign: 'start', scrollSnapStop: 'always' } : null;
+
+// Pick the round to land on when entering the tournament view:
+// - Default is `currentRound`.
+// - If that round is fully played (every player scored every hole) AND
+//   a next round exists, jump to the next one. Keeps the UI pointing at
+//   where play is actually headed.
+function chooseInitialRound(tournament) {
+  const cur = tournament?.currentRound ?? 0;
+  const rounds = tournament?.rounds ?? [];
+  const round = rounds[cur];
+  if (!round) return cur;
+  const playersCount = tournament?.players?.length ?? 0;
+  const holeCount = round.holes?.length ?? 18;
+  const expected = playersCount * holeCount;
+  if (expected === 0) return cur;
+  let entered = 0;
+  for (const pid in (round.scores ?? {})) {
+    entered += Object.keys(round.scores[pid] ?? {}).length;
+  }
+  if (entered >= expected && cur < rounds.length - 1) return cur + 1;
+  return cur;
+}
 
 // Belt-and-braces: inject the snap rules via a real <style> tag so they
 // apply even if RNW's atomic-CSS pipeline ever filters an unknown CSS
@@ -71,13 +91,11 @@ export default function HomeScreen({ navigation, route }) {
   const [undoSnack, setUndoSnack] = useState(null); // { roundIndex, snapshot, at }
   const undoTimerRef = useRef(null);
   const [leaderboardBestBall, setLeaderboardBestBall] = useState(false);
-  const [memLightboxItems, setMemLightboxItems] = useState([]);
-  const [memLightboxIndex, setMemLightboxIndex] = useState(0);
-  const [memLightboxVisible, setMemLightboxVisible] = useState(false);
   const [roundBestBall, setRoundBestBall] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [showInvite, setShowInvite] = useState(false);
   const [inviteCode, setInviteCode] = useState('');
+  const [inviteRoleState, setInviteRoleState] = useState('editor');
   const [inviteLoading, setInviteLoading] = useState(false);
 
   const reload = useCallback(async () => {
@@ -86,7 +104,7 @@ export default function HomeScreen({ navigation, route }) {
       const [t, all] = await Promise.all([loadTournament(), loadAllTournaments()]);
       setTournament(t);
       setAllTournaments(all);
-      if (t) setSelectedRound(t.currentRound);
+      if (t) setSelectedRound(chooseInitialRound(t));
     } finally {
       setLoading(false);
     }
@@ -102,15 +120,18 @@ export default function HomeScreen({ navigation, route }) {
     return unsubscribe;
   }, [navigation, reload]);
 
-  // Keep the round pager pinned to the round being played: whenever the
-  // tournament's currentRound advances (e.g. the user started the next
-  // round in another screen), snap the selection back to it. This also
-  // covers the initial Tournament mount where selectedRound is briefly 0
-  // before the tournament has loaded.
+  // Keep the round pager pinned to the round play is actually on:
+  // whenever `currentRound` advances (e.g. the user started the next
+  // round from another screen), snap to the smart default. This also
+  // covers the initial Tournament mount where selectedRound is briefly
+  // 0 before the tournament has loaded.
   useEffect(() => {
-    if (tournament?.currentRound != null) {
-      setSelectedRound(tournament.currentRound);
+    if (tournament) {
+      setSelectedRound(chooseInitialRound(tournament));
     }
+    // Intentionally only re-run when currentRound advances; editing a
+    // scorecard doesn't force the pager off the user's manual choice.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [tournament?.currentRound]);
 
   // Auto-push Tournament once on the first Home mount if there's an active
@@ -278,13 +299,26 @@ export default function HomeScreen({ navigation, route }) {
     setInviteLoading(true);
     setShowInvite(true);
     try {
-      const code = await generateInviteCode(tournament.id);
+      const { code, role } = await generateInviteCode(tournament.id);
       setInviteCode(code);
+      setInviteRoleState(role);
     } catch (err) {
       setShowInvite(false);
       Alert.alert('Error', err.message);
     } finally {
       setInviteLoading(false);
+    }
+  }
+
+  async function changeInviteRole(next) {
+    if (!tournament || next === inviteRoleState) return;
+    const prev = inviteRoleState;
+    setInviteRoleState(next); // optimistic
+    try {
+      await setInviteRole(tournament.id, next);
+    } catch (err) {
+      setInviteRoleState(prev);
+      Alert.alert('Error', err.message ?? 'Could not change invite role');
     }
   }
 
@@ -493,6 +527,14 @@ export default function HomeScreen({ navigation, route }) {
               <Feather name="share" size={18} color={theme.accent.primary} />
             </TouchableOpacity>
           )}
+          <TouchableOpacity
+            style={s.iconBtn}
+            onPress={() => navigation.navigate('Gallery', { tournamentId: tournament.id })}
+            activeOpacity={0.7}
+            accessibilityLabel="Recuerdos"
+          >
+            <Feather name="image" size={18} color={theme.accent.primary} />
+          </TouchableOpacity>
           <TouchableOpacity style={s.iconBtn} onPress={() => setShowSettings(true)} activeOpacity={0.7}>
             <Feather name="settings" size={18} color={theme.accent.primary} />
           </TouchableOpacity>
@@ -551,18 +593,6 @@ export default function HomeScreen({ navigation, route }) {
           );
         })}
       </View>
-
-      {tournament && (
-        <TournamentMemoriesSection
-          tournamentId={tournament.id}
-          onOpenGallery={() => navigation.navigate('Gallery', { tournamentId: tournament.id })}
-          onOpenLightbox={(items, i) => {
-            setMemLightboxItems(items);
-            setMemLightboxIndex(i);
-            setMemLightboxVisible(true);
-          }}
-        />
-      )}
 
       {tournament.rounds.length > 0 && (
         <View style={s.card}>
@@ -748,8 +778,12 @@ export default function HomeScreen({ navigation, route }) {
       <Pressable style={s.modalBackdrop} onPress={() => setShowInvite(false)}>
         <Pressable style={s.modalSheet} onPress={() => {}}>
           <View style={s.modalHandle} />
-          <Text style={s.modalTitle}>Invite Viewers</Text>
-          <Text style={s.inviteSubtitle}>Share this code — anyone who enters it can follow this tournament.</Text>
+          <Text style={s.modalTitle}>Invite</Text>
+          <Text style={s.inviteSubtitle}>
+            {inviteRoleState === 'editor'
+              ? 'Anyone with this code can enter scores for this tournament.'
+              : 'Anyone with this code can view this tournament (read-only).'}
+          </Text>
           {inviteLoading
             ? <ActivityIndicator color={theme.accent.primary} style={{ marginVertical: 24 }} />
             : (
@@ -757,6 +791,28 @@ export default function HomeScreen({ navigation, route }) {
                 <Text style={s.inviteCode}>{inviteCode}</Text>
               </View>
             )}
+          <View style={s.inviteRoleRow}>
+            <TouchableOpacity
+              style={[s.inviteRoleBtn, inviteRoleState === 'editor' && s.inviteRoleBtnActive]}
+              onPress={() => changeInviteRole('editor')}
+              activeOpacity={0.7}
+              disabled={!inviteCode}
+            >
+              <Text style={[s.inviteRoleText, inviteRoleState === 'editor' && s.inviteRoleTextActive]}>
+                Editor
+              </Text>
+            </TouchableOpacity>
+            <TouchableOpacity
+              style={[s.inviteRoleBtn, inviteRoleState === 'viewer' && s.inviteRoleBtnActive]}
+              onPress={() => changeInviteRole('viewer')}
+              activeOpacity={0.7}
+              disabled={!inviteCode}
+            >
+              <Text style={[s.inviteRoleText, inviteRoleState === 'viewer' && s.inviteRoleTextActive]}>
+                Viewer
+              </Text>
+            </TouchableOpacity>
+          </View>
           <TouchableOpacity
             style={[s.menuItem, { borderBottomWidth: 0 }]}
             onPress={() => Share.share({ message: `Join my golf tournament! Code: ${inviteCode}` })}
@@ -1006,12 +1062,6 @@ export default function HomeScreen({ navigation, route }) {
       </Pressable>
     </Modal>
 
-    <MediaLightbox
-      visible={memLightboxVisible}
-      items={memLightboxItems}
-      initialIndex={memLightboxIndex}
-      onClose={() => setMemLightboxVisible(false)}
-    />
     </SafeAreaView>
   );
 }
@@ -1489,4 +1539,19 @@ const makeStyles = (t) => StyleSheet.create({
     fontFamily: 'PlusJakartaSans-ExtraBold', color: t.accent.primary,
     fontSize: 36, letterSpacing: 10,
   },
+  inviteRoleRow: {
+    flexDirection: 'row', gap: 8, marginBottom: 12, paddingHorizontal: 4,
+  },
+  inviteRoleBtn: {
+    flex: 1, paddingVertical: 10, borderRadius: 10,
+    borderWidth: 1, borderColor: t.border.default,
+    alignItems: 'center', backgroundColor: t.bg.secondary,
+  },
+  inviteRoleBtnActive: {
+    backgroundColor: t.accent.primary, borderColor: t.accent.primary,
+  },
+  inviteRoleText: {
+    fontFamily: 'PlusJakartaSans-SemiBold', fontSize: 13, color: t.text.muted,
+  },
+  inviteRoleTextActive: { color: t.text.inverse },
 });

@@ -126,6 +126,14 @@ export default function ScorecardScreen({ navigation, route }) {
     return unsub;
   }, [reload]);
 
+  // Re-run the auto-jump to the first unplayed hole whenever the round
+  // being displayed changes. Without this, switching from round 1 to
+  // round 2 would leave the pager stuck on whatever hole was active
+  // in round 1.
+  useEffect(() => {
+    hasAutoJumpedRef.current = false;
+  }, [paramRoundIndex]);
+
   const onRefresh = useCallback(async () => {
     setRefreshing(true);
     try { await reload(); } finally { setRefreshing(false); }
@@ -690,8 +698,13 @@ function HoleView({ round, roundIndex, players, scores, notes, currentHole, hole
       <View
         style={s.pagerWrap}
         onLayout={(e) => {
+          // Don't prefill holeScrollOffset from currentHole — on web the
+          // ScrollView's contentOffset doesn't reliably position before
+          // children lay out, and lying about the offset lets the sync
+          // effect skip its scrollTo when auto-jumping to the first
+          // unplayed hole. Leave the ref at its actual value so the
+          // effect corrects it.
           const { width, height } = e.nativeEvent.layout;
-          holeScrollOffset.current = (currentHole - 1) * width;
           setPagerSize({ width, height });
         }}
       >
