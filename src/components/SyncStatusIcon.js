@@ -25,6 +25,7 @@ export default function SyncStatusIcon() {
   const [sheetOpen, setSheetOpen] = useState(false);
   const pulse = useRef(new Animated.Value(1)).current;
   const lastUnreadRef = useRef(0);
+  const seededRef = useRef(false);
 
   useEffect(() => subscribeSyncStatus(setStatus), []);
   useEffect(() => subscribeConflicts(({ unread: nextUnread }) => {
@@ -32,11 +33,16 @@ export default function SyncStatusIcon() {
   }), []);
 
   // Fire a single pulse animation on 0 -> n transitions (live only).
-  // `lastUnreadRef` is seeded by the first subscribe callback, so cold-start
-  // hydration of a persisted non-zero unread does NOT trigger a pulse.
+  // Skip the first observation: it carries the persisted value from
+  // AsyncStorage hydration, not a live change. We only want to pulse on
+  // genuine 0 → n transitions that happen within a running session.
   useEffect(() => {
     const prev = lastUnreadRef.current;
     lastUnreadRef.current = unread;
+    if (!seededRef.current) {
+      seededRef.current = true;
+      return;
+    }
     if (prev === 0 && unread > 0) {
       pulse.setValue(1);
       Animated.sequence([
