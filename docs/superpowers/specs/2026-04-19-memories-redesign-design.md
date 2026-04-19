@@ -29,23 +29,23 @@ Horizontal scroll. One entry per round in `tournament.rounds[]`.
 
 - Circle avatar (56×56): background is the round's cover thumbnail (most recent media in that round). If the round has no media, the circle is flat `bg.secondary` with muted content.
 - Inside the circle: the round label (`R1`, `R2`, …) in Playfair, white with text-shadow for legibility over any photo.
-- Below the circle: course name (`round.course` if present, else `round.courseName`, else empty), one line, ellipsis, muted color, max width = circle width.
+- Below the circle: `round.courseName` (one line, ellipsis, muted color, max width = circle width). Empty string if absent.
 - No badge, no progress ring, no count.
 - Tap a round with media → open Stories viewer for that round. Tap an empty round → no-op (circle appears dimmed ~60% opacity).
 - End-of-row affordance: right-edge fade gradient over the container so users know to scroll if the row overflows.
 
-### Hole activity strip
+### Hole filter strip
 
 Card with header "POR HOYO · `N / total`" where N = distinct `hole_index` values present in this tournament's media.
 
-- Grid of `maxHoles` cells (derived as today from `tournament.rounds.map(r => r.holes.length)`), laid out in rows of 9 so 18 holes = 2 rows, 9 holes = 1 row.
+- Body renders only the holes that have media, sorted ascending, as wrapping pill buttons.
 - Cell states:
-  - **inactive** (no media at this hole): muted background, muted number.
-  - **has** (media exists at this hole across any round): normal background, accent border, normal text.
-  - **on** (this hole is the active filter): accent background, white text.
-- Tap a cell with `has` → sets hole filter. Tap active cell → clears filter. Tap inactive cell → no-op (subtle haptic on mobile if easy, otherwise ignore).
+  - **default**: accent border, normal text.
+  - **on** (this hole is the active filter): accent background, inverse text.
+- Tap a cell → sets hole filter. Tap active cell → clears filter.
+- If no holes have media, the whole strip hides (returns null).
 
-Computing cell state: a single `Set<number>` built from `items` on each render via `useMemo`.
+Computing the displayed list: a single `Set<number>` built from `items` on each render via `useMemo`, then `Array.from(set).sort((a,b) => a-b)`.
 
 ### Kind chips
 
