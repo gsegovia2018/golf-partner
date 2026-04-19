@@ -39,7 +39,7 @@ async function drainTournament(tournamentId, entries) {
     return;
   }
   const remote = await fetchRemote(tournamentId);
-  const merged = mergeTournaments(local, remote);
+  const { merged } = mergeTournaments(local, remote);
 
   await saveLocal(merged);
   await pushRemote(merged);
