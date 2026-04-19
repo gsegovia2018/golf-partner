@@ -101,6 +101,19 @@ export default function HomeScreen({ navigation, route }) {
     return unsubscribe;
   }, [navigation, reload]);
 
+  // Web deep-link: if the URL has ?invite=CODE, auto-open the Join screen
+  // with the code pre-filled once the user is signed in. Strip the param
+  // from the URL afterwards so a refresh doesn't re-trigger.
+  useEffect(() => {
+    if (Platform.OS !== 'web' || typeof window === 'undefined') return;
+    const url = new URL(window.location.href);
+    const code = url.searchParams.get('invite');
+    if (!code) return;
+    url.searchParams.delete('invite');
+    window.history.replaceState({}, '', url.toString());
+    navigation.navigate('JoinTournament', { code: code.toUpperCase() });
+  }, [navigation]);
+
   // Keep the round pager pinned to the round being played: whenever the
   // tournament's currentRound advances (e.g. the user started the next
   // round in another screen), snap the selection back to it. This also
@@ -777,12 +790,23 @@ export default function HomeScreen({ navigation, route }) {
           </View>
           <TouchableOpacity
             style={[s.menuItem, { borderBottomWidth: 0 }]}
-            onPress={() => Share.share({ message: `Join my golf tournament! Code: ${inviteCode}` })}
+            onPress={() => {
+              const origin = Platform.OS === 'web' && typeof window !== 'undefined'
+                ? window.location.origin
+                : null;
+              // On web the link auto-prefills the join code (see
+              // AppNavigator's ?invite handler). On native we share just
+              // the code until deep-linking is wired up.
+              const message = origin
+                ? `Join my golf tournament 🏌️  ${origin}/?invite=${inviteCode}`
+                : `Join my golf tournament! Code: ${inviteCode}`;
+              Share.share({ message });
+            }}
             activeOpacity={0.7}
             disabled={!inviteCode}
           >
             <Feather name="share-2" size={18} color={theme.accent.primary} />
-            <Text style={s.menuItemText}>Share Code</Text>
+            <Text style={s.menuItemText}>Share link</Text>
             <Feather name="chevron-right" size={16} color={theme.text.muted} />
           </TouchableOpacity>
         </Pressable>

@@ -6,20 +6,21 @@ import {
 } from './tournamentStore';
 
 // One row per auth.users.id — created by a trigger on signup, edited from
-// ProfileScreen. `display_name` is also what we match against the
-// per-tournament player entries to compute personal stats.
+// ProfileScreen. `username` is a unique lowercase handle; `display_name`
+// is the free-text name shown in UIs.
 export async function loadProfile() {
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) return null;
   const { data, error } = await supabase
     .from('profiles')
-    .select('user_id, display_name, handicap, avatar_color, updated_at')
+    .select('user_id, username, display_name, handicap, avatar_color, updated_at')
     .eq('user_id', user.id)
     .maybeSingle();
   if (error) throw error;
   return {
     userId: user.id,
     email: user.email,
+    username: data?.username ?? '',
     displayName: data?.display_name ?? '',
     handicap: data?.handicap ?? null,
     avatarColor: data?.avatar_color ?? null,
@@ -27,7 +28,7 @@ export async function loadProfile() {
   };
 }
 
-export async function upsertProfile({ displayName, handicap, avatarColor }) {
+export async function upsertProfile({ username, displayName, handicap, avatarColor }) {
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) throw new Error('Not signed in');
   const row = {
@@ -37,18 +38,28 @@ export async function upsertProfile({ displayName, handicap, avatarColor }) {
     avatar_color: avatarColor || null,
     updated_at: new Date().toISOString(),
   };
+  // Only write username if provided — blank means "don't touch". Keep it
+  // lowercased so the unique(lower(username)) index can't fail silently.
+  if (username !== undefined && username !== null && username !== '') {
+    row.username = String(username).trim().toLowerCase();
+  }
   const { error } = await supabase.from('profiles').upsert(row);
   if (error) throw error;
 }
 
-// Match on player name (case-insensitive, trimmed). 4-friends app, names
-// are distinct; if that ever stops being true we can layer an explicit
-// claim table on top. Returns null entries when the name isn't found in
-// the tournament's player list.
-function findPlayerByName(tournament, displayName) {
-  if (!displayName) return null;
-  const target = displayName.trim().toLowerCase();
-  return tournament.players.find((p) => p.name.trim().toLowerCase() === target) ?? null;
+// Resolve "me" inside a tournament: prefer the embedded player with
+// user_id === current user. Fall back to name match for legacy data
+// written before user_id was stamped onto embedded players.
+function findMyPlayer(tournament, userId, displayName) {
+  if (userId) {
+    const byId = tournament.players.find((p) => p.user_id === userId);
+    if (byId) return byId;
+  }
+  if (displayName) {
+    const target = displayName.trim().toLowerCase();
+    return tournament.players.find((p) => p.name.trim().toLowerCase() === target) ?? null;
+  }
+  return null;
 }
 
 function isRoundPlayed(round, index, tournament) {
@@ -59,8 +70,8 @@ function isRoundPlayed(round, index, tournament) {
 // Aggregates: per-user stats computed client-side from tournaments the
 // user can see (own + invited). Keeping this client-side avoids a new
 // server-side aggregation table while the data volume is tiny.
-export async function computePersonalStats(displayName) {
-  if (!displayName?.trim()) {
+export async function computePersonalStats({ userId, displayName }) {
+  if (!userId && !displayName?.trim()) {
     return {
       tournamentsPlayed: 0,
       roundsPlayed: 0,
@@ -78,7 +89,7 @@ export async function computePersonalStats(displayName) {
   let wins = 0;
 
   for (const t of tournaments) {
-    const me = findPlayerByName(t, displayName);
+    const me = findMyPlayer(t, userId, displayName);
     if (!me) continue;
     tournamentsPlayed += 1;
 
