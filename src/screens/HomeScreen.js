@@ -8,8 +8,6 @@ import { useAuth } from '../context/AuthContext';
 import { ShareableLeaderboard, shareLeaderboard } from '../components/ShareableCard';
 import PullToRefresh from '../components/PullToRefresh';
 import LoadingSplash from '../components/LoadingSplash';
-import TournamentMemoriesSection from '../components/TournamentMemoriesSection';
-import MediaLightbox from '../components/MediaLightbox';
 import {
   loadTournament, loadAllTournaments,
   setActiveTournament, clearActiveTournament,
@@ -25,6 +23,28 @@ import {
 // fast swipe can skip past one page. On web we drive snap ourselves.
 const PAGER_SNAP_TYPE_STYLE = Platform.OS === 'web' ? { scrollSnapType: 'x mandatory', overflowX: 'auto' } : null;
 const PAGER_PAGE_SNAP_STYLE = Platform.OS === 'web' ? { scrollSnapAlign: 'start', scrollSnapStop: 'always' } : null;
+
+// Pick the round to land on when entering the tournament view:
+// - Default is `currentRound`.
+// - If that round is fully played (every player scored every hole) AND
+//   a next round exists, jump to the next one. Keeps the UI pointing at
+//   where play is actually headed.
+function chooseInitialRound(tournament) {
+  const cur = tournament?.currentRound ?? 0;
+  const rounds = tournament?.rounds ?? [];
+  const round = rounds[cur];
+  if (!round) return cur;
+  const playersCount = tournament?.players?.length ?? 0;
+  const holeCount = round.holes?.length ?? 18;
+  const expected = playersCount * holeCount;
+  if (expected === 0) return cur;
+  let entered = 0;
+  for (const pid in (round.scores ?? {})) {
+    entered += Object.keys(round.scores[pid] ?? {}).length;
+  }
+  if (entered >= expected && cur < rounds.length - 1) return cur + 1;
+  return cur;
+}
 
 // Belt-and-braces: inject the snap rules via a real <style> tag so they
 // apply even if RNW's atomic-CSS pipeline ever filters an unknown CSS
@@ -70,9 +90,6 @@ export default function HomeScreen({ navigation, route }) {
   const [undoSnack, setUndoSnack] = useState(null); // { roundIndex, snapshot, at }
   const undoTimerRef = useRef(null);
   const [leaderboardBestBall, setLeaderboardBestBall] = useState(false);
-  const [memLightboxItems, setMemLightboxItems] = useState([]);
-  const [memLightboxIndex, setMemLightboxIndex] = useState(0);
-  const [memLightboxVisible, setMemLightboxVisible] = useState(false);
   const [roundBestBall, setRoundBestBall] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [showInvite, setShowInvite] = useState(false);
@@ -81,11 +98,12 @@ export default function HomeScreen({ navigation, route }) {
   const [inviteLoading, setInviteLoading] = useState(false);
 
   const reload = useCallback(async () => {
+    setLoading(true);
     try {
       const [t, all] = await Promise.all([loadTournament(), loadAllTournaments()]);
       setTournament(t);
       setAllTournaments(all);
-      if (t) setSelectedRound(t.currentRound);
+      if (t) setSelectedRound(chooseInitialRound(t));
     } finally {
       setLoading(false);
     }
@@ -114,15 +132,18 @@ export default function HomeScreen({ navigation, route }) {
     navigation.navigate('JoinTournament', { code: code.toUpperCase() });
   }, [navigation]);
 
-  // Keep the round pager pinned to the round being played: whenever the
-  // tournament's currentRound advances (e.g. the user started the next
-  // round in another screen), snap the selection back to it. This also
-  // covers the initial Tournament mount where selectedRound is briefly 0
-  // before the tournament has loaded.
+  // Keep the round pager pinned to the round play is actually on:
+  // whenever `currentRound` advances (e.g. the user started the next
+  // round from another screen), snap to the smart default. This also
+  // covers the initial Tournament mount where selectedRound is briefly
+  // 0 before the tournament has loaded.
   useEffect(() => {
-    if (tournament?.currentRound != null) {
-      setSelectedRound(tournament.currentRound);
+    if (tournament) {
+      setSelectedRound(chooseInitialRound(tournament));
     }
+    // Intentionally only re-run when currentRound advances; editing a
+    // scorecard doesn't force the pager off the user's manual choice.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [tournament?.currentRound]);
 
   // Auto-push Tournament once on the first Home mount if there's an active
@@ -355,7 +376,15 @@ export default function HomeScreen({ navigation, route }) {
   const isViewer = tournament?._role === 'viewer';
   const userInitials = user?.email ? user.email.slice(0, 2).toUpperCase() : '?';
 
-  if (loading) {
+  // Show the green splash whenever a reload is in flight AND there's no
+  // data to render yet — covers initial mount (cold open) and re-focus
+  // cases where the cached state would otherwise flash an empty page
+  // (e.g. after deletion). When data IS already present, skip the splash
+  // so quick navigations don't blink the green panel.
+  const wouldRenderEmpty =
+    (showTournament && !tournament) ||
+    (showList && allTournaments.length === 0);
+  if (loading && wouldRenderEmpty) {
     return <LoadingSplash />;
   }
 
@@ -505,6 +534,14 @@ export default function HomeScreen({ navigation, route }) {
               <Feather name="share" size={18} color={theme.accent.primary} />
             </TouchableOpacity>
           )}
+          <TouchableOpacity
+            style={s.iconBtn}
+            onPress={() => navigation.navigate('Gallery', { tournamentId: tournament.id })}
+            activeOpacity={0.7}
+            accessibilityLabel="Recuerdos"
+          >
+            <Feather name="image" size={18} color={theme.accent.primary} />
+          </TouchableOpacity>
           <TouchableOpacity style={s.iconBtn} onPress={() => setShowSettings(true)} activeOpacity={0.7}>
             <Feather name="settings" size={18} color={theme.accent.primary} />
           </TouchableOpacity>
@@ -556,18 +593,6 @@ export default function HomeScreen({ navigation, route }) {
           );
         })}
       </View>
-
-      {tournament && (
-        <TournamentMemoriesSection
-          tournamentId={tournament.id}
-          onOpenGallery={() => navigation.navigate('Gallery', { tournamentId: tournament.id })}
-          onOpenLightbox={(items, i) => {
-            setMemLightboxItems(items);
-            setMemLightboxIndex(i);
-            setMemLightboxVisible(true);
-          }}
-        />
-      )}
 
       {tournament.rounds.length > 0 && (
         <View style={s.card}>
@@ -1048,12 +1073,6 @@ export default function HomeScreen({ navigation, route }) {
       </Pressable>
     </Modal>
 
-    <MediaLightbox
-      visible={memLightboxVisible}
-      items={memLightboxItems}
-      initialIndex={memLightboxIndex}
-      onClose={() => setMemLightboxVisible(false)}
-    />
     </SafeAreaView>
   );
 }
