@@ -17,7 +17,7 @@ import {
   tournamentLeaderboard, tournamentBestWorstLeaderboard,
   roundPairLeaderboard, calcBestWorstBall, roundTotals,
   playerRoundBestWorstPoints,
-  DEFAULT_SETTINGS, generateInviteCode,
+  DEFAULT_SETTINGS, generateInviteCode, setInviteRole,
 } from '../store/tournamentStore';
 
 // Web-only CSS scroll-snap. See ScorecardScreen.js for the rationale:
@@ -77,6 +77,7 @@ export default function HomeScreen({ navigation, route }) {
   const [refreshing, setRefreshing] = useState(false);
   const [showInvite, setShowInvite] = useState(false);
   const [inviteCode, setInviteCode] = useState('');
+  const [inviteRoleState, setInviteRoleState] = useState('editor');
   const [inviteLoading, setInviteLoading] = useState(false);
 
   const reload = useCallback(async () => {
@@ -276,13 +277,26 @@ export default function HomeScreen({ navigation, route }) {
     setInviteLoading(true);
     setShowInvite(true);
     try {
-      const code = await generateInviteCode(tournament.id);
+      const { code, role } = await generateInviteCode(tournament.id);
       setInviteCode(code);
+      setInviteRoleState(role);
     } catch (err) {
       setShowInvite(false);
       Alert.alert('Error', err.message);
     } finally {
       setInviteLoading(false);
+    }
+  }
+
+  async function changeInviteRole(next) {
+    if (!tournament || next === inviteRoleState) return;
+    const prev = inviteRoleState;
+    setInviteRoleState(next); // optimistic
+    try {
+      await setInviteRole(tournament.id, next);
+    } catch (err) {
+      setInviteRoleState(prev);
+      Alert.alert('Error', err.message ?? 'Could not change invite role');
     }
   }
 
@@ -726,8 +740,12 @@ export default function HomeScreen({ navigation, route }) {
       <Pressable style={s.modalBackdrop} onPress={() => setShowInvite(false)}>
         <Pressable style={s.modalSheet} onPress={() => {}}>
           <View style={s.modalHandle} />
-          <Text style={s.modalTitle}>Invite Viewers</Text>
-          <Text style={s.inviteSubtitle}>Share this code — anyone who enters it can follow this tournament.</Text>
+          <Text style={s.modalTitle}>Invite</Text>
+          <Text style={s.inviteSubtitle}>
+            {inviteRoleState === 'editor'
+              ? 'Anyone with this code can enter scores for this tournament.'
+              : 'Anyone with this code can view this tournament (read-only).'}
+          </Text>
           {inviteLoading
             ? <ActivityIndicator color={theme.accent.primary} style={{ marginVertical: 24 }} />
             : (
@@ -735,6 +753,28 @@ export default function HomeScreen({ navigation, route }) {
                 <Text style={s.inviteCode}>{inviteCode}</Text>
               </View>
             )}
+          <View style={s.inviteRoleRow}>
+            <TouchableOpacity
+              style={[s.inviteRoleBtn, inviteRoleState === 'editor' && s.inviteRoleBtnActive]}
+              onPress={() => changeInviteRole('editor')}
+              activeOpacity={0.7}
+              disabled={!inviteCode}
+            >
+              <Text style={[s.inviteRoleText, inviteRoleState === 'editor' && s.inviteRoleTextActive]}>
+                Editor
+              </Text>
+            </TouchableOpacity>
+            <TouchableOpacity
+              style={[s.inviteRoleBtn, inviteRoleState === 'viewer' && s.inviteRoleBtnActive]}
+              onPress={() => changeInviteRole('viewer')}
+              activeOpacity={0.7}
+              disabled={!inviteCode}
+            >
+              <Text style={[s.inviteRoleText, inviteRoleState === 'viewer' && s.inviteRoleTextActive]}>
+                Viewer
+              </Text>
+            </TouchableOpacity>
+          </View>
           <TouchableOpacity
             style={[s.menuItem, { borderBottomWidth: 0 }]}
             onPress={() => Share.share({ message: `Join my golf tournament! Code: ${inviteCode}` })}
@@ -1442,4 +1482,19 @@ const makeStyles = (t) => StyleSheet.create({
     fontFamily: 'PlusJakartaSans-ExtraBold', color: t.accent.primary,
     fontSize: 36, letterSpacing: 10,
   },
+  inviteRoleRow: {
+    flexDirection: 'row', gap: 8, marginBottom: 12, paddingHorizontal: 4,
+  },
+  inviteRoleBtn: {
+    flex: 1, paddingVertical: 10, borderRadius: 10,
+    borderWidth: 1, borderColor: t.border.default,
+    alignItems: 'center', backgroundColor: t.bg.secondary,
+  },
+  inviteRoleBtnActive: {
+    backgroundColor: t.accent.primary, borderColor: t.accent.primary,
+  },
+  inviteRoleText: {
+    fontFamily: 'PlusJakartaSans-SemiBold', fontSize: 13, color: t.text.muted,
+  },
+  inviteRoleTextActive: { color: t.text.inverse },
 });
