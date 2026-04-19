@@ -3,7 +3,7 @@ import { Modal, View, Text, TouchableOpacity, Dimensions, FlatList, Alert, Style
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Feather } from '@expo/vector-icons';
 import { Image as ExpoImage } from 'expo-image';
-import { Video, ResizeMode } from 'expo-av';
+import { VideoView, useVideoPlayer } from 'expo-video';
 import * as Sharing from 'expo-sharing';
 import { useTheme } from '../theme/ThemeContext';
 import { deleteMedia } from '../store/mediaStore';
@@ -71,19 +71,8 @@ export default function MediaLightbox({ visible, items, initialIndex, onClose })
             const i = Math.round(e.nativeEvent.contentOffset.x / width);
             setIndex(i);
           }}
-          renderItem={({ item }) => (
-            <View style={{ width, height }}>
-              {item.kind === 'photo' ? (
-                <ExpoImage source={{ uri: item.url }} style={s.media} contentFit="contain" />
-              ) : (
-                <Video
-                  source={{ uri: item.url }}
-                  style={s.media}
-                  useNativeControls
-                  resizeMode={ResizeMode.CONTAIN}
-                />
-              )}
-            </View>
+          renderItem={({ item, index: i }) => (
+            <LightboxItem item={item} active={i === index} styles={s} />
           )}
         />
 
@@ -113,6 +102,41 @@ export default function MediaLightbox({ visible, items, initialIndex, onClose })
         </View>
       </View>
     </Modal>
+  );
+}
+
+function LightboxItem({ item, active, styles }) {
+  if (item.kind === 'photo') {
+    return (
+      <View style={{ width, height }}>
+        <ExpoImage source={{ uri: item.url }} style={styles.media} contentFit="contain" />
+      </View>
+    );
+  }
+  return (
+    <View style={{ width, height }}>
+      <LightboxVideo uri={item.url} active={active} style={styles.media} />
+    </View>
+  );
+}
+
+function LightboxVideo({ uri, active, style }) {
+  const player = useVideoPlayer(uri, (p) => {
+    p.loop = false;
+  });
+  useEffect(() => {
+    if (active) player.play();
+    else player.pause();
+  }, [active, player]);
+  return (
+    <VideoView
+      player={player}
+      style={style}
+      contentFit="contain"
+      nativeControls
+      allowsFullscreen
+      allowsPictureInPicture={false}
+    />
   );
 }
 

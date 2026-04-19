@@ -2,6 +2,7 @@ import React, { useEffect, useState } from 'react';
 import { Modal, View, Text, TouchableOpacity, TextInput, ScrollView, Image, StyleSheet } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { Feather } from '@expo/vector-icons';
+import { VideoView, useVideoPlayer } from 'expo-video';
 import { useTheme } from '../theme/ThemeContext';
 
 const UPLOADER_KEY = '@golf_uploader_label';
@@ -45,10 +46,7 @@ export default function AttachMediaSheet({ visible, asset, holes, defaultHoleInd
           {asset.kind === 'photo' ? (
             <Image source={{ uri: asset.localUri }} style={s.preview} resizeMode="cover" />
           ) : (
-            <View style={[s.preview, s.videoPreview]}>
-              <Feather name="video" size={32} color={theme.text.muted} />
-              <Text style={s.videoLabel}>Video {asset.durationS ? `· ${Math.round(asset.durationS)}s` : ''}</Text>
-            </View>
+            <VideoPreview uri={asset.localUri} style={s.preview} />
           )}
 
           <Text style={s.sectionLabel}>Hoyo</Text>
@@ -92,6 +90,20 @@ export default function AttachMediaSheet({ visible, asset, holes, defaultHoleInd
   );
 }
 
+function VideoPreview({ uri, style }) {
+  const player = useVideoPlayer(uri, (p) => { p.loop = true; p.muted = true; });
+  return (
+    <VideoView
+      player={player}
+      style={style}
+      contentFit="cover"
+      nativeControls
+      allowsFullscreen={false}
+      allowsPictureInPicture={false}
+    />
+  );
+}
+
 function Chip({ label, active, onPress, theme }) {
   const s = makeChipStyles(theme, active);
   return (
@@ -122,9 +134,7 @@ const makeStyles = (theme) => StyleSheet.create({
   },
   header: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 },
   title: { fontFamily: 'PlayfairDisplay-Bold', fontSize: 20, color: theme.text.primary },
-  preview: { width: '100%', aspectRatio: 16 / 9, borderRadius: 12, backgroundColor: theme.bg.secondary, marginBottom: 16 },
-  videoPreview: { alignItems: 'center', justifyContent: 'center' },
-  videoLabel: { marginTop: 6, color: theme.text.muted, fontFamily: 'PlusJakartaSans-Medium' },
+  preview: { width: '100%', aspectRatio: 16 / 9, borderRadius: 12, backgroundColor: theme.bg.secondary, marginBottom: 16, overflow: 'hidden' },
   sectionLabel: { fontFamily: 'PlusJakartaSans-SemiBold', fontSize: 12, color: theme.text.muted, marginTop: 12, marginBottom: 6, textTransform: 'uppercase', letterSpacing: 0.5 },
   chipsRow: { paddingVertical: 4 },
   input: {

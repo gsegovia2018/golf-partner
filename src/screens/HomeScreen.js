@@ -8,6 +8,12 @@ import { useAuth } from '../context/AuthContext';
 import { ShareableLeaderboard, shareLeaderboard } from '../components/ShareableCard';
 import PullToRefresh from '../components/PullToRefresh';
 import LoadingSplash from '../components/LoadingSplash';
+import TournamentMemoriesSection from '../components/TournamentMemoriesSection';
+import MediaLightbox from '../components/MediaLightbox';
+import CaptureMenuSheet from '../components/CaptureMenuSheet';
+import AttachMediaSheet from '../components/AttachMediaSheet';
+import BatchAttachSheet from '../components/BatchAttachSheet';
+import { pickMedia, attachMedia, attachManyMedia } from '../lib/mediaCapture';
 import {
   loadTournament, loadAllTournaments,
   setActiveTournament, clearActiveTournament,
@@ -97,6 +103,10 @@ export default function HomeScreen({ navigation, route }) {
   const [inviteCode, setInviteCode] = useState('');
   const [inviteRoleState, setInviteRoleState] = useState('editor');
   const [inviteLoading, setInviteLoading] = useState(false);
+  const [memLightbox, setMemLightbox] = useState({ visible: false, items: [], index: 0 });
+  const [captureMenuVisible, setCaptureMenuVisible] = useState(false);
+  const [singleAsset, setSingleAsset] = useState(null);
+  const [batchAssets, setBatchAssets] = useState(null);
 
   const reload = useCallback(async () => {
     setLoading(true);
@@ -114,6 +124,67 @@ export default function HomeScreen({ navigation, route }) {
     setRefreshing(true);
     try { await reload(); } finally { setRefreshing(false); }
   }, [reload]);
+
+  const defaultRoundIndexForAdd = useCallback(() => {
+    if (!tournament?.rounds?.length) return 0;
+    return Math.min(tournament.currentRound ?? 0, tournament.rounds.length - 1);
+  }, [tournament]);
+
+  const openAddMemory = useCallback(() => setCaptureMenuVisible(true), []);
+
+  const handleCaptureSelect = useCallback(async ({ source, mediaTypes }) => {
+    setCaptureMenuVisible(false);
+    try {
+      const result = await pickMedia({
+        source,
+        mediaTypes,
+        multi: source === 'library',
+      });
+      if (!result) return;
+      if (Array.isArray(result)) {
+        if (result.length === 0) return;
+        if (result.length === 1) setSingleAsset(result[0]);
+        else setBatchAssets(result);
+      } else {
+        setSingleAsset(result);
+      }
+    } catch (e) {
+      Alert.alert('No se pudo capturar', String(e?.message ?? e));
+    }
+  }, []);
+
+  const onSingleConfirm = useCallback(async ({ holeIndex, caption, uploaderLabel }) => {
+    const asset = singleAsset;
+    setSingleAsset(null);
+    if (!asset || !tournament) return;
+    const roundIdx = defaultRoundIndexForAdd();
+    const round = tournament.rounds?.[roundIdx];
+    if (!round) return;
+    try {
+      await attachMedia({
+        tournamentId: tournament.id,
+        roundId: round.id,
+        holeIndex,
+        kind: asset.kind,
+        localUri: asset.localUri,
+        durationS: asset.durationS,
+        caption,
+        uploaderLabel,
+      });
+    } catch (e) {
+      Alert.alert('No se pudo adjuntar', String(e?.message ?? e));
+    }
+  }, [singleAsset, tournament, defaultRoundIndexForAdd]);
+
+  const onBatchConfirm = useCallback(async (items) => {
+    setBatchAssets(null);
+    if (!tournament) return;
+    try {
+      await attachManyMedia({ tournamentId: tournament.id, items });
+    } catch (e) {
+      Alert.alert('No se pudieron adjuntar', String(e?.message ?? e));
+    }
+  }, [tournament]);
 
   useEffect(() => {
     const unsubscribe = navigation.addListener('focus', reload);
@@ -788,6 +859,13 @@ export default function HomeScreen({ navigation, route }) {
         </View>
       )}
 
+      <TournamentMemoriesSection
+        tournamentId={tournament.id}
+        onOpenGallery={() => navigation.navigate('Gallery', { tournamentId: tournament.id })}
+        onOpenLightbox={(items, i) => setMemLightbox({ visible: true, items, index: i })}
+        onAdd={isViewer ? null : openAddMemory}
+      />
+
       <View style={{ position: 'absolute', left: -9999 }}>
         <ShareableLeaderboard ref={leaderboardRef} tournamentName={tournament.name} leaderboard={leaderboard} />
       </View>
@@ -1149,6 +1227,34 @@ export default function HomeScreen({ navigation, route }) {
         </Pressable>
       </Pressable>
     </Modal>
+
+    <CaptureMenuSheet
+      visible={captureMenuVisible}
+      onSelect={handleCaptureSelect}
+      onClose={() => setCaptureMenuVisible(false)}
+    />
+    <AttachMediaSheet
+      visible={!!singleAsset}
+      asset={singleAsset}
+      holes={tournament?.rounds?.[defaultRoundIndexForAdd()]?.holes ?? []}
+      defaultHoleIndex={null}
+      onCancel={() => setSingleAsset(null)}
+      onConfirm={onSingleConfirm}
+    />
+    <BatchAttachSheet
+      visible={!!batchAssets}
+      assets={batchAssets ?? []}
+      rounds={tournament?.rounds ?? []}
+      defaultRoundIndex={defaultRoundIndexForAdd()}
+      onCancel={() => setBatchAssets(null)}
+      onConfirm={onBatchConfirm}
+    />
+    <MediaLightbox
+      visible={memLightbox.visible}
+      items={memLightbox.items}
+      initialIndex={memLightbox.index}
+      onClose={() => setMemLightbox({ visible: false, items: [], index: 0 })}
+    />
 
     </SafeAreaView>
   );

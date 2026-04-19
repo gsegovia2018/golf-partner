@@ -5,7 +5,7 @@ import {
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Feather } from '@expo/vector-icons';
 import { Image as ExpoImage } from 'expo-image';
-import { Video, ResizeMode } from 'expo-av';
+import { VideoView, useVideoPlayer } from 'expo-video';
 import { findParForHole } from '../lib/memoriesGalleryData';
 
 const PHOTO_MS = 4000;
@@ -17,7 +17,6 @@ export default function MemoriesStoriesViewer({ visible, entry, round, onClose }
   const [progress, setProgress] = useState(0);
   const [paused, setPaused] = useState(false);
   const longPressedRef = useRef(false);
-  const videoRef = useRef(null);
 
   const items = entry?.items ?? [];
   const current = items[index];
@@ -87,20 +86,11 @@ export default function MemoriesStoriesViewer({ visible, entry, round, onClose }
             contentFit="contain"
           />
         ) : (
-          <Video
-            ref={videoRef}
-            source={{ uri: current.url }}
-            style={StyleSheet.absoluteFillObject}
-            resizeMode={ResizeMode.CONTAIN}
-            shouldPlay={!paused}
-            isLooping={false}
-            onPlaybackStatusUpdate={(st) => {
-              if (!st.isLoaded) return;
-              const total = st.durationMillis ?? 0;
-              const pos = st.positionMillis ?? 0;
-              if (total > 0) setProgress(Math.min(1, pos / total));
-              if (st.didJustFinish) advance();
-            }}
+          <StoryVideo
+            uri={current.url}
+            paused={paused}
+            onProgress={setProgress}
+            onFinished={advance}
           />
         )}
 
@@ -163,6 +153,40 @@ export default function MemoriesStoriesViewer({ visible, entry, round, onClose }
         </View>
       </View>
     </Modal>
+  );
+}
+
+function StoryVideo({ uri, paused, onProgress, onFinished }) {
+  const player = useVideoPlayer(uri, (p) => { p.loop = false; });
+
+  useEffect(() => {
+    if (paused) player.pause();
+    else player.play();
+  }, [paused, player]);
+
+  // expo-video doesn't expose a per-frame callback, so we poll currentTime
+  // against duration to drive the progress bar and advance when finished.
+  useEffect(() => {
+    const id = setInterval(() => {
+      const total = player.duration;
+      const pos = player.currentTime;
+      if (!Number.isFinite(total) || total <= 0) return;
+      const p = Math.min(1, pos / total);
+      onProgress(p);
+      if (p >= 0.999) onFinished();
+    }, 120);
+    return () => clearInterval(id);
+  }, [player, onProgress, onFinished]);
+
+  return (
+    <VideoView
+      player={player}
+      style={StyleSheet.absoluteFillObject}
+      contentFit="contain"
+      nativeControls={false}
+      allowsFullscreen={false}
+      allowsPictureInPicture={false}
+    />
   );
 }
 

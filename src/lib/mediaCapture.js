@@ -20,7 +20,7 @@ async function ensurePermissions(source) {
   }
 }
 
-export async function pickMedia({ source, mediaTypes }) {
+export async function pickMedia({ source, mediaTypes, multi = false, selectionLimit = 20 }) {
   await ensurePermissions(source);
 
   const opts = {
@@ -32,19 +32,23 @@ export async function pickMedia({ source, mediaTypes }) {
     quality: 0.7,
     videoMaxDuration: 20,
     allowsEditing: false,
+    allowsMultipleSelection: multi && source === 'library',
+    selectionLimit: multi && source === 'library' ? selectionLimit : 1,
   };
 
   const result = source === 'camera'
     ? await ImagePicker.launchCameraAsync(opts)
     : await ImagePicker.launchImageLibraryAsync(opts);
 
-  if (result.canceled || !result.assets?.length) return null;
-  const asset = result.assets[0];
-  return {
+  if (result.canceled || !result.assets?.length) return multi ? [] : null;
+
+  const mapped = result.assets.map((asset) => ({
     localUri: asset.uri,
     kind: asset.type === 'video' ? 'video' : 'photo',
     durationS: asset.duration ? asset.duration / 1000 : null,
-  };
+  }));
+
+  return multi ? mapped : mapped[0];
 }
 
 export async function attachMedia({
@@ -58,4 +62,23 @@ export async function attachMedia({
   });
   kickUploadWorker();
   return { id };
+}
+
+export async function attachManyMedia({ tournamentId, items }) {
+  // items: [{ asset, roundId, holeIndex, caption, uploaderLabel }]
+  const ids = [];
+  for (const it of items) {
+    const { id } = await attachMedia({
+      tournamentId,
+      roundId: it.roundId,
+      holeIndex: it.holeIndex,
+      kind: it.asset.kind,
+      localUri: it.asset.localUri,
+      durationS: it.asset.durationS,
+      caption: it.caption,
+      uploaderLabel: it.uploaderLabel,
+    });
+    ids.push(id);
+  }
+  return ids;
 }

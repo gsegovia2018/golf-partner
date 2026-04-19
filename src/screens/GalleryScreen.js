@@ -1,5 +1,5 @@
-import React, { useEffect, useMemo, useState } from 'react';
-import { View, Text, TouchableOpacity, ScrollView, StyleSheet } from 'react-native';
+import React, { useCallback, useEffect, useMemo, useState } from 'react';
+import { View, Text, TouchableOpacity, ScrollView, StyleSheet, Alert } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Feather } from '@expo/vector-icons';
 import { useTheme } from '../theme/ThemeContext';
@@ -11,6 +11,9 @@ import MemoriesHoleStrip from '../components/MemoriesHoleStrip';
 import MemoriesKindChips from '../components/MemoriesKindChips';
 import MemoryCard from '../components/MemoryCard';
 import MemoriesStoriesViewer from '../components/MemoriesStoriesViewer';
+import CaptureMenuSheet from '../components/CaptureMenuSheet';
+import AttachMediaSheet from '../components/AttachMediaSheet';
+import BatchAttachSheet from '../components/BatchAttachSheet';
 import {
   deriveRoundEntries,
   deriveHolesWithMedia,
@@ -19,6 +22,7 @@ import {
   applyFilters,
   resolveRoundIndex,
 } from '../lib/memoriesGalleryData';
+import { pickMedia, attachMedia, attachManyMedia } from '../lib/mediaCapture';
 
 export default function GalleryScreen({ route, navigation }) {
   const { tournamentId } = route.params ?? {};
@@ -31,6 +35,9 @@ export default function GalleryScreen({ route, navigation }) {
   const [activeKind, setActiveKind] = useState('all');
   const [lightbox, setLightbox] = useState({ visible: false, index: 0 });
   const [stories, setStories] = useState({ visible: false, entry: null });
+  const [captureMenuVisible, setCaptureMenuVisible] = useState(false);
+  const [singleAsset, setSingleAsset] = useState(null);
+  const [batchAssets, setBatchAssets] = useState(null);
 
   useEffect(() => { loadTournament().then(setTournament); }, []);
 
@@ -49,6 +56,66 @@ export default function GalleryScreen({ route, navigation }) {
     filtered.forEach((it, i) => { (i % 2 === 0 ? L : R).push({ it, i }); });
     return [L, R];
   }, [filtered]);
+
+  const defaultRoundIndex = useMemo(() => {
+    if (!tournament?.rounds?.length) return 0;
+    return Math.min(tournament.currentRound ?? 0, tournament.rounds.length - 1);
+  }, [tournament]);
+
+  const openAdd = useCallback(() => setCaptureMenuVisible(true), []);
+
+  const handleCaptureSelect = useCallback(async ({ source, mediaTypes }) => {
+    setCaptureMenuVisible(false);
+    try {
+      const result = await pickMedia({
+        source,
+        mediaTypes,
+        multi: source === 'library',
+      });
+      if (!result) return;
+      if (Array.isArray(result)) {
+        if (result.length === 0) return;
+        if (result.length === 1) setSingleAsset(result[0]);
+        else setBatchAssets(result);
+      } else {
+        setSingleAsset(result);
+      }
+    } catch (e) {
+      Alert.alert('No se pudo capturar', String(e?.message ?? e));
+    }
+  }, []);
+
+  const onSingleConfirm = useCallback(async ({ holeIndex, caption, uploaderLabel }) => {
+    const asset = singleAsset;
+    setSingleAsset(null);
+    if (!asset || !tournament) return;
+    const round = tournament.rounds?.[defaultRoundIndex];
+    if (!round) return;
+    try {
+      await attachMedia({
+        tournamentId: tournament.id,
+        roundId: round.id,
+        holeIndex,
+        kind: asset.kind,
+        localUri: asset.localUri,
+        durationS: asset.durationS,
+        caption,
+        uploaderLabel,
+      });
+    } catch (e) {
+      Alert.alert('No se pudo adjuntar', String(e?.message ?? e));
+    }
+  }, [singleAsset, tournament, defaultRoundIndex]);
+
+  const onBatchConfirm = useCallback(async (payload) => {
+    setBatchAssets(null);
+    if (!tournament) return;
+    try {
+      await attachManyMedia({ tournamentId: tournament.id, items: payload });
+    } catch (e) {
+      Alert.alert('No se pudieron adjuntar', String(e?.message ?? e));
+    }
+  }, [tournament]);
 
   const openCard = (filteredIndex) => setLightbox({ visible: true, index: filteredIndex });
 
@@ -131,6 +198,32 @@ export default function GalleryScreen({ route, navigation }) {
         round={rounds?.[stories.entry?.roundIndex ?? -1] ?? null}
         onClose={() => setStories({ visible: false, entry: null })}
       />
+
+      <TouchableOpacity style={s.fab} onPress={openAdd} accessibilityLabel="Añadir recuerdo" activeOpacity={0.85}>
+        <Feather name="plus" size={26} color={theme.text.inverse} />
+      </TouchableOpacity>
+
+      <CaptureMenuSheet
+        visible={captureMenuVisible}
+        onSelect={handleCaptureSelect}
+        onClose={() => setCaptureMenuVisible(false)}
+      />
+      <AttachMediaSheet
+        visible={!!singleAsset}
+        asset={singleAsset}
+        holes={tournament?.rounds?.[defaultRoundIndex]?.holes ?? []}
+        defaultHoleIndex={null}
+        onCancel={() => setSingleAsset(null)}
+        onConfirm={onSingleConfirm}
+      />
+      <BatchAttachSheet
+        visible={!!batchAssets}
+        assets={batchAssets ?? []}
+        rounds={tournament?.rounds ?? []}
+        defaultRoundIndex={defaultRoundIndex}
+        onCancel={() => setBatchAssets(null)}
+        onConfirm={onBatchConfirm}
+      />
     </SafeAreaView>
   );
 }
@@ -154,5 +247,14 @@ const makeStyles = (theme) => StyleSheet.create({
   emptyText: {
     marginTop: 8, color: theme.text.muted,
     fontFamily: 'PlusJakartaSans-Regular',
+  },
+  fab: {
+    position: 'absolute',
+    right: 20, bottom: 28,
+    width: 56, height: 56, borderRadius: 28,
+    backgroundColor: theme.accent.primary,
+    alignItems: 'center', justifyContent: 'center',
+    shadowColor: '#000', shadowOpacity: 0.25, shadowRadius: 8, shadowOffset: { width: 0, height: 3 },
+    elevation: 6,
   },
 });
