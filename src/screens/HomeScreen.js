@@ -400,7 +400,13 @@ export default function HomeScreen({ navigation, route }) {
         <View style={s.header}>
           <View>
             <Text style={s.title}>Golf Partner</Text>
-            <Text style={s.subtitle}>{allTournaments.length} {allTournaments.length === 1 ? 'tournament' : 'tournaments'}</Text>
+            <Text style={s.subtitle}>{(() => {
+              const games = allTournaments.filter((t) => t.kind === 'game').length;
+              const tourn = allTournaments.length - games;
+              if (games === 0) return `${tourn} ${tourn === 1 ? 'tournament' : 'tournaments'}`;
+              if (tourn === 0) return `${games} ${games === 1 ? 'game' : 'games'}`;
+              return `${games} ${games === 1 ? 'game' : 'games'} · ${tourn} ${tourn === 1 ? 'tournament' : 'tournaments'}`;
+            })()}</Text>
           </View>
           <View style={s.headerActions}>
             <TouchableOpacity style={s.iconBtn} onPress={toggle} activeOpacity={0.7}>
@@ -424,8 +430,20 @@ export default function HomeScreen({ navigation, route }) {
           refreshing={refreshing}
           onRefresh={onRefresh}
         >
-        <View style={{ flexDirection: 'row', gap: 8 }}>
-          <TouchableOpacity style={[s.primaryBtn, { flex: 1, marginTop: 0 }]} onPress={() => navigation.navigate('Setup')} activeOpacity={0.8}>
+        <TouchableOpacity
+          style={[s.primaryBtn, { marginTop: 0 }]}
+          onPress={() => navigation.navigate('Setup', { kind: 'game' })}
+          activeOpacity={0.8}
+        >
+          <Feather name="plus" size={18} color={theme.isDark ? theme.accent.primary : theme.text.inverse} />
+          <Text style={s.primaryBtnText}>New Game</Text>
+        </TouchableOpacity>
+        <View style={{ flexDirection: 'row', gap: 8, marginTop: 8 }}>
+          <TouchableOpacity
+            style={[s.primaryBtn, { flex: 1, marginTop: 0 }]}
+            onPress={() => navigation.navigate('Setup', { kind: 'tournament' })}
+            activeOpacity={0.8}
+          >
             <Feather name="plus" size={18} color={theme.isDark ? theme.accent.primary : theme.text.inverse} />
             <Text style={s.primaryBtnText}>New Tournament</Text>
           </TouchableOpacity>
@@ -435,58 +453,78 @@ export default function HomeScreen({ navigation, route }) {
           </TouchableOpacity>
         </View>
 
-        {allTournaments.length === 0 ? (
-          <View style={s.emptyState}>
-            <Feather name="flag" size={48} color={theme.text.muted} />
-            <Text style={s.emptyTitle}>No tournaments yet</Text>
-            <Text style={s.emptySubtitle}>Create your first tournament to start playing</Text>
-          </View>
-        ) : (
-          <>
-            <Text style={s.sectionLabel}>TOURNAMENTS</Text>
-            {allTournaments
-              .slice()
-              .sort((a, b) => b.id - a.id)
-              .map((t, index) => {
-                const played = t.rounds.filter((r) => r.scores && Object.keys(r.scores).length > 0).length;
-                const isActive = played < t.rounds.length;
-                return (
-                  <View key={t.id} style={s.tournamentCardWrapper}>
-                    <TouchableOpacity style={s.tournamentCard} onPress={() => selectTournament(t.id)} activeOpacity={0.7}>
-                      <View style={s.tournamentCardLeft}>
-                        <View style={s.tournamentCardHeader}>
-                          <Text style={s.tournamentCardName}>{t.name}</Text>
-                          <View style={[s.statusBadge, !isActive && s.statusBadgeFinished]}>
-                            <Text style={[s.statusBadgeText, !isActive && s.statusBadgeTextFinished]}>
-                              {isActive ? 'Active' : 'Finished'}
-                            </Text>
-                          </View>
-                          {t._role === 'viewer' && (
-                            <View style={s.viewerBadge}>
-                              <Feather name="eye" size={9} color={theme.text.muted} />
-                              <Text style={s.viewerBadgeText}>Viewer</Text>
-                            </View>
-                          )}
-                        </View>
-                        <Text style={s.tournamentCardMeta}>
-                          {t.players.map((p) => p.name.split(' ')[0]).join(' · ')}
+        {(() => {
+          const renderCard = (t) => {
+            const isGameKind = t.kind === 'game';
+            const played = t.rounds.filter((r) => r.scores && Object.keys(r.scores).length > 0).length;
+            const isActive = played < t.rounds.length;
+            const courseName = isGameKind ? (t.rounds[0]?.courseName ?? '') : null;
+            return (
+              <View key={t.id} style={s.tournamentCardWrapper}>
+                <TouchableOpacity style={s.tournamentCard} onPress={() => selectTournament(t.id)} activeOpacity={0.7}>
+                  <View style={s.tournamentCardLeft}>
+                    <View style={s.tournamentCardHeader}>
+                      <Text style={s.tournamentCardName}>{t.name}</Text>
+                      <View style={[s.statusBadge, !isActive && s.statusBadgeFinished]}>
+                        <Text style={[s.statusBadgeText, !isActive && s.statusBadgeTextFinished]}>
+                          {isActive ? 'Active' : 'Finished'}
                         </Text>
-                        <Text style={s.tournamentCardRound}>Round {played}/{t.rounds.length}</Text>
                       </View>
-                      <View style={s.tournamentCardRight}>
-                        <Feather name="chevron-right" size={18} color={theme.text.muted} />
-                      </View>
-                    </TouchableOpacity>
-                    {t._role !== 'viewer' && (
-                      <TouchableOpacity style={s.deleteCardBtn} onPress={() => confirmDelete(t)} hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}>
-                        <Feather name="trash-2" size={14} color={theme.destructive} />
-                      </TouchableOpacity>
-                    )}
+                      {t._role === 'viewer' && (
+                        <View style={s.viewerBadge}>
+                          <Feather name="eye" size={9} color={theme.text.muted} />
+                          <Text style={s.viewerBadgeText}>Viewer</Text>
+                        </View>
+                      )}
+                    </View>
+                    <Text style={s.tournamentCardMeta}>
+                      {t.players.map((p) => p.name.split(' ')[0]).join(' · ')}
+                    </Text>
+                    <Text style={s.tournamentCardRound}>
+                      {isGameKind ? (courseName || 'Single round') : `Round ${played}/${t.rounds.length}`}
+                    </Text>
                   </View>
-                );
-              })}
-          </>
-        )}
+                  <View style={s.tournamentCardRight}>
+                    <Feather name="chevron-right" size={18} color={theme.text.muted} />
+                  </View>
+                </TouchableOpacity>
+                {t._role !== 'viewer' && (
+                  <TouchableOpacity style={s.deleteCardBtn} onPress={() => confirmDelete(t)} hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}>
+                    <Feather name="trash-2" size={14} color={theme.destructive} />
+                  </TouchableOpacity>
+                )}
+              </View>
+            );
+          };
+          const sorted = allTournaments.slice().sort((a, b) => b.id - a.id);
+          const games = sorted.filter((t) => t.kind === 'game');
+          const tournaments = sorted.filter((t) => t.kind !== 'game');
+          if (sorted.length === 0) {
+            return (
+              <View style={s.emptyState}>
+                <Feather name="flag" size={48} color={theme.text.muted} />
+                <Text style={s.emptyTitle}>Nothing here yet</Text>
+                <Text style={s.emptySubtitle}>Create your first game or tournament to start playing</Text>
+              </View>
+            );
+          }
+          return (
+            <>
+              {games.length > 0 && (
+                <>
+                  <Text style={s.sectionLabel}>GAMES</Text>
+                  {games.map(renderCard)}
+                </>
+              )}
+              {tournaments.length > 0 && (
+                <>
+                  <Text style={s.sectionLabel}>TOURNAMENTS</Text>
+                  {tournaments.map(renderCard)}
+                </>
+              )}
+            </>
+          );
+        })()}
         </PullToRefresh>
       </SafeAreaView>
     );
@@ -508,6 +546,7 @@ export default function HomeScreen({ navigation, route }) {
     );
   }
 
+  const isGame = tournament.kind === 'game';
   const completedRounds = tournament.rounds.filter(
     (r) => r.scores && Object.keys(r.scores).length > 0,
   );
@@ -561,6 +600,7 @@ export default function HomeScreen({ navigation, route }) {
         onRefresh={onRefresh}
       >
 
+      {!isGame && (
       <View style={s.mastersCard}>
         <View style={s.cardTitleRow}>
           <Text style={s.mastersCardTitle}>LEADERBOARD</Text>
@@ -606,6 +646,7 @@ export default function HomeScreen({ navigation, route }) {
           );
         })}
       </View>
+      )}
 
       {tournament.rounds.length > 0 && (
         <View style={s.card}>
@@ -622,24 +663,26 @@ export default function HomeScreen({ navigation, route }) {
               <Text style={[s.modeLabel, roundBestBall && s.modeLabelActive]}>Best Ball</Text>
             </View>
           </View>
-          <FlatList
-            horizontal
-            showsHorizontalScrollIndicator={false}
-            data={tournament.rounds}
-            keyExtractor={(r) => r.id}
-            style={s.tabBar}
-            renderItem={({ item: round, index }) => (
-              <TouchableOpacity
-                style={[s.tab, selectedRound === index && s.tabActive]}
-                onPress={() => setSelectedRound(index)}
-                activeOpacity={0.7}
-              >
-                <Text style={[s.tabText, selectedRound === index && s.tabTextActive]}>
-                  R{index + 1}
-                </Text>
-              </TouchableOpacity>
-            )}
-          />
+          {!isGame && (
+            <FlatList
+              horizontal
+              showsHorizontalScrollIndicator={false}
+              data={tournament.rounds}
+              keyExtractor={(r) => r.id}
+              style={s.tabBar}
+              renderItem={({ item: round, index }) => (
+                <TouchableOpacity
+                  style={[s.tab, selectedRound === index && s.tabActive]}
+                  onPress={() => setSelectedRound(index)}
+                  activeOpacity={0.7}
+                >
+                  <Text style={[s.tabText, selectedRound === index && s.tabTextActive]}>
+                    R{index + 1}
+                  </Text>
+                </TouchableOpacity>
+              )}
+            />
+          )}
 
           {/* Horizontal pager — swipe to change round, stays in sync with tabs */}
           <View
@@ -653,7 +696,23 @@ export default function HomeScreen({ navigation, route }) {
               setRoundPagerWidth(e.nativeEvent.layout.width);
             }}
           >
-            {roundPagerWidth > 0 && (
+            {roundPagerWidth > 0 && (isGame ? (
+              <RoundPage
+                round={tournament.rounds[0]}
+                index={0}
+                width={roundPagerWidth}
+                hasPrev={false}
+                hasNext={false}
+                revealed
+                roundBestBall={roundBestBall}
+                players={tournament.players}
+                settings={settings}
+                theme={theme}
+                s={s}
+                onGoToRound={goToRound}
+                onOpenEdit={isViewer ? null : openRoundEdit}
+              />
+            ) : (
               <ScrollView
                 ref={roundPagerRef}
                 horizontal
@@ -721,7 +780,7 @@ export default function HomeScreen({ navigation, route }) {
                   />
                 ))}
               </ScrollView>
-            )}
+            ))}
           </View>
         </View>
       )}
