@@ -30,24 +30,48 @@ export async function loadProfile() {
   };
 }
 
-export async function upsertProfile({ username, displayName, handicap, avatarColor, avatarUrl }) {
+// Only sends the columns that were explicitly provided. Supabase `.upsert`
+// would otherwise set every missing column to NULL on conflict and clobber
+// the rest of the profile. The `avatarUrl` path from ProfileScreen passes
+// nothing else, so it used to wipe display_name / handicap / avatar_color.
+export async function upsertProfile(fields) {
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) throw new Error('Not signed in');
-  const row = {
-    user_id: user.id,
-    display_name: displayName?.trim() || null,
-    handicap: handicap === '' || handicap == null ? null : parseInt(handicap, 10),
-    avatar_color: avatarColor || null,
-    updated_at: new Date().toISOString(),
-  };
-  if (avatarUrl !== undefined) row.avatar_url = avatarUrl || null;
-  // Only write username if provided — blank means "don't touch". Keep it
-  // lowercased so the unique(lower(username)) index can't fail silently.
-  if (username !== undefined && username !== null && username !== '') {
-    row.username = String(username).trim().toLowerCase();
+
+  const row = { user_id: user.id, updated_at: new Date().toISOString() };
+  if (fields.displayName !== undefined) {
+    row.display_name = fields.displayName?.trim() || null;
   }
-  const { error } = await supabase.from('profiles').upsert(row);
-  if (error) throw error;
+  if (fields.handicap !== undefined) {
+    row.handicap = fields.handicap === '' || fields.handicap == null
+      ? null
+      : parseInt(fields.handicap, 10);
+  }
+  if (fields.avatarColor !== undefined) {
+    row.avatar_color = fields.avatarColor || null;
+  }
+  if (fields.avatarUrl !== undefined) {
+    row.avatar_url = fields.avatarUrl || null;
+  }
+  // Only write username when provided non-empty — lowercased so the
+  // unique(lower(username)) index can't fail silently.
+  if (fields.username !== undefined && fields.username !== null && fields.username !== '') {
+    row.username = String(fields.username).trim().toLowerCase();
+  }
+
+  // Does this row already exist? If yes, surgical UPDATE (only touches the
+  // keys in `row`). If no, INSERT with defaults for everything else.
+  const { data: existing, error: existingErr } = await supabase
+    .from('profiles').select('user_id').eq('user_id', user.id).maybeSingle();
+  if (existingErr) throw existingErr;
+
+  if (existing) {
+    const { error } = await supabase.from('profiles').update(row).eq('user_id', user.id);
+    if (error) throw error;
+  } else {
+    const { error } = await supabase.from('profiles').insert(row);
+    if (error) throw error;
+  }
 }
 
 // Upload a locally-picked image to the `avatars` bucket under the user's
