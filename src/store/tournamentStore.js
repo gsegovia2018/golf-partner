@@ -611,7 +611,7 @@ export async function loadTournamentMembers(tournamentId) {
   if (ids.length > 0) {
     const { data: profiles, error: pErr } = await supabase
       .from('profiles')
-      .select('user_id, display_name, handicap, avatar_color')
+      .select('user_id, display_name, handicap, avatar_color, avatar_url')
       .in('user_id', ids);
     if (pErr) throw pErr;
     byId = Object.fromEntries((profiles ?? []).map((p) => [p.user_id, p]));

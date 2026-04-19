@@ -3,6 +3,7 @@ import { View, Text, TouchableOpacity, StyleSheet, ScrollView, FlatList, Switch 
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Feather } from '@expo/vector-icons';
 import { useTheme } from '../theme/ThemeContext';
+import { useAuth } from '../context/AuthContext';
 import { loadTournament, getPlayingHandicap, calcStablefordPoints } from '../store/tournamentStore';
 import {
   playerRoundHistory, playerAvgStableford, playerScoreDistribution,
@@ -64,6 +65,7 @@ const tiedRowsByPlayer = (entries, makeRows, headerRight) => {
 
 export default function StatsScreen({ navigation }) {
   const { theme } = useTheme();
+  const { user } = useAuth();
   const s = makeStyles(theme);
   const [tournament, setTournament] = useState(null);
   const [tab, setTab] = useState(0);
@@ -72,8 +74,22 @@ export default function StatsScreen({ navigation }) {
   const [metric, setMetric] = useState('points');
 
   useEffect(() => {
-    loadTournament().then(t => { setTournament(t); });
-  }, []);
+    loadTournament().then(t => {
+      setTournament(t);
+      // Default the Players / Pairs selector to the signed-in user when
+      // they're one of the players in this tournament. Falls back to the
+      // first player otherwise (e.g. viewers who aren't themselves playing).
+      if (t?.players?.length && user?.id) {
+        const mine = t.players.findIndex((p) => p.user_id === user.id);
+        if (mine >= 0) {
+          setSelectedPlayer(mine);
+          // h2hPlayer should default to anyone else so the matchup makes
+          // sense from the start.
+          setH2hPlayer(mine === 0 ? 1 : 0);
+        }
+      }
+    });
+  }, [user?.id]);
 
   if (!tournament) return null;
 

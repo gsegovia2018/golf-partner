@@ -1,7 +1,7 @@
 import React, { useCallback, useState } from 'react';
 import {
   View, Text, TouchableOpacity, StyleSheet, ScrollView,
-  ActivityIndicator, Alert, Platform,
+  ActivityIndicator, Alert, Platform, Image,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useFocusEffect } from '@react-navigation/native';
@@ -97,7 +97,9 @@ export default function MembersScreen({ navigation, route }) {
             return (
               <View key={row.userId} style={s.row}>
                 <View style={[s.avatar, { backgroundColor: color }]}>
-                  <Text style={s.avatarText}>{initials}</Text>
+                  {row.profile?.avatar_url
+                    ? <Image source={{ uri: row.profile.avatar_url }} style={s.avatarImg} />
+                    : <Text style={s.avatarText}>{initials}</Text>}
                 </View>
                 <View style={s.info}>
                   <View style={s.nameRow}>
@@ -179,8 +181,9 @@ const makeStyles = (theme) => StyleSheet.create({
   },
   avatar: {
     width: 44, height: 44, borderRadius: 22,
-    alignItems: 'center', justifyContent: 'center',
+    alignItems: 'center', justifyContent: 'center', overflow: 'hidden',
   },
+  avatarImg: { width: '100%', height: '100%' },
   avatarText: { fontFamily: 'PlusJakartaSans-ExtraBold', color: '#ffd700', fontSize: 15 },
   info: { flex: 1 },
   nameRow: { flexDirection: 'row', alignItems: 'center', gap: 8 },
