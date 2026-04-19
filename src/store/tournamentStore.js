@@ -756,21 +756,27 @@ let _conflictLog = null;      // lazy-loaded array
 let _conflictUnread = null;   // lazy-loaded integer
 let _lastSyncAt = null;       // lazy-loaded number | null
 const _conflictSubs = new Set();
+let _hydrationPromise = null;
 
 async function _ensureConflictLoaded() {
   if (_conflictLog != null) return;
-  const [rawLog, rawUnread, rawLast] = await Promise.all([
-    AsyncStorage.getItem(CONFLICT_LOG_KEY),
-    AsyncStorage.getItem(CONFLICT_UNREAD_KEY),
-    AsyncStorage.getItem(LAST_SYNC_AT_KEY),
-  ]);
-  try { _conflictLog = rawLog ? JSON.parse(rawLog) : []; }
-  catch { _conflictLog = []; }
-  if (!Array.isArray(_conflictLog)) _conflictLog = [];
-  const n = parseInt(rawUnread ?? '0', 10);
-  _conflictUnread = Number.isFinite(n) && n >= 0 ? n : 0;
-  const t = parseInt(rawLast ?? '0', 10);
-  _lastSyncAt = Number.isFinite(t) && t > 0 ? t : null;
+  if (!_hydrationPromise) {
+    _hydrationPromise = (async () => {
+      const [rawLog, rawUnread, rawLast] = await Promise.all([
+        AsyncStorage.getItem(CONFLICT_LOG_KEY),
+        AsyncStorage.getItem(CONFLICT_UNREAD_KEY),
+        AsyncStorage.getItem(LAST_SYNC_AT_KEY),
+      ]);
+      try { _conflictLog = rawLog ? JSON.parse(rawLog) : []; }
+      catch { _conflictLog = []; }
+      if (!Array.isArray(_conflictLog)) _conflictLog = [];
+      const n = parseInt(rawUnread ?? '0', 10);
+      _conflictUnread = Number.isFinite(n) && n >= 0 ? n : 0;
+      const t = parseInt(rawLast ?? '0', 10);
+      _lastSyncAt = Number.isFinite(t) && t > 0 ? t : null;
+    })();
+  }
+  return _hydrationPromise;
 }
 
 function _emitConflicts() {
@@ -801,6 +807,12 @@ export function subscribeConflicts(fn) {
   });
   return () => _conflictSubs.delete(fn);
 }
+
+// INVARIANT: the writer helpers below (_appendConflicts, _setLastSyncAt,
+// markConflictsRead) are expected to run serially. The sync worker drains
+// through `drainOnce` which is itself guarded by the `_running` flag in
+// syncWorker.js, and markConflictsRead is only called from UI open events.
+// If a second concurrent writer is introduced, add a write-chain mutex here.
 
 // Worker-only: append a batch of conflicts and bump unread. FIFO cap.
 export async function _appendConflicts(entries) {
