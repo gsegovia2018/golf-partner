@@ -17,6 +17,7 @@ import {
   tournamentLeaderboard, tournamentBestWorstLeaderboard,
   roundPairLeaderboard, calcBestWorstBall, roundTotals,
   playerRoundBestWorstPoints,
+  tournamentPlayerClinched, roundPairClinched,
   DEFAULT_SETTINGS, generateInviteCode,
 } from '../store/tournamentStore';
 
@@ -315,6 +316,11 @@ export default function HomeScreen({ navigation, route }) {
       : null),
     [tournament, selectedRoundData, selectedRoundHasScores, leaderboardBestBall],
   );
+  const tournamentMode = settings.scoringMode === 'bestball' ? 'bestball' : 'stableford';
+  const tournamentClinchedId = useMemo(
+    () => (tournament ? tournamentPlayerClinched(tournament, tournamentMode) : null),
+    [tournament, tournamentMode],
+  );
 
   // Stable callbacks for the memoised round pager pages. Keep references
   // stable across swipes so <RoundPage /> memoisation holds.
@@ -527,7 +533,14 @@ export default function HomeScreen({ navigation, route }) {
                 <Text style={[s.mastersRankText, { color: rankColor }]}>{i + 1}</Text>
               </View>
               <View style={s.mastersNameCol}>
-                <Text style={[s.mastersName, i === 0 && { fontFamily: 'PlusJakartaSans-Bold' }]}>{entry.player.name}</Text>
+                <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+                  <Text style={[s.mastersName, i === 0 && { fontFamily: 'PlusJakartaSans-Bold' }]} numberOfLines={1}>
+                    {entry.player.name}
+                  </Text>
+                  {entry.player.id === tournamentClinchedId && (
+                    <Feather name="award" size={12} color="#ffd700" />
+                  )}
+                </View>
                 <Text style={s.mastersRoundSub}>
                   R{selectedRound + 1} · {roundValue == null ? '—' : `${roundValue} ${roundUnit}`}
                 </Text>
@@ -1013,6 +1026,10 @@ const RoundPage = React.memo(function RoundPage({
 }) {
   const hasScores = round.scores && Object.keys(round.scores).length > 0;
   const hasPairs = Array.isArray(round.pairs) && round.pairs.length > 0;
+  const tournamentMode = settings?.scoringMode === 'bestball' ? 'bestball' : 'stableford';
+  const clinchedPairIdx = hasScores
+    ? roundPairClinched(round, players, settings, tournamentMode)
+    : null;
   return (
     <View
       style={[{ width }, PAGER_PAGE_SNAP_STYLE]}
@@ -1051,8 +1068,8 @@ const RoundPage = React.memo(function RoundPage({
       </View>
       {hasScores ? (
         roundBestBall
-          ? <BestBallRoundCard round={round} players={players} settings={settings} theme={theme} s={s} />
-          : <StablefordRoundCard round={round} players={players} theme={theme} s={s} />
+          ? <BestBallRoundCard round={round} players={players} settings={settings} clinchedPairIdx={clinchedPairIdx} theme={theme} s={s} />
+          : <StablefordRoundCard round={round} players={players} clinchedPairIdx={clinchedPairIdx} theme={theme} s={s} />
       ) : revealed && hasPairs ? (
         <PairsPreviewCard pairs={round.pairs} theme={theme} s={s} />
       ) : (
@@ -1079,24 +1096,37 @@ const PairsPreviewCard = React.memo(function PairsPreviewCard({ pairs, theme, s 
   );
 });
 
-const StablefordRoundCard = React.memo(function StablefordRoundCard({ round, players, theme, s }) {
+const StablefordRoundCard = React.memo(function StablefordRoundCard({ round, players, clinchedPairIdx, theme, s }) {
   const pairResults = roundPairLeaderboard(round, players);
+  // Map sorted-leaderboard position back to round.pairs index so we can
+  // tag the winner row with a crown when that pair is mathematically
+  // clinched. The leader row (pi === 0) is always first in pairResults.
+  const pairIdxFor = (members) => round.pairs.findIndex((pr) => (
+    pr.length === members.length && pr.every((p) => members.some((m) => m.player.id === p.id))
+  ));
   return (
     <>
-      {pairResults.map((pair, pi) => (
-        <View key={pi} style={[s.pairBlock, pi === 0 && s.winnerBlock]}>
-          {pi === 0 && <Text style={s.winnerBadge}>WINNER</Text>}
-          <View style={s.pairHeader}>
-            <Text style={s.pairNames}>{pair.members.map((m) => m.player.name).join(' & ')}</Text>
-            <Text style={s.pairPoints}>{pair.combinedPoints} pts</Text>
+      {pairResults.map((pair, pi) => {
+        const origIdx = pairIdxFor(pair.members);
+        const isClinched = clinchedPairIdx != null && origIdx === clinchedPairIdx;
+        return (
+          <View key={pi} style={[s.pairBlock, pi === 0 && s.winnerBlock]}>
+            {pi === 0 && <Text style={s.winnerBadge}>WINNER</Text>}
+            <View style={s.pairHeader}>
+              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6, flex: 1 }}>
+                <Text style={s.pairNames}>{pair.members.map((m) => m.player.name).join(' & ')}</Text>
+                {isClinched && <Feather name="award" size={14} color="#ffd700" />}
+              </View>
+              <Text style={s.pairPoints}>{pair.combinedPoints} pts</Text>
+            </View>
           </View>
-        </View>
-      ))}
+        );
+      })}
     </>
   );
 });
 
-const BestBallRoundCard = React.memo(function BestBallRoundCard({ round, players, settings, theme, s }) {
+const BestBallRoundCard = React.memo(function BestBallRoundCard({ round, players, settings, clinchedPairIdx, theme, s }) {
   const result = calcBestWorstBall(round, players);
   if (!result) return <Text style={s.pairMember}>No results yet</Text>;
 
@@ -1107,20 +1137,28 @@ const BestBallRoundCard = React.memo(function BestBallRoundCard({ round, players
   const p1Points = bestBall.pair1 * settings.bestBallValue + worstBall.pair1 * settings.worstBallValue;
   const p2Points = bestBall.pair2 * settings.bestBallValue + worstBall.pair2 * settings.worstBallValue;
   const winner = p1Points > p2Points ? 1 : p2Points > p1Points ? 2 : 0;
+  const p1Clinched = clinchedPairIdx === 0;
+  const p2Clinched = clinchedPairIdx === 1;
 
   return (
     <>
       <View style={[s.pairBlock, winner === 1 && s.winnerBlock]}>
         {winner === 1 && <Text style={s.winnerBadge}>WINNER</Text>}
         <View style={s.pairHeader}>
-          <Text style={s.pairNames}>{p1Names}</Text>
+          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6, flex: 1 }}>
+            <Text style={s.pairNames}>{p1Names}</Text>
+            {p1Clinched && <Feather name="award" size={14} color="#ffd700" />}
+          </View>
           <Text style={s.pairPoints}>{p1Points} pts</Text>
         </View>
       </View>
       <View style={[s.pairBlock, winner === 2 && s.winnerBlock]}>
         {winner === 2 && <Text style={s.winnerBadge}>WINNER</Text>}
         <View style={s.pairHeader}>
-          <Text style={s.pairNames}>{p2Names}</Text>
+          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6, flex: 1 }}>
+            <Text style={s.pairNames}>{p2Names}</Text>
+            {p2Clinched && <Feather name="award" size={14} color="#ffd700" />}
+          </View>
           <Text style={s.pairPoints}>{p2Points} pts</Text>
         </View>
       </View>
