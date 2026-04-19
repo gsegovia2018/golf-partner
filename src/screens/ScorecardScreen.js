@@ -531,6 +531,7 @@ const HolePage = React.memo(function HolePage({
   round, players, scores,
   theme, s,
   onStep, onSetScore, getScoreAnim,
+  showRunning, playerTotals,
 }) {
   const pairs = round.pairs ?? [];
   const orderedPlayers = pairs.length === 2
@@ -771,6 +772,8 @@ function HoleView({ round, roundIndex, players, scores, notes, currentHole, hole
                 onStep={onStep}
                 onSetScore={onSetScore}
                 getScoreAnim={getScoreAnim}
+                showRunning={showRunning}
+                playerTotals={playerTotals}
               />
             ))}
           </ScrollView>
