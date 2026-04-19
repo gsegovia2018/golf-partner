@@ -835,8 +835,10 @@ export default function HomeScreen({ navigation, route }) {
               // On web the link auto-prefills the join code (see
               // AppNavigator's ?invite handler). On native we share just
               // the code until deep-linking is wired up.
+              // Blank line before the URL keeps WhatsApp from wrapping the
+              // text into the middle of the link and breaking the tap target.
               const message = origin
-                ? `Join my golf tournament 🏌️  ${origin}/?invite=${inviteCode}`
+                ? `Join my golf tournament 🏌️\n\n${origin}/?invite=${inviteCode}`
                 : `Join my golf tournament! Code: ${inviteCode}`;
               Share.share({ message });
             }}
