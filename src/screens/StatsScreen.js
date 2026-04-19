@@ -1,10 +1,10 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, useMemo } from 'react';
 import { View, Text, TouchableOpacity, StyleSheet, ScrollView, FlatList, Switch } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Feather } from '@expo/vector-icons';
 import { useTheme } from '../theme/ThemeContext';
 import { useAuth } from '../context/AuthContext';
-import { loadTournament, getPlayingHandicap, calcStablefordPoints } from '../store/tournamentStore';
+import { loadTournament, getPlayingHandicap, calcStablefordPoints, playerPartnerSplits } from '../store/tournamentStore';
 import {
   playerRoundHistory, playerAvgStableford, playerScoreDistribution,
   playerStreaks, bestWorstHoles, holeDifficultyMap,
@@ -1094,6 +1094,10 @@ function HolesTab({ tournament, completedRounds, metric, theme, s }) {
 // ── Pairs Tab ──
 function PairsTab({ tournament, players, h2hPlayer, setH2hPlayer, selectedPlayer, setSelectedPlayer, metric, theme, s }) {
   const pairs = pairPerformance(tournament);
+  const splitsPlayer = players[selectedPlayer] ?? null;
+  const splits = splitsPlayer
+    ? playerPartnerSplits(tournament, splitsPlayer.id)
+    : { baseline: 0, partners: [] };
   const [hwRound, setHwRound] = useState(null);
   const holeWins = pairHoleWins(tournament, { metric, roundIndex: hwRound });
   const firstCompletedRound = tournament.rounds.findIndex(r => r.scores && Object.keys(r.scores).length > 0);
@@ -1109,6 +1113,23 @@ function PairsTab({ tournament, players, h2hPlayer, setH2hPlayer, selectedPlayer
   const p2Idx = h2hPlayer >= players.length ? 0 : h2hPlayer;
   const p2 = players[p2Idx];
   const h2h = p1 && p2 && p1.id !== p2.id ? headToHead(tournament, p1.id, p2.id, { roundIndex: h2hRound }) : null;
+
+  // H2H heatmap matrix — for each (row=i, col=j) cell, the net holes won
+  // by player i against player j in the active metric (points or strokes).
+  // Diagonal entries are null (no self-comparison). The values are
+  // antisymmetric (matrix[i][j] === -matrix[j][i]).
+  const h2hMatrix = useMemo(() => {
+    if (!players || players.length < 2) return [];
+    return players.map((rowPlayer, i) => players.map((colPlayer, j) => {
+      if (i === j) return null;
+      const result = headToHead(tournament, rowPlayer.id, colPlayer.id);
+      const bucket = metric === 'strokes' ? result.strokes : result.points;
+      const totalHoles = bucket.p1Wins + bucket.p2Wins + bucket.ties;
+      if (totalHoles === 0) return null;
+      return { net: bucket.p1Wins - bucket.p2Wins, wins: bucket.p1Wins, losses: bucket.p2Wins, ties: bucket.ties };
+    }));
+  }, [tournament, players, metric]);
+
   const [sheet, setSheet] = useState(null);
 
   const openPair = (pair) => setSheet({
@@ -1320,6 +1341,64 @@ function PairsTab({ tournament, players, h2hPlayer, setH2hPlayer, selectedPlayer
         </>
       )}
 
+      {splitsPlayer && (
+        <>
+          <View style={s.sectionTitleRow}>
+            <Text style={s.sectionTitle}>PARTNER SPLITS · {firstName(splitsPlayer)}</Text>
+            <Text style={s.scopeText}>baseline {splits.baseline} pts</Text>
+          </View>
+          <View style={s.splitsChipRow}>
+            {players.map((p, i) => (
+              <TouchableOpacity key={p.id} style={[s.playerChip, selectedPlayer === i && s.playerChipActive]} onPress={() => setSelectedPlayer(i)} activeOpacity={0.7}>
+                <Text style={[s.playerChipText, selectedPlayer === i && s.playerChipTextActive]}>{p.name.split(' ')[0]}</Text>
+              </TouchableOpacity>
+            ))}
+          </View>
+          {splits.partners.length === 0 ? (
+            <Text style={s.emptyText}>No completed rounds with partners for {firstName(splitsPlayer)} yet.</Text>
+          ) : (
+            <View style={s.splitsTable}>
+              <View style={s.splitsHeader}>
+                <Text style={[s.splitsHeaderText, { flex: 1 }]}>Partner</Text>
+                <Text style={[s.splitsHeaderText, { width: 36, textAlign: 'right' }]}>R</Text>
+                <Text style={[s.splitsHeaderText, { width: 64, textAlign: 'right' }]}>Avg</Text>
+                <Text style={[s.splitsHeaderText, { width: 56, textAlign: 'right' }]}>Δ vs base</Text>
+              </View>
+              {splits.partners.map((row) => {
+                const tone = row.delta >= 2 ? 'excellent' : row.delta <= -2 ? 'poor' : 'neutral';
+                const deltaColor = tone === 'excellent' ? theme.scoreColor('excellent')
+                  : tone === 'poor' ? theme.scoreColor('poor')
+                  : theme.text.muted;
+                return (
+                  <TouchableOpacity
+                    key={row.partner.id}
+                    style={s.splitsRow}
+                    activeOpacity={0.7}
+                    onPress={() => setSheet({
+                      title: `${splitsPlayer.name} with ${row.partner.name}`,
+                      subtitle: `${row.avgPlayerPoints} avg · ${row.rounds} round${row.rounds === 1 ? '' : 's'} · baseline ${splits.baseline}`,
+                      explainer: `Average individual Stableford points scored by ${splitsPlayer.name} when partnered with ${row.partner.name}, vs their overall ${splits.baseline} pts/round baseline. Delta is signed; positive means ${firstName(splitsPlayer)} overperforms when paired with ${firstName(row.partner)}.`,
+                      rows: row.perRoundPoints.map((pts, i) => ({
+                        key: `${row.partner.id}-${i}`,
+                        primary: `R${row.roundIndices[i] + 1}`,
+                        rightPrimary: `${pts} pts`,
+                      })),
+                    })}
+                  >
+                    <Text style={[s.splitsCell, { flex: 1, color: theme.text.primary, fontFamily: 'PlusJakartaSans-Medium' }]}>{row.partner.name}</Text>
+                    <Text style={[s.splitsCell, { width: 36, textAlign: 'right', color: theme.text.muted }]}>{row.rounds}</Text>
+                    <Text style={[s.splitsCell, { width: 64, textAlign: 'right', fontFamily: 'PlusJakartaSans-Bold', color: theme.text.primary }]}>{row.avgPlayerPoints}</Text>
+                    <Text style={[s.splitsCell, { width: 56, textAlign: 'right', fontFamily: 'PlusJakartaSans-ExtraBold', color: deltaColor }]}>
+                      {row.delta >= 0 ? '+' : ''}{row.delta}
+                    </Text>
+                  </TouchableOpacity>
+                );
+              })}
+            </View>
+          )}
+        </>
+      )}
+
       {tournament.rounds.some(r => r.pairs && r.scores && Object.keys(r.scores).length > 0) && (
         <>
           <View style={s.sectionTitleRow}>
@@ -1492,6 +1571,80 @@ function PairsTab({ tournament, players, h2hPlayer, setH2hPlayer, selectedPlayer
           })}
         </>
       )}
+
+      {players.length >= 2 && (() => {
+        const flat = h2hMatrix.flat().filter((c) => c != null);
+        const maxAbs = flat.reduce((m, c) => Math.max(m, Math.abs(c.net)), 0) || 1;
+        const cellColor = (net) => {
+          if (net === 0) return theme.text.muted;
+          return net > 0 ? theme.scoreColor('excellent') : theme.scoreColor('poor');
+        };
+        const cellBg = (net) => {
+          const intensity = Math.min(1, Math.abs(net) / maxAbs);
+          const opacity = 0.10 + intensity * 0.30;
+          if (net === 0) return theme.bg.secondary;
+          const hex = net > 0 ? theme.scoreColor('excellent') : theme.scoreColor('poor');
+          return hex + Math.round(opacity * 255).toString(16).padStart(2, '0');
+        };
+        return (
+          <>
+            <Text style={s.sectionTitle}>H2H HEATMAP</Text>
+            <Text style={s.scopeText}>
+              Net holes won across the tournament — row vs column ({metric === 'strokes' ? 'lower strokes wins' : 'higher Stableford wins'}). Tap to load that matchup below.
+            </Text>
+            <ScrollView horizontal showsHorizontalScrollIndicator={false}>
+              <View style={s.h2hMatrixWrap}>
+                <View style={s.h2hMatrixRow}>
+                  <View style={[s.h2hMatrixCell, s.h2hMatrixCornerCell]} />
+                  {players.map((p) => (
+                    <View key={p.id} style={[s.h2hMatrixCell, s.h2hMatrixHeaderCell]}>
+                      <Text style={s.h2hMatrixHeaderText} numberOfLines={1}>{firstName(p)}</Text>
+                    </View>
+                  ))}
+                </View>
+                {players.map((rowPlayer, i) => (
+                  <View key={rowPlayer.id} style={s.h2hMatrixRow}>
+                    <View style={[s.h2hMatrixCell, s.h2hMatrixRowLabelCell]}>
+                      <Text style={s.h2hMatrixHeaderText} numberOfLines={1}>{firstName(rowPlayer)}</Text>
+                    </View>
+                    {players.map((colPlayer, j) => {
+                      const cell = h2hMatrix[i]?.[j];
+                      if (i === j) {
+                        return (
+                          <View key={colPlayer.id} style={[s.h2hMatrixCell, s.h2hMatrixDiagonalCell]}>
+                            <Text style={s.h2hMatrixDiagonalText}>—</Text>
+                          </View>
+                        );
+                      }
+                      if (cell == null) {
+                        return (
+                          <View key={colPlayer.id} style={[s.h2hMatrixCell, s.h2hMatrixEmptyCell]}>
+                            <Text style={s.h2hMatrixEmptyText}>·</Text>
+                          </View>
+                        );
+                      }
+                      const sign = cell.net > 0 ? '+' : '';
+                      return (
+                        <TouchableOpacity
+                          key={colPlayer.id}
+                          style={[s.h2hMatrixCell, { backgroundColor: cellBg(cell.net) }]}
+                          activeOpacity={0.7}
+                          onPress={() => { setSelectedPlayer(i); setH2hPlayer(j); }}
+                        >
+                          <Text style={[s.h2hMatrixValueText, { color: cellColor(cell.net) }]}>
+                            {sign}{cell.net}
+                          </Text>
+                          <Text style={s.h2hMatrixSubText}>{cell.wins}-{cell.losses}-{cell.ties}</Text>
+                        </TouchableOpacity>
+                      );
+                    })}
+                  </View>
+                ))}
+              </View>
+            </ScrollView>
+          </>
+        );
+      })()}
 
       <Text style={s.sectionTitle}>HEAD TO HEAD</Text>
       <View style={s.h2hSelector}>
@@ -2492,6 +2645,64 @@ const makeStyles = (t) => StyleSheet.create({
   scopeText: {
     fontFamily: 'PlusJakartaSans-Medium', color: t.text.muted, fontSize: 11,
     marginTop: -6, marginBottom: 10,
+  },
+
+  // Partner splits
+  splitsChipRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 6, marginBottom: 12 },
+  splitsTable: {
+    backgroundColor: t.isDark ? t.bg.card : t.bg.card,
+    borderRadius: 16,
+    borderWidth: 1,
+    borderColor: t.isDark ? t.glass?.border || t.border.default : t.border.default,
+    paddingHorizontal: 12, paddingVertical: 6, marginBottom: 12,
+    ...(t.isDark ? {} : t.shadow.card),
+  },
+  splitsHeader: {
+    flexDirection: 'row', alignItems: 'center',
+    paddingVertical: 8, borderBottomWidth: 1, borderBottomColor: t.border.subtle,
+  },
+  splitsHeaderText: {
+    fontFamily: 'PlusJakartaSans-SemiBold', color: t.text.muted, fontSize: 10, letterSpacing: 1,
+  },
+  splitsRow: {
+    flexDirection: 'row', alignItems: 'center', gap: 8,
+    paddingVertical: 10, borderBottomWidth: 1, borderBottomColor: t.border.subtle,
+  },
+  splitsCell: { fontSize: 13 },
+
+  // H2H heatmap
+  h2hMatrixWrap: { marginBottom: 12, alignSelf: 'flex-start' },
+  h2hMatrixRow: { flexDirection: 'row' },
+  h2hMatrixCell: {
+    width: 60, height: 52,
+    alignItems: 'center', justifyContent: 'center',
+    borderWidth: 1, borderColor: t.border.subtle,
+  },
+  h2hMatrixCornerCell: {
+    backgroundColor: t.bg.secondary,
+  },
+  h2hMatrixHeaderCell: {
+    backgroundColor: t.bg.secondary,
+  },
+  h2hMatrixRowLabelCell: {
+    backgroundColor: t.bg.secondary,
+  },
+  h2hMatrixHeaderText: {
+    fontFamily: 'PlusJakartaSans-SemiBold', fontSize: 11,
+    color: t.text.secondary, paddingHorizontal: 4,
+  },
+  h2hMatrixDiagonalCell: {
+    backgroundColor: t.isDark ? 'rgba(255,255,255,0.04)' : 'rgba(0,0,0,0.04)',
+  },
+  h2hMatrixDiagonalText: { color: t.text.muted, fontSize: 14 },
+  h2hMatrixEmptyCell: { backgroundColor: t.bg.primary },
+  h2hMatrixEmptyText: { color: t.text.muted, fontSize: 12 },
+  h2hMatrixValueText: {
+    fontFamily: 'PlusJakartaSans-ExtraBold', fontSize: 15,
+  },
+  h2hMatrixSubText: {
+    fontFamily: 'PlusJakartaSans-Medium', fontSize: 9,
+    color: t.text.muted, marginTop: 2, letterSpacing: 0.3,
   },
 
   // Hole Wins table (new visual layout)

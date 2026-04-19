@@ -5,13 +5,17 @@ import {
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import * as Haptics from 'expo-haptics';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 
 import { Feather } from '@expo/vector-icons';
+
+const RUNNING_SCORE_KEY = '@scorecard_show_running_score';
 import {
-  loadTournament, saveTournament, subscribeTournamentChanges,
+  loadTournament, subscribeTournamentChanges,
   calcStablefordPoints, calcBestWorstBall, pickupStrokes, DEFAULT_SETTINGS,
-  roundPairLeaderboard,
+  roundPairLeaderboard, roundPairClinched,
 } from '../store/tournamentStore';
+import { mutate } from '../store/mutate';
 import { useTheme } from '../theme/ThemeContext';
 import PullToRefresh from '../components/PullToRefresh';
 import MediaLightbox from '../components/MediaLightbox';
@@ -137,25 +141,44 @@ export default function ScorecardScreen({ navigation, route }) {
   }, [reload]);
 
   const autoSave = useCallback((newScores) => {
-    if (saveTimeoutRef.current) clearTimeout(saveTimeoutRef.current);
+    // Compute the diff between the previously-synced scores and newScores,
+    // emitting one score.set mutation per changed cell. This naturally coalesces
+    // rapid keystrokes because `scores` state is already debounced upstream.
+    if (!tournamentRef.current) return;
+    const round = tournamentRef.current.rounds[roundIndex];
+    const prevScores = round.scores ?? {};
+
+    const changedCells = [];
+    const playerIds = new Set([...Object.keys(prevScores), ...Object.keys(newScores)]);
+    for (const pid of playerIds) {
+      const prevByHole = prevScores[pid] ?? {};
+      const nextByHole = newScores[pid] ?? {};
+      const holes = new Set([...Object.keys(prevByHole), ...Object.keys(nextByHole)]);
+      for (const h of holes) {
+        const before = prevByHole[h];
+        const after = nextByHole[h];
+        if (before !== after) changedCells.push({ playerId: pid, hole: Number(h), value: after ?? null });
+      }
+    }
+    if (changedCells.length === 0) return;
+
     pendingSaveRef.current = true;
-    saveTimeoutRef.current = setTimeout(async () => {
-      saveTimeoutRef.current = null;
-      if (!tournamentRef.current) {
-        if (!notesSaveTimeoutRef.current) pendingSaveRef.current = false;
-        return;
+    (async () => {
+      let t = tournamentRef.current;
+      for (const cell of changedCells) {
+        t = await mutate(t, {
+          type: 'score.set',
+          roundId: round.id,
+          playerId: cell.playerId,
+          hole: cell.hole,
+          value: cell.value,
+        });
       }
-      const updated = { ...tournamentRef.current };
-      updated.rounds = [...updated.rounds];
-      updated.rounds[roundIndex] = { ...updated.rounds[roundIndex], scores: newScores };
-      try {
-        await saveTournament(updated);
-      } finally {
-        if (!saveTimeoutRef.current && !notesSaveTimeoutRef.current) {
-          pendingSaveRef.current = false;
-        }
+      tournamentRef.current = t;
+      if (!saveTimeoutRef.current && !notesSaveTimeoutRef.current) {
+        pendingSaveRef.current = false;
       }
-    }, 300);
+    })();
   }, [roundIndex]);
 
   const saveNotes = useCallback((value) => {
@@ -164,19 +187,17 @@ export default function ScorecardScreen({ navigation, route }) {
     pendingSaveRef.current = true;
     notesSaveTimeoutRef.current = setTimeout(async () => {
       notesSaveTimeoutRef.current = null;
-      if (!tournamentRef.current) {
-        if (!saveTimeoutRef.current) pendingSaveRef.current = false;
-        return;
-      }
-      const updated = { ...tournamentRef.current };
-      updated.rounds = [...updated.rounds];
-      updated.rounds[roundIndex] = { ...updated.rounds[roundIndex], notes: value };
-      try {
-        await saveTournament(updated);
-      } finally {
-        if (!saveTimeoutRef.current && !notesSaveTimeoutRef.current) {
-          pendingSaveRef.current = false;
-        }
+      if (!tournamentRef.current) return;
+      const round = tournamentRef.current.rounds[roundIndex];
+      const t = await mutate(tournamentRef.current, {
+        type: 'note.set',
+        roundId: round.id,
+        scope: 'round',
+        text: value,
+      });
+      tournamentRef.current = t;
+      if (!saveTimeoutRef.current && !notesSaveTimeoutRef.current) {
+        pendingSaveRef.current = false;
       }
     }, 400);
   }, [roundIndex]);
@@ -298,10 +319,54 @@ export default function ScorecardScreen({ navigation, route }) {
     setCurrentHole((h) => Math.max(1, h - 1));
   }, []);
 
+  const [showRunning, setShowRunning] = useState(false);
+  useEffect(() => {
+    AsyncStorage.getItem(RUNNING_SCORE_KEY).then((v) => {
+      if (v === '1') setShowRunning(true);
+    }).catch(() => {});
+  }, []);
+  const toggleRunning = useCallback(() => {
+    setShowRunning((v) => {
+      const next = !v;
+      AsyncStorage.setItem(RUNNING_SCORE_KEY, next ? '1' : '0').catch(() => {});
+      return next;
+    });
+  }, []);
+
+  const lastClinchedPairRef = useRef(null);
+  const clinchInitRef = useRef(false);
+
+  // Initialize the clinch ref once per mount so re-entering an already
+  // clinched round does not pop the alert again. Re-runs only if round id
+  // changes (different round opened in the same screen instance).
+  useEffect(() => {
+    if (!round || !tournament) return;
+    if (clinchInitRef.current) return;
+    clinchInitRef.current = true;
+    const mode = tournament.settings?.scoringMode === 'bestball' ? 'bestball' : 'stableford';
+    const liveRound = { ...round, scores };
+    lastClinchedPairRef.current = roundPairClinched(liveRound, players, tournament.settings, mode);
+  }, [round, tournament, players, scores]);
+
   const goToNextHole = useCallback(() => {
     haptic('medium');
     setCurrentHole((h) => Math.min(18, h + 1));
-  }, []);
+    if (!round || !tournament) return;
+    const mode = tournament.settings?.scoringMode === 'bestball' ? 'bestball' : 'stableford';
+    const liveRound = { ...round, scores };
+    const clinched = roundPairClinched(liveRound, players, tournament.settings, mode);
+    if (clinched != null && lastClinchedPairRef.current == null) {
+      const pair = round.pairs?.[clinched];
+      if (pair) {
+        const names = pair.map((p) => p.name).join(' & ');
+        const title = '🏆 Round clinched';
+        const message = `${names} cannot be caught in this round.`;
+        if (Platform.OS === 'web') window.alert(`${title}\n${message}`);
+        else Alert.alert(title, message);
+      }
+    }
+    lastClinchedPairRef.current = clinched;
+  }, [round, tournament, players, scores]);
 
   const goToHole = useCallback((h) => {
     haptic('light');
@@ -382,6 +447,13 @@ export default function ScorecardScreen({ navigation, route }) {
             </TouchableOpacity>
           </View>
           <TouchableOpacity
+            onPress={toggleRunning}
+            style={s.cameraBtn}
+            accessibilityLabel={showRunning ? 'Hide running score' : 'Show running score'}
+          >
+            <Feather name={showRunning ? 'eye-off' : 'eye'} size={18} color={theme.accent.primary} />
+          </TouchableOpacity>
+          <TouchableOpacity
             onPress={openCapturePicker}
             style={s.cameraBtn}
             accessibilityLabel="Adjuntar recuerdo"
@@ -411,6 +483,7 @@ export default function ScorecardScreen({ navigation, route }) {
           onGoToHole={goToHole}
           onGoBack={goBack}
           playerTotals={playerTotals}
+          showRunning={showRunning}
           getScoreAnim={getScoreAnim}
           celebration={celebration}
           celebrationAnim={celebrationAnim}
@@ -547,6 +620,11 @@ const HolePage = React.memo(function HolePage({
                     <View>
                       <Text style={s.playerCardName}>{player.name}</Text>
                       <Text style={s.playerCardHcp}>HCP {handicap}{extraShots > 0 ? ` +${extraShots}` : ''}</Text>
+                      {showRunning && (
+                        <Text style={s.playerCardRunning}>
+                          {playerTotals(player).pts} pts
+                        </Text>
+                      )}
                     </View>
                   </View>
                   <View style={s.playerCardRight}>
@@ -589,7 +667,7 @@ const HolePage = React.memo(function HolePage({
   );
 });
 
-function HoleView({ round, roundIndex, players, scores, notes, currentHole, hole, isBestBall, bbResult, settings, onStep, onSetScore, onNotesChange, onPrev, onNext, onGoToHole, onGoBack, playerTotals, getScoreAnim, celebration, celebrationAnim, refreshing, onRefresh }) {
+function HoleView({ round, roundIndex, players, scores, notes, currentHole, hole, isBestBall, bbResult, settings, onStep, onSetScore, onNotesChange, onPrev, onNext, onGoToHole, onGoBack, playerTotals, showRunning, getScoreAnim, celebration, celebrationAnim, refreshing, onRefresh }) {
   const { theme } = useTheme();
   const s = useMemo(() => makeStyles(theme), [theme]);
   const [notesOpen, setNotesOpen] = useState(false);
@@ -1640,6 +1718,13 @@ function makeStyles(theme) {
       fontSize: 12,
       marginTop: 2,
       fontFamily: 'PlusJakartaSans-Medium',
+    },
+    playerCardRunning: {
+      color: theme.accent.primary,
+      fontSize: 11,
+      marginTop: 2,
+      fontFamily: 'PlusJakartaSans-Bold',
+      letterSpacing: 0.5,
     },
     playerCardRight: { flexDirection: 'row', alignItems: 'center', gap: 8 },
     stepBtn: {
