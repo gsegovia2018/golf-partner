@@ -655,6 +655,64 @@ export function tournamentPlayerClinched(tournament, mode) {
   return leaderId;
 }
 
+// For a given player, returns one entry per partner with the player's
+// average individual Stableford points across rounds they played together,
+// the player's overall baseline average, and the signed delta between them.
+export function playerPartnerSplits(tournament, playerId) {
+  const { players, rounds } = tournament;
+  const player = players.find((p) => p.id === playerId);
+  if (!player) return { baseline: 0, partners: [] };
+
+  const playerRoundPoints = [];
+  rounds.forEach((round, idx) => {
+    if (!isRoundPlayed(round, idx, tournament)) return;
+    const hasAnyScore = Object.values(round.scores?.[playerId] ?? {}).some((s) => s != null);
+    if (!hasAnyScore) return;
+    const totals = roundTotals(round, players);
+    const me = totals.find((t) => t.player.id === playerId);
+    if (!me) return;
+    playerRoundPoints.push({ roundIndex: idx, points: me.totalPoints });
+  });
+
+  const baseline = playerRoundPoints.length
+    ? playerRoundPoints.reduce((s, r) => s + r.points, 0) / playerRoundPoints.length
+    : 0;
+
+  const buckets = new Map();
+  rounds.forEach((round, idx) => {
+    if (!isRoundPlayed(round, idx, tournament) || !round.pairs?.length) return;
+    const myPair = round.pairs.find((pr) => pr.some((p) => p.id === playerId));
+    if (!myPair) return;
+    const partner = myPair.find((p) => p.id !== playerId);
+    if (!partner) return;
+    const hasAnyScore = Object.values(round.scores?.[playerId] ?? {}).some((s) => s != null);
+    if (!hasAnyScore) return;
+    const totals = roundTotals(round, players);
+    const me = totals.find((t) => t.player.id === playerId);
+    if (!me) return;
+    if (!buckets.has(partner.id)) {
+      buckets.set(partner.id, { partner, points: [], roundIndices: [] });
+    }
+    const bucket = buckets.get(partner.id);
+    bucket.points.push(me.totalPoints);
+    bucket.roundIndices.push(idx);
+  });
+
+  const partners = [...buckets.values()].map(({ partner, points, roundIndices }) => {
+    const avg = points.reduce((s, p) => s + p, 0) / points.length;
+    return {
+      partner,
+      rounds: points.length,
+      avgPlayerPoints: Math.round(avg * 10) / 10,
+      delta: Math.round((avg - baseline) * 10) / 10,
+      roundIndices,
+      perRoundPoints: points,
+    };
+  }).sort((a, b) => b.avgPlayerPoints - a.avgPlayerPoints);
+
+  return { baseline: Math.round(baseline * 10) / 10, partners };
+}
+
 export function tournamentLeaderboard(tournament) {
   const { players, rounds } = tournament;
   const totals = players.map((p) => ({ player: p, points: 0, strokes: 0 }));
