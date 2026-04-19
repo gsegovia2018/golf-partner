@@ -10,7 +10,7 @@ import { Feather } from '@expo/vector-icons';
 import {
   loadTournament, saveTournament, subscribeTournamentChanges,
   calcStablefordPoints, calcBestWorstBall, pickupStrokes, DEFAULT_SETTINGS,
-  roundPairLeaderboard,
+  roundPairLeaderboard, roundPairClinched,
 } from '../store/tournamentStore';
 import { useTheme } from '../theme/ThemeContext';
 import PullToRefresh from '../components/PullToRefresh';
@@ -290,10 +290,40 @@ export default function ScorecardScreen({ navigation, route }) {
     setCurrentHole((h) => Math.max(1, h - 1));
   }, []);
 
+  const lastClinchedPairRef = useRef(null);
+  const clinchInitRef = useRef(false);
+
+  // Initialize the clinch ref once per mount so re-entering an already
+  // clinched round does not pop the alert again. Re-runs only if round id
+  // changes (different round opened in the same screen instance).
+  useEffect(() => {
+    if (!round || !tournament) return;
+    if (clinchInitRef.current) return;
+    clinchInitRef.current = true;
+    const mode = tournament.settings?.scoringMode === 'bestball' ? 'bestball' : 'stableford';
+    const liveRound = { ...round, scores };
+    lastClinchedPairRef.current = roundPairClinched(liveRound, players, tournament.settings, mode);
+  }, [round, tournament, players, scores]);
+
   const goToNextHole = useCallback(() => {
     haptic('medium');
     setCurrentHole((h) => Math.min(18, h + 1));
-  }, []);
+    if (!round || !tournament) return;
+    const mode = tournament.settings?.scoringMode === 'bestball' ? 'bestball' : 'stableford';
+    const liveRound = { ...round, scores };
+    const clinched = roundPairClinched(liveRound, players, tournament.settings, mode);
+    if (clinched != null && lastClinchedPairRef.current == null) {
+      const pair = round.pairs?.[clinched];
+      if (pair) {
+        const names = pair.map((p) => p.name).join(' & ');
+        const title = '🏆 Round clinched';
+        const message = `${names} cannot be caught in this round.`;
+        if (Platform.OS === 'web') window.alert(`${title}\n${message}`);
+        else Alert.alert(title, message);
+      }
+    }
+    lastClinchedPairRef.current = clinched;
+  }, [round, tournament, players, scores]);
 
   const goToHole = useCallback((h) => {
     haptic('light');
