@@ -11,10 +11,11 @@ import { Feather } from '@expo/vector-icons';
 
 const RUNNING_SCORE_KEY = '@scorecard_show_running_score';
 import {
-  loadTournament, saveTournament, subscribeTournamentChanges,
+  loadTournament, subscribeTournamentChanges,
   calcStablefordPoints, calcBestWorstBall, pickupStrokes, DEFAULT_SETTINGS,
   roundPairLeaderboard, roundPairClinched,
 } from '../store/tournamentStore';
+import { mutate } from '../store/mutate';
 import { useTheme } from '../theme/ThemeContext';
 import PullToRefresh from '../components/PullToRefresh';
 import MediaLightbox from '../components/MediaLightbox';
@@ -140,25 +141,44 @@ export default function ScorecardScreen({ navigation, route }) {
   }, [reload]);
 
   const autoSave = useCallback((newScores) => {
-    if (saveTimeoutRef.current) clearTimeout(saveTimeoutRef.current);
+    // Compute the diff between the previously-synced scores and newScores,
+    // emitting one score.set mutation per changed cell. This naturally coalesces
+    // rapid keystrokes because `scores` state is already debounced upstream.
+    if (!tournamentRef.current) return;
+    const round = tournamentRef.current.rounds[roundIndex];
+    const prevScores = round.scores ?? {};
+
+    const changedCells = [];
+    const playerIds = new Set([...Object.keys(prevScores), ...Object.keys(newScores)]);
+    for (const pid of playerIds) {
+      const prevByHole = prevScores[pid] ?? {};
+      const nextByHole = newScores[pid] ?? {};
+      const holes = new Set([...Object.keys(prevByHole), ...Object.keys(nextByHole)]);
+      for (const h of holes) {
+        const before = prevByHole[h];
+        const after = nextByHole[h];
+        if (before !== after) changedCells.push({ playerId: pid, hole: Number(h), value: after ?? null });
+      }
+    }
+    if (changedCells.length === 0) return;
+
     pendingSaveRef.current = true;
-    saveTimeoutRef.current = setTimeout(async () => {
-      saveTimeoutRef.current = null;
-      if (!tournamentRef.current) {
-        if (!notesSaveTimeoutRef.current) pendingSaveRef.current = false;
-        return;
+    (async () => {
+      let t = tournamentRef.current;
+      for (const cell of changedCells) {
+        t = await mutate(t, {
+          type: 'score.set',
+          roundId: round.id,
+          playerId: cell.playerId,
+          hole: cell.hole,
+          value: cell.value,
+        });
       }
-      const updated = { ...tournamentRef.current };
-      updated.rounds = [...updated.rounds];
-      updated.rounds[roundIndex] = { ...updated.rounds[roundIndex], scores: newScores };
-      try {
-        await saveTournament(updated);
-      } finally {
-        if (!saveTimeoutRef.current && !notesSaveTimeoutRef.current) {
-          pendingSaveRef.current = false;
-        }
+      tournamentRef.current = t;
+      if (!saveTimeoutRef.current && !notesSaveTimeoutRef.current) {
+        pendingSaveRef.current = false;
       }
-    }, 300);
+    })();
   }, [roundIndex]);
 
   const saveNotes = useCallback((value) => {
@@ -167,19 +187,17 @@ export default function ScorecardScreen({ navigation, route }) {
     pendingSaveRef.current = true;
     notesSaveTimeoutRef.current = setTimeout(async () => {
       notesSaveTimeoutRef.current = null;
-      if (!tournamentRef.current) {
-        if (!saveTimeoutRef.current) pendingSaveRef.current = false;
-        return;
-      }
-      const updated = { ...tournamentRef.current };
-      updated.rounds = [...updated.rounds];
-      updated.rounds[roundIndex] = { ...updated.rounds[roundIndex], notes: value };
-      try {
-        await saveTournament(updated);
-      } finally {
-        if (!saveTimeoutRef.current && !notesSaveTimeoutRef.current) {
-          pendingSaveRef.current = false;
-        }
+      if (!tournamentRef.current) return;
+      const round = tournamentRef.current.rounds[roundIndex];
+      const t = await mutate(tournamentRef.current, {
+        type: 'note.set',
+        roundId: round.id,
+        scope: 'round',
+        text: value,
+      });
+      tournamentRef.current = t;
+      if (!saveTimeoutRef.current && !notesSaveTimeoutRef.current) {
+        pendingSaveRef.current = false;
       }
     }, 400);
   }, [roundIndex]);
