@@ -22,6 +22,7 @@ export default function ProfileScreen({ navigation }) {
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
 
+  const [username, setUsername] = useState('');
   const [displayName, setDisplayName] = useState('');
   const [handicap, setHandicap] = useState('');
   const [avatarColor, setAvatarColor] = useState(null);
@@ -32,12 +33,13 @@ export default function ProfileScreen({ navigation }) {
     try {
       const p = await loadProfile();
       setProfile(p);
+      setUsername(p?.username ?? '');
       setDisplayName(p?.displayName ?? '');
       setHandicap(p?.handicap != null ? String(p.handicap) : '');
       setAvatarColor(p?.avatarColor ?? null);
       setDirty(false);
-      if (p?.displayName) {
-        setStats(await computePersonalStats(p.displayName));
+      if (p?.userId || p?.displayName) {
+        setStats(await computePersonalStats({ userId: p?.userId, displayName: p?.displayName }));
       } else {
         setStats(null);
       }
@@ -51,6 +53,17 @@ export default function ProfileScreen({ navigation }) {
   useFocusEffect(useCallback(() => { load(); }, [load]));
 
   async function save() {
+    // Username: 3-20 chars, lowercase letters/digits/underscore only. Keeps
+    // it safe to drop into URLs and @-mentions later.
+    const trimmedUsername = username.trim().toLowerCase();
+    if (trimmedUsername && !/^[a-z0-9_]{3,20}$/.test(trimmedUsername)) {
+      Alert.alert(
+        'Invalid username',
+        'Username must be 3–20 characters: lowercase letters, digits or underscores.',
+      );
+      return;
+    }
+
     // Golf handicap range: scratch/low-single digits up to 54 (max index
     // allowed by WHS). Reject clearly wrong values so nobody saves 200
     // and wrecks their Stableford math downstream.
@@ -63,10 +76,16 @@ export default function ProfileScreen({ navigation }) {
     }
     setSaving(true);
     try {
-      await upsertProfile({ displayName, handicap, avatarColor });
+      await upsertProfile({ username: trimmedUsername, displayName, handicap, avatarColor });
       await load();
     } catch (err) {
-      Alert.alert('Error', err.message ?? 'Could not save profile');
+      const msg = err?.message ?? 'Could not save profile';
+      // Unique-constraint violation on (lower(username)) surfaces as 23505.
+      if (err?.code === '23505' || /duplicate|unique/i.test(msg)) {
+        Alert.alert('Username taken', 'Pick another username.');
+      } else {
+        Alert.alert('Error', msg);
+      }
     } finally {
       setSaving(false);
     }
@@ -113,6 +132,24 @@ export default function ProfileScreen({ navigation }) {
           <Text style={s.sectionLabel}>ACCOUNT</Text>
 
           <View style={s.fieldGroup}>
+            <Text style={s.fieldLabel}>Username</Text>
+            <TextInput
+              style={s.input}
+              placeholder="shorthandle"
+              placeholderTextColor={theme.text.muted}
+              keyboardAppearance={theme.isDark ? 'dark' : 'light'}
+              selectionColor={theme.accent.primary}
+              value={username}
+              onChangeText={(v) => { setUsername(v.toLowerCase()); setDirty(true); }}
+              autoCapitalize="none"
+              autoCorrect={false}
+            />
+            <Text style={s.fieldHint}>
+              Unique, lowercase. 3–20 letters, digits or underscores. Used in links.
+            </Text>
+          </View>
+
+          <View style={s.fieldGroup}>
             <Text style={s.fieldLabel}>Display name</Text>
             <TextInput
               style={s.input}
@@ -125,7 +162,7 @@ export default function ProfileScreen({ navigation }) {
               autoCapitalize="words"
             />
             <Text style={s.fieldHint}>
-              Used to match you to players in tournaments for personal stats.
+              Shown in tournaments and on the leaderboard.
             </Text>
           </View>
 
