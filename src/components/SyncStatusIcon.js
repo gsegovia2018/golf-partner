@@ -1,7 +1,7 @@
-import React, { useEffect, useState } from 'react';
-import { View, Text, Pressable, ActivityIndicator } from 'react-native';
-import { subscribeSyncStatus } from '../store/tournamentStore';
-import { retrySync } from '../store/syncWorker';
+import React, { useEffect, useRef, useState, useCallback } from 'react';
+import { View, Text, Pressable, ActivityIndicator, Animated, StyleSheet } from 'react-native';
+import { subscribeSyncStatus, subscribeConflicts } from '../store/tournamentStore';
+import SyncStatusSheet from './SyncStatusSheet';
 
 const COLOR = {
   idle:    '#4a7c4a',
@@ -10,34 +10,100 @@ const COLOR = {
   error:   '#b33a3a',
 };
 
+const BADGE_COLOR = '#c77a0a'; // ámbar, distinct from the error red
+
 const LABEL = {
   idle: '',
   syncing: 'Sincronizando',
   pending: 'Pendiente',
-  error: 'Reintentar',
+  error: 'Error',
 };
 
 export default function SyncStatusIcon() {
   const [status, setStatus] = useState('idle');
-  useEffect(() => subscribeSyncStatus(setStatus), []);
+  const [unread, setUnread] = useState(0);
+  const [sheetOpen, setSheetOpen] = useState(false);
+  const pulse = useRef(new Animated.Value(1)).current;
+  const lastUnreadRef = useRef(0);
 
-  if (status === 'idle') {
-    return (
-      <View style={{ width: 10, height: 10, borderRadius: 5, backgroundColor: COLOR.idle, marginHorizontal: 8 }} />
-    );
-  }
+  useEffect(() => subscribeSyncStatus(setStatus), []);
+  useEffect(() => subscribeConflicts(({ unread: nextUnread }) => {
+    setUnread(nextUnread);
+  }), []);
+
+  // Fire a single pulse animation on 0 -> n transitions (live only).
+  // `lastUnreadRef` is seeded by the first subscribe callback, so cold-start
+  // hydration of a persisted non-zero unread does NOT trigger a pulse.
+  useEffect(() => {
+    const prev = lastUnreadRef.current;
+    lastUnreadRef.current = unread;
+    if (prev === 0 && unread > 0) {
+      pulse.setValue(1);
+      Animated.sequence([
+        Animated.timing(pulse, { toValue: 1.15, duration: 200, useNativeDriver: true }),
+        Animated.timing(pulse, { toValue: 1,    duration: 200, useNativeDriver: true }),
+        Animated.timing(pulse, { toValue: 1.15, duration: 200, useNativeDriver: true }),
+        Animated.timing(pulse, { toValue: 1,    duration: 200, useNativeDriver: true }),
+      ]).start();
+    }
+  }, [unread, pulse]);
+
+  const open = useCallback(() => setSheetOpen(true), []);
+  const close = useCallback(() => setSheetOpen(false), []);
+
+  const badge = unread > 0 ? (
+    <View style={styles.badge}>
+      <Text style={styles.badgeText}>{unread > 9 ? '9+' : String(unread)}</Text>
+    </View>
+  ) : null;
 
   const content = status === 'syncing'
     ? <ActivityIndicator size="small" color={COLOR.syncing} />
     : (
-      <View style={{ flexDirection: 'row', alignItems: 'center' }}>
-        <View style={{ width: 10, height: 10, borderRadius: 5, backgroundColor: COLOR[status], marginRight: 6 }} />
-        <Text style={{ color: COLOR[status], fontSize: 12 }}>{LABEL[status]}</Text>
+      <View style={styles.dotRow}>
+        <Animated.View style={[
+          styles.dot,
+          { backgroundColor: COLOR[status], transform: [{ scale: pulse }] },
+        ]} />
+        {status !== 'idle' && <Text style={[styles.label, { color: COLOR[status] }]}>{LABEL[status]}</Text>}
       </View>
     );
 
-  if (status === 'error') {
-    return <Pressable onPress={retrySync} style={{ paddingHorizontal: 8 }}>{content}</Pressable>;
-  }
-  return <View style={{ paddingHorizontal: 8 }}>{content}</View>;
+  return (
+    <>
+      <Pressable onPress={open} style={styles.hit} hitSlop={10}>
+        <View style={styles.container}>
+          {content}
+          {badge}
+        </View>
+      </Pressable>
+      <SyncStatusSheet visible={sheetOpen} onClose={close} />
+    </>
+  );
 }
+
+const styles = StyleSheet.create({
+  hit: { paddingHorizontal: 8, paddingVertical: 4 },
+  container: { position: 'relative', flexDirection: 'row', alignItems: 'center' },
+  dotRow: { flexDirection: 'row', alignItems: 'center' },
+  dot: { width: 10, height: 10, borderRadius: 5 },
+  label: { fontSize: 12, marginLeft: 6 },
+  badge: {
+    position: 'absolute',
+    top: -6,
+    right: -8,
+    minWidth: 16,
+    height: 16,
+    borderRadius: 8,
+    backgroundColor: BADGE_COLOR,
+    paddingHorizontal: 3,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  badgeText: {
+    color: '#fff',
+    fontSize: 10,
+    fontFamily: 'PlusJakartaSans-Bold',
+    lineHeight: 12,
+  },
+});
