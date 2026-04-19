@@ -5,6 +5,12 @@ const ACTIVE_ID_KEY = '@golf_active_id';
 const LEGACY_TOURNAMENTS_KEY = '@golf_tournaments';
 const LEGACY_KEY = '@golf_tournament';
 
+const CONFLICT_LOG_KEY = '@golf_conflict_log';       // array of conflict entries, cap 20 FIFO
+const CONFLICT_UNREAD_KEY = '@golf_conflict_unread'; // integer
+const LAST_SYNC_AT_KEY = '@golf_last_sync_at';       // ms epoch of last successful drain
+
+const CONFLICT_LOG_CAP = 20;
+
 // Runs once: pushes any locally-stored tournaments up to Supabase then clears local keys.
 async function migrate() {
   const [legacy, legacyAll] = await Promise.all([
@@ -742,4 +748,90 @@ export function isRoundInProgress(tournament) {
     entered += Object.keys(perPlayer).length;
   }
   return entered > 0 && entered < expected;
+}
+
+// ── Conflict log observable ──────────────────────────────────────────────────
+
+let _conflictLog = null;      // lazy-loaded array
+let _conflictUnread = null;   // lazy-loaded integer
+let _lastSyncAt = null;       // lazy-loaded number | null
+const _conflictSubs = new Set();
+
+async function _ensureConflictLoaded() {
+  if (_conflictLog != null) return;
+  const [rawLog, rawUnread, rawLast] = await Promise.all([
+    AsyncStorage.getItem(CONFLICT_LOG_KEY),
+    AsyncStorage.getItem(CONFLICT_UNREAD_KEY),
+    AsyncStorage.getItem(LAST_SYNC_AT_KEY),
+  ]);
+  try { _conflictLog = rawLog ? JSON.parse(rawLog) : []; }
+  catch { _conflictLog = []; }
+  if (!Array.isArray(_conflictLog)) _conflictLog = [];
+  const n = parseInt(rawUnread ?? '0', 10);
+  _conflictUnread = Number.isFinite(n) && n >= 0 ? n : 0;
+  const t = parseInt(rawLast ?? '0', 10);
+  _lastSyncAt = Number.isFinite(t) && t > 0 ? t : null;
+}
+
+function _emitConflicts() {
+  const snapshot = { log: _conflictLog.slice(), unread: _conflictUnread, lastSyncAt: _lastSyncAt };
+  _conflictSubs.forEach((fn) => { try { fn(snapshot); } catch (_) {} });
+}
+
+export async function getConflicts() {
+  await _ensureConflictLoaded();
+  return _conflictLog.slice();
+}
+
+export async function getConflictUnreadCount() {
+  await _ensureConflictLoaded();
+  return _conflictUnread;
+}
+
+export async function getLastSyncAt() {
+  await _ensureConflictLoaded();
+  return _lastSyncAt;
+}
+
+export function subscribeConflicts(fn) {
+  _conflictSubs.add(fn);
+  _ensureConflictLoaded().then(() => {
+    try { fn({ log: _conflictLog.slice(), unread: _conflictUnread, lastSyncAt: _lastSyncAt }); }
+    catch (_) {}
+  });
+  return () => _conflictSubs.delete(fn);
+}
+
+// Worker-only: append a batch of conflicts and bump unread. FIFO cap.
+export async function _appendConflicts(entries) {
+  if (!entries || entries.length === 0) return;
+  await _ensureConflictLoaded();
+  const next = _conflictLog.concat(entries);
+  // Drop oldest if we exceed cap.
+  const trimmed = next.length > CONFLICT_LOG_CAP
+    ? next.slice(next.length - CONFLICT_LOG_CAP)
+    : next;
+  _conflictLog = trimmed;
+  _conflictUnread = _conflictUnread + entries.length;
+  await AsyncStorage.multiSet([
+    [CONFLICT_LOG_KEY, JSON.stringify(_conflictLog)],
+    [CONFLICT_UNREAD_KEY, String(_conflictUnread)],
+  ]);
+  _emitConflicts();
+}
+
+// Worker-only: record a successful drain timestamp.
+export async function _setLastSyncAt(ts) {
+  await _ensureConflictLoaded();
+  _lastSyncAt = ts;
+  await AsyncStorage.setItem(LAST_SYNC_AT_KEY, String(ts));
+  _emitConflicts();
+}
+
+export async function markConflictsRead() {
+  await _ensureConflictLoaded();
+  if (_conflictUnread === 0) return;
+  _conflictUnread = 0;
+  await AsyncStorage.setItem(CONFLICT_UNREAD_KEY, '0');
+  _emitConflicts();
 }
