@@ -1,5 +1,6 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { Modal, View, Text, TouchableOpacity, Dimensions, FlatList, Alert, StyleSheet, Platform } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Feather } from '@expo/vector-icons';
 import { Image as ExpoImage } from 'expo-image';
 import { VideoView, useVideoPlayer } from 'expo-video';
@@ -13,6 +14,7 @@ const { width, height } = Dimensions.get('window');
 export default function MediaLightbox({ visible, items, initialIndex, onClose }) {
   const { theme } = useTheme();
   const s = makeStyles(theme);
+  const insets = useSafeAreaInsets();
   const listRef = useRef(null);
   const [index, setIndex] = useState(initialIndex ?? 0);
 
@@ -74,7 +76,7 @@ export default function MediaLightbox({ visible, items, initialIndex, onClose })
           )}
         />
 
-        <View style={s.topBar}>
+        <View style={[s.topBar, { top: insets.top + 12 }]}>
           <TouchableOpacity onPress={onClose} style={s.iconBtn} accessibilityLabel="Cerrar">
             <Feather name="x" size={24} color="#fff" />
           </TouchableOpacity>
@@ -90,7 +92,7 @@ export default function MediaLightbox({ visible, items, initialIndex, onClose })
           </View>
         </View>
 
-        <View style={s.footer}>
+        <View style={[s.footer, { bottom: insets.bottom + 24 }]}>
           {formatHole(current.holeIndex) && <Text style={s.hole}>{formatHole(current.holeIndex)}</Text>}
           {current.caption && <Text style={s.caption}>{current.caption}</Text>}
           <Text style={s.meta}>
@@ -141,12 +143,13 @@ function LightboxVideo({ uri, active, style }) {
 const makeStyles = () => StyleSheet.create({
   container: { flex: 1, backgroundColor: '#000' },
   media: { width: '100%', height: '100%' },
-  topBar: { position: 'absolute', top: 40, left: 0, right: 0, paddingHorizontal: 16,
-            flexDirection: 'row', justifyContent: 'space-between' },
+  topBar: { position: 'absolute', left: 0, right: 0, paddingHorizontal: 16,
+            flexDirection: 'row', justifyContent: 'space-between', zIndex: 10 },
   topActions: { flexDirection: 'row', gap: 8 },
-  iconBtn: { padding: 8, backgroundColor: 'rgba(0,0,0,0.4)', borderRadius: 999 },
-  footer: { position: 'absolute', bottom: 32, left: 16, right: 16,
-            backgroundColor: 'rgba(0,0,0,0.5)', borderRadius: 12, padding: 12 },
+  iconBtn: { width: 40, height: 40, alignItems: 'center', justifyContent: 'center',
+             backgroundColor: 'rgba(0,0,0,0.55)', borderRadius: 999 },
+  footer: { position: 'absolute', left: 16, right: 16, zIndex: 10,
+            backgroundColor: 'rgba(0,0,0,0.55)', borderRadius: 12, padding: 12 },
   hole: { color: '#fff', fontFamily: 'PlusJakartaSans-SemiBold', fontSize: 13, marginBottom: 4 },
   caption: { color: '#fff', fontFamily: 'PlusJakartaSans-Regular', fontSize: 15, marginBottom: 4 },
   meta: { color: 'rgba(255,255,255,0.7)', fontFamily: 'PlusJakartaSans-Regular', fontSize: 12 },

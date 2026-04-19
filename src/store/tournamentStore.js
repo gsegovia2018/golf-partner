@@ -339,9 +339,10 @@ export const DEFAULT_SETTINGS = {
   worstBallValue: 1,         // points awarded per hole won in worst ball match
 };
 
-export function createTournament({ name, players, rounds, settings }) {
+export function createTournament({ name, players, rounds, settings, kind = 'tournament' }) {
   return {
     id: Date.now().toString(),
+    kind,
     name,
     createdAt: new Date().toISOString(),
     players,

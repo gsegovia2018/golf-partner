@@ -1,4 +1,4 @@
-import React, { useCallback, useState } from 'react';
+import React, { useCallback, useEffect, useState } from 'react';
 import {
   View, Text, TextInput, TouchableOpacity,
   StyleSheet, ScrollView, Alert, Platform,
@@ -12,14 +12,36 @@ import { defaultHoles, fetchCourses, fetchPlayers } from '../store/libraryStore'
 import { consumePendingPlayers, consumePendingCourses } from '../lib/selectionBridge';
 import { useTheme } from '../theme/ThemeContext';
 
-export default function SetupScreen({ navigation }) {
+function buildGameName(courseName) {
+  const d = new Date();
+  const months = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+  const stamp = `${d.getDate()} ${months[d.getMonth()]}`;
+  const trimmed = (courseName || '').trim();
+  return trimmed ? `Game at ${trimmed} · ${stamp}` : `Game · ${stamp}`;
+}
+
+export default function SetupScreen({ navigation, route }) {
   const { theme } = useTheme();
   const s = makeStyles(theme);
 
-  const [tournamentName, setTournamentName] = useState('Weekend Golf');
+  const kind = route?.params?.kind === 'game' ? 'game' : 'tournament';
+  const isGame = kind === 'game';
+
+  const [tournamentName, setTournamentName] = useState(() =>
+    isGame ? buildGameName('') : 'Weekend Golf',
+  );
+  const [nameTouched, setNameTouched] = useState(false);
   const [players, setPlayers] = useState([]);
   const [rounds, setRounds] = useState([{ courseName: '', holes: defaultHoles(), slope: null, playerHandicaps: null }]);
   const [settings, setSettings] = useState({ ...DEFAULT_SETTINGS });
+
+  const bestBallAllowed = !isGame || players.length === 4;
+
+  useEffect(() => {
+    if (!bestBallAllowed && settings.scoringMode === 'bestball') {
+      setSettings((prev) => ({ ...prev, scoringMode: 'stableford' }));
+    }
+  }, [bestBallAllowed, settings.scoringMode]);
 
   useFocusEffect(useCallback(() => {
     let cancelled = false;
@@ -81,6 +103,9 @@ export default function SetupScreen({ navigation }) {
           });
           return next;
         });
+        if (isGame && !nameTouched && startRoundIndex === 0 && freshCourses[0]?.name) {
+          setTournamentName(buildGameName(freshCourses[0].name));
+        }
       })();
     }
 
@@ -109,6 +134,9 @@ export default function SetupScreen({ navigation }) {
       next[index] = { ...next[index], courseName: value };
       return next;
     });
+    if (isGame && !nameTouched && index === 0) {
+      setTournamentName(buildGameName(value));
+    }
   }
 
   function addRound() {
@@ -147,7 +175,8 @@ export default function SetupScreen({ navigation }) {
     });
 
     const tournament = createTournament({
-      name: tournamentName.trim() || 'Weekend Golf',
+      kind,
+      name: tournamentName.trim() || (isGame ? 'Game' : 'Weekend Golf'),
       players,
       rounds: builtRounds,
       settings: {
@@ -174,7 +203,7 @@ export default function SetupScreen({ navigation }) {
         <TouchableOpacity onPress={() => navigation.goBack()} style={s.backBtn}>
           <Feather name="chevron-left" size={22} color={theme.accent.primary} />
         </TouchableOpacity>
-        <Text style={s.headerTitle}>New Tournament</Text>
+        <Text style={s.headerTitle}>{isGame ? 'New Game' : 'New Tournament'}</Text>
         <View style={{ width: 22 }} />
       </View>
 
@@ -182,11 +211,11 @@ export default function SetupScreen({ navigation }) {
 
       {/* Tournament Name */}
       <View>
-        <Text style={s.label}>Tournament Name</Text>
+        <Text style={s.label}>{isGame ? 'Game Name' : 'Tournament Name'}</Text>
         <TextInput
           style={s.input}
           value={tournamentName}
-          onChangeText={setTournamentName}
+          onChangeText={(v) => { setTournamentName(v); setNameTouched(true); }}
           placeholderTextColor={theme.text.muted}
           keyboardAppearance={theme.isDark ? 'dark' : 'light'}
           selectionColor={theme.accent.primary}
@@ -222,13 +251,13 @@ export default function SetupScreen({ navigation }) {
 
       {/* Rounds */}
       <View>
-        <Text style={s.sectionTitle}>Rounds</Text>
+        <Text style={s.sectionTitle}>{isGame ? 'Course' : 'Rounds'}</Text>
         {rounds.map((r, i) => {
           const totalPar = r.holes.reduce((sum, h) => sum + h.par, 0);
           return (
             <View key={i} style={s.courseBlock}>
               <View style={s.roundHeader}>
-                <Text style={s.roundLabel}>Round {i + 1}</Text>
+                {!isGame && <Text style={s.roundLabel}>Round {i + 1}</Text>}
                 {rounds.length > 1 && (
                   <TouchableOpacity onPress={() => removeRound(i)} style={s.removeRoundBtn}>
                     <Feather name="trash-2" size={14} color={theme.destructive} />
@@ -289,27 +318,38 @@ export default function SetupScreen({ navigation }) {
           );
         })}
 
-        <TouchableOpacity style={s.addRoundBtn} onPress={addRound}>
-          <Feather name="plus-circle" size={16} color={theme.accent.primary} style={{ marginRight: 6 }} />
-          <Text style={s.addRoundBtnText}>Add Round</Text>
-        </TouchableOpacity>
+        {!isGame && (
+          <TouchableOpacity style={s.addRoundBtn} onPress={addRound}>
+            <Feather name="plus-circle" size={16} color={theme.accent.primary} style={{ marginRight: 6 }} />
+            <Text style={s.addRoundBtnText}>Add Round</Text>
+          </TouchableOpacity>
+        )}
       </View>
 
       {/* Scoring */}
       <View>
         <Text style={s.sectionTitle}>Scoring</Text>
         <View style={s.modeRow}>
-          {['stableford', 'bestball'].map((mode) => (
-            <TouchableOpacity
-              key={mode}
-              style={[s.modeBtn, settings.scoringMode === mode && s.modeBtnActive]}
-              onPress={() => setSettings((prev) => ({ ...prev, scoringMode: mode }))}
-            >
-              <Text style={[s.modeBtnText, settings.scoringMode === mode && s.modeBtnTextActive]}>
-                {mode === 'stableford' ? 'Individual Stableford' : 'Best Ball / Worst Ball'}
-              </Text>
-            </TouchableOpacity>
-          ))}
+          {['stableford', 'bestball'].map((mode) => {
+            const disabled = mode === 'bestball' && !bestBallAllowed;
+            return (
+              <TouchableOpacity
+                key={mode}
+                style={[s.modeBtn, settings.scoringMode === mode && s.modeBtnActive, disabled && { opacity: 0.5 }]}
+                onPress={() => { if (!disabled) setSettings((prev) => ({ ...prev, scoringMode: mode })); }}
+                activeOpacity={disabled ? 1 : 0.7}
+              >
+                <Text style={[s.modeBtnText, settings.scoringMode === mode && s.modeBtnTextActive]}>
+                  {mode === 'stableford' ? 'Individual Stableford' : 'Best Ball / Worst Ball'}
+                </Text>
+                {disabled && (
+                  <Text style={[s.modeBtnText, { fontSize: 11, marginTop: 4, color: theme.text.muted }]}>
+                    Requires 4 players
+                  </Text>
+                )}
+              </TouchableOpacity>
+            );
+          })}
         </View>
         {settings.scoringMode === 'bestball' && (
           <View style={s.valueRow}>
@@ -347,7 +387,7 @@ export default function SetupScreen({ navigation }) {
       <View>
         <TouchableOpacity style={s.primaryBtn} onPress={handleStart}>
           <Feather name="play" size={18} color={theme.isDark ? theme.accent.primary : theme.text.inverse} style={{ marginRight: 8 }} />
-          <Text style={s.primaryBtnText}>Start Tournament</Text>
+          <Text style={s.primaryBtnText}>{isGame ? 'Start Game' : 'Start Tournament'}</Text>
         </TouchableOpacity>
       </View>
     </ScrollView>
