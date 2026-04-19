@@ -226,6 +226,18 @@ export async function deleteTournament(id) {
   const { error } = await supabase.from('tournaments').delete().eq('id', id);
   if (error) throw error;
   if (activeId === id) await AsyncStorage.removeItem(ACTIVE_ID_KEY);
+  // Mirror the delete into the offline layer: drop the blob cache and
+  // remove the id from the tournaments index so Home doesn't show a
+  // phantom card after next cold start.
+  await AsyncStorage.removeItem(ACTIVE_TOURNAMENT_KEY + id);
+  try {
+    const current = await tournamentsIndex.readIndex();
+    const next = current.filter((row) => row.id !== id);
+    await tournamentsIndex.writeIndex(next.map((row) => ({
+      id: row.id, name: row.name, createdAt: row.createdAt,
+      _role: row.role, updatedAt: row.updatedAt,
+    })));
+  } catch (_) { /* index cleanup is best-effort */ }
   _emitChange();
 }
 
