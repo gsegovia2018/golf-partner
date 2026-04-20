@@ -8,7 +8,10 @@ import { useFocusEffect } from '@react-navigation/native';
 import { Feather } from '@expo/vector-icons';
 
 import { useTheme } from '../theme/ThemeContext';
-import { deleteCourse, fetchCourses, upsertCourse } from '../store/libraryStore';
+import {
+  deleteCourse, fetchCourses, upsertCourse,
+  fetchFavoriteCourseIds, toggleFavoriteCourse,
+} from '../store/libraryStore';
 
 const normalize = (value) =>
   (value ?? '').toString().normalize('NFD').replace(/\p{Diacritic}/gu, '').toLowerCase();
@@ -22,6 +25,7 @@ export default function CoursesLibraryScreen({ navigation }) {
   const [name, setName] = useState('');
   const [saving, setSaving] = useState(false);
   const [query, setQuery] = useState('');
+  const [favorites, setFavorites] = useState(() => new Set());
 
   const filteredCourses = useMemo(() => {
     const q = normalize(query);
@@ -42,9 +46,28 @@ export default function CoursesLibraryScreen({ navigation }) {
   async function load() {
     setLoading(true);
     try {
-      setCourses(await fetchCourses());
+      const [list, favs] = await Promise.all([
+        fetchCourses(),
+        fetchFavoriteCourseIds().catch(() => new Set()),
+      ]);
+      setCourses(list);
+      setFavorites(favs);
     } finally {
       setLoading(false);
+    }
+  }
+
+  async function handleToggleFavorite(courseId) {
+    const prev = favorites;
+    const next = new Set(prev);
+    if (next.has(courseId)) next.delete(courseId); else next.add(courseId);
+    setFavorites(next);
+    try {
+      await toggleFavoriteCourse(courseId);
+    } catch (err) {
+      setFavorites(prev);
+      if (Platform.OS === 'web') window.alert(err.message ?? 'Could not update favorite');
+      else Alert.alert('Error', err.message ?? 'Could not update favorite');
     }
   }
 
@@ -170,6 +193,18 @@ export default function CoursesLibraryScreen({ navigation }) {
                     </Text>
                   </TouchableOpacity>
                   <TouchableOpacity
+                    style={s.favBtn}
+                    onPress={() => handleToggleFavorite(c.id)}
+                    activeOpacity={0.7}
+                    hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+                  >
+                    <Feather
+                      name="star"
+                      size={16}
+                      color={favorites.has(c.id) ? theme.accent.primary : theme.text.muted}
+                    />
+                  </TouchableOpacity>
+                  <TouchableOpacity
                     style={s.editBtn}
                     onPress={() => navigation.navigate('CourseLibraryDetail', { courseId: c.id, courseName: c.name })}
                     activeOpacity={0.7}
@@ -242,5 +277,6 @@ const makeStyles = (theme) => StyleSheet.create({
   courseName: { fontFamily: 'PlusJakartaSans-Bold', color: theme.text.primary, fontSize: 16 },
   courseMeta: { fontFamily: 'PlusJakartaSans-Medium', color: theme.text.secondary, fontSize: 12, marginTop: 3 },
   editBtn: { paddingHorizontal: 10, paddingVertical: 6 },
+  favBtn: { paddingHorizontal: 10, paddingVertical: 6 },
   deleteBtn: { paddingHorizontal: 8, paddingVertical: 6 },
 });
