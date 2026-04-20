@@ -1,7 +1,7 @@
 import React, { useCallback, useState } from 'react';
 import {
   View, Text, TextInput, TouchableOpacity, StyleSheet, ScrollView,
-  ActivityIndicator, Alert, Platform, Image,
+  ActivityIndicator, Alert, Platform, Switch, Image,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useFocusEffect } from '@react-navigation/native';
@@ -11,6 +11,7 @@ import * as ImagePicker from 'expo-image-picker';
 import { useTheme } from '../theme/ThemeContext';
 import { supabase } from '../lib/supabase';
 import { loadProfile, upsertProfile, uploadAvatar, computePersonalStats } from '../store/profileStore';
+import { getShowRunningScore, setShowRunningScore } from '../lib/prefs';
 
 const AVATAR_COLORS = ['#006747', '#c77b38', '#1b4965', '#7b3f6b', '#4a6d3f', '#b33951'];
 
@@ -30,17 +31,19 @@ export default function ProfileScreen({ navigation }) {
   const [avatarUrl, setAvatarUrl] = useState(null);
   const [uploadingAvatar, setUploadingAvatar] = useState(false);
   const [dirty, setDirty] = useState(false);
+  const [showRunning, setShowRunning] = useState(true);
 
   const load = useCallback(async () => {
     setLoading(true);
     try {
-      const p = await loadProfile();
+      const [p, running] = await Promise.all([loadProfile(), getShowRunningScore()]);
       setProfile(p);
       setUsername(p?.username ?? '');
       setDisplayName(p?.displayName ?? '');
       setHandicap(p?.handicap != null ? String(p.handicap) : '');
       setAvatarColor(p?.avatarColor ?? null);
       setAvatarUrl(p?.avatarUrl ?? null);
+      setShowRunning(running);
       setDirty(false);
       if (p?.userId || p?.displayName) {
         setStats(await computePersonalStats({ userId: p?.userId, displayName: p?.displayName }));
@@ -52,6 +55,13 @@ export default function ProfileScreen({ navigation }) {
     } finally {
       setLoading(false);
     }
+  }, []);
+
+  const toggleShowRunning = useCallback((next) => {
+    setShowRunning(next);
+    setShowRunningScore(next).catch((err) => {
+      Alert.alert('Error', err.message ?? 'Could not save preference');
+    });
   }, []);
 
   useFocusEffect(useCallback(() => { load(); }, [load]));
@@ -289,6 +299,23 @@ export default function ProfileScreen({ navigation }) {
             })}
           </View>
 
+          <Text style={s.sectionLabel}>PREFERENCES</Text>
+
+          <View style={s.prefRow}>
+            <View style={{ flex: 1 }}>
+              <Text style={s.prefLabel}>Show running points on scorecard</Text>
+              <Text style={s.fieldHint}>
+                Displays each player's total Stableford points under their name.
+              </Text>
+            </View>
+            <Switch
+              value={showRunning}
+              onValueChange={toggleShowRunning}
+              trackColor={{ false: theme.border.default, true: theme.accent.primary }}
+              thumbColor={Platform.OS === 'android' ? theme.bg.card : undefined}
+            />
+          </View>
+
           <Text style={s.sectionLabel}>PERSONAL STATS</Text>
 
           {!profile?.displayName ? (
@@ -434,6 +461,16 @@ const makeStyles = (theme) => StyleSheet.create({
     fontFamily: 'PlusJakartaSans-ExtraBold',
     color: theme.isDark ? theme.accent.primary : theme.text.inverse,
     fontSize: 15,
+  },
+
+  prefRow: {
+    flexDirection: 'row', alignItems: 'center', gap: 12,
+    backgroundColor: theme.bg.card, borderRadius: 14, borderWidth: 1,
+    borderColor: theme.border.default, padding: 14,
+    ...(theme.isDark ? {} : theme.shadow.card),
+  },
+  prefLabel: {
+    fontFamily: 'PlusJakartaSans-SemiBold', color: theme.text.primary, fontSize: 14,
   },
 
   statsGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: 10 },

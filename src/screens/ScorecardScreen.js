@@ -5,11 +5,10 @@ import {
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import * as Haptics from 'expo-haptics';
-import AsyncStorage from '@react-native-async-storage/async-storage';
 
 import { Feather } from '@expo/vector-icons';
 
-const RUNNING_SCORE_KEY = '@scorecard_show_running_score';
+import { getShowRunningScore, setShowRunningScore } from '../lib/prefs';
 import {
   loadTournament, subscribeTournamentChanges,
   calcStablefordPoints, calcBestWorstBall, pickupStrokes, DEFAULT_SETTINGS,
@@ -319,16 +318,18 @@ export default function ScorecardScreen({ navigation, route }) {
     setCurrentHole((h) => Math.max(1, h - 1));
   }, []);
 
-  const [showRunning, setShowRunning] = useState(false);
+  const [showRunning, setShowRunning] = useState(true);
   useEffect(() => {
-    AsyncStorage.getItem(RUNNING_SCORE_KEY).then((v) => {
-      if (v === '1') setShowRunning(true);
+    let cancelled = false;
+    getShowRunningScore().then((v) => {
+      if (!cancelled) setShowRunning(v);
     }).catch(() => {});
+    return () => { cancelled = true; };
   }, []);
   const toggleRunning = useCallback(() => {
     setShowRunning((v) => {
       const next = !v;
-      AsyncStorage.setItem(RUNNING_SCORE_KEY, next ? '1' : '0').catch(() => {});
+      setShowRunningScore(next).catch(() => {});
       return next;
     });
   }, []);
