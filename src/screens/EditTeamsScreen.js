@@ -3,7 +3,8 @@ import { View, Text, TouchableOpacity, StyleSheet } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Feather } from '@expo/vector-icons';
 import { useTheme } from '../theme/ThemeContext';
-import { loadTournament, saveTournament, subscribeTournamentChanges } from '../store/tournamentStore';
+import { loadTournament, subscribeTournamentChanges } from '../store/tournamentStore';
+import { mutate } from '../store/mutate';
 
 export default function EditTeamsScreen({ navigation, route }) {
   const { theme } = useTheme();
@@ -62,11 +63,11 @@ export default function EditTeamsScreen({ navigation, route }) {
   async function onSave() {
     setSaving(true);
     try {
-      const updated = { ...tournament };
-      updated.rounds = updated.rounds.map((r, i) =>
-        i === roundIndex ? { ...r, pairs, revealed: true } : r,
-      );
-      await saveTournament(updated);
+      await mutate(tournament, {
+        type: 'pairs.set',
+        roundId: round.id,
+        pairs,
+      });
       navigation.goBack();
     } catch (err) {
       setSaving(false);

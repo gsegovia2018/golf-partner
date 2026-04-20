@@ -10,10 +10,11 @@ import { Feather } from '@expo/vector-icons';
 
 import { getShowRunningScore, setShowRunningScore } from '../lib/prefs';
 import {
-  loadTournament, saveTournament, subscribeTournamentChanges,
+  loadTournament, subscribeTournamentChanges,
   calcStablefordPoints, calcBestWorstBall, pickupStrokes, DEFAULT_SETTINGS,
   roundPairLeaderboard, roundPairClinched,
 } from '../store/tournamentStore';
+import { mutate } from '../store/mutate';
 import { useTheme } from '../theme/ThemeContext';
 import PullToRefresh from '../components/PullToRefresh';
 import MediaLightbox from '../components/MediaLightbox';
@@ -138,88 +139,67 @@ export default function ScorecardScreen({ navigation, route }) {
     try { await reload(); } finally { setRefreshing(false); }
   }, [reload]);
 
-  // Latest pending payload per field, so the unmount cleanup can flush
-  // them synchronously even if the 300/400ms debounce hasn't elapsed.
-  const pendingScoresRef = useRef(null);
-  const pendingNotesRef = useRef(null);
-
-  const flushScores = useCallback(async () => {
-    const newScores = pendingScoresRef.current;
-    pendingScoresRef.current = null;
-    if (!tournamentRef.current || newScores == null) return;
-    const updated = { ...tournamentRef.current };
-    updated.rounds = [...updated.rounds];
-    updated.rounds[roundIndex] = { ...updated.rounds[roundIndex], scores: newScores };
-    try {
-      await saveTournament(updated);
-    } catch (err) {
-      console.error('[Scorecard] save scores failed', err);
-      const msg = err?.message ?? 'Could not save scores';
-      if (Platform.OS === 'web') window.alert(`Save failed: ${msg}`);
-      else Alert.alert('Save failed', msg);
-    }
-  }, [roundIndex]);
-
-  const flushNotes = useCallback(async () => {
-    const value = pendingNotesRef.current;
-    pendingNotesRef.current = null;
-    if (!tournamentRef.current || value == null) return;
-    const updated = { ...tournamentRef.current };
-    updated.rounds = [...updated.rounds];
-    updated.rounds[roundIndex] = { ...updated.rounds[roundIndex], notes: value };
-    try {
-      await saveTournament(updated);
-    } catch (err) {
-      console.error('[Scorecard] save notes failed', err);
-    }
-  }, [roundIndex]);
-
   const autoSave = useCallback((newScores) => {
-    pendingScoresRef.current = newScores;
-    if (saveTimeoutRef.current) clearTimeout(saveTimeoutRef.current);
+    // Compute the diff between the previously-synced scores and newScores,
+    // emitting one score.set mutation per changed cell. This naturally coalesces
+    // rapid keystrokes because `scores` state is already debounced upstream.
+    if (!tournamentRef.current) return;
+    const round = tournamentRef.current.rounds[roundIndex];
+    const prevScores = round.scores ?? {};
+
+    const changedCells = [];
+    const playerIds = new Set([...Object.keys(prevScores), ...Object.keys(newScores)]);
+    for (const pid of playerIds) {
+      const prevByHole = prevScores[pid] ?? {};
+      const nextByHole = newScores[pid] ?? {};
+      const holes = new Set([...Object.keys(prevByHole), ...Object.keys(nextByHole)]);
+      for (const h of holes) {
+        const before = prevByHole[h];
+        const after = nextByHole[h];
+        if (before !== after) changedCells.push({ playerId: pid, hole: Number(h), value: after ?? null });
+      }
+    }
+    if (changedCells.length === 0) return;
+
     pendingSaveRef.current = true;
-    saveTimeoutRef.current = setTimeout(async () => {
-      saveTimeoutRef.current = null;
-      await flushScores();
+    (async () => {
+      let t = tournamentRef.current;
+      for (const cell of changedCells) {
+        t = await mutate(t, {
+          type: 'score.set',
+          roundId: round.id,
+          playerId: cell.playerId,
+          hole: cell.hole,
+          value: cell.value,
+        });
+      }
+      tournamentRef.current = t;
       if (!saveTimeoutRef.current && !notesSaveTimeoutRef.current) {
         pendingSaveRef.current = false;
       }
-    }, 300);
-  }, [flushScores]);
+    })();
+  }, [roundIndex]);
 
   const saveNotes = useCallback((value) => {
     setNotes(value);
-    pendingNotesRef.current = value;
     if (notesSaveTimeoutRef.current) clearTimeout(notesSaveTimeoutRef.current);
     pendingSaveRef.current = true;
     notesSaveTimeoutRef.current = setTimeout(async () => {
       notesSaveTimeoutRef.current = null;
-      await flushNotes();
+      if (!tournamentRef.current) return;
+      const round = tournamentRef.current.rounds[roundIndex];
+      const t = await mutate(tournamentRef.current, {
+        type: 'note.set',
+        roundId: round.id,
+        scope: 'round',
+        text: value,
+      });
+      tournamentRef.current = t;
       if (!saveTimeoutRef.current && !notesSaveTimeoutRef.current) {
         pendingSaveRef.current = false;
       }
     }, 400);
-  }, [flushNotes]);
-
-  // Flush pending saves when the user navigates away before the debounce
-  // elapses. Without this, a score entered and followed by an immediate
-  // "back" never reaches the DB — the component unmounts, the scheduled
-  // setTimeout may be discarded by the runtime, and on re-entry the round
-  // reads stale data.
-  useEffect(() => {
-    return () => {
-      if (saveTimeoutRef.current) {
-        clearTimeout(saveTimeoutRef.current);
-        saveTimeoutRef.current = null;
-        flushScores();
-      }
-      if (notesSaveTimeoutRef.current) {
-        clearTimeout(notesSaveTimeoutRef.current);
-        notesSaveTimeoutRef.current = null;
-        flushNotes();
-      }
-    };
-  }, [flushScores, flushNotes]);
+  }, [roundIndex]);
 
   // Hoist memoised derivations above the early return so the hook order
   // stays stable while the tournament loads.

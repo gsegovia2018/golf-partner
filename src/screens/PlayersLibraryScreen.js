@@ -7,9 +7,12 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { useFocusEffect, useNavigation } from '@react-navigation/native';
 import { Feather } from '@expo/vector-icons';
 
+import { v4 as uuidv4 } from 'uuid';
+
 import { useTheme } from '../theme/ThemeContext';
 import { deletePlayer, fetchPlayers, upsertPlayer } from '../store/libraryStore';
 import { propagatePlayerToTournaments } from '../store/tournamentStore';
+import { mutate } from '../store/mutate';
 
 export default function PlayersLibraryScreen() {
   const navigation = useNavigation();
@@ -54,12 +57,25 @@ export default function PlayersLibraryScreen() {
     if (!name.trim()) return;
     setSaving(true);
     try {
-      const saved = await upsertPlayer({ id: editingId ?? undefined, name: name.trim(), handicap });
       if (editingId) {
+        const saved = await upsertPlayer({ id: editingId, name: name.trim(), handicap });
         await propagatePlayerToTournaments(saved.id, { name: saved.name, handicap: saved.handicap });
+        cancelEdit();
+        await load();
+      } else {
+        // Create path goes through mutate() with a client UUID so it works
+        // offline; the sync worker flushes to Supabase when back online.
+        const playerId = uuidv4();
+        const hcp = parseInt(handicap, 10) || 0;
+        await mutate(null, {
+          type: 'player.upsertLibrary',
+          playerId,
+          name: name.trim(),
+          handicap: hcp,
+        });
+        setPlayers((prev) => [...prev, { id: playerId, name: name.trim(), handicap: hcp }]);
+        cancelEdit();
       }
-      cancelEdit();
-      await load();
     } catch (e) {
       Alert.alert('Error', e.message);
     } finally {
