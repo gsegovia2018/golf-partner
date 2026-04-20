@@ -104,3 +104,84 @@ test('getAtPath returns undefined for missing paths', () => {
   assert.equal(getAtPath({}, 'x.y'), undefined);
   assert.equal(getAtPath({ x: { y: 3 } }, 'x.y'), 3);
 });
+
+// The paths mutate.js emits don't address the tournament blob 1:1:
+//   - `rounds` is an array, but paths use the round's `id`.
+//   - Score paths encode hole numbers as `h<N>`, not the bare number.
+// getAtPath/setAtPath must transparently resolve both. Without this, the
+// LWW merge silently drops local-wins on any round-scoped path — which
+// was wiping scores the moment the user typed them.
+
+test('getAtPath navigates rounds array by id', () => {
+  const t = { rounds: [{ id: 'r1', scores: { p7: { 5: 4 } } }] };
+  assert.equal(getAtPath(t, 'rounds.r1.scores.p7.5'), 4);
+});
+
+test('getAtPath resolves h-prefixed hole keys', () => {
+  const t = { rounds: [{ id: 'r1', scores: { p7: { 5: 4 } } }] };
+  assert.equal(getAtPath(t, 'rounds.r1.scores.p7.h5'), 4);
+});
+
+test('setAtPath writes through rounds-by-id + h-prefix', () => {
+  const t = { rounds: [{ id: 'r1', scores: {} }] };
+  setAtPath(t, 'rounds.r1.scores.p7.h5', 4);
+  assert.equal(t.rounds[0].scores.p7[5], 4);
+  // No garbage `r1` property on the rounds array.
+  assert.deepEqual(Object.keys(t.rounds).filter((k) => !/^\d+$/.test(k)), []);
+});
+
+test('LWW merge preserves local score at round-scoped path', () => {
+  // Regression for the "typed score vanishes on next refresh" bug: the
+  // loadTournament background refresh LWW-merged remote into local, but
+  // the helpers couldn't navigate `rounds.<id>.scores.<pid>.h<N>` so
+  // setAtPath wrote garbage and the score was lost.
+  const local = {
+    id: 't1',
+    rounds: [{ id: 'r1', scores: { p7: { 5: 4 } } }],
+    _meta: { 'rounds.r1.scores.p7.h5': 1000 },
+  };
+  const remote = {
+    id: 't1',
+    rounds: [{ id: 'r1', scores: {} }],
+    _meta: {},
+  };
+  const { merged } = mergeTournaments(local, remote);
+  assert.equal(merged.rounds[0].scores.p7[5], 4);
+  // Survives serialization — non-index array properties would be lost
+  // here, so the assertion catches the old broken behavior too.
+  const roundtrip = JSON.parse(JSON.stringify(merged));
+  assert.equal(roundtrip.rounds[0].scores.p7[5], 4);
+});
+
+test('LWW merge: remote wins on same round-scoped path reports conflict', () => {
+  const local = {
+    id: 't1',
+    rounds: [{ id: 'r1', scores: { p7: { 5: 3 } } }],
+    _meta: { 'rounds.r1.scores.p7.h5': 500 },
+  };
+  const remote = {
+    id: 't1',
+    rounds: [{ id: 'r1', scores: { p7: { 5: 6 } } }],
+    _meta: { 'rounds.r1.scores.p7.h5': 1500 },
+  };
+  const { merged, conflicts } = mergeTournaments(local, remote);
+  assert.equal(merged.rounds[0].scores.p7[5], 6);
+  assert.equal(conflicts.length, 1);
+  assert.equal(conflicts[0].losingValue, 3);
+  assert.equal(conflicts[0].winnerValue, 6);
+});
+
+test('LWW merge preserves local pairs array on round-scoped path', () => {
+  const local = {
+    id: 't1',
+    rounds: [{ id: 'r1', pairs: [[{ id: 'a' }, { id: 'b' }]] }],
+    _meta: { 'rounds.r1.pairs': 1000 },
+  };
+  const remote = {
+    id: 't1',
+    rounds: [{ id: 'r1', pairs: [] }],
+    _meta: {},
+  };
+  const { merged } = mergeTournaments(local, remote);
+  assert.deepEqual(merged.rounds[0].pairs, [[{ id: 'a' }, { id: 'b' }]]);
+});
