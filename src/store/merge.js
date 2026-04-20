@@ -1,10 +1,45 @@
 // Dot-encoded path helpers. Paths look like "rounds.r1.scores.p7.h5".
+//
+// Two conventions the raw path doesn't match 1:1 against the data:
+//   1. `rounds` is an array indexed by position, but meta paths address
+//      rounds by their string `id` (e.g. "r1744..."). resolveKey falls
+//      back to finding an array element by its `id` attribute when the
+//      segment isn't a numeric index.
+//   2. Score paths encode hole numbers as `h<N>` (e.g. "h5") while the
+//      underlying data stores them as numeric keys ("5"). resolveKey
+//      strips the `h` prefix when the parent doesn't own the literal key.
+//
+// Without this, LWW-merging round-scoped paths silently dropped the local
+// value — every score edit was wiped by the next remote refresh.
+function resolveKey(cur, seg) {
+  if (cur == null) return { ok: false, key: seg };
+  if (Array.isArray(cur)) {
+    if (/^\d+$/.test(seg)) {
+      const idx = Number(seg);
+      return idx < cur.length ? { ok: true, key: idx } : { ok: false, key: seg };
+    }
+    const idx = cur.findIndex((x) => x && x.id === seg);
+    if (idx >= 0) return { ok: true, key: idx };
+    return { ok: false, key: seg };
+  }
+  if (Object.prototype.hasOwnProperty.call(cur, seg)) {
+    return { ok: true, key: seg };
+  }
+  // Score-path convention: "h<N>" addresses hole <N>.
+  if (typeof seg === 'string' && seg.length > 1 && seg[0] === 'h' && /^\d+$/.test(seg.slice(1))) {
+    return { ok: true, key: seg.slice(1) };
+  }
+  return { ok: false, key: seg };
+}
+
 export function getAtPath(obj, path) {
   const parts = path.split('.');
   let cur = obj;
   for (const p of parts) {
     if (cur == null) return undefined;
-    cur = cur[p];
+    const r = resolveKey(cur, p);
+    if (!r.ok) return undefined;
+    cur = cur[r.key];
   }
   return cur;
 }
@@ -13,11 +48,15 @@ export function setAtPath(obj, path, value) {
   const parts = path.split('.');
   let cur = obj;
   for (let i = 0; i < parts.length - 1; i++) {
-    const p = parts[i];
-    if (cur[p] == null || typeof cur[p] !== 'object') cur[p] = {};
-    cur = cur[p];
+    const seg = parts[i];
+    const r = resolveKey(cur, seg);
+    const key = r.ok ? r.key : seg;
+    if (cur[key] == null || typeof cur[key] !== 'object') cur[key] = {};
+    cur = cur[key];
   }
-  cur[parts[parts.length - 1]] = value;
+  const lastSeg = parts[parts.length - 1];
+  const r = resolveKey(cur, lastSeg);
+  cur[r.ok ? r.key : lastSeg] = value;
 }
 
 function deepClone(o) {

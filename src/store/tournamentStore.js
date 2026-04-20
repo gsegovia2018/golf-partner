@@ -168,10 +168,22 @@ async function persistRemote(tournament) {
   if (error) throw error;
 }
 
+// Skip redundant writes: loadTournament's background refresh and
+// drainTournament both call saveLocal(merged) unconditionally, and when the
+// merge result matches what's already stored the identity write fires
+// _emitChange → subscribers reload() → loadTournament kicks another
+// background refresh → saveLocal again … a feedback loop that manifests as
+// UI lag while typing scores. Compare JSON against the last-written blob
+// per tournament id and bail out early when nothing actually changed.
+const _lastWrittenJson = new Map();
+
 export async function saveLocal(tournament) {
+  const json = JSON.stringify(tournament);
+  if (_lastWrittenJson.get(tournament.id) === json) return;
+  _lastWrittenJson.set(tournament.id, json);
   await AsyncStorage.multiSet([
     [ACTIVE_ID_KEY, tournament.id],
-    [ACTIVE_TOURNAMENT_KEY + tournament.id, JSON.stringify(tournament)],
+    [ACTIVE_TOURNAMENT_KEY + tournament.id, json],
   ]);
   _emitChange();
 }
@@ -237,6 +249,7 @@ export async function deleteTournament(id) {
   // remove the id from the tournaments index so Home doesn't show a
   // phantom card after next cold start.
   await AsyncStorage.removeItem(ACTIVE_TOURNAMENT_KEY + id);
+  _lastWrittenJson.delete(id);
   try {
     const current = await tournamentsIndex.readIndex();
     const next = current.filter((row) => row.id !== id);
