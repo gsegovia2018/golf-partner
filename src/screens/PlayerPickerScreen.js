@@ -1,7 +1,7 @@
-import React, { useCallback, useState } from 'react';
+import React, { useCallback, useMemo, useState } from 'react';
 import {
   ActivityIndicator, ScrollView, StyleSheet,
-  Text, TextInput, TouchableOpacity, View, Alert, Image,
+  Text, TextInput, TouchableOpacity, View, Alert, Image, Platform,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useFocusEffect } from '@react-navigation/native';
@@ -11,8 +11,13 @@ import { v4 as uuidv4 } from 'uuid';
 
 import { useTheme } from '../theme/ThemeContext';
 import { fetchPlayers } from '../store/libraryStore';
+import { loadAllTournaments } from '../store/tournamentStore';
 import { setPendingPlayers } from '../lib/selectionBridge';
+import { buildPlayerLastUsed } from '../lib/recentUse';
 import { mutate } from '../store/mutate';
+
+const normalize = (value) =>
+  (value ?? '').toString().normalize('NFD').replace(/\p{Diacritic}/gu, '').toLowerCase();
 
 export default function PlayerPickerScreen({ navigation, route }) {
   const { theme } = useTheme();
@@ -27,12 +32,36 @@ export default function PlayerPickerScreen({ navigation, route }) {
   const [newName, setNewName] = useState('');
   const [newHcp, setNewHcp] = useState('');
   const [saving, setSaving] = useState(false);
+  const [query, setQuery] = useState('');
+  const [lastUsed, setLastUsed] = useState({});
 
   useFocusEffect(
     useCallback(() => {
-      fetchPlayers().then(setPlayers).finally(() => setLoading(false));
+      let cancelled = false;
+      Promise.all([fetchPlayers(), loadAllTournaments().catch(() => [])])
+        .then(([list, tournaments]) => {
+          if (cancelled) return;
+          setPlayers(list);
+          setLastUsed(buildPlayerLastUsed(tournaments));
+        })
+        .finally(() => { if (!cancelled) setLoading(false); });
+      return () => { cancelled = true; };
     }, []),
   );
+
+  const filteredPlayers = useMemo(() => {
+    const q = normalize(query);
+    const list = q
+      ? players.filter((p) => normalize(p.name).includes(q))
+      : players.slice();
+    list.sort((a, b) => {
+      const ta = lastUsed[a.id] ?? 0;
+      const tb = lastUsed[b.id] ?? 0;
+      if (ta !== tb) return tb - ta;
+      return normalize(a.name).localeCompare(normalize(b.name));
+    });
+    return list;
+  }, [players, query, lastUsed]);
 
   function togglePlayer(player) {
     setPickedIds((prev) => {
@@ -48,13 +77,14 @@ export default function PlayerPickerScreen({ navigation, route }) {
     navigation.goBack();
   }
 
-  async function addAndSelect() {
-    if (!newName.trim()) return;
+  async function addAndSelect({ name, handicap } = { name: newName, handicap: newHcp }) {
+    const trimmed = (name ?? '').trim();
+    if (!trimmed) return;
     setSaving(true);
     try {
       const playerId = uuidv4();
-      const hcp = parseInt(newHcp, 10) || 0;
-      const player = { id: playerId, name: newName.trim(), handicap: hcp };
+      const hcp = parseInt(handicap, 10) || 0;
+      const player = { id: playerId, name: trimmed, handicap: hcp };
       await mutate(null, {
         type: 'player.upsertLibrary',
         playerId,
@@ -64,6 +94,7 @@ export default function PlayerPickerScreen({ navigation, route }) {
       setPlayers((prev) => [...prev, player]);
       setNewName('');
       setNewHcp('');
+      setQuery('');
       setPickedIds((prev) => {
         if (prev.length >= maxSelectable) return prev;
         return [...prev, player.id];
@@ -86,6 +117,26 @@ export default function PlayerPickerScreen({ navigation, route }) {
       </View>
 
       <ScrollView contentContainerStyle={s.content} automaticallyAdjustKeyboardInsets>
+        <View style={s.searchRow}>
+          <Feather name="search" size={16} color={theme.text.muted} style={s.searchIcon} />
+          <TextInput
+            style={s.searchInput}
+            placeholder="Search players"
+            placeholderTextColor={theme.text.muted}
+            keyboardAppearance={theme.isDark ? 'dark' : 'light'}
+            selectionColor={theme.accent.primary}
+            value={query}
+            onChangeText={setQuery}
+            autoCorrect={false}
+            autoCapitalize="none"
+          />
+          {query ? (
+            <TouchableOpacity onPress={() => setQuery('')} style={s.searchClear} activeOpacity={0.7}>
+              <Feather name="x" size={16} color={theme.text.muted} />
+            </TouchableOpacity>
+          ) : null}
+        </View>
+
         <Text style={s.sectionTitle}>New Player</Text>
         <View style={s.form}>
           <TextInput
@@ -107,54 +158,68 @@ export default function PlayerPickerScreen({ navigation, route }) {
             value={newHcp}
             onChangeText={setNewHcp}
           />
-          <TouchableOpacity style={s.addBtn} onPress={addAndSelect} disabled={saving || !newName.trim()}>
+          <TouchableOpacity style={s.addBtn} onPress={() => addAndSelect()} disabled={saving || !newName.trim()}>
             <Feather name="plus" size={18} color={theme.isDark ? theme.accent.primary : theme.text.inverse} />
             <Text style={s.addBtnText}>Add</Text>
           </TouchableOpacity>
         </View>
 
         <Text style={s.sectionTitle}>Library</Text>
-        {loading
-          ? <ActivityIndicator color={theme.accent.primary} style={{ marginTop: 20 }} />
-          : players.length === 0
-            ? <Text style={s.empty}>No players in library yet.</Text>
-            : players.map((p, index) => {
-              const alreadyAdded = alreadySelectedIds.includes(p.id);
-              const picked = pickedIds.includes(p.id);
-              const disabled = alreadyAdded || (!picked && pickedIds.length >= maxSelectable);
-              return (
-                <View
-                  key={p.id}
-                 
+        {loading ? (
+          <ActivityIndicator color={theme.accent.primary} style={{ marginTop: 20 }} />
+        ) : players.length === 0 ? (
+          <Text style={s.empty}>No players in library yet.</Text>
+        ) : filteredPlayers.length === 0 ? (
+          <>
+            <Text style={s.empty}>No players match "{query}"</Text>
+            {query.trim() ? (
+              <TouchableOpacity
+                style={s.createCta}
+                onPress={() => addAndSelect({ name: query, handicap: 0 })}
+                disabled={saving || pickedIds.length >= maxSelectable}
+                activeOpacity={0.7}
+              >
+                <Feather name="plus-circle" size={16} color={theme.accent.primary} style={{ marginRight: 6 }} />
+                <Text style={s.createCtaText}>Create "{query.trim()}"</Text>
+              </TouchableOpacity>
+            ) : null}
+          </>
+        ) : (
+          filteredPlayers.map((p) => {
+            const alreadyAdded = alreadySelectedIds.includes(p.id);
+            const picked = pickedIds.includes(p.id);
+            const disabled = alreadyAdded || (!picked && pickedIds.length >= maxSelectable);
+            return (
+              <View key={p.id}>
+                <TouchableOpacity
+                  style={[s.row, alreadyAdded && s.rowAdded, picked && s.rowPicked]}
+                  onPress={() => !alreadyAdded && togglePlayer(p)}
+                  disabled={alreadyAdded}
+                  activeOpacity={disabled ? 1 : 0.7}
                 >
-                  <TouchableOpacity
-                    style={[s.row, alreadyAdded && s.rowAdded, picked && s.rowPicked]}
-                    onPress={() => !alreadyAdded && togglePlayer(p)}
-                    disabled={alreadyAdded}
-                    activeOpacity={disabled ? 1 : 0.7}
-                  >
-                    <View style={s.pickerAvatar}>
-                      {p.avatar_url
-                        ? <Image source={{ uri: p.avatar_url }} style={s.pickerAvatarImg} />
-                        : <Text style={s.pickerAvatarText}>{(p.name ?? '?').slice(0, 2).toUpperCase()}</Text>}
-                    </View>
-                    <View style={s.rowLeft}>
-                      <Text style={[s.playerName, alreadyAdded && s.textMuted]}>{p.name}</Text>
-                      <Text style={s.hcpLabel}>HCP {p.handicap}</Text>
-                    </View>
-                    {alreadyAdded
-                      ? <Text style={s.addedBadge}>Added</Text>
-                      : picked
-                        ? (
-                          <View style={s.checkCircle}>
-                            <Feather name="check" size={14} color={theme.text.inverse} />
-                          </View>
-                        )
-                        : <View style={s.emptyCircle} />}
-                  </TouchableOpacity>
-                </View>
-              );
-            })}
+                  <View style={s.pickerAvatar}>
+                    {p.avatar_url
+                      ? <Image source={{ uri: p.avatar_url }} style={s.pickerAvatarImg} />
+                      : <Text style={s.pickerAvatarText}>{(p.name ?? '?').slice(0, 2).toUpperCase()}</Text>}
+                  </View>
+                  <View style={s.rowLeft}>
+                    <Text style={[s.playerName, alreadyAdded && s.textMuted]}>{p.name}</Text>
+                    <Text style={s.hcpLabel}>HCP {p.handicap}</Text>
+                  </View>
+                  {alreadyAdded
+                    ? <Text style={s.addedBadge}>Added</Text>
+                    : picked
+                      ? (
+                        <View style={s.checkCircle}>
+                          <Feather name="check" size={14} color={theme.text.inverse} />
+                        </View>
+                      )
+                      : <View style={s.emptyCircle} />}
+                </TouchableOpacity>
+              </View>
+            );
+          })
+        )}
       </ScrollView>
 
       {pickedIds.length > 0 && (
@@ -311,5 +376,30 @@ const makeStyles = (theme) => StyleSheet.create({
     color: theme.isDark ? theme.accent.primary : theme.text.inverse,
     fontFamily: 'PlusJakartaSans-ExtraBold',
     fontSize: 16,
+  },
+  searchRow: {
+    flexDirection: 'row', alignItems: 'center',
+    backgroundColor: theme.isDark ? theme.bg.secondary : theme.bg.card,
+    borderRadius: 10, borderWidth: 1, borderColor: theme.border.default,
+    paddingHorizontal: 12, marginBottom: 12,
+  },
+  searchIcon: { marginRight: 8 },
+  searchInput: {
+    flex: 1, paddingVertical: 12, paddingHorizontal: 4,
+    color: theme.text.primary, fontSize: 15,
+    fontFamily: 'PlusJakartaSans-Medium',
+    ...(Platform.OS === 'web' ? { outlineStyle: 'none' } : {}),
+  },
+  searchClear: { paddingHorizontal: 6, paddingVertical: 4 },
+  createCta: {
+    flexDirection: 'row', alignItems: 'center', justifyContent: 'center',
+    borderRadius: 12, borderWidth: 1,
+    borderColor: theme.accent.primary + '40', borderStyle: 'dashed',
+    backgroundColor: theme.accent.light,
+    padding: 14, marginTop: 8,
+  },
+  createCtaText: {
+    fontFamily: 'PlusJakartaSans-SemiBold',
+    color: theme.accent.primary, fontSize: 14,
   },
 });
