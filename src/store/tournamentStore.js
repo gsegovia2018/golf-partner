@@ -1,6 +1,7 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { supabase } from '../lib/supabase';
 import { tournamentsIndex } from './tournamentsIndex';
+import { mergeTournaments } from './merge';
 
 const ACTIVE_ID_KEY = '@golf_active_id';
 const LEGACY_TOURNAMENTS_KEY = '@golf_tournaments';
@@ -134,11 +135,17 @@ export async function loadTournament() {
 
   const cached = await readLocal(activeId);
   if (cached) {
-    // Kick remote refresh in background; do not block the UI.
+    // Kick remote refresh in background; do not block the UI. LWW-merge
+    // remote into the freshest local blob so we never clobber an
+    // in-flight mutation whose sync hasn't landed yet — the overwrite
+    // path was erasing scores the moment they were entered.
     loadAllTournaments()
-      .then((all) => {
+      .then(async (all) => {
         const remote = all.find((t) => t.id === activeId);
-        if (remote) saveLocal(remote).catch(() => {});
+        if (!remote) return;
+        const latest = await readLocal(activeId);
+        const { merged } = mergeTournaments(latest ?? cached, remote);
+        await saveLocal(merged);
       })
       .catch(() => {});
     return cached;
