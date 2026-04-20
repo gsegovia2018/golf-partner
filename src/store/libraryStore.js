@@ -80,6 +80,47 @@ export async function updateCourseFromEditor(courseId, slope, holes) {
   await saveCourseHoles(courseId, holes);
 }
 
+// ── Favorite courses ─────────────────────────────────────────────────────────
+// Per-user toggle. Unauthenticated sessions get an empty set and a no-op
+// toggle so callers can render the control the same way either way.
+
+export async function fetchFavoriteCourseIds() {
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user) return new Set();
+  const { data, error } = await supabase
+    .from('favorite_courses')
+    .select('course_id')
+    .eq('user_id', user.id);
+  if (error) throw error;
+  return new Set((data ?? []).map((r) => r.course_id));
+}
+
+export async function toggleFavoriteCourse(courseId) {
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user) return { favorite: false };
+  const { data: existing, error: selErr } = await supabase
+    .from('favorite_courses')
+    .select('course_id')
+    .eq('user_id', user.id)
+    .eq('course_id', courseId)
+    .maybeSingle();
+  if (selErr) throw selErr;
+  if (existing) {
+    const { error } = await supabase
+      .from('favorite_courses')
+      .delete()
+      .eq('user_id', user.id)
+      .eq('course_id', courseId);
+    if (error) throw error;
+    return { favorite: false };
+  }
+  const { error } = await supabase
+    .from('favorite_courses')
+    .insert({ user_id: user.id, course_id: courseId });
+  if (error) throw error;
+  return { favorite: true };
+}
+
 
 // Convert Supabase course row → app-friendly shape
 export function normalizeCourse(c) {
