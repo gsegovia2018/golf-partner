@@ -5,11 +5,10 @@ import {
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import * as Haptics from 'expo-haptics';
-import AsyncStorage from '@react-native-async-storage/async-storage';
 
 import { Feather } from '@expo/vector-icons';
 
-const RUNNING_SCORE_KEY = '@scorecard_show_running_score';
+import { getShowRunningScore, setShowRunningScore } from '../lib/prefs';
 import {
   loadTournament, saveTournament, subscribeTournamentChanges,
   calcStablefordPoints, calcBestWorstBall, pickupStrokes, DEFAULT_SETTINGS,
@@ -139,50 +138,88 @@ export default function ScorecardScreen({ navigation, route }) {
     try { await reload(); } finally { setRefreshing(false); }
   }, [reload]);
 
+  // Latest pending payload per field, so the unmount cleanup can flush
+  // them synchronously even if the 300/400ms debounce hasn't elapsed.
+  const pendingScoresRef = useRef(null);
+  const pendingNotesRef = useRef(null);
+
+  const flushScores = useCallback(async () => {
+    const newScores = pendingScoresRef.current;
+    pendingScoresRef.current = null;
+    if (!tournamentRef.current || newScores == null) return;
+    const updated = { ...tournamentRef.current };
+    updated.rounds = [...updated.rounds];
+    updated.rounds[roundIndex] = { ...updated.rounds[roundIndex], scores: newScores };
+    try {
+      await saveTournament(updated);
+    } catch (err) {
+      console.error('[Scorecard] save scores failed', err);
+      const msg = err?.message ?? 'Could not save scores';
+      if (Platform.OS === 'web') window.alert(`Save failed: ${msg}`);
+      else Alert.alert('Save failed', msg);
+    }
+  }, [roundIndex]);
+
+  const flushNotes = useCallback(async () => {
+    const value = pendingNotesRef.current;
+    pendingNotesRef.current = null;
+    if (!tournamentRef.current || value == null) return;
+    const updated = { ...tournamentRef.current };
+    updated.rounds = [...updated.rounds];
+    updated.rounds[roundIndex] = { ...updated.rounds[roundIndex], notes: value };
+    try {
+      await saveTournament(updated);
+    } catch (err) {
+      console.error('[Scorecard] save notes failed', err);
+    }
+  }, [roundIndex]);
+
   const autoSave = useCallback((newScores) => {
+    pendingScoresRef.current = newScores;
     if (saveTimeoutRef.current) clearTimeout(saveTimeoutRef.current);
     pendingSaveRef.current = true;
     saveTimeoutRef.current = setTimeout(async () => {
       saveTimeoutRef.current = null;
-      if (!tournamentRef.current) {
-        if (!notesSaveTimeoutRef.current) pendingSaveRef.current = false;
-        return;
-      }
-      const updated = { ...tournamentRef.current };
-      updated.rounds = [...updated.rounds];
-      updated.rounds[roundIndex] = { ...updated.rounds[roundIndex], scores: newScores };
-      try {
-        await saveTournament(updated);
-      } finally {
-        if (!saveTimeoutRef.current && !notesSaveTimeoutRef.current) {
-          pendingSaveRef.current = false;
-        }
+      await flushScores();
+      if (!saveTimeoutRef.current && !notesSaveTimeoutRef.current) {
+        pendingSaveRef.current = false;
       }
     }, 300);
-  }, [roundIndex]);
+  }, [flushScores]);
 
   const saveNotes = useCallback((value) => {
     setNotes(value);
+    pendingNotesRef.current = value;
     if (notesSaveTimeoutRef.current) clearTimeout(notesSaveTimeoutRef.current);
     pendingSaveRef.current = true;
     notesSaveTimeoutRef.current = setTimeout(async () => {
       notesSaveTimeoutRef.current = null;
-      if (!tournamentRef.current) {
-        if (!saveTimeoutRef.current) pendingSaveRef.current = false;
-        return;
-      }
-      const updated = { ...tournamentRef.current };
-      updated.rounds = [...updated.rounds];
-      updated.rounds[roundIndex] = { ...updated.rounds[roundIndex], notes: value };
-      try {
-        await saveTournament(updated);
-      } finally {
-        if (!saveTimeoutRef.current && !notesSaveTimeoutRef.current) {
-          pendingSaveRef.current = false;
-        }
+      await flushNotes();
+      if (!saveTimeoutRef.current && !notesSaveTimeoutRef.current) {
+        pendingSaveRef.current = false;
       }
     }, 400);
-  }, [roundIndex]);
+  }, [flushNotes]);
+
+  // Flush pending saves when the user navigates away before the debounce
+  // elapses. Without this, a score entered and followed by an immediate
+  // "back" never reaches the DB — the component unmounts, the scheduled
+  // setTimeout may be discarded by the runtime, and on re-entry the round
+  // reads stale data.
+  useEffect(() => {
+    return () => {
+      if (saveTimeoutRef.current) {
+        clearTimeout(saveTimeoutRef.current);
+        saveTimeoutRef.current = null;
+        flushScores();
+      }
+      if (notesSaveTimeoutRef.current) {
+        clearTimeout(notesSaveTimeoutRef.current);
+        notesSaveTimeoutRef.current = null;
+        flushNotes();
+      }
+    };
+  }, [flushScores, flushNotes]);
 
   // Hoist memoised derivations above the early return so the hook order
   // stays stable while the tournament loads.
@@ -301,16 +338,18 @@ export default function ScorecardScreen({ navigation, route }) {
     setCurrentHole((h) => Math.max(1, h - 1));
   }, []);
 
-  const [showRunning, setShowRunning] = useState(false);
+  const [showRunning, setShowRunning] = useState(true);
   useEffect(() => {
-    AsyncStorage.getItem(RUNNING_SCORE_KEY).then((v) => {
-      if (v === '1') setShowRunning(true);
+    let cancelled = false;
+    getShowRunningScore().then((v) => {
+      if (!cancelled) setShowRunning(v);
     }).catch(() => {});
+    return () => { cancelled = true; };
   }, []);
   const toggleRunning = useCallback(() => {
     setShowRunning((v) => {
       const next = !v;
-      AsyncStorage.setItem(RUNNING_SCORE_KEY, next ? '1' : '0').catch(() => {});
+      setShowRunningScore(next).catch(() => {});
       return next;
     });
   }, []);
