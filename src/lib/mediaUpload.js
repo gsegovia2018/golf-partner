@@ -1,6 +1,7 @@
 import { Platform } from 'react-native';
 import * as ImageManipulator from 'expo-image-manipulator';
 import * as VideoThumbnails from 'expo-video-thumbnails';
+import { File as FsFile } from 'expo-file-system';
 import { supabase } from './supabase';
 import { insertMediaRow } from '../store/mediaStore';
 import { generateVideoThumbWeb } from './videoThumbWeb';
@@ -12,12 +13,23 @@ function extFromUri(uri, fallback) {
   return (m ? m[1] : fallback).toLowerCase();
 }
 
+// On web, fetch() + .blob() handles file://, blob:, and data: URIs uniformly
+// and the browser streams the Blob through multipart upload correctly.
+//
+// On native, the React Native Blob returned by fetch() is a reference object
+// backed by a blob-id in the networking layer. When supabase-js wraps that
+// Blob in a FormData for a multipart upload, RN's bridge frequently fails
+// to serialize the underlying bytes for large payloads (>~5MB) — videos and
+// Samsung/Pixel motion photos silently upload 0 bytes or time out. Reading
+// the file into an ArrayBuffer via expo-file-system skips that path: the
+// raw bytes are sent as the request body directly (no FormData wrapping).
 async function uriToBody(uri) {
-  // fetch() works for file://, blob:, data:, and http(s) URIs on both web
-  // and native, so we use it as the single path to get a Blob for upload.
-  const res = await fetch(uri);
-  if (!res.ok) throw new Error(`Failed to read media (${res.status})`);
-  return res.blob();
+  if (Platform.OS === 'web') {
+    const res = await fetch(uri);
+    if (!res.ok) throw new Error(`Failed to read media (${res.status})`);
+    return res.blob();
+  }
+  return new FsFile(uri).arrayBuffer();
 }
 
 // Resolve the content-type + storage extension for a video upload.

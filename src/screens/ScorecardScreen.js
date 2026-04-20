@@ -403,6 +403,8 @@ export default function ScorecardScreen({ navigation, route }) {
         durationS: asset.durationS,
         caption,
         uploaderLabel,
+        mimeType: asset.mimeType,
+        fileName: asset.fileName,
       });
     } catch (e) {
       Alert.alert('No se pudo adjuntar', String(e?.message ?? e));

@@ -101,6 +101,8 @@ export default function GalleryScreen({ route, navigation }) {
         durationS: asset.durationS,
         caption,
         uploaderLabel,
+        mimeType: asset.mimeType,
+        fileName: asset.fileName,
       });
     } catch (e) {
       Alert.alert('No se pudo adjuntar', String(e?.message ?? e));
