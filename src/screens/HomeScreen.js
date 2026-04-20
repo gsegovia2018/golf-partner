@@ -389,6 +389,7 @@ export default function HomeScreen({ navigation, route }) {
   const showList = viewMode === 'list' || (viewMode === 'auto' && !tournament);
   const showTournament = viewMode === 'tournament' || (viewMode === 'auto' && !!tournament);
   const isViewer = tournament?._role === 'viewer';
+  const isOwner = tournament?._role === 'owner';
   const userInitials = user?.email ? user.email.slice(0, 2).toUpperCase() : '?';
 
   // Show the green splash whenever a reload is in flight AND there's no
@@ -531,7 +532,7 @@ export default function HomeScreen({ navigation, route }) {
                     )}
                   </View>
                 </TouchableOpacity>
-                {openable && t._role !== 'viewer' && (
+                {openable && t._role === 'owner' && (
                   <TouchableOpacity style={s.deleteCardBtn} onPress={() => confirmDelete(t)} hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}>
                     <Feather name="trash-2" size={14} color={theme.destructive} />
                   </TouchableOpacity>
@@ -1181,7 +1182,7 @@ export default function HomeScreen({ navigation, route }) {
             </TouchableOpacity>
           )}
 
-          {!isViewer && (
+          {isOwner && (
             <TouchableOpacity
               style={[s.menuItem, s.menuItemDestructive]}
               onPress={() => { setShowSettings(false); confirmDelete(tournament); }}
