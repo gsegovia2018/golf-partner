@@ -2,6 +2,7 @@ import React, { useEffect, useRef, useState, useCallback, useMemo, startTransiti
 import {
   View, Text, TextInput, TouchableOpacity,
   StyleSheet, ScrollView, Modal, Pressable, KeyboardAvoidingView, Platform, Animated,
+  useWindowDimensions,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import * as Haptics from 'expo-haptics';
@@ -12,6 +13,7 @@ import { getShowRunningScore, setShowRunningScore } from '../lib/prefs';
 import {
   loadTournament, subscribeTournamentChanges,
   calcStablefordPoints, calcBestWorstBall, pickupStrokes, DEFAULT_SETTINGS,
+  matchPlayHolePts, calcExtraShots,
   roundPairLeaderboard, roundPairClinched,
 } from '../store/tournamentStore';
 import { mutate } from '../store/mutate';
@@ -289,27 +291,36 @@ export default function ScorecardScreen({ navigation, route }) {
 
   // Totals computed once per (round, players, scores) change. The per-hole
   // pager pages do NOT read this — it only feeds the outside totals strip.
+  // In match play, pts tallies per-hole wins (1/0/half) instead of Stableford.
   const playerTotalsMap = useMemo(() => {
     const map = new Map();
     if (!round) return map;
+    const isMatchPlay = settings.scoringMode === 'matchplay';
+    const playerHandicaps = round.playerHandicaps ?? {};
     players.forEach((player) => {
-      const handicap = round.playerHandicaps?.[player.id] ?? player.handicap;
+      const handicap = playerHandicaps[player.id] ?? player.handicap ?? 0;
       let pts = 0;
       let str = 0;
+      let parPlayed = 0;
       round.holes.forEach((hole) => {
         const sc = scores[player.id]?.[hole.number];
         if (sc) {
           str += sc;
-          pts += calcStablefordPoints(hole.par, sc, handicap, hole.strokeIndex);
+          parPlayed += hole.par;
+          if (isMatchPlay) {
+            pts += matchPlayHolePts(hole, player.id, players, scores, playerHandicaps) ?? 0;
+          } else {
+            pts += calcStablefordPoints(hole.par, sc, handicap, hole.strokeIndex);
+          }
         }
       });
-      map.set(player.id, { pts, str });
+      map.set(player.id, { pts, str, parPlayed });
     });
     return map;
-  }, [round, players, scores]);
+  }, [round, players, scores, settings.scoringMode]);
 
   const playerTotals = useCallback(
-    (player) => playerTotalsMap.get(player.id) ?? { pts: 0, str: 0 },
+    (player) => playerTotalsMap.get(player.id) ?? { pts: 0, str: 0, parPlayed: 0 },
     [playerTotalsMap],
   );
 
@@ -553,9 +564,15 @@ const HolePage = React.memo(function HolePage({
   theme, s,
   onStep, onSetScore, getScoreAnim,
   showRunning, playerTotals,
+  mode,
 }) {
   const pairs = round.pairs ?? [];
-  const orderedPlayers = pairs.length === 2
+  const isSolo = players.length === 1;
+  // Hero card layout (big +/-, centered strokes) for solo, 2-4 player
+  // Stableford, and Match Play. Keep the compact pair UI only for classic
+  // 4-player Best Ball where pair colors carry meaning.
+  const useHeroCards = mode !== 'bestball';
+  const orderedPlayers = !useHeroCards && pairs.length === 2
     ? [...pairs[0], ...pairs[1]].map((pp) => players.find((p) => p.id === pp.id)).filter(Boolean)
     : players;
 
@@ -585,19 +602,27 @@ const HolePage = React.memo(function HolePage({
         </View>
       </View>
 
-      {/* Player score cards */}
-      <View style={s.playerCardsContent}>
+      {/* Player score cards — scroll if they overflow, which happens once
+          2+ hero cards are stacked on a short screen. */}
+      <ScrollView
+        style={s.flex}
+        contentContainerStyle={s.playerCardsContent}
+        keyboardShouldPersistTaps="handled"
+      >
         {orderedPlayers.map((player, idx) => {
           const pairIndex = pairs.findIndex((pair) => pair.some((pp) => pp.id === player.id));
-          const pairColor = pairIndex === 0 ? theme.pairA : pairIndex === 1 ? theme.pairB : theme.text.muted;
+          const pairColor = isSolo
+            ? theme.accent.primary
+            : pairIndex === 0 ? theme.pairA : pairIndex === 1 ? theme.pairB : theme.text.muted;
           const isFirstOfPair = pairs.length === 2 && (idx === 0 || idx === 2);
           const pairLabelText = pairIndex === 0 ? 'Pair A' : 'Pair B';
 
           const handicap = round.playerHandicaps?.[player.id] ?? player.handicap;
           const strokes = scores[player.id]?.[pageHole.number];
-          const pts = strokes != null
-            ? calcStablefordPoints(pageHole.par, strokes, handicap, pageHole.strokeIndex)
-            : null;
+          const pts = strokes == null ? null
+            : mode === 'matchplay'
+              ? matchPlayHolePts(pageHole, player.id, players, scores, round.playerHandicaps ?? {})
+              : calcStablefordPoints(pageHole.par, strokes, handicap, pageHole.strokeIndex);
 
           const ptsColor = pts == null ? theme.text.muted
             : pts >= 3 ? theme.scoreColor('excellent')
@@ -609,6 +634,92 @@ const HolePage = React.memo(function HolePage({
 
           const pickup = pickupStrokes(pageHole.par, handicap, pageHole.strokeIndex);
           const isPickup = strokes != null && strokes >= pickup;
+
+          if (useHeroCards) {
+            const totals = playerTotals(player);
+            const vsPar = totals.parPlayed > 0 ? totals.str - totals.parPlayed : 0;
+            const vsParLabel = totals.parPlayed === 0 ? '—'
+              : vsPar === 0 ? 'E'
+              : vsPar > 0 ? `+${vsPar}` : String(vsPar);
+            const vsParColor = totals.parPlayed === 0 ? theme.text.muted
+              : vsPar <= -1 ? theme.scoreColor('excellent')
+              : vsPar === 0 ? theme.scoreColor('good')
+              : vsPar <= 2 ? theme.scoreColor('neutral')
+              : theme.scoreColor('poor');
+
+            return (
+              <View key={player.id} style={s.soloHeroCard}>
+                <View style={s.soloHeroHeader}>
+                  <View>
+                    <Text style={s.soloHeroName}>{player.name}</Text>
+                    <Text style={s.soloHeroHcp}>
+                      HCP {handicap}{extraShots > 0 ? `  ·  +${extraShots} on this hole` : ''}
+                    </Text>
+                  </View>
+                  <TouchableOpacity
+                    style={[s.pickupBtn, isPickup && s.pickupBtnActive]}
+                    onPress={() => onSetScore(player.id, pageHole.number, isPickup ? pageHole.par : pickup)}
+                    activeOpacity={0.7}
+                    accessibilityLabel={isPickup ? `Picked up at ${pickup} strokes — tap to clear` : `Pickup at ${pickup} strokes`}
+                  >
+                    <Feather
+                      name="arrow-up-circle"
+                      size={16}
+                      color={isPickup ? theme.text.inverse : theme.text.muted}
+                    />
+                  </TouchableOpacity>
+                </View>
+
+                <View style={s.soloScoreRow}>
+                  <TouchableOpacity
+                    style={s.soloStepBtn}
+                    onPress={() => onStep(player.id, pageHole.number, -1)}
+                    accessibilityLabel={`Decrease strokes on hole ${pageHole.number}`}
+                  >
+                    <Feather name="minus" size={24} color={theme.text.primary} />
+                  </TouchableOpacity>
+                  <Animated.View style={[s.soloScoreDisplay, { transform: [{ scale: getScoreAnim(player.id) }] }]}>
+                    <Text style={[s.soloScoreNum, strokes == null && s.scoreDisplayNumEmpty]}>
+                      {strokes ?? '—'}
+                    </Text>
+                    <Text style={s.soloScoreLabel}>STROKES</Text>
+                  </Animated.View>
+                  <TouchableOpacity
+                    style={s.soloStepBtn}
+                    onPress={() => onStep(player.id, pageHole.number, 1)}
+                    accessibilityLabel={`Increase strokes on hole ${pageHole.number}`}
+                  >
+                    <Feather name="plus" size={24} color={theme.text.primary} />
+                  </TouchableOpacity>
+                </View>
+
+                {pts !== null && (
+                  <View style={[s.soloPtsBadge, { borderColor: ptsColor }]}>
+                    <Text style={[s.soloPtsText, { color: ptsColor }]}>
+                      {pts} {pts === 1 ? 'point' : 'points'}
+                    </Text>
+                  </View>
+                )}
+
+                <View style={s.soloStatsRow}>
+                  <View style={s.soloStatItem}>
+                    <Text style={s.soloStatLabel}>STROKES</Text>
+                    <Text style={s.soloStatValue}>{totals.str || '—'}</Text>
+                  </View>
+                  <View style={s.soloStatDivider} />
+                  <View style={s.soloStatItem}>
+                    <Text style={s.soloStatLabel}>POINTS</Text>
+                    <Text style={[s.soloStatValue, { color: theme.accent.primary }]}>{totals.pts}</Text>
+                  </View>
+                  <View style={s.soloStatDivider} />
+                  <View style={s.soloStatItem}>
+                    <Text style={s.soloStatLabel}>vs PAR</Text>
+                    <Text style={[s.soloStatValue, { color: vsParColor }]}>{vsParLabel}</Text>
+                  </View>
+                </View>
+              </View>
+            );
+          }
 
           return (
             <React.Fragment key={player.id}>
@@ -666,7 +777,7 @@ const HolePage = React.memo(function HolePage({
             </React.Fragment>
           );
         })}
-      </View>
+      </ScrollView>
     </View>
   );
 });
@@ -795,6 +906,7 @@ function HoleView({ round, roundIndex, players, scores, notes, currentHole, hole
                 getScoreAnim={getScoreAnim}
                 showRunning={showRunning}
                 playerTotals={playerTotals}
+                mode={settings?.scoringMode === 'matchplay' ? 'matchplay' : isBestBall ? 'bestball' : 'stableford'}
               />
             ))}
           </ScrollView>
@@ -804,24 +916,26 @@ function HoleView({ round, roundIndex, players, scores, notes, currentHole, hole
       {/* Round totals / live match — pinned above the bottom controls */}
       {isBestBall && bbResult
         ? <MatchPanel bbResult={bbResult} currentHole={currentHole} settings={settings} />
-        : (
-          <View style={s.totalsStrip}>
-            <StablefordWinnerBanner round={round} scores={scores} players={players} />
-            <Text style={s.totalStripLabel}>ROUND TOTALS</Text>
-            <View style={s.totalStripRow}>
-              {players.map((player) => {
-                const { pts, str } = playerTotals(player);
-                return (
-                  <View key={player.id} style={s.totalStripPlayer}>
-                    <Text style={s.totalStripName}>{player.name.split(' ')[0]}</Text>
-                    <Text style={s.totalStripPts}>{pts}</Text>
-                    <Text style={s.totalStripStr}>{str || '-'}</Text>
-                  </View>
-                );
-              })}
+        : players.length === 1
+          ? <SoloTotalsRibbon player={players[0]} stats={playerTotals(players[0])} />
+          : (
+            <View style={s.totalsStrip}>
+              <StablefordWinnerBanner round={round} scores={scores} players={players} />
+              <Text style={s.totalStripLabel}>ROUND TOTALS</Text>
+              <View style={s.totalStripRow}>
+                {players.map((player) => {
+                  const { pts, str } = playerTotals(player);
+                  return (
+                    <View key={player.id} style={s.totalStripPlayer}>
+                      <Text style={s.totalStripName}>{player.name.split(' ')[0]}</Text>
+                      <Text style={s.totalStripPts}>{pts}</Text>
+                      <Text style={s.totalStripStr}>{str || '-'}</Text>
+                    </View>
+                  );
+                })}
+              </View>
             </View>
-          </View>
-        )
+          )
       }
 
       {/* Bottom controls: actions (notes / go-to-hole / next) */}
@@ -1069,6 +1183,44 @@ function StablefordWinnerBanner({ round, scores, players }) {
   return <WinnerBadge name={name} />;
 }
 
+function SoloTotalsRibbon({ player, stats }) {
+  const { theme } = useTheme();
+  const s = useMemo(() => makeStyles(theme), [theme]);
+  const { pts, str, parPlayed } = stats;
+  const vsPar = parPlayed > 0 ? str - parPlayed : 0;
+  const vsParLabel = parPlayed === 0 ? '—'
+    : vsPar === 0 ? 'E'
+    : vsPar > 0 ? `+${vsPar}` : String(vsPar);
+  const vsParColor = parPlayed === 0 ? theme.text.muted
+    : vsPar <= -1 ? theme.scoreColor('excellent')
+    : vsPar === 0 ? theme.scoreColor('good')
+    : vsPar <= 2 ? theme.scoreColor('neutral')
+    : theme.scoreColor('poor');
+
+  return (
+    <View style={s.soloRibbon}>
+      <View style={s.soloRibbonHeader}>
+        <Text style={s.soloRibbonName} numberOfLines={1}>{player.name}</Text>
+        <Text style={s.soloRibbonLabel}>ROUND TOTALS</Text>
+      </View>
+      <View style={s.soloRibbonRow}>
+        <View style={s.soloRibbonItem}>
+          <Text style={s.soloRibbonItemLabel}>STROKES</Text>
+          <Text style={s.soloRibbonStrokes}>{str || '—'}</Text>
+        </View>
+        <View style={s.soloRibbonItem}>
+          <Text style={s.soloRibbonItemLabel}>POINTS</Text>
+          <Text style={s.soloRibbonPts}>{pts}</Text>
+        </View>
+        <View style={s.soloRibbonItem}>
+          <Text style={s.soloRibbonItemLabel}>vs PAR</Text>
+          <Text style={[s.soloRibbonVsPar, { color: vsParColor }]}>{vsParLabel}</Text>
+        </View>
+      </View>
+    </View>
+  );
+}
+
 const CELEBRATION_TIERS = {
   BIRDIE: {
     eyebrow: 'A BIRDIE',
@@ -1161,23 +1313,338 @@ function CelebrationOverlay({ celebration, celebrationAnim, players }) {
   );
 }
 
+// Column layout is computed once per block and passed to every row so every
+// cell — header, par, SI, stroke input, pts — lines up perfectly.
+function getSoloColumns(blockWidth) {
+  // Block inner width after card padding + row margin (see soloNineBlock /
+  // soloNineRow styles: 2+4 = 6 each side, 12 total). Caller already passed
+  // inner width if available; when it hasn't been measured yet, fall back.
+  const width = Math.max(260, blockWidth);
+  // Label/agg columns are fixed so "Hole" / "YOU" / "OUT" always fit on one
+  // line at the body font size. Hole cells flex in the remaining space.
+  // Player labels use a 3-letter uppercase initial ("GUI", "MAR") so the
+  // column stays narrow no matter how long names get.
+  const narrow = width < 340;
+  const labelW = narrow ? 38 : 42;
+  const aggW = narrow ? 40 : 46;
+  const holeW = (width - labelW - aggW) / 9;
+  const labelFontSize = narrow ? 10 : 11;
+  return { labelW, aggW, holeW, narrow, labelFontSize };
+}
+
+// Player label for the scorecard row: "You" for solo, 3-letter uppercase
+// abbreviation for multi-player (classic scorecard convention).
+function shortPlayerLabel(player, isSolo) {
+  if (isSolo) return 'You';
+  const name = player.name?.trim() ?? '';
+  if (!name) return '—';
+  return name.slice(0, 3).toUpperCase();
+}
+
+function NineBlock({
+  holes, label, aggLabel, players, scores, onSetScore,
+  playerHandicaps, mode, theme, s, columns,
+}) {
+  const { labelW, aggW, holeW, labelFontSize } = columns;
+  const labelFont = { fontSize: labelFontSize };
+  const isSolo = players.length === 1;
+
+  const holePts = (hole, player, handicap) => {
+    const str = scores[player.id]?.[hole.number];
+    if (str == null) return null;
+    if (mode === 'matchplay') {
+      return matchPlayHolePts(hole, player.id, players, scores, playerHandicaps);
+    }
+    return calcStablefordPoints(hole.par, str, handicap, hole.strokeIndex);
+  };
+  const ptsColorFor = (pts) => pts == null ? theme.text.muted
+    : pts >= 3 ? theme.scoreColor('excellent')
+    : pts >= 2 ? theme.scoreColor('good')
+    : pts === 1 ? theme.scoreColor('neutral')
+    : theme.scoreColor('poor');
+
+  const sumPar = holes.reduce((acc, h) => acc + h.par, 0);
+
+  const labelCell = { width: labelW };
+  const holeCell = { width: holeW };
+  const aggCell = { width: aggW };
+
+  const renderPlayerRows = (player, isFirst) => {
+    const handicap = playerHandicaps[player.id] ?? player.handicap ?? 0;
+    const sumStr = holes.reduce((acc, h) => {
+      const v = scores[player.id]?.[h.number];
+      return v ? acc + v : acc;
+    }, 0);
+    const sumPts = holes.reduce((acc, h) => acc + (holePts(h, player, handicap) ?? 0), 0);
+    const rowLabel = shortPlayerLabel(player, isSolo);
+
+    return (
+      <React.Fragment key={player.id}>
+        {/* strokes entry row */}
+        <View style={[s.soloNineRow, s.soloNineRowYou, !isFirst && s.soloNinePlayerSeparator]}>
+          <Text numberOfLines={1} style={[s.soloNineCell, s.soloNineLabelCell, labelCell, s.soloNineRowLabel, s.soloNineYouLabel, labelFont]}>
+            {rowLabel}
+          </Text>
+          {holes.map((h) => {
+            const extra = calcExtraShots(handicap, h.strokeIndex);
+            return (
+              <View key={h.number} style={[s.soloNineCell, holeCell, s.soloNineYouCell]}>
+                <TextInput
+                  style={s.soloNineStrokeInput}
+                  keyboardType="numeric"
+                  keyboardAppearance={theme.isDark ? 'dark' : 'light'}
+                  selectionColor={theme.accent.primary}
+                  maxLength={2}
+                  value={scores[player.id]?.[h.number] != null ? String(scores[player.id][h.number]) : ''}
+                  onChangeText={(v) => onSetScore(player.id, h.number, v)}
+                  placeholder="·"
+                  placeholderTextColor={theme.text.muted}
+                />
+                {extra > 0 && (
+                  <View style={s.soloNineExtraDots} pointerEvents="none">
+                    {Array.from({ length: Math.min(extra, 2) }).map((_, i) => (
+                      <View key={i} style={[s.soloNineExtraDot, { backgroundColor: theme.accent.primary }]} />
+                    ))}
+                  </View>
+                )}
+              </View>
+            );
+          })}
+          <Text numberOfLines={1} style={[s.soloNineCell, aggCell, s.soloNineAggDivider, s.soloNineAggStrokesTotal]}>{sumStr || '·'}</Text>
+        </View>
+
+        {/* pts row */}
+        <View style={s.soloNineRow}>
+          <Text numberOfLines={1} style={[s.soloNineCell, s.soloNineLabelCell, labelCell, s.soloNineRowLabel, labelFont]}>Pts</Text>
+          {holes.map((h) => {
+            const pts = holePts(h, player, handicap);
+            return (
+              <Text key={h.number} numberOfLines={1} style={[s.soloNineCell, holeCell, s.soloNinePtsText, { color: ptsColorFor(pts) }]}>
+                {pts ?? '·'}
+              </Text>
+            );
+          })}
+          <Text numberOfLines={1} style={[s.soloNineCell, aggCell, s.soloNineAggDivider, s.soloNineAggPtsTotal]}>{sumPts}</Text>
+        </View>
+      </React.Fragment>
+    );
+  };
+
+  return (
+    <View style={s.soloNineBlock}>
+      <Text style={s.soloNineLabel}>{label}</Text>
+
+      {/* Hole header */}
+      <View style={s.soloNineHeaderRow}>
+        <Text numberOfLines={1} style={[s.soloNineCell, s.soloNineLabelCell, labelCell, s.soloNineHeaderText, s.soloNineHeaderLabel, labelFont]}>Hole</Text>
+        {holes.map((h) => (
+          <Text key={h.number} numberOfLines={1} style={[s.soloNineCell, holeCell, s.soloNineHeaderText]}>
+            {h.number}
+          </Text>
+        ))}
+        <Text numberOfLines={1} style={[s.soloNineCell, aggCell, s.soloNineHeaderText, s.soloNineHeaderAgg]}>{aggLabel}</Text>
+      </View>
+
+      {/* Par */}
+      <View style={s.soloNineRow}>
+        <Text numberOfLines={1} style={[s.soloNineCell, s.soloNineLabelCell, labelCell, s.soloNineRowLabel, labelFont]}>Par</Text>
+        {holes.map((h) => (
+          <Text key={h.number} numberOfLines={1} style={[s.soloNineCell, holeCell, s.soloNineParText]}>{h.par}</Text>
+        ))}
+        <Text numberOfLines={1} style={[s.soloNineCell, aggCell, s.soloNineAggDivider, s.soloNineAggText]}>{sumPar}</Text>
+      </View>
+
+      {/* SI */}
+      <View style={[s.soloNineRow, s.soloNineRowSi]}>
+        <Text numberOfLines={1} style={[s.soloNineCell, s.soloNineLabelCell, labelCell, s.soloNineRowLabel, s.soloNineSiLabel, labelFont]}>SI</Text>
+        {holes.map((h) => (
+          <Text key={h.number} numberOfLines={1} style={[s.soloNineCell, holeCell, s.soloNineSiText]}>{h.strokeIndex}</Text>
+        ))}
+        <Text style={[s.soloNineCell, aggCell, s.soloNineAggDivider]} />
+      </View>
+
+      {players.map((player, i) => renderPlayerRows(player, i === 0))}
+    </View>
+  );
+}
+
+function ScorecardTable({ round, players, scores, onSetScore, mode }) {
+  const { theme } = useTheme();
+  const s = useMemo(() => makeStyles(theme), [theme]);
+  const { width } = useWindowDimensions();
+
+  // Landscape / large-phone / tablet — put FRONT + BACK side by side so the
+  // whole card fits in one screenful without scrolling.
+  const sideBySide = width >= 720;
+
+  const holes = round.holes ?? [];
+  const front = holes.slice(0, 9);
+  const back = holes.slice(9, 18);
+  const hasBack = back.length > 0;
+  const playerHandicaps = round.playerHandicaps ?? {};
+
+  // Block inner width: viewport minus content padding (14*2) minus card
+  // border (2) minus card padding (2*2). In side-by-side mode, each card
+  // gets half the space minus the gap between them (16).
+  const innerWidth = (() => {
+    const available = width - 14 * 2 - 2 - 2 * 2 - 4 * 2;
+    return sideBySide ? (available - 16) / 2 : available;
+  })();
+  const columns = getSoloColumns(innerWidth, players.length);
+
+  const coursePar = holes.reduce((acc, h) => acc + h.par, 0);
+  const isSolo = players.length === 1;
+
+  // Per-player totals for the bottom bar / leaderboard strip.
+  const playerTotals = players.map((p) => {
+    const handicap = playerHandicaps[p.id] ?? p.handicap ?? 0;
+    let str = 0;
+    let pts = 0;
+    let parPlayed = 0;
+    for (const h of holes) {
+      const v = scores[p.id]?.[h.number];
+      if (!v) continue;
+      str += v;
+      parPlayed += h.par;
+      if (mode === 'matchplay') {
+        pts += matchPlayHolePts(h, p.id, players, scores, playerHandicaps) ?? 0;
+      } else {
+        pts += calcStablefordPoints(h.par, v, handicap, h.strokeIndex);
+      }
+    }
+    const vsPar = parPlayed > 0 ? str - parPlayed : 0;
+    const vsParLabel = parPlayed === 0 ? '·'
+      : vsPar === 0 ? 'E'
+      : vsPar > 0 ? `+${vsPar}` : String(vsPar);
+    return { player: p, str, pts, vsPar, vsParLabel };
+  });
+  const leader = [...playerTotals].sort((a, b) => b.pts - a.pts)[0];
+
+  return (
+    <View style={s.soloBoard}>
+      <View style={sideBySide ? s.soloNinesRow : s.soloNinesStack}>
+        <View style={sideBySide ? s.soloNineFlex : null}>
+          <NineBlock
+            holes={front}
+            label="FRONT NINE"
+            aggLabel="OUT"
+            players={players}
+            scores={scores}
+            onSetScore={onSetScore}
+            playerHandicaps={playerHandicaps}
+            mode={mode}
+            theme={theme}
+            s={s}
+            columns={columns}
+          />
+        </View>
+
+        {hasBack && (
+          <View style={sideBySide ? s.soloNineFlex : null}>
+            <NineBlock
+              holes={back}
+              label="BACK NINE"
+              aggLabel="IN"
+              players={players}
+              scores={scores}
+              onSetScore={onSetScore}
+              playerHandicaps={playerHandicaps}
+              mode={mode}
+              theme={theme}
+              s={s}
+              columns={columns}
+            />
+          </View>
+        )}
+      </View>
+
+      {/* Round total — single bar for solo (course par + personal totals),
+          compact per-player leaderboard for 2+ players. */}
+      {isSolo ? (
+        <View style={s.soloTotalBar}>
+          <View style={s.soloTotalCol}>
+            <Text style={s.soloTotalLabel}>PAR</Text>
+            <Text style={s.soloTotalNumber}>{coursePar}</Text>
+          </View>
+          <View style={s.soloTotalDivider} />
+          <View style={s.soloTotalCol}>
+            <Text style={s.soloTotalLabel}>STROKES</Text>
+            <Text style={s.soloTotalNumber}>{playerTotals[0].str || '·'}</Text>
+          </View>
+          <View style={s.soloTotalDivider} />
+          <View style={s.soloTotalCol}>
+            <Text style={s.soloTotalLabel}>POINTS</Text>
+            <Text style={[s.soloTotalNumber, { color: theme.accent.primary }]}>{playerTotals[0].pts}</Text>
+          </View>
+          <View style={s.soloTotalDivider} />
+          <View style={s.soloTotalCol}>
+            <Text style={s.soloTotalLabel}>vs PAR</Text>
+            <Text style={s.soloTotalNumber}>{playerTotals[0].vsParLabel}</Text>
+          </View>
+        </View>
+      ) : (
+        <View style={s.multiTotalCard}>
+          <View style={s.multiTotalHeader}>
+            <Text style={s.multiTotalLabel}>PAR {coursePar}</Text>
+            <Text style={s.multiTotalLabel}>{mode === 'matchplay' ? 'MATCH PLAY' : 'STABLEFORD'}</Text>
+          </View>
+          <View style={s.multiTotalColHeader}>
+            <Text style={s.multiTotalColHeaderLabel} />
+            <Text style={[s.multiTotalColHeaderLabel, { width: 48, textAlign: 'right' }]}>STR</Text>
+            <Text style={[s.multiTotalColHeaderLabel, { width: 40, textAlign: 'right' }]}>vs PAR</Text>
+            <Text style={[s.multiTotalColHeaderLabel, { width: 46, textAlign: 'right' }]}>PTS</Text>
+          </View>
+          {playerTotals.map(({ player, str, pts, vsParLabel }) => {
+            const isLeader = leader && player.id === leader.player.id && leader.pts > 0;
+            return (
+              <View key={player.id} style={s.multiTotalRow}>
+                <Text numberOfLines={1} style={[s.multiTotalName, isLeader && s.multiTotalLeader]}>
+                  {player.name?.split(' ')[0] ?? '—'}
+                </Text>
+                <Text style={s.multiTotalStr}>{str || '·'}</Text>
+                <Text style={s.multiTotalVsPar}>{vsParLabel}</Text>
+                <Text style={[s.multiTotalPts, isLeader && { color: theme.accent.primary }]}>{pts}</Text>
+              </View>
+            );
+          })}
+        </View>
+      )}
+    </View>
+  );
+}
+
 function GridView({ round, roundIndex, players, scores, notes, onNotesChange, isBestBall, bbResult, settings, onSetScore, refreshing, onRefresh }) {
   const { theme } = useTheme();
   const s = useMemo(() => makeStyles(theme), [theme]);
   const [notesOpen, setNotesOpen] = useState(false);
+  const mode = settings?.scoringMode === 'matchplay' ? 'matchplay'
+    : isBestBall ? 'bestball'
+    : 'stableford';
+  // Classic pair-vs-pair best-ball scorecard (4 players). Everything else —
+  // solo, 2-4 player stableford, 2-player match play — uses the compact
+  // front-nine / back-nine card layout so one view works for all modes.
+  const useClassicGrid = mode === 'bestball' && players.length === 4;
 
   return (
     <PullToRefresh
       style={s.flex}
-      contentContainerStyle={s.gridContent}
+      contentContainerStyle={useClassicGrid ? s.gridContent : s.soloGridContent}
       automaticallyAdjustKeyboardInsets
       refreshing={refreshing}
       onRefresh={onRefresh}
     >
-      <View style={s.gridHeaderRow}>
+      <View style={useClassicGrid ? s.gridHeaderRow : s.soloGridHeaderBar}>
         <View style={{ flex: 1 }}>
-          <Text style={s.title}>{round.courseName}</Text>
-          <Text style={s.subtitle}>Round {roundIndex + 1}</Text>
+          {useClassicGrid ? (
+            <>
+              <Text style={s.title}>{round.courseName}</Text>
+              <Text style={s.subtitle}>Round {roundIndex + 1}</Text>
+            </>
+          ) : (
+            <Text style={s.soloGridHeaderTitle} numberOfLines={1}>
+              {round.courseName} · Round {roundIndex + 1}
+            </Text>
+          )}
         </View>
         <TouchableOpacity
           style={s.notesPillBtn}
@@ -1195,6 +1662,15 @@ function GridView({ round, roundIndex, players, scores, notes, onNotesChange, is
         </TouchableOpacity>
       </View>
 
+      {!useClassicGrid ? (
+        <ScorecardTable
+          round={round}
+          players={players}
+          scores={scores}
+          onSetScore={onSetScore}
+          mode={mode}
+        />
+      ) : (
       <ScrollView horizontal showsHorizontalScrollIndicator={false}>
         <View>
           {(() => {
@@ -1358,6 +1834,7 @@ function GridView({ round, roundIndex, players, scores, notes, onNotesChange, is
           })()}
         </View>
       </ScrollView>
+      )}
 
       {isBestBall && bbResult && <LiveMatchStrip bbResult={bbResult} settings={settings} />}
 
@@ -1566,7 +2043,7 @@ function makeStyles(theme) {
     holeNavBtnTextDisabled: { color: theme.text.muted },
 
     // Player cards (must fit 4 + 2 pair labels with no inner scroll)
-    playerCardsContent: { flex: 1, paddingHorizontal: 14, paddingTop: 10, paddingBottom: 6, gap: 8 },
+    playerCardsContent: { paddingHorizontal: 14, paddingTop: 10, paddingBottom: 10, gap: 10 },
     pairLabel: {
       fontSize: 10,
       fontFamily: 'PlusJakartaSans-Bold',
@@ -1923,6 +2400,166 @@ function makeStyles(theme) {
       fontFamily: 'PlusJakartaSans-Regular',
     },
 
+    // Solo hero card (shown on HolePage when players.length === 1)
+    soloHeroCard: {
+      backgroundColor: theme.bg.card,
+      borderRadius: 20,
+      borderWidth: 1,
+      borderColor: theme.isDark ? theme.glass?.border : theme.border.default,
+      padding: 20,
+      gap: 18,
+      shadowColor: '#000',
+      shadowOpacity: theme.isDark ? 0.3 : 0.06,
+      shadowRadius: 12,
+      shadowOffset: { width: 0, height: 4 },
+      elevation: 2,
+    },
+    soloHeroHeader: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      justifyContent: 'space-between',
+    },
+    soloHeroName: {
+      color: theme.text.primary,
+      fontSize: 18,
+      fontFamily: 'PlusJakartaSans-Bold',
+    },
+    soloHeroHcp: {
+      color: theme.text.muted,
+      fontSize: 12,
+      fontFamily: 'PlusJakartaSans-Regular',
+      marginTop: 2,
+    },
+    soloScoreRow: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      justifyContent: 'space-between',
+      gap: 16,
+    },
+    soloStepBtn: {
+      width: 56, height: 56, borderRadius: 28,
+      alignItems: 'center', justifyContent: 'center',
+      backgroundColor: theme.isDark ? theme.bg.elevated : theme.bg.secondary,
+      borderWidth: 1,
+      borderColor: theme.isDark ? theme.glass?.border : theme.border.default,
+    },
+    soloScoreDisplay: {
+      flex: 1,
+      alignItems: 'center',
+      justifyContent: 'center',
+    },
+    soloScoreNum: {
+      color: theme.text.primary,
+      fontSize: 64,
+      fontFamily: 'PlayfairDisplay-Bold',
+      lineHeight: 70,
+      letterSpacing: -1,
+    },
+    soloScoreLabel: {
+      color: theme.text.muted,
+      fontSize: 10,
+      fontFamily: 'PlusJakartaSans-Bold',
+      letterSpacing: 1.5,
+      marginTop: 4,
+    },
+    soloPtsBadge: {
+      alignSelf: 'center',
+      paddingHorizontal: 18,
+      paddingVertical: 8,
+      borderRadius: 999,
+      borderWidth: 1.5,
+    },
+    soloPtsText: {
+      fontSize: 14,
+      fontFamily: 'PlusJakartaSans-ExtraBold',
+      letterSpacing: 0.3,
+    },
+    soloStatsRow: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      justifyContent: 'space-around',
+      borderTopWidth: 1,
+      borderTopColor: theme.isDark ? theme.glass?.border : theme.border.default,
+      paddingTop: 14,
+    },
+    soloStatItem: {
+      flex: 1,
+      alignItems: 'center',
+      gap: 4,
+    },
+    soloStatDivider: {
+      width: 1,
+      alignSelf: 'stretch',
+      backgroundColor: theme.isDark ? theme.glass?.border : theme.border.default,
+    },
+    soloStatLabel: {
+      color: theme.text.muted,
+      fontSize: 9,
+      fontFamily: 'PlusJakartaSans-Bold',
+      letterSpacing: 1.5,
+    },
+    soloStatValue: {
+      color: theme.text.primary,
+      fontSize: 22,
+      fontFamily: 'PlusJakartaSans-ExtraBold',
+    },
+
+    // Solo totals ribbon (under the pager, replaces totalsStrip when solo)
+    soloRibbon: {
+      backgroundColor: theme.bg.card,
+      borderTopWidth: 1,
+      borderTopColor: theme.isDark ? theme.glass?.border : theme.border.default,
+      paddingHorizontal: 18,
+      paddingVertical: 12,
+    },
+    soloRibbonHeader: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      justifyContent: 'space-between',
+      marginBottom: 8,
+    },
+    soloRibbonName: {
+      flex: 1,
+      color: theme.text.primary,
+      fontSize: 13,
+      fontFamily: 'PlusJakartaSans-Bold',
+    },
+    soloRibbonLabel: {
+      color: theme.text.muted,
+      fontSize: 10,
+      fontFamily: 'PlusJakartaSans-Bold',
+      letterSpacing: 1.5,
+      textTransform: 'uppercase',
+    },
+    soloRibbonRow: {
+      flexDirection: 'row',
+      justifyContent: 'space-around',
+    },
+    soloRibbonItem: {
+      alignItems: 'center',
+      gap: 2,
+    },
+    soloRibbonItemLabel: {
+      color: theme.text.muted,
+      fontSize: 10,
+      fontFamily: 'PlusJakartaSans-Bold',
+      letterSpacing: 1.5,
+    },
+    soloRibbonStrokes: {
+      color: theme.text.primary,
+      fontSize: 20,
+      fontFamily: 'PlusJakartaSans-ExtraBold',
+    },
+    soloRibbonPts: {
+      color: theme.accent.primary,
+      fontSize: 20,
+      fontFamily: 'PlusJakartaSans-ExtraBold',
+    },
+    soloRibbonVsPar: {
+      fontSize: 20,
+      fontFamily: 'PlusJakartaSans-ExtraBold',
+    },
+
     // Match panel (hole-by-hole best ball)
     matchPanel: {
       backgroundColor: theme.bg.card,
@@ -2094,6 +2731,302 @@ function makeStyles(theme) {
       fontSize: 10,
       textAlign: 'center',
       fontFamily: 'PlusJakartaSans-Medium',
+    },
+
+    // Solo scorecard — classic two-up (front nine + back nine blocks)
+    soloGridContent: { padding: 14, paddingTop: 10, paddingBottom: 24 },
+    soloGridHeaderBar: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      justifyContent: 'space-between',
+      gap: 8,
+      marginBottom: 12,
+    },
+    soloGridHeaderTitle: {
+      color: theme.accent.primary,
+      fontSize: 16,
+      fontFamily: 'PlayfairDisplay-Bold',
+      letterSpacing: -0.3,
+    },
+    soloBoard: {
+      gap: 14,
+    },
+    soloNinesStack: {
+      gap: 14,
+    },
+    soloNinesRow: {
+      flexDirection: 'row',
+      gap: 16,
+    },
+    soloNineFlex: {
+      flex: 1,
+    },
+    soloNineBlock: {
+      backgroundColor: theme.bg.card,
+      borderRadius: 10,
+      borderWidth: 1,
+      borderColor: theme.isDark ? theme.glass?.border : theme.border.default,
+      paddingHorizontal: 2,
+      paddingVertical: 6,
+      overflow: 'hidden',
+      ...(theme.isDark ? {} : theme.shadow.card),
+    },
+    soloNineLabel: {
+      color: theme.text.muted,
+      fontSize: 10,
+      fontFamily: 'PlusJakartaSans-Bold',
+      letterSpacing: 2,
+      paddingHorizontal: 8,
+      paddingBottom: 6,
+    },
+    soloNineHeaderRow: {
+      flexDirection: 'row',
+      backgroundColor: theme.accent.primary,
+      marginHorizontal: 4,
+      marginBottom: 3,
+      borderRadius: 6,
+      paddingVertical: 7,
+      alignItems: 'center',
+    },
+    soloNineHeaderText: {
+      fontFamily: 'PlusJakartaSans-Bold',
+      fontSize: 11,
+      color: 'rgba(255,255,255,0.95)',
+      letterSpacing: 0.3,
+      textAlign: 'center',
+    },
+    soloNineHeaderLabel: {
+      textAlign: 'left',
+      paddingLeft: 6,
+    },
+    soloNineHeaderAgg: {
+      fontSize: 10,
+      letterSpacing: 0.8,
+    },
+    soloNineRow: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      paddingVertical: 6,
+      marginHorizontal: 4,
+    },
+    soloNineRowSi: {
+      paddingVertical: 4,
+    },
+    soloNineRowYou: {
+      backgroundColor: theme.isDark ? 'rgba(79,174,138,0.08)' : 'rgba(0,103,71,0.045)',
+      borderRadius: 6,
+      paddingVertical: 8,
+      marginVertical: 2,
+    },
+    soloNineCell: {
+      // Width applied explicitly per column (labelW / holeW / aggW) so header
+      // and body rows share the same column geometry. No flex on any cell.
+      justifyContent: 'center',
+      alignItems: 'center',
+      paddingHorizontal: 0,
+    },
+    soloNineLabelCell: {
+      alignItems: 'flex-start',
+      paddingLeft: 6,
+    },
+    soloNineAggDivider: {
+      borderLeftWidth: 1,
+      borderLeftColor: theme.isDark ? theme.glass?.border : theme.border.default,
+    },
+    soloNineYouCell: {
+      position: 'relative',
+    },
+    soloNineRowLabel: {
+      color: theme.text.secondary,
+      fontSize: 11,
+      fontFamily: 'PlusJakartaSans-Bold',
+      letterSpacing: 0.8,
+      textTransform: 'uppercase',
+    },
+    soloNineSiLabel: {
+      color: theme.text.muted,
+    },
+    soloNineYouLabel: {
+      color: theme.accent.primary,
+    },
+    soloNineParText: {
+      color: theme.text.primary,
+      fontSize: 14,
+      fontFamily: 'PlusJakartaSans-SemiBold',
+      textAlign: 'center',
+    },
+    soloNineSiText: {
+      color: theme.text.muted,
+      fontSize: 10,
+      fontFamily: 'PlusJakartaSans-Regular',
+      letterSpacing: 0.3,
+      textAlign: 'center',
+    },
+    soloNinePtsText: {
+      fontSize: 14,
+      fontFamily: 'PlusJakartaSans-ExtraBold',
+      textAlign: 'center',
+    },
+    soloNineStrokeInput: {
+      color: theme.text.primary,
+      width: '92%',
+      height: 30,
+      textAlign: 'center',
+      fontSize: 16,
+      fontFamily: 'PlayfairDisplay-Bold',
+      padding: 0,
+      backgroundColor: theme.isDark ? 'rgba(255,255,255,0.04)' : '#ffffff',
+      borderRadius: 4,
+      borderBottomWidth: 1,
+      borderBottomColor: theme.isDark ? theme.glass?.border : theme.border.default,
+    },
+    soloNineExtraDots: {
+      position: 'absolute',
+      top: 1,
+      right: 4,
+      flexDirection: 'row',
+      gap: 2,
+    },
+    soloNineExtraDot: {
+      width: 3,
+      height: 3,
+      borderRadius: 2,
+    },
+    soloNineAggText: {
+      color: theme.text.secondary,
+      fontSize: 13,
+      fontFamily: 'PlusJakartaSans-Bold',
+      textAlign: 'center',
+    },
+    soloNineAggStrokesTotal: {
+      color: theme.text.primary,
+      fontSize: 17,
+      fontFamily: 'PlayfairDisplay-Bold',
+      textAlign: 'center',
+    },
+    soloNineAggPtsTotal: {
+      color: theme.accent.primary,
+      fontSize: 17,
+      fontFamily: 'PlayfairDisplay-Bold',
+      textAlign: 'center',
+    },
+
+    // Round-total bar (bottom of solo scorecard)
+    soloTotalBar: {
+      flexDirection: 'row',
+      backgroundColor: theme.bg.card,
+      borderRadius: 10,
+      borderWidth: 1,
+      borderColor: theme.isDark ? theme.glass?.border : theme.border.default,
+      paddingVertical: 14,
+      paddingHorizontal: 8,
+      alignItems: 'center',
+      ...(theme.isDark ? {} : theme.shadow.card),
+    },
+    soloTotalCol: {
+      flex: 1,
+      alignItems: 'center',
+      gap: 4,
+    },
+    soloTotalDivider: {
+      width: 1,
+      height: 32,
+      backgroundColor: theme.isDark ? theme.glass?.border : theme.border.default,
+    },
+    soloTotalLabel: {
+      color: theme.text.muted,
+      fontSize: 9,
+      fontFamily: 'PlusJakartaSans-Bold',
+      letterSpacing: 1.4,
+    },
+    soloTotalNumber: {
+      color: theme.text.primary,
+      fontSize: 22,
+      fontFamily: 'PlayfairDisplay-Bold',
+    },
+
+    // Per-player separator inside a block (between player N and player N+1 rows)
+    soloNinePlayerSeparator: {
+      borderTopWidth: 1,
+      borderTopColor: theme.isDark ? theme.glass?.border : theme.border.subtle,
+      marginTop: 2,
+    },
+
+    // Multi-player total card (replaces solo total bar when >1 player)
+    multiTotalCard: {
+      backgroundColor: theme.bg.card,
+      borderRadius: 10,
+      borderWidth: 1,
+      borderColor: theme.isDark ? theme.glass?.border : theme.border.default,
+      paddingVertical: 10,
+      paddingHorizontal: 14,
+      ...(theme.isDark ? {} : theme.shadow.card),
+    },
+    multiTotalLabel: {
+      color: theme.text.muted,
+      fontSize: 10,
+      fontFamily: 'PlusJakartaSans-Bold',
+      letterSpacing: 1.4,
+    },
+    multiTotalColHeader: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: 8,
+      paddingTop: 4,
+      paddingBottom: 2,
+    },
+    multiTotalColHeaderLabel: {
+      color: theme.text.muted,
+      fontSize: 9,
+      fontFamily: 'PlusJakartaSans-Bold',
+      letterSpacing: 1.2,
+      flex: 1,
+    },
+    multiTotalHeader: {
+      flexDirection: 'row',
+      justifyContent: 'space-between',
+      alignItems: 'center',
+      paddingBottom: 8,
+      borderBottomWidth: 1,
+      borderBottomColor: theme.isDark ? theme.glass?.border : theme.border.default,
+      marginBottom: 2,
+    },
+    multiTotalRow: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      paddingVertical: 8,
+      gap: 8,
+    },
+    multiTotalName: {
+      flex: 1,
+      color: theme.text.primary,
+      fontSize: 14,
+      fontFamily: 'PlusJakartaSans-SemiBold',
+    },
+    multiTotalLeader: {
+      color: theme.accent.primary,
+      fontFamily: 'PlusJakartaSans-Bold',
+    },
+    multiTotalStr: {
+      width: 48,
+      textAlign: 'right',
+      color: theme.text.secondary,
+      fontSize: 14,
+      fontFamily: 'PlayfairDisplay-Bold',
+    },
+    multiTotalVsPar: {
+      width: 40,
+      textAlign: 'right',
+      color: theme.text.muted,
+      fontSize: 12,
+      fontFamily: 'PlusJakartaSans-Regular',
+    },
+    multiTotalPts: {
+      width: 46,
+      textAlign: 'right',
+      color: theme.text.primary,
+      fontSize: 18,
+      fontFamily: 'PlayfairDisplay-Bold',
     },
 
     // Live match

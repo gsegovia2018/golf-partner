@@ -17,6 +17,7 @@ import {
   playerRoundBestWorstPoints,
   tournamentPlayerClinched, roundPairClinched,
   isRoundComplete, subscribeTournamentChanges,
+  matchPlayRoundTally,
   DEFAULT_SETTINGS, generateInviteCode, setInviteRole,
 } from '../store/tournamentStore';
 import { subscribeConnectivity } from '../lib/connectivity';
@@ -95,7 +96,7 @@ export default function HomeScreen({ navigation, route }) {
   const [undoSnack, setUndoSnack] = useState(null); // { roundIndex, snapshot, at }
   const undoTimerRef = useRef(null);
   const [leaderboardBestBall, setLeaderboardBestBall] = useState(false);
-  const [roundBestBall, setRoundBestBall] = useState(true);
+  const [roundBestBall, setRoundBestBall] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
   const [showInvite, setShowInvite] = useState(false);
   const [inviteCode, setInviteCode] = useState('');
@@ -403,6 +404,20 @@ export default function HomeScreen({ navigation, route }) {
     () => ({ ...DEFAULT_SETTINGS, ...(tournament?.settings ?? {}) }),
     [tournament?.settings],
   );
+  const bestBallAvailable = (tournament?.players?.length ?? 0) >= 4;
+
+  // Sync toggle to tournament's scoring mode when it loads/changes. If the
+  // tournament doesn't support best-ball (fewer than 4 players), force off.
+  useEffect(() => {
+    if (!bestBallAvailable) {
+      setRoundBestBall(false);
+      setLeaderboardBestBall(false);
+      return;
+    }
+    const isBB = settings.scoringMode === 'bestball';
+    setRoundBestBall(isBB);
+    setLeaderboardBestBall(isBB);
+  }, [tournament?.id, settings.scoringMode, bestBallAvailable]);
   const leaderboard = useMemo(
     () => (tournament ? tournamentLeaderboard(tournament) : []),
     [tournament],
@@ -712,16 +727,18 @@ export default function HomeScreen({ navigation, route }) {
       <View style={s.mastersCard}>
         <View style={s.cardTitleRow}>
           <Text style={s.mastersCardTitle}>LEADERBOARD</Text>
-          <View style={s.inlineToggle}>
-            <Text style={[s.mastersToggleLabel, !leaderboardBestBall && s.mastersToggleLabelActive]}>Stableford</Text>
-            <Switch
-              value={leaderboardBestBall}
-              onValueChange={setLeaderboardBestBall}
-              trackColor={{ false: 'rgba(255,255,255,0.2)', true: 'rgba(255,215,0,0.4)' }}
-              thumbColor="#fff"
-            />
-            <Text style={[s.mastersToggleLabel, leaderboardBestBall && s.mastersToggleLabelActive]}>Best Ball</Text>
-          </View>
+          {bestBallAvailable && (
+            <View style={s.inlineToggle}>
+              <Text style={[s.mastersToggleLabel, !leaderboardBestBall && s.mastersToggleLabelActive]}>Stableford</Text>
+              <Switch
+                value={leaderboardBestBall}
+                onValueChange={setLeaderboardBestBall}
+                trackColor={{ false: 'rgba(255,255,255,0.2)', true: 'rgba(255,215,0,0.4)' }}
+                thumbColor="#fff"
+              />
+              <Text style={[s.mastersToggleLabel, leaderboardBestBall && s.mastersToggleLabelActive]}>Best Ball</Text>
+            </View>
+          )}
         </View>
         {displayedBoard.map((entry, i) => {
           const rankColors = ['#ffd700', '#c0c8d4', '#daa06d'];
@@ -759,17 +776,36 @@ export default function HomeScreen({ navigation, route }) {
       {tournament.rounds.length > 0 && (
         <View style={s.card}>
           <View style={s.cardTitleRow}>
-            <Text style={s.cardTitle}>ROUND SCORES</Text>
-            <View style={s.inlineToggle}>
-              <Text style={[s.modeLabel, !roundBestBall && s.modeLabelActive]}>Stableford</Text>
-              <Switch
-                value={roundBestBall}
-                onValueChange={setRoundBestBall}
-                trackColor={{ false: theme.border.default, true: theme.accent.primary }}
-                thumbColor="#fff"
-              />
-              <Text style={[s.modeLabel, roundBestBall && s.modeLabelActive]}>Best Ball</Text>
+            <View style={s.cardTitleLeft}>
+              <Text style={s.cardTitle}>ROUND SCORES</Text>
+              {tournament.rounds.length === 1 && tournament.rounds[0].courseName && (
+                <Text style={s.cardTitleCourse} numberOfLines={1}>
+                  {' · '}{tournament.rounds[0].courseName}
+                </Text>
+              )}
             </View>
+            {bestBallAvailable && (
+              <View style={s.inlineToggle}>
+                <Text style={[s.modeLabel, !roundBestBall && s.modeLabelActive]}>Stableford</Text>
+                <Switch
+                  value={roundBestBall}
+                  onValueChange={setRoundBestBall}
+                  trackColor={{ false: theme.border.default, true: theme.accent.primary }}
+                  thumbColor="#fff"
+                />
+                <Text style={[s.modeLabel, roundBestBall && s.modeLabelActive]}>Best Ball</Text>
+              </View>
+            )}
+            {tournament.rounds.length === 1 && !isViewer && (
+              <TouchableOpacity
+                onPress={() => openRoundEdit(0)}
+                style={s.roundEditBtn}
+                hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+                accessibilityLabel="Round options"
+              >
+                <Feather name="settings" size={14} color={theme.text.muted} />
+              </TouchableOpacity>
+            )}
           </View>
           {!isGame && (
             <FlatList
@@ -819,6 +855,7 @@ export default function HomeScreen({ navigation, route }) {
                 s={s}
                 onGoToRound={goToRound}
                 onOpenEdit={isViewer ? null : openRoundEdit}
+                isSingleRound
               />
             ) : (
               <ScrollView
@@ -885,6 +922,7 @@ export default function HomeScreen({ navigation, route }) {
                     s={s}
                     onGoToRound={goToRound}
                     onOpenEdit={isViewer ? null : openRoundEdit}
+                    isSingleRound={tournament.rounds.length === 1}
                   />
                 ))}
               </ScrollView>
@@ -1265,7 +1303,7 @@ export default function HomeScreen({ navigation, route }) {
 const RoundPage = React.memo(function RoundPage({
   round, index, width, hasPrev, hasNext, revealed, roundBestBall,
   players, settings, theme, s,
-  onGoToRound, onOpenEdit,
+  onGoToRound, onOpenEdit, isSingleRound,
 }) {
   const hasScores = round.scores && Object.keys(round.scores).length > 0;
   const hasPairs = Array.isArray(round.pairs) && round.pairs.length > 0;
@@ -1278,41 +1316,47 @@ const RoundPage = React.memo(function RoundPage({
       style={[{ width }, PAGER_PAGE_SNAP_STYLE]}
       dataSet={Platform.OS === 'web' ? { pagerpage: '1' } : undefined}
     >
-      <View style={s.pagerTitleRow}>
-        <TouchableOpacity
-          style={[s.pagerArrow, !hasPrev && s.pagerArrowHidden]}
-          onPress={() => hasPrev && onGoToRound(index - 1)}
-          disabled={!hasPrev}
-          activeOpacity={0.7}
-          accessibilityLabel="Previous round"
-        >
-          <Feather name="chevron-left" size={18} color={theme.accent.primary} />
-        </TouchableOpacity>
-        <Text style={s.tabRoundTitle}>RONDA {index + 1} · {round.courseName || '—'}</Text>
-        {onOpenEdit && (
+      {/* Single-round games render course + gear in the card title row, so
+          this RONDA N / prev-next row is redundant and we skip it entirely. */}
+      {!isSingleRound && (
+        <View style={s.pagerTitleRow}>
           <TouchableOpacity
-            onPress={() => onOpenEdit(index)}
-            style={s.roundEditBtn}
-            hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
-            accessibilityLabel="Round options"
+            style={[s.pagerArrow, !hasPrev && s.pagerArrowHidden]}
+            onPress={() => hasPrev && onGoToRound(index - 1)}
+            disabled={!hasPrev}
+            activeOpacity={0.7}
+            accessibilityLabel="Previous round"
           >
-            <Feather name="settings" size={14} color={theme.text.muted} />
+            <Feather name="chevron-left" size={18} color={theme.accent.primary} />
           </TouchableOpacity>
-        )}
-        <TouchableOpacity
-          style={[s.pagerArrow, !hasNext && s.pagerArrowHidden]}
-          onPress={() => hasNext && onGoToRound(index + 1)}
-          disabled={!hasNext}
-          activeOpacity={0.7}
-          accessibilityLabel="Next round"
-        >
-          <Feather name="chevron-right" size={18} color={theme.accent.primary} />
-        </TouchableOpacity>
-      </View>
+          <Text style={s.tabRoundTitle}>RONDA {index + 1} · {round.courseName || '—'}</Text>
+          {onOpenEdit && (
+            <TouchableOpacity
+              onPress={() => onOpenEdit(index)}
+              style={s.roundEditBtn}
+              hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+              accessibilityLabel="Round options"
+            >
+              <Feather name="settings" size={14} color={theme.text.muted} />
+            </TouchableOpacity>
+          )}
+          <TouchableOpacity
+            style={[s.pagerArrow, !hasNext && s.pagerArrowHidden]}
+            onPress={() => hasNext && onGoToRound(index + 1)}
+            disabled={!hasNext}
+            activeOpacity={0.7}
+            accessibilityLabel="Next round"
+          >
+            <Feather name="chevron-right" size={18} color={theme.accent.primary} />
+          </TouchableOpacity>
+        </View>
+      )}
       {hasScores ? (
-        roundBestBall
-          ? <BestBallRoundCard round={round} players={players} settings={settings} clinchedPairIdx={clinchedPairIdx} theme={theme} s={s} />
-          : <StablefordRoundCard round={round} players={players} clinchedPairIdx={clinchedPairIdx} theme={theme} s={s} />
+        settings?.scoringMode === 'matchplay'
+          ? <MatchPlayRoundCard round={round} players={players} theme={theme} s={s} />
+          : roundBestBall
+            ? <BestBallRoundCard round={round} players={players} settings={settings} clinchedPairIdx={clinchedPairIdx} theme={theme} s={s} />
+            : <StablefordRoundCard round={round} players={players} clinchedPairIdx={clinchedPairIdx} theme={theme} s={s} />
       ) : revealed && hasPairs ? (
         <PairsPreviewCard pairs={round.pairs} theme={theme} s={s} />
       ) : (
@@ -1347,14 +1391,15 @@ const StablefordRoundCard = React.memo(function StablefordRoundCard({ round, pla
   const pairIdxFor = (members) => round.pairs.findIndex((pr) => (
     pr.length === members.length && pr.every((p) => members.some((m) => m.player.id === p.id))
   ));
+  const competitive = pairResults.length > 1;
   return (
     <>
       {pairResults.map((pair, pi) => {
         const origIdx = pairIdxFor(pair.members);
         const isClinched = clinchedPairIdx != null && origIdx === clinchedPairIdx;
         return (
-          <View key={pi} style={[s.pairBlock, pi === 0 && s.winnerBlock]}>
-            {pi === 0 && <Text style={s.winnerBadge}>WINNER</Text>}
+          <View key={pi} style={[s.pairBlock, competitive && pi === 0 && s.winnerBlock]}>
+            {competitive && pi === 0 && <Text style={s.winnerBadge}>WINNER</Text>}
             <View style={s.pairHeader}>
               <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6, flex: 1 }}>
                 <Text style={s.pairNames}>{pair.members.map((m) => m.player.name).join(' & ')}</Text>
@@ -1365,6 +1410,60 @@ const StablefordRoundCard = React.memo(function StablefordRoundCard({ round, pla
           </View>
         );
       })}
+    </>
+  );
+});
+
+// Match Play: show per-player hole wins, halved count, and match status
+// ("Alex 2 UP", "All square", "Alex wins 3&2"). Uses the same .pairBlock /
+// .winnerBlock / .winnerBadge styles as the Stableford card so the visual
+// rhythm on the round overview stays consistent.
+const MatchPlayRoundCard = React.memo(function MatchPlayRoundCard({ round, players, theme, s }) {
+  if (!players || players.length !== 2) {
+    return <Text style={s.pairMember}>Match play needs 2 players</Text>;
+  }
+  const tally = matchPlayRoundTally(round, players);
+  if (!tally) return <Text style={s.pairMember}>No results yet</Text>;
+
+  const { aWins, bWins, halved, leaderIdx, lead, clinched, holesLeft } = tally;
+  const leader = leaderIdx !== null ? players[leaderIdx] : null;
+  const loser = leaderIdx !== null ? players[1 - leaderIdx] : null;
+
+  const firstName = (p) => p.name?.split(' ')[0] ?? '—';
+  const status = leader
+    ? clinched
+      ? `${firstName(leader)} wins ${lead}&${holesLeft}`
+      : `${firstName(leader)} ${lead} UP${holesLeft > 0 ? ` · ${holesLeft} to play` : ''}`
+    : `All square${holesLeft > 0 ? ` · ${holesLeft} to play` : ''}`;
+
+  // Order rows: leader first (winner), then other.
+  const rows = leader
+    ? [
+        { player: leader, wins: leaderIdx === 0 ? aWins : bWins, isLeader: true },
+        { player: loser, wins: leaderIdx === 0 ? bWins : aWins, isLeader: false },
+      ]
+    : [
+        { player: players[0], wins: aWins, isLeader: false },
+        { player: players[1], wins: bWins, isLeader: false },
+      ];
+
+  return (
+    <>
+      {rows.map(({ player, wins, isLeader }, i) => (
+        <View key={player.id} style={[s.pairBlock, clinched && isLeader && s.winnerBlock]}>
+          {clinched && isLeader && <Text style={s.winnerBadge}>WINNER</Text>}
+          <View style={s.pairHeader}>
+            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6, flex: 1 }}>
+              <Text style={s.pairNames}>{player.name}</Text>
+              {clinched && isLeader && <Feather name="award" size={14} color="#ffd700" />}
+            </View>
+            <Text style={s.pairPoints}>{wins} {wins === 1 ? 'hole' : 'holes'}</Text>
+          </View>
+        </View>
+      ))}
+      <Text style={s.pairsPreviewHint}>
+        {status}{halved > 0 ? ` · ${halved} halved` : ''}
+      </Text>
     </>
   );
 });
@@ -1543,7 +1642,8 @@ const makeStyles = (t) => StyleSheet.create({
   emptySubtitle: { fontFamily: 'PlusJakartaSans-Regular', color: t.text.muted, fontSize: 14, textAlign: 'center' },
 
   // Card title row with inline toggle
-  cardTitleRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 14 },
+  cardTitleRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 14, gap: 8 },
+  cardTitleLeft: { flexDirection: 'row', alignItems: 'baseline', flex: 1, minWidth: 0 },
   inlineToggle: { flexDirection: 'row', alignItems: 'center', gap: 8 },
   modeLabel: { fontFamily: 'PlusJakartaSans-SemiBold', color: t.text.muted, fontSize: 11 },
   modeLabelActive: { color: t.text.primary },
@@ -1560,6 +1660,13 @@ const makeStyles = (t) => StyleSheet.create({
     fontFamily: 'PlusJakartaSans-SemiBold',
     fontSize: 10, color: t.accent.primary,
     letterSpacing: 1.5, textTransform: 'uppercase',
+  },
+  cardTitleCourse: {
+    flex: 1,
+    fontFamily: 'PlayfairDisplay-Bold',
+    fontSize: 14,
+    color: t.text.primary,
+    letterSpacing: -0.2,
   },
 
   // Round navigation

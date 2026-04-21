@@ -440,6 +440,56 @@ export function calcStablefordPoints(par, strokes, playerHandicap, holeStrokeInd
   return Math.max(0, points);
 }
 
+// Match Play: 2 players, per-hole 1-vs-1. Returns 1 if `playerId` won the hole
+// (lower net strokes), 0 if they lost OR halved, null if either side hasn't
+// scored yet. Caller can derive halved holes by checking that both sides
+// returned 0 for the same hole.
+export function matchPlayHolePts(hole, playerId, players, scores, playerHandicapsByPlayerId) {
+  if (!players || players.length !== 2) return null;
+  const [a, b] = players;
+  const strA = scores?.[a.id]?.[hole.number];
+  const strB = scores?.[b.id]?.[hole.number];
+  if (strA == null || strB == null) return null;
+  const hA = playerHandicapsByPlayerId?.[a.id] ?? a.handicap ?? 0;
+  const hB = playerHandicapsByPlayerId?.[b.id] ?? b.handicap ?? 0;
+  const netA = strA - calcExtraShots(hA, hole.strokeIndex);
+  const netB = strB - calcExtraShots(hB, hole.strokeIndex);
+  if (netA === netB) return 0;
+  const winnerId = netA < netB ? a.id : b.id;
+  return playerId === winnerId ? 1 : 0;
+}
+
+// Match Play round tally: holes won by each player + halved count + status.
+// Status is one of "A up 2", "All square", or "A wins 3&2" (clinched).
+export function matchPlayRoundTally(round, players) {
+  if (!players || players.length !== 2) return null;
+  const [a, b] = players;
+  const scores = round?.scores ?? {};
+  const playerHandicaps = round?.playerHandicaps ?? {};
+  const holes = round?.holes ?? [];
+  let aWins = 0;
+  let bWins = 0;
+  let halved = 0;
+  let played = 0;
+  for (const hole of holes) {
+    const pts = matchPlayHolePts(hole, a.id, players, scores, playerHandicaps);
+    if (pts == null) continue;
+    played++;
+    if (pts === 1) aWins++;
+    else {
+      // a didn't win — either b did or it was halved
+      const bPts = matchPlayHolePts(hole, b.id, players, scores, playerHandicaps);
+      if (bPts === 1) bWins++;
+      else halved++;
+    }
+  }
+  const holesLeft = holes.length - played;
+  const lead = Math.abs(aWins - bWins);
+  const leaderIdx = aWins > bWins ? 0 : bWins > aWins ? 1 : null;
+  const clinched = leaderIdx !== null && lead > holesLeft;
+  return { aWins, bWins, halved, played, holesLeft, lead, leaderIdx, clinched };
+}
+
 // Lowest stroke count that still yields 0 Stableford points on this hole for this
 // player. Use as the recorded score when a player picks up the ball.
 export function pickupStrokes(par, playerHandicap, holeStrokeIndex) {

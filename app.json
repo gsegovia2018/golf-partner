@@ -16,12 +16,16 @@
       "supportsTablet": true
     },
     "android": {
+      "package": "com.musterpck.golf",
       "adaptiveIcon": {
         "foregroundImage": "./assets/adaptive-icon.png",
         "backgroundColor": "#006747"
       },
       "edgeToEdgeEnabled": true,
-      "softwareKeyboardLayoutMode": "pan"
+      "softwareKeyboardLayoutMode": "pan",
+      "permissions": [
+        "android.permission.RECORD_AUDIO"
+      ]
     },
     "web": {
       "favicon": "./assets/favicon.png"
@@ -36,6 +40,12 @@
         }
       ],
       "expo-video"
-    ]
+    ],
+    "extra": {
+      "eas": {
+        "projectId": "6fafd0c9-3715-4b8a-81d1-cc41ba2c9727"
+      }
+    },
+    "owner": "musterpck"
   }
 }

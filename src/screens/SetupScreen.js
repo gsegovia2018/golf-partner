@@ -42,12 +42,16 @@ export default function SetupScreen({ navigation, route }) {
   const [settings, setSettings] = useState({ ...DEFAULT_SETTINGS });
 
   const bestBallAllowed = !isGame || players.length === 4;
+  const matchPlayAllowed = players.length === 2;
 
   useEffect(() => {
     if (!bestBallAllowed && settings.scoringMode === 'bestball') {
       setSettings((prev) => ({ ...prev, scoringMode: 'stableford' }));
     }
-  }, [bestBallAllowed, settings.scoringMode]);
+    if (!matchPlayAllowed && settings.scoringMode === 'matchplay') {
+      setSettings((prev) => ({ ...prev, scoringMode: 'stableford' }));
+    }
+  }, [bestBallAllowed, matchPlayAllowed, settings.scoringMode]);
 
   useFocusEffect(useCallback(() => {
     let cancelled = false;
@@ -163,6 +167,14 @@ export default function SetupScreen({ navigation, route }) {
       return;
     }
 
+    // Match play uses solo-pairs ([[p1], [p2]]) so the best-ball math treats
+    // each player as their own "pair" and compares 1-vs-1 per hole.
+    const isMatchPlay = settings.scoringMode === 'matchplay';
+    const buildPairs = () => {
+      if (isMatchPlay && players.length === 2) return [[players[0]], [players[1]]];
+      return randomPairs(players);
+    };
+
     const builtRounds = rounds.map((r, i) => {
       const playerHandicaps = r.playerHandicaps
         ?? Object.fromEntries(players.map((p) => [p.id, p.handicap]));
@@ -175,7 +187,7 @@ export default function SetupScreen({ navigation, route }) {
         playerHandicaps,
         manualHandicaps: { ...(r.manualHandicaps ?? {}) },
         notes: '',
-        pairs: randomPairs(players),
+        pairs: buildPairs(),
         scores: {},
       };
     });
@@ -185,11 +197,13 @@ export default function SetupScreen({ navigation, route }) {
       name: tournamentName.trim() || (isGame ? 'Game' : 'Weekend Golf'),
       players,
       rounds: builtRounds,
-      settings: {
-        ...settings,
-        bestBallValue: parseInt(settings.bestBallValue, 10) || 1,
-        worstBallValue: parseInt(settings.worstBallValue, 10) || 1,
-      },
+      settings: isMatchPlay
+        ? { ...settings, scoringMode: 'matchplay', bestBallValue: 1, worstBallValue: 0 }
+        : {
+            ...settings,
+            bestBallValue: parseInt(settings.bestBallValue, 10) || 1,
+            worstBallValue: parseInt(settings.worstBallValue, 10) || 1,
+          },
     });
 
     try {
@@ -333,61 +347,74 @@ export default function SetupScreen({ navigation, route }) {
       </View>
 
       {/* Scoring */}
-      <View>
-        <Text style={s.sectionTitle}>Scoring</Text>
-        <View style={s.modeRow}>
-          {['stableford', 'bestball'].map((mode) => {
-            const disabled = mode === 'bestball' && !bestBallAllowed;
-            return (
-              <TouchableOpacity
-                key={mode}
-                style={[s.modeBtn, settings.scoringMode === mode && s.modeBtnActive, disabled && { opacity: 0.5 }]}
-                onPress={() => { if (!disabled) setSettings((prev) => ({ ...prev, scoringMode: mode })); }}
-                activeOpacity={disabled ? 1 : 0.7}
-              >
-                <Text style={[s.modeBtnText, settings.scoringMode === mode && s.modeBtnTextActive]}>
-                  {mode === 'stableford' ? 'Individual Stableford' : 'Best Ball / Worst Ball'}
-                </Text>
-                {disabled && (
-                  <Text style={[s.modeBtnText, { fontSize: 11, marginTop: 4, color: theme.text.muted }]}>
-                    Requires 4 players
-                  </Text>
-                )}
-              </TouchableOpacity>
-            );
-          })}
-        </View>
-        {settings.scoringMode === 'bestball' && (
-          <View style={s.valueRow}>
-            <View style={s.valueBlock}>
-              <Text style={s.valueLabel}>Best Ball</Text>
-              <TextInput
-                style={s.valueInput}
-                keyboardType="numeric"
-                keyboardAppearance={theme.isDark ? 'dark' : 'light'}
-                selectionColor={theme.accent.primary}
-                maxLength={2}
-                value={String(settings.bestBallValue)}
-                onChangeText={(v) => setSettings((prev) => ({ ...prev, bestBallValue: v }))}
-              />
-              <Text style={s.valueSuffix}>pts / hole</Text>
-            </View>
-            <View style={s.valueBlock}>
-              <Text style={s.valueLabel}>Worst Ball</Text>
-              <TextInput
-                style={s.valueInput}
-                keyboardType="numeric"
-                keyboardAppearance={theme.isDark ? 'dark' : 'light'}
-                selectionColor={theme.accent.primary}
-                maxLength={2}
-                value={String(settings.worstBallValue)}
-                onChangeText={(v) => setSettings((prev) => ({ ...prev, worstBallValue: v }))}
-              />
-              <Text style={s.valueSuffix}>pts / hole</Text>
-            </View>
+      {players.length >= 2 && (
+        <View>
+          <Text style={s.sectionTitle}>Scoring</Text>
+          <View style={s.modeRow}>
+            {(() => {
+              // Mode options depend on player count: 2 players get Stableford +
+              // Match Play; 3 players get only Stableford; 4 players get
+              // Stableford + Best Ball.
+              const availableModes = matchPlayAllowed
+                ? ['stableford', 'matchplay']
+                : ['stableford', 'bestball'];
+              return availableModes.map((mode) => {
+                const disabled = mode === 'bestball' && !bestBallAllowed;
+                const label = mode === 'stableford' ? 'Individual Stableford'
+                  : mode === 'matchplay' ? 'Match Play'
+                  : 'Best Ball / Worst Ball';
+                return (
+                  <TouchableOpacity
+                    key={mode}
+                    style={[s.modeBtn, settings.scoringMode === mode && s.modeBtnActive, disabled && { opacity: 0.5 }]}
+                    onPress={() => { if (!disabled) setSettings((prev) => ({ ...prev, scoringMode: mode })); }}
+                    activeOpacity={disabled ? 1 : 0.7}
+                  >
+                    <Text style={[s.modeBtnText, settings.scoringMode === mode && s.modeBtnTextActive]}>
+                      {label}
+                    </Text>
+                    {disabled && (
+                      <Text style={[s.modeBtnText, { fontSize: 11, marginTop: 4, color: theme.text.muted }]}>
+                        Requires 4 players
+                      </Text>
+                    )}
+                  </TouchableOpacity>
+                );
+              });
+            })()}
           </View>
-        )}
-      </View>
+          {settings.scoringMode === 'bestball' && (
+            <View style={s.valueRow}>
+              <View style={s.valueBlock}>
+                <Text style={s.valueLabel}>Best Ball</Text>
+                <TextInput
+                  style={s.valueInput}
+                  keyboardType="numeric"
+                  keyboardAppearance={theme.isDark ? 'dark' : 'light'}
+                  selectionColor={theme.accent.primary}
+                  maxLength={2}
+                  value={String(settings.bestBallValue)}
+                  onChangeText={(v) => setSettings((prev) => ({ ...prev, bestBallValue: v }))}
+                />
+                <Text style={s.valueSuffix}>pts / hole</Text>
+              </View>
+              <View style={s.valueBlock}>
+                <Text style={s.valueLabel}>Worst Ball</Text>
+                <TextInput
+                  style={s.valueInput}
+                  keyboardType="numeric"
+                  keyboardAppearance={theme.isDark ? 'dark' : 'light'}
+                  selectionColor={theme.accent.primary}
+                  maxLength={2}
+                  value={String(settings.worstBallValue)}
+                  onChangeText={(v) => setSettings((prev) => ({ ...prev, worstBallValue: v }))}
+                />
+                <Text style={s.valueSuffix}>pts / hole</Text>
+              </View>
+            </View>
+          )}
+        </View>
+      )}
 
       {/* Start Button */}
       <View>
