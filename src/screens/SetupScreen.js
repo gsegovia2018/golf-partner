@@ -17,7 +17,13 @@ function buildGameName(courseName) {
   const months = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
   const stamp = `${d.getDate()} ${months[d.getMonth()]}`;
   const trimmed = (courseName || '').trim();
-  return trimmed ? `Game at ${trimmed} · ${stamp}` : `Game · ${stamp}`;
+  if (!trimmed) return `Game · ${stamp}`;
+  // Keep the title short — golf course names can be very long and clip
+  // in the tournament header. Trim to ~22 chars with an ellipsis when
+  // combined with the date.
+  const MAX = 22;
+  const shortCourse = trimmed.length > MAX ? `${trimmed.slice(0, MAX - 1).trimEnd()}…` : trimmed;
+  return `${shortCourse} · ${stamp}`;
 }
 
 export default function SetupScreen({ navigation, route }) {

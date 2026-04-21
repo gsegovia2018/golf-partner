@@ -976,21 +976,36 @@ export async function joinTournamentByCode(code) {
   return invite.tournament_id;
 }
 
+// A round is "complete" when every player has a score recorded for every
+// hole. "In progress" means at least one score entered but not all.
+export function isRoundComplete(round, players) {
+  if (!round || !round.scores || !round.holes?.length) return false;
+  if (!players?.length) return false;
+  return players.every((p) => {
+    const perPlayer = round.scores[p.id];
+    if (!perPlayer) return false;
+    return round.holes.every((h) => perPlayer[h.number] != null);
+  });
+}
+
+export function roundEnteredCount(round, players) {
+  if (!round?.scores || !players?.length) return 0;
+  let entered = 0;
+  for (const p of players) {
+    const perPlayer = round.scores[p.id];
+    if (!perPlayer) continue;
+    entered += Object.keys(perPlayer).length;
+  }
+  return entered;
+}
+
 export function isRoundInProgress(tournament) {
   if (!tournament) return false;
   const round = tournament.rounds?.[tournament.currentRound];
   if (!round || !round.scores) return false;
-
-  const playerIds = tournament.players.map((p) => p.id);
-  const holeCount = round.course?.holes?.length ?? 18;
-  const expected = playerIds.length * holeCount;
-
-  let entered = 0;
-  for (const pid of playerIds) {
-    const perPlayer = round.scores[pid];
-    if (!perPlayer) continue;
-    entered += Object.keys(perPlayer).length;
-  }
+  const entered = roundEnteredCount(round, tournament.players ?? []);
+  const holeCount = round.holes?.length ?? 18;
+  const expected = (tournament.players?.length ?? 0) * holeCount;
   return entered > 0 && entered < expected;
 }
 

@@ -68,8 +68,8 @@ function AppNavigator() {
         pointerEvents="box-none"
         style={{
           position: 'absolute',
-          top: insets.top + 8,
-          right: insets.right + 12,
+          top: insets.top + 60,
+          right: insets.right + 6,
           zIndex: 1000,
         }}
       >

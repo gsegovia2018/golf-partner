@@ -72,13 +72,10 @@ export default function SyncStatusIcon() {
   const content = status === 'syncing'
     ? <ActivityIndicator size="small" color={COLOR.syncing} />
     : (
-      <View style={styles.dotRow}>
-        <Animated.View style={[
-          styles.dot,
-          { backgroundColor: COLOR[status], transform: [{ scale: pulse }] },
-        ]} />
-        {status !== 'idle' && <Text style={[styles.label, { color: COLOR[status] }]}>{LABEL[status]}</Text>}
-      </View>
+      <Animated.View style={[
+        styles.dot,
+        { backgroundColor: COLOR[status], transform: [{ scale: pulse }] },
+      ]} />
     );
 
   return (
@@ -95,18 +92,16 @@ export default function SyncStatusIcon() {
 }
 
 const styles = StyleSheet.create({
-  hit: { paddingHorizontal: 8, paddingVertical: 4 },
-  container: { position: 'relative', flexDirection: 'row', alignItems: 'center' },
-  dotRow: { flexDirection: 'row', alignItems: 'center' },
-  dot: { width: 10, height: 10, borderRadius: 5 },
-  label: { fontSize: 12, marginLeft: 6 },
+  hit: { padding: 6 },
+  container: { position: 'relative', width: 8, height: 8, alignItems: 'center', justifyContent: 'center' },
+  dot: { width: 8, height: 8, borderRadius: 4 },
   badge: {
     position: 'absolute',
-    top: -6,
-    right: -8,
-    minWidth: 16,
-    height: 16,
-    borderRadius: 8,
+    top: -5,
+    right: -7,
+    minWidth: 14,
+    height: 14,
+    borderRadius: 7,
     backgroundColor: BADGE_COLOR,
     paddingHorizontal: 3,
     alignItems: 'center',
