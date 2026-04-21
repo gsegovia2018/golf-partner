@@ -5,7 +5,7 @@ import {
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useFocusEffect } from '@react-navigation/native';
-import { Feather } from '@expo/vector-icons';
+import { Feather, FontAwesome } from '@expo/vector-icons';
 
 import { useTheme } from '../theme/ThemeContext';
 import {
@@ -198,11 +198,11 @@ export default function CoursesLibraryScreen({ navigation }) {
                     activeOpacity={0.7}
                     hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
                   >
-                    <Feather
-                      name="star"
-                      size={16}
-                      color={favorites.has(c.id) ? theme.accent.primary : theme.text.muted}
-                    />
+                    {favorites.has(c.id) ? (
+                      <FontAwesome name="star" size={16} color={theme.accent.primary} />
+                    ) : (
+                      <Feather name="star" size={16} color={theme.text.muted} />
+                    )}
                   </TouchableOpacity>
                   <TouchableOpacity
                     style={s.editBtn}

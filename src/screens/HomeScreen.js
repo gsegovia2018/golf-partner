@@ -16,6 +16,7 @@ import {
   roundPairLeaderboard, calcBestWorstBall, roundTotals,
   playerRoundBestWorstPoints,
   tournamentPlayerClinched, roundPairClinched,
+  isRoundComplete, subscribeTournamentChanges,
   DEFAULT_SETTINGS, generateInviteCode, setInviteRole,
 } from '../store/tournamentStore';
 
@@ -124,7 +125,8 @@ export default function HomeScreen({ navigation, route }) {
 
   useEffect(() => {
     const unsubscribe = navigation.addListener('focus', reload);
-    return unsubscribe;
+    const unsubStore = subscribeTournamentChanges(() => { reload(); });
+    return () => { unsubscribe(); unsubStore(); };
   }, [navigation, reload]);
 
   // Web deep-link: if the URL has ?invite=CODE, auto-open the Join screen
@@ -154,12 +156,27 @@ export default function HomeScreen({ navigation, route }) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [tournament?.currentRound]);
 
-  // Auto-push Tournament once on the first Home mount if there's an active
-  // tournament, so the back gesture / browser back can pop us to the list.
+  // Auto-push Tournament once on the first Home mount, but only if a round
+  // is actually in progress (some scores entered, not all holes complete).
+  // If the user's active tournament is finished or not yet started, stay
+  // on the list so they can pick what to do next. Back gesture / browser
+  // back still pops us here.
   useEffect(() => {
     if (viewMode !== 'list') return;
     if (hasAutoOpenedRef.current) return;
     if (!tournament) return;
+    const round = tournament.rounds?.[tournament.currentRound];
+    const players = tournament.players ?? [];
+    if (!round || !players.length) return;
+    const holeCount = round.holes?.length ?? 18;
+    const expected = players.length * holeCount;
+    let entered = 0;
+    for (const p of players) {
+      const ps = round.scores?.[p.id];
+      if (ps) entered += Object.keys(ps).length;
+    }
+    const inProgress = entered > 0 && entered < expected;
+    if (!inProgress) return;
     hasAutoOpenedRef.current = true;
     navigation.navigate('Tournament');
   }, [viewMode, tournament, navigation]);
@@ -482,7 +499,7 @@ export default function HomeScreen({ navigation, route }) {
             const rounds = t.rounds ?? [];
             const players = t.players ?? [];
             const isGameKind = t.kind === 'game';
-            const played = rounds.filter((r) => r.scores && Object.keys(r.scores).length > 0).length;
+            const played = rounds.filter((r) => isRoundComplete(r, players)).length;
             const totalRounds = rounds.length;
             const isActive = totalRounds > 0 && played < totalRounds;
             const courseName = isGameKind ? (rounds[0]?.courseName ?? '') : null;
@@ -620,7 +637,13 @@ export default function HomeScreen({ navigation, route }) {
           <TouchableOpacity onPress={goToList} style={s.backBtn} activeOpacity={0.7}>
             <Feather name="chevron-left" size={20} color={theme.accent.primary} />
           </TouchableOpacity>
-          <Text style={s.headerTitle} numberOfLines={1}>{tournament.name}</Text>
+          <Text
+            style={[s.headerTitle, tournament.name.length > 22 && s.headerTitleLong]}
+            numberOfLines={2}
+            ellipsizeMode="tail"
+          >
+            {tournament.name}
+          </Text>
         </View>
         <View style={s.headerActions}>
           {!isViewer && (
@@ -1357,12 +1380,13 @@ const makeStyles = (t) => StyleSheet.create({
 
   // Header
   header: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingHorizontal: 20, paddingTop: 16, paddingBottom: 12, backgroundColor: t.bg.primary },
-  headerLeft: { flexDirection: 'row', alignItems: 'center' },
-  headerActions: { flexDirection: 'row', gap: 8 },
+  headerLeft: { flexDirection: 'row', alignItems: 'center', flex: 1, minWidth: 0, paddingRight: 8 },
+  headerActions: { flexDirection: 'row', gap: 8, flexShrink: 0 },
   title: { fontFamily: 'PlayfairDisplay-Black', fontSize: 30, color: t.text.primary, letterSpacing: -0.5 },
   subtitle: { fontFamily: 'PlusJakartaSans-Regular', fontSize: 12, color: t.text.muted, marginTop: 2 },
-  backBtn: { flexDirection: 'row', alignItems: 'center' },
-  headerTitle: { fontFamily: 'PlayfairDisplay-Bold', fontSize: 20, color: t.text.primary, flexShrink: 1 },
+  backBtn: { flexDirection: 'row', alignItems: 'center', flexShrink: 0 },
+  headerTitle: { fontFamily: 'PlayfairDisplay-Bold', fontSize: 20, color: t.text.primary, flexShrink: 1, lineHeight: 24 },
+  headerTitleLong: { fontSize: 16, lineHeight: 20 },
   iconBtn: {
     width: 36, height: 36, borderRadius: 10,
     backgroundColor: t.isDark ? t.bg.secondary : t.bg.card,
