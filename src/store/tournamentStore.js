@@ -2,6 +2,7 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import { supabase } from '../lib/supabase';
 import { tournamentsIndex } from './tournamentsIndex';
 import { mergeTournaments } from './merge';
+import { isOnline } from '../lib/connectivity';
 
 const ACTIVE_ID_KEY = '@golf_active_id';
 const LEGACY_TOURNAMENTS_KEY = '@golf_tournaments';
@@ -102,31 +103,77 @@ export async function loadAllTournaments() {
   return sorted;
 }
 
-// Used by Home. Tries remote first; on failure, returns the last-known index
-// marked with `_stale: true` plus a `_openableIds` set for rendering
-// non-openable cards. Never throws.
-export async function loadAllTournamentsWithFallback() {
-  try {
-    const list = await loadAllTournaments();
-    return { list, stale: false, openableIds: null };
-  } catch (_) {
-    const [index, openable] = await Promise.all([
-      tournamentsIndex.readIndex(),
-      tournamentsIndex.getLocalBlobIds(),
-    ]);
+// Full offline list: union of blobs on disk + any index-only entries we
+// haven't locally opened yet. Prefers full blobs so rounds/scores render.
+async function _loadCachedFullList() {
+  const [index, blobIds] = await Promise.all([
+    tournamentsIndex.readIndex(),
+    tournamentsIndex.getLocalBlobIds(),
+  ]);
+  const indexById = new Map(index.map((row) => [row.id, row]));
+  const allIds = new Set([...indexById.keys(), ...blobIds]);
+  const rows = await Promise.all([...allIds].map(async (id) => {
+    const full = await readLocal(id);
+    const meta = indexById.get(id);
+    if (full) return { ...full, _role: meta?.role ?? full._role ?? null };
+    if (!meta) return null;
     return {
-      list: index.map((row) => ({
-        id: row.id,
-        name: row.name,
-        createdAt: row.createdAt,
-        _role: row.role,
-        updatedAt: row.updatedAt,
-        _stale: true,
-      })),
-      stale: true,
-      openableIds: new Set(openable),
+      id: meta.id,
+      name: meta.name,
+      createdAt: meta.createdAt,
+      _role: meta.role,
+      updatedAt: meta.updatedAt,
     };
+  }));
+  return rows.filter(Boolean).sort((a, b) => {
+    const ai = Number(a.id) || 0;
+    const bi = Number(b.id) || 0;
+    return bi - ai;
+  });
+}
+
+// A single transient Supabase error shouldn't paint the "Sin conexión"
+// banner — only flip to stale when the device is truly offline or after
+// repeated failures in a row.
+let _consecutiveListFailures = 0;
+const FAILURES_BEFORE_STALE = 2;
+
+// Used by Home. Tries remote when online; on failure falls back to cached
+// blobs. Never throws. Only marks `stale` (→ banner) when offline or after
+// repeated failures, so a single hiccup degrades silently instead of
+// flashing orange across every reload.
+export async function loadAllTournamentsWithFallback() {
+  if (isOnline()) {
+    try {
+      const list = await loadAllTournaments();
+      _consecutiveListFailures = 0;
+      return { list, stale: false, openableIds: null };
+    } catch (_) {
+      _consecutiveListFailures += 1;
+    }
   }
+  const stale = !isOnline() || _consecutiveListFailures >= FAILURES_BEFORE_STALE;
+  const [fullList, openable] = await Promise.all([
+    _loadCachedFullList(),
+    tournamentsIndex.getLocalBlobIds(),
+  ]);
+  return {
+    list: fullList,
+    stale,
+    openableIds: stale ? new Set(openable) : null,
+  };
+}
+
+// Fetch a single tournament row by id. Used by loadTournament's background
+// refresh so we don't pull the user's entire list just to merge one blob.
+async function fetchRemoteTournament(id) {
+  const { data, error } = await supabase
+    .from('tournaments')
+    .select('data')
+    .eq('id', id)
+    .maybeSingle();
+  if (error) throw error;
+  return data?.data ?? null;
 }
 
 export async function loadTournament() {
@@ -138,23 +185,29 @@ export async function loadTournament() {
     // Kick remote refresh in background; do not block the UI. LWW-merge
     // remote into the freshest local blob so we never clobber an
     // in-flight mutation whose sync hasn't landed yet — the overwrite
-    // path was erasing scores the moment they were entered.
-    loadAllTournaments()
-      .then(async (all) => {
-        const remote = all.find((t) => t.id === activeId);
-        if (!remote) return;
-        const latest = await readLocal(activeId);
-        const { merged } = mergeTournaments(latest ?? cached, remote);
-        await saveLocal(merged);
-      })
-      .catch(() => {});
+    // path was erasing scores the moment they were entered. Skip when
+    // offline to avoid stacking failed round-trips behind every focus.
+    if (isOnline()) {
+      fetchRemoteTournament(activeId)
+        .then(async (remote) => {
+          if (!remote) return;
+          const latest = await readLocal(activeId);
+          const { merged } = mergeTournaments(latest ?? cached, remote);
+          await saveLocal(merged);
+        })
+        .catch(() => {});
+    }
     return cached;
   }
 
-  const all = await loadAllTournaments();
-  const remote = all.find((t) => t.id === activeId) ?? null;
-  if (remote) await saveLocal(remote);
-  return remote;
+  if (!isOnline()) return null;
+  try {
+    const remote = await fetchRemoteTournament(activeId);
+    if (remote) await saveLocal(remote);
+    return remote;
+  } catch (_) {
+    return null;
+  }
 }
 
 const ACTIVE_TOURNAMENT_KEY = '@golf_tournament_'; // + id

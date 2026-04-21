@@ -19,6 +19,7 @@ import {
   isRoundComplete, subscribeTournamentChanges,
   DEFAULT_SETTINGS, generateInviteCode, setInviteRole,
 } from '../store/tournamentStore';
+import { subscribeConnectivity } from '../lib/connectivity';
 
 // Web-only CSS scroll-snap. See ScorecardScreen.js for the rationale:
 // RNW 0.21's `pagingEnabled` omits `scroll-snap-stop: always`, so a
@@ -101,21 +102,46 @@ export default function HomeScreen({ navigation, route }) {
   const [inviteRoleState, setInviteRoleState] = useState('editor');
   const [inviteLoading, setInviteLoading] = useState(false);
 
+  // Coalesce reload calls: `focus` and store-change emits can arrive in
+  // quick succession. Run them serially and squash consecutive triggers
+  // into a single trailing reload so we don't fan out overlapping
+  // network round-trips.
+  const reloadInFlight = useRef(null);
+  const reloadPending = useRef(false);
+  const hasLoadedOnceRef = useRef(false);
   const reload = useCallback(async () => {
-    setLoading(true);
-    try {
-      const [t, listResult] = await Promise.all([
-        loadTournament(),
-        loadAllTournamentsWithFallback(),
-      ]);
-      setTournament(t);
-      setAllTournaments(listResult.list);
-      setListStale(listResult.stale);
-      setOpenableIds(listResult.openableIds);
-      if (t) setSelectedRound(chooseInitialRound(t));
-    } finally {
-      setLoading(false);
+    if (reloadInFlight.current) {
+      reloadPending.current = true;
+      return reloadInFlight.current;
     }
+    const run = async () => {
+      // Only flash the splash on the first load. Subsequent reloads swap
+      // data in place to avoid flicker and perceived slowness.
+      if (!hasLoadedOnceRef.current) setLoading(true);
+      try {
+        const [t, listResult] = await Promise.all([
+          loadTournament(),
+          loadAllTournamentsWithFallback(),
+        ]);
+        setTournament(t);
+        setAllTournaments(listResult.list);
+        setListStale(listResult.stale);
+        setOpenableIds(listResult.openableIds);
+        if (t) setSelectedRound(chooseInitialRound(t));
+      } finally {
+        hasLoadedOnceRef.current = true;
+        setLoading(false);
+      }
+    };
+    const p = run().finally(() => {
+      reloadInFlight.current = null;
+      if (reloadPending.current) {
+        reloadPending.current = false;
+        reload();
+      }
+    });
+    reloadInFlight.current = p;
+    return p;
   }, []);
 
   const onRefresh = useCallback(async () => {
@@ -126,7 +152,17 @@ export default function HomeScreen({ navigation, route }) {
   useEffect(() => {
     const unsubscribe = navigation.addListener('focus', reload);
     const unsubStore = subscribeTournamentChanges(() => { reload(); });
-    return () => { unsubscribe(); unsubStore(); };
+    // Re-pull when the device comes back online so the orange "Sin
+    // conexión" banner clears on its own without forcing the user to
+    // navigate or pull-to-refresh. The first event fires the current
+    // state — ignore it so we don't double-load on mount (`focus`
+    // already triggers the initial reload).
+    let seenFirstConnEvent = false;
+    const unsubConn = subscribeConnectivity((online) => {
+      if (!seenFirstConnEvent) { seenFirstConnEvent = true; return; }
+      if (online) reload();
+    });
+    return () => { unsubscribe(); unsubStore(); unsubConn(); };
   }, [navigation, reload]);
 
   // Web deep-link: if the URL has ?invite=CODE, auto-open the Join screen
