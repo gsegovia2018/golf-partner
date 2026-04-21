@@ -30,6 +30,10 @@ async function drainLibrary(libraryMuts) {
     if (m.type === 'player.upsertLibrary') {
       await upsertPlayer({ id: m.playerId, name: m.name, handicap: m.handicap });
       await syncQueue.drop(entry.id);
+    } else {
+      // Unknown library-type mutation: drop so it can't sit in the queue
+      // forever pinning the sync dot to orange.
+      await syncQueue.drop(entry.id);
     }
   }
 }
@@ -51,11 +55,13 @@ async function drainTournament(tournamentId, entries) {
     await _appendConflicts(conflicts);
   }
 
+  // Push succeeded: every entry for this tournament is now reflected in
+  // the remote blob (either as the winner of its LWW cell or as a
+  // captured conflict). Drop them unconditionally; the previous ts-gate
+  // occasionally left entries stuck when `merged._meta[path]` didn't
+  // bump — those would linger and paint the dot orange permanently.
   for (const e of entries) {
-    const pathTs = merged._meta?.[e.path] ?? 0;
-    if (!e.path || (e.mutation.ts ?? 0) <= pathTs) {
-      await syncQueue.drop(e.id);
-    }
+    await syncQueue.drop(e.id);
   }
 }
 
@@ -90,8 +96,21 @@ async function drainOnce() {
   }
 }
 
+// "pending" should only mean "there's something waiting to sync".
+// Flipping the dot orange with an empty queue (because isOnline() lied
+// for a frame or NetInfo's first fetch hadn't resolved) is what keeps
+// users stuck in orange forever.
+async function _markPendingOrIdle() {
+  try {
+    const all = await syncQueue.all();
+    _setSyncStatus(all.length > 0 ? 'pending' : 'idle');
+  } catch (_) {
+    _setSyncStatus('idle');
+  }
+}
+
 export function scheduleSync() {
-  if (!isOnline()) { _setSyncStatus('pending'); return; }
+  if (!isOnline()) { _markPendingOrIdle(); return; }
   if (_running) return;
   if (_timer) { clearTimeout(_timer); _timer = null; }
 
@@ -116,5 +135,5 @@ export function retrySync() {
 // Auto-trigger on connectivity regain.
 subscribeConnectivity((online) => {
   if (online) retrySync();
-  else _setSyncStatus('pending');
+  else _markPendingOrIdle();
 });
