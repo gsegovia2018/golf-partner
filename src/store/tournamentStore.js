@@ -316,12 +316,34 @@ export async function deleteTournament(id) {
 
 export const STANDARD_SLOPE = 113;
 
-// Course playing handicap = index × slope / 113 (rounded). No slope → raw index.
-export function calcPlayingHandicap(index, slope) {
+// Sum hole pars; used as the "Par" term in the WHS course-handicap formula.
+export function totalParFromHoles(holes) {
+  if (!Array.isArray(holes)) return 0;
+  return holes.reduce((sum, h) => sum + (parseInt(h?.par, 10) || 0), 0);
+}
+
+// WHS course handicap: HI × (slope/113) + (CR − par), rounded.
+// No slope → raw index (can't compute either term meaningfully).
+// Missing CR or par → slope-only fallback.
+export function calcPlayingHandicap(index, slope, rating, par) {
   const idx = parseInt(index, 10) || 0;
   const sv = parseInt(slope, 10) || 0;
   if (sv <= 0) return idx;
-  return Math.round(idx * (sv / STANDARD_SLOPE));
+  const slopeAdj = idx * (sv / STANDARD_SLOPE);
+  const cr = parseFloat(rating);
+  const pv = parseInt(par, 10) || 0;
+  const crAdj = (Number.isFinite(cr) && pv > 0) ? (cr - pv) : 0;
+  return Math.round(slopeAdj + crAdj);
+}
+
+// Convenience: derive a player's auto playing handicap for a given round.
+export function deriveRoundPlayingHandicap(handicap, round) {
+  return calcPlayingHandicap(
+    handicap,
+    round?.slope,
+    round?.courseRating,
+    totalParFromHoles(round?.holes),
+  );
 }
 
 // Ensure every current player has an entry in round.playerHandicaps. Missing
@@ -333,7 +355,7 @@ export function normalizeRoundHandicaps(round, players) {
   const manualHandicaps = { ...(round.manualHandicaps ?? {}) };
   const hasLegacyFlags = round.manualHandicaps != null;
   players.forEach((p) => {
-    const auto = calcPlayingHandicap(p.handicap, round.slope);
+    const auto = deriveRoundPlayingHandicap(p.handicap, round);
     const current = playerHandicaps[p.id];
     if (current == null) {
       playerHandicaps[p.id] = auto;
@@ -350,7 +372,7 @@ export function normalizeRoundHandicaps(round, players) {
 export function getPlayingHandicap(round, player) {
   const stored = round.playerHandicaps?.[player.id];
   if (stored != null) return Number(stored);
-  return calcPlayingHandicap(player.handicap, round.slope);
+  return deriveRoundPlayingHandicap(player.handicap, round);
 }
 
 // Recompute playerHandicaps for non-manual entries when base index or slope
@@ -360,7 +382,7 @@ export function recomputeRoundPlayingHandicaps(round, players) {
   const manual = round.manualHandicaps ?? {};
   players.forEach((p) => {
     if (manual[p.id]) return;
-    playerHandicaps[p.id] = calcPlayingHandicap(p.handicap, round.slope);
+    playerHandicaps[p.id] = deriveRoundPlayingHandicap(p.handicap, round);
   });
   return { ...round, playerHandicaps };
 }
@@ -398,10 +420,10 @@ export async function propagatePlayerToTournaments(playerId, { name, handicap })
   return updatedIds;
 }
 
-// Push a course library edit (slope/holes) into every tournament round that
-// references this courseId. Holes are deep-copied per round. Non-manual
-// playing handicaps are re-derived from the new slope.
-export async function propagateCourseToTournaments(courseId, { slope, holes }) {
+// Push a course library edit (slope/rating/holes) into every tournament round
+// that references this courseId. Holes are deep-copied per round. Non-manual
+// playing handicaps are re-derived from the new slope + course rating.
+export async function propagateCourseToTournaments(courseId, { slope, rating, holes }) {
   if (!courseId) return [];
   const tournaments = await loadAllTournaments();
   const updatedIds = [];
@@ -414,6 +436,7 @@ export async function propagateCourseToTournaments(courseId, { slope, holes }) {
         ...round,
         holes: holes.map((h) => ({ ...h })),
         slope: slope ?? null,
+        courseRating: rating ?? null,
       };
       return recomputeRoundPlayingHandicaps(nextRound, t.players);
     });
@@ -508,7 +531,11 @@ export function randomPairs(players) {
 }
 
 export const DEFAULT_SETTINGS = {
-  scoringMode: 'stableford', // 'stableford' | 'bestball'
+  // 'individual' = Stableford ranked per player (each player's own pair)
+  // 'stableford' = Stableford with random partners (pair total wins the round)
+  // 'matchplay'  = 2-player hole-by-hole match
+  // 'bestball'   = 4-player best-ball / worst-ball pair points
+  scoringMode: 'stableford',
   bestBallValue: 1,          // points awarded per hole won in best ball match
   worstBallValue: 1,         // points awarded per hole won in worst ball match
 };

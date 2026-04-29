@@ -104,5 +104,24 @@ export function mergeTournaments(local, remote) {
   }
 
   merged._meta = mergedMeta;
+
+  // Apply structural deletion tombstones. Path-based LWW alone can't tell
+  // "round was deleted" from "round was never written" — without a tombstone,
+  // the next remote refresh deepClones remote's full rounds list and silently
+  // resurrects anything the user removed. We stamp `rounds.<id>._deleted` in
+  // _meta when a deletion mutation runs; here we drop those rounds from the
+  // merged result. Tombstones are kept in _meta so subsequent merges still
+  // honor the deletion.
+  if (Array.isArray(merged.rounds) && merged.rounds.length > 0) {
+    const tombstoned = new Set();
+    for (const path of Object.keys(mergedMeta)) {
+      const m = path.match(/^rounds\.([^.]+)\._deleted$/);
+      if (m) tombstoned.add(m[1]);
+    }
+    if (tombstoned.size > 0) {
+      merged.rounds = merged.rounds.filter((r) => !tombstoned.has(r?.id));
+    }
+  }
+
   return { merged, conflicts };
 }

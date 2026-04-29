@@ -43,6 +43,10 @@ export default function SetupScreen({ navigation, route }) {
 
   const bestBallAllowed = !isGame || players.length === 4;
   const matchPlayAllowed = players.length === 2;
+  // Individual Stableford ranks every player solo and is available whenever
+  // there are at least 2 players; for solo (1 player) the Scoring section
+  // is hidden entirely.
+  const individualAllowed = players.length >= 2;
 
   useEffect(() => {
     if (!bestBallAllowed && settings.scoringMode === 'bestball') {
@@ -51,7 +55,10 @@ export default function SetupScreen({ navigation, route }) {
     if (!matchPlayAllowed && settings.scoringMode === 'matchplay') {
       setSettings((prev) => ({ ...prev, scoringMode: 'stableford' }));
     }
-  }, [bestBallAllowed, matchPlayAllowed, settings.scoringMode]);
+    if (!individualAllowed && settings.scoringMode === 'individual') {
+      setSettings((prev) => ({ ...prev, scoringMode: 'stableford' }));
+    }
+  }, [bestBallAllowed, matchPlayAllowed, individualAllowed, settings.scoringMode]);
 
   useFocusEffect(useCallback(() => {
     let cancelled = false;
@@ -103,6 +110,7 @@ export default function SetupScreen({ navigation, route }) {
               // library's in-memory hole objects.
               holes: course.holes.map((h) => ({ ...h })),
               slope: course.slope,
+              courseRating: course.rating ?? null,
               playerHandicaps: null,
             };
             if (idx < next.length) {
@@ -122,12 +130,12 @@ export default function SetupScreen({ navigation, route }) {
     return () => { cancelled = true; };
   }, []));
 
-  const handleHolesSaved = useCallback((roundIndex, holes, slope, playerHandicaps, manualHandicaps) => {
+  const handleHolesSaved = useCallback((roundIndex, holes, slope, courseRating, playerHandicaps, manualHandicaps) => {
     setRounds((prev) => {
       const next = [...prev];
       next[roundIndex] = {
         ...next[roundIndex],
-        holes, slope, playerHandicaps,
+        holes, slope, courseRating, playerHandicaps,
         manualHandicaps: { ...(manualHandicaps ?? {}) },
       };
       return next;
@@ -150,7 +158,7 @@ export default function SetupScreen({ navigation, route }) {
   }
 
   function addRound() {
-    setRounds((prev) => [...prev, { courseName: '', holes: defaultHoles(), slope: null, playerHandicaps: null, manualHandicaps: {} }]);
+    setRounds((prev) => [...prev, { courseName: '', holes: defaultHoles(), slope: null, courseRating: null, playerHandicaps: null, manualHandicaps: {} }]);
   }
 
   function removeRound(index) {
@@ -167,11 +175,15 @@ export default function SetupScreen({ navigation, route }) {
       return;
     }
 
-    // Match play uses solo-pairs ([[p1], [p2]]) so the best-ball math treats
-    // each player as their own "pair" and compares 1-vs-1 per hole.
+    // Match play and Individual Stableford both use solo-pairs
+    // ([[p1], [p2], …]) so the existing pair-based leaderboard / best-ball
+    // math naturally treats each player as their own "pair" and ranks them
+    // 1-vs-1 (match play) or by individual points (individual stableford).
     const isMatchPlay = settings.scoringMode === 'matchplay';
+    const isIndividual = settings.scoringMode === 'individual';
     const buildPairs = () => {
       if (isMatchPlay && players.length === 2) return [[players[0]], [players[1]]];
+      if (isIndividual) return players.map((p) => [p]);
       return randomPairs(players);
     };
 
@@ -184,6 +196,7 @@ export default function SetupScreen({ navigation, route }) {
         courseName: r.courseName.trim(),
         holes: r.holes,
         slope: r.slope ?? null,
+        courseRating: r.courseRating ?? null,
         playerHandicaps,
         manualHandicaps: { ...(r.manualHandicaps ?? {}) },
         notes: '',
@@ -208,7 +221,10 @@ export default function SetupScreen({ navigation, route }) {
 
     try {
       await saveTournament(tournament);
-      navigation.replace('Home');
+      // saveTournament marks the new tournament active, so jumping straight
+      // to the Tournament view (Game menu) lands the user on what they just
+      // created instead of bouncing back to the Home list.
+      navigation.replace('Tournament');
     } catch (err) {
       const msg = err?.message ?? 'Could not create tournament';
       if (Platform.OS === 'web') window.alert(msg);
@@ -320,6 +336,7 @@ export default function SetupScreen({ navigation, route }) {
                         onSave: handleHolesSaved,
                         players: players,
                         initialSlope: r.slope,
+                        initialCourseRating: r.courseRating ?? null,
                         initialPlayerHandicaps: r.playerHandicaps,
                         initialManualHandicaps: r.manualHandicaps ?? {},
                         courseId: r.courseId ?? null,
@@ -352,17 +369,22 @@ export default function SetupScreen({ navigation, route }) {
           <Text style={s.sectionTitle}>Scoring</Text>
           <View style={s.modeRow}>
             {(() => {
-              // Mode options depend on player count: 2 players get Stableford +
-              // Match Play; 3 players get only Stableford; 4 players get
-              // Stableford + Best Ball.
+              // Mode options depend on player count:
+              //   2 players: Individual + Stableford (random partners) + Match Play
+              //   3 players: Individual + Stableford (random partners)
+              //   4 players: Individual + Stableford (random partners) + Best Ball
               const availableModes = matchPlayAllowed
-                ? ['stableford', 'matchplay']
-                : ['stableford', 'bestball'];
+                ? ['individual', 'stableford', 'matchplay']
+                : ['individual', 'stableford', 'bestball'];
               return availableModes.map((mode) => {
                 const disabled = mode === 'bestball' && !bestBallAllowed;
-                const label = mode === 'stableford' ? 'Individual Stableford'
+                const label = mode === 'individual' ? 'Stableford'
+                  : mode === 'stableford' ? 'Stableford with Partners'
                   : mode === 'matchplay' ? 'Match Play'
                   : 'Best Ball / Worst Ball';
+                const subtitle = mode === 'individual' ? 'Highest points wins'
+                  : mode === 'stableford' ? 'Random partners each round'
+                  : null;
                 return (
                   <TouchableOpacity
                     key={mode}
@@ -373,6 +395,11 @@ export default function SetupScreen({ navigation, route }) {
                     <Text style={[s.modeBtnText, settings.scoringMode === mode && s.modeBtnTextActive]}>
                       {label}
                     </Text>
+                    {subtitle && !disabled && (
+                      <Text style={[s.modeBtnText, { fontSize: 11, marginTop: 4, color: settings.scoringMode === mode ? theme.text.inverse : theme.text.muted }]}>
+                        {subtitle}
+                      </Text>
+                    )}
                     {disabled && (
                       <Text style={[s.modeBtnText, { fontSize: 11, marginTop: 4, color: theme.text.muted }]}>
                         Requires 4 players

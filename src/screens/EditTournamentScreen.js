@@ -9,7 +9,7 @@ import { Feather } from '@expo/vector-icons';
 import { useTheme } from '../theme/ThemeContext';
 import {
   loadTournament, saveTournament, subscribeTournamentChanges, DEFAULT_SETTINGS, randomPairs,
-  calcPlayingHandicap, normalizeRoundHandicaps,
+  deriveRoundPlayingHandicap, normalizeRoundHandicaps, readLocal,
 } from '../store/tournamentStore';
 import { mutate } from '../store/mutate';
 
@@ -110,7 +110,14 @@ export default function EditTournamentScreen({ navigation }) {
       // the relevant _meta paths are stamped for LWW merge. The rest of the
       // tournament (players, settings, notes, etc.) rides on the saveTournament
       // call below, which is offline-safe since Task 5.
-      let t = tournamentRef.current;
+      //
+      // Re-read the freshest local snapshot so any out-of-band mutations
+      // (e.g. a round.remove fired by removeRound just before this timer)
+      // are preserved in the spread below. Without this, the spread of
+      // tournamentRef would drop their _meta tombstones and the deletion
+      // would be undone on the next merge.
+      const baseId = tournamentRef.current?.id;
+      let t = (baseId && (await readLocal(baseId))) || tournamentRef.current;
       for (const r of builtRounds) {
         const prevRound = t.rounds.find((pr) => pr.id === r.id);
         if (!prevRound) continue;
@@ -134,13 +141,14 @@ export default function EditTournamentScreen({ navigation }) {
     }, 400);
   }, [players, rounds, settings]);
 
-  const handleHolesSaved = useCallback((roundIndex, holes, slope, playerHandicaps, manualHandicaps) => {
+  const handleHolesSaved = useCallback((roundIndex, holes, slope, courseRating, playerHandicaps, manualHandicaps) => {
     setRounds((prev) => {
       const next = [...prev];
       next[roundIndex] = {
         ...next[roundIndex],
         holes,
         slope,
+        courseRating,
         // CourseEditor returns numbers; convert to strings for our inputs
         playerHandicaps: Object.fromEntries(
           Object.entries(playerHandicaps).map(([id, v]) => [id, String(v)]),
@@ -162,8 +170,7 @@ export default function EditTournamentScreen({ navigation }) {
     const parsedIndex = parseInt(value, 10) || 0;
     setRounds((prev) => prev.map((r) => {
       if (r.manualHandicaps?.[playerId]) return r;
-      const slopeNum = parseInt(r.slope, 10) || 0;
-      const derived = calcPlayingHandicap(parsedIndex, slopeNum);
+      const derived = deriveRoundPlayingHandicap(parsedIndex, r);
       return {
         ...r,
         playerHandicaps: { ...r.playerHandicaps, [playerId]: String(derived) },
@@ -182,21 +189,55 @@ export default function EditTournamentScreen({ navigation }) {
   function addRound() {
     setRounds((prev) => {
       const builtPlayers = players.map((p) => ({ ...p, handicap: parseInt(p.handicap, 10) || 0 }));
+      // Match each tournament's pair structure: individual stableford + 2-
+      // player match play use solo-pairs; everything else gets random
+      // partners. Without this an individual tournament would suddenly
+      // sprout random partners on its added round.
+      const mode = settings?.scoringMode;
+      const pairs = mode === 'individual'
+        ? builtPlayers.map((p) => [p])
+        : (mode === 'matchplay' && builtPlayers.length === 2)
+          ? [[builtPlayers[0]], [builtPlayers[1]]]
+          : randomPairs(builtPlayers);
       const newRound = {
         id: `r${Date.now()}`,
         courseName: '',
         holes: defaultHoles(),
         slope: null,
+        courseRating: null,
         playerHandicaps: Object.fromEntries(builtPlayers.map((p) => [p.id, String(p.handicap)])),
         manualHandicaps: {},
-        pairs: randomPairs(builtPlayers),
+        pairs,
         scores: {},
       };
       return [...prev, newRound];
     });
   }
 
-  function removeRound(index) {
+  async function removeRound(index) {
+    const target = rounds[index];
+    // Persist the deletion through mutate() so a `rounds.<id>._deleted`
+    // tombstone lands in _meta. Without it the next loadTournament merge
+    // would deepClone the still-present remote round back into local state.
+    if (target?.id && tournamentRef.current) {
+      try {
+        const updated = await mutate(tournamentRef.current, {
+          type: 'round.remove',
+          roundId: target.id,
+        });
+        tournamentRef.current = updated;
+        // Skip the next debounced save: mutate already wrote local + queued
+        // the sync, and the spread in the save effect would otherwise echo
+        // the deletion as a redundant write.
+        skipNextSaveRef.current = true;
+        setTournament(updated);
+      } catch (_) {
+        // Fall through to local-only filter so the UI still updates; the
+        // debounced save will then push a truncated rounds list (without a
+        // tombstone, so the historical bug shape can recur). This branch is
+        // only hit if mutate itself throws, which is rare.
+      }
+    }
     setRounds((prev) => prev.filter((_, i) => i !== index));
   }
 
@@ -313,6 +354,7 @@ export default function EditTournamentScreen({ navigation }) {
                     courseName: r.courseName,
                     initialHoles: r.holes,
                     initialSlope: r.slope,
+                    initialCourseRating: r.courseRating ?? null,
                     initialPlayerHandicaps: Object.fromEntries(
                       Object.entries(r.playerHandicaps ?? {}).map(([id, v]) => [id, parseInt(v, 10) || 0]),
                     ),

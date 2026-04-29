@@ -54,7 +54,7 @@ export default function CourseLibraryDetailScreen({ navigation, route }) {
     try {
       await upsertCourse({ id: courseId, name: name.trim(), slope: slope || null, rating: rating || null, city, province });
       await saveCourseHoles(courseId, holes);
-      await propagateCourseToTournaments(courseId, { slope: slope || null, holes });
+      await propagateCourseToTournaments(courseId, { slope: slope || null, rating: rating || null, holes });
       navigation.goBack();
     } catch (e) {
       Alert.alert('Error', e.message);

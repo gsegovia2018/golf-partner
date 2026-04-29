@@ -13,6 +13,9 @@ function metaPathFor(m) {
         : `rounds.${m.roundId}.notes.round`;
     case 'pairs.set':    return `rounds.${m.roundId}.pairs`;
     case 'handicap.set': return `rounds.${m.roundId}.playerHandicaps.${m.playerId}`;
+    // Structural round deletion: tombstone path consumed by mergeTournaments
+    // so the round stays gone after the next remote refresh.
+    case 'round.remove': return `rounds.${m.roundId}._deleted`;
     // Players array LWW's as a single unit. Two concurrent offline adds
     // from different devices → last sync wins; this edge case is out of v1
     // scope per the spec's conflict section.
@@ -63,6 +66,10 @@ function applyToTournament(t, m) {
     }
     case 'tournament.addPlayer': {
       t.players = [...(t.players ?? []), m.player];
+      break;
+    }
+    case 'round.remove': {
+      t.rounds = (t.rounds ?? []).filter((r) => r.id !== m.roundId);
       break;
     }
     default:

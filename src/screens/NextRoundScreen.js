@@ -42,6 +42,19 @@ export default function NextRoundScreen({ navigation, route }) {
   const phaseRef = useRef('initial');
   useEffect(() => { phaseRef.current = phase; }, [phase]);
 
+  // Individual Stableford and Match Play don't use random partners — every
+  // player is their own "pair" so the existing pair-based scorecard /
+  // leaderboard machinery ranks them solo. Build single-member pairs for
+  // those modes; everything else still randomises partners each round.
+  const buildPairsForRound = (t) => {
+    const mode = t?.settings?.scoringMode;
+    if (mode === 'individual') return t.players.map((p) => [p]);
+    if (mode === 'matchplay' && t.players.length === 2) {
+      return [[t.players[0]], [t.players[1]]];
+    }
+    return randomPairs(t.players);
+  };
+
   useEffect(() => {
     let cancelled = false;
     async function load({ initial }) {
@@ -54,7 +67,7 @@ export default function NextRoundScreen({ navigation, route }) {
         return;
       }
       if (revealOnly) setNextPairs(t.rounds[paramRoundIndex].pairs);
-      else setNextPairs(randomPairs(t.players));
+      else setNextPairs(buildPairsForRound(t));
     }
     load({ initial: true });
     const unsub = subscribeTournamentChanges(() => load({ initial: false }));
@@ -125,7 +138,10 @@ export default function NextRoundScreen({ navigation, route }) {
   }
 
   async function reshuffle() {
-    const newPairs = randomPairs(tournament.players);
+    // Individual / match-play tournaments have nothing to reshuffle — every
+    // pair has one player. Re-running buildPairsForRound keeps the structure
+    // valid (same solo-pairs) so the button is a no-op rather than a crash.
+    const newPairs = buildPairsForRound(tournament);
     setNextPairs(newPairs);
     if (revealOnly) {
       const updated = { ...tournament };

@@ -70,11 +70,14 @@ export async function deleteCourse(id) {
   if (error) throw error;
 }
 
-// Called from CourseEditorScreen to sync slope+holes back to the library
-export async function updateCourseFromEditor(courseId, slope, holes) {
+// Called from CourseEditorScreen to sync slope+rating+holes back to the library
+export async function updateCourseFromEditor(courseId, slope, rating, holes) {
   const { error } = await supabase
     .from('courses')
-    .update({ slope: slope ? parseInt(slope, 10) : null })
+    .update({
+      slope: slope ? parseInt(slope, 10) : null,
+      rating: rating ? parseFloat(rating) : null,
+    })
     .eq('id', courseId);
   if (error) throw error;
   await saveCourseHoles(courseId, holes);

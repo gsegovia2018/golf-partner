@@ -24,7 +24,8 @@ export default function CourseEditorScreen({ navigation, route }) {
 
   const {
     roundIndex, courseName,
-    initialHoles, initialSlope, initialPlayerHandicaps, initialManualHandicaps,
+    initialHoles, initialSlope, initialCourseRating,
+    initialPlayerHandicaps, initialManualHandicaps,
     courseId,
     players = [],
     onSave,
@@ -34,6 +35,9 @@ export default function CourseEditorScreen({ navigation, route }) {
     initialHoles?.length === 18 ? initialHoles.map((h) => ({ ...h })) : defaultHoles(),
   );
   const [slope, setSlope] = useState(initialSlope ? String(initialSlope) : '');
+  const [courseRating, setCourseRating] = useState(
+    initialCourseRating != null && initialCourseRating !== '' ? String(initialCourseRating) : '',
+  );
 
   // playerHandicaps: { [playerId]: string } — editable overrides
   const [playerHandicaps, setPlayerHandicaps] = useState(() => {
@@ -52,27 +56,72 @@ export default function CourseEditorScreen({ navigation, route }) {
   const onSaveRef = useRef(onSave);
   useEffect(() => { onSaveRef.current = onSave; }, [onSave]);
 
+  // On mount: if slope is already set (e.g. opened from a saved round), align
+  // non-manual players' playing handicaps with the current slope+CR. Without
+  // this the input keeps showing stale values stored before slope/CR were
+  // applied to the round.
+  useEffect(() => {
+    const sv = parseInt(slope, 10) || 0;
+    if (sv <= 0) return;
+    const par = holes.reduce((sum, h) => sum + (h.par || 0), 0);
+    const cr = parseFloat(courseRating);
+    const crForCalc = Number.isFinite(cr) ? cr : null;
+    setPlayerHandicaps((prev) => {
+      const next = { ...prev };
+      let changed = false;
+      players.forEach((p) => {
+        if (manualHandicaps[p.id]) return;
+        const auto = String(calcPlayingHandicap(p.handicap, sv, crForCalc, par));
+        if (next[p.id] !== auto) {
+          next[p.id] = auto;
+          changed = true;
+        }
+      });
+      return changed ? next : prev;
+    });
+    // Run only on mount.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
   useEffect(() => {
     if (isFirstRender.current) { isFirstRender.current = false; return; }
     const parsedHandicaps = {};
     players.forEach((p) => { parsedHandicaps[p.id] = parseInt(playerHandicaps[p.id], 10) || 0; });
-    onSaveRef.current(roundIndex, holes, parseInt(slope, 10) || null, parsedHandicaps, manualHandicaps);
-  }, [holes, slope, playerHandicaps, manualHandicaps]);
+    const parsedRating = parseFloat(courseRating);
+    onSaveRef.current(
+      roundIndex,
+      holes,
+      parseInt(slope, 10) || null,
+      Number.isFinite(parsedRating) ? parsedRating : null,
+      parsedHandicaps,
+      manualHandicaps,
+    );
+  }, [holes, slope, courseRating, playerHandicaps, manualHandicaps]);
 
-  function applySlope(rawSlope) {
-    setSlope(rawSlope);
-    const sv = parseInt(rawSlope, 10);
+  function recomputeAuto(nextSlope, nextRating) {
+    const sv = parseInt(nextSlope, 10);
     if (!sv || sv <= 0) return;
+    const par = holes.reduce((sum, h) => sum + (h.par || 0), 0);
     setPlayerHandicaps((prev) => {
       const next = { ...prev };
       players.forEach((p) => {
-        next[p.id] = String(calcPlayingHandicap(p.handicap, sv));
+        next[p.id] = String(calcPlayingHandicap(p.handicap, sv, nextRating, par));
       });
       return next;
     });
-    // Applying the slope is an explicit "recompute from slope" action — any
-    // prior manual overrides are cleared so Fix A / Fix B can cascade.
+    // Recompute is an explicit action — clear manual overrides so the new
+    // slope/CR cascade to every player.
     setManualHandicaps({});
+  }
+
+  function applySlope(rawSlope) {
+    setSlope(rawSlope);
+    recomputeAuto(rawSlope, courseRating);
+  }
+
+  function applyRating(rawRating) {
+    setCourseRating(rawRating);
+    recomputeAuto(slope, rawRating);
   }
 
   function setPar(holeIndex, par) {
@@ -93,6 +142,8 @@ export default function CourseEditorScreen({ navigation, route }) {
 
   const totalPar = holes.reduce((sum, h) => sum + h.par, 0);
   const slopeNum = parseInt(slope, 10) || 0;
+  const ratingNum = parseFloat(courseRating);
+  const ratingForCalc = Number.isFinite(ratingNum) ? ratingNum : null;
 
   return (
     <SafeAreaView style={s.screen} edges={['top', 'bottom']}>
@@ -111,7 +162,7 @@ export default function CourseEditorScreen({ navigation, route }) {
           <Text style={s.subtitle}>Total par: {totalPar}</Text>
         </View>
 
-        {/* Slope */}
+        {/* Slope + Course Rating */}
         <View style={s.slopeCard}>
           <View style={s.slopeRow}>
             <Text style={s.slopeLabel}>Course Slope</Text>
@@ -128,6 +179,21 @@ export default function CourseEditorScreen({ navigation, route }) {
             />
             <Text style={s.slopeHint}>std 113</Text>
           </View>
+          <View style={[s.slopeRow, { marginTop: 12 }]}>
+            <Text style={s.slopeLabel}>Course Rating</Text>
+            <TextInput
+              style={s.slopeInput}
+              keyboardType="decimal-pad"
+              maxLength={5}
+              placeholder="e.g. 71.5"
+              placeholderTextColor={theme.text.muted}
+              keyboardAppearance={theme.isDark ? 'dark' : 'light'}
+              selectionColor={theme.accent.primary}
+              value={courseRating}
+              onChangeText={applyRating}
+            />
+            <Text style={s.slopeHint}>par {totalPar}</Text>
+          </View>
         </View>
 
         {/* Per-player playing handicaps */}
@@ -136,11 +202,13 @@ export default function CourseEditorScreen({ navigation, route }) {
             <Text style={s.sectionTitle}>Playing Handicaps</Text>
             {slopeNum > 0 && (
               <Text style={s.hcpHint}>
-                Auto-calculated from slope -- tap to override
+                Auto-calculated from slope & CR -- tap to override
               </Text>
             )}
             {players.map((p) => {
-              const auto = slopeNum > 0 ? calcPlayingHandicap(p.handicap, slopeNum) : null;
+              const auto = slopeNum > 0
+                ? calcPlayingHandicap(p.handicap, slopeNum, ratingForCalc, totalPar)
+                : null;
               const current = parseInt(playerHandicaps[p.id], 10);
               const isDifferent = auto !== null && current !== auto;
               return (
@@ -213,7 +281,7 @@ export default function CourseEditorScreen({ navigation, route }) {
             style={s.btn}
             onPress={async () => {
               if (courseId) {
-                try { await updateCourseFromEditor(courseId, slope, holes); } catch (_) {}
+                try { await updateCourseFromEditor(courseId, slope, courseRating, holes); } catch (_) {}
               }
               navigation.goBack();
             }}

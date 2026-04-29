@@ -21,6 +21,7 @@ import {
   DEFAULT_SETTINGS, generateInviteCode, setInviteRole,
 } from '../store/tournamentStore';
 import { subscribeConnectivity } from '../lib/connectivity';
+import { getShowRunningScore, setShowRunningScore } from '../lib/prefs';
 
 // Web-only CSS scroll-snap. See ScorecardScreen.js for the rationale:
 // RNW 0.21's `pagingEnabled` omits `scroll-snap-stop: always`, so a
@@ -102,6 +103,21 @@ export default function HomeScreen({ navigation, route }) {
   const [inviteCode, setInviteCode] = useState('');
   const [inviteRoleState, setInviteRoleState] = useState('editor');
   const [inviteLoading, setInviteLoading] = useState(false);
+  // Shares the same persisted preference as ScorecardScreen so that hiding
+  // running totals follows the user across screens.
+  const [showRunning, setShowRunningState] = useState(true);
+  useEffect(() => {
+    let cancelled = false;
+    getShowRunningScore().then((v) => { if (!cancelled) setShowRunningState(v); }).catch(() => {});
+    return () => { cancelled = true; };
+  }, []);
+  const toggleRunning = useCallback(() => {
+    setShowRunningState((v) => {
+      const next = !v;
+      setShowRunningScore(next).catch(() => {});
+      return next;
+    });
+  }, []);
 
   // Coalesce reload calls: `focus` and store-change emits can arrive in
   // quick succession. Run them serially and squash consecutive triggers
@@ -202,6 +218,11 @@ export default function HomeScreen({ navigation, route }) {
     if (viewMode !== 'list') return;
     if (hasAutoOpenedRef.current) return;
     if (!tournament) return;
+    // Background subscription updates can fire this effect while the user
+    // is on a deeper screen (e.g. Scorecard). Auto-pushing then pops the
+    // user out of their current screen — symptom: the first score on a
+    // fresh round bounced you back to the tournament page.
+    if (!navigation.isFocused()) return;
     const round = tournament.rounds?.[tournament.currentRound];
     const players = tournament.players ?? [];
     if (!round || !players.length) return;
@@ -710,6 +731,14 @@ export default function HomeScreen({ navigation, route }) {
           >
             <Feather name="image" size={18} color={theme.accent.primary} />
           </TouchableOpacity>
+          <TouchableOpacity
+            style={s.iconBtn}
+            onPress={toggleRunning}
+            activeOpacity={0.7}
+            accessibilityLabel={showRunning ? 'Hide running scores' : 'Show running scores'}
+          >
+            <Feather name={showRunning ? 'eye-off' : 'eye'} size={18} color={theme.accent.primary} />
+          </TouchableOpacity>
           <TouchableOpacity style={s.iconBtn} onPress={() => setShowSettings(true)} activeOpacity={0.7}>
             <Feather name="settings" size={18} color={theme.accent.primary} />
           </TouchableOpacity>
@@ -757,23 +786,37 @@ export default function HomeScreen({ navigation, route }) {
                   <Text style={[s.mastersName, i === 0 && { fontFamily: 'PlusJakartaSans-Bold' }]} numberOfLines={1}>
                     {entry.player.name}
                   </Text>
-                  {entry.player.id === tournamentClinchedId && (
+                  {showRunning && entry.player.id === tournamentClinchedId && (
                     <Feather name="award" size={12} color="#ffd700" />
                   )}
                 </View>
                 <Text style={s.mastersRoundSub}>
-                  R{selectedRound + 1} · {roundValue == null ? '—' : `${roundValue} ${roundUnit}`}
+                  R{selectedRound + 1} · {!showRunning ? '—' : roundValue == null ? '—' : `${roundValue} ${roundUnit}`}
                 </Text>
               </View>
-              <Text style={[s.mastersPoints, i === 0 && { fontSize: 18 }]}>{entry.points} pts</Text>
-              <Text style={s.mastersSub}>{strokes || '-'} str</Text>
+              <Text style={[s.mastersPoints, i === 0 && { fontSize: 18 }]}>{showRunning ? `${entry.points} pts` : '—'}</Text>
+              <Text style={s.mastersSub}>{showRunning ? `${strokes || '-'} str` : ''}</Text>
             </View>
           );
         })}
       </View>
       )}
 
-      {tournament.rounds.length > 0 && (
+      {tournament.rounds.length > 0 && isGame && tournament.rounds.length === 1
+        && settings.scoringMode !== 'matchplay' && settings.scoringMode !== 'bestball' && (
+        <GameOverviewCard
+          round={tournament.rounds[0]}
+          players={tournament.players}
+          settings={settings}
+          theme={theme}
+          s={s}
+          onOpenEdit={isViewer ? null : openRoundEdit}
+          showRunning={showRunning}
+        />
+      )}
+
+      {tournament.rounds.length > 0 && !(isGame && tournament.rounds.length === 1
+        && settings.scoringMode !== 'matchplay' && settings.scoringMode !== 'bestball') && (
         <View style={s.card}>
           <View style={s.cardTitleRow}>
             <View style={s.cardTitleLeft}>
@@ -856,6 +899,7 @@ export default function HomeScreen({ navigation, route }) {
                 onGoToRound={goToRound}
                 onOpenEdit={isViewer ? null : openRoundEdit}
                 isSingleRound
+                showRunning={showRunning}
               />
             ) : (
               <ScrollView
@@ -923,6 +967,7 @@ export default function HomeScreen({ navigation, route }) {
                     onGoToRound={goToRound}
                     onOpenEdit={isViewer ? null : openRoundEdit}
                     isSingleRound={tournament.rounds.length === 1}
+                    showRunning={showRunning}
                   />
                 ))}
               </ScrollView>
@@ -1070,6 +1115,12 @@ export default function HomeScreen({ navigation, route }) {
           <Text style={s.modalTitle}>Round {selectedRound + 1}</Text>
 
           {(() => {
+            // Individual + match-play tournaments have nothing to "team up" —
+            // every pair is one player — so Edit/Reveal Teams is meaningless
+            // and EditTeamsScreen's slot UI doesn't fit single-member pairs.
+            const mode = settings?.scoringMode;
+            const usesTeams = mode !== 'individual' && mode !== 'matchplay' && tournament.players.length > 1;
+            if (!usesTeams) return null;
             const r = tournament.rounds[selectedRound];
             const alreadyRevealed = r?.revealed || selectedRound <= tournament.currentRound;
             return alreadyRevealed ? (
@@ -1186,6 +1237,9 @@ export default function HomeScreen({ navigation, route }) {
           <Text style={s.modalTitle}>Tournament Settings</Text>
 
           {!isViewer && (() => {
+            const mode = settings?.scoringMode;
+            const usesTeams = mode !== 'individual' && mode !== 'matchplay' && tournament.players.length > 1;
+            if (!usesTeams) return null;
             const r = tournament.rounds[selectedRound];
             const alreadyRevealed = r?.revealed || selectedRound <= tournament.currentRound;
             return alreadyRevealed ? (
@@ -1211,15 +1265,17 @@ export default function HomeScreen({ navigation, route }) {
             );
           })()}
 
-          <TouchableOpacity
-            style={s.menuItem}
-            onPress={() => { setShowSettings(false); shareLeaderboard({ tournamentName: tournament.name, leaderboard, theme, viewRef: leaderboardRef }); }}
-            activeOpacity={0.7}
-          >
-            <Feather name="share-2" size={18} color={theme.accent.primary} />
-            <Text style={s.menuItemText}>Share Leaderboard</Text>
-            <Feather name="chevron-right" size={16} color={theme.text.muted} />
-          </TouchableOpacity>
+          {tournament.players.length > 1 && (
+            <TouchableOpacity
+              style={s.menuItem}
+              onPress={() => { setShowSettings(false); shareLeaderboard({ tournamentName: tournament.name, leaderboard, theme, viewRef: leaderboardRef }); }}
+              activeOpacity={0.7}
+            >
+              <Feather name="share-2" size={18} color={theme.accent.primary} />
+              <Text style={s.menuItemText}>Share Leaderboard</Text>
+              <Feather name="chevron-right" size={16} color={theme.text.muted} />
+            </TouchableOpacity>
+          )}
 
           <TouchableOpacity
             style={s.menuItem}
@@ -1247,26 +1303,6 @@ export default function HomeScreen({ navigation, route }) {
             <Feather name="chevron-right" size={16} color={theme.text.muted} />
           </TouchableOpacity>
 
-          <TouchableOpacity
-            style={s.menuItem}
-            onPress={() => { setShowSettings(false); navigation.navigate('PlayersLibrary'); }}
-            activeOpacity={0.7}
-          >
-            <Feather name="users" size={18} color={theme.accent.primary} />
-            <Text style={s.menuItemText}>Players</Text>
-            <Feather name="chevron-right" size={16} color={theme.text.muted} />
-          </TouchableOpacity>
-
-          <TouchableOpacity
-            style={s.menuItem}
-            onPress={() => { setShowSettings(false); navigation.navigate('CoursesLibrary'); }}
-            activeOpacity={0.7}
-          >
-            <Feather name="map" size={18} color={theme.accent.primary} />
-            <Text style={s.menuItemText}>Courses</Text>
-            <Feather name="chevron-right" size={16} color={theme.text.muted} />
-          </TouchableOpacity>
-
           {!isViewer && (
             <TouchableOpacity
               style={s.menuItem}
@@ -1274,7 +1310,7 @@ export default function HomeScreen({ navigation, route }) {
               activeOpacity={0.7}
             >
               <Feather name="edit-3" size={18} color={theme.accent.primary} />
-              <Text style={s.menuItemText}>Edit Tournament</Text>
+              <Text style={s.menuItemText}>{tournament.rounds.length === 1 ? 'Edit Round' : 'Edit Tournament'}</Text>
               <Feather name="chevron-right" size={16} color={theme.text.muted} />
             </TouchableOpacity>
           )}
@@ -1303,7 +1339,7 @@ export default function HomeScreen({ navigation, route }) {
 const RoundPage = React.memo(function RoundPage({
   round, index, width, hasPrev, hasNext, revealed, roundBestBall,
   players, settings, theme, s,
-  onGoToRound, onOpenEdit, isSingleRound,
+  onGoToRound, onOpenEdit, isSingleRound, showRunning = true,
 }) {
   const hasScores = round.scores && Object.keys(round.scores).length > 0;
   const hasPairs = Array.isArray(round.pairs) && round.pairs.length > 0;
@@ -1353,14 +1389,158 @@ const RoundPage = React.memo(function RoundPage({
       )}
       {hasScores ? (
         settings?.scoringMode === 'matchplay'
-          ? <MatchPlayRoundCard round={round} players={players} theme={theme} s={s} />
+          ? <MatchPlayRoundCard round={round} players={players} theme={theme} s={s} showRunning={showRunning} />
           : roundBestBall
-            ? <BestBallRoundCard round={round} players={players} settings={settings} clinchedPairIdx={clinchedPairIdx} theme={theme} s={s} />
-            : <StablefordRoundCard round={round} players={players} clinchedPairIdx={clinchedPairIdx} theme={theme} s={s} />
+            ? <BestBallRoundCard round={round} players={players} settings={settings} clinchedPairIdx={clinchedPairIdx} theme={theme} s={s} showRunning={showRunning} />
+            : <StablefordRoundCard round={round} players={players} clinchedPairIdx={clinchedPairIdx} theme={theme} s={s} showRunning={showRunning} />
       ) : revealed && hasPairs ? (
         <PairsPreviewCard pairs={round.pairs} theme={theme} s={s} />
       ) : (
         <Text style={s.emptyRoundHint}>No scores yet for this round.</Text>
+      )}
+    </View>
+  );
+});
+
+// Single-round game overview: course hero with progress and per-player
+// stat cards (points / strokes / through / vs par). Replaces the bare
+// "ROUND SCORES · Course" + name+points layout for the common case where
+// a Game has one round and isn't using match-play or best-ball scoring.
+const GameOverviewCard = React.memo(function GameOverviewCard({
+  round, players, settings, theme, s, onOpenEdit, showRunning = true,
+}) {
+  const totalHoles = round?.holes?.length ?? 18;
+  const totalPar = (round?.holes ?? []).reduce((sum, h) => sum + (h.par ?? 0), 0);
+  const playedByPlayer = players.map((p) => Object.keys(round?.scores?.[p.id] ?? {}).length);
+  const holesPlayed = playedByPlayer.length ? Math.max(...playedByPlayer) : 0;
+  const progressPct = totalHoles > 0 ? Math.min(100, Math.round((holesPlayed / totalHoles) * 100)) : 0;
+
+  const totals = roundTotals(round, players);
+  const totalsById = Object.fromEntries(totals.map((t) => [t.player.id, t]));
+
+  const stats = players.map((p) => {
+    const ps = round?.scores?.[p.id] ?? {};
+    let strokes = 0;
+    let parThrough = 0;
+    let played = 0;
+    for (const hole of round?.holes ?? []) {
+      const sc = ps[hole.number];
+      if (sc) {
+        strokes += sc;
+        parThrough += hole.par ?? 0;
+        played++;
+      }
+    }
+    const t = totalsById[p.id];
+    return {
+      player: p,
+      played,
+      strokes,
+      vsPar: strokes - parThrough,
+      points: t?.totalPoints ?? 0,
+      handicap: t?.handicap ?? p.handicap ?? 0,
+    };
+  });
+
+  const ranked = stats.length > 1
+    ? [...stats].sort((a, b) => b.points - a.points)
+    : stats;
+  const anyScores = stats.some((st) => st.played > 0);
+  const competitive = ranked.length > 1 && anyScores
+    && ranked[0].points !== (ranked[1]?.points ?? 0);
+
+  return (
+    <View style={s.gameHeroCard}>
+      <View style={s.gameHeroHeader}>
+        <View style={{ flex: 1, minWidth: 0 }}>
+          <Text style={s.cardTitle}>ROUND</Text>
+          <Text style={s.gameHeroCourse} numberOfLines={2}>
+            {round?.courseName || '—'}
+          </Text>
+          <Text style={s.gameHeroMeta}>
+            {totalHoles} holes · Par {totalPar || '—'}
+          </Text>
+        </View>
+        {onOpenEdit && (
+          <TouchableOpacity
+            onPress={() => onOpenEdit(0)}
+            style={s.roundEditBtn}
+            hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+            accessibilityLabel="Round options"
+          >
+            <Feather name="settings" size={14} color={theme.text.muted} />
+          </TouchableOpacity>
+        )}
+      </View>
+
+      <View style={s.gameProgressRow}>
+        <View style={s.gameProgressTrack}>
+          <View style={[s.gameProgressFill, { width: `${progressPct}%` }]} />
+        </View>
+        <Text style={s.gameProgressText}>{holesPlayed} / {totalHoles}</Text>
+      </View>
+
+      <View style={{ marginTop: 16, gap: 10 }}>
+        {ranked.map((st, idx) => {
+          const isLeader = competitive && idx === 0;
+          const vsParStr = st.played === 0
+            ? '—'
+            : st.vsPar === 0 ? 'E' : st.vsPar > 0 ? `+${st.vsPar}` : `${st.vsPar}`;
+          return (
+            <View
+              key={st.player.id}
+              style={[s.gamePlayerCard, isLeader && s.gamePlayerCardLeader]}
+            >
+              <View style={s.gamePlayerHeader}>
+                <View style={{ flex: 1, minWidth: 0 }}>
+                  <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+                    <Text style={s.gamePlayerName} numberOfLines={1}>
+                      {st.player.name}
+                    </Text>
+                    {isLeader && <Feather name="award" size={14} color="#ffd700" />}
+                  </View>
+                  <Text style={s.gamePlayerHcp}>HCP {st.handicap}</Text>
+                </View>
+                <View style={{ alignItems: 'flex-end' }}>
+                  <Text style={s.gamePlayerPoints}>{showRunning ? st.points : '—'}</Text>
+                  <Text style={s.gamePlayerPointsLabel}>pts</Text>
+                </View>
+              </View>
+              <View style={s.gameStatsRow}>
+                <View style={s.gameStatCell}>
+                  <Text style={s.gameStatValue}>
+                    {!showRunning ? '—' : st.played > 0 ? st.strokes : '—'}
+                  </Text>
+                  <Text style={s.gameStatLabel}>Strokes</Text>
+                </View>
+                <View style={s.gameStatDivider} />
+                <View style={s.gameStatCell}>
+                  <Text style={s.gameStatValue}>
+                    {st.played > 0 ? `${st.played}/${totalHoles}` : '—'}
+                  </Text>
+                  <Text style={s.gameStatLabel}>Through</Text>
+                </View>
+                <View style={s.gameStatDivider} />
+                <View style={s.gameStatCell}>
+                  <Text style={[
+                    s.gameStatValue,
+                    showRunning && st.played > 0 && st.vsPar > 0 && s.gameStatValueWarn,
+                    showRunning && st.played > 0 && st.vsPar < 0 && s.gameStatValueGood,
+                  ]}>
+                    {showRunning ? vsParStr : '—'}
+                  </Text>
+                  <Text style={s.gameStatLabel}>vs Par</Text>
+                </View>
+              </View>
+            </View>
+          );
+        })}
+      </View>
+
+      {!anyScores && (
+        <Text style={s.gameHintText}>
+          No scores yet — tap Scorecard below to start the round.
+        </Text>
       )}
     </View>
   );
@@ -1383,7 +1563,7 @@ const PairsPreviewCard = React.memo(function PairsPreviewCard({ pairs, theme, s 
   );
 });
 
-const StablefordRoundCard = React.memo(function StablefordRoundCard({ round, players, clinchedPairIdx, theme, s }) {
+const StablefordRoundCard = React.memo(function StablefordRoundCard({ round, players, clinchedPairIdx, theme, s, showRunning = true }) {
   const pairResults = roundPairLeaderboard(round, players);
   // Map sorted-leaderboard position back to round.pairs index so we can
   // tag the winner row with a crown when that pair is mathematically
@@ -1398,14 +1578,14 @@ const StablefordRoundCard = React.memo(function StablefordRoundCard({ round, pla
         const origIdx = pairIdxFor(pair.members);
         const isClinched = clinchedPairIdx != null && origIdx === clinchedPairIdx;
         return (
-          <View key={pi} style={[s.pairBlock, competitive && pi === 0 && s.winnerBlock]}>
-            {competitive && pi === 0 && <Text style={s.winnerBadge}>WINNER</Text>}
+          <View key={pi} style={[s.pairBlock, showRunning && competitive && pi === 0 && s.winnerBlock]}>
+            {showRunning && competitive && pi === 0 && <Text style={s.winnerBadge}>WINNER</Text>}
             <View style={s.pairHeader}>
               <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6, flex: 1 }}>
                 <Text style={s.pairNames}>{pair.members.map((m) => m.player.name).join(' & ')}</Text>
-                {isClinched && <Feather name="award" size={14} color="#ffd700" />}
+                {showRunning && isClinched && <Feather name="award" size={14} color="#ffd700" />}
               </View>
-              <Text style={s.pairPoints}>{pair.combinedPoints} pts</Text>
+              <Text style={s.pairPoints}>{showRunning ? `${pair.combinedPoints} pts` : '— pts'}</Text>
             </View>
           </View>
         );
@@ -1418,7 +1598,7 @@ const StablefordRoundCard = React.memo(function StablefordRoundCard({ round, pla
 // ("Alex 2 UP", "All square", "Alex wins 3&2"). Uses the same .pairBlock /
 // .winnerBlock / .winnerBadge styles as the Stableford card so the visual
 // rhythm on the round overview stays consistent.
-const MatchPlayRoundCard = React.memo(function MatchPlayRoundCard({ round, players, theme, s }) {
+const MatchPlayRoundCard = React.memo(function MatchPlayRoundCard({ round, players, theme, s, showRunning = true }) {
   if (!players || players.length !== 2) {
     return <Text style={s.pairMember}>Match play needs 2 players</Text>;
   }
@@ -1450,25 +1630,25 @@ const MatchPlayRoundCard = React.memo(function MatchPlayRoundCard({ round, playe
   return (
     <>
       {rows.map(({ player, wins, isLeader }, i) => (
-        <View key={player.id} style={[s.pairBlock, clinched && isLeader && s.winnerBlock]}>
-          {clinched && isLeader && <Text style={s.winnerBadge}>WINNER</Text>}
+        <View key={player.id} style={[s.pairBlock, showRunning && clinched && isLeader && s.winnerBlock]}>
+          {showRunning && clinched && isLeader && <Text style={s.winnerBadge}>WINNER</Text>}
           <View style={s.pairHeader}>
             <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6, flex: 1 }}>
               <Text style={s.pairNames}>{player.name}</Text>
-              {clinched && isLeader && <Feather name="award" size={14} color="#ffd700" />}
+              {showRunning && clinched && isLeader && <Feather name="award" size={14} color="#ffd700" />}
             </View>
-            <Text style={s.pairPoints}>{wins} {wins === 1 ? 'hole' : 'holes'}</Text>
+            <Text style={s.pairPoints}>{showRunning ? `${wins} ${wins === 1 ? 'hole' : 'holes'}` : '—'}</Text>
           </View>
         </View>
       ))}
       <Text style={s.pairsPreviewHint}>
-        {status}{halved > 0 ? ` · ${halved} halved` : ''}
+        {showRunning ? `${status}${halved > 0 ? ` · ${halved} halved` : ''}` : 'Scores hidden'}
       </Text>
     </>
   );
 });
 
-const BestBallRoundCard = React.memo(function BestBallRoundCard({ round, players, settings, clinchedPairIdx, theme, s }) {
+const BestBallRoundCard = React.memo(function BestBallRoundCard({ round, players, settings, clinchedPairIdx, theme, s, showRunning = true }) {
   const result = calcBestWorstBall(round, players);
   if (!result) return <Text style={s.pairMember}>No results yet</Text>;
 
@@ -1484,24 +1664,24 @@ const BestBallRoundCard = React.memo(function BestBallRoundCard({ round, players
 
   return (
     <>
-      <View style={[s.pairBlock, winner === 1 && s.winnerBlock]}>
-        {winner === 1 && <Text style={s.winnerBadge}>WINNER</Text>}
+      <View style={[s.pairBlock, showRunning && winner === 1 && s.winnerBlock]}>
+        {showRunning && winner === 1 && <Text style={s.winnerBadge}>WINNER</Text>}
         <View style={s.pairHeader}>
           <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6, flex: 1 }}>
             <Text style={s.pairNames}>{p1Names}</Text>
-            {p1Clinched && <Feather name="award" size={14} color="#ffd700" />}
+            {showRunning && p1Clinched && <Feather name="award" size={14} color="#ffd700" />}
           </View>
-          <Text style={s.pairPoints}>{p1Points} pts</Text>
+          <Text style={s.pairPoints}>{showRunning ? `${p1Points} pts` : '— pts'}</Text>
         </View>
       </View>
-      <View style={[s.pairBlock, winner === 2 && s.winnerBlock]}>
-        {winner === 2 && <Text style={s.winnerBadge}>WINNER</Text>}
+      <View style={[s.pairBlock, showRunning && winner === 2 && s.winnerBlock]}>
+        {showRunning && winner === 2 && <Text style={s.winnerBadge}>WINNER</Text>}
         <View style={s.pairHeader}>
           <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6, flex: 1 }}>
             <Text style={s.pairNames}>{p2Names}</Text>
-            {p2Clinched && <Feather name="award" size={14} color="#ffd700" />}
+            {showRunning && p2Clinched && <Feather name="award" size={14} color="#ffd700" />}
           </View>
-          <Text style={s.pairPoints}>{p2Points} pts</Text>
+          <Text style={s.pairPoints}>{showRunning ? `${p2Points} pts` : '— pts'}</Text>
         </View>
       </View>
     </>
@@ -1774,6 +1954,132 @@ const makeStyles = (t) => StyleSheet.create({
   pairNames: { fontFamily: 'PlusJakartaSans-Bold', color: t.text.primary, fontSize: 14, flex: 1 },
   pairPoints: { fontFamily: 'PlusJakartaSans-ExtraBold', color: t.accent.primary, fontSize: 20 },
   pairMember: { fontFamily: 'PlusJakartaSans-Medium', color: t.text.secondary, fontSize: 12, paddingTop: 3 },
+
+  // Single-round game overview (course hero + per-player stat cards)
+  gameHeroCard: {
+    backgroundColor: t.bg.card,
+    borderRadius: 20,
+    borderWidth: t.isDark ? 1 : 0,
+    borderColor: t.isDark ? t.glass?.border || t.border.default : t.border.default,
+    padding: 16,
+    marginBottom: 16,
+    ...(t.isDark ? {} : t.shadow.card),
+  },
+  gameHeroHeader: { flexDirection: 'row', alignItems: 'flex-start', gap: 8, marginBottom: 14 },
+  gameHeroCourse: {
+    fontFamily: 'PlayfairDisplay-Bold',
+    fontSize: 22,
+    lineHeight: 26,
+    color: t.text.primary,
+    letterSpacing: -0.4,
+    marginTop: 6,
+  },
+  gameHeroMeta: {
+    fontFamily: 'PlusJakartaSans-Medium',
+    color: t.text.muted,
+    fontSize: 12,
+    marginTop: 4,
+    letterSpacing: 0.2,
+  },
+  gameProgressRow: { flexDirection: 'row', alignItems: 'center', gap: 10 },
+  gameProgressTrack: {
+    flex: 1,
+    height: 6,
+    borderRadius: 3,
+    backgroundColor: t.isDark ? 'rgba(255,255,255,0.08)' : 'rgba(0,0,0,0.06)',
+    overflow: 'hidden',
+  },
+  gameProgressFill: {
+    height: '100%',
+    borderRadius: 3,
+    backgroundColor: t.accent.primary,
+  },
+  gameProgressText: {
+    fontFamily: 'PlusJakartaSans-Bold',
+    color: t.text.secondary,
+    fontSize: 11,
+    letterSpacing: 0.5,
+  },
+  gamePlayerCard: {
+    borderRadius: 14,
+    backgroundColor: t.isDark ? t.bg.secondary : t.bg.secondary,
+    borderWidth: 1,
+    borderColor: t.border.default,
+    padding: 14,
+  },
+  gamePlayerCardLeader: {
+    backgroundColor: t.isDark ? 'rgba(255,215,0,0.06)' : '#fffaeb',
+    borderColor: '#ffd700' + '66',
+  },
+  gamePlayerHeader: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    justifyContent: 'space-between',
+    gap: 8,
+    marginBottom: 12,
+  },
+  gamePlayerName: {
+    fontFamily: 'PlusJakartaSans-Bold',
+    color: t.text.primary,
+    fontSize: 15,
+    flexShrink: 1,
+  },
+  gamePlayerHcp: {
+    fontFamily: 'PlusJakartaSans-Medium',
+    color: t.text.muted,
+    fontSize: 11,
+    marginTop: 2,
+    letterSpacing: 0.3,
+  },
+  gamePlayerPoints: {
+    fontFamily: 'PlusJakartaSans-ExtraBold',
+    color: t.accent.primary,
+    fontSize: 28,
+    lineHeight: 30,
+  },
+  gamePlayerPointsLabel: {
+    fontFamily: 'PlusJakartaSans-SemiBold',
+    color: t.text.muted,
+    fontSize: 10,
+    letterSpacing: 0.8,
+    textTransform: 'uppercase',
+    marginTop: -2,
+  },
+  gameStatsRow: {
+    flexDirection: 'row',
+    alignItems: 'stretch',
+    backgroundColor: t.isDark ? 'rgba(255,255,255,0.04)' : 'rgba(0,0,0,0.025)',
+    borderRadius: 10,
+    paddingVertical: 8,
+  },
+  gameStatCell: { flex: 1, alignItems: 'center', justifyContent: 'center', paddingVertical: 2 },
+  gameStatDivider: {
+    width: 1,
+    backgroundColor: t.isDark ? 'rgba(255,255,255,0.08)' : 'rgba(0,0,0,0.06)',
+    marginVertical: 4,
+  },
+  gameStatValue: {
+    fontFamily: 'PlusJakartaSans-Bold',
+    color: t.text.primary,
+    fontSize: 15,
+  },
+  gameStatValueGood: { color: t.accent.primary },
+  gameStatValueWarn: { color: t.text.secondary },
+  gameStatLabel: {
+    fontFamily: 'PlusJakartaSans-SemiBold',
+    color: t.text.muted,
+    fontSize: 9,
+    letterSpacing: 0.8,
+    textTransform: 'uppercase',
+    marginTop: 3,
+  },
+  gameHintText: {
+    fontFamily: 'PlusJakartaSans-Regular',
+    color: t.text.muted,
+    fontSize: 12,
+    textAlign: 'center',
+    marginTop: 14,
+  },
 
   // Round action row (Scorecard + Next Round side-by-side)
   roundActionsRow: { flexDirection: 'row', gap: 10 },

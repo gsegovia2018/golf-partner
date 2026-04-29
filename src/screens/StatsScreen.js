@@ -19,7 +19,13 @@ import {
 } from '../store/statsEngine';
 import StatDetailSheet from '../components/StatDetailSheet';
 
-const TABS = ['Overview', 'Players', 'Holes', 'Pairs', 'Shame'];
+const ALL_TABS = [
+  { key: 'overview', label: 'Overview' },
+  { key: 'players', label: 'Players' },
+  { key: 'holes', label: 'Holes' },
+  { key: 'pairs', label: 'Pairs' },
+  { key: 'shame', label: 'Shame' },
+];
 
 const firstName = (p) => p.name.split(' ')[0];
 const joinNames = (players) => {
@@ -68,7 +74,7 @@ export default function StatsScreen({ navigation }) {
   const { user } = useAuth();
   const s = makeStyles(theme);
   const [tournament, setTournament] = useState(null);
-  const [tab, setTab] = useState(0);
+  const [tab, setTab] = useState('overview');
   const [selectedPlayer, setSelectedPlayer] = useState(0);
   const [h2hPlayer, setH2hPlayer] = useState(1);
   const [metric, setMetric] = useState('points');
@@ -95,6 +101,12 @@ export default function StatsScreen({ navigation }) {
 
   const { players } = tournament;
   const completedRounds = tournament.rounds.filter(r => r.scores && Object.keys(r.scores).length > 0);
+  const scoringMode = tournament.settings?.scoringMode;
+  const isSolo = players.length === 1;
+  const usesTeams = !isSolo && scoringMode !== 'individual' && scoringMode !== 'matchplay';
+  const hasMulti = players.length > 1;
+  const visibleTabs = ALL_TABS.filter(t => t.key !== 'pairs' || usesTeams);
+  const activeTab = visibleTabs.some(t => t.key === tab) ? tab : 'overview';
 
   return (
     <SafeAreaView style={s.container} edges={['top', 'bottom']}>
@@ -107,39 +119,37 @@ export default function StatsScreen({ navigation }) {
       </View>
 
       <View style={s.tabBar}>
-        {TABS.map((t, i) => (
-          <TouchableOpacity key={t} style={[s.tab, tab === i && s.tabActive]} onPress={() => setTab(i)} activeOpacity={0.7}>
-            <Text style={[s.tabText, tab === i && s.tabTextActive]}>{t}</Text>
+        {visibleTabs.map(t => (
+          <TouchableOpacity key={t.key} style={[s.tab, activeTab === t.key && s.tabActive]} onPress={() => setTab(t.key)} activeOpacity={0.7}>
+            <Text style={[s.tabText, activeTab === t.key && s.tabTextActive]}>{t.label}</Text>
           </TouchableOpacity>
         ))}
       </View>
 
-      {(tab === 0 || tab === 1 || tab === 2 || tab === 3 || tab === 4) && (
-        <View style={s.scoringToggle}>
-          <Text style={[s.scoringLabel, metric === 'strokes' && s.scoringLabelActive]}>Strokes</Text>
-          <Switch
-            value={metric === 'points'}
-            onValueChange={(v) => setMetric(v ? 'points' : 'strokes')}
-            trackColor={{ false: theme.border.default, true: theme.accent.primary }}
-            thumbColor="#fff"
-          />
-          <Text style={[s.scoringLabel, metric === 'points' && s.scoringLabelActive]}>Points</Text>
-        </View>
-      )}
+      <View style={s.scoringToggle}>
+        <Text style={[s.scoringLabel, metric === 'strokes' && s.scoringLabelActive]}>Strokes</Text>
+        <Switch
+          value={metric === 'points'}
+          onValueChange={(v) => setMetric(v ? 'points' : 'strokes')}
+          trackColor={{ false: theme.border.default, true: theme.accent.primary }}
+          thumbColor="#fff"
+        />
+        <Text style={[s.scoringLabel, metric === 'points' && s.scoringLabelActive]}>Points</Text>
+      </View>
 
       <ScrollView style={s.scrollView} contentContainerStyle={s.content}>
-        {tab === 0 && <OverviewTab tournament={tournament} metric={metric} theme={theme} s={s} />}
-        {tab === 1 && <PlayersTab tournament={tournament} players={players} selectedPlayer={selectedPlayer} setSelectedPlayer={setSelectedPlayer} metric={metric} theme={theme} s={s} />}
-        {tab === 2 && <HolesTab tournament={tournament} completedRounds={completedRounds} metric={metric} theme={theme} s={s} />}
-        {tab === 3 && <PairsTab tournament={tournament} players={players} h2hPlayer={h2hPlayer} setH2hPlayer={setH2hPlayer} selectedPlayer={selectedPlayer} setSelectedPlayer={setSelectedPlayer} metric={metric} theme={theme} s={s} />}
-        {tab === 4 && <ShameTab tournament={tournament} metric={metric} theme={theme} s={s} />}
+        {activeTab === 'overview' && <OverviewTab tournament={tournament} metric={metric} hasMulti={hasMulti} usesTeams={usesTeams} theme={theme} s={s} />}
+        {activeTab === 'players' && <PlayersTab tournament={tournament} players={players} selectedPlayer={selectedPlayer} setSelectedPlayer={setSelectedPlayer} metric={metric} theme={theme} s={s} />}
+        {activeTab === 'holes' && <HolesTab tournament={tournament} completedRounds={completedRounds} hasMulti={hasMulti} metric={metric} theme={theme} s={s} />}
+        {activeTab === 'pairs' && usesTeams && <PairsTab tournament={tournament} players={players} h2hPlayer={h2hPlayer} setH2hPlayer={setH2hPlayer} selectedPlayer={selectedPlayer} setSelectedPlayer={setSelectedPlayer} metric={metric} theme={theme} s={s} />}
+        {activeTab === 'shame' && <ShameTab tournament={tournament} hasMulti={hasMulti} usesTeams={usesTeams} metric={metric} theme={theme} s={s} />}
       </ScrollView>
     </SafeAreaView>
   );
 }
 
 // ── Overview Tab ──
-function OverviewTab({ tournament, metric, theme, s }) {
+function OverviewTab({ tournament, metric, hasMulti, usesTeams, theme, s }) {
   const [roundIndex, setRoundIndex] = useState(null);
   const highlights = tournamentHighlights(tournament, { metric, roundIndex });
   const momentum = tournamentMomentum(tournament);
@@ -360,7 +370,7 @@ function OverviewTab({ tournament, metric, theme, s }) {
         />
       )}
 
-      {roundIndex === null && momentum.some(m => m.rounds.some(r => r.points != null)) && (
+      {hasMulti && roundIndex === null && momentum.some(m => m.rounds.some(r => r.points != null)) && (
         <>
           <Text style={s.sectionTitle}>TOURNAMENT MOMENTUM</Text>
           <View style={s.card}>
@@ -406,7 +416,7 @@ function OverviewTab({ tournament, metric, theme, s }) {
         </>
       )}
 
-      {roundIndex === null && skins.totalSkins > 0 && (
+      {hasMulti && roundIndex === null && skins.totalSkins > 0 && (
         <>
           <Text style={s.sectionTitle}>SKINS LEADERBOARD</Text>
           <Text style={s.scopeText}>
@@ -496,6 +506,49 @@ function OverviewTab({ tournament, metric, theme, s }) {
         </>
       )}
 
+      {hasMulti && !usesTeams && roundIndex === null && (
+        <>
+          <Text style={s.sectionTitle}>HEAD-TO-HEAD</Text>
+          <Text style={s.scopeText}>
+            Net holes won across the tournament — row vs column ({isStrokes ? 'lower strokes wins' : 'higher Stableford wins'}). Tap a cell for the breakdown.
+          </Text>
+          <H2HMatrix
+            tournament={tournament}
+            players={tournament.players}
+            metric={metric}
+            theme={theme}
+            s={s}
+            onCellPress={(i, j) => {
+              const p1 = tournament.players[i];
+              const p2 = tournament.players[j];
+              const result = headToHead(tournament, p1.id, p2.id);
+              const bucket = isStrokes ? result.strokes : result.points;
+              setSheet({
+                title: `${firstName(p1)} vs ${firstName(p2)} — by ${isStrokes ? 'strokes' : 'points'}`,
+                subtitle: `Holes won: ${firstName(p1)} ${bucket.p1Wins} · ${firstName(p2)} ${bucket.p2Wins} · ${bucket.ties} ties`,
+                explainer: isStrokes
+                  ? 'On each hole both players played, we count who took fewer strokes. Fewer = win. Equal strokes = tie.'
+                  : 'On each hole both players played, we count who scored more Stableford points (handicap-adjusted). Higher = win. Equal = tie.',
+                rows: result.holes.map((h, idx) => {
+                  const v1 = isStrokes ? h.p1Strokes : h.p1Points;
+                  const v2 = isStrokes ? h.p2Strokes : h.p2Points;
+                  const p1Won = isStrokes ? v1 < v2 : v1 > v2;
+                  const p2Won = isStrokes ? v2 < v1 : v2 > v1;
+                  const winner = p1Won ? firstName(p1) : p2Won ? firstName(p2) : 'Tie';
+                  return {
+                    key: `${h.roundIndex}-${h.courseName}-${h.holeNumber}-${idx}`,
+                    primary: `R${h.roundIndex + 1} · ${h.courseName} · Hole ${h.holeNumber}`,
+                    secondary: `${firstName(p1)} ${v1} · ${firstName(p2)} ${v2}`,
+                    rightPrimary: winner,
+                    tone: v1 === v2 ? 'neutral' : 'good',
+                  };
+                }),
+              });
+            }}
+          />
+        </>
+      )}
+
       <StatDetailSheet
         visible={!!sheet}
         onClose={() => setSheet(null)}
@@ -533,6 +586,84 @@ function RoundSelector({ tournament, selected, onSelect, theme, s }) {
         );
       })}
     </View>
+  );
+}
+
+function H2HMatrix({ tournament, players, metric, onCellPress, theme, s }) {
+  const matrix = useMemo(() => {
+    if (!players || players.length < 2) return [];
+    return players.map((rowPlayer, i) => players.map((colPlayer, j) => {
+      if (i === j) return null;
+      const result = headToHead(tournament, rowPlayer.id, colPlayer.id);
+      const bucket = metric === 'strokes' ? result.strokes : result.points;
+      const totalHoles = bucket.p1Wins + bucket.p2Wins + bucket.ties;
+      if (totalHoles === 0) return null;
+      return { net: bucket.p1Wins - bucket.p2Wins, wins: bucket.p1Wins, losses: bucket.p2Wins, ties: bucket.ties };
+    }));
+  }, [tournament, players, metric]);
+
+  const flat = matrix.flat().filter((c) => c != null);
+  const maxAbs = flat.reduce((m, c) => Math.max(m, Math.abs(c.net)), 0) || 1;
+  const cellColor = (net) => net === 0 ? theme.text.muted : net > 0 ? theme.scoreColor('excellent') : theme.scoreColor('poor');
+  const cellBg = (net) => {
+    const intensity = Math.min(1, Math.abs(net) / maxAbs);
+    const opacity = 0.10 + intensity * 0.30;
+    if (net === 0) return theme.bg.secondary;
+    const hex = net > 0 ? theme.scoreColor('excellent') : theme.scoreColor('poor');
+    return hex + Math.round(opacity * 255).toString(16).padStart(2, '0');
+  };
+
+  return (
+    <ScrollView horizontal showsHorizontalScrollIndicator={false}>
+      <View style={s.h2hMatrixWrap}>
+        <View style={s.h2hMatrixRow}>
+          <View style={[s.h2hMatrixCell, s.h2hMatrixCornerCell]} />
+          {players.map((p) => (
+            <View key={p.id} style={[s.h2hMatrixCell, s.h2hMatrixHeaderCell]}>
+              <Text style={s.h2hMatrixHeaderText} numberOfLines={1}>{firstName(p)}</Text>
+            </View>
+          ))}
+        </View>
+        {players.map((rowPlayer, i) => (
+          <View key={rowPlayer.id} style={s.h2hMatrixRow}>
+            <View style={[s.h2hMatrixCell, s.h2hMatrixRowLabelCell]}>
+              <Text style={s.h2hMatrixHeaderText} numberOfLines={1}>{firstName(rowPlayer)}</Text>
+            </View>
+            {players.map((colPlayer, j) => {
+              const cell = matrix[i]?.[j];
+              if (i === j) {
+                return (
+                  <View key={colPlayer.id} style={[s.h2hMatrixCell, s.h2hMatrixDiagonalCell]}>
+                    <Text style={s.h2hMatrixDiagonalText}>—</Text>
+                  </View>
+                );
+              }
+              if (cell == null) {
+                return (
+                  <View key={colPlayer.id} style={[s.h2hMatrixCell, s.h2hMatrixEmptyCell]}>
+                    <Text style={s.h2hMatrixEmptyText}>·</Text>
+                  </View>
+                );
+              }
+              const sign = cell.net > 0 ? '+' : '';
+              return (
+                <TouchableOpacity
+                  key={colPlayer.id}
+                  style={[s.h2hMatrixCell, { backgroundColor: cellBg(cell.net) }]}
+                  activeOpacity={0.7}
+                  onPress={() => onCellPress?.(i, j, cell)}
+                >
+                  <Text style={[s.h2hMatrixValueText, { color: cellColor(cell.net) }]}>
+                    {sign}{cell.net}
+                  </Text>
+                  <Text style={s.h2hMatrixSubText}>{cell.wins}-{cell.losses}-{cell.ties}</Text>
+                </TouchableOpacity>
+              );
+            })}
+          </View>
+        ))}
+      </View>
+    </ScrollView>
   );
 }
 
@@ -826,7 +957,7 @@ function DistBar({ label, count, total, color, onPress, s }) {
 }
 
 // ── Holes Tab ──
-function HolesTab({ tournament, completedRounds, metric, theme, s }) {
+function HolesTab({ tournament, completedRounds, hasMulti, metric, theme, s }) {
   const isStrokes = metric === 'strokes';
   const bw = bestWorstHoles(tournament, { metric });
   const firstCompletedIdx = tournament.rounds.findIndex(r => r.scores && Object.keys(r.scores).length > 0);
@@ -1021,7 +1152,7 @@ function HolesTab({ tournament, completedRounds, metric, theme, s }) {
         </>
       )}
 
-      {chaos.length > 0 && (
+      {hasMulti && chaos.length > 0 && (
         <>
           <Text style={s.sectionTitle}>CHAOS HOLES</Text>
           <Text style={s.scopeText}>Where the group diverged most in strokes</Text>
@@ -1039,7 +1170,7 @@ function HolesTab({ tournament, completedRounds, metric, theme, s }) {
         </>
       )}
 
-      {(extremes.disasters.length > 0 || extremes.gimmes.length > 0) && (
+      {hasMulti && (extremes.disasters.length > 0 || extremes.gimmes.length > 0) && (
         <>
           <Text style={s.sectionTitle}>COLLECTIVE EXTREMES</Text>
           {extremes.disasters.length > 0 && (
@@ -1113,22 +1244,6 @@ function PairsTab({ tournament, players, h2hPlayer, setH2hPlayer, selectedPlayer
   const p2Idx = h2hPlayer >= players.length ? 0 : h2hPlayer;
   const p2 = players[p2Idx];
   const h2h = p1 && p2 && p1.id !== p2.id ? headToHead(tournament, p1.id, p2.id, { roundIndex: h2hRound }) : null;
-
-  // H2H heatmap matrix — for each (row=i, col=j) cell, the net holes won
-  // by player i against player j in the active metric (points or strokes).
-  // Diagonal entries are null (no self-comparison). The values are
-  // antisymmetric (matrix[i][j] === -matrix[j][i]).
-  const h2hMatrix = useMemo(() => {
-    if (!players || players.length < 2) return [];
-    return players.map((rowPlayer, i) => players.map((colPlayer, j) => {
-      if (i === j) return null;
-      const result = headToHead(tournament, rowPlayer.id, colPlayer.id);
-      const bucket = metric === 'strokes' ? result.strokes : result.points;
-      const totalHoles = bucket.p1Wins + bucket.p2Wins + bucket.ties;
-      if (totalHoles === 0) return null;
-      return { net: bucket.p1Wins - bucket.p2Wins, wins: bucket.p1Wins, losses: bucket.p2Wins, ties: bucket.ties };
-    }));
-  }, [tournament, players, metric]);
 
   const [sheet, setSheet] = useState(null);
 
@@ -1572,79 +1687,22 @@ function PairsTab({ tournament, players, h2hPlayer, setH2hPlayer, selectedPlayer
         </>
       )}
 
-      {players.length >= 2 && (() => {
-        const flat = h2hMatrix.flat().filter((c) => c != null);
-        const maxAbs = flat.reduce((m, c) => Math.max(m, Math.abs(c.net)), 0) || 1;
-        const cellColor = (net) => {
-          if (net === 0) return theme.text.muted;
-          return net > 0 ? theme.scoreColor('excellent') : theme.scoreColor('poor');
-        };
-        const cellBg = (net) => {
-          const intensity = Math.min(1, Math.abs(net) / maxAbs);
-          const opacity = 0.10 + intensity * 0.30;
-          if (net === 0) return theme.bg.secondary;
-          const hex = net > 0 ? theme.scoreColor('excellent') : theme.scoreColor('poor');
-          return hex + Math.round(opacity * 255).toString(16).padStart(2, '0');
-        };
-        return (
-          <>
-            <Text style={s.sectionTitle}>H2H HEATMAP</Text>
-            <Text style={s.scopeText}>
-              Net holes won across the tournament — row vs column ({metric === 'strokes' ? 'lower strokes wins' : 'higher Stableford wins'}). Tap to load that matchup below.
-            </Text>
-            <ScrollView horizontal showsHorizontalScrollIndicator={false}>
-              <View style={s.h2hMatrixWrap}>
-                <View style={s.h2hMatrixRow}>
-                  <View style={[s.h2hMatrixCell, s.h2hMatrixCornerCell]} />
-                  {players.map((p) => (
-                    <View key={p.id} style={[s.h2hMatrixCell, s.h2hMatrixHeaderCell]}>
-                      <Text style={s.h2hMatrixHeaderText} numberOfLines={1}>{firstName(p)}</Text>
-                    </View>
-                  ))}
-                </View>
-                {players.map((rowPlayer, i) => (
-                  <View key={rowPlayer.id} style={s.h2hMatrixRow}>
-                    <View style={[s.h2hMatrixCell, s.h2hMatrixRowLabelCell]}>
-                      <Text style={s.h2hMatrixHeaderText} numberOfLines={1}>{firstName(rowPlayer)}</Text>
-                    </View>
-                    {players.map((colPlayer, j) => {
-                      const cell = h2hMatrix[i]?.[j];
-                      if (i === j) {
-                        return (
-                          <View key={colPlayer.id} style={[s.h2hMatrixCell, s.h2hMatrixDiagonalCell]}>
-                            <Text style={s.h2hMatrixDiagonalText}>—</Text>
-                          </View>
-                        );
-                      }
-                      if (cell == null) {
-                        return (
-                          <View key={colPlayer.id} style={[s.h2hMatrixCell, s.h2hMatrixEmptyCell]}>
-                            <Text style={s.h2hMatrixEmptyText}>·</Text>
-                          </View>
-                        );
-                      }
-                      const sign = cell.net > 0 ? '+' : '';
-                      return (
-                        <TouchableOpacity
-                          key={colPlayer.id}
-                          style={[s.h2hMatrixCell, { backgroundColor: cellBg(cell.net) }]}
-                          activeOpacity={0.7}
-                          onPress={() => { setSelectedPlayer(i); setH2hPlayer(j); }}
-                        >
-                          <Text style={[s.h2hMatrixValueText, { color: cellColor(cell.net) }]}>
-                            {sign}{cell.net}
-                          </Text>
-                          <Text style={s.h2hMatrixSubText}>{cell.wins}-{cell.losses}-{cell.ties}</Text>
-                        </TouchableOpacity>
-                      );
-                    })}
-                  </View>
-                ))}
-              </View>
-            </ScrollView>
-          </>
-        );
-      })()}
+      {players.length >= 2 && (
+        <>
+          <Text style={s.sectionTitle}>H2H HEATMAP</Text>
+          <Text style={s.scopeText}>
+            Net holes won across the tournament — row vs column ({metric === 'strokes' ? 'lower strokes wins' : 'higher Stableford wins'}). Tap to load that matchup below.
+          </Text>
+          <H2HMatrix
+            tournament={tournament}
+            players={players}
+            metric={metric}
+            theme={theme}
+            s={s}
+            onCellPress={(i, j) => { setSelectedPlayer(i); setH2hPlayer(j); }}
+          />
+        </>
+      )}
 
       <Text style={s.sectionTitle}>HEAD TO HEAD</Text>
       <View style={s.h2hSelector}>
@@ -1927,7 +1985,7 @@ function HwGEPCells({ stats, strong, theme, s }) {
 
 // ── Shame Tab ──
 
-function ShameTab({ tournament, metric, theme, s }) {
+function ShameTab({ tournament, hasMulti, usesTeams, metric, theme, s }) {
   const shame = hallOfShame(tournament, { metric });
   const par3 = par3Heartbreak(tournament);
   const pickup = pickupChampion(tournament);
@@ -2109,7 +2167,7 @@ function ShameTab({ tournament, metric, theme, s }) {
     ]),
   });
 
-  const any = shame.tripleBogey || shame.bogeyStreak || shame.doubleBogeyStreak || shame.pointlessStreak || shame.gift || shame.collapse || shame.blowup || par3 || pickup || anchorStat || zero;
+  const any = shame.tripleBogey || shame.bogeyStreak || shame.doubleBogeyStreak || shame.pointlessStreak || (hasMulti && shame.gift) || shame.collapse || shame.blowup || par3 || pickup || (usesTeams && anchorStat) || zero;
 
   return (
     <View>
@@ -2151,7 +2209,7 @@ function ShameTab({ tournament, metric, theme, s }) {
           onPress={openPointless} theme={theme} s={s}
         />
       )}
-      {shame.gift && (
+      {hasMulti && shame.gift && (
         <HighlightCard
           icon="gift"
           label="🎁 The Gift"
@@ -2196,7 +2254,7 @@ function ShameTab({ tournament, metric, theme, s }) {
           onPress={openPickup} theme={theme} s={s}
         />
       )}
-      {anchorStat && (
+      {usesTeams && anchorStat && (
         <HighlightCard
           icon="anchor"
           label="⚓ The Anchor"

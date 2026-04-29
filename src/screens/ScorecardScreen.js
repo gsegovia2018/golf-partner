@@ -78,6 +78,12 @@ export default function ScorecardScreen({ navigation, route }) {
   const tournamentRef = useRef(null);
   const saveTimeoutRef = useRef(null);
   const notesSaveTimeoutRef = useRef(null);
+  // Serializes score/note saves so concurrent edits never race over the same
+  // tournament blob. Without this, two near-simultaneous setScore taps each
+  // cloned the same tournamentRef baseline, and the later mutation's
+  // saveLocal could overwrite the earlier one — dropping the first edit.
+  const saveChainRef = useRef(Promise.resolve());
+  const inflightSavesRef = useRef(0);
   // Tracks whether the user has an unsaved edit (scores or notes) that a
   // subscription-driven reload must not clobber. Set when a debounce is
   // scheduled, cleared after the save finishes.
@@ -141,31 +147,56 @@ export default function ScorecardScreen({ navigation, route }) {
     try { await reload(); } finally { setRefreshing(false); }
   }, [reload]);
 
-  const autoSave = useCallback((newScores) => {
-    // Compute the diff between the previously-synced scores and newScores,
-    // emitting one score.set mutation per changed cell. This naturally coalesces
-    // rapid keystrokes because `scores` state is already debounced upstream.
-    if (!tournamentRef.current) return;
-    const round = tournamentRef.current.rounds[roundIndex];
-    const prevScores = round.scores ?? {};
-
-    const changedCells = [];
-    const playerIds = new Set([...Object.keys(prevScores), ...Object.keys(newScores)]);
-    for (const pid of playerIds) {
-      const prevByHole = prevScores[pid] ?? {};
-      const nextByHole = newScores[pid] ?? {};
-      const holes = new Set([...Object.keys(prevByHole), ...Object.keys(nextByHole)]);
-      for (const h of holes) {
-        const before = prevByHole[h];
-        const after = nextByHole[h];
-        if (before !== after) changedCells.push({ playerId: pid, hole: Number(h), value: after ?? null });
-      }
-    }
-    if (changedCells.length === 0) return;
-
+  // Append a save unit to the serial chain. Each unit reads tournamentRef
+  // at execution time (after preceding units have committed), so it sees a
+  // fresh baseline. inflightSavesRef gates pendingSaveRef so a
+  // subscription-driven reload won't clobber local edits while any save
+  // unit is queued or running.
+  const enqueueSave = useCallback((unit) => {
+    inflightSavesRef.current += 1;
     pendingSaveRef.current = true;
-    (async () => {
-      let t = tournamentRef.current;
+    saveChainRef.current = saveChainRef.current
+      .then(unit)
+      .catch(() => {})
+      .finally(() => {
+        inflightSavesRef.current -= 1;
+        if (
+          inflightSavesRef.current === 0
+          && !saveTimeoutRef.current
+          && !notesSaveTimeoutRef.current
+        ) {
+          pendingSaveRef.current = false;
+        }
+      });
+  }, []);
+
+  const autoSave = useCallback((newScores) => {
+    if (!tournamentRef.current) return;
+    enqueueSave(async () => {
+      // Diff against the latest committed tournament — not the baseline at
+      // schedule time — so chained saves apply incremental deltas rather
+      // than redundantly re-mutating already-persisted cells.
+      if (!tournamentRef.current) return;
+      const t0 = tournamentRef.current;
+      const round = t0.rounds[roundIndex];
+      if (!round) return;
+      const prevScores = round.scores ?? {};
+
+      const changedCells = [];
+      const playerIds = new Set([...Object.keys(prevScores), ...Object.keys(newScores)]);
+      for (const pid of playerIds) {
+        const prevByHole = prevScores[pid] ?? {};
+        const nextByHole = newScores[pid] ?? {};
+        const holes = new Set([...Object.keys(prevByHole), ...Object.keys(nextByHole)]);
+        for (const h of holes) {
+          const before = prevByHole[h];
+          const after = nextByHole[h];
+          if (before !== after) changedCells.push({ playerId: pid, hole: Number(h), value: after ?? null });
+        }
+      }
+      if (changedCells.length === 0) return;
+
+      let t = t0;
       for (const cell of changedCells) {
         t = await mutate(t, {
           type: 'score.set',
@@ -174,34 +205,36 @@ export default function ScorecardScreen({ navigation, route }) {
           hole: cell.hole,
           value: cell.value,
         });
+        // Commit immediately so the next chained unit (or a notes save)
+        // diffs/clones from this state, not from the pre-save baseline.
+        tournamentRef.current = t;
       }
-      tournamentRef.current = t;
-      if (!saveTimeoutRef.current && !notesSaveTimeoutRef.current) {
-        pendingSaveRef.current = false;
-      }
-    })();
-  }, [roundIndex]);
+    });
+  }, [roundIndex, enqueueSave]);
 
   const saveNotes = useCallback((value) => {
     setNotes(value);
     if (notesSaveTimeoutRef.current) clearTimeout(notesSaveTimeoutRef.current);
+    // Hold pendingSaveRef during the debounce window too, so a reload that
+    // arrives between keystroke and timeout doesn't wipe the in-progress
+    // text from React state.
     pendingSaveRef.current = true;
-    notesSaveTimeoutRef.current = setTimeout(async () => {
+    notesSaveTimeoutRef.current = setTimeout(() => {
       notesSaveTimeoutRef.current = null;
-      if (!tournamentRef.current) return;
-      const round = tournamentRef.current.rounds[roundIndex];
-      const t = await mutate(tournamentRef.current, {
-        type: 'note.set',
-        roundId: round.id,
-        scope: 'round',
-        text: value,
+      enqueueSave(async () => {
+        if (!tournamentRef.current) return;
+        const round = tournamentRef.current.rounds[roundIndex];
+        if (!round) return;
+        const t = await mutate(tournamentRef.current, {
+          type: 'note.set',
+          roundId: round.id,
+          scope: 'round',
+          text: value,
+        });
+        tournamentRef.current = t;
       });
-      tournamentRef.current = t;
-      if (!saveTimeoutRef.current && !notesSaveTimeoutRef.current) {
-        pendingSaveRef.current = false;
-      }
     }, 400);
-  }, [roundIndex]);
+  }, [roundIndex, enqueueSave]);
 
   // Hoist memoised derivations above the early return so the hook order
   // stays stable while the tournament loads.
@@ -701,22 +734,24 @@ const HolePage = React.memo(function HolePage({
                   </View>
                 )}
 
-                <View style={s.soloStatsRow}>
-                  <View style={s.soloStatItem}>
-                    <Text style={s.soloStatLabel}>STROKES</Text>
-                    <Text style={s.soloStatValue}>{totals.str || '—'}</Text>
+                {showRunning && (
+                  <View style={s.soloStatsRow}>
+                    <View style={s.soloStatItem}>
+                      <Text style={s.soloStatLabel}>STROKES</Text>
+                      <Text style={s.soloStatValue}>{totals.str || '—'}</Text>
+                    </View>
+                    <View style={s.soloStatDivider} />
+                    <View style={s.soloStatItem}>
+                      <Text style={s.soloStatLabel}>POINTS</Text>
+                      <Text style={[s.soloStatValue, { color: theme.accent.primary }]}>{totals.pts}</Text>
+                    </View>
+                    <View style={s.soloStatDivider} />
+                    <View style={s.soloStatItem}>
+                      <Text style={s.soloStatLabel}>vs PAR</Text>
+                      <Text style={[s.soloStatValue, { color: vsParColor }]}>{vsParLabel}</Text>
+                    </View>
                   </View>
-                  <View style={s.soloStatDivider} />
-                  <View style={s.soloStatItem}>
-                    <Text style={s.soloStatLabel}>POINTS</Text>
-                    <Text style={[s.soloStatValue, { color: theme.accent.primary }]}>{totals.pts}</Text>
-                  </View>
-                  <View style={s.soloStatDivider} />
-                  <View style={s.soloStatItem}>
-                    <Text style={s.soloStatLabel}>vs PAR</Text>
-                    <Text style={[s.soloStatValue, { color: vsParColor }]}>{vsParLabel}</Text>
-                  </View>
-                </View>
+                )}
               </View>
             );
           }
@@ -913,30 +948,31 @@ function HoleView({ round, roundIndex, players, scores, notes, currentHole, hole
         )}
       </View>
 
-      {/* Round totals / live match — pinned above the bottom controls */}
-      {isBestBall && bbResult
-        ? <MatchPanel bbResult={bbResult} currentHole={currentHole} settings={settings} />
-        : players.length === 1
-          ? <SoloTotalsRibbon player={players[0]} stats={playerTotals(players[0])} />
-          : (
-            <View style={s.totalsStrip}>
-              <StablefordWinnerBanner round={round} scores={scores} players={players} />
-              <Text style={s.totalStripLabel}>ROUND TOTALS</Text>
-              <View style={s.totalStripRow}>
-                {players.map((player) => {
-                  const { pts, str } = playerTotals(player);
-                  return (
-                    <View key={player.id} style={s.totalStripPlayer}>
-                      <Text style={s.totalStripName}>{player.name.split(' ')[0]}</Text>
-                      <Text style={s.totalStripPts}>{pts}</Text>
-                      <Text style={s.totalStripStr}>{str || '-'}</Text>
-                    </View>
-                  );
-                })}
-              </View>
-            </View>
-          )
-      }
+      {/* Round totals / live match — pinned above the bottom controls.
+          Match-play live panel always shows (it's the score, not a running
+          total). Solo and Stableford totals respect the eye toggle. */}
+      {isBestBall && bbResult ? (
+        <MatchPanel bbResult={bbResult} currentHole={currentHole} settings={settings} />
+      ) : showRunning && players.length === 1 ? (
+        <SoloTotalsRibbon player={players[0]} stats={playerTotals(players[0])} />
+      ) : showRunning ? (
+        <View style={s.totalsStrip}>
+          <StablefordWinnerBanner round={round} scores={scores} players={players} />
+          <Text style={s.totalStripLabel}>ROUND TOTALS</Text>
+          <View style={s.totalStripRow}>
+            {players.map((player) => {
+              const { pts, str } = playerTotals(player);
+              return (
+                <View key={player.id} style={s.totalStripPlayer}>
+                  <Text style={s.totalStripName}>{player.name.split(' ')[0]}</Text>
+                  <Text style={s.totalStripPts}>{pts}</Text>
+                  <Text style={s.totalStripStr}>{str || '-'}</Text>
+                </View>
+              );
+            })}
+          </View>
+        </View>
+      ) : null}
 
       {/* Bottom controls: actions (notes / go-to-hole / next) */}
       <View style={s.bottomBar}>
@@ -1160,10 +1196,13 @@ function WinnerBadge({ name }) {
 }
 
 // Shown above the Stableford totals strip when the pair result is decided
-// (either mathematically clinched or all 18 holes fully scored).
+// (every player has entered every hole, and one entry leads outright).
+// Works for both random-partners (2 pair-of-2) and individual stableford
+// (N pair-of-1) — single-member "pairs" naturally produce a per-player
+// ranking through roundPairLeaderboard.
 function StablefordWinnerBanner({ round, scores, players }) {
   const pairs = round?.pairs ?? [];
-  if (pairs.length !== 2) return null;
+  if (pairs.length < 2) return null;
 
   // Round is considered "decided" only once every player has entered scores
   // on every hole. Stableford has no clinching shortcut (a 5-point eagle
