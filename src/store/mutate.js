@@ -7,6 +7,8 @@ import { isOnline } from '../lib/connectivity';
 function metaPathFor(m) {
   switch (m.type) {
     case 'score.set':    return `rounds.${m.roundId}.scores.${m.playerId}.h${m.hole}`;
+    // Per-player, per-hole shot detail (putts / drive / penalties).
+    case 'shot.set':     return `rounds.${m.roundId}.shotDetails.${m.playerId}.h${m.hole}`;
     case 'note.set':
       return m.scope === 'hole'
         ? `rounds.${m.roundId}.notes.hole.${m.hole}`
@@ -18,8 +20,21 @@ function metaPathFor(m) {
     case 'round.remove': return `rounds.${m.roundId}._deleted`;
     // Players array LWW's as a single unit. Two concurrent offline adds
     // from different devices → last sync wins; this edge case is out of v1
-    // scope per the spec's conflict section.
-    case 'tournament.addPlayer': return `players`;
+    // scope per the spec's conflict section. Adding a player mid-round also
+    // touches per-round playing handicaps and pairs, so this mutation bumps
+    // several paths at once.
+    case 'tournament.addPlayer': {
+      const paths = ['players'];
+      for (const patch of (m.roundPatches ?? [])) {
+        paths.push(`rounds.${patch.roundId}.playerHandicaps.${m.player.id}`);
+        if (patch.pairs) paths.push(`rounds.${patch.roundId}.pairs`);
+      }
+      return paths;
+    }
+    // Archive / reopen a tournament. Scalar LWW path.
+    case 'tournament.setFinished': return `finishedAt`;
+    // Which tournament player is "me" (drives shot-detail tracking).
+    case 'tournament.setMe': return `meId`;
     case 'player.upsertLibrary': return null;
     default: throw new Error(`unknown mutation type: ${m.type}`);
   }
@@ -35,6 +50,15 @@ function applyToTournament(t, m) {
       round.scores[m.playerId] = { ...(round.scores[m.playerId] ?? {}) };
       if (m.value == null) delete round.scores[m.playerId][m.hole];
       else round.scores[m.playerId][m.hole] = m.value;
+      break;
+    }
+    case 'shot.set': {
+      const round = t.rounds.find((r) => r.id === m.roundId);
+      if (!round) return;
+      round.shotDetails = { ...(round.shotDetails ?? {}) };
+      round.shotDetails[m.playerId] = { ...(round.shotDetails[m.playerId] ?? {}) };
+      if (m.detail == null) delete round.shotDetails[m.playerId][m.hole];
+      else round.shotDetails[m.playerId][m.hole] = m.detail;
       break;
     }
     case 'note.set': {
@@ -66,6 +90,23 @@ function applyToTournament(t, m) {
     }
     case 'tournament.addPlayer': {
       t.players = [...(t.players ?? []), m.player];
+      for (const patch of (m.roundPatches ?? [])) {
+        const round = t.rounds?.find((r) => r.id === patch.roundId);
+        if (!round) continue;
+        round.playerHandicaps = {
+          ...(round.playerHandicaps ?? {}),
+          [m.player.id]: patch.playerHandicap,
+        };
+        if (patch.pairs) round.pairs = patch.pairs;
+      }
+      break;
+    }
+    case 'tournament.setFinished': {
+      t.finishedAt = m.finishedAt ?? null;
+      break;
+    }
+    case 'tournament.setMe': {
+      t.meId = m.meId ?? null;
       break;
     }
     case 'round.remove': {
@@ -95,7 +136,11 @@ export async function mutate(tournamentBefore, mutation) {
   applyToTournament(t, m);
   const path = metaPathFor(m);
   if (path) {
-    t._meta = { ...(t._meta ?? {}), [path]: ts };
+    // Most mutations stamp one _meta path; some (addPlayer) stamp several.
+    const paths = Array.isArray(path) ? path : [path];
+    const meta = { ...(t._meta ?? {}) };
+    for (const p of paths) meta[p] = ts;
+    t._meta = meta;
   }
 
   // 2. Persist local (UI source of truth)

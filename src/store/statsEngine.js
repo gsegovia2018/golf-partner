@@ -1367,3 +1367,86 @@ export function pairConfigMatrix(tournament) {
     pointDiff: c.pointsA - c.pointsB,
   }));
 }
+
+// ── Shot Stats (putts / driver direction / penalties) ──
+//
+// Aggregates the per-hole shot detail recorded for a single player
+// (round.shotDetails[playerId][holeNumber]) across every round. Driver
+// accuracy excludes par 3s — there is no driver off that tee. Returns a
+// plain object; an empty `hasData` flag lets the UI show a prompt.
+export function shotStats(tournament, playerId) {
+  const rounds = tournament?.rounds ?? [];
+  let puttsTotal = 0, holesWithPutts = 0, onePutts = 0, threePuttPlus = 0;
+  let drivesRecorded = 0, fairwaysHit = 0;
+  const driveDistribution = { fairway: 0, left: 0, right: 0, short: 0, super: 0 };
+  let teePenalties = 0, otherPenalties = 0;
+  let girHoles = 0, girEligible = 0;
+  let roundsWithData = 0;
+
+  rounds.forEach((round) => {
+    const byHole = round?.shotDetails?.[playerId];
+    if (!byHole) return;
+    let roundHasData = false;
+    (round.holes ?? []).forEach((hole) => {
+      const d = byHole[hole.number];
+      if (!d) return;
+      if (d.putts != null || d.drive != null
+        || (d.teePenalties ?? 0) > 0 || (d.otherPenalties ?? 0) > 0) {
+        roundHasData = true;
+      }
+      if (d.putts != null) {
+        puttsTotal += d.putts;
+        holesWithPutts += 1;
+        if (d.putts === 1) onePutts += 1;
+        if (d.putts >= 3) threePuttPlus += 1;
+      }
+      if (d.drive != null && hole.par !== 3) {
+        drivesRecorded += 1;
+        if (driveDistribution[d.drive] != null) driveDistribution[d.drive] += 1;
+        if (d.drive === 'fairway' || d.drive === 'super') fairwaysHit += 1;
+      }
+      teePenalties += d.teePenalties ?? 0;
+      otherPenalties += d.otherPenalties ?? 0;
+
+      // Green in regulation: reached the green with at least two strokes
+      // left for putting (strokes − putts ≤ par − 2).
+      const strokes = round?.scores?.[playerId]?.[hole.number];
+      if (strokes != null && d.putts != null) {
+        girEligible += 1;
+        if ((strokes - d.putts) <= (hole.par - 2)) girHoles += 1;
+      }
+    });
+    if (roundHasData) roundsWithData += 1;
+  });
+
+  const round1 = (n) => Math.round(n * 10) / 10;
+  return {
+    hasData: holesWithPutts > 0 || drivesRecorded > 0
+      || teePenalties > 0 || otherPenalties > 0,
+    roundsWithData,
+    putts: {
+      total: puttsTotal,
+      holes: holesWithPutts,
+      perHole: holesWithPutts > 0 ? round1(puttsTotal / holesWithPutts) : 0,
+      perRound: roundsWithData > 0 ? round1(puttsTotal / roundsWithData) : 0,
+      onePutts,
+      threePuttPlus,
+    },
+    drives: {
+      recorded: drivesRecorded,
+      fairwaysHit,
+      fairwayPct: drivesRecorded > 0 ? Math.round((fairwaysHit / drivesRecorded) * 100) : 0,
+      distribution: driveDistribution,
+    },
+    penalties: {
+      tee: teePenalties,
+      other: otherPenalties,
+      total: teePenalties + otherPenalties,
+    },
+    gir: {
+      holes: girHoles,
+      eligible: girEligible,
+      pct: girEligible > 0 ? Math.round((girHoles / girEligible) * 100) : 0,
+    },
+  };
+}

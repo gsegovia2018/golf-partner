@@ -42,7 +42,9 @@ import GalleryScreen from './src/screens/GalleryScreen';
 import JoinTournamentScreen from './src/screens/JoinTournamentScreen';
 import ProfileScreen from './src/screens/ProfileScreen';
 import MembersScreen from './src/screens/MembersScreen';
+import FinishedScreen from './src/screens/FinishedScreen';
 import { startUploadWorker } from './src/lib/uploadWorker';
+import * as ScreenOrientation from 'expo-screen-orientation';
 
 const Stack = createStackNavigator();
 
@@ -105,6 +107,7 @@ function AppNavigator() {
         <Stack.Screen name="JoinTournament" component={JoinTournamentScreen} />
         <Stack.Screen name="Profile" component={ProfileScreen} />
         <Stack.Screen name="Members" component={MembersScreen} />
+        <Stack.Screen name="Finished" component={FinishedScreen} />
       </Stack.Navigator>
     </>
   );
@@ -124,6 +127,12 @@ export default function App() {
   });
 
   useEffect(() => { startUploadWorker(); }, []);
+
+  // The app is portrait-first; only the scorecard grid view opts into
+  // landscape. Lock portrait at startup so every other screen stays put.
+  useEffect(() => {
+    ScreenOrientation.lockAsync(ScreenOrientation.OrientationLock.PORTRAIT_UP).catch(() => {});
+  }, []);
 
   if (!fontsLoaded) {
     return <LoadingSplash />;

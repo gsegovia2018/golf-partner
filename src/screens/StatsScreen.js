@@ -16,6 +16,7 @@ import {
   pairSynergy, pairCarryRatio, swingHole,
   par3Heartbreak, pickupChampion, anchor, zeroHero,
   skinsLeaderboard, matchPlayResults, pairConfigMatrix,
+  shotStats,
 } from '../store/statsEngine';
 import StatDetailSheet from '../components/StatDetailSheet';
 
@@ -24,8 +25,12 @@ const ALL_TABS = [
   { key: 'players', label: 'Players' },
   { key: 'holes', label: 'Holes' },
   { key: 'pairs', label: 'Pairs' },
+  { key: 'shots', label: 'My Shots' },
   { key: 'shame', label: 'Shame' },
 ];
+
+const DRIVE_KEYS = ['fairway', 'left', 'right', 'short', 'super'];
+const DRIVE_LABELS = { fairway: 'Fairway', left: 'Left', right: 'Right', short: 'Short', super: 'Super' };
 
 const firstName = (p) => p.name.split(' ')[0];
 const joinNames = (players) => {
@@ -142,6 +147,7 @@ export default function StatsScreen({ navigation }) {
         {activeTab === 'players' && <PlayersTab tournament={tournament} players={players} selectedPlayer={selectedPlayer} setSelectedPlayer={setSelectedPlayer} metric={metric} theme={theme} s={s} />}
         {activeTab === 'holes' && <HolesTab tournament={tournament} completedRounds={completedRounds} hasMulti={hasMulti} metric={metric} theme={theme} s={s} />}
         {activeTab === 'pairs' && usesTeams && <PairsTab tournament={tournament} players={players} h2hPlayer={h2hPlayer} setH2hPlayer={setH2hPlayer} selectedPlayer={selectedPlayer} setSelectedPlayer={setSelectedPlayer} metric={metric} theme={theme} s={s} />}
+        {activeTab === 'shots' && <ShotsTab tournament={tournament} theme={theme} s={s} />}
         {activeTab === 'shame' && <ShameTab tournament={tournament} hasMulti={hasMulti} usesTeams={usesTeams} metric={metric} theme={theme} s={s} />}
       </ScrollView>
     </SafeAreaView>
@@ -1985,6 +1991,118 @@ function HwGEPCells({ stats, strong, theme, s }) {
 
 // ── Shame Tab ──
 
+// ── My Shots Tab ──
+// Putting / driving / penalty stats for the "me" player (tournament.meId),
+// derived from per-hole shot detail entered on the scorecard.
+function ShotsTab({ tournament, theme, s }) {
+  const meId = tournament.meId ?? null;
+  const me = meId ? tournament.players.find((p) => p.id === meId) : null;
+  const stats = useMemo(() => (meId ? shotStats(tournament, meId) : null), [tournament, meId]);
+
+  if (!me || !stats || !stats.hasData) {
+    return (
+      <View style={{ paddingHorizontal: 16 }}>
+        <Text style={s.emptyText}>
+          {me
+            ? `No shot detail yet. On the scorecard, tap “Shot detail” under ${firstName(me)}'s card to log putts, drives and penalties.`
+            : 'Open the scorecard and pick which player is you to start tracking your shots.'}
+        </Text>
+      </View>
+    );
+  }
+
+  const { putts, drives, penalties, gir } = stats;
+  const driveColors = {
+    fairway: theme.scoreColor('excellent'),
+    super: theme.scoreColor('excellent'),
+    left: theme.scoreColor('neutral'),
+    right: theme.scoreColor('neutral'),
+    short: theme.scoreColor('poor'),
+  };
+
+  return (
+    <View style={{ paddingHorizontal: 16 }}>
+      <Text style={s.sectionTitle}>
+        {firstName(me)} · {stats.roundsWithData} {stats.roundsWithData === 1 ? 'round' : 'rounds'}
+      </Text>
+
+      <View style={s.card}>
+        <Text style={s.cardLabel}>Putting</Text>
+        <View style={s.shotStatGrid}>
+          <View style={s.shotStatCell}>
+            <Text style={s.shotStatNum}>{putts.perRound}</Text>
+            <Text style={s.shotStatLabel}>per round</Text>
+          </View>
+          <View style={s.shotStatCell}>
+            <Text style={s.shotStatNum}>{putts.perHole}</Text>
+            <Text style={s.shotStatLabel}>per hole</Text>
+          </View>
+          <View style={s.shotStatCell}>
+            <Text style={s.shotStatNum}>{putts.onePutts}</Text>
+            <Text style={s.shotStatLabel}>1-putts</Text>
+          </View>
+          <View style={s.shotStatCell}>
+            <Text style={s.shotStatNum}>{putts.threePuttPlus}</Text>
+            <Text style={s.shotStatLabel}>3-putts+</Text>
+          </View>
+        </View>
+      </View>
+
+      <View style={s.card}>
+        <Text style={s.cardLabel}>Driving</Text>
+        {drives.recorded > 0 ? (
+          <>
+            <Text style={s.bigNumber}>{drives.fairwayPct}%</Text>
+            <Text style={s.cardSub}>
+              fairways hit · {drives.fairwaysHit}/{drives.recorded} drives
+            </Text>
+            <View style={[s.distRow, { marginTop: 12 }]}>
+              {DRIVE_KEYS.map((k) => (
+                <DistBar
+                  key={k}
+                  label={DRIVE_LABELS[k]}
+                  count={drives.distribution[k]}
+                  total={drives.recorded}
+                  color={driveColors[k]}
+                  s={s}
+                />
+              ))}
+            </View>
+          </>
+        ) : (
+          <Text style={s.cardSub}>No drives recorded yet.</Text>
+        )}
+      </View>
+
+      <View style={s.card}>
+        <Text style={s.cardLabel}>Penalties</Text>
+        <View style={s.shotStatGrid}>
+          <View style={s.shotStatCell}>
+            <Text style={[s.shotStatNum, { color: theme.scoreColor('poor') }]}>{penalties.tee}</Text>
+            <Text style={s.shotStatLabel}>tee</Text>
+          </View>
+          <View style={s.shotStatCell}>
+            <Text style={[s.shotStatNum, { color: theme.scoreColor('neutral') }]}>{penalties.other}</Text>
+            <Text style={s.shotStatLabel}>other</Text>
+          </View>
+          <View style={s.shotStatCell}>
+            <Text style={s.shotStatNum}>{penalties.total}</Text>
+            <Text style={s.shotStatLabel}>total</Text>
+          </View>
+        </View>
+      </View>
+
+      {gir.eligible > 0 && (
+        <View style={s.card}>
+          <Text style={s.cardLabel}>Greens in regulation</Text>
+          <Text style={s.bigNumber}>{gir.pct}%</Text>
+          <Text style={s.cardSub}>{gir.holes}/{gir.eligible} holes</Text>
+        </View>
+      )}
+    </View>
+  );
+}
+
 function ShameTab({ tournament, hasMulti, usesTeams, metric, theme, s }) {
   const shame = hallOfShame(tournament, { metric });
   const par3 = par3Heartbreak(tournament);
@@ -2319,6 +2437,11 @@ const makeStyles = (t) => StyleSheet.create({
   cardLabel: { fontFamily: 'PlusJakartaSans-SemiBold', color: t.text.muted, fontSize: 11, letterSpacing: 1, textTransform: 'uppercase', marginBottom: 4 },
   cardSub: { fontFamily: 'PlusJakartaSans-Regular', color: t.text.muted, fontSize: 12, marginTop: 2 },
   bigNumber: { fontFamily: 'PlayfairDisplay-Black', color: t.accent.primary, fontSize: 36 },
+
+  shotStatGrid: { flexDirection: 'row', flexWrap: 'wrap', marginTop: 10 },
+  shotStatCell: { width: '25%', alignItems: 'center', paddingVertical: 6 },
+  shotStatNum: { fontFamily: 'PlayfairDisplay-Bold', color: t.text.primary, fontSize: 24 },
+  shotStatLabel: { fontFamily: 'PlusJakartaSans-Medium', color: t.text.muted, fontSize: 10, marginTop: 2, textAlign: 'center' },
 
   sectionTitle: { fontFamily: 'PlusJakartaSans-SemiBold', color: t.text.muted, fontSize: 10, letterSpacing: 1.5, textTransform: 'uppercase', marginBottom: 12, marginTop: 20 },
   sectionTitleRow: { flexDirection: 'row', alignItems: 'center' },

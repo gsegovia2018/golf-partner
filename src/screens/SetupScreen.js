@@ -7,7 +7,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { Feather } from '@expo/vector-icons';
 import { useFocusEffect } from '@react-navigation/native';
-import { createTournament, saveTournament, randomPairs, DEFAULT_SETTINGS } from '../store/tournamentStore';
+import { createTournament, saveTournament, randomPairs, DEFAULT_SETTINGS, deriveRoundPlayingHandicap } from '../store/tournamentStore';
 import { defaultHoles, fetchCourses, fetchPlayers } from '../store/libraryStore';
 import { consumePendingPlayers, consumePendingCourses } from '../lib/selectionBridge';
 import { useTheme } from '../theme/ThemeContext';
@@ -188,8 +188,12 @@ export default function SetupScreen({ navigation, route }) {
     };
 
     const builtRounds = rounds.map((r, i) => {
+      // Auto-derive WHS playing handicaps when the user never opened
+      // Configure Holes (r.playerHandicaps still null). r already carries
+      // holes / slope / courseRating here, so deriveRoundPlayingHandicap
+      // yields the real playing handicap rather than the raw index.
       const playerHandicaps = r.playerHandicaps
-        ?? Object.fromEntries(players.map((p) => [p.id, p.handicap]));
+        ?? Object.fromEntries(players.map((p) => [p.id, deriveRoundPlayingHandicap(p.handicap, r)]));
       return {
         id: `r${i}`,
         courseId: r.courseId ?? null,

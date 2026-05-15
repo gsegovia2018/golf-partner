@@ -16,10 +16,12 @@ import {
   roundPairLeaderboard, calcBestWorstBall, roundTotals,
   playerRoundBestWorstPoints,
   tournamentPlayerClinched, roundPairClinched,
-  isRoundComplete, subscribeTournamentChanges,
-  matchPlayRoundTally,
+  isRoundComplete, isTournamentFinished, subscribeTournamentChanges,
+  matchPlayRoundTally, addPlayerRoundPatches,
   DEFAULT_SETTINGS, generateInviteCode, setInviteRole,
 } from '../store/tournamentStore';
+import { mutate } from '../store/mutate';
+import { consumePendingPlayers } from '../lib/selectionBridge';
 import { subscribeConnectivity } from '../lib/connectivity';
 import { getShowRunningScore, setShowRunningScore } from '../lib/prefs';
 
@@ -165,6 +167,31 @@ export default function HomeScreen({ navigation, route }) {
     setRefreshing(true);
     try { await reload(); } finally { setRefreshing(false); }
   }, [reload]);
+
+  // Apply players picked mid-round (returned via the selection bridge from
+  // PlayerPicker). Each addPlayer mutation also patches the affected rounds'
+  // playing handicaps and pairs. Applied serially so the second player's
+  // pairs are computed against a roster that already includes the first.
+  const applyAddPlayers = useCallback(async (picked) => {
+    let t = await loadTournament();
+    if (!t) return;
+    for (const p of picked) {
+      if ((t.players ?? []).length >= 4) break;
+      if ((t.players ?? []).some((x) => x.id === p.id)) continue;
+      const player = { id: p.id, name: p.name, handicap: parseInt(p.handicap, 10) || 0 };
+      const roundPatches = addPlayerRoundPatches(t, player);
+      t = await mutate(t, { type: 'tournament.addPlayer', player, roundPatches });
+    }
+    setTournament(t);
+  }, []);
+
+  useEffect(() => {
+    const unsub = navigation.addListener('focus', () => {
+      const picked = consumePendingPlayers();
+      if (picked && picked.length > 0) applyAddPlayers(picked);
+    });
+    return unsub;
+  }, [navigation, applyAddPlayers]);
 
   useEffect(() => {
     const unsubscribe = navigation.addListener('focus', reload);
@@ -385,6 +412,27 @@ export default function HomeScreen({ navigation, route }) {
     } catch (err) {
       if (Platform.OS === 'web') window.alert(err.message ?? 'Could not delete tournament');
       else Alert.alert('Error', err.message ?? 'Could not delete tournament');
+    }
+  }
+
+  // Archive or reopen the active tournament. Marking finished moves it off
+  // the Home list onto the Finished screen; reopening clears the flag.
+  async function setTournamentFinished(t, finished) {
+    if (!t) return;
+    try {
+      const updated = await mutate(t, {
+        type: 'tournament.setFinished',
+        finishedAt: finished ? new Date().toISOString() : null,
+      });
+      setTournament(updated);
+      if (finished) {
+        if (viewMode === 'tournament' && navigation.canGoBack()) navigation.goBack();
+        else navigation.navigate('Home');
+      }
+    } catch (err) {
+      const msg = err?.message ?? 'Could not update tournament';
+      if (Platform.OS === 'web') window.alert(msg);
+      else Alert.alert('Error', msg);
     }
   }
 
@@ -630,8 +678,25 @@ export default function HomeScreen({ navigation, route }) {
             );
           };
           const sorted = allTournaments.slice().sort((a, b) => b.id - a.id);
-          const games = sorted.filter((t) => t.kind === 'game');
-          const tournaments = sorted.filter((t) => t.kind !== 'game');
+          // Finished games/tournaments live on a dedicated screen — keep the
+          // Home list focused on what's still in play.
+          const active = sorted.filter((t) => !isTournamentFinished(t));
+          const finishedCount = sorted.length - active.length;
+          const games = active.filter((t) => t.kind === 'game');
+          const tournaments = active.filter((t) => t.kind !== 'game');
+          const finishedLink = finishedCount > 0 ? (
+            <TouchableOpacity
+              style={s.finishedLink}
+              onPress={() => navigation.navigate('Finished')}
+              activeOpacity={0.7}
+            >
+              <Feather name="archive" size={16} color={theme.accent.primary} />
+              <Text style={s.finishedLinkText}>
+                Finished ({finishedCount})
+              </Text>
+              <Feather name="chevron-right" size={16} color={theme.text.muted} style={{ marginLeft: 'auto' }} />
+            </TouchableOpacity>
+          ) : null;
           if (sorted.length === 0) {
             if (listStale) {
               return (
@@ -649,6 +714,18 @@ export default function HomeScreen({ navigation, route }) {
               </View>
             );
           }
+          if (active.length === 0) {
+            return (
+              <>
+                <View style={s.emptyState}>
+                  <Feather name="check-circle" size={48} color={theme.text.muted} />
+                  <Text style={s.emptyTitle}>All caught up</Text>
+                  <Text style={s.emptySubtitle}>Every game and tournament is finished. Start a new one above.</Text>
+                </View>
+                {finishedLink}
+              </>
+            );
+          }
           return (
             <>
               {games.length > 0 && (
@@ -663,6 +740,7 @@ export default function HomeScreen({ navigation, route }) {
                   {tournaments.map(renderCard)}
                 </>
               )}
+              {finishedLink}
             </>
           );
         })()}
@@ -1277,6 +1355,26 @@ export default function HomeScreen({ navigation, route }) {
             </TouchableOpacity>
           )}
 
+          {!isViewer && tournament.players.length < 4
+            && (settings?.scoringMode === 'individual'
+              || settings?.scoringMode === 'stableford'
+              || settings?.scoringMode == null) && (
+            <TouchableOpacity
+              style={s.menuItem}
+              onPress={() => {
+                setShowSettings(false);
+                navigation.navigate('PlayerPicker', {
+                  alreadySelectedIds: tournament.players.map((p) => p.id),
+                });
+              }}
+              activeOpacity={0.7}
+            >
+              <Feather name="user-plus" size={18} color={theme.accent.primary} />
+              <Text style={s.menuItemText}>Add Player</Text>
+              <Feather name="chevron-right" size={16} color={theme.text.muted} />
+            </TouchableOpacity>
+          )}
+
           <TouchableOpacity
             style={s.menuItem}
             onPress={() => { setShowSettings(false); navigation.navigate('Stats'); }}
@@ -1314,6 +1412,34 @@ export default function HomeScreen({ navigation, route }) {
               <Feather name="chevron-right" size={16} color={theme.text.muted} />
             </TouchableOpacity>
           )}
+
+          {!isViewer && (() => {
+            const kindLabel = tournament.kind === 'game' ? 'Game' : 'Tournament';
+            if (tournament.finishedAt) {
+              return (
+                <TouchableOpacity
+                  style={s.menuItem}
+                  onPress={() => { setShowSettings(false); setTournamentFinished(tournament, false); }}
+                  activeOpacity={0.7}
+                >
+                  <Feather name="rotate-ccw" size={18} color={theme.accent.primary} />
+                  <Text style={s.menuItemText}>Reopen {kindLabel}</Text>
+                  <Feather name="chevron-right" size={16} color={theme.text.muted} />
+                </TouchableOpacity>
+              );
+            }
+            return (
+              <TouchableOpacity
+                style={s.menuItem}
+                onPress={() => { setShowSettings(false); setTournamentFinished(tournament, true); }}
+                activeOpacity={0.7}
+              >
+                <Feather name="flag" size={18} color={theme.accent.primary} />
+                <Text style={s.menuItemText}>Finish {kindLabel}</Text>
+                <Feather name="chevron-right" size={16} color={theme.text.muted} />
+              </TouchableOpacity>
+            );
+          })()}
 
           {isOwner && (
             <TouchableOpacity
@@ -1767,6 +1893,17 @@ const makeStyles = (t) => StyleSheet.create({
     fontFamily: 'PlusJakartaSans-SemiBold',
     color: t.text.muted, fontSize: 10, letterSpacing: 1.5,
     marginBottom: 12, marginTop: 20, textTransform: 'uppercase',
+  },
+  finishedLink: {
+    flexDirection: 'row', alignItems: 'center', gap: 8,
+    backgroundColor: t.isDark ? t.bg.card : t.bg.card,
+    borderRadius: 16, borderWidth: t.isDark ? 1 : 0,
+    borderColor: t.isDark ? t.glass?.border || t.border.default : t.border.default,
+    padding: 16, marginTop: 16,
+    ...(t.isDark ? {} : t.shadow.card),
+  },
+  finishedLinkText: {
+    fontFamily: 'PlusJakartaSans-SemiBold', color: t.text.primary, fontSize: 14,
   },
   tournamentCard: {
     backgroundColor: t.isDark ? t.bg.card : t.bg.card,

@@ -450,6 +450,45 @@ export async function propagateCourseToTournaments(courseId, { slope, rating, ho
   return updatedIds;
 }
 
+// Build the per-round patches for adding `player` to an in-progress
+// tournament. The player joins `currentRound` and every later round;
+// already-played earlier rounds are left untouched. For a single game
+// (one round) this is just that round. Each patch carries the derived
+// playing handicap and the updated pairs for its round.
+//
+// Pairs:
+//   individual → append the player as their own solo pair.
+//   stableford → not-yet-revealed rounds re-randomise with the full
+//     roster; revealed rounds slot the player into a pair short of two
+//     members, or a new solo pair if none is short.
+export function addPlayerRoundPatches(tournament, player) {
+  const mode = tournament?.settings?.scoringMode ?? 'stableford';
+  const currentRound = tournament?.currentRound ?? 0;
+  const roster = [...(tournament?.players ?? []), player];
+  const patches = [];
+  (tournament?.rounds ?? []).forEach((round, idx) => {
+    if (idx < currentRound) return; // already-played rounds untouched
+    const playerHandicap = deriveRoundPlayingHandicap(player.handicap, round);
+    let pairs = null;
+    if (mode === 'individual') {
+      pairs = [...(round.pairs ?? []), [player]];
+    } else if (mode === 'stableford') {
+      const revealed = round.revealed || idx <= currentRound;
+      if (!revealed) {
+        pairs = randomPairs(roster);
+      } else {
+        const next = (round.pairs ?? []).map((pr) => [...pr]);
+        const short = next.find((pr) => pr.length < 2);
+        if (short) short.push(player);
+        else next.push([player]);
+        pairs = next;
+      }
+    }
+    patches.push({ roundId: round.id, playerHandicap, pairs });
+  });
+  return patches;
+}
+
 export function calcExtraShots(playerHandicap, holeStrokeIndex) {
   const base = Math.floor(playerHandicap / 18);
   const remainder = playerHandicap % 18;
@@ -1116,6 +1155,18 @@ export function isRoundComplete(round, players) {
     if (!perPlayer) return false;
     return round.holes.every((h) => perPlayer[h.number] != null);
   });
+}
+
+// A tournament/game is "finished" when explicitly archived (finishedAt set)
+// or when every round has every player scored on every hole. Drives whether
+// it appears on the Home list or the Finished page.
+export function isTournamentFinished(tournament) {
+  if (!tournament) return false;
+  if (tournament.finishedAt) return true;
+  const rounds = tournament.rounds ?? [];
+  const players = tournament.players ?? [];
+  if (rounds.length === 0 || players.length === 0) return false;
+  return rounds.every((r) => isRoundComplete(r, players));
 }
 
 export function roundEnteredCount(round, players) {

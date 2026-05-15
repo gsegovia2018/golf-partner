@@ -8,6 +8,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import * as Haptics from 'expo-haptics';
 
 import { Feather } from '@expo/vector-icons';
+import * as ScreenOrientation from 'expo-screen-orientation';
 
 import { getShowRunningScore, setShowRunningScore } from '../lib/prefs';
 import {
@@ -17,6 +18,8 @@ import {
   roundPairLeaderboard, roundPairClinched,
 } from '../store/tournamentStore';
 import { mutate } from '../store/mutate';
+import { fetchPlayers } from '../store/libraryStore';
+import { useAuth } from '../context/AuthContext';
 import { useTheme } from '../theme/ThemeContext';
 import PullToRefresh from '../components/PullToRefresh';
 import MediaLightbox from '../components/MediaLightbox';
@@ -65,12 +68,30 @@ function celebrationFor(par, strokes) {
   return null;
 }
 
+// Shot detail (tracked for the "me" player only).
+const DEFAULT_SHOT = { putts: null, drive: null, teePenalties: 0, otherPenalties: 0 };
+
+// Driver direction, in display order: miss-left, fairway (on target),
+// miss-right, short, then `super` for a stand-out tee shot.
+const DRIVE_ORDER = ['left', 'fairway', 'right', 'short', 'super'];
+const DRIVE_META = {
+  left: { label: 'Left', icon: 'arrow-up-left' },
+  fairway: { label: 'Fairway', icon: 'circle' },
+  right: { label: 'Right', icon: 'arrow-up-right' },
+  short: { label: 'Short', icon: 'arrow-down' },
+  super: { label: 'Super', icon: 'star' },
+};
+
 export default function ScorecardScreen({ navigation, route }) {
   const { theme } = useTheme();
   const s = useMemo(() => makeStyles(theme), [theme]);
   const paramRoundIndex = route.params?.roundIndex;
+  const { user } = useAuth();
   const [tournament, setTournament] = useState(null);
   const [scores, setScores] = useState({});
+  // Per-player, per-hole shot detail. In practice only the "me" player has
+  // entries, but it is keyed by playerId like `scores` for generality.
+  const [shotDetails, setShotDetails] = useState({});
   const [notes, setNotes] = useState('');
   const [view, setView] = useState('hole'); // 'grid' | 'hole'
   const [currentHole, setCurrentHole] = useState(1);
@@ -103,6 +124,19 @@ export default function ScorecardScreen({ navigation, route }) {
 
   useEffect(() => { tournamentRef.current = tournament; }, [tournament]);
 
+  // The grid view is wide — let the user rotate to landscape to read it.
+  // The hole view stays portrait. Either way, restore portrait on exit.
+  useEffect(() => {
+    if (view === 'grid') {
+      ScreenOrientation.unlockAsync().catch(() => {});
+    } else {
+      ScreenOrientation.lockAsync(ScreenOrientation.OrientationLock.PORTRAIT_UP).catch(() => {});
+    }
+  }, [view]);
+  useEffect(() => () => {
+    ScreenOrientation.lockAsync(ScreenOrientation.OrientationLock.PORTRAIT_UP).catch(() => {});
+  }, []);
+
   const reload = useCallback(async ({ preserveLocalEdits = false } = {}) => {
     const t = await loadTournament();
     if (!t) return;
@@ -112,6 +146,7 @@ export default function ScorecardScreen({ navigation, route }) {
     setTournament(t);
     if (!preserveLocalEdits) {
       setScores(roundScores);
+      setShotDetails(round?.shotDetails ?? {});
       setNotes(round?.notes ?? '');
 
       // Only on first load: jump to the first hole with no scores entered.
@@ -236,10 +271,55 @@ export default function ScorecardScreen({ navigation, route }) {
     }, 400);
   }, [roundIndex, enqueueSave]);
 
+  // Persist a single hole's shot detail for the "me" player. Routed through
+  // the same serial save chain as scores so concurrent edits don't race.
+  const saveShot = useCallback((playerId, holeNumber, detail) => {
+    if (!tournamentRef.current) return;
+    pendingSaveRef.current = true;
+    enqueueSave(async () => {
+      if (!tournamentRef.current) return;
+      const r = tournamentRef.current.rounds[roundIndex];
+      if (!r) return;
+      const t = await mutate(tournamentRef.current, {
+        type: 'shot.set',
+        roundId: r.id,
+        playerId,
+        hole: holeNumber,
+        detail,
+      });
+      tournamentRef.current = t;
+    });
+  }, [roundIndex, enqueueSave]);
+
+  const setShot = useCallback((playerId, holeNumber, patch) => {
+    setShotDetails((prev) => {
+      const current = prev[playerId]?.[holeNumber] ?? DEFAULT_SHOT;
+      const detail = { ...DEFAULT_SHOT, ...current, ...patch };
+      const next = {
+        ...prev,
+        [playerId]: { ...prev[playerId], [holeNumber]: detail },
+      };
+      saveShot(playerId, holeNumber, detail);
+      return next;
+    });
+  }, [saveShot]);
+
+  // Persist which player is "me" (drives shot-detail tracking).
+  const pickMe = useCallback(async (playerId) => {
+    if (!tournamentRef.current) return;
+    const t = await mutate(tournamentRef.current, {
+      type: 'tournament.setMe',
+      meId: playerId,
+    });
+    tournamentRef.current = t;
+    setTournament(t);
+  }, []);
+
   // Hoist memoised derivations above the early return so the hook order
   // stays stable while the tournament loads.
   const round = tournament?.rounds?.[roundIndex] ?? null;
   const players = tournament?.players ?? [];
+  const meId = tournament?.meId ?? null;
   const settings = useMemo(
     () => ({ ...DEFAULT_SETTINGS, ...(tournament?.settings ?? {}) }),
     [tournament?.settings],
@@ -253,6 +333,29 @@ export default function ScorecardScreen({ navigation, route }) {
     () => (isBestBall && liveRound ? calcBestWorstBall(liveRound, players) : null),
     [isBestBall, liveRound, players],
   );
+
+  // Best-effort default for the "me" player: a solo round is unambiguous;
+  // otherwise match the signed-in user to a linked library player. If no
+  // match, meId stays null and the scorecard shows the "who are you?" picker.
+  const meDefaultedRef = useRef(false);
+  useEffect(() => {
+    if (meDefaultedRef.current || !tournament) return;
+    const ps = tournament.players ?? [];
+    if (tournament.meId || ps.length === 0) { meDefaultedRef.current = true; return; }
+    if (ps.length === 1) {
+      meDefaultedRef.current = true;
+      pickMe(ps[0].id);
+      return;
+    }
+    if (!user?.id) return;
+    meDefaultedRef.current = true;
+    fetchPlayers()
+      .then((lib) => {
+        const linked = lib.find((p) => p.user_id === user.id);
+        if (linked && ps.some((p) => p.id === linked.id)) pickMe(linked.id);
+      })
+      .catch(() => {});
+  }, [tournament, user, pickMe]);
 
   const triggerCelebration = useCallback((playerId, holeNumber, label) => {
     const holdMs =
@@ -516,6 +619,10 @@ export default function ScorecardScreen({ navigation, route }) {
           roundIndex={roundIndex}
           players={players}
           scores={scores}
+          shotDetails={shotDetails}
+          meId={meId}
+          onSetShot={setShot}
+          onPickMe={pickMe}
           notes={notes}
           currentHole={currentHole}
           hole={hole}
@@ -594,6 +701,7 @@ export default function ScorecardScreen({ navigation, route }) {
 const HolePage = React.memo(function HolePage({
   pageHole, width, height, courseName, roundIndex,
   round, players, scores,
+  shotDetails, meId, onSetShot,
   theme, s,
   onStep, onSetScore, getScoreAnim,
   showRunning, playerTotals,
@@ -681,7 +789,8 @@ const HolePage = React.memo(function HolePage({
               : theme.scoreColor('poor');
 
             return (
-              <View key={player.id} style={s.soloHeroCard}>
+              <React.Fragment key={player.id}>
+              <View style={s.soloHeroCard}>
                 <View style={s.soloHeroHeader}>
                   <View>
                     <Text style={s.soloHeroName}>{player.name}</Text>
@@ -753,6 +862,16 @@ const HolePage = React.memo(function HolePage({
                   </View>
                 )}
               </View>
+              {player.id === meId && (
+                <ShotDetailPanel
+                  hole={pageHole}
+                  detail={shotDetails[meId]?.[pageHole.number]}
+                  onChange={(patch) => onSetShot(meId, pageHole.number, patch)}
+                  theme={theme}
+                  s={s}
+                />
+              )}
+              </React.Fragment>
             );
           }
 
@@ -809,6 +928,15 @@ const HolePage = React.memo(function HolePage({
                   </View>
                 </View>
               </View>
+              {player.id === meId && (
+                <ShotDetailPanel
+                  hole={pageHole}
+                  detail={shotDetails[meId]?.[pageHole.number]}
+                  onChange={(patch) => onSetShot(meId, pageHole.number, patch)}
+                  theme={theme}
+                  s={s}
+                />
+              )}
             </React.Fragment>
           );
         })}
@@ -817,7 +945,133 @@ const HolePage = React.memo(function HolePage({
   );
 });
 
-function HoleView({ round, roundIndex, players, scores, notes, currentHole, hole, isBestBall, bbResult, settings, onStep, onSetScore, onNotesChange, onPrev, onNext, onGoToHole, onGoBack, playerTotals, showRunning, getScoreAnim, celebration, celebrationAnim, refreshing, onRefresh }) {
+// Prompt shown on the scorecard when shot-detail tracking can't tell which
+// player is "me" (multi-player round, no signed-in match).
+function MePicker({ players, onPickMe, theme, s }) {
+  return (
+    <View style={s.mePicker}>
+      <View style={s.mePickerHeader}>
+        <Feather name="target" size={14} color={theme.accent.primary} />
+        <Text style={s.mePickerLabel}>Track your shots — which player are you?</Text>
+      </View>
+      <View style={s.mePickerChips}>
+        {players.map((p) => (
+          <TouchableOpacity
+            key={p.id}
+            style={s.mePickerChip}
+            onPress={() => onPickMe(p.id)}
+            activeOpacity={0.7}
+          >
+            <Text style={s.mePickerChipText}>{p.name.split(' ')[0]}</Text>
+          </TouchableOpacity>
+        ))}
+      </View>
+    </View>
+  );
+}
+
+// Collapsible per-hole shot detail for the "me" player: putts, driver
+// direction (hidden on par 3s — no driver off the tee), and penalties
+// split into tee penalties vs everything else.
+// One "label … − value +" row, styled after the Hole19 stat rows.
+function ShotCounterRow({ label, value, onStep, theme, s }) {
+  const canDec = value != null && value > 0;
+  return (
+    <View style={s.shotRow}>
+      <Text style={s.shotRowLabel}>{label}</Text>
+      <View style={s.shotCounter}>
+        <TouchableOpacity
+          style={[s.shotCounterBtn, !canDec && s.shotCounterBtnDim]}
+          onPress={() => onStep(-1)}
+          disabled={!canDec}
+          activeOpacity={0.7}
+          accessibilityLabel={`Decrease ${label}`}
+        >
+          <Feather name="minus" size={18} color={canDec ? theme.text.primary : theme.text.muted} />
+        </TouchableOpacity>
+        <Text style={s.shotCounterValue}>{value == null ? '–' : value}</Text>
+        <TouchableOpacity
+          style={s.shotCounterBtn}
+          onPress={() => onStep(1)}
+          activeOpacity={0.7}
+          accessibilityLabel={`Increase ${label}`}
+        >
+          <Feather name="plus" size={18} color={theme.text.primary} />
+        </TouchableOpacity>
+      </View>
+    </View>
+  );
+}
+
+// Per-hole shot detail for the "me" player, laid out after the Hole19
+// scorecard: stat rows with a stepper, plus a row of round direction
+// buttons for the drive. The drive row is hidden on par 3s.
+function ShotDetailPanel({ hole, detail, onChange, theme, s }) {
+  const d = { ...DEFAULT_SHOT, ...(detail ?? {}) };
+  const isPar3 = hole.par === 3;
+
+  const step = (field, delta) => {
+    const cur = d[field] ?? 0;
+    onChange({ [field]: Math.max(0, Math.min(15, cur + delta)) });
+  };
+
+  return (
+    <View style={s.shotPanel}>
+      <Text style={s.shotPanelLabel}>How many were:</Text>
+
+      <ShotCounterRow
+        label="Putts"
+        value={d.putts}
+        onStep={(delta) => step('putts', delta)}
+        theme={theme}
+        s={s}
+      />
+      <ShotCounterRow
+        label="Tee penalties"
+        value={d.teePenalties}
+        onStep={(delta) => step('teePenalties', delta)}
+        theme={theme}
+        s={s}
+      />
+      <ShotCounterRow
+        label="Other penalties"
+        value={d.otherPenalties}
+        onStep={(delta) => step('otherPenalties', delta)}
+        theme={theme}
+        s={s}
+      />
+
+      {!isPar3 && (
+        <View style={[s.shotRow, s.shotRowLast]}>
+          <Text style={s.shotRowLabel}>Driver</Text>
+          <View style={s.driveBtns}>
+            {DRIVE_ORDER.map((key) => {
+              const meta = DRIVE_META[key];
+              const active = d.drive === key;
+              return (
+                <TouchableOpacity
+                  key={key}
+                  style={[s.driveCircle, active && s.driveCircleActive]}
+                  onPress={() => onChange({ drive: active ? null : key })}
+                  activeOpacity={0.7}
+                  accessibilityLabel={`Driver ${meta.label}`}
+                >
+                  <Feather
+                    name={meta.icon}
+                    size={18}
+                    color={active ? theme.text.inverse : theme.text.secondary}
+                  />
+                </TouchableOpacity>
+              );
+            })}
+          </View>
+        </View>
+      )}
+    </View>
+  );
+}
+
+function HoleView({ round, roundIndex, players, scores, shotDetails, meId, onSetShot, onPickMe, notes, currentHole, hole, isBestBall, bbResult, settings, onStep, onSetScore, onNotesChange, onPrev, onNext, onGoToHole, onGoBack, playerTotals, showRunning, getScoreAnim, celebration, celebrationAnim, refreshing, onRefresh }) {
   const { theme } = useTheme();
   const s = useMemo(() => makeStyles(theme), [theme]);
   const [notesOpen, setNotesOpen] = useState(false);
@@ -862,6 +1116,12 @@ function HoleView({ round, roundIndex, players, scores, notes, currentHole, hole
 
   return (
     <View style={s.flex}>
+      {/* Shot tracking needs to know which player is "me". Solo rounds and
+          signed-in users are resolved automatically; otherwise prompt. */}
+      {!meId && players.length > 1 && (
+        <MePicker players={players} onPickMe={onPickMe} theme={theme} s={s} />
+      )}
+
       {/* Horizontal pager: flex:1, one page per hole (swipe to change hole) */}
       <View
         style={s.pagerWrap}
@@ -934,6 +1194,9 @@ function HoleView({ round, roundIndex, players, scores, notes, currentHole, hole
                 round={round}
                 players={players}
                 scores={scores}
+                shotDetails={shotDetails}
+                meId={meId}
+                onSetShot={onSetShot}
                 theme={theme}
                 s={s}
                 onStep={onStep}
@@ -2453,6 +2716,99 @@ function makeStyles(theme) {
       shadowOffset: { width: 0, height: 4 },
       elevation: 2,
     },
+
+    /* ── Shot detail panel ── */
+    mePicker: {
+      backgroundColor: theme.bg.card,
+      borderRadius: 14,
+      borderWidth: 1,
+      borderColor: theme.accent.primary + '40',
+      marginHorizontal: 16,
+      marginTop: 12,
+      padding: 14,
+      gap: 10,
+    },
+    mePickerHeader: { flexDirection: 'row', alignItems: 'center', gap: 8 },
+    mePickerLabel: {
+      flex: 1,
+      fontFamily: 'PlusJakartaSans-SemiBold',
+      color: theme.text.primary,
+      fontSize: 13,
+    },
+    mePickerChips: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 },
+    mePickerChip: {
+      paddingHorizontal: 14,
+      paddingVertical: 8,
+      borderRadius: 10,
+      backgroundColor: theme.isDark ? theme.accent.light : theme.accent.light,
+      borderWidth: 1,
+      borderColor: theme.accent.primary + '40',
+    },
+    mePickerChipText: {
+      fontFamily: 'PlusJakartaSans-Bold',
+      color: theme.accent.primary,
+      fontSize: 13,
+    },
+    shotPanel: {
+      backgroundColor: theme.bg.card,
+      borderRadius: 14,
+      borderWidth: 1,
+      borderColor: theme.isDark ? theme.glass?.border : theme.border.default,
+      marginTop: -4,
+      paddingHorizontal: 16,
+      paddingTop: 12,
+      paddingBottom: 4,
+    },
+    shotPanelLabel: {
+      fontFamily: 'PlusJakartaSans-SemiBold',
+      color: theme.text.muted,
+      fontSize: 12,
+      letterSpacing: 0.3,
+      marginBottom: 4,
+    },
+    shotRow: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      justifyContent: 'space-between',
+      paddingVertical: 10,
+      borderBottomWidth: 1,
+      borderBottomColor: theme.border.subtle ?? theme.border.default,
+    },
+    shotRowLast: { borderBottomWidth: 0 },
+    shotRowLabel: {
+      fontFamily: 'PlusJakartaSans-Bold',
+      color: theme.text.primary,
+      fontSize: 16,
+    },
+    shotCounter: { flexDirection: 'row', alignItems: 'center', gap: 14 },
+    shotCounterBtn: {
+      width: 40,
+      height: 40,
+      borderRadius: 12,
+      backgroundColor: theme.bg.card,
+      borderWidth: 1,
+      borderColor: theme.border.default,
+      alignItems: 'center',
+      justifyContent: 'center',
+    },
+    shotCounterBtnDim: { opacity: 0.4 },
+    shotCounterValue: {
+      fontFamily: 'PlusJakartaSans-Bold',
+      color: theme.text.primary,
+      fontSize: 18,
+      minWidth: 20,
+      textAlign: 'center',
+    },
+    driveBtns: { flexDirection: 'row', gap: 8 },
+    driveCircle: {
+      width: 38,
+      height: 38,
+      borderRadius: 19,
+      backgroundColor: theme.bg.secondary,
+      alignItems: 'center',
+      justifyContent: 'center',
+    },
+    driveCircleActive: { backgroundColor: theme.accent.primary },
     soloHeroHeader: {
       flexDirection: 'row',
       alignItems: 'center',
