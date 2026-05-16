@@ -28,25 +28,35 @@ export default function PlayerPickerScreen({ navigation, route }) {
 
   const [players, setPlayers] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState(null);
   const [pickedIds, setPickedIds] = useState([]);
   const [newName, setNewName] = useState('');
   const [newHcp, setNewHcp] = useState('');
   const [saving, setSaving] = useState(false);
   const [query, setQuery] = useState('');
   const [lastUsed, setLastUsed] = useState({});
+  const [reloadKey, setReloadKey] = useState(0);
 
   useFocusEffect(
     useCallback(() => {
       let cancelled = false;
-      Promise.all([fetchPlayers(), loadAllTournaments().catch(() => [])])
-        .then(([list, tournaments]) => {
+      setLoading(true);
+      setLoadError(null);
+      // fetchPlayers is fatal (no library to pick from); recent-use data is
+      // best-effort and degrades silently to alphabetical sort.
+      fetchPlayers()
+        .then(async (list) => {
+          const tournaments = await loadAllTournaments().catch(() => []);
           if (cancelled) return;
           setPlayers(list);
           setLastUsed(buildPlayerLastUsed(tournaments));
         })
+        .catch((err) => {
+          if (!cancelled) setLoadError(err?.message ?? 'Could not load players');
+        })
         .finally(() => { if (!cancelled) setLoading(false); });
       return () => { cancelled = true; };
-    }, []),
+    }, [reloadKey]),
   );
 
   const filteredPlayers = useMemo(() => {
@@ -116,7 +126,7 @@ export default function PlayerPickerScreen({ navigation, route }) {
         <View style={{ width: 22 }} />
       </View>
 
-      <ScrollView contentContainerStyle={s.content} automaticallyAdjustKeyboardInsets>
+      <ScrollView contentContainerStyle={s.content} automaticallyAdjustKeyboardInsets keyboardShouldPersistTaps="handled">
         <View style={s.searchRow}>
           <Feather name="search" size={16} color={theme.text.muted} style={s.searchIcon} />
           <TextInput
@@ -167,6 +177,20 @@ export default function PlayerPickerScreen({ navigation, route }) {
         <Text style={s.sectionTitle}>Library</Text>
         {loading ? (
           <ActivityIndicator color={theme.accent.primary} style={{ marginTop: 20 }} />
+        ) : loadError ? (
+          <View style={s.errorBox}>
+            <Feather name="wifi-off" size={20} color={theme.destructive} />
+            <Text style={s.errorTitle}>Couldn't load players</Text>
+            <Text style={s.errorMsg}>{loadError}</Text>
+            <TouchableOpacity
+              style={s.retryBtn}
+              onPress={() => setReloadKey((k) => k + 1)}
+              activeOpacity={0.7}
+            >
+              <Feather name="refresh-cw" size={14} color={theme.accent.primary} style={{ marginRight: 6 }} />
+              <Text style={s.retryBtnText}>Retry</Text>
+            </TouchableOpacity>
+          </View>
         ) : players.length === 0 ? (
           <Text style={s.empty}>No players in library yet.</Text>
         ) : filteredPlayers.length === 0 ? (
@@ -203,7 +227,15 @@ export default function PlayerPickerScreen({ navigation, route }) {
                       : <Text style={s.pickerAvatarText}>{(p.name ?? '?').slice(0, 2).toUpperCase()}</Text>}
                   </View>
                   <View style={s.rowLeft}>
-                    <Text style={[s.playerName, alreadyAdded && s.textMuted]}>{p.name}</Text>
+                    <View style={s.nameRow}>
+                      <Text style={[s.playerName, alreadyAdded && s.textMuted]}>{p.name}</Text>
+                      {p.user_id ? (
+                        <View style={s.linkedBadge}>
+                          <Feather name="user-check" size={10} color={theme.accent.primary} />
+                          <Text style={s.linkedBadgeText}>App user</Text>
+                        </View>
+                      ) : null}
+                    </View>
                     <Text style={s.hcpLabel}>HCP {p.handicap}</Text>
                   </View>
                   {alreadyAdded
@@ -330,6 +362,16 @@ const makeStyles = (theme) => StyleSheet.create({
     fontFamily: 'PlusJakartaSans-Bold',
   },
   textMuted: { color: theme.text.muted },
+  nameRow: { flexDirection: 'row', alignItems: 'center', gap: 8, flexWrap: 'wrap' },
+  linkedBadge: {
+    flexDirection: 'row', alignItems: 'center', gap: 3,
+    backgroundColor: theme.accent.light,
+    borderRadius: 6, paddingHorizontal: 6, paddingVertical: 2,
+  },
+  linkedBadgeText: {
+    fontFamily: 'PlusJakartaSans-Bold', fontSize: 9,
+    color: theme.accent.primary, letterSpacing: 0.3,
+  },
   hcpLabel: {
     color: theme.text.secondary,
     fontSize: 12,
@@ -402,4 +444,24 @@ const makeStyles = (theme) => StyleSheet.create({
     fontFamily: 'PlusJakartaSans-SemiBold',
     color: theme.accent.primary, fontSize: 14,
   },
+  errorBox: {
+    alignItems: 'center', padding: 24, marginTop: 12,
+    backgroundColor: theme.bg.card, borderRadius: 16,
+    borderWidth: 1, borderColor: theme.border.default,
+  },
+  errorTitle: {
+    fontFamily: 'PlusJakartaSans-Bold', color: theme.text.primary,
+    fontSize: 15, marginTop: 10,
+  },
+  errorMsg: {
+    fontFamily: 'PlusJakartaSans-Regular', color: theme.text.muted,
+    fontSize: 13, marginTop: 4, textAlign: 'center',
+  },
+  retryBtn: {
+    flexDirection: 'row', alignItems: 'center',
+    backgroundColor: theme.accent.light, borderRadius: 10,
+    borderWidth: 1, borderColor: theme.accent.primary + '40',
+    paddingHorizontal: 16, paddingVertical: 10, marginTop: 14,
+  },
+  retryBtnText: { fontFamily: 'PlusJakartaSans-Bold', color: theme.accent.primary, fontSize: 14 },
 });

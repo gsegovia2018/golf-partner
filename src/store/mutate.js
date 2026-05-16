@@ -35,6 +35,9 @@ function metaPathFor(m) {
     case 'tournament.setFinished': return `finishedAt`;
     // Which tournament player is "me" (drives shot-detail tracking).
     case 'tournament.setMe': return `meId`;
+    // A joining editor links their account to a tournament player: stamps
+    // that player's user_id and points meId at them. LWW on both paths.
+    case 'tournament.claimPlayer': return ['players', 'meId'];
     case 'player.upsertLibrary': return null;
     default: throw new Error(`unknown mutation type: ${m.type}`);
   }
@@ -107,6 +110,13 @@ function applyToTournament(t, m) {
     }
     case 'tournament.setMe': {
       t.meId = m.meId ?? null;
+      break;
+    }
+    case 'tournament.claimPlayer': {
+      t.players = (t.players ?? []).map((p) => (
+        p.id === m.playerId ? { ...p, user_id: m.userId } : p
+      ));
+      t.meId = m.playerId;
       break;
     }
     case 'round.remove': {

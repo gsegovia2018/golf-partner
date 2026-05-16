@@ -21,9 +21,15 @@ export default function JoinTournamentScreen({ navigation, route }) {
     if (code.trim().length < 6) return;
     setLoading(true);
     try {
-      const tournamentId = await joinTournamentByCode(code.trim());
+      const { tournamentId, role } = await joinTournamentByCode(code.trim());
       await setActiveTournament(tournamentId);
-      navigation.goBack();
+      // Editors get to say which player they are (or add themselves) before
+      // landing in the tournament. Viewers are read-only — straight in.
+      if (role === 'editor') {
+        navigation.replace('ClaimPlayer', { tournamentId });
+      } else {
+        navigation.goBack();
+      }
     } catch (err) {
       Alert.alert('Error', err.message ?? 'Could not join tournament');
     } finally {

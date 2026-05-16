@@ -2,7 +2,7 @@ import React, { useEffect, useRef, useState, useCallback, useMemo, startTransiti
 import {
   View, Text, TextInput, TouchableOpacity,
   StyleSheet, ScrollView, Modal, Pressable, KeyboardAvoidingView, Platform, Animated,
-  useWindowDimensions,
+  useWindowDimensions, ActivityIndicator,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import * as Haptics from 'expo-haptics';
@@ -16,6 +16,8 @@ import {
   calcStablefordPoints, calcBestWorstBall, pickupStrokes, DEFAULT_SETTINGS,
   matchPlayHolePts, calcExtraShots,
   roundPairLeaderboard, roundPairClinched,
+  isRoundComplete, isTournamentFinished,
+  subscribeSyncStatus,
 } from '../store/tournamentStore';
 import { mutate } from '../store/mutate';
 import { fetchPlayers } from '../store/libraryStore';
@@ -92,13 +94,24 @@ export default function ScorecardScreen({ navigation, route }) {
   // Per-player, per-hole shot detail. In practice only the "me" player has
   // entries, but it is keyed by playerId like `scores` for generality.
   const [shotDetails, setShotDetails] = useState({});
-  const [notes, setNotes] = useState('');
+  // Notes object: { round: string, hole: { [holeNumber]: string } }.
+  const [notes, setNotes] = useState({});
   const [view, setView] = useState('hole'); // 'grid' | 'hole'
   const [currentHole, setCurrentHole] = useState(1);
   const [refreshing, setRefreshing] = useState(false);
+  const [saveError, setSaveError] = useState(false);
+  // 'loading' until the first loadTournament resolves; 'error' if it returned
+  // null (or threw); 'ready' once a tournament is in hand.
+  const [loadState, setLoadState] = useState('loading');
+  // Live sync status from the store ('idle' | 'syncing' | 'pending' | 'error').
+  const [syncStatus, setSyncStatus] = useState('idle');
+  // Round-complete celebration overlay before navigating to the summary.
+  const [roundCompleteVisible, setRoundCompleteVisible] = useState(false);
   const tournamentRef = useRef(null);
   const saveTimeoutRef = useRef(null);
-  const notesSaveTimeoutRef = useRef(null);
+  // Keyed debounce timers for notes: key is 'round' or `h<holeNumber>`, so a
+  // hole-note edit and a round-note edit never cancel each other's save.
+  const notesSaveTimeoutsRef = useRef({});
   // Serializes score/note saves so concurrent edits never race over the same
   // tournament blob. Without this, two near-simultaneous setScore taps each
   // cloned the same tournamentRef baseline, and the later mutation's
@@ -138,8 +151,20 @@ export default function ScorecardScreen({ navigation, route }) {
   }, []);
 
   const reload = useCallback(async ({ preserveLocalEdits = false } = {}) => {
-    const t = await loadTournament();
-    if (!t) return;
+    let t;
+    try {
+      t = await loadTournament();
+    } catch (e) {
+      console.warn('ScorecardScreen: loadTournament failed', e);
+      t = null;
+    }
+    if (!t) {
+      // Only flip to the error state if there is nothing already on screen —
+      // a transient subscription-driven reload should not blank a live round.
+      if (!tournamentRef.current) setLoadState('error');
+      return;
+    }
+    setLoadState('ready');
     const idx = paramRoundIndex ?? t.currentRound;
     const round = t.rounds[idx];
     const roundScores = round?.scores ?? {};
@@ -147,7 +172,14 @@ export default function ScorecardScreen({ navigation, route }) {
     if (!preserveLocalEdits) {
       setScores(roundScores);
       setShotDetails(round?.shotDetails ?? {});
-      setNotes(round?.notes ?? '');
+      // Normalize notes to the { round, hole } object shape. Legacy data may
+      // have stored a bare string — treat that as the round-level note.
+      const rawNotes = round?.notes;
+      setNotes(
+        rawNotes && typeof rawNotes === 'object'
+          ? rawNotes
+          : (typeof rawNotes === 'string' && rawNotes ? { round: rawNotes } : {})
+      );
 
       // Only on first load: jump to the first hole with no scores entered.
       if (!hasAutoJumpedRef.current && round?.holes?.length) {
@@ -167,6 +199,15 @@ export default function ScorecardScreen({ navigation, route }) {
       reload({ preserveLocalEdits: pendingSaveRef.current });
     });
     return unsub;
+  }, [reload]);
+
+  // Mirror the store's sync status into a header indicator.
+  useEffect(() => subscribeSyncStatus(setSyncStatus), []);
+
+  // Retry handler for the "couldn't load" error state.
+  const retryLoad = useCallback(() => {
+    setLoadState('loading');
+    reload();
   }, [reload]);
 
   // Re-run the auto-jump to the first unplayed hole whenever the round
@@ -192,13 +233,19 @@ export default function ScorecardScreen({ navigation, route }) {
     pendingSaveRef.current = true;
     saveChainRef.current = saveChainRef.current
       .then(unit)
-      .catch(() => {})
+      .then(() => { setSaveError(false); })
+      .catch((e) => {
+        // A local save failing (e.g. AsyncStorage full) is rare but must not
+        // be silent — the user would believe the score was recorded.
+        console.warn('ScorecardScreen: save failed', e);
+        setSaveError(true);
+      })
       .finally(() => {
         inflightSavesRef.current -= 1;
         if (
           inflightSavesRef.current === 0
           && !saveTimeoutRef.current
-          && !notesSaveTimeoutRef.current
+          && Object.keys(notesSaveTimeoutsRef.current).length === 0
         ) {
           pendingSaveRef.current = false;
         }
@@ -247,15 +294,26 @@ export default function ScorecardScreen({ navigation, route }) {
     });
   }, [roundIndex, enqueueSave]);
 
-  const saveNotes = useCallback((value) => {
-    setNotes(value);
-    if (notesSaveTimeoutRef.current) clearTimeout(notesSaveTimeoutRef.current);
+  // Keep the latest scores/notes in refs so retrySave can re-push them
+  // without being re-created on every keystroke.
+  const scoresRef = useRef(scores);
+  useEffect(() => { scoresRef.current = scores; }, [scores]);
+  const notesRef = useRef(notes);
+  useEffect(() => { notesRef.current = notes; }, [notes]);
+
+  // Debounced note save shared by round-level and per-hole notes. `key`
+  // identifies the debounce timer ('round' or `h<n>`); `mutation` carries the
+  // scope-specific `note.set` fields.
+  const scheduleNoteSave = useCallback((key, mutation) => {
+    if (notesSaveTimeoutsRef.current[key]) {
+      clearTimeout(notesSaveTimeoutsRef.current[key]);
+    }
     // Hold pendingSaveRef during the debounce window too, so a reload that
     // arrives between keystroke and timeout doesn't wipe the in-progress
     // text from React state.
     pendingSaveRef.current = true;
-    notesSaveTimeoutRef.current = setTimeout(() => {
-      notesSaveTimeoutRef.current = null;
+    notesSaveTimeoutsRef.current[key] = setTimeout(() => {
+      delete notesSaveTimeoutsRef.current[key];
       enqueueSave(async () => {
         if (!tournamentRef.current) return;
         const round = tournamentRef.current.rounds[roundIndex];
@@ -263,13 +321,35 @@ export default function ScorecardScreen({ navigation, route }) {
         const t = await mutate(tournamentRef.current, {
           type: 'note.set',
           roundId: round.id,
-          scope: 'round',
-          text: value,
+          ...mutation,
         });
         tournamentRef.current = t;
       });
     }, 400);
   }, [roundIndex, enqueueSave]);
+
+  // Re-attempt the last save after a permanent failure. Re-pushes the full
+  // current scores + round note through the same diff-based save path.
+  const retrySave = useCallback(() => {
+    autoSave(scoresRef.current);
+    const roundNote = notesRef.current?.round;
+    if (roundNote != null) {
+      scheduleNoteSave('round', { scope: 'round', text: roundNote });
+    }
+  }, [autoSave, scheduleNoteSave]);
+
+  const saveRoundNote = useCallback((value) => {
+    setNotes((prev) => ({ ...prev, round: value }));
+    scheduleNoteSave('round', { scope: 'round', text: value });
+  }, [scheduleNoteSave]);
+
+  const saveHoleNote = useCallback((holeNumber, value) => {
+    setNotes((prev) => ({
+      ...prev,
+      hole: { ...(prev.hole ?? {}), [holeNumber]: value },
+    }));
+    scheduleNoteSave(`h${holeNumber}`, { scope: 'hole', hole: holeNumber, text: value });
+  }, [scheduleNoteSave]);
 
   // Persist a single hole's shot detail for the "me" player. Routed through
   // the same serial save chain as scores so concurrent edits don't race.
@@ -498,7 +578,8 @@ export default function ScorecardScreen({ navigation, route }) {
 
   const goToNextHole = useCallback(() => {
     haptic('medium');
-    setCurrentHole((h) => Math.min(18, h + 1));
+    const maxHole = round?.holes?.length ?? 18;
+    setCurrentHole((h) => Math.min(maxHole, h + 1));
     if (!round || !tournament) return;
     const mode = tournament.settings?.scoringMode === 'bestball' ? 'bestball' : 'stableford';
     const liveRound = { ...round, scores };
@@ -523,6 +604,55 @@ export default function ScorecardScreen({ navigation, route }) {
 
   const goBack = useCallback(() => navigation.goBack(), [navigation]);
 
+  // Finish flow: invoked from the last-hole "Finish" button. Shows a brief
+  // "round complete" celebration, then routes to that round's summary. When
+  // every round of the tournament is complete, also offers to archive it.
+  const handleFinish = useCallback(() => {
+    const t = tournamentRef.current;
+    const r = t?.rounds?.[roundIndex];
+    if (!t || !r) { goBack(); return; }
+
+    const liveRound = { ...r, scores };
+    const players = t.players ?? [];
+    const liveTournament = {
+      ...t,
+      rounds: t.rounds.map((rr, i) => (i === roundIndex ? liveRound : rr)),
+    };
+    const roundDone = isRoundComplete(liveRound, players);
+    const tournamentDone = isTournamentFinished(liveTournament);
+
+    const goToSummary = () => {
+      navigation.navigate('RoundSummary', {
+        tournamentId: t.id,
+        roundId: r.id,
+      });
+    };
+
+    haptic('success');
+    setRoundCompleteVisible(true);
+    setTimeout(() => {
+      setRoundCompleteVisible(false);
+      if (tournamentDone && t.kind !== 'game') {
+        const title = '🏆 Tournament complete';
+        const message = 'Every round is finished. Archive this tournament?';
+        if (Platform.OS === 'web') {
+          if (window.confirm(`${title}\n${message}`)) {
+            navigation.navigate('Finished');
+          } else {
+            goToSummary();
+          }
+        } else {
+          Alert.alert(title, message, [
+            { text: 'View round summary', style: 'cancel', onPress: goToSummary },
+            { text: 'Finish tournament', onPress: () => navigation.navigate('Finished') },
+          ]);
+        }
+      } else {
+        goToSummary();
+      }
+    }, roundDone ? 1400 : 400);
+  }, [roundIndex, scores, navigation, goBack]);
+
   const openCapturePicker = useCallback(() => {
     setCaptureMenuVisible(true);
   }, []);
@@ -533,7 +663,7 @@ export default function ScorecardScreen({ navigation, route }) {
       const asset = await pickMedia({ source, mediaTypes });
       if (asset) setPickerAsset(asset);
     } catch (e) {
-      Alert.alert('No se pudo capturar', String(e?.message ?? e));
+      Alert.alert("Couldn't capture", String(e?.message ?? e));
     }
   }, []);
 
@@ -555,12 +685,56 @@ export default function ScorecardScreen({ navigation, route }) {
         fileName: asset.fileName,
       });
     } catch (e) {
-      Alert.alert('No se pudo adjuntar', String(e?.message ?? e));
+      Alert.alert("Couldn't attach", String(e?.message ?? e));
     }
   }, [pickerAsset, tournament, round]);
 
-  if (!tournament || !round) return null;
+  // Explicit load failure — never a blank screen. Keep a working back button.
+  if (loadState === 'error' && !tournament) {
+    return (
+      <SafeAreaView style={s.container} edges={['top', 'bottom']}>
+        <View style={s.header}>
+          <TouchableOpacity onPress={() => navigation.goBack()} style={s.backBtn}>
+            <Feather name="chevron-left" size={22} color={theme.accent.primary} />
+          </TouchableOpacity>
+          <Text style={s.headerTitle}>Scorecard</Text>
+          <View style={{ width: 36 }} />
+        </View>
+        <View style={s.statusCenter}>
+          <Feather name="alert-circle" size={44} color={theme.text.muted} />
+          <Text style={s.statusTitle}>Couldn't load this round</Text>
+          <Text style={s.statusSubtitle}>
+            Check your connection and try again.
+          </Text>
+          <TouchableOpacity style={s.statusRetryBtn} onPress={retryLoad} activeOpacity={0.8}>
+            <Feather name="rotate-ccw" size={15} color={theme.text.inverse} />
+            <Text style={s.statusRetryText}>Retry</Text>
+          </TouchableOpacity>
+        </View>
+      </SafeAreaView>
+    );
+  }
 
+  // First load in progress — spinner + a working header back button.
+  if (!tournament || !round) {
+    return (
+      <SafeAreaView style={s.container} edges={['top', 'bottom']}>
+        <View style={s.header}>
+          <TouchableOpacity onPress={() => navigation.goBack()} style={s.backBtn}>
+            <Feather name="chevron-left" size={22} color={theme.accent.primary} />
+          </TouchableOpacity>
+          <Text style={s.headerTitle}>Scorecard</Text>
+          <View style={{ width: 36 }} />
+        </View>
+        <View style={s.statusCenter}>
+          <ActivityIndicator color={theme.accent.primary} />
+          <Text style={s.statusSubtitle}>Loading round…</Text>
+        </View>
+      </SafeAreaView>
+    );
+  }
+
+  const holeCount = round.holes.length;
   const hole = round.holes.find((h) => h.number === currentHole);
 
   return (
@@ -572,6 +746,7 @@ export default function ScorecardScreen({ navigation, route }) {
         </TouchableOpacity>
         <Text style={s.headerTitle}>Scorecard</Text>
         <View style={s.headerRight}>
+          <SyncIndicator status={syncStatus} saveError={saveError} theme={theme} s={s} />
           <View style={s.togglePill}>
             <TouchableOpacity
               style={[s.toggleBtn, view === 'hole' && s.toggleBtnActive]}
@@ -606,12 +781,35 @@ export default function ScorecardScreen({ navigation, route }) {
           <TouchableOpacity
             onPress={openCapturePicker}
             style={s.cameraBtn}
-            accessibilityLabel="Adjuntar recuerdo"
+            accessibilityLabel="Attach a memory"
           >
             <Feather name="camera" size={20} color={theme.accent.primary} />
           </TouchableOpacity>
         </View>
       </View>
+
+      {saveError && (
+        <View style={s.saveErrorBanner}>
+          <Feather name="alert-triangle" size={14} color={theme.text.inverse} />
+          <Text style={s.saveErrorText}>
+            Couldn't save your last change.
+          </Text>
+          <TouchableOpacity
+            onPress={() => { setSaveError(false); retrySave(); }}
+            accessibilityLabel="Retry saving"
+            hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+          >
+            <Text style={s.saveErrorAction}>Retry</Text>
+          </TouchableOpacity>
+          <TouchableOpacity
+            onPress={() => setSaveError(false)}
+            accessibilityLabel="Dismiss"
+            hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+          >
+            <Feather name="x" size={14} color={theme.text.inverse} />
+          </TouchableOpacity>
+        </View>
+      )}
 
       {view === 'hole' ? (
         <HoleView
@@ -631,11 +829,14 @@ export default function ScorecardScreen({ navigation, route }) {
           settings={settings}
           onStep={stepScore}
           onSetScore={setScore}
-          onNotesChange={saveNotes}
+          onRoundNoteChange={saveRoundNote}
+          onHoleNoteChange={saveHoleNote}
           onPrev={goToPrevHole}
           onNext={goToNextHole}
           onGoToHole={goToHole}
           onGoBack={goBack}
+          onFinish={handleFinish}
+          holeCount={holeCount}
           playerTotals={playerTotals}
           showRunning={showRunning}
           getScoreAnim={getScoreAnim}
@@ -650,8 +851,6 @@ export default function ScorecardScreen({ navigation, route }) {
           roundIndex={roundIndex}
           players={players}
           scores={scores}
-          notes={notes}
-          onNotesChange={saveNotes}
           isBestBall={isBestBall}
           bbResult={bbResult}
           settings={settings}
@@ -668,7 +867,7 @@ export default function ScorecardScreen({ navigation, route }) {
         extraActions={roundMediaCount > 0 ? [{
           key: 'view',
           icon: 'image',
-          label: `Ver recuerdos de esta ronda (${roundMediaCount})`,
+          label: `View this round's memories (${roundMediaCount})`,
           onPress: () => {
             setCaptureMenuVisible(false);
             setLightboxItems(roundMediaItems);
@@ -691,7 +890,51 @@ export default function ScorecardScreen({ navigation, route }) {
         initialIndex={lightboxIndex}
         onClose={() => setLightboxVisible(false)}
       />
+
+      {roundCompleteVisible && (
+        <View pointerEvents="none" style={s.roundCompleteRoot}>
+          <View style={s.roundCompleteScrim} />
+          <View style={s.roundCompleteCard}>
+            <View style={s.roundCompleteIconWrap}>
+              <Feather name="flag" size={26} color={theme.accent.primary} />
+            </View>
+            <Text style={s.roundCompleteEyebrow}>ROUND COMPLETE</Text>
+            <Text style={s.roundCompleteTitle}>Nice round!</Text>
+          </View>
+        </View>
+      )}
     </SafeAreaView>
+  );
+}
+
+// Compact header sync/error indicator. Reflects the store's sync status and
+// flips to an explicit error dot when a local save fails.
+function SyncIndicator({ status, saveError, theme, s }) {
+  if (saveError || status === 'error') {
+    return (
+      <View style={s.syncDot} accessibilityLabel="Sync error">
+        <Feather name="alert-circle" size={14} color={theme.destructive} />
+      </View>
+    );
+  }
+  if (status === 'syncing') {
+    return (
+      <View style={s.syncDot} accessibilityLabel="Syncing">
+        <ActivityIndicator size="small" color={theme.text.muted} />
+      </View>
+    );
+  }
+  if (status === 'pending') {
+    return (
+      <View style={s.syncDot} accessibilityLabel="Changes pending sync">
+        <Feather name="cloud" size={14} color={theme.text.muted} />
+      </View>
+    );
+  }
+  return (
+    <View style={s.syncDot} accessibilityLabel="Synced">
+      <Feather name="check-circle" size={14} color={theme.accent.primary} />
+    </View>
   );
 }
 
@@ -820,12 +1063,25 @@ const HolePage = React.memo(function HolePage({
                   >
                     <Feather name="minus" size={24} color={theme.text.primary} />
                   </TouchableOpacity>
-                  <Animated.View style={[s.soloScoreDisplay, { transform: [{ scale: getScoreAnim(player.id) }] }]}>
-                    <Text style={[s.soloScoreNum, strokes == null && s.scoreDisplayNumEmpty]}>
-                      {strokes ?? '—'}
-                    </Text>
-                    <Text style={s.soloScoreLabel}>STROKES</Text>
-                  </Animated.View>
+                  <Pressable
+                    onLongPress={() => {
+                      if (strokes != null) {
+                        haptic('medium');
+                        onSetScore(player.id, pageHole.number, '');
+                      }
+                    }}
+                    delayLongPress={350}
+                    accessibilityLabel={`Strokes on hole ${pageHole.number}${strokes != null ? ' — long-press to clear' : ''}`}
+                  >
+                    <Animated.View style={[s.soloScoreDisplay, { transform: [{ scale: getScoreAnim(player.id) }] }]}>
+                      <Text style={[s.soloScoreNum, strokes == null && s.scoreDisplayNumEmpty]}>
+                        {strokes ?? '—'}
+                      </Text>
+                      <Text style={s.soloScoreLabel}>
+                        {strokes == null ? 'STROKES' : 'HOLD TO CLEAR'}
+                      </Text>
+                    </Animated.View>
+                  </Pressable>
                   <TouchableOpacity
                     style={s.soloStepBtn}
                     onPress={() => onStep(player.id, pageHole.number, 1)}
@@ -900,16 +1156,27 @@ const HolePage = React.memo(function HolePage({
                     <TouchableOpacity style={s.stepBtn} onPress={() => onStep(player.id, pageHole.number, -1)}>
                       <Feather name="minus" size={18} color={theme.text.primary} />
                     </TouchableOpacity>
-                    <Animated.View style={[s.scoreDisplay, { transform: [{ scale: getScoreAnim(player.id) }] }]}>
-                      <Text style={[s.scoreDisplayNum, strokes == null && s.scoreDisplayNumEmpty]}>
-                        {strokes ?? '—'}
-                      </Text>
-                      {pts !== null && (
-                        <Text style={[s.scoreDisplayPts, { color: ptsColor }]}>
-                          {pts} {pts === 1 ? 'pt' : 'pts'}
+                    <Pressable
+                      onLongPress={() => {
+                        if (strokes != null) {
+                          haptic('medium');
+                          onSetScore(player.id, pageHole.number, '');
+                        }
+                      }}
+                      delayLongPress={350}
+                      accessibilityLabel={`Strokes on hole ${pageHole.number}${strokes != null ? ' — long-press to clear' : ''}`}
+                    >
+                      <Animated.View style={[s.scoreDisplay, { transform: [{ scale: getScoreAnim(player.id) }] }]}>
+                        <Text style={[s.scoreDisplayNum, strokes == null && s.scoreDisplayNumEmpty]}>
+                          {strokes ?? '—'}
                         </Text>
-                      )}
-                    </Animated.View>
+                        {pts !== null && (
+                          <Text style={[s.scoreDisplayPts, { color: ptsColor }]}>
+                            {pts} {pts === 1 ? 'pt' : 'pts'}
+                          </Text>
+                        )}
+                      </Animated.View>
+                    </Pressable>
                     <TouchableOpacity style={s.stepBtn} onPress={() => onStep(player.id, pageHole.number, 1)}>
                       <Feather name="plus" size={18} color={theme.text.primary} />
                     </TouchableOpacity>
@@ -1071,8 +1338,11 @@ function ShotDetailPanel({ hole, detail, onChange, theme, s }) {
   );
 }
 
-function HoleView({ round, roundIndex, players, scores, shotDetails, meId, onSetShot, onPickMe, notes, currentHole, hole, isBestBall, bbResult, settings, onStep, onSetScore, onNotesChange, onPrev, onNext, onGoToHole, onGoBack, playerTotals, showRunning, getScoreAnim, celebration, celebrationAnim, refreshing, onRefresh }) {
+function HoleView({ round, roundIndex, players, scores, shotDetails, meId, onSetShot, onPickMe, notes, currentHole, hole, isBestBall, bbResult, settings, onStep, onSetScore, onRoundNoteChange, onHoleNoteChange, onPrev, onNext, onGoToHole, onGoBack, onFinish, holeCount, playerTotals, showRunning, getScoreAnim, celebration, celebrationAnim, refreshing, onRefresh }) {
   const { theme } = useTheme();
+  // Notes split: the current hole's note plus the shared round-level note.
+  const holeNote = notes?.hole?.[currentHole] ?? '';
+  const roundNote = notes?.round ?? '';
   const s = useMemo(() => makeStyles(theme), [theme]);
   const [notesOpen, setNotesOpen] = useState(false);
   const [holePickerOpen, setHolePickerOpen] = useState(false);
@@ -1246,12 +1516,12 @@ function HoleView({ round, roundIndex, players, scores, shotDetails, meId, onSet
             activeOpacity={0.7}
           >
             <Feather
-              name={notes?.trim() ? 'edit-3' : 'edit-2'}
+              name={holeNote.trim() ? 'edit-3' : 'edit-2'}
               size={14}
-              color={notes?.trim() ? theme.accent.primary : theme.text.muted}
+              color={holeNote.trim() ? theme.accent.primary : theme.text.muted}
             />
-            <Text style={[s.notesPillBtnText, notes?.trim() && s.notesPillBtnTextActive]}>
-              {notes?.trim() ? 'Notes' : 'Notes'}
+            <Text style={[s.notesPillBtnText, holeNote.trim() && s.notesPillBtnTextActive]}>
+              Notes
             </Text>
           </TouchableOpacity>
           <TouchableOpacity
@@ -1265,20 +1535,22 @@ function HoleView({ round, roundIndex, players, scores, shotDetails, meId, onSet
           </TouchableOpacity>
           <TouchableOpacity
             style={s.saveBtn}
-            onPress={currentHole < 18 ? onNext : onGoBack}
+            onPress={currentHole < holeCount ? onNext : onFinish}
             activeOpacity={0.8}
           >
             <Text style={s.saveBtnText}>
-              {currentHole < 18 ? `Hole ${currentHole + 1}` : 'Finish'}
+              {currentHole < holeCount ? `Hole ${currentHole + 1}` : 'Finish'}
             </Text>
-            {currentHole < 18 && (
-              <Feather name="chevron-right" size={18} color={theme.text.inverse} />
-            )}
+            <Feather
+              name={currentHole < holeCount ? 'chevron-right' : 'flag'}
+              size={18}
+              color={theme.text.inverse}
+            />
           </TouchableOpacity>
         </View>
       </View>
 
-      {/* Notes modal — only shown on demand */}
+      {/* Notes modal — per-hole note + shared round note */}
       <Modal
         visible={notesOpen}
         transparent
@@ -1293,21 +1565,32 @@ function HoleView({ round, roundIndex, players, scores, shotDetails, meId, onSet
             <Pressable style={s.notesSheet} onPress={() => {}}>
               <View style={s.notesHandle} />
               <View style={s.notesHeader}>
-                <Text style={s.notesTitle}>Round Notes</Text>
+                <Text style={s.notesTitle}>Notes</Text>
                 <TouchableOpacity onPress={() => setNotesOpen(false)} style={s.notesCloseBtn}>
                   <Feather name="x" size={18} color={theme.text.secondary} />
                 </TouchableOpacity>
               </View>
+              <Text style={s.notesFieldLabel}>{`Hole ${currentHole}`}</Text>
               <TextInput
-                style={s.notesModalInput}
+                style={s.notesModalInputCompact}
+                placeholder={`Notes for hole ${currentHole}`}
+                placeholderTextColor={theme.text.muted}
+                keyboardAppearance={theme.isDark ? 'dark' : 'light'}
+                selectionColor={theme.accent.primary}
+                multiline
+                value={holeNote}
+                onChangeText={(text) => onHoleNoteChange(currentHole, text)}
+              />
+              <Text style={[s.notesFieldLabel, s.notesFieldLabelSpaced]}>Round</Text>
+              <TextInput
+                style={s.notesModalInputCompact}
                 placeholder="What happened this round?"
                 placeholderTextColor={theme.text.muted}
                 keyboardAppearance={theme.isDark ? 'dark' : 'light'}
                 selectionColor={theme.accent.primary}
                 multiline
-                value={notes}
-                onChangeText={onNotesChange}
-                autoFocus
+                value={roundNote}
+                onChangeText={onRoundNoteChange}
               />
             </Pressable>
           </Pressable>
@@ -1325,9 +1608,10 @@ function HoleView({ round, roundIndex, players, scores, shotDetails, meId, onSet
           <Pressable style={s.holePickerSheet} onPress={() => {}}>
             <Text style={s.notesTitle}>Jump to hole</Text>
             <View style={s.holePickerGrid}>
-              {Array.from({ length: 18 }, (_, i) => {
-                const n = i + 1;
+              {round.holes.map((h) => {
+                const n = h.number;
                 const hasAnyScore = players.some((p) => scores[p.id]?.[n] != null);
+                const hasNote = !!(notes?.hole?.[n] ?? '').trim();
                 return (
                   <TouchableOpacity
                     key={n}
@@ -1340,6 +1624,18 @@ function HoleView({ round, roundIndex, players, scores, shotDetails, meId, onSet
                     activeOpacity={0.7}
                   >
                     <Text style={[s.holePickerBtnText, n === currentHole && s.holePickerBtnTextActive]}>{n}</Text>
+                    {hasNote && (
+                      <View
+                        style={[
+                          s.holePickerNoteDot,
+                          {
+                            backgroundColor: n === currentHole
+                              ? theme.text.inverse
+                              : theme.accent.primary,
+                          },
+                        ]}
+                      />
+                    )}
                   </TouchableOpacity>
                 );
               })}
@@ -1651,6 +1947,20 @@ function NineBlock({
   const labelFont = { fontSize: labelFontSize };
   const isSolo = players.length === 1;
 
+  // Refs for every stroke-entry cell, keyed `playerId:holeNumber`, plus the
+  // flat tab order (player by player, hole by hole) so the keyboard "next"
+  // key advances focus through the card.
+  const cellRefs = useRef({});
+  const cellKey = (playerId, holeNumber) => `${playerId}:${holeNumber}`;
+  const focusOrder = [];
+  players.forEach((p) => holes.forEach((h) => focusOrder.push(cellKey(p.id, h.number))));
+  const focusNext = (playerId, holeNumber) => {
+    const idx = focusOrder.indexOf(cellKey(playerId, holeNumber));
+    if (idx < 0 || idx + 1 >= focusOrder.length) return;
+    const next = cellRefs.current[focusOrder[idx + 1]];
+    if (next) next.focus();
+  };
+
   const holePts = (hole, player, handicap) => {
     const str = scores[player.id]?.[hole.number];
     if (str == null) return null;
@@ -1692,6 +2002,7 @@ function NineBlock({
             return (
               <View key={h.number} style={[s.soloNineCell, holeCell, s.soloNineYouCell]}>
                 <TextInput
+                  ref={(el) => { cellRefs.current[cellKey(player.id, h.number)] = el; }}
                   style={s.soloNineStrokeInput}
                   keyboardType="numeric"
                   keyboardAppearance={theme.isDark ? 'dark' : 'light'}
@@ -1701,6 +2012,9 @@ function NineBlock({
                   onChangeText={(v) => onSetScore(player.id, h.number, v)}
                   placeholder="·"
                   placeholderTextColor={theme.text.muted}
+                  returnKeyType="next"
+                  blurOnSubmit={false}
+                  onSubmitEditing={() => focusNext(player.id, h.number)}
                 />
                 {extra > 0 && (
                   <View style={s.soloNineExtraDots} pointerEvents="none">
@@ -1915,10 +2229,9 @@ function ScorecardTable({ round, players, scores, onSetScore, mode }) {
   );
 }
 
-function GridView({ round, roundIndex, players, scores, notes, onNotesChange, isBestBall, bbResult, settings, onSetScore, refreshing, onRefresh }) {
+function GridView({ round, roundIndex, players, scores, isBestBall, bbResult, settings, onSetScore, refreshing, onRefresh }) {
   const { theme } = useTheme();
   const s = useMemo(() => makeStyles(theme), [theme]);
-  const [notesOpen, setNotesOpen] = useState(false);
   const mode = settings?.scoringMode === 'matchplay' ? 'matchplay'
     : isBestBall ? 'bestball'
     : 'stableford';
@@ -1926,6 +2239,11 @@ function GridView({ round, roundIndex, players, scores, notes, onNotesChange, is
   // solo, 2-4 player stableford, 2-player match play — uses the compact
   // front-nine / back-nine card layout so one view works for all modes.
   const useClassicGrid = mode === 'bestball' && players.length === 4;
+
+  // Cell refs for the classic grid so the keyboard "next" key advances down
+  // a player's column (hole to hole).
+  const gridCellRefs = useRef({});
+  const gridCellKey = (playerId, holeNumber) => `${playerId}:${holeNumber}`;
 
   return (
     <PullToRefresh
@@ -1948,20 +2266,6 @@ function GridView({ round, roundIndex, players, scores, notes, onNotesChange, is
             </Text>
           )}
         </View>
-        <TouchableOpacity
-          style={s.notesPillBtn}
-          onPress={() => setNotesOpen(true)}
-          activeOpacity={0.7}
-        >
-          <Feather
-            name={notes?.trim() ? 'edit-3' : 'edit-2'}
-            size={14}
-            color={notes?.trim() ? theme.accent.primary : theme.text.muted}
-          />
-          <Text style={[s.notesPillBtnText, notes?.trim() && s.notesPillBtnTextActive]}>
-            {notes?.trim() ? 'Notes' : 'Notes'}
-          </Text>
-        </TouchableOpacity>
       </View>
 
       {!useClassicGrid ? (
@@ -1996,6 +2300,7 @@ function GridView({ round, roundIndex, players, scores, notes, onNotesChange, is
               return (
                 <View key={p.id} style={[s.cell, s.playerCell, s.inputCell]}>
                   <TextInput
+                    ref={(el) => { gridCellRefs.current[gridCellKey(p.id, hole.number)] = el; }}
                     style={s.scoreInput}
                     keyboardType="numeric"
                     keyboardAppearance={theme.isDark ? 'dark' : 'light'}
@@ -2005,6 +2310,12 @@ function GridView({ round, roundIndex, players, scores, notes, onNotesChange, is
                     onChangeText={(v) => onSetScore(p.id, hole.number, v)}
                     placeholder="-"
                     placeholderTextColor={theme.text.muted}
+                    returnKeyType="next"
+                    blurOnSubmit={false}
+                    onSubmitEditing={() => {
+                      const next = gridCellRefs.current[gridCellKey(p.id, hole.number + 1)];
+                      if (next) next.focus();
+                    }}
                   />
                   {pts !== null && (
                     <Text style={[s.pts, { color: ptsColor }]}>{pts}</Text>
@@ -2139,42 +2450,6 @@ function GridView({ round, roundIndex, players, scores, notes, onNotesChange, is
       )}
 
       {isBestBall && bbResult && <LiveMatchStrip bbResult={bbResult} settings={settings} />}
-
-      {/* Notes modal — same as HoleView */}
-      <Modal
-        visible={notesOpen}
-        transparent
-        animationType="slide"
-        onRequestClose={() => setNotesOpen(false)}
-      >
-        <KeyboardAvoidingView
-          behavior={Platform.OS === 'ios' ? 'padding' : undefined}
-          style={s.notesModalKav}
-        >
-          <Pressable style={s.notesBackdrop} onPress={() => setNotesOpen(false)}>
-            <Pressable style={s.notesSheet} onPress={() => {}}>
-              <View style={s.notesHandle} />
-              <View style={s.notesHeader}>
-                <Text style={s.notesTitle}>Round Notes</Text>
-                <TouchableOpacity onPress={() => setNotesOpen(false)} style={s.notesCloseBtn}>
-                  <Feather name="x" size={18} color={theme.text.secondary} />
-                </TouchableOpacity>
-              </View>
-              <TextInput
-                style={s.notesModalInput}
-                placeholder="What happened this round?"
-                placeholderTextColor={theme.text.muted}
-                keyboardAppearance={theme.isDark ? 'dark' : 'light'}
-                selectionColor={theme.accent.primary}
-                multiline
-                value={notes}
-                onChangeText={onNotesChange}
-                autoFocus
-              />
-            </Pressable>
-          </Pressable>
-        </KeyboardAvoidingView>
-      </Modal>
     </PullToRefresh>
   );
 }
@@ -2209,6 +2484,115 @@ function makeStyles(theme) {
   return StyleSheet.create({
     container: { ...StyleSheet.absoluteFillObject, backgroundColor: theme.bg.primary },
     flex: { flex: 1 },
+
+    // Save-failure banner
+    saveErrorBanner: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      justifyContent: 'center',
+      gap: 6,
+      backgroundColor: theme.destructive,
+      paddingVertical: 8,
+      paddingHorizontal: 12,
+    },
+    saveErrorText: {
+      ...theme.typography.caption,
+      color: theme.text.inverse,
+      fontWeight: '700',
+      flex: 1,
+    },
+    saveErrorAction: {
+      ...theme.typography.caption,
+      color: theme.text.inverse,
+      fontWeight: '800',
+      textDecorationLine: 'underline',
+    },
+
+    // Header sync/error indicator
+    syncDot: {
+      width: 28,
+      height: 28,
+      alignItems: 'center',
+      justifyContent: 'center',
+    },
+
+    // Loading / error states (replace the bare null returns)
+    statusCenter: {
+      flex: 1,
+      alignItems: 'center',
+      justifyContent: 'center',
+      gap: 12,
+      padding: 32,
+    },
+    statusTitle: {
+      fontFamily: 'PlayfairDisplay-Bold',
+      fontSize: 18,
+      color: theme.text.primary,
+      textAlign: 'center',
+    },
+    statusSubtitle: {
+      fontFamily: 'PlusJakartaSans-Regular',
+      fontSize: 13,
+      color: theme.text.muted,
+      textAlign: 'center',
+    },
+    statusRetryBtn: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: 8,
+      backgroundColor: theme.accent.primary,
+      borderRadius: 14,
+      paddingVertical: 12,
+      paddingHorizontal: 22,
+      marginTop: 6,
+    },
+    statusRetryText: {
+      fontFamily: 'PlusJakartaSans-ExtraBold',
+      color: theme.text.inverse,
+      fontSize: 14,
+    },
+
+    // Round-complete celebration overlay (shown before the round summary)
+    roundCompleteRoot: {
+      ...StyleSheet.absoluteFillObject,
+      alignItems: 'center',
+      justifyContent: 'center',
+    },
+    roundCompleteScrim: {
+      ...StyleSheet.absoluteFillObject,
+      backgroundColor: 'rgba(0,0,0,0.55)',
+    },
+    roundCompleteCard: {
+      backgroundColor: theme.bg.card,
+      borderRadius: 22,
+      borderWidth: 1,
+      borderColor: theme.accent.primary,
+      paddingVertical: 28,
+      paddingHorizontal: 36,
+      alignItems: 'center',
+      gap: 6,
+    },
+    roundCompleteIconWrap: {
+      width: 56,
+      height: 56,
+      borderRadius: 28,
+      borderWidth: 2,
+      borderColor: theme.accent.primary,
+      alignItems: 'center',
+      justifyContent: 'center',
+      marginBottom: 6,
+    },
+    roundCompleteEyebrow: {
+      fontFamily: 'PlusJakartaSans-ExtraBold',
+      fontSize: 11,
+      letterSpacing: 2,
+      color: theme.accent.primary,
+    },
+    roundCompleteTitle: {
+      fontFamily: 'PlayfairDisplay-Bold',
+      fontSize: 24,
+      color: theme.text.primary,
+    },
 
     // Header
     header: {
@@ -2602,8 +2986,9 @@ function makeStyles(theme) {
       alignItems: 'center', justifyContent: 'center',
       backgroundColor: theme.isDark ? theme.bg.elevated : theme.bg.secondary,
     },
-    notesModalInput: {
-      minHeight: 160,
+    // Note input used in the notes bottom sheet (one per hole / round field).
+    notesModalInputCompact: {
+      minHeight: 96,
       backgroundColor: theme.isDark ? theme.bg.elevated : theme.bg.card,
       color: theme.text.primary,
       borderRadius: 12,
@@ -2614,6 +2999,13 @@ function makeStyles(theme) {
       fontFamily: 'PlusJakartaSans-Regular',
       textAlignVertical: 'top',
     },
+    notesFieldLabel: {
+      fontFamily: 'PlusJakartaSans-SemiBold',
+      color: theme.text.secondary,
+      fontSize: 12,
+      marginBottom: 6,
+    },
+    notesFieldLabelSpaced: { marginTop: 14 },
 
     // Horizontal pager — flexes to fill between fixed top card and bottom bar
     pagerWrap: { flex: 1 },
@@ -2666,6 +3058,14 @@ function makeStyles(theme) {
     },
     holePickerBtnTextActive: {
       color: theme.text.inverse,
+    },
+    holePickerNoteDot: {
+      position: 'absolute',
+      top: 6,
+      right: 6,
+      width: 6,
+      height: 6,
+      borderRadius: 3,
     },
 
     // Round totals strip

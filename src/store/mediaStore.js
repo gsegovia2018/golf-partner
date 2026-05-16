@@ -28,6 +28,9 @@ function rowToMedia(row) {
     durationS: row.duration_s,
     caption: row.caption,
     uploaderLabel: row.uploader_label,
+    // uploader_id is added by migration 20260516_feed_reactions_and_uploader.sql.
+    // Safe to read before the migration lands: undefined when the column is absent.
+    uploaderId: row.uploader_id ?? null,
     createdAt: row.created_at,
     url: originalUrl.publicUrl,
     thumbUrl: thumbUrl.publicUrl,
@@ -40,6 +43,20 @@ export async function loadTournamentMedia(tournamentId) {
     .from('tournament_media')
     .select('*')
     .eq('tournament_id', tournamentId)
+    .order('created_at', { ascending: false });
+  if (error) throw error;
+  return data.map(rowToMedia);
+}
+
+// Batch variant for the activity feed: one query for many tournaments
+// instead of N round-trips. Returns newest-first across all of them.
+export async function loadMediaForTournaments(tournamentIds) {
+  const ids = [...new Set(tournamentIds)].filter(Boolean);
+  if (ids.length === 0) return [];
+  const { data, error } = await supabase
+    .from('tournament_media')
+    .select('*')
+    .in('tournament_id', ids)
     .order('created_at', { ascending: false });
   if (error) throw error;
   return data.map(rowToMedia);

@@ -1,7 +1,9 @@
-import React, { useEffect, useState, useMemo } from 'react';
-import { View, Text, TouchableOpacity, StyleSheet, ScrollView, FlatList, Switch } from 'react-native';
+import React, { useEffect, useState, useMemo, useRef } from 'react';
+import { View, Text, TouchableOpacity, StyleSheet, ScrollView, FlatList, Switch, Platform } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Feather } from '@expo/vector-icons';
+import { captureRef } from 'react-native-view-shot';
+import * as Sharing from 'expo-sharing';
 import { useTheme } from '../theme/ThemeContext';
 import { useAuth } from '../context/AuthContext';
 import { loadTournament, getPlayingHandicap, calcStablefordPoints, playerPartnerSplits } from '../store/tournamentStore';
@@ -16,9 +18,10 @@ import {
   pairSynergy, pairCarryRatio, swingHole,
   par3Heartbreak, pickupChampion, anchor, zeroHero,
   skinsLeaderboard, matchPlayResults, pairConfigMatrix,
-  shotStats,
+  shotStats, playersWithShotData,
+  bounceBackRate, frontBackSplit, strokeIndexAccuracy, scramblingStats,
 } from '../store/statsEngine';
-import StatDetailSheet from '../components/StatDetailSheet';
+import StatDetailSheet, { captureAndShare } from '../components/StatDetailSheet';
 
 const ALL_TABS = [
   { key: 'overview', label: 'Overview' },
@@ -77,28 +80,45 @@ const tiedRowsByPlayer = (entries, makeRows, headerRight) => {
 export default function StatsScreen({ navigation }) {
   const { theme } = useTheme();
   const { user } = useAuth();
-  const s = makeStyles(theme);
+  // Memoised so StyleSheet.create only re-runs when the theme actually
+  // changes — not on every tab switch / metric toggle re-render.
+  const s = useMemo(() => makeStyles(theme), [theme]);
   const [tournament, setTournament] = useState(null);
   const [tab, setTab] = useState('overview');
-  const [selectedPlayer, setSelectedPlayer] = useState(0);
-  const [h2hPlayer, setH2hPlayer] = useState(1);
+  // Each tab keeps its own player selection so navigating tabs no longer
+  // silently changes the selection elsewhere.
+  const [playersTabPlayer, setPlayersTabPlayer] = useState(0);
+  const [pairsTabPlayer, setPairsTabPlayer] = useState(0);
+  const [h2hP1, setH2hP1] = useState(0);
+  const [h2hP2, setH2hP2] = useState(1);
   const [metric, setMetric] = useState('points');
+  // Single screen-level round scope: null = whole tournament, otherwise a
+  // round index. Sections that are inherently per-round read this scope and
+  // fall back to the first completed round when it is null.
+  const [roundScope, setRoundScope] = useState(null);
+  // Per-tab scroll refs + section anchor offsets, for the sticky section index.
+  const overviewScrollRef = useRef(null);
+  const pairsScrollRef = useRef(null);
 
   useEffect(() => {
     loadTournament().then(t => {
       setTournament(t);
-      // Default the Players / Pairs selector to the signed-in user when
-      // they're one of the players in this tournament. Falls back to the
-      // first player otherwise (e.g. viewers who aren't themselves playing).
+      // Default selections to the signed-in user when they're one of the
+      // players in this tournament. Falls back to the first player otherwise.
       if (t?.players?.length && user?.id) {
         const mine = t.players.findIndex((p) => p.user_id === user.id);
         if (mine >= 0) {
-          setSelectedPlayer(mine);
-          // h2hPlayer should default to anyone else so the matchup makes
-          // sense from the start.
-          setH2hPlayer(mine === 0 ? 1 : 0);
+          setPlayersTabPlayer(mine);
+          setPairsTabPlayer(mine);
+          setH2hP1(mine);
+          setH2hP2(mine === 0 ? 1 : 0);
         }
       }
+    }).catch((e) => {
+      // Without this catch a load failure is an unhandled rejection and the
+      // screen silently stays blank. Leaving `tournament` null renders the
+      // "no tournament" fallback below.
+      console.warn('StatsScreen: failed to load tournament', e);
     });
   }, [user?.id]);
 
@@ -112,6 +132,10 @@ export default function StatsScreen({ navigation }) {
   const hasMulti = players.length > 1;
   const visibleTabs = ALL_TABS.filter(t => t.key !== 'pairs' || usesTeams);
   const activeTab = visibleTabs.some(t => t.key === tab) ? tab : 'overview';
+  const firstCompletedIdx = tournament.rounds.findIndex(r => r.scores && Object.keys(r.scores).length > 0);
+  // Effective per-round scope: when "Total" is selected, per-round sections
+  // fall back to the first completed round so they still show data.
+  const effectiveRound = roundScope != null ? roundScope : (firstCompletedIdx >= 0 ? firstCompletedIdx : null);
 
   return (
     <SafeAreaView style={s.container} edges={['top', 'bottom']}>
@@ -131,42 +155,150 @@ export default function StatsScreen({ navigation }) {
         ))}
       </View>
 
-      <View style={s.scoringToggle}>
-        <Text style={[s.scoringLabel, metric === 'strokes' && s.scoringLabelActive]}>Strokes</Text>
-        <Switch
-          value={metric === 'points'}
-          onValueChange={(v) => setMetric(v ? 'points' : 'strokes')}
-          trackColor={{ false: theme.border.default, true: theme.accent.primary }}
-          thumbColor="#fff"
-        />
-        <Text style={[s.scoringLabel, metric === 'points' && s.scoringLabelActive]}>Points</Text>
+      {/* Unified scope controls: Strokes/Points + a single round chip set. */}
+      <View style={s.scopeBar}>
+        <View style={s.scoringToggle}>
+          <Text style={[s.scoringLabel, metric === 'strokes' && s.scoringLabelActive]}>Strokes</Text>
+          <Switch
+            value={metric === 'points'}
+            onValueChange={(v) => setMetric(v ? 'points' : 'strokes')}
+            trackColor={{ false: theme.border.default, true: theme.accent.primary }}
+            thumbColor="#fff"
+          />
+          <Text style={[s.scoringLabel, metric === 'points' && s.scoringLabelActive]}>Points</Text>
+        </View>
+        {/* Round scope only drives the per-round sections (Overview / Holes /
+            Pairs). Players & Shame are tournament-wide aggregates, so the
+            chip set is hidden there to avoid a control that does nothing. */}
+        {(activeTab === 'overview' || activeTab === 'holes' || activeTab === 'pairs') && (
+          <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={s.scopeChips}>
+            <RoundScopeChips tournament={tournament} selected={roundScope} onSelect={setRoundScope} theme={theme} s={s} />
+          </ScrollView>
+        )}
       </View>
 
-      <ScrollView style={s.scrollView} contentContainerStyle={s.content}>
-        {activeTab === 'overview' && <OverviewTab tournament={tournament} metric={metric} hasMulti={hasMulti} usesTeams={usesTeams} theme={theme} s={s} />}
-        {activeTab === 'players' && <PlayersTab tournament={tournament} players={players} selectedPlayer={selectedPlayer} setSelectedPlayer={setSelectedPlayer} metric={metric} theme={theme} s={s} />}
-        {activeTab === 'holes' && <HolesTab tournament={tournament} completedRounds={completedRounds} hasMulti={hasMulti} metric={metric} theme={theme} s={s} />}
-        {activeTab === 'pairs' && usesTeams && <PairsTab tournament={tournament} players={players} h2hPlayer={h2hPlayer} setH2hPlayer={setH2hPlayer} selectedPlayer={selectedPlayer} setSelectedPlayer={setSelectedPlayer} metric={metric} theme={theme} s={s} />}
-        {activeTab === 'shots' && <ShotsTab tournament={tournament} theme={theme} s={s} />}
-        {activeTab === 'shame' && <ShameTab tournament={tournament} hasMulti={hasMulti} usesTeams={usesTeams} metric={metric} theme={theme} s={s} />}
-      </ScrollView>
+      {activeTab === 'overview' && (
+        <ScrollView ref={overviewScrollRef} style={s.scrollView} contentContainerStyle={s.content}>
+          <OverviewTab tournament={tournament} metric={metric} hasMulti={hasMulti} usesTeams={usesTeams}
+            roundScope={roundScope} scrollRef={overviewScrollRef} theme={theme} s={s} />
+        </ScrollView>
+      )}
+      {activeTab === 'players' && (
+        <ScrollView style={s.scrollView} contentContainerStyle={s.content}>
+          <PlayersTab tournament={tournament} players={players} selectedPlayer={playersTabPlayer}
+            setSelectedPlayer={setPlayersTabPlayer} metric={metric} theme={theme} s={s} />
+        </ScrollView>
+      )}
+      {activeTab === 'holes' && (
+        <ScrollView style={s.scrollView} contentContainerStyle={s.content}>
+          <HolesTab tournament={tournament} completedRounds={completedRounds} hasMulti={hasMulti}
+            metric={metric} effectiveRound={effectiveRound} theme={theme} s={s} />
+        </ScrollView>
+      )}
+      {activeTab === 'pairs' && usesTeams && (
+        <ScrollView ref={pairsScrollRef} style={s.scrollView} contentContainerStyle={s.content}>
+          <PairsTab tournament={tournament} players={players}
+            h2hP1={h2hP1} setH2hP1={setH2hP1} h2hP2={h2hP2} setH2hP2={setH2hP2}
+            selectedPlayer={pairsTabPlayer} setSelectedPlayer={setPairsTabPlayer}
+            metric={metric} effectiveRound={effectiveRound} scrollRef={pairsScrollRef} theme={theme} s={s} />
+        </ScrollView>
+      )}
+      {activeTab === 'shots' && (
+        <ScrollView style={s.scrollView} contentContainerStyle={s.content}>
+          <ShotsTab tournament={tournament} theme={theme} s={s} />
+        </ScrollView>
+      )}
+      {activeTab === 'shame' && (
+        <ScrollView style={s.scrollView} contentContainerStyle={s.content}>
+          <ShameTab tournament={tournament} hasMulti={hasMulti} usesTeams={usesTeams} metric={metric} theme={theme} s={s} />
+        </ScrollView>
+      )}
     </SafeAreaView>
   );
 }
 
+// Single round-scope chip set ("Total" + each round). Reused by the scope bar.
+function RoundScopeChips({ tournament, selected, onSelect, theme, s }) {
+  return (
+    <>
+      <TouchableOpacity
+        style={[s.roundChip, selected === null && s.roundChipActive]}
+        onPress={() => onSelect(null)}
+        activeOpacity={0.7}
+      >
+        <Text style={[s.roundChipText, selected === null && s.roundChipTextActive]}>Total</Text>
+      </TouchableOpacity>
+      {tournament.rounds.map((r, i) => {
+        const hasData = r.scores && Object.keys(r.scores).length > 0;
+        return (
+          <TouchableOpacity
+            key={i}
+            style={[s.roundChip, selected === i && s.roundChipActive, !hasData && s.roundChipDisabled]}
+            onPress={() => hasData && onSelect(i)}
+            disabled={!hasData}
+            activeOpacity={0.7}
+          >
+            <Text style={[s.roundChipText, selected === i && s.roundChipTextActive, !hasData && s.roundChipTextDisabled]}>R{i + 1}</Text>
+          </TouchableOpacity>
+        );
+      })}
+    </>
+  );
+}
+
+// Sticky section index — horizontal chips that scroll the parent ScrollView to
+// a registered section anchor. `sections` is [{key,label}]; `anchors` is a ref
+// to a {key: yOffset} map populated by SectionAnchor onLayout.
+function SectionIndex({ sections, anchors, scrollRef, theme, s }) {
+  if (!sections || sections.length < 2) return null;
+  return (
+    <View style={s.sectionIndexWrap}>
+      <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={s.sectionIndexRow}>
+        {sections.map(sec => (
+          <TouchableOpacity
+            key={sec.key}
+            style={s.sectionIndexChip}
+            activeOpacity={0.7}
+            onPress={() => {
+              const y = anchors.current[sec.key];
+              if (y != null && scrollRef?.current) {
+                scrollRef.current.scrollTo({ y: Math.max(0, y - 8), animated: true });
+              }
+            }}
+          >
+            <Text style={s.sectionIndexText}>{sec.label}</Text>
+          </TouchableOpacity>
+        ))}
+      </ScrollView>
+    </View>
+  );
+}
+
+// Wrap a section so its scroll offset is registered for the SectionIndex.
+function SectionAnchor({ anchorKey, anchors, children }) {
+  return (
+    <View onLayout={(e) => { anchors.current[anchorKey] = e.nativeEvent.layout.y; }}>
+      {children}
+    </View>
+  );
+}
+
 // ── Overview Tab ──
-function OverviewTab({ tournament, metric, hasMulti, usesTeams, theme, s }) {
-  const [roundIndex, setRoundIndex] = useState(null);
+function OverviewTab({ tournament, metric, hasMulti, usesTeams, roundScope, scrollRef, theme, s }) {
+  // Round scope is now screen-level; treat the prop as the source of truth.
+  const roundIndex = roundScope;
   const highlights = tournamentHighlights(tournament, { metric, roundIndex });
   const momentum = tournamentMomentum(tournament);
   const clutch = clutchOnHardest(tournament, { topN: 3 });
   const consistency = playerConsistency(tournament);
   const dna = courseDNA(tournament);
   const skins = skinsLeaderboard(tournament, { metric });
+  const siAccuracy = strokeIndexAccuracy(tournament);
   const isStrokes = metric === 'strokes';
   const modeLabel = isStrokes ? 'strokes (gross)' : 'points (net Stableford)';
   const fmtValue = (v, unit) => `${v} ${unit}`;
   const [sheet, setSheet] = useState(null);
+  const anchors = useRef({});
 
   const scope = roundIndex === null
     ? 'Tournament · all rounds'
@@ -279,8 +411,29 @@ function OverviewTab({ tournament, metric, hasMulti, usesTeams, theme, s }) {
   const openConsistency = (row) => setSheet({
     title: `${row.player.name} — consistency`,
     subtitle: `σ ${row.stdev} · mean ${row.mean} pts/hole`,
-    explainer: 'Standard deviation of Stableford points across every hole played. Lower numbers mean fewer big swings.',
-    rows: [],
+    explainer: 'Standard deviation of Stableford points across every hole played. Lower numbers mean fewer big swings. Each row shows the hole and how far its points landed from the player\'s own mean.',
+    rows: (row.breakdown || []).map((b, i) => ({
+      key: `${b.roundIndex}-${b.holeNumber}-${i}`,
+      primary: `R${b.roundIndex + 1} · ${b.courseName} · Hole ${b.holeNumber}`,
+      secondary: `Par ${b.par} · SI ${b.si} · ${b.strokes} strokes`,
+      rightPrimary: `${b.points} pts`,
+      rightSecondary: `${b.deviation >= 0 ? '+' : ''}${b.deviation} vs μ`,
+      tone: Math.abs(b.deviation) <= 0.5 ? 'good' : Math.abs(b.deviation) <= 1.2 ? 'neutral' : 'poor',
+    })),
+  });
+
+  const openSiAccuracy = () => setSheet({
+    title: 'Stroke index accuracy',
+    subtitle: `${siAccuracy.length} holes ranked by real difficulty`,
+    explainer: 'Every hole is ranked by its actual average strokes-over-par (1 = hardest). We compare that to the course\'s printed stroke index. A large gap means the printed SI mislabels the hole — positive gap = played harder than its label, negative = easier.',
+    rows: siAccuracy.map((h, i) => ({
+      key: `${h.roundIndex}-${h.holeNumber}-${i}`,
+      primary: `R${h.roundIndex + 1} · ${h.courseName} · Hole ${h.holeNumber}`,
+      secondary: `Par ${h.par} · printed SI ${h.printedSi} · played-as SI ${h.actualSi} · ${h.avgVsPar >= 0 ? '+' : ''}${h.avgVsPar} avg vs par`,
+      rightPrimary: `${h.siGap > 0 ? '+' : ''}${h.siGap}`,
+      rightSecondary: 'SI gap',
+      tone: Math.abs(h.siGap) >= 6 ? 'poor' : Math.abs(h.siGap) >= 3 ? 'neutral' : 'good',
+    })),
   });
 
   const openSkins = (player) => {
@@ -322,9 +475,29 @@ function OverviewTab({ tournament, metric, hasMulti, usesTeams, theme, s }) {
   const mb = highlights.mostBirdies;
   const ps = highlights.longestParStreak;
 
+  // Build the sticky section index from whichever sections will actually render.
+  const showMomentum = hasMulti && roundIndex === null && momentum.some(m => m.rounds.some(r => r.points != null));
+  const showSkins = hasMulti && roundIndex === null && skins.totalSkins > 0;
+  const showClutch = roundIndex === null && clutch.length > 0;
+  const showConsistency = roundIndex === null && consistency.length > 0;
+  const showDna = roundIndex === null && dna.length > 0 && dna[0].courses.length > 0;
+  const showSi = siAccuracy.length > 0;
+  const showH2H = hasMulti && !usesTeams && roundIndex === null;
+  const indexSections = [
+    { key: 'highlights', label: 'Highlights' },
+    showMomentum && { key: 'momentum', label: 'Momentum' },
+    showSkins && { key: 'skins', label: 'Skins' },
+    showClutch && { key: 'clutch', label: 'Clutch' },
+    showConsistency && { key: 'consistency', label: 'Consistency' },
+    showDna && { key: 'dna', label: 'Course DNA' },
+    showSi && { key: 'si', label: 'SI Accuracy' },
+    showH2H && { key: 'h2h', label: 'Head-to-Head' },
+  ].filter(Boolean);
+
   return (
     <View>
-      <RoundSelector tournament={tournament} selected={roundIndex} onSelect={setRoundIndex} theme={theme} s={s} />
+      <SectionIndex sections={indexSections} anchors={anchors} scrollRef={scrollRef} theme={theme} s={s} />
+      <SectionAnchor anchorKey="highlights" anchors={anchors}>
       <Text style={s.sectionTitle}>{roundIndex === null ? 'TOURNAMENT HIGHLIGHTS' : 'ROUND HIGHLIGHTS'}</Text>
       <Text style={s.scopeText}>{scope}</Text>
       {!br && <Text style={s.emptyText}>No scores for this round yet.</Text>}
@@ -376,54 +549,17 @@ function OverviewTab({ tournament, metric, hasMulti, usesTeams, theme, s }) {
         />
       )}
 
-      {hasMulti && roundIndex === null && momentum.some(m => m.rounds.some(r => r.points != null)) && (
-        <>
+      </SectionAnchor>
+
+      {showMomentum && (
+        <SectionAnchor anchorKey="momentum" anchors={anchors}>
           <Text style={s.sectionTitle}>TOURNAMENT MOMENTUM</Text>
-          <View style={s.card}>
-            {momentum.map(row => (
-              <TouchableOpacity
-                key={row.player.id}
-                style={s.momentumRow}
-                onPress={() => openMomentum(row)}
-                activeOpacity={0.7}
-              >
-                <Text style={s.momentumName}>{firstName(row.player)}</Text>
-                <View style={s.momentumBars}>
-                  {row.rounds.map(r => {
-                    const played = r.points != null;
-                    const range = Math.max(row.maxPts - row.minPts, 1);
-                    const pct = played ? Math.max(0.12, (r.points - row.minPts + 2) / (range + 4)) : 0;
-                    return (
-                      <View key={r.roundIndex} style={s.momentumBarWrap}>
-                        <View
-                          style={[
-                            s.momentumBar,
-                            {
-                              height: 32 * pct,
-                              backgroundColor: played ? theme.scoreColor(
-                                r.points >= 32 ? 'excellent' : r.points >= 28 ? 'good' : r.points >= 22 ? 'neutral' : 'poor'
-                              ) : theme.border.default,
-                            },
-                          ]}
-                        />
-                        <Text style={s.momentumBarLabel}>{played ? r.points : '—'}</Text>
-                      </View>
-                    );
-                  })}
-                </View>
-              </TouchableOpacity>
-            ))}
-            <View style={s.momentumLegend}>
-              {momentum[0]?.rounds.map(r => (
-                <Text key={r.roundIndex} style={s.momentumLegendLabel}>R{r.roundIndex + 1}</Text>
-              ))}
-            </View>
-          </View>
-        </>
+          <MomentumChart momentum={momentum} onRowPress={openMomentum} theme={theme} s={s} />
+        </SectionAnchor>
       )}
 
-      {hasMulti && roundIndex === null && skins.totalSkins > 0 && (
-        <>
+      {showSkins && (
+        <SectionAnchor anchorKey="skins" anchors={anchors}>
           <Text style={s.sectionTitle}>SKINS LEADERBOARD</Text>
           <Text style={s.scopeText}>
             Outright winner of each hole ({isStrokes ? 'fewer strokes' : 'more points'}) takes 1 skin · ties = no skin
@@ -448,11 +584,11 @@ function OverviewTab({ tournament, metric, hasMulti, usesTeams, theme, s }) {
               {skins.rounds.map(r => `R${r.roundIndex + 1}: ${Object.values(r.skinsPerPlayer).reduce((a, b) => a + b, 0)}`).join(' · ')} skins · {skins.totalSkins} total
             </Text>
           </View>
-        </>
+        </SectionAnchor>
       )}
 
-      {roundIndex === null && clutch.length > 0 && (
-        <>
+      {showClutch && (
+        <SectionAnchor anchorKey="clutch" anchors={anchors}>
           <Text style={s.sectionTitle}>CLUTCH ON HARDEST HOLES</Text>
           <Text style={s.scopeText}>Avg points on the 3 lowest-SI holes of each round</Text>
           <View style={s.card}>
@@ -464,13 +600,13 @@ function OverviewTab({ tournament, metric, hasMulti, usesTeams, theme, s }) {
               </TouchableOpacity>
             ))}
           </View>
-        </>
+        </SectionAnchor>
       )}
 
-      {roundIndex === null && consistency.length > 0 && (
-        <>
+      {showConsistency && (
+        <SectionAnchor anchorKey="consistency" anchors={anchors}>
           <Text style={s.sectionTitle}>CONSISTENCY INDEX</Text>
-          <Text style={s.scopeText}>Stdev of pts per hole — lower is steadier</Text>
+          <Text style={s.scopeText}>Stdev of pts per hole — lower is steadier · tap for hole breakdown</Text>
           <View style={s.card}>
             {consistency.map((row, i) => (
               <TouchableOpacity key={row.player.id} style={s.leaderRow} onPress={() => openConsistency(row)} activeOpacity={0.7}>
@@ -480,11 +616,11 @@ function OverviewTab({ tournament, metric, hasMulti, usesTeams, theme, s }) {
               </TouchableOpacity>
             ))}
           </View>
-        </>
+        </SectionAnchor>
       )}
 
-      {roundIndex === null && dna.length > 0 && dna[0].courses.length > 0 && (
-        <>
+      {showDna && (
+        <SectionAnchor anchorKey="dna" anchors={anchors}>
           <Text style={s.sectionTitle}>COURSE DNA</Text>
           <Text style={s.scopeText}>Avg pts/hole per course · tap a player</Text>
           {dna.map(row => {
@@ -509,11 +645,32 @@ function OverviewTab({ tournament, metric, hasMulti, usesTeams, theme, s }) {
               </TouchableOpacity>
             );
           })}
-        </>
+        </SectionAnchor>
       )}
 
-      {hasMulti && !usesTeams && roundIndex === null && (
-        <>
+      {showSi && (
+        <SectionAnchor anchorKey="si" anchors={anchors}>
+          <Text style={s.sectionTitle}>STROKE INDEX ACCURACY</Text>
+          <Text style={s.scopeText}>Does the printed SI match how the holes actually played?</Text>
+          <TouchableOpacity style={s.card} onPress={openSiAccuracy} activeOpacity={0.7}>
+            {siAccuracy.slice(0, 4).map((h, i) => (
+              <View key={`${h.roundIndex}-${h.holeNumber}-${i}`} style={s.leaderRow}>
+                <Text style={s.leaderName}>R{h.roundIndex + 1} · H{h.holeNumber}</Text>
+                <Text style={s.leaderUnit}>SI {h.printedSi} → played {h.actualSi}</Text>
+                <Text style={[s.leaderValue, {
+                  color: Math.abs(h.siGap) >= 6 ? theme.scoreColor('poor')
+                    : Math.abs(h.siGap) >= 3 ? theme.scoreColor('neutral')
+                    : theme.scoreColor('good'),
+                }]}>{h.siGap > 0 ? '+' : ''}{h.siGap}</Text>
+              </View>
+            ))}
+            <Text style={s.skinsFooter}>Tap for the full hole-by-hole ranking</Text>
+          </TouchableOpacity>
+        </SectionAnchor>
+      )}
+
+      {showH2H && (
+        <SectionAnchor anchorKey="h2h" anchors={anchors}>
           <Text style={s.sectionTitle}>HEAD-TO-HEAD</Text>
           <Text style={s.scopeText}>
             Net holes won across the tournament — row vs column ({isStrokes ? 'lower strokes wins' : 'higher Stableford wins'}). Tap a cell for the breakdown.
@@ -552,7 +709,7 @@ function OverviewTab({ tournament, metric, hasMulti, usesTeams, theme, s }) {
               });
             }}
           />
-        </>
+        </SectionAnchor>
       )}
 
       <StatDetailSheet
@@ -563,6 +720,63 @@ function OverviewTab({ tournament, metric, hasMulti, usesTeams, theme, s }) {
         explainer={sheet?.explainer}
         rows={sheet?.rows || []}
       />
+    </View>
+  );
+}
+
+// Momentum bars with axes: a labelled value scale on the left and a zero
+// baseline so the per-round trajectory is readable, not just relative.
+function MomentumChart({ momentum, onRowPress, theme, s }) {
+  const allPts = momentum.flatMap(m => m.rounds.filter(r => r.points != null).map(r => r.points));
+  const maxPts = allPts.length ? Math.max(...allPts) : 0;
+  const ROW_H = 36;
+  const rounds = momentum[0]?.rounds || [];
+  return (
+    <View style={s.card}>
+      <View style={s.momentumScaleRow}>
+        <Text style={s.momentumScaleLabel}>0</Text>
+        <View style={s.momentumScaleLine} />
+        <Text style={s.momentumScaleLabel}>{maxPts} pts</Text>
+      </View>
+      {momentum.map(row => (
+        <TouchableOpacity
+          key={row.player.id}
+          style={s.momentumRow}
+          onPress={() => onRowPress(row)}
+          activeOpacity={0.7}
+        >
+          <Text style={s.momentumName}>{firstName(row.player)}</Text>
+          <View style={s.momentumBars}>
+            {row.rounds.map(r => {
+              const played = r.points != null;
+              // Bar height is proportional to absolute points against a true
+              // zero baseline (an honest axis, not a relative min/max).
+              const pct = played && maxPts > 0 ? Math.max(0.06, r.points / maxPts) : 0;
+              return (
+                <View key={r.roundIndex} style={s.momentumBarWrap}>
+                  <View
+                    style={[
+                      s.momentumBar,
+                      {
+                        height: Math.max(played ? 2 : 0, ROW_H * pct),
+                        backgroundColor: played ? theme.scoreColor(
+                          r.points >= 32 ? 'excellent' : r.points >= 28 ? 'good' : r.points >= 22 ? 'neutral' : 'poor'
+                        ) : theme.border.default,
+                      },
+                    ]}
+                  />
+                  <Text style={s.momentumBarLabel}>{played ? r.points : '—'}</Text>
+                </View>
+              );
+            })}
+          </View>
+        </TouchableOpacity>
+      ))}
+      <View style={s.momentumLegend}>
+        {rounds.map(r => (
+          <Text key={r.roundIndex} style={s.momentumLegendLabel}>R{r.roundIndex + 1}</Text>
+        ))}
+      </View>
     </View>
   );
 }
@@ -673,10 +887,37 @@ function H2HMatrix({ tournament, players, metric, onCellPress, theme, s }) {
   );
 }
 
-function HighlightCard({ icon, label, value, sub, onPress, theme, s }) {
+// Branded off-screen card used to share a single highlight as an image.
+const ShareableHighlight = React.forwardRef(({ label, value, sub }, ref) => (
+  <View ref={ref} collapsable={false} style={shareCardStyles.card}>
+    <Text style={shareCardStyles.brand}>GOLF PARTNER</Text>
+    <Text style={shareCardStyles.label}>{(label || '').replace(/[^\x00-\x7F]/g, '').trim()}</Text>
+    <Text style={shareCardStyles.value} numberOfLines={3}>{value}</Text>
+    {sub ? <Text style={shareCardStyles.sub} numberOfLines={2}>{sub}</Text> : null}
+    <Text style={shareCardStyles.footer}>golfpartner.app</Text>
+  </View>
+));
+ShareableHighlight.displayName = 'ShareableHighlight';
+
+function HighlightCard({ icon, label, value, sub, onPress, shareable = true, theme, s }) {
   const Container = onPress ? TouchableOpacity : View;
+  const shareRef = useRef(null);
+  const [sharing, setSharing] = useState(false);
+  const onShare = async () => {
+    if (sharing) return;
+    setSharing(true);
+    try {
+      await captureAndShare(shareRef, `${(label || 'highlight').replace(/[^a-z0-9]+/gi, '-').toLowerCase()}.png`);
+    } finally {
+      setSharing(false);
+    }
+  };
   return (
     <Container style={s.highlightCard} onPress={onPress} activeOpacity={0.7}>
+      {/* Off-screen capture target. */}
+      <View style={s.highlightCaptureHost} pointerEvents="none">
+        <ShareableHighlight ref={shareRef} label={label} value={value} sub={sub} />
+      </View>
       <View style={s.highlightIcon}>
         <Feather name={icon} size={20} color={theme.accent.primary} />
       </View>
@@ -685,10 +926,41 @@ function HighlightCard({ icon, label, value, sub, onPress, theme, s }) {
         <Text style={s.highlightValue}>{value}</Text>
         {sub && <Text style={s.highlightSub}>{sub}</Text>}
       </View>
+      {shareable && (
+        <TouchableOpacity
+          onPress={onShare}
+          disabled={sharing}
+          hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}
+          style={[s.highlightShareBtn, sharing && { opacity: 0.4 }]}
+        >
+          <Feather name="share-2" size={16} color={theme.accent.primary} />
+        </TouchableOpacity>
+      )}
       {onPress && <Feather name="chevron-right" size={18} color={theme.text.muted} />}
     </Container>
   );
 }
+
+const shareCardStyles = StyleSheet.create({
+  card: {
+    width: 360, backgroundColor: '#006747', borderRadius: 20,
+    borderWidth: 1, borderColor: 'rgba(255,215,0,0.4)', padding: 28,
+  },
+  brand: {
+    fontFamily: 'PlusJakartaSans-SemiBold', color: '#ffd700',
+    fontSize: 11, letterSpacing: 2, textTransform: 'uppercase', marginBottom: 16,
+  },
+  label: {
+    fontFamily: 'PlusJakartaSans-SemiBold', color: 'rgba(255,255,255,0.6)',
+    fontSize: 11, letterSpacing: 1.5, textTransform: 'uppercase', marginBottom: 6,
+  },
+  value: { fontFamily: 'PlusJakartaSans-ExtraBold', color: '#ffffff', fontSize: 24, lineHeight: 30 },
+  sub: { fontFamily: 'PlusJakartaSans-Medium', color: 'rgba(255,255,255,0.6)', fontSize: 13, marginTop: 8 },
+  footer: {
+    fontFamily: 'PlusJakartaSans-SemiBold', color: 'rgba(255,255,255,0.45)',
+    fontSize: 10, letterSpacing: 1, marginTop: 20,
+  },
+});
 
 // ── Players Tab ──
 function PlayersTab({ tournament, players, selectedPlayer, setSelectedPlayer, metric, theme, s }) {
@@ -704,6 +976,8 @@ function PlayersTab({ tournament, players, selectedPlayer, setSelectedPlayer, me
   const parSplit = parTypeSplit(tournament, player.id);
   const wc = warmupVsClosing(tournament, player.id);
   const roi = handicapROI(tournament, player.id);
+  const bounceBack = bounceBackRate(tournament).find(r => r.player.id === player.id) || null;
+  const frontBack = frontBackSplit(tournament).find(r => r.player.id === player.id) || null;
   const modeLabel = isStrokes ? 'strokes (gross)' : 'points (net Stableford)';
 
   const defaultTone = (b) => toneForPoints(b.points);
@@ -753,16 +1027,55 @@ function PlayersTab({ tournament, players, selectedPlayer, setSelectedPlayer, me
 
   const openROI = () => roi && setSheet({
     title: `${player.name} — handicap ROI`,
-    subtitle: `${roi.actual} actual / ${roi.expected} expected`,
-    explainer: 'Ratio of actual Stableford points to the 2 pts/hole baseline a player whose handicap exactly matches their level would score. Above 1.00 means they are outplaying their handicap.',
-    rows: [],
+    subtitle: `${roi.actual} actual / ${roi.expected} expected · ratio ${roi.ratio}`,
+    explainer: 'Ratio of actual Stableford points to the 2 pts/hole baseline a player whose handicap exactly matches their level would score. Above 1.00 means they are outplaying their handicap. Rows show each round.',
+    rows: (roi.breakdown || []).map(b => ({
+      key: `roi-${b.roundIndex}`,
+      primary: `R${b.roundIndex + 1} · ${b.courseName}`,
+      secondary: `${b.actual} actual / ${b.expected} expected · ${b.holesPlayed} holes`,
+      rightPrimary: `×${b.ratio}`,
+      tone: b.ratio >= 1 ? 'excellent' : b.ratio >= 0.75 ? 'neutral' : 'poor',
+    })),
   });
 
   const openParSplit = (label, bucket) => bucket.holes > 0 && setSheet({
     title: `${player.name} — ${label}`,
     subtitle: `${bucket.avgPoints} avg pts · ${bucket.avgStrokes} avg str · ${bucket.holes} holes`,
-    explainer: `Aggregated performance across every ${label} hole played in this tournament.`,
-    rows: [],
+    explainer: `Every ${label} hole played in this tournament, hole by hole.`,
+    rows: (bucket.breakdown || []).map((b, i) => ({
+      key: `ps-${b.roundIndex}-${b.holeNumber}-${i}`,
+      primary: `R${b.roundIndex + 1} · ${b.courseName} · Hole ${b.holeNumber}`,
+      secondary: `Par ${b.par} · SI ${b.si} · ${b.strokes} strokes`,
+      rightPrimary: `${b.points} pts`,
+      tone: toneForPoints(b.points),
+    })),
+  });
+
+  const openBounceBack = (row) => setSheet({
+    title: `${row.player.name} — bounce-back`,
+    subtitle: `${row.bounceBacks}/${row.opportunities} recoveries · ${row.rate}%`,
+    explainer: 'After a bogey-or-worse, how often the very next hole was par-or-better. Each row is one such follow-up hole.',
+    rows: row.breakdown.map((b, i) => ({
+      key: `bb-${b.roundIndex}-${b.holeNumber}-${i}`,
+      primary: `R${b.roundIndex + 1} · ${b.courseName} · Hole ${b.holeNumber}`,
+      secondary: `After H${b.afterHole} (+${b.afterVsPar}) · Par ${b.par} · ${b.strokes} strokes`,
+      rightPrimary: b.recovered ? 'Bounced back' : 'No recovery',
+      tone: b.recovered ? 'excellent' : 'poor',
+    })),
+  });
+
+  const openFrontBack = (row) => setSheet({
+    title: `${row.player.name} — front 9 vs back 9`,
+    subtitle: `Front ${row.frontAvg} · Back ${row.backAvg} pts/hole · Δ ${row.delta >= 0 ? '+' : ''}${row.delta}`,
+    explainer: 'Average Stableford points on holes 1-9 versus 10-18. A positive delta means a stronger finisher. Rows show each 18-hole round.',
+    rows: row.rounds.map(r => ({
+      key: `fb-${r.roundIndex}`,
+      primary: `R${r.roundIndex + 1} · ${r.courseName}`,
+      secondary: `Front ${r.front} pts · Back ${r.back} pts`,
+      rightPrimary: `${r.delta >= 0 ? '+' : ''}${r.delta}`,
+      rightSecondary: 'back − front',
+      tone: r.delta > 0 ? 'excellent' : r.delta < 0 ? 'poor' : 'neutral',
+    })),
   });
 
   const openRound = (r) => {
@@ -822,22 +1135,26 @@ function PlayersTab({ tournament, players, selectedPlayer, setSelectedPlayer, me
           <Text style={s.sectionTitle}>STREAKS</Text>
           <View style={s.card}>
             <View style={s.streakRow}>
-              <TouchableOpacity style={s.streakItem} onPress={() => streaks.bestBirdieStreak > 0 && openStreak(`Birdie streak — ${streaks.bestBirdieStreak} holes`, streaks.birdieStreakHoles, () => 'excellent', 'Longest run of consecutive holes at birdie or better.')} activeOpacity={0.7}>
-                <Text style={[s.streakNumber, { color: theme.scoreColor('excellent') }]}>{streaks.bestBirdieStreak}</Text>
-                <Text style={s.streakLabel}>Birdie streak</Text>
-              </TouchableOpacity>
-              <TouchableOpacity style={s.streakItem} onPress={() => streaks.bestParStreak > 0 && openStreak(`Par streak — ${streaks.bestParStreak} holes`, streaks.parStreakHoles, defaultTone, 'Longest run of consecutive holes at par or better.')} activeOpacity={0.7}>
-                <Text style={[s.streakNumber, { color: theme.scoreColor('good') }]}>{streaks.bestParStreak}</Text>
-                <Text style={s.streakLabel}>Par streak</Text>
-              </TouchableOpacity>
-              <TouchableOpacity style={s.streakItem} onPress={() => streaks.bogeyOnlyStreak > 0 && openStreak(`Bogey streak — ${streaks.bogeyOnlyStreak} holes`, streaks.bogeyOnlyStreakHoles, () => 'neutral', 'Longest run of consecutive holes at exactly 1 over par.')} activeOpacity={0.7}>
-                <Text style={[s.streakNumber, { color: theme.scoreColor('neutral') }]}>{streaks.bogeyOnlyStreak}</Text>
-                <Text style={s.streakLabel}>Bogey streak</Text>
-              </TouchableOpacity>
-              <TouchableOpacity style={s.streakItem} onPress={() => streaks.doubleBogeyPlusStreak > 0 && openStreak(`Dbl+ streak — ${streaks.doubleBogeyPlusStreak} holes`, streaks.doubleBogeyPlusStreakHoles, () => 'poor', 'Longest run of consecutive holes at 2 or more over par.')} activeOpacity={0.7}>
-                <Text style={[s.streakNumber, { color: theme.scoreColor('poor') }]}>{streaks.doubleBogeyPlusStreak}</Text>
-                <Text style={s.streakLabel}>Dbl+ streak</Text>
-              </TouchableOpacity>
+              {[
+                { key: 'birdie', label: 'Birdie streak', value: streaks.bestBirdieStreak, tone: 'excellent', holes: streaks.birdieStreakHoles, toneFn: () => 'excellent', explainer: 'Longest run of consecutive holes at birdie or better.' },
+                { key: 'par', label: 'Par streak', value: streaks.bestParStreak, tone: 'good', holes: streaks.parStreakHoles, toneFn: defaultTone, explainer: 'Longest run of consecutive holes at par or better.' },
+                { key: 'bogey', label: 'Bogey streak', value: streaks.bogeyOnlyStreak, tone: 'neutral', holes: streaks.bogeyOnlyStreakHoles, toneFn: () => 'neutral', explainer: 'Longest run of consecutive holes at exactly 1 over par.' },
+                { key: 'dbl', label: 'Dbl+ streak', value: streaks.doubleBogeyPlusStreak, tone: 'poor', holes: streaks.doubleBogeyPlusStreakHoles, toneFn: () => 'poor', explainer: 'Longest run of consecutive holes at 2 or more over par.' },
+              ].map(st => {
+                const zero = st.value === 0;
+                return (
+                  <TouchableOpacity
+                    key={st.key}
+                    style={[s.streakItem, zero && s.streakItemDim]}
+                    disabled={zero}
+                    onPress={() => openStreak(`${st.label} — ${st.value} holes`, st.holes, st.toneFn, st.explainer)}
+                    activeOpacity={0.7}
+                  >
+                    <Text style={[s.streakNumber, { color: zero ? theme.text.muted : theme.scoreColor(st.tone) }]}>{st.value}</Text>
+                    <Text style={s.streakLabel}>{st.label}</Text>
+                  </TouchableOpacity>
+                );
+              })}
             </View>
           </View>
 
@@ -924,6 +1241,45 @@ function PlayersTab({ tournament, players, selectedPlayer, setSelectedPlayer, me
             </>
           )}
 
+          <Text style={s.sectionTitle}>BOUNCE-BACK RATE</Text>
+          {bounceBack ? (
+            <TouchableOpacity style={s.card} onPress={() => openBounceBack(bounceBack)} activeOpacity={0.7}>
+              <Text style={s.bigNumber}>{bounceBack.rate}%</Text>
+              <Text style={s.cardSub}>
+                par-or-better after a bogey+ · {bounceBack.bounceBacks}/{bounceBack.opportunities} recoveries
+              </Text>
+            </TouchableOpacity>
+          ) : (
+            <Text style={s.mutedNote}>No bogey-or-worse holes yet — nothing to bounce back from.</Text>
+          )}
+
+          <Text style={s.sectionTitle}>FRONT 9 vs BACK 9</Text>
+          {frontBack ? (
+            <TouchableOpacity style={s.card} onPress={() => openFrontBack(frontBack)} activeOpacity={0.7}>
+              <View style={s.wcRow}>
+                <View style={s.wcCol}>
+                  <Text style={s.wcLabel}>Front 9</Text>
+                  <Text style={[s.wcValue, { color: theme.scoreColor(frontBack.frontAvg >= 2 ? 'good' : 'neutral') }]}>{frontBack.frontAvg}</Text>
+                  <Text style={s.wcSub}>pts/hole</Text>
+                </View>
+                <View style={s.wcCol}>
+                  <Text style={s.wcLabel}>Back 9</Text>
+                  <Text style={[s.wcValue, { color: theme.scoreColor(frontBack.backAvg >= 2 ? 'good' : 'neutral') }]}>{frontBack.backAvg}</Text>
+                  <Text style={s.wcSub}>pts/hole</Text>
+                </View>
+                <View style={s.wcCol}>
+                  <Text style={s.wcLabel}>Δ</Text>
+                  <Text style={[s.wcValue, {
+                    color: frontBack.delta > 0 ? theme.scoreColor('excellent') : frontBack.delta < 0 ? theme.scoreColor('poor') : theme.text.primary,
+                  }]}>{frontBack.delta > 0 ? '+' : ''}{frontBack.delta}</Text>
+                  <Text style={s.wcSub}>back − front</Text>
+                </View>
+              </View>
+            </TouchableOpacity>
+          ) : (
+            <Text style={s.mutedNote}>Needs a completed 18-hole round to split the nines.</Text>
+          )}
+
           <Text style={s.sectionTitle}>ROUND HISTORY</Text>
           {history.map((r, i) => (
             <TouchableOpacity key={i} style={s.historyRow} onPress={() => openRound(r)} activeOpacity={0.7}>
@@ -963,11 +1319,11 @@ function DistBar({ label, count, total, color, onPress, s }) {
 }
 
 // ── Holes Tab ──
-function HolesTab({ tournament, completedRounds, hasMulti, metric, theme, s }) {
+function HolesTab({ tournament, completedRounds, hasMulti, metric, effectiveRound, theme, s }) {
   const isStrokes = metric === 'strokes';
   const bw = bestWorstHoles(tournament, { metric });
-  const firstCompletedIdx = tournament.rounds.findIndex(r => r.scores && Object.keys(r.scores).length > 0);
-  const [heatRound, setHeatRound] = useState(firstCompletedIdx >= 0 ? firstCompletedIdx : 0);
+  // The heatmap is inherently per-round — it reads the unified screen scope.
+  const heatRound = effectiveRound != null ? effectiveRound : 0;
   const heatmap = holeDifficultyMap(tournament, heatRound);
   const nemesisCrushed = playerNemesisAndCrushed(tournament);
   const chaos = chaosHoles(tournament);
@@ -1082,8 +1438,7 @@ function HolesTab({ tournament, completedRounds, hasMulti, metric, theme, s }) {
       {completedRounds.length > 0 && (
         <>
           <Text style={s.sectionTitle}>HOLE HEATMAP</Text>
-          <RoundSelector tournament={tournament} selected={heatRound} onSelect={(v) => v !== null && setHeatRound(v)} theme={theme} s={s} />
-          <Text style={s.scopeText}>{tournament.rounds[heatRound]?.courseName}</Text>
+          <Text style={s.scopeText}>R{heatRound + 1} · {tournament.rounds[heatRound]?.courseName} — change the round chip above</Text>
           <ScrollView horizontal showsHorizontalScrollIndicator={false}>
             <View>
               <View style={s.heatRow}>
@@ -1102,6 +1457,7 @@ function HolesTab({ tournament, completedRounds, hasMulti, metric, theme, s }) {
                     const ps = h.playerScores.find(x => x.playerId === p.id);
                     if (isStrokes) {
                       const strokes = ps?.strokes ?? null;
+                      const empty = strokes == null;
                       const vsPar = strokes != null ? strokes - h.par : null;
                       const color = vsPar == null ? theme.text.muted
                         : vsPar < 0 ? theme.scoreColor('excellent')
@@ -1109,19 +1465,20 @@ function HolesTab({ tournament, completedRounds, hasMulti, metric, theme, s }) {
                         : vsPar === 1 ? theme.scoreColor('neutral')
                         : theme.scoreColor('poor');
                       return (
-                        <View key={p.id} style={[s.heatCell, s.heatValue, { backgroundColor: color + '18' }]}>
+                        <View key={p.id} style={[s.heatCell, s.heatValue, empty && s.heatCellEmpty, { backgroundColor: color + (empty ? '08' : '18') }]}>
                           <Text style={[s.heatValueText, { color }]}>{strokes ?? '-'}</Text>
                         </View>
                       );
                     }
                     const pts = ps?.points ?? '-';
+                    const empty = pts === '-';
                     const color = pts === '-' ? theme.text.muted
                       : pts >= 3 ? theme.scoreColor('excellent')
                       : pts === 2 ? theme.scoreColor('good')
                       : pts === 1 ? theme.scoreColor('neutral')
                       : theme.scoreColor('poor');
                     return (
-                      <View key={p.id} style={[s.heatCell, s.heatValue, { backgroundColor: color + '18' }]}>
+                      <View key={p.id} style={[s.heatCell, s.heatValue, empty && s.heatCellEmpty, { backgroundColor: color + (empty ? '08' : '18') }]}>
                         <Text style={[s.heatValueText, { color }]}>{pts}</Text>
                       </View>
                     );
@@ -1229,27 +1586,28 @@ function HolesTab({ tournament, completedRounds, hasMulti, metric, theme, s }) {
 }
 
 // ── Pairs Tab ──
-function PairsTab({ tournament, players, h2hPlayer, setH2hPlayer, selectedPlayer, setSelectedPlayer, metric, theme, s }) {
+function PairsTab({ tournament, players, h2hP1, setH2hP1, h2hP2, setH2hP2, selectedPlayer, setSelectedPlayer, metric, effectiveRound, scrollRef, theme, s }) {
   const pairs = pairPerformance(tournament);
   const splitsPlayer = players[selectedPlayer] ?? null;
   const splits = splitsPlayer
     ? playerPartnerSplits(tournament, splitsPlayer.id)
     : { baseline: 0, partners: [] };
-  const [hwRound, setHwRound] = useState(null);
-  const holeWins = pairHoleWins(tournament, { metric, roundIndex: hwRound });
+  // Hole-wins and H2H read the unified round scope; the per-hole pair
+  // difference chart is inherently per-round so it uses effectiveRound.
+  const holeWins = pairHoleWins(tournament, { metric, roundIndex: effectiveRound });
   const firstCompletedRound = tournament.rounds.findIndex(r => r.scores && Object.keys(r.scores).length > 0);
-  const [pdRound, setPdRound] = useState(firstCompletedRound >= 0 ? firstCompletedRound : null);
+  const pdRound = effectiveRound != null ? effectiveRound : (firstCompletedRound >= 0 ? firstCompletedRound : null);
   const pdData = pdRound != null ? pairDifferenceByHole(tournament, pdRound, { metric }) : null;
   const synergy = pairSynergy(tournament);
   const carry = pairCarryRatio(tournament);
   const swing = pdRound != null ? swingHole(tournament, pdRound) : null;
   const matchPlay = matchPlayResults(tournament, { metric });
   const configMatrix = pairConfigMatrix(tournament);
-  const [h2hRound, setH2hRound] = useState(null);
-  const p1 = players[selectedPlayer];
-  const p2Idx = h2hPlayer >= players.length ? 0 : h2hPlayer;
+  const p1 = players[h2hP1];
+  const p2Idx = h2hP2 >= players.length ? 0 : h2hP2;
   const p2 = players[p2Idx];
-  const h2h = p1 && p2 && p1.id !== p2.id ? headToHead(tournament, p1.id, p2.id, { roundIndex: h2hRound }) : null;
+  const h2h = p1 && p2 && p1.id !== p2.id ? headToHead(tournament, p1.id, p2.id, { roundIndex: effectiveRound }) : null;
+  const anchors = useRef({});
 
   const [sheet, setSheet] = useState(null);
 
@@ -1319,8 +1677,14 @@ function PairsTab({ tournament, players, h2hPlayer, setH2hPlayer, selectedPlayer
   const openSynergy = (pair) => setSheet({
     title: `${pair.members[0].name} & ${pair.members[1].name} — synergy`,
     subtitle: `${pair.synergy}× baseline · ${pair.rounds} round${pair.rounds === 1 ? '' : 's'}`,
-    explainer: `Actual combined Stableford (${pair.combined}) over expected-from-each-members-average (${pair.expected}). 1.00 = as expected, above = lift each other, below = drag each other.`,
-    rows: [],
+    explainer: `Actual combined Stableford (${pair.combined}) over expected-from-each-members-average (${pair.expected}). 1.00 = as expected, above = lift each other, below = drag each other. Rows show each round they played together.`,
+    rows: (pair.roundList || []).map(r => ({
+      key: `syn-${r.roundIndex}`,
+      primary: `R${r.roundIndex + 1} · ${r.courseName}`,
+      secondary: `${r.combined} actual / ${r.expected} expected · ${r.holesPlayed} holes`,
+      rightPrimary: r.synergy != null ? `×${r.synergy}` : '—',
+      tone: r.synergy != null ? (r.synergy >= 1.05 ? 'excellent' : r.synergy >= 0.95 ? 'good' : 'poor') : 'neutral',
+    })),
   });
 
   const openCarry = (pair) => setSheet({
@@ -1405,11 +1769,37 @@ function PairsTab({ tournament, players, h2hPlayer, setH2hPlayer, selectedPlayer
         : holeEntry.holeDelta > 0
           ? `${pair1Label} +${holeEntry.holeDelta}`
           : `${pair2Label} +${Math.abs(holeEntry.holeDelta)}`;
+    // Per-player breakdown for this hole so the sheet is not a dead end.
+    const round = tournament.rounds[pdRound];
+    const memberRows = [];
+    const addPairRows = (pair, pairLabel) => {
+      memberRows.push({ key: `sec-${pairLabel}`, section: true, label: pairLabel });
+      pair.forEach(member => {
+        const player = tournament.players.find(p => p.id === member.id);
+        if (!player || !round) return;
+        const sc = round.scores?.[player.id]?.[holeEntry.holeNumber];
+        const hole = round.holes.find(h => h.number === holeEntry.holeNumber);
+        if (sc == null || !hole) {
+          memberRows.push({ key: `${pairLabel}-${player.id}`, primary: player.name, secondary: 'no score', rightPrimary: '—' });
+          return;
+        }
+        const pts = calcStablefordPoints(hole.par, sc, getPlayingHandicap(round, player), hole.strokeIndex);
+        memberRows.push({
+          key: `${pairLabel}-${player.id}`,
+          primary: player.name,
+          secondary: `${sc} strokes`,
+          rightPrimary: isStr ? `${sc} str` : `${pts} pts`,
+          tone: toneForPoints(pts),
+        });
+      });
+    };
+    addPairRows(pdData.pair1, pair1Label);
+    addPairRows(pdData.pair2, pair2Label);
     setSheet({
       title: `Hole ${holeEntry.holeNumber} — pair split`,
       subtitle: `${pdData.courseName} · Par ${holeEntry.par} · ${isStr ? 'strokes' : 'points'}`,
       explainer: `After this hole: ${leadText}. Hole result: ${holeDeltaLabel}. Combined totals: ${holeSplit}.`,
-      rows: [],
+      rows: memberRows,
     });
   };
 
@@ -1441,12 +1831,27 @@ function PairsTab({ tournament, players, h2hPlayer, setH2hPlayer, selectedPlayer
     });
   };
 
+  const hasPairRounds = tournament.rounds.some(r => r.pairs && r.scores && Object.keys(r.scores).length > 0);
+  const indexSections = [
+    { key: 'chemistry', label: 'Chemistry' },
+    splitsPlayer && { key: 'splits', label: 'Splits' },
+    { key: 'holewins', label: 'Hole Wins' },
+    { key: 'pairdiff', label: 'Pair Diff' },
+    { key: 'synergy', label: 'Synergy' },
+    { key: 'carry', label: 'Carry' },
+    { key: 'matchplay', label: 'Match Play' },
+    { key: 'config', label: 'Config' },
+    { key: 'h2h', label: 'Head-to-Head' },
+  ].filter(Boolean);
+
   return (
     <View>
-      {pairs.length > 0 && (
-        <>
-          <Text style={s.sectionTitle}>PAIR CHEMISTRY</Text>
-          {pairs.map((p, i) => (
+      <SectionIndex sections={indexSections} anchors={anchors} scrollRef={scrollRef} theme={theme} s={s} />
+
+      <SectionAnchor anchorKey="chemistry" anchors={anchors}>
+        <Text style={s.sectionTitle}>PAIR CHEMISTRY</Text>
+        {pairs.length > 0 ? (
+          pairs.map((p, i) => (
             <TouchableOpacity key={i} style={s.pairCard} onPress={() => openPair(p)} activeOpacity={0.7}>
               <View style={s.pairNames}>
                 <Text style={s.pairName}>{p.players[0].name}</Text>
@@ -1458,12 +1863,14 @@ function PairsTab({ tournament, players, h2hPlayer, setH2hPlayer, selectedPlayer
                 <Text style={s.pairRounds}>{p.rounds} round{p.rounds !== 1 ? 's' : ''}</Text>
               </View>
             </TouchableOpacity>
-          ))}
-        </>
-      )}
+          ))
+        ) : (
+          <Text style={s.mutedNote}>Pair chemistry needs at least one completed round with assigned pairs.</Text>
+        )}
+      </SectionAnchor>
 
       {splitsPlayer && (
-        <>
+        <SectionAnchor anchorKey="splits" anchors={anchors}>
           <View style={s.sectionTitleRow}>
             <Text style={s.sectionTitle}>PARTNER SPLITS · {firstName(splitsPlayer)}</Text>
             <Text style={s.scopeText}>baseline {splits.baseline} pts</Text>
@@ -1517,62 +1924,68 @@ function PairsTab({ tournament, players, h2hPlayer, setH2hPlayer, selectedPlayer
               })}
             </View>
           )}
-        </>
+        </SectionAnchor>
       )}
 
-      {tournament.rounds.some(r => r.pairs && r.scores && Object.keys(r.scores).length > 0) && (
-        <>
-          <View style={s.sectionTitleRow}>
-            <Text style={s.sectionTitle}>{metric === 'strokes' ? 'HOLE WINS ON STROKES' : 'HOLE WINS ON POINTS'}</Text>
-            <TouchableOpacity
-              onPress={openHoleWinsInfo}
-              hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
-              style={s.sectionTitleInfo}
-            >
-              <Feather name="info" size={14} color={theme.text.muted} />
-            </TouchableOpacity>
-          </View>
-          <RoundSelector tournament={tournament} selected={hwRound} onSelect={setHwRound} theme={theme} s={s} />
+      <SectionAnchor anchorKey="holewins" anchors={anchors}>
+        <View style={s.sectionTitleRow}>
+          <Text style={s.sectionTitle}>{metric === 'strokes' ? 'HOLE WINS ON STROKES' : 'HOLE WINS ON POINTS'}</Text>
+          <TouchableOpacity
+            onPress={openHoleWinsInfo}
+            hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+            style={s.sectionTitleInfo}
+          >
+            <Feather name="info" size={14} color={theme.text.muted} />
+          </TouchableOpacity>
+        </View>
+        {hasPairRounds ? (
           <HoleWinsTable rows={holeWins} metricMode={metric} openRow={openHoleWins} theme={theme} s={s} />
-        </>
-      )}
+        ) : (
+          <Text style={s.mutedNote}>Hole wins compare two assigned pairs — no paired rounds yet.</Text>
+        )}
+      </SectionAnchor>
 
-      {firstCompletedRound >= 0 && tournament.rounds.some(r => r.pairs && r.scores && Object.keys(r.scores).length > 0) && (
-        <>
-          <View style={s.sectionTitleRow}>
-            <Text style={s.sectionTitle}>{metric === 'strokes' ? 'PAIR DIFFERENCE ON STROKES' : 'PAIR DIFFERENCE ON POINTS'}</Text>
-            <TouchableOpacity
-              onPress={openPairDiffInfo}
-              hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
-              style={s.sectionTitleInfo}
-            >
-              <Feather name="info" size={14} color={theme.text.muted} />
-            </TouchableOpacity>
-          </View>
-          <PairRoundSelector tournament={tournament} selected={pdRound} onSelect={setPdRound} theme={theme} s={s} />
-          {pdData ? (
-            <PairDifferenceChart data={pdData} metric={metric} onHolePress={openPairDiffHole} theme={theme} s={s} />
-          ) : (
-            <Text style={s.emptyText}>No pair data for this round.</Text>
-          )}
-          {swing && (
-            <TouchableOpacity style={s.swingCard} onPress={openSwing} activeOpacity={0.7}>
-              <View>
-                <Text style={s.swingLabel}>SWING HOLE</Text>
-                <Text style={s.swingValue}>
-                  Hole {swing.holeNumber} · {swing.holeDelta > 0 ? firstName(swing.pair1[0]) + '+' + firstName(swing.pair1[1]) : swing.holeDelta < 0 ? firstName(swing.pair2[0]) + '+' + firstName(swing.pair2[1]) : 'Even'} {swing.holeDelta !== 0 ? `+${Math.abs(swing.holeDelta)} pts` : ''}
-                </Text>
-                <Text style={s.swingSub}>Par {swing.par} · cum. after: {swing.cumulativeAfter > 0 ? '+' : ''}{swing.cumulativeAfter} pts</Text>
-              </View>
-              <Feather name="chevron-right" size={16} color={theme.text.muted} />
-            </TouchableOpacity>
-          )}
-        </>
-      )}
+      <SectionAnchor anchorKey="pairdiff" anchors={anchors}>
+        <View style={s.sectionTitleRow}>
+          <Text style={s.sectionTitle}>{metric === 'strokes' ? 'PAIR DIFFERENCE ON STROKES' : 'PAIR DIFFERENCE ON POINTS'}</Text>
+          <TouchableOpacity
+            onPress={openPairDiffInfo}
+            hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+            style={s.sectionTitleInfo}
+          >
+            <Feather name="info" size={14} color={theme.text.muted} />
+          </TouchableOpacity>
+        </View>
+        {firstCompletedRound >= 0 && hasPairRounds && pdRound != null ? (
+          <>
+            <Text style={s.scopeText}>R{pdRound + 1} · {tournament.rounds[pdRound]?.courseName} — change the round chip above</Text>
+            {pdData ? (
+              <PairDifferenceChart data={pdData} metric={metric} onHolePress={openPairDiffHole} theme={theme} s={s} />
+            ) : (
+              <Text style={s.mutedNote}>This round has no assigned pairs to compare.</Text>
+            )}
+            {swing && (
+              <TouchableOpacity style={s.swingCard} onPress={openSwing} activeOpacity={0.7}>
+                <View>
+                  <Text style={s.swingLabel}>SWING HOLE</Text>
+                  <Text style={s.swingValue}>
+                    Hole {swing.holeNumber} · {swing.holeDelta > 0 ? firstName(swing.pair1[0]) + '+' + firstName(swing.pair1[1]) : swing.holeDelta < 0 ? firstName(swing.pair2[0]) + '+' + firstName(swing.pair2[1]) : 'Even'} {swing.holeDelta !== 0 ? `+${Math.abs(swing.holeDelta)} pts` : ''}
+                  </Text>
+                  <Text style={s.swingSub}>Par {swing.par} · cum. after: {swing.cumulativeAfter > 0 ? '+' : ''}{swing.cumulativeAfter} pts</Text>
+                </View>
+                <Feather name="chevron-right" size={16} color={theme.text.muted} />
+              </TouchableOpacity>
+            )}
+          </>
+        ) : (
+          <Text style={s.mutedNote}>The pair-difference chart needs a completed round with assigned pairs.</Text>
+        )}
+      </SectionAnchor>
 
-      {synergy.length > 0 && (
-        <>
-          <Text style={s.sectionTitle}>PAIR SYNERGY</Text>
+      <SectionAnchor anchorKey="synergy" anchors={anchors}>
+        <Text style={s.sectionTitle}>PAIR SYNERGY</Text>
+        {synergy.length > 0 ? (
+          <>
           <Text style={s.scopeText}>Combined pts vs expected from each partner's average</Text>
           {synergy.map((pair, i) => (
             <TouchableOpacity key={i} style={s.pairCard} onPress={() => openSynergy(pair)} activeOpacity={0.7}>
@@ -1591,12 +2004,16 @@ function PairsTab({ tournament, players, h2hPlayer, setH2hPlayer, selectedPlayer
               </View>
             </TouchableOpacity>
           ))}
-        </>
-      )}
+          </>
+        ) : (
+          <Text style={s.mutedNote}>Synergy needs a paired round to compare against each player's average.</Text>
+        )}
+      </SectionAnchor>
 
-      {carry.length > 0 && (
-        <>
-          <Text style={s.sectionTitle}>CARRY RATIO</Text>
+      <SectionAnchor anchorKey="carry" anchors={anchors}>
+        <Text style={s.sectionTitle}>CARRY RATIO</Text>
+        {carry.length > 0 ? (
+          <>
           <Text style={s.scopeText}>Who contributed more inside the pair</Text>
           {carry.map((pair, i) => (
             <TouchableOpacity key={i} style={s.carryCard} onPress={() => openCarry(pair)} activeOpacity={0.7}>
@@ -1617,12 +2034,16 @@ function PairsTab({ tournament, players, h2hPlayer, setH2hPlayer, selectedPlayer
               <Text style={s.carryMeta}>{pair.totalPoints} combined pts · imbalance {pair.imbalance}</Text>
             </TouchableOpacity>
           ))}
-        </>
-      )}
+          </>
+        ) : (
+          <Text style={s.mutedNote}>Carry ratio needs a paired round to split each pair's contribution.</Text>
+        )}
+      </SectionAnchor>
 
-      {matchPlay.some(r => r.available) && (
-        <>
-          <Text style={s.sectionTitle}>MATCH PLAY</Text>
+      <SectionAnchor anchorKey="matchplay" anchors={anchors}>
+        <Text style={s.sectionTitle}>MATCH PLAY</Text>
+        {matchPlay.some(r => r.available) ? (
+          <>
           <Text style={s.scopeText}>Per round, hole-by-hole up/down — closes when lead > holes remaining</Text>
           {matchPlay.filter(r => r.available).map(round => {
             const p1Label = round.pair1.map(p => firstName(p)).join(' + ');
@@ -1655,12 +2076,16 @@ function PairsTab({ tournament, players, h2hPlayer, setH2hPlayer, selectedPlayer
               </TouchableOpacity>
             );
           })}
-        </>
-      )}
+          </>
+        ) : (
+          <Text style={s.mutedNote}>Match Play needs assigned pairs in at least one round.</Text>
+        )}
+      </SectionAnchor>
 
-      {configMatrix.length > 0 && (
-        <>
-          <Text style={s.sectionTitle}>PAIR CONFIG MATRIX</Text>
+      <SectionAnchor anchorKey="config" anchors={anchors}>
+        <Text style={s.sectionTitle}>PAIR CONFIG MATRIX</Text>
+        {configMatrix.length > 0 ? (
+          <>
           <Text style={s.scopeText}>The 2-vs-2 combinations that actually played · W·T·L by holes won</Text>
           {configMatrix.map((cfg, i) => {
             const aWon = cfg.holeWins.A > cfg.holeWins.B;
@@ -1690,9 +2115,13 @@ function PairsTab({ tournament, players, h2hPlayer, setH2hPlayer, selectedPlayer
               </TouchableOpacity>
             );
           })}
-        </>
-      )}
+          </>
+        ) : (
+          <Text style={s.mutedNote}>The config matrix lists every 2-vs-2 combination once a paired round is played.</Text>
+        )}
+      </SectionAnchor>
 
+      <SectionAnchor anchorKey="h2h" anchors={anchors}>
       {players.length >= 2 && (
         <>
           <Text style={s.sectionTitle}>H2H HEATMAP</Text>
@@ -1705,7 +2134,7 @@ function PairsTab({ tournament, players, h2hPlayer, setH2hPlayer, selectedPlayer
             metric={metric}
             theme={theme}
             s={s}
-            onCellPress={(i, j) => { setSelectedPlayer(i); setH2hPlayer(j); }}
+            onCellPress={(i, j) => { setH2hP1(i); setH2hP2(j); }}
           />
         </>
       )}
@@ -1714,17 +2143,17 @@ function PairsTab({ tournament, players, h2hPlayer, setH2hPlayer, selectedPlayer
       <View style={s.h2hSelector}>
         <View style={s.h2hCol}>
           {players.map((p, i) => (
-            <TouchableOpacity key={p.id} style={[s.playerChip, selectedPlayer === i && s.playerChipActive]} onPress={() => setSelectedPlayer(i)} activeOpacity={0.7}>
-              <Text style={[s.playerChipText, selectedPlayer === i && s.playerChipTextActive]}>{p.name.split(' ')[0]}</Text>
+            <TouchableOpacity key={p.id} style={[s.playerChip, h2hP1 === i && s.playerChipActive]} onPress={() => setH2hP1(i)} activeOpacity={0.7}>
+              <Text style={[s.playerChipText, h2hP1 === i && s.playerChipTextActive]}>{p.name.split(' ')[0]}</Text>
             </TouchableOpacity>
           ))}
         </View>
         <Text style={s.h2hVs}>vs</Text>
         <View style={s.h2hCol}>
-          {players.filter((_, i) => i !== selectedPlayer).map((p) => {
+          {players.filter((_, i) => i !== h2hP1).map((p) => {
             const realIdx = players.indexOf(p);
             return (
-              <TouchableOpacity key={p.id} style={[s.playerChip, p2Idx === realIdx && s.playerChipActive]} onPress={() => setH2hPlayer(realIdx)} activeOpacity={0.7}>
+              <TouchableOpacity key={p.id} style={[s.playerChip, p2Idx === realIdx && s.playerChipActive]} onPress={() => setH2hP2(realIdx)} activeOpacity={0.7}>
                 <Text style={[s.playerChipText, p2Idx === realIdx && s.playerChipTextActive]}>{p.name.split(' ')[0]}</Text>
               </TouchableOpacity>
             );
@@ -1734,7 +2163,6 @@ function PairsTab({ tournament, players, h2hPlayer, setH2hPlayer, selectedPlayer
 
       {h2h ? (
         <>
-          <RoundSelector tournament={tournament} selected={h2hRound} onSelect={setH2hRound} theme={theme} s={s} />
           <H2HCard
             label={metric === 'strokes' ? 'Holes won by strokes' : 'Holes won by points'}
             explainer={metric === 'strokes' ? 'Fewer strokes on the hole' : 'Higher Stableford points on the hole'}
@@ -1751,8 +2179,9 @@ function PairsTab({ tournament, players, h2hPlayer, setH2hPlayer, selectedPlayer
           </View>
         </>
       ) : (
-        <Text style={s.emptyText}>Select two different players to compare.</Text>
+        <Text style={s.mutedNote}>Select two different players to compare.</Text>
       )}
+      </SectionAnchor>
 
       <StatDetailSheet
         visible={!!sheet}
@@ -1823,6 +2252,16 @@ function PairDifferenceChart({ data, metric, onHolePress, theme, s }) {
       </View>
 
       <View style={[s.pdChart, { height: CHART_HEIGHT }]}>
+        {/* Value axis: peak gap at top/bottom, zero on the baseline. */}
+        <View style={[s.pdAxisYTop, { top: 0 }]} pointerEvents="none">
+          <Text style={s.pdAxisYLabel}>+{data.maxAbs} {unit}</Text>
+        </View>
+        <View style={[s.pdAxisYZero, { top: HALF - 6 }]} pointerEvents="none">
+          <Text style={s.pdAxisYLabel}>0</Text>
+        </View>
+        <View style={[s.pdAxisYBottom, { bottom: 0 }]} pointerEvents="none">
+          <Text style={s.pdAxisYLabel}>−{data.maxAbs} {unit}</Text>
+        </View>
         <View style={[s.pdBaseline, { top: HALF }]} />
         <View style={s.pdBarsRow}>
           {data.holes.map((h) => {
@@ -1867,6 +2306,7 @@ function PairDifferenceChart({ data, metric, onHolePress, theme, s }) {
           <Text key={h.holeNumber} style={s.pdAxisLabel}>{h.holeNumber}</Text>
         ))}
       </View>
+      <Text style={s.pdAxisTitle}>Hole — bars show cumulative {unit} lead vs the zero line</Text>
 
       <View style={s.pdSummary}>
         <View style={s.pdSummaryCell}>
@@ -1992,25 +2432,38 @@ function HwGEPCells({ stats, strong, theme, s }) {
 // ── Shame Tab ──
 
 // ── My Shots Tab ──
-// Putting / driving / penalty stats for the "me" player (tournament.meId),
-// derived from per-hole shot detail entered on the scorecard.
+// Putting / driving / penalty stats derived from per-hole shot detail. Works
+// for ANY player who logged shot detail — a picker selects whose shots to view,
+// defaulting to the device "me" player when they have data.
 function ShotsTab({ tournament, theme, s }) {
+  const withData = useMemo(() => playersWithShotData(tournament), [tournament]);
   const meId = tournament.meId ?? null;
-  const me = meId ? tournament.players.find((p) => p.id === meId) : null;
-  const stats = useMemo(() => (meId ? shotStats(tournament, meId) : null), [tournament, meId]);
+  // Default to the "me" player when they logged data, else the first logger.
+  const defaultIdx = (() => {
+    const mineIdx = withData.findIndex(p => p.id === meId);
+    return mineIdx >= 0 ? mineIdx : 0;
+  })();
+  const [shotPlayerIdx, setShotPlayerIdx] = useState(defaultIdx);
+  const selected = withData[shotPlayerIdx] || withData[0] || null;
+  const stats = useMemo(
+    () => (selected ? shotStats(tournament, selected.id) : null),
+    [tournament, selected],
+  );
 
-  if (!me || !stats || !stats.hasData) {
+  if (withData.length === 0) {
+    const me = meId ? tournament.players.find((p) => p.id === meId) : null;
     return (
       <View style={{ paddingHorizontal: 16 }}>
         <Text style={s.emptyText}>
           {me
             ? `No shot detail yet. On the scorecard, tap “Shot detail” under ${firstName(me)}'s card to log putts, drives and penalties.`
-            : 'Open the scorecard and pick which player is you to start tracking your shots.'}
+            : 'Open the scorecard and tap “Shot detail” under any player to start tracking putts, drives and penalties.'}
         </Text>
       </View>
     );
   }
 
+  const me = selected;
   const { putts, drives, penalties, gir } = stats;
   const driveColors = {
     fairway: theme.scoreColor('excellent'),
@@ -2022,6 +2475,20 @@ function ShotsTab({ tournament, theme, s }) {
 
   return (
     <View style={{ paddingHorizontal: 16 }}>
+      {withData.length > 1 && (
+        <View style={s.playerSelector}>
+          {withData.map((p, i) => (
+            <TouchableOpacity
+              key={p.id}
+              style={[s.playerChip, shotPlayerIdx === i && s.playerChipActive]}
+              onPress={() => setShotPlayerIdx(i)}
+              activeOpacity={0.7}
+            >
+              <Text style={[s.playerChipText, shotPlayerIdx === i && s.playerChipTextActive]}>{firstName(p)}</Text>
+            </TouchableOpacity>
+          ))}
+        </View>
+      )}
       <Text style={s.sectionTitle}>
         {firstName(me)} · {stats.roundsWithData} {stats.roundsWithData === 1 ? 'round' : 'rounds'}
       </Text>
@@ -2099,6 +2566,29 @@ function ShotsTab({ tournament, theme, s }) {
           <Text style={s.cardSub}>{gir.holes}/{gir.eligible} holes</Text>
         </View>
       )}
+
+      {(() => {
+        const scr = scramblingStats(tournament).find(r => r.player.id === me.id);
+        return (
+          <View style={s.card}>
+            <Text style={s.cardLabel}>Scrambling</Text>
+            {scr ? (
+              <>
+                <Text style={s.bigNumber}>{scr.pct}%</Text>
+                <Text style={s.cardSub}>
+                  par-or-better after missing the green · {scr.saves}/{scr.missedGir} saves
+                </Text>
+              </>
+            ) : (
+              <Text style={s.cardSub}>
+                {gir.eligible > 0
+                  ? 'No missed greens recorded — nothing to scramble from yet.'
+                  : 'Log putts to let us work out greens in regulation and scrambling.'}
+              </Text>
+            )}
+          </View>
+        );
+      })()}
     </View>
   );
 }
@@ -2417,12 +2907,32 @@ const makeStyles = (t) => StyleSheet.create({
 
   // Tabs
   tabBar: { flexDirection: 'row', paddingHorizontal: 16, gap: 6, paddingBottom: 8 },
+  scopeBar: { paddingBottom: 6, borderBottomWidth: 1, borderBottomColor: t.border.subtle },
+  scopeChips: { flexDirection: 'row', gap: 6, paddingHorizontal: 16, paddingTop: 2, paddingBottom: 2 },
   scoringToggle: {
     flexDirection: 'row', alignItems: 'center', justifyContent: 'center',
     gap: 10, paddingVertical: 6, paddingHorizontal: 16,
   },
   scoringLabel: { fontFamily: 'PlusJakartaSans-SemiBold', color: t.text.muted, fontSize: 12 },
   scoringLabelActive: { color: t.text.primary },
+
+  // Sticky section index
+  sectionIndexWrap: {
+    marginHorizontal: -20, paddingHorizontal: 0, marginBottom: 4,
+    borderBottomWidth: 1, borderBottomColor: t.border.subtle,
+  },
+  sectionIndexRow: { flexDirection: 'row', gap: 6, paddingHorizontal: 20, paddingVertical: 8 },
+  sectionIndexChip: {
+    paddingVertical: 5, paddingHorizontal: 12, borderRadius: 14,
+    backgroundColor: t.bg.secondary, borderWidth: 1, borderColor: t.border.default,
+  },
+  sectionIndexText: { fontFamily: 'PlusJakartaSans-SemiBold', fontSize: 11, color: t.text.secondary },
+
+  // Persistent muted empty-state note
+  mutedNote: {
+    fontFamily: 'PlusJakartaSans-Medium', color: t.text.muted, fontSize: 12,
+    lineHeight: 18, paddingVertical: 10, paddingHorizontal: 2, marginBottom: 4,
+  },
   tab: { paddingVertical: 6, paddingHorizontal: 14, borderRadius: 20, backgroundColor: t.bg.secondary, borderWidth: 1, borderColor: t.border.default },
   tabActive: { backgroundColor: t.accent.primary, borderColor: t.accent.primary },
   tabText: { fontFamily: 'PlusJakartaSans-SemiBold', fontSize: 12, color: t.text.muted },
@@ -2480,6 +2990,17 @@ const makeStyles = (t) => StyleSheet.create({
     flex: 1, textAlign: 'center',
     fontFamily: 'PlusJakartaSans-Medium', fontSize: 9, color: t.text.muted,
   },
+  pdAxisTitle: {
+    fontFamily: 'PlusJakartaSans-Medium', fontSize: 9, color: t.text.muted,
+    textAlign: 'center', marginTop: 4,
+  },
+  pdAxisYTop: { position: 'absolute', left: 2 },
+  pdAxisYZero: { position: 'absolute', left: 2 },
+  pdAxisYBottom: { position: 'absolute', left: 2 },
+  pdAxisYLabel: {
+    fontFamily: 'PlusJakartaSans-SemiBold', fontSize: 8, color: t.text.muted,
+    backgroundColor: t.bg.card, paddingHorizontal: 2,
+  },
   pdSummary: {
     flexDirection: 'row', justifyContent: 'space-between',
     marginTop: 14, paddingTop: 10, borderTopWidth: 1, borderTopColor: t.border.subtle,
@@ -2495,6 +3016,14 @@ const makeStyles = (t) => StyleSheet.create({
   },
 
   // Tournament momentum
+  momentumScaleRow: {
+    flexDirection: 'row', alignItems: 'center', gap: 8,
+    marginBottom: 6, paddingLeft: '30%',
+  },
+  momentumScaleLine: { flex: 1, height: 1, backgroundColor: t.border.default },
+  momentumScaleLabel: {
+    fontFamily: 'PlusJakartaSans-SemiBold', fontSize: 9, color: t.text.muted, letterSpacing: 0.5,
+  },
   momentumRow: {
     flexDirection: 'row', alignItems: 'center',
     paddingVertical: 6,
@@ -2725,6 +3254,8 @@ const makeStyles = (t) => StyleSheet.create({
     padding: 16, marginBottom: 8, ...(t.isDark ? {} : t.shadow.card),
   },
   highlightIcon: { width: 40, height: 40, borderRadius: 12, backgroundColor: t.accent.light, alignItems: 'center', justifyContent: 'center', marginRight: 14 },
+  highlightCaptureHost: { position: 'absolute', left: -10000, top: 0, width: 360 },
+  highlightShareBtn: { padding: 6, marginRight: 2 },
   highlightContent: { flex: 1 },
   highlightLabel: { fontFamily: 'PlusJakartaSans-SemiBold', color: t.text.muted, fontSize: 10, letterSpacing: 1, textTransform: 'uppercase' },
   highlightValue: { fontFamily: 'PlayfairDisplay-Black', color: t.text.primary, fontSize: 15, marginTop: 2 },
@@ -2748,6 +3279,7 @@ const makeStyles = (t) => StyleSheet.create({
   // Streaks
   streakRow: { flexDirection: 'row', justifyContent: 'space-around' },
   streakItem: { alignItems: 'center' },
+  streakItemDim: { opacity: 0.4 },
   streakNumber: { fontFamily: 'PlayfairDisplay-Black', fontSize: 28 },
   streakLabel: { fontFamily: 'PlusJakartaSans-Medium', color: t.text.muted, fontSize: 11, marginTop: 4 },
 
@@ -2784,6 +3316,7 @@ const makeStyles = (t) => StyleSheet.create({
   heatSiCol: { width: 36 },
   heatSi: { fontFamily: 'PlusJakartaSans-Medium', color: t.text.muted, fontSize: 11 },
   heatValue: { borderRadius: 6, margin: 1, paddingVertical: 8 },
+  heatCellEmpty: { opacity: 0.45 },
   heatValueText: { fontFamily: 'PlusJakartaSans-Bold', fontSize: 14 },
   heatAvgText: { fontFamily: 'PlusJakartaSans-Medium', color: t.text.muted, fontSize: 12 },
 

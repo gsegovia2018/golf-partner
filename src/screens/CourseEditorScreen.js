@@ -98,20 +98,48 @@ export default function CourseEditorScreen({ navigation, route }) {
     );
   }, [holes, slope, courseRating, playerHandicaps, manualHandicaps]);
 
+  // Slope/CR keystrokes recompute ONLY the players who have not been manually
+  // overridden. Manual overrides survive until the user explicitly resets.
   function recomputeAuto(nextSlope, nextRating) {
     const sv = parseInt(nextSlope, 10);
     if (!sv || sv <= 0) return;
     const par = holes.reduce((sum, h) => sum + (h.par || 0), 0);
+    const cr = parseFloat(nextRating);
+    const crForCalc = Number.isFinite(cr) ? cr : null;
     setPlayerHandicaps((prev) => {
       const next = { ...prev };
       players.forEach((p) => {
-        next[p.id] = String(calcPlayingHandicap(p.handicap, sv, nextRating, par));
+        if (manualHandicaps[p.id]) return;
+        next[p.id] = String(calcPlayingHandicap(p.handicap, sv, crForCalc, par));
       });
       return next;
     });
-    // Recompute is an explicit action — clear manual overrides so the new
-    // slope/CR cascade to every player.
+  }
+
+  // Explicit "Reset all to auto": clear every manual override and recompute
+  // each player from the current slope/CR.
+  function resetAllToAuto() {
+    const sv = parseInt(slope, 10);
+    const par = holes.reduce((sum, h) => sum + (h.par || 0), 0);
+    const cr = parseFloat(courseRating);
+    const crForCalc = Number.isFinite(cr) ? cr : null;
     setManualHandicaps({});
+    if (!sv || sv <= 0) {
+      // No slope: auto value is just the raw index.
+      setPlayerHandicaps(() => {
+        const next = {};
+        players.forEach((p) => { next[p.id] = String(p.handicap); });
+        return next;
+      });
+      return;
+    }
+    setPlayerHandicaps(() => {
+      const next = {};
+      players.forEach((p) => {
+        next[p.id] = String(calcPlayingHandicap(p.handicap, sv, crForCalc, par));
+      });
+      return next;
+    });
   }
 
   function applySlope(rawSlope) {
@@ -139,6 +167,40 @@ export default function CourseEditorScreen({ navigation, route }) {
       return next;
     });
   }
+
+  // Sequentially numbers stroke indexes 1-18 in hole order. The simplest
+  // valid SI set; the user can then fine-tune individual holes.
+  function autoNumberSI() {
+    setHoles((prev) => prev.map((h, i) => ({ ...h, strokeIndex: i + 1 })));
+  }
+
+  function setAllPar(par) {
+    setHoles((prev) => prev.map((h) => ({ ...h, par })));
+  }
+
+  // Validate the stroke-index set: every value must be 1-18 and used exactly
+  // once. Returns a human-readable list of problems (empty when valid).
+  const siIssues = (() => {
+    const issues = [];
+    const seen = new Map();
+    holes.forEach((h) => {
+      const si = h.strokeIndex;
+      if (!si || si < 1 || si > 18) {
+        issues.push(`Hole ${h.number}: SI must be 1–18`);
+      }
+      if (si) seen.set(si, (seen.get(si) ?? 0) + 1);
+    });
+    const dupes = [...seen.entries()].filter(([, n]) => n > 1).map(([si]) => si);
+    if (dupes.length > 0) {
+      issues.push(`Duplicate SI: ${dupes.sort((a, b) => a - b).join(', ')}`);
+    }
+    const missing = [];
+    for (let i = 1; i <= 18; i += 1) if (!seen.has(i)) missing.push(i);
+    if (missing.length > 0 && missing.length < 18) {
+      issues.push(`Missing SI: ${missing.join(', ')}`);
+    }
+    return issues;
+  })();
 
   const totalPar = holes.reduce((sum, h) => sum + h.par, 0);
   const slopeNum = parseInt(slope, 10) || 0;
@@ -205,6 +267,12 @@ export default function CourseEditorScreen({ navigation, route }) {
                 Auto-calculated from slope & CR -- tap to override
               </Text>
             )}
+            {Object.values(manualHandicaps).some(Boolean) && (
+              <TouchableOpacity style={s.resetBtn} onPress={resetAllToAuto} activeOpacity={0.7}>
+                <Feather name="refresh-cw" size={13} color={theme.accent.primary} style={{ marginRight: 6 }} />
+                <Text style={s.resetBtnText}>Reset all to auto</Text>
+              </TouchableOpacity>
+            )}
             {players.map((p) => {
               const auto = slopeNum > 0
                 ? calcPlayingHandicap(p.handicap, slopeNum, ratingForCalc, totalPar)
@@ -239,6 +307,41 @@ export default function CourseEditorScreen({ navigation, route }) {
         {/* Hole table */}
         <View>
           <Text style={s.sectionTitle}>Holes</Text>
+
+          <View style={s.toolRow}>
+            <Text style={s.toolLabel}>Par presets</Text>
+            {[3, 4, 5].map((p) => (
+              <TouchableOpacity
+                key={p}
+                style={s.toolBtn}
+                onPress={() => setAllPar(p)}
+                activeOpacity={0.7}
+              >
+                <Text style={s.toolBtnText}>All par {p}</Text>
+              </TouchableOpacity>
+            ))}
+          </View>
+          <View style={s.toolRow}>
+            <Text style={s.toolLabel}>Stroke index</Text>
+            <TouchableOpacity style={s.toolBtn} onPress={autoNumberSI} activeOpacity={0.7}>
+              <Feather name="hash" size={12} color={theme.accent.primary} style={{ marginRight: 4 }} />
+              <Text style={s.toolBtnText}>Auto-number 1–18</Text>
+            </TouchableOpacity>
+          </View>
+
+          {siIssues.length > 0 && (
+            <View style={s.warnBox}>
+              <Feather name="alert-triangle" size={14} color={theme.destructive} style={{ marginRight: 8, marginTop: 1 }} />
+              <View style={{ flex: 1 }}>
+                <Text style={s.warnTitle}>Stroke index needs attention</Text>
+                {siIssues.map((issue) => (
+                  <Text key={issue} style={s.warnText}>{issue}</Text>
+                ))}
+                <Text style={s.warnText}>Each hole must use a unique SI from 1 to 18.</Text>
+              </View>
+            </View>
+          )}
+
           <View style={s.tableCard}>
             <View style={s.headerRow}>
               <Text style={[s.col, s.holeCol, s.headerText]}>Hole</Text>
@@ -356,6 +459,38 @@ const makeStyles = (theme) => StyleSheet.create({
   hcpInputOverride: {
     backgroundColor: theme.accent.light,
     borderColor: theme.accent.primary,
+  },
+  resetBtn: {
+    flexDirection: 'row', alignItems: 'center', alignSelf: 'flex-start',
+    backgroundColor: theme.accent.light, borderRadius: 8,
+    borderWidth: 1, borderColor: theme.accent.primary + '40',
+    paddingHorizontal: 10, paddingVertical: 6, marginBottom: 10,
+  },
+  resetBtnText: { fontFamily: 'PlusJakartaSans-SemiBold', color: theme.accent.primary, fontSize: 12 },
+  toolRow: { flexDirection: 'row', alignItems: 'center', flexWrap: 'wrap', gap: 8, marginBottom: 8 },
+  toolLabel: {
+    fontFamily: 'PlusJakartaSans-SemiBold', color: theme.text.secondary,
+    fontSize: 12, marginRight: 4,
+  },
+  toolBtn: {
+    flexDirection: 'row', alignItems: 'center',
+    backgroundColor: theme.isDark ? theme.bg.secondary : theme.bg.card,
+    borderRadius: 8, borderWidth: 1, borderColor: theme.border.default,
+    paddingHorizontal: 10, paddingVertical: 6,
+  },
+  toolBtnText: { fontFamily: 'PlusJakartaSans-SemiBold', color: theme.accent.primary, fontSize: 12 },
+  warnBox: {
+    flexDirection: 'row', alignItems: 'flex-start',
+    backgroundColor: theme.destructive + '12', borderRadius: 12,
+    borderWidth: 1, borderColor: theme.destructive + '55',
+    padding: 12, marginBottom: 10,
+  },
+  warnTitle: {
+    fontFamily: 'PlusJakartaSans-Bold', color: theme.destructive,
+    fontSize: 13, marginBottom: 2,
+  },
+  warnText: {
+    fontFamily: 'PlusJakartaSans-Medium', color: theme.text.secondary, fontSize: 12, marginTop: 1,
   },
   tableCard: {
     backgroundColor: theme.bg.card, borderRadius: 16, borderWidth: 1,

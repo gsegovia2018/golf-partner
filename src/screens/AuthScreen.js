@@ -1,12 +1,17 @@
-import React, { useState } from 'react';
+import React, { useState, useMemo } from 'react';
 import {
   View, Text, TextInput, TouchableOpacity,
   StyleSheet, KeyboardAvoidingView, Platform, ActivityIndicator, Alert,
 } from 'react-native';
+import { Feather } from '@expo/vector-icons';
 import { supabase } from '../lib/supabase';
 import { useTheme } from '../theme/ThemeContext';
 
 const isWeb = Platform.OS === 'web';
+
+// Basic email shape check — good enough to gate the submit button and show
+// inline feedback without being overly strict about valid TLDs.
+const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
 export default function AuthScreen() {
   const { theme } = useTheme();
@@ -17,9 +22,29 @@ export default function AuthScreen() {
   const [password, setPassword] = useState('');
   const [loading, setLoading] = useState(false);
   const [googleLoading, setGoogleLoading] = useState(false);
+  const [showPassword, setShowPassword] = useState(false);
+  // `touched` gates inline errors so the form doesn't shout at the user
+  // before they've had a chance to type anything.
+  const [touched, setTouched] = useState({ email: false, password: false });
+
+  const emailValid = EMAIL_RE.test(email.trim());
+  const passwordValid = password.length >= 6;
+  const formValid = emailValid && passwordValid;
+
+  const emailError = useMemo(
+    () => (touched.email && email.trim().length > 0 && !emailValid
+      ? 'Enter a valid email address' : null),
+    [touched.email, email, emailValid],
+  );
+  const passwordError = useMemo(
+    () => (touched.password && password.length > 0 && !passwordValid
+      ? 'Password must be at least 6 characters' : null),
+    [touched.password, password, passwordValid],
+  );
 
   async function submit() {
-    if (!email.trim() || !password) return;
+    setTouched({ email: true, password: true });
+    if (!formValid) return;
     setLoading(true);
     try {
       let error;
@@ -34,6 +59,25 @@ export default function AuthScreen() {
         }
       }
       if (error) Alert.alert('Error', error.message);
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  async function handleForgotPassword() {
+    if (!emailValid) {
+      setTouched((t) => ({ ...t, email: true }));
+      Alert.alert('Email needed', 'Enter your account email above, then tap "Forgot password?" again.');
+      return;
+    }
+    setLoading(true);
+    try {
+      const options = isWeb && typeof window !== 'undefined'
+        ? { redirectTo: window.location.origin }
+        : undefined;
+      const { error } = await supabase.auth.resetPasswordForEmail(email.trim(), options);
+      if (error) Alert.alert('Error', error.message);
+      else Alert.alert('Check your email', 'We sent a password reset link to your email.');
     } finally {
       setLoading(false);
     }
@@ -82,7 +126,7 @@ export default function AuthScreen() {
           </View>
 
           <TextInput
-            style={s.input}
+            style={[s.input, emailError && s.inputError]}
             placeholder="Email"
             placeholderTextColor={theme.text.muted}
             keyboardType="email-address"
@@ -92,23 +136,54 @@ export default function AuthScreen() {
             selectionColor={theme.accent.primary}
             value={email}
             onChangeText={setEmail}
+            onBlur={() => setTouched((t) => ({ ...t, email: true }))}
           />
-          <TextInput
-            style={s.input}
-            placeholder="Password"
-            placeholderTextColor={theme.text.muted}
-            secureTextEntry
-            keyboardAppearance={theme.isDark ? 'dark' : 'light'}
-            selectionColor={theme.accent.primary}
-            value={password}
-            onChangeText={setPassword}
-            onSubmitEditing={submit}
-          />
+          {emailError && <Text style={s.fieldError}>{emailError}</Text>}
+
+          <View style={[s.passwordRow, passwordError && s.inputError]}>
+            <TextInput
+              style={s.passwordInput}
+              placeholder="Password"
+              placeholderTextColor={theme.text.muted}
+              secureTextEntry={!showPassword}
+              keyboardAppearance={theme.isDark ? 'dark' : 'light'}
+              selectionColor={theme.accent.primary}
+              value={password}
+              onChangeText={setPassword}
+              onBlur={() => setTouched((t) => ({ ...t, password: true }))}
+              onSubmitEditing={submit}
+            />
+            <TouchableOpacity
+              style={s.eyeBtn}
+              onPress={() => setShowPassword((v) => !v)}
+              activeOpacity={0.7}
+              accessibilityLabel={showPassword ? 'Hide password' : 'Show password'}
+              hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+            >
+              <Feather
+                name={showPassword ? 'eye-off' : 'eye'}
+                size={18}
+                color={theme.text.muted}
+              />
+            </TouchableOpacity>
+          </View>
+          {passwordError && <Text style={s.fieldError}>{passwordError}</Text>}
+
+          {mode === 'signin' && (
+            <TouchableOpacity
+              style={s.forgotBtn}
+              onPress={handleForgotPassword}
+              activeOpacity={0.7}
+              disabled={loading}
+            >
+              <Text style={s.forgotText}>Forgot password?</Text>
+            </TouchableOpacity>
+          )}
 
           <TouchableOpacity
-            style={[s.btn, loading && { opacity: 0.6 }]}
+            style={[s.btn, (loading || !formValid) && { opacity: 0.5 }]}
             onPress={submit}
-            disabled={loading}
+            disabled={loading || !formValid}
             activeOpacity={0.8}
           >
             {loading
@@ -187,9 +262,32 @@ const makeStyles = (theme) => StyleSheet.create({
     borderColor: theme.border.default, padding: 14, fontSize: 15,
     fontFamily: 'PlusJakartaSans-Medium', marginBottom: 12,
   },
+  inputError: { borderColor: theme.destructive },
+  fieldError: {
+    fontFamily: 'PlusJakartaSans-Medium',
+    fontSize: 12, color: theme.destructive,
+    marginTop: -6, marginBottom: 10, marginLeft: 2,
+  },
+  passwordRow: {
+    flexDirection: 'row', alignItems: 'center',
+    backgroundColor: theme.isDark ? theme.bg.secondary : theme.bg.primary,
+    borderRadius: 12, borderWidth: 1,
+    borderColor: theme.border.default, marginBottom: 12,
+    paddingRight: 12,
+  },
+  passwordInput: {
+    flex: 1, color: theme.text.primary, padding: 14, fontSize: 15,
+    fontFamily: 'PlusJakartaSans-Medium',
+  },
+  eyeBtn: { padding: 4 },
+  forgotBtn: { alignSelf: 'flex-end', marginBottom: 4, paddingVertical: 2 },
+  forgotText: {
+    fontFamily: 'PlusJakartaSans-SemiBold',
+    fontSize: 12, color: theme.accent.primary,
+  },
   btn: {
     backgroundColor: theme.isDark ? theme.accent.light : theme.accent.primary,
-    borderRadius: 14, padding: 16, alignItems: 'center', marginTop: 4,
+    borderRadius: 14, padding: 16, alignItems: 'center', marginTop: 8,
     borderWidth: theme.isDark ? 1 : 0,
     borderColor: theme.isDark ? theme.accent.primary + '33' : 'transparent',
   },

@@ -1,7 +1,7 @@
 import React, { useCallback, useState } from 'react';
 import {
   View, Text, TouchableOpacity, StyleSheet, ScrollView,
-  ActivityIndicator, Alert, Platform, Image,
+  ActivityIndicator, Alert, Platform, Image, Share,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useFocusEffect } from '@react-navigation/native';
@@ -9,7 +9,21 @@ import { Feather } from '@expo/vector-icons';
 
 import { useTheme } from '../theme/ThemeContext';
 import { useAuth } from '../context/AuthContext';
-import { loadTournamentMembers, removeTournamentMember } from '../store/tournamentStore';
+import { supabase } from '../lib/supabase';
+import {
+  loadTournamentMembers, removeTournamentMember, generateInviteCode,
+} from '../store/tournamentStore';
+
+// Promote/demote a member between editor and viewer roles. Kept local to this
+// screen since tournamentStore has no role-update mutation yet.
+async function updateMemberRole(tournamentId, userId, role) {
+  const { error } = await supabase
+    .from('tournament_members')
+    .update({ role })
+    .eq('tournament_id', tournamentId)
+    .eq('user_id', userId);
+  if (error) throw error;
+}
 
 export default function MembersScreen({ navigation, route }) {
   const { tournamentId, tournamentName } = route.params ?? {};
@@ -19,15 +33,20 @@ export default function MembersScreen({ navigation, route }) {
 
   const [rows, setRows] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState(null);
   const [removingId, setRemovingId] = useState(null);
+  const [roleBusyId, setRoleBusyId] = useState(null);
+  const [inviting, setInviting] = useState(false);
+  const [leaving, setLeaving] = useState(false);
 
   const load = useCallback(async () => {
     if (!tournamentId) return;
     setLoading(true);
+    setLoadError(null);
     try {
       setRows(await loadTournamentMembers(tournamentId));
     } catch (err) {
-      Alert.alert('Error', err.message ?? 'Could not load members');
+      setLoadError(err?.message ?? 'Could not load members');
     } finally {
       setLoading(false);
     }
@@ -37,6 +56,9 @@ export default function MembersScreen({ navigation, route }) {
 
   const ownerRow = rows.find((r) => r.role === 'owner');
   const iAmOwner = ownerRow?.userId === user?.id;
+  const myRow = rows.find((r) => r.userId === user?.id);
+  // A non-owner member can leave on their own; the owner cannot "leave".
+  const iAmNonOwnerMember = !!myRow && !iAmOwner;
 
   async function confirmRemove(row) {
     const name = row.profile?.display_name || 'this member';
@@ -59,6 +81,69 @@ export default function MembersScreen({ navigation, route }) {
     }
   }
 
+  async function handleInvite() {
+    if (inviting) return;
+    setInviting(true);
+    try {
+      const { editorCode } = await generateInviteCode(tournamentId);
+      const message = `Join "${tournamentName ?? 'my tournament'}" on Golf Partner — invite code: ${editorCode}`;
+      if (Platform.OS === 'web') {
+        // Web has no native share sheet here — show the code and copy it.
+        try { await navigator.clipboard?.writeText(editorCode); } catch (_) {}
+        window.alert(`Invite code: ${editorCode}\n(copied to clipboard)`);
+      } else {
+        await Share.share({ message });
+      }
+    } catch (err) {
+      Alert.alert('Error', err?.message ?? 'Could not create invite code');
+    } finally {
+      setInviting(false);
+    }
+  }
+
+  async function changeRole(row) {
+    const nextRole = row.role === 'editor' ? 'viewer' : 'editor';
+    const name = row.profile?.display_name || 'this member';
+    const confirmed = Platform.OS === 'web'
+      ? window.confirm(`Change ${name} to ${nextRole}?`)
+      : await new Promise((resolve) => Alert.alert(
+          'Change role', `Change ${name} to ${nextRole}?`,
+          [{ text: 'Cancel', style: 'cancel', onPress: () => resolve(false) },
+           { text: 'Change', onPress: () => resolve(true) }],
+        ));
+    if (!confirmed) return;
+    setRoleBusyId(row.userId);
+    try {
+      await updateMemberRole(tournamentId, row.userId, nextRole);
+      await load();
+    } catch (err) {
+      Alert.alert('Error', err?.message ?? 'Could not update role');
+    } finally {
+      setRoleBusyId(null);
+    }
+  }
+
+  async function leaveTournament() {
+    if (leaving || !user?.id) return;
+    const confirmed = Platform.OS === 'web'
+      ? window.confirm('Leave this tournament? You will need a new invite code to rejoin.')
+      : await new Promise((resolve) => Alert.alert(
+          'Leave tournament',
+          'Leave this tournament? You will need a new invite code to rejoin.',
+          [{ text: 'Cancel', style: 'cancel', onPress: () => resolve(false) },
+           { text: 'Leave', style: 'destructive', onPress: () => resolve(true) }],
+        ));
+    if (!confirmed) return;
+    setLeaving(true);
+    try {
+      await removeTournamentMember(tournamentId, user.id);
+      navigation.goBack();
+    } catch (err) {
+      Alert.alert('Error', err?.message ?? 'Could not leave tournament');
+      setLeaving(false);
+    }
+  }
+
   return (
     <SafeAreaView style={s.screen} edges={['top', 'bottom']}>
       <View style={s.header}>
@@ -76,9 +161,34 @@ export default function MembersScreen({ navigation, route }) {
         <View style={s.loadingWrap}>
           <ActivityIndicator color={theme.accent.primary} />
         </View>
+      ) : loadError ? (
+        <View style={s.errorBox}>
+          <Feather name="wifi-off" size={22} color={theme.destructive} />
+          <Text style={s.errorTitle}>Couldn't load members</Text>
+          <Text style={s.errorMsg}>{loadError}</Text>
+          <TouchableOpacity style={s.retryBtn} onPress={load} activeOpacity={0.7}>
+            <Feather name="refresh-cw" size={14} color={theme.accent.primary} style={{ marginRight: 6 }} />
+            <Text style={s.retryBtnText}>Retry</Text>
+          </TouchableOpacity>
+        </View>
       ) : (
         <ScrollView style={s.scroll} contentContainerStyle={s.content}>
-          <Text style={s.sectionLabel}>{rows.length} {rows.length === 1 ? 'member' : 'members'}</Text>
+          <View style={s.topRow}>
+            <Text style={s.sectionLabel}>{rows.length} {rows.length === 1 ? 'member' : 'members'}</Text>
+            {iAmOwner && (
+              <TouchableOpacity
+                style={s.inviteBtn}
+                onPress={handleInvite}
+                disabled={inviting}
+                activeOpacity={0.7}
+              >
+                {inviting
+                  ? <ActivityIndicator size="small" color={theme.accent.primary} />
+                  : <Feather name="user-plus" size={14} color={theme.accent.primary} style={{ marginRight: 6 }} />}
+                <Text style={s.inviteBtnText}>Invite</Text>
+              </TouchableOpacity>
+            )}
+          </View>
 
           {rows.map((row) => {
             // Fallback chain: display_name → the signed-in user's own email
@@ -119,18 +229,36 @@ export default function MembersScreen({ navigation, route }) {
                   </View>
                 </View>
                 {canRemove && (
-                  removingId === row.userId
-                    ? <ActivityIndicator color={theme.destructive} />
-                    : (
+                  <View style={s.rowActions}>
+                    {roleBusyId === row.userId ? (
+                      <ActivityIndicator color={theme.accent.primary} />
+                    ) : (
                       <TouchableOpacity
-                        onPress={() => confirmRemove(row)}
-                        style={s.removeBtn}
-                        hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
-                        accessibilityLabel={`Remove ${name}`}
+                        onPress={() => changeRole(row)}
+                        style={s.roleActionBtn}
+                        hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+                        accessibilityLabel={row.role === 'editor' ? `Demote ${name} to viewer` : `Promote ${name} to editor`}
                       >
-                        <Feather name="user-minus" size={18} color={theme.destructive} />
+                        <Feather
+                          name={row.role === 'editor' ? 'arrow-down' : 'arrow-up'}
+                          size={16}
+                          color={theme.accent.primary}
+                        />
                       </TouchableOpacity>
-                    )
+                    )}
+                    {removingId === row.userId
+                      ? <ActivityIndicator color={theme.destructive} />
+                      : (
+                        <TouchableOpacity
+                          onPress={() => confirmRemove(row)}
+                          style={s.removeBtn}
+                          hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+                          accessibilityLabel={`Remove ${name}`}
+                        >
+                          <Feather name="user-minus" size={18} color={theme.destructive} />
+                        </TouchableOpacity>
+                      )}
+                  </View>
                 )}
               </View>
             );
@@ -138,8 +266,22 @@ export default function MembersScreen({ navigation, route }) {
 
           {rows.length === 1 && iAmOwner && (
             <Text style={s.hint}>
-              Share an invite code from the tournament header to add more members.
+              Tap Invite above to generate a code and add more members.
             </Text>
+          )}
+
+          {iAmNonOwnerMember && (
+            <TouchableOpacity
+              style={s.leaveBtn}
+              onPress={leaveTournament}
+              disabled={leaving}
+              activeOpacity={0.7}
+            >
+              {leaving
+                ? <ActivityIndicator size="small" color={theme.destructive} />
+                : <Feather name="log-out" size={16} color={theme.destructive} />}
+              <Text style={s.leaveBtnText}>Leave tournament</Text>
+            </TouchableOpacity>
           )}
         </ScrollView>
       )}
@@ -209,8 +351,51 @@ const makeStyles = (theme) => StyleSheet.create({
     fontFamily: 'PlusJakartaSans-Medium', fontSize: 11, color: theme.text.muted,
   },
   removeBtn: { padding: 8 },
+  rowActions: { flexDirection: 'row', alignItems: 'center', gap: 4 },
+  roleActionBtn: {
+    width: 32, height: 32, borderRadius: 8,
+    backgroundColor: theme.accent.light,
+    borderWidth: 1, borderColor: theme.accent.primary + '33',
+    alignItems: 'center', justifyContent: 'center',
+  },
   hint: {
     fontFamily: 'PlusJakartaSans-Regular', fontSize: 13,
     color: theme.text.muted, marginTop: 16, lineHeight: 19,
   },
+  topRow: {
+    flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
+  },
+  inviteBtn: {
+    flexDirection: 'row', alignItems: 'center',
+    backgroundColor: theme.accent.light, borderRadius: 10,
+    borderWidth: 1, borderColor: theme.accent.primary + '40',
+    paddingHorizontal: 12, paddingVertical: 7, marginBottom: 12,
+  },
+  inviteBtnText: { fontFamily: 'PlusJakartaSans-Bold', color: theme.accent.primary, fontSize: 13 },
+  leaveBtn: {
+    flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8,
+    padding: 14, marginTop: 24, borderRadius: 12,
+    borderWidth: 1, borderColor: theme.border.default,
+  },
+  leaveBtnText: {
+    fontFamily: 'PlusJakartaSans-SemiBold', color: theme.destructive, fontSize: 14,
+  },
+  errorBox: {
+    flex: 1, alignItems: 'center', justifyContent: 'center', padding: 24,
+  },
+  errorTitle: {
+    fontFamily: 'PlusJakartaSans-Bold', color: theme.text.primary,
+    fontSize: 15, marginTop: 10,
+  },
+  errorMsg: {
+    fontFamily: 'PlusJakartaSans-Regular', color: theme.text.muted,
+    fontSize: 13, marginTop: 4, textAlign: 'center',
+  },
+  retryBtn: {
+    flexDirection: 'row', alignItems: 'center',
+    backgroundColor: theme.accent.light, borderRadius: 10,
+    borderWidth: 1, borderColor: theme.accent.primary + '40',
+    paddingHorizontal: 16, paddingVertical: 10, marginTop: 14,
+  },
+  retryBtnText: { fontFamily: 'PlusJakartaSans-Bold', color: theme.accent.primary, fontSize: 14 },
 });

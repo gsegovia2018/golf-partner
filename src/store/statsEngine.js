@@ -764,15 +764,23 @@ export function clutchOnHardest(tournament, { topN = 3 } = {}) {
 }
 
 // ── Player Consistency ──
-// Standard deviation of points per hole. Lower = more consistent.
+// Standard deviation of points per hole. Lower = more consistent. Each entry
+// also carries a per-hole `breakdown` so a detail sheet can show every hole's
+// deviation from the player's own mean.
 export function playerConsistency(tournament) {
   const perPlayer = {};
-  tournament.players.forEach(p => { perPlayer[p.id] = { player: p, samples: [] }; });
-  forEachHole(tournament, ({ player, points }) => { perPlayer[player.id].samples.push(points); });
+  tournament.players.forEach(p => { perPlayer[p.id] = { player: p, samples: [], holes: [] }; });
+  forEachHole(tournament, ({ player, round, roundIndex, hole, strokes, points }) => {
+    perPlayer[player.id].samples.push(points);
+    perPlayer[player.id].holes.push({
+      roundIndex, courseName: round.courseName,
+      holeNumber: hole.number, par: hole.par, si: hole.strokeIndex, strokes, points,
+    });
+  });
 
   return Object.values(perPlayer).map(r => {
     const n = r.samples.length;
-    if (n === 0) return { player: r.player, stdev: null, mean: null, holesPlayed: 0 };
+    if (n === 0) return { player: r.player, stdev: null, mean: null, holesPlayed: 0, breakdown: [] };
     const mean = r.samples.reduce((s, x) => s + x, 0) / n;
     const variance = r.samples.reduce((s, x) => s + (x - mean) ** 2, 0) / n;
     return {
@@ -780,6 +788,7 @@ export function playerConsistency(tournament) {
       stdev: +Math.sqrt(variance).toFixed(2),
       mean: +mean.toFixed(2),
       holesPlayed: n,
+      breakdown: r.holes.map(h => ({ ...h, deviation: +(h.points - mean).toFixed(2) })),
     };
   }).filter(r => r.holesPlayed > 0).sort((a, b) => a.stdev - b.stdev);
 }
@@ -830,16 +839,25 @@ export function courseDNA(tournament) {
 // Per-player split of points / strokes by par-3, par-4, par-5 holes.
 export function parTypeSplit(tournament, playerId) {
   const buckets = { 3: [], 4: [], 5: [] };
-  forEachHole(tournament, ({ player, hole, strokes, points }) => {
+  forEachHole(tournament, ({ player, round, roundIndex, hole, strokes, points }) => {
     if (player.id !== playerId) return;
     if (!buckets[hole.par]) buckets[hole.par] = [];
-    buckets[hole.par].push({ strokes, points, par: hole.par });
+    buckets[hole.par].push({
+      strokes, points, par: hole.par,
+      roundIndex, courseName: round.courseName, holeNumber: hole.number, si: hole.strokeIndex,
+    });
   });
   const summarize = (arr) => {
-    if (arr.length === 0) return { holes: 0, avgPoints: 0, avgStrokes: 0, totalPoints: 0 };
+    if (arr.length === 0) return { holes: 0, avgPoints: 0, avgStrokes: 0, totalPoints: 0, breakdown: [] };
     const pts = arr.reduce((s, h) => s + h.points, 0);
     const str = arr.reduce((s, h) => s + h.strokes, 0);
-    return { holes: arr.length, avgPoints: +(pts / arr.length).toFixed(2), avgStrokes: +(str / arr.length).toFixed(2), totalPoints: pts };
+    return {
+      holes: arr.length,
+      avgPoints: +(pts / arr.length).toFixed(2),
+      avgStrokes: +(str / arr.length).toFixed(2),
+      totalPoints: pts,
+      breakdown: arr,
+    };
   };
   return { par3: summarize(buckets[3] || []), par4: summarize(buckets[4] || []), par5: summarize(buckets[5] || []) };
 }
@@ -876,7 +894,8 @@ export function warmupVsClosing(tournament, playerId) {
 // handicap; <1.0 = underperformed.
 export function handicapROI(tournament, playerId) {
   let totalPoints = 0, totalHoles = 0, rounds = 0;
-  tournament.rounds.forEach(round => {
+  const breakdown = [];
+  tournament.rounds.forEach((round, roundIndex) => {
     if (!round.scores?.[playerId]) return;
     const player = tournament.players.find(p => p.id === playerId);
     if (!player) return;
@@ -888,7 +907,14 @@ export function handicapROI(tournament, playerId) {
       rp += calcStablefordPoints(hole.par, sc, handicap, hole.strokeIndex);
       rh++;
     });
-    if (rh > 0) { totalPoints += rp; totalHoles += rh; rounds++; }
+    if (rh > 0) {
+      totalPoints += rp; totalHoles += rh; rounds++;
+      breakdown.push({
+        roundIndex, courseName: round.courseName,
+        actual: rp, expected: 2 * rh, holesPlayed: rh,
+        ratio: +(rp / (2 * rh)).toFixed(2),
+      });
+    }
   });
   if (rounds === 0) return null;
   const expected = 2 * totalHoles;
@@ -898,6 +924,7 @@ export function handicapROI(tournament, playerId) {
     ratio: expected > 0 ? +(totalPoints / expected).toFixed(2) : null,
     holesPlayed: totalHoles,
     rounds,
+    breakdown,
   };
 }
 
@@ -1001,7 +1028,7 @@ export function pairSynergy(tournament) {
     round.pairs.forEach(pair => {
       if (pair.length < 2) return;
       const key = [pair[0].id, pair[1].id].sort().join('|');
-      if (!pairMap[key]) pairMap[key] = { members: [pair[0], pair[1]], combined: 0, expected: 0, rounds: 0, holesPlayed: 0 };
+      if (!pairMap[key]) pairMap[key] = { members: [pair[0], pair[1]], combined: 0, expected: 0, rounds: 0, holesPlayed: 0, roundList: [] };
       let combined = 0, expected = 0, holes = 0;
       round.holes.forEach(hole => {
         const s1 = round.scores[pair[0].id]?.[hole.number];
@@ -1019,6 +1046,11 @@ export function pairSynergy(tournament) {
         pairMap[key].expected += expected;
         pairMap[key].rounds++;
         pairMap[key].holesPlayed += holes;
+        pairMap[key].roundList.push({
+          roundIndex, courseName: round.courseName, holesPlayed: holes,
+          combined: +combined.toFixed(1), expected: +expected.toFixed(1),
+          synergy: expected > 0 ? +(combined / expected).toFixed(2) : null,
+        });
       }
     });
   });
@@ -1032,6 +1064,7 @@ export function pairSynergy(tournament) {
       expected: +p.expected.toFixed(1),
       synergy: +(p.combined / p.expected).toFixed(2),
       holesPlayed: p.holesPlayed,
+      roundList: p.roundList,
     }))
     .sort((a, b) => b.synergy - a.synergy);
 }
@@ -1449,4 +1482,179 @@ export function shotStats(tournament, playerId) {
       pct: girEligible > 0 ? Math.round((girHoles / girEligible) * 100) : 0,
     },
   };
+}
+
+// ── Players who logged shot detail ──
+// Returns the players who have at least one round of shot detail recorded,
+// so the My Shots tab can offer a picker rather than locking to meId only.
+export function playersWithShotData(tournament) {
+  return tournament.players.filter(p => shotStats(tournament, p.id).hasData);
+}
+
+// ── Bounce-back Rate ──
+// Share of holes immediately following a bogey-or-worse on which the player
+// scored par-or-better. Walks each round in hole order; the hole after the
+// last hole of a round does NOT chain into the next round.
+export function bounceBackRate(tournament) {
+  const perPlayer = {};
+  tournament.players.forEach(p => { perPlayer[p.id] = { player: p, opportunities: 0, bounceBacks: 0, breakdown: [] }; });
+
+  tournament.rounds.forEach((round, roundIndex) => {
+    if (!round.scores) return;
+    tournament.players.forEach(player => {
+      if (!round.scores[player.id]) return;
+      const handicap = getPlayingHandicap(round, player);
+      const seq = [];
+      round.holes.forEach(hole => {
+        const sc = round.scores[player.id]?.[hole.number];
+        if (!sc) return;
+        seq.push({
+          holeNumber: hole.number, par: hole.par, si: hole.strokeIndex,
+          strokes: sc, vsPar: sc - hole.par,
+          points: calcStablefordPoints(hole.par, sc, handicap, hole.strokeIndex),
+        });
+      });
+      for (let i = 1; i < seq.length; i++) {
+        const prev = seq[i - 1];
+        const cur = seq[i];
+        if (prev.vsPar < 1) continue; // prior hole was par-or-better — no opportunity
+        const rec = perPlayer[player.id];
+        rec.opportunities++;
+        const recovered = cur.vsPar <= 0;
+        if (recovered) rec.bounceBacks++;
+        rec.breakdown.push({
+          roundIndex, courseName: round.courseName,
+          holeNumber: cur.holeNumber, par: cur.par, si: cur.si,
+          strokes: cur.strokes, points: cur.points,
+          vsPar: cur.vsPar, recovered,
+          afterHole: prev.holeNumber, afterVsPar: prev.vsPar,
+        });
+      }
+    });
+  });
+
+  return Object.values(perPlayer)
+    .filter(r => r.opportunities > 0)
+    .map(r => ({ ...r, rate: Math.round((r.bounceBacks / r.opportunities) * 100) }))
+    .sort((a, b) => b.rate - a.rate);
+}
+
+// ── Front 9 vs Back 9 split ──
+// Positive framing of nine-by-nine form: average Stableford points on holes
+// 1-9 vs 10-18 across every round, plus per-round breakdown. Only rounds with
+// both nines fully played contribute.
+export function frontBackSplit(tournament) {
+  const perPlayer = {};
+  tournament.players.forEach(p => { perPlayer[p.id] = { player: p, front: 0, back: 0, frontHoles: 0, backHoles: 0, rounds: [] }; });
+
+  tournament.rounds.forEach((round, roundIndex) => {
+    if (!round.scores || round.holes.length < 18) return;
+    tournament.players.forEach(player => {
+      if (!round.scores[player.id]) return;
+      const handicap = getPlayingHandicap(round, player);
+      let front = 0, back = 0, fc = 0, bc = 0;
+      round.holes.forEach(hole => {
+        const sc = round.scores[player.id]?.[hole.number];
+        if (!sc) return;
+        const pts = calcStablefordPoints(hole.par, sc, handicap, hole.strokeIndex);
+        if (hole.number <= 9) { front += pts; fc++; } else { back += pts; bc++; }
+      });
+      if (fc < 9 || bc < 9) return;
+      const rec = perPlayer[player.id];
+      rec.front += front; rec.back += back; rec.frontHoles += fc; rec.backHoles += bc;
+      rec.rounds.push({ roundIndex, courseName: round.courseName, front, back, delta: back - front });
+    });
+  });
+
+  return Object.values(perPlayer)
+    .filter(r => r.rounds.length > 0)
+    .map(r => ({
+      player: r.player,
+      rounds: r.rounds,
+      frontAvg: +(r.front / r.frontHoles).toFixed(2),
+      backAvg: +(r.back / r.backHoles).toFixed(2),
+      frontTotal: r.front,
+      backTotal: r.back,
+      // Positive = stronger finisher (back nine higher).
+      delta: +((r.back / r.backHoles) - (r.front / r.frontHoles)).toFixed(2),
+    }))
+    .sort((a, b) => b.delta - a.delta);
+}
+
+// ── Stroke Index Accuracy ──
+// Ranks every hole of every round by actual average strokes-over-par and
+// compares that empirical difficulty rank to the course's printed stroke
+// index. A large positive `siGap` means the hole played much harder than its
+// printed SI suggested (mislabeled handicap hole), negative means easier.
+export function strokeIndexAccuracy(tournament) {
+  const results = [];
+  tournament.rounds.forEach((round, roundIndex) => {
+    if (!round.scores || Object.keys(round.scores).length === 0) return;
+    const holeStats = round.holes.map(hole => {
+      let totalVsPar = 0, count = 0;
+      tournament.players.forEach(p => {
+        const sc = round.scores[p.id]?.[hole.number];
+        if (!sc) return;
+        totalVsPar += sc - hole.par;
+        count++;
+      });
+      return {
+        holeNumber: hole.number, par: hole.par, printedSi: hole.strokeIndex,
+        avgVsPar: count > 0 ? totalVsPar / count : null, count,
+      };
+    }).filter(h => h.avgVsPar != null);
+    if (holeStats.length === 0) return;
+    // Rank hardest (highest avgVsPar) as actualSi 1.
+    const ranked = [...holeStats].sort((a, b) => b.avgVsPar - a.avgVsPar);
+    ranked.forEach((h, i) => { h.actualSi = i + 1; });
+    holeStats.forEach(h => {
+      results.push({
+        roundIndex, courseName: round.courseName,
+        holeNumber: h.holeNumber, par: h.par,
+        printedSi: h.printedSi, actualSi: h.actualSi,
+        avgVsPar: +h.avgVsPar.toFixed(2),
+        // Positive = played harder than its SI label predicted.
+        siGap: h.printedSi - h.actualSi,
+      });
+    });
+  });
+  return results.sort((a, b) => Math.abs(b.siGap) - Math.abs(a.siGap));
+}
+
+// ── Scrambling % ──
+// Of the holes where the green was missed in regulation, the share on which
+// the player still scored par-or-better. Requires per-hole shot detail
+// (putts) to determine GIR. One entry per player who has the data.
+export function scramblingStats(tournament) {
+  const perPlayer = {};
+  tournament.players.forEach(p => { perPlayer[p.id] = { player: p, missedGir: 0, saves: 0, breakdown: [] }; });
+
+  tournament.rounds.forEach((round, roundIndex) => {
+    if (!round.scores) return;
+    tournament.players.forEach(player => {
+      const byHole = round?.shotDetails?.[player.id];
+      if (!byHole) return;
+      round.holes.forEach(hole => {
+        const d = byHole[hole.number];
+        const strokes = round.scores[player.id]?.[hole.number];
+        if (!d || d.putts == null || strokes == null) return;
+        const gir = (strokes - d.putts) <= (hole.par - 2);
+        if (gir) return; // GIR holes are not scrambling opportunities
+        const rec = perPlayer[player.id];
+        rec.missedGir++;
+        const saved = (strokes - hole.par) <= 0;
+        if (saved) rec.saves++;
+        rec.breakdown.push({
+          roundIndex, courseName: round.courseName,
+          holeNumber: hole.number, par: hole.par, si: hole.strokeIndex,
+          strokes, putts: d.putts, saved, vsPar: strokes - hole.par,
+        });
+      });
+    });
+  });
+
+  return Object.values(perPlayer)
+    .filter(r => r.missedGir > 0)
+    .map(r => ({ ...r, pct: Math.round((r.saves / r.missedGir) * 100) }))
+    .sort((a, b) => b.pct - a.pct);
 }

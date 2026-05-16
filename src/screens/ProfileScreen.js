@@ -1,4 +1,4 @@
-import React, { useCallback, useState } from 'react';
+import React, { useCallback, useEffect, useState } from 'react';
 import {
   View, Text, TextInput, TouchableOpacity, StyleSheet, ScrollView,
   ActivityIndicator, Alert, Platform, Switch, Image,
@@ -7,6 +7,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { useFocusEffect } from '@react-navigation/native';
 import { Feather } from '@expo/vector-icons';
 import * as ImagePicker from 'expo-image-picker';
+import * as ImageManipulator from 'expo-image-manipulator';
 
 import { useTheme } from '../theme/ThemeContext';
 import { supabase } from '../lib/supabase';
@@ -46,7 +47,14 @@ export default function ProfileScreen({ navigation }) {
       setShowRunning(running);
       setDirty(false);
       if (p?.userId || p?.displayName) {
-        setStats(await computePersonalStats({ userId: p?.userId, displayName: p?.displayName }));
+        // Prefer user_id matching — it's a stable account link, whereas
+        // displayName matching is fuzzy and breaks on renames. Only pass
+        // displayName as a fallback when there is no userId.
+        setStats(await computePersonalStats(
+          p?.userId
+            ? { userId: p.userId }
+            : { displayName: p?.displayName },
+        ));
       } else {
         setStats(null);
       }
@@ -65,6 +73,26 @@ export default function ProfileScreen({ navigation }) {
   }, []);
 
   useFocusEffect(useCallback(() => { load(); }, [load]));
+
+  // Intercept hardware-back / swipe-back gestures so unsaved edits aren't
+  // silently lost. The header back button is handled separately by handleBack.
+  useEffect(() => {
+    const sub = navigation.addListener('beforeRemove', (e) => {
+      if (!dirty) return;
+      e.preventDefault();
+      const confirmLeave = () => navigation.dispatch(e.data.action);
+      if (Platform.OS === 'web') {
+        if (window.confirm('You have unsaved changes. Leave without saving?')) confirmLeave();
+        return;
+      }
+      Alert.alert(
+        'Unsaved changes', 'You have unsaved changes. Leave without saving?',
+        [{ text: 'Stay', style: 'cancel' },
+         { text: 'Discard', style: 'destructive', onPress: confirmLeave }],
+      );
+    });
+    return sub;
+  }, [navigation, dirty]);
 
   async function save() {
     // Username: 3-20 chars, lowercase letters/digits/underscore only. Keeps
@@ -122,7 +150,17 @@ export default function ProfileScreen({ navigation }) {
     if (result.canceled) return;
     setUploadingAvatar(true);
     try {
-      const uri = result.assets[0].uri;
+      // Compress before upload: avatars render at ~84px, so a 512px JPEG at
+      // 0.6 quality is plenty and keeps storage / bandwidth small.
+      let uri = result.assets[0].uri;
+      try {
+        const manipulated = await ImageManipulator.manipulateAsync(
+          uri,
+          [{ resize: { width: 512 } }],
+          { compress: 0.6, format: ImageManipulator.SaveFormat.JPEG },
+        );
+        uri = manipulated.uri;
+      } catch (_) { /* fall back to the original picked image */ }
       const publicUrl = await uploadAvatar(uri);
       // Persist immediately so other screens (Members / PlayerPicker)
       // see the new photo on their next reload, without waiting for the
@@ -148,13 +186,19 @@ export default function ProfileScreen({ navigation }) {
     await supabase.auth.signOut();
   }
 
+  // The unsaved-changes confirmation lives in the `beforeRemove` listener
+  // above, so goBack() here is enough — the listener intercepts it.
+  function handleBack() {
+    navigation.goBack();
+  }
+
   const initials = (profile?.displayName || profile?.email || '?').slice(0, 2).toUpperCase();
   const resolvedAvatarColor = avatarColor || AVATAR_COLORS[0];
 
   return (
     <SafeAreaView style={s.screen} edges={['top', 'bottom']}>
       <View style={s.header}>
-        <TouchableOpacity onPress={() => navigation.goBack()} style={s.backBtn} activeOpacity={0.7}>
+        <TouchableOpacity onPress={handleBack} style={s.backBtn} activeOpacity={0.7}>
           <Feather name="chevron-left" size={22} color={theme.accent.primary} />
         </TouchableOpacity>
         <Text style={s.headerTitle}>Profile</Text>
@@ -166,7 +210,7 @@ export default function ProfileScreen({ navigation }) {
           <ActivityIndicator color={theme.accent.primary} />
         </View>
       ) : (
-        <ScrollView style={s.scroll} contentContainerStyle={s.content} automaticallyAdjustKeyboardInsets>
+        <ScrollView style={s.scroll} contentContainerStyle={s.content} automaticallyAdjustKeyboardInsets keyboardShouldPersistTaps="handled">
           <View style={s.heroCard}>
             <TouchableOpacity
               style={[s.avatar, { backgroundColor: resolvedAvatarColor, overflow: 'hidden' }]}
@@ -368,6 +412,18 @@ export default function ProfileScreen({ navigation }) {
             </>
           ) : null}
 
+          <Text style={s.sectionLabel}>SOCIAL</Text>
+
+          <TouchableOpacity
+            style={s.linkRow}
+            onPress={() => navigation.navigate('Friends')}
+            activeOpacity={0.7}
+          >
+            <Feather name="users" size={18} color={theme.accent.primary} />
+            <Text style={s.linkRowText}>Friends</Text>
+            <Feather name="chevron-right" size={18} color={theme.text.muted} />
+          </TouchableOpacity>
+
           <TouchableOpacity
             style={s.signOutBtn}
             onPress={signOut}
@@ -524,6 +580,16 @@ const makeStyles = (theme) => StyleSheet.create({
     fontFamily: 'PlusJakartaSans-Bold',
   },
 
+  linkRow: {
+    flexDirection: 'row', alignItems: 'center', gap: 12,
+    backgroundColor: theme.bg.card, borderRadius: 14, borderWidth: 1,
+    borderColor: theme.border.default, padding: 14,
+    ...(theme.isDark ? {} : theme.shadow.card),
+  },
+  linkRowText: {
+    flex: 1, fontFamily: 'PlusJakartaSans-SemiBold',
+    color: theme.text.primary, fontSize: 14,
+  },
   signOutBtn: {
     flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8,
     padding: 14, marginTop: 32, borderRadius: 12,

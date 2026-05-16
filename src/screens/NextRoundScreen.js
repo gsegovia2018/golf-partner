@@ -1,5 +1,6 @@
 import React, { useEffect, useRef, useState } from 'react';
 import {
+  ActivityIndicator,
   Animated,
   StyleSheet,
   Text,
@@ -23,6 +24,11 @@ export default function NextRoundScreen({ navigation, route }) {
   const [nextPairs, setNextPairs] = useState(null);
   const [phase, setPhase] = useState('initial');
   const [countdownNum, setCountdownNum] = useState(3);
+  // 'loading' until the first load resolves; 'error' if it returned null (or
+  // threw); 'ready' once a tournament is in hand.
+  const [loadState, setLoadState] = useState('loading');
+  // Bumped to re-run the load effect when the user taps Retry.
+  const [loadAttempt, setLoadAttempt] = useState(0);
 
   const countdownOpacity = useRef(new Animated.Value(0)).current;
   const countdownScale = useRef(new Animated.Value(1.4)).current;
@@ -58,8 +64,21 @@ export default function NextRoundScreen({ navigation, route }) {
   useEffect(() => {
     let cancelled = false;
     async function load({ initial }) {
-      const t = await loadTournament();
-      if (cancelled || !t) return;
+      let t;
+      try {
+        t = await loadTournament();
+      } catch (e) {
+        console.warn('NextRoundScreen: loadTournament failed', e);
+        t = null;
+      }
+      if (cancelled) return;
+      if (!t) {
+        // Only flip to the error state if nothing is on screen yet — a
+        // transient subscription-driven reload should not blank the reveal.
+        if (initial && !tournament) setLoadState('error');
+        return;
+      }
+      setLoadState('ready');
       setTournament(t);
       if (!initial) {
         if (phaseRef.current !== 'initial') return;
@@ -72,12 +91,64 @@ export default function NextRoundScreen({ navigation, route }) {
     load({ initial: true });
     const unsub = subscribeTournamentChanges(() => load({ initial: false }));
     return () => { cancelled = true; unsub(); };
-  }, [revealOnly, paramRoundIndex]);
+  }, [revealOnly, paramRoundIndex, loadAttempt]);
 
-  if (!tournament || !nextPairs) return null;
+  // Retry handler for the "couldn't load" error state.
+  function retryLoad() {
+    setLoadState('loading');
+    setLoadAttempt((n) => n + 1);
+  }
+
+  // Explicit load failure — never a blank screen. Keep a working back button.
+  if (loadState === 'error' && !tournament) {
+    return (
+      <SafeAreaView style={s.container} edges={['top', 'bottom']}>
+        <View style={s.header}>
+          <TouchableOpacity onPress={() => navigation.goBack()} style={s.backBtn}>
+            <Feather name="chevron-left" size={22} color={theme.accent.primary} />
+          </TouchableOpacity>
+          <Text style={s.headerTitle}>Next Round</Text>
+          <View style={{ width: 22 }} />
+        </View>
+        <View style={s.loadingBody}>
+          <Feather name="alert-circle" size={44} color={theme.text.muted} />
+          <Text style={s.errorTitle}>Couldn't load the next round</Text>
+          <Text style={s.loadingText}>Check your connection and try again.</Text>
+          <TouchableOpacity style={s.retryBtn} onPress={retryLoad} activeOpacity={0.8}>
+            <Feather name="rotate-ccw" size={15} color={theme.text.inverse} />
+            <Text style={s.retryBtnText}>Retry</Text>
+          </TouchableOpacity>
+        </View>
+      </SafeAreaView>
+    );
+  }
+
+  // Loading state — never a blank screen. Keep a working back button.
+  if (!tournament || !nextPairs) {
+    return (
+      <SafeAreaView style={s.container} edges={['top', 'bottom']}>
+        <View style={s.header}>
+          <TouchableOpacity onPress={() => navigation.goBack()} style={s.backBtn}>
+            <Feather name="chevron-left" size={22} color={theme.accent.primary} />
+          </TouchableOpacity>
+          <Text style={s.headerTitle}>Next Round</Text>
+          <View style={{ width: 22 }} />
+        </View>
+        <View style={s.loadingBody}>
+          <ActivityIndicator color={theme.accent.primary} />
+          <Text style={s.loadingText}>Loading…</Text>
+        </View>
+      </SafeAreaView>
+    );
+  }
 
   const roundIndex = revealOnly ? paramRoundIndex : tournament.currentRound + 1;
   const round = tournament.rounds[roundIndex];
+
+  // Random partners only apply to pairs-of-2 modes. Individual Stableford and
+  // Match Play build solo "pairs", so there is nothing to re-shuffle.
+  const mode = tournament?.settings?.scoringMode;
+  const canReshuffle = mode !== 'individual' && mode !== 'matchplay';
 
   function startReveal() {
     setPhase('countdown');
@@ -101,6 +172,24 @@ export default function NextRoundScreen({ navigation, route }) {
       Animated.delay(165),
       Animated.timing(countdownOpacity, { toValue: 0, duration: 60, useNativeDriver: true }),
     ]).start(() => runCountdown(n - 1));
+  }
+
+  // Snap straight to the fully-revealed state — used by the Skip control and
+  // by tap-to-complete during the reveal animation.
+  function finishRevealInstant() {
+    ensurePairAnims(nextPairs.length);
+    countdownOpacity.stopAnimation();
+    nextPairs.forEach((_, i) => {
+      pairAnimsRef.current[i].opacity.stopAnimation();
+      pairAnimsRef.current[i].scale.stopAnimation();
+      pairAnimsRef.current[i].opacity.setValue(1);
+      pairAnimsRef.current[i].scale.setValue(1);
+    });
+    actionsOpacity.stopAnimation();
+    actionsTranslateY.stopAnimation();
+    actionsOpacity.setValue(1);
+    actionsTranslateY.setValue(0);
+    setPhase('reveal');
   }
 
   function revealPairs() {
@@ -168,19 +257,27 @@ export default function NextRoundScreen({ navigation, route }) {
   if (phase === 'countdown') {
     return (
       <SafeAreaView style={s.fullscreen} edges={['top', 'bottom']}>
-        <View style={s.countdownCircle}>
-          <Animated.Text
-            style={[
-              s.countdownNum,
-              {
-                opacity: countdownOpacity,
-                transform: [{ scale: countdownScale }],
-              },
-            ]}
-          >
-            {countdownNum}
-          </Animated.Text>
-        </View>
+        <TouchableOpacity
+          activeOpacity={1}
+          style={s.countdownTapTarget}
+          onPress={finishRevealInstant}
+          accessibilityLabel="Skip the countdown"
+        >
+          <View style={s.countdownCircle}>
+            <Animated.Text
+              style={[
+                s.countdownNum,
+                {
+                  opacity: countdownOpacity,
+                  transform: [{ scale: countdownScale }],
+                },
+              ]}
+            >
+              {countdownNum}
+            </Animated.Text>
+          </View>
+          <Text style={s.skipHint}>Tap to skip</Text>
+        </TouchableOpacity>
       </SafeAreaView>
     );
   }
@@ -240,10 +337,12 @@ export default function NextRoundScreen({ navigation, route }) {
             },
           ]}
         >
-          <TouchableOpacity style={s.btnSecondary} onPress={reshuffle}>
-            <Feather name="shuffle" size={18} color={theme.accent.primary} style={{ marginRight: 8 }} />
-            <Text style={s.btnSecondaryText}>Re-shuffle</Text>
-          </TouchableOpacity>
+          {canReshuffle && (
+            <TouchableOpacity style={s.btnSecondary} onPress={reshuffle}>
+              <Feather name="shuffle" size={18} color={theme.accent.primary} style={{ marginRight: 8 }} />
+              <Text style={s.btnSecondaryText}>Re-shuffle</Text>
+            </TouchableOpacity>
+          )}
           <TouchableOpacity style={s.btnPrimary} onPress={handleConfirm}>
             <Feather
               name="play"
@@ -277,6 +376,14 @@ export default function NextRoundScreen({ navigation, route }) {
 
         <TouchableOpacity style={s.revealBtn} onPress={startReveal}>
           <Text style={s.revealBtnText}>Reveal Teams</Text>
+        </TouchableOpacity>
+
+        <TouchableOpacity
+          style={s.skipBtn}
+          onPress={finishRevealInstant}
+          accessibilityLabel="Skip the reveal animation"
+        >
+          <Text style={s.skipBtnText}>Skip</Text>
         </TouchableOpacity>
       </View>
     </SafeAreaView>
@@ -382,6 +489,68 @@ function makeStyles(theme) {
       fontSize: 140,
       fontFamily: 'PlayfairDisplay-Black',
       color: '#ffd700',
+    },
+    countdownTapTarget: {
+      alignItems: 'center',
+      justifyContent: 'center',
+    },
+    skipHint: {
+      marginTop: 28,
+      fontSize: 13,
+      fontFamily: 'PlusJakartaSans-SemiBold',
+      color: theme.text.muted,
+      letterSpacing: 1,
+      textTransform: 'uppercase',
+    },
+
+    /* Loading / error states */
+    loadingBody: {
+      flex: 1,
+      alignItems: 'center',
+      justifyContent: 'center',
+      gap: 12,
+      padding: 32,
+    },
+    loadingText: {
+      fontFamily: 'PlusJakartaSans-Regular',
+      fontSize: 13,
+      color: theme.text.muted,
+      textAlign: 'center',
+    },
+    errorTitle: {
+      fontFamily: 'PlayfairDisplay-Bold',
+      fontSize: 18,
+      color: theme.text.primary,
+      textAlign: 'center',
+    },
+    retryBtn: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: 8,
+      backgroundColor: theme.accent.primary,
+      borderRadius: 14,
+      paddingVertical: 12,
+      paddingHorizontal: 22,
+      marginTop: 6,
+    },
+    retryBtnText: {
+      fontFamily: 'PlusJakartaSans-ExtraBold',
+      color: theme.text.inverse,
+      fontSize: 14,
+    },
+
+    /* Skip control on the initial phase */
+    skipBtn: {
+      marginTop: 20,
+      paddingVertical: 12,
+      paddingHorizontal: 28,
+    },
+    skipBtnText: {
+      fontFamily: 'PlusJakartaSans-Bold',
+      fontSize: 14,
+      color: theme.text.muted,
+      letterSpacing: 1,
+      textTransform: 'uppercase',
     },
 
     /* VS divider */

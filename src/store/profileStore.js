@@ -5,6 +5,7 @@ import {
   roundTotals,
   tournamentLeaderboard,
 } from './tournamentStore';
+import { isRoundPlayed } from './scoring';
 
 // One row per auth.users.id — created by a trigger on signup, edited from
 // ProfileScreen. `username` is a unique lowercase handle; `display_name`
@@ -117,10 +118,7 @@ function findMyPlayer(tournament, userId, displayName) {
   return null;
 }
 
-function isRoundPlayed(round, index, tournament) {
-  if (index > (tournament.currentRound ?? 0)) return false;
-  return !!round.scores;
-}
+// isRoundPlayed is imported from ./scoring (shared with tournamentStore).
 
 // Aggregates: per-user stats computed client-side from tournaments the
 // user can see (own + invited). Keeping this client-side avoids a new

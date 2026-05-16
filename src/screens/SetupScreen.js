@@ -11,6 +11,20 @@ import { createTournament, saveTournament, randomPairs, DEFAULT_SETTINGS, derive
 import { defaultHoles, fetchCourses, fetchPlayers } from '../store/libraryStore';
 import { consumePendingPlayers, consumePendingCourses } from '../lib/selectionBridge';
 import { useTheme } from '../theme/ThemeContext';
+import ScoringModePicker, { isScoringModeAllowed, fallbackScoringMode } from '../components/ScoringModePicker';
+
+// Stable id for a round so React keys / removal survive reordering.
+let _roundIdSeq = 0;
+function newRoundId() { return `setup-r${Date.now()}-${_roundIdSeq++}`; }
+
+async function confirmDialog(title, message, confirmLabel = 'Remove') {
+  if (Platform.OS === 'web') return window.confirm(`${title}\n\n${message}`);
+  return new Promise((resolve) => Alert.alert(
+    title, message,
+    [{ text: 'Cancel', style: 'cancel', onPress: () => resolve(false) },
+     { text: confirmLabel, style: 'destructive', onPress: () => resolve(true) }],
+  ));
+}
 
 function buildGameName(courseName) {
   const d = new Date();
@@ -38,27 +52,16 @@ export default function SetupScreen({ navigation, route }) {
   );
   const [nameTouched, setNameTouched] = useState(false);
   const [players, setPlayers] = useState([]);
-  const [rounds, setRounds] = useState([{ courseName: '', holes: defaultHoles(), slope: null, playerHandicaps: null }]);
+  const [rounds, setRounds] = useState([{ id: newRoundId(), courseName: '', holes: defaultHoles(), slope: null, playerHandicaps: null }]);
   const [settings, setSettings] = useState({ ...DEFAULT_SETTINGS });
 
-  const bestBallAllowed = !isGame || players.length === 4;
-  const matchPlayAllowed = players.length === 2;
-  // Individual Stableford ranks every player solo and is available whenever
-  // there are at least 2 players; for solo (1 player) the Scoring section
-  // is hidden entirely.
-  const individualAllowed = players.length >= 2;
-
+  // Whenever the player count makes the chosen scoring mode invalid, fall
+  // back to a mode that is always valid for the current roster.
   useEffect(() => {
-    if (!bestBallAllowed && settings.scoringMode === 'bestball') {
-      setSettings((prev) => ({ ...prev, scoringMode: 'stableford' }));
+    if (!isScoringModeAllowed(settings.scoringMode, players.length)) {
+      setSettings((prev) => ({ ...prev, scoringMode: fallbackScoringMode(players.length) }));
     }
-    if (!matchPlayAllowed && settings.scoringMode === 'matchplay') {
-      setSettings((prev) => ({ ...prev, scoringMode: 'stableford' }));
-    }
-    if (!individualAllowed && settings.scoringMode === 'individual') {
-      setSettings((prev) => ({ ...prev, scoringMode: 'stableford' }));
-    }
-  }, [bestBallAllowed, matchPlayAllowed, individualAllowed, settings.scoringMode]);
+  }, [players.length, settings.scoringMode]);
 
   useFocusEffect(useCallback(() => {
     let cancelled = false;
@@ -82,7 +85,16 @@ export default function SetupScreen({ navigation, route }) {
           const next = [...prev];
           for (const p of fresh) {
             if (next.length >= 4 || next.find((x) => x.id === p.id)) continue;
-            next.push({ id: p.id, name: p.name, handicap: p.handicap });
+            // Carry user_id / avatar_url so the embedded player links back to
+            // a real account (feed attribution, friend stats). Guest players
+            // added via the picker form simply have these undefined.
+            next.push({
+              id: p.id,
+              name: p.name,
+              handicap: p.handicap,
+              user_id: p.user_id ?? null,
+              avatar_url: p.avatar_url ?? null,
+            });
           }
           return next;
         });
@@ -116,7 +128,8 @@ export default function SetupScreen({ navigation, route }) {
             if (idx < next.length) {
               next[idx] = { ...next[idx], ...roundData };
             } else {
-              next.push({ ...roundData });
+              // Stable id so React keys / removal survive reordering.
+              next.push({ id: newRoundId(), ...roundData });
             }
           });
           return next;
@@ -142,7 +155,13 @@ export default function SetupScreen({ navigation, route }) {
     });
   }, []);
 
-  function removePlayer(id) {
+  async function removePlayer(id) {
+    const player = players.find((p) => p.id === id);
+    const ok = await confirmDialog(
+      'Remove player',
+      `Remove ${player?.name ?? 'this player'} from the ${isGame ? 'game' : 'tournament'}?`,
+    );
+    if (!ok) return;
     setPlayers((prev) => prev.filter((p) => p.id !== id));
   }
 
@@ -158,19 +177,33 @@ export default function SetupScreen({ navigation, route }) {
   }
 
   function addRound() {
-    setRounds((prev) => [...prev, { courseName: '', holes: defaultHoles(), slope: null, courseRating: null, playerHandicaps: null, manualHandicaps: {} }]);
+    setRounds((prev) => [...prev, { id: newRoundId(), courseName: '', holes: defaultHoles(), slope: null, courseRating: null, playerHandicaps: null, manualHandicaps: {} }]);
   }
 
-  function removeRound(index) {
+  async function removeRound(index) {
+    const round = rounds[index];
+    // Setup-stage rounds carry no entered scores yet, but a course may have
+    // been configured — still confirm so a stray tap doesn't wipe holes/slope.
+    const hasCourse = !!(round?.courseName || '').trim();
+    const ok = await confirmDialog(
+      'Remove round',
+      hasCourse
+        ? `Round ${index + 1} (${round.courseName}) and its hole setup will be removed.`
+        : `Remove Round ${index + 1}?`,
+    );
+    if (!ok) return;
     setRounds((prev) => prev.filter((_, i) => i !== index));
   }
+
+  const missingCourseName = rounds.some((r) => !r.courseName.trim());
+  const canStart = players.length >= 1 && !missingCourseName;
 
   async function handleStart() {
     if (players.length < 1) {
       Alert.alert('Missing info', 'Select at least 1 player.');
       return;
     }
-    if (rounds.some((r) => !r.courseName.trim())) {
+    if (missingCourseName) {
       Alert.alert('Missing info', 'All course names are required.');
       return;
     }
@@ -265,6 +298,14 @@ export default function SetupScreen({ navigation, route }) {
       {/* Players */}
       <View>
         <Text style={s.sectionTitle}>Players ({players.length}/4 max)</Text>
+        {players.length === 0 && (
+          <View style={s.emptyHint}>
+            <Feather name="users" size={16} color={theme.text.muted} style={{ marginRight: 8 }} />
+            <Text style={s.emptyHintText}>
+              Add at least 1 player to {isGame ? 'start the game' : 'start the tournament'}.
+            </Text>
+          </View>
+        )}
         {players.map((p) => (
           <View key={p.id} style={s.playerCard}>
             <View style={s.playerInfo}>
@@ -294,8 +335,9 @@ export default function SetupScreen({ navigation, route }) {
         <Text style={s.sectionTitle}>{isGame ? 'Course' : 'Rounds'}</Text>
         {rounds.map((r, i) => {
           const totalPar = r.holes.reduce((sum, h) => sum + h.par, 0);
+          const missingName = !r.courseName.trim();
           return (
-            <View key={i} style={s.courseBlock}>
+            <View key={r.id ?? `round-${i}`} style={s.courseBlock}>
               <View style={s.roundHeader}>
                 {!isGame && <Text style={s.roundLabel}>Round {i + 1}</Text>}
                 {rounds.length > 1 && (
@@ -319,6 +361,11 @@ export default function SetupScreen({ navigation, route }) {
                   {r.courseName ? `Course: ${r.courseName}` : 'Pick Course from Library'}
                 </Text>
               </TouchableOpacity>
+              {missingName && (
+                <Text style={s.errorText}>
+                  {isGame ? 'A course is required.' : `Round ${i + 1} needs a course.`}
+                </Text>
+              )}
               {r.courseName ? (
                 <>
                   <TextInput
@@ -371,85 +418,31 @@ export default function SetupScreen({ navigation, route }) {
       {players.length >= 2 && (
         <View>
           <Text style={s.sectionTitle}>Scoring</Text>
-          <View style={s.modeRow}>
-            {(() => {
-              // Mode options depend on player count:
-              //   2 players: Individual + Stableford (random partners) + Match Play
-              //   3 players: Individual + Stableford (random partners)
-              //   4 players: Individual + Stableford (random partners) + Best Ball
-              const availableModes = matchPlayAllowed
-                ? ['individual', 'stableford', 'matchplay']
-                : ['individual', 'stableford', 'bestball'];
-              return availableModes.map((mode) => {
-                const disabled = mode === 'bestball' && !bestBallAllowed;
-                const label = mode === 'individual' ? 'Stableford'
-                  : mode === 'stableford' ? 'Stableford with Partners'
-                  : mode === 'matchplay' ? 'Match Play'
-                  : 'Best Ball / Worst Ball';
-                const subtitle = mode === 'individual' ? 'Highest points wins'
-                  : mode === 'stableford' ? 'Random partners each round'
-                  : null;
-                return (
-                  <TouchableOpacity
-                    key={mode}
-                    style={[s.modeBtn, settings.scoringMode === mode && s.modeBtnActive, disabled && { opacity: 0.5 }]}
-                    onPress={() => { if (!disabled) setSettings((prev) => ({ ...prev, scoringMode: mode })); }}
-                    activeOpacity={disabled ? 1 : 0.7}
-                  >
-                    <Text style={[s.modeBtnText, settings.scoringMode === mode && s.modeBtnTextActive]}>
-                      {label}
-                    </Text>
-                    {subtitle && !disabled && (
-                      <Text style={[s.modeBtnText, { fontSize: 11, marginTop: 4, color: settings.scoringMode === mode ? theme.text.inverse : theme.text.muted }]}>
-                        {subtitle}
-                      </Text>
-                    )}
-                    {disabled && (
-                      <Text style={[s.modeBtnText, { fontSize: 11, marginTop: 4, color: theme.text.muted }]}>
-                        Requires 4 players
-                      </Text>
-                    )}
-                  </TouchableOpacity>
-                );
-              });
-            })()}
-          </View>
-          {settings.scoringMode === 'bestball' && (
-            <View style={s.valueRow}>
-              <View style={s.valueBlock}>
-                <Text style={s.valueLabel}>Best Ball</Text>
-                <TextInput
-                  style={s.valueInput}
-                  keyboardType="numeric"
-                  keyboardAppearance={theme.isDark ? 'dark' : 'light'}
-                  selectionColor={theme.accent.primary}
-                  maxLength={2}
-                  value={String(settings.bestBallValue)}
-                  onChangeText={(v) => setSettings((prev) => ({ ...prev, bestBallValue: v }))}
-                />
-                <Text style={s.valueSuffix}>pts / hole</Text>
-              </View>
-              <View style={s.valueBlock}>
-                <Text style={s.valueLabel}>Worst Ball</Text>
-                <TextInput
-                  style={s.valueInput}
-                  keyboardType="numeric"
-                  keyboardAppearance={theme.isDark ? 'dark' : 'light'}
-                  selectionColor={theme.accent.primary}
-                  maxLength={2}
-                  value={String(settings.worstBallValue)}
-                  onChangeText={(v) => setSettings((prev) => ({ ...prev, worstBallValue: v }))}
-                />
-                <Text style={s.valueSuffix}>pts / hole</Text>
-              </View>
-            </View>
-          )}
+          <ScoringModePicker
+            value={settings.scoringMode}
+            onChange={(mode) => setSettings((prev) => ({ ...prev, scoringMode: mode }))}
+            playerCount={players.length}
+            settings={settings}
+            onSettingsChange={setSettings}
+          />
         </View>
       )}
 
       {/* Start Button */}
       <View>
-        <TouchableOpacity style={s.primaryBtn} onPress={handleStart}>
+        {!canStart && (
+          <Text style={s.errorText}>
+            {players.length < 1
+              ? 'Add at least 1 player to continue.'
+              : 'Pick a course for every round to continue.'}
+          </Text>
+        )}
+        <TouchableOpacity
+          style={[s.primaryBtn, !canStart && { opacity: 0.5 }]}
+          onPress={handleStart}
+          disabled={!canStart}
+          activeOpacity={0.8}
+        >
           <Feather name="play" size={18} color={theme.isDark ? theme.accent.primary : theme.text.inverse} style={{ marginRight: 8 }} />
           <Text style={s.primaryBtnText}>{isGame ? 'Start Game' : 'Start Tournament'}</Text>
         </TouchableOpacity>
@@ -717,6 +710,32 @@ function makeStyles(theme) {
       fontFamily: 'PlusJakartaSans-Regular',
       color: theme.text.muted,
       fontSize: 11,
+    },
+
+    /* Empty / error states */
+    emptyHint: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      backgroundColor: theme.bg.secondary,
+      borderRadius: 12,
+      borderWidth: 1,
+      borderColor: theme.border.default,
+      borderStyle: 'dashed',
+      padding: 14,
+      marginBottom: 8,
+    },
+    emptyHintText: {
+      flex: 1,
+      fontFamily: 'PlusJakartaSans-Medium',
+      color: theme.text.muted,
+      fontSize: 13,
+    },
+    errorText: {
+      fontFamily: 'PlusJakartaSans-SemiBold',
+      color: theme.destructive,
+      fontSize: 12,
+      marginBottom: 8,
+      marginTop: 2,
     },
 
     /* Primary Button */

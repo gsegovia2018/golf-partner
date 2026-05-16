@@ -10,7 +10,7 @@ import { Feather, FontAwesome } from '@expo/vector-icons';
 import { useTheme } from '../theme/ThemeContext';
 import {
   fetchCourses, upsertCourse, defaultHoles, saveCourseHoles,
-  fetchFavoriteCourseIds, toggleFavoriteCourse,
+  fetchFavoriteCourseIds, toggleFavoriteCourse, deleteCourse,
 } from '../store/libraryStore';
 import { loadAllTournaments } from '../store/tournamentStore';
 import { setPendingCourses } from '../lib/selectionBridge';
@@ -24,33 +24,44 @@ export default function CoursePickerScreen({ navigation, route }) {
   const s = makeStyles(theme);
 
   const { roundIndex } = route.params;
+  // Optional cap on how many courses can be picked at once.
+  const maxSelectable = route.params?.maxSelectable ?? null;
 
   const [courses, setCourses] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState(null);
   const [selectedCourses, setSelectedCourses] = useState([]);
   const [newName, setNewName] = useState('');
   const [saving, setSaving] = useState(false);
   const [query, setQuery] = useState('');
   const [favorites, setFavorites] = useState(() => new Set());
   const [lastUsed, setLastUsed] = useState({});
+  const [reloadKey, setReloadKey] = useState(0);
 
   useFocusEffect(
     useCallback(() => {
       let cancelled = false;
-      Promise.all([
-        fetchCourses(),
-        fetchFavoriteCourseIds().catch(() => new Set()),
-        loadAllTournaments().catch(() => []),
-      ])
-        .then(([list, favs, tournaments]) => {
+      setLoading(true);
+      setLoadError(null);
+      // fetchCourses failure is fatal for this screen (no library to show);
+      // favorites / tournaments are best-effort and fall back silently.
+      fetchCourses()
+        .then(async (list) => {
+          const [favs, tournaments] = await Promise.all([
+            fetchFavoriteCourseIds().catch(() => new Set()),
+            loadAllTournaments().catch(() => []),
+          ]);
           if (cancelled) return;
           setCourses(list);
           setFavorites(favs);
           setLastUsed(buildCourseLastUsed(tournaments));
         })
+        .catch((err) => {
+          if (!cancelled) setLoadError(err?.message ?? 'Could not load courses');
+        })
         .finally(() => { if (!cancelled) setLoading(false); });
       return () => { cancelled = true; };
-    }, []),
+    }, [reloadKey]),
   );
 
   const filteredCourses = useMemo(() => {
@@ -77,8 +88,73 @@ export default function CoursePickerScreen({ navigation, route }) {
     setSelectedCourses((prev) => {
       const exists = prev.find((c) => c.id === course.id);
       if (exists) return prev.filter((c) => c.id !== course.id);
+      if (maxSelectable != null && prev.length >= maxSelectable) {
+        const msg = `You can pick at most ${maxSelectable} course${maxSelectable !== 1 ? 's' : ''}.`;
+        if (Platform.OS === 'web') window.alert(msg);
+        else Alert.alert('Selection limit', msg);
+        return prev;
+      }
       return [...prev, course];
     });
+  }
+
+  // Long-press on a library row: rename or delete the underlying course.
+  function handleCourseLongPress(course) {
+    const doRename = async () => {
+      const current = course.name;
+      const next = Platform.OS === 'web'
+        ? window.prompt('Rename course', current)
+        : await new Promise((resolve) => {
+            Alert.prompt
+              ? Alert.prompt('Rename course', null, [
+                  { text: 'Cancel', style: 'cancel', onPress: () => resolve(null) },
+                  { text: 'Save', onPress: (v) => resolve(v) },
+                ], 'plain-text', current)
+              : resolve(null);
+          });
+      const trimmed = (next ?? '').trim();
+      if (!trimmed || trimmed === current) return;
+      try {
+        const updated = await upsertCourse({ id: course.id, name: trimmed });
+        setCourses((prev) => prev.map((c) => (c.id === course.id ? { ...c, name: trimmed } : c)));
+        setSelectedCourses((prev) => prev.map((c) => (c.id === course.id ? { ...c, name: trimmed } : c)));
+        return updated;
+      } catch (err) {
+        Alert.alert('Error', err?.message ?? 'Could not rename course');
+      }
+    };
+
+    const doDelete = async () => {
+      const confirmed = Platform.OS === 'web'
+        ? window.confirm(`Delete "${course.name}" from the library?`)
+        : await new Promise((resolve) => Alert.alert(
+            'Delete course', `Delete "${course.name}" from the library?`,
+            [{ text: 'Cancel', style: 'cancel', onPress: () => resolve(false) },
+             { text: 'Delete', style: 'destructive', onPress: () => resolve(true) }],
+          ));
+      if (!confirmed) return;
+      try {
+        await deleteCourse(course.id);
+        setCourses((prev) => prev.filter((c) => c.id !== course.id));
+        setSelectedCourses((prev) => prev.filter((c) => c.id !== course.id));
+      } catch (err) {
+        Alert.alert('Error', err?.message ?? 'Could not delete course');
+      }
+    };
+
+    if (Platform.OS === 'web') {
+      if (window.confirm(`Edit "${course.name}"?\n\nOK = Rename, Cancel = more options`)) {
+        doRename();
+      } else if (window.confirm(`Delete "${course.name}" from the library?`)) {
+        doDelete();
+      }
+      return;
+    }
+    Alert.alert(course.name, 'Manage this library course', [
+      { text: 'Rename', onPress: doRename },
+      { text: 'Delete', style: 'destructive', onPress: doDelete },
+      { text: 'Cancel', style: 'cancel' },
+    ]);
   }
 
   function confirm() {
@@ -111,7 +187,12 @@ export default function CoursePickerScreen({ navigation, route }) {
       setCourses((prev) => [...prev, full]);
       setNewName('');
       setQuery('');
-      setSelectedCourses((prev) => [...prev, full]);
+      // Respect the selection cap — add to library but skip auto-selecting
+      // when the picker is already full.
+      setSelectedCourses((prev) => {
+        if (maxSelectable != null && prev.length >= maxSelectable) return prev;
+        return [...prev, full];
+      });
     } catch (e) {
       Alert.alert('Error', e.message);
     } finally {
@@ -129,7 +210,7 @@ export default function CoursePickerScreen({ navigation, route }) {
         <View style={{ width: 22 }} />
       </View>
 
-      <ScrollView contentContainerStyle={s.content} automaticallyAdjustKeyboardInsets>
+      <ScrollView contentContainerStyle={s.content} automaticallyAdjustKeyboardInsets keyboardShouldPersistTaps="handled">
         <View style={s.searchRow}>
           <Feather name="search" size={16} color={theme.text.muted} style={s.searchIcon} />
           <TextInput
@@ -170,6 +251,20 @@ export default function CoursePickerScreen({ navigation, route }) {
         <Text style={s.sectionTitle}>Library</Text>
         {loading ? (
           <ActivityIndicator color={theme.accent.primary} style={{ marginTop: 20 }} />
+        ) : loadError ? (
+          <View style={s.errorBox}>
+            <Feather name="wifi-off" size={20} color={theme.destructive} />
+            <Text style={s.errorTitle}>Couldn't load courses</Text>
+            <Text style={s.errorMsg}>{loadError}</Text>
+            <TouchableOpacity
+              style={s.retryBtn}
+              onPress={() => setReloadKey((k) => k + 1)}
+              activeOpacity={0.7}
+            >
+              <Feather name="refresh-cw" size={14} color={theme.accent.primary} style={{ marginRight: 6 }} />
+              <Text style={s.retryBtnText}>Retry</Text>
+            </TouchableOpacity>
+          </View>
         ) : courses.length === 0 ? (
           <Text style={s.empty}>No courses in library yet.</Text>
         ) : filteredCourses.length === 0 ? (
@@ -197,6 +292,8 @@ export default function CoursePickerScreen({ navigation, route }) {
                 <TouchableOpacity
                   style={s.rowLeft}
                   onPress={() => toggleCourse({ id: c.id, name: c.name, slope: c.slope, holes: c.holes.length === 18 ? c.holes : defaultHoles() })}
+                  onLongPress={() => handleCourseLongPress(c)}
+                  delayLongPress={350}
                   activeOpacity={0.7}
                 >
                   <Text style={s.courseName}>{c.name}</Text>
@@ -401,4 +498,24 @@ const makeStyles = (theme) => StyleSheet.create({
     fontFamily: 'PlusJakartaSans-SemiBold',
     color: theme.accent.primary, fontSize: 14,
   },
+  errorBox: {
+    alignItems: 'center', padding: 24, marginTop: 12,
+    backgroundColor: theme.bg.card, borderRadius: 16,
+    borderWidth: 1, borderColor: theme.border.default,
+  },
+  errorTitle: {
+    fontFamily: 'PlusJakartaSans-Bold', color: theme.text.primary,
+    fontSize: 15, marginTop: 10,
+  },
+  errorMsg: {
+    fontFamily: 'PlusJakartaSans-Regular', color: theme.text.muted,
+    fontSize: 13, marginTop: 4, textAlign: 'center',
+  },
+  retryBtn: {
+    flexDirection: 'row', alignItems: 'center',
+    backgroundColor: theme.accent.light, borderRadius: 10,
+    borderWidth: 1, borderColor: theme.accent.primary + '40',
+    paddingHorizontal: 16, paddingVertical: 10, marginTop: 14,
+  },
+  retryBtnText: { fontFamily: 'PlusJakartaSans-Bold', color: theme.accent.primary, fontSize: 14 },
 });

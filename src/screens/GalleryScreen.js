@@ -1,10 +1,13 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
-import { View, Text, TouchableOpacity, ScrollView, StyleSheet, Alert } from 'react-native';
+import {
+  View, Text, TouchableOpacity, ScrollView, StyleSheet, Alert,
+  ActivityIndicator,
+} from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Feather } from '@expo/vector-icons';
 import { useTheme } from '../theme/ThemeContext';
 import { useTournamentMedia } from '../hooks/useTournamentMedia';
-import { loadTournament } from '../store/tournamentStore';
+import { getTournament } from '../store/tournamentStore';
 import MediaLightbox from '../components/MediaLightbox';
 import MemoriesRoundRow from '../components/MemoriesRoundRow';
 import MemoriesHoleStrip from '../components/MemoriesHoleStrip';
@@ -31,15 +34,35 @@ export default function GalleryScreen({ route, navigation }) {
 
   const { items } = useTournamentMedia(tournamentId);
   const [tournament, setTournament] = useState(null);
+  // Tournament load lifecycle: 'loading' until getTournament settles, then
+  // 'ready' or 'error'. The media hook has no loading state of its own, so
+  // this drives the gallery's loading/error UI.
+  const [loadState, setLoadState] = useState('loading');
   const [activeHole, setActiveHole] = useState(null);
   const [activeKind, setActiveKind] = useState('all');
   const [lightbox, setLightbox] = useState({ visible: false, index: 0 });
-  const [stories, setStories] = useState({ visible: false, entry: null });
+  const [stories, setStories] = useState({ visible: false, items: [], startIndex: 0 });
   const [captureMenuVisible, setCaptureMenuVisible] = useState(false);
   const [singleAsset, setSingleAsset] = useState(null);
   const [batchAssets, setBatchAssets] = useState(null);
 
-  useEffect(() => { loadTournament().then(setTournament); }, []);
+  // Load the tournament the gallery was opened for — not whatever is the
+  // active tournament. Opening a gallery from the feed targets a different
+  // tournament than the one last opened.
+  const loadTournament = useCallback(() => {
+    let cancelled = false;
+    setLoadState('loading');
+    getTournament(tournamentId)
+      .then((t) => {
+        if (cancelled) return;
+        setTournament(t);
+        setLoadState(t ? 'ready' : 'error');
+      })
+      .catch(() => { if (!cancelled) setLoadState('error'); });
+    return () => { cancelled = true; };
+  }, [tournamentId]);
+
+  useEffect(() => loadTournament(), [loadTournament]);
 
   const rounds = tournament?.rounds;
   const maxHoles = useMemo(() => deriveMaxHoles(rounds), [rounds]);
@@ -51,9 +74,22 @@ export default function GalleryScreen({ route, navigation }) {
     [items, activeHole, activeKind],
   );
 
+  // Height-aware masonry: instead of a fixed even/odd split (which leaves one
+  // column lopsided when images vary in aspect), each card is placed in
+  // whichever column is currently shorter. Card height is estimated from the
+  // image aspect ratio so the running column heights stay close.
   const [leftCol, rightCol] = useMemo(() => {
     const L = []; const R = [];
-    filtered.forEach((it, i) => { (i % 2 === 0 ? L : R).push({ it, i }); });
+    let hL = 0; let hR = 0;
+    filtered.forEach((it, i) => {
+      // Estimate relative card height: image area (1/aspect) plus a constant
+      // for the caption/meta footer. Absolute units don't matter — only the
+      // L vs R comparison does.
+      const aspect = (it.width > 0 && it.height > 0) ? it.width / it.height : 1;
+      const estHeight = (1 / Math.max(0.2, aspect)) + 0.35;
+      if (hL <= hR) { L.push({ it, i }); hL += estHeight; }
+      else { R.push({ it, i }); hR += estHeight; }
+    });
     return [L, R];
   }, [filtered]);
 
@@ -81,7 +117,7 @@ export default function GalleryScreen({ route, navigation }) {
         setSingleAsset(result);
       }
     } catch (e) {
-      Alert.alert('No se pudo capturar', String(e?.message ?? e));
+      Alert.alert('Could not capture', String(e?.message ?? e));
     }
   }, []);
 
@@ -105,7 +141,7 @@ export default function GalleryScreen({ route, navigation }) {
         fileName: asset.fileName,
       });
     } catch (e) {
-      Alert.alert('No se pudo adjuntar', String(e?.message ?? e));
+      Alert.alert('Could not attach', String(e?.message ?? e));
     }
   }, [singleAsset, tournament, defaultRoundIndex]);
 
@@ -115,31 +151,53 @@ export default function GalleryScreen({ route, navigation }) {
     try {
       await attachManyMedia({ tournamentId: tournament.id, items: payload });
     } catch (e) {
-      Alert.alert('No se pudieron adjuntar', String(e?.message ?? e));
+      Alert.alert('Could not attach', String(e?.message ?? e));
     }
   }, [tournament]);
 
   const openCard = (filteredIndex) => setLightbox({ visible: true, index: filteredIndex });
 
-  return (
-    <SafeAreaView style={s.container} edges={['top', 'bottom']}>
-      <View style={s.header}>
-        <TouchableOpacity onPress={() => navigation.goBack()} style={s.backBtn}>
-          <Feather name="chevron-left" size={22} color={theme.accent.primary} />
-        </TouchableOpacity>
-        <Text style={s.title}>Recuerdos</Text>
-        <View style={{ width: 22 }} />
-      </View>
+  // Stories play through every round's media, not just the tapped round —
+  // flatten all rounds in order and start at the tapped round's first photo.
+  const openStories = (entry) => {
+    const allItems = roundEntries.flatMap((e) => e?.items ?? []);
+    const startIndex = Math.max(0, allItems.findIndex((m) => m.roundId === entry.roundId));
+    setStories({ visible: true, items: allItems, startIndex });
+  };
 
+  // No filter active and no media at all → this is a brand-new gallery.
+  const isFirstMemory =
+    items.length === 0 && activeHole == null && activeKind === 'all';
+
+  const renderBody = () => {
+    if (loadState === 'loading') {
+      return (
+        <View style={s.stateBox}>
+          <ActivityIndicator color={theme.accent.primary} />
+          <Text style={s.stateText}>Loading memories…</Text>
+        </View>
+      );
+    }
+    if (loadState === 'error') {
+      return (
+        <View style={s.stateBox}>
+          <Feather name="alert-triangle" size={32} color={theme.text.muted} />
+          <Text style={s.stateText}>Couldn't load this gallery.</Text>
+          <TouchableOpacity style={s.retryBtn} onPress={loadTournament} activeOpacity={0.85}>
+            <Feather name="refresh-cw" size={14} color={theme.text.inverse} />
+            <Text style={s.retryText}>Retry</Text>
+          </TouchableOpacity>
+        </View>
+      );
+    }
+    return (
       <ScrollView contentContainerStyle={s.scroll}>
-        <Text style={s.subtitle}>
-          {items.length} · {tournament?.name ?? ''}
-        </Text>
-
-        {rounds?.length ? (
+        {/* A game is a single round — only multi-round tournaments need a
+            round selector here. */}
+        {rounds?.length > 1 ? (
           <MemoriesRoundRow
             entries={roundEntries}
-            onOpenRound={(entry) => setStories({ visible: true, entry })}
+            onOpenRound={openStories}
           />
         ) : null}
 
@@ -156,10 +214,24 @@ export default function GalleryScreen({ route, navigation }) {
           onChange={setActiveKind}
         />
 
-        {filtered.length === 0 ? (
+        {isFirstMemory ? (
+          <View style={s.empty}>
+            <Feather name="camera" size={34} color={theme.text.muted} />
+            <Text style={s.emptyTitle}>No memories yet</Text>
+            <Text style={s.emptyText}>
+              Tap the + button below to add your first photo or video.
+            </Text>
+            <Feather
+              name="arrow-down"
+              size={20}
+              color={theme.accent.primary}
+              style={{ marginTop: 4 }}
+            />
+          </View>
+        ) : filtered.length === 0 ? (
           <View style={s.empty}>
             <Feather name="image" size={32} color={theme.text.muted} />
-            <Text style={s.emptyText}>Sin recuerdos para este filtro.</Text>
+            <Text style={s.emptyText}>No memories for this filter.</Text>
           </View>
         ) : (
           <View style={s.mosaic}>
@@ -186,6 +258,20 @@ export default function GalleryScreen({ route, navigation }) {
           </View>
         )}
       </ScrollView>
+    );
+  };
+
+  return (
+    <SafeAreaView style={s.container} edges={['top', 'bottom']}>
+      <View style={s.header}>
+        <TouchableOpacity onPress={() => navigation.goBack()} style={s.backBtn}>
+          <Feather name="chevron-left" size={22} color={theme.accent.primary} />
+        </TouchableOpacity>
+        <Text style={s.title}>Memories</Text>
+        <View style={{ width: 22 }} />
+      </View>
+
+      {renderBody()}
 
       <MediaLightbox
         visible={lightbox.visible}
@@ -196,12 +282,13 @@ export default function GalleryScreen({ route, navigation }) {
 
       <MemoriesStoriesViewer
         visible={stories.visible}
-        entry={stories.entry}
-        round={rounds?.[stories.entry?.roundIndex ?? -1] ?? null}
-        onClose={() => setStories({ visible: false, entry: null })}
+        items={stories.items}
+        startIndex={stories.startIndex}
+        rounds={rounds}
+        onClose={() => setStories({ visible: false, items: [], startIndex: 0 })}
       />
 
-      <TouchableOpacity style={s.fab} onPress={openAdd} accessibilityLabel="Añadir recuerdo" activeOpacity={0.85}>
+      <TouchableOpacity style={s.fab} onPress={openAdd} accessibilityLabel="Add memory" activeOpacity={0.85}>
         <Feather name="plus" size={26} color={theme.text.inverse} />
       </TouchableOpacity>
 
@@ -238,17 +325,29 @@ const makeStyles = (theme) => StyleSheet.create({
   },
   backBtn: { padding: 4 },
   title: { fontFamily: 'PlayfairDisplay-Bold', fontSize: 20, color: theme.text.primary },
-  scroll: { paddingBottom: 32, gap: 10 },
-  subtitle: {
-    paddingHorizontal: 16, marginTop: -4, marginBottom: 4,
-    fontFamily: 'PlusJakartaSans-Regular', fontSize: 12, color: theme.text.muted,
-  },
+  scroll: { paddingTop: 8, paddingBottom: 32, gap: 10 },
   mosaic: { flexDirection: 'row', paddingHorizontal: 12, gap: 6 },
   col: { flex: 1, gap: 6 },
-  empty: { paddingVertical: 60, alignItems: 'center' },
+  stateBox: {
+    flex: 1, alignItems: 'center', justifyContent: 'center', gap: 12, paddingHorizontal: 40,
+  },
+  stateText: {
+    color: theme.text.muted, fontFamily: 'PlusJakartaSans-Medium',
+    fontSize: 13, textAlign: 'center',
+  },
+  retryBtn: {
+    flexDirection: 'row', alignItems: 'center', gap: 7, marginTop: 4,
+    backgroundColor: theme.accent.primary, borderRadius: 12,
+    paddingHorizontal: 18, paddingVertical: 10,
+  },
+  retryText: {
+    fontFamily: 'PlusJakartaSans-Bold', color: theme.text.inverse, fontSize: 13,
+  },
+  empty: { paddingVertical: 60, alignItems: 'center', gap: 8, paddingHorizontal: 40 },
+  emptyTitle: { fontFamily: 'PlayfairDisplay-Bold', fontSize: 17, color: theme.text.primary },
   emptyText: {
-    marginTop: 8, color: theme.text.muted,
-    fontFamily: 'PlusJakartaSans-Regular',
+    color: theme.text.muted,
+    fontFamily: 'PlusJakartaSans-Regular', fontSize: 13, textAlign: 'center',
   },
   fab: {
     position: 'absolute',

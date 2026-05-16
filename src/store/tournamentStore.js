@@ -3,6 +3,25 @@ import { supabase } from '../lib/supabase';
 import { tournamentsIndex } from './tournamentsIndex';
 import { mergeTournaments } from './merge';
 import { isOnline } from '../lib/connectivity';
+// Pure scoring & handicap math lives in ./scoring. Imported here for this
+// module's own use and re-exported below so existing call sites that do
+// `import { calcStablefordPoints } from '../store/tournamentStore'` keep working.
+import {
+  STANDARD_SLOPE,
+  totalParFromHoles,
+  calcPlayingHandicap,
+  deriveRoundPlayingHandicap,
+  normalizeRoundHandicaps,
+  getPlayingHandicap,
+  recomputeRoundPlayingHandicaps,
+  calcExtraShots,
+  calcStablefordPoints,
+  matchPlayHolePts,
+  matchPlayRoundTally,
+  pickupStrokes,
+  randomPairs,
+  isRoundPlayed,
+} from './scoring';
 
 const ACTIVE_ID_KEY = '@golf_active_id';
 const LEGACY_TOURNAMENTS_KEY = '@golf_tournaments';
@@ -14,7 +33,20 @@ const LAST_SYNC_AT_KEY = '@golf_last_sync_at';       // ms epoch of last success
 
 const CONFLICT_LOG_CAP = 20;
 
-// Runs once: pushes any locally-stored tournaments up to Supabase then clears local keys.
+function _safeParse(json, label) {
+  try {
+    return JSON.parse(json);
+  } catch (e) {
+    console.warn(`migrate: could not parse ${label}, skipping`, e);
+    return null;
+  }
+}
+
+// Runs once: pushes any locally-stored tournaments up to Supabase then clears
+// the legacy keys. A legacy key is only removed after its data parsed cleanly
+// AND the remote upsert succeeded — a parse failure or network error leaves it
+// on disk so the migration is retried on a future launch instead of silently
+// losing the tournament.
 async function migrate() {
   const [legacy, legacyAll] = await Promise.all([
     AsyncStorage.getItem(LEGACY_KEY),
@@ -22,30 +54,41 @@ async function migrate() {
   ]);
 
   const toUpsert = [];
+  const keysToClear = [];
 
   if (legacyAll) {
-    const ts = JSON.parse(legacyAll);
-    ts.forEach((t) => toUpsert.push({ id: t.id, name: t.name, created_at: t.createdAt, data: t }));
-    await AsyncStorage.removeItem(LEGACY_TOURNAMENTS_KEY);
+    const ts = _safeParse(legacyAll, LEGACY_TOURNAMENTS_KEY);
+    if (Array.isArray(ts)) {
+      ts.forEach((t) => toUpsert.push({ id: t.id, name: t.name, created_at: t.createdAt, data: t }));
+      keysToClear.push(LEGACY_TOURNAMENTS_KEY);
+    }
   }
 
   if (legacy) {
-    const t = JSON.parse(legacy);
-    if (!toUpsert.find((r) => r.id === t.id)) {
-      toUpsert.push({ id: t.id, name: t.name, created_at: t.createdAt, data: t });
+    const t = _safeParse(legacy, LEGACY_KEY);
+    if (t && t.id != null) {
+      if (!toUpsert.find((r) => r.id === t.id)) {
+        toUpsert.push({ id: t.id, name: t.name, created_at: t.createdAt, data: t });
+      }
+      keysToClear.push(LEGACY_KEY);
     }
-    await AsyncStorage.removeItem(LEGACY_KEY);
   }
 
   if (toUpsert.length > 0) {
-    await supabase.from('tournaments').upsert(toUpsert);
+    const { error } = await supabase.from('tournaments').upsert(toUpsert);
+    if (error) throw error; // keep legacy keys intact; retry on next launch
+  }
+
+  // Only reached when the upsert succeeded (or there was nothing to push).
+  if (keysToClear.length > 0) {
+    await AsyncStorage.multiRemove(keysToClear);
   }
 }
 
 let _migrated = false;
 async function ensureMigrated() {
   if (_migrated) return;
-  await migrate();
+  await migrate();   // throws on failure -> _migrated stays false -> retried
   _migrated = true;
 }
 
@@ -210,7 +253,54 @@ export async function loadTournament() {
   }
 }
 
+// Load a specific tournament by id — local cache first, then remote. Unlike
+// loadTournament() this does NOT depend on which tournament is "active", so
+// screens reached from the feed (Gallery, RoundSummary) show the tournament
+// they were opened for rather than whatever was last opened.
+export async function getTournament(id) {
+  if (!id) return null;
+  const cached = await readLocal(id);
+  if (cached) {
+    if (isOnline()) {
+      fetchRemoteTournament(id)
+        .then(async (remote) => {
+          if (!remote) return;
+          const latest = await readLocal(id);
+          const { merged } = mergeTournaments(latest ?? cached, remote);
+          await saveLocal(merged);
+        })
+        .catch(() => {});
+    }
+    return cached;
+  }
+  if (!isOnline()) return null;
+  try {
+    return await fetchRemoteTournament(id);
+  } catch (_) {
+    return null;
+  }
+}
+
 const ACTIVE_TOURNAMENT_KEY = '@golf_tournament_'; // + id
+
+// Mirror the tournament's user-linked players into tournament_participants
+// so the activity feed can discover tournaments a friend played without the
+// current user (see migrations/20260515_friends_and_feed.sql). Guarded by a
+// per-tournament signature so it only writes when the player set changes —
+// every score entry calls persistRemote and we don't want a write each time.
+const _participantSig = new Map();
+async function syncTournamentParticipants(tournament) {
+  const ids = [...new Set(
+    (tournament.players ?? []).map((p) => p?.user_id).filter(Boolean),
+  )];
+  const sig = ids.slice().sort().join(',');
+  if (_participantSig.get(tournament.id) === sig) return;
+  if (ids.length === 0) { _participantSig.set(tournament.id, sig); return; }
+  const rows = ids.map((user_id) => ({ tournament_id: tournament.id, user_id }));
+  const { error } = await supabase.from('tournament_participants').upsert(rows);
+  if (error) throw error;
+  _participantSig.set(tournament.id, sig);
+}
 
 async function persistRemote(tournament) {
   const userId = await getCurrentUserId();
@@ -219,6 +309,8 @@ async function persistRemote(tournament) {
   if (userId) row.created_by = userId;
   const { error } = await supabase.from('tournaments').upsert(row);
   if (error) throw error;
+  // Best-effort: a failed participant sync must not fail the tournament save.
+  syncTournamentParticipants(cleanData).catch(() => {});
 }
 
 // Skip redundant writes: loadTournament's background refresh and
@@ -314,78 +406,23 @@ export async function deleteTournament(id) {
   _emitChange();
 }
 
-export const STANDARD_SLOPE = 113;
-
-// Sum hole pars; used as the "Par" term in the WHS course-handicap formula.
-export function totalParFromHoles(holes) {
-  if (!Array.isArray(holes)) return 0;
-  return holes.reduce((sum, h) => sum + (parseInt(h?.par, 10) || 0), 0);
-}
-
-// WHS course handicap: HI × (slope/113) + (CR − par), rounded.
-// No slope → raw index (can't compute either term meaningfully).
-// Missing CR or par → slope-only fallback.
-export function calcPlayingHandicap(index, slope, rating, par) {
-  const idx = parseInt(index, 10) || 0;
-  const sv = parseInt(slope, 10) || 0;
-  if (sv <= 0) return idx;
-  const slopeAdj = idx * (sv / STANDARD_SLOPE);
-  const cr = parseFloat(rating);
-  const pv = parseInt(par, 10) || 0;
-  const crAdj = (Number.isFinite(cr) && pv > 0) ? (cr - pv) : 0;
-  return Math.round(slopeAdj + crAdj);
-}
-
-// Convenience: derive a player's auto playing handicap for a given round.
-export function deriveRoundPlayingHandicap(handicap, round) {
-  return calcPlayingHandicap(
-    handicap,
-    round?.slope,
-    round?.courseRating,
-    totalParFromHoles(round?.holes),
-  );
-}
-
-// Ensure every current player has an entry in round.playerHandicaps. Missing
-// entries are backfilled from the player's base index applied to round.slope.
-// For legacy rounds lacking manualHandicaps, infer manual overrides by
-// comparing stored value to the slope-derived value.
-export function normalizeRoundHandicaps(round, players) {
-  const playerHandicaps = { ...(round.playerHandicaps ?? {}) };
-  const manualHandicaps = { ...(round.manualHandicaps ?? {}) };
-  const hasLegacyFlags = round.manualHandicaps != null;
-  players.forEach((p) => {
-    const auto = deriveRoundPlayingHandicap(p.handicap, round);
-    const current = playerHandicaps[p.id];
-    if (current == null) {
-      playerHandicaps[p.id] = auto;
-    } else if (!hasLegacyFlags && round.slope && Number(current) !== auto) {
-      manualHandicaps[p.id] = true;
-    }
-  });
-  return { ...round, playerHandicaps, manualHandicaps };
-}
-
-// Read the playing handicap for a player in a round. Falls back to deriving
-// from the player's base index × round slope when the round has no stored
-// entry (e.g. legacy data).
-export function getPlayingHandicap(round, player) {
-  const stored = round.playerHandicaps?.[player.id];
-  if (stored != null) return Number(stored);
-  return deriveRoundPlayingHandicap(player.handicap, round);
-}
-
-// Recompute playerHandicaps for non-manual entries when base index or slope
-// changes. Preserves manual overrides.
-export function recomputeRoundPlayingHandicaps(round, players) {
-  const playerHandicaps = { ...(round.playerHandicaps ?? {}) };
-  const manual = round.manualHandicaps ?? {};
-  players.forEach((p) => {
-    if (manual[p.id]) return;
-    playerHandicaps[p.id] = deriveRoundPlayingHandicap(p.handicap, round);
-  });
-  return { ...round, playerHandicaps };
-}
+// Re-export the pure scoring/handicap math (defined in ./scoring) so existing
+// importers of these names from this module keep working.
+export {
+  STANDARD_SLOPE,
+  totalParFromHoles,
+  calcPlayingHandicap,
+  deriveRoundPlayingHandicap,
+  normalizeRoundHandicaps,
+  getPlayingHandicap,
+  recomputeRoundPlayingHandicaps,
+  calcExtraShots,
+  calcStablefordPoints,
+  matchPlayHolePts,
+  matchPlayRoundTally,
+  pickupStrokes,
+  randomPairs,
+} from './scoring';
 
 // Push a player library edit (name/handicap) into every tournament that
 // references this player id. Updates tournament.players and the player
@@ -489,85 +526,9 @@ export function addPlayerRoundPatches(tournament, player) {
   return patches;
 }
 
-export function calcExtraShots(playerHandicap, holeStrokeIndex) {
-  const base = Math.floor(playerHandicap / 18);
-  const remainder = playerHandicap % 18;
-  return base + (holeStrokeIndex <= remainder ? 1 : 0);
-}
-
-export function calcStablefordPoints(par, strokes, playerHandicap, holeStrokeIndex) {
-  if (!strokes || strokes <= 0) return 0;
-  const extra = calcExtraShots(playerHandicap, holeStrokeIndex);
-  const points = 2 + par - strokes + extra;
-  return Math.max(0, points);
-}
-
-// Match Play: 2 players, per-hole 1-vs-1. Returns 1 if `playerId` won the hole
-// (lower net strokes), 0 if they lost OR halved, null if either side hasn't
-// scored yet. Caller can derive halved holes by checking that both sides
-// returned 0 for the same hole.
-export function matchPlayHolePts(hole, playerId, players, scores, playerHandicapsByPlayerId) {
-  if (!players || players.length !== 2) return null;
-  const [a, b] = players;
-  const strA = scores?.[a.id]?.[hole.number];
-  const strB = scores?.[b.id]?.[hole.number];
-  if (strA == null || strB == null) return null;
-  const hA = playerHandicapsByPlayerId?.[a.id] ?? a.handicap ?? 0;
-  const hB = playerHandicapsByPlayerId?.[b.id] ?? b.handicap ?? 0;
-  const netA = strA - calcExtraShots(hA, hole.strokeIndex);
-  const netB = strB - calcExtraShots(hB, hole.strokeIndex);
-  if (netA === netB) return 0;
-  const winnerId = netA < netB ? a.id : b.id;
-  return playerId === winnerId ? 1 : 0;
-}
-
-// Match Play round tally: holes won by each player + halved count + status.
-// Status is one of "A up 2", "All square", or "A wins 3&2" (clinched).
-export function matchPlayRoundTally(round, players) {
-  if (!players || players.length !== 2) return null;
-  const [a, b] = players;
-  const scores = round?.scores ?? {};
-  const playerHandicaps = round?.playerHandicaps ?? {};
-  const holes = round?.holes ?? [];
-  let aWins = 0;
-  let bWins = 0;
-  let halved = 0;
-  let played = 0;
-  for (const hole of holes) {
-    const pts = matchPlayHolePts(hole, a.id, players, scores, playerHandicaps);
-    if (pts == null) continue;
-    played++;
-    if (pts === 1) aWins++;
-    else {
-      // a didn't win — either b did or it was halved
-      const bPts = matchPlayHolePts(hole, b.id, players, scores, playerHandicaps);
-      if (bPts === 1) bWins++;
-      else halved++;
-    }
-  }
-  const holesLeft = holes.length - played;
-  const lead = Math.abs(aWins - bWins);
-  const leaderIdx = aWins > bWins ? 0 : bWins > aWins ? 1 : null;
-  const clinched = leaderIdx !== null && lead > holesLeft;
-  return { aWins, bWins, halved, played, holesLeft, lead, leaderIdx, clinched };
-}
-
-// Lowest stroke count that still yields 0 Stableford points on this hole for this
-// player. Use as the recorded score when a player picks up the ball.
-export function pickupStrokes(par, playerHandicap, holeStrokeIndex) {
-  const extra = calcExtraShots(playerHandicap, holeStrokeIndex);
-  return par + 2 + extra;
-}
-
-export function randomPairs(players) {
-  const shuffled = [...players].sort(() => Math.random() - 0.5);
-  const pairs = [];
-  for (let i = 0; i < shuffled.length; i += 2) {
-    const pair = [shuffled[i], shuffled[i + 1]].filter(Boolean);
-    if (pair.length > 0) pairs.push(pair);
-  }
-  return pairs;
-}
+// calcExtraShots, calcStablefordPoints, matchPlayHolePts, matchPlayRoundTally,
+// pickupStrokes and randomPairs now live in ./scoring (imported + re-exported
+// at the top of this file).
 
 export const DEFAULT_SETTINGS = {
   // 'individual' = Stableford ranked per player (each player's own pair)
@@ -681,13 +642,7 @@ export function calcBestWorstBall(round, players) {
   return { pair1, pair2, holes, bestBall, worstBall };
 }
 
-// Rounds count towards tournament totals only once the user has advanced to
-// them — otherwise auto-par scores from incidental navigation would inflate
-// the tournament total.
-function isRoundPlayed(round, index, tournament) {
-  if (index > (tournament.currentRound ?? 0)) return false;
-  return !!round.scores;
-}
+// isRoundPlayed now lives in ./scoring (imported at the top of this file).
 
 // Per-pair, per-hole assign each member a role: exactly one is the "best
 // ball" (higher Stableford on that hole) and the other is the "worst ball".
@@ -1029,39 +984,46 @@ export function tournamentLeaderboard(tournament) {
   return totals.sort((a, b) => b.points - a.points);
 }
 
+// Ensure the tournament has one editor invite code and one viewer invite
+// code, then return both. They are stored as separate rows with a fixed
+// role each, so a viewer link can never silently become an editor link —
+// the role a code grants is decided once, when the code is minted.
 export async function generateInviteCode(tournamentId) {
-  // Pick the oldest existing invite if there are several (historical data
-  // may have multiple rows before the "one invite per tournament" intent
-  // was enforced). maybeSingle() throws on multiple rows, so use limit(1).
   const { data: existing, error: existingErr } = await supabase
     .from('tournament_invites').select('code, role')
     .eq('tournament_id', tournamentId)
-    .order('created_at', { ascending: true })
-    .limit(1);
+    .order('created_at', { ascending: true });
   if (existingErr) throw existingErr;
-  if (existing?.[0]) return { code: existing[0].code, role: existing[0].role ?? 'editor' };
 
-  const userId = await getCurrentUserId();
-  const code = Math.random().toString(36).substring(2, 8).toUpperCase();
-  const { data, error } = await supabase
-    .from('tournament_invites')
-    .insert({ tournament_id: tournamentId, code, created_by: userId, role: 'editor' })
-    .select('code, role').single();
-  if (error) throw error;
-  return { code: data.code, role: data.role ?? 'editor' };
-}
-
-// Flip an existing invite code between editor / viewer so owners can decide
-// whether a shared link gives read-only access or scoring rights.
-export async function setInviteRole(tournamentId, role) {
-  if (role !== 'editor' && role !== 'viewer') {
-    throw new Error(`Unknown role: ${role}`);
+  // Oldest code wins per role if historical data has duplicate rows.
+  const byRole = {};
+  for (const row of existing ?? []) {
+    const role = row.role ?? 'editor';
+    if (!byRole[role]) byRole[role] = row.code;
   }
-  const { error } = await supabase
-    .from('tournament_invites')
-    .update({ role })
-    .eq('tournament_id', tournamentId);
-  if (error) throw error;
+
+  const missing = ['editor', 'viewer'].filter((r) => !byRole[r]);
+  if (missing.length > 0) {
+    const userId = await getCurrentUserId();
+    const rows = missing.map((role) => ({
+      tournament_id: tournamentId,
+      // 8 chars of base-36 (~2.8e12 space) so codes can't be feasibly
+      // brute-forced via the redeem RPC; the invites table itself is no
+      // longer readable (see 20260516_security_hardening.sql).
+      code: (
+        Math.random().toString(36).substring(2, 10)
+        + Math.random().toString(36).substring(2, 10)
+      ).substring(0, 8).toUpperCase(),
+      created_by: userId,
+      role,
+    }));
+    const { data: inserted, error: insErr } = await supabase
+      .from('tournament_invites').insert(rows).select('code, role');
+    if (insErr) throw insErr;
+    for (const row of inserted ?? []) byRole[row.role ?? 'editor'] = row.code;
+  }
+
+  return { editorCode: byRole.editor, viewerCode: byRole.viewer };
 }
 
 // Members list for a tournament: owner + everyone who joined via an invite
@@ -1129,20 +1091,17 @@ export async function joinTournamentByCode(code) {
   const userId = await getCurrentUserId();
   if (!userId) throw new Error('Must be signed in to join');
 
-  const { data: invite, error: inviteErr } = await supabase
-    .from('tournament_invites').select('tournament_id, role')
-    .eq('code', code.toUpperCase().trim()).maybeSingle();
-  if (inviteErr) throw inviteErr;
-  if (!invite) throw new Error('Invalid code — check with the tournament owner');
-
-  // Default = editor: the common use case is friends scoring a tournament
-  // together. Viewer-only invites are a future per-invite opt-in.
-  const role = invite.role ?? 'editor';
-  const { error } = await supabase
-    .from('tournament_members')
-    .upsert({ tournament_id: invite.tournament_id, user_id: userId, role });
+  // Redemption runs server-side via the redeem_invite_code SECURITY DEFINER
+  // RPC: it validates the code (revoked / expired / usage cap), records the
+  // membership, and bumps the use counter — all without exposing the
+  // tournament_invites table to the joining user. See migration
+  // 20260516_security_hardening.sql.
+  const { data, error } = await supabase
+    .rpc('redeem_invite_code', { p_code: String(code ?? '').toUpperCase().trim() });
   if (error) throw error;
-  return invite.tournament_id;
+  const row = Array.isArray(data) ? data[0] : data;
+  if (!row) throw new Error('Invalid code — check with the tournament owner');
+  return { tournamentId: row.tournament_id, role: row.role ?? 'editor' };
 }
 
 // A round is "complete" when every player has a score recorded for every

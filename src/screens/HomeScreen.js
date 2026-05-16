@@ -2,6 +2,7 @@ import React, { useEffect, useState, useCallback, useRef, useMemo, startTransiti
 import { View, Text, TouchableOpacity, StyleSheet, ScrollView, Switch, Alert, FlatList, Platform, Modal, Pressable, ActivityIndicator, Share } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Feather } from '@expo/vector-icons';
+import QRCode from 'react-native-qrcode-svg';
 
 import { useTheme } from '../theme/ThemeContext';
 import { useAuth } from '../context/AuthContext';
@@ -18,7 +19,7 @@ import {
   tournamentPlayerClinched, roundPairClinched,
   isRoundComplete, isTournamentFinished, subscribeTournamentChanges,
   matchPlayRoundTally, addPlayerRoundPatches,
-  DEFAULT_SETTINGS, generateInviteCode, setInviteRole,
+  DEFAULT_SETTINGS, generateInviteCode,
 } from '../store/tournamentStore';
 import { mutate } from '../store/mutate';
 import { consumePendingPlayers } from '../lib/selectionBridge';
@@ -94,6 +95,9 @@ export default function HomeScreen({ navigation, route }) {
   // trigger a visible mini-scroll back to an intermediate page.
   const selectedRoundFromScroll = useRef(false);
   const [showSettings, setShowSettings] = useState(false);
+  // List-view overflow menu — surfaces Friends / Stats / Profile, which are
+  // otherwise buried (Friends had no entry point at all on the list view).
+  const [showListMenu, setShowListMenu] = useState(false);
   const [showRoundEdit, setShowRoundEdit] = useState(false);
   const [showResetHistory, setShowResetHistory] = useState(false);
   const [undoSnack, setUndoSnack] = useState(null); // { roundIndex, snapshot, at }
@@ -102,9 +106,28 @@ export default function HomeScreen({ navigation, route }) {
   const [roundBestBall, setRoundBestBall] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
   const [showInvite, setShowInvite] = useState(false);
-  const [inviteCode, setInviteCode] = useState('');
+  const [inviteCodes, setInviteCodes] = useState({ editor: '', viewer: '' });
   const [inviteRoleState, setInviteRoleState] = useState('editor');
   const [inviteLoading, setInviteLoading] = useState(false);
+  // Surfaced inline when reload() throws — instead of silently dropping the
+  // user into an empty state with no way to recover.
+  const [reloadError, setReloadError] = useState(null);
+  // Themed in-app confirmation modal. `confirm()` returns a promise that
+  // resolves true/false; replaces window.confirm so web matches native.
+  const [confirmState, setConfirmState] = useState(null);
+  const confirmResolverRef = useRef(null);
+  const confirm = useCallback(({ title, message, confirmLabel = 'Confirm', destructive = false }) => (
+    new Promise((resolve) => {
+      confirmResolverRef.current = resolve;
+      setConfirmState({ title, message, confirmLabel, destructive });
+    })
+  ), []);
+  const resolveConfirm = useCallback((result) => {
+    const resolver = confirmResolverRef.current;
+    confirmResolverRef.current = null;
+    setConfirmState(null);
+    if (resolver) resolver(result);
+  }, []);
   // Shares the same persisted preference as ScorecardScreen so that hiding
   // running totals follows the user across screens.
   const [showRunning, setShowRunningState] = useState(true);
@@ -147,6 +170,11 @@ export default function HomeScreen({ navigation, route }) {
         setListStale(listResult.stale);
         setOpenableIds(listResult.openableIds);
         if (t) setSelectedRound(chooseInitialRound(t));
+        setReloadError(null);
+      } catch (err) {
+        // Surface the failure inline (with a Retry) rather than letting the
+        // empty state render as if there were genuinely nothing to show.
+        setReloadError(err?.message ?? 'Could not load your tournaments');
       } finally {
         hasLoadedOnceRef.current = true;
         setLoading(false);
@@ -294,19 +322,24 @@ export default function HomeScreen({ navigation, route }) {
   async function resetCurrentRound() {
     if (!tournament) return;
     const idx = selectedRound;
-    const confirmed = Platform.OS === 'web'
-      ? window.confirm(`Reset Round ${idx + 1}? Scores and notes will be cleared.`)
-      : await new Promise((resolve) => Alert.alert(
-          'Reset Round', `Reset Round ${idx + 1}? Scores and notes will be cleared.`,
-          [{ text: 'Cancel', style: 'cancel', onPress: () => resolve(false) },
-           { text: 'Reset', style: 'destructive', onPress: () => resolve(true) }],
-        ));
+    const confirmed = await confirm({
+      title: 'Reset Round',
+      message: `Reset Round ${idx + 1}? Scores and notes will be cleared.`,
+      confirmLabel: 'Reset',
+      destructive: true,
+    });
     if (!confirmed) return;
 
     const roundBefore = tournament.rounds[idx];
     const prevScores = roundBefore?.scores ?? {};
-    const prevNotes = roundBefore?.notes ?? '';
-    const hasContent = Object.keys(prevScores).length > 0 || (prevNotes?.trim?.() ?? '').length > 0;
+    const prevNotes = roundBefore?.notes ?? {};
+    // Notes are an object { round, hole: { [n]: text } }; treat the round as
+    // having note content if the round-level note or any hole note is set.
+    const hasNoteContent = typeof prevNotes === 'string'
+      ? prevNotes.trim().length > 0
+      : [prevNotes.round, ...Object.values(prevNotes.hole ?? {})]
+          .some((t) => typeof t === 'string' && t.trim().length > 0);
+    const hasContent = Object.keys(prevScores).length > 0 || hasNoteContent;
     const snapshot = { scores: prevScores, notes: prevNotes, at: new Date().toISOString() };
 
     const updated = { ...tournament };
@@ -318,7 +351,7 @@ export default function HomeScreen({ navigation, route }) {
         // Cap to last 10 entries to avoid unbounded growth
         if (history.length > 10) history.splice(0, history.length - 10);
       }
-      return { ...r, scores: {}, notes: '', resetHistory: history };
+      return { ...r, scores: {}, notes: {}, resetHistory: history };
     });
     await saveTournament(updated);
     await reload();
@@ -353,13 +386,11 @@ export default function HomeScreen({ navigation, route }) {
     const round = tournament.rounds[idx];
     const entry = round?.resetHistory?.[entryIndex];
     if (!entry) return;
-    const confirmed = Platform.OS === 'web'
-      ? window.confirm('Restore this snapshot? Current scores for this round will be overwritten.')
-      : await new Promise((resolve) => Alert.alert(
-          'Restore snapshot', 'Restore this snapshot? Current scores for this round will be overwritten.',
-          [{ text: 'Cancel', style: 'cancel', onPress: () => resolve(false) },
-           { text: 'Restore', style: 'default', onPress: () => resolve(true) }],
-        ));
+    const confirmed = await confirm({
+      title: 'Restore snapshot',
+      message: 'Restore this snapshot? Current scores for this round will be overwritten.',
+      confirmLabel: 'Restore',
+    });
     if (!confirmed) return;
     const updated = { ...tournament };
     updated.rounds = updated.rounds.map((r, i) => (
@@ -386,18 +417,17 @@ export default function HomeScreen({ navigation, route }) {
     if (navigation.canGoBack()) {
       navigation.goBack();
     } else {
-      navigation.navigate('Home');
+      navigation.navigate('Main', { screen: 'Home' });
     }
   }
 
   async function confirmDelete(t) {
-    const confirmed = Platform.OS === 'web'
-      ? window.confirm(`Delete "${t.name}"? This cannot be undone.`)
-      : await new Promise((resolve) => Alert.alert(
-          'Delete Tournament', `Delete "${t.name}"? This cannot be undone.`,
-          [{ text: 'Cancel', style: 'cancel', onPress: () => resolve(false) },
-           { text: 'Delete', style: 'destructive', onPress: () => resolve(true) }],
-        ));
+    const confirmed = await confirm({
+      title: 'Delete Tournament',
+      message: `Delete "${t.name}"? This cannot be undone.`,
+      confirmLabel: 'Delete',
+      destructive: true,
+    });
     if (!confirmed) return;
     try {
       await deleteTournament(t.id);
@@ -427,7 +457,7 @@ export default function HomeScreen({ navigation, route }) {
       setTournament(updated);
       if (finished) {
         if (viewMode === 'tournament' && navigation.canGoBack()) navigation.goBack();
-        else navigation.navigate('Home');
+        else navigation.navigate('Main', { screen: 'Home' });
       }
     } catch (err) {
       const msg = err?.message ?? 'Could not update tournament';
@@ -444,9 +474,8 @@ export default function HomeScreen({ navigation, route }) {
     setInviteLoading(true);
     setShowInvite(true);
     try {
-      const { code, role } = await generateInviteCode(tournament.id);
-      setInviteCode(code);
-      setInviteRoleState(role);
+      const { editorCode, viewerCode } = await generateInviteCode(tournament.id);
+      setInviteCodes({ editor: editorCode, viewer: viewerCode });
     } catch (err) {
       setShowInvite(false);
       Alert.alert('Error', err.message);
@@ -455,17 +484,12 @@ export default function HomeScreen({ navigation, route }) {
     }
   }
 
-  async function changeInviteRole(next) {
-    if (!tournament || next === inviteRoleState) return;
-    const prev = inviteRoleState;
-    setInviteRoleState(next); // optimistic
-    try {
-      await setInviteRole(tournament.id, next);
-    } catch (err) {
-      setInviteRoleState(prev);
-      Alert.alert('Error', err.message ?? 'Could not change invite role');
-    }
+  // The editor and viewer codes are distinct and fixed; switching role just
+  // shows the matching code — no server round-trip, nothing to mutate.
+  function changeInviteRole(next) {
+    setInviteRoleState(next);
   }
+  const inviteCode = inviteCodes[inviteRoleState] ?? '';
 
   // Hoist memoised derivations above the early returns so the hook order
   // stays stable across showList / showTournament toggles.
@@ -547,23 +571,15 @@ export default function HomeScreen({ navigation, route }) {
         <View style={s.header}>
           <View>
             <Text style={s.title}>Golf Partner</Text>
-            <Text style={s.subtitle}>{(() => {
-              const games = allTournaments.filter((t) => t.kind === 'game').length;
-              const tourn = allTournaments.length - games;
-              if (games === 0) return `${tourn} ${tourn === 1 ? 'tournament' : 'tournaments'}`;
-              if (tourn === 0) return `${games} ${games === 1 ? 'game' : 'games'}`;
-              return `${games} ${games === 1 ? 'game' : 'games'} · ${tourn} ${tourn === 1 ? 'tournament' : 'tournaments'}`;
-            })()}</Text>
           </View>
           <View style={s.headerActions}>
-            <TouchableOpacity style={s.iconBtn} onPress={() => navigation.navigate('JoinTournament')} activeOpacity={0.7} accessibilityLabel="Join">
-              <Feather name="link" size={18} color={theme.accent.primary} />
-            </TouchableOpacity>
-            <TouchableOpacity style={s.iconBtn} onPress={() => navigation.navigate('PlayersLibrary')} activeOpacity={0.7}>
-              <Feather name="users" size={18} color={theme.accent.primary} />
-            </TouchableOpacity>
-            <TouchableOpacity style={s.iconBtn} onPress={() => navigation.navigate('CoursesLibrary')} activeOpacity={0.7}>
-              <Feather name="map" size={18} color={theme.accent.primary} />
+            <TouchableOpacity
+              style={s.iconBtn}
+              onPress={() => setShowListMenu(true)}
+              activeOpacity={0.7}
+              accessibilityLabel="Menu"
+            >
+              <Feather name="menu" size={18} color={theme.accent.primary} />
             </TouchableOpacity>
             <TouchableOpacity style={s.avatarBtn} onPress={() => navigation.navigate('Profile')} activeOpacity={0.7}>
               <Text style={s.avatarText}>{userInitials}</Text>
@@ -577,39 +593,77 @@ export default function HomeScreen({ navigation, route }) {
           refreshing={refreshing}
           onRefresh={onRefresh}
         >
+        <Text style={s.startHeading}>Start playing</Text>
         <View style={s.startTilesRow}>
           <TouchableOpacity
             style={[s.startTile, s.startTileFeatured]}
             onPress={() => navigation.navigate('Setup', { kind: 'game' })}
-            activeOpacity={0.85}
+            activeOpacity={0.88}
           >
-            <View style={s.startTileIconWrap}>
-              <Feather name="flag" size={18} color={theme.accent.primary} />
+            <View style={[s.startTileIconWrap, s.startTileIconWrapFeatured]}>
+              <Feather name="flag" size={24} color={theme.text.inverse} />
             </View>
-            <View style={s.startTileText}>
-              <Text style={s.startTileTitle}>Game</Text>
-              <Text style={s.startTileSub}>Single round</Text>
+            <View>
+              <Text style={[s.startTileTitle, s.startTileTitleFeatured]}>Game</Text>
+              <Text style={[s.startTileSub, s.startTileSubFeatured]}>Single round</Text>
+            </View>
+            <View style={[s.startTileCta, s.startTileCtaFeatured]}>
+              <Feather name="plus" size={16} color={theme.text.inverse} />
+              <Text style={[s.startTileCtaText, { color: theme.text.inverse }]}>New game</Text>
             </View>
           </TouchableOpacity>
           <TouchableOpacity
             style={s.startTile}
             onPress={() => navigation.navigate('Setup', { kind: 'tournament' })}
-            activeOpacity={0.85}
+            activeOpacity={0.88}
           >
             <View style={s.startTileIconWrap}>
-              <Feather name="award" size={18} color={theme.accent.primary} />
+              <Feather name="award" size={24} color={theme.accent.primary} />
             </View>
-            <View style={s.startTileText}>
+            <View>
               <Text style={s.startTileTitle}>Tournament</Text>
               <Text style={s.startTileSub}>Multi-day event</Text>
+            </View>
+            <View style={s.startTileCta}>
+              <Feather name="plus" size={16} color={theme.accent.primary} />
+              <Text style={s.startTileCtaText}>New tournament</Text>
             </View>
           </TouchableOpacity>
         </View>
 
+        <TouchableOpacity
+          style={s.joinTile}
+          onPress={() => navigation.navigate('JoinTournament')}
+          activeOpacity={0.85}
+        >
+          <View style={s.joinTileIconWrap}>
+            <Feather name="link" size={20} color={theme.accent.primary} />
+          </View>
+          <View style={{ flex: 1 }}>
+            <Text style={s.joinTileTitle}>Join with code</Text>
+            <Text style={s.joinTileSub}>Enter an invite code from a friend</Text>
+          </View>
+          <Feather name="chevron-right" size={18} color={theme.text.muted} />
+        </TouchableOpacity>
+
+        {reloadError && (
+          <View style={s.errorCard}>
+            <Feather name="alert-triangle" size={18} color={theme.destructive} />
+            <View style={{ flex: 1 }}>
+              <Text style={s.errorCardTitle}>Couldn't load</Text>
+              <Text style={s.errorCardText}>{reloadError}</Text>
+            </View>
+            <TouchableOpacity style={s.errorRetryBtn} onPress={reload} activeOpacity={0.8}>
+              <Feather name="refresh-cw" size={13} color={theme.accent.primary} />
+              <Text style={s.errorRetryText}>Retry</Text>
+            </TouchableOpacity>
+          </View>
+        )}
+
         {listStale && allTournaments.length > 0 && (
           <View style={s.staleBanner}>
             <Feather name="cloud-off" size={14} color="#c77a0a" />
-            <Text style={s.staleBannerText}>Sin conexión · mostrando última lista guardada</Text>
+            <Text style={s.staleBannerText}>Offline · showing last saved list</Text>
           </View>
         )}
 
@@ -662,7 +716,7 @@ export default function HomeScreen({ navigation, route }) {
                     {!openable ? (
                       <View style={s.offlineBadge}>
                         <Feather name="cloud-off" size={12} color="#c77a0a" />
-                        <Text style={s.offlineBadgeText}>Requiere conexión</Text>
+                        <Text style={s.offlineBadgeText}>Connection required</Text>
                       </View>
                     ) : (
                       <Feather name="chevron-right" size={18} color={theme.text.muted} />
@@ -681,28 +735,16 @@ export default function HomeScreen({ navigation, route }) {
           // Finished games/tournaments live on a dedicated screen — keep the
           // Home list focused on what's still in play.
           const active = sorted.filter((t) => !isTournamentFinished(t));
-          const finishedCount = sorted.length - active.length;
+          // Finished games/tournaments live entirely on the History tab —
+          // the Play view stays focused on starting and resuming play.
           const games = active.filter((t) => t.kind === 'game');
           const tournaments = active.filter((t) => t.kind !== 'game');
-          const finishedLink = finishedCount > 0 ? (
-            <TouchableOpacity
-              style={s.finishedLink}
-              onPress={() => navigation.navigate('Finished')}
-              activeOpacity={0.7}
-            >
-              <Feather name="archive" size={16} color={theme.accent.primary} />
-              <Text style={s.finishedLinkText}>
-                Finished ({finishedCount})
-              </Text>
-              <Feather name="chevron-right" size={16} color={theme.text.muted} style={{ marginLeft: 'auto' }} />
-            </TouchableOpacity>
-          ) : null;
           if (sorted.length === 0) {
             if (listStale) {
               return (
                 <View style={s.staleEmpty}>
                   <Feather name="cloud-off" size={32} color={theme.text.muted} />
-                  <Text style={s.staleEmptyText}>Sin conexión · aún no hay torneos guardados</Text>
+                  <Text style={s.staleEmptyText}>Offline · no saved tournaments yet</Text>
                 </View>
               );
             }
@@ -716,14 +758,11 @@ export default function HomeScreen({ navigation, route }) {
           }
           if (active.length === 0) {
             return (
-              <>
-                <View style={s.emptyState}>
-                  <Feather name="check-circle" size={48} color={theme.text.muted} />
-                  <Text style={s.emptyTitle}>All caught up</Text>
-                  <Text style={s.emptySubtitle}>Every game and tournament is finished. Start a new one above.</Text>
-                </View>
-                {finishedLink}
-              </>
+              <View style={s.emptyState}>
+                <Feather name="check-circle" size={48} color={theme.text.muted} />
+                <Text style={s.emptyTitle}>All caught up</Text>
+                <Text style={s.emptySubtitle}>Every game and tournament is finished. Start a new one above.</Text>
+              </View>
             );
           }
           return (
@@ -740,26 +779,91 @@ export default function HomeScreen({ navigation, route }) {
                   {tournaments.map(renderCard)}
                 </>
               )}
-              {finishedLink}
             </>
           );
         })()}
         </PullToRefresh>
+
+        <Modal
+          visible={showListMenu}
+          transparent
+          animationType="slide"
+          onRequestClose={() => setShowListMenu(false)}
+        >
+          <Pressable style={s.modalBackdrop} onPress={() => setShowListMenu(false)}>
+            <Pressable style={s.modalSheet} onPress={() => {}}>
+              <View style={s.modalHandle} />
+              <Text style={s.modalTitle}>Menu</Text>
+
+              <TouchableOpacity
+                style={s.menuItem}
+                onPress={() => { setShowListMenu(false); navigation.navigate('Friends'); }}
+                activeOpacity={0.7}
+              >
+                <Feather name="users" size={18} color={theme.accent.primary} />
+                <Text style={s.menuItemText}>Friends</Text>
+                <Feather name="chevron-right" size={16} color={theme.text.muted} />
+              </TouchableOpacity>
+
+              <TouchableOpacity
+                style={s.menuItem}
+                onPress={() => { setShowListMenu(false); navigation.navigate('Stats'); }}
+                activeOpacity={0.7}
+              >
+                <Feather name="bar-chart-2" size={18} color={theme.accent.primary} />
+                <Text style={s.menuItemText}>Statistics</Text>
+                <Feather name="chevron-right" size={16} color={theme.text.muted} />
+              </TouchableOpacity>
+
+              <TouchableOpacity
+                style={[s.menuItem, { borderBottomWidth: 0 }]}
+                onPress={() => { setShowListMenu(false); navigation.navigate('Profile'); }}
+                activeOpacity={0.7}
+              >
+                <Feather name="user" size={18} color={theme.accent.primary} />
+                <Text style={s.menuItemText}>Profile</Text>
+                <Feather name="chevron-right" size={16} color={theme.text.muted} />
+              </TouchableOpacity>
+            </Pressable>
+          </Pressable>
+        </Modal>
+
+        <ConfirmModal state={confirmState} onResult={resolveConfirm} theme={theme} s={s} />
       </SafeAreaView>
     );
   }
 
   if (showTournament && !tournament) {
     return (
-      <SafeAreaView style={[s.screen, { alignItems: 'center', justifyContent: 'center' }]} edges={['top', 'bottom']}>
+      <SafeAreaView style={[s.screen, { alignItems: 'center', justifyContent: 'center', padding: 24 }]} edges={['top', 'bottom']}>
         <Feather name="flag" size={48} color={theme.text.muted} />
         <Text style={[s.emptyTitle, { marginTop: 16 }]}>No active tournament</Text>
+        <Text style={[s.emptySubtitle, { marginTop: 6, marginBottom: 8 }]}>
+          Start a game or tournament to begin playing.
+        </Text>
         <TouchableOpacity
-          style={[s.primaryBtn, { marginTop: 20 }]}
+          style={[s.primaryBtn, s.emptyStateBtn]}
+          onPress={() => navigation.navigate('Setup', { kind: 'game' })}
+          activeOpacity={0.8}
+        >
+          <Feather name="flag" size={16} color={theme.isDark ? theme.accent.primary : theme.text.inverse} />
+          <Text style={s.primaryBtnText}>Start a Game</Text>
+        </TouchableOpacity>
+        <TouchableOpacity
+          style={[s.secondaryBtn, s.emptyStateBtn]}
+          onPress={() => navigation.navigate('Setup', { kind: 'tournament' })}
+          activeOpacity={0.8}
+        >
+          <Feather name="award" size={16} color={theme.accent.primary} />
+          <Text style={s.secondaryBtnText}>Start a Tournament</Text>
+        </TouchableOpacity>
+        <TouchableOpacity
+          style={[s.secondaryBtn, s.emptyStateBtn]}
           onPress={goToList}
           activeOpacity={0.8}
         >
-          <Text style={s.primaryBtnText}>Go to Home</Text>
+          <Feather name="home" size={16} color={theme.accent.primary} />
+          <Text style={s.secondaryBtnText}>Go to Home</Text>
         </TouchableOpacity>
       </SafeAreaView>
     );
@@ -805,7 +909,7 @@ export default function HomeScreen({ navigation, route }) {
             style={s.iconBtn}
             onPress={() => navigation.navigate('Gallery', { tournamentId: tournament.id })}
             activeOpacity={0.7}
-            accessibilityLabel="Recuerdos"
+            accessibilityLabel="Memories"
           >
             <Feather name="image" size={18} color={theme.accent.primary} />
           </TouchableOpacity>
@@ -1121,16 +1225,44 @@ export default function HomeScreen({ navigation, route }) {
           <View style={s.modalHandle} />
           <Text style={s.modalTitle}>Invite</Text>
           <Text style={s.inviteSubtitle}>
-            {inviteRoleState === 'editor'
-              ? 'Anyone with this code can enter scores for this tournament.'
-              : 'Anyone with this code can view this tournament (read-only).'}
+            {(() => {
+              const noun = tournament?.kind === 'game' ? 'game' : 'tournament';
+              return inviteRoleState === 'editor'
+                ? `Anyone with this code can enter scores for this ${noun}.`
+                : `Anyone with this code can view this ${noun} (read-only).`;
+            })()}
           </Text>
           {inviteLoading
             ? <ActivityIndicator color={theme.accent.primary} style={{ marginVertical: 24 }} />
             : (
-              <View style={s.inviteCodeBox}>
-                <Text style={s.inviteCode}>{inviteCode}</Text>
-              </View>
+              <>
+                <View style={s.inviteCodeBox}>
+                  <Text style={s.inviteCode}>{inviteCode}</Text>
+                </View>
+                {!!inviteCode && (() => {
+                  // QR encodes the same payload as "Share link": a web invite
+                  // URL when an origin is available, otherwise the bare code.
+                  const origin = Platform.OS === 'web' && typeof window !== 'undefined'
+                    ? window.location.origin
+                    : null;
+                  const qrValue = origin
+                    ? `${origin}/?invite=${inviteCode}`
+                    : inviteCode;
+                  return (
+                    <View style={s.inviteQrBox}>
+                      <View style={s.inviteQrInner}>
+                        <QRCode
+                          value={qrValue}
+                          size={148}
+                          backgroundColor="#ffffff"
+                          color="#000000"
+                        />
+                      </View>
+                      <Text style={s.inviteQrHint}>Scan to join</Text>
+                    </View>
+                  );
+                })()}
+              </>
             )}
           <View style={s.inviteRoleRow}>
             <TouchableOpacity
@@ -1455,7 +1587,50 @@ export default function HomeScreen({ navigation, route }) {
       </Pressable>
     </Modal>
 
+    <ConfirmModal state={confirmState} onResult={resolveConfirm} theme={theme} s={s} />
+
     </SafeAreaView>
+  );
+}
+
+// Themed in-app confirmation dialog. Used in place of window.confirm so the
+// web build matches the native styling; native uses it too for consistency.
+function ConfirmModal({ state, onResult, theme, s }) {
+  return (
+    <Modal
+      visible={!!state}
+      transparent
+      animationType="fade"
+      onRequestClose={() => onResult(false)}
+    >
+      <Pressable style={s.confirmBackdrop} onPress={() => onResult(false)}>
+        <Pressable style={s.confirmCard} onPress={() => {}}>
+          <Text style={s.confirmTitle}>{state?.title}</Text>
+          {!!state?.message && <Text style={s.confirmMessage}>{state.message}</Text>}
+          <View style={s.confirmActions}>
+            <TouchableOpacity
+              style={[s.confirmBtn, s.confirmBtnCancel]}
+              onPress={() => onResult(false)}
+              activeOpacity={0.8}
+            >
+              <Text style={s.confirmBtnCancelText}>Cancel</Text>
+            </TouchableOpacity>
+            <TouchableOpacity
+              style={[s.confirmBtn, state?.destructive ? s.confirmBtnDestructive : s.confirmBtnPrimary]}
+              onPress={() => onResult(true)}
+              activeOpacity={0.8}
+            >
+              <Text style={[
+                s.confirmBtnPrimaryText,
+                state?.destructive && s.confirmBtnDestructiveText,
+              ]}>
+                {state?.confirmLabel ?? 'Confirm'}
+              </Text>
+            </TouchableOpacity>
+          </View>
+        </Pressable>
+      </Pressable>
+    </Modal>
   );
 }
 
@@ -1479,7 +1654,7 @@ const RoundPage = React.memo(function RoundPage({
       dataSet={Platform.OS === 'web' ? { pagerpage: '1' } : undefined}
     >
       {/* Single-round games render course + gear in the card title row, so
-          this RONDA N / prev-next row is redundant and we skip it entirely. */}
+          this ROUND N / prev-next row is redundant and we skip it entirely. */}
       {!isSingleRound && (
         <View style={s.pagerTitleRow}>
           <TouchableOpacity
@@ -1491,7 +1666,7 @@ const RoundPage = React.memo(function RoundPage({
           >
             <Feather name="chevron-left" size={18} color={theme.accent.primary} />
           </TouchableOpacity>
-          <Text style={s.tabRoundTitle}>RONDA {index + 1} · {round.courseName || '—'}</Text>
+          <Text style={s.tabRoundTitle}>ROUND {index + 1} · {round.courseName || '—'}</Text>
           {onOpenEdit && (
             <TouchableOpacity
               onPress={() => onOpenEdit(index)}
@@ -1663,11 +1838,6 @@ const GameOverviewCard = React.memo(function GameOverviewCard({
         })}
       </View>
 
-      {!anyScores && (
-        <Text style={s.gameHintText}>
-          No scores yet — tap Scorecard below to start the round.
-        </Text>
-      )}
     </View>
   );
 });
@@ -1824,7 +1994,6 @@ const makeStyles = (t) => StyleSheet.create({
   headerLeft: { flexDirection: 'row', alignItems: 'center', flex: 1, minWidth: 0, paddingRight: 8 },
   headerActions: { flexDirection: 'row', gap: 8, flexShrink: 0 },
   title: { fontFamily: 'PlayfairDisplay-Black', fontSize: 30, color: t.text.primary, letterSpacing: -0.5 },
-  subtitle: { fontFamily: 'PlusJakartaSans-Regular', fontSize: 12, color: t.text.muted, marginTop: 2 },
   backBtn: { flexDirection: 'row', alignItems: 'center', flexShrink: 0 },
   headerTitle: { fontFamily: 'PlayfairDisplay-Bold', fontSize: 20, color: t.text.primary, flexShrink: 1, lineHeight: 24 },
   headerTitleLong: { fontSize: 16, lineHeight: 20 },
@@ -1862,30 +2031,96 @@ const makeStyles = (t) => StyleSheet.create({
   },
 
   // Start tiles (Game / Tournament)
-  startTilesRow: { flexDirection: 'row', gap: 10 },
+  startHeading: {
+    fontFamily: 'PlayfairDisplay-Bold', color: t.text.primary,
+    fontSize: 17, marginBottom: 12, letterSpacing: -0.2,
+  },
+  startTilesRow: { flexDirection: 'row', gap: 12 },
   startTile: {
-    flex: 1, flexDirection: 'row', alignItems: 'center', gap: 12,
+    flex: 1, alignItems: 'flex-start', gap: 14,
     backgroundColor: t.bg.card,
-    borderRadius: 16, borderWidth: 1, borderColor: t.border.default,
-    paddingVertical: 12, paddingHorizontal: 14,
+    borderRadius: 22, borderWidth: 1.5, borderColor: t.accent.primary + '55',
+    paddingVertical: 20, paddingHorizontal: 16, minHeight: 168,
     ...(t.isDark ? {} : t.shadow.card),
   },
   startTileFeatured: {
-    borderColor: t.accent.primary + '55',
+    backgroundColor: t.accent.primary,
+    borderColor: t.accent.primary,
   },
   startTileIconWrap: {
-    width: 36, height: 36, borderRadius: 12,
+    width: 48, height: 48, borderRadius: 16,
     backgroundColor: t.accent.light,
     alignItems: 'center', justifyContent: 'center',
   },
-  startTileText: { flex: 1 },
-  startTileTitle: {
-    fontFamily: 'PlayfairDisplay-Bold', color: t.text.primary, fontSize: 16,
-    letterSpacing: -0.2,
+  startTileIconWrapFeatured: {
+    backgroundColor: 'rgba(255,255,255,0.18)',
   },
+  startTileTitle: {
+    fontFamily: 'PlayfairDisplay-Bold', color: t.text.primary, fontSize: 21,
+    letterSpacing: -0.3,
+  },
+  startTileTitleFeatured: { color: t.text.inverse },
   startTileSub: {
-    fontFamily: 'PlusJakartaSans-Medium', color: t.text.muted, fontSize: 11,
-    marginTop: 2, letterSpacing: 0.2,
+    fontFamily: 'PlusJakartaSans-Medium', color: t.text.muted, fontSize: 12,
+    marginTop: 3, letterSpacing: 0.2,
+  },
+  startTileSubFeatured: { color: t.text.inverse, opacity: 0.82 },
+  startTileCta: {
+    flexDirection: 'row', alignItems: 'center', gap: 5,
+    marginTop: 'auto',
+    backgroundColor: t.accent.light,
+    borderRadius: 12, paddingVertical: 8, paddingHorizontal: 12,
+  },
+  startTileCtaFeatured: {
+    backgroundColor: 'rgba(255,255,255,0.18)',
+  },
+  startTileCtaText: {
+    fontFamily: 'PlusJakartaSans-Bold', color: t.accent.primary, fontSize: 12,
+  },
+
+  // "Join with code" entry point
+  joinTile: {
+    flexDirection: 'row', alignItems: 'center', gap: 14,
+    backgroundColor: t.bg.card,
+    borderRadius: 16, borderWidth: 1,
+    borderColor: t.isDark ? t.glass?.border || t.border.default : t.border.default,
+    paddingVertical: 14, paddingHorizontal: 16, marginTop: 12,
+    ...(t.isDark ? {} : t.shadow.card),
+  },
+  joinTileIconWrap: {
+    width: 40, height: 40, borderRadius: 12,
+    backgroundColor: t.accent.light,
+    alignItems: 'center', justifyContent: 'center',
+  },
+  joinTileTitle: {
+    fontFamily: 'PlusJakartaSans-Bold', color: t.text.primary, fontSize: 15,
+  },
+  joinTileSub: {
+    fontFamily: 'PlusJakartaSans-Medium', color: t.text.muted, fontSize: 12,
+    marginTop: 1,
+  },
+
+  // Inline reload error card
+  errorCard: {
+    flexDirection: 'row', alignItems: 'center', gap: 12,
+    backgroundColor: t.isDark ? t.bg.card : t.bg.card,
+    borderRadius: 14, borderWidth: 1, borderColor: t.destructive + '55',
+    padding: 14, marginTop: 12,
+  },
+  errorCardTitle: {
+    fontFamily: 'PlusJakartaSans-Bold', color: t.text.primary, fontSize: 14,
+  },
+  errorCardText: {
+    fontFamily: 'PlusJakartaSans-Regular', color: t.text.muted, fontSize: 12,
+    marginTop: 1,
+  },
+  errorRetryBtn: {
+    flexDirection: 'row', alignItems: 'center', gap: 5,
+    paddingVertical: 8, paddingHorizontal: 12, borderRadius: 10,
+    backgroundColor: t.accent.light,
+  },
+  errorRetryText: {
+    fontFamily: 'PlusJakartaSans-Bold', color: t.accent.primary, fontSize: 12,
   },
 
   // Tournament list
@@ -2210,14 +2445,6 @@ const makeStyles = (t) => StyleSheet.create({
     textTransform: 'uppercase',
     marginTop: 3,
   },
-  gameHintText: {
-    fontFamily: 'PlusJakartaSans-Regular',
-    color: t.text.muted,
-    fontSize: 12,
-    textAlign: 'center',
-    marginTop: 14,
-  },
-
   // Round action row (Scorecard + Next Round side-by-side)
   roundActionsRow: { flexDirection: 'row', gap: 10 },
   roundActionBtn: { flex: 1, marginTop: 0 },
@@ -2352,4 +2579,62 @@ const makeStyles = (t) => StyleSheet.create({
     fontFamily: 'PlusJakartaSans-SemiBold', fontSize: 13, color: t.text.muted,
   },
   inviteRoleTextActive: { color: t.text.inverse },
+
+  // Invite QR code
+  inviteQrBox: { alignItems: 'center', marginBottom: 16 },
+  inviteQrInner: {
+    backgroundColor: '#ffffff', padding: 14, borderRadius: 16,
+    borderWidth: 1, borderColor: t.border.default,
+  },
+  inviteQrHint: {
+    fontFamily: 'PlusJakartaSans-SemiBold', color: t.text.muted,
+    fontSize: 11, marginTop: 8, letterSpacing: 0.3,
+  },
+
+  // Empty-state CTA buttons
+  emptyStateBtn: { alignSelf: 'stretch', width: '100%', maxWidth: 320 },
+
+  // Themed confirmation modal
+  confirmBackdrop: {
+    flex: 1, backgroundColor: 'rgba(0,0,0,0.5)',
+    alignItems: 'center', justifyContent: 'center', padding: 32,
+  },
+  confirmCard: {
+    width: '100%', maxWidth: 360,
+    backgroundColor: t.bg.card,
+    borderRadius: 20, padding: 22,
+    borderWidth: 1, borderColor: t.border.default,
+    ...(t.isDark ? {} : t.shadow.elevated),
+  },
+  confirmTitle: {
+    fontFamily: 'PlayfairDisplay-Bold', fontSize: 19, color: t.text.primary,
+    marginBottom: 6,
+  },
+  confirmMessage: {
+    fontFamily: 'PlusJakartaSans-Regular', fontSize: 14, color: t.text.secondary,
+    lineHeight: 20, marginBottom: 20,
+  },
+  confirmActions: { flexDirection: 'row', gap: 10 },
+  confirmBtn: {
+    flex: 1, paddingVertical: 12, borderRadius: 12,
+    alignItems: 'center', justifyContent: 'center',
+  },
+  confirmBtnCancel: {
+    backgroundColor: t.bg.secondary,
+    borderWidth: 1, borderColor: t.border.default,
+  },
+  confirmBtnCancelText: {
+    fontFamily: 'PlusJakartaSans-SemiBold', fontSize: 14, color: t.text.primary,
+  },
+  confirmBtnPrimary: {
+    backgroundColor: t.isDark ? t.accent.light : t.accent.primary,
+    borderWidth: t.isDark ? 1 : 0,
+    borderColor: t.isDark ? t.accent.primary + '33' : 'transparent',
+  },
+  confirmBtnPrimaryText: {
+    fontFamily: 'PlusJakartaSans-ExtraBold', fontSize: 14,
+    color: t.isDark ? t.accent.primary : t.text.inverse,
+  },
+  confirmBtnDestructive: { backgroundColor: t.destructive },
+  confirmBtnDestructiveText: { color: '#ffffff' },
 });
