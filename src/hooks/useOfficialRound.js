@@ -40,13 +40,76 @@ export function useOfficialRound({ token, roundId }) {
   // and worse, a stale overwrite of fresher local state).
   const mountedRef = useRef(true);
 
+  // Optimistic writes that have not yet been confirmed by the server.
+  // Keyed by `${hole}|${subjectRosterId}|${source}`, value = the strokes the
+  // user wrote (may be null for a cleared cell). submitScore goes through an
+  // offline queue, so a 20s poll can land before the write reaches the
+  // server; these entries are re-applied on top of every poll result so an
+  // optimistic write is never visibly reverted by stale server state.
+  const pendingRef = useRef(new Map());
+
+  const pendingKey = (hole, subjectRosterId, source) =>
+    `${hole}|${subjectRosterId}|${source}`;
+
+  // Apply one still-pending optimistic write on top of a score list, using
+  // the same replace-or-append (and null-prunes-the-row) logic as setScore.
+  const applyPendingRow = (list, hole, subjectRosterId, source, strokes) => {
+    const idx = list.findIndex(
+      (r) => r.hole === hole
+        && r.subject_roster_id === subjectRosterId
+        && r.source === source,
+    );
+    // A pending clear (strokes === null) means the row should not exist.
+    if (strokes == null) {
+      return idx === -1 ? list : list.filter((_, i) => i !== idx);
+    }
+    if (idx === -1) {
+      return [...list, { hole, subject_roster_id: subjectRosterId, source, strokes }];
+    }
+    const next = list.slice();
+    next[idx] = { ...next[idx], strokes };
+    return next;
+  };
+
+  // Reconcile a freshly-fetched server score list against pending optimistic
+  // writes: drop entries the server has now confirmed, and re-apply the rest
+  // on top so a poll never reverts an unconfirmed local write.
+  const reconcile = (serverScores) => {
+    const server = Array.isArray(serverScores) ? serverScores : [];
+    const pending = pendingRef.current;
+    // Confirm + drop any pending write the server now agrees with.
+    for (const [key, strokes] of [...pending.entries()]) {
+      const [holeStr, subjectRosterId, source] = key.split('|');
+      const hole = Number(holeStr);
+      const row = server.find(
+        (r) => r.hole === hole
+          && String(r.subject_roster_id) === subjectRosterId
+          && r.source === source,
+      );
+      if (strokes == null) {
+        // Cleared cell: confirmed once the server also shows it absent/null.
+        if (!row || row.strokes == null) pending.delete(key);
+      } else if (row && row.strokes === strokes) {
+        pending.delete(key);
+      }
+    }
+    // Re-apply every still-pending write on top of the server snapshot.
+    let merged = server;
+    for (const [key, strokes] of pending.entries()) {
+      const [holeStr, subjectRosterId, source] = key.split('|');
+      merged = applyPendingRow(merged, Number(holeStr), subjectRosterId, source, strokes);
+    }
+    return merged;
+  };
+
   // Apply one getRoundState payload to local state. Centralised so the
   // initial load, the poll, and refresh() all normalise identically.
   const applyState = useCallback((data) => {
     if (!mountedRef.current || !data) return;
     setRound(data.round ?? null);
     setMembers(Array.isArray(data.members) ? data.members : []);
-    setScores(Array.isArray(data.scores) ? data.scores : []);
+    // Re-apply still-pending optimistic writes so a poll doesn't revert them.
+    setScores(reconcile(data.scores));
     setAttestations(Array.isArray(data.attestations) ? data.attestations : []);
     setPartyId(data.party_id ?? null);
     setMyRosterId(data.my_roster_id ?? null);
@@ -77,6 +140,8 @@ export function useOfficialRound({ token, roundId }) {
   // blocks any in-flight response that resolves after unmount.
   useEffect(() => {
     mountedRef.current = true;
+    // A different round must not inherit the previous round's pending writes.
+    pendingRef.current = new Map();
     setLoading(true);
     refresh();
     const id = setInterval(refresh, POLL_MS);
@@ -115,6 +180,10 @@ export function useOfficialRound({ token, roundId }) {
    * {hole, subject_roster_id, source} row or appends a new one.
    */
   const setScore = useCallback(async (subjectRosterId, hole, strokes, source) => {
+    // Track this write as pending so a poll landing before the offline queue
+    // drains re-applies it instead of reverting to stale server state.
+    // A permanently-failed queued write keeps its pending entry; acceptable for Core.
+    pendingRef.current.set(pendingKey(hole, subjectRosterId, source), strokes);
     // Optimistic local update — keep the screen responsive offline.
     setScores((prev) => {
       const idx = prev.findIndex(
@@ -122,6 +191,10 @@ export function useOfficialRound({ token, roundId }) {
           && r.subject_roster_id === subjectRosterId
           && r.source === source,
       );
+      // Cleared cell: drop the row entirely rather than storing strokes: null.
+      if (strokes == null) {
+        return idx === -1 ? prev : prev.filter((_, i) => i !== idx);
+      }
       if (idx === -1) {
         return [...prev, { hole, subject_roster_id: subjectRosterId, source, strokes }];
       }
