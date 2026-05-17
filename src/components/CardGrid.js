@@ -2,8 +2,11 @@ import React from 'react';
 import { View } from 'react-native';
 import { useResponsive } from '../theme/responsive';
 
-// Pure: flexBasis for one cell given the column count. Values sit just under
-// the exact fraction so a `gap` between cells does not force a wrap.
+// Pure: flexBasis for one cell given the column count. The values sit a few
+// points under the exact fraction (100/2, 100/3) so the row `gap` between
+// cells fits without forcing an extra wrap. They are calibrated for the
+// default gap (12) used by CardGrid; a substantially larger gap would need
+// these adjusted.
 export function cardCellBasis(columns) {
   if (columns === 2) return '48%';
   if (columns === 3) return '31%';
@@ -22,8 +25,8 @@ export default function CardGrid({ children, columns, gap = 12, style }) {
 
   return (
     <View style={[{ flexDirection: 'row', flexWrap: 'wrap', gap }, style]}>
-      {items.map((child, i) => (
-        <View key={child.key ?? i} style={{ flexBasis: basis, flexGrow: 0, minWidth: 0 }}>
+      {items.map((child) => (
+        <View key={child.key} style={{ flexBasis: basis, flexGrow: 0, minWidth: 0 }}>
           {child}
         </View>
       ))}
