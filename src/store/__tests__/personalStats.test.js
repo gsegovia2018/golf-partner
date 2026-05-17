@@ -1,6 +1,6 @@
 import {
   collectMyRounds, buildSyntheticTournament, CANON_ID,
-  holeDifficultySplit, computeMetrics,
+  holeDifficultySplit, computeMetrics, computeRecentVsHistory, FORM_METRICS,
 } from '../personalStats';
 
 // ── Fixture helpers ───────────────────────────────────────────────
@@ -175,5 +175,54 @@ describe('computeMetrics', () => {
     expect(m.hasShotData).toBe(true);
     expect(m.fairwayPct).toBe(100);
     expect(m.puttsPerRound).toBe(36);
+  });
+});
+
+describe('computeRecentVsHistory', () => {
+  // Build N rounds where round i scores `strokesByRound[i]` on every hole.
+  function roundsTournament(strokesByRound) {
+    const h = holes18();
+    return [{
+      id: 1, name: 'T', players: [{ id: 'p1', handicap: 0, user_id: 'u1' }],
+      rounds: strokesByRound.map((str) => mkRound({
+        holes: h, scores: { p1: evenScores(h, str) }, playerHandicaps: { p1: 0 },
+      })),
+    }];
+  }
+
+  test('keeps FORM_METRICS in sync — 6 metrics produced', () => {
+    const my = collectMyRounds(roundsTournament([5, 5]), 'u1');
+    expect(computeRecentVsHistory(my, 5).metrics).toHaveLength(FORM_METRICS.length);
+  });
+
+  test('splits into recent (last N) and history (earlier), disjoint', () => {
+    // 7 rounds; N=5 → history = first 2, recent = last 5
+    const my = collectMyRounds(roundsTournament([6, 6, 5, 5, 5, 4, 4]), 'u1');
+    const r = computeRecentVsHistory(my, 5);
+    expect(r.recentCount).toBe(5);
+    expect(r.historyCount).toBe(2);
+    expect(r.hasHistory).toBe(true);
+    const points = r.metrics.find((m) => m.key === 'avgPoints');
+    expect(points.recent).toBeGreaterThan(points.history); // recent rounds lower strokes → more points
+    expect(points.direction).toBe('up');
+  });
+
+  test('marks no history when total rounds <= N', () => {
+    const my = collectMyRounds(roundsTournament([5, 5, 4]), 'u1');
+    const r = computeRecentVsHistory(my, 5);
+    expect(r.hasHistory).toBe(false);
+    expect(r.recentCount).toBe(3);
+    const points = r.metrics.find((m) => m.key === 'avgPoints');
+    expect(points.history).toBeNull();
+    expect(points.delta).toBeNull();
+  });
+
+  test('direction respects polarity — fewer strokes-vs-par is an improvement', () => {
+    // earlier rounds score 6 (worse), recent score 4 (better)
+    const my = collectMyRounds(roundsTournament([6, 6, 6, 4, 4, 4, 4, 4]), 'u1');
+    const r = computeRecentVsHistory(my, 5);
+    const vsPar = r.metrics.find((m) => m.key === 'avgVsPar');
+    expect(vsPar.recent).toBeLessThan(vsPar.history);
+    expect(vsPar.direction).toBe('up'); // lower vsPar = green up
   });
 });

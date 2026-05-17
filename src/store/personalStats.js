@@ -120,6 +120,18 @@ export function computeMetrics(synthetic) {
   };
 }
 
+// ── Form metrics ──
+// Each carries a polarity so the UI colors the trend arrow correctly.
+// `shot: true` metrics need shot-tracking data to be meaningful.
+export const FORM_METRICS = [
+  { key: 'avgPoints',          label: 'Points / round',   polarity: 'higher', shot: false },
+  { key: 'avgVsPar',           label: 'Strokes vs par',   polarity: 'lower',  shot: false },
+  { key: 'fairwayPct',         label: 'Fairways hit %',   polarity: 'higher', shot: true },
+  { key: 'girPct',             label: 'Greens in reg %',  polarity: 'higher', shot: true },
+  { key: 'puttsPerRound',      label: 'Putts / round',    polarity: 'lower',  shot: true },
+  { key: 'threePuttsPerRound', label: '3-putts / round',  polarity: 'lower',  shot: true },
+];
+
 // ── collectMyRounds ──
 // Flattens every tournament's rounds into MyRound records for the user.
 // `tournaments` arrive newest-first (id desc) from the loaders, so we reverse
@@ -150,4 +162,37 @@ export function collectMyRounds(tournaments, userId) {
     });
   });
   return result;
+}
+
+// ── computeRecentVsHistory ──
+// "Recent" = the last N rounds (chronologically). "History" = every earlier
+// round. Disjoint, so the delta is a true improving/declining signal.
+export function computeRecentVsHistory(myRounds, n = 5) {
+  const all = myRounds || [];
+  const recentRounds = all.slice(-n);
+  const historyRounds = all.slice(0, Math.max(0, all.length - n));
+  const hasHistory = historyRounds.length > 0;
+  const recent = computeMetrics(buildSyntheticTournament(recentRounds));
+  const history = hasHistory
+    ? computeMetrics(buildSyntheticTournament(historyRounds))
+    : null;
+  const metrics = FORM_METRICS.map((m) => {
+    const recentVal = recent[m.key];
+    const historyVal = hasHistory ? history[m.key] : null;
+    const delta = hasHistory ? +(recentVal - historyVal).toFixed(2) : null;
+    let direction = 'flat';
+    if (delta != null && delta !== 0) {
+      const improved = m.polarity === 'higher' ? delta > 0 : delta < 0;
+      direction = improved ? 'up' : 'down';
+    }
+    return { ...m, recent: recentVal, history: historyVal, delta, direction };
+  });
+  return {
+    n,
+    recentCount: recentRounds.length,
+    historyCount: historyRounds.length,
+    hasHistory,
+    hasShotData: recent.hasShotData || (history?.hasShotData ?? false),
+    metrics,
+  };
 }
