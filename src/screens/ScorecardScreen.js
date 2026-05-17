@@ -1498,7 +1498,7 @@ function HoleView({ round, roundIndex, players, scores, shotDetails, meId, onSet
       {isBestBall && bbResult ? (
         <MatchPanel bbResult={bbResult} currentHole={currentHole} settings={settings} />
       ) : isSindicato && players.length === 3 ? (
-        <SindicatoPanel round={round} players={players} scores={scores} />
+        <SindicatoPanel round={round} players={players} scores={scores} meId={meId} />
       ) : showRunning && players.length === 1 ? (
         <SoloTotalsRibbon player={players[0]} stats={playerTotals(players[0])} />
       ) : showRunning ? (
@@ -1506,7 +1506,7 @@ function HoleView({ round, roundIndex, players, scores, shotDetails, meId, onSet
           <StablefordWinnerBanner round={round} scores={scores} players={players} />
           <Text style={s.totalStripLabel}>ROUND TOTALS</Text>
           <View style={s.totalStripRow}>
-            {players.map((player) => {
+            {playersMeFirst(players, meId).map((player) => {
               const { pts, str } = playerTotals(player);
               return (
                 <View key={player.id} style={s.totalStripPlayer}>
@@ -1775,7 +1775,7 @@ function WinnerBadge({ name }) {
 // Live Sindicato standings, pinned above the bottom controls — mirrors the
 // best-ball MatchPanel / Stableford totals strip. Shows each player's running
 // points (high to low) and the leader / clinch status.
-function SindicatoPanel({ round, players, scores }) {
+function SindicatoPanel({ round, players, scores, meId }) {
   const { theme } = useTheme();
   const s = useMemo(() => makeStyles(theme), [theme]);
   const tally = sindicatoRoundTally({ ...round, scores }, players);
@@ -1788,11 +1788,13 @@ function SindicatoPanel({ round, players, scores }) {
     : leader
       ? `${firstName(leader)} leads by ${lead}${holesLeft > 0 ? ` · ${holesLeft} to play` : ''}`
       : `All level${holesLeft > 0 ? ` · ${holesLeft} to play` : ''}`;
+  const me = totals.find((t) => t.player.id === meId);
+  const orderedTotals = me ? [me, ...totals.filter((t) => t.player.id !== meId)] : totals;
   return (
     <View style={s.totalsStrip}>
       <Text style={s.totalStripLabel}>SINDICATO</Text>
       <View style={s.totalStripRow}>
-        {totals.map(({ player, points }) => (
+        {orderedTotals.map(({ player, points }) => (
           <View key={player.id} style={s.totalStripPlayer}>
             <Text style={s.totalStripName}>{firstName(player)}</Text>
             <Text style={s.totalStripPts}>{points}</Text>
