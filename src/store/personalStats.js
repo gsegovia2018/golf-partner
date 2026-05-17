@@ -10,7 +10,7 @@ import { getPlayingHandicap, calcStablefordPoints } from './tournamentStore';
 import {
   parTypeSplit, warmupVsClosing, frontBackSplit, playerScoreDistribution,
   playerRoundHistory, playerConsistency, bounceBackRate, shotStats,
-  teeShotImpact,
+  teeShotImpact, scramblingStats,
 } from './statsEngine';
 
 // Canonical player id used inside the synthetic tournament.
@@ -303,6 +303,7 @@ export function computeMyStats(selectedRounds, { n = 5 } = {}) {
     teeShot: teeShotImpact(synthetic, CANON_ID),
     shots: shotStats(synthetic, CANON_ID),
     bounceBack: bounceBackRate(synthetic)[0] ?? null,
+    scrambling: scramblingStats(synthetic)[0] ?? null,
     history: playerRoundHistory(synthetic, CANON_ID),
   };
 }

@@ -336,5 +336,7 @@ describe('computeMyStats', () => {
     expect(stats.form.metrics.length).toBe(FORM_METRICS.length);
     expect(stats.ranking).toHaveProperty('strengths');
     expect(stats.parType.par4.holes).toBe(36);
+    expect(stats).toHaveProperty('scrambling');
+    expect(stats).toHaveProperty('bounceBack');
   });
 });

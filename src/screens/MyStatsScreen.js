@@ -198,6 +198,12 @@ export default function MyStatsScreen({ navigation }) {
           ['Closing 3', stats.warmupClosing.closing.avgPoints, stats.warmupClosing.closing.holes],
         ]} s={s} />
         <DistributionSection dist={stats.distribution} s={s} />
+        {(stats.bounceBack || stats.scrambling) ? (
+          <BreakdownSection title="Recovery" rows={[
+            ['Bounce-back rate %', stats.bounceBack ? stats.bounceBack.rate : 0, stats.bounceBack ? stats.bounceBack.opportunities : 0],
+            ['Scrambling %', stats.scrambling ? stats.scrambling.pct : 0, stats.scrambling ? stats.scrambling.missedGir : 0],
+          ]} s={s} />
+        ) : null}
         {stats.teeShot.hasData ? (
           <BreakdownSection title="Tee shot impact" rows={[
             ['Fairway found', stats.teeShot.fairway.avgPoints, stats.teeShot.fairway.holes],
