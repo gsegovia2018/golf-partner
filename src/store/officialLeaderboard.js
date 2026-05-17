@@ -24,7 +24,9 @@ function resolvedByPlayer(scores) {
 
 // Reduce the flat score rows to ranked leaderboard rows. Core ranks on gross
 // strokes; net / Stableford columns are a follow-on.
-export function buildLeaderboard({ members, scores }) {
+// `format` is reserved for net / Stableford ranking (a follow-on); Core
+// ranks on gross strokes only.
+export function buildLeaderboard({ members, scores, format }) {
   const resolved = resolvedByPlayer(scores);
   const rows = members.map((m) => {
     const holesMap = resolved.get(m.roster_id) || new Map();
@@ -37,6 +39,13 @@ export function buildLeaderboard({ members, scores }) {
       gross,
     };
   });
-  rows.sort((a, b) => a.gross - b.gross);
+  // Players with no resolved holes yet rank last (a gross of 0 must not
+  // float an un-started player to the top). Otherwise gross ascending,
+  // with rosterId as a stable tiebreak so equal-gross rows don't jitter
+  // between refreshes.
+  rows.sort((a, b) => {
+    if ((a.thru === 0) !== (b.thru === 0)) return a.thru === 0 ? 1 : -1;
+    return a.gross - b.gross || a.rosterId.localeCompare(b.rosterId);
+  });
   return rows;
 }

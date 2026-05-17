@@ -33,4 +33,15 @@ describe('buildLeaderboard', () => {
     expect(rows.find((r) => r.rosterId === 'a').gross).toBe(9);
     expect(rows.find((r) => r.rosterId === 'a').thru).toBe(2);
   });
+
+  test('a hole with only one entered side still counts toward gross', () => {
+    const partial = [
+      { hole: 1, subject_roster_id: 'a', source: 'self', strokes: 4 },
+      { hole: 2, subject_roster_id: 'a', source: 'self', strokes: 5 },
+    ];
+    const rows = buildLeaderboard({ members, scores: partial, format: 'gross_net' });
+    const a = rows.find((r) => r.rosterId === 'a');
+    expect(a.gross).toBe(9);
+    expect(a.thru).toBe(2);
+  });
 });
