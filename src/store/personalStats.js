@@ -148,16 +148,26 @@ export function collectMyRounds(tournaments, userId) {
       const holes = round.holes || [];
       const completed = holes.length > 0
         && holes.every((h) => myScores[h.number] != null);
+      const handicap = getPlayingHandicap(round, me);
+      let points = 0;
+      holes.forEach((h) => {
+        const sc = myScores[h.number];
+        if (sc != null) {
+          points += calcStablefordPoints(h.par, sc, handicap, h.strokeIndex);
+        }
+      });
       result.push({
         key: `${t.id}:${roundIndex}`,
         round,
         tournamentId: t.id,
         tournamentName: t.name || 'Tournament',
+        tournamentDate: t.createdAt ?? null,
         courseName: round.courseName || `Round ${roundIndex + 1}`,
         roundIndex,
         playerId: me.id,
         player: me,
         completed,
+        points,
       });
     });
   });

@@ -83,6 +83,26 @@ describe('collectMyRounds', () => {
     const result = collectMyRounds(tournaments, 'u1');
     expect(result.map((r) => r.tournamentName)).toEqual(['Older', 'Newer']);
   });
+
+  test('captures the tournament createdAt date on each round', () => {
+    const h = holes18();
+    const result = collectMyRounds([{
+      id: 1, name: 'T', createdAt: '2026-05-12T10:00:00.000Z',
+      players: [{ id: 'p1', user_id: 'u1' }],
+      rounds: [mkRound({ holes: h, scores: { p1: evenScores(h, 4) } })],
+    }], 'u1');
+    expect(result[0].tournamentDate).toBe('2026-05-12T10:00:00.000Z');
+  });
+
+  test('computes each round total Stableford points for the user', () => {
+    const h = holes18(); // 18 par-4 holes
+    const result = collectMyRounds([{
+      id: 1, name: 'T', players: [{ id: 'p1', handicap: 0, user_id: 'u1' }],
+      rounds: [mkRound({ holes: h, scores: { p1: evenScores(h, 4) }, playerHandicaps: { p1: 0 } })],
+    }], 'u1');
+    // gross par on every hole, scratch handicap → 2 pts each × 18 = 36
+    expect(result[0].points).toBe(36);
+  });
 });
 
 describe('buildSyntheticTournament', () => {
