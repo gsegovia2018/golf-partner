@@ -21,6 +21,7 @@ import {
   isRoundComplete, isTournamentFinished, subscribeTournamentChanges,
   matchPlayRoundTally, addPlayerRoundPatches,
   sindicatoRoundTally, tournamentSindicatoLeaderboard,
+  tournamentMatchPlayStandings,
   DEFAULT_SETTINGS, generateInviteCode,
 } from '../store/tournamentStore';
 import { mutate } from '../store/mutate';
@@ -513,14 +514,20 @@ export default function HomeScreen({ navigation, route }) {
     setRoundBestBall(isBB);
     setLeaderboardBestBall(isBB);
   }, [tournament?.id, settings.scoringMode, bestBallAvailable]);
+  const matchPlayStandings = useMemo(
+    () => (tournament && settings.scoringMode === 'matchplay'
+      ? tournamentMatchPlayStandings(tournament)
+      : null),
+    [tournament, settings.scoringMode],
+  );
   const leaderboard = useMemo(
     () => {
       if (!tournament) return [];
-      return settings.scoringMode === 'sindicato'
-        ? tournamentSindicatoLeaderboard(tournament)
-        : tournamentLeaderboard(tournament);
+      if (settings.scoringMode === 'matchplay') return matchPlayStandings?.board ?? [];
+      if (settings.scoringMode === 'sindicato') return tournamentSindicatoLeaderboard(tournament);
+      return tournamentLeaderboard(tournament);
     },
-    [tournament, settings.scoringMode],
+    [tournament, settings.scoringMode, matchPlayStandings],
   );
   const bestWorstLeaderboard = useMemo(
     () => (tournament && leaderboardBestBall ? tournamentBestWorstLeaderboard(tournament) : null),
@@ -549,6 +556,7 @@ export default function HomeScreen({ navigation, route }) {
   );
   const tournamentMode = settings.scoringMode === 'bestball' ? 'bestball'
     : settings.scoringMode === 'sindicato' ? 'sindicato'
+    : settings.scoringMode === 'matchplay' ? 'matchplay'
     : 'stableford';
   const tournamentClinchedId = useMemo(
     () => (tournament ? tournamentPlayerClinched(tournament, tournamentMode) : null),
@@ -1024,7 +1032,6 @@ export default function HomeScreen({ navigation, route }) {
         onRefresh={onRefresh}
       >
 
-      {!isGame && (
       <View style={s.mastersCard}>
         <View style={s.cardTitleRow}>
           <Text style={s.mastersCardTitle}>LEADERBOARD</Text>
@@ -1066,13 +1073,20 @@ export default function HomeScreen({ navigation, route }) {
                   R{selectedRound + 1} · {!showRunning ? '—' : roundValue == null ? '—' : `${roundValue} ${roundUnit}`}
                 </Text>
               </View>
-              <Text style={[s.mastersPoints, i === 0 && { fontSize: 18 }]}>{showRunning ? `${entry.points} pts` : '—'}</Text>
+              <Text style={[s.mastersPoints, i === 0 && { fontSize: 18 }]}>{
+                !showRunning ? '—'
+                  : settings.scoringMode === 'matchplay'
+                    ? `${entry.points} ${entry.points === 1 ? 'hole' : 'holes'}`
+                    : `${entry.points} pts`
+              }</Text>
               <Text style={s.mastersSub}>{showRunning ? `${strokes || '-'} str` : ''}</Text>
             </View>
           );
         })}
+        {settings.scoringMode === 'matchplay' && matchPlayStandings && showRunning && (
+          <Text style={s.mastersMatchStatus}>{matchPlayStandings.status}</Text>
+        )}
       </View>
-      )}
 
       {tournament.rounds.length > 0 && isGame && tournament.rounds.length === 1
         && settings.scoringMode !== 'matchplay' && settings.scoringMode !== 'bestball' && settings.scoringMode !== 'sindicato' && (
@@ -2272,6 +2286,10 @@ const makeStyles = (t) => StyleSheet.create({
   },
   mastersPoints: { fontFamily: 'PlusJakartaSans-ExtraBold', color: '#ffd700', fontSize: 16, marginRight: 8 },
   mastersSub: { fontFamily: 'PlusJakartaSans-Medium', color: 'rgba(255,255,255,0.45)', fontSize: 11, width: 60, textAlign: 'right' },
+  mastersMatchStatus: {
+    fontFamily: 'PlusJakartaSans-SemiBold', color: 'rgba(255,255,255,0.85)',
+    fontSize: 12, textAlign: 'center', marginTop: 10,
+  },
 
   // Ranked rows (round cards — leaderboard-style, theme-aware)
   rankedRow: {
