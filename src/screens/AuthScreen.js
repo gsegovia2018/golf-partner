@@ -224,7 +224,7 @@ const makeStyles = (theme) => StyleSheet.create({
     backgroundColor: '#006747',
     justifyContent: 'center',
   },
-  inner: { paddingHorizontal: 24 },
+  inner: { paddingHorizontal: 24, width: '100%', maxWidth: 460, alignSelf: 'center' },
   logo: {
     fontFamily: 'PlayfairDisplay-Black',
     fontSize: 42, color: '#ffd700',
