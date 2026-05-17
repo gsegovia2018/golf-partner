@@ -17,7 +17,7 @@ import {
   tournamentLeaderboard, tournamentBestWorstLeaderboard,
   roundPairLeaderboard, calcBestWorstBall, roundTotals,
   playerRoundBestWorstPoints,
-  tournamentPlayerClinched, roundPairClinched,
+  tournamentPlayerClinched,
   isRoundComplete, isTournamentFinished, subscribeTournamentChanges,
   matchPlayRoundTally, addPlayerRoundPatches,
   sindicatoRoundTally, tournamentSindicatoLeaderboard,
@@ -1642,10 +1642,6 @@ const RoundPage = React.memo(function RoundPage({
 }) {
   const hasScores = round.scores && Object.keys(round.scores).length > 0;
   const hasPairs = Array.isArray(round.pairs) && round.pairs.length > 0;
-  const tournamentMode = settings?.scoringMode === 'bestball' ? 'bestball' : 'stableford';
-  const clinchedPairIdx = hasScores
-    ? roundPairClinched(round, players, settings, tournamentMode)
-    : null;
   return (
     <View
       style={[{ width }, PAGER_PAGE_SNAP_STYLE]}
@@ -1687,13 +1683,7 @@ const RoundPage = React.memo(function RoundPage({
         </View>
       )}
       {hasScores ? (
-        settings?.scoringMode === 'matchplay'
-          ? <MatchPlayRoundCard round={round} players={players} theme={theme} s={s} showRunning={showRunning} />
-          : settings?.scoringMode === 'sindicato'
-            ? <SindicatoRoundCard round={round} players={players} theme={theme} s={s} showRunning={showRunning} />
-            : roundBestBall
-              ? <BestBallRoundCard round={round} players={players} settings={settings} clinchedPairIdx={clinchedPairIdx} theme={theme} s={s} showRunning={showRunning} />
-              : <StablefordRoundCard round={round} players={players} clinchedPairIdx={clinchedPairIdx} theme={theme} s={s} showRunning={showRunning} />
+        <RoundScoreboard round={round} players={players} theme={theme} s={s} showRunning={showRunning} />
       ) : revealed && hasPairs ? (
         <PairsPreviewCard pairs={round.pairs} theme={theme} s={s} />
       ) : (
@@ -1890,145 +1880,73 @@ const RankedRow = React.memo(function RankedRow({ rank, name, primary, sub, sub2
   );
 });
 
-const StablefordRoundCard = React.memo(function StablefordRoundCard({ round, players, clinchedPairIdx, theme, s, showRunning = true }) {
-  const pairResults = roundPairLeaderboard(round, players);
-  // Map sorted-leaderboard position back to round.pairs index so the winner
-  // row can be tagged when that pair is mathematically clinched.
-  const pairIdxFor = (members) => round.pairs.findIndex((pr) => (
-    pr.length === members.length && pr.every((p) => members.some((m) => m.player.id === p.id))
-  ));
-  return (
-    <>
-      {pairResults.map((pair, pi) => {
-        const origIdx = pairIdxFor(pair.members);
-        const isClinched = clinchedPairIdx != null && origIdx === clinchedPairIdx;
-        return (
-          <RankedRow
-            key={origIdx}
-            rank={pi + 1}
-            name={pair.members.map((m) => m.player.name).join(' & ')}
-            primary={showRunning ? `${pair.combinedPoints} pts` : '— pts'}
-            sub={showRunning ? `${pair.combinedStrokes || '-'} str` : null}
-            isWinner={showRunning && isClinched}
-            isLast={pi === pairResults.length - 1}
-            theme={theme}
-            s={s}
-          />
-        );
-      })}
-    </>
-  );
-});
+// Universal round card — identical in every scoring mode. Shows a holes-played
+// progress bar for the round, then each player ranked by Stableford points
+// with strokes and vs-par. Replaces the four mode-specific round cards.
+const RoundScoreboard = React.memo(function RoundScoreboard({ round, players, theme, s, showRunning = true }) {
+  const holes = round?.holes ?? [];
+  const totalHoles = holes.length || 18;
 
-// Match Play: per-player hole wins as ranked rows, plus a match-status footer
-// ("Alex 2 UP", "All square", "Alex wins 3&2"). The footer carries match state
-// the ranked rows cannot show; the other round cards have no footer.
-const MatchPlayRoundCard = React.memo(function MatchPlayRoundCard({ round, players, theme, s, showRunning = true }) {
-  if (!players || players.length !== 2) {
-    return <Text style={s.pairMember}>Match play needs 2 players</Text>;
-  }
-  const tally = matchPlayRoundTally(round, players);
-  if (!tally) return <Text style={s.pairMember}>No results yet</Text>;
+  const totals = roundTotals(round, players);
+  const totalsById = Object.fromEntries(totals.map((t) => [t.player.id, t]));
+  const rows = players.map((player) => {
+    const ps = round?.scores?.[player.id] ?? {};
+    let strokes = 0;
+    let parThrough = 0;
+    let played = 0;
+    for (const hole of holes) {
+      const sc = ps[hole.number];
+      if (sc) { strokes += sc; parThrough += hole.par ?? 0; played++; }
+    }
+    return {
+      player,
+      points: totalsById[player.id]?.totalPoints ?? 0,
+      strokes,
+      played,
+      vsPar: strokes - parThrough,
+    };
+  }).sort((a, b) => b.points - a.points);
 
-  const { aWins, bWins, halved, leaderIdx, lead, clinched, holesLeft } = tally;
-  const leader = leaderIdx !== null ? players[leaderIdx] : null;
-  const loser = leaderIdx !== null ? players[1 - leaderIdx] : null;
+  const holesPlayed = rows.length ? Math.max(...rows.map((r) => r.played)) : 0;
+  const progressPct = totalHoles > 0 ? Math.min(100, Math.round((holesPlayed / totalHoles) * 100)) : 0;
 
-  const firstName = (p) => p.name?.split(' ')[0] ?? '—';
-  const status = leader
-    ? clinched
-      ? `${firstName(leader)} wins ${lead}&${holesLeft}`
-      : `${firstName(leader)} ${lead} UP${holesLeft > 0 ? ` · ${holesLeft} to play` : ''}`
-    : `All square${holesLeft > 0 ? ` · ${holesLeft} to play` : ''}`;
+  // The round is decided once every player has scored every hole and there is
+  // a sole top scorer.
+  const allScored = players.length > 0 && players.every((p) =>
+    holes.every((h) => round?.scores?.[p.id]?.[h.number] != null));
+  const decided = allScored && rows.length > 1 && rows[0].points !== rows[1].points;
 
-  // Order rows: leader first (winner), then other.
-  const rows = leader
-    ? [
-        { player: leader, wins: leaderIdx === 0 ? aWins : bWins, isLeader: true },
-        { player: loser, wins: leaderIdx === 0 ? bWins : aWins, isLeader: false },
-      ]
-    : [
-        { player: players[0], wins: aWins, isLeader: false },
-        { player: players[1], wins: bWins, isLeader: false },
-      ];
+  const vsParText = (r) => {
+    if (r.played === 0) return '—';
+    if (r.vsPar === 0) return 'E';
+    return r.vsPar > 0 ? `+${r.vsPar}` : `${r.vsPar}`;
+  };
+  const vsParColor = (r) => {
+    if (r.played === 0) return theme.text.muted;
+    if (r.vsPar < 0) return theme.scoreColor('excellent');
+    if (r.vsPar === 0) return theme.scoreColor('good');
+    return theme.scoreColor('poor');
+  };
 
   return (
     <>
-      {rows.map(({ player, wins, isLeader }, i) => (
+      <View style={s.roundProgressRow}>
+        <View style={s.roundProgressTrack}>
+          <View style={[s.roundProgressFill, { width: `${progressPct}%` }]} />
+        </View>
+        <Text style={s.roundProgressText}>{holesPlayed} / {totalHoles}</Text>
+      </View>
+      {rows.map((r, i) => (
         <RankedRow
-          key={player.id}
+          key={r.player.id}
           rank={i + 1}
-          name={player.name}
-          primary={showRunning ? `${wins} ${wins === 1 ? 'hole' : 'holes'}` : '—'}
-          sub={null}
-          isWinner={showRunning && clinched && isLeader}
+          name={r.player.name}
+          primary={showRunning ? `${r.points} pts` : '— pts'}
+          sub={showRunning ? `${r.strokes || '-'} str` : null}
+          sub2={showRunning ? vsParText(r) : '—'}
+          sub2Color={showRunning ? vsParColor(r) : theme.text.muted}
+          isWinner={showRunning && decided && i === 0}
           isLast={i === rows.length - 1}
-          theme={theme}
-          s={s}
-        />
-      ))}
-      <Text style={s.pairsPreviewHint}>
-        {showRunning ? `${status}${halved > 0 ? ` · ${halved} halved` : ''}` : 'Scores hidden'}
-      </Text>
-    </>
-  );
-});
-
-const SindicatoRoundCard = React.memo(function SindicatoRoundCard({ round, players, theme, s, showRunning = true }) {
-  if (!players || players.length !== 3) {
-    return <Text style={s.pairMember}>Sindicato needs 3 players</Text>;
-  }
-  const tally = sindicatoRoundTally(round, players);
-  if (!tally) return <Text style={s.pairMember}>No results yet</Text>;
-
-  const { totals, leaderIdx, clinched } = tally;
-  const strokesOf = (id) =>
-    Object.values(round.scores?.[id] ?? {}).reduce((sum, v) => sum + (v || 0), 0);
-
-  return (
-    <>
-      {totals.map(({ player, points }, i) => (
-        <RankedRow
-          key={player.id}
-          rank={i + 1}
-          name={player.name}
-          primary={showRunning ? `${points} ${points === 1 ? 'pt' : 'pts'}` : '—'}
-          sub={showRunning ? `${strokesOf(player.id) || '-'} str` : null}
-          isWinner={showRunning && clinched && leaderIdx === i}
-          isLast={i === totals.length - 1}
-          theme={theme}
-          s={s}
-        />
-      ))}
-    </>
-  );
-});
-
-const BestBallRoundCard = React.memo(function BestBallRoundCard({ round, players, settings, clinchedPairIdx, theme, s, showRunning = true }) {
-  const result = calcBestWorstBall(round, players);
-  if (!result) return <Text style={s.pairMember}>No results yet</Text>;
-
-  const { pair1, pair2, bestBall, worstBall } = result;
-  const p1Points = bestBall.pair1 * settings.bestBallValue + worstBall.pair1 * settings.worstBallValue;
-  const p2Points = bestBall.pair2 * settings.bestBallValue + worstBall.pair2 * settings.worstBallValue;
-
-  // Rank the two pairs by total points so the leader is row 1.
-  const entries = [
-    { idx: 0, name: pair1.map((p) => p.name).join(' & '), points: p1Points },
-    { idx: 1, name: pair2.map((p) => p.name).join(' & '), points: p2Points },
-  ].sort((a, b) => b.points - a.points);
-
-  return (
-    <>
-      {entries.map((e, i) => (
-        <RankedRow
-          key={e.idx}
-          rank={i + 1}
-          name={e.name}
-          primary={showRunning ? `${e.points} pts` : '— pts'}
-          sub={null}
-          isWinner={showRunning && clinchedPairIdx === e.idx}
-          isLast={i === entries.length - 1}
           theme={theme}
           s={s}
         />
@@ -2378,6 +2296,14 @@ const makeStyles = (t) => StyleSheet.create({
   rankedPrimary: { fontFamily: 'PlusJakartaSans-ExtraBold', color: t.accent.primary, fontSize: 16, marginRight: 8 },
   rankedSub: { fontFamily: 'PlusJakartaSans-Medium', color: t.text.muted, fontSize: 11, width: 60, textAlign: 'right' },
   rankedSub2: { fontFamily: 'PlusJakartaSans-SemiBold', color: t.text.muted, fontSize: 11, width: 44, textAlign: 'right' },
+  roundProgressRow: { flexDirection: 'row', alignItems: 'center', gap: 10, marginBottom: 14 },
+  roundProgressTrack: {
+    flex: 1, height: 6, borderRadius: 3,
+    backgroundColor: t.isDark ? 'rgba(255,255,255,0.08)' : 'rgba(0,0,0,0.06)',
+    overflow: 'hidden',
+  },
+  roundProgressFill: { height: 6, borderRadius: 3, backgroundColor: t.accent.primary },
+  roundProgressText: { fontFamily: 'PlusJakartaSans-Bold', color: t.text.muted, fontSize: 11 },
 
   // Pair blocks
   pairBlock: {
