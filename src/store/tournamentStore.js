@@ -22,6 +22,7 @@ import {
   sindicatoRoundTally,
   tournamentSindicatoLeaderboard,
   tournamentSindicatoClinched,
+  tournamentMatchPlayStandings,
   pickupStrokes,
   randomPairs,
   isRoundPlayed,
@@ -427,6 +428,7 @@ export {
   sindicatoHolePoints,
   sindicatoRoundTally,
   tournamentSindicatoLeaderboard,
+  tournamentMatchPlayStandings,
   pickupStrokes,
   randomPairs,
 } from './scoring';
