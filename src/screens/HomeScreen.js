@@ -1942,7 +1942,7 @@ const RoundScoreboard = React.memo(function RoundScoreboard({ round, players, th
           rank={i + 1}
           name={r.player.name}
           primary={showRunning ? `${r.points} pts` : '— pts'}
-          sub={showRunning ? `${r.strokes || '-'} str` : null}
+          sub={showRunning ? `${r.strokes || '-'} str` : '—'}
           sub2={showRunning ? vsParText(r) : '—'}
           sub2Color={showRunning ? vsParColor(r) : theme.text.muted}
           isWinner={showRunning && decided && i === 0}
