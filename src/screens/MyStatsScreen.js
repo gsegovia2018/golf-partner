@@ -8,8 +8,16 @@ import { useAuth } from '../context/AuthContext';
 import { loadAllTournamentsWithFallback } from '../store/tournamentStore';
 import { collectMyRounds, resolveSelection, computeMyStats } from '../store/personalStats';
 import MyStatsRoundSelector from '../components/MyStatsRoundSelector';
+import CardGrid from '../components/CardGrid';
 
 const SELECTION_PREFIX = '@mystats_round_selection:';
+
+const ALL_TABS = [
+  { key: 'overview',  label: 'Overview' },
+  { key: 'form',      label: 'Form' },
+  { key: 'breakdown', label: 'Breakdown' },
+  { key: 'shots',     label: 'Shots' },
+];
 
 // Format strokes-vs-par with an explicit sign.
 function fmtVsPar(v) {
@@ -29,6 +37,7 @@ export default function MyStatsScreen({ navigation }) {
   const [n, setN] = useState(5);
   const [selectorOpen, setSelectorOpen] = useState(false);
   const [loadNonce, setLoadNonce] = useState(0);
+  const [tab, setTab] = useState('overview');
 
   const storageKey = user?.id ? `${SELECTION_PREFIX}${user.id}` : null;
 
@@ -97,6 +106,23 @@ export default function MyStatsScreen({ navigation }) {
           {myRounds ? `${selected.length} of ${myRounds.length}` : '—'}
         </Text>
       </TouchableOpacity>
+    </View>
+  );
+
+  const TabBar = (
+    <View style={s.tabBar}>
+      {ALL_TABS.map((t) => (
+        <TouchableOpacity
+          key={t.key}
+          style={[s.tab, tab === t.key && s.tabActive]}
+          onPress={() => setTab(t.key)}
+          activeOpacity={0.7}
+          accessibilityRole="tab"
+          accessibilityState={{ selected: tab === t.key }}
+        >
+          <Text style={[s.tabText, tab === t.key && s.tabTextActive]}>{t.label}</Text>
+        </TouchableOpacity>
+      ))}
     </View>
   );
 
@@ -177,62 +203,80 @@ export default function MyStatsScreen({ navigation }) {
   return (
     <ScreenContainer style={s.container} edges={['top', 'bottom']}>
       {Header}
+      {TabBar}
       <ScrollView contentContainerStyle={s.scroll}>
-        <Snapshot stats={stats} metric={metric} onToggleMetric={setMetric} s={s} theme={theme} />
-        <FormSection form={stats.form} history={stats.history} n={n} onChangeN={setN} s={s} theme={theme} />
-        <StrengthsSection ranking={stats.ranking} s={s} theme={theme} />
-        <BreakdownSection title="Par type" rows={[
-          ['Par 3s', stats.parType.par3.avgPoints, stats.parType.par3.holes],
-          ['Par 4s', stats.parType.par4.avgPoints, stats.parType.par4.holes],
-          ['Par 5s', stats.parType.par5.avgPoints, stats.parType.par5.holes],
-        ]} s={s} />
-        <BreakdownSection title="Hole difficulty" rows={[
-          ['Hard (SI 1-6)', stats.difficulty.hard.avgPoints, stats.difficulty.hard.holes],
-          ['Mid (SI 7-12)', stats.difficulty.mid.avgPoints, stats.difficulty.mid.holes],
-          ['Easy (SI 13-18)', stats.difficulty.easy.avgPoints, stats.difficulty.easy.holes],
-        ]} s={s} />
-        <BreakdownSection title="Round shape" rows={[
-          ['Front nine', fb ? fb.frontAvg : 0, fbHoles],
-          ['Back nine', fb ? fb.backAvg : 0, fbHoles],
-          ['Opening 3', stats.warmupClosing.warmup.avgPoints, stats.warmupClosing.warmup.holes],
-          ['Closing 3', stats.warmupClosing.closing.avgPoints, stats.warmupClosing.closing.holes],
-        ]} s={s} />
-        <DistributionSection dist={stats.distribution} s={s} />
-        {(stats.bounceBack || stats.scrambling) ? (
-          <BreakdownSection title="Recovery" rows={[
-            ['Bounce-back rate %', stats.bounceBack ? stats.bounceBack.rate : 0, stats.bounceBack ? stats.bounceBack.opportunities : 0],
-            ['Scrambling %', stats.scrambling ? stats.scrambling.pct : 0, stats.scrambling ? stats.scrambling.missedGir : 0],
-          ]} s={s} />
-        ) : null}
-        {stats.teeShot.hasData ? (
-          <BreakdownSection title="Tee shot impact" rows={[
-            ['Fairway found', stats.teeShot.fairway.avgPoints, stats.teeShot.fairway.holes],
-            ['Fairway missed', stats.teeShot.missed.avgPoints, stats.teeShot.missed.holes],
-            ['Miss left', stats.teeShot.byDirection.left.avgPoints, stats.teeShot.byDirection.left.holes],
-            ['Miss right', stats.teeShot.byDirection.right.avgPoints, stats.teeShot.byDirection.right.holes],
-            ['Miss short', stats.teeShot.byDirection.short.avgPoints, stats.teeShot.byDirection.short.holes],
-            ['After tee penalty', stats.teeShot.teePenalty.avgPoints, stats.teeShot.teePenalty.holes],
-            ['Penalty drag (pts lost)', stats.teeShot.penaltyDrag, stats.teeShot.teePenalty.holes],
-          ]} s={s} />
-        ) : null}
-        {stats.shots.hasData ? (
-          <BreakdownSection title="Putting & driving" rows={[
-            ['Putts / round', stats.shots.putts.perRound, stats.shots.putts.holes],
-            ['1-putts', stats.shots.putts.onePutts, stats.shots.putts.holes],
-            ['3-putts+', stats.shots.putts.threePuttPlus, stats.shots.putts.holes],
-            ['Fairways hit %', stats.shots.drives.fairwayPct, stats.shots.drives.recorded],
-            ['Greens in reg %', stats.shots.gir.pct, stats.shots.gir.eligible],
-            ['Penalties / round', stats.shots.penalties.total, stats.shots.roundsWithData],
-          ]} s={s} />
-        ) : null}
-        {!stats.teeShot.hasData && !stats.shots.hasData ? (
-          <View style={s.card}>
-            <Text style={s.note}>
-              Log putts and drives during a round to unlock tee-shot, putting and
-              driving stats.
-            </Text>
-          </View>
-        ) : null}
+        {tab === 'overview' && (
+          <>
+            <Snapshot stats={stats} metric={metric} onToggleMetric={setMetric} s={s} theme={theme} />
+            <StrengthsSection ranking={stats.ranking} s={s} theme={theme} />
+          </>
+        )}
+
+        {tab === 'form' && (
+          <FormSection form={stats.form} history={stats.history} n={n} onChangeN={setN} s={s} theme={theme} />
+        )}
+
+        {tab === 'breakdown' && (
+          <CardGrid>
+            <BreakdownSection key="parType" title="Par type" rows={[
+              ['Par 3s', stats.parType.par3.avgPoints, stats.parType.par3.holes],
+              ['Par 4s', stats.parType.par4.avgPoints, stats.parType.par4.holes],
+              ['Par 5s', stats.parType.par5.avgPoints, stats.parType.par5.holes],
+            ]} s={s} />
+            <BreakdownSection key="difficulty" title="Hole difficulty" rows={[
+              ['Hard (SI 1-6)', stats.difficulty.hard.avgPoints, stats.difficulty.hard.holes],
+              ['Mid (SI 7-12)', stats.difficulty.mid.avgPoints, stats.difficulty.mid.holes],
+              ['Easy (SI 13-18)', stats.difficulty.easy.avgPoints, stats.difficulty.easy.holes],
+            ]} s={s} />
+            <BreakdownSection key="roundShape" title="Round shape" rows={[
+              ['Front nine', fb ? fb.frontAvg : 0, fbHoles],
+              ['Back nine', fb ? fb.backAvg : 0, fbHoles],
+              ['Opening 3', stats.warmupClosing.warmup.avgPoints, stats.warmupClosing.warmup.holes],
+              ['Closing 3', stats.warmupClosing.closing.avgPoints, stats.warmupClosing.closing.holes],
+            ]} s={s} />
+            <DistributionSection key="distribution" dist={stats.distribution} s={s} />
+            {(stats.bounceBack || stats.scrambling) ? (
+              <BreakdownSection key="recovery" title="Recovery" rows={[
+                ['Bounce-back rate %', stats.bounceBack ? stats.bounceBack.rate : 0, stats.bounceBack ? stats.bounceBack.opportunities : 0],
+                ['Scrambling %', stats.scrambling ? stats.scrambling.pct : 0, stats.scrambling ? stats.scrambling.missedGir : 0],
+              ]} s={s} />
+            ) : null}
+          </CardGrid>
+        )}
+
+        {tab === 'shots' && (
+          <>
+            {stats.teeShot.hasData ? (
+              <BreakdownSection title="Tee shot impact" rows={[
+                ['Fairway found', stats.teeShot.fairway.avgPoints, stats.teeShot.fairway.holes],
+                ['Fairway missed', stats.teeShot.missed.avgPoints, stats.teeShot.missed.holes],
+                ['Miss left', stats.teeShot.byDirection.left.avgPoints, stats.teeShot.byDirection.left.holes],
+                ['Miss right', stats.teeShot.byDirection.right.avgPoints, stats.teeShot.byDirection.right.holes],
+                ['Miss short', stats.teeShot.byDirection.short.avgPoints, stats.teeShot.byDirection.short.holes],
+                ['After tee penalty', stats.teeShot.teePenalty.avgPoints, stats.teeShot.teePenalty.holes],
+                ['Penalty drag (pts lost)', stats.teeShot.penaltyDrag, stats.teeShot.teePenalty.holes],
+              ]} s={s} />
+            ) : null}
+            {stats.shots.hasData ? (
+              <BreakdownSection title="Putting & driving" rows={[
+                ['Putts / round', stats.shots.putts.perRound, stats.shots.putts.holes],
+                ['1-putts', stats.shots.putts.onePutts, stats.shots.putts.holes],
+                ['3-putts+', stats.shots.putts.threePuttPlus, stats.shots.putts.holes],
+                ['Fairways hit %', stats.shots.drives.fairwayPct, stats.shots.drives.recorded],
+                ['Greens in reg %', stats.shots.gir.pct, stats.shots.gir.eligible],
+                ['Penalties / round', stats.shots.penalties.total, stats.shots.roundsWithData],
+              ]} s={s} />
+            ) : null}
+            {!stats.teeShot.hasData && !stats.shots.hasData ? (
+              <View style={s.card}>
+                <Text style={s.note}>
+                  Log putts and drives during a round to unlock tee-shot, putting and
+                  driving stats.
+                </Text>
+              </View>
+            ) : null}
+          </>
+        )}
       </ScrollView>
       {Selector}
     </ScreenContainer>
@@ -468,6 +512,18 @@ function makeStyles(theme) {
       borderRadius: theme.radius.pill, backgroundColor: theme.accent.light,
     },
     roundsBtnText: { ...theme.typography.caption, color: theme.accent.primary, fontWeight: '700' },
+    tabBar: {
+      flexDirection: 'row', gap: 6,
+      paddingHorizontal: theme.spacing.lg, paddingTop: theme.spacing.sm,
+    },
+    tab: {
+      paddingVertical: 6, paddingHorizontal: 14,
+      borderRadius: theme.radius.pill, backgroundColor: theme.bg.secondary,
+      borderWidth: 1, borderColor: theme.border.default,
+    },
+    tabActive: { backgroundColor: theme.accent.primary, borderColor: theme.accent.primary },
+    tabText: { ...theme.typography.caption, color: theme.text.muted, fontWeight: '700' },
+    tabTextActive: { color: theme.text.inverse },
     center: { flex: 1, alignItems: 'center', justifyContent: 'center', gap: theme.spacing.md, padding: theme.spacing.xl },
     emptyText: { ...theme.typography.body, color: theme.text.muted, textAlign: 'center' },
     retryBtn: {
