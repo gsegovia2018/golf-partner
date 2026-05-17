@@ -11,6 +11,7 @@ import { Feather } from '@expo/vector-icons';
 import * as ScreenOrientation from 'expo-screen-orientation';
 
 import { getShowRunningScore, setShowRunningScore } from '../lib/prefs';
+import { playersMeFirst, pairsMeFirst } from '../lib/playerOrder';
 import {
   loadTournament, subscribeTournamentChanges,
   calcStablefordPoints, calcBestWorstBall, pickupStrokes, DEFAULT_SETTINGS,
@@ -861,6 +862,7 @@ export default function ScorecardScreen({ navigation, route }) {
           onSetScore={setScore}
           refreshing={refreshing}
           onRefresh={onRefresh}
+          meId={meId}
         />
       )}
 
@@ -961,8 +963,8 @@ const HolePage = React.memo(function HolePage({
   // 4-player Best Ball where pair colors carry meaning.
   const useHeroCards = mode !== 'bestball';
   const orderedPlayers = !useHeroCards && pairs.length === 2
-    ? [...pairs[0], ...pairs[1]].map((pp) => players.find((p) => p.id === pp.id)).filter(Boolean)
-    : players;
+    ? pairsMeFirst(pairs, meId).map((pp) => players.find((p) => p.id === pp.id)).filter(Boolean)
+    : playersMeFirst(players, meId);
 
   return (
     <View
@@ -2281,7 +2283,7 @@ function ScorecardTable({ round, players, scores, onSetScore, mode }) {
   );
 }
 
-function GridView({ round, roundIndex, players, scores, isBestBall, bbResult, settings, onSetScore, refreshing, onRefresh }) {
+function GridView({ round, roundIndex, players, scores, isBestBall, bbResult, settings, onSetScore, refreshing, onRefresh, meId }) {
   const { theme } = useTheme();
   const s = useMemo(() => makeStyles(theme), [theme]);
   const mode = settings?.scoringMode === 'matchplay' ? 'matchplay'
@@ -2336,8 +2338,8 @@ function GridView({ round, roundIndex, players, scores, isBestBall, bbResult, se
             const pairs = round.pairs ?? [];
             const hasPairs = pairs.length === 2;
             const orderedPlayers = hasPairs
-              ? [...pairs[0], ...pairs[1]].map((pp) => players.find((p) => p.id === pp.id)).filter(Boolean)
-              : players;
+              ? pairsMeFirst(pairs, meId).map((pp) => players.find((p) => p.id === pp.id)).filter(Boolean)
+              : playersMeFirst(players, meId);
 
             const renderPlayerCell = (p, hole) => {
               const strokes = scores[p.id]?.[hole.number];
