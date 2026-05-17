@@ -34,6 +34,7 @@ import { useRoundMedia } from '../hooks/useRoundMedia';
 import { useOfficialRound } from '../hooks/useOfficialRound';
 import DiscrepancySheet from '../components/DiscrepancySheet';
 import { scoreCellState, cardDiscrepancyHoles } from '../store/officialScoring';
+import { buildLeaderboard } from '../store/officialLeaderboard';
 import { attestCard } from '../store/officialStore';
 import { Alert } from 'react-native';
 
@@ -155,6 +156,8 @@ export default function ScorecardScreen({ navigation, route }) {
   // Official mode (Task 16): attest-my-card request in flight, and the last
   // attest error message (RPC can reject with "resolve discrepancies first").
   const [attestBusy, setAttestBusy] = useState(false);
+  // Official-only: whether the official gross leaderboard sheet is open.
+  const [officialLeaderboardOpen, setOfficialLeaderboardOpen] = useState(false);
   const [attestError, setAttestError] = useState(null);
   const tournamentRef = useRef(null);
   const saveTimeoutRef = useRef(null);
@@ -677,6 +680,17 @@ export default function ScorecardScreen({ navigation, route }) {
     };
   }, [official, officialData.scores, officialData.members, officialData.myRosterId]);
 
+  // Official-only: ranked gross leaderboard rows built from the flat
+  // members / scores lists. Discrepancy holes are omitted from each total
+  // (see officialLeaderboard.js). Casual mode never builds this.
+  const officialLeaderboard = useMemo(() => {
+    if (!official) return [];
+    return buildLeaderboard({
+      members: officialData.members ?? [],
+      scores: officialData.scores ?? [],
+    });
+  }, [official, officialData.members, officialData.scores]);
+
   const setScore = useCallback((playerId, holeNumber, value) => {
     const parsed = value === '' ? undefined : parseInt(value, 10) || undefined;
     const holePar = round?.holes?.find((h) => h.number === holeNumber)?.par ?? 4;
@@ -1020,6 +1034,15 @@ export default function ScorecardScreen({ navigation, route }) {
           >
             <Feather name={showRunning ? 'eye-off' : 'eye'} size={18} color={theme.accent.primary} />
           </TouchableOpacity>
+          {official && (
+            <TouchableOpacity
+              onPress={() => setOfficialLeaderboardOpen(true)}
+              style={s.cameraBtn}
+              accessibilityLabel="View official leaderboard"
+            >
+              <Feather name="award" size={20} color={theme.accent.primary} />
+            </TouchableOpacity>
+          )}
           <TouchableOpacity
             onPress={openCapturePicker}
             style={s.cameraBtn}
@@ -1154,6 +1177,55 @@ export default function ScorecardScreen({ navigation, route }) {
             <Text style={s.roundCompleteTitle}>Nice round!</Text>
           </View>
         </View>
+      )}
+
+      {/* Official gross leaderboard (Task 17). Official-only; built from the
+          flat members / scores lists via buildLeaderboard. Holes still in
+          discrepancy are omitted from each player's gross total. */}
+      {official && (
+        <Modal
+          visible={officialLeaderboardOpen}
+          transparent
+          animationType="slide"
+          onRequestClose={() => setOfficialLeaderboardOpen(false)}
+        >
+          <Pressable
+            style={s.notesBackdrop}
+            onPress={() => setOfficialLeaderboardOpen(false)}
+          >
+            <Pressable style={s.notesSheet} onPress={() => {}}>
+              <View style={s.notesHandle} />
+              <View style={s.notesHeader}>
+                <Text style={s.notesTitle}>Leaderboard</Text>
+                <TouchableOpacity
+                  onPress={() => setOfficialLeaderboardOpen(false)}
+                  style={s.notesCloseBtn}
+                  accessibilityLabel="Close leaderboard"
+                >
+                  <Feather name="x" size={18} color={theme.text.secondary} />
+                </TouchableOpacity>
+              </View>
+              {officialLeaderboard.length === 0 ? (
+                <Text style={s.statusSubtitle}>No scores yet.</Text>
+              ) : (
+                <ScrollView style={s.officialLbList}>
+                  {officialLeaderboard.map((row, i) => (
+                    <View key={row.rosterId} style={s.officialLbRow}>
+                      <Text style={s.officialLbRank}>{i + 1}</Text>
+                      <Text style={s.officialLbName} numberOfLines={1}>
+                        {row.name}
+                      </Text>
+                      <Text style={s.officialLbThru}>
+                        {row.thru > 0 ? `thru ${row.thru}` : '—'}
+                      </Text>
+                      <Text style={s.officialLbGross}>{row.gross}</Text>
+                    </View>
+                  ))}
+                </ScrollView>
+              )}
+            </Pressable>
+          </Pressable>
+        </Modal>
       )}
     </ScreenContainer>
   );
@@ -3446,6 +3518,40 @@ function makeStyles(theme) {
       width: 32, height: 32, borderRadius: 16,
       alignItems: 'center', justifyContent: 'center',
       backgroundColor: theme.isDark ? theme.bg.elevated : theme.bg.secondary,
+    },
+    // Official leaderboard sheet (Task 17).
+    officialLbList: { maxHeight: 360 },
+    officialLbRow: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      paddingVertical: 12,
+      borderBottomWidth: 1,
+      borderBottomColor: theme.border.default,
+    },
+    officialLbRank: {
+      width: 28,
+      fontFamily: 'PlusJakartaSans-Bold',
+      fontSize: 15,
+      color: theme.text.secondary,
+    },
+    officialLbName: {
+      flex: 1,
+      fontFamily: 'PlusJakartaSans-SemiBold',
+      fontSize: 15,
+      color: theme.text.primary,
+    },
+    officialLbThru: {
+      fontFamily: 'PlusJakartaSans-Regular',
+      fontSize: 13,
+      color: theme.text.muted,
+      marginRight: 14,
+    },
+    officialLbGross: {
+      minWidth: 36,
+      textAlign: 'right',
+      fontFamily: 'PlusJakartaSans-Bold',
+      fontSize: 16,
+      color: theme.text.primary,
     },
     // Note input used in the notes bottom sheet (one per hole / round field).
     notesModalInputCompact: {
