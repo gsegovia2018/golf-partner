@@ -1658,3 +1658,76 @@ export function scramblingStats(tournament) {
     .map(r => ({ ...r, pct: Math.round((r.saves / r.missedGir) * 100) }))
     .sort((a, b) => b.pct - a.pct);
 }
+
+// ── Tee Shot Impact ──
+// Cross-references each par-4/5 hole's drive outcome and tee penalty with the
+// Stableford points scored, so a player can see what a good tee shot is worth.
+// Par 3s are excluded — "tee shot" here means the drive on a 4 or 5.
+export function teeShotImpact(tournament, playerId) {
+  const player = (tournament.players || []).find((p) => p.id === playerId);
+  const fairway = [];
+  const missed = [];
+  const byDir = { left: [], right: [], short: [] };
+  const withPenalty = [];
+  const withoutPenalty = [];
+  let penaltyCount = 0;
+
+  (tournament.rounds || []).forEach((round, roundIndex) => {
+    if (!round.scores?.[playerId] || !player) return;
+    const handicap = getPlayingHandicap(round, player);
+    const details = round.shotDetails?.[playerId] || {};
+    (round.holes || []).forEach((hole) => {
+      if (hole.par === 3) return;
+      const sc = round.scores[playerId]?.[hole.number];
+      if (!sc) return;
+      const d = details[hole.number];
+      const points = calcStablefordPoints(hole.par, sc, handicap, hole.strokeIndex);
+      const entry = {
+        roundIndex, courseName: round.courseName,
+        holeNumber: hole.number, par: hole.par, strokes: sc, points,
+      };
+      if (d) {
+        if (d.drive != null) {
+          if (d.drive === 'fairway' || d.drive === 'super') {
+            fairway.push(entry);
+          } else {
+            missed.push(entry);
+            if (byDir[d.drive]) byDir[d.drive].push(entry);
+          }
+        }
+        const teePen = d.teePenalties ?? 0;
+        if (teePen > 0) {
+          withPenalty.push(entry);
+          penaltyCount += teePen;
+        } else {
+          withoutPenalty.push(entry);
+        }
+      } else {
+        // No shot detail recorded — counts as penalty-free for penalty analysis
+        withoutPenalty.push(entry);
+      }
+    });
+  });
+
+  const avg = (arr) => (arr.length
+    ? +(arr.reduce((s, e) => s + e.points, 0) / arr.length).toFixed(2)
+    : 0);
+  const summarize = (arr) => ({ holes: arr.length, avgPoints: avg(arr), breakdown: arr });
+  const penaltyDrag = withPenalty.length && withoutPenalty.length
+    ? +(avg(withoutPenalty) - avg(withPenalty)).toFixed(2)
+    : 0;
+
+  return {
+    hasData: fairway.length + missed.length + withPenalty.length > 0,
+    fairway: summarize(fairway),
+    missed: summarize(missed),
+    byDirection: {
+      left: summarize(byDir.left),
+      right: summarize(byDir.right),
+      short: summarize(byDir.short),
+    },
+    teePenalty: { ...summarize(withPenalty), penaltyCount },
+    withoutPenalty: summarize(withoutPenalty),
+    penaltyDrag,
+  };
+}
