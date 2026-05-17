@@ -1898,7 +1898,7 @@ const StablefordRoundCard = React.memo(function StablefordRoundCard({ round, pla
         const isClinched = clinchedPairIdx != null && origIdx === clinchedPairIdx;
         return (
           <RankedRow
-            key={pi}
+            key={origIdx}
             rank={pi + 1}
             name={pair.members.map((m) => m.player.name).join(' & ')}
             primary={showRunning ? `${pair.combinedPoints} pts` : '— pts'}
@@ -1914,10 +1914,9 @@ const StablefordRoundCard = React.memo(function StablefordRoundCard({ round, pla
   );
 });
 
-// Match Play: show per-player hole wins, halved count, and match status
-// ("Alex 2 UP", "All square", "Alex wins 3&2"). Uses the same .pairBlock /
-// .winnerBlock / .winnerBadge styles as the Stableford card so the visual
-// rhythm on the round overview stays consistent.
+// Match Play: per-player hole wins as ranked rows, plus a match-status footer
+// ("Alex 2 UP", "All square", "Alex wins 3&2"). The footer carries match state
+// the ranked rows cannot show; the other round cards have no footer.
 const MatchPlayRoundCard = React.memo(function MatchPlayRoundCard({ round, players, theme, s, showRunning = true }) {
   if (!players || players.length !== 2) {
     return <Text style={s.pairMember}>Match play needs 2 players</Text>;
