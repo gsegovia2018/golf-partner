@@ -12,6 +12,8 @@ export const SCORING_MODES = [
     subtitle: 'Highest points wins',
     icon: 'user',
     category: 'Solo',
+    // Each player competes solo — no partners/pairs to assign or reveal.
+    teams: false,
     // Solo ranking — needs at least 2 players to be a contest.
     isAllowed: (count) => count >= 2,
     requirement: 'Requires 2+ players',
@@ -22,6 +24,8 @@ export const SCORING_MODES = [
     subtitle: 'Random partners each round',
     icon: 'users',
     category: 'Solo',
+    // Played in pairs — partners are assigned and revealed each round.
+    teams: true,
     // Needs 3+ so there is an opposing side: 2 players form a single pair
     // (the whole field — no contest), and randomPairs would yield 1 pair.
     isAllowed: (count) => count >= 3,
@@ -33,9 +37,23 @@ export const SCORING_MODES = [
     subtitle: 'Head-to-head, hole by hole',
     icon: 'flag',
     category: 'Head-to-head',
+    // 1-vs-1 — each player is their own side, no partners to assign.
+    teams: false,
     // Match play is strictly 1-vs-1.
     isAllowed: (count) => count === 2,
     requirement: 'Requires exactly 2 players',
+  },
+  {
+    key: 'sindicato',
+    label: 'Sindicato',
+    subtitle: 'Three-way points, hole by hole',
+    icon: 'pie-chart',
+    category: 'Head-to-head',
+    // Each player competes solo — no partners/pairs to assign.
+    teams: false,
+    // Sindicato splits 6 points per hole between exactly three players.
+    isAllowed: (count) => count === 3,
+    requirement: 'Requires exactly 3 players',
   },
   {
     key: 'bestball',
@@ -43,6 +61,8 @@ export const SCORING_MODES = [
     subtitle: 'Two pairs, best & worst score',
     icon: 'award',
     category: 'Teams',
+    // Two pairs of two — partners are assigned and revealed each round.
+    teams: true,
     // Two pairs of two.
     isAllowed: (count) => count === 4,
     requirement: 'Requires exactly 4 players',
@@ -64,6 +84,21 @@ export function fallbackScoringMode(playerCount) {
 // default so the UI can always render something.
 export function getScoringMode(key) {
   return SCORING_MODES.find((m) => m.key === key) ?? SCORING_MODES[0];
+}
+
+// True when the mode is played in partners/pairs (Stableford with Partners,
+// Best Ball) — i.e. teams get assigned and revealed. Solo modes (Stableford,
+// Match Play) return false. Unknown keys fall back to the first mode (solo),
+// so a stray/legacy mode never wrongly surfaces team UI.
+//
+// When `playerCount` is supplied, the mode must ALSO be valid for that roster
+// size. This catches legacy/degenerate games stuck on a team mode their
+// roster can no longer support — e.g. a 1- or 2-player game still stored as
+// 'stableford' — which have a "teams" mode on paper but no teams in practice.
+export function scoringModeUsesTeams(key, playerCount) {
+  if (!getScoringMode(key).teams) return false;
+  if (playerCount != null && !isScoringModeAllowed(key, playerCount)) return false;
+  return true;
 }
 
 // Groups SCORING_MODES into ordered { category, modes } sections, preserving

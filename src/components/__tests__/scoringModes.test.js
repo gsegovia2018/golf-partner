@@ -37,6 +37,11 @@ describe('isScoringModeAllowed', () => {
   test('unknown mode is never allowed', () => {
     expect(isScoringModeAllowed('nope', 4)).toBe(false);
   });
+  test('sindicato needs exactly 3 players', () => {
+    expect(isScoringModeAllowed('sindicato', 2)).toBe(false);
+    expect(isScoringModeAllowed('sindicato', 3)).toBe(true);
+    expect(isScoringModeAllowed('sindicato', 4)).toBe(false);
+  });
 });
 
 describe('fallbackScoringMode', () => {
@@ -56,7 +61,7 @@ describe('scoringModeCategories', () => {
     const sections = scoringModeCategories();
     expect(sections.map((s) => s.category)).toEqual(['Solo', 'Head-to-head', 'Teams']);
     expect(sections[0].modes.map((m) => m.key)).toEqual(['individual', 'stableford']);
-    expect(sections[1].modes.map((m) => m.key)).toEqual(['matchplay']);
+    expect(sections[1].modes.map((m) => m.key)).toEqual(['matchplay', 'sindicato']);
     expect(sections[2].modes.map((m) => m.key)).toEqual(['bestball']);
   });
   test('every mode appears exactly once across sections', () => {
