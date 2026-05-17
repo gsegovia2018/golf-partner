@@ -43,3 +43,27 @@ export function autoBalanceParties(
   }
   return parties;
 }
+
+// Mean handicap of a pair's two players.
+export function pairAverageHandicap(pair) {
+  const hs = pair.players.map((p) => p.handicap ?? 0);
+  return hs.reduce((s, h) => s + h, 0) / hs.length;
+}
+
+// Snake-deal pre-formed pairs into parties so each party's pairs are balanced
+// on average handicap. Used when a round's format is 'pairs'.
+export function balancePartiesFromPairs(pairs, { pairsPerParty = 2 } = {}) {
+  const sorted = [...pairs].sort(
+    (a, b) => pairAverageHandicap(a) - pairAverageHandicap(b),
+  );
+  const partyCount = Math.max(1, Math.ceil(sorted.length / pairsPerParty));
+  const parties = Array.from({ length: partyCount }, () => []);
+  let idx = 0, dir = 1;
+  for (const pair of sorted) {
+    parties[idx].push(pair);
+    idx += dir;
+    if (idx === partyCount) { idx = partyCount - 1; dir = -1; }
+    else if (idx < 0) { idx = 0; dir = 1; }
+  }
+  return parties;
+}

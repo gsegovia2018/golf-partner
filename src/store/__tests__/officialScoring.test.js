@@ -1,4 +1,4 @@
-import { assignRoundRobinMarkers, autoBalanceParties } from '../officialScoring';
+import { assignRoundRobinMarkers, autoBalanceParties, pairAverageHandicap, balancePartiesFromPairs } from '../officialScoring';
 
 describe('assignRoundRobinMarkers', () => {
   test('each seat marks the next, last wraps to first', () => {
@@ -57,5 +57,25 @@ describe('autoBalanceParties', () => {
     const parties = autoBalanceParties(roster.slice(0, 6), { partySize: 4, mode: 'handicap' });
     expect(parties.flat()).toHaveLength(6);
     expect(parties).toHaveLength(2);
+  });
+});
+
+describe('pair-format balancing', () => {
+  test('pairAverageHandicap averages the two players', () => {
+    expect(pairAverageHandicap({ players: [{ handicap: 4 }, { handicap: 12 }] })).toBe(8);
+  });
+
+  test('balancePartiesFromPairs snake-deals pairs by average handicap', () => {
+    const pairs = [
+      { pairId: 'p1', players: [{ handicap: 2 }, { handicap: 2 }] },
+      { pairId: 'p2', players: [{ handicap: 10 }, { handicap: 10 }] },
+      { pairId: 'p3', players: [{ handicap: 18 }, { handicap: 18 }] },
+      { pairId: 'p4', players: [{ handicap: 26 }, { handicap: 26 }] },
+    ];
+    const parties = balancePartiesFromPairs(pairs, { pairsPerParty: 2 });
+    expect(parties).toHaveLength(2);
+    const partyAvg = (p) => p.reduce((s, x) => s + pairAverageHandicap(x), 0) / p.length;
+    expect(partyAvg(parties[0])).toBe(14);
+    expect(partyAvg(parties[1])).toBe(14);
   });
 });
