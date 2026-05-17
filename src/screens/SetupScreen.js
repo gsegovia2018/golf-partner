@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import {
   View, Text, TextInput, TouchableOpacity,
   StyleSheet, ScrollView, Alert, Platform,
@@ -12,7 +12,14 @@ import { defaultHoles, fetchCourses, fetchPlayers } from '../store/libraryStore'
 import { consumePendingPlayers, consumePendingCourses } from '../lib/selectionBridge';
 import { useTheme } from '../theme/ThemeContext';
 import ScoringModePicker, { isScoringModeAllowed, fallbackScoringMode } from '../components/ScoringModePicker';
-import { scoringModeUsesTeams } from '../components/scoringModes';
+import { scoringModeUsesTeams, getScoringMode } from '../components/scoringModes';
+import WizardProgress from '../components/setup/WizardProgress';
+import WizardNav from '../components/setup/WizardNav';
+import { wizardSteps, isStepValid } from './setupWizard';
+
+// Deep green used for the Review hero band — fixed in both themes so white
+// hero text always has strong contrast.
+const HERO_GREEN = '#024d36';
 
 // Stable id for a round so React keys / removal survive reordering.
 let _roundIdSeq = 0;
@@ -55,6 +62,18 @@ export default function SetupScreen({ navigation, route }) {
   const [players, setPlayers] = useState([]);
   const [rounds, setRounds] = useState([{ id: newRoundId(), courseName: '', holes: defaultHoles(), slope: null, playerHandicaps: null }]);
   const [settings, setSettings] = useState({ ...DEFAULT_SETTINGS });
+  const [step, setStep] = useState(0);
+
+  // The active step list depends on kind + roster size (Scoring only exists
+  // for 2+ players). stepKey is the key of the currently displayed step.
+  const steps = useMemo(() => wizardSteps(kind, players.length), [kind, players.length]);
+  const stepKey = steps[step] ?? steps[steps.length - 1];
+
+  // When the roster shrinks the Scoring step away, the steps array gets
+  // shorter — clamp the active index so it never points past the array.
+  useEffect(() => {
+    setStep((prev) => Math.min(prev, steps.length - 1));
+  }, [steps.length]);
 
   // Whenever the player count makes the chosen scoring mode invalid, fall
   // back to a mode that is always valid for the current roster.
@@ -269,167 +288,252 @@ export default function SetupScreen({ navigation, route }) {
     }
   }
 
-  return (
-    <ScreenContainer style={s.container} edges={['top', 'bottom']}>
-      {/* Header */}
-      <View style={s.header}>
-        <TouchableOpacity onPress={() => navigation.goBack()} style={s.backBtn}>
-          <Feather name="chevron-left" size={22} color={theme.accent.primary} />
-        </TouchableOpacity>
-        <Text style={s.headerTitle}>{isGame ? 'New Game' : 'New Tournament'}</Text>
-        <View style={{ width: 22 }} />
-      </View>
+  // ---- Wizard navigation -------------------------------------------------
 
-      <ScrollView style={s.scrollView} contentContainerStyle={s.content} keyboardShouldPersistTaps="handled">
+  function handleBack() {
+    // Step 0's back exits the screen entirely; later steps go back one step.
+    if (step === 0) navigation.goBack();
+    else setStep((p) => p - 1);
+  }
 
-      {/* Tournament Name */}
-      <View>
-        <Text style={s.label}>{isGame ? 'Game Name' : 'Tournament Name'}</Text>
-        <TextInput
-          style={s.input}
-          value={tournamentName}
-          onChangeText={(v) => { setTournamentName(v); setNameTouched(true); }}
-          placeholderTextColor={theme.text.muted}
-          keyboardAppearance={theme.isDark ? 'dark' : 'light'}
-          selectionColor={theme.accent.primary}
-        />
-      </View>
+  function handleNext() {
+    if (stepKey === 'review') handleStart();
+    else setStep((p) => Math.min(p + 1, steps.length - 1));
+  }
 
-      {/* Players */}
-      <View>
-        <Text style={s.sectionTitle}>Players ({players.length}/4 max)</Text>
-        {players.length === 0 && (
-          <View style={s.emptyHint}>
-            <Feather name="users" size={16} color={theme.text.muted} style={{ marginRight: 8 }} />
-            <Text style={s.emptyHintText}>
-              Add at least 1 player to {isGame ? 'start the game' : 'start the tournament'}.
-            </Text>
-          </View>
-        )}
-        {players.map((p) => (
-          <View key={p.id} style={s.playerCard}>
-            <View style={s.playerInfo}>
-              <Text style={s.playerName}>{p.name}</Text>
-              <Text style={s.playerHcp}>HCP {p.handicap}</Text>
-            </View>
-            <TouchableOpacity onPress={() => removePlayer(p.id)} style={s.removeBtn}>
-              <Feather name="x" size={16} color={theme.destructive} />
-            </TouchableOpacity>
-          </View>
-        ))}
-        {players.length < 4 && (
-          <TouchableOpacity
-            style={s.pickBtn}
-            onPress={() => navigation.navigate('PlayerPicker', {
-              alreadySelectedIds: players.map((p) => p.id),
-            })}
-          >
-            <Feather name="plus" size={16} color={theme.accent.primary} style={{ marginRight: 6 }} />
-            <Text style={s.pickBtnText}>Add Player from Library</Text>
-          </TouchableOpacity>
-        )}
-      </View>
+  function goToStep(key) {
+    const idx = steps.indexOf(key);
+    if (idx >= 0) setStep(idx);
+  }
 
-      {/* Rounds */}
-      <View>
-        <Text style={s.sectionTitle}>{isGame ? 'Course' : 'Rounds'}</Text>
-        {rounds.map((r, i) => {
-          const totalPar = r.holes.reduce((sum, h) => sum + h.par, 0);
-          const missingName = !r.courseName.trim();
-          return (
-            <View key={r.id ?? `round-${i}`} style={s.courseBlock}>
-              <View style={s.roundHeader}>
-                {!isGame && <Text style={s.roundLabel}>Round {i + 1}</Text>}
-                {rounds.length > 1 && (
-                  <TouchableOpacity onPress={() => removeRound(i)} style={s.removeRoundBtn}>
-                    <Feather name="trash-2" size={14} color={theme.destructive} />
-                    <Text style={s.removeRoundText}>Remove</Text>
-                  </TouchableOpacity>
-                )}
-              </View>
-              <TouchableOpacity
-                style={s.pickBtn}
-                onPress={() => navigation.navigate('CoursePicker', { roundIndex: i })}
-              >
-                <Feather
-                  name={r.courseName ? 'map-pin' : 'plus'}
-                  size={16}
-                  color={theme.accent.primary}
-                  style={{ marginRight: 6 }}
-                />
-                <Text style={s.pickBtnText}>
-                  {r.courseName ? `Course: ${r.courseName}` : 'Pick Course from Library'}
-                </Text>
-              </TouchableOpacity>
-              {missingName && (
-                <Text style={s.errorText}>
-                  {isGame ? 'A course is required.' : `Round ${i + 1} needs a course.`}
-                </Text>
-              )}
-              {r.courseName ? (
-                <>
-                  <TextInput
-                    style={s.input}
-                    placeholder="Course name"
-                    placeholderTextColor={theme.text.muted}
-                    keyboardAppearance={theme.isDark ? 'dark' : 'light'}
-                    selectionColor={theme.accent.primary}
-                    value={r.courseName}
-                    onChangeText={(v) => updateCourseName(i, v)}
-                  />
-                  <TouchableOpacity
-                    style={s.editHolesBtn}
-                    onPress={() =>
-                      navigation.navigate('CourseEditor', {
-                        roundIndex: i,
-                        courseName: r.courseName || `Round ${i + 1}`,
-                        initialHoles: r.holes,
-                        onSave: handleHolesSaved,
-                        players: players,
-                        initialSlope: r.slope,
-                        initialCourseRating: r.courseRating ?? null,
-                        initialPlayerHandicaps: r.playerHandicaps,
-                        initialManualHandicaps: r.manualHandicaps ?? {},
-                        courseId: r.courseId ?? null,
-                      })
-                    }
-                  >
-                    <Feather name="settings" size={14} color={theme.accent.primary} style={{ marginRight: 6 }} />
-                    <Text style={s.editHolesBtnText}>
-                      Configure Holes  {'\u00B7'}  Par {totalPar}
-                    </Text>
-                    <Feather name="chevron-right" size={16} color={theme.accent.primary} style={{ marginLeft: 'auto' }} />
-                  </TouchableOpacity>
-                </>
-              ) : null}
-            </View>
-          );
-        })}
+  const isLastStep = stepKey === 'review';
+  const nextEnabled = isStepValid(stepKey, { players, rounds })
+    && (!isLastStep || canStart);
+  const nextLabel = isLastStep
+    ? (isGame ? 'Start Game' : 'Start Tournament')
+    : 'Next';
 
-        {!isGame && (
-          <TouchableOpacity style={s.addRoundBtn} onPress={addRound}>
-            <Feather name="plus-circle" size={16} color={theme.accent.primary} style={{ marginRight: 6 }} />
-            <Text style={s.addRoundBtnText}>Add Round</Text>
-          </TouchableOpacity>
-        )}
-      </View>
+  // ---- Step bodies -------------------------------------------------------
 
-      {/* Scoring */}
-      {players.length >= 2 && (
-        <View>
-          <Text style={s.sectionTitle}>Scoring</Text>
-          <ScoringModePicker
-            value={settings.scoringMode}
-            onChange={(mode) => setSettings((prev) => ({ ...prev, scoringMode: mode }))}
-            playerCount={players.length}
-            settings={settings}
-            onSettingsChange={setSettings}
-          />
+  const renderPlayersStep = () => (
+    <>
+      <Text style={s.stepOverline}>PLAYERS</Text>
+      <Text style={s.stepPrompt}>Who's playing?</Text>
+      <Text style={s.stepSubtitle}>Add 1–4 golfers from your library.</Text>
+      {players.length === 0 && (
+        <View style={s.emptyHint}>
+          <Feather name="users" size={16} color={theme.text.muted} style={{ marginRight: 8 }} />
+          <Text style={s.emptyHintText}>
+            Add at least 1 player to {isGame ? 'start the game' : 'start the tournament'}.
+          </Text>
         </View>
       )}
+      {players.map((p) => (
+        <View key={p.id} style={s.playerCard}>
+          <View style={s.playerInfo}>
+            <Text style={s.playerName}>{p.name}</Text>
+            <Text style={s.playerHcp}>HCP {p.handicap}</Text>
+          </View>
+          <TouchableOpacity onPress={() => removePlayer(p.id)} style={s.removeBtn}>
+            <Feather name="x" size={16} color={theme.destructive} />
+          </TouchableOpacity>
+        </View>
+      ))}
+      {players.length < 4 && (
+        <TouchableOpacity
+          style={s.pickBtn}
+          onPress={() => navigation.navigate('PlayerPicker', {
+            alreadySelectedIds: players.map((p) => p.id),
+          })}
+        >
+          <Feather name="plus" size={16} color={theme.accent.primary} style={{ marginRight: 6 }} />
+          <Text style={s.pickBtnText}>Add Player from Library</Text>
+        </TouchableOpacity>
+      )}
+    </>
+  );
 
-      {/* Start Button */}
-      <View>
+  const renderCourseStep = () => (
+    <>
+      <Text style={s.stepOverline}>{isGame ? 'COURSE' : 'ROUNDS'}</Text>
+      <Text style={s.stepPrompt}>Where are you playing?</Text>
+      <Text style={s.stepSubtitle}>
+        {isGame
+          ? 'Pick a course, then fine-tune the holes if needed.'
+          : 'Add each round and pick its course.'}
+      </Text>
+      {rounds.map((r, i) => {
+        const totalPar = r.holes.reduce((sum, h) => sum + h.par, 0);
+        const missingName = !r.courseName.trim();
+        return (
+          <View key={r.id ?? `round-${i}`} style={s.courseBlock}>
+            <View style={s.roundHeader}>
+              {!isGame && <Text style={s.roundLabel}>Round {i + 1}</Text>}
+              {rounds.length > 1 && (
+                <TouchableOpacity onPress={() => removeRound(i)} style={s.removeRoundBtn}>
+                  <Feather name="trash-2" size={14} color={theme.destructive} />
+                  <Text style={s.removeRoundText}>Remove</Text>
+                </TouchableOpacity>
+              )}
+            </View>
+            <TouchableOpacity
+              style={s.pickBtn}
+              onPress={() => navigation.navigate('CoursePicker', { roundIndex: i })}
+            >
+              <Feather
+                name={r.courseName ? 'map-pin' : 'plus'}
+                size={16}
+                color={theme.accent.primary}
+                style={{ marginRight: 6 }}
+              />
+              <Text style={s.pickBtnText}>
+                {r.courseName ? `Course: ${r.courseName}` : 'Pick Course from Library'}
+              </Text>
+            </TouchableOpacity>
+            {missingName && (
+              <Text style={s.errorText}>
+                {isGame ? 'A course is required.' : `Round ${i + 1} needs a course.`}
+              </Text>
+            )}
+            {r.courseName ? (
+              <>
+                <TextInput
+                  style={s.input}
+                  placeholder="Course name"
+                  placeholderTextColor={theme.text.muted}
+                  keyboardAppearance={theme.isDark ? 'dark' : 'light'}
+                  selectionColor={theme.accent.primary}
+                  value={r.courseName}
+                  onChangeText={(v) => updateCourseName(i, v)}
+                />
+                <TouchableOpacity
+                  style={s.editHolesBtn}
+                  onPress={() =>
+                    navigation.navigate('CourseEditor', {
+                      roundIndex: i,
+                      courseName: r.courseName || `Round ${i + 1}`,
+                      initialHoles: r.holes,
+                      onSave: handleHolesSaved,
+                      players: players,
+                      initialSlope: r.slope,
+                      initialCourseRating: r.courseRating ?? null,
+                      initialPlayerHandicaps: r.playerHandicaps,
+                      initialManualHandicaps: r.manualHandicaps ?? {},
+                      courseId: r.courseId ?? null,
+                    })
+                  }
+                >
+                  <Feather name="settings" size={14} color={theme.accent.primary} style={{ marginRight: 6 }} />
+                  <Text style={s.editHolesBtnText}>
+                    Configure Holes  {'·'}  Par {totalPar}
+                  </Text>
+                  <Feather name="chevron-right" size={16} color={theme.accent.primary} style={{ marginLeft: 'auto' }} />
+                </TouchableOpacity>
+              </>
+            ) : null}
+          </View>
+        );
+      })}
+      {!isGame && (
+        <TouchableOpacity style={s.addRoundBtn} onPress={addRound}>
+          <Feather name="plus-circle" size={16} color={theme.accent.primary} style={{ marginRight: 6 }} />
+          <Text style={s.addRoundBtnText}>Add Round</Text>
+        </TouchableOpacity>
+      )}
+    </>
+  );
+
+  const renderScoringStep = () => (
+    <>
+      <Text style={s.stepOverline}>SCORING</Text>
+      <Text style={s.stepPrompt}>How do you keep score?</Text>
+      <Text style={s.stepSubtitle}>Pick a format. You can change it later.</Text>
+      <ScoringModePicker
+        value={settings.scoringMode}
+        onChange={(mode) => setSettings((prev) => ({ ...prev, scoringMode: mode }))}
+        playerCount={players.length}
+        settings={settings}
+        onSettingsChange={setSettings}
+      />
+    </>
+  );
+
+  const renderReviewStep = () => {
+    const hasScoringStep = steps.includes('scoring');
+    const scoringLabel = getScoringMode(settings.scoringMode)?.label ?? 'Solo play';
+    const playerSummary = players.length === 1
+      ? `${players[0].name} · HCP ${players[0].handicap}`
+      : `${players.length} golfers`;
+    const courseSummary = isGame
+      ? (rounds[0]?.courseName || 'No course set')
+      : `${rounds.length} round${rounds.length === 1 ? '' : 's'}`;
+    return (
+      <>
+        {/* Green hero recap */}
+        <View style={s.reviewHero}>
+          <Text style={s.reviewHeroOverline}>REVIEW & CONFIRM</Text>
+          <TextInput
+            style={s.reviewNameInput}
+            value={tournamentName}
+            onChangeText={(v) => { setTournamentName(v); setNameTouched(true); }}
+            placeholder={isGame ? 'Game name' : 'Tournament name'}
+            placeholderTextColor="rgba(255,255,255,0.5)"
+            selectionColor="#ffffff"
+          />
+          <View style={s.reviewChipRow}>
+            <View style={s.reviewChip}>
+              <Text style={s.reviewChipText}>
+                {players.length} player{players.length === 1 ? '' : 's'}
+              </Text>
+            </View>
+            <View style={s.reviewChip}>
+              <Text style={s.reviewChipText}>{scoringLabel}</Text>
+            </View>
+          </View>
+        </View>
+
+        <Text style={s.stepOverline}>TAP TO EDIT</Text>
+        <View style={s.reviewList}>
+          <TouchableOpacity
+            style={[s.reviewRow, s.reviewRowDivider]}
+            onPress={() => goToStep('players')}
+          >
+            <Feather name="users" size={16} color={theme.accent.primary} style={s.reviewRowIcon} />
+            <View style={{ flex: 1 }}>
+              <Text style={s.reviewRowTitle}>Players</Text>
+              <Text style={s.reviewRowSub}>{playerSummary}</Text>
+            </View>
+            <Feather name="chevron-right" size={18} color={theme.accent.primary} />
+          </TouchableOpacity>
+
+          <TouchableOpacity
+            style={[s.reviewRow, s.reviewRowDivider]}
+            onPress={() => goToStep(isGame ? 'course' : 'rounds')}
+          >
+            <Feather name="map-pin" size={16} color={theme.accent.primary} style={s.reviewRowIcon} />
+            <View style={{ flex: 1 }}>
+              <Text style={s.reviewRowTitle}>{isGame ? 'Course' : 'Rounds'}</Text>
+              <Text style={s.reviewRowSub}>{courseSummary}</Text>
+            </View>
+            <Feather name="chevron-right" size={18} color={theme.accent.primary} />
+          </TouchableOpacity>
+
+          <TouchableOpacity
+            style={s.reviewRow}
+            onPress={() => goToStep('scoring')}
+            disabled={!hasScoringStep}
+          >
+            <Feather name="target" size={16} color={theme.accent.primary} style={s.reviewRowIcon} />
+            <View style={{ flex: 1 }}>
+              <Text style={s.reviewRowTitle}>Scoring</Text>
+              <Text style={s.reviewRowSub}>{scoringLabel}</Text>
+            </View>
+            {hasScoringStep && (
+              <Feather name="chevron-right" size={18} color={theme.accent.primary} />
+            )}
+          </TouchableOpacity>
+        </View>
+
         {!canStart && (
           <Text style={s.errorText}>
             {players.length < 1
@@ -437,17 +541,33 @@ export default function SetupScreen({ navigation, route }) {
               : 'Pick a course for every round to continue.'}
           </Text>
         )}
-        <TouchableOpacity
-          style={[s.primaryBtn, !canStart && { opacity: 0.5 }]}
-          onPress={handleStart}
-          disabled={!canStart}
-          activeOpacity={0.8}
-        >
-          <Feather name="play" size={18} color={theme.isDark ? theme.accent.primary : theme.text.inverse} style={{ marginRight: 8 }} />
-          <Text style={s.primaryBtnText}>{isGame ? 'Start Game' : 'Start Tournament'}</Text>
-        </TouchableOpacity>
-      </View>
-    </ScrollView>
+      </>
+    );
+  };
+
+  return (
+    <ScreenContainer style={s.container} edges={['top', 'bottom']}>
+      <WizardProgress step={step} totalSteps={steps.length} onBack={handleBack} />
+
+      <ScrollView
+        style={s.scrollView}
+        contentContainerStyle={s.content}
+        keyboardShouldPersistTaps="handled"
+      >
+        {stepKey === 'players' && renderPlayersStep()}
+        {(stepKey === 'course' || stepKey === 'rounds') && renderCourseStep()}
+        {stepKey === 'scoring' && renderScoringStep()}
+        {stepKey === 'review' && renderReviewStep()}
+      </ScrollView>
+
+      <WizardNav
+        isFirstStep={step === 0}
+        isLastStep={isLastStep}
+        nextEnabled={nextEnabled}
+        nextLabel={nextLabel}
+        onBack={handleBack}
+        onNext={handleNext}
+      />
     </ScreenContainer>
   );
 }
@@ -463,51 +583,30 @@ function makeStyles(theme) {
     },
     content: {
       padding: 20,
-      paddingBottom: 100,
+      paddingBottom: 40,
     },
 
-    /* Header */
-    header: {
-      flexDirection: 'row',
-      alignItems: 'center',
-      justifyContent: 'space-between',
-      paddingHorizontal: 20,
-      paddingTop: 16,
-      paddingBottom: 12,
-    },
-    backBtn: {
-      width: 36,
-      height: 36,
-      borderRadius: 10,
-      backgroundColor: theme.isDark ? theme.bg.secondary : theme.bg.card,
-      borderWidth: 1,
-      borderColor: theme.isDark ? theme.glass?.border : theme.border.default,
-      alignItems: 'center',
-      justifyContent: 'center',
-    },
-    headerTitle: {
-      fontFamily: 'PlayfairDisplay-Bold',
-      fontSize: 18,
-      color: theme.text.primary,
-      letterSpacing: -0.3,
-    },
-
-    /* Labels & Sections */
-    label: {
-      fontFamily: 'PlusJakartaSans-SemiBold',
-      color: theme.text.secondary,
-      marginBottom: 8,
-      fontSize: 13,
-      letterSpacing: 0.3,
-    },
-    sectionTitle: {
+    /* Step heading */
+    stepOverline: {
       fontFamily: 'PlusJakartaSans-Bold',
       color: theme.accent.primary,
       fontSize: 11,
-      marginTop: 24,
-      marginBottom: 12,
       letterSpacing: 1.8,
       textTransform: 'uppercase',
+      marginBottom: 6,
+    },
+    stepPrompt: {
+      fontFamily: 'PlayfairDisplay-Bold',
+      fontSize: 26,
+      color: theme.text.primary,
+      letterSpacing: -0.3,
+    },
+    stepSubtitle: {
+      fontFamily: 'PlusJakartaSans-Medium',
+      color: theme.text.secondary,
+      fontSize: 13,
+      marginTop: 6,
+      marginBottom: 18,
     },
 
     /* Input */
@@ -553,7 +652,7 @@ function makeStyles(theme) {
       width: 32,
       height: 32,
       borderRadius: 10,
-      backgroundColor: theme.isDark ? theme.bg.secondary : theme.bg.secondary,
+      backgroundColor: theme.bg.secondary,
       borderWidth: 1,
       borderColor: theme.border.default,
       alignItems: 'center',
@@ -569,7 +668,7 @@ function makeStyles(theme) {
       borderWidth: 1,
       borderColor: theme.accent.primary + '40',
       borderStyle: 'dashed',
-      backgroundColor: theme.isDark ? theme.accent.light : theme.accent.light,
+      backgroundColor: theme.accent.light,
       padding: 14,
       marginBottom: 8,
     },
@@ -631,7 +730,7 @@ function makeStyles(theme) {
     editHolesBtn: {
       flexDirection: 'row',
       alignItems: 'center',
-      backgroundColor: theme.isDark ? theme.accent.light : theme.accent.light,
+      backgroundColor: theme.accent.light,
       borderRadius: 12,
       borderWidth: 1,
       borderColor: theme.accent.primary + '40',
@@ -642,74 +741,6 @@ function makeStyles(theme) {
       fontFamily: 'PlusJakartaSans-SemiBold',
       color: theme.accent.primary,
       fontSize: 14,
-    },
-
-    /* Scoring Mode Tabs */
-    modeRow: {
-      gap: 8,
-    },
-    modeBtn: {
-      backgroundColor: theme.bg.secondary,
-      borderRadius: 12,
-      borderWidth: 1,
-      borderColor: theme.border.default,
-      padding: 14,
-      alignItems: 'center',
-      marginBottom: 6,
-    },
-    modeBtnActive: {
-      backgroundColor: theme.accent.primary,
-      borderColor: theme.accent.primary,
-    },
-    modeBtnText: {
-      fontFamily: 'PlusJakartaSans-SemiBold',
-      color: theme.text.muted,
-      fontSize: 14,
-    },
-    modeBtnTextActive: {
-      fontFamily: 'PlusJakartaSans-Bold',
-      color: theme.text.inverse,
-    },
-
-    /* Value Inputs (Best/Worst ball) */
-    valueRow: {
-      flexDirection: 'row',
-      gap: 12,
-      marginTop: 10,
-    },
-    valueBlock: {
-      flex: 1,
-      backgroundColor: theme.bg.card,
-      borderRadius: 16,
-      borderWidth: 1,
-      borderColor: theme.isDark ? theme.glass?.border : theme.border.default,
-      padding: 16,
-      alignItems: 'center',
-      gap: 8,
-      ...(theme.isDark ? {} : theme.shadow.card),
-    },
-    valueLabel: {
-      fontFamily: 'PlusJakartaSans-Bold',
-      color: theme.accent.primary,
-      fontSize: 12,
-      letterSpacing: 0.5,
-    },
-    valueInput: {
-      backgroundColor: theme.isDark ? theme.bg.primary : theme.bg.secondary,
-      color: theme.text.primary,
-      borderRadius: 8,
-      borderWidth: 1,
-      borderColor: theme.border.default,
-      width: 56,
-      textAlign: 'center',
-      fontSize: 22,
-      fontFamily: 'PlusJakartaSans-ExtraBold',
-      padding: 8,
-    },
-    valueSuffix: {
-      fontFamily: 'PlusJakartaSans-Regular',
-      color: theme.text.muted,
-      fontSize: 11,
     },
 
     /* Empty / error states */
@@ -735,26 +766,78 @@ function makeStyles(theme) {
       color: theme.destructive,
       fontSize: 12,
       marginBottom: 8,
-      marginTop: 2,
+      marginTop: 8,
     },
 
-    /* Primary Button */
-    primaryBtn: {
+    /* Review hero */
+    reviewHero: {
+      backgroundColor: HERO_GREEN,
+      borderRadius: 20,
+      padding: 20,
+      marginBottom: 20,
+    },
+    reviewHeroOverline: {
+      fontFamily: 'PlusJakartaSans-Bold',
+      color: 'rgba(255,255,255,0.55)',
+      fontSize: 10,
+      letterSpacing: 1.6,
+    },
+    reviewNameInput: {
+      fontFamily: 'PlayfairDisplay-Bold',
+      color: '#ffffff',
+      fontSize: 24,
+      letterSpacing: -0.3,
+      marginTop: 6,
+      paddingVertical: 4,
+    },
+    reviewChipRow: {
+      flexDirection: 'row',
+      gap: 8,
+      marginTop: 12,
+    },
+    reviewChip: {
+      backgroundColor: 'rgba(255,255,255,0.14)',
+      borderRadius: 999,
+      paddingVertical: 6,
+      paddingHorizontal: 12,
+    },
+    reviewChipText: {
+      fontFamily: 'PlusJakartaSans-Bold',
+      color: '#ffffff',
+      fontSize: 11,
+    },
+
+    /* Review tap-to-edit list */
+    reviewList: {
+      backgroundColor: theme.bg.card,
+      borderRadius: 16,
+      borderWidth: 1,
+      borderColor: theme.isDark ? theme.glass?.border : theme.border.default,
+      overflow: 'hidden',
+      ...(theme.isDark ? {} : theme.shadow.card),
+    },
+    reviewRow: {
       flexDirection: 'row',
       alignItems: 'center',
-      justifyContent: 'center',
-      backgroundColor: theme.isDark ? theme.accent.light : theme.accent.primary,
-      borderRadius: 14,
-      borderWidth: theme.isDark ? 1 : 0,
-      borderColor: theme.isDark ? theme.accent.primary + '33' : 'transparent',
-      padding: 18,
-      marginTop: 24,
-      ...(theme.isDark ? {} : theme.shadow.accent),
+      padding: 14,
     },
-    primaryBtnText: {
-      fontFamily: 'PlusJakartaSans-ExtraBold',
-      color: theme.isDark ? theme.accent.primary : theme.text.inverse,
-      fontSize: 16,
+    reviewRowDivider: {
+      borderBottomWidth: 1,
+      borderBottomColor: theme.border.subtle,
+    },
+    reviewRowIcon: {
+      marginRight: 12,
+    },
+    reviewRowTitle: {
+      fontFamily: 'PlusJakartaSans-Bold',
+      color: theme.text.primary,
+      fontSize: 14,
+    },
+    reviewRowSub: {
+      fontFamily: 'PlusJakartaSans-Medium',
+      color: theme.text.secondary,
+      fontSize: 12,
+      marginTop: 2,
     },
   });
 }
