@@ -177,6 +177,52 @@ export default function MyStatsScreen({ navigation }) {
       <ScrollView contentContainerStyle={s.scroll}>
         <Snapshot stats={stats} metric={metric} onToggleMetric={setMetric} s={s} theme={theme} />
         <FormSection form={stats.form} n={n} onChangeN={setN} s={s} theme={theme} />
+        <StrengthsSection ranking={stats.ranking} s={s} theme={theme} />
+        <BreakdownSection title="Par type" rows={[
+          ['Par 3s', stats.parType.par3.avgPoints, stats.parType.par3.holes],
+          ['Par 4s', stats.parType.par4.avgPoints, stats.parType.par4.holes],
+          ['Par 5s', stats.parType.par5.avgPoints, stats.parType.par5.holes],
+        ]} s={s} />
+        <BreakdownSection title="Hole difficulty" rows={[
+          ['Hard (SI 1-6)', stats.difficulty.hard.avgPoints, stats.difficulty.hard.holes],
+          ['Mid (SI 7-12)', stats.difficulty.mid.avgPoints, stats.difficulty.mid.holes],
+          ['Easy (SI 13-18)', stats.difficulty.easy.avgPoints, stats.difficulty.easy.holes],
+        ]} s={s} />
+        <BreakdownSection title="Round shape" rows={[
+          ['Front nine', stats.frontBack ? stats.frontBack.frontAvg : 0, stats.frontBack ? stats.frontBack.rounds.length * 9 : 0],
+          ['Back nine', stats.frontBack ? stats.frontBack.backAvg : 0, stats.frontBack ? stats.frontBack.rounds.length * 9 : 0],
+          ['Opening 3', stats.warmupClosing.warmup.avgPoints, stats.warmupClosing.warmup.holes],
+          ['Closing 3', stats.warmupClosing.closing.avgPoints, stats.warmupClosing.closing.holes],
+        ]} s={s} />
+        <DistributionSection dist={stats.distribution} s={s} />
+        {stats.teeShot.hasData ? (
+          <BreakdownSection title="Tee shot impact" rows={[
+            ['Fairway found', stats.teeShot.fairway.avgPoints, stats.teeShot.fairway.holes],
+            ['Fairway missed', stats.teeShot.missed.avgPoints, stats.teeShot.missed.holes],
+            ['Miss left', stats.teeShot.byDirection.left.avgPoints, stats.teeShot.byDirection.left.holes],
+            ['Miss right', stats.teeShot.byDirection.right.avgPoints, stats.teeShot.byDirection.right.holes],
+            ['Miss short', stats.teeShot.byDirection.short.avgPoints, stats.teeShot.byDirection.short.holes],
+            ['After tee penalty', stats.teeShot.teePenalty.avgPoints, stats.teeShot.teePenalty.holes],
+          ]} s={s} />
+        ) : null}
+        {stats.shots.hasData ? (
+          <BreakdownSection title="Putting & driving" rows={[
+            ['Putts / round', stats.shots.putts.perRound, stats.shots.putts.holes],
+            ['1-putts', stats.shots.putts.onePutts, stats.shots.putts.holes],
+            ['3-putts+', stats.shots.putts.threePuttPlus, stats.shots.putts.holes],
+            ['Fairways hit %', stats.shots.drives.fairwayPct, stats.shots.drives.recorded],
+            ['Greens in reg %', stats.shots.gir.pct, stats.shots.gir.eligible],
+            ['Penalties / round', stats.shots.penalties.total, stats.shots.roundsWithData],
+          ]} s={s} />
+        ) : null}
+        {!stats.teeShot.hasData && !stats.shots.hasData ? (
+          <View style={s.card}>
+            <Text style={s.note}>
+              Log putts and drives during a round to unlock tee-shot, putting and
+              driving stats.
+            </Text>
+          </View>
+        ) : null}
       </ScrollView>
       {Selector}
     </SafeAreaView>
@@ -257,7 +303,7 @@ function FormSection({ form, n, onChangeN, s, theme }) {
       </View>
       {!form.hasHistory && (
         <Text style={s.note}>
-          Not enough history yet — play more than {n} rounds to compare.
+          Not enough history yet — select more than {n} rounds to compare.
         </Text>
       )}
       {form.metrics.map((m) => {
@@ -277,6 +323,79 @@ function FormSection({ form, n, onChangeN, s, theme }) {
           </View>
         );
       })}
+    </View>
+  );
+}
+
+function StrengthsSection({ ranking, s, theme }) {
+  const Row = ({ cell, kind }) => (
+    <View style={s.insightRow}>
+      <Feather
+        name={kind === 'good' ? 'trending-up' : 'trending-down'}
+        size={16}
+        color={kind === 'good' ? theme.accent.primary : theme.destructive}
+      />
+      <Text style={s.insightText}>
+        {cell.label} — {cell.avgPoints} pts/hole
+      </Text>
+      <Text style={[s.insightDelta, { color: kind === 'good' ? theme.accent.primary : theme.destructive }]}>
+        {cell.deviation > 0 ? `+${cell.deviation}` : `${cell.deviation}`}
+      </Text>
+    </View>
+  );
+  return (
+    <View style={s.card}>
+      <Text style={s.cardTitle}>Strengths & Pain Points</Text>
+      {ranking.baseline == null ? (
+        <Text style={s.note}>Not enough data yet.</Text>
+      ) : (
+        <>
+          <Text style={s.subhead}>What's working</Text>
+          {ranking.strengths.length === 0 && <Text style={s.note}>Nothing stands out yet.</Text>}
+          {ranking.strengths.map((c) => <Row key={c.label} cell={c} kind="good" />)}
+          <Text style={s.subhead}>Where you're losing points</Text>
+          {ranking.weaknesses.length === 0 && <Text style={s.note}>Nothing stands out yet.</Text>}
+          {ranking.weaknesses.map((c) => <Row key={c.label} cell={c} kind="bad" />)}
+          <Text style={s.note}>Measured against your {ranking.baseline} pts/hole average.</Text>
+        </>
+      )}
+    </View>
+  );
+}
+
+// rows: array of [label, value, sample]. Rows with sample 0 are dimmed.
+function BreakdownSection({ title, rows, s }) {
+  return (
+    <View style={s.card}>
+      <Text style={s.cardTitle}>{title}</Text>
+      {rows.map(([label, value, sample]) => (
+        <View key={label} style={s.formRow}>
+          <Text style={[s.formLabel, sample === 0 && s.dim]}>{label}</Text>
+          <Text style={[s.formRecent, sample === 0 && s.dim]}>{sample === 0 ? '—' : value}</Text>
+          <Text style={[s.formHistory, s.dim]}>{sample === 0 ? '' : `${sample} ×`}</Text>
+        </View>
+      ))}
+    </View>
+  );
+}
+
+function DistributionSection({ dist, s }) {
+  const rows = [
+    ['Eagles+', dist.eagles], ['Birdies', dist.birdies], ['Pars', dist.pars],
+    ['Bogeys', dist.bogeys], ['Doubles', dist.doubles], ['Triple+', dist.worse],
+  ];
+  return (
+    <View style={s.card}>
+      <Text style={s.cardTitle}>Score distribution</Text>
+      {rows.map(([label, count]) => (
+        <View key={label} style={s.formRow}>
+          <Text style={s.formLabel}>{label}</Text>
+          <Text style={s.formRecent}>{count}</Text>
+          <Text style={[s.formHistory, s.dim]}>
+            {dist.total > 0 ? `${Math.round((count / dist.total) * 100)}%` : '—'}
+          </Text>
+        </View>
+      ))}
     </View>
   );
 }
