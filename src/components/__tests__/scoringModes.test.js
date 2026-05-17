@@ -21,6 +21,17 @@ describe('isScoringModeAllowed', () => {
     expect(isScoringModeAllowed('matchplay', 2)).toBe(true);
     expect(isScoringModeAllowed('matchplay', 3)).toBe(false);
   });
+  test('individual and stableford need at least 2 players', () => {
+    expect(isScoringModeAllowed('individual', 1)).toBe(false);
+    expect(isScoringModeAllowed('individual', 2)).toBe(true);
+    expect(isScoringModeAllowed('stableford', 1)).toBe(false);
+    expect(isScoringModeAllowed('stableford', 2)).toBe(true);
+  });
+  test('bestball needs exactly 4 players', () => {
+    expect(isScoringModeAllowed('bestball', 3)).toBe(false);
+    expect(isScoringModeAllowed('bestball', 4)).toBe(true);
+    expect(isScoringModeAllowed('bestball', 5)).toBe(false);
+  });
   test('unknown mode is never allowed', () => {
     expect(isScoringModeAllowed('nope', 4)).toBe(false);
   });
