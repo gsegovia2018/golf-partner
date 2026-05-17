@@ -1852,7 +1852,8 @@ const PairsPreviewCard = React.memo(function PairsPreviewCard({ pairs, theme, s 
 // Shared ranked row for the round cards — the leaderboard's row visual made
 // theme-aware so it is legible on the normal card background. Ranks 1/2/3 get
 // gold/silver/bronze badges; the winner row also gets a left gold border and
-// an award icon. `sub` is an optional right-aligned muted value (e.g. strokes).
+// an award icon. `sub` is an optional right-aligned muted value (e.g. strokes);
+// `sub2`/`sub2Color` add a second optional right-aligned column (e.g. vs-par).
 const RankedRow = React.memo(function RankedRow({ rank, name, primary, sub, sub2, sub2Color, isWinner, isLast, theme, s }) {
   const rankColors = ['#ffd700', '#c0c8d4', '#daa06d'];
   const rankColor = rankColors[rank - 1] || theme.text.muted;
