@@ -241,7 +241,10 @@ BEGIN
                   AND s.subject_roster_id IN (
                     SELECT roster_id FROM public.tournament_party_members WHERE party_id = v_party)),
     'attestations', (SELECT COALESCE(jsonb_agg(a.roster_id), '[]'::jsonb)
-                FROM public.tournament_attestations a WHERE a.round_id = p_round_id));
+                FROM public.tournament_attestations a
+               WHERE a.round_id = p_round_id
+                 AND a.roster_id IN (
+                   SELECT roster_id FROM public.tournament_party_members WHERE party_id = v_party)));
 END $$;
 
 -- Write one score cell. Validates: self => subject is the caller; marker =>
@@ -262,8 +265,14 @@ BEGIN
   IF v_party IS NULL THEN RAISE EXCEPTION 'not in this round'; END IF;
   IF v_locked THEN RAISE EXCEPTION 'party locked'; END IF;
   IF p_source NOT IN ('self','marker') THEN RAISE EXCEPTION 'bad source'; END IF;
+  IF p_hole IS NULL OR p_hole < 1 OR p_hole > 18 THEN
+    RAISE EXCEPTION 'hole out of range'; END IF;
+  IF p_strokes IS NOT NULL AND (p_strokes < 1 OR p_strokes > 20) THEN
+    RAISE EXCEPTION 'strokes out of range'; END IF;
   IF p_source = 'self' AND p_subject <> v_roster THEN
     RAISE EXCEPTION 'self score must be your own'; END IF;
+  IF p_source = 'marker' AND v_markee IS NULL THEN
+    RAISE EXCEPTION 'no markee assigned'; END IF;
   IF p_source = 'marker' AND p_subject <> v_markee THEN
     RAISE EXCEPTION 'marker score must be your markee'; END IF;
 
