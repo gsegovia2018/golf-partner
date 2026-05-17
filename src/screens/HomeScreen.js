@@ -15,7 +15,7 @@ import {
   setActiveTournament, clearActiveTournament,
   deleteTournament, saveTournament,
   tournamentLeaderboard, tournamentBestWorstLeaderboard,
-  roundPairLeaderboard, calcBestWorstBall, roundTotals,
+  calcBestWorstBall, roundTotals,
   playerRoundBestWorstPoints,
   tournamentPlayerClinched,
   isRoundComplete, isTournamentFinished, subscribeTournamentChanges,
@@ -1152,9 +1152,7 @@ export default function HomeScreen({ navigation, route }) {
                 hasPrev={false}
                 hasNext={false}
                 revealed
-                roundBestBall={roundBestBall}
                 players={tournament.players}
-                settings={settings}
                 theme={theme}
                 s={s}
                 onGoToRound={goToRound}
@@ -1219,9 +1217,7 @@ export default function HomeScreen({ navigation, route }) {
                     hasPrev={i > 0}
                     hasNext={i < tournament.rounds.length - 1}
                     revealed={!!round.revealed || i <= tournament.currentRound}
-                    roundBestBall={roundBestBall}
                     players={tournament.players}
-                    settings={settings}
                     theme={theme}
                     s={s}
                     onGoToRound={goToRound}
@@ -1636,8 +1632,8 @@ function ConfirmModal({ state, onResult, theme, s }) {
 // a swipe only re-renders the outside leaderboard / tab bar — the 3
 // round pages stay memoized with stable refs.
 const RoundPage = React.memo(function RoundPage({
-  round, index, width, hasPrev, hasNext, revealed, roundBestBall,
-  players, settings, theme, s,
+  round, index, width, hasPrev, hasNext, revealed,
+  players, theme, s,
   onGoToRound, onOpenEdit, isSingleRound, showRunning = true,
 }) {
   const hasScores = round.scores && Object.keys(round.scores).length > 0;
