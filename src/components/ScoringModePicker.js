@@ -1,6 +1,6 @@
 import React, { useEffect, useRef, useState } from 'react';
 import {
-  View, Text, TextInput, TouchableOpacity, StyleSheet, Modal, ScrollView, Dimensions,
+  View, Text, TextInput, TouchableOpacity, StyleSheet, Modal, ScrollView, useWindowDimensions,
 } from 'react-native';
 import { Feather } from '@expo/vector-icons';
 
@@ -19,16 +19,16 @@ import {
 // keep working now that the data/logic lives in scoringModes.js.
 export { SCORING_MODES, isScoringModeAllowed, fallbackScoringMode };
 
-// Cap the sheet list at ~70% of the screen so it always scrolls rather
-// than pushing the sheet past the top of the screen.
-const SHEET_MAX_HEIGHT = Math.round(Dimensions.get('window').height * 0.7);
+// Category sections are derived from static data — compute once.
+const MODE_SECTIONS = scoringModeCategories();
 
 // --- Bottom-sheet mode list ----------------------------------------------
 
 function ScoringModeSheet({ visible, value, playerCount, onSelect, onClose }) {
   const { theme } = useTheme();
   const s = makeStyles(theme);
-  const sections = scoringModeCategories();
+  const { height } = useWindowDimensions();
+  const sheetMaxHeight = Math.round(height * 0.7);
 
   return (
     <Modal visible={visible} transparent animationType="slide" onRequestClose={onClose}>
@@ -36,15 +36,15 @@ function ScoringModeSheet({ visible, value, playerCount, onSelect, onClose }) {
         <TouchableOpacity activeOpacity={1} style={s.sheet}>
           <View style={s.sheetHeader}>
             <Text style={s.sheetTitle}>Choose scoring mode</Text>
-            <TouchableOpacity onPress={onClose} accessibilityLabel="Close">
+            <TouchableOpacity onPress={onClose} accessibilityLabel="Close" accessibilityRole="button">
               <Feather name="x" size={22} color={theme.text.muted} />
             </TouchableOpacity>
           </View>
 
-          <ScrollView style={s.sheetScroll} showsVerticalScrollIndicator={false}>
-            {sections.map((section) => (
+          <ScrollView style={{ maxHeight: sheetMaxHeight }} showsVerticalScrollIndicator={false}>
+            {MODE_SECTIONS.map((section) => (
               <View key={section.category}>
-                <Text style={s.sectionHeader}>{section.category.toUpperCase()}</Text>
+                <Text style={s.sectionHeader}>{section.category}</Text>
                 {section.modes.map((mode) => {
                   const allowed = mode.isAllowed(playerCount);
                   const active = value === mode.key;
@@ -129,7 +129,14 @@ export default function ScoringModeField({ value, onChange, playerCount, setting
 
   return (
     <View>
-      <TouchableOpacity style={s.field} onPress={openSheet} activeOpacity={0.7}>
+      <TouchableOpacity
+        style={s.field}
+        onPress={openSheet}
+        activeOpacity={0.7}
+        accessibilityRole="button"
+        accessibilityLabel={`Scoring mode: ${current.label}`}
+        accessibilityHint="Opens the scoring mode picker"
+      >
         <Feather name={current.icon} size={20} color={theme.accent.primary} />
         <View style={s.fieldText}>
           <Text style={s.fieldLabel}>{current.label}</Text>
@@ -142,7 +149,7 @@ export default function ScoringModeField({ value, onChange, playerCount, setting
         <View style={s.notice}>
           <Feather name="info" size={14} color={theme.accent.primary} />
           <Text style={s.noticeText}>{notice}</Text>
-          <TouchableOpacity onPress={() => setNotice(null)} accessibilityLabel="Dismiss">
+          <TouchableOpacity onPress={() => setNotice(null)} accessibilityLabel="Dismiss" accessibilityRole="button">
             <Feather name="x" size={14} color={theme.text.muted} />
           </TouchableOpacity>
         </View>
@@ -232,7 +239,6 @@ const makeStyles = (theme) => StyleSheet.create({
     flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 4,
   },
   sheetTitle: { fontFamily: 'PlayfairDisplay-Bold', fontSize: 20, color: theme.text.primary },
-  sheetScroll: { maxHeight: SHEET_MAX_HEIGHT },
   sectionHeader: {
     fontFamily: 'PlusJakartaSans-Bold', color: theme.accent.primary, fontSize: 11,
     letterSpacing: 1.8, textTransform: 'uppercase', marginTop: 16, marginBottom: 6,
