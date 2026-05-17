@@ -16,6 +16,38 @@ import {
 // Canonical player id used inside the synthetic tournament.
 export const CANON_ID = 'me';
 
+// ── buildSyntheticTournament ──
+// Produces { id, name, players: [me], rounds } where every round's scores,
+// shotDetails, playerHandicaps and manualHandicaps are re-keyed from the
+// round's original player id to CANON_ID. This object is the input to the
+// existing per-player engine functions.
+export function buildSyntheticTournament(myRounds) {
+  if (!myRounds || myRounds.length === 0) {
+    return { id: 'mystats', name: 'My Stats', players: [], rounds: [] };
+  }
+  const base = myRounds[0].player || {};
+  const player = {
+    id: CANON_ID,
+    name: base.name || 'Me',
+    handicap: base.handicap ?? 0,
+    user_id: base.user_id ?? null,
+  };
+  const rounds = myRounds.map((mr) => {
+    const { round, playerId } = mr;
+    const rekey = (obj) => (obj && obj[playerId] != null
+      ? { [CANON_ID]: obj[playerId] }
+      : {});
+    return {
+      ...round,
+      scores: rekey(round.scores),
+      shotDetails: rekey(round.shotDetails),
+      playerHandicaps: rekey(round.playerHandicaps),
+      manualHandicaps: rekey(round.manualHandicaps),
+    };
+  });
+  return { id: 'mystats', name: 'My Stats', players: [player], rounds };
+}
+
 // ── collectMyRounds ──
 // Flattens every tournament's rounds into MyRound records for the user.
 // `tournaments` arrive newest-first (id desc) from the loaders, so we reverse

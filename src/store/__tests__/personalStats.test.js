@@ -1,4 +1,4 @@
-import { collectMyRounds } from '../personalStats';
+import { collectMyRounds, buildSyntheticTournament, CANON_ID } from '../personalStats';
 
 // ── Fixture helpers ───────────────────────────────────────────────
 // hcp default 0; SI defaults to hole number; par defaults to 4.
@@ -78,5 +78,49 @@ describe('collectMyRounds', () => {
     ];
     const result = collectMyRounds(tournaments, 'u1');
     expect(result.map((r) => r.tournamentName)).toEqual(['Older', 'Newer']);
+  });
+});
+
+describe('buildSyntheticTournament', () => {
+  test('returns an empty single-player tournament for no rounds', () => {
+    const t = buildSyntheticTournament([]);
+    expect(t.players).toEqual([]);
+    expect(t.rounds).toEqual([]);
+  });
+
+  test('re-keys scores, shotDetails and playerHandicaps to the canonical id', () => {
+    const h = holes18();
+    const myRounds = collectMyRounds([{
+      id: 5, name: 'T', players: [{ id: 'origA', name: 'Me', handicap: 9, user_id: 'u1' }],
+      rounds: [mkRound({
+        holes: h,
+        scores: { origA: evenScores(h, 4) },
+        shotDetails: { origA: { 1: { putts: 2 } } },
+        playerHandicaps: { origA: 9 },
+      })],
+    }], 'u1');
+    const t = buildSyntheticTournament(myRounds);
+    expect(t.players).toHaveLength(1);
+    expect(t.players[0].id).toBe(CANON_ID);
+    expect(t.rounds[0].scores[CANON_ID][1]).toBe(4);
+    expect(t.rounds[0].scores.origA).toBeUndefined();
+    expect(t.rounds[0].shotDetails[CANON_ID][1].putts).toBe(2);
+    expect(t.rounds[0].playerHandicaps[CANON_ID]).toBe(9);
+  });
+
+  test('keeps each round under its own original player id (different per tournament)', () => {
+    const h = holes18();
+    const myRounds = collectMyRounds([
+      { id: 2, name: 'B', players: [{ id: 'pB', handicap: 10, user_id: 'u1' }],
+        rounds: [mkRound({ holes: h, scores: { pB: evenScores(h, 5) }, playerHandicaps: { pB: 10 } })] },
+      { id: 1, name: 'A', players: [{ id: 'pA', handicap: 14, user_id: 'u1' }],
+        rounds: [mkRound({ holes: h, scores: { pA: evenScores(h, 6) }, playerHandicaps: { pA: 14 } })] },
+    ], 'u1');
+    const t = buildSyntheticTournament(myRounds);
+    // chronological: A (id 1) first, B second
+    expect(t.rounds[0].scores[CANON_ID][1]).toBe(6);
+    expect(t.rounds[0].playerHandicaps[CANON_ID]).toBe(14);
+    expect(t.rounds[1].scores[CANON_ID][1]).toBe(5);
+    expect(t.rounds[1].playerHandicaps[CANON_ID]).toBe(10);
   });
 });
