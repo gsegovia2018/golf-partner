@@ -8,6 +8,9 @@
 --    through the relational tables below instead of the JSONB blob.
 ALTER TABLE public.tournaments
   ADD COLUMN IF NOT EXISTS kind text NOT NULL DEFAULT 'casual';
+ALTER TABLE public.tournaments DROP CONSTRAINT IF EXISTS tournaments_kind_check;
+ALTER TABLE public.tournaments
+  ADD CONSTRAINT tournaments_kind_check CHECK (kind IN ('casual','official'));
 
 -- 2) Roster: one row per player in an official tournament.
 CREATE TABLE IF NOT EXISTS public.tournament_roster (
@@ -73,7 +76,7 @@ CREATE TABLE IF NOT EXISTS public.tournament_scores (
 CREATE TABLE IF NOT EXISTS public.tournament_score_audit (
   id                uuid PRIMARY KEY DEFAULT gen_random_uuid(),
   round_id          uuid NOT NULL REFERENCES public.tournament_rounds(id) ON DELETE CASCADE,
-  hole              int NOT NULL,
+  hole              int NOT NULL CHECK (hole BETWEEN 1 AND 18),
   subject_roster_id uuid NOT NULL,
   source            text NOT NULL,
   strokes           int,
@@ -102,6 +105,8 @@ CREATE TABLE IF NOT EXISTS public.tournament_notifications (
 CREATE INDEX IF NOT EXISTS roster_tournament_idx     ON public.tournament_roster (tournament_id);
 CREATE INDEX IF NOT EXISTS rounds_tournament_idx     ON public.tournament_rounds (tournament_id);
 CREATE INDEX IF NOT EXISTS parties_round_idx         ON public.tournament_parties (round_id);
+CREATE INDEX IF NOT EXISTS parties_tournament_idx    ON public.tournament_parties (tournament_id);
+CREATE INDEX IF NOT EXISTS party_members_roster_idx  ON public.tournament_party_members (roster_id);
 CREATE INDEX IF NOT EXISTS scores_round_idx          ON public.tournament_scores (round_id);
 CREATE INDEX IF NOT EXISTS notifications_tourn_idx   ON public.tournament_notifications (tournament_id);
 
