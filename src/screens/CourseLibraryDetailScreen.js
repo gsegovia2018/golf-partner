@@ -84,7 +84,9 @@ export default function CourseLibraryDetailScreen({ navigation, route }) {
   if (loading) {
     return (
       <ScreenContainer style={s.centered} edges={['top', 'bottom']}>
-        <ActivityIndicator color={theme.accent.primary} />
+        <View style={{ flex: 1, alignItems: 'center', justifyContent: 'center' }}>
+          <ActivityIndicator color={theme.accent.primary} />
+        </View>
       </ScreenContainer>
     );
   }

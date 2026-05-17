@@ -258,27 +258,29 @@ export default function NextRoundScreen({ navigation, route }) {
   if (phase === 'countdown') {
     return (
       <ScreenContainer style={s.fullscreen} edges={['top', 'bottom']}>
-        <TouchableOpacity
-          activeOpacity={1}
-          style={s.countdownTapTarget}
-          onPress={finishRevealInstant}
-          accessibilityLabel="Skip the countdown"
-        >
-          <View style={s.countdownCircle}>
-            <Animated.Text
-              style={[
-                s.countdownNum,
-                {
-                  opacity: countdownOpacity,
-                  transform: [{ scale: countdownScale }],
-                },
-              ]}
-            >
-              {countdownNum}
-            </Animated.Text>
-          </View>
-          <Text style={s.skipHint}>Tap to skip</Text>
-        </TouchableOpacity>
+        <View style={{ flex: 1, alignItems: 'center', justifyContent: 'center' }}>
+          <TouchableOpacity
+            activeOpacity={1}
+            style={s.countdownTapTarget}
+            onPress={finishRevealInstant}
+            accessibilityLabel="Skip the countdown"
+          >
+            <View style={s.countdownCircle}>
+              <Animated.Text
+                style={[
+                  s.countdownNum,
+                  {
+                    opacity: countdownOpacity,
+                    transform: [{ scale: countdownScale }],
+                  },
+                ]}
+              >
+                {countdownNum}
+              </Animated.Text>
+            </View>
+            <Text style={s.skipHint}>Tap to skip</Text>
+          </TouchableOpacity>
+        </View>
       </ScreenContainer>
     );
   }

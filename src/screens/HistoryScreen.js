@@ -1,4 +1,4 @@
-import React, { useCallback, useState } from 'react';
+import React, { useCallback, useMemo, useState } from 'react';
 import {
   View, Text, TouchableOpacity, StyleSheet, ScrollView, ActivityIndicator,
 } from 'react-native';
@@ -20,7 +20,7 @@ import { loadProfile, computePersonalStats } from '../store/profileStore';
 export default function HistoryScreen({ navigation }) {
   const { theme } = useTheme();
   const { gridColumns } = useResponsive();
-  const s = makeStyles(theme, gridColumns);
+  const s = useMemo(() => makeStyles(theme, gridColumns), [theme, gridColumns]);
 
   const [finished, setFinished] = useState([]);
   const [stats, setStats] = useState(null);

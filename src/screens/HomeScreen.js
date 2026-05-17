@@ -919,35 +919,37 @@ export default function HomeScreen({ navigation, route }) {
   if (showTournament && !tournament) {
     return (
       <ScreenContainer style={[s.screen, { alignItems: 'center', justifyContent: 'center', padding: 24 }]} edges={['top', 'bottom']}>
-        <Feather name="flag" size={48} color={theme.text.muted} />
-        <Text style={[s.emptyTitle, { marginTop: 16 }]}>No active tournament</Text>
-        <Text style={[s.emptySubtitle, { marginTop: 6, marginBottom: 8 }]}>
-          Start a game or tournament to begin playing.
-        </Text>
-        <TouchableOpacity
-          style={[s.primaryBtn, s.emptyStateBtn]}
-          onPress={() => navigation.navigate('Setup', { kind: 'game' })}
-          activeOpacity={0.8}
-        >
-          <Feather name="flag" size={16} color={theme.isDark ? theme.accent.primary : theme.text.inverse} />
-          <Text style={s.primaryBtnText}>Start a Game</Text>
-        </TouchableOpacity>
-        <TouchableOpacity
-          style={[s.secondaryBtn, s.emptyStateBtn]}
-          onPress={() => navigation.navigate('Setup', { kind: 'tournament' })}
-          activeOpacity={0.8}
-        >
-          <Feather name="award" size={16} color={theme.accent.primary} />
-          <Text style={s.secondaryBtnText}>Start a Tournament</Text>
-        </TouchableOpacity>
-        <TouchableOpacity
-          style={[s.secondaryBtn, s.emptyStateBtn]}
-          onPress={goToList}
-          activeOpacity={0.8}
-        >
-          <Feather name="home" size={16} color={theme.accent.primary} />
-          <Text style={s.secondaryBtnText}>Go to Home</Text>
-        </TouchableOpacity>
+        <View style={{ flex: 1, alignItems: 'center', justifyContent: 'center' }}>
+          <Feather name="flag" size={48} color={theme.text.muted} />
+          <Text style={[s.emptyTitle, { marginTop: 16 }]}>No active tournament</Text>
+          <Text style={[s.emptySubtitle, { marginTop: 6, marginBottom: 8 }]}>
+            Start a game or tournament to begin playing.
+          </Text>
+          <TouchableOpacity
+            style={[s.primaryBtn, s.emptyStateBtn]}
+            onPress={() => navigation.navigate('Setup', { kind: 'game' })}
+            activeOpacity={0.8}
+          >
+            <Feather name="flag" size={16} color={theme.isDark ? theme.accent.primary : theme.text.inverse} />
+            <Text style={s.primaryBtnText}>Start a Game</Text>
+          </TouchableOpacity>
+          <TouchableOpacity
+            style={[s.secondaryBtn, s.emptyStateBtn]}
+            onPress={() => navigation.navigate('Setup', { kind: 'tournament' })}
+            activeOpacity={0.8}
+          >
+            <Feather name="award" size={16} color={theme.accent.primary} />
+            <Text style={s.secondaryBtnText}>Start a Tournament</Text>
+          </TouchableOpacity>
+          <TouchableOpacity
+            style={[s.secondaryBtn, s.emptyStateBtn]}
+            onPress={goToList}
+            activeOpacity={0.8}
+          >
+            <Feather name="home" size={16} color={theme.accent.primary} />
+            <Text style={s.secondaryBtnText}>Go to Home</Text>
+          </TouchableOpacity>
+        </View>
       </ScreenContainer>
     );
   }
