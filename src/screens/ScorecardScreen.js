@@ -1774,7 +1774,7 @@ function WinnerBadge({ name }) {
 // ranking through roundPairLeaderboard.
 // Live Sindicato standings, pinned above the bottom controls — mirrors the
 // best-ball MatchPanel / Stableford totals strip. Shows each player's running
-// points (high to low) and the leader / clinch status.
+// points (me first, then high to low) and the leader / clinch status.
 function SindicatoPanel({ round, players, scores, meId }) {
   const { theme } = useTheme();
   const s = useMemo(() => makeStyles(theme), [theme]);
