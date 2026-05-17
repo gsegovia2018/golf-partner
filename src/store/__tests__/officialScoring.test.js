@@ -1,4 +1,4 @@
-import { assignRoundRobinMarkers, autoBalanceParties, pairAverageHandicap, balancePartiesFromPairs } from '../officialScoring';
+import { assignRoundRobinMarkers, autoBalanceParties, pairAverageHandicap, balancePartiesFromPairs, scoreCellState, cardDiscrepancyHoles } from '../officialScoring';
 
 describe('assignRoundRobinMarkers', () => {
   test('each seat marks the next, last wraps to first', () => {
@@ -77,5 +77,29 @@ describe('pair-format balancing', () => {
     const partyAvg = (p) => p.reduce((s, x) => s + pairAverageHandicap(x), 0) / p.length;
     expect(partyAvg(parties[0])).toBe(14);
     expect(partyAvg(parties[1])).toBe(14);
+  });
+});
+
+describe('discrepancy state', () => {
+  test('scoreCellState classifies the four cases', () => {
+    expect(scoreCellState(null, null)).toBe('empty');
+    expect(scoreCellState(4, null)).toBe('waiting');
+    expect(scoreCellState(null, 4)).toBe('waiting');
+    expect(scoreCellState(4, 4)).toBe('agreed');
+    expect(scoreCellState(4, 5)).toBe('discrepancy');
+  });
+
+  test('cardDiscrepancyHoles lists only holes in discrepancy for a subject', () => {
+    const scores = [
+      { hole: 1, subject_roster_id: 'a', source: 'self',   strokes: 4 },
+      { hole: 1, subject_roster_id: 'a', source: 'marker', strokes: 4 },
+      { hole: 2, subject_roster_id: 'a', source: 'self',   strokes: 5 },
+      { hole: 2, subject_roster_id: 'a', source: 'marker', strokes: 6 },
+      { hole: 3, subject_roster_id: 'a', source: 'self',   strokes: 3 },
+      { hole: 4, subject_roster_id: 'b', source: 'self',   strokes: 9 },
+      { hole: 4, subject_roster_id: 'b', source: 'marker', strokes: 2 },
+    ];
+    expect(cardDiscrepancyHoles(scores, 'a')).toEqual([2]);
+    expect(cardDiscrepancyHoles(scores, 'b')).toEqual([4]);
   });
 });

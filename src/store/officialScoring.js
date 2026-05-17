@@ -67,3 +67,32 @@ export function balancePartiesFromPairs(pairs, { pairsPerParty = 2 } = {}) {
   }
   return parties;
 }
+
+// Classify one player's hole given the two entries.
+//   empty       — neither entered
+//   waiting     — exactly one entered (the other side hasn't scored yet)
+//   agreed      — both entered and equal
+//   discrepancy — both entered and unequal
+export function scoreCellState(selfStrokes, markerStrokes) {
+  const hasSelf = selfStrokes != null;
+  const hasMarker = markerStrokes != null;
+  if (!hasSelf && !hasMarker) return 'empty';
+  if (hasSelf !== hasMarker) return 'waiting';
+  return selfStrokes === markerStrokes ? 'agreed' : 'discrepancy';
+}
+
+// Holes (ascending) where a subject's self/marker entries disagree. `scores`
+// is the flat row list returned by get_round_state.
+export function cardDiscrepancyHoles(scores, subjectRosterId) {
+  const byHole = new Map();
+  for (const s of scores) {
+    if (s.subject_roster_id !== subjectRosterId) continue;
+    const e = byHole.get(s.hole) || {};
+    e[s.source] = s.strokes;
+    byHole.set(s.hole, e);
+  }
+  return [...byHole.entries()]
+    .filter(([, e]) => scoreCellState(e.self, e.marker) === 'discrepancy')
+    .map(([hole]) => hole)
+    .sort((a, b) => a - b);
+}
