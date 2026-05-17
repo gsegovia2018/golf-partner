@@ -1716,6 +1716,8 @@ export function teeShotImpact(tournament, playerId) {
     : 0;
 
   return {
+    // hasData is keyed on drive/penalty buckets, not "any shot detail": a hole
+    // may carry putts-only detail which is not tee-shot data.
     hasData: fairway.length + missed.length + withPenalty.length > 0,
     fairway: summarize(fairway),
     missed: summarize(missed),
