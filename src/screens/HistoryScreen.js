@@ -3,6 +3,8 @@ import {
   View, Text, TouchableOpacity, StyleSheet, ScrollView, ActivityIndicator,
 } from 'react-native';
 import ScreenContainer from '../components/ScreenContainer';
+import CardGrid from '../components/CardGrid';
+import { useResponsive } from '../theme/responsive';
 import { useFocusEffect } from '@react-navigation/native';
 import { Feather } from '@expo/vector-icons';
 
@@ -17,7 +19,8 @@ import { loadProfile, computePersonalStats } from '../store/profileStore';
 // archive of finished games and tournaments.
 export default function HistoryScreen({ navigation }) {
   const { theme } = useTheme();
-  const s = makeStyles(theme);
+  const { gridColumns } = useResponsive();
+  const s = makeStyles(theme, gridColumns);
 
   const [finished, setFinished] = useState([]);
   const [stats, setStats] = useState(null);
@@ -138,13 +141,13 @@ export default function HistoryScreen({ navigation }) {
               {tournaments.length > 0 && (
                 <>
                   <Text style={s.sectionLabel}>TOURNAMENTS</Text>
-                  {tournaments.map(renderCard)}
+                  <CardGrid>{tournaments.map(renderCard)}</CardGrid>
                 </>
               )}
               {games.length > 0 && (
                 <>
                   <Text style={s.sectionLabel}>GAMES</Text>
-                  {games.map(renderCard)}
+                  <CardGrid>{games.map(renderCard)}</CardGrid>
                 </>
               )}
             </>
@@ -155,7 +158,7 @@ export default function HistoryScreen({ navigation }) {
   );
 }
 
-function makeStyles(theme) {
+function makeStyles(theme, statColumns) {
   return StyleSheet.create({
     container: { flex: 1, backgroundColor: theme.bg.primary },
     header: { paddingHorizontal: 20, paddingTop: 14, paddingBottom: 10 },
@@ -170,7 +173,7 @@ function makeStyles(theme) {
     },
     statsGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: 10 },
     statCell: {
-      flexGrow: 1, flexBasis: '30%',
+      flexGrow: 1, flexBasis: statColumns >= 3 ? '30%' : '46%',
       backgroundColor: theme.bg.card, borderRadius: 14, borderWidth: 1,
       borderColor: theme.border.default,
       paddingVertical: 14, paddingHorizontal: 12, alignItems: 'center',
@@ -185,7 +188,7 @@ function makeStyles(theme) {
       backgroundColor: theme.bg.card, borderRadius: 18,
       borderWidth: theme.isDark ? 1 : 0,
       borderColor: theme.isDark ? theme.glass?.border || theme.border.default : theme.border.default,
-      padding: 16, marginBottom: 10, flexDirection: 'row', alignItems: 'center',
+      padding: 16, flexDirection: 'row', alignItems: 'center',
       ...(theme.isDark ? {} : theme.shadow.card),
     },
     cardName: { fontFamily: 'PlayfairDisplay-Bold', color: theme.text.primary, fontSize: 16 },
