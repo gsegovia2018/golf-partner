@@ -104,7 +104,8 @@ export function scoringModeUsesTeams(key, playerCount) {
 // The two labels for the LEADERBOARD card's view toggle, per scoring mode.
 // `left` is the mode's native view (the default), `right` is the alternate.
 // Stableford-scored modes (individual, stableford) toggle to Stroke Play;
-// every other mode toggles to Stableford.
+// every other mode toggles to Stableford. Labels are short toggle captions
+// (e.g. 'Best Ball'), not the full SCORING_MODES labels.
 export function leaderboardToggleLabels(scoringMode) {
   if (scoringMode === 'matchplay') return { left: 'Match Play', right: 'Stableford' };
   if (scoringMode === 'sindicato') return { left: 'Sindicato', right: 'Stableford' };
