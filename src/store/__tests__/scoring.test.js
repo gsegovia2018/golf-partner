@@ -515,4 +515,17 @@ describe('tournamentMatchPlayStandings', () => {
     };
     expect(tournamentMatchPlayStandings(t)).toBeNull();
   });
+
+  test('future rounds keep their holes in the remaining count', () => {
+    // Round 0 fully played — a wins both holes, lead 2, 0 holes left in R0.
+    // Round 1 is a future round (currentRound 0); its 2 holes keep the match
+    // alive, so a lead of 2 does NOT yet clinch ("leads by", not "wins").
+    const played = {
+      holes, playerHandicaps: {},
+      scores: { a: { 1: 4, 2: 4 }, b: { 1: 5, 2: 5 } },
+    };
+    const future = { holes, playerHandicaps: {}, scores: {} };
+    const t = { players, rounds: [played, future], currentRound: 0 };
+    expect(tournamentMatchPlayStandings(t).status).toBe('Alex leads by 2');
+  });
 });
