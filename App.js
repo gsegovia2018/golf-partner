@@ -42,6 +42,7 @@ import CourseEditorScreen from './src/screens/CourseEditorScreen';
 import EditTournamentScreen from './src/screens/EditTournamentScreen';
 import OfficialSetupScreen from './src/screens/OfficialSetupScreen';
 import PartyBoardScreen from './src/screens/PartyBoardScreen';
+import OfficialAdminScreen from './src/screens/OfficialAdminScreen';
 import JoinOfficialScreen from './src/screens/JoinOfficialScreen';
 import PlayersLibraryScreen from './src/screens/PlayersLibraryScreen';
 import CoursesLibraryScreen from './src/screens/CoursesLibraryScreen';
@@ -273,6 +274,7 @@ function AppNavigator() {
         <Stack.Screen name="EditTournament" component={EditTournamentScreen} />
         <Stack.Screen name="OfficialSetup" component={OfficialSetupScreen} />
         <Stack.Screen name="PartyBoard" component={PartyBoardScreen} />
+        <Stack.Screen name="OfficialAdmin" component={OfficialAdminScreen} />
         <Stack.Screen name="JoinOfficial" component={JoinOfficialScreen} />
         <Stack.Screen name="PlayersLibrary" component={PlayersLibraryScreen} />
         <Stack.Screen name="CoursesLibrary" component={CoursesLibraryScreen} />
