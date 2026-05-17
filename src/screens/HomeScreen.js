@@ -1853,7 +1853,7 @@ const PairsPreviewCard = React.memo(function PairsPreviewCard({ pairs, theme, s 
 // theme-aware so it is legible on the normal card background. Ranks 1/2/3 get
 // gold/silver/bronze badges; the winner row also gets a left gold border and
 // an award icon. `sub` is an optional right-aligned muted value (e.g. strokes).
-const RankedRow = React.memo(function RankedRow({ rank, name, primary, sub, isWinner, isLast, theme, s }) {
+const RankedRow = React.memo(function RankedRow({ rank, name, primary, sub, sub2, sub2Color, isWinner, isLast, theme, s }) {
   const rankColors = ['#ffd700', '#c0c8d4', '#daa06d'];
   const rankColor = rankColors[rank - 1] || theme.text.muted;
   const rankBg = rank === 1 ? 'rgba(255,215,0,0.18)'
@@ -1882,6 +1882,9 @@ const RankedRow = React.memo(function RankedRow({ rank, name, primary, sub, isWi
       </View>
       <Text style={[s.rankedPrimary, rank === 1 && { fontSize: 18 }]}>{primary}</Text>
       <Text style={s.rankedSub}>{sub ?? ''}</Text>
+      {sub2 != null && (
+        <Text style={[s.rankedSub2, sub2Color && { color: sub2Color }]}>{sub2}</Text>
+      )}
     </View>
   );
 });
@@ -2373,6 +2376,7 @@ const makeStyles = (t) => StyleSheet.create({
   rankedName: { fontFamily: 'PlusJakartaSans-Medium', color: t.text.primary, fontSize: 14 },
   rankedPrimary: { fontFamily: 'PlusJakartaSans-ExtraBold', color: t.accent.primary, fontSize: 16, marginRight: 8 },
   rankedSub: { fontFamily: 'PlusJakartaSans-Medium', color: t.text.muted, fontSize: 11, width: 60, textAlign: 'right' },
+  rankedSub2: { fontFamily: 'PlusJakartaSans-SemiBold', color: t.text.muted, fontSize: 11, width: 44, textAlign: 'right' },
 
   // Pair blocks
   pairBlock: {
