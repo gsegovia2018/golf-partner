@@ -167,6 +167,7 @@ export function collectMyRounds(tournaments, userId) {
         playerId: me.id,
         player: me,
         completed,
+        // Total Stableford points; partial for in-progress (incomplete) rounds.
         points,
       });
     });

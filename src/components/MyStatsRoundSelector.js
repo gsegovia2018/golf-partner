@@ -104,10 +104,11 @@ export default function MyStatsRoundSelector({ visible, myRounds, overrides, onC
                   <View style={s.groupHeader}>
                     <TouchableOpacity
                       onPress={() => setGroup(g, !allOn)}
+                      activeOpacity={0.7}
                       accessibilityRole="checkbox"
-                      accessibilityState={{ checked: allOn }}
+                      accessibilityState={{ checked: selCount === 0 ? false : allOn ? true : 'mixed' }}
                       accessibilityLabel={`${g.name}, toggle all rounds`}
-                      hitSlop={6}
+                      hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
                     >
                       <Feather
                         name={groupIcon}
