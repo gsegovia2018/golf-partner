@@ -7,4 +7,10 @@ module.exports = {
     'src/store/scoring.js',
     'src/store/merge.js',
   ],
+  moduleNameMapper: {
+    '@react-native-async-storage/async-storage':
+      '@react-native-async-storage/async-storage/jest/async-storage-mock',
+    '^@supabase/supabase-js$': '<rootDir>/__mocks__/@supabase/supabase-js.js',
+    '^@react-native-community/netinfo$': '<rootDir>/__mocks__/@react-native-community/netinfo.js',
+  },
 };
