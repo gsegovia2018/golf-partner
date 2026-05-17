@@ -151,6 +151,64 @@ export function matchPlayRoundTally(round, players) {
   return { aWins, bWins, halved, played, holesLeft, lead, leaderIdx, clinched };
 }
 
+// ── Sindicato ───────────────────────────────────────────────────────────────
+// 3-player per-hole points game. Each hole splits 6 points by net-stroke rank:
+//   all three net-equal      → 2 / 2 / 2
+//   two tied lowest, one up  → 3 / 3 / 0
+//   one lowest, two tied up  → 4 / 1 / 1
+//   three distinct           → 4 / 2 / 0
+// Returns { [playerId]: points }, or null when there are not exactly 3 players
+// or any of them has not scored the hole yet.
+export function sindicatoHolePoints(hole, players, scores, playerHandicapsByPlayerId) {
+  if (!players || players.length !== 3) return null;
+  const nets = [];
+  for (const p of players) {
+    const strokes = scores?.[p.id]?.[hole.number];
+    if (strokes == null) return null;
+    const h = playerHandicapsByPlayerId?.[p.id] ?? p.handicap ?? 0;
+    nets.push({ id: p.id, net: strokes - calcExtraShots(h, hole.strokeIndex) });
+  }
+  const [lo, mid, hi] = [...nets].sort((a, b) => a.net - b.net);
+  if (lo.net === mid.net && mid.net === hi.net) {
+    return { [lo.id]: 2, [mid.id]: 2, [hi.id]: 2 };
+  }
+  if (lo.net === mid.net) {
+    return { [lo.id]: 3, [mid.id]: 3, [hi.id]: 0 };
+  }
+  if (mid.net === hi.net) {
+    return { [lo.id]: 4, [mid.id]: 1, [hi.id]: 1 };
+  }
+  return { [lo.id]: 4, [mid.id]: 2, [hi.id]: 0 };
+}
+
+// Cumulative Sindicato points for one round. Returns null for the wrong player
+// count. `totals` is sorted points-descending; `leaderIdx` is the index of the
+// sole leader within `totals` (null when the top two are tied). A trailing
+// player gains at most 4 per hole, so the leader has clinched the round when
+// `lead > holesLeft × 4`.
+export function sindicatoRoundTally(round, players) {
+  if (!players || players.length !== 3) return null;
+  const scores = round?.scores ?? {};
+  const playerHandicaps = round?.playerHandicaps ?? {};
+  const holes = round?.holes ?? [];
+  const pointsById = Object.fromEntries(players.map((p) => [p.id, 0]));
+  let played = 0;
+  for (const hole of holes) {
+    const hp = sindicatoHolePoints(hole, players, scores, playerHandicaps);
+    if (!hp) continue;
+    played++;
+    for (const p of players) pointsById[p.id] += hp[p.id];
+  }
+  const totals = players
+    .map((player) => ({ player, points: pointsById[player.id] }))
+    .sort((a, b) => b.points - a.points);
+  const holesLeft = holes.length - played;
+  const lead = totals[0].points - totals[1].points;
+  const leaderIdx = totals[0].points > totals[1].points ? 0 : null;
+  const clinched = leaderIdx === 0 && lead > holesLeft * 4;
+  return { totals, played, holesLeft, leaderIdx, lead, clinched };
+}
+
 // Lowest stroke count that still yields 0 Stableford points on this hole for
 // this player. Use as the recorded score when a player picks up the ball.
 export function pickupStrokes(par, playerHandicap, holeStrokeIndex) {

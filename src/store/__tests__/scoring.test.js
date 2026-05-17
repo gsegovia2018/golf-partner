@@ -13,6 +13,8 @@ import {
   pickupStrokes,
   randomPairs,
   isRoundPlayed,
+  sindicatoHolePoints,
+  sindicatoRoundTally,
 } from '../scoring';
 
 describe('calcExtraShots', () => {
@@ -264,5 +266,121 @@ describe('isRoundPlayed', () => {
 
   it('is false when the round has no scores object', () => {
     expect(isRoundPlayed({}, 0, { currentRound: 0 })).toBe(false);
+  });
+});
+
+describe('sindicatoHolePoints', () => {
+  // Handicap 0 for all → net strokes equal gross, so gross controls rank.
+  const players = [
+    { id: 'a', name: 'A', handicap: 0 },
+    { id: 'b', name: 'B', handicap: 0 },
+    { id: 'c', name: 'C', handicap: 0 },
+  ];
+  const hole = { number: 1, par: 4, strokeIndex: 5 };
+
+  test('three distinct results split 4 / 2 / 0', () => {
+    const scores = { a: { 1: 4 }, b: { 1: 5 }, c: { 1: 6 } };
+    expect(sindicatoHolePoints(hole, players, scores, {})).toEqual({ a: 4, b: 2, c: 0 });
+  });
+  test('one winner, two tied behind split 4 / 1 / 1', () => {
+    const scores = { a: { 1: 4 }, b: { 1: 5 }, c: { 1: 5 } };
+    expect(sindicatoHolePoints(hole, players, scores, {})).toEqual({ a: 4, b: 1, c: 1 });
+  });
+  test('two tied for the win split 3 / 3 / 0', () => {
+    const scores = { a: { 1: 4 }, b: { 1: 4 }, c: { 1: 5 } };
+    expect(sindicatoHolePoints(hole, players, scores, {})).toEqual({ a: 3, b: 3, c: 0 });
+  });
+  test('all three tied split 2 / 2 / 2', () => {
+    const scores = { a: { 1: 5 }, b: { 1: 5 }, c: { 1: 5 } };
+    expect(sindicatoHolePoints(hole, players, scores, {})).toEqual({ a: 2, b: 2, c: 2 });
+  });
+  test('the four point values always sum to 6', () => {
+    const scores = { a: { 1: 4 }, b: { 1: 5 }, c: { 1: 6 } };
+    const pts = sindicatoHolePoints(hole, players, scores, {});
+    expect(pts.a + pts.b + pts.c).toBe(6);
+  });
+  test('returns null when a player has not scored the hole', () => {
+    const scores = { a: { 1: 4 }, b: { 1: 5 } };
+    expect(sindicatoHolePoints(hole, players, scores, {})).toBeNull();
+  });
+  test('returns null when not exactly 3 players', () => {
+    const scores = { a: { 1: 4 }, b: { 1: 5 } };
+    expect(sindicatoHolePoints(hole, players.slice(0, 2), scores, {})).toBeNull();
+  });
+  test('ranks by net strokes — a handicap stroke flips equal gross', () => {
+    // a gets one stroke on this hole (handicap 18, any strokeIndex → +1),
+    // so a's net 4 beats b's net 5 despite both carding gross 5.
+    const scores = { a: { 1: 5 }, b: { 1: 5 }, c: { 1: 6 } };
+    const handicaps = { a: 18, b: 0, c: 0 };
+    expect(sindicatoHolePoints(hole, players, scores, handicaps)).toEqual({ a: 4, b: 2, c: 0 });
+  });
+});
+
+describe('sindicatoRoundTally', () => {
+  const players = [
+    { id: 'a', name: 'A', handicap: 0 },
+    { id: 'b', name: 'B', handicap: 0 },
+    { id: 'c', name: 'C', handicap: 0 },
+  ];
+  const holes = [
+    { number: 1, par: 4, strokeIndex: 1 },
+    { number: 2, par: 4, strokeIndex: 2 },
+  ];
+
+  test('accumulates points across played holes and sorts descending', () => {
+    // Hole 1: 4/5/6 → 4/2/0. Hole 2: 4/5/5 → 4/1/1. Totals a8 b3 c1.
+    const round = {
+      holes,
+      playerHandicaps: {},
+      scores: { a: { 1: 4, 2: 4 }, b: { 1: 5, 2: 5 }, c: { 1: 6, 2: 5 } },
+    };
+    const tally = sindicatoRoundTally(round, players);
+    expect(tally.totals.map((t) => [t.player.id, t.points]))
+      .toEqual([['a', 8], ['b', 3], ['c', 1]]);
+    expect(tally.played).toBe(2);
+    expect(tally.holesLeft).toBe(0);
+    expect(tally.leaderIdx).toBe(0);
+    expect(tally.lead).toBe(5);
+  });
+  test('counts an unscored hole as not played', () => {
+    const round = {
+      holes,
+      playerHandicaps: {},
+      scores: { a: { 1: 4 }, b: { 1: 5 }, c: { 1: 6 } },
+    };
+    const tally = sindicatoRoundTally(round, players);
+    expect(tally.played).toBe(1);
+    expect(tally.holesLeft).toBe(1);
+  });
+  test('leaderIdx is null when the top two are tied', () => {
+    const round = {
+      holes: [{ number: 1, par: 4, strokeIndex: 1 }],
+      playerHandicaps: {},
+      scores: { a: { 1: 4 }, b: { 1: 4 }, c: { 1: 5 } },
+    };
+    const tally = sindicatoRoundTally(round, players);
+    expect(tally.leaderIdx).toBeNull();
+    expect(tally.clinched).toBe(false);
+  });
+  test('not clinched when lead equals holesLeft × 4', () => {
+    // 1 hole played (4/2/0 → lead 2), 1 hole left → max gain 4. lead 2 ≤ 4.
+    const round = {
+      holes,
+      playerHandicaps: {},
+      scores: { a: { 1: 4 }, b: { 1: 5 }, c: { 1: 6 } },
+    };
+    expect(sindicatoRoundTally(round, players).clinched).toBe(false);
+  });
+  test('clinched when lead exceeds holesLeft × 4', () => {
+    // Both holes played, holesLeft 0, lead 5 > 0 → clinched.
+    const round = {
+      holes,
+      playerHandicaps: {},
+      scores: { a: { 1: 4, 2: 4 }, b: { 1: 5, 2: 5 }, c: { 1: 6, 2: 5 } },
+    };
+    expect(sindicatoRoundTally(round, players).clinched).toBe(true);
+  });
+  test('returns null when not exactly 3 players', () => {
+    expect(sindicatoRoundTally({ holes, scores: {} }, players.slice(0, 2))).toBeNull();
   });
 });
