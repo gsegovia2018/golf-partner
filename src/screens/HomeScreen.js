@@ -24,6 +24,7 @@ import {
   tournamentMatchPlayStandings,
   DEFAULT_SETTINGS, generateInviteCode,
 } from '../store/tournamentStore';
+import { playersMeFirst } from '../lib/playerOrder';
 import { mutate } from '../store/mutate';
 import { consumePendingPlayers } from '../lib/selectionBridge';
 import { subscribeConnectivity } from '../lib/connectivity';
@@ -1148,6 +1149,7 @@ export default function HomeScreen({ navigation, route }) {
                 hasNext={false}
                 revealed
                 players={tournament.players}
+                meId={tournament.meId}
                 theme={theme}
                 s={s}
                 onGoToRound={goToRound}
@@ -1213,6 +1215,7 @@ export default function HomeScreen({ navigation, route }) {
                     hasNext={i < tournament.rounds.length - 1}
                     revealed={!!round.revealed || i <= tournament.currentRound}
                     players={tournament.players}
+                    meId={tournament.meId}
                     theme={theme}
                     s={s}
                     onGoToRound={goToRound}
@@ -1628,7 +1631,7 @@ function ConfirmModal({ state, onResult, theme, s }) {
 // round pages stay memoized with stable refs.
 const RoundPage = React.memo(function RoundPage({
   round, index, width, hasPrev, hasNext, revealed,
-  players, theme, s,
+  players, meId, theme, s,
   onGoToRound, onOpenEdit, isSingleRound, showRunning = true,
 }) {
   const hasScores = round.scores && Object.keys(round.scores).length > 0;
@@ -1674,7 +1677,7 @@ const RoundPage = React.memo(function RoundPage({
         </View>
       )}
       {hasScores ? (
-        <RoundScoreboard round={round} players={players} theme={theme} s={s} showRunning={showRunning} />
+        <RoundScoreboard round={round} players={players} meId={meId} theme={theme} s={s} showRunning={showRunning} />
       ) : revealed && hasPairs ? (
         <PairsPreviewCard pairs={round.pairs} theme={theme} s={s} />
       ) : (
@@ -1701,57 +1704,18 @@ const PairsPreviewCard = React.memo(function PairsPreviewCard({ pairs, theme, s 
   );
 });
 
-// Shared ranked row for the round cards — the leaderboard's row visual made
-// theme-aware so it is legible on the normal card background. Ranks 1/2/3 get
-// gold/silver/bronze badges; the winner row also gets a left gold border and
-// an award icon. `sub` is an optional right-aligned muted value (e.g. strokes);
-// `sub2`/`sub2Color` add a second optional right-aligned column (e.g. vs-par).
-const RankedRow = React.memo(function RankedRow({ rank, name, primary, sub, sub2, sub2Color, isWinner, isLast, theme, s }) {
-  const rankColors = ['#ffd700', '#c0c8d4', '#daa06d'];
-  const rankColor = rankColors[rank - 1] || theme.text.muted;
-  const rankBg = rank === 1 ? 'rgba(255,215,0,0.18)'
-    : rank === 2 ? 'rgba(192,200,212,0.18)'
-    : rank === 3 ? 'rgba(218,160,109,0.18)'
-    : (theme.isDark ? 'rgba(255,255,255,0.08)' : 'rgba(0,0,0,0.05)');
-  return (
-    <View style={[
-      s.rankedRow,
-      rank === 1 && s.rankedRowFirst,
-      isLast && { borderBottomWidth: 0 },
-    ]}>
-      <View style={[s.rankBadge, { backgroundColor: rankBg }]}>
-        <Text style={[s.rankText, { color: rankColor }]}>{rank}</Text>
-      </View>
-      <View style={s.rankedNameCol}>
-        <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
-          <Text
-            style={[s.rankedName, rank === 1 && { fontFamily: 'PlusJakartaSans-Bold' }]}
-            numberOfLines={1}
-          >
-            {name}
-          </Text>
-          {isWinner && <Feather name="award" size={13} color="#ffd700" />}
-        </View>
-      </View>
-      <Text style={[s.rankedPrimary, rank === 1 && { fontSize: 18 }]}>{primary}</Text>
-      <Text style={s.rankedSub}>{sub ?? ''}</Text>
-      {sub2 != null && (
-        <Text style={[s.rankedSub2, sub2Color && { color: sub2Color }]}>{sub2}</Text>
-      )}
-    </View>
-  );
-});
 
 // Universal round card — identical in every scoring mode. Shows a holes-played
-// progress bar for the round, then each player ranked by Stableford points
-// with strokes and vs-par. Replaces the four mode-specific round cards.
-const RoundScoreboard = React.memo(function RoundScoreboard({ round, players, theme, s, showRunning = true }) {
+// progress bar, then each player (me first, then join order) with POINTS /
+// STROKES / VS PAR stat cells. No rank badge or winner highlight — the green
+// LEADERBOARD card is where standings are shown.
+const RoundScoreboard = React.memo(function RoundScoreboard({ round, players, meId, theme, s, showRunning = true }) {
   const holes = round?.holes ?? [];
   const totalHoles = holes.length || 18;
 
   const totals = roundTotals(round, players);
   const totalsById = Object.fromEntries(totals.map((t) => [t.player.id, t]));
-  const rows = players.map((player) => {
+  const rows = playersMeFirst(players, meId).map((player) => {
     const ps = round?.scores?.[player.id] ?? {};
     let strokes = 0;
     let parThrough = 0;
@@ -1767,16 +1731,10 @@ const RoundScoreboard = React.memo(function RoundScoreboard({ round, players, th
       played,
       vsPar: strokes - parThrough,
     };
-  }).sort((a, b) => b.points - a.points);
+  });
 
   const holesPlayed = rows.length ? Math.max(...rows.map((r) => r.played)) : 0;
   const progressPct = totalHoles > 0 ? Math.min(100, Math.round((holesPlayed / totalHoles) * 100)) : 0;
-
-  // The round is decided once every player has scored every hole and there is
-  // a sole top scorer.
-  const allScored = players.length > 0 && players.every((p) =>
-    holes.every((h) => round?.scores?.[p.id]?.[h.number] != null));
-  const decided = allScored && rows.length > 1 && rows[0].points !== rows[1].points;
 
   const vsParText = (r) => {
     if (r.played === 0) return '—';
@@ -1798,21 +1756,33 @@ const RoundScoreboard = React.memo(function RoundScoreboard({ round, players, th
         </View>
         <Text style={s.roundProgressText}>{holesPlayed} / {totalHoles}</Text>
       </View>
-      {rows.map((r, i) => (
-        <RankedRow
-          key={r.player.id}
-          rank={i + 1}
-          name={r.player.name}
-          primary={showRunning ? `${r.points} pts` : '— pts'}
-          sub={showRunning ? `${r.strokes || '-'} str` : '—'}
-          sub2={showRunning ? vsParText(r) : '—'}
-          sub2Color={showRunning ? vsParColor(r) : theme.text.muted}
-          isWinner={showRunning && decided && i === 0}
-          isLast={i === rows.length - 1}
-          theme={theme}
-          s={s}
-        />
-      ))}
+      <View style={{ gap: 10 }}>
+        {rows.map((r) => (
+          <View key={r.player.id} style={s.gamePlayerCard}>
+            <Text style={s.gamePlayerName} numberOfLines={1}>{r.player.name}</Text>
+            <View style={[s.gameStatsRow, { marginTop: 10 }]}>
+              <View style={s.gameStatCell}>
+                <Text style={s.gameStatValue}>{showRunning ? r.points : '—'}</Text>
+                <Text style={s.gameStatLabel}>Points</Text>
+              </View>
+              <View style={s.gameStatDivider} />
+              <View style={s.gameStatCell}>
+                <Text style={s.gameStatValue}>
+                  {showRunning && r.played > 0 ? r.strokes : '—'}
+                </Text>
+                <Text style={s.gameStatLabel}>Strokes</Text>
+              </View>
+              <View style={s.gameStatDivider} />
+              <View style={s.gameStatCell}>
+                <Text style={[s.gameStatValue, showRunning && { color: vsParColor(r) }]}>
+                  {showRunning ? vsParText(r) : '—'}
+                </Text>
+                <Text style={s.gameStatLabel}>vs Par</Text>
+              </View>
+            </View>
+          </View>
+        ))}
+      </View>
     </>
   );
 });
@@ -2143,25 +2113,6 @@ const makeStyles = (t) => StyleSheet.create({
     fontSize: 12, textAlign: 'center', marginTop: 10,
   },
 
-  // Ranked rows (round cards — leaderboard-style, theme-aware)
-  rankedRow: {
-    flexDirection: 'row', alignItems: 'center', paddingVertical: 10,
-    borderBottomWidth: 1, borderBottomColor: t.border.default,
-  },
-  rankedRowFirst: {
-    borderLeftWidth: 3, borderLeftColor: '#ffd700',
-    paddingLeft: 8, marginLeft: -8,
-  },
-  rankBadge: {
-    width: 28, height: 28, borderRadius: 14,
-    alignItems: 'center', justifyContent: 'center', marginRight: 10,
-  },
-  rankText: { fontFamily: 'PlusJakartaSans-ExtraBold', fontSize: 12 },
-  rankedNameCol: { flex: 1, minWidth: 0, marginRight: 8 },
-  rankedName: { fontFamily: 'PlusJakartaSans-Medium', color: t.text.primary, fontSize: 14 },
-  rankedPrimary: { fontFamily: 'PlusJakartaSans-ExtraBold', color: t.accent.primary, fontSize: 16, marginRight: 8 },
-  rankedSub: { fontFamily: 'PlusJakartaSans-Medium', color: t.text.muted, fontSize: 11, width: 60, textAlign: 'right' },
-  rankedSub2: { fontFamily: 'PlusJakartaSans-SemiBold', color: t.text.muted, fontSize: 11, width: 44, textAlign: 'right' },
   roundProgressRow: { flexDirection: 'row', alignItems: 'center', gap: 10, marginBottom: 14 },
   roundProgressTrack: {
     flex: 1, height: 6, borderRadius: 3,
