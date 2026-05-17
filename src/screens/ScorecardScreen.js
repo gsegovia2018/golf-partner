@@ -32,6 +32,8 @@ import CaptureMenuSheet from '../components/CaptureMenuSheet';
 import { pickMedia, attachMedia } from '../lib/mediaCapture';
 import { useRoundMedia } from '../hooks/useRoundMedia';
 import { useOfficialRound } from '../hooks/useOfficialRound';
+import DiscrepancySheet from '../components/DiscrepancySheet';
+import { scoreCellState, cardDiscrepancyHoles } from '../store/officialScoring';
 import { Alert } from 'react-native';
 
 // Web-only CSS scroll-snap. On native, `pagingEnabled` is handled by the
@@ -633,6 +635,40 @@ export default function ScorecardScreen({ navigation, route }) {
     });
   }, [officialData]);
 
+  // ── Official discrepancy surfacing (Task 15) ───────────────────────────
+  // The casual `scores` blob collapses each player/hole to ONE number, so it
+  // can't show a self-vs-marker mismatch. These helpers read the raw two-row
+  // `officialData.scores` list instead. All of this is official-only; casual
+  // mode never touches `officialDiscrepancy`.
+  const officialDiscrepancy = useMemo(() => {
+    if (!official) return null;
+    const rows = officialData.scores ?? [];
+    const members = officialData.members ?? [];
+    // Both entries for one subject on one hole: { self, marker } strokes.
+    const cellEntries = (subjectRosterId, holeNumber) => {
+      let self = null;
+      let marker = null;
+      for (const r of rows) {
+        if (r.subject_roster_id !== subjectRosterId || r.hole !== holeNumber) continue;
+        if (r.source === 'self') self = r.strokes;
+        else if (r.source === 'marker') marker = r.strokes;
+      }
+      return { self, marker };
+    };
+    // Display name of whoever marks `subjectRosterId` (for labelling the
+    // read-only side of the resolve sheet).
+    const markerNameFor = (subjectRosterId) => {
+      const m = members.find((x) => x.marks_roster_id === subjectRosterId);
+      return m?.display_name ?? 'Marker';
+    };
+    return {
+      cellEntries,
+      markerNameFor,
+      // The token holder's own discrepancy holes — ascending hole numbers.
+      myHoles: cardDiscrepancyHoles(rows, officialData.myRosterId),
+    };
+  }, [official, officialData.scores, officialData.members, officialData.myRosterId]);
+
   const setScore = useCallback((playerId, holeNumber, value) => {
     const parsed = value === '' ? undefined : parseInt(value, 10) || undefined;
     const holePar = round?.holes?.find((h) => h.number === holeNumber)?.par ?? 4;
@@ -1022,6 +1058,10 @@ export default function ScorecardScreen({ navigation, route }) {
           celebrationAnim={celebrationAnim}
           refreshing={refreshing}
           onRefresh={onRefresh}
+          official={official}
+          officialDiscrepancy={officialDiscrepancy}
+          officialEditableSource={official ? officialData.editableSource : null}
+          officialSetScore={official ? officialData.setScore : null}
         />
       ) : (
         <GridView
@@ -1128,6 +1168,7 @@ const HolePage = React.memo(function HolePage({
   onStep, onSetScore, editable, getScoreAnim,
   showRunning, playerTotals,
   mode,
+  official, officialDiscrepancy, onOpenDiscrepancy,
 }) {
   const pairs = round.pairs ?? [];
   const isSolo = players.length === 1;
@@ -1204,6 +1245,19 @@ const HolePage = React.memo(function HolePage({
           // renders the score without +/- steppers or the pickup toggle.
           const canEdit = editable ? editable(player.id) : true;
 
+          // Official mode: classify this player's hole from the raw two-row
+          // score data so the hero card can show an agreed / waiting /
+          // discrepancy badge. Casual mode leaves officialState null.
+          let officialState = null;     // 'empty' | 'waiting' | 'agreed' | 'discrepancy'
+          let canResolveHere = false;   // viewer owns an entry → can open sheet
+          if (official && officialDiscrepancy) {
+            const { self, marker } = officialDiscrepancy.cellEntries(player.id, pageHole.number);
+            officialState = scoreCellState(self, marker);
+            // The viewer can act on a card they own an entry for (self or
+            // marker). canEdit already encodes editableSource !== null.
+            canResolveHere = canEdit;
+          }
+
           if (useHeroCards) {
             const totals = playerTotals(player);
             const vsPar = totals.parPlayed > 0 ? totals.str - totals.parPlayed : 0;
@@ -1216,12 +1270,38 @@ const HolePage = React.memo(function HolePage({
               : vsPar <= 2 ? theme.scoreColor('neutral')
               : theme.scoreColor('poor');
 
+            // A discrepancy card the viewer can act on opens the resolve
+            // sheet on tap. Other states (or read-only viewers) keep the
+            // card non-interactive — the badge alone communicates state.
+            const heroTappable = officialState === 'discrepancy' && canResolveHere;
+            const HeroCard = heroTappable ? Pressable : View;
+            const heroCardProps = heroTappable
+              ? {
+                onPress: () => onOpenDiscrepancy?.(player.id, pageHole.number),
+                accessibilityLabel: `Resolve ${player.name}'s score on hole ${pageHole.number}`,
+              }
+              : {};
+
             return (
               <React.Fragment key={player.id}>
-              <View style={s.soloHeroCard}>
+              <HeroCard style={s.soloHeroCard} {...heroCardProps}>
                 <View style={s.soloHeroHeader}>
-                  <View>
-                    <Text style={s.soloHeroName}>{player.name}</Text>
+                  <View style={s.soloHeroNameWrap}>
+                    <View style={s.soloHeroNameRow}>
+                      <Text style={s.soloHeroName}>{player.name}</Text>
+                      {/* Official discrepancy badge: green check (agreed),
+                          grey clock (waiting), red dot (discrepancy). No
+                          badge for 'empty' or in casual mode. */}
+                      {officialState === 'agreed' && (
+                        <Feather name="check-circle" size={14} color={theme.scoreColor('good')} />
+                      )}
+                      {officialState === 'waiting' && (
+                        <Feather name="clock" size={14} color={theme.text.muted} />
+                      )}
+                      {officialState === 'discrepancy' && (
+                        <Feather name="alert-circle" size={14} color={theme.destructive} />
+                      )}
+                    </View>
                     <Text style={s.soloHeroHcp}>
                       HCP {handicap}{extraShots > 0 ? `  ·  +${extraShots} on this hole` : ''}
                     </Text>
@@ -1312,7 +1392,7 @@ const HolePage = React.memo(function HolePage({
                     </View>
                   </View>
                 )}
-              </View>
+              </HeroCard>
               {player.id === meId && (
                 <ShotDetailPanel
                   hole={pageHole}
@@ -1540,7 +1620,7 @@ function ShotDetailPanel({ hole, detail, onChange, theme, s }) {
   );
 }
 
-function HoleView({ round, roundIndex, players, scores, shotDetails, meId, onSetShot, onPickMe, notes, currentHole, hole, isBestBall, bbResult, settings, onStep, onSetScore, editable, onRoundNoteChange, onHoleNoteChange, onPrev, onNext, onGoToHole, onGoBack, onFinish, holeCount, playerTotals, showRunning, getScoreAnim, celebration, celebrationAnim, refreshing, onRefresh }) {
+function HoleView({ round, roundIndex, players, scores, shotDetails, meId, onSetShot, onPickMe, notes, currentHole, hole, isBestBall, bbResult, settings, onStep, onSetScore, editable, onRoundNoteChange, onHoleNoteChange, onPrev, onNext, onGoToHole, onGoBack, onFinish, holeCount, playerTotals, showRunning, getScoreAnim, celebration, celebrationAnim, refreshing, onRefresh, official, officialDiscrepancy, officialEditableSource, officialSetScore }) {
   const { theme } = useTheme();
   const isSindicato = settings?.scoringMode === 'sindicato';
   // Notes split: the current hole's note plus the shared round-level note.
@@ -1549,6 +1629,9 @@ function HoleView({ round, roundIndex, players, scores, shotDetails, meId, onSet
   const s = useMemo(() => makeStyles(theme), [theme]);
   const [notesOpen, setNotesOpen] = useState(false);
   const [holePickerOpen, setHolePickerOpen] = useState(false);
+  // Official mode: the hole + subject currently open in the resolve sheet.
+  // { hole, subjectRosterId } or null. Casual mode never sets this.
+  const [discrepancyTarget, setDiscrepancyTarget] = useState(null);
   const [pagerSize, setPagerSize] = useState({ width: 0, height: 0 });
   const pagerRef = useRef(null);
   const holeScrollOffset = useRef(0);
@@ -1681,6 +1764,10 @@ function HoleView({ round, roundIndex, players, scores, shotDetails, meId, onSet
                 mode={settings?.scoringMode === 'matchplay' ? 'matchplay'
                   : settings?.scoringMode === 'sindicato' ? 'sindicato'
                   : isBestBall ? 'bestball' : 'stableford'}
+                official={official}
+                officialDiscrepancy={officialDiscrepancy}
+                onOpenDiscrepancy={(subjectRosterId, holeNumber) =>
+                  setDiscrepancyTarget({ hole: holeNumber, subjectRosterId })}
               />
             ))}
           </ScrollView>
@@ -1820,6 +1907,11 @@ function HoleView({ round, roundIndex, players, scores, shotDetails, meId, onSet
                 const n = h.number;
                 const hasAnyScore = players.some((p) => scores[p.id]?.[n] != null);
                 const hasNote = !!(notes?.hole?.[n] ?? '').trim();
+                // Official mode: red dot on holes where the token holder's
+                // own self/marker entries disagree (their discrepancy holes).
+                const hasDiscrepancy = official && officialDiscrepancy
+                  ? officialDiscrepancy.myHoles.includes(n)
+                  : false;
                 return (
                   <TouchableOpacity
                     key={n}
@@ -1832,7 +1924,12 @@ function HoleView({ round, roundIndex, players, scores, shotDetails, meId, onSet
                     activeOpacity={0.7}
                   >
                     <Text style={[s.holePickerBtnText, n === currentHole && s.holePickerBtnTextActive]}>{n}</Text>
-                    {hasNote && (
+                    {hasDiscrepancy ? (
+                      // Discrepancy takes visual priority over a note dot.
+                      <View
+                        style={[s.holePickerNoteDot, { backgroundColor: theme.destructive }]}
+                      />
+                    ) : hasNote ? (
                       <View
                         style={[
                           s.holePickerNoteDot,
@@ -1843,7 +1940,7 @@ function HoleView({ round, roundIndex, players, scores, shotDetails, meId, onSet
                           },
                         ]}
                       />
-                    )}
+                    ) : null}
                   </TouchableOpacity>
                 );
               })}
@@ -1851,6 +1948,35 @@ function HoleView({ round, roundIndex, players, scores, shotDetails, meId, onSet
           </Pressable>
         </Pressable>
       </Modal>
+
+      {/* Official-mode discrepancy resolve sheet. Opened by tapping a hero
+          card flagged 'discrepancy'. Casual mode never sets discrepancyTarget. */}
+      {official && officialDiscrepancy && discrepancyTarget && (() => {
+        const { hole: dHole, subjectRosterId } = discrepancyTarget;
+        const { self, marker } = officialDiscrepancy.cellEntries(subjectRosterId, dHole);
+        const subject = players.find((p) => p.id === subjectRosterId);
+        const src = officialEditableSource ? officialEditableSource(subjectRosterId) : null;
+        return (
+          <DiscrepancySheet
+            visible
+            onClose={() => setDiscrepancyTarget(null)}
+            hole={dHole}
+            subjectName={subject?.name ?? 'Player'}
+            selfStrokes={self}
+            markerStrokes={marker}
+            markerName={officialDiscrepancy.markerNameFor(subjectRosterId)}
+            editableSource={src}
+            onChange={(strokes) => {
+              // Route the viewer's edit through the hook's setScore for the
+              // entry they own. A pure read-only viewer (src === null) has no
+              // editable side; onChange is then a no-op.
+              if (src && officialSetScore) {
+                officialSetScore(subjectRosterId, dHole, strokes, src);
+              }
+            }}
+          />
+        );
+      })()}
 
       <CelebrationOverlay celebration={celebration} celebrationAnim={celebrationAnim} players={players} />
     </View>
@@ -3480,6 +3606,12 @@ function makeStyles(theme) {
       flexDirection: 'row',
       alignItems: 'center',
       justifyContent: 'space-between',
+    },
+    soloHeroNameWrap: { flexShrink: 1 },
+    soloHeroNameRow: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: 6,
     },
     soloHeroName: {
       color: theme.text.primary,
