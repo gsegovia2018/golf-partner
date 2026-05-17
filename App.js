@@ -22,6 +22,7 @@ import {
 } from '@expo-google-fonts/playfair-display';
 
 import { ThemeProvider, useTheme } from './src/theme/ThemeContext';
+import { CONTENT_MAX_WIDTH } from './src/theme/responsive';
 import LoadingSplash from './src/components/LoadingSplash';
 import ErrorBoundary from './src/components/ErrorBoundary';
 import { AuthProvider, useAuth } from './src/context/AuthContext';
@@ -146,6 +147,9 @@ function tabBarStyles(theme) {
     },
     bar: {
       flexDirection: 'row',
+      width: '100%',
+      maxWidth: CONTENT_MAX_WIDTH,
+      alignSelf: 'center',
       alignItems: 'center',
       height: 62,
       paddingHorizontal: 8,
