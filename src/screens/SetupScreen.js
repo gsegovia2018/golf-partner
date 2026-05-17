@@ -62,18 +62,17 @@ export default function SetupScreen({ navigation, route }) {
   const [players, setPlayers] = useState([]);
   const [rounds, setRounds] = useState([{ id: newRoundId(), courseName: '', holes: defaultHoles(), slope: null, playerHandicaps: null }]);
   const [settings, setSettings] = useState({ ...DEFAULT_SETTINGS });
-  const [step, setStep] = useState(0);
+  const [rawStep, setStep] = useState(0);
 
   // The active step list depends on kind + roster size (Scoring only exists
-  // for 2+ players). stepKey is the key of the currently displayed step.
+  // for 2+ players). When the roster shrinks the Scoring step away the array
+  // gets shorter, so the active index is clamped synchronously here — not via
+  // an effect, which would leave a one-render window where the index points
+  // past the array and stepKey wrongly resolves to 'review'. stepKey is the
+  // key of the currently displayed step.
   const steps = useMemo(() => wizardSteps(kind, players.length), [kind, players.length]);
-  const stepKey = steps[step] ?? steps[steps.length - 1];
-
-  // When the roster shrinks the Scoring step away, the steps array gets
-  // shorter — clamp the active index so it never points past the array.
-  useEffect(() => {
-    setStep((prev) => Math.min(prev, steps.length - 1));
-  }, [steps.length]);
+  const step = Math.max(0, Math.min(rawStep, steps.length - 1));
+  const stepKey = steps[step];
 
   // Whenever the player count makes the chosen scoring mode invalid, fall
   // back to a mode that is always valid for the current roster.
@@ -460,7 +459,11 @@ export default function SetupScreen({ navigation, route }) {
 
   const renderReviewStep = () => {
     const hasScoringStep = steps.includes('scoring');
-    const scoringLabel = getScoringMode(settings.scoringMode)?.label ?? 'Solo play';
+    // For a solo game there is no scoring choice — show a neutral label
+    // rather than whatever mode happens to be left in settings.
+    const scoringLabel = hasScoringStep
+      ? (getScoringMode(settings.scoringMode)?.label ?? 'Solo play')
+      : 'Solo play';
     const playerSummary = players.length === 1
       ? `${players[0].name} · HCP ${players[0].handicap}`
       : `${players.length} golfers`;
@@ -478,6 +481,7 @@ export default function SetupScreen({ navigation, route }) {
             onChangeText={(v) => { setTournamentName(v); setNameTouched(true); }}
             placeholder={isGame ? 'Game name' : 'Tournament name'}
             placeholderTextColor="rgba(255,255,255,0.5)"
+            keyboardAppearance={theme.isDark ? 'dark' : 'light'}
             selectionColor="#ffffff"
           />
           <View style={s.reviewChipRow}>
