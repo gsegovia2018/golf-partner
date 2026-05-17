@@ -1103,7 +1103,7 @@ export default function HomeScreen({ navigation, route }) {
               <Text style={[s.mastersPoints, i === 0 && { fontSize: 18 }]}>{
                 !showRunning ? '—'
                   : isStrokePlayView
-                    ? `${strokesByPlayer[entry.player.id] || '-'} str`
+                    ? `${strokes || '-'} str`
                     : settings.scoringMode === 'matchplay' && !leaderboardAlt
                       ? `${entry.points} ${entry.points === 1 ? 'hole' : 'holes'}`
                       : `${entry.points} pts`
