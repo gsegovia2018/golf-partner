@@ -7,6 +7,7 @@ import QRCode from 'react-native-qrcode-svg';
 import { useTheme } from '../theme/ThemeContext';
 import { useAuth } from '../context/AuthContext';
 import { ShareableLeaderboard, shareLeaderboard } from '../components/ShareableCard';
+import { scoringModeUsesTeams } from '../components/scoringModes';
 import PullToRefresh from '../components/PullToRefresh';
 import LoadingSplash from '../components/LoadingSplash';
 import {
@@ -19,6 +20,7 @@ import {
   tournamentPlayerClinched, roundPairClinched,
   isRoundComplete, isTournamentFinished, subscribeTournamentChanges,
   matchPlayRoundTally, addPlayerRoundPatches,
+  sindicatoRoundTally, tournamentSindicatoLeaderboard,
   DEFAULT_SETTINGS, generateInviteCode,
 } from '../store/tournamentStore';
 import { mutate } from '../store/mutate';
@@ -512,8 +514,13 @@ export default function HomeScreen({ navigation, route }) {
     setLeaderboardBestBall(isBB);
   }, [tournament?.id, settings.scoringMode, bestBallAvailable]);
   const leaderboard = useMemo(
-    () => (tournament ? tournamentLeaderboard(tournament) : []),
-    [tournament],
+    () => {
+      if (!tournament) return [];
+      return settings.scoringMode === 'sindicato'
+        ? tournamentSindicatoLeaderboard(tournament)
+        : tournamentLeaderboard(tournament);
+    },
+    [tournament, settings.scoringMode],
   );
   const bestWorstLeaderboard = useMemo(
     () => (tournament && leaderboardBestBall ? tournamentBestWorstLeaderboard(tournament) : null),
@@ -533,7 +540,9 @@ export default function HomeScreen({ navigation, route }) {
       : null),
     [tournament, selectedRoundData, selectedRoundHasScores, leaderboardBestBall],
   );
-  const tournamentMode = settings.scoringMode === 'bestball' ? 'bestball' : 'stableford';
+  const tournamentMode = settings.scoringMode === 'bestball' ? 'bestball'
+    : settings.scoringMode === 'sindicato' ? 'sindicato'
+    : 'stableford';
   const tournamentClinchedId = useMemo(
     () => (tournament ? tournamentPlayerClinched(tournament, tournamentMode) : null),
     [tournament, tournamentMode],
@@ -542,10 +551,77 @@ export default function HomeScreen({ navigation, route }) {
   // Stable callbacks for the memoised round pager pages. Keep references
   // stable across swipes so <RoundPage /> memoisation holds.
   const goToRound = useCallback((i) => setSelectedRound(i), []);
+  // Opens the per-round (•••) sheet. Multi-round only — single-round
+  // tournaments collapse "round" and "tournament" into one thing, so they
+  // use just the header gear (Tournament Settings) as the single entry point.
   const openRoundEdit = useCallback((i) => {
     setSelectedRound(i);
     setShowRoundEdit(true);
   }, []);
+
+  // Edit/Reveal Teams menu item — shared by the round-options sheet and the
+  // tournament-settings sheet so the two stay in lockstep. Returns null for
+  // individual / match-play modes, where every "pair" is a single player and
+  // there is nothing to team up. `onClose` dismisses the host sheet.
+  function renderTeamsMenuItem(onClose) {
+    // Teams exist only in a team scoring mode that the current roster can
+    // actually support — so an unknown/legacy mode, or a game stuck on a
+    // team mode with too few players, never wrongly shows team UI.
+    if (!scoringModeUsesTeams(settings?.scoringMode, tournament.players.length)) return null;
+    const r = tournament.rounds[selectedRound];
+    const alreadyRevealed = r?.revealed || selectedRound <= tournament.currentRound;
+    return alreadyRevealed ? (
+      <TouchableOpacity
+        style={s.menuItem}
+        onPress={() => { onClose(); navigation.navigate('EditTeams', { roundIndex: selectedRound }); }}
+        activeOpacity={0.7}
+      >
+        <Feather name="users" size={18} color={theme.accent.primary} />
+        <Text style={s.menuItemText}>Edit Teams</Text>
+        <Feather name="chevron-right" size={16} color={theme.text.muted} />
+      </TouchableOpacity>
+    ) : (
+      <TouchableOpacity
+        style={s.menuItem}
+        onPress={() => { onClose(); navigation.navigate('NextRound', { revealOnly: true, roundIndex: selectedRound }); }}
+        activeOpacity={0.7}
+      >
+        <Feather name="eye" size={18} color={theme.accent.primary} />
+        <Text style={s.menuItemText}>Reveal Teams</Text>
+        <Feather name="chevron-right" size={16} color={theme.text.muted} />
+      </TouchableOpacity>
+    );
+  }
+
+  // Restore-scores + Reset-Round items for the selected round. Shared by the
+  // per-round sheet (multi-round) and the single settings sheet (single-
+  // round, where the two menus are merged). `onClose` dismisses the host.
+  function renderRoundActions(onClose) {
+    const historyCount = tournament.rounds[selectedRound]?.resetHistory?.length ?? 0;
+    return (
+      <>
+        {historyCount > 0 && (
+          <TouchableOpacity
+            style={s.menuItem}
+            onPress={() => { onClose(); setShowResetHistory(true); }}
+            activeOpacity={0.7}
+          >
+            <Feather name="rotate-cw" size={18} color={theme.accent.primary} />
+            <Text style={s.menuItemText}>Restore previous scores ({historyCount})</Text>
+            <Feather name="chevron-right" size={16} color={theme.text.muted} />
+          </TouchableOpacity>
+        )}
+        <TouchableOpacity
+          style={[s.menuItem, s.menuItemDestructive]}
+          onPress={() => { onClose(); resetCurrentRound(); }}
+          activeOpacity={0.7}
+        >
+          <Feather name="rotate-ccw" size={18} color={theme.destructive} />
+          <Text style={[s.menuItemText, { color: theme.destructive }]}>Reset Round</Text>
+        </TouchableOpacity>
+      </>
+    );
+  }
 
   const showList = viewMode === 'list' || (viewMode === 'auto' && !tournament);
   const showTournament = viewMode === 'tournament' || (viewMode === 'auto' && !!tournament);
@@ -921,7 +997,12 @@ export default function HomeScreen({ navigation, route }) {
           >
             <Feather name={showRunning ? 'eye-off' : 'eye'} size={18} color={theme.accent.primary} />
           </TouchableOpacity>
-          <TouchableOpacity style={s.iconBtn} onPress={() => setShowSettings(true)} activeOpacity={0.7}>
+          <TouchableOpacity
+            style={s.iconBtn}
+            onPress={() => setShowSettings(true)}
+            activeOpacity={0.7}
+            accessibilityLabel="Tournament settings"
+          >
             <Feather name="settings" size={18} color={theme.accent.primary} />
           </TouchableOpacity>
         </View>
@@ -985,20 +1066,19 @@ export default function HomeScreen({ navigation, route }) {
       )}
 
       {tournament.rounds.length > 0 && isGame && tournament.rounds.length === 1
-        && settings.scoringMode !== 'matchplay' && settings.scoringMode !== 'bestball' && (
+        && settings.scoringMode !== 'matchplay' && settings.scoringMode !== 'bestball' && settings.scoringMode !== 'sindicato' && (
         <GameOverviewCard
           round={tournament.rounds[0]}
           players={tournament.players}
           settings={settings}
           theme={theme}
           s={s}
-          onOpenEdit={isViewer ? null : openRoundEdit}
           showRunning={showRunning}
         />
       )}
 
       {tournament.rounds.length > 0 && !(isGame && tournament.rounds.length === 1
-        && settings.scoringMode !== 'matchplay' && settings.scoringMode !== 'bestball') && (
+        && settings.scoringMode !== 'matchplay' && settings.scoringMode !== 'bestball' && settings.scoringMode !== 'sindicato') && (
         <View style={s.card}>
           <View style={s.cardTitleRow}>
             <View style={s.cardTitleLeft}>
@@ -1020,16 +1100,6 @@ export default function HomeScreen({ navigation, route }) {
                 />
                 <Text style={[s.modeLabel, roundBestBall && s.modeLabelActive]}>Best Ball</Text>
               </View>
-            )}
-            {tournament.rounds.length === 1 && !isViewer && (
-              <TouchableOpacity
-                onPress={() => openRoundEdit(0)}
-                style={s.roundEditBtn}
-                hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
-                accessibilityLabel="Round options"
-              >
-                <Feather name="settings" size={14} color={theme.text.muted} />
-              </TouchableOpacity>
             )}
           </View>
           {!isGame && (
@@ -1079,7 +1149,6 @@ export default function HomeScreen({ navigation, route }) {
                 theme={theme}
                 s={s}
                 onGoToRound={goToRound}
-                onOpenEdit={isViewer ? null : openRoundEdit}
                 isSingleRound
                 showRunning={showRunning}
               />
@@ -1324,72 +1393,10 @@ export default function HomeScreen({ navigation, route }) {
           <View style={s.modalHandle} />
           <Text style={s.modalTitle}>Round {selectedRound + 1}</Text>
 
-          {(() => {
-            // Individual + match-play tournaments have nothing to "team up" —
-            // every pair is one player — so Edit/Reveal Teams is meaningless
-            // and EditTeamsScreen's slot UI doesn't fit single-member pairs.
-            const mode = settings?.scoringMode;
-            const usesTeams = mode !== 'individual' && mode !== 'matchplay' && tournament.players.length > 1;
-            if (!usesTeams) return null;
-            const r = tournament.rounds[selectedRound];
-            const alreadyRevealed = r?.revealed || selectedRound <= tournament.currentRound;
-            return alreadyRevealed ? (
-              <TouchableOpacity
-                style={s.menuItem}
-                onPress={() => { setShowRoundEdit(false); navigation.navigate('EditTeams', { roundIndex: selectedRound }); }}
-                activeOpacity={0.7}
-              >
-                <Feather name="users" size={18} color={theme.accent.primary} />
-                <Text style={s.menuItemText}>Edit Teams</Text>
-                <Feather name="chevron-right" size={16} color={theme.text.muted} />
-              </TouchableOpacity>
-            ) : (
-              <TouchableOpacity
-                style={s.menuItem}
-                onPress={() => { setShowRoundEdit(false); navigation.navigate('NextRound', { revealOnly: true, roundIndex: selectedRound }); }}
-                activeOpacity={0.7}
-              >
-                <Feather name="eye" size={18} color={theme.accent.primary} />
-                <Text style={s.menuItemText}>Reveal Teams</Text>
-                <Feather name="chevron-right" size={16} color={theme.text.muted} />
-              </TouchableOpacity>
-            );
-          })()}
-
-          <TouchableOpacity
-            style={s.menuItem}
-            onPress={() => { setShowRoundEdit(false); navigation.navigate('EditTournament'); }}
-            activeOpacity={0.7}
-          >
-            <Feather name="map" size={18} color={theme.accent.primary} />
-            <Text style={s.menuItemText}>Edit Course</Text>
-            <Feather name="chevron-right" size={16} color={theme.text.muted} />
-          </TouchableOpacity>
-
-          {(() => {
-            const historyCount = tournament.rounds[selectedRound]?.resetHistory?.length ?? 0;
-            if (historyCount === 0) return null;
-            return (
-              <TouchableOpacity
-                style={s.menuItem}
-                onPress={() => { setShowRoundEdit(false); setShowResetHistory(true); }}
-                activeOpacity={0.7}
-              >
-                <Feather name="rotate-cw" size={18} color={theme.accent.primary} />
-                <Text style={s.menuItemText}>Restore previous scores ({historyCount})</Text>
-                <Feather name="chevron-right" size={16} color={theme.text.muted} />
-              </TouchableOpacity>
-            );
-          })()}
-
-          <TouchableOpacity
-            style={[s.menuItem, s.menuItemDestructive]}
-            onPress={() => { setShowRoundEdit(false); resetCurrentRound(); }}
-            activeOpacity={0.7}
-          >
-            <Feather name="rotate-ccw" size={18} color={theme.destructive} />
-            <Text style={[s.menuItemText, { color: theme.destructive }]}>Reset Round</Text>
-          </TouchableOpacity>
+          {/* Per-round sheet (multi-round only). Round-scoped actions live
+              here; tournament-wide settings live in the gear menu. */}
+          {renderTeamsMenuItem(() => setShowRoundEdit(false))}
+          {renderRoundActions(() => setShowRoundEdit(false))}
         </Pressable>
       </Pressable>
     </Modal>
@@ -1444,36 +1451,13 @@ export default function HomeScreen({ navigation, route }) {
       <Pressable style={s.modalBackdrop} onPress={() => setShowSettings(false)}>
         <Pressable style={s.modalSheet} onPress={() => {}}>
           <View style={s.modalHandle} />
-          <Text style={s.modalTitle}>Tournament Settings</Text>
+          <Text style={s.modalTitle}>{tournament.kind === 'game' ? 'Game Settings' : 'Tournament Settings'}</Text>
 
-          {!isViewer && (() => {
-            const mode = settings?.scoringMode;
-            const usesTeams = mode !== 'individual' && mode !== 'matchplay' && tournament.players.length > 1;
-            if (!usesTeams) return null;
-            const r = tournament.rounds[selectedRound];
-            const alreadyRevealed = r?.revealed || selectedRound <= tournament.currentRound;
-            return alreadyRevealed ? (
-              <TouchableOpacity
-                style={s.menuItem}
-                onPress={() => { setShowSettings(false); navigation.navigate('EditTeams', { roundIndex: selectedRound }); }}
-                activeOpacity={0.7}
-              >
-                <Feather name="users" size={18} color={theme.accent.primary} />
-                <Text style={s.menuItemText}>Edit Teams</Text>
-                <Feather name="chevron-right" size={16} color={theme.text.muted} />
-              </TouchableOpacity>
-            ) : (
-              <TouchableOpacity
-                style={s.menuItem}
-                onPress={() => { setShowSettings(false); navigation.navigate('NextRound', { revealOnly: true, roundIndex: selectedRound }); }}
-                activeOpacity={0.7}
-              >
-                <Feather name="eye" size={18} color={theme.accent.primary} />
-                <Text style={s.menuItemText}>Reveal Teams</Text>
-                <Feather name="chevron-right" size={16} color={theme.text.muted} />
-              </TouchableOpacity>
-            );
-          })()}
+          {/* Teams are round-scoped. Single-round tournaments have no separate
+              per-round sheet, so teams surface here; multi-round keeps them in
+              the per-round (•••) sheet instead. */}
+          {!isViewer && tournament.rounds.length === 1
+            && renderTeamsMenuItem(() => setShowSettings(false))}
 
           {tournament.players.length > 1 && (
             <TouchableOpacity
@@ -1544,6 +1528,11 @@ export default function HomeScreen({ navigation, route }) {
               <Feather name="chevron-right" size={16} color={theme.text.muted} />
             </TouchableOpacity>
           )}
+
+          {/* Round-scoped actions — single-round only, since multi-round
+              tournaments expose these in the per-round (•••) sheet. */}
+          {!isViewer && tournament.rounds.length === 1
+            && renderRoundActions(() => setShowSettings(false))}
 
           {!isViewer && (() => {
             const kindLabel = tournament.kind === 'game' ? 'Game' : 'Tournament';
@@ -1674,7 +1663,7 @@ const RoundPage = React.memo(function RoundPage({
               hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
               accessibilityLabel="Round options"
             >
-              <Feather name="settings" size={14} color={theme.text.muted} />
+              <Feather name="more-horizontal" size={16} color={theme.text.muted} />
             </TouchableOpacity>
           )}
           <TouchableOpacity
@@ -1691,9 +1680,11 @@ const RoundPage = React.memo(function RoundPage({
       {hasScores ? (
         settings?.scoringMode === 'matchplay'
           ? <MatchPlayRoundCard round={round} players={players} theme={theme} s={s} showRunning={showRunning} />
-          : roundBestBall
-            ? <BestBallRoundCard round={round} players={players} settings={settings} clinchedPairIdx={clinchedPairIdx} theme={theme} s={s} showRunning={showRunning} />
-            : <StablefordRoundCard round={round} players={players} clinchedPairIdx={clinchedPairIdx} theme={theme} s={s} showRunning={showRunning} />
+          : settings?.scoringMode === 'sindicato'
+            ? <SindicatoRoundCard round={round} players={players} theme={theme} s={s} showRunning={showRunning} />
+            : roundBestBall
+              ? <BestBallRoundCard round={round} players={players} settings={settings} clinchedPairIdx={clinchedPairIdx} theme={theme} s={s} showRunning={showRunning} />
+              : <StablefordRoundCard round={round} players={players} clinchedPairIdx={clinchedPairIdx} theme={theme} s={s} showRunning={showRunning} />
       ) : revealed && hasPairs ? (
         <PairsPreviewCard pairs={round.pairs} theme={theme} s={s} />
       ) : (
@@ -1708,7 +1699,7 @@ const RoundPage = React.memo(function RoundPage({
 // "ROUND SCORES · Course" + name+points layout for the common case where
 // a Game has one round and isn't using match-play or best-ball scoring.
 const GameOverviewCard = React.memo(function GameOverviewCard({
-  round, players, settings, theme, s, onOpenEdit, showRunning = true,
+  round, players, settings, theme, s, showRunning = true,
 }) {
   const totalHoles = round?.holes?.length ?? 18;
   const totalPar = (round?.holes ?? []).reduce((sum, h) => sum + (h.par ?? 0), 0);
@@ -1762,16 +1753,6 @@ const GameOverviewCard = React.memo(function GameOverviewCard({
             {totalHoles} holes · Par {totalPar || '—'}
           </Text>
         </View>
-        {onOpenEdit && (
-          <TouchableOpacity
-            onPress={() => onOpenEdit(0)}
-            style={s.roundEditBtn}
-            hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
-            accessibilityLabel="Round options"
-          >
-            <Feather name="settings" size={14} color={theme.text.muted} />
-          </TouchableOpacity>
-        )}
       </View>
 
       <View style={s.gameProgressRow}>
@@ -1940,6 +1921,44 @@ const MatchPlayRoundCard = React.memo(function MatchPlayRoundCard({ round, playe
       <Text style={s.pairsPreviewHint}>
         {showRunning ? `${status}${halved > 0 ? ` · ${halved} halved` : ''}` : 'Scores hidden'}
       </Text>
+    </>
+  );
+});
+
+const SindicatoRoundCard = React.memo(function SindicatoRoundCard({ round, players, theme, s, showRunning = true }) {
+  if (!players || players.length !== 3) {
+    return <Text style={s.pairMember}>Sindicato needs 3 players</Text>;
+  }
+  const tally = sindicatoRoundTally(round, players);
+  if (!tally) return <Text style={s.pairMember}>No results yet</Text>;
+
+  const { totals, leaderIdx, lead, clinched, holesLeft } = tally;
+  const firstName = (p) => p.name?.split(' ')[0] ?? '—';
+  const leader = leaderIdx != null ? totals[leaderIdx].player : null;
+  const status = clinched && leader
+    ? `${firstName(leader)} wins`
+    : leader
+      ? `${firstName(leader)} leads by ${lead}${holesLeft > 0 ? ` · ${holesLeft} to play` : ''}`
+      : `All level${holesLeft > 0 ? ` · ${holesLeft} to play` : ''}`;
+
+  return (
+    <>
+      {totals.map(({ player, points }, i) => {
+        const isLeader = leaderIdx === i;
+        return (
+          <View key={player.id} style={[s.pairBlock, showRunning && clinched && isLeader && s.winnerBlock]}>
+            {showRunning && clinched && isLeader && <Text style={s.winnerBadge}>WINNER</Text>}
+            <View style={s.pairHeader}>
+              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6, flex: 1 }}>
+                <Text style={s.pairNames}>{player.name}</Text>
+                {showRunning && clinched && isLeader && <Feather name="award" size={14} color="#ffd700" />}
+              </View>
+              <Text style={s.pairPoints}>{showRunning ? `${points} ${points === 1 ? 'pt' : 'pts'}` : '—'}</Text>
+            </View>
+          </View>
+        );
+      })}
+      <Text style={s.pairsPreviewHint}>{showRunning ? status : 'Scores hidden'}</Text>
     </>
   );
 });
