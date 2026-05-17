@@ -179,7 +179,7 @@ export default function MyStatsScreen({ navigation }) {
       {Header}
       <ScrollView contentContainerStyle={s.scroll}>
         <Snapshot stats={stats} metric={metric} onToggleMetric={setMetric} s={s} theme={theme} />
-        <FormSection form={stats.form} n={n} onChangeN={setN} s={s} theme={theme} />
+        <FormSection form={stats.form} history={stats.history} n={n} onChangeN={setN} s={s} theme={theme} />
         <StrengthsSection ranking={stats.ranking} s={s} theme={theme} />
         <BreakdownSection title="Par type" rows={[
           ['Par 3s', stats.parType.par3.avgPoints, stats.parType.par3.holes],
@@ -279,7 +279,7 @@ function Stat({ label, value, valueColor, s }) {
   );
 }
 
-function FormSection({ form, n, onChangeN, s, theme }) {
+function FormSection({ form, history, n, onChangeN, s, theme }) {
   return (
     <View style={s.card}>
       <View style={s.cardHead}>
@@ -326,6 +326,7 @@ function FormSection({ form, n, onChangeN, s, theme }) {
           </View>
         );
       })}
+      <Sparkline history={history} s={s} theme={theme} />
     </View>
   );
 }
@@ -411,6 +412,39 @@ function DistributionSection({ dist, s }) {
   );
 }
 
+// Chronological points-per-round bar sparkline. Oldest round on the left.
+// Renders nothing for fewer than 2 rounds (a one-bar trend says nothing).
+function Sparkline({ history, s, theme }) {
+  if (!history || history.length < 2) return null;
+  const points = history.map((h) => h.points);
+  const max = Math.max(...points, 1);
+  const min = Math.min(...points);
+  const BAR_AREA = 52;
+  return (
+    <View style={s.sparkWrap}>
+      <Text style={s.sparkCaption}>Points per round · oldest → newest</Text>
+      <View style={s.sparkRow}>
+        {history.map((h) => (
+          <View
+            key={h.roundIndex}
+            style={[
+              s.sparkBar,
+              {
+                height: Math.max(3, Math.round((h.points / max) * BAR_AREA)),
+                backgroundColor: theme.accent.primary,
+              },
+            ]}
+          />
+        ))}
+      </View>
+      <View style={s.sparkScale}>
+        <Text style={s.sparkScaleText}>low {min}</Text>
+        <Text style={s.sparkScaleText}>high {max}</Text>
+      </View>
+    </View>
+  );
+}
+
 function makeStyles(theme) {
   return StyleSheet.create({
     container: { flex: 1, backgroundColor: theme.bg.primary },
@@ -466,5 +500,14 @@ function makeStyles(theme) {
     insightText: { ...theme.typography.body, color: theme.text.primary, flex: 1 },
     insightDelta: { ...theme.typography.caption, fontWeight: '700' },
     dim: { color: theme.text.muted },
+    sparkWrap: { marginTop: theme.spacing.sm, gap: theme.spacing.xs },
+    sparkCaption: { ...theme.typography.tiny, color: theme.text.muted },
+    sparkRow: {
+      flexDirection: 'row', alignItems: 'flex-end', gap: 2,
+      height: 56, paddingVertical: theme.spacing.xs,
+    },
+    sparkBar: { flex: 1, borderRadius: 2, minHeight: 3 },
+    sparkScale: { flexDirection: 'row', justifyContent: 'space-between' },
+    sparkScaleText: { ...theme.typography.tiny, color: theme.text.muted },
   });
 }
