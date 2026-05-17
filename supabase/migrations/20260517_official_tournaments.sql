@@ -324,6 +324,7 @@ GRANT EXECUTE ON FUNCTION public.attest_card(text,uuid)        TO anon, authenti
 CREATE OR REPLACE FUNCTION public.on_attestation()
 RETURNS trigger LANGUAGE plpgsql SECURITY DEFINER SET search_path = public AS $$
 DECLARE v_party uuid; v_tourn bigint; v_open int; v_round_open int;
+        v_party_locked boolean; v_round_status text;
 BEGIN
   SELECT pm.party_id INTO v_party
     FROM public.tournament_party_members pm
@@ -331,26 +332,41 @@ BEGIN
    WHERE pm.roster_id = NEW.roster_id AND pa.round_id = NEW.round_id;
   IF v_party IS NULL THEN RETURN NEW; END IF;
 
+  -- Lock the party row so concurrent attestations serialize: a second
+  -- transaction blocks here until the first commits, then sees the first's
+  -- attestation in the count below. Also makes the trigger idempotent —
+  -- an already-locked party is left untouched (no duplicate notification).
+  SELECT locked INTO v_party_locked
+    FROM public.tournament_parties WHERE id = v_party FOR UPDATE;
+  IF v_party_locked THEN RETURN NEW; END IF;
+
   SELECT count(*) INTO v_open
     FROM public.tournament_party_members pm
     JOIN public.tournament_roster ro ON ro.id = pm.roster_id
    WHERE pm.party_id = v_party AND ro.withdrawn = false
      AND NOT EXISTS (SELECT 1 FROM public.tournament_attestations a
                       WHERE a.round_id = NEW.round_id AND a.roster_id = pm.roster_id);
-  IF v_open = 0 THEN
-    UPDATE public.tournament_parties SET locked = true WHERE id = v_party;
-    SELECT tournament_id INTO v_tourn FROM public.tournament_parties WHERE id = v_party;
-    INSERT INTO public.tournament_notifications (tournament_id, round_id, kind, body)
-    VALUES (v_tourn, NEW.round_id, 'party_locked',
-            'A party finished and locked its scores.');
+  IF v_open > 0 THEN RETURN NEW; END IF;
 
-    SELECT count(*) INTO v_round_open
-      FROM public.tournament_parties WHERE round_id = NEW.round_id AND locked = false;
-    IF v_round_open = 0 THEN
-      UPDATE public.tournament_rounds SET status = 'locked' WHERE id = NEW.round_id;
-      INSERT INTO public.tournament_notifications (tournament_id, round_id, kind, body)
-      VALUES (v_tourn, NEW.round_id, 'round_locked', 'A round is complete.');
-    END IF;
+  UPDATE public.tournament_parties SET locked = true WHERE id = v_party;
+  SELECT tournament_id INTO v_tourn FROM public.tournament_parties WHERE id = v_party;
+  INSERT INTO public.tournament_notifications (tournament_id, round_id, kind, body)
+  VALUES (v_tourn, NEW.round_id, 'party_locked',
+          'A party finished and locked its scores.');
+
+  -- Lock the round row so two parties locking concurrently cannot both
+  -- skip the round-lock. Only reached when a party has just locked, and
+  -- skipped entirely if the round is already locked (idempotent).
+  SELECT status INTO v_round_status
+    FROM public.tournament_rounds WHERE id = NEW.round_id FOR UPDATE;
+  IF v_round_status = 'locked' THEN RETURN NEW; END IF;
+
+  SELECT count(*) INTO v_round_open
+    FROM public.tournament_parties WHERE round_id = NEW.round_id AND locked = false;
+  IF v_round_open = 0 THEN
+    UPDATE public.tournament_rounds SET status = 'locked' WHERE id = NEW.round_id;
+    INSERT INTO public.tournament_notifications (tournament_id, round_id, kind, body)
+    VALUES (v_tourn, NEW.round_id, 'round_locked', 'A round is complete.');
   END IF;
   RETURN NEW;
 END $$;
