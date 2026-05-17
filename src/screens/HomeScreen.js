@@ -1,6 +1,6 @@
 import React, { useEffect, useState, useCallback, useRef, useMemo, startTransition } from 'react';
 import { View, Text, TouchableOpacity, StyleSheet, ScrollView, Switch, Alert, FlatList, Platform, Modal, Pressable, ActivityIndicator, Share } from 'react-native';
-import { SafeAreaView } from 'react-native-safe-area-context';
+import ScreenContainer from '../components/ScreenContainer';
 import { Feather } from '@expo/vector-icons';
 import QRCode from 'react-native-qrcode-svg';
 
@@ -650,7 +650,7 @@ export default function HomeScreen({ navigation, route }) {
 
   if (showList) {
     return (
-      <SafeAreaView style={s.screen} edges={['top', 'bottom']}>
+      <ScreenContainer style={s.screen} edges={['top', 'bottom']}>
         <View style={s.header}>
           <View>
             <Text style={s.title}>Golf Partner</Text>
@@ -912,13 +912,13 @@ export default function HomeScreen({ navigation, route }) {
         </Modal>
 
         <ConfirmModal state={confirmState} onResult={resolveConfirm} theme={theme} s={s} />
-      </SafeAreaView>
+      </ScreenContainer>
     );
   }
 
   if (showTournament && !tournament) {
     return (
-      <SafeAreaView style={[s.screen, { alignItems: 'center', justifyContent: 'center', padding: 24 }]} edges={['top', 'bottom']}>
+      <ScreenContainer style={[s.screen, { alignItems: 'center', justifyContent: 'center', padding: 24 }]} edges={['top', 'bottom']}>
         <Feather name="flag" size={48} color={theme.text.muted} />
         <Text style={[s.emptyTitle, { marginTop: 16 }]}>No active tournament</Text>
         <Text style={[s.emptySubtitle, { marginTop: 6, marginBottom: 8 }]}>
@@ -948,7 +948,7 @@ export default function HomeScreen({ navigation, route }) {
           <Feather name="home" size={16} color={theme.accent.primary} />
           <Text style={s.secondaryBtnText}>Go to Home</Text>
         </TouchableOpacity>
-      </SafeAreaView>
+      </ScreenContainer>
     );
   }
 
@@ -968,7 +968,7 @@ export default function HomeScreen({ navigation, route }) {
   };
 
   return (
-    <SafeAreaView style={s.screen} edges={['top', 'bottom']}>
+    <ScreenContainer style={s.screen} edges={['top', 'bottom']}>
       <View style={s.header}>
         <View style={s.headerLeft}>
           <TouchableOpacity onPress={goToList} style={s.backBtn} activeOpacity={0.7}>
@@ -1585,7 +1585,7 @@ export default function HomeScreen({ navigation, route }) {
 
     <ConfirmModal state={confirmState} onResult={resolveConfirm} theme={theme} s={s} />
 
-    </SafeAreaView>
+    </ScreenContainer>
   );
 }
 

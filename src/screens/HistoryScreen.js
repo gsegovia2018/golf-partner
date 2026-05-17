@@ -2,7 +2,7 @@ import React, { useCallback, useState } from 'react';
 import {
   View, Text, TouchableOpacity, StyleSheet, ScrollView, ActivityIndicator,
 } from 'react-native';
-import { SafeAreaView } from 'react-native-safe-area-context';
+import ScreenContainer from '../components/ScreenContainer';
 import { useFocusEffect } from '@react-navigation/native';
 import { Feather } from '@expo/vector-icons';
 
@@ -102,7 +102,7 @@ export default function HistoryScreen({ navigation }) {
   ] : [];
 
   return (
-    <SafeAreaView style={s.container} edges={['top']}>
+    <ScreenContainer style={s.container} edges={['top']}>
       <View style={s.header}>
         <Text style={s.headerTitle}>History</Text>
       </View>
@@ -151,7 +151,7 @@ export default function HistoryScreen({ navigation }) {
           )}
         </ScrollView>
       )}
-    </SafeAreaView>
+    </ScreenContainer>
   );
 }
 

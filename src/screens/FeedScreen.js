@@ -1,17 +1,19 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   View, Text, TouchableOpacity, StyleSheet, FlatList, ScrollView,
-  ActivityIndicator, RefreshControl, Image,
+  ActivityIndicator, RefreshControl, Image, TextInput,
 } from 'react-native';
-import { SafeAreaView } from 'react-native-safe-area-context';
+import ScreenContainer from '../components/ScreenContainer';
 import { useFocusEffect } from '@react-navigation/native';
 import { Feather } from '@expo/vector-icons';
 
 import { useTheme } from '../theme/ThemeContext';
 import {
   buildFeed, loadReactions, toggleReaction, FEED_REACTION_EMOJI,
+  isValidReactionEmoji, loadCommentCounts,
 } from '../store/feedStore';
 import { subscribeTournamentChanges } from '../store/tournamentStore';
+import CommentsSheet from '../components/CommentsSheet';
 
 // Compact relative time: "just now", "3h", "2d", "5w". Pure function of a
 // timestamp and a "now" — `now` is passed in so the value can re-render live.
@@ -147,9 +149,10 @@ function PhotoCarousel({ mediaList, s }) {
 
 // Emoji reaction bar. Optimistic: a tap flips the local count/mine state
 // immediately, then persists via toggleReaction; a failed persist reverts.
-function ReactionBar({ itemKey, reactions, onChange, s, theme }) {
+function ReactionBar({ itemKey, reactions, onChange, commentCount, onOpenComments, s, theme }) {
   const counts = reactions?.counts ?? {};
   const mine = reactions?.mine ?? [];
+  const emojiInputRef = useRef(null);
 
   const onTap = async (emoji) => {
     const currentlyMine = mine.includes(emoji);
@@ -159,9 +162,27 @@ function ReactionBar({ itemKey, reactions, onChange, s, theme }) {
     if (!ok) onChange(itemKey, emoji, currentlyMine, false); // revert
   };
 
+  // Chips to show: the quick-pick set plus any emoji someone has already used
+  // on this item, so custom reactions stay visible to everyone.
+  const emojiList = useMemo(() => {
+    const list = [...FEED_REACTION_EMOJI];
+    for (const e of Object.keys(counts)) {
+      if ((counts[e] ?? 0) > 0 && !list.includes(e)) list.push(e);
+    }
+    return list;
+  }, [counts]);
+
+  // The OS emoji keyboard delivers its pick through onChangeText of a hidden
+  // input; value="" keeps it empty so every pick is a single clean event.
+  const onPickEmoji = (text) => {
+    emojiInputRef.current?.blur();
+    const emoji = (text || '').trim();
+    if (isValidReactionEmoji(emoji)) onTap(emoji);
+  };
+
   return (
     <View style={s.reactionRow}>
-      {FEED_REACTION_EMOJI.map((emoji) => {
+      {emojiList.map((emoji) => {
         const count = counts[emoji] ?? 0;
         const isMine = mine.includes(emoji);
         return (
@@ -180,6 +201,35 @@ function ReactionBar({ itemKey, reactions, onChange, s, theme }) {
           </TouchableOpacity>
         );
       })}
+      <TouchableOpacity
+        style={s.reactionChip}
+        onPress={() => emojiInputRef.current?.focus()}
+        activeOpacity={0.7}
+        accessibilityLabel="React with any emoji"
+      >
+        <Feather name="plus" size={14} color={theme.text.muted} />
+      </TouchableOpacity>
+      <TouchableOpacity
+        style={s.reactionChip}
+        onPress={() => onOpenComments?.(itemKey)}
+        activeOpacity={0.7}
+        accessibilityLabel="Comments"
+      >
+        <Feather name="message-circle" size={13} color={theme.text.muted} />
+        {commentCount > 0 ? (
+          <Text style={s.reactionCount}>{commentCount}</Text>
+        ) : null}
+      </TouchableOpacity>
+      {/* Off-screen input: focusing it opens the OS emoji keyboard. */}
+      <TextInput
+        ref={emojiInputRef}
+        style={s.hiddenEmojiInput}
+        value=""
+        onChangeText={onPickEmoji}
+        autoCorrect={false}
+        caretHidden
+        accessible={false}
+      />
     </View>
   );
 }
@@ -219,6 +269,10 @@ export default function FeedScreen({ navigation }) {
   const [status, setStatus] = useState('ok');
   const [filter, setFilter] = useState('all');
   const [reactions, setReactions] = useState({});
+  // { [itemKey]: number } comment-count overlay, and the item whose comment
+  // thread sheet is currently open (null when closed).
+  const [commentCounts, setCommentCounts] = useState({});
+  const [openCommentsKey, setOpenCommentsKey] = useState(null);
   // True once at least one successful load has populated the list, so
   // focus-driven reloads keep the existing list visible (no full spinner).
   const loadedOnceRef = useRef(false);
@@ -231,9 +285,14 @@ export default function FeedScreen({ navigation }) {
       setItems(feedItems);
       setStatus(result.error ? 'error' : (result.partial ? 'partial' : 'ok'));
       loadedOnceRef.current = true;
-      // Reactions are a best-effort overlay — never blocks the feed.
-      loadReactions(feedItems.map((it) => it.key))
+      // Reactions + comment counts are best-effort overlays — never block
+      // the feed.
+      const keys = feedItems.map((it) => it.key);
+      loadReactions(keys)
         .then(setReactions)
+        .catch(() => {});
+      loadCommentCounts(keys)
+        .then(setCommentCounts)
         .catch(() => {});
     } catch {
       // buildFeed is defensive and rarely throws; treat a throw as an error
@@ -275,6 +334,14 @@ export default function FeedScreen({ navigation }) {
       }
       return { ...prev, [itemKey]: { counts, mine } };
     });
+  }, []);
+
+  // Keep the comment badge in sync when the sheet adds/removes a comment.
+  const onCommentCountChange = useCallback((itemKey, delta) => {
+    setCommentCounts((prev) => ({
+      ...prev,
+      [itemKey]: Math.max(0, (prev[itemKey] ?? 0) + delta),
+    }));
   }, []);
 
   const filteredItems = useMemo(() => {
@@ -368,6 +435,8 @@ export default function FeedScreen({ navigation }) {
           itemKey={item.key}
           reactions={reactions[item.key]}
           onChange={applyReaction}
+          commentCount={commentCounts[item.key] ?? 0}
+          onOpenComments={setOpenCommentsKey}
           s={s}
           theme={theme}
         />
@@ -409,6 +478,8 @@ export default function FeedScreen({ navigation }) {
           itemKey={item.key}
           reactions={reactions[item.key]}
           onChange={applyReaction}
+          commentCount={commentCounts[item.key] ?? 0}
+          onOpenComments={setOpenCommentsKey}
           s={s}
           theme={theme}
         />
@@ -474,7 +545,7 @@ export default function FeedScreen({ navigation }) {
   };
 
   return (
-    <SafeAreaView style={s.container} edges={['top']}>
+    <ScreenContainer style={s.container} edges={['top']}>
       <View style={s.header}>
         <Text style={s.headerTitle}>Feed</Text>
         <TouchableOpacity
@@ -519,7 +590,14 @@ export default function FeedScreen({ navigation }) {
           ListEmptyComponent={renderEmpty()}
         />
       )}
-    </SafeAreaView>
+
+      <CommentsSheet
+        visible={!!openCommentsKey}
+        itemKey={openCommentsKey}
+        onClose={() => setOpenCommentsKey(null)}
+        onCountChange={onCommentCountChange}
+      />
+    </ScreenContainer>
   );
 }
 
@@ -641,6 +719,10 @@ function makeStyles(theme) {
       fontFamily: 'PlusJakartaSans-Bold', fontSize: 11, color: theme.text.secondary,
     },
     reactionCountActive: { color: theme.accent.primary },
+    // Off-screen: focused programmatically to summon the OS emoji keyboard.
+    hiddenEmojiInput: {
+      position: 'absolute', width: 1, height: 1, opacity: 0,
+    },
     /* Skeleton */
     skelBlock: {
       backgroundColor: theme.bg.secondary, borderRadius: 6,

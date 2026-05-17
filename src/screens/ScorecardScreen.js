@@ -4,7 +4,7 @@ import {
   StyleSheet, ScrollView, Modal, Pressable, KeyboardAvoidingView, Platform, Animated,
   useWindowDimensions, ActivityIndicator,
 } from 'react-native';
-import { SafeAreaView } from 'react-native-safe-area-context';
+import ScreenContainer from '../components/ScreenContainer';
 import * as Haptics from 'expo-haptics';
 
 import { Feather } from '@expo/vector-icons';
@@ -696,7 +696,7 @@ export default function ScorecardScreen({ navigation, route }) {
   // Explicit load failure — never a blank screen. Keep a working back button.
   if (loadState === 'error' && !tournament) {
     return (
-      <SafeAreaView style={s.container} edges={['top', 'bottom']}>
+      <ScreenContainer style={s.container} edges={['top', 'bottom']}>
         <View style={s.header}>
           <TouchableOpacity onPress={() => navigation.goBack()} style={s.backBtn}>
             <Feather name="chevron-left" size={22} color={theme.accent.primary} />
@@ -715,14 +715,14 @@ export default function ScorecardScreen({ navigation, route }) {
             <Text style={s.statusRetryText}>Retry</Text>
           </TouchableOpacity>
         </View>
-      </SafeAreaView>
+      </ScreenContainer>
     );
   }
 
   // First load in progress — spinner + a working header back button.
   if (!tournament || !round) {
     return (
-      <SafeAreaView style={s.container} edges={['top', 'bottom']}>
+      <ScreenContainer style={s.container} edges={['top', 'bottom']}>
         <View style={s.header}>
           <TouchableOpacity onPress={() => navigation.goBack()} style={s.backBtn}>
             <Feather name="chevron-left" size={22} color={theme.accent.primary} />
@@ -734,7 +734,7 @@ export default function ScorecardScreen({ navigation, route }) {
           <ActivityIndicator color={theme.accent.primary} />
           <Text style={s.statusSubtitle}>Loading round…</Text>
         </View>
-      </SafeAreaView>
+      </ScreenContainer>
     );
   }
 
@@ -742,7 +742,7 @@ export default function ScorecardScreen({ navigation, route }) {
   const hole = round.holes.find((h) => h.number === currentHole);
 
   return (
-    <SafeAreaView style={s.container} edges={['top', 'bottom']}>
+    <ScreenContainer style={s.container} edges={['top', 'bottom']}>
       {/* Header with inline view toggle (small, doesn't take a full row) */}
       <View style={s.header}>
         <TouchableOpacity onPress={() => navigation.goBack()} style={s.backBtn}>
@@ -907,7 +907,7 @@ export default function ScorecardScreen({ navigation, route }) {
           </View>
         </View>
       )}
-    </SafeAreaView>
+    </ScreenContainer>
   );
 }
 

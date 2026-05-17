@@ -1,6 +1,6 @@
 import React, { useEffect, useState, useMemo, useRef } from 'react';
 import { View, Text, TouchableOpacity, StyleSheet, ScrollView, FlatList, Switch, Platform } from 'react-native';
-import { SafeAreaView } from 'react-native-safe-area-context';
+import ScreenContainer from '../components/ScreenContainer';
 import { Feather } from '@expo/vector-icons';
 import { captureRef } from 'react-native-view-shot';
 import * as Sharing from 'expo-sharing';
@@ -22,6 +22,7 @@ import {
   bounceBackRate, frontBackSplit, strokeIndexAccuracy, scramblingStats,
 } from '../store/statsEngine';
 import StatDetailSheet, { captureAndShare } from '../components/StatDetailSheet';
+import { scoringModeUsesTeams } from '../components/scoringModes';
 
 const ALL_TABS = [
   { key: 'overview', label: 'Overview' },
@@ -128,7 +129,7 @@ export default function StatsScreen({ navigation }) {
   const completedRounds = tournament.rounds.filter(r => r.scores && Object.keys(r.scores).length > 0);
   const scoringMode = tournament.settings?.scoringMode;
   const isSolo = players.length === 1;
-  const usesTeams = !isSolo && scoringMode !== 'individual' && scoringMode !== 'matchplay';
+  const usesTeams = !isSolo && scoringModeUsesTeams(scoringMode, players.length);
   const hasMulti = players.length > 1;
   const visibleTabs = ALL_TABS.filter(t => t.key !== 'pairs' || usesTeams);
   const activeTab = visibleTabs.some(t => t.key === tab) ? tab : 'overview';
@@ -138,7 +139,7 @@ export default function StatsScreen({ navigation }) {
   const effectiveRound = roundScope != null ? roundScope : (firstCompletedIdx >= 0 ? firstCompletedIdx : null);
 
   return (
-    <SafeAreaView style={s.container} edges={['top', 'bottom']}>
+    <ScreenContainer style={s.container} edges={['top', 'bottom']}>
       <View style={s.header}>
         <TouchableOpacity onPress={() => navigation.goBack()} style={s.backBtn}>
           <Feather name="chevron-left" size={22} color={theme.accent.primary} />
@@ -213,7 +214,7 @@ export default function StatsScreen({ navigation }) {
           <ShameTab tournament={tournament} hasMulti={hasMulti} usesTeams={usesTeams} metric={metric} theme={theme} s={s} />
         </ScrollView>
       )}
-    </SafeAreaView>
+    </ScreenContainer>
   );
 }
 
