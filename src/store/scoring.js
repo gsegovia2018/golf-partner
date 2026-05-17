@@ -292,3 +292,51 @@ export function tournamentSindicatoClinched(tournament) {
   if (lb[0].points - lb[1].points > holesRemaining * 4) return lb[0].player.id;
   return null;
 }
+
+// Match Play tournament standing. Across played rounds, sums each of the two
+// players' holes won (matchPlayRoundTally) and total gross strokes. Returns
+// { board: [{player, points, strokes}] sorted by holes won desc, status } or
+// null for the wrong player count / before any hole is scored. `status` is
+// "<leader> wins" once the lead exceeds the holes still to play, else
+// "<leader> leads by N", else "All square".
+export function tournamentMatchPlayStandings(tournament) {
+  const { players, rounds } = tournament;
+  if (!players || players.length !== 2) return null;
+  const hasAnyScore = rounds.some((r) => r.scores && Object.keys(r.scores).length > 0);
+  if (!hasAnyScore) return null;
+  const [a, b] = players;
+  let aHoles = 0;
+  let bHoles = 0;
+  let holesRemaining = 0;
+  const strokes = { [a.id]: 0, [b.id]: 0 };
+  rounds.forEach((round, idx) => {
+    players.forEach((p) => {
+      const holeScores = round.scores?.[p.id] ?? {};
+      for (const v of Object.values(holeScores)) strokes[p.id] += (v || 0);
+    });
+    const future = idx > (tournament.currentRound ?? 0);
+    if (future) {
+      holesRemaining += round.holes?.length ?? 0;
+      return;
+    }
+    const tally = matchPlayRoundTally(round, players);
+    if (tally) {
+      aHoles += tally.aWins;
+      bHoles += tally.bWins;
+      holesRemaining += tally.holesLeft;
+    } else {
+      holesRemaining += round.holes?.length ?? 0;
+    }
+  });
+  const board = [
+    { player: a, points: aHoles, strokes: strokes[a.id] },
+    { player: b, points: bHoles, strokes: strokes[b.id] },
+  ].sort((x, y) => y.points - x.points);
+  const lead = Math.abs(aHoles - bHoles);
+  const firstName = (p) => p.name?.split(' ')[0] ?? '—';
+  let status;
+  if (lead === 0) status = 'All square';
+  else if (lead > holesRemaining) status = `${firstName(board[0].player)} wins`;
+  else status = `${firstName(board[0].player)} leads by ${lead}`;
+  return { board, status };
+}

@@ -17,6 +17,7 @@ import {
   sindicatoRoundTally,
   tournamentSindicatoLeaderboard,
   tournamentSindicatoClinched,
+  tournamentMatchPlayStandings,
 } from '../scoring';
 
 describe('calcExtraShots', () => {
@@ -456,5 +457,62 @@ describe('tournamentSindicatoClinched', () => {
       players, rounds: [{ holes, playerHandicaps: {}, scores: {} }], currentRound: 0,
     };
     expect(tournamentSindicatoClinched(tournament)).toBeNull();
+  });
+});
+
+describe('tournamentMatchPlayStandings', () => {
+  const players = [
+    { id: 'a', name: 'Alex', handicap: 0 },
+    { id: 'b', name: 'Bo', handicap: 0 },
+  ];
+  const holes = [
+    { number: 1, par: 4, strokeIndex: 1 },
+    { number: 2, par: 4, strokeIndex: 2 },
+  ];
+
+  test('ranks the two players by holes won and reports the lead', () => {
+    // Hole 1: a 4, b 5 → a wins. Hole 2: a 4, b 5 → a wins. a 2 holes, b 0.
+    const round = {
+      holes, playerHandicaps: {},
+      scores: { a: { 1: 4, 2: 4 }, b: { 1: 5, 2: 5 } },
+    };
+    const t = { players, rounds: [round], currentRound: 0 };
+    const r = tournamentMatchPlayStandings(t);
+    expect(r.board.map((e) => [e.player.id, e.points])).toEqual([['a', 2], ['b', 0]]);
+    expect(r.board[0].strokes).toBe(8);
+    expect(r.status).toBe('Alex wins');
+  });
+
+  test('reports a running lead when holes remain', () => {
+    // Hole 1 only: a wins. Hole 2 unscored → 1 hole left, lead 1, not clinched.
+    const round = {
+      holes, playerHandicaps: {},
+      scores: { a: { 1: 4 }, b: { 1: 5 } },
+    };
+    const t = { players, rounds: [round], currentRound: 0 };
+    const r = tournamentMatchPlayStandings(t);
+    expect(r.status).toBe('Alex leads by 1');
+  });
+
+  test('reports all square when holes won are equal', () => {
+    const round = {
+      holes, playerHandicaps: {},
+      scores: { a: { 1: 4, 2: 5 }, b: { 1: 5, 2: 4 } },
+    };
+    const t = { players, rounds: [round], currentRound: 0 };
+    expect(tournamentMatchPlayStandings(t).status).toBe('All square');
+  });
+
+  test('returns null when not exactly 2 players', () => {
+    const round = { holes, playerHandicaps: {}, scores: { a: { 1: 4 } } };
+    const t = { players: players.slice(0, 1), rounds: [round], currentRound: 0 };
+    expect(tournamentMatchPlayStandings(t)).toBeNull();
+  });
+
+  test('returns null before any hole is scored', () => {
+    const t = {
+      players, rounds: [{ holes, playerHandicaps: {}, scores: {} }], currentRound: 0,
+    };
+    expect(tournamentMatchPlayStandings(t)).toBeNull();
   });
 });
