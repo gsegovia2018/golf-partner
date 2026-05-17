@@ -48,6 +48,78 @@ export function buildSyntheticTournament(myRounds) {
   return { id: 'mystats', name: 'My Stats', players: [player], rounds };
 }
 
+// ── holeDifficultySplit ──
+// Buckets a player's holes by printed stroke index: hard 1-6, mid 7-12,
+// easy 13-18. avgPoints is net Stableford points per hole in each band.
+export function holeDifficultySplit(tournament, playerId) {
+  const bands = { hard: [], mid: [], easy: [] };
+  const player = (tournament.players || []).find((p) => p.id === playerId);
+  if (player) {
+    (tournament.rounds || []).forEach((round, roundIndex) => {
+      if (!round.scores?.[playerId]) return;
+      const handicap = getPlayingHandicap(round, player);
+      (round.holes || []).forEach((hole) => {
+        const sc = round.scores[playerId]?.[hole.number];
+        if (!sc) return;
+        const points = calcStablefordPoints(hole.par, sc, handicap, hole.strokeIndex);
+        const band = hole.strokeIndex <= 6 ? 'hard'
+          : hole.strokeIndex <= 12 ? 'mid' : 'easy';
+        bands[band].push({
+          roundIndex, courseName: round.courseName,
+          holeNumber: hole.number, par: hole.par, si: hole.strokeIndex,
+          strokes: sc, points,
+        });
+      });
+    });
+  }
+  const summarize = (arr) => ({
+    holes: arr.length,
+    avgPoints: arr.length
+      ? +(arr.reduce((s, e) => s + e.points, 0) / arr.length).toFixed(2)
+      : 0,
+    breakdown: arr,
+  });
+  return {
+    hard: summarize(bands.hard),
+    mid: summarize(bands.mid),
+    easy: summarize(bands.easy),
+  };
+}
+
+// ── computeMetrics ──
+// Round-level aggregates over a synthetic tournament. Used for the Snapshot
+// card and for both sides of the recent-vs-history comparison.
+export function computeMetrics(synthetic) {
+  const history = playerRoundHistory(synthetic, CANON_ID);
+  const rounds = history.length;
+  let vsParSum = 0;
+  let vsParRounds = 0;
+  (synthetic.rounds || []).forEach((round, ri) => {
+    const h = history.find((x) => x.roundIndex === ri);
+    if (!h) return;
+    let parPlayed = 0;
+    (round.holes || []).forEach((hole) => {
+      if (round.scores?.[CANON_ID]?.[hole.number] != null) parPlayed += hole.par;
+    });
+    vsParSum += h.strokes - parPlayed;
+    vsParRounds += 1;
+  });
+  const shots = shotStats(synthetic, CANON_ID);
+  const div = (a, b) => (b > 0 ? +(a / b).toFixed(2) : 0);
+  const totalPoints = history.reduce((s, h) => s + h.points, 0);
+  return {
+    rounds,
+    avgPoints: div(totalPoints, rounds),
+    avgVsPar: div(vsParSum, vsParRounds),
+    bestRoundPoints: history.reduce((m, h) => Math.max(m, h.points), 0),
+    hasShotData: shots.hasData,
+    fairwayPct: shots.drives.fairwayPct,
+    puttsPerRound: shots.putts.perRound,
+    girPct: shots.gir.pct,
+    threePuttsPerRound: div(shots.putts.threePuttPlus, shots.roundsWithData),
+  };
+}
+
 // ── collectMyRounds ──
 // Flattens every tournament's rounds into MyRound records for the user.
 // `tournaments` arrive newest-first (id desc) from the loaders, so we reverse

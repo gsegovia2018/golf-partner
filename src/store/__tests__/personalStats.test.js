@@ -1,4 +1,7 @@
-import { collectMyRounds, buildSyntheticTournament, CANON_ID } from '../personalStats';
+import {
+  collectMyRounds, buildSyntheticTournament, CANON_ID,
+  holeDifficultySplit, computeMetrics,
+} from '../personalStats';
 
 // ── Fixture helpers ───────────────────────────────────────────────
 // hcp default 0; SI defaults to hole number; par defaults to 4.
@@ -122,5 +125,55 @@ describe('buildSyntheticTournament', () => {
     expect(t.rounds[0].playerHandicaps[CANON_ID]).toBe(14);
     expect(t.rounds[1].scores[CANON_ID][1]).toBe(5);
     expect(t.rounds[1].playerHandicaps[CANON_ID]).toBe(10);
+  });
+});
+
+describe('holeDifficultySplit', () => {
+  test('buckets holes into hard (SI 1-6), mid (7-12), easy (13-18)', () => {
+    const h = holes18(); // par 4, SI = hole number
+    const myRounds = collectMyRounds([{
+      id: 1, name: 'T', players: [{ id: 'p1', handicap: 0, user_id: 'u1' }],
+      rounds: [mkRound({ holes: h, scores: { p1: evenScores(h, 4) }, playerHandicaps: { p1: 0 } })],
+    }], 'u1');
+    const split = holeDifficultySplit(buildSyntheticTournament(myRounds), CANON_ID);
+    expect(split.hard.holes).toBe(6);
+    expect(split.mid.holes).toBe(6);
+    expect(split.easy.holes).toBe(6);
+    expect(split.hard.avgPoints).toBe(2); // gross par, scratch → 2 pts
+  });
+});
+
+describe('computeMetrics', () => {
+  test('averages points and strokes-vs-par per round', () => {
+    const h = holes18(); // par 4 × 18 → par total 72
+    const myRounds = collectMyRounds([{
+      id: 1, name: 'T', players: [{ id: 'p1', handicap: 0, user_id: 'u1' }],
+      rounds: [
+        mkRound({ holes: h, scores: { p1: evenScores(h, 4) }, playerHandicaps: { p1: 0 } }),
+        mkRound({ holes: h, scores: { p1: evenScores(h, 5) }, playerHandicaps: { p1: 0 } }),
+      ],
+    }], 'u1');
+    const m = computeMetrics(buildSyntheticTournament(myRounds));
+    expect(m.rounds).toBe(2);
+    expect(m.avgPoints).toBe(27);    // round1: 36 pts, round2: 18 pts → avg 27
+    expect(m.avgVsPar).toBe(9);      // round1: 0, round2: +18 → avg 9
+    expect(m.hasShotData).toBe(false);
+  });
+
+  test('reports shot metrics when shot detail exists', () => {
+    const h = holes18();
+    const shotDetails = {};
+    h.forEach((hole) => { shotDetails[hole.number] = { putts: 2, drive: 'fairway' }; });
+    const myRounds = collectMyRounds([{
+      id: 1, name: 'T', players: [{ id: 'p1', handicap: 0, user_id: 'u1' }],
+      rounds: [mkRound({
+        holes: h, scores: { p1: evenScores(h, 4) },
+        playerHandicaps: { p1: 0 }, shotDetails: { p1: shotDetails },
+      })],
+    }], 'u1');
+    const m = computeMetrics(buildSyntheticTournament(myRounds));
+    expect(m.hasShotData).toBe(true);
+    expect(m.fairwayPct).toBe(100);
+    expect(m.puttsPerRound).toBe(36);
   });
 });
