@@ -1986,11 +1986,12 @@ function shortPlayerLabel(player, isSolo) {
 
 function NineBlock({
   holes, label, aggLabel, players, scores, onSetScore,
-  playerHandicaps, mode, theme, s, columns,
+  playerHandicaps, mode, theme, s, columns, meId,
 }) {
   const { labelW, aggW, holeW, labelFontSize } = columns;
   const labelFont = { fontSize: labelFontSize };
   const isSolo = players.length === 1;
+  const displayPlayers = playersMeFirst(players, meId);
 
   // Refs for every stroke-entry cell, keyed `playerId:holeNumber`, plus the
   // flat tab order (player by player, hole by hole) so the keyboard "next"
@@ -1998,7 +1999,7 @@ function NineBlock({
   const cellRefs = useRef({});
   const cellKey = (playerId, holeNumber) => `${playerId}:${holeNumber}`;
   const focusOrder = [];
-  players.forEach((p) => holes.forEach((h) => focusOrder.push(cellKey(p.id, h.number))));
+  displayPlayers.forEach((p) => holes.forEach((h) => focusOrder.push(cellKey(p.id, h.number))));
   const focusNext = (playerId, holeNumber) => {
     const idx = focusOrder.indexOf(cellKey(playerId, holeNumber));
     if (idx < 0 || idx + 1 >= focusOrder.length) return;
@@ -2127,12 +2128,12 @@ function NineBlock({
         <Text style={[s.soloNineCell, aggCell, s.soloNineAggDivider]} />
       </View>
 
-      {players.map((player, i) => renderPlayerRows(player, i === 0))}
+      {displayPlayers.map((player, i) => renderPlayerRows(player, i === 0))}
     </View>
   );
 }
 
-function ScorecardTable({ round, players, scores, onSetScore, mode }) {
+function ScorecardTable({ round, players, scores, onSetScore, mode, meId }) {
   const { theme } = useTheme();
   const s = useMemo(() => makeStyles(theme), [theme]);
   const { width } = useWindowDimensions();
@@ -2146,6 +2147,7 @@ function ScorecardTable({ round, players, scores, onSetScore, mode }) {
   const back = holes.slice(9, 18);
   const hasBack = back.length > 0;
   const playerHandicaps = round.playerHandicaps ?? {};
+  const displayPlayers = playersMeFirst(players, meId);
 
   // Block inner width: viewport minus content padding (14*2) minus card
   // border (2) minus card padding (2*2). In side-by-side mode, each card
@@ -2160,7 +2162,10 @@ function ScorecardTable({ round, players, scores, onSetScore, mode }) {
   const isSolo = players.length === 1;
 
   // Per-player totals for the bottom bar / leaderboard strip.
-  const playerTotals = players.map((p) => {
+  // Uses displayPlayers so the rendered leaderboard order is me-first.
+  // Scoring functions (matchPlayHolePts, sindicatoHolePoints) still receive
+  // the original `players` array to preserve index-based scoring correctness.
+  const playerTotals = displayPlayers.map((p) => {
     const handicap = playerHandicaps[p.id] ?? p.handicap ?? 0;
     let str = 0;
     let pts = 0;
@@ -2202,6 +2207,7 @@ function ScorecardTable({ round, players, scores, onSetScore, mode }) {
             theme={theme}
             s={s}
             columns={columns}
+            meId={meId}
           />
         </View>
 
@@ -2219,6 +2225,7 @@ function ScorecardTable({ round, players, scores, onSetScore, mode }) {
               theme={theme}
               s={s}
               columns={columns}
+              meId={meId}
             />
           </View>
         )}
@@ -2330,6 +2337,7 @@ function GridView({ round, roundIndex, players, scores, isBestBall, bbResult, se
           scores={scores}
           onSetScore={onSetScore}
           mode={mode}
+          meId={meId}
         />
       ) : (
       <ScrollView horizontal showsHorizontalScrollIndicator={false}>
