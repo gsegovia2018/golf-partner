@@ -150,8 +150,8 @@ applied uniformly to games as well.
 
 No new async or data paths. `roundTotals` and the leaderboard functions already
 handle empty/partial rounds. `RoundScoreboard` shows the existing no-scores
-states; the progress bar reads `0 / totalHoles` before any score. vs-par is
-`—` for a player with no scored holes (avoids dividing intent on zero par).
+states; the progress bar reads `0 / totalHoles` before any score. vs-par
+renders `—` for a player who has not scored any hole yet.
 `tournamentMatchPlayStandings` returns `null` when the roster is not exactly 2
 players or no round has scores, and the card falls back to a "No results yet"
 message — mirroring the existing card guards.
