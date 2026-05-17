@@ -30,6 +30,13 @@ async function drainLibrary(libraryMuts) {
     if (m.type === 'player.upsertLibrary') {
       await upsertPlayer({ id: m.playerId, name: m.name, handicap: m.handicap });
       await syncQueue.drop(entry.id);
+    } else if (m.type === 'rpc.call') {
+      // Generic RPC dispatch (e.g. official-tournament score writes).
+      // A returned error is a retryable failure: leave the entry in the
+      // queue and let scheduleSync's backoff retry it on the next pass.
+      const { error } = await supabase.rpc(m.fn, m.args);
+      if (error) throw error;
+      await syncQueue.drop(entry.id);
     } else {
       // Unknown library-type mutation: drop so it can't sit in the queue
       // forever pinning the sync dot to orange.
