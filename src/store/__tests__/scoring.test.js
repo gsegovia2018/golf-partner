@@ -15,6 +15,8 @@ import {
   isRoundPlayed,
   sindicatoHolePoints,
   sindicatoRoundTally,
+  tournamentSindicatoLeaderboard,
+  tournamentSindicatoClinched,
 } from '../scoring';
 
 describe('calcExtraShots', () => {
@@ -382,5 +384,77 @@ describe('sindicatoRoundTally', () => {
   });
   test('returns null when not exactly 3 players', () => {
     expect(sindicatoRoundTally({ holes, scores: {} }, players.slice(0, 2))).toBeNull();
+  });
+});
+
+describe('tournamentSindicatoLeaderboard', () => {
+  const players = [
+    { id: 'a', name: 'A', handicap: 0 },
+    { id: 'b', name: 'B', handicap: 0 },
+    { id: 'c', name: 'C', handicap: 0 },
+  ];
+  const holes = [{ number: 1, par: 4, strokeIndex: 1 }];
+
+  test('sums Sindicato points across played rounds, sorted descending', () => {
+    // Each round: hole 1 scored 4/5/6 → 4/2/0.
+    const round = {
+      holes, playerHandicaps: {},
+      scores: { a: { 1: 4 }, b: { 1: 5 }, c: { 1: 6 } },
+    };
+    const tournament = { players, rounds: [round, round], currentRound: 1 };
+    const lb = tournamentSindicatoLeaderboard(tournament);
+    expect(lb.map((e) => [e.player.id, e.points])).toEqual([['a', 8], ['b', 4], ['c', 0]]);
+  });
+  test('ignores rounds not yet reached', () => {
+    const played = {
+      holes, playerHandicaps: {},
+      scores: { a: { 1: 4 }, b: { 1: 5 }, c: { 1: 6 } },
+    };
+    const future = { holes, playerHandicaps: {}, scores: {} };
+    const tournament = { players, rounds: [played, future], currentRound: 0 };
+    const lb = tournamentSindicatoLeaderboard(tournament);
+    expect(lb.map((e) => [e.player.id, e.points])).toEqual([['a', 4], ['b', 2], ['c', 0]]);
+  });
+});
+
+describe('tournamentSindicatoClinched', () => {
+  const players = [
+    { id: 'a', name: 'A', handicap: 0 },
+    { id: 'b', name: 'B', handicap: 0 },
+    { id: 'c', name: 'C', handicap: 0 },
+  ];
+
+  test('returns the leader id when the lead cannot be overcome', () => {
+    // One round, both holes played. a8 b3 c1, lead 5, 0 holes left → clinched.
+    const holes = [
+      { number: 1, par: 4, strokeIndex: 1 },
+      { number: 2, par: 4, strokeIndex: 2 },
+    ];
+    const round = {
+      holes, playerHandicaps: {},
+      scores: { a: { 1: 4, 2: 4 }, b: { 1: 5, 2: 5 }, c: { 1: 6, 2: 5 } },
+    };
+    const tournament = { players, rounds: [round], currentRound: 0 };
+    expect(tournamentSindicatoClinched(tournament)).toBe('a');
+  });
+  test('returns null when remaining holes could still overturn the lead', () => {
+    // One hole played (lead 2), one hole left → max gain 4. Not clinched.
+    const holes = [
+      { number: 1, par: 4, strokeIndex: 1 },
+      { number: 2, par: 4, strokeIndex: 2 },
+    ];
+    const round = {
+      holes, playerHandicaps: {},
+      scores: { a: { 1: 4 }, b: { 1: 5 }, c: { 1: 6 } },
+    };
+    const tournament = { players, rounds: [round], currentRound: 0 };
+    expect(tournamentSindicatoClinched(tournament)).toBeNull();
+  });
+  test('returns null before any hole is scored', () => {
+    const holes = [{ number: 1, par: 4, strokeIndex: 1 }];
+    const tournament = {
+      players, rounds: [{ holes, playerHandicaps: {}, scores: {} }], currentRound: 0,
+    };
+    expect(tournamentSindicatoClinched(tournament)).toBeNull();
   });
 });

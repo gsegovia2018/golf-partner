@@ -238,3 +238,56 @@ export function isRoundPlayed(round, index, tournament) {
   if (index > (tournament.currentRound ?? 0)) return false;
   return !!round.scores;
 }
+
+// Cumulative Sindicato standings across all played rounds. Returns
+// [{ player, points, strokes }] sorted points-descending. `strokes` is the
+// player's total gross strokes (kept shape-compatible with tournamentLeaderboard
+// so leaderboard UI can render either without branching).
+export function tournamentSindicatoLeaderboard(tournament) {
+  const { players, rounds } = tournament;
+  const pointsById = Object.fromEntries(players.map((p) => [p.id, 0]));
+  const strokesById = Object.fromEntries(players.map((p) => [p.id, 0]));
+  rounds.forEach((round, index) => {
+    if (!isRoundPlayed(round, index, tournament)) return;
+    const tally = sindicatoRoundTally(round, players);
+    if (!tally) return;
+    tally.totals.forEach(({ player, points }) => {
+      pointsById[player.id] += points;
+    });
+    players.forEach((p) => {
+      const holeScores = round.scores?.[p.id] ?? {};
+      for (const v of Object.values(holeScores)) strokesById[p.id] += (v || 0);
+    });
+  });
+  return players
+    .map((player) => ({
+      player,
+      points: pointsById[player.id],
+      strokes: strokesById[player.id],
+    }))
+    .sort((a, b) => b.points - a.points);
+}
+
+// Player id who has clinched a Sindicato tournament, or null. Sums the holes
+// still to play across the current round and every future round; a trailing
+// player can gain at most 4 per hole, so the leader has clinched when their
+// lead over second place exceeds holesRemaining × 4.
+export function tournamentSindicatoClinched(tournament) {
+  const { players, rounds } = tournament;
+  if (!players || players.length !== 3) return null;
+  const hasAnyScore = rounds.some((r) => r.scores && Object.keys(r.scores).length > 0);
+  if (!hasAnyScore) return null;
+  const lb = tournamentSindicatoLeaderboard(tournament);
+  let holesRemaining = 0;
+  rounds.forEach((round, idx) => {
+    const future = idx > (tournament.currentRound ?? 0);
+    if (future) {
+      holesRemaining += round.holes?.length ?? 0;
+      return;
+    }
+    const tally = sindicatoRoundTally(round, players);
+    holesRemaining += tally ? tally.holesLeft : (round.holes?.length ?? 0);
+  });
+  if (lb[0].points - lb[1].points > holesRemaining * 4) return lb[0].player.id;
+  return null;
+}
