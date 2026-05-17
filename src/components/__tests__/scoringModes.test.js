@@ -46,6 +46,9 @@ describe('fallbackScoringMode', () => {
   test('falls back to individual when stableford is not allowed', () => {
     expect(fallbackScoringMode(1)).toBe('individual');
   });
+  test('falls back to individual for exactly 2 players (stableford needs 3+)', () => {
+    expect(fallbackScoringMode(2)).toBe('individual');
+  });
 });
 
 describe('scoringModeCategories', () => {
