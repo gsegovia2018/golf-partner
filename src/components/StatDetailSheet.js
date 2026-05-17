@@ -163,6 +163,9 @@ const makeStyles = (t) => StyleSheet.create({
     maxHeight: '80%',
     paddingBottom: 32,
     borderTopWidth: 1, borderColor: t.border.default,
+    width: '100%',
+    maxWidth: 560,
+    alignSelf: 'center',
   },
   handle: {
     width: 40, height: 4, borderRadius: 2,
