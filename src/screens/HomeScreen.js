@@ -1847,6 +1847,43 @@ const PairsPreviewCard = React.memo(function PairsPreviewCard({ pairs, theme, s 
   );
 });
 
+// Shared ranked row for the round cards — the leaderboard's row visual made
+// theme-aware so it is legible on the normal card background. Ranks 1/2/3 get
+// gold/silver/bronze badges; the winner row also gets a left gold border and
+// an award icon. `sub` is an optional right-aligned muted value (e.g. strokes).
+function RankedRow({ rank, name, primary, sub, isWinner, isLast, theme, s }) {
+  const rankColors = ['#ffd700', '#c0c8d4', '#daa06d'];
+  const rankColor = rankColors[rank - 1] || theme.text.muted;
+  const rankBg = rank === 1 ? 'rgba(255,215,0,0.18)'
+    : rank === 2 ? 'rgba(192,200,212,0.18)'
+    : rank === 3 ? 'rgba(218,160,109,0.18)'
+    : (theme.isDark ? 'rgba(255,255,255,0.08)' : 'rgba(0,0,0,0.05)');
+  return (
+    <View style={[
+      s.rankedRow,
+      rank === 1 && s.rankedRowFirst,
+      isLast && { borderBottomWidth: 0 },
+    ]}>
+      <View style={[s.rankBadge, { backgroundColor: rankBg }]}>
+        <Text style={[s.rankText, { color: rankColor }]}>{rank}</Text>
+      </View>
+      <View style={s.rankedNameCol}>
+        <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+          <Text
+            style={[s.rankedName, rank === 1 && { fontFamily: 'PlusJakartaSans-Bold' }]}
+            numberOfLines={1}
+          >
+            {name}
+          </Text>
+          {isWinner && <Feather name="award" size={13} color="#ffd700" />}
+        </View>
+      </View>
+      <Text style={[s.rankedPrimary, rank === 1 && { fontSize: 18 }]}>{primary}</Text>
+      <Text style={s.rankedSub}>{sub ?? ''}</Text>
+    </View>
+  );
+}
+
 const StablefordRoundCard = React.memo(function StablefordRoundCard({ round, players, clinchedPairIdx, theme, s, showRunning = true }) {
   const pairResults = roundPairLeaderboard(round, players);
   // Map sorted-leaderboard position back to round.pairs index so we can
@@ -2331,6 +2368,25 @@ const makeStyles = (t) => StyleSheet.create({
   },
   mastersPoints: { fontFamily: 'PlusJakartaSans-ExtraBold', color: '#ffd700', fontSize: 16, marginRight: 8 },
   mastersSub: { fontFamily: 'PlusJakartaSans-Medium', color: 'rgba(255,255,255,0.45)', fontSize: 11, width: 60, textAlign: 'right' },
+
+  // Ranked rows (round cards — leaderboard-style, theme-aware)
+  rankedRow: {
+    flexDirection: 'row', alignItems: 'center', paddingVertical: 10,
+    borderBottomWidth: 1, borderBottomColor: t.border.default,
+  },
+  rankedRowFirst: {
+    borderLeftWidth: 3, borderLeftColor: '#ffd700',
+    paddingLeft: 8, marginLeft: -8,
+  },
+  rankBadge: {
+    width: 28, height: 28, borderRadius: 14,
+    alignItems: 'center', justifyContent: 'center', marginRight: 10,
+  },
+  rankText: { fontFamily: 'PlusJakartaSans-ExtraBold', fontSize: 12 },
+  rankedNameCol: { flex: 1, minWidth: 0, marginRight: 8 },
+  rankedName: { fontFamily: 'PlusJakartaSans-Medium', color: t.text.primary, fontSize: 14 },
+  rankedPrimary: { fontFamily: 'PlusJakartaSans-ExtraBold', color: t.accent.primary, fontSize: 16, marginRight: 8 },
+  rankedSub: { fontFamily: 'PlusJakartaSans-Medium', color: t.text.muted, fontSize: 11, width: 60, textAlign: 'right' },
 
   // Pair blocks
   pairBlock: {
