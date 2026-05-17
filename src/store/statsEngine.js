@@ -1667,7 +1667,7 @@ export function teeShotImpact(tournament, playerId) {
   const player = (tournament.players || []).find((p) => p.id === playerId);
   const fairway = [];
   const missed = [];
-  const byDir = { left: [], right: [], short: [] };
+  const byDirection = { left: [], right: [], short: [] };
   const withPenalty = [];
   const withoutPenalty = [];
   let penaltyCount = 0;
@@ -1692,7 +1692,7 @@ export function teeShotImpact(tournament, playerId) {
             fairway.push(entry);
           } else {
             missed.push(entry);
-            if (byDir[d.drive]) byDir[d.drive].push(entry);
+            if (byDirection[d.drive]) byDirection[d.drive].push(entry);
           }
         }
         const teePen = d.teePenalties ?? 0;
@@ -1703,7 +1703,8 @@ export function teeShotImpact(tournament, playerId) {
           withoutPenalty.push(entry);
         }
       } else {
-        // No shot detail recorded — counts as penalty-free for penalty analysis
+        // No shot detail recorded, or detail exists but no tee penalty —
+        // counts as penalty-free for the penalty-drag baseline.
         withoutPenalty.push(entry);
       }
     });
@@ -1718,13 +1719,16 @@ export function teeShotImpact(tournament, playerId) {
     : 0;
 
   return {
+    // True when there is drive data or tee-penalty data — i.e. something the
+    // Tee Shot Impact card can show. Deliberately NOT keyed on "any shot
+    // detail": a hole may carry putts-only detail, which is not tee-shot data.
     hasData: fairway.length + missed.length + withPenalty.length > 0,
     fairway: summarize(fairway),
     missed: summarize(missed),
     byDirection: {
-      left: summarize(byDir.left),
-      right: summarize(byDir.right),
-      short: summarize(byDir.short),
+      left: summarize(byDirection.left),
+      right: summarize(byDirection.right),
+      short: summarize(byDirection.short),
     },
     teePenalty: { ...summarize(withPenalty), penaltyCount },
     withoutPenalty: summarize(withoutPenalty),
