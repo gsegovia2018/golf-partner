@@ -8,10 +8,9 @@ import ScreenContainer from '../components/ScreenContainer';
 import { Feather } from '@expo/vector-icons';
 
 import { useTheme } from '../theme/ThemeContext';
-import { supabase } from '../lib/supabase';
 import {
   createOfficialTournament, addRosterPlayer, listRoster,
-  regenerateToken, withdrawPlayer, createRound,
+  regenerateToken, withdrawPlayer, createRound, saveTournamentData,
 } from '../store/officialAdmin';
 
 // Origin used when building share links. On web we read the live origin;
@@ -33,7 +32,7 @@ function showError(message) {
   else Alert.alert('Error', msg);
 }
 
-async function copyToClipboard(text) {
+function copyToClipboard(text) {
   // expo-clipboard is not a dependency; react-native's Clipboard is used.
   Clipboard.setString(text);
 }
@@ -41,6 +40,10 @@ async function copyToClipboard(text) {
 export default function OfficialSetupScreen({ navigation }) {
   const { theme } = useTheme();
   const s = makeStyles(theme);
+
+  // Guards async handlers from calling setState after the screen unmounts.
+  const mountedRef = useRef(true);
+  useEffect(() => () => { mountedRef.current = false; }, []);
 
   // Tournament creation
   const [name, setName] = useState('');
@@ -59,6 +62,8 @@ export default function OfficialSetupScreen({ navigation }) {
   const [rosterError, setRosterError] = useState(false);
   // Roster id whose share link/QR is currently expanded.
   const [openLinkId, setOpenLinkId] = useState(null);
+  // Roster id with a per-row action in flight; blocks double-submit.
+  const [pendingRowId, setPendingRowId] = useState(null);
 
   // Add-player form
   const [newName, setNewName] = useState('');
@@ -66,6 +71,7 @@ export default function OfficialSetupScreen({ navigation }) {
   const [addingPlayer, setAddingPlayer] = useState(false);
 
   // Rounds
+  // This screen only ever drives a freshly-created tournament, so round indices start at 0.
   const [roundCount, setRoundCount] = useState(0);
   const [addingRound, setAddingRound] = useState(false);
 
@@ -74,12 +80,14 @@ export default function OfficialSetupScreen({ navigation }) {
     setRosterError(false);
     try {
       const rows = await listRoster(id);
+      if (!mountedRef.current) return;
       setRoster(rows);
     } catch (e) {
+      if (!mountedRef.current) return;
       console.warn('OfficialSetupScreen: failed to load roster', e);
       setRosterError(true);
     } finally {
-      setRosterLoading(false);
+      if (mountedRef.current) setRosterLoading(false);
     }
   }, []);
 
@@ -93,12 +101,14 @@ export default function OfficialSetupScreen({ navigation }) {
     setCreating(true);
     try {
       const id = await createOfficialTournament({ name: trimmed });
+      if (!mountedRef.current) return;
       tournamentDataRef.current = {};
       setTournamentId(id);
     } catch (e) {
+      if (!mountedRef.current) return;
       showError(e?.message);
     } finally {
-      setCreating(false);
+      if (mountedRef.current) setCreating(false);
     }
   }
 
@@ -107,17 +117,15 @@ export default function OfficialSetupScreen({ navigation }) {
     if (!tournamentId) return;
     setSavingRules(true);
     try {
-      const nextData = { ...tournamentDataRef.current, rules };
-      const { error } = await supabase
-        .from('tournaments')
-        .update({ data: nextData })
-        .eq('id', tournamentId);
-      if (error) throw error;
+      const nextData = { ...(tournamentDataRef.current ?? {}), rules };
+      await saveTournamentData(tournamentId, tournamentDataRef.current ?? {}, { rules });
+      if (!mountedRef.current) return;
       tournamentDataRef.current = nextData;
     } catch (e) {
+      if (!mountedRef.current) return;
       showError(e?.message);
     } finally {
-      setSavingRules(false);
+      if (mountedRef.current) setSavingRules(false);
     }
   }
 
@@ -130,49 +138,59 @@ export default function OfficialSetupScreen({ navigation }) {
         displayName: trimmed,
         handicap: parseInt(newHandicap, 10) || 0,
       });
+      if (!mountedRef.current) return;
       setRoster((prev) => [...prev, row]);
       setNewName('');
       setNewHandicap('');
     } catch (e) {
+      if (!mountedRef.current) return;
       showError(e?.message);
     } finally {
-      setAddingPlayer(false);
+      if (mountedRef.current) setAddingPlayer(false);
     }
   }
 
-  async function handleShowLink(row) {
+  function handleShowLink(row) {
     if (openLinkId === row.id) {
       setOpenLinkId(null);
       return;
     }
     setOpenLinkId(row.id);
-    try {
-      await copyToClipboard(joinLink(row.magic_token));
-    } catch (e) {
-      showError(e?.message);
-    }
+    copyToClipboard(joinLink(row.magic_token));
   }
 
   async function handleRegenerate(rosterId) {
+    if (pendingRowId) return;
+    setPendingRowId(rosterId);
     try {
       const token = await regenerateToken(rosterId);
+      if (!mountedRef.current) return;
       setRoster((prev) => prev.map((r) => (
         r.id === rosterId ? { ...r, magic_token: token } : r
       )));
     } catch (e) {
+      if (!mountedRef.current) return;
       showError(e?.message);
+    } finally {
+      if (mountedRef.current) setPendingRowId(null);
     }
   }
 
   async function handleWithdrawToggle(row) {
+    if (pendingRowId) return;
     const next = !row.withdrawn;
+    setPendingRowId(row.id);
     try {
       await withdrawPlayer(row.id, next);
+      if (!mountedRef.current) return;
       setRoster((prev) => prev.map((r) => (
         r.id === row.id ? { ...r, withdrawn: next } : r
       )));
     } catch (e) {
+      if (!mountedRef.current) return;
       showError(e?.message);
+    } finally {
+      if (mountedRef.current) setPendingRowId(null);
     }
   }
 
@@ -184,12 +202,14 @@ export default function OfficialSetupScreen({ navigation }) {
       const roundId = await createRound(tournamentId, {
         roundIndex, course: {}, format: 'stableford',
       });
+      if (!mountedRef.current) return;
       setRoundCount((c) => c + 1);
       navigation.navigate('PartyBoard', { tournamentId, roundId });
     } catch (e) {
+      if (!mountedRef.current) return;
       showError(e?.message);
     } finally {
-      setAddingRound(false);
+      if (mountedRef.current) setAddingRound(false);
     }
   }
 
@@ -293,11 +313,19 @@ export default function OfficialSetupScreen({ navigation }) {
                           {openLinkId === row.id ? 'Hide link' : 'Show link'}
                         </Text>
                       </TouchableOpacity>
-                      <TouchableOpacity style={s.actionBtn} onPress={() => handleRegenerate(row.id)}>
+                      <TouchableOpacity
+                        style={[s.actionBtn, pendingRowId === row.id && s.btnDisabled]}
+                        onPress={() => handleRegenerate(row.id)}
+                        disabled={pendingRowId === row.id}
+                      >
                         <Feather name="refresh-cw" size={13} color={theme.accent.primary} style={{ marginRight: 4 }} />
                         <Text style={s.actionBtnText}>Regenerate</Text>
                       </TouchableOpacity>
-                      <TouchableOpacity style={s.actionBtn} onPress={() => handleWithdrawToggle(row)}>
+                      <TouchableOpacity
+                        style={[s.actionBtn, pendingRowId === row.id && s.btnDisabled]}
+                        onPress={() => handleWithdrawToggle(row)}
+                        disabled={pendingRowId === row.id}
+                      >
                         <Feather
                           name={row.withdrawn ? 'rotate-ccw' : 'user-x'}
                           size={13}

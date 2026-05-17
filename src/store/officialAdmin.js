@@ -55,6 +55,16 @@ export async function withdrawPlayer(rosterId, withdrawn = true) {
   if (error) throw error;
 }
 
+// Merge keys into an official tournament's config blob without clobbering
+// existing keys. `existingData` is the current `data` object (caller-held).
+export async function saveTournamentData(tournamentId, existingData, patch) {
+  const { error } = await supabase
+    .from('tournaments')
+    .update({ data: { ...existingData, ...patch } })
+    .eq('id', tournamentId);
+  if (error) throw error;
+}
+
 // Create a round in 'setup' status.
 export async function createRound(tournamentId, { roundIndex, course, format }) {
   const { data, error } = await supabase
