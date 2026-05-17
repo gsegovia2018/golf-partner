@@ -71,8 +71,11 @@ export async function createRound(tournamentId, { roundIndex, course, format }) 
 // inner array is one party in seat order. Markers are derived round-robin.
 // Replaces any existing parties for the round (only valid while status=setup).
 export async function saveParties(tournamentId, roundId, parties) {
-  await supabase.from('tournament_parties').delete().eq('round_id', roundId);
+  const { error: delErr } = await supabase
+    .from('tournament_parties').delete().eq('round_id', roundId);
+  if (delErr) throw delErr;
   for (let i = 0; i < parties.length; i++) {
+    if (!parties[i] || parties[i].length === 0) continue;
     const { data: party, error: pErr } = await supabase
       .from('tournament_parties')
       .insert({ round_id: roundId, tournament_id: tournamentId, number: i + 1 })
@@ -110,14 +113,16 @@ export async function startRound(roundId) {
 // Force-resolve a discrepancy: write both score rows to the agreed value.
 export async function forceResolve(roundId, hole, subjectRosterId, strokes, adminRosterId) {
   for (const source of ['self', 'marker']) {
-    await supabase.from('tournament_scores').upsert({
+    const { error: scoreErr } = await supabase.from('tournament_scores').upsert({
       round_id: roundId, hole, subject_roster_id: subjectRosterId,
       source, author_roster_id: adminRosterId, strokes, updated_at: new Date().toISOString(),
     }, { onConflict: 'round_id,hole,subject_roster_id,source' });
-    await supabase.from('tournament_score_audit').insert({
+    if (scoreErr) throw scoreErr;
+    const { error: auditErr } = await supabase.from('tournament_score_audit').insert({
       round_id: roundId, hole, subject_roster_id: subjectRosterId,
       source, strokes, author_roster_id: adminRosterId,
     });
+    if (auditErr) throw auditErr;
   }
 }
 
