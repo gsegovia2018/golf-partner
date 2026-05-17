@@ -3617,6 +3617,7 @@ function makeStyles(theme) {
       color: theme.text.primary,
       fontSize: 18,
       fontFamily: 'PlusJakartaSans-Bold',
+      flexShrink: 1,
     },
     soloHeroHcp: {
       color: theme.text.muted,
