@@ -5,6 +5,7 @@ import {
   scoringModeCategories,
   fallbackNoticeText,
   getScoringMode,
+  leaderboardToggleLabels,
 } from '../scoringModes';
 
 describe('SCORING_MODES', () => {
@@ -87,5 +88,24 @@ describe('getScoringMode', () => {
   });
   test('falls back to the first mode for an unknown key', () => {
     expect(getScoringMode('nope')).toBe(SCORING_MODES[0]);
+  });
+});
+
+describe('leaderboardToggleLabels', () => {
+  test('Stableford modes get Stableford / Stroke Play', () => {
+    expect(leaderboardToggleLabels('individual')).toEqual({ left: 'Stableford', right: 'Stroke Play' });
+    expect(leaderboardToggleLabels('stableford')).toEqual({ left: 'Stableford', right: 'Stroke Play' });
+  });
+  test('Match Play gets Match Play / Stableford', () => {
+    expect(leaderboardToggleLabels('matchplay')).toEqual({ left: 'Match Play', right: 'Stableford' });
+  });
+  test('Sindicato gets Sindicato / Stableford', () => {
+    expect(leaderboardToggleLabels('sindicato')).toEqual({ left: 'Sindicato', right: 'Stableford' });
+  });
+  test('Best Ball gets Best Ball / Stableford', () => {
+    expect(leaderboardToggleLabels('bestball')).toEqual({ left: 'Best Ball', right: 'Stableford' });
+  });
+  test('unknown mode falls back to Stableford / Stroke Play', () => {
+    expect(leaderboardToggleLabels('nope')).toEqual({ left: 'Stableford', right: 'Stroke Play' });
   });
 });
