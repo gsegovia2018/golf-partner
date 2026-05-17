@@ -55,11 +55,17 @@ describe('teeShotImpact', () => {
     expect(teeShotImpact(t, 'p1').fairway.holes).toBe(0);
   });
 
-  test('measures tee-penalty holes against penalty-free holes', () => {
+  test('measures tee-penalty holes against tracked penalty-free holes', () => {
     const h = holes18();
     const scores = { ...evenScores(h, 4) };
     scores[1] = 6; // penalty hole scores worse
-    const shotDetails = { p1: { 1: { teePenalties: 1 } } };
+    // Every hole has shot detail: hole 1 took a tee penalty, the rest are clean.
+    const shotDetails = { p1: {} };
+    h.forEach((hole) => {
+      shotDetails.p1[hole.number] = hole.number === 1
+        ? { teePenalties: 1 }
+        : { drive: 'fairway' };
+    });
     const t = {
       players: [{ id: 'p1', handicap: 0 }],
       rounds: [{ courseName: 'C', holes: h, scores: { p1: scores }, shotDetails }],
@@ -67,8 +73,24 @@ describe('teeShotImpact', () => {
     const r = teeShotImpact(t, 'p1');
     expect(r.teePenalty.holes).toBe(1);
     expect(r.teePenalty.penaltyCount).toBe(1);
-    expect(r.teePenalty.avgPoints).toBe(0);
-    expect(r.withoutPenalty.avgPoints).toBe(2);
-    expect(r.penaltyDrag).toBe(2);
+    expect(r.teePenalty.avgPoints).toBe(0);     // hole 1: 6 on par 4 → 0 pts
+    expect(r.withoutPenalty.holes).toBe(17);    // holes 2-18, tracked, no penalty
+    expect(r.withoutPenalty.avgPoints).toBe(2); // par → 2 pts each
+    expect(r.penaltyDrag).toBe(2);              // 2 - 0
+  });
+
+  test('untracked holes do not pad the penalty-free baseline', () => {
+    const h = holes18();
+    const scores = { ...evenScores(h, 4) };
+    scores[1] = 6;
+    // Only hole 1 has shot detail (a tee penalty); holes 2-18 are untracked.
+    const shotDetails = { p1: { 1: { teePenalties: 1 } } };
+    const t = {
+      players: [{ id: 'p1', handicap: 0 }],
+      rounds: [{ courseName: 'C', holes: h, scores: { p1: scores }, shotDetails }],
+    };
+    const r = teeShotImpact(t, 'p1');
+    expect(r.withoutPenalty.holes).toBe(0); // untracked holes are not counted
+    expect(r.penaltyDrag).toBe(0);          // no clean baseline → no drag figure
   });
 });

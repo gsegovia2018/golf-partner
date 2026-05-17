@@ -206,6 +206,7 @@ export default function MyStatsScreen({ navigation }) {
             ['Miss right', stats.teeShot.byDirection.right.avgPoints, stats.teeShot.byDirection.right.holes],
             ['Miss short', stats.teeShot.byDirection.short.avgPoints, stats.teeShot.byDirection.short.holes],
             ['After tee penalty', stats.teeShot.teePenalty.avgPoints, stats.teeShot.teePenalty.holes],
+            ['Penalty drag (pts lost)', stats.teeShot.penaltyDrag, stats.teeShot.teePenalty.holes],
           ]} s={s} />
         ) : null}
         {stats.shots.hasData ? (
@@ -419,7 +420,7 @@ function Sparkline({ history, s, theme }) {
   const points = history.map((h) => h.points);
   const max = Math.max(...points, 1);
   const min = Math.min(...points);
-  const BAR_AREA = 52;
+  const BAR_AREA = 44;
   return (
     <View style={s.sparkWrap}>
       <Text style={s.sparkCaption}>Points per round · oldest → newest</Text>

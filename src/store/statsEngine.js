@@ -1662,7 +1662,9 @@ export function scramblingStats(tournament) {
 // ── Tee Shot Impact ──
 // Cross-references each par-4/5 hole's drive outcome and tee penalty with the
 // Stableford points scored, so a player can see what a good tee shot is worth.
-// Par 3s are excluded — "tee shot" here means the drive on a 4 or 5.
+// Par 3s are excluded — "tee shot" here means the drive on a 4 or 5. Only
+// holes with recorded shot detail are counted, so the penalty-free baseline
+// is genuinely tracked clean holes, not untracked ones.
 export function teeShotImpact(tournament, playerId) {
   const player = (tournament.players || []).find((p) => p.id === playerId);
   const fairway = [];
@@ -1681,30 +1683,25 @@ export function teeShotImpact(tournament, playerId) {
       const sc = round.scores[playerId]?.[hole.number];
       if (!sc) return;
       const d = details[hole.number];
+      if (!d) return;
       const points = calcStablefordPoints(hole.par, sc, handicap, hole.strokeIndex);
       const entry = {
         roundIndex, courseName: round.courseName,
         holeNumber: hole.number, par: hole.par, strokes: sc, points,
       };
-      if (d) {
-        if (d.drive != null) {
-          if (d.drive === 'fairway' || d.drive === 'super') {
-            fairway.push(entry);
-          } else {
-            missed.push(entry);
-            if (byDirection[d.drive]) byDirection[d.drive].push(entry);
-          }
-        }
-        const teePen = d.teePenalties ?? 0;
-        if (teePen > 0) {
-          withPenalty.push(entry);
-          penaltyCount += teePen;
+      if (d.drive != null) {
+        if (d.drive === 'fairway' || d.drive === 'super') {
+          fairway.push(entry);
         } else {
-          withoutPenalty.push(entry);
+          missed.push(entry);
+          if (byDirection[d.drive]) byDirection[d.drive].push(entry);
         }
+      }
+      const teePen = d.teePenalties ?? 0;
+      if (teePen > 0) {
+        withPenalty.push(entry);
+        penaltyCount += teePen;
       } else {
-        // No shot detail recorded, or detail exists but no tee penalty —
-        // counts as penalty-free for the penalty-drag baseline.
         withoutPenalty.push(entry);
       }
     });
@@ -1719,9 +1716,6 @@ export function teeShotImpact(tournament, playerId) {
     : 0;
 
   return {
-    // True when there is drive data or tee-penalty data — i.e. something the
-    // Tee Shot Impact card can show. Deliberately NOT keyed on "any shot
-    // detail": a hole may carry putts-only detail, which is not tee-shot data.
     hasData: fairway.length + missed.length + withPenalty.length > 0,
     fairway: summarize(fairway),
     missed: summarize(missed),
