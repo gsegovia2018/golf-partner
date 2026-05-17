@@ -1,7 +1,7 @@
 import {
   collectMyRounds, buildSyntheticTournament, CANON_ID,
   holeDifficultySplit, computeMetrics, computeRecentVsHistory, FORM_METRICS,
-  rankStrengths,
+  rankStrengths, resolveSelection, computeMyStats,
 } from '../personalStats';
 
 // ── Fixture helpers ───────────────────────────────────────────────
@@ -271,5 +271,50 @@ describe('rankStrengths', () => {
     const r = rankStrengths(buildSyntheticTournament([]));
     expect(r.strengths).toEqual([]);
     expect(r.weaknesses).toEqual([]);
+  });
+});
+
+describe('resolveSelection', () => {
+  function threeRounds() {
+    const h = holes18();
+    const partial = evenScores(h, 5);
+    delete partial[18]; // round 3 incomplete
+    return collectMyRounds([{
+      id: 1, name: 'T', players: [{ id: 'p1', handicap: 0, user_id: 'u1' }],
+      rounds: [
+        mkRound({ holes: h, scores: { p1: evenScores(h, 4) } }),
+        mkRound({ holes: h, scores: { p1: evenScores(h, 5) } }),
+        mkRound({ holes: h, scores: { p1: partial } }),
+      ],
+    }], 'u1');
+  }
+
+  test('defaults to completed rounds when there are no overrides', () => {
+    const selected = resolveSelection(threeRounds(), {});
+    expect(selected.map((r) => r.key)).toEqual(['1:0', '1:1']);
+  });
+
+  test('an override can add an incomplete round or remove a completed one', () => {
+    const selected = resolveSelection(threeRounds(), { '1:2': true, '1:0': false });
+    expect(selected.map((r) => r.key)).toEqual(['1:1', '1:2']);
+  });
+});
+
+describe('computeMyStats', () => {
+  test('bundles round count, metrics, form and ranking', () => {
+    const h = holes18();
+    const my = collectMyRounds([{
+      id: 1, name: 'T', players: [{ id: 'p1', handicap: 0, user_id: 'u1' }],
+      rounds: [
+        mkRound({ holes: h, scores: { p1: evenScores(h, 4) }, playerHandicaps: { p1: 0 } }),
+        mkRound({ holes: h, scores: { p1: evenScores(h, 5) }, playerHandicaps: { p1: 0 } }),
+      ],
+    }], 'u1');
+    const stats = computeMyStats(my, { n: 5 });
+    expect(stats.roundCount).toBe(2);
+    expect(stats.metrics.avgPoints).toBe(27);
+    expect(stats.form.metrics.length).toBe(6);
+    expect(stats.ranking).toHaveProperty('strengths');
+    expect(stats.parType.par4.holes).toBe(36);
   });
 });

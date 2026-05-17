@@ -226,6 +226,43 @@ export function rankStrengths(synthetic) {
   return { baseline: +baseline.toFixed(2), strengths, weaknesses };
 }
 
+// ── resolveSelection ──
+// Given the full MyRound list and a stored override map ({ [key]: boolean }),
+// returns the rounds that are active. Default (no override) = the round's
+// `completed` flag. Storing only overrides means newly-played completed
+// rounds are auto-included.
+export function resolveSelection(myRounds, overrides = {}) {
+  return (myRounds || []).filter((r) => (
+    Object.prototype.hasOwnProperty.call(overrides, r.key)
+      ? overrides[r.key]
+      : r.completed
+  ));
+}
+
+// ── computeMyStats ──
+// Single entry point for the screen. `selectedRounds` is the active selection
+// (already filtered via resolveSelection). The selection is the universe —
+// every selected round counts in metrics, form and ranking alike.
+export function computeMyStats(selectedRounds, { n = 5 } = {}) {
+  const rounds = selectedRounds || [];
+  const synthetic = buildSyntheticTournament(rounds);
+  return {
+    roundCount: rounds.length,
+    metrics: computeMetrics(synthetic),
+    form: computeRecentVsHistory(rounds, n),
+    ranking: rankStrengths(synthetic),
+    parType: parTypeSplit(synthetic, CANON_ID),
+    difficulty: holeDifficultySplit(synthetic, CANON_ID),
+    frontBack: frontBackSplit(synthetic)[0] ?? null,
+    warmupClosing: warmupVsClosing(synthetic, CANON_ID),
+    distribution: playerScoreDistribution(synthetic, CANON_ID),
+    teeShot: teeShotImpact(synthetic, CANON_ID),
+    shots: shotStats(synthetic, CANON_ID),
+    bounceBack: bounceBackRate(synthetic)[0] ?? null,
+    history: playerRoundHistory(synthetic, CANON_ID),
+  };
+}
+
 // ── computeRecentVsHistory ──
 // "Recent" = the last N rounds (chronologically). "History" = every earlier
 // round. Disjoint, so the delta is a true improving/declining signal.
