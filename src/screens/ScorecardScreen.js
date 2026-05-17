@@ -669,7 +669,7 @@ export default function ScorecardScreen({ navigation, route }) {
     // Display name of whoever marks `subjectRosterId` (for labelling the
     // read-only side of the resolve sheet).
     const markerNameFor = (subjectRosterId) => {
-      const m = members.find((x) => x.marks_roster_id === subjectRosterId);
+      const m = members.find((x) => x.marks_roster_id === subjectRosterId && !x.withdrawn);
       return m?.display_name ?? 'Marker';
     };
     return {

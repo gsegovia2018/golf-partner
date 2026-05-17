@@ -36,6 +36,7 @@ export default function JoinOfficialScreen({ navigation, route }) {
   const [activeToken, setActiveToken] = useState(null);
   const [player, setPlayer] = useState(null); // redeemToken result
   const [tournamentName, setTournamentName] = useState('');
+  const [rules, setRules] = useState('');
   const [rounds, setRounds] = useState([]);
 
   // Re-enter affordance (shown on failure).
@@ -52,16 +53,18 @@ export default function JoinOfficialScreen({ navigation, route }) {
       if (!mountedRef.current) return;
       await saveToken(token);
 
-      // Tournament name — best-effort; a failure here should not block the
-      // confirmation, which is the important part of the redeem flow.
+      // Tournament name + local rules — best-effort; a failure here should not
+      // block the confirmation, which is the important part of the redeem flow.
       let name = '';
+      let rulesText = '';
       try {
         const { data: tRow } = await supabase
           .from('tournaments')
-          .select('name')
+          .select('name, data')
           .eq('id', result.tournament_id)
           .single();
         name = tRow?.name || '';
+        rulesText = typeof tRow?.data?.rules === 'string' ? tRow.data.rules : '';
       } catch (e) {
         console.warn('JoinOfficialScreen: failed to load tournament name', e);
       }
@@ -84,6 +87,7 @@ export default function JoinOfficialScreen({ navigation, route }) {
       setActiveToken(token);
       setPlayer(result);
       setTournamentName(name);
+      setRules(rulesText);
       setRounds(roundRows);
       setError(false);
     } catch (e) {
@@ -188,6 +192,15 @@ export default function JoinOfficialScreen({ navigation, route }) {
           )}
         </View>
 
+        {!!rules.trim() && (
+          <>
+            <Text style={s.sectionTitle}>Local rules & notes</Text>
+            <View style={s.card}>
+              <Text style={s.rulesText}>{rules}</Text>
+            </View>
+          </>
+        )}
+
         <Text style={s.sectionTitle}>Rounds</Text>
         {rounds.length === 0 ? (
           <Text style={s.hint}>No rounds have been added yet.</Text>
@@ -266,6 +279,10 @@ const makeStyles = (theme) => StyleSheet.create({
   errorTitle: {
     fontFamily: 'PlusJakartaSans-Bold', color: theme.text.primary,
     fontSize: 16, marginBottom: 6,
+  },
+  rulesText: {
+    fontFamily: 'PlusJakartaSans-Regular', color: theme.text.secondary,
+    fontSize: 14, lineHeight: 21,
   },
   withdrawnNote: {
     flexDirection: 'row', alignItems: 'flex-start',
