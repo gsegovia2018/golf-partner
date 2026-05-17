@@ -34,6 +34,7 @@ import { useRoundMedia } from '../hooks/useRoundMedia';
 import { useOfficialRound } from '../hooks/useOfficialRound';
 import DiscrepancySheet from '../components/DiscrepancySheet';
 import { scoreCellState, cardDiscrepancyHoles } from '../store/officialScoring';
+import { attestCard } from '../store/officialStore';
 import { Alert } from 'react-native';
 
 // Web-only CSS scroll-snap. On native, `pagingEnabled` is handled by the
@@ -151,6 +152,10 @@ export default function ScorecardScreen({ navigation, route }) {
   const [syncStatus, setSyncStatus] = useState('idle');
   // Round-complete celebration overlay before navigating to the summary.
   const [roundCompleteVisible, setRoundCompleteVisible] = useState(false);
+  // Official mode (Task 16): attest-my-card request in flight, and the last
+  // attest error message (RPC can reject with "resolve discrepancies first").
+  const [attestBusy, setAttestBusy] = useState(false);
+  const [attestError, setAttestError] = useState(null);
   const tournamentRef = useRef(null);
   const saveTimeoutRef = useRef(null);
   // Keyed debounce timers for notes: key is 'round' or `h<holeNumber>`, so a
@@ -619,6 +624,9 @@ export default function ScorecardScreen({ navigation, route }) {
   // it is assigned to mark (`marker`); every other card is read-only.
   const editable = useCallback((playerId) => {
     if (!official) return true;
+    // Once this device's holder has attested their card (Task 16) the official
+    // branch is read-only for them — no more edits to any card on this device.
+    if (officialData.hasAttested) return false;
     return officialData.editableSource(playerId) !== null;
   }, [official, officialData]);
 
@@ -866,6 +874,27 @@ export default function ScorecardScreen({ navigation, route }) {
     }, roundDone ? 1400 : 400);
   }, [roundIndex, scores, navigation, goBack, official]);
 
+  // Official mode (Task 16): attest the token holder's own card. Replaces the
+  // casual "finish" affordance for official rounds. Disabled while the holder
+  // still has open discrepancies; the RPC also rejects server-side with
+  // "resolve discrepancies first" — surfaced as attestError.
+  const handleAttest = useCallback(async () => {
+    if (!official || attestBusy) return;
+    setAttestBusy(true);
+    setAttestError(null);
+    try {
+      await attestCard(officialToken, officialRoundId);
+      haptic('success');
+      // Refresh so `attestations` includes our roster id and the branch flips
+      // to its attested, read-only state.
+      await officialData.refresh();
+    } catch (e) {
+      setAttestError(e?.message ?? 'Could not attest your card.');
+    } finally {
+      setAttestBusy(false);
+    }
+  }, [official, attestBusy, officialToken, officialRoundId, officialData]);
+
   const openCapturePicker = useCallback(() => {
     setCaptureMenuVisible(true);
   }, []);
@@ -1062,6 +1091,10 @@ export default function ScorecardScreen({ navigation, route }) {
           officialDiscrepancy={officialDiscrepancy}
           officialEditableSource={official ? officialData.editableSource : null}
           officialSetScore={official ? officialData.setScore : null}
+          officialHasAttested={official ? officialData.hasAttested : false}
+          officialAttestBusy={attestBusy}
+          officialAttestError={attestError}
+          onAttest={handleAttest}
         />
       ) : (
         <GridView
@@ -1620,7 +1653,7 @@ function ShotDetailPanel({ hole, detail, onChange, theme, s }) {
   );
 }
 
-function HoleView({ round, roundIndex, players, scores, shotDetails, meId, onSetShot, onPickMe, notes, currentHole, hole, isBestBall, bbResult, settings, onStep, onSetScore, editable, onRoundNoteChange, onHoleNoteChange, onPrev, onNext, onGoToHole, onGoBack, onFinish, holeCount, playerTotals, showRunning, getScoreAnim, celebration, celebrationAnim, refreshing, onRefresh, official, officialDiscrepancy, officialEditableSource, officialSetScore }) {
+function HoleView({ round, roundIndex, players, scores, shotDetails, meId, onSetShot, onPickMe, notes, currentHole, hole, isBestBall, bbResult, settings, onStep, onSetScore, editable, onRoundNoteChange, onHoleNoteChange, onPrev, onNext, onGoToHole, onGoBack, onFinish, holeCount, playerTotals, showRunning, getScoreAnim, celebration, celebrationAnim, refreshing, onRefresh, official, officialDiscrepancy, officialEditableSource, officialSetScore, officialHasAttested, officialAttestBusy, officialAttestError, onAttest }) {
   const { theme } = useTheme();
   const isSindicato = settings?.scoringMode === 'sindicato';
   // Notes split: the current hole's note plus the shared round-level note.
@@ -1828,21 +1861,63 @@ function HoleView({ round, roundIndex, players, scores, shotDetails, meId, onSet
             <Feather name="list" size={14} color={theme.text.muted} />
             <Text style={s.notesPillBtnText}>Go to hole</Text>
           </TouchableOpacity>
-          <TouchableOpacity
-            style={s.saveBtn}
-            onPress={currentHole < holeCount ? onNext : onFinish}
-            activeOpacity={0.8}
-          >
-            <Text style={s.saveBtnText}>
-              {currentHole < holeCount ? `Hole ${currentHole + 1}` : 'Finish'}
-            </Text>
-            <Feather
-              name={currentHole < holeCount ? 'chevron-right' : 'flag'}
-              size={18}
-              color={theme.text.inverse}
-            />
-          </TouchableOpacity>
+          {(() => {
+            // Last-hole affordance. Official mode (Task 16) replaces the casual
+            // "Finish" with "Attest my card": disabled while the holder has
+            // open discrepancies or a request is in flight, hidden once done.
+            const onLastHole = currentHole >= holeCount;
+            if (official && onLastHole) {
+              const hasDiscrepancies = (officialDiscrepancy?.myHoles?.length ?? 0) > 0;
+              const attestDisabled = hasDiscrepancies || officialAttestBusy
+                || officialHasAttested;
+              const label = officialHasAttested
+                ? 'Attested'
+                : officialAttestBusy ? 'Attesting…' : 'Attest my card';
+              return (
+                <TouchableOpacity
+                  style={[s.saveBtn, attestDisabled && s.saveBtnDisabled]}
+                  onPress={onAttest}
+                  disabled={attestDisabled}
+                  activeOpacity={0.8}
+                  accessibilityLabel="Attest my card"
+                >
+                  <Text style={s.saveBtnText}>{label}</Text>
+                  <Feather
+                    name={officialHasAttested ? 'check-circle' : 'flag'}
+                    size={18}
+                    color={theme.text.inverse}
+                  />
+                </TouchableOpacity>
+              );
+            }
+            return (
+              <TouchableOpacity
+                style={s.saveBtn}
+                onPress={onLastHole ? onFinish : onNext}
+                activeOpacity={0.8}
+              >
+                <Text style={s.saveBtnText}>
+                  {onLastHole ? 'Finish' : `Hole ${currentHole + 1}`}
+                </Text>
+                <Feather
+                  name={onLastHole ? 'flag' : 'chevron-right'}
+                  size={18}
+                  color={theme.text.inverse}
+                />
+              </TouchableOpacity>
+            );
+          })()}
         </View>
+        {official && currentHole >= holeCount && (officialHasAttested
+          || (officialDiscrepancy?.myHoles?.length ?? 0) > 0 || officialAttestError) && (
+          <Text style={s.attestHint}>
+            {officialHasAttested
+              ? 'Attested — waiting for your party'
+              : officialAttestError
+                ? officialAttestError
+                : 'Resolve discrepancies before attesting'}
+          </Text>
+        )}
       </View>
 
       {/* Notes modal — per-hole note + shared round note */}
@@ -3807,6 +3882,17 @@ function makeStyles(theme) {
       color: theme.text.inverse,
       fontFamily: 'PlusJakartaSans-ExtraBold',
       fontSize: 16,
+    },
+    // Official-mode attest button when blocked (discrepancies / in flight).
+    saveBtnDisabled: { opacity: 0.4 },
+    // Hint shown under the bottom bar in official mode (Task 16): attested
+    // confirmation, discrepancy block, or an attest error message.
+    attestHint: {
+      marginTop: 8,
+      textAlign: 'center',
+      color: theme.text.muted,
+      fontFamily: 'PlusJakartaSans-SemiBold',
+      fontSize: 12,
     },
 
     // Grid view

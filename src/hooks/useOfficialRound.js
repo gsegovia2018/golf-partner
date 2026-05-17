@@ -151,6 +151,12 @@ export function useOfficialRound({ token, roundId }) {
     };
   }, [refresh]);
 
+  // Whether THIS token holder has already attested their own card (Task 16).
+  // `attestations` is a flat list of roster_ids; once it contains ours the
+  // official branch goes read-only and shows the attested state.
+  const hasAttested = myRosterId != null
+    && attestations.some((id) => id === myRosterId);
+
   /**
    * The roster_id of the player THIS token holder marks. Round-robin marker
    * assignment (Task 3) gives each member exactly one markee. We find it by
@@ -213,6 +219,7 @@ export function useOfficialRound({ token, roundId }) {
     round,
     partyId,
     attestations,
+    hasAttested,
     myRosterId,
     loading,
     error,

@@ -315,3 +315,47 @@ GRANT EXECUTE ON FUNCTION public.link_token_to_user(text)      TO authenticated;
 GRANT EXECUTE ON FUNCTION public.get_round_state(text,uuid)    TO anon, authenticated;
 GRANT EXECUTE ON FUNCTION public.submit_score(text,uuid,int,uuid,text,int) TO anon, authenticated;
 GRANT EXECUTE ON FUNCTION public.attest_card(text,uuid)        TO anon, authenticated;
+
+-- ============================================================================
+-- Party / round locking. When every member of a party has attested, lock the
+-- party; when every party in a round is locked, lock the round. Each step
+-- writes an admin notification.
+-- ============================================================================
+CREATE OR REPLACE FUNCTION public.on_attestation()
+RETURNS trigger LANGUAGE plpgsql SECURITY DEFINER SET search_path = public AS $$
+DECLARE v_party uuid; v_tourn bigint; v_open int; v_round_open int;
+BEGIN
+  SELECT pm.party_id INTO v_party
+    FROM public.tournament_party_members pm
+    JOIN public.tournament_parties pa ON pa.id = pm.party_id
+   WHERE pm.roster_id = NEW.roster_id AND pa.round_id = NEW.round_id;
+  IF v_party IS NULL THEN RETURN NEW; END IF;
+
+  SELECT count(*) INTO v_open
+    FROM public.tournament_party_members pm
+    JOIN public.tournament_roster ro ON ro.id = pm.roster_id
+   WHERE pm.party_id = v_party AND ro.withdrawn = false
+     AND NOT EXISTS (SELECT 1 FROM public.tournament_attestations a
+                      WHERE a.round_id = NEW.round_id AND a.roster_id = pm.roster_id);
+  IF v_open = 0 THEN
+    UPDATE public.tournament_parties SET locked = true WHERE id = v_party;
+    SELECT tournament_id INTO v_tourn FROM public.tournament_parties WHERE id = v_party;
+    INSERT INTO public.tournament_notifications (tournament_id, round_id, kind, body)
+    VALUES (v_tourn, NEW.round_id, 'party_locked',
+            'A party finished and locked its scores.');
+
+    SELECT count(*) INTO v_round_open
+      FROM public.tournament_parties WHERE round_id = NEW.round_id AND locked = false;
+    IF v_round_open = 0 THEN
+      UPDATE public.tournament_rounds SET status = 'locked' WHERE id = NEW.round_id;
+      INSERT INTO public.tournament_notifications (tournament_id, round_id, kind, body)
+      VALUES (v_tourn, NEW.round_id, 'round_locked', 'A round is complete.');
+    END IF;
+  END IF;
+  RETURN NEW;
+END $$;
+
+DROP TRIGGER IF EXISTS trg_on_attestation ON public.tournament_attestations;
+CREATE TRIGGER trg_on_attestation
+  AFTER INSERT ON public.tournament_attestations
+  FOR EACH ROW EXECUTE FUNCTION public.on_attestation();
