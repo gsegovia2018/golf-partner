@@ -7,7 +7,7 @@ import QRCode from 'react-native-qrcode-svg';
 import { useTheme } from '../theme/ThemeContext';
 import { useAuth } from '../context/AuthContext';
 import { ShareableLeaderboard, shareLeaderboard } from '../components/ShareableCard';
-import { scoringModeUsesTeams } from '../components/scoringModes';
+import { scoringModeUsesTeams, leaderboardToggleLabels } from '../components/scoringModes';
 import PullToRefresh from '../components/PullToRefresh';
 import LoadingSplash from '../components/LoadingSplash';
 import {
@@ -106,7 +106,7 @@ export default function HomeScreen({ navigation, route }) {
   const [showResetHistory, setShowResetHistory] = useState(false);
   const [undoSnack, setUndoSnack] = useState(null); // { roundIndex, snapshot, at }
   const undoTimerRef = useRef(null);
-  const [leaderboardBestBall, setLeaderboardBestBall] = useState(false);
+  const [leaderboardAlt, setLeaderboardAlt] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
   const [showInvite, setShowInvite] = useState(false);
   const [inviteCodes, setInviteCodes] = useState({ editor: '', viewer: '' });
@@ -500,18 +500,10 @@ export default function HomeScreen({ navigation, route }) {
     () => ({ ...DEFAULT_SETTINGS, ...(tournament?.settings ?? {}) }),
     [tournament?.settings],
   );
-  const bestBallAvailable = (tournament?.players?.length ?? 0) >= 4;
-
-  // Sync toggle to tournament's scoring mode when it loads/changes. If the
-  // tournament doesn't support best-ball (fewer than 4 players), force off.
+  // Sync toggle to tournament's scoring mode when it loads/changes.
   useEffect(() => {
-    if (!bestBallAvailable) {
-      setLeaderboardBestBall(false);
-      return;
-    }
-    const isBB = settings.scoringMode === 'bestball';
-    setLeaderboardBestBall(isBB);
-  }, [tournament?.id, settings.scoringMode, bestBallAvailable]);
+    setLeaderboardAlt(false);
+  }, [tournament?.id, settings.scoringMode]);
   const matchPlayStandings = useMemo(
     () => (tournament && settings.scoringMode === 'matchplay'
       ? tournamentMatchPlayStandings(tournament)
@@ -523,18 +515,36 @@ export default function HomeScreen({ navigation, route }) {
       if (!tournament) return [];
       if (settings.scoringMode === 'matchplay') return matchPlayStandings?.board ?? [];
       if (settings.scoringMode === 'sindicato') return tournamentSindicatoLeaderboard(tournament);
+      if (settings.scoringMode === 'bestball') return tournamentBestWorstLeaderboard(tournament);
       return tournamentLeaderboard(tournament);
     },
     [tournament, settings.scoringMode, matchPlayStandings],
   );
-  const bestWorstLeaderboard = useMemo(
-    () => (tournament && leaderboardBestBall ? tournamentBestWorstLeaderboard(tournament) : null),
-    [tournament, leaderboardBestBall],
+  // The Stableford board — native view for Stableford modes, alternate view
+  // for every other mode, and the source of per-player gross strokes.
+  const stablefordBoard = useMemo(
+    () => (tournament ? tournamentLeaderboard(tournament) : []),
+    [tournament],
   );
+  // Stableford modes: native = Stableford (points), alternate = Stroke Play
+  // (gross strokes ascending, unplayed/0-stroke players last). Other modes:
+  // native = the mode board, alternate = Stableford.
+  const isStablefordMode = settings.scoringMode === 'individual'
+    || settings.scoringMode === 'stableford';
+  const displayedBoard = useMemo(() => {
+    if (!leaderboardAlt) return leaderboard;
+    if (isStablefordMode) {
+      return [...stablefordBoard].sort(
+        (a, b) => (a.strokes || Infinity) - (b.strokes || Infinity));
+    }
+    return stablefordBoard;
+  }, [leaderboardAlt, isStablefordMode, leaderboard, stablefordBoard]);
+  const isStrokePlayView = leaderboardAlt && isStablefordMode;
   const selectedRoundData = tournament?.rounds?.[selectedRound] ?? null;
   const selectedRoundHasScores = !!(selectedRoundData?.scores && Object.keys(selectedRoundData.scores).length > 0);
   const selectedRoundPlayerTotals = useMemo(() => {
-    if (!tournament || !selectedRoundData || !selectedRoundHasScores || leaderboardBestBall) return null;
+    if (!tournament || !selectedRoundData || !selectedRoundHasScores
+      || (settings.scoringMode === 'bestball' && !leaderboardAlt)) return null;
     if (settings.scoringMode === 'sindicato') {
       const tally = sindicatoRoundTally(selectedRoundData, tournament.players);
       if (!tally) return null;
@@ -545,12 +555,13 @@ export default function HomeScreen({ navigation, route }) {
       });
     }
     return roundTotals(selectedRoundData, tournament.players);
-  }, [tournament, selectedRoundData, selectedRoundHasScores, leaderboardBestBall, settings.scoringMode]);
+  }, [tournament, selectedRoundData, selectedRoundHasScores, leaderboardAlt, settings.scoringMode]);
   const selectedRoundBB = useMemo(
-    () => (tournament && selectedRoundData && selectedRoundHasScores && leaderboardBestBall && selectedRoundData.pairs?.length
+    () => (tournament && selectedRoundData && selectedRoundHasScores
+      && settings.scoringMode === 'bestball' && !leaderboardAlt && selectedRoundData.pairs?.length
       ? calcBestWorstBall(selectedRoundData, tournament.players)
       : null),
-    [tournament, selectedRoundData, selectedRoundHasScores, leaderboardBestBall],
+    [tournament, selectedRoundData, selectedRoundHasScores, settings.scoringMode, leaderboardAlt],
   );
   const tournamentMode = settings.scoringMode === 'bestball' ? 'bestball'
     : settings.scoringMode === 'sindicato' ? 'sindicato'
@@ -974,8 +985,8 @@ export default function HomeScreen({ navigation, route }) {
   const completedRounds = tournament.rounds.filter(
     (r) => r.scores && Object.keys(r.scores).length > 0,
   );
-  const strokesByPlayer = Object.fromEntries(leaderboard.map((e) => [e.player.id, e.strokes]));
-  const displayedBoard = leaderboardBestBall && bestWorstLeaderboard ? bestWorstLeaderboard : leaderboard;
+  const strokesByPlayer = Object.fromEntries(stablefordBoard.map((e) => [e.player.id, e.strokes]));
+  const toggleLabels = leaderboardToggleLabels(settings.scoringMode);
   const getSelectedRoundValue = (playerId) => {
     if (settings.scoringMode === 'matchplay') {
       if (!selectedRoundData || !selectedRoundHasScores) return null;
@@ -984,7 +995,7 @@ export default function HomeScreen({ navigation, route }) {
       const idx = tournament.players.findIndex((p) => p.id === playerId);
       return idx === 0 ? tally.aWins : idx === 1 ? tally.bWins : null;
     }
-    if (leaderboardBestBall) {
+    if (settings.scoringMode === 'bestball' && !leaderboardAlt) {
       if (!selectedRoundData || !selectedRoundHasScores || !selectedRoundData.pairs?.length) return null;
       return playerRoundBestWorstPoints(selectedRoundData, playerId, tournament.players, settings);
     }
@@ -1051,18 +1062,16 @@ export default function HomeScreen({ navigation, route }) {
       <View style={s.mastersCard}>
         <View style={s.cardTitleRow}>
           <Text style={s.mastersCardTitle}>LEADERBOARD</Text>
-          {bestBallAvailable && (
-            <View style={s.inlineToggle}>
-              <Text style={[s.mastersToggleLabel, !leaderboardBestBall && s.mastersToggleLabelActive]}>Stableford</Text>
-              <Switch
-                value={leaderboardBestBall}
-                onValueChange={setLeaderboardBestBall}
-                trackColor={{ false: 'rgba(255,255,255,0.2)', true: 'rgba(255,215,0,0.4)' }}
-                thumbColor="#fff"
-              />
-              <Text style={[s.mastersToggleLabel, leaderboardBestBall && s.mastersToggleLabelActive]}>Best Ball</Text>
-            </View>
-          )}
+          <View style={s.inlineToggle}>
+            <Text style={[s.mastersToggleLabel, !leaderboardAlt && s.mastersToggleLabelActive]}>{toggleLabels.left}</Text>
+            <Switch
+              value={leaderboardAlt}
+              onValueChange={setLeaderboardAlt}
+              trackColor={{ false: 'rgba(255,255,255,0.2)', true: 'rgba(255,215,0,0.4)' }}
+              thumbColor="#fff"
+            />
+            <Text style={[s.mastersToggleLabel, leaderboardAlt && s.mastersToggleLabelActive]}>{toggleLabels.right}</Text>
+          </View>
         </View>
         {displayedBoard.map((entry, i) => {
           const rankColors = ['#ffd700', '#c0c8d4', '#daa06d'];
@@ -1093,11 +1102,16 @@ export default function HomeScreen({ navigation, route }) {
               </View>
               <Text style={[s.mastersPoints, i === 0 && { fontSize: 18 }]}>{
                 !showRunning ? '—'
-                  : settings.scoringMode === 'matchplay'
-                    ? `${entry.points} ${entry.points === 1 ? 'hole' : 'holes'}`
-                    : `${entry.points} pts`
+                  : isStrokePlayView
+                    ? `${strokesByPlayer[entry.player.id] || '-'} str`
+                    : settings.scoringMode === 'matchplay' && !leaderboardAlt
+                      ? `${entry.points} ${entry.points === 1 ? 'hole' : 'holes'}`
+                      : `${entry.points} pts`
               }</Text>
-              <Text style={s.mastersSub}>{showRunning ? `${strokes || '-'} str` : ''}</Text>
+              <Text style={s.mastersSub}>{
+                !showRunning ? ''
+                  : isStrokePlayView ? `${entry.points} pts` : `${strokes || '-'} str`
+              }</Text>
             </View>
           );
         })}
