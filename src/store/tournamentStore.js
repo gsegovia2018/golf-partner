@@ -18,6 +18,10 @@ import {
   calcStablefordPoints,
   matchPlayHolePts,
   matchPlayRoundTally,
+  sindicatoHolePoints,
+  sindicatoRoundTally,
+  tournamentSindicatoLeaderboard,
+  tournamentSindicatoClinched,
   pickupStrokes,
   randomPairs,
   isRoundPlayed,
@@ -420,6 +424,9 @@ export {
   calcStablefordPoints,
   matchPlayHolePts,
   matchPlayRoundTally,
+  sindicatoHolePoints,
+  sindicatoRoundTally,
+  tournamentSindicatoLeaderboard,
   pickupStrokes,
   randomPairs,
 } from './scoring';
@@ -858,6 +865,7 @@ export function roundPairClinched(round, players, settings, mode) {
 // remaining holes in scored rounds AND every hole of any future rounds the
 // user has not yet advanced to.
 export function tournamentPlayerClinched(tournament, mode) {
+  if (mode === 'sindicato') return tournamentSindicatoClinched(tournament);
   const { players, rounds, settings } = tournament;
   const lb = mode === 'bestball'
     ? tournamentBestWorstLeaderboard(tournament)
