@@ -1,6 +1,6 @@
 import React, { useEffect, useState, useMemo, useCallback } from 'react';
 import { View, Text, TouchableOpacity, StyleSheet, ScrollView, ActivityIndicator } from 'react-native';
-import { SafeAreaView } from 'react-native-safe-area-context';
+import ScreenContainer from '../components/ScreenContainer';
 import { Feather } from '@expo/vector-icons';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useTheme } from '../theme/ThemeContext';
@@ -103,19 +103,19 @@ export default function MyStatsScreen({ navigation }) {
   // ── Loading ──
   if (myRounds === null && !error) {
     return (
-      <SafeAreaView style={s.container} edges={['top', 'bottom']}>
+      <ScreenContainer style={s.container} edges={['top', 'bottom']}>
         {Header}
         <View style={s.center}>
           <ActivityIndicator color={theme.accent.primary} />
         </View>
-      </SafeAreaView>
+      </ScreenContainer>
     );
   }
 
   // ── Error ──
   if (error) {
     return (
-      <SafeAreaView style={s.container} edges={['top', 'bottom']}>
+      <ScreenContainer style={s.container} edges={['top', 'bottom']}>
         {Header}
         <View style={s.center}>
           <Feather name="wifi-off" size={32} color={theme.text.muted} />
@@ -127,20 +127,20 @@ export default function MyStatsScreen({ navigation }) {
             <Text style={s.retryText}>Retry</Text>
           </TouchableOpacity>
         </View>
-      </SafeAreaView>
+      </ScreenContainer>
     );
   }
 
   // ── Empty: no rounds at all ──
   if (myRounds.length === 0) {
     return (
-      <SafeAreaView style={s.container} edges={['top', 'bottom']}>
+      <ScreenContainer style={s.container} edges={['top', 'bottom']}>
         {Header}
         <View style={s.center}>
           <Feather name="bar-chart-2" size={32} color={theme.text.muted} />
           <Text style={s.emptyText}>Play and score a round to see your stats.</Text>
         </View>
-      </SafeAreaView>
+      </ScreenContainer>
     );
   }
 
@@ -157,7 +157,7 @@ export default function MyStatsScreen({ navigation }) {
   // ── Empty: every round deselected ──
   if (selected.length === 0) {
     return (
-      <SafeAreaView style={s.container} edges={['top', 'bottom']}>
+      <ScreenContainer style={s.container} edges={['top', 'bottom']}>
         {Header}
         <View style={s.center}>
           <Feather name="filter" size={32} color={theme.text.muted} />
@@ -167,7 +167,7 @@ export default function MyStatsScreen({ navigation }) {
           </TouchableOpacity>
         </View>
         {Selector}
-      </SafeAreaView>
+      </ScreenContainer>
     );
   }
 
@@ -175,7 +175,7 @@ export default function MyStatsScreen({ navigation }) {
   const fbHoles = fb ? fb.rounds.length * 9 : 0;
 
   return (
-    <SafeAreaView style={s.container} edges={['top', 'bottom']}>
+    <ScreenContainer style={s.container} edges={['top', 'bottom']}>
       {Header}
       <ScrollView contentContainerStyle={s.scroll}>
         <Snapshot stats={stats} metric={metric} onToggleMetric={setMetric} s={s} theme={theme} />
@@ -235,7 +235,7 @@ export default function MyStatsScreen({ navigation }) {
         ) : null}
       </ScrollView>
       {Selector}
-    </SafeAreaView>
+    </ScreenContainer>
   );
 }
 
