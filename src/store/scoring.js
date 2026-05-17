@@ -278,6 +278,7 @@ export function tournamentSindicatoClinched(tournament) {
   const hasAnyScore = rounds.some((r) => r.scores && Object.keys(r.scores).length > 0);
   if (!hasAnyScore) return null;
   const lb = tournamentSindicatoLeaderboard(tournament);
+  if (lb.length < 2) return null;
   let holesRemaining = 0;
   rounds.forEach((round, idx) => {
     const future = idx > (tournament.currentRound ?? 0);
