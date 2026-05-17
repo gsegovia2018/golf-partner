@@ -176,3 +176,133 @@ END $$;
    SELECT relname, relrowsecurity FROM pg_class
     WHERE relname LIKE 'tournament_%';
 */
+
+-- ============================================================================
+-- Token-validated RPCs. Guests call these with their magic_token; the
+-- function validates the exact operation before acting. SECURITY DEFINER so
+-- they bypass RLS, but each one re-checks authorization itself.
+-- ============================================================================
+
+-- Resolve a token to its roster player + tournament context.
+CREATE OR REPLACE FUNCTION public.redeem_token(p_token text)
+RETURNS jsonb LANGUAGE plpgsql SECURITY DEFINER SET search_path = public AS $$
+DECLARE r record;
+BEGIN
+  SELECT ro.id, ro.display_name, ro.handicap, ro.tournament_id, ro.withdrawn
+    INTO r FROM public.tournament_roster ro WHERE ro.magic_token = p_token;
+  IF r.id IS NULL THEN RAISE EXCEPTION 'invalid token'; END IF;
+  RETURN jsonb_build_object(
+    'roster_id', r.id, 'display_name', r.display_name,
+    'handicap', r.handicap, 'tournament_id', r.tournament_id,
+    'withdrawn', r.withdrawn);
+END $$;
+
+-- Optional account linking: when an authenticated user opens a link, bind
+-- the roster row to their account so the round reaches their history.
+CREATE OR REPLACE FUNCTION public.link_token_to_user(p_token text)
+RETURNS void LANGUAGE plpgsql SECURITY DEFINER SET search_path = public AS $$
+BEGIN
+  IF auth.uid() IS NULL THEN RETURN; END IF;
+  UPDATE public.tournament_roster
+     SET user_id = auth.uid()
+   WHERE magic_token = p_token AND user_id IS NULL;
+END $$;
+
+-- Full round state visible to the token holder: parties, members, scores,
+-- attestations. Scores are returned for the caller's whole party.
+CREATE OR REPLACE FUNCTION public.get_round_state(p_token text, p_round_id uuid)
+RETURNS jsonb LANGUAGE plpgsql SECURITY DEFINER SET search_path = public AS $$
+DECLARE v_roster uuid; v_party uuid;
+BEGIN
+  SELECT id INTO v_roster FROM public.tournament_roster WHERE magic_token = p_token;
+  IF v_roster IS NULL THEN RAISE EXCEPTION 'invalid token'; END IF;
+  SELECT pm.party_id INTO v_party
+    FROM public.tournament_party_members pm
+    JOIN public.tournament_parties pa ON pa.id = pm.party_id
+   WHERE pm.roster_id = v_roster AND pa.round_id = p_round_id;
+  IF v_party IS NULL THEN RAISE EXCEPTION 'not in this round'; END IF;
+  RETURN jsonb_build_object(
+    'party_id', v_party,
+    'my_roster_id', v_roster,
+    'round', (SELECT to_jsonb(r) FROM public.tournament_rounds r WHERE r.id = p_round_id),
+    'members', (SELECT jsonb_agg(jsonb_build_object(
+                  'roster_id', pm.roster_id, 'seat', pm.seat,
+                  'marks_roster_id', pm.marks_roster_id, 'pair_id', pm.pair_id,
+                  'display_name', ro.display_name, 'handicap', ro.handicap,
+                  'withdrawn', ro.withdrawn) ORDER BY pm.seat)
+                FROM public.tournament_party_members pm
+                JOIN public.tournament_roster ro ON ro.id = pm.roster_id
+               WHERE pm.party_id = v_party),
+    'scores', (SELECT COALESCE(jsonb_agg(jsonb_build_object(
+                  'hole', s.hole, 'subject_roster_id', s.subject_roster_id,
+                  'source', s.source, 'strokes', s.strokes)), '[]'::jsonb)
+                FROM public.tournament_scores s
+                WHERE s.round_id = p_round_id
+                  AND s.subject_roster_id IN (
+                    SELECT roster_id FROM public.tournament_party_members WHERE party_id = v_party)),
+    'attestations', (SELECT COALESCE(jsonb_agg(a.roster_id), '[]'::jsonb)
+                FROM public.tournament_attestations a WHERE a.round_id = p_round_id));
+END $$;
+
+-- Write one score cell. Validates: self => subject is the caller; marker =>
+-- subject is the caller's markee. Rejects writes to a locked party.
+CREATE OR REPLACE FUNCTION public.submit_score(
+  p_token text, p_round_id uuid, p_hole int,
+  p_subject uuid, p_source text, p_strokes int)
+RETURNS void LANGUAGE plpgsql SECURITY DEFINER SET search_path = public AS $$
+DECLARE v_roster uuid; v_party uuid; v_locked boolean; v_markee uuid;
+BEGIN
+  SELECT id INTO v_roster FROM public.tournament_roster WHERE magic_token = p_token;
+  IF v_roster IS NULL THEN RAISE EXCEPTION 'invalid token'; END IF;
+  SELECT pm.party_id, pa.locked, pm.marks_roster_id
+    INTO v_party, v_locked, v_markee
+    FROM public.tournament_party_members pm
+    JOIN public.tournament_parties pa ON pa.id = pm.party_id
+   WHERE pm.roster_id = v_roster AND pa.round_id = p_round_id;
+  IF v_party IS NULL THEN RAISE EXCEPTION 'not in this round'; END IF;
+  IF v_locked THEN RAISE EXCEPTION 'party locked'; END IF;
+  IF p_source NOT IN ('self','marker') THEN RAISE EXCEPTION 'bad source'; END IF;
+  IF p_source = 'self' AND p_subject <> v_roster THEN
+    RAISE EXCEPTION 'self score must be your own'; END IF;
+  IF p_source = 'marker' AND p_subject <> v_markee THEN
+    RAISE EXCEPTION 'marker score must be your markee'; END IF;
+
+  INSERT INTO public.tournament_scores
+    (round_id, hole, subject_roster_id, source, author_roster_id, strokes, updated_at)
+  VALUES (p_round_id, p_hole, p_subject, p_source, v_roster, p_strokes, now())
+  ON CONFLICT (round_id, hole, subject_roster_id, source)
+  DO UPDATE SET strokes = excluded.strokes,
+                author_roster_id = excluded.author_roster_id,
+                updated_at = now();
+  INSERT INTO public.tournament_score_audit
+    (round_id, hole, subject_roster_id, source, strokes, author_roster_id)
+  VALUES (p_round_id, p_hole, p_subject, p_source, p_strokes, v_roster);
+END $$;
+
+-- Attest the caller's own card. Allowed only when none of the caller's holes
+-- are in discrepancy (both entries present and unequal).
+CREATE OR REPLACE FUNCTION public.attest_card(p_token text, p_round_id uuid)
+RETURNS void LANGUAGE plpgsql SECURITY DEFINER SET search_path = public AS $$
+DECLARE v_roster uuid; v_conflicts int;
+BEGIN
+  SELECT id INTO v_roster FROM public.tournament_roster WHERE magic_token = p_token;
+  IF v_roster IS NULL THEN RAISE EXCEPTION 'invalid token'; END IF;
+  SELECT count(*) INTO v_conflicts FROM (
+    SELECT hole FROM public.tournament_scores
+     WHERE round_id = p_round_id AND subject_roster_id = v_roster
+     GROUP BY hole
+    HAVING count(*) FILTER (WHERE source='self')   = 1
+       AND count(*) FILTER (WHERE source='marker') = 1
+       AND max(strokes) FILTER (WHERE source='self')
+         <> max(strokes) FILTER (WHERE source='marker')
+  ) c;
+  IF v_conflicts > 0 THEN RAISE EXCEPTION 'resolve discrepancies first'; END IF;
+  INSERT INTO public.tournament_attestations (round_id, roster_id)
+  VALUES (p_round_id, v_roster) ON CONFLICT DO NOTHING;
+END $$;
+
+GRANT EXECUTE ON FUNCTION public.redeem_token(text)            TO anon, authenticated;
+GRANT EXECUTE ON FUNCTION public.link_token_to_user(text)      TO authenticated;
+GRANT EXECUTE ON FUNCTION public.get_round_state(text,uuid)    TO anon, authenticated;
+GRANT EXECUTE ON FUNCTION public.submit_score(text,uuid,int,uuid,text,int) TO anon, authenticated;
+GRANT EXECUTE ON FUNCTION public.attest_card(text,uuid)        TO anon, authenticated;
