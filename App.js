@@ -40,6 +40,7 @@ import ScorecardScreen from './src/screens/ScorecardScreen';
 import NextRoundScreen from './src/screens/NextRoundScreen';
 import CourseEditorScreen from './src/screens/CourseEditorScreen';
 import EditTournamentScreen from './src/screens/EditTournamentScreen';
+import OfficialSetupScreen from './src/screens/OfficialSetupScreen';
 import PlayersLibraryScreen from './src/screens/PlayersLibraryScreen';
 import CoursesLibraryScreen from './src/screens/CoursesLibraryScreen';
 import CourseLibraryDetailScreen from './src/screens/CourseLibraryDetailScreen';
@@ -268,6 +269,7 @@ function AppNavigator() {
         <Stack.Screen name="NextRound" component={NextRoundScreen} options={{ transitionSpec: { open: { animation: 'timing', config: { duration: 400 } }, close: { animation: 'timing', config: { duration: 300 } } } }} />
         <Stack.Screen name="CourseEditor" component={CourseEditorScreen} />
         <Stack.Screen name="EditTournament" component={EditTournamentScreen} />
+        <Stack.Screen name="OfficialSetup" component={OfficialSetupScreen} />
         <Stack.Screen name="PlayersLibrary" component={PlayersLibraryScreen} />
         <Stack.Screen name="CoursesLibrary" component={CoursesLibraryScreen} />
         <Stack.Screen name="CourseLibraryDetail" component={CourseLibraryDetailScreen} />
