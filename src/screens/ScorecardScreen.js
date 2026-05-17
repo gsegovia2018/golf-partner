@@ -15,6 +15,7 @@ import {
   loadTournament, subscribeTournamentChanges,
   calcStablefordPoints, calcBestWorstBall, pickupStrokes, DEFAULT_SETTINGS,
   matchPlayHolePts, calcExtraShots,
+  sindicatoHolePoints, sindicatoRoundTally,
   roundPairLeaderboard, roundPairClinched,
   isRoundComplete, isTournamentFinished,
   subscribeSyncStatus,
@@ -405,6 +406,7 @@ export default function ScorecardScreen({ navigation, route }) {
     [tournament?.settings],
   );
   const isBestBall = settings.scoringMode === 'bestball';
+  const isSindicato = settings.scoringMode === 'sindicato';
   const liveRound = useMemo(
     () => (round ? { ...round, scores } : null),
     [round, scores],
@@ -525,6 +527,8 @@ export default function ScorecardScreen({ navigation, route }) {
           parPlayed += hole.par;
           if (isMatchPlay) {
             pts += matchPlayHolePts(hole, player.id, players, scores, playerHandicaps) ?? 0;
+          } else if (isSindicato) {
+            pts += sindicatoHolePoints(hole, players, scores, playerHandicaps)?.[player.id] ?? 0;
           } else {
             pts += calcStablefordPoints(hole.par, sc, handicap, hole.strokeIndex);
           }
@@ -1006,7 +1010,9 @@ const HolePage = React.memo(function HolePage({
           const pts = strokes == null ? null
             : mode === 'matchplay'
               ? matchPlayHolePts(pageHole, player.id, players, scores, round.playerHandicaps ?? {})
-              : calcStablefordPoints(pageHole.par, strokes, handicap, pageHole.strokeIndex);
+              : mode === 'sindicato'
+                ? (sindicatoHolePoints(pageHole, players, scores, round.playerHandicaps ?? {})?.[player.id] ?? null)
+                : calcStablefordPoints(pageHole.par, strokes, handicap, pageHole.strokeIndex);
 
           const ptsColor = pts == null ? theme.text.muted
             : pts >= 3 ? theme.scoreColor('excellent')
@@ -1340,6 +1346,7 @@ function ShotDetailPanel({ hole, detail, onChange, theme, s }) {
 
 function HoleView({ round, roundIndex, players, scores, shotDetails, meId, onSetShot, onPickMe, notes, currentHole, hole, isBestBall, bbResult, settings, onStep, onSetScore, onRoundNoteChange, onHoleNoteChange, onPrev, onNext, onGoToHole, onGoBack, onFinish, holeCount, playerTotals, showRunning, getScoreAnim, celebration, celebrationAnim, refreshing, onRefresh }) {
   const { theme } = useTheme();
+  const isSindicato = settings?.scoringMode === 'sindicato';
   // Notes split: the current hole's note plus the shared round-level note.
   const holeNote = notes?.hole?.[currentHole] ?? '';
   const roundNote = notes?.round ?? '';
@@ -1474,7 +1481,9 @@ function HoleView({ round, roundIndex, players, scores, shotDetails, meId, onSet
                 getScoreAnim={getScoreAnim}
                 showRunning={showRunning}
                 playerTotals={playerTotals}
-                mode={settings?.scoringMode === 'matchplay' ? 'matchplay' : isBestBall ? 'bestball' : 'stableford'}
+                mode={settings?.scoringMode === 'matchplay' ? 'matchplay'
+                  : settings?.scoringMode === 'sindicato' ? 'sindicato'
+                  : isBestBall ? 'bestball' : 'stableford'}
               />
             ))}
           </ScrollView>
@@ -1486,6 +1495,8 @@ function HoleView({ round, roundIndex, players, scores, shotDetails, meId, onSet
           total). Solo and Stableford totals respect the eye toggle. */}
       {isBestBall && bbResult ? (
         <MatchPanel bbResult={bbResult} currentHole={currentHole} settings={settings} />
+      ) : isSindicato && players.length === 3 ? (
+        <SindicatoPanel round={round} players={players} scores={scores} />
       ) : showRunning && players.length === 1 ? (
         <SoloTotalsRibbon player={players[0]} stats={playerTotals(players[0])} />
       ) : showRunning ? (
@@ -1759,6 +1770,38 @@ function WinnerBadge({ name }) {
 // Works for both random-partners (2 pair-of-2) and individual stableford
 // (N pair-of-1) — single-member "pairs" naturally produce a per-player
 // ranking through roundPairLeaderboard.
+// Live Sindicato standings, pinned above the bottom controls — mirrors the
+// best-ball MatchPanel / Stableford totals strip. Shows each player's running
+// points (high to low) and the leader / clinch status.
+function SindicatoPanel({ round, players, scores }) {
+  const { theme } = useTheme();
+  const s = useMemo(() => makeStyles(theme), [theme]);
+  const tally = sindicatoRoundTally({ ...round, scores }, players);
+  if (!tally) return null;
+  const { totals, leaderIdx, lead, clinched, holesLeft } = tally;
+  const firstName = (p) => p.name?.split(' ')[0] ?? '—';
+  const leader = leaderIdx != null ? totals[leaderIdx].player : null;
+  const status = clinched && leader
+    ? `${firstName(leader)} has clinched`
+    : leader
+      ? `${firstName(leader)} leads by ${lead}${holesLeft > 0 ? ` · ${holesLeft} to play` : ''}`
+      : `All level${holesLeft > 0 ? ` · ${holesLeft} to play` : ''}`;
+  return (
+    <View style={s.totalsStrip}>
+      <Text style={s.totalStripLabel}>SINDICATO</Text>
+      <View style={s.totalStripRow}>
+        {totals.map(({ player, points }) => (
+          <View key={player.id} style={s.totalStripPlayer}>
+            <Text style={s.totalStripName}>{firstName(player)}</Text>
+            <Text style={s.totalStripPts}>{points}</Text>
+          </View>
+        ))}
+      </View>
+      <Text style={s.sindicatoStatus}>{status}</Text>
+    </View>
+  );
+}
+
 function StablefordWinnerBanner({ round, scores, players }) {
   const pairs = round?.pairs ?? [];
   if (pairs.length < 2) return null;
@@ -1967,6 +2010,9 @@ function NineBlock({
     if (mode === 'matchplay') {
       return matchPlayHolePts(hole, player.id, players, scores, playerHandicaps);
     }
+    if (mode === 'sindicato') {
+      return sindicatoHolePoints(hole, players, scores, playerHandicaps)?.[player.id] ?? null;
+    }
     return calcStablefordPoints(hole.par, str, handicap, hole.strokeIndex);
   };
   const ptsColorFor = (pts) => pts == null ? theme.text.muted
@@ -2124,6 +2170,8 @@ function ScorecardTable({ round, players, scores, onSetScore, mode }) {
       parPlayed += h.par;
       if (mode === 'matchplay') {
         pts += matchPlayHolePts(h, p.id, players, scores, playerHandicaps) ?? 0;
+      } else if (mode === 'sindicato') {
+        pts += sindicatoHolePoints(h, players, scores, playerHandicaps)?.[p.id] ?? 0;
       } else {
         pts += calcStablefordPoints(h.par, v, handicap, h.strokeIndex);
       }
@@ -2202,7 +2250,11 @@ function ScorecardTable({ round, players, scores, onSetScore, mode }) {
         <View style={s.multiTotalCard}>
           <View style={s.multiTotalHeader}>
             <Text style={s.multiTotalLabel}>PAR {coursePar}</Text>
-            <Text style={s.multiTotalLabel}>{mode === 'matchplay' ? 'MATCH PLAY' : 'STABLEFORD'}</Text>
+            <Text style={s.multiTotalLabel}>{
+              mode === 'matchplay' ? 'MATCH PLAY'
+                : mode === 'sindicato' ? 'SINDICATO'
+                : 'STABLEFORD'
+            }</Text>
           </View>
           <View style={s.multiTotalColHeader}>
             <Text style={s.multiTotalColHeaderLabel} />
@@ -2233,6 +2285,7 @@ function GridView({ round, roundIndex, players, scores, isBestBall, bbResult, se
   const { theme } = useTheme();
   const s = useMemo(() => makeStyles(theme), [theme]);
   const mode = settings?.scoringMode === 'matchplay' ? 'matchplay'
+    : settings?.scoringMode === 'sindicato' ? 'sindicato'
     : isBestBall ? 'bestball'
     : 'stableford';
   // Classic pair-vs-pair best-ball scorecard (4 players). Everything else —
@@ -3083,6 +3136,13 @@ function makeStyles(theme) {
       letterSpacing: 1.5,
       marginBottom: 8,
       textTransform: 'uppercase',
+    },
+    sindicatoStatus: {
+      fontFamily: 'PlusJakartaSans-SemiBold',
+      color: theme.text.secondary,
+      fontSize: 11,
+      textAlign: 'center',
+      marginTop: 6,
     },
     totalStripRow: { flexDirection: 'row', justifyContent: 'space-around' },
     totalStripPlayer: { alignItems: 'center', gap: 2 },
