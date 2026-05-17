@@ -1886,29 +1886,28 @@ const RankedRow = React.memo(function RankedRow({ rank, name, primary, sub, isWi
 
 const StablefordRoundCard = React.memo(function StablefordRoundCard({ round, players, clinchedPairIdx, theme, s, showRunning = true }) {
   const pairResults = roundPairLeaderboard(round, players);
-  // Map sorted-leaderboard position back to round.pairs index so we can
-  // tag the winner row with a crown when that pair is mathematically
-  // clinched. The leader row (pi === 0) is always first in pairResults.
+  // Map sorted-leaderboard position back to round.pairs index so the winner
+  // row can be tagged when that pair is mathematically clinched.
   const pairIdxFor = (members) => round.pairs.findIndex((pr) => (
     pr.length === members.length && pr.every((p) => members.some((m) => m.player.id === p.id))
   ));
-  const competitive = pairResults.length > 1;
   return (
     <>
       {pairResults.map((pair, pi) => {
         const origIdx = pairIdxFor(pair.members);
         const isClinched = clinchedPairIdx != null && origIdx === clinchedPairIdx;
         return (
-          <View key={pi} style={[s.pairBlock, showRunning && competitive && pi === 0 && s.winnerBlock]}>
-            {showRunning && competitive && pi === 0 && <Text style={s.winnerBadge}>WINNER</Text>}
-            <View style={s.pairHeader}>
-              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6, flex: 1 }}>
-                <Text style={s.pairNames}>{pair.members.map((m) => m.player.name).join(' & ')}</Text>
-                {showRunning && isClinched && <Feather name="award" size={14} color="#ffd700" />}
-              </View>
-              <Text style={s.pairPoints}>{showRunning ? `${pair.combinedPoints} pts` : '— pts'}</Text>
-            </View>
-          </View>
+          <RankedRow
+            key={pi}
+            rank={pi + 1}
+            name={pair.members.map((m) => m.player.name).join(' & ')}
+            primary={showRunning ? `${pair.combinedPoints} pts` : '— pts'}
+            sub={showRunning ? `${pair.combinedStrokes || '-'} str` : null}
+            isWinner={showRunning && isClinched}
+            isLast={pi === pairResults.length - 1}
+            theme={theme}
+            s={s}
+          />
         );
       })}
     </>
@@ -1951,16 +1950,17 @@ const MatchPlayRoundCard = React.memo(function MatchPlayRoundCard({ round, playe
   return (
     <>
       {rows.map(({ player, wins, isLeader }, i) => (
-        <View key={player.id} style={[s.pairBlock, showRunning && clinched && isLeader && s.winnerBlock]}>
-          {showRunning && clinched && isLeader && <Text style={s.winnerBadge}>WINNER</Text>}
-          <View style={s.pairHeader}>
-            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6, flex: 1 }}>
-              <Text style={s.pairNames}>{player.name}</Text>
-              {showRunning && clinched && isLeader && <Feather name="award" size={14} color="#ffd700" />}
-            </View>
-            <Text style={s.pairPoints}>{showRunning ? `${wins} ${wins === 1 ? 'hole' : 'holes'}` : '—'}</Text>
-          </View>
-        </View>
+        <RankedRow
+          key={player.id}
+          rank={i + 1}
+          name={player.name}
+          primary={showRunning ? `${wins} ${wins === 1 ? 'hole' : 'holes'}` : '—'}
+          sub={null}
+          isWinner={showRunning && clinched && isLeader}
+          isLast={i === rows.length - 1}
+          theme={theme}
+          s={s}
+        />
       ))}
       <Text style={s.pairsPreviewHint}>
         {showRunning ? `${status}${halved > 0 ? ` · ${halved} halved` : ''}` : 'Scores hidden'}
@@ -1976,33 +1976,25 @@ const SindicatoRoundCard = React.memo(function SindicatoRoundCard({ round, playe
   const tally = sindicatoRoundTally(round, players);
   if (!tally) return <Text style={s.pairMember}>No results yet</Text>;
 
-  const { totals, leaderIdx, lead, clinched, holesLeft } = tally;
-  const firstName = (p) => p.name?.split(' ')[0] ?? '—';
-  const leader = leaderIdx != null ? totals[leaderIdx].player : null;
-  const status = clinched && leader
-    ? `${firstName(leader)} wins`
-    : leader
-      ? `${firstName(leader)} leads by ${lead}${holesLeft > 0 ? ` · ${holesLeft} to play` : ''}`
-      : `All level${holesLeft > 0 ? ` · ${holesLeft} to play` : ''}`;
+  const { totals, leaderIdx, clinched } = tally;
+  const strokesOf = (id) =>
+    Object.values(round.scores?.[id] ?? {}).reduce((sum, v) => sum + (v || 0), 0);
 
   return (
     <>
-      {totals.map(({ player, points }, i) => {
-        const isLeader = leaderIdx === i;
-        return (
-          <View key={player.id} style={[s.pairBlock, showRunning && clinched && isLeader && s.winnerBlock]}>
-            {showRunning && clinched && isLeader && <Text style={s.winnerBadge}>WINNER</Text>}
-            <View style={s.pairHeader}>
-              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6, flex: 1 }}>
-                <Text style={s.pairNames}>{player.name}</Text>
-                {showRunning && clinched && isLeader && <Feather name="award" size={14} color="#ffd700" />}
-              </View>
-              <Text style={s.pairPoints}>{showRunning ? `${points} ${points === 1 ? 'pt' : 'pts'}` : '—'}</Text>
-            </View>
-          </View>
-        );
-      })}
-      <Text style={s.pairsPreviewHint}>{showRunning ? status : 'Scores hidden'}</Text>
+      {totals.map(({ player, points }, i) => (
+        <RankedRow
+          key={player.id}
+          rank={i + 1}
+          name={player.name}
+          primary={showRunning ? `${points} ${points === 1 ? 'pt' : 'pts'}` : '—'}
+          sub={showRunning ? `${strokesOf(player.id) || '-'} str` : null}
+          isWinner={showRunning && clinched && leaderIdx === i}
+          isLast={i === totals.length - 1}
+          theme={theme}
+          s={s}
+        />
+      ))}
     </>
   );
 });
@@ -2012,37 +2004,30 @@ const BestBallRoundCard = React.memo(function BestBallRoundCard({ round, players
   if (!result) return <Text style={s.pairMember}>No results yet</Text>;
 
   const { pair1, pair2, bestBall, worstBall } = result;
-  const p1Names = pair1.map((p) => p.name).join(' & ');
-  const p2Names = pair2.map((p) => p.name).join(' & ');
-
   const p1Points = bestBall.pair1 * settings.bestBallValue + worstBall.pair1 * settings.worstBallValue;
   const p2Points = bestBall.pair2 * settings.bestBallValue + worstBall.pair2 * settings.worstBallValue;
-  const winner = p1Points > p2Points ? 1 : p2Points > p1Points ? 2 : 0;
-  const p1Clinched = clinchedPairIdx === 0;
-  const p2Clinched = clinchedPairIdx === 1;
+
+  // Rank the two pairs by total points so the leader is row 1.
+  const entries = [
+    { idx: 0, name: pair1.map((p) => p.name).join(' & '), points: p1Points },
+    { idx: 1, name: pair2.map((p) => p.name).join(' & '), points: p2Points },
+  ].sort((a, b) => b.points - a.points);
 
   return (
     <>
-      <View style={[s.pairBlock, showRunning && winner === 1 && s.winnerBlock]}>
-        {showRunning && winner === 1 && <Text style={s.winnerBadge}>WINNER</Text>}
-        <View style={s.pairHeader}>
-          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6, flex: 1 }}>
-            <Text style={s.pairNames}>{p1Names}</Text>
-            {showRunning && p1Clinched && <Feather name="award" size={14} color="#ffd700" />}
-          </View>
-          <Text style={s.pairPoints}>{showRunning ? `${p1Points} pts` : '— pts'}</Text>
-        </View>
-      </View>
-      <View style={[s.pairBlock, showRunning && winner === 2 && s.winnerBlock]}>
-        {showRunning && winner === 2 && <Text style={s.winnerBadge}>WINNER</Text>}
-        <View style={s.pairHeader}>
-          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6, flex: 1 }}>
-            <Text style={s.pairNames}>{p2Names}</Text>
-            {showRunning && p2Clinched && <Feather name="award" size={14} color="#ffd700" />}
-          </View>
-          <Text style={s.pairPoints}>{showRunning ? `${p2Points} pts` : '— pts'}</Text>
-        </View>
-      </View>
+      {entries.map((e, i) => (
+        <RankedRow
+          key={e.idx}
+          rank={i + 1}
+          name={e.name}
+          primary={showRunning ? `${e.points} pts` : '— pts'}
+          sub={null}
+          isWinner={showRunning && clinchedPairIdx === e.idx}
+          isLast={i === entries.length - 1}
+          theme={theme}
+          s={s}
+        />
+      ))}
     </>
   );
 });
