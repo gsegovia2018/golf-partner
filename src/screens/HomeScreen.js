@@ -1851,7 +1851,7 @@ const PairsPreviewCard = React.memo(function PairsPreviewCard({ pairs, theme, s 
 // theme-aware so it is legible on the normal card background. Ranks 1/2/3 get
 // gold/silver/bronze badges; the winner row also gets a left gold border and
 // an award icon. `sub` is an optional right-aligned muted value (e.g. strokes).
-function RankedRow({ rank, name, primary, sub, isWinner, isLast, theme, s }) {
+const RankedRow = React.memo(function RankedRow({ rank, name, primary, sub, isWinner, isLast, theme, s }) {
   const rankColors = ['#ffd700', '#c0c8d4', '#daa06d'];
   const rankColor = rankColors[rank - 1] || theme.text.muted;
   const rankBg = rank === 1 ? 'rgba(255,215,0,0.18)'
@@ -1882,7 +1882,7 @@ function RankedRow({ rank, name, primary, sub, isWinner, isLast, theme, s }) {
       <Text style={s.rankedSub}>{sub ?? ''}</Text>
     </View>
   );
-}
+});
 
 const StablefordRoundCard = React.memo(function StablefordRoundCard({ round, players, clinchedPairIdx, theme, s, showRunning = true }) {
   const pairResults = roundPairLeaderboard(round, players);
