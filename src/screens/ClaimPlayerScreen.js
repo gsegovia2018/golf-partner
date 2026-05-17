@@ -3,7 +3,7 @@ import {
   View, Text, TextInput, TouchableOpacity, ScrollView,
   StyleSheet, Alert, ActivityIndicator,
 } from 'react-native';
-import { SafeAreaView } from 'react-native-safe-area-context';
+import ScreenContainer from '../components/ScreenContainer';
 import { Feather } from '@expo/vector-icons';
 import { v4 as uuidv4 } from 'uuid';
 import { useTheme } from '../theme/ThemeContext';
@@ -113,7 +113,7 @@ export default function ClaimPlayerScreen({ navigation, route }) {
     && players.every((p) => p.user_id && p.user_id !== profile?.userId);
 
   return (
-    <SafeAreaView style={s.screen} edges={['top', 'bottom']}>
+    <ScreenContainer style={s.screen} edges={['top', 'bottom']}>
       <View style={s.header}>
         <TouchableOpacity onPress={done} style={s.backBtn} activeOpacity={0.7}>
           <Feather name="chevron-left" size={22} color={theme.accent.primary} />
@@ -237,7 +237,7 @@ export default function ClaimPlayerScreen({ navigation, route }) {
           </View>
         </ScrollView>
       )}
-    </SafeAreaView>
+    </ScreenContainer>
   );
 }
 

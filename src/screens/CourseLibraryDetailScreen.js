@@ -3,7 +3,7 @@ import {
   ActivityIndicator, Alert, ScrollView, StyleSheet,
   Text, TextInput, TouchableOpacity, View,
 } from 'react-native';
-import { SafeAreaView } from 'react-native-safe-area-context';
+import ScreenContainer from '../components/ScreenContainer';
 import { Feather } from '@expo/vector-icons';
 
 import { useTheme } from '../theme/ThemeContext';
@@ -83,14 +83,14 @@ export default function CourseLibraryDetailScreen({ navigation, route }) {
 
   if (loading) {
     return (
-      <SafeAreaView style={s.centered} edges={['top', 'bottom']}>
+      <ScreenContainer style={s.centered} edges={['top', 'bottom']}>
         <ActivityIndicator color={theme.accent.primary} />
-      </SafeAreaView>
+      </ScreenContainer>
     );
   }
 
   return (
-    <SafeAreaView style={s.container} edges={['top', 'bottom']}>
+    <ScreenContainer style={s.container} edges={['top', 'bottom']}>
       <View style={s.header}>
         <TouchableOpacity onPress={() => navigation.goBack()} style={s.backBtn}>
           <Feather name="chevron-left" size={22} color={theme.accent.primary} />
@@ -213,7 +213,7 @@ export default function CourseLibraryDetailScreen({ navigation, route }) {
           <Text style={s.saveBtnText}>{saving ? 'Saving...' : 'Save course'}</Text>
         </TouchableOpacity>
       </ScrollView>
-    </SafeAreaView>
+    </ScreenContainer>
   );
 }
 

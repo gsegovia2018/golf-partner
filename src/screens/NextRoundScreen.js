@@ -7,7 +7,7 @@ import {
   TouchableOpacity,
   View,
 } from 'react-native';
-import { SafeAreaView } from 'react-native-safe-area-context';
+import ScreenContainer from '../components/ScreenContainer';
 import { Feather } from '@expo/vector-icons';
 import {
   loadTournament, randomPairs, saveTournament, subscribeTournamentChanges,
@@ -101,7 +101,7 @@ export default function NextRoundScreen({ navigation, route }) {
   // Explicit load failure — never a blank screen. Keep a working back button.
   if (loadState === 'error' && !tournament) {
     return (
-      <SafeAreaView style={s.container} edges={['top', 'bottom']}>
+      <ScreenContainer style={s.container} edges={['top', 'bottom']}>
         <View style={s.header}>
           <TouchableOpacity onPress={() => navigation.goBack()} style={s.backBtn}>
             <Feather name="chevron-left" size={22} color={theme.accent.primary} />
@@ -118,14 +118,14 @@ export default function NextRoundScreen({ navigation, route }) {
             <Text style={s.retryBtnText}>Retry</Text>
           </TouchableOpacity>
         </View>
-      </SafeAreaView>
+      </ScreenContainer>
     );
   }
 
   // Loading state — never a blank screen. Keep a working back button.
   if (!tournament || !nextPairs) {
     return (
-      <SafeAreaView style={s.container} edges={['top', 'bottom']}>
+      <ScreenContainer style={s.container} edges={['top', 'bottom']}>
         <View style={s.header}>
           <TouchableOpacity onPress={() => navigation.goBack()} style={s.backBtn}>
             <Feather name="chevron-left" size={22} color={theme.accent.primary} />
@@ -137,7 +137,7 @@ export default function NextRoundScreen({ navigation, route }) {
           <ActivityIndicator color={theme.accent.primary} />
           <Text style={s.loadingText}>Loading…</Text>
         </View>
-      </SafeAreaView>
+      </ScreenContainer>
     );
   }
 
@@ -257,7 +257,7 @@ export default function NextRoundScreen({ navigation, route }) {
   /* ─── Countdown phase ─── */
   if (phase === 'countdown') {
     return (
-      <SafeAreaView style={s.fullscreen} edges={['top', 'bottom']}>
+      <ScreenContainer style={s.fullscreen} edges={['top', 'bottom']}>
         <TouchableOpacity
           activeOpacity={1}
           style={s.countdownTapTarget}
@@ -279,7 +279,7 @@ export default function NextRoundScreen({ navigation, route }) {
           </View>
           <Text style={s.skipHint}>Tap to skip</Text>
         </TouchableOpacity>
-      </SafeAreaView>
+      </ScreenContainer>
     );
   }
 
@@ -288,7 +288,7 @@ export default function NextRoundScreen({ navigation, route }) {
     ensurePairAnims(nextPairs.length);
     const pairColors = [theme.pairA, theme.pairB, theme.accent.primary, theme.accent.primary];
     return (
-      <SafeAreaView style={s.revealContainer} edges={['top', 'bottom']}>
+      <ScreenContainer style={s.revealContainer} edges={['top', 'bottom']}>
         <View style={s.pairsContainer}>
           {nextPairs.map((pair, i) => {
             const anim = pairAnimsRef.current[i];
@@ -356,13 +356,13 @@ export default function NextRoundScreen({ navigation, route }) {
             </Text>
           </TouchableOpacity>
         </View>
-      </SafeAreaView>
+      </ScreenContainer>
     );
   }
 
   /* ─── Initial phase ─── */
   return (
-    <SafeAreaView style={s.container} edges={['top', 'bottom']}>
+    <ScreenContainer style={s.container} edges={['top', 'bottom']}>
       <View style={s.header}>
         <TouchableOpacity onPress={() => navigation.goBack()} style={s.backBtn}>
           <Feather name="chevron-left" size={22} color={theme.accent.primary} />
@@ -387,7 +387,7 @@ export default function NextRoundScreen({ navigation, route }) {
           <Text style={s.skipBtnText}>Skip</Text>
         </TouchableOpacity>
       </View>
-    </SafeAreaView>
+    </ScreenContainer>
   );
 }
 

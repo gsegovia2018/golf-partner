@@ -3,7 +3,7 @@ import {
   View, Text, TouchableOpacity, ScrollView, StyleSheet, Alert,
   ActivityIndicator,
 } from 'react-native';
-import { SafeAreaView } from 'react-native-safe-area-context';
+import ScreenContainer from '../components/ScreenContainer';
 import { Feather } from '@expo/vector-icons';
 import { useTheme } from '../theme/ThemeContext';
 import { useTournamentMedia } from '../hooks/useTournamentMedia';
@@ -262,7 +262,7 @@ export default function GalleryScreen({ route, navigation }) {
   };
 
   return (
-    <SafeAreaView style={s.container} edges={['top', 'bottom']}>
+    <ScreenContainer style={s.container} edges={['top', 'bottom']}>
       <View style={s.header}>
         <TouchableOpacity onPress={() => navigation.goBack()} style={s.backBtn}>
           <Feather name="chevron-left" size={22} color={theme.accent.primary} />
@@ -313,7 +313,7 @@ export default function GalleryScreen({ route, navigation }) {
         onCancel={() => setBatchAssets(null)}
         onConfirm={onBatchConfirm}
       />
-    </SafeAreaView>
+    </ScreenContainer>
   );
 }
 

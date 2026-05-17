@@ -3,7 +3,7 @@ import {
   View, Text, TextInput, TouchableOpacity, StyleSheet, ScrollView,
   ActivityIndicator, Alert, Platform, Switch, Image,
 } from 'react-native';
-import { SafeAreaView } from 'react-native-safe-area-context';
+import ScreenContainer from '../components/ScreenContainer';
 import { useFocusEffect } from '@react-navigation/native';
 import { Feather } from '@expo/vector-icons';
 import * as ImagePicker from 'expo-image-picker';
@@ -196,7 +196,7 @@ export default function ProfileScreen({ navigation }) {
   const resolvedAvatarColor = avatarColor || AVATAR_COLORS[0];
 
   return (
-    <SafeAreaView style={s.screen} edges={['top', 'bottom']}>
+    <ScreenContainer style={s.screen} edges={['top', 'bottom']}>
       <View style={s.header}>
         <TouchableOpacity onPress={handleBack} style={s.backBtn} activeOpacity={0.7}>
           <Feather name="chevron-left" size={22} color={theme.accent.primary} />
@@ -434,7 +434,7 @@ export default function ProfileScreen({ navigation }) {
           </TouchableOpacity>
         </ScrollView>
       )}
-    </SafeAreaView>
+    </ScreenContainer>
   );
 }
 
