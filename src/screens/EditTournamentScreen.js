@@ -13,6 +13,7 @@ import {
 } from '../store/tournamentStore';
 import { mutate } from '../store/mutate';
 import ScoringModePicker, { isScoringModeAllowed, fallbackScoringMode } from '../components/ScoringModePicker';
+import { scoringModeUsesTeams } from '../components/scoringModes';
 
 async function confirmDialog(title, message, confirmLabel = 'Remove') {
   if (Platform.OS === 'web') return window.confirm(`${title}\n\n${message}`);
@@ -225,11 +226,9 @@ export default function EditTournamentScreen({ navigation }) {
       // partners. Without this an individual tournament would suddenly
       // sprout random partners on its added round.
       const mode = settings?.scoringMode;
-      const pairs = mode === 'individual'
-        ? builtPlayers.map((p) => [p])
-        : (mode === 'matchplay' && builtPlayers.length === 2)
-          ? [[builtPlayers[0]], [builtPlayers[1]]]
-          : randomPairs(builtPlayers);
+      const pairs = scoringModeUsesTeams(mode)
+        ? randomPairs(builtPlayers)
+        : builtPlayers.map((p) => [p]);
       const newRound = {
         id: `r${Date.now()}`,
         courseName: '',
@@ -380,6 +379,11 @@ export default function EditTournamentScreen({ navigation }) {
                 value={r.courseName}
                 onChangeText={(v) => updateCourseName(ri, v)}
               />
+              {r.courseId ? (
+                <Text style={s.courseNameHint}>
+                  Renames this round only — the course saved in your library is unchanged.
+                </Text>
+              ) : null}
               {players.map((p) => (
                 <View key={p.id} style={s.hcpRow}>
                   <Text style={s.hcpRowName}>{p.name}</Text>
@@ -486,6 +490,10 @@ const makeStyles = (theme) => StyleSheet.create({
     letterSpacing: 1.8, textTransform: 'uppercase',
   },
   hint: { fontFamily: 'PlusJakartaSans-Regular', color: theme.text.muted, fontSize: 12, marginBottom: 10 },
+  courseNameHint: {
+    fontFamily: 'PlusJakartaSans-Regular', color: theme.text.muted,
+    fontSize: 11, marginTop: -2, marginBottom: 10,
+  },
   playerCard: {
     flexDirection: 'row', alignItems: 'center',
     backgroundColor: theme.bg.card, borderRadius: 16, borderWidth: 1,

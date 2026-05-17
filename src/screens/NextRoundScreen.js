@@ -12,6 +12,7 @@ import { Feather } from '@expo/vector-icons';
 import {
   loadTournament, randomPairs, saveTournament, subscribeTournamentChanges,
 } from '../store/tournamentStore';
+import { scoringModeUsesTeams } from '../components/scoringModes';
 import { useTheme } from '../theme/ThemeContext';
 
 export default function NextRoundScreen({ navigation, route }) {
@@ -54,11 +55,9 @@ export default function NextRoundScreen({ navigation, route }) {
   // those modes; everything else still randomises partners each round.
   const buildPairsForRound = (t) => {
     const mode = t?.settings?.scoringMode;
-    if (mode === 'individual') return t.players.map((p) => [p]);
-    if (mode === 'matchplay' && t.players.length === 2) {
-      return [[t.players[0]], [t.players[1]]];
-    }
-    return randomPairs(t.players);
+    return scoringModeUsesTeams(mode)
+      ? randomPairs(t.players)
+      : t.players.map((p) => [p]);
   };
 
   useEffect(() => {
@@ -145,10 +144,12 @@ export default function NextRoundScreen({ navigation, route }) {
   const roundIndex = revealOnly ? paramRoundIndex : tournament.currentRound + 1;
   const round = tournament.rounds[roundIndex];
 
-  // Random partners only apply to pairs-of-2 modes. Individual Stableford and
-  // Match Play build solo "pairs", so there is nothing to re-shuffle.
+  // Teams (assigned/revealed partners) only exist in team modes. Solo modes
+  // (Stableford, Match Play) build single-member "pairs", so there is nothing
+  // to re-shuffle and the screen avoids "Teams" wording for them.
   const mode = tournament?.settings?.scoringMode;
-  const canReshuffle = mode !== 'individual' && mode !== 'matchplay';
+  const usesTeams = scoringModeUsesTeams(mode, tournament?.players?.length);
+  const canReshuffle = usesTeams;
 
   function startReveal() {
     setPhase('countdown');
@@ -375,7 +376,7 @@ export default function NextRoundScreen({ navigation, route }) {
         <Text style={s.course}>{round.courseName}</Text>
 
         <TouchableOpacity style={s.revealBtn} onPress={startReveal}>
-          <Text style={s.revealBtnText}>Reveal Teams</Text>
+          <Text style={s.revealBtnText}>{usesTeams ? 'Reveal Teams' : 'Reveal Round'}</Text>
         </TouchableOpacity>
 
         <TouchableOpacity

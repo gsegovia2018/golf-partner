@@ -12,6 +12,7 @@ import { defaultHoles, fetchCourses, fetchPlayers } from '../store/libraryStore'
 import { consumePendingPlayers, consumePendingCourses } from '../lib/selectionBridge';
 import { useTheme } from '../theme/ThemeContext';
 import ScoringModePicker, { isScoringModeAllowed, fallbackScoringMode } from '../components/ScoringModePicker';
+import { scoringModeUsesTeams } from '../components/scoringModes';
 
 // Stable id for a round so React keys / removal survive reordering.
 let _roundIdSeq = 0;
@@ -213,12 +214,11 @@ export default function SetupScreen({ navigation, route }) {
     // math naturally treats each player as their own "pair" and ranks them
     // 1-vs-1 (match play) or by individual points (individual stableford).
     const isMatchPlay = settings.scoringMode === 'matchplay';
-    const isIndividual = settings.scoringMode === 'individual';
-    const buildPairs = () => {
-      if (isMatchPlay && players.length === 2) return [[players[0]], [players[1]]];
-      if (isIndividual) return players.map((p) => [p]);
-      return randomPairs(players);
-    };
+    const buildPairs = () => (
+      scoringModeUsesTeams(settings.scoringMode)
+        ? randomPairs(players)
+        : players.map((p) => [p])
+    );
 
     const builtRounds = rounds.map((r, i) => {
       // Auto-derive WHS playing handicaps when the user never opened
@@ -370,7 +370,7 @@ export default function SetupScreen({ navigation, route }) {
                 <>
                   <TextInput
                     style={s.input}
-                    placeholder="Override course name"
+                    placeholder="Course name"
                     placeholderTextColor={theme.text.muted}
                     keyboardAppearance={theme.isDark ? 'dark' : 'light'}
                     selectionColor={theme.accent.primary}
