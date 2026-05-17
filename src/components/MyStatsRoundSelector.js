@@ -70,6 +70,9 @@ export default function MyStatsRoundSelector({ visible, myRounds, overrides, onC
                       style={s.row}
                       onPress={() => setRound(r, !on)}
                       activeOpacity={0.7}
+                      accessibilityRole="checkbox"
+                      accessibilityState={{ checked: on }}
+                      accessibilityLabel={`Round ${r.roundIndex + 1}, ${r.courseName}${r.completed ? '' : ', in progress'}`}
                     >
                       <Feather
                         name={on ? 'check-square' : 'square'}
@@ -101,7 +104,7 @@ export default function MyStatsRoundSelector({ visible, myRounds, overrides, onC
 
 function makeStyles(theme) {
   return StyleSheet.create({
-    backdrop: { flex: 1, backgroundColor: 'rgba(0,0,0,0.4)', justifyContent: 'flex-end' },
+    backdrop: { flex: 1, backgroundColor: 'rgba(0,0,0,0.5)', justifyContent: 'flex-end' },
     sheet: {
       backgroundColor: theme.bg.elevated,
       borderTopLeftRadius: theme.radius.xl, borderTopRightRadius: theme.radius.xl,
