@@ -406,7 +406,6 @@ export default function ScorecardScreen({ navigation, route }) {
     [tournament?.settings],
   );
   const isBestBall = settings.scoringMode === 'bestball';
-  const isSindicato = settings.scoringMode === 'sindicato';
   const liveRound = useMemo(
     () => (round ? { ...round, scores } : null),
     [round, scores],
@@ -514,6 +513,7 @@ export default function ScorecardScreen({ navigation, route }) {
     const map = new Map();
     if (!round) return map;
     const isMatchPlay = settings.scoringMode === 'matchplay';
+    const isSindicato = settings.scoringMode === 'sindicato';
     const playerHandicaps = round.playerHandicaps ?? {};
     players.forEach((player) => {
       const handicap = playerHandicaps[player.id] ?? player.handicap ?? 0;

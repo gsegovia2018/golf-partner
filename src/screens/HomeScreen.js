@@ -528,12 +528,19 @@ export default function HomeScreen({ navigation, route }) {
   );
   const selectedRoundData = tournament?.rounds?.[selectedRound] ?? null;
   const selectedRoundHasScores = !!(selectedRoundData?.scores && Object.keys(selectedRoundData.scores).length > 0);
-  const selectedRoundPlayerTotals = useMemo(
-    () => (tournament && selectedRoundData && selectedRoundHasScores && !leaderboardBestBall
-      ? roundTotals(selectedRoundData, tournament.players)
-      : null),
-    [tournament, selectedRoundData, selectedRoundHasScores, leaderboardBestBall],
-  );
+  const selectedRoundPlayerTotals = useMemo(() => {
+    if (!tournament || !selectedRoundData || !selectedRoundHasScores || leaderboardBestBall) return null;
+    if (settings.scoringMode === 'sindicato') {
+      const tally = sindicatoRoundTally(selectedRoundData, tournament.players);
+      if (!tally) return null;
+      return tally.totals.map(({ player, points }) => {
+        const totalStrokes = Object.values(selectedRoundData.scores?.[player.id] ?? {})
+          .reduce((sum, v) => sum + (v || 0), 0);
+        return { player, totalPoints: points, totalStrokes };
+      });
+    }
+    return roundTotals(selectedRoundData, tournament.players);
+  }, [tournament, selectedRoundData, selectedRoundHasScores, leaderboardBestBall, settings.scoringMode]);
   const selectedRoundBB = useMemo(
     () => (tournament && selectedRoundData && selectedRoundHasScores && leaderboardBestBall && selectedRoundData.pairs?.length
       ? calcBestWorstBall(selectedRoundData, tournament.players)
