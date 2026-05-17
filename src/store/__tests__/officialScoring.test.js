@@ -1,4 +1,4 @@
-import { assignRoundRobinMarkers, autoBalanceParties, pairAverageHandicap, balancePartiesFromPairs, scoreCellState, cardDiscrepancyHoles } from '../officialScoring';
+import { assignRoundRobinMarkers, autoBalanceParties, pairAverageHandicap, balancePartiesFromPairs, scoreCellState, cardDiscrepancyHoles, activeMarkerChain } from '../officialScoring';
 
 describe('assignRoundRobinMarkers', () => {
   test('each seat marks the next, last wraps to first', () => {
@@ -101,5 +101,24 @@ describe('discrepancy state', () => {
     ];
     expect(cardDiscrepancyHoles(scores, 'a')).toEqual([2]);
     expect(cardDiscrepancyHoles(scores, 'b')).toEqual([4]);
+  });
+});
+
+describe('activeMarkerChain', () => {
+  const members = [
+    { rosterId: 'a', seat: 1 }, { rosterId: 'b', seat: 2 },
+    { rosterId: 'c', seat: 3 }, { rosterId: 'd', seat: 4 },
+  ];
+
+  test('with no withdrawals it equals the full round-robin', () => {
+    expect(activeMarkerChain(members, []).map((m) => m.marksRosterId))
+      .toEqual(['b', 'c', 'd', 'a']);
+  });
+
+  test('a withdrawn player is skipped on both sides of the chain', () => {
+    const chain = activeMarkerChain(members, ['c']);
+    expect(chain.map((m) => m.rosterId)).toEqual(['a', 'b', 'd']);
+    expect(chain.find((m) => m.rosterId === 'b').marksRosterId).toBe('d');
+    expect(chain.find((m) => m.rosterId === 'd').marksRosterId).toBe('a');
   });
 });

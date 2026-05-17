@@ -96,3 +96,11 @@ export function cardDiscrepancyHoles(scores, subjectRosterId) {
     .map(([hole]) => hole)
     .sort((a, b) => a - b);
 }
+
+// Round-robin chain over only the players still in the round. Withdrawn
+// players drop out and the chain re-closes around the remainder.
+export function activeMarkerChain(members, withdrawnRosterIds = []) {
+  const withdrawn = new Set(withdrawnRosterIds);
+  const active = members.filter((m) => !withdrawn.has(m.rosterId));
+  return assignRoundRobinMarkers(active);
+}
