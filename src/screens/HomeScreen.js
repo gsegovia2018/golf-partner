@@ -905,6 +905,16 @@ export default function HomeScreen({ navigation, route }) {
               </TouchableOpacity>
 
               <TouchableOpacity
+                style={s.menuItem}
+                onPress={() => { setShowListMenu(false); navigation.navigate('OfficialSetup'); }}
+                activeOpacity={0.7}
+              >
+                <Feather name="award" size={18} color={theme.accent.primary} />
+                <Text style={s.menuItemText}>Official Tournament</Text>
+                <Feather name="chevron-right" size={16} color={theme.text.muted} />
+              </TouchableOpacity>
+
+              <TouchableOpacity
                 style={[s.menuItem, { borderBottomWidth: 0 }]}
                 onPress={() => { setShowListMenu(false); navigation.navigate('Profile'); }}
                 activeOpacity={0.7}
@@ -1037,6 +1047,7 @@ export default function HomeScreen({ navigation, route }) {
         onRefresh={onRefresh}
       >
 
+      {tournament.players.length >= 2 && (
       <View style={s.mastersCard}>
         <View style={s.cardTitleRow}>
           <Text style={s.mastersCardTitle}>LEADERBOARD</Text>
@@ -1094,6 +1105,7 @@ export default function HomeScreen({ navigation, route }) {
           <Text style={s.mastersMatchStatus}>{matchPlayStandings.status}</Text>
         )}
       </View>
+      )}
 
       {tournament.rounds.length > 0 && (
         <View style={s.card}>
