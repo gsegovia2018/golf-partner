@@ -239,7 +239,12 @@ export default function PartyBoardScreen({ route, navigation }) {
       else Alert.alert('Saved', 'Parties saved.');
     } catch (e) {
       if (!mountedRef.current) return;
-      showError(e?.message);
+      // persist() is non-atomic, but a plain retry of Save is self-healing
+      // because saveParties does a full delete + re-insert.
+      showError(
+        "Couldn't fully save the parties. Some changes may not have been "
+        + 'stored — tap Save to try again.',
+      );
     } finally {
       if (mountedRef.current) setSaving(false);
     }
@@ -247,6 +252,19 @@ export default function PartyBoardScreen({ route, navigation }) {
 
   async function handleStart() {
     if (saving || starting) return;
+
+    // Pre-flight checks: starting a round locks the parties and cannot be
+    // undone from this screen. Withdrawn players may stay unassigned.
+    const unassignedActive = unassigned.filter((r) => !r.withdrawn);
+    if (unassignedActive.length > 0) {
+      showError('Assign every player to a party before starting the round.');
+      return;
+    }
+    if (parties.some((p) => p.length === 0)) {
+      showError('Remove empty parties before starting the round.');
+      return;
+    }
+
     setStarting(true);
     try {
       await persist();
@@ -255,7 +273,12 @@ export default function PartyBoardScreen({ route, navigation }) {
       navigation.navigate('OfficialAdmin', { tournamentId });
     } catch (e) {
       if (!mountedRef.current) return;
-      showError(e?.message);
+      // persist() is non-atomic, but a plain retry of Save is self-healing
+      // because saveParties does a full delete + re-insert.
+      showError(
+        "Couldn't fully save the parties. Some changes may not have been "
+        + 'stored — tap Save to try again.',
+      );
     } finally {
       if (mountedRef.current) setStarting(false);
     }
