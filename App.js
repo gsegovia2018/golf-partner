@@ -42,6 +42,7 @@ import CourseEditorScreen from './src/screens/CourseEditorScreen';
 import EditTournamentScreen from './src/screens/EditTournamentScreen';
 import OfficialSetupScreen from './src/screens/OfficialSetupScreen';
 import PartyBoardScreen from './src/screens/PartyBoardScreen';
+import JoinOfficialScreen from './src/screens/JoinOfficialScreen';
 import PlayersLibraryScreen from './src/screens/PlayersLibraryScreen';
 import CoursesLibraryScreen from './src/screens/CoursesLibraryScreen';
 import CourseLibraryDetailScreen from './src/screens/CourseLibraryDetailScreen';
@@ -272,6 +273,7 @@ function AppNavigator() {
         <Stack.Screen name="EditTournament" component={EditTournamentScreen} />
         <Stack.Screen name="OfficialSetup" component={OfficialSetupScreen} />
         <Stack.Screen name="PartyBoard" component={PartyBoardScreen} />
+        <Stack.Screen name="JoinOfficial" component={JoinOfficialScreen} />
         <Stack.Screen name="PlayersLibrary" component={PlayersLibraryScreen} />
         <Stack.Screen name="CoursesLibrary" component={CoursesLibraryScreen} />
         <Stack.Screen name="CourseLibraryDetail" component={CourseLibraryDetailScreen} />
@@ -292,6 +294,19 @@ function AppNavigator() {
     </>
   );
 }
+
+// Deep-link config: maps the web URL path `join/:token` to the JoinOfficial
+// route so magic invite links open the redeem flow directly.
+const linking = {
+  prefixes: [typeof window !== 'undefined' && window.location?.origin
+    ? window.location.origin
+    : 'https://golf.app'],
+  config: {
+    screens: {
+      JoinOfficial: 'join/:token',
+    },
+  },
+};
 
 export default function App() {
   const [fontsLoaded] = useFonts({
@@ -323,7 +338,7 @@ export default function App() {
       <ErrorBoundary>
         <ThemeProvider>
           <AuthProvider>
-            <NavigationContainer>
+            <NavigationContainer linking={linking}>
               <AppNavigator />
             </NavigationContainer>
           </AuthProvider>
