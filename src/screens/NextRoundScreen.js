@@ -55,7 +55,7 @@ export default function NextRoundScreen({ navigation, route }) {
   // those modes; everything else still randomises partners each round.
   const buildPairsForRound = (t) => {
     const mode = t?.settings?.scoringMode;
-    return scoringModeUsesTeams(mode)
+    return scoringModeUsesTeams(mode, t.players?.length)
       ? randomPairs(t.players)
       : t.players.map((p) => [p]);
   };

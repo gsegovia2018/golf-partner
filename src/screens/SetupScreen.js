@@ -209,13 +209,13 @@ export default function SetupScreen({ navigation, route }) {
       return;
     }
 
-    // Match play and Individual Stableford both use solo-pairs
-    // ([[p1], [p2], …]) so the existing pair-based leaderboard / best-ball
-    // math naturally treats each player as their own "pair" and ranks them
-    // 1-vs-1 (match play) or by individual points (individual stableford).
+    // Pairs are built from the scoring mode: team modes get random pairs,
+    // every solo mode (including match play and sindicato) gets one
+    // singleton pair per player. scoringModeUsesTeams is the single source
+    // of truth, so new solo modes need no change here.
     const isMatchPlay = settings.scoringMode === 'matchplay';
     const buildPairs = () => (
-      scoringModeUsesTeams(settings.scoringMode)
+      scoringModeUsesTeams(settings.scoringMode, players.length)
         ? randomPairs(players)
         : players.map((p) => [p])
     );

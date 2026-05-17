@@ -221,12 +221,10 @@ export default function EditTournamentScreen({ navigation }) {
   function addRound() {
     setRounds((prev) => {
       const builtPlayers = players.map((p) => ({ ...p, handicap: parseInt(p.handicap, 10) || 0 }));
-      // Match each tournament's pair structure: individual stableford + 2-
-      // player match play use solo-pairs; everything else gets random
-      // partners. Without this an individual tournament would suddenly
-      // sprout random partners on its added round.
+      // Team modes get random pairs; solo modes get one singleton pair per
+      // player. scoringModeUsesTeams keeps this in lockstep with the mode list.
       const mode = settings?.scoringMode;
-      const pairs = scoringModeUsesTeams(mode)
+      const pairs = scoringModeUsesTeams(mode, builtPlayers.length)
         ? randomPairs(builtPlayers)
         : builtPlayers.map((p) => [p]);
       const newRound = {
