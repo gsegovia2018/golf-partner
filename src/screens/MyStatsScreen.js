@@ -119,6 +119,7 @@ export default function MyStatsScreen({ navigation }) {
           activeOpacity={0.7}
           accessibilityRole="tab"
           accessibilityState={{ selected: tab === t.key }}
+          accessibilityLabel={t.label}
         >
           <Text style={[s.tabText, tab === t.key && s.tabTextActive]}>{t.label}</Text>
         </TouchableOpacity>
@@ -514,7 +515,7 @@ function makeStyles(theme) {
     roundsBtnText: { ...theme.typography.caption, color: theme.accent.primary, fontWeight: '700' },
     tabBar: {
       flexDirection: 'row', gap: 6,
-      paddingHorizontal: theme.spacing.lg, paddingTop: theme.spacing.sm,
+      paddingHorizontal: theme.spacing.lg, paddingVertical: theme.spacing.sm,
     },
     tab: {
       paddingVertical: 6, paddingHorizontal: 14,
