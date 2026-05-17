@@ -868,6 +868,7 @@ export function roundPairClinched(round, players, settings, mode) {
 // user has not yet advanced to.
 export function tournamentPlayerClinched(tournament, mode) {
   if (mode === 'sindicato') return tournamentSindicatoClinched(tournament);
+  if (mode === 'matchplay') return null;
   const { players, rounds, settings } = tournament;
   const lb = mode === 'bestball'
     ? tournamentBestWorstLeaderboard(tournament)

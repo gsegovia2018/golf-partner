@@ -969,6 +969,13 @@ export default function HomeScreen({ navigation, route }) {
   const strokesByPlayer = Object.fromEntries(leaderboard.map((e) => [e.player.id, e.strokes]));
   const displayedBoard = leaderboardBestBall && bestWorstLeaderboard ? bestWorstLeaderboard : leaderboard;
   const getSelectedRoundValue = (playerId) => {
+    if (settings.scoringMode === 'matchplay') {
+      if (!selectedRoundData || !selectedRoundHasScores) return null;
+      const tally = matchPlayRoundTally(selectedRoundData, tournament.players);
+      if (!tally) return null;
+      const idx = tournament.players.findIndex((p) => p.id === playerId);
+      return idx === 0 ? tally.aWins : idx === 1 ? tally.bWins : 0;
+    }
     if (leaderboardBestBall) {
       if (!selectedRoundData || !selectedRoundHasScores || !selectedRoundData.pairs?.length) return null;
       return playerRoundBestWorstPoints(selectedRoundData, playerId, tournament.players, settings);
@@ -1053,7 +1060,9 @@ export default function HomeScreen({ navigation, route }) {
           const rankColor = rankColors[i] || 'rgba(255,255,255,0.4)';
           const rankBg = i === 0 ? 'rgba(255,215,0,0.2)' : i === 1 ? 'rgba(192,200,212,0.15)' : i === 2 ? 'rgba(218,160,109,0.15)' : 'rgba(255,255,255,0.08)';
           const roundValue = getSelectedRoundValue(entry.player.id);
-          const roundUnit = 'pts';
+          const roundUnit = settings.scoringMode === 'matchplay'
+            ? (roundValue === 1 ? 'hole' : 'holes')
+            : 'pts';
           const strokes = strokesByPlayer[entry.player.id] ?? 0;
           return (
             <View key={entry.player.id} style={[s.mastersRow, i === 0 && s.mastersRowFirst, i === displayedBoard.length - 1 && { borderBottomWidth: 0 }]}>
