@@ -106,7 +106,6 @@ export default function HomeScreen({ navigation, route }) {
   const [undoSnack, setUndoSnack] = useState(null); // { roundIndex, snapshot, at }
   const undoTimerRef = useRef(null);
   const [leaderboardBestBall, setLeaderboardBestBall] = useState(false);
-  const [roundBestBall, setRoundBestBall] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
   const [showInvite, setShowInvite] = useState(false);
   const [inviteCodes, setInviteCodes] = useState({ editor: '', viewer: '' });
@@ -506,12 +505,10 @@ export default function HomeScreen({ navigation, route }) {
   // tournament doesn't support best-ball (fewer than 4 players), force off.
   useEffect(() => {
     if (!bestBallAvailable) {
-      setRoundBestBall(false);
       setLeaderboardBestBall(false);
       return;
     }
     const isBB = settings.scoringMode === 'bestball';
-    setRoundBestBall(isBB);
     setLeaderboardBestBall(isBB);
   }, [tournament?.id, settings.scoringMode, bestBallAvailable]);
   const matchPlayStandings = useMemo(
@@ -974,7 +971,7 @@ export default function HomeScreen({ navigation, route }) {
       const tally = matchPlayRoundTally(selectedRoundData, tournament.players);
       if (!tally) return null;
       const idx = tournament.players.findIndex((p) => p.id === playerId);
-      return idx === 0 ? tally.aWins : idx === 1 ? tally.bWins : 0;
+      return idx === 0 ? tally.aWins : idx === 1 ? tally.bWins : null;
     }
     if (leaderboardBestBall) {
       if (!selectedRoundData || !selectedRoundHasScores || !selectedRoundData.pairs?.length) return null;
@@ -1108,18 +1105,6 @@ export default function HomeScreen({ navigation, route }) {
                 </Text>
               )}
             </View>
-            {bestBallAvailable && (
-              <View style={s.inlineToggle}>
-                <Text style={[s.modeLabel, !roundBestBall && s.modeLabelActive]}>Stableford</Text>
-                <Switch
-                  value={roundBestBall}
-                  onValueChange={setRoundBestBall}
-                  trackColor={{ false: theme.border.default, true: theme.accent.primary }}
-                  thumbColor="#fff"
-                />
-                <Text style={[s.modeLabel, roundBestBall && s.modeLabelActive]}>Best Ball</Text>
-              </View>
-            )}
           </View>
           {!isGame && (
             <FlatList

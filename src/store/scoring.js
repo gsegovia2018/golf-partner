@@ -310,15 +310,15 @@ export function tournamentMatchPlayStandings(tournament) {
   let holesRemaining = 0;
   const strokes = { [a.id]: 0, [b.id]: 0 };
   rounds.forEach((round, idx) => {
-    players.forEach((p) => {
-      const holeScores = round.scores?.[p.id] ?? {};
-      for (const v of Object.values(holeScores)) strokes[p.id] += (v || 0);
-    });
     const future = idx > (tournament.currentRound ?? 0);
     if (future) {
       holesRemaining += round.holes?.length ?? 0;
       return;
     }
+    players.forEach((p) => {
+      const holeScores = round.scores?.[p.id] ?? {};
+      for (const v of Object.values(holeScores)) strokes[p.id] += (v || 0);
+    });
     const tally = matchPlayRoundTally(round, players);
     if (tally) {
       aHoles += tally.aWins;
