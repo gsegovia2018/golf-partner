@@ -171,6 +171,9 @@ export default function MyStatsScreen({ navigation }) {
     );
   }
 
+  const fb = stats.frontBack;
+  const fbHoles = fb ? fb.rounds.length * 9 : 0;
+
   return (
     <SafeAreaView style={s.container} edges={['top', 'bottom']}>
       {Header}
@@ -189,8 +192,8 @@ export default function MyStatsScreen({ navigation }) {
           ['Easy (SI 13-18)', stats.difficulty.easy.avgPoints, stats.difficulty.easy.holes],
         ]} s={s} />
         <BreakdownSection title="Round shape" rows={[
-          ['Front nine', stats.frontBack ? stats.frontBack.frontAvg : 0, stats.frontBack ? stats.frontBack.rounds.length * 9 : 0],
-          ['Back nine', stats.frontBack ? stats.frontBack.backAvg : 0, stats.frontBack ? stats.frontBack.rounds.length * 9 : 0],
+          ['Front nine', fb ? fb.frontAvg : 0, fbHoles],
+          ['Back nine', fb ? fb.backAvg : 0, fbHoles],
           ['Opening 3', stats.warmupClosing.warmup.avgPoints, stats.warmupClosing.warmup.holes],
           ['Closing 3', stats.warmupClosing.closing.avgPoints, stats.warmupClosing.closing.holes],
         ]} s={s} />
@@ -327,22 +330,26 @@ function FormSection({ form, n, onChangeN, s, theme }) {
   );
 }
 
-function StrengthsSection({ ranking, s, theme }) {
-  const Row = ({ cell, kind }) => (
+function StrengthsRow({ cell, kind, s, theme }) {
+  const color = kind === 'good' ? theme.accent.primary : theme.destructive;
+  return (
     <View style={s.insightRow}>
       <Feather
         name={kind === 'good' ? 'trending-up' : 'trending-down'}
         size={16}
-        color={kind === 'good' ? theme.accent.primary : theme.destructive}
+        color={color}
       />
       <Text style={s.insightText}>
         {cell.label} — {cell.avgPoints} pts/hole
       </Text>
-      <Text style={[s.insightDelta, { color: kind === 'good' ? theme.accent.primary : theme.destructive }]}>
+      <Text style={[s.insightDelta, { color }]}>
         {cell.deviation > 0 ? `+${cell.deviation}` : `${cell.deviation}`}
       </Text>
     </View>
   );
+}
+
+function StrengthsSection({ ranking, s, theme }) {
   return (
     <View style={s.card}>
       <Text style={s.cardTitle}>Strengths & Pain Points</Text>
@@ -352,10 +359,14 @@ function StrengthsSection({ ranking, s, theme }) {
         <>
           <Text style={s.subhead}>What's working</Text>
           {ranking.strengths.length === 0 && <Text style={s.note}>Nothing stands out yet.</Text>}
-          {ranking.strengths.map((c) => <Row key={c.label} cell={c} kind="good" />)}
+          {ranking.strengths.map((c) => (
+            <StrengthsRow key={c.label} cell={c} kind="good" s={s} theme={theme} />
+          ))}
           <Text style={s.subhead}>Where you're losing points</Text>
           {ranking.weaknesses.length === 0 && <Text style={s.note}>Nothing stands out yet.</Text>}
-          {ranking.weaknesses.map((c) => <Row key={c.label} cell={c} kind="bad" />)}
+          {ranking.weaknesses.map((c) => (
+            <StrengthsRow key={c.label} cell={c} kind="bad" s={s} theme={theme} />
+          ))}
           <Text style={s.note}>Measured against your {ranking.baseline} pts/hole average.</Text>
         </>
       )}
