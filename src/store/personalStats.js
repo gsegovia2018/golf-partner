@@ -164,6 +164,68 @@ export function collectMyRounds(tournaments, userId) {
   return result;
 }
 
+// Minimum holes for a hole-level cell to be eligible for ranking — guards
+// against fake insights from tiny samples.
+const HOLE_SAMPLE_MIN = 12;
+
+// ── rankStrengths ──
+// Every candidate cell is reduced to one comparable number: net points per
+// hole. The baseline is the player's overall mean points/hole. Cells far
+// above baseline are strengths; far below are pain points.
+export function rankStrengths(synthetic) {
+  const consistency = playerConsistency(synthetic)[0];
+  const baseline = consistency?.mean ?? null;
+  if (baseline == null) {
+    return { baseline: null, strengths: [], weaknesses: [] };
+  }
+
+  const cells = [];
+  const addCell = (label, avgPoints, holes) => {
+    if (holes >= HOLE_SAMPLE_MIN) {
+      cells.push({ label, avgPoints, sample: holes, unit: 'holes' });
+    }
+  };
+
+  const pt = parTypeSplit(synthetic, CANON_ID);
+  addCell('Par 3s', pt.par3.avgPoints, pt.par3.holes);
+  addCell('Par 4s', pt.par4.avgPoints, pt.par4.holes);
+  addCell('Par 5s', pt.par5.avgPoints, pt.par5.holes);
+
+  const diff = holeDifficultySplit(synthetic, CANON_ID);
+  addCell('Hard holes (SI 1-6)', diff.hard.avgPoints, diff.hard.holes);
+  addCell('Mid holes (SI 7-12)', diff.mid.avgPoints, diff.mid.holes);
+  addCell('Easy holes (SI 13-18)', diff.easy.avgPoints, diff.easy.holes);
+
+  const wc = warmupVsClosing(synthetic, CANON_ID);
+  addCell('Opening 3 holes', wc.warmup.avgPoints, wc.warmup.holes);
+  addCell('Closing 3 holes', wc.closing.avgPoints, wc.closing.holes);
+
+  const fb = frontBackSplit(synthetic)[0];
+  if (fb) {
+    addCell('Front nine', fb.frontAvg, fb.rounds.length * 9);
+    addCell('Back nine', fb.backAvg, fb.rounds.length * 9);
+  }
+
+  const tee = teeShotImpact(synthetic, CANON_ID);
+  addCell('Tee shot on the fairway', tee.fairway.avgPoints, tee.fairway.holes);
+  addCell('Tee shot missing the fairway', tee.missed.avgPoints, tee.missed.holes);
+  addCell('After a tee penalty', tee.teePenalty.avgPoints, tee.teePenalty.holes);
+
+  const scored = cells.map((c) => ({
+    ...c,
+    deviation: +(c.avgPoints - baseline).toFixed(2),
+  }));
+  const strengths = scored
+    .filter((c) => c.deviation > 0)
+    .sort((a, b) => b.deviation - a.deviation)
+    .slice(0, 3);
+  const weaknesses = scored
+    .filter((c) => c.deviation < 0)
+    .sort((a, b) => a.deviation - b.deviation)
+    .slice(0, 3);
+  return { baseline: +baseline.toFixed(2), strengths, weaknesses };
+}
+
 // ── computeRecentVsHistory ──
 // "Recent" = the last N rounds (chronologically). "History" = every earlier
 // round. Disjoint, so the delta is a true improving/declining signal.

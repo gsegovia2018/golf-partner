@@ -1,6 +1,7 @@
 import {
   collectMyRounds, buildSyntheticTournament, CANON_ID,
   holeDifficultySplit, computeMetrics, computeRecentVsHistory, FORM_METRICS,
+  rankStrengths,
 } from '../personalStats';
 
 // ── Fixture helpers ───────────────────────────────────────────────
@@ -224,5 +225,51 @@ describe('computeRecentVsHistory', () => {
     const vsPar = r.metrics.find((m) => m.key === 'avgVsPar');
     expect(vsPar.recent).toBeLessThan(vsPar.history);
     expect(vsPar.direction).toBe('up'); // lower vsPar = green up
+  });
+});
+
+describe('rankStrengths', () => {
+  // Build a tournament where par-3 holes score badly and par-5 holes score
+  // well, so par type becomes a clear strength/weakness.
+  function skewedTournament() {
+    const holes = Array.from({ length: 18 }, (_, i) => ({
+      number: i + 1,
+      par: i < 9 ? 3 : 5,             // 9 par-3, 9 par-5
+      strokeIndex: i + 1,
+    }));
+    const scores = {};
+    holes.forEach((h) => { scores[h.number] = h.par === 3 ? h.par + 2 : h.par; });
+    // Three identical rounds → 27 holes per par bucket (above the 12 guard).
+    const round = mkRound({ holes, scores: { p1: scores }, playerHandicaps: { p1: 0 } });
+    return [{
+      id: 1, name: 'T', players: [{ id: 'p1', handicap: 0, user_id: 'u1' }],
+      rounds: [round, round, round],
+    }];
+  }
+
+  test('ranks par 5s as a strength and par 3s as a pain point', () => {
+    const my = collectMyRounds(skewedTournament(), 'u1');
+    const r = rankStrengths(buildSyntheticTournament(my));
+    expect(r.strengths[0].label).toBe('Par 5s');
+    expect(r.strengths[0].deviation).toBeGreaterThan(0);
+    expect(r.weaknesses[0].label).toBe('Par 3s');
+    expect(r.weaknesses[0].deviation).toBeLessThan(0);
+  });
+
+  test('excludes cells below the sample-size guard', () => {
+    // Single round → each par bucket has only 9 holes (< 12 guard).
+    const one = skewedTournament();
+    one[0].rounds = [one[0].rounds[0]];
+    const my = collectMyRounds(one, 'u1');
+    const r = rankStrengths(buildSyntheticTournament(my));
+    const labels = [...r.strengths, ...r.weaknesses].map((c) => c.label);
+    expect(labels).not.toContain('Par 3s');
+    expect(labels).not.toContain('Par 5s');
+  });
+
+  test('returns empty lists when there are no rounds', () => {
+    const r = rankStrengths(buildSyntheticTournament([]));
+    expect(r.strengths).toEqual([]);
+    expect(r.weaknesses).toEqual([]);
   });
 });
