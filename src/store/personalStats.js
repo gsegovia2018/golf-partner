@@ -239,30 +239,6 @@ export function resolveSelection(myRounds, overrides = {}) {
   ));
 }
 
-// ── computeMyStats ──
-// Single entry point for the screen. `selectedRounds` is the active selection
-// (already filtered via resolveSelection). The selection is the universe —
-// every selected round counts in metrics, form and ranking alike.
-export function computeMyStats(selectedRounds, { n = 5 } = {}) {
-  const rounds = selectedRounds || [];
-  const synthetic = buildSyntheticTournament(rounds);
-  return {
-    roundCount: rounds.length,
-    metrics: computeMetrics(synthetic),
-    form: computeRecentVsHistory(rounds, n),
-    ranking: rankStrengths(synthetic),
-    parType: parTypeSplit(synthetic, CANON_ID),
-    difficulty: holeDifficultySplit(synthetic, CANON_ID),
-    frontBack: frontBackSplit(synthetic)[0] ?? null,
-    warmupClosing: warmupVsClosing(synthetic, CANON_ID),
-    distribution: playerScoreDistribution(synthetic, CANON_ID),
-    teeShot: teeShotImpact(synthetic, CANON_ID),
-    shots: shotStats(synthetic, CANON_ID),
-    bounceBack: bounceBackRate(synthetic)[0] ?? null,
-    history: playerRoundHistory(synthetic, CANON_ID),
-  };
-}
-
 // ── computeRecentVsHistory ──
 // "Recent" = the last N rounds (chronologically). "History" = every earlier
 // round. Disjoint, so the delta is a true improving/declining signal.
@@ -293,5 +269,29 @@ export function computeRecentVsHistory(myRounds, n = 5) {
     hasHistory,
     hasShotData: recent.hasShotData || (history?.hasShotData ?? false),
     metrics,
+  };
+}
+
+// ── computeMyStats ──
+// Single entry point for the screen. `selectedRounds` is the active selection
+// (already filtered via resolveSelection). The selection is the universe —
+// every selected round counts in metrics, form and ranking alike.
+export function computeMyStats(selectedRounds, { n = 5 } = {}) {
+  const rounds = selectedRounds || [];
+  const synthetic = buildSyntheticTournament(rounds);
+  return {
+    roundCount: rounds.length,
+    metrics: computeMetrics(synthetic),
+    form: computeRecentVsHistory(rounds, n),
+    ranking: rankStrengths(synthetic),
+    parType: parTypeSplit(synthetic, CANON_ID),
+    difficulty: holeDifficultySplit(synthetic, CANON_ID),
+    frontBack: frontBackSplit(synthetic)[0] ?? null,
+    warmupClosing: warmupVsClosing(synthetic, CANON_ID),
+    distribution: playerScoreDistribution(synthetic, CANON_ID),
+    teeShot: teeShotImpact(synthetic, CANON_ID),
+    shots: shotStats(synthetic, CANON_ID),
+    bounceBack: bounceBackRate(synthetic)[0] ?? null,
+    history: playerRoundHistory(synthetic, CANON_ID),
   };
 }

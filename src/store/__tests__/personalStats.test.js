@@ -313,7 +313,7 @@ describe('computeMyStats', () => {
     const stats = computeMyStats(my, { n: 5 });
     expect(stats.roundCount).toBe(2);
     expect(stats.metrics.avgPoints).toBe(27);
-    expect(stats.form.metrics.length).toBe(6);
+    expect(stats.form.metrics.length).toBe(FORM_METRICS.length);
     expect(stats.ranking).toHaveProperty('strengths');
     expect(stats.parType.par4.holes).toBe(36);
   });
