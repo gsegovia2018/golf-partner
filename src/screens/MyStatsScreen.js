@@ -22,6 +22,7 @@ export default function MyStatsScreen({ navigation }) {
   const [metric, setMetric] = useState('points');   // 'points' | 'strokes'
   const [n, setN] = useState(5);
   const [selectorOpen, setSelectorOpen] = useState(false);
+  const [loadNonce, setLoadNonce] = useState(0);
 
   const storageKey = user?.id ? `${SELECTION_PREFIX}${user.id}` : null;
 
@@ -56,7 +57,7 @@ export default function MyStatsScreen({ navigation }) {
       }
     })();
     return () => { cancelled = true; };
-  }, [user?.id, storageKey]);
+  }, [user?.id, storageKey, loadNonce]);
 
   const persistOverrides = useCallback((next) => {
     setOverrides(next);
@@ -115,7 +116,7 @@ export default function MyStatsScreen({ navigation }) {
           <Text style={s.emptyText}>Couldn't load your stats.</Text>
           <TouchableOpacity
             style={s.retryBtn}
-            onPress={() => { setMyRounds(null); setError(false); }}
+            onPress={() => { setMyRounds(null); setError(false); setLoadNonce((v) => v + 1); }}
           >
             <Text style={s.retryText}>Retry</Text>
           </TouchableOpacity>
