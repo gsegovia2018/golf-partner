@@ -22,8 +22,10 @@ export const SCORING_MODES = [
     subtitle: 'Random partners each round',
     icon: 'users',
     category: 'Solo',
-    isAllowed: (count) => count >= 2,
-    requirement: 'Requires 2+ players',
+    // Needs 3+ so there is an opposing side: 2 players form a single pair
+    // (the whole field — no contest), and randomPairs would yield 1 pair.
+    isAllowed: (count) => count >= 3,
+    requirement: 'Requires 3+ players',
   },
   {
     key: 'matchplay',

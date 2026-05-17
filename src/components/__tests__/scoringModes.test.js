@@ -21,11 +21,13 @@ describe('isScoringModeAllowed', () => {
     expect(isScoringModeAllowed('matchplay', 2)).toBe(true);
     expect(isScoringModeAllowed('matchplay', 3)).toBe(false);
   });
-  test('individual and stableford need at least 2 players', () => {
+  test('individual needs at least 2 players', () => {
     expect(isScoringModeAllowed('individual', 1)).toBe(false);
     expect(isScoringModeAllowed('individual', 2)).toBe(true);
-    expect(isScoringModeAllowed('stableford', 1)).toBe(false);
-    expect(isScoringModeAllowed('stableford', 2)).toBe(true);
+  });
+  test('stableford with partners needs at least 3 players', () => {
+    expect(isScoringModeAllowed('stableford', 2)).toBe(false);
+    expect(isScoringModeAllowed('stableford', 3)).toBe(true);
   });
   test('bestball needs exactly 4 players', () => {
     expect(isScoringModeAllowed('bestball', 3)).toBe(false);
