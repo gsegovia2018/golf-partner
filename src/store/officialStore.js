@@ -31,7 +31,11 @@ export async function getRoundState(token, roundId) {
 export async function submitScore(params) {
   const payload = buildScorePayload(params);
   // Lazy require keeps this module's pure surface (buildScorePayload)
-  // loadable without pulling in the queue / native deps.
+  // loadable without pulling in the queue / native deps — `syncQueue`
+  // transitively pulls in `uuid`, which Jest's default transform chokes
+  // on. `connectivity` and `syncWorker` are kept lazy for the same
+  // deferred-boundary reason, and to sidestep a syncWorker <-> syncQueue
+  // import-cycle concern.
   const { syncQueue } = require('./syncQueue');
   const { isOnline } = require('../lib/connectivity');
   await syncQueue.enqueue({
