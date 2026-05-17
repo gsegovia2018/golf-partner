@@ -10,9 +10,9 @@ import { useTheme } from '../theme/ThemeContext';
 import { supabase } from '../lib/supabase';
 import {
   forceResolve, forceFinalizeParty, withdrawPlayer,
-  listNotifications, saveParties,
+  listNotifications, overrideMarker,
 } from '../store/officialAdmin';
-import { cardDiscrepancyHoles } from '../store/officialScoring';
+import { cardDiscrepancyHoles, activeMarkerChain } from '../store/officialScoring';
 
 function showError(message) {
   const msg = message || 'Something went wrong';
@@ -194,22 +194,35 @@ export default function OfficialAdminScreen({ route, navigation }) {
     if (mountedRef.current) setOpenPicker(null);
   }
 
-  function handleForceFinalize(party) {
-    runMutation(() => forceFinalizeParty(party.id));
+  async function handleForceFinalize(party) {
+    await runMutation(() => forceFinalizeParty(party.id));
   }
 
-  // Withdraw a player, then re-save the round's parties (excluding the
-  // withdrawn player) so saveParties re-derives the round-robin markers.
+  // Withdraw a player, then heal that party's marker chain in place via
+  // overrideMarker. We deliberately do NOT call saveParties: it deletes and
+  // re-inserts every party row for the round (non-atomic, changes ids) and is
+  // documented setup-only. The withdrawn player stays a member row — only the
+  // round-robin marker chain over the still-active members needs to re-close.
   function handleWithdraw(party, member) {
     if (!round) return;
     const confirm = () => runMutation(async () => {
       await withdrawPlayer(member.roster_id);
-      const rebuilt = parties
-        .map((p) => p.members
-          .filter((m) => m.roster_id !== member.roster_id)
-          .map((m) => m.roster_id))
-        .filter((arr) => arr.length > 0);
-      await saveParties(tournamentId, round.id, rebuilt);
+      // Build the party's full member list (including the withdrawn player —
+      // activeMarkerChain filters it out) in seat order. Fall back to the
+      // member's index within the seat-ordered list if `seat` is absent.
+      const partyMembers = party.members.map((m, i) => ({
+        rosterId: m.roster_id,
+        seat: m.seat ?? i + 1,
+      }));
+      // Withdrawn ids in this party: the just-withdrawn player plus any
+      // already flagged withdrawn in the loaded data.
+      const withdrawnRosterIdsInParty = party.members
+        .filter((m) => m.withdrawn || m.roster_id === member.roster_id)
+        .map((m) => m.roster_id);
+      const chain = activeMarkerChain(partyMembers, withdrawnRosterIdsInParty);
+      for (const { rosterId, marksRosterId } of chain) {
+        await overrideMarker(party.id, rosterId, marksRosterId);
+      }
     });
     if (Platform.OS === 'web') {
       if (window.confirm(`Withdraw ${member.display_name}?`)) confirm();
