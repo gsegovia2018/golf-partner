@@ -60,7 +60,11 @@ export default function RoundTeeAssignments({ round, players = [], onChange, the
         if (tee) resolved[p.id] = tee;
       }
       if (cancelled) return;
-      setPlayerTees(resolved);
+      // Only update tee state when a missing tee was actually resolved —
+      // avoids a spurious onChange (and autosave) when every player already
+      // had a tee.
+      const teesChanged = players.some((p) => playerTees[p.id] == null && resolved[p.id] != null);
+      if (teesChanged) setPlayerTees(resolved);
       setPlayerHandicaps((prev) => {
         const next = { ...prev };
         let changed = false;

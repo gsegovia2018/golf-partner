@@ -253,10 +253,11 @@ export default function SetupScreen({ navigation, route }) {
     );
 
     const builtRounds = rounds.map((r, i) => {
-      // When the user never opened Configure Holes, no per-player tee was
-      // picked. Default every player to the course's middle tee so playing
-      // handicaps are tee-derived rather than the raw index. A course with no
-      // tees leaves playerTees null (raw-index fallback is then correct).
+      // Defensive: if a round somehow has no per-player tees (e.g. the round
+      // object was built outside the Tees & Handicaps step), default every
+      // player to the course's middle tee so playing handicaps are
+      // tee-derived rather than the raw index. A course with no tees leaves
+      // playerTees null (raw-index fallback is then correct).
       const defaultTee = middleTee(r.tees);
       const playerTees = r.playerTees ?? (defaultTee
         ? Object.fromEntries(players.map((p) => [
