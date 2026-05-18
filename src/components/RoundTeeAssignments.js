@@ -146,7 +146,7 @@ export default function RoundTeeAssignments({ round, players = [], onChange, the
           ? calcPlayingHandicap(p.handicap, pTee.slope, pTee.rating, totalPar)
           : null;
         const current = parseInt(playerHandicaps[p.id], 10);
-        const isDifferent = auto !== null && current !== auto;
+        const isDifferent = auto !== null && !Number.isNaN(current) && current !== auto;
         return (
           <View key={p.id} style={s.row}>
             <View style={{ flex: 1 }}>
@@ -181,7 +181,7 @@ export default function RoundTeeAssignments({ round, players = [], onChange, the
             <TextInput
               style={[s.hcpInput, isDifferent && s.hcpInputOverride]}
               keyboardType="numeric"
-              maxLength={2}
+              maxLength={4}
               keyboardAppearance={theme.isDark ? 'dark' : 'light'}
               selectionColor={theme.accent.primary}
               value={playerHandicaps[p.id] ?? ''}
