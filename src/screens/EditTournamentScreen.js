@@ -9,11 +9,12 @@ import { Feather } from '@expo/vector-icons';
 import { useTheme } from '../theme/ThemeContext';
 import {
   loadTournament, saveTournament, subscribeTournamentChanges, DEFAULT_SETTINGS, randomPairs,
-  deriveRoundPlayingHandicap, normalizeRoundHandicaps, readLocal, roundEnteredCount,
+  normalizeRoundHandicaps, readLocal, roundEnteredCount,
 } from '../store/tournamentStore';
 import { mutate } from '../store/mutate';
 import ScoringModePicker, { isScoringModeAllowed, fallbackScoringMode } from '../components/ScoringModePicker';
 import { scoringModeUsesTeams } from '../components/scoringModes';
+import RoundTeeAssignments from '../components/RoundTeeAssignments';
 
 async function confirmDialog(title, message, confirmLabel = 'Remove') {
   if (Platform.OS === 'web') return window.confirm(`${title}\n\n${message}`);
@@ -176,15 +177,18 @@ export default function EditTournamentScreen({ navigation }) {
   const handleHolesSaved = useCallback((roundIndex, patch) => {
     setRounds((prev) => {
       const next = [...prev];
+      next[roundIndex] = { ...next[roundIndex], holes: patch.holes, tees: patch.tees };
+      return next;
+    });
+  }, []);
+
+  const handleRoundTeesChange = useCallback((roundIndex, patch) => {
+    setRounds((prev) => {
+      const next = [...prev];
       next[roundIndex] = {
         ...next[roundIndex],
-        holes: patch.holes,
-        tees: patch.tees,
-        // CourseEditor returns numbers; convert to strings for our inputs
-        playerHandicaps: Object.fromEntries(
-          Object.entries(patch.playerHandicaps).map(([id, v]) => [id, String(v)]),
-        ),
         playerTees: patch.playerTees,
+        playerHandicaps: patch.playerHandicaps,
         manualHandicaps: { ...(patch.manualHandicaps ?? {}) },
       };
       return next;
@@ -192,22 +196,11 @@ export default function EditTournamentScreen({ navigation }) {
   }, []);
 
   function updateBaseHandicap(playerIndex, value) {
-    const playerId = players[playerIndex]?.id;
     setPlayers((prev) => {
       const next = [...prev];
       next[playerIndex] = { ...next[playerIndex], handicap: value };
       return next;
     });
-    if (!playerId) return;
-    const parsedIndex = parseInt(value, 10) || 0;
-    setRounds((prev) => prev.map((r) => {
-      if (r.manualHandicaps?.[playerId]) return r;
-      const derived = deriveRoundPlayingHandicap(parsedIndex, r, playerId);
-      return {
-        ...r,
-        playerHandicaps: { ...r.playerHandicaps, [playerId]: String(derived) },
-      };
-    }));
   }
 
   function updateCourseName(roundIndex, value) {
@@ -284,18 +277,6 @@ export default function EditTournamentScreen({ navigation }) {
     setRounds((prev) => {
       const next = [...prev];
       next[roundIndex] = { ...next[roundIndex], notes: value };
-      return next;
-    });
-  }
-
-  function updatePlayingHandicap(roundIndex, playerId, value) {
-    setRounds((prev) => {
-      const next = [...prev];
-      next[roundIndex] = {
-        ...next[roundIndex],
-        playerHandicaps: { ...next[roundIndex].playerHandicaps, [playerId]: value },
-        manualHandicaps: { ...(next[roundIndex].manualHandicaps ?? {}), [playerId]: true },
-      };
       return next;
     });
   }
@@ -382,22 +363,13 @@ export default function EditTournamentScreen({ navigation }) {
                   Renames this round only — the course saved in your library is unchanged.
                 </Text>
               ) : null}
-              {players.map((p) => (
-                <View key={p.id} style={s.hcpRow}>
-                  <Text style={s.hcpRowName}>{p.name}</Text>
-                  <TextInput
-                    style={s.hcpInput}
-                    keyboardType="numeric"
-                    keyboardAppearance={theme.isDark ? 'dark' : 'light'}
-                    selectionColor={theme.accent.primary}
-                    value={r.playerHandicaps?.[p.id] ?? ''}
-                    onChangeText={(v) => updatePlayingHandicap(ri, p.id, v)}
-                    placeholder="0"
-                    placeholderTextColor={theme.text.muted}
-                  />
-                  <Text style={s.hcpLabel}>p.hcp</Text>
-                </View>
-              ))}
+              <RoundTeeAssignments
+                key={`${r.id}:${players.map((p) => p.handicap).join(',')}`}
+                round={r}
+                players={players.map((p) => ({ ...p, handicap: parseInt(p.handicap, 10) || 0 }))}
+                theme={theme}
+                onChange={(patch) => handleRoundTeesChange(ri, patch)}
+              />
               <TextInput
                 style={[s.input, s.notesInput]}
                 placeholder="Round notes..."
@@ -416,12 +388,6 @@ export default function EditTournamentScreen({ navigation }) {
                     courseName: r.courseName,
                     initialHoles: r.holes,
                     initialTees: r.tees ?? [],
-                    initialPlayerHandicaps: Object.fromEntries(
-                      Object.entries(r.playerHandicaps ?? {}).map(([id, v]) => [id, parseInt(v, 10) || 0]),
-                    ),
-                    initialManualHandicaps: r.manualHandicaps ?? {},
-                    initialPlayerTees: r.playerTees ?? {},
-                    players: players.map((p) => ({ ...p, handicap: parseInt(p.handicap, 10) || 0 })),
                     onSave: handleHolesSaved,
                     courseId: r.courseId ?? null,
                   })
@@ -527,12 +493,6 @@ const makeStyles = (theme) => StyleSheet.create({
     padding: 14, marginBottom: 8, fontSize: 15,
     fontFamily: 'PlusJakartaSans-Medium',
   },
-  hcpRow: {
-    flexDirection: 'row', alignItems: 'center',
-    paddingVertical: 8,
-    borderBottomWidth: 1, borderBottomColor: theme.border.subtle,
-  },
-  hcpRowName: { flex: 1, fontFamily: 'PlusJakartaSans-SemiBold', color: theme.text.primary, fontSize: 15 },
   notesInput: { minHeight: 60, textAlignVertical: 'top', marginTop: 8 },
   editHolesBtn: {
     backgroundColor: theme.isDark ? theme.bg.secondary : theme.bg.primary,
