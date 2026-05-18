@@ -318,6 +318,21 @@ export async function getTournament(id) {
   }
 }
 
+// Force a remote pull for one tournament, merge it into the local cache, and
+// return the merged result. Unlike getTournament(), which returns a possibly
+// stale cache and refreshes in the background, this awaits the network — a
+// caller that just made a server-side change (e.g. claiming a player slot via
+// the claim_tournament_player RPC) needs the fresh state synchronously.
+export async function refreshTournamentFromRemote(id) {
+  if (!id) return null;
+  const remote = await fetchRemoteTournament(id);
+  if (!remote) return readLocal(id);
+  const local = await readLocal(id);
+  const merged = local ? mergeTournaments(local, remote).merged : remote;
+  await saveLocal(merged);
+  return merged;
+}
+
 const ACTIVE_TOURNAMENT_KEY = '@golf_tournament_'; // + id
 
 // Mirror the tournament's user-linked players into tournament_participants

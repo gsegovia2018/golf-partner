@@ -9,6 +9,7 @@ import { v4 as uuidv4 } from 'uuid';
 import { useTheme } from '../theme/ThemeContext';
 import {
   getTournament, addPlayerRoundPatches, claimTournamentPlayer,
+  refreshTournamentFromRemote,
 } from '../store/tournamentStore';
 import { loadProfile } from '../store/profileStore';
 import { mutate } from '../store/mutate';
@@ -66,20 +67,20 @@ export default function ClaimPlayerScreen({ navigation, route }) {
     setClaimingId(player.id);
     try {
       // Atomic, race-safe claim — the RPC sets data.players[].user_id only
-      // if the slot is still open (migration 20260518000004).
+      // if the slot is still open (migrations 20260518000004 / ...0005).
       await claimTournamentPlayer(tournament.id, player.id);
-      // Re-pull so the local copy reflects the server-side claim, then point
-      // "me" at the claimed slot for this device.
-      const fresh = await getTournament(tournament.id);
-      await mutate(fresh, { type: 'tournament.setMe', meId: player.id });
+      // Force a remote pull so the local cache reflects the server-side
+      // claim (the RPC bumps the players LWW timestamp so it wins the merge).
+      const fresh = await refreshTournamentFromRemote(tournament.id);
+      await mutate(fresh ?? tournament, { type: 'tournament.setMe', meId: player.id });
       done();
     } catch (err) {
       if (err?.message === 'SLOT_TAKEN') {
         // Someone else took it first — refresh the roster so the row
         // re-renders as "Taken".
         try {
-          const fresh = await getTournament(tournament.id);
-          setTournament(fresh);
+          const fresh = await refreshTournamentFromRemote(tournament.id);
+          if (fresh) setTournament(fresh);
         } catch (_) { /* keep the stale roster; the alert is enough */ }
         Alert.alert('Already taken',
           'Someone else just claimed that player. Pick another.');
