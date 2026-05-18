@@ -141,18 +141,20 @@ force-finalize a party, withdraw a player.
 
 ## Admin flow
 
-Creation reuses the shared **New Tournament setup wizard** (`SetupScreen`) —
-official is not a separate screen or menu item. The wizard's first step carries
-an **"Official tournament" toggle**; turning it on switches the wizard into
-official mode for the rest of the flow.
+Official tournaments have their own **dedicated setup screen**
+(`OfficialCreateScreen`), separate from the casual `SetupScreen` wizard.
+Tapping **New Tournament** presents a Casual / Official choice; choosing
+Official opens the dedicated screen. `SetupScreen` stays purely casual
+(New Game / New Tournament).
 
-1. **Setup wizard — Official toggle on step 1.** With the toggle on, the steps
-   become `Roster → Rounds → Format → Review`. The Roster step replaces the
-   casual Players step: the admin adds named players (`display_name` +
-   `handicap`) inline — no library picker, since roster players need not be app
-   users. Review creates the tournament with `kind = official`, one
-   `tournament_roster` row per entry (each gets a `magic_token`), and the
-   `tournament_rounds`, then opens the management screen.
+1. **Official setup screen** — a self-contained stepped flow
+   `Roster → Rounds → Format → Review`. The Roster step lets the admin add
+   named players (`display_name` + `handicap`) inline — no library picker,
+   since roster players need not be app users. The Rounds step sets a course
+   per round; the Format step picks one of the four official formats. Review
+   creates the tournament with `kind = official`, one `tournament_roster` row
+   per entry (each gets a `magic_token`), and the `tournament_rounds`, then
+   opens the management screen.
 2. **Official tournament management screen** — the post-creation home for an
    existing official tournament: the roster with each player's invite link
    (copy / QR — QR lib already in deps), regenerate-token, withdraw, add a
