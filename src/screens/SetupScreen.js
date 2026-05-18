@@ -16,6 +16,15 @@ import { scoringModeUsesTeams, getScoringMode } from '../components/scoringModes
 import WizardProgress from '../components/setup/WizardProgress';
 import WizardNav from '../components/setup/WizardNav';
 import { wizardSteps, isStepValid } from './setupWizard';
+import { createOfficialTournament, addRosterPlayer, createRound } from '../store/officialAdmin';
+
+// Official tournament round formats — distinct value set from ScoringModePicker.
+const OFFICIAL_FORMATS = [
+  { value: 'gross_net', label: 'Stroke play (gross & net)' },
+  { value: 'stableford', label: 'Stableford' },
+  { value: 'pairs', label: 'Pairs (Best Ball / Sindicato)' },
+  { value: 'match', label: 'Match play' },
+];
 
 // Deep green used for the Review hero band — fixed in both themes so white
 // hero text always has strong contrast.
@@ -52,8 +61,10 @@ export default function SetupScreen({ navigation, route }) {
   const { theme } = useTheme();
   const s = makeStyles(theme);
 
-  const kind = route?.params?.kind === 'game' ? 'game' : 'tournament';
+  const routeKind = route?.params?.kind;
+  const kind = routeKind === 'game' || routeKind === 'official' ? routeKind : 'tournament';
   const isGame = kind === 'game';
+  const isOfficial = kind === 'official';
 
   const [tournamentName, setTournamentName] = useState(() =>
     isGame ? buildGameName('') : 'Weekend Golf',
@@ -63,6 +74,13 @@ export default function SetupScreen({ navigation, route }) {
   const [rounds, setRounds] = useState([{ id: newRoundId(), courseName: '', holes: defaultHoles(), slope: null, playerHandicaps: null }]);
   const [settings, setSettings] = useState({ ...DEFAULT_SETTINGS });
   const [rawStep, setStep] = useState(0);
+
+  // Official-mode-only state. roster: [{ displayName, handicap }].
+  const [roster, setRoster] = useState([]);
+  const [officialFormat, setOfficialFormat] = useState('stableford');
+  const [rosterName, setRosterName] = useState('');
+  const [rosterHcp, setRosterHcp] = useState('');
+  const [busy, setBusy] = useState(false);
 
   // The active step list depends on kind + roster size (Scoring only exists
   // for 2+ players). When the roster shrinks the Scoring step away the array
@@ -215,9 +233,45 @@ export default function SetupScreen({ navigation, route }) {
   }
 
   const missingCourseName = rounds.some((r) => !r.courseName.trim());
-  const canStart = players.length >= 1 && !missingCourseName;
+  // Official tournaments store each round's course as a free-form jsonb blob
+  // and do not require a course name to be entered in this wizard, so Start
+  // gates only on a non-empty roster.
+  const canStart = isOfficial
+    ? roster.length > 0
+    : (players.length >= 1 && !missingCourseName);
 
   async function handleStart() {
+    if (isOfficial) {
+      if (busy) return;
+      setBusy(true);
+      try {
+        const tournamentId = await createOfficialTournament({
+          name: tournamentName.trim() || 'Weekend Golf',
+        });
+        for (const entry of roster) {
+          await addRosterPlayer(tournamentId, {
+            displayName: entry.displayName,
+            handicap: entry.handicap,
+          });
+        }
+        for (let i = 0; i < rounds.length; i++) {
+          await createRound(tournamentId, {
+            roundIndex: i,
+            course: rounds[i],
+            format: officialFormat,
+          });
+        }
+        navigation.navigate('OfficialSetup', { tournamentId });
+      } catch (err) {
+        const msg = err?.message ?? 'Could not create tournament';
+        if (Platform.OS === 'web') window.alert(msg);
+        else Alert.alert('Error', msg);
+      } finally {
+        setBusy(false);
+      }
+      return;
+    }
+
     if (players.length < 1) {
       Alert.alert('Missing info', 'Select at least 1 player.');
       return;
@@ -306,8 +360,9 @@ export default function SetupScreen({ navigation, route }) {
   }
 
   const isLastStep = stepKey === 'review';
-  const nextEnabled = isStepValid(stepKey, { players, rounds })
-    && (!isLastStep || canStart);
+  const nextEnabled = isStepValid(stepKey, { players, rounds, roster })
+    && (!isLastStep || canStart)
+    && !busy;
   const nextLabel = isLastStep
     ? (isGame ? 'Start Game' : 'Start Tournament')
     : 'Next';
@@ -461,12 +516,18 @@ export default function SetupScreen({ navigation, route }) {
     const hasScoringStep = steps.includes('scoring');
     // For a solo game there is no scoring choice — show a neutral label
     // rather than whatever mode happens to be left in settings.
-    const scoringLabel = hasScoringStep
-      ? (getScoringMode(settings.scoringMode)?.label ?? 'Solo play')
-      : 'Solo play';
-    const playerSummary = players.length === 1
-      ? `${players[0].name} · HCP ${players[0].handicap}`
-      : `${players.length} golfers`;
+    // Official tournaments use their own format step instead of scoring.
+    const scoringLabel = isOfficial
+      ? (OFFICIAL_FORMATS.find((f) => f.value === officialFormat)?.label ?? 'Stableford')
+      : hasScoringStep
+        ? (getScoringMode(settings.scoringMode)?.label ?? 'Solo play')
+        : 'Solo play';
+    const rosterCount = isOfficial ? roster.length : players.length;
+    const playerSummary = isOfficial
+      ? `${roster.length} golfer${roster.length === 1 ? '' : 's'}`
+      : players.length === 1
+        ? `${players[0].name} · HCP ${players[0].handicap}`
+        : `${players.length} golfers`;
     const courseSummary = isGame
       ? (rounds[0]?.courseName || 'No course set')
       : `${rounds.length} round${rounds.length === 1 ? '' : 's'}`;
@@ -487,7 +548,7 @@ export default function SetupScreen({ navigation, route }) {
           <View style={s.reviewChipRow}>
             <View style={s.reviewChip}>
               <Text style={s.reviewChipText}>
-                {players.length} player{players.length === 1 ? '' : 's'}
+                {rosterCount} player{rosterCount === 1 ? '' : 's'}
               </Text>
             </View>
             <View style={s.reviewChip}>
@@ -500,7 +561,7 @@ export default function SetupScreen({ navigation, route }) {
         <View style={s.reviewList}>
           <TouchableOpacity
             style={[s.reviewRow, s.reviewRowDivider]}
-            onPress={() => goToStep('players')}
+            onPress={() => goToStep(isOfficial ? 'roster' : 'players')}
           >
             <Feather name="users" size={16} color={theme.accent.primary} style={s.reviewRowIcon} />
             <View style={{ flex: 1 }}>
@@ -524,15 +585,15 @@ export default function SetupScreen({ navigation, route }) {
 
           <TouchableOpacity
             style={s.reviewRow}
-            onPress={() => goToStep('scoring')}
-            disabled={!hasScoringStep}
+            onPress={() => goToStep(isOfficial ? 'format' : 'scoring')}
+            disabled={!hasScoringStep && !isOfficial}
           >
             <Feather name="target" size={16} color={theme.accent.primary} style={s.reviewRowIcon} />
             <View style={{ flex: 1 }}>
-              <Text style={s.reviewRowTitle}>Scoring</Text>
+              <Text style={s.reviewRowTitle}>{isOfficial ? 'Format' : 'Scoring'}</Text>
               <Text style={s.reviewRowSub}>{scoringLabel}</Text>
             </View>
-            {hasScoringStep && (
+            {(hasScoringStep || isOfficial) && (
               <Feather name="chevron-right" size={18} color={theme.accent.primary} />
             )}
           </TouchableOpacity>
@@ -540,14 +601,100 @@ export default function SetupScreen({ navigation, route }) {
 
         {!canStart && (
           <Text style={s.errorText}>
-            {players.length < 1
+            {isOfficial
               ? 'Add at least 1 player to continue.'
-              : 'Pick a course for every round to continue.'}
+              : players.length < 1
+                ? 'Add at least 1 player to continue.'
+                : 'Pick a course for every round to continue.'}
           </Text>
         )}
       </>
     );
   };
+
+  const addRosterPlayerLocal = () => {
+    const name = rosterName.trim();
+    if (!name) return;
+    setRoster((prev) => [...prev, { displayName: name, handicap: Number(rosterHcp) || 0 }]);
+    setRosterName('');
+    setRosterHcp('');
+  };
+
+  const renderRosterStep = () => (
+    <>
+      <Text style={s.stepOverline}>ROSTER</Text>
+      <Text style={s.stepPrompt}>Who's competing?</Text>
+      <Text style={s.stepSubtitle}>Add every player in the official tournament.</Text>
+      {roster.length === 0 && (
+        <View style={s.emptyHint}>
+          <Feather name="users" size={16} color={theme.text.muted} style={{ marginRight: 8 }} />
+          <Text style={s.emptyHintText}>Add at least 1 player to continue.</Text>
+        </View>
+      )}
+      {roster.map((entry, i) => (
+        <View key={`roster-${i}`} style={s.playerCard}>
+          <View style={s.playerInfo}>
+            <Text style={s.playerName}>{entry.displayName}</Text>
+            <Text style={s.playerHcp}>HCP {entry.handicap}</Text>
+          </View>
+          <TouchableOpacity
+            onPress={() => setRoster((prev) => prev.filter((_, idx) => idx !== i))}
+            style={s.removeBtn}
+          >
+            <Feather name="x" size={16} color={theme.destructive} />
+          </TouchableOpacity>
+        </View>
+      ))}
+      <View style={s.rosterAddForm}>
+        <TextInput
+          style={[s.input, s.rosterNameInput]}
+          placeholder="Player name"
+          placeholderTextColor={theme.text.muted}
+          keyboardAppearance={theme.isDark ? 'dark' : 'light'}
+          selectionColor={theme.accent.primary}
+          value={rosterName}
+          onChangeText={setRosterName}
+        />
+        <TextInput
+          style={[s.input, s.rosterHcpInput]}
+          placeholder="HCP"
+          placeholderTextColor={theme.text.muted}
+          keyboardAppearance={theme.isDark ? 'dark' : 'light'}
+          selectionColor={theme.accent.primary}
+          keyboardType="numeric"
+          value={rosterHcp}
+          onChangeText={setRosterHcp}
+        />
+      </View>
+      <TouchableOpacity style={s.pickBtn} onPress={addRosterPlayerLocal}>
+        <Feather name="plus" size={16} color={theme.accent.primary} style={{ marginRight: 6 }} />
+        <Text style={s.pickBtnText}>Add Player</Text>
+      </TouchableOpacity>
+    </>
+  );
+
+  const renderFormatStep = () => (
+    <>
+      <Text style={s.stepOverline}>FORMAT</Text>
+      <Text style={s.stepPrompt}>How is it scored?</Text>
+      <Text style={s.stepSubtitle}>Pick the official scoring format.</Text>
+      {OFFICIAL_FORMATS.map((opt) => {
+        const selected = officialFormat === opt.value;
+        return (
+          <TouchableOpacity
+            key={opt.value}
+            style={[s.formatRow, selected && s.formatRowSelected]}
+            onPress={() => setOfficialFormat(opt.value)}
+          >
+            <Text style={[s.formatRowText, selected && s.formatRowTextSelected]}>
+              {opt.label}
+            </Text>
+            {selected && <Feather name="check" size={18} color={theme.accent.primary} />}
+          </TouchableOpacity>
+        );
+      })}
+    </>
+  );
 
   return (
     <ScreenContainer style={s.container} edges={['top', 'bottom']}>
@@ -559,7 +706,9 @@ export default function SetupScreen({ navigation, route }) {
         keyboardShouldPersistTaps="handled"
       >
         {stepKey === 'players' && renderPlayersStep()}
+        {stepKey === 'roster' && renderRosterStep()}
         {(stepKey === 'course' || stepKey === 'rounds') && renderCourseStep()}
+        {stepKey === 'format' && renderFormatStep()}
         {stepKey === 'scoring' && renderScoringStep()}
         {stepKey === 'review' && renderReviewStep()}
       </ScrollView>
@@ -745,6 +894,46 @@ function makeStyles(theme) {
       fontFamily: 'PlusJakartaSans-SemiBold',
       color: theme.accent.primary,
       fontSize: 14,
+    },
+
+    /* Roster add form (official) */
+    rosterAddForm: {
+      flexDirection: 'row',
+      gap: 8,
+    },
+    rosterNameInput: {
+      flex: 1,
+    },
+    rosterHcpInput: {
+      width: 80,
+      textAlign: 'center',
+    },
+
+    /* Format option rows (official) */
+    formatRow: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      justifyContent: 'space-between',
+      backgroundColor: theme.bg.card,
+      borderRadius: 14,
+      borderWidth: 1,
+      borderColor: theme.isDark ? theme.glass?.border : theme.border.default,
+      padding: 16,
+      marginBottom: 8,
+      ...(theme.isDark ? {} : theme.shadow.card),
+    },
+    formatRowSelected: {
+      borderColor: theme.accent.primary,
+      backgroundColor: theme.accent.light,
+    },
+    formatRowText: {
+      fontFamily: 'PlusJakartaSans-SemiBold',
+      color: theme.text.primary,
+      fontSize: 15,
+    },
+    formatRowTextSelected: {
+      fontFamily: 'PlusJakartaSans-Bold',
+      color: theme.accent.primary,
     },
 
     /* Empty / error states */
