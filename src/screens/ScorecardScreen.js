@@ -37,6 +37,7 @@ import DiscrepancySheet from '../components/DiscrepancySheet';
 import { scoreCellState, cardDiscrepancyHoles } from '../store/officialScoring';
 import { buildLeaderboard } from '../store/officialLeaderboard';
 import { attestCard } from '../store/officialStore';
+import { notifyRoundFinished } from '../store/notificationStore';
 import { Alert } from 'react-native';
 
 // Web-only CSS scroll-snap. On native, `pagingEnabled` is handled by the
@@ -848,6 +849,19 @@ export default function ScorecardScreen({ navigation, route }) {
     const t = tournamentRef.current;
     const r = t?.rounds?.[roundIndex];
     if (!t || !r) { goBack(); return; }
+
+    // Notify the finisher's friends that a casual round wrapped up. Official
+    // rounds notify server-side on attestation, so skip them here.
+    // Best-effort — a failure never blocks finishing the round.
+    if (!official && t.kind !== 'official') {
+      notifyRoundFinished({
+        tournamentId: t.id,
+        roundId: r.id,
+        roundIndex,
+        tournamentName: t.name,
+        courseName: r.courseName,
+      }).catch(() => {});
+    }
 
     const liveRound = { ...r, scores };
     const players = t.players ?? [];
