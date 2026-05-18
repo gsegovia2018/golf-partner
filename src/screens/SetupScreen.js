@@ -276,10 +276,11 @@ export default function SetupScreen({ navigation, route }) {
 
     try {
       await saveTournament(tournament);
-      // saveTournament marks the new tournament active, so jumping straight
-      // to the Tournament view (Game menu) lands the user on what they just
-      // created instead of bouncing back to the Home list.
-      navigation.replace('Tournament');
+      // saveTournament marks the new tournament active. A game is a single
+      // round — jump straight to its scorecard. A multi-round tournament
+      // lands on the Tournament view instead of bouncing back to the Home list.
+      if (isGame) navigation.replace('Scorecard', { roundIndex: 0 });
+      else navigation.replace('Tournament');
     } catch (err) {
       const msg = err?.message ?? 'Could not create tournament';
       if (Platform.OS === 'web') window.alert(msg);
