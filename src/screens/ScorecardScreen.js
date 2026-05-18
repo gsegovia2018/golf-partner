@@ -1510,16 +1510,16 @@ const HolePage = React.memo(function HolePage({
                     </View>
                   </View>
                 )}
+                {player.id === meId && (
+                  <ShotDetailPanel
+                    hole={pageHole}
+                    detail={shotDetails[meId]?.[pageHole.number]}
+                    onChange={(patch) => onSetShot(meId, pageHole.number, patch)}
+                    theme={theme}
+                    s={s}
+                  />
+                )}
               </HeroCard>
-              {player.id === meId && (
-                <ShotDetailPanel
-                  hole={pageHole}
-                  detail={shotDetails[meId]?.[pageHole.number]}
-                  onChange={(patch) => onSetShot(meId, pageHole.number, patch)}
-                  theme={theme}
-                  s={s}
-                />
-              )}
               </React.Fragment>
             );
           }
@@ -1594,16 +1594,16 @@ const HolePage = React.memo(function HolePage({
                     )}
                   </View>
                 </View>
+                {player.id === meId && (
+                  <ShotDetailPanel
+                    hole={pageHole}
+                    detail={shotDetails[meId]?.[pageHole.number]}
+                    onChange={(patch) => onSetShot(meId, pageHole.number, patch)}
+                    theme={theme}
+                    s={s}
+                  />
+                )}
               </View>
-              {player.id === meId && (
-                <ShotDetailPanel
-                  hole={pageHole}
-                  detail={shotDetails[meId]?.[pageHole.number]}
-                  onChange={(patch) => onSetShot(meId, pageHole.number, patch)}
-                  theme={theme}
-                  s={s}
-                />
-              )}
             </React.Fragment>
           );
         })}
@@ -3736,15 +3736,14 @@ function makeStyles(theme) {
       color: theme.accent.primary,
       fontSize: 13,
     },
+    // Inset section WITHIN the score card (not a standalone card): a top
+    // hairline divides it from the strokes section above, no own
+    // background / border / shadow / outer margin.
     shotPanel: {
-      backgroundColor: theme.bg.card,
-      borderRadius: 14,
-      borderWidth: 1,
-      borderColor: theme.isDark ? theme.glass?.border : theme.border.default,
-      marginTop: -4,
-      paddingHorizontal: 16,
-      paddingTop: 12,
-      paddingBottom: 4,
+      borderTopWidth: 1,
+      borderTopColor: theme.isDark ? theme.glass?.border : theme.border.default,
+      paddingTop: 14,
+      paddingBottom: 2,
     },
     shotPanelLabel: {
       fontFamily: 'PlusJakartaSans-SemiBold',
