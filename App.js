@@ -27,6 +27,7 @@ import LoadingSplash from './src/components/LoadingSplash';
 import ErrorBoundary from './src/components/ErrorBoundary';
 import { AuthProvider, useAuth } from './src/context/AuthContext';
 import AuthScreen from './src/screens/AuthScreen';
+import JoinTournamentLinkScreen from './src/screens/JoinTournamentLinkScreen';
 
 import { loadTournament, isRoundInProgress, subscribeTournamentChanges } from './src/store/tournamentStore';
 import HomeScreen from './src/screens/HomeScreen';
@@ -258,7 +259,19 @@ function AppNavigator() {
     );
   }
 
-  if (!session) return <AuthScreen />;
+  if (!session) {
+    // A logged-out visitor opening a /join-tournament/<code> web link gets
+    // the guest/login choice instead of the bare sign-up wall. After a
+    // session is established the Stack mounts and the linking config routes
+    // the same URL to the JoinTournament screen.
+    const path = typeof window !== 'undefined' && window.location
+      ? window.location.pathname
+      : '';
+    if (/^\/join-tournament\/[^/]+/.test(path)) {
+      return <JoinTournamentLinkScreen />;
+    }
+    return <AuthScreen />;
+  }
 
   return (
     <>
