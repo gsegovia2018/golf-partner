@@ -4,6 +4,7 @@ import {
   loadAllTournaments,
   roundTotals,
   tournamentLeaderboard,
+  isTournamentFinished,
 } from './tournamentStore';
 import { isRoundPlayed } from './scoring';
 
@@ -144,7 +145,15 @@ export async function computePersonalStats({ userId, displayName }) {
   for (const t of tournaments) {
     const me = findMyPlayer(t, userId, displayName);
     if (!me) continue;
-    tournamentsPlayed += 1;
+    // Personal record reflects completed play only — consistent with the
+    // History archive (which lists `isTournamentFinished` events) and with
+    // `wins` below. In-progress tournaments are excluded so the record does
+    // not drift ahead of what the user sees archived.
+    if (!isTournamentFinished(t)) continue;
+    // "Tournaments" counts multi-round tournaments only. Single-round games
+    // (`kind === 'game'`) still contribute their rounds, points and wins
+    // below — they just aren't tournaments.
+    if (t.kind !== 'game') tournamentsPlayed += 1;
 
     t.rounds.forEach((round, index) => {
       if (!isRoundPlayed(round, index, t)) return;
@@ -165,10 +174,11 @@ export async function computePersonalStats({ userId, displayName }) {
       }
     });
 
+    // Tournament is already known finished (guarded above), so topping the
+    // leaderboard with a positive score is a win.
     const leaderboard = tournamentLeaderboard(t);
     if (leaderboard[0]?.player.id === me.id && leaderboard[0]?.points > 0) {
-      const finished = t.rounds.every((r, i) => !isRoundPlayed(r, i, t) ? false : true);
-      if (finished) wins += 1;
+      wins += 1;
     }
   }
 

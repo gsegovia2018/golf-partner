@@ -265,7 +265,22 @@ export async function buildFeed() {
 // working before the migration is applied.
 // ---------------------------------------------------------------------------
 
+// Default quick-pick reactions shown on every feed card. NOT a whitelist —
+// any emoji is allowed (see isValidReactionEmoji); these are just the
+// always-visible shortcuts. The "+" control lets the user react with any
+// emoji via the OS keyboard.
 export const FEED_REACTION_EMOJI = ['👏', '🔥', '⛳', '😂'];
+
+// Validates an emoji picked from the OS keyboard before it is stored.
+// Mirrors the feed_reactions.emoji DB CHECK (1–16 chars) and requires at
+// least one non-ASCII character so a typed word/letter is not stored as a
+// "reaction". Returns true when `str` is acceptable.
+export function isValidReactionEmoji(str) {
+  if (typeof str !== 'string') return false;
+  const s = str.trim();
+  if (s.length < 1 || s.length > 16) return false;
+  return /[^\x00-\x7F]/.test(s);
+}
 
 // A Postgres "relation does not exist" surfaces with code 42P01 (or a message
 // mentioning the table). Treat that as "feature not provisioned yet".
@@ -331,6 +346,133 @@ export async function toggleReaction(itemKey, emoji, currentlyMine) {
     // A duplicate (23505) means the reaction is already there — treat as OK.
     if (error && error.code !== '23505' && !isMissingTable(error)) throw error;
     return !error || error.code === '23505';
+  } catch {
+    return false;
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Feed comments. Backed by the feed_comments table added in
+// migrations/20260517_feed_comments.sql. Like reactions, every function here
+// degrades gracefully if the table is not yet present or the device is
+// offline — the feed must keep working before the migration is applied.
+// ---------------------------------------------------------------------------
+
+// Comment counts for a set of feed item keys: { [itemKey]: number }.
+// Loaded with the feed as a lightweight overlay. Returns {} on any failure.
+export async function loadCommentCounts(itemKeys) {
+  const keys = [...new Set(itemKeys)].filter(Boolean);
+  if (keys.length === 0 || !isOnline()) return {};
+  try {
+    const { data, error } = await supabase
+      .from('feed_comments')
+      .select('item_key')
+      .in('item_key', keys);
+    if (error) {
+      if (isMissingTable(error)) return {};
+      throw error;
+    }
+    const out = {};
+    for (const row of data ?? []) {
+      out[row.item_key] = (out[row.item_key] ?? 0) + 1;
+    }
+    return out;
+  } catch {
+    return {};
+  }
+}
+
+// Full comment thread for one feed item, oldest first, each row enriched with
+// the author's profile. Returns [] on any failure (offline / table missing).
+export async function loadComments(itemKey) {
+  if (!itemKey || !isOnline()) return [];
+  try {
+    const { data, error } = await supabase
+      .from('feed_comments')
+      .select('id, user_id, body, created_at')
+      .eq('item_key', itemKey)
+      .order('created_at', { ascending: true });
+    if (error) {
+      if (isMissingTable(error)) return [];
+      throw error;
+    }
+    const rows = data ?? [];
+    // feed_comments.user_id references auth.users (not public.profiles), so
+    // there is no FK PostgREST can embed through — fetch profiles separately.
+    const authorIds = [...new Set(rows.map((r) => r.user_id))];
+    const profiles = {};
+    if (authorIds.length > 0) {
+      const { data: profRows } = await supabase
+        .from('profiles')
+        .select('id, display_name, avatar_url, avatar_color')
+        .in('id', authorIds);
+      for (const p of profRows ?? []) profiles[p.id] = p;
+    }
+    const me = await currentUserId();
+    return rows.map((r) => {
+      const p = profiles[r.user_id];
+      return {
+        id: r.id,
+        userId: r.user_id,
+        body: r.body,
+        createdAt: r.created_at,
+        isMine: !!me && r.user_id === me,
+        author: {
+          name: p?.display_name ?? null,
+          avatarUrl: p?.avatar_url ?? null,
+          avatarColor: p?.avatar_color ?? null,
+        },
+      };
+    });
+  } catch {
+    return [];
+  }
+}
+
+// Adds a comment by the current user. Returns the created comment (shaped
+// like a loadComments row) on success, or null on failure (offline / table
+// missing / empty or over-long body).
+export async function addComment(itemKey, body) {
+  const text = (body ?? '').trim();
+  if (!itemKey || text.length < 1 || text.length > 500 || !isOnline()) return null;
+  try {
+    const me = await currentUserId();
+    if (!me) return null;
+    const { data, error } = await supabase
+      .from('feed_comments')
+      .insert({ item_key: itemKey, user_id: me, body: text })
+      .select('id, user_id, body, created_at')
+      .single();
+    if (error) {
+      if (isMissingTable(error)) return null;
+      throw error;
+    }
+    return {
+      id: data.id,
+      userId: data.user_id,
+      body: data.body,
+      createdAt: data.created_at,
+      isMine: true,
+      author: { name: null, avatarUrl: null, avatarColor: null },
+    };
+  } catch {
+    return null;
+  }
+}
+
+// Deletes one of the current user's comments. Returns true on success.
+export async function deleteComment(commentId) {
+  if (!commentId || !isOnline()) return false;
+  try {
+    const me = await currentUserId();
+    if (!me) return false;
+    const { error } = await supabase
+      .from('feed_comments')
+      .delete()
+      .eq('id', commentId)
+      .eq('user_id', me);
+    if (error && !isMissingTable(error)) throw error;
+    return !error;
   } catch {
     return false;
   }
