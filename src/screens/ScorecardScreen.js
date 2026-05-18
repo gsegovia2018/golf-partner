@@ -873,6 +873,16 @@ export default function ScorecardScreen({ navigation, route }) {
     const tournamentDone = isTournamentFinished(liveTournament);
 
     const goToSummary = () => {
+      // Non-official rounds: drop the finisher into their personal Report
+      // Card for the round just played. collectMyRounds keys rounds as
+      // `${tournamentId}:${roundIndex}` — match that here.
+      if (!official && t.kind !== 'official') {
+        navigation.navigate('MyStats', {
+          tab: 'reportCard',
+          roundKey: `${t.id}:${roundIndex}`,
+        });
+        return;
+      }
       navigation.navigate('RoundSummary', {
         tournamentId: t.id,
         roundId: r.id,
