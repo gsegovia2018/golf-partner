@@ -9,6 +9,7 @@ import { Feather } from '@expo/vector-icons';
 import { useFocusEffect } from '@react-navigation/native';
 import { createTournament, saveTournament, randomPairs, DEFAULT_SETTINGS, deriveRoundPlayingHandicap } from '../store/tournamentStore';
 import { defaultHoles, fetchCourses, fetchPlayers } from '../store/libraryStore';
+import { middleTee } from '../store/tees';
 import { consumePendingPlayers, consumePendingCourses } from '../lib/selectionBridge';
 import { useTheme } from '../theme/ThemeContext';
 import ScoringModePicker, { isScoringModeAllowed, fallbackScoringMode } from '../components/ScoringModePicker';
@@ -245,12 +246,26 @@ export default function SetupScreen({ navigation, route }) {
     );
 
     const builtRounds = rounds.map((r, i) => {
+      // When the user never opened Configure Holes, no per-player tee was
+      // picked. Default every player to the course's middle tee so playing
+      // handicaps are tee-derived rather than the raw index. A course with no
+      // tees leaves playerTees null (raw-index fallback is then correct).
+      const defaultTee = middleTee(r.tees);
+      const playerTees = r.playerTees ?? (defaultTee
+        ? Object.fromEntries(players.map((p) => [
+            p.id,
+            { label: defaultTee.label, slope: defaultTee.slope, rating: defaultTee.rating },
+          ]))
+        : null);
       // Auto-derive WHS playing handicaps when the user never opened
-      // Configure Holes (r.playerHandicaps still null). r already carries
-      // holes / tees here, so deriveRoundPlayingHandicap yields the real
+      // Configure Holes (r.playerHandicaps still null). With playerTees
+      // resolved above, deriveRoundPlayingHandicap yields the real per-tee
       // playing handicap rather than the raw index.
+      const roundWithTees = { ...r, playerTees };
       const playerHandicaps = r.playerHandicaps
-        ?? Object.fromEntries(players.map((p) => [p.id, deriveRoundPlayingHandicap(p.handicap, r)]));
+        ?? Object.fromEntries(players.map((p) => [
+          p.id, deriveRoundPlayingHandicap(p.handicap, roundWithTees, p.id),
+        ]));
       return {
         id: `r${i}`,
         courseId: r.courseId ?? null,
@@ -258,7 +273,7 @@ export default function SetupScreen({ navigation, route }) {
         holes: r.holes,
         tees: r.tees ?? [],
         playerHandicaps,
-        playerTees: r.playerTees ?? null,
+        playerTees,
         manualHandicaps: { ...(r.manualHandicaps ?? {}) },
         notes: '',
         pairs: buildPairs(),
