@@ -29,6 +29,7 @@ import { mutate } from '../store/mutate';
 import { consumePendingPlayers } from '../lib/selectionBridge';
 import { subscribeConnectivity } from '../lib/connectivity';
 import { getShowRunningScore, setShowRunningScore } from '../lib/prefs';
+import { unreadCount } from '../store/notificationStore';
 
 // Web-only CSS scroll-snap. See ScorecardScreen.js for the rationale:
 // RNW 0.21's `pagingEnabled` omits `scroll-snap-stop: always`, so a
@@ -102,6 +103,7 @@ export default function HomeScreen({ navigation, route }) {
   // List-view overflow menu — surfaces Friends / Stats / Profile, which are
   // otherwise buried (Friends had no entry point at all on the list view).
   const [showListMenu, setShowListMenu] = useState(false);
+  const [unreadNotifs, setUnreadNotifs] = useState(0);
   const [showTournamentKindChoice, setShowTournamentKindChoice] = useState(false);
   const [showRoundEdit, setShowRoundEdit] = useState(false);
   const [showResetHistory, setShowResetHistory] = useState(false);
@@ -224,6 +226,16 @@ export default function HomeScreen({ navigation, route }) {
     });
     return unsub;
   }, [navigation, applyAddPlayers]);
+
+  // Unread-notification badge — refreshes whenever the screen regains focus.
+  useEffect(() => {
+    const refresh = () => {
+      unreadCount().then(setUnreadNotifs).catch(() => {});
+    };
+    refresh();
+    const unsubFocus = navigation.addListener('focus', refresh);
+    return unsubFocus;
+  }, [navigation]);
 
   useEffect(() => {
     const unsubscribe = navigation.addListener('focus', reload);
@@ -678,9 +690,10 @@ export default function HomeScreen({ navigation, route }) {
               style={s.iconBtn}
               onPress={() => setShowListMenu(true)}
               activeOpacity={0.7}
-              accessibilityLabel="Menu"
+              accessibilityLabel={unreadNotifs > 0 ? `Menu, ${unreadNotifs} notifications` : 'Menu'}
             >
               <Feather name="menu" size={18} color={theme.accent.primary} />
+              {unreadNotifs > 0 && <View style={s.notifDot} />}
             </TouchableOpacity>
             <TouchableOpacity style={s.avatarBtn} onPress={() => navigation.navigate('Profile')} activeOpacity={0.7}>
               <Text style={s.avatarText}>{userInitials}</Text>
@@ -785,7 +798,17 @@ export default function HomeScreen({ navigation, route }) {
               <View key={t.id} style={s.tournamentCardWrapper}>
                 <TouchableOpacity
                   style={[s.tournamentCard, !openable && s.tournamentCardDisabled]}
-                  onPress={() => { if (openable) selectTournament(t.id); }}
+                  onPress={() => {
+                    if (!openable) return;
+                    // Official tournaments use a separate data model and
+                    // dedicated screens — the casual detail view can't render
+                    // them, so route straight to the management screen.
+                    if (t.kind === 'official') {
+                      navigation.navigate('OfficialSetup', { tournamentId: t.id });
+                    } else {
+                      selectTournament(t.id);
+                    }
+                  }}
                   disabled={!openable}
                   activeOpacity={openable ? 0.7 : 1}
                 >
@@ -832,7 +855,11 @@ export default function HomeScreen({ navigation, route }) {
               </View>
             );
           };
-          const sorted = allTournaments.slice().sort((a, b) => b.id - a.id);
+          // Newest first by creation time — official tournament ids are UUID
+          // strings, so an id subtraction would produce NaN ordering.
+          const sorted = allTournaments.slice().sort(
+            (a, b) => new Date(b.createdAt ?? 0) - new Date(a.createdAt ?? 0),
+          );
           // Finished games/tournaments live on a dedicated screen — keep the
           // Home list focused on what's still in play.
           const active = sorted.filter((t) => !isTournamentFinished(t));
@@ -903,26 +930,21 @@ export default function HomeScreen({ navigation, route }) {
               >
                 <Feather name="users" size={18} color={theme.accent.primary} />
                 <Text style={s.menuItemText}>Friends</Text>
-                <Feather name="chevron-right" size={16} color={theme.text.muted} />
-              </TouchableOpacity>
-
-              <TouchableOpacity
-                style={s.menuItem}
-                onPress={() => { setShowListMenu(false); navigation.navigate('MyStats'); }}
-                activeOpacity={0.7}
-              >
-                <Feather name="bar-chart-2" size={18} color={theme.accent.primary} />
-                <Text style={s.menuItemText}>Statistics</Text>
+                {unreadNotifs > 0 && (
+                  <View style={s.menuItemBadge}>
+                    <Text style={s.menuItemBadgeText}>{unreadNotifs > 9 ? '9+' : unreadNotifs}</Text>
+                  </View>
+                )}
                 <Feather name="chevron-right" size={16} color={theme.text.muted} />
               </TouchableOpacity>
 
               <TouchableOpacity
                 style={[s.menuItem, { borderBottomWidth: 0 }]}
-                onPress={() => { setShowListMenu(false); navigation.navigate('Profile'); }}
+                onPress={() => { setShowListMenu(false); navigation.navigate('MyStats'); }}
                 activeOpacity={0.7}
               >
-                <Feather name="user" size={18} color={theme.accent.primary} />
-                <Text style={s.menuItemText}>Profile</Text>
+                <Feather name="bar-chart-2" size={18} color={theme.accent.primary} />
+                <Text style={s.menuItemText}>Statistics</Text>
                 <Feather name="chevron-right" size={16} color={theme.text.muted} />
               </TouchableOpacity>
             </Pressable>
@@ -2445,6 +2467,31 @@ const makeStyles = (t) => StyleSheet.create({
     color: t.text.primary, fontSize: 14,
   },
   menuItemDestructive: { borderBottomWidth: 0 },
+  notifDot: {
+    position: 'absolute',
+    top: 6,
+    right: 6,
+    width: 9,
+    height: 9,
+    borderRadius: 5,
+    backgroundColor: t.accent.danger ?? '#e5484d',
+    borderWidth: 1.5,
+    borderColor: t.bg.card,
+  },
+  menuItemBadge: {
+    minWidth: 20,
+    height: 20,
+    borderRadius: 10,
+    paddingHorizontal: 6,
+    backgroundColor: t.accent.danger ?? '#e5484d',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  menuItemBadgeText: {
+    fontFamily: 'PlusJakartaSans-Bold',
+    fontSize: 11,
+    color: t.text.inverse ?? '#fff',
+  },
 
   // Viewer badge
   viewerBadge: {
