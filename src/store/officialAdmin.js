@@ -7,9 +7,12 @@ import { assignRoundRobinMarkers } from './officialScoring';
 export async function createOfficialTournament({ name }) {
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) throw new Error('Not signed in');
+  // tournaments.id is a non-defaulted text primary key — the client owns id
+  // generation here, same as createTournament in tournamentStore.js.
+  const id = uuidv4();
   const { data, error } = await supabase
     .from('tournaments')
-    .insert({ name, kind: 'official', created_by: user.id, data: {} })
+    .insert({ id, name, kind: 'official', created_by: user.id, data: {} })
     .select('id')
     .single();
   if (error) throw error;

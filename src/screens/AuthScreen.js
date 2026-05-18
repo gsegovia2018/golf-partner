@@ -1,10 +1,14 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useEffect } from 'react';
 import {
   View, Text, TextInput, TouchableOpacity,
   StyleSheet, KeyboardAvoidingView, Platform, ActivityIndicator, Alert,
 } from 'react-native';
-import { Feather } from '@expo/vector-icons';
+import { Feather, Ionicons } from '@expo/vector-icons';
+import * as WebBrowser from 'expo-web-browser';
+import { makeRedirectUri } from 'expo-auth-session';
+import * as QueryParams from 'expo-auth-session/build/QueryParams';
 import { supabase } from '../lib/supabase';
+import { parseOAuthError, getWebRedirectTo } from '../lib/oauth';
 import { useTheme } from '../theme/ThemeContext';
 
 const isWeb = Platform.OS === 'web';
@@ -21,7 +25,8 @@ export default function AuthScreen() {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [loading, setLoading] = useState(false);
-  const [googleLoading, setGoogleLoading] = useState(false);
+  // Which social provider is mid-flow: null | 'google' | 'apple'.
+  const [oauthLoading, setOauthLoading] = useState(null);
   const [showPassword, setShowPassword] = useState(false);
   // `touched` gates inline errors so the form doesn't shout at the user
   // before they've had a chance to type anything.
@@ -41,6 +46,18 @@ export default function AuthScreen() {
       ? 'Password must be at least 6 characters' : null),
     [touched.password, password, passwordValid],
   );
+
+  // On web, a failed OAuth round-trip redirects back here with the error in
+  // the URL's query/hash. Supabase ignores those params, so without this the
+  // user just lands on a blank-looking screen. Surface it, then scrub the URL.
+  useEffect(() => {
+    if (!isWeb) return;
+    const message = parseOAuthError(window.location.href);
+    if (message) {
+      Alert.alert('Sign-in failed', message);
+      window.history.replaceState({}, '', getWebRedirectTo());
+    }
+  }, []);
 
   async function submit() {
     setTouched({ email: true, password: true });
@@ -72,9 +89,8 @@ export default function AuthScreen() {
     }
     setLoading(true);
     try {
-      const options = isWeb && typeof window !== 'undefined'
-        ? { redirectTo: window.location.origin }
-        : undefined;
+      const redirectTo = getWebRedirectTo();
+      const options = redirectTo ? { redirectTo } : undefined;
       const { error } = await supabase.auth.resetPasswordForEmail(email.trim(), options);
       if (error) Alert.alert('Error', error.message);
       else Alert.alert('Check your email', 'We sent a password reset link to your email.');
@@ -83,21 +99,46 @@ export default function AuthScreen() {
     }
   }
 
-  async function signInWithGoogle() {
-    if (!isWeb) {
-      Alert.alert('Coming soon', 'Google sign-in on mobile is not wired up yet. Use email for now.');
-      return;
-    }
-    setGoogleLoading(true);
+  // Single OAuth handler for every social provider (Google, Apple).
+  // Web uses a full-page redirect; native opens an in-app browser and
+  // exchanges the returned `code` for a session.
+  async function signInWithProvider(provider) {
+    setOauthLoading(provider);
     try {
-      const { error } = await supabase.auth.signInWithOAuth({
-        provider: 'google',
-        options: { redirectTo: window.location.origin },
+      if (isWeb) {
+        const { error } = await supabase.auth.signInWithOAuth({
+          provider,
+          options: { redirectTo: getWebRedirectTo() },
+        });
+        if (error) Alert.alert('Error', error.message);
+        // On success the browser redirects away — nothing else to do here.
+        return;
+      }
+
+      const redirectTo = makeRedirectUri();
+      const { data, error } = await supabase.auth.signInWithOAuth({
+        provider,
+        options: { redirectTo, skipBrowserRedirect: true },
       });
-      if (error) Alert.alert('Error', error.message);
-      // On success the page redirects — nothing else to do here.
+      if (error) { Alert.alert('Error', error.message); return; }
+
+      const result = await WebBrowser.openAuthSessionAsync(data.url, redirectTo);
+      if (result.type !== 'success') return; // user dismissed or cancelled
+
+      const { params, errorCode } = QueryParams.getQueryParams(result.url);
+      if (errorCode || params.error) {
+        Alert.alert('Sign-in failed', params.error_description || errorCode || params.error);
+        return;
+      }
+      if (params.code) {
+        const { error: exchangeError } = await supabase.auth.exchangeCodeForSession(params.code);
+        if (exchangeError) Alert.alert('Error', exchangeError.message);
+        // On success `onAuthStateChange` swaps in the app — nothing else here.
+      }
+    } catch (e) {
+      Alert.alert('Error', e?.message ?? 'Could not sign in. Please try again.');
     } finally {
-      setGoogleLoading(false);
+      setOauthLoading(null);
     }
   }
 
@@ -198,17 +239,33 @@ export default function AuthScreen() {
           </View>
 
           <TouchableOpacity
-            style={[s.googleBtn, googleLoading && { opacity: 0.6 }]}
-            onPress={signInWithGoogle}
-            disabled={googleLoading}
+            style={[s.googleBtn, oauthLoading && { opacity: 0.6 }]}
+            onPress={() => signInWithProvider('google')}
+            disabled={!!oauthLoading}
             activeOpacity={0.8}
           >
-            {googleLoading
+            {oauthLoading === 'google'
               ? <ActivityIndicator color={theme.text.primary} />
               : (
                 <>
                   <Text style={s.googleG}>G</Text>
                   <Text style={s.googleBtnText}>Continue with Google</Text>
+                </>
+              )}
+          </TouchableOpacity>
+
+          <TouchableOpacity
+            style={[s.appleBtn, oauthLoading && { opacity: 0.6 }]}
+            onPress={() => signInWithProvider('apple')}
+            disabled={!!oauthLoading}
+            activeOpacity={0.8}
+          >
+            {oauthLoading === 'apple'
+              ? <ActivityIndicator color="#ffffff" />
+              : (
+                <>
+                  <Ionicons name="logo-apple" size={18} color="#ffffff" style={s.appleIcon} />
+                  <Text style={s.appleBtnText}>Continue with Apple</Text>
                 </>
               )}
           </TouchableOpacity>
@@ -306,6 +363,7 @@ const makeStyles = (theme) => StyleSheet.create({
     flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 10,
     backgroundColor: '#ffffff', borderRadius: 14, padding: 14,
     borderWidth: 1, borderColor: theme.border.default,
+    marginBottom: 10,
   },
   googleG: {
     fontFamily: 'PlusJakartaSans-ExtraBold', fontSize: 18, color: '#4285F4',
@@ -313,5 +371,14 @@ const makeStyles = (theme) => StyleSheet.create({
   },
   googleBtnText: {
     fontFamily: 'PlusJakartaSans-SemiBold', fontSize: 15, color: '#1f1f1f',
+  },
+  appleBtn: {
+    flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 10,
+    backgroundColor: '#000000', borderRadius: 14, padding: 14,
+  },
+  // Optical nudge: the Apple glyph sits slightly low against the text baseline.
+  appleIcon: { marginTop: -2 },
+  appleBtnText: {
+    fontFamily: 'PlusJakartaSans-SemiBold', fontSize: 15, color: '#ffffff',
   },
 });

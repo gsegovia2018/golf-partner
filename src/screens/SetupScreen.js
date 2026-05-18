@@ -473,22 +473,17 @@ export default function SetupScreen({ navigation, route }) {
                 </TouchableOpacity>
               </View>
             ) : (
-              <>
-                <TouchableOpacity
-                  style={s.courseEmpty}
-                  activeOpacity={0.7}
-                  onPress={() => navigation.navigate('CoursePicker', { roundIndex: i })}
-                >
-                  <View style={s.courseEmptyPin}>
-                    <Feather name="map-pin" size={20} color={theme.accent.primary} />
-                  </View>
-                  <Text style={s.courseEmptyTitle}>Pick a course from library</Text>
-                  <Text style={s.courseEmptyHint}>Tap to choose where you're playing</Text>
-                </TouchableOpacity>
-                <Text style={s.errorText}>
-                  {isGame ? 'A course is required.' : `Round ${i + 1} needs a course.`}
-                </Text>
-              </>
+              <TouchableOpacity
+                style={s.courseEmpty}
+                activeOpacity={0.7}
+                onPress={() => navigation.navigate('CoursePicker', { roundIndex: i })}
+              >
+                <View style={s.courseEmptyPin}>
+                  <Feather name="map-pin" size={20} color={theme.accent.primary} />
+                </View>
+                <Text style={s.courseEmptyTitle}>Pick a course from library</Text>
+                <Text style={s.courseEmptyHint}>Tap to choose where you're playing</Text>
+              </TouchableOpacity>
             )}
           </View>
         );

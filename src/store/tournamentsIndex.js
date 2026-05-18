@@ -10,6 +10,7 @@ export function createTournamentsIndex({ storage = AsyncStorage, key = INDEX_KEY
     return {
       id: t?.id,
       name: t?.name ?? '',
+      kind: t?.kind ?? null,
       createdAt: t?.createdAt ?? null,
       role: t?._role ?? null,
       updatedAt: t?.updatedAt ?? null,

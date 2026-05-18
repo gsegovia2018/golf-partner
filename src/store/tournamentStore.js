@@ -111,26 +111,56 @@ export function subscribeTournamentChanges(fn) {
   return () => _subs.delete(fn);
 }
 
+// Columns needed to build a Home-list entry. Casual tournaments carry their
+// whole state in the `data` blob; official tournaments keep their identity in
+// real columns (their `data` blob is empty), so both are always selected.
+const TOURNAMENT_LIST_COLUMNS = 'id, name, kind, created_at, data';
+
+// Build a Home-list tournament entry from a `tournaments` table row. For a
+// casual tournament every field comes from the `data` blob (unchanged from the
+// historical behaviour). For an official tournament the blob is empty, so
+// identity falls back to the columns and rounds/players default to empty
+// arrays — letting every list consumer treat both kinds uniformly.
+export function rowToTournament(row, role) {
+  const data = (row && row.data) || {};
+  return {
+    id: row?.id,
+    name: row?.name,
+    kind: row?.kind,
+    createdAt: row?.created_at,
+    rounds: [],
+    players: [],
+    ...data,
+    _role: role,
+  };
+}
+
+// Newest first. Used instead of an id subtraction because official tournament
+// ids are UUID strings, not the numeric timestamps casual tournaments use.
+function byCreatedAtDesc(a, b) {
+  return new Date(b?.createdAt ?? 0) - new Date(a?.createdAt ?? 0);
+}
+
 export async function loadAllTournaments() {
   await ensureMigrated();
   const userId = await getCurrentUserId();
 
   if (!userId) {
     const { data, error } = await supabase
-      .from('tournaments').select('data')
+      .from('tournaments').select(TOURNAMENT_LIST_COLUMNS)
       .order('created_at', { ascending: false });
     if (error) throw error;
-    const list = data.map((row) => ({ ...row.data, _role: 'owner' }));
+    const list = (data ?? []).map((row) => rowToTournament(row, 'owner'));
     tournamentsIndex.writeIndex(list).catch(() => {});
     return list;
   }
 
   const [{ data: owned, error: ownedErr }, { data: memberships, error: memberErr }] = await Promise.all([
-    supabase.from('tournaments').select('data')
+    supabase.from('tournaments').select(TOURNAMENT_LIST_COLUMNS)
       .or(`created_by.eq.${userId},created_by.is.null`)
       .order('created_at', { ascending: false }),
     supabase.from('tournament_members')
-      .select('role, tournaments(data)')
+      .select(`role, tournaments(${TOURNAMENT_LIST_COLUMNS})`)
       .eq('user_id', userId),
   ]);
   if (ownedErr) throw ownedErr;
@@ -138,14 +168,15 @@ export async function loadAllTournaments() {
 
   const ownedIds = new Set();
   const result = (owned ?? []).map((row) => {
-    ownedIds.add(row.data.id);
-    return { ...row.data, _role: 'owner' };
+    const t = rowToTournament(row, 'owner');
+    ownedIds.add(t.id);
+    return t;
   });
   (memberships ?? []).forEach((m) => {
-    if (!m.tournaments?.data || ownedIds.has(m.tournaments.data.id)) return;
-    result.push({ ...m.tournaments.data, _role: m.role });
+    if (!m.tournaments || ownedIds.has(m.tournaments.id)) return;
+    result.push(rowToTournament(m.tournaments, m.role));
   });
-  const sorted = result.sort((a, b) => b.id - a.id);
+  const sorted = result.sort(byCreatedAtDesc);
   // Fire-and-forget: keep the offline index in sync with the latest remote list.
   tournamentsIndex.writeIndex(sorted).catch(() => {});
   return sorted;
@@ -168,6 +199,7 @@ async function _loadCachedFullList() {
     return {
       id: meta.id,
       name: meta.name,
+      kind: meta.kind ?? null,
       createdAt: meta.createdAt,
       _role: meta.role,
       updatedAt: meta.updatedAt,

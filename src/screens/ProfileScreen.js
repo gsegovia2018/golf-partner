@@ -232,6 +232,9 @@ export default function ProfileScreen({ navigation }) {
                 </View>
               )}
             </TouchableOpacity>
+            {profile?.username ? (
+              <Text style={s.usernameTag}>@{profile.username}</Text>
+            ) : null}
             <Text style={s.email}>{profile?.email}</Text>
           </View>
 
@@ -476,6 +479,10 @@ const makeStyles = (theme) => StyleSheet.create({
     ...StyleSheet.absoluteFillObject,
     backgroundColor: 'rgba(0,0,0,0.4)',
     alignItems: 'center', justifyContent: 'center',
+  },
+  usernameTag: {
+    fontFamily: 'PlusJakartaSans-Bold', color: theme.text.primary,
+    fontSize: 15, marginBottom: 2,
   },
   email: { fontFamily: 'PlusJakartaSans-Medium', color: theme.text.secondary, fontSize: 13 },
 

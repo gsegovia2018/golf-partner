@@ -295,7 +295,10 @@ const makeStyles = (theme) => StyleSheet.create({
     textTransform: 'uppercase',
   },
   form: { flexDirection: 'row', gap: 8, alignItems: 'center' },
-  flex: { flex: 1 },
+  // minWidth:0 lets the flexible name field shrink below its intrinsic
+  // content width; without it the fixed HCP field + Add button get pushed
+  // off the right edge on narrow screens.
+  flex: { flex: 1, minWidth: 0 },
   input: {
     backgroundColor: theme.isDark ? theme.bg.secondary : theme.bg.card,
     color: theme.text.primary,
