@@ -141,17 +141,28 @@ force-finalize a party, withdraw a player.
 
 ## Admin flow
 
-1. Create tournament, set `kind = official`.
-2. Build roster — `display_name` + `handicap` per player; each row gets a
-   `magic_token`. Distribute links (copy / QR — QR lib already in deps).
-3. Per round: set course + format. Optionally write **local rules & notes**
-   (free text — format notes, tee info, local rules).
-4. **Party & Marker board** — assign players to parties via Manual drag /
-   Auto-by-handicap / Random. Auto-balance spreads handicaps across parties;
-   for pair formats it balances on pair-average handicap. Markers are
-   auto-assigned round-robin by seat; admin can override any marker.
-5. **Start Round** — locks parties, sets round `status = live`, opens scoring.
-6. Monitor party status; force-resolve / force-finalize / withdraw as needed.
+Creation reuses the shared **New Game / Tournament setup wizard**
+(`SetupScreen`) — official is a third `kind` alongside `game` and
+`tournament`, not a separate screen. The wizard adapts for `kind = 'official'`:
+
+1. **Setup wizard (`kind = 'official'`)** — steps `Roster → Rounds → Format →
+   Review`. The Roster step replaces the casual Players step: the admin adds
+   named players (`display_name` + `handicap`) inline — no library picker,
+   since roster players need not be app users. Review creates the tournament
+   with `kind = official`, one `tournament_roster` row per entry (each gets a
+   `magic_token`), and the `tournament_rounds`, then opens the management
+   screen.
+2. **Official tournament management screen** — the post-creation home for an
+   existing official tournament: the roster with each player's invite link
+   (copy / QR — QR lib already in deps), regenerate-token, withdraw, add a
+   late entrant; the rounds list; and free-text **local rules & notes**
+   (format notes, tee info, local rules).
+3. **Party & Marker board** (per round) — assign players to parties via
+   Manual drag / Auto-by-handicap / Random. Auto-balance spreads handicaps
+   across parties; for pair formats it balances on pair-average handicap.
+   Markers are auto-assigned round-robin by seat; admin can override any marker.
+4. **Start Round** — locks parties, sets round `status = live`, opens scoring.
+5. Monitor party status; force-resolve / force-finalize / withdraw as needed.
 
 ## Player flow
 
