@@ -1421,6 +1421,9 @@ const HolePage = React.memo(function HolePage({
                   <View style={s.soloHeroNameWrap}>
                     <View style={s.soloHeroNameRow}>
                       <Text style={s.soloHeroName}>{player.name}</Text>
+                      {round.playerTees?.[player.id]?.label ? (
+                        <Text style={s.teeBadge}>{round.playerTees[player.id].label}</Text>
+                      ) : null}
                       {/* Official discrepancy badge: green check (agreed),
                           grey clock (waiting), red dot (discrepancy). No
                           badge for 'empty' or in casual mode. */}
@@ -1550,7 +1553,12 @@ const HolePage = React.memo(function HolePage({
                       <Text style={s.playerAvatarText}>{player.name[0].toUpperCase()}</Text>
                     </View>
                     <View>
-                      <Text style={s.playerCardName}>{player.name}</Text>
+                      <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+                        <Text style={s.playerCardName}>{player.name}</Text>
+                        {round.playerTees?.[player.id]?.label ? (
+                          <Text style={s.teeBadge}>{round.playerTees[player.id].label}</Text>
+                        ) : null}
+                      </View>
                       <Text style={s.playerCardHcp}>HCP {handicap}{extraShots > 0 ? ` +${extraShots}` : ''}</Text>
                       {showRunning && (
                         <Text style={s.playerCardRunning}>
@@ -4484,6 +4492,13 @@ function makeStyles(theme) {
       color: theme.text.muted,
       fontSize: 18,
       fontFamily: 'PlusJakartaSans-Regular',
+    },
+
+    teeBadge: {
+      fontFamily: 'PlusJakartaSans-SemiBold', fontSize: 11,
+      color: theme.accent.primary, backgroundColor: theme.accent.light,
+      borderRadius: 6, paddingHorizontal: 6, paddingVertical: 2,
+      overflow: 'hidden', marginLeft: 6,
     },
   });
 }

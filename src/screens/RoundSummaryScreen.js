@@ -113,9 +113,14 @@ export default function RoundSummaryScreen({ navigation, route }) {
               return (
                 <View key={entry.player.id} style={[s.lbRow, isMe && s.lbRowMe]}>
                   <Text style={s.lbRank}>{i + 1}</Text>
-                  <Text style={[s.lbName, isMe && s.lbNameMe]} numberOfLines={1}>
-                    {entry.player.name}{isMe ? '  (you)' : ''}
-                  </Text>
+                  <View style={s.lbNameWrap}>
+                    <Text style={[s.lbName, isMe && s.lbNameMe]} numberOfLines={1}>
+                      {entry.player.name}{isMe ? '  (you)' : ''}
+                    </Text>
+                    {round.playerTees?.[entry.player.id]?.label ? (
+                      <Text style={s.teeBadge}>{round.playerTees[entry.player.id].label}</Text>
+                    ) : null}
+                  </View>
                   <View style={s.lbStat}>
                     <Text style={s.lbStatValue}>{entry.totalPoints}</Text>
                     <Text style={s.lbStatLabel}>PTS</Text>
@@ -286,8 +291,11 @@ function makeStyles(theme) {
       fontFamily: 'PlayfairDisplay-Bold', fontSize: 16, color: theme.text.muted,
       width: 22, textAlign: 'center',
     },
+    lbNameWrap: {
+      flex: 1, flexDirection: 'row', alignItems: 'center', flexWrap: 'nowrap', overflow: 'hidden',
+    },
     lbName: {
-      flex: 1, fontFamily: 'PlusJakartaSans-Bold', fontSize: 15, color: theme.text.primary,
+      fontFamily: 'PlusJakartaSans-Bold', fontSize: 15, color: theme.text.primary, flexShrink: 1,
     },
     lbNameMe: { color: theme.accent.primary },
     lbStat: { alignItems: 'center', minWidth: 42 },
@@ -362,6 +370,13 @@ function makeStyles(theme) {
     },
     openBtnText: {
       fontFamily: 'PlusJakartaSans-ExtraBold', color: theme.text.inverse, fontSize: 15,
+    },
+
+    teeBadge: {
+      fontFamily: 'PlusJakartaSans-SemiBold', fontSize: 11,
+      color: theme.accent.primary, backgroundColor: theme.accent.light,
+      borderRadius: 6, paddingHorizontal: 6, paddingVertical: 2,
+      overflow: 'hidden', marginLeft: 6,
     },
   });
 }
