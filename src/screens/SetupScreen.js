@@ -1,7 +1,7 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import {
   View, Text, TextInput, TouchableOpacity,
-  StyleSheet, ScrollView, Alert, Platform, Switch,
+  StyleSheet, ScrollView, Alert, Platform,
 } from 'react-native';
 import ScreenContainer from '../components/ScreenContainer';
 
@@ -16,15 +16,6 @@ import { scoringModeUsesTeams, getScoringMode } from '../components/scoringModes
 import WizardProgress from '../components/setup/WizardProgress';
 import WizardNav from '../components/setup/WizardNav';
 import { wizardSteps, isStepValid } from './setupWizard';
-import { createOfficialTournament, addRosterPlayer, createRound } from '../store/officialAdmin';
-
-// Official tournament round formats — distinct value set from ScoringModePicker.
-const OFFICIAL_FORMATS = [
-  { value: 'gross_net', label: 'Stroke play (gross & net)' },
-  { value: 'stableford', label: 'Stableford' },
-  { value: 'pairs', label: 'Pairs (Best Ball / Sindicato)' },
-  { value: 'match', label: 'Match play' },
-];
 
 // Deep green used for the Review hero band — fixed in both themes so white
 // hero text always has strong contrast.
@@ -57,34 +48,11 @@ function buildGameName(courseName) {
   return `${shortCourse} · ${stamp}`;
 }
 
-// Project a wizard round down to just the course data an official round needs.
-// The casual round object also carries a transient client id and casual
-// scoring fields, which must not leak into tournament_rounds.course.
-function officialCourseFor(round) {
-  return {
-    name: round?.courseName ?? '',
-    holes: round?.holes ?? [],
-    slope: round?.slope ?? null,
-    courseRating: round?.courseRating ?? null,
-  };
-}
-
-// Stable id for a roster entry so React keys survive add / remove.
-let _rosterIdSeq = 0;
-function newRosterId() { return `roster-${Date.now()}-${_rosterIdSeq++}`; }
-
 export default function SetupScreen({ navigation, route }) {
   const { theme } = useTheme();
   const s = makeStyles(theme);
 
-  const routeKind = route?.params?.kind;
-  // The game flow stays game; everything else is the tournament flow. Official
-  // is no longer a route kind — it is an in-wizard toggle on step 1. The legacy
-  // kind:'official' route param simply pre-toggles it for backward compat.
-  const baseKind = routeKind === 'game' ? 'game' : 'tournament';
-  const [official, setOfficial] = useState(routeKind === 'official');
-  const isOfficial = baseKind === 'tournament' && official;
-  const kind = isOfficial ? 'official' : baseKind;
+  const kind = route?.params?.kind === 'game' ? 'game' : 'tournament';
   const isGame = kind === 'game';
 
   const [tournamentName, setTournamentName] = useState(() =>
@@ -96,14 +64,7 @@ export default function SetupScreen({ navigation, route }) {
   const [settings, setSettings] = useState({ ...DEFAULT_SETTINGS });
   const [rawStep, setStep] = useState(0);
 
-  // Official-mode-only state. roster: [{ id, displayName, handicap }].
-  const [roster, setRoster] = useState([]);
-  const [officialFormat, setOfficialFormat] = useState('stableford');
-  const [rosterName, setRosterName] = useState('');
-  const [rosterHcp, setRosterHcp] = useState('');
-  const [busy, setBusy] = useState(false);
-
-  // The active step list depends on kind + roster size (Scoring only exists
+  // The active step list depends on kind + player count (Scoring only exists
   // for 2+ players). When the roster shrinks the Scoring step away the array
   // gets shorter, so the active index is clamped synchronously here — not via
   // an effect, which would leave a one-render window where the index points
@@ -254,58 +215,9 @@ export default function SetupScreen({ navigation, route }) {
   }
 
   const missingCourseName = rounds.some((r) => !r.courseName.trim());
-  // Official rounds, like casual tournament rounds, require a course per
-  // round — the shared rounds-step gate (isStepValid) enforces that before
-  // Review is reachable. canStart here only adds the official-specific
-  // requirement of a non-empty roster; the course check already happened.
-  const canStart = isOfficial
-    ? roster.length > 0
-    : (players.length >= 1 && !missingCourseName);
+  const canStart = players.length >= 1 && !missingCourseName;
 
   async function handleStart() {
-    if (isOfficial) {
-      if (busy) return;
-      setBusy(true);
-      let tournamentId = null;
-      try {
-        tournamentId = await createOfficialTournament({
-          name: tournamentName.trim() || 'Weekend Golf',
-        });
-        for (const entry of roster) {
-          await addRosterPlayer(tournamentId, {
-            displayName: entry.displayName,
-            handicap: entry.handicap,
-          });
-        }
-        for (let i = 0; i < rounds.length; i++) {
-          await createRound(tournamentId, {
-            roundIndex: i,
-            course: officialCourseFor(rounds[i]),
-            format: officialFormat,
-          });
-        }
-        navigation.navigate('OfficialSetup', { tournamentId });
-      } catch (err) {
-        if (tournamentId) {
-          // The tournament row exists but roster/rounds setup did not fully
-          // finish. Send the admin to the management screen to complete it —
-          // never leave them on Review where a retry would create a duplicate
-          // tournament.
-          const msg = 'Tournament created, but some setup did not finish. You can complete the roster and rounds on the next screen.';
-          if (Platform.OS === 'web') window.alert(msg);
-          else Alert.alert('Setup incomplete', msg);
-          navigation.navigate('OfficialSetup', { tournamentId });
-        } else {
-          const msg = "Couldn't create the tournament. Please try again.";
-          if (Platform.OS === 'web') window.alert(msg);
-          else Alert.alert('Error', msg);
-        }
-      } finally {
-        setBusy(false);
-      }
-      return;
-    }
-
     if (players.length < 1) {
       Alert.alert('Missing info', 'Select at least 1 player.');
       return;
@@ -394,9 +306,8 @@ export default function SetupScreen({ navigation, route }) {
   }
 
   const isLastStep = stepKey === 'review';
-  const nextEnabled = isStepValid(stepKey, { players, rounds, roster })
-    && (!isLastStep || canStart)
-    && !busy;
+  const nextEnabled = isStepValid(stepKey, { players, rounds })
+    && (!isLastStep || canStart);
   const nextLabel = isLastStep
     ? (isGame ? 'Start Game' : 'Start Tournament')
     : 'Next';
@@ -550,18 +461,12 @@ export default function SetupScreen({ navigation, route }) {
     const hasScoringStep = steps.includes('scoring');
     // For a solo game there is no scoring choice — show a neutral label
     // rather than whatever mode happens to be left in settings.
-    // Official tournaments use their own format step instead of scoring.
-    const scoringLabel = isOfficial
-      ? (OFFICIAL_FORMATS.find((f) => f.value === officialFormat)?.label ?? 'Stableford')
-      : hasScoringStep
-        ? (getScoringMode(settings.scoringMode)?.label ?? 'Solo play')
-        : 'Solo play';
-    const rosterCount = isOfficial ? roster.length : players.length;
-    const playerSummary = isOfficial
-      ? `${roster.length} golfer${roster.length === 1 ? '' : 's'}`
-      : players.length === 1
-        ? `${players[0].name} · HCP ${players[0].handicap}`
-        : `${players.length} golfers`;
+    const scoringLabel = hasScoringStep
+      ? (getScoringMode(settings.scoringMode)?.label ?? 'Solo play')
+      : 'Solo play';
+    const playerSummary = players.length === 1
+      ? `${players[0].name} · HCP ${players[0].handicap}`
+      : `${players.length} golfers`;
     const courseSummary = isGame
       ? (rounds[0]?.courseName || 'No course set')
       : `${rounds.length} round${rounds.length === 1 ? '' : 's'}`;
@@ -582,7 +487,7 @@ export default function SetupScreen({ navigation, route }) {
           <View style={s.reviewChipRow}>
             <View style={s.reviewChip}>
               <Text style={s.reviewChipText}>
-                {rosterCount} player{rosterCount === 1 ? '' : 's'}
+                {players.length} player{players.length === 1 ? '' : 's'}
               </Text>
             </View>
             <View style={s.reviewChip}>
@@ -595,7 +500,7 @@ export default function SetupScreen({ navigation, route }) {
         <View style={s.reviewList}>
           <TouchableOpacity
             style={[s.reviewRow, s.reviewRowDivider]}
-            onPress={() => goToStep(isOfficial ? 'roster' : 'players')}
+            onPress={() => goToStep('players')}
           >
             <Feather name="users" size={16} color={theme.accent.primary} style={s.reviewRowIcon} />
             <View style={{ flex: 1 }}>
@@ -619,15 +524,15 @@ export default function SetupScreen({ navigation, route }) {
 
           <TouchableOpacity
             style={s.reviewRow}
-            onPress={() => goToStep(isOfficial ? 'format' : 'scoring')}
-            disabled={!hasScoringStep && !isOfficial}
+            onPress={() => goToStep('scoring')}
+            disabled={!hasScoringStep}
           >
             <Feather name="target" size={16} color={theme.accent.primary} style={s.reviewRowIcon} />
             <View style={{ flex: 1 }}>
-              <Text style={s.reviewRowTitle}>{isOfficial ? 'Format' : 'Scoring'}</Text>
+              <Text style={s.reviewRowTitle}>Scoring</Text>
               <Text style={s.reviewRowSub}>{scoringLabel}</Text>
             </View>
-            {(hasScoringStep || isOfficial) && (
+            {hasScoringStep && (
               <Feather name="chevron-right" size={18} color={theme.accent.primary} />
             )}
           </TouchableOpacity>
@@ -635,100 +540,14 @@ export default function SetupScreen({ navigation, route }) {
 
         {!canStart && (
           <Text style={s.errorText}>
-            {isOfficial
+            {players.length < 1
               ? 'Add at least 1 player to continue.'
-              : players.length < 1
-                ? 'Add at least 1 player to continue.'
-                : 'Pick a course for every round to continue.'}
+              : 'Pick a course for every round to continue.'}
           </Text>
         )}
       </>
     );
   };
-
-  const handleAddRosterEntry = () => {
-    const name = rosterName.trim();
-    if (!name) return;
-    setRoster((prev) => [...prev, { id: newRosterId(), displayName: name, handicap: Number(rosterHcp) || 0 }]);
-    setRosterName('');
-    setRosterHcp('');
-  };
-
-  const renderRosterStep = () => (
-    <>
-      <Text style={s.stepOverline}>ROSTER</Text>
-      <Text style={s.stepPrompt}>Who's competing?</Text>
-      <Text style={s.stepSubtitle}>Add every player in the official tournament.</Text>
-      {roster.length === 0 && (
-        <View style={s.emptyHint}>
-          <Feather name="users" size={16} color={theme.text.muted} style={{ marginRight: 8 }} />
-          <Text style={s.emptyHintText}>Add at least 1 player to continue.</Text>
-        </View>
-      )}
-      {roster.map((entry, i) => (
-        <View key={entry.id ?? `roster-${i}`} style={s.playerCard}>
-          <View style={s.playerInfo}>
-            <Text style={s.playerName}>{entry.displayName}</Text>
-            <Text style={s.playerHcp}>HCP {entry.handicap}</Text>
-          </View>
-          <TouchableOpacity
-            onPress={() => setRoster((prev) => prev.filter((_, idx) => idx !== i))}
-            style={s.removeBtn}
-          >
-            <Feather name="x" size={16} color={theme.destructive} />
-          </TouchableOpacity>
-        </View>
-      ))}
-      <View style={s.rosterAddForm}>
-        <TextInput
-          style={[s.input, s.rosterNameInput]}
-          placeholder="Player name"
-          placeholderTextColor={theme.text.muted}
-          keyboardAppearance={theme.isDark ? 'dark' : 'light'}
-          selectionColor={theme.accent.primary}
-          value={rosterName}
-          onChangeText={setRosterName}
-        />
-        <TextInput
-          style={[s.input, s.rosterHcpInput]}
-          placeholder="HCP"
-          placeholderTextColor={theme.text.muted}
-          keyboardAppearance={theme.isDark ? 'dark' : 'light'}
-          selectionColor={theme.accent.primary}
-          keyboardType="numeric"
-          value={rosterHcp}
-          onChangeText={setRosterHcp}
-        />
-      </View>
-      <TouchableOpacity style={s.pickBtn} onPress={handleAddRosterEntry}>
-        <Feather name="plus" size={16} color={theme.accent.primary} style={{ marginRight: 6 }} />
-        <Text style={s.pickBtnText}>Add Player</Text>
-      </TouchableOpacity>
-    </>
-  );
-
-  const renderFormatStep = () => (
-    <>
-      <Text style={s.stepOverline}>FORMAT</Text>
-      <Text style={s.stepPrompt}>How is it scored?</Text>
-      <Text style={s.stepSubtitle}>Pick the official scoring format.</Text>
-      {OFFICIAL_FORMATS.map((opt) => {
-        const selected = officialFormat === opt.value;
-        return (
-          <TouchableOpacity
-            key={opt.value}
-            style={[s.formatRow, selected && s.formatRowSelected]}
-            onPress={() => setOfficialFormat(opt.value)}
-          >
-            <Text style={[s.formatRowText, selected && s.formatRowTextSelected]}>
-              {opt.label}
-            </Text>
-            {selected && <Feather name="check" size={18} color={theme.accent.primary} />}
-          </TouchableOpacity>
-        );
-      })}
-    </>
-  );
 
   return (
     <ScreenContainer style={s.container} edges={['top', 'bottom']}>
@@ -739,26 +558,8 @@ export default function SetupScreen({ navigation, route }) {
         contentContainerStyle={s.content}
         keyboardShouldPersistTaps="handled"
       >
-        {step === 0 && baseKind === 'tournament' && (
-          <View style={s.officialToggleCard}>
-            <View style={s.officialToggleRow}>
-              <Text style={s.officialToggleLabel}>Official tournament</Text>
-              <Switch
-                value={official}
-                onValueChange={setOfficial}
-                trackColor={{ false: theme.border.default, true: theme.accent.primary }}
-                thumbColor="#ffffff"
-              />
-            </View>
-            <Text style={s.officialToggleCaption}>
-              Players join by invite link; scores are double-entered and verified.
-            </Text>
-          </View>
-        )}
         {stepKey === 'players' && renderPlayersStep()}
-        {stepKey === 'roster' && renderRosterStep()}
         {(stepKey === 'course' || stepKey === 'rounds') && renderCourseStep()}
-        {stepKey === 'format' && renderFormatStep()}
         {stepKey === 'scoring' && renderScoringStep()}
         {stepKey === 'review' && renderReviewStep()}
       </ScrollView>
@@ -944,74 +745,6 @@ function makeStyles(theme) {
       fontFamily: 'PlusJakartaSans-SemiBold',
       color: theme.accent.primary,
       fontSize: 14,
-    },
-
-    /* Official tournament toggle (tournament flow, step 1 only) */
-    officialToggleCard: {
-      backgroundColor: theme.bg.card,
-      borderRadius: 16,
-      borderWidth: 1,
-      borderColor: theme.isDark ? theme.glass?.border : theme.border.default,
-      padding: 16,
-      marginBottom: 18,
-      ...(theme.isDark ? {} : theme.shadow.card),
-    },
-    officialToggleRow: {
-      flexDirection: 'row',
-      alignItems: 'center',
-      justifyContent: 'space-between',
-    },
-    officialToggleLabel: {
-      flex: 1,
-      fontFamily: 'PlusJakartaSans-Bold',
-      color: theme.text.primary,
-      fontSize: 15,
-    },
-    officialToggleCaption: {
-      fontFamily: 'PlusJakartaSans-Medium',
-      color: theme.text.secondary,
-      fontSize: 12,
-      marginTop: 6,
-    },
-
-    /* Roster add form (official) */
-    rosterAddForm: {
-      flexDirection: 'row',
-      gap: 8,
-    },
-    rosterNameInput: {
-      flex: 1,
-    },
-    rosterHcpInput: {
-      width: 80,
-      textAlign: 'center',
-    },
-
-    /* Format option rows (official) */
-    formatRow: {
-      flexDirection: 'row',
-      alignItems: 'center',
-      justifyContent: 'space-between',
-      backgroundColor: theme.bg.card,
-      borderRadius: 14,
-      borderWidth: 1,
-      borderColor: theme.isDark ? theme.glass?.border : theme.border.default,
-      padding: 16,
-      marginBottom: 8,
-      ...(theme.isDark ? {} : theme.shadow.card),
-    },
-    formatRowSelected: {
-      borderColor: theme.accent.primary,
-      backgroundColor: theme.accent.light,
-    },
-    formatRowText: {
-      fontFamily: 'PlusJakartaSans-SemiBold',
-      color: theme.text.primary,
-      fontSize: 15,
-    },
-    formatRowTextSelected: {
-      fontFamily: 'PlusJakartaSans-Bold',
-      color: theme.accent.primary,
     },
 
     /* Empty / error states */
