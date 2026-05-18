@@ -429,6 +429,12 @@ export default function HomeScreen({ navigation, route }) {
     navigation.navigate('Tournament');
   }
 
+  // Deep link from an "added to a game" notification — open that game.
+  useEffect(() => {
+    const id = route.params?.openTournamentId;
+    if (id) selectTournament(id);
+  }, [route.params?.openTournamentId]);
+
   async function goToList() {
     if (navigation.canGoBack()) {
       navigation.goBack();
@@ -930,6 +936,16 @@ export default function HomeScreen({ navigation, route }) {
               >
                 <Feather name="users" size={18} color={theme.accent.primary} />
                 <Text style={s.menuItemText}>Friends</Text>
+                <Feather name="chevron-right" size={16} color={theme.text.muted} />
+              </TouchableOpacity>
+
+              <TouchableOpacity
+                style={s.menuItem}
+                onPress={() => { setShowListMenu(false); navigation.navigate('Notifications'); }}
+                activeOpacity={0.7}
+              >
+                <Feather name="bell" size={18} color={theme.accent.primary} />
+                <Text style={s.menuItemText}>Notifications</Text>
                 {unreadNotifs > 0 && (
                   <View style={s.menuItemBadge}>
                     <Text style={s.menuItemBadgeText}>{unreadNotifs > 9 ? '9+' : unreadNotifs}</Text>
