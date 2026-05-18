@@ -17,7 +17,7 @@
       "supportsTablet": true
     },
     "android": {
-      "package": "com.musterpck.golf",
+      "package": "com.golfpartner.app",
       "adaptiveIcon": {
         "foregroundImage": "./assets/adaptive-icon.png",
         "backgroundColor": "#006747"
