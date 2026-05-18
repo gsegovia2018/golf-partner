@@ -149,7 +149,7 @@ function LightboxVideo({ uri, active, style }) {
 
 const makeStyles = () => StyleSheet.create({
   container: { flex: 1, backgroundColor: '#000' },
-  media: { width: '100%', height: '100%' },
+  media: { width: '100%', height: '100%', maxWidth: 720, alignSelf: 'center' },
   topBar: { position: 'absolute', left: 0, right: 0, paddingHorizontal: 16,
             flexDirection: 'row', justifyContent: 'space-between', zIndex: 10 },
   topActions: { flexDirection: 'row', gap: 8 },

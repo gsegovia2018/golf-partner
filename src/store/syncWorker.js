@@ -30,6 +30,26 @@ async function drainLibrary(libraryMuts) {
     if (m.type === 'player.upsertLibrary') {
       await upsertPlayer({ id: m.playerId, name: m.name, handicap: m.handicap });
       await syncQueue.drop(entry.id);
+    } else if (m.type === 'rpc.call') {
+      // Generic RPC dispatch (e.g. official-tournament score writes).
+      const { error } = await supabase.rpc(m.fn, m.args);
+      if (error) {
+        if (error.code) {
+          // Terminal failure: the RPC reached the database and the
+          // function raised an exception / hit a constraint (SQLSTATE
+          // codes like P0001, 23xxx — "party locked", "invalid token").
+          // Retrying will never succeed, so drop the entry rather than
+          // let it sit forever pinning the sync dot to orange.
+          console.warn(`rpc.call ${m.fn} permanently rejected; dropping: ${error.message}`);
+          await syncQueue.drop(entry.id);
+          continue;
+        }
+        // Transient failure: no SQLSTATE means a network/transport
+        // error. Leave the entry queued and let scheduleSync's backoff
+        // retry it on the next pass.
+        throw error;
+      }
+      await syncQueue.drop(entry.id);
     } else {
       // Unknown library-type mutation: drop so it can't sit in the queue
       // forever pinning the sync dot to orange.

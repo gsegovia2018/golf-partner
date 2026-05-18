@@ -2,7 +2,7 @@ import React, { useCallback, useState } from 'react';
 import {
   View, Text, TouchableOpacity, StyleSheet, ScrollView, Alert, Platform,
 } from 'react-native';
-import { SafeAreaView } from 'react-native-safe-area-context';
+import ScreenContainer from '../components/ScreenContainer';
 import { Feather } from '@expo/vector-icons';
 import { useFocusEffect } from '@react-navigation/native';
 
@@ -22,7 +22,24 @@ export default function FinishedScreen({ navigation }) {
 
   const reload = useCallback(async () => {
     const { list } = await loadAllTournamentsWithFallback();
-    setFinished(list.filter((t) => isTournamentFinished(t)).sort((a, b) => b.id - a.id));
+    // Sort newest-finished first. `finishedAt` is an ms epoch (or ISO string);
+    // fall back to id when a tournament became finished implicitly (every
+    // round complete) and so has no explicit finishedAt timestamp.
+    const finishedAtValue = (t) => {
+      const v = t.finishedAt;
+      if (v == null) return 0;
+      const n = typeof v === 'number' ? v : Date.parse(v);
+      return Number.isFinite(n) ? n : 0;
+    };
+    setFinished(
+      list
+        .filter((t) => isTournamentFinished(t))
+        .sort((a, b) => {
+          const diff = finishedAtValue(b) - finishedAtValue(a);
+          if (diff !== 0) return diff;
+          return b.id - a.id;
+        }),
+    );
     setLoading(false);
   }, []);
 
@@ -39,6 +56,15 @@ export default function FinishedScreen({ navigation }) {
   }
 
   async function reopen(t) {
+    const confirmed = Platform.OS === 'web'
+      ? window.confirm(`Reopen "${t.name}"? It will move back to your active list.`)
+      : await new Promise((resolve) => Alert.alert(
+          'Reopen',
+          `Reopen "${t.name}"? It will move back to your active list.`,
+          [{ text: 'Cancel', style: 'cancel', onPress: () => resolve(false) },
+           { text: 'Reopen', onPress: () => resolve(true) }],
+        ));
+    if (!confirmed) return;
     try {
       await mutate(t, { type: 'tournament.setFinished', finishedAt: null });
       await reload();
@@ -125,7 +151,7 @@ export default function FinishedScreen({ navigation }) {
   const tournaments = finished.filter((t) => t.kind !== 'game');
 
   return (
-    <SafeAreaView style={s.container} edges={['top', 'bottom']}>
+    <ScreenContainer style={s.container} edges={['top', 'bottom']}>
       <View style={s.header}>
         <TouchableOpacity onPress={() => navigation.goBack()} style={s.backBtn}>
           <Feather name="chevron-left" size={22} color={theme.accent.primary} />
@@ -155,7 +181,7 @@ export default function FinishedScreen({ navigation }) {
           </>
         )}
       </ScrollView>
-    </SafeAreaView>
+    </ScreenContainer>
   );
 }
 

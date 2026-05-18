@@ -1,6 +1,7 @@
-import React, { useEffect, useRef, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import {
   Modal, View, Text, Pressable, TouchableOpacity, StyleSheet,
+  ActivityIndicator, Animated, PanResponder,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Feather } from '@expo/vector-icons';
@@ -10,37 +11,82 @@ import { findParForHole } from '../lib/memoriesGalleryData';
 
 const PHOTO_MS = 4000;
 const TICK_MS = 50;
+// Drag distance past which a downward swipe dismisses the viewer.
+const DISMISS_DISTANCE = 120;
 
-export default function MemoriesStoriesViewer({ visible, entry, round, onClose }) {
+// `items` is a flat, chronologically ordered list of media across every
+// round; `startIndex` is where playback begins (the round the user tapped).
+// Playback continues across round boundaries, so opening one round's story
+// shows the whole tournament's memories.
+export default function MemoriesStoriesViewer({ visible, items = [], startIndex = 0, rounds, onClose }) {
   const insets = useSafeAreaInsets();
   const [index, setIndex] = useState(0);
   const [progress, setProgress] = useState(0);
   const [paused, setPaused] = useState(false);
+  const [buffering, setBuffering] = useState(false);
   const longPressedRef = useRef(false);
+  // Accumulated photo elapsed time (ms) across pause/resume cycles, so a
+  // resume continues from where it stopped instead of replaying the full 4s.
+  const elapsedRef = useRef(0);
+  const dragY = useRef(new Animated.Value(0)).current;
 
-  const items = entry?.items ?? [];
   const current = items[index];
 
   useEffect(() => {
     if (!visible) return;
-    setIndex(0);
+    setIndex(startIndex);
     setProgress(0);
     setPaused(false);
-  }, [visible, entry?.roundId]);
+    elapsedRef.current = 0;
+    dragY.setValue(0);
+  }, [visible, startIndex, dragY]);
 
-  useEffect(() => { setProgress(0); }, [index]);
-
+  // New item → reset progress and the elapsed accumulator.
   useEffect(() => {
-    if (!visible || paused || !current || current.kind !== 'photo') return;
-    const start = Date.now();
+    setProgress(0);
+    elapsedRef.current = 0;
+    setBuffering(current?.kind === 'video');
+  }, [index, current?.kind]);
+
+  // Photo auto-advance timer. Tracks accumulated elapsed time in elapsedRef
+  // so pausing (long-press) and resuming preserves progress: each run adds
+  // (now - runStart) to the elapsed total rather than restarting from 0.
+  useEffect(() => {
+    if (!visible || paused || buffering || !current || current.kind !== 'photo') return;
+    const runStart = Date.now();
     const id = setInterval(() => {
-      const p = Math.min(1, (Date.now() - start) / PHOTO_MS);
+      const total = elapsedRef.current + (Date.now() - runStart);
+      const p = Math.min(1, total / PHOTO_MS);
       setProgress(p);
       if (p >= 1) advance();
     }, TICK_MS);
-    return () => clearInterval(id);
+    return () => {
+      // Banking the elapsed time of this run so a resume continues from here.
+      elapsedRef.current += Date.now() - runStart;
+      clearInterval(id);
+    };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [visible, paused, index, current?.id]);
+  }, [visible, paused, buffering, index, current?.id]);
+
+  // Swipe-down-to-dismiss. A predominantly-vertical downward drag tracks the
+  // content; releasing past the threshold closes, otherwise it springs back.
+  const panResponder = useMemo(() => PanResponder.create({
+    onMoveShouldSetPanResponder: (_e, g) =>
+      g.dy > 8 && g.dy > Math.abs(g.dx) * 1.5,
+    onPanResponderMove: (_e, g) => {
+      if (g.dy > 0) dragY.setValue(g.dy);
+    },
+    onPanResponderRelease: (_e, g) => {
+      if (g.dy > DISMISS_DISTANCE || g.vy > 0.8) {
+        onClose();
+      } else {
+        Animated.spring(dragY, { toValue: 0, useNativeDriver: true }).start();
+      }
+    },
+    onPanResponderTerminate: () => {
+      Animated.spring(dragY, { toValue: 0, useNativeDriver: true }).start();
+    },
+  }), [dragY, onClose]);
 
   if (!visible || !current) return null;
 
@@ -61,29 +107,60 @@ export default function MemoriesStoriesViewer({ visible, entry, round, onClose }
     }
   };
 
-  const par = findParForHole(round, current.holeIndex);
+  // Each item carries its own roundId — resolve the round it belongs to so
+  // the header label and par update as playback crosses round boundaries.
+  const curRoundIndex = rounds ? rounds.findIndex((r) => r.id === current.roundId) : -1;
+  const curRound = curRoundIndex >= 0 ? rounds[curRoundIndex] : null;
+  const par = findParForHole(curRound, current.holeIndex);
   const holeLabel =
     current.holeIndex == null
       ? null
       : par != null
-        ? `Hoyo ${current.holeIndex + 1} · Par ${par}`
-        : `Hoyo ${current.holeIndex + 1}`;
+        ? `Hole ${current.holeIndex + 1} · Par ${par}`
+        : `Hole ${current.holeIndex + 1}`;
   const time = (() => {
     try {
-      return new Date(current.createdAt).toLocaleTimeString('es-ES', {
+      return new Date(current.createdAt).toLocaleTimeString([], {
         hour: '2-digit', minute: '2-digit',
       });
     } catch { return ''; }
   })();
 
+  // The progress bar is segmented PER ROUND, not per global media item — a
+  // tournament with 60+ photos would otherwise render 60+ unreadable slivers.
+  // Each round is one segment; the active round's segment fills with the
+  // round's own item-by-item progress.
+  const roundSegments = useMemo(() => {
+    const segs = [];
+    let prevRoundId;
+    items.forEach((m, i) => {
+      if (m.roundId !== prevRoundId) {
+        segs.push({ roundId: m.roundId, start: i, count: 0 });
+        prevRoundId = m.roundId;
+      }
+      segs[segs.length - 1].count += 1;
+    });
+    return segs;
+  }, [items]);
+
+  const activeSegmentIndex = roundSegments.findIndex(
+    (seg) => index >= seg.start && index < seg.start + seg.count,
+  );
+
   return (
     <Modal visible animationType="fade" onRequestClose={onClose} transparent={false}>
-      <View style={s.container}>
+      <Animated.View
+        style={[s.container, { transform: [{ translateY: dragY }] }]}
+        {...panResponder.panHandlers}
+      >
         {current.kind === 'photo' ? (
           <ExpoImage
             source={{ uri: current.url }}
             style={StyleSheet.absoluteFillObject}
             contentFit="contain"
+            onLoadStart={() => setBuffering(true)}
+            onLoad={() => setBuffering(false)}
+            onError={() => setBuffering(false)}
           />
         ) : (
           <StoryVideo
@@ -91,8 +168,15 @@ export default function MemoriesStoriesViewer({ visible, entry, round, onClose }
             paused={paused}
             onProgress={setProgress}
             onFinished={advance}
+            onBuffering={setBuffering}
           />
         )}
+
+        {buffering ? (
+          <View style={s.bufferWrap} pointerEvents="none">
+            <ActivityIndicator color="#fff" size="large" />
+          </View>
+        ) : null}
 
         <View style={s.tapRow} pointerEvents="box-none">
           <Pressable
@@ -112,11 +196,18 @@ export default function MemoriesStoriesViewer({ visible, entry, round, onClose }
         </View>
 
         <View style={[s.bars, { top: insets.top + 10 }]} pointerEvents="none">
-          {items.map((_, i) => {
-            const fill = i < index ? 1 : i === index ? progress : 0;
+          {roundSegments.map((seg, i) => {
+            let fill = 0;
+            if (i < activeSegmentIndex) fill = 1;
+            else if (i === activeSegmentIndex) {
+              // Within the active round: completed items + the current item's
+              // own progress, normalised over the round's item count.
+              const doneInRound = index - seg.start;
+              fill = seg.count > 0 ? (doneInRound + progress) / seg.count : 0;
+            }
             return (
-              <View key={i} style={s.bar}>
-                <View style={[s.barFill, { width: `${fill * 100}%` }]} />
+              <View key={seg.roundId ?? `seg-${i}`} style={s.bar}>
+                <View style={[s.barFill, { width: `${Math.min(1, fill) * 100}%` }]} />
               </View>
             );
           })}
@@ -125,15 +216,15 @@ export default function MemoriesStoriesViewer({ visible, entry, round, onClose }
         <View style={[s.top, { top: insets.top + 20 }]} pointerEvents="box-none">
           <View style={s.topLeft} pointerEvents="none">
             <Text style={s.topLabel}>
-              R{(entry?.roundIndex ?? 0) + 1}
-              {entry?.courseName ? ` · ${entry.courseName}` : ''}
+              R{curRoundIndex >= 0 ? curRoundIndex + 1 : '?'}
+              {curRound?.courseName ? ` · ${curRound.courseName}` : ''}
               {` · ${index + 1}/${items.length}`}
             </Text>
           </View>
           <TouchableOpacity
             onPress={onClose}
             style={s.closeBtn}
-            accessibilityLabel="Cerrar"
+            accessibilityLabel="Close"
             hitSlop={12}
           >
             <Feather name="x" size={22} color="#fff" />
@@ -151,18 +242,28 @@ export default function MemoriesStoriesViewer({ visible, entry, round, onClose }
             {current.uploaderLabel ? `${current.uploaderLabel} · ${time}` : time}
           </Text>
         </View>
-      </View>
+      </Animated.View>
     </Modal>
   );
 }
 
-function StoryVideo({ uri, paused, onProgress, onFinished }) {
+function StoryVideo({ uri, paused, onProgress, onFinished, onBuffering }) {
   const player = useVideoPlayer(uri, (p) => { p.loop = false; });
 
   useEffect(() => {
     if (paused) player.pause();
     else player.play();
   }, [paused, player]);
+
+  // Surface the player's buffering/loading state so the viewer can show a
+  // spinner until the video is actually ready to play.
+  useEffect(() => {
+    const sub = player.addListener?.('statusChange', (status) => {
+      const value = status?.status ?? status;
+      onBuffering(value === 'loading' || value === 'idle');
+    });
+    return () => { sub?.remove?.(); };
+  }, [player, onBuffering]);
 
   // expo-video doesn't expose a per-frame callback, so we poll currentTime
   // against duration to drive the progress bar and advance when finished.
@@ -195,6 +296,10 @@ const s = StyleSheet.create({
   tapRow: { ...StyleSheet.absoluteFillObject, flexDirection: 'row', zIndex: 2 },
   tapLeft: { flex: 1 },
   tapRight: { flex: 2 },
+  bufferWrap: {
+    ...StyleSheet.absoluteFillObject,
+    alignItems: 'center', justifyContent: 'center', zIndex: 5,
+  },
   bars: {
     position: 'absolute', left: 8, right: 8,
     flexDirection: 'row', gap: 3, zIndex: 10,

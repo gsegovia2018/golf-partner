@@ -1,0 +1,342 @@
+// ============================================================================
+// Pure scoring & handicap math.
+// ============================================================================
+//
+// Extracted from tournamentStore.js so the leaderboard / Stableford / match-play
+// math can be imported and unit-tested WITHOUT pulling in AsyncStorage, the
+// Supabase client, or the sync layer. tournamentStore.js re-exports everything
+// here for backwards compatibility, so existing `import { ... } from
+// '../store/tournamentStore'` call sites keep working.
+//
+// Everything in this file is a pure function (no IO, no module state) except
+// randomPairs, which is deliberately non-deterministic.
+// ============================================================================
+
+export const STANDARD_SLOPE = 113;
+
+// Sum hole pars; used as the "Par" term in the WHS course-handicap formula.
+export function totalParFromHoles(holes) {
+  if (!Array.isArray(holes)) return 0;
+  return holes.reduce((sum, h) => sum + (parseInt(h?.par, 10) || 0), 0);
+}
+
+// WHS course handicap: HI × (slope/113) + (CR − par), rounded.
+// No slope → raw index (can't compute either term meaningfully).
+// Missing CR or par → slope-only fallback.
+export function calcPlayingHandicap(index, slope, rating, par) {
+  const idx = parseInt(index, 10) || 0;
+  const sv = parseInt(slope, 10) || 0;
+  if (sv <= 0) return idx;
+  const slopeAdj = idx * (sv / STANDARD_SLOPE);
+  const cr = parseFloat(rating);
+  const pv = parseInt(par, 10) || 0;
+  const crAdj = (Number.isFinite(cr) && pv > 0) ? (cr - pv) : 0;
+  return Math.round(slopeAdj + crAdj);
+}
+
+// Convenience: derive a player's auto playing handicap for a given round.
+export function deriveRoundPlayingHandicap(handicap, round) {
+  return calcPlayingHandicap(
+    handicap,
+    round?.slope,
+    round?.courseRating,
+    totalParFromHoles(round?.holes),
+  );
+}
+
+// Ensure every current player has an entry in round.playerHandicaps. Missing
+// entries are backfilled from the player's base index applied to round.slope.
+// For legacy rounds lacking manualHandicaps, infer manual overrides by
+// comparing stored value to the slope-derived value.
+export function normalizeRoundHandicaps(round, players) {
+  const playerHandicaps = { ...(round.playerHandicaps ?? {}) };
+  const manualHandicaps = { ...(round.manualHandicaps ?? {}) };
+  const hasLegacyFlags = round.manualHandicaps != null;
+  players.forEach((p) => {
+    const auto = deriveRoundPlayingHandicap(p.handicap, round);
+    const current = playerHandicaps[p.id];
+    if (current == null) {
+      playerHandicaps[p.id] = auto;
+    } else if (!hasLegacyFlags && round.slope && Number(current) !== auto) {
+      manualHandicaps[p.id] = true;
+    }
+  });
+  return { ...round, playerHandicaps, manualHandicaps };
+}
+
+// Read the playing handicap for a player in a round. Falls back to deriving
+// from the player's base index × round slope when the round has no stored
+// entry (e.g. legacy data).
+export function getPlayingHandicap(round, player) {
+  const stored = round.playerHandicaps?.[player.id];
+  if (stored != null) return Number(stored);
+  return deriveRoundPlayingHandicap(player.handicap, round);
+}
+
+// Recompute playerHandicaps for non-manual entries when base index or slope
+// changes. Preserves manual overrides.
+export function recomputeRoundPlayingHandicaps(round, players) {
+  const playerHandicaps = { ...(round.playerHandicaps ?? {}) };
+  const manual = round.manualHandicaps ?? {};
+  players.forEach((p) => {
+    if (manual[p.id]) return;
+    playerHandicaps[p.id] = deriveRoundPlayingHandicap(p.handicap, round);
+  });
+  return { ...round, playerHandicaps };
+}
+
+// Strokes received on a hole: floor(handicap/18) on every hole, plus one more
+// on holes whose stroke index is within the handicap's remainder.
+export function calcExtraShots(playerHandicap, holeStrokeIndex) {
+  const base = Math.floor(playerHandicap / 18);
+  const remainder = playerHandicap % 18;
+  return base + (holeStrokeIndex <= remainder ? 1 : 0);
+}
+
+// Stableford points = 2 + par − net strokes (handicap-adjusted), floored at 0.
+export function calcStablefordPoints(par, strokes, playerHandicap, holeStrokeIndex) {
+  if (!strokes || strokes <= 0) return 0;
+  const extra = calcExtraShots(playerHandicap, holeStrokeIndex);
+  const points = 2 + par - strokes + extra;
+  return Math.max(0, points);
+}
+
+// Match Play: 2 players, per-hole 1-vs-1. Returns 1 if `playerId` won the hole
+// (lower net strokes), 0 if they lost OR halved, null if either side hasn't
+// scored yet. Caller can derive halved holes by checking that both sides
+// returned 0 for the same hole.
+export function matchPlayHolePts(hole, playerId, players, scores, playerHandicapsByPlayerId) {
+  if (!players || players.length !== 2) return null;
+  const [a, b] = players;
+  const strA = scores?.[a.id]?.[hole.number];
+  const strB = scores?.[b.id]?.[hole.number];
+  if (strA == null || strB == null) return null;
+  const hA = playerHandicapsByPlayerId?.[a.id] ?? a.handicap ?? 0;
+  const hB = playerHandicapsByPlayerId?.[b.id] ?? b.handicap ?? 0;
+  const netA = strA - calcExtraShots(hA, hole.strokeIndex);
+  const netB = strB - calcExtraShots(hB, hole.strokeIndex);
+  if (netA === netB) return 0;
+  const winnerId = netA < netB ? a.id : b.id;
+  return playerId === winnerId ? 1 : 0;
+}
+
+// Match Play round tally: holes won by each player + halved count + status.
+// Status is one of "A up 2", "All square", or "A wins 3&2" (clinched).
+export function matchPlayRoundTally(round, players) {
+  if (!players || players.length !== 2) return null;
+  const [a, b] = players;
+  const scores = round?.scores ?? {};
+  const playerHandicaps = round?.playerHandicaps ?? {};
+  const holes = round?.holes ?? [];
+  let aWins = 0;
+  let bWins = 0;
+  let halved = 0;
+  let played = 0;
+  for (const hole of holes) {
+    const pts = matchPlayHolePts(hole, a.id, players, scores, playerHandicaps);
+    if (pts == null) continue;
+    played++;
+    if (pts === 1) aWins++;
+    else {
+      // a didn't win — either b did or it was halved
+      const bPts = matchPlayHolePts(hole, b.id, players, scores, playerHandicaps);
+      if (bPts === 1) bWins++;
+      else halved++;
+    }
+  }
+  const holesLeft = holes.length - played;
+  const lead = Math.abs(aWins - bWins);
+  const leaderIdx = aWins > bWins ? 0 : bWins > aWins ? 1 : null;
+  const clinched = leaderIdx !== null && lead > holesLeft;
+  return { aWins, bWins, halved, played, holesLeft, lead, leaderIdx, clinched };
+}
+
+// ── Sindicato ───────────────────────────────────────────────────────────────
+// 3-player per-hole points game. Each hole splits 6 points by net-stroke rank:
+//   all three net-equal      → 2 / 2 / 2
+//   two tied lowest, one up  → 3 / 3 / 0
+//   one lowest, two tied up  → 4 / 1 / 1
+//   three distinct           → 4 / 2 / 0
+// Returns { [playerId]: points }, or null when there are not exactly 3 players
+// or any of them has not scored the hole yet.
+export function sindicatoHolePoints(hole, players, scores, playerHandicapsByPlayerId) {
+  if (!players || players.length !== 3) return null;
+  const nets = [];
+  for (const p of players) {
+    const strokes = scores?.[p.id]?.[hole.number];
+    if (strokes == null) return null;
+    const h = playerHandicapsByPlayerId?.[p.id] ?? p.handicap ?? 0;
+    nets.push({ id: p.id, net: strokes - calcExtraShots(h, hole.strokeIndex) });
+  }
+  const [lo, mid, hi] = [...nets].sort((a, b) => a.net - b.net);
+  if (lo.net === mid.net && mid.net === hi.net) {
+    return { [lo.id]: 2, [mid.id]: 2, [hi.id]: 2 };
+  }
+  if (lo.net === mid.net) {
+    return { [lo.id]: 3, [mid.id]: 3, [hi.id]: 0 };
+  }
+  if (mid.net === hi.net) {
+    return { [lo.id]: 4, [mid.id]: 1, [hi.id]: 1 };
+  }
+  return { [lo.id]: 4, [mid.id]: 2, [hi.id]: 0 };
+}
+
+// Cumulative Sindicato points for one round. Returns null for the wrong player
+// count. `totals` is sorted points-descending; `leaderIdx` is the index of the
+// sole leader within `totals` (null when the top two are tied). A trailing
+// player gains at most 4 per hole, so the leader has clinched the round when
+// `lead > holesLeft × 4`.
+export function sindicatoRoundTally(round, players) {
+  if (!players || players.length !== 3) return null;
+  const scores = round?.scores ?? {};
+  const playerHandicaps = round?.playerHandicaps ?? {};
+  const holes = round?.holes ?? [];
+  const pointsById = Object.fromEntries(players.map((p) => [p.id, 0]));
+  let played = 0;
+  for (const hole of holes) {
+    const hp = sindicatoHolePoints(hole, players, scores, playerHandicaps);
+    if (!hp) continue;
+    played++;
+    for (const p of players) pointsById[p.id] += hp[p.id];
+  }
+  const totals = players
+    .map((player) => ({ player, points: pointsById[player.id] }))
+    .sort((a, b) => b.points - a.points);
+  const holesLeft = holes.length - played;
+  const lead = totals[0].points - totals[1].points;
+  const leaderIdx = totals[0].points > totals[1].points ? 0 : null;
+  const clinched = leaderIdx === 0 && lead > holesLeft * 4;
+  return { totals, played, holesLeft, leaderIdx, lead, clinched };
+}
+
+// Lowest stroke count that still yields 0 Stableford points on this hole for
+// this player. Use as the recorded score when a player picks up the ball.
+export function pickupStrokes(par, playerHandicap, holeStrokeIndex) {
+  const extra = calcExtraShots(playerHandicap, holeStrokeIndex);
+  return par + 2 + extra;
+}
+
+// Split players into pairs at random. Uses an unbiased Fisher-Yates shuffle
+// (the old `sort(() => Math.random() - 0.5)` produced a skewed distribution).
+export function randomPairs(players) {
+  const shuffled = [...players];
+  for (let i = shuffled.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [shuffled[i], shuffled[j]] = [shuffled[j], shuffled[i]];
+  }
+  const pairs = [];
+  for (let i = 0; i < shuffled.length; i += 2) {
+    const pair = [shuffled[i], shuffled[i + 1]].filter(Boolean);
+    if (pair.length > 0) pairs.push(pair);
+  }
+  return pairs;
+}
+
+// A round counts toward tournament totals once it's been reached (its index is
+// at or before the tournament's currentRound) and has a scores object.
+export function isRoundPlayed(round, index, tournament) {
+  if (index > (tournament.currentRound ?? 0)) return false;
+  return !!round.scores;
+}
+
+// Cumulative Sindicato standings across all played rounds. Returns
+// [{ player, points, strokes }] sorted points-descending. `strokes` is the
+// player's total gross strokes (kept shape-compatible with tournamentLeaderboard
+// so leaderboard UI can render either without branching).
+export function tournamentSindicatoLeaderboard(tournament) {
+  const { players, rounds } = tournament;
+  const pointsById = Object.fromEntries(players.map((p) => [p.id, 0]));
+  const strokesById = Object.fromEntries(players.map((p) => [p.id, 0]));
+  rounds.forEach((round, index) => {
+    if (!isRoundPlayed(round, index, tournament)) return;
+    const tally = sindicatoRoundTally(round, players);
+    if (!tally) return;
+    tally.totals.forEach(({ player, points }) => {
+      pointsById[player.id] += points;
+    });
+    players.forEach((p) => {
+      const holeScores = round.scores?.[p.id] ?? {};
+      for (const v of Object.values(holeScores)) strokesById[p.id] += (v || 0);
+    });
+  });
+  return players
+    .map((player) => ({
+      player,
+      points: pointsById[player.id],
+      strokes: strokesById[player.id],
+    }))
+    .sort((a, b) => b.points - a.points);
+}
+
+// Player id who has clinched a Sindicato tournament, or null. Sums the holes
+// still to play across the current round and every future round; a trailing
+// player can gain at most 4 per hole, so the leader has clinched when their
+// lead over second place exceeds holesRemaining × 4.
+export function tournamentSindicatoClinched(tournament) {
+  const { players, rounds } = tournament;
+  if (!players || players.length !== 3) return null;
+  const hasAnyScore = rounds.some((r) => r.scores && Object.keys(r.scores).length > 0);
+  if (!hasAnyScore) return null;
+  const lb = tournamentSindicatoLeaderboard(tournament);
+  if (lb.length < 2) return null;
+  let holesRemaining = 0;
+  rounds.forEach((round, idx) => {
+    const future = idx > (tournament.currentRound ?? 0);
+    if (future) {
+      holesRemaining += round.holes?.length ?? 0;
+      return;
+    }
+    const tally = sindicatoRoundTally(round, players);
+    holesRemaining += tally ? tally.holesLeft : (round.holes?.length ?? 0);
+  });
+  if (lb[0].points - lb[1].points > holesRemaining * 4) return lb[0].player.id;
+  return null;
+}
+
+// Match Play tournament standing. Across played rounds, sums each of the two
+// players' holes won (matchPlayRoundTally) and total gross strokes. Returns
+// { board: [{player, points, strokes}] sorted by holes won desc, status } or
+// null for the wrong player count / before any hole is scored. `status` is
+// "<leader> wins" once the lead exceeds the holes still to play, else
+// "<leader> leads by N", else "All square".
+export function tournamentMatchPlayStandings(tournament) {
+  const { players, rounds } = tournament;
+  if (!players || players.length !== 2) return null;
+  // No early-out on an unscored match: both players still appear on the
+  // leaderboard, all square at 0, so the card is populated from the start.
+  const [a, b] = players;
+  let aHoles = 0;
+  let bHoles = 0;
+  let holesRemaining = 0;
+  const strokes = { [a.id]: 0, [b.id]: 0 };
+  rounds.forEach((round, idx) => {
+    const future = idx > (tournament.currentRound ?? 0);
+    if (future) {
+      holesRemaining += round.holes?.length ?? 0;
+      return;
+    }
+    players.forEach((p) => {
+      const holeScores = round.scores?.[p.id] ?? {};
+      for (const v of Object.values(holeScores)) strokes[p.id] += (v || 0);
+    });
+    const tally = matchPlayRoundTally(round, players);
+    if (tally) {
+      aHoles += tally.aWins;
+      bHoles += tally.bWins;
+      holesRemaining += tally.holesLeft;
+    } else {
+      holesRemaining += round.holes?.length ?? 0;
+    }
+  });
+  const board = [
+    { player: a, points: aHoles, strokes: strokes[a.id] },
+    { player: b, points: bHoles, strokes: strokes[b.id] },
+  ].sort((x, y) => y.points - x.points);
+  const lead = Math.abs(aHoles - bHoles);
+  const firstName = (p) => p.name?.split(' ')[0] ?? '—';
+  let status;
+  if (lead === 0) status = 'All square';
+  else if (lead > holesRemaining) status = `${firstName(board[0].player)} wins`;
+  else status = `${firstName(board[0].player)} leads by ${lead}`;
+  return { board, status };
+}

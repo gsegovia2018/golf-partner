@@ -1,17 +1,28 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import {
   View, Text, TextInput, TouchableOpacity,
-  StyleSheet, ScrollView,
+  StyleSheet, ScrollView, Alert, Platform,
 } from 'react-native';
-import { SafeAreaView } from 'react-native-safe-area-context';
+import ScreenContainer from '../components/ScreenContainer';
 import { Feather } from '@expo/vector-icons';
 
 import { useTheme } from '../theme/ThemeContext';
 import {
   loadTournament, saveTournament, subscribeTournamentChanges, DEFAULT_SETTINGS, randomPairs,
-  deriveRoundPlayingHandicap, normalizeRoundHandicaps, readLocal,
+  deriveRoundPlayingHandicap, normalizeRoundHandicaps, readLocal, roundEnteredCount,
 } from '../store/tournamentStore';
 import { mutate } from '../store/mutate';
+import ScoringModePicker, { isScoringModeAllowed, fallbackScoringMode } from '../components/ScoringModePicker';
+import { scoringModeUsesTeams } from '../components/scoringModes';
+
+async function confirmDialog(title, message, confirmLabel = 'Remove') {
+  if (Platform.OS === 'web') return window.confirm(`${title}\n\n${message}`);
+  return new Promise((resolve) => Alert.alert(
+    title, message,
+    [{ text: 'Cancel', style: 'cancel', onPress: () => resolve(false) },
+     { text: confirmLabel, style: 'destructive', onPress: () => resolve(true) }],
+  ));
+}
 
 function defaultHoles() {
   return Array.from({ length: 18 }, (_, i) => ({
@@ -29,6 +40,8 @@ export default function EditTournamentScreen({ navigation }) {
   const [players, setPlayers] = useState([]);
   const [rounds, setRounds] = useState([]);
   const [settings, setSettings] = useState({ ...DEFAULT_SETTINGS });
+  // 'idle' | 'saving' | 'saved' | 'error' — drives the small status pill.
+  const [saveState, setSaveState] = useState('idle');
   const tournamentRef = useRef(null);
   const saveTimeoutRef = useRef(null);
   const isFirstRender = useRef(true);
@@ -96,50 +109,69 @@ export default function EditTournamentScreen({ navigation }) {
     if (skipNextSaveRef.current) { skipNextSaveRef.current = false; return; }
     if (!tournamentRef.current) return;
     if (saveTimeoutRef.current) clearTimeout(saveTimeoutRef.current);
+    setSaveState('saving');
     saveTimeoutRef.current = setTimeout(async () => {
-      const builtPlayers = players.map((p) => ({ ...p, handicap: parseInt(p.handicap, 10) || 0 }));
-      const builtRounds = rounds.map((r) => ({
-        ...r,
-        playerHandicaps: Object.fromEntries(
-          Object.entries(r.playerHandicaps).map(([id, v]) => [id, parseInt(v, 10) || 0]),
-        ),
-        manualHandicaps: { ...(r.manualHandicaps ?? {}) },
-      }));
+      try {
+        const builtPlayers = players.map((p) => ({ ...p, handicap: parseInt(p.handicap, 10) || 0 }));
+        const builtRounds = rounds.map((r) => ({
+          ...r,
+          playerHandicaps: Object.fromEntries(
+            Object.entries(r.playerHandicaps).map(([id, v]) => [id, parseInt(v, 10) || 0]),
+          ),
+          manualHandicaps: { ...(r.manualHandicaps ?? {}) },
+        }));
 
-      // Emit per-cell handicap.set mutations so offline edits are queued and
-      // the relevant _meta paths are stamped for LWW merge. The rest of the
-      // tournament (players, settings, notes, etc.) rides on the saveTournament
-      // call below, which is offline-safe since Task 5.
-      //
-      // Re-read the freshest local snapshot so any out-of-band mutations
-      // (e.g. a round.remove fired by removeRound just before this timer)
-      // are preserved in the spread below. Without this, the spread of
-      // tournamentRef would drop their _meta tombstones and the deletion
-      // would be undone on the next merge.
-      const baseId = tournamentRef.current?.id;
-      let t = (baseId && (await readLocal(baseId))) || tournamentRef.current;
-      for (const r of builtRounds) {
-        const prevRound = t.rounds.find((pr) => pr.id === r.id);
-        if (!prevRound) continue;
-        for (const [pid, v] of Object.entries(r.playerHandicaps)) {
-          const before = prevRound.playerHandicaps?.[pid];
-          if (before === v) continue;
-          t = await mutate(t, { type: 'handicap.set', roundId: r.id, playerId: pid, handicap: v });
+        // Emit per-cell handicap.set mutations so offline edits are queued and
+        // the relevant _meta paths are stamped for LWW merge. The rest of the
+        // tournament (players, settings, notes, etc.) rides on the saveTournament
+        // call below, which is offline-safe since Task 5.
+        //
+        // Re-read the freshest local snapshot so any out-of-band mutations
+        // (e.g. a round.remove fired by removeRound just before this timer)
+        // are preserved in the spread below. Without this, the spread of
+        // tournamentRef would drop their _meta tombstones and the deletion
+        // would be undone on the next merge.
+        const baseId = tournamentRef.current?.id;
+        let t = (baseId && (await readLocal(baseId))) || tournamentRef.current;
+        for (const r of builtRounds) {
+          const prevRound = t.rounds.find((pr) => pr.id === r.id);
+          if (!prevRound) continue;
+          for (const [pid, v] of Object.entries(r.playerHandicaps)) {
+            const before = prevRound.playerHandicaps?.[pid];
+            if (before === v) continue;
+            t = await mutate(t, { type: 'handicap.set', roundId: r.id, playerId: pid, handicap: v });
+          }
         }
-      }
 
-      await saveTournament({
-        ...t,
-        players: builtPlayers,
-        rounds: builtRounds,
-        settings: {
-          ...settings,
-          bestBallValue: parseInt(settings.bestBallValue, 10) || 1,
-          worstBallValue: parseInt(settings.worstBallValue, 10) || 1,
-        },
-      });
+        await saveTournament({
+          ...t,
+          players: builtPlayers,
+          rounds: builtRounds,
+          settings: {
+            ...settings,
+            bestBallValue: parseInt(settings.bestBallValue, 10) || 1,
+            worstBallValue: parseInt(settings.worstBallValue, 10) || 1,
+          },
+        });
+        setSaveState('saved');
+      } catch (err) {
+        setSaveState('error');
+        const msg = err?.message ?? 'Could not save changes';
+        if (Platform.OS === 'web') window.alert(msg);
+        else Alert.alert('Save failed', msg);
+      }
     }, 400);
   }, [players, rounds, settings]);
+
+  // Keep the scoring mode valid for the current player count. An existing
+  // tournament loaded with e.g. bestball but only 3 players gets nudged back
+  // to a safe mode rather than silently saving an unplayable configuration.
+  useEffect(() => {
+    if (players.length === 0) return;
+    if (!isScoringModeAllowed(settings.scoringMode, players.length)) {
+      setSettings((prev) => ({ ...prev, scoringMode: fallbackScoringMode(players.length) }));
+    }
+  }, [players.length, settings.scoringMode]);
 
   const handleHolesSaved = useCallback((roundIndex, holes, slope, courseRating, playerHandicaps, manualHandicaps) => {
     setRounds((prev) => {
@@ -189,16 +221,12 @@ export default function EditTournamentScreen({ navigation }) {
   function addRound() {
     setRounds((prev) => {
       const builtPlayers = players.map((p) => ({ ...p, handicap: parseInt(p.handicap, 10) || 0 }));
-      // Match each tournament's pair structure: individual stableford + 2-
-      // player match play use solo-pairs; everything else gets random
-      // partners. Without this an individual tournament would suddenly
-      // sprout random partners on its added round.
+      // Team modes get random pairs; solo modes get one singleton pair per
+      // player. scoringModeUsesTeams keeps this in lockstep with the mode list.
       const mode = settings?.scoringMode;
-      const pairs = mode === 'individual'
-        ? builtPlayers.map((p) => [p])
-        : (mode === 'matchplay' && builtPlayers.length === 2)
-          ? [[builtPlayers[0]], [builtPlayers[1]]]
-          : randomPairs(builtPlayers);
+      const pairs = scoringModeUsesTeams(mode, builtPlayers.length)
+        ? randomPairs(builtPlayers)
+        : builtPlayers.map((p) => [p]);
       const newRound = {
         id: `r${Date.now()}`,
         courseName: '',
@@ -216,6 +244,17 @@ export default function EditTournamentScreen({ navigation }) {
 
   async function removeRound(index) {
     const target = rounds[index];
+    // Warn loudly when the round already holds entered scores — deleting it
+    // discards real gameplay data, not just an empty placeholder.
+    const entered = target ? roundEnteredCount(target, players) : 0;
+    const ok = await confirmDialog(
+      'Remove round',
+      entered > 0
+        ? `Round ${index + 1} has scores entered for ${entered} player${entered !== 1 ? 's' : ''}. Removing it will permanently delete those scores.`
+        : `Remove Round ${index + 1}?`,
+      entered > 0 ? 'Delete round & scores' : 'Remove',
+    );
+    if (!ok) return;
     // Persist the deletion through mutate() so a `rounds.<id>._deleted`
     // tombstone lands in _meta. Without it the next loadTournament merge
     // would deepClone the still-present remote round back into local state.
@@ -264,14 +303,32 @@ export default function EditTournamentScreen({ navigation }) {
   if (!tournament) return null;
 
   return (
-    <SafeAreaView style={s.screen} edges={['top', 'bottom']}>
+    <ScreenContainer style={s.screen} edges={['top', 'bottom']}>
       {/* Header */}
       <View style={s.header}>
         <TouchableOpacity onPress={() => navigation.goBack()} style={s.backBtn}>
           <Feather name="chevron-left" size={22} color={theme.accent.primary} />
         </TouchableOpacity>
         <Text style={s.headerTitle}>Edit Tournament</Text>
-        <View style={{ width: 22 }} />
+        {saveState === 'idle' ? (
+          <View style={{ width: 64 }} />
+        ) : (
+          <View style={[
+            s.savePill,
+            saveState === 'error' && s.savePillError,
+            saveState === 'saved' && s.savePillSaved,
+          ]}>
+            <Feather
+              name={saveState === 'error' ? 'alert-circle' : saveState === 'saved' ? 'check' : 'loader'}
+              size={11}
+              color={saveState === 'error' ? theme.destructive : theme.text.muted}
+              style={{ marginRight: 4 }}
+            />
+            <Text style={[s.savePillText, saveState === 'error' && s.savePillTextError]}>
+              {saveState === 'error' ? 'Save failed' : saveState === 'saved' ? 'Saved' : 'Saving…'}
+            </Text>
+          </View>
+        )}
       </View>
 
       <ScrollView style={s.container} contentContainerStyle={s.content} automaticallyAdjustKeyboardInsets>
@@ -320,6 +377,11 @@ export default function EditTournamentScreen({ navigation }) {
                 value={r.courseName}
                 onChangeText={(v) => updateCourseName(ri, v)}
               />
+              {r.courseId ? (
+                <Text style={s.courseNameHint}>
+                  Renames this round only — the course saved in your library is unchanged.
+                </Text>
+              ) : null}
               {players.map((p) => (
                 <View key={p.id} style={s.hcpRow}>
                   <Text style={s.hcpRowName}>{p.name}</Text>
@@ -386,60 +448,16 @@ export default function EditTournamentScreen({ navigation }) {
 
         <View>
           <Text style={s.sectionTitle}>Scoring Mode</Text>
-          <View style={s.modeRow}>
-            {['stableford', 'bestball'].map((mode) => (
-              <TouchableOpacity
-                key={mode}
-                style={[s.modeBtn, settings.scoringMode === mode && s.modeBtnActive]}
-                onPress={() => setSettings((sv) => ({ ...sv, scoringMode: mode }))}
-              >
-                <Feather
-                  name={mode === 'stableford' ? 'user' : 'users'}
-                  size={16}
-                  color={settings.scoringMode === mode
-                    ? (theme.isDark ? theme.accent.primary : theme.text.inverse)
-                    : theme.text.muted}
-                  style={{ marginRight: 8 }}
-                />
-                <Text style={[s.modeBtnText, settings.scoringMode === mode && s.modeBtnTextActive]}>
-                  {mode === 'stableford' ? 'Individual Stableford' : 'Best Ball / Worst Ball'}
-                </Text>
-              </TouchableOpacity>
-            ))}
-          </View>
-          {settings.scoringMode === 'bestball' && (
-            <View style={s.valueRow}>
-              <View style={s.valueBlock}>
-                <Text style={s.valueLabel}>Best Ball</Text>
-                <TextInput
-                  style={s.valueInput}
-                  keyboardType="numeric"
-                  maxLength={2}
-                  keyboardAppearance={theme.isDark ? 'dark' : 'light'}
-                  selectionColor={theme.accent.primary}
-                  value={String(settings.bestBallValue)}
-                  onChangeText={(v) => setSettings((sv) => ({ ...sv, bestBallValue: v }))}
-                />
-                <Text style={s.valueSuffix}>pts / hole</Text>
-              </View>
-              <View style={s.valueBlock}>
-                <Text style={s.valueLabel}>Worst Ball</Text>
-                <TextInput
-                  style={s.valueInput}
-                  keyboardType="numeric"
-                  maxLength={2}
-                  keyboardAppearance={theme.isDark ? 'dark' : 'light'}
-                  selectionColor={theme.accent.primary}
-                  value={String(settings.worstBallValue)}
-                  onChangeText={(v) => setSettings((sv) => ({ ...sv, worstBallValue: v }))}
-                />
-                <Text style={s.valueSuffix}>pts / hole</Text>
-              </View>
-            </View>
-          )}
+          <ScoringModePicker
+            value={settings.scoringMode}
+            onChange={(mode) => setSettings((sv) => ({ ...sv, scoringMode: mode }))}
+            playerCount={players.length}
+            settings={settings}
+            onSettingsChange={(next) => setSettings(next)}
+          />
         </View>
       </ScrollView>
-    </SafeAreaView>
+    </ScreenContainer>
   );
 }
 
@@ -451,6 +469,17 @@ const makeStyles = (theme) => StyleSheet.create({
   },
   backBtn: {},
   headerTitle: { fontFamily: 'PlusJakartaSans-Bold', fontSize: 17, color: theme.text.primary },
+  savePill: {
+    flexDirection: 'row', alignItems: 'center',
+    minWidth: 64, justifyContent: 'center',
+    backgroundColor: theme.bg.secondary,
+    borderRadius: 10, borderWidth: 1, borderColor: theme.border.default,
+    paddingHorizontal: 8, paddingVertical: 4,
+  },
+  savePillSaved: { borderColor: theme.accent.primary + '55' },
+  savePillError: { borderColor: theme.destructive, backgroundColor: theme.destructive + '15' },
+  savePillText: { fontFamily: 'PlusJakartaSans-SemiBold', fontSize: 10, color: theme.text.muted },
+  savePillTextError: { color: theme.destructive },
   container: { flex: 1 },
   content: { padding: 20, paddingTop: 4, paddingBottom: 40 },
   sectionTitle: {
@@ -459,6 +488,10 @@ const makeStyles = (theme) => StyleSheet.create({
     letterSpacing: 1.8, textTransform: 'uppercase',
   },
   hint: { fontFamily: 'PlusJakartaSans-Regular', color: theme.text.muted, fontSize: 12, marginBottom: 10 },
+  courseNameHint: {
+    fontFamily: 'PlusJakartaSans-Regular', color: theme.text.muted,
+    fontSize: 11, marginTop: -2, marginBottom: 10,
+  },
   playerCard: {
     flexDirection: 'row', alignItems: 'center',
     backgroundColor: theme.bg.card, borderRadius: 16, borderWidth: 1,

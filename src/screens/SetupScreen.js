@@ -1,9 +1,9 @@
-import React, { useCallback, useEffect, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import {
   View, Text, TextInput, TouchableOpacity,
   StyleSheet, ScrollView, Alert, Platform,
 } from 'react-native';
-import { SafeAreaView } from 'react-native-safe-area-context';
+import ScreenContainer from '../components/ScreenContainer';
 
 import { Feather } from '@expo/vector-icons';
 import { useFocusEffect } from '@react-navigation/native';
@@ -11,6 +11,28 @@ import { createTournament, saveTournament, randomPairs, DEFAULT_SETTINGS, derive
 import { defaultHoles, fetchCourses, fetchPlayers } from '../store/libraryStore';
 import { consumePendingPlayers, consumePendingCourses } from '../lib/selectionBridge';
 import { useTheme } from '../theme/ThemeContext';
+import ScoringModePicker, { isScoringModeAllowed, fallbackScoringMode } from '../components/ScoringModePicker';
+import { scoringModeUsesTeams, getScoringMode } from '../components/scoringModes';
+import WizardProgress from '../components/setup/WizardProgress';
+import WizardNav from '../components/setup/WizardNav';
+import { wizardSteps, isStepValid } from './setupWizard';
+
+// Deep green used for the Review hero band — fixed in both themes so white
+// hero text always has strong contrast.
+const HERO_GREEN = '#024d36';
+
+// Stable id for a round so React keys / removal survive reordering.
+let _roundIdSeq = 0;
+function newRoundId() { return `setup-r${Date.now()}-${_roundIdSeq++}`; }
+
+async function confirmDialog(title, message, confirmLabel = 'Remove') {
+  if (Platform.OS === 'web') return window.confirm(`${title}\n\n${message}`);
+  return new Promise((resolve) => Alert.alert(
+    title, message,
+    [{ text: 'Cancel', style: 'cancel', onPress: () => resolve(false) },
+     { text: confirmLabel, style: 'destructive', onPress: () => resolve(true) }],
+  ));
+}
 
 function buildGameName(courseName) {
   const d = new Date();
@@ -38,27 +60,27 @@ export default function SetupScreen({ navigation, route }) {
   );
   const [nameTouched, setNameTouched] = useState(false);
   const [players, setPlayers] = useState([]);
-  const [rounds, setRounds] = useState([{ courseName: '', holes: defaultHoles(), slope: null, playerHandicaps: null }]);
+  const [rounds, setRounds] = useState([{ id: newRoundId(), courseName: '', holes: defaultHoles(), slope: null, playerHandicaps: null }]);
   const [settings, setSettings] = useState({ ...DEFAULT_SETTINGS });
+  const [rawStep, setStep] = useState(0);
 
-  const bestBallAllowed = !isGame || players.length === 4;
-  const matchPlayAllowed = players.length === 2;
-  // Individual Stableford ranks every player solo and is available whenever
-  // there are at least 2 players; for solo (1 player) the Scoring section
-  // is hidden entirely.
-  const individualAllowed = players.length >= 2;
+  // The active step list depends on kind + player count (Scoring only exists
+  // for 2+ players). When the roster shrinks the Scoring step away the array
+  // gets shorter, so the active index is clamped synchronously here — not via
+  // an effect, which would leave a one-render window where the index points
+  // past the array and stepKey wrongly resolves to 'review'. stepKey is the
+  // key of the currently displayed step.
+  const steps = useMemo(() => wizardSteps(kind, players.length), [kind, players.length]);
+  const step = Math.max(0, Math.min(rawStep, steps.length - 1));
+  const stepKey = steps[step];
 
+  // Whenever the player count makes the chosen scoring mode invalid, fall
+  // back to a mode that is always valid for the current roster.
   useEffect(() => {
-    if (!bestBallAllowed && settings.scoringMode === 'bestball') {
-      setSettings((prev) => ({ ...prev, scoringMode: 'stableford' }));
+    if (!isScoringModeAllowed(settings.scoringMode, players.length)) {
+      setSettings((prev) => ({ ...prev, scoringMode: fallbackScoringMode(players.length) }));
     }
-    if (!matchPlayAllowed && settings.scoringMode === 'matchplay') {
-      setSettings((prev) => ({ ...prev, scoringMode: 'stableford' }));
-    }
-    if (!individualAllowed && settings.scoringMode === 'individual') {
-      setSettings((prev) => ({ ...prev, scoringMode: 'stableford' }));
-    }
-  }, [bestBallAllowed, matchPlayAllowed, individualAllowed, settings.scoringMode]);
+  }, [players.length, settings.scoringMode]);
 
   useFocusEffect(useCallback(() => {
     let cancelled = false;
@@ -82,7 +104,16 @@ export default function SetupScreen({ navigation, route }) {
           const next = [...prev];
           for (const p of fresh) {
             if (next.length >= 4 || next.find((x) => x.id === p.id)) continue;
-            next.push({ id: p.id, name: p.name, handicap: p.handicap });
+            // Carry user_id / avatar_url so the embedded player links back to
+            // a real account (feed attribution, friend stats). Guest players
+            // added via the picker form simply have these undefined.
+            next.push({
+              id: p.id,
+              name: p.name,
+              handicap: p.handicap,
+              user_id: p.user_id ?? null,
+              avatar_url: p.avatar_url ?? null,
+            });
           }
           return next;
         });
@@ -116,7 +147,8 @@ export default function SetupScreen({ navigation, route }) {
             if (idx < next.length) {
               next[idx] = { ...next[idx], ...roundData };
             } else {
-              next.push({ ...roundData });
+              // Stable id so React keys / removal survive reordering.
+              next.push({ id: newRoundId(), ...roundData });
             }
           });
           return next;
@@ -142,7 +174,13 @@ export default function SetupScreen({ navigation, route }) {
     });
   }, []);
 
-  function removePlayer(id) {
+  async function removePlayer(id) {
+    const player = players.find((p) => p.id === id);
+    const ok = await confirmDialog(
+      'Remove player',
+      `Remove ${player?.name ?? 'this player'} from the ${isGame ? 'game' : 'tournament'}?`,
+    );
+    if (!ok) return;
     setPlayers((prev) => prev.filter((p) => p.id !== id));
   }
 
@@ -158,34 +196,47 @@ export default function SetupScreen({ navigation, route }) {
   }
 
   function addRound() {
-    setRounds((prev) => [...prev, { courseName: '', holes: defaultHoles(), slope: null, courseRating: null, playerHandicaps: null, manualHandicaps: {} }]);
+    setRounds((prev) => [...prev, { id: newRoundId(), courseName: '', holes: defaultHoles(), slope: null, courseRating: null, playerHandicaps: null, manualHandicaps: {} }]);
   }
 
-  function removeRound(index) {
+  async function removeRound(index) {
+    const round = rounds[index];
+    // Setup-stage rounds carry no entered scores yet, but a course may have
+    // been configured — still confirm so a stray tap doesn't wipe holes/slope.
+    const hasCourse = !!(round?.courseName || '').trim();
+    const ok = await confirmDialog(
+      'Remove round',
+      hasCourse
+        ? `Round ${index + 1} (${round.courseName}) and its hole setup will be removed.`
+        : `Remove Round ${index + 1}?`,
+    );
+    if (!ok) return;
     setRounds((prev) => prev.filter((_, i) => i !== index));
   }
+
+  const missingCourseName = rounds.some((r) => !r.courseName.trim());
+  const canStart = players.length >= 1 && !missingCourseName;
 
   async function handleStart() {
     if (players.length < 1) {
       Alert.alert('Missing info', 'Select at least 1 player.');
       return;
     }
-    if (rounds.some((r) => !r.courseName.trim())) {
+    if (missingCourseName) {
       Alert.alert('Missing info', 'All course names are required.');
       return;
     }
 
-    // Match play and Individual Stableford both use solo-pairs
-    // ([[p1], [p2], …]) so the existing pair-based leaderboard / best-ball
-    // math naturally treats each player as their own "pair" and ranks them
-    // 1-vs-1 (match play) or by individual points (individual stableford).
+    // Pairs are built from the scoring mode: team modes get random pairs,
+    // every solo mode (including match play and sindicato) gets one
+    // singleton pair per player. scoringModeUsesTeams is the single source
+    // of truth, so new solo modes need no change here.
     const isMatchPlay = settings.scoringMode === 'matchplay';
-    const isIndividual = settings.scoringMode === 'individual';
-    const buildPairs = () => {
-      if (isMatchPlay && players.length === 2) return [[players[0]], [players[1]]];
-      if (isIndividual) return players.map((p) => [p]);
-      return randomPairs(players);
-    };
+    const buildPairs = () => (
+      scoringModeUsesTeams(settings.scoringMode, players.length)
+        ? randomPairs(players)
+        : players.map((p) => [p])
+    );
 
     const builtRounds = rounds.map((r, i) => {
       // Auto-derive WHS playing handicaps when the user never opened
@@ -225,10 +276,11 @@ export default function SetupScreen({ navigation, route }) {
 
     try {
       await saveTournament(tournament);
-      // saveTournament marks the new tournament active, so jumping straight
-      // to the Tournament view (Game menu) lands the user on what they just
-      // created instead of bouncing back to the Home list.
-      navigation.replace('Tournament');
+      // saveTournament marks the new tournament active. A game is a single
+      // round — jump straight to its scorecard. A multi-round tournament
+      // lands on the Tournament view instead of bouncing back to the Home list.
+      if (isGame) navigation.replace('Scorecard', { roundIndex: 0 });
+      else navigation.replace('Tournament');
     } catch (err) {
       const msg = err?.message ?? 'Could not create tournament';
       if (Platform.OS === 'web') window.alert(msg);
@@ -236,226 +288,292 @@ export default function SetupScreen({ navigation, route }) {
     }
   }
 
-  return (
-    <SafeAreaView style={s.container} edges={['top', 'bottom']}>
-      {/* Header */}
-      <View style={s.header}>
-        <TouchableOpacity onPress={() => navigation.goBack()} style={s.backBtn}>
-          <Feather name="chevron-left" size={22} color={theme.accent.primary} />
-        </TouchableOpacity>
-        <Text style={s.headerTitle}>{isGame ? 'New Game' : 'New Tournament'}</Text>
-        <View style={{ width: 22 }} />
-      </View>
+  // ---- Wizard navigation -------------------------------------------------
 
-      <ScrollView style={s.scrollView} contentContainerStyle={s.content} keyboardShouldPersistTaps="handled">
+  function handleBack() {
+    // Step 0's back exits the screen entirely; later steps go back one step.
+    if (step === 0) navigation.goBack();
+    else setStep((p) => p - 1);
+  }
 
-      {/* Tournament Name */}
-      <View>
-        <Text style={s.label}>{isGame ? 'Game Name' : 'Tournament Name'}</Text>
-        <TextInput
-          style={s.input}
-          value={tournamentName}
-          onChangeText={(v) => { setTournamentName(v); setNameTouched(true); }}
-          placeholderTextColor={theme.text.muted}
-          keyboardAppearance={theme.isDark ? 'dark' : 'light'}
-          selectionColor={theme.accent.primary}
-        />
-      </View>
+  function handleNext() {
+    if (stepKey === 'review') handleStart();
+    else setStep((p) => Math.min(p + 1, steps.length - 1));
+  }
 
-      {/* Players */}
-      <View>
-        <Text style={s.sectionTitle}>Players ({players.length}/4 max)</Text>
-        {players.map((p) => (
-          <View key={p.id} style={s.playerCard}>
-            <View style={s.playerInfo}>
-              <Text style={s.playerName}>{p.name}</Text>
-              <Text style={s.playerHcp}>HCP {p.handicap}</Text>
-            </View>
-            <TouchableOpacity onPress={() => removePlayer(p.id)} style={s.removeBtn}>
-              <Feather name="x" size={16} color={theme.destructive} />
-            </TouchableOpacity>
-          </View>
-        ))}
-        {players.length < 4 && (
-          <TouchableOpacity
-            style={s.pickBtn}
-            onPress={() => navigation.navigate('PlayerPicker', {
-              alreadySelectedIds: players.map((p) => p.id),
-            })}
-          >
-            <Feather name="plus" size={16} color={theme.accent.primary} style={{ marginRight: 6 }} />
-            <Text style={s.pickBtnText}>Add Player from Library</Text>
-          </TouchableOpacity>
-        )}
-      </View>
+  function goToStep(key) {
+    const idx = steps.indexOf(key);
+    if (idx >= 0) setStep(idx);
+  }
 
-      {/* Rounds */}
-      <View>
-        <Text style={s.sectionTitle}>{isGame ? 'Course' : 'Rounds'}</Text>
-        {rounds.map((r, i) => {
-          const totalPar = r.holes.reduce((sum, h) => sum + h.par, 0);
-          return (
-            <View key={i} style={s.courseBlock}>
-              <View style={s.roundHeader}>
-                {!isGame && <Text style={s.roundLabel}>Round {i + 1}</Text>}
-                {rounds.length > 1 && (
-                  <TouchableOpacity onPress={() => removeRound(i)} style={s.removeRoundBtn}>
-                    <Feather name="trash-2" size={14} color={theme.destructive} />
-                    <Text style={s.removeRoundText}>Remove</Text>
-                  </TouchableOpacity>
-                )}
-              </View>
-              <TouchableOpacity
-                style={s.pickBtn}
-                onPress={() => navigation.navigate('CoursePicker', { roundIndex: i })}
-              >
-                <Feather
-                  name={r.courseName ? 'map-pin' : 'plus'}
-                  size={16}
-                  color={theme.accent.primary}
-                  style={{ marginRight: 6 }}
-                />
-                <Text style={s.pickBtnText}>
-                  {r.courseName ? `Course: ${r.courseName}` : 'Pick Course from Library'}
-                </Text>
-              </TouchableOpacity>
-              {r.courseName ? (
-                <>
-                  <TextInput
-                    style={s.input}
-                    placeholder="Override course name"
-                    placeholderTextColor={theme.text.muted}
-                    keyboardAppearance={theme.isDark ? 'dark' : 'light'}
-                    selectionColor={theme.accent.primary}
-                    value={r.courseName}
-                    onChangeText={(v) => updateCourseName(i, v)}
-                  />
-                  <TouchableOpacity
-                    style={s.editHolesBtn}
-                    onPress={() =>
-                      navigation.navigate('CourseEditor', {
-                        roundIndex: i,
-                        courseName: r.courseName || `Round ${i + 1}`,
-                        initialHoles: r.holes,
-                        onSave: handleHolesSaved,
-                        players: players,
-                        initialSlope: r.slope,
-                        initialCourseRating: r.courseRating ?? null,
-                        initialPlayerHandicaps: r.playerHandicaps,
-                        initialManualHandicaps: r.manualHandicaps ?? {},
-                        courseId: r.courseId ?? null,
-                      })
-                    }
-                  >
-                    <Feather name="settings" size={14} color={theme.accent.primary} style={{ marginRight: 6 }} />
-                    <Text style={s.editHolesBtnText}>
-                      Configure Holes  {'\u00B7'}  Par {totalPar}
-                    </Text>
-                    <Feather name="chevron-right" size={16} color={theme.accent.primary} style={{ marginLeft: 'auto' }} />
-                  </TouchableOpacity>
-                </>
-              ) : null}
-            </View>
-          );
-        })}
+  const isLastStep = stepKey === 'review';
+  const nextEnabled = isStepValid(stepKey, { players, rounds })
+    && (!isLastStep || canStart);
+  const nextLabel = isLastStep
+    ? (isGame ? 'Start Game' : 'Start Tournament')
+    : 'Next';
 
-        {!isGame && (
-          <TouchableOpacity style={s.addRoundBtn} onPress={addRound}>
-            <Feather name="plus-circle" size={16} color={theme.accent.primary} style={{ marginRight: 6 }} />
-            <Text style={s.addRoundBtnText}>Add Round</Text>
-          </TouchableOpacity>
-        )}
-      </View>
+  // ---- Step bodies -------------------------------------------------------
 
-      {/* Scoring */}
-      {players.length >= 2 && (
-        <View>
-          <Text style={s.sectionTitle}>Scoring</Text>
-          <View style={s.modeRow}>
-            {(() => {
-              // Mode options depend on player count:
-              //   2 players: Individual + Stableford (random partners) + Match Play
-              //   3 players: Individual + Stableford (random partners)
-              //   4 players: Individual + Stableford (random partners) + Best Ball
-              const availableModes = matchPlayAllowed
-                ? ['individual', 'stableford', 'matchplay']
-                : ['individual', 'stableford', 'bestball'];
-              return availableModes.map((mode) => {
-                const disabled = mode === 'bestball' && !bestBallAllowed;
-                const label = mode === 'individual' ? 'Stableford'
-                  : mode === 'stableford' ? 'Stableford with Partners'
-                  : mode === 'matchplay' ? 'Match Play'
-                  : 'Best Ball / Worst Ball';
-                const subtitle = mode === 'individual' ? 'Highest points wins'
-                  : mode === 'stableford' ? 'Random partners each round'
-                  : null;
-                return (
-                  <TouchableOpacity
-                    key={mode}
-                    style={[s.modeBtn, settings.scoringMode === mode && s.modeBtnActive, disabled && { opacity: 0.5 }]}
-                    onPress={() => { if (!disabled) setSettings((prev) => ({ ...prev, scoringMode: mode })); }}
-                    activeOpacity={disabled ? 1 : 0.7}
-                  >
-                    <Text style={[s.modeBtnText, settings.scoringMode === mode && s.modeBtnTextActive]}>
-                      {label}
-                    </Text>
-                    {subtitle && !disabled && (
-                      <Text style={[s.modeBtnText, { fontSize: 11, marginTop: 4, color: settings.scoringMode === mode ? theme.text.inverse : theme.text.muted }]}>
-                        {subtitle}
-                      </Text>
-                    )}
-                    {disabled && (
-                      <Text style={[s.modeBtnText, { fontSize: 11, marginTop: 4, color: theme.text.muted }]}>
-                        Requires 4 players
-                      </Text>
-                    )}
-                  </TouchableOpacity>
-                );
-              });
-            })()}
-          </View>
-          {settings.scoringMode === 'bestball' && (
-            <View style={s.valueRow}>
-              <View style={s.valueBlock}>
-                <Text style={s.valueLabel}>Best Ball</Text>
-                <TextInput
-                  style={s.valueInput}
-                  keyboardType="numeric"
-                  keyboardAppearance={theme.isDark ? 'dark' : 'light'}
-                  selectionColor={theme.accent.primary}
-                  maxLength={2}
-                  value={String(settings.bestBallValue)}
-                  onChangeText={(v) => setSettings((prev) => ({ ...prev, bestBallValue: v }))}
-                />
-                <Text style={s.valueSuffix}>pts / hole</Text>
-              </View>
-              <View style={s.valueBlock}>
-                <Text style={s.valueLabel}>Worst Ball</Text>
-                <TextInput
-                  style={s.valueInput}
-                  keyboardType="numeric"
-                  keyboardAppearance={theme.isDark ? 'dark' : 'light'}
-                  selectionColor={theme.accent.primary}
-                  maxLength={2}
-                  value={String(settings.worstBallValue)}
-                  onChangeText={(v) => setSettings((prev) => ({ ...prev, worstBallValue: v }))}
-                />
-                <Text style={s.valueSuffix}>pts / hole</Text>
-              </View>
-            </View>
-          )}
+  const renderPlayersStep = () => (
+    <>
+      <Text style={s.stepOverline}>PLAYERS</Text>
+      <Text style={s.stepPrompt}>Who's playing?</Text>
+      <Text style={s.stepSubtitle}>Add 1–4 golfers from your library.</Text>
+      {players.length === 0 && (
+        <View style={s.emptyHint}>
+          <Feather name="users" size={16} color={theme.text.muted} style={{ marginRight: 8 }} />
+          <Text style={s.emptyHintText}>
+            Add at least 1 player to {isGame ? 'start the game' : 'start the tournament'}.
+          </Text>
         </View>
       )}
-
-      {/* Start Button */}
-      <View>
-        <TouchableOpacity style={s.primaryBtn} onPress={handleStart}>
-          <Feather name="play" size={18} color={theme.isDark ? theme.accent.primary : theme.text.inverse} style={{ marginRight: 8 }} />
-          <Text style={s.primaryBtnText}>{isGame ? 'Start Game' : 'Start Tournament'}</Text>
+      {players.map((p) => (
+        <View key={p.id} style={s.playerCard}>
+          <View style={s.playerInfo}>
+            <Text style={s.playerName}>{p.name}</Text>
+            <Text style={s.playerHcp}>HCP {p.handicap}</Text>
+          </View>
+          <TouchableOpacity onPress={() => removePlayer(p.id)} style={s.removeBtn}>
+            <Feather name="x" size={16} color={theme.destructive} />
+          </TouchableOpacity>
+        </View>
+      ))}
+      {players.length < 4 && (
+        <TouchableOpacity
+          style={s.pickBtn}
+          onPress={() => navigation.navigate('PlayerPicker', {
+            alreadySelectedIds: players.map((p) => p.id),
+          })}
+        >
+          <Feather name="plus" size={16} color={theme.accent.primary} style={{ marginRight: 6 }} />
+          <Text style={s.pickBtnText}>Add Player from Library</Text>
         </TouchableOpacity>
-      </View>
-    </ScrollView>
-    </SafeAreaView>
+      )}
+    </>
+  );
+
+  const renderCourseStep = () => (
+    <>
+      <Text style={s.stepOverline}>{isGame ? 'COURSE' : 'ROUNDS'}</Text>
+      <Text style={s.stepPrompt}>Where are you playing?</Text>
+      <Text style={s.stepSubtitle}>
+        {isGame
+          ? 'Pick a course, then fine-tune the holes if needed.'
+          : 'Add each round and pick its course.'}
+      </Text>
+      {rounds.map((r, i) => {
+        const totalPar = r.holes.reduce((sum, h) => sum + h.par, 0);
+        const missingName = !r.courseName.trim();
+        return (
+          <View key={r.id ?? `round-${i}`} style={s.courseBlock}>
+            <View style={s.roundHeader}>
+              {!isGame && <Text style={s.roundLabel}>Round {i + 1}</Text>}
+              {rounds.length > 1 && (
+                <TouchableOpacity onPress={() => removeRound(i)} style={s.removeRoundBtn}>
+                  <Feather name="trash-2" size={14} color={theme.destructive} />
+                  <Text style={s.removeRoundText}>Remove</Text>
+                </TouchableOpacity>
+              )}
+            </View>
+            <TouchableOpacity
+              style={s.pickBtn}
+              onPress={() => navigation.navigate('CoursePicker', { roundIndex: i })}
+            >
+              <Feather
+                name={r.courseName ? 'map-pin' : 'plus'}
+                size={16}
+                color={theme.accent.primary}
+                style={{ marginRight: 6 }}
+              />
+              <Text style={s.pickBtnText}>
+                {r.courseName ? `Course: ${r.courseName}` : 'Pick Course from Library'}
+              </Text>
+            </TouchableOpacity>
+            {missingName && (
+              <Text style={s.errorText}>
+                {isGame ? 'A course is required.' : `Round ${i + 1} needs a course.`}
+              </Text>
+            )}
+            {r.courseName ? (
+              <>
+                <TextInput
+                  style={s.input}
+                  placeholder="Course name"
+                  placeholderTextColor={theme.text.muted}
+                  keyboardAppearance={theme.isDark ? 'dark' : 'light'}
+                  selectionColor={theme.accent.primary}
+                  value={r.courseName}
+                  onChangeText={(v) => updateCourseName(i, v)}
+                />
+                <TouchableOpacity
+                  style={s.editHolesBtn}
+                  onPress={() =>
+                    navigation.navigate('CourseEditor', {
+                      roundIndex: i,
+                      courseName: r.courseName || `Round ${i + 1}`,
+                      initialHoles: r.holes,
+                      onSave: handleHolesSaved,
+                      players: players,
+                      initialSlope: r.slope,
+                      initialCourseRating: r.courseRating ?? null,
+                      initialPlayerHandicaps: r.playerHandicaps,
+                      initialManualHandicaps: r.manualHandicaps ?? {},
+                      courseId: r.courseId ?? null,
+                    })
+                  }
+                >
+                  <Feather name="settings" size={14} color={theme.accent.primary} style={{ marginRight: 6 }} />
+                  <Text style={s.editHolesBtnText}>
+                    Configure Holes  {'·'}  Par {totalPar}
+                  </Text>
+                  <Feather name="chevron-right" size={16} color={theme.accent.primary} style={{ marginLeft: 'auto' }} />
+                </TouchableOpacity>
+              </>
+            ) : null}
+          </View>
+        );
+      })}
+      {!isGame && (
+        <TouchableOpacity style={s.addRoundBtn} onPress={addRound}>
+          <Feather name="plus-circle" size={16} color={theme.accent.primary} style={{ marginRight: 6 }} />
+          <Text style={s.addRoundBtnText}>Add Round</Text>
+        </TouchableOpacity>
+      )}
+    </>
+  );
+
+  const renderScoringStep = () => (
+    <>
+      <Text style={s.stepOverline}>SCORING</Text>
+      <Text style={s.stepPrompt}>How do you keep score?</Text>
+      <Text style={s.stepSubtitle}>Pick a format. You can change it later.</Text>
+      <ScoringModePicker
+        value={settings.scoringMode}
+        onChange={(mode) => setSettings((prev) => ({ ...prev, scoringMode: mode }))}
+        playerCount={players.length}
+        settings={settings}
+        onSettingsChange={setSettings}
+      />
+    </>
+  );
+
+  const renderReviewStep = () => {
+    const hasScoringStep = steps.includes('scoring');
+    // For a solo game there is no scoring choice — show a neutral label
+    // rather than whatever mode happens to be left in settings.
+    const scoringLabel = hasScoringStep
+      ? (getScoringMode(settings.scoringMode)?.label ?? 'Solo play')
+      : 'Solo play';
+    const playerSummary = players.length === 1
+      ? `${players[0].name} · HCP ${players[0].handicap}`
+      : `${players.length} golfers`;
+    const courseSummary = isGame
+      ? (rounds[0]?.courseName || 'No course set')
+      : `${rounds.length} round${rounds.length === 1 ? '' : 's'}`;
+    return (
+      <>
+        {/* Green hero recap */}
+        <View style={s.reviewHero}>
+          <Text style={s.reviewHeroOverline}>REVIEW & CONFIRM</Text>
+          <TextInput
+            style={s.reviewNameInput}
+            value={tournamentName}
+            onChangeText={(v) => { setTournamentName(v); setNameTouched(true); }}
+            placeholder={isGame ? 'Game name' : 'Tournament name'}
+            placeholderTextColor="rgba(255,255,255,0.5)"
+            keyboardAppearance={theme.isDark ? 'dark' : 'light'}
+            selectionColor="#ffffff"
+          />
+          <View style={s.reviewChipRow}>
+            <View style={s.reviewChip}>
+              <Text style={s.reviewChipText}>
+                {players.length} player{players.length === 1 ? '' : 's'}
+              </Text>
+            </View>
+            <View style={s.reviewChip}>
+              <Text style={s.reviewChipText}>{scoringLabel}</Text>
+            </View>
+          </View>
+        </View>
+
+        <Text style={s.stepOverline}>TAP TO EDIT</Text>
+        <View style={s.reviewList}>
+          <TouchableOpacity
+            style={[s.reviewRow, s.reviewRowDivider]}
+            onPress={() => goToStep('players')}
+          >
+            <Feather name="users" size={16} color={theme.accent.primary} style={s.reviewRowIcon} />
+            <View style={{ flex: 1 }}>
+              <Text style={s.reviewRowTitle}>Players</Text>
+              <Text style={s.reviewRowSub}>{playerSummary}</Text>
+            </View>
+            <Feather name="chevron-right" size={18} color={theme.accent.primary} />
+          </TouchableOpacity>
+
+          <TouchableOpacity
+            style={[s.reviewRow, s.reviewRowDivider]}
+            onPress={() => goToStep(isGame ? 'course' : 'rounds')}
+          >
+            <Feather name="map-pin" size={16} color={theme.accent.primary} style={s.reviewRowIcon} />
+            <View style={{ flex: 1 }}>
+              <Text style={s.reviewRowTitle}>{isGame ? 'Course' : 'Rounds'}</Text>
+              <Text style={s.reviewRowSub}>{courseSummary}</Text>
+            </View>
+            <Feather name="chevron-right" size={18} color={theme.accent.primary} />
+          </TouchableOpacity>
+
+          <TouchableOpacity
+            style={s.reviewRow}
+            onPress={() => goToStep('scoring')}
+            disabled={!hasScoringStep}
+          >
+            <Feather name="target" size={16} color={theme.accent.primary} style={s.reviewRowIcon} />
+            <View style={{ flex: 1 }}>
+              <Text style={s.reviewRowTitle}>Scoring</Text>
+              <Text style={s.reviewRowSub}>{scoringLabel}</Text>
+            </View>
+            {hasScoringStep && (
+              <Feather name="chevron-right" size={18} color={theme.accent.primary} />
+            )}
+          </TouchableOpacity>
+        </View>
+
+        {!canStart && (
+          <Text style={s.errorText}>
+            {players.length < 1
+              ? 'Add at least 1 player to continue.'
+              : 'Pick a course for every round to continue.'}
+          </Text>
+        )}
+      </>
+    );
+  };
+
+  return (
+    <ScreenContainer style={s.container} edges={['top', 'bottom']}>
+      <WizardProgress step={step} totalSteps={steps.length} onBack={handleBack} />
+
+      <ScrollView
+        style={s.scrollView}
+        contentContainerStyle={s.content}
+        keyboardShouldPersistTaps="handled"
+      >
+        {stepKey === 'players' && renderPlayersStep()}
+        {(stepKey === 'course' || stepKey === 'rounds') && renderCourseStep()}
+        {stepKey === 'scoring' && renderScoringStep()}
+        {stepKey === 'review' && renderReviewStep()}
+      </ScrollView>
+
+      <WizardNav
+        isFirstStep={step === 0}
+        isLastStep={isLastStep}
+        nextEnabled={nextEnabled}
+        nextLabel={nextLabel}
+        onBack={handleBack}
+        onNext={handleNext}
+      />
+    </ScreenContainer>
   );
 }
 
@@ -470,51 +588,30 @@ function makeStyles(theme) {
     },
     content: {
       padding: 20,
-      paddingBottom: 100,
+      paddingBottom: 40,
     },
 
-    /* Header */
-    header: {
-      flexDirection: 'row',
-      alignItems: 'center',
-      justifyContent: 'space-between',
-      paddingHorizontal: 20,
-      paddingTop: 16,
-      paddingBottom: 12,
-    },
-    backBtn: {
-      width: 36,
-      height: 36,
-      borderRadius: 10,
-      backgroundColor: theme.isDark ? theme.bg.secondary : theme.bg.card,
-      borderWidth: 1,
-      borderColor: theme.isDark ? theme.glass?.border : theme.border.default,
-      alignItems: 'center',
-      justifyContent: 'center',
-    },
-    headerTitle: {
-      fontFamily: 'PlayfairDisplay-Bold',
-      fontSize: 18,
-      color: theme.text.primary,
-      letterSpacing: -0.3,
-    },
-
-    /* Labels & Sections */
-    label: {
-      fontFamily: 'PlusJakartaSans-SemiBold',
-      color: theme.text.secondary,
-      marginBottom: 8,
-      fontSize: 13,
-      letterSpacing: 0.3,
-    },
-    sectionTitle: {
+    /* Step heading */
+    stepOverline: {
       fontFamily: 'PlusJakartaSans-Bold',
       color: theme.accent.primary,
       fontSize: 11,
-      marginTop: 24,
-      marginBottom: 12,
       letterSpacing: 1.8,
       textTransform: 'uppercase',
+      marginBottom: 6,
+    },
+    stepPrompt: {
+      fontFamily: 'PlayfairDisplay-Bold',
+      fontSize: 26,
+      color: theme.text.primary,
+      letterSpacing: -0.3,
+    },
+    stepSubtitle: {
+      fontFamily: 'PlusJakartaSans-Medium',
+      color: theme.text.secondary,
+      fontSize: 13,
+      marginTop: 6,
+      marginBottom: 18,
     },
 
     /* Input */
@@ -560,7 +657,7 @@ function makeStyles(theme) {
       width: 32,
       height: 32,
       borderRadius: 10,
-      backgroundColor: theme.isDark ? theme.bg.secondary : theme.bg.secondary,
+      backgroundColor: theme.bg.secondary,
       borderWidth: 1,
       borderColor: theme.border.default,
       alignItems: 'center',
@@ -576,7 +673,7 @@ function makeStyles(theme) {
       borderWidth: 1,
       borderColor: theme.accent.primary + '40',
       borderStyle: 'dashed',
-      backgroundColor: theme.isDark ? theme.accent.light : theme.accent.light,
+      backgroundColor: theme.accent.light,
       padding: 14,
       marginBottom: 8,
     },
@@ -638,7 +735,7 @@ function makeStyles(theme) {
     editHolesBtn: {
       flexDirection: 'row',
       alignItems: 'center',
-      backgroundColor: theme.isDark ? theme.accent.light : theme.accent.light,
+      backgroundColor: theme.accent.light,
       borderRadius: 12,
       borderWidth: 1,
       borderColor: theme.accent.primary + '40',
@@ -651,91 +748,101 @@ function makeStyles(theme) {
       fontSize: 14,
     },
 
-    /* Scoring Mode Tabs */
-    modeRow: {
-      gap: 8,
-    },
-    modeBtn: {
+    /* Empty / error states */
+    emptyHint: {
+      flexDirection: 'row',
+      alignItems: 'center',
       backgroundColor: theme.bg.secondary,
       borderRadius: 12,
       borderWidth: 1,
       borderColor: theme.border.default,
+      borderStyle: 'dashed',
       padding: 14,
-      alignItems: 'center',
-      marginBottom: 6,
+      marginBottom: 8,
     },
-    modeBtnActive: {
-      backgroundColor: theme.accent.primary,
-      borderColor: theme.accent.primary,
-    },
-    modeBtnText: {
-      fontFamily: 'PlusJakartaSans-SemiBold',
+    emptyHintText: {
+      flex: 1,
+      fontFamily: 'PlusJakartaSans-Medium',
       color: theme.text.muted,
-      fontSize: 14,
+      fontSize: 13,
     },
-    modeBtnTextActive: {
-      fontFamily: 'PlusJakartaSans-Bold',
-      color: theme.text.inverse,
+    errorText: {
+      fontFamily: 'PlusJakartaSans-SemiBold',
+      color: theme.destructive,
+      fontSize: 12,
+      marginBottom: 8,
+      marginTop: 8,
     },
 
-    /* Value Inputs (Best/Worst ball) */
-    valueRow: {
-      flexDirection: 'row',
-      gap: 12,
-      marginTop: 10,
+    /* Review hero */
+    reviewHero: {
+      backgroundColor: HERO_GREEN,
+      borderRadius: 20,
+      padding: 20,
+      marginBottom: 20,
     },
-    valueBlock: {
-      flex: 1,
+    reviewHeroOverline: {
+      fontFamily: 'PlusJakartaSans-Bold',
+      color: 'rgba(255,255,255,0.55)',
+      fontSize: 10,
+      letterSpacing: 1.6,
+    },
+    reviewNameInput: {
+      fontFamily: 'PlayfairDisplay-Bold',
+      color: '#ffffff',
+      fontSize: 24,
+      letterSpacing: -0.3,
+      marginTop: 6,
+      paddingVertical: 4,
+    },
+    reviewChipRow: {
+      flexDirection: 'row',
+      gap: 8,
+      marginTop: 12,
+    },
+    reviewChip: {
+      backgroundColor: 'rgba(255,255,255,0.14)',
+      borderRadius: 999,
+      paddingVertical: 6,
+      paddingHorizontal: 12,
+    },
+    reviewChipText: {
+      fontFamily: 'PlusJakartaSans-Bold',
+      color: '#ffffff',
+      fontSize: 11,
+    },
+
+    /* Review tap-to-edit list */
+    reviewList: {
       backgroundColor: theme.bg.card,
       borderRadius: 16,
       borderWidth: 1,
       borderColor: theme.isDark ? theme.glass?.border : theme.border.default,
-      padding: 16,
-      alignItems: 'center',
-      gap: 8,
+      overflow: 'hidden',
       ...(theme.isDark ? {} : theme.shadow.card),
     },
-    valueLabel: {
-      fontFamily: 'PlusJakartaSans-Bold',
-      color: theme.accent.primary,
-      fontSize: 12,
-      letterSpacing: 0.5,
-    },
-    valueInput: {
-      backgroundColor: theme.isDark ? theme.bg.primary : theme.bg.secondary,
-      color: theme.text.primary,
-      borderRadius: 8,
-      borderWidth: 1,
-      borderColor: theme.border.default,
-      width: 56,
-      textAlign: 'center',
-      fontSize: 22,
-      fontFamily: 'PlusJakartaSans-ExtraBold',
-      padding: 8,
-    },
-    valueSuffix: {
-      fontFamily: 'PlusJakartaSans-Regular',
-      color: theme.text.muted,
-      fontSize: 11,
-    },
-
-    /* Primary Button */
-    primaryBtn: {
+    reviewRow: {
       flexDirection: 'row',
       alignItems: 'center',
-      justifyContent: 'center',
-      backgroundColor: theme.isDark ? theme.accent.light : theme.accent.primary,
-      borderRadius: 14,
-      borderWidth: theme.isDark ? 1 : 0,
-      borderColor: theme.isDark ? theme.accent.primary + '33' : 'transparent',
-      padding: 18,
-      marginTop: 24,
-      ...(theme.isDark ? {} : theme.shadow.accent),
+      padding: 14,
     },
-    primaryBtnText: {
-      fontFamily: 'PlusJakartaSans-ExtraBold',
-      color: theme.isDark ? theme.accent.primary : theme.text.inverse,
-      fontSize: 16,
+    reviewRowDivider: {
+      borderBottomWidth: 1,
+      borderBottomColor: theme.border.subtle,
+    },
+    reviewRowIcon: {
+      marginRight: 12,
+    },
+    reviewRowTitle: {
+      fontFamily: 'PlusJakartaSans-Bold',
+      color: theme.text.primary,
+      fontSize: 14,
+    },
+    reviewRowSub: {
+      fontFamily: 'PlusJakartaSans-Medium',
+      color: theme.text.secondary,
+      fontSize: 12,
+      marginTop: 2,
     },
   });
 }

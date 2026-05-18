@@ -21,9 +21,15 @@ export default function JoinTournamentScreen({ navigation, route }) {
     if (code.trim().length < 6) return;
     setLoading(true);
     try {
-      const tournamentId = await joinTournamentByCode(code.trim());
+      const { tournamentId, role } = await joinTournamentByCode(code.trim());
       await setActiveTournament(tournamentId);
-      navigation.goBack();
+      // Editors get to say which player they are (or add themselves) before
+      // landing in the tournament. Viewers are read-only — straight in.
+      if (role === 'editor') {
+        navigation.replace('ClaimPlayer', { tournamentId });
+      } else {
+        navigation.goBack();
+      }
     } catch (err) {
       Alert.alert('Error', err.message ?? 'Could not join tournament');
     } finally {
@@ -87,10 +93,11 @@ const makeStyles = (theme) => StyleSheet.create({
   header: {
     flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
     paddingHorizontal: 20, paddingTop: 16, paddingBottom: 12,
+    width: '100%', maxWidth: 460, alignSelf: 'center',
   },
   backBtn: {},
   headerTitle: { fontFamily: 'PlusJakartaSans-Bold', fontSize: 17, color: theme.text.primary },
-  content: { flex: 1, padding: 24, alignItems: 'center', justifyContent: 'center' },
+  content: { flex: 1, padding: 24, alignItems: 'center', justifyContent: 'center', width: '100%', maxWidth: 460, alignSelf: 'center' },
   icon: {
     width: 72, height: 72, borderRadius: 36,
     backgroundColor: theme.isDark ? theme.bg.card : theme.bg.card,

@@ -3,7 +3,8 @@ import {
   ActivityIndicator, Alert, Platform, ScrollView, StyleSheet,
   Text, TextInput, TouchableOpacity, View,
 } from 'react-native';
-import { SafeAreaView } from 'react-native-safe-area-context';
+import ScreenContainer from '../components/ScreenContainer';
+import CardGrid from '../components/CardGrid';
 import { useFocusEffect } from '@react-navigation/native';
 import { Feather, FontAwesome } from '@expo/vector-icons';
 
@@ -105,7 +106,7 @@ export default function CoursesLibraryScreen({ navigation }) {
   }
 
   return (
-    <SafeAreaView style={s.container} edges={['top', 'bottom']}>
+    <ScreenContainer style={s.container} edges={['top', 'bottom']}>
       <View style={s.header}>
         <TouchableOpacity onPress={() => navigation.goBack()} style={s.backBtn}>
           <Feather name="chevron-left" size={22} color={theme.accent.primary} />
@@ -175,50 +176,52 @@ export default function CoursesLibraryScreen({ navigation }) {
                 <Text style={s.emptySubtitle}>No courses match "{query}"</Text>
               </View>
             )
-            : filteredCourses.map((c, index) => (
-              <View key={c.id}>
-                <View style={s.row}>
-                  <TouchableOpacity
-                    style={s.rowLeft}
-                    onPress={() => navigation.navigate('CourseLibraryDetail', { courseId: c.id, courseName: c.name })}
-                    activeOpacity={0.7}
-                  >
-                    <Text style={s.courseName}>{c.name}</Text>
-                    <Text style={s.courseMeta}>
-                      {[c.city, c.province].filter(Boolean).join(', ')}
-                      {(c.city || c.province) ? '  ·  ' : ''}
-                      Par {c.holes.reduce((sum, h) => sum + h.par, 0)}
-                      {c.slope ? `  ·  Slope ${c.slope}` : ''}
-                      {c.rating ? `  ·  CR ${c.rating}` : ''}
-                    </Text>
-                  </TouchableOpacity>
-                  <TouchableOpacity
-                    style={s.favBtn}
-                    onPress={() => handleToggleFavorite(c.id)}
-                    activeOpacity={0.7}
-                    hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
-                  >
-                    {favorites.has(c.id) ? (
-                      <FontAwesome name="star" size={16} color={theme.accent.primary} />
-                    ) : (
-                      <Feather name="star" size={16} color={theme.text.muted} />
-                    )}
-                  </TouchableOpacity>
-                  <TouchableOpacity
-                    style={s.editBtn}
-                    onPress={() => navigation.navigate('CourseLibraryDetail', { courseId: c.id, courseName: c.name })}
-                    activeOpacity={0.7}
-                  >
-                    <Feather name="edit-2" size={16} color={theme.accent.primary} />
-                  </TouchableOpacity>
-                  <TouchableOpacity style={s.deleteBtn} onPress={() => remove(c)} activeOpacity={0.7}>
-                    <Feather name="trash-2" size={16} color={theme.destructive} />
-                  </TouchableOpacity>
+            : (
+              <CardGrid>{filteredCourses.map((c) => (
+                <View key={c.id}>
+                  <View style={s.row}>
+                    <TouchableOpacity
+                      style={s.rowLeft}
+                      onPress={() => navigation.navigate('CourseLibraryDetail', { courseId: c.id, courseName: c.name })}
+                      activeOpacity={0.7}
+                    >
+                      <Text style={s.courseName}>{c.name}</Text>
+                      <Text style={s.courseMeta}>
+                        {[c.city, c.province].filter(Boolean).join(', ')}
+                        {(c.city || c.province) ? '  ·  ' : ''}
+                        Par {c.holes.reduce((sum, h) => sum + h.par, 0)}
+                        {c.slope ? `  ·  Slope ${c.slope}` : ''}
+                        {c.rating ? `  ·  CR ${c.rating}` : ''}
+                      </Text>
+                    </TouchableOpacity>
+                    <TouchableOpacity
+                      style={s.favBtn}
+                      onPress={() => handleToggleFavorite(c.id)}
+                      activeOpacity={0.7}
+                      hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+                    >
+                      {favorites.has(c.id) ? (
+                        <FontAwesome name="star" size={16} color={theme.accent.primary} />
+                      ) : (
+                        <Feather name="star" size={16} color={theme.text.muted} />
+                      )}
+                    </TouchableOpacity>
+                    <TouchableOpacity
+                      style={s.editBtn}
+                      onPress={() => navigation.navigate('CourseLibraryDetail', { courseId: c.id, courseName: c.name })}
+                      activeOpacity={0.7}
+                    >
+                      <Feather name="edit-2" size={16} color={theme.accent.primary} />
+                    </TouchableOpacity>
+                    <TouchableOpacity style={s.deleteBtn} onPress={() => remove(c)} activeOpacity={0.7}>
+                      <Feather name="trash-2" size={16} color={theme.destructive} />
+                    </TouchableOpacity>
+                  </View>
                 </View>
-              </View>
-            ))}
+              ))}</CardGrid>
+            )}
       </ScrollView>
-    </SafeAreaView>
+    </ScreenContainer>
   );
 }
 
@@ -270,7 +273,7 @@ const makeStyles = (theme) => StyleSheet.create({
     flexDirection: 'row', alignItems: 'center',
     backgroundColor: theme.bg.card, borderRadius: 16, borderWidth: 1,
     borderColor: theme.isDark ? theme.glass?.border : theme.border.default,
-    padding: 16, marginBottom: 8,
+    padding: 16,
     ...(theme.isDark ? {} : theme.shadow.card),
   },
   rowLeft: { flex: 1 },

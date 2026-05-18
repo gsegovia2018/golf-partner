@@ -1,14 +1,40 @@
 import React from 'react';
-import { View, Text, StyleSheet, Platform } from 'react-native';
+import { View, Text, StyleSheet, Platform, Alert } from 'react-native';
 import { captureRef } from 'react-native-view-shot';
 import * as Sharing from 'expo-sharing';
 import { useTheme } from '../theme/ThemeContext';
+
+// Cross-platform themed alert. On web there is no Alert UI, so fall back to
+// window.alert; native uses the OS dialog.
+function notify(title, message) {
+  if (Platform.OS === 'web') {
+    if (typeof window !== 'undefined') window.alert(message ?? title);
+  } else {
+    Alert.alert(title, message);
+  }
+}
 
 // ---------------------------------------------------------------------------
 // Web: render the leaderboard directly to a 2D canvas.
 // Avoids html2canvas (used by react-native-view-shot on web), which is flaky
 // with react-native-web's flex layout and custom web fonts.
 // ---------------------------------------------------------------------------
+// Resolve the shared-card palette from the active theme. The card keeps a
+// golf-green identity but adapts its depth/accent to light vs dark so a
+// shared image matches the app the user is looking at.
+function cardPalette(theme) {
+  const isDark = !!theme?.isDark;
+  return {
+    bg: isDark ? '#0c1a14' : '#006747',
+    card: isDark ? 'rgba(255,255,255,0.05)' : 'rgba(255,255,255,0.08)',
+    text: '#ffffff',
+    sub: 'rgba(255,255,255,0.5)',
+    muted: 'rgba(255,255,255,0.5)',
+    border: isDark ? 'rgba(79,174,138,0.45)' : 'rgba(255,215,0,0.4)',
+    accent: isDark ? '#4fae8a' : '#ffd700',
+  };
+}
+
 function drawLeaderboardCanvas({ tournamentName, leaderboard, theme }) {
   const W = 1200;
   const H = 800;
@@ -17,13 +43,7 @@ function drawLeaderboardCanvas({ tournamentName, leaderboard, theme }) {
   canvas.height = H;
   const ctx = canvas.getContext('2d');
 
-  const bg = '#006747';
-  const card = 'rgba(255,255,255,0.08)';
-  const text = '#ffffff';
-  const sub = 'rgba(255,255,255,0.5)';
-  const muted = 'rgba(255,255,255,0.5)';
-  const border = 'rgba(255,215,0,0.4)';
-  const accent = '#ffd700';
+  const { bg, card, text, sub, muted, border, accent } = cardPalette(theme);
 
   ctx.fillStyle = bg;
   ctx.fillRect(0, 0, W, H);
@@ -34,7 +54,7 @@ function drawLeaderboardCanvas({ tournamentName, leaderboard, theme }) {
   ctx.textBaseline = 'alphabetic';
   ctx.fillText(truncate(ctx, tournamentName ?? 'Tournament', W - 80), 40, 90);
 
-  ctx.fillStyle = '#ffd700';
+  ctx.fillStyle = accent;
   ctx.font = '600 18px system-ui, -apple-system, "Segoe UI", Roboto, sans-serif';
   ctx.fillText('LEADERBOARD', 40, 124);
 
@@ -73,7 +93,7 @@ function drawLeaderboardCanvas({ tournamentName, leaderboard, theme }) {
     roundRect(ctx, 60, y - 42, 56, 44, 10);
     ctx.fill();
 
-    ctx.fillStyle = '#ffffff';
+    ctx.fillStyle = text;
     ctx.font = '800 18px system-ui, -apple-system, "Segoe UI", Roboto, sans-serif';
     ctx.textAlign = 'center';
     ctx.textBaseline = 'middle';
@@ -102,7 +122,7 @@ function drawLeaderboardCanvas({ tournamentName, leaderboard, theme }) {
   });
 
   // Branding
-  ctx.fillStyle = '#ffd700';
+  ctx.fillStyle = accent;
   ctx.font = '700 16px system-ui, -apple-system, "Segoe UI", Roboto, sans-serif';
   ctx.textAlign = 'center';
   ctx.fillText('GOLF PARTNER', W / 2, H - 28);
@@ -184,8 +204,17 @@ async function shareBlobOrDownload(blob, fileName, title, fallbackText) {
 // Public API: share a leaderboard as a PNG.
 // Web: renders via Canvas 2D from data — no html2canvas, no off-screen DOM.
 // Native: captures the provided viewRef and opens the native share sheet.
+//
+// `onBusy(isBusy)` is an optional callback the caller can use to drive a
+// "Sharing…" busy state in its UI. It is always called with `false` once the
+// operation settles (success or failure).
+// Returns true on success, false on failure.
 // ---------------------------------------------------------------------------
-export async function shareLeaderboard({ tournamentName, leaderboard, theme, viewRef, fileName = 'leaderboard.png' }) {
+export async function shareLeaderboard({
+  tournamentName, leaderboard, theme, viewRef, fileName = 'leaderboard.png', onBusy,
+}) {
+  onBusy?.(true);
+
   if (Platform.OS === 'web') {
     try {
       const canvas = drawLeaderboardCanvas({ tournamentName, leaderboard, theme });
@@ -193,22 +222,33 @@ export async function shareLeaderboard({ tournamentName, leaderboard, theme, vie
         canvas.toBlob((b) => (b ? resolve(b) : reject(new Error('toBlob returned null'))), 'image/png');
       });
       await shareBlobOrDownload(blob, fileName, tournamentName ?? 'Leaderboard', leaderboardToText(tournamentName, leaderboard));
+      return true;
     } catch (e) {
       console.warn('Web share failed:', e);
-      if (typeof window !== 'undefined') {
-        window.alert(`Could not share: ${e?.message ?? e}`);
-      }
+      notify('Could not share', `Sharing failed: ${e?.message ?? e}`);
+      return false;
+    } finally {
+      onBusy?.(false);
     }
-    return;
   }
 
   try {
+    if (!viewRef?.current) throw new Error('Nothing to capture');
     const uri = await captureRef(viewRef, { format: 'png', quality: 1 });
-    if (await Sharing.isAvailableAsync()) {
-      await Sharing.shareAsync(uri);
+    if (!(await Sharing.isAvailableAsync())) {
+      notify('Sharing unavailable', 'Sharing is not available on this device.');
+      return false;
     }
+    await Sharing.shareAsync(uri);
+    return true;
   } catch (e) {
+    // A user-cancelled share sheet is not an error worth surfacing.
+    if (e?.message && /cancel/i.test(e.message)) return false;
     console.warn('Share failed:', e);
+    notify('Could not share', `Sharing failed: ${e?.message ?? e}`);
+    return false;
+  } finally {
+    onBusy?.(false);
   }
 }
 
@@ -249,6 +289,7 @@ function RankBadge({ index, theme }) {
 export const ShareableLeaderboard = React.forwardRef(
   ({ tournamentName, leaderboard = [] }, ref) => {
     const { theme } = useTheme();
+    const pal = cardPalette(theme);
     const players = leaderboard.slice(0, 4);
 
     return (
@@ -258,8 +299,8 @@ export const ShareableLeaderboard = React.forwardRef(
         style={[
           styles.card,
           {
-            backgroundColor: '#006747',
-            borderColor: 'rgba(255,215,0,0.4)',
+            backgroundColor: pal.bg,
+            borderColor: pal.border,
           },
         ]}
       >
@@ -269,7 +310,7 @@ export const ShareableLeaderboard = React.forwardRef(
             style={[
               styles.tournamentName,
               {
-                color: '#ffffff',
+                color: pal.text,
                 fontFamily: 'PlusJakartaSans-ExtraBold',
               },
             ]}
@@ -282,7 +323,7 @@ export const ShareableLeaderboard = React.forwardRef(
             style={[
               styles.subtitle,
               {
-                color: '#ffd700',
+                color: pal.accent,
                 fontFamily: 'PlusJakartaSans-Medium',
               },
             ]}
@@ -292,7 +333,7 @@ export const ShareableLeaderboard = React.forwardRef(
         </View>
 
         {/* ---- Divider ---- */}
-        <View style={[styles.divider, { backgroundColor: 'rgba(255,215,0,0.4)' }]} />
+        <View style={[styles.divider, { backgroundColor: pal.border }]} />
 
         {/* ---- Column labels ---- */}
         <View style={styles.columnLabels}>
@@ -300,7 +341,7 @@ export const ShareableLeaderboard = React.forwardRef(
             style={[
               styles.colLabel,
               styles.colLabelPlayer,
-              { color: 'rgba(255,255,255,0.5)', fontFamily: 'PlusJakartaSans-SemiBold' },
+              { color: pal.sub, fontFamily: 'PlusJakartaSans-SemiBold' },
             ]}
           >
             Player
@@ -308,7 +349,7 @@ export const ShareableLeaderboard = React.forwardRef(
           <Text
             style={[
               styles.colLabel,
-              { color: 'rgba(255,255,255,0.5)', fontFamily: 'PlusJakartaSans-SemiBold' },
+              { color: pal.sub, fontFamily: 'PlusJakartaSans-SemiBold' },
             ]}
           >
             Pts
@@ -316,7 +357,7 @@ export const ShareableLeaderboard = React.forwardRef(
           <Text
             style={[
               styles.colLabel,
-              { color: 'rgba(255,255,255,0.5)', fontFamily: 'PlusJakartaSans-SemiBold' },
+              { color: pal.sub, fontFamily: 'PlusJakartaSans-SemiBold' },
             ]}
           >
             Strk
@@ -341,7 +382,7 @@ export const ShareableLeaderboard = React.forwardRef(
               style={[
                 styles.playerName,
                 {
-                  color: '#ffffff',
+                  color: pal.text,
                   fontFamily: 'PlusJakartaSans-SemiBold',
                 },
               ]}
@@ -354,7 +395,7 @@ export const ShareableLeaderboard = React.forwardRef(
               style={[
                 styles.stat,
                 {
-                  color: '#ffd700',
+                  color: pal.accent,
                   fontFamily: 'PlusJakartaSans-Bold',
                 },
               ]}
@@ -366,7 +407,7 @@ export const ShareableLeaderboard = React.forwardRef(
               style={[
                 styles.stat,
                 {
-                  color: 'rgba(255,255,255,0.5)',
+                  color: pal.sub,
                   fontFamily: 'PlusJakartaSans-Medium',
                 },
               ]}
@@ -382,7 +423,7 @@ export const ShareableLeaderboard = React.forwardRef(
             style={[
               styles.brandText,
               {
-                color: '#ffd700',
+                color: pal.accent,
                 fontFamily: 'PlusJakartaSans-SemiBold',
               },
             ]}
