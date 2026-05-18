@@ -642,6 +642,7 @@ function makeStyles(theme) {
       justifyContent: 'space-between',
     },
     slotFilled: {
+      position: 'relative',
       width: '48%',
       marginBottom: 10,
       minHeight: 116,
@@ -688,7 +689,6 @@ function makeStyles(theme) {
       fontFamily: 'PlusJakartaSans-Bold',
       color: theme.text.primary,
       fontSize: 14,
-      maxWidth: '100%',
     },
     slotHcp: {
       fontFamily: 'PlusJakartaSans-Medium',
