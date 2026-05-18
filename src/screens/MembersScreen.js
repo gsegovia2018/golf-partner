@@ -12,7 +12,7 @@ import { useAuth } from '../context/AuthContext';
 import { supabase } from '../lib/supabase';
 import {
   loadTournamentMembers, removeTournamentMember, generateInviteCode,
-  getTournament, releaseTournamentPlayer,
+  getTournament, releaseTournamentPlayer, buildJoinLink,
 } from '../store/tournamentStore';
 
 // Promote/demote a member between editor and viewer roles. Kept local to this
@@ -118,16 +118,19 @@ export default function MembersScreen({ navigation, route }) {
     setInviting(true);
     try {
       const { editorCode } = await generateInviteCode(tournamentId);
-      const message = `Join "${tournamentName ?? 'my tournament'}" on Golf Partner — invite code: ${editorCode}`;
+      const origin = Platform.OS === 'web' && typeof window !== 'undefined'
+        ? window.location.origin
+        : '';
+      const link = buildJoinLink(origin, editorCode);
+      const message = `Join "${tournamentName ?? 'my tournament'}" on Golf Partner:\n${link}`;
       if (Platform.OS === 'web') {
-        // Web has no native share sheet here — show the code and copy it.
-        try { await navigator.clipboard?.writeText(editorCode); } catch (_) {}
-        window.alert(`Invite code: ${editorCode}\n(copied to clipboard)`);
+        try { await navigator.clipboard?.writeText(link); } catch (_) {}
+        window.alert(`Invite link copied:\n${link}`);
       } else {
         await Share.share({ message });
       }
     } catch (err) {
-      Alert.alert('Error', err?.message ?? 'Could not create invite code');
+      Alert.alert('Error', err?.message ?? 'Could not create invite link');
     } finally {
       setInviting(false);
     }
