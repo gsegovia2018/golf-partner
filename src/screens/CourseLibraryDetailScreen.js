@@ -7,8 +7,9 @@ import ScreenContainer from '../components/ScreenContainer';
 import { Feather } from '@expo/vector-icons';
 
 import { useTheme } from '../theme/ThemeContext';
-import { fetchCourses, saveCourseHoles, upsertCourse } from '../store/libraryStore';
+import { fetchCourses, updateCourseFromEditor, upsertCourse } from '../store/libraryStore';
 import { propagateCourseToTournaments } from '../store/tournamentStore';
+import TeesEditor from '../components/TeesEditor';
 
 function defaultHoles() {
   return Array.from({ length: 18 }, (_, i) => ({ number: i + 1, par: 4, strokeIndex: i + 1 }));
@@ -20,8 +21,7 @@ export default function CourseLibraryDetailScreen({ navigation, route }) {
   const s = makeStyles(theme);
 
   const [name, setName] = useState(initialName ?? '');
-  const [slope, setSlope] = useState('');
-  const [rating, setRating] = useState('');
+  const [tees, setTees] = useState([]);
   const [city, setCity] = useState('');
   const [province, setProvince] = useState('');
   const [holes, setHoles] = useState(defaultHoles());
@@ -34,8 +34,7 @@ export default function CourseLibraryDetailScreen({ navigation, route }) {
       const course = courses.find((c) => c.id === courseId);
       if (course) {
         setName(course.name);
-        setSlope(course.slope ? String(course.slope) : '');
-        setRating(course.rating ? String(course.rating) : '');
+        setTees((course.tees ?? []).map((t) => ({ ...t })));
         setCity(course.city ?? '');
         setProvince(course.province ?? '');
         if (course.holes.length === 18) setHoles(course.holes.map((h) => ({ ...h })));
@@ -52,9 +51,9 @@ export default function CourseLibraryDetailScreen({ navigation, route }) {
     if (!name.trim()) return;
     setSaving(true);
     try {
-      await upsertCourse({ id: courseId, name: name.trim(), slope: slope || null, rating: rating || null, city, province });
-      await saveCourseHoles(courseId, holes);
-      await propagateCourseToTournaments(courseId, { slope: slope || null, rating: rating || null, holes });
+      await upsertCourse({ id: courseId, name: name.trim(), city, province });
+      await updateCourseFromEditor(courseId, holes, tees);
+      await propagateCourseToTournaments(courseId, { holes, tees });
       navigation.goBack();
     } catch (e) {
       Alert.alert('Error', e.message);
@@ -112,36 +111,7 @@ export default function CourseLibraryDetailScreen({ navigation, route }) {
           selectionColor={theme.accent.primary}
         />
 
-        <View style={s.ratingRow}>
-          <View style={s.ratingHalf}>
-            <Text style={s.slopeLabel}>Slope</Text>
-            <TextInput
-              style={s.slopeInput}
-              keyboardType="numeric"
-              maxLength={3}
-              placeholder="128"
-              placeholderTextColor={theme.text.muted}
-              keyboardAppearance={theme.isDark ? 'dark' : 'light'}
-              selectionColor={theme.accent.primary}
-              value={slope}
-              onChangeText={setSlope}
-            />
-          </View>
-          <View style={s.ratingHalf}>
-            <Text style={s.slopeLabel}>Course Rating</Text>
-            <TextInput
-              style={s.slopeInput}
-              keyboardType="decimal-pad"
-              maxLength={5}
-              placeholder="71.5"
-              placeholderTextColor={theme.text.muted}
-              keyboardAppearance={theme.isDark ? 'dark' : 'light'}
-              selectionColor={theme.accent.primary}
-              value={rating}
-              onChangeText={setRating}
-            />
-          </View>
-        </View>
+        <TeesEditor tees={tees} onChange={setTees} theme={theme} />
 
         <View style={s.locationRow}>
           <TextInput
@@ -236,8 +206,6 @@ const makeStyles = (theme) => StyleSheet.create({
     borderColor: theme.border.default, padding: 14, fontSize: 18,
     fontFamily: 'PlusJakartaSans-Bold', marginBottom: 16,
   },
-  ratingRow: { flexDirection: 'row', gap: 12, marginBottom: 12 },
-  ratingHalf: { flex: 1, flexDirection: 'row', alignItems: 'center', gap: 8 },
   locationRow: { flexDirection: 'row', gap: 8, marginBottom: 20 },
   locationInput: {
     backgroundColor: theme.isDark ? theme.bg.secondary : theme.bg.card,
@@ -246,13 +214,6 @@ const makeStyles = (theme) => StyleSheet.create({
     fontFamily: 'PlusJakartaSans-Medium',
   },
   flex: { flex: 1 },
-  slopeLabel: { fontFamily: 'PlusJakartaSans-SemiBold', color: theme.text.primary, fontSize: 14 },
-  slopeInput: {
-    backgroundColor: theme.isDark ? theme.bg.secondary : theme.bg.card,
-    color: theme.text.primary, borderRadius: 10, borderWidth: 1,
-    borderColor: theme.border.default, width: 72, textAlign: 'center', fontSize: 16,
-    fontFamily: 'PlusJakartaSans-Bold', padding: 9,
-  },
   sectionTitle: {
     fontFamily: 'PlusJakartaSans-SemiBold', color: theme.accent.primary, fontSize: 11,
     marginBottom: 10, letterSpacing: 1.5, textTransform: 'uppercase',
