@@ -60,7 +60,7 @@ export default function SetupScreen({ navigation, route }) {
   );
   const [nameTouched, setNameTouched] = useState(false);
   const [players, setPlayers] = useState([]);
-  const [rounds, setRounds] = useState([{ id: newRoundId(), courseName: '', holes: defaultHoles(), slope: null, playerHandicaps: null }]);
+  const [rounds, setRounds] = useState([{ id: newRoundId(), courseName: '', holes: defaultHoles(), tees: [], playerHandicaps: null, playerTees: null }]);
   const [settings, setSettings] = useState({ ...DEFAULT_SETTINGS });
   const [rawStep, setStep] = useState(0);
   // Which round's course name is being edited inline (null = none).
@@ -140,11 +140,11 @@ export default function SetupScreen({ navigation, route }) {
               courseId: course.id,
               courseName: course.name,
               // Deep-copy so later edits in CourseEditor don't mutate the
-              // library's in-memory hole objects.
+              // library's in-memory objects.
               holes: course.holes.map((h) => ({ ...h })),
-              slope: course.slope,
-              courseRating: course.rating ?? null,
+              tees: (course.tees ?? []).map((t) => ({ ...t })),
               playerHandicaps: null,
+              playerTees: null,
             };
             if (idx < next.length) {
               next[idx] = { ...next[idx], ...roundData };
@@ -164,13 +164,16 @@ export default function SetupScreen({ navigation, route }) {
     return () => { cancelled = true; };
   }, []));
 
-  const handleHolesSaved = useCallback((roundIndex, holes, slope, courseRating, playerHandicaps, manualHandicaps) => {
+  const handleHolesSaved = useCallback((roundIndex, patch) => {
     setRounds((prev) => {
       const next = [...prev];
       next[roundIndex] = {
         ...next[roundIndex],
-        holes, slope, courseRating, playerHandicaps,
-        manualHandicaps: { ...(manualHandicaps ?? {}) },
+        holes: patch.holes,
+        tees: patch.tees,
+        playerHandicaps: patch.playerHandicaps,
+        playerTees: patch.playerTees,
+        manualHandicaps: { ...(patch.manualHandicaps ?? {}) },
       };
       return next;
     });
@@ -198,13 +201,13 @@ export default function SetupScreen({ navigation, route }) {
   }
 
   function addRound() {
-    setRounds((prev) => [...prev, { id: newRoundId(), courseName: '', holes: defaultHoles(), slope: null, courseRating: null, playerHandicaps: null, manualHandicaps: {} }]);
+    setRounds((prev) => [...prev, { id: newRoundId(), courseName: '', holes: defaultHoles(), tees: [], playerHandicaps: null, playerTees: null, manualHandicaps: {} }]);
   }
 
   async function removeRound(index) {
     const round = rounds[index];
     // Setup-stage rounds carry no entered scores yet, but a course may have
-    // been configured — still confirm so a stray tap doesn't wipe holes/slope.
+    // been configured — still confirm so a stray tap doesn't wipe holes/tees.
     const hasCourse = !!(round?.courseName || '').trim();
     const ok = await confirmDialog(
       'Remove round',
@@ -244,8 +247,8 @@ export default function SetupScreen({ navigation, route }) {
     const builtRounds = rounds.map((r, i) => {
       // Auto-derive WHS playing handicaps when the user never opened
       // Configure Holes (r.playerHandicaps still null). r already carries
-      // holes / slope / courseRating here, so deriveRoundPlayingHandicap
-      // yields the real playing handicap rather than the raw index.
+      // holes / tees here, so deriveRoundPlayingHandicap yields the real
+      // playing handicap rather than the raw index.
       const playerHandicaps = r.playerHandicaps
         ?? Object.fromEntries(players.map((p) => [p.id, deriveRoundPlayingHandicap(p.handicap, r)]));
       return {
@@ -253,9 +256,9 @@ export default function SetupScreen({ navigation, route }) {
         courseId: r.courseId ?? null,
         courseName: r.courseName.trim(),
         holes: r.holes,
-        slope: r.slope ?? null,
-        courseRating: r.courseRating ?? null,
+        tees: r.tees ?? [],
         playerHandicaps,
+        playerTees: r.playerTees ?? null,
         manualHandicaps: { ...(r.manualHandicaps ?? {}) },
         notes: '',
         pairs: buildPairs(),
@@ -445,8 +448,8 @@ export default function SetupScreen({ navigation, route }) {
                     <Text style={s.courseStatLabel}>HOLES</Text>
                   </View>
                   <View style={s.courseStat}>
-                    <Text style={s.courseStatValue}>{r.slope ?? '—'}</Text>
-                    <Text style={s.courseStatLabel}>SLOPE</Text>
+                    <Text style={s.courseStatValue}>{r.tees?.length ?? 0}</Text>
+                    <Text style={s.courseStatLabel}>TEES</Text>
                   </View>
                 </View>
 
@@ -457,12 +460,12 @@ export default function SetupScreen({ navigation, route }) {
                       roundIndex: i,
                       courseName: r.courseName || `Round ${i + 1}`,
                       initialHoles: r.holes,
-                      onSave: handleHolesSaved,
-                      players: players,
-                      initialSlope: r.slope,
-                      initialCourseRating: r.courseRating ?? null,
+                      initialTees: r.tees ?? [],
                       initialPlayerHandicaps: r.playerHandicaps,
                       initialManualHandicaps: r.manualHandicaps ?? {},
+                      initialPlayerTees: r.playerTees ?? {},
+                      players: players,
+                      onSave: handleHolesSaved,
                       courseId: r.courseId ?? null,
                     })
                   }
