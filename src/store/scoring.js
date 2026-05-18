@@ -302,8 +302,8 @@ export function tournamentSindicatoClinched(tournament) {
 export function tournamentMatchPlayStandings(tournament) {
   const { players, rounds } = tournament;
   if (!players || players.length !== 2) return null;
-  const hasAnyScore = rounds.some((r) => r.scores && Object.keys(r.scores).length > 0);
-  if (!hasAnyScore) return null;
+  // No early-out on an unscored match: both players still appear on the
+  // leaderboard, all square at 0, so the card is populated from the start.
   const [a, b] = players;
   let aHoles = 0;
   let bHoles = 0;

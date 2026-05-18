@@ -509,11 +509,13 @@ describe('tournamentMatchPlayStandings', () => {
     expect(tournamentMatchPlayStandings(t)).toBeNull();
   });
 
-  test('returns null before any hole is scored', () => {
+  test('shows both players all square before any hole is scored', () => {
     const t = {
       players, rounds: [{ holes, playerHandicaps: {}, scores: {} }], currentRound: 0,
     };
-    expect(tournamentMatchPlayStandings(t)).toBeNull();
+    const r = tournamentMatchPlayStandings(t);
+    expect(r.board.map((e) => [e.player.id, e.points])).toEqual([['a', 0], ['b', 0]]);
+    expect(r.status).toBe('All square');
   });
 
   test('future rounds keep their holes in the remaining count', () => {
