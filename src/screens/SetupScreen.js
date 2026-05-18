@@ -63,6 +63,8 @@ export default function SetupScreen({ navigation, route }) {
   const [rounds, setRounds] = useState([{ id: newRoundId(), courseName: '', holes: defaultHoles(), slope: null, playerHandicaps: null }]);
   const [settings, setSettings] = useState({ ...DEFAULT_SETTINGS });
   const [rawStep, setStep] = useState(0);
+  // Which round's course name is being edited inline (null = none).
+  const [renamingIndex, setRenamingIndex] = useState(null);
 
   // The active step list depends on kind + player count (Scoring only exists
   // for 2+ players). When the roster shrinks the Scoring step away the array
@@ -212,6 +214,7 @@ export default function SetupScreen({ navigation, route }) {
     );
     if (!ok) return;
     setRounds((prev) => prev.filter((_, i) => i !== index));
+    setRenamingIndex(null);
   }
 
   const missingCourseName = rounds.some((r) => !r.courseName.trim());
@@ -372,7 +375,8 @@ export default function SetupScreen({ navigation, route }) {
       </Text>
       {rounds.map((r, i) => {
         const totalPar = r.holes.reduce((sum, h) => sum + h.par, 0);
-        const missingName = !r.courseName.trim();
+        const hasCourse = !!r.courseName.trim();
+        const isRenaming = renamingIndex === i;
         return (
           <View key={r.id ?? `round-${i}`} style={s.courseBlock}>
             <View style={s.roundHeader}>
@@ -384,38 +388,70 @@ export default function SetupScreen({ navigation, route }) {
                 </TouchableOpacity>
               )}
             </View>
-            <TouchableOpacity
-              style={s.pickBtn}
-              onPress={() => navigation.navigate('CoursePicker', { roundIndex: i })}
-            >
-              <Feather
-                name={r.courseName ? 'map-pin' : 'plus'}
-                size={16}
-                color={theme.accent.primary}
-                style={{ marginRight: 6 }}
-              />
-              <Text style={s.pickBtnText}>
-                {r.courseName ? `Course: ${r.courseName}` : 'Pick Course from Library'}
-              </Text>
-            </TouchableOpacity>
-            {missingName && (
-              <Text style={s.errorText}>
-                {isGame ? 'A course is required.' : `Round ${i + 1} needs a course.`}
-              </Text>
-            )}
-            {r.courseName ? (
-              <>
-                <TextInput
-                  style={s.input}
-                  placeholder="Course name"
-                  placeholderTextColor={theme.text.muted}
-                  keyboardAppearance={theme.isDark ? 'dark' : 'light'}
-                  selectionColor={theme.accent.primary}
-                  value={r.courseName}
-                  onChangeText={(v) => updateCourseName(i, v)}
-                />
+
+            {hasCourse ? (
+              <View style={s.courseCard}>
+                <View style={s.courseCardTop}>
+                  {isRenaming ? (
+                    <>
+                      <View style={s.coursePin}>
+                        <Feather name="map-pin" size={15} color={theme.accent.primary} />
+                      </View>
+                      <TextInput
+                        style={s.courseNameInput}
+                        value={r.courseName}
+                        onChangeText={(v) => updateCourseName(i, v)}
+                        onBlur={() => setRenamingIndex(null)}
+                        onSubmitEditing={() => setRenamingIndex(null)}
+                        autoFocus
+                        placeholder="Course name"
+                        placeholderTextColor={theme.text.muted}
+                        keyboardAppearance={theme.isDark ? 'dark' : 'light'}
+                        selectionColor={theme.accent.primary}
+                      />
+                    </>
+                  ) : (
+                    <TouchableOpacity
+                      style={s.courseIdentity}
+                      activeOpacity={0.7}
+                      onPress={() => navigation.navigate('CoursePicker', { roundIndex: i })}
+                    >
+                      <View style={s.coursePin}>
+                        <Feather name="map-pin" size={15} color={theme.accent.primary} />
+                      </View>
+                      <Text style={s.courseCardName} numberOfLines={1}>{r.courseName}</Text>
+                    </TouchableOpacity>
+                  )}
+                  <TouchableOpacity
+                    style={s.coursePencil}
+                    hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+                    onPress={() => setRenamingIndex(isRenaming ? null : i)}
+                  >
+                    <Feather
+                      name={isRenaming ? 'check' : 'edit-2'}
+                      size={14}
+                      color={isRenaming ? theme.accent.primary : theme.text.muted}
+                    />
+                  </TouchableOpacity>
+                </View>
+
+                <View style={s.courseStats}>
+                  <View style={s.courseStat}>
+                    <Text style={s.courseStatValue}>{totalPar}</Text>
+                    <Text style={s.courseStatLabel}>PAR</Text>
+                  </View>
+                  <View style={s.courseStat}>
+                    <Text style={s.courseStatValue}>{r.holes.length}</Text>
+                    <Text style={s.courseStatLabel}>HOLES</Text>
+                  </View>
+                  <View style={s.courseStat}>
+                    <Text style={s.courseStatValue}>{r.slope ?? '—'}</Text>
+                    <Text style={s.courseStatLabel}>SLOPE</Text>
+                  </View>
+                </View>
+
                 <TouchableOpacity
-                  style={s.editHolesBtn}
+                  style={s.courseConfigRow}
                   onPress={() =>
                     navigation.navigate('CourseEditor', {
                       roundIndex: i,
@@ -431,14 +467,29 @@ export default function SetupScreen({ navigation, route }) {
                     })
                   }
                 >
-                  <Feather name="settings" size={14} color={theme.accent.primary} style={{ marginRight: 6 }} />
-                  <Text style={s.editHolesBtnText}>
-                    Configure Holes  {'·'}  Par {totalPar}
-                  </Text>
-                  <Feather name="chevron-right" size={16} color={theme.accent.primary} style={{ marginLeft: 'auto' }} />
+                  <Feather name="settings" size={14} color={theme.accent.primary} />
+                  <Text style={s.courseConfigText}>Configure holes</Text>
+                  <Feather name="chevron-right" size={16} color={theme.text.muted} style={{ marginLeft: 'auto' }} />
                 </TouchableOpacity>
+              </View>
+            ) : (
+              <>
+                <TouchableOpacity
+                  style={s.courseEmpty}
+                  activeOpacity={0.7}
+                  onPress={() => navigation.navigate('CoursePicker', { roundIndex: i })}
+                >
+                  <View style={s.courseEmptyPin}>
+                    <Feather name="map-pin" size={20} color={theme.accent.primary} />
+                  </View>
+                  <Text style={s.courseEmptyTitle}>Pick a course from library</Text>
+                  <Text style={s.courseEmptyHint}>Tap to choose where you're playing</Text>
+                </TouchableOpacity>
+                <Text style={s.errorText}>
+                  {isGame ? 'A course is required.' : `Round ${i + 1} needs a course.`}
+                </Text>
               </>
-            ) : null}
+            )}
           </View>
         );
       })}
@@ -622,19 +673,6 @@ function makeStyles(theme) {
       marginBottom: 18,
     },
 
-    /* Input */
-    input: {
-      backgroundColor: theme.isDark ? theme.bg.secondary : theme.bg.card,
-      color: theme.text.primary,
-      borderRadius: 10,
-      borderWidth: 1,
-      borderColor: theme.border.default,
-      padding: 14,
-      marginBottom: 10,
-      fontSize: 15,
-      fontFamily: 'PlusJakartaSans-Medium',
-    },
-
     /* Players slot grid */
     slotGrid: {
       flexDirection: 'row',
@@ -727,25 +765,6 @@ function makeStyles(theme) {
       letterSpacing: 0.8,
     },
 
-    /* Pick / Dashed Buttons */
-    pickBtn: {
-      flexDirection: 'row',
-      alignItems: 'center',
-      justifyContent: 'center',
-      borderRadius: 12,
-      borderWidth: 1,
-      borderColor: theme.accent.primary + '40',
-      borderStyle: 'dashed',
-      backgroundColor: theme.accent.light,
-      padding: 14,
-      marginBottom: 8,
-    },
-    pickBtnText: {
-      fontFamily: 'PlusJakartaSans-SemiBold',
-      color: theme.accent.primary,
-      fontSize: 14,
-    },
-
     /* Rounds */
     courseBlock: {
       marginBottom: 12,
@@ -775,6 +794,126 @@ function makeStyles(theme) {
       marginLeft: 4,
     },
 
+    /* Course card */
+    courseCard: {
+      backgroundColor: theme.bg.card,
+      borderRadius: 16,
+      borderWidth: 1,
+      borderColor: theme.isDark ? theme.glass?.border : theme.border.default,
+      overflow: 'hidden',
+      ...(theme.isDark ? {} : theme.shadow.card),
+    },
+    courseCardTop: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      padding: 13,
+    },
+    courseIdentity: {
+      flex: 1,
+      flexDirection: 'row',
+      alignItems: 'center',
+    },
+    coursePin: {
+      width: 32,
+      height: 32,
+      borderRadius: 9,
+      backgroundColor: theme.accent.light,
+      alignItems: 'center',
+      justifyContent: 'center',
+      marginRight: 10,
+    },
+    courseCardName: {
+      flex: 1,
+      fontFamily: 'PlusJakartaSans-Bold',
+      color: theme.text.primary,
+      fontSize: 15,
+    },
+    courseNameInput: {
+      flex: 1,
+      fontFamily: 'PlusJakartaSans-Bold',
+      color: theme.text.primary,
+      fontSize: 15,
+      padding: 0,
+      borderBottomWidth: 1,
+      borderBottomColor: theme.accent.primary,
+    },
+    coursePencil: {
+      width: 30,
+      height: 30,
+      alignItems: 'center',
+      justifyContent: 'center',
+      marginLeft: 6,
+    },
+    courseStats: {
+      flexDirection: 'row',
+      gap: 6,
+      paddingHorizontal: 13,
+      paddingBottom: 13,
+    },
+    courseStat: {
+      flex: 1,
+      backgroundColor: theme.bg.secondary,
+      borderRadius: 10,
+      paddingVertical: 8,
+      alignItems: 'center',
+    },
+    courseStatValue: {
+      fontFamily: 'PlusJakartaSans-Bold',
+      color: theme.text.primary,
+      fontSize: 15,
+    },
+    courseStatLabel: {
+      fontFamily: 'PlusJakartaSans-Bold',
+      color: theme.text.muted,
+      fontSize: 9,
+      letterSpacing: 0.6,
+      marginTop: 2,
+    },
+    courseConfigRow: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: 8,
+      paddingVertical: 12,
+      paddingHorizontal: 13,
+      borderTopWidth: 1,
+      borderTopColor: theme.border.subtle,
+    },
+    courseConfigText: {
+      fontFamily: 'PlusJakartaSans-SemiBold',
+      color: theme.accent.primary,
+      fontSize: 14,
+    },
+    courseEmpty: {
+      backgroundColor: theme.bg.card,
+      borderRadius: 16,
+      borderWidth: 1.5,
+      borderColor: theme.accent.primary + '40',
+      borderStyle: 'dashed',
+      paddingVertical: 26,
+      paddingHorizontal: 16,
+      alignItems: 'center',
+    },
+    courseEmptyPin: {
+      width: 44,
+      height: 44,
+      borderRadius: 13,
+      backgroundColor: theme.accent.light,
+      alignItems: 'center',
+      justifyContent: 'center',
+      marginBottom: 8,
+    },
+    courseEmptyTitle: {
+      fontFamily: 'PlusJakartaSans-Bold',
+      color: theme.accent.primary,
+      fontSize: 14,
+    },
+    courseEmptyHint: {
+      fontFamily: 'PlusJakartaSans-Medium',
+      color: theme.text.muted,
+      fontSize: 12,
+      marginTop: 3,
+    },
+
     /* Add Round */
     addRoundBtn: {
       flexDirection: 'row',
@@ -789,23 +928,6 @@ function makeStyles(theme) {
       marginTop: 4,
     },
     addRoundBtnText: {
-      fontFamily: 'PlusJakartaSans-SemiBold',
-      color: theme.accent.primary,
-      fontSize: 14,
-    },
-
-    /* Edit Holes */
-    editHolesBtn: {
-      flexDirection: 'row',
-      alignItems: 'center',
-      backgroundColor: theme.accent.light,
-      borderRadius: 12,
-      borderWidth: 1,
-      borderColor: theme.accent.primary + '40',
-      padding: 12,
-      marginBottom: 4,
-    },
-    editHolesBtnText: {
       fontFamily: 'PlusJakartaSans-SemiBold',
       color: theme.accent.primary,
       fontSize: 14,
