@@ -57,6 +57,22 @@ function buildGameName(courseName) {
   return `${shortCourse} · ${stamp}`;
 }
 
+// Project a wizard round down to just the course data an official round needs.
+// The casual round object also carries a transient client id and casual
+// scoring fields, which must not leak into tournament_rounds.course.
+function officialCourseFor(round) {
+  return {
+    name: round?.courseName ?? '',
+    holes: round?.holes ?? [],
+    slope: round?.slope ?? null,
+    courseRating: round?.courseRating ?? null,
+  };
+}
+
+// Stable id for a roster entry so React keys survive add / remove.
+let _rosterIdSeq = 0;
+function newRosterId() { return `roster-${Date.now()}-${_rosterIdSeq++}`; }
+
 export default function SetupScreen({ navigation, route }) {
   const { theme } = useTheme();
   const s = makeStyles(theme);
@@ -75,7 +91,7 @@ export default function SetupScreen({ navigation, route }) {
   const [settings, setSettings] = useState({ ...DEFAULT_SETTINGS });
   const [rawStep, setStep] = useState(0);
 
-  // Official-mode-only state. roster: [{ displayName, handicap }].
+  // Official-mode-only state. roster: [{ id, displayName, handicap }].
   const [roster, setRoster] = useState([]);
   const [officialFormat, setOfficialFormat] = useState('stableford');
   const [rosterName, setRosterName] = useState('');
@@ -233,9 +249,10 @@ export default function SetupScreen({ navigation, route }) {
   }
 
   const missingCourseName = rounds.some((r) => !r.courseName.trim());
-  // Official tournaments store each round's course as a free-form jsonb blob
-  // and do not require a course name to be entered in this wizard, so Start
-  // gates only on a non-empty roster.
+  // Official rounds, like casual tournament rounds, require a course per
+  // round — the shared rounds-step gate (isStepValid) enforces that before
+  // Review is reachable. canStart here only adds the official-specific
+  // requirement of a non-empty roster; the course check already happened.
   const canStart = isOfficial
     ? roster.length > 0
     : (players.length >= 1 && !missingCourseName);
@@ -244,8 +261,9 @@ export default function SetupScreen({ navigation, route }) {
     if (isOfficial) {
       if (busy) return;
       setBusy(true);
+      let tournamentId = null;
       try {
-        const tournamentId = await createOfficialTournament({
+        tournamentId = await createOfficialTournament({
           name: tournamentName.trim() || 'Weekend Golf',
         });
         for (const entry of roster) {
@@ -257,15 +275,26 @@ export default function SetupScreen({ navigation, route }) {
         for (let i = 0; i < rounds.length; i++) {
           await createRound(tournamentId, {
             roundIndex: i,
-            course: rounds[i],
+            course: officialCourseFor(rounds[i]),
             format: officialFormat,
           });
         }
         navigation.navigate('OfficialSetup', { tournamentId });
       } catch (err) {
-        const msg = err?.message ?? 'Could not create tournament';
-        if (Platform.OS === 'web') window.alert(msg);
-        else Alert.alert('Error', msg);
+        if (tournamentId) {
+          // The tournament row exists but roster/rounds setup did not fully
+          // finish. Send the admin to the management screen to complete it —
+          // never leave them on Review where a retry would create a duplicate
+          // tournament.
+          const msg = 'Tournament created, but some setup did not finish. You can complete the roster and rounds on the next screen.';
+          if (Platform.OS === 'web') window.alert(msg);
+          else Alert.alert('Setup incomplete', msg);
+          navigation.navigate('OfficialSetup', { tournamentId });
+        } else {
+          const msg = "Couldn't create the tournament. Please try again.";
+          if (Platform.OS === 'web') window.alert(msg);
+          else Alert.alert('Error', msg);
+        }
       } finally {
         setBusy(false);
       }
@@ -612,10 +641,10 @@ export default function SetupScreen({ navigation, route }) {
     );
   };
 
-  const addRosterPlayerLocal = () => {
+  const handleAddRosterEntry = () => {
     const name = rosterName.trim();
     if (!name) return;
-    setRoster((prev) => [...prev, { displayName: name, handicap: Number(rosterHcp) || 0 }]);
+    setRoster((prev) => [...prev, { id: newRosterId(), displayName: name, handicap: Number(rosterHcp) || 0 }]);
     setRosterName('');
     setRosterHcp('');
   };
@@ -632,7 +661,7 @@ export default function SetupScreen({ navigation, route }) {
         </View>
       )}
       {roster.map((entry, i) => (
-        <View key={`roster-${i}`} style={s.playerCard}>
+        <View key={entry.id ?? `roster-${i}`} style={s.playerCard}>
           <View style={s.playerInfo}>
             <Text style={s.playerName}>{entry.displayName}</Text>
             <Text style={s.playerHcp}>HCP {entry.handicap}</Text>
@@ -666,7 +695,7 @@ export default function SetupScreen({ navigation, route }) {
           onChangeText={setRosterHcp}
         />
       </View>
-      <TouchableOpacity style={s.pickBtn} onPress={addRosterPlayerLocal}>
+      <TouchableOpacity style={s.pickBtn} onPress={handleAddRosterEntry}>
         <Feather name="plus" size={16} color={theme.accent.primary} style={{ marginRight: 6 }} />
         <Text style={s.pickBtnText}>Add Player</Text>
       </TouchableOpacity>
