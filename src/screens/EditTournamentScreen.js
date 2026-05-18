@@ -231,8 +231,8 @@ export default function EditTournamentScreen({ navigation }) {
         id: `r${Date.now()}`,
         courseName: '',
         holes: defaultHoles(),
-        slope: null,
-        courseRating: null,
+        tees: [],
+        playerTees: {},
         playerHandicaps: Object.fromEntries(builtPlayers.map((p) => [p.id, String(p.handicap)])),
         manualHandicaps: {},
         pairs,
@@ -335,7 +335,7 @@ export default function EditTournamentScreen({ navigation }) {
         {/* Base handicap indexes */}
         <View>
           <Text style={s.sectionTitle}>Handicap Index</Text>
-          <Text style={s.hint}>Base index used when no slope is set for a course.</Text>
+          <Text style={s.hint}>Base index used when no tee is set for a course.</Text>
           {players.map((p, i) => (
             <View key={p.id} style={s.playerCard}>
               <Text style={s.playerName}>{p.name}</Text>
@@ -358,7 +358,7 @@ export default function EditTournamentScreen({ navigation }) {
         {rounds.map((r, ri) => (
           <View key={r.id}>
             <View style={s.roundHeader}>
-              <Text style={s.sectionTitle}>Round {ri + 1}{r.slope ? `  --  Slope ${r.slope}` : ''}</Text>
+              <Text style={s.sectionTitle}>Round {ri + 1}{r.tees?.length ? `  --  ${r.tees.length} tees` : ''}</Text>
               {rounds.length > 1 && (
                 <TouchableOpacity onPress={() => removeRound(ri)} style={s.removeBtn}>
                   <Feather name="trash-2" size={14} color={theme.destructive} style={{ marginRight: 4 }} />
