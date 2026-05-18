@@ -13,6 +13,7 @@ import { middleTee } from '../store/tees';
 import { consumePendingPlayers, consumePendingCourses } from '../lib/selectionBridge';
 import { useTheme } from '../theme/ThemeContext';
 import ScoringModePicker, { isScoringModeAllowed, fallbackScoringMode } from '../components/ScoringModePicker';
+import RoundTeeAssignments from '../components/RoundTeeAssignments';
 import { scoringModeUsesTeams, getScoringMode } from '../components/scoringModes';
 import WizardProgress from '../components/setup/WizardProgress';
 import WizardNav from '../components/setup/WizardNav';
@@ -168,12 +169,18 @@ export default function SetupScreen({ navigation, route }) {
   const handleHolesSaved = useCallback((roundIndex, patch) => {
     setRounds((prev) => {
       const next = [...prev];
+      next[roundIndex] = { ...next[roundIndex], holes: patch.holes, tees: patch.tees };
+      return next;
+    });
+  }, []);
+
+  const handleRoundTeesChange = useCallback((roundIndex, patch) => {
+    setRounds((prev) => {
+      const next = [...prev];
       next[roundIndex] = {
         ...next[roundIndex],
-        holes: patch.holes,
-        tees: patch.tees,
-        playerHandicaps: patch.playerHandicaps,
         playerTees: patch.playerTees,
+        playerHandicaps: patch.playerHandicaps,
         manualHandicaps: { ...(patch.manualHandicaps ?? {}) },
       };
       return next;
@@ -476,10 +483,6 @@ export default function SetupScreen({ navigation, route }) {
                       courseName: r.courseName || `Round ${i + 1}`,
                       initialHoles: r.holes,
                       initialTees: r.tees ?? [],
-                      initialPlayerHandicaps: r.playerHandicaps,
-                      initialManualHandicaps: r.manualHandicaps ?? {},
-                      initialPlayerTees: r.playerTees ?? {},
-                      players: players,
                       onSave: handleHolesSaved,
                       courseId: r.courseId ?? null,
                     })
@@ -527,6 +530,29 @@ export default function SetupScreen({ navigation, route }) {
         settings={settings}
         onSettingsChange={setSettings}
       />
+    </>
+  );
+
+  const renderTeesStep = () => (
+    <>
+      <Text style={s.stepOverline}>TEES & HANDICAPS</Text>
+      <Text style={s.stepPrompt}>Who plays from where?</Text>
+      <Text style={s.stepSubtitle}>
+        Pick each player's tee. Playing handicaps auto-calculate — tap one to override.
+      </Text>
+      {rounds.map((r, i) => (
+        <View key={r.id ?? `round-${i}`} style={s.teesRoundBlock}>
+          {!isGame && <Text style={s.roundLabel}>Round {i + 1}</Text>}
+          <View style={s.teesRoundCard}>
+            <RoundTeeAssignments
+              round={r}
+              players={players}
+              theme={theme}
+              onChange={(patch) => handleRoundTeesChange(i, patch)}
+            />
+          </View>
+        </View>
+      ))}
     </>
   );
 
@@ -634,6 +660,7 @@ export default function SetupScreen({ navigation, route }) {
         {stepKey === 'players' && renderPlayersStep()}
         {(stepKey === 'course' || stepKey === 'rounds') && renderCourseStep()}
         {stepKey === 'scoring' && renderScoringStep()}
+        {stepKey === 'tees' && renderTeesStep()}
         {stepKey === 'review' && renderReviewStep()}
       </ScrollView>
 
@@ -944,6 +971,15 @@ function makeStyles(theme) {
       fontFamily: 'PlusJakartaSans-SemiBold',
       color: theme.accent.primary,
       fontSize: 14,
+    },
+
+    /* Tees step */
+    teesRoundBlock: { marginBottom: 16 },
+    teesRoundCard: {
+      backgroundColor: theme.bg.card, borderRadius: 16, borderWidth: 1,
+      borderColor: theme.isDark ? theme.glass?.border : theme.border.default,
+      padding: 16,
+      ...(theme.isDark ? {} : theme.shadow.card),
     },
 
     /* Empty / error states */
