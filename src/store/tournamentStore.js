@@ -1147,6 +1147,44 @@ export async function joinTournamentByCode(code) {
   return { tournamentId: row.tournament_id, role: row.role ?? 'editor' };
 }
 
+// Build the shareable web URL for a casual-tournament invite code. The path
+// `/join-tournament/<code>` is handled by the linking config in App.js (and,
+// pre-session, by the JoinTournamentLink interception). A no-app recipient
+// simply lands on the Vercel web build.
+export function buildJoinLink(origin, code) {
+  const base = (origin || 'https://golf.app').replace(/\/+$/, '');
+  return `${base}/join-tournament/${String(code ?? '').toUpperCase()}`;
+}
+
+// Atomic player-slot claim. Wraps the claim_tournament_player RPC (migration
+// 20260518000004). Throws Error('SLOT_TAKEN') when another joiner won the
+// race; the caller refreshes the picker on that.
+export async function claimTournamentPlayer(tournamentId, playerId) {
+  const { data, error } = await supabase
+    .rpc('claim_tournament_player', {
+      p_tournament_id: String(tournamentId),
+      p_player_id: String(playerId),
+    });
+  if (error) {
+    if ((error.message || '').includes('SLOT_TAKEN')) {
+      throw new Error('SLOT_TAKEN');
+    }
+    throw error;
+  }
+  return data; // the claimed player id
+}
+
+// Owner-only: clear a player slot's user_id and drop that member, reopening
+// the slot. Wraps the release_tournament_player RPC.
+export async function releaseTournamentPlayer(tournamentId, playerId) {
+  const { error } = await supabase
+    .rpc('release_tournament_player', {
+      p_tournament_id: String(tournamentId),
+      p_player_id: String(playerId),
+    });
+  if (error) throw error;
+}
+
 // A round is "complete" when every player has a score recorded for every
 // hole. "In progress" means at least one score entered but not all.
 export function isRoundComplete(round, players) {
