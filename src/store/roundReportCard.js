@@ -93,6 +93,72 @@ function pointsPerHoleCells(thisStats, baseStats) {
   return cells.filter(Boolean);
 }
 
+// Build a count cell (birdies, blow-ups, …): value is this round's count,
+// baseline is the career per-round average count.
+function countCell(label, value, baseTotal, baseRounds, polarity) {
+  const baseline = baseRounds > 0 ? +(baseTotal / baseRounds).toFixed(1) : null;
+  return {
+    label,
+    group: 'distribution',
+    value,
+    baseline,
+    deltaVsAvg: baseline != null ? +(value - baseline).toFixed(1) : null,
+    deltaVs2: null,
+    holes: null,
+    polarity,
+  };
+}
+
+// Build a shot-stat cell. value is this round's figure; baseline is the
+// career figure (already per-round in shotStats output).
+function shotCell(label, value, baseline, polarity) {
+  return {
+    label,
+    group: 'shots',
+    value,
+    baseline: baseline != null ? baseline : null,
+    deltaVsAvg: baseline != null ? +(value - baseline).toFixed(1) : null,
+    deltaVs2: null,
+    holes: null,
+    polarity,
+  };
+}
+
+// The distribution cells: birdies-or-better, pars, bogeys, blow-ups.
+function distributionCells(thisStats, baseStats) {
+  const d = thisStats.distribution;
+  const bd = baseStats ? baseStats.distribution : null;
+  const bRounds = baseStats ? baseStats.roundCount : 0;
+  const thisBirdies = d.eagles + d.birdies;
+  const thisBlowups = d.doubles + d.worse;
+  return [
+    countCell('Birdies+', thisBirdies,
+      bd ? bd.eagles + bd.birdies : 0, bRounds, 'higher'),
+    countCell('Pars', d.pars, bd ? bd.pars : 0, bRounds, 'higher'),
+    countCell('Bogeys', d.bogeys, bd ? bd.bogeys : 0, bRounds, 'lower'),
+    countCell('Blow-ups', thisBlowups,
+      bd ? bd.doubles + bd.worse : 0, bRounds, 'lower'),
+  ];
+}
+
+// The shot-stat cells — only meaningful when the round has shot detail.
+function shotCells(thisStats, baseStats) {
+  const s = thisStats.shots;
+  const bs = baseStats ? baseStats.shots : null;
+  const basePenaltiesPerRound = bs && bs.roundsWithData > 0
+    ? +(bs.penalties.total / bs.roundsWithData).toFixed(1)
+    : null;
+  return [
+    shotCell('Putts', s.putts.perRound,
+      bs ? bs.putts.perRound : null, 'lower'),
+    shotCell('Fairways hit %', s.drives.fairwayPct,
+      bs ? bs.drives.fairwayPct : null, 'higher'),
+    shotCell('Greens in reg %', s.gir.pct,
+      bs ? bs.gir.pct : null, 'higher'),
+    shotCell('Penalties', s.penalties.total, basePenaltiesPerRound, 'lower'),
+  ];
+}
+
 // Pick the bright spots / cost-you-points from a cell pool.
 function selectCallouts(cells, hasHistory) {
   const rankKey = hasHistory ? 'deltaVsAvg' : 'deltaVs2';
@@ -133,6 +199,21 @@ export function buildRoundReportCard(myRounds, roundKey) {
   const pphCells = pointsPerHoleCells(thisStats, baseStats);
   const callouts = selectCallouts(pphCells, hasHistory);
 
+  const hasShotData = !!thisStats.shots.hasData;
+
+  const groups = [
+    { key: 'course', label: 'Where on the course',
+      cells: pphCells.filter((c) => c.group === 'course') },
+    { key: 'timing', label: 'When in the round',
+      cells: pphCells.filter((c) => c.group === 'timing') },
+    { key: 'distribution', label: 'Scoring',
+      cells: distributionCells(thisStats, baseStats) },
+  ];
+  if (hasShotData) {
+    groups.push({ key: 'shots', label: 'Shot stats',
+      cells: shotCells(thisStats, baseStats) });
+  }
+
   return {
     round: {
       key: selected.key,
@@ -151,5 +232,7 @@ export function buildRoundReportCard(myRounds, roundKey) {
     },
     hasHistory,
     callouts,
+    hasShotData,
+    groups,
   };
 }

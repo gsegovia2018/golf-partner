@@ -173,3 +173,70 @@ describe('buildRoundReportCard — callouts', () => {
     expect(card.callouts.cost.map((c) => c.label)).toContain('Hard holes (SI 1-6)');
   });
 });
+
+describe('buildRoundReportCard — breakdown groups', () => {
+  test('groups cover course, timing and distribution for an 18-hole round', () => {
+    const h = mkHoles();
+    const rounds = [
+      mkMyRound({ key: 'h1', holes: h, scores: evenScores(h, 4) }),
+      mkMyRound({ key: 'target', holes: h, scores: evenScores(h, 4) }),
+    ];
+    const card = buildRoundReportCard(rounds, 'target');
+    const keys = card.groups.map((g) => g.key);
+    expect(keys).toEqual(expect.arrayContaining(['course', 'timing', 'distribution']));
+    const course = card.groups.find((g) => g.key === 'course');
+    expect(course.cells.map((c) => c.label)).toContain('Par 4s');
+    const timing = card.groups.find((g) => g.key === 'timing');
+    expect(timing.cells.map((c) => c.label)).toEqual(
+      expect.arrayContaining(['Front 9', 'Back 9']),
+    );
+  });
+
+  test('distribution group reports blow-ups (double bogey or worse)', () => {
+    const h = mkHoles();
+    // Target round: holes 1-2 are triple bogey (par+3) → blow-ups; rest par.
+    const target = evenScores(h, 4);
+    target[1] = 7; target[2] = 7;
+    const rounds = [
+      mkMyRound({ key: 'h1', holes: h, scores: evenScores(h, 4) }),
+      mkMyRound({ key: 'target', holes: h, scores: target }),
+    ];
+    const card = buildRoundReportCard(rounds, 'target');
+    const dist = card.groups.find((g) => g.key === 'distribution');
+    const blowups = dist.cells.find((c) => c.label === 'Blow-ups');
+    expect(blowups.value).toBe(2);
+    expect(blowups.polarity).toBe('lower');
+  });
+
+  test('9-hole round omits the front/back nine cells', () => {
+    const h = mkHoles(9);
+    const rounds = [mkMyRound({ key: 'nine', holes: h, scores: evenScores(h, 4) })];
+    const card = buildRoundReportCard(rounds, 'nine');
+    const timing = card.groups.find((g) => g.key === 'timing');
+    expect(timing.cells.map((c) => c.label)).not.toContain('Front 9');
+    expect(timing.cells.map((c) => c.label)).toContain('Opening 3');
+  });
+
+  test('round without shot detail → hasShotData false, no shots group', () => {
+    const h = mkHoles();
+    const rounds = [mkMyRound({ key: 'noshots', holes: h, scores: evenScores(h, 4) })];
+    const card = buildRoundReportCard(rounds, 'noshots');
+    expect(card.hasShotData).toBe(false);
+    expect(card.groups.map((g) => g.key)).not.toContain('shots');
+  });
+
+  test('round with shot detail → shots group with putts and GIR', () => {
+    const h = mkHoles();
+    const shot = {};
+    h.forEach((hole) => { shot[hole.number] = { putts: 2, drive: 'fairway', teePenalties: 0, otherPenalties: 0 }; });
+    const rounds = [mkMyRound({
+      key: 'shots', holes: h, scores: evenScores(h, 4), shotDetails: shot,
+    })];
+    const card = buildRoundReportCard(rounds, 'shots');
+    expect(card.hasShotData).toBe(true);
+    const shots = card.groups.find((g) => g.key === 'shots');
+    expect(shots.cells.map((c) => c.label)).toEqual(
+      expect.arrayContaining(['Putts', 'Fairways hit %', 'Greens in reg %']),
+    );
+  });
+});
