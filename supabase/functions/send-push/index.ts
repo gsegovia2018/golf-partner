@@ -10,16 +10,35 @@ type NotificationRow = {
   data: Record<string, unknown> | null;
 };
 
-// type -> push title/body. Unknown types are skipped (the in-app row still
-// exists, it just gets no push).
-const RENDERERS: Record<string, (d: Record<string, unknown>) => { title: string; body: string }> = {
+type DeepLink = { screen: string; params?: Record<string, unknown> };
+type Rendered = { title: string; body: string; deepLink: DeepLink };
+
+// type -> push title/body/deepLink. Mirrors src/lib/notificationContent.js
+// (Deno cannot import React Native code). Unknown types are skipped.
+const RENDERERS: Record<string, (d: Record<string, unknown>) => Rendered> = {
   friend_request: (d) => ({
     title: 'New friend request',
     body: `${d.actor_name ?? 'Someone'} wants to be your golf partner`,
+    deepLink: { screen: 'Friends' },
   }),
   friend_accepted: (d) => ({
     title: 'Friend request accepted',
     body: `${d.actor_name ?? 'Someone'} accepted your friend request`,
+    deepLink: { screen: 'Friends' },
+  }),
+  added_to_game: (d) => ({
+    title: 'Added to a game',
+    body: `You were added to ${d.tournament_name ?? 'a game'}`,
+    deepLink: { screen: 'Home', params: { openTournamentId: d.tournament_id } },
+  }),
+  round_finished: (d) => ({
+    title: 'Round finished',
+    body: `${d.actor_name ?? 'A friend'} finished a round at `
+      + `${d.course_name || d.tournament_name || 'the course'}`,
+    deepLink: {
+      screen: 'RoundSummary',
+      params: { tournamentId: d.tournament_id, roundId: d.round_id },
+    },
   }),
 };
 
@@ -31,7 +50,7 @@ Deno.serve(async (req) => {
 
     const render = RENDERERS[note.type];
     if (!render) return new Response('ignored type', { status: 200 });
-    const { title, body } = render(note.data ?? {});
+    const { title, body, deepLink } = render(note.data ?? {});
 
     const supabase = createClient(
       Deno.env.get('SUPABASE_URL')!,
@@ -49,7 +68,7 @@ Deno.serve(async (req) => {
       title,
       body,
       sound: 'default',
-      data: { screen: 'Friends' },
+      data: deepLink,
     }));
 
     const expoResp = await fetch('https://exp.host/--/api/v2/push/send', {
