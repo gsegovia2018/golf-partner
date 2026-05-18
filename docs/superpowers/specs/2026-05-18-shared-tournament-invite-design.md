@@ -67,18 +67,20 @@ A "player slot" is an entry in `tournaments.data.players`
 - `user_id == null` → open slot, shown in the picker.
 - `user_id` set → claimed/locked, hidden from the picker.
 
-**Claiming** — new `SECURITY DEFINER` RPC `claim_tournament_player(invite_code,
-player_id)`:
+**Claiming** — new `SECURITY DEFINER` RPC `claim_tournament_player(
+tournament_id, player_id)`:
 
-1. Validate the invite code via existing `tournament_invites` checks (not
-   revoked, not expired, usage under cap).
+1. Verify the caller is already an `editor` member of the tournament (the
+   `editor` `tournament_members` row was inserted when the invite code was
+   redeemed — see Join flow). This is the authorization check.
 2. Atomically set the player's `user_id` to the caller **only if it is still
    null** — prevents a double-claim race.
-3. Insert an `editor` row into `tournament_members`.
-4. Return the claimed `player_id`.
+3. Return the claimed `player_id`.
 
 If step 2 finds the slot already claimed, the RPC returns a "slot taken" error
-and the UI refreshes the picker.
+and the UI refreshes the picker. The `editor` membership is *not* re-inserted
+here — it is owned solely by the code-redeem step, so a caller never gets two
+membership rows.
 
 **Releasing** — new `SECURITY DEFINER` RPC `release_tournament_player(
 tournament_id, player_id)`, restricted to the tournament owner/creator. Clears
