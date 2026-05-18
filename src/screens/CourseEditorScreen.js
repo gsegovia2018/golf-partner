@@ -9,6 +9,9 @@ import { Feather } from '@expo/vector-icons';
 import { useTheme } from '../theme/ThemeContext';
 import { updateCourseFromEditor } from '../store/libraryStore';
 import { calcPlayingHandicap } from '../store/tournamentStore';
+import TeesEditor from '../components/TeesEditor';
+import { middleTee } from '../store/tees';
+import { lastTeeForPlayerOnCourse } from '../store/tournamentStore';
 
 function defaultHoles() {
   return Array.from({ length: 18 }, (_, i) => ({
@@ -24,8 +27,8 @@ export default function CourseEditorScreen({ navigation, route }) {
 
   const {
     roundIndex, courseName,
-    initialHoles, initialSlope, initialCourseRating,
-    initialPlayerHandicaps, initialManualHandicaps,
+    initialHoles, initialTees,
+    initialPlayerHandicaps, initialManualHandicaps, initialPlayerTees,
     courseId,
     players = [],
     onSave,
@@ -34,9 +37,12 @@ export default function CourseEditorScreen({ navigation, route }) {
   const [holes, setHoles] = useState(
     initialHoles?.length === 18 ? initialHoles.map((h) => ({ ...h })) : defaultHoles(),
   );
-  const [slope, setSlope] = useState(initialSlope ? String(initialSlope) : '');
-  const [courseRating, setCourseRating] = useState(
-    initialCourseRating != null && initialCourseRating !== '' ? String(initialCourseRating) : '',
+  const [tees, setTees] = useState(
+    () => (initialTees ?? []).map((t) => ({ ...t })),
+  );
+  // playerTees: { [playerId]: { label, slope, rating } } — resolved on mount.
+  const [playerTees, setPlayerTees] = useState(
+    () => ({ ...(initialPlayerTees ?? {}) }),
   );
 
   // playerHandicaps: { [playerId]: string } — editable overrides
@@ -56,29 +62,40 @@ export default function CourseEditorScreen({ navigation, route }) {
   const onSaveRef = useRef(onSave);
   useEffect(() => { onSaveRef.current = onSave; }, [onSave]);
 
-  // On mount: if slope is already set (e.g. opened from a saved round), align
-  // non-manual players' playing handicaps with the current slope+CR. Without
-  // this the input keeps showing stale values stored before slope/CR were
-  // applied to the round.
+  // On mount: ensure every player has a tee (last-used on this course, else
+  // the middle tee), then align non-manual playing handicaps to each tee.
   useEffect(() => {
-    const sv = parseInt(slope, 10) || 0;
-    if (sv <= 0) return;
-    const par = holes.reduce((sum, h) => sum + (h.par || 0), 0);
-    const cr = parseFloat(courseRating);
-    const crForCalc = Number.isFinite(cr) ? cr : null;
-    setPlayerHandicaps((prev) => {
-      const next = { ...prev };
-      let changed = false;
-      players.forEach((p) => {
-        if (manualHandicaps[p.id]) return;
-        const auto = String(calcPlayingHandicap(p.handicap, sv, crForCalc, par));
-        if (next[p.id] !== auto) {
-          next[p.id] = auto;
-          changed = true;
+    let cancelled = false;
+    (async () => {
+      const resolved = { ...playerTees };
+      for (const p of players) {
+        if (resolved[p.id]) continue;
+        let tee = null;
+        if (courseId) {
+          try { tee = await lastTeeForPlayerOnCourse(courseId, p.id); } catch (_) {}
         }
+        if (!tee) {
+          const mid = middleTee(tees);
+          if (mid) tee = { label: mid.label, slope: mid.slope, rating: mid.rating };
+        }
+        if (tee) resolved[p.id] = tee;
+      }
+      if (cancelled) return;
+      setPlayerTees(resolved);
+      const par = holes.reduce((sum, h) => sum + (h.par || 0), 0);
+      setPlayerHandicaps((prev) => {
+        const next = { ...prev };
+        let changed = false;
+        players.forEach((p) => {
+          if (manualHandicaps[p.id]) return;
+          const tee = resolved[p.id];
+          const auto = String(calcPlayingHandicap(p.handicap, tee?.slope, tee?.rating, par));
+          if (next[p.id] !== auto) { next[p.id] = auto; changed = true; }
+        });
+        return changed ? next : prev;
       });
-      return changed ? next : prev;
-    });
+    })();
+    return () => { cancelled = true; };
     // Run only on mount.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
@@ -87,69 +104,51 @@ export default function CourseEditorScreen({ navigation, route }) {
     if (isFirstRender.current) { isFirstRender.current = false; return; }
     const parsedHandicaps = {};
     players.forEach((p) => { parsedHandicaps[p.id] = parseInt(playerHandicaps[p.id], 10) || 0; });
-    const parsedRating = parseFloat(courseRating);
-    onSaveRef.current(
-      roundIndex,
+    onSaveRef.current(roundIndex, {
       holes,
-      parseInt(slope, 10) || null,
-      Number.isFinite(parsedRating) ? parsedRating : null,
-      parsedHandicaps,
+      tees,
+      playerHandicaps: parsedHandicaps,
       manualHandicaps,
-    );
-  }, [holes, slope, courseRating, playerHandicaps, manualHandicaps]);
+      playerTees,
+    });
+  }, [holes, tees, playerHandicaps, manualHandicaps, playerTees]);
 
-  // Slope/CR keystrokes recompute ONLY the players who have not been manually
-  // overridden. Manual overrides survive until the user explicitly resets.
-  function recomputeAuto(nextSlope, nextRating) {
-    const sv = parseInt(nextSlope, 10);
-    if (!sv || sv <= 0) return;
+  // Recompute non-manual handicaps from each player's current tee.
+  function recomputeAuto(nextPlayerTees) {
     const par = holes.reduce((sum, h) => sum + (h.par || 0), 0);
-    const cr = parseFloat(nextRating);
-    const crForCalc = Number.isFinite(cr) ? cr : null;
     setPlayerHandicaps((prev) => {
       const next = { ...prev };
       players.forEach((p) => {
         if (manualHandicaps[p.id]) return;
-        next[p.id] = String(calcPlayingHandicap(p.handicap, sv, crForCalc, par));
+        const tee = nextPlayerTees[p.id];
+        next[p.id] = String(calcPlayingHandicap(p.handicap, tee?.slope, tee?.rating, par));
       });
       return next;
     });
   }
 
-  // Explicit "Reset all to auto": clear every manual override and recompute
-  // each player from the current slope/CR.
+  // Assign a tee to one player and refresh their auto handicap.
+  function setPlayerTee(playerId, tee) {
+    const snapshot = { label: tee.label, slope: tee.slope, rating: tee.rating };
+    setPlayerTees((prev) => {
+      const next = { ...prev, [playerId]: snapshot };
+      recomputeAuto(next);
+      return next;
+    });
+  }
+
+  // Explicit "Reset all to auto": clear manual overrides, recompute from tees.
   function resetAllToAuto() {
-    const sv = parseInt(slope, 10);
-    const par = holes.reduce((sum, h) => sum + (h.par || 0), 0);
-    const cr = parseFloat(courseRating);
-    const crForCalc = Number.isFinite(cr) ? cr : null;
     setManualHandicaps({});
-    if (!sv || sv <= 0) {
-      // No slope: auto value is just the raw index.
-      setPlayerHandicaps(() => {
-        const next = {};
-        players.forEach((p) => { next[p.id] = String(p.handicap); });
-        return next;
-      });
-      return;
-    }
+    const par = holes.reduce((sum, h) => sum + (h.par || 0), 0);
     setPlayerHandicaps(() => {
       const next = {};
       players.forEach((p) => {
-        next[p.id] = String(calcPlayingHandicap(p.handicap, sv, crForCalc, par));
+        const tee = playerTees[p.id];
+        next[p.id] = String(calcPlayingHandicap(p.handicap, tee?.slope, tee?.rating, par));
       });
       return next;
     });
-  }
-
-  function applySlope(rawSlope) {
-    setSlope(rawSlope);
-    recomputeAuto(rawSlope, courseRating);
-  }
-
-  function applyRating(rawRating) {
-    setCourseRating(rawRating);
-    recomputeAuto(slope, rawRating);
   }
 
   function setPar(holeIndex, par) {
@@ -203,9 +202,6 @@ export default function CourseEditorScreen({ navigation, route }) {
   })();
 
   const totalPar = holes.reduce((sum, h) => sum + h.par, 0);
-  const slopeNum = parseInt(slope, 10) || 0;
-  const ratingNum = parseFloat(courseRating);
-  const ratingForCalc = Number.isFinite(ratingNum) ? ratingNum : null;
 
   return (
     <ScreenContainer style={s.screen} edges={['top', 'bottom']}>
@@ -224,45 +220,13 @@ export default function CourseEditorScreen({ navigation, route }) {
           <Text style={s.subtitle}>Total par: {totalPar}</Text>
         </View>
 
-        {/* Slope + Course Rating */}
-        <View style={s.slopeCard}>
-          <View style={s.slopeRow}>
-            <Text style={s.slopeLabel}>Course Slope</Text>
-            <TextInput
-              style={s.slopeInput}
-              keyboardType="numeric"
-              maxLength={3}
-              placeholder="e.g. 128"
-              placeholderTextColor={theme.text.muted}
-              keyboardAppearance={theme.isDark ? 'dark' : 'light'}
-              selectionColor={theme.accent.primary}
-              value={slope}
-              onChangeText={applySlope}
-            />
-            <Text style={s.slopeHint}>std 113</Text>
-          </View>
-          <View style={[s.slopeRow, { marginTop: 12 }]}>
-            <Text style={s.slopeLabel}>Course Rating</Text>
-            <TextInput
-              style={s.slopeInput}
-              keyboardType="decimal-pad"
-              maxLength={5}
-              placeholder="e.g. 71.5"
-              placeholderTextColor={theme.text.muted}
-              keyboardAppearance={theme.isDark ? 'dark' : 'light'}
-              selectionColor={theme.accent.primary}
-              value={courseRating}
-              onChangeText={applyRating}
-            />
-            <Text style={s.slopeHint}>par {totalPar}</Text>
-          </View>
-        </View>
+        <TeesEditor tees={tees} onChange={setTees} theme={theme} />
 
         {/* Per-player playing handicaps */}
         {players.length > 0 && (
           <View style={s.hcpSection}>
             <Text style={s.sectionTitle}>Playing Handicaps</Text>
-            {slopeNum > 0 && (
+            {tees.length > 0 && (
               <Text style={s.hcpHint}>
                 Auto-calculated from slope & CR -- tap to override
               </Text>
@@ -274,14 +238,39 @@ export default function CourseEditorScreen({ navigation, route }) {
               </TouchableOpacity>
             )}
             {players.map((p) => {
-              const auto = slopeNum > 0
-                ? calcPlayingHandicap(p.handicap, slopeNum, ratingForCalc, totalPar)
+              const pTee = playerTees[p.id];
+              const auto = pTee
+                ? calcPlayingHandicap(p.handicap, pTee.slope, pTee.rating, totalPar)
                 : null;
               const current = parseInt(playerHandicaps[p.id], 10);
               const isDifferent = auto !== null && current !== auto;
               return (
                 <View key={p.id} style={s.hcpRow}>
-                  <Text style={s.hcpName}>{p.name}</Text>
+                  <View style={{ flex: 1 }}>
+                    <Text style={s.hcpName}>{p.name}</Text>
+                    <View style={s.teeChips}>
+                      {tees.length === 0 && (
+                        <Text style={s.noTeeText}>No tees — add tees above</Text>
+                      )}
+                      {tees.map((tee) => {
+                        const selected = playerTees[p.id]?.label === tee.label;
+                        return (
+                          <TouchableOpacity
+                            key={tee.id ?? tee.label}
+                            style={[s.teeChip, selected && s.teeChipActive]}
+                            onPress={() => setPlayerTee(p.id, tee)}
+                            activeOpacity={0.7}
+                            accessibilityRole="button"
+                            accessibilityLabel={`${p.name} tee ${tee.label || 'unnamed'}`}
+                          >
+                            <Text style={[s.teeChipText, selected && s.teeChipTextActive]}>
+                              {tee.label || '—'}
+                            </Text>
+                          </TouchableOpacity>
+                        );
+                      })}
+                    </View>
+                  </View>
                   <Text style={s.hcpIndex}>Index {p.handicap}</Text>
                   {auto !== null && (
                     <Feather name="arrow-right" size={14} color={theme.text.muted} style={{ marginRight: 8 }} />
@@ -384,7 +373,7 @@ export default function CourseEditorScreen({ navigation, route }) {
             style={s.btn}
             onPress={async () => {
               if (courseId) {
-                try { await updateCourseFromEditor(courseId, slope, courseRating, holes); } catch (_) {}
+                try { await updateCourseFromEditor(courseId, holes, tees); } catch (_) {}
               }
               navigation.goBack();
             }}
@@ -416,25 +405,6 @@ const makeStyles = (theme) => StyleSheet.create({
     fontFamily: 'PlusJakartaSans-Medium', color: theme.text.secondary,
     marginBottom: 16, fontSize: 14,
   },
-  slopeCard: {
-    backgroundColor: theme.bg.card, borderRadius: 16, borderWidth: 1,
-    borderColor: theme.isDark ? theme.glass?.border : theme.border.default,
-    padding: 16, marginBottom: 16,
-    ...(theme.isDark ? {} : theme.shadow.card),
-  },
-  slopeRow: { flexDirection: 'row', alignItems: 'center', gap: 12 },
-  slopeLabel: {
-    fontFamily: 'PlusJakartaSans-SemiBold', color: theme.text.primary,
-    fontSize: 15, flex: 1,
-  },
-  slopeInput: {
-    backgroundColor: theme.isDark ? theme.bg.secondary : theme.bg.card,
-    color: theme.text.primary, borderRadius: 10, borderWidth: 1,
-    borderColor: theme.border.default,
-    width: 76, textAlign: 'center', fontSize: 16,
-    fontFamily: 'PlusJakartaSans-Bold', padding: 9,
-  },
-  slopeHint: { fontFamily: 'PlusJakartaSans-Regular', color: theme.text.muted, fontSize: 12 },
   hcpSection: {
     backgroundColor: theme.bg.card, borderRadius: 16, borderWidth: 1,
     borderColor: theme.isDark ? theme.glass?.border : theme.border.default,
@@ -446,7 +416,7 @@ const makeStyles = (theme) => StyleSheet.create({
     fontSize: 11, marginBottom: 10, letterSpacing: 1.5, textTransform: 'uppercase',
   },
   hcpHint: { fontFamily: 'PlusJakartaSans-Regular', color: theme.text.secondary, fontSize: 12, marginBottom: 10 },
-  hcpRow: { flexDirection: 'row', alignItems: 'center', paddingVertical: 6 },
+  hcpRow: { flexDirection: 'row', alignItems: 'flex-start', paddingVertical: 8 },
   hcpName: { flex: 1, fontFamily: 'PlusJakartaSans-SemiBold', color: theme.text.primary, fontSize: 15 },
   hcpIndex: { fontFamily: 'PlusJakartaSans-Regular', color: theme.text.secondary, fontSize: 13, marginRight: 8 },
   hcpInput: {
@@ -467,6 +437,15 @@ const makeStyles = (theme) => StyleSheet.create({
     paddingHorizontal: 10, paddingVertical: 6, marginBottom: 10,
   },
   resetBtnText: { fontFamily: 'PlusJakartaSans-SemiBold', color: theme.accent.primary, fontSize: 12 },
+  teeChips: { flexDirection: 'row', flexWrap: 'wrap', gap: 6, marginTop: 6 },
+  teeChip: {
+    backgroundColor: theme.bg.secondary, borderRadius: 7, borderWidth: 1,
+    borderColor: theme.border.default, paddingHorizontal: 9, paddingVertical: 4,
+  },
+  teeChipActive: { backgroundColor: theme.accent.primary, borderColor: theme.accent.primary },
+  teeChipText: { fontFamily: 'PlusJakartaSans-SemiBold', color: theme.text.secondary, fontSize: 12 },
+  teeChipTextActive: { fontFamily: 'PlusJakartaSans-Bold', color: theme.text.inverse, fontSize: 12 },
+  noTeeText: { fontFamily: 'PlusJakartaSans-Regular', color: theme.text.muted, fontSize: 12 },
   toolRow: { flexDirection: 'row', alignItems: 'center', flexWrap: 'wrap', gap: 8, marginBottom: 8 },
   toolLabel: {
     fontFamily: 'PlusJakartaSans-SemiBold', color: theme.text.secondary,
