@@ -33,6 +33,7 @@ import HomeScreen from './src/screens/HomeScreen';
 import FeedScreen from './src/screens/FeedScreen';
 import HistoryScreen from './src/screens/HistoryScreen';
 import FriendsScreen from './src/screens/FriendsScreen';
+import NotificationsScreen from './src/screens/NotificationsScreen';
 import RoundSummaryScreen from './src/screens/RoundSummaryScreen';
 import SetupScreen from './src/screens/SetupScreen';
 import ScorecardScreen from './src/screens/ScorecardScreen';
@@ -241,9 +242,9 @@ function AppNavigator() {
 
   useEffect(() => {
     const sub = Notifications.addNotificationResponseReceivedListener((response) => {
-      const screen = response?.notification?.request?.content?.data?.screen;
-      if (screen && navigationRef.isReady()) {
-        navigationRef.navigate(screen);
+      const data = response?.notification?.request?.content?.data;
+      if (data?.screen && navigationRef.isReady()) {
+        navigationRef.navigate(data.screen, data.params);
       }
     });
     return () => sub.remove();
@@ -301,6 +302,7 @@ function AppNavigator() {
         <Stack.Screen name="Members" component={MembersScreen} />
         <Stack.Screen name="Finished" component={FinishedScreen} />
         <Stack.Screen name="Friends" component={FriendsScreen} />
+        <Stack.Screen name="Notifications" component={NotificationsScreen} />
         <Stack.Screen name="RoundSummary" component={RoundSummaryScreen} />
       </Stack.Navigator>
     </>
