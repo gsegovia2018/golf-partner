@@ -189,9 +189,20 @@ export async function acceptRequest(friendshipId) {
 }
 
 // Decline an incoming request or cancel an outgoing one — both delete the row.
+// Also clears the friend_request notification so the recipient's badge stays
+// honest. The cleanup is best-effort: the friendship is already gone, and a
+// stale notification is harmless (it is marked read next time Friends opens).
 export async function declineRequest(friendshipId) {
   const { error } = await supabase.from('friendships').delete().eq('id', friendshipId);
   if (error) throw error;
+  try {
+    await supabase.rpc('delete_notification_for_entity', {
+      p_entity_id: friendshipId,
+      p_type: 'friend_request',
+    });
+  } catch {
+    // best-effort cleanup
+  }
 }
 
 // Remove an existing friend. The row lives under either ordering of the
