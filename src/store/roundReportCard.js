@@ -96,17 +96,11 @@ function pointsPerHoleCells(thisStats, baseStats) {
 // Pick the bright spots / cost-you-points from a cell pool.
 function selectCallouts(cells, hasHistory) {
   const rankKey = hasHistory ? 'deltaVsAvg' : 'deltaVs2';
-  const pool = cells.filter(
-    (c) => c.holes >= CALLOUT_MIN_HOLES && c[rankKey] != null,
-  );
-  const bright = [...pool]
-    .sort((a, b) => b[rankKey] - a[rankKey])
-    .filter((c) => c[rankKey] > 0)
-    .slice(0, 2);
-  const cost = [...pool]
-    .sort((a, b) => a[rankKey] - b[rankKey])
-    .filter((c) => c[rankKey] < 0)
-    .slice(0, 2);
+  const sorted = cells
+    .filter((c) => c.holes >= CALLOUT_MIN_HOLES && c[rankKey] != null)
+    .sort((a, b) => b[rankKey] - a[rankKey]);
+  const bright = sorted.filter((c) => c[rankKey] > 0).slice(0, 2);
+  const cost = sorted.filter((c) => c[rankKey] < 0).reverse().slice(0, 2);
   return { bright, cost };
 }
 

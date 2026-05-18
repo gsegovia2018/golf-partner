@@ -136,6 +136,9 @@ describe('buildRoundReportCard — callouts', () => {
     const costLabels = card.callouts.cost.map((c) => c.label);
     expect(brightLabels).toContain('Par 3s');
     expect(costLabels).toContain('Hard holes (SI 1-6)');
+    // The strongest bright spot / worst cost cell must rank first.
+    expect(brightLabels[0]).toBe('Par 3s');
+    expect(costLabels[0]).toBe('Hard holes (SI 1-6)');
     expect(card.callouts.bright.length).toBeLessThanOrEqual(2);
     expect(card.callouts.cost.length).toBeLessThanOrEqual(2);
   });
