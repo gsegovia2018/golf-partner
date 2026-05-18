@@ -916,16 +916,6 @@ export default function HomeScreen({ navigation, route }) {
               </TouchableOpacity>
 
               <TouchableOpacity
-                style={s.menuItem}
-                onPress={() => { setShowListMenu(false); navigation.navigate('Setup', { kind: 'official' }); }}
-                activeOpacity={0.7}
-              >
-                <Feather name="award" size={18} color={theme.accent.primary} />
-                <Text style={s.menuItemText}>Official Tournament</Text>
-                <Feather name="chevron-right" size={16} color={theme.text.muted} />
-              </TouchableOpacity>
-
-              <TouchableOpacity
                 style={[s.menuItem, { borderBottomWidth: 0 }]}
                 onPress={() => { setShowListMenu(false); navigation.navigate('Profile'); }}
                 activeOpacity={0.7}

@@ -1,7 +1,7 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import {
   View, Text, TextInput, TouchableOpacity,
-  StyleSheet, ScrollView, Alert, Platform,
+  StyleSheet, ScrollView, Alert, Platform, Switch,
 } from 'react-native';
 import ScreenContainer from '../components/ScreenContainer';
 
@@ -78,9 +78,14 @@ export default function SetupScreen({ navigation, route }) {
   const s = makeStyles(theme);
 
   const routeKind = route?.params?.kind;
-  const kind = routeKind === 'game' || routeKind === 'official' ? routeKind : 'tournament';
+  // The game flow stays game; everything else is the tournament flow. Official
+  // is no longer a route kind — it is an in-wizard toggle on step 1. The legacy
+  // kind:'official' route param simply pre-toggles it for backward compat.
+  const baseKind = routeKind === 'game' ? 'game' : 'tournament';
+  const [official, setOfficial] = useState(routeKind === 'official');
+  const isOfficial = baseKind === 'tournament' && official;
+  const kind = isOfficial ? 'official' : baseKind;
   const isGame = kind === 'game';
-  const isOfficial = kind === 'official';
 
   const [tournamentName, setTournamentName] = useState(() =>
     isGame ? buildGameName('') : 'Weekend Golf',
@@ -734,6 +739,22 @@ export default function SetupScreen({ navigation, route }) {
         contentContainerStyle={s.content}
         keyboardShouldPersistTaps="handled"
       >
+        {step === 0 && baseKind === 'tournament' && (
+          <View style={s.officialToggleCard}>
+            <View style={s.officialToggleRow}>
+              <Text style={s.officialToggleLabel}>Official tournament</Text>
+              <Switch
+                value={official}
+                onValueChange={setOfficial}
+                trackColor={{ false: theme.border.default, true: theme.accent.primary }}
+                thumbColor="#ffffff"
+              />
+            </View>
+            <Text style={s.officialToggleCaption}>
+              Players join by invite link; scores are double-entered and verified.
+            </Text>
+          </View>
+        )}
         {stepKey === 'players' && renderPlayersStep()}
         {stepKey === 'roster' && renderRosterStep()}
         {(stepKey === 'course' || stepKey === 'rounds') && renderCourseStep()}
@@ -923,6 +944,34 @@ function makeStyles(theme) {
       fontFamily: 'PlusJakartaSans-SemiBold',
       color: theme.accent.primary,
       fontSize: 14,
+    },
+
+    /* Official tournament toggle (tournament flow, step 1 only) */
+    officialToggleCard: {
+      backgroundColor: theme.bg.card,
+      borderRadius: 16,
+      borderWidth: 1,
+      borderColor: theme.isDark ? theme.glass?.border : theme.border.default,
+      padding: 16,
+      marginBottom: 18,
+      ...(theme.isDark ? {} : theme.shadow.card),
+    },
+    officialToggleRow: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      justifyContent: 'space-between',
+    },
+    officialToggleLabel: {
+      flex: 1,
+      fontFamily: 'PlusJakartaSans-Bold',
+      color: theme.text.primary,
+      fontSize: 15,
+    },
+    officialToggleCaption: {
+      fontFamily: 'PlusJakartaSans-Medium',
+      color: theme.text.secondary,
+      fontSize: 12,
+      marginTop: 6,
     },
 
     /* Roster add form (official) */
