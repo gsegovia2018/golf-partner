@@ -1,4 +1,5 @@
 import { supabase } from '../lib/supabase';
+import { listFriends, getCachedFriends } from './friendStore';
 
 // ── Players ──────────────────────────────────────────────────────────────────
 
@@ -8,6 +9,52 @@ export async function fetchPlayers() {
   const { data, error } = await supabase
     .from('players')
     .select('id, name, handicap, user_id, avatar_url, created_at')
+    .order('name');
+  if (error) throw error;
+  return data;
+}
+
+// Columns every player consumer relies on. Shared by the scoped readers below.
+const PLAYER_COLUMNS = 'id, name, handicap, user_id, avatar_url, created_at, created_by';
+
+// Accepted-friend auth user ids. Falls back to the offline cache when the
+// network read fails, so the picker still scopes sensibly offline.
+async function myFriendIds() {
+  try {
+    const friends = await listFriends();
+    return friends.map((f) => f.userId).filter(Boolean);
+  } catch {
+    const cached = await getCachedFriends();
+    return cached.map((f) => f.userId).filter(Boolean);
+  }
+}
+
+// Players the current user may ADD to a game: their own guest players
+// (created_by = me) plus every friend's app-user row. Signed-out → [].
+export async function fetchMyPlayers() {
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user) return [];
+  const friendIds = await myFriendIds();
+  const userIds = [user.id, ...friendIds].filter(Boolean);
+  const { data, error } = await supabase
+    .from('players')
+    .select(PLAYER_COLUMNS)
+    .or(`created_by.eq.${user.id},user_id.in.(${userIds.join(',')})`)
+    .order('name');
+  if (error) throw error;
+  return data;
+}
+
+// Players the current user MANAGES in their library: only their own guest
+// players (created_by = me, no app account). Signed-out → [].
+export async function fetchMyGuestPlayers() {
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user) return [];
+  const { data, error } = await supabase
+    .from('players')
+    .select(PLAYER_COLUMNS)
+    .eq('created_by', user.id)
+    .is('user_id', null)
     .order('name');
   if (error) throw error;
   return data;
