@@ -96,7 +96,8 @@ function pointsPerHoleCells(thisStats, baseStats) {
 // Build a count cell (birdies, blow-ups, …): value is this round's count,
 // baseline is the career per-round average count.
 function countCell(label, value, baseTotal, baseRounds, polarity) {
-  const baseline = baseRounds > 0 ? +(baseTotal / baseRounds).toFixed(1) : null;
+  const baseline = baseRounds > 0 && baseTotal != null
+    ? +(baseTotal / baseRounds).toFixed(1) : null;
   return {
     label,
     group: 'distribution',
@@ -116,7 +117,7 @@ function shotCell(label, value, baseline, polarity) {
     label,
     group: 'shots',
     value,
-    baseline: baseline != null ? baseline : null,
+    baseline,
     deltaVsAvg: baseline != null ? +(value - baseline).toFixed(1) : null,
     deltaVs2: null,
     holes: null,
@@ -133,11 +134,11 @@ function distributionCells(thisStats, baseStats) {
   const thisBlowups = d.doubles + d.worse;
   return [
     countCell('Birdies+', thisBirdies,
-      bd ? bd.eagles + bd.birdies : 0, bRounds, 'higher'),
-    countCell('Pars', d.pars, bd ? bd.pars : 0, bRounds, 'higher'),
-    countCell('Bogeys', d.bogeys, bd ? bd.bogeys : 0, bRounds, 'lower'),
+      bd ? bd.eagles + bd.birdies : null, bRounds, 'higher'),
+    countCell('Pars', d.pars, bd ? bd.pars : null, bRounds, 'higher'),
+    countCell('Bogeys', d.bogeys, bd ? bd.bogeys : null, bRounds, 'lower'),
     countCell('Blow-ups', thisBlowups,
-      bd ? bd.doubles + bd.worse : 0, bRounds, 'lower'),
+      bd ? bd.doubles + bd.worse : null, bRounds, 'lower'),
   ];
 }
 

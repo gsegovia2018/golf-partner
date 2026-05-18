@@ -239,4 +239,22 @@ describe('buildRoundReportCard — breakdown groups', () => {
       expect.arrayContaining(['Putts', 'Fairways hit %', 'Greens in reg %']),
     );
   });
+
+  test('first-ever round with shot detail → shots group, null baselines', () => {
+    const h = mkHoles();
+    const shot = {};
+    h.forEach((hole) => { shot[hole.number] = { putts: 2, drive: 'fairway', teePenalties: 0, otherPenalties: 0 }; });
+    const rounds = [mkMyRound({
+      key: 'first', holes: h, scores: evenScores(h, 4), shotDetails: shot,
+    })];
+    const card = buildRoundReportCard(rounds, 'first');
+    expect(card.hasHistory).toBe(false);
+    expect(card.hasShotData).toBe(true);
+    const shots = card.groups.find((g) => g.key === 'shots');
+    expect(shots).toBeTruthy();
+    shots.cells.forEach((c) => {
+      expect(c.baseline).toBeNull();
+      expect(c.deltaVsAvg).toBeNull();
+    });
+  });
 });
