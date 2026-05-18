@@ -66,30 +66,35 @@ async function compressPhoto(uri) {
   const result = await ImageManipulator.manipulateAsync(
     uri,
     [{ resize: { width: 1920 } }],
-    { compress: 0.7, format: ImageManipulator.SaveFormat.JPEG },
+    { compress: 0.8, format: ImageManipulator.SaveFormat.JPEG },
   );
   return result.uri;
 }
 
+// The "thumbnail" is what the feed, memory cards, and round summary actually
+// render — and those cards span the full device width. At 400px it was being
+// upscaled ~3x on a retina phone and looked blurry. 1080px covers a full-width
+// retina card sharply; the storage/bandwidth cost of the larger thumb is
+// negligible for this app's scale.
 async function makeThumbnail(uri, kind) {
   if (kind === 'photo') {
     const result = await ImageManipulator.manipulateAsync(
       uri,
-      [{ resize: { width: 400 } }],
-      { compress: 0.6, format: ImageManipulator.SaveFormat.JPEG },
+      [{ resize: { width: 1080 } }],
+      { compress: 0.75, format: ImageManipulator.SaveFormat.JPEG },
     );
     return result.uri;
   }
   const thumbUri = Platform.OS === 'web'
-    ? await generateVideoThumbWeb(uri, { timeSeconds: 0.5, quality: 0.7 })
+    ? await generateVideoThumbWeb(uri, { timeSeconds: 0.5, quality: 0.8 })
     : (await VideoThumbnails.getThumbnailAsync(uri, { time: 500 })).uri;
   // ImageManipulator supports web too, but re-encoding an already-compressed
   // canvas JPEG offers little; on web we ship the canvas output directly.
   if (Platform.OS === 'web') return thumbUri;
   const resized = await ImageManipulator.manipulateAsync(
     thumbUri,
-    [{ resize: { width: 400 } }],
-    { compress: 0.6, format: ImageManipulator.SaveFormat.JPEG },
+    [{ resize: { width: 1080 } }],
+    { compress: 0.75, format: ImageManipulator.SaveFormat.JPEG },
   );
   return resized.uri;
 }

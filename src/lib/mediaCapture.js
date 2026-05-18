@@ -29,7 +29,9 @@ export async function pickMedia({ source, mediaTypes, multi = false, selectionLi
       : mediaTypes === 'photo'
         ? ImagePicker.MediaTypeOptions.Images
         : ImagePicker.MediaTypeOptions.All,
-    quality: 0.7,
+    // First-pass quality from the picker; the upload pipeline re-encodes
+    // afterward, so keep this high to avoid stacking compression loss.
+    quality: 0.9,
     videoMaxDuration: 20,
     allowsEditing: false,
     allowsMultipleSelection: multi && source === 'library',
