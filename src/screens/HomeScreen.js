@@ -430,9 +430,12 @@ export default function HomeScreen({ navigation, route }) {
   }
 
   // Deep link from an "added to a game" notification — open that game.
+  // selectTournament is intentionally omitted from deps: it is recreated each
+  // render, and the effect should run only when the param changes.
   useEffect(() => {
     const id = route.params?.openTournamentId;
     if (id) selectTournament(id);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [route.params?.openTournamentId]);
 
   async function goToList() {

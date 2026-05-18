@@ -49,7 +49,7 @@ export async function listNotifications() {
 }
 
 // Mark every unread notification as read — called when the user opens a
-// screen that surfaces them (currently the Friends screen).
+// screen that surfaces them (the Notifications inbox screen).
 export async function markAllRead() {
   const me = await currentUserId();
   if (!me) return;

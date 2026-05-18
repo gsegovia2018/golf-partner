@@ -112,6 +112,7 @@ BEGIN
      WHERE actor_id = v_actor
        AND type = 'round_finished'
        AND data->>'round_id' = p_round_id
+       AND data->>'tournament_id' = p_tournament_id
   ) THEN
     RETURN;
   END IF;

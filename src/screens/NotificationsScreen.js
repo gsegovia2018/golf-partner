@@ -36,12 +36,15 @@ export default function NotificationsScreen({ navigation }) {
     try {
       const data = await listNotifications();
       setItems(data);
+      // Opening this screen IS the user seeing their notifications — clear
+      // the badge. Only after a successful load, so a fetch failure does not
+      // silently mark unseen notifications read.
+      markAllRead().catch(() => {});
     } catch {
       setItems([]);
     } finally {
       setLoading(false);
     }
-    markAllRead().catch(() => {});
   }, []);
 
   useFocusEffect(useCallback(() => { reload(); }, [reload]));
