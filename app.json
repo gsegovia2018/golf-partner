@@ -3,6 +3,7 @@
     "name": "golf",
     "slug": "golf",
     "version": "1.0.0",
+    "scheme": "golf",
     "orientation": "default",
     "icon": "./assets/icon.png",
     "userInterfaceStyle": "light",
@@ -39,7 +40,9 @@
           "microphonePermission": "Necesitamos acceder al micrófono para grabar el audio de los videos."
         }
       ],
-      "expo-video"
+      "expo-video",
+      "expo-web-browser",
+      "expo-notifications"
     ],
     "extra": {
       "eas": {
