@@ -9,6 +9,8 @@
 //  - Native: an in-app browser session (`expo-web-browser`) that resolves
 //    with the redirect URL, which we parse for the `code` to exchange.
 
+import { supabase } from './supabase';
+
 /**
  * Extract a human-readable OAuth error from a redirect URL, if present.
  * Providers put the error in the query string and/or the hash fragment, so
@@ -45,4 +47,20 @@ export function parseOAuthError(urlString) {
 export function getWebRedirectTo() {
   if (typeof window === 'undefined' || !window.location) return undefined;
   return window.location.origin + window.location.pathname;
+}
+
+/**
+ * Start an anonymous Supabase session. Used by the "Continue without an
+ * account" path on the join screen: the guest gets a real (but anonymous)
+ * auth.uid(), so every RLS-gated casual feature works for them unchanged.
+ *
+ * Requires "Anonymous sign-ins" to be enabled in the Supabase dashboard
+ * (Auth → Providers). Throws the Supabase AuthError on failure.
+ *
+ * @returns {Promise<import('@supabase/supabase-js').Session>} the new session
+ */
+export async function signInAnonymously() {
+  const { data, error } = await supabase.auth.signInAnonymously();
+  if (error) throw error;
+  return data.session;
 }

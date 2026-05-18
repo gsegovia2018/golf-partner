@@ -22,7 +22,7 @@ import {
   matchPlayRoundTally, addPlayerRoundPatches,
   sindicatoRoundTally, tournamentSindicatoLeaderboard,
   tournamentMatchPlayStandings,
-  DEFAULT_SETTINGS, generateInviteCode,
+  DEFAULT_SETTINGS, generateInviteCode, buildJoinLink,
 } from '../store/tournamentStore';
 import { playersMeFirst } from '../lib/playerOrder';
 import { mutate } from '../store/mutate';
@@ -1450,14 +1450,12 @@ export default function HomeScreen({ navigation, route }) {
                   <Text style={s.inviteCode}>{inviteCode}</Text>
                 </View>
                 {!!inviteCode && (() => {
-                  // QR encodes the same payload as "Share link": a web invite
-                  // URL when an origin is available, otherwise the bare code.
+                  // QR encodes the same payload as "Share link": the
+                  // path-based join-tournament link.
                   const origin = Platform.OS === 'web' && typeof window !== 'undefined'
                     ? window.location.origin
-                    : null;
-                  const qrValue = origin
-                    ? `${origin}/?invite=${inviteCode}`
-                    : inviteCode;
+                    : '';
+                  const qrValue = buildJoinLink(origin, inviteCode);
                   return (
                     <View style={s.inviteQrBox}>
                       <View style={s.inviteQrInner}>
@@ -1501,15 +1499,10 @@ export default function HomeScreen({ navigation, route }) {
             onPress={() => {
               const origin = Platform.OS === 'web' && typeof window !== 'undefined'
                 ? window.location.origin
-                : null;
-              // On web the link auto-prefills the join code (see
-              // AppNavigator's ?invite handler). On native we share just
-              // the code until deep-linking is wired up.
+                : '';
               // Blank line before the URL keeps WhatsApp from wrapping the
               // text into the middle of the link and breaking the tap target.
-              const message = origin
-                ? `Join my golf tournament 🏌️\n\n${origin}/?invite=${inviteCode}`
-                : `Join my golf tournament! Code: ${inviteCode}`;
+              const message = `Join my golf tournament 🏌️\n\n${buildJoinLink(origin, inviteCode)}`;
               Share.share({ message });
             }}
             activeOpacity={0.7}

@@ -12,6 +12,7 @@ import { useAuth } from '../context/AuthContext';
 import { supabase } from '../lib/supabase';
 import {
   loadTournamentMembers, removeTournamentMember, generateInviteCode,
+  getTournament, releaseTournamentPlayer, buildJoinLink, findClaimedSlot,
 } from '../store/tournamentStore';
 
 // Promote/demote a member between editor and viewer roles. Kept local to this
@@ -32,6 +33,10 @@ export default function MembersScreen({ navigation, route }) {
   const s = makeStyles(theme);
 
   const [rows, setRows] = useState([]);
+  // Player slots in this tournament, used to map a member → the slot they
+  // claimed so the owner can release it.
+  const [players, setPlayers] = useState([]);
+  const [releasingId, setReleasingId] = useState(null);
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState(null);
   const [removingId, setRemovingId] = useState(null);
@@ -44,7 +49,12 @@ export default function MembersScreen({ navigation, route }) {
     setLoading(true);
     setLoadError(null);
     try {
-      setRows(await loadTournamentMembers(tournamentId));
+      const [members, t] = await Promise.all([
+        loadTournamentMembers(tournamentId),
+        getTournament(tournamentId),
+      ]);
+      setRows(members);
+      setPlayers(t?.players ?? []);
     } catch (err) {
       setLoadError(err?.message ?? 'Could not load members');
     } finally {
@@ -81,21 +91,46 @@ export default function MembersScreen({ navigation, route }) {
     }
   }
 
+  async function releaseSlot(row, slot) {
+    const name = slot?.name || row.profile?.display_name || 'this player';
+    const confirmed = Platform.OS === 'web'
+      ? window.confirm(`Release the "${name}" slot? They will be removed and the slot reopens for someone else to claim.`)
+      : await new Promise((resolve) => Alert.alert(
+          'Release player slot',
+          `Release the "${name}" slot? They will be removed and the slot reopens.`,
+          [{ text: 'Cancel', style: 'cancel', onPress: () => resolve(false) },
+           { text: 'Release', style: 'destructive', onPress: () => resolve(true) }],
+        ));
+    if (!confirmed) return;
+    setReleasingId(row.userId);
+    try {
+      await releaseTournamentPlayer(tournamentId, slot.id);
+      await load();
+    } catch (err) {
+      Alert.alert('Error', err?.message ?? 'Could not release the slot');
+    } finally {
+      setReleasingId(null);
+    }
+  }
+
   async function handleInvite() {
     if (inviting) return;
     setInviting(true);
     try {
       const { editorCode } = await generateInviteCode(tournamentId);
-      const message = `Join "${tournamentName ?? 'my tournament'}" on Golf Partner — invite code: ${editorCode}`;
+      const origin = Platform.OS === 'web' && typeof window !== 'undefined'
+        ? window.location.origin
+        : '';
+      const link = buildJoinLink(origin, editorCode);
+      const message = `Join "${tournamentName ?? 'my tournament'}" on Golf Partner:\n${link}`;
       if (Platform.OS === 'web') {
-        // Web has no native share sheet here — show the code and copy it.
-        try { await navigator.clipboard?.writeText(editorCode); } catch (_) {}
-        window.alert(`Invite code: ${editorCode}\n(copied to clipboard)`);
+        try { await navigator.clipboard?.writeText(link); } catch (_) {}
+        window.alert(`Invite link copied:\n${link}`);
       } else {
         await Share.share({ message });
       }
     } catch (err) {
-      Alert.alert('Error', err?.message ?? 'Could not create invite code');
+      Alert.alert('Error', err?.message ?? 'Could not create invite link');
     } finally {
       setInviting(false);
     }
@@ -204,6 +239,7 @@ export default function MembersScreen({ navigation, route }) {
             const joined = formatDate(row.joinedAt);
             const isSelf = row.userId === user?.id;
             const canRemove = iAmOwner && row.role !== 'owner' && !isSelf;
+            const claimedSlot = findClaimedSlot(players, row.userId);
             return (
               <View key={row.userId} style={s.row}>
                 <View style={[s.avatar, { backgroundColor: color }]}>
@@ -245,6 +281,20 @@ export default function MembersScreen({ navigation, route }) {
                           color={theme.accent.primary}
                         />
                       </TouchableOpacity>
+                    )}
+                    {canRemove && claimedSlot && (
+                      releasingId === row.userId
+                        ? <ActivityIndicator color={theme.accent.primary} />
+                        : (
+                          <TouchableOpacity
+                            onPress={() => releaseSlot(row, claimedSlot)}
+                            style={s.roleActionBtn}
+                            hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+                            accessibilityLabel={`Release the ${claimedSlot.name} player slot`}
+                          >
+                            <Feather name="rotate-ccw" size={15} color={theme.accent.primary} />
+                          </TouchableOpacity>
+                        )
                     )}
                     {removingId === row.userId
                       ? <ActivityIndicator color={theme.destructive} />

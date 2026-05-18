@@ -1,21 +1,28 @@
-import React, { useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import {
   View, Text, TextInput, TouchableOpacity,
   StyleSheet, KeyboardAvoidingView, Platform, Alert, ActivityIndicator,
 } from 'react-native';
 import { Feather } from '@expo/vector-icons';
 import { useTheme } from '../theme/ThemeContext';
-import { joinTournamentByCode, setActiveTournament } from '../store/tournamentStore';
+import {
+  joinTournamentByCode, setActiveTournament, getTournament, findClaimedSlot,
+} from '../store/tournamentStore';
+import { supabase } from '../lib/supabase';
 
 export default function JoinTournamentScreen({ navigation, route }) {
   const { theme } = useTheme();
   const s = makeStyles(theme);
 
-  // Allow deep-links / share URLs to pre-fill the code (e.g. `?invite=ABC123`
-  // is picked up by AppNavigator and forwarded as route.params.code).
-  const initialCode = (route?.params?.code ?? '').toString().toUpperCase().slice(0, 6);
+  // Deep-link / share URLs deliver the code via route.params.code; manual
+  // entry still works when the screen is opened from the Home "Join" tile.
+  const initialCode = (route?.params?.code ?? '').toString().toUpperCase().slice(0, 8);
   const [code, setCode] = useState(initialCode);
   const [loading, setLoading] = useState(false);
+  // True while the deep-link path is auto-redeeming, so we show a spinner
+  // instead of the manual code field.
+  const [autoJoining, setAutoJoining] = useState(initialCode.length >= 6);
+  const didAutoJoin = useRef(false);
 
   async function handleJoin() {
     if (code.trim().length < 6) return;
@@ -23,19 +30,39 @@ export default function JoinTournamentScreen({ navigation, route }) {
     try {
       const { tournamentId, role } = await joinTournamentByCode(code.trim());
       await setActiveTournament(tournamentId);
-      // Editors get to say which player they are (or add themselves) before
-      // landing in the tournament. Viewers are read-only — straight in.
-      if (role === 'editor') {
-        navigation.replace('ClaimPlayer', { tournamentId });
-      } else {
+      if (role !== 'editor') {
+        // Viewers are read-only — straight in.
         navigation.goBack();
+        return;
+      }
+      // Editor: if a slot is already bound to this account (a friend the
+      // creator added from their friends list), skip the picker.
+      const [t, { data: { user } }] = await Promise.all([
+        getTournament(tournamentId), supabase.auth.getUser(),
+      ]);
+      const mine = findClaimedSlot(t?.players ?? [], user?.id);
+      if (mine) {
+        navigation.replace('Tournament', { tournamentId });
+      } else {
+        navigation.replace('ClaimPlayer', { tournamentId });
       }
     } catch (err) {
+      setAutoJoining(false);
       Alert.alert('Error', err.message ?? 'Could not join tournament');
     } finally {
       setLoading(false);
     }
   }
+
+  // Auto-redeem when arriving via a deep link (code already present).
+  useEffect(() => {
+    if (didAutoJoin.current) return;
+    if (initialCode.length >= 6) {
+      didAutoJoin.current = true;
+      handleJoin();
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   return (
     <KeyboardAvoidingView style={s.screen} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
@@ -47,43 +74,50 @@ export default function JoinTournamentScreen({ navigation, route }) {
         <View style={{ width: 22 }} />
       </View>
 
-      <View style={s.content}>
-        <View style={s.icon}>
-          <Feather name="link" size={32} color={theme.accent.primary} />
+      {autoJoining ? (
+        <View style={s.content}>
+          <ActivityIndicator size="large" color={theme.accent.primary} />
+          <Text style={[s.subtitle, { marginTop: 16 }]}>Joining tournament…</Text>
         </View>
-        <Text style={s.title}>Enter Invite Code</Text>
-        <Text style={s.subtitle}>Ask the tournament owner for their 6-character invite code.</Text>
+      ) : (
+        <View style={s.content}>
+          <View style={s.icon}>
+            <Feather name="link" size={32} color={theme.accent.primary} />
+          </View>
+          <Text style={s.title}>Enter Invite Code</Text>
+          <Text style={s.subtitle}>Ask the tournament owner for their invite code.</Text>
 
-        <TextInput
-          style={s.codeInput}
-          placeholder="ABC123"
-          placeholderTextColor={theme.text.muted}
-          autoCapitalize="characters"
-          autoCorrect={false}
-          maxLength={6}
-          keyboardAppearance={theme.isDark ? 'dark' : 'light'}
-          selectionColor={theme.accent.primary}
-          value={code}
-          onChangeText={(v) => setCode(v.toUpperCase())}
-          onSubmitEditing={handleJoin}
-        />
+          <TextInput
+            style={s.codeInput}
+            placeholder="ABC123"
+            placeholderTextColor={theme.text.muted}
+            autoCapitalize="characters"
+            autoCorrect={false}
+            maxLength={8}
+            keyboardAppearance={theme.isDark ? 'dark' : 'light'}
+            selectionColor={theme.accent.primary}
+            value={code}
+            onChangeText={(v) => setCode(v.toUpperCase())}
+            onSubmitEditing={handleJoin}
+          />
 
-        <TouchableOpacity
-          style={[s.btn, (loading || code.length < 6) && { opacity: 0.5 }]}
-          onPress={handleJoin}
-          disabled={loading || code.length < 6}
-          activeOpacity={0.8}
-        >
-          {loading
-            ? <ActivityIndicator color={theme.isDark ? theme.accent.primary : theme.text.inverse} />
-            : (
-              <>
-                <Feather name="log-in" size={18} color={theme.isDark ? theme.accent.primary : theme.text.inverse} />
-                <Text style={s.btnText}>Join</Text>
-              </>
-            )}
-        </TouchableOpacity>
-      </View>
+          <TouchableOpacity
+            style={[s.btn, (loading || code.length < 6) && { opacity: 0.5 }]}
+            onPress={handleJoin}
+            disabled={loading || code.length < 6}
+            activeOpacity={0.8}
+          >
+            {loading
+              ? <ActivityIndicator color={theme.isDark ? theme.accent.primary : theme.text.inverse} />
+              : (
+                <>
+                  <Feather name="log-in" size={18} color={theme.isDark ? theme.accent.primary : theme.text.inverse} />
+                  <Text style={s.btnText}>Join</Text>
+                </>
+              )}
+          </TouchableOpacity>
+        </View>
+      )}
     </KeyboardAvoidingView>
   );
 }
