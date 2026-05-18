@@ -3742,7 +3742,7 @@ function makeStyles(theme) {
     shotPanel: {
       borderTopWidth: 1,
       borderTopColor: theme.isDark ? theme.glass?.border : theme.border.default,
-      paddingTop: 14,
+      paddingTop: 6,
       paddingBottom: 2,
     },
     shotPanelLabel: {
@@ -3771,7 +3771,7 @@ function makeStyles(theme) {
       width: 40,
       height: 40,
       borderRadius: 12,
-      backgroundColor: theme.bg.card,
+      backgroundColor: theme.isDark ? theme.bg.elevated : theme.bg.secondary,
       borderWidth: 1,
       borderColor: theme.border.default,
       alignItems: 'center',
