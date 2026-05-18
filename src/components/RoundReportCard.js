@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useMemo } from 'react';
 import { View, Text, TouchableOpacity, StyleSheet, Modal, ScrollView } from 'react-native';
 import { Feather } from '@expo/vector-icons';
 import { useTheme } from '../theme/ThemeContext';
@@ -16,13 +16,13 @@ function fmtDelta(v) {
   return `${v}`;
 }
 
-function Callout({ cell, kind, s }) {
+function Callout({ cell, kind, s, theme }) {
   const good = kind === 'bright';
   const delta = cell.deltaVsAvg != null ? cell.deltaVsAvg : cell.deltaVs2;
   return (
     <View style={[s.callout, good ? s.calloutGood : s.calloutBad]}>
       <View style={[s.calloutDot, good ? s.dotGood : s.dotBad]}>
-        <Feather name={good ? 'arrow-up' : 'arrow-down'} size={10} color="#fff" />
+        <Feather name={good ? 'arrow-up' : 'arrow-down'} size={10} color={theme.text.inverse} />
       </View>
       <View style={{ flex: 1 }}>
         <Text style={s.calloutLabel}>{cell.label}</Text>
@@ -52,7 +52,7 @@ function BreakdownRow({ cell, s, theme }) {
 
 export default function RoundReportCard({ card, rounds, selectedKey, onSelect }) {
   const { theme } = useTheme();
-  const s = makeStyles(theme);
+  const s = useMemo(() => makeStyles(theme), [theme]);
   const [expanded, setExpanded] = useState(false);
   const [pickerOpen, setPickerOpen] = useState(false);
 
@@ -105,7 +105,7 @@ export default function RoundReportCard({ card, rounds, selectedKey, onSelect })
         <>
           <Text style={s.sectionLabel}>BRIGHT SPOTS</Text>
           {callouts.bright.map((c) => (
-            <Callout key={c.label} cell={c} kind="bright" s={s} />
+            <Callout key={c.label} cell={c} kind="bright" s={s} theme={theme} />
           ))}
         </>
       )}
@@ -113,7 +113,7 @@ export default function RoundReportCard({ card, rounds, selectedKey, onSelect })
         <>
           <Text style={s.sectionLabel}>COST YOU POINTS</Text>
           {callouts.cost.map((c) => (
-            <Callout key={c.label} cell={c} kind="cost" s={s} />
+            <Callout key={c.label} cell={c} kind="cost" s={s} theme={theme} />
           ))}
         </>
       )}
@@ -140,7 +140,7 @@ export default function RoundReportCard({ card, rounds, selectedKey, onSelect })
           <View style={s.modalCard}>
             <Text style={s.modalTitle}>Choose a round</Text>
             <ScrollView style={{ maxHeight: 360 }}>
-              {[...(rounds || [])].slice().reverse().map((r) => (
+              {(rounds || []).slice().reverse().map((r) => (
                 <TouchableOpacity
                   key={r.key}
                   style={[s.pickRow, r.key === selectedKey && s.pickRowOn]}
