@@ -309,8 +309,9 @@ function AppNavigator() {
   );
 }
 
-// Deep-link config: maps the web URL path `join/:token` to the JoinOfficial
-// route so magic invite links open the redeem flow directly.
+// Deep-link config: maps web URL paths to routes so invite links open the
+// right flow directly. `join/:token` → official magic-token redeem;
+// `join-tournament/:code` → casual shared-invite redeem + claim.
 const linking = {
   prefixes: [typeof window !== 'undefined' && window.location?.origin
     ? window.location.origin
@@ -318,6 +319,7 @@ const linking = {
   config: {
     screens: {
       JoinOfficial: 'join/:token',
+      JoinTournament: 'join-tournament/:code',
     },
   },
 };
