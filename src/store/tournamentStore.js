@@ -1156,6 +1156,14 @@ export function buildJoinLink(origin, code) {
   return `${base}/join-tournament/${String(code ?? '').toUpperCase()}`;
 }
 
+// Find the player slot already bound to a given user id, if any. Used to
+// auto-match a joiner (a friend the creator added from their friends list,
+// whose slot carries their user_id) so they skip the "which player?" picker.
+export function findClaimedSlot(players, userId) {
+  if (!userId || !Array.isArray(players)) return null;
+  return players.find((p) => p && p.user_id === userId) ?? null;
+}
+
 // Atomic player-slot claim. Wraps the claim_tournament_player RPC (migration
 // 20260518000004). Throws Error('SLOT_TAKEN') when another joiner won the
 // race; the caller refreshes the picker on that.
