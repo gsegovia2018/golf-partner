@@ -22,6 +22,7 @@ function verdictFromVsAvg(vsAvg) {
 }
 
 // Verdict when the player has no prior rounds — judged against the benchmark.
+// Tops out at 'Strong round' — 'Standout round' needs a career baseline.
 function verdictFromPerHole(perHole) {
   if (perHole >= 2.4) return 'Strong round';
   if (perHole >= 2.0) return 'Solid round';
@@ -30,7 +31,7 @@ function verdictFromPerHole(perHole) {
 }
 
 // Career points-per-hole across every round in `history` (a stats object
-// from computeMyStats). Returns null when there is no history.
+// from computeMyStats). Returns null when there is no history or no scored holes.
 function careerPerHole(baseStats) {
   if (!baseStats) return null;
   const totals = (baseStats.history || []).reduce(
