@@ -10,7 +10,7 @@ import { Feather } from '@expo/vector-icons';
 import { v4 as uuidv4 } from 'uuid';
 
 import { useTheme } from '../theme/ThemeContext';
-import { deletePlayer, fetchPlayers, upsertPlayer } from '../store/libraryStore';
+import { deletePlayer, fetchMyGuestPlayers, upsertPlayer } from '../store/libraryStore';
 import { propagatePlayerToTournaments } from '../store/tournamentStore';
 import { mutate } from '../store/mutate';
 
@@ -35,7 +35,7 @@ export default function PlayersLibraryScreen() {
   async function load() {
     setLoading(true);
     try {
-      setPlayers(await fetchPlayers());
+      setPlayers(await fetchMyGuestPlayers());
     } finally {
       setLoading(false);
     }
