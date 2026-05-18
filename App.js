@@ -272,7 +272,7 @@ function AppNavigator() {
         <Stack.Screen name="NextRound" component={NextRoundScreen} options={{ transitionSpec: { open: { animation: 'timing', config: { duration: 400 } }, close: { animation: 'timing', config: { duration: 300 } } } }} />
         <Stack.Screen name="CourseEditor" component={CourseEditorScreen} />
         <Stack.Screen name="EditTournament" component={EditTournamentScreen} />
-        <Stack.Screen name="OfficialSetup" component={OfficialSetupScreen} />
+        <Stack.Screen name="OfficialSetup" component={OfficialSetupScreen} />{/* management screen — reached with { tournamentId } param after wizard creates */}
         <Stack.Screen name="PartyBoard" component={PartyBoardScreen} />
         <Stack.Screen name="OfficialAdmin" component={OfficialAdminScreen} />
         <Stack.Screen name="JoinOfficial" component={JoinOfficialScreen} />
