@@ -10,7 +10,7 @@ import { Feather } from '@expo/vector-icons';
 import { v4 as uuidv4 } from 'uuid';
 
 import { useTheme } from '../theme/ThemeContext';
-import { fetchPlayers } from '../store/libraryStore';
+import { fetchMyPlayers } from '../store/libraryStore';
 import { loadAllTournaments } from '../store/tournamentStore';
 import { setPendingPlayers } from '../lib/selectionBridge';
 import { buildPlayerLastUsed } from '../lib/recentUse';
@@ -44,7 +44,7 @@ export default function PlayerPickerScreen({ navigation, route }) {
       setLoadError(null);
       // fetchPlayers is fatal (no library to pick from); recent-use data is
       // best-effort and degrades silently to alphabetical sort.
-      fetchPlayers()
+      fetchMyPlayers()
         .then(async (list) => {
           const tournaments = await loadAllTournaments().catch(() => []);
           if (cancelled) return;
