@@ -12,6 +12,7 @@ import {
 } from '../store/tournamentStore';
 import { loadProfile } from '../store/profileStore';
 import { mutate } from '../store/mutate';
+import { useAuth } from '../context/AuthContext';
 
 const MAX_PLAYERS = 4;
 
@@ -22,6 +23,8 @@ export default function ClaimPlayerScreen({ navigation, route }) {
   const { theme } = useTheme();
   const s = makeStyles(theme);
   const tournamentId = route?.params?.tournamentId;
+  const { user } = useAuth();
+  const isAnon = !!user?.is_anonymous;
 
   const [tournament, setTournament] = useState(null);
   const [profile, setProfile] = useState(null);
@@ -250,6 +253,20 @@ export default function ClaimPlayerScreen({ navigation, route }) {
               </TouchableOpacity>
             )}
           </View>
+
+          {isAnon && (
+            <TouchableOpacity
+              style={s.saveAccountBox}
+              onPress={() => navigation.navigate('Profile')}
+              activeOpacity={0.8}
+            >
+              <Feather name="bookmark" size={16} color={theme.accent.primary} style={{ marginRight: 10 }} />
+              <Text style={s.saveAccountText}>
+                You're playing as a guest. Add an email in your profile so you
+                keep this tournament if you switch devices.
+              </Text>
+            </TouchableOpacity>
+          )}
         </ScrollView>
       )}
     </ScreenContainer>
@@ -328,6 +345,16 @@ const makeStyles = (theme) => StyleSheet.create({
     padding: 12, marginTop: 4,
   },
   noticeText: {
+    flex: 1, fontFamily: 'PlusJakartaSans-Medium',
+    color: theme.text.secondary, fontSize: 13, lineHeight: 19,
+  },
+  saveAccountBox: {
+    flexDirection: 'row', alignItems: 'center',
+    backgroundColor: theme.accent.light, borderRadius: 12,
+    borderWidth: 1, borderColor: theme.accent.primary + '33',
+    padding: 12, marginTop: 4,
+  },
+  saveAccountText: {
     flex: 1, fontFamily: 'PlusJakartaSans-Medium',
     color: theme.text.secondary, fontSize: 13, lineHeight: 19,
   },
