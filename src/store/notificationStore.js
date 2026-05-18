@@ -60,3 +60,18 @@ export async function markAllRead() {
     .is('read_at', null);
   if (error) throw error;
 }
+
+// Fire the casual "round finished" fan-out. Invoked from the Scorecard
+// "Finish" button. The RPC is idempotent server-side, so a re-tap is safe.
+export async function notifyRoundFinished({
+  tournamentId, roundId, roundIndex, tournamentName, courseName,
+}) {
+  const { error } = await supabase.rpc('notify_round_finished', {
+    p_tournament_id: String(tournamentId),
+    p_round_id: String(roundId),
+    p_round_index: roundIndex ?? 0,
+    p_tournament_name: tournamentName ?? '',
+    p_course_name: courseName ?? '',
+  });
+  if (error) throw error;
+}

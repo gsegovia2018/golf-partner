@@ -1,8 +1,11 @@
-import { unreadCount, listNotifications, markAllRead } from '../notificationStore';
+import { unreadCount, listNotifications, markAllRead, notifyRoundFinished } from '../notificationStore';
 
 // mockState is read inside the jest.mock factory; the `mock` prefix is what
 // lets jest's hoisted factory reference it.
-const mockState = { user: { id: 'user-1' }, rows: [], error: null, updatePayload: undefined };
+const mockState = {
+  user: { id: 'user-1' }, rows: [], error: null, updatePayload: undefined,
+  rpcCalls: [], rpcError: null,
+};
 
 jest.mock('../../lib/supabase', () => {
   // A minimal supabase query-builder stub. Every chain method returns the
@@ -28,6 +31,10 @@ jest.mock('../../lib/supabase', () => {
   }
   const client = {
     from: () => builder(),
+    rpc: (name, args) => {
+      mockState.rpcCalls.push({ name, args });
+      return Promise.resolve({ error: mockState.rpcError });
+    },
     auth: { getUser: () => Promise.resolve({ data: { user: mockState.user } }) },
   };
   return { supabase: client };
@@ -39,6 +46,8 @@ describe('notificationStore', () => {
     mockState.rows = [];
     mockState.error = null;
     mockState.updatePayload = undefined;
+    mockState.rpcCalls = [];
+    mockState.rpcError = null;
   });
 
   test('unreadCount returns the number of unread rows', async () => {
@@ -77,5 +86,32 @@ describe('notificationStore', () => {
     mockState.user = null;
     await markAllRead();
     expect(mockState.updatePayload).toBeUndefined();
+  });
+});
+
+describe('notifyRoundFinished', () => {
+  test('calls the notify_round_finished RPC with stringified ids', async () => {
+    await notifyRoundFinished({
+      tournamentId: 1747000000000, roundId: 'r1', roundIndex: 2,
+      tournamentName: 'Weekend Cup', courseName: 'Pebble',
+    });
+    expect(mockState.rpcCalls).toContainEqual({
+      name: 'notify_round_finished',
+      args: {
+        p_tournament_id: '1747000000000',
+        p_round_id: 'r1',
+        p_round_index: 2,
+        p_tournament_name: 'Weekend Cup',
+        p_course_name: 'Pebble',
+      },
+    });
+  });
+
+  test('throws when the RPC returns an error', async () => {
+    mockState.rpcError = { message: 'boom' };
+    await expect(notifyRoundFinished({
+      tournamentId: 't1', roundId: 'r1', roundIndex: 0,
+      tournamentName: 'X', courseName: 'Y',
+    })).rejects.toBeTruthy();
   });
 });
