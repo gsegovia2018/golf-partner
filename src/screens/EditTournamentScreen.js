@@ -173,19 +173,19 @@ export default function EditTournamentScreen({ navigation }) {
     }
   }, [players.length, settings.scoringMode]);
 
-  const handleHolesSaved = useCallback((roundIndex, holes, slope, courseRating, playerHandicaps, manualHandicaps) => {
+  const handleHolesSaved = useCallback((roundIndex, patch) => {
     setRounds((prev) => {
       const next = [...prev];
       next[roundIndex] = {
         ...next[roundIndex],
-        holes,
-        slope,
-        courseRating,
+        holes: patch.holes,
+        tees: patch.tees,
         // CourseEditor returns numbers; convert to strings for our inputs
         playerHandicaps: Object.fromEntries(
-          Object.entries(playerHandicaps).map(([id, v]) => [id, String(v)]),
+          Object.entries(patch.playerHandicaps).map(([id, v]) => [id, String(v)]),
         ),
-        manualHandicaps: { ...(manualHandicaps ?? {}) },
+        playerTees: patch.playerTees,
+        manualHandicaps: { ...(patch.manualHandicaps ?? {}) },
       };
       return next;
     });
@@ -202,7 +202,7 @@ export default function EditTournamentScreen({ navigation }) {
     const parsedIndex = parseInt(value, 10) || 0;
     setRounds((prev) => prev.map((r) => {
       if (r.manualHandicaps?.[playerId]) return r;
-      const derived = deriveRoundPlayingHandicap(parsedIndex, r);
+      const derived = deriveRoundPlayingHandicap(parsedIndex, r, playerId);
       return {
         ...r,
         playerHandicaps: { ...r.playerHandicaps, [playerId]: String(derived) },
@@ -415,12 +415,12 @@ export default function EditTournamentScreen({ navigation }) {
                     roundIndex: ri,
                     courseName: r.courseName,
                     initialHoles: r.holes,
-                    initialSlope: r.slope,
-                    initialCourseRating: r.courseRating ?? null,
+                    initialTees: r.tees ?? [],
                     initialPlayerHandicaps: Object.fromEntries(
                       Object.entries(r.playerHandicaps ?? {}).map(([id, v]) => [id, parseInt(v, 10) || 0]),
                     ),
                     initialManualHandicaps: r.manualHandicaps ?? {},
+                    initialPlayerTees: r.playerTees ?? {},
                     players: players.map((p) => ({ ...p, handicap: parseInt(p.handicap, 10) || 0 })),
                     onSave: handleHolesSaved,
                     courseId: r.courseId ?? null,
@@ -429,7 +429,7 @@ export default function EditTournamentScreen({ navigation }) {
               >
                 <Feather name="edit-3" size={14} color={theme.accent.primary} style={{ marginRight: 8 }} />
                 <Text style={s.editHolesBtnText}>
-                  Edit Holes & Slope
+                  Edit Holes & Tees
                 </Text>
                 <View style={s.parBadge}>
                   <Text style={s.parBadgeText}>Par {r.holes.reduce((sum, h) => sum + h.par, 0)}</Text>
