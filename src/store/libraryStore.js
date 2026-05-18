@@ -124,7 +124,8 @@ export async function deleteCourse(id) {
 // tee ids are therefore not stable across saves — callers match tees by
 // `label`, never by id.
 export async function saveCourseTees(courseId, tees) {
-  await supabase.from('course_tees').delete().eq('course_id', courseId);
+  const { error: delErr } = await supabase.from('course_tees').delete().eq('course_id', courseId);
+  if (delErr) throw delErr;
   if (!tees || !tees.length) return;
   const rows = tees.map((t, i) => ({
     course_id: courseId,

@@ -1,4 +1,4 @@
-import { fetchMyPlayers, fetchMyGuestPlayers, normalizeCourse } from '../libraryStore';
+import { fetchMyPlayers, fetchMyGuestPlayers, normalizeCourse, saveCourseTees } from '../libraryStore';
 import { listFriends, getCachedFriends } from '../friendStore';
 
 // mockState is read inside the hoisted jest.mock factory; the `mock` prefix
@@ -10,6 +10,13 @@ const mockState = {
 };
 
 jest.mock('../../lib/supabase', () => {
+  // A lightweight delete-chain object whose eq() resolves to { error: null }.
+  // This is returned by client.delete() so existing tests that use client.eq()
+  // for select/filter chains are unaffected.
+  const deleteChain = {
+    eq: () => Promise.resolve({ error: null }),
+  };
+
   const client = {
     from(table) { mockState.calls.table = table; return client; },
     select(cols) { mockState.calls.select = cols; return client; },
@@ -25,6 +32,14 @@ jest.mock('../../lib/supabase', () => {
       return client;
     },
     order() { return Promise.resolve({ data: mockState.rows, error: null }); },
+    // delete() returns a separate chain so its eq() resolves to { error: null }
+    // without affecting the existing client.eq() used by select/filter chains.
+    delete() { return deleteChain; },
+    // insert() records the rows and resolves to { error: null }.
+    insert(rows) {
+      mockState.calls.insertedRows = rows;
+      return Promise.resolve({ error: null });
+    },
     auth: {
       getUser: () => Promise.resolve({ data: { user: mockState.user } }),
     },
@@ -131,5 +146,22 @@ describe('normalizeCourse', () => {
       course_holes: [], course_tees: [],
     });
     expect(out.tees).toEqual([]);
+  });
+});
+
+describe('saveCourseTees', () => {
+  beforeEach(() => {
+    mockState.calls = {};
+  });
+
+  test('inserts trimmed, coerced rows with sort_order from index and null yardages', async () => {
+    await saveCourseTees('c1', [
+      { label: ' White ', rating: '71.8', slope: '132' },
+      { label: 'Yellow', rating: 69, slope: 125 },
+    ]);
+    expect(mockState.calls.insertedRows).toEqual([
+      { course_id: 'c1', label: 'White', rating: 71.8, slope: 132, sort_order: 0, yardages: null },
+      { course_id: 'c1', label: 'Yellow', rating: 69, slope: 125, sort_order: 1, yardages: null },
+    ]);
   });
 });
