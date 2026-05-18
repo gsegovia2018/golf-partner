@@ -15,7 +15,7 @@ ALTER TABLE public.tournaments
 -- 2) Roster: one row per player in an official tournament.
 CREATE TABLE IF NOT EXISTS public.tournament_roster (
   id            uuid PRIMARY KEY DEFAULT gen_random_uuid(),
-  tournament_id bigint NOT NULL REFERENCES public.tournaments(id) ON DELETE CASCADE,
+  tournament_id text NOT NULL REFERENCES public.tournaments(id) ON DELETE CASCADE,
   display_name  text NOT NULL,
   handicap      numeric NOT NULL DEFAULT 0,
   magic_token   text NOT NULL UNIQUE,
@@ -27,7 +27,7 @@ CREATE TABLE IF NOT EXISTS public.tournament_roster (
 -- 3) Rounds (relational — casual rounds stay in the blob).
 CREATE TABLE IF NOT EXISTS public.tournament_rounds (
   id            uuid PRIMARY KEY DEFAULT gen_random_uuid(),
-  tournament_id bigint NOT NULL REFERENCES public.tournaments(id) ON DELETE CASCADE,
+  tournament_id text NOT NULL REFERENCES public.tournaments(id) ON DELETE CASCADE,
   round_index   int NOT NULL,
   course        jsonb NOT NULL DEFAULT '{}'::jsonb,
   format        text NOT NULL DEFAULT 'stableford'
@@ -42,7 +42,7 @@ CREATE TABLE IF NOT EXISTS public.tournament_rounds (
 CREATE TABLE IF NOT EXISTS public.tournament_parties (
   id            uuid PRIMARY KEY DEFAULT gen_random_uuid(),
   round_id      uuid NOT NULL REFERENCES public.tournament_rounds(id) ON DELETE CASCADE,
-  tournament_id bigint NOT NULL REFERENCES public.tournaments(id) ON DELETE CASCADE,
+  tournament_id text NOT NULL REFERENCES public.tournaments(id) ON DELETE CASCADE,
   number        int NOT NULL,
   locked        boolean NOT NULL DEFAULT false,
   UNIQUE (round_id, number)
@@ -95,7 +95,7 @@ CREATE TABLE IF NOT EXISTS public.tournament_attestations (
 -- 9) In-app admin notifications.
 CREATE TABLE IF NOT EXISTS public.tournament_notifications (
   id            uuid PRIMARY KEY DEFAULT gen_random_uuid(),
-  tournament_id bigint NOT NULL REFERENCES public.tournaments(id) ON DELETE CASCADE,
+  tournament_id text NOT NULL REFERENCES public.tournaments(id) ON DELETE CASCADE,
   round_id      uuid REFERENCES public.tournament_rounds(id) ON DELETE CASCADE,
   kind          text NOT NULL,
   body          text NOT NULL,
@@ -323,7 +323,7 @@ GRANT EXECUTE ON FUNCTION public.attest_card(text,uuid)        TO anon, authenti
 -- ============================================================================
 CREATE OR REPLACE FUNCTION public.on_attestation()
 RETURNS trigger LANGUAGE plpgsql SECURITY DEFINER SET search_path = public AS $$
-DECLARE v_party uuid; v_tourn bigint; v_open int; v_round_open int;
+DECLARE v_party uuid; v_tourn text; v_open int; v_round_open int;
         v_party_locked boolean; v_round_status text;
 BEGIN
   SELECT pm.party_id INTO v_party
