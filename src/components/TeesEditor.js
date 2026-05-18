@@ -40,7 +40,7 @@ export default function TeesEditor({ tees, onChange, theme }) {
       </View>
 
       {tees.map((tee, i) => (
-        <View key={tee.id ?? i} style={s.row}>
+        <View key={tee.id} style={s.row}>
           <TextInput
             style={[s.input, s.labelCol]}
             placeholder="White / 3 / Champ"
@@ -72,13 +72,25 @@ export default function TeesEditor({ tees, onChange, theme }) {
             value={tee.slope != null ? String(tee.slope) : ''}
             onChangeText={(v) => update(i, { slope: v })}
           />
-          <TouchableOpacity style={s.removeCol} onPress={() => remove(i)} activeOpacity={0.7}>
+          <TouchableOpacity
+            style={s.removeCol}
+            onPress={() => remove(i)}
+            activeOpacity={0.7}
+            accessibilityRole="button"
+            accessibilityLabel={`Remove ${tee.label || 'tee'}`}
+          >
             <Feather name="x" size={16} color={theme.destructive} />
           </TouchableOpacity>
         </View>
       ))}
 
-      <TouchableOpacity style={s.addBtn} onPress={add} activeOpacity={0.7}>
+      <TouchableOpacity
+        style={s.addBtn}
+        onPress={add}
+        activeOpacity={0.7}
+        accessibilityRole="button"
+        accessibilityLabel="Add tee"
+      >
         <Feather name="plus" size={14} color={theme.accent.primary} style={{ marginRight: 6 }} />
         <Text style={s.addBtnText}>Add tee</Text>
       </TouchableOpacity>
