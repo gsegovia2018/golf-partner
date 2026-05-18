@@ -37,3 +37,23 @@ describe('isStepValid', () => {
     expect(isStepValid('review', { players: [], rounds: [] })).toBe(true);
   });
 });
+
+describe('official kind', () => {
+  test('official steps are roster, rounds, format, review', () => {
+    expect(wizardSteps('official', 0)).toEqual(['roster', 'rounds', 'format', 'review']);
+    expect(wizardSteps('official', 8)).toEqual(['roster', 'rounds', 'format', 'review']);
+  });
+
+  test('roster step needs at least one roster entry', () => {
+    expect(isStepValid('roster', { roster: [], rounds: [] })).toBe(false);
+    expect(isStepValid('roster', { roster: [{ displayName: 'Ann' }], rounds: [] })).toBe(true);
+  });
+
+  test('a roster entry with a blank name is invalid', () => {
+    expect(isStepValid('roster', { roster: [{ displayName: '  ' }], rounds: [] })).toBe(false);
+  });
+
+  test('format step is always valid', () => {
+    expect(isStepValid('format', { roster: [], rounds: [] })).toBe(true);
+  });
+});
