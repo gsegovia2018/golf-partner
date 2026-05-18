@@ -1,4 +1,4 @@
-import { fetchMyPlayers, fetchMyGuestPlayers } from '../libraryStore';
+import { fetchMyPlayers, fetchMyGuestPlayers, normalizeCourse } from '../libraryStore';
 import { listFriends, getCachedFriends } from '../friendStore';
 
 // mockState is read inside the hoisted jest.mock factory; the `mock` prefix
@@ -99,5 +99,37 @@ describe('fetchMyGuestPlayers', () => {
     const result = await fetchMyGuestPlayers();
     expect(result).toEqual([]);
     expect(mockState.calls.table).toBeUndefined();
+  });
+});
+
+describe('normalizeCourse', () => {
+  test('maps course_tees rows into a sorted tees array', () => {
+    const out = normalizeCourse({
+      id: 'c1', name: 'Pine', slope: null, rating: null,
+      course_holes: [],
+      course_tees: [
+        { id: 't2', label: 'White',  rating: 71.8, slope: 132, sort_order: 1 },
+        { id: 't1', label: 'Black',  rating: 73.5, slope: 140, sort_order: 0 },
+      ],
+    });
+    expect(out.tees.map((t) => t.label)).toEqual(['Black', 'White']);
+    expect(out.tees[0]).toMatchObject({ label: 'Black', rating: 73.5, slope: 140, sortOrder: 0 });
+  });
+
+  test('synthesizes a Default tee from legacy slope/rating when no tee rows', () => {
+    const out = normalizeCourse({
+      id: 'c2', name: 'Oak', slope: 125, rating: 70.1,
+      course_holes: [], course_tees: [],
+    });
+    expect(out.tees).toHaveLength(1);
+    expect(out.tees[0]).toMatchObject({ label: 'Default', slope: 125, rating: 70.1 });
+  });
+
+  test('yields an empty tees array when there is no tee data at all', () => {
+    const out = normalizeCourse({
+      id: 'c3', name: 'Elm', slope: null, rating: null,
+      course_holes: [], course_tees: [],
+    });
+    expect(out.tees).toEqual([]);
   });
 });

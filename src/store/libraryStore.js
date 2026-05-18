@@ -83,17 +83,15 @@ export async function deletePlayer(id) {
 export async function fetchCourses() {
   const { data, error } = await supabase
     .from('courses')
-    .select('*, course_holes(*)')
+    .select('*, course_holes(*), course_tees(*)')
     .order('name');
   if (error) throw error;
   return data.map(normalizeCourse);
 }
 
-export async function upsertCourse({ id, name, slope, rating, city, province }) {
+export async function upsertCourse({ id, name, city, province }) {
   const row = {
     name,
-    slope: slope ? parseInt(slope, 10) : null,
-    rating: rating ? parseFloat(rating) : null,
     city: city?.trim() || null,
     province: province?.trim() || null,
   };
@@ -122,17 +120,29 @@ export async function deleteCourse(id) {
   if (error) throw error;
 }
 
-// Called from CourseEditorScreen to sync slope+rating+holes back to the library
-export async function updateCourseFromEditor(courseId, slope, rating, holes) {
-  const { error } = await supabase
-    .from('courses')
-    .update({
-      slope: slope ? parseInt(slope, 10) : null,
-      rating: rating ? parseFloat(rating) : null,
-    })
-    .eq('id', courseId);
+// Replace a course's tee list. Delete-then-insert (mirrors saveCourseHoles);
+// tee ids are therefore not stable across saves — callers match tees by
+// `label`, never by id.
+export async function saveCourseTees(courseId, tees) {
+  await supabase.from('course_tees').delete().eq('course_id', courseId);
+  if (!tees || !tees.length) return;
+  const rows = tees.map((t, i) => ({
+    course_id: courseId,
+    label: String(t.label ?? '').trim(),
+    rating: t.rating != null && t.rating !== '' ? parseFloat(t.rating) : null,
+    slope: t.slope != null && t.slope !== '' ? parseInt(t.slope, 10) : null,
+    sort_order: i,
+    yardages: t.yardages ?? null,
+  }));
+  const { error } = await supabase.from('course_tees').insert(rows);
   if (error) throw error;
+}
+
+// Called from CourseEditorScreen / CourseLibraryDetailScreen to sync holes +
+// tees back to the course library.
+export async function updateCourseFromEditor(courseId, holes, tees) {
   await saveCourseHoles(courseId, holes);
+  await saveCourseTees(courseId, tees);
 }
 
 // ── Favorite courses ─────────────────────────────────────────────────────────
@@ -179,16 +189,35 @@ export async function toggleFavoriteCourse(courseId) {
 
 // Convert Supabase course row → app-friendly shape
 export function normalizeCourse(c) {
+  const tees = (c.course_tees ?? [])
+    .slice()
+    .sort((a, b) => (a.sort_order ?? 0) - (b.sort_order ?? 0))
+    .map((t) => ({
+      id: t.id,
+      label: t.label,
+      rating: t.rating,
+      slope: t.slope,
+      sortOrder: t.sort_order ?? 0,
+      yardages: t.yardages ?? undefined,
+    }));
+  // Legacy course with no tee rows but a stored course-level slope/rating →
+  // synthesize a single Default tee so the app shape always has `tees`.
+  const effectiveTees = tees.length > 0
+    ? tees
+    : (c.slope != null || c.rating != null)
+      ? [{ id: `legacy-${c.id}`, label: 'Default', rating: c.rating, slope: c.slope, sortOrder: 0 }]
+      : [];
   return {
     id: c.id,
     name: c.name,
-    slope: c.slope,
+    slope: c.slope,    // legacy course-level fields, kept for back-compat reads
     rating: c.rating,
     city: c.city,
     province: c.province,
     holes: (c.course_holes ?? [])
       .sort((a, b) => a.number - b.number)
       .map((h) => ({ number: h.number, par: h.par, strokeIndex: h.stroke_index })),
+    tees: effectiveTees,
   };
 }
 
