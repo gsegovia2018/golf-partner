@@ -8,8 +8,9 @@ import ScreenContainer from '../components/ScreenContainer';
 import { Feather } from '@expo/vector-icons';
 
 import { useTheme } from '../theme/ThemeContext';
+import { supabase } from '../lib/supabase';
 import {
-  createOfficialTournament, addRosterPlayer, listRoster,
+  addRosterPlayer, listRoster,
   regenerateToken, withdrawPlayer, createRound, saveTournamentData,
 } from '../store/officialAdmin';
 
@@ -37,18 +38,23 @@ function copyToClipboard(text) {
   Clipboard.setString(text);
 }
 
-export default function OfficialSetupScreen({ navigation }) {
+export default function OfficialSetupScreen({ navigation, route }) {
   const { theme } = useTheme();
   const s = makeStyles(theme);
+
+  // The tournament being managed — supplied by the setup wizard.
+  const tournamentId = route?.params?.tournamentId ?? null;
 
   // Guards async handlers from calling setState after the screen unmounts.
   const mountedRef = useRef(true);
   useEffect(() => () => { mountedRef.current = false; }, []);
 
-  // Tournament creation
+  // Initial load (tournament + roster + rounds).
+  const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState(false);
+
+  // Tournament identity (read-only).
   const [name, setName] = useState('');
-  const [creating, setCreating] = useState(false);
-  const [tournamentId, setTournamentId] = useState(null);
 
   // Local rules & notes — persisted into the tournament `data` blob.
   const [rules, setRules] = useState('');
@@ -58,8 +64,6 @@ export default function OfficialSetupScreen({ navigation }) {
 
   // Roster
   const [roster, setRoster] = useState([]);
-  const [rosterLoading, setRosterLoading] = useState(false);
-  const [rosterError, setRosterError] = useState(false);
   // Roster id whose share link/QR is currently expanded.
   const [openLinkId, setOpenLinkId] = useState(null);
   // Roster id with a per-row action in flight; blocks double-submit.
@@ -70,55 +74,62 @@ export default function OfficialSetupScreen({ navigation }) {
   const [newHandicap, setNewHandicap] = useState('');
   const [addingPlayer, setAddingPlayer] = useState(false);
 
-  // Rounds
-  // This screen only ever drives a freshly-created tournament, so round indices start at 0.
-  const [roundCount, setRoundCount] = useState(0);
+  // Rounds — loaded from tournament_rounds.
+  const [rounds, setRounds] = useState([]);
   const [addingRound, setAddingRound] = useState(false);
 
-  const loadRoster = useCallback(async (id) => {
-    setRosterLoading(true);
-    setRosterError(false);
+  // Load tournament, roster and rounds for the route's tournamentId.
+  const load = useCallback(async () => {
+    if (!tournamentId) {
+      setLoadError(true);
+      setLoading(false);
+      return;
+    }
+    setLoading(true);
+    setLoadError(false);
     try {
-      const rows = await listRoster(id);
+      const [tournamentRes, rosterRows, roundsRes] = await Promise.all([
+        supabase
+          .from('tournaments')
+          .select('name, data')
+          .eq('id', tournamentId)
+          .single(),
+        listRoster(tournamentId),
+        supabase
+          .from('tournament_rounds')
+          .select('id, round_index, format, status')
+          .eq('tournament_id', tournamentId)
+          .order('round_index'),
+      ]);
+      if (tournamentRes.error) throw tournamentRes.error;
+      if (roundsRes.error) throw roundsRes.error;
       if (!mountedRef.current) return;
-      setRoster(rows);
+
+      const data = tournamentRes.data?.data ?? {};
+      tournamentDataRef.current = data;
+      setName(tournamentRes.data?.name ?? '');
+      setRules(typeof data.rules === 'string' ? data.rules : '');
+      setRoster(rosterRows ?? []);
+      setRounds(roundsRes.data ?? []);
     } catch (e) {
       if (!mountedRef.current) return;
-      console.warn('OfficialSetupScreen: failed to load roster', e);
-      setRosterError(true);
+      console.warn('OfficialSetupScreen: failed to load tournament', e);
+      setLoadError(true);
     } finally {
-      if (mountedRef.current) setRosterLoading(false);
+      if (mountedRef.current) setLoading(false);
     }
-  }, []);
+  }, [tournamentId]);
 
-  useEffect(() => {
-    if (tournamentId) loadRoster(tournamentId);
-  }, [tournamentId, loadRoster]);
-
-  async function handleCreate() {
-    const trimmed = name.trim();
-    if (!trimmed || creating) return;
-    setCreating(true);
-    try {
-      const id = await createOfficialTournament({ name: trimmed });
-      if (!mountedRef.current) return;
-      tournamentDataRef.current = {};
-      setTournamentId(id);
-    } catch (e) {
-      if (!mountedRef.current) return;
-      showError(e?.message);
-    } finally {
-      if (mountedRef.current) setCreating(false);
-    }
-  }
+  useEffect(() => { load(); }, [load]);
 
   // Persist the rules text into tournaments.data, preserving other keys.
   async function handleRulesSave() {
-    if (!tournamentId) return;
+    if (!tournamentId || savingRules) return;
     setSavingRules(true);
     try {
-      const nextData = { ...(tournamentDataRef.current ?? {}), rules };
-      await saveTournamentData(tournamentId, tournamentDataRef.current ?? {}, { rules });
+      const existing = tournamentDataRef.current ?? {};
+      const nextData = { ...existing, rules };
+      await saveTournamentData(tournamentId, existing, { rules });
       if (!mountedRef.current) return;
       tournamentDataRef.current = nextData;
     } catch (e) {
@@ -198,12 +209,18 @@ export default function OfficialSetupScreen({ navigation }) {
     if (!tournamentId || addingRound) return;
     setAddingRound(true);
     try {
-      const roundIndex = roundCount;
+      // Next index follows the highest existing round_index.
+      const roundIndex = rounds.reduce(
+        (max, r) => Math.max(max, (r.round_index ?? -1) + 1), rounds.length,
+      );
       const roundId = await createRound(tournamentId, {
         roundIndex, course: {}, format: 'stableford',
       });
       if (!mountedRef.current) return;
-      setRoundCount((c) => c + 1);
+      setRounds((prev) => [
+        ...prev,
+        { id: roundId, round_index: roundIndex, format: 'stableford', status: 'setup' },
+      ]);
       navigation.navigate('PartyBoard', { tournamentId, roundId });
     } catch (e) {
       if (!mountedRef.current) return;
@@ -212,8 +229,6 @@ export default function OfficialSetupScreen({ navigation }) {
       if (mountedRef.current) setAddingRound(false);
     }
   }
-
-  const setupUnlocked = !!tournamentId;
 
   return (
     <ScreenContainer style={s.screen} edges={['top', 'bottom']}>
@@ -225,194 +240,184 @@ export default function OfficialSetupScreen({ navigation }) {
         <View style={{ width: 64 }} />
       </View>
 
-      <ScrollView style={s.container} contentContainerStyle={s.content} automaticallyAdjustKeyboardInsets>
-        {/* Tournament name + create */}
-        <Text style={s.sectionTitle}>Tournament</Text>
-        <View style={s.card}>
-          <TextInput
-            style={s.input}
-            placeholder="Tournament name"
-            placeholderTextColor={theme.text.muted}
-            keyboardAppearance={theme.isDark ? 'dark' : 'light'}
-            selectionColor={theme.accent.primary}
-            value={name}
-            onChangeText={setName}
-            editable={!setupUnlocked}
-          />
-          {setupUnlocked ? (
-            <View style={s.createdRow}>
-              <Feather name="check-circle" size={14} color={theme.accent.primary} style={{ marginRight: 6 }} />
-              <Text style={s.createdText}>Tournament created</Text>
-            </View>
-          ) : (
-            <TouchableOpacity
-              style={[s.primaryBtn, (!name.trim() || creating) && s.btnDisabled]}
-              onPress={handleCreate}
-              disabled={!name.trim() || creating}
-            >
-              {creating
-                ? <ActivityIndicator size="small" color={theme.text.inverse} />
-                : <Text style={s.primaryBtnText}>Create</Text>}
+      {loading ? (
+        <View style={s.centerState}>
+          <ActivityIndicator size="large" color={theme.accent.primary} />
+        </View>
+      ) : loadError ? (
+        <View style={s.centerState}>
+          <Text style={s.errorText}>
+            {tournamentId
+              ? 'Could not load this tournament.'
+              : 'No tournament selected.'}
+          </Text>
+          {!!tournamentId && (
+            <TouchableOpacity style={s.secondaryBtn} onPress={load}>
+              <Text style={s.secondaryBtnText}>Retry</Text>
             </TouchableOpacity>
           )}
         </View>
+      ) : (
+        <ScrollView style={s.container} contentContainerStyle={s.content} automaticallyAdjustKeyboardInsets>
+          {/* Tournament name (read-only) */}
+          <Text style={s.sectionTitle}>Tournament</Text>
+          <View style={s.card}>
+            <Text style={s.tournamentName}>{name || 'Untitled tournament'}</Text>
+          </View>
 
-        {setupUnlocked && (
-          <>
-            {/* Local rules & notes */}
-            <Text style={s.sectionTitle}>Local Rules & Notes</Text>
-            <View style={s.card}>
-              <TextInput
-                style={[s.input, s.notesInput]}
-                placeholder="Local rules, notes, dress code..."
-                placeholderTextColor={theme.text.muted}
-                keyboardAppearance={theme.isDark ? 'dark' : 'light'}
-                selectionColor={theme.accent.primary}
-                multiline
-                value={rules}
-                onChangeText={setRules}
-                onBlur={handleRulesSave}
-              />
-              {savingRules && (
-                <Text style={s.hint}>Saving…</Text>
-              )}
-            </View>
+          {/* Local rules & notes */}
+          <Text style={s.sectionTitle}>Local Rules & Notes</Text>
+          <View style={s.card}>
+            <TextInput
+              style={[s.input, s.notesInput]}
+              placeholder="Local rules, notes, dress code..."
+              placeholderTextColor={theme.text.muted}
+              keyboardAppearance={theme.isDark ? 'dark' : 'light'}
+              selectionColor={theme.accent.primary}
+              multiline
+              value={rules}
+              onChangeText={setRules}
+              onBlur={handleRulesSave}
+            />
+            {savingRules && (
+              <Text style={s.hint}>Saving…</Text>
+            )}
+          </View>
 
-            {/* Roster */}
-            <Text style={s.sectionTitle}>Roster</Text>
-            {rosterLoading ? (
-              <ActivityIndicator size="small" color={theme.accent.primary} style={{ marginVertical: 16 }} />
-            ) : rosterError ? (
-              <View style={s.card}>
-                <Text style={s.errorText}>Could not load roster.</Text>
-                <TouchableOpacity style={s.secondaryBtn} onPress={() => loadRoster(tournamentId)}>
-                  <Text style={s.secondaryBtnText}>Retry</Text>
+          {/* Roster */}
+          <Text style={s.sectionTitle}>Roster</Text>
+          {roster.length === 0 && (
+            <Text style={s.hint}>No players yet. Add the first below.</Text>
+          )}
+          {roster.map((row) => (
+            <View key={row.id} style={s.playerCard}>
+              <View style={s.playerRow}>
+                <View style={{ flex: 1 }}>
+                  <Text style={[s.playerName, row.withdrawn && s.withdrawnText]}>
+                    {row.display_name}
+                  </Text>
+                  <Text style={s.playerMeta}>
+                    Handicap {row.handicap}{row.withdrawn ? '  •  Withdrawn' : ''}
+                  </Text>
+                </View>
+              </View>
+              <View style={s.actionRow}>
+                <TouchableOpacity style={s.actionBtn} onPress={() => handleShowLink(row)}>
+                  <Feather name="link" size={13} color={theme.accent.primary} style={{ marginRight: 4 }} />
+                  <Text style={s.actionBtnText}>
+                    {openLinkId === row.id ? 'Hide link' : 'Show link'}
+                  </Text>
+                </TouchableOpacity>
+                <TouchableOpacity
+                  style={[s.actionBtn, pendingRowId === row.id && s.btnDisabled]}
+                  onPress={() => handleRegenerate(row.id)}
+                  disabled={pendingRowId === row.id}
+                >
+                  <Feather name="refresh-cw" size={13} color={theme.accent.primary} style={{ marginRight: 4 }} />
+                  <Text style={s.actionBtnText}>Regenerate</Text>
+                </TouchableOpacity>
+                <TouchableOpacity
+                  style={[s.actionBtn, pendingRowId === row.id && s.btnDisabled]}
+                  onPress={() => handleWithdrawToggle(row)}
+                  disabled={pendingRowId === row.id}
+                >
+                  <Feather
+                    name={row.withdrawn ? 'rotate-ccw' : 'user-x'}
+                    size={13}
+                    color={row.withdrawn ? theme.accent.primary : theme.destructive}
+                    style={{ marginRight: 4 }}
+                  />
+                  <Text style={[s.actionBtnText, !row.withdrawn && s.actionBtnTextDanger]}>
+                    {row.withdrawn ? 'Reinstate' : 'Withdraw'}
+                  </Text>
                 </TouchableOpacity>
               </View>
+              {openLinkId === row.id && (
+                <View style={s.linkBlock}>
+                  <View style={s.qrWrap}>
+                    <QRCode
+                      value={joinLink(row.magic_token)}
+                      size={132}
+                      backgroundColor="#ffffff"
+                      color="#000000"
+                    />
+                  </View>
+                  <Text style={s.linkText} selectable>{joinLink(row.magic_token)}</Text>
+                  <Text style={s.hint}>Link copied to clipboard.</Text>
+                </View>
+              )}
+            </View>
+          ))}
+
+          {/* Add player */}
+          <View style={s.card}>
+            <Text style={s.cardLabel}>Add player</Text>
+            <TextInput
+              style={s.input}
+              placeholder="Display name"
+              placeholderTextColor={theme.text.muted}
+              keyboardAppearance={theme.isDark ? 'dark' : 'light'}
+              selectionColor={theme.accent.primary}
+              value={newName}
+              onChangeText={setNewName}
+            />
+            <TextInput
+              style={s.input}
+              placeholder="Handicap"
+              placeholderTextColor={theme.text.muted}
+              keyboardType="numeric"
+              keyboardAppearance={theme.isDark ? 'dark' : 'light'}
+              selectionColor={theme.accent.primary}
+              value={newHandicap}
+              onChangeText={setNewHandicap}
+            />
+            <TouchableOpacity
+              style={[s.primaryBtn, (!newName.trim() || addingPlayer) && s.btnDisabled]}
+              onPress={handleAddPlayer}
+              disabled={!newName.trim() || addingPlayer}
+            >
+              {addingPlayer
+                ? <ActivityIndicator size="small" color={theme.text.inverse} />
+                : <Text style={s.primaryBtnText}>Add player</Text>}
+            </TouchableOpacity>
+          </View>
+
+          {/* Rounds */}
+          <Text style={s.sectionTitle}>Rounds</Text>
+          {rounds.length === 0 && (
+            <Text style={s.hint}>No rounds added yet.</Text>
+          )}
+          {rounds.map((round) => (
+            <TouchableOpacity
+              key={round.id}
+              style={s.roundCard}
+              onPress={() => navigation.navigate('PartyBoard', { tournamentId, roundId: round.id })}
+            >
+              <View style={{ flex: 1 }}>
+                <Text style={s.roundName}>Round {(round.round_index ?? 0) + 1}</Text>
+                <Text style={s.roundMeta}>
+                  {(round.format ?? 'stableford')}  •  {(round.status ?? 'setup')}
+                </Text>
+              </View>
+              <Feather name="chevron-right" size={18} color={theme.accent.primary} />
+            </TouchableOpacity>
+          ))}
+          <TouchableOpacity
+            style={[s.addRoundBtn, addingRound && s.btnDisabled]}
+            onPress={handleAddRound}
+            disabled={addingRound}
+          >
+            {addingRound ? (
+              <ActivityIndicator size="small" color={theme.accent.primary} />
             ) : (
               <>
-                {roster.length === 0 && (
-                  <Text style={s.hint}>No players yet. Add the first below.</Text>
-                )}
-                {roster.map((row) => (
-                  <View key={row.id} style={s.playerCard}>
-                    <View style={s.playerRow}>
-                      <View style={{ flex: 1 }}>
-                        <Text style={[s.playerName, row.withdrawn && s.withdrawnText]}>
-                          {row.display_name}
-                        </Text>
-                        <Text style={s.playerMeta}>
-                          Handicap {row.handicap}{row.withdrawn ? '  •  Withdrawn' : ''}
-                        </Text>
-                      </View>
-                    </View>
-                    <View style={s.actionRow}>
-                      <TouchableOpacity style={s.actionBtn} onPress={() => handleShowLink(row)}>
-                        <Feather name="link" size={13} color={theme.accent.primary} style={{ marginRight: 4 }} />
-                        <Text style={s.actionBtnText}>
-                          {openLinkId === row.id ? 'Hide link' : 'Show link'}
-                        </Text>
-                      </TouchableOpacity>
-                      <TouchableOpacity
-                        style={[s.actionBtn, pendingRowId === row.id && s.btnDisabled]}
-                        onPress={() => handleRegenerate(row.id)}
-                        disabled={pendingRowId === row.id}
-                      >
-                        <Feather name="refresh-cw" size={13} color={theme.accent.primary} style={{ marginRight: 4 }} />
-                        <Text style={s.actionBtnText}>Regenerate</Text>
-                      </TouchableOpacity>
-                      <TouchableOpacity
-                        style={[s.actionBtn, pendingRowId === row.id && s.btnDisabled]}
-                        onPress={() => handleWithdrawToggle(row)}
-                        disabled={pendingRowId === row.id}
-                      >
-                        <Feather
-                          name={row.withdrawn ? 'rotate-ccw' : 'user-x'}
-                          size={13}
-                          color={row.withdrawn ? theme.accent.primary : theme.destructive}
-                          style={{ marginRight: 4 }}
-                        />
-                        <Text style={[s.actionBtnText, !row.withdrawn && s.actionBtnTextDanger]}>
-                          {row.withdrawn ? 'Reinstate' : 'Withdraw'}
-                        </Text>
-                      </TouchableOpacity>
-                    </View>
-                    {openLinkId === row.id && (
-                      <View style={s.linkBlock}>
-                        <View style={s.qrWrap}>
-                          <QRCode
-                            value={joinLink(row.magic_token)}
-                            size={132}
-                            backgroundColor="#ffffff"
-                            color="#000000"
-                          />
-                        </View>
-                        <Text style={s.linkText} selectable>{joinLink(row.magic_token)}</Text>
-                        <Text style={s.hint}>Link copied to clipboard.</Text>
-                      </View>
-                    )}
-                  </View>
-                ))}
+                <Feather name="plus-circle" size={16} color={theme.accent.primary} style={{ marginRight: 8 }} />
+                <Text style={s.addRoundBtnText}>Add Round</Text>
               </>
             )}
-
-            {/* Add player */}
-            <View style={s.card}>
-              <Text style={s.cardLabel}>Add player</Text>
-              <TextInput
-                style={s.input}
-                placeholder="Display name"
-                placeholderTextColor={theme.text.muted}
-                keyboardAppearance={theme.isDark ? 'dark' : 'light'}
-                selectionColor={theme.accent.primary}
-                value={newName}
-                onChangeText={setNewName}
-              />
-              <TextInput
-                style={s.input}
-                placeholder="Handicap"
-                placeholderTextColor={theme.text.muted}
-                keyboardType="numeric"
-                keyboardAppearance={theme.isDark ? 'dark' : 'light'}
-                selectionColor={theme.accent.primary}
-                value={newHandicap}
-                onChangeText={setNewHandicap}
-              />
-              <TouchableOpacity
-                style={[s.primaryBtn, (!newName.trim() || addingPlayer) && s.btnDisabled]}
-                onPress={handleAddPlayer}
-                disabled={!newName.trim() || addingPlayer}
-              >
-                {addingPlayer
-                  ? <ActivityIndicator size="small" color={theme.text.inverse} />
-                  : <Text style={s.primaryBtnText}>Add player</Text>}
-              </TouchableOpacity>
-            </View>
-
-            {/* Rounds */}
-            <Text style={s.sectionTitle}>Rounds</Text>
-            <Text style={s.hint}>
-              {roundCount === 0
-                ? 'No rounds added yet.'
-                : `${roundCount} round${roundCount !== 1 ? 's' : ''} added.`}
-            </Text>
-            <TouchableOpacity
-              style={[s.addRoundBtn, addingRound && s.btnDisabled]}
-              onPress={handleAddRound}
-              disabled={addingRound}
-            >
-              {addingRound ? (
-                <ActivityIndicator size="small" color={theme.accent.primary} />
-              ) : (
-                <>
-                  <Feather name="plus-circle" size={16} color={theme.accent.primary} style={{ marginRight: 8 }} />
-                  <Text style={s.addRoundBtnText}>Add Round</Text>
-                </>
-              )}
-            </TouchableOpacity>
-          </>
-        )}
-      </ScrollView>
+          </TouchableOpacity>
+        </ScrollView>
+      )}
     </ScreenContainer>
   );
 }
@@ -427,13 +432,16 @@ const makeStyles = (theme) => StyleSheet.create({
   headerTitle: { fontFamily: 'PlusJakartaSans-Bold', fontSize: 17, color: theme.text.primary },
   container: { flex: 1 },
   content: { padding: 20, paddingTop: 4, paddingBottom: 40 },
+  centerState: {
+    flex: 1, alignItems: 'center', justifyContent: 'center', padding: 32,
+  },
   sectionTitle: {
     fontFamily: 'PlusJakartaSans-Bold', color: theme.accent.primary,
     fontSize: 11, marginTop: 24, marginBottom: 8,
     letterSpacing: 1.8, textTransform: 'uppercase',
   },
   hint: { fontFamily: 'PlusJakartaSans-Regular', color: theme.text.muted, fontSize: 12, marginBottom: 8 },
-  errorText: { fontFamily: 'PlusJakartaSans-Medium', color: theme.destructive, fontSize: 13, marginBottom: 10 },
+  errorText: { fontFamily: 'PlusJakartaSans-Medium', color: theme.destructive, fontSize: 13, marginBottom: 10, textAlign: 'center' },
   card: {
     backgroundColor: theme.bg.card, borderRadius: 16, borderWidth: 1,
     borderColor: theme.isDark ? theme.glass?.border : theme.border.default,
@@ -443,6 +451,9 @@ const makeStyles = (theme) => StyleSheet.create({
   cardLabel: {
     fontFamily: 'PlusJakartaSans-Bold', color: theme.text.primary,
     fontSize: 14, marginBottom: 10,
+  },
+  tournamentName: {
+    fontFamily: 'PlusJakartaSans-Bold', color: theme.text.primary, fontSize: 18,
   },
   input: {
     backgroundColor: theme.isDark ? theme.bg.secondary : theme.bg.card,
@@ -460,11 +471,9 @@ const makeStyles = (theme) => StyleSheet.create({
   btnDisabled: { opacity: 0.5 },
   secondaryBtn: {
     borderRadius: 10, borderWidth: 1, borderColor: theme.border.default,
-    padding: 10, alignItems: 'center',
+    paddingVertical: 10, paddingHorizontal: 24, alignItems: 'center',
   },
   secondaryBtnText: { fontFamily: 'PlusJakartaSans-Bold', color: theme.accent.primary, fontSize: 13 },
-  createdRow: { flexDirection: 'row', alignItems: 'center', marginTop: 4 },
-  createdText: { fontFamily: 'PlusJakartaSans-SemiBold', color: theme.text.secondary, fontSize: 13 },
   playerCard: {
     backgroundColor: theme.bg.card, borderRadius: 16, borderWidth: 1,
     borderColor: theme.isDark ? theme.glass?.border : theme.border.default,
@@ -494,6 +503,18 @@ const makeStyles = (theme) => StyleSheet.create({
   linkText: {
     fontFamily: 'PlusJakartaSans-Medium', color: theme.text.secondary,
     fontSize: 12, textAlign: 'center', marginBottom: 4,
+  },
+  roundCard: {
+    flexDirection: 'row', alignItems: 'center',
+    backgroundColor: theme.bg.card, borderRadius: 16, borderWidth: 1,
+    borderColor: theme.isDark ? theme.glass?.border : theme.border.default,
+    padding: 16, marginBottom: 8,
+    ...(theme.isDark ? {} : theme.shadow.card),
+  },
+  roundName: { fontFamily: 'PlusJakartaSans-SemiBold', color: theme.text.primary, fontSize: 15 },
+  roundMeta: {
+    fontFamily: 'PlusJakartaSans-Regular', color: theme.text.muted,
+    fontSize: 12, marginTop: 2, textTransform: 'capitalize',
   },
   addRoundBtn: {
     borderRadius: 14, borderWidth: 1,
