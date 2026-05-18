@@ -8,10 +8,9 @@ import { Feather } from '@expo/vector-icons';
 
 import { useTheme } from '../theme/ThemeContext';
 import { updateCourseFromEditor } from '../store/libraryStore';
-import { calcPlayingHandicap } from '../store/tournamentStore';
+import { calcPlayingHandicap, lastTeeForPlayerOnCourse } from '../store/tournamentStore';
 import TeesEditor from '../components/TeesEditor';
 import { middleTee } from '../store/tees';
-import { lastTeeForPlayerOnCourse } from '../store/tournamentStore';
 
 function defaultHoles() {
   return Array.from({ length: 18 }, (_, i) => ({
@@ -114,12 +113,12 @@ export default function CourseEditorScreen({ navigation, route }) {
   }, [holes, tees, playerHandicaps, manualHandicaps, playerTees]);
 
   // Recompute non-manual handicaps from each player's current tee.
-  function recomputeAuto(nextPlayerTees) {
+  function recomputeAuto(nextPlayerTees, manual) {
     const par = holes.reduce((sum, h) => sum + (h.par || 0), 0);
     setPlayerHandicaps((prev) => {
       const next = { ...prev };
       players.forEach((p) => {
-        if (manualHandicaps[p.id]) return;
+        if (manual[p.id]) return;
         const tee = nextPlayerTees[p.id];
         next[p.id] = String(calcPlayingHandicap(p.handicap, tee?.slope, tee?.rating, par));
       });
@@ -130,11 +129,9 @@ export default function CourseEditorScreen({ navigation, route }) {
   // Assign a tee to one player and refresh their auto handicap.
   function setPlayerTee(playerId, tee) {
     const snapshot = { label: tee.label, slope: tee.slope, rating: tee.rating };
-    setPlayerTees((prev) => {
-      const next = { ...prev, [playerId]: snapshot };
-      recomputeAuto(next);
-      return next;
-    });
+    const next = { ...playerTees, [playerId]: snapshot };
+    setPlayerTees(next);
+    recomputeAuto(next, manualHandicaps);
   }
 
   // Explicit "Reset all to auto": clear manual overrides, recompute from tees.
@@ -417,7 +414,7 @@ const makeStyles = (theme) => StyleSheet.create({
   },
   hcpHint: { fontFamily: 'PlusJakartaSans-Regular', color: theme.text.secondary, fontSize: 12, marginBottom: 10 },
   hcpRow: { flexDirection: 'row', alignItems: 'flex-start', paddingVertical: 8 },
-  hcpName: { flex: 1, fontFamily: 'PlusJakartaSans-SemiBold', color: theme.text.primary, fontSize: 15 },
+  hcpName: { fontFamily: 'PlusJakartaSans-SemiBold', color: theme.text.primary, fontSize: 15 },
   hcpIndex: { fontFamily: 'PlusJakartaSans-Regular', color: theme.text.secondary, fontSize: 13, marginRight: 8 },
   hcpInput: {
     backgroundColor: theme.isDark ? theme.bg.secondary : theme.bg.card,
