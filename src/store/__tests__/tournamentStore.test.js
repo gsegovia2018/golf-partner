@@ -1,4 +1,4 @@
-import { rowToTournament } from '../tournamentStore';
+import { rowToTournament, reTeeRound } from '../tournamentStore';
 
 describe('rowToTournament', () => {
   test('official tournament: identity comes from columns, content defaults empty', () => {
@@ -44,5 +44,33 @@ describe('rowToTournament', () => {
     expect(t.players).toEqual([{ id: 'p1', name: 'Ann' }]);
     expect(t.rounds).toEqual([{ courseName: 'Pebble' }]);
     expect(t._role).toBe('viewer');
+  });
+});
+
+describe('reTeeRound', () => {
+  const newTees = [
+    { label: 'Black',  slope: 140, rating: 73.5 },
+    { label: 'White',  slope: 130, rating: 71.0 }, // White edited: was 132/71.8
+  ];
+
+  test('refreshes a player tee snapshot from the matching new tee by label', () => {
+    const round = {
+      playerTees: { p1: { label: 'White', slope: 132, rating: 71.8 } },
+    };
+    const out = reTeeRound(round, newTees);
+    expect(out.playerTees.p1).toEqual({ label: 'White', slope: 130, rating: 71.0 });
+  });
+
+  test('retains the existing snapshot when no new tee matches the label', () => {
+    const round = {
+      playerTees: { p1: { label: 'Yellow', slope: 118, rating: 68.0 } },
+    };
+    const out = reTeeRound(round, newTees);
+    expect(out.playerTees.p1).toEqual({ label: 'Yellow', slope: 118, rating: 68.0 });
+  });
+
+  test('is a no-op when the round has no playerTees', () => {
+    const round = { scores: {} };
+    expect(reTeeRound(round, newTees)).toEqual({ scores: {} });
   });
 });

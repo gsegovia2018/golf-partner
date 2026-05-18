@@ -3,6 +3,7 @@ import { supabase } from '../lib/supabase';
 import { tournamentsIndex } from './tournamentsIndex';
 import { mergeTournaments } from './merge';
 import { isOnline } from '../lib/connectivity';
+import { teeByLabel } from './tees';
 // Pure scoring & handicap math lives in ./scoring. Imported here for this
 // module's own use and re-exported below so existing call sites that do
 // `import { calcStablefordPoints } from '../store/tournamentStore'` keep working.
@@ -498,10 +499,27 @@ export async function propagatePlayerToTournaments(playerId, { name, handicap })
   return updatedIds;
 }
 
-// Push a course library edit (slope/rating/holes) into every tournament round
-// that references this courseId. Holes are deep-copied per round. Non-manual
-// playing handicaps are re-derived from the new slope + course rating.
-export async function propagateCourseToTournaments(courseId, { slope, rating, holes }) {
+// Re-resolve every per-player tee snapshot in a round against a fresh tee
+// list, matching by label. A player whose tee label still exists gets its
+// slope/rating refreshed; a player whose label is gone keeps the old
+// snapshot. Pure — no IO.
+export function reTeeRound(round, tees) {
+  if (!round?.playerTees) return round;
+  const next = {};
+  for (const [playerId, snapshot] of Object.entries(round.playerTees)) {
+    const match = teeByLabel(tees, snapshot?.label);
+    next[playerId] = match
+      ? { label: match.label, slope: match.slope, rating: match.rating }
+      : snapshot;
+  }
+  return { ...round, playerTees: next };
+}
+
+// Push a course library edit (holes + tees) into every tournament round that
+// references this courseId. Holes and tees are deep-copied per round. Each
+// round's per-player tee snapshots are re-resolved by label, then non-manual
+// playing handicaps are re-derived.
+export async function propagateCourseToTournaments(courseId, { holes, tees }) {
   if (!courseId) return [];
   const tournaments = await loadAllTournaments();
   const updatedIds = [];
@@ -510,11 +528,11 @@ export async function propagateCourseToTournaments(courseId, { slope, rating, ho
     const nextRounds = t.rounds.map((round) => {
       if (round.courseId !== courseId) return round;
       changed = true;
+      const reTeed = reTeeRound(round, tees);
       const nextRound = {
-        ...round,
+        ...reTeed,
         holes: holes.map((h) => ({ ...h })),
-        slope: slope ?? null,
-        courseRating: rating ?? null,
+        tees: tees.map((tee) => ({ ...tee })),
       };
       return recomputeRoundPlayingHandicaps(nextRound, t.players);
     });
@@ -526,6 +544,25 @@ export async function propagateCourseToTournaments(courseId, { slope, rating, ho
   }
   if (updatedIds.length > 0) _emitChange();
   return updatedIds;
+}
+
+// Most recent prior round on `courseId` that recorded a tee for `playerId`.
+// Returns the stored { label, slope, rating } snapshot, or null. Used to
+// pre-fill a player's tee when setting up a new round on the same course.
+export async function lastTeeForPlayerOnCourse(courseId, playerId) {
+  if (!courseId || !playerId) return null;
+  const tournaments = await loadAllTournaments();
+  let best = null; // { ts, tee }
+  for (const t of tournaments) {
+    const ts = t.createdAt ?? 0;
+    for (const round of t.rounds ?? []) {
+      if (round.courseId !== courseId) continue;
+      const tee = round.playerTees?.[playerId];
+      if (!tee) continue;
+      if (!best || ts >= best.ts) best = { ts, tee };
+    }
+  }
+  return best ? { label: best.tee.label, slope: best.tee.slope, rating: best.tee.rating } : null;
 }
 
 // Build the per-round patches for adding `player` to an in-progress
