@@ -1,6 +1,6 @@
 import React, { useEffect } from 'react';
 import { View, ActivityIndicator, Text, TouchableOpacity, StyleSheet } from 'react-native';
-import { NavigationContainer } from '@react-navigation/native';
+import { NavigationContainer, createNavigationContainerRef } from '@react-navigation/native';
 import { createStackNavigator, CardStyleInterpolators } from '@react-navigation/stack';
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
 import { SafeAreaProvider, initialWindowMetrics, useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -60,9 +60,16 @@ import MembersScreen from './src/screens/MembersScreen';
 import FinishedScreen from './src/screens/FinishedScreen';
 import { startUploadWorker } from './src/lib/uploadWorker';
 import * as ScreenOrientation from 'expo-screen-orientation';
+import * as Notifications from 'expo-notifications';
+import { registerPushToken, configureNotificationHandler } from './src/lib/pushNotifications';
 
 const Stack = createStackNavigator();
 const Tab = createBottomTabNavigator();
+
+const navigationRef = createNavigationContainerRef();
+
+// Set the foreground notification handler once, at module load.
+configureNotificationHandler();
 
 const TAB_META = {
   Feed: { icon: 'rss', label: 'Feed' },
@@ -228,6 +235,20 @@ function AppNavigator() {
   const { theme, mode } = useTheme();
   const { session, loading } = useAuth();
 
+  useEffect(() => {
+    if (session) registerPushToken();
+  }, [session]);
+
+  useEffect(() => {
+    const sub = Notifications.addNotificationResponseReceivedListener((response) => {
+      const screen = response?.notification?.request?.content?.data?.screen;
+      if (screen && navigationRef.isReady()) {
+        navigationRef.navigate(screen);
+      }
+    });
+    return () => sub.remove();
+  }, []);
+
   if (loading) {
     return (
       <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: '#006747' }}>
@@ -329,7 +350,7 @@ export default function App() {
       <ErrorBoundary>
         <ThemeProvider>
           <AuthProvider>
-            <NavigationContainer linking={linking}>
+            <NavigationContainer linking={linking} ref={navigationRef}>
               <AppNavigator />
             </NavigationContainer>
           </AuthProvider>
