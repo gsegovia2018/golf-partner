@@ -42,7 +42,7 @@ export default function PlayerPickerScreen({ navigation, route }) {
       let cancelled = false;
       setLoading(true);
       setLoadError(null);
-      // fetchPlayers is fatal (no library to pick from); recent-use data is
+      // fetchMyPlayers is fatal (no library to pick from); recent-use data is
       // best-effort and degrades silently to alphabetical sort.
       fetchMyPlayers()
         .then(async (list) => {
