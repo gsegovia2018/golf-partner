@@ -102,6 +102,7 @@ export default function HomeScreen({ navigation, route }) {
   // List-view overflow menu — surfaces Friends / Stats / Profile, which are
   // otherwise buried (Friends had no entry point at all on the list view).
   const [showListMenu, setShowListMenu] = useState(false);
+  const [showTournamentKindChoice, setShowTournamentKindChoice] = useState(false);
   const [showRoundEdit, setShowRoundEdit] = useState(false);
   const [showResetHistory, setShowResetHistory] = useState(false);
   const [undoSnack, setUndoSnack] = useState(null); // { roundIndex, snapshot, at }
@@ -714,7 +715,7 @@ export default function HomeScreen({ navigation, route }) {
           </TouchableOpacity>
           <TouchableOpacity
             style={s.startTile}
-            onPress={() => navigation.navigate('Setup', { kind: 'tournament' })}
+            onPress={() => setShowTournamentKindChoice(true)}
             activeOpacity={0.88}
           >
             <View style={s.startTileIconWrap}>
@@ -928,6 +929,46 @@ export default function HomeScreen({ navigation, route }) {
           </Pressable>
         </Modal>
 
+        <Modal
+          visible={showTournamentKindChoice}
+          transparent
+          animationType="slide"
+          onRequestClose={() => setShowTournamentKindChoice(false)}
+        >
+          <Pressable style={s.modalBackdrop} onPress={() => setShowTournamentKindChoice(false)}>
+            <Pressable style={s.modalSheet} onPress={() => {}}>
+              <View style={s.modalHandle} />
+              <Text style={s.modalTitle}>New Tournament</Text>
+
+              <TouchableOpacity
+                style={s.menuItem}
+                onPress={() => { setShowTournamentKindChoice(false); navigation.navigate('Setup', { kind: 'tournament' }); }}
+                activeOpacity={0.7}
+              >
+                <Feather name="users" size={18} color={theme.accent.primary} />
+                <View style={{ flex: 1 }}>
+                  <Text style={s.menuItemText}>Casual tournament</Text>
+                  <Text style={s.modalSubtle}>Friends scoring a round together</Text>
+                </View>
+                <Feather name="chevron-right" size={16} color={theme.text.muted} />
+              </TouchableOpacity>
+
+              <TouchableOpacity
+                style={[s.menuItem, { borderBottomWidth: 0 }]}
+                onPress={() => { setShowTournamentKindChoice(false); navigation.navigate('OfficialCreate'); }}
+                activeOpacity={0.7}
+              >
+                <Feather name="award" size={18} color={theme.accent.primary} />
+                <View style={{ flex: 1 }}>
+                  <Text style={s.menuItemText}>Official tournament</Text>
+                  <Text style={s.modalSubtle}>Invite players by link; double-entered, verified scoring</Text>
+                </View>
+                <Feather name="chevron-right" size={16} color={theme.text.muted} />
+              </TouchableOpacity>
+            </Pressable>
+          </Pressable>
+        </Modal>
+
         <ConfirmModal state={confirmState} onResult={resolveConfirm} theme={theme} s={s} />
       </ScreenContainer>
     );
@@ -952,7 +993,7 @@ export default function HomeScreen({ navigation, route }) {
           </TouchableOpacity>
           <TouchableOpacity
             style={[s.secondaryBtn, s.emptyStateBtn]}
-            onPress={() => navigation.navigate('Setup', { kind: 'tournament' })}
+            onPress={() => setShowTournamentKindChoice(true)}
             activeOpacity={0.8}
           >
             <Feather name="award" size={16} color={theme.accent.primary} />
@@ -967,6 +1008,46 @@ export default function HomeScreen({ navigation, route }) {
             <Text style={s.secondaryBtnText}>Go to Home</Text>
           </TouchableOpacity>
         </View>
+
+        <Modal
+          visible={showTournamentKindChoice}
+          transparent
+          animationType="slide"
+          onRequestClose={() => setShowTournamentKindChoice(false)}
+        >
+          <Pressable style={s.modalBackdrop} onPress={() => setShowTournamentKindChoice(false)}>
+            <Pressable style={s.modalSheet} onPress={() => {}}>
+              <View style={s.modalHandle} />
+              <Text style={s.modalTitle}>New Tournament</Text>
+
+              <TouchableOpacity
+                style={s.menuItem}
+                onPress={() => { setShowTournamentKindChoice(false); navigation.navigate('Setup', { kind: 'tournament' }); }}
+                activeOpacity={0.7}
+              >
+                <Feather name="users" size={18} color={theme.accent.primary} />
+                <View style={{ flex: 1 }}>
+                  <Text style={s.menuItemText}>Casual tournament</Text>
+                  <Text style={s.modalSubtle}>Friends scoring a round together</Text>
+                </View>
+                <Feather name="chevron-right" size={16} color={theme.text.muted} />
+              </TouchableOpacity>
+
+              <TouchableOpacity
+                style={[s.menuItem, { borderBottomWidth: 0 }]}
+                onPress={() => { setShowTournamentKindChoice(false); navigation.navigate('OfficialCreate'); }}
+                activeOpacity={0.7}
+              >
+                <Feather name="award" size={18} color={theme.accent.primary} />
+                <View style={{ flex: 1 }}>
+                  <Text style={s.menuItemText}>Official tournament</Text>
+                  <Text style={s.modalSubtle}>Invite players by link; double-entered, verified scoring</Text>
+                </View>
+                <Feather name="chevron-right" size={16} color={theme.text.muted} />
+              </TouchableOpacity>
+            </Pressable>
+          </Pressable>
+        </Modal>
       </ScreenContainer>
     );
   }
