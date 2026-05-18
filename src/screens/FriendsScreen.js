@@ -14,7 +14,6 @@ import {
   sendRequest, acceptRequest, declineRequest, removeFriend,
   getFriendProfile, isAbortError,
 } from '../store/friendStore';
-import { markAllRead } from '../store/notificationStore';
 
 const alert = (title, msg) => {
   if (Platform.OS === 'web') window.alert(msg ?? title);
@@ -83,10 +82,6 @@ export default function FriendsScreen({ navigation }) {
       setLoading(false);
       setRefreshing(false);
     }
-    // Opening the Friends screen is the user seeing their requests — clear the
-    // notification badge. Best-effort: a failure just leaves the badge until
-    // the next visit.
-    markAllRead().catch(() => {});
   }, []);
 
   useFocusEffect(useCallback(() => { reload(); }, [reload]));
