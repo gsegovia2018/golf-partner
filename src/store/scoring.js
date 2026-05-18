@@ -58,9 +58,10 @@ export function deriveRoundPlayingHandicap(handicap, round, playerId) {
 }
 
 // Ensure every current player has an entry in round.playerHandicaps. Missing
-// entries are backfilled from the player's base index applied to round.slope.
-// For legacy rounds lacking manualHandicaps, infer manual overrides by
-// comparing stored value to the slope-derived value.
+// entries are backfilled from the player's base index applied to their tee
+// (round.playerTees), or round.slope for legacy rounds. For legacy rounds
+// lacking manualHandicaps, infer manual overrides by comparing the stored
+// value to the slope-derived value.
 export function normalizeRoundHandicaps(round, players) {
   const playerHandicaps = { ...(round.playerHandicaps ?? {}) };
   const manualHandicaps = { ...(round.manualHandicaps ?? {}) };
