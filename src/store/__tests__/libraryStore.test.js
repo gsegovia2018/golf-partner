@@ -69,6 +69,12 @@ describe('fetchMyPlayers', () => {
     expect(result).toEqual([]);
     expect(mockState.calls.table).toBeUndefined();
   });
+
+  test('scopes to just the current user when they have no friends', async () => {
+    listFriends.mockResolvedValue([]);
+    await fetchMyPlayers();
+    expect(mockState.calls.or).toBe('created_by.eq.u1,user_id.in.(u1)');
+  });
 });
 
 describe('fetchMyGuestPlayers', () => {
@@ -76,6 +82,8 @@ describe('fetchMyGuestPlayers', () => {
     mockState.user = { id: 'u1' };
     mockState.rows = [{ id: 'g1', name: 'Guest', user_id: null }];
     mockState.calls = {};
+    listFriends.mockReset();
+    getCachedFriends.mockReset();
   });
 
   test('scopes to created_by = me AND user_id IS NULL', async () => {

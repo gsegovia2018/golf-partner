@@ -30,7 +30,9 @@ async function myFriendIds() {
 }
 
 // Players the current user may ADD to a game: their own guest players
-// (created_by = me) plus every friend's app-user row. Signed-out → [].
+// (created_by = me), their own app-user row, and every friend's app-user
+// row. Including the current user themselves is intentional — the picker
+// lets you add yourself to a game. Signed-out → [].
 export async function fetchMyPlayers() {
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) return [];
