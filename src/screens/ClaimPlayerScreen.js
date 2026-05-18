@@ -7,7 +7,9 @@ import ScreenContainer from '../components/ScreenContainer';
 import { Feather } from '@expo/vector-icons';
 import { v4 as uuidv4 } from 'uuid';
 import { useTheme } from '../theme/ThemeContext';
-import { getTournament, addPlayerRoundPatches } from '../store/tournamentStore';
+import {
+  getTournament, addPlayerRoundPatches, claimTournamentPlayer,
+} from '../store/tournamentStore';
 import { loadProfile } from '../store/profileStore';
 import { mutate } from '../store/mutate';
 
@@ -60,14 +62,27 @@ export default function ClaimPlayerScreen({ navigation, route }) {
     setSaving(true);
     setClaimingId(player.id);
     try {
-      await mutate(tournament, {
-        type: 'tournament.claimPlayer',
-        playerId: player.id,
-        userId: profile.userId,
-      });
+      // Atomic, race-safe claim — the RPC sets data.players[].user_id only
+      // if the slot is still open (migration 20260518000004).
+      await claimTournamentPlayer(tournament.id, player.id);
+      // Re-pull so the local copy reflects the server-side claim, then point
+      // "me" at the claimed slot for this device.
+      const fresh = await getTournament(tournament.id);
+      await mutate(fresh, { type: 'tournament.setMe', meId: player.id });
       done();
     } catch (err) {
-      Alert.alert('Error', err.message ?? 'Could not link you to that player');
+      if (err?.message === 'SLOT_TAKEN') {
+        // Someone else took it first — refresh the roster so the row
+        // re-renders as "Taken".
+        try {
+          const fresh = await getTournament(tournament.id);
+          setTournament(fresh);
+        } catch (_) { /* keep the stale roster; the alert is enough */ }
+        Alert.alert('Already taken',
+          'Someone else just claimed that player. Pick another.');
+      } else {
+        Alert.alert('Error', err.message ?? 'Could not link you to that player');
+      }
       setSaving(false);
       setClaimingId(null);
     }
