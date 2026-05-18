@@ -23,5 +23,10 @@ export const SAMPLE_COURSES = [
       { number: 17, par: 4, strokeIndex: 10 },
       { number: 18, par: 4, strokeIndex: 14 },
     ],
+    tees: [
+      { label: 'White',  rating: 71.8, slope: 132, sortOrder: 0 },
+      { label: 'Yellow', rating: 69.4, slope: 125, sortOrder: 1 },
+      { label: 'Red',    rating: 73.0, slope: 128, sortOrder: 2 },
+    ],
   },
 ];
