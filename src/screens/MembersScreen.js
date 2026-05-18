@@ -12,7 +12,7 @@ import { useAuth } from '../context/AuthContext';
 import { supabase } from '../lib/supabase';
 import {
   loadTournamentMembers, removeTournamentMember, generateInviteCode,
-  getTournament, releaseTournamentPlayer, buildJoinLink,
+  getTournament, releaseTournamentPlayer, buildJoinLink, findClaimedSlot,
 } from '../store/tournamentStore';
 
 // Promote/demote a member between editor and viewer roles. Kept local to this
@@ -239,7 +239,7 @@ export default function MembersScreen({ navigation, route }) {
             const joined = formatDate(row.joinedAt);
             const isSelf = row.userId === user?.id;
             const canRemove = iAmOwner && row.role !== 'owner' && !isSelf;
-            const claimedSlot = players.find((p) => p.user_id === row.userId) ?? null;
+            const claimedSlot = findClaimedSlot(players, row.userId);
             return (
               <View key={row.userId} style={s.row}>
                 <View style={[s.avatar, { backgroundColor: color }]}>
