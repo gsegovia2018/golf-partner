@@ -105,3 +105,68 @@ describe('buildRoundReportCard — meta & headline', () => {
     expect(card.headline.perHole).toBe(2);
   });
 });
+
+describe('buildRoundReportCard — callouts', () => {
+  // A round that is par everywhere EXCEPT par-3 holes are birdied and
+  // SI 1-6 holes are double-bogeyed, against a flat 2-pt/hole history.
+  function scoresWithStandoutAndWeak(holes) {
+    const o = {};
+    holes.forEach((h) => {
+      if (h.par === 3) o[h.number] = h.par - 1;        // birdie → 3 pts
+      else if (h.strokeIndex <= 6) o[h.number] = h.par + 2; // double → 0 pts
+      else o[h.number] = h.par;                        // par → 2 pts
+    });
+    return o;
+  }
+
+  test('bright spots and cost cells rank by delta vs career average', () => {
+    // 18 holes: holes 1-3 are par 3, rest par 4. SI = hole number.
+    const holes = Array.from({ length: 18 }, (_, i) => ({
+      number: i + 1, par: i < 3 ? 3 : 4, strokeIndex: i + 1,
+    }));
+    const flat = {};
+    holes.forEach((h) => { flat[h.number] = h.par; }); // 2 pts everywhere
+    const rounds = [
+      mkMyRound({ key: 'h1', holes, scores: flat }),
+      mkMyRound({ key: 'h2', holes, scores: flat }),
+      mkMyRound({ key: 'target', holes, scores: scoresWithStandoutAndWeak(holes) }),
+    ];
+    const card = buildRoundReportCard(rounds, 'target');
+    const brightLabels = card.callouts.bright.map((c) => c.label);
+    const costLabels = card.callouts.cost.map((c) => c.label);
+    expect(brightLabels).toContain('Par 3s');
+    expect(costLabels).toContain('Hard holes (SI 1-6)');
+    expect(card.callouts.bright.length).toBeLessThanOrEqual(2);
+    expect(card.callouts.cost.length).toBeLessThanOrEqual(2);
+  });
+
+  test('a cell with fewer than 3 holes this round is not callout-eligible', () => {
+    // Only ONE par-3 hole — Par 3s has a 1-hole sample and must be excluded
+    // even though it is birdied (a large delta).
+    const holes = Array.from({ length: 18 }, (_, i) => ({
+      number: i + 1, par: i === 0 ? 3 : 4, strokeIndex: i + 1,
+    }));
+    const flat = {};
+    holes.forEach((h) => { flat[h.number] = h.par; });
+    const target = { ...flat, 1: 2 }; // birdie the single par 3
+    const rounds = [
+      mkMyRound({ key: 'h1', holes, scores: flat }),
+      mkMyRound({ key: 'target', holes, scores: target }),
+    ];
+    const card = buildRoundReportCard(rounds, 'target');
+    expect(card.callouts.bright.map((c) => c.label)).not.toContain('Par 3s');
+  });
+
+  test('no history → callouts rank on delta vs the 2.0 benchmark', () => {
+    const holes = Array.from({ length: 18 }, (_, i) => ({
+      number: i + 1, par: i < 3 ? 3 : 4, strokeIndex: i + 1,
+    }));
+    const rounds = [mkMyRound({
+      key: 'solo', holes, scores: scoresWithStandoutAndWeak(holes),
+    })];
+    const card = buildRoundReportCard(rounds, 'solo');
+    expect(card.hasHistory).toBe(false);
+    expect(card.callouts.bright.map((c) => c.label)).toContain('Par 3s');
+    expect(card.callouts.cost.map((c) => c.label)).toContain('Hard holes (SI 1-6)');
+  });
+});
