@@ -549,6 +549,9 @@ export async function propagateCourseToTournaments(courseId, { holes, tees }) {
 // Most recent prior round on `courseId` that recorded a tee for `playerId`.
 // Returns the stored { label, slope, rating } snapshot, or null. Used to
 // pre-fill a player's tee when setting up a new round on the same course.
+// Recency is keyed on the tournament's createdAt, not a per-round date, so
+// when one tournament has multiple same-course rounds the pick among them is
+// arbitrary — acceptable for a pre-fill default the user can still change.
 export async function lastTeeForPlayerOnCourse(courseId, playerId) {
   if (!courseId || !playerId) return null;
   const tournaments = await loadAllTournaments();
