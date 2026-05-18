@@ -1,6 +1,6 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import {
-  View, Text, TextInput, TouchableOpacity,
+  View, Text, TextInput, TouchableOpacity, Image,
   StyleSheet, ScrollView, Alert, Platform,
 } from 'react-native';
 import ScreenContainer from '../components/ScreenContainer';
@@ -315,43 +315,51 @@ export default function SetupScreen({ navigation, route }) {
 
   // ---- Step bodies -------------------------------------------------------
 
-  const renderPlayersStep = () => (
-    <>
-      <Text style={s.stepOverline}>PLAYERS</Text>
-      <Text style={s.stepPrompt}>Who's playing?</Text>
-      <Text style={s.stepSubtitle}>Add 1–4 golfers from your library.</Text>
-      {players.length === 0 && (
-        <View style={s.emptyHint}>
-          <Feather name="users" size={16} color={theme.text.muted} style={{ marginRight: 8 }} />
-          <Text style={s.emptyHintText}>
-            Add at least 1 player to {isGame ? 'start the game' : 'start the tournament'}.
-          </Text>
+  const renderPlayersStep = () => {
+    const emptySlots = Math.max(0, 4 - players.length);
+    return (
+      <>
+        <Text style={s.stepOverline}>PLAYERS</Text>
+        <Text style={s.stepPrompt}>Who's playing?</Text>
+        <Text style={s.stepSubtitle}>Add 1–4 golfers from your library.</Text>
+        <View style={s.slotGrid}>
+          {players.map((p) => (
+            <View key={p.id} style={s.slotFilled}>
+              <TouchableOpacity
+                style={s.slotRemove}
+                onPress={() => removePlayer(p.id)}
+                hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+              >
+                <Feather name="x" size={13} color={theme.destructive} />
+              </TouchableOpacity>
+              <View style={s.slotAvatar}>
+                {p.avatar_url
+                  ? <Image source={{ uri: p.avatar_url }} style={s.slotAvatarImg} />
+                  : <Text style={s.slotAvatarText}>{(p.name ?? '?').slice(0, 2).toUpperCase()}</Text>}
+              </View>
+              <Text style={s.slotName} numberOfLines={1}>{p.name}</Text>
+              <Text style={s.slotHcp}>HCP {p.handicap}</Text>
+            </View>
+          ))}
+          {Array.from({ length: emptySlots }).map((_, i) => (
+            <TouchableOpacity
+              key={`empty-${i}`}
+              style={s.slotEmpty}
+              activeOpacity={0.7}
+              onPress={() => navigation.navigate('PlayerPicker', {
+                alreadySelectedIds: players.map((pl) => pl.id),
+              })}
+            >
+              <View style={s.slotPlus}>
+                <Feather name="plus" size={16} color={theme.accent.primary} />
+              </View>
+              <Text style={s.slotEmptyLabel}>ADD PLAYER</Text>
+            </TouchableOpacity>
+          ))}
         </View>
-      )}
-      {players.map((p) => (
-        <View key={p.id} style={s.playerCard}>
-          <View style={s.playerInfo}>
-            <Text style={s.playerName}>{p.name}</Text>
-            <Text style={s.playerHcp}>HCP {p.handicap}</Text>
-          </View>
-          <TouchableOpacity onPress={() => removePlayer(p.id)} style={s.removeBtn}>
-            <Feather name="x" size={16} color={theme.destructive} />
-          </TouchableOpacity>
-        </View>
-      ))}
-      {players.length < 4 && (
-        <TouchableOpacity
-          style={s.pickBtn}
-          onPress={() => navigation.navigate('PlayerPicker', {
-            alreadySelectedIds: players.map((p) => p.id),
-          })}
-        >
-          <Feather name="plus" size={16} color={theme.accent.primary} style={{ marginRight: 6 }} />
-          <Text style={s.pickBtnText}>Add Player from Library</Text>
-        </TouchableOpacity>
-      )}
-    </>
-  );
+      </>
+    );
+  };
 
   const renderCourseStep = () => (
     <>
@@ -627,41 +635,96 @@ function makeStyles(theme) {
       fontFamily: 'PlusJakartaSans-Medium',
     },
 
-    /* Player Cards */
-    playerCard: {
+    /* Players slot grid */
+    slotGrid: {
       flexDirection: 'row',
-      alignItems: 'center',
+      flexWrap: 'wrap',
+      justifyContent: 'space-between',
+    },
+    slotFilled: {
+      width: '48%',
+      marginBottom: 10,
+      minHeight: 116,
       backgroundColor: theme.bg.card,
       borderRadius: 16,
       borderWidth: 1,
       borderColor: theme.isDark ? theme.glass?.border : theme.border.default,
-      padding: 16,
-      marginBottom: 8,
+      padding: 14,
+      alignItems: 'center',
+      justifyContent: 'center',
       ...(theme.isDark ? {} : theme.shadow.card),
     },
-    playerInfo: {
-      flex: 1,
-    },
-    playerName: {
-      fontFamily: 'PlusJakartaSans-Bold',
-      color: theme.text.primary,
-      fontSize: 16,
-    },
-    playerHcp: {
-      fontFamily: 'PlusJakartaSans-Medium',
-      color: theme.text.secondary,
-      fontSize: 12,
-      marginTop: 3,
-    },
-    removeBtn: {
-      width: 32,
-      height: 32,
-      borderRadius: 10,
+    slotRemove: {
+      position: 'absolute',
+      top: 6,
+      right: 6,
+      width: 26,
+      height: 26,
+      borderRadius: 13,
       backgroundColor: theme.bg.secondary,
       borderWidth: 1,
       borderColor: theme.border.default,
       alignItems: 'center',
       justifyContent: 'center',
+      zIndex: 2,
+    },
+    slotAvatar: {
+      width: 44,
+      height: 44,
+      borderRadius: 22,
+      backgroundColor: theme.isDark ? theme.bg.secondary : '#006747',
+      alignItems: 'center',
+      justifyContent: 'center',
+      overflow: 'hidden',
+      marginBottom: 8,
+    },
+    slotAvatarImg: { width: '100%', height: '100%' },
+    slotAvatarText: {
+      fontFamily: 'PlusJakartaSans-ExtraBold',
+      color: '#ffd700',
+      fontSize: 15,
+    },
+    slotName: {
+      fontFamily: 'PlusJakartaSans-Bold',
+      color: theme.text.primary,
+      fontSize: 14,
+      maxWidth: '100%',
+    },
+    slotHcp: {
+      fontFamily: 'PlusJakartaSans-Medium',
+      color: theme.text.secondary,
+      fontSize: 12,
+      marginTop: 3,
+    },
+    slotEmpty: {
+      width: '48%',
+      marginBottom: 10,
+      minHeight: 116,
+      borderRadius: 16,
+      borderWidth: 1.5,
+      borderColor: theme.accent.primary + '40',
+      borderStyle: 'dashed',
+      backgroundColor: theme.accent.light,
+      alignItems: 'center',
+      justifyContent: 'center',
+      padding: 14,
+    },
+    slotPlus: {
+      width: 36,
+      height: 36,
+      borderRadius: 18,
+      borderWidth: 1.5,
+      borderColor: theme.accent.primary,
+      borderStyle: 'dashed',
+      alignItems: 'center',
+      justifyContent: 'center',
+      marginBottom: 8,
+    },
+    slotEmptyLabel: {
+      fontFamily: 'PlusJakartaSans-Bold',
+      color: theme.accent.primary,
+      fontSize: 11,
+      letterSpacing: 0.8,
     },
 
     /* Pick / Dashed Buttons */
@@ -749,23 +812,6 @@ function makeStyles(theme) {
     },
 
     /* Empty / error states */
-    emptyHint: {
-      flexDirection: 'row',
-      alignItems: 'center',
-      backgroundColor: theme.bg.secondary,
-      borderRadius: 12,
-      borderWidth: 1,
-      borderColor: theme.border.default,
-      borderStyle: 'dashed',
-      padding: 14,
-      marginBottom: 8,
-    },
-    emptyHintText: {
-      flex: 1,
-      fontFamily: 'PlusJakartaSans-Medium',
-      color: theme.text.muted,
-      fontSize: 13,
-    },
     errorText: {
       fontFamily: 'PlusJakartaSans-SemiBold',
       color: theme.destructive,
