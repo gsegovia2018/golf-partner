@@ -26,6 +26,11 @@ ALTER TABLE public.players
     REFERENCES auth.users(id) ON DELETE SET NULL
     DEFAULT auth.uid();
 
+-- The scoped player readers (fetchMyPlayers / fetchMyGuestPlayers) filter on
+-- created_by, so index it.
+CREATE INDEX IF NOT EXISTS players_created_by_idx
+  ON public.players (created_by);
+
 -- 2) Backfill from tournament history ----------------------------------------
 -- Each player is attributed to the owner of the earliest tournament that lists
 -- them in its data->'players' JSON array.

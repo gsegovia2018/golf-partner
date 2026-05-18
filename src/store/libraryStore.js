@@ -38,6 +38,9 @@ export async function fetchMyPlayers() {
   if (!user) return [];
   const friendIds = await myFriendIds();
   const userIds = [user.id, ...friendIds].filter(Boolean);
+  // userIds are all auth UUIDs (the current user + friend user_ids), so they
+  // are safe to interpolate into this raw PostgREST .or() filter — postgrest-js
+  // has no parameterized form for `user_id.in.(...)`.
   const { data, error } = await supabase
     .from('players')
     .select(PLAYER_COLUMNS)
