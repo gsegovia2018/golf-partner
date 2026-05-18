@@ -5,6 +5,15 @@
 // are 2+ players (a solo game is always solo play, so there is nothing to
 // choose). The 'official' kind uses a fixed roster-based flow independent of
 // player count. Keeping this logic pure makes it unit-testable in isolation.
+//
+// Step sequence for game/tournament kinds:
+//   course (or rounds) → players → tees → [scoring] → review
+//
+// The 'tees' step lets each player select a tee colour and records their
+// handicap index. It depends on the course + players being chosen first
+// (so it can display the available tees and pre-fill player details).
+// It is always valid — every player receives a default tee and auto handicap,
+// so the Next button is never blocked.
 
 /**
  * Ordered list of step keys for the current setup.
@@ -17,7 +26,7 @@ export function wizardSteps(kind, playerCount) {
     return ['roster', 'rounds', 'format', 'review'];
   }
   const courseStep = kind === 'tournament' ? 'rounds' : 'course';
-  const steps = ['players', courseStep];
+  const steps = [courseStep, 'players', 'tees'];
   if (playerCount >= 2) steps.push('scoring');
   steps.push('review');
   return steps;
@@ -36,6 +45,7 @@ export function isStepValid(stepKey, { players, rounds, roster }) {
     case 'course':
     case 'rounds':
       return rounds.every((r) => (r.courseName || '').trim().length > 0);
+    case 'tees':
     case 'scoring':
     case 'review':
       return true;

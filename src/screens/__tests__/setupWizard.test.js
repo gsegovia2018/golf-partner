@@ -2,16 +2,16 @@ import { wizardSteps, isStepValid } from '../setupWizard';
 
 describe('wizardSteps', () => {
   test('solo game omits the scoring step', () => {
-    expect(wizardSteps('game', 1)).toEqual(['players', 'course', 'review']);
+    expect(wizardSteps('game', 1)).toEqual(['course', 'players', 'tees', 'review']);
   });
   test('multiplayer game includes the scoring step', () => {
-    expect(wizardSteps('game', 2)).toEqual(['players', 'course', 'scoring', 'review']);
+    expect(wizardSteps('game', 2)).toEqual(['course', 'players', 'tees', 'scoring', 'review']);
   });
   test('solo tournament uses the rounds step and omits scoring', () => {
-    expect(wizardSteps('tournament', 1)).toEqual(['players', 'rounds', 'review']);
+    expect(wizardSteps('tournament', 1)).toEqual(['rounds', 'players', 'tees', 'review']);
   });
   test('multiplayer tournament uses rounds and includes scoring', () => {
-    expect(wizardSteps('tournament', 3)).toEqual(['players', 'rounds', 'scoring', 'review']);
+    expect(wizardSteps('tournament', 4)).toEqual(['rounds', 'players', 'tees', 'scoring', 'review']);
   });
 });
 
@@ -31,6 +31,9 @@ describe('isStepValid', () => {
     expect(isStepValid('rounds', {
       players: [], rounds: [{ courseName: 'A' }, { courseName: 'B' }],
     })).toBe(true);
+  });
+  test('tees step is always valid', () => {
+    expect(isStepValid('tees', { players: [], rounds: [] })).toBe(true);
   });
   test('scoring and review steps are always valid', () => {
     expect(isStepValid('scoring', { players: [], rounds: [] })).toBe(true);
