@@ -3,6 +3,7 @@ import {
   totalParFromHoles,
   calcPlayingHandicap,
   deriveRoundPlayingHandicap,
+  resolveRoundTee,
   getPlayingHandicap,
   recomputeRoundPlayingHandicaps,
   normalizeRoundHandicaps,
@@ -133,6 +134,44 @@ describe('deriveRoundPlayingHandicap / getPlayingHandicap', () => {
     const player = { id: 'p1', handicap: 10 };
     expect(getPlayingHandicap({ ...round, playerHandicaps: {} }, player))
       .toBe(10);
+  });
+});
+
+describe('resolveRoundTee', () => {
+  it('prefers the player tee snapshot when present', () => {
+    const round = {
+      slope: 113, courseRating: 72,
+      playerTees: { p1: { label: 'White', slope: 132, rating: 71.8 } },
+    };
+    expect(resolveRoundTee(round, 'p1')).toEqual({ slope: 132, rating: 71.8 });
+  });
+
+  it('falls back to round-level slope/rating for legacy rounds', () => {
+    const round = { slope: 125, courseRating: 70.1 };
+    expect(resolveRoundTee(round, 'p1')).toEqual({ slope: 125, rating: 70.1 });
+  });
+});
+
+describe('deriveRoundPlayingHandicap with per-player tees', () => {
+  const holes = Array.from({ length: 18 }, () => ({ par: 4 })); // par 72
+
+  it('derives each player from their own tee', () => {
+    const round = {
+      holes,
+      playerTees: {
+        p1: { label: 'White',  slope: 132, rating: 71.8 },
+        p2: { label: 'Yellow', slope: 113, rating: 69.0 },
+      },
+    };
+    // p1: 10 * 132/113 + (71.8 - 72) = 11.68 - 0.2 = 11.48 -> 11
+    expect(deriveRoundPlayingHandicap(10, round, 'p1')).toBe(11);
+    // p2: 10 * 113/113 + (69.0 - 72) = 10 - 3 = 7
+    expect(deriveRoundPlayingHandicap(10, round, 'p2')).toBe(7);
+  });
+
+  it('falls back to round.slope when the player has no tee entry', () => {
+    const round = { holes, slope: 113, courseRating: 72, playerTees: {} };
+    expect(deriveRoundPlayingHandicap(10, round, 'p1')).toBe(10);
   });
 });
 

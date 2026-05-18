@@ -34,12 +34,25 @@ export function calcPlayingHandicap(index, slope, rating, par) {
   return Math.round(slopeAdj + crAdj);
 }
 
-// Convenience: derive a player's auto playing handicap for a given round.
-export function deriveRoundPlayingHandicap(handicap, round) {
+// Resolve the slope + course rating a player plays off in a round. Prefers
+// the player's per-player tee snapshot (round.playerTees); falls back to the
+// round-level slope/courseRating for legacy rounds created before per-player
+// tees existed.
+export function resolveRoundTee(round, playerId) {
+  const tee = round?.playerTees?.[playerId];
+  if (tee) return { slope: tee.slope, rating: tee.rating };
+  return { slope: round?.slope, rating: round?.courseRating };
+}
+
+// Convenience: derive a player's auto playing handicap for a given round,
+// using that player's tee. `playerId` is optional — when omitted (e.g. legacy
+// call sites, tests) it falls back to the round-level slope/rating.
+export function deriveRoundPlayingHandicap(handicap, round, playerId) {
+  const { slope, rating } = resolveRoundTee(round, playerId);
   return calcPlayingHandicap(
     handicap,
-    round?.slope,
-    round?.courseRating,
+    slope,
+    rating,
     totalParFromHoles(round?.holes),
   );
 }
@@ -53,7 +66,7 @@ export function normalizeRoundHandicaps(round, players) {
   const manualHandicaps = { ...(round.manualHandicaps ?? {}) };
   const hasLegacyFlags = round.manualHandicaps != null;
   players.forEach((p) => {
-    const auto = deriveRoundPlayingHandicap(p.handicap, round);
+    const auto = deriveRoundPlayingHandicap(p.handicap, round, p.id);
     const current = playerHandicaps[p.id];
     if (current == null) {
       playerHandicaps[p.id] = auto;
@@ -70,7 +83,7 @@ export function normalizeRoundHandicaps(round, players) {
 export function getPlayingHandicap(round, player) {
   const stored = round.playerHandicaps?.[player.id];
   if (stored != null) return Number(stored);
-  return deriveRoundPlayingHandicap(player.handicap, round);
+  return deriveRoundPlayingHandicap(player.handicap, round, player.id);
 }
 
 // Recompute playerHandicaps for non-manual entries when base index or slope
@@ -80,7 +93,7 @@ export function recomputeRoundPlayingHandicaps(round, players) {
   const manual = round.manualHandicaps ?? {};
   players.forEach((p) => {
     if (manual[p.id]) return;
-    playerHandicaps[p.id] = deriveRoundPlayingHandicap(p.handicap, round);
+    playerHandicaps[p.id] = deriveRoundPlayingHandicap(p.handicap, round, p.id);
   });
   return { ...round, playerHandicaps };
 }
