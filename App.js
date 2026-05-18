@@ -27,7 +27,6 @@ import LoadingSplash from './src/components/LoadingSplash';
 import ErrorBoundary from './src/components/ErrorBoundary';
 import { AuthProvider, useAuth } from './src/context/AuthContext';
 import AuthScreen from './src/screens/AuthScreen';
-import SyncStatusIcon from './src/components/SyncStatusIcon';
 
 import { loadTournament, isRoundInProgress, subscribeTournamentChanges } from './src/store/tournamentStore';
 import HomeScreen from './src/screens/HomeScreen';
@@ -227,7 +226,6 @@ function MainTabs() {
 
 function AppNavigator() {
   const { theme, mode } = useTheme();
-  const insets = useSafeAreaInsets();
   const { session, loading } = useAuth();
 
   if (loading) {
@@ -243,17 +241,6 @@ function AppNavigator() {
   return (
     <>
       <StatusBar style={mode === 'dark' ? 'light' : 'dark'} />
-      <View
-        pointerEvents="box-none"
-        style={{
-          position: 'absolute',
-          top: insets.top + 60,
-          right: insets.right + 6,
-          zIndex: 1000,
-        }}
-      >
-        <SyncStatusIcon />
-      </View>
       <Stack.Navigator
         initialRouteName="Main"
         screenOptions={{

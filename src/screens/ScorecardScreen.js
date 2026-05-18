@@ -29,6 +29,7 @@ import PullToRefresh from '../components/PullToRefresh';
 import MediaLightbox from '../components/MediaLightbox';
 import AttachMediaSheet from '../components/AttachMediaSheet';
 import CaptureMenuSheet from '../components/CaptureMenuSheet';
+import SyncStatusSheet from '../components/SyncStatusSheet';
 import { pickMedia, attachMedia } from '../lib/mediaCapture';
 import { useRoundMedia } from '../hooks/useRoundMedia';
 import { useOfficialRound } from '../hooks/useOfficialRound';
@@ -183,6 +184,7 @@ export default function ScorecardScreen({ navigation, route }) {
   const [lightboxIndex, setLightboxIndex] = useState(0);
   const [lightboxVisible, setLightboxVisible] = useState(false);
   const [captureMenuVisible, setCaptureMenuVisible] = useState(false);
+  const [syncSheetOpen, setSyncSheetOpen] = useState(false);
   const { items: roundMediaItems } = useRoundMedia(tournament?.rounds?.[paramRoundIndex ?? tournament?.currentRound ?? 0]?.id);
   const roundMediaCount = roundMediaItems.length;
   const roundIndex = paramRoundIndex ?? tournament?.currentRound ?? 0;
@@ -1002,7 +1004,14 @@ export default function ScorecardScreen({ navigation, route }) {
         </TouchableOpacity>
         <Text style={s.headerTitle}>Scorecard</Text>
         <View style={s.headerRight}>
-          <SyncIndicator status={syncStatus} saveError={saveError} theme={theme} s={s} />
+          <Pressable
+            onPress={() => setSyncSheetOpen(true)}
+            hitSlop={8}
+            accessibilityRole="button"
+            accessibilityLabel="Sync status"
+          >
+            <SyncIndicator status={syncStatus} saveError={saveError} theme={theme} s={s} />
+          </Pressable>
           <View style={s.togglePill}>
             <TouchableOpacity
               style={[s.toggleBtn, view === 'hole' && s.toggleBtnActive]}
@@ -1164,6 +1173,10 @@ export default function ScorecardScreen({ navigation, route }) {
         items={lightboxItems}
         initialIndex={lightboxIndex}
         onClose={() => setLightboxVisible(false)}
+      />
+      <SyncStatusSheet
+        visible={syncSheetOpen}
+        onClose={() => setSyncSheetOpen(false)}
       />
 
       {roundCompleteVisible && (
