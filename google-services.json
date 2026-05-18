@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "676801269930",
+    "project_id": "golf-partner-1e211",
+    "storage_bucket": "golf-partner-1e211.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:676801269930:android:0eaef5d3c37b6bad5540d3",
+        "android_client_info": {
+          "package_name": "com.golfpartner.app"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyDHCNXoy06cON9IBGGH-2w5gIJFfwSQqps"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}
