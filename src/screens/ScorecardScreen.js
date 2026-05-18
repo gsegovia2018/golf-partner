@@ -1553,7 +1553,7 @@ const HolePage = React.memo(function HolePage({
                       <Text style={s.playerAvatarText}>{player.name[0].toUpperCase()}</Text>
                     </View>
                     <View>
-                      <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+                      <View style={s.playerCardNameRow}>
                         <Text style={s.playerCardName}>{player.name}</Text>
                         {round.playerTees?.[player.id]?.label ? (
                           <Text style={s.teeBadge}>{round.playerTees[player.id].label}</Text>
@@ -3445,6 +3445,7 @@ function makeStyles(theme) {
       fontFamily: 'PlusJakartaSans-ExtraBold',
       fontSize: 15,
     },
+    playerCardNameRow: { flexDirection: 'row', alignItems: 'center', gap: 6 },
     playerCardName: {
       color: theme.text.primary,
       fontFamily: 'PlusJakartaSans-Bold',
@@ -4498,7 +4499,6 @@ function makeStyles(theme) {
       fontFamily: 'PlusJakartaSans-SemiBold', fontSize: 11,
       color: theme.accent.primary, backgroundColor: theme.accent.light,
       borderRadius: 6, paddingHorizontal: 6, paddingVertical: 2,
-      overflow: 'hidden', marginLeft: 6,
     },
   });
 }

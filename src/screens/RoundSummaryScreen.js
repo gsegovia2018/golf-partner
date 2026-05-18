@@ -292,7 +292,7 @@ function makeStyles(theme) {
       width: 22, textAlign: 'center',
     },
     lbNameWrap: {
-      flex: 1, flexDirection: 'row', alignItems: 'center', flexWrap: 'nowrap', overflow: 'hidden',
+      flex: 1, flexDirection: 'row', alignItems: 'center', flexWrap: 'nowrap', overflow: 'hidden', gap: 6,
     },
     lbName: {
       fontFamily: 'PlusJakartaSans-Bold', fontSize: 15, color: theme.text.primary, flexShrink: 1,
@@ -376,7 +376,6 @@ function makeStyles(theme) {
       fontFamily: 'PlusJakartaSans-SemiBold', fontSize: 11,
       color: theme.accent.primary, backgroundColor: theme.accent.light,
       borderRadius: 6, paddingHorizontal: 6, paddingVertical: 2,
-      overflow: 'hidden', marginLeft: 6,
     },
   });
 }
