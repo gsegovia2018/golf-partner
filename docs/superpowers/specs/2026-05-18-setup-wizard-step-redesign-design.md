@@ -68,10 +68,15 @@ Replaces, per round, `renderCourseStep`'s dashed pick button + `TextInput` +
   the tile navigates to `CoursePicker` with `{ roundIndex: i }`, exactly as the
   current dashed button does.
 - **Filled state (course picked):** a white card with
-  - **Top row:** a pin icon tile, the course name, and a pencil icon. Tapping the
-    pencil reveals an inline `TextInput` bound to `updateCourseName(i, value)`
-    (same handler as today) so the name stays editable; tapping again / blur
-    collapses it back to text.
+  - **Top row:** a pin icon tile, the course name, and a pencil icon.
+    - Tapping the pin / name area re-opens `CoursePicker` with `{ roundIndex: i }`
+      to swap the course from library — this preserves the change-course
+      capability the old "Course: X" button provided.
+    - Tapping the pencil reveals an inline `TextInput` bound to
+      `updateCourseName(i, value)` (same handler as today) so the name stays
+      editable; the pencil becomes a check icon, and tapping it again or blurring
+      collapses back to text. While renaming, the name area is the `TextInput`
+      and does not navigate.
   - **Stat row:** three compact stat chips — **Par** (sum of `r.holes[].par`),
     **Holes** (`r.holes.length`), **Slope** (`r.slope`, or "—" when null).
   - **Bottom row:** a divided "Configure holes" row with a chevron. Tapping it
@@ -105,7 +110,9 @@ Unchanged. The redesign is presentational only:
   selection bridge (`consumePendingCourses`) and edited via `CourseEditor`'s
   `onSave` → `handleHolesSaved`.
 - `updateCourseName`, `removePlayer`, `removeRound`, `addRound` handlers are
-  reused as-is.
+  reused. A new `renamingIndex` state (which round's name is being edited
+  inline, or `null`) is added to `SetupScreen`; `removeRound` additionally
+  resets it to `null` so a removed round cannot leave a stale rename target.
 
 ## Error / Edge Cases
 
