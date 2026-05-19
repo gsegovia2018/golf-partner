@@ -49,6 +49,12 @@ export default function RoundTeeAssignments({ round, players = [], onChange, the
   const courseId = round?.courseId ?? null;
   const totalPar = holes.reduce((sum, h) => sum + (h.par || 0), 0);
 
+  // A legacy course carries one synthetic tee with no label, purely to hold a
+  // rating/slope. Only tees with a real label are a genuine tee *choice* worth
+  // showing a picker for; an unnamed tee is "no tee" as far as the UI cares.
+  const namedTees = tees.filter((t) => String(t?.label ?? '').trim());
+  const hasNamedTees = namedTees.length > 0;
+
   // playerTees: { [playerId]: { label, slope, rating } }
   const [playerTees, setPlayerTees] = useState(() => ({ ...(round?.playerTees ?? {}) }));
   // playerHandicaps: { [playerId]: string } — editable
@@ -193,9 +199,11 @@ export default function RoundTeeAssignments({ round, players = [], onChange, the
 
   return (
     <View>
-      {tees.length > 0 && (
-        <Text style={s.hint}>Tap a player to set their tee. Handicaps auto-calculate.</Text>
-      )}
+      <Text style={s.hint}>
+        {hasNamedTees
+          ? 'Tap a player to set their tee. Handicaps auto-calculate.'
+          : 'Playing handicaps auto-calculate — tap a player to adjust.'}
+      </Text>
       {anyManual && (
         <TouchableOpacity style={s.resetBtn} onPress={resetAllToAuto} activeOpacity={0.7}
           accessibilityRole="button" accessibilityLabel="Reset all handicaps to auto">
@@ -211,6 +219,10 @@ export default function RoundTeeAssignments({ round, players = [], onChange, the
         const valueStr = playerHandicaps[p.id] ?? '';
         const overridden = !!manualHandicaps[p.id];
         const editing = editingHandicapId === p.id;
+        // On a course with named tees every player gets one resolved on mount,
+        // so "Pick a tee" only ever shows defensively. A player on an unnamed
+        // (legacy synthetic) tee shows no tee line at all.
+        const showPickPrompt = !pTee && hasNamedTees;
         return (
           <View key={p.id} style={[s.card, expanded && s.cardExpanded]}>
             <TouchableOpacity
@@ -221,7 +233,7 @@ export default function RoundTeeAssignments({ round, players = [], onChange, the
                 setExpandedId(expanded ? null : p.id);
               }}
               accessibilityRole="button"
-              accessibilityLabel={`${p.name}, ${teeLabel ? teeLabel + ' tee' : 'no tee selected'}, playing handicap ${valueStr || 'unset'}`}
+              accessibilityLabel={`${p.name}${teeLabel ? `, ${teeLabel} tee` : showPickPrompt ? ', no tee selected' : ''}, playing handicap ${valueStr || 'unset'}`}
               accessibilityState={{ expanded }}
             >
               <View style={s.avatar}>
@@ -229,19 +241,18 @@ export default function RoundTeeAssignments({ round, players = [], onChange, the
               </View>
               <View style={{ flex: 1 }}>
                 <Text style={s.name}>{p.name}</Text>
-                <View style={s.teeSummary}>
-                  {teeLabel ? (
-                    <>
-                      <View style={[s.teeDot, { backgroundColor: dotColor || theme.bg.secondary }]} />
-                      <Text style={s.teeSummaryText}>{teeLabel} tee</Text>
-                    </>
-                  ) : (
-                    <Text style={s.teeSummaryMuted}>
-                      {tees.length === 0 ? 'No tees on this course' : 'Pick a tee'}
-                    </Text>
-                  )}
-                  {overridden && <Text style={s.editedTag}>· Edited</Text>}
-                </View>
+                {(teeLabel || showPickPrompt || overridden) && (
+                  <View style={s.teeSummary}>
+                    {teeLabel && (
+                      <>
+                        <View style={[s.teeDot, { backgroundColor: dotColor || theme.bg.secondary }]} />
+                        <Text style={s.teeSummaryText}>{teeLabel} tee</Text>
+                      </>
+                    )}
+                    {showPickPrompt && <Text style={s.teeSummaryMuted}>Pick a tee</Text>}
+                    {overridden && <Text style={s.editedTag}>· Edited</Text>}
+                  </View>
+                )}
               </View>
               <View style={s.hcpPill}>
                 <Text style={s.hcpPillText}>{valueStr || '—'}</Text>
@@ -256,32 +267,32 @@ export default function RoundTeeAssignments({ round, players = [], onChange, the
 
             {expanded && (
               <View style={s.editor}>
-                <Text style={s.editorLabel}>TEE</Text>
-                {tees.length === 0 ? (
-                  <Text style={s.teeSummaryMuted}>No tees on this course</Text>
-                ) : (
-                  <View style={s.teePills}>
-                    {tees.map((tee) => {
-                      const selected = playerTees[p.id]?.label === tee.label;
-                      const tColor = teeColor(tee.label);
-                      return (
-                        <TouchableOpacity
-                          key={tee.id ?? tee.label}
-                          style={[s.teePill, selected && s.teePillActive]}
-                          onPress={() => setPlayerTee(p.id, tee)}
-                          activeOpacity={0.7}
-                          accessibilityRole="button"
-                          accessibilityLabel={`${tee.label || 'Unnamed'} tee`}
-                          accessibilityState={{ selected }}
-                        >
-                          <View style={[s.teeDot, { backgroundColor: tColor || theme.bg.secondary }]} />
-                          <Text style={[s.teePillText, selected && s.teePillTextActive]}>
-                            {tee.label || '—'}
-                          </Text>
-                        </TouchableOpacity>
-                      );
-                    })}
-                  </View>
+                {hasNamedTees && (
+                  <>
+                    <Text style={s.editorLabel}>TEE</Text>
+                    <View style={s.teePills}>
+                      {namedTees.map((tee) => {
+                        const selected = playerTees[p.id]?.label === tee.label;
+                        const tColor = teeColor(tee.label);
+                        return (
+                          <TouchableOpacity
+                            key={tee.id ?? tee.label}
+                            style={[s.teePill, selected && s.teePillActive]}
+                            onPress={() => setPlayerTee(p.id, tee)}
+                            activeOpacity={0.7}
+                            accessibilityRole="button"
+                            accessibilityLabel={`${tee.label} tee`}
+                            accessibilityState={{ selected }}
+                          >
+                            <View style={[s.teeDot, { backgroundColor: tColor || theme.bg.secondary }]} />
+                            <Text style={[s.teePillText, selected && s.teePillTextActive]}>
+                              {tee.label}
+                            </Text>
+                          </TouchableOpacity>
+                        );
+                      })}
+                    </View>
+                  </>
                 )}
                 <Text style={s.editorLabel}>PLAYING HANDICAP</Text>
                 <View style={s.stepper}>
