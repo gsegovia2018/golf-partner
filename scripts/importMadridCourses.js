@@ -6,7 +6,7 @@ const fs = require('fs');
 const path = require('path');
 const { createClient } = require('@supabase/supabase-js');
 const {
-  deriveCourseName, validateStrokeIndex, buildTeeRows,
+  deriveCourseName, deriveLayoutName, validateStrokeIndex, buildTeeRows,
 } = require('./lib/madridCourses');
 
 const url = process.env.EXPO_PUBLIC_SUPABASE_URL;
@@ -29,20 +29,36 @@ async function main() {
     trazadoCount[r.clubCode] = (trazadoCount[r.clubCode] || 0) + 1;
   }
 
-  const byName = new Map();
+  const courseByName = new Map();
+  const clubByName = new Map();
   if (!DRY_RUN) {
-    const { data: existing, error } = await supabase.from('courses').select('id, name');
+    const { data: courses, error: cErr } = await supabase.from('courses').select('id, name');
+    if (cErr) throw cErr;
+    for (const c of courses) courseByName.set(c.name, c.id);
+    const { data: clubs, error: clErr } = await supabase.from('clubs').select('id, name');
+    if (clErr) throw clErr;
+    for (const c of clubs) clubByName.set(c.name, c.id);
+  }
+
+  // Resolve a club row by name, creating it on first sight.
+  async function ensureClub(clubName) {
+    if (clubByName.has(clubName)) return clubByName.get(clubName);
+    const { data, error } = await supabase
+      .from('clubs').insert({ name: clubName, province: 'Madrid' }).select().single();
     if (error) throw error;
-    for (const c of existing) byName.set(c.name, c.id);
+    clubByName.set(clubName, data.id);
+    return data.id;
   }
 
   const flagged = [];
   let inserted = 0;
   let enriched = 0;
   let teesWritten = 0;
+  let clubsCreated = 0;
 
   for (const r of records) {
     const name = deriveCourseName(r.clubName, r.trazadoName, trazadoCount[r.clubCode]);
+    const layoutName = deriveLayoutName(r.trazadoName);
 
     const check = validateStrokeIndex(r.holes);
     if (!check.valid) flagged.push(`${name}: ${check.reason}`);
@@ -58,25 +74,29 @@ async function main() {
     }
 
     const totalPar = r.holes.reduce((a, h) => a + h.par, 0);
-    const mark = byName.has(name) ? '↻' : '+';
+    const mark = courseByName.has(name) ? '↻' : '+';
     console.log(
-      `${mark} ${name.padEnd(44)} holes=${r.holeCount} par=${totalPar} ` +
-      `tees=${teeRows.length}${check.valid ? '' : '  ⚠ SI INVALID'}`);
+      `${mark} ${name.padEnd(46)} layout="${layoutName}" holes=${r.holeCount} ` +
+      `par=${totalPar} tees=${teeRows.length}${check.valid ? '' : '  ⚠ SI INVALID'}`);
 
     if (DRY_RUN) continue;
 
-    let id = byName.get(name);
+    const hadClub = clubByName.has(r.clubName);
+    const clubId = await ensureClub(r.clubName);
+    if (!hadClub) clubsCreated++;
+
+    const courseRow = { name, province: 'Madrid', club_id: clubId, layout_name: layoutName };
+    let id = courseByName.get(name);
     if (id) {
-      const { error } = await supabase
-        .from('courses').update({ province: 'Madrid' }).eq('id', id);
+      const { error } = await supabase.from('courses').update(courseRow).eq('id', id);
       if (error) throw error;
       enriched++;
     } else {
       const { data, error } = await supabase
-        .from('courses').insert({ name, province: 'Madrid' }).select().single();
+        .from('courses').insert(courseRow).select().single();
       if (error) throw error;
       id = data.id;
-      byName.set(name, id);
+      courseByName.set(name, id);
       inserted++;
     }
 
@@ -102,7 +122,8 @@ async function main() {
   console.log(
     `\n${DRY_RUN
       ? 'Dry run — no writes performed.'
-      : `Done. Inserted ${inserted}, enriched ${enriched}, ${teesWritten} tee rows.`}`);
+      : `Done. ${clubsCreated} clubs created, ${inserted} courses inserted, ` +
+        `${enriched} enriched, ${teesWritten} tee rows.`}`);
   if (flagged.length) {
     console.log(`\n⚠ ${flagged.length} course(s) need manual stroke-index fixing:`);
     for (const f of flagged) console.log(`  - ${f}`);
