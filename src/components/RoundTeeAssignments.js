@@ -4,6 +4,33 @@ import { Feather } from '@expo/vector-icons';
 import { calcPlayingHandicap, lastTeeForPlayerOnCourse } from '../store/tournamentStore';
 import { middleTee } from '../store/tees';
 
+// Common golf tee colours, keyed by lower-cased label.
+const TEE_COLORS = {
+  white: '#FFFFFF', yellow: '#F2C200', red: '#D7372E', blue: '#2F6FB5',
+  black: '#23262B', gold: '#C9A227', green: '#2F7D5B', orange: '#E5862B',
+  silver: '#B8BCC2', bronze: '#A9712E',
+};
+
+// Resolve a tee label to a swatch colour, or null when unknown.
+function teeColor(label) {
+  return TEE_COLORS[String(label || '').trim().toLowerCase()] || null;
+}
+
+// Up to two uppercase initials for a player's avatar badge.
+export function playerInitials(name) {
+  const parts = String(name || '').trim().split(/\s+/).filter(Boolean);
+  if (parts.length === 0) return '?';
+  if (parts.length === 1) return parts[0].slice(0, 2).toUpperCase();
+  return (parts[0][0] + parts[parts.length - 1][0]).toUpperCase();
+}
+
+// Clamp a playing handicap to a sane integer range.
+export function clampPlayingHandicap(n) {
+  const v = Math.round(Number(n));
+  if (Number.isNaN(v)) return 0;
+  return Math.max(-9, Math.min(54, v));
+}
+
 // Per-round, per-player tee picker + playing-handicap editor.
 //
 // Props:
