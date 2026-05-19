@@ -1,7 +1,7 @@
 import {
   collectMyRounds, buildSyntheticTournament, CANON_ID,
   holeDifficultySplit, computeMetrics, computeRecentVsHistory, FORM_METRICS,
-  rankStrengths, resolveSelection, computeMyStats,
+  rankStrengths, resolveSelection, computeMyStats, computeFormSeries,
 } from '../personalStats';
 
 // ── Fixture helpers ───────────────────────────────────────────────
@@ -370,6 +370,58 @@ describe('resolveSelection', () => {
   test('an override can add an incomplete round or remove a completed one', () => {
     const selected = resolveSelection(threeRounds(), { '1:2': true, '1:0': false });
     expect(selected.map((r) => r.key)).toEqual(['1:1', '1:2']);
+  });
+});
+
+describe('computeFormSeries', () => {
+  // collectMyRounds output shape: each MyRound has { round, courseName, player, playerId }
+  function myRound(courseName, holes, strokes) {
+    return {
+      key: `${courseName}:0`,
+      round: mkRound({ courseName, holes, scores: { p1: evenScores(holes, strokes) }, playerHandicaps: { p1: 0 } }),
+      courseName,
+      roundIndex: 0,
+      playerId: 'p1',
+      player: { id: 'p1', name: 'Me', handicap: 0, user_id: 'u1' },
+      completed: true,
+    };
+  }
+
+  test('returns one points-series entry per selected round', () => {
+    const h = holes18();
+    const rounds = [myRound('Pine', h, 4), myRound('Oak', h, 5)];
+    const { metrics } = computeFormSeries(rounds);
+    expect(metrics.avgPoints).toHaveLength(2);
+    expect(metrics.avgPoints[0]).toEqual({ label: 'Pine', value: 36 }); // par on every hole = 2 pts x 18
+    expect(metrics.avgPoints[1].value).toBe(18); // bogey on every hole = 1 pt x 18
+  });
+
+  test('computes strokes vs par per round', () => {
+    const h = holes18(); // 18 par-4 holes -> par 72
+    const { metrics } = computeFormSeries([myRound('Pine', h, 5)]);
+    expect(metrics.avgVsPar[0]).toEqual({ label: 'Pine', value: 18 }); // 90 strokes - 72 par
+  });
+
+  test('shot metrics are null when the round has no shot data', () => {
+    const h = holes18();
+    const { metrics, hasShotData } = computeFormSeries([myRound('Pine', h, 4)]);
+    expect(hasShotData).toBe(false);
+    expect(metrics.fairwayPct[0].value).toBeNull();
+    expect(metrics.girPct[0].value).toBeNull();
+    expect(metrics.puttsPerRound[0].value).toBeNull();
+  });
+
+  test('builds a birdie/par/bogey score-mix entry per round', () => {
+    const h = holes18();
+    const { scoreMix } = computeFormSeries([myRound('Pine', h, 4)]);
+    expect(scoreMix[0]).toEqual({ label: 'Pine', birdie: 0, par: 18, bogey: 0 });
+  });
+
+  test('empty selection returns empty series', () => {
+    const r = computeFormSeries([]);
+    expect(r.metrics.avgPoints).toEqual([]);
+    expect(r.scoreMix).toEqual([]);
+    expect(r.hasShotData).toBe(false);
   });
 });
 
