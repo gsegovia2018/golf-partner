@@ -13,8 +13,12 @@ export const supabase = createClient(
       storage: AsyncStorage,
       autoRefreshToken: true,
       persistSession: true,
-      // Web: Google OAuth redirects back with the token in the URL hash;
-      // the client needs to pick it up and clean the URL.
+      // PKCE flow: OAuth redirects back with a `?code=` that we exchange for a
+      // session (see AuthScreen `signInWithProvider`). The default `implicit`
+      // flow returns tokens in the URL hash instead, which the native sign-in
+      // path never reads — so login silently fails on Android.
+      flowType: 'pkce',
+      // Web: Supabase auto-exchanges the `?code=` in the URL on load.
       detectSessionInUrl: isWeb,
     },
   },
