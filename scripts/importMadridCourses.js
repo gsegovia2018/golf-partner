@@ -1,6 +1,8 @@
 // One-shot: import scripts/data/madrid-courses.json into Supabase.
 // Usage:  node scripts/importMadridCourses.js [--dry-run]
-// Reads EXPO_PUBLIC_SUPABASE_URL + EXPO_PUBLIC_SUPABASE_ANON_KEY from .env.
+// Reads EXPO_PUBLIC_SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY (preferred —
+// bypasses RLS to write the clubs/course_tees tables) from .env, falling back
+// to EXPO_PUBLIC_SUPABASE_ANON_KEY.
 require('dotenv').config();
 const fs = require('fs');
 const path = require('path');
@@ -10,9 +12,11 @@ const {
 } = require('./lib/madridCourses');
 
 const url = process.env.EXPO_PUBLIC_SUPABASE_URL;
-const key = process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY;
+// Prefer the service-role key: clubs and course_tees restrict writes to
+// authenticated users, and a one-shot script has no user session.
+const key = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY;
 if (!url || !key) {
-  console.error('Missing EXPO_PUBLIC_SUPABASE_URL / EXPO_PUBLIC_SUPABASE_ANON_KEY in .env');
+  console.error('Missing EXPO_PUBLIC_SUPABASE_URL or a Supabase key in .env');
   process.exit(1);
 }
 const supabase = createClient(url, key);
