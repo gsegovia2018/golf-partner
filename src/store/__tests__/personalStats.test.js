@@ -103,6 +103,59 @@ describe('collectMyRounds', () => {
     // gross par on every hole, scratch handicap → 2 pts each × 18 = 36
     expect(result[0].points).toBe(36);
   });
+
+  test('includes a single-player game when the lone player has no user_id', () => {
+    const h = holes18();
+    const tournaments = [{
+      id: 30, name: 'Solo Round', kind: 'game',
+      players: [{ id: 'g1', name: 'Me', handicap: 0 }],
+      rounds: [mkRound({ holes: h, scores: { g1: evenScores(h, 4) } })],
+    }];
+    const result = collectMyRounds(tournaments, 'u1');
+    expect(result).toHaveLength(1);
+    expect(result[0].key).toBe('30:0');
+    expect(result[0].playerId).toBe('g1');
+  });
+
+  test('matches a game player by display name when user_id is absent', () => {
+    const h = holes18();
+    const tournaments = [{
+      id: 31, name: 'Casual Game', kind: 'game',
+      players: [{ id: 'g1', name: 'Marcos' }, { id: 'g2', name: 'Friend' }],
+      rounds: [mkRound({ holes: h, scores: {
+        g1: evenScores(h, 4), g2: evenScores(h, 5),
+      } })],
+    }];
+    const result = collectMyRounds(tournaments, 'u1', 'marcos');
+    expect(result).toHaveLength(1);
+    expect(result[0].playerId).toBe('g1');
+  });
+
+  test('prefers a user_id match over the display-name fallback', () => {
+    const h = holes18();
+    const tournaments = [{
+      id: 32, name: 'Cup',
+      players: [
+        { id: 'p1', name: 'Marcos', user_id: 'u1' },
+        { id: 'p2', name: 'Marcos' },
+      ],
+      rounds: [mkRound({ holes: h, scores: {
+        p1: evenScores(h, 4), p2: evenScores(h, 5),
+      } })],
+    }];
+    const result = collectMyRounds(tournaments, 'u1', 'Marcos');
+    expect(result[0].playerId).toBe('p1');
+  });
+
+  test('does not claim a multi-player game when nothing identifies the user', () => {
+    const h = holes18();
+    const tournaments = [{
+      id: 33, name: 'Their Game', kind: 'game',
+      players: [{ id: 'a', name: 'Ann' }, { id: 'b', name: 'Bob' }],
+      rounds: [mkRound({ holes: h, scores: { a: evenScores(h, 4) } })],
+    }];
+    expect(collectMyRounds(tournaments, 'u1', 'Marcos')).toHaveLength(0);
+  });
 });
 
 describe('buildSyntheticTournament', () => {

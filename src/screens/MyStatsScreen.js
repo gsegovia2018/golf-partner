@@ -6,6 +6,7 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useTheme } from '../theme/ThemeContext';
 import { useAuth } from '../context/AuthContext';
 import { loadAllTournamentsWithFallback } from '../store/tournamentStore';
+import { loadProfile } from '../store/profileStore';
 import { collectMyRounds, resolveSelection, computeMyStats } from '../store/personalStats';
 import { buildRoundReportCard } from '../store/roundReportCard';
 import RoundReportCard from '../components/RoundReportCard';
@@ -51,8 +52,13 @@ export default function MyStatsScreen({ navigation, route }) {
     setError(false);
     (async () => {
       try {
-        const { list } = await loadAllTournamentsWithFallback();
-        const rounds = collectMyRounds(list, user?.id);
+        // The profile display name lets collectMyRounds recognise unlinked
+        // (guest) player slots — e.g. solo games never claimed to an account.
+        const [{ list }, profile] = await Promise.all([
+          loadAllTournamentsWithFallback(),
+          loadProfile().catch(() => null),
+        ]);
+        const rounds = collectMyRounds(list, user?.id, profile?.displayName);
         let stored = {};
         if (storageKey) {
           try {

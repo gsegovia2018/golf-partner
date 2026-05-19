@@ -1766,7 +1766,6 @@ const RoundPage = React.memo(function RoundPage({
   onGoToRound, onOpenEdit, isSingleRound, showRunning = true,
 }) {
   const hasScores = round.scores && Object.keys(round.scores).length > 0;
-  const hasPairs = Array.isArray(round.pairs) && round.pairs.length > 0;
   return (
     <View
       style={[{ width }, PAGER_PAGE_SNAP_STYLE]}
@@ -1807,10 +1806,8 @@ const RoundPage = React.memo(function RoundPage({
           </TouchableOpacity>
         </View>
       )}
-      {hasScores ? (
+      {hasScores || revealed ? (
         <RoundScoreboard round={round} players={players} meId={meId} theme={theme} s={s} showRunning={showRunning} />
-      ) : revealed && hasPairs ? (
-        <PairsPreviewCard pairs={round.pairs} theme={theme} s={s} />
       ) : (
         <Text style={s.emptyRoundHint}>No scores yet for this round.</Text>
       )}
@@ -1818,22 +1815,6 @@ const RoundPage = React.memo(function RoundPage({
   );
 });
 
-// Fallback card shown when a round has revealed pairs but no scores yet.
-const PairsPreviewCard = React.memo(function PairsPreviewCard({ pairs, theme, s }) {
-  return (
-    <>
-      {pairs.map((pair, pi) => (
-        <View key={pi} style={s.pairBlock}>
-          <View style={s.pairHeader}>
-            <Text style={s.pairNames}>{pair.map((p) => p.name).join(' & ')}</Text>
-            <Text style={s.pairPoints}>—</Text>
-          </View>
-        </View>
-      ))}
-      <Text style={s.pairsPreviewHint}>No scores yet. Teams are set for this round.</Text>
-    </>
-  );
-});
 
 
 // Universal round card — identical in every scoring mode. Shows a holes-played
@@ -1857,6 +1838,7 @@ const RoundScoreboard = React.memo(function RoundScoreboard({ round, players, me
     }
     return {
       player,
+      handicap: totalsById[player.id]?.handicap,
       points: totalsById[player.id]?.totalPoints ?? 0,
       strokes,
       played,
@@ -1890,8 +1872,13 @@ const RoundScoreboard = React.memo(function RoundScoreboard({ round, players, me
       <View style={{ gap: 10 }}>
         {rows.map((r) => (
           <View key={r.player.id} style={s.gamePlayerCard}>
-            <Text style={s.gamePlayerName} numberOfLines={1}>{r.player.name}</Text>
-            <View style={[s.gameStatsRow, { marginTop: 10 }]}>
+            <View style={s.gamePlayerHeader}>
+              <Text style={s.gamePlayerName} numberOfLines={1}>{r.player.name}</Text>
+              <Text style={s.gamePlayerHcp}>
+                HCP {Number.isFinite(r.handicap) ? r.handicap : '—'}
+              </Text>
+            </View>
+            <View style={s.gameStatsRow}>
               <View style={s.gameStatCell}>
                 <Text style={s.gameStatValue}>{showRunning ? r.points : '—'}</Text>
                 <Text style={s.gameStatLabel}>Points</Text>
