@@ -899,7 +899,18 @@ export default function ScorecardScreen({ navigation, route }) {
           ]);
         }
       } else {
-        goToSummary();
+        // Non-official rounds drop the finisher into their personal Report
+        // Card for the round just played. collectMyRounds keys rounds as
+        // `${tournamentId}:${roundIndex}` — match that here. The tournament-
+        // complete / archive branch above keeps using goToSummary unchanged.
+        if (!official && t.kind !== 'official') {
+          navigation.navigate('MyStats', {
+            tab: 'reportCard',
+            roundKey: `${t.id}:${roundIndex}`,
+          });
+        } else {
+          goToSummary();
+        }
       }
     }, roundDone ? 1400 : 400);
   }, [roundIndex, scores, navigation, goBack, official]);

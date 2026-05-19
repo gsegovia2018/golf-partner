@@ -7,12 +7,15 @@ import { useTheme } from '../theme/ThemeContext';
 import { useAuth } from '../context/AuthContext';
 import { loadAllTournamentsWithFallback } from '../store/tournamentStore';
 import { collectMyRounds, resolveSelection, computeMyStats } from '../store/personalStats';
+import { buildRoundReportCard } from '../store/roundReportCard';
+import RoundReportCard from '../components/RoundReportCard';
 import MyStatsRoundSelector from '../components/MyStatsRoundSelector';
 import CardGrid from '../components/CardGrid';
 
 const SELECTION_PREFIX = '@mystats_round_selection:';
 
 const ALL_TABS = [
+  { key: 'reportCard', label: 'Report Card' },
   { key: 'overview',  label: 'Overview' },
   { key: 'form',      label: 'Form' },
   { key: 'breakdown', label: 'Breakdown' },
@@ -25,7 +28,7 @@ function fmtVsPar(v) {
   return `${v}`;
 }
 
-export default function MyStatsScreen({ navigation }) {
+export default function MyStatsScreen({ navigation, route }) {
   const { theme } = useTheme();
   const { user } = useAuth();
   const s = useMemo(() => makeStyles(theme), [theme]);
@@ -37,7 +40,8 @@ export default function MyStatsScreen({ navigation }) {
   const [n, setN] = useState(5);
   const [selectorOpen, setSelectorOpen] = useState(false);
   const [loadNonce, setLoadNonce] = useState(0);
-  const [tab, setTab] = useState('overview');
+  const [tab, setTab] = useState(route?.params?.tab ?? 'reportCard');
+  const [reportRoundKey, setReportRoundKey] = useState(route?.params?.roundKey ?? null);
 
   const storageKey = user?.id ? `${SELECTION_PREFIX}${user.id}` : null;
 
@@ -74,6 +78,17 @@ export default function MyStatsScreen({ navigation }) {
     return () => { cancelled = true; };
   }, [user?.id, storageKey, loadNonce]);
 
+  // Default the Report Card to the most recent round once rounds are loaded.
+  // collectMyRounds returns rounds chronologically (oldest first), so the
+  // last entry is the most recent.
+  useEffect(() => {
+    if (!myRounds || myRounds.length === 0) return;
+    setReportRoundKey((prev) => {
+      if (prev && myRounds.some((r) => r.key === prev)) return prev;
+      return myRounds[myRounds.length - 1].key;
+    });
+  }, [myRounds]);
+
   const persistOverrides = useCallback((next) => {
     setOverrides(next);
     if (storageKey) {
@@ -88,6 +103,13 @@ export default function MyStatsScreen({ navigation }) {
   const stats = useMemo(
     () => (selected.length ? computeMyStats(selected, { n }) : null),
     [selected, n],
+  );
+
+  const reportCard = useMemo(
+    () => (myRounds && reportRoundKey
+      ? buildRoundReportCard(myRounds, reportRoundKey)
+      : null),
+    [myRounds, reportRoundKey],
   );
 
   const Header = (
@@ -182,7 +204,7 @@ export default function MyStatsScreen({ navigation }) {
   );
 
   // ── Empty: every round deselected ──
-  if (selected.length === 0) {
+  if (selected.length === 0 && tab !== 'reportCard') {
     return (
       <ScreenContainer style={s.container} edges={['top', 'bottom']}>
         {Header}
@@ -198,7 +220,7 @@ export default function MyStatsScreen({ navigation }) {
     );
   }
 
-  const fb = stats.frontBack;
+  const fb = stats?.frontBack ?? null;
   const fbHoles = fb ? fb.rounds.length * 9 : 0;
 
   return (
@@ -206,6 +228,15 @@ export default function MyStatsScreen({ navigation }) {
       {Header}
       {TabBar}
       <ScrollView contentContainerStyle={s.scroll}>
+        {tab === 'reportCard' && (
+          <RoundReportCard
+            card={reportCard}
+            rounds={myRounds}
+            selectedKey={reportRoundKey}
+            onSelect={setReportRoundKey}
+          />
+        )}
+
         {tab === 'overview' && (
           <>
             <Snapshot stats={stats} metric={metric} onToggleMetric={setMetric} s={s} theme={theme} />
