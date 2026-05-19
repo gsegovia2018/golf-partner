@@ -8,9 +8,11 @@ import ScreenContainer from '../components/ScreenContainer';
 import { Feather } from '@expo/vector-icons';
 import { useFocusEffect } from '@react-navigation/native';
 import { createTournament, saveTournament, randomPairs, DEFAULT_SETTINGS, deriveRoundPlayingHandicap } from '../store/tournamentStore';
-import { defaultHoles, fetchCourses, fetchPlayers } from '../store/libraryStore';
+import { defaultHoles, fetchPlayers } from '../store/libraryStore';
 import { middleTee } from '../store/tees';
 import { consumePendingPlayers, consumePendingCourses } from '../lib/selectionBridge';
+import { applyCoursePick, applyLayoutChoice } from '../lib/roundCourse';
+import RoundLayoutSelect from '../components/RoundLayoutSelect';
 import { useTheme } from '../theme/ThemeContext';
 import ScoringModePicker, { isScoringModeAllowed, fallbackScoringMode } from '../components/ScoringModePicker';
 import RoundTeeAssignments from '../components/RoundTeeAssignments';
@@ -125,42 +127,27 @@ export default function SetupScreen({ navigation, route }) {
     }
 
     const pc = consumePendingCourses();
-    if (pc && pc.courses.length > 0) {
-      const { startRoundIndex, courses } = pc;
-      (async () => {
-        let freshCourses = courses;
-        try {
-          const all = await fetchCourses();
-          freshCourses = courses.map((c) => all.find((x) => x.id === c.id) ?? c);
-        } catch (_) { /* keep snapshot */ }
-        if (cancelled) return;
-        setRounds((prev) => {
-          const next = [...prev];
-          freshCourses.forEach((course, i) => {
-            const idx = startRoundIndex + i;
-            const roundData = {
-              courseId: course.id,
-              courseName: course.name,
-              // Deep-copy so later edits in CourseEditor don't mutate the
-              // library's in-memory objects.
-              holes: course.holes.map((h) => ({ ...h })),
-              tees: (course.tees ?? []).map((t) => ({ ...t })),
-              playerHandicaps: null,
-              playerTees: null,
-            };
-            if (idx < next.length) {
-              next[idx] = { ...next[idx], ...roundData };
-            } else {
-              // Stable id so React keys / removal survive reordering.
-              next.push({ id: newRoundId(), ...roundData });
-            }
-          });
-          return next;
+    if (pc && pc.picks && pc.picks.length > 0) {
+      const { startRoundIndex, picks } = pc;
+      setRounds((prev) => {
+        const next = [...prev];
+        picks.forEach((pick, i) => {
+          const idx = startRoundIndex + i;
+          const base = idx < next.length
+            ? next[idx]
+            : { id: newRoundId(), manualHandicaps: {} };
+          const applied = applyCoursePick(base, pick);
+          if (idx < next.length) next[idx] = applied;
+          else next.push(applied);
         });
-        if (isGame && !nameTouched && startRoundIndex === 0 && freshCourses[0]?.name) {
-          setTournamentName(buildGameName(freshCourses[0].name));
-        }
-      })();
+        return next;
+      });
+      // Name a single game after its course — only a resolved 'course' pick
+      // has a name now; a 'club' pick names the game when its layout is set.
+      const first = picks[0];
+      if (isGame && !nameTouched && startRoundIndex === 0 && first?.kind === 'course') {
+        setTournamentName(buildGameName(first.course.name));
+      }
     }
 
     return () => { cancelled = true; };
@@ -207,6 +194,18 @@ export default function SetupScreen({ navigation, route }) {
       setTournamentName(buildGameName(value));
     }
   }
+
+  // Resolve a club-picked round to one of the club's layouts.
+  const chooseLayout = useCallback((roundIndex, layoutCourse) => {
+    setRounds((prev) => {
+      const next = [...prev];
+      next[roundIndex] = applyLayoutChoice(next[roundIndex], layoutCourse);
+      return next;
+    });
+    if (isGame && !nameTouched && roundIndex === 0) {
+      setTournamentName(buildGameName(layoutCourse.name));
+    }
+  }, [isGame, nameTouched]);
 
   function addRound() {
     setRounds((prev) => [...prev, { id: newRoundId(), courseName: '', holes: defaultHoles(), tees: [], playerHandicaps: null, playerTees: null, manualHandicaps: {} }]);
@@ -494,6 +493,16 @@ export default function SetupScreen({ navigation, route }) {
                   <Feather name="chevron-right" size={16} color={theme.text.muted} style={{ marginLeft: 'auto' }} />
                 </TouchableOpacity>
               </View>
+            ) : r.club ? (
+              <View style={s.courseCard}>
+                <RoundLayoutSelect
+                  club={r.club}
+                  layouts={r.clubLayouts || []}
+                  value={r.layoutId ?? null}
+                  onChange={(layoutCourse) => chooseLayout(i, layoutCourse)}
+                  onChangeClub={() => navigation.navigate('CoursePicker', { roundIndex: i })}
+                />
+              </View>
             ) : (
               <TouchableOpacity
                 style={s.courseEmpty}
@@ -503,7 +512,7 @@ export default function SetupScreen({ navigation, route }) {
                 <View style={s.courseEmptyPin}>
                   <Feather name="map-pin" size={20} color={theme.accent.primary} />
                 </View>
-                <Text style={s.courseEmptyTitle}>Pick a course from library</Text>
+                <Text style={s.courseEmptyTitle}>Pick a club or course</Text>
                 <Text style={s.courseEmptyHint}>Tap to choose where you're playing</Text>
               </TouchableOpacity>
             )}
