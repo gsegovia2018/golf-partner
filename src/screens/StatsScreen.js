@@ -2045,7 +2045,7 @@ function PairsTab({ tournament, players, h2hP1, setH2hP1, h2hP2, setH2hP2, selec
         <Text style={s.sectionTitle}>MATCH PLAY</Text>
         {matchPlay.some(r => r.available) ? (
           <>
-          <Text style={s.scopeText}>Per round, hole-by-hole up/down — closes when lead > holes remaining</Text>
+          <Text style={s.scopeText}>Per round, hole-by-hole up/down — closes when lead {'>'} holes remaining</Text>
           {matchPlay.filter(r => r.available).map(round => {
             const p1Label = round.pair1.map(p => firstName(p)).join(' + ');
             const p2Label = round.pair2.map(p => firstName(p)).join(' + ');

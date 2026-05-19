@@ -1,7 +1,7 @@
 import React, { useEffect, useRef, useState } from 'react';
 import {
   View, Text, TextInput, TouchableOpacity,
-  StyleSheet, ScrollView,
+  StyleSheet, ScrollView, Alert,
 } from 'react-native';
 import ScreenContainer from '../components/ScreenContainer';
 import { Feather } from '@expo/vector-icons';
@@ -196,7 +196,16 @@ export default function CourseEditorScreen({ navigation, route }) {
             style={s.btn}
             onPress={async () => {
               if (courseId) {
-                try { await updateCourseFromEditor(courseId, holes, tees); } catch (_) {}
+                try {
+                  await updateCourseFromEditor(courseId, holes, tees);
+                } catch (err) {
+                  // Keep the user on the editor so their edits aren't lost.
+                  Alert.alert(
+                    'Could not save course',
+                    err?.message ?? 'Your changes were not saved. Please try again.',
+                  );
+                  return;
+                }
               }
               navigation.goBack();
             }}

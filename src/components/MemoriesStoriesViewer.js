@@ -88,6 +88,24 @@ export default function MemoriesStoriesViewer({ visible, items = [], startIndex 
     },
   }), [dragY, onClose]);
 
+  // The progress bar is segmented PER ROUND, not per global media item — a
+  // tournament with 60+ photos would otherwise render 60+ unreadable slivers.
+  // Each round is one segment; the active round's segment fills with the
+  // round's own item-by-item progress. Computed before the early return so
+  // the hook order stays stable across every render.
+  const roundSegments = useMemo(() => {
+    const segs = [];
+    let prevRoundId;
+    items.forEach((m, i) => {
+      if (m.roundId !== prevRoundId) {
+        segs.push({ roundId: m.roundId, start: i, count: 0 });
+        prevRoundId = m.roundId;
+      }
+      segs[segs.length - 1].count += 1;
+    });
+    return segs;
+  }, [items]);
+
   if (!visible || !current) return null;
 
   const advance = () => {
@@ -125,23 +143,6 @@ export default function MemoriesStoriesViewer({ visible, items = [], startIndex 
       });
     } catch { return ''; }
   })();
-
-  // The progress bar is segmented PER ROUND, not per global media item — a
-  // tournament with 60+ photos would otherwise render 60+ unreadable slivers.
-  // Each round is one segment; the active round's segment fills with the
-  // round's own item-by-item progress.
-  const roundSegments = useMemo(() => {
-    const segs = [];
-    let prevRoundId;
-    items.forEach((m, i) => {
-      if (m.roundId !== prevRoundId) {
-        segs.push({ roundId: m.roundId, start: i, count: 0 });
-        prevRoundId = m.roundId;
-      }
-      segs[segs.length - 1].count += 1;
-    });
-    return segs;
-  }, [items]);
 
   const activeSegmentIndex = roundSegments.findIndex(
     (seg) => index >= seg.start && index < seg.start + seg.count,

@@ -23,8 +23,6 @@ jobs:
         run: npm test -- --ci
 
       - name: Lint
-        # Requires eslint.config.mjs (see the handoff notes — the config file
-        # could not be committed automatically). continue-on-error until the
-        # existing lint backlog is cleared; flip to blocking afterwards.
+        # Blocking: the config is committed and `npm run lint` is error-free.
+        # Remaining items are warnings (tracked, non-blocking) — see eslint.config.mjs.
         run: npm run lint
-        continue-on-error: true
