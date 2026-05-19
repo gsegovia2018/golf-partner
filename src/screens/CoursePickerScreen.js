@@ -9,15 +9,15 @@ import { Feather, FontAwesome } from '@expo/vector-icons';
 
 import { useTheme } from '../theme/ThemeContext';
 import {
-  fetchCourses, upsertCourse, defaultHoles, saveCourseHoles,
+  fetchCourses, fetchClubs, upsertCourse, defaultHoles, saveCourseHoles,
   fetchFavoriteCourseIds, toggleFavoriteCourse, deleteCourse,
 } from '../store/libraryStore';
 import { loadAllTournaments } from '../store/tournamentStore';
 import { setPendingCourses } from '../lib/selectionBridge';
 import { buildCourseLastUsed } from '../lib/recentUse';
-
-const normalize = (value) =>
-  (value ?? '').toString().normalize('NFD').replace(/\p{Diacritic}/gu, '').toLowerCase();
+import {
+  buildCourseLibraryItems, filterCourseLibraryItems, normalizeText as normalize,
+} from '../lib/courseLibrary';
 
 export default function CoursePickerScreen({ navigation, route }) {
   const { theme } = useTheme();
@@ -28,6 +28,8 @@ export default function CoursePickerScreen({ navigation, route }) {
   const maxSelectable = route.params?.maxSelectable ?? null;
 
   const [courses, setCourses] = useState([]);
+  const [clubs, setClubs] = useState([]);
+  const [expandedClubs, setExpandedClubs] = useState(() => new Set());
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState(null);
   const [selectedCourses, setSelectedCourses] = useState([]);
@@ -47,12 +49,14 @@ export default function CoursePickerScreen({ navigation, route }) {
       // favorites / tournaments are best-effort and fall back silently.
       fetchCourses()
         .then(async (list) => {
-          const [favs, tournaments] = await Promise.all([
+          const [clubList, favs, tournaments] = await Promise.all([
+            fetchClubs().catch(() => []),
             fetchFavoriteCourseIds().catch(() => new Set()),
             loadAllTournaments().catch(() => []),
           ]);
           if (cancelled) return;
           setCourses(list);
+          setClubs(clubList);
           setFavorites(favs);
           setLastUsed(buildCourseLastUsed(tournaments));
         })
@@ -64,25 +68,99 @@ export default function CoursePickerScreen({ navigation, route }) {
     }, [reloadKey]),
   );
 
-  const filteredCourses = useMemo(() => {
-    const q = normalize(query);
-    const base = q
-      ? courses.filter((c) =>
-        normalize(c.name).includes(q) ||
-        normalize(c.city).includes(q) ||
-        normalize(c.province).includes(q))
-      : courses.slice();
-    base.sort((a, b) => {
-      const fa = favorites.has(a.id) ? 1 : 0;
-      const fb = favorites.has(b.id) ? 1 : 0;
-      if (fa !== fb) return fb - fa;
-      const ta = lastUsed[a.id] ?? 0;
-      const tb = lastUsed[b.id] ?? 0;
-      if (ta !== tb) return tb - ta;
-      return normalize(a.name).localeCompare(normalize(b.name));
+  const items = useMemo(() => {
+    const all = buildCourseLibraryItems(courses, clubs, favorites, lastUsed);
+    return filterCourseLibraryItems(all, query);
+  }, [courses, clubs, query, favorites, lastUsed]);
+
+  // While searching, every shown club is expanded so matches stay visible.
+  const searching = normalize(query).length > 0;
+  const isClubExpanded = (clubId) => searching || expandedClubs.has(clubId);
+  function toggleClub(clubId) {
+    setExpandedClubs((prev) => {
+      const next = new Set(prev);
+      if (next.has(clubId)) next.delete(clubId); else next.add(clubId);
+      return next;
     });
-    return base;
-  }, [courses, query, favorites, lastUsed]);
+  }
+
+  // One library row for a course — used for standalone courses and, with
+  // isLayout=true, for the layout rows inside an expanded club.
+  function renderCourseRow(c, isLayout) {
+    const selIdx = selectedCourses.findIndex((sc) => sc.id === c.id);
+    const isPicked = selIdx !== -1;
+    const isFavorite = favorites.has(c.id);
+    return (
+      <View key={c.id} style={[s.row, isLayout && s.layoutRow, isPicked && s.rowPicked]}>
+        <TouchableOpacity
+          style={s.rowLeft}
+          onPress={() => toggleCourse({ id: c.id, name: c.name, slope: c.slope, holes: c.holes.length === 18 ? c.holes : defaultHoles() })}
+          onLongPress={() => handleCourseLongPress(c)}
+          delayLongPress={350}
+          activeOpacity={0.7}
+        >
+          <Text style={s.courseName}>{isLayout ? (c.layoutName || c.name) : c.name}</Text>
+          <Text style={s.courseMeta}>
+            {[c.city, c.province].filter(Boolean).join(', ')}
+            {(c.city || c.province) ? '  ·  ' : ''}
+            Par {c.holes.reduce((sum, h) => sum + h.par, 0)}
+            {c.slope ? `  ·  Slope ${c.slope}` : ''}
+          </Text>
+        </TouchableOpacity>
+        <TouchableOpacity
+          style={s.favBtn}
+          onPress={() => handleToggleFavorite(c.id)}
+          activeOpacity={0.7}
+          hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+        >
+          {isFavorite ? (
+            <FontAwesome name="star" size={18} color={theme.accent.primary} />
+          ) : (
+            <Feather name="star" size={18} color={theme.text.muted} />
+          )}
+        </TouchableOpacity>
+        {isPicked
+          ? (
+            <View style={s.orderBadge}>
+              <Text style={s.orderBadgeText}>{selIdx + 1}</Text>
+            </View>
+          )
+          : <View style={s.emptyCircle} />}
+      </View>
+    );
+  }
+
+  // A collapsible club header; expands to its layout rows.
+  function renderClubRow(club, layouts) {
+    const expanded = isClubExpanded(club.id);
+    const pickedCount = layouts.filter(
+      (l) => selectedCourses.some((sc) => sc.id === l.id)).length;
+    return (
+      <View key={`club-${club.id}`}>
+        <TouchableOpacity style={s.clubRow} onPress={() => toggleClub(club.id)} activeOpacity={0.7}>
+          <Feather
+            name={expanded ? 'chevron-down' : 'chevron-right'}
+            size={18}
+            color={theme.text.muted}
+          />
+          <View style={s.rowLeft}>
+            <Text style={s.courseName}>{club.name}</Text>
+            <Text style={s.courseMeta}>
+              {[club.city, club.province].filter(Boolean).join(', ')}
+              {(club.city || club.province) ? '  ·  ' : ''}
+              {layouts.length} layouts
+            </Text>
+          </View>
+          {pickedCount > 0 && (
+            <View style={s.orderBadge}>
+              <Text style={s.orderBadgeText}>{pickedCount}</Text>
+            </View>
+          )}
+        </TouchableOpacity>
+        {expanded && layouts.map((l) => renderCourseRow(l, true))}
+      </View>
+    );
+  }
 
   function toggleCourse(course) {
     setSelectedCourses((prev) => {
@@ -267,7 +345,7 @@ export default function CoursePickerScreen({ navigation, route }) {
           </View>
         ) : courses.length === 0 ? (
           <Text style={s.empty}>No courses in library yet.</Text>
-        ) : filteredCourses.length === 0 ? (
+        ) : items.length === 0 ? (
           <>
             <Text style={s.empty}>No courses match "{query}"</Text>
             {query.trim() ? (
@@ -283,49 +361,10 @@ export default function CoursePickerScreen({ navigation, route }) {
             ) : null}
           </>
         ) : (
-          filteredCourses.map((c) => {
-            const selIdx = selectedCourses.findIndex((sc) => sc.id === c.id);
-            const isPicked = selIdx !== -1;
-            const isFavorite = favorites.has(c.id);
-            return (
-              <View key={c.id} style={[s.row, isPicked && s.rowPicked]}>
-                <TouchableOpacity
-                  style={s.rowLeft}
-                  onPress={() => toggleCourse({ id: c.id, name: c.name, slope: c.slope, holes: c.holes.length === 18 ? c.holes : defaultHoles() })}
-                  onLongPress={() => handleCourseLongPress(c)}
-                  delayLongPress={350}
-                  activeOpacity={0.7}
-                >
-                  <Text style={s.courseName}>{c.name}</Text>
-                  <Text style={s.courseMeta}>
-                    {[c.city, c.province].filter(Boolean).join(', ')}
-                    {(c.city || c.province) ? '  ·  ' : ''}
-                    Par {c.holes.reduce((sum, h) => sum + h.par, 0)}
-                    {c.slope ? `  ·  Slope ${c.slope}` : ''}
-                  </Text>
-                </TouchableOpacity>
-                <TouchableOpacity
-                  style={s.favBtn}
-                  onPress={() => handleToggleFavorite(c.id)}
-                  activeOpacity={0.7}
-                  hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
-                >
-                  {isFavorite ? (
-                    <FontAwesome name="star" size={18} color={theme.accent.primary} />
-                  ) : (
-                    <Feather name="star" size={18} color={theme.text.muted} />
-                  )}
-                </TouchableOpacity>
-                {isPicked
-                  ? (
-                    <View style={s.orderBadge}>
-                      <Text style={s.orderBadgeText}>{selIdx + 1}</Text>
-                    </View>
-                  )
-                  : <View style={s.emptyCircle} />}
-              </View>
-            );
-          })
+          items.map((item) =>
+            item.kind === 'club'
+              ? renderClubRow(item.club, item.layouts)
+              : renderCourseRow(item.course, false))
         )}
       </ScrollView>
 
@@ -420,6 +459,19 @@ const makeStyles = (theme) => StyleSheet.create({
     backgroundColor: theme.isDark ? theme.accent.primary + '10' : theme.accent.light,
   },
   rowLeft: { flex: 1 },
+  clubRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    backgroundColor: theme.bg.card,
+    borderRadius: 16,
+    borderWidth: 1,
+    borderColor: theme.isDark ? theme.glass?.border : theme.border.default,
+    padding: 16,
+    marginBottom: 8,
+    ...(theme.isDark ? {} : theme.shadow.card),
+  },
+  layoutRow: { marginLeft: 16 },
   courseName: {
     color: theme.text.primary,
     fontSize: 16,
