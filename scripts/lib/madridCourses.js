@@ -103,7 +103,39 @@ function validateStrokeIndex(holes) {
     : { valid: false, reason: `stroke indices must be 1..${n}, got [${sis.join(',')}]` };
 }
 
+// Federation ratings arrive as strings ("71.2") or 0/"" when absent.
+// Normalise to a finite number, or null when missing/zero.
+function numOrNull(v) {
+  if (v == null || v === '') return null;
+  const n = Number(v);
+  return Number.isFinite(n) && n !== 0 ? n : null;
+}
+
+// Build the course_tees rows for one tee colour (barra). Rating/slope are
+// rated separately per sex, so up to two rows are produced — men's keeps the
+// plain colour label, women's gets a " (Damas)" suffix. A sex with no rating
+// AND no slope is skipped. If neither sex is rated, a single fallback row is
+// kept so the distances are not lost. Both rows share the same yardages map.
+function buildTeeRows(barra, distances, men, women) {
+  const name = decodeEntities(barra.nombre).trim();
+  const mRating = numOrNull(men && men.rating);
+  const mSlope = numOrNull(men && men.slope);
+  const wRating = numOrNull(women && women.rating);
+  const wSlope = numOrNull(women && women.slope);
+  const rows = [];
+  if (mRating != null || mSlope != null) {
+    rows.push({ label: name, rating: mRating, slope: mSlope, yardages: distances });
+  }
+  if (wRating != null || wSlope != null) {
+    rows.push({ label: `${name} (Damas)`, rating: wRating, slope: wSlope, yardages: distances });
+  }
+  if (rows.length === 0) {
+    rows.push({ label: name, rating: null, slope: null, yardages: distances });
+  }
+  return rows;
+}
+
 module.exports = {
   CLUBS, decodeEntities, parseTrazadoOptions, deriveCourseName,
-  buildHoles, validateStrokeIndex,
+  buildHoles, validateStrokeIndex, numOrNull, buildTeeRows,
 };

@@ -125,3 +125,55 @@ describe('validateStrokeIndex', () => {
     expect(validateStrokeIndex([]).valid).toBe(false);
   });
 });
+
+const { numOrNull, buildTeeRows } = require('../lib/madridCourses');
+
+describe('numOrNull', () => {
+  test('parses real numbers, treats 0/empty/nullish as null', () => {
+    expect(numOrNull('71.2')).toBe(71.2);
+    expect(numOrNull(142)).toBe(142);
+    expect(numOrNull(0)).toBeNull();
+    expect(numOrNull('0')).toBeNull();
+    expect(numOrNull('')).toBeNull();
+    expect(numOrNull(null)).toBeNull();
+    expect(numOrNull(undefined)).toBeNull();
+  });
+});
+
+describe('buildTeeRows', () => {
+  const barra = { id: 'AM', nombre: 'Amarillas' };
+  const distances = { 1: 402, 2: 415 };
+
+  test('both sexes rated → two rows, women suffixed "(Damas)"', () => {
+    const rows = buildTeeRows(
+      barra, distances,
+      { rating: '71.2', slope: 142 },
+      { rating: '77.7', slope: 143 },
+    );
+    expect(rows).toEqual([
+      { label: 'Amarillas', rating: 71.2, slope: 142, yardages: distances },
+      { label: 'Amarillas (Damas)', rating: 77.7, slope: 143, yardages: distances },
+    ]);
+  });
+
+  test('only men rated → single men row', () => {
+    const rows = buildTeeRows(
+      barra, distances,
+      { rating: '71.2', slope: 142 },
+      { rating: '0', slope: 0 },
+    );
+    expect(rows).toHaveLength(1);
+    expect(rows[0].label).toBe('Amarillas');
+  });
+
+  test('neither sex rated → one fallback row with null rating/slope', () => {
+    const rows = buildTeeRows(
+      barra, distances,
+      { rating: 0, slope: 0 },
+      { rating: 0, slope: 0 },
+    );
+    expect(rows).toEqual([
+      { label: 'Amarillas', rating: null, slope: null, yardages: distances },
+    ]);
+  });
+});
