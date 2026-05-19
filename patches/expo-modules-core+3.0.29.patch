@@ -1,0 +1,37 @@
+diff --git a/node_modules/expo-modules-core/android/src/main/java/expo/modules/kotlin/activityresult/AppContextActivityResultRegistry.kt b/node_modules/expo-modules-core/android/src/main/java/expo/modules/kotlin/activityresult/AppContextActivityResultRegistry.kt
+index a5b971e..e200a56 100644
+--- a/node_modules/expo-modules-core/android/src/main/java/expo/modules/kotlin/activityresult/AppContextActivityResultRegistry.kt
++++ b/node_modules/expo-modules-core/android/src/main/java/expo/modules/kotlin/activityresult/AppContextActivityResultRegistry.kt
+@@ -221,6 +221,32 @@ class AppContextActivityResultRegistry(
+ 
+     return object : AppContextActivityResultLauncher<I, O>() {
+       override fun launch(input: I, callback: ActivityResultCallback<O>) {
++        // patch-package (expo/expo#19512): when the host Activity is destroyed and
++        // recreated (configuration change, or the OS reclaiming memory while the app
++        // is backgrounded) the ON_DESTROY observer unregisters this launcher's key
++        // before expo-modules-core's asynchronous re-registration runs. Without this
++        // guard, launch() throws IllegalStateException and the camera/gallery picker
++        // crashes. Re-register on demand against the current Activity to recover.
++        if (keyToRequestCode[key] == null) {
++          val recreatedActivity = currentActivityProvider.currentActivity as? AppCompatActivity
++          if (recreatedActivity != null) {
++            if (Looper.myLooper() == Looper.getMainLooper()) {
++              register(key, recreatedActivity, contract, fallbackCallback)
++            } else {
++              // register() touches LifecycleRegistry and must run on the main thread.
++              val latch = java.util.concurrent.CountDownLatch(1)
++              Handler(Looper.getMainLooper()).post {
++                try {
++                  register(key, recreatedActivity, contract, fallbackCallback)
++                } finally {
++                  latch.countDown()
++                }
++              }
++              latch.await()
++            }
++          }
++        }
++
+         val requestCode = keyToRequestCode[key]
+           ?: throw IllegalStateException("Attempting to launch an unregistered ActivityResultLauncher with contract $contract and input $input. You must ensure the ActivityResultLauncher is registered before calling launch()")
+ 
