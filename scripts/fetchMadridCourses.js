@@ -43,7 +43,10 @@ async function fetchTrazado(trazadoId) {
     const metros = data.metros || [];
     const distances = {};
     metros.forEach((dist, i) => {
-      if (typeof parArr[i] === 'number') distances[i + 1] = dist;
+      const n = Number(dist);
+      if (typeof parArr[i] === 'number' && Number.isFinite(n) && n > 0) {
+        distances[i + 1] = n;
+      }
     });
     tees.push({
       barra: barra.id,
