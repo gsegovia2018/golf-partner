@@ -80,4 +80,30 @@ function deriveCourseName(clubName, trazadoText, trazadoCount) {
   return `${club} — ${short}`;
 }
 
-module.exports = { CLUBS, decodeEntities, parseTrazadoOptions, deriveCourseName };
+// Build the hole list from the federation's parallel par/hcp arrays.
+// Holes whose par is "A" (void — used to pad 9-hole courses to 18 slots)
+// are dropped; surviving holes are renumbered 1..N.
+function buildHoles(parArr, hcpArr) {
+  const holes = [];
+  for (let i = 0; i < parArr.length; i++) {
+    const par = parArr[i];
+    if (typeof par !== 'number' || !Number.isFinite(par)) continue;
+    holes.push({ number: holes.length + 1, par, strokeIndex: Number(hcpArr[i]) });
+  }
+  return holes;
+}
+
+// Stroke indices for an N-hole course must be exactly the set 1..N.
+function validateStrokeIndex(holes) {
+  const n = holes.length;
+  const sis = holes.map((h) => h.strokeIndex).sort((a, b) => a - b);
+  const ok = n > 0 && sis.every((v, i) => v === i + 1);
+  return ok
+    ? { valid: true }
+    : { valid: false, reason: `stroke indices must be 1..${n}, got [${sis.join(',')}]` };
+}
+
+module.exports = {
+  CLUBS, decodeEntities, parseTrazadoOptions, deriveCourseName,
+  buildHoles, validateStrokeIndex,
+};
