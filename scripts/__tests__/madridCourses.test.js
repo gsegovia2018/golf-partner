@@ -56,3 +56,24 @@ describe('parseTrazadoOptions', () => {
     expect(parseTrazadoOptions('<div>no select here</div>')).toEqual([]);
   });
 });
+
+const { deriveCourseName } = require('../lib/madridCourses');
+
+describe('deriveCourseName', () => {
+  test('single-trazado club → bare club name', () => {
+    expect(
+      deriveCourseName('Real Club de Golf La Herrería', 'LA HERRERIA - La Herreria', 1),
+    ).toBe('Real Club de Golf La Herrería');
+  });
+
+  test('multi-trazado club → "Club — Trazado", short name after last " - "', () => {
+    expect(
+      deriveCourseName('Real Club La Moraleja', 'LA MORALEJA - Campo 1', 4),
+    ).toBe('Real Club La Moraleja — Campo 1');
+  });
+
+  test('multi-trazado with no " - " separator → "Club — fullText"', () => {
+    expect(deriveCourseName('Some Club', 'Recorrido Norte', 2))
+      .toBe('Some Club — Recorrido Norte');
+  });
+});

@@ -68,4 +68,16 @@ function parseTrazadoOptions(html) {
   return out;
 }
 
-module.exports = { CLUBS, decodeEntities, parseTrazadoOptions };
+// Build the app course name. The trazado option text is "CLUB - Trazado";
+// a club with one trazado keeps just the club name, otherwise the trazado
+// short name (text after the last " - ") is appended with an em dash.
+function deriveCourseName(clubName, trazadoText, trazadoCount) {
+  const club = decodeEntities(clubName).trim();
+  if (trazadoCount <= 1) return club;
+  const decoded = decodeEntities(trazadoText).trim();
+  const idx = decoded.lastIndexOf(' - ');
+  const short = idx >= 0 ? decoded.slice(idx + 3).trim() : decoded;
+  return `${club} — ${short}`;
+}
+
+module.exports = { CLUBS, decodeEntities, parseTrazadoOptions, deriveCourseName };
