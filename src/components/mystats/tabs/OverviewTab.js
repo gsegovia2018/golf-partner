@@ -34,7 +34,7 @@ export default function OverviewTab({ stats, onInfo }) {
         ) : (
           <Text style={s.verdictSub}>Play more rounds to see a trend.</Text>
         )}
-        <TrendLineChart series={formSeries.metrics.avgPoints} color={theme.text.inverse} />
+        <TrendLineChart series={formSeries.metrics.avgPoints} color={theme.text.inverse} labelColor={theme.text.inverse} />
         <View style={s.tiles}>
           <StatTile surface="hero" value={`${metrics.rounds}`} caption="ROUNDS COUNTED" />
           <StatTile surface="hero" value={`${metrics.avgPoints}`} caption="AVG PTS / ROUND" />

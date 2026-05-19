@@ -29,7 +29,7 @@ export default function ScoreMixArea({ rounds = [] }) {
   }, [rounds]);
 
   if (cols.length < 2) {
-    return <Text style={s.empty}>Not enough rounds yet.</Text>;
+    return <Text style={s.empty}>Select two or more rounds to see the score mix.</Text>;
   }
 
   const band = (topFn, botFn) => {

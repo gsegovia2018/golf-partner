@@ -424,6 +424,19 @@ describe('computeFormSeries', () => {
     expect(r.scoreMix).toEqual([]);
     expect(r.hasShotData).toBe(false);
   });
+
+  test('populates shot metrics and hasShotData when the round has shot detail', () => {
+    const h = holes18();
+    const mr = myRound('Pine', h, 4);
+    // Log a putt + a fairway drive on every hole so shotStats reports data.
+    mr.round.shotDetails = {
+      p1: Object.fromEntries(h.map((hole) => [hole.number, { putts: 2, drive: 'fairway' }])),
+    };
+    const { metrics, hasShotData } = computeFormSeries([mr]);
+    expect(hasShotData).toBe(true);
+    expect(metrics.puttsPerRound[0].value).not.toBeNull();
+    expect(metrics.fairwayPct[0].value).not.toBeNull();
+  });
 });
 
 describe('computeMyStats', () => {

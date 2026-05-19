@@ -10,6 +10,7 @@ import { scalePoints, toSegments } from './chartGeometry';
 export default function TrendLineChart({
   series = [],
   color,
+  labelColor,
   variant = 'full',
   formatValue = (v) => `${v}`,
   caption,
@@ -17,6 +18,7 @@ export default function TrendLineChart({
   const { theme } = useTheme();
   const s = useMemo(() => makeStyles(theme), [theme]);
   const stroke = color || theme.accent.primary;
+  const labelFill = labelColor || theme.text.primary;
 
   const compact = variant === 'compact';
   const width = 300;
@@ -74,7 +76,7 @@ export default function TrendLineChart({
                 y={ly}
                 fontSize={fontSize}
                 fontWeight="800"
-                fill={theme.text.primary}
+                fill={labelFill}
                 textAnchor="middle"
               >
                 {formatValue(p.value)}
