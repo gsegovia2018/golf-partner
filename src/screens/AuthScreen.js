@@ -1,4 +1,4 @@
-import React, { useState, useMemo, useEffect } from 'react';
+import React, { useState, useMemo, useEffect, useRef, useCallback } from 'react';
 import {
   View, Text, TextInput, TouchableOpacity,
   StyleSheet, KeyboardAvoidingView, Platform, ActivityIndicator, Alert,
@@ -7,11 +7,17 @@ import { Feather, Ionicons } from '@expo/vector-icons';
 import * as WebBrowser from 'expo-web-browser';
 import { makeRedirectUri } from 'expo-auth-session';
 import * as QueryParams from 'expo-auth-session/build/QueryParams';
+import * as Linking from 'expo-linking';
 import { supabase } from '../lib/supabase';
 import { parseOAuthError, getWebRedirectTo } from '../lib/oauth';
 import { useTheme } from '../theme/ThemeContext';
 
 const isWeb = Platform.OS === 'web';
+
+// Temporary: surfaces the native OAuth callback trace on-device via Alert so
+// the redirect can be diagnosed without a dev connection. Flip to false once
+// Google sign-in is confirmed working on Android.
+const OAUTH_DEBUG = true;
 
 // Basic email shape check — good enough to gate the submit button and show
 // inline feedback without being overly strict about valid TLDs.
@@ -58,6 +64,55 @@ export default function AuthScreen() {
       window.history.replaceState({}, '', getWebRedirectTo());
     }
   }, []);
+
+  // Guards so the OAuth `code` is exchanged exactly once — the in-app browser
+  // result and the deep-link listener can both deliver the same callback URL.
+  const oauthBusy = useRef(false);
+  const lastOAuthCode = useRef(null);
+
+  // Parse an OAuth callback URL and exchange its `code` for a session.
+  // Fed from two sources: `openAuthSessionAsync`'s result (works on iOS) and
+  // the deep-link listener (Android routes the `golf://` redirect to the app).
+  const completeOAuth = useCallback(async (url) => {
+    if (!url) return;
+    const { params, errorCode } = QueryParams.getQueryParams(url);
+    if (errorCode || params.error) {
+      Alert.alert('Sign-in failed', params.error_description || errorCode || params.error);
+      return;
+    }
+    const { code } = params;
+    if (!code) return;
+    if (oauthBusy.current || lastOAuthCode.current === code) return;
+    oauthBusy.current = true;
+    lastOAuthCode.current = code;
+    try {
+      const { error } = await supabase.auth.exchangeCodeForSession(code);
+      if (error) Alert.alert('Error', error.message);
+      else if (OAUTH_DEBUG) Alert.alert('OAuth debug', 'exchange OK — session set');
+      // On success `onAuthStateChange` swaps in the app.
+    } finally {
+      oauthBusy.current = false;
+    }
+  }, []);
+
+  // Native OAuth callback: the provider redirects to `golf://...?code=`, which
+  // Android delivers to the app as a deep link because the in-app browser
+  // usually can't capture a custom-scheme redirect. Handle both a cold start
+  // (`getInitialURL`) and the app already running (the `url` event).
+  useEffect(() => {
+    if (isWeb) return undefined;
+    let active = true;
+    Linking.getInitialURL().then((url) => {
+      if (!active || !url) return;
+      if (OAUTH_DEBUG && url.includes('code=')) Alert.alert('OAuth debug', `initial url: ${url}`);
+      completeOAuth(url);
+    });
+    const sub = Linking.addEventListener('url', ({ url }) => {
+      if (OAUTH_DEBUG && url && url.includes('code=')) Alert.alert('OAuth debug', `deep link: ${url}`);
+      completeOAuth(url);
+    });
+    return () => { active = false; sub.remove(); };
+  }, [completeOAuth]);
 
   async function submit() {
     setTouched({ email: true, password: true });
@@ -122,19 +177,20 @@ export default function AuthScreen() {
       });
       if (error) { Alert.alert('Error', error.message); return; }
 
+      // Opens an in-app browser. On iOS the redirect returns as `result.url`;
+      // on Android it usually arrives via the deep-link listener instead.
+      // Both funnel into `completeOAuth`, which exchanges the code once.
       const result = await WebBrowser.openAuthSessionAsync(data.url, redirectTo);
-      if (result.type !== 'success') return; // user dismissed or cancelled
-
-      const { params, errorCode } = QueryParams.getQueryParams(result.url);
-      if (errorCode || params.error) {
-        Alert.alert('Sign-in failed', params.error_description || errorCode || params.error);
-        return;
+      if (OAUTH_DEBUG) {
+        Alert.alert(
+          'OAuth debug',
+          `redirectTo: ${redirectTo}\nresult.type: ${result.type}\nresult.url: ${result.url ?? '(none)'}`,
+        );
       }
-      if (params.code) {
-        const { error: exchangeError } = await supabase.auth.exchangeCodeForSession(params.code);
-        if (exchangeError) Alert.alert('Error', exchangeError.message);
-        // On success `onAuthStateChange` swaps in the app — nothing else here.
+      if (result.type === 'success' && result.url) {
+        await completeOAuth(result.url);
       }
+      // Otherwise the deep-link listener handles the callback.
     } catch (e) {
       Alert.alert('Error', e?.message ?? 'Could not sign in. Please try again.');
     } finally {
