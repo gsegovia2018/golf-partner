@@ -31,6 +31,22 @@ export function clampPlayingHandicap(n) {
   return Math.max(-9, Math.min(54, v));
 }
 
+// Resolve a player's tee for a round, reconciled against the course's current
+// tees. An existing tee is kept when its label still matches one of `tees`;
+// otherwise the player's last-used tee (matched the same way) is adopted with
+// the current course tee's data, falling back to the course's middle tee.
+// This drops a stored tee naming one the course no longer has — e.g. a legacy
+// synthetic tee carried over from an older round.
+export function resolvePlayerTee(existing, lastUsed, tees) {
+  const list = Array.isArray(tees) ? tees : [];
+  const find = (tee) => (tee
+    ? list.find((t) => String(t?.label ?? '') === String(tee.label ?? '')) ?? null
+    : null);
+  if (find(existing)) return existing;
+  const pick = find(lastUsed) || middleTee(list);
+  return pick ? { label: pick.label, slope: pick.slope, rating: pick.rating } : null;
+}
+
 // Per-round, per-player tee picker + playing-handicap editor.
 //
 // Props:
@@ -85,22 +101,26 @@ export default function RoundTeeAssignments({ round, players = [], onChange, the
     (async () => {
       const resolved = { ...playerTees };
       for (const p of players) {
-        if (resolved[p.id]) continue;
-        let tee = null;
-        if (courseId) {
-          try { tee = await lastTeeForPlayerOnCourse(courseId, p.id); } catch (_) {}
+        const existing = resolved[p.id];
+        // Skip the history lookup when the existing tee already matches a
+        // current course tee — only stale/missing tees need re-resolving.
+        const existingValid = !!existing
+          && tees.some((t) => String(t?.label ?? '') === String(existing.label ?? ''));
+        let lastUsed = null;
+        if (!existingValid && courseId) {
+          try { lastUsed = await lastTeeForPlayerOnCourse(courseId, p.id); } catch (_) {}
         }
-        if (!tee) {
-          const mid = middleTee(tees);
-          if (mid) tee = { label: mid.label, slope: mid.slope, rating: mid.rating };
-        }
+        const tee = resolvePlayerTee(existing, lastUsed, tees);
         if (tee) resolved[p.id] = tee;
+        else delete resolved[p.id];
       }
       if (cancelled) return;
-      // Only update tee state when a missing tee was actually resolved —
-      // avoids a spurious onChange (and autosave) when every player already
-      // had a tee.
-      const teesChanged = players.some((p) => playerTees[p.id] == null && resolved[p.id] != null);
+      // Update tee state when reconciliation changed any player's tee — a
+      // freshly resolved tee, or a stale one corrected to a current course
+      // tee. Unchanged tees emit nothing, avoiding a spurious autosave.
+      const teesChanged = players.some(
+        (p) => (playerTees[p.id]?.label ?? null) !== (resolved[p.id]?.label ?? null),
+      );
       if (teesChanged) setPlayerTees(resolved);
       setPlayerHandicaps((prev) => {
         const next = { ...prev };
