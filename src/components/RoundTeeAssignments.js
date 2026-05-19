@@ -167,9 +167,22 @@ export default function RoundTeeAssignments({ round, players = [], onChange, the
   }
 
   // Nudge a player's handicap by delta (+/-1), clamped to a sane range.
+  // Reads prior state via the setter callback so rapid taps don't drop a step.
   function stepHandicap(playerId, delta) {
-    const current = parseInt(playerHandicaps[playerId], 10) || 0;
-    setHandicapValue(playerId, String(clampPlayingHandicap(current + delta)));
+    setPlayerHandicaps((prev) => {
+      const current = parseInt(prev[playerId], 10) || 0;
+      return { ...prev, [playerId]: String(clampPlayingHandicap(current + delta)) };
+    });
+    setManualHandicaps((prev) => ({ ...prev, [playerId]: true }));
+  }
+
+  // Commit a typed handicap: clamp the entered value and leave edit mode.
+  function commitHandicapEdit(playerId) {
+    setHandicapValue(
+      playerId,
+      String(clampPlayingHandicap(parseInt(playerHandicaps[playerId], 10) || 0)),
+    );
+    setEditingHandicapId(null);
   }
 
   if (players.length === 0) {
@@ -258,7 +271,7 @@ export default function RoundTeeAssignments({ round, players = [], onChange, the
                           onPress={() => setPlayerTee(p.id, tee)}
                           activeOpacity={0.7}
                           accessibilityRole="button"
-                          accessibilityLabel={`${p.name} tee ${tee.label || 'unnamed'}`}
+                          accessibilityLabel={`${tee.label || 'Unnamed'} tee`}
                           accessibilityState={{ selected }}
                         >
                           <View style={[s.teeDot, { backgroundColor: tColor || theme.bg.secondary }]} />
@@ -287,17 +300,13 @@ export default function RoundTeeAssignments({ round, players = [], onChange, the
                       keyboardType="numeric"
                       maxLength={4}
                       autoFocus
+                      returnKeyType="done"
                       keyboardAppearance={theme.isDark ? 'dark' : 'light'}
                       selectionColor={theme.accent.primary}
                       value={playerHandicaps[p.id] ?? ''}
                       onChangeText={(v) => setHandicapValue(p.id, v)}
-                      onBlur={() => {
-                        setHandicapValue(
-                          p.id,
-                          String(clampPlayingHandicap(parseInt(playerHandicaps[p.id], 10) || 0)),
-                        );
-                        setEditingHandicapId(null);
-                      }}
+                      onSubmitEditing={() => commitHandicapEdit(p.id)}
+                      onBlur={() => commitHandicapEdit(p.id)}
                     />
                   ) : (
                     <TouchableOpacity
@@ -402,7 +411,7 @@ const makeStyles = (theme) => StyleSheet.create({
     borderWidth: 1, borderColor: theme.border.default,
     alignItems: 'center', justifyContent: 'center',
   },
-  stepValueWrap: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: 16 },
+  stepValueWrap: { flex: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'center' },
   stepValue: { fontFamily: 'PlusJakartaSans-Bold', color: theme.text.primary, fontSize: 20 },
   stepInput: {
     flex: 1, marginHorizontal: 8, textAlign: 'center',
