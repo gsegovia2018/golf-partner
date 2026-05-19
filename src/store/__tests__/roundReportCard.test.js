@@ -91,6 +91,53 @@ describe('buildRoundReportCard — meta & headline', () => {
     expect(card.headline.verdict).toBe('Solid round');
   });
 
+  test('verdict bands with history: Strong / Off day / Tough day', () => {
+    const h = mkHoles();
+    // History baseline: one all-par round → 2.0 pts/hole.
+    const base = mkMyRound({ key: 'h1', holes: h, scores: evenScores(h, 4) });
+
+    // Strong: 3 birdies + 15 pars → 39 pts → perHole 2.17 → vsAvg ~+3.1.
+    const strongScores = evenScores(h, 4);
+    [1, 2, 3].forEach((n) => { strongScores[n] = 3; });
+    const strong = buildRoundReportCard(
+      [base, mkMyRound({ key: 'strong', holes: h, scores: strongScores })], 'strong');
+    expect(strong.headline.verdict).toBe('Strong round');
+
+    // Off day: 4 bogeys + 14 pars → 32 pts → perHole 1.78 → vsAvg ~-4.0.
+    const offScores = evenScores(h, 4);
+    [1, 2, 3, 4].forEach((n) => { offScores[n] = 5; });
+    const off = buildRoundReportCard(
+      [base, mkMyRound({ key: 'off', holes: h, scores: offScores })], 'off');
+    expect(off.headline.verdict).toBe('Off day');
+
+    // Tough day: 8 bogeys + 10 pars → 28 pts → perHole 1.56 → vsAvg ~-7.9.
+    const toughScores = evenScores(h, 4);
+    [1, 2, 3, 4, 5, 6, 7, 8].forEach((n) => { toughScores[n] = 5; });
+    const tough = buildRoundReportCard(
+      [base, mkMyRound({ key: 'tough', holes: h, scores: toughScores })], 'tough');
+    expect(tough.headline.verdict).toBe('Tough day');
+  });
+
+  test('verdict bands without history: Solid / Off day / Tough day', () => {
+    const h = mkHoles();
+    // Solid: all par → 2.0 pts/hole.
+    const solid = buildRoundReportCard(
+      [mkMyRound({ key: 'solid', holes: h, scores: evenScores(h, 4) })], 'solid');
+    expect(solid.headline.verdict).toBe('Solid round');
+
+    // Off day: 4 bogeys + 14 pars → perHole 1.78.
+    const offScores = evenScores(h, 4);
+    [1, 2, 3, 4].forEach((n) => { offScores[n] = 5; });
+    const off = buildRoundReportCard(
+      [mkMyRound({ key: 'off', holes: h, scores: offScores })], 'off');
+    expect(off.headline.verdict).toBe('Off day');
+
+    // Tough day: all bogeys (strokes 5 on par 4) → 1.0 pts/hole.
+    const tough = buildRoundReportCard(
+      [mkMyRound({ key: 'tough', holes: h, scores: evenScores(h, 5) })], 'tough');
+    expect(tough.headline.verdict).toBe('Tough day');
+  });
+
   test('incomplete round: per-hole and holesPlayed reflect holes actually scored', () => {
     const h = mkHoles();
     const partial = {};
