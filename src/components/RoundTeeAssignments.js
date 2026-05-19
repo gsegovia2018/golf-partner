@@ -1,4 +1,4 @@
-import React, { useEffect, useRef, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { View, Text, TextInput, TouchableOpacity, StyleSheet } from 'react-native';
 import { Feather } from '@expo/vector-icons';
 import { calcPlayingHandicap, lastTeeForPlayerOnCourse } from '../store/tournamentStore';
@@ -43,7 +43,7 @@ export function clampPlayingHandicap(n) {
 // Hosts MUST pass key={round.id} (and, where base indexes can change, fold a
 // base-index signature into the key) so the component remounts and re-resolves.
 export default function RoundTeeAssignments({ round, players = [], onChange, theme }) {
-  const s = makeStyles(theme);
+  const s = useMemo(() => makeStyles(theme), [theme]);
   const tees = round?.tees ?? [];
   const holes = round?.holes ?? [];
   const courseId = round?.courseId ?? null;
@@ -148,6 +148,7 @@ export default function RoundTeeAssignments({ round, players = [], onChange, the
 
   // Explicit "Reset all to auto": clear manual overrides, recompute from tees.
   function resetAllToAuto() {
+    setEditingHandicapId(null);
     setManualHandicaps({});
     setPlayerHandicaps(() => {
       const next = {};
@@ -192,7 +193,7 @@ export default function RoundTeeAssignments({ round, players = [], onChange, the
       {players.map((p) => {
         const expanded = expandedId === p.id;
         const pTee = playerTees[p.id];
-        const teeLabel = pTee?.label || null;
+        const teeLabel = pTee?.label ?? null;
         const dotColor = teeColor(teeLabel);
         const valueStr = playerHandicaps[p.id] ?? '';
         const overridden = !!manualHandicaps[p.id];
@@ -208,6 +209,7 @@ export default function RoundTeeAssignments({ round, players = [], onChange, the
               }}
               accessibilityRole="button"
               accessibilityLabel={`${p.name}, ${teeLabel ? teeLabel + ' tee' : 'no tee selected'}, playing handicap ${valueStr || 'unset'}`}
+              accessibilityState={{ expanded }}
             >
               <View style={s.avatar}>
                 <Text style={s.avatarText}>{playerInitials(p.name)}</Text>
@@ -257,6 +259,7 @@ export default function RoundTeeAssignments({ round, players = [], onChange, the
                           activeOpacity={0.7}
                           accessibilityRole="button"
                           accessibilityLabel={`${p.name} tee ${tee.label || 'unnamed'}`}
+                          accessibilityState={{ selected }}
                         >
                           <View style={[s.teeDot, { backgroundColor: tColor || theme.bg.secondary }]} />
                           <Text style={[s.teePillText, selected && s.teePillTextActive]}>
