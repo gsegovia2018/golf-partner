@@ -3,6 +3,7 @@ import { Modal, View, Text, TouchableOpacity, TouchableWithoutFeedback, ScrollVi
 import { Feather } from '@expo/vector-icons';
 import { captureRef } from 'react-native-view-shot';
 import * as Sharing from 'expo-sharing';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useTheme } from '../theme/ThemeContext';
 
 // Captures a branded off-screen card and opens the native share sheet (or
@@ -58,6 +59,7 @@ ShareableStatCard.displayName = 'ShareableStatCard';
 
 export default function StatDetailSheet({ visible, onClose, title, subtitle, explainer, rows = [], shareable = true }) {
   const { theme } = useTheme();
+  const insets = useSafeAreaInsets();
   const s = makeStyles(theme);
   const shareRef = useRef(null);
   const [sharing, setSharing] = useState(false);
@@ -96,7 +98,7 @@ export default function StatDetailSheet({ visible, onClose, title, subtitle, exp
       {/* Full-screen wrapper bottom-anchors the sheet and centres it on wide
           screens; box-none lets taps above the sheet reach the backdrop. */}
       <View style={s.sheetWrap} pointerEvents="box-none">
-        <View style={s.sheet}>
+        <View style={[s.sheet, { paddingBottom: Math.max(insets.bottom, 8) + 24 }]}>
           <View style={s.handle} />
           <View style={s.header}>
             <View style={{ flex: 1 }}>
@@ -125,7 +127,9 @@ export default function StatDetailSheet({ visible, onClose, title, subtitle, exp
               </View>
             ) : null}
             {rows.length === 0 ? (
-              <Text style={s.empty}>No details available.</Text>
+              // An explainer-only sheet has nothing more to show — don't print
+              // a misleading "no details" line under a perfectly good explainer.
+              explainer ? null : <Text style={s.empty}>No details available.</Text>
             ) : rows.map(r => {
               if (r.section) {
                 return (
@@ -169,7 +173,6 @@ const makeStyles = (t) => StyleSheet.create({
     backgroundColor: t.bg.primary,
     borderTopLeftRadius: 24, borderTopRightRadius: 24,
     maxHeight: '80%',
-    paddingBottom: 32,
     borderTopWidth: 1, borderColor: t.border.default,
     width: '100%',
     maxWidth: 560,
