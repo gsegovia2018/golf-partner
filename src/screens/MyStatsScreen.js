@@ -28,7 +28,6 @@ const ALL_TABS = [
   { key: 'shots',     label: 'Shots' },
 ];
 
-
 export default function MyStatsScreen({ navigation, route }) {
   const { theme } = useTheme();
   const { user } = useAuth();
