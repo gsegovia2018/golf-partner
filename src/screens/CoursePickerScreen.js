@@ -29,10 +29,9 @@ export default function CoursePickerScreen({ navigation, route }) {
 
   const [courses, setCourses] = useState([]);
   const [clubs, setClubs] = useState([]);
-  const [expandedClubs, setExpandedClubs] = useState(() => new Set());
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState(null);
-  const [selectedCourses, setSelectedCourses] = useState([]);
+  const [selected, setSelected] = useState([]);
   const [newName, setNewName] = useState('');
   const [saving, setSaving] = useState(false);
   const [query, setQuery] = useState('');
@@ -73,33 +72,40 @@ export default function CoursePickerScreen({ navigation, route }) {
     return filterCourseLibraryItems(all, query);
   }, [courses, clubs, query, favorites, lastUsed]);
 
-  // While searching, every shown club is expanded so matches stay visible.
-  const searching = normalize(query).length > 0;
-  const isClubExpanded = (clubId) => searching || expandedClubs.has(clubId);
-  function toggleClub(clubId) {
-    setExpandedClubs((prev) => {
-      const next = new Set(prev);
-      if (next.has(clubId)) next.delete(clubId); else next.add(clubId);
-      return next;
+  // A selection is { kind:'course'|'club', id }. Order = round assignment.
+  function isPicked(kind, id) {
+    return selected.findIndex((p) => p.kind === kind && p.id === id);
+  }
+
+  function togglePick(kind, id) {
+    setSelected((prev) => {
+      const i = prev.findIndex((p) => p.kind === kind && p.id === id);
+      if (i !== -1) return prev.filter((_, idx) => idx !== i);
+      if (maxSelectable != null && prev.length >= maxSelectable) {
+        const msg = `You can pick at most ${maxSelectable} course${maxSelectable !== 1 ? 's' : ''}.`;
+        if (Platform.OS === 'web') window.alert(msg);
+        else Alert.alert('Selection limit', msg);
+        return prev;
+      }
+      return [...prev, { kind, id }];
     });
   }
 
-  // One library row for a course — used for standalone courses and, with
-  // isLayout=true, for the layout rows inside an expanded club.
-  function renderCourseRow(c, isLayout) {
-    const selIdx = selectedCourses.findIndex((sc) => sc.id === c.id);
-    const isPicked = selIdx !== -1;
+  // A selectable row for a standalone course (or a single-layout club's course).
+  function renderCourseRow(c) {
+    const selIdx = isPicked('course', c.id);
+    const picked = selIdx !== -1;
     const isFavorite = favorites.has(c.id);
     return (
-      <View key={c.id} style={[s.row, isLayout && s.layoutRow, isPicked && s.rowPicked]}>
+      <View key={`course-${c.id}`} style={[s.row, picked && s.rowPicked]}>
         <TouchableOpacity
           style={s.rowLeft}
-          onPress={() => toggleCourse({ id: c.id, name: c.name, slope: c.slope, holes: c.holes.length === 18 ? c.holes : defaultHoles() })}
+          onPress={() => togglePick('course', c.id)}
           onLongPress={() => handleCourseLongPress(c)}
           delayLongPress={350}
           activeOpacity={0.7}
         >
-          <Text style={s.courseName}>{isLayout ? (c.layoutName || c.name) : c.name}</Text>
+          <Text style={s.courseName}>{c.name}</Text>
           <Text style={s.courseMeta}>
             {[c.city, c.province].filter(Boolean).join(', ')}
             {(c.city || c.province) ? '  ·  ' : ''}
@@ -119,61 +125,37 @@ export default function CoursePickerScreen({ navigation, route }) {
             <Feather name="star" size={18} color={theme.text.muted} />
           )}
         </TouchableOpacity>
-        {isPicked
-          ? (
-            <View style={s.orderBadge}>
-              <Text style={s.orderBadgeText}>{selIdx + 1}</Text>
-            </View>
-          )
+        {picked
+          ? <View style={s.orderBadge}><Text style={s.orderBadgeText}>{selIdx + 1}</Text></View>
           : <View style={s.emptyCircle} />}
       </View>
     );
   }
 
-  // A collapsible club header; expands to its layout rows.
+  // A selectable row for a club — picking it selects the club; the layout is
+  // chosen later, on the wizard's round card.
   function renderClubRow(club, layouts) {
-    const expanded = isClubExpanded(club.id);
-    const pickedCount = layouts.filter(
-      (l) => selectedCourses.some((sc) => sc.id === l.id)).length;
+    const selIdx = isPicked('club', club.id);
+    const picked = selIdx !== -1;
     return (
-      <View key={`club-${club.id}`}>
-        <TouchableOpacity style={s.clubRow} onPress={() => toggleClub(club.id)} activeOpacity={0.7}>
-          <Feather
-            name={expanded ? 'chevron-down' : 'chevron-right'}
-            size={18}
-            color={theme.text.muted}
-          />
-          <View style={s.rowLeft}>
-            <Text style={s.courseName}>{club.name}</Text>
-            <Text style={s.courseMeta}>
-              {[club.city, club.province].filter(Boolean).join(', ')}
-              {(club.city || club.province) ? '  ·  ' : ''}
-              {layouts.length} layouts
-            </Text>
-          </View>
-          {pickedCount > 0 && (
-            <View style={s.orderBadge}>
-              <Text style={s.orderBadgeText}>{pickedCount}</Text>
-            </View>
-          )}
+      <View key={`club-${club.id}`} style={[s.row, picked && s.rowPicked]}>
+        <TouchableOpacity
+          style={s.rowLeft}
+          onPress={() => togglePick('club', club.id)}
+          activeOpacity={0.7}
+        >
+          <Text style={s.courseName}>{club.name}</Text>
+          <Text style={s.courseMeta}>
+            {[club.city, club.province].filter(Boolean).join(', ')}
+            {(club.city || club.province) ? '  ·  ' : ''}
+            {layouts.length} layouts
+          </Text>
         </TouchableOpacity>
-        {expanded && layouts.map((l) => renderCourseRow(l, true))}
+        {picked
+          ? <View style={s.orderBadge}><Text style={s.orderBadgeText}>{selIdx + 1}</Text></View>
+          : <View style={s.emptyCircle} />}
       </View>
     );
-  }
-
-  function toggleCourse(course) {
-    setSelectedCourses((prev) => {
-      const exists = prev.find((c) => c.id === course.id);
-      if (exists) return prev.filter((c) => c.id !== course.id);
-      if (maxSelectable != null && prev.length >= maxSelectable) {
-        const msg = `You can pick at most ${maxSelectable} course${maxSelectable !== 1 ? 's' : ''}.`;
-        if (Platform.OS === 'web') window.alert(msg);
-        else Alert.alert('Selection limit', msg);
-        return prev;
-      }
-      return [...prev, course];
-    });
   }
 
   // Long-press on a library row: rename or delete the underlying course.
@@ -195,7 +177,6 @@ export default function CoursePickerScreen({ navigation, route }) {
       try {
         const updated = await upsertCourse({ id: course.id, name: trimmed });
         setCourses((prev) => prev.map((c) => (c.id === course.id ? { ...c, name: trimmed } : c)));
-        setSelectedCourses((prev) => prev.map((c) => (c.id === course.id ? { ...c, name: trimmed } : c)));
         return updated;
       } catch (err) {
         Alert.alert('Error', err?.message ?? 'Could not rename course');
@@ -214,7 +195,7 @@ export default function CoursePickerScreen({ navigation, route }) {
       try {
         await deleteCourse(course.id);
         setCourses((prev) => prev.filter((c) => c.id !== course.id));
-        setSelectedCourses((prev) => prev.filter((c) => c.id !== course.id));
+        setSelected((prev) => prev.filter((p) => !(p.kind === 'course' && p.id === course.id)));
       } catch (err) {
         Alert.alert('Error', err?.message ?? 'Could not delete course');
       }
@@ -236,7 +217,26 @@ export default function CoursePickerScreen({ navigation, route }) {
   }
 
   function confirm() {
-    setPendingCourses({ startRoundIndex: roundIndex, courses: selectedCourses });
+    const picks = selected.map((sel) => {
+      if (sel.kind === 'club') {
+        const item = items.find((it) => it.kind === 'club' && it.club.id === sel.id);
+        return {
+          kind: 'club',
+          club: { id: item.club.id, name: item.club.name },
+          layouts: item.layouts,
+        };
+      }
+      const course = courses.find((c) => c.id === sel.id);
+      return {
+        kind: 'course',
+        course: {
+          id: course.id, name: course.name, slope: course.slope, rating: course.rating,
+          holes: course.holes.length === 18 ? course.holes : defaultHoles(),
+          tees: course.tees ?? [],
+        },
+      };
+    });
+    setPendingCourses({ startRoundIndex: roundIndex, picks });
     navigation.goBack();
   }
 
@@ -267,9 +267,9 @@ export default function CoursePickerScreen({ navigation, route }) {
       setQuery('');
       // Respect the selection cap — add to library but skip auto-selecting
       // when the picker is already full.
-      setSelectedCourses((prev) => {
+      setSelected((prev) => {
         if (maxSelectable != null && prev.length >= maxSelectable) return prev;
-        return [...prev, full];
+        return [...prev, { kind: 'course', id: course.id }];
       });
     } catch (e) {
       Alert.alert('Error', e.message);
@@ -364,15 +364,15 @@ export default function CoursePickerScreen({ navigation, route }) {
           items.map((item) =>
             item.kind === 'club'
               ? renderClubRow(item.club, item.layouts)
-              : renderCourseRow(item.course, false))
+              : renderCourseRow(item.course))
         )}
       </ScrollView>
 
-      {selectedCourses.length > 0 && (
+      {selected.length > 0 && (
         <View style={s.footer}>
           <TouchableOpacity style={s.confirmBtn} onPress={confirm}>
             <Text style={s.confirmBtnText}>
-              Add {selectedCourses.length} Round{selectedCourses.length !== 1 ? 's' : ''}
+              Add {selected.length} Round{selected.length !== 1 ? 's' : ''}
             </Text>
           </TouchableOpacity>
         </View>
@@ -459,19 +459,6 @@ const makeStyles = (theme) => StyleSheet.create({
     backgroundColor: theme.isDark ? theme.accent.primary + '10' : theme.accent.light,
   },
   rowLeft: { flex: 1 },
-  clubRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 8,
-    backgroundColor: theme.bg.card,
-    borderRadius: 16,
-    borderWidth: 1,
-    borderColor: theme.isDark ? theme.glass?.border : theme.border.default,
-    padding: 16,
-    marginBottom: 8,
-    ...(theme.isDark ? {} : theme.shadow.card),
-  },
-  layoutRow: { marginLeft: 16 },
   courseName: {
     color: theme.text.primary,
     fontSize: 16,
