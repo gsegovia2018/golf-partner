@@ -89,12 +89,25 @@ export async function fetchCourses() {
   return data.map(normalizeCourse);
 }
 
-export async function upsertCourse({ id, name, city, province }) {
+// All clubs, ordered by name. A club groups several course layouts; the
+// picker uses this together with fetchCourses to build its grouped list.
+export async function fetchClubs() {
+  const { data, error } = await supabase
+    .from('clubs')
+    .select('id, name, city, province')
+    .order('name');
+  if (error) throw error;
+  return data;
+}
+
+export async function upsertCourse({ id, name, city, province, clubId, layoutName }) {
   const row = {
     name,
     city: city?.trim() || null,
     province: province?.trim() || null,
   };
+  if (clubId !== undefined) row.club_id = clubId;
+  if (layoutName !== undefined) row.layout_name = layoutName;
   if (id) row.id = id;
   const { data, error } = await supabase.from('courses').upsert(row).select().single();
   if (error) throw error;
@@ -218,6 +231,8 @@ export function normalizeCourse(c) {
     rating: c.rating,
     city: c.city,
     province: c.province,
+    clubId: c.club_id ?? null,
+    layoutName: c.layout_name ?? null,
     holes: (c.course_holes ?? [])
       .sort((a, b) => a.number - b.number)
       .map((h) => ({ number: h.number, par: h.par, strokeIndex: h.stroke_index })),

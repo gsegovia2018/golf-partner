@@ -135,7 +135,16 @@ function buildTeeRows(barra, distances, men, women) {
   return rows;
 }
 
+// The short layout label for a trazado: the text after the last " - " in the
+// option text ("LA MORALEJA - Campo 1" → "Campo 1"), or the whole trimmed
+// text when there is no " - ". HTML-entity decoded.
+function deriveLayoutName(trazadoText) {
+  const decoded = decodeEntities(trazadoText).trim();
+  const idx = decoded.lastIndexOf(' - ');
+  return idx >= 0 ? decoded.slice(idx + 3).trim() : decoded;
+}
+
 module.exports = {
   CLUBS, decodeEntities, parseTrazadoOptions, deriveCourseName,
-  buildHoles, validateStrokeIndex, numOrNull, buildTeeRows,
+  buildHoles, validateStrokeIndex, numOrNull, buildTeeRows, deriveLayoutName,
 };

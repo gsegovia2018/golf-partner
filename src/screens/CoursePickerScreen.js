@@ -9,15 +9,15 @@ import { Feather, FontAwesome } from '@expo/vector-icons';
 
 import { useTheme } from '../theme/ThemeContext';
 import {
-  fetchCourses, upsertCourse, defaultHoles, saveCourseHoles,
+  fetchCourses, fetchClubs, upsertCourse, defaultHoles, saveCourseHoles,
   fetchFavoriteCourseIds, toggleFavoriteCourse, deleteCourse,
 } from '../store/libraryStore';
 import { loadAllTournaments } from '../store/tournamentStore';
 import { setPendingCourses } from '../lib/selectionBridge';
 import { buildCourseLastUsed } from '../lib/recentUse';
-
-const normalize = (value) =>
-  (value ?? '').toString().normalize('NFD').replace(/\p{Diacritic}/gu, '').toLowerCase();
+import {
+  buildCourseLibraryItems, filterCourseLibraryItems,
+} from '../lib/courseLibrary';
 
 export default function CoursePickerScreen({ navigation, route }) {
   const { theme } = useTheme();
@@ -28,9 +28,10 @@ export default function CoursePickerScreen({ navigation, route }) {
   const maxSelectable = route.params?.maxSelectable ?? null;
 
   const [courses, setCourses] = useState([]);
+  const [clubs, setClubs] = useState([]);
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState(null);
-  const [selectedCourses, setSelectedCourses] = useState([]);
+  const [selected, setSelected] = useState([]);
   const [newName, setNewName] = useState('');
   const [saving, setSaving] = useState(false);
   const [query, setQuery] = useState('');
@@ -47,12 +48,14 @@ export default function CoursePickerScreen({ navigation, route }) {
       // favorites / tournaments are best-effort and fall back silently.
       fetchCourses()
         .then(async (list) => {
-          const [favs, tournaments] = await Promise.all([
+          const [clubList, favs, tournaments] = await Promise.all([
+            fetchClubs().catch(() => []),
             fetchFavoriteCourseIds().catch(() => new Set()),
             loadAllTournaments().catch(() => []),
           ]);
           if (cancelled) return;
           setCourses(list);
+          setClubs(clubList);
           setFavorites(favs);
           setLastUsed(buildCourseLastUsed(tournaments));
         })
@@ -64,38 +67,102 @@ export default function CoursePickerScreen({ navigation, route }) {
     }, [reloadKey]),
   );
 
-  const filteredCourses = useMemo(() => {
-    const q = normalize(query);
-    const base = q
-      ? courses.filter((c) =>
-        normalize(c.name).includes(q) ||
-        normalize(c.city).includes(q) ||
-        normalize(c.province).includes(q))
-      : courses.slice();
-    base.sort((a, b) => {
-      const fa = favorites.has(a.id) ? 1 : 0;
-      const fb = favorites.has(b.id) ? 1 : 0;
-      if (fa !== fb) return fb - fa;
-      const ta = lastUsed[a.id] ?? 0;
-      const tb = lastUsed[b.id] ?? 0;
-      if (ta !== tb) return tb - ta;
-      return normalize(a.name).localeCompare(normalize(b.name));
-    });
-    return base;
-  }, [courses, query, favorites, lastUsed]);
+  // allItems is the full grouped list; items is the search-filtered view.
+  // confirm() resolves club picks against allItems so a still-active search
+  // query can never filter a selected club out from under the lookup.
+  const allItems = useMemo(
+    () => buildCourseLibraryItems(courses, clubs, favorites, lastUsed),
+    [courses, clubs, favorites, lastUsed],
+  );
+  const items = useMemo(
+    () => filterCourseLibraryItems(allItems, query),
+    [allItems, query],
+  );
 
-  function toggleCourse(course) {
-    setSelectedCourses((prev) => {
-      const exists = prev.find((c) => c.id === course.id);
-      if (exists) return prev.filter((c) => c.id !== course.id);
+  // A selection is { kind:'course'|'club', id }. Order = round assignment.
+  function isPicked(kind, id) {
+    return selected.findIndex((p) => p.kind === kind && p.id === id);
+  }
+
+  function togglePick(kind, id) {
+    setSelected((prev) => {
+      const i = prev.findIndex((p) => p.kind === kind && p.id === id);
+      if (i !== -1) return prev.filter((_, idx) => idx !== i);
       if (maxSelectable != null && prev.length >= maxSelectable) {
         const msg = `You can pick at most ${maxSelectable} course${maxSelectable !== 1 ? 's' : ''}.`;
         if (Platform.OS === 'web') window.alert(msg);
         else Alert.alert('Selection limit', msg);
         return prev;
       }
-      return [...prev, course];
+      return [...prev, { kind, id }];
     });
+  }
+
+  // A selectable row for a standalone course (or a single-layout club's course).
+  function renderCourseRow(c) {
+    const selIdx = isPicked('course', c.id);
+    const picked = selIdx !== -1;
+    const isFavorite = favorites.has(c.id);
+    return (
+      <View key={`course-${c.id}`} style={[s.row, picked && s.rowPicked]}>
+        <TouchableOpacity
+          style={s.rowLeft}
+          onPress={() => togglePick('course', c.id)}
+          onLongPress={() => handleCourseLongPress(c)}
+          delayLongPress={350}
+          activeOpacity={0.7}
+        >
+          <Text style={s.courseName}>{c.name}</Text>
+          <Text style={s.courseMeta}>
+            {[c.city, c.province].filter(Boolean).join(', ')}
+            {(c.city || c.province) ? '  ·  ' : ''}
+            Par {c.holes.reduce((sum, h) => sum + h.par, 0)}
+            {c.slope ? `  ·  Slope ${c.slope}` : ''}
+          </Text>
+        </TouchableOpacity>
+        <TouchableOpacity
+          style={s.favBtn}
+          onPress={() => handleToggleFavorite(c.id)}
+          activeOpacity={0.7}
+          hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+        >
+          {isFavorite ? (
+            <FontAwesome name="star" size={18} color={theme.accent.primary} />
+          ) : (
+            <Feather name="star" size={18} color={theme.text.muted} />
+          )}
+        </TouchableOpacity>
+        {picked
+          ? <View style={s.orderBadge}><Text style={s.orderBadgeText}>{selIdx + 1}</Text></View>
+          : <View style={s.emptyCircle} />}
+      </View>
+    );
+  }
+
+  // A selectable row for a club — picking it selects the club; the layout is
+  // chosen later, on the wizard's round card.
+  function renderClubRow(club, layouts) {
+    const selIdx = isPicked('club', club.id);
+    const picked = selIdx !== -1;
+    return (
+      <View key={`club-${club.id}`} style={[s.row, picked && s.rowPicked]}>
+        <TouchableOpacity
+          style={s.rowLeft}
+          onPress={() => togglePick('club', club.id)}
+          activeOpacity={0.7}
+        >
+          <Text style={s.courseName}>{club.name}</Text>
+          <Text style={s.courseMeta}>
+            {[club.city, club.province].filter(Boolean).join(', ')}
+            {(club.city || club.province) ? '  ·  ' : ''}
+            {layouts.length} layouts
+          </Text>
+        </TouchableOpacity>
+        {picked
+          ? <View style={s.orderBadge}><Text style={s.orderBadgeText}>{selIdx + 1}</Text></View>
+          : <View style={s.emptyCircle} />}
+      </View>
+    );
   }
 
   // Long-press on a library row: rename or delete the underlying course.
@@ -117,7 +184,6 @@ export default function CoursePickerScreen({ navigation, route }) {
       try {
         const updated = await upsertCourse({ id: course.id, name: trimmed });
         setCourses((prev) => prev.map((c) => (c.id === course.id ? { ...c, name: trimmed } : c)));
-        setSelectedCourses((prev) => prev.map((c) => (c.id === course.id ? { ...c, name: trimmed } : c)));
         return updated;
       } catch (err) {
         Alert.alert('Error', err?.message ?? 'Could not rename course');
@@ -136,7 +202,7 @@ export default function CoursePickerScreen({ navigation, route }) {
       try {
         await deleteCourse(course.id);
         setCourses((prev) => prev.filter((c) => c.id !== course.id));
-        setSelectedCourses((prev) => prev.filter((c) => c.id !== course.id));
+        setSelected((prev) => prev.filter((p) => !(p.kind === 'course' && p.id === course.id)));
       } catch (err) {
         Alert.alert('Error', err?.message ?? 'Could not delete course');
       }
@@ -158,7 +224,26 @@ export default function CoursePickerScreen({ navigation, route }) {
   }
 
   function confirm() {
-    setPendingCourses({ startRoundIndex: roundIndex, courses: selectedCourses });
+    const picks = selected.map((sel) => {
+      if (sel.kind === 'club') {
+        const item = allItems.find((it) => it.kind === 'club' && it.club.id === sel.id);
+        return {
+          kind: 'club',
+          club: { id: item.club.id, name: item.club.name },
+          layouts: item.layouts,
+        };
+      }
+      const course = courses.find((c) => c.id === sel.id);
+      return {
+        kind: 'course',
+        course: {
+          id: course.id, name: course.name, slope: course.slope, rating: course.rating,
+          holes: course.holes.length === 18 ? course.holes : defaultHoles(),
+          tees: course.tees ?? [],
+        },
+      };
+    });
+    setPendingCourses({ startRoundIndex: roundIndex, picks });
     navigation.goBack();
   }
 
@@ -189,9 +274,9 @@ export default function CoursePickerScreen({ navigation, route }) {
       setQuery('');
       // Respect the selection cap — add to library but skip auto-selecting
       // when the picker is already full.
-      setSelectedCourses((prev) => {
+      setSelected((prev) => {
         if (maxSelectable != null && prev.length >= maxSelectable) return prev;
-        return [...prev, full];
+        return [...prev, { kind: 'course', id: course.id }];
       });
     } catch (e) {
       Alert.alert('Error', e.message);
@@ -267,7 +352,7 @@ export default function CoursePickerScreen({ navigation, route }) {
           </View>
         ) : courses.length === 0 ? (
           <Text style={s.empty}>No courses in library yet.</Text>
-        ) : filteredCourses.length === 0 ? (
+        ) : items.length === 0 ? (
           <>
             <Text style={s.empty}>No courses match "{query}"</Text>
             {query.trim() ? (
@@ -283,57 +368,18 @@ export default function CoursePickerScreen({ navigation, route }) {
             ) : null}
           </>
         ) : (
-          filteredCourses.map((c) => {
-            const selIdx = selectedCourses.findIndex((sc) => sc.id === c.id);
-            const isPicked = selIdx !== -1;
-            const isFavorite = favorites.has(c.id);
-            return (
-              <View key={c.id} style={[s.row, isPicked && s.rowPicked]}>
-                <TouchableOpacity
-                  style={s.rowLeft}
-                  onPress={() => toggleCourse({ id: c.id, name: c.name, slope: c.slope, holes: c.holes.length === 18 ? c.holes : defaultHoles() })}
-                  onLongPress={() => handleCourseLongPress(c)}
-                  delayLongPress={350}
-                  activeOpacity={0.7}
-                >
-                  <Text style={s.courseName}>{c.name}</Text>
-                  <Text style={s.courseMeta}>
-                    {[c.city, c.province].filter(Boolean).join(', ')}
-                    {(c.city || c.province) ? '  ·  ' : ''}
-                    Par {c.holes.reduce((sum, h) => sum + h.par, 0)}
-                    {c.slope ? `  ·  Slope ${c.slope}` : ''}
-                  </Text>
-                </TouchableOpacity>
-                <TouchableOpacity
-                  style={s.favBtn}
-                  onPress={() => handleToggleFavorite(c.id)}
-                  activeOpacity={0.7}
-                  hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
-                >
-                  {isFavorite ? (
-                    <FontAwesome name="star" size={18} color={theme.accent.primary} />
-                  ) : (
-                    <Feather name="star" size={18} color={theme.text.muted} />
-                  )}
-                </TouchableOpacity>
-                {isPicked
-                  ? (
-                    <View style={s.orderBadge}>
-                      <Text style={s.orderBadgeText}>{selIdx + 1}</Text>
-                    </View>
-                  )
-                  : <View style={s.emptyCircle} />}
-              </View>
-            );
-          })
+          items.map((item) =>
+            item.kind === 'club'
+              ? renderClubRow(item.club, item.layouts)
+              : renderCourseRow(item.course))
         )}
       </ScrollView>
 
-      {selectedCourses.length > 0 && (
+      {selected.length > 0 && (
         <View style={s.footer}>
           <TouchableOpacity style={s.confirmBtn} onPress={confirm}>
             <Text style={s.confirmBtnText}>
-              Add {selectedCourses.length} Round{selectedCourses.length !== 1 ? 's' : ''}
+              Add {selected.length} Round{selected.length !== 1 ? 's' : ''}
             </Text>
           </TouchableOpacity>
         </View>
