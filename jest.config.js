@@ -12,5 +12,6 @@ module.exports = {
       '@react-native-async-storage/async-storage/jest/async-storage-mock',
     '^@supabase/supabase-js$': '<rootDir>/__mocks__/@supabase/supabase-js.js',
     '^@react-native-community/netinfo$': '<rootDir>/__mocks__/@react-native-community/netinfo.js',
+    '^@expo/vector-icons$': '<rootDir>/__mocks__/@expo/vector-icons.js',
   },
 };

@@ -132,15 +132,40 @@ export const FORM_METRICS = [
   { key: 'threePuttsPerRound', label: '3-putts / round',  polarity: 'lower',  shot: true },
 ];
 
+// ── resolveMyPlayer ──
+// Finds the logged-in user's player slot inside a tournament or game.
+// The primary signal is the linked account (`user_id`), but solo games and
+// guest-added players often have no `user_id` — that link is only stamped on
+// via the tournament claim/join flow, which single games never use. So we
+// fall back to a case-insensitive display-name match, then to the lone
+// player of a single-player game. Both fallbacks are safe here: collectMyRounds
+// only ever sees the current user's own visible tournaments.
+function resolveMyPlayer(tournament, userId, displayName) {
+  const players = tournament.players || [];
+  if (userId) {
+    const byId = players.find((p) => p.user_id === userId);
+    if (byId) return byId;
+  }
+  const name = displayName?.trim().toLowerCase();
+  if (name) {
+    const byName = players.find((p) => (p.name || '').trim().toLowerCase() === name);
+    if (byName) return byName;
+  }
+  if (tournament.kind === 'game' && players.length === 1) return players[0];
+  return null;
+}
+
 // ── collectMyRounds ──
 // Flattens every tournament's rounds into MyRound records for the user.
 // `tournaments` arrive newest-first (id desc) from the loaders, so we reverse
-// to get chronological (oldest-first) order.
-export function collectMyRounds(tournaments, userId) {
+// to get chronological (oldest-first) order. `displayName` is the optional
+// profile name used to recognise unlinked (guest) player slots — see
+// resolveMyPlayer.
+export function collectMyRounds(tournaments, userId, displayName) {
   const result = [];
   const chrono = [...(tournaments || [])].reverse();
   chrono.forEach((t) => {
-    const me = (t.players || []).find((p) => p.user_id === userId);
+    const me = resolveMyPlayer(t, userId, displayName);
     if (!me) return;
     (t.rounds || []).forEach((round, roundIndex) => {
       const myScores = round?.scores?.[me.id];

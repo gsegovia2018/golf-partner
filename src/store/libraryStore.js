@@ -202,11 +202,14 @@ export function normalizeCourse(c) {
       yardages: t.yardages ?? undefined,
     }));
   // Legacy course with no tee rows but a stored course-level slope/rating →
-  // synthesize a single Default tee so the app shape always has `tees`.
+  // synthesize a single unnamed tee so the app shape always has `tees`. It
+  // exists only to carry the rating/slope for handicap maths; its label is
+  // empty because the course has no real named tees, which keeps tee badges
+  // (scorecard, round summary) hidden rather than showing a bogus name.
   const effectiveTees = tees.length > 0
     ? tees
     : (c.slope != null || c.rating != null)
-      ? [{ id: `legacy-${c.id}`, label: 'Default', rating: c.rating, slope: c.slope, sortOrder: 0 }]
+      ? [{ id: `legacy-${c.id}`, label: '', rating: c.rating, slope: c.slope, sortOrder: 0 }]
       : [];
   return {
     id: c.id,
