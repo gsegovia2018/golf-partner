@@ -47,3 +47,6 @@ yarn-error.*
 # dev artifacts (Playwright MCP cache, ad-hoc screenshots in repo root)
 .playwright-mcp/
 /*.png
+
+# git worktrees
+.claude/worktrees/
