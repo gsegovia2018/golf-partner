@@ -295,13 +295,15 @@ export default function OfficialCreateScreen({ navigation }) {
               )}
             </View>
             {r.club && !(r.courseName || '').trim() ? (
-              <RoundLayoutSelect
-                club={r.club}
-                layouts={r.clubLayouts || []}
-                value={r.layoutId ?? null}
-                onChange={(layoutCourse) => chooseLayout(i, layoutCourse)}
-                onChangeClub={() => navigation.navigate('CoursePicker', { roundIndex: i })}
-              />
+              <View style={s.layoutCard}>
+                <RoundLayoutSelect
+                  club={r.club}
+                  layouts={r.clubLayouts || []}
+                  value={r.layoutId ?? null}
+                  onChange={(layoutCourse) => chooseLayout(i, layoutCourse)}
+                  onChangeClub={() => navigation.navigate('CoursePicker', { roundIndex: i })}
+                />
+              </View>
             ) : (
               <TouchableOpacity
                 style={s.pickBtn}
@@ -564,6 +566,14 @@ function makeStyles(theme) {
       fontFamily: 'PlusJakartaSans-SemiBold',
       color: theme.accent.primary,
       fontSize: 14,
+    },
+    layoutCard: {
+      backgroundColor: theme.bg.card,
+      borderWidth: 1,
+      borderColor: theme.border.default,
+      borderRadius: 14,
+      padding: 14,
+      marginBottom: 8,
     },
 
     /* Rounds */
