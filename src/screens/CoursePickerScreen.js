@@ -16,7 +16,7 @@ import { loadAllTournaments } from '../store/tournamentStore';
 import { setPendingCourses } from '../lib/selectionBridge';
 import { buildCourseLastUsed } from '../lib/recentUse';
 import {
-  buildCourseLibraryItems, filterCourseLibraryItems, normalizeText as normalize,
+  buildCourseLibraryItems, filterCourseLibraryItems,
 } from '../lib/courseLibrary';
 
 export default function CoursePickerScreen({ navigation, route }) {
@@ -67,10 +67,17 @@ export default function CoursePickerScreen({ navigation, route }) {
     }, [reloadKey]),
   );
 
-  const items = useMemo(() => {
-    const all = buildCourseLibraryItems(courses, clubs, favorites, lastUsed);
-    return filterCourseLibraryItems(all, query);
-  }, [courses, clubs, query, favorites, lastUsed]);
+  // allItems is the full grouped list; items is the search-filtered view.
+  // confirm() resolves club picks against allItems so a still-active search
+  // query can never filter a selected club out from under the lookup.
+  const allItems = useMemo(
+    () => buildCourseLibraryItems(courses, clubs, favorites, lastUsed),
+    [courses, clubs, favorites, lastUsed],
+  );
+  const items = useMemo(
+    () => filterCourseLibraryItems(allItems, query),
+    [allItems, query],
+  );
 
   // A selection is { kind:'course'|'club', id }. Order = round assignment.
   function isPicked(kind, id) {
@@ -219,7 +226,7 @@ export default function CoursePickerScreen({ navigation, route }) {
   function confirm() {
     const picks = selected.map((sel) => {
       if (sel.kind === 'club') {
-        const item = items.find((it) => it.kind === 'club' && it.club.id === sel.id);
+        const item = allItems.find((it) => it.kind === 'club' && it.club.id === sel.id);
         return {
           kind: 'club',
           club: { id: item.club.id, name: item.club.name },
