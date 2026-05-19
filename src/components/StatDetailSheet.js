@@ -93,61 +93,65 @@ export default function StatDetailSheet({ visible, onClose, title, subtitle, exp
       <View style={s.captureHost} pointerEvents="none">
         <ShareableStatCard ref={shareRef} title={title} subtitle={subtitle} rows={rows} />
       </View>
-      <View style={s.sheet}>
-        <View style={s.handle} />
-        <View style={s.header}>
-          <View style={{ flex: 1 }}>
-            <Text style={s.title}>{title}</Text>
-            {subtitle ? <Text style={s.subtitle}>{subtitle}</Text> : null}
-          </View>
-          {canShare ? (
-            <TouchableOpacity
-              onPress={onShare}
-              disabled={sharing}
-              hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
-              style={[s.shareBtn, sharing && { opacity: 0.4 }]}
-            >
-              <Feather name="share-2" size={18} color={theme.accent.primary} />
-            </TouchableOpacity>
-          ) : null}
-          <TouchableOpacity onPress={onClose} hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}>
-            <Feather name="x" size={22} color={theme.text.muted} />
-          </TouchableOpacity>
-        </View>
-        <ScrollView style={s.scroll} contentContainerStyle={s.scrollContent}>
-          {explainer ? (
-            <View style={s.explainerBox}>
-              <Feather name="info" size={14} color={theme.text.muted} />
-              <Text style={s.explainerText}>{explainer}</Text>
+      {/* Full-screen wrapper bottom-anchors the sheet and centres it on wide
+          screens; box-none lets taps above the sheet reach the backdrop. */}
+      <View style={s.sheetWrap} pointerEvents="box-none">
+        <View style={s.sheet}>
+          <View style={s.handle} />
+          <View style={s.header}>
+            <View style={{ flex: 1 }}>
+              <Text style={s.title}>{title}</Text>
+              {subtitle ? <Text style={s.subtitle}>{subtitle}</Text> : null}
             </View>
-          ) : null}
-          {rows.length === 0 ? (
-            <Text style={s.empty}>No details available.</Text>
-          ) : rows.map(r => {
-            if (r.section) {
+            {canShare ? (
+              <TouchableOpacity
+                onPress={onShare}
+                disabled={sharing}
+                hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+                style={[s.shareBtn, sharing && { opacity: 0.4 }]}
+              >
+                <Feather name="share-2" size={18} color={theme.accent.primary} />
+              </TouchableOpacity>
+            ) : null}
+            <TouchableOpacity onPress={onClose} hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}>
+              <Feather name="x" size={22} color={theme.text.muted} />
+            </TouchableOpacity>
+          </View>
+          <ScrollView style={s.scroll} contentContainerStyle={s.scrollContent}>
+            {explainer ? (
+              <View style={s.explainerBox}>
+                <Feather name="info" size={14} color={theme.text.muted} />
+                <Text style={s.explainerText}>{explainer}</Text>
+              </View>
+            ) : null}
+            {rows.length === 0 ? (
+              <Text style={s.empty}>No details available.</Text>
+            ) : rows.map(r => {
+              if (r.section) {
+                return (
+                  <View key={r.key} style={s.sectionHeader}>
+                    <Text style={s.sectionHeaderText}>{r.label}</Text>
+                    {r.rightLabel ? <Text style={s.sectionHeaderRight}>{r.rightLabel}</Text> : null}
+                  </View>
+                );
+              }
               return (
-                <View key={r.key} style={s.sectionHeader}>
-                  <Text style={s.sectionHeaderText}>{r.label}</Text>
-                  {r.rightLabel ? <Text style={s.sectionHeaderRight}>{r.rightLabel}</Text> : null}
+                <View key={r.key} style={s.row}>
+                  <View style={s.rowLeft}>
+                    <Text style={s.rowPrimary}>{r.primary}</Text>
+                    {r.secondary ? <Text style={s.rowSecondary}>{r.secondary}</Text> : null}
+                  </View>
+                  <View style={s.rowRight}>
+                    {r.rightPrimary != null ? (
+                      <Text style={[s.rowRightPrimary, { color: toneColor(r.tone) }]}>{r.rightPrimary}</Text>
+                    ) : null}
+                    {r.rightSecondary ? <Text style={s.rowRightSecondary}>{r.rightSecondary}</Text> : null}
+                  </View>
                 </View>
               );
-            }
-            return (
-              <View key={r.key} style={s.row}>
-                <View style={s.rowLeft}>
-                  <Text style={s.rowPrimary}>{r.primary}</Text>
-                  {r.secondary ? <Text style={s.rowSecondary}>{r.secondary}</Text> : null}
-                </View>
-                <View style={s.rowRight}>
-                  {r.rightPrimary != null ? (
-                    <Text style={[s.rowRightPrimary, { color: toneColor(r.tone) }]}>{r.rightPrimary}</Text>
-                  ) : null}
-                  {r.rightSecondary ? <Text style={s.rowRightSecondary}>{r.rightSecondary}</Text> : null}
-                </View>
-              </View>
-            );
-          })}
-        </ScrollView>
+            })}
+          </ScrollView>
+        </View>
       </View>
     </Modal>
   );
@@ -156,8 +160,12 @@ export default function StatDetailSheet({ visible, onClose, title, subtitle, exp
 const makeStyles = (t) => StyleSheet.create({
   backdrop: { ...StyleSheet.absoluteFillObject, backgroundColor: 'rgba(0,0,0,0.45)' },
   captureHost: { position: 'absolute', left: -10000, top: 0, width: 360 },
+  sheetWrap: {
+    ...StyleSheet.absoluteFillObject,
+    justifyContent: 'flex-end',
+    alignItems: 'center',
+  },
   sheet: {
-    position: 'absolute', left: 0, right: 0, bottom: 0,
     backgroundColor: t.bg.primary,
     borderTopLeftRadius: 24, borderTopRightRadius: 24,
     maxHeight: '80%',
@@ -165,7 +173,6 @@ const makeStyles = (t) => StyleSheet.create({
     borderTopWidth: 1, borderColor: t.border.default,
     width: '100%',
     maxWidth: 560,
-    alignSelf: 'center',
   },
   handle: {
     width: 40, height: 4, borderRadius: 2,
