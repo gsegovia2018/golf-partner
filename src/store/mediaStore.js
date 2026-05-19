@@ -62,10 +62,13 @@ export async function loadMediaForTournaments(tournamentIds) {
   return data.map(rowToMedia);
 }
 
-export async function loadRoundMedia(roundId) {
+// Scoped to a (tournament, round) pair: round ids are only unique within a
+// tournament, so filtering on round_id alone would leak another game's media.
+export async function loadRoundMedia(tournamentId, roundId) {
   const { data, error } = await supabase
     .from('tournament_media')
     .select('*')
+    .eq('tournament_id', tournamentId)
     .eq('round_id', roundId)
     .order('created_at', { ascending: false });
   if (error) throw error;

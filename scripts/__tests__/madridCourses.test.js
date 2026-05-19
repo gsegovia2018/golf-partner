@@ -77,3 +77,103 @@ describe('deriveCourseName', () => {
       .toBe('Some Club — Recorrido Norte');
   });
 });
+
+const { buildHoles, validateStrokeIndex } = require('../lib/madridCourses');
+
+describe('buildHoles', () => {
+  test('18 holes → numbered 1..18 with par + strokeIndex', () => {
+    const par = [4, 3, 5, 4, 4, 3, 5, 4, 4, 4, 3, 5, 4, 4, 3, 5, 4, 4];
+    const hcp = [7, 17, 3, 11, 1, 15, 5, 9, 13, 8, 18, 4, 12, 2, 16, 6, 10, 14];
+    const holes = buildHoles(par, hcp);
+    expect(holes).toHaveLength(18);
+    expect(holes[0]).toEqual({ number: 1, par: 4, strokeIndex: 7 });
+    expect(holes[17]).toEqual({ number: 18, par: 4, strokeIndex: 14 });
+  });
+
+  test('drops "A" void holes and renumbers (9-hole course)', () => {
+    const par = [4, 3, 5, 4, 4, 3, 5, 4, 4, 'A', 'A', 'A', 'A', 'A', 'A', 'A', 'A', 'A'];
+    const hcp = [3, 7, 1, 5, 9, 8, 2, 6, 4, '', '', '', '', '', '', '', '', ''];
+    const holes = buildHoles(par, hcp);
+    expect(holes).toHaveLength(9);
+    expect(holes.map((h) => h.number)).toEqual([1, 2, 3, 4, 5, 6, 7, 8, 9]);
+    expect(holes[8]).toEqual({ number: 9, par: 4, strokeIndex: 4 });
+  });
+});
+
+describe('validateStrokeIndex', () => {
+  test('valid when indices are exactly 1..N', () => {
+    const holes = [
+      { number: 1, par: 4, strokeIndex: 2 },
+      { number: 2, par: 3, strokeIndex: 1 },
+      { number: 3, par: 5, strokeIndex: 3 },
+    ];
+    expect(validateStrokeIndex(holes)).toEqual({ valid: true });
+  });
+
+  test('invalid when an index is duplicated or out of range', () => {
+    const holes = [
+      { number: 1, par: 4, strokeIndex: 1 },
+      { number: 2, par: 3, strokeIndex: 1 },
+      { number: 3, par: 5, strokeIndex: 9 },
+    ];
+    const res = validateStrokeIndex(holes);
+    expect(res.valid).toBe(false);
+    expect(res.reason).toContain('1..3');
+  });
+
+  test('invalid for an empty hole list', () => {
+    expect(validateStrokeIndex([]).valid).toBe(false);
+  });
+});
+
+const { numOrNull, buildTeeRows } = require('../lib/madridCourses');
+
+describe('numOrNull', () => {
+  test('parses real numbers, treats 0/empty/nullish as null', () => {
+    expect(numOrNull('71.2')).toBe(71.2);
+    expect(numOrNull(142)).toBe(142);
+    expect(numOrNull(0)).toBeNull();
+    expect(numOrNull('0')).toBeNull();
+    expect(numOrNull('')).toBeNull();
+    expect(numOrNull(null)).toBeNull();
+    expect(numOrNull(undefined)).toBeNull();
+  });
+});
+
+describe('buildTeeRows', () => {
+  const barra = { id: 'AM', nombre: 'Amarillas' };
+  const distances = { 1: 402, 2: 415 };
+
+  test('both sexes rated → two rows, women suffixed "(Damas)"', () => {
+    const rows = buildTeeRows(
+      barra, distances,
+      { rating: '71.2', slope: 142 },
+      { rating: '77.7', slope: 143 },
+    );
+    expect(rows).toEqual([
+      { label: 'Amarillas', rating: 71.2, slope: 142, yardages: distances },
+      { label: 'Amarillas (Damas)', rating: 77.7, slope: 143, yardages: distances },
+    ]);
+  });
+
+  test('only men rated → single men row', () => {
+    const rows = buildTeeRows(
+      barra, distances,
+      { rating: '71.2', slope: 142 },
+      { rating: '0', slope: 0 },
+    );
+    expect(rows).toHaveLength(1);
+    expect(rows[0].label).toBe('Amarillas');
+  });
+
+  test('neither sex rated → one fallback row with null rating/slope', () => {
+    const rows = buildTeeRows(
+      barra, distances,
+      { rating: 0, slope: 0 },
+      { rating: 0, slope: 0 },
+    );
+    expect(rows).toEqual([
+      { label: 'Amarillas', rating: null, slope: null, yardages: distances },
+    ]);
+  });
+});

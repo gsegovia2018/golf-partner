@@ -308,6 +308,52 @@ export function computeRecentVsHistory(myRounds, n = 5) {
   };
 }
 
+// ── computeFormSeries ──
+// Per-round series for the Form-tab charts. Each selected round is sliced into
+// a one-round synthetic tournament and run back through the existing engine —
+// no parallel per-round math. Shot-derived values are null for rounds with no
+// shot detail so charts render a gap rather than a fake zero.
+export function computeFormSeries(selectedRounds) {
+  const rounds = selectedRounds || [];
+  const metrics = {
+    avgPoints: [], avgVsPar: [], fairwayPct: [],
+    girPct: [], puttsPerRound: [], threePuttsPerRound: [],
+  };
+  const scoreMix = [];
+  let hasShotData = false;
+
+  rounds.forEach((mr, i) => {
+    const label = mr.courseName || `R${i + 1}`;
+    const synthetic = buildSyntheticTournament([mr]);
+    const round = synthetic.rounds[0];
+    const hist = playerRoundHistory(synthetic, CANON_ID)[0] || null;
+    let parPlayed = 0;
+    (round.holes || []).forEach((h) => {
+      if (round.scores?.[CANON_ID]?.[h.number] != null) parPlayed += h.par;
+    });
+    const shots = shotStats(synthetic, CANON_ID);
+    if (shots.hasData) hasShotData = true;
+
+    metrics.avgPoints.push({ label, value: hist ? hist.points : 0 });
+    metrics.avgVsPar.push({ label, value: hist ? hist.strokes - parPlayed : null });
+    metrics.fairwayPct.push({ label, value: shots.drives.recorded > 0 ? shots.drives.fairwayPct : null });
+    metrics.girPct.push({ label, value: shots.gir.eligible > 0 ? shots.gir.pct : null });
+    // `total` equals per-round here because shotStats runs on a one-round synthetic slice.
+    metrics.puttsPerRound.push({ label, value: shots.putts.holes > 0 ? shots.putts.total : null });
+    metrics.threePuttsPerRound.push({ label, value: shots.putts.holes > 0 ? shots.putts.threePuttPlus : null });
+
+    const d = playerScoreDistribution(synthetic, CANON_ID);
+    scoreMix.push({
+      label,
+      birdie: d.eagles + d.birdies,
+      par: d.pars,
+      bogey: d.bogeys + d.doubles + d.worse,
+    });
+  });
+
+  return { metrics, scoreMix, hasShotData };
+}
+
 // ── computeMyStats ──
 // Single entry point for the screen. `selectedRounds` is the active selection
 // (already filtered via resolveSelection). The selection is the universe —
@@ -330,5 +376,6 @@ export function computeMyStats(selectedRounds, { n = 5 } = {}) {
     bounceBack: bounceBackRate(synthetic)[0] ?? null,
     scrambling: scramblingStats(synthetic)[0] ?? null,
     history: playerRoundHistory(synthetic, CANON_ID),
+    formSeries: computeFormSeries(rounds),
   };
 }

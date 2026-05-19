@@ -41,7 +41,7 @@ export default function RoundSummaryScreen({ navigation, route }) {
       const [{ data: { user } }, t, roundMedia] = await Promise.all([
         supabase.auth.getUser(),
         fetchTournament(tournamentId),
-        loadRoundMedia(roundId).catch(() => []),
+        loadRoundMedia(tournamentId, roundId).catch(() => []),
       ]);
       setMe(user?.id ?? null);
       setTournament(t);

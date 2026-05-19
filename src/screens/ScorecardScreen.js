@@ -186,7 +186,10 @@ export default function ScorecardScreen({ navigation, route }) {
   const [lightboxVisible, setLightboxVisible] = useState(false);
   const [captureMenuVisible, setCaptureMenuVisible] = useState(false);
   const [syncSheetOpen, setSyncSheetOpen] = useState(false);
-  const { items: roundMediaItems } = useRoundMedia(tournament?.rounds?.[paramRoundIndex ?? tournament?.currentRound ?? 0]?.id);
+  const { items: roundMediaItems } = useRoundMedia(
+    tournament?.id,
+    tournament?.rounds?.[paramRoundIndex ?? tournament?.currentRound ?? 0]?.id,
+  );
   const roundMediaCount = roundMediaItems.length;
   const roundIndex = paramRoundIndex ?? tournament?.currentRound ?? 0;
 
