@@ -2,9 +2,11 @@
 -- plus a Pitch & Putt). A course optionally belongs to a club; existing and
 -- standalone courses keep club_id null and behave exactly as before.
 
+-- name is UNIQUE: the import resolves clubs by name, so a unique constraint
+-- prevents an interrupted or repeated run from creating duplicate club rows.
 CREATE TABLE IF NOT EXISTS public.clubs (
   id          uuid        PRIMARY KEY DEFAULT gen_random_uuid(),
-  name        text        NOT NULL,
+  name        text        NOT NULL UNIQUE,
   city        text,
   province    text,
   created_at  timestamptz NOT NULL DEFAULT now()
