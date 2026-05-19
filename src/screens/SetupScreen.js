@@ -494,7 +494,7 @@ export default function SetupScreen({ navigation, route }) {
                 </TouchableOpacity>
               </View>
             ) : r.club ? (
-              <View style={s.courseCard}>
+              <View style={s.layoutCard}>
                 <RoundLayoutSelect
                   club={r.club}
                   layouts={r.clubLayouts || []}
@@ -851,6 +851,16 @@ function makeStyles(theme) {
       borderWidth: 1,
       borderColor: theme.isDark ? theme.glass?.border : theme.border.default,
       overflow: 'hidden',
+      ...(theme.isDark ? {} : theme.shadow.card),
+    },
+    // The filled course card relies on its children for padding; the layout
+    // dropdown card holds RoundLayoutSelect directly, so it needs its own.
+    layoutCard: {
+      backgroundColor: theme.bg.card,
+      borderRadius: 16,
+      borderWidth: 1,
+      borderColor: theme.isDark ? theme.glass?.border : theme.border.default,
+      padding: 14,
       ...(theme.isDark ? {} : theme.shadow.card),
     },
     courseCardTop: {
