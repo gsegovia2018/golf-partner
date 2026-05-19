@@ -10,8 +10,10 @@ import WizardProgress from '../components/setup/WizardProgress';
 import WizardNav from '../components/setup/WizardNav';
 import { wizardSteps, isStepValid } from './setupWizard';
 import { useTheme } from '../theme/ThemeContext';
-import { defaultHoles, fetchCourses } from '../store/libraryStore';
+import { defaultHoles } from '../store/libraryStore';
 import { consumePendingCourses } from '../lib/selectionBridge';
+import { applyCoursePick, applyLayoutChoice } from '../lib/roundCourse';
+import RoundLayoutSelect from '../components/RoundLayoutSelect';
 import { createOfficialTournament, addRosterPlayer, createRound } from '../store/officialAdmin';
 
 // Official tournament round formats — distinct value set from ScoringModePicker.
@@ -89,36 +91,19 @@ export default function OfficialCreateScreen({ navigation }) {
     let cancelled = false;
 
     const pc = consumePendingCourses();
-    if (pc && pc.courses.length > 0) {
-      const { startRoundIndex, courses } = pc;
-      (async () => {
-        let freshCourses = courses;
-        try {
-          const all = await fetchCourses();
-          freshCourses = courses.map((c) => all.find((x) => x.id === c.id) ?? c);
-        } catch (_) { /* keep snapshot */ }
-        if (cancelled || !mountedRef.current) return;
-        setRounds((prev) => {
-          const next = [...prev];
-          freshCourses.forEach((course, i) => {
-            const idx = startRoundIndex + i;
-            const roundData = {
-              courseId: course.id,
-              courseName: course.name,
-              // Deep-copy so later edits don't mutate the library's holes.
-              holes: course.holes.map((h) => ({ ...h })),
-              slope: course.slope,
-              courseRating: course.rating ?? null,
-            };
-            if (idx < next.length) {
-              next[idx] = { ...next[idx], ...roundData };
-            } else {
-              next.push({ id: newRoundId(), ...roundData });
-            }
-          });
-          return next;
+    if (pc && pc.picks && pc.picks.length > 0) {
+      const { startRoundIndex, picks } = pc;
+      setRounds((prev) => {
+        const next = [...prev];
+        picks.forEach((pick, i) => {
+          const idx = startRoundIndex + i;
+          const base = idx < next.length ? next[idx] : { id: newRoundId() };
+          const applied = applyCoursePick(base, pick);
+          if (idx < next.length) next[idx] = applied;
+          else next.push(applied);
         });
-      })();
+        return next;
+      });
     }
 
     return () => { cancelled = true; };
@@ -153,6 +138,15 @@ export default function OfficialCreateScreen({ navigation }) {
   function removeRound(index) {
     setRounds((prev) => prev.filter((_, i) => i !== index));
   }
+
+  // Resolve a club-picked round to one of the club's layouts.
+  const chooseLayout = useCallback((roundIndex, layoutCourse) => {
+    setRounds((prev) => {
+      const next = [...prev];
+      next[roundIndex] = applyLayoutChoice(next[roundIndex], layoutCourse);
+      return next;
+    });
+  }, []);
 
   // ---- Create -------------------------------------------------------------
 
@@ -300,21 +294,31 @@ export default function OfficialCreateScreen({ navigation }) {
                 </TouchableOpacity>
               )}
             </View>
-            <TouchableOpacity
-              style={s.pickBtn}
-              onPress={() => navigation.navigate('CoursePicker', { roundIndex: i })}
-            >
-              <Feather
-                name={r.courseName ? 'map-pin' : 'plus'}
-                size={16}
-                color={theme.accent.primary}
-                style={{ marginRight: 6 }}
+            {r.club && !(r.courseName || '').trim() ? (
+              <RoundLayoutSelect
+                club={r.club}
+                layouts={r.clubLayouts || []}
+                value={r.layoutId ?? null}
+                onChange={(layoutCourse) => chooseLayout(i, layoutCourse)}
+                onChangeClub={() => navigation.navigate('CoursePicker', { roundIndex: i })}
               />
-              <Text style={s.pickBtnText}>
-                {r.courseName ? `Course: ${r.courseName}` : 'Pick Course from Library'}
-              </Text>
-            </TouchableOpacity>
-            {missingName && (
+            ) : (
+              <TouchableOpacity
+                style={s.pickBtn}
+                onPress={() => navigation.navigate('CoursePicker', { roundIndex: i })}
+              >
+                <Feather
+                  name={r.courseName ? 'map-pin' : 'plus'}
+                  size={16}
+                  color={theme.accent.primary}
+                  style={{ marginRight: 6 }}
+                />
+                <Text style={s.pickBtnText}>
+                  {r.courseName ? `Course: ${r.courseName}` : 'Pick a Club or Course'}
+                </Text>
+              </TouchableOpacity>
+            )}
+            {missingName && !r.club && (
               <Text style={s.errorText}>{`Round ${i + 1} needs a course.`}</Text>
             )}
           </View>
