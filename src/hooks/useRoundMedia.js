@@ -18,18 +18,18 @@ function pendingToItem(e) {
   };
 }
 
-export function useRoundMedia(roundId) {
+export function useRoundMedia(tournamentId, roundId) {
   const [items, setItems] = useState([]);
 
   const refresh = useCallback(async () => {
-    if (!roundId) { setItems([]); return; }
+    if (!tournamentId || !roundId) { setItems([]); return; }
     const [remote, pending] = await Promise.all([
-      loadRoundMedia(roundId),
-      listQueueForRound(roundId),
+      loadRoundMedia(tournamentId, roundId),
+      listQueueForRound(tournamentId, roundId),
     ]);
     const pendingItems = pending.map(pendingToItem);
     setItems([...pendingItems, ...remote]);
-  }, [roundId]);
+  }, [tournamentId, roundId]);
 
   useEffect(() => {
     refresh();

@@ -32,8 +32,12 @@ export async function listQueueForTournament(tournamentId) {
   return (await read()).filter((e) => e.tournamentId === tournamentId);
 }
 
-export async function listQueueForRound(roundId) {
-  return (await read()).filter((e) => e.roundId === roundId);
+// Scoped to a (tournament, round) pair: round ids are only unique within a
+// tournament, so matching on roundId alone would leak another game's uploads.
+export async function listQueueForRound(tournamentId, roundId) {
+  return (await read()).filter(
+    (e) => e.tournamentId === tournamentId && e.roundId === roundId,
+  );
 }
 
 export async function enqueueMedia(entry) {
