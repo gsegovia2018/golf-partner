@@ -177,3 +177,19 @@ describe('buildTeeRows', () => {
     ]);
   });
 });
+
+const { deriveLayoutName } = require('../lib/madridCourses');
+
+describe('deriveLayoutName', () => {
+  test('returns the text after the last " - "', () => {
+    expect(deriveLayoutName('LA MORALEJA - Campo 1')).toBe('Campo 1');
+  });
+
+  test('decodes HTML entities', () => {
+    expect(deriveLayoutName('CC VILLA DE MADRID - P&amp;P')).toBe('P&P');
+  });
+
+  test('no " - " separator → whole trimmed text', () => {
+    expect(deriveLayoutName('  BARBERAN Y COLLAR  ')).toBe('BARBERAN Y COLLAR');
+  });
+});
