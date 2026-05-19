@@ -1,5 +1,5 @@
 import React, { useRef, useState } from 'react';
-import { Modal, View, Text, TouchableOpacity, TouchableWithoutFeedback, ScrollView, StyleSheet, Platform } from 'react-native';
+import { Modal, View, Text, TouchableOpacity, TouchableWithoutFeedback, ScrollView, StyleSheet, Platform, useWindowDimensions } from 'react-native';
 import { Feather } from '@expo/vector-icons';
 import { captureRef } from 'react-native-view-shot';
 import * as Sharing from 'expo-sharing';
@@ -60,6 +60,10 @@ ShareableStatCard.displayName = 'ShareableStatCard';
 export default function StatDetailSheet({ visible, onClose, title, subtitle, explainer, rows = [], shareable = true }) {
   const { theme } = useTheme();
   const insets = useSafeAreaInsets();
+  // Size the sheet from the real window width — never a percentage of a
+  // container, which can resolve wider than the screen and clip the sheet.
+  const { width: winW } = useWindowDimensions();
+  const sheetW = Math.min(winW, 560);
   const s = makeStyles(theme);
   const shareRef = useRef(null);
   const [sharing, setSharing] = useState(false);
@@ -98,7 +102,13 @@ export default function StatDetailSheet({ visible, onClose, title, subtitle, exp
       {/* Full-screen wrapper bottom-anchors the sheet and centres it on wide
           screens; box-none lets taps above the sheet reach the backdrop. */}
       <View style={s.sheetWrap} pointerEvents="box-none">
-        <View style={[s.sheet, { paddingBottom: Math.max(insets.bottom, 8) + 24 }]}>
+        <View
+          style={[s.sheet, {
+            width: sheetW,
+            left: Math.max(0, (winW - sheetW) / 2),
+            paddingBottom: Math.max(insets.bottom, 8) + 24,
+          }]}
+        >
           <View style={s.handle} />
           <View style={s.header}>
             <View style={{ flex: 1 }}>
@@ -166,16 +176,15 @@ const makeStyles = (t) => StyleSheet.create({
   captureHost: { position: 'absolute', left: -10000, top: 0, width: 360 },
   sheetWrap: {
     ...StyleSheet.absoluteFillObject,
-    justifyContent: 'flex-end',
-    alignItems: 'center',
   },
+  // width + left are applied inline from the measured window — see component.
   sheet: {
+    position: 'absolute',
+    bottom: 0,
     backgroundColor: t.bg.primary,
     borderTopLeftRadius: 24, borderTopRightRadius: 24,
     maxHeight: '80%',
     borderTopWidth: 1, borderColor: t.border.default,
-    width: '100%',
-    maxWidth: 560,
   },
   handle: {
     width: 40, height: 4, borderRadius: 2,
