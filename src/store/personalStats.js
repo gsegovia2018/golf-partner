@@ -338,6 +338,7 @@ export function computeFormSeries(selectedRounds) {
     metrics.avgVsPar.push({ label, value: hist ? hist.strokes - parPlayed : null });
     metrics.fairwayPct.push({ label, value: shots.drives.recorded > 0 ? shots.drives.fairwayPct : null });
     metrics.girPct.push({ label, value: shots.gir.eligible > 0 ? shots.gir.pct : null });
+    // `total` equals per-round here because shotStats runs on a one-round synthetic slice.
     metrics.puttsPerRound.push({ label, value: shots.putts.holes > 0 ? shots.putts.total : null });
     metrics.threePuttsPerRound.push({ label, value: shots.putts.holes > 0 ? shots.putts.threePuttPlus : null });
 

@@ -409,6 +409,7 @@ describe('computeFormSeries', () => {
     expect(metrics.fairwayPct[0].value).toBeNull();
     expect(metrics.girPct[0].value).toBeNull();
     expect(metrics.puttsPerRound[0].value).toBeNull();
+    expect(metrics.threePuttsPerRound[0].value).toBeNull();
   });
 
   test('builds a birdie/par/bogey score-mix entry per round', () => {
