@@ -31,6 +31,11 @@ describe('decodeEntities', () => {
     expect(decodeEntities(null)).toBe('');
     expect(decodeEntities(undefined)).toBe('');
   });
+
+  test('decodes hex numeric entities (lower and upper case)', () => {
+    expect(decodeEntities('A&#xf1;o')).toBe('Año');
+    expect(decodeEntities('A&#XF1;o')).toBe('Año');
+  });
 });
 
 describe('parseTrazadoOptions', () => {

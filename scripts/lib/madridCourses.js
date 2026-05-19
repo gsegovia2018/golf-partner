@@ -49,7 +49,7 @@ const NAMED_ENTITIES = {
 function decodeEntities(str) {
   if (str == null) return '';
   return String(str)
-    .replace(/&#x([0-9a-fA-F]+);/g, (_, h) => String.fromCodePoint(parseInt(h, 16)))
+    .replace(/&#x([0-9a-fA-F]+);/gi, (_, h) => String.fromCodePoint(parseInt(h, 16)))
     .replace(/&#(\d+);/g, (_, d) => String.fromCodePoint(parseInt(d, 10)))
     .replace(/&([a-zA-Z]+);/g, (m, name) =>
       Object.prototype.hasOwnProperty.call(NAMED_ENTITIES, name) ? NAMED_ENTITIES[name] : m);
