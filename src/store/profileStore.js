@@ -1,4 +1,6 @@
+import { Platform } from 'react-native';
 import * as ImageManipulator from 'expo-image-manipulator';
+import { File as FsFile } from 'expo-file-system';
 import { supabase } from '../lib/supabase';
 import {
   loadAllTournaments,
@@ -89,15 +91,19 @@ export async function uploadAvatar(localUri) {
     { compress: 0.82, format: ImageManipulator.SaveFormat.JPEG },
   );
 
-  // fetch(uri) resolves file:// / content:// / data: URIs on both native
-  // and web, giving us a Blob we can hand directly to supabase-js.
-  const resp = await fetch(resized.uri);
-  const blob = await resp.blob();
+  // On web a Blob from fetch() uploads cleanly. On native the React Native
+  // Blob is a bridge reference whose bytes supabase-js can't serialize for the
+  // multipart upload — the request fails with "Network request failed".
+  // Reading the file into an ArrayBuffer via expo-file-system sends the raw
+  // bytes directly. Same fix as src/lib/mediaUpload.js `uriToBody`.
+  const body = Platform.OS === 'web'
+    ? await (await fetch(resized.uri)).blob()
+    : await new FsFile(resized.uri).arrayBuffer();
 
   const path = `${user.id}/avatar-${Date.now()}.jpg`;
   const { error } = await supabase.storage
     .from('avatars')
-    .upload(path, blob, { contentType: 'image/jpeg', upsert: true });
+    .upload(path, body, { contentType: 'image/jpeg', upsert: true });
   if (error) throw error;
 
   const { data: pub } = supabase.storage.from('avatars').getPublicUrl(path);
