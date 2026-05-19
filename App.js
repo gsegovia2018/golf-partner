@@ -367,7 +367,11 @@ export default function App() {
       <ErrorBoundary>
         <ThemeProvider>
           <AuthProvider>
-            <NavigationContainer linking={linking} ref={navigationRef}>
+            <NavigationContainer
+              linking={linking}
+              ref={navigationRef}
+              documentTitle={{ formatter: () => 'Golf Partner' }}
+            >
               <AppNavigator />
             </NavigationContainer>
           </AuthProvider>
