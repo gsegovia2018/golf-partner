@@ -28,6 +28,7 @@ import {
   randomPairs,
   isRoundPlayed,
 } from './scoring';
+import { isScoringModeAllowed, fallbackScoringMode } from '../components/ScoringModePicker';
 
 const ACTIVE_ID_KEY = '@golf_active_id';
 const LEGACY_TOURNAMENTS_KEY = '@golf_tournaments';
@@ -604,7 +605,11 @@ export function addPlayerRoundPatches(tournament, player, { mode } = {}) {
   const oldMode = tournament?.settings?.scoringMode ?? 'stableford';
   const currentRound = tournament?.currentRound ?? 0;
   const roster = [...(tournament?.players ?? []), player];
-  const nextScoringMode = oldMode; // mode resolution lands in Task 2
+  const newCount = roster.length;
+  const nextScoringMode =
+    mode && isScoringModeAllowed(mode, newCount) ? mode
+      : isScoringModeAllowed(oldMode, newCount) ? oldMode
+      : fallbackScoringMode(newCount);
   const patches = [];
   (tournament?.rounds ?? []).forEach((round, idx) => {
     if (idx < currentRound) return; // already-played rounds untouched
