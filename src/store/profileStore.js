@@ -69,8 +69,19 @@ export async function upsertProfile(fields) {
     row.username = String(fields.username).trim().toLowerCase();
   }
 
-  const { error } = await supabase.from('profiles').upsert(row, { onConflict: 'user_id' });
-  if (error) throw error;
+  // Does this row already exist? If yes, surgical UPDATE (only touches the
+  // keys in `row`). If no, INSERT with defaults for everything else.
+  const { data: existing, error: existingErr } = await supabase
+    .from('profiles').select('user_id').eq('user_id', user.id).maybeSingle();
+  if (existingErr) throw existingErr;
+
+  if (existing) {
+    const { error } = await supabase.from('profiles').update(row).eq('user_id', user.id);
+    if (error) throw error;
+  } else {
+    const { error } = await supabase.from('profiles').insert(row);
+    if (error) throw error;
+  }
 }
 
 // Upload a locally-picked image to the `avatars` bucket under the user's
