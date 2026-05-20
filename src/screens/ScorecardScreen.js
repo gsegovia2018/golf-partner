@@ -605,6 +605,8 @@ export default function ScorecardScreen({ navigation, route }) {
   const prevMode = usePrevious(currentMode);
   const [noticeMessage, setNoticeMessage] = useState(null);
   const [reopenPrompt, setReopenPrompt] = useState(false);
+  const dismissModeNotice = useCallback(() => setNoticeMessage(null), []);
+  const openModeSheet = useCallback(() => setReopenPrompt(true), []);
 
   useEffect(() => {
     if (prevMode && prevMode !== currentMode) {
@@ -1167,8 +1169,8 @@ export default function ScorecardScreen({ navigation, route }) {
 
       <ScoringModeChangeBanner
         message={noticeMessage}
-        onPress={() => setReopenPrompt(true)}
-        onDismiss={() => setNoticeMessage(null)}
+        onPress={openModeSheet}
+        onDismiss={dismissModeNotice}
       />
       <ScoringModeChangeSheet
         visible={reopenPrompt}
