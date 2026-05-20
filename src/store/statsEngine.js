@@ -2002,3 +2002,38 @@ export function sgTotal(round, playerId) {
   );
   return { total, byCategory, sampleHoles };
 }
+
+const SG_SEASON_MIN_SAMPLE = 18;       // one full round's worth of contributing holes
+
+export function sgSeason(rounds, playerId) {
+  const byCategory = { tee: 0, approach: 0, aroundGreen: 0, putting: 0 };
+  let total = 0;
+  let sampleHoles = 0;
+  const perRound = [];
+  rounds.forEach((round, i) => {
+    const r = sgTotal(round, playerId);
+    if (r.sampleHoles === 0) return;
+    byCategory.tee         += r.byCategory.tee;
+    byCategory.approach    += r.byCategory.approach;
+    byCategory.aroundGreen += r.byCategory.aroundGreen;
+    byCategory.putting     += r.byCategory.putting;
+    total += r.total;
+    sampleHoles += r.sampleHoles;
+    perRound.push({ index: i, total: r.total, sampleHoles: r.sampleHoles });
+  });
+  if (sampleHoles < SG_SEASON_MIN_SAMPLE) {
+    return { total: null, byCategory: null, sampleHoles, perRound };
+  }
+  const denom = perRound.length;
+  return {
+    total: total / denom,                                          // per-round
+    byCategory: {
+      tee:         byCategory.tee         / denom,
+      approach:    byCategory.approach    / denom,
+      aroundGreen: byCategory.aroundGreen / denom,
+      putting:     byCategory.putting     / denom,
+    },
+    sampleHoles,
+    perRound,
+  };
+}

@@ -1,4 +1,4 @@
-import { teeShotImpact, lagPuttingQuality, sandSaveRate, upAndDownRate, bunkerVisits, sgPutting, sgAroundGreen, sgApproach, sgOffTheTee, sgTotal } from '../statsEngine';
+import { teeShotImpact, lagPuttingQuality, sandSaveRate, upAndDownRate, bunkerVisits, sgPutting, sgAroundGreen, sgApproach, sgOffTheTee, sgTotal, sgSeason } from '../statsEngine';
 
 // 18 par-4 holes, strokeIndex = hole number.
 function holes18() {
@@ -292,5 +292,29 @@ describe('sgTotal', () => {
       5,
     );
     expect(r.sampleHoles).toBeGreaterThan(0);
+  });
+});
+
+describe('sgSeason', () => {
+  test('returns null total below 18-hole sample', () => {
+    expect(sgSeason([], 'me').total).toBeNull();
+  });
+  test('aggregates across rounds when enough sample holes exist', () => {
+    const mkRound = () => ({
+      holes: Array.from({ length: 18 }, (_, i) => ({
+        number: i + 1, par: 4, strokeIndex: i + 1, distance: 400,
+      })),
+      scores: { me: Object.fromEntries(Array.from({ length: 18 }, (_, i) => [i + 1, 4])) },
+      shotDetails: { me: Object.fromEntries(Array.from({ length: 18 }, (_, i) => [i + 1, {
+        drive: 'fairway', teePenalties: 0,
+        approachBucket: '100-150',
+        putts: 2, firstPuttBucket: '10-20',
+        sandShots: 0,
+      }])) },
+    });
+    const r = sgSeason([mkRound(), mkRound()], 'me');
+    expect(r.perRound.length).toBe(2);
+    expect(r.sampleHoles).toBeGreaterThanOrEqual(18);
+    expect(r.total).not.toBeNull();
   });
 });
