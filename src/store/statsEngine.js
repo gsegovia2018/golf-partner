@@ -1970,12 +1970,12 @@ export function sgOffTheTee(round, playerId) {
   return { perHole, total, sampleHoles: sample.length };
 }
 
-export function sgPutting(round, playerId) {
+export function sgPutting(round, playerId, targetHandicap = 0) {
   const byHole = round?.shotDetails?.[playerId];
   const perHole = (round?.holes ?? []).map((hole) => {
     const d = byHole?.[hole.number];
     if (!d || d.putts == null || !d.firstPuttBucket) return null;
-    const expected = expectedFromBucket('firstPutt', d.firstPuttBucket);
+    const expected = expectedFromBucket('firstPutt', d.firstPuttBucket, targetHandicap);
     if (expected == null) return null;
     return expected - d.putts;
   });
