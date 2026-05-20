@@ -465,6 +465,36 @@ describe('computeMyStats', () => {
     expect(stats.bunkerVisits).toBeDefined();
   });
 
+  test('returns a strokesGained block with total, byCategory, and sampleHoles', () => {
+    const rawRound = {
+      courseName: 'Test',
+      holes: Array.from({ length: 18 }, (_, i) => ({ number: i + 1, par: 4, strokeIndex: i + 1 })),
+      scores: { p1: Object.fromEntries(Array.from({ length: 18 }, (_, i) => [i + 1, 4])) },
+      shotDetails: {
+        p1: Object.fromEntries(Array.from({ length: 18 }, (_, i) => [
+          i + 1,
+          { putts: 2, drive: 'fairway', approachShots: 1, firstPuttBucket: '6-10' },
+        ])),
+      },
+      playerHandicaps: { p1: 0 },
+    };
+    const myRound = {
+      key: 'sg:0',
+      round: rawRound,
+      playerId: 'p1',
+      player: { id: 'p1', name: 'Me', handicap: 0 },
+      courseName: 'Test',
+      tournamentName: 'T',
+      tournamentDate: '2026-05-20',
+      completed: true,
+    };
+    const stats = computeMyStats([myRound]);
+    expect(stats.strokesGained).toBeDefined();
+    expect(stats.strokesGained).toHaveProperty('total');
+    expect(stats.strokesGained).toHaveProperty('byCategory');
+    expect(stats.strokesGained).toHaveProperty('sampleHoles');
+  });
+
   test('bundles round count, metrics, form and ranking', () => {
     const h = holes18();
     const my = collectMyRounds([{

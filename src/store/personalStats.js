@@ -12,6 +12,7 @@ import {
   playerRoundHistory, playerConsistency, bounceBackRate, shotStats,
   teeShotImpact, scramblingStats,
   lagPuttingQuality, sandSaveRate, upAndDownRate, bunkerVisits,
+  sgSeason,
 } from './statsEngine';
 
 // Canonical player id used inside the synthetic tournament.
@@ -383,5 +384,7 @@ export function computeMyStats(selectedRounds, { n = 5 } = {}) {
     sandSaves:    sandSaveRate(synthetic.rounds, CANON_ID),
     upAndDown:    upAndDownRate(synthetic.rounds, CANON_ID),
     bunkerVisits: bunkerVisits(synthetic.rounds, CANON_ID),
+    // Phase B:
+    strokesGained: sgSeason(synthetic.rounds, CANON_ID),
   };
 }
