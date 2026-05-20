@@ -7,7 +7,7 @@ import MetricRow from '../MetricRow';
 export default function ShotsTab({ stats, onInfo }) {
   const { theme } = useTheme();
   const s = useMemo(() => makeStyles(theme), [theme]);
-  const { teeShot, shots, lagPutting } = stats;
+  const { teeShot, shots, lagPutting, sandSaves, upAndDown, bunkerVisits } = stats;
 
   if (!teeShot.hasData && !shots.hasData) {
     return (
@@ -61,6 +61,35 @@ export default function ShotsTab({ stats, onInfo }) {
               />
             );
           })}
+        </SectionCard>
+      ) : null}
+
+      {(sandSaves || upAndDown || bunkerVisits) ? (
+        <SectionCard title="Around the green">
+          {sandSaves ? (
+            <MetricRow
+              label="Sand-save rate"
+              value={sandSaves.rate != null ? `${sandSaves.saves} of ${sandSaves.attempts} · ${Math.round(sandSaves.rate * 100)}%` : '—'}
+              secondary="Scratch ~51%"
+              dim={sandSaves.rate == null}
+            />
+          ) : null}
+          {upAndDown ? (
+            <MetricRow
+              label="Up-and-down rate"
+              value={upAndDown.rate != null ? `${upAndDown.conversions} of ${upAndDown.attempts} · ${Math.round(upAndDown.rate * 100)}%` : '—'}
+              secondary="Scratch ~60%"
+              dim={upAndDown.rate == null}
+            />
+          ) : null}
+          {bunkerVisits ? (
+            <MetricRow
+              label="Bunker visits"
+              value={bunkerVisits.avgPerRound > 0 ? `${bunkerVisits.avgPerRound.toFixed(1)} per round` : '—'}
+              secondary={bunkerVisits.holesWithSand != null ? `${bunkerVisits.holesWithSand} holes` : undefined}
+              dim={bunkerVisits.avgPerRound === 0}
+            />
+          ) : null}
         </SectionCard>
       ) : null}
     </View>
