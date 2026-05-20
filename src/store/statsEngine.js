@@ -1,6 +1,6 @@
 import { calcStablefordPoints, calcExtraShots, roundPairLeaderboard, getPlayingHandicap, pickupStrokes } from './tournamentStore';
 import { isGIR } from './scoring';
-import { expectedFromBucket } from './strokesGainedBaseline';
+import { expectedFromBucket, expectedStrokes } from './strokesGainedBaseline';
 
 // ── Player Stats ──
 
@@ -1870,6 +1870,36 @@ export function bunkerVisits(rounds, playerId) {
 }
 
 // ── Strokes Gained: Putting ──
+
+// Around-the-green: typical chip/pitch is 15-25y from the green. Use 20y
+// as the canonical "missed GIR" recovery start distance for both sand
+// and non-sand lies.
+const AROUND_GREEN_START_DISTANCE = 20;
+
+export function sgAroundGreen(round, playerId) {
+  const byHole = round?.shotDetails?.[playerId];
+  const perHole = (round?.holes ?? []).map((hole) => {
+    const d = byHole?.[hole.number];
+    if (!d) return null;
+    const strokes = round?.scores?.[playerId]?.[hole.number];
+    const gir = isGIR({ strokes, putts: d.putts, par: hole.par });
+    if (gir !== false) return null;
+    const lie = (d.sandShots ?? 0) >= 1 ? 'sand' : 'recovery';
+    const start = expectedStrokes(lie, AROUND_GREEN_START_DISTANCE);
+    let end;
+    if (d.putts === 0) {
+      end = 0;                                          // chip-in
+    } else if (d.firstPuttBucket) {
+      end = expectedFromBucket('firstPutt', d.firstPuttBucket);
+    } else {
+      return null;                                      // missing data
+    }
+    return start - end - 1;
+  });
+  const sample = perHole.filter((x) => x != null);
+  const total = sample.reduce((a, x) => a + x, 0);
+  return { perHole, total, sampleHoles: sample.length };
+}
 
 export function sgPutting(round, playerId) {
   const byHole = round?.shotDetails?.[playerId];

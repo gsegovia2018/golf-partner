@@ -1,4 +1,4 @@
-import { teeShotImpact, lagPuttingQuality, sandSaveRate, upAndDownRate, bunkerVisits, sgPutting } from '../statsEngine';
+import { teeShotImpact, lagPuttingQuality, sandSaveRate, upAndDownRate, bunkerVisits, sgPutting, sgAroundGreen } from '../statsEngine';
 
 // 18 par-4 holes, strokeIndex = hole number.
 function holes18() {
@@ -190,6 +190,25 @@ describe('upAndDownRate', () => {
     expect(r.byLie.sand.conversions).toBe(2);
     expect(r.byLie.nonSand.attempts).toBe(4);
     expect(r.byLie.nonSand.conversions).toBe(2);
+  });
+});
+
+describe('sgAroundGreen', () => {
+  test('null on GIR-hit holes', () => {
+    const round = makeRound(
+      [{ par: 4, strokes: 4 }],
+      [{ putts: 2, sandShots: 0, firstPuttBucket: '6-10' }],
+    );
+    expect(sgAroundGreen(round, 'me').perHole[0]).toBeNull();
+  });
+  test('SG = expected(start lie, ~20y) - expected(green, putt bucket) - 1', () => {
+    const round = makeRound(
+      [{ par: 4, strokes: 5 }],
+      [{ putts: 1, sandShots: 1, firstPuttBucket: '0-3', recoveryOutcome: 'sand-save' }],
+    );
+    // start: sand @20y = 2.55. end: green @1.5ft clamp → 1.05. SG = 2.55 - 1.05 - 1 = 0.50
+    const r = sgAroundGreen(round, 'me');
+    expect(r.perHole[0]).toBeCloseTo(0.50, 1);
   });
 });
 
