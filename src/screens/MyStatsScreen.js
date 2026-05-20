@@ -6,7 +6,8 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useTheme } from '../theme/ThemeContext';
 import { useAuth } from '../context/AuthContext';
 import { loadAllTournamentsWithFallback } from '../store/tournamentStore';
-import { loadProfile } from '../store/profileStore';
+import { loadProfile, upsertProfile } from '../store/profileStore';
+import { TargetHandicapPicker } from '../components/mystats/TargetHandicapPicker';
 import { collectMyRounds, resolveSelection, computeMyStats } from '../store/personalStats';
 import { buildRoundReportCard } from '../store/roundReportCard';
 import RoundReportCard from '../components/RoundReportCard';
@@ -65,6 +66,8 @@ export default function MyStatsScreen({ navigation, route }) {
   const [tab, setTab] = useState(route?.params?.tab ?? 'reportCard');
   const [reportRoundKey, setReportRoundKey] = useState(route?.params?.roundKey ?? null);
   const [infoKey, setInfoKey] = useState(null);
+  const [targetHandicap, setTargetHandicap] = useState(null);
+  const [pickerOpen, setPickerOpen] = useState(false);
 
   const storageKey = user?.id ? `${SELECTION_PREFIX}${user.id}` : null;
 
@@ -80,6 +83,7 @@ export default function MyStatsScreen({ navigation, route }) {
           loadAllTournamentsWithFallback(),
           loadProfile().catch(() => null),
         ]);
+        if (!cancelled) setTargetHandicap(profile?.targetHandicap ?? null);
         const rounds = collectMyRounds(list, user?.id, profile?.displayName);
         let stored = {};
         if (storageKey) {
@@ -131,8 +135,8 @@ export default function MyStatsScreen({ navigation, route }) {
     [myRounds, overrides],
   );
   const stats = useMemo(
-    () => (selected.length ? computeMyStats(selected, { n }) : null),
-    [selected, n],
+    () => (selected.length ? computeMyStats(selected, { n, targetHandicap: targetHandicap ?? 0 }) : null),
+    [selected, n, targetHandicap],
   );
 
   const reportCard = useMemo(
@@ -263,10 +267,10 @@ export default function MyStatsScreen({ navigation, route }) {
             onSelect={setReportRoundKey}
           />
         )}
-        {tab === 'overview' && <OverviewTab stats={stats} onInfo={onInfo} />}
+        {tab === 'overview' && <OverviewTab stats={stats} onInfo={onInfo} targetHandicap={targetHandicap} onChangeTarget={() => setPickerOpen(true)} />}
         {tab === 'form' && <FormTab stats={stats} n={n} onChangeN={setN} onInfo={onInfo} />}
         {tab === 'breakdown' && <BreakdownTab stats={stats} onInfo={onInfo} />}
-        {tab === 'shots' && <ShotsTab stats={stats} onInfo={onInfo} />}
+        {tab === 'shots' && <ShotsTab stats={stats} onInfo={onInfo} targetHandicap={targetHandicap} onChangeTarget={() => setPickerOpen(true)} />}
       </ScrollView>
       <StatDetailSheet
         visible={!!infoKey}
@@ -278,6 +282,17 @@ export default function MyStatsScreen({ navigation, route }) {
         shareable={false}
       />
       {Selector}
+      <TargetHandicapPicker
+        visible={pickerOpen}
+        currentValue={targetHandicap}
+        currentHandicap={null}
+        onSave={async (value) => {
+          setTargetHandicap(value);
+          setPickerOpen(false);
+          await upsertProfile({ targetHandicap: value });
+        }}
+        onCancel={() => setPickerOpen(false)}
+      />
     </ScreenContainer>
   );
 }
