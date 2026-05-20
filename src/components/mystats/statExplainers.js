@@ -10,12 +10,13 @@ const strokesGainedExplainer = (targetHandicap) => {
   const subtitle = isScratch
     ? 'How you compare to a scratch golfer'
     : `How you compare to a handicap-${targetHandicap} golfer`;
+  const reference = isScratch ? 'a scratch golfer' : `a handicap-${targetHandicap} golfer`;
+  const positiveCmp = isScratch ? 'scratch' : `your target`;
   return {
     title,
     subtitle,
-    explainer:
-      'Strokes Gained tells you how your round compares to a scratch golfer from the same spots '
-      + 'on the course. Positive means you played that part of the game better than scratch; '
+    explainer: `Strokes Gained tells you how your round compares to ${reference} from the same spots `
+      + `on the course. Positive means you played that part of the game better than ${positiveCmp}; `
       + 'negative means worse.\n\n'
       + "We use Mark Broadie's published baselines (the same ones the PGA Tour uses). Because "
       + 'you log buckets instead of exact yardage, your numbers are estimates — accurate to '
