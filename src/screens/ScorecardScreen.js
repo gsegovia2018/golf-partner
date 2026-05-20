@@ -1752,6 +1752,13 @@ function ShotDetailPanel({ hole, detail, onChange, theme, s }) {
         theme={theme}
         s={s}
       />
+      <ShotCounterRow
+        label="Sand shots"
+        value={d.sandShots}
+        onStep={(delta) => step('sandShots', delta)}
+        theme={theme}
+        s={s}
+      />
 
       {!isPar3 && (
         <View style={[s.shotRow, s.shotRowLast]}>
