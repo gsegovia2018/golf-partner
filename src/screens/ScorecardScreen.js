@@ -1727,9 +1727,9 @@ function ShotCounterRow({ label, value, onStep, theme, s }) {
   );
 }
 
-function BucketRow({ label, value, buckets, labels, onSelect, theme, s }) {
+function BucketRow({ label, value, buckets, labels, onSelect, theme, s, isLast = true }) {
   return (
-    <View style={[s.shotRow, s.shotRowLast]}>
+    <View style={[s.shotRow, isLast && s.shotRowLast]}>
       <Text style={s.shotRowLabel}>{label}</Text>
       <View style={s.driveBtns}>
         {buckets.map((key) => {
@@ -1829,6 +1829,18 @@ function ShotDetailPanel({ hole, detail, onChange, theme, s }) {
             })}
           </View>
         </View>
+      )}
+      {!isPar3 && (
+        <BucketRow
+          label="Approach from"
+          value={d.approachBucket}
+          buckets={APPROACH_BUCKETS}
+          labels={APPROACH_LABELS}
+          onSelect={(key) => onChange({ approachBucket: key })}
+          theme={theme}
+          s={s}
+          isLast={false}
+        />
       )}
       {(d.putts ?? 0) >= 1 && (
         <BucketRow
