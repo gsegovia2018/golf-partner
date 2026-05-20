@@ -7,11 +7,19 @@ module.exports = {
     'src/store/scoring.js',
     'src/store/merge.js',
   ],
+  // Transform ESM packages from node_modules that Jest can't parse as-is.
+  transformIgnorePatterns: [
+    'node_modules/(?!((jest-)?react-native|@react-native(-community)?|expo(-.*)?|@expo(-.*)?|@unimodules|unimodules|sentry-expo|native-base|react-native-svg|react-native-url-polyfill|uuid)/)',
+  ],
   moduleNameMapper: {
     '@react-native-async-storage/async-storage':
       '@react-native-async-storage/async-storage/jest/async-storage-mock',
     '^@supabase/supabase-js$': '<rootDir>/__mocks__/@supabase/supabase-js.js',
     '^@react-native-community/netinfo$': '<rootDir>/__mocks__/@react-native-community/netinfo.js',
     '^@expo/vector-icons$': '<rootDir>/__mocks__/@expo/vector-icons.js',
+    '^react-native-reanimated$': '<rootDir>/__mocks__/react-native-reanimated.js',
+    '^expo-haptics$': '<rootDir>/__mocks__/expo-haptics.js',
+    '^expo-screen-orientation$': '<rootDir>/__mocks__/expo-screen-orientation.js',
+    '^expo-video$': '<rootDir>/__mocks__/expo-video.js',
   },
 };

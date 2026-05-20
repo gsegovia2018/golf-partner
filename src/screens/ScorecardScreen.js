@@ -22,6 +22,7 @@ import {
   subscribeSyncStatus,
 } from '../store/tournamentStore';
 import { mutate } from '../store/mutate';
+import { isGIR, recoveryOutcomeFromState } from '../store/scoring';
 import { fetchPlayers } from '../store/libraryStore';
 import { useAuth } from '../context/AuthContext';
 import { useTheme } from '../theme/ThemeContext';
@@ -1567,6 +1568,7 @@ const HolePage = React.memo(function HolePage({
                     hole={pageHole}
                     detail={shotDetails[meId]?.[pageHole.number]}
                     onChange={(patch) => onSetShot(meId, pageHole.number, patch)}
+                    strokes={scores?.[meId]?.[pageHole.number]}
                     theme={theme}
                     s={s}
                   />
@@ -1656,6 +1658,7 @@ const HolePage = React.memo(function HolePage({
                     hole={pageHole}
                     detail={shotDetails[meId]?.[pageHole.number]}
                     onChange={(patch) => onSetShot(meId, pageHole.number, patch)}
+                    strokes={scores?.[meId]?.[pageHole.number]}
                     theme={theme}
                     s={s}
                   />
@@ -1762,9 +1765,22 @@ function BucketRow({ label, value, buckets, labels, onSelect, theme, s, isLast =
 // Per-hole shot detail for the "me" player, laid out after the Hole19
 // scorecard: stat rows with a stepper, plus a row of round direction
 // buttons for the drive. The drive row is hidden on par 3s.
-function ShotDetailPanel({ hole, detail, onChange, theme, s }) {
+export function ShotDetailPanel({ hole, detail, onChange, strokes, theme: themeProp, s: sProp }) {
+  const { theme: themeCtx } = useTheme();
+  const theme = themeProp ?? themeCtx;
+  const sOwn = useMemo(() => makeStyles(theme), [theme]);
+  const s = sProp ?? sOwn;
   const d = { ...DEFAULT_SHOT, ...(detail ?? {}) };
   const isPar3 = hole.par === 3;
+  const gir = isGIR({ strokes, putts: d.putts, par: hole.par });
+  const missedGIR = gir === false;
+  const autoOutcome = recoveryOutcomeFromState({
+    strokes,
+    putts: d.putts,
+    sandShots: d.sandShots ?? 0,
+    par: hole.par,
+  });
+  const effectiveOutcome = d.recoveryOutcome ?? autoOutcome;
 
   const step = (field, delta) => {
     const cur = d[field] ?? 0;
@@ -1851,7 +1867,47 @@ function ShotDetailPanel({ hole, detail, onChange, theme, s }) {
           onSelect={(key) => onChange({ firstPuttBucket: key })}
           theme={theme}
           s={s}
+          isLast={false}
         />
+      )}
+      {missedGIR && (
+        <View style={[s.shotRow, s.shotRowLast]}>
+          <Text style={s.shotRowLabel}>Outcome</Text>
+          <View style={s.driveBtns}>
+            <TouchableOpacity
+              style={[s.outcomeChip, effectiveOutcome === 'up-and-down' && s.outcomeChipActive]}
+              onPress={() => onChange({
+                recoveryOutcome:
+                  effectiveOutcome === 'up-and-down' ? 'none' : 'up-and-down',
+              })}
+              activeOpacity={0.7}
+            >
+              <Text
+                accessibilityState={{ selected: effectiveOutcome === 'up-and-down' }}
+                style={[
+                  s.outcomeChipLabel,
+                  effectiveOutcome === 'up-and-down' && { color: theme.text.inverse },
+                ]}
+              >Up & Down</Text>
+            </TouchableOpacity>
+            <TouchableOpacity
+              style={[s.outcomeChip, effectiveOutcome === 'sand-save' && s.outcomeChipActive]}
+              onPress={() => onChange({
+                recoveryOutcome:
+                  effectiveOutcome === 'sand-save' ? 'none' : 'sand-save',
+              })}
+              activeOpacity={0.7}
+            >
+              <Text
+                accessibilityState={{ selected: effectiveOutcome === 'sand-save' }}
+                style={[
+                  s.outcomeChipLabel,
+                  effectiveOutcome === 'sand-save' && { color: theme.text.inverse },
+                ]}
+              >Sand Save</Text>
+            </TouchableOpacity>
+          </View>
+        </View>
       )}
     </View>
   );
@@ -3915,6 +3971,13 @@ function makeStyles(theme) {
       justifyContent: 'center',
     },
     driveCircleActive: { backgroundColor: theme.accent.primary },
+    outcomeChip: {
+      paddingHorizontal: 12, paddingVertical: 6,
+      borderRadius: 16, marginRight: 8,
+      borderWidth: 1, borderColor: theme.border.default,
+    },
+    outcomeChipActive: { backgroundColor: theme.accent.primary, borderColor: theme.accent.primary },
+    outcomeChipLabel: { fontSize: 13, fontWeight: '600', color: theme.text.secondary },
     bucketCircle: { width: 56, height: 32, borderRadius: 16, paddingHorizontal: 4 },
     soloHeroHeader: {
       flexDirection: 'row',
