@@ -25,7 +25,7 @@ export default function ShotsTab({ stats, onInfo }) {
   return (
     <View style={s.wrap}>
       {stats?.strokesGained && (
-        <SectionCard title="Strokes Gained vs scratch">
+        <SectionCard title="Strokes Gained vs scratch" infoKey="strokesGained" onInfo={onInfo}>
           {stats.strokesGained.total == null ? (
             <Text style={s.note}>
               Log first-putt distance and approach bucket on a few rounds to see this.

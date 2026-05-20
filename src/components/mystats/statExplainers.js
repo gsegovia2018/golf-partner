@@ -103,4 +103,15 @@ export const statExplainers = {
     subtitle: 'Shot-tracking detail',
     explainer: 'Putting and driving aggregates from holes where you logged shot detail.',
   },
+  strokesGained: {
+    title: 'Strokes Gained',
+    subtitle: 'How you compare to a scratch golfer',
+    explainer:
+      'Strokes Gained tells you how your round compares to a scratch golfer from the same spots '
+      + 'on the course. Positive means you played that part of the game better than scratch; '
+      + 'negative means worse.\n\n'
+      + "We use Mark Broadie's published baselines (the same ones the PGA Tour uses). Because "
+      + 'you log buckets instead of exact yardage, your numbers are estimates — accurate to '
+      + 'about ±0.2 strokes per round.',
+  },
 };

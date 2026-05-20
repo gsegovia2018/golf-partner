@@ -20,6 +20,29 @@ import { statExplainers } from '../components/mystats/statExplainers';
 
 const SELECTION_PREFIX = '@mystats_round_selection:';
 
+// Builds the rows array for StatDetailSheet based on which infoKey is active.
+// Most keys need no rows (explainer-only). strokesGained shows per-round trend.
+function buildInfoRows(key, stats) {
+  if (key !== 'strokesGained' || !stats?.strokesGained?.perRound?.length) return [];
+  const perRound = stats.strokesGained.perRound;
+  const last10 = perRound.slice(-10);
+  const rows = [
+    { key: 'section-trend', section: true, label: 'Last 10 rounds', rightLabel: 'SG total' },
+  ];
+  last10.forEach((r, i) => {
+    const n = perRound.length - last10.length + i + 1;
+    const val = r.total >= 0 ? `+${r.total.toFixed(2)}` : r.total.toFixed(2);
+    rows.push({
+      key: `sg-round-${n}`,
+      primary: `Round ${n}`,
+      secondary: `${r.sampleHoles} holes`,
+      rightPrimary: val,
+      tone: r.total >= 0 ? 'good' : 'poor',
+    });
+  });
+  return rows;
+}
+
 const ALL_TABS = [
   { key: 'reportCard', label: 'Report Card' },
   { key: 'overview',  label: 'Overview' },
@@ -251,7 +274,7 @@ export default function MyStatsScreen({ navigation, route }) {
         title={infoKey ? statExplainers[infoKey]?.title : ''}
         subtitle={infoKey ? statExplainers[infoKey]?.subtitle : ''}
         explainer={infoKey ? statExplainers[infoKey]?.explainer : ''}
-        rows={[]}
+        rows={buildInfoRows(infoKey, stats)}
         shareable={false}
       />
       {Selector}
