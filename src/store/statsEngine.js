@@ -1,5 +1,6 @@
 import { calcStablefordPoints, calcExtraShots, roundPairLeaderboard, getPlayingHandicap, pickupStrokes } from './tournamentStore';
 import { isGIR } from './scoring';
+import { expectedFromBucket } from './strokesGainedBaseline';
 
 // ── Player Stats ──
 
@@ -1866,4 +1867,20 @@ export function bunkerVisits(rounds, playerId) {
       ? Math.round((totalShots / roundCount) * 10) / 10
       : 0,
   };
+}
+
+// ── Strokes Gained: Putting ──
+
+export function sgPutting(round, playerId) {
+  const byHole = round?.shotDetails?.[playerId];
+  const perHole = (round?.holes ?? []).map((hole) => {
+    const d = byHole?.[hole.number];
+    if (!d || d.putts == null || !d.firstPuttBucket) return null;
+    const expected = expectedFromBucket('firstPutt', d.firstPuttBucket);
+    if (expected == null) return null;
+    return expected - d.putts;
+  });
+  const sample = perHole.filter((x) => x != null);
+  const total = sample.reduce((a, x) => a + x, 0);
+  return { perHole, total, sampleHoles: sample.length };
 }

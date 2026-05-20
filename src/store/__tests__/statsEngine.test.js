@@ -1,4 +1,4 @@
-import { teeShotImpact, lagPuttingQuality, sandSaveRate, upAndDownRate, bunkerVisits } from '../statsEngine';
+import { teeShotImpact, lagPuttingQuality, sandSaveRate, upAndDownRate, bunkerVisits, sgPutting } from '../statsEngine';
 
 // 18 par-4 holes, strokeIndex = hole number.
 function holes18() {
@@ -190,5 +190,27 @@ describe('upAndDownRate', () => {
     expect(r.byLie.sand.conversions).toBe(2);
     expect(r.byLie.nonSand.attempts).toBe(4);
     expect(r.byLie.nonSand.conversions).toBe(2);
+  });
+});
+
+describe('sgPutting', () => {
+  test('returns null per hole when firstPuttBucket missing', () => {
+    const round = makeRound(
+      [{ par: 4, strokes: 4 }],
+      [{ putts: 2 }],
+    );
+    const r = sgPutting(round, 'me');
+    expect(r.perHole[0]).toBeNull();
+    expect(r.sampleHoles).toBe(0);
+  });
+  test('SG = expectedStrokes(green, midpoint) - putts on a 2-putt from 6-10', () => {
+    const round = makeRound(
+      [{ par: 4, strokes: 4 }],
+      [{ putts: 2, firstPuttBucket: '6-10' }],
+    );
+    // midpoint 8ft interpolates to ~1.60 → SG = 1.60 − 2 = −0.40
+    const r = sgPutting(round, 'me');
+    expect(r.perHole[0]).toBeCloseTo(-0.40, 1);
+    expect(r.sampleHoles).toBe(1);
   });
 });
