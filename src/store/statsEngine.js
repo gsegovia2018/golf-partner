@@ -1800,3 +1800,43 @@ export function sandSaveRate(rounds, playerId) {
     perRound,
   };
 }
+
+const UP_AND_DOWN_MIN_ATTEMPTS = 6;
+
+export function upAndDownRate(rounds, playerId) {
+  let attempts = 0, conversions = 0;
+  const byLie = {
+    sand:    { attempts: 0, conversions: 0 },
+    nonSand: { attempts: 0, conversions: 0 },
+  };
+  rounds.forEach((round) => {
+    const byHole = round?.shotDetails?.[playerId];
+    if (!byHole) return;
+    (round.holes ?? []).forEach((hole) => {
+      const d = byHole[hole.number];
+      if (!d) return;
+      const strokes = round?.scores?.[playerId]?.[hole.number];
+      const gir = isGIR({ strokes, putts: d.putts, par: hole.par });
+      if (gir !== false) return;
+      attempts += 1;
+      const isSand = (d.sandShots ?? 0) >= 1;
+      const lieKey = isSand ? 'sand' : 'nonSand';
+      byLie[lieKey].attempts += 1;
+      const saved = d.recoveryOutcome === 'up-and-down' || d.recoveryOutcome === 'sand-save';
+      if (saved) {
+        conversions += 1;
+        byLie[lieKey].conversions += 1;
+      }
+    });
+  });
+  const safeRate = (a, c) => (a > 0 ? c / a : null);
+  return {
+    attempts,
+    conversions,
+    rate: attempts >= UP_AND_DOWN_MIN_ATTEMPTS ? conversions / attempts : null,
+    byLie: {
+      sand:    { ...byLie.sand,    rate: safeRate(byLie.sand.attempts,    byLie.sand.conversions) },
+      nonSand: { ...byLie.nonSand, rate: safeRate(byLie.nonSand.attempts, byLie.nonSand.conversions) },
+    },
+  };
+}
