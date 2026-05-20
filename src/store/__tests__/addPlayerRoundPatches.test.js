@@ -171,3 +171,33 @@ describe('addPlayerRoundPatches pair construction', () => {
     expect(patches[0].pairs.length).toBe(2);
   });
 });
+
+describe('addPlayerRoundPatches multi-round behavior', () => {
+  test('rounds before currentRound are not patched', () => {
+    const D = { id: 'd', name: 'D', handicap: 4 };
+    const t = makeTournament({
+      players: [A, B, C],
+      mode: 'stableford',
+      currentRound: 1,
+      rounds: [
+        makeRound({ id: 'r0', revealed: true, pairs: [[A, B], [C]] }),
+        makeRound({ id: 'r1', revealed: true, pairs: [[A, C], [B]] }),
+        makeRound({ id: 'r2', revealed: false, pairs: [] }),
+      ],
+    });
+    const { patches } = addPlayerRoundPatches(t, D);
+    const ids = patches.map((p) => p.roundId);
+    expect(ids).toEqual(['r1', 'r2']);
+  });
+
+  test('each patch carries a derived playerHandicap', () => {
+    const D = { id: 'd', name: 'D', handicap: 7 };
+    const t = makeTournament({
+      players: [A, B, C],
+      mode: 'stableford',
+      rounds: [makeRound({ revealed: true, pairs: [[A, B], [C]] })],
+    });
+    const { patches } = addPlayerRoundPatches(t, D);
+    expect(patches[0].playerHandicap).toEqual(expect.any(Number));
+  });
+});
