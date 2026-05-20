@@ -1,5 +1,6 @@
 import {
-  BASELINES, BUCKETS, expectedStrokes, expectedFromBucket,
+  BASELINES, BASELINES_SCRATCH, BUCKETS,
+  expectedStrokes, expectedFromBucket,
 } from '../strokesGainedBaseline';
 
 describe('BASELINES', () => {
@@ -14,8 +15,8 @@ describe('BASELINES', () => {
 
 describe('expectedStrokes', () => {
   test('returns exact row when distance matches', () => {
-    const fairway150 = BASELINES.fairway.find((r) => r.distance === 150);
-    expect(expectedStrokes('fairway', 150)).toBeCloseTo(fairway150.expected);
+    const fairway150m = BASELINES_SCRATCH.fairway.find((r) => Math.abs(r.distance - 137.2) < 0.1);
+    expect(expectedStrokes('fairway', 137.2)).toBeCloseTo(fairway150m.expected);
   });
   test('interpolates between rows', () => {
     const a = BASELINES.fairway[0];
@@ -40,7 +41,7 @@ describe('expectedStrokes', () => {
 
 describe('expectedFromBucket', () => {
   test('maps bucket key to midpoint then to expected', () => {
-    const v = expectedFromBucket('firstPutt', '6-10');
-    expect(v).toBeCloseTo(expectedStrokes('green', BUCKETS.firstPutt['6-10']));
+    const v = expectedFromBucket('approach', '100-150');
+    expect(v).toBeCloseTo(expectedStrokes('fairway', 125));
   });
 });

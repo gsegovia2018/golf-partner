@@ -1,65 +1,72 @@
 // src/store/strokesGainedBaseline.js
 //
 // Mark Broadie scratch-golfer baselines from "Every Shot Counts"
-// (Putnam, 2014). Distances in YARDS for tee/fairway/rough/sand/recovery
-// and in FEET for green. Values are expected strokes-to-hole-out from
+// (Putnam, 2014). All distances in METERS for non-green lies and
+// METERS for green. Values are expected strokes-to-hole-out from
 // that lie and distance.
 //
 // These approximate the published Broadie tables; refine with the exact
 // rows when convenient — the lookup helper interpolates linearly so
 // small revisions stay stable.
 
-export const BASELINES = {
+// All distances in METERS for non-green lies and METERS for green.
+// (Phase B used yards for non-green and feet for green; this is a clean
+// retrofit before Phase B sees significant real-world data.)
+export const BASELINES_SCRATCH = {
   tee: [
-    { distance: 100, expected: 2.79 },
-    { distance: 150, expected: 2.91 },
-    { distance: 200, expected: 3.12 },
-    { distance: 250, expected: 3.41 },
-    { distance: 300, expected: 3.71 },
-    { distance: 350, expected: 4.00 },
-    { distance: 400, expected: 4.29 },
-    { distance: 450, expected: 4.55 },
-    { distance: 500, expected: 4.78 },
-    { distance: 550, expected: 5.00 },
+    { distance:  91.4, expected: 2.79 },
+    { distance: 137.2, expected: 2.91 },
+    { distance: 182.9, expected: 3.12 },
+    { distance: 228.6, expected: 3.41 },
+    { distance: 274.3, expected: 3.71 },
+    { distance: 320.0, expected: 4.00 },
+    { distance: 365.8, expected: 4.29 },
+    { distance: 411.5, expected: 4.55 },
+    { distance: 457.2, expected: 4.78 },
+    { distance: 502.9, expected: 5.00 },
   ],
   fairway: [
-    { distance:  50, expected: 2.55 },
-    { distance: 100, expected: 2.80 },
-    { distance: 150, expected: 2.92 },
-    { distance: 200, expected: 3.32 },
-    { distance: 250, expected: 3.70 },
-    { distance: 300, expected: 4.04 },
+    { distance:  45.7, expected: 2.55 },
+    { distance:  91.4, expected: 2.80 },
+    { distance: 137.2, expected: 2.92 },
+    { distance: 182.9, expected: 3.32 },
+    { distance: 228.6, expected: 3.70 },
+    { distance: 274.3, expected: 4.04 },
   ],
   rough: [
-    { distance:  50, expected: 2.74 },
-    { distance: 100, expected: 2.98 },
-    { distance: 150, expected: 3.10 },
-    { distance: 200, expected: 3.50 },
-    { distance: 250, expected: 3.91 },
+    { distance:  45.7, expected: 2.74 },
+    { distance:  91.4, expected: 2.98 },
+    { distance: 137.2, expected: 3.10 },
+    { distance: 182.9, expected: 3.50 },
+    { distance: 228.6, expected: 3.91 },
   ],
   sand: [
-    { distance:  10, expected: 2.42 },
-    { distance:  20, expected: 2.55 },
-    { distance:  30, expected: 2.70 },
-    { distance:  50, expected: 2.93 },
-    { distance: 100, expected: 3.25 },
+    { distance:   9.1, expected: 2.42 },
+    { distance:  18.3, expected: 2.55 },
+    { distance:  27.4, expected: 2.70 },
+    { distance:  45.7, expected: 2.93 },
+    { distance:  91.4, expected: 3.25 },
   ],
   recovery: [
-    { distance:  50, expected: 2.85 },        // blended fairway+rough
-    { distance: 100, expected: 3.05 },
-    { distance: 150, expected: 3.20 },
-    { distance: 200, expected: 3.60 },
+    { distance:  45.7, expected: 2.85 },
+    { distance:  91.4, expected: 3.05 },
+    { distance: 137.2, expected: 3.20 },
+    { distance: 182.9, expected: 3.60 },
   ],
   green: [
-    { distance:  3, expected: 1.05 },         // feet
-    { distance:  6, expected: 1.50 },
-    { distance: 10, expected: 1.70 },
-    { distance: 15, expected: 1.83 },
-    { distance: 20, expected: 1.91 },
-    { distance: 30, expected: 2.10 },
-    { distance: 50, expected: 2.40 },
+    { distance:  0.91, expected: 1.05 },
+    { distance:  1.83, expected: 1.50 },
+    { distance:  3.05, expected: 1.70 },
+    { distance:  4.57, expected: 1.83 },
+    { distance:  6.10, expected: 1.91 },
+    { distance:  9.14, expected: 2.10 },
+    { distance: 15.24, expected: 2.40 },
   ],
 };
+
+// Backward-compatibility export so existing callers keep working
+// until they're migrated. Will be removed in a follow-up.
+export const BASELINES = BASELINES_SCRATCH;
 
 export const BUCKETS = {
   firstPutt: { '0-3': 1.5, '3-6': 4.5, '6-10': 8, '10-20': 15, '20+': 30 },         // feet
