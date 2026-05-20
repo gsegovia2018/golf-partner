@@ -1840,3 +1840,30 @@ export function upAndDownRate(rounds, playerId) {
     },
   };
 }
+
+// ── Bunker Visits ──
+// Total sand shots and holes-with-sand across a set of rounds for one player,
+// plus an average sand shots per round figure.
+export function bunkerVisits(rounds, playerId) {
+  let totalShots = 0, holesWithSand = 0, roundCount = 0;
+  rounds.forEach((round) => {
+    const byHole = round?.shotDetails?.[playerId];
+    if (!byHole) return;
+    roundCount += 1;
+    let roundShots = 0;
+    (round.holes ?? []).forEach((hole) => {
+      const d = byHole[hole.number];
+      const sand = d?.sandShots ?? 0;
+      if (sand > 0) holesWithSand += 1;
+      roundShots += sand;
+    });
+    totalShots += roundShots;
+  });
+  return {
+    totalShots,
+    holesWithSand,
+    avgPerRound: roundCount > 0
+      ? Math.round((totalShots / roundCount) * 10) / 10
+      : 0,
+  };
+}

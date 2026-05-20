@@ -1,4 +1,4 @@
-import { teeShotImpact, lagPuttingQuality, sandSaveRate, upAndDownRate } from '../statsEngine';
+import { teeShotImpact, lagPuttingQuality, sandSaveRate, upAndDownRate, bunkerVisits } from '../statsEngine';
 
 // 18 par-4 holes, strokeIndex = hole number.
 function holes18() {
@@ -140,6 +140,27 @@ describe('sandSaveRate', () => {
     expect(r.attempts).toBe(5);
     expect(r.saves).toBe(3);
     expect(r.rate).toBeCloseTo(0.6);
+  });
+});
+
+describe('bunkerVisits', () => {
+  test('counts sand shots and holes-with-sand per round', () => {
+    const round = makeRound(
+      [
+        { par: 4, strokes: 5 },
+        { par: 4, strokes: 4 },
+        { par: 5, strokes: 7 },
+      ],
+      [
+        { putts: 1, sandShots: 2 },
+        { putts: 2, sandShots: 0 },
+        { putts: 2, sandShots: 1 },
+      ],
+    );
+    const r = bunkerVisits([round, round], 'me');
+    expect(r.totalShots).toBe(6);
+    expect(r.holesWithSand).toBe(4);
+    expect(r.avgPerRound).toBeCloseTo(3.0);          // 6 sand shots / 2 rounds
   });
 });
 
