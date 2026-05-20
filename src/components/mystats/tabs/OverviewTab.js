@@ -42,6 +42,22 @@ export default function OverviewTab({ stats, onInfo }) {
         </View>
       </SectionCard>
 
+      {/* ── Strokes Gained snapshot ── */}
+      {stats?.strokesGained?.total != null && (
+        <SectionCard title="Strokes Gained vs scratch" infoKey="strokesGained" onInfo={onInfo}>
+          <Text
+            style={[
+              s.sgValue,
+              { color: stats.strokesGained.total >= 0 ? theme.scoreColor('good') : theme.scoreColor('poor') },
+            ]}
+          >
+            {stats.strokesGained.total >= 0 ? '+' : ''}
+            {stats.strokesGained.total.toFixed(2)}
+          </Text>
+          <Text style={s.sgSubtle}>per round vs scratch</Text>
+        </SectionCard>
+      )}
+
       {/* ── Strengths & Pain Points ── */}
       <SectionCard title="Strengths & Pain Points" infoKey="strengths" onInfo={onInfo}>
         {ranking.baseline == null ? (
@@ -95,5 +111,7 @@ function makeStyles(theme) {
     insightName: { ...theme.typography.body, color: theme.text.primary, fontWeight: '600' },
     insightSub: { ...theme.typography.tiny, color: theme.text.muted, fontWeight: '700' },
     insightDelta: { ...theme.typography.caption, fontWeight: '800' },
+    sgValue: { ...theme.typography.title, fontWeight: '800' },
+    sgSubtle: { ...theme.typography.caption, color: theme.text.muted, marginTop: theme.spacing.xs },
   });
 }
