@@ -146,6 +146,11 @@ export default function MyStatsScreen({ navigation, route }) {
     [myRounds, reportRoundKey],
   );
 
+  const activeExplainer = useMemo(() => {
+    const rawExplainer = infoKey ? statExplainers[infoKey] : null;
+    return typeof rawExplainer === 'function' ? rawExplainer(targetHandicap) : rawExplainer;
+  }, [infoKey, targetHandicap]);
+
   const Header = (
     <View style={s.header}>
       <TouchableOpacity onPress={() => navigation.goBack()} style={s.backBtn}>
@@ -275,9 +280,9 @@ export default function MyStatsScreen({ navigation, route }) {
       <StatDetailSheet
         visible={!!infoKey}
         onClose={() => setInfoKey(null)}
-        title={infoKey ? statExplainers[infoKey]?.title : ''}
-        subtitle={infoKey ? statExplainers[infoKey]?.subtitle : ''}
-        explainer={infoKey ? statExplainers[infoKey]?.explainer : ''}
+        title={activeExplainer?.title ?? ''}
+        subtitle={activeExplainer?.subtitle ?? ''}
+        explainer={activeExplainer?.explainer ?? ''}
         rows={buildInfoRows(infoKey, stats)}
         shareable={false}
       />
