@@ -439,6 +439,56 @@ describe('computeFormSeries', () => {
   });
 });
 
+describe('computeMyStats targetHandicap', () => {
+  test('computeMyStats accepts targetHandicap and threads it to sgSeason', () => {
+    const mkMyRound = () => ({
+      key: 't1#0',
+      courseName: 'Test',
+      tournamentName: 'T',
+      tournamentDate: '2026-05-20',
+      completed: true,
+      playerId: 'me',
+      player: { id: 'me', name: 'Me' },
+      round: {
+        holes: Array.from({ length: 18 }, (_, i) => ({
+          number: i + 1, par: 4, strokeIndex: i + 1, distance: 400,
+        })),
+        scores: { me: Object.fromEntries(Array.from({ length: 18 }, (_, i) => [i + 1, 4])) },
+        shotDetails: { me: Object.fromEntries(Array.from({ length: 18 }, (_, i) => [i + 1, {
+          drive: 'fairway', teePenalties: 0, approachBucket: '100-150',
+          putts: 2, firstPuttBucket: '3-6', sandShots: 0,
+        }])) },
+        playerHandicaps: { me: 18 },
+      },
+    });
+    const rounds = [mkMyRound(), mkMyRound()];
+    const s0 = computeMyStats(rounds, { targetHandicap: 0 });
+    const s14 = computeMyStats(rounds, { targetHandicap: 14 });
+    expect(s14.strokesGained.total).toBeGreaterThan(s0.strokesGained.total);
+  });
+
+  test('computeMyStats default targetHandicap=0 matches no-arg call', () => {
+    const round = {
+      key: 't1#0',
+      courseName: 'Test',
+      tournamentName: 'T',
+      tournamentDate: '2026-05-20',
+      completed: true,
+      playerId: 'me',
+      player: { id: 'me', name: 'Me' },
+      round: {
+        holes: [{ number: 1, par: 4, strokeIndex: 1 }],
+        scores: { me: { 1: 4 } },
+        shotDetails: { me: { 1: { putts: 2 } } },
+        playerHandicaps: { me: 18 },
+      },
+    };
+    const sNoArg = computeMyStats([round]);
+    const sZero = computeMyStats([round], { targetHandicap: 0 });
+    expect(sNoArg.strokesGained).toEqual(sZero.strokesGained);
+  });
+});
+
 describe('computeMyStats', () => {
   test('includes lagPutting, sandSaves, upAndDown, bunkerVisits', () => {
     const rawRound = {

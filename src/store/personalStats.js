@@ -360,7 +360,7 @@ export function computeFormSeries(selectedRounds) {
 // Single entry point for the screen. `selectedRounds` is the active selection
 // (already filtered via resolveSelection). The selection is the universe —
 // every selected round counts in metrics, form and ranking alike.
-export function computeMyStats(selectedRounds, { n = 5 } = {}) {
+export function computeMyStats(selectedRounds, { n = 5, targetHandicap = 0 } = {}) {
   const rounds = selectedRounds || [];
   const synthetic = buildSyntheticTournament(rounds);
   return {
@@ -385,6 +385,6 @@ export function computeMyStats(selectedRounds, { n = 5 } = {}) {
     upAndDown:    upAndDownRate(synthetic.rounds, CANON_ID),
     bunkerVisits: bunkerVisits(synthetic.rounds, CANON_ID),
     // Phase B:
-    strokesGained: sgSeason(synthetic.rounds, CANON_ID),
+    strokesGained: sgSeason(synthetic.rounds, CANON_ID, targetHandicap),
   };
 }
