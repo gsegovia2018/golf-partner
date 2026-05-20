@@ -7,7 +7,7 @@ import MetricRow from '../MetricRow';
 export default function ShotsTab({ stats, onInfo }) {
   const { theme } = useTheme();
   const s = useMemo(() => makeStyles(theme), [theme]);
-  const { teeShot, shots } = stats;
+  const { teeShot, shots, lagPutting } = stats;
 
   if (!teeShot.hasData && !shots.hasData) {
     return (
@@ -43,6 +43,24 @@ export default function ShotsTab({ stats, onInfo }) {
           <MetricRow label="Fairways hit %" value={`${shots.drives.fairwayPct}%`} secondary={`${shots.drives.recorded} drives`} dim={shots.drives.recorded === 0} />
           <MetricRow label="Greens in reg %" value={`${shots.gir.pct}%`} secondary={`${shots.gir.eligible} holes`} dim={shots.gir.eligible === 0} />
           <MetricRow label="Penalties / round" value={shots.penalties.total} secondary={`${shots.roundsWithData} rounds`} dim={shots.roundsWithData === 0} />
+        </SectionCard>
+      ) : null}
+
+      {lagPutting ? (
+        <SectionCard title="Putts by first-putt distance">
+          {['0-3', '3-6', '6-10', '10-20', '20+'].map((bucket) => {
+            const avg = lagPutting.avgPuttsByBucket[bucket];
+            const n = lagPutting.sample.perBucket[bucket];
+            return (
+              <MetricRow
+                key={bucket}
+                label={`${bucket} ft`}
+                value={avg == null ? '—' : avg.toFixed(2)}
+                secondary={`${n} putts`}
+                dim={n === 0}
+              />
+            );
+          })}
         </SectionCard>
       ) : null}
     </View>
