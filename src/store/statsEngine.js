@@ -1903,7 +1903,7 @@ export function sgAroundGreen(round, playerId, targetHandicap = 0) {
 
 // ── Strokes Gained: Approach ──
 
-export function sgApproach(round, playerId) {
+export function sgApproach(round, playerId, targetHandicap = 0) {
   const byHole = round?.shotDetails?.[playerId];
   const perHole = (round?.holes ?? []).map((hole) => {
     if (hole.par === 3) return null;
@@ -1911,15 +1911,15 @@ export function sgApproach(round, playerId) {
     if (!d || !d.approachBucket) return null;
     const startDist = BUCKETS.approach[d.approachBucket];
     if (startDist == null) return null;
-    const start = expectedStrokes('fairway', startDist);
+    const start = expectedStrokes('fairway', startDist, targetHandicap);
     const strokes = round?.scores?.[playerId]?.[hole.number];
     const gir = isGIR({ strokes, putts: d.putts, par: hole.par });
     let end;
     if (gir === true && d.firstPuttBucket) {
-      end = expectedFromBucket('firstPutt', d.firstPuttBucket);
+      end = expectedFromBucket('firstPutt', d.firstPuttBucket, targetHandicap);
     } else if (gir === false) {
       const lie = (d.sandShots ?? 0) >= 1 ? 'sand' : 'recovery';
-      end = expectedStrokes(lie, AROUND_GREEN_START_DISTANCE);
+      end = expectedStrokes(lie, AROUND_GREEN_START_DISTANCE, targetHandicap);
     } else {
       return null;
     }
