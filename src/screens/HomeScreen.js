@@ -213,7 +213,7 @@ export default function HomeScreen({ navigation, route }) {
       if ((t.players ?? []).length >= 4) break;
       if ((t.players ?? []).some((x) => x.id === p.id)) continue;
       const player = { id: p.id, name: p.name, handicap: parseInt(p.handicap, 10) || 0 };
-      const roundPatches = addPlayerRoundPatches(t, player);
+      const { patches: roundPatches } = addPlayerRoundPatches(t, player);
       t = await mutate(t, { type: 'tournament.addPlayer', player, roundPatches });
     }
     setTournament(t);

@@ -108,7 +108,7 @@ export default function ClaimPlayerScreen({ navigation, route }) {
         handicap: parseInt(newHcp, 10) || 0,
         user_id: profile.userId,
       };
-      const roundPatches = addPlayerRoundPatches(tournament, player);
+      const { patches: roundPatches } = addPlayerRoundPatches(tournament, player);
       const t = await mutate(tournament, {
         type: 'tournament.addPlayer', player, roundPatches,
       });

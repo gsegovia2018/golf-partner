@@ -594,18 +594,25 @@ export async function lastTeeForPlayerOnCourse(courseId, playerId) {
 //   stableford → not-yet-revealed rounds re-randomise with the full
 //     roster; revealed rounds slot the player into a pair short of two
 //     members, or a new solo pair if none is short.
-export function addPlayerRoundPatches(tournament, player) {
-  const mode = tournament?.settings?.scoringMode ?? 'stableford';
+// Build the per-round patches for adding `player` to an in-progress
+// tournament. The player joins `currentRound` and every later round;
+// already-played earlier rounds are left untouched. Returns the patches
+// plus the resolved scoring mode after the add — equal to the current
+// mode when it stays valid for the new roster, or the auto-fallback
+// otherwise. Pass { mode } to override (used by the prompt UX).
+export function addPlayerRoundPatches(tournament, player, { mode } = {}) {
+  const oldMode = tournament?.settings?.scoringMode ?? 'stableford';
   const currentRound = tournament?.currentRound ?? 0;
   const roster = [...(tournament?.players ?? []), player];
+  const nextScoringMode = oldMode; // mode resolution lands in Task 2
   const patches = [];
   (tournament?.rounds ?? []).forEach((round, idx) => {
     if (idx < currentRound) return; // already-played rounds untouched
     const playerHandicap = deriveRoundPlayingHandicap(player.handicap, round);
     let pairs = null;
-    if (mode === 'individual') {
+    if (oldMode === 'individual') {
       pairs = [...(round.pairs ?? []), [player]];
-    } else if (mode === 'stableford') {
+    } else if (oldMode === 'stableford') {
       const revealed = round.revealed || idx <= currentRound;
       if (!revealed) {
         pairs = randomPairs(roster);
@@ -619,7 +626,7 @@ export function addPlayerRoundPatches(tournament, player) {
     }
     patches.push({ roundId: round.id, playerHandicap, pairs });
   });
-  return patches;
+  return { patches, nextScoringMode };
 }
 
 // calcExtraShots, calcStablefordPoints, matchPlayHolePts, matchPlayRoundTally,
