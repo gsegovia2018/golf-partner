@@ -70,3 +70,26 @@ describe('tournament.addPlayer mutation', () => {
     expect(t.settings.worstBallValue).toBe(1);
   });
 });
+
+describe('tournament.setScoringMode mutation', () => {
+  test('updates settings.scoringMode and leaves players unchanged', () => {
+    const t = baseTournament();
+    applyToTournament(t, {
+      type: 'tournament.setScoringMode',
+      scoringMode: 'individual',
+    });
+    expect(t.settings.scoringMode).toBe('individual');
+    expect(t.players.map((p) => p.id)).toEqual(['a', 'b']);
+  });
+
+  test('preserves other settings fields when setting scoring mode', () => {
+    const t = baseTournament();
+    applyToTournament(t, {
+      type: 'tournament.setScoringMode',
+      scoringMode: 'bestball',
+    });
+    expect(t.settings.scoringMode).toBe('bestball');
+    expect(t.settings.bestBallValue).toBe(1);
+    expect(t.settings.worstBallValue).toBe(1);
+  });
+});

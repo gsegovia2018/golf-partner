@@ -36,6 +36,9 @@ import { useRoundMedia } from '../hooks/useRoundMedia';
 import { useOfficialRound } from '../hooks/useOfficialRound';
 import DiscrepancySheet from '../components/DiscrepancySheet';
 import { ShotDetailExplainer } from '../components/ShotDetailExplainer';
+import ScoringModeChangeBanner from '../components/ScoringModeChangeBanner';
+import ScoringModeChangeSheet from '../components/ScoringModeChangeSheet';
+import { fallbackNoticeText } from '../components/scoringModes';
 import { scoreCellState, cardDiscrepancyHoles } from '../store/officialScoring';
 import { buildLeaderboard } from '../store/officialLeaderboard';
 import { attestCard } from '../store/officialStore';
@@ -141,6 +144,12 @@ const APPROACH_LABELS = {
   '0-50': '0-50m', '50-100': '50-100m', '100-150': '100-150m',
   '150-200': '150-200m', '200+': '200+m',
 };
+
+function usePrevious(value) {
+  const ref = useRef(value);
+  useEffect(() => { ref.current = value; }, [value]);
+  return ref.current;
+}
 
 export default function ScorecardScreen({ navigation, route }) {
   const { theme } = useTheme();
@@ -592,6 +601,17 @@ export default function ScorecardScreen({ navigation, route }) {
     () => ({ ...DEFAULT_SETTINGS, ...(tournament?.settings ?? {}) }),
     [tournament?.settings],
   );
+  const currentMode = tournament?.settings?.scoringMode ?? 'stableford';
+  const prevMode = usePrevious(currentMode);
+  const [noticeMessage, setNoticeMessage] = useState(null);
+  const [reopenPrompt, setReopenPrompt] = useState(false);
+
+  useEffect(() => {
+    if (prevMode && prevMode !== currentMode) {
+      setNoticeMessage(fallbackNoticeText(prevMode, currentMode));
+    }
+  }, [prevMode, currentMode]);
+
   const isBestBall = settings.scoringMode === 'bestball';
   const liveRound = useMemo(
     () => (round ? { ...round, scores } : null),
@@ -1144,6 +1164,27 @@ export default function ScorecardScreen({ navigation, route }) {
           </TouchableOpacity>
         </View>
       )}
+
+      <ScoringModeChangeBanner
+        message={noticeMessage}
+        onPress={() => setReopenPrompt(true)}
+        onDismiss={() => setNoticeMessage(null)}
+      />
+      <ScoringModeChangeSheet
+        visible={reopenPrompt}
+        playerCount={(tournament?.players ?? []).length}
+        defaultMode={currentMode}
+        title="Change scoring mode"
+        onConfirm={async (chosenMode) => {
+          setReopenPrompt(false);
+          if (chosenMode === currentMode) return;
+          await mutate(tournament, {
+            type: 'tournament.setScoringMode',
+            scoringMode: chosenMode,
+          });
+        }}
+        onCancel={() => setReopenPrompt(false)}
+      />
 
       {view === 'hole' ? (
         <HoleView

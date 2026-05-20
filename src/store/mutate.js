@@ -39,6 +39,7 @@ function metaPathFor(m) {
     // A joining editor links their account to a tournament player: stamps
     // that player's user_id and points meId at them. LWW on both paths.
     case 'tournament.claimPlayer': return ['players', 'meId'];
+    case 'tournament.setScoringMode': return 'settings.scoringMode';
     case 'player.upsertLibrary': return null;
     default: throw new Error(`unknown mutation type: ${m.type}`);
   }
@@ -125,6 +126,10 @@ export function applyToTournament(t, m) {
     }
     case 'round.remove': {
       t.rounds = (t.rounds ?? []).filter((r) => r.id !== m.roundId);
+      break;
+    }
+    case 'tournament.setScoringMode': {
+      t.settings = { ...(t.settings ?? {}), scoringMode: m.scoringMode };
       break;
     }
     default:
