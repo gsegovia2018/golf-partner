@@ -1876,7 +1876,7 @@ export function bunkerVisits(rounds, playerId) {
 // and non-sand lies.
 const AROUND_GREEN_START_DISTANCE = 20;
 
-export function sgAroundGreen(round, playerId) {
+export function sgAroundGreen(round, playerId, targetHandicap = 0) {
   const byHole = round?.shotDetails?.[playerId];
   const perHole = (round?.holes ?? []).map((hole) => {
     const d = byHole?.[hole.number];
@@ -1885,14 +1885,14 @@ export function sgAroundGreen(round, playerId) {
     const gir = isGIR({ strokes, putts: d.putts, par: hole.par });
     if (gir !== false) return null;
     const lie = (d.sandShots ?? 0) >= 1 ? 'sand' : 'recovery';
-    const start = expectedStrokes(lie, AROUND_GREEN_START_DISTANCE);
+    const start = expectedStrokes(lie, AROUND_GREEN_START_DISTANCE, targetHandicap);
     let end;
     if (d.putts === 0) {
-      end = 0;                                          // chip-in
+      end = 0;
     } else if (d.firstPuttBucket) {
-      end = expectedFromBucket('firstPutt', d.firstPuttBucket);
+      end = expectedFromBucket('firstPutt', d.firstPuttBucket, targetHandicap);
     } else {
-      return null;                                      // missing data
+      return null;
     }
     return start - end - 1;
   });

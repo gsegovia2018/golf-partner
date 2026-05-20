@@ -319,6 +319,26 @@ describe('sgPutting with targetHandicap', () => {
   });
 });
 
+describe('sgAroundGreen with targetHandicap', () => {
+  test('default targetHandicap=0 matches Phase B', () => {
+    const round = makeRound(
+      [{ par: 4, strokes: 5 }],
+      [{ putts: 1, sandShots: 1, firstPuttBucket: '0-1', recoveryOutcome: 'sand-save' }],
+    );
+    expect(sgAroundGreen(round, 'me').perHole[0])
+      .toBeCloseTo(sgAroundGreen(round, 'me', 0).perHole[0]);
+  });
+  test('higher targetHandicap shifts SG toward less-negative', () => {
+    const round = makeRound(
+      [{ par: 4, strokes: 5 }],
+      [{ putts: 1, sandShots: 1, firstPuttBucket: '0-1', recoveryOutcome: 'sand-save' }],
+    );
+    const scratchSG = sgAroundGreen(round, 'me', 0).perHole[0];
+    const amateurSG = sgAroundGreen(round, 'me', 14).perHole[0];
+    expect(amateurSG).toBeGreaterThan(scratchSG);
+  });
+});
+
 describe('sgSeason', () => {
   test('returns null total below 18-hole sample', () => {
     expect(sgSeason([], 'me').total).toBeNull();
