@@ -130,16 +130,16 @@ const DRIVE_META = {
   super: { label: 'Super', icon: 'star' },
 };
 
-const FIRST_PUTT_BUCKETS = ['0-3', '3-6', '6-10', '10-20', '20+'];
+const FIRST_PUTT_BUCKETS = ['0-1', '1-2', '2-3', '3-6', '6+'];
 const FIRST_PUTT_LABELS = {
-  '0-3': "0-3'", '3-6': "3-6'", '6-10': "6-10'",
-  '10-20': "10-20'", '20+': "20+'",
+  '0-1': '0-1m', '1-2': '1-2m', '2-3': '2-3m',
+  '3-6': '3-6m', '6+': '6+m',
 };
 
 const APPROACH_BUCKETS = ['0-50', '50-100', '100-150', '150-200', '200+'];
 const APPROACH_LABELS = {
-  '0-50': '0-50y', '50-100': '50-100y', '100-150': '100-150y',
-  '150-200': '150-200y', '200+': '200+y',
+  '0-50': '0-50m', '50-100': '50-100m', '100-150': '100-150m',
+  '150-200': '150-200m', '200+': '200+m',
 };
 
 export default function ScorecardScreen({ navigation, route }) {
@@ -866,7 +866,16 @@ export default function ScorecardScreen({ navigation, route }) {
     setCurrentHole(h);
   }, []);
 
-  const goBack = useCallback(() => navigation.goBack(), [navigation]);
+  // Back from the scorecard should land on the tournament/round info view
+  // (leaderboard + round pager), not the Play tab list. Official rounds
+  // come from JoinOfficial and need their own pop behavior preserved.
+  const goBack = useCallback(() => {
+    if (official) {
+      navigation.goBack();
+      return;
+    }
+    navigation.navigate('Tournament');
+  }, [navigation, official]);
 
   // Finish flow: invoked from the last-hole "Finish" button. Shows a brief
   // "round complete" celebration, then routes to that round's summary. When
@@ -1736,12 +1745,12 @@ function ShotCounterRow({ label, value, onStep, theme, s, explainer }) {
 
 function BucketRow({ label, value, buckets, labels, onSelect, theme, s, isLast = true, explainer }) {
   return (
-    <View style={[s.shotRow, isLast && s.shotRowLast]}>
-      <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+    <View style={[s.shotRow, s.bucketRow, isLast && s.shotRowLast]}>
+      <View style={s.bucketLabelRow}>
         <Text style={s.shotRowLabel}>{label}</Text>
         {explainer}
       </View>
-      <View style={s.driveBtns}>
+      <View style={s.bucketBtns}>
         {buckets.map((key) => {
           const active = value === key;
           return (
@@ -1874,7 +1883,7 @@ export function ShotDetailPanel({ hole, detail, onChange, strokes, theme: themeP
             <ShotDetailExplainer
               rowKey="approachBucket"
               title="Approach distance"
-              body="How far you played your approach into the green from. Drives Strokes Gained Approach."
+              body="How far you played your approach into the green from (in meters). Drives Strokes Gained Approach."
             />
           }
         />
@@ -1893,7 +1902,7 @@ export function ShotDetailPanel({ hole, detail, onChange, strokes, theme: themeP
             <ShotDetailExplainer
               rowKey="firstPuttBucket"
               title="First putt distance"
-              body="How far away your first putt was. Lets us measure how well you lag long putts and how well you convert short ones."
+              body="How far away your first putt was (in meters). Lets us measure how well you lag long putts and how well you convert short ones."
             />
           }
         />
@@ -4014,6 +4023,22 @@ function makeStyles(theme) {
     outcomeChipActive: { backgroundColor: theme.accent.primary, borderColor: theme.accent.primary },
     outcomeChipLabel: { fontSize: 13, fontWeight: '600', color: theme.text.secondary },
     bucketCircle: { width: 56, height: 32, borderRadius: 16, paddingHorizontal: 4 },
+    bucketRow: {
+      flexDirection: 'column',
+      alignItems: 'stretch',
+      justifyContent: 'flex-start',
+      gap: 8,
+    },
+    bucketLabelRow: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: 6,
+    },
+    bucketBtns: {
+      flexDirection: 'row',
+      flexWrap: 'wrap',
+      gap: 8,
+    },
     soloHeroHeader: {
       flexDirection: 'row',
       alignItems: 'center',

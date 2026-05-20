@@ -68,9 +68,10 @@ export const BASELINES_SCRATCH = {
 // until they're migrated. Will be removed in a follow-up.
 export const BASELINES = BASELINES_SCRATCH;
 
+// Bucket midpoints in METERS.
 export const BUCKETS = {
-  firstPutt: { '0-3': 1.5, '3-6': 4.5, '6-10': 8, '10-20': 15, '20+': 30 },         // feet
-  approach:  { '0-50': 25, '50-100': 75, '100-150': 125, '150-200': 175, '200+': 230 },  // yards
+  firstPutt: { '0-1': 0.5, '1-2': 1.5, '2-3': 2.5, '3-6': 4.5, '6+': 9 },
+  approach:  { '0-50': 25, '50-100': 75, '100-150': 125, '150-200': 175, '200+': 230 },
 };
 
 // Private: look up a single table by distance using binary search + linear

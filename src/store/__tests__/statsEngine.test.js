@@ -106,19 +106,19 @@ describe('lagPuttingQuality', () => {
   test('returns null per bucket below 12-putt threshold', () => {
     const round = makeRound(
       [{ par: 4, strokes: 4 }],
-      [{ putts: 2, firstPuttBucket: '6-10' }],
+      [{ putts: 2, firstPuttBucket: '2-3' }],
     );
     const result = lagPuttingQuality([round], 'me');
-    expect(result.avgPuttsByBucket['6-10']).toBeNull();
+    expect(result.avgPuttsByBucket['2-3']).toBeNull();
   });
 
   test('aggregates putts per bucket above threshold', () => {
     const holes = Array.from({ length: 12 }, () => ({ par: 4, strokes: 4 }));
-    const details = Array.from({ length: 12 }, () => ({ putts: 2, firstPuttBucket: '6-10' }));
+    const details = Array.from({ length: 12 }, () => ({ putts: 2, firstPuttBucket: '2-3' }));
     const round = makeRound(holes, details);
     const result = lagPuttingQuality([round], 'me');
-    expect(result.avgPuttsByBucket['6-10']).toBeCloseTo(2.0);
-    expect(result.sample.perBucket['6-10']).toBe(12);
+    expect(result.avgPuttsByBucket['2-3']).toBeCloseTo(2.0);
+    expect(result.sample.perBucket['2-3']).toBe(12);
   });
 });
 
@@ -197,18 +197,19 @@ describe('sgAroundGreen', () => {
   test('null on GIR-hit holes', () => {
     const round = makeRound(
       [{ par: 4, strokes: 4 }],
-      [{ putts: 2, sandShots: 0, firstPuttBucket: '6-10' }],
+      [{ putts: 2, sandShots: 0, firstPuttBucket: '2-3' }],
     );
     expect(sgAroundGreen(round, 'me').perHole[0]).toBeNull();
   });
-  test('SG = expected(start lie, ~20y) - expected(green, putt bucket) - 1', () => {
+  test('SG = expected(start lie, ~20m) - expected(green, putt bucket) - 1', () => {
     const round = makeRound(
       [{ par: 4, strokes: 5 }],
-      [{ putts: 1, sandShots: 1, firstPuttBucket: '0-3', recoveryOutcome: 'sand-save' }],
+      [{ putts: 1, sandShots: 1, firstPuttBucket: '0-1', recoveryOutcome: 'sand-save' }],
     );
-    // start: sand @20y = 2.55. end: green @1.5ft clamp → 1.05. SG = 2.55 - 1.05 - 1 = 0.50
+    // start: sand @18.3m=2.55, @27.4m=2.70; t=(20-18.3)/(27.4-18.3)≈0.187 → 2.578
+    // end: green @0.5m clamp → 1.05. SG = 2.578 - 1.05 - 1 ≈ 0.53
     const r = sgAroundGreen(round, 'me');
-    expect(r.perHole[0]).toBeCloseTo(0.50, 1);
+    expect(r.perHole[0]).toBeCloseTo(0.53, 1);
   });
 });
 
@@ -223,24 +224,27 @@ describe('sgApproach', () => {
   test('GIR hit from 100-150 bucket → SG = expected(fairway, 125) - expected(green, putt midpoint) - 1', () => {
     const round = makeRound(
       [{ par: 4, strokes: 4 }],
-      [{ putts: 2, approachBucket: '100-150', firstPuttBucket: '10-20' }],
+      [{ putts: 2, approachBucket: '100-150', firstPuttBucket: '3-6' }],
     );
-    // expected(fairway, 125) ≈ 2.86. expected(green, 15ft) = 1.83. SG = 2.86 - 1.83 - 1 = 0.03
+    // fairway@125: interp between 91.4(2.80) and 137.2(2.92): t≈0.734 → 2.888
+    // green@4.5m: interp between 3.05(1.70) and 4.57(1.83): t≈0.954 → 1.824
+    // SG = 2.888 - 1.824 - 1 ≈ 0.064
     const r = sgApproach(round, 'me');
-    expect(r.perHole[0]).toBeCloseTo(0.03, 1);
+    expect(r.perHole[0]).toBeCloseTo(0.06, 1);
   });
 });
 
 describe('sgOffTheTee', () => {
-  test('fairway drive on a 400y par-4 → SG ≈ +0.43', () => {
+  test('fairway drive on a 400m par-4 → SG ≈ +0.60', () => {
     const round = {
       holes: [{ number: 1, par: 4, strokeIndex: 1, distance: 400 }],
       scores: { me: { 1: 4 } },
       shotDetails: { me: { 1: { drive: 'fairway', teePenalties: 0, approachBucket: '100-150' } } },
     };
     const r = sgOffTheTee(round, 'me');
-    // expected(tee, 400) ≈ 4.29. expected(fairway, 125) ≈ 2.86. SG ≈ 4.29 - 2.86 - 1 ≈ 0.43.
-    expect(r.perHole[0]).toBeCloseTo(0.43, 1);
+    // tee@400: interp between 365.8(4.29) and 411.5(4.55): t≈0.749 → 4.485
+    // fairway@125: ≈ 2.888. SG = 4.485 - 2.888 - 1 ≈ 0.597
+    expect(r.perHole[0]).toBeCloseTo(0.60, 1);
   });
   test('tee penalty drags SG below -0.5', () => {
     const round = {
@@ -262,14 +266,14 @@ describe('sgPutting', () => {
     expect(r.perHole[0]).toBeNull();
     expect(r.sampleHoles).toBe(0);
   });
-  test('SG = expectedStrokes(green, midpoint) - putts on a 2-putt from 6-10', () => {
+  test('SG = expectedStrokes(green, midpoint) - putts on a 2-putt from 2-3', () => {
     const round = makeRound(
       [{ par: 4, strokes: 4 }],
-      [{ putts: 2, firstPuttBucket: '6-10' }],
+      [{ putts: 2, firstPuttBucket: '2-3' }],
     );
-    // midpoint 8ft interpolates to ~1.60 → SG = 1.60 − 2 = −0.40
+    // midpoint 2.5m: interp between 1.83(1.50) and 3.05(1.70): t≈0.548 → 1.61 → SG = 1.61 − 2 = −0.39
     const r = sgPutting(round, 'me');
-    expect(r.perHole[0]).toBeCloseTo(-0.40, 1);
+    expect(r.perHole[0]).toBeCloseTo(-0.39, 1);
     expect(r.sampleHoles).toBe(1);
   });
 });
@@ -282,7 +286,7 @@ describe('sgTotal', () => {
       shotDetails: { me: { 1: {
         drive: 'fairway', teePenalties: 0,
         approachBucket: '100-150',
-        putts: 2, firstPuttBucket: '10-20',
+        putts: 2, firstPuttBucket: '3-6',
         sandShots: 0,
       } } },
     };
@@ -308,7 +312,7 @@ describe('sgSeason', () => {
       shotDetails: { me: Object.fromEntries(Array.from({ length: 18 }, (_, i) => [i + 1, {
         drive: 'fairway', teePenalties: 0,
         approachBucket: '100-150',
-        putts: 2, firstPuttBucket: '10-20',
+        putts: 2, firstPuttBucket: '3-6',
         sandShots: 0,
       }])) },
     });

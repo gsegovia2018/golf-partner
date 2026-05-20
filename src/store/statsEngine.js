@@ -1737,7 +1737,7 @@ export function teeShotImpact(tournament, playerId) {
 // ── Lag putting quality (Phase A) ──
 // Aggregates avg putts and 3-putt rate keyed by first-putt distance bucket.
 // Below 12 putts per bucket the result for that bucket is null.
-const FIRST_PUTT_BUCKETS_LIST = ['0-3', '3-6', '6-10', '10-20', '20+'];
+const FIRST_PUTT_BUCKETS_LIST = ['0-1', '1-2', '2-3', '3-6', '6+'];
 const PUTT_BUCKET_MIN = 12;
 
 export function lagPuttingQuality(rounds, playerId) {

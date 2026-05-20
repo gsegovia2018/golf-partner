@@ -73,13 +73,13 @@ export default function ShotsTab({ stats, onInfo }) {
 
       {lagPutting ? (
         <SectionCard title="Putts by first-putt distance">
-          {['0-3', '3-6', '6-10', '10-20', '20+'].map((bucket) => {
+          {['0-1', '1-2', '2-3', '3-6', '6+'].map((bucket) => {
             const avg = lagPutting.avgPuttsByBucket[bucket];
             const n = lagPutting.sample.perBucket[bucket];
             return (
               <MetricRow
                 key={bucket}
-                label={`${bucket} ft`}
+                label={`${bucket} m`}
                 value={avg == null ? '—' : avg.toFixed(2)}
                 secondary={`${n} putts`}
                 dim={n === 0}
