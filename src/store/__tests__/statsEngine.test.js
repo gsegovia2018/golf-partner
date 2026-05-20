@@ -1,4 +1,4 @@
-import { teeShotImpact, lagPuttingQuality } from '../statsEngine';
+import { teeShotImpact, lagPuttingQuality, sandSaveRate } from '../statsEngine';
 
 // 18 par-4 holes, strokeIndex = hole number.
 function holes18() {
@@ -119,5 +119,26 @@ describe('lagPuttingQuality', () => {
     const result = lagPuttingQuality([round], 'me');
     expect(result.avgPuttsByBucket['6-10']).toBeCloseTo(2.0);
     expect(result.sample.perBucket['6-10']).toBe(12);
+  });
+});
+
+describe('sandSaveRate', () => {
+  test('returns null below 4-attempt threshold', () => {
+    const round = makeRound(
+      [{ par: 4, strokes: 5 }],
+      [{ putts: 1, sandShots: 1, recoveryOutcome: 'sand-save' }],
+    );
+    expect(sandSaveRate([round], 'me').rate).toBeNull();
+  });
+
+  test('counts saves over sand-shot attempts on missed-GIR holes', () => {
+    const rounds = Array.from({ length: 5 }, (_, i) => makeRound(
+      [{ par: 4, strokes: 5 }],
+      [{ putts: 1, sandShots: 1, recoveryOutcome: i < 3 ? 'sand-save' : 'none' }],
+    ));
+    const r = sandSaveRate(rounds, 'me');
+    expect(r.attempts).toBe(5);
+    expect(r.saves).toBe(3);
+    expect(r.rate).toBeCloseTo(0.6);
   });
 });

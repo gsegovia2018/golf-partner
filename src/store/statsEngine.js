@@ -1,4 +1,5 @@
 import { calcStablefordPoints, calcExtraShots, roundPairLeaderboard, getPlayingHandicap, pickupStrokes } from './tournamentStore';
+import { isGIR } from './scoring';
 
 // ── Player Stats ──
 
@@ -1766,4 +1767,36 @@ export function lagPuttingQuality(rounds, playerId) {
     threePuttRateByBucket[b] = Math.round((threes / arr.length) * 1000) / 1000;
   });
   return { avgPuttsByBucket, threePuttRateByBucket, sample };
+}
+
+// ── Sand Save Rate ──
+
+const SAND_SAVE_MIN_ATTEMPTS = 4;
+
+export function sandSaveRate(rounds, playerId) {
+  let attempts = 0, saves = 0;
+  const perRound = [];
+  rounds.forEach((round) => {
+    const byHole = round?.shotDetails?.[playerId];
+    if (!byHole) return;
+    let roundAttempts = 0, roundSaves = 0;
+    (round.holes ?? []).forEach((hole) => {
+      const d = byHole[hole.number];
+      if (!d || (d.sandShots ?? 0) === 0) return;
+      const strokes = round?.scores?.[playerId]?.[hole.number];
+      const gir = isGIR({ strokes, putts: d.putts, par: hole.par });
+      if (gir !== false) return;             // sand save requires missed GIR
+      roundAttempts += 1;
+      if (d.recoveryOutcome === 'sand-save') roundSaves += 1;
+    });
+    if (roundAttempts > 0) perRound.push({ attempts: roundAttempts, saves: roundSaves });
+    attempts += roundAttempts;
+    saves += roundSaves;
+  });
+  return {
+    attempts,
+    saves,
+    rate: attempts >= SAND_SAVE_MIN_ATTEMPTS ? saves / attempts : null,
+    perRound,
+  };
 }
