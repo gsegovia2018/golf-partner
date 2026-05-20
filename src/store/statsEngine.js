@@ -1983,3 +1983,22 @@ export function sgPutting(round, playerId) {
   const total = sample.reduce((a, x) => a + x, 0);
   return { perHole, total, sampleHoles: sample.length };
 }
+
+export function sgTotal(round, playerId) {
+  const tee         = sgOffTheTee(round, playerId);
+  const approach    = sgApproach(round, playerId);
+  const aroundGreen = sgAroundGreen(round, playerId);
+  const putting     = sgPutting(round, playerId);
+  const byCategory = {
+    tee:         tee.total,
+    approach:    approach.total,
+    aroundGreen: aroundGreen.total,
+    putting:     putting.total,
+  };
+  const total = byCategory.tee + byCategory.approach + byCategory.aroundGreen + byCategory.putting;
+  const sampleHoles = Math.max(
+    tee.sampleHoles, approach.sampleHoles,
+    aroundGreen.sampleHoles, putting.sampleHoles,
+  );
+  return { total, byCategory, sampleHoles };
+}

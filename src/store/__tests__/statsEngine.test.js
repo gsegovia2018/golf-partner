@@ -1,4 +1,4 @@
-import { teeShotImpact, lagPuttingQuality, sandSaveRate, upAndDownRate, bunkerVisits, sgPutting, sgAroundGreen, sgApproach, sgOffTheTee } from '../statsEngine';
+import { teeShotImpact, lagPuttingQuality, sandSaveRate, upAndDownRate, bunkerVisits, sgPutting, sgAroundGreen, sgApproach, sgOffTheTee, sgTotal } from '../statsEngine';
 
 // 18 par-4 holes, strokeIndex = hole number.
 function holes18() {
@@ -271,5 +271,26 @@ describe('sgPutting', () => {
     const r = sgPutting(round, 'me');
     expect(r.perHole[0]).toBeCloseTo(-0.40, 1);
     expect(r.sampleHoles).toBe(1);
+  });
+});
+
+describe('sgTotal', () => {
+  test('sums the four categories', () => {
+    const round = {
+      holes: [{ number: 1, par: 4, strokeIndex: 1, distance: 400 }],
+      scores: { me: { 1: 4 } },
+      shotDetails: { me: { 1: {
+        drive: 'fairway', teePenalties: 0,
+        approachBucket: '100-150',
+        putts: 2, firstPuttBucket: '10-20',
+        sandShots: 0,
+      } } },
+    };
+    const r = sgTotal(round, 'me');
+    expect(r.total).toBeCloseTo(
+      r.byCategory.tee + r.byCategory.approach + r.byCategory.aroundGreen + r.byCategory.putting,
+      5,
+    );
+    expect(r.sampleHoles).toBeGreaterThan(0);
   });
 });
