@@ -307,6 +307,27 @@ export function tournamentSindicatoClinched(tournament) {
   return null;
 }
 
+// ── Phase A helpers ─────────────────────────────────────────────────────────
+
+// Green-in-Regulation: reached the green with at least two strokes left
+// for putting (strokes − putts ≤ par − 2). Returns null when putts is unknown.
+export function isGIR({ strokes, putts, par }) {
+  if (strokes == null || putts == null || par == null) return null;
+  return (strokes - putts) <= (par - 2);
+}
+
+// Auto-derives the recoveryOutcome chip value from the rest of the hole's
+// state. Returns null when the situation doesn't fit a clear outcome — the
+// UI keeps the chips tappable so the user can override manually.
+export function recoveryOutcomeFromState({ strokes, putts, sandShots = 0, par }) {
+  const gir = isGIR({ strokes, putts, par });
+  if (gir !== false) return null;        // GIR hit OR unknown → no recovery
+  if (putts !== 1) return null;          // only 1-putt up-and-downs are unambiguous
+  return sandShots >= 1 ? 'sand-save' : 'up-and-down';
+}
+
+// ── Match Play tournament ────────────────────────────────────────────────────
+
 // Match Play tournament standing. Across played rounds, sums each of the two
 // players' holes won (matchPlayRoundTally) and total gross strokes. Returns
 // { board: [{player, points, strokes}] sorted by holes won desc, status } or

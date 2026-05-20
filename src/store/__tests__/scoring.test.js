@@ -19,6 +19,8 @@ import {
   tournamentSindicatoLeaderboard,
   tournamentSindicatoClinched,
   tournamentMatchPlayStandings,
+  recoveryOutcomeFromState,
+  isGIR,
 } from '../scoring';
 
 describe('calcExtraShots', () => {
@@ -568,5 +570,47 @@ describe('tournamentMatchPlayStandings', () => {
     const future = { holes, playerHandicaps: {}, scores: {} };
     const t = { players, rounds: [played, future], currentRound: 0 };
     expect(tournamentMatchPlayStandings(t).status).toBe('Alex leads by 2');
+  });
+});
+
+describe('isGIR', () => {
+  test('GIR hit when strokes - putts <= par - 2', () => {
+    expect(isGIR({ strokes: 4, putts: 2, par: 4 })).toBe(true);   // 4-2=2 <= 4-2
+    expect(isGIR({ strokes: 3, putts: 1, par: 4 })).toBe(true);   // 3-1=2 <= 2
+  });
+  test('GIR missed when strokes - putts > par - 2', () => {
+    expect(isGIR({ strokes: 5, putts: 2, par: 4 })).toBe(false);  // 5-2=3 > 2
+    expect(isGIR({ strokes: 6, putts: 3, par: 4 })).toBe(false);
+  });
+  test('returns null when putts missing', () => {
+    expect(isGIR({ strokes: 4, putts: null, par: 4 })).toBeNull();
+  });
+});
+
+describe('recoveryOutcomeFromState', () => {
+  test('GIR hit → null (no recovery)', () => {
+    expect(recoveryOutcomeFromState({
+      strokes: 4, putts: 2, sandShots: 0, par: 4,
+    })).toBeNull();
+  });
+  test('missed GIR, 1 putt, no sand → up-and-down', () => {
+    expect(recoveryOutcomeFromState({
+      strokes: 5, putts: 1, sandShots: 0, par: 4,
+    })).toBe('up-and-down');
+  });
+  test('missed GIR, 1 putt, sand shot → sand-save', () => {
+    expect(recoveryOutcomeFromState({
+      strokes: 5, putts: 1, sandShots: 1, par: 4,
+    })).toBe('sand-save');
+  });
+  test('missed GIR, 2 putts → null (heuristic abstains)', () => {
+    expect(recoveryOutcomeFromState({
+      strokes: 6, putts: 2, sandShots: 0, par: 4,
+    })).toBeNull();
+  });
+  test('chip-in (0 putts) missed GIR → null (heuristic abstains, user can tap up-and-down)', () => {
+    expect(recoveryOutcomeFromState({
+      strokes: 4, putts: 0, sandShots: 0, par: 4,
+    })).toBeNull();
   });
 });
