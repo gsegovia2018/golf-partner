@@ -381,6 +381,27 @@ describe('sgApproach with targetHandicap', () => {
   });
 });
 
+describe('sgTotal with targetHandicap', () => {
+  test('threads targetHandicap into all four categories', () => {
+    const round = {
+      holes: [{ number: 1, par: 4, strokeIndex: 1, distance: 400 }],
+      scores: { me: { 1: 4 } },
+      shotDetails: { me: { 1: {
+        drive: 'fairway', teePenalties: 0, approachBucket: '100-150',
+        putts: 2, firstPuttBucket: '3-6', sandShots: 0,
+      } } },
+    };
+    const r0 = sgTotal(round, 'me', 0);
+    const r14 = sgTotal(round, 'me', 14);
+    expect(r14.total).toBeGreaterThan(r0.total);
+    expect(r14.total).toBeCloseTo(
+      r14.byCategory.tee + r14.byCategory.approach
+      + r14.byCategory.aroundGreen + r14.byCategory.putting,
+      5,
+    );
+  });
+});
+
 describe('sgSeason', () => {
   test('returns null total below 18-hole sample', () => {
     expect(sgSeason([], 'me').total).toBeNull();

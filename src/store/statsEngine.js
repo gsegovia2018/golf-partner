@@ -1980,11 +1980,11 @@ export function sgPutting(round, playerId, targetHandicap = 0) {
   return { perHole, total, sampleHoles: sample.length };
 }
 
-export function sgTotal(round, playerId) {
-  const tee         = sgOffTheTee(round, playerId);
-  const approach    = sgApproach(round, playerId);
-  const aroundGreen = sgAroundGreen(round, playerId);
-  const putting     = sgPutting(round, playerId);
+export function sgTotal(round, playerId, targetHandicap = 0) {
+  const tee         = sgOffTheTee(round, playerId, targetHandicap);
+  const approach    = sgApproach(round, playerId, targetHandicap);
+  const aroundGreen = sgAroundGreen(round, playerId, targetHandicap);
+  const putting     = sgPutting(round, playerId, targetHandicap);
   const byCategory = {
     tee:         tee.total,
     approach:    approach.total,
