@@ -1,5 +1,5 @@
 import React, { useMemo } from 'react';
-import { View, Text, StyleSheet } from 'react-native';
+import { View, Text, StyleSheet, TouchableOpacity } from 'react-native';
 import { Feather } from '@expo/vector-icons';
 import { useTheme } from '../../../theme/ThemeContext';
 import SectionCard from '../SectionCard';
@@ -15,7 +15,7 @@ function verdict(form) {
   return 'Holding steady';
 }
 
-export default function OverviewTab({ stats, onInfo }) {
+export default function OverviewTab({ stats, onInfo, targetHandicap, onChangeTarget }) {
   const { theme } = useTheme();
   const s = useMemo(() => makeStyles(theme), [theme]);
 
@@ -44,7 +44,22 @@ export default function OverviewTab({ stats, onInfo }) {
 
       {/* ── Strokes Gained snapshot ── */}
       {stats?.strokesGained?.total != null && (
-        <SectionCard title="Strokes Gained vs scratch" infoKey="strokesGained" onInfo={onInfo}>
+        <SectionCard
+          title={
+            (targetHandicap == null || targetHandicap === 0)
+              ? 'Strokes Gained vs scratch'
+              : `Strokes Gained vs handicap ${targetHandicap}`
+          }
+          infoKey="strokesGained"
+          onInfo={onInfo}
+          right={
+            onChangeTarget && (
+              <TouchableOpacity onPress={onChangeTarget} hitSlop={8}>
+                <Feather name="edit-2" size={14} color={theme.text.secondary} />
+              </TouchableOpacity>
+            )
+          }
+        >
           <Text
             style={[
               s.sgValue,
@@ -54,7 +69,9 @@ export default function OverviewTab({ stats, onInfo }) {
             {stats.strokesGained.total >= 0 ? '+' : ''}
             {stats.strokesGained.total.toFixed(2)}
           </Text>
-          <Text style={s.sgSubtle}>per round vs scratch</Text>
+          <Text style={s.sgSubtle}>
+            per round {(targetHandicap == null || targetHandicap === 0) ? 'vs scratch' : `vs hcp ${targetHandicap}`}
+          </Text>
         </SectionCard>
       )}
 
