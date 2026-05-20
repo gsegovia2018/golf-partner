@@ -3,6 +3,7 @@ import { View, Text, StyleSheet } from 'react-native';
 import { useTheme } from '../../../theme/ThemeContext';
 import SectionCard from '../SectionCard';
 import MetricRow from '../MetricRow';
+import { SGBar } from '../SGBars';
 
 export default function ShotsTab({ stats, onInfo }) {
   const { theme } = useTheme();
@@ -23,6 +24,30 @@ export default function ShotsTab({ stats, onInfo }) {
 
   return (
     <View style={s.wrap}>
+      {stats?.strokesGained && (
+        <SectionCard title="Strokes Gained vs scratch">
+          {stats.strokesGained.total == null ? (
+            <Text style={s.note}>
+              Log first-putt distance and approach bucket on a few rounds to see this.
+            </Text>
+          ) : (
+            <>
+              <Text style={s.sgHeadline}>
+                {stats.strokesGained.total >= 0 ? '+' : ''}
+                {stats.strokesGained.total.toFixed(2)} per round
+              </Text>
+              <Text style={s.sgSubtle}>
+                From {stats.strokesGained.sampleHoles} holes · estimated from buckets
+              </Text>
+              <SGBar label="Off the tee"   value={stats.strokesGained.byCategory?.tee} />
+              <SGBar label="Approach"       value={stats.strokesGained.byCategory?.approach} />
+              <SGBar label="Around green"   value={stats.strokesGained.byCategory?.aroundGreen} />
+              <SGBar label="Putting"        value={stats.strokesGained.byCategory?.putting} />
+            </>
+          )}
+        </SectionCard>
+      )}
+
       {teeShot.hasData ? (
         <SectionCard title="Tee shot impact" infoKey="teeShotImpact" onInfo={onInfo}>
           <MetricRow label="Fairway found" value={teeShot.fairway.avgPoints} secondary={`${teeShot.fairway.holes} holes`} dim={teeShot.fairway.holes === 0} />
@@ -100,5 +125,7 @@ function makeStyles(theme) {
   return StyleSheet.create({
     wrap: { gap: theme.spacing.lg },
     note: { ...theme.typography.caption, color: theme.text.muted, fontStyle: 'italic' },
+    sgHeadline: { ...theme.typography.title, color: theme.text.primary, marginBottom: theme.spacing.xs },
+    sgSubtle: { ...theme.typography.caption, color: theme.text.muted, marginBottom: theme.spacing.sm },
   });
 }
