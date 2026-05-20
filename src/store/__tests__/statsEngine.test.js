@@ -402,6 +402,24 @@ describe('sgTotal with targetHandicap', () => {
   });
 });
 
+describe('sgSeason with targetHandicap', () => {
+  test('threads targetHandicap through sgTotal', () => {
+    const mkRound = () => ({
+      holes: Array.from({ length: 18 }, (_, i) => ({
+        number: i + 1, par: 4, strokeIndex: i + 1, distance: 400,
+      })),
+      scores: { me: Object.fromEntries(Array.from({ length: 18 }, (_, i) => [i + 1, 4])) },
+      shotDetails: { me: Object.fromEntries(Array.from({ length: 18 }, (_, i) => [i + 1, {
+        drive: 'fairway', teePenalties: 0, approachBucket: '100-150',
+        putts: 2, firstPuttBucket: '3-6', sandShots: 0,
+      }])) },
+    });
+    const r0 = sgSeason([mkRound(), mkRound()], 'me', 0);
+    const r14 = sgSeason([mkRound(), mkRound()], 'me', 14);
+    expect(r14.total).toBeGreaterThan(r0.total);
+  });
+});
+
 describe('sgSeason', () => {
   test('returns null total below 18-hole sample', () => {
     expect(sgSeason([], 'me').total).toBeNull();

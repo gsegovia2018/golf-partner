@@ -2001,13 +2001,13 @@ export function sgTotal(round, playerId, targetHandicap = 0) {
 
 const SG_SEASON_MIN_SAMPLE = 18;       // one full round's worth of contributing holes
 
-export function sgSeason(rounds, playerId) {
+export function sgSeason(rounds, playerId, targetHandicap = 0) {
   const byCategory = { tee: 0, approach: 0, aroundGreen: 0, putting: 0 };
   let total = 0;
   let sampleHoles = 0;
   const perRound = [];
   rounds.forEach((round, i) => {
-    const r = sgTotal(round, playerId);
+    const r = sgTotal(round, playerId, targetHandicap);
     if (r.sampleHoles === 0) return;
     byCategory.tee         += r.byCategory.tee;
     byCategory.approach    += r.byCategory.approach;
@@ -2022,7 +2022,7 @@ export function sgSeason(rounds, playerId) {
   }
   const denom = perRound.length;
   return {
-    total: total / denom,                                          // per-round
+    total: total / denom,
     byCategory: {
       tee:         byCategory.tee         / denom,
       approach:    byCategory.approach    / denom,
