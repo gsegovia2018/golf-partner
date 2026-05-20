@@ -1640,10 +1640,7 @@ export default function HomeScreen({ navigation, route }) {
             </TouchableOpacity>
           )}
 
-          {!isViewer && tournament.players.length < 4
-            && (settings?.scoringMode === 'individual'
-              || settings?.scoringMode === 'stableford'
-              || settings?.scoringMode == null) && (
+          {!isViewer && tournament.players.length < 4 && (
             <TouchableOpacity
               style={s.menuItem}
               onPress={() => {
