@@ -80,7 +80,16 @@ function celebrationFor(par, strokes) {
 }
 
 // Shot detail (tracked for the "me" player only).
-const DEFAULT_SHOT = { putts: null, drive: null, teePenalties: 0, otherPenalties: 0 };
+const DEFAULT_SHOT = {
+  putts: null,
+  drive: null,
+  teePenalties: 0,
+  otherPenalties: 0,
+  sandShots: 0,
+  recoveryOutcome: null,        // 'up-and-down' | 'sand-save' | 'none' | null
+  firstPuttBucket: null,        // '0-3' | '3-6' | '6-10' | '10-20' | '20+' | null
+  approachBucket: null,         // '0-50' | '50-100' | '100-150' | '150-200' | '200+' | null
+};
 
 // Fallback 18-hole layout for official rounds whose `course` JSONB is empty
 // or missing — keeps the scorecard usable until course data lands.
