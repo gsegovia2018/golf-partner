@@ -18,7 +18,7 @@ export async function loadProfile() {
   if (!user) return null;
   const { data, error } = await supabase
     .from('profiles')
-    .select('user_id, username, display_name, handicap, avatar_color, avatar_url, updated_at')
+    .select('user_id, username, display_name, handicap, target_handicap, avatar_color, avatar_url, updated_at')
     .eq('user_id', user.id)
     .maybeSingle();
   if (error) throw error;
@@ -28,6 +28,7 @@ export async function loadProfile() {
     username: data?.username ?? '',
     displayName: data?.display_name ?? '',
     handicap: data?.handicap ?? null,
+    targetHandicap: data?.target_handicap ?? null,
     avatarColor: data?.avatar_color ?? null,
     avatarUrl: data?.avatar_url ?? null,
     updatedAt: data?.updated_at ?? null,
@@ -51,6 +52,11 @@ export async function upsertProfile(fields) {
       ? null
       : parseInt(fields.handicap, 10);
   }
+  if (fields.targetHandicap !== undefined) {
+    row.target_handicap = fields.targetHandicap === '' || fields.targetHandicap == null
+      ? null
+      : Number(fields.targetHandicap);
+  }
   if (fields.avatarColor !== undefined) {
     row.avatar_color = fields.avatarColor || null;
   }
@@ -63,19 +69,8 @@ export async function upsertProfile(fields) {
     row.username = String(fields.username).trim().toLowerCase();
   }
 
-  // Does this row already exist? If yes, surgical UPDATE (only touches the
-  // keys in `row`). If no, INSERT with defaults for everything else.
-  const { data: existing, error: existingErr } = await supabase
-    .from('profiles').select('user_id').eq('user_id', user.id).maybeSingle();
-  if (existingErr) throw existingErr;
-
-  if (existing) {
-    const { error } = await supabase.from('profiles').update(row).eq('user_id', user.id);
-    if (error) throw error;
-  } else {
-    const { error } = await supabase.from('profiles').insert(row);
-    if (error) throw error;
-  }
+  const { error } = await supabase.from('profiles').upsert(row, { onConflict: 'user_id' });
+  if (error) throw error;
 }
 
 // Upload a locally-picked image to the `avatars` bucket under the user's
