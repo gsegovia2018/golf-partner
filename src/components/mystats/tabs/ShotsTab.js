@@ -1,11 +1,13 @@
-import React, { useMemo } from 'react';
-import { View, Text, StyleSheet } from 'react-native';
+import React, { useEffect, useMemo, useState } from 'react';
+import { View, Text, StyleSheet, TouchableOpacity } from 'react-native';
+import { Feather } from '@expo/vector-icons';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useTheme } from '../../../theme/ThemeContext';
 import SectionCard from '../SectionCard';
 import MetricRow from '../MetricRow';
 import { SGBar } from '../SGBars';
 
-export default function ShotsTab({ stats, onInfo }) {
+export default function ShotsTab({ stats, onInfo, targetHandicap, onChangeTarget }) {
   const { theme } = useTheme();
   const s = useMemo(() => makeStyles(theme), [theme]);
   const { teeShot, shots, lagPutting, sandSaves, upAndDown, bunkerVisits } = stats;
@@ -22,10 +24,25 @@ export default function ShotsTab({ stats, onInfo }) {
     );
   }
 
+  const sgTitle = (targetHandicap == null || targetHandicap === 0)
+    ? 'Strokes Gained vs scratch'
+    : `Strokes Gained vs ${targetHandicap}-handicap target`;
+
   return (
     <View style={s.wrap}>
       {stats?.strokesGained && (
-        <SectionCard title="Strokes Gained vs scratch" infoKey="strokesGained" onInfo={onInfo}>
+        <SectionCard
+          title={sgTitle}
+          infoKey="strokesGained"
+          onInfo={onInfo}
+          right={
+            onChangeTarget ? (
+              <TouchableOpacity onPress={onChangeTarget} hitSlop={8}>
+                <Feather name="edit-2" size={14} color={theme.text.secondary} />
+              </TouchableOpacity>
+            ) : null
+          }
+        >
           {stats.strokesGained.total == null ? (
             <Text style={s.note}>
               Log first-putt distance and approach bucket on a few rounds to see this.
@@ -43,6 +60,9 @@ export default function ShotsTab({ stats, onInfo }) {
               <SGBar label="Approach"       value={stats.strokesGained.byCategory?.approach} />
               <SGBar label="Around green"   value={stats.strokesGained.byCategory?.aroundGreen} />
               <SGBar label="Putting"        value={stats.strokesGained.byCategory?.putting} />
+              {stats.strokesGained.sampleHoles >= 18
+                && (targetHandicap == null || targetHandicap === 0)
+                && <SGTargetNudge onTap={onChangeTarget} />}
             </>
           )}
         </SectionCard>
@@ -128,4 +148,41 @@ function makeStyles(theme) {
     sgHeadline: { ...theme.typography.title, color: theme.text.primary, marginBottom: theme.spacing.xs },
     sgSubtle: { ...theme.typography.caption, color: theme.text.muted, marginBottom: theme.spacing.sm },
   });
+}
+
+const NUDGE_KEY = 'sgTargetNudgeDismissed';
+
+function SGTargetNudge({ onTap }) {
+  const { theme } = useTheme();
+  const [dismissed, setDismissed] = useState(true);
+  useEffect(() => {
+    let cancelled = false;
+    AsyncStorage.getItem(NUDGE_KEY).then((v) => {
+      if (!cancelled) setDismissed(v === '1');
+    });
+    return () => { cancelled = true; };
+  }, []);
+  if (dismissed) return null;
+  return (
+    <View style={{
+      flexDirection: 'row', alignItems: 'center', marginTop: 12, padding: 10,
+      backgroundColor: theme.bg.subtle ?? theme.bg.card, borderRadius: 8,
+    }}>
+      <TouchableOpacity onPress={onTap} style={{ flex: 1 }}>
+        <Text style={{ color: theme.text.primary, fontSize: 13 }}>
+          ⓘ Tip: set a target handicap to see where you'd improve most.
+        </Text>
+      </TouchableOpacity>
+      <TouchableOpacity
+        onPress={async () => {
+          await AsyncStorage.setItem(NUDGE_KEY, '1');
+          setDismissed(true);
+        }}
+        hitSlop={8}
+        style={{ paddingHorizontal: 8 }}
+      >
+        <Text style={{ color: theme.text.secondary, fontSize: 16 }}>×</Text>
+      </TouchableOpacity>
+    </View>
+  );
 }
