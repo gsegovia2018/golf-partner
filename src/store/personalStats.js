@@ -11,6 +11,7 @@ import {
   parTypeSplit, warmupVsClosing, frontBackSplit, playerScoreDistribution,
   playerRoundHistory, playerConsistency, bounceBackRate, shotStats,
   teeShotImpact, scramblingStats,
+  lagPuttingQuality, sandSaveRate, upAndDownRate, bunkerVisits,
 } from './statsEngine';
 
 // Canonical player id used inside the synthetic tournament.
@@ -377,5 +378,10 @@ export function computeMyStats(selectedRounds, { n = 5 } = {}) {
     scrambling: scramblingStats(synthetic)[0] ?? null,
     history: playerRoundHistory(synthetic, CANON_ID),
     formSeries: computeFormSeries(rounds),
+    // Phase A:
+    lagPutting:   lagPuttingQuality(synthetic.rounds, CANON_ID),
+    sandSaves:    sandSaveRate(synthetic.rounds, CANON_ID),
+    upAndDown:    upAndDownRate(synthetic.rounds, CANON_ID),
+    bunkerVisits: bunkerVisits(synthetic.rounds, CANON_ID),
   };
 }

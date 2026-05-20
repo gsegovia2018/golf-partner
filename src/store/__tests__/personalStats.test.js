@@ -440,6 +440,31 @@ describe('computeFormSeries', () => {
 });
 
 describe('computeMyStats', () => {
+  test('includes lagPutting, sandSaves, upAndDown, bunkerVisits', () => {
+    const rawRound = {
+      courseName: 'Test',
+      holes: [{ number: 1, par: 4, strokeIndex: 1 }],
+      scores: { p1: { 1: 4 } },
+      shotDetails: { p1: { 1: { putts: 2, sandShots: 0, firstPuttBucket: '6-10' } } },
+      playerHandicaps: { p1: 18 },
+    };
+    const myRound = {
+      key: 't1#0',
+      round: rawRound,
+      playerId: 'p1',
+      player: { id: 'p1', name: 'Me', handicap: 18 },
+      courseName: 'Test',
+      tournamentName: 'T',
+      tournamentDate: '2026-05-20',
+      completed: true,
+    };
+    const stats = computeMyStats([myRound]);
+    expect(stats.lagPutting).toBeDefined();
+    expect(stats.sandSaves).toBeDefined();
+    expect(stats.upAndDown).toBeDefined();
+    expect(stats.bunkerVisits).toBeDefined();
+  });
+
   test('bundles round count, metrics, form and ranking', () => {
     const h = holes18();
     const my = collectMyRounds([{
