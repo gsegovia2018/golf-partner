@@ -29,6 +29,7 @@ function metaPathFor(m) {
         paths.push(`rounds.${patch.roundId}.playerHandicaps.${m.player.id}`);
         if (patch.pairs) paths.push(`rounds.${patch.roundId}.pairs`);
       }
+      if (m.nextScoringMode) paths.push('settings.scoringMode');
       return paths;
     }
     // Archive / reopen a tournament. Scalar LWW path.
@@ -44,7 +45,7 @@ function metaPathFor(m) {
 }
 
 // Applies the mutation's side effect to a cloned tournament object in place.
-function applyToTournament(t, m) {
+export function applyToTournament(t, m) {
   switch (m.type) {
     case 'score.set': {
       const round = t.rounds.find((r) => r.id === m.roundId);
@@ -101,6 +102,9 @@ function applyToTournament(t, m) {
           [m.player.id]: patch.playerHandicap,
         };
         if (patch.pairs) round.pairs = patch.pairs;
+      }
+      if (m.nextScoringMode) {
+        t.settings = { ...(t.settings ?? {}), scoringMode: m.nextScoringMode };
       }
       break;
     }
