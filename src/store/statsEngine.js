@@ -1731,3 +1731,39 @@ export function teeShotImpact(tournament, playerId) {
     penaltyDrag,
   };
 }
+
+// ── Lag putting quality (Phase A) ──
+// Aggregates avg putts and 3-putt rate keyed by first-putt distance bucket.
+// Below 12 putts per bucket the result for that bucket is null.
+const FIRST_PUTT_BUCKETS_LIST = ['0-3', '3-6', '6-10', '10-20', '20+'];
+const PUTT_BUCKET_MIN = 12;
+
+export function lagPuttingQuality(rounds, playerId) {
+  const perBucket = Object.fromEntries(FIRST_PUTT_BUCKETS_LIST.map((b) => [b, []]));
+  rounds.forEach((round) => {
+    const byHole = round?.shotDetails?.[playerId];
+    if (!byHole) return;
+    (round.holes ?? []).forEach((hole) => {
+      const d = byHole[hole.number];
+      if (!d || d.putts == null || !d.firstPuttBucket) return;
+      perBucket[d.firstPuttBucket]?.push(d.putts);
+    });
+  });
+  const avgPuttsByBucket = {};
+  const threePuttRateByBucket = {};
+  const sample = { perBucket: {} };
+  FIRST_PUTT_BUCKETS_LIST.forEach((b) => {
+    const arr = perBucket[b];
+    sample.perBucket[b] = arr.length;
+    if (arr.length < PUTT_BUCKET_MIN) {
+      avgPuttsByBucket[b] = null;
+      threePuttRateByBucket[b] = null;
+      return;
+    }
+    const sum = arr.reduce((a, x) => a + x, 0);
+    avgPuttsByBucket[b] = Math.round((sum / arr.length) * 100) / 100;
+    const threes = arr.filter((x) => x >= 3).length;
+    threePuttRateByBucket[b] = Math.round((threes / arr.length) * 1000) / 1000;
+  });
+  return { avgPuttsByBucket, threePuttRateByBucket, sample };
+}

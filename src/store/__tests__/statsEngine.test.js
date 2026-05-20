@@ -1,4 +1,4 @@
-import { teeShotImpact } from '../statsEngine';
+import { teeShotImpact, lagPuttingQuality } from '../statsEngine';
 
 // 18 par-4 holes, strokeIndex = hole number.
 function holes18() {
@@ -92,5 +92,32 @@ describe('teeShotImpact', () => {
     const r = teeShotImpact(t, 'p1');
     expect(r.withoutPenalty.holes).toBe(0); // untracked holes are not counted
     expect(r.penaltyDrag).toBe(0);          // no clean baseline → no drag figure
+  });
+});
+
+// ── lagPuttingQuality helpers ──
+const makeRound = (holes, details, playerId = 'me') => ({
+  holes: holes.map((h, i) => ({ number: i + 1, par: h.par, strokeIndex: i + 1 })),
+  scores: { [playerId]: Object.fromEntries(holes.map((h, i) => [i + 1, h.strokes])) },
+  shotDetails: { [playerId]: Object.fromEntries(details.map((d, i) => [i + 1, d])) },
+});
+
+describe('lagPuttingQuality', () => {
+  test('returns null per bucket below 12-putt threshold', () => {
+    const round = makeRound(
+      [{ par: 4, strokes: 4 }],
+      [{ putts: 2, firstPuttBucket: '6-10' }],
+    );
+    const result = lagPuttingQuality([round], 'me');
+    expect(result.avgPuttsByBucket['6-10']).toBeNull();
+  });
+
+  test('aggregates putts per bucket above threshold', () => {
+    const holes = Array.from({ length: 12 }, () => ({ par: 4, strokes: 4 }));
+    const details = Array.from({ length: 12 }, () => ({ putts: 2, firstPuttBucket: '6-10' }));
+    const round = makeRound(holes, details);
+    const result = lagPuttingQuality([round], 'me');
+    expect(result.avgPuttsByBucket['6-10']).toBeCloseTo(2.0);
+    expect(result.sample.perBucket['6-10']).toBe(12);
   });
 });
