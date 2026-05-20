@@ -13,7 +13,6 @@ import { useTheme } from '../theme/ThemeContext';
 import { supabase } from '../lib/supabase';
 import { loadProfile, upsertProfile, uploadAvatar, computePersonalStats } from '../store/profileStore';
 import { getShowRunningScore, setShowRunningScore } from '../lib/prefs';
-import { TargetHandicapPicker } from '../components/mystats/TargetHandicapPicker';
 
 const AVATAR_COLORS = ['#006747', '#c77b38', '#1b4965', '#7b3f6b', '#4a6d3f', '#b33951'];
 
@@ -29,8 +28,7 @@ export default function ProfileScreen({ navigation }) {
   const [username, setUsername] = useState('');
   const [displayName, setDisplayName] = useState('');
   const [handicap, setHandicap] = useState('');
-  const [targetHandicap, setTargetHandicap] = useState(null);
-  const [targetPickerOpen, setTargetPickerOpen] = useState(false);
+  const [targetHandicap, setTargetHandicap] = useState('');
   const [avatarColor, setAvatarColor] = useState(null);
   const [avatarUrl, setAvatarUrl] = useState(null);
   const [uploadingAvatar, setUploadingAvatar] = useState(false);
@@ -45,7 +43,7 @@ export default function ProfileScreen({ navigation }) {
       setUsername(p?.username ?? '');
       setDisplayName(p?.displayName ?? '');
       setHandicap(p?.handicap != null ? String(p.handicap) : '');
-      setTargetHandicap(p?.targetHandicap ?? null);
+      setTargetHandicap(p?.targetHandicap != null ? String(p.targetHandicap) : '');
       setAvatarColor(p?.avatarColor ?? null);
       setAvatarUrl(p?.avatarUrl ?? null);
       setShowRunning(running);
@@ -120,9 +118,19 @@ export default function ProfileScreen({ navigation }) {
         return;
       }
     }
+    // Target handicap is the comparison baseline for Strokes Gained.
+    // Decimals are fine (12.5 is a valid playing-handicap target). Range
+    // matches the picker's previous 0–36 bounds.
+    if (targetHandicap.trim() !== '') {
+      const t = parseFloat(targetHandicap);
+      if (!Number.isFinite(t) || t < 0 || t > 36) {
+        Alert.alert('Invalid target handicap', 'Target handicap must be between 0 and 36.');
+        return;
+      }
+    }
     setSaving(true);
     try {
-      await upsertProfile({ username: trimmedUsername, displayName, handicap, avatarColor, avatarUrl });
+      await upsertProfile({ username: trimmedUsername, displayName, handicap, targetHandicap, avatarColor, avatarUrl });
       await load();
     } catch (err) {
       const msg = err?.message ?? 'Could not save profile';
@@ -295,14 +303,16 @@ export default function ProfileScreen({ navigation }) {
             </View>
             <View style={{ flex: 1 }}>
               <Text style={s.fieldLabel}>Target handicap</Text>
-              <TouchableOpacity
-                style={[s.input, { width: 100, justifyContent: 'center' }]}
-                onPress={() => setTargetPickerOpen(true)}
-              >
-                <Text style={{ color: targetHandicap == null ? theme.text.muted : theme.text.primary, fontFamily: 'PlusJakartaSans-Medium', fontSize: 15 }}>
-                  {targetHandicap == null ? 'Not set' : String(targetHandicap)}
-                </Text>
-              </TouchableOpacity>
+              <TextInput
+                style={[s.input, { width: 100 }]}
+                placeholder="—"
+                placeholderTextColor={theme.text.muted}
+                keyboardType="decimal-pad"
+                keyboardAppearance={theme.isDark ? 'dark' : 'light'}
+                selectionColor={theme.accent.primary}
+                value={targetHandicap}
+                onChangeText={(v) => { setTargetHandicap(v); setDirty(true); }}
+              />
             </View>
           </View>
 
@@ -452,18 +462,6 @@ export default function ProfileScreen({ navigation }) {
             <Feather name="log-out" size={16} color={theme.destructive} />
             <Text style={s.signOutText}>Sign out</Text>
           </TouchableOpacity>
-
-          <TargetHandicapPicker
-            visible={targetPickerOpen}
-            currentValue={targetHandicap}
-            currentHandicap={handicap === '' ? null : Number(handicap)}
-            onSave={async (value) => {
-              setTargetHandicap(value);
-              setTargetPickerOpen(false);
-              await upsertProfile({ targetHandicap: value });
-            }}
-            onCancel={() => setTargetPickerOpen(false)}
-          />
         </ScrollView>
       )}
     </ScreenContainer>
