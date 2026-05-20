@@ -35,6 +35,7 @@ import { pickMedia, attachMedia } from '../lib/mediaCapture';
 import { useRoundMedia } from '../hooks/useRoundMedia';
 import { useOfficialRound } from '../hooks/useOfficialRound';
 import DiscrepancySheet from '../components/DiscrepancySheet';
+import { ShotDetailExplainer } from '../components/ShotDetailExplainer';
 import { scoreCellState, cardDiscrepancyHoles } from '../store/officialScoring';
 import { buildLeaderboard } from '../store/officialLeaderboard';
 import { attestCard } from '../store/officialStore';
@@ -1701,11 +1702,14 @@ function MePicker({ players, onPickMe, theme, s }) {
 // direction (hidden on par 3s — no driver off the tee), and penalties
 // split into tee penalties vs everything else.
 // One "label … − value +" row, styled after the Hole19 stat rows.
-function ShotCounterRow({ label, value, onStep, theme, s }) {
+function ShotCounterRow({ label, value, onStep, theme, s, explainer }) {
   const canDec = value != null && value > 0;
   return (
     <View style={s.shotRow}>
-      <Text style={s.shotRowLabel}>{label}</Text>
+      <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+        <Text style={s.shotRowLabel}>{label}</Text>
+        {explainer}
+      </View>
       <View style={s.shotCounter}>
         <TouchableOpacity
           style={[s.shotCounterBtn, !canDec && s.shotCounterBtnDim]}
@@ -1730,10 +1734,13 @@ function ShotCounterRow({ label, value, onStep, theme, s }) {
   );
 }
 
-function BucketRow({ label, value, buckets, labels, onSelect, theme, s, isLast = true }) {
+function BucketRow({ label, value, buckets, labels, onSelect, theme, s, isLast = true, explainer }) {
   return (
     <View style={[s.shotRow, isLast && s.shotRowLast]}>
-      <Text style={s.shotRowLabel}>{label}</Text>
+      <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+        <Text style={s.shotRowLabel}>{label}</Text>
+        {explainer}
+      </View>
       <View style={s.driveBtns}>
         {buckets.map((key) => {
           const active = value === key;
@@ -1818,6 +1825,13 @@ export function ShotDetailPanel({ hole, detail, onChange, strokes, theme: themeP
         onStep={(delta) => step('sandShots', delta)}
         theme={theme}
         s={s}
+        explainer={
+          <ShotDetailExplainer
+            rowKey="sandShots"
+            title="Sand shots"
+            body="Total bunker shots you played on this hole — even from a fairway bunker. Used for sand saves and bunker visits per round."
+          />
+        }
       />
 
       {!isPar3 && (
@@ -1856,6 +1870,13 @@ export function ShotDetailPanel({ hole, detail, onChange, strokes, theme: themeP
           theme={theme}
           s={s}
           isLast={false}
+          explainer={
+            <ShotDetailExplainer
+              rowKey="approachBucket"
+              title="Approach distance"
+              body="How far you played your approach into the green from. Drives Strokes Gained Approach."
+            />
+          }
         />
       )}
       {(d.putts ?? 0) >= 1 && (
@@ -1868,11 +1889,25 @@ export function ShotDetailPanel({ hole, detail, onChange, strokes, theme: themeP
           theme={theme}
           s={s}
           isLast={!missedGIR}
+          explainer={
+            <ShotDetailExplainer
+              rowKey="firstPuttBucket"
+              title="First putt distance"
+              body="How far away your first putt was. Lets us measure how well you lag long putts and how well you convert short ones."
+            />
+          }
         />
       )}
       {missedGIR && (
         <View style={[s.shotRow, s.shotRowLast]}>
-          <Text style={s.shotRowLabel}>Outcome</Text>
+          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+            <Text style={s.shotRowLabel}>Outcome</Text>
+            <ShotDetailExplainer
+              rowKey="outcome"
+              title="Up & Down / Sand Save"
+              body={'A successful "up and down" means you missed the green in regulation but still saved par or better. A "sand save" is the same but from a bunker.'}
+            />
+          </View>
           <View style={s.driveBtns}>
             <TouchableOpacity
               style={[s.outcomeChip, effectiveOutcome === 'up-and-down' && s.outcomeChipActive]}
