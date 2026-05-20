@@ -13,6 +13,7 @@ import { useTheme } from '../theme/ThemeContext';
 import { supabase } from '../lib/supabase';
 import { loadProfile, upsertProfile, uploadAvatar, computePersonalStats } from '../store/profileStore';
 import { getShowRunningScore, setShowRunningScore } from '../lib/prefs';
+import { TargetHandicapPicker } from '../components/mystats/TargetHandicapPicker';
 
 const AVATAR_COLORS = ['#006747', '#c77b38', '#1b4965', '#7b3f6b', '#4a6d3f', '#b33951'];
 
@@ -28,6 +29,8 @@ export default function ProfileScreen({ navigation }) {
   const [username, setUsername] = useState('');
   const [displayName, setDisplayName] = useState('');
   const [handicap, setHandicap] = useState('');
+  const [targetHandicap, setTargetHandicap] = useState(null);
+  const [targetPickerOpen, setTargetPickerOpen] = useState(false);
   const [avatarColor, setAvatarColor] = useState(null);
   const [avatarUrl, setAvatarUrl] = useState(null);
   const [uploadingAvatar, setUploadingAvatar] = useState(false);
@@ -42,6 +45,7 @@ export default function ProfileScreen({ navigation }) {
       setUsername(p?.username ?? '');
       setDisplayName(p?.displayName ?? '');
       setHandicap(p?.handicap != null ? String(p.handicap) : '');
+      setTargetHandicap(p?.targetHandicap ?? null);
       setAvatarColor(p?.avatarColor ?? null);
       setAvatarUrl(p?.avatarUrl ?? null);
       setShowRunning(running);
@@ -290,6 +294,18 @@ export default function ProfileScreen({ navigation }) {
           </View>
 
           <View style={s.fieldGroup}>
+            <Text style={s.fieldLabel}>Target handicap</Text>
+            <TouchableOpacity
+              style={[s.input, { width: 100, justifyContent: 'center' }]}
+              onPress={() => setTargetPickerOpen(true)}
+            >
+              <Text style={{ color: targetHandicap == null ? theme.text.muted : theme.text.primary, fontFamily: 'PlusJakartaSans-Medium', fontSize: 15 }}>
+                {targetHandicap == null ? 'Not set' : String(targetHandicap)}
+              </Text>
+            </TouchableOpacity>
+          </View>
+
+          <View style={s.fieldGroup}>
             <Text style={s.fieldLabel}>Avatar color</Text>
             <View style={s.colorRow}>
               {AVATAR_COLORS.map((c) => (
@@ -435,6 +451,18 @@ export default function ProfileScreen({ navigation }) {
             <Feather name="log-out" size={16} color={theme.destructive} />
             <Text style={s.signOutText}>Sign out</Text>
           </TouchableOpacity>
+
+          <TargetHandicapPicker
+            visible={targetPickerOpen}
+            currentValue={targetHandicap}
+            currentHandicap={handicap === '' ? null : Number(handicap)}
+            onSave={async (value) => {
+              setTargetHandicap(value);
+              setTargetPickerOpen(false);
+              await upsertProfile({ targetHandicap: value });
+            }}
+            onCancel={() => setTargetPickerOpen(false)}
+          />
         </ScrollView>
       )}
     </ScreenContainer>
