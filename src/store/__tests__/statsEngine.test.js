@@ -299,6 +299,28 @@ describe('sgTotal', () => {
   });
 });
 
+describe('sgOffTheTee with targetHandicap', () => {
+  test('default targetHandicap=0 matches Phase B', () => {
+    const round = {
+      holes: [{ number: 1, par: 4, strokeIndex: 1, distance: 400 }],
+      scores: { me: { 1: 4 } },
+      shotDetails: { me: { 1: { drive: 'fairway', teePenalties: 0, approachBucket: '100-150' } } },
+    };
+    expect(sgOffTheTee(round, 'me').perHole[0])
+      .toBeCloseTo(sgOffTheTee(round, 'me', 0).perHole[0]);
+  });
+  test('higher targetHandicap shifts SG up', () => {
+    const round = {
+      holes: [{ number: 1, par: 4, strokeIndex: 1, distance: 400 }],
+      scores: { me: { 1: 4 } },
+      shotDetails: { me: { 1: { drive: 'fairway', teePenalties: 0, approachBucket: '100-150' } } },
+    };
+    const scratchSG = sgOffTheTee(round, 'me', 0).perHole[0];
+    const amateurSG = sgOffTheTee(round, 'me', 14).perHole[0];
+    expect(amateurSG).toBeGreaterThan(scratchSG);
+  });
+});
+
 describe('sgPutting with targetHandicap', () => {
   test('default targetHandicap=0 matches Phase B', () => {
     const round = makeRound(

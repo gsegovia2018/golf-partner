@@ -1937,18 +1937,14 @@ export function sgApproach(round, playerId, targetHandicap = 0) {
 const PAR_DEFAULT_DISTANCE = { 3: 170, 4: 400, 5: 530 };
 const PAR_TYPICAL_RESIDUAL = { 3: 0, 4: 150, 5: 220 };
 
-export function sgOffTheTee(round, playerId) {
+export function sgOffTheTee(round, playerId, targetHandicap = 0) {
   const byHole = round?.shotDetails?.[playerId];
   const perHole = (round?.holes ?? []).map((hole) => {
     const d = byHole?.[hole.number];
     if (!d || d.drive == null) return null;
     const teeDistance = hole.distance ?? PAR_DEFAULT_DISTANCE[hole.par] ?? 400;
-    const start = expectedStrokes('tee', teeDistance);
+    const start = expectedStrokes('tee', teeDistance, targetHandicap);
 
-    // End lie & residual distance from drive direction:
-    //   fairway/super: fairway lie at approachBucket midpoint (or par-typical)
-    //   left/right:    rough lie at same residual
-    //   short:         fairway lie at ~60% of the tee distance remaining
     let endLie = 'fairway';
     let residualDistance;
     if (d.drive === 'short') {
@@ -1961,7 +1957,7 @@ export function sgOffTheTee(round, playerId) {
       residualDistance = PAR_TYPICAL_RESIDUAL[hole.par] ?? 150;
       endLie = (d.drive === 'left' || d.drive === 'right') ? 'rough' : 'fairway';
     }
-    const end = expectedStrokes(endLie, residualDistance);
+    const end = expectedStrokes(endLie, residualDistance, targetHandicap);
     const penalty = d.teePenalties ?? 0;
     return start - end - 1 - penalty;
   });
