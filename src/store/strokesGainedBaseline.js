@@ -73,9 +73,10 @@ export const BUCKETS = {
   approach:  { '0-50': 25, '50-100': 75, '100-150': 125, '150-200': 175, '200+': 230 },  // yards
 };
 
-// Binary-search lookup with linear interpolation. Clamps to endpoints.
-export function expectedStrokes(lie, distance) {
-  const rows = BASELINES[lie];
+// Private: look up a single table by distance using binary search + linear
+// interpolation with endpoint clamping. Returns null for unknown lie.
+function lookupOne(table, lie, distance) {
+  const rows = table[lie];
   if (!rows || rows.length === 0) return null;
   if (distance <= rows[0].distance) return rows[0].expected;
   if (distance >= rows[rows.length - 1].distance) return rows[rows.length - 1].expected;
@@ -89,11 +90,25 @@ export function expectedStrokes(lie, distance) {
   return a.expected + t * (b.expected - a.expected);
 }
 
-export function expectedFromBucket(category, bucketKey) {
+// Private: blend scratch and amateur tables by target handicap.
+// t = 0 returns scratch; t = 1 returns amateur; t = 2 extrapolates and clamps.
+function blendedExpected(lie, distance, targetHandicap) {
+  const t = Math.max(0, Math.min(2, (targetHandicap ?? 0) / AMATEUR_ANCHOR_HANDICAP));
+  const a = lookupOne(BASELINES_SCRATCH, lie, distance);
+  const b = lookupOne(BASELINES_AMATEUR, lie, distance);
+  if (a == null || b == null) return null;
+  return a + t * (b - a);
+}
+
+export function expectedStrokes(lie, distance, targetHandicap = 0) {
+  return blendedExpected(lie, distance, targetHandicap);
+}
+
+export function expectedFromBucket(category, bucketKey, targetHandicap = 0) {
   const midpoint = BUCKETS[category]?.[bucketKey];
   if (midpoint == null) return null;
   const lie = category === 'firstPutt' ? 'green' : 'fairway';
-  return expectedStrokes(lie, midpoint);
+  return expectedStrokes(lie, midpoint, targetHandicap);
 }
 
 // Mark Broadie "average amateur" (~14 hcp) baselines from Every Shot

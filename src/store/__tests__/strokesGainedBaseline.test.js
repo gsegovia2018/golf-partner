@@ -65,3 +65,40 @@ describe('BASELINES_AMATEUR', () => {
     expect(AMATEUR_ANCHOR_HANDICAP).toBe(14);
   });
 });
+
+describe('expectedStrokes(lie, distance, targetHandicap)', () => {
+  test('targetHandicap=0 returns scratch values (Phase B regression)', () => {
+    expect(expectedStrokes('fairway', 137.2, 0))
+      .toBeCloseTo(BASELINES_SCRATCH.fairway.find((r) => Math.abs(r.distance - 137.2) < 0.1).expected);
+  });
+  test('targetHandicap=14 returns amateur values', () => {
+    expect(expectedStrokes('fairway', 137.2, 14))
+      .toBeCloseTo(BASELINES_AMATEUR.fairway.find((r) => Math.abs(r.distance - 137.2) < 0.1).expected);
+  });
+  test('targetHandicap=7 returns midpoint between scratch and amateur', () => {
+    const s = BASELINES_SCRATCH.fairway.find((r) => Math.abs(r.distance - 137.2) < 0.1).expected;
+    const a = BASELINES_AMATEUR.fairway.find((r) => Math.abs(r.distance - 137.2) < 0.1).expected;
+    expect(expectedStrokes('fairway', 137.2, 7)).toBeCloseTo((s + a) / 2, 3);
+  });
+  test('targetHandicap=28 extrapolates at t=2', () => {
+    const s = BASELINES_SCRATCH.fairway.find((r) => Math.abs(r.distance - 137.2) < 0.1).expected;
+    const a = BASELINES_AMATEUR.fairway.find((r) => Math.abs(r.distance - 137.2) < 0.1).expected;
+    expect(expectedStrokes('fairway', 137.2, 28)).toBeCloseTo(s + 2 * (a - s), 3);
+  });
+  test('targetHandicap>28 clamps to t=2', () => {
+    expect(expectedStrokes('fairway', 137.2, 50))
+      .toBeCloseTo(expectedStrokes('fairway', 137.2, 28));
+  });
+  test('targetHandicap default is 0 (no arg)', () => {
+    expect(expectedStrokes('fairway', 137.2))
+      .toBeCloseTo(expectedStrokes('fairway', 137.2, 0));
+  });
+});
+
+describe('expectedFromBucket(category, bucketKey, targetHandicap)', () => {
+  test('passes targetHandicap through to expectedStrokes', () => {
+    const direct = expectedStrokes('fairway', 125, 10);
+    const via = expectedFromBucket('approach', '100-150', 10);
+    expect(via).toBeCloseTo(direct);
+  });
+});
