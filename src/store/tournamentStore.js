@@ -1232,7 +1232,7 @@ export async function joinTournamentByCode(code) {
 // pre-session, by the JoinTournamentLink interception). A no-app recipient
 // simply lands on the Vercel web build.
 export function buildJoinLink(origin, code) {
-  const base = (origin || 'https://golf.app').replace(/\/+$/, '');
+  const base = (origin || 'https://golf-partner.vercel.app').replace(/\/+$/, '');
   return `${base}/join-tournament/${String(code ?? '').toUpperCase()}`;
 }
 

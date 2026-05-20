@@ -1,0 +1,12 @@
+[
+  {
+    "relation": ["delegate_permission/common.handle_all_urls"],
+    "target": {
+      "namespace": "android_app",
+      "package_name": "com.golfpartner.app",
+      "sha256_cert_fingerprints": [
+        "DE:98:D8:8B:7F:0E:88:7C:82:DC:E6:F7:1F:A8:E6:AC:DF:42:B6:A4:62:D7:AB:0F:6E:EB:96:B0:09:16:CE:F2"
+      ]
+    }
+  }
+]

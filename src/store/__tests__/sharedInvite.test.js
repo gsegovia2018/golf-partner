@@ -13,12 +13,12 @@ describe('buildJoinLink', () => {
 
   test('falls back to the production origin when none is given', () => {
     expect(buildJoinLink('', 'XYZ789'))
-      .toBe('https://golf.app/join-tournament/XYZ789');
+      .toBe('https://golf-partner.vercel.app/join-tournament/XYZ789');
   });
 
   test('upper-cases the code', () => {
-    expect(buildJoinLink('https://golf.app', 'abc123'))
-      .toBe('https://golf.app/join-tournament/ABC123');
+    expect(buildJoinLink('https://golf-partner.vercel.app', 'abc123'))
+      .toBe('https://golf-partner.vercel.app/join-tournament/ABC123');
   });
 });
 

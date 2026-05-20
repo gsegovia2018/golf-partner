@@ -1,10 +1,11 @@
-import React, { useEffect } from 'react';
+import React, { useEffect, useState } from 'react';
 import { View, ActivityIndicator, Text, TouchableOpacity, StyleSheet } from 'react-native';
 import { NavigationContainer, createNavigationContainerRef } from '@react-navigation/native';
 import { createStackNavigator, CardStyleInterpolators } from '@react-navigation/stack';
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
 import { SafeAreaProvider, initialWindowMetrics, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { StatusBar } from 'expo-status-bar';
+import * as Linking from 'expo-linking';
 import { Feather } from '@expo/vector-icons';
 import { useFonts } from 'expo-font';
 import {
@@ -233,9 +234,48 @@ function MainTabs() {
   );
 }
 
+// Matches both the App Link URL (https://golf-partner.vercel.app/join-tournament/CODE)
+// and the custom-scheme deep link (golf://join-tournament/CODE) used when the app
+// catches an invite. Web reads it sync from window.location; native reads it
+// async from Linking.getInitialURL so the auth gate can route logged-out
+// scanners to the guest/login choice instead of the bare sign-up wall.
+function matchesJoinLink(url) {
+  if (!url) return false;
+  if (/^golf:\/\/join-tournament\/[^/?#]+/i.test(url)) return true;
+  try {
+    return /^\/join-tournament\/[^/]+/.test(new URL(url).pathname);
+  } catch {
+    return false;
+  }
+}
+
 function AppNavigator() {
   const { theme, mode } = useTheme();
   const { session, loading } = useAuth();
+  // null = "not resolved yet" (native cold-start); avoids a flash of AuthScreen
+  // before getInitialURL settles. On web we read it synchronously up front.
+  const [isJoinLink, setIsJoinLink] = useState(() => {
+    if (typeof window !== 'undefined' && window.location) {
+      return /^\/join-tournament\/[^/]+/.test(window.location.pathname);
+    }
+    return null;
+  });
+
+  useEffect(() => {
+    if (isJoinLink !== null) return;
+    let cancelled = false;
+    Linking.getInitialURL().then((url) => {
+      if (!cancelled) setIsJoinLink(matchesJoinLink(url));
+    }).catch(() => { if (!cancelled) setIsJoinLink(false); });
+    return () => { cancelled = true; };
+  }, [isJoinLink]);
+
+  useEffect(() => {
+    const sub = Linking.addEventListener('url', ({ url }) => {
+      if (matchesJoinLink(url)) setIsJoinLink(true);
+    });
+    return () => sub.remove();
+  }, []);
 
   useEffect(() => {
     if (session) registerPushToken();
@@ -251,7 +291,7 @@ function AppNavigator() {
     return () => sub.remove();
   }, []);
 
-  if (loading) {
+  if (loading || isJoinLink === null) {
     return (
       <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: '#006747' }}>
         <ActivityIndicator size="large" color="#ffd700" />
@@ -260,16 +300,11 @@ function AppNavigator() {
   }
 
   if (!session) {
-    // A logged-out visitor opening a /join-tournament/<code> web link gets
-    // the guest/login choice instead of the bare sign-up wall. After a
-    // session is established the Stack mounts and the linking config routes
-    // the same URL to the JoinTournament screen.
-    const path = typeof window !== 'undefined' && window.location
-      ? window.location.pathname
-      : '';
-    if (/^\/join-tournament\/[^/]+/.test(path)) {
-      return <JoinTournamentLinkScreen />;
-    }
+    // A logged-out scanner of a /join-tournament/<code> link gets the
+    // guest/login choice instead of the bare sign-up wall. Once a session
+    // (anonymous or otherwise) is established, the Stack mounts and the
+    // linking config routes the same URL to the JoinTournament screen.
+    if (isJoinLink) return <JoinTournamentLinkScreen />;
     return <AuthScreen />;
   }
 
@@ -328,7 +363,7 @@ function AppNavigator() {
 const linking = {
   prefixes: [typeof window !== 'undefined' && window.location?.origin
     ? window.location.origin
-    : 'https://golf.app'],
+    : 'https://golf-partner.vercel.app'],
   config: {
     screens: {
       JoinOfficial: 'join/:token',

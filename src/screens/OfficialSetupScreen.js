@@ -20,7 +20,7 @@ function shareOrigin() {
   if (Platform.OS === 'web' && typeof window !== 'undefined' && window.location?.origin) {
     return window.location.origin;
   }
-  return 'https://golf.app';
+  return 'https://golf-partner.vercel.app';
 }
 
 function joinLink(token) {
