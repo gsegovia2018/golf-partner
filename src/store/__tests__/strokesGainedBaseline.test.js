@@ -1,6 +1,7 @@
 import {
   BASELINES, BASELINES_SCRATCH, BUCKETS,
   expectedStrokes, expectedFromBucket,
+  BASELINES_AMATEUR, AMATEUR_ANCHOR_HANDICAP,
 } from '../strokesGainedBaseline';
 
 describe('BASELINES', () => {
@@ -43,5 +44,24 @@ describe('expectedFromBucket', () => {
   test('maps bucket key to midpoint then to expected', () => {
     const v = expectedFromBucket('approach', '100-150');
     expect(v).toBeCloseTo(expectedStrokes('fairway', 125));
+  });
+});
+
+describe('BASELINES_AMATEUR', () => {
+  test('every category is sorted ascending by distance', () => {
+    Object.entries(BASELINES_AMATEUR).forEach(([_lie, rows]) => {
+      for (let i = 1; i < rows.length; i++) {
+        expect(rows[i].distance).toBeGreaterThan(rows[i - 1].distance);
+      }
+    });
+  });
+  test('amateur values are worse than scratch at same distance', () => {
+    expect(BASELINES_AMATEUR.fairway[0].expected)
+      .toBeGreaterThan(BASELINES_SCRATCH.fairway[0].expected);
+    expect(BASELINES_AMATEUR.green[2].expected)
+      .toBeGreaterThan(BASELINES_SCRATCH.green[2].expected);
+  });
+  test('AMATEUR_ANCHOR_HANDICAP is 14', () => {
+    expect(AMATEUR_ANCHOR_HANDICAP).toBe(14);
   });
 });
