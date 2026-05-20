@@ -1,6 +1,6 @@
 import { calcStablefordPoints, calcExtraShots, roundPairLeaderboard, getPlayingHandicap, pickupStrokes } from './tournamentStore';
 import { isGIR } from './scoring';
-import { expectedFromBucket, expectedStrokes } from './strokesGainedBaseline';
+import { expectedFromBucket, expectedStrokes, BUCKETS } from './strokesGainedBaseline';
 
 // ── Player Stats ──
 
@@ -1893,6 +1893,35 @@ export function sgAroundGreen(round, playerId) {
       end = expectedFromBucket('firstPutt', d.firstPuttBucket);
     } else {
       return null;                                      // missing data
+    }
+    return start - end - 1;
+  });
+  const sample = perHole.filter((x) => x != null);
+  const total = sample.reduce((a, x) => a + x, 0);
+  return { perHole, total, sampleHoles: sample.length };
+}
+
+// ── Strokes Gained: Approach ──
+
+export function sgApproach(round, playerId) {
+  const byHole = round?.shotDetails?.[playerId];
+  const perHole = (round?.holes ?? []).map((hole) => {
+    if (hole.par === 3) return null;
+    const d = byHole?.[hole.number];
+    if (!d || !d.approachBucket) return null;
+    const startDist = BUCKETS.approach[d.approachBucket];
+    if (startDist == null) return null;
+    const start = expectedStrokes('fairway', startDist);
+    const strokes = round?.scores?.[playerId]?.[hole.number];
+    const gir = isGIR({ strokes, putts: d.putts, par: hole.par });
+    let end;
+    if (gir === true && d.firstPuttBucket) {
+      end = expectedFromBucket('firstPutt', d.firstPuttBucket);
+    } else if (gir === false) {
+      const lie = (d.sandShots ?? 0) >= 1 ? 'sand' : 'recovery';
+      end = expectedStrokes(lie, AROUND_GREEN_START_DISTANCE);
+    } else {
+      return null;
     }
     return start - end - 1;
   });

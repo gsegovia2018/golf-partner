@@ -1,4 +1,4 @@
-import { teeShotImpact, lagPuttingQuality, sandSaveRate, upAndDownRate, bunkerVisits, sgPutting, sgAroundGreen } from '../statsEngine';
+import { teeShotImpact, lagPuttingQuality, sandSaveRate, upAndDownRate, bunkerVisits, sgPutting, sgAroundGreen, sgApproach } from '../statsEngine';
 
 // 18 par-4 holes, strokeIndex = hole number.
 function holes18() {
@@ -209,6 +209,25 @@ describe('sgAroundGreen', () => {
     // start: sand @20y = 2.55. end: green @1.5ft clamp → 1.05. SG = 2.55 - 1.05 - 1 = 0.50
     const r = sgAroundGreen(round, 'me');
     expect(r.perHole[0]).toBeCloseTo(0.50, 1);
+  });
+});
+
+describe('sgApproach', () => {
+  test('null on par-3', () => {
+    const round = makeRound(
+      [{ par: 3, strokes: 3 }],
+      [{ putts: 1, approachBucket: null }],
+    );
+    expect(sgApproach(round, 'me').perHole[0]).toBeNull();
+  });
+  test('GIR hit from 100-150 bucket → SG = expected(fairway, 125) - expected(green, putt midpoint) - 1', () => {
+    const round = makeRound(
+      [{ par: 4, strokes: 4 }],
+      [{ putts: 2, approachBucket: '100-150', firstPuttBucket: '10-20' }],
+    );
+    // expected(fairway, 125) ≈ 2.86. expected(green, 15ft) = 1.83. SG = 2.86 - 1.83 - 1 = 0.03
+    const r = sgApproach(round, 'me');
+    expect(r.perHole[0]).toBeCloseTo(0.03, 1);
   });
 });
 
