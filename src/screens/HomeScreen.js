@@ -7,7 +7,8 @@ import QRCode from 'react-native-qrcode-svg';
 import { useTheme } from '../theme/ThemeContext';
 import { useAuth } from '../context/AuthContext';
 import { ShareableLeaderboard, shareLeaderboard } from '../components/ShareableCard';
-import { scoringModeUsesTeams, leaderboardToggleLabels } from '../components/scoringModes';
+import { scoringModeUsesTeams, leaderboardToggleLabels, isScoringModeAllowed, fallbackScoringMode, getScoringMode } from '../components/scoringModes';
+import ScoringModeChangeSheet from '../components/ScoringModeChangeSheet';
 import PullToRefresh from '../components/PullToRefresh';
 import LoadingSplash from '../components/LoadingSplash';
 import {
@@ -110,6 +111,8 @@ export default function HomeScreen({ navigation, route }) {
   const [undoSnack, setUndoSnack] = useState(null); // { roundIndex, snapshot, at }
   const undoTimerRef = useRef(null);
   const [leaderboardAlt, setLeaderboardAlt] = useState(false);
+  const [modePrompt, setModePrompt] = useState(null);
+  // modePrompt: { picked, newCount, defaultMode, prevMode } when prompting, null otherwise
   const [refreshing, setRefreshing] = useState(false);
   const [showInvite, setShowInvite] = useState(false);
   const [inviteCodes, setInviteCodes] = useState({ editor: '', viewer: '' });
@@ -206,18 +209,50 @@ export default function HomeScreen({ navigation, route }) {
   // PlayerPicker). Each addPlayer mutation also patches the affected rounds'
   // playing handicaps and pairs. Applied serially so the second player's
   // pairs are computed against a roster that already includes the first.
-  const applyAddPlayers = useCallback(async (picked) => {
+  const commitAdds = useCallback(async (picked, initialChosenMode) => {
     let t = await loadTournament();
     if (!t) return;
+    let chosenMode = initialChosenMode;
     for (const p of picked) {
       if ((t.players ?? []).length >= 4) break;
       if ((t.players ?? []).some((x) => x.id === p.id)) continue;
       const player = { id: p.id, name: p.name, handicap: parseInt(p.handicap, 10) || 0 };
-      const { patches: roundPatches } = addPlayerRoundPatches(t, player);
-      t = await mutate(t, { type: 'tournament.addPlayer', player, roundPatches });
+      const { patches: roundPatches, nextScoringMode } = addPlayerRoundPatches(t, player, { mode: chosenMode });
+      const modeChanged = nextScoringMode !== (t.settings?.scoringMode ?? 'stableford');
+      t = await mutate(t, {
+        type: 'tournament.addPlayer',
+        player,
+        roundPatches,
+        ...(modeChanged ? { nextScoringMode } : {}),
+      });
+      chosenMode = undefined;
     }
     setTournament(t);
   }, []);
+
+  const applyAddPlayers = useCallback(async (picked) => {
+    const t = await loadTournament();
+    if (!t) return;
+    const currentMode = t.settings?.scoringMode ?? 'stableford';
+    const existingIds = new Set((t.players ?? []).map((p) => p.id));
+    let simulatedCount = (t.players ?? []).length;
+    for (const p of picked) {
+      if (simulatedCount >= 4) break;
+      if (existingIds.has(p.id)) continue;
+      simulatedCount += 1;
+    }
+    if (simulatedCount === (t.players ?? []).length) return;
+    if (isScoringModeAllowed(currentMode, simulatedCount)) {
+      await commitAdds(picked, undefined);
+      return;
+    }
+    setModePrompt({
+      picked,
+      newCount: simulatedCount,
+      defaultMode: fallbackScoringMode(simulatedCount),
+      prevMode: currentMode,
+    });
+  }, [commitAdds]);
 
   useEffect(() => {
     const unsub = navigation.addListener('focus', () => {
@@ -1711,6 +1746,24 @@ export default function HomeScreen({ navigation, route }) {
     </Modal>
 
     <ConfirmModal state={confirmState} onResult={resolveConfirm} theme={theme} s={s} />
+
+    <ScoringModeChangeSheet
+      visible={!!modePrompt}
+      playerCount={modePrompt?.newCount ?? 0}
+      defaultMode={modePrompt?.defaultMode}
+      title="Pick a new scoring mode"
+      subtitle={
+        modePrompt
+          ? `Adding this player makes ${getScoringMode(modePrompt.prevMode).label} invalid (${getScoringMode(modePrompt.prevMode).requirement.toLowerCase()}). Pick a mode for ${modePrompt.newCount} players.`
+          : undefined
+      }
+      onConfirm={async (chosenMode) => {
+        const picked = modePrompt.picked;
+        setModePrompt(null);
+        await commitAdds(picked, chosenMode);
+      }}
+      onCancel={() => setModePrompt(null)}
+    />
 
     </ScreenContainer>
   );
