@@ -1,4 +1,4 @@
-import { teeShotImpact, lagPuttingQuality, sandSaveRate, upAndDownRate, bunkerVisits, sgPutting, sgAroundGreen, sgApproach } from '../statsEngine';
+import { teeShotImpact, lagPuttingQuality, sandSaveRate, upAndDownRate, bunkerVisits, sgPutting, sgAroundGreen, sgApproach, sgOffTheTee } from '../statsEngine';
 
 // 18 par-4 holes, strokeIndex = hole number.
 function holes18() {
@@ -228,6 +228,27 @@ describe('sgApproach', () => {
     // expected(fairway, 125) ≈ 2.86. expected(green, 15ft) = 1.83. SG = 2.86 - 1.83 - 1 = 0.03
     const r = sgApproach(round, 'me');
     expect(r.perHole[0]).toBeCloseTo(0.03, 1);
+  });
+});
+
+describe('sgOffTheTee', () => {
+  test('fairway drive on a 400y par-4 → SG ≈ +0.43', () => {
+    const round = {
+      holes: [{ number: 1, par: 4, strokeIndex: 1, distance: 400 }],
+      scores: { me: { 1: 4 } },
+      shotDetails: { me: { 1: { drive: 'fairway', teePenalties: 0, approachBucket: '100-150' } } },
+    };
+    const r = sgOffTheTee(round, 'me');
+    // expected(tee, 400) ≈ 4.29. expected(fairway, 125) ≈ 2.86. SG ≈ 4.29 - 2.86 - 1 ≈ 0.43.
+    expect(r.perHole[0]).toBeCloseTo(0.43, 1);
+  });
+  test('tee penalty drags SG below -0.5', () => {
+    const round = {
+      holes: [{ number: 1, par: 4, strokeIndex: 1, distance: 400 }],
+      scores: { me: { 1: 6 } },
+      shotDetails: { me: { 1: { drive: 'left', teePenalties: 1, approachBucket: '100-150' } } },
+    };
+    expect(sgOffTheTee(round, 'me').perHole[0]).toBeLessThan(-0.5);
   });
 });
 
