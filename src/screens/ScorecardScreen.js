@@ -1867,7 +1867,7 @@ export function ShotDetailPanel({ hole, detail, onChange, strokes, theme: themeP
           onSelect={(key) => onChange({ firstPuttBucket: key })}
           theme={theme}
           s={s}
-          isLast={false}
+          isLast={!missedGIR}
         />
       )}
       {missedGIR && (
