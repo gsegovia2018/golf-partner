@@ -96,3 +96,78 @@ describe('addPlayerRoundPatches return shape', () => {
     }));
   });
 });
+
+describe('addPlayerRoundPatches pair construction', () => {
+  test('non-team new mode: every player becomes their own group', () => {
+    const t = makeTournament({
+      players: [A, B],
+      mode: 'matchplay',
+      rounds: [makeRound({ revealed: true, pairs: [[A], [B]] })],
+    });
+    const { patches } = addPlayerRoundPatches(t, C, { mode: 'individual' });
+    expect(patches[0].pairs).toEqual([[A], [B], [C]]);
+  });
+
+  test('matchplay 2→3 with sindicato override produces solo pairs', () => {
+    const t = makeTournament({
+      players: [A, B],
+      mode: 'matchplay',
+      rounds: [makeRound({ revealed: true, pairs: [[A], [B]] })],
+    });
+    const { patches } = addPlayerRoundPatches(t, C, { mode: 'sindicato' });
+    expect(patches[0].pairs).toEqual([[A], [B], [C]]);
+  });
+
+  test('team→team with revealed pairs: preserves existing pairs, new player joins as solo group', () => {
+    const D = { id: 'd', name: 'D', handicap: 4 };
+    const t = makeTournament({
+      players: [A, B, C],
+      mode: 'stableford',
+      rounds: [makeRound({ revealed: true, pairs: [[A, B], [C]] })],
+    });
+    const { patches } = addPlayerRoundPatches(t, D);
+    expect(patches[0].pairs).toEqual([[A, B], [C], [D]]);
+  });
+
+  test('team mode but not-yet-revealed round: randomizes fresh', () => {
+    const D = { id: 'd', name: 'D', handicap: 4 };
+    const t = makeTournament({
+      players: [A, B, C],
+      mode: 'stableford',
+      rounds: [makeRound({ revealed: false, pairs: [] })],
+    });
+    const { patches } = addPlayerRoundPatches(t, D);
+    const flat = patches[0].pairs.flat();
+    expect(flat).toHaveLength(4);
+    expect(flat.map((p) => p.id).sort()).toEqual(['a', 'b', 'c', 'd']);
+  });
+
+  test('non-team old + team new: randomizes fresh (matchplay 2→3 fallback to stableford)', () => {
+    const t = makeTournament({
+      players: [A, B],
+      mode: 'matchplay',
+      rounds: [makeRound({ revealed: true, pairs: [[A], [B]] })],
+    });
+    const { patches } = addPlayerRoundPatches(t, C);
+    const flat = patches[0].pairs.flat();
+    expect(flat).toHaveLength(3);
+    expect(flat.map((p) => p.id).sort()).toEqual(['a', 'b', 'c']);
+    // randomPairs(3) → [[x, y], [z]] (one pair + one solo)
+    expect(patches[0].pairs.length).toBe(2);
+  });
+
+  test('non-team old + team new (sindicato 3→4 fallback to stableford): randomizes fresh', () => {
+    const D = { id: 'd', name: 'D', handicap: 4 };
+    const t = makeTournament({
+      players: [A, B, C],
+      mode: 'sindicato',
+      rounds: [makeRound({ revealed: true, pairs: [[A], [B], [C]] })],
+    });
+    const { patches } = addPlayerRoundPatches(t, D);
+    const flat = patches[0].pairs.flat();
+    expect(flat).toHaveLength(4);
+    expect(flat.map((p) => p.id).sort()).toEqual(['a', 'b', 'c', 'd']);
+    // randomPairs(4) → [[x, y], [z, w]]
+    expect(patches[0].pairs.length).toBe(2);
+  });
+});

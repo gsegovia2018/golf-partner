@@ -29,6 +29,7 @@ import {
   isRoundPlayed,
 } from './scoring';
 import { isScoringModeAllowed, fallbackScoringMode } from '../components/ScoringModePicker';
+import { scoringModeUsesTeams } from '../components/scoringModes';
 
 const ACTIVE_ID_KEY = '@golf_active_id';
 const LEGACY_TOURNAMENTS_KEY = '@golf_tournaments';
@@ -595,6 +596,25 @@ export async function lastTeeForPlayerOnCourse(courseId, playerId) {
 //   stableford → not-yet-revealed rounds re-randomise with the full
 //     roster; revealed rounds slot the player into a pair short of two
 //     members, or a new solo pair if none is short.
+// Pair construction for a round after a player is added. Closed over all
+// modes via scoringModeUsesTeams — no per-mode ladder.
+// - Non-team new mode (individual / matchplay / sindicato) → every player
+//   is their own group.
+// - Team new mode AND old mode also used teams AND existing pairs were
+//   revealed → keep the existing partnerships, the new player joins as a
+//   solo group.
+// - Otherwise → fresh randomPairs(roster).
+function buildPairsForAddedPlayer({ roster, newMode, oldMode, existingPairs, newPlayer, revealed }) {
+  if (!scoringModeUsesTeams(newMode)) {
+    return roster.map((p) => [p]);
+  }
+  const oldWasTeams = scoringModeUsesTeams(oldMode, roster.length - 1);
+  if (oldWasTeams && existingPairs?.length && revealed) {
+    return [...existingPairs.map((pr) => [...pr]), [newPlayer]];
+  }
+  return randomPairs(roster);
+}
+
 // Build the per-round patches for adding `player` to an in-progress
 // tournament. The player joins `currentRound` and every later round;
 // already-played earlier rounds are left untouched. Returns the patches
@@ -614,21 +634,14 @@ export function addPlayerRoundPatches(tournament, player, { mode } = {}) {
   (tournament?.rounds ?? []).forEach((round, idx) => {
     if (idx < currentRound) return; // already-played rounds untouched
     const playerHandicap = deriveRoundPlayingHandicap(player.handicap, round);
-    let pairs = null;
-    if (oldMode === 'individual') {
-      pairs = [...(round.pairs ?? []), [player]];
-    } else if (oldMode === 'stableford') {
-      const revealed = round.revealed || idx <= currentRound;
-      if (!revealed) {
-        pairs = randomPairs(roster);
-      } else {
-        const next = (round.pairs ?? []).map((pr) => [...pr]);
-        const short = next.find((pr) => pr.length < 2);
-        if (short) short.push(player);
-        else next.push([player]);
-        pairs = next;
-      }
-    }
+    const pairs = buildPairsForAddedPlayer({
+      roster,
+      newMode: nextScoringMode,
+      oldMode,
+      existingPairs: round.pairs,
+      newPlayer: player,
+      revealed: Boolean(round.revealed),
+    });
     patches.push({ roundId: round.id, playerHandicap, pairs });
   });
   return { patches, nextScoringMode };
