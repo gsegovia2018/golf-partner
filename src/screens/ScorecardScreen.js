@@ -601,18 +601,19 @@ export default function ScorecardScreen({ navigation, route }) {
     () => ({ ...DEFAULT_SETTINGS, ...(tournament?.settings ?? {}) }),
     [tournament?.settings],
   );
-  const currentMode = tournament?.settings?.scoringMode ?? 'stableford';
-  const prevMode = usePrevious(currentMode);
+  const settingsMode = tournament?.settings?.scoringMode;
+  const currentMode = settingsMode ?? 'stableford';
+  const prevSettingsMode = usePrevious(settingsMode);
   const [noticeMessage, setNoticeMessage] = useState(null);
   const [reopenPrompt, setReopenPrompt] = useState(false);
   const dismissModeNotice = useCallback(() => setNoticeMessage(null), []);
   const openModeSheet = useCallback(() => setReopenPrompt(true), []);
 
   useEffect(() => {
-    if (prevMode && prevMode !== currentMode) {
-      setNoticeMessage(fallbackNoticeText(prevMode, currentMode));
+    if (prevSettingsMode && settingsMode && prevSettingsMode !== settingsMode) {
+      setNoticeMessage(fallbackNoticeText(prevSettingsMode, settingsMode));
     }
-  }, [prevMode, currentMode]);
+  }, [prevSettingsMode, settingsMode]);
 
   const isBestBall = settings.scoringMode === 'bestball';
   const liveRound = useMemo(
