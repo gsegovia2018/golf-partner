@@ -128,6 +128,18 @@ const DRIVE_META = {
   super: { label: 'Super', icon: 'star' },
 };
 
+const FIRST_PUTT_BUCKETS = ['0-3', '3-6', '6-10', '10-20', '20+'];
+const FIRST_PUTT_LABELS = {
+  '0-3': "0-3'", '3-6': "3-6'", '6-10': "6-10'",
+  '10-20': "10-20'", '20+': "20+'",
+};
+
+const APPROACH_BUCKETS = ['0-50', '50-100', '100-150', '150-200', '200+'];
+const APPROACH_LABELS = {
+  '0-50': '0-50y', '50-100': '50-100y', '100-150': '100-150y',
+  '150-200': '150-200y', '200+': '200+y',
+};
+
 export default function ScorecardScreen({ navigation, route }) {
   const { theme } = useTheme();
   const s = useMemo(() => makeStyles(theme), [theme]);
@@ -1715,6 +1727,38 @@ function ShotCounterRow({ label, value, onStep, theme, s }) {
   );
 }
 
+function BucketRow({ label, value, buckets, labels, onSelect, theme, s }) {
+  return (
+    <View style={[s.shotRow, s.shotRowLast]}>
+      <Text style={s.shotRowLabel}>{label}</Text>
+      <View style={s.driveBtns}>
+        {buckets.map((key) => {
+          const active = value === key;
+          return (
+            <TouchableOpacity
+              key={key}
+              style={[s.driveCircle, active && s.driveCircleActive, s.bucketCircle]}
+              onPress={() => onSelect(active ? null : key)}
+              activeOpacity={0.7}
+              accessibilityLabel={`${label} ${labels[key]}`}
+            >
+              <Text
+                style={{
+                  color: active ? theme.text.inverse : theme.text.secondary,
+                  fontSize: 11,
+                  fontWeight: '600',
+                }}
+              >
+                {labels[key]}
+              </Text>
+            </TouchableOpacity>
+          );
+        })}
+      </View>
+    </View>
+  );
+}
+
 // Per-hole shot detail for the "me" player, laid out after the Hole19
 // scorecard: stat rows with a stepper, plus a row of round direction
 // buttons for the drive. The drive row is hidden on par 3s.
@@ -1785,6 +1829,17 @@ function ShotDetailPanel({ hole, detail, onChange, theme, s }) {
             })}
           </View>
         </View>
+      )}
+      {(d.putts ?? 0) >= 1 && (
+        <BucketRow
+          label="First putt"
+          value={d.firstPuttBucket}
+          buckets={FIRST_PUTT_BUCKETS}
+          labels={FIRST_PUTT_LABELS}
+          onSelect={(key) => onChange({ firstPuttBucket: key })}
+          theme={theme}
+          s={s}
+        />
       )}
     </View>
   );
@@ -3848,6 +3903,7 @@ function makeStyles(theme) {
       justifyContent: 'center',
     },
     driveCircleActive: { backgroundColor: theme.accent.primary },
+    bucketCircle: { width: 56, height: 32, borderRadius: 16, paddingHorizontal: 4 },
     soloHeroHeader: {
       flexDirection: 'row',
       alignItems: 'center',
