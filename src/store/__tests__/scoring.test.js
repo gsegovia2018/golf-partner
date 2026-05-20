@@ -578,12 +578,19 @@ describe('isGIR', () => {
     expect(isGIR({ strokes: 4, putts: 2, par: 4 })).toBe(true);   // 4-2=2 <= 4-2
     expect(isGIR({ strokes: 3, putts: 1, par: 4 })).toBe(true);   // 3-1=2 <= 2
   });
+  test('par-3 GIR formula: reached green in 1 stroke', () => {
+    expect(isGIR({ strokes: 3, putts: 2, par: 3 })).toBe(true);   // 3-2=1 <= 3-2
+    expect(isGIR({ strokes: 4, putts: 2, par: 3 })).toBe(false);  // 4-2=2 > 1
+  });
   test('GIR missed when strokes - putts > par - 2', () => {
     expect(isGIR({ strokes: 5, putts: 2, par: 4 })).toBe(false);  // 5-2=3 > 2
     expect(isGIR({ strokes: 6, putts: 3, par: 4 })).toBe(false);
   });
   test('returns null when putts missing', () => {
     expect(isGIR({ strokes: 4, putts: null, par: 4 })).toBeNull();
+  });
+  test('returns null when strokes missing', () => {
+    expect(isGIR({ strokes: null, putts: 2, par: 4 })).toBeNull();
   });
 });
 
