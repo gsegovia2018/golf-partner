@@ -279,30 +279,31 @@ export default function ProfileScreen({ navigation }) {
             </Text>
           </View>
 
-          <View style={s.fieldGroup}>
-            <Text style={s.fieldLabel}>Handicap</Text>
-            <TextInput
-              style={[s.input, { width: 100 }]}
-              placeholder="—"
-              placeholderTextColor={theme.text.muted}
-              keyboardType="numeric"
-              keyboardAppearance={theme.isDark ? 'dark' : 'light'}
-              selectionColor={theme.accent.primary}
-              value={handicap}
-              onChangeText={(v) => { setHandicap(v); setDirty(true); }}
-            />
-          </View>
-
-          <View style={s.fieldGroup}>
-            <Text style={s.fieldLabel}>Target handicap</Text>
-            <TouchableOpacity
-              style={[s.input, { width: 100, justifyContent: 'center' }]}
-              onPress={() => setTargetPickerOpen(true)}
-            >
-              <Text style={{ color: targetHandicap == null ? theme.text.muted : theme.text.primary, fontFamily: 'PlusJakartaSans-Medium', fontSize: 15 }}>
-                {targetHandicap == null ? 'Not set' : String(targetHandicap)}
-              </Text>
-            </TouchableOpacity>
+          <View style={[s.fieldGroup, { flexDirection: 'row', gap: 16 }]}>
+            <View style={{ flex: 1 }}>
+              <Text style={s.fieldLabel}>Handicap</Text>
+              <TextInput
+                style={[s.input, { width: 100 }]}
+                placeholder="—"
+                placeholderTextColor={theme.text.muted}
+                keyboardType="numeric"
+                keyboardAppearance={theme.isDark ? 'dark' : 'light'}
+                selectionColor={theme.accent.primary}
+                value={handicap}
+                onChangeText={(v) => { setHandicap(v); setDirty(true); }}
+              />
+            </View>
+            <View style={{ flex: 1 }}>
+              <Text style={s.fieldLabel}>Target handicap</Text>
+              <TouchableOpacity
+                style={[s.input, { width: 100, justifyContent: 'center' }]}
+                onPress={() => setTargetPickerOpen(true)}
+              >
+                <Text style={{ color: targetHandicap == null ? theme.text.muted : theme.text.primary, fontFamily: 'PlusJakartaSans-Medium', fontSize: 15 }}>
+                  {targetHandicap == null ? 'Not set' : String(targetHandicap)}
+                </Text>
+              </TouchableOpacity>
+            </View>
           </View>
 
           <View style={s.fieldGroup}>
