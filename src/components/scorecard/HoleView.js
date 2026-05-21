@@ -42,6 +42,9 @@ export function HoleView({ round, roundIndex, players, scores, shotDetails, meId
   const s = useMemo(() => makeScorecardStyles(theme), [theme]);
   const [notesOpen, setNotesOpen] = useState(false);
   const [holePickerOpen, setHolePickerOpen] = useState(false);
+  // True once the "which player are you?" modal is dismissed via "Not now",
+  // so it stays closed for the rest of this scorecard session.
+  const [mePickerSkipped, setMePickerSkipped] = useState(false);
   // Collapse state for the "me" card's Shot detail section. Shared across
   // holes so the choice persists while paging. Persisted via prefs.
   const [shotCollapsed, setShotCollapsed] = useState(false);
@@ -110,9 +113,16 @@ export function HoleView({ round, roundIndex, players, scores, shotDetails, meId
   return (
     <View style={s.flex}>
       {/* Shot tracking needs to know which player is "me". Solo rounds and
-          signed-in users are resolved automatically; otherwise prompt. */}
-      {!meId && players.length > 1 && (
-        <MePicker players={players} onPickMe={onPickMe} theme={theme} s={s} />
+          the game creator are resolved automatically; a joined game prompts
+          with a centered modal until answered or dismissed. */}
+      {!meId && players.length > 1 && !mePickerSkipped && (
+        <MePicker
+          players={players}
+          onPickMe={onPickMe}
+          onSkip={() => setMePickerSkipped(true)}
+          theme={theme}
+          s={s}
+        />
       )}
 
       {/* Horizontal pager: flex:1, one page per hole (swipe to change hole) */}

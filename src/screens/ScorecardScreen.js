@@ -630,8 +630,10 @@ export default function ScorecardScreen({ navigation, route }) {
   );
 
   // Best-effort default for the "me" player: a solo round is unambiguous;
-  // otherwise match the signed-in user to a linked library player. If no
-  // match, meId stays null and the scorecard shows the "who are you?" picker.
+  // otherwise match the signed-in user to their roster slot. The embedded
+  // players carry user_id, so this resolves with no network and works
+  // offline. If no match, meId stays null and the scorecard shows the
+  // "who are you?" picker.
   const meDefaultedRef = useRef(false);
   useEffect(() => {
     if (meDefaultedRef.current || !tournament) return;
@@ -644,6 +646,13 @@ export default function ScorecardScreen({ navigation, route }) {
     }
     if (!user?.id) return;
     meDefaultedRef.current = true;
+    // Local match first — embedded roster players carry user_id, so this
+    // needs no network and works fully offline.
+    const mine = ps.find((p) => p.user_id && p.user_id === user.id);
+    if (mine) { pickMe(mine.id); return; }
+    // Fallback for legacy rounds whose embedded players predate user_id:
+    // resolve via the library when online. Offline this no-ops and the
+    // picker handles it.
     fetchPlayers()
       .then((lib) => {
         const linked = lib.find((p) => p.user_id === user.id);

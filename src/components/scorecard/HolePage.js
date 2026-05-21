@@ -1,5 +1,5 @@
 import React, { useMemo } from 'react';
-import { View, Text, ScrollView, TouchableOpacity, Platform } from 'react-native';
+import { View, Text, ScrollView, TouchableOpacity, Modal, Platform } from 'react-native';
 import { Feather } from '@expo/vector-icons';
 import { playersMeFirst } from '../../lib/playerOrder';
 import { pickupStrokes } from '../../store/tournamentStore';
@@ -136,26 +136,42 @@ export const HolePage = React.memo(function HolePage({
 });
 
 // Prompt shown on the scorecard when shot-detail tracking can't tell which
-// player is "me" (multi-player round, no signed-in match).
-export function MePicker({ players, onPickMe, theme, s }) {
+// player is "me" (a game you joined — the app can't infer your roster slot).
+// A centered modal: picking yourself matters enough to ask up front, but
+// `onSkip` lets you keep scoring without shot tracking.
+export function MePicker({ players, onPickMe, onSkip, theme, s }) {
   return (
-    <View style={s.mePicker}>
-      <View style={s.mePickerHeader}>
-        <Feather name="target" size={14} color={theme.accent.primary} />
-        <Text style={s.mePickerLabel}>Track your shots — which player are you?</Text>
-      </View>
-      <View style={s.mePickerChips}>
-        {players.map((p) => (
+    <Modal visible transparent animationType="fade" onRequestClose={onSkip}>
+      <View style={s.mePickerBackdrop}>
+        <View style={s.mePickerCard}>
+          <View style={s.mePickerIcon}>
+            <Feather name="target" size={26} color={theme.accent.primary} />
+          </View>
+          <Text style={s.mePickerTitle}>Which player are you?</Text>
+          <Text style={s.mePickerSubtitle}>
+            Pick yourself so the app can track your shots this round.
+          </Text>
+          <View style={s.mePickerChips}>
+            {players.map((p) => (
+              <TouchableOpacity
+                key={p.id}
+                style={s.mePickerChip}
+                onPress={() => onPickMe(p.id)}
+                activeOpacity={0.8}
+              >
+                <Text style={s.mePickerChipText} numberOfLines={1}>{p.name}</Text>
+              </TouchableOpacity>
+            ))}
+          </View>
           <TouchableOpacity
-            key={p.id}
-            style={s.mePickerChip}
-            onPress={() => onPickMe(p.id)}
+            style={s.mePickerSkip}
+            onPress={onSkip}
             activeOpacity={0.7}
           >
-            <Text style={s.mePickerChipText}>{p.name.split(' ')[0]}</Text>
+            <Text style={s.mePickerSkipText}>Not now</Text>
           </TouchableOpacity>
-        ))}
+        </View>
       </View>
-    </View>
+    </Modal>
   );
 }

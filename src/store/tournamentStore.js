@@ -746,13 +746,16 @@ export const DEFAULT_SETTINGS = {
   worstBallValue: 1,         // points awarded per hole won in worst ball match
 };
 
-export function createTournament({ name, players, rounds, settings, kind = 'tournament' }) {
+export function createTournament({ name, players, rounds, settings, kind = 'tournament', meId = null }) {
   return {
     id: Date.now().toString(),
     kind,
     name,
     createdAt: new Date().toISOString(),
     players,
+    // Which player is the signed-in user. Set at creation so shot tracking
+    // is pre-assigned without a library round-trip (works fully offline).
+    meId,
     rounds,
     currentRound: 0,
     settings: { ...DEFAULT_SETTINGS, ...settings },

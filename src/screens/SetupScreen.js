@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useMemo, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   View, Text, TextInput, TouchableOpacity, Image,
   StyleSheet, ScrollView, Alert, Platform,
@@ -8,12 +8,13 @@ import ScreenContainer from '../components/ScreenContainer';
 import { Feather } from '@expo/vector-icons';
 import { useFocusEffect, CommonActions } from '@react-navigation/native';
 import { createTournament, saveTournament, randomPairs, DEFAULT_SETTINGS, deriveRoundPlayingHandicap } from '../store/tournamentStore';
-import { defaultHoles, fetchPlayers } from '../store/libraryStore';
+import { defaultHoles, fetchPlayers, fetchMyPlayers } from '../store/libraryStore';
 import { middleTee } from '../store/tees';
 import { consumePendingPlayers, consumePendingCourses } from '../lib/selectionBridge';
 import { applyCoursePick, applyLayoutChoice } from '../lib/roundCourse';
 import RoundLayoutSelect from '../components/RoundLayoutSelect';
 import { useTheme } from '../theme/ThemeContext';
+import { useAuth } from '../context/AuthContext';
 import ScoringModePicker, { isScoringModeAllowed, fallbackScoringMode } from '../components/ScoringModePicker';
 import RoundTeeAssignments from '../components/RoundTeeAssignments';
 import { scoringModeUsesTeams, getScoringMode } from '../components/scoringModes';
@@ -55,6 +56,7 @@ function buildGameName(courseName) {
 export default function SetupScreen({ navigation, route }) {
   const { theme } = useTheme();
   const s = makeStyles(theme);
+  const { user } = useAuth();
 
   const kind = route?.params?.kind === 'game' ? 'game' : 'tournament';
   const isGame = kind === 'game';
@@ -87,6 +89,35 @@ export default function SetupScreen({ navigation, route }) {
       setSettings((prev) => ({ ...prev, scoringMode: fallbackScoringMode(players.length) }));
     }
   }, [players.length, settings.scoringMode]);
+
+  // Pre-add the signed-in user to the roster — you're setting up an event
+  // you'll play in, so you start in the "Who's playing?" list by default.
+  // Runs once; the slot stays removable and the PlayerPicker won't add a
+  // duplicate. Offline this no-ops gracefully (the library read fails).
+  const mePreaddedRef = useRef(false);
+  useEffect(() => {
+    if (mePreaddedRef.current || !user?.id) return;
+    mePreaddedRef.current = true;
+    let cancelled = false;
+    (async () => {
+      try {
+        const mine = await fetchMyPlayers();
+        const me = mine.find((p) => p.user_id === user.id);
+        if (cancelled || !me) return;
+        setPlayers((prev) => {
+          if (prev.length >= 4 || prev.some((p) => p.id === me.id)) return prev;
+          return [{
+            id: me.id,
+            name: me.name,
+            handicap: me.handicap,
+            user_id: me.user_id ?? null,
+            avatar_url: me.avatar_url ?? null,
+          }, ...prev];
+        });
+      } catch (_) { /* offline / no own player row — add players manually */ }
+    })();
+    return () => { cancelled = true; };
+  }, [user?.id]);
 
   useFocusEffect(useCallback(() => {
     let cancelled = false;
@@ -288,10 +319,17 @@ export default function SetupScreen({ navigation, route }) {
       };
     });
 
+    // The creator is "me": match the signed-in account to its player slot so
+    // shot tracking is pre-assigned. Resolved here, at creation, from data
+    // already in hand — no network — so it works offline and the scorecard
+    // never has to fall back to the "which player are you?" picker.
+    const meId = players.find((p) => p.user_id && p.user_id === user?.id)?.id ?? null;
+
     const tournament = createTournament({
       kind,
       name: tournamentName.trim() || (isGame ? 'Game' : 'Weekend Golf'),
       players,
+      meId,
       rounds: builtRounds,
       settings: isMatchPlay
         ? { ...settings, scoringMode: 'matchplay', bestBallValue: 1, worstBallValue: 0 }
