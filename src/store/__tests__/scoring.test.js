@@ -653,6 +653,11 @@ describe('reconcileShotDetail', () => {
     expect(reconcileShotDetail(d, null)).toBe(d);
   });
 
+  test('returns the input unchanged when strokes is undefined', () => {
+    const d = { putts: 9, teePenalties: 0, otherPenalties: 0, sandShots: 0 };
+    expect(reconcileShotDetail(d, undefined)).toBe(d);
+  });
+
   test('trims putts first', () => {
     const r = reconcileShotDetail(
       { putts: 5, teePenalties: 0, otherPenalties: 0, sandShots: 0 }, 3);
