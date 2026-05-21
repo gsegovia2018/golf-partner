@@ -15,8 +15,8 @@ import {
   loadTournament, subscribeTournamentChanges,
   calcStablefordPoints, calcBestWorstBall, DEFAULT_SETTINGS,
   matchPlayHolePts,
-  sindicatoHolePoints, sindicatoRoundTally,
-  roundPairLeaderboard, roundPairClinched,
+  sindicatoHolePoints,
+  roundPairClinched,
   isRoundComplete, isTournamentFinished,
   subscribeSyncStatus,
 } from '../store/tournamentStore';
@@ -1368,119 +1368,6 @@ function SyncIndicator({ status, saveError, theme, s }) {
   return (
     <View style={s.syncDot} accessibilityLabel="Synced">
       <Feather name="check-circle" size={14} color={theme.accent.primary} />
-    </View>
-  );
-}
-
-
-function WinnerBadge({ name }) {
-  const { theme } = useTheme();
-  const s = useMemo(() => makeScorecardStyles(theme), [theme]);
-  return (
-    <View style={s.winnerBadgeRow}>
-      <Feather name="award" size={14} color="#ffd700" />
-      <Text style={s.winnerBadgeText}>
-        {name} · CHAMPIONS
-      </Text>
-    </View>
-  );
-}
-
-// Shown above the Stableford totals strip when the pair result is decided
-// (every player has entered every hole, and one entry leads outright).
-// Works for both random-partners (2 pair-of-2) and individual stableford
-// (N pair-of-1) — single-member "pairs" naturally produce a per-player
-// ranking through roundPairLeaderboard.
-// Live Sindicato standings, pinned above the bottom controls — mirrors the
-// best-ball MatchPanel / Stableford totals strip. Shows each player's running
-// points (me first, then high to low) and the leader / clinch status.
-function SindicatoPanel({ round, players, scores, meId }) {
-  const { theme } = useTheme();
-  const s = useMemo(() => makeScorecardStyles(theme), [theme]);
-  const tally = sindicatoRoundTally({ ...round, scores }, players);
-  if (!tally) return null;
-  const { totals, leaderIdx, lead, clinched, holesLeft } = tally;
-  const firstName = (p) => p.name?.split(' ')[0] ?? '—';
-  const leader = leaderIdx != null ? totals[leaderIdx].player : null;
-  const status = clinched && leader
-    ? `${firstName(leader)} has clinched`
-    : leader
-      ? `${firstName(leader)} leads by ${lead}${holesLeft > 0 ? ` · ${holesLeft} to play` : ''}`
-      : `All level${holesLeft > 0 ? ` · ${holesLeft} to play` : ''}`;
-  const me = totals.find((t) => t.player.id === meId);
-  const orderedTotals = me ? [me, ...totals.filter((t) => t.player.id !== meId)] : totals;
-  return (
-    <View style={s.totalsStrip}>
-      <Text style={s.totalStripLabel}>SINDICATO</Text>
-      <View style={s.totalStripRow}>
-        {orderedTotals.map(({ player, points }) => (
-          <View key={player.id} style={s.totalStripPlayer}>
-            <Text style={s.totalStripName}>{firstName(player)}</Text>
-            <Text style={s.totalStripPts}>{points}</Text>
-          </View>
-        ))}
-      </View>
-      <Text style={s.sindicatoStatus}>{status}</Text>
-    </View>
-  );
-}
-
-function StablefordWinnerBanner({ round, scores, players }) {
-  const pairs = round?.pairs ?? [];
-  if (pairs.length < 2) return null;
-
-  // Round is considered "decided" only once every player has entered scores
-  // on every hole. Stableford has no clinching shortcut (a 5-point eagle
-  // could always swing the result), so we wait until the round is complete.
-  const allScored = players.every((p) =>
-    round.holes.every((h) => scores[p.id]?.[h.number] != null)
-  );
-  if (!allScored) return null;
-
-  const liveRound = { ...round, scores };
-  const pairResults = roundPairLeaderboard(liveRound, players);
-  if (pairResults.length < 2) return null;
-  const [first, second] = pairResults;
-  if (first.combinedPoints === second.combinedPoints) return null;
-
-  const name = first.members.map((m) => m.player.name.split(' ')[0]).join(' & ');
-  return <WinnerBadge name={name} />;
-}
-
-function SoloTotalsRibbon({ player, stats }) {
-  const { theme } = useTheme();
-  const s = useMemo(() => makeScorecardStyles(theme), [theme]);
-  const { pts, str, parPlayed } = stats;
-  const vsPar = parPlayed > 0 ? str - parPlayed : 0;
-  const vsParLabel = parPlayed === 0 ? '—'
-    : vsPar === 0 ? 'E'
-    : vsPar > 0 ? `+${vsPar}` : String(vsPar);
-  const vsParColor = parPlayed === 0 ? theme.text.muted
-    : vsPar <= -1 ? theme.scoreColor('excellent')
-    : vsPar === 0 ? theme.scoreColor('good')
-    : vsPar <= 2 ? theme.scoreColor('neutral')
-    : theme.scoreColor('poor');
-
-  return (
-    <View style={s.soloRibbon}>
-      <View style={s.soloRibbonHeader}>
-        <Text style={s.soloRibbonName} numberOfLines={1}>{player.name}</Text>
-        <Text style={s.soloRibbonLabel}>ROUND TOTALS</Text>
-      </View>
-      <View style={s.soloRibbonRow}>
-        <View style={s.soloRibbonItem}>
-          <Text style={s.soloRibbonItemLabel}>STROKES</Text>
-          <Text style={s.soloRibbonStrokes}>{str || '—'}</Text>
-        </View>
-        <View style={s.soloRibbonItem}>
-          <Text style={s.soloRibbonItemLabel}>POINTS</Text>
-          <Text style={s.soloRibbonPts}>{pts}</Text>
-        </View>
-        <View style={s.soloRibbonItem}>
-          <Text style={s.soloRibbonItemLabel}>vs PAR</Text>
-          <Text style={[s.soloRibbonVsPar, { color: vsParColor }]}>{vsParLabel}</Text>
-        </View>
-      </View>
     </View>
   );
 }

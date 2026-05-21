@@ -366,11 +366,6 @@ export function makeScorecardStyles(theme) {
       alignItems: 'center',
       gap: 6,
     },
-    playerCardRow: {
-      flexDirection: 'row',
-      alignItems: 'center',
-      justifyContent: 'space-between',
-    },
     pickupBtn: {
       width: 30,
       height: 30,
@@ -385,39 +380,6 @@ export function makeScorecardStyles(theme) {
       borderColor: theme.accent.primary,
       backgroundColor: theme.accent.primary,
     },
-    playerCardLeft: { flexDirection: 'row', alignItems: 'center', gap: 12, flex: 1, minWidth: 0 },
-    playerAvatar: {
-      width: 36,
-      height: 36,
-      borderRadius: 18,
-      alignItems: 'center',
-      justifyContent: 'center',
-    },
-    playerAvatarText: {
-      color: '#fff',
-      fontFamily: 'PlusJakartaSans-ExtraBold',
-      fontSize: 15,
-    },
-    playerCardNameRow: { flexDirection: 'row', alignItems: 'center', gap: 6 },
-    playerCardName: {
-      color: theme.text.primary,
-      fontFamily: 'PlusJakartaSans-Bold',
-      fontSize: 15,
-    },
-    playerCardHcp: {
-      color: theme.text.secondary,
-      fontSize: 12,
-      marginTop: 2,
-      fontFamily: 'PlusJakartaSans-Medium',
-    },
-    playerCardRunning: {
-      color: theme.accent.primary,
-      fontSize: 11,
-      marginTop: 2,
-      fontFamily: 'PlusJakartaSans-Bold',
-      letterSpacing: 0.5,
-    },
-    playerCardRight: { flexDirection: 'row', alignItems: 'center', gap: 8 },
     stepBtn: {
       width: 36,
       height: 36,
@@ -566,14 +528,6 @@ export function makeScorecardStyles(theme) {
     // Horizontal pager — flexes to fill between fixed top card and bottom bar
     pagerWrap: { flex: 1 },
 
-    // Grid view header row (course title + Notes pill)
-    gridHeaderRow: {
-      flexDirection: 'row',
-      alignItems: 'flex-start',
-      justifyContent: 'space-between',
-      gap: 12,
-      marginBottom: 8,
-    },
 
     // Go-to-hole picker (centered modal with 18-hole grid)
     holePickerSheet: {
@@ -1011,125 +965,6 @@ export function makeScorecardStyles(theme) {
       color: theme.text.muted,
       fontFamily: 'PlusJakartaSans-SemiBold',
       fontSize: 12,
-    },
-
-    // Grid view
-    gridContent: { padding: 16, paddingTop: 12, paddingBottom: 40 },
-    title: {
-      fontSize: 22,
-      fontFamily: 'PlayfairDisplay-Bold',
-      color: theme.accent.primary,
-      letterSpacing: -0.3,
-    },
-    subtitle: {
-      color: theme.text.muted,
-      marginBottom: 16,
-      fontFamily: 'PlusJakartaSans-Medium',
-      fontSize: 12,
-      letterSpacing: 0.5,
-      textTransform: 'uppercase',
-    },
-    headerRow: {
-      flexDirection: 'row',
-      backgroundColor: '#006747',
-      borderRadius: 8,
-      paddingVertical: 8,
-      marginBottom: 4,
-    },
-    holeRow: { flexDirection: 'row', alignItems: 'center', paddingVertical: 4, borderRadius: 6 },
-    altRow: {
-      backgroundColor: theme.isDark ? 'rgba(79,174,138,0.04)' : 'rgba(0,103,71,0.03)',
-    },
-    totalsRow: {
-      borderTopWidth: 2,
-      borderTopColor: theme.accent.primary,
-      marginTop: 6,
-      paddingTop: 10,
-    },
-    headerText: {
-      fontFamily: 'PlusJakartaSans-Bold',
-      fontSize: 11,
-      color: 'rgba(255,255,255,0.85)',
-      letterSpacing: 0.5,
-    },
-    cell: { justifyContent: 'center', alignItems: 'center', paddingHorizontal: 2 },
-    holeCell: {
-      width: 36, fontSize: 13,
-      fontFamily: 'PlusJakartaSans-SemiBold',
-      color: theme.text.secondary,
-      textAlign: 'center',
-    },
-    parCell: {
-      width: 32, fontSize: 12,
-      fontFamily: 'PlusJakartaSans-SemiBold',
-      color: theme.text.primary,
-      textAlign: 'center',
-    },
-    siCell: {
-      width: 32, fontSize: 10,
-      fontFamily: 'PlusJakartaSans-Regular',
-      color: theme.text.muted,
-      textAlign: 'center',
-    },
-    playerCell: { width: 50 },
-    pairCombinedCell: {
-      width: 62,
-      flexDirection: 'row',
-      alignItems: 'center',
-      justifyContent: 'center',
-      gap: 4,
-      borderLeftWidth: 1,
-      borderLeftColor: theme.isDark ? theme.glass?.border : theme.border.default,
-    },
-    pairInlinePts: {
-      fontSize: 13,
-      fontFamily: 'PlusJakartaSans-ExtraBold',
-    },
-    pairInlineTotal: {
-      fontSize: 14,
-      fontFamily: 'PlayfairDisplay-Bold',
-    },
-    pairInlineSep: {
-      fontSize: 11,
-      color: theme.text.muted,
-      fontFamily: 'PlusJakartaSans-Regular',
-    },
-    inputCell: { alignItems: 'center' },
-    scoreInput: {
-      backgroundColor: theme.isDark ? theme.bg.elevated : '#ffffff',
-      color: theme.text.primary,
-      borderRadius: 8,
-      borderWidth: 1,
-      borderColor: theme.isDark ? theme.glass?.border : theme.border.subtle,
-      width: 40,
-      height: 38,
-      textAlign: 'center',
-      fontSize: 15,
-      fontFamily: 'PlusJakartaSans-Bold',
-      padding: 2,
-    },
-    pts: {
-      fontSize: 9,
-      fontFamily: 'PlusJakartaSans-Bold',
-      marginTop: 1,
-      letterSpacing: 0.2,
-    },
-    totalText: {
-      color: theme.text.primary,
-      fontFamily: 'PlusJakartaSans-Bold',
-      fontSize: 13,
-      textAlign: 'center',
-    },
-    totalPts: {
-      fontFamily: 'PlayfairDisplay-Bold',
-      fontSize: 15,
-      textAlign: 'center',
-    },
-    totalStr: {
-      color: theme.text.muted,
-      fontSize: 10,
-      textAlign: 'center',
-      fontFamily: 'PlusJakartaSans-Medium',
     },
 
     // Solo scorecard — classic two-up (front nine + back nine blocks)
