@@ -647,6 +647,60 @@ export function addPlayerRoundPatches(tournament, player, { mode } = {}) {
   return { patches, nextScoringMode };
 }
 
+// Pair construction for a round after a player is removed. Mirror of
+// buildPairsForAddedPlayer, keyed on scoringModeUsesTeams.
+// - Non-team new mode → every survivor is their own group.
+// - Team new mode AND old mode also used teams AND existing pairs were
+//   revealed → keep the existing partnerships minus the removed player; a
+//   pair emptied by the removal is discarded, a half-emptied pair becomes a
+//   one-member group.
+// - Otherwise → fresh randomPairs(survivors).
+function buildPairsForRemovedPlayer({ survivors, newMode, oldMode, existingPairs, removedId, revealed }) {
+  if (!scoringModeUsesTeams(newMode)) {
+    return survivors.map((p) => [p]);
+  }
+  const oldWasTeams = scoringModeUsesTeams(oldMode, survivors.length + 1);
+  if (oldWasTeams && existingPairs?.length && revealed) {
+    return existingPairs
+      .map((pr) => pr.filter((p) => p.id !== removedId))
+      .filter((pr) => pr.length > 0);
+  }
+  return randomPairs(survivors);
+}
+
+// Build the per-round patches for removing the player `playerId` from an
+// in-progress tournament. The player leaves `currentRound` and every later
+// round; already-played earlier rounds are left untouched. Returns the
+// patches plus the resolved scoring mode after the removal — equal to the
+// current mode when it stays valid for the smaller roster, or the
+// auto-fallback otherwise. Pass { mode } to override (used by the prompt UX).
+// Each patch carries only the rebuilt `pairs`; deleting the removed player's
+// per-round scores/shotDetails/handicap is the mutation's job.
+export function removePlayerRoundPatches(tournament, playerId, { mode } = {}) {
+  const oldMode = tournament?.settings?.scoringMode ?? 'stableford';
+  const currentRound = tournament?.currentRound ?? 0;
+  const survivors = (tournament?.players ?? []).filter((p) => p.id !== playerId);
+  const newCount = survivors.length;
+  const nextScoringMode =
+    mode && isScoringModeAllowed(mode, newCount) ? mode
+      : isScoringModeAllowed(oldMode, newCount) ? oldMode
+      : fallbackScoringMode(newCount);
+  const patches = [];
+  (tournament?.rounds ?? []).forEach((round, idx) => {
+    if (idx < currentRound) return; // already-played rounds untouched
+    const pairs = buildPairsForRemovedPlayer({
+      survivors,
+      newMode: nextScoringMode,
+      oldMode,
+      existingPairs: round.pairs,
+      removedId: playerId,
+      revealed: Boolean(round.revealed),
+    });
+    patches.push({ roundId: round.id, pairs });
+  });
+  return { patches, nextScoringMode };
+}
+
 // calcExtraShots, calcStablefordPoints, matchPlayHolePts, matchPlayRoundTally,
 // pickupStrokes and randomPairs now live in ./scoring (imported + re-exported
 // at the top of this file).
