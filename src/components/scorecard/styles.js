@@ -682,6 +682,12 @@ export function makeScorecardStyles(theme) {
       letterSpacing: 0.3,
       marginBottom: 4,
     },
+    shotBudgetCaption: {
+      fontFamily: 'PlusJakartaSans-SemiBold',
+      color: theme.text.muted,
+      fontSize: 11,
+      marginBottom: 8,
+    },
     shotRow: {
       flexDirection: 'row',
       alignItems: 'center',

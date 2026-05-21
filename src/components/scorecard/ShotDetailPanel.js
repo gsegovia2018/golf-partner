@@ -4,7 +4,7 @@ import { Feather } from '@expo/vector-icons';
 import { useTheme } from '../../theme/ThemeContext';
 import { makeScorecardStyles } from './styles';
 import { ShotDetailExplainer } from '../ShotDetailExplainer';
-import { isGIR, recoveryOutcomeFromState } from '../../store/scoring';
+import { isGIR, recoveryOutcomeFromState, shotDetailStrokeCount } from '../../store/scoring';
 import {
   DEFAULT_SHOT, DRIVE_ORDER, DRIVE_META,
   FIRST_PUTT_BUCKETS, FIRST_PUTT_LABELS,
@@ -12,7 +12,8 @@ import {
 } from './constants';
 
 // One "label … − value +" counter row used for putts, penalties, sand shots.
-function ShotCounterRow({ label, value, onStep, theme, s, explainer }) {
+// `canInc` is false once the hole's stroke budget is fully assigned.
+function ShotCounterRow({ label, value, onStep, canInc = true, theme, s, explainer }) {
   const canDec = value != null && value > 0;
   return (
     <View style={s.shotRow}>
@@ -32,12 +33,14 @@ function ShotCounterRow({ label, value, onStep, theme, s, explainer }) {
         </TouchableOpacity>
         <Text style={s.shotCounterValue}>{value == null ? '–' : value}</Text>
         <TouchableOpacity
-          style={s.shotCounterBtn}
+          style={[s.shotCounterBtn, !canInc && s.shotCounterBtnDim]}
           onPress={() => onStep(1)}
+          disabled={!canInc}
           activeOpacity={0.7}
           accessibilityLabel={`Increase ${label}`}
+          accessibilityState={{ disabled: !canInc }}
         >
-          <Feather name="plus" size={18} color={theme.text.primary} />
+          <Feather name="plus" size={18} color={canInc ? theme.text.primary : theme.text.muted} />
         </TouchableOpacity>
       </View>
     </View>
@@ -98,7 +101,19 @@ export function ShotDetailPanel({ hole, detail, onChange, strokes, theme: themeP
   });
   const effectiveOutcome = d.recoveryOutcome ?? autoOutcome;
 
+  // Stroke budget: every counter is one of the hole's strokes, so the four
+  // counters together can never exceed `strokes`. No cap until strokes is set.
+  const assigned = shotDetailStrokeCount(d);
+  const budgetLeft = strokes == null ? Infinity : strokes - assigned;
+  const atBudget = budgetLeft <= 0;
+  const budgetCaption = strokes == null
+    ? null
+    : budgetLeft > 0
+      ? `${budgetLeft} stroke${budgetLeft === 1 ? '' : 's'} left to assign`
+      : `All ${strokes} stroke${strokes === 1 ? '' : 's'} assigned`;
+
   const step = (field, delta) => {
+    if (delta > 0 && atBudget) return;
     const cur = d[field] ?? 0;
     onChange({ [field]: Math.max(0, Math.min(15, cur + delta)) });
   };
@@ -106,11 +121,13 @@ export function ShotDetailPanel({ hole, detail, onChange, strokes, theme: themeP
   return (
     <View style={s.shotPanel}>
       <Text style={s.shotPanelLabel}>How many were:</Text>
+      {budgetCaption && <Text style={s.shotBudgetCaption}>{budgetCaption}</Text>}
 
       <ShotCounterRow
         label="Putts"
         value={d.putts}
         onStep={(delta) => step('putts', delta)}
+        canInc={!atBudget}
         theme={theme}
         s={s}
       />
@@ -118,6 +135,7 @@ export function ShotDetailPanel({ hole, detail, onChange, strokes, theme: themeP
         label="Tee penalties"
         value={d.teePenalties}
         onStep={(delta) => step('teePenalties', delta)}
+        canInc={!atBudget}
         theme={theme}
         s={s}
       />
@@ -125,6 +143,7 @@ export function ShotDetailPanel({ hole, detail, onChange, strokes, theme: themeP
         label="Other penalties"
         value={d.otherPenalties}
         onStep={(delta) => step('otherPenalties', delta)}
+        canInc={!atBudget}
         theme={theme}
         s={s}
       />
@@ -132,6 +151,7 @@ export function ShotDetailPanel({ hole, detail, onChange, strokes, theme: themeP
         label="Sand shots"
         value={d.sandShots}
         onStep={(delta) => step('sandShots', delta)}
+        canInc={!atBudget}
         theme={theme}
         s={s}
         explainer={

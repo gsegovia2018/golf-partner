@@ -47,3 +47,54 @@ describe('ShotDetailPanel — outcome chips', () => {
     expect(onChange).toHaveBeenCalledWith({ recoveryOutcome: 'none' });
   });
 });
+
+describe('ShotDetailPanel — stroke budget', () => {
+  const wrap = (ui) => <ThemeProvider>{ui}</ThemeProvider>;
+  const par4 = { number: 1, par: 4, strokeIndex: 1 };
+
+  test('under budget → "+" works and caption shows strokes left', () => {
+    const onChange = jest.fn();
+    const { getByLabelText, getByText } = render(wrap(
+      <ShotDetailPanel
+        hole={par4}
+        strokes={4}
+        detail={{ putts: 2, teePenalties: 0, otherPenalties: 0, sandShots: 0 }}
+        onChange={onChange}
+      />
+    ));
+    expect(getByText('2 strokes left to assign')).toBeTruthy();
+    fireEvent.press(getByLabelText('Increase Putts'));
+    expect(onChange).toHaveBeenCalledWith({ putts: 3 });
+  });
+
+  test('at budget → "+" blocked and caption shows all assigned', () => {
+    const onChange = jest.fn();
+    const { getByLabelText, getByText } = render(wrap(
+      <ShotDetailPanel
+        hole={par4}
+        strokes={4}
+        detail={{ putts: 2, teePenalties: 1, otherPenalties: 0, sandShots: 1 }}
+        onChange={onChange}
+      />
+    ));
+    expect(getByText('All 4 strokes assigned')).toBeTruthy();
+    fireEvent.press(getByLabelText('Increase Putts'));
+    expect(onChange).not.toHaveBeenCalled();
+  });
+
+  test('strokes not entered → no caption and "+" works', () => {
+    const onChange = jest.fn();
+    const { queryByText, getByLabelText } = render(wrap(
+      <ShotDetailPanel
+        hole={par4}
+        strokes={null}
+        detail={{ putts: 2, teePenalties: 0, otherPenalties: 0, sandShots: 0 }}
+        onChange={onChange}
+      />
+    ));
+    expect(queryByText(/to assign/)).toBeNull();
+    expect(queryByText(/assigned/)).toBeNull();
+    fireEvent.press(getByLabelText('Increase Putts'));
+    expect(onChange).toHaveBeenCalledWith({ putts: 3 });
+  });
+});
