@@ -1487,5 +1487,10 @@ export function makeScorecardStyles(theme) {
     bucketSegCellActive: { backgroundColor: theme.accent.primary },
     bucketSegCellText: { color: theme.text.secondary, fontSize: 12, fontFamily: 'PlusJakartaSans-Bold' },
     bucketSegCellTextActive: { color: theme.text.inverse },
+
+    // ShotDetailSection — collapsible wrapper around ShotDetailPanel
+    shotSection: { marginTop: 10, borderTopWidth: 1, borderTopColor: theme.border.subtle ?? theme.border.default },
+    shotSectionHeader: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingVertical: 10 },
+    shotSectionTitle: { color: theme.text.secondary, fontSize: 13, fontFamily: 'PlusJakartaSans-Bold' },
   });
 }
