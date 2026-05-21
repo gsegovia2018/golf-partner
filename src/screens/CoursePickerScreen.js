@@ -47,6 +47,7 @@ export default function CoursePickerScreen({ navigation, route }) {
       let cancelled = false;
       setLoading(true);
       setLoadError(null);
+      setUsingCachedData(false);
       // loadCourseLibrary never throws: online it fetches fresh (and refreshes
       // the cache); offline it serves the last-known cache and reports
       // usingCachedData. lastUsed comes from local tournaments — best-effort.
