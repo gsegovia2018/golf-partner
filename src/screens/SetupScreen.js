@@ -6,7 +6,7 @@ import {
 import ScreenContainer from '../components/ScreenContainer';
 
 import { Feather } from '@expo/vector-icons';
-import { useFocusEffect } from '@react-navigation/native';
+import { useFocusEffect, CommonActions } from '@react-navigation/native';
 import { createTournament, saveTournament, randomPairs, DEFAULT_SETTINGS, deriveRoundPlayingHandicap } from '../store/tournamentStore';
 import { defaultHoles, fetchPlayers } from '../store/libraryStore';
 import { middleTee } from '../store/tees';
@@ -305,10 +305,22 @@ export default function SetupScreen({ navigation, route }) {
     try {
       await saveTournament(tournament);
       // saveTournament marks the new tournament active. A game is a single
-      // round — jump straight to its scorecard. A multi-round tournament
-      // lands on the Tournament view instead of bouncing back to the Home list.
-      if (isGame) navigation.replace('Scorecard', { roundIndex: 0 });
-      else navigation.replace('Tournament');
+      // round — jump straight to its scorecard, but seat the Tournament
+      // (round details) view underneath so back from the scorecard returns
+      // there instead of bouncing all the way to Home. A multi-round
+      // tournament lands on the Tournament view directly.
+      if (isGame) {
+        navigation.dispatch((state) => {
+          const routes = [
+            ...state.routes.slice(0, -1), // drop the Setup wizard itself
+            { name: 'Tournament' },
+            { name: 'Scorecard', params: { roundIndex: 0 } },
+          ];
+          return CommonActions.reset({ ...state, routes, index: routes.length - 1 });
+        });
+      } else {
+        navigation.replace('Tournament');
+      }
     } catch (err) {
       const msg = err?.message ?? 'Could not create tournament';
       if (Platform.OS === 'web') window.alert(msg);
