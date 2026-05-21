@@ -14,7 +14,7 @@ import { getShowRunningScore, setShowRunningScore } from '../lib/prefs';
 import { playersMeFirst, pairsMeFirst } from '../lib/playerOrder';
 import {
   loadTournament, subscribeTournamentChanges,
-  calcStablefordPoints, calcBestWorstBall, pickupStrokes, DEFAULT_SETTINGS,
+  calcStablefordPoints, calcBestWorstBall, DEFAULT_SETTINGS,
   matchPlayHolePts, calcExtraShots,
   sindicatoHolePoints, sindicatoRoundTally,
   roundPairLeaderboard, roundPairClinched,
@@ -37,7 +37,7 @@ import DiscrepancySheet from '../components/DiscrepancySheet';
 import ScoringModeChangeBanner from '../components/ScoringModeChangeBanner';
 import ScoringModeChangeSheet from '../components/ScoringModeChangeSheet';
 import { fallbackNoticeText } from '../components/scoringModes';
-import { scoreCellState, cardDiscrepancyHoles } from '../store/officialScoring';
+import { cardDiscrepancyHoles } from '../store/officialScoring';
 import { buildLeaderboard } from '../store/officialLeaderboard';
 import { attestCard } from '../store/officialStore';
 import { notifyRoundFinished } from '../store/notificationStore';
@@ -47,10 +47,9 @@ import {
   CELEBRATION_TIERS, celebrationFor,
 } from '../components/scorecard/constants';
 import { RoundSummary } from '../components/scorecard/RoundSummary';
-import { PlayerCard } from '../components/scorecard/PlayerCard';
-import { holePoints, roundTotals } from '../components/scorecard/scoreModel';
-import { teamsByPlayer } from '../components/scorecard/teamModel';
+import { roundTotals } from '../components/scorecard/scoreModel';
 import { makeScorecardStyles } from '../components/scorecard/styles';
+import { HolePage, MePicker } from '../components/scorecard/HolePage';
 
 // Web-only CSS scroll-snap. On native, `pagingEnabled` is handled by the
 // platform. On web, react-native-web 0.21's `pagingEnabled` only sets
@@ -59,7 +58,6 @@ import { makeScorecardStyles } from '../components/scorecard/styles';
 // We disable the auto-wrapper on web (pagingEnabled={false}) and apply
 // the snap properties directly on the ScrollView + each page.
 const PAGER_SNAP_TYPE_STYLE = Platform.OS === 'web' ? { scrollSnapType: 'x mandatory', overflowX: 'auto' } : null;
-const PAGER_PAGE_SNAP_STYLE = Platform.OS === 'web' ? { scrollSnapAlign: 'start', scrollSnapStop: 'always' } : null;
 
 // Belt-and-braces: inject the snap rules via a real <style> tag so they
 // apply even if RNW's atomic-CSS pipeline ever filters an unknown CSS
@@ -1397,153 +1395,6 @@ function SyncIndicator({ status, saveError, theme, s }) {
     </View>
   );
 }
-
-// Memoized per-hole page. Extracted so a swipe that only changes the
-// outside `currentHole` indicator does NOT re-render the other 17 pages
-// in the pager — that's the main source of swipe lag.
-const HolePage = React.memo(function HolePage({
-  pageHole, width, height, courseName, roundIndex,
-  round, players, scores,
-  shotDetails, meId, onSetShot,
-  theme, s,
-  onStep, onSetScore, editable, getScoreAnim,
-  showRunning,
-  mode,
-  official, officialDiscrepancy, onOpenDiscrepancy,
-  shotCollapsed, onToggleShotDetail,
-  totalsMap,
-}) {
-  // Every game mode now renders the unified PlayerCard. Players are ordered
-  // "me first" so the signed-in player's card (with shot detail) is on top.
-  const orderedPlayers = playersMeFirst(players, meId);
-
-  // Per-hole points are computed once per render and then looked up per player.
-  // roundTotals is computed once in HoleView and passed down via totalsMap.
-  const handicaps = round.playerHandicaps ?? {};
-  const holePts = holePoints({ mode, hole: pageHole, players, scores, handicaps });
-  const teams = useMemo(() => teamsByPlayer(round), [round]);
-
-  return (
-    <View
-      style={[{ width, height }, PAGER_PAGE_SNAP_STYLE]}
-      dataSet={Platform.OS === 'web' ? { pagerpage: '1' } : undefined}
-    >
-      {/* Hole header */}
-      <View style={s.holeHeaderCard}>
-        <View style={s.holeHeaderLeft}>
-          <Text style={s.holeHeaderRound}>{courseName} -- Round {roundIndex + 1}</Text>
-          <View style={s.holeNumberRow}>
-            <Text style={s.holeNumberLabel}>HOLE</Text>
-            <Text style={s.holeNumber}>{pageHole.number}</Text>
-          </View>
-        </View>
-        <View style={s.holeHeaderRight}>
-          <View style={s.holeMetaItem}>
-            <Text style={s.holeMetaLabel}>PAR</Text>
-            <Text style={s.holeMetaValue}>{pageHole.par}</Text>
-          </View>
-          <View style={s.holeMetaItem}>
-            <Text style={s.holeMetaLabel}>SI</Text>
-            <Text style={s.holeMetaValue}>{pageHole.strokeIndex}</Text>
-          </View>
-        </View>
-      </View>
-
-      {/* Player score cards — scroll if they overflow, which happens once
-          2+ hero cards are stacked on a short screen. */}
-      <ScrollView
-        style={s.flex}
-        contentContainerStyle={s.playerCardsContent}
-        keyboardShouldPersistTaps="handled"
-      >
-        {orderedPlayers.map((player) => {
-          const handicap = round.playerHandicaps?.[player.id] ?? player.handicap;
-          const strokes = scores[player.id]?.[pageHole.number];
-          const points = holePts[player.id] ?? null;
-
-          const extraShots = handicap >= pageHole.strokeIndex ? (Math.floor(handicap / 18) + (handicap % 18 >= pageHole.strokeIndex ? 1 : 0)) : 0;
-
-          const pickup = pickupStrokes(pageHole.par, handicap, pageHole.strokeIndex);
-          const isPickup = strokes != null && strokes >= pickup;
-          // Per-card write permission. Casual mode passes no `editable` prop
-          // (or one that returns true). In official mode a read-only card
-          // renders the score without +/- steppers or the pickup toggle.
-          const canEdit = editable ? editable(player.id) : true;
-          const isMe = player.id === meId;
-
-          // Official mode: classify this player's hole from the raw two-row
-          // score data so the card can show an agreed / waiting / discrepancy
-          // badge. Casual mode leaves officialState null.
-          let officialState = null;     // 'empty' | 'waiting' | 'agreed' | 'discrepancy'
-          let canResolveHere = false;   // viewer owns an entry → can open sheet
-          if (official && officialDiscrepancy) {
-            const { self, marker } = officialDiscrepancy.cellEntries(player.id, pageHole.number);
-            officialState = scoreCellState(self, marker);
-            // The viewer can act on a card they own an entry for (self or
-            // marker). canEdit already encodes editableSource !== null.
-            canResolveHere = canEdit;
-          }
-
-          return (
-            <PlayerCard
-              key={player.id}
-              player={player}
-              hole={pageHole}
-              strokes={strokes}
-              points={points}
-              handicap={handicap}
-              extraShots={extraShots}
-              pickup={pickup}
-              isPickup={isPickup}
-              teeLabel={round.playerTees?.[player.id]?.label ?? null}
-              team={teams[player.id] ?? null}
-              isMe={isMe}
-              canEdit={canEdit}
-              showRunning={showRunning}
-              totals={totalsMap.get(player.id)}
-              getScoreAnim={getScoreAnim}
-              onStep={onStep}
-              onSetScore={onSetScore}
-              shotDetail={isMe ? shotDetails[meId]?.[pageHole.number] : undefined}
-              onSetShot={onSetShot}
-              shotCollapsed={shotCollapsed}
-              onToggleShotDetail={onToggleShotDetail}
-              officialState={officialState}
-              canResolveHere={canResolveHere}
-              onOpenDiscrepancy={onOpenDiscrepancy}
-            />
-          );
-        })}
-      </ScrollView>
-    </View>
-  );
-});
-
-// Prompt shown on the scorecard when shot-detail tracking can't tell which
-// player is "me" (multi-player round, no signed-in match).
-function MePicker({ players, onPickMe, theme, s }) {
-  return (
-    <View style={s.mePicker}>
-      <View style={s.mePickerHeader}>
-        <Feather name="target" size={14} color={theme.accent.primary} />
-        <Text style={s.mePickerLabel}>Track your shots — which player are you?</Text>
-      </View>
-      <View style={s.mePickerChips}>
-        {players.map((p) => (
-          <TouchableOpacity
-            key={p.id}
-            style={s.mePickerChip}
-            onPress={() => onPickMe(p.id)}
-            activeOpacity={0.7}
-          >
-            <Text style={s.mePickerChipText}>{p.name.split(' ')[0]}</Text>
-          </TouchableOpacity>
-        ))}
-      </View>
-    </View>
-  );
-}
-
 
 function HoleView({ round, roundIndex, players, scores, shotDetails, meId, onSetShot, onPickMe, notes, currentHole, hole, isBestBall, bbResult, settings, onStep, onSetScore, editable, onRoundNoteChange, onHoleNoteChange, onPrev, onNext, onGoToHole, onGoBack, onFinish, holeCount, playerTotals, showRunning, getScoreAnim, celebration, celebrationAnim, refreshing, onRefresh, official, officialDiscrepancy, officialEditableSource, officialSetScore, officialHasAttested, officialAttestBusy, officialAttestError, onAttest }) {
   const { theme } = useTheme();
