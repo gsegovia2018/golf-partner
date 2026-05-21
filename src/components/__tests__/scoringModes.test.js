@@ -6,6 +6,7 @@ import {
   fallbackNoticeText,
   getScoringMode,
   leaderboardToggleLabels,
+  mergeScoringSettings,
 } from '../scoringModes';
 
 describe('SCORING_MODES', () => {
@@ -107,5 +108,63 @@ describe('leaderboardToggleLabels', () => {
   });
   test('unknown mode falls back to Stableford / Stroke Play', () => {
     expect(leaderboardToggleLabels('nope')).toEqual({ left: 'Stableford', right: 'Stroke Play' });
+  });
+});
+
+describe('mergeScoringSettings', () => {
+  test('applies the chosen mode and preserves unrelated settings', () => {
+    const result = mergeScoringSettings(
+      { scoringMode: 'individual', startDate: '2026-05-21' },
+      { scoringMode: 'matchplay', bestBallValue: '1', worstBallValue: '1' },
+    );
+    expect(result).toEqual({
+      scoringMode: 'matchplay',
+      startDate: '2026-05-21',
+      bestBallValue: 1,
+      worstBallValue: 1,
+    });
+  });
+
+  test('coerces string Best Ball point values to integers', () => {
+    const result = mergeScoringSettings(
+      { scoringMode: 'individual' },
+      { scoringMode: 'bestball', bestBallValue: '3', worstBallValue: '2' },
+    );
+    expect(result.bestBallValue).toBe(3);
+    expect(result.worstBallValue).toBe(2);
+  });
+
+  test('falls back to 1 for empty or non-numeric Best Ball values', () => {
+    const result = mergeScoringSettings(
+      {},
+      { scoringMode: 'bestball', bestBallValue: '', worstBallValue: 'abc' },
+    );
+    expect(result.bestBallValue).toBe(1);
+    expect(result.worstBallValue).toBe(1);
+  });
+
+  test('falls back to 1 when a Best Ball value is zero', () => {
+    const result = mergeScoringSettings(
+      {},
+      { scoringMode: 'bestball', bestBallValue: '0', worstBallValue: '0' },
+    );
+    expect(result.bestBallValue).toBe(1);
+    expect(result.worstBallValue).toBe(1);
+  });
+
+  test('accepts already-numeric Best Ball values', () => {
+    const result = mergeScoringSettings(
+      {},
+      { scoringMode: 'bestball', bestBallValue: 4, worstBallValue: 5 },
+    );
+    expect(result.bestBallValue).toBe(4);
+    expect(result.worstBallValue).toBe(5);
+  });
+
+  test('tolerates a missing current settings object', () => {
+    const result = mergeScoringSettings(undefined, {
+      scoringMode: 'sindicato', bestBallValue: '1', worstBallValue: '1',
+    });
+    expect(result.scoringMode).toBe('sindicato');
   });
 });

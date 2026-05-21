@@ -137,3 +137,17 @@ export function fallbackNoticeText(prevKey, nextKey) {
   const reason = prev.requirement.replace(/^Requires/, 'needs');
   return `${prev.label} ${reason} — switched to ${next.label}.`;
 }
+
+// Merges a scoring-mode draft back into a tournament's settings object.
+// The draft carries the mode key plus Best Ball point values, which the
+// picker holds as strings (its inputs are TextInputs); this coerces them to
+// positive integers, defaulting to 1 — the same normalization the Edit
+// Tournament screen has always applied at save time.
+export function mergeScoringSettings(currentSettings, draft) {
+  return {
+    ...(currentSettings ?? {}),
+    scoringMode: draft.scoringMode,
+    bestBallValue: parseInt(draft.bestBallValue, 10) || 1,
+    worstBallValue: parseInt(draft.worstBallValue, 10) || 1,
+  };
+}
