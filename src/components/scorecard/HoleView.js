@@ -11,6 +11,8 @@ import { RoundSummary } from './RoundSummary';
 import { roundTotals } from './scoreModel';
 import { CELEBRATION_TIERS } from './constants';
 import DiscrepancySheet from '../DiscrepancySheet';
+import ScoreConflictSheet from '../ScoreConflictSheet';
+import { listRoundConflicts } from '../../store/scoring';
 import { getShotDetailCollapsed, setShotDetailCollapsed } from '../../lib/prefs';
 
 // Web-only CSS scroll-snap. On native, `pagingEnabled` is handled by the
@@ -34,7 +36,7 @@ if (Platform.OS === 'web' && typeof document !== 'undefined') {
   }
 }
 
-export function HoleView({ round, roundIndex, players, scores, shotDetails, meId, onSetShot, onPickMe, notes, currentHole, hole, isBestBall, bbResult, settings, onStep, onSetScore, editable, onRoundNoteChange, onHoleNoteChange, onNext, onGoToHole, onFinish, holeCount, showRunning, getScoreAnim, celebration, celebrationAnim, refreshing, onRefresh, official, officialDiscrepancy, officialEditableSource, officialSetScore, officialHasAttested, officialAttestBusy, officialAttestError, onAttest }) {
+export function HoleView({ round, roundIndex, players, scores, shotDetails, meId, onSetShot, onPickMe, notes, currentHole, hole, isBestBall, bbResult, settings, onStep, onSetScore, editable, onRoundNoteChange, onHoleNoteChange, onNext, onGoToHole, onFinish, holeCount, showRunning, getScoreAnim, celebration, celebrationAnim, refreshing, onRefresh, official, officialDiscrepancy, officialEditableSource, officialSetScore, officialHasAttested, officialAttestBusy, officialAttestError, onAttest, onResolveConflict, focusConflict, onFocusConflictHandled }) {
   const { theme } = useTheme();
   // Notes split: the current hole's note plus the shared round-level note.
   const holeNote = notes?.hole?.[currentHole] ?? '';
@@ -59,6 +61,33 @@ export function HoleView({ round, roundIndex, players, scores, shotDetails, meId
   // Official mode: the hole + subject currently open in the resolve sheet.
   // { hole, subjectRosterId } or null. Casual mode never sets this.
   const [discrepancyTarget, setDiscrepancyTarget] = useState(null);
+  // Stable identity so it does not defeat HolePage's memo comparator — an
+  // inline arrow here re-rendered all 18 pages on every score edit.
+  const openDiscrepancy = useCallback((subjectRosterId, holeNumber) => {
+    setDiscrepancyTarget({ hole: holeNumber, subjectRosterId });
+  }, []);
+  // Casual-mode score conflict: which hole/player is open in the resolve sheet.
+  const [conflictTarget, setConflictTarget] = useState(null);
+  const openConflict = useCallback((playerId, holeNumber) => {
+    setConflictTarget({ hole: holeNumber, playerId });
+  }, []);
+
+  // The finish gate (ScorecardScreen) sets `focusConflict` after deciding to
+  // review a conflict: jump to its hole, open the sheet, then hand the signal
+  // back so it fires once.
+  useEffect(() => {
+    if (focusConflict) {
+      onGoToHole?.(focusConflict.hole);
+      setConflictTarget({ hole: focusConflict.hole, playerId: focusConflict.playerId });
+      onFocusConflictHandled?.();
+    }
+  }, [focusConflict, onGoToHole, onFocusConflictHandled]);
+
+  // Holes with at least one unresolved conflict — drives the go-to-hole dot.
+  const conflictHoles = useMemo(
+    () => new Set(listRoundConflicts(round).map((c) => c.hole)),
+    [round],
+  );
   const [pagerSize, setPagerSize] = useState({ width: 0, height: 0 });
   const pagerRef = useRef(null);
   const holeScrollOffset = useRef(0);
@@ -190,6 +219,7 @@ export function HoleView({ round, roundIndex, players, scores, shotDetails, meId
               <HolePage
                 key={pageHole.number}
                 pageHole={pageHole}
+                isActive={pageHole.number === currentHole}
                 width={pagerSize.width}
                 height={pagerSize.height}
                 courseName={round.courseName}
@@ -212,8 +242,8 @@ export function HoleView({ round, roundIndex, players, scores, shotDetails, meId
                   : isBestBall ? 'bestball' : 'stableford'}
                 official={official}
                 officialDiscrepancy={officialDiscrepancy}
-                onOpenDiscrepancy={(subjectRosterId, holeNumber) =>
-                  setDiscrepancyTarget({ hole: holeNumber, subjectRosterId })}
+                onOpenDiscrepancy={openDiscrepancy}
+                onOpenConflict={openConflict}
                 shotCollapsed={shotCollapsed}
                 onToggleShotDetail={toggleShotDetail}
                 totalsMap={scorecardTotals}
@@ -391,6 +421,7 @@ export function HoleView({ round, roundIndex, players, scores, shotDetails, meId
                 const hasDiscrepancy = official && officialDiscrepancy
                   ? officialDiscrepancy.myHoles.includes(n)
                   : false;
+                const hasConflict = conflictHoles.has(n);
                 return (
                   <TouchableOpacity
                     key={n}
@@ -407,6 +438,10 @@ export function HoleView({ round, roundIndex, players, scores, shotDetails, meId
                       // Discrepancy takes visual priority over a note dot.
                       <View
                         style={[s.holePickerNoteDot, { backgroundColor: theme.destructive }]}
+                      />
+                    ) : hasConflict ? (
+                      <View
+                        style={[s.holePickerNoteDot, { backgroundColor: '#c77a0a' }]}
                       />
                     ) : hasNote ? (
                       <View
@@ -452,6 +487,30 @@ export function HoleView({ round, roundIndex, players, scores, shotDetails, meId
               if (src && officialSetScore) {
                 officialSetScore(subjectRosterId, dHole, strokes, src);
               }
+            }}
+          />
+        );
+      })()}
+
+      {/* Casual-mode score conflict resolve sheet. Opened by tapping a hero
+          card flagged with a conflict marker. */}
+      {conflictTarget && (() => {
+        const { hole: cHole, playerId } = conflictTarget;
+        const marker = round.scoreConflicts?.[playerId]?.[cHole];
+        if (!marker) return null;
+        const subject = players.find((p) => p.id === playerId);
+        const currentValue = scores?.[playerId]?.[cHole] ?? null;
+        return (
+          <ScoreConflictSheet
+            visible
+            onClose={() => setConflictTarget(null)}
+            hole={cHole}
+            subjectName={subject?.name ?? 'Player'}
+            candidates={marker.candidates ?? []}
+            currentValue={currentValue}
+            onResolve={(value) => {
+              onResolveConflict?.(playerId, cHole, value);
+              setConflictTarget(null);
             }}
           />
         );
