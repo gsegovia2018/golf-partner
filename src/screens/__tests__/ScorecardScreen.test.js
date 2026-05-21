@@ -97,4 +97,28 @@ describe('ShotDetailPanel — stroke budget', () => {
     fireEvent.press(getByLabelText('Increase Putts'));
     expect(onChange).toHaveBeenCalledWith({ putts: 3 });
   });
+
+  test('singular caption — exactly 1 stroke left', () => {
+    const { getByText } = render(wrap(
+      <ShotDetailPanel
+        hole={par4}
+        strokes={1}
+        detail={{ putts: 0, teePenalties: 0, otherPenalties: 0, sandShots: 0 }}
+        onChange={() => {}}
+      />
+    ));
+    expect(getByText('1 stroke left to assign')).toBeTruthy();
+  });
+
+  test('singular caption — all 1 stroke assigned', () => {
+    const { getByText } = render(wrap(
+      <ShotDetailPanel
+        hole={par4}
+        strokes={1}
+        detail={{ putts: 1, teePenalties: 0, otherPenalties: 0, sandShots: 0 }}
+        onChange={() => {}}
+      />
+    ));
+    expect(getByText('All 1 stroke assigned')).toBeTruthy();
+  });
 });

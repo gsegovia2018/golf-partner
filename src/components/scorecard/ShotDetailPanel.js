@@ -28,6 +28,7 @@ function ShotCounterRow({ label, value, onStep, canInc = true, theme, s, explain
           disabled={!canDec}
           activeOpacity={0.7}
           accessibilityLabel={`Decrease ${label}`}
+          accessibilityState={{ disabled: !canDec }}
         >
           <Feather name="minus" size={18} color={canDec ? theme.text.primary : theme.text.muted} />
         </TouchableOpacity>
