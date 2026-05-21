@@ -26,6 +26,7 @@ import {
   sindicatoRoundTally, tournamentSindicatoLeaderboard,
   tournamentMatchPlayStandings,
   DEFAULT_SETTINGS, generateInviteCode, buildJoinLink,
+  setScoringModeRoundPatches,
 } from '../store/tournamentStore';
 import { playersMeFirst } from '../lib/playerOrder';
 import { mutate } from '../store/mutate';
@@ -551,14 +552,23 @@ export default function HomeScreen({ navigation, route }) {
     }
   }
 
-  // Persist the scoring-mode draft. saveTournament writes the whole tournament
-  // blob (the established settings-save path); reload() refreshes local state.
+  // Persist the scoring-mode draft. Rebuilds each affected round's pairs so
+  // teams match the new mode — the same pair patches ScorecardScreen applies
+  // for a mid-game change — then saves the whole tournament blob so the Best
+  // Ball point values ride along too. reload() refreshes local state.
   async function saveScoringMode() {
     if (!tournament || !scoringDraft) return;
     try {
+      const { patches } = setScoringModeRoundPatches(tournament, scoringDraft.scoringMode);
+      const pairsByRound = new Map(
+        patches.filter((p) => p.pairs).map((p) => [p.roundId, p.pairs]),
+      );
       const updated = {
         ...tournament,
         settings: mergeScoringSettings(tournament.settings, scoringDraft),
+        rounds: (tournament.rounds ?? []).map((r) => (
+          pairsByRound.has(r.id) ? { ...r, pairs: pairsByRound.get(r.id) } : r
+        )),
       };
       await saveTournament(updated);
       await reload();
@@ -1852,46 +1862,46 @@ export default function HomeScreen({ navigation, route }) {
       </Pressable>
     </Modal>
 
-      <Modal
-        visible={showScoringModeSheet}
-        transparent
-        animationType="slide"
-        onRequestClose={() => setShowScoringModeSheet(false)}
-      >
-        <Pressable style={s.modalBackdrop} onPress={() => setShowScoringModeSheet(false)}>
-          <Pressable style={s.modalSheet} onPress={() => {}}>
-            <View style={s.modalHandle} />
-            <Text style={s.modalTitle}>Scoring Mode</Text>
-            {scoringDraft && (
-              <>
-                <ScoringModeField
-                  value={scoringDraft.scoringMode}
-                  onChange={(mode) => setScoringDraft((d) => ({ ...d, scoringMode: mode }))}
-                  playerCount={tournament.players.length}
-                  settings={scoringDraft}
-                  onSettingsChange={(next) => setScoringDraft(next)}
-                />
-                <View style={[s.confirmActions, { marginTop: 16 }]}>
-                  <TouchableOpacity
-                    style={[s.confirmBtn, s.confirmBtnCancel]}
-                    onPress={() => setShowScoringModeSheet(false)}
-                    activeOpacity={0.7}
-                  >
-                    <Text style={s.confirmBtnCancelText}>Cancel</Text>
-                  </TouchableOpacity>
-                  <TouchableOpacity
-                    style={[s.confirmBtn, s.confirmBtnPrimary]}
-                    onPress={saveScoringMode}
-                    activeOpacity={0.7}
-                  >
-                    <Text style={s.confirmBtnPrimaryText}>Save</Text>
-                  </TouchableOpacity>
-                </View>
-              </>
-            )}
-          </Pressable>
+    <Modal
+      visible={showScoringModeSheet}
+      transparent
+      animationType="slide"
+      onRequestClose={() => setShowScoringModeSheet(false)}
+    >
+      <Pressable style={s.modalBackdrop} onPress={() => setShowScoringModeSheet(false)}>
+        <Pressable style={s.modalSheet} onPress={() => {}}>
+          <View style={s.modalHandle} />
+          <Text style={s.modalTitle}>Scoring Mode</Text>
+          {scoringDraft && (
+            <>
+              <ScoringModeField
+                value={scoringDraft.scoringMode}
+                onChange={(mode) => setScoringDraft((d) => ({ ...d, scoringMode: mode }))}
+                playerCount={tournament.players.length}
+                settings={scoringDraft}
+                onSettingsChange={(next) => setScoringDraft(next)}
+              />
+              <View style={[s.confirmActions, { marginTop: 16 }]}>
+                <TouchableOpacity
+                  style={[s.confirmBtn, s.confirmBtnCancel]}
+                  onPress={() => setShowScoringModeSheet(false)}
+                  activeOpacity={0.7}
+                >
+                  <Text style={s.confirmBtnCancelText}>Cancel</Text>
+                </TouchableOpacity>
+                <TouchableOpacity
+                  style={[s.confirmBtn, s.confirmBtnPrimary]}
+                  onPress={saveScoringMode}
+                  activeOpacity={0.7}
+                >
+                  <Text style={s.confirmBtnPrimaryText}>Save</Text>
+                </TouchableOpacity>
+              </View>
+            </>
+          )}
         </Pressable>
-      </Modal>
+      </Pressable>
+    </Modal>
 
     <ConfirmModal state={confirmState} onResult={resolveConfirm} theme={theme} s={s} />
 
