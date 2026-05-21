@@ -2,7 +2,7 @@
 // mode just changed. Auto-dismisses after ~5s. Tap-to-reopen lets the
 // user change the mode again via the supplied callback.
 import React, { useEffect } from 'react';
-import { View, Text, TouchableOpacity, StyleSheet } from 'react-native';
+import { Text, TouchableOpacity, StyleSheet } from 'react-native';
 import { Feather } from '@expo/vector-icons';
 import { useTheme } from '../theme/ThemeContext';
 

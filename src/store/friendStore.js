@@ -281,18 +281,3 @@ export async function getFriendProfile(friend) {
     return empty;
   }
 }
-
-// Relationship of the current user to a given user id — drives the
-// add/pending/friends button state in search results.
-export async function friendshipStatus(targetUserId) {
-  const { me, rows } = await loadFriendshipRows();
-  if (!me) return 'none';
-  const row = rows.find(
-    (r) =>
-      (r.requester_id === me && r.addressee_id === targetUserId) ||
-      (r.requester_id === targetUserId && r.addressee_id === me),
-  );
-  if (!row) return 'none';
-  if (row.status === 'accepted') return 'friends';
-  return row.requester_id === me ? 'outgoing' : 'incoming';
-}

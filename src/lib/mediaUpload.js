@@ -8,11 +8,6 @@ import { generateVideoThumbWeb } from './videoThumbWeb';
 
 const BUCKET = 'tournament-media';
 
-function extFromUri(uri, fallback) {
-  const m = uri.match(/\.([a-z0-9]+)(\?|#|$)/i);
-  return (m ? m[1] : fallback).toLowerCase();
-}
-
 // On web, fetch() + .blob() handles file://, blob:, and data: URIs uniformly
 // and the browser streams the Blob through multipart upload correctly.
 //

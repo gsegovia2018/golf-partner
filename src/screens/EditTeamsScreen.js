@@ -69,7 +69,7 @@ export default function EditTeamsScreen({ navigation, route }) {
         pairs,
       });
       navigation.goBack();
-    } catch (err) {
+    } catch {
       setSaving(false);
     }
   }

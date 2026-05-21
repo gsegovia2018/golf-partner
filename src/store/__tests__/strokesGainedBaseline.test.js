@@ -1,5 +1,5 @@
 import {
-  BASELINES, BASELINES_SCRATCH, BUCKETS,
+  BASELINES, BASELINES_SCRATCH,
   expectedStrokes, expectedFromBucket,
   BASELINES_AMATEUR, AMATEUR_ANCHOR_HANDICAP,
 } from '../strokesGainedBaseline';

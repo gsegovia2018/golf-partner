@@ -8,14 +8,6 @@ export async function saveToken(token) {
   await AsyncStorage.setItem(TOKEN_KEY, token);
 }
 
-export async function loadToken() {
-  return AsyncStorage.getItem(TOKEN_KEY);
-}
-
-export async function clearToken() {
-  await AsyncStorage.removeItem(TOKEN_KEY);
-}
-
 // Resolve a token to its roster player + tournament context. If an app
 // account is signed in on this device, link it so the round reaches that
 // account's history (best-effort — link failure must not block play).

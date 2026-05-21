@@ -61,8 +61,3 @@ export function startUploadWorker() {
     if (next === 'active') drain();
   });
 }
-
-export async function retryFailedEntry(id) {
-  await updateQueueEntry(id, { status: 'pending', attempts: 0, lastError: null });
-  drain();
-}

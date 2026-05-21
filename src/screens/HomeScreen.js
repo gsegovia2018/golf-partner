@@ -14,10 +14,10 @@ import PullToRefresh from '../components/PullToRefresh';
 import LoadingSplash from '../components/LoadingSplash';
 import {
   loadTournament, loadAllTournaments, loadAllTournamentsWithFallback,
-  setActiveTournament, clearActiveTournament,
+  setActiveTournament,
   deleteTournament, saveTournament,
   tournamentLeaderboard, tournamentBestWorstLeaderboard,
-  calcBestWorstBall, roundTotals,
+  roundTotals,
   playerRoundBestWorstPoints,
   tournamentPlayerClinched,
   isRoundComplete, isTournamentFinished, subscribeTournamentChanges,
@@ -102,8 +102,8 @@ export default function HomeScreen({ navigation, route }) {
   // trigger a visible mini-scroll back to an intermediate page.
   const selectedRoundFromScroll = useRef(false);
   const [showSettings, setShowSettings] = useState(false);
-  // List-view overflow menu — surfaces Friends / Stats / Profile, which are
-  // otherwise buried (Friends had no entry point at all on the list view).
+  // List-view overflow menu — surfaces Friends, Notifications, Statistics and
+  // the Course/Player libraries, which otherwise have no entry point here.
   const [showListMenu, setShowListMenu] = useState(false);
   const [unreadNotifs, setUnreadNotifs] = useState(0);
   const [showTournamentKindChoice, setShowTournamentKindChoice] = useState(false);
@@ -653,13 +653,6 @@ export default function HomeScreen({ navigation, route }) {
     }
     return roundTotals(selectedRoundData, tournament.players);
   }, [tournament, selectedRoundData, selectedRoundHasScores, leaderboardAlt, settings.scoringMode]);
-  const selectedRoundBB = useMemo(
-    () => (tournament && selectedRoundData && selectedRoundHasScores
-      && settings.scoringMode === 'bestball' && !leaderboardAlt && selectedRoundData.pairs?.length
-      ? calcBestWorstBall(selectedRoundData, tournament.players)
-      : null),
-    [tournament, selectedRoundData, selectedRoundHasScores, settings.scoringMode, leaderboardAlt],
-  );
   const tournamentMode = settings.scoringMode === 'bestball' ? 'bestball'
     : settings.scoringMode === 'sindicato' ? 'sindicato'
     : settings.scoringMode === 'matchplay' ? 'matchplay'
@@ -1033,12 +1026,32 @@ export default function HomeScreen({ navigation, route }) {
               </TouchableOpacity>
 
               <TouchableOpacity
-                style={[s.menuItem, { borderBottomWidth: 0 }]}
+                style={s.menuItem}
                 onPress={() => { setShowListMenu(false); navigation.navigate('MyStats'); }}
                 activeOpacity={0.7}
               >
                 <Feather name="bar-chart-2" size={18} color={theme.accent.primary} />
                 <Text style={s.menuItemText}>Statistics</Text>
+                <Feather name="chevron-right" size={16} color={theme.text.muted} />
+              </TouchableOpacity>
+
+              <TouchableOpacity
+                style={s.menuItem}
+                onPress={() => { setShowListMenu(false); navigation.navigate('CoursesLibrary'); }}
+                activeOpacity={0.7}
+              >
+                <Feather name="map" size={18} color={theme.accent.primary} />
+                <Text style={s.menuItemText}>Courses</Text>
+                <Feather name="chevron-right" size={16} color={theme.text.muted} />
+              </TouchableOpacity>
+
+              <TouchableOpacity
+                style={[s.menuItem, { borderBottomWidth: 0 }]}
+                onPress={() => { setShowListMenu(false); navigation.navigate('PlayersLibrary'); }}
+                activeOpacity={0.7}
+              >
+                <Feather name="user" size={18} color={theme.accent.primary} />
+                <Text style={s.menuItemText}>Players</Text>
                 <Feather name="chevron-right" size={16} color={theme.text.muted} />
               </TouchableOpacity>
             </Pressable>
@@ -1169,9 +1182,6 @@ export default function HomeScreen({ navigation, route }) {
   }
 
   const isGame = tournament.kind === 'game';
-  const completedRounds = tournament.rounds.filter(
-    (r) => r.scores && Object.keys(r.scores).length > 0,
-  );
   const strokesByPlayer = Object.fromEntries(stablefordBoard.map((e) => [e.player.id, e.strokes]));
   const toggleLabels = leaderboardToggleLabels(settings.scoringMode);
   const getSelectedRoundValue = (playerId) => {

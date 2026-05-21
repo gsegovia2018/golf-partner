@@ -8,23 +8,11 @@ import { teeByLabel } from './tees';
 // module's own use and re-exported below so existing call sites that do
 // `import { calcStablefordPoints } from '../store/tournamentStore'` keep working.
 import {
-  STANDARD_SLOPE,
-  totalParFromHoles,
-  calcPlayingHandicap,
   deriveRoundPlayingHandicap,
-  normalizeRoundHandicaps,
   getPlayingHandicap,
   recomputeRoundPlayingHandicaps,
-  calcExtraShots,
   calcStablefordPoints,
-  matchPlayHolePts,
-  matchPlayRoundTally,
-  sindicatoHolePoints,
-  sindicatoRoundTally,
-  tournamentSindicatoLeaderboard,
   tournamentSindicatoClinched,
-  tournamentMatchPlayStandings,
-  pickupStrokes,
   randomPairs,
   isRoundPlayed,
 } from './scoring';
@@ -415,8 +403,6 @@ export async function pushRemote(tournament) {
 const SYNC_STATES = ['idle', 'syncing', 'pending', 'error'];
 let _syncStatus = 'idle';
 const _syncSubs = new Set();
-
-export function getSyncStatus() { return _syncStatus; }
 
 export function subscribeSyncStatus(fn) {
   _syncSubs.add(fn);
@@ -1404,21 +1390,6 @@ async function _ensureConflictLoaded() {
 function _emitConflicts() {
   const snapshot = { log: _conflictLog.slice(), unread: _conflictUnread, lastSyncAt: _lastSyncAt };
   _conflictSubs.forEach((fn) => { try { fn(snapshot); } catch (_) {} });
-}
-
-export async function getConflicts() {
-  await _ensureConflictLoaded();
-  return _conflictLog.slice();
-}
-
-export async function getConflictUnreadCount() {
-  await _ensureConflictLoaded();
-  return _conflictUnread;
-}
-
-export async function getLastSyncAt() {
-  await _ensureConflictLoaded();
-  return _lastSyncAt;
 }
 
 export function subscribeConflicts(fn) {

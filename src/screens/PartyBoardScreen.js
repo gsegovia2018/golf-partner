@@ -237,7 +237,7 @@ export default function PartyBoardScreen({ route, navigation }) {
       if (!mountedRef.current) return;
       if (Platform.OS === 'web') window.alert('Parties saved');
       else Alert.alert('Saved', 'Parties saved.');
-    } catch (e) {
+    } catch {
       if (!mountedRef.current) return;
       // persist() is non-atomic, but a plain retry of Save is self-healing
       // because saveParties does a full delete + re-insert.
@@ -271,7 +271,7 @@ export default function PartyBoardScreen({ route, navigation }) {
       await startRound(roundId);
       if (!mountedRef.current) return;
       navigation.navigate('OfficialAdmin', { tournamentId });
-    } catch (e) {
+    } catch {
       if (!mountedRef.current) return;
       // persist() is non-atomic, but a plain retry of Save is self-healing
       // because saveParties does a full delete + re-insert.

@@ -25,7 +25,7 @@ export default function PullToRefresh({
   const pulling = useRef(false);
   const currentDistance = useRef(0);
   const pullAnim = useRef(new Animated.Value(0)).current;
-  const [armed, setArmed] = useState(false);
+  const [, setArmed] = useState(false);
   const refreshingRef = useRef(refreshing);
 
   useEffect(() => { refreshingRef.current = refreshing; }, [refreshing]);

@@ -88,8 +88,6 @@ export default function OfficialCreateScreen({ navigation }) {
   // so the screen stays mounted and `step` survives. On regaining focus we
   // consume whatever the picker stashed in the selection bridge.
   useFocusEffect(useCallback(() => {
-    let cancelled = false;
-
     const pc = consumePendingCourses();
     if (pc && pc.picks && pc.picks.length > 0) {
       const { startRoundIndex, picks } = pc;
@@ -105,8 +103,6 @@ export default function OfficialCreateScreen({ navigation }) {
         return next;
       });
     }
-
-    return () => { cancelled = true; };
   }, []));
 
   // ---- Roster -------------------------------------------------------------
@@ -172,7 +168,7 @@ export default function OfficialCreateScreen({ navigation }) {
         });
       }
       navigation.navigate('OfficialSetup', { tournamentId });
-    } catch (e) {
+    } catch {
       if (tournamentId) {
         // The tournament row exists but roster/rounds setup did not fully
         // finish. Send the admin to the management screen to complete it —

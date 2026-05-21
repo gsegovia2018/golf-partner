@@ -102,7 +102,3 @@ export async function deleteMedia(media) {
   if (error) throw error;
   _emitChange();
 }
-
-export function notifyMediaChange() {
-  _emitChange();
-}

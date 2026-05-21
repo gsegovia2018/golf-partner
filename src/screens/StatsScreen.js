@@ -1,9 +1,7 @@
 import React, { useEffect, useState, useMemo, useRef } from 'react';
-import { View, Text, TouchableOpacity, StyleSheet, ScrollView, FlatList, Switch, Platform } from 'react-native';
+import { View, Text, TouchableOpacity, StyleSheet, ScrollView, Switch } from 'react-native';
 import ScreenContainer from '../components/ScreenContainer';
 import { Feather } from '@expo/vector-icons';
-import { captureRef } from 'react-native-view-shot';
-import * as Sharing from 'expo-sharing';
 import { useTheme } from '../theme/ThemeContext';
 import { useAuth } from '../context/AuthContext';
 import { loadTournament, getPlayingHandicap, calcStablefordPoints, playerPartnerSplits } from '../store/tournamentStore';
@@ -297,7 +295,6 @@ function OverviewTab({ tournament, metric, hasMulti, usesTeams, roundScope, scro
   const siAccuracy = strokeIndexAccuracy(tournament);
   const isStrokes = metric === 'strokes';
   const modeLabel = isStrokes ? 'strokes (gross)' : 'points (net Stableford)';
-  const fmtValue = (v, unit) => `${v} ${unit}`;
   const [sheet, setSheet] = useState(null);
   const anchors = useRef({});
 
@@ -626,7 +623,6 @@ function OverviewTab({ tournament, metric, hasMulti, usesTeams, roundScope, scro
           <Text style={s.scopeText}>Avg pts/hole per course · tap a player</Text>
           {dna.map(row => {
             if (row.courses.length === 0) return null;
-            const top = row.courses[0];
             return (
               <TouchableOpacity
                 key={row.player.id}
@@ -778,34 +774,6 @@ function MomentumChart({ momentum, onRowPress, theme, s }) {
           <Text key={r.roundIndex} style={s.momentumLegendLabel}>R{r.roundIndex + 1}</Text>
         ))}
       </View>
-    </View>
-  );
-}
-
-function RoundSelector({ tournament, selected, onSelect, theme, s }) {
-  return (
-    <View style={s.roundSelector}>
-      <TouchableOpacity
-        style={[s.roundChip, selected === null && s.roundChipActive]}
-        onPress={() => onSelect(null)}
-        activeOpacity={0.7}
-      >
-        <Text style={[s.roundChipText, selected === null && s.roundChipTextActive]}>Total</Text>
-      </TouchableOpacity>
-      {tournament.rounds.map((r, i) => {
-        const hasData = r.scores && Object.keys(r.scores).length > 0;
-        return (
-          <TouchableOpacity
-            key={i}
-            style={[s.roundChip, selected === i && s.roundChipActive, !hasData && s.roundChipDisabled]}
-            onPress={() => hasData && onSelect(i)}
-            disabled={!hasData}
-            activeOpacity={0.7}
-          >
-            <Text style={[s.roundChipText, selected === i && s.roundChipTextActive, !hasData && s.roundChipTextDisabled]}>R{i + 1}</Text>
-          </TouchableOpacity>
-        );
-      })}
     </View>
   );
 }
@@ -2192,29 +2160,6 @@ function PairsTab({ tournament, players, h2hP1, setH2hP1, h2hP2, setH2hP2, selec
         explainer={sheet?.explainer}
         rows={sheet?.rows || []}
       />
-    </View>
-  );
-}
-
-// Round selector that requires a round (no "Total" option) — used by the
-// pair-difference chart, since the cumulative view is inherently per-round.
-function PairRoundSelector({ tournament, selected, onSelect, theme, s }) {
-  return (
-    <View style={s.roundSelector}>
-      {tournament.rounds.map((r, i) => {
-        const hasData = r.scores && Object.keys(r.scores).length > 0 && r.pairs && r.pairs.length >= 2;
-        return (
-          <TouchableOpacity
-            key={i}
-            style={[s.roundChip, selected === i && s.roundChipActive, !hasData && s.roundChipDisabled]}
-            onPress={() => hasData && onSelect(i)}
-            disabled={!hasData}
-            activeOpacity={0.7}
-          >
-            <Text style={[s.roundChipText, selected === i && s.roundChipTextActive, !hasData && s.roundChipTextDisabled]}>R{i + 1}</Text>
-          </TouchableOpacity>
-        );
-      })}
     </View>
   );
 }
