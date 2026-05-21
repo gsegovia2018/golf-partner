@@ -25,16 +25,17 @@ export const DRIVE_META = {
   super: { label: 'Super', icon: 'star' },
 };
 
+// Labels omit the unit; the section's "metres" hint already states it.
 export const FIRST_PUTT_BUCKETS = ['0-1', '1-2', '2-3', '3-6', '6+'];
 export const FIRST_PUTT_LABELS = {
-  '0-1': '0-1m', '1-2': '1-2m', '2-3': '2-3m',
-  '3-6': '3-6m', '6+': '6+m',
+  '0-1': '0-1', '1-2': '1-2', '2-3': '2-3',
+  '3-6': '3-6', '6+': '6+',
 };
 
 export const APPROACH_BUCKETS = ['0-50', '50-100', '100-150', '150-200', '200+'];
 export const APPROACH_LABELS = {
-  '0-50': '0-50m', '50-100': '50-100m', '100-150': '100-150m',
-  '150-200': '150-200m', '200+': '200+m',
+  '0-50': '0-50', '50-100': '50-100', '100-150': '100-150',
+  '150-200': '150-200', '200+': '200+',
 };
 
 export const CELEBRATION_TIERS = {

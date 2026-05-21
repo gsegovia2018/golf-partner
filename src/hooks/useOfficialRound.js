@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { getRoundState, submitScore } from '../store/officialStore';
 
 // Poll interval for re-fetching round state while the scorecard is open.
@@ -213,7 +213,13 @@ export function useOfficialRound({ token, roundId }) {
     await submitScore({ token, roundId, hole, subjectRosterId, source, strokes });
   }, [token, roundId]);
 
-  return {
+  // Memoize the return so consumers get a STABLE reference when nothing
+  // changed. ScorecardScreen builds several useCallbacks (editable,
+  // officialWrite, stepScore, setScore) on top of this object; a fresh
+  // object every render recreated all of them on every keystroke, which
+  // defeated the scorecard's HolePage memoization. All deps below are
+  // either useState values or useCallbacks, so this is stable at rest.
+  return useMemo(() => ({
     members,
     scores,
     round,
@@ -226,5 +232,8 @@ export function useOfficialRound({ token, roundId }) {
     setScore,
     refresh,
     editableSource,
-  };
+  }), [
+    members, scores, round, partyId, attestations, hasAttested,
+    myRosterId, loading, error, setScore, refresh, editableSource,
+  ]);
 }

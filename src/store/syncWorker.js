@@ -58,7 +58,8 @@ async function drainLibrary(libraryMuts) {
   }
 }
 
-async function drainTournament(tournamentId, entries) {
+// Exported for unit testing the fetch/merge/save ordering.
+export async function drainTournament(tournamentId, entries) {
   const local = await readLocal(tournamentId);
   if (!local) {
     // Nothing to push — drop the stale entries.
@@ -66,7 +67,14 @@ async function drainTournament(tournamentId, entries) {
     return;
   }
   const remote = await fetchRemote(tournamentId);
-  const { merged, conflicts } = mergeTournaments(local, remote);
+  // Re-read the local blob AFTER the network round-trip. A score or
+  // shot-detail edit the user makes WHILE fetchRemote is in flight is saved
+  // locally but is absent from the `local` snapshot taken before the fetch.
+  // Merging that stale snapshot and writing it back would silently revert
+  // the just-entered value. loadTournament()'s background refresh guards
+  // itself the same way.
+  const latest = await readLocal(tournamentId);
+  const { merged, conflicts } = mergeTournaments(latest ?? local, remote);
 
   await saveLocal(merged);
   await pushRemote(merged);
