@@ -9,6 +9,7 @@ import { useAuth } from '../context/AuthContext';
 import { ShareableLeaderboard, shareLeaderboard } from '../components/ShareableCard';
 import { scoringModeUsesTeams, leaderboardToggleLabels, isScoringModeAllowed, fallbackScoringMode, getScoringMode } from '../components/scoringModes';
 import ScoringModeChangeSheet from '../components/ScoringModeChangeSheet';
+import PlayerRemoveSheet from '../components/PlayerRemoveSheet';
 import PullToRefresh from '../components/PullToRefresh';
 import LoadingSplash from '../components/LoadingSplash';
 import {
@@ -20,7 +21,7 @@ import {
   playerRoundBestWorstPoints,
   tournamentPlayerClinched,
   isRoundComplete, isTournamentFinished, subscribeTournamentChanges,
-  matchPlayRoundTally, addPlayerRoundPatches,
+  matchPlayRoundTally, addPlayerRoundPatches, removePlayerRoundPatches,
   sindicatoRoundTally, tournamentSindicatoLeaderboard,
   tournamentMatchPlayStandings,
   DEFAULT_SETTINGS, generateInviteCode, buildJoinLink,
@@ -113,6 +114,9 @@ export default function HomeScreen({ navigation, route }) {
   const [leaderboardAlt, setLeaderboardAlt] = useState(false);
   const [modePrompt, setModePrompt] = useState(null);
   // modePrompt: { picked, newCount, defaultMode, prevMode } when prompting, null otherwise
+  const [removeSheetOpen, setRemoveSheetOpen] = useState(false);
+  const [removeModePrompt, setRemoveModePrompt] = useState(null);
+  // removeModePrompt: { playerId, newCount, defaultMode, prevMode } when prompting, null otherwise
   const [refreshing, setRefreshing] = useState(false);
   const [showInvite, setShowInvite] = useState(false);
   const [inviteCodes, setInviteCodes] = useState({ editor: '', viewer: '' });
@@ -253,6 +257,42 @@ export default function HomeScreen({ navigation, route }) {
       prevMode: currentMode,
     });
   }, [commitAdds]);
+
+  const commitRemove = useCallback(async (playerId, chosenMode) => {
+    let t = await loadTournament();
+    if (!t) return;
+    const { patches: roundPatches, nextScoringMode } =
+      removePlayerRoundPatches(t, playerId, { mode: chosenMode });
+    const modeChanged = nextScoringMode !== (t.settings?.scoringMode ?? 'stableford');
+    t = await mutate(t, {
+      type: 'tournament.removePlayer',
+      playerId,
+      roundPatches,
+      ...(modeChanged ? { nextScoringMode } : {}),
+    });
+    setTournament(t);
+  }, []);
+
+  const applyRemovePlayer = useCallback(async (playerId) => {
+    const t = await loadTournament();
+    if (!t) return;
+    const newCount = (t.players ?? []).length - 1;
+    if (newCount < 2) {
+      Alert.alert('Cannot remove', 'A game needs at least 2 players.');
+      return;
+    }
+    const currentMode = t.settings?.scoringMode ?? 'stableford';
+    if (isScoringModeAllowed(currentMode, newCount)) {
+      await commitRemove(playerId, undefined);
+      return;
+    }
+    setRemoveModePrompt({
+      playerId,
+      newCount,
+      defaultMode: fallbackScoringMode(newCount),
+      prevMode: currentMode,
+    });
+  }, [commitRemove]);
 
   useEffect(() => {
     const unsub = navigation.addListener('focus', () => {
@@ -1657,6 +1697,21 @@ export default function HomeScreen({ navigation, route }) {
             </TouchableOpacity>
           )}
 
+          {!isViewer && tournament.players.length > 2 && (
+            <TouchableOpacity
+              style={s.menuItem}
+              onPress={() => {
+                setShowSettings(false);
+                setRemoveSheetOpen(true);
+              }}
+              activeOpacity={0.7}
+            >
+              <Feather name="user-x" size={18} color={theme.accent.primary} />
+              <Text style={s.menuItemText}>Remove Player</Text>
+              <Feather name="chevron-right" size={16} color={theme.text.muted} />
+            </TouchableOpacity>
+          )}
+
           <TouchableOpacity
             style={s.menuItem}
             onPress={() => { setShowSettings(false); navigation.navigate('Stats'); }}
@@ -1760,6 +1815,33 @@ export default function HomeScreen({ navigation, route }) {
         await commitAdds(picked, chosenMode);
       }}
       onCancel={() => setModePrompt(null)}
+    />
+
+    <PlayerRemoveSheet
+      visible={removeSheetOpen}
+      players={(tournament?.players ?? []).filter((p) => p.id !== tournament?.meId)}
+      onSelect={(playerId) => {
+        setRemoveSheetOpen(false);
+        applyRemovePlayer(playerId);
+      }}
+      onCancel={() => setRemoveSheetOpen(false)}
+    />
+    <ScoringModeChangeSheet
+      visible={!!removeModePrompt}
+      playerCount={removeModePrompt?.newCount ?? 0}
+      defaultMode={removeModePrompt?.defaultMode}
+      title="Pick a new scoring mode"
+      subtitle={
+        removeModePrompt
+          ? `Removing this player makes ${getScoringMode(removeModePrompt.prevMode).label} invalid (${getScoringMode(removeModePrompt.prevMode).requirement.toLowerCase()}). Pick a mode for ${removeModePrompt.newCount} players.`
+          : undefined
+      }
+      onConfirm={async (chosenMode) => {
+        const playerId = removeModePrompt.playerId;
+        setRemoveModePrompt(null);
+        await commitRemove(playerId, chosenMode);
+      }}
+      onCancel={() => setRemoveModePrompt(null)}
     />
 
     </ScreenContainer>
