@@ -225,6 +225,28 @@ export async function getCachedFavoriteCourseIds() {
   }
 }
 
+// Loads the course library for the picker. Online, each underlying fetch also
+// refreshes its cache. If the course fetch fails (offline), the whole library
+// is served from the last-known cache and usingCachedData is true so the
+// caller can disable course creation. Never throws.
+export async function loadCourseLibrary() {
+  try {
+    const courses = await fetchCourses();
+    const [clubs, favorites] = await Promise.all([
+      fetchClubs().catch(() => getCachedClubs()),
+      fetchFavoriteCourseIds().catch(() => getCachedFavoriteCourseIds()),
+    ]);
+    return { courses, clubs, favorites, usingCachedData: false };
+  } catch {
+    const [courses, clubs, favorites] = await Promise.all([
+      getCachedCourses(),
+      getCachedClubs(),
+      getCachedFavoriteCourseIds(),
+    ]);
+    return { courses, clubs, favorites, usingCachedData: true };
+  }
+}
+
 export async function toggleFavoriteCourse(courseId) {
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) return { favorite: false };

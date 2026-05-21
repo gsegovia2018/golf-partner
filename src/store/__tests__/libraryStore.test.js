@@ -3,6 +3,7 @@ import {
   fetchCourses, getCachedCourses, COURSES_CACHE_KEY,
   fetchClubs, getCachedClubs, CLUBS_CACHE_KEY,
   fetchFavoriteCourseIds, getCachedFavoriteCourseIds, FAVORITE_COURSES_CACHE_KEY,
+  loadCourseLibrary,
 } from '../libraryStore';
 import { listFriends, getCachedFriends } from '../friendStore';
 import AsyncStorage from '@react-native-async-storage/async-storage';
@@ -13,6 +14,7 @@ const mockState = {
   user: { id: 'u1' },
   rows: [],
   calls: {},
+  orderError: null,
 };
 
 jest.mock('../../lib/supabase', () => {
@@ -37,7 +39,7 @@ jest.mock('../../lib/supabase', () => {
       mockState.calls.is.push([col, val]);
       return client;
     },
-    order() { return Promise.resolve({ data: mockState.rows, error: null }); },
+    order() { return Promise.resolve({ data: mockState.rows, error: mockState.orderError ?? null }); },
     // delete() returns a separate chain so its eq() resolves to { error: null }
     // without affecting the existing client.eq() used by select/filter chains.
     delete() { return deleteChain; },
@@ -251,5 +253,42 @@ describe('favorite courses offline cache', () => {
   test('getCachedFavoriteCourseIds returns an empty Set when the cached value is corrupt', async () => {
     await AsyncStorage.setItem(FAVORITE_COURSES_CACHE_KEY, 'nope');
     expect(await getCachedFavoriteCourseIds()).toEqual(new Set());
+  });
+});
+
+describe('loadCourseLibrary', () => {
+  beforeEach(async () => {
+    await AsyncStorage.clear();
+    mockState.user = { id: 'u1' };
+    mockState.rows = [];
+    mockState.calls = {};
+    mockState.orderError = null;
+  });
+
+  test('online: returns fetched courses with usingCachedData false', async () => {
+    mockState.rows = [
+      { id: 'c1', name: 'Pine', slope: null, rating: null, course_holes: [], course_tees: [] },
+    ];
+    const result = await loadCourseLibrary();
+    expect(result.usingCachedData).toBe(false);
+    expect(result.courses.map((c) => c.name)).toEqual(['Pine']);
+  });
+
+  test('offline: falls back to the cached library with usingCachedData true', async () => {
+    mockState.rows = [
+      { id: 'c1', name: 'Pine', slope: null, rating: null, course_holes: [], course_tees: [] },
+    ];
+    await fetchCourses();                          // online — seeds the cache
+    mockState.orderError = { message: 'offline' }; // now fetchCourses rejects
+    const result = await loadCourseLibrary();
+    expect(result.usingCachedData).toBe(true);
+    expect(result.courses.map((c) => c.name)).toEqual(['Pine']);
+  });
+
+  test('offline with an empty cache: returns no courses, usingCachedData true', async () => {
+    mockState.orderError = { message: 'offline' };
+    const result = await loadCourseLibrary();
+    expect(result.usingCachedData).toBe(true);
+    expect(result.courses).toEqual([]);
   });
 });
