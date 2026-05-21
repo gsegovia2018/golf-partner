@@ -114,6 +114,36 @@ function usePrevious(value) {
   return ref.current;
 }
 
+// Reconcile a reloaded scores blob with the local optimistic state. Clean
+// cells take the blob value; a cell marked dirty keeps its local value until
+// the blob agrees with it (its save has round-tripped). `dirtyKeys` holds
+// `${playerId}:${holeNumber}` strings.
+export function mergeScores(blobScores, localScores, dirtyKeys) {
+  const out = {};
+  const playerIds = new Set([
+    ...Object.keys(blobScores ?? {}),
+    ...Object.keys(localScores ?? {}),
+  ]);
+  for (const pid of playerIds) {
+    const blobByHole = blobScores?.[pid] ?? {};
+    const localByHole = localScores?.[pid] ?? {};
+    const holes = new Set([...Object.keys(blobByHole), ...Object.keys(localByHole)]);
+    const merged = {};
+    for (const h of holes) {
+      const key = `${pid}:${h}`;
+      const blobVal = blobByHole[h];
+      const localVal = localByHole[h];
+      if (dirtyKeys.has(key) && blobVal !== localVal) {
+        merged[h] = localVal;          // stale reload — protect the local edit
+      } else {
+        merged[h] = blobVal;           // clean cell, or save has round-tripped
+      }
+    }
+    out[pid] = merged;
+  }
+  return out;
+}
+
 export default function ScorecardScreen({ navigation, route }) {
   const { theme } = useTheme();
   const s = useMemo(() => makeStyles(theme), [theme]);
@@ -227,7 +257,19 @@ export default function ScorecardScreen({ navigation, route }) {
     const roundScores = round?.scores ?? {};
     setTournament(t);
     if (!preserveLocalEdits) {
-      setScores(roundScores);
+      // Merge rather than clobber: a stale reload (one that began around a tap
+      // and resolved later) must not overwrite a newer local edit. mergeScores
+      // keeps any dirty cell whose save has not yet round-tripped.
+      setScores((prev) => {
+        const merged = mergeScores(roundScores, prev, dirtyCellsRef.current);
+        // Drop cells the blob has now caught up on.
+        for (const key of [...dirtyCellsRef.current]) {
+          const [pid, h] = key.split(':');
+          if (roundScores?.[pid]?.[h] === merged[pid]?.[h]) dirtyCellsRef.current.delete(key);
+        }
+        scoresRef.current = merged;
+        return merged;
+      });
       setShotDetails(round?.shotDetails ?? {});
       // Normalize notes to the { round, hole } object shape. Legacy data may
       // have stored a bare string — treat that as the round-level note.
@@ -360,6 +402,10 @@ export default function ScorecardScreen({ navigation, route }) {
   // without being re-created on every keystroke.
   const scoresRef = useRef(scores);
   useEffect(() => { scoresRef.current = scores; }, [scores]);
+  // `${playerId}:${holeNumber}` keys for cells edited locally whose save has
+  // not yet round-tripped through the blob. A reload merges against these so a
+  // stale blob can't clobber a newer local tap (see mergeScores).
+  const dirtyCellsRef = useRef(new Set());
   const notesRef = useRef(notes);
   useEffect(() => { notesRef.current = notes; }, [notes]);
 
@@ -709,19 +755,24 @@ export default function ScorecardScreen({ navigation, route }) {
   const setScore = useCallback((playerId, holeNumber, value) => {
     const parsed = value === '' ? undefined : parseInt(value, 10) || undefined;
     const holePar = round?.holes?.find((h) => h.number === holeNumber)?.par ?? 4;
-    setScores((prev) => {
-      const current = prev[playerId]?.[holeNumber];
-      const next = { ...prev, [playerId]: { ...prev[playerId], [holeNumber]: parsed } };
-      // Official mode routes the write through the RPC layer; casual mode
-      // diffs and persists through the tournament-blob `mutate` chain.
-      if (official) officialWrite(playerId, holeNumber, parsed);
-      else autoSave(next);
-      if (parsed != null && parsed !== current) {
-        const label = celebrationFor(holePar, parsed);
-        if (label) triggerCelebration(playerId, holeNumber, label);
-      }
-      return next;
-    });
+    const cur = scoresRef.current;
+    const current = cur[playerId]?.[holeNumber];
+    const next = {
+      ...cur,
+      [playerId]: { ...cur[playerId], [holeNumber]: parsed },
+    };
+    scoresRef.current = next;                                  // sync source of truth
+    dirtyCellsRef.current.add(`${playerId}:${holeNumber}`);
+    setScores(next);                                           // pre-computed value
+
+    // Official mode routes the write through the RPC layer; casual mode
+    // diffs and persists through the tournament-blob `mutate` chain.
+    if (official) officialWrite(playerId, holeNumber, parsed);
+    else autoSave(next);
+    if (parsed != null && parsed !== current) {
+      const label = celebrationFor(holePar, parsed);
+      if (label) triggerCelebration(playerId, holeNumber, label);
+    }
   }, [round, autoSave, triggerCelebration, official, officialWrite]);
 
   const stepScore = useCallback((playerId, holeNumber, delta) => {
@@ -731,25 +782,27 @@ export default function ScorecardScreen({ navigation, route }) {
     Animated.spring(anim, { toValue: 1, friction: 5, useNativeDriver: true }).start();
 
     const holePar = round?.holes?.find((h) => h.number === holeNumber)?.par ?? 4;
-    setScores((prev) => {
-      const current = prev[playerId]?.[holeNumber];
-      // First interaction on an un-scored hole: + lands on par, - lands on birdie.
-      // After that, +/- step by one as usual. Minimum is 1 stroke.
-      let newStrokes;
-      if (current == null) {
-        newStrokes = delta > 0 ? holePar : Math.max(1, holePar - 1);
-      } else {
-        newStrokes = Math.max(1, current + delta);
-      }
-      const next = { ...prev, [playerId]: { ...prev[playerId], [holeNumber]: newStrokes } };
-      if (official) officialWrite(playerId, holeNumber, newStrokes);
-      else autoSave(next);
-      if (newStrokes !== current) {
-        const label = celebrationFor(holePar, newStrokes);
-        if (label) triggerCelebration(playerId, holeNumber, label);
-      }
-      return next;
-    });
+    const cur = scoresRef.current;
+    const current = cur[playerId]?.[holeNumber];
+    // First interaction on an un-scored hole: + lands on par, - lands on birdie.
+    // After that, +/- step by one as usual. Minimum is 1 stroke.
+    const newStrokes = current == null
+      ? (delta > 0 ? holePar : Math.max(1, holePar - 1))
+      : Math.max(1, current + delta);
+    const next = {
+      ...cur,
+      [playerId]: { ...cur[playerId], [holeNumber]: newStrokes },
+    };
+    scoresRef.current = next;                                  // sync source of truth
+    dirtyCellsRef.current.add(`${playerId}:${holeNumber}`);
+    setScores(next);                                           // pre-computed value
+
+    if (official) officialWrite(playerId, holeNumber, newStrokes);
+    else autoSave(next);
+    if (newStrokes !== current) {
+      const label = celebrationFor(holePar, newStrokes);
+      if (label) triggerCelebration(playerId, holeNumber, label);
+    }
   }, [round, autoSave, triggerCelebration, getScoreAnim, official, officialWrite]);
 
   // Totals computed once per (round, players, scores) change. The per-hole
