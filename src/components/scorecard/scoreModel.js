@@ -14,6 +14,7 @@ export function holePoints({ mode, hole, players, scores, handicaps }) {
     const str = scores?.[p.id]?.[hole.number];
     if (str == null) { result[p.id] = null; continue; }
     if (mode === 'matchplay') {
+      // matchPlayHolePts returns null when either player (not just p) has not scored yet.
       result[p.id] = matchPlayHolePts(hole, p.id, players, scores, handicaps);
     } else if (mode === 'sindicato') {
       result[p.id] = sindicatoHolePoints(hole, players, scores, handicaps)?.[p.id] ?? null;

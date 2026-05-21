@@ -10,6 +10,13 @@ const players = [
 ];
 const handicaps = { a: 0, b: 0 };
 
+const sindicatoPlayers = [
+  { id: 'a', name: 'Ana', handicap: 0 },
+  { id: 'b', name: 'Ben', handicap: 0 },
+  { id: 'c', name: 'Cal', handicap: 0 },
+];
+const sindicatoHandicaps = { a: 0, b: 0, c: 0 };
+
 describe('holePoints', () => {
   test('stableford: par = 2 points, birdie = 3', () => {
     const scores = { a: { 1: 4 }, b: { 1: 3 } };
@@ -34,6 +41,37 @@ describe('holePoints', () => {
     const scores = { a: { 1: 3 }, b: { 1: 5 } };
     const pts = holePoints({ mode: 'matchplay', hole: holes[0], players, scores, handicaps });
     expect(pts).toEqual({ a: 1, b: 0 });
+  });
+
+  describe('sindicato', () => {
+    test('three distinct net scores → 4/2/0 split (lowest gets 4, middle 2, highest 0)', () => {
+      // All handicap 0, strokeIndex 5 → no extra shots, net = gross.
+      // Scores: a=3 (lowest), b=4 (middle), c=5 (highest)
+      const scores = { a: { 1: 3 }, b: { 1: 4 }, c: { 1: 5 } };
+      const pts = holePoints({
+        mode: 'sindicato',
+        hole: holes[0],
+        players: sindicatoPlayers,
+        scores,
+        handicaps: sindicatoHandicaps,
+      });
+      expect(pts).toEqual({ a: 4, b: 2, c: 0 });
+    });
+
+    test('one player has not scored → every player entry is null', () => {
+      // Player c has no score for hole 1; sindicatoHolePoints returns null for the whole hole.
+      const scores = { a: { 1: 3 }, b: { 1: 4 } };
+      const pts = holePoints({
+        mode: 'sindicato',
+        hole: holes[0],
+        players: sindicatoPlayers,
+        scores,
+        handicaps: sindicatoHandicaps,
+      });
+      expect(pts.a).toBeNull();
+      expect(pts.b).toBeNull();
+      expect(pts.c).toBeNull();
+    });
   });
 });
 
