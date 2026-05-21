@@ -378,27 +378,10 @@ const makeStyles = (theme) => StyleSheet.create({
     fontSize: 11, marginTop: 24, marginBottom: 8, flex: 1,
     letterSpacing: 1.8, textTransform: 'uppercase',
   },
-  hint: { fontFamily: 'PlusJakartaSans-Regular', color: theme.text.muted, fontSize: 12, marginBottom: 10 },
   courseNameHint: {
     fontFamily: 'PlusJakartaSans-Regular', color: theme.text.muted,
     fontSize: 11, marginTop: -2, marginBottom: 10,
   },
-  playerCard: {
-    flexDirection: 'row', alignItems: 'center',
-    backgroundColor: theme.bg.card, borderRadius: 16, borderWidth: 1,
-    borderColor: theme.isDark ? theme.glass?.border : theme.border.default,
-    padding: 14, marginBottom: 8,
-    ...(theme.isDark ? {} : theme.shadow.card),
-  },
-  playerName: { flex: 1, fontFamily: 'PlusJakartaSans-SemiBold', color: theme.text.primary, fontSize: 16 },
-  hcpInput: {
-    backgroundColor: theme.isDark ? theme.bg.secondary : theme.bg.card,
-    color: theme.text.primary, borderRadius: 10, borderWidth: 1,
-    borderColor: theme.border.default,
-    width: 54, textAlign: 'center', fontSize: 16,
-    fontFamily: 'PlusJakartaSans-Bold', padding: 7,
-  },
-  hcpLabel: { fontFamily: 'PlusJakartaSans-Regular', color: theme.text.secondary, marginLeft: 6, fontSize: 13, width: 44 },
   roundHeader: {
     flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
     marginTop: 24, marginBottom: 8,

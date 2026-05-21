@@ -63,7 +63,6 @@ export default function PlayersScreen({ navigation, route }) {
   const [removeModePrompt, setRemoveModePrompt] = useState(null);
   const tournamentRef = useRef(null);
   const saveTimeoutRef = useRef(null);
-  const isFirstRender = useRef(true);
   const skipNextSaveRef = useRef(false);
 
   const load = useCallback(async () => {
@@ -74,6 +73,7 @@ export default function PlayersScreen({ navigation, route }) {
         loadTournament(),
         tournamentId ? loadTournamentMembers(tournamentId) : Promise.resolve([]),
       ]);
+      skipNextSaveRef.current = true;
       setTournament(t);
       setMembers(mem);
       setEditPlayers(t.players.map((p) => ({ ...p, handicap: String(p.handicap) })));
@@ -210,7 +210,6 @@ export default function PlayersScreen({ navigation, route }) {
   }, [tournamentId]);
 
   useEffect(() => {
-    if (isFirstRender.current) { isFirstRender.current = false; return; }
     if (skipNextSaveRef.current) { skipNextSaveRef.current = false; return; }
     if (!tournamentRef.current) return;
     if (saveTimeoutRef.current) clearTimeout(saveTimeoutRef.current);
