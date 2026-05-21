@@ -46,8 +46,10 @@ import {
   DEFAULT_SHOT,
   CELEBRATION_TIERS, celebrationFor,
 } from '../components/scorecard/constants';
-import { ShotDetailPanel } from '../components/scorecard/ShotDetailPanel';
 import { RoundSummary } from '../components/scorecard/RoundSummary';
+import { PlayerCard } from '../components/scorecard/PlayerCard';
+import { holePoints, roundTotals } from '../components/scorecard/scoreModel';
+import { teamsByPlayer } from '../components/scorecard/teamModel';
 import { makeScorecardStyles } from '../components/scorecard/styles';
 
 // Web-only CSS scroll-snap. On native, `pagingEnabled` is handled by the
@@ -1405,19 +1407,21 @@ const HolePage = React.memo(function HolePage({
   shotDetails, meId, onSetShot,
   theme, s,
   onStep, onSetScore, editable, getScoreAnim,
-  showRunning, playerTotals,
+  showRunning,
   mode,
   official, officialDiscrepancy, onOpenDiscrepancy,
+  shotCollapsed, onToggleShotDetail,
 }) {
-  const pairs = round.pairs ?? [];
-  const isSolo = players.length === 1;
-  // Hero card layout (big +/-, centered strokes) for solo, 2-4 player
-  // Stableford, and Match Play. Keep the compact pair UI only for classic
-  // 4-player Best Ball where pair colors carry meaning.
-  const useHeroCards = mode !== 'bestball';
-  const orderedPlayers = !useHeroCards && pairs.length === 2
-    ? pairsMeFirst(pairs, meId).map((pp) => players.find((p) => p.id === pp.id)).filter(Boolean)
-    : playersMeFirst(players, meId);
+  // Every game mode now renders the unified PlayerCard. Players are ordered
+  // "me first" so the signed-in player's card (with shot detail) is on top.
+  const orderedPlayers = playersMeFirst(players, meId);
+
+  // Per-hole points and round totals are computed once per render and then
+  // looked up per player — PlayerCard is pure presentation.
+  const handicaps = round.playerHandicaps ?? {};
+  const holePts = holePoints({ mode, hole: pageHole, players, scores, handicaps });
+  const totalsMap = roundTotals({ mode, round, players, scores, handicaps });
+  const teams = teamsByPlayer(round);
 
   return (
     <View
@@ -1452,28 +1456,10 @@ const HolePage = React.memo(function HolePage({
         contentContainerStyle={s.playerCardsContent}
         keyboardShouldPersistTaps="handled"
       >
-        {orderedPlayers.map((player, idx) => {
-          const pairIndex = pairs.findIndex((pair) => pair.some((pp) => pp.id === player.id));
-          const pairColor = isSolo
-            ? theme.accent.primary
-            : pairIndex === 0 ? theme.pairA : pairIndex === 1 ? theme.pairB : theme.text.muted;
-          const isFirstOfPair = pairs.length === 2 && (idx === 0 || idx === 2);
-          const pairLabelText = pairIndex === 0 ? 'Pair A' : 'Pair B';
-
+        {orderedPlayers.map((player) => {
           const handicap = round.playerHandicaps?.[player.id] ?? player.handicap;
           const strokes = scores[player.id]?.[pageHole.number];
-          const pts = strokes == null ? null
-            : mode === 'matchplay'
-              ? matchPlayHolePts(pageHole, player.id, players, scores, round.playerHandicaps ?? {})
-              : mode === 'sindicato'
-                ? (sindicatoHolePoints(pageHole, players, scores, round.playerHandicaps ?? {})?.[player.id] ?? null)
-                : calcStablefordPoints(pageHole.par, strokes, handicap, pageHole.strokeIndex);
-
-          const ptsColor = pts == null ? theme.text.muted
-            : pts >= 3 ? theme.scoreColor('excellent')
-            : pts >= 2 ? theme.scoreColor('good')
-            : pts === 1 ? theme.scoreColor('neutral')
-            : theme.scoreColor('poor');
+          const points = holePts[player.id] ?? null;
 
           const extraShots = handicap >= pageHole.strokeIndex ? (Math.floor(handicap / 18) + (handicap % 18 >= pageHole.strokeIndex ? 1 : 0)) : 0;
 
@@ -1483,10 +1469,11 @@ const HolePage = React.memo(function HolePage({
           // (or one that returns true). In official mode a read-only card
           // renders the score without +/- steppers or the pickup toggle.
           const canEdit = editable ? editable(player.id) : true;
+          const isMe = player.id === meId;
 
           // Official mode: classify this player's hole from the raw two-row
-          // score data so the hero card can show an agreed / waiting /
-          // discrepancy badge. Casual mode leaves officialState null.
+          // score data so the card can show an agreed / waiting / discrepancy
+          // badge. Casual mode leaves officialState null.
           let officialState = null;     // 'empty' | 'waiting' | 'agreed' | 'discrepancy'
           let canResolveHere = false;   // viewer owns an entry → can open sheet
           if (official && officialDiscrepancy) {
@@ -1497,245 +1484,35 @@ const HolePage = React.memo(function HolePage({
             canResolveHere = canEdit;
           }
 
-          if (useHeroCards) {
-            const totals = playerTotals(player);
-            const vsPar = totals.parPlayed > 0 ? totals.str - totals.parPlayed : 0;
-            const vsParLabel = totals.parPlayed === 0 ? '—'
-              : vsPar === 0 ? 'E'
-              : vsPar > 0 ? `+${vsPar}` : String(vsPar);
-            const vsParColor = totals.parPlayed === 0 ? theme.text.muted
-              : vsPar <= -1 ? theme.scoreColor('excellent')
-              : vsPar === 0 ? theme.scoreColor('good')
-              : vsPar <= 2 ? theme.scoreColor('neutral')
-              : theme.scoreColor('poor');
-
-            // A discrepancy card the viewer can act on opens the resolve
-            // sheet on tap. Other states (or read-only viewers) keep the
-            // card non-interactive — the badge alone communicates state.
-            const heroTappable = officialState === 'discrepancy' && canResolveHere;
-            const HeroCard = heroTappable ? Pressable : View;
-            const heroCardProps = heroTappable
-              ? {
-                onPress: () => onOpenDiscrepancy?.(player.id, pageHole.number),
-                accessibilityLabel: `Resolve ${player.name}'s score on hole ${pageHole.number}`,
-              }
-              : {};
-
-            return (
-              <React.Fragment key={player.id}>
-              <HeroCard style={s.soloHeroCard} {...heroCardProps}>
-                <View style={s.soloHeroHeader}>
-                  <View style={s.soloHeroNameWrap}>
-                    <View style={s.soloHeroNameRow}>
-                      <Text style={s.soloHeroName}>{player.name}</Text>
-                      {round.playerTees?.[player.id]?.label ? (
-                        <Text style={s.teeBadge}>{round.playerTees[player.id].label}</Text>
-                      ) : null}
-                      {/* Official discrepancy badge: green check (agreed),
-                          grey clock (waiting), red dot (discrepancy). No
-                          badge for 'empty' or in casual mode. */}
-                      {officialState === 'agreed' && (
-                        <Feather name="check-circle" size={14} color={theme.scoreColor('good')} />
-                      )}
-                      {officialState === 'waiting' && (
-                        <Feather name="clock" size={14} color={theme.text.muted} />
-                      )}
-                      {officialState === 'discrepancy' && (
-                        <Feather name="alert-circle" size={14} color={theme.destructive} />
-                      )}
-                    </View>
-                    <Text style={s.soloHeroHcp}>
-                      HCP {handicap}{extraShots > 0 ? `  ·  +${extraShots} on this hole` : ''}
-                    </Text>
-                  </View>
-                  {/* Pickup toggle is a write action — hide on read-only cards. */}
-                  {canEdit && (
-                    <TouchableOpacity
-                      style={[s.pickupBtn, isPickup && s.pickupBtnActive]}
-                      onPress={() => onSetScore(player.id, pageHole.number, isPickup ? pageHole.par : pickup)}
-                      activeOpacity={0.7}
-                      accessibilityLabel={isPickup ? `Picked up at ${pickup} strokes — tap to clear` : `Pickup at ${pickup} strokes`}
-                    >
-                      <Feather
-                        name="arrow-up-circle"
-                        size={16}
-                        color={isPickup ? theme.text.inverse : theme.text.muted}
-                      />
-                    </TouchableOpacity>
-                  )}
-                </View>
-
-                <View style={s.soloScoreRow}>
-                  {/* Steppers only on cards this device may write. A
-                      read-only card (official mode: not self / not markee)
-                      shows the score with no +/- and no long-press-to-clear. */}
-                  {canEdit && (
-                    <TouchableOpacity
-                      style={s.soloStepBtn}
-                      onPress={() => onStep(player.id, pageHole.number, -1)}
-                      accessibilityLabel={`Decrease strokes on hole ${pageHole.number}`}
-                    >
-                      <Feather name="minus" size={24} color={theme.text.primary} />
-                    </TouchableOpacity>
-                  )}
-                  <Pressable
-                    onLongPress={() => {
-                      if (canEdit && strokes != null) {
-                        haptic('medium');
-                        onSetScore(player.id, pageHole.number, '');
-                      }
-                    }}
-                    delayLongPress={350}
-                    accessibilityLabel={`Strokes on hole ${pageHole.number}${canEdit && strokes != null ? ' — long-press to clear' : ''}`}
-                  >
-                    <Animated.View style={[s.soloScoreDisplay, { transform: [{ scale: getScoreAnim(player.id) }] }]}>
-                      <Text style={[s.soloScoreNum, strokes == null && s.scoreDisplayNumEmpty]}>
-                        {strokes ?? '—'}
-                      </Text>
-                      <Text style={s.soloScoreLabel}>
-                        {strokes == null ? 'STROKES' : canEdit ? 'HOLD TO CLEAR' : 'STROKES'}
-                      </Text>
-                    </Animated.View>
-                  </Pressable>
-                  {canEdit && (
-                    <TouchableOpacity
-                      style={s.soloStepBtn}
-                      onPress={() => onStep(player.id, pageHole.number, 1)}
-                      accessibilityLabel={`Increase strokes on hole ${pageHole.number}`}
-                    >
-                      <Feather name="plus" size={24} color={theme.text.primary} />
-                    </TouchableOpacity>
-                  )}
-                </View>
-
-                {pts !== null && (
-                  <View style={[s.soloPtsBadge, { borderColor: ptsColor }]}>
-                    <Text style={[s.soloPtsText, { color: ptsColor }]}>
-                      {pts} {pts === 1 ? 'point' : 'points'}
-                    </Text>
-                  </View>
-                )}
-
-                {showRunning && (
-                  <View style={s.soloStatsRow}>
-                    <View style={s.soloStatItem}>
-                      <Text style={s.soloStatLabel}>STROKES</Text>
-                      <Text style={s.soloStatValue}>{totals.str || '—'}</Text>
-                    </View>
-                    <View style={s.soloStatDivider} />
-                    <View style={s.soloStatItem}>
-                      <Text style={s.soloStatLabel}>POINTS</Text>
-                      <Text style={[s.soloStatValue, { color: theme.accent.primary }]}>{totals.pts}</Text>
-                    </View>
-                    <View style={s.soloStatDivider} />
-                    <View style={s.soloStatItem}>
-                      <Text style={s.soloStatLabel}>vs PAR</Text>
-                      <Text style={[s.soloStatValue, { color: vsParColor }]}>{vsParLabel}</Text>
-                    </View>
-                  </View>
-                )}
-                {player.id === meId && (
-                  <ShotDetailPanel
-                    hole={pageHole}
-                    detail={shotDetails[meId]?.[pageHole.number]}
-                    onChange={(patch) => onSetShot(meId, pageHole.number, patch)}
-                    strokes={scores?.[meId]?.[pageHole.number]}
-                    theme={theme}
-                    s={s}
-                  />
-                )}
-              </HeroCard>
-              </React.Fragment>
-            );
-          }
-
           return (
-            <React.Fragment key={player.id}>
-              {isFirstOfPair && (
-                <Text style={[s.pairLabel, { color: pairColor, marginTop: idx === 0 ? 0 : 16 }]}>{pairLabelText}</Text>
-              )}
-              <View style={[s.playerCard, { borderLeftColor: pairColor, borderLeftWidth: 3 }]}>
-                <View style={s.playerCardRow}>
-                  <View style={s.playerCardLeft}>
-                    <View style={[s.playerAvatar, { backgroundColor: pairColor }]}>
-                      <Text style={s.playerAvatarText}>{player.name[0].toUpperCase()}</Text>
-                    </View>
-                    <View>
-                      <View style={s.playerCardNameRow}>
-                        <Text style={s.playerCardName}>{player.name}</Text>
-                        {round.playerTees?.[player.id]?.label ? (
-                          <Text style={s.teeBadge}>{round.playerTees[player.id].label}</Text>
-                        ) : null}
-                      </View>
-                      <Text style={s.playerCardHcp}>HCP {handicap}{extraShots > 0 ? ` +${extraShots}` : ''}</Text>
-                      {showRunning && (
-                        <Text style={s.playerCardRunning}>
-                          {playerTotals(player).pts} pts
-                        </Text>
-                      )}
-                    </View>
-                  </View>
-                  <View style={s.playerCardRight}>
-                    {/* Steppers / pickup only on cards this device may write. */}
-                    {canEdit && (
-                      <TouchableOpacity style={s.stepBtn} onPress={() => onStep(player.id, pageHole.number, -1)}>
-                        <Feather name="minus" size={18} color={theme.text.primary} />
-                      </TouchableOpacity>
-                    )}
-                    <Pressable
-                      onLongPress={() => {
-                        if (canEdit && strokes != null) {
-                          haptic('medium');
-                          onSetScore(player.id, pageHole.number, '');
-                        }
-                      }}
-                      delayLongPress={350}
-                      accessibilityLabel={`Strokes on hole ${pageHole.number}${canEdit && strokes != null ? ' — long-press to clear' : ''}`}
-                    >
-                      <Animated.View style={[s.scoreDisplay, { transform: [{ scale: getScoreAnim(player.id) }] }]}>
-                        <Text style={[s.scoreDisplayNum, strokes == null && s.scoreDisplayNumEmpty]}>
-                          {strokes ?? '—'}
-                        </Text>
-                        {pts !== null && (
-                          <Text style={[s.scoreDisplayPts, { color: ptsColor }]}>
-                            {pts} {pts === 1 ? 'pt' : 'pts'}
-                          </Text>
-                        )}
-                      </Animated.View>
-                    </Pressable>
-                    {canEdit && (
-                      <TouchableOpacity style={s.stepBtn} onPress={() => onStep(player.id, pageHole.number, 1)}>
-                        <Feather name="plus" size={18} color={theme.text.primary} />
-                      </TouchableOpacity>
-                    )}
-                    {canEdit && (
-                      <TouchableOpacity
-                        style={[s.pickupBtn, isPickup && s.pickupBtnActive]}
-                        onPress={() => onSetScore(player.id, pageHole.number, isPickup ? pageHole.par : pickup)}
-                        activeOpacity={0.7}
-                        accessibilityLabel={isPickup ? `Picked up at ${pickup} strokes — tap to clear` : `Pickup at ${pickup} strokes`}
-                      >
-                        <Feather
-                          name="arrow-up-circle"
-                          size={16}
-                          color={isPickup ? theme.text.inverse : theme.text.muted}
-                        />
-                      </TouchableOpacity>
-                    )}
-                  </View>
-                </View>
-                {player.id === meId && (
-                  <ShotDetailPanel
-                    hole={pageHole}
-                    detail={shotDetails[meId]?.[pageHole.number]}
-                    onChange={(patch) => onSetShot(meId, pageHole.number, patch)}
-                    strokes={scores?.[meId]?.[pageHole.number]}
-                    theme={theme}
-                    s={s}
-                  />
-                )}
-              </View>
-            </React.Fragment>
+            <PlayerCard
+              key={player.id}
+              player={player}
+              hole={pageHole}
+              strokes={strokes}
+              points={points}
+              handicap={handicap}
+              extraShots={extraShots}
+              pickup={pickup}
+              isPickup={isPickup}
+              teeLabel={round.playerTees?.[player.id]?.label ?? null}
+              team={teams[player.id] ?? null}
+              isMe={isMe}
+              canEdit={canEdit}
+              showRunning={showRunning}
+              totals={totalsMap.get(player.id)}
+              getScoreAnim={getScoreAnim}
+              onStep={onStep}
+              onSetScore={onSetScore}
+              shotDetail={isMe ? shotDetails[meId]?.[pageHole.number] : undefined}
+              onSetShot={onSetShot}
+              shotCollapsed={shotCollapsed}
+              onToggleShotDetail={onToggleShotDetail}
+              official={official}
+              officialState={officialState}
+              canResolveHere={canResolveHere}
+              onOpenDiscrepancy={onOpenDiscrepancy}
+            />
           );
         })}
       </ScrollView>
@@ -1778,6 +1555,10 @@ function HoleView({ round, roundIndex, players, scores, shotDetails, meId, onSet
   const s = useMemo(() => makeScorecardStyles(theme), [theme]);
   const [notesOpen, setNotesOpen] = useState(false);
   const [holePickerOpen, setHolePickerOpen] = useState(false);
+  // Collapse state for the "me" card's Shot detail section. Shared across
+  // holes so the choice persists while paging. (Task 12 adds persistence.)
+  const [shotCollapsed, setShotCollapsed] = useState(false);
+  const toggleShotDetail = useCallback(() => setShotCollapsed((v) => !v), []);
   // Official mode: the hole + subject currently open in the resolve sheet.
   // { hole, subjectRosterId } or null. Casual mode never sets this.
   const [discrepancyTarget, setDiscrepancyTarget] = useState(null);
@@ -1909,7 +1690,6 @@ function HoleView({ round, roundIndex, players, scores, shotDetails, meId, onSet
                 editable={editable}
                 getScoreAnim={getScoreAnim}
                 showRunning={showRunning}
-                playerTotals={playerTotals}
                 mode={settings?.scoringMode === 'matchplay' ? 'matchplay'
                   : settings?.scoringMode === 'sindicato' ? 'sindicato'
                   : isBestBall ? 'bestball' : 'stableford'}
@@ -1917,6 +1697,8 @@ function HoleView({ round, roundIndex, players, scores, shotDetails, meId, onSet
                 officialDiscrepancy={officialDiscrepancy}
                 onOpenDiscrepancy={(subjectRosterId, holeNumber) =>
                   setDiscrepancyTarget({ hole: holeNumber, subjectRosterId })}
+                shotCollapsed={shotCollapsed}
+                onToggleShotDetail={toggleShotDetail}
               />
             ))}
           </ScrollView>

@@ -1478,6 +1478,20 @@ export function makeScorecardStyles(theme) {
       borderRadius: 6, paddingHorizontal: 6, paddingVertical: 2,
     },
 
+    // Team chip on the unified PlayerCard — small pill showing "PAIR A" /
+    // "PAIR B" in the team colour on a low-alpha tinted background. The
+    // colour is applied inline so one style serves both teams.
+    playerTeamChip: {
+      borderRadius: 6,
+      paddingHorizontal: 6,
+      paddingVertical: 2,
+    },
+    playerTeamChipText: {
+      fontFamily: 'PlusJakartaSans-Bold',
+      fontSize: 10,
+      letterSpacing: 1,
+    },
+
     // Segmented-control distance-bucket picker (BucketSegment)
     bucketSegBlock: { paddingVertical: 10, borderBottomWidth: 1, borderBottomColor: theme.border.subtle ?? theme.border.default },
     bucketSegLabelRow: { flexDirection: 'row', alignItems: 'center', gap: 6, marginBottom: 8 },
