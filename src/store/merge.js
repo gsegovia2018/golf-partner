@@ -89,7 +89,7 @@ export function mergeTournaments(local, remote) {
     if (lTs >= rTs) {
       setAtPath(merged, path, getAtPath(local, path));
       mergedMeta[path] = lTs;
-    } else if (bothHadTs) {
+    } else if (bothHadTs && !path.includes('.scoreConflicts.')) {
       // Remote wins AND local had also written this path → same-cell conflict.
       conflicts.push({
         path,
@@ -101,6 +101,51 @@ export function mergeTournaments(local, remote) {
         detectedAt,
       });
     }
+  }
+
+  // ── Score conflict markers ─────────────────────────────────────────────────
+  // When two devices wrote the same score cell with genuinely different values,
+  // the LWW above silently kept one. Record the other in a conflict marker
+  // stored in the blob (round.scoreConflicts[pid][hole]) so every device can
+  // see and resolve it. This runs as a pass after LWW so it reads the settled
+  // `merged` / `mergedMeta`, free of loop-order effects. `remote._meta` is the
+  // remote's original (pre-merge) meta.
+  const originalRemoteMeta = remote._meta ?? {};
+  const SCORE_PATH = /^rounds\.([^.]+)\.scores\.([^.]+)\.h(\d+)$/;
+  for (const path of paths) {
+    const sm = path.match(SCORE_PATH);
+    if (!sm) continue;
+    const [, rid, pid, holeStr] = sm;
+    const lTs = localMeta[path] ?? 0;
+    const rTs = originalRemoteMeta[path] ?? 0;
+    // Only a remote-wins, both-sides-wrote case can be a same-cell conflict.
+    if (!(rTs > lTs)) continue;
+    if (localMeta[path] == null) continue;
+    const winnerValue = getAtPath(remote, path);
+    const loserValue = getAtPath(local, path);
+    // A cleared cell (null) or two equal values is not a conflict.
+    if (winnerValue == null || loserValue == null) continue;
+    if (winnerValue === loserValue) continue;
+
+    const cPath = `rounds.${rid}.scoreConflicts.${pid}.h${holeStr}`;
+    // Already flagged → leave the existing marker untouched.
+    if (getAtPath(merged, cPath) != null) continue;
+    // Resolved after the losing value was written → do not resurrect it.
+    // This relies on conflict.resolve stamping _meta[cPath] with the
+    // resolution timestamp (see store/mutate.js) — a resolution that cleared
+    // the marker without stamping _meta would let a stale value re-flag here.
+    const cMeta = mergedMeta[cPath];
+    if (cMeta != null && cMeta >= lTs) continue;
+
+    const markerDetectedAt = Date.now();
+    setAtPath(merged, cPath, {
+      candidates: [
+        { value: winnerValue, ts: rTs },
+        { value: loserValue, ts: lTs },
+      ],
+      detectedAt: markerDetectedAt,
+    });
+    mergedMeta[cPath] = markerDetectedAt;
   }
 
   merged._meta = mergedMeta;
