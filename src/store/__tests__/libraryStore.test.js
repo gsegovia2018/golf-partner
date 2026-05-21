@@ -1,6 +1,7 @@
 import {
   fetchMyPlayers, fetchMyGuestPlayers, normalizeCourse, saveCourseTees,
   fetchCourses, getCachedCourses, COURSES_CACHE_KEY,
+  fetchClubs, getCachedClubs, CLUBS_CACHE_KEY,
 } from '../libraryStore';
 import { listFriends, getCachedFriends } from '../friendStore';
 import AsyncStorage from '@react-native-async-storage/async-storage';
@@ -197,5 +198,29 @@ describe('courses offline cache', () => {
   test('getCachedCourses returns [] when the cached value is corrupt', async () => {
     await AsyncStorage.setItem(COURSES_CACHE_KEY, 'not-json{');
     expect(await getCachedCourses()).toEqual([]);
+  });
+});
+
+describe('clubs offline cache', () => {
+  beforeEach(async () => {
+    await AsyncStorage.clear();
+    mockState.user = { id: 'u1' };
+    mockState.rows = [];
+    mockState.calls = {};
+  });
+
+  test('fetchClubs writes the club list to the cache', async () => {
+    mockState.rows = [{ id: 'club1', name: 'Augusta', city: 'Augusta', province: 'GA' }];
+    const result = await fetchClubs();
+    expect(await getCachedClubs()).toEqual(result);
+  });
+
+  test('getCachedClubs returns [] when nothing is cached', async () => {
+    expect(await getCachedClubs()).toEqual([]);
+  });
+
+  test('getCachedClubs returns [] when the cached value is corrupt', async () => {
+    await AsyncStorage.setItem(CLUBS_CACHE_KEY, '{bad');
+    expect(await getCachedClubs()).toEqual([]);
   });
 });

@@ -111,13 +111,27 @@ export async function getCachedCourses() {
 
 // All clubs, ordered by name. A club groups several course layouts; the
 // picker uses this together with fetchCourses to build its grouped list.
+export const CLUBS_CACHE_KEY = '@golf_clubs_cache';
+
 export async function fetchClubs() {
   const { data, error } = await supabase
     .from('clubs')
     .select('id, name, city, province')
     .order('name');
   if (error) throw error;
+  AsyncStorage.setItem(CLUBS_CACHE_KEY, JSON.stringify(data)).catch(() => {});
   return data;
+}
+
+// Last-known club list — used when fetchClubs fails (offline). Never throws.
+export async function getCachedClubs() {
+  try {
+    const raw = await AsyncStorage.getItem(CLUBS_CACHE_KEY);
+    const parsed = raw ? JSON.parse(raw) : [];
+    return Array.isArray(parsed) ? parsed : [];
+  } catch {
+    return [];
+  }
 }
 
 export async function upsertCourse({ id, name, city, province, clubId, layoutName }) {
