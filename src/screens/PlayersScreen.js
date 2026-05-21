@@ -15,7 +15,7 @@ import {
   loadTournamentMembers, findClaimedSlot,
 } from '../store/tournamentStore';
 import { mutate } from '../store/mutate';
-import { playerInitials } from '../components/RoundTeeAssignments';
+import RoundTeeAssignments, { playerInitials } from '../components/RoundTeeAssignments';
 
 export default function PlayersScreen({ navigation, route }) {
   const { tournamentId, tournamentName } = route.params ?? {};
@@ -131,6 +131,19 @@ export default function PlayersScreen({ navigation, route }) {
     setEditPlayers((prev) => prev.map((p) => (p.id === playerId ? { ...p, handicap: value } : p)));
   }
 
+  const handleRoundTeesChange = useCallback((roundIndex, patch) => {
+    setRounds((prev) => {
+      const next = [...prev];
+      next[roundIndex] = {
+        ...next[roundIndex],
+        playerTees: patch.playerTees,
+        playerHandicaps: patch.playerHandicaps,
+        manualHandicaps: { ...(patch.manualHandicaps ?? {}) },
+      };
+      return next;
+    });
+  }, []);
+
   const ownerRow = members.find((m) => m.role === 'owner');
   const isOwner = !!ownerRow && ownerRow.userId === user?.id;
   const myRow = members.find((m) => m.userId === user?.id);
@@ -224,6 +237,25 @@ export default function PlayersScreen({ navigation, route }) {
               </View>
             );
           })}
+          {!isViewer && rounds.length > 0 && (
+            <>
+              <Text style={s.sectionTitle}>Tees & playing handicaps</Text>
+              {rounds.map((r, ri) => (
+                <View key={r.id} style={s.roundCard}>
+                  <Text style={s.roundCardTitle}>
+                    Round {ri + 1}{r.courseName ? ` — ${r.courseName}` : ''}
+                  </Text>
+                  <RoundTeeAssignments
+                    key={`${r.id}:${editPlayers.map((p) => p.handicap).join(',')}`}
+                    round={r}
+                    players={editPlayers.map((p) => ({ ...p, handicap: parseInt(p.handicap, 10) || 0 }))}
+                    theme={theme}
+                    onChange={(patch) => handleRoundTeesChange(ri, patch)}
+                  />
+                </View>
+              ))}
+            </>
+          )}
         </ScrollView>
       )}
     </ScreenContainer>
