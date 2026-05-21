@@ -53,7 +53,15 @@ function metaPathFor(m) {
     // A joining editor links their account to a tournament player: stamps
     // that player's user_id and points meId at them. LWW on both paths.
     case 'tournament.claimPlayer': return ['players', 'meId'];
-    case 'tournament.setScoringMode': return 'settings.scoringMode';
+    // Mid-game scoring-mode change: bumps the mode flag plus, for every round
+    // whose pairs were rebuilt to match the new mode, that round's pairs path.
+    case 'tournament.setScoringMode': {
+      const paths = ['settings.scoringMode'];
+      for (const patch of (m.roundPatches ?? [])) {
+        if (patch.pairs) paths.push(`rounds.${patch.roundId}.pairs`);
+      }
+      return paths;
+    }
     case 'player.upsertLibrary': return null;
     default: throw new Error(`unknown mutation type: ${m.type}`);
   }
@@ -165,6 +173,14 @@ export function applyToTournament(t, m) {
     }
     case 'tournament.setScoringMode': {
       t.settings = { ...(t.settings ?? {}), scoringMode: m.scoringMode };
+      // Rebuild each affected round's pairs so teams match the new mode
+      // (e.g. switching into Best Ball assigns partnerships; switching out
+      // collapses them to individuals). Patches are pre-computed by the
+      // caller via setScoringModeRoundPatches.
+      for (const patch of (m.roundPatches ?? [])) {
+        const round = t.rounds?.find((r) => r.id === patch.roundId);
+        if (round && patch.pairs) round.pairs = patch.pairs;
+      }
       break;
     }
     default:

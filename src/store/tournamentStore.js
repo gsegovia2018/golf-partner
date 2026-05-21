@@ -687,6 +687,51 @@ export function removePlayerRoundPatches(tournament, playerId, { mode } = {}) {
   return { patches, nextScoringMode };
 }
 
+// Pair construction for a round after a mid-tournament scoring-mode change
+// (the roster is unchanged). Mirror of buildPairsForAddedPlayer /
+// buildPairsForRemovedPlayer, keyed on scoringModeUsesTeams.
+// - Non-team new mode (individual / matchplay / sindicato) → every player is
+//   their own group, so no halo / pair summary surfaces.
+// - Team new mode AND old mode also used teams AND existing pairs were
+//   revealed → keep the existing partnerships unchanged.
+// - Otherwise (switching INTO a team mode from a non-team mode) → fresh
+//   randomPairs(roster).
+function buildPairsForModeChange({ roster, newMode, oldMode, existingPairs, revealed }) {
+  if (!scoringModeUsesTeams(newMode)) {
+    return roster.map((p) => [p]);
+  }
+  const oldWasTeams = scoringModeUsesTeams(oldMode, roster.length);
+  if (oldWasTeams && existingPairs?.length && revealed) {
+    return existingPairs.map((pr) => [...pr]);
+  }
+  return randomPairs(roster);
+}
+
+// Build the per-round pair patches for a mid-tournament scoring-mode change.
+// Mirror of addPlayerRoundPatches / removePlayerRoundPatches: currentRound and
+// every later round get their pairs rebuilt to match the new mode;
+// already-played earlier rounds are left untouched. Returns { patches } where
+// each patch is { roundId, pairs }. randomPairs is resolved here, not in the
+// mutation, so the persisted/replayed mutation carries deterministic pairs.
+export function setScoringModeRoundPatches(tournament, newMode) {
+  const oldMode = tournament?.settings?.scoringMode ?? 'stableford';
+  const currentRound = tournament?.currentRound ?? 0;
+  const roster = tournament?.players ?? [];
+  const patches = [];
+  (tournament?.rounds ?? []).forEach((round, idx) => {
+    if (idx < currentRound) return; // already-played rounds untouched
+    const pairs = buildPairsForModeChange({
+      roster,
+      newMode,
+      oldMode,
+      existingPairs: round.pairs,
+      revealed: Boolean(round.revealed),
+    });
+    patches.push({ roundId: round.id, pairs });
+  });
+  return { patches };
+}
+
 // calcExtraShots, calcStablefordPoints, matchPlayHolePts, matchPlayRoundTally,
 // pickupStrokes and randomPairs now live in ./scoring (imported + re-exported
 // at the top of this file).

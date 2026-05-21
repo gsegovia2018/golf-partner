@@ -14,7 +14,7 @@ import { getShowRunningScore, setShowRunningScore } from '../lib/prefs';
 import {
   loadTournament, subscribeTournamentChanges,
   calcBestWorstBall, DEFAULT_SETTINGS,
-  roundPairClinched,
+  roundPairClinched, setScoringModeRoundPatches,
   isRoundComplete, isTournamentFinished,
   subscribeSyncStatus,
 } from '../store/tournamentStore';
@@ -1129,9 +1129,13 @@ export default function ScorecardScreen({ navigation, route }) {
         onConfirm={async (chosenMode) => {
           setReopenPrompt(false);
           if (chosenMode === currentMode) return;
+          // Rebuild round pairs so teams match the new mode (e.g. switching
+          // into Best Ball assigns partnerships, switching out collapses them).
+          const { patches: roundPatches } = setScoringModeRoundPatches(tournament, chosenMode);
           await mutate(tournament, {
             type: 'tournament.setScoringMode',
             scoringMode: chosenMode,
+            roundPatches,
           });
         }}
         onCancel={() => setReopenPrompt(false)}

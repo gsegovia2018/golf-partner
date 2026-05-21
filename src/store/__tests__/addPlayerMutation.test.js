@@ -92,6 +92,27 @@ describe('tournament.setScoringMode mutation', () => {
     expect(t.settings.bestBallValue).toBe(1);
     expect(t.settings.worstBallValue).toBe(1);
   });
+
+  test('applies roundPatches pairs so teams match the new mode', () => {
+    const t = baseTournament();
+    applyToTournament(t, {
+      type: 'tournament.setScoringMode',
+      scoringMode: 'bestball',
+      roundPatches: [{ roundId: 'r1', pairs: [[{ id: 'a' }, { id: 'b' }]] }],
+    });
+    expect(t.settings.scoringMode).toBe('bestball');
+    expect(t.rounds[0].pairs).toEqual([[{ id: 'a' }, { id: 'b' }]]);
+  });
+
+  test('without roundPatches it changes only the mode, leaving pairs intact', () => {
+    const t = baseTournament();
+    applyToTournament(t, {
+      type: 'tournament.setScoringMode',
+      scoringMode: 'individual',
+    });
+    expect(t.settings.scoringMode).toBe('individual');
+    expect(t.rounds[0].pairs).toEqual([[{ id: 'a' }], [{ id: 'b' }]]);
+  });
 });
 
 function fourPlayerTournament() {
