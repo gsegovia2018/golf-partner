@@ -633,6 +633,27 @@ export function makeScorecardStyles(theme) {
       shadowOffset: { width: 0, height: 4 },
       elevation: 2,
     },
+    // Amber treatment for a hero card whose score is in conflict.
+    soloHeroCardConflict: {
+      borderColor: '#c77a0a',
+      borderWidth: 1.5,
+      backgroundColor: 'rgba(199,122,10,0.10)',
+    },
+    soloConflictHint: {
+      alignSelf: 'center',
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: 6,
+      backgroundColor: '#c77a0a',
+      paddingHorizontal: 16,
+      paddingVertical: 9,
+      borderRadius: 999,
+    },
+    soloConflictHintText: {
+      color: '#ffffff',
+      fontFamily: 'PlusJakartaSans-Bold',
+      fontSize: 13,
+    },
 
     /* ── Shot detail panel ── */
     // "Which player are you?" prompt — a centered modal. Shown for a joined

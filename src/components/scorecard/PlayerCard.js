@@ -30,6 +30,7 @@ function haptic(style = 'medium') {
 //   onStep(playerId, holeNumber, delta), onSetScore(playerId, holeNumber, value)
 //   shotDetail, onSetShot, shotCollapsed, onToggleShotDetail   — me-only
 //   officialState, canResolveHere, onOpenDiscrepancy — official mode
+//   conflict, onOpenConflict — casual-mode score conflict (amber flag + resolve sheet)
 export const PlayerCard = React.memo(function PlayerCard({
   player, hole, strokes, points,
   handicap, extraShots, pickup, isPickup, teeLabel,
@@ -39,6 +40,7 @@ export const PlayerCard = React.memo(function PlayerCard({
   onStep, onSetScore,
   shotDetail, onSetShot, shotCollapsed, onToggleShotDetail,
   officialState, canResolveHere, onOpenDiscrepancy,
+  conflict, onOpenConflict,
 }) {
   const { theme } = useTheme();
   const s = useMemo(() => makeScorecardStyles(theme), [theme]);
@@ -72,20 +74,27 @@ export const PlayerCard = React.memo(function PlayerCard({
     elevation: 6,
   } : null;
 
-  // A discrepancy card the viewer can act on opens the resolve sheet on tap.
-  // Other states (or read-only viewers) keep the card non-interactive — the
-  // badge alone communicates state.
-  const heroTappable = officialState === 'discrepancy' && canResolveHere;
+  // A conflicted card, or an official discrepancy card the viewer can act on,
+  // opens its resolve sheet on tap. Conflict takes priority over official
+  // state (the two never co-occur — official rounds have no casual conflicts).
+  const conflicted = !!conflict;
+  const officialTappable = officialState === 'discrepancy' && canResolveHere;
+  const heroTappable = conflicted || officialTappable;
   const HeroCard = heroTappable ? Pressable : View;
-  const heroCardProps = heroTappable
+  const heroCardProps = conflicted
     ? {
-      onPress: () => onOpenDiscrepancy?.(player.id, hole.number),
-      accessibilityLabel: `Resolve ${player.name}'s score on hole ${hole.number}`,
+      onPress: () => onOpenConflict?.(player.id, hole.number),
+      accessibilityLabel: `Resolve ${player.name}'s conflicting score on hole ${hole.number}`,
     }
-    : {};
+    : officialTappable
+      ? {
+        onPress: () => onOpenDiscrepancy?.(player.id, hole.number),
+        accessibilityLabel: `Resolve ${player.name}'s score on hole ${hole.number}`,
+      }
+      : {};
 
   return (
-    <HeroCard style={[s.soloHeroCard, haloStyle]} {...heroCardProps}>
+    <HeroCard style={[s.soloHeroCard, haloStyle, conflicted && s.soloHeroCardConflict]} {...heroCardProps}>
       <View style={s.soloHeroHeader}>
         <View style={s.soloHeroNameWrap}>
           <View style={s.soloHeroNameRow}>
@@ -118,13 +127,16 @@ export const PlayerCard = React.memo(function PlayerCard({
             {officialState === 'discrepancy' && (
               <Feather name="alert-circle" size={14} color={theme.destructive} />
             )}
+            {conflicted && (
+              <Feather name="alert-circle" size={14} color="#c77a0a" />
+            )}
           </View>
           <Text style={s.soloHeroHcp}>
             HCP {handicap}{extraShots > 0 ? `  ·  +${extraShots} on this hole` : ''}
           </Text>
         </View>
         {/* Pickup toggle is a write action — hide on read-only cards. */}
-        {canEdit && (
+        {canEdit && !conflicted && (
           <TouchableOpacity
             style={[s.pickupBtn, isPickup && s.pickupBtnActive]}
             onPress={() => onSetScore(player.id, hole.number, isPickup ? hole.par : pickup)}
@@ -144,7 +156,7 @@ export const PlayerCard = React.memo(function PlayerCard({
         {/* Steppers only on cards this device may write. A read-only card
             (official mode: not self / not markee) shows the score with no
             +/- and no long-press-to-clear. */}
-        {canEdit && (
+        {canEdit && !conflicted && (
           <TouchableOpacity
             style={s.soloStepBtn}
             onPress={() => onStep(player.id, hole.number, -1)}
@@ -155,24 +167,30 @@ export const PlayerCard = React.memo(function PlayerCard({
         )}
         <Pressable
           onLongPress={() => {
-            if (canEdit && strokes != null) {
+            if (canEdit && !conflicted && strokes != null) {
               haptic('medium');
               onSetScore(player.id, hole.number, '');
             }
           }}
           delayLongPress={350}
-          accessibilityLabel={`Strokes on hole ${hole.number}${canEdit && strokes != null ? ' — long-press to clear' : ''}`}
+          accessibilityLabel={`Strokes on hole ${hole.number}${canEdit && !conflicted && strokes != null ? ' — long-press to clear' : ''}`}
         >
           <Animated.View style={[s.soloScoreDisplay, { transform: [{ scale: getScoreAnim(player.id) }] }]}>
-            <Text style={[s.soloScoreNum, strokes == null && s.scoreDisplayNumEmpty]}>
+            <Text style={[
+              s.soloScoreNum,
+              strokes == null && s.scoreDisplayNumEmpty,
+              conflicted && { color: '#c77a0a' },
+            ]}>
               {strokes ?? '—'}
             </Text>
-            <Text style={s.soloScoreLabel}>
-              {strokes == null ? 'STROKES' : canEdit ? 'HOLD TO CLEAR' : 'STROKES'}
+            <Text style={[s.soloScoreLabel, conflicted && { color: '#c77a0a' }]}>
+              {conflicted
+                ? 'TAP TO RESOLVE'
+                : strokes == null ? 'STROKES' : canEdit ? 'HOLD TO CLEAR' : 'STROKES'}
             </Text>
           </Animated.View>
         </Pressable>
-        {canEdit && (
+        {canEdit && !conflicted && (
           <TouchableOpacity
             style={s.soloStepBtn}
             onPress={() => onStep(player.id, hole.number, 1)}
@@ -183,7 +201,7 @@ export const PlayerCard = React.memo(function PlayerCard({
         )}
       </View>
 
-      {points != null && (
+      {points != null && !conflicted && (
         <View style={[s.soloPtsBadge, { borderColor: ptsColor }]}>
           <Text style={[s.soloPtsText, { color: ptsColor }]}>
             {points} {points === 1 ? 'point' : 'points'}
@@ -191,7 +209,14 @@ export const PlayerCard = React.memo(function PlayerCard({
         </View>
       )}
 
-      {showRunning && (
+      {conflicted && (
+        <View style={s.soloConflictHint}>
+          <Feather name="alert-circle" size={14} color="#ffffff" />
+          <Text style={s.soloConflictHintText}>Tap to resolve</Text>
+        </View>
+      )}
+
+      {showRunning && !conflicted && (
         <View style={s.soloStatsRow}>
           <View style={s.soloStatItem}>
             <Text style={s.soloStatLabel}>STROKES</Text>
@@ -210,7 +235,7 @@ export const PlayerCard = React.memo(function PlayerCard({
         </View>
       )}
 
-      {isMe && (
+      {isMe && !conflicted && (
         <ShotDetailSection
           hole={hole}
           detail={shotDetail}
