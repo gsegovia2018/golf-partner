@@ -41,6 +41,7 @@ import {
   DEFAULT_SHOT,
   celebrationFor,
 } from '../components/scorecard/constants';
+import { reconcileShotDetail } from '../store/scoring';
 import { makeScorecardStyles } from '../components/scorecard/styles';
 import { HoleView } from '../components/scorecard/HoleView';
 import { GridView } from '../components/scorecard/GridView';
@@ -467,6 +468,25 @@ export default function ScorecardScreen({ navigation, route }) {
     });
   }, [saveShot]);
 
+  // When the me-player's strokes change, trim that hole's shot detail so the
+  // logged putts/penalties/sand shots never exceed the new stroke total.
+  // No-op for other players, holes with no detail, or already-valid detail.
+  const reconcileMeShot = useCallback((playerId, holeNumber, newStrokes) => {
+    if (playerId !== (tournamentRef.current?.meId ?? null)) return;
+    setShotDetails((prev) => {
+      const current = prev[playerId]?.[holeNumber];
+      if (!current) return prev;
+      const reconciled = reconcileShotDetail(current, newStrokes);
+      if (reconciled === current) return prev;
+      const next = {
+        ...prev,
+        [playerId]: { ...prev[playerId], [holeNumber]: reconciled },
+      };
+      saveShot(playerId, holeNumber, reconciled);
+      return next;
+    });
+  }, [saveShot]);
+
   // Persist which player is "me" (drives shot-detail tracking).
   const pickMe = useCallback(async (playerId) => {
     if (!tournamentRef.current) return;
@@ -739,6 +759,7 @@ export default function ScorecardScreen({ navigation, route }) {
     scoresRef.current = next;                                  // sync source of truth
     dirtyCellsRef.current.add(`${playerId}:${holeNumber}`);
     setScores(next);                                           // pre-computed value
+    reconcileMeShot(playerId, holeNumber, parsed);
 
     // Official mode routes the write through the RPC layer; casual mode
     // diffs and persists through the tournament-blob `mutate` chain.
@@ -748,7 +769,7 @@ export default function ScorecardScreen({ navigation, route }) {
       const label = celebrationFor(holePar, parsed);
       if (label) triggerCelebration(playerId, holeNumber, label);
     }
-  }, [round, autoSave, triggerCelebration, official, officialWrite]);
+  }, [round, autoSave, triggerCelebration, official, officialWrite, reconcileMeShot]);
 
   const stepScore = useCallback((playerId, holeNumber, delta) => {
     haptic('light');
@@ -771,6 +792,7 @@ export default function ScorecardScreen({ navigation, route }) {
     scoresRef.current = next;                                  // sync source of truth
     dirtyCellsRef.current.add(`${playerId}:${holeNumber}`);
     setScores(next);                                           // pre-computed value
+    reconcileMeShot(playerId, holeNumber, newStrokes);
 
     if (official) officialWrite(playerId, holeNumber, newStrokes);
     else autoSave(next);
@@ -778,7 +800,7 @@ export default function ScorecardScreen({ navigation, route }) {
       const label = celebrationFor(holePar, newStrokes);
       if (label) triggerCelebration(playerId, holeNumber, label);
     }
-  }, [round, autoSave, triggerCelebration, getScoreAnim, official, officialWrite]);
+  }, [round, autoSave, triggerCelebration, getScoreAnim, official, officialWrite, reconcileMeShot]);
 
   const [showRunning, setShowRunning] = useState(true);
   useEffect(() => {
