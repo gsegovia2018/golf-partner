@@ -1,7 +1,7 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import {
   View, Text, TextInput, TouchableOpacity, StyleSheet, ScrollView,
-  ActivityIndicator, Image, Alert, Platform,
+  ActivityIndicator, Image, Alert, Platform, Share,
 } from 'react-native';
 import ScreenContainer from '../components/ScreenContainer';
 import { useFocusEffect } from '@react-navigation/native';
@@ -13,9 +13,20 @@ import {
   loadTournament, saveTournament, subscribeTournamentChanges,
   normalizeRoundHandicaps, readLocal,
   loadTournamentMembers, findClaimedSlot,
+  removeTournamentMember, generateInviteCode, releaseTournamentPlayer, buildJoinLink,
 } from '../store/tournamentStore';
+import { supabase } from '../lib/supabase';
 import { mutate } from '../store/mutate';
 import RoundTeeAssignments, { playerInitials } from '../components/RoundTeeAssignments';
+
+async function updateMemberRole(tournamentId, userId, role) {
+  const { error } = await supabase
+    .from('tournament_members')
+    .update({ role })
+    .eq('tournament_id', tournamentId)
+    .eq('user_id', userId);
+  if (error) throw error;
+}
 
 export default function PlayersScreen({ navigation, route }) {
   const { tournamentId, tournamentName } = route.params ?? {};
@@ -30,6 +41,11 @@ export default function PlayersScreen({ navigation, route }) {
   const [editPlayers, setEditPlayers] = useState([]);   // [{ id, name, handicap: string, user_id }]
   const [rounds, setRounds] = useState([]);
   const [saveState, setSaveState] = useState('idle');   // idle | saving | saved | error
+  const [inviting, setInviting] = useState(false);
+  const [leaving, setLeaving] = useState(false);
+  const [roleBusyId, setRoleBusyId] = useState(null);
+  const [releasingId, setReleasingId] = useState(null);
+  const [removingId, setRemovingId] = useState(null);
   const tournamentRef = useRef(null);
   const saveTimeoutRef = useRef(null);
   const isFirstRender = useRef(true);
@@ -144,6 +160,115 @@ export default function PlayersScreen({ navigation, route }) {
     });
   }, []);
 
+  async function confirmRemove(row) {
+    const name = row.profile?.display_name || 'this member';
+    const confirmed = Platform.OS === 'web'
+      ? window.confirm(`Remove ${name} from the tournament?`)
+      : await new Promise((resolve) => Alert.alert(
+          'Remove member', `Remove ${name} from the tournament?`,
+          [{ text: 'Cancel', style: 'cancel', onPress: () => resolve(false) },
+           { text: 'Remove', style: 'destructive', onPress: () => resolve(true) }],
+        ));
+    if (!confirmed) return;
+    setRemovingId(row.userId);
+    try {
+      await removeTournamentMember(tournamentId, row.userId);
+      await load();
+    } catch (err) {
+      Alert.alert('Error', err.message ?? 'Could not remove member');
+    } finally {
+      setRemovingId(null);
+    }
+  }
+
+  async function releaseSlot(row, slot) {
+    const name = slot?.name || row.profile?.display_name || 'this player';
+    const confirmed = Platform.OS === 'web'
+      ? window.confirm(`Release the "${name}" slot? They will be removed and the slot reopens for someone else to claim.`)
+      : await new Promise((resolve) => Alert.alert(
+          'Release player slot',
+          `Release the "${name}" slot? They will be removed and the slot reopens.`,
+          [{ text: 'Cancel', style: 'cancel', onPress: () => resolve(false) },
+           { text: 'Release', style: 'destructive', onPress: () => resolve(true) }],
+        ));
+    if (!confirmed) return;
+    setReleasingId(row.userId);
+    try {
+      await releaseTournamentPlayer(tournamentId, slot.id);
+      await load();
+    } catch (err) {
+      Alert.alert('Error', err?.message ?? 'Could not release the slot');
+    } finally {
+      setReleasingId(null);
+    }
+  }
+
+  async function handleInvite() {
+    if (inviting) return;
+    setInviting(true);
+    try {
+      const { editorCode } = await generateInviteCode(tournamentId);
+      const origin = Platform.OS === 'web' && typeof window !== 'undefined'
+        ? window.location.origin
+        : '';
+      const link = buildJoinLink(origin, editorCode);
+      const message = `Join "${tournamentName ?? 'my tournament'}" on Golf Partner:\n${link}`;
+      if (Platform.OS === 'web') {
+        try { await navigator.clipboard?.writeText(link); } catch (_) {}
+        window.alert(`Invite link copied:\n${link}`);
+      } else {
+        await Share.share({ message });
+      }
+    } catch (err) {
+      Alert.alert('Error', err?.message ?? 'Could not create invite link');
+    } finally {
+      setInviting(false);
+    }
+  }
+
+  async function changeRole(row) {
+    const nextRole = row.role === 'editor' ? 'viewer' : 'editor';
+    const name = row.profile?.display_name || 'this member';
+    const confirmed = Platform.OS === 'web'
+      ? window.confirm(`Change ${name} to ${nextRole}?`)
+      : await new Promise((resolve) => Alert.alert(
+          'Change role', `Change ${name} to ${nextRole}?`,
+          [{ text: 'Cancel', style: 'cancel', onPress: () => resolve(false) },
+           { text: 'Change', onPress: () => resolve(true) }],
+        ));
+    if (!confirmed) return;
+    setRoleBusyId(row.userId);
+    try {
+      await updateMemberRole(tournamentId, row.userId, nextRole);
+      await load();
+    } catch (err) {
+      Alert.alert('Error', err?.message ?? 'Could not update role');
+    } finally {
+      setRoleBusyId(null);
+    }
+  }
+
+  async function leaveTournament() {
+    if (leaving || !user?.id) return;
+    const confirmed = Platform.OS === 'web'
+      ? window.confirm('Leave this tournament? You will need a new invite code to rejoin.')
+      : await new Promise((resolve) => Alert.alert(
+          'Leave tournament',
+          'Leave this tournament? You will need a new invite code to rejoin.',
+          [{ text: 'Cancel', style: 'cancel', onPress: () => resolve(false) },
+           { text: 'Leave', style: 'destructive', onPress: () => resolve(true) }],
+        ));
+    if (!confirmed) return;
+    setLeaving(true);
+    try {
+      await removeTournamentMember(tournamentId, user.id);
+      navigation.goBack();
+    } catch (err) {
+      Alert.alert('Error', err?.message ?? 'Could not leave tournament');
+      setLeaving(false);
+    }
+  }
+
   const ownerRow = members.find((m) => m.role === 'owner');
   const isOwner = !!ownerRow && ownerRow.userId === user?.id;
   const myRow = members.find((m) => m.userId === user?.id);
@@ -196,9 +321,12 @@ export default function PlayersScreen({ navigation, route }) {
         </View>
       ) : (
         <ScrollView style={s.scroll} contentContainerStyle={s.content}>
-          <Text style={s.sectionLabel}>{editPlayers.length} {editPlayers.length === 1 ? 'player' : 'players'}</Text>
+          <View style={s.topRow}>
+            <Text style={s.sectionLabel}>{editPlayers.length} {editPlayers.length === 1 ? 'player' : 'players'}</Text>
+          </View>
           {editPlayers.map((p) => {
             const member = members.find((m) => m.userId === p.user_id) || null;
+            const canManage = isOwner && !!member && member.role !== 'owner' && member.userId !== user?.id;
             const color = member?.profile?.avatar_color || theme.accent.primary;
             return (
               <View key={p.id} style={s.row}>
@@ -234,9 +362,59 @@ export default function PlayersScreen({ navigation, route }) {
                     accessibilityLabel={`Handicap for ${p.name}`}
                   />
                 )}
+                {canManage && (
+                  <View style={s.rowActions}>
+                    {roleBusyId === member.userId ? (
+                      <ActivityIndicator color={theme.accent.primary} />
+                    ) : (
+                      <TouchableOpacity
+                        onPress={() => changeRole(member)}
+                        style={s.roleActionBtn}
+                        hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+                        accessibilityLabel={member.role === 'editor' ? `Demote ${p.name} to viewer` : `Promote ${p.name} to editor`}
+                      >
+                        <Feather name={member.role === 'editor' ? 'arrow-down' : 'arrow-up'} size={16} color={theme.accent.primary} />
+                      </TouchableOpacity>
+                    )}
+                    {findClaimedSlot(players, member.userId) && (
+                      releasingId === member.userId
+                        ? <ActivityIndicator color={theme.accent.primary} />
+                        : (
+                          <TouchableOpacity
+                            onPress={() => releaseSlot(member, findClaimedSlot(players, member.userId))}
+                            style={s.roleActionBtn}
+                            hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+                            accessibilityLabel={`Release the ${p.name} player slot`}
+                          >
+                            <Feather name="rotate-ccw" size={15} color={theme.accent.primary} />
+                          </TouchableOpacity>
+                        )
+                    )}
+                    {removingId === member.userId
+                      ? <ActivityIndicator color={theme.destructive} />
+                      : (
+                        <TouchableOpacity
+                          onPress={() => confirmRemove(member)}
+                          style={s.removeBtn}
+                          hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+                          accessibilityLabel={`Remove ${p.name} member access`}
+                        >
+                          <Feather name="user-minus" size={18} color={theme.destructive} />
+                        </TouchableOpacity>
+                      )}
+                  </View>
+                )}
               </View>
             );
           })}
+          {isOwner && (
+            <TouchableOpacity style={s.inviteBtn} onPress={handleInvite} disabled={inviting} activeOpacity={0.7}>
+              {inviting
+                ? <ActivityIndicator size="small" color={theme.accent.primary} />
+                : <Feather name="user-plus" size={16} color={theme.accent.primary} />}
+              <Text style={s.inviteBtnText}>Invite people</Text>
+            </TouchableOpacity>
+          )}
           {!isViewer && rounds.length > 0 && (
             <>
               <Text style={s.sectionTitle}>Tees & playing handicaps</Text>
@@ -255,6 +433,14 @@ export default function PlayersScreen({ navigation, route }) {
                 </View>
               ))}
             </>
+          )}
+          {myRow && !isOwner && (
+            <TouchableOpacity style={s.leaveBtn} onPress={leaveTournament} disabled={leaving} activeOpacity={0.7}>
+              {leaving
+                ? <ActivityIndicator size="small" color={theme.destructive} />
+                : <Feather name="log-out" size={16} color={theme.destructive} />}
+              <Text style={s.leaveBtnText}>Leave tournament</Text>
+            </TouchableOpacity>
           )}
         </ScrollView>
       )}
