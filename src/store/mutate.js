@@ -41,7 +41,7 @@ function metaPathFor(m) {
         paths.push(`rounds.${patch.roundId}.playerHandicaps.${m.playerId}`);
         paths.push(`rounds.${patch.roundId}.scores.${m.playerId}`);
         paths.push(`rounds.${patch.roundId}.shotDetails.${m.playerId}`);
-        paths.push(`rounds.${patch.roundId}.pairs`);
+        if (patch.pairs) paths.push(`rounds.${patch.roundId}.pairs`);
       }
       if (m.nextScoringMode) paths.push('settings.scoringMode');
       return paths;
