@@ -1,5 +1,9 @@
-import { fetchMyPlayers, fetchMyGuestPlayers, normalizeCourse, saveCourseTees } from '../libraryStore';
+import {
+  fetchMyPlayers, fetchMyGuestPlayers, normalizeCourse, saveCourseTees,
+  fetchCourses, getCachedCourses, COURSES_CACHE_KEY,
+} from '../libraryStore';
 import { listFriends, getCachedFriends } from '../friendStore';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 
 // mockState is read inside the hoisted jest.mock factory; the `mock` prefix
 // is what lets jest reference it from the factory.
@@ -165,5 +169,33 @@ describe('saveCourseTees', () => {
       { course_id: 'c1', label: 'White', rating: 71.8, slope: 132, sort_order: 0, yardages: null },
       { course_id: 'c1', label: 'Yellow', rating: 69, slope: 125, sort_order: 1, yardages: null },
     ]);
+  });
+});
+
+describe('courses offline cache', () => {
+  beforeEach(async () => {
+    await AsyncStorage.clear();
+    mockState.user = { id: 'u1' };
+    mockState.rows = [];
+    mockState.calls = {};
+  });
+
+  test('fetchCourses writes the normalized list to the cache', async () => {
+    mockState.rows = [
+      { id: 'c1', name: 'Pine', slope: null, rating: null, course_holes: [], course_tees: [] },
+    ];
+    const result = await fetchCourses();
+    const cached = await getCachedCourses();
+    expect(cached).toEqual(result);
+    expect(cached[0]).toMatchObject({ id: 'c1', name: 'Pine' });
+  });
+
+  test('getCachedCourses returns [] when nothing is cached', async () => {
+    expect(await getCachedCourses()).toEqual([]);
+  });
+
+  test('getCachedCourses returns [] when the cached value is corrupt', async () => {
+    await AsyncStorage.setItem(COURSES_CACHE_KEY, 'not-json{');
+    expect(await getCachedCourses()).toEqual([]);
   });
 });

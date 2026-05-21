@@ -1,3 +1,4 @@
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import { supabase } from '../lib/supabase';
 import { listFriends, getCachedFriends } from './friendStore';
 
@@ -79,6 +80,10 @@ export async function deletePlayer(id) {
 }
 
 // ── Courses ───────────────────────────────────────────────────────────────────
+// Offline cache: the picker falls back to these last-known lists when a fetch
+// fails, so a casual game can still be set up without a connection.
+
+export const COURSES_CACHE_KEY = '@golf_courses_cache';
 
 export async function fetchCourses() {
   const { data, error } = await supabase
@@ -86,7 +91,22 @@ export async function fetchCourses() {
     .select('*, course_holes(*), course_tees(*)')
     .order('name');
   if (error) throw error;
-  return data.map(normalizeCourse);
+  const courses = data.map(normalizeCourse);
+  // Write-through cache, fire-and-forget (mirrors friendStore.listFriends).
+  AsyncStorage.setItem(COURSES_CACHE_KEY, JSON.stringify(courses)).catch(() => {});
+  return courses;
+}
+
+// Last-known course library — used when fetchCourses fails (offline). Never
+// throws; returns [] when nothing is cached or the cache is unreadable.
+export async function getCachedCourses() {
+  try {
+    const raw = await AsyncStorage.getItem(COURSES_CACHE_KEY);
+    const parsed = raw ? JSON.parse(raw) : [];
+    return Array.isArray(parsed) ? parsed : [];
+  } catch {
+    return [];
+  }
 }
 
 // All clubs, ordered by name. A club groups several course layouts; the
