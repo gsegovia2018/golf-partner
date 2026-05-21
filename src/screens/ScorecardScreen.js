@@ -41,7 +41,7 @@ import {
   DEFAULT_SHOT,
   celebrationFor,
 } from '../components/scorecard/constants';
-import { reconcileShotDetail } from '../store/scoring';
+import { reconcileShotDetail, listRoundConflicts } from '../store/scoring';
 import { makeScorecardStyles } from '../components/scorecard/styles';
 import { HoleView } from '../components/scorecard/HoleView';
 import { GridView } from '../components/scorecard/GridView';
@@ -154,6 +154,10 @@ export default function ScorecardScreen({ navigation, route }) {
   const [syncStatus, setSyncStatus] = useState('idle');
   // Round-complete celebration overlay before navigating to the summary.
   const [roundCompleteVisible, setRoundCompleteVisible] = useState(false);
+  // The finish gate sets this to { hole, playerId } to send the user to a
+  // conflicted hole; HoleView consumes it to open the resolve sheet.
+  const [conflictFocus, setConflictFocus] = useState(null);
+  const clearConflictFocus = useCallback(() => setConflictFocus(null), []);
   // Official mode (Task 16): attest-my-card request in flight, and the last
   // attest error message (RPC can reject with "resolve discrepancies first").
   const [attestBusy, setAttestBusy] = useState(false);
@@ -272,7 +276,15 @@ export default function ScorecardScreen({ navigation, route }) {
   useEffect(() => {
     reload();
     const unsub = subscribeTournamentChanges(() => {
-      reload({ preserveLocalEdits: pendingSaveRef.current });
+      // A change event that fires while THIS screen has a save in flight is
+      // the echo of our own saveLocal(). Re-reading the blob from disk and
+      // setTournament()-ing a fresh object would churn tournament/round
+      // identity on every +/- tap — re-rendering the whole pager and doing a
+      // redundant disk read + remote fetch each time. Our own scores state
+      // is already authoritative; skip the self-echo. A genuine remote change
+      // is picked up by the next event once the save chain drains.
+      if (pendingSaveRef.current) return;
+      reload();
     });
     return unsub;
   }, [reload]);
@@ -434,6 +446,32 @@ export default function ScorecardScreen({ navigation, route }) {
     }));
     scheduleNoteSave(`h${holeNumber}`, { scope: 'hole', hole: holeNumber, text: value });
   }, [scheduleNoteSave]);
+
+  // Resolve a casual score conflict: write the chosen value and clear the
+  // marker. Updates `scores` state optimistically, then dispatches a
+  // conflict.resolve mutation through the serial save chain.
+  const resolveConflict = useCallback((playerId, holeNumber, value) => {
+    if (!tournamentRef.current) return;
+    setScores((prev) => ({
+      ...prev,
+      [playerId]: { ...(prev[playerId] ?? {}), [holeNumber]: value },
+    }));
+    pendingSaveRef.current = true;
+    enqueueSave(async () => {
+      if (!tournamentRef.current) return;
+      const r = tournamentRef.current.rounds[roundIndex];
+      if (!r) return;
+      const t = await mutate(tournamentRef.current, {
+        type: 'conflict.resolve',
+        roundId: r.id,
+        playerId,
+        hole: holeNumber,
+        value,
+      });
+      tournamentRef.current = t;
+      setTournament(t);
+    });
+  }, [roundIndex, enqueueSave]);
 
   // Persist a single hole's shot detail for the "me" player. Routed through
   // the same serial save chain as scores so concurrent edits don't race.
@@ -887,6 +925,28 @@ export default function ScorecardScreen({ navigation, route }) {
     const r = t?.rounds?.[roundIndex];
     if (!t || !r) { goBack(); return; }
 
+    // A round cannot finish while a hole still has an unresolved score
+    // conflict — every hole must end on one agreed value.
+    const openConflicts = listRoundConflicts(r);
+    if (openConflicts.length > 0) {
+      const first = openConflicts[0];
+      const name = (t.players ?? []).find((p) => p.id === first.playerId)?.name ?? 'a player';
+      const title = 'Resolve conflict to finish';
+      const message = openConflicts.length === 1
+        ? `Hole ${first.hole} still has a conflicting score for ${name}. Every hole needs one agreed score before this round can finish.`
+        : `${openConflicts.length} holes still have conflicting scores. Resolve them before this round can finish.`;
+      const review = () => setConflictFocus({ hole: first.hole, playerId: first.playerId });
+      if (Platform.OS === 'web') {
+        if (window.confirm(`${title}\n\n${message}\n\nReview the conflict now?`)) review();
+      } else {
+        Alert.alert(title, message, [
+          { text: 'Not now', style: 'cancel' },
+          { text: 'Review conflict', onPress: review },
+        ]);
+      }
+      return;
+    }
+
     // Notify the finisher's friends that a casual round wrapped up. Official
     // rounds notify server-side on attestation, so skip them here.
     // Best-effort — a failure never blocks finishing the round.
@@ -1211,6 +1271,9 @@ export default function ScorecardScreen({ navigation, route }) {
           officialAttestBusy={attestBusy}
           officialAttestError={attestError}
           onAttest={handleAttest}
+          onResolveConflict={resolveConflict}
+          focusConflict={conflictFocus}
+          onFocusConflictHandled={clearConflictFocus}
         />
       ) : (
         <GridView
