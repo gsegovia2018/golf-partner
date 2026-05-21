@@ -260,16 +260,19 @@ export default function ScorecardScreen({ navigation, route }) {
       // Merge rather than clobber: a stale reload (one that began around a tap
       // and resolved later) must not overwrite a newer local edit. mergeScores
       // keeps any dirty cell whose save has not yet round-tripped.
-      setScores((prev) => {
-        const merged = mergeScores(roundScores, prev, dirtyCellsRef.current);
-        // Drop cells the blob has now caught up on.
-        for (const key of [...dirtyCellsRef.current]) {
-          const [pid, h] = key.split(':');
-          if (roundScores?.[pid]?.[h] === merged[pid]?.[h]) dirtyCellsRef.current.delete(key);
+      // scoresRef.current is the reliable current-scores source here: score
+      // handlers set it synchronously before calling setScores, and a useEffect
+      // mirrors scores into it after every render — so it is always current.
+      const merged = mergeScores(roundScores, scoresRef.current, dirtyCellsRef.current);
+      // Drop dirty cells the blob has now caught up on.
+      for (const key of [...dirtyCellsRef.current]) {
+        const [pid, h] = key.split(':');
+        if (roundScores?.[pid]?.[String(h)] === merged?.[pid]?.[String(h)]) {
+          dirtyCellsRef.current.delete(key);
         }
-        scoresRef.current = merged;
-        return merged;
-      });
+      }
+      scoresRef.current = merged;
+      setScores(merged);
       setShotDetails(round?.shotDetails ?? {});
       // Normalize notes to the { round, hole } object shape. Legacy data may
       // have stored a bare string — treat that as the round-level note.
@@ -402,9 +405,8 @@ export default function ScorecardScreen({ navigation, route }) {
   // without being re-created on every keystroke.
   const scoresRef = useRef(scores);
   useEffect(() => { scoresRef.current = scores; }, [scores]);
-  // `${playerId}:${holeNumber}` keys for cells edited locally whose save has
-  // not yet round-tripped through the blob. A reload merges against these so a
-  // stale blob can't clobber a newer local tap (see mergeScores).
+  // `${playerId}:${holeNumber}` keys for score cells edited locally and not yet
+  // confirmed saved. Scores only — shot-detail saves rely on pendingSaveRef.
   const dirtyCellsRef = useRef(new Set());
   const notesRef = useRef(notes);
   useEffect(() => { notesRef.current = notes; }, [notes]);
