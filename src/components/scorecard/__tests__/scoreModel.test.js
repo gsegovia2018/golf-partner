@@ -86,6 +86,19 @@ describe('roundTotals', () => {
 });
 
 describe('summaryState', () => {
+  test('solo variant with no holes scored returns em dash for vsParLabel', () => {
+    const round = { holes: [{ number: 1, par: 4, strokeIndex: 1 }] };
+    const solo = [{ id: 'a', name: 'Ana', handicap: 0 }];
+    const s = summaryState({
+      mode: 'stableford', round, players: solo,
+      scores: {}, settings: {}, currentHole: 1, meId: 'a',
+    });
+    expect(s.variant).toBe('solo');
+    expect(s.solo.vsParLabel).toBe('—');
+    expect(s.solo.str).toBe(0);
+    expect(s.solo.pts).toBe(0);
+  });
+
   test('solo variant returns the stat ribbon', () => {
     const round = { holes: [{ number: 1, par: 4, strokeIndex: 1 }] };
     const solo = [{ id: 'a', name: 'Ana', handicap: 0 }];

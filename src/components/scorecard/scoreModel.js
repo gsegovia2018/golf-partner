@@ -82,7 +82,7 @@ function roundTeamPts(bbResult, team, bbVal, wbVal) {
 
 // vs-par label for the solo ribbon — ports SoloTotalsRibbon's vsParLabel.
 function vsParLabel(str, parPlayed) {
-  if (parPlayed === 0) return '-';
+  if (parPlayed === 0) return '—';
   const diff = str - parPlayed;
   if (diff === 0) return 'E';
   if (diff > 0) return `+${diff}`;
