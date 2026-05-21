@@ -10,7 +10,7 @@ export const DEFAULT_SHOT = {
   otherPenalties: 0,
   sandShots: 0,
   recoveryOutcome: null,        // 'up-and-down' | 'sand-save' | 'none' | null
-  firstPuttBucket: null,        // '0-3' | '3-6' | '6-10' | '10-20' | '20+' | null
+  firstPuttBucket: null,        // '0-1' | '1-2' | '2-3' | '3-6' | '6+' | null
   approachBucket: null,         // '0-50' | '50-100' | '100-150' | '150-200' | '200+' | null
 };
 

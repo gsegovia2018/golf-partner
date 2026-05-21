@@ -13,9 +13,7 @@ import * as ScreenOrientation from 'expo-screen-orientation';
 import { getShowRunningScore, setShowRunningScore } from '../lib/prefs';
 import {
   loadTournament, subscribeTournamentChanges,
-  calcStablefordPoints, calcBestWorstBall, DEFAULT_SETTINGS,
-  matchPlayHolePts,
-  sindicatoHolePoints,
+  calcBestWorstBall, DEFAULT_SETTINGS,
   roundPairClinched,
   isRoundComplete, isTournamentFinished,
   subscribeSyncStatus,
@@ -782,49 +780,6 @@ export default function ScorecardScreen({ navigation, route }) {
     }
   }, [round, autoSave, triggerCelebration, getScoreAnim, official, officialWrite]);
 
-  // Totals computed once per (round, players, scores) change. The per-hole
-  // pager pages do NOT read this — it only feeds the outside totals strip.
-  // In match play, pts tallies per-hole wins (1/0/half) instead of Stableford.
-  const playerTotalsMap = useMemo(() => {
-    const map = new Map();
-    if (!round) return map;
-    const isMatchPlay = settings.scoringMode === 'matchplay';
-    const isSindicato = settings.scoringMode === 'sindicato';
-    const playerHandicaps = round.playerHandicaps ?? {};
-    players.forEach((player) => {
-      const handicap = playerHandicaps[player.id] ?? player.handicap ?? 0;
-      let pts = 0;
-      let str = 0;
-      let parPlayed = 0;
-      round.holes.forEach((hole) => {
-        const sc = scores[player.id]?.[hole.number];
-        if (sc) {
-          str += sc;
-          parPlayed += hole.par;
-          if (isMatchPlay) {
-            pts += matchPlayHolePts(hole, player.id, players, scores, playerHandicaps) ?? 0;
-          } else if (isSindicato) {
-            pts += sindicatoHolePoints(hole, players, scores, playerHandicaps)?.[player.id] ?? 0;
-          } else {
-            pts += calcStablefordPoints(hole.par, sc, handicap, hole.strokeIndex);
-          }
-        }
-      });
-      map.set(player.id, { pts, str, parPlayed });
-    });
-    return map;
-  }, [round, players, scores, settings.scoringMode]);
-
-  const playerTotals = useCallback(
-    (player) => playerTotalsMap.get(player.id) ?? { pts: 0, str: 0, parPlayed: 0 },
-    [playerTotalsMap],
-  );
-
-  const goToPrevHole = useCallback(() => {
-    haptic('medium');
-    setCurrentHole((h) => Math.max(1, h - 1));
-  }, []);
-
   const [showRunning, setShowRunning] = useState(true);
   useEffect(() => {
     let cancelled = false;
@@ -1203,13 +1158,10 @@ export default function ScorecardScreen({ navigation, route }) {
           editable={editable}
           onRoundNoteChange={saveRoundNote}
           onHoleNoteChange={saveHoleNote}
-          onPrev={goToPrevHole}
           onNext={goToNextHole}
           onGoToHole={goToHole}
-          onGoBack={goBack}
           onFinish={handleFinish}
           holeCount={holeCount}
-          playerTotals={playerTotals}
           showRunning={showRunning}
           getScoreAnim={getScoreAnim}
           celebration={celebration}
