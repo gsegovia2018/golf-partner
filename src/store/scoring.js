@@ -326,6 +326,17 @@ export function recoveryOutcomeFromState({ strokes, putts, sandShots = 0, par })
   return sandShots >= 1 ? 'sand-save' : 'up-and-down';
 }
 
+// Total strokes already accounted for by a hole's shot detail: every putt,
+// penalty, and sand shot is itself one of the hole's strokes. Missing or
+// null fields count as 0.
+export function shotDetailStrokeCount(detail) {
+  if (!detail) return 0;
+  return (detail.putts ?? 0)
+    + (detail.teePenalties ?? 0)
+    + (detail.otherPenalties ?? 0)
+    + (detail.sandShots ?? 0);
+}
+
 // ── Match Play tournament ────────────────────────────────────────────────────
 
 // Match Play tournament standing. Across played rounds, sums each of the two

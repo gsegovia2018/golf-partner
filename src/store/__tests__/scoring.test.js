@@ -21,6 +21,7 @@ import {
   tournamentMatchPlayStandings,
   recoveryOutcomeFromState,
   isGIR,
+  shotDetailStrokeCount,
 } from '../scoring';
 
 describe('calcExtraShots', () => {
@@ -619,5 +620,23 @@ describe('recoveryOutcomeFromState', () => {
     expect(recoveryOutcomeFromState({
       strokes: 4, putts: 0, sandShots: 0, par: 4,
     })).toBeNull();
+  });
+});
+
+describe('shotDetailStrokeCount', () => {
+  test('sums the four counter fields', () => {
+    expect(shotDetailStrokeCount({
+      putts: 2, teePenalties: 1, otherPenalties: 1, sandShots: 1,
+    })).toBe(5);
+  });
+
+  test('treats null and missing fields as zero', () => {
+    expect(shotDetailStrokeCount({ putts: null })).toBe(0);
+    expect(shotDetailStrokeCount({})).toBe(0);
+  });
+
+  test('returns 0 for a missing detail', () => {
+    expect(shotDetailStrokeCount(null)).toBe(0);
+    expect(shotDetailStrokeCount(undefined)).toBe(0);
   });
 });
