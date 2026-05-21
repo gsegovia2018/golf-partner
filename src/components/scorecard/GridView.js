@@ -223,7 +223,7 @@ function ScorecardTable({ round, players, scores, onSetScore, mode, meId }) {
     const available = width - 14 * 2 - 2 - 2 * 2 - 4 * 2;
     return sideBySide ? (available - 16) / 2 : available;
   })();
-  const columns = getSoloColumns(innerWidth, players.length);
+  const columns = getSoloColumns(innerWidth);
 
   const coursePar = holes.reduce((acc, h) => acc + h.par, 0);
   const isSolo = players.length === 1;
@@ -388,7 +388,7 @@ function LiveMatchStrip({ bbResult, settings }) {
 
   if (!bbResult) return null;
   const { pair1, pair2 } = bbResult;
-  const { bestBallValue: bbVal, worstBallValue: wbVal } = settings;
+  const { bestBallValue: bbVal = 1, worstBallValue: wbVal = 1 } = settings ?? {};
   const p1Name = pairLabel(pair1);
   const p2Name = pairLabel(pair2);
   const p1Round = roundTeamPts(bbResult, 1, bbVal, wbVal);
