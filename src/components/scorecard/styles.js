@@ -1492,5 +1492,147 @@ export function makeScorecardStyles(theme) {
     shotSection: { marginTop: 10, borderTopWidth: 1, borderTopColor: theme.border.subtle ?? theme.border.default },
     shotSectionHeader: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingVertical: 10 },
     shotSectionTitle: { color: theme.text.secondary, fontSize: 13, fontFamily: 'PlusJakartaSans-Bold' },
+
+    // Unified round summary panel (RoundSummary) — one card replaces the four
+    // mode-specific panels (MatchPanel / SindicatoPanel / SoloTotalsRibbon /
+    // StablefordWinnerBanner). Matches the visual weight of totalsStrip /
+    // matchPanel so the pinned panel height stays consistent.
+    summaryCard: {
+      backgroundColor: theme.bg.card,
+      borderRadius: 14,
+      borderWidth: 1,
+      borderColor: theme.isDark ? theme.glass?.border : theme.border.default,
+      borderTopWidth: 1,
+      borderTopColor: theme.isDark ? theme.glass?.border : theme.border.default,
+      paddingHorizontal: 13,
+      paddingVertical: 11,
+    },
+    summaryEyebrow: {
+      color: theme.text.muted,
+      fontSize: 10,
+      fontFamily: 'PlusJakartaSans-Bold',
+      letterSpacing: 1.5,
+      textTransform: 'uppercase',
+      textAlign: 'center',
+      marginBottom: 6,
+    },
+    // pairs variant — column-header row + two pair rows
+    summaryColHeader: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      marginBottom: 4,
+    },
+    summaryColLabel: {
+      width: 52,
+      textAlign: 'center',
+      color: theme.text.muted,
+      fontSize: 10,
+      fontFamily: 'PlusJakartaSans-Bold',
+      letterSpacing: 1.5,
+      textTransform: 'uppercase',
+    },
+    summaryRow: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      paddingVertical: 5,
+      paddingHorizontal: 4,
+      borderRadius: 8,
+    },
+    summaryRowWinner: {
+      backgroundColor: 'rgba(232,196,95,0.12)',
+    },
+    summaryNameWrap: {
+      flex: 1,
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: 6,
+    },
+    summaryName: {
+      flex: 1,
+      color: theme.text.primary,
+      fontSize: 13,
+      fontFamily: 'PlusJakartaSans-Bold',
+    },
+    summaryCol: {
+      width: 52,
+      textAlign: 'center',
+      color: theme.text.primary,
+      fontSize: 17,
+      fontFamily: 'PlusJakartaSans-ExtraBold',
+    },
+    // players variant — a row of per-player chips
+    summaryChipRow: {
+      flexDirection: 'row',
+      gap: 8,
+    },
+    summaryChip: {
+      flex: 1,
+      alignItems: 'center',
+      backgroundColor: theme.isDark ? theme.bg.elevated : theme.bg.secondary,
+      borderRadius: 10,
+      borderWidth: 1,
+      borderColor: 'transparent',
+      paddingVertical: 7,
+      paddingHorizontal: 6,
+    },
+    summaryChipLeader: {
+      backgroundColor: theme.accent.primary + '22',
+      borderColor: theme.accent.primary,
+    },
+    summaryChipNameRow: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: 4,
+      maxWidth: '100%',
+    },
+    summaryChipName: {
+      color: theme.text.muted,
+      fontSize: 11,
+      fontFamily: 'PlusJakartaSans-SemiBold',
+    },
+    summaryChipValue: {
+      color: theme.text.primary,
+      fontSize: 20,
+      fontFamily: 'PlusJakartaSans-ExtraBold',
+      marginTop: 1,
+    },
+    // solo variant — three stat columns
+    summarySolo: {
+      flexDirection: 'row',
+      alignItems: 'center',
+    },
+    summarySoloItem: {
+      flex: 1,
+      alignItems: 'center',
+      gap: 2,
+    },
+    summarySoloDivider: {
+      width: 1,
+      height: 28,
+      backgroundColor: theme.isDark ? theme.glass?.border : theme.border.default,
+    },
+    summarySoloLabel: {
+      color: theme.text.muted,
+      fontSize: 10,
+      fontFamily: 'PlusJakartaSans-Bold',
+      letterSpacing: 1.5,
+      textTransform: 'uppercase',
+    },
+    summarySoloValue: {
+      color: theme.text.primary,
+      fontSize: 20,
+      fontFamily: 'PlusJakartaSans-ExtraBold',
+    },
+    // status line below the body
+    summaryStatus: {
+      color: theme.text.muted,
+      fontSize: 11,
+      fontFamily: 'PlusJakartaSans-SemiBold',
+      textAlign: 'center',
+      marginTop: 7,
+    },
+    summaryStatusWinner: {
+      color: '#e8c45f',
+    },
   });
 }

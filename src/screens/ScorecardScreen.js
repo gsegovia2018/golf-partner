@@ -47,6 +47,7 @@ import {
   CELEBRATION_TIERS, celebrationFor,
 } from '../components/scorecard/constants';
 import { ShotDetailPanel } from '../components/scorecard/ShotDetailPanel';
+import { RoundSummary } from '../components/scorecard/RoundSummary';
 import { makeScorecardStyles } from '../components/scorecard/styles';
 
 // Web-only CSS scroll-snap. On native, `pagingEnabled` is handled by the
@@ -1922,33 +1923,17 @@ function HoleView({ round, roundIndex, players, scores, shotDetails, meId, onSet
         )}
       </View>
 
-      {/* Round totals / live match — pinned above the bottom controls.
-          Match-play live panel always shows (it's the score, not a running
-          total). Solo and Stableford totals respect the eye toggle. */}
-      {isBestBall && bbResult ? (
-        <MatchPanel bbResult={bbResult} currentHole={currentHole} settings={settings} />
-      ) : isSindicato && players.length === 3 ? (
-        <SindicatoPanel round={round} players={players} scores={scores} meId={meId} />
-      ) : showRunning && players.length === 1 ? (
-        <SoloTotalsRibbon player={players[0]} stats={playerTotals(players[0])} />
-      ) : showRunning ? (
-        <View style={s.totalsStrip}>
-          <StablefordWinnerBanner round={round} scores={scores} players={players} />
-          <Text style={s.totalStripLabel}>ROUND TOTALS</Text>
-          <View style={s.totalStripRow}>
-            {playersMeFirst(players, meId).map((player) => {
-              const { pts, str } = playerTotals(player);
-              return (
-                <View key={player.id} style={s.totalStripPlayer}>
-                  <Text style={s.totalStripName}>{player.name.split(' ')[0]}</Text>
-                  <Text style={s.totalStripPts}>{pts}</Text>
-                  <Text style={s.totalStripStr}>{str || '-'}</Text>
-                </View>
-              );
-            })}
-          </View>
-        </View>
-      ) : null}
+      {/* Unified round summary — pinned above the bottom controls. One panel
+          renders every game mode (pairs / players / solo) from summaryState. */}
+      <RoundSummary
+        mode={settings?.scoringMode ?? 'stableford'}
+        round={round}
+        players={players}
+        scores={scores}
+        settings={settings}
+        currentHole={currentHole}
+        meId={meId}
+      />
 
       {/* Bottom controls: actions (notes / go-to-hole / next) */}
       <View style={s.bottomBar}>
