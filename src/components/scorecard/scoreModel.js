@@ -34,6 +34,7 @@ export function holePoints({ mode, hole, players, scores, handicaps }) {
 
 // Per-player round totals. Returns Map<playerId, { pts, str, parPlayed }>.
 export function roundTotals({ mode, round, players, scores, handicaps }) {
+  const hcaps = handicaps ?? round?.playerHandicaps ?? {};
   const map = new Map();
   const holes = round?.holes ?? [];
   for (const p of players) {
@@ -45,7 +46,7 @@ export function roundTotals({ mode, round, players, scores, handicaps }) {
       if (sc == null) continue;
       str += sc;
       parPlayed += hole.par;
-      const hp = holePoints({ mode, hole, players, scores, handicaps });
+      const hp = holePoints({ mode, hole, players, scores, handicaps: hcaps });
       pts += hp[p.id] ?? 0;
     }
     map.set(p.id, { pts, str, parPlayed });
@@ -96,10 +97,11 @@ export function summaryState({ mode, round, players, scores, settings, currentHo
   const playerList = players ?? [];
   const liveRound = { ...round, scores };
   const cfg = settings ?? {};
+  const handicaps = round?.playerHandicaps ?? {};
 
   // --- solo --------------------------------------------------------------
   if (playerList.length === 1) {
-    const totals = roundTotals({ mode, round, players: playerList, scores });
+    const totals = roundTotals({ mode, round, players: playerList, scores, handicaps });
     const me = playerList[0];
     const { str = 0, pts = 0, parPlayed = 0 } = totals.get(me.id) ?? {};
     return {
@@ -113,7 +115,7 @@ export function summaryState({ mode, round, players, scores, settings, currentHo
 
   // --- match play (1v1 — exactly 2 individual players) -------------------
   if (mode === 'matchplay') {
-    const totals = roundTotals({ mode, round, players: playerList, scores });
+    const totals = roundTotals({ mode, round, players: playerList, scores, handicaps });
     const ordered = playersMeFirst(playerList, meId);
     const tally = matchPlayRoundTally(
       { ...round, scores, playerHandicaps: round?.playerHandicaps ?? {} },
@@ -217,7 +219,7 @@ export function summaryState({ mode, round, players, scores, settings, currentHo
   }
 
   // --- players (stableford / sindicato) ----------------------------------
-  const totals = roundTotals({ mode, round, players: playerList, scores });
+  const totals = roundTotals({ mode, round, players: playerList, scores, handicaps });
   const ordered = playersMeFirst(playerList, meId);
 
   if (mode === 'sindicato') {
@@ -264,15 +266,17 @@ export function summaryState({ mode, round, players, scores, settings, currentHo
   const roundPairs = round?.pairs ?? [];
   const hasTwoPairs = roundPairs.length >= 2;
 
+  // Hoist the leaderboard computation once for the hasTwoPairs path.
+  const pairLb = hasTwoPairs ? roundPairLeaderboard(liveRound, playerList) : null;
+
   // Winner — top pair when 2 pairs exist (random-partner Stableford), else
   // the top chip. Null on a tie.
   let winnerLabel = null;
   let winnerIds = [];
   if (hasTwoPairs) {
-    const lb = roundPairLeaderboard(liveRound, playerList);
-    if (lb.length >= 2 && lb[0].combinedPoints !== lb[1].combinedPoints) {
-      winnerLabel = lb[0].members.map((m) => firstName(m.player)).join(' & ');
-      winnerIds = lb[0].members.map((m) => m.player.id);
+    if (pairLb.length >= 2 && pairLb[0].combinedPoints !== pairLb[1].combinedPoints) {
+      winnerLabel = pairLb[0].members.map((m) => firstName(m.player)).join(' & ');
+      winnerIds = pairLb[0].members.map((m) => m.player.id);
     }
   } else if (!tiedTop && leaderEntry) {
     winnerLabel = firstName(leaderEntry.p);
@@ -289,13 +293,12 @@ export function summaryState({ mode, round, players, scores, settings, currentHo
     }
   } else if (hasTwoPairs) {
     // Live random-partner Stableford — name the leading pair.
-    const lb = roundPairLeaderboard(liveRound, playerList);
     const holesLeft = holes.filter((h) => (
       !playerList.every((p) => scores?.[p.id]?.[h.number] != null)
     )).length;
-    if (lb.length >= 2 && lb[0].combinedPoints !== lb[1].combinedPoints) {
-      const lbLead = lb[0].combinedPoints - lb[1].combinedPoints;
-      const lbName = lb[0].members.map((m) => firstName(m.player)).join(' & ');
+    if (pairLb.length >= 2 && pairLb[0].combinedPoints !== pairLb[1].combinedPoints) {
+      const lbLead = pairLb[0].combinedPoints - pairLb[1].combinedPoints;
+      const lbName = pairLb[0].members.map((m) => firstName(m.player)).join(' & ');
       status = `${lbName} lead by ${lbLead} · ${holesLeft} to play`;
     } else {
       status = `All level · ${holesLeft} to play`;

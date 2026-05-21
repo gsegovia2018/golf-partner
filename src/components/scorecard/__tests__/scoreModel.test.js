@@ -190,6 +190,77 @@ describe('summaryState', () => {
     expect(s.pairs[0].holePts).toBe(2);
   });
 
+  test('stableford hasTwoPairs: 4 players, 2 pairs, pair-aware status and chips', () => {
+    // Two par-4 holes (SI 1 and SI 2), all handicap 0.
+    // Pairs: [p1,p2] and [p3,p4].
+    // Hole 1: p1=3(birdie,3pts) p2=4(par,2pts) p3=4(par,2pts) p4=5(bogey,1pt)
+    // Hole 2: p1=4(par,2pts)    p2=3(birdie,3pts) p3=5(bogey,1pt)  p4=4(par,2pts)
+    // Totals: p1=5, p2=5, p3=3, p4=3
+    // Combined: pair1=10, pair2=6 -> pair1 leads after hole 2 (1 hole left)
+    const p1 = { id: 'p1', name: 'Ana Diaz', handicap: 0 };
+    const p2 = { id: 'p2', name: 'Ben Cruz', handicap: 0 };
+    const p3 = { id: 'p3', name: 'Cal Vega', handicap: 0 };
+    const p4 = { id: 'p4', name: 'Dan Ford', handicap: 0 };
+    const round = {
+      holes: [
+        { number: 1, par: 4, strokeIndex: 1 },
+        { number: 2, par: 4, strokeIndex: 2 },
+        { number: 3, par: 4, strokeIndex: 3 },
+      ],
+      pairs: [[p1, p2], [p3, p4]],
+    };
+    const fourPlayers = [p1, p2, p3, p4];
+    const scores = {
+      p1: { 1: 3, 2: 4 },
+      p2: { 1: 4, 2: 3 },
+      p3: { 1: 4, 2: 5 },
+      p4: { 1: 5, 2: 4 },
+    };
+    const s = summaryState({
+      mode: 'stableford', round, players: fourPlayers,
+      scores, settings: {}, currentHole: 2, meId: 'p1',
+    });
+    expect(s.variant).toBe('players');
+    expect(s.eyebrow).toBe('STABLEFORD');
+    expect(s.chips).toHaveLength(4);
+    // me-first: p1 first
+    expect(s.chips[0].id).toBe('p1');
+    // pair1 combined = 10, pair2 combined = 6 -> lead 4, 1 hole to play
+    expect(s.status).toBe('Ana & Ben lead by 4 · 1 to play');
+    // pair1 players are winners when decided; decided = false here (hole 3 not scored)
+    expect(s.decided).toBe(false);
+    // chip point values match individual totals
+    expect(s.chips.find((c) => c.id === 'p1').points).toBe(5);
+    expect(s.chips.find((c) => c.id === 'p2').points).toBe(5);
+    expect(s.chips.find((c) => c.id === 'p3').points).toBe(3);
+    expect(s.chips.find((c) => c.id === 'p4').points).toBe(3);
+  });
+
+  test('stableford hasTwoPairs decided: winner label uses have', () => {
+    // Single hole, all scored -> decided = true
+    const p1 = { id: 'p1', name: 'Ana Diaz', handicap: 0 };
+    const p2 = { id: 'p2', name: 'Ben Cruz', handicap: 0 };
+    const p3 = { id: 'p3', name: 'Cal Vega', handicap: 0 };
+    const p4 = { id: 'p4', name: 'Dan Ford', handicap: 0 };
+    const round = {
+      holes: [{ number: 1, par: 4, strokeIndex: 1 }],
+      pairs: [[p1, p2], [p3, p4]],
+    };
+    const fourPlayers = [p1, p2, p3, p4];
+    // pair1: p1 birdie(3pts)+p2 par(2pts)=5; pair2: p3 bogey(1pt)+p4 double(0pts)=1
+    const scores = { p1: { 1: 3 }, p2: { 1: 4 }, p3: { 1: 5 }, p4: { 1: 6 } };
+    const s = summaryState({
+      mode: 'stableford', round, players: fourPlayers,
+      scores, settings: {}, currentHole: 1, meId: 'p3',
+    });
+    expect(s.decided).toBe(true);
+    expect(s.status).toBe('Ana & Ben have won');
+    expect(s.chips.find((c) => c.id === 'p1').isWinner).toBe(true);
+    expect(s.chips.find((c) => c.id === 'p2').isWinner).toBe(true);
+    expect(s.chips.find((c) => c.id === 'p3').isWinner).toBe(false);
+    expect(s.chips.find((c) => c.id === 'p4').isWinner).toBe(false);
+  });
+
   test('players variant — sindicato: three players, leader status', () => {
     // Two holes, all handicap 0. sindicato awards 4/2/0 by net rank per hole.
     const round = {
