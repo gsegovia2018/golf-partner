@@ -1,7 +1,7 @@
 import React from 'react';
 import { render, fireEvent } from '@testing-library/react-native';
 import { ThemeProvider } from '../../theme/ThemeContext';
-import { ShotDetailPanel } from '../ScorecardScreen';
+import { ShotDetailPanel } from '../../components/scorecard/ShotDetailPanel';
 
 describe('ShotDetailPanel — outcome chips', () => {
   const wrap = (ui) => <ThemeProvider>{ui}</ThemeProvider>;

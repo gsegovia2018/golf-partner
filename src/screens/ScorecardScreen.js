@@ -22,7 +22,6 @@ import {
   subscribeSyncStatus,
 } from '../store/tournamentStore';
 import { mutate } from '../store/mutate';
-import { isGIR, recoveryOutcomeFromState } from '../store/scoring';
 import { fetchPlayers } from '../store/libraryStore';
 import { useAuth } from '../context/AuthContext';
 import { useTheme } from '../theme/ThemeContext';
@@ -35,7 +34,6 @@ import { pickMedia, attachMedia } from '../lib/mediaCapture';
 import { useRoundMedia } from '../hooks/useRoundMedia';
 import { useOfficialRound } from '../hooks/useOfficialRound';
 import DiscrepancySheet from '../components/DiscrepancySheet';
-import { ShotDetailExplainer } from '../components/ShotDetailExplainer';
 import ScoringModeChangeBanner from '../components/ScoringModeChangeBanner';
 import ScoringModeChangeSheet from '../components/ScoringModeChangeSheet';
 import { fallbackNoticeText } from '../components/scoringModes';
@@ -45,11 +43,10 @@ import { attestCard } from '../store/officialStore';
 import { notifyRoundFinished } from '../store/notificationStore';
 import { Alert } from 'react-native';
 import {
-  DEFAULT_SHOT, DRIVE_ORDER, DRIVE_META,
-  FIRST_PUTT_BUCKETS, FIRST_PUTT_LABELS,
-  APPROACH_BUCKETS, APPROACH_LABELS,
+  DEFAULT_SHOT,
   CELEBRATION_TIERS, celebrationFor,
 } from '../components/scorecard/constants';
+import { ShotDetailPanel } from '../components/scorecard/ShotDetailPanel';
 import { makeScorecardStyles } from '../components/scorecard/styles';
 
 // Web-only CSS scroll-snap. On native, `pagingEnabled` is handled by the
@@ -1770,255 +1767,6 @@ function MePicker({ players, onPickMe, theme, s }) {
   );
 }
 
-// Collapsible per-hole shot detail for the "me" player: putts, driver
-// direction (hidden on par 3s — no driver off the tee), and penalties
-// split into tee penalties vs everything else.
-// One "label … − value +" row, styled after the Hole19 stat rows.
-function ShotCounterRow({ label, value, onStep, theme, s, explainer }) {
-  const canDec = value != null && value > 0;
-  return (
-    <View style={s.shotRow}>
-      <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
-        <Text style={s.shotRowLabel}>{label}</Text>
-        {explainer}
-      </View>
-      <View style={s.shotCounter}>
-        <TouchableOpacity
-          style={[s.shotCounterBtn, !canDec && s.shotCounterBtnDim]}
-          onPress={() => onStep(-1)}
-          disabled={!canDec}
-          activeOpacity={0.7}
-          accessibilityLabel={`Decrease ${label}`}
-        >
-          <Feather name="minus" size={18} color={canDec ? theme.text.primary : theme.text.muted} />
-        </TouchableOpacity>
-        <Text style={s.shotCounterValue}>{value == null ? '–' : value}</Text>
-        <TouchableOpacity
-          style={s.shotCounterBtn}
-          onPress={() => onStep(1)}
-          activeOpacity={0.7}
-          accessibilityLabel={`Increase ${label}`}
-        >
-          <Feather name="plus" size={18} color={theme.text.primary} />
-        </TouchableOpacity>
-      </View>
-    </View>
-  );
-}
-
-function BucketRow({ label, value, buckets, labels, onSelect, theme, s, isLast = true, explainer }) {
-  return (
-    <View style={[s.shotRow, s.bucketRow, isLast && s.shotRowLast]}>
-      <View style={s.bucketLabelRow}>
-        <Text style={s.shotRowLabel}>{label}</Text>
-        {explainer}
-      </View>
-      <View style={s.bucketBtns}>
-        {buckets.map((key) => {
-          const active = value === key;
-          return (
-            <TouchableOpacity
-              key={key}
-              style={[s.driveCircle, active && s.driveCircleActive, s.bucketCircle]}
-              onPress={() => onSelect(active ? null : key)}
-              activeOpacity={0.7}
-              accessibilityLabel={`${label} ${labels[key]}`}
-            >
-              <Text
-                style={{
-                  color: active ? theme.text.inverse : theme.text.secondary,
-                  fontSize: 11,
-                  fontWeight: '600',
-                }}
-              >
-                {labels[key]}
-              </Text>
-            </TouchableOpacity>
-          );
-        })}
-      </View>
-    </View>
-  );
-}
-
-// Per-hole shot detail for the "me" player, laid out after the Hole19
-// scorecard: stat rows with a stepper, plus a row of round direction
-// buttons for the drive. The drive row is hidden on par 3s.
-export function ShotDetailPanel({ hole, detail, onChange, strokes, theme: themeProp, s: sProp }) {
-  const { theme: themeCtx } = useTheme();
-  const theme = themeProp ?? themeCtx;
-  const sOwn = useMemo(() => makeScorecardStyles(theme), [theme]);
-  const s = sProp ?? sOwn;
-  const d = { ...DEFAULT_SHOT, ...(detail ?? {}) };
-  const isPar3 = hole.par === 3;
-  const gir = isGIR({ strokes, putts: d.putts, par: hole.par });
-  const missedGIR = gir === false;
-  const autoOutcome = recoveryOutcomeFromState({
-    strokes,
-    putts: d.putts,
-    sandShots: d.sandShots ?? 0,
-    par: hole.par,
-  });
-  const effectiveOutcome = d.recoveryOutcome ?? autoOutcome;
-
-  const step = (field, delta) => {
-    const cur = d[field] ?? 0;
-    onChange({ [field]: Math.max(0, Math.min(15, cur + delta)) });
-  };
-
-  return (
-    <View style={s.shotPanel}>
-      <Text style={s.shotPanelLabel}>How many were:</Text>
-
-      <ShotCounterRow
-        label="Putts"
-        value={d.putts}
-        onStep={(delta) => step('putts', delta)}
-        theme={theme}
-        s={s}
-      />
-      <ShotCounterRow
-        label="Tee penalties"
-        value={d.teePenalties}
-        onStep={(delta) => step('teePenalties', delta)}
-        theme={theme}
-        s={s}
-      />
-      <ShotCounterRow
-        label="Other penalties"
-        value={d.otherPenalties}
-        onStep={(delta) => step('otherPenalties', delta)}
-        theme={theme}
-        s={s}
-      />
-      <ShotCounterRow
-        label="Sand shots"
-        value={d.sandShots}
-        onStep={(delta) => step('sandShots', delta)}
-        theme={theme}
-        s={s}
-        explainer={
-          <ShotDetailExplainer
-            rowKey="sandShots"
-            title="Sand shots"
-            body="Total bunker shots you played on this hole — even from a fairway bunker. Used for sand saves and bunker visits per round."
-          />
-        }
-      />
-
-      {!isPar3 && (
-        <View style={[s.shotRow, s.shotRowLast]}>
-          <Text style={s.shotRowLabel}>Driver</Text>
-          <View style={s.driveBtns}>
-            {DRIVE_ORDER.map((key) => {
-              const meta = DRIVE_META[key];
-              const active = d.drive === key;
-              return (
-                <TouchableOpacity
-                  key={key}
-                  style={[s.driveCircle, active && s.driveCircleActive]}
-                  onPress={() => onChange({ drive: active ? null : key })}
-                  activeOpacity={0.7}
-                  accessibilityLabel={`Driver ${meta.label}`}
-                >
-                  <Feather
-                    name={meta.icon}
-                    size={18}
-                    color={active ? theme.text.inverse : theme.text.secondary}
-                  />
-                </TouchableOpacity>
-              );
-            })}
-          </View>
-        </View>
-      )}
-      {!isPar3 && (
-        <BucketRow
-          label="Approach from"
-          value={d.approachBucket}
-          buckets={APPROACH_BUCKETS}
-          labels={APPROACH_LABELS}
-          onSelect={(key) => onChange({ approachBucket: key })}
-          theme={theme}
-          s={s}
-          isLast={false}
-          explainer={
-            <ShotDetailExplainer
-              rowKey="approachBucket"
-              title="Approach distance"
-              body="How far you played your approach into the green from (in meters). Drives Strokes Gained Approach."
-            />
-          }
-        />
-      )}
-      {(d.putts ?? 0) >= 1 && (
-        <BucketRow
-          label="First putt"
-          value={d.firstPuttBucket}
-          buckets={FIRST_PUTT_BUCKETS}
-          labels={FIRST_PUTT_LABELS}
-          onSelect={(key) => onChange({ firstPuttBucket: key })}
-          theme={theme}
-          s={s}
-          isLast={!missedGIR}
-          explainer={
-            <ShotDetailExplainer
-              rowKey="firstPuttBucket"
-              title="First putt distance"
-              body="How far away your first putt was (in meters). Lets us measure how well you lag long putts and how well you convert short ones."
-            />
-          }
-        />
-      )}
-      {missedGIR && (
-        <View style={[s.shotRow, s.shotRowLast]}>
-          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
-            <Text style={s.shotRowLabel}>Outcome</Text>
-            <ShotDetailExplainer
-              rowKey="outcome"
-              title="Up & Down / Sand Save"
-              body={'A successful "up and down" means you missed the green in regulation but still saved par or better. A "sand save" is the same but from a bunker.'}
-            />
-          </View>
-          <View style={s.driveBtns}>
-            <TouchableOpacity
-              style={[s.outcomeChip, effectiveOutcome === 'up-and-down' && s.outcomeChipActive]}
-              onPress={() => onChange({
-                recoveryOutcome:
-                  effectiveOutcome === 'up-and-down' ? 'none' : 'up-and-down',
-              })}
-              activeOpacity={0.7}
-            >
-              <Text
-                accessibilityState={{ selected: effectiveOutcome === 'up-and-down' }}
-                style={[
-                  s.outcomeChipLabel,
-                  effectiveOutcome === 'up-and-down' && { color: theme.text.inverse },
-                ]}
-              >Up & Down</Text>
-            </TouchableOpacity>
-            <TouchableOpacity
-              style={[s.outcomeChip, effectiveOutcome === 'sand-save' && s.outcomeChipActive]}
-              onPress={() => onChange({
-                recoveryOutcome:
-                  effectiveOutcome === 'sand-save' ? 'none' : 'sand-save',
-              })}
-              activeOpacity={0.7}
-            >
-              <Text
-                accessibilityState={{ selected: effectiveOutcome === 'sand-save' }}
-                style={[
-                  s.outcomeChipLabel,
-                  effectiveOutcome === 'sand-save' && { color: theme.text.inverse },
-                ]}
-              >Sand Save</Text>
-            </TouchableOpacity>
-          </View>
-        </View>
-      )}
-    </View>
-  );
-}
 
 function HoleView({ round, roundIndex, players, scores, shotDetails, meId, onSetShot, onPickMe, notes, currentHole, hole, isBestBall, bbResult, settings, onStep, onSetScore, editable, onRoundNoteChange, onHoleNoteChange, onPrev, onNext, onGoToHole, onGoBack, onFinish, holeCount, playerTotals, showRunning, getScoreAnim, celebration, celebrationAnim, refreshing, onRefresh, official, officialDiscrepancy, officialEditableSource, officialSetScore, officialHasAttested, officialAttestBusy, officialAttestError, onAttest }) {
   const { theme } = useTheme();
