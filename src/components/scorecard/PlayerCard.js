@@ -29,7 +29,7 @@ function haptic(style = 'medium') {
 //   getScoreAnim                          — (playerId) => Animated.Value
 //   onStep(playerId, holeNumber, delta), onSetScore(playerId, holeNumber, value)
 //   shotDetail, onSetShot, shotCollapsed, onToggleShotDetail   — me-only
-//   official, officialState, canResolveHere, onOpenDiscrepancy — official mode
+//   officialState, canResolveHere, onOpenDiscrepancy — official mode
 export const PlayerCard = React.memo(function PlayerCard({
   player, hole, strokes, points,
   handicap, extraShots, pickup, isPickup, teeLabel,
@@ -38,16 +38,15 @@ export const PlayerCard = React.memo(function PlayerCard({
   getScoreAnim,
   onStep, onSetScore,
   shotDetail, onSetShot, shotCollapsed, onToggleShotDetail,
-  official, officialState, canResolveHere, onOpenDiscrepancy,
+  officialState, canResolveHere, onOpenDiscrepancy,
 }) {
   const { theme } = useTheme();
   const s = useMemo(() => makeScorecardStyles(theme), [theme]);
 
-  const pts = points;
-  const ptsColor = pts == null ? theme.text.muted
-    : pts >= 3 ? theme.scoreColor('excellent')
-    : pts >= 2 ? theme.scoreColor('good')
-    : pts === 1 ? theme.scoreColor('neutral')
+  const ptsColor = points == null ? theme.text.muted
+    : points >= 3 ? theme.scoreColor('excellent')
+    : points >= 2 ? theme.scoreColor('good')
+    : points === 1 ? theme.scoreColor('neutral')
     : theme.scoreColor('poor');
 
   const t = totals ?? { pts: 0, str: 0, parPlayed: 0 };
@@ -184,10 +183,10 @@ export const PlayerCard = React.memo(function PlayerCard({
         )}
       </View>
 
-      {pts != null && (
+      {points != null && (
         <View style={[s.soloPtsBadge, { borderColor: ptsColor }]}>
           <Text style={[s.soloPtsText, { color: ptsColor }]}>
-            {pts} {pts === 1 ? 'point' : 'points'}
+            {points} {points === 1 ? 'point' : 'points'}
           </Text>
         </View>
       )}

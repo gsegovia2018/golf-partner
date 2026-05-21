@@ -1411,17 +1411,17 @@ const HolePage = React.memo(function HolePage({
   mode,
   official, officialDiscrepancy, onOpenDiscrepancy,
   shotCollapsed, onToggleShotDetail,
+  totalsMap,
 }) {
   // Every game mode now renders the unified PlayerCard. Players are ordered
   // "me first" so the signed-in player's card (with shot detail) is on top.
   const orderedPlayers = playersMeFirst(players, meId);
 
-  // Per-hole points and round totals are computed once per render and then
-  // looked up per player — PlayerCard is pure presentation.
+  // Per-hole points are computed once per render and then looked up per player.
+  // roundTotals is computed once in HoleView and passed down via totalsMap.
   const handicaps = round.playerHandicaps ?? {};
   const holePts = holePoints({ mode, hole: pageHole, players, scores, handicaps });
-  const totalsMap = roundTotals({ mode, round, players, scores, handicaps });
-  const teams = teamsByPlayer(round);
+  const teams = useMemo(() => teamsByPlayer(round), [round]);
 
   return (
     <View
@@ -1508,7 +1508,6 @@ const HolePage = React.memo(function HolePage({
               onSetShot={onSetShot}
               shotCollapsed={shotCollapsed}
               onToggleShotDetail={onToggleShotDetail}
-              official={official}
               officialState={officialState}
               canResolveHere={canResolveHere}
               onOpenDiscrepancy={onOpenDiscrepancy}
@@ -1597,6 +1596,19 @@ function HoleView({ round, roundIndex, players, scores, shotDetails, meId, onSet
     holeScrollOffset.current = target;
     holePagerInitialized.current = true;
   }, [currentHole, pagerSize.width]);
+
+  // Compute round totals once here so all HolePage instances share the same
+  // result — avoids O(holes × players²) redundant work across the pager.
+  const scorecardTotals = useMemo(
+    () => roundTotals({
+      mode: settings?.scoringMode ?? 'stableford',
+      round,
+      players,
+      scores,
+      handicaps: round?.playerHandicaps ?? {},
+    }),
+    [settings?.scoringMode, round, players, scores],
+  );
 
   if (!hole) return null;
 
@@ -1699,6 +1711,7 @@ function HoleView({ round, roundIndex, players, scores, shotDetails, meId, onSet
                   setDiscrepancyTarget({ hole: holeNumber, subjectRosterId })}
                 shotCollapsed={shotCollapsed}
                 onToggleShotDetail={toggleShotDetail}
+                totalsMap={scorecardTotals}
               />
             ))}
           </ScrollView>
