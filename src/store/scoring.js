@@ -337,6 +337,29 @@ export function shotDetailStrokeCount(detail) {
     + (detail.sandShots ?? 0);
 }
 
+// Trims a hole's shot detail so its counters never exceed `strokes`. Strokes
+// is the master value. Trims in order putts -> sandShots -> otherPenalties ->
+// teePenalties until the detail fits. Clears firstPuttBucket when putts is
+// driven to 0 (its picker is hidden at 0 putts). Idempotent: returns the
+// input object unchanged when it already fits or when strokes is null.
+export function reconcileShotDetail(detail, strokes) {
+  if (detail == null || strokes == null) return detail;
+  if (shotDetailStrokeCount(detail) <= strokes) return detail;
+
+  let over = shotDetailStrokeCount(detail) - strokes;
+  const out = { ...detail };
+  for (const field of ['putts', 'sandShots', 'otherPenalties', 'teePenalties']) {
+    if (over <= 0) break;
+    const cur = out[field] ?? 0;
+    if (cur <= 0) continue;            // nothing to trim here — leave field as-is
+    const cut = Math.min(cur, over);
+    out[field] = cur - cut;
+    over -= cut;
+  }
+  if (out.putts === 0) out.firstPuttBucket = null;
+  return out;
+}
+
 // ── Match Play tournament ────────────────────────────────────────────────────
 
 // Match Play tournament standing. Across played rounds, sums each of the two

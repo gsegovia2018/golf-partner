@@ -22,6 +22,7 @@ import {
   recoveryOutcomeFromState,
   isGIR,
   shotDetailStrokeCount,
+  reconcileShotDetail,
 } from '../scoring';
 
 describe('calcExtraShots', () => {
@@ -638,5 +639,60 @@ describe('shotDetailStrokeCount', () => {
   test('returns 0 for a missing detail', () => {
     expect(shotDetailStrokeCount(null)).toBe(0);
     expect(shotDetailStrokeCount(undefined)).toBe(0);
+  });
+});
+
+describe('reconcileShotDetail', () => {
+  test('returns the input unchanged when the detail already fits', () => {
+    const d = { putts: 2, teePenalties: 0, otherPenalties: 0, sandShots: 0 };
+    expect(reconcileShotDetail(d, 4)).toBe(d);
+  });
+
+  test('returns the input unchanged when strokes is null', () => {
+    const d = { putts: 9, teePenalties: 0, otherPenalties: 0, sandShots: 0 };
+    expect(reconcileShotDetail(d, null)).toBe(d);
+  });
+
+  test('trims putts first', () => {
+    const r = reconcileShotDetail(
+      { putts: 5, teePenalties: 0, otherPenalties: 0, sandShots: 0 }, 3);
+    expect(r.putts).toBe(3);
+  });
+
+  test('trims sand shots after putts are exhausted', () => {
+    // count 5, strokes 2, over by 3: putts 1->0, sandShots 4->2
+    const r = reconcileShotDetail(
+      { putts: 1, teePenalties: 0, otherPenalties: 0, sandShots: 4 }, 2);
+    expect(r.putts).toBe(0);
+    expect(r.sandShots).toBe(2);
+  });
+
+  test('trims other penalties before tee penalties, both last', () => {
+    // count 6, strokes 4, over by 2: otherPenalties 3->1, teePenalties untouched
+    const r = reconcileShotDetail(
+      { putts: 0, teePenalties: 3, otherPenalties: 3, sandShots: 0 }, 4);
+    expect(r.otherPenalties).toBe(1);
+    expect(r.teePenalties).toBe(3);
+  });
+
+  test('clears firstPuttBucket when putts is trimmed to 0', () => {
+    const r = reconcileShotDetail(
+      { putts: 2, teePenalties: 0, otherPenalties: 0, sandShots: 0, firstPuttBucket: '1-2' }, 0);
+    expect(r.putts).toBe(0);
+    expect(r.firstPuttBucket).toBeNull();
+  });
+
+  test('leaves a null putts field as null', () => {
+    const r = reconcileShotDetail(
+      { putts: null, teePenalties: 5, otherPenalties: 0, sandShots: 0 }, 3);
+    expect(r.putts).toBeNull();
+    expect(r.teePenalties).toBe(3);
+  });
+
+  test('is idempotent', () => {
+    const once = reconcileShotDetail(
+      { putts: 5, teePenalties: 2, otherPenalties: 0, sandShots: 0 }, 4);
+    const twice = reconcileShotDetail(once, 4);
+    expect(twice).toBe(once);
   });
 });
