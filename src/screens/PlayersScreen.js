@@ -1,7 +1,7 @@
-import React, { useCallback, useState } from 'react';
+import React, { useCallback, useEffect, useRef, useState } from 'react';
 import {
-  View, Text, TouchableOpacity, StyleSheet, ScrollView,
-  ActivityIndicator, Image,
+  View, Text, TextInput, TouchableOpacity, StyleSheet, ScrollView,
+  ActivityIndicator, Image, Alert, Platform,
 } from 'react-native';
 import ScreenContainer from '../components/ScreenContainer';
 import { useFocusEffect } from '@react-navigation/native';
@@ -10,8 +10,11 @@ import { Feather } from '@expo/vector-icons';
 import { useTheme } from '../theme/ThemeContext';
 import { useAuth } from '../context/AuthContext';
 import {
-  loadTournament, loadTournamentMembers, findClaimedSlot,
+  loadTournament, saveTournament, subscribeTournamentChanges,
+  normalizeRoundHandicaps, readLocal,
+  loadTournamentMembers, findClaimedSlot,
 } from '../store/tournamentStore';
+import { mutate } from '../store/mutate';
 import { playerInitials } from '../components/RoundTeeAssignments';
 
 export default function PlayersScreen({ navigation, route }) {
@@ -24,6 +27,13 @@ export default function PlayersScreen({ navigation, route }) {
   const [members, setMembers] = useState([]);
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState(null);
+  const [editPlayers, setEditPlayers] = useState([]);   // [{ id, name, handicap: string, user_id }]
+  const [rounds, setRounds] = useState([]);
+  const [saveState, setSaveState] = useState('idle');   // idle | saving | saved | error
+  const tournamentRef = useRef(null);
+  const saveTimeoutRef = useRef(null);
+  const isFirstRender = useRef(true);
+  const skipNextSaveRef = useRef(false);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -35,6 +45,18 @@ export default function PlayersScreen({ navigation, route }) {
       ]);
       setTournament(t);
       setMembers(mem);
+      setEditPlayers(t.players.map((p) => ({ ...p, handicap: String(p.handicap) })));
+      setRounds(t.rounds.map((r) => {
+        const normalized = normalizeRoundHandicaps(r, t.players);
+        return {
+          ...normalized,
+          holes: [...normalized.holes],
+          playerHandicaps: Object.fromEntries(
+            t.players.map((p) => [p.id, String(normalized.playerHandicaps[p.id] ?? p.handicap)]),
+          ),
+          manualHandicaps: { ...(normalized.manualHandicaps ?? {}) },
+        };
+      }));
     } catch (err) {
       setLoadError(err?.message ?? 'Could not load players');
     } finally {
@@ -43,6 +65,71 @@ export default function PlayersScreen({ navigation, route }) {
   }, [tournamentId]);
 
   useFocusEffect(useCallback(() => { load(); }, [load]));
+
+  useEffect(() => { tournamentRef.current = tournament; }, [tournament]);
+
+  useEffect(() => {
+    const unsub = subscribeTournamentChanges(async () => {
+      const t = await loadTournament();
+      if (!t) return;
+      setTournament(t);
+      setMembers(tournamentId ? await loadTournamentMembers(tournamentId) : []);
+      setEditPlayers((prev) => {
+        let changed = false;
+        const next = prev.map((p) => {
+          const fresh = t.players.find((x) => x.id === p.id);
+          if (fresh && fresh.name !== p.name) { changed = true; return { ...p, name: fresh.name }; }
+          return p;
+        });
+        if (!changed) return prev;
+        skipNextSaveRef.current = true;
+        return next;
+      });
+    });
+    return unsub;
+  }, [tournamentId]);
+
+  useEffect(() => {
+    if (isFirstRender.current) { isFirstRender.current = false; return; }
+    if (skipNextSaveRef.current) { skipNextSaveRef.current = false; return; }
+    if (!tournamentRef.current) return;
+    if (saveTimeoutRef.current) clearTimeout(saveTimeoutRef.current);
+    setSaveState('saving');
+    saveTimeoutRef.current = setTimeout(async () => {
+      try {
+        const builtPlayers = editPlayers.map((p) => ({ ...p, handicap: parseInt(p.handicap, 10) || 0 }));
+        const builtRounds = rounds.map((r) => ({
+          ...r,
+          playerHandicaps: Object.fromEntries(
+            Object.entries(r.playerHandicaps).map(([id, v]) => [id, parseInt(v, 10) || 0]),
+          ),
+          manualHandicaps: { ...(r.manualHandicaps ?? {}) },
+        }));
+        const baseId = tournamentRef.current?.id;
+        let t = (baseId && (await readLocal(baseId))) || tournamentRef.current;
+        for (const r of builtRounds) {
+          const prevRound = t.rounds.find((pr) => pr.id === r.id);
+          if (!prevRound) continue;
+          for (const [pid, v] of Object.entries(r.playerHandicaps)) {
+            const before = prevRound.playerHandicaps?.[pid];
+            if (before === v) continue;
+            t = await mutate(t, { type: 'handicap.set', roundId: r.id, playerId: pid, handicap: v });
+          }
+        }
+        await saveTournament({ ...t, players: builtPlayers, rounds: builtRounds });
+        setSaveState('saved');
+      } catch (err) {
+        setSaveState('error');
+        const msg = err?.message ?? 'Could not save changes';
+        if (Platform.OS === 'web') window.alert(msg);
+        else Alert.alert('Save failed', msg);
+      }
+    }, 400);
+  }, [editPlayers, rounds]);
+
+  function updateBaseHandicap(playerId, value) {
+    setEditPlayers((prev) => prev.map((p) => (p.id === playerId ? { ...p, handicap: value } : p)));
+  }
 
   const ownerRow = members.find((m) => m.role === 'owner');
   const isOwner = !!ownerRow && ownerRow.userId === user?.id;
@@ -61,7 +148,25 @@ export default function PlayersScreen({ navigation, route }) {
           <Text style={s.headerTitle}>Players</Text>
           {tournamentName ? <Text style={s.headerSubtitle} numberOfLines={1}>{tournamentName}</Text> : null}
         </View>
-        <View style={{ width: 22 }} />
+        {saveState === 'idle' ? (
+          <View style={{ width: 64 }} />
+        ) : (
+          <View style={[
+            s.savePill,
+            saveState === 'error' && s.savePillError,
+            saveState === 'saved' && s.savePillSaved,
+          ]}>
+            <Feather
+              name={saveState === 'error' ? 'alert-circle' : saveState === 'saved' ? 'check' : 'loader'}
+              size={11}
+              color={saveState === 'error' ? theme.destructive : theme.text.muted}
+              style={{ marginRight: 4 }}
+            />
+            <Text style={[s.savePillText, saveState === 'error' && s.savePillTextError]}>
+              {saveState === 'error' ? 'Save failed' : saveState === 'saved' ? 'Saved' : 'Saving…'}
+            </Text>
+          </View>
+        )}
       </View>
 
       {loading ? (
@@ -78,8 +183,8 @@ export default function PlayersScreen({ navigation, route }) {
         </View>
       ) : (
         <ScrollView style={s.scroll} contentContainerStyle={s.content}>
-          <Text style={s.sectionLabel}>{players.length} {players.length === 1 ? 'player' : 'players'}</Text>
-          {players.map((p) => {
+          <Text style={s.sectionLabel}>{editPlayers.length} {editPlayers.length === 1 ? 'player' : 'players'}</Text>
+          {editPlayers.map((p) => {
             const member = members.find((m) => m.userId === p.user_id) || null;
             const color = member?.profile?.avatar_color || theme.accent.primary;
             return (
@@ -99,9 +204,23 @@ export default function PlayersScreen({ navigation, route }) {
                         </Text>
                       </View>
                     ) : null}
-                    <Text style={s.metaText}>HCP {p.handicap}</Text>
                   </View>
                 </View>
+                {isViewer ? (
+                  <Text style={s.metaText}>HCP {p.handicap}</Text>
+                ) : (
+                  <TextInput
+                    style={s.hcpInput}
+                    keyboardType="numeric"
+                    keyboardAppearance={theme.isDark ? 'dark' : 'light'}
+                    selectionColor={theme.accent.primary}
+                    value={p.handicap}
+                    onChangeText={(v) => updateBaseHandicap(p.id, v)}
+                    placeholder="0"
+                    placeholderTextColor={theme.text.muted}
+                    accessibilityLabel={`Handicap for ${p.name}`}
+                  />
+                )}
               </View>
             );
           })}
