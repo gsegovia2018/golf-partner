@@ -1924,16 +1924,20 @@ function HoleView({ round, roundIndex, players, scores, shotDetails, meId, onSet
       </View>
 
       {/* Unified round summary — pinned above the bottom controls. One panel
-          renders every game mode (pairs / players / solo) from summaryState. */}
-      <RoundSummary
-        mode={settings?.scoringMode ?? 'stableford'}
-        round={round}
-        players={players}
-        scores={scores}
-        settings={settings}
-        currentHole={currentHole}
-        meId={meId}
-      />
+          renders every game mode (pairs / players / solo) from summaryState.
+          Gated behind the showRunning eye toggle (mirrors old stableford/solo
+          running-score visibility behaviour). */}
+      {showRunning && (
+        <RoundSummary
+          mode={settings?.scoringMode ?? 'stableford'}
+          round={round}
+          players={players}
+          scores={scores}
+          settings={settings}
+          currentHole={currentHole}
+          meId={meId}
+        />
+      )}
 
       {/* Bottom controls: actions (notes / go-to-hole / next) */}
       <View style={s.bottomBar}>

@@ -1502,8 +1502,6 @@ export function makeScorecardStyles(theme) {
       borderRadius: 14,
       borderWidth: 1,
       borderColor: theme.isDark ? theme.glass?.border : theme.border.default,
-      borderTopWidth: 1,
-      borderTopColor: theme.isDark ? theme.glass?.border : theme.border.default,
       paddingHorizontal: 13,
       paddingVertical: 11,
     },

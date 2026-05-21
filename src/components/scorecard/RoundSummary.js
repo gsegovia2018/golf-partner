@@ -67,7 +67,8 @@ export const RoundSummary = React.memo(function RoundSummary({
           {(state.chips ?? []).map((chip) => (
             <View
               key={chip.id}
-              style={[
+              // summaryRowWinner is intentionally last so the gold winner tint overrides the leader accent on a decided winner.
+            style={[
                 s.summaryChip,
                 chip.isLeader && s.summaryChipLeader,
                 chip.isWinner && s.summaryRowWinner,
