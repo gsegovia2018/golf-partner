@@ -113,6 +113,39 @@ describe('summaryState', () => {
     expect(s.chips.find((c) => c.id === 'a').isLeader).toBe(true);
   });
 
+  test('matchplay: 1v1 players variant — 2 chips, leader has higher points', () => {
+    // Match Play is strictly 1 vs 1 — exactly 2 individual players.
+    // Two par-4 holes, all handicap 0. Ana wins hole 1 (3 vs 5),
+    // hole 2 halved (4 vs 4). Ana leads 1-0.
+    const round = {
+      holes: [
+        { number: 1, par: 4, strokeIndex: 1 },
+        { number: 2, par: 4, strokeIndex: 2 },
+      ],
+    };
+    const matchPlayers = [
+      { id: 'a', name: 'Ana Diaz', handicap: 0 },
+      { id: 'b', name: 'Ben Cruz', handicap: 0 },
+    ];
+    const s = summaryState({
+      mode: 'matchplay', round, players: matchPlayers,
+      scores: { a: { 1: 3, 2: 4 }, b: { 1: 5, 2: 4 } },
+      settings: {}, currentHole: 2, meId: 'b',
+    });
+    expect(s.variant).toBe('players');
+    expect(s.eyebrow).toBe('MATCH PLAY');
+    expect(s.chips).toHaveLength(2);
+    // me-first: Ben then Ana.
+    expect(s.chips.map((c) => c.id)).toEqual(['b', 'a']);
+    const ana = s.chips.find((c) => c.id === 'a');
+    const ben = s.chips.find((c) => c.id === 'b');
+    expect(ana.points).toBe(1);
+    expect(ben.points).toBe(0);
+    expect(ana.points).toBeGreaterThan(ben.points);
+    expect(ana.isLeader).toBe(true);
+    expect(ben.isLeader).toBe(false);
+  });
+
   test('pairs variant — best ball: two pairs with combined names and round points', () => {
     // Two pairs of two, all handicap 0, single par-4 hole (SI 1).
     // pair1: p1 strokes 3 (birdie, 3 pts), p2 strokes 5 (bogey, 1 pt)

@@ -3,6 +3,7 @@
 import {
   calcStablefordPoints,
   matchPlayHolePts,
+  matchPlayRoundTally,
   sindicatoHolePoints,
   calcBestWorstBall,
   roundPairLeaderboard,
@@ -110,8 +111,42 @@ export function summaryState({ mode, round, players, scores, settings, currentHo
     };
   }
 
-  // --- pairs (match play / best ball) ------------------------------------
-  if (mode === 'matchplay' || mode === 'bestball') {
+  // --- match play (1v1 — exactly 2 individual players) -------------------
+  if (mode === 'matchplay') {
+    const totals = roundTotals({ mode, round, players: playerList, scores });
+    const ordered = playersMeFirst(playerList, meId);
+    const tally = matchPlayRoundTally(
+      { ...round, scores, playerHandicaps: round?.playerHandicaps ?? {} },
+      playerList,
+    );
+    const decided = !!tally?.clinched;
+    const holesLeft = tally?.holesLeft ?? 0;
+    const lead = tally?.lead ?? 0;
+    const leaderIdx = tally?.leaderIdx ?? null;
+    const leader = leaderIdx != null ? playerList[leaderIdx] : null;
+
+    let status;
+    if (decided && leader) {
+      status = `${firstName(leader)} wins the match`;
+    } else if (lead > 0 && leader) {
+      status = `${firstName(leader)} leads by ${lead} · ${holesLeft} to play`;
+    } else {
+      status = `All square · ${holesLeft} to play`;
+    }
+
+    const chips = ordered.map((p) => ({
+      id: p.id,
+      name: firstName(p),
+      points: totals.get(p.id)?.pts ?? 0,
+      isLeader: leader ? p.id === leader.id : false,
+      isMe: p.id === meId,
+      isWinner: decided && !!leader && p.id === leader.id,
+    }));
+    return { variant: 'players', eyebrow: 'MATCH PLAY', chips, status, decided };
+  }
+
+  // --- pairs (best ball only) --------------------------------------------
+  if (mode === 'bestball') {
     const roundPairs = round?.pairs ?? [];
     const [pair1 = [], pair2 = []] = roundPairs;
     const bbVal = cfg.bestBallValue ?? 1;
@@ -125,7 +160,7 @@ export function summaryState({ mode, round, players, scores, settings, currentHo
     let decided = false;
     let holesRemaining = round?.holes?.length ?? 0;
 
-    if (mode === 'bestball' && fullPairs) {
+    if (fullPairs) {
       // Best Ball — port MatchPanel exactly off calcBestWorstBall.
       const bb = calcBestWorstBall(liveRound, playerList);
       if (bb) {
@@ -137,35 +172,6 @@ export function summaryState({ mode, round, players, scores, settings, currentHo
         holesRemaining = bb.holes.filter((h) => h.bestWinner === null).length;
       }
       decided = roundPairClinched(liveRound, playerList, cfg, 'bestball') != null;
-    } else {
-      // Match Play (and any pairs fallback) — sum per-member points so a
-      // 1v1 match reproduces the live match score.
-      const holes = round?.holes ?? [];
-      const hole = holes.find((h) => h.number === currentHole);
-      if (hole) {
-        const hp = holePoints({ mode, hole, players: playerList, scores });
-        const sum = (pair) => {
-          let any = false;
-          let total = 0;
-          for (const p of pair) {
-            const v = hp[p.id];
-            if (v == null) return null;
-            any = true;
-            total += v;
-          }
-          return any ? total : null;
-        };
-        p1Hole = sum(pair1);
-        p2Hole = sum(pair2);
-      }
-      const totals = roundTotals({ mode, round, players: playerList, scores });
-      const sumRound = (pair) => pair.reduce((acc, p) => acc + (totals.get(p.id)?.pts ?? 0), 0);
-      p1Round = sumRound(pair1);
-      p2Round = sumRound(pair2);
-      // A hole is "remaining" until every member of both pairs has scored it.
-      holesRemaining = (round?.holes ?? []).filter((h) => (
-        ![...pair1, ...pair2].every((p) => scores?.[p.id]?.[h.number] != null)
-      )).length;
     }
 
     const roundWinner = p1Round > p2Round ? 1 : p2Round > p1Round ? 2 : 0;
@@ -188,7 +194,7 @@ export function summaryState({ mode, round, players, scores, settings, currentHo
 
     return {
       variant: 'pairs',
-      eyebrow: mode === 'bestball' ? 'BEST BALL' : 'MATCH PLAY',
+      eyebrow: 'BEST BALL',
       pairs: [
         {
           index: 0,
