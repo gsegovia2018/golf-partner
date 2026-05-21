@@ -9,8 +9,8 @@ import { Feather, FontAwesome } from '@expo/vector-icons';
 
 import { useTheme } from '../theme/ThemeContext';
 import {
-  fetchCourses, fetchClubs, upsertCourse, defaultHoles, saveCourseHoles,
-  fetchFavoriteCourseIds, toggleFavoriteCourse, deleteCourse,
+  loadCourseLibrary, upsertCourse, defaultHoles, saveCourseHoles,
+  toggleFavoriteCourse, deleteCourse,
 } from '../store/libraryStore';
 import { loadAllTournaments } from '../store/tournamentStore';
 import { setPendingCourses } from '../lib/selectionBridge';
@@ -38,26 +38,33 @@ export default function CoursePickerScreen({ navigation, route }) {
   const [favorites, setFavorites] = useState(() => new Set());
   const [lastUsed, setLastUsed] = useState({});
   const [reloadKey, setReloadKey] = useState(0);
+  // True when the library shown is the offline cache (a course fetch failed).
+  // Course creation is disabled in this state — it needs a connection.
+  const [usingCachedData, setUsingCachedData] = useState(false);
 
   useFocusEffect(
     useCallback(() => {
       let cancelled = false;
       setLoading(true);
       setLoadError(null);
-      // fetchCourses failure is fatal for this screen (no library to show);
-      // favorites / tournaments are best-effort and fall back silently.
-      fetchCourses()
-        .then(async (list) => {
-          const [clubList, favs, tournaments] = await Promise.all([
-            fetchClubs().catch(() => []),
-            fetchFavoriteCourseIds().catch(() => new Set()),
-            loadAllTournaments().catch(() => []),
-          ]);
+      // loadCourseLibrary never throws: online it fetches fresh (and refreshes
+      // the cache); offline it serves the last-known cache and reports
+      // usingCachedData. lastUsed comes from local tournaments — best-effort.
+      Promise.all([
+        loadCourseLibrary(),
+        loadAllTournaments().catch(() => []),
+      ])
+        .then(([library, tournaments]) => {
           if (cancelled) return;
-          setCourses(list);
-          setClubs(clubList);
-          setFavorites(favs);
+          setCourses(library.courses);
+          setClubs(library.clubs);
+          setFavorites(library.favorites);
           setLastUsed(buildCourseLastUsed(tournaments));
+          setUsingCachedData(library.usingCachedData);
+          // The only true error state: offline with nothing cached to show.
+          if (library.usingCachedData && library.courses.length === 0) {
+            setLoadError('Could not load courses');
+          }
         })
         .catch((err) => {
           if (!cancelled) setLoadError(err?.message ?? 'Could not load courses');
@@ -327,7 +334,7 @@ export default function CoursePickerScreen({ navigation, route }) {
             value={newName}
             onChangeText={setNewName}
           />
-          <TouchableOpacity style={s.addBtn} onPress={() => addAndSelect()} disabled={saving || !newName.trim()}>
+          <TouchableOpacity style={s.addBtn} onPress={() => addAndSelect()} disabled={saving || !newName.trim() || usingCachedData}>
             <Feather name="plus" size={18} color={theme.isDark ? theme.accent.primary : theme.text.inverse} />
             <Text style={s.addBtnText}>Add</Text>
           </TouchableOpacity>
@@ -355,7 +362,7 @@ export default function CoursePickerScreen({ navigation, route }) {
         ) : items.length === 0 ? (
           <>
             <Text style={s.empty}>No courses match "{query}"</Text>
-            {query.trim() ? (
+            {query.trim() && !usingCachedData ? (
               <TouchableOpacity
                 style={s.createCta}
                 onPress={() => addAndSelect(query)}
