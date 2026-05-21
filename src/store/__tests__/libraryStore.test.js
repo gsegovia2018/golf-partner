@@ -2,6 +2,7 @@ import {
   fetchMyPlayers, fetchMyGuestPlayers, normalizeCourse, saveCourseTees,
   fetchCourses, getCachedCourses, COURSES_CACHE_KEY,
   fetchClubs, getCachedClubs, CLUBS_CACHE_KEY,
+  fetchFavoriteCourseIds, getCachedFavoriteCourseIds, FAVORITE_COURSES_CACHE_KEY,
 } from '../libraryStore';
 import { listFriends, getCachedFriends } from '../friendStore';
 import AsyncStorage from '@react-native-async-storage/async-storage';
@@ -45,6 +46,9 @@ jest.mock('../../lib/supabase', () => {
       mockState.calls.insertedRows = rows;
       return Promise.resolve({ error: null });
     },
+    // Makes a filter chain that ends without .order() (e.g. fetchFavoriteCourseIds,
+    // which ends at .eq()) awaitable — `await <chain>` resolves to the rows.
+    then(resolve) { resolve({ data: mockState.rows, error: null }); },
     auth: {
       getUser: () => Promise.resolve({ data: { user: mockState.user } }),
     },
@@ -222,5 +226,30 @@ describe('clubs offline cache', () => {
   test('getCachedClubs returns [] when the cached value is corrupt', async () => {
     await AsyncStorage.setItem(CLUBS_CACHE_KEY, '{bad');
     expect(await getCachedClubs()).toEqual([]);
+  });
+});
+
+describe('favorite courses offline cache', () => {
+  beforeEach(async () => {
+    await AsyncStorage.clear();
+    mockState.user = { id: 'u1' };
+    mockState.rows = [];
+    mockState.calls = {};
+  });
+
+  test('fetchFavoriteCourseIds caches the ids and round-trips through a Set', async () => {
+    mockState.rows = [{ course_id: 'c1' }, { course_id: 'c2' }];
+    const result = await fetchFavoriteCourseIds();
+    expect(result).toEqual(new Set(['c1', 'c2']));
+    expect(await getCachedFavoriteCourseIds()).toEqual(new Set(['c1', 'c2']));
+  });
+
+  test('getCachedFavoriteCourseIds returns an empty Set when nothing is cached', async () => {
+    expect(await getCachedFavoriteCourseIds()).toEqual(new Set());
+  });
+
+  test('getCachedFavoriteCourseIds returns an empty Set when the cached value is corrupt', async () => {
+    await AsyncStorage.setItem(FAVORITE_COURSES_CACHE_KEY, 'nope');
+    expect(await getCachedFavoriteCourseIds()).toEqual(new Set());
   });
 });

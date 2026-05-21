@@ -197,6 +197,8 @@ export async function updateCourseFromEditor(courseId, holes, tees) {
 // Per-user toggle. Unauthenticated sessions get an empty set and a no-op
 // toggle so callers can render the control the same way either way.
 
+export const FAVORITE_COURSES_CACHE_KEY = '@golf_fav_courses_cache';
+
 export async function fetchFavoriteCourseIds() {
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) return new Set();
@@ -205,7 +207,22 @@ export async function fetchFavoriteCourseIds() {
     .select('course_id')
     .eq('user_id', user.id);
   if (error) throw error;
-  return new Set((data ?? []).map((r) => r.course_id));
+  const ids = new Set((data ?? []).map((r) => r.course_id));
+  // Cache as an array — a Set does not survive JSON serialization.
+  AsyncStorage.setItem(FAVORITE_COURSES_CACHE_KEY, JSON.stringify([...ids])).catch(() => {});
+  return ids;
+}
+
+// Last-known favorite course ids as a Set. Never throws; returns an empty Set
+// when nothing is cached or the cache is unreadable.
+export async function getCachedFavoriteCourseIds() {
+  try {
+    const raw = await AsyncStorage.getItem(FAVORITE_COURSES_CACHE_KEY);
+    const parsed = raw ? JSON.parse(raw) : [];
+    return new Set(Array.isArray(parsed) ? parsed : []);
+  } catch {
+    return new Set();
+  }
 }
 
 export async function toggleFavoriteCourse(courseId) {
