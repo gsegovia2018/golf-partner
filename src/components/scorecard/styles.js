@@ -1481,11 +1481,11 @@ export function makeScorecardStyles(theme) {
     // Segmented-control distance-bucket picker (BucketSegment)
     bucketSegBlock: { paddingVertical: 10, borderBottomWidth: 1, borderBottomColor: theme.border.subtle ?? theme.border.default },
     bucketSegLabelRow: { flexDirection: 'row', alignItems: 'center', gap: 6, marginBottom: 8 },
-    bucketSegHint: { marginLeft: 'auto', color: theme.text.muted, fontSize: 11, fontWeight: '600' },
+    bucketSegHint: { marginLeft: 'auto', color: theme.text.muted, fontSize: 11, fontFamily: 'PlusJakartaSans-SemiBold' },
     bucketSegTrack: { flexDirection: 'row', backgroundColor: theme.bg.secondary, borderRadius: 10, padding: 3 },
     bucketSegCell: { flex: 1, paddingVertical: 8, alignItems: 'center', borderRadius: 8 },
     bucketSegCellActive: { backgroundColor: theme.accent.primary },
-    bucketSegCellText: { color: theme.text.secondary, fontSize: 12, fontWeight: '700' },
+    bucketSegCellText: { color: theme.text.secondary, fontSize: 12, fontFamily: 'PlusJakartaSans-Bold' },
     bucketSegCellTextActive: { color: theme.text.inverse },
   });
 }

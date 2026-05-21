@@ -46,9 +46,9 @@ function ShotCounterRow({ label, value, onStep, theme, s, explainer }) {
 
 // A distance-bucket picker: label on its own line, then a full-width row of
 // equal-width segmented cells. Tapping the active cell clears the value.
-function BucketSegment({ label, value, buckets, labels, onSelect, theme, s, explainer, hint }) {
+function BucketSegment({ label, value, buckets, labels, onSelect, theme, s, explainer, hint, isLast = false }) {
   return (
-    <View style={s.bucketSegBlock}>
+    <View style={[s.bucketSegBlock, isLast && { borderBottomWidth: 0 }]}>
       <View style={s.bucketSegLabelRow}>
         <Text style={s.shotRowLabel}>{label}</Text>
         {explainer}
@@ -63,6 +63,7 @@ function BucketSegment({ label, value, buckets, labels, onSelect, theme, s, expl
               style={[s.bucketSegCell, active && s.bucketSegCellActive]}
               onPress={() => onSelect(active ? null : key)}
               activeOpacity={0.7}
+              accessibilityRole="button"
               accessibilityLabel={`${label} ${labels[key]}`}
               accessibilityState={{ selected: active }}
             >
@@ -178,6 +179,7 @@ export function ShotDetailPanel({ hole, detail, onChange, strokes, theme: themeP
           theme={theme}
           s={s}
           hint="metres"
+          isLast={false}
           explainer={
             <ShotDetailExplainer
               rowKey="approachBucket"
@@ -197,6 +199,7 @@ export function ShotDetailPanel({ hole, detail, onChange, strokes, theme: themeP
           theme={theme}
           s={s}
           hint="metres"
+          isLast={!missedGIR}
           explainer={
             <ShotDetailExplainer
               rowKey="firstPuttBucket"
