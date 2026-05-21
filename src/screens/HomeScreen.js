@@ -1783,6 +1783,22 @@ export default function HomeScreen({ navigation, route }) {
             <Feather name="chevron-right" size={16} color={theme.text.muted} />
           </TouchableOpacity>
 
+          <TouchableOpacity
+            style={s.menuItem}
+            onPress={() => {
+              setShowSettings(false);
+              navigation.navigate('Players', {
+                tournamentId: tournament.id,
+                tournamentName: tournament.name,
+              });
+            }}
+            activeOpacity={0.7}
+          >
+            <Feather name="users" size={18} color={theme.accent.primary} />
+            <Text style={s.menuItemText}>Players</Text>
+            <Feather name="chevron-right" size={16} color={theme.text.muted} />
+          </TouchableOpacity>
+
           {!isViewer && (
             <TouchableOpacity
               style={s.menuItem}

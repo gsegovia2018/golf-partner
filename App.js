@@ -60,6 +60,7 @@ import JoinTournamentScreen from './src/screens/JoinTournamentScreen';
 import ClaimPlayerScreen from './src/screens/ClaimPlayerScreen';
 import ProfileScreen from './src/screens/ProfileScreen';
 import MembersScreen from './src/screens/MembersScreen';
+import PlayersScreen from './src/screens/PlayersScreen';
 import FinishedScreen from './src/screens/FinishedScreen';
 import { startUploadWorker } from './src/lib/uploadWorker';
 import * as ScreenOrientation from 'expo-screen-orientation';
@@ -348,6 +349,7 @@ function AppNavigator() {
         <Stack.Screen name="ClaimPlayer" component={ClaimPlayerScreen} />
         <Stack.Screen name="Profile" component={ProfileScreen} />
         <Stack.Screen name="Members" component={MembersScreen} />
+        <Stack.Screen name="Players" component={PlayersScreen} />
         <Stack.Screen name="Finished" component={FinishedScreen} />
         <Stack.Screen name="Friends" component={FriendsScreen} />
         <Stack.Screen name="Notifications" component={NotificationsScreen} />
