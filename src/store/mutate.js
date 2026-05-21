@@ -32,6 +32,20 @@ function metaPathFor(m) {
       if (m.nextScoringMode) paths.push('settings.scoringMode');
       return paths;
     }
+    // Removing a player drops them from the roster and clears their per-round
+    // scores / shot detail / handicap; like addPlayer it can also flip the
+    // scoring mode, so this mutation bumps several paths at once.
+    case 'tournament.removePlayer': {
+      const paths = ['players'];
+      for (const patch of (m.roundPatches ?? [])) {
+        paths.push(`rounds.${patch.roundId}.playerHandicaps.${m.playerId}`);
+        paths.push(`rounds.${patch.roundId}.scores.${m.playerId}`);
+        paths.push(`rounds.${patch.roundId}.shotDetails.${m.playerId}`);
+        paths.push(`rounds.${patch.roundId}.pairs`);
+      }
+      if (m.nextScoringMode) paths.push('settings.scoringMode');
+      return paths;
+    }
     // Archive / reopen a tournament. Scalar LWW path.
     case 'tournament.setFinished': return `finishedAt`;
     // Which tournament player is "me" (drives shot-detail tracking).
@@ -102,6 +116,27 @@ export function applyToTournament(t, m) {
           ...(round.playerHandicaps ?? {}),
           [m.player.id]: patch.playerHandicap,
         };
+        if (patch.pairs) round.pairs = patch.pairs;
+      }
+      if (m.nextScoringMode) {
+        t.settings = { ...(t.settings ?? {}), scoringMode: m.nextScoringMode };
+      }
+      break;
+    }
+    case 'tournament.removePlayer': {
+      t.players = (t.players ?? []).filter((p) => p.id !== m.playerId);
+      for (const patch of (m.roundPatches ?? [])) {
+        const round = t.rounds?.find((r) => r.id === patch.roundId);
+        if (!round) continue;
+        const handicaps = { ...(round.playerHandicaps ?? {}) };
+        delete handicaps[m.playerId];
+        round.playerHandicaps = handicaps;
+        const scores = { ...(round.scores ?? {}) };
+        delete scores[m.playerId];
+        round.scores = scores;
+        const shotDetails = { ...(round.shotDetails ?? {}) };
+        delete shotDetails[m.playerId];
+        round.shotDetails = shotDetails;
         if (patch.pairs) round.pairs = patch.pairs;
       }
       if (m.nextScoringMode) {
