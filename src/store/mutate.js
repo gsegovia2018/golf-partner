@@ -41,6 +41,7 @@ function metaPathFor(m) {
         paths.push(`rounds.${patch.roundId}.playerHandicaps.${m.playerId}`);
         paths.push(`rounds.${patch.roundId}.scores.${m.playerId}`);
         paths.push(`rounds.${patch.roundId}.shotDetails.${m.playerId}`);
+        paths.push(`rounds.${patch.roundId}.scoreConflicts.${m.playerId}`);
         if (patch.pairs) paths.push(`rounds.${patch.roundId}.pairs`);
       }
       if (m.nextScoringMode) paths.push('settings.scoringMode');
@@ -62,6 +63,12 @@ function metaPathFor(m) {
       }
       return paths;
     }
+    // Resolving a score conflict writes the chosen value AND clears the
+    // marker; both LWW-merge, so both paths are stamped.
+    case 'conflict.resolve': return [
+      `rounds.${m.roundId}.scores.${m.playerId}.h${m.hole}`,
+      `rounds.${m.roundId}.scoreConflicts.${m.playerId}.h${m.hole}`,
+    ];
     case 'player.upsertLibrary': return null;
     default: throw new Error(`unknown mutation type: ${m.type}`);
   }
@@ -77,6 +84,19 @@ export function applyToTournament(t, m) {
       round.scores[m.playerId] = { ...(round.scores[m.playerId] ?? {}) };
       if (m.value == null) delete round.scores[m.playerId][m.hole];
       else round.scores[m.playerId][m.hole] = m.value;
+      break;
+    }
+    case 'conflict.resolve': {
+      const round = t.rounds.find((r) => r.id === m.roundId);
+      if (!round) return;
+      round.scores = { ...(round.scores ?? {}) };
+      round.scores[m.playerId] = { ...(round.scores[m.playerId] ?? {}) };
+      round.scores[m.playerId][m.hole] = m.value;
+      if (round.scoreConflicts?.[m.playerId]) {
+        round.scoreConflicts = { ...round.scoreConflicts };
+        round.scoreConflicts[m.playerId] = { ...round.scoreConflicts[m.playerId] };
+        delete round.scoreConflicts[m.playerId][m.hole];
+      }
       break;
     }
     case 'shot.set': {
@@ -145,6 +165,11 @@ export function applyToTournament(t, m) {
         const shotDetails = { ...(round.shotDetails ?? {}) };
         delete shotDetails[m.playerId];
         round.shotDetails = shotDetails;
+        if (round.scoreConflicts) {
+          const scoreConflicts = { ...round.scoreConflicts };
+          delete scoreConflicts[m.playerId];
+          round.scoreConflicts = scoreConflicts;
+        }
         if (patch.pairs) round.pairs = patch.pairs;
       }
       if (m.nextScoringMode) {
