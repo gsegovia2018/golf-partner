@@ -14,9 +14,67 @@ const PAGER_PAGE_SNAP_STYLE = Platform.OS === 'web'
   ? { scrollSnapAlign: 'start', scrollSnapStop: 'always' }
   : null;
 
+// True when two `{ [playerId]: { [hole]: value } }` maps hold identical
+// values for `holeNumber` across every player present in either map.
+function samePerHoleSlice(prevMap, nextMap, holeNumber) {
+  if (prevMap === nextMap) return true;
+  const a = prevMap ?? {};
+  const b = nextMap ?? {};
+  const pids = new Set([...Object.keys(a), ...Object.keys(b)]);
+  for (const pid of pids) {
+    if (a[pid]?.[holeNumber] !== b[pid]?.[holeNumber]) return false;
+  }
+  return true;
+}
+
+// Custom `React.memo` comparison. The pager mounts all 18 HolePage instances
+// at once, but a single score edit hands every one of them a fresh
+// `scores`/`totalsMap` reference — defeating the default shallow compare and
+// re-rendering all 18 pages (and every PlayerCard) for one tap. A page only
+// depends on its own hole's score + shot-detail slice and its structural
+// props. Round totals are whole-round and change on every edit, but an
+// off-screen page need not reflect them until it is visible — `isActive`
+// flipping forces that re-render on swipe, so `totalsMap` is not compared.
+// Returns true to SKIP the re-render.
+export function holePagePropsEqual(prev, next) {
+  if (
+    prev.isActive !== next.isActive
+    || prev.pageHole !== next.pageHole
+    || prev.width !== next.width
+    || prev.height !== next.height
+    || prev.courseName !== next.courseName
+    || prev.roundIndex !== next.roundIndex
+    || prev.round !== next.round
+    || prev.players !== next.players
+    || prev.meId !== next.meId
+    || prev.onSetShot !== next.onSetShot
+    || prev.theme !== next.theme
+    || prev.s !== next.s
+    || prev.onStep !== next.onStep
+    || prev.onSetScore !== next.onSetScore
+    || prev.editable !== next.editable
+    || prev.getScoreAnim !== next.getScoreAnim
+    || prev.showRunning !== next.showRunning
+    || prev.mode !== next.mode
+    || prev.official !== next.official
+    || prev.officialDiscrepancy !== next.officialDiscrepancy
+    || prev.onOpenDiscrepancy !== next.onOpenDiscrepancy
+    || prev.onOpenConflict !== next.onOpenConflict
+    || prev.shotCollapsed !== next.shotCollapsed
+    || prev.onToggleShotDetail !== next.onToggleShotDetail
+  ) {
+    return false;
+  }
+  const hole = next.pageHole.number;
+  return samePerHoleSlice(prev.scores, next.scores, hole)
+    && samePerHoleSlice(prev.shotDetails, next.shotDetails, hole);
+}
+
 // Memoized per-hole page. Extracted so a swipe that only changes the
 // outside `currentHole` indicator does NOT re-render the other 17 pages
-// in the pager — that's the main source of swipe lag.
+// in the pager — that's the main source of swipe lag. The custom
+// `holePagePropsEqual` comparator extends this to score/shot edits: a tap
+// on the active hole no longer re-renders the other 17 pages.
 export const HolePage = React.memo(function HolePage({
   pageHole, width, height, courseName, roundIndex,
   round, players, scores,
@@ -26,6 +84,7 @@ export const HolePage = React.memo(function HolePage({
   showRunning,
   mode,
   official, officialDiscrepancy, onOpenDiscrepancy,
+  onOpenConflict,
   shotCollapsed, onToggleShotDetail,
   totalsMap,
 }) {
@@ -100,6 +159,8 @@ export const HolePage = React.memo(function HolePage({
             canResolveHere = canEdit;
           }
 
+          const conflict = round.scoreConflicts?.[player.id]?.[pageHole.number] ?? null;
+
           return (
             <PlayerCard
               key={player.id}
@@ -127,13 +188,15 @@ export const HolePage = React.memo(function HolePage({
               officialState={officialState}
               canResolveHere={canResolveHere}
               onOpenDiscrepancy={onOpenDiscrepancy}
+              conflict={conflict}
+              onOpenConflict={onOpenConflict}
             />
           );
         })}
       </ScrollView>
     </View>
   );
-});
+}, holePagePropsEqual);
 
 // Prompt shown on the scorecard when shot-detail tracking can't tell which
 // player is "me" (a game you joined — the app can't infer your roster slot).
