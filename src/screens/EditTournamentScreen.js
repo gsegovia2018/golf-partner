@@ -9,12 +9,11 @@ import { Feather } from '@expo/vector-icons';
 import { useTheme } from '../theme/ThemeContext';
 import {
   loadTournament, saveTournament, subscribeTournamentChanges, DEFAULT_SETTINGS, randomPairs,
-  normalizeRoundHandicaps, readLocal, roundEnteredCount,
+  normalizeRoundHandicaps, roundEnteredCount,
 } from '../store/tournamentStore';
 import { mutate } from '../store/mutate';
 import { isScoringModeAllowed, fallbackScoringMode } from '../components/ScoringModePicker';
 import { scoringModeUsesTeams } from '../components/scoringModes';
-import RoundTeeAssignments from '../components/RoundTeeAssignments';
 
 async function confirmDialog(title, message, confirmLabel = 'Remove') {
   if (Platform.OS === 'web') return window.confirm(`${title}\n\n${message}`);
@@ -113,7 +112,6 @@ export default function EditTournamentScreen({ navigation }) {
     setSaveState('saving');
     saveTimeoutRef.current = setTimeout(async () => {
       try {
-        const builtPlayers = players.map((p) => ({ ...p, handicap: parseInt(p.handicap, 10) || 0 }));
         const builtRounds = rounds.map((r) => ({
           ...r,
           playerHandicaps: Object.fromEntries(
@@ -122,31 +120,8 @@ export default function EditTournamentScreen({ navigation }) {
           manualHandicaps: { ...(r.manualHandicaps ?? {}) },
         }));
 
-        // Emit per-cell handicap.set mutations so offline edits are queued and
-        // the relevant _meta paths are stamped for LWW merge. The rest of the
-        // tournament (players, settings, notes, etc.) rides on the saveTournament
-        // call below, which is offline-safe since Task 5.
-        //
-        // Re-read the freshest local snapshot so any out-of-band mutations
-        // (e.g. a round.remove fired by removeRound just before this timer)
-        // are preserved in the spread below. Without this, the spread of
-        // tournamentRef would drop their _meta tombstones and the deletion
-        // would be undone on the next merge.
-        const baseId = tournamentRef.current?.id;
-        let t = (baseId && (await readLocal(baseId))) || tournamentRef.current;
-        for (const r of builtRounds) {
-          const prevRound = t.rounds.find((pr) => pr.id === r.id);
-          if (!prevRound) continue;
-          for (const [pid, v] of Object.entries(r.playerHandicaps)) {
-            const before = prevRound.playerHandicaps?.[pid];
-            if (before === v) continue;
-            t = await mutate(t, { type: 'handicap.set', roundId: r.id, playerId: pid, handicap: v });
-          }
-        }
-
         await saveTournament({
-          ...t,
-          players: builtPlayers,
+          ...tournamentRef.current,
           rounds: builtRounds,
           settings: {
             ...settings,
@@ -162,7 +137,7 @@ export default function EditTournamentScreen({ navigation }) {
         else Alert.alert('Save failed', msg);
       }
     }, 400);
-  }, [players, rounds, settings]);
+  }, [rounds, settings]);
 
   // Keep the scoring mode valid for the current player count. An existing
   // tournament loaded with e.g. bestball but only 3 players gets nudged back
@@ -181,27 +156,6 @@ export default function EditTournamentScreen({ navigation }) {
       return next;
     });
   }, []);
-
-  const handleRoundTeesChange = useCallback((roundIndex, patch) => {
-    setRounds((prev) => {
-      const next = [...prev];
-      next[roundIndex] = {
-        ...next[roundIndex],
-        playerTees: patch.playerTees,
-        playerHandicaps: patch.playerHandicaps,
-        manualHandicaps: { ...(patch.manualHandicaps ?? {}) },
-      };
-      return next;
-    });
-  }, []);
-
-  function updateBaseHandicap(playerIndex, value) {
-    setPlayers((prev) => {
-      const next = [...prev];
-      next[playerIndex] = { ...next[playerIndex], handicap: value };
-      return next;
-    });
-  }
 
   function updateCourseName(roundIndex, value) {
     setRounds((prev) => {
@@ -313,28 +267,6 @@ export default function EditTournamentScreen({ navigation }) {
       </View>
 
       <ScrollView style={s.container} contentContainerStyle={s.content} automaticallyAdjustKeyboardInsets>
-        {/* Base handicap indexes */}
-        <View>
-          <Text style={s.sectionTitle}>Handicap Index</Text>
-          <Text style={s.hint}>Base index used when no tee is set for a course.</Text>
-          {players.map((p, i) => (
-            <View key={p.id} style={s.playerCard}>
-              <Text style={s.playerName}>{p.name}</Text>
-              <TextInput
-                style={s.hcpInput}
-                keyboardType="numeric"
-                keyboardAppearance={theme.isDark ? 'dark' : 'light'}
-                selectionColor={theme.accent.primary}
-                value={p.handicap}
-                onChangeText={(v) => updateBaseHandicap(i, v)}
-                placeholder="0"
-                placeholderTextColor={theme.text.muted}
-              />
-              <Text style={s.hcpLabel}>index</Text>
-            </View>
-          ))}
-        </View>
-
         {/* Per-round playing handicaps */}
         {rounds.map((r, ri) => (
           <View key={r.id}>
@@ -363,13 +295,6 @@ export default function EditTournamentScreen({ navigation }) {
                   Renames this round only — the course saved in your library is unchanged.
                 </Text>
               ) : null}
-              <RoundTeeAssignments
-                key={`${r.id}:${players.map((p) => p.handicap).join(',')}`}
-                round={r}
-                players={players.map((p) => ({ ...p, handicap: parseInt(p.handicap, 10) || 0 }))}
-                theme={theme}
-                onChange={(patch) => handleRoundTeesChange(ri, patch)}
-              />
               <TextInput
                 style={[s.input, s.notesInput]}
                 placeholder="Round notes..."
@@ -442,27 +367,10 @@ const makeStyles = (theme) => StyleSheet.create({
     fontSize: 11, marginTop: 24, marginBottom: 8, flex: 1,
     letterSpacing: 1.8, textTransform: 'uppercase',
   },
-  hint: { fontFamily: 'PlusJakartaSans-Regular', color: theme.text.muted, fontSize: 12, marginBottom: 10 },
   courseNameHint: {
     fontFamily: 'PlusJakartaSans-Regular', color: theme.text.muted,
     fontSize: 11, marginTop: -2, marginBottom: 10,
   },
-  playerCard: {
-    flexDirection: 'row', alignItems: 'center',
-    backgroundColor: theme.bg.card, borderRadius: 16, borderWidth: 1,
-    borderColor: theme.isDark ? theme.glass?.border : theme.border.default,
-    padding: 14, marginBottom: 8,
-    ...(theme.isDark ? {} : theme.shadow.card),
-  },
-  playerName: { flex: 1, fontFamily: 'PlusJakartaSans-SemiBold', color: theme.text.primary, fontSize: 16 },
-  hcpInput: {
-    backgroundColor: theme.isDark ? theme.bg.secondary : theme.bg.card,
-    color: theme.text.primary, borderRadius: 10, borderWidth: 1,
-    borderColor: theme.border.default,
-    width: 54, textAlign: 'center', fontSize: 16,
-    fontFamily: 'PlusJakartaSans-Bold', padding: 7,
-  },
-  hcpLabel: { fontFamily: 'PlusJakartaSans-Regular', color: theme.text.secondary, marginLeft: 6, fontSize: 13, width: 44 },
   roundHeader: {
     flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
     marginTop: 24, marginBottom: 8,
