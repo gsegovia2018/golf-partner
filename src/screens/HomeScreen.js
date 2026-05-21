@@ -7,8 +7,9 @@ import QRCode from 'react-native-qrcode-svg';
 import { useTheme } from '../theme/ThemeContext';
 import { useAuth } from '../context/AuthContext';
 import { ShareableLeaderboard, shareLeaderboard } from '../components/ShareableCard';
-import { scoringModeUsesTeams, leaderboardToggleLabels, isScoringModeAllowed, fallbackScoringMode, getScoringMode } from '../components/scoringModes';
+import { scoringModeUsesTeams, leaderboardToggleLabels, isScoringModeAllowed, fallbackScoringMode, getScoringMode, mergeScoringSettings } from '../components/scoringModes';
 import ScoringModeChangeSheet from '../components/ScoringModeChangeSheet';
+import ScoringModeField from '../components/ScoringModePicker';
 import PlayerRemoveSheet from '../components/PlayerRemoveSheet';
 import PullToRefresh from '../components/PullToRefresh';
 import LoadingSplash from '../components/LoadingSplash';
@@ -102,6 +103,11 @@ export default function HomeScreen({ navigation, route }) {
   // trigger a visible mini-scroll back to an intermediate page.
   const selectedRoundFromScroll = useRef(false);
   const [showSettings, setShowSettings] = useState(false);
+  const [showScoringModeSheet, setShowScoringModeSheet] = useState(false);
+  // Draft scoring settings while the sheet is open. Best Ball values are held
+  // as strings because ScoringModeField edits them through TextInputs. null
+  // until the sheet is opened.
+  const [scoringDraft, setScoringDraft] = useState(null);
   // List-view overflow menu — surfaces Friends, Notifications, Statistics and
   // the Course/Player libraries, which otherwise have no entry point here.
   const [showListMenu, setShowListMenu] = useState(false);
@@ -542,6 +548,25 @@ export default function HomeScreen({ navigation, route }) {
     } catch (err) {
       if (Platform.OS === 'web') window.alert(err.message ?? 'Could not delete tournament');
       else Alert.alert('Error', err.message ?? 'Could not delete tournament');
+    }
+  }
+
+  // Persist the scoring-mode draft. saveTournament writes the whole tournament
+  // blob (the established settings-save path); reload() refreshes local state.
+  async function saveScoringMode() {
+    if (!tournament || !scoringDraft) return;
+    try {
+      const updated = {
+        ...tournament,
+        settings: mergeScoringSettings(tournament.settings, scoringDraft),
+      };
+      await saveTournament(updated);
+      await reload();
+      setShowScoringModeSheet(false);
+    } catch (err) {
+      const msg = err?.message ?? 'Could not update scoring mode';
+      if (Platform.OS === 'web') window.alert(msg);
+      else Alert.alert('Error', msg);
     }
   }
 
@@ -1751,6 +1776,26 @@ export default function HomeScreen({ navigation, route }) {
           {!isViewer && (
             <TouchableOpacity
               style={s.menuItem}
+              onPress={() => {
+                setShowSettings(false);
+                setScoringDraft({
+                  scoringMode: tournament.settings?.scoringMode ?? 'stableford',
+                  bestBallValue: String(tournament.settings?.bestBallValue ?? 1),
+                  worstBallValue: String(tournament.settings?.worstBallValue ?? 1),
+                });
+                setShowScoringModeSheet(true);
+              }}
+              activeOpacity={0.7}
+            >
+              <Feather name="sliders" size={18} color={theme.accent.primary} />
+              <Text style={s.menuItemText}>Scoring Mode</Text>
+              <Feather name="chevron-right" size={16} color={theme.text.muted} />
+            </TouchableOpacity>
+          )}
+
+          {!isViewer && (
+            <TouchableOpacity
+              style={s.menuItem}
               onPress={() => { setShowSettings(false); navigation.navigate('EditTournament'); }}
               activeOpacity={0.7}
             >
@@ -1806,6 +1851,47 @@ export default function HomeScreen({ navigation, route }) {
         </Pressable>
       </Pressable>
     </Modal>
+
+      <Modal
+        visible={showScoringModeSheet}
+        transparent
+        animationType="slide"
+        onRequestClose={() => setShowScoringModeSheet(false)}
+      >
+        <Pressable style={s.modalBackdrop} onPress={() => setShowScoringModeSheet(false)}>
+          <Pressable style={s.modalSheet} onPress={() => {}}>
+            <View style={s.modalHandle} />
+            <Text style={s.modalTitle}>Scoring Mode</Text>
+            {scoringDraft && (
+              <>
+                <ScoringModeField
+                  value={scoringDraft.scoringMode}
+                  onChange={(mode) => setScoringDraft((d) => ({ ...d, scoringMode: mode }))}
+                  playerCount={tournament.players.length}
+                  settings={scoringDraft}
+                  onSettingsChange={(next) => setScoringDraft(next)}
+                />
+                <View style={[s.confirmActions, { marginTop: 16 }]}>
+                  <TouchableOpacity
+                    style={[s.confirmBtn, s.confirmBtnCancel]}
+                    onPress={() => setShowScoringModeSheet(false)}
+                    activeOpacity={0.7}
+                  >
+                    <Text style={s.confirmBtnCancelText}>Cancel</Text>
+                  </TouchableOpacity>
+                  <TouchableOpacity
+                    style={[s.confirmBtn, s.confirmBtnPrimary]}
+                    onPress={saveScoringMode}
+                    activeOpacity={0.7}
+                  >
+                    <Text style={s.confirmBtnPrimaryText}>Save</Text>
+                  </TouchableOpacity>
+                </View>
+              </>
+            )}
+          </Pressable>
+        </Pressable>
+      </Modal>
 
     <ConfirmModal state={confirmState} onResult={resolveConfirm} theme={theme} s={s} />
 
