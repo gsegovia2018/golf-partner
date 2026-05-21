@@ -12,7 +12,7 @@ import {
   normalizeRoundHandicaps, readLocal, roundEnteredCount,
 } from '../store/tournamentStore';
 import { mutate } from '../store/mutate';
-import ScoringModePicker, { isScoringModeAllowed, fallbackScoringMode } from '../components/ScoringModePicker';
+import { isScoringModeAllowed, fallbackScoringMode } from '../components/ScoringModePicker';
 import { scoringModeUsesTeams } from '../components/scoringModes';
 import RoundTeeAssignments from '../components/RoundTeeAssignments';
 
@@ -410,17 +410,6 @@ export default function EditTournamentScreen({ navigation }) {
             <Feather name="plus-circle" size={16} color={theme.accent.primary} style={{ marginRight: 8 }} />
             <Text style={s.addRoundBtnText}>Add Round</Text>
           </TouchableOpacity>
-        </View>
-
-        <View>
-          <Text style={s.sectionTitle}>Scoring Mode</Text>
-          <ScoringModePicker
-            value={settings.scoringMode}
-            onChange={(mode) => setSettings((sv) => ({ ...sv, scoringMode: mode }))}
-            playerCount={players.length}
-            settings={settings}
-            onSettingsChange={(next) => setSettings(next)}
-          />
         </View>
       </ScrollView>
     </ScreenContainer>
