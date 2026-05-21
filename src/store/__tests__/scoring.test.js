@@ -23,6 +23,8 @@ import {
   isGIR,
   shotDetailStrokeCount,
   reconcileShotDetail,
+  listRoundConflicts,
+  roundHasConflicts,
 } from '../scoring';
 
 describe('calcExtraShots', () => {
@@ -699,5 +701,34 @@ describe('reconcileShotDetail', () => {
       { putts: 5, teePenalties: 2, otherPenalties: 0, sandShots: 0 }, 4);
     const twice = reconcileShotDetail(once, 4);
     expect(twice).toBe(once);
+  });
+});
+
+describe('listRoundConflicts / roundHasConflicts', () => {
+  it('returns [] and false when the round has no scoreConflicts', () => {
+    const round = { id: 'r1', scores: {} };
+    expect(listRoundConflicts(round)).toEqual([]);
+    expect(roundHasConflicts(round)).toBe(false);
+  });
+
+  it('lists each unresolved conflict as { playerId, hole }, sorted by hole', () => {
+    const round = {
+      id: 'r1',
+      scoreConflicts: {
+        p1: { 7: { candidates: [], detectedAt: 1 } },
+        p2: { 3: { candidates: [], detectedAt: 1 } },
+      },
+    };
+    expect(listRoundConflicts(round)).toEqual([
+      { playerId: 'p2', hole: 3 },
+      { playerId: 'p1', hole: 7 },
+    ]);
+    expect(roundHasConflicts(round)).toBe(true);
+  });
+
+  it('ignores cells whose marker was cleared to undefined by a merge', () => {
+    const round = { id: 'r1', scoreConflicts: { p1: { 7: undefined } } };
+    expect(listRoundConflicts(round)).toEqual([]);
+    expect(roundHasConflicts(round)).toBe(false);
   });
 });

@@ -360,6 +360,31 @@ export function reconcileShotDetail(detail, strokes) {
   return out;
 }
 
+// ── Score conflict helpers ───────────────────────────────────────────────────
+// A round carries `scoreConflicts` (parallel to `scores`): a marker object at
+// scoreConflicts[playerId][hole] when that cell has two competing values. See
+// store/merge.js for how markers are written. A merge that clears a marker
+// leaves the key set to `undefined`, so test the value, not key presence.
+
+// Every unresolved conflict in a round as { playerId, hole } pairs, hole ascending.
+export function listRoundConflicts(round) {
+  const byPlayer = round?.scoreConflicts;
+  if (!byPlayer || typeof byPlayer !== 'object') return [];
+  const out = [];
+  for (const [playerId, byHole] of Object.entries(byPlayer)) {
+    if (!byHole || typeof byHole !== 'object') continue;
+    for (const [holeKey, marker] of Object.entries(byHole)) {
+      if (marker) out.push({ playerId, hole: Number(holeKey) });
+    }
+  }
+  return out.sort((a, b) => a.hole - b.hole);
+}
+
+// True when the round has at least one unresolved score conflict.
+export function roundHasConflicts(round) {
+  return listRoundConflicts(round).length > 0;
+}
+
 // ── Match Play tournament ────────────────────────────────────────────────────
 
 // Match Play tournament standing. Across played rounds, sums each of the two
