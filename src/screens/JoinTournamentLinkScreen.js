@@ -46,9 +46,9 @@ export default function JoinTournamentLinkScreen() {
         <View style={s.icon}>
           <Feather name="flag" size={32} color={theme.accent.primary} />
         </View>
-        <Text style={s.title}>You're invited to a round</Text>
+        <Text style={s.title}>You're invited to play</Text>
         <Text style={s.subtitle}>
-          Join the tournament to enter scores. Log in if you already have a
+          Join to enter scores. Log in if you already have a
           Golf Partner account, or jump straight in as a guest.
         </Text>
 
