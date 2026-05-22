@@ -365,6 +365,12 @@ const linking = {
     ? window.location.origin
     : 'https://golf-partner.vercel.app'],
   config: {
+    // Anchor deep-linked screens on top of Main so they always have a screen
+    // to return to. Without this, opening /join-tournament/:code builds a
+    // single-entry stack — and the post-join navigation.goBack() (e.g. after
+    // claiming a player on ClaimPlayer) silently fails, leaving the screen
+    // mounted with its spinner stuck forever.
+    initialRouteName: 'Main',
     screens: {
       JoinOfficial: 'join/:token',
       JoinTournament: 'join-tournament/:code',
