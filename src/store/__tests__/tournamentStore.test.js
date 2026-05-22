@@ -1,4 +1,7 @@
-import { rowToTournament, reTeeRound } from '../tournamentStore';
+import {
+  rowToTournament, reTeeRound,
+  tournamentNoun, tournamentNounCapitalized, formatRoundLabel,
+} from '../tournamentStore';
 
 describe('rowToTournament', () => {
   test('official tournament: identity comes from columns, content defaults empty', () => {
@@ -72,5 +75,48 @@ describe('reTeeRound', () => {
   test('is a no-op when the round has no playerTees', () => {
     const round = { scores: {} };
     expect(reTeeRound(round, newTees)).toEqual({ scores: {} });
+  });
+});
+
+describe('tournamentNoun', () => {
+  test('casual game kind returns "game"', () => {
+    expect(tournamentNoun({ kind: 'game' })).toBe('game');
+  });
+  test('non-game kinds return "tournament"', () => {
+    expect(tournamentNoun({ kind: 'casual' })).toBe('tournament');
+    expect(tournamentNoun({ kind: 'official' })).toBe('tournament');
+  });
+  test('missing tournament returns "tournament"', () => {
+    expect(tournamentNoun(null)).toBe('tournament');
+    expect(tournamentNoun(undefined)).toBe('tournament');
+  });
+});
+
+describe('tournamentNounCapitalized', () => {
+  test('casual game kind returns "Game"', () => {
+    expect(tournamentNounCapitalized({ kind: 'game' })).toBe('Game');
+  });
+  test('non-game kinds return "Tournament"', () => {
+    expect(tournamentNounCapitalized({ kind: 'casual' })).toBe('Tournament');
+    expect(tournamentNounCapitalized(null)).toBe('Tournament');
+  });
+});
+
+describe('formatRoundLabel', () => {
+  test('game with a course name shows the course name', () => {
+    expect(formatRoundLabel({ kind: 'game', courseName: 'Pebble Beach', roundIndex: 0 }))
+      .toBe('Pebble Beach');
+  });
+  test('game without a course name falls back to "Round"', () => {
+    expect(formatRoundLabel({ kind: 'game', courseName: '', roundIndex: 0 }))
+      .toBe('Round');
+    expect(formatRoundLabel({ kind: 'game', roundIndex: 0 }))
+      .toBe('Round');
+  });
+  test('non-game shows "Round N" with a 1-based index', () => {
+    expect(formatRoundLabel({ kind: 'casual', courseName: 'Ignored', roundIndex: 0 }))
+      .toBe('Round 1');
+    expect(formatRoundLabel({ kind: 'official', roundIndex: 2 }))
+      .toBe('Round 3');
   });
 });

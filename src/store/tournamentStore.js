@@ -1332,6 +1332,26 @@ export function findClaimedSlot(players, userId) {
   return players.find((p) => p && p.user_id === userId) ?? null;
 }
 
+// User-facing noun for a tournament record: 'game' for a casual single round
+// (kind === 'game'), 'tournament' for everything else. One place so screen
+// copy cannot drift.
+export function tournamentNoun(tournament) {
+  return tournament?.kind === 'game' ? 'game' : 'tournament';
+}
+
+// Capitalized variant of tournamentNoun, for headers and titles.
+export function tournamentNounCapitalized(tournament) {
+  return tournament?.kind === 'game' ? 'Game' : 'Tournament';
+}
+
+// Round display label: the course name for a casual game, "Round N" for a
+// multi-round tournament. Takes a plain { kind, courseName, roundIndex }
+// object so it serves both full tournament objects and the flattened
+// feed-item shape. roundIndex is zero-based; the label shows roundIndex + 1.
+export function formatRoundLabel({ kind, courseName, roundIndex }) {
+  return kind === 'game' ? (courseName || 'Round') : `Round ${roundIndex + 1}`;
+}
+
 // Atomic player-slot claim. Wraps the claim_tournament_player RPC (migration
 // 20260518000004). Throws Error('SLOT_TAKEN') when another joiner won the
 // race; the caller refreshes the picker on that.
