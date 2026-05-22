@@ -69,8 +69,9 @@ export function tournamentNounCapitalized(tournament) {
 
 // Round display label: course name for a casual game, "Round N" otherwise.
 // Takes a plain object so it serves both full tournament objects and the
-// flattened feed-item shape.
-export function roundLabel({ kind, courseName, roundIndex }) {
+// flattened feed-item shape. Named `formatRoundLabel` (not `roundLabel`) so
+// it does not shadow the existing local `roundLabel` const in the screens.
+export function formatRoundLabel({ kind, courseName, roundIndex }) {
   return kind === 'game' ? (courseName || 'Round') : `Round ${roundIndex + 1}`;
 }
 ```
@@ -79,8 +80,8 @@ Contract:
 - `tournamentNoun` / `tournamentNounCapitalized` accept a tournament object or
   `null`/`undefined`; a missing object yields the `'tournament'` / `'Tournament'`
   default (matching today's `tournament?.kind === 'game'` behavior).
-- `roundLabel` accepts a plain `{ kind, courseName, roundIndex }` object.
-  `roundIndex` is zero-based; the label shows `roundIndex + 1`.
+- `formatRoundLabel` accepts a plain `{ kind, courseName, roundIndex }`
+  object. `roundIndex` is zero-based; the label shows `roundIndex + 1`.
 
 ## Component 2 — Join-flow copy fixes (the bug)
 
@@ -124,8 +125,8 @@ logic exists once.
 | `HomeScreen.js:1458` | `tournament?.kind === 'game' ? 'game' : 'tournament'` | `tournamentNoun(tournament)` |
 | `HomeScreen.js:1607` | `tournament.kind === 'game' ? 'Game Settings' : 'Tournament Settings'` | `` `${tournamentNounCapitalized(tournament)} Settings` `` |
 | `HomeScreen.js:1691` | `tournament.kind === 'game' ? 'Game' : 'Tournament'` | `tournamentNounCapitalized(tournament)` |
-| `FeedScreen.js:359` | inline `roundLabel` ternary on `item.tournamentKind` | `roundLabel({ kind: item.tournamentKind, courseName: item.courseName, roundIndex: item.roundIndex })` |
-| `RoundSummaryScreen.js:79` | inline `roundLabel` ternary on `tournament?.kind` | `roundLabel({ kind: tournament?.kind, courseName: round?.courseName, roundIndex })` |
+| `FeedScreen.js:359` | inline ternary on `item.tournamentKind` | `formatRoundLabel({ kind: item.tournamentKind, courseName: item.courseName, roundIndex: item.roundIndex })` |
+| `RoundSummaryScreen.js:79` | inline ternary on `tournament?.kind` | `formatRoundLabel({ kind: tournament?.kind, courseName: round?.courseName, roundIndex })` |
 
 Boolean uses of `kind === 'game'` (filters, `isGame` flags in
 Home/Finished/History/Setup/personalStats) are **not** touched — they are
@@ -145,9 +146,9 @@ Unit tests for the three helpers, added to the existing
 - `tournamentNoun`: `kind: 'game'` → `'game'`; other `kind` → `'tournament'`;
   `null`/`undefined` tournament → `'tournament'`.
 - `tournamentNounCapitalized`: same matrix → `'Game'` / `'Tournament'`.
-- `roundLabel`: `kind: 'game'` with `courseName` → course name; `kind: 'game'`
-  without `courseName` → `'Round'`; non-game `kind` → `'Round N'` with
-  `roundIndex + 1`.
+- `formatRoundLabel`: `kind: 'game'` with `courseName` → course name;
+  `kind: 'game'` without `courseName` → `'Round'`; non-game `kind` →
+  `'Round N'` with `roundIndex + 1`.
 
 Screen copy changes are static strings — no UI test needed. Run `npm run lint`
 and `npm test` (the existing ~330-test suite) to confirm no regressions.
@@ -159,6 +160,6 @@ and `npm test` (the existing ~330-test suite) to confirm no regressions.
 - `src/screens/JoinTournamentScreen.js` — neutral copy.
 - `src/screens/ClaimPlayerScreen.js` — use helper; fix two leaks.
 - `src/screens/HomeScreen.js` — route three label sites through helpers.
-- `src/screens/FeedScreen.js` — use `roundLabel`.
-- `src/screens/RoundSummaryScreen.js` — use `roundLabel`.
+- `src/screens/FeedScreen.js` — use `formatRoundLabel`.
+- `src/screens/RoundSummaryScreen.js` — use `formatRoundLabel`.
 - `src/store/__tests__/tournamentStore.test.js` — helper tests.
