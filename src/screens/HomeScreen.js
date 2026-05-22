@@ -25,6 +25,7 @@ import {
   tournamentMatchPlayStandings,
   DEFAULT_SETTINGS, generateInviteCode, buildJoinLink,
   setScoringModeRoundPatches,
+  tournamentNoun, tournamentNounCapitalized,
 } from '../store/tournamentStore';
 import { playersMeFirst } from '../lib/playerOrder';
 import { mutate } from '../store/mutate';
@@ -1455,7 +1456,7 @@ export default function HomeScreen({ navigation, route }) {
           <Text style={s.modalTitle}>Invite</Text>
           <Text style={s.inviteSubtitle}>
             {(() => {
-              const noun = tournament?.kind === 'game' ? 'game' : 'tournament';
+              const noun = tournamentNoun(tournament);
               return inviteRoleState === 'editor'
                 ? `Anyone with this code can enter scores for this ${noun}.`
                 : `Anyone with this code can view this ${noun} (read-only).`;
@@ -1604,7 +1605,7 @@ export default function HomeScreen({ navigation, route }) {
       <Pressable style={s.modalBackdrop} onPress={() => setShowSettings(false)}>
         <Pressable style={s.modalSheet} onPress={() => {}}>
           <View style={s.modalHandle} />
-          <Text style={s.modalTitle}>{tournament.kind === 'game' ? 'Game Settings' : 'Tournament Settings'}</Text>
+          <Text style={s.modalTitle}>{`${tournamentNounCapitalized(tournament)} Settings`}</Text>
 
           {/* Teams are round-scoped. Single-round tournaments have no separate
               per-round sheet, so teams surface here; multi-round keeps them in
@@ -1688,7 +1689,7 @@ export default function HomeScreen({ navigation, route }) {
             && renderRoundActions(() => setShowSettings(false))}
 
           {!isViewer && (() => {
-            const kindLabel = tournament.kind === 'game' ? 'Game' : 'Tournament';
+            const kindLabel = tournamentNounCapitalized(tournament);
             if (tournament.finishedAt) {
               return (
                 <TouchableOpacity
