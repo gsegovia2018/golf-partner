@@ -98,7 +98,10 @@ describe('tournamentNounCapitalized', () => {
   });
   test('non-game kinds return "Tournament"', () => {
     expect(tournamentNounCapitalized({ kind: 'casual' })).toBe('Tournament');
+  });
+  test('missing tournament returns "Tournament"', () => {
     expect(tournamentNounCapitalized(null)).toBe('Tournament');
+    expect(tournamentNounCapitalized(undefined)).toBe('Tournament');
   });
 });
 
