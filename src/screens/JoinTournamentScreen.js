@@ -48,7 +48,7 @@ export default function JoinTournamentScreen({ navigation, route }) {
       }
     } catch (err) {
       setAutoJoining(false);
-      Alert.alert('Error', err.message ?? 'Could not join tournament');
+      Alert.alert('Error', err.message ?? 'Could not join');
     } finally {
       setLoading(false);
     }
@@ -70,14 +70,14 @@ export default function JoinTournamentScreen({ navigation, route }) {
         <TouchableOpacity onPress={() => navigation.goBack()} style={s.backBtn} activeOpacity={0.7}>
           <Feather name="chevron-left" size={22} color={theme.accent.primary} />
         </TouchableOpacity>
-        <Text style={s.headerTitle}>Join Tournament</Text>
+        <Text style={s.headerTitle}>Join</Text>
         <View style={{ width: 22 }} />
       </View>
 
       {autoJoining ? (
         <View style={s.content}>
           <ActivityIndicator size="large" color={theme.accent.primary} />
-          <Text style={[s.subtitle, { marginTop: 16 }]}>Joining tournament…</Text>
+          <Text style={[s.subtitle, { marginTop: 16 }]}>Joining…</Text>
         </View>
       ) : (
         <View style={s.content}>
@@ -85,7 +85,7 @@ export default function JoinTournamentScreen({ navigation, route }) {
             <Feather name="link" size={32} color={theme.accent.primary} />
           </View>
           <Text style={s.title}>Enter Invite Code</Text>
-          <Text style={s.subtitle}>Ask the tournament owner for their invite code.</Text>
+          <Text style={s.subtitle}>Ask the organiser for their invite code.</Text>
 
           <TextInput
             style={s.codeInput}
