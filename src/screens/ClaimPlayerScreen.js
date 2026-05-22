@@ -9,7 +9,7 @@ import { v4 as uuidv4 } from 'uuid';
 import { useTheme } from '../theme/ThemeContext';
 import {
   getTournament, addPlayerRoundPatches, claimTournamentPlayer,
-  refreshTournamentFromRemote,
+  refreshTournamentFromRemote, tournamentNoun,
 } from '../store/tournamentStore';
 import { loadProfile } from '../store/profileStore';
 import { mutate } from '../store/mutate';
@@ -49,7 +49,7 @@ export default function ClaimPlayerScreen({ navigation, route }) {
         setNewName(p?.displayName || (p?.email ? p.email.split('@')[0] : ''));
         setNewHcp(p?.handicap != null ? String(p.handicap) : '');
       } catch (err) {
-        if (!cancelled) Alert.alert('Error', err.message ?? 'Could not load tournament');
+        if (!cancelled) Alert.alert('Error', err.message ?? 'Could not load');
       } finally {
         if (!cancelled) setLoading(false);
       }
@@ -122,7 +122,7 @@ export default function ClaimPlayerScreen({ navigation, route }) {
 
   const players = tournament?.players ?? [];
   const rosterFull = players.length >= MAX_PLAYERS;
-  const noun = tournament?.kind === 'game' ? 'game' : 'tournament';
+  const noun = tournamentNoun(tournament);
   // Already linked to me — nothing more to claim.
   const iAmClaimed = players.some((p) => p.user_id && p.user_id === profile?.userId);
   // Every player is linked to another account: claiming is a dead end unless
@@ -264,7 +264,7 @@ export default function ClaimPlayerScreen({ navigation, route }) {
               <Feather name="bookmark" size={16} color={theme.accent.primary} style={{ marginRight: 10 }} />
               <Text style={s.saveAccountText}>
                 You're playing as a guest. Add an email in your profile so you
-                keep this tournament if you switch devices.
+                keep this {noun} if you switch devices.
               </Text>
             </TouchableOpacity>
           )}
