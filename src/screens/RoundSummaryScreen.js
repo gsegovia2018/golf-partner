@@ -9,7 +9,7 @@ import { Feather } from '@expo/vector-icons';
 
 import { useTheme } from '../theme/ThemeContext';
 import { supabase } from '../lib/supabase';
-import { readLocal, roundTotals, setActiveTournament } from '../store/tournamentStore';
+import { readLocal, roundTotals, setActiveTournament, formatRoundLabel } from '../store/tournamentStore';
 import { loadRoundMedia } from '../store/mediaStore';
 
 // Read-only summary of a single round — the feed's drill-in target. Works
@@ -76,9 +76,11 @@ export default function RoundSummaryScreen({ navigation, route }) {
     return theme.text.secondary;
   };
 
-  const roundLabel = tournament?.kind === 'game'
-    ? (round?.courseName || 'Round')
-    : `Round ${roundIndex + 1}`;
+  const roundLabel = formatRoundLabel({
+    kind: tournament?.kind,
+    courseName: round?.courseName,
+    roundIndex,
+  });
 
   return (
     <ScreenContainer style={s.container} edges={['top', 'bottom']}>

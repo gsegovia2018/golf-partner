@@ -12,7 +12,7 @@ import {
   buildFeed, loadReactions, toggleReaction, FEED_REACTION_EMOJI,
   isValidReactionEmoji, loadCommentCounts,
 } from '../store/feedStore';
-import { subscribeTournamentChanges } from '../store/tournamentStore';
+import { subscribeTournamentChanges, formatRoundLabel } from '../store/tournamentStore';
 import CommentsSheet from '../components/CommentsSheet';
 
 // Compact relative time: "just now", "3h", "2d", "5w". Pure function of a
@@ -356,9 +356,11 @@ export default function FeedScreen({ navigation }) {
   });
 
   const renderRound = (item) => {
-    const roundLabel = item.tournamentKind === 'game'
-      ? (item.courseName || 'Round')
-      : `Round ${item.roundIndex + 1}`;
+    const roundLabel = formatRoundLabel({
+      kind: item.tournamentKind,
+      courseName: item.courseName,
+      roundIndex: item.roundIndex,
+    });
     const results = item.results ?? [];
     const multi = results.length > 1;
     const verb = multi
