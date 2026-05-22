@@ -1,3 +1,8 @@
+// Polyfill `crypto.getRandomValues` for the React Native (Hermes) runtime.
+// Must load before any module that imports `uuid` (player IDs, sync queue,
+// official admin) — otherwise uuidv4() throws "crypto.getRandomValues() not
+// supported" on Android. No-op on web, which already has Web Crypto.
+import 'react-native-get-random-values';
 import { registerRootComponent } from 'expo';
 
 import App from './App';
