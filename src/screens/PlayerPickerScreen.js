@@ -15,6 +15,7 @@ import { loadAllTournaments } from '../store/tournamentStore';
 import { setPendingPlayers } from '../lib/selectionBridge';
 import { buildPlayerLastUsed } from '../lib/recentUse';
 import { mutate } from '../store/mutate';
+import { parseHandicapIndex } from '../lib/handicap';
 
 const normalize = (value) =>
   (value ?? '').toString().normalize('NFD').replace(/\p{Diacritic}/gu, '').toLowerCase();
@@ -93,7 +94,8 @@ export default function PlayerPickerScreen({ navigation, route }) {
     setSaving(true);
     try {
       const playerId = uuidv4();
-      const hcp = parseInt(handicap, 10) || 0;
+      const parsedHcp = parseHandicapIndex(handicap);
+      const hcp = parsedHcp.ok ? parsedHcp.value : 0;
       const player = { id: playerId, name: trimmed, handicap: hcp };
       await mutate(null, {
         type: 'player.upsertLibrary',
@@ -162,7 +164,7 @@ export default function PlayerPickerScreen({ navigation, route }) {
             style={[s.input, s.hcpInput]}
             placeholder="HCP"
             placeholderTextColor={theme.text.muted}
-            keyboardType="numeric"
+            keyboardType="decimal-pad"
             keyboardAppearance={theme.isDark ? 'dark' : 'light'}
             selectionColor={theme.accent.primary}
             value={newHcp}

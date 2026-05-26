@@ -22,6 +22,7 @@ import RoundTeeAssignments, { playerInitials } from '../components/RoundTeeAssig
 import { isScoringModeAllowed, fallbackScoringMode, getScoringMode } from '../components/scoringModes';
 import ScoringModeChangeSheet from '../components/ScoringModeChangeSheet';
 import { consumePendingPlayers } from '../lib/selectionBridge';
+import { parseHandicapIndex } from '../lib/handicap';
 
 async function confirmDialog(title, message, confirmLabel = 'Remove') {
   if (Platform.OS === 'web') return window.confirm(`${title}\n\n${message}`);
@@ -104,7 +105,8 @@ export default function PlayersScreen({ navigation, route }) {
     for (const p of picked) {
       if ((t.players ?? []).length >= 4) break;
       if ((t.players ?? []).some((x) => x.id === p.id)) continue;
-      const player = { id: p.id, name: p.name, handicap: parseInt(p.handicap, 10) || 0 };
+      const parsed = parseHandicapIndex(p.handicap);
+      const player = { id: p.id, name: p.name, handicap: parsed.ok ? parsed.value : 0 };
       const { patches: roundPatches, nextScoringMode } = addPlayerRoundPatches(t, player, { mode: chosenMode });
       const modeChanged = nextScoringMode !== (t.settings?.scoringMode ?? 'stableford');
       t = await mutate(t, {
@@ -216,7 +218,10 @@ export default function PlayersScreen({ navigation, route }) {
     setSaveState('saving');
     saveTimeoutRef.current = setTimeout(async () => {
       try {
-        const builtPlayers = editPlayers.map((p) => ({ ...p, handicap: parseInt(p.handicap, 10) || 0 }));
+        const builtPlayers = editPlayers.map((p) => {
+          const r = parseHandicapIndex(p.handicap);
+          return { ...p, handicap: r.ok ? r.value : 0 };
+        });
         const builtRounds = rounds.map((r) => ({
           ...r,
           playerHandicaps: Object.fromEntries(
@@ -561,7 +566,10 @@ export default function PlayersScreen({ navigation, route }) {
                   <RoundTeeAssignments
                     key={`${r.id}:${editPlayers.map((p) => p.handicap).join(',')}`}
                     round={r}
-                    players={editPlayers.map((p) => ({ ...p, handicap: parseInt(p.handicap, 10) || 0 }))}
+                    players={editPlayers.map((p) => {
+                      const r = parseHandicapIndex(p.handicap);
+                      return { ...p, handicap: r.ok ? r.value : 0 };
+                    })}
                     theme={theme}
                     onChange={(patch) => handleRoundTeesChange(ri, patch)}
                   />
