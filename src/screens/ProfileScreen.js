@@ -13,6 +13,7 @@ import { useTheme } from '../theme/ThemeContext';
 import { supabase } from '../lib/supabase';
 import { loadProfile, upsertProfile, uploadAvatar, computePersonalStats } from '../store/profileStore';
 import { getShowRunningScore, setShowRunningScore } from '../lib/prefs';
+import { parseHandicapIndex } from '../lib/handicap';
 
 const AVATAR_COLORS = ['#006747', '#c77b38', '#1b4965', '#7b3f6b', '#4a6d3f', '#b33951'];
 
@@ -112,9 +113,9 @@ export default function ProfileScreen({ navigation }) {
     // allowed by WHS). Reject clearly wrong values so nobody saves 200
     // and wrecks their Stableford math downstream.
     if (handicap.trim() !== '') {
-      const n = parseInt(handicap, 10);
-      if (!Number.isFinite(n) || n < 0 || n > 54) {
-        Alert.alert('Invalid handicap', 'Handicap must be a whole number between 0 and 54.');
+      const parsed = parseHandicapIndex(handicap);
+      if (!parsed.ok) {
+        Alert.alert('Invalid handicap', 'Handicap must be between 0 and 54, with up to one decimal place.');
         return;
       }
     }
@@ -294,7 +295,7 @@ export default function ProfileScreen({ navigation }) {
                 style={[s.input, { width: 100 }]}
                 placeholder="—"
                 placeholderTextColor={theme.text.muted}
-                keyboardType="numeric"
+                keyboardType="decimal-pad"
                 keyboardAppearance={theme.isDark ? 'dark' : 'light'}
                 selectionColor={theme.accent.primary}
                 value={handicap}
