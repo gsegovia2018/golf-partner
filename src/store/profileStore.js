@@ -49,11 +49,12 @@ export async function upsertProfile(fields) {
     row.display_name = fields.displayName?.trim() || null;
   }
   if (fields.handicap !== undefined) {
-    row.handicap = (() => {
-      if (fields.handicap == null || fields.handicap === '') return null;
+    if (fields.handicap == null || fields.handicap === '') {
+      row.handicap = null;
+    } else {
       const r = parseHandicapIndex(fields.handicap);
-      return r.ok ? r.value : null;
-    })();
+      row.handicap = r.ok ? r.value : null;
+    }
   }
   if (fields.targetHandicap !== undefined) {
     row.target_handicap = fields.targetHandicap === '' || fields.targetHandicap == null
