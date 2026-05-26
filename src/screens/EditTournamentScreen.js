@@ -14,6 +14,7 @@ import {
 import { mutate } from '../store/mutate';
 import { isScoringModeAllowed, fallbackScoringMode } from '../components/ScoringModePicker';
 import { scoringModeUsesTeams } from '../components/scoringModes';
+import { parseHandicapIndex } from '../lib/handicap';
 
 async function confirmDialog(title, message, confirmLabel = 'Remove') {
   if (Platform.OS === 'web') return window.confirm(`${title}\n\n${message}`);
@@ -167,7 +168,10 @@ export default function EditTournamentScreen({ navigation }) {
 
   function addRound() {
     setRounds((prev) => {
-      const builtPlayers = players.map((p) => ({ ...p, handicap: parseInt(p.handicap, 10) || 0 }));
+      const builtPlayers = players.map((p) => {
+        const r = parseHandicapIndex(p.handicap);
+        return { ...p, handicap: r.ok ? r.value : 0 };
+      });
       // Team modes get random pairs; solo modes get one singleton pair per
       // player. scoringModeUsesTeams keeps this in lockstep with the mode list.
       const mode = settings?.scoringMode;
