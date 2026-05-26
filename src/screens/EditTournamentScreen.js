@@ -9,7 +9,7 @@ import { Feather } from '@expo/vector-icons';
 import { useTheme } from '../theme/ThemeContext';
 import {
   loadTournament, saveTournament, subscribeTournamentChanges, DEFAULT_SETTINGS, randomPairs,
-  normalizeRoundHandicaps, roundEnteredCount,
+  normalizeRoundHandicaps, roundEnteredCount, isRoundComplete,
 } from '../store/tournamentStore';
 import { mutate } from '../store/mutate';
 import { isScoringModeAllowed, fallbackScoringMode } from '../components/ScoringModePicker';
@@ -268,11 +268,17 @@ export default function EditTournamentScreen({ navigation }) {
 
       <ScrollView style={s.container} contentContainerStyle={s.content} automaticallyAdjustKeyboardInsets>
         {/* Per-round playing handicaps */}
-        {rounds.map((r, ri) => (
+        {rounds.map((r, ri) => {
+          // Finished rounds are view-only — hide destructive controls.
+          // Editing happens through "Edit round" on the scorecard. A round
+          // counts as finished when every player has every hole scored OR
+          // when the parent tournament was archived early (`finishedAt`).
+          const finished = isRoundComplete(r, players) || !!tournament?.finishedAt;
+          return (
           <View key={r.id}>
             <View style={s.roundHeader}>
               <Text style={s.sectionTitle}>Round {ri + 1}{r.tees?.length ? `  --  ${r.tees.length} tees` : ''}</Text>
-              {rounds.length > 1 && (
+              {rounds.length > 1 && !finished && (
                 <TouchableOpacity onPress={() => removeRound(ri)} style={s.removeBtn}>
                   <Feather name="trash-2" size={14} color={theme.destructive} style={{ marginRight: 4 }} />
                   <Text style={s.removeBtnText}>Remove</Text>
@@ -305,30 +311,33 @@ export default function EditTournamentScreen({ navigation }) {
                 value={r.notes ?? ''}
                 onChangeText={(v) => updateNotes(ri, v)}
               />
-              <TouchableOpacity
-                style={s.editHolesBtn}
-                onPress={() =>
-                  navigation.navigate('CourseEditor', {
-                    roundIndex: ri,
-                    courseName: r.courseName,
-                    initialHoles: r.holes,
-                    initialTees: r.tees ?? [],
-                    onSave: handleHolesSaved,
-                    courseId: r.courseId ?? null,
-                  })
-                }
-              >
-                <Feather name="edit-3" size={14} color={theme.accent.primary} style={{ marginRight: 8 }} />
-                <Text style={s.editHolesBtnText}>
-                  Edit Holes & Tees
-                </Text>
-                <View style={s.parBadge}>
-                  <Text style={s.parBadgeText}>Par {r.holes.reduce((sum, h) => sum + h.par, 0)}</Text>
-                </View>
-              </TouchableOpacity>
+              {!finished && (
+                <TouchableOpacity
+                  style={s.editHolesBtn}
+                  onPress={() =>
+                    navigation.navigate('CourseEditor', {
+                      roundIndex: ri,
+                      courseName: r.courseName,
+                      initialHoles: r.holes,
+                      initialTees: r.tees ?? [],
+                      onSave: handleHolesSaved,
+                      courseId: r.courseId ?? null,
+                    })
+                  }
+                >
+                  <Feather name="edit-3" size={14} color={theme.accent.primary} style={{ marginRight: 8 }} />
+                  <Text style={s.editHolesBtnText}>
+                    Edit Holes & Tees
+                  </Text>
+                  <View style={s.parBadge}>
+                    <Text style={s.parBadgeText}>Par {r.holes.reduce((sum, h) => sum + h.par, 0)}</Text>
+                  </View>
+                </TouchableOpacity>
+              )}
             </View>
           </View>
-        ))}
+          );
+        })}
 
         <View>
           <TouchableOpacity style={s.addRoundBtn} onPress={addRound}>

@@ -52,7 +52,7 @@ function shortPlayerLabel(player, isSolo) {
 }
 
 function NineBlock({
-  holes, label, aggLabel, players, scores, onSetScore,
+  holes, label, aggLabel, players, scores, onSetScore, editable,
   playerHandicaps, mode, theme, s, columns, meId,
 }) {
   const { labelW, aggW, holeW, labelFontSize } = columns;
@@ -115,6 +115,7 @@ function NineBlock({
           </Text>
           {holes.map((h) => {
             const extra = calcExtraShots(handicap, h.strokeIndex);
+            const cellEditable = editable ? editable(player.id) !== false : true;
             return (
               <View key={h.number} style={[s.soloNineCell, holeCell, s.soloNineYouCell]}>
                 <TextInput
@@ -123,6 +124,7 @@ function NineBlock({
                   keyboardType="numeric"
                   keyboardAppearance={theme.isDark ? 'dark' : 'light'}
                   selectionColor={theme.accent.primary}
+                  editable={cellEditable}
                   maxLength={2}
                   value={scores[player.id]?.[h.number] != null ? String(scores[player.id][h.number]) : ''}
                   onChangeText={(v) => onSetScore(player.id, h.number, v)}
@@ -200,7 +202,7 @@ function NineBlock({
   );
 }
 
-function ScorecardTable({ round, players, scores, onSetScore, mode, meId }) {
+function ScorecardTable({ round, players, scores, onSetScore, editable, mode, meId }) {
   const { theme } = useTheme();
   const s = useMemo(() => makeScorecardStyles(theme), [theme]);
   const { width } = useWindowDimensions();
@@ -254,6 +256,7 @@ function ScorecardTable({ round, players, scores, onSetScore, mode, meId }) {
             players={players}
             scores={scores}
             onSetScore={onSetScore}
+            editable={editable}
             playerHandicaps={playerHandicaps}
             mode={mode}
             theme={theme}
@@ -272,6 +275,7 @@ function ScorecardTable({ round, players, scores, onSetScore, mode, meId }) {
               players={players}
               scores={scores}
               onSetScore={onSetScore}
+              editable={editable}
               playerHandicaps={playerHandicaps}
               mode={mode}
               theme={theme}
@@ -342,7 +346,7 @@ function ScorecardTable({ round, players, scores, onSetScore, mode, meId }) {
   );
 }
 
-export function GridView({ round, roundIndex, players, scores, isBestBall, bbResult, settings, onSetScore, refreshing, onRefresh, meId }) {
+export function GridView({ round, roundIndex, players, scores, isBestBall, bbResult, settings, onSetScore, editable, refreshing, onRefresh, meId }) {
   const { theme } = useTheme();
   const s = useMemo(() => makeScorecardStyles(theme), [theme]);
   const mode = settings?.scoringMode === 'matchplay' ? 'matchplay'
@@ -373,6 +377,7 @@ export function GridView({ round, roundIndex, players, scores, isBestBall, bbRes
         players={players}
         scores={scores}
         onSetScore={onSetScore}
+        editable={editable}
         mode={mode}
         meId={meId}
       />

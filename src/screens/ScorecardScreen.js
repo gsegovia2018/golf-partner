@@ -164,6 +164,12 @@ export default function ScorecardScreen({ navigation, route }) {
   // Official-only: whether the official gross leaderboard sheet is open.
   const [officialLeaderboardOpen, setOfficialLeaderboardOpen] = useState(false);
   const [attestError, setAttestError] = useState(null);
+  // Casual-mode read-only lock for finished rounds. Initialized to true once
+  // when a complete round is first loaded; "Edit round" in the header flips
+  // it off for the rest of the session. Re-initializes when the user opens
+  // a different round on this screen.
+  const [viewOnly, setViewOnly] = useState(false);
+  const viewOnlyInitRoundIdRef = useRef(null);
   const tournamentRef = useRef(null);
   const saveTimeoutRef = useRef(null);
   // Keyed debounce timers for notes: key is 'round' or `h<holeNumber>`, so a
@@ -435,17 +441,19 @@ export default function ScorecardScreen({ navigation, route }) {
   }, [autoSave, scheduleNoteSave]);
 
   const saveRoundNote = useCallback((value) => {
+    if (viewOnly) return;
     setNotes((prev) => ({ ...prev, round: value }));
     scheduleNoteSave('round', { scope: 'round', text: value });
-  }, [scheduleNoteSave]);
+  }, [scheduleNoteSave, viewOnly]);
 
   const saveHoleNote = useCallback((holeNumber, value) => {
+    if (viewOnly) return;
     setNotes((prev) => ({
       ...prev,
       hole: { ...(prev.hole ?? {}), [holeNumber]: value },
     }));
     scheduleNoteSave(`h${holeNumber}`, { scope: 'hole', hole: holeNumber, text: value });
-  }, [scheduleNoteSave]);
+  }, [scheduleNoteSave, viewOnly]);
 
   // Resolve a casual score conflict: write the chosen value and clear the
   // marker. Updates `scores` state optimistically, then dispatches a
@@ -494,6 +502,7 @@ export default function ScorecardScreen({ navigation, route }) {
   }, [roundIndex, enqueueSave]);
 
   const setShot = useCallback((playerId, holeNumber, patch) => {
+    if (viewOnly) return;
     setShotDetails((prev) => {
       const current = prev[playerId]?.[holeNumber] ?? DEFAULT_SHOT;
       const detail = { ...DEFAULT_SHOT, ...current, ...patch };
@@ -504,7 +513,7 @@ export default function ScorecardScreen({ navigation, route }) {
       saveShot(playerId, holeNumber, detail);
       return next;
     });
-  }, [saveShot]);
+  }, [saveShot, viewOnly]);
 
   // When the me-player's strokes change, trim that hole's shot detail so the
   // logged putts/penalties/sand shots never exceed the new stroke total.
@@ -639,6 +648,22 @@ export default function ScorecardScreen({ navigation, route }) {
   const round = tournament?.rounds?.[roundIndex] ?? null;
   const players = tournament?.players ?? [];
   const meId = tournament?.meId ?? null;
+
+  // Lock a freshly opened finished round to view-only. "Finished" means
+  // either this specific round has every player scored on every hole, OR the
+  // parent tournament/game was explicitly archived (`finishedAt` set) — a
+  // game can be finished early without filling in the remaining holes.
+  // Re-runs only when the displayed round changes (different round id), so
+  // local edits made after "Edit round" don't silently re-lock when the last
+  // score lands.
+  useEffect(() => {
+    if (official) return;
+    if (!round || !players.length) return;
+    if (viewOnlyInitRoundIdRef.current === round.id) return;
+    viewOnlyInitRoundIdRef.current = round.id;
+    const finished = isRoundComplete(round, players) || !!tournament?.finishedAt;
+    setViewOnly(finished);
+  }, [official, round, players, tournament?.finishedAt]);
   const settings = useMemo(
     () => ({ ...DEFAULT_SETTINGS, ...(tournament?.settings ?? {}) }),
     [tournament?.settings],
@@ -729,12 +754,12 @@ export default function ScorecardScreen({ navigation, route }) {
   // mode: a device may only write its own card (`self`) and the one player
   // it is assigned to mark (`marker`); every other card is read-only.
   const editable = useCallback((playerId) => {
-    if (!official) return true;
+    if (!official) return !viewOnly;
     // Once this device's holder has attested their card (Task 16) the official
     // branch is read-only for them — no more edits to any card on this device.
     if (officialData.hasAttested) return false;
     return officialData.editableSource(playerId) !== null;
-  }, [official, officialData]);
+  }, [official, officialData, viewOnly]);
 
   // Official-mode write: persist one cell through the RPC data layer
   // instead of the casual `mutate` blob path. `editableSource` decides if
@@ -795,6 +820,7 @@ export default function ScorecardScreen({ navigation, route }) {
   }, [official, officialData.members, officialData.scores]);
 
   const setScore = useCallback((playerId, holeNumber, value) => {
+    if (!official && viewOnly) return;
     const parsed = value === '' ? undefined : parseInt(value, 10) || undefined;
     const holePar = round?.holes?.find((h) => h.number === holeNumber)?.par ?? 4;
     const cur = scoresRef.current;
@@ -816,9 +842,10 @@ export default function ScorecardScreen({ navigation, route }) {
       const label = celebrationFor(holePar, parsed);
       if (label) triggerCelebration(playerId, holeNumber, label);
     }
-  }, [round, autoSave, triggerCelebration, official, officialWrite, reconcileMeShot]);
+  }, [round, autoSave, triggerCelebration, official, officialWrite, reconcileMeShot, viewOnly]);
 
   const stepScore = useCallback((playerId, holeNumber, delta) => {
+    if (!official && viewOnly) return;
     haptic('light');
     const anim = getScoreAnim(playerId);
     anim.setValue(1.18);
@@ -847,7 +874,7 @@ export default function ScorecardScreen({ navigation, route }) {
       const label = celebrationFor(holePar, newStrokes);
       if (label) triggerCelebration(playerId, holeNumber, label);
     }
-  }, [round, autoSave, triggerCelebration, getScoreAnim, official, officialWrite, reconcileMeShot]);
+  }, [round, autoSave, triggerCelebration, getScoreAnim, official, officialWrite, reconcileMeShot, viewOnly]);
 
   const [showRunning, setShowRunning] = useState(true);
   useEffect(() => {
@@ -1134,6 +1161,17 @@ export default function ScorecardScreen({ navigation, route }) {
           >
             <SyncIndicator status={syncStatus} saveError={saveError} theme={theme} s={s} />
           </Pressable>
+          {!official && viewOnly && (
+            <TouchableOpacity
+              onPress={() => setViewOnly(false)}
+              style={s.editRoundBtn}
+              accessibilityRole="button"
+              accessibilityLabel="Edit round"
+            >
+              <Feather name="edit-2" size={12} color={theme.accent.primary} style={{ marginRight: 4 }} />
+              <Text style={s.editRoundBtnText}>Edit round</Text>
+            </TouchableOpacity>
+          )}
           <View style={s.togglePill}>
             <TouchableOpacity
               style={[s.toggleBtn, view === 'hole' && s.toggleBtnActive]}
@@ -1285,6 +1323,7 @@ export default function ScorecardScreen({ navigation, route }) {
           bbResult={bbResult}
           settings={settings}
           onSetScore={setScore}
+          editable={editable}
           refreshing={refreshing}
           onRefresh={onRefresh}
           meId={meId}

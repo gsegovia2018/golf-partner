@@ -174,6 +174,23 @@ export function makeScorecardStyles(theme) {
       backgroundColor: theme.accent.primary,
     },
 
+    // "Edit round" pill — header affordance that unlocks a finished round.
+    editRoundBtn: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      backgroundColor: theme.accent.light,
+      borderRadius: 999,
+      borderWidth: 1,
+      borderColor: theme.accent.primary + '40',
+      paddingHorizontal: 10,
+      paddingVertical: 5,
+    },
+    editRoundBtnText: {
+      fontFamily: 'PlusJakartaSans-Bold',
+      color: theme.accent.primary,
+      fontSize: 12,
+    },
+
     // Hole view header card
     holeHeaderCard: {
       flexDirection: 'row',
@@ -186,7 +203,8 @@ export function makeScorecardStyles(theme) {
       paddingVertical: 14,
       ...(theme.isDark ? {} : theme.shadow.card),
     },
-    holeHeaderLeft: { gap: 2 },
+    holeHeaderLeft: { gap: 2, flex: 1, minWidth: 0 },
+    holeHeaderRightWrap: { flexShrink: 0 },
     holeHeaderRound: {
       color: theme.text.muted,
       fontSize: 11,
