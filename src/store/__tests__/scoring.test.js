@@ -729,8 +729,10 @@ describe('calcPlayingHandicap with decimal index', () => {
     expect(calcPlayingHandicap(undefined, 113, 72, 72)).toBe(0);
   });
 
-  it('returns raw decimal index when slope is missing (slope=0 fallback)', () => {
-    expect(calcPlayingHandicap(12.4, 0, 72, 72)).toBe(12.4);
+  it('rounds the index to integer when slope is missing (slope=0 fallback)', () => {
+    expect(calcPlayingHandicap(12.4, 0, 72, 72)).toBe(12);
+    expect(calcPlayingHandicap(12.6, 0, 72, 72)).toBe(13);
+    expect(calcPlayingHandicap(17.9, 0, 72, 72)).toBe(18);
   });
 });
 

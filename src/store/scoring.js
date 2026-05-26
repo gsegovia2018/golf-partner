@@ -27,7 +27,7 @@ export function calcPlayingHandicap(index, slope, rating, par) {
   const parsed = parseFloat(index);
   const idx = Number.isFinite(parsed) ? parsed : 0;
   const sv = parseInt(slope, 10) || 0;
-  if (sv <= 0) return idx; // No slope → return raw (possibly decimal) index; callers handle non-integer.
+  if (sv <= 0) return Math.round(idx) || 0; // No slope → round to integer course handicap (matches WHS).
   const slopeAdj = idx * (sv / STANDARD_SLOPE);
   const cr = parseFloat(rating);
   const pv = parseInt(par, 10) || 0;
