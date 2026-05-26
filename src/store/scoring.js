@@ -27,12 +27,12 @@ export function calcPlayingHandicap(index, slope, rating, par) {
   const parsed = parseFloat(index);
   const idx = Number.isFinite(parsed) ? parsed : 0;
   const sv = parseInt(slope, 10) || 0;
-  if (sv <= 0) return idx;
+  if (sv <= 0) return idx; // No slope → return raw (possibly decimal) index; callers handle non-integer.
   const slopeAdj = idx * (sv / STANDARD_SLOPE);
   const cr = parseFloat(rating);
   const pv = parseInt(par, 10) || 0;
   const crAdj = (Number.isFinite(cr) && pv > 0) ? (cr - pv) : 0;
-  return Math.round(slopeAdj + crAdj);
+  return Math.round(slopeAdj + crAdj) || 0;
 }
 
 // Resolve the slope + course rating a player plays off in a round. Prefers
