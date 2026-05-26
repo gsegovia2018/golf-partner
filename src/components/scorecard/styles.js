@@ -1140,7 +1140,13 @@ export function makeScorecardStyles(theme) {
     },
     soloNineCell: {
       // Width applied explicitly per column (labelW / holeW / aggW) so header
-      // and body rows share the same column geometry. No flex on any cell.
+      // and body rows share the same column geometry. flexShrink: 1 makes
+      // <View> cells shrink the same way <Text> cells do under RN-Web (which
+      // defaults View to flex-shrink: 0, Text to 1) — otherwise the
+      // View-wrapped stroke cells stay at full declared width while the
+      // Text-based PAR/SI/PTS cells shrink, leaving stroke digits offset
+      // from the PTS digits below them when the row overflows its block.
+      flexShrink: 1,
       justifyContent: 'center',
       alignItems: 'center',
       paddingHorizontal: 0,
