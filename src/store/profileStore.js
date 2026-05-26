@@ -9,6 +9,7 @@ import {
   isTournamentFinished,
 } from './tournamentStore';
 import { isRoundPlayed } from './scoring';
+import { parseHandicapIndex } from '../lib/handicap';
 
 // One row per auth.users.id — created by a trigger on signup, edited from
 // ProfileScreen. `username` is a unique lowercase handle; `display_name`
@@ -48,9 +49,11 @@ export async function upsertProfile(fields) {
     row.display_name = fields.displayName?.trim() || null;
   }
   if (fields.handicap !== undefined) {
-    row.handicap = fields.handicap === '' || fields.handicap == null
-      ? null
-      : parseInt(fields.handicap, 10);
+    row.handicap = (() => {
+      if (fields.handicap == null || fields.handicap === '') return null;
+      const r = parseHandicapIndex(fields.handicap);
+      return r.ok ? r.value : null;
+    })();
   }
   if (fields.targetHandicap !== undefined) {
     row.target_handicap = fields.targetHandicap === '' || fields.targetHandicap == null

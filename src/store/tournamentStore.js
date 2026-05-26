@@ -18,6 +18,7 @@ import {
 } from './scoring';
 import { isScoringModeAllowed, fallbackScoringMode } from '../components/ScoringModePicker';
 import { scoringModeUsesTeams } from '../components/scoringModes';
+import { parseHandicapIndex } from '../lib/handicap';
 
 const ACTIVE_ID_KEY = '@golf_active_id';
 const LEGACY_TOURNAMENTS_KEY = '@golf_tournaments';
@@ -522,7 +523,8 @@ export {
 // are re-derived from the new base index.
 export async function propagatePlayerToTournaments(playerId, { name, handicap }) {
   if (!playerId) return [];
-  const parsedIndex = parseInt(handicap, 10) || 0;
+  const result = parseHandicapIndex(handicap);
+  const parsedIndex = result.ok ? result.value : 0;
   const tournaments = await loadAllTournaments();
   const updatedIds = [];
   for (const t of tournaments) {

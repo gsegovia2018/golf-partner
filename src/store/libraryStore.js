@@ -1,6 +1,7 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { supabase } from '../lib/supabase';
 import { listFriends, getCachedFriends } from './friendStore';
+import { parseHandicapIndex } from '../lib/handicap';
 
 // ── Players ──────────────────────────────────────────────────────────────────
 
@@ -67,7 +68,8 @@ export async function fetchMyGuestPlayers() {
 }
 
 export async function upsertPlayer({ id, name, handicap }) {
-  const row = { name, handicap: parseInt(handicap, 10) || 0 };
+  const parsed = parseHandicapIndex(handicap);
+  const row = { name, handicap: parsed.ok ? parsed.value : 0 };
   if (id) row.id = id;
   const { data, error } = await supabase.from('players').upsert(row).select().single();
   if (error) throw error;
