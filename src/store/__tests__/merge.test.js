@@ -233,3 +233,34 @@ describe('path helpers', () => {
     expect(obj.rounds[0].scores.p1['7']).toBe(5);
   });
 });
+
+// meId is per-device identity ("which player is *me* on this phone") — never
+// collaborative state. Without these guarantees a joiner's setMe push would
+// overwrite the creator's meId on the next pull and "me" would suddenly point
+// at the other player.
+describe('mergeTournaments — meId is device-local', () => {
+  it('keeps local meId when remote stamps a newer _meta.meId', () => {
+    const local = { id: 't1', meId: 'alice', _meta: {} };
+    const remote = { id: 't1', meId: 'bob', _meta: { meId: 999 } };
+    expect(mergeTournaments(local, remote).merged.meId).toBe('alice');
+  });
+
+  it('keeps local meId when remote has no _meta.meId but a different meId value', () => {
+    const local = { id: 't1', meId: 'alice' };
+    const remote = { id: 't1', meId: 'bob' };
+    expect(mergeTournaments(local, remote).merged.meId).toBe('alice');
+  });
+
+  it('keeps a null local meId rather than picking up remote meId', () => {
+    const local = { id: 't1', meId: null };
+    const remote = { id: 't1', meId: 'bob' };
+    expect(mergeTournaments(local, remote).merged.meId).toBeNull();
+  });
+
+  it('never emits a meId conflict entry', () => {
+    const local = { id: 't1', meId: 'alice', _meta: { meId: 100 } };
+    const remote = { id: 't1', meId: 'bob', _meta: { meId: 200 } };
+    const { conflicts } = mergeTournaments(local, remote);
+    expect(conflicts.find((c) => c.path === 'meId')).toBeUndefined();
+  });
+});

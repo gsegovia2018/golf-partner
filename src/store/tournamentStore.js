@@ -93,6 +93,50 @@ async function getCurrentUserId() {
   return user?.id ?? null;
 }
 
+// Derive the device-local meId from the signed-in auth user: if any player
+// in this tournament is linked to the current account, that player IS "me"
+// on this device. Used on load paths so a fresh device / new install
+// auto-identifies the user without depending on a synced meId (meId itself
+// is intentionally device-local — see mutate.js and merge.js). Pure function
+// — tested in __tests__/identity.test.js.
+export function deriveMeIdFromAuth(t, authUserId) {
+  if (!t || !authUserId) return t;
+  const players = t.players ?? [];
+  const match = players.find((p) => p?.user_id && p.user_id === authUserId);
+  if (match) {
+    if (t.meId === match.id) return t;
+    return { ...t, meId: match.id };
+  }
+  // No player on this tournament is linked to the signed-in account. If the
+  // stored meId points at a player owned by *another* account (a stale value
+  // left over from when meId was synced via LWW), clear it so the scorecard
+  // shows the "which player are you?" picker instead of impersonating them.
+  if (t.meId) {
+    const current = players.find((p) => p.id === t.meId);
+    if (current?.user_id && current.user_id !== authUserId) {
+      return { ...t, meId: null };
+    }
+  }
+  return t;
+}
+
+// Async wrapper: looks up the auth user once and applies deriveMeIdFromAuth.
+// When the meId changes, persists the corrected tournament locally so the
+// next read returns the right identity without re-deriving. Errors are
+// swallowed — identity resolution is a best-effort enhancement, never the
+// reason a load fails.
+async function resolveMeIdForTournament(t) {
+  if (!t) return t;
+  let userId = null;
+  try { userId = await getCurrentUserId(); } catch (_) { /* offline / no session */ }
+  if (!userId) return t;
+  const next = deriveMeIdFromAuth(t, userId);
+  if (next !== t) {
+    try { await saveLocal(next); } catch (_) { /* best-effort persist */ }
+  }
+  return next;
+}
+
 const _subs = new Set();
 function _emitChange() {
   _subs.forEach((fn) => { try { fn(); } catch (_) {} });
@@ -265,17 +309,18 @@ export async function loadTournament() {
           const latest = await readLocal(activeId);
           const { merged } = mergeTournaments(latest ?? cached, remote);
           await saveLocal(merged);
+          await resolveMeIdForTournament(merged);
         })
         .catch(() => {});
     }
-    return cached;
+    return resolveMeIdForTournament(cached);
   }
 
   if (!isOnline()) return null;
   try {
     const remote = await fetchRemoteTournament(activeId);
     if (remote) await saveLocal(remote);
-    return remote;
+    return resolveMeIdForTournament(remote);
   } catch (_) {
     return null;
   }
@@ -296,14 +341,16 @@ export async function getTournament(id) {
           const latest = await readLocal(id);
           const { merged } = mergeTournaments(latest ?? cached, remote);
           await saveLocal(merged);
+          await resolveMeIdForTournament(merged);
         })
         .catch(() => {});
     }
-    return cached;
+    return resolveMeIdForTournament(cached);
   }
   if (!isOnline()) return null;
   try {
-    return await fetchRemoteTournament(id);
+    const remote = await fetchRemoteTournament(id);
+    return resolveMeIdForTournament(remote);
   } catch (_) {
     return null;
   }
@@ -317,11 +364,11 @@ export async function getTournament(id) {
 export async function refreshTournamentFromRemote(id) {
   if (!id) return null;
   const remote = await fetchRemoteTournament(id);
-  if (!remote) return readLocal(id);
+  if (!remote) return resolveMeIdForTournament(await readLocal(id));
   const local = await readLocal(id);
   const merged = local ? mergeTournaments(local, remote).merged : remote;
   await saveLocal(merged);
-  return merged;
+  return resolveMeIdForTournament(merged);
 }
 
 const ACTIVE_TOURNAMENT_KEY = '@golf_tournament_'; // + id

@@ -82,6 +82,11 @@ export function mergeTournaments(local, remote) {
   const detectedAt = Date.now();
 
   for (const path of paths) {
+    // `meId` is per-device identity ("which player is *me* on this phone"),
+    // not collaborative state — restored from local below, never merged via
+    // LWW, never flagged as a conflict. Skipping here prevents a joiner's
+    // setMe push from overwriting the creator's meId on the next pull.
+    if (path === 'meId') continue;
     const lTs = localMeta[path] ?? 0;
     const rTs = mergedMeta[path] ?? 0;
     const bothHadTs = localMeta[path] != null && mergedMeta[path] != null;
@@ -149,6 +154,11 @@ export function mergeTournaments(local, remote) {
   }
 
   merged._meta = mergedMeta;
+
+  // `merged` started as deepClone(remote), so it already carries remote's
+  // meId — restore the device-local value (including an explicit null when
+  // the user has not claimed a player yet on this device).
+  if (local && 'meId' in local) merged.meId = local.meId;
 
   // Apply structural deletion tombstones. Path-based LWW alone can't tell
   // "round was deleted" from "round was never written" — without a tombstone,

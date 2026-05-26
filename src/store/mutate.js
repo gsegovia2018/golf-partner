@@ -49,11 +49,15 @@ function metaPathFor(m) {
     }
     // Archive / reopen a tournament. Scalar LWW path.
     case 'tournament.setFinished': return `finishedAt`;
-    // Which tournament player is "me" (drives shot-detail tracking).
-    case 'tournament.setMe': return `meId`;
+    // Which tournament player is "me" (drives shot-detail tracking). Per-
+    // device identity — never synced, never stamped in _meta. Handled as a
+    // local-only mutation in mutate() below (short-circuited before enqueue).
+    case 'tournament.setMe': return null;
     // A joining editor links their account to a tournament player: stamps
-    // that player's user_id and points meId at them. LWW on both paths.
-    case 'tournament.claimPlayer': return ['players', 'meId'];
+    // that player's user_id (the joiner's claim must propagate to other
+    // devices). The local meId update is intentional but device-local, so
+    // it is NOT stamped — mergeTournaments restores local meId per device.
+    case 'tournament.claimPlayer': return 'players';
     // Mid-game scoring-mode change: bumps the mode flag plus, for every round
     // whose pairs were rebuilt to match the new mode, that round's pairs path.
     case 'tournament.setScoringMode': {
@@ -224,6 +228,16 @@ export async function mutate(tournamentBefore, mutation) {
     if (isOnline()) scheduleSync();
     else _setSyncStatus('pending');
     return tournamentBefore;
+  }
+
+  // tournament.setMe is per-device identity ("which player is me on this
+  // phone"). Apply and persist locally, but skip enqueue/sync entirely so
+  // a joiner's setMe never overwrites another device's meId.
+  if (m.type === 'tournament.setMe') {
+    const t = JSON.parse(JSON.stringify(tournamentBefore));
+    applyToTournament(t, m);
+    await saveLocal(t);
+    return t;
   }
 
   // 1. Clone + apply + bump _meta
