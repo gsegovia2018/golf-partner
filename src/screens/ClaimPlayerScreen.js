@@ -14,6 +14,7 @@ import {
 import { loadProfile } from '../store/profileStore';
 import { mutate } from '../store/mutate';
 import { useAuth } from '../context/AuthContext';
+import { parseHandicapIndex } from '../lib/handicap';
 
 const MAX_PLAYERS = 4;
 
@@ -102,10 +103,11 @@ export default function ClaimPlayerScreen({ navigation, route }) {
     setSaving(true);
     try {
       const playerId = uuidv4();
+      const parsedHcp = parseHandicapIndex(newHcp);
       const player = {
         id: playerId,
         name,
-        handicap: parseInt(newHcp, 10) || 0,
+        handicap: parsedHcp.ok ? parsedHcp.value : 0,
         user_id: profile.userId,
       };
       const { patches: roundPatches } = addPlayerRoundPatches(tournament, player);
@@ -227,7 +229,7 @@ export default function ClaimPlayerScreen({ navigation, route }) {
                   placeholderTextColor={theme.text.muted}
                   value={newHcp}
                   onChangeText={setNewHcp}
-                  keyboardType="number-pad"
+                  keyboardType="decimal-pad"
                   selectionColor={theme.accent.primary}
                   keyboardAppearance={theme.isDark ? 'dark' : 'light'}
                 />
