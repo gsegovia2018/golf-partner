@@ -8,6 +8,7 @@ import { useFocusEffect, useNavigation } from '@react-navigation/native';
 import { Feather } from '@expo/vector-icons';
 
 import { v4 as uuidv4 } from 'uuid';
+import { parseHandicapIndex } from '../lib/handicap';
 
 import { useTheme } from '../theme/ThemeContext';
 import { deletePlayer, fetchMyGuestPlayers, upsertPlayer } from '../store/libraryStore';
@@ -66,7 +67,8 @@ export default function PlayersLibraryScreen() {
         // Create path goes through mutate() with a client UUID so it works
         // offline; the sync worker flushes to Supabase when back online.
         const playerId = uuidv4();
-        const hcp = parseInt(handicap, 10) || 0;
+        const parsed = parseHandicapIndex(handicap);
+        const hcp = parsed.ok ? parsed.value : 0;
         await mutate(null, {
           type: 'player.upsertLibrary',
           playerId,
@@ -127,7 +129,7 @@ export default function PlayersLibraryScreen() {
             style={[s.input, s.hcpInput]}
             placeholder="HCP"
             placeholderTextColor={theme.text.muted}
-            keyboardType="numeric"
+            keyboardType="decimal-pad"
             keyboardAppearance={theme.isDark ? 'dark' : 'light'}
             selectionColor={theme.accent.primary}
             value={handicap}
