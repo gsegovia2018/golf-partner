@@ -9,6 +9,7 @@ import { Feather } from '@expo/vector-icons';
 
 import { useTheme } from '../theme/ThemeContext';
 import { supabase } from '../lib/supabase';
+import { parseHandicapIndex } from '../lib/handicap';
 import {
   addRosterPlayer, listRoster,
   regenerateToken, withdrawPlayer, createRound, saveTournamentData,
@@ -145,9 +146,10 @@ export default function OfficialSetupScreen({ navigation, route }) {
     if (!trimmed || !tournamentId || addingPlayer) return;
     setAddingPlayer(true);
     try {
+      const parsedHcp = parseHandicapIndex(newHandicap);
       const row = await addRosterPlayer(tournamentId, {
         displayName: trimmed,
-        handicap: parseInt(newHandicap, 10) || 0,
+        handicap: parsedHcp.ok ? parsedHcp.value : 0,
       });
       if (!mountedRef.current) return;
       setRoster((prev) => [...prev, row]);
@@ -365,7 +367,7 @@ export default function OfficialSetupScreen({ navigation, route }) {
               style={s.input}
               placeholder="Handicap"
               placeholderTextColor={theme.text.muted}
-              keyboardType="numeric"
+              keyboardType="decimal-pad"
               keyboardAppearance={theme.isDark ? 'dark' : 'light'}
               selectionColor={theme.accent.primary}
               value={newHandicap}
