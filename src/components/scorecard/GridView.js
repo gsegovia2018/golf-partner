@@ -116,24 +116,37 @@ function NineBlock({
           {holes.map((h) => {
             const extra = calcExtraShots(handicap, h.strokeIndex);
             const cellEditable = editable ? editable(player.id) !== false : true;
+            const cellValue = scores[player.id]?.[h.number] != null
+              ? String(scores[player.id][h.number])
+              : '';
             return (
               <View key={h.number} style={[s.soloNineCell, holeCell, s.soloNineYouCell]}>
-                <TextInput
-                  ref={(el) => { cellRefs.current[cellKey(player.id, h.number)] = el; }}
-                  style={s.soloNineStrokeInput}
-                  keyboardType="numeric"
-                  keyboardAppearance={theme.isDark ? 'dark' : 'light'}
-                  selectionColor={theme.accent.primary}
-                  editable={cellEditable}
-                  maxLength={2}
-                  value={scores[player.id]?.[h.number] != null ? String(scores[player.id][h.number]) : ''}
-                  onChangeText={(v) => onSetScore(player.id, h.number, v)}
-                  placeholder="·"
-                  placeholderTextColor={theme.text.muted}
-                  returnKeyType="next"
-                  blurOnSubmit={false}
-                  onSubmitEditing={() => focusNext(player.id, h.number)}
-                />
+                {cellEditable ? (
+                  <TextInput
+                    ref={(el) => { cellRefs.current[cellKey(player.id, h.number)] = el; }}
+                    style={s.soloNineStrokeInput}
+                    keyboardType="numeric"
+                    keyboardAppearance={theme.isDark ? 'dark' : 'light'}
+                    selectionColor={theme.accent.primary}
+                    maxLength={2}
+                    value={cellValue}
+                    onChangeText={(v) => onSetScore(player.id, h.number, v)}
+                    placeholder="·"
+                    placeholderTextColor={theme.text.muted}
+                    returnKeyType="next"
+                    blurOnSubmit={false}
+                    onSubmitEditing={() => focusNext(player.id, h.number)}
+                  />
+                ) : (
+                  // Plain Text keeps centering reliable in view-only mode —
+                  // a readonly TextInput can pick up browser user-agent
+                  // styles that override textAlign on web. The parent cell
+                  // already centers via flex, so the Text only needs the
+                  // typographic styles.
+                  <Text style={s.soloNineStrokeText} numberOfLines={1}>
+                    {cellValue || '·'}
+                  </Text>
+                )}
                 {extra > 0 && (
                   <View style={s.soloNineExtraDots} pointerEvents="none">
                     {Array.from({ length: Math.min(extra, 2) }).map((_, i) => (

@@ -1200,6 +1200,16 @@ export function makeScorecardStyles(theme) {
       borderBottomWidth: 1,
       borderBottomColor: theme.isDark ? theme.glass?.border : theme.border.default,
     },
+    // View-only twin of soloNineStrokeInput. Renders as <Text>, so it drops
+    // the input-only bits (height/padding/background/border) and relies on
+    // the parent cell's flex centering — keeping the digits centered in
+    // both axes without inheriting a TextInput's readonly browser styles.
+    soloNineStrokeText: {
+      color: theme.text.primary,
+      textAlign: 'center',
+      fontSize: 16,
+      fontFamily: 'PlayfairDisplay-Bold',
+    },
     soloNineExtraDots: {
       position: 'absolute',
       top: 1,
