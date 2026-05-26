@@ -704,6 +704,36 @@ describe('reconcileShotDetail', () => {
   });
 });
 
+describe('calcPlayingHandicap with decimal index', () => {
+  it('honors a decimal index that crosses an integer band (slope-neutral)', () => {
+    // 12.5 × 113/113 = 12.5 → Math.round = 13 (today's parseInt drops to 12 → 12)
+    expect(calcPlayingHandicap(12.5, 113, 72, 72)).toBe(13);
+  });
+
+  it('honors a decimal index that crosses an integer band (slope 130)', () => {
+    // 14.5 × 130/113 ≈ 16.681 → 17 (today: 14 × 130/113 ≈ 16.106 → 16)
+    expect(calcPlayingHandicap(14.5, 130, 72, 72)).toBe(17);
+  });
+
+  it('matches the integer result when index is whole', () => {
+    expect(calcPlayingHandicap(12, 130, 72, 72)).toBe(14);
+    expect(calcPlayingHandicap(12.0, 130, 72, 72)).toBe(14);
+  });
+
+  it('accepts a string decimal (UI passes strings through)', () => {
+    expect(calcPlayingHandicap('12.5', 113, 72, 72)).toBe(13);
+  });
+
+  it('falls back to 0 on garbage input', () => {
+    expect(calcPlayingHandicap('abc', 113, 72, 72)).toBe(0);
+    expect(calcPlayingHandicap(undefined, 113, 72, 72)).toBe(0);
+  });
+
+  it('returns raw decimal index when slope is missing (slope=0 fallback)', () => {
+    expect(calcPlayingHandicap(12.4, 0, 72, 72)).toBe(12.4);
+  });
+});
+
 describe('listRoundConflicts / roundHasConflicts', () => {
   it('returns [] and false when the round has no scoreConflicts', () => {
     const round = { id: 'r1', scores: {} };

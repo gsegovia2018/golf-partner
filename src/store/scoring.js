@@ -24,7 +24,8 @@ export function totalParFromHoles(holes) {
 // No slope → raw index (can't compute either term meaningfully).
 // Missing CR or par → slope-only fallback.
 export function calcPlayingHandicap(index, slope, rating, par) {
-  const idx = parseInt(index, 10) || 0;
+  const parsed = parseFloat(index);
+  const idx = Number.isFinite(parsed) ? parsed : 0;
   const sv = parseInt(slope, 10) || 0;
   if (sv <= 0) return idx;
   const slopeAdj = idx * (sv / STANDARD_SLOPE);
