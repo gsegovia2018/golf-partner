@@ -16,7 +16,8 @@ import {
   pairSynergy, pairCarryRatio, swingHole,
   par3Heartbreak, pickupChampion, anchor, zeroHero,
   skinsLeaderboard, matchPlayResults, pairConfigMatrix,
-  shotStats, playersWithShotData,
+  shotStats, playersWithShotData, driveScoreImpact, puttDeepDive,
+  approachScoreImpact,
   bounceBackRate, frontBackSplit, strokeIndexAccuracy, scramblingStats,
 } from '../store/statsEngine';
 import StatDetailSheet, { captureAndShare } from '../components/StatDetailSheet';
@@ -146,13 +147,17 @@ export default function StatsScreen({ navigation }) {
         <View style={{ width: 22 }} />
       </View>
 
-      <View style={s.tabBar}>
+      <ScrollView
+        horizontal
+        showsHorizontalScrollIndicator={false}
+        contentContainerStyle={s.tabBar}
+      >
         {visibleTabs.map(t => (
           <TouchableOpacity key={t.key} style={[s.tab, activeTab === t.key && s.tabActive]} onPress={() => setTab(t.key)} activeOpacity={0.7}>
             <Text style={[s.tabText, activeTab === t.key && s.tabTextActive]}>{t.label}</Text>
           </TouchableOpacity>
         ))}
-      </View>
+      </ScrollView>
 
       {/* Unified scope controls: Strokes/Points + a single round chip set. */}
       <View style={s.scopeBar}>
@@ -2395,6 +2400,18 @@ function ShotsTab({ tournament, theme, s }) {
     () => (selected ? shotStats(tournament, selected.id) : null),
     [tournament, selected],
   );
+  const driveImpact = useMemo(
+    () => (selected ? driveScoreImpact(tournament, selected.id) : null),
+    [tournament, selected],
+  );
+  const puttDive = useMemo(
+    () => (selected ? puttDeepDive(tournament, selected.id) : null),
+    [tournament, selected],
+  );
+  const approachImpact = useMemo(
+    () => (selected ? approachScoreImpact(tournament, selected.id) : null),
+    [tournament, selected],
+  );
 
   if (withData.length === 0) {
     const me = meId ? tournament.players.find((p) => p.id === meId) : null;
@@ -2462,6 +2479,48 @@ function ShotsTab({ tournament, theme, s }) {
       </View>
 
       <View style={s.card}>
+        <Text style={s.cardLabel}>Putt deep-dive</Text>
+        {puttDive && puttDive.hasData ? (
+          <>
+            <View style={s.shotStatGrid}>
+              <View style={s.shotStatCell}>
+                <Text style={s.shotStatNum}>{puttDive.twoPuttPct}%</Text>
+                <Text style={s.shotStatLabel}>2-putts</Text>
+              </View>
+              <View style={s.shotStatCell}>
+                <Text style={s.shotStatNum}>{puttDive.girPuttsAvg ?? '—'}</Text>
+                <Text style={s.shotStatLabel}>on GIR</Text>
+              </View>
+              <View style={s.shotStatCell}>
+                <Text style={s.shotStatNum}>{puttDive.nonGirPuttsAvg ?? '—'}</Text>
+                <Text style={s.shotStatLabel}>off GIR</Text>
+              </View>
+              <View style={s.shotStatCell}>
+                <Text style={s.shotStatNum}>{puttDive.onePuttSave.pct}%</Text>
+                <Text style={s.shotStatLabel}>1-putt save</Text>
+              </View>
+            </View>
+            <View style={s.puttByParRow}>
+              {[3, 4, 5].map((par) => {
+                const row = puttDive.byPar[par];
+                return (
+                  <View key={par} style={s.puttByParCell}>
+                    <Text style={s.puttByParLabel}>par {par}</Text>
+                    <Text style={s.puttByParVal}>{row ? row.avg : '—'}</Text>
+                    <Text style={s.puttByParSub}>
+                      {row ? `${row.holes} ${row.holes === 1 ? 'hole' : 'holes'}` : 'no data'}
+                    </Text>
+                  </View>
+                );
+              })}
+            </View>
+          </>
+        ) : (
+          <Text style={s.cardSub}>Log putts on the scorecard to see putt detail.</Text>
+        )}
+      </View>
+
+      <View style={s.card}>
         <Text style={s.cardLabel}>Driving</Text>
         {drives.recorded > 0 ? (
           <>
@@ -2484,6 +2543,101 @@ function ShotsTab({ tournament, theme, s }) {
           </>
         ) : (
           <Text style={s.cardSub}>No drives recorded yet.</Text>
+        )}
+      </View>
+
+      <View style={s.card}>
+        <Text style={s.cardLabel}>Drive impact</Text>
+        {driveImpact && driveImpact.hasData ? (
+          <View style={{ marginTop: 4 }}>
+            {DRIVE_KEYS.map((k) => {
+              const b = driveImpact.buckets[k];
+              if (b.holes === 0) return null;
+              const vsParColor = b.avgVsPar > 0
+                ? theme.scoreColor('poor')
+                : b.avgVsPar < 0
+                  ? theme.scoreColor('excellent')
+                  : theme.text.primary;
+              const penColor = b.penaltyRate > 0 ? theme.scoreColor('poor') : theme.text.muted;
+              return (
+                <View key={k} style={s.driveImpactRow}>
+                  <View style={[s.driveImpactSwatch, { backgroundColor: driveColors[k] }]} />
+                  <Text style={s.driveImpactLabel}>{DRIVE_LABELS[k]}</Text>
+                  <Text style={s.driveImpactCount}>
+                    {b.holes} {b.holes === 1 ? 'hole' : 'holes'}
+                  </Text>
+                  <View style={s.driveImpactStat}>
+                    <Text style={s.driveImpactStatVal}>{b.avgPoints}</Text>
+                    <Text style={s.driveImpactStatLabel}>pts</Text>
+                  </View>
+                  <View style={s.driveImpactStat}>
+                    <Text style={[s.driveImpactStatVal, { color: vsParColor }]}>
+                      {b.avgVsPar > 0 ? '+' : ''}{b.avgVsPar}
+                    </Text>
+                    <Text style={s.driveImpactStatLabel}>vs par</Text>
+                  </View>
+                  <View style={s.driveImpactStat}>
+                    <Text style={[s.driveImpactStatVal, { color: penColor }]}>{b.penaltyRate}%</Text>
+                    <Text style={s.driveImpactStatLabel}>pen</Text>
+                  </View>
+                </View>
+              );
+            })}
+          </View>
+        ) : (
+          <Text style={s.cardSub}>No drive impact data yet.</Text>
+        )}
+      </View>
+
+      <View style={s.card}>
+        <Text style={s.cardLabel}>Approach impact</Text>
+        {approachImpact && approachImpact.hasData ? (
+          <View style={{ marginTop: 4 }}>
+            {['0-50', '50-100', '100-150', '150-200', '200+'].map((k) => {
+              const b = approachImpact.buckets[k];
+              if (b.holes === 0) return null;
+              const vsParColor = b.avgVsPar > 0
+                ? theme.scoreColor('poor')
+                : b.avgVsPar < 0
+                  ? theme.scoreColor('excellent')
+                  : theme.text.primary;
+              const girColor = b.girRate == null
+                ? theme.text.muted
+                : b.girRate >= 50
+                  ? theme.scoreColor('excellent')
+                  : b.girRate >= 25
+                    ? theme.scoreColor('neutral')
+                    : theme.scoreColor('poor');
+              return (
+                <View key={k} style={s.driveImpactRow}>
+                  <View style={s.approachBucketPill}>
+                    <Text style={s.approachBucketPillText}>{k}m</Text>
+                  </View>
+                  <Text style={s.driveImpactCount}>
+                    {b.holes} {b.holes === 1 ? 'hole' : 'holes'}
+                  </Text>
+                  <View style={s.driveImpactStat}>
+                    <Text style={s.driveImpactStatVal}>{b.avgPoints}</Text>
+                    <Text style={s.driveImpactStatLabel}>pts</Text>
+                  </View>
+                  <View style={s.driveImpactStat}>
+                    <Text style={[s.driveImpactStatVal, { color: vsParColor }]}>
+                      {b.avgVsPar > 0 ? '+' : ''}{b.avgVsPar}
+                    </Text>
+                    <Text style={s.driveImpactStatLabel}>vs par</Text>
+                  </View>
+                  <View style={s.driveImpactStat}>
+                    <Text style={[s.driveImpactStatVal, { color: girColor }]}>
+                      {b.girRate == null ? '—' : `${b.girRate}%`}
+                    </Text>
+                    <Text style={s.driveImpactStatLabel}>GIR</Text>
+                  </View>
+                </View>
+              );
+            })}
+          </View>
+        ) : (
+          <Text style={s.cardSub}>Log approach distances on the scorecard to see impact.</Text>
         )}
       </View>
 
@@ -2898,6 +3052,34 @@ const makeStyles = (t) => StyleSheet.create({
   shotStatCell: { width: '25%', alignItems: 'center', paddingVertical: 6 },
   shotStatNum: { fontFamily: 'PlayfairDisplay-Bold', color: t.text.primary, fontSize: 24 },
   shotStatLabel: { fontFamily: 'PlusJakartaSans-Medium', color: t.text.muted, fontSize: 10, marginTop: 2, textAlign: 'center' },
+
+  // Drive impact rows — one row per bucket (super/fairway/left/right/short),
+  // each with a small colored dot and three mini-stats (pts / vs par / pen).
+  driveImpactRow: {
+    flexDirection: 'row', alignItems: 'center', gap: 10,
+    paddingVertical: 8, borderBottomWidth: 1, borderBottomColor: t.border.subtle,
+  },
+  driveImpactSwatch: { width: 10, height: 10, borderRadius: 5 },
+  driveImpactLabel: { fontFamily: 'PlusJakartaSans-SemiBold', color: t.text.primary, fontSize: 13, minWidth: 60 },
+  // Approach distance pill — same row template as drive impact, but the
+  // bucket key (e.g. "100-150m") replaces the colored swatch + drive name.
+  approachBucketPill: {
+    paddingHorizontal: 8, paddingVertical: 3, borderRadius: 10,
+    backgroundColor: t.bg.secondary, borderWidth: 1, borderColor: t.border.default,
+    minWidth: 70, alignItems: 'center',
+  },
+  approachBucketPillText: { fontFamily: 'PlusJakartaSans-SemiBold', color: t.text.primary, fontSize: 12 },
+  driveImpactCount: { fontFamily: 'PlusJakartaSans-Medium', color: t.text.muted, fontSize: 11, flex: 1 },
+  driveImpactStat: { alignItems: 'center', minWidth: 44 },
+  driveImpactStatVal: { fontFamily: 'PlayfairDisplay-Bold', color: t.text.primary, fontSize: 15 },
+  driveImpactStatLabel: { fontFamily: 'PlusJakartaSans-Medium', color: t.text.muted, fontSize: 9, marginTop: 1 },
+
+  // Putt deep-dive: avg putts split by par 3 / 4 / 5
+  puttByParRow: { flexDirection: 'row', marginTop: 12, gap: 8 },
+  puttByParCell: { flex: 1, alignItems: 'center', paddingVertical: 8, backgroundColor: t.bg.secondary, borderRadius: 10 },
+  puttByParLabel: { fontFamily: 'PlusJakartaSans-SemiBold', color: t.text.secondary, fontSize: 11 },
+  puttByParVal: { fontFamily: 'PlayfairDisplay-Bold', color: t.text.primary, fontSize: 20, marginTop: 2 },
+  puttByParSub: { fontFamily: 'PlusJakartaSans-Medium', color: t.text.muted, fontSize: 9, marginTop: 1 },
 
   sectionTitle: { fontFamily: 'PlusJakartaSans-SemiBold', color: t.text.muted, fontSize: 10, letterSpacing: 1.5, textTransform: 'uppercase', marginBottom: 12, marginTop: 20 },
   sectionTitleRow: { flexDirection: 'row', alignItems: 'center' },

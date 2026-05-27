@@ -1,4 +1,4 @@
-import { teeShotImpact, lagPuttingQuality, sandSaveRate, upAndDownRate, bunkerVisits, sgPutting, sgAroundGreen, sgApproach, sgOffTheTee, sgTotal, sgSeason } from '../statsEngine';
+import { teeShotImpact, lagPuttingQuality, sandSaveRate, upAndDownRate, bunkerVisits, sgPutting, sgAroundGreen, sgApproach, sgOffTheTee, sgTotal, sgSeason, driveScoreImpact, puttDeepDive, approachScoreImpact } from '../statsEngine';
 
 // 18 par-4 holes, strokeIndex = hole number.
 function holes18() {
@@ -441,5 +441,184 @@ describe('sgSeason', () => {
     expect(r.perRound.length).toBe(2);
     expect(r.sampleHoles).toBeGreaterThanOrEqual(18);
     expect(r.total).not.toBeNull();
+  });
+});
+
+describe('driveScoreImpact', () => {
+  test('reports no data when no drives are logged', () => {
+    const h = holes18();
+    const t = {
+      players: [{ id: 'p1', handicap: 0 }],
+      rounds: [{ courseName: 'C', holes: h, scores: { p1: evenScores(h, 4) }, shotDetails: {} }],
+    };
+    const r = driveScoreImpact(t, 'p1');
+    expect(r.hasData).toBe(false);
+    expect(r.totalHoles).toBe(0);
+  });
+
+  test('aggregates points, strokes-vs-par and penalty rate per bucket', () => {
+    const h = holes18();
+    const scores = { ...evenScores(h, 4) };
+    scores[5] = 5; scores[6] = 5;   // left: bogey
+    scores[7] = 6; scores[8] = 6;   // right: double
+    scores[9] = 5; scores[10] = 5;  // short: bogey
+    const shotDetails = {
+      p1: {
+        1: { drive: 'super' }, 2: { drive: 'super' },
+        3: { drive: 'fairway' }, 4: { drive: 'fairway' },
+        5: { drive: 'left', teePenalties: 1 }, 6: { drive: 'left' },
+        7: { drive: 'right' }, 8: { drive: 'right' },
+        9: { drive: 'short' }, 10: { drive: 'short' },
+      },
+    };
+    const t = {
+      players: [{ id: 'p1', handicap: 0 }],
+      rounds: [{ courseName: 'C', holes: h, scores: { p1: scores }, shotDetails }],
+    };
+    const r = driveScoreImpact(t, 'p1');
+    expect(r.hasData).toBe(true);
+    expect(r.totalHoles).toBe(10);
+    expect(r.buckets.super).toMatchObject({ holes: 2, avgPoints: 2, avgVsPar: 0, penaltyRate: 0 });
+    expect(r.buckets.fairway).toMatchObject({ holes: 2, avgPoints: 2, avgVsPar: 0, penaltyRate: 0 });
+    expect(r.buckets.left).toMatchObject({ holes: 2, avgPoints: 1, avgVsPar: 1, penaltyRate: 50 });
+    expect(r.buckets.right).toMatchObject({ holes: 2, avgPoints: 0, avgVsPar: 2, penaltyRate: 0 });
+    expect(r.buckets.short).toMatchObject({ holes: 2, avgPoints: 1, avgVsPar: 1, penaltyRate: 0 });
+  });
+
+  test('ignores par-3 holes (no driver off the tee)', () => {
+    const h = holes18().map((hole, i) => (i === 0 ? { ...hole, par: 3 } : hole));
+    const shotDetails = { p1: { 1: { drive: 'fairway' } } };
+    const t = {
+      players: [{ id: 'p1', handicap: 0 }],
+      rounds: [{ courseName: 'C', holes: h, scores: { p1: evenScores(h, 4) }, shotDetails }],
+    };
+    expect(driveScoreImpact(t, 'p1').buckets.fairway.holes).toBe(0);
+  });
+});
+
+describe('puttDeepDive', () => {
+  test('reports no data when no putts are logged', () => {
+    const h = holes18();
+    const t = {
+      players: [{ id: 'p1', handicap: 0 }],
+      rounds: [{ courseName: 'C', holes: h, scores: { p1: evenScores(h, 4) }, shotDetails: {} }],
+    };
+    expect(puttDeepDive(t, 'p1').hasData).toBe(false);
+  });
+
+  test('breaks down 2-putt rate, GIR vs non-GIR averages, and 1-putt save rate', () => {
+    const h = holes18();
+    // 1-6:  4 strokes / 2 putts (GIR, 2-putt)
+    // 7-9:  5 strokes / 1 putt  (non-GIR, 1-putt save)
+    // 10-12: 5 strokes / 2 putts (non-GIR, 2-putt)
+    // 13-15: 4 strokes / 3 putts (GIR, 3-putt)
+    // 16-18: untracked
+    const scores = { ...evenScores(h, 4) };
+    [7, 8, 9, 10, 11, 12].forEach((n) => { scores[n] = 5; });
+    const shotDetails = { p1: {} };
+    [1, 2, 3, 4, 5, 6].forEach((n) => { shotDetails.p1[n] = { putts: 2 }; });
+    [7, 8, 9].forEach((n) => { shotDetails.p1[n] = { putts: 1 }; });
+    [10, 11, 12].forEach((n) => { shotDetails.p1[n] = { putts: 2 }; });
+    [13, 14, 15].forEach((n) => { shotDetails.p1[n] = { putts: 3 }; });
+    const t = {
+      players: [{ id: 'p1', handicap: 0 }],
+      rounds: [{ courseName: 'C', holes: h, scores: { p1: scores }, shotDetails }],
+    };
+    const r = puttDeepDive(t, 'p1');
+    expect(r.hasData).toBe(true);
+    expect(r.holes).toBe(15);
+    // 9 two-putt holes (1-6 and 10-12) / 15 = 60%
+    expect(r.twoPuttPct).toBe(60);
+    // GIR holes: 1-6 (2 putts × 6) + 13-15 (3 putts × 3) = 21 putts / 9 holes ≈ 2.3
+    expect(r.girHoles).toBe(9);
+    expect(r.girPuttsAvg).toBe(2.3);
+    // Non-GIR: 7-9 (1 × 3) + 10-12 (2 × 3) = 9 putts / 6 holes = 1.5
+    expect(r.nonGirHoles).toBe(6);
+    expect(r.nonGirPuttsAvg).toBe(1.5);
+    // 1-putt save rate: 3 non-GIR 1-putts / 6 non-GIR = 50%
+    expect(r.onePuttSave).toMatchObject({ attempts: 6, saves: 3, pct: 50 });
+    // All tracked holes are par 4
+    expect(r.byPar[3]).toBeNull();
+    expect(r.byPar[4]).toMatchObject({ holes: 15, avg: 2 });
+    expect(r.byPar[5]).toBeNull();
+  });
+
+  test('splits avg putts by par when the round mixes par 3 / 4 / 5', () => {
+    const h = holes18().map((hole, i) => {
+      if (i === 0) return { ...hole, par: 3 };
+      if (i === 1) return { ...hole, par: 5 };
+      return hole;
+    });
+    const scores = { ...evenScores(h, 4) };
+    scores[1] = 3; scores[2] = 5;
+    const shotDetails = {
+      p1: {
+        1: { putts: 1 },        // par 3
+        2: { putts: 2 },        // par 5
+        3: { putts: 2 },        // par 4
+      },
+    };
+    const t = {
+      players: [{ id: 'p1', handicap: 0 }],
+      rounds: [{ courseName: 'C', holes: h, scores: { p1: scores }, shotDetails }],
+    };
+    const r = puttDeepDive(t, 'p1');
+    expect(r.byPar[3]).toMatchObject({ holes: 1, avg: 1 });
+    expect(r.byPar[4]).toMatchObject({ holes: 1, avg: 2 });
+    expect(r.byPar[5]).toMatchObject({ holes: 1, avg: 2 });
+  });
+});
+
+describe('approachScoreImpact', () => {
+  test('reports no data when no approach buckets are tagged', () => {
+    const h = holes18();
+    const t = {
+      players: [{ id: 'p1', handicap: 0 }],
+      rounds: [{ courseName: 'C', holes: h, scores: { p1: evenScores(h, 4) }, shotDetails: {} }],
+    };
+    expect(approachScoreImpact(t, 'p1').hasData).toBe(false);
+  });
+
+  test('aggregates points, strokes-vs-par and GIR rate per bucket', () => {
+    const h = holes18();
+    const scores = { ...evenScores(h, 4) };
+    scores[4] = 5; scores[5] = 5;   // 100-150 bogeys (non-GIR with 2 putts)
+    scores[8] = 6;                  // 200+ double (non-GIR with 2 putts)
+    const shotDetails = {
+      p1: {
+        1: { approachBucket: '100-150', putts: 2 },  // par with 2 putts → GIR
+        2: { approachBucket: '100-150', putts: 2 },
+        3: { approachBucket: '100-150', putts: 2 },
+        4: { approachBucket: '100-150', putts: 2 },  // bogey, non-GIR
+        5: { approachBucket: '100-150', putts: 2 },
+        6: { approachBucket: '0-50',    putts: 2 },  // par, GIR
+        7: { approachBucket: '0-50',    putts: 2 },
+        8: { approachBucket: '200+',    putts: 2 },  // double, non-GIR
+        9: { approachBucket: '150-200' },            // no putts → GIR not computable
+      },
+    };
+    const t = {
+      players: [{ id: 'p1', handicap: 0 }],
+      rounds: [{ courseName: 'C', holes: h, scores: { p1: scores }, shotDetails }],
+    };
+    const r = approachScoreImpact(t, 'p1');
+    expect(r.hasData).toBe(true);
+    expect(r.totalHoles).toBe(9);
+
+    // 100-150: 5 holes; 3 pars + 2 bogeys → avg pts 1.6, avg vs par 0.4, GIR 3/5 = 60%
+    expect(r.buckets['100-150']).toMatchObject({
+      holes: 5, avgPoints: 1.6, avgVsPar: 0.4, girRate: 60, girEligible: 5,
+    });
+    expect(r.buckets['0-50']).toMatchObject({
+      holes: 2, avgPoints: 2, avgVsPar: 0, girRate: 100,
+    });
+    expect(r.buckets['200+']).toMatchObject({
+      holes: 1, avgPoints: 0, avgVsPar: 2, girRate: 0,
+    });
+    // 150-200 has the hole counted, but GIR not computable without putts.
+    expect(r.buckets['150-200']).toMatchObject({
+      holes: 1, avgPoints: 2, avgVsPar: 0, girRate: null, girEligible: 0,
+    });
+    expect(r.buckets['50-100'].holes).toBe(0);
   });
 });

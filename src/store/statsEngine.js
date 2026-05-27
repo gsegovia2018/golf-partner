@@ -1734,6 +1734,186 @@ export function teeShotImpact(tournament, playerId) {
   };
 }
 
+// ── Drive → Score Impact ──
+// For one player on par-4/5 holes with shot detail, buckets every recorded
+// drive (super / fairway / left / right / short) and reports how that bucket
+// played: average Stableford points, average strokes vs par, and the share
+// of holes in the bucket that picked up a tee penalty.
+export function driveScoreImpact(tournament, playerId) {
+  const player = (tournament.players || []).find((p) => p.id === playerId);
+  const buckets = { super: [], fairway: [], left: [], right: [], short: [] };
+
+  (tournament.rounds || []).forEach((round, roundIndex) => {
+    if (!round.scores?.[playerId] || !player) return;
+    const handicap = getPlayingHandicap(round, player);
+    const details = round.shotDetails?.[playerId] || {};
+    (round.holes || []).forEach((hole) => {
+      if (hole.par === 3) return;
+      const sc = round.scores[playerId]?.[hole.number];
+      if (sc == null) return;
+      const d = details[hole.number];
+      if (!d || d.drive == null || !buckets[d.drive]) return;
+      const points = calcStablefordPoints(hole.par, sc, handicap, hole.strokeIndex);
+      const teePen = d.teePenalties ?? 0;
+      buckets[d.drive].push({
+        roundIndex, courseName: round.courseName,
+        holeNumber: hole.number, par: hole.par,
+        strokes: sc, points, vsPar: sc - hole.par,
+        penalty: teePen > 0,
+      });
+    });
+  });
+
+  const summarize = (arr) => {
+    if (arr.length === 0) {
+      return { holes: 0, avgPoints: 0, avgVsPar: 0, penaltyRate: 0, breakdown: [] };
+    }
+    const sumP = arr.reduce((s, e) => s + e.points, 0);
+    const sumV = arr.reduce((s, e) => s + e.vsPar, 0);
+    const pens = arr.filter((e) => e.penalty).length;
+    return {
+      holes: arr.length,
+      avgPoints: +(sumP / arr.length).toFixed(2),
+      avgVsPar: +(sumV / arr.length).toFixed(2),
+      penaltyRate: Math.round((pens / arr.length) * 100),
+      breakdown: arr,
+    };
+  };
+
+  const totalHoles = Object.values(buckets).reduce((s, arr) => s + arr.length, 0);
+  return {
+    hasData: totalHoles > 0,
+    totalHoles,
+    buckets: {
+      super: summarize(buckets.super),
+      fairway: summarize(buckets.fairway),
+      left: summarize(buckets.left),
+      right: summarize(buckets.right),
+      short: summarize(buckets.short),
+    },
+  };
+}
+
+// ── Approach → Score Impact ──
+// Buckets every hole the player tagged with an approachBucket
+// ('0-50' / '50-100' / '100-150' / '150-200' / '200+', defined in
+// scorecard/constants.js) and reports how that distance played: average
+// Stableford points, average strokes vs par, and the GIR rate (computable
+// only when putts are also logged; nullable when not).
+const APPROACH_BUCKETS = ['0-50', '50-100', '100-150', '150-200', '200+'];
+export function approachScoreImpact(tournament, playerId) {
+  const player = (tournament.players || []).find((p) => p.id === playerId);
+  const buckets = {};
+  APPROACH_BUCKETS.forEach((b) => { buckets[b] = []; });
+
+  (tournament.rounds || []).forEach((round, roundIndex) => {
+    if (!round.scores?.[playerId] || !player) return;
+    const handicap = getPlayingHandicap(round, player);
+    const details = round.shotDetails?.[playerId] || {};
+    (round.holes || []).forEach((hole) => {
+      const sc = round.scores[playerId]?.[hole.number];
+      if (sc == null) return;
+      const d = details[hole.number];
+      if (!d || !d.approachBucket || !buckets[d.approachBucket]) return;
+      const points = calcStablefordPoints(hole.par, sc, handicap, hole.strokeIndex);
+      const gir = d.putts != null ? ((sc - d.putts) <= (hole.par - 2)) : null;
+      buckets[d.approachBucket].push({
+        roundIndex, courseName: round.courseName,
+        holeNumber: hole.number, par: hole.par,
+        strokes: sc, points, vsPar: sc - hole.par, gir,
+      });
+    });
+  });
+
+  const summarize = (arr) => {
+    if (arr.length === 0) {
+      return { holes: 0, avgPoints: 0, avgVsPar: 0, girRate: null, girEligible: 0, breakdown: [] };
+    }
+    const sumP = arr.reduce((s, e) => s + e.points, 0);
+    const sumV = arr.reduce((s, e) => s + e.vsPar, 0);
+    const girEligible = arr.filter((e) => e.gir !== null).length;
+    const girHits = arr.filter((e) => e.gir === true).length;
+    return {
+      holes: arr.length,
+      avgPoints: +(sumP / arr.length).toFixed(2),
+      avgVsPar: +(sumV / arr.length).toFixed(2),
+      girRate: girEligible > 0 ? Math.round((girHits / girEligible) * 100) : null,
+      girEligible,
+      breakdown: arr,
+    };
+  };
+
+  const out = {};
+  APPROACH_BUCKETS.forEach((b) => { out[b] = summarize(buckets[b]); });
+  const totalHoles = APPROACH_BUCKETS.reduce((s, b) => s + buckets[b].length, 0);
+  return { hasData: totalHoles > 0, totalHoles, buckets: out };
+}
+
+// ── Putt deep-dive ──
+// Finer-grained putting metrics for one player: 2-putt rate, avg putts on
+// GIR vs non-GIR holes, avg putts by par 3 / 4 / 5, and the 1-putt save
+// rate on non-GIR holes (recovery-putting proxy — true up-and-down would
+// need a "chipped on" marker we don't track yet).
+export function puttDeepDive(tournament, playerId) {
+  const rounds = tournament?.rounds ?? [];
+  let twoPuttHoles = 0, holesWithPutts = 0;
+  let girPuttsTotal = 0, girHoles = 0;
+  let nonGirPuttsTotal = 0, nonGirHoles = 0;
+  let onePuttNonGir = 0;
+  const byPar = {
+    3: { putts: 0, holes: 0 },
+    4: { putts: 0, holes: 0 },
+    5: { putts: 0, holes: 0 },
+  };
+
+  rounds.forEach((round) => {
+    const byHole = round?.shotDetails?.[playerId];
+    if (!byHole) return;
+    (round.holes ?? []).forEach((hole) => {
+      const d = byHole[hole.number];
+      if (!d || d.putts == null) return;
+      const strokes = round?.scores?.[playerId]?.[hole.number];
+      if (strokes == null) return;
+      holesWithPutts += 1;
+      if (d.putts === 2) twoPuttHoles += 1;
+      const gir = (strokes - d.putts) <= (hole.par - 2);
+      if (gir) {
+        girHoles += 1;
+        girPuttsTotal += d.putts;
+      } else {
+        nonGirHoles += 1;
+        nonGirPuttsTotal += d.putts;
+        if (d.putts === 1) onePuttNonGir += 1;
+      }
+      if (byPar[hole.par]) {
+        byPar[hole.par].putts += d.putts;
+        byPar[hole.par].holes += 1;
+      }
+    });
+  });
+
+  const round1 = (n) => Math.round(n * 10) / 10;
+  const pct = (n, d) => (d > 0 ? Math.round((n / d) * 100) : 0);
+  const parRow = (k) => (byPar[k].holes > 0
+    ? { holes: byPar[k].holes, avg: round1(byPar[k].putts / byPar[k].holes) }
+    : null);
+  return {
+    hasData: holesWithPutts > 0,
+    holes: holesWithPutts,
+    twoPuttPct: pct(twoPuttHoles, holesWithPutts),
+    girPuttsAvg: girHoles > 0 ? round1(girPuttsTotal / girHoles) : null,
+    nonGirPuttsAvg: nonGirHoles > 0 ? round1(nonGirPuttsTotal / nonGirHoles) : null,
+    girHoles,
+    nonGirHoles,
+    byPar: { 3: parRow(3), 4: parRow(4), 5: parRow(5) },
+    onePuttSave: {
+      attempts: nonGirHoles,
+      saves: onePuttNonGir,
+      pct: pct(onePuttNonGir, nonGirHoles),
+    },
+  };
+}
+
 // ── Lag putting quality (Phase A) ──
 // Aggregates avg putts and 3-putt rate keyed by first-putt distance bucket.
 // Below 12 putts per bucket the result for that bucket is null.
