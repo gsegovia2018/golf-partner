@@ -933,16 +933,22 @@ export default function ScorecardScreen({ navigation, route }) {
     setCurrentHole(h);
   }, []);
 
-  // Back from the scorecard should land on the tournament/round info view
-  // (leaderboard + round pager), not the Play tab list. Official rounds
-  // come from JoinOfficial and need their own pop behavior preserved.
+  // Back from the scorecard. Finished casual rounds land on the app home
+  // (Main → Home tab) so users aren't dumped back into the leaderboard of
+  // a game they're already done with. In-progress casual rounds go to the
+  // tournament/round info view (leaderboard + round pager). Official
+  // rounds come from JoinOfficial and need their own pop behavior preserved.
   const goBack = useCallback(() => {
     if (official) {
       navigation.goBack();
       return;
     }
+    if (viewOnly) {
+      navigation.navigate('Main', { screen: 'Home' });
+      return;
+    }
     navigation.navigate('Tournament');
-  }, [navigation, official]);
+  }, [navigation, official, viewOnly]);
 
   // Finish flow: invoked from the last-hole "Finish" button. Shows a brief
   // "round complete" celebration, then routes to that round's summary. When
@@ -1148,7 +1154,7 @@ export default function ScorecardScreen({ navigation, route }) {
     <ScreenContainer style={s.container} edges={['top', 'bottom']}>
       {/* Header with inline view toggle (small, doesn't take a full row) */}
       <View style={s.header}>
-        <TouchableOpacity onPress={() => navigation.goBack()} style={s.backBtn}>
+        <TouchableOpacity onPress={goBack} style={s.backBtn}>
           <Feather name="chevron-left" size={22} color={theme.accent.primary} />
         </TouchableOpacity>
         <Text style={s.headerTitle}>Scorecard</Text>
