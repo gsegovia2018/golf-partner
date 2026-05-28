@@ -490,6 +490,64 @@ describe('computeMyStats targetHandicap', () => {
 });
 
 describe('computeMyStats', () => {
+  test('includes shot impact blocks, target comparisons, and actionable insight rankings', () => {
+    const holes = holes18();
+    const scores = {};
+    const shotDetails = { p1: {} };
+    holes.forEach((hole) => {
+      if (hole.number <= 6) {
+        scores[hole.number] = 4;
+        shotDetails.p1[hole.number] = {
+          drive: 'super', approachBucket: '100-150',
+          putts: 2, firstPuttBucket: '3-6', sandShots: 0,
+        };
+      } else if (hole.number <= 12) {
+        scores[hole.number] = 4;
+        shotDetails.p1[hole.number] = {
+          drive: 'fairway', approachBucket: '100-150',
+          putts: 2, firstPuttBucket: '3-6', sandShots: 0,
+        };
+      } else {
+        scores[hole.number] = 6;
+        shotDetails.p1[hole.number] = {
+          drive: 'right', approachBucket: '200+',
+          putts: 3, firstPuttBucket: '6+', sandShots: 0,
+        };
+      }
+    });
+    const myRound = {
+      key: 'impact:0',
+      round: mkRound({
+        holes,
+        scores: { p1: scores },
+        shotDetails,
+        playerHandicaps: { p1: 0 },
+      }),
+      playerId: 'p1',
+      player: { id: 'p1', name: 'Me', handicap: 0 },
+      courseName: 'Impact',
+      tournamentName: 'T',
+      tournamentDate: '2026-05-28',
+      completed: true,
+    };
+
+    const stats = computeMyStats([myRound], { targetHandicap: 14 });
+
+    expect(stats.driveImpact.buckets.super).toMatchObject({ holes: 6, avgPoints: 2 });
+    expect(stats.driveImpact.buckets.right).toMatchObject({ holes: 6, avgPoints: 0, avgVsPar: 2 });
+    expect(stats.approachImpact.buckets['200+']).toMatchObject({ holes: 6, avgPoints: 0, girRate: 0 });
+    expect(stats.puttDive).toMatchObject({ hasData: true, twoPuttPct: 67 });
+    expect(stats.puttingTarget.buckets['6+']).toMatchObject({ attempts: 6, sgPerPutt: -0.81 });
+    expect(stats.approachTarget.buckets['200+']).toMatchObject({ holes: 6, avgSg: -0.09 });
+    expect(stats.actionPlan.strengths).toEqual(expect.arrayContaining([
+      expect.objectContaining({ area: 'Driving', label: 'Super drives' }),
+    ]));
+    expect(stats.actionPlan.improvements).toEqual(expect.arrayContaining([
+      expect.objectContaining({ area: 'Driving', label: 'Right misses' }),
+      expect.objectContaining({ area: 'Putting', label: '6+ m putts' }),
+    ]));
+  });
+
   test('includes lagPutting, sandSaves, upAndDown, bunkerVisits', () => {
     const rawRound = {
       courseName: 'Test',

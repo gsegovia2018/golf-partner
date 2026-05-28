@@ -42,6 +42,8 @@ export default function OverviewTab({ stats, onInfo, targetHandicap, onChangeTar
         </View>
       </SectionCard>
 
+      <ActionPlanCard actionPlan={stats.actionPlan} s={s} theme={theme} />
+
       {/* ── Strokes Gained snapshot ── */}
       {stats?.strokesGained?.total != null && (
         <SectionCard
@@ -99,6 +101,41 @@ export default function OverviewTab({ stats, onInfo, targetHandicap, onChangeTar
   );
 }
 
+function ActionPlanCard({ actionPlan, s, theme }) {
+  if (!actionPlan || (!actionPlan.keep && !actionPlan.improve && !actionPlan.practice)) return null;
+  return (
+    <SectionCard title="Action Plan">
+      {actionPlan.keep ? (
+        <ActionPlanRow eyebrow="KEEP DOING" item={actionPlan.keep} icon="check-circle" color={theme.accent.primary} s={s} />
+      ) : null}
+      {actionPlan.improve ? (
+        <ActionPlanRow eyebrow="BIGGEST LEAK" item={actionPlan.improve} icon="alert-triangle" color={theme.destructive} s={s} />
+      ) : null}
+      {actionPlan.practice ? (
+        <ActionPlanRow eyebrow="PRACTICE FIRST" item={actionPlan.practice} icon="target" color={theme.scoreColor('neutral')} s={s} />
+      ) : null}
+    </SectionCard>
+  );
+}
+
+function formatActionScore(item) {
+  const sign = item.score > 0 ? '+' : '';
+  return `${sign}${item.score} ${item.unit} · ${item.sample} samples`;
+}
+
+function ActionPlanRow({ eyebrow, item, icon, color, s }) {
+  return (
+    <View style={s.actionRow}>
+      <Feather name={icon} size={17} color={color} />
+      <View style={s.actionText}>
+        <Text style={[s.actionEyebrow, { color }]}>{eyebrow}</Text>
+        <Text style={s.actionLabel}>{item.label}</Text>
+        <Text style={s.actionSub}>{`${item.area} · ${formatActionScore(item)}`}</Text>
+      </View>
+    </View>
+  );
+}
+
 function InsightRow({ cell, kind, s, theme }) {
   const color = kind === 'good' ? theme.accent.primary : theme.destructive;
   return (
@@ -123,6 +160,11 @@ function makeStyles(theme) {
     tiles: { flexDirection: 'row', gap: theme.spacing.sm, marginTop: theme.spacing.xs },
     group: { ...theme.typography.overline, fontWeight: '800', marginTop: theme.spacing.sm },
     note: { ...theme.typography.caption, color: theme.text.muted, fontStyle: 'italic', marginTop: theme.spacing.xs },
+    actionRow: { flexDirection: 'row', gap: theme.spacing.sm, alignItems: 'flex-start', paddingVertical: 7 },
+    actionText: { flex: 1 },
+    actionEyebrow: { ...theme.typography.tiny, fontWeight: '800' },
+    actionLabel: { ...theme.typography.body, color: theme.text.primary, fontWeight: '700', marginTop: 1 },
+    actionSub: { ...theme.typography.caption, color: theme.text.muted, marginTop: 1 },
     insightRow: { flexDirection: 'row', alignItems: 'center', gap: theme.spacing.sm, paddingVertical: 7 },
     insightText: { flex: 1 },
     insightName: { ...theme.typography.body, color: theme.text.primary, fontWeight: '600' },

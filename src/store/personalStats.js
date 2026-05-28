@@ -12,7 +12,8 @@ import {
   playerRoundHistory, playerConsistency, bounceBackRate, shotStats,
   teeShotImpact, scramblingStats,
   lagPuttingQuality, sandSaveRate, upAndDownRate, bunkerVisits,
-  sgSeason,
+  sgSeason, driveScoreImpact, approachScoreImpact, puttDeepDive,
+  puttingTargetGaps, approachTargetGaps,
 } from './statsEngine';
 
 // Canonical player id used inside the synthetic tournament.
@@ -205,6 +206,109 @@ export function collectMyRounds(tournaments, userId, displayName) {
 // Minimum holes for a hole-level cell to be eligible for ranking — guards
 // against fake insights from tiny samples.
 const HOLE_SAMPLE_MIN = 12;
+const IMPACT_SAMPLE_MIN = 3;
+const DRIVE_LABELS = {
+  super: 'Super drives',
+  fairway: 'Fairway drives',
+  left: 'Left misses',
+  right: 'Right misses',
+  short: 'Short drives',
+};
+
+const round2 = (n) => Math.round(n * 100) / 100;
+
+function pushImpact(cells, { area, label, score, sample, unit, value }) {
+  if (!Number.isFinite(score) || sample < IMPACT_SAMPLE_MIN) return;
+  cells.push({
+    area,
+    label,
+    score: round2(score),
+    sample,
+    unit,
+    value: value ?? round2(score),
+  });
+}
+
+export function buildActionPlan({
+  driveImpact, approachTarget, puttingTarget, strokesGained,
+}) {
+  const cells = [];
+
+  if (driveImpact?.hasData) {
+    const bucketEntries = Object.entries(driveImpact.buckets)
+      .filter(([, b]) => b.holes >= IMPACT_SAMPLE_MIN);
+    const totalHoles = bucketEntries.reduce((sum, [, b]) => sum + b.holes, 0);
+    const totalPoints = bucketEntries.reduce((sum, [, b]) => sum + (b.avgPoints * b.holes), 0);
+    const baseline = totalHoles > 0 ? totalPoints / totalHoles : null;
+    if (baseline != null) {
+      bucketEntries.forEach(([key, bucket]) => {
+        pushImpact(cells, {
+          area: 'Driving',
+          label: DRIVE_LABELS[key] ?? `${key} drives`,
+          score: bucket.avgPoints - baseline,
+          sample: bucket.holes,
+          unit: 'pts / hole',
+          value: bucket.avgPoints,
+        });
+      });
+    }
+  }
+
+  Object.entries(approachTarget?.buckets ?? {}).forEach(([bucket, row]) => {
+    pushImpact(cells, {
+      area: 'Approach',
+      label: `${bucket} m approaches`,
+      score: row.avgSg,
+      sample: row.holes,
+      unit: 'SG / shot',
+      value: row.avgSg,
+    });
+  });
+
+  Object.entries(puttingTarget?.buckets ?? {}).forEach(([bucket, row]) => {
+    pushImpact(cells, {
+      area: 'Putting',
+      label: `${bucket} m putts`,
+      score: row.sgPerPutt,
+      sample: row.attempts,
+      unit: 'SG / putt',
+      value: row.sgPerPutt,
+    });
+  });
+
+  Object.entries(strokesGained?.byCategory ?? {}).forEach(([key, value]) => {
+    const label = {
+      tee: 'Off the tee',
+      approach: 'Approach',
+      aroundGreen: 'Around the green',
+      putting: 'Putting',
+    }[key] ?? key;
+    pushImpact(cells, {
+      area: 'Strokes Gained',
+      label,
+      score: value,
+      sample: strokesGained.sampleHoles ?? 0,
+      unit: 'SG / round',
+      value,
+    });
+  });
+
+  const strengths = cells
+    .filter((cell) => cell.score > 0)
+    .sort((a, b) => b.score - a.score)
+    .slice(0, 3);
+  const improvements = cells
+    .filter((cell) => cell.score < 0)
+    .sort((a, b) => a.score - b.score)
+    .slice(0, 5);
+  return {
+    keep: strengths[0] ?? null,
+    improve: improvements[0] ?? null,
+    practice: improvements.find((cell) => cell.area !== improvements[0]?.area) ?? improvements[0] ?? null,
+    strengths,
+    improvements,
+  };
+}
 
 // ── rankStrengths ──
 // Every candidate cell is reduced to one comparable number: net points per
@@ -363,11 +467,18 @@ export function computeFormSeries(selectedRounds) {
 export function computeMyStats(selectedRounds, { n = 5, targetHandicap = 0 } = {}) {
   const rounds = selectedRounds || [];
   const synthetic = buildSyntheticTournament(rounds);
+  const ranking = rankStrengths(synthetic);
+  const driveImpact = driveScoreImpact(synthetic, CANON_ID);
+  const approachImpact = approachScoreImpact(synthetic, CANON_ID);
+  const puttDive = puttDeepDive(synthetic, CANON_ID);
+  const puttingTarget = puttingTargetGaps(synthetic.rounds, CANON_ID, targetHandicap);
+  const approachTarget = approachTargetGaps(synthetic.rounds, CANON_ID, targetHandicap);
+  const strokesGained = sgSeason(synthetic.rounds, CANON_ID, targetHandicap);
   return {
     roundCount: rounds.length,
     metrics: computeMetrics(synthetic),
     form: computeRecentVsHistory(rounds, n),
-    ranking: rankStrengths(synthetic),
+    ranking,
     parType: parTypeSplit(synthetic, CANON_ID),
     difficulty: holeDifficultySplit(synthetic, CANON_ID),
     frontBack: frontBackSplit(synthetic)[0] ?? null,
@@ -375,6 +486,14 @@ export function computeMyStats(selectedRounds, { n = 5, targetHandicap = 0 } = {
     distribution: playerScoreDistribution(synthetic, CANON_ID),
     teeShot: teeShotImpact(synthetic, CANON_ID),
     shots: shotStats(synthetic, CANON_ID),
+    driveImpact,
+    approachImpact,
+    puttDive,
+    puttingTarget,
+    approachTarget,
+    actionPlan: buildActionPlan({
+      driveImpact, approachTarget, puttingTarget, strokesGained,
+    }),
     bounceBack: bounceBackRate(synthetic)[0] ?? null,
     scrambling: scramblingStats(synthetic)[0] ?? null,
     history: playerRoundHistory(synthetic, CANON_ID),
@@ -385,6 +504,6 @@ export function computeMyStats(selectedRounds, { n = 5, targetHandicap = 0 } = {
     upAndDown:    upAndDownRate(synthetic.rounds, CANON_ID),
     bunkerVisits: bunkerVisits(synthetic.rounds, CANON_ID),
     // Phase B:
-    strokesGained: sgSeason(synthetic.rounds, CANON_ID, targetHandicap),
+    strokesGained,
   };
 }

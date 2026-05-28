@@ -1,4 +1,4 @@
-import { teeShotImpact, lagPuttingQuality, sandSaveRate, upAndDownRate, bunkerVisits, sgPutting, sgAroundGreen, sgApproach, sgOffTheTee, sgTotal, sgSeason, driveScoreImpact, puttDeepDive, approachScoreImpact } from '../statsEngine';
+import { teeShotImpact, lagPuttingQuality, sandSaveRate, upAndDownRate, bunkerVisits, sgPutting, sgAroundGreen, sgApproach, sgOffTheTee, sgTotal, sgSeason, driveScoreImpact, puttDeepDive, approachScoreImpact, puttingTargetGaps, approachTargetGaps } from '../statsEngine';
 
 // 18 par-4 holes, strokeIndex = hole number.
 function holes18() {
@@ -620,5 +620,73 @@ describe('approachScoreImpact', () => {
       holes: 1, avgPoints: 2, avgVsPar: 0, girRate: null, girEligible: 0,
     });
     expect(r.buckets['50-100'].holes).toBe(0);
+  });
+});
+
+describe('puttingTargetGaps', () => {
+  test('compares average putts by first-putt distance against the target handicap baseline', () => {
+    const h = holes18();
+    const shotDetails = { p1: {} };
+    h.forEach((hole) => {
+      shotDetails.p1[hole.number] = {
+        putts: hole.number <= 12 ? 2 : 3,
+        firstPuttBucket: hole.number <= 12 ? '3-6' : '6+',
+      };
+    });
+    const t = {
+      players: [{ id: 'p1', handicap: 0 }],
+      rounds: [{ courseName: 'C', holes: h, scores: { p1: evenScores(h, 4) }, shotDetails }],
+    };
+
+    const r = puttingTargetGaps(t.rounds, 'p1', 14);
+
+    expect(r.hasData).toBe(true);
+    expect(r.buckets['3-6']).toMatchObject({
+      attempts: 12,
+      avgPutts: 2,
+      expectedPutts: 1.95,
+      sgPerPutt: -0.05,
+      threePuttRate: 0,
+    });
+    expect(r.buckets['6+']).toMatchObject({
+      attempts: 6,
+      avgPutts: 3,
+      expectedPutts: 2.19,
+      sgPerPutt: -0.81,
+      threePuttRate: 100,
+    });
+  });
+});
+
+describe('approachTargetGaps', () => {
+  test('compares approach buckets against the target handicap baseline', () => {
+    const h = holes18();
+    const scores = { ...evenScores(h, 4) };
+    scores[7] = 5; scores[8] = 5; scores[9] = 5;
+    const shotDetails = { p1: {} };
+    [1, 2, 3, 4, 5, 6].forEach((n) => {
+      shotDetails.p1[n] = { approachBucket: '100-150', putts: 2, firstPuttBucket: '3-6', sandShots: 0 };
+    });
+    [7, 8, 9].forEach((n) => {
+      shotDetails.p1[n] = { approachBucket: '200+', putts: 2, firstPuttBucket: '3-6', sandShots: 0 };
+    });
+    const t = {
+      players: [{ id: 'p1', handicap: 0 }],
+      rounds: [{ courseName: 'C', holes: h, scores: { p1: scores }, shotDetails }],
+    };
+
+    const r = approachTargetGaps(t.rounds, 'p1', 14);
+
+    expect(r.hasData).toBe(true);
+    expect(r.buckets['100-150']).toMatchObject({
+      holes: 6,
+      avgSg: 0.31,
+      girRate: 100,
+    });
+    expect(r.buckets['200+']).toMatchObject({
+      holes: 3,
+      avgSg: -0.09,
+      girRate: 0,
+    });
   });
 });

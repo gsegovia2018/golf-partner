@@ -7,12 +7,30 @@ import SectionCard from '../SectionCard';
 import MetricRow from '../MetricRow';
 import { SGBar } from '../SGBars';
 
+const DRIVE_ORDER = ['super', 'fairway', 'left', 'right', 'short'];
+const DRIVE_LABELS = {
+  super: 'Super drives',
+  fairway: 'Fairway drives',
+  left: 'Left misses',
+  right: 'Right misses',
+  short: 'Short drives',
+};
+const APPROACH_BUCKETS = ['0-50', '50-100', '100-150', '150-200', '200+'];
+const PUTT_BUCKETS = ['0-1', '1-2', '2-3', '3-6', '6+'];
+
 export default function ShotsTab({ stats, onInfo, targetHandicap, onChangeTarget }) {
   const { theme } = useTheme();
   const s = useMemo(() => makeStyles(theme), [theme]);
-  const { teeShot, shots, lagPutting, sandSaves, upAndDown, bunkerVisits } = stats;
+  const {
+    teeShot, shots, sandSaves, upAndDown, bunkerVisits,
+    driveImpact, approachImpact, puttDive, puttingTarget, approachTarget,
+  } = stats;
 
-  if (!teeShot.hasData && !shots.hasData) {
+  const hasAnyShotData = teeShot.hasData || shots.hasData
+    || driveImpact?.hasData || approachImpact?.hasData
+    || puttingTarget?.hasData || approachTarget?.hasData;
+
+  if (!hasAnyShotData) {
     return (
       <View style={s.wrap}>
         <SectionCard title="Shots">
@@ -80,6 +98,28 @@ export default function ShotsTab({ stats, onInfo, targetHandicap, onChangeTarget
         </SectionCard>
       ) : null}
 
+      {driveImpact?.hasData ? (
+        <SectionCard title="Drive score impact">
+          <MetricRow
+            label="Worst drive for score"
+            value={worstDriveLabel(driveImpact)}
+            secondary={worstDriveSecondary(driveImpact)}
+          />
+          {DRIVE_ORDER.map((bucket) => {
+            const row = driveImpact.buckets[bucket];
+            if (!row || row.holes === 0) return null;
+            return (
+              <MetricRow
+                key={bucket}
+                label={DRIVE_LABELS[bucket]}
+                value={`${row.avgPoints} pts`}
+                secondary={`${signed(row.avgVsPar)} vs par · ${row.penaltyRate}% pen · ${row.holes} holes`}
+              />
+            );
+          })}
+        </SectionCard>
+      ) : null}
+
       {shots.hasData ? (
         <SectionCard title="Putting & driving" infoKey="puttingDriving" onInfo={onInfo}>
           <MetricRow label="Putts / round" value={shots.putts.perRound} secondary={`${shots.putts.holes} holes`} dim={shots.putts.holes === 0} />
@@ -91,18 +131,60 @@ export default function ShotsTab({ stats, onInfo, targetHandicap, onChangeTarget
         </SectionCard>
       ) : null}
 
-      {lagPutting ? (
-        <SectionCard title="Putts by first-putt distance">
-          {['0-1', '1-2', '2-3', '3-6', '6+'].map((bucket) => {
-            const avg = lagPutting.avgPuttsByBucket[bucket];
-            const n = lagPutting.sample.perBucket[bucket];
+      {puttDive?.hasData ? (
+        <SectionCard title="Putting detail">
+          <MetricRow label="2-putt rate" value={`${puttDive.twoPuttPct}%`} secondary={`${puttDive.holes} holes`} />
+          <MetricRow label="Putts on GIR" value={puttDive.girPuttsAvg ?? '—'} secondary={`${puttDive.girHoles} holes`} dim={puttDive.girPuttsAvg == null} />
+          <MetricRow label="Putts off GIR" value={puttDive.nonGirPuttsAvg ?? '—'} secondary={`${puttDive.nonGirHoles} holes`} dim={puttDive.nonGirPuttsAvg == null} />
+          <MetricRow label="1-putt save" value={`${puttDive.onePuttSave.pct}%`} secondary={`${puttDive.onePuttSave.attempts} chances`} dim={puttDive.onePuttSave.attempts === 0} />
+        </SectionCard>
+      ) : null}
+
+      {puttingTarget?.hasData ? (
+        <SectionCard title="Putting vs target">
+          {PUTT_BUCKETS.map((bucket) => {
+            const row = puttingTarget.buckets[bucket];
+            if (!row || row.attempts === 0) return null;
+            return (
+              <MetricRow
+                key={bucket}
+                label={`${bucket} m putts`}
+                value={signed(row.sgPerPutt)}
+                secondary={`${row.avgPutts} avg vs ${row.expectedPutts} target · ${row.threePuttRate}% 3-putt · ${row.attempts} putts`}
+              />
+            );
+          })}
+        </SectionCard>
+      ) : null}
+
+      {approachImpact?.hasData ? (
+        <SectionCard title="Approach score impact">
+          {APPROACH_BUCKETS.map((bucket) => {
+            const row = approachImpact.buckets[bucket];
+            if (!row || row.holes === 0) return null;
             return (
               <MetricRow
                 key={bucket}
                 label={`${bucket} m`}
-                value={avg == null ? '—' : avg.toFixed(2)}
-                secondary={`${n} putts`}
-                dim={n === 0}
+                value={`${row.avgPoints} pts`}
+                secondary={`${signed(row.avgVsPar)} vs par · ${row.girRate == null ? '—' : `${row.girRate}%`} GIR · ${row.holes} holes`}
+              />
+            );
+          })}
+        </SectionCard>
+      ) : null}
+
+      {approachTarget?.hasData ? (
+        <SectionCard title="Approach vs target">
+          {APPROACH_BUCKETS.map((bucket) => {
+            const row = approachTarget.buckets[bucket];
+            if (!row || row.holes === 0) return null;
+            return (
+              <MetricRow
+                key={bucket}
+                label={`${bucket} m approaches`}
+                value={signed(row.avgSg)}
+                secondary={`${row.girRate}% GIR · ${row.holes} shots`}
               />
             );
           })}
@@ -139,6 +221,27 @@ export default function ShotsTab({ stats, onInfo, targetHandicap, onChangeTarget
       ) : null}
     </View>
   );
+}
+
+function signed(value) {
+  if (value == null) return '—';
+  return value > 0 ? `+${value}` : `${value}`;
+}
+
+function driveRows(driveImpact) {
+  return DRIVE_ORDER
+    .map((bucket) => ({ bucket, label: DRIVE_LABELS[bucket], ...(driveImpact?.buckets?.[bucket] ?? {}) }))
+    .filter((row) => row.holes > 0);
+}
+
+function worstDriveLabel(driveImpact) {
+  const worst = driveRows(driveImpact).sort((a, b) => a.avgPoints - b.avgPoints)[0];
+  return worst?.label ?? '—';
+}
+
+function worstDriveSecondary(driveImpact) {
+  const worst = driveRows(driveImpact).sort((a, b) => a.avgPoints - b.avgPoints)[0];
+  return worst ? `${worst.avgPoints} pts · ${worst.holes} holes` : undefined;
 }
 
 function makeStyles(theme) {

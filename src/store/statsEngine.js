@@ -2160,6 +2160,101 @@ export function sgPutting(round, playerId, targetHandicap = 0) {
   return { perHole, total, sampleHoles: sample.length };
 }
 
+export function puttingTargetGaps(rounds, playerId, targetHandicap = 0) {
+  const buckets = Object.fromEntries(FIRST_PUTT_BUCKETS_LIST.map((b) => [b, []]));
+  (rounds ?? []).forEach((round) => {
+    const byHole = round?.shotDetails?.[playerId];
+    if (!byHole) return;
+    (round.holes ?? []).forEach((hole) => {
+      const d = byHole[hole.number];
+      if (!d || d.putts == null || !d.firstPuttBucket || !buckets[d.firstPuttBucket]) return;
+      const expected = expectedFromBucket('firstPutt', d.firstPuttBucket, targetHandicap);
+      if (expected == null) return;
+      buckets[d.firstPuttBucket].push({
+        holeNumber: hole.number,
+        putts: d.putts,
+        expected,
+        sg: expected - d.putts,
+      });
+    });
+  });
+
+  const round2 = (n) => Math.round(n * 100) / 100;
+  const summarize = (arr) => {
+    if (arr.length === 0) {
+      return { attempts: 0, avgPutts: null, expectedPutts: null, sgPerPutt: null, threePuttRate: null, breakdown: [] };
+    }
+    const putts = arr.reduce((sum, e) => sum + e.putts, 0);
+    const expected = arr.reduce((sum, e) => sum + e.expected, 0);
+    const sg = arr.reduce((sum, e) => sum + e.sg, 0);
+    const threePutts = arr.filter((e) => e.putts >= 3).length;
+    return {
+      attempts: arr.length,
+      avgPutts: round2(putts / arr.length),
+      expectedPutts: round2(expected / arr.length),
+      sgPerPutt: round2(sg / arr.length),
+      threePuttRate: Math.round((threePutts / arr.length) * 100),
+      breakdown: arr,
+    };
+  };
+
+  const out = {};
+  FIRST_PUTT_BUCKETS_LIST.forEach((b) => { out[b] = summarize(buckets[b]); });
+  const attempts = FIRST_PUTT_BUCKETS_LIST.reduce((sum, b) => sum + buckets[b].length, 0);
+  return { hasData: attempts > 0, attempts, buckets: out };
+}
+
+export function approachTargetGaps(rounds, playerId, targetHandicap = 0) {
+  const buckets = Object.fromEntries(APPROACH_BUCKETS.map((b) => [b, []]));
+  (rounds ?? []).forEach((round) => {
+    const byHole = round?.shotDetails?.[playerId];
+    if (!byHole) return;
+    (round.holes ?? []).forEach((hole) => {
+      const d = byHole[hole.number];
+      if (!d || !d.approachBucket || !buckets[d.approachBucket]) return;
+      const startDist = BUCKETS.approach[d.approachBucket];
+      if (startDist == null) return;
+      const strokes = round?.scores?.[playerId]?.[hole.number];
+      const gir = isGIR({ strokes, putts: d.putts, par: hole.par });
+      const start = expectedStrokes('fairway', startDist, targetHandicap);
+      let end;
+      if (gir === true && d.firstPuttBucket) {
+        end = expectedFromBucket('firstPutt', d.firstPuttBucket, targetHandicap);
+      } else if (gir === false) {
+        const lie = (d.sandShots ?? 0) >= 1 ? 'sand' : 'recovery';
+        end = expectedStrokes(lie, AROUND_GREEN_START_DISTANCE, targetHandicap);
+      } else {
+        return;
+      }
+      if (start == null || end == null) return;
+      buckets[d.approachBucket].push({
+        holeNumber: hole.number,
+        gir,
+        sg: start - end - 1,
+      });
+    });
+  });
+
+  const round2 = (n) => Math.round(n * 100) / 100;
+  const summarize = (arr) => {
+    if (arr.length === 0) {
+      return { holes: 0, avgSg: null, girRate: null, breakdown: [] };
+    }
+    const girHits = arr.filter((e) => e.gir === true).length;
+    return {
+      holes: arr.length,
+      avgSg: round2(arr.reduce((sum, e) => sum + e.sg, 0) / arr.length),
+      girRate: Math.round((girHits / arr.length) * 100),
+      breakdown: arr,
+    };
+  };
+
+  const out = {};
+  APPROACH_BUCKETS.forEach((b) => { out[b] = summarize(buckets[b]); });
+  const holes = APPROACH_BUCKETS.reduce((sum, b) => sum + buckets[b].length, 0);
+  return { hasData: holes > 0, holes, buckets: out };
+}
+
 export function sgTotal(round, playerId, targetHandicap = 0) {
   const tee         = sgOffTheTee(round, playerId, targetHandicap);
   const approach    = sgApproach(round, playerId, targetHandicap);
