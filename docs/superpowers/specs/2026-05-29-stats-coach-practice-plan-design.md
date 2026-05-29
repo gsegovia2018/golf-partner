@@ -27,6 +27,10 @@ direct, specific, and grounded in the player's own scoring patterns.
   - things getting worse lately
   - additional improvement opportunities that are not necessarily the worst
   - watch items with low confidence or smaller sample sizes
+- Preserve the current high-value Overview content:
+  - Strokes Gained vs the selected target handicap, including the edit target
+    affordance
+  - top 3 strengths and bottom 3 pain points
 - Keep the **Practice Plan** near the bottom of the Coach tab so it feels like
   the conclusion after the diagnosis, not the whole page.
 - Use deterministic local stats logic only. No AI-generated coaching text, no
@@ -140,17 +144,40 @@ Content:
 This section answers "how am I playing lately?" after the top sections answer
 "what should I do about it?"
 
-### 4. Detail Sections
+### 4. Strokes Gained vs Target
 
-Keep compact versions of the current:
+Keep the current Strokes Gained card visible on the Coach tab.
 
-- Strokes Gained summary
-- Strengths and Pain Points
+Requirements:
 
-These sections should be phrased as evidence behind the advice. They should
-not compete with the Coach Hero as the primary read.
+- title reflects the selected target, such as `Strokes Gained vs scratch` or
+  `Strokes Gained vs handicap 12`
+- total strokes-gained value remains prominent
+- per-round framing remains clear
+- target-handicap edit affordance remains available
+- category breakdown can be compact, but the user must still understand where
+  the gain or loss comes from
 
-### 5. Practice Plan
+This card is evidence behind the Coach Hero and can also feed the Coach Board.
+It should not be reduced to only a small row or hidden behind a tap.
+
+### 5. Top 3 / Bottom 3
+
+Keep the current strengths and pain-points concept, but make it clearer and
+more explicit:
+
+- show up to 3 `Top strengths`
+- show up to 3 `Bottom leaks`
+- include each item's average points or deviation from baseline
+- keep the baseline explanation visible or available through the info sheet
+- preserve empty states such as `Nothing stands out yet`
+
+This section can use the existing `ranking.strengths` and
+`ranking.weaknesses` data. It is separate from the Coach Board: the Coach Board
+is a curated diagnosis across many signals, while Top 3 / Bottom 3 is the
+direct ranked evidence list.
+
+### 6. Practice Plan
 
 The Practice Plan appears near the bottom of the Coach tab.
 
@@ -342,6 +369,10 @@ Screen/component tests:
 - default Stats tab is Coach.
 - `overview` route param maps to Coach.
 - tab order is Coach, Report Card, Form, Breakdown, Shots.
+- Strokes Gained vs target handicap remains visible on Coach when data exists.
+- target-handicap edit control remains available from the Coach tab.
+- Top 3 strengths and Bottom 3 leaks render from the ranking data when
+  available.
 - sparse data states render without crashes.
 - Practice Plan appears after the diagnostic sections, not at the top.
 
