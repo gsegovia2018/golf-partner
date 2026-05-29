@@ -8,6 +8,12 @@ function coverForStory(story) {
   return story?.mediaList?.find((m) => m.thumbUrl || m.url) ?? null;
 }
 
+function initialsForLabel(label) {
+  const words = String(label || '').trim().split(/\s+/).filter(Boolean);
+  const initials = words.slice(0, 2).map((word) => word[0]).join('');
+  return initials.toUpperCase() || '?';
+}
+
 export default function RoundStoriesRail({ stories = [], onPressStory }) {
   const { theme } = useTheme();
   const s = makeStyles(theme);
@@ -41,7 +47,7 @@ export default function RoundStoriesRail({ stories = [], onPressStory }) {
                     resizeMode="cover"
                   />
                 ) : (
-                  <Text style={s.fallbackText}>{(story.roundLabel || '?').slice(0, 2).toUpperCase()}</Text>
+                  <Text style={s.fallbackText}>{initialsForLabel(story.roundLabel)}</Text>
                 )}
               </View>
             </View>

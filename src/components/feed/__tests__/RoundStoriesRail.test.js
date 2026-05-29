@@ -46,6 +46,20 @@ describe('RoundStoriesRail', () => {
     expect(getByText('seen')).toBeTruthy();
   });
 
+  test('renders fallback initials from the round label when no cover exists', async () => {
+    const fallbackStories = [
+      {
+        ...stories[0],
+        mediaList: [{ id: 'm-no-cover' }],
+      },
+    ];
+    const { getByText } = render(wrap(
+      <RoundStoriesRail stories={fallbackStories} onPressStory={() => {}} />,
+    ));
+
+    await waitFor(() => expect(getByText('LM')).toBeTruthy());
+  });
+
   test('calls onPressStory with the selected story', async () => {
     const onPressStory = jest.fn();
     const { getByLabelText } = render(wrap(
