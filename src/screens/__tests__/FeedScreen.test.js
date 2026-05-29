@@ -83,11 +83,11 @@ const result = {
     roundId: 'r1',
     roundIndex: 0,
     courseName: 'La Moraleja',
+    playerCount: 4,
     results: [
       { playerId: 'p1', name: 'Marcos', points: 38, strokes: 82, holes: 18, isMine: true },
       { playerId: 'p2', name: 'Pablo', points: 34, strokes: 88, holes: 18 },
       { playerId: 'p3', name: 'Luis', points: 31, strokes: 91, holes: 18 },
-      { playerId: 'p4', name: 'Javi', points: 29, strokes: 93, holes: 18 },
     ],
   }],
 };

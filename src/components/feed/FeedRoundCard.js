@@ -49,7 +49,8 @@ export default function FeedRoundCard({
   const s = makeStyles(theme);
   const allResults = item.results ?? [];
   const results = allResults.slice(0, 3);
-  const hiddenCount = Math.max(0, allResults.length - results.length);
+  const resultCount = item.playerCount ?? allResults.length;
+  const hiddenCount = Math.max(0, resultCount - results.length);
 
   return (
     <TouchableOpacity

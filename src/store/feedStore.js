@@ -79,9 +79,10 @@ export function buildRoundStories(tournaments, media, options = {}) {
   const groups = new Map();
 
   for (const item of media ?? []) {
-    if (!item?.tournamentId) continue;
+    if (!item?.tournamentId || !item.roundId) continue;
     const tournament = tournamentById.get(item.tournamentId);
     if (!tournament) continue;
+    if (!(tournament.rounds ?? []).some((round) => round.id === item.roundId)) continue;
     const groupKey = `${item.tournamentId}:${item.roundId ?? 'none'}`;
     let group = groups.get(groupKey);
     if (!group) {
@@ -218,9 +219,11 @@ export async function buildFeed() {
       // all into ONE feed card for the round-event so the feed shows a
       // single card with every player's result.
       const results = [];
+      let scoredPlayerCount = 0;
       for (const entry of totals) {
         const player = entry.player;
         if (!player || entry.totalStrokes === 0) continue;
+        scoredPlayerCount += 1;
         const uid = player.user_id ?? null;
         const isMe = !!uid && uid === me;
         const isFriend = !!uid && friendSet.has(uid);
@@ -270,7 +273,7 @@ export async function buildFeed() {
         holes: lead.holes,
         // Every player's result for the grouped card.
         results,
-        playerCount: results.length,
+        playerCount: scoredPlayerCount,
         finished,
         // A friend's round the current user did not play in.
         withMe: iAmIn || anyMine,

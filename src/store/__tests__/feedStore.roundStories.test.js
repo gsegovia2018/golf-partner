@@ -72,7 +72,7 @@ describe('buildRoundStories', () => {
     expect(moraleja.mediaList.map((m) => m.id)).toEqual(['m1', 'm2']);
   });
 
-  test('uses tournament-level fallback label for media without a round id', () => {
+  test('skips media without a real round id', () => {
     const stories = buildRoundStories([tournament], [{
       id: 'm4',
       tournamentId: 't1',
@@ -82,17 +82,28 @@ describe('buildRoundStories', () => {
       uploaderLabel: 'Javi',
       url: 'https://example.com/m4.jpg',
       thumbUrl: 'https://example.com/m4-thumb.jpg',
+    }, {
+      id: 'm5',
+      tournamentId: 't1',
+      roundId: 'missing-round',
+      kind: 'photo',
+      createdAt: '2026-05-29T12:05:00.000Z',
+      uploaderLabel: 'Luis',
+      url: 'https://example.com/m5.jpg',
+      thumbUrl: 'https://example.com/m5-thumb.jpg',
     }]);
 
-    expect(stories[0]).toMatchObject({
-      key: 'story:t1:none',
-      roundId: null,
-      roundLabel: 'Weekend Match',
-      count: 1,
-    });
+    expect(stories).toEqual([]);
   });
 
   test('limits stories to the requested maximum', () => {
+    const manyTournament = {
+      ...tournament,
+      rounds: Array.from({ length: 14 }, (_, i) => ({
+        id: `r-${i}`,
+        courseName: `Course ${i}`,
+      })),
+    };
     const manyMedia = Array.from({ length: 14 }, (_, i) => ({
       id: `m-${i}`,
       tournamentId: 't1',
@@ -104,6 +115,6 @@ describe('buildRoundStories', () => {
       thumbUrl: `https://example.com/${i}-thumb.jpg`,
     }));
 
-    expect(buildRoundStories([tournament], manyMedia, { limit: 12 })).toHaveLength(12);
+    expect(buildRoundStories([manyTournament], manyMedia, { limit: 12 })).toHaveLength(12);
   });
 });
