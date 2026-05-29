@@ -1,7 +1,7 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   View, Text, TouchableOpacity, StyleSheet, FlatList, ScrollView,
-  RefreshControl, Image, TextInput,
+  RefreshControl, TextInput,
 } from 'react-native';
 import ScreenContainer from '../components/ScreenContainer';
 import { useFocusEffect } from '@react-navigation/native';
@@ -9,11 +9,17 @@ import { Feather } from '@expo/vector-icons';
 
 import { useTheme } from '../theme/ThemeContext';
 import {
-  buildFeed, loadReactions, toggleReaction, FEED_REACTION_EMOJI,
-  isValidReactionEmoji, loadCommentCounts,
+  buildFeed, loadReactions, toggleReaction, isValidReactionEmoji, loadCommentCounts,
 } from '../store/feedStore';
+import { notifyFeedActivity } from '../store/notificationStore';
 import { subscribeTournamentChanges, formatRoundLabel } from '../store/tournamentStore';
 import CommentsSheet from '../components/CommentsSheet';
+import MemoriesStoriesViewer from '../components/MemoriesStoriesViewer';
+import RoundStoriesRail from '../components/feed/RoundStoriesRail';
+import FeedRoundCard from '../components/feed/FeedRoundCard';
+
+const EMPTY_REACTION_COUNTS = {};
+const EMPTY_REACTION_MINE = [];
 
 // Compact relative time: "just now", "3h", "2d", "5w". Pure function of a
 // timestamp and a "now" — `now` is passed in so the value can re-render live.
@@ -45,114 +51,23 @@ function useNow(intervalMs = 60000) {
   return now;
 }
 
-function Avatar({ item, theme }) {
-  const initial = (item.actorName || '?').trim().charAt(0).toUpperCase();
-  return (
-    <View style={[
-      feedAvatar.wrap,
-      { backgroundColor: item.actorAvatarColor || theme.accent.primary },
-    ]}>
-      {item.actorAvatarUrl
-        ? <Image source={{ uri: item.actorAvatarUrl }} style={feedAvatar.img} />
-        : <Text style={feedAvatar.text}>{initial}</Text>}
-    </View>
-  );
-}
-
-// Small avatar for one player inside a grouped round card.
-function MiniAvatar({ result, theme }) {
-  const initial = (result.name || '?').trim().charAt(0).toUpperCase();
-  return (
-    <View style={[
-      feedAvatar.mini,
-      { backgroundColor: result.avatarColor || theme.accent.primary },
-    ]}>
-      {result.avatarUrl
-        ? <Image source={{ uri: result.avatarUrl }} style={feedAvatar.img} />
-        : <Text style={feedAvatar.miniText}>{initial}</Text>}
-    </View>
-  );
-}
-
-const feedAvatar = StyleSheet.create({
-  wrap: {
-    width: 38, height: 38, borderRadius: 19,
-    alignItems: 'center', justifyContent: 'center', overflow: 'hidden',
-  },
-  mini: {
-    width: 26, height: 26, borderRadius: 13,
-    alignItems: 'center', justifyContent: 'center', overflow: 'hidden',
-  },
-  img: { width: '100%', height: '100%' },
-  text: { fontFamily: 'PlusJakartaSans-ExtraBold', color: '#ffd700', fontSize: 15 },
-  miniText: { fontFamily: 'PlusJakartaSans-ExtraBold', color: '#ffd700', fontSize: 11 },
-});
-
-// A photo group from the feed. One photo renders flush; multiple photos from
-// the same round become a horizontally paged carousel with a count badge,
-// page dots, and a caption that follows the visible photo.
-function PhotoCarousel({ mediaList, s }) {
-  const [width, setWidth] = useState(0);
-  const [page, setPage] = useState(0);
-  const multi = mediaList.length > 1;
-
-  const onScroll = (e) => {
-    if (!width) return;
-    const p = Math.round(e.nativeEvent.contentOffset.x / width);
-    if (p !== page) setPage(Math.max(0, Math.min(p, mediaList.length - 1)));
-  };
-
-  const current = mediaList[Math.min(page, mediaList.length - 1)];
-
-  return (
-    <View>
-      <View
-        style={s.carouselWrap}
-        onLayout={(e) => setWidth(e.nativeEvent.layout.width)}
-      >
-        {width > 0 ? (
-          <ScrollView
-            horizontal
-            pagingEnabled={multi}
-            scrollEnabled={multi}
-            showsHorizontalScrollIndicator={false}
-            onScroll={onScroll}
-            scrollEventThrottle={16}
-          >
-            {mediaList.map((m) => (
-              <Image
-                key={m.id}
-                source={{ uri: m.thumbUrl || m.url }}
-                style={[s.carouselPhoto, { width }]}
-                resizeMode="cover"
-              />
-            ))}
-          </ScrollView>
-        ) : null}
-        {multi ? (
-          <View style={s.countBadge}>
-            <Text style={s.countBadgeText}>{page + 1}/{mediaList.length}</Text>
-          </View>
-        ) : null}
-      </View>
-      {multi ? (
-        <View style={s.dots}>
-          {mediaList.map((m, i) => (
-            <View key={m.id} style={[s.dot, i === page && s.dotActive]} />
-          ))}
-        </View>
-      ) : null}
-      {current?.caption ? <Text style={s.caption}>{current.caption}</Text> : null}
-    </View>
-  );
-}
-
 // Emoji reaction bar. Optimistic: a tap flips the local count/mine state
 // immediately, then persists via toggleReaction; a failed persist reverts.
-function ReactionBar({ itemKey, reactions, onChange, commentCount, onOpenComments, s, theme }) {
-  const counts = reactions?.counts ?? {};
-  const mine = reactions?.mine ?? [];
+function ReactionBar({
+  itemKey,
+  reactions,
+  onChange,
+  commentCount,
+  onOpenComments,
+  onReactionAdded,
+  s,
+  theme,
+}) {
+  const counts = reactions?.counts ?? EMPTY_REACTION_COUNTS;
+  const mine = reactions?.mine ?? EMPTY_REACTION_MINE;
   const emojiInputRef = useRef(null);
+  const [emojiDraft, setEmojiDraft] = useState('');
+  const [pickerOpen, setPickerOpen] = useState(false);
 
   const onTap = async (emoji) => {
     const currentlyMine = mine.includes(emoji);
@@ -160,24 +75,19 @@ function ReactionBar({ itemKey, reactions, onChange, commentCount, onOpenComment
     onChange(itemKey, emoji, currentlyMine, true);
     const ok = await toggleReaction(itemKey, emoji, currentlyMine);
     if (!ok) onChange(itemKey, emoji, currentlyMine, false); // revert
+    else if (!currentlyMine) onReactionAdded?.(emoji);
   };
 
-  // Chips to show: the quick-pick set plus any emoji someone has already used
-  // on this item, so custom reactions stay visible to everyone.
   const emojiList = useMemo(() => {
-    const list = [...FEED_REACTION_EMOJI];
-    for (const e of Object.keys(counts)) {
-      if ((counts[e] ?? 0) > 0 && !list.includes(e)) list.push(e);
-    }
-    return list;
+    return Object.keys(counts).filter((emoji) => (counts[emoji] ?? 0) > 0);
   }, [counts]);
 
-  // The OS emoji keyboard delivers its pick through onChangeText of a hidden
-  // input; value="" keeps it empty so every pick is a single clean event.
-  const onPickEmoji = (text) => {
-    emojiInputRef.current?.blur();
-    const emoji = (text || '').trim();
+  const submitEmoji = () => {
+    const emoji = emojiDraft.trim();
     if (isValidReactionEmoji(emoji)) onTap(emoji);
+    setEmojiDraft('');
+    setPickerOpen(false);
+    emojiInputRef.current?.blur();
   };
 
   return (
@@ -202,12 +112,16 @@ function ReactionBar({ itemKey, reactions, onChange, commentCount, onOpenComment
         );
       })}
       <TouchableOpacity
-        style={s.reactionChip}
-        onPress={() => emojiInputRef.current?.focus()}
+        style={[s.reactionChip, pickerOpen && s.reactionChipActive]}
+        onPress={() => {
+          setPickerOpen((open) => !open);
+          setTimeout(() => emojiInputRef.current?.focus?.(), 0);
+        }}
         activeOpacity={0.7}
         accessibilityLabel="React with any emoji"
       >
-        <Feather name="plus" size={14} color={theme.text.muted} />
+        <Feather name="smile" size={14} color={theme.text.muted} />
+        <Text style={s.reactionActionText}>React</Text>
       </TouchableOpacity>
       <TouchableOpacity
         style={s.reactionChip}
@@ -220,16 +134,31 @@ function ReactionBar({ itemKey, reactions, onChange, commentCount, onOpenComment
           <Text style={s.reactionCount}>{commentCount}</Text>
         ) : null}
       </TouchableOpacity>
-      {/* Off-screen input: focusing it opens the OS emoji keyboard. */}
-      <TextInput
-        ref={emojiInputRef}
-        style={s.hiddenEmojiInput}
-        value=""
-        onChangeText={onPickEmoji}
-        autoCorrect={false}
-        caretHidden
-        accessible={false}
-      />
+      {pickerOpen ? (
+        <View style={s.emojiInputWrap}>
+          <TextInput
+            ref={emojiInputRef}
+            style={s.emojiInput}
+            value={emojiDraft}
+            onChangeText={setEmojiDraft}
+            placeholder="Emoji"
+            placeholderTextColor={theme.text.muted}
+            autoCorrect={false}
+            autoCapitalize="none"
+            maxLength={16}
+            onSubmitEditing={submitEmoji}
+            accessibilityLabel="Emoji reaction"
+          />
+          <TouchableOpacity
+            style={[s.emojiSendBtn, !isValidReactionEmoji(emojiDraft) && s.emojiSendBtnDisabled]}
+            disabled={!isValidReactionEmoji(emojiDraft)}
+            onPress={submitEmoji}
+            accessibilityLabel="Send reaction"
+          >
+            <Feather name="send" size={13} color={theme.text.inverse} />
+          </TouchableOpacity>
+        </View>
+      ) : null}
     </View>
   );
 }
@@ -250,29 +179,24 @@ function SkeletonCard({ s }) {
   );
 }
 
-const FILTERS = [
-  { key: 'all', label: 'All' },
-  { key: 'mine', label: 'Mine' },
-  { key: 'friends', label: 'Friends' },
-];
-
 export default function FeedScreen({ navigation }) {
   const { theme } = useTheme();
   const s = makeStyles(theme);
   const now = useNow();
 
   const [items, setItems] = useState([]);
+  const [roundStories, setRoundStories] = useState([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   // 'ok' | 'error' | 'partial' — distinguishes a genuine empty feed from a
   // failed build.
   const [status, setStatus] = useState('ok');
-  const [filter, setFilter] = useState('all');
   const [reactions, setReactions] = useState({});
   // { [itemKey]: number } comment-count overlay, and the item whose comment
   // thread sheet is currently open (null when closed).
   const [commentCounts, setCommentCounts] = useState({});
-  const [openCommentsKey, setOpenCommentsKey] = useState(null);
+  const [openCommentsItem, setOpenCommentsItem] = useState(null);
+  const [openStoryKey, setOpenStoryKey] = useState(null);
   // True once at least one successful load has populated the list, so
   // focus-driven reloads keep the existing list visible (no full spinner).
   const loadedOnceRef = useRef(false);
@@ -283,6 +207,7 @@ export default function FeedScreen({ navigation }) {
       const result = await buildFeed();
       const feedItems = result.items ?? [];
       setItems(feedItems);
+      setRoundStories(result.roundStories ?? []);
       setStatus(result.error ? 'error' : (result.partial ? 'partial' : 'ok'));
       loadedOnceRef.current = true;
       // Reactions + comment counts are best-effort overlays — never block
@@ -298,6 +223,7 @@ export default function FeedScreen({ navigation }) {
       // buildFeed is defensive and rarely throws; treat a throw as an error
       // state rather than silently showing an empty feed.
       if (!loadedOnceRef.current) setItems([]);
+      if (!loadedOnceRef.current) setRoundStories([]);
       setStatus('error');
     } finally {
       setLoading(false);
@@ -344,16 +270,49 @@ export default function FeedScreen({ navigation }) {
     }));
   }, []);
 
-  const filteredItems = useMemo(() => {
-    if (filter === 'mine') return items.filter((it) => it.isMine);
-    if (filter === 'friends') return items.filter((it) => !it.isMine);
-    return items;
-  }, [items, filter]);
+  const storyPlaybackItems = useMemo(() => roundStories.flatMap((story) => (
+    (story.mediaList ?? []).map((media) => ({
+      ...media,
+      storyKey: story.key,
+      storyRoundLabel: story.roundLabel,
+      storyTournamentName: story.tournamentName,
+      storyRoundIndex: story.roundIndex,
+    }))
+  )), [roundStories]);
+
+  const storyStartIndexByKey = useMemo(() => {
+    const map = new Map();
+    storyPlaybackItems.forEach((media, index) => {
+      if (!map.has(media.storyKey)) map.set(media.storyKey, index);
+    });
+    return map;
+  }, [storyPlaybackItems]);
+
+  const openStoryIndex = openStoryKey ? storyStartIndexByKey.get(openStoryKey) : null;
 
   const openRound = (item) => navigation.navigate('RoundSummary', {
     tournamentId: item.tournamentId,
     roundId: item.roundId,
   });
+
+  const openRoundMedia = (item, media) => navigation.navigate('Gallery', {
+    tournamentId: item.tournamentId,
+    mediaId: media?.id ?? item.mediaId ?? undefined,
+  });
+
+  const notifyForFeedItem = useCallback((item, type, payload = {}) => {
+    if (!item?.tournamentId || !item?.roundId) return;
+    notifyFeedActivity({
+      type,
+      tournamentId: item.tournamentId,
+      roundId: item.roundId,
+      itemKey: item.key,
+      roundIndex: item.roundIndex,
+      tournamentName: item.tournamentName,
+      courseName: item.courseName,
+      ...payload,
+    }).catch(() => {});
+  }, []);
 
   const renderRound = (item) => {
     const roundLabel = formatRoundLabel({
@@ -361,150 +320,27 @@ export default function FeedScreen({ navigation }) {
       courseName: item.courseName,
       roundIndex: item.roundIndex,
     });
-    const results = item.results ?? [];
-    const multi = results.length > 1;
-    const verb = multi
-      ? ` and ${results.length - 1} other${results.length - 1 > 1 ? 's' : ''} played a round`
-      : ' played a round';
     return (
-      <TouchableOpacity
-        style={s.card}
-        activeOpacity={0.75}
+      <FeedRoundCard
+        item={item}
+        roundLabel={roundLabel}
+        timestamp={timeAgo(item.ts, now)}
         onPress={() => openRound(item)}
+        onPressMedia={item.mediaCoverUrl ? (media) => openRoundMedia(item, media) : undefined}
       >
-        <View style={s.cardHead}>
-          <Avatar item={item} theme={theme} />
-          <View style={{ flex: 1 }}>
-            <Text style={s.actorLine}>
-              <Text style={s.actorName}>{item.actorName}</Text>
-              <Text style={s.actorVerb}>{verb}</Text>
-            </Text>
-            <Text style={s.metaLine}>
-              {roundLabel} · {item.tournamentName} · {timeAgo(item.ts, now)}
-            </Text>
-          </View>
-        </View>
-
-        {multi ? (
-          // Grouped round: one row per player.
-          <View style={s.resultsList}>
-            {results.map((r) => (
-              <View key={r.playerId} style={s.resultRow}>
-                <MiniAvatar result={r} theme={theme} />
-                <Text style={s.resultName} numberOfLines={1}>{r.name}</Text>
-                <View style={s.resultStat}>
-                  <Text style={s.resultStatValue}>{r.points}</Text>
-                  <Text style={s.resultStatLabel}>PTS</Text>
-                </View>
-                <View style={s.resultStat}>
-                  <Text style={s.resultStatValue}>{r.strokes}</Text>
-                  <Text style={s.resultStatLabel}>STRK</Text>
-                </View>
-              </View>
-            ))}
-          </View>
-        ) : (
-          <View style={s.scoreRow}>
-            <View style={s.scoreCell}>
-              <Text style={s.scoreValue}>{item.points}</Text>
-              <Text style={s.scoreLabel}>POINTS</Text>
-            </View>
-            <View style={s.scoreCell}>
-              <Text style={s.scoreValue}>{item.strokes}</Text>
-              <Text style={s.scoreLabel}>STROKES</Text>
-            </View>
-            <View style={s.scoreCell}>
-              <Text style={s.scoreValue}>{item.holes}</Text>
-              <Text style={s.scoreLabel}>HOLES</Text>
-            </View>
-            {item.courseName ? (
-              <View style={[s.scoreCell, s.courseCell]}>
-                <Feather name="map-pin" size={12} color={theme.text.muted} />
-                <Text style={s.courseText} numberOfLines={1}>{item.courseName}</Text>
-              </View>
-            ) : null}
-          </View>
-        )}
-
-        {!item.isMine && !item.withMe ? (
-          <View style={s.tagRow}>
-            <Feather name="users" size={11} color={theme.text.muted} />
-            <Text style={s.tagText}>A round without you</Text>
-          </View>
-        ) : null}
-
         <ReactionBar
           itemKey={item.key}
           reactions={reactions[item.key]}
           onChange={applyReaction}
           commentCount={commentCounts[item.key] ?? 0}
-          onOpenComments={setOpenCommentsKey}
+          onOpenComments={() => setOpenCommentsItem(item)}
+          onReactionAdded={(emoji) => notifyForFeedItem(item, 'feed_reaction', { emoji })}
           s={s}
           theme={theme}
         />
-      </TouchableOpacity>
+      </FeedRoundCard>
     );
   };
-
-  const renderPhoto = (item) => {
-    const list = item.mediaList ?? (item.media ? [item.media] : []);
-    if (list.length === 0) return null;
-    const verb = list.length > 1 ? ` added ${list.length} photos` : ' added a photo';
-    return (
-      <TouchableOpacity
-        style={s.card}
-        activeOpacity={0.85}
-        onPress={() => navigation.navigate('Gallery', { tournamentId: item.tournamentId })}
-      >
-        <View style={s.cardHead}>
-          {/* Uploader avatar when known, falling back to the camera glyph. */}
-          {item.actorAvatarUrl || item.actorAvatarColor ? (
-            <Avatar item={item} theme={theme} />
-          ) : (
-            <View style={[feedAvatar.wrap, { backgroundColor: theme.accent.primary }]}>
-              <Feather name="camera" size={16} color="#ffd700" />
-            </View>
-          )}
-          <View style={{ flex: 1 }}>
-            <Text style={s.actorLine}>
-              <Text style={s.actorName}>{item.actorName}</Text>
-              <Text style={s.actorVerb}>{verb}</Text>
-            </Text>
-            <Text style={s.metaLine}>
-              {item.tournamentName} · {timeAgo(item.ts, now)}
-            </Text>
-          </View>
-        </View>
-        <PhotoCarousel mediaList={list} s={s} />
-        <ReactionBar
-          itemKey={item.key}
-          reactions={reactions[item.key]}
-          onChange={applyReaction}
-          commentCount={commentCounts[item.key] ?? 0}
-          onOpenComments={setOpenCommentsKey}
-          s={s}
-          theme={theme}
-        />
-      </TouchableOpacity>
-    );
-  };
-
-  const renderFilters = () => (
-    <View style={s.filterRow}>
-      {FILTERS.map((f) => (
-        <TouchableOpacity
-          key={f.key}
-          style={[s.filterChip, filter === f.key && s.filterChipActive]}
-          onPress={() => setFilter(f.key)}
-          activeOpacity={0.8}
-        >
-          <Text style={[s.filterText, filter === f.key && s.filterTextActive]}>
-            {f.label}
-          </Text>
-        </TouchableOpacity>
-      ))}
-    </View>
-  );
 
   const renderEmpty = () => {
     // A failed build is a distinct state from a genuinely empty feed: it
@@ -513,7 +349,7 @@ export default function FeedScreen({ navigation }) {
       return (
         <View style={s.emptyState}>
           <Feather name="cloud-off" size={46} color={theme.text.muted} />
-          <Text style={s.emptyTitle}>Couldn't load your feed</Text>
+          <Text style={s.emptyTitle}>Could not load your feed</Text>
           <Text style={s.emptySub}>
             Check your connection and try again.
           </Text>
@@ -527,11 +363,7 @@ export default function FeedScreen({ navigation }) {
     return (
       <View style={s.emptyState}>
         <Feather name="rss" size={46} color={theme.text.muted} />
-        <Text style={s.emptyTitle}>
-          {filter === 'mine' ? 'No rounds of yours yet'
-            : filter === 'friends' ? 'No friend activity yet'
-              : 'Your feed is quiet'}
-        </Text>
+        <Text style={s.emptyTitle}>Your feed is quiet</Text>
         <Text style={s.emptySub}>
           Play a round or add friends to see their golf here.
         </Text>
@@ -559,7 +391,12 @@ export default function FeedScreen({ navigation }) {
         </TouchableOpacity>
       </View>
 
-      {renderFilters()}
+      {!loading ? (
+        <RoundStoriesRail
+          stories={roundStories}
+          onPressStory={(story) => setOpenStoryKey(story.key)}
+        />
+      ) : null}
 
       {/* Partial-load banner: some data reached us, some didn't. */}
       {status === 'partial' && items.length > 0 ? (
@@ -576,11 +413,9 @@ export default function FeedScreen({ navigation }) {
         </ScrollView>
       ) : (
         <FlatList
-          data={filteredItems}
+          data={items}
           keyExtractor={(it) => it.key}
-          renderItem={({ item }) => (
-            item.type === 'round' ? renderRound(item) : renderPhoto(item)
-          )}
+          renderItem={({ item }) => renderRound(item)}
           contentContainerStyle={s.list}
           refreshControl={(
             <RefreshControl
@@ -594,10 +429,20 @@ export default function FeedScreen({ navigation }) {
       )}
 
       <CommentsSheet
-        visible={!!openCommentsKey}
-        itemKey={openCommentsKey}
-        onClose={() => setOpenCommentsKey(null)}
+        visible={!!openCommentsItem}
+        itemKey={openCommentsItem?.key}
+        onClose={() => setOpenCommentsItem(null)}
         onCountChange={onCommentCountChange}
+        onCommentAdded={(_, comment) => notifyForFeedItem(openCommentsItem, 'feed_comment', {
+          commentBody: comment?.body,
+        })}
+      />
+      <MemoriesStoriesViewer
+        visible={openStoryIndex != null}
+        items={storyPlaybackItems}
+        startIndex={openStoryIndex ?? 0}
+        rounds={[]}
+        onClose={() => setOpenStoryKey(null)}
       />
     </ScreenContainer>
   );
@@ -621,21 +466,6 @@ function makeStyles(theme) {
     },
     center: { flex: 1, alignItems: 'center', justifyContent: 'center' },
     list: { padding: 16, paddingBottom: 30, flexGrow: 1 },
-    filterRow: {
-      flexDirection: 'row', gap: 8, paddingHorizontal: 16, paddingBottom: 8,
-    },
-    filterChip: {
-      paddingHorizontal: 14, paddingVertical: 7, borderRadius: 99,
-      backgroundColor: theme.isDark ? theme.bg.secondary : theme.bg.card,
-      borderWidth: 1, borderColor: theme.border.default,
-    },
-    filterChipActive: {
-      backgroundColor: theme.accent.primary, borderColor: theme.accent.primary,
-    },
-    filterText: {
-      fontFamily: 'PlusJakartaSans-Bold', fontSize: 12, color: theme.text.secondary,
-    },
-    filterTextActive: { color: theme.text.inverse },
     partialBanner: {
       flexDirection: 'row', alignItems: 'center', gap: 6, justifyContent: 'center',
       marginHorizontal: 16, marginBottom: 6, paddingVertical: 7,
@@ -652,56 +482,6 @@ function makeStyles(theme) {
       ...(theme.isDark ? {} : theme.shadow.card),
     },
     cardHead: { flexDirection: 'row', alignItems: 'center', gap: 10 },
-    actorLine: { fontSize: 14 },
-    actorName: { fontFamily: 'PlusJakartaSans-Bold', color: theme.text.primary, fontSize: 14 },
-    actorVerb: { fontFamily: 'PlusJakartaSans-Regular', color: theme.text.secondary, fontSize: 14 },
-    metaLine: {
-      fontFamily: 'PlusJakartaSans-Medium', color: theme.text.muted,
-      fontSize: 11, marginTop: 2,
-    },
-    scoreRow: {
-      flexDirection: 'row', alignItems: 'center', gap: 8,
-      marginTop: 14,
-    },
-    scoreCell: {
-      backgroundColor: theme.bg.secondary, borderRadius: 12,
-      paddingVertical: 9, paddingHorizontal: 12, alignItems: 'center', minWidth: 62,
-    },
-    courseCell: {
-      flex: 1, flexDirection: 'row', gap: 5, justifyContent: 'center', minWidth: 0,
-    },
-    courseText: {
-      fontFamily: 'PlusJakartaSans-SemiBold', color: theme.text.secondary,
-      fontSize: 12, flexShrink: 1,
-    },
-    scoreValue: { fontFamily: 'PlayfairDisplay-Bold', fontSize: 19, color: theme.text.primary },
-    scoreLabel: {
-      fontFamily: 'PlusJakartaSans-Bold', fontSize: 8, letterSpacing: 1,
-      color: theme.text.muted, marginTop: 2,
-    },
-    /* Grouped round: per-player rows */
-    resultsList: { marginTop: 12, gap: 6 },
-    resultRow: {
-      flexDirection: 'row', alignItems: 'center', gap: 9,
-      backgroundColor: theme.bg.secondary, borderRadius: 12,
-      paddingVertical: 7, paddingHorizontal: 10,
-    },
-    resultName: {
-      flex: 1, fontFamily: 'PlusJakartaSans-SemiBold',
-      fontSize: 13, color: theme.text.primary,
-    },
-    resultStat: { alignItems: 'center', minWidth: 44 },
-    resultStatValue: {
-      fontFamily: 'PlayfairDisplay-Bold', fontSize: 15, color: theme.text.primary,
-    },
-    resultStatLabel: {
-      fontFamily: 'PlusJakartaSans-Bold', fontSize: 7, letterSpacing: 1,
-      color: theme.text.muted, marginTop: 1,
-    },
-    tagRow: {
-      flexDirection: 'row', alignItems: 'center', gap: 5, marginTop: 10,
-    },
-    tagText: { fontFamily: 'PlusJakartaSans-Medium', color: theme.text.muted, fontSize: 11 },
     /* Reactions */
     reactionRow: {
       flexDirection: 'row', gap: 6, marginTop: 12, flexWrap: 'wrap',
@@ -721,37 +501,45 @@ function makeStyles(theme) {
       fontFamily: 'PlusJakartaSans-Bold', fontSize: 11, color: theme.text.secondary,
     },
     reactionCountActive: { color: theme.accent.primary },
-    // Off-screen: focused programmatically to summon the OS emoji keyboard.
-    hiddenEmojiInput: {
-      position: 'absolute', width: 1, height: 1, opacity: 0,
+    reactionActionText: {
+      color: theme.text.secondary,
+      fontFamily: 'PlusJakartaSans-Bold',
+      fontSize: 11,
+    },
+    emojiInputWrap: {
+      flexBasis: '100%',
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: 8,
+      marginTop: 2,
+    },
+    emojiInput: {
+      flex: 1,
+      minHeight: 38,
+      borderRadius: 10,
+      borderWidth: 1,
+      borderColor: theme.border.default,
+      backgroundColor: theme.bg.card,
+      color: theme.text.primary,
+      fontFamily: 'PlusJakartaSans-Medium',
+      fontSize: 16,
+      paddingHorizontal: 12,
+      paddingVertical: 8,
+    },
+    emojiSendBtn: {
+      width: 38,
+      height: 38,
+      borderRadius: 10,
+      alignItems: 'center',
+      justifyContent: 'center',
+      backgroundColor: theme.accent.primary,
+    },
+    emojiSendBtnDisabled: {
+      opacity: 0.45,
     },
     /* Skeleton */
     skelBlock: {
       backgroundColor: theme.bg.secondary, borderRadius: 6,
-    },
-    carouselWrap: {
-      height: 200, borderRadius: 12, marginTop: 12, overflow: 'hidden',
-      backgroundColor: theme.bg.secondary,
-    },
-    carouselPhoto: { height: 200, backgroundColor: theme.bg.secondary },
-    countBadge: {
-      position: 'absolute', top: 8, right: 8,
-      backgroundColor: 'rgba(0,0,0,0.6)', borderRadius: 99,
-      paddingHorizontal: 8, paddingVertical: 3,
-    },
-    countBadgeText: {
-      color: '#fff', fontFamily: 'PlusJakartaSans-Bold', fontSize: 11,
-    },
-    dots: {
-      flexDirection: 'row', justifyContent: 'center', gap: 5, marginTop: 8,
-    },
-    dot: {
-      width: 6, height: 6, borderRadius: 3, backgroundColor: theme.border.default,
-    },
-    dotActive: { backgroundColor: theme.accent.primary },
-    caption: {
-      fontFamily: 'PlusJakartaSans-Medium', color: theme.text.secondary,
-      fontSize: 13, marginTop: 8,
     },
     emptyState: { alignItems: 'center', paddingVertical: 80, gap: 12, flex: 1, justifyContent: 'center' },
     emptyTitle: { fontFamily: 'PlayfairDisplay-Bold', fontSize: 18, color: theme.text.primary },

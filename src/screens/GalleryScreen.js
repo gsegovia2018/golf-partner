@@ -28,9 +28,10 @@ import {
 import { pickMedia, attachMedia, attachManyMedia } from '../lib/mediaCapture';
 
 export default function GalleryScreen({ route, navigation }) {
-  const { tournamentId } = route.params ?? {};
+  const { tournamentId, mediaId } = route.params ?? {};
   const { theme } = useTheme();
   const s = makeStyles(theme);
+  const openedMediaRef = useRef(null);
 
   const { items } = useTournamentMedia(tournamentId);
   const initialTournament = useMemo(() => getTournamentSnapshot(tournamentId), [tournamentId]);
@@ -76,6 +77,14 @@ export default function GalleryScreen({ route, navigation }) {
     () => applyFilters(items, { hole: activeHole, kind: activeKind }),
     [items, activeHole, activeKind],
   );
+
+  useEffect(() => {
+    if (!mediaId || openedMediaRef.current === mediaId || filtered.length === 0) return;
+    const index = filtered.findIndex((item) => item.id === mediaId);
+    if (index < 0) return;
+    openedMediaRef.current = mediaId;
+    setLightbox({ visible: true, index });
+  }, [filtered, mediaId]);
 
   // Height-aware masonry: instead of a fixed even/odd split (which leaves one
   // column lopsided when images vary in aspect), each card is placed in

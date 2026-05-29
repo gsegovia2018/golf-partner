@@ -4,15 +4,16 @@ import {
   loadAllTournamentsWithFallback,
   roundTotals,
   isTournamentFinished,
+  formatRoundLabel,
 } from './tournamentStore';
 import { loadMediaForTournaments } from './mediaStore';
-import { loadProfile } from './profileStore';
 import { listFriends, getCachedFriends } from './friendStore';
 
 // The activity feed is derived client-side (no server aggregation table).
 // It unions the current user's tournaments with tournaments their friends
 // played — discovered through tournament_participants — then flattens every
-// completed round and every photo into a single time-sorted item list.
+// completed round into a single time-sorted item list. Round media is grouped
+// into stories and attached to the corresponding round card.
 
 // Set true once any data source has failed during a buildFeed pass. Surfaces
 // to the screen so it can show a distinct error/partial state instead of
@@ -45,6 +46,91 @@ function holesPlayed(round, playerId) {
   return Object.values(scores).filter((v) => v != null).length;
 }
 
+const ROUND_STORY_LIMIT = 12;
+
+function mediaTs(media) {
+  return Date.parse(media?.createdAt) || 0;
+}
+
+function mediaCountLabel(count, hasVideo) {
+  if (count === 1) return hasVideo ? '1 memory' : '1 photo';
+  return hasVideo ? `${count} memories` : `${count} photos`;
+}
+
+function roundLabelForStory(tournament, roundId) {
+  const rounds = tournament?.rounds ?? [];
+  const index = rounds.findIndex((r) => r.id === roundId);
+  const round = index >= 0 ? rounds[index] : null;
+  return {
+    round,
+    roundIndex: index,
+    roundLabel: round?.courseName
+      || (index >= 0 ? formatRoundLabel({
+        kind: tournament?.kind,
+        courseName: round?.courseName,
+        roundIndex: index,
+      }) : tournament?.name || 'Tournament photos'),
+  };
+}
+
+export function buildRoundStories(tournaments, media, options = {}) {
+  const limit = options.limit ?? ROUND_STORY_LIMIT;
+  const tournamentById = new Map((tournaments ?? []).map((t) => [t.id, t]));
+  const groups = new Map();
+
+  for (const item of media ?? []) {
+    if (!item?.tournamentId || !item.roundId) continue;
+    const tournament = tournamentById.get(item.tournamentId);
+    if (!tournament) continue;
+    if (!(tournament.rounds ?? []).some((round) => round.id === item.roundId)) continue;
+    const groupKey = `${item.tournamentId}:${item.roundId ?? 'none'}`;
+    let group = groups.get(groupKey);
+    if (!group) {
+      const { round, roundIndex, roundLabel } = roundLabelForStory(tournament, item.roundId ?? null);
+      group = {
+        key: `story:${item.tournamentId}:${item.roundId ?? 'none'}`,
+        tournamentId: item.tournamentId,
+        tournamentName: tournament.name,
+        roundId: item.roundId ?? null,
+        roundIndex,
+        roundLabel,
+        courseName: round?.courseName ?? null,
+        latestTs: 0,
+        mediaList: [],
+        count: 0,
+        uploaderNames: [],
+        hasVideo: false,
+      };
+      groups.set(groupKey, group);
+    }
+    group.mediaList.push(item);
+    group.latestTs = Math.max(group.latestTs, mediaTs(item));
+    group.hasVideo = group.hasVideo || item.kind === 'video';
+    const name = (item.uploaderLabel ?? '').trim();
+    if (name && !group.uploaderNames.includes(name)) group.uploaderNames.push(name);
+  }
+
+  return [...groups.values()]
+    .map((group) => {
+      const mediaList = group.mediaList.slice().sort((a, b) => mediaTs(a) - mediaTs(b));
+      const uploaderNames = [];
+      for (const item of mediaList) {
+        const name = (item.uploaderLabel ?? '').trim();
+        if (name && !uploaderNames.includes(name)) uploaderNames.push(name);
+      }
+      return {
+        ...group,
+        mediaList,
+        count: mediaList.length,
+        countLabel: mediaCountLabel(mediaList.length, group.hasVideo),
+        uploaderNames,
+      };
+    })
+    .filter((group) => group.count > 0)
+    .sort((a, b) => b.latestTs - a.latestTs)
+    .slice(0, limit);
+}
+
 // Fetch tournaments a friend played that the current user's own list does
 // not already include. Relies on the friend-aware RLS added in
 // migrations/20260515_friends_and_feed.sql. Network-only; returns [] on
@@ -72,7 +158,7 @@ async function fetchFriendTournaments(friendIds, alreadyHaveIds) {
 }
 
 // Build the full, time-sorted feed. Never throws — degrades to whatever
-// data is reachable. Returns { me, friends, items, partial, error }.
+// data is reachable. Returns { me, friends, items, roundStories, partial, error }.
 //   - error:   true when the feed could not be built at all (no items).
 //   - partial: true when some — but not all — data sources failed, so the
 //              feed is incomplete (e.g. friends loaded but media did not).
@@ -83,10 +169,6 @@ export async function buildFeed() {
 
   let me = null;
   try { me = await currentUserId(); } catch { partial = true; }
-
-  let profile = null;
-  try { profile = await loadProfile(); } catch { partial = true; /* offline */ }
-  const myName = (profile?.displayName ?? '').trim().toLowerCase();
 
   let friends = [];
   try {
@@ -105,7 +187,7 @@ export async function buildFeed() {
   } catch {
     // The only hard-fail path: with no tournaments at all there is nothing
     // to build a feed from.
-    return { me, friends, items: [], partial: false, error: true };
+    return { me, friends, items: [], roundStories: [], partial: false, error: true };
   }
   const haveIds = new Set(myTournaments.map((t) => t.id));
   const friendTournaments = await fetchFriendTournaments(friendIds, haveIds);
@@ -133,9 +215,11 @@ export async function buildFeed() {
       // all into ONE feed card for the round-event so the feed shows a
       // single card with every player's result.
       const results = [];
+      let scoredPlayerCount = 0;
       for (const entry of totals) {
         const player = entry.player;
         if (!player || entry.totalStrokes === 0) continue;
+        scoredPlayerCount += 1;
         const uid = player.user_id ?? null;
         const isMe = !!uid && uid === me;
         const isFriend = !!uid && friendSet.has(uid);
@@ -185,7 +269,7 @@ export async function buildFeed() {
         holes: lead.holes,
         // Every player's result for the grouped card.
         results,
-        playerCount: results.length,
+        playerCount: scoredPlayerCount,
         finished,
         // A friend's round the current user did not play in.
         withMe: iAmIn || anyMine,
@@ -201,61 +285,27 @@ export async function buildFeed() {
     media = await loadMediaForTournaments(all.map((t) => t.id));
   } catch { partial = true; /* offline — feed still shows rounds */ }
 
-  const tournamentById = new Map(all.map((t) => [t.id, t]));
-  // Group photos by round (tournament-level photos with no roundId group per
-  // tournament) so the feed shows one swipeable card per round of memories.
-  const photoGroups = new Map();
-  for (const m of media) {
-    const t = tournamentById.get(m.tournamentId);
-    if (!t) continue;
-    const groupKey = `${m.tournamentId}:${m.roundId ?? 'none'}`;
-    let group = photoGroups.get(groupKey);
-    if (!group) {
-      group = { tournament: t, roundId: m.roundId ?? null, media: [] };
-      photoGroups.set(groupKey, group);
-    }
-    group.media.push(m);
-  }
-
-  for (const group of photoGroups.values()) {
-    const { tournament: t, roundId } = group;
-    // Oldest-first so the feed carousel swipes chronologically.
-    const list = group.media
-      .slice()
-      .sort((a, b) => (Date.parse(a.createdAt) || 0) - (Date.parse(b.createdAt) || 0));
-    if (list.length === 0) continue;
-    // The card surfaces by its most recent photo; attribute it to that
-    // photo's uploader — by user id when present, falling back to the
-    // legacy display-name label.
-    const newest = list[list.length - 1];
-    const uploaderId = newest.uploaderId ?? null;
-    const label = (newest.uploaderLabel ?? '').trim();
-    const friendInfo = uploaderId ? friendById.get(uploaderId) : null;
-    const isMine = uploaderId
-      ? uploaderId === me
-      : (!!myName && label.toLowerCase() === myName);
-    const actorName = isMine
-      ? 'You'
-      : (friendInfo?.displayName || label || 'Someone');
-    items.push({
-      type: 'photo',
-      key: `photos:${t.id}:${roundId ?? 'none'}`,
-      ts: Date.parse(newest.createdAt) || 0,
-      isMine,
-      actorUserId: uploaderId,
-      actorName,
-      actorAvatarUrl: friendInfo?.avatarUrl ?? null,
-      actorAvatarColor: friendInfo?.avatarColor ?? null,
-      tournamentId: t.id,
-      tournamentName: t.name,
-      roundId,
-      count: list.length,
-      mediaList: list,
-    });
+  const roundStories = buildRoundStories(all, media);
+  const storyByRoundKey = new Map(roundStories.map((story) => [
+    `${story.tournamentId}:${story.roundId ?? 'none'}`,
+    story,
+  ]));
+  for (const item of items) {
+    if (item.type !== 'round') continue;
+    const story = storyByRoundKey.get(`${item.tournamentId}:${item.roundId ?? 'none'}`);
+    if (!story) continue;
+    const newestMedia = story.mediaList[story.mediaList.length - 1] ?? null;
+    item.mediaCount = story.count;
+    item.mediaCountLabel = story.countLabel;
+    item.mediaId = newestMedia?.id ?? null;
+    item.mediaCoverUrl = newestMedia?.thumbUrl || newestMedia?.url || null;
+    item.mediaUrl = newestMedia?.url || newestMedia?.thumbUrl || null;
+    item.mediaList = story.mediaList.slice();
+    item.mediaHasVideo = story.hasVideo;
   }
 
   items.sort((a, b) => b.ts - a.ts);
-  return { me, friends, items, partial, error: false };
+  return { me, friends, items, roundStories, partial, error: false };
 }
 
 // ---------------------------------------------------------------------------
@@ -265,11 +315,10 @@ export async function buildFeed() {
 // working before the migration is applied.
 // ---------------------------------------------------------------------------
 
-// Default quick-pick reactions shown on every feed card. NOT a whitelist —
-// any emoji is allowed (see isValidReactionEmoji); these are just the
-// always-visible shortcuts. The "+" control lets the user react with any
-// emoji via the OS keyboard.
-export const FEED_REACTION_EMOJI = ['👏', '🔥', '⛳', '😂'];
+// Default quick-pick reactions shown on every feed card. Intentionally empty:
+// the UI only shows reactions people have actually used, plus an input to add
+// any emoji.
+export const FEED_REACTION_EMOJI = [];
 
 // Validates an emoji picked from the OS keyboard before it is stored.
 // Mirrors the feed_reactions.emoji DB CHECK (1–16 chars) and requires at
@@ -404,9 +453,9 @@ export async function loadComments(itemKey) {
     if (authorIds.length > 0) {
       const { data: profRows } = await supabase
         .from('profiles')
-        .select('id, display_name, avatar_url, avatar_color')
-        .in('id', authorIds);
-      for (const p of profRows ?? []) profiles[p.id] = p;
+        .select('user_id, display_name, avatar_url, avatar_color')
+        .in('user_id', authorIds);
+      for (const p of profRows ?? []) profiles[p.user_id] = p;
     }
     const me = await currentUserId();
     return rows.map((r) => {

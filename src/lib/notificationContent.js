@@ -34,6 +34,20 @@ export function renderNotification(type, data = {}) {
         body: `${actorName} finished a round at `
           + `${data.course_name || data.tournament_name || 'the course'}`,
       };
+    case 'feed_reaction':
+      return {
+        icon: 'smile',
+        title: 'New reaction',
+        body: `${actorName} reacted ${data.emoji || ''} to `
+          + `${data.course_name || data.tournament_name || 'a round'}`,
+      };
+    case 'feed_comment':
+      return {
+        icon: 'message-circle',
+        title: 'New comment',
+        body: `${actorName} commented on `
+          + `${data.course_name || data.tournament_name || 'a round'}`,
+      };
     default:
       return { icon: 'bell', title: 'Notification', body: '' };
   }
@@ -49,6 +63,8 @@ export function notificationLink(type, data = {}) {
     case 'added_to_game':
       return { screen: 'Home', params: { openTournamentId: data.tournament_id } };
     case 'round_finished':
+    case 'feed_reaction':
+    case 'feed_comment':
       return {
         screen: 'RoundSummary',
         params: { tournamentId: data.tournament_id, roundId: data.round_id },

@@ -1,4 +1,6 @@
-import React, { useEffect, useMemo, useRef, useState } from 'react';
+import React, {
+  useCallback, useEffect, useMemo, useRef, useState,
+} from 'react';
 import {
   Modal, View, Text, Pressable, TouchableOpacity, StyleSheet,
   ActivityIndicator, Animated, PanResponder,
@@ -13,12 +15,21 @@ const PHOTO_MS = 4000;
 const TICK_MS = 50;
 // Drag distance past which a downward swipe dismisses the viewer.
 const DISMISS_DISTANCE = 120;
+const STORY_SWIPE_DISTANCE = 54;
 
 // `items` is a flat, chronologically ordered list of media across every
 // round; `startIndex` is where playback begins (the round the user tapped).
 // Playback continues across round boundaries, so opening one round's story
 // shows the whole tournament's memories.
-export default function MemoriesStoriesViewer({ visible, items = [], startIndex = 0, rounds, onClose }) {
+export default function MemoriesStoriesViewer({
+  visible,
+  items = [],
+  startIndex = 0,
+  rounds,
+  storyTitle,
+  storySubtitle,
+  onClose,
+}) {
   const insets = useSafeAreaInsets();
   const [index, setIndex] = useState(0);
   const [progress, setProgress] = useState(0);
@@ -31,6 +42,18 @@ export default function MemoriesStoriesViewer({ visible, items = [], startIndex 
   const dragY = useRef(new Animated.Value(0)).current;
 
   const current = items[index];
+
+  const advance = useCallback(() => {
+    if (index + 1 >= items.length) {
+      onClose();
+      return;
+    }
+    setIndex((i) => Math.min(i + 1, items.length - 1));
+  }, [index, items.length, onClose]);
+
+  const back = useCallback(() => {
+    setIndex((i) => Math.max(0, i - 1));
+  }, []);
 
   useEffect(() => {
     if (!visible) return;
@@ -65,20 +88,24 @@ export default function MemoriesStoriesViewer({ visible, items = [], startIndex 
       elapsedRef.current += Date.now() - runStart;
       clearInterval(id);
     };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [visible, paused, buffering, index, current?.id]);
+  }, [visible, paused, buffering, index, current, advance]);
 
-  // Swipe-down-to-dismiss. A predominantly-vertical downward drag tracks the
-  // content; releasing past the threshold closes, otherwise it springs back.
+  // Swipe down dismisses; horizontal swipes move between story items without
+  // needing the tap zones.
   const panResponder = useMemo(() => PanResponder.create({
-    onMoveShouldSetPanResponder: (_e, g) =>
-      g.dy > 8 && g.dy > Math.abs(g.dx) * 1.5,
+    onMoveShouldSetPanResponder: (_e, g) => (
+      (g.dy > 8 && g.dy > Math.abs(g.dx) * 1.5)
+      || (Math.abs(g.dx) > 14 && Math.abs(g.dx) > Math.abs(g.dy) * 1.4)
+    ),
     onPanResponderMove: (_e, g) => {
       if (g.dy > 0) dragY.setValue(g.dy);
     },
     onPanResponderRelease: (_e, g) => {
       if (g.dy > DISMISS_DISTANCE || g.vy > 0.8) {
         onClose();
+      } else if (Math.abs(g.dx) > STORY_SWIPE_DISTANCE && Math.abs(g.dx) > Math.abs(g.dy) * 1.2) {
+        if (g.dx > 0) advance();
+        else back();
       } else {
         Animated.spring(dragY, { toValue: 0, useNativeDriver: true }).start();
       }
@@ -86,7 +113,7 @@ export default function MemoriesStoriesViewer({ visible, items = [], startIndex 
     onPanResponderTerminate: () => {
       Animated.spring(dragY, { toValue: 0, useNativeDriver: true }).start();
     },
-  }), [dragY, onClose]);
+  }), [advance, back, dragY, onClose]);
 
   // The progress bar is segmented PER ROUND, not per global media item — a
   // tournament with 60+ photos would otherwise render 60+ unreadable slivers.
@@ -95,11 +122,12 @@ export default function MemoriesStoriesViewer({ visible, items = [], startIndex 
   // the hook order stays stable across every render.
   const roundSegments = useMemo(() => {
     const segs = [];
-    let prevRoundId;
+    let prevSegmentKey;
     items.forEach((m, i) => {
-      if (m.roundId !== prevRoundId) {
-        segs.push({ roundId: m.roundId, start: i, count: 0 });
-        prevRoundId = m.roundId;
+      const segmentKey = m.storyKey ?? `${m.tournamentId ?? 't'}:${m.roundId ?? 'round'}:${i}`;
+      if (segmentKey !== prevSegmentKey) {
+        segs.push({ key: segmentKey, start: i, count: 0 });
+        prevSegmentKey = segmentKey;
       }
       segs[segs.length - 1].count += 1;
     });
@@ -107,15 +135,6 @@ export default function MemoriesStoriesViewer({ visible, items = [], startIndex 
   }, [items]);
 
   if (!visible || !current) return null;
-
-  const advance = () => {
-    if (index + 1 >= items.length) onClose();
-    else setIndex((i) => i + 1);
-  };
-
-  const back = () => {
-    if (index > 0) setIndex((i) => i - 1);
-  };
 
   const onLongPress = () => { longPressedRef.current = true; setPaused(true); };
   const onPressOut = () => {
@@ -147,6 +166,13 @@ export default function MemoriesStoriesViewer({ visible, items = [], startIndex 
   const activeSegmentIndex = roundSegments.findIndex(
     (seg) => index >= seg.start && index < seg.start + seg.count,
   );
+  const currentStoryTitle = current.storyRoundLabel || storyTitle;
+  const currentStorySubtitle = current.storyTournamentName || storySubtitle;
+  const headerLabel = currentStoryTitle
+    ? `${currentStoryTitle} · ${index + 1}/${items.length}`
+    : `R${curRoundIndex >= 0 ? curRoundIndex + 1 : '?'}${
+      curRound?.courseName ? ` · ${curRound.courseName}` : ''
+    } · ${index + 1}/${items.length}`;
 
   return (
     <Modal visible animationType="fade" onRequestClose={onClose} transparent={false}>
@@ -186,6 +212,8 @@ export default function MemoriesStoriesViewer({ visible, items = [], startIndex 
             onLongPress={onLongPress}
             onPressOut={onPressOut}
             delayLongPress={180}
+            accessibilityRole="button"
+            accessibilityLabel="Previous story"
           />
           <Pressable
             style={s.tapRight}
@@ -193,6 +221,8 @@ export default function MemoriesStoriesViewer({ visible, items = [], startIndex 
             onLongPress={onLongPress}
             onPressOut={onPressOut}
             delayLongPress={180}
+            accessibilityRole="button"
+            accessibilityLabel="Next story"
           />
         </View>
 
@@ -207,7 +237,7 @@ export default function MemoriesStoriesViewer({ visible, items = [], startIndex 
               fill = seg.count > 0 ? (doneInRound + progress) / seg.count : 0;
             }
             return (
-              <View key={seg.roundId ?? `seg-${i}`} style={s.bar}>
+              <View key={seg.key ?? `seg-${i}`} style={s.bar}>
                 <View style={[s.barFill, { width: `${Math.min(1, fill) * 100}%` }]} />
               </View>
             );
@@ -216,11 +246,10 @@ export default function MemoriesStoriesViewer({ visible, items = [], startIndex 
 
         <View style={[s.top, { top: insets.top + 20 }]} pointerEvents="box-none">
           <View style={s.topLeft} pointerEvents="none">
-            <Text style={s.topLabel}>
-              R{curRoundIndex >= 0 ? curRoundIndex + 1 : '?'}
-              {curRound?.courseName ? ` · ${curRound.courseName}` : ''}
-              {` · ${index + 1}/${items.length}`}
-            </Text>
+            <Text style={s.topLabel}>{headerLabel}</Text>
+            {currentStorySubtitle ? (
+              <Text style={s.topSubtitle} numberOfLines={1}>{currentStorySubtitle}</Text>
+            ) : null}
           </View>
           <TouchableOpacity
             onPress={onClose}
@@ -313,9 +342,16 @@ const s = StyleSheet.create({
   },
   topLeft: {
     backgroundColor: 'rgba(0,0,0,0.55)',
-    paddingHorizontal: 10, paddingVertical: 4, borderRadius: 99,
+    paddingHorizontal: 10, paddingVertical: 4, borderRadius: 10,
+    maxWidth: '78%',
   },
   topLabel: { color: '#fff', fontFamily: 'PlusJakartaSans-SemiBold', fontSize: 12 },
+  topSubtitle: {
+    color: 'rgba(255,255,255,0.68)',
+    fontFamily: 'PlusJakartaSans-Regular',
+    fontSize: 10,
+    marginTop: 1,
+  },
   closeBtn: {
     width: 36, height: 36, borderRadius: 99,
     alignItems: 'center', justifyContent: 'center',

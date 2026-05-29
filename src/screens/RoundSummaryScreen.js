@@ -14,6 +14,11 @@ import {
   getTournamentSnapshot,
 } from '../store/tournamentStore';
 import { loadRoundMedia } from '../store/mediaStore';
+import { loadComments } from '../store/feedStore';
+import RoundRecapPanel from '../components/roundSummary/RoundRecapPanel';
+import RoundSummaryTabs from '../components/roundSummary/RoundSummaryTabs';
+import RoundScorecardTables from '../components/roundSummary/RoundScorecardTables';
+import { buildRoundRecap, buildScorecardSections } from './roundSummaryModel';
 
 // Read-only summary of a single round — the feed's drill-in target. Works
 // for the current user's own rounds and for friends' rounds (read access
@@ -28,6 +33,20 @@ async function fetchTournament(id) {
   return readLocal(id);
 }
 
+function recapSummary(recap) {
+  if (!recap?.winnerName) return 'No scores recorded for this round.';
+  return `${recap.winnerName} won the round.`;
+}
+
+function roundFeedKey(tournamentId, roundId) {
+  return tournamentId && roundId ? `round:${tournamentId}:${roundId}` : null;
+}
+
+function commentName(comment) {
+  if (comment?.isMine) return 'You';
+  return comment?.author?.name || 'Player';
+}
+
 export default function RoundSummaryScreen({ navigation, route }) {
   const { theme } = useTheme();
   const s = makeStyles(theme);
@@ -36,21 +55,26 @@ export default function RoundSummaryScreen({ navigation, route }) {
 
   const [tournament, setTournament] = useState(() => initialTournament);
   const [media, setMedia] = useState([]);
+  const [feedComments, setFeedComments] = useState([]);
   const [me, setMe] = useState(null);
   const [loading, setLoading] = useState(() => !initialTournament);
   const hasLoadedOnceRef = useRef(!!initialTournament);
+  const [activeTab, setActiveTab] = useState('scorecard');
 
   const load = useCallback(async () => {
     if (!hasLoadedOnceRef.current) setLoading(true);
     try {
-      const [{ data: { user } }, t, roundMedia] = await Promise.all([
+      const itemKey = roundFeedKey(tournamentId, roundId);
+      const [{ data: { user } }, t, roundMedia, comments] = await Promise.all([
         supabase.auth.getUser(),
         fetchTournament(tournamentId),
         loadRoundMedia(tournamentId, roundId).catch(() => []),
+        itemKey ? loadComments(itemKey).catch(() => []) : Promise.resolve([]),
       ]);
       setMe(user?.id ?? null);
       setTournament(t);
       setMedia(roundMedia);
+      setFeedComments(comments);
     } finally {
       hasLoadedOnceRef.current = true;
       setLoading(false);
@@ -73,20 +97,22 @@ export default function RoundSummaryScreen({ navigation, route }) {
   const ranked = [...totals]
     .filter((e) => e.totalStrokes > 0)
     .sort((a, b) => b.totalPoints - a.totalPoints);
-  const holes = round?.holes ?? [];
-
-  const strokeColor = (strokes, par) => {
-    if (strokes == null) return theme.text.muted;
-    if (strokes < par) return theme.accent.primary;
-    if (strokes === par) return theme.text.primary;
-    return theme.text.secondary;
-  };
 
   const roundLabel = formatRoundLabel({
     kind: tournament?.kind,
     courseName: round?.courseName,
     roundIndex,
   });
+  const recap = round ? buildRoundRecap({ round, ranked }) : null;
+  const scorecardSections = round ? buildScorecardSections({ round, ranked }) : [];
+  const roundNote = typeof round?.notes?.round === 'string'
+    ? round.notes.round.trim()
+    : '';
+  const holeNotes = Object.entries(round?.notes?.hole ?? {})
+    .filter(([, text]) => typeof text === 'string' && text.trim())
+    .sort(([a], [b]) => Number(a) - Number(b));
+  const hasNotes = Boolean(roundNote) || holeNotes.length > 0;
+  const hasFeedComments = feedComments.length > 0;
 
   return (
     <ScreenContainer style={s.container} edges={['top', 'bottom']}>
@@ -107,109 +133,53 @@ export default function RoundSummaryScreen({ navigation, route }) {
         </View>
       ) : (
         <ScrollView contentContainerStyle={s.content}>
-          <Text style={s.subTitle}>
-            {tournament.name}
-            {round.courseName ? ` · ${round.courseName}` : ''}
-          </Text>
+          <RoundRecapPanel
+            recap={recap}
+            roundLabel={roundLabel}
+            tournamentName={tournament?.name}
+            summary={recapSummary(recap)}
+            mediaCount={media.length}
+          />
 
-          <Text style={s.sectionLabel}>LEADERBOARD</Text>
-          {ranked.length === 0 ? (
-            <Text style={s.empty}>No scores recorded for this round.</Text>
-          ) : (
-            ranked.map((entry, i) => {
-              const isMe = entry.player.user_id && entry.player.user_id === me;
-              return (
-                <View key={entry.player.id} style={[s.lbRow, isMe && s.lbRowMe]}>
-                  <Text style={s.lbRank}>{i + 1}</Text>
-                  <View style={s.lbNameWrap}>
-                    <Text style={[s.lbName, isMe && s.lbNameMe]} numberOfLines={1}>
-                      {entry.player.name}{isMe ? '  (you)' : ''}
-                    </Text>
-                    {round.playerTees?.[entry.player.id]?.label ? (
-                      <Text style={s.teeBadge}>{round.playerTees[entry.player.id].label}</Text>
-                    ) : null}
-                  </View>
-                  <View style={s.lbStat}>
-                    <Text style={s.lbStatValue}>{entry.totalPoints}</Text>
-                    <Text style={s.lbStatLabel}>PTS</Text>
-                  </View>
-                  <View style={s.lbStat}>
-                    <Text style={s.lbStatValue}>{entry.totalStrokes}</Text>
-                    <Text style={s.lbStatLabel}>STR</Text>
-                  </View>
-                </View>
-              );
-            })
-          )}
+          <RoundSummaryTabs active={activeTab} onChange={setActiveTab} />
 
-          {holes.length > 0 && ranked.length > 0 && (
-            <>
-              <Text style={s.sectionLabel}>SCORECARD</Text>
-              <View style={s.gridWrap}>
-                <View style={s.gridLabelCol}>
-                  <View style={s.gridHeadCell}><Text style={s.gridHeadText}>Hole</Text></View>
-                  <View style={s.gridCell}><Text style={s.gridParLabel}>Par</Text></View>
-                  {ranked.map((entry) => (
-                    <View key={entry.player.id} style={s.gridCell}>
-                      <Text style={s.gridNameText} numberOfLines={1}>
-                        {entry.player.name.split(' ')[0]}
+          {activeTab === 'scorecard' ? (
+            <RoundScorecardTables sections={scorecardSections} />
+          ) : null}
+
+          {activeTab === 'leaderboard' ? (
+            <View>
+              {ranked.length === 0 ? (
+                <Text style={s.empty}>No scores recorded for this round.</Text>
+              ) : ranked.map((entry, i) => {
+                const isMe = entry.player.user_id && entry.player.user_id === me;
+                return (
+                  <View key={entry.player.id} style={[s.lbRow, isMe && s.lbRowMe]}>
+                    <Text style={s.lbRank}>{i + 1}</Text>
+                    <View style={s.lbNameWrap}>
+                      <Text style={[s.lbName, isMe && s.lbNameMe]} numberOfLines={1}>
+                        {entry.player.name}{isMe ? '  (you)' : ''}
                       </Text>
+                      {round.playerTees?.[entry.player.id]?.label ? (
+                        <Text style={s.teeBadge}>{round.playerTees[entry.player.id].label}</Text>
+                      ) : null}
                     </View>
-                  ))}
-                </View>
-                <ScrollView horizontal showsHorizontalScrollIndicator={false}>
-                  <View>
-                    <View style={s.gridRow}>
-                      {holes.map((h) => (
-                        <View key={h.number} style={[s.gridHeadCell, s.gridDataCell]}>
-                          <Text style={s.gridHeadText}>{h.number}</Text>
-                        </View>
-                      ))}
-                      <View style={[s.gridHeadCell, s.gridDataCell, s.gridTotCell]}>
-                        <Text style={s.gridHeadText}>Tot</Text>
-                      </View>
+                    <View style={s.lbStat}>
+                      <Text style={s.lbStatValue}>{entry.totalPoints}</Text>
+                      <Text style={s.lbStatLabel}>PTS</Text>
                     </View>
-                    <View style={s.gridRow}>
-                      {holes.map((h) => (
-                        <View key={h.number} style={[s.gridCell, s.gridDataCell]}>
-                          <Text style={s.gridParValue}>{h.par}</Text>
-                        </View>
-                      ))}
-                      <View style={[s.gridCell, s.gridDataCell, s.gridTotCell]}>
-                        <Text style={s.gridParValue}>
-                          {holes.reduce((sum, h) => sum + (h.par || 0), 0)}
-                        </Text>
-                      </View>
+                    <View style={s.lbStat}>
+                      <Text style={s.lbStatValue}>{entry.totalStrokes}</Text>
+                      <Text style={s.lbStatLabel}>STR</Text>
                     </View>
-                    {ranked.map((entry) => {
-                      const pScores = round.scores?.[entry.player.id] ?? {};
-                      return (
-                        <View key={entry.player.id} style={s.gridRow}>
-                          {holes.map((h) => {
-                            const v = pScores[h.number];
-                            return (
-                              <View key={h.number} style={[s.gridCell, s.gridDataCell]}>
-                                <Text style={[s.gridScore, { color: strokeColor(v, h.par) }]}>
-                                  {v ?? '·'}
-                                </Text>
-                              </View>
-                            );
-                          })}
-                          <View style={[s.gridCell, s.gridDataCell, s.gridTotCell]}>
-                            <Text style={s.gridTotValue}>{entry.totalStrokes}</Text>
-                          </View>
-                        </View>
-                      );
-                    })}
                   </View>
-                </ScrollView>
-              </View>
-            </>
-          )}
+                );
+              })}
+            </View>
+          ) : null}
 
-          {media.length > 0 && (
-            <>
-              <Text style={s.sectionLabel}>PHOTOS</Text>
+          {activeTab === 'photos' ? (
+            media.length > 0 ? (
               <ScrollView horizontal showsHorizontalScrollIndicator={false}>
                 {media.map((m) => (
                   <Image
@@ -220,33 +190,73 @@ export default function RoundSummaryScreen({ navigation, route }) {
                   />
                 ))}
               </ScrollView>
-            </>
-          )}
-
-          {round.notes?.round ? (
-            <>
-              <Text style={s.sectionLabel}>NOTES</Text>
-              <Text style={s.notes}>{round.notes.round}</Text>
-            </>
+            ) : (
+              <Text style={s.empty}>No photos for this round.</Text>
+            )
           ) : null}
 
-          {(() => {
-            const holeNotes = Object.entries(round.notes?.hole ?? {})
-              .filter(([, text]) => text && text.trim())
-              .sort(([a], [b]) => Number(a) - Number(b));
-            if (holeNotes.length === 0) return null;
-            return (
-              <>
-                <Text style={s.sectionLabel}>HOLE NOTES</Text>
-                {holeNotes.map(([hole, text]) => (
-                  <View key={hole} style={s.holeNoteRow}>
-                    <Text style={s.holeNoteLabel}>{`Hole ${hole}`}</Text>
-                    <Text style={s.holeNoteText}>{text}</Text>
+          {activeTab === 'comments' ? (
+            <View>
+              {hasFeedComments ? (
+                <>
+                  <Text style={s.sectionLabel}>COMMENTS</Text>
+                  <View style={s.commentList}>
+                    {feedComments.map((comment) => (
+                      <View key={comment.id} style={s.commentRow}>
+                        <View
+                          style={[
+                            s.commentAvatar,
+                            { backgroundColor: comment.author?.avatarColor || theme.accent.primary },
+                          ]}
+                        >
+                          {comment.author?.avatarUrl ? (
+                            <Image
+                              source={{ uri: comment.author.avatarUrl }}
+                              style={s.commentAvatarImage}
+                            />
+                          ) : (
+                            <Text style={s.commentAvatarText}>
+                              {commentName(comment).trim().charAt(0).toUpperCase() || '?'}
+                            </Text>
+                          )}
+                        </View>
+                        <View style={s.commentBodyWrap}>
+                          <Text style={s.commentAuthor} numberOfLines={1}>
+                            {commentName(comment)}
+                          </Text>
+                          <Text style={s.commentBody}>{comment.body}</Text>
+                        </View>
+                      </View>
+                    ))}
                   </View>
-                ))}
-              </>
-            );
-          })()}
+                </>
+              ) : null}
+
+              {hasNotes ? (
+                <>
+                  {roundNote ? (
+                    <>
+                      <Text style={s.sectionLabel}>NOTES</Text>
+                      <Text style={s.notes}>{roundNote}</Text>
+                    </>
+                  ) : null}
+                  {holeNotes.length > 0 ? (
+                    <>
+                      <Text style={s.sectionLabel}>HOLE NOTES</Text>
+                      {holeNotes.map(([hole, text]) => (
+                        <View key={hole} style={s.holeNoteRow}>
+                          <Text style={s.holeNoteLabel}>{`Hole ${hole}`}</Text>
+                          <Text style={s.holeNoteText}>{text.trim()}</Text>
+                        </View>
+                      ))}
+                    </>
+                  ) : null}
+                </>
+              ) : !hasFeedComments ? (
+                <Text style={s.empty}>Comments appear from the feed thread for this round.</Text>
+              ) : null}
+            </View>
+          ) : null}
 
           {iAmPlaying && (
             <TouchableOpacity
@@ -269,16 +279,24 @@ function makeStyles(theme) {
     container: { flex: 1, backgroundColor: theme.bg.primary },
     header: {
       flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
-      paddingHorizontal: 20, paddingTop: 16, paddingBottom: 12,
+      paddingHorizontal: 14, paddingTop: 12, paddingBottom: 8,
     },
-    backBtn: {},
+    backBtn: {
+      width: 36, height: 36, borderRadius: 10,
+      alignItems: 'center', justifyContent: 'center',
+    },
     headerTitle: {
-      fontFamily: 'PlayfairDisplay-Bold', fontSize: 18, color: theme.text.primary,
+      fontFamily: 'PlusJakartaSans-ExtraBold', fontSize: 16, color: theme.text.primary,
       flex: 1, textAlign: 'center',
     },
     center: { flex: 1, alignItems: 'center', justifyContent: 'center', gap: 12 },
     missingText: { fontFamily: 'PlusJakartaSans-Medium', color: theme.text.muted, fontSize: 14 },
-    content: { padding: 20, paddingBottom: 60 },
+    content: {
+      paddingHorizontal: 14,
+      paddingTop: 10,
+      paddingBottom: 60,
+      gap: 12,
+    },
     subTitle: {
       fontFamily: 'PlusJakartaSans-Medium', color: theme.text.secondary,
       fontSize: 13, marginBottom: 4,
@@ -288,6 +306,51 @@ function makeStyles(theme) {
       letterSpacing: 1.5, marginTop: 22, marginBottom: 10, textTransform: 'uppercase',
     },
     empty: { fontFamily: 'PlusJakartaSans-Regular', color: theme.text.muted, fontSize: 13 },
+    commentList: {
+      gap: 10,
+    },
+    commentRow: {
+      backgroundColor: theme.bg.card,
+      borderColor: theme.border.default,
+      borderRadius: 10,
+      borderWidth: 1,
+      flexDirection: 'row',
+      gap: 10,
+      padding: 10,
+    },
+    commentAvatar: {
+      alignItems: 'center',
+      borderRadius: 15,
+      height: 30,
+      justifyContent: 'center',
+      overflow: 'hidden',
+      width: 30,
+    },
+    commentAvatarImage: {
+      height: '100%',
+      width: '100%',
+    },
+    commentAvatarText: {
+      color: '#ffd700',
+      fontFamily: 'PlusJakartaSans-ExtraBold',
+      fontSize: 12,
+    },
+    commentBodyWrap: {
+      flex: 1,
+      minWidth: 0,
+    },
+    commentAuthor: {
+      color: theme.text.primary,
+      fontFamily: 'PlusJakartaSans-Bold',
+      fontSize: 13,
+    },
+    commentBody: {
+      color: theme.text.secondary,
+      fontFamily: 'PlusJakartaSans-Regular',
+      fontSize: 13,
+      lineHeight: 18,
+      marginTop: 2,
+    },
 
     lbRow: {
       flexDirection: 'row', alignItems: 'center', gap: 10,

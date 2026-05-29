@@ -40,6 +40,24 @@ const RENDERERS: Record<string, (d: Record<string, unknown>) => Rendered> = {
       params: { tournamentId: d.tournament_id, roundId: d.round_id },
     },
   }),
+  feed_reaction: (d) => ({
+    title: 'New reaction',
+    body: `${d.actor_name ?? 'A friend'} reacted ${d.emoji || ''} to `
+      + `${d.course_name || d.tournament_name || 'a round'}`,
+    deepLink: {
+      screen: 'RoundSummary',
+      params: { tournamentId: d.tournament_id, roundId: d.round_id },
+    },
+  }),
+  feed_comment: (d) => ({
+    title: 'New comment',
+    body: `${d.actor_name ?? 'A friend'} commented on `
+      + `${d.course_name || d.tournament_name || 'a round'}`,
+    deepLink: {
+      screen: 'RoundSummary',
+      params: { tournamentId: d.tournament_id, roundId: d.round_id },
+    },
+  }),
 };
 
 Deno.serve(async (req) => {
