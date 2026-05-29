@@ -50,3 +50,4 @@ yarn-error.*
 
 # git worktrees
 .claude/worktrees/
+.worktrees/
