@@ -1,6 +1,6 @@
 import React from 'react';
 import {
-  Image, StyleSheet, Text, TouchableOpacity, View,
+  Image, ScrollView, StyleSheet, Text, TouchableOpacity, useWindowDimensions, View,
 } from 'react-native';
 import { Feather } from '@expo/vector-icons';
 import { useTheme } from '../../theme/ThemeContext';
@@ -28,14 +28,27 @@ function statValue(value) {
 }
 
 function roundTitle(item, roundLabel) {
-  const actorName = item.actorName || item.results?.[0]?.name || 'Someone';
-  const playerCount = item.playerCount ?? item.results?.length ?? 1;
-  const others = Math.max(0, playerCount - 1);
-  const subject = others > 0
-    ? `${actorName} and ${others} other${others === 1 ? '' : 's'}`
-    : actorName;
-  const label = roundLabel || item.courseName || 'a round';
-  return `${subject} played ${label}`;
+  return roundLabel || item.courseName || 'Round';
+}
+
+function leaderSummary(leader, second) {
+  if (!leader) return 'No scores recorded yet';
+  const points = statValue(leader.points);
+  if (!second) {
+    return `${leader.name || 'Player'} scored ${points} pts`;
+  }
+  const margin = Number.isFinite(leader.points) && Number.isFinite(second?.points)
+    ? leader.points - second.points
+    : null;
+  if (margin != null && margin > 0) {
+    return `${leader.name || 'Leader'} led by ${margin} with ${points} pts`;
+  }
+  return `${leader.name || 'Leader'} led with ${points} pts`;
+}
+
+function playerCountLabel(count) {
+  if (count === 1) return '1 player';
+  return `${count} players`;
 }
 
 export default function FeedRoundCard({
@@ -43,14 +56,30 @@ export default function FeedRoundCard({
   roundLabel,
   timestamp,
   onPress,
+  onPressMedia,
   children,
 }) {
   const { theme } = useTheme();
+  const { width } = useWindowDimensions();
   const s = makeStyles(theme);
   const allResults = item.results ?? [];
   const results = allResults.slice(0, 3);
   const resultCount = item.playerCount ?? allResults.length;
   const hiddenCount = Math.max(0, resultCount - results.length);
+  const leader = results[0] ?? null;
+  const second = results[1] ?? null;
+  const contextLabel = item.withMe || item.isMine ? 'Your round' : 'Friends round';
+  const mediaLabel = item.mediaCountLabel || (item.mediaCount ? `${item.mediaCount} photos` : null);
+  const mediaList = Array.isArray(item.mediaList) && item.mediaList.length > 0
+    ? item.mediaList
+    : (item.mediaCoverUrl ? [{
+      id: item.mediaId,
+      thumbUrl: item.mediaCoverUrl,
+      url: item.mediaUrl,
+      kind: item.mediaHasVideo ? 'video' : 'photo',
+    }] : []);
+  const mediaFrameWidth = Math.max(220, Math.min(520, (Number(width) || 390) - 60));
+  const showScorePreview = results.length > 0;
 
   return (
     <TouchableOpacity
@@ -59,38 +88,136 @@ export default function FeedRoundCard({
       onPress={onPress}
       accessibilityRole="button"
     >
-      <View style={s.header}>
-        <Avatar item={item} theme={theme} />
-        <View style={s.headerText}>
+      <View style={s.kickerRow}>
+        <View style={s.statusPill}>
+          <Feather
+            name={item.withMe || item.isMine ? 'check-circle' : 'users'}
+            size={11}
+            color={theme.accent.primary}
+          />
+          <Text style={s.statusText}>{contextLabel}</Text>
+        </View>
+        <Text style={s.timeText}>{timestamp}</Text>
+      </View>
+
+      <View style={s.heroRow}>
+        <View style={s.heroText}>
           <Text style={s.title} numberOfLines={2}>{roundTitle(item, roundLabel)}</Text>
           <Text style={s.meta} numberOfLines={1}>
-            {item.tournamentName ? `${item.tournamentName} · ` : ''}{timestamp}
+            {item.tournamentName || 'Golf activity'}
           </Text>
         </View>
       </View>
 
-      {results.length > 0 ? (
-        <View style={s.resultsList}>
-          {results.map((result, index) => (
-            <View key={resultKey(result, index)} style={s.resultRow}>
-              <View style={s.rankWrap}>
-                <Text style={s.rank}>{index + 1}</Text>
+      {mediaList.length > 0 ? (
+        mediaList.length === 1 ? (
+          <TouchableOpacity
+            style={s.roundPhotoWrap}
+            activeOpacity={0.85}
+            onPress={(event) => {
+              event?.stopPropagation?.();
+              onPressMedia?.(mediaList[0]);
+            }}
+            accessibilityRole="imagebutton"
+            accessibilityLabel="Open round photo"
+          >
+            <Image
+              source={{ uri: mediaList[0].thumbUrl || mediaList[0].url }}
+              style={s.roundPhoto}
+              resizeMode="cover"
+            />
+            {mediaLabel ? (
+              <View style={s.photoBadge}>
+                <Feather
+                  name={item.mediaHasVideo ? 'film' : 'camera'}
+                  size={11}
+                  color="#fff"
+                />
+                <Text style={s.photoBadgeText}>{mediaLabel}</Text>
               </View>
-              <Text style={s.resultName} numberOfLines={1}>{result.name || 'Player'}</Text>
-              <View style={s.statBlock}>
-                <Text style={s.statValue}>{statValue(result.points)}</Text>
-                <Text style={s.statLabel}>PTS</Text>
-              </View>
-              <View style={s.secondaryStat}>
-                <Text style={s.secondaryValue}>{statValue(result.strokes)}</Text>
-                <Text style={s.secondaryLabel}>STR</Text>
-              </View>
-              <View style={s.secondaryStat}>
-                <Text style={s.secondaryValue}>{statValue(result.holes)}</Text>
-                <Text style={s.secondaryLabel}>H</Text>
-              </View>
+            ) : null}
+          </TouchableOpacity>
+        ) : (
+          <ScrollView
+            horizontal
+            showsHorizontalScrollIndicator={false}
+            contentContainerStyle={s.mediaScrollerContent}
+            snapToInterval={mediaFrameWidth + 8}
+            decelerationRate="fast"
+            style={s.mediaScroller}
+          >
+            {mediaList.map((media, index) => (
+              <TouchableOpacity
+                key={media.id || `${media.url}-${index}`}
+                style={[s.roundPhotoWrap, s.roundPhotoStripItem, { width: mediaFrameWidth }]}
+                activeOpacity={0.85}
+                onPress={(event) => {
+                  event?.stopPropagation?.();
+                  onPressMedia?.(media);
+                }}
+                accessibilityRole="imagebutton"
+                accessibilityLabel={`Open round photo ${index + 1} of ${mediaList.length}`}
+              >
+                <Image
+                  source={{ uri: media.thumbUrl || media.url }}
+                  style={s.roundPhoto}
+                  resizeMode="cover"
+                />
+                <View style={s.photoBadge}>
+                  <Feather
+                    name={media.kind === 'video' ? 'film' : 'camera'}
+                    size={11}
+                    color="#fff"
+                  />
+                  <Text style={s.photoBadgeText}>{index + 1} / {mediaList.length}</Text>
+                </View>
+              </TouchableOpacity>
+            ))}
+          </ScrollView>
+        )
+      ) : null}
+
+      <View style={s.recapRow}>
+        <Avatar item={{ ...item, actorName: leader?.name || item.actorName }} theme={theme} />
+        <View style={s.recapTextWrap}>
+          <Text style={s.recapText} numberOfLines={2}>{leaderSummary(leader, second)}</Text>
+          <View style={s.chipRow}>
+            <View style={s.infoChip}>
+              <Feather name="users" size={11} color={theme.text.muted} />
+              <Text style={s.infoChipText}>{playerCountLabel(resultCount)}</Text>
             </View>
-          ))}
+            {mediaLabel && !item.mediaCoverUrl ? (
+              <View style={s.infoChip}>
+                <Feather name={item.mediaHasVideo ? 'film' : 'camera'} size={11} color={theme.text.muted} />
+                <Text style={s.infoChipText}>{mediaLabel}</Text>
+              </View>
+            ) : null}
+          </View>
+        </View>
+      </View>
+
+      {showScorePreview ? (
+        <View style={s.scorePreview}>
+          <View style={s.scoreStrip}>
+            {results.map((result, index) => (
+              <View
+                key={resultKey(result, index)}
+                style={[s.scoreTile, index === 0 && s.scoreTileLead]}
+              >
+                <View style={[s.rankWrap, index === 0 && s.rankWrapLead]}>
+                  <Text style={s.rank}>{index + 1}</Text>
+                </View>
+                <Text style={s.resultName} numberOfLines={1}>{result.name || 'Player'}</Text>
+                <View style={s.pointsLine}>
+                  <Text style={s.statValue}>{statValue(result.points)}</Text>
+                  <Text style={s.statLabel}>pts</Text>
+                  {result.strokes != null ? (
+                    <Text style={s.strokesText}>{statValue(result.strokes)} str</Text>
+                  ) : null}
+                </View>
+              </View>
+            ))}
+          </View>
           {hiddenCount > 0 ? (
             <View style={s.overflowRow}>
               <Text style={s.overflowText}>
@@ -98,13 +225,6 @@ export default function FeedRoundCard({
               </Text>
             </View>
           ) : null}
-        </View>
-      ) : null}
-
-      {!item.isMine && !item.withMe ? (
-        <View style={s.contextRow}>
-          <Feather name="users" size={11} color={theme.text.muted} />
-          <Text style={s.contextText}>A round without you</Text>
         </View>
       ) : null}
 
@@ -134,51 +254,160 @@ function makeStyles(theme) {
   return StyleSheet.create({
     card: {
       backgroundColor: theme.bg.card,
-      borderRadius: 14,
-      borderWidth: theme.isDark ? 1 : 0,
-      borderColor: theme.isDark ? theme.glass?.border || theme.border.default : theme.border.default,
+      borderRadius: 10,
+      borderWidth: 1,
+      borderColor: theme.border.default,
       padding: 14,
       marginBottom: 12,
-      ...(theme.isDark ? {} : theme.shadow.card),
     },
-    header: {
+    kickerRow: {
       flexDirection: 'row',
       alignItems: 'center',
+      justifyContent: 'space-between',
       gap: 10,
+      marginBottom: 10,
     },
-    headerText: { flex: 1, minWidth: 0 },
+    statusPill: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: 5,
+      backgroundColor: theme.accent.light,
+      borderRadius: 999,
+      paddingHorizontal: 8,
+      paddingVertical: 4,
+    },
+    statusText: {
+      fontFamily: 'PlusJakartaSans-SemiBold',
+      color: theme.accent.primary,
+      fontSize: 11,
+    },
+    timeText: {
+      fontFamily: 'PlusJakartaSans-Medium',
+      color: theme.text.muted,
+      fontSize: 11,
+    },
+    heroRow: {
+      flexDirection: 'row',
+      gap: 12,
+      alignItems: 'flex-start',
+    },
+    heroText: { flex: 1, minWidth: 0 },
     title: {
-      fontFamily: 'PlusJakartaSans-Bold',
+      fontFamily: 'PlusJakartaSans-ExtraBold',
       color: theme.text.primary,
-      fontSize: 14,
-      lineHeight: 19,
+      fontSize: 16,
+      lineHeight: 21,
     },
     meta: {
       fontFamily: 'PlusJakartaSans-Medium',
       color: theme.text.muted,
       fontSize: 11,
-      marginTop: 2,
+      marginTop: 3,
     },
-    resultsList: {
+    roundPhotoWrap: {
+      height: 210,
+      borderRadius: 8,
       marginTop: 12,
-      borderRadius: 12,
       overflow: 'hidden',
-      borderWidth: 1,
-      borderColor: theme.border.default,
+      backgroundColor: theme.bg.secondary,
     },
-    resultRow: {
+    mediaScroller: {
+      marginTop: 12,
+    },
+    mediaScrollerContent: {
+      gap: 8,
+      paddingRight: 2,
+    },
+    roundPhotoStripItem: {
+      marginTop: 0,
+    },
+    roundPhoto: {
+      width: '100%',
+      height: '100%',
+    },
+    photoBadge: {
+      position: 'absolute',
+      right: 9,
+      bottom: 9,
       flexDirection: 'row',
       alignItems: 'center',
-      gap: 9,
-      paddingVertical: 8,
-      paddingHorizontal: 10,
+      gap: 5,
+      borderRadius: 999,
+      backgroundColor: 'rgba(0,0,0,0.58)',
+      paddingHorizontal: 9,
+      paddingVertical: 5,
+    },
+    photoBadgeText: {
+      color: '#fff',
+      fontFamily: 'PlusJakartaSans-Bold',
+      fontSize: 11,
+    },
+    recapRow: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: 10,
+      marginTop: 12,
+      paddingTop: 12,
+      borderTopWidth: 1,
+      borderTopColor: theme.border.subtle || theme.border.default,
+    },
+    recapTextWrap: {
+      flex: 1,
+      minWidth: 0,
+    },
+    recapText: {
+      fontFamily: 'PlusJakartaSans-SemiBold',
+      color: theme.text.primary,
+      fontSize: 13,
+      lineHeight: 18,
+    },
+    chipRow: {
+      flexDirection: 'row',
+      flexWrap: 'wrap',
+      gap: 6,
+      marginTop: 7,
+    },
+    infoChip: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: 4,
+      borderRadius: 999,
       backgroundColor: theme.bg.secondary,
-      borderBottomWidth: 1,
-      borderBottomColor: theme.border.default,
+      paddingHorizontal: 8,
+      paddingVertical: 4,
+    },
+    infoChipText: {
+      fontFamily: 'PlusJakartaSans-SemiBold',
+      color: theme.text.secondary,
+      fontSize: 10,
+    },
+    scorePreview: {
+      marginTop: 12,
+      gap: 8,
+    },
+    scoreStrip: {
+      flexDirection: 'row',
+      gap: 8,
+    },
+    scoreTile: {
+      flex: 1,
+      minWidth: 0,
+      borderRadius: 10,
+      borderWidth: 1,
+      borderColor: theme.border.default,
+      backgroundColor: theme.bg.card,
+      padding: 8,
+    },
+    scoreTileLead: {
+      backgroundColor: theme.accent.light,
+      borderColor: theme.accent.primary,
     },
     overflowRow: {
-      backgroundColor: theme.bg.secondary,
-      paddingVertical: 8,
+      backgroundColor: theme.bg.card,
+      borderRadius: 10,
+      borderWidth: 1,
+      borderColor: theme.border.default,
+      paddingVertical: 7,
       paddingHorizontal: 10,
       alignItems: 'center',
     },
@@ -188,11 +417,14 @@ function makeStyles(theme) {
       fontSize: 12,
     },
     rankWrap: {
-      width: 22,
-      height: 22,
-      borderRadius: 11,
+      width: 20,
+      height: 20,
+      borderRadius: 10,
       alignItems: 'center',
       justifyContent: 'center',
+      backgroundColor: theme.bg.secondary,
+    },
+    rankWrapLead: {
       backgroundColor: theme.bg.card,
     },
     rank: {
@@ -201,12 +433,18 @@ function makeStyles(theme) {
       fontSize: 11,
     },
     resultName: {
-      flex: 1,
       fontFamily: 'PlusJakartaSans-SemiBold',
-      fontSize: 13,
+      fontSize: 12,
       color: theme.text.primary,
+      marginTop: 7,
     },
-    statBlock: { alignItems: 'flex-end', minWidth: 44 },
+    pointsLine: {
+      flexDirection: 'row',
+      alignItems: 'baseline',
+      gap: 3,
+      marginTop: 2,
+      flexWrap: 'wrap',
+    },
     statValue: {
       fontFamily: 'PlusJakartaSans-ExtraBold',
       fontSize: 15,
@@ -214,32 +452,16 @@ function makeStyles(theme) {
     },
     statLabel: {
       fontFamily: 'PlusJakartaSans-Bold',
-      fontSize: 8,
+      fontSize: 10,
       color: theme.text.muted,
       marginTop: 1,
+      textTransform: 'uppercase',
     },
-    secondaryStat: { alignItems: 'flex-end', minWidth: 32 },
-    secondaryValue: {
-      fontFamily: 'PlusJakartaSans-Bold',
-      fontSize: 12,
-      color: theme.text.secondary,
-    },
-    secondaryLabel: {
-      fontFamily: 'PlusJakartaSans-Bold',
-      fontSize: 8,
+    strokesText: {
       color: theme.text.muted,
-      marginTop: 1,
-    },
-    contextRow: {
-      flexDirection: 'row',
-      alignItems: 'center',
-      gap: 5,
-      marginTop: 10,
-    },
-    contextText: {
-      fontFamily: 'PlusJakartaSans-Medium',
-      color: theme.text.muted,
+      fontFamily: 'PlusJakartaSans-SemiBold',
       fontSize: 11,
+      marginLeft: 3,
     },
   });
 }

@@ -55,6 +55,9 @@ describe('RoundStoriesRail', () => {
     const rail = await waitFor(() => getByTestId('round-stories-rail'));
     expect(rail.props.horizontal).toBe(true);
     expect(rail.props.showsHorizontalScrollIndicator).toBe(false);
+    expect(StyleSheet.flatten(rail.props.style)).toEqual(
+      expect.objectContaining({ minHeight: 118, maxHeight: 118 }),
+    );
   });
 
   test('applies viewed ring style to viewed stories', async () => {

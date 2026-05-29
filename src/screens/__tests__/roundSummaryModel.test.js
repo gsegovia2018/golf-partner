@@ -59,6 +59,25 @@ describe('roundSummaryModel', () => {
     });
   });
 
+  test('buildRoundRecap reports zero margin when there is no runner-up', () => {
+    const round = {
+      holes,
+      scores: {
+        p1: Object.fromEntries(holes.slice(0, 9).map((h) => [h.number, 4])),
+      },
+    };
+    const ranked = [
+      { player: players[0], totalPoints: 23, totalStrokes: 49 },
+    ];
+
+    expect(buildRoundRecap({ round, ranked })).toMatchObject({
+      winnerName: 'Marcos',
+      winnerPoints: 23,
+      margin: 0,
+      playerCount: 1,
+    });
+  });
+
   test('buildScorecardSections splits front/back nine and totals null or missing scores as 0', () => {
     const round = {
       holes,

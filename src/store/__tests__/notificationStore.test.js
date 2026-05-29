@@ -1,4 +1,10 @@
-import { unreadCount, listNotifications, markAllRead, notifyRoundFinished } from '../notificationStore';
+import {
+  unreadCount,
+  listNotifications,
+  markAllRead,
+  notifyRoundFinished,
+  notifyFeedActivity,
+} from '../notificationStore';
 
 // mockState is read inside the jest.mock factory; the `mock` prefix is what
 // lets jest's hoisted factory reference it.
@@ -40,16 +46,16 @@ jest.mock('../../lib/supabase', () => {
   return { supabase: client };
 });
 
-describe('notificationStore', () => {
-  beforeEach(() => {
-    mockState.user = { id: 'user-1' };
-    mockState.rows = [];
-    mockState.error = null;
-    mockState.updatePayload = undefined;
-    mockState.rpcCalls = [];
-    mockState.rpcError = null;
-  });
+beforeEach(() => {
+  mockState.user = { id: 'user-1' };
+  mockState.rows = [];
+  mockState.error = null;
+  mockState.updatePayload = undefined;
+  mockState.rpcCalls = [];
+  mockState.rpcError = null;
+});
 
+describe('notificationStore', () => {
   test('unreadCount returns the number of unread rows', async () => {
     mockState.rows = [{ id: 'n1' }, { id: 'n2' }];
     expect(await unreadCount()).toBe(2);
@@ -113,5 +119,48 @@ describe('notifyRoundFinished', () => {
       tournamentId: 't1', roundId: 'r1', roundIndex: 0,
       tournamentName: 'X', courseName: 'Y',
     })).rejects.toBeTruthy();
+  });
+});
+
+describe('notifyFeedActivity', () => {
+  test('calls the notify_feed_activity RPC with round activity metadata', async () => {
+    await expect(notifyFeedActivity({
+      type: 'feed_reaction',
+      tournamentId: 1747000000000,
+      roundId: 'r1',
+      itemKey: 'round:t1:r1',
+      roundIndex: 1,
+      tournamentName: 'Weekend Cup',
+      courseName: 'Pebble',
+      emoji: '😎',
+      commentBody: '',
+    })).resolves.toBe(true);
+    expect(mockState.rpcCalls).toContainEqual({
+      name: 'notify_feed_activity',
+      args: {
+        p_tournament_id: '1747000000000',
+        p_round_id: 'r1',
+        p_item_key: 'round:t1:r1',
+        p_type: 'feed_reaction',
+        p_round_index: 1,
+        p_tournament_name: 'Weekend Cup',
+        p_course_name: 'Pebble',
+        p_emoji: '😎',
+        p_comment_body: '',
+      },
+    });
+  });
+
+  test('returns false when required metadata is missing or the RPC errors', async () => {
+    expect(await notifyFeedActivity({ type: 'feed_comment', tournamentId: 't1' })).toBe(false);
+
+    mockState.rpcError = { message: 'boom' };
+    expect(await notifyFeedActivity({
+      type: 'feed_comment',
+      tournamentId: 't1',
+      roundId: 'r1',
+      itemKey: 'round:t1:r1',
+      commentBody: 'Nice',
+    })).toBe(false);
   });
 });

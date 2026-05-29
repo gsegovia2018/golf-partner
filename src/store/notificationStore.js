@@ -75,3 +75,36 @@ export async function notifyRoundFinished({
   });
   if (error) throw error;
 }
+
+// Best-effort fan-out for feed reactions/comments. The RPC notifies accepted
+// friends who were linked to the same round/tournament; failures must not
+// block the local reaction/comment action.
+export async function notifyFeedActivity({
+  type,
+  tournamentId,
+  roundId,
+  itemKey,
+  roundIndex,
+  tournamentName,
+  courseName,
+  emoji,
+  commentBody,
+}) {
+  if (!type || !tournamentId || !roundId || !itemKey) return false;
+  try {
+    const { error } = await supabase.rpc('notify_feed_activity', {
+      p_tournament_id: String(tournamentId),
+      p_round_id: String(roundId),
+      p_item_key: String(itemKey),
+      p_type: type,
+      p_round_index: roundIndex ?? 0,
+      p_tournament_name: tournamentName ?? '',
+      p_course_name: courseName ?? '',
+      p_emoji: emoji ?? '',
+      p_comment_body: commentBody ?? '',
+    });
+    return !error;
+  } catch {
+    return false;
+  }
+}

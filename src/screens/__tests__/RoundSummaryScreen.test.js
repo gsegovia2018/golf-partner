@@ -33,6 +33,18 @@ jest.mock('../../store/mediaStore', () => ({
   loadRoundMedia: jest.fn(() => Promise.resolve([])),
 }));
 
+jest.mock('../../store/feedStore', () => ({
+  loadComments: jest.fn(() => Promise.resolve([
+    {
+      id: 'c1',
+      body: 'Great match from the feed.',
+      createdAt: '2026-05-29T10:00:00Z',
+      isMine: true,
+      author: { name: 'Marcos', avatarUrl: null, avatarColor: '#123456' },
+    },
+  ])),
+}));
+
 const mockTournament = {
   id: 't1',
   name: 'Weekend Match',
@@ -86,7 +98,7 @@ describe('RoundSummaryScreen', () => {
       <RoundSummaryScreen navigation={navigation} route={route} />,
     ));
 
-    expect(await findByText('Marcos led with 38 points.')).toBeTruthy();
+    expect(await findByText('Marcos won the round.')).toBeTruthy();
     expect(getByLabelText('Scorecard').props.accessibilityState.selected).toBe(true);
     expect(getByText('Front nine')).toBeTruthy();
     expect(getByText('Back nine')).toBeTruthy();
@@ -113,5 +125,18 @@ describe('RoundSummaryScreen', () => {
     expect(await findByText('Pablo holed a long putt on the back nine.')).toBeTruthy();
     expect(await findByText('Hole 7')).toBeTruthy();
     expect(await findByText('Marcos found the fairway bunker.')).toBeTruthy();
+  });
+
+  test('shows feed comments in the round summary comments tab', async () => {
+    const { loadComments } = require('../../store/feedStore');
+    const { findByLabelText, findByText } = render(wrap(
+      <RoundSummaryScreen navigation={navigation} route={route} />,
+    ));
+
+    fireEvent.press(await findByLabelText('Comments'));
+
+    expect(loadComments).toHaveBeenCalledWith('round:t1:r1');
+    expect(await findByText('Great match from the feed.')).toBeTruthy();
+    expect(await findByText('You')).toBeTruthy();
   });
 });

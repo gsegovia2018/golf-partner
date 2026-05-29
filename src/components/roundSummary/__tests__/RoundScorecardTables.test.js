@@ -50,17 +50,21 @@ describe('RoundScorecardTables', () => {
       <RoundScorecardTables sections={sections} />
     );
 
+    expect(getByText('Round total')).toBeTruthy();
+    expect(getAllByText('Total').length).toBeGreaterThan(0);
+    expect(getByText('20')).toBeTruthy();
+    expect(getByText('26')).toBeTruthy();
     expect(getByText('Front nine')).toBeTruthy();
     expect(getByText('Back nine')).toBeTruthy();
     expect(getAllByText('Hole')).toHaveLength(2);
     expect(getAllByText('Par')).toHaveLength(2);
-    expect(getByText('Out')).toBeTruthy();
-    expect(getByText('In')).toBeTruthy();
-    expect(getAllByText('Marcos')).toHaveLength(2);
-    expect(getAllByText('Pablo')).toHaveLength(2);
+    expect(getAllByText('Out').length).toBeGreaterThan(0);
+    expect(getAllByText('In').length).toBeGreaterThan(0);
+    expect(getAllByText('Marcos').length).toBeGreaterThanOrEqual(2);
+    expect(getAllByText('Pablo').length).toBeGreaterThanOrEqual(2);
     expect(getAllByText('12').length).toBeGreaterThan(0);
     expect(getAllByText('13').length).toBeGreaterThan(0);
-    expect(getByText('15')).toBeTruthy();
+    expect(getAllByText('15').length).toBeGreaterThan(0);
     expect(getAllByText('11').length).toBeGreaterThan(0);
     expect(getAllByText('·')).toHaveLength(2);
   });
@@ -91,12 +95,13 @@ describe('RoundScorecardTables', () => {
 });
 
 describe('RoundRecapPanel', () => {
-  test('renders all recap contract fields', () => {
-    const { getAllByText, getByText } = render(
+  test('renders winner context and general round stats', () => {
+    const { getByText, queryByText } = render(
       <RoundRecapPanel
         tournamentName="Weekend Cup"
         roundLabel="Round 2"
-        summary="Marcos led the round."
+        summary="Marcos won the round."
+        mediaCount={3}
         recap={{
           winnerName: 'Marcos',
           winnerPoints: 38,
@@ -108,12 +113,16 @@ describe('RoundRecapPanel', () => {
       />
     );
 
-    expect(getByText('Marcos')).toBeTruthy();
-    expect(getByText('38')).toBeTruthy();
-    expect(getAllByText('4').length).toBeGreaterThan(0);
-    expect(getByText('72')).toBeTruthy();
-    expect(getByText('18')).toBeTruthy();
+    expect(getByText('Marcos won the round.')).toBeTruthy();
+    expect(getByText('Winner: Marcos')).toBeTruthy();
     expect(getByText('Players')).toBeTruthy();
+    expect(getByText('Holes')).toBeTruthy();
+    expect(getByText('Photos')).toBeTruthy();
+    expect(getByText('4')).toBeTruthy();
+    expect(getByText('18')).toBeTruthy();
+    expect(getByText('3')).toBeTruthy();
+    expect(queryByText('38')).toBeNull();
+    expect(queryByText('72')).toBeNull();
   });
 });
 

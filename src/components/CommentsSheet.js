@@ -72,7 +72,13 @@ function CommentRow({ comment, theme, s, onDelete }) {
 // reel), keyed by the feed item key. Loads the thread when shown, supports
 // optimistic posting and deleting the user's own comments. `onCountChange`
 // reports +1 / -1 so the feed's comment badge stays in sync.
-export default function CommentsSheet({ visible, itemKey, onClose, onCountChange }) {
+export default function CommentsSheet({
+  visible,
+  itemKey,
+  onClose,
+  onCountChange,
+  onCommentAdded,
+}) {
   const { theme } = useTheme();
   const s = makeStyles(theme);
 
@@ -112,6 +118,7 @@ export default function CommentsSheet({ visible, itemKey, onClose, onCountChange
       setComments((prev) => [...prev, created]);
       setDraft('');
       onCountChange?.(itemKey, 1);
+      onCommentAdded?.(itemKey, created);
     } else {
       // Offline, or the feed_comments table is not provisioned yet.
       setSendError(true);

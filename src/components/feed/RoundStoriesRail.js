@@ -24,6 +24,7 @@ export default function RoundStoriesRail({ stories = [], onPressStory }) {
       testID="round-stories-rail"
       horizontal
       showsHorizontalScrollIndicator={false}
+      style={s.scroller}
       contentContainerStyle={s.rail}
     >
       {stories.map((story) => {
@@ -66,20 +67,27 @@ export default function RoundStoriesRail({ stories = [], onPressStory }) {
 
 function makeStyles(theme) {
   return StyleSheet.create({
+    scroller: {
+      minHeight: 118,
+      maxHeight: 118,
+    },
     rail: {
+      minHeight: 118,
       paddingHorizontal: 16,
-      paddingBottom: 12,
-      gap: 10,
+      paddingTop: 4,
+      paddingBottom: 14,
+      gap: 12,
+      alignItems: 'flex-start',
     },
     item: {
-      width: 76,
-      minHeight: 92,
+      width: 82,
+      minHeight: 100,
       alignItems: 'center',
     },
     ring: {
-      width: 62,
-      height: 62,
-      borderRadius: 31,
+      width: 68,
+      height: 68,
+      borderRadius: 34,
       borderWidth: 2,
       borderColor: theme.accent.primary,
       padding: 3,
@@ -91,7 +99,7 @@ function makeStyles(theme) {
     },
     thumbWrap: {
       flex: 1,
-      borderRadius: 27,
+      borderRadius: 30,
       overflow: 'hidden',
       alignItems: 'center',
       justifyContent: 'center',
@@ -106,20 +114,20 @@ function makeStyles(theme) {
     fallbackText: {
       fontFamily: 'PlusJakartaSans-ExtraBold',
       color: theme.accent.primary,
-      fontSize: 12,
+      fontSize: 13,
     },
     label: {
       fontFamily: 'PlusJakartaSans-ExtraBold',
       color: theme.text.primary,
-      fontSize: 10,
-      maxWidth: 72,
+      fontSize: 11,
+      maxWidth: 78,
     },
     count: {
       fontFamily: 'PlusJakartaSans-SemiBold',
       color: theme.text.muted,
       fontSize: 9,
       marginTop: 1,
-      maxWidth: 72,
+      maxWidth: 78,
     },
   });
 }

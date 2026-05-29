@@ -11,26 +11,36 @@ export default function RoundRecapPanel({
   roundLabel,
   summary,
   recap,
+  mediaCount = 0,
 }) {
   const { theme } = useTheme();
   const s = useMemo(() => makeStyles(theme), [theme]);
   const stats = [
-    { label: 'Winner', value: recap?.winnerName || 'No winner' },
-    { label: 'Points', value: statValue(recap?.winnerPoints) },
-    { label: 'Margin', value: statValue(recap?.margin) },
-    { label: 'Strokes', value: statValue(recap?.winnerStrokes) },
-    { label: 'Holes', value: statValue(recap?.holesPlayed) },
     { label: 'Players', value: statValue(recap?.playerCount) },
+    { label: 'Holes', value: statValue(recap?.holesPlayed) },
+    { label: 'Photos', value: statValue(mediaCount) },
   ];
+  const winnerLabel = recap?.winnerName
+    ? `Winner: ${recap.winnerName}`
+    : null;
 
   return (
     <View style={s.card}>
-      {tournamentName ? (
-        <Text style={s.tournamentName} numberOfLines={1}>{tournamentName}</Text>
-      ) : null}
-      {roundLabel ? (
-        <Text style={s.roundLabel} numberOfLines={1}>{roundLabel}</Text>
-      ) : null}
+      <View style={s.headerRow}>
+        <View style={s.headerText}>
+          {tournamentName ? (
+            <Text style={s.tournamentName} numberOfLines={1}>{tournamentName}</Text>
+          ) : null}
+          {roundLabel ? (
+            <Text style={s.roundLabel} numberOfLines={1}>{roundLabel}</Text>
+          ) : null}
+        </View>
+        {winnerLabel ? (
+          <View style={s.playerPill}>
+            <Text style={s.playerPillText} numberOfLines={1}>{winnerLabel}</Text>
+          </View>
+        ) : null}
+      </View>
       {summary ? <Text style={s.summary}>{summary}</Text> : null}
       <View style={s.statsRow}>
         {stats.map((stat) => (
@@ -51,19 +61,42 @@ function makeStyles(theme) {
       borderColor: theme.border.default,
       borderRadius: 8,
       borderWidth: 1,
+      gap: 9,
+      padding: 12,
+    },
+    headerRow: {
+      flexDirection: 'row',
+      alignItems: 'flex-start',
       gap: 10,
-      padding: 14,
+      justifyContent: 'space-between',
+    },
+    headerText: {
+      flex: 1,
+      minWidth: 0,
     },
     tournamentName: {
       color: theme.text.secondary,
       fontFamily: 'PlusJakartaSans-SemiBold',
       fontSize: 12,
-      textTransform: 'uppercase',
     },
     roundLabel: {
       color: theme.text.primary,
+      fontFamily: 'PlusJakartaSans-ExtraBold',
+      fontSize: 16,
+      lineHeight: 21,
+      marginTop: 2,
+    },
+    playerPill: {
+      backgroundColor: theme.bg.secondary,
+      borderRadius: 999,
+      maxWidth: '48%',
+      paddingHorizontal: 8,
+      paddingVertical: 5,
+    },
+    playerPillText: {
+      color: theme.text.secondary,
       fontFamily: 'PlusJakartaSans-SemiBold',
-      fontSize: 18,
+      fontSize: 11,
     },
     summary: {
       color: theme.text.secondary,
@@ -73,17 +106,15 @@ function makeStyles(theme) {
     },
     statsRow: {
       flexDirection: 'row',
-      flexWrap: 'wrap',
-      gap: 8,
+      gap: 6,
     },
     stat: {
       backgroundColor: theme.bg.secondary,
       borderRadius: 6,
-      flexBasis: '31%',
-      flexGrow: 1,
+      flex: 1,
       minWidth: 0,
-      paddingHorizontal: 8,
-      paddingVertical: 8,
+      paddingHorizontal: 6,
+      paddingVertical: 7,
     },
     statValue: {
       color: theme.text.primary,

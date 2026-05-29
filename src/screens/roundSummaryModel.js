@@ -38,7 +38,7 @@ export function buildRoundRecap({ round, ranked } = {}) {
   return {
     winnerName: winnerEntry?.player?.name ?? '',
     winnerPoints,
-    margin: winnerEntry ? Math.max(0, winnerPoints - runnerUpPoints) : 0,
+    margin: winnerEntry && runnerUpEntry ? Math.max(0, winnerPoints - runnerUpPoints) : 0,
     winnerStrokes: winnerEntry?.totalStrokes ?? 0,
     holesPlayed: countPlayedHoles(round),
     playerCount: rows.length,

@@ -7,13 +7,13 @@ import {
   formatRoundLabel,
 } from './tournamentStore';
 import { loadMediaForTournaments } from './mediaStore';
-import { loadProfile } from './profileStore';
 import { listFriends, getCachedFriends } from './friendStore';
 
 // The activity feed is derived client-side (no server aggregation table).
 // It unions the current user's tournaments with tournaments their friends
 // played — discovered through tournament_participants — then flattens every
-// completed round and every photo into a single time-sorted item list.
+// completed round into a single time-sorted item list. Round media is grouped
+// into stories and attached to the corresponding round card.
 
 // Set true once any data source has failed during a buildFeed pass. Surfaces
 // to the screen so it can show a distinct error/partial state instead of
@@ -170,10 +170,6 @@ export async function buildFeed() {
   let me = null;
   try { me = await currentUserId(); } catch { partial = true; }
 
-  let profile = null;
-  try { profile = await loadProfile(); } catch { partial = true; /* offline */ }
-  const myName = (profile?.displayName ?? '').trim().toLowerCase();
-
   let friends = [];
   try {
     friends = await listFriends();
@@ -290,57 +286,22 @@ export async function buildFeed() {
   } catch { partial = true; /* offline — feed still shows rounds */ }
 
   const roundStories = buildRoundStories(all, media);
-  const tournamentById = new Map(all.map((t) => [t.id, t]));
-  // Group photos by round (tournament-level photos with no roundId group per
-  // tournament) so the feed shows one swipeable card per round of memories.
-  const photoGroups = new Map();
-  for (const m of media) {
-    const t = tournamentById.get(m.tournamentId);
-    if (!t) continue;
-    const groupKey = `${m.tournamentId}:${m.roundId ?? 'none'}`;
-    let group = photoGroups.get(groupKey);
-    if (!group) {
-      group = { tournament: t, roundId: m.roundId ?? null, media: [] };
-      photoGroups.set(groupKey, group);
-    }
-    group.media.push(m);
-  }
-
-  for (const group of photoGroups.values()) {
-    const { tournament: t, roundId } = group;
-    // Oldest-first so the feed carousel swipes chronologically.
-    const list = group.media
-      .slice()
-      .sort((a, b) => (Date.parse(a.createdAt) || 0) - (Date.parse(b.createdAt) || 0));
-    if (list.length === 0) continue;
-    // The card surfaces by its most recent photo; attribute it to that
-    // photo's uploader — by user id when present, falling back to the
-    // legacy display-name label.
-    const newest = list[list.length - 1];
-    const uploaderId = newest.uploaderId ?? null;
-    const label = (newest.uploaderLabel ?? '').trim();
-    const friendInfo = uploaderId ? friendById.get(uploaderId) : null;
-    const isMine = uploaderId
-      ? uploaderId === me
-      : (!!myName && label.toLowerCase() === myName);
-    const actorName = isMine
-      ? 'You'
-      : (friendInfo?.displayName || label || 'Someone');
-    items.push({
-      type: 'photo',
-      key: `photos:${t.id}:${roundId ?? 'none'}`,
-      ts: Date.parse(newest.createdAt) || 0,
-      isMine,
-      actorUserId: uploaderId,
-      actorName,
-      actorAvatarUrl: friendInfo?.avatarUrl ?? null,
-      actorAvatarColor: friendInfo?.avatarColor ?? null,
-      tournamentId: t.id,
-      tournamentName: t.name,
-      roundId,
-      count: list.length,
-      mediaList: list,
-    });
+  const storyByRoundKey = new Map(roundStories.map((story) => [
+    `${story.tournamentId}:${story.roundId ?? 'none'}`,
+    story,
+  ]));
+  for (const item of items) {
+    if (item.type !== 'round') continue;
+    const story = storyByRoundKey.get(`${item.tournamentId}:${item.roundId ?? 'none'}`);
+    if (!story) continue;
+    const newestMedia = story.mediaList[story.mediaList.length - 1] ?? null;
+    item.mediaCount = story.count;
+    item.mediaCountLabel = story.countLabel;
+    item.mediaId = newestMedia?.id ?? null;
+    item.mediaCoverUrl = newestMedia?.thumbUrl || newestMedia?.url || null;
+    item.mediaUrl = newestMedia?.url || newestMedia?.thumbUrl || null;
+    item.mediaList = story.mediaList.slice();
+    item.mediaHasVideo = story.hasVideo;
   }
 
   items.sort((a, b) => b.ts - a.ts);
@@ -354,11 +315,10 @@ export async function buildFeed() {
 // working before the migration is applied.
 // ---------------------------------------------------------------------------
 
-// Default quick-pick reactions shown on every feed card. NOT a whitelist —
-// any emoji is allowed (see isValidReactionEmoji); these are just the
-// always-visible shortcuts. The "+" control lets the user react with any
-// emoji via the OS keyboard.
-export const FEED_REACTION_EMOJI = ['👏', '🔥', '⛳', '😂'];
+// Default quick-pick reactions shown on every feed card. Intentionally empty:
+// the UI only shows reactions people have actually used, plus an input to add
+// any emoji.
+export const FEED_REACTION_EMOJI = [];
 
 // Validates an emoji picked from the OS keyboard before it is stored.
 // Mirrors the feed_reactions.emoji DB CHECK (1–16 chars) and requires at
@@ -493,9 +453,9 @@ export async function loadComments(itemKey) {
     if (authorIds.length > 0) {
       const { data: profRows } = await supabase
         .from('profiles')
-        .select('id, display_name, avatar_url, avatar_color')
-        .in('id', authorIds);
-      for (const p of profRows ?? []) profiles[p.id] = p;
+        .select('user_id, display_name, avatar_url, avatar_color')
+        .in('user_id', authorIds);
+      for (const p of profRows ?? []) profiles[p.user_id] = p;
     }
     const me = await currentUserId();
     return rows.map((r) => {

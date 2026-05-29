@@ -11,6 +11,7 @@ import { useTheme } from '../theme/ThemeContext';
 import { supabase } from '../lib/supabase';
 import { readLocal, roundTotals, setActiveTournament, formatRoundLabel } from '../store/tournamentStore';
 import { loadRoundMedia } from '../store/mediaStore';
+import { loadComments } from '../store/feedStore';
 import RoundRecapPanel from '../components/roundSummary/RoundRecapPanel';
 import RoundSummaryTabs from '../components/roundSummary/RoundSummaryTabs';
 import RoundScorecardTables from '../components/roundSummary/RoundScorecardTables';
@@ -31,7 +32,16 @@ async function fetchTournament(id) {
 
 function recapSummary(recap) {
   if (!recap?.winnerName) return 'No scores recorded for this round.';
-  return `${recap.winnerName} led with ${recap.winnerPoints} points.`;
+  return `${recap.winnerName} won the round.`;
+}
+
+function roundFeedKey(tournamentId, roundId) {
+  return tournamentId && roundId ? `round:${tournamentId}:${roundId}` : null;
+}
+
+function commentName(comment) {
+  if (comment?.isMine) return 'You';
+  return comment?.author?.name || 'Player';
 }
 
 export default function RoundSummaryScreen({ navigation, route }) {
@@ -41,6 +51,7 @@ export default function RoundSummaryScreen({ navigation, route }) {
 
   const [tournament, setTournament] = useState(null);
   const [media, setMedia] = useState([]);
+  const [feedComments, setFeedComments] = useState([]);
   const [me, setMe] = useState(null);
   const [loading, setLoading] = useState(true);
   const [activeTab, setActiveTab] = useState('scorecard');
@@ -48,14 +59,17 @@ export default function RoundSummaryScreen({ navigation, route }) {
   const load = useCallback(async () => {
     setLoading(true);
     try {
-      const [{ data: { user } }, t, roundMedia] = await Promise.all([
+      const itemKey = roundFeedKey(tournamentId, roundId);
+      const [{ data: { user } }, t, roundMedia, comments] = await Promise.all([
         supabase.auth.getUser(),
         fetchTournament(tournamentId),
         loadRoundMedia(tournamentId, roundId).catch(() => []),
+        itemKey ? loadComments(itemKey).catch(() => []) : Promise.resolve([]),
       ]);
       setMe(user?.id ?? null);
       setTournament(t);
       setMedia(roundMedia);
+      setFeedComments(comments);
     } finally {
       setLoading(false);
     }
@@ -92,6 +106,7 @@ export default function RoundSummaryScreen({ navigation, route }) {
     .filter(([, text]) => typeof text === 'string' && text.trim())
     .sort(([a], [b]) => Number(a) - Number(b));
   const hasNotes = Boolean(roundNote) || holeNotes.length > 0;
+  const hasFeedComments = feedComments.length > 0;
 
   return (
     <ScreenContainer style={s.container} edges={['top', 'bottom']}>
@@ -117,6 +132,7 @@ export default function RoundSummaryScreen({ navigation, route }) {
             roundLabel={roundLabel}
             tournamentName={tournament?.name}
             summary={recapSummary(recap)}
+            mediaCount={media.length}
           />
 
           <RoundSummaryTabs active={activeTab} onChange={setActiveTab} />
@@ -175,6 +191,41 @@ export default function RoundSummaryScreen({ navigation, route }) {
 
           {activeTab === 'comments' ? (
             <View>
+              {hasFeedComments ? (
+                <>
+                  <Text style={s.sectionLabel}>COMMENTS</Text>
+                  <View style={s.commentList}>
+                    {feedComments.map((comment) => (
+                      <View key={comment.id} style={s.commentRow}>
+                        <View
+                          style={[
+                            s.commentAvatar,
+                            { backgroundColor: comment.author?.avatarColor || theme.accent.primary },
+                          ]}
+                        >
+                          {comment.author?.avatarUrl ? (
+                            <Image
+                              source={{ uri: comment.author.avatarUrl }}
+                              style={s.commentAvatarImage}
+                            />
+                          ) : (
+                            <Text style={s.commentAvatarText}>
+                              {commentName(comment).trim().charAt(0).toUpperCase() || '?'}
+                            </Text>
+                          )}
+                        </View>
+                        <View style={s.commentBodyWrap}>
+                          <Text style={s.commentAuthor} numberOfLines={1}>
+                            {commentName(comment)}
+                          </Text>
+                          <Text style={s.commentBody}>{comment.body}</Text>
+                        </View>
+                      </View>
+                    ))}
+                  </View>
+                </>
+              ) : null}
+
               {hasNotes ? (
                 <>
                   {roundNote ? (
@@ -195,9 +246,9 @@ export default function RoundSummaryScreen({ navigation, route }) {
                     </>
                   ) : null}
                 </>
-              ) : (
+              ) : !hasFeedComments ? (
                 <Text style={s.empty}>Comments appear from the feed thread for this round.</Text>
-              )}
+              ) : null}
             </View>
           ) : null}
 
@@ -222,16 +273,24 @@ function makeStyles(theme) {
     container: { flex: 1, backgroundColor: theme.bg.primary },
     header: {
       flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
-      paddingHorizontal: 20, paddingTop: 16, paddingBottom: 12,
+      paddingHorizontal: 14, paddingTop: 12, paddingBottom: 8,
     },
-    backBtn: {},
+    backBtn: {
+      width: 36, height: 36, borderRadius: 10,
+      alignItems: 'center', justifyContent: 'center',
+    },
     headerTitle: {
-      fontFamily: 'PlayfairDisplay-Bold', fontSize: 18, color: theme.text.primary,
+      fontFamily: 'PlusJakartaSans-ExtraBold', fontSize: 16, color: theme.text.primary,
       flex: 1, textAlign: 'center',
     },
     center: { flex: 1, alignItems: 'center', justifyContent: 'center', gap: 12 },
     missingText: { fontFamily: 'PlusJakartaSans-Medium', color: theme.text.muted, fontSize: 14 },
-    content: { padding: 20, paddingBottom: 60 },
+    content: {
+      paddingHorizontal: 14,
+      paddingTop: 10,
+      paddingBottom: 60,
+      gap: 12,
+    },
     subTitle: {
       fontFamily: 'PlusJakartaSans-Medium', color: theme.text.secondary,
       fontSize: 13, marginBottom: 4,
@@ -241,6 +300,51 @@ function makeStyles(theme) {
       letterSpacing: 1.5, marginTop: 22, marginBottom: 10, textTransform: 'uppercase',
     },
     empty: { fontFamily: 'PlusJakartaSans-Regular', color: theme.text.muted, fontSize: 13 },
+    commentList: {
+      gap: 10,
+    },
+    commentRow: {
+      backgroundColor: theme.bg.card,
+      borderColor: theme.border.default,
+      borderRadius: 10,
+      borderWidth: 1,
+      flexDirection: 'row',
+      gap: 10,
+      padding: 10,
+    },
+    commentAvatar: {
+      alignItems: 'center',
+      borderRadius: 15,
+      height: 30,
+      justifyContent: 'center',
+      overflow: 'hidden',
+      width: 30,
+    },
+    commentAvatarImage: {
+      height: '100%',
+      width: '100%',
+    },
+    commentAvatarText: {
+      color: '#ffd700',
+      fontFamily: 'PlusJakartaSans-ExtraBold',
+      fontSize: 12,
+    },
+    commentBodyWrap: {
+      flex: 1,
+      minWidth: 0,
+    },
+    commentAuthor: {
+      color: theme.text.primary,
+      fontFamily: 'PlusJakartaSans-Bold',
+      fontSize: 13,
+    },
+    commentBody: {
+      color: theme.text.secondary,
+      fontFamily: 'PlusJakartaSans-Regular',
+      fontSize: 13,
+      lineHeight: 18,
+      marginTop: 2,
+    },
 
     lbRow: {
       flexDirection: 'row', alignItems: 'center', gap: 10,

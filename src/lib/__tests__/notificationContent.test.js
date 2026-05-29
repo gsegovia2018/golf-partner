@@ -35,6 +35,25 @@ describe('renderNotification', () => {
     expect(r.body).toBe('A friend finished a round at Pebble');
   });
 
+  test('feed_reaction names the actor, emoji, and course', () => {
+    const r = renderNotification('feed_reaction', {
+      actor_name: 'Sam',
+      emoji: '😎',
+      course_name: 'La Moraleja',
+    });
+    expect(r.title).toBe('New reaction');
+    expect(r.body).toBe('Sam reacted 😎 to La Moraleja');
+  });
+
+  test('feed_comment names the actor and round context', () => {
+    const r = renderNotification('feed_comment', {
+      actor_name: 'Sam',
+      tournament_name: 'Weekend Cup',
+    });
+    expect(r.title).toBe('New comment');
+    expect(r.body).toBe('Sam commented on Weekend Cup');
+  });
+
   test('unknown type returns a generic notification', () => {
     const r = renderNotification('something_else', {});
     expect(r.title).toBe('Notification');
@@ -54,6 +73,13 @@ describe('notificationLink', () => {
 
   test('round_finished routes to RoundSummary with tournament and round ids', () => {
     expect(notificationLink('round_finished', { tournament_id: 't1', round_id: 'r1' }))
+      .toEqual({ screen: 'RoundSummary', params: { tournamentId: 't1', roundId: 'r1' } });
+  });
+
+  test('feed activity routes to RoundSummary with tournament and round ids', () => {
+    expect(notificationLink('feed_reaction', { tournament_id: 't1', round_id: 'r1' }))
+      .toEqual({ screen: 'RoundSummary', params: { tournamentId: 't1', roundId: 'r1' } });
+    expect(notificationLink('feed_comment', { tournament_id: 't1', round_id: 'r1' }))
       .toEqual({ screen: 'RoundSummary', params: { tournamentId: 't1', roundId: 'r1' } });
   });
 
