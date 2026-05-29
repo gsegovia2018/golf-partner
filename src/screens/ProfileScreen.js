@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useState } from 'react';
+import React, { useCallback, useEffect, useRef, useState } from 'react';
 import {
   View, Text, TextInput, TouchableOpacity, StyleSheet, ScrollView,
   ActivityIndicator, Alert, Platform, Switch, Image,
@@ -36,9 +36,10 @@ export default function ProfileScreen({ navigation, route }) {
   const [uploadingAvatar, setUploadingAvatar] = useState(false);
   const [dirty, setDirty] = useState(false);
   const [showRunning, setShowRunning] = useState(true);
+  const hasLoadedOnceRef = useRef(false);
 
   const load = useCallback(async () => {
-    setLoading(true);
+    if (!hasLoadedOnceRef.current) setLoading(true);
     try {
       const [p, running] = await Promise.all([loadProfile(), getShowRunningScore()]);
       setProfile(p);
@@ -65,6 +66,7 @@ export default function ProfileScreen({ navigation, route }) {
     } catch (err) {
       Alert.alert('Error', err.message ?? 'Could not load profile');
     } finally {
+      hasLoadedOnceRef.current = true;
       setLoading(false);
     }
   }, []);

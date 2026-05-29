@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   View, Text, TextInput, TouchableOpacity, StyleSheet, ScrollView,
   ActivityIndicator, Image, Alert, Platform, Share,
@@ -15,6 +15,7 @@ import {
   loadTournamentMembers, findClaimedSlot,
   removeTournamentMember, generateInviteCode, releaseTournamentPlayer, buildJoinLink,
   addPlayerRoundPatches, removePlayerRoundPatches,
+  getActiveTournamentSnapshot,
 } from '../store/tournamentStore';
 import { supabase } from '../lib/supabase';
 import { mutate } from '../store/mutate';
@@ -23,6 +24,7 @@ import { isScoringModeAllowed, fallbackScoringMode, getScoringMode } from '../co
 import ScoringModeChangeSheet from '../components/ScoringModeChangeSheet';
 import { consumePendingPlayers } from '../lib/selectionBridge';
 import { parseHandicapIndex } from '../lib/handicap';
+import { shouldHandleStoreChange } from '../lib/navigationFocus';
 
 async function confirmDialog(title, message, confirmLabel = 'Remove') {
   if (Platform.OS === 'web') return window.confirm(`${title}\n\n${message}`);
@@ -42,18 +44,37 @@ async function updateMemberRole(tournamentId, userId, role) {
   if (error) throw error;
 }
 
+function editablePlayersFromTournament(t) {
+  return (t?.players ?? []).map((p) => ({ ...p, handicap: String(p.handicap) }));
+}
+
+function editableRoundsFromTournament(t) {
+  return (t?.rounds ?? []).map((r) => {
+    const normalized = normalizeRoundHandicaps(r, t.players ?? []);
+    return {
+      ...normalized,
+      holes: [...(normalized.holes ?? [])],
+      playerHandicaps: Object.fromEntries(
+        (t.players ?? []).map((p) => [p.id, String(normalized.playerHandicaps[p.id] ?? p.handicap)]),
+      ),
+      manualHandicaps: { ...(normalized.manualHandicaps ?? {}) },
+    };
+  });
+}
+
 export default function PlayersScreen({ navigation, route }) {
   const { tournamentId, tournamentName } = route.params ?? {};
   const { theme } = useTheme();
   const { user } = useAuth();
   const s = makeStyles(theme);
+  const initialTournament = useMemo(() => getActiveTournamentSnapshot(), []);
 
-  const [tournament, setTournament] = useState(null);
+  const [tournament, setTournament] = useState(() => initialTournament);
   const [members, setMembers] = useState([]);
-  const [loading, setLoading] = useState(true);
+  const [loading, setLoading] = useState(() => !initialTournament);
   const [loadError, setLoadError] = useState(null);
-  const [editPlayers, setEditPlayers] = useState([]);   // [{ id, name, handicap: string, user_id }]
-  const [rounds, setRounds] = useState([]);
+  const [editPlayers, setEditPlayers] = useState(() => editablePlayersFromTournament(initialTournament));   // [{ id, name, handicap: string, user_id }]
+  const [rounds, setRounds] = useState(() => editableRoundsFromTournament(initialTournament));
   const [saveState, setSaveState] = useState('idle');   // idle | saving | saved | error
   const [inviting, setInviting] = useState(false);
   const [leaving, setLeaving] = useState(false);
@@ -65,9 +86,10 @@ export default function PlayersScreen({ navigation, route }) {
   const tournamentRef = useRef(null);
   const saveTimeoutRef = useRef(null);
   const skipNextSaveRef = useRef(false);
+  const hasLoadedOnceRef = useRef(!!initialTournament);
 
   const load = useCallback(async () => {
-    setLoading(true);
+    if (!hasLoadedOnceRef.current) setLoading(true);
     setLoadError(null);
     try {
       const [t, mem] = await Promise.all([
@@ -77,21 +99,12 @@ export default function PlayersScreen({ navigation, route }) {
       skipNextSaveRef.current = true;
       setTournament(t);
       setMembers(mem);
-      setEditPlayers(t.players.map((p) => ({ ...p, handicap: String(p.handicap) })));
-      setRounds(t.rounds.map((r) => {
-        const normalized = normalizeRoundHandicaps(r, t.players);
-        return {
-          ...normalized,
-          holes: [...normalized.holes],
-          playerHandicaps: Object.fromEntries(
-            t.players.map((p) => [p.id, String(normalized.playerHandicaps[p.id] ?? p.handicap)]),
-          ),
-          manualHandicaps: { ...(normalized.manualHandicaps ?? {}) },
-        };
-      }));
+      setEditPlayers(editablePlayersFromTournament(t));
+      setRounds(editableRoundsFromTournament(t));
     } catch (err) {
       setLoadError(err?.message ?? 'Could not load players');
     } finally {
+      hasLoadedOnceRef.current = true;
       setLoading(false);
     }
   }, [tournamentId]);
@@ -192,6 +205,7 @@ export default function PlayersScreen({ navigation, route }) {
 
   useEffect(() => {
     const unsub = subscribeTournamentChanges(async () => {
+      if (!shouldHandleStoreChange(navigation)) return;
       const t = await loadTournament();
       if (!t) return;
       setTournament(t);
@@ -209,7 +223,7 @@ export default function PlayersScreen({ navigation, route }) {
       });
     });
     return unsub;
-  }, [tournamentId]);
+  }, [navigation, tournamentId]);
 
   useEffect(() => {
     if (skipNextSaveRef.current) { skipNextSaveRef.current = false; return; }

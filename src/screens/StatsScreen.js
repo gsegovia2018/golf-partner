@@ -4,7 +4,10 @@ import ScreenContainer from '../components/ScreenContainer';
 import { Feather } from '@expo/vector-icons';
 import { useTheme } from '../theme/ThemeContext';
 import { useAuth } from '../context/AuthContext';
-import { loadTournament, getPlayingHandicap, calcStablefordPoints, playerPartnerSplits } from '../store/tournamentStore';
+import {
+  loadTournament, getPlayingHandicap, calcStablefordPoints,
+  playerPartnerSplits, getActiveTournamentSnapshot,
+} from '../store/tournamentStore';
 import {
   playerRoundHistory, playerAvgStableford, playerScoreDistribution,
   playerStreaks, bestWorstHoles, holeDifficultyMap,
@@ -83,7 +86,7 @@ export default function StatsScreen({ navigation }) {
   // Memoised so StyleSheet.create only re-runs when the theme actually
   // changes — not on every tab switch / metric toggle re-render.
   const s = useMemo(() => makeStyles(theme), [theme]);
-  const [tournament, setTournament] = useState(null);
+  const [tournament, setTournament] = useState(() => getActiveTournamentSnapshot());
   const [tab, setTab] = useState('overview');
   // Each tab keeps its own player selection so navigating tabs no longer
   // silently changes the selection elsewhere.

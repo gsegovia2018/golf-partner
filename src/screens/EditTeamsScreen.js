@@ -1,18 +1,23 @@
-import React, { useEffect, useRef, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { View, Text, TouchableOpacity, StyleSheet } from 'react-native';
 import ScreenContainer from '../components/ScreenContainer';
 import { Feather } from '@expo/vector-icons';
 import { useTheme } from '../theme/ThemeContext';
-import { loadTournament, subscribeTournamentChanges } from '../store/tournamentStore';
+import { getActiveTournamentSnapshot, loadTournament, subscribeTournamentChanges } from '../store/tournamentStore';
 import { mutate } from '../store/mutate';
+import { shouldHandleStoreChange } from '../lib/navigationFocus';
 
 export default function EditTeamsScreen({ navigation, route }) {
   const { theme } = useTheme();
   const s = makeStyles(theme);
   const { roundIndex } = route?.params ?? {};
+  const initialTournament = useMemo(() => getActiveTournamentSnapshot(), []);
+  const initialPairs = initialTournament?.rounds?.[roundIndex]?.pairs;
 
-  const [tournament, setTournament] = useState(null);
-  const [pairs, setPairs] = useState(null);
+  const [tournament, setTournament] = useState(() => initialTournament);
+  const [pairs, setPairs] = useState(() => (
+    initialPairs?.length === 2 ? [[...initialPairs[0]], [...initialPairs[1]]] : null
+  ));
   const [selected, setSelected] = useState(null);
   const [saving, setSaving] = useState(false);
   // Set when the user performs a local swap so a subscription-driven
@@ -33,9 +38,11 @@ export default function EditTeamsScreen({ navigation, route }) {
     }
     hasLocalEdits.current = false;
     load({ force: true });
-    const unsub = subscribeTournamentChanges(() => load({ force: false }));
+    const unsub = subscribeTournamentChanges(() => {
+      if (shouldHandleStoreChange(navigation)) load({ force: false });
+    });
     return () => { cancelled = true; unsub(); };
-  }, [roundIndex]);
+  }, [navigation, roundIndex]);
 
   if (!tournament || !pairs) return null;
 

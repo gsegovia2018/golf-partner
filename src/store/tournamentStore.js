@@ -292,9 +292,12 @@ async function fetchRemoteTournament(id) {
   return data?.data ?? null;
 }
 
-export async function loadTournament() {
+export async function loadTournament(options = {}) {
+  const { refreshRemote = true, resolveIdentity = true } = options ?? {};
+  const finalize = (t) => (resolveIdentity ? resolveMeIdForTournament(t) : t);
   const activeId = await AsyncStorage.getItem(ACTIVE_ID_KEY);
   if (!activeId) return null;
+  _activeTournamentId = activeId;
 
   const cached = await readLocal(activeId);
   if (cached) {
@@ -303,25 +306,25 @@ export async function loadTournament() {
     // in-flight mutation whose sync hasn't landed yet — the overwrite
     // path was erasing scores the moment they were entered. Skip when
     // offline to avoid stacking failed round-trips behind every focus.
-    if (isOnline()) {
+    if (refreshRemote && isOnline()) {
       fetchRemoteTournament(activeId)
         .then(async (remote) => {
           if (!remote) return;
           const latest = await readLocal(activeId);
           const { merged } = mergeTournaments(latest ?? cached, remote);
           await saveLocal(merged);
-          await resolveMeIdForTournament(merged);
+          if (resolveIdentity) await resolveMeIdForTournament(merged);
         })
         .catch(() => {});
     }
-    return resolveMeIdForTournament(cached);
+    return finalize(cached);
   }
 
   if (!isOnline()) return null;
   try {
     const remote = await fetchRemoteTournament(activeId);
     if (remote) await saveLocal(remote);
-    return resolveMeIdForTournament(remote);
+    return finalize(remote);
   } catch (_) {
     return null;
   }
@@ -374,6 +377,23 @@ export async function refreshTournamentFromRemote(id) {
 
 const ACTIVE_TOURNAMENT_KEY = '@golf_tournament_'; // + id
 
+const _localTournamentCache = new Map();
+let _activeTournamentId = null;
+
+function cloneTournament(tournament) {
+  return tournament ? JSON.parse(JSON.stringify(tournament)) : null;
+}
+
+export function getActiveTournamentSnapshot() {
+  if (!_activeTournamentId) return null;
+  return cloneTournament(_localTournamentCache.get(_activeTournamentId));
+}
+
+export function getTournamentSnapshot(id) {
+  if (!id) return null;
+  return cloneTournament(_localTournamentCache.get(id));
+}
+
 // Mirror the tournament's user-linked players into tournament_participants
 // so the activity feed can discover tournaments a friend played without the
 // current user (see migrations/20260515_friends_and_feed.sql). Guarded by a
@@ -415,6 +435,8 @@ const _lastWrittenJson = new Map();
 
 export async function saveLocal(tournament) {
   const json = JSON.stringify(tournament);
+  _activeTournamentId = tournament.id;
+  _localTournamentCache.set(tournament.id, JSON.parse(json));
   if (_lastWrittenJson.get(tournament.id) === json) return;
   _lastWrittenJson.set(tournament.id, json);
   await AsyncStorage.multiSet([
@@ -425,9 +447,16 @@ export async function saveLocal(tournament) {
 }
 
 export async function readLocal(id) {
+  if (_localTournamentCache.has(id)) {
+    return cloneTournament(_localTournamentCache.get(id));
+  }
   const raw = await AsyncStorage.getItem(ACTIVE_TOURNAMENT_KEY + id);
   if (!raw) return null;
-  try { return JSON.parse(raw); } catch { return null; }
+  try {
+    const parsed = JSON.parse(raw);
+    _localTournamentCache.set(id, parsed);
+    return cloneTournament(parsed);
+  } catch { return null; }
 }
 
 // Backwards-compatible entry: local first, then attempt remote. Never throws on
@@ -465,11 +494,13 @@ export function _setSyncStatus(next) {
 }
 
 export async function setActiveTournament(id) {
+  _activeTournamentId = id;
   await AsyncStorage.setItem(ACTIVE_ID_KEY, id);
   _emitChange();
 }
 
 export async function clearActiveTournament() {
+  _activeTournamentId = null;
   await AsyncStorage.removeItem(ACTIVE_ID_KEY);
   _emitChange();
 }
@@ -479,10 +510,12 @@ export async function deleteTournament(id) {
   const { error } = await supabase.from('tournaments').delete().eq('id', id);
   if (error) throw error;
   if (activeId === id) await AsyncStorage.removeItem(ACTIVE_ID_KEY);
+  if (_activeTournamentId === id) _activeTournamentId = null;
   // Mirror the delete into the offline layer: drop the blob cache and
   // remove the id from the tournaments index so Home doesn't show a
   // phantom card after next cold start.
   await AsyncStorage.removeItem(ACTIVE_TOURNAMENT_KEY + id);
+  _localTournamentCache.delete(id);
   _lastWrittenJson.delete(id);
   try {
     const current = await tournamentsIndex.readIndex();

@@ -1,0 +1,326 @@
+{
+  "schemaVersion": 2,
+  "generatedAt": "2026-05-29T09:37:50Z",
+  "title": "Design System: Golf Partner",
+  "extensions": {
+    "colorMeta": {
+      "clubhouse-green": {
+        "role": "primary",
+        "displayName": "Clubhouse Green",
+        "canonical": "#006747",
+        "tonalRamp": [
+          "oklch(18% 0.07 160)",
+          "oklch(28% 0.09 160)",
+          "oklch(38% 0.11 160)",
+          "oklch(48% 0.12 160)",
+          "oklch(58% 0.11 160)",
+          "oklch(70% 0.08 160)",
+          "oklch(84% 0.045 160)",
+          "oklch(95% 0.018 160)"
+        ]
+      },
+      "fairway-mint": {
+        "role": "primary-support",
+        "displayName": "Fairway Mint",
+        "canonical": "#e6f0eb",
+        "tonalRamp": [
+          "oklch(18% 0.035 160)",
+          "oklch(30% 0.045 160)",
+          "oklch(43% 0.055 160)",
+          "oklch(56% 0.06 160)",
+          "oklch(68% 0.045 160)",
+          "oklch(80% 0.032 160)",
+          "oklch(90% 0.02 160)",
+          "oklch(96% 0.012 160)"
+        ]
+      },
+      "canvas-warm": {
+        "role": "neutral",
+        "displayName": "Warm Canvas",
+        "canonical": "#f6f3ee",
+        "tonalRamp": [
+          "oklch(18% 0.012 78)",
+          "oklch(30% 0.014 78)",
+          "oklch(43% 0.015 78)",
+          "oklch(56% 0.015 78)",
+          "oklch(70% 0.014 78)",
+          "oklch(82% 0.012 78)",
+          "oklch(91% 0.01 78)",
+          "oklch(96% 0.008 78)"
+        ]
+      },
+      "night-green": {
+        "role": "dark-neutral",
+        "displayName": "Night Green",
+        "canonical": "#0c1a14",
+        "tonalRamp": [
+          "oklch(12% 0.025 160)",
+          "oklch(18% 0.032 160)",
+          "oklch(25% 0.04 160)",
+          "oklch(34% 0.045 160)",
+          "oklch(46% 0.05 160)",
+          "oklch(60% 0.045 160)",
+          "oklch(77% 0.028 160)",
+          "oklch(92% 0.014 160)"
+        ]
+      },
+      "gold-marker": {
+        "role": "ceremony",
+        "displayName": "Gold Marker",
+        "canonical": "#ffd700",
+        "tonalRamp": [
+          "oklch(22% 0.07 92)",
+          "oklch(34% 0.1 92)",
+          "oklch(46% 0.13 92)",
+          "oklch(58% 0.15 92)",
+          "oklch(70% 0.16 92)",
+          "oklch(80% 0.13 92)",
+          "oklch(89% 0.08 92)",
+          "oklch(96% 0.035 92)"
+        ]
+      },
+      "bronze-marker": {
+        "role": "secondary",
+        "displayName": "Bronze Marker",
+        "canonical": "#c47c3a",
+        "tonalRamp": [
+          "oklch(20% 0.055 55)",
+          "oklch(31% 0.075 55)",
+          "oklch(43% 0.095 55)",
+          "oklch(55% 0.105 55)",
+          "oklch(67% 0.09 55)",
+          "oklch(78% 0.06 55)",
+          "oklch(88% 0.035 55)",
+          "oklch(96% 0.018 55)"
+        ]
+      },
+      "error": {
+        "role": "semantic-error",
+        "displayName": "Scorecard Red",
+        "canonical": "#ef4444",
+        "tonalRamp": [
+          "oklch(18% 0.07 25)",
+          "oklch(30% 0.105 25)",
+          "oklch(42% 0.14 25)",
+          "oklch(55% 0.17 25)",
+          "oklch(66% 0.16 25)",
+          "oklch(78% 0.1 25)",
+          "oklch(89% 0.05 25)",
+          "oklch(96% 0.025 25)"
+        ]
+      }
+    },
+    "typographyMeta": {
+      "display": {
+        "displayName": "Display",
+        "purpose": "Brand wordmarks, scorecard landmarks, and major social titles only."
+      },
+      "title": {
+        "displayName": "Title",
+        "purpose": "Screen section heroes, modal titles, and major summaries."
+      },
+      "heading": {
+        "displayName": "Heading",
+        "purpose": "Card titles, row names, and compact section headings."
+      },
+      "body": {
+        "displayName": "Body",
+        "purpose": "Operational copy, metadata, helper text, and descriptions."
+      },
+      "label": {
+        "displayName": "Label",
+        "purpose": "Chips, counters, badges, and compact controls."
+      }
+    },
+    "shadows": [
+      {
+        "name": "card",
+        "value": "shadowOpacity 0.04, offset 0 1, radius 6, elevation 2",
+        "purpose": "Light-mode cards and list rows that need separation from Warm Canvas."
+      },
+      {
+        "name": "elevated",
+        "value": "shadowOpacity 0.08, offset 0 2, radius 12, elevation 4",
+        "purpose": "Modal-like panels and stronger surface separation."
+      },
+      {
+        "name": "accent",
+        "value": "Clubhouse Green shadowOpacity 0.2, offset 0 2, radius 8, elevation 3",
+        "purpose": "Primary action buttons in light mode."
+      },
+      {
+        "name": "floating-tab",
+        "value": "shadowOpacity 0.16, offset 0 8, radius 18, elevation 14",
+        "purpose": "Persistent bottom tab bar only."
+      }
+    ],
+    "motion": [
+      {
+        "name": "state-feedback",
+        "value": "150ms to 250ms",
+        "purpose": "Short state transitions and touch feedback."
+      },
+      {
+        "name": "splash-breathe",
+        "value": "1400ms inOut(sin)",
+        "purpose": "Loading splash golf ball breathing motion."
+      },
+      {
+        "name": "splash-ring",
+        "value": "1800ms out(cubic)",
+        "purpose": "Loading splash ring pulse, ceremonial only."
+      }
+    ],
+    "breakpoints": [
+      {
+        "name": "compact",
+        "value": "<600px"
+      },
+      {
+        "name": "regular",
+        "value": "600px to 959px"
+      },
+      {
+        "name": "wide",
+        "value": ">=960px"
+      },
+      {
+        "name": "content-max-width",
+        "value": "960px"
+      }
+    ]
+  },
+  "components": [
+    {
+      "name": "Primary Button",
+      "kind": "button",
+      "refersTo": "button-primary",
+      "description": "Main action button for starting, saving, sharing, joining, and confirming flows.",
+      "html": "<button class=\"ds-btn-primary\">Save changes</button>",
+      "css": ".ds-btn-primary{display:inline-flex;align-items:center;justify-content:center;gap:8px;background:#006747;color:#ffffff;border:0;border-radius:14px;padding:14px 16px;font-family:PlusJakartaSans-ExtraBold,PlusJakartaSans,system-ui,sans-serif;font-size:14px;font-weight:800;line-height:20px;min-height:48px;cursor:pointer;box-shadow:0 2px 8px rgba(0,103,71,.2);transition:background-color .18s ease,transform .18s ease}.ds-btn-primary:hover{background:#005538}.ds-btn-primary:active{transform:translateY(1px)}.ds-btn-primary:focus-visible{outline:3px solid rgba(0,103,71,.28);outline-offset:2px}.ds-btn-primary:disabled{opacity:.5;cursor:not-allowed;transform:none}"
+    },
+    {
+      "name": "Secondary Button",
+      "kind": "button",
+      "refersTo": "button-secondary",
+      "description": "Back, cancel, and secondary action button with a quiet border vocabulary.",
+      "html": "<button class=\"ds-btn-secondary\">Back</button>",
+      "css": ".ds-btn-secondary{display:inline-flex;align-items:center;justify-content:center;background:#ffffff;color:#6b7280;border:1px solid #ece8e1;border-radius:14px;padding:14px 18px;font-family:PlusJakartaSans-Bold,PlusJakartaSans,system-ui,sans-serif;font-size:14px;font-weight:700;line-height:20px;min-height:48px;cursor:pointer;transition:border-color .18s ease,color .18s ease,background-color .18s ease}.ds-btn-secondary:hover{border-color:#006747;color:#006747;background:#f6f3ee}.ds-btn-secondary:active{background:#ece8e1}.ds-btn-secondary:focus-visible{outline:3px solid rgba(0,103,71,.22);outline-offset:2px}.ds-btn-secondary:disabled{opacity:.55;cursor:not-allowed}"
+    },
+    {
+      "name": "Text Field",
+      "kind": "input",
+      "refersTo": "input",
+      "description": "Default text input and search field shape used across setup, auth, and libraries.",
+      "html": "<label class=\"ds-field\"><span class=\"ds-field-label\">Course name</span><input class=\"ds-input\" placeholder=\"Enter course\" /></label>",
+      "css": ".ds-field{display:grid;gap:6px;font-family:PlusJakartaSans,system-ui,sans-serif}.ds-field-label{color:#6b7280;font-size:12px;font-weight:700;line-height:16px}.ds-input{background:#ffffff;color:#1a1a1a;border:1px solid #ece8e1;border-radius:10px;padding:13px;font-family:PlusJakartaSans-Medium,PlusJakartaSans,system-ui,sans-serif;font-size:15px;font-weight:500;line-height:20px;min-height:46px}.ds-input::placeholder{color:#8a8a7a}.ds-input:focus{outline:3px solid rgba(0,103,71,.18);border-color:#006747}.ds-input[aria-invalid=\"true\"]{border-color:#ef4444}"
+    },
+    {
+      "name": "Filter Chip",
+      "kind": "chip",
+      "refersTo": "chip-selected",
+      "description": "Compact pill for gallery filters, round selectors, and segmented choices.",
+      "html": "<div class=\"ds-chip-row\"><button class=\"ds-chip ds-chip-active\">Todo - 12</button><button class=\"ds-chip\">Foto - 8</button><button class=\"ds-chip\">Video - 4</button></div>",
+      "css": ".ds-chip-row{display:flex;align-items:center;gap:6px}.ds-chip{display:inline-flex;align-items:center;gap:4px;border:0;border-radius:9999px;background:#ece8e1;color:#1a1a1a;padding:6px 10px;font-family:PlusJakartaSans-SemiBold,PlusJakartaSans,system-ui,sans-serif;font-size:12px;font-weight:600;line-height:16px;cursor:pointer;transition:background-color .18s ease,color .18s ease}.ds-chip:hover{background:#e6f0eb;color:#006747}.ds-chip:focus-visible{outline:3px solid rgba(0,103,71,.22);outline-offset:2px}.ds-chip-active{background:#006747;color:#ffffff}"
+    },
+    {
+      "name": "Section Card",
+      "kind": "card",
+      "refersTo": "card",
+      "description": "Standard compact content shell for stats, lists, setup blocks, and scoring panels.",
+      "html": "<section class=\"ds-card\"><div class=\"ds-card-head\"><h3>Round form</h3><button aria-label=\"More info\">i</button></div><p>Recent scoring trend and short supporting detail.</p></section>",
+      "css": ".ds-card{background:#ffffff;color:#1a1a1a;border:1px solid #ece8e1;border-radius:14px;padding:16px;font-family:PlusJakartaSans,system-ui,sans-serif;box-shadow:0 1px 6px rgba(0,0,0,.04)}.ds-card-head{display:flex;align-items:center;justify-content:space-between;gap:12px;margin-bottom:8px}.ds-card h3{margin:0;color:#1a1a1a;font-size:16px;font-weight:700;line-height:22px}.ds-card p{margin:0;color:#6b7280;font-size:14px;font-weight:500;line-height:20px}.ds-card button{width:28px;height:28px;border:0;border-radius:9999px;background:#ece8e1;color:#6b7280;font-weight:700;cursor:pointer}.ds-card button:focus-visible{outline:3px solid rgba(0,103,71,.22);outline-offset:2px}"
+    },
+    {
+      "name": "Hero Stat Tile",
+      "kind": "custom",
+      "refersTo": "card",
+      "description": "Value plus caption pattern used in stats and hero score summaries.",
+      "html": "<div class=\"ds-stat-tile\"><strong>+12</strong><span>vs target</span></div>",
+      "css": ".ds-stat-tile{display:grid;gap:1px;background:#ece8e1;border:1px solid #ece8e1;border-radius:14px;padding:12px;font-family:PlusJakartaSans,system-ui,sans-serif;min-width:112px}.ds-stat-tile strong{color:#006747;font-size:24px;font-weight:700;line-height:30px;letter-spacing:-.3px}.ds-stat-tile span{color:#8a8a7a;font-size:10px;font-weight:700;line-height:14px}.ds-stat-tile:focus-within{outline:3px solid rgba(0,103,71,.18);outline-offset:2px}"
+    },
+    {
+      "name": "Floating Tab Bar",
+      "kind": "nav",
+      "refersTo": "navigation",
+      "description": "Primary Feed, Play, History navigation pattern with active green pill.",
+      "html": "<nav class=\"ds-tabbar\" aria-label=\"Primary\"><button class=\"ds-tab\">Feed</button><button class=\"ds-tab ds-tab-active\">Play</button><button class=\"ds-tab\">History</button></nav>",
+      "css": ".ds-tabbar{display:flex;align-items:center;gap:4px;height:62px;padding:0 8px;background:#ffffff;border:1px solid #ece8e1;border-radius:30px;box-shadow:0 8px 18px rgba(0,0,0,.16);font-family:PlusJakartaSans,system-ui,sans-serif}.ds-tab{flex:1;border:0;background:transparent;color:#8a8a7a;border-radius:22px;padding:9px 10px;font-size:13px;font-weight:700;line-height:18px;cursor:pointer}.ds-tab:hover{color:#006747;background:#e6f0eb}.ds-tab:focus-visible{outline:3px solid rgba(0,103,71,.22);outline-offset:2px}.ds-tab-active{background:#006747;color:#ffffff;padding-left:16px;padding-right:16px}.ds-tab-active:hover{background:#006747;color:#ffffff}"
+    },
+    {
+      "name": "Bottom Sheet",
+      "kind": "custom",
+      "refersTo": "sheet",
+      "description": "Focused choice and sharing surface with rounded top corners and a modest handle.",
+      "html": "<section class=\"ds-sheet\"><div class=\"ds-sheet-handle\"></div><h2>Invite players</h2><p>Share this link with friends joining the round.</p><button class=\"ds-btn-primary\">Copy invite link</button></section>",
+      "css": ".ds-sheet{background:#ffffff;color:#1a1a1a;border:1px solid #ece8e1;border-radius:22px 22px 0 0;padding:22px 22px 28px;font-family:PlusJakartaSans,system-ui,sans-serif;max-width:420px}.ds-sheet-handle{width:42px;height:4px;border-radius:2px;background:#ece8e1;margin:0 auto 18px}.ds-sheet h2{margin:0;color:#1a1a1a;font-family:PlayfairDisplay-Bold,PlayfairDisplay,Georgia,serif;font-size:26px;font-weight:700;line-height:32px;letter-spacing:-.3px;text-align:center}.ds-sheet p{margin:8px 0 18px;color:#6b7280;font-size:13px;font-weight:500;line-height:19px;text-align:center}.ds-sheet .ds-btn-primary{display:inline-flex;width:100%;align-items:center;justify-content:center;gap:8px;background:#006747;color:#ffffff;border:0;border-radius:14px;padding:14px 16px;font-family:PlusJakartaSans-ExtraBold,PlusJakartaSans,system-ui,sans-serif;font-size:14px;font-weight:800;line-height:20px;min-height:48px;cursor:pointer;transition:background-color .18s ease,transform .18s ease}.ds-sheet .ds-btn-primary:hover{background:#005538}.ds-sheet .ds-btn-primary:focus-visible{outline:3px solid rgba(0,103,71,.28);outline-offset:2px}"
+    }
+  ],
+  "narrative": {
+    "northStar": "The Clubhouse Score Ledger",
+    "overview": "Golf Partner should feel like a familiar clubhouse table after a round: scores are present, names matter, and the interface supports friendly rivalry without turning the group into tournament operators. The system is a restrained product UI with one clear green accent, warm neutral surfaces, concise cards, and direct mobile controls.\n\nThe app already carries two visual voices. Plus Jakarta Sans does the operational work for labels, buttons, scores, and lists. Playfair Display is reserved for brand moments, modal titles, and scorecard landmarks where the app can feel more social and memorable. Keep that split. Do not let the serif become routine UI chrome.",
+    "keyCharacteristics": [
+      "People and recency lead before raw scoring tables.",
+      "Green marks action, selection, current state, and official golf identity.",
+      "Cards are compact containers, not decorative page sections.",
+      "Mobile outdoor use wins over visual flourish: high contrast, clear tap targets, and stable layouts.",
+      "Social surfaces may feel warm; scoring surfaces must stay fast and unambiguous."
+    ],
+    "rules": [
+      {
+        "name": "The Green Means Action Rule",
+        "body": "Green is for primary actions, selected filters, live state, pair A, and excellent scoring. If everything is green, nothing is actionable.",
+        "section": "colors"
+      },
+      {
+        "name": "The Gold Is Ceremony Rule",
+        "body": "Gold belongs to splash, rank, and special score moments. It is prohibited for normal buttons, tabs, or helper text.",
+        "section": "colors"
+      },
+      {
+        "name": "The Neutral Must Read Rule",
+        "body": "Muted text must stay legible outdoors. If a label competes with sunlight or a tinted background, move it from Olive Muted to Slate or Ink.",
+        "section": "colors"
+      },
+      {
+        "name": "The Sans Does The Work Rule",
+        "body": "Buttons, tabs, scoring cells, inputs, tables, and state labels always use Plus Jakarta Sans.",
+        "section": "typography"
+      },
+      {
+        "name": "The Serif Earns The Moment Rule",
+        "body": "Playfair Display is allowed for brand, modal, and scorecard moments. It is forbidden inside dense controls, small labels, and data rows.",
+        "section": "typography"
+      },
+      {
+        "name": "The Touch Only Rule",
+        "body": "Elevation exists to separate controls, sheets, tabs, and tappable cards. It is not background decoration.",
+        "section": "elevation"
+      },
+      {
+        "name": "The Dark Mode Layer Rule",
+        "body": "In dark mode, use tonal layers and borders first. Heavy black shadows on already-dark surfaces are prohibited.",
+        "section": "elevation"
+      }
+    ],
+    "dos": [
+      "Do lead with people, recency, and active game state before dense scoring data.",
+      "Do keep scoring controls compact, predictable, and readable on mobile outdoors.",
+      "Do use Clubhouse Green for primary actions, selected state, and live state only.",
+      "Do reserve Playfair Display for brand and scorecard moments; use Plus Jakarta Sans for everything operational.",
+      "Do keep cards at 14 to 16px radius unless they are true pills, balls, or bottom sheets.",
+      "Do pair color with text, icon, rank, or layout for score quality and error states.",
+      "Do keep web and Android surfaces visually aligned from the same token vocabulary."
+    ],
+    "donts": [
+      "Don't make the app feel like enterprise sports admin dashboards.",
+      "Don't create sterile spreadsheet-like leaderboards that hide who played and what happened.",
+      "Don't make a generic social feed that hides the golf context.",
+      "Don't add decorative golf nostalgia that slows down scoring workflows.",
+      "Don't use gold for everyday CTAs, tabs, search fields, or filters.",
+      "Don't put Playfair Display inside buttons, chips, dense rows, or score inputs.",
+      "Don't rely on color alone for rankings, selected filters, score quality, or errors.",
+      "Don't use side-stripe card borders, gradient text, glassmorphism, or repeated identical marketing card grids."
+    ]
+  }
+}

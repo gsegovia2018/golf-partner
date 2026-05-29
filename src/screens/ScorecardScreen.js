@@ -17,6 +17,7 @@ import {
   roundPairClinched, setScoringModeRoundPatches,
   isRoundComplete, isTournamentFinished,
   subscribeSyncStatus,
+  getActiveTournamentSnapshot,
 } from '../store/tournamentStore';
 import { mutate } from '../store/mutate';
 import { fetchPlayers } from '../store/libraryStore';
@@ -118,6 +119,12 @@ export function mergeScores(blobScores, localScores, dirtyKeys) {
   return out;
 }
 
+export function getScorecardBackTarget({ official, viewOnly, canGoBack }) {
+  if (official) return 'previous';
+  if (viewOnly) return 'home';
+  return canGoBack ? 'previous' : 'tournament';
+}
+
 export default function ScorecardScreen({ navigation, route }) {
   const { theme } = useTheme();
   const s = useMemo(() => makeScorecardStyles(theme), [theme]);
@@ -130,26 +137,37 @@ export default function ScorecardScreen({ navigation, route }) {
   const official = route.params?.official === true;
   const officialToken = route.params?.token ?? null;
   const officialRoundId = route.params?.roundId ?? null;
+  const initialTournament = useMemo(
+    () => (official ? null : getActiveTournamentSnapshot()),
+    [official],
+  );
+  const initialRoundIndex = paramRoundIndex ?? initialTournament?.currentRound ?? 0;
+  const initialRound = initialTournament?.rounds?.[initialRoundIndex] ?? null;
   // The hook is always called (Rules of Hooks); it no-ops on null token.
   const officialData = useOfficialRound({
     token: official ? officialToken : null,
     roundId: official ? officialRoundId : null,
   });
   const { user } = useAuth();
-  const [tournament, setTournament] = useState(null);
-  const [scores, setScores] = useState({});
+  const [tournament, setTournament] = useState(() => initialTournament);
+  const [scores, setScores] = useState(() => initialRound?.scores ?? {});
   // Per-player, per-hole shot detail. In practice only the "me" player has
   // entries, but it is keyed by playerId like `scores` for generality.
-  const [shotDetails, setShotDetails] = useState({});
+  const [shotDetails, setShotDetails] = useState(() => initialRound?.shotDetails ?? {});
   // Notes object: { round: string, hole: { [holeNumber]: string } }.
-  const [notes, setNotes] = useState({});
+  const [notes, setNotes] = useState(() => {
+    const rawNotes = initialRound?.notes;
+    return rawNotes && typeof rawNotes === 'object'
+      ? rawNotes
+      : (typeof rawNotes === 'string' && rawNotes ? { round: rawNotes } : {});
+  });
   const [view, setView] = useState('hole'); // 'grid' | 'hole'
   const [currentHole, setCurrentHole] = useState(1);
   const [refreshing, setRefreshing] = useState(false);
   const [saveError, setSaveError] = useState(false);
   // 'loading' until the first loadTournament resolves; 'error' if it returned
   // null (or threw); 'ready' once a tournament is in hand.
-  const [loadState, setLoadState] = useState('loading');
+  const [loadState, setLoadState] = useState(() => (initialTournament && initialRound ? 'ready' : 'loading'));
   // Live sync status from the store ('idle' | 'syncing' | 'pending' | 'error').
   const [syncStatus, setSyncStatus] = useState('idle');
   // Round-complete celebration overlay before navigating to the summary.
@@ -935,15 +953,22 @@ export default function ScorecardScreen({ navigation, route }) {
 
   // Back from the scorecard. Finished casual rounds land on the app home
   // (Main → Home tab) so users aren't dumped back into the leaderboard of
-  // a game they're already done with. In-progress casual rounds go to the
-  // tournament/round info view (leaderboard + round pager). Official
-  // rounds come from JoinOfficial and need their own pop behavior preserved.
+  // a game they're already done with. In-progress casual rounds usually have
+  // Tournament already underneath in the stack, so pop instead of navigating
+  // to a fresh Tournament route; otherwise the next back can return here.
+  // Official rounds come from JoinOfficial and need their own pop behavior
+  // preserved.
   const goBack = useCallback(() => {
-    if (official) {
+    const target = getScorecardBackTarget({
+      official,
+      viewOnly,
+      canGoBack: typeof navigation.canGoBack === 'function' && navigation.canGoBack(),
+    });
+    if (target === 'previous') {
       navigation.goBack();
       return;
     }
-    if (viewOnly) {
+    if (target === 'home') {
       navigation.navigate('Main', { screen: 'Home' });
       return;
     }
@@ -1466,4 +1491,3 @@ function SyncIndicator({ status, saveError, theme, s }) {
     </View>
   );
 }
-

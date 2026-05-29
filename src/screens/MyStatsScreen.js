@@ -1,4 +1,4 @@
-import React, { useEffect, useState, useMemo, useCallback } from 'react';
+import React, { useEffect, useState, useMemo, useCallback, useRef } from 'react';
 import { View, Text, TouchableOpacity, StyleSheet, ScrollView, ActivityIndicator } from 'react-native';
 import ScreenContainer from '../components/ScreenContainer';
 import { Feather } from '@expo/vector-icons';
@@ -69,6 +69,7 @@ export default function MyStatsScreen({ navigation, route }) {
   const [targetHandicap, setTargetHandicap] = useState(null);
   const [pickerOpen, setPickerOpen] = useState(false);
   const isTabPresentation = route?.params?.presentation === 'tab';
+  const tabScrollRef = useRef(null);
 
   const storageKey = user?.id ? `${SELECTION_PREFIX}${user.id}` : null;
 
@@ -131,6 +132,17 @@ export default function MyStatsScreen({ navigation, route }) {
 
   const onInfo = useCallback((key) => setInfoKey(key), []);
 
+  useEffect(() => {
+    const frame = requestAnimationFrame(() => {
+      if (tab === 'breakdown' || tab === 'shots') {
+        tabScrollRef.current?.scrollToEnd({ animated: true });
+      } else if (tab === 'reportCard' || tab === 'overview') {
+        tabScrollRef.current?.scrollTo({ x: 0, animated: true });
+      }
+    });
+    return () => cancelAnimationFrame(frame);
+  }, [tab]);
+
   const selected = useMemo(
     () => (myRounds ? resolveSelection(myRounds, overrides) : []),
     [myRounds, overrides],
@@ -180,7 +192,16 @@ export default function MyStatsScreen({ navigation, route }) {
   );
 
   const TabBar = (
-    <View style={s.tabBar}>
+    <ScrollView
+      ref={tabScrollRef}
+      horizontal
+      showsHorizontalScrollIndicator={false}
+      alwaysBounceHorizontal={false}
+      nestedScrollEnabled
+      style={s.tabScroller}
+      contentContainerStyle={s.tabBar}
+      testID="my-stats-tab-scroller"
+    >
       {ALL_TABS.map((t) => (
         <TouchableOpacity
           key={t.key}
@@ -194,7 +215,7 @@ export default function MyStatsScreen({ navigation, route }) {
           <Text style={[s.tabText, tab === t.key && s.tabTextActive]}>{t.label}</Text>
         </TouchableOpacity>
       ))}
-    </View>
+    </ScrollView>
   );
 
   // ── Loading ──
@@ -333,14 +354,24 @@ function makeStyles(theme) {
       borderRadius: theme.radius.pill, backgroundColor: theme.accent.light,
     },
     roundsBtnText: { ...theme.typography.caption, color: theme.accent.primary, fontWeight: '700' },
+    tabScroller: {
+      flexGrow: 0,
+      minHeight: 48,
+      borderBottomWidth: StyleSheet.hairlineWidth,
+      borderBottomColor: theme.border.default,
+      backgroundColor: theme.bg.primary,
+    },
     tabBar: {
       flexDirection: 'row', gap: 6,
       paddingHorizontal: theme.spacing.lg, paddingVertical: theme.spacing.sm,
+      alignItems: 'center',
+      minHeight: 48,
     },
     tab: {
       paddingVertical: 6, paddingHorizontal: 14,
       borderRadius: theme.radius.pill, backgroundColor: theme.bg.secondary,
       borderWidth: 1, borderColor: theme.border.default,
+      flexShrink: 0,
     },
     tabActive: { backgroundColor: theme.accent.primary, borderColor: theme.accent.primary },
     tabText: { ...theme.typography.caption, color: theme.text.muted, fontWeight: '700' },

@@ -1,4 +1,4 @@
-import React, { useCallback, useState } from 'react';
+import React, { useCallback, useRef, useState } from 'react';
 import {
   View, Text, TouchableOpacity, StyleSheet, ScrollView,
   ActivityIndicator, Image,
@@ -9,7 +9,10 @@ import { Feather } from '@expo/vector-icons';
 
 import { useTheme } from '../theme/ThemeContext';
 import { supabase } from '../lib/supabase';
-import { readLocal, roundTotals, setActiveTournament, formatRoundLabel } from '../store/tournamentStore';
+import {
+  readLocal, roundTotals, setActiveTournament, formatRoundLabel,
+  getTournamentSnapshot,
+} from '../store/tournamentStore';
 import { loadRoundMedia } from '../store/mediaStore';
 
 // Read-only summary of a single round — the feed's drill-in target. Works
@@ -29,14 +32,16 @@ export default function RoundSummaryScreen({ navigation, route }) {
   const { theme } = useTheme();
   const s = makeStyles(theme);
   const { tournamentId, roundId } = route.params ?? {};
+  const initialTournament = getTournamentSnapshot(tournamentId);
 
-  const [tournament, setTournament] = useState(null);
+  const [tournament, setTournament] = useState(() => initialTournament);
   const [media, setMedia] = useState([]);
   const [me, setMe] = useState(null);
-  const [loading, setLoading] = useState(true);
+  const [loading, setLoading] = useState(() => !initialTournament);
+  const hasLoadedOnceRef = useRef(!!initialTournament);
 
   const load = useCallback(async () => {
-    setLoading(true);
+    if (!hasLoadedOnceRef.current) setLoading(true);
     try {
       const [{ data: { user } }, t, roundMedia] = await Promise.all([
         supabase.auth.getUser(),
@@ -47,6 +52,7 @@ export default function RoundSummaryScreen({ navigation, route }) {
       setTournament(t);
       setMedia(roundMedia);
     } finally {
+      hasLoadedOnceRef.current = true;
       setLoading(false);
     }
   }, [tournamentId, roundId]);

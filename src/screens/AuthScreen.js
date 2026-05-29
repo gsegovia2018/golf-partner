@@ -3,7 +3,7 @@ import {
   View, Text, TextInput, TouchableOpacity,
   StyleSheet, KeyboardAvoidingView, Platform, ActivityIndicator, Alert,
 } from 'react-native';
-import { Feather, Ionicons } from '@expo/vector-icons';
+import { Feather } from '@expo/vector-icons';
 import * as WebBrowser from 'expo-web-browser';
 import { makeRedirectUri } from 'expo-auth-session';
 import * as QueryParams from 'expo-auth-session/build/QueryParams';
@@ -13,11 +13,6 @@ import { parseOAuthError, getWebRedirectTo } from '../lib/oauth';
 import { useTheme } from '../theme/ThemeContext';
 
 const isWeb = Platform.OS === 'web';
-
-// Temporary: surfaces the native OAuth callback trace on-device via Alert so
-// the redirect can be diagnosed without a dev connection. Flip to false once
-// Google sign-in is confirmed working on Android.
-const OAUTH_DEBUG = true;
 
 // Basic email shape check — good enough to gate the submit button and show
 // inline feedback without being overly strict about valid TLDs.
@@ -31,7 +26,7 @@ export default function AuthScreen() {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [loading, setLoading] = useState(false);
-  // Which social provider is mid-flow: null | 'google' | 'apple'.
+  // Which social provider is mid-flow: null | 'google'.
   const [oauthLoading, setOauthLoading] = useState(null);
   const [showPassword, setShowPassword] = useState(false);
   // `touched` gates inline errors so the form doesn't shout at the user
@@ -88,7 +83,6 @@ export default function AuthScreen() {
     try {
       const { error } = await supabase.auth.exchangeCodeForSession(code);
       if (error) Alert.alert('Error', error.message);
-      else if (OAUTH_DEBUG) Alert.alert('OAuth debug', 'exchange OK — session set');
       // On success `onAuthStateChange` swaps in the app.
     } finally {
       oauthBusy.current = false;
@@ -104,11 +98,9 @@ export default function AuthScreen() {
     let active = true;
     Linking.getInitialURL().then((url) => {
       if (!active || !url) return;
-      if (OAUTH_DEBUG && url.includes('code=')) Alert.alert('OAuth debug', `initial url: ${url}`);
       completeOAuth(url);
     });
     const sub = Linking.addEventListener('url', ({ url }) => {
-      if (OAUTH_DEBUG && url && url.includes('code=')) Alert.alert('OAuth debug', `deep link: ${url}`);
       completeOAuth(url);
     });
     return () => { active = false; sub.remove(); };
@@ -154,7 +146,7 @@ export default function AuthScreen() {
     }
   }
 
-  // Single OAuth handler for every social provider (Google, Apple).
+  // OAuth handler for Google sign-in.
   // Web uses a full-page redirect; native opens an in-app browser and
   // exchanges the returned `code` for a session.
   async function signInWithProvider(provider) {
@@ -181,12 +173,6 @@ export default function AuthScreen() {
       // on Android it usually arrives via the deep-link listener instead.
       // Both funnel into `completeOAuth`, which exchanges the code once.
       const result = await WebBrowser.openAuthSessionAsync(data.url, redirectTo);
-      if (OAUTH_DEBUG) {
-        Alert.alert(
-          'OAuth debug',
-          `redirectTo: ${redirectTo}\nresult.type: ${result.type}\nresult.url: ${result.url ?? '(none)'}`,
-        );
-      }
       if (result.type === 'success' && result.url) {
         await completeOAuth(result.url);
       }
@@ -309,22 +295,6 @@ export default function AuthScreen() {
                 </>
               )}
           </TouchableOpacity>
-
-          <TouchableOpacity
-            style={[s.appleBtn, oauthLoading && { opacity: 0.6 }]}
-            onPress={() => signInWithProvider('apple')}
-            disabled={!!oauthLoading}
-            activeOpacity={0.8}
-          >
-            {oauthLoading === 'apple'
-              ? <ActivityIndicator color="#ffffff" />
-              : (
-                <>
-                  <Ionicons name="logo-apple" size={18} color="#ffffff" style={s.appleIcon} />
-                  <Text style={s.appleBtnText}>Continue with Apple</Text>
-                </>
-              )}
-          </TouchableOpacity>
         </View>
       </View>
     </KeyboardAvoidingView>
@@ -427,14 +397,5 @@ const makeStyles = (theme) => StyleSheet.create({
   },
   googleBtnText: {
     fontFamily: 'PlusJakartaSans-SemiBold', fontSize: 15, color: '#1f1f1f',
-  },
-  appleBtn: {
-    flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 10,
-    backgroundColor: '#000000', borderRadius: 14, padding: 14,
-  },
-  // Optical nudge: the Apple glyph sits slightly low against the text baseline.
-  appleIcon: { marginTop: -2 },
-  appleBtnText: {
-    fontFamily: 'PlusJakartaSans-SemiBold', fontSize: 15, color: '#ffffff',
   },
 });

@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useMemo, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   View, Text, TouchableOpacity, ScrollView, StyleSheet, Alert,
   ActivityIndicator,
@@ -7,7 +7,7 @@ import ScreenContainer from '../components/ScreenContainer';
 import { Feather } from '@expo/vector-icons';
 import { useTheme } from '../theme/ThemeContext';
 import { useTournamentMedia } from '../hooks/useTournamentMedia';
-import { getTournament } from '../store/tournamentStore';
+import { getTournament, getTournamentSnapshot } from '../store/tournamentStore';
 import MediaLightbox from '../components/MediaLightbox';
 import MemoriesRoundRow from '../components/MemoriesRoundRow';
 import MemoriesHoleStrip from '../components/MemoriesHoleStrip';
@@ -33,11 +33,13 @@ export default function GalleryScreen({ route, navigation }) {
   const s = makeStyles(theme);
 
   const { items } = useTournamentMedia(tournamentId);
-  const [tournament, setTournament] = useState(null);
+  const initialTournament = useMemo(() => getTournamentSnapshot(tournamentId), [tournamentId]);
+  const [tournament, setTournament] = useState(() => initialTournament);
   // Tournament load lifecycle: 'loading' until getTournament settles, then
   // 'ready' or 'error'. The media hook has no loading state of its own, so
   // this drives the gallery's loading/error UI.
-  const [loadState, setLoadState] = useState('loading');
+  const [loadState, setLoadState] = useState(() => (initialTournament ? 'ready' : 'loading'));
+  const hasLoadedOnceRef = useRef(!!initialTournament);
   const [activeHole, setActiveHole] = useState(null);
   const [activeKind, setActiveKind] = useState('all');
   const [lightbox, setLightbox] = useState({ visible: false, index: 0 });
@@ -51,11 +53,12 @@ export default function GalleryScreen({ route, navigation }) {
   // tournament than the one last opened.
   const loadTournament = useCallback(() => {
     let cancelled = false;
-    setLoadState('loading');
+    if (!hasLoadedOnceRef.current) setLoadState('loading');
     getTournament(tournamentId)
       .then((t) => {
         if (cancelled) return;
         setTournament(t);
+        hasLoadedOnceRef.current = true;
         setLoadState(t ? 'ready' : 'error');
       })
       .catch(() => { if (!cancelled) setLoadState('error'); });

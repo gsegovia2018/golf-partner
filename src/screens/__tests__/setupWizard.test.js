@@ -1,4 +1,4 @@
-import { wizardSteps, isStepValid } from '../setupWizard';
+import { wizardSteps, isStepValid, shouldOfferPostCreateEditorInvite } from '../setupWizard';
 
 describe('wizardSteps', () => {
   test('solo game omits the scoring step', () => {
@@ -58,5 +58,26 @@ describe('official kind', () => {
 
   test('format step is always valid', () => {
     expect(isStepValid('format', { roster: [], rounds: [] })).toBe(true);
+  });
+});
+
+describe('shouldOfferPostCreateEditorInvite', () => {
+  const me = { id: 'p1', name: 'Me', user_id: 'u-me' };
+  const appPlayer = { id: 'p2', name: 'App Player', user_id: 'u-friend' };
+  const guest = { id: 'p3', name: 'Guest', user_id: null };
+
+  test('offers an editor invite when a multiplayer game has an unlinked other player', () => {
+    expect(shouldOfferPostCreateEditorInvite('game', [me, guest], 'u-me')).toBe(true);
+    expect(shouldOfferPostCreateEditorInvite('game', [me, appPlayer, guest], 'u-me')).toBe(true);
+  });
+
+  test('does not offer an editor invite when all other players have app accounts', () => {
+    expect(shouldOfferPostCreateEditorInvite('game', [me, appPlayer], 'u-me')).toBe(false);
+  });
+
+  test('does not offer an editor invite for solo games or tournaments', () => {
+    expect(shouldOfferPostCreateEditorInvite('game', [me], 'u-me')).toBe(false);
+    expect(shouldOfferPostCreateEditorInvite('tournament', [me, guest], 'u-me')).toBe(false);
+    expect(shouldOfferPostCreateEditorInvite('official', [me, guest], 'u-me')).toBe(false);
   });
 });

@@ -14,6 +14,7 @@ import {
 } from '../store/tournamentStore';
 import { scoringModeUsesTeams } from '../components/scoringModes';
 import { useTheme } from '../theme/ThemeContext';
+import { shouldHandleStoreChange } from '../lib/navigationFocus';
 
 export default function NextRoundScreen({ navigation, route }) {
   const { theme } = useTheme();
@@ -88,9 +89,11 @@ export default function NextRoundScreen({ navigation, route }) {
       else setNextPairs(buildPairsForRound(t));
     }
     load({ initial: true });
-    const unsub = subscribeTournamentChanges(() => load({ initial: false }));
+    const unsub = subscribeTournamentChanges(() => {
+      if (shouldHandleStoreChange(navigation)) load({ initial: false });
+    });
     return () => { cancelled = true; unsub(); };
-  }, [revealOnly, paramRoundIndex, loadAttempt]);
+  }, [navigation, revealOnly, paramRoundIndex, loadAttempt]);
 
   // Retry handler for the "couldn't load" error state.
   function retryLoad() {

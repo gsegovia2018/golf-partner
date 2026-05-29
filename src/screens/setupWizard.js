@@ -33,6 +33,21 @@ export function wizardSteps(kind, playerCount) {
 }
 
 /**
+ * Whether a just-created setup should offer the shared editor invite.
+ * @param {'game'|'tournament'|'official'} kind
+ * @param {Array<{ user_id?: string | null }>} players
+ * @param {string | null | undefined} currentUserId
+ * @returns {boolean}
+ */
+export function shouldOfferPostCreateEditorInvite(kind, players, currentUserId) {
+  if (kind !== 'game' || !Array.isArray(players) || players.length <= 1) return false;
+  return players.some((p) => {
+    if (p?.user_id && p.user_id === currentUserId) return false;
+    return !p?.user_id;
+  });
+}
+
+/**
  * Whether the given step's requirements are satisfied. Gates the Next button.
  * @param {string} stepKey
  * @param {{ players: any[], rounds: { courseName?: string }[], roster?: { displayName?: string }[] }} state

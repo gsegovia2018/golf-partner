@@ -1,4 +1,4 @@
-import React, { useCallback, useMemo, useState } from 'react';
+import React, { useCallback, useMemo, useRef, useState } from 'react';
 import {
   ActivityIndicator, Alert, Platform, ScrollView, StyleSheet,
   Text, TextInput, TouchableOpacity, View,
@@ -27,6 +27,7 @@ export default function CoursesLibraryScreen({ navigation }) {
   const [saving, setSaving] = useState(false);
   const [query, setQuery] = useState('');
   const [favorites, setFavorites] = useState(() => new Set());
+  const hasLoadedOnceRef = useRef(false);
 
   const filteredCourses = useMemo(() => {
     const q = normalize(query);
@@ -45,7 +46,7 @@ export default function CoursesLibraryScreen({ navigation }) {
   );
 
   async function load() {
-    setLoading(true);
+    if (!hasLoadedOnceRef.current) setLoading(true);
     try {
       const [list, favs] = await Promise.all([
         fetchCourses(),
@@ -54,6 +55,7 @@ export default function CoursesLibraryScreen({ navigation }) {
       setCourses(list);
       setFavorites(favs);
     } finally {
+      hasLoadedOnceRef.current = true;
       setLoading(false);
     }
   }

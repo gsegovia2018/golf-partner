@@ -1,4 +1,4 @@
-import React, { useCallback, useState } from 'react';
+import React, { useCallback, useRef, useState } from 'react';
 import {
   ActivityIndicator, Alert, Platform, ScrollView, StyleSheet,
   Text, TextInput, TouchableOpacity, View,
@@ -26,6 +26,7 @@ export default function PlayersLibraryScreen() {
   const [handicap, setHandicap] = useState('');
   const [editingId, setEditingId] = useState(null);
   const [saving, setSaving] = useState(false);
+  const hasLoadedOnceRef = useRef(false);
 
   useFocusEffect(
     useCallback(() => {
@@ -34,10 +35,11 @@ export default function PlayersLibraryScreen() {
   );
 
   async function load() {
-    setLoading(true);
+    if (!hasLoadedOnceRef.current) setLoading(true);
     try {
       setPlayers(await fetchMyGuestPlayers());
     } finally {
+      hasLoadedOnceRef.current = true;
       setLoading(false);
     }
   }

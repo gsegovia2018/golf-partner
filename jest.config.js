@@ -7,6 +7,8 @@ module.exports = {
     'src/store/scoring.js',
     'src/store/merge.js',
   ],
+  testPathIgnorePatterns: ['/node_modules/', '/\\.worktrees/'],
+  modulePathIgnorePatterns: ['<rootDir>/.worktrees/'],
   // Transform ESM packages from node_modules that Jest can't parse as-is.
   transformIgnorePatterns: [
     'node_modules/(?!((jest-)?react-native|@react-native(-community)?|expo(-.*)?|@expo(-.*)?|@unimodules|unimodules|sentry-expo|native-base|react-native-svg|react-native-url-polyfill|uuid)/)',

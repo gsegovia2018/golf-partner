@@ -1,4 +1,4 @@
-import React, { useCallback, useMemo, useState } from 'react';
+import React, { useCallback, useMemo, useRef, useState } from 'react';
 import {
   ActivityIndicator, Alert, Platform, ScrollView, StyleSheet,
   Text, TextInput, TouchableOpacity, View,
@@ -41,11 +41,12 @@ export default function CoursePickerScreen({ navigation, route }) {
   // True when the library shown is the offline cache (a course fetch failed).
   // Course creation is disabled in this state — it needs a connection.
   const [usingCachedData, setUsingCachedData] = useState(false);
+  const hasLoadedOnceRef = useRef(false);
 
   useFocusEffect(
     useCallback(() => {
       let cancelled = false;
-      setLoading(true);
+      if (!hasLoadedOnceRef.current) setLoading(true);
       setLoadError(null);
       setUsingCachedData(false);
       // loadCourseLibrary never throws: online it fetches fresh (and refreshes
@@ -70,7 +71,12 @@ export default function CoursePickerScreen({ navigation, route }) {
         .catch((err) => {
           if (!cancelled) setLoadError(err?.message ?? 'Could not load courses');
         })
-        .finally(() => { if (!cancelled) setLoading(false); });
+        .finally(() => {
+          if (!cancelled) {
+            hasLoadedOnceRef.current = true;
+            setLoading(false);
+          }
+        });
       return () => { cancelled = true; };
     }, [reloadKey]),
   );

@@ -6,6 +6,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useTheme } from '../theme/ThemeContext';
 import { CONTENT_MAX_WIDTH } from '../theme/responsive';
 import { loadTournament, isRoundInProgress, subscribeTournamentChanges } from '../store/tournamentStore';
+import { shouldHandleStoreChange } from '../lib/navigationFocus';
 import { getTabBarItem, isCenterTab } from './tabBarModel';
 
 export default function FloatingTabBar({ state, navigation }) {
@@ -17,7 +18,8 @@ export default function FloatingTabBar({ state, navigation }) {
   React.useEffect(() => {
     let cancelled = false;
     const check = () => {
-      loadTournament()
+      if (!shouldHandleStoreChange(navigation)) return;
+      loadTournament({ refreshRemote: false, resolveIdentity: false })
         .then((t) => {
           if (!cancelled) setRoundLive(isRoundInProgress(t));
         })

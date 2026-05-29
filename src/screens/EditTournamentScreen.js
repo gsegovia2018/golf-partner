@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   View, Text, TextInput, TouchableOpacity,
   StyleSheet, ScrollView, Alert, Platform,
@@ -9,12 +9,18 @@ import { Feather } from '@expo/vector-icons';
 import { useTheme } from '../theme/ThemeContext';
 import {
   loadTournament, saveTournament, subscribeTournamentChanges, DEFAULT_SETTINGS, randomPairs,
-  normalizeRoundHandicaps, roundEnteredCount, isRoundComplete,
+  normalizeRoundHandicaps, isRoundComplete,
+  getActiveTournamentSnapshot,
 } from '../store/tournamentStore';
 import { mutate } from '../store/mutate';
 import { isScoringModeAllowed, fallbackScoringMode } from '../components/ScoringModePicker';
 import { scoringModeUsesTeams } from '../components/scoringModes';
 import { parseHandicapIndex } from '../lib/handicap';
+import { shouldHandleStoreChange } from '../lib/navigationFocus';
+import {
+  canRemoveRoundFromEditor,
+  roundRemovalConfirmation,
+} from './editTournamentRoundDeletion';
 
 async function confirmDialog(title, message, confirmLabel = 'Remove') {
   if (Platform.OS === 'web') return window.confirm(`${title}\n\n${message}`);
@@ -33,14 +39,44 @@ function defaultHoles() {
   }));
 }
 
+function editablePlayersFromTournament(t) {
+  return (t?.players ?? []).map((p) => ({ ...p, handicap: String(p.handicap) }));
+}
+
+function editableSettingsFromTournament(t) {
+  const settings = t?.settings ?? DEFAULT_SETTINGS;
+  return {
+    ...DEFAULT_SETTINGS,
+    ...settings,
+    bestBallValue: String((settings ?? DEFAULT_SETTINGS).bestBallValue ?? 1),
+    worstBallValue: String((settings ?? DEFAULT_SETTINGS).worstBallValue ?? 1),
+  };
+}
+
+function editableRoundsFromTournament(t) {
+  return (t?.rounds ?? []).map((r) => {
+    const normalized = normalizeRoundHandicaps(r, t.players ?? []);
+    return {
+      ...normalized,
+      holes: [...(normalized.holes ?? [])],
+      notes: normalized.notes ?? '',
+      playerHandicaps: Object.fromEntries(
+        (t.players ?? []).map((p) => [p.id, String(normalized.playerHandicaps[p.id] ?? p.handicap)]),
+      ),
+      manualHandicaps: { ...(normalized.manualHandicaps ?? {}) },
+    };
+  });
+}
+
 export default function EditTournamentScreen({ navigation }) {
   const { theme } = useTheme();
   const s = makeStyles(theme);
+  const initialTournament = useMemo(() => getActiveTournamentSnapshot(), []);
 
-  const [tournament, setTournament] = useState(null);
-  const [players, setPlayers] = useState([]);
-  const [rounds, setRounds] = useState([]);
-  const [settings, setSettings] = useState({ ...DEFAULT_SETTINGS });
+  const [tournament, setTournament] = useState(() => initialTournament);
+  const [players, setPlayers] = useState(() => editablePlayersFromTournament(initialTournament));
+  const [rounds, setRounds] = useState(() => editableRoundsFromTournament(initialTournament));
+  const [settings, setSettings] = useState(() => editableSettingsFromTournament(initialTournament));
   // 'idle' | 'saving' | 'saved' | 'error' — drives the small status pill.
   const [saveState, setSaveState] = useState('idle');
   const tournamentRef = useRef(null);
@@ -59,20 +95,9 @@ export default function EditTournamentScreen({ navigation }) {
       const t = await loadTournament();
       if (cancelled) return;
       setTournament(t);
-      setPlayers(t.players.map((p) => ({ ...p, handicap: String(p.handicap) })));
-      setSettings({ ...DEFAULT_SETTINGS, ...t.settings, bestBallValue: String((t.settings ?? DEFAULT_SETTINGS).bestBallValue ?? 1), worstBallValue: String((t.settings ?? DEFAULT_SETTINGS).worstBallValue ?? 1) });
-      setRounds(t.rounds.map((r) => {
-        const normalized = normalizeRoundHandicaps(r, t.players);
-        return {
-          ...normalized,
-          holes: [...normalized.holes],
-          notes: normalized.notes ?? '',
-          playerHandicaps: Object.fromEntries(
-            t.players.map((p) => [p.id, String(normalized.playerHandicaps[p.id] ?? p.handicap)]),
-          ),
-          manualHandicaps: { ...(normalized.manualHandicaps ?? {}) },
-        };
-      }));
+      setPlayers(editablePlayersFromTournament(t));
+      setSettings(editableSettingsFromTournament(t));
+      setRounds(editableRoundsFromTournament(t));
     }
 
     // On subscription-driven reloads we only refresh display-only fields
@@ -101,9 +126,11 @@ export default function EditTournamentScreen({ navigation }) {
     }
 
     initialLoad();
-    const unsub = subscribeTournamentChanges(mergeLoad);
+    const unsub = subscribeTournamentChanges(() => {
+      if (shouldHandleStoreChange(navigation)) mergeLoad();
+    });
     return () => { cancelled = true; unsub(); };
-  }, []);
+  }, [navigation]);
 
   useEffect(() => {
     if (isFirstRender.current) { isFirstRender.current = false; return; }
@@ -195,15 +222,16 @@ export default function EditTournamentScreen({ navigation }) {
 
   async function removeRound(index) {
     const target = rounds[index];
-    // Warn loudly when the round already holds entered scores — deleting it
-    // discards real gameplay data, not just an empty placeholder.
-    const entered = target ? roundEnteredCount(target, players) : 0;
+    const confirmation = roundRemovalConfirmation({
+      round: target,
+      roundIndex: index,
+      players,
+      tournament: { ...tournamentRef.current, rounds },
+    });
     const ok = await confirmDialog(
-      'Remove round',
-      entered > 0
-        ? `Round ${index + 1} has scores entered for ${entered} player${entered !== 1 ? 's' : ''}. Removing it will permanently delete those scores.`
-        : `Remove Round ${index + 1}?`,
-      entered > 0 ? 'Delete round & scores' : 'Remove',
+      confirmation.title,
+      confirmation.message,
+      confirmation.confirmLabel,
     );
     if (!ok) return;
     // Persist the deletion through mutate() so a `rounds.<id>._deleted`
@@ -273,16 +301,15 @@ export default function EditTournamentScreen({ navigation }) {
       <ScrollView style={s.container} contentContainerStyle={s.content} automaticallyAdjustKeyboardInsets>
         {/* Per-round playing handicaps */}
         {rounds.map((r, ri) => {
-          // Finished rounds are view-only — hide destructive controls.
-          // Editing happens through "Edit round" on the scorecard. A round
-          // counts as finished when every player has every hole scored OR
-          // when the parent tournament was archived early (`finishedAt`).
+          // Finished rounds are score-edit locked, but can still be removed
+          // from history when another round remains in the tournament.
           const finished = isRoundComplete(r, players) || !!tournament?.finishedAt;
+          const canRemove = canRemoveRoundFromEditor({ ...tournament, rounds }, ri);
           return (
           <View key={r.id}>
             <View style={s.roundHeader}>
               <Text style={s.sectionTitle}>Round {ri + 1}{r.tees?.length ? `  --  ${r.tees.length} tees` : ''}</Text>
-              {rounds.length > 1 && !finished && (
+              {canRemove && (
                 <TouchableOpacity onPress={() => removeRound(ri)} style={s.removeBtn}>
                   <Feather name="trash-2" size={14} color={theme.destructive} style={{ marginRight: 4 }} />
                   <Text style={s.removeBtnText}>Remove</Text>

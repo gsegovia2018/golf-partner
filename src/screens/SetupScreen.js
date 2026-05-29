@@ -1,13 +1,16 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   View, Text, TextInput, TouchableOpacity, Image,
-  StyleSheet, ScrollView, Alert, Platform,
+  StyleSheet, ScrollView, Alert, Platform, Share,
 } from 'react-native';
 import ScreenContainer from '../components/ScreenContainer';
 
 import { Feather } from '@expo/vector-icons';
 import { useFocusEffect, CommonActions } from '@react-navigation/native';
-import { createTournament, saveTournament, randomPairs, DEFAULT_SETTINGS, deriveRoundPlayingHandicap } from '../store/tournamentStore';
+import {
+  createTournament, saveTournament, randomPairs, DEFAULT_SETTINGS,
+  deriveRoundPlayingHandicap, generateInviteCode, buildJoinLink,
+} from '../store/tournamentStore';
 import { defaultHoles, fetchPlayers, fetchMyPlayers } from '../store/libraryStore';
 import { middleTee } from '../store/tees';
 import { consumePendingPlayers, consumePendingCourses } from '../lib/selectionBridge';
@@ -17,10 +20,11 @@ import { useTheme } from '../theme/ThemeContext';
 import { useAuth } from '../context/AuthContext';
 import ScoringModePicker, { isScoringModeAllowed, fallbackScoringMode } from '../components/ScoringModePicker';
 import RoundTeeAssignments from '../components/RoundTeeAssignments';
+import PostCreateInviteModal from '../components/PostCreateInviteModal';
 import { scoringModeUsesTeams, getScoringMode } from '../components/scoringModes';
 import WizardProgress from '../components/setup/WizardProgress';
 import WizardNav from '../components/setup/WizardNav';
-import { wizardSteps, isStepValid } from './setupWizard';
+import { wizardSteps, isStepValid, shouldOfferPostCreateEditorInvite } from './setupWizard';
 
 // Deep green used for the Review hero band — fixed in both themes so white
 // hero text always has strong contrast.
@@ -69,6 +73,13 @@ export default function SetupScreen({ navigation, route }) {
   const [rounds, setRounds] = useState([{ id: newRoundId(), courseName: '', holes: defaultHoles(), tees: [], playerHandicaps: null, playerTees: null }]);
   const [settings, setSettings] = useState({ ...DEFAULT_SETTINGS });
   const [rawStep, setStep] = useState(0);
+  const [postCreateInvite, setPostCreateInvite] = useState({
+    visible: false,
+    loading: false,
+    link: '',
+    error: '',
+    tournament: null,
+  });
   // Which round's course name is being edited inline (null = none).
   const [renamingIndex, setRenamingIndex] = useState(null);
 
@@ -261,6 +272,57 @@ export default function SetupScreen({ navigation, route }) {
   const missingCourseName = rounds.some((r) => !r.courseName.trim());
   const canStart = players.length >= 1 && !missingCourseName;
 
+  const navigateToCreatedTournament = useCallback(() => {
+    // saveTournament marks the new tournament active. A game is a single
+    // round — jump straight to its scorecard, but seat the Tournament
+    // (round details) view underneath so back from the scorecard returns
+    // there instead of bouncing all the way to Home. A multi-round
+    // tournament lands on the Tournament view directly.
+    if (isGame) {
+      navigation.dispatch((state) => {
+        const routes = [
+          ...state.routes.slice(0, -1), // drop the Setup wizard itself
+          { name: 'Tournament' },
+          { name: 'Scorecard', params: { roundIndex: 0 } },
+        ];
+        return CommonActions.reset({ ...state, routes, index: routes.length - 1 });
+      });
+    } else {
+      navigation.replace('Tournament');
+    }
+  }, [isGame, navigation]);
+
+  function closePostCreateInvite() {
+    const tournament = postCreateInvite.tournament;
+    setPostCreateInvite({
+      visible: false,
+      loading: false,
+      link: '',
+      error: '',
+      tournament: null,
+    });
+    if (tournament) navigateToCreatedTournament();
+  }
+
+  function requestClosePostCreateInvite() {
+    if (postCreateInvite.loading) return;
+    closePostCreateInvite();
+  }
+
+  async function sharePostCreateInvite() {
+    if (!postCreateInvite.link) return;
+    try {
+      const label = tournamentName.trim() || 'my game';
+      await Share.share({
+        message: `Join "${label}" on Golf Partner:\n${postCreateInvite.link}`,
+      });
+    } catch (err) {
+      const msg = err?.message ?? 'Could not share the invite link';
+      if (Platform.OS === 'web') window.alert(msg);
+      else Alert.alert('Error', msg);
+    }
+  }
+
   async function handleStart() {
     if (players.length < 1) {
       Alert.alert('Missing info', 'Select at least 1 player.');
@@ -342,23 +404,40 @@ export default function SetupScreen({ navigation, route }) {
 
     try {
       await saveTournament(tournament);
-      // saveTournament marks the new tournament active. A game is a single
-      // round — jump straight to its scorecard, but seat the Tournament
-      // (round details) view underneath so back from the scorecard returns
-      // there instead of bouncing all the way to Home. A multi-round
-      // tournament lands on the Tournament view directly.
-      if (isGame) {
-        navigation.dispatch((state) => {
-          const routes = [
-            ...state.routes.slice(0, -1), // drop the Setup wizard itself
-            { name: 'Tournament' },
-            { name: 'Scorecard', params: { roundIndex: 0 } },
-          ];
-          return CommonActions.reset({ ...state, routes, index: routes.length - 1 });
+
+      if (shouldOfferPostCreateEditorInvite(kind, players, user?.id)) {
+        setPostCreateInvite({
+          visible: true,
+          loading: true,
+          link: '',
+          error: '',
+          tournament,
         });
-      } else {
-        navigation.replace('Tournament');
+        try {
+          const { editorCode } = await generateInviteCode(tournament.id);
+          const origin = Platform.OS === 'web' && typeof window !== 'undefined'
+            ? window.location.origin
+            : '';
+          setPostCreateInvite({
+            visible: true,
+            loading: false,
+            link: buildJoinLink(origin, editorCode),
+            error: '',
+            tournament,
+          });
+        } catch (inviteErr) {
+          setPostCreateInvite({
+            visible: true,
+            loading: false,
+            link: '',
+            error: inviteErr?.message ?? 'Could not create the invite link right now.',
+            tournament,
+          });
+        }
+        return;
       }
+
+      navigateToCreatedTournament();
     } catch (err) {
       const msg = err?.message ?? 'Could not create tournament';
       if (Platform.OS === 'web') window.alert(msg);
@@ -731,6 +810,15 @@ export default function SetupScreen({ navigation, route }) {
         nextLabel={nextLabel}
         onBack={handleBack}
         onNext={handleNext}
+      />
+
+      <PostCreateInviteModal
+        visible={postCreateInvite.visible}
+        loading={postCreateInvite.loading}
+        link={postCreateInvite.link}
+        error={postCreateInvite.error}
+        onRequestClose={requestClosePostCreateInvite}
+        onShare={sharePostCreateInvite}
       />
     </ScreenContainer>
   );
@@ -1131,5 +1219,6 @@ function makeStyles(theme) {
       fontSize: 12,
       marginTop: 2,
     },
+
   });
 }

@@ -1,4 +1,4 @@
-import { mergeScores } from '../ScorecardScreen';
+import { getScorecardBackTarget, mergeScores } from '../ScorecardScreen';
 
 describe('mergeScores', () => {
   test('adopts blob values for clean cells', () => {
@@ -20,5 +20,15 @@ describe('mergeScores', () => {
     const local = { a: { 1: 7 } };
     const merged = mergeScores(blob, local, new Set(['a:1']));
     expect(merged.a[1]).toBe(7);
+  });
+});
+
+describe('getScorecardBackTarget', () => {
+  test('in-progress casual scorecards pop back to the existing round details route', () => {
+    expect(getScorecardBackTarget({
+      official: false,
+      viewOnly: false,
+      canGoBack: true,
+    })).toBe('previous');
   });
 });

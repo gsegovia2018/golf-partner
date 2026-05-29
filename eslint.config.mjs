@@ -10,6 +10,7 @@ export default [
       'dist/*',
       'web-build/*',
       '.expo/*',
+      '.worktrees/**',
       'coverage/*',
       // Deno runtime — not part of the React Native lint scope.
       'supabase/functions/*',

@@ -1,4 +1,4 @@
-import React, { useCallback, useMemo, useState } from 'react';
+import React, { useCallback, useMemo, useRef, useState } from 'react';
 import {
   ActivityIndicator, ScrollView, StyleSheet,
   Text, TextInput, TouchableOpacity, View, Alert, Image, Platform,
@@ -37,11 +37,12 @@ export default function PlayerPickerScreen({ navigation, route }) {
   const [query, setQuery] = useState('');
   const [lastUsed, setLastUsed] = useState({});
   const [reloadKey, setReloadKey] = useState(0);
+  const hasLoadedOnceRef = useRef(false);
 
   useFocusEffect(
     useCallback(() => {
       let cancelled = false;
-      setLoading(true);
+      if (!hasLoadedOnceRef.current) setLoading(true);
       setLoadError(null);
       // fetchMyPlayers is fatal (no library to pick from); recent-use data is
       // best-effort and degrades silently to alphabetical sort.
@@ -55,7 +56,12 @@ export default function PlayerPickerScreen({ navigation, route }) {
         .catch((err) => {
           if (!cancelled) setLoadError(err?.message ?? 'Could not load players');
         })
-        .finally(() => { if (!cancelled) setLoading(false); });
+        .finally(() => {
+          if (!cancelled) {
+            hasLoadedOnceRef.current = true;
+            setLoading(false);
+          }
+        });
       return () => { cancelled = true; };
     }, [reloadKey]),
   );

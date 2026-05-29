@@ -26,12 +26,14 @@ import {
   DEFAULT_SETTINGS, generateInviteCode, buildJoinLink,
   setScoringModeRoundPatches,
   tournamentNoun, tournamentNounCapitalized,
+  getActiveTournamentSnapshot,
 } from '../store/tournamentStore';
 import { playersMeFirst } from '../lib/playerOrder';
 import { mutate } from '../store/mutate';
 import { subscribeConnectivity } from '../lib/connectivity';
 import { getShowRunningScore, setShowRunningScore } from '../lib/prefs';
 import { unreadCount } from '../store/notificationStore';
+import { shouldHandleStoreChange } from '../lib/navigationFocus';
 
 // Web-only CSS scroll-snap. See ScorecardScreen.js for the rationale:
 // RNW 0.21's `pagingEnabled` omits `scroll-snap-stop: always`, so a
@@ -78,11 +80,12 @@ export default function HomeScreen({ navigation, route }) {
   const viewMode = route?.params?.viewMode ?? 'auto';
   const { theme } = useTheme();
   const { user } = useAuth();
-  const [tournament, setTournament] = useState(null);
-  const [allTournaments, setAllTournaments] = useState([]);
+  const initialTournament = useMemo(() => getActiveTournamentSnapshot(), []);
+  const [tournament, setTournament] = useState(() => initialTournament);
+  const [allTournaments, setAllTournaments] = useState(() => (initialTournament ? [initialTournament] : []));
   const [listStale, setListStale] = useState(false);
   const [openableIds, setOpenableIds] = useState(null); // null = all openable
-  const [loading, setLoading] = useState(true);
+  const [loading, setLoading] = useState(() => !initialTournament);
   const [selectedRound, setSelectedRound] = useState(0);
   const [roundPagerWidth, setRoundPagerWidth] = useState(0);
   const roundPagerRef = useRef(null);
@@ -163,7 +166,7 @@ export default function HomeScreen({ navigation, route }) {
   // network round-trips.
   const reloadInFlight = useRef(null);
   const reloadPending = useRef(false);
-  const hasLoadedOnceRef = useRef(false);
+  const hasLoadedOnceRef = useRef(!!initialTournament);
   const reload = useCallback(async () => {
     if (reloadInFlight.current) {
       reloadPending.current = true;
@@ -221,7 +224,9 @@ export default function HomeScreen({ navigation, route }) {
 
   useEffect(() => {
     const unsubscribe = navigation.addListener('focus', reload);
-    const unsubStore = subscribeTournamentChanges(() => { reload(); });
+    const unsubStore = subscribeTournamentChanges(() => {
+      if (shouldHandleStoreChange(navigation)) reload();
+    });
     // Re-pull when the device comes back online so the orange "Sin
     // conexión" banner clears on its own without forcing the user to
     // navigate or pull-to-refresh. The first event fires the current

@@ -14,6 +14,15 @@
         "buildType": "apk"
       }
     },
+    "preview-arm64": {
+      "distribution": "internal",
+      "android": {
+        "buildType": "apk"
+      },
+      "env": {
+        "GOLF_ANDROID_BUILD_ARCHS": "arm64-v8a"
+      }
+    },
     "production": {
       "autoIncrement": true,
       "android": {
