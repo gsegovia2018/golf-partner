@@ -1,0 +1,1115 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Golf Partner Stats UI Versions</title>
+  <style>
+    :root {
+      --green: #006747;
+      --green-pressed: #005538;
+      --mint: #e6f0eb;
+      --canvas: #f6f3ee;
+      --wash: #ece8e1;
+      --card: #ffffff;
+      --ink: #1a1a1a;
+      --slate: #56616f;
+      --muted: #747467;
+      --gold: #d4af37;
+      --bronze: #c47c3a;
+      --red: #dc3f3f;
+      --line: #ded8cd;
+      --shadow: 0 14px 34px rgba(18, 28, 24, 0.12);
+      --soft-shadow: 0 6px 18px rgba(18, 28, 24, 0.08);
+      font-family: "Plus Jakarta Sans", Inter, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+    }
+
+    * {
+      box-sizing: border-box;
+    }
+
+    body {
+      margin: 0;
+      background: var(--canvas);
+      color: var(--ink);
+    }
+
+    .page {
+      padding: 32px;
+    }
+
+    .board-head {
+      display: flex;
+      align-items: flex-end;
+      justify-content: space-between;
+      gap: 24px;
+      max-width: 1500px;
+      margin: 0 auto 24px;
+    }
+
+    h1 {
+      margin: 0 0 6px;
+      font-size: 30px;
+      line-height: 38px;
+      letter-spacing: 0;
+    }
+
+    .intro {
+      margin: 0;
+      color: var(--slate);
+      font-size: 14px;
+      line-height: 20px;
+      max-width: 760px;
+    }
+
+    .note {
+      min-width: 210px;
+      border: 1px solid var(--line);
+      border-radius: 14px;
+      background: rgba(255, 255, 255, 0.58);
+      padding: 12px 14px;
+      color: var(--slate);
+      font-size: 12px;
+      line-height: 17px;
+    }
+
+    .versions {
+      display: grid;
+      grid-template-columns: repeat(4, minmax(300px, 1fr));
+      gap: 20px;
+      max-width: 1500px;
+      margin: 0 auto;
+      align-items: start;
+    }
+
+    .version {
+      display: grid;
+      gap: 10px;
+    }
+
+    .version-title {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      min-height: 30px;
+    }
+
+    .letter {
+      width: 28px;
+      height: 28px;
+      border-radius: 999px;
+      display: grid;
+      place-items: center;
+      background: var(--green);
+      color: white;
+      font-size: 12px;
+      font-weight: 800;
+    }
+
+    .version-title h2 {
+      margin: 0;
+      font-size: 16px;
+      line-height: 22px;
+      letter-spacing: 0;
+    }
+
+    .version-title p {
+      margin: 0;
+      color: var(--slate);
+      font-size: 12px;
+      line-height: 16px;
+    }
+
+    .phone {
+      height: 740px;
+      border-radius: 28px;
+      background: #101711;
+      padding: 10px;
+      box-shadow: var(--shadow);
+    }
+
+    .screen {
+      height: 100%;
+      overflow: hidden;
+      border-radius: 22px;
+      background: var(--canvas);
+      display: flex;
+      flex-direction: column;
+      position: relative;
+    }
+
+    .status {
+      height: 30px;
+      padding: 8px 18px 0;
+      display: flex;
+      justify-content: space-between;
+      color: var(--ink);
+      font-size: 11px;
+      font-weight: 800;
+    }
+
+    .header {
+      display: flex;
+      align-items: center;
+      padding: 6px 16px 10px;
+      gap: 10px;
+      border-bottom: 1px solid rgba(222, 216, 205, 0.85);
+    }
+
+    .icon-btn {
+      width: 34px;
+      height: 34px;
+      border-radius: 12px;
+      display: grid;
+      place-items: center;
+      background: rgba(230, 240, 235, 0.72);
+      color: var(--green);
+      font-size: 17px;
+      font-weight: 900;
+    }
+
+    .title {
+      flex: 1;
+      font-size: 16px;
+      line-height: 22px;
+      font-weight: 800;
+    }
+
+    .round-pill {
+      display: flex;
+      align-items: center;
+      gap: 5px;
+      padding: 7px 10px;
+      border-radius: 999px;
+      background: var(--mint);
+      color: var(--green);
+      font-size: 11px;
+      line-height: 14px;
+      font-weight: 800;
+    }
+
+    .tabs {
+      display: flex;
+      gap: 6px;
+      padding: 9px 16px;
+      overflow: hidden;
+      border-bottom: 1px solid rgba(222, 216, 205, 0.85);
+    }
+
+    .tab {
+      white-space: nowrap;
+      padding: 6px 12px;
+      border-radius: 999px;
+      border: 1px solid var(--line);
+      color: var(--muted);
+      background: var(--wash);
+      font-size: 11px;
+      line-height: 14px;
+      font-weight: 800;
+    }
+
+    .tab.on {
+      background: var(--green);
+      color: white;
+      border-color: var(--green);
+    }
+
+    .content {
+      padding: 16px;
+      overflow: hidden;
+      display: grid;
+      gap: 12px;
+      align-content: start;
+    }
+
+    .panel {
+      background: var(--card);
+      border: 1px solid var(--line);
+      border-radius: 14px;
+      padding: 14px;
+      box-shadow: var(--soft-shadow);
+    }
+
+    .panel.flat {
+      box-shadow: none;
+      background: rgba(255, 255, 255, 0.72);
+    }
+
+    .panel-title {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 10px;
+      margin-bottom: 8px;
+      font-size: 13px;
+      line-height: 18px;
+      font-weight: 800;
+    }
+
+    .label {
+      color: var(--muted);
+      font-size: 10px;
+      line-height: 14px;
+      font-weight: 800;
+    }
+
+    .hero-coach {
+      background: var(--green);
+      color: white;
+      border: 0;
+      padding: 16px;
+    }
+
+    .coach-kicker {
+      display: flex;
+      justify-content: space-between;
+      gap: 12px;
+      color: rgba(255, 255, 255, 0.82);
+      font-size: 11px;
+      line-height: 15px;
+      font-weight: 800;
+      margin-bottom: 12px;
+    }
+
+    .coach-headline {
+      font-size: 25px;
+      line-height: 30px;
+      letter-spacing: 0;
+      font-weight: 900;
+      margin: 0 0 8px;
+    }
+
+    .coach-copy {
+      margin: 0;
+      color: rgba(255, 255, 255, 0.84);
+      font-size: 13px;
+      line-height: 19px;
+      font-weight: 650;
+    }
+
+    .hero-actions {
+      display: flex;
+      gap: 8px;
+      margin-top: 14px;
+    }
+
+    .hero-action {
+      flex: 1;
+      background: rgba(255, 255, 255, 0.15);
+      border: 1px solid rgba(255, 255, 255, 0.18);
+      border-radius: 12px;
+      padding: 9px;
+    }
+
+    .hero-action strong,
+    .hero-action span {
+      display: block;
+    }
+
+    .hero-action strong {
+      color: white;
+      font-size: 12px;
+      line-height: 16px;
+    }
+
+    .hero-action span {
+      color: rgba(255, 255, 255, 0.74);
+      font-size: 10px;
+      line-height: 14px;
+      margin-top: 1px;
+    }
+
+    .action-list {
+      display: grid;
+      gap: 8px;
+    }
+
+    .action-row {
+      display: grid;
+      grid-template-columns: 28px 1fr auto;
+      gap: 9px;
+      align-items: center;
+      padding: 9px 0;
+      border-top: 1px solid rgba(222, 216, 205, 0.75);
+    }
+
+    .action-row:first-child {
+      border-top: 0;
+      padding-top: 0;
+    }
+
+    .row-icon {
+      width: 28px;
+      height: 28px;
+      border-radius: 999px;
+      display: grid;
+      place-items: center;
+      color: white;
+      font-size: 13px;
+      font-weight: 900;
+    }
+
+    .row-text strong {
+      display: block;
+      font-size: 13px;
+      line-height: 18px;
+    }
+
+    .row-text span {
+      display: block;
+      color: var(--slate);
+      font-size: 11px;
+      line-height: 15px;
+      margin-top: 1px;
+    }
+
+    .row-value {
+      font-size: 12px;
+      line-height: 16px;
+      font-weight: 900;
+    }
+
+    .score-strip {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 8px;
+    }
+
+    .score-tile {
+      background: var(--wash);
+      border-radius: 12px;
+      padding: 10px 8px;
+      border: 1px solid var(--line);
+    }
+
+    .score-tile strong {
+      display: block;
+      font-size: 21px;
+      line-height: 25px;
+    }
+
+    .score-tile span {
+      display: block;
+      color: var(--muted);
+      font-size: 9px;
+      line-height: 13px;
+      font-weight: 800;
+      margin-top: 2px;
+    }
+
+    .map-hero {
+      padding: 0;
+      overflow: hidden;
+    }
+
+    .map-top {
+      padding: 15px;
+      background: linear-gradient(135deg, #fdfdfb 0%, #edf5f1 100%);
+      border-bottom: 1px solid var(--line);
+    }
+
+    .map-title {
+      margin: 0;
+      font-size: 22px;
+      line-height: 28px;
+      letter-spacing: 0;
+      font-weight: 900;
+    }
+
+    .map-sub {
+      margin: 5px 0 0;
+      color: var(--slate);
+      font-size: 12px;
+      line-height: 18px;
+      font-weight: 650;
+    }
+
+    .skill-grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 10px;
+      padding: 14px;
+    }
+
+    .skill {
+      min-height: 116px;
+      border-radius: 14px;
+      border: 1px solid var(--line);
+      background: white;
+      padding: 11px;
+      display: flex;
+      flex-direction: column;
+      justify-content: space-between;
+    }
+
+    .skill.bad {
+      border-color: rgba(220, 63, 63, 0.28);
+      background: #fff7f6;
+    }
+
+    .skill.good {
+      border-color: rgba(0, 103, 71, 0.28);
+      background: #f3faf7;
+    }
+
+    .skill .topline {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      font-size: 11px;
+      line-height: 15px;
+      color: var(--slate);
+      font-weight: 800;
+    }
+
+    .skill strong {
+      display: block;
+      font-size: 15px;
+      line-height: 20px;
+      margin-top: 6px;
+    }
+
+    .meter {
+      height: 6px;
+      border-radius: 999px;
+      background: var(--wash);
+      overflow: hidden;
+      margin-top: 10px;
+    }
+
+    .meter span {
+      display: block;
+      height: 100%;
+      border-radius: 999px;
+    }
+
+    .map-callout {
+      display: grid;
+      grid-template-columns: 40px 1fr;
+      gap: 10px;
+      align-items: center;
+    }
+
+    .big-grade {
+      width: 40px;
+      height: 40px;
+      border-radius: 12px;
+      background: var(--red);
+      color: white;
+      display: grid;
+      place-items: center;
+      font-size: 18px;
+      line-height: 22px;
+      font-weight: 900;
+    }
+
+    .report-card {
+      background: #fffdf8;
+      border-color: #e8ddbd;
+    }
+
+    .report-hero {
+      display: grid;
+      grid-template-columns: 76px 1fr;
+      gap: 13px;
+      align-items: center;
+    }
+
+    .grade {
+      width: 76px;
+      height: 76px;
+      border-radius: 18px;
+      background: var(--green);
+      color: white;
+      display: grid;
+      place-items: center;
+      font-size: 34px;
+      line-height: 40px;
+      font-weight: 900;
+      box-shadow: 0 8px 18px rgba(0, 103, 71, 0.18);
+    }
+
+    .report-hero h3 {
+      margin: 0;
+      font-size: 22px;
+      line-height: 28px;
+      letter-spacing: 0;
+    }
+
+    .report-hero p {
+      margin: 4px 0 0;
+      color: var(--slate);
+      font-size: 12px;
+      line-height: 18px;
+      font-weight: 650;
+    }
+
+    .teacher-lines {
+      display: grid;
+      gap: 7px;
+      margin-top: 13px;
+    }
+
+    .teacher-line {
+      display: grid;
+      grid-template-columns: 64px 1fr;
+      gap: 9px;
+      align-items: start;
+      padding-top: 9px;
+      border-top: 1px solid #eee3c8;
+    }
+
+    .teacher-line span {
+      color: var(--bronze);
+      font-size: 10px;
+      line-height: 14px;
+      font-weight: 900;
+    }
+
+    .teacher-line strong {
+      font-size: 12px;
+      line-height: 17px;
+    }
+
+    .mini-chart {
+      height: 88px;
+      border-radius: 12px;
+      background: linear-gradient(180deg, rgba(0, 103, 71, 0.12), rgba(0, 103, 71, 0.02));
+      position: relative;
+      overflow: hidden;
+    }
+
+    .mini-chart svg {
+      position: absolute;
+      inset: 0;
+      width: 100%;
+      height: 100%;
+    }
+
+    .rounds {
+      display: grid;
+      gap: 8px;
+    }
+
+    .round {
+      display: grid;
+      grid-template-columns: 44px 1fr auto;
+      gap: 9px;
+      align-items: center;
+      padding: 9px;
+      border-radius: 12px;
+      background: rgba(236, 232, 225, 0.7);
+      border: 1px solid var(--line);
+    }
+
+    .round strong {
+      font-size: 13px;
+      line-height: 17px;
+    }
+
+    .round span {
+      display: block;
+      color: var(--slate);
+      font-size: 10px;
+      line-height: 14px;
+    }
+
+    .round-score {
+      color: var(--green);
+      font-size: 15px;
+      line-height: 20px;
+      font-weight: 900;
+    }
+
+    .practice-hero {
+      background: #10241b;
+      color: white;
+      border: 0;
+    }
+
+    .practice-hero .panel-title {
+      color: rgba(255, 255, 255, 0.78);
+    }
+
+    .practice-number {
+      font-size: 44px;
+      line-height: 48px;
+      font-weight: 900;
+      letter-spacing: 0;
+      margin: 4px 0;
+    }
+
+    .practice-hero h3 {
+      margin: 0;
+      font-size: 22px;
+      line-height: 28px;
+      letter-spacing: 0;
+    }
+
+    .practice-hero p {
+      margin: 6px 0 0;
+      color: rgba(255, 255, 255, 0.78);
+      font-size: 12px;
+      line-height: 18px;
+      font-weight: 650;
+    }
+
+    .drill {
+      display: grid;
+      grid-template-columns: 38px 1fr;
+      gap: 10px;
+      align-items: start;
+      padding: 11px 0;
+      border-top: 1px solid rgba(222, 216, 205, 0.75);
+    }
+
+    .drill:first-child {
+      border-top: 0;
+      padding-top: 0;
+    }
+
+    .drill-num {
+      width: 38px;
+      height: 38px;
+      border-radius: 12px;
+      display: grid;
+      place-items: center;
+      background: var(--mint);
+      color: var(--green);
+      font-size: 14px;
+      line-height: 18px;
+      font-weight: 900;
+    }
+
+    .drill strong {
+      display: block;
+      font-size: 13px;
+      line-height: 18px;
+    }
+
+    .drill span {
+      display: block;
+      color: var(--slate);
+      font-size: 11px;
+      line-height: 16px;
+      margin-top: 2px;
+    }
+
+    .bottom-nav {
+      margin-top: auto;
+      padding: 10px 16px 16px;
+    }
+
+    .nav-pill {
+      height: 54px;
+      border-radius: 999px;
+      background: white;
+      border: 1px solid var(--line);
+      box-shadow: 0 8px 18px rgba(18, 28, 24, 0.12);
+      display: flex;
+      justify-content: space-around;
+      align-items: center;
+      color: var(--slate);
+      font-size: 10px;
+      font-weight: 800;
+    }
+
+    .nav-pill .active {
+      display: flex;
+      align-items: center;
+      gap: 5px;
+      padding: 8px 12px;
+      border-radius: 999px;
+      background: var(--green);
+      color: white;
+    }
+
+    .sig {
+      display: flex;
+      gap: 4px;
+      align-items: center;
+    }
+
+    .dot {
+      width: 5px;
+      height: 5px;
+      border-radius: 999px;
+      background: currentColor;
+    }
+
+    @media (max-width: 1280px) {
+      .versions {
+        grid-template-columns: repeat(2, minmax(300px, 1fr));
+      }
+    }
+
+    @media (max-width: 720px) {
+      .page {
+        padding: 20px;
+      }
+
+      .board-head {
+        display: grid;
+      }
+
+      .versions {
+        grid-template-columns: 1fr;
+      }
+
+      .phone {
+        max-width: 390px;
+      }
+    }
+  </style>
+</head>
+<body>
+  <main class="page">
+    <header class="board-head">
+      <div>
+        <h1>Stats Refactor Visual Directions</h1>
+        <p class="intro">Four possible landing views for My Stats. Each version answers the same problem in a different way: make the next improvement obvious without making the app feel like tournament software.</p>
+      </div>
+      <div class="note">Compare the top third of each phone first. That is where the app should answer "what should I work on?" before users inspect details.</div>
+    </header>
+
+    <section class="versions" aria-label="Stats UI versions">
+      <article class="version">
+        <div class="version-title">
+          <span class="letter">A</span>
+          <div>
+            <h2>Coach First</h2>
+            <p>Best for direct improvement guidance</p>
+          </div>
+        </div>
+        <div class="phone">
+          <div class="screen">
+            <div class="status"><span>9:41</span><span>100%</span></div>
+            <div class="header">
+              <div class="icon-btn">&lt;</div>
+              <div class="title">My Stats</div>
+              <div class="round-pill">8 of 12</div>
+            </div>
+            <div class="tabs">
+              <div class="tab on">Coach</div>
+              <div class="tab">Form</div>
+              <div class="tab">Skills</div>
+              <div class="tab">Shots</div>
+            </div>
+            <div class="content">
+              <section class="panel hero-coach">
+                <div class="coach-kicker">
+                  <span>Biggest leak</span>
+                  <span>Last 8 rounds</span>
+                </div>
+                <h3 class="coach-headline">Putting from 6m+ is costing 2.1 pts</h3>
+                <p class="coach-copy">Your long putts turn into 3-putts too often. Fix this first before chasing extra distance.</p>
+                <div class="hero-actions">
+                  <div class="hero-action">
+                    <strong>Practice first</strong>
+                    <span>Lag putting</span>
+                  </div>
+                  <div class="hero-action">
+                    <strong>Proof</strong>
+                    <span>18 attempts</span>
+                  </div>
+                </div>
+              </section>
+
+              <section class="panel">
+                <div class="panel-title">Today's read</div>
+                <div class="action-list">
+                  <div class="action-row">
+                    <div class="row-icon" style="background: var(--green)">OK</div>
+                    <div class="row-text">
+                      <strong>Keep finding fairways</strong>
+                      <span>Fairway drives average 2.6 pts</span>
+                    </div>
+                    <div class="row-value" style="color: var(--green)">+0.6</div>
+                  </div>
+                  <div class="action-row">
+                    <div class="row-icon" style="background: var(--red)">!</div>
+                    <div class="row-text">
+                      <strong>Approach 100 to 150m</strong>
+                      <span>Low GIR and weak score impact</span>
+                    </div>
+                    <div class="row-value" style="color: var(--red)">-1.3</div>
+                  </div>
+                  <div class="action-row">
+                    <div class="row-icon" style="background: var(--bronze)">~</div>
+                    <div class="row-text">
+                      <strong>Watch closing holes</strong>
+                      <span>Back nine drops after hole 15</span>
+                    </div>
+                    <div class="row-value" style="color: var(--bronze)">-0.8</div>
+                  </div>
+                </div>
+              </section>
+
+              <div class="score-strip">
+                <div class="score-tile"><strong>31</strong><span>AVG POINTS</span></div>
+                <div class="score-tile"><strong>+2</strong><span>FORM TREND</span></div>
+                <div class="score-tile"><strong>38</strong><span>BEST ROUND</span></div>
+              </div>
+            </div>
+            <div class="bottom-nav">
+              <div class="nav-pill">
+                <span>Feed</span>
+                <span class="active">Stats</span>
+                <span>Play</span>
+              </div>
+            </div>
+          </div>
+        </div>
+      </article>
+
+      <article class="version">
+        <div class="version-title">
+          <span class="letter">B</span>
+          <div>
+            <h2>Skill Map</h2>
+            <p>Best for fast scan and drill-down</p>
+          </div>
+        </div>
+        <div class="phone">
+          <div class="screen">
+            <div class="status"><span>9:41</span><span>100%</span></div>
+            <div class="header">
+              <div class="icon-btn">&lt;</div>
+              <div class="title">My Stats</div>
+              <div class="round-pill">8 of 12</div>
+            </div>
+            <div class="tabs">
+              <div class="tab on">Map</div>
+              <div class="tab">Report</div>
+              <div class="tab">Form</div>
+              <div class="tab">Shots</div>
+            </div>
+            <div class="content">
+              <section class="panel map-hero">
+                <div class="map-top">
+                  <h3 class="map-title">Your game map</h3>
+                  <p class="map-sub">Putting and mid-iron approaches are the two areas holding your Stableford average down.</p>
+                </div>
+                <div class="skill-grid">
+                  <div class="skill good">
+                    <div class="topline"><span>Driving</span><span>B+</span></div>
+                    <strong>Fairways are helping</strong>
+                    <div class="meter"><span style="width: 78%; background: var(--green)"></span></div>
+                  </div>
+                  <div class="skill bad">
+                    <div class="topline"><span>Approach</span><span>C-</span></div>
+                    <strong>100 to 150m leak</strong>
+                    <div class="meter"><span style="width: 42%; background: var(--red)"></span></div>
+                  </div>
+                  <div class="skill">
+                    <div class="topline"><span>Short game</span><span>C+</span></div>
+                    <strong>Good saves, few chances</strong>
+                    <div class="meter"><span style="width: 58%; background: var(--bronze)"></span></div>
+                  </div>
+                  <div class="skill bad">
+                    <div class="topline"><span>Putting</span><span>D</span></div>
+                    <strong>Long putts hurt</strong>
+                    <div class="meter"><span style="width: 31%; background: var(--red)"></span></div>
+                  </div>
+                </div>
+              </section>
+
+              <section class="panel">
+                <div class="map-callout">
+                  <div class="big-grade">D</div>
+                  <div>
+                    <div class="panel-title" style="margin: 0">Start with putting</div>
+                    <div class="label" style="font-size: 11px; line-height: 16px">3-putt rate is 24% from 6m+ over the selected rounds.</div>
+                  </div>
+                </div>
+              </section>
+
+              <section class="panel flat">
+                <div class="panel-title">Recent form</div>
+                <div class="mini-chart">
+                  <svg viewBox="0 0 300 88" preserveAspectRatio="none" aria-hidden="true">
+                    <path d="M0 62 L48 55 L96 63 L144 41 L192 48 L240 28 L300 34" fill="none" stroke="#006747" stroke-width="4" stroke-linecap="round" stroke-linejoin="round"/>
+                    <path d="M0 62 L48 55 L96 63 L144 41 L192 48 L240 28 L300 34 L300 88 L0 88 Z" fill="rgba(0,103,71,0.10)"/>
+                  </svg>
+                </div>
+              </section>
+            </div>
+            <div class="bottom-nav">
+              <div class="nav-pill">
+                <span>Feed</span>
+                <span class="active">Stats</span>
+                <span>Play</span>
+              </div>
+            </div>
+          </div>
+        </div>
+      </article>
+
+      <article class="version">
+        <div class="version-title">
+          <span class="letter">C</span>
+          <div>
+            <h2>Round Report Card</h2>
+            <p>Best for clubhouse tone and recency</p>
+          </div>
+        </div>
+        <div class="phone">
+          <div class="screen">
+            <div class="status"><span>9:41</span><span>100%</span></div>
+            <div class="header">
+              <div class="icon-btn">&lt;</div>
+              <div class="title">My Stats</div>
+              <div class="round-pill">8 of 12</div>
+            </div>
+            <div class="tabs">
+              <div class="tab on">Report</div>
+              <div class="tab">Trend</div>
+              <div class="tab">Breakdown</div>
+              <div class="tab">Shots</div>
+            </div>
+            <div class="content">
+              <section class="panel report-card">
+                <div class="report-hero">
+                  <div class="grade">B-</div>
+                  <div>
+                    <h3>Good scoring, loose finish</h3>
+                    <p>Last round at Santander Golf. Strong front nine, trouble from 100 to 150m late.</p>
+                  </div>
+                </div>
+                <div class="teacher-lines">
+                  <div class="teacher-line">
+                    <span>Best mark</span>
+                    <strong>Fairway drives set up 2.8 pts per hole.</strong>
+                  </div>
+                  <div class="teacher-line">
+                    <span>Needs work</span>
+                    <strong>Closing 3 holes averaged 1.1 pts.</strong>
+                  </div>
+                  <div class="teacher-line">
+                    <span>Note</span>
+                    <strong>Three-putts appeared after missed greens.</strong>
+                  </div>
+                </div>
+              </section>
+
+              <section class="panel">
+                <div class="panel-title">Last 4 rounds</div>
+                <div class="rounds">
+                  <div class="round">
+                    <div class="sig"><span class="dot" style="color: var(--green)"></span><span class="dot" style="color: var(--green)"></span><span class="dot" style="color: var(--gold)"></span></div>
+                    <div><strong>Santander Golf</strong><span>Back nine faded</span></div>
+                    <div class="round-score">32</div>
+                  </div>
+                  <div class="round">
+                    <div class="sig"><span class="dot" style="color: var(--green)"></span><span class="dot" style="color: var(--red)"></span><span class="dot" style="color: var(--green)"></span></div>
+                    <div><strong>La Moraleja</strong><span>Good drive day</span></div>
+                    <div class="round-score">36</div>
+                  </div>
+                  <div class="round">
+                    <div class="sig"><span class="dot" style="color: var(--bronze)"></span><span class="dot" style="color: var(--red)"></span><span class="dot" style="color: var(--red)"></span></div>
+                    <div><strong>Centro Nacional</strong><span>Putting cost points</span></div>
+                    <div class="round-score">28</div>
+                  </div>
+                </div>
+              </section>
+
+              <section class="panel flat">
+                <div class="panel-title">Report trend</div>
+                <div class="score-strip">
+                  <div class="score-tile"><strong>B-</strong><span>CURRENT</span></div>
+                  <div class="score-tile"><strong>B</strong><span>BEST</span></div>
+                  <div class="score-tile"><strong>C+</strong><span>AVERAGE</span></div>
+                </div>
+              </section>
+            </div>
+            <div class="bottom-nav">
+              <div class="nav-pill">
+                <span>Feed</span>
+                <span class="active">Stats</span>
+                <span>Play</span>
+              </div>
+            </div>
+          </div>
+        </div>
+      </article>
+
+      <article class="version">
+        <div class="version-title">
+          <span class="letter">D</span>
+          <div>
+            <h2>Practice Plan</h2>
+            <p>Best for an action-oriented Stats tab</p>
+          </div>
+        </div>
+        <div class="phone">
+          <div class="screen">
+            <div class="status"><span>9:41</span><span>100%</span></div>
+            <div class="header">
+              <div class="icon-btn">&lt;</div>
+              <div class="title">My Stats</div>
+              <div class="round-pill">8 of 12</div>
+            </div>
+            <div class="tabs">
+              <div class="tab on">Plan</div>
+              <div class="tab">Proof</div>
+              <div class="tab">Form</div>
+              <div class="tab">Shots</div>
+            </div>
+            <div class="content">
+              <section class="panel practice-hero">
+                <div class="panel-title">This week's focus</div>
+                <div class="practice-number">1</div>
+                <h3>Lag putting before the next round</h3>
+                <p>Your best scoring gain is reducing 3-putts from long first putts. One focused session beats reviewing every chart.</p>
+              </section>
+
+              <section class="panel">
+                <div class="panel-title">Practice plan</div>
+                <div class="drill">
+                  <div class="drill-num">1</div>
+                  <div><strong>20 putts from 6 to 9m</strong><span>Target: leave every ball inside 1m.</span></div>
+                </div>
+                <div class="drill">
+                  <div class="drill-num">2</div>
+                  <div><strong>10 approach shots from 125m</strong><span>Track GIR or leave distance after each shot.</span></div>
+                </div>
+                <div class="drill">
+                  <div class="drill-num">3</div>
+                  <div><strong>Finish with 6 pressure putts</strong><span>Make 4 of 6 from 1m before you stop.</span></div>
+                </div>
+              </section>
+
+              <section class="panel flat">
+                <div class="panel-title">Why this plan</div>
+                <div class="action-row">
+                  <div class="row-icon" style="background: var(--red)">!</div>
+                  <div class="row-text">
+                    <strong>3-putt+ rate from 6m</strong>
+                    <span>24% across 18 attempts</span>
+                  </div>
+                  <div class="row-value" style="color: var(--red)">high</div>
+                </div>
+                <div class="action-row">
+                  <div class="row-icon" style="background: var(--bronze)">~</div>
+                  <div class="row-text">
+                    <strong>Approach 100 to 150m</strong>
+                    <span>41% GIR over selected rounds</span>
+                  </div>
+                  <div class="row-value" style="color: var(--bronze)">watch</div>
+                </div>
+              </section>
+            </div>
+            <div class="bottom-nav">
+              <div class="nav-pill">
+                <span>Feed</span>
+                <span class="active">Stats</span>
+                <span>Play</span>
+              </div>
+            </div>
+          </div>
+        </div>
+      </article>
+    </section>
+  </main>
+</body>
+</html>
