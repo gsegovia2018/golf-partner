@@ -73,6 +73,7 @@ function makeStyles(theme) {
     },
     item: {
       width: 76,
+      minHeight: 92,
       alignItems: 'center',
     },
     ring: {
