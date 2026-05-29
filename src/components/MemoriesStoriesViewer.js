@@ -18,7 +18,15 @@ const DISMISS_DISTANCE = 120;
 // round; `startIndex` is where playback begins (the round the user tapped).
 // Playback continues across round boundaries, so opening one round's story
 // shows the whole tournament's memories.
-export default function MemoriesStoriesViewer({ visible, items = [], startIndex = 0, rounds, onClose }) {
+export default function MemoriesStoriesViewer({
+  visible,
+  items = [],
+  startIndex = 0,
+  rounds,
+  storyTitle,
+  storySubtitle,
+  onClose,
+}) {
   const insets = useSafeAreaInsets();
   const [index, setIndex] = useState(0);
   const [progress, setProgress] = useState(0);
@@ -147,6 +155,11 @@ export default function MemoriesStoriesViewer({ visible, items = [], startIndex 
   const activeSegmentIndex = roundSegments.findIndex(
     (seg) => index >= seg.start && index < seg.start + seg.count,
   );
+  const headerLabel = storyTitle
+    ? `${storyTitle} · ${index + 1}/${items.length}`
+    : `R${curRoundIndex >= 0 ? curRoundIndex + 1 : '?'}${
+      curRound?.courseName ? ` · ${curRound.courseName}` : ''
+    } · ${index + 1}/${items.length}`;
 
   return (
     <Modal visible animationType="fade" onRequestClose={onClose} transparent={false}>
@@ -216,11 +229,10 @@ export default function MemoriesStoriesViewer({ visible, items = [], startIndex 
 
         <View style={[s.top, { top: insets.top + 20 }]} pointerEvents="box-none">
           <View style={s.topLeft} pointerEvents="none">
-            <Text style={s.topLabel}>
-              R{curRoundIndex >= 0 ? curRoundIndex + 1 : '?'}
-              {curRound?.courseName ? ` · ${curRound.courseName}` : ''}
-              {` · ${index + 1}/${items.length}`}
-            </Text>
+            <Text style={s.topLabel}>{headerLabel}</Text>
+            {storySubtitle ? (
+              <Text style={s.topSubtitle} numberOfLines={1}>{storySubtitle}</Text>
+            ) : null}
           </View>
           <TouchableOpacity
             onPress={onClose}
@@ -313,9 +325,16 @@ const s = StyleSheet.create({
   },
   topLeft: {
     backgroundColor: 'rgba(0,0,0,0.55)',
-    paddingHorizontal: 10, paddingVertical: 4, borderRadius: 99,
+    paddingHorizontal: 10, paddingVertical: 4, borderRadius: 10,
+    maxWidth: '78%',
   },
   topLabel: { color: '#fff', fontFamily: 'PlusJakartaSans-SemiBold', fontSize: 12 },
+  topSubtitle: {
+    color: 'rgba(255,255,255,0.68)',
+    fontFamily: 'PlusJakartaSans-Regular',
+    fontSize: 10,
+    marginTop: 1,
+  },
   closeBtn: {
     width: 36, height: 36, borderRadius: 99,
     alignItems: 'center', justifyContent: 'center',

@@ -19,9 +19,20 @@ jest.mock('../../components/CommentsSheet', () => function MockCommentsSheet() {
   return null;
 });
 
-jest.mock('../../components/MemoriesStoriesViewer', () => function MockMemoriesStoriesViewer({ visible, items }) {
-  const { Text } = require('react-native');
-  return visible ? <Text>{`Story viewer ${items.length}`}</Text> : null;
+jest.mock('../../components/MemoriesStoriesViewer', () => function MockMemoriesStoriesViewer({
+  visible,
+  items,
+  storyTitle,
+  storySubtitle,
+}) {
+  const { Text, View } = require('react-native');
+  return visible ? (
+    <View>
+      <Text>{`Story viewer ${items.length}`}</Text>
+      <Text>{`Story title ${storyTitle}`}</Text>
+      <Text>{`Story subtitle ${storySubtitle}`}</Text>
+    </View>
+  ) : null;
 });
 
 jest.mock('../../store/tournamentStore', () => ({
@@ -96,6 +107,8 @@ describe('FeedScreen', () => {
     fireEvent.press(getByLabelText('Open La Moraleja story, 2 photos'));
 
     expect(await findByText('Story viewer 2')).toBeTruthy();
+    expect(await findByText('Story title La Moraleja')).toBeTruthy();
+    expect(await findByText('Story subtitle Weekend Match')).toBeTruthy();
   });
 
   test('renders top-three result preview and navigates to round summary', async () => {
