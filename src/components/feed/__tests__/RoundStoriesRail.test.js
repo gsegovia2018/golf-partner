@@ -1,5 +1,6 @@
 import React from 'react';
 import { fireEvent, render, waitFor } from '@testing-library/react-native';
+import { StyleSheet } from 'react-native';
 import { ThemeProvider } from '../../../theme/ThemeContext';
 import RoundStoriesRail from '../RoundStoriesRail';
 
@@ -44,6 +45,47 @@ describe('RoundStoriesRail', () => {
     expect(getByText('7 photos')).toBeTruthy();
     expect(getByText('Santander')).toBeTruthy();
     expect(getByText('seen')).toBeTruthy();
+  });
+
+  test('renders as a horizontal rail without a scroll indicator', async () => {
+    const { getByTestId } = render(wrap(
+      <RoundStoriesRail stories={stories} onPressStory={() => {}} />,
+    ));
+
+    const rail = await waitFor(() => getByTestId('round-stories-rail'));
+    expect(rail.props.horizontal).toBe(true);
+    expect(rail.props.showsHorizontalScrollIndicator).toBe(false);
+  });
+
+  test('applies viewed ring style to viewed stories', async () => {
+    const { getByTestId } = render(wrap(
+      <RoundStoriesRail stories={stories} onPressStory={() => {}} />,
+    ));
+
+    const activeRing = await waitFor(() => getByTestId('round-story-ring-story:t1:r1'));
+    const viewedRing = getByTestId('round-story-ring-story:t1:r2');
+
+    expect(StyleSheet.flatten(viewedRing.props.style).borderColor)
+      .not.toBe(StyleSheet.flatten(activeRing.props.style).borderColor);
+  });
+
+  test('uses the first media item with a thumbnail or url as the cover', async () => {
+    const coverStories = [
+      {
+        ...stories[0],
+        mediaList: [
+          { id: 'm-without-cover' },
+          { id: 'm-thumb', thumbUrl: 'https://example.com/thumb.jpg' },
+          { id: 'm-url', url: 'https://example.com/full.jpg' },
+        ],
+      },
+    ];
+    const { getByTestId } = render(wrap(
+      <RoundStoriesRail stories={coverStories} onPressStory={() => {}} />,
+    ));
+
+    const cover = await waitFor(() => getByTestId('round-story-cover-story:t1:r1'));
+    expect(cover.props.source.uri).toBe('https://example.com/thumb.jpg');
   });
 
   test('renders fallback initials from the round label when no cover exists', async () => {

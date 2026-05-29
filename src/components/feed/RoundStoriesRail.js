@@ -38,10 +38,14 @@ export default function RoundStoriesRail({ stories = [], onPressStory }) {
             accessibilityRole="button"
             accessibilityLabel={`Open ${story.roundLabel} story, ${countLabel}`}
           >
-            <View style={[s.ring, story.viewed && s.ringViewed]}>
+            <View
+              testID={`round-story-ring-${story.key}`}
+              style={[s.ring, story.viewed && s.ringViewed]}
+            >
               <View style={s.thumbWrap}>
                 {cover ? (
                   <Image
+                    testID={`round-story-cover-${story.key}`}
                     source={{ uri: cover.thumbUrl || cover.url }}
                     style={s.thumb}
                     resizeMode="cover"
