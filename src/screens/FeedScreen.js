@@ -14,6 +14,12 @@ import {
 } from '../store/feedStore';
 import { subscribeTournamentChanges, formatRoundLabel } from '../store/tournamentStore';
 import CommentsSheet from '../components/CommentsSheet';
+import MemoriesStoriesViewer from '../components/MemoriesStoriesViewer';
+import RoundStoriesRail from '../components/feed/RoundStoriesRail';
+import FeedRoundCard from '../components/feed/FeedRoundCard';
+
+const EMPTY_REACTION_COUNTS = {};
+const EMPTY_REACTION_MINE = [];
 
 // Compact relative time: "just now", "3h", "2d", "5w". Pure function of a
 // timestamp and a "now" — `now` is passed in so the value can re-render live.
@@ -59,33 +65,13 @@ function Avatar({ item, theme }) {
   );
 }
 
-// Small avatar for one player inside a grouped round card.
-function MiniAvatar({ result, theme }) {
-  const initial = (result.name || '?').trim().charAt(0).toUpperCase();
-  return (
-    <View style={[
-      feedAvatar.mini,
-      { backgroundColor: result.avatarColor || theme.accent.primary },
-    ]}>
-      {result.avatarUrl
-        ? <Image source={{ uri: result.avatarUrl }} style={feedAvatar.img} />
-        : <Text style={feedAvatar.miniText}>{initial}</Text>}
-    </View>
-  );
-}
-
 const feedAvatar = StyleSheet.create({
   wrap: {
     width: 38, height: 38, borderRadius: 19,
     alignItems: 'center', justifyContent: 'center', overflow: 'hidden',
   },
-  mini: {
-    width: 26, height: 26, borderRadius: 13,
-    alignItems: 'center', justifyContent: 'center', overflow: 'hidden',
-  },
   img: { width: '100%', height: '100%' },
   text: { fontFamily: 'PlusJakartaSans-ExtraBold', color: '#ffd700', fontSize: 15 },
-  miniText: { fontFamily: 'PlusJakartaSans-ExtraBold', color: '#ffd700', fontSize: 11 },
 });
 
 // A photo group from the feed. One photo renders flush; multiple photos from
@@ -150,8 +136,8 @@ function PhotoCarousel({ mediaList, s }) {
 // Emoji reaction bar. Optimistic: a tap flips the local count/mine state
 // immediately, then persists via toggleReaction; a failed persist reverts.
 function ReactionBar({ itemKey, reactions, onChange, commentCount, onOpenComments, s, theme }) {
-  const counts = reactions?.counts ?? {};
-  const mine = reactions?.mine ?? [];
+  const counts = reactions?.counts ?? EMPTY_REACTION_COUNTS;
+  const mine = reactions?.mine ?? EMPTY_REACTION_MINE;
   const emojiInputRef = useRef(null);
 
   const onTap = async (emoji) => {
@@ -262,6 +248,7 @@ export default function FeedScreen({ navigation }) {
   const now = useNow();
 
   const [items, setItems] = useState([]);
+  const [roundStories, setRoundStories] = useState([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   // 'ok' | 'error' | 'partial' — distinguishes a genuine empty feed from a
@@ -273,6 +260,7 @@ export default function FeedScreen({ navigation }) {
   // thread sheet is currently open (null when closed).
   const [commentCounts, setCommentCounts] = useState({});
   const [openCommentsKey, setOpenCommentsKey] = useState(null);
+  const [openStory, setOpenStory] = useState(null);
   // True once at least one successful load has populated the list, so
   // focus-driven reloads keep the existing list visible (no full spinner).
   const loadedOnceRef = useRef(false);
@@ -283,6 +271,7 @@ export default function FeedScreen({ navigation }) {
       const result = await buildFeed();
       const feedItems = result.items ?? [];
       setItems(feedItems);
+      setRoundStories(result.roundStories ?? []);
       setStatus(result.error ? 'error' : (result.partial ? 'partial' : 'ok'));
       loadedOnceRef.current = true;
       // Reactions + comment counts are best-effort overlays — never block
@@ -298,6 +287,7 @@ export default function FeedScreen({ navigation }) {
       // buildFeed is defensive and rarely throws; treat a throw as an error
       // state rather than silently showing an empty feed.
       if (!loadedOnceRef.current) setItems([]);
+      if (!loadedOnceRef.current) setRoundStories([]);
       setStatus('error');
     } finally {
       setLoading(false);
@@ -361,78 +351,13 @@ export default function FeedScreen({ navigation }) {
       courseName: item.courseName,
       roundIndex: item.roundIndex,
     });
-    const results = item.results ?? [];
-    const multi = results.length > 1;
-    const verb = multi
-      ? ` and ${results.length - 1} other${results.length - 1 > 1 ? 's' : ''} played a round`
-      : ' played a round';
     return (
-      <TouchableOpacity
-        style={s.card}
-        activeOpacity={0.75}
+      <FeedRoundCard
+        item={item}
+        roundLabel={roundLabel}
+        timestamp={timeAgo(item.ts, now)}
         onPress={() => openRound(item)}
       >
-        <View style={s.cardHead}>
-          <Avatar item={item} theme={theme} />
-          <View style={{ flex: 1 }}>
-            <Text style={s.actorLine}>
-              <Text style={s.actorName}>{item.actorName}</Text>
-              <Text style={s.actorVerb}>{verb}</Text>
-            </Text>
-            <Text style={s.metaLine}>
-              {roundLabel} · {item.tournamentName} · {timeAgo(item.ts, now)}
-            </Text>
-          </View>
-        </View>
-
-        {multi ? (
-          // Grouped round: one row per player.
-          <View style={s.resultsList}>
-            {results.map((r) => (
-              <View key={r.playerId} style={s.resultRow}>
-                <MiniAvatar result={r} theme={theme} />
-                <Text style={s.resultName} numberOfLines={1}>{r.name}</Text>
-                <View style={s.resultStat}>
-                  <Text style={s.resultStatValue}>{r.points}</Text>
-                  <Text style={s.resultStatLabel}>PTS</Text>
-                </View>
-                <View style={s.resultStat}>
-                  <Text style={s.resultStatValue}>{r.strokes}</Text>
-                  <Text style={s.resultStatLabel}>STRK</Text>
-                </View>
-              </View>
-            ))}
-          </View>
-        ) : (
-          <View style={s.scoreRow}>
-            <View style={s.scoreCell}>
-              <Text style={s.scoreValue}>{item.points}</Text>
-              <Text style={s.scoreLabel}>POINTS</Text>
-            </View>
-            <View style={s.scoreCell}>
-              <Text style={s.scoreValue}>{item.strokes}</Text>
-              <Text style={s.scoreLabel}>STROKES</Text>
-            </View>
-            <View style={s.scoreCell}>
-              <Text style={s.scoreValue}>{item.holes}</Text>
-              <Text style={s.scoreLabel}>HOLES</Text>
-            </View>
-            {item.courseName ? (
-              <View style={[s.scoreCell, s.courseCell]}>
-                <Feather name="map-pin" size={12} color={theme.text.muted} />
-                <Text style={s.courseText} numberOfLines={1}>{item.courseName}</Text>
-              </View>
-            ) : null}
-          </View>
-        )}
-
-        {!item.isMine && !item.withMe ? (
-          <View style={s.tagRow}>
-            <Feather name="users" size={11} color={theme.text.muted} />
-            <Text style={s.tagText}>A round without you</Text>
-          </View>
-        ) : null}
-
         <ReactionBar
           itemKey={item.key}
           reactions={reactions[item.key]}
@@ -442,7 +367,7 @@ export default function FeedScreen({ navigation }) {
           s={s}
           theme={theme}
         />
-      </TouchableOpacity>
+      </FeedRoundCard>
     );
   };
 
@@ -513,7 +438,7 @@ export default function FeedScreen({ navigation }) {
       return (
         <View style={s.emptyState}>
           <Feather name="cloud-off" size={46} color={theme.text.muted} />
-          <Text style={s.emptyTitle}>Couldn't load your feed</Text>
+          <Text style={s.emptyTitle}>Could not load your feed</Text>
           <Text style={s.emptySub}>
             Check your connection and try again.
           </Text>
@@ -559,6 +484,13 @@ export default function FeedScreen({ navigation }) {
         </TouchableOpacity>
       </View>
 
+      {!loading ? (
+        <RoundStoriesRail
+          stories={roundStories}
+          onPressStory={setOpenStory}
+        />
+      ) : null}
+
       {renderFilters()}
 
       {/* Partial-load banner: some data reached us, some didn't. */}
@@ -598,6 +530,15 @@ export default function FeedScreen({ navigation }) {
         itemKey={openCommentsKey}
         onClose={() => setOpenCommentsKey(null)}
         onCountChange={onCommentCountChange}
+      />
+      <MemoriesStoriesViewer
+        visible={!!openStory}
+        items={openStory?.mediaList ?? []}
+        startIndex={0}
+        rounds={[]}
+        storyTitle={openStory?.roundLabel}
+        storySubtitle={openStory?.tournamentName}
+        onClose={() => setOpenStory(null)}
       />
     </ScreenContainer>
   );
