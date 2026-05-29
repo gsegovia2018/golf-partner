@@ -18,7 +18,9 @@ export default function RoundRecapPanel({
     { label: 'Winner', value: recap?.winnerName || 'No winner' },
     { label: 'Points', value: statValue(recap?.winnerPoints) },
     { label: 'Margin', value: statValue(recap?.margin) },
+    { label: 'Strokes', value: statValue(recap?.winnerStrokes) },
     { label: 'Holes', value: statValue(recap?.holesPlayed) },
+    { label: 'Players', value: statValue(recap?.playerCount) },
   ];
 
   return (
@@ -71,12 +73,14 @@ function makeStyles(theme) {
     },
     statsRow: {
       flexDirection: 'row',
+      flexWrap: 'wrap',
       gap: 8,
     },
     stat: {
       backgroundColor: theme.bg.secondary,
       borderRadius: 6,
-      flex: 1,
+      flexBasis: '31%',
+      flexGrow: 1,
       minWidth: 0,
       paddingHorizontal: 8,
       paddingVertical: 8,

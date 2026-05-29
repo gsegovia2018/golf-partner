@@ -1,6 +1,8 @@
 import React from 'react';
-import { render } from '@testing-library/react-native';
+import { fireEvent, render } from '@testing-library/react-native';
+import RoundRecapPanel from '../RoundRecapPanel';
 import RoundScorecardTables from '../RoundScorecardTables';
+import RoundSummaryTabs from '../RoundSummaryTabs';
 
 jest.mock('../../../theme/ThemeContext', () => ({
   useTheme: () => ({
@@ -68,5 +70,47 @@ describe('RoundScorecardTables', () => {
     );
 
     expect(getByText('No scorecard data for this round')).toBeTruthy();
+  });
+});
+
+describe('RoundRecapPanel', () => {
+  test('renders all recap contract fields', () => {
+    const { getAllByText, getByText } = render(
+      <RoundRecapPanel
+        tournamentName="Weekend Cup"
+        roundLabel="Round 2"
+        summary="Marcos led the round."
+        recap={{
+          winnerName: 'Marcos',
+          winnerPoints: 38,
+          margin: 4,
+          winnerStrokes: 72,
+          holesPlayed: 18,
+          playerCount: 4,
+        }}
+      />
+    );
+
+    expect(getByText('Marcos')).toBeTruthy();
+    expect(getByText('38')).toBeTruthy();
+    expect(getAllByText('4').length).toBeGreaterThan(0);
+    expect(getByText('72')).toBeTruthy();
+    expect(getByText('18')).toBeTruthy();
+    expect(getByText('Players')).toBeTruthy();
+  });
+});
+
+describe('RoundSummaryTabs', () => {
+  test('uses active prop for selected accessibility state', () => {
+    const onChange = jest.fn();
+    const { getByRole, getByText } = render(
+      <RoundSummaryTabs active="photos" onChange={onChange} />
+    );
+
+    expect(getByRole('button', { name: 'Photos' }).props.accessibilityState).toEqual({ selected: true });
+    expect(getByRole('button', { name: 'Scorecard' }).props.accessibilityState).toEqual({ selected: false });
+
+    fireEvent.press(getByText('Comments'));
+    expect(onChange).toHaveBeenCalledWith('comments');
   });
 });

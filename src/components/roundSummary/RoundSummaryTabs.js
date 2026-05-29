@@ -9,14 +9,14 @@ export const ROUND_SUMMARY_TABS = [
   { key: 'comments', label: 'Comments' },
 ];
 
-export default function RoundSummaryTabs({ activeTab, onChange }) {
+export default function RoundSummaryTabs({ active, onChange }) {
   const { theme } = useTheme();
   const s = useMemo(() => makeStyles(theme), [theme]);
 
   return (
     <View style={s.tabs}>
       {ROUND_SUMMARY_TABS.map((tab) => {
-        const selected = tab.key === activeTab;
+        const selected = tab.key === active;
         return (
           <TouchableOpacity
             key={tab.key}
