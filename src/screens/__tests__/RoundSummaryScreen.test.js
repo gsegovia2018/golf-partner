@@ -75,6 +75,7 @@ const mockTournament = {
 };
 
 jest.mock('../../store/tournamentStore', () => ({
+  getTournamentSnapshot: jest.fn(() => null),
   readLocal: jest.fn(() => Promise.resolve(mockTournament)),
   setActiveTournament: jest.fn(() => Promise.resolve()),
   formatRoundLabel: jest.fn(({ courseName }) => courseName),
