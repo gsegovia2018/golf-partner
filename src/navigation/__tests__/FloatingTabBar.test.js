@@ -4,6 +4,7 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { ThemeProvider } from '../../theme/ThemeContext';
 import FloatingTabBar from '../FloatingTabBar';
+import { light } from '../../theme/tokens';
 
 jest.mock('react-native-safe-area-context', () => {
   const React = require('react');
@@ -82,6 +83,13 @@ describe('FloatingTabBar', () => {
 
     expect(navigation.navigate).toHaveBeenCalledWith('MyStats');
     expect(navigation.navigate).toHaveBeenCalledWith('Profile');
+  });
+
+  test('uses secondary text color for inactive secondary icons', () => {
+    const { UNSAFE_getAllByType } = renderTabBar({ index: 2 });
+
+    const icons = UNSAFE_getAllByType('MaterialCommunityIcons');
+    expect(icons[0].props.color).toBe(light.text.secondary);
   });
 
   test('routes the center action to Home when no round is live', () => {

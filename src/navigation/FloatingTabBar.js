@@ -58,7 +58,7 @@ export default function FloatingTabBar({ state, navigation }) {
               : theme.text.inverse
             : focused
               ? theme.accent.primary
-              : theme.text.muted;
+              : theme.text.secondary;
 
           return (
             <TouchableOpacity

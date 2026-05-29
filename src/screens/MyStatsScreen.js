@@ -68,6 +68,7 @@ export default function MyStatsScreen({ navigation, route }) {
   const [infoKey, setInfoKey] = useState(null);
   const [targetHandicap, setTargetHandicap] = useState(null);
   const [pickerOpen, setPickerOpen] = useState(false);
+  const isTabPresentation = route?.params?.presentation === 'tab';
 
   const storageKey = user?.id ? `${SELECTION_PREFIX}${user.id}` : null;
 
@@ -153,9 +154,17 @@ export default function MyStatsScreen({ navigation, route }) {
 
   const Header = (
     <View style={s.header}>
-      <TouchableOpacity onPress={() => navigation.goBack()} style={s.backBtn}>
-        <Feather name="chevron-left" size={22} color={theme.accent.primary} />
-      </TouchableOpacity>
+      {isTabPresentation ? (
+        <View style={s.backBtn} />
+      ) : (
+        <TouchableOpacity
+          accessibilityLabel="Back"
+          onPress={() => navigation.goBack()}
+          style={s.backBtn}
+        >
+          <Feather name="chevron-left" size={22} color={theme.accent.primary} />
+        </TouchableOpacity>
+      )}
       <Text style={s.headerTitle}>My Stats</Text>
       <TouchableOpacity
         onPress={() => setSelectorOpen(true)}
@@ -310,7 +319,13 @@ function makeStyles(theme) {
       paddingHorizontal: theme.spacing.md, paddingVertical: theme.spacing.sm,
       borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: theme.border.default,
     },
-    backBtn: { padding: theme.spacing.xs },
+    backBtn: {
+      width: 38,
+      height: 38,
+      alignItems: 'center',
+      justifyContent: 'center',
+      padding: theme.spacing.xs,
+    },
     headerTitle: { ...theme.typography.heading, color: theme.text.primary, flex: 1, marginLeft: theme.spacing.sm },
     roundsBtn: {
       flexDirection: 'row', alignItems: 'center', gap: 4,

@@ -29,6 +29,7 @@ import AuthScreen from './src/screens/AuthScreen';
 import JoinTournamentLinkScreen from './src/screens/JoinTournamentLinkScreen';
 
 import FloatingTabBar from './src/navigation/FloatingTabBar';
+import { TAB_ROUTE_NAMES } from './src/navigation/tabBarModel';
 import HomeScreen from './src/screens/HomeScreen';
 import FeedScreen from './src/screens/FeedScreen';
 import HistoryScreen from './src/screens/HistoryScreen';
@@ -72,6 +73,14 @@ const navigationRef = createNavigationContainerRef();
 // Set the foreground notification handler once, at module load.
 configureNotificationHandler();
 
+const TAB_SCREENS = {
+  Feed: { component: FeedScreen },
+  MyStats: { component: MyStatsScreen, initialParams: { presentation: 'tab' } },
+  Home: { component: HomeScreen, initialParams: { viewMode: 'list' } },
+  History: { component: HistoryScreen },
+  Profile: { component: ProfileScreen, initialParams: { presentation: 'tab' } },
+};
+
 // Primary navigation: Feed, personal Stats, the raised Play/Score action,
 // History, and Profile. The center route keeps the name "Home" so existing
 // navigate('Home') targets still resolve; the custom tab bar redirects it to
@@ -83,15 +92,17 @@ function MainTabs() {
       screenOptions={{ headerShown: false }}
       tabBar={(props) => <FloatingTabBar {...props} />}
     >
-      <Tab.Screen name="Feed" component={FeedScreen} />
-      <Tab.Screen name="MyStats" component={MyStatsScreen} />
-      <Tab.Screen
-        name="Home"
-        component={HomeScreen}
-        initialParams={{ viewMode: 'list' }}
-      />
-      <Tab.Screen name="History" component={HistoryScreen} />
-      <Tab.Screen name="Profile" component={ProfileScreen} />
+      {TAB_ROUTE_NAMES.map((routeName) => {
+        const screen = TAB_SCREENS[routeName];
+        return (
+          <Tab.Screen
+            key={routeName}
+            name={routeName}
+            component={screen.component}
+            initialParams={screen.initialParams}
+          />
+        );
+      })}
     </Tab.Navigator>
   );
 }
