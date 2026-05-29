@@ -53,6 +53,12 @@ const mockTournament = {
       p1: Object.fromEntries(Array.from({ length: 18 }, (_, i) => [i + 1, 4])),
       p2: Object.fromEntries(Array.from({ length: 18 }, (_, i) => [i + 1, 5])),
     },
+    notes: {
+      round: 'Pablo holed a long putt on the back nine.',
+      hole: {
+        7: 'Marcos found the fairway bunker.',
+      },
+    },
   }],
 };
 
@@ -95,5 +101,17 @@ describe('RoundSummaryScreen', () => {
 
     expect(await findByText('Marcos  (you)')).toBeTruthy();
     expect((await findAllByText('38')).length).toBeGreaterThan(0);
+  });
+
+  test('preserves existing round and hole notes in comments tab', async () => {
+    const { findByLabelText, findByText } = render(wrap(
+      <RoundSummaryScreen navigation={navigation} route={route} />,
+    ));
+
+    fireEvent.press(await findByLabelText('Comments'));
+
+    expect(await findByText('Pablo holed a long putt on the back nine.')).toBeTruthy();
+    expect(await findByText('Hole 7')).toBeTruthy();
+    expect(await findByText('Marcos found the fairway bunker.')).toBeTruthy();
   });
 });

@@ -85,6 +85,13 @@ export default function RoundSummaryScreen({ navigation, route }) {
   });
   const recap = round ? buildRoundRecap({ round, ranked }) : null;
   const scorecardSections = round ? buildScorecardSections({ round, ranked }) : [];
+  const roundNote = typeof round?.notes?.round === 'string'
+    ? round.notes.round.trim()
+    : '';
+  const holeNotes = Object.entries(round?.notes?.hole ?? {})
+    .filter(([, text]) => typeof text === 'string' && text.trim())
+    .sort(([a], [b]) => Number(a) - Number(b));
+  const hasNotes = Boolean(roundNote) || holeNotes.length > 0;
 
   return (
     <ScreenContainer style={s.container} edges={['top', 'bottom']}>
@@ -167,7 +174,31 @@ export default function RoundSummaryScreen({ navigation, route }) {
           ) : null}
 
           {activeTab === 'comments' ? (
-            <Text style={s.empty}>Comments appear from the feed thread for this round.</Text>
+            <View>
+              {hasNotes ? (
+                <>
+                  {roundNote ? (
+                    <>
+                      <Text style={s.sectionLabel}>NOTES</Text>
+                      <Text style={s.notes}>{roundNote}</Text>
+                    </>
+                  ) : null}
+                  {holeNotes.length > 0 ? (
+                    <>
+                      <Text style={s.sectionLabel}>HOLE NOTES</Text>
+                      {holeNotes.map(([hole, text]) => (
+                        <View key={hole} style={s.holeNoteRow}>
+                          <Text style={s.holeNoteLabel}>{`Hole ${hole}`}</Text>
+                          <Text style={s.holeNoteText}>{text.trim()}</Text>
+                        </View>
+                      ))}
+                    </>
+                  ) : null}
+                </>
+              ) : (
+                <Text style={s.empty}>Comments appear from the feed thread for this round.</Text>
+              )}
+            </View>
           ) : null}
 
           {iAmPlaying && (
