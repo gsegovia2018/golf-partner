@@ -17,9 +17,10 @@ import { parseHandicapIndex } from '../lib/handicap';
 
 const AVATAR_COLORS = ['#006747', '#c77b38', '#1b4965', '#7b3f6b', '#4a6d3f', '#b33951'];
 
-export default function ProfileScreen({ navigation }) {
+export default function ProfileScreen({ navigation, route }) {
   const { theme, mode, toggle } = useTheme();
   const s = makeStyles(theme);
+  const isTabPresentation = route?.params?.presentation === 'tab';
 
   const [profile, setProfile] = useState(null);
   const [stats, setStats] = useState(null);
@@ -211,11 +212,20 @@ export default function ProfileScreen({ navigation }) {
   return (
     <ScreenContainer style={s.screen} edges={['top', 'bottom']}>
       <View style={s.header}>
-        <TouchableOpacity onPress={handleBack} style={s.backBtn} activeOpacity={0.7}>
-          <Feather name="chevron-left" size={22} color={theme.accent.primary} />
-        </TouchableOpacity>
+        {isTabPresentation ? (
+          <View style={s.backBtn} />
+        ) : (
+          <TouchableOpacity
+            accessibilityLabel="Back"
+            onPress={handleBack}
+            style={s.backBtn}
+            activeOpacity={0.7}
+          >
+            <Feather name="chevron-left" size={22} color={theme.accent.primary} />
+          </TouchableOpacity>
+        )}
         <Text style={s.headerTitle}>Profile</Text>
-        <View style={{ width: 22 }} />
+        <View style={s.backBtn} />
       </View>
 
       {loading ? (
@@ -484,7 +494,12 @@ const makeStyles = (theme) => StyleSheet.create({
     flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
     paddingHorizontal: 20, paddingTop: 16, paddingBottom: 12,
   },
-  backBtn: {},
+  backBtn: {
+    width: 40,
+    height: 40,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
   headerTitle: { fontFamily: 'PlusJakartaSans-Bold', fontSize: 17, color: theme.text.primary },
   loadingWrap: { flex: 1, alignItems: 'center', justifyContent: 'center' },
   scroll: { flex: 1 },
