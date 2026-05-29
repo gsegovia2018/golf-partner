@@ -236,10 +236,6 @@ jest.mock('../../store/tournamentStore', () => ({
   subscribeTournamentChanges: (...args) => subscribeTournamentChanges(...args),
 }));
 
-jest.mock('../../lib/navigationFocus', () => ({
-  shouldHandleStoreChange: jest.fn(() => true),
-}));
-
 function makeState(index = 2) {
   const names = ['Feed', 'MyStats', 'Home', 'History', 'Profile'];
   return {
@@ -339,7 +335,6 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useTheme } from '../theme/ThemeContext';
 import { CONTENT_MAX_WIDTH } from '../theme/responsive';
 import { loadTournament, isRoundInProgress, subscribeTournamentChanges } from '../store/tournamentStore';
-import { shouldHandleStoreChange } from '../lib/navigationFocus';
 import { getTabBarItem, isCenterTab } from './tabBarModel';
 
 export default function FloatingTabBar({ state, navigation }) {
@@ -351,8 +346,7 @@ export default function FloatingTabBar({ state, navigation }) {
   React.useEffect(() => {
     let cancelled = false;
     const check = () => {
-      if (!shouldHandleStoreChange(navigation)) return;
-      loadTournament({ refreshRemote: false, resolveIdentity: false })
+      loadTournament()
         .then((t) => {
           if (!cancelled) setRoundLive(isRoundInProgress(t));
         })
@@ -543,7 +537,6 @@ Remove these imports from `App.js`:
 import { Feather } from '@expo/vector-icons';
 import { CONTENT_MAX_WIDTH } from './src/theme/responsive';
 import { loadTournament, isRoundInProgress, subscribeTournamentChanges } from './src/store/tournamentStore';
-import { shouldHandleStoreChange } from './src/lib/navigationFocus';
 ```
 
 Add this import near the other local imports:
