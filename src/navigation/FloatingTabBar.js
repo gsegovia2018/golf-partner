@@ -39,6 +39,7 @@ export default function FloatingTabBar({ state, navigation }) {
           const focused = state.index === index;
           const item = getTabBarItem(route.name, { roundLive });
           const center = isCenterTab(route.name);
+          const secondaryFocused = !center && focused;
           const selected = focused && (!center || !item.live);
 
           const onPress = () => {
@@ -71,14 +72,16 @@ export default function FloatingTabBar({ state, navigation }) {
               style={[styles.tab, center && styles.centerTab]}
             >
               <View
+                testID={`${route.name}-tab-surface`}
                 style={[
                   center ? styles.centerButton : styles.secondaryButton,
                   center && item.live && styles.centerButtonLive,
-                  !center && focused && styles.secondaryButtonActive,
+                  secondaryFocused && styles.secondaryButtonActive,
                 ]}
               >
-                <MaterialCommunityIcons name={item.icon} size={center ? 25 : 22} color={iconColor} />
+                <MaterialCommunityIcons name={item.icon} size={center ? 25 : secondaryFocused ? 20 : 22} color={iconColor} />
                 {center && <Text style={[styles.centerLabel, item.live && styles.centerLabelLive]}>{item.label}</Text>}
+                {secondaryFocused && <Text style={styles.secondaryLabel}>{item.label}</Text>}
               </View>
             </TouchableOpacity>
           );
@@ -134,7 +137,19 @@ function tabBarStyles(theme) {
       justifyContent: 'center',
     },
     secondaryButtonActive: {
+      width: 58,
+      height: 52,
+      borderRadius: 18,
+      gap: 1,
       backgroundColor: theme.accent.light,
+      borderWidth: 1,
+      borderColor: theme.isDark ? theme.glass?.border ?? theme.border.default : 'rgba(0,103,71,0.14)',
+      shadowColor: theme.accent.primary,
+      shadowOpacity: theme.isDark ? 0.14 : 0.16,
+      shadowRadius: 8,
+      shadowOffset: { width: 0, height: 4 },
+      elevation: 6,
+      transform: [{ translateY: -8 }],
     },
     centerButton: {
       width: 68,
@@ -166,6 +181,12 @@ function tabBarStyles(theme) {
     },
     centerLabelLive: {
       color: theme.masters.yellow,
+    },
+    secondaryLabel: {
+      fontFamily: 'PlusJakartaSans-ExtraBold',
+      fontSize: 10,
+      lineHeight: 12,
+      color: theme.accent.primary,
     },
   });
 }

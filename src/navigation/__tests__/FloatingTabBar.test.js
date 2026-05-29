@@ -1,5 +1,6 @@
 import React from 'react';
 import { fireEvent, render, waitFor } from '@testing-library/react-native';
+import { StyleSheet } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { ThemeProvider } from '../../theme/ThemeContext';
@@ -90,6 +91,16 @@ describe('FloatingTabBar', () => {
 
     const icons = UNSAFE_getAllByType('MaterialCommunityIcons');
     expect(icons[0].props.color).toBe(light.text.secondary);
+  });
+
+  test('reveals a compact label for the selected secondary tab', () => {
+    const { getByTestId, getByText, queryByText } = renderTabBar({ index: 1 });
+    const activeSurface = StyleSheet.flatten(getByTestId('MyStats-tab-surface').props.style);
+
+    expect(getByText('Stats')).toBeTruthy();
+    expect(queryByText('Feed')).toBeNull();
+    expect(activeSurface.transform).toEqual([{ translateY: -8 }]);
+    expect(activeSurface.height).toBeGreaterThan(46);
   });
 
   test('routes the center action to Home when no round is live', () => {
