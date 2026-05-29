@@ -60,7 +60,11 @@ export default function RoundScorecardTables({ sections }) {
                   </View>
                 ))}
               </View>
-              <ScrollView horizontal showsHorizontalScrollIndicator={false}>
+              <ScrollView
+                horizontal
+                showsHorizontalScrollIndicator={false}
+                style={s.scoreScroller}
+              >
                 <View>
                   <View style={s.row}>
                     {holes.map((hole, index) => (
@@ -128,6 +132,9 @@ function makeStyles(theme) {
     nameColumn: {
       borderRightWidth: 1,
       borderRightColor: theme.border.default,
+    },
+    scoreScroller: {
+      flex: 1,
     },
     row: {
       flexDirection: 'row',

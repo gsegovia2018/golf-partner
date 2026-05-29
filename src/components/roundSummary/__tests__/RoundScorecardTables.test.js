@@ -1,5 +1,6 @@
 import React from 'react';
 import { fireEvent, render } from '@testing-library/react-native';
+import { ScrollView, StyleSheet } from 'react-native';
 import RoundRecapPanel from '../RoundRecapPanel';
 import RoundScorecardTables from '../RoundScorecardTables';
 import RoundSummaryTabs from '../RoundSummaryTabs';
@@ -70,6 +71,22 @@ describe('RoundScorecardTables', () => {
     );
 
     expect(getByText('No scorecard data for this round')).toBeTruthy();
+  });
+
+  test('bounds horizontal score scrollers to remaining table width', () => {
+    const { UNSAFE_getAllByType } = render(
+      <RoundScorecardTables sections={sections} />
+    );
+
+    const scrollerStyles = UNSAFE_getAllByType(ScrollView)
+      .filter((node) => node.props.horizontal)
+      .map((node) => StyleSheet.flatten(node.props.style));
+
+    expect(scrollerStyles).toHaveLength(2);
+    expect(scrollerStyles).toEqual([
+      expect.objectContaining({ flex: 1 }),
+      expect.objectContaining({ flex: 1 }),
+    ]);
   });
 });
 
