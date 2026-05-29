@@ -36,7 +36,8 @@ export function buildRoundRecap({ round, ranked } = {}) {
   const runnerUpPoints = Number(runnerUpEntry?.totalPoints) || 0;
 
   return {
-    winner: winnerEntry?.player ?? null,
+    winnerName: winnerEntry?.player?.name ?? '',
+    winnerPoints,
     margin: winnerEntry ? Math.max(0, winnerPoints - runnerUpPoints) : 0,
     winnerStrokes: winnerEntry?.totalStrokes ?? 0,
     holesPlayed: countPlayedHoles(round),
@@ -49,8 +50,8 @@ export function buildScorecardSections({ round, ranked } = {}) {
   const rows = asArray(ranked);
   const scores = round?.scores ?? {};
   const sectionDefs = [
-    { key: 'front', label: 'Front 9', holes: holes.slice(0, 9) },
-    { key: 'back', label: 'Back 9', holes: holes.slice(9, 18) },
+    { label: 'Front', holes: holes.slice(0, 9) },
+    { label: 'Back', holes: holes.slice(9, 18) },
   ];
 
   return sectionDefs
@@ -58,12 +59,13 @@ export function buildScorecardSections({ round, ranked } = {}) {
     .map((section) => ({
       ...section,
       parTotal: section.holes.reduce((sum, hole) => sum + (Number(hole?.par) || 0), 0),
-      rows: rows.map((entry) => {
+      playerRows: rows.map((entry) => {
         const playerId = entry?.player?.id;
         const playerScores = section.holes.map((hole) => scoreValue(scores, playerId, hole?.number));
 
         return {
-          player: entry?.player ?? null,
+          playerId: playerId ?? null,
+          name: entry?.player?.name ?? '',
           scores: playerScores,
           total: scoreTotal(playerScores),
         };

@@ -24,13 +24,14 @@ describe('roundSummaryModel', () => {
     };
     const ranked = [
       { player: players[0], totalPoints: 38, totalStrokes: 72 },
-      { player: players[1], totalPoints: 35, totalStrokes: 81 },
+      { player: players[1], totalPoints: 34, totalStrokes: 81 },
       { player: players[2], totalPoints: 30, totalStrokes: 90 },
     ];
 
     expect(buildRoundRecap({ round, ranked })).toEqual({
-      winner: players[0],
-      margin: 3,
+      winnerName: 'Marcos',
+      winnerPoints: 38,
+      margin: 4,
       winnerStrokes: 72,
       holesPlayed: 18,
       playerCount: 3,
@@ -90,37 +91,41 @@ describe('roundSummaryModel', () => {
 
     expect(sections).toHaveLength(2);
     expect(sections[0]).toMatchObject({
-      key: 'front',
-      label: 'Front 9',
+      label: 'Front',
       holes: holes.slice(0, 9),
       parTotal: holes.slice(0, 9).reduce((sum, h) => sum + h.par, 0),
     });
     expect(sections[1]).toMatchObject({
-      key: 'back',
-      label: 'Back 9',
+      label: 'Back',
       holes: holes.slice(9, 18),
       parTotal: holes.slice(9, 18).reduce((sum, h) => sum + h.par, 0),
     });
-    expect(sections[0].rows).toEqual([
+    expect(sections[0]).not.toHaveProperty('rows');
+    expect(sections[0].playerRows).toEqual([
       {
-        player: players[0],
+        playerId: 'p1',
+        name: 'Marcos',
         scores: [4, null, 5, null, null, null, null, null, 3],
         total: 12,
       },
       {
-        player: players[1],
+        playerId: 'p2',
+        name: 'Pablo',
         scores: [5, 4, null, null, null, null, null, null, 4],
         total: 13,
       },
     ]);
-    expect(sections[1].rows).toEqual([
+    expect(sections[1]).not.toHaveProperty('rows');
+    expect(sections[1].playerRows).toEqual([
       {
-        player: players[0],
+        playerId: 'p1',
+        name: 'Marcos',
         scores: [4, 4, null, null, null, null, null, null, null],
         total: 8,
       },
       {
-        player: players[1],
+        playerId: 'p2',
+        name: 'Pablo',
         scores: [null, null, 6, null, null, null, null, null, 5],
         total: 11,
       },
