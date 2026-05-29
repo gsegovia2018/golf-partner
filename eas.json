@@ -23,6 +23,15 @@
         "GOLF_ANDROID_BUILD_ARCHS": "arm64-v8a"
       }
     },
+    "preview-amd64": {
+      "distribution": "internal",
+      "android": {
+        "buildType": "apk"
+      },
+      "env": {
+        "GOLF_ANDROID_BUILD_ARCHS": "x86_64"
+      }
+    },
     "production": {
       "autoIncrement": true,
       "android": {
