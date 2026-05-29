@@ -4,6 +4,7 @@ import {
   loadAllTournamentsWithFallback,
   roundTotals,
   isTournamentFinished,
+  formatRoundLabel,
 } from './tournamentStore';
 import { loadMediaForTournaments } from './mediaStore';
 import { loadProfile } from './profileStore';
@@ -45,6 +46,90 @@ function holesPlayed(round, playerId) {
   return Object.values(scores).filter((v) => v != null).length;
 }
 
+const ROUND_STORY_LIMIT = 12;
+
+function mediaTs(media) {
+  return Date.parse(media?.createdAt) || 0;
+}
+
+function mediaCountLabel(count, hasVideo) {
+  if (count === 1) return hasVideo ? '1 memory' : '1 photo';
+  return hasVideo ? `${count} memories` : `${count} photos`;
+}
+
+function roundLabelForStory(tournament, roundId) {
+  const rounds = tournament?.rounds ?? [];
+  const index = rounds.findIndex((r) => r.id === roundId);
+  const round = index >= 0 ? rounds[index] : null;
+  return {
+    round,
+    roundIndex: index,
+    roundLabel: round?.courseName
+      || (index >= 0 ? formatRoundLabel({
+        kind: tournament?.kind,
+        courseName: round?.courseName,
+        roundIndex: index,
+      }) : tournament?.name || 'Tournament photos'),
+  };
+}
+
+export function buildRoundStories(tournaments, media, options = {}) {
+  const limit = options.limit ?? ROUND_STORY_LIMIT;
+  const tournamentById = new Map((tournaments ?? []).map((t) => [t.id, t]));
+  const groups = new Map();
+
+  for (const item of media ?? []) {
+    if (!item?.tournamentId) continue;
+    const tournament = tournamentById.get(item.tournamentId);
+    if (!tournament) continue;
+    const groupKey = `${item.tournamentId}:${item.roundId ?? 'none'}`;
+    let group = groups.get(groupKey);
+    if (!group) {
+      const { round, roundIndex, roundLabel } = roundLabelForStory(tournament, item.roundId ?? null);
+      group = {
+        key: `story:${item.tournamentId}:${item.roundId ?? 'none'}`,
+        tournamentId: item.tournamentId,
+        tournamentName: tournament.name,
+        roundId: item.roundId ?? null,
+        roundIndex,
+        roundLabel,
+        courseName: round?.courseName ?? null,
+        latestTs: 0,
+        mediaList: [],
+        count: 0,
+        uploaderNames: [],
+        hasVideo: false,
+      };
+      groups.set(groupKey, group);
+    }
+    group.mediaList.push(item);
+    group.latestTs = Math.max(group.latestTs, mediaTs(item));
+    group.hasVideo = group.hasVideo || item.kind === 'video';
+    const name = (item.uploaderLabel ?? '').trim();
+    if (name && !group.uploaderNames.includes(name)) group.uploaderNames.push(name);
+  }
+
+  return [...groups.values()]
+    .map((group) => {
+      const mediaList = group.mediaList.slice().sort((a, b) => mediaTs(a) - mediaTs(b));
+      const uploaderNames = [];
+      for (const item of mediaList) {
+        const name = (item.uploaderLabel ?? '').trim();
+        if (name && !uploaderNames.includes(name)) uploaderNames.push(name);
+      }
+      return {
+        ...group,
+        mediaList,
+        count: mediaList.length,
+        countLabel: mediaCountLabel(mediaList.length, group.hasVideo),
+        uploaderNames,
+      };
+    })
+    .filter((group) => group.count > 0)
+    .sort((a, b) => b.latestTs - a.latestTs)
+    .slice(0, limit);
+}
+
 // Fetch tournaments a friend played that the current user's own list does
 // not already include. Relies on the friend-aware RLS added in
 // migrations/20260515_friends_and_feed.sql. Network-only; returns [] on
@@ -72,7 +157,7 @@ async function fetchFriendTournaments(friendIds, alreadyHaveIds) {
 }
 
 // Build the full, time-sorted feed. Never throws — degrades to whatever
-// data is reachable. Returns { me, friends, items, partial, error }.
+// data is reachable. Returns { me, friends, items, roundStories, partial, error }.
 //   - error:   true when the feed could not be built at all (no items).
 //   - partial: true when some — but not all — data sources failed, so the
 //              feed is incomplete (e.g. friends loaded but media did not).
@@ -105,7 +190,7 @@ export async function buildFeed() {
   } catch {
     // The only hard-fail path: with no tournaments at all there is nothing
     // to build a feed from.
-    return { me, friends, items: [], partial: false, error: true };
+    return { me, friends, items: [], roundStories: [], partial: false, error: true };
   }
   const haveIds = new Set(myTournaments.map((t) => t.id));
   const friendTournaments = await fetchFriendTournaments(friendIds, haveIds);
@@ -201,6 +286,7 @@ export async function buildFeed() {
     media = await loadMediaForTournaments(all.map((t) => t.id));
   } catch { partial = true; /* offline — feed still shows rounds */ }
 
+  const roundStories = buildRoundStories(all, media);
   const tournamentById = new Map(all.map((t) => [t.id, t]));
   // Group photos by round (tournament-level photos with no roundId group per
   // tournament) so the feed shows one swipeable card per round of memories.
@@ -255,7 +341,7 @@ export async function buildFeed() {
   }
 
   items.sort((a, b) => b.ts - a.ts);
-  return { me, friends, items, partial, error: false };
+  return { me, friends, items, roundStories, partial, error: false };
 }
 
 // ---------------------------------------------------------------------------
