@@ -122,6 +122,7 @@ describe('FeedScreen', () => {
     expect(getByText('Pablo')).toBeTruthy();
     expect(getByText('Luis')).toBeTruthy();
     expect(queryByText('Javi')).toBeNull();
+    expect(getByText('+1 more player')).toBeTruthy();
 
     fireEvent.press(title);
     expect(navigation.navigate).toHaveBeenCalledWith('RoundSummary', {

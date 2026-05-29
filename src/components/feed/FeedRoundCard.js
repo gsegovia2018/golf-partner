@@ -47,7 +47,9 @@ export default function FeedRoundCard({
 }) {
   const { theme } = useTheme();
   const s = makeStyles(theme);
-  const results = (item.results ?? []).slice(0, 3);
+  const allResults = item.results ?? [];
+  const results = allResults.slice(0, 3);
+  const hiddenCount = Math.max(0, allResults.length - results.length);
 
   return (
     <TouchableOpacity
@@ -88,6 +90,13 @@ export default function FeedRoundCard({
               </View>
             </View>
           ))}
+          {hiddenCount > 0 ? (
+            <View style={s.overflowRow}>
+              <Text style={s.overflowText}>
+                +{hiddenCount} more player{hiddenCount === 1 ? '' : 's'}
+              </Text>
+            </View>
+          ) : null}
         </View>
       ) : null}
 
@@ -165,6 +174,17 @@ function makeStyles(theme) {
       backgroundColor: theme.bg.secondary,
       borderBottomWidth: 1,
       borderBottomColor: theme.border.default,
+    },
+    overflowRow: {
+      backgroundColor: theme.bg.secondary,
+      paddingVertical: 8,
+      paddingHorizontal: 10,
+      alignItems: 'center',
+    },
+    overflowText: {
+      fontFamily: 'PlusJakartaSans-Bold',
+      color: theme.text.muted,
+      fontSize: 12,
     },
     rankWrap: {
       width: 22,
