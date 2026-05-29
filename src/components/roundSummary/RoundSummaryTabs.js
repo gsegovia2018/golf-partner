@@ -25,6 +25,7 @@ export default function RoundSummaryTabs({ active, onChange }) {
             activeOpacity={0.75}
             accessibilityRole="button"
             accessibilityState={{ selected }}
+            accessibilityLabel={tab.label}
           >
             <Text style={[s.tabText, selected && s.tabTextSelected]} numberOfLines={1}>
               {tab.label}

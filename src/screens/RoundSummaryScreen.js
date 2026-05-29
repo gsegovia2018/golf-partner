@@ -11,6 +11,10 @@ import { useTheme } from '../theme/ThemeContext';
 import { supabase } from '../lib/supabase';
 import { readLocal, roundTotals, setActiveTournament, formatRoundLabel } from '../store/tournamentStore';
 import { loadRoundMedia } from '../store/mediaStore';
+import RoundRecapPanel from '../components/roundSummary/RoundRecapPanel';
+import RoundSummaryTabs from '../components/roundSummary/RoundSummaryTabs';
+import RoundScorecardTables from '../components/roundSummary/RoundScorecardTables';
+import { buildRoundRecap, buildScorecardSections } from './roundSummaryModel';
 
 // Read-only summary of a single round — the feed's drill-in target. Works
 // for the current user's own rounds and for friends' rounds (read access
@@ -25,6 +29,11 @@ async function fetchTournament(id) {
   return readLocal(id);
 }
 
+function recapSummary(recap) {
+  if (!recap?.winnerName) return 'No scores recorded for this round.';
+  return `${recap.winnerName} led with ${recap.winnerPoints} points.`;
+}
+
 export default function RoundSummaryScreen({ navigation, route }) {
   const { theme } = useTheme();
   const s = makeStyles(theme);
@@ -34,6 +43,7 @@ export default function RoundSummaryScreen({ navigation, route }) {
   const [media, setMedia] = useState([]);
   const [me, setMe] = useState(null);
   const [loading, setLoading] = useState(true);
+  const [activeTab, setActiveTab] = useState('scorecard');
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -67,20 +77,14 @@ export default function RoundSummaryScreen({ navigation, route }) {
   const ranked = [...totals]
     .filter((e) => e.totalStrokes > 0)
     .sort((a, b) => b.totalPoints - a.totalPoints);
-  const holes = round?.holes ?? [];
-
-  const strokeColor = (strokes, par) => {
-    if (strokes == null) return theme.text.muted;
-    if (strokes < par) return theme.accent.primary;
-    if (strokes === par) return theme.text.primary;
-    return theme.text.secondary;
-  };
 
   const roundLabel = formatRoundLabel({
     kind: tournament?.kind,
     courseName: round?.courseName,
     roundIndex,
   });
+  const recap = round ? buildRoundRecap({ round, ranked }) : null;
+  const scorecardSections = round ? buildScorecardSections({ round, ranked }) : [];
 
   return (
     <ScreenContainer style={s.container} edges={['top', 'bottom']}>
@@ -101,109 +105,52 @@ export default function RoundSummaryScreen({ navigation, route }) {
         </View>
       ) : (
         <ScrollView contentContainerStyle={s.content}>
-          <Text style={s.subTitle}>
-            {tournament.name}
-            {round.courseName ? ` · ${round.courseName}` : ''}
-          </Text>
+          <RoundRecapPanel
+            recap={recap}
+            roundLabel={roundLabel}
+            tournamentName={tournament?.name}
+            summary={recapSummary(recap)}
+          />
 
-          <Text style={s.sectionLabel}>LEADERBOARD</Text>
-          {ranked.length === 0 ? (
-            <Text style={s.empty}>No scores recorded for this round.</Text>
-          ) : (
-            ranked.map((entry, i) => {
-              const isMe = entry.player.user_id && entry.player.user_id === me;
-              return (
-                <View key={entry.player.id} style={[s.lbRow, isMe && s.lbRowMe]}>
-                  <Text style={s.lbRank}>{i + 1}</Text>
-                  <View style={s.lbNameWrap}>
-                    <Text style={[s.lbName, isMe && s.lbNameMe]} numberOfLines={1}>
-                      {entry.player.name}{isMe ? '  (you)' : ''}
-                    </Text>
-                    {round.playerTees?.[entry.player.id]?.label ? (
-                      <Text style={s.teeBadge}>{round.playerTees[entry.player.id].label}</Text>
-                    ) : null}
-                  </View>
-                  <View style={s.lbStat}>
-                    <Text style={s.lbStatValue}>{entry.totalPoints}</Text>
-                    <Text style={s.lbStatLabel}>PTS</Text>
-                  </View>
-                  <View style={s.lbStat}>
-                    <Text style={s.lbStatValue}>{entry.totalStrokes}</Text>
-                    <Text style={s.lbStatLabel}>STR</Text>
-                  </View>
-                </View>
-              );
-            })
-          )}
+          <RoundSummaryTabs active={activeTab} onChange={setActiveTab} />
 
-          {holes.length > 0 && ranked.length > 0 && (
-            <>
-              <Text style={s.sectionLabel}>SCORECARD</Text>
-              <View style={s.gridWrap}>
-                <View style={s.gridLabelCol}>
-                  <View style={s.gridHeadCell}><Text style={s.gridHeadText}>Hole</Text></View>
-                  <View style={s.gridCell}><Text style={s.gridParLabel}>Par</Text></View>
-                  {ranked.map((entry) => (
-                    <View key={entry.player.id} style={s.gridCell}>
-                      <Text style={s.gridNameText} numberOfLines={1}>
-                        {entry.player.name.split(' ')[0]}
+          {activeTab === 'scorecard' ? (
+            <RoundScorecardTables sections={scorecardSections} />
+          ) : null}
+
+          {activeTab === 'leaderboard' ? (
+            <View>
+              {ranked.length === 0 ? (
+                <Text style={s.empty}>No scores recorded for this round.</Text>
+              ) : ranked.map((entry, i) => {
+                const isMe = entry.player.user_id && entry.player.user_id === me;
+                return (
+                  <View key={entry.player.id} style={[s.lbRow, isMe && s.lbRowMe]}>
+                    <Text style={s.lbRank}>{i + 1}</Text>
+                    <View style={s.lbNameWrap}>
+                      <Text style={[s.lbName, isMe && s.lbNameMe]} numberOfLines={1}>
+                        {entry.player.name}{isMe ? '  (you)' : ''}
                       </Text>
+                      {round.playerTees?.[entry.player.id]?.label ? (
+                        <Text style={s.teeBadge}>{round.playerTees[entry.player.id].label}</Text>
+                      ) : null}
                     </View>
-                  ))}
-                </View>
-                <ScrollView horizontal showsHorizontalScrollIndicator={false}>
-                  <View>
-                    <View style={s.gridRow}>
-                      {holes.map((h) => (
-                        <View key={h.number} style={[s.gridHeadCell, s.gridDataCell]}>
-                          <Text style={s.gridHeadText}>{h.number}</Text>
-                        </View>
-                      ))}
-                      <View style={[s.gridHeadCell, s.gridDataCell, s.gridTotCell]}>
-                        <Text style={s.gridHeadText}>Tot</Text>
-                      </View>
+                    <View style={s.lbStat}>
+                      <Text style={s.lbStatValue}>{entry.totalPoints}</Text>
+                      <Text style={s.lbStatLabel}>PTS</Text>
                     </View>
-                    <View style={s.gridRow}>
-                      {holes.map((h) => (
-                        <View key={h.number} style={[s.gridCell, s.gridDataCell]}>
-                          <Text style={s.gridParValue}>{h.par}</Text>
-                        </View>
-                      ))}
-                      <View style={[s.gridCell, s.gridDataCell, s.gridTotCell]}>
-                        <Text style={s.gridParValue}>
-                          {holes.reduce((sum, h) => sum + (h.par || 0), 0)}
-                        </Text>
-                      </View>
+                    <View style={s.lbStat}>
+                      <Text style={s.lbStatValue}>{entry.totalStrokes}</Text>
+                      <Text style={s.lbStatLabel}>STR</Text>
                     </View>
-                    {ranked.map((entry) => {
-                      const pScores = round.scores?.[entry.player.id] ?? {};
-                      return (
-                        <View key={entry.player.id} style={s.gridRow}>
-                          {holes.map((h) => {
-                            const v = pScores[h.number];
-                            return (
-                              <View key={h.number} style={[s.gridCell, s.gridDataCell]}>
-                                <Text style={[s.gridScore, { color: strokeColor(v, h.par) }]}>
-                                  {v ?? '·'}
-                                </Text>
-                              </View>
-                            );
-                          })}
-                          <View style={[s.gridCell, s.gridDataCell, s.gridTotCell]}>
-                            <Text style={s.gridTotValue}>{entry.totalStrokes}</Text>
-                          </View>
-                        </View>
-                      );
-                    })}
                   </View>
-                </ScrollView>
-              </View>
-            </>
-          )}
+                );
+              })}
+            </View>
+          ) : null}
 
-          {media.length > 0 && (
-            <>
-              <Text style={s.sectionLabel}>PHOTOS</Text>
+          {activeTab === 'photos' ? (
+            media.length > 0 ? (
               <ScrollView horizontal showsHorizontalScrollIndicator={false}>
                 {media.map((m) => (
                   <Image
@@ -214,33 +161,14 @@ export default function RoundSummaryScreen({ navigation, route }) {
                   />
                 ))}
               </ScrollView>
-            </>
-          )}
-
-          {round.notes?.round ? (
-            <>
-              <Text style={s.sectionLabel}>NOTES</Text>
-              <Text style={s.notes}>{round.notes.round}</Text>
-            </>
+            ) : (
+              <Text style={s.empty}>No photos for this round.</Text>
+            )
           ) : null}
 
-          {(() => {
-            const holeNotes = Object.entries(round.notes?.hole ?? {})
-              .filter(([, text]) => text && text.trim())
-              .sort(([a], [b]) => Number(a) - Number(b));
-            if (holeNotes.length === 0) return null;
-            return (
-              <>
-                <Text style={s.sectionLabel}>HOLE NOTES</Text>
-                {holeNotes.map(([hole, text]) => (
-                  <View key={hole} style={s.holeNoteRow}>
-                    <Text style={s.holeNoteLabel}>{`Hole ${hole}`}</Text>
-                    <Text style={s.holeNoteText}>{text}</Text>
-                  </View>
-                ))}
-              </>
-            );
-          })()}
+          {activeTab === 'comments' ? (
+            <Text style={s.empty}>Comments appear from the feed thread for this round.</Text>
+          ) : null}
 
           {iAmPlaying && (
             <TouchableOpacity
