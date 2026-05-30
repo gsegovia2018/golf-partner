@@ -5,7 +5,6 @@ import { Feather } from '@expo/vector-icons';
 import QRCode from 'react-native-qrcode-svg';
 
 import { useTheme } from '../theme/ThemeContext';
-import { useAuth } from '../context/AuthContext';
 import { ShareableLeaderboard, shareLeaderboard } from '../components/ShareableCard';
 import { scoringModeUsesTeams, leaderboardToggleLabels, mergeScoringSettings } from '../components/scoringModes';
 import ScoringModeField from '../components/ScoringModePicker';
@@ -79,7 +78,6 @@ if (Platform.OS === 'web' && typeof document !== 'undefined') {
 export default function HomeScreen({ navigation, route }) {
   const viewMode = route?.params?.viewMode ?? 'auto';
   const { theme } = useTheme();
-  const { user } = useAuth();
   const initialTournament = useMemo(() => getActiveTournamentSnapshot(), []);
   const [tournament, setTournament] = useState(() => initialTournament);
   const [allTournaments, setAllTournaments] = useState(() => (initialTournament ? [initialTournament] : []));
@@ -110,8 +108,8 @@ export default function HomeScreen({ navigation, route }) {
   // as strings because ScoringModeField edits them through TextInputs. null
   // until the sheet is opened.
   const [scoringDraft, setScoringDraft] = useState(null);
-  // List-view overflow menu — surfaces Friends, Notifications, Statistics and
-  // the Course/Player libraries, which otherwise have no entry point here.
+  // List-view overflow menu — surfaces the Course/Player libraries, which
+  // otherwise have no entry point here.
   const [showListMenu, setShowListMenu] = useState(false);
   const [unreadNotifs, setUnreadNotifs] = useState(0);
   const [showTournamentKindChoice, setShowTournamentKindChoice] = useState(false);
@@ -681,7 +679,6 @@ export default function HomeScreen({ navigation, route }) {
   const showTournament = viewMode === 'tournament' || (viewMode === 'auto' && !!tournament);
   const isViewer = tournament?._role === 'viewer';
   const isOwner = tournament?._role === 'owner';
-  const userInitials = user?.email ? user.email.slice(0, 2).toUpperCase() : '?';
 
   // Show the green splash whenever a reload is in flight AND there's no
   // data to render yet — covers initial mount (cold open) and re-focus
@@ -707,13 +704,18 @@ export default function HomeScreen({ navigation, route }) {
               style={s.iconBtn}
               onPress={() => setShowListMenu(true)}
               activeOpacity={0.7}
-              accessibilityLabel={unreadNotifs > 0 ? `Menu, ${unreadNotifs} notifications` : 'Menu'}
+              accessibilityLabel="Menu"
             >
               <Feather name="menu" size={18} color={theme.accent.primary} />
-              {unreadNotifs > 0 && <View style={s.notifDot} />}
             </TouchableOpacity>
-            <TouchableOpacity style={s.avatarBtn} onPress={() => navigation.navigate('Profile')} activeOpacity={0.7}>
-              <Text style={s.avatarText}>{userInitials}</Text>
+            <TouchableOpacity
+              style={s.iconBtn}
+              onPress={() => navigation.navigate('Notifications')}
+              activeOpacity={0.7}
+              accessibilityLabel={unreadNotifs > 0 ? `Notifications, ${unreadNotifs} unread` : 'Notifications'}
+            >
+              <Feather name="bell" size={18} color={theme.accent.primary} />
+              {unreadNotifs > 0 && <View style={s.notifDot} />}
             </TouchableOpacity>
           </View>
         </View>
@@ -939,41 +941,6 @@ export default function HomeScreen({ navigation, route }) {
             <Pressable style={s.modalSheet} onPress={() => {}}>
               <View style={s.modalHandle} />
               <Text style={s.modalTitle}>Menu</Text>
-
-              <TouchableOpacity
-                style={s.menuItem}
-                onPress={() => { setShowListMenu(false); navigation.navigate('Friends'); }}
-                activeOpacity={0.7}
-              >
-                <Feather name="users" size={18} color={theme.accent.primary} />
-                <Text style={s.menuItemText}>Friends</Text>
-                <Feather name="chevron-right" size={16} color={theme.text.muted} />
-              </TouchableOpacity>
-
-              <TouchableOpacity
-                style={s.menuItem}
-                onPress={() => { setShowListMenu(false); navigation.navigate('Notifications'); }}
-                activeOpacity={0.7}
-              >
-                <Feather name="bell" size={18} color={theme.accent.primary} />
-                <Text style={s.menuItemText}>Notifications</Text>
-                {unreadNotifs > 0 && (
-                  <View style={s.menuItemBadge}>
-                    <Text style={s.menuItemBadgeText}>{unreadNotifs > 9 ? '9+' : unreadNotifs}</Text>
-                  </View>
-                )}
-                <Feather name="chevron-right" size={16} color={theme.text.muted} />
-              </TouchableOpacity>
-
-              <TouchableOpacity
-                style={s.menuItem}
-                onPress={() => { setShowListMenu(false); navigation.navigate('MyStats'); }}
-                activeOpacity={0.7}
-              >
-                <Feather name="bar-chart-2" size={18} color={theme.accent.primary} />
-                <Text style={s.menuItemText}>Statistics</Text>
-                <Feather name="chevron-right" size={16} color={theme.text.muted} />
-              </TouchableOpacity>
 
               <TouchableOpacity
                 style={s.menuItem}
@@ -2543,20 +2510,6 @@ const makeStyles = (t) => StyleSheet.create({
     borderWidth: 1.5,
     borderColor: t.bg.card,
   },
-  menuItemBadge: {
-    minWidth: 20,
-    height: 20,
-    borderRadius: 10,
-    paddingHorizontal: 6,
-    backgroundColor: t.accent.danger ?? '#e5484d',
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  menuItemBadgeText: {
-    fontFamily: 'PlusJakartaSans-Bold',
-    fontSize: 11,
-    color: t.text.inverse ?? '#fff',
-  },
 
   // Viewer badge
   viewerBadge: {
@@ -2565,15 +2518,6 @@ const makeStyles = (t) => StyleSheet.create({
     backgroundColor: t.bg.secondary, borderWidth: 1, borderColor: t.border.default,
   },
   viewerBadgeText: { fontFamily: 'PlusJakartaSans-SemiBold', color: t.text.muted, fontSize: 9, letterSpacing: 0.5 },
-
-  // User avatar
-  avatarBtn: {
-    width: 36, height: 36, borderRadius: 18,
-    backgroundColor: '#006747',
-    borderWidth: 1, borderColor: t.accent.primary + '66',
-    alignItems: 'center', justifyContent: 'center',
-  },
-  avatarText: { fontFamily: 'PlusJakartaSans-Bold', color: '#ffd700', fontSize: 13 },
 
   // Invite modal
   inviteSubtitle: {

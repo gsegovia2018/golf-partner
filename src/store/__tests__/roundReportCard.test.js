@@ -116,6 +116,29 @@ describe('buildRoundReportCard — meta & headline', () => {
     const tough = buildRoundReportCard(
       [base, mkMyRound({ key: 'tough', holes: h, scores: toughScores })], 'tough');
     expect(tough.headline.verdict).toBe('Tough day');
+    expect(tough.headline.tone).toBe('bad');
+  });
+
+  test('headline tone maps strong, solid and tough verdicts to semantic states', () => {
+    const h = mkHoles();
+    const base = mkMyRound({ key: 'h1', holes: h, scores: evenScores(h, 4) });
+
+    const strongScores = evenScores(h, 4);
+    [1, 2, 3].forEach((n) => { strongScores[n] = 3; });
+    const strong = buildRoundReportCard(
+      [base, mkMyRound({ key: 'strong', holes: h, scores: strongScores })], 'strong');
+
+    const solid = buildRoundReportCard(
+      [base, mkMyRound({ key: 'solid', holes: h, scores: evenScores(h, 4) })], 'solid');
+
+    const toughScores = evenScores(h, 4);
+    [1, 2, 3, 4, 5, 6, 7, 8].forEach((n) => { toughScores[n] = 5; });
+    const tough = buildRoundReportCard(
+      [base, mkMyRound({ key: 'tough', holes: h, scores: toughScores })], 'tough');
+
+    expect(strong.headline.tone).toBe('good');
+    expect(solid.headline.tone).toBe('neutral');
+    expect(tough.headline.tone).toBe('bad');
   });
 
   test('verdict bands without history: Solid / Off day / Tough day', () => {

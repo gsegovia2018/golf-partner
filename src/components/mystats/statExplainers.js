@@ -86,16 +86,17 @@ export const statExplainers = {
     explainer: 'Holes where you took three or more putts. Needs shot tracking logged during the round.',
   },
   scoreDistribution: {
-    title: 'Score distribution',
-    subtitle: 'How your holes break down',
+    title: 'Scoring patterns',
+    subtitle: 'Good and bad results per round',
     explainer: 'Counts every scored hole by result — eagle-or-better through triple-bogey-or-worse — '
-      + 'across all selected rounds.',
+      + 'across all selected rounds. The card converts those counts into per-round patterns so '
+      + 'you can see whether scoring chances or big numbers are driving the round.',
   },
   parType: {
-    title: 'Par type',
-    subtitle: 'Net points by hole length',
-    explainer: 'Average net Stableford points per hole, split by par 3 / 4 / 5. The "played" '
-      + 'figure is how many holes of that type are in the sample.',
+    title: 'Course scoring patterns',
+    subtitle: 'Where the course profile helps or hurts',
+    explainer: 'Average net Stableford points per hole, split by par 3 / 4 / 5 and by stroke-index '
+      + 'difficulty. Each row is compared with your own average points per hole.',
   },
   holeDifficulty: {
     title: 'Hole difficulty',
@@ -104,16 +105,38 @@ export const statExplainers = {
       + 'mid (SI 7-12), easy (SI 13-18).',
   },
   roundShape: {
-    title: 'Round shape',
+    title: 'Round timing patterns',
     subtitle: 'Front vs back, openers vs closers',
     explainer: 'Average net points across the front and back nine, and across your opening and '
       + 'closing three holes — useful for spotting slow starts or fades.',
   },
   recovery: {
-    title: 'Recovery',
+    title: 'Recovery patterns',
     subtitle: 'Bouncing back and scrambling',
     explainer: 'Bounce-back rate is how often you follow a bogey-or-worse with a birdie-or-better. '
-      + 'Scrambling is how often you still make par after missing the green.',
+      + 'Scrambling, sand saves, up-and-downs, and bunker visits show how well you limit damage '
+      + 'after missing the ideal route.',
+  },
+  teeShot: {
+    title: 'Tee result patterns',
+    subtitle: 'How tee outcomes change your points',
+    explainer: 'Average net Stableford points after each tee result, compared with your own average '
+      + 'points per hole. Good rows are outcomes that lift your scoring; bad rows are tee outcomes '
+      + 'that drag the hole below your normal level.',
+  },
+  driveBuckets: {
+    title: 'Drive bucket patterns',
+    subtitle: 'Direction and penalty impact',
+    explainer: 'Groups logged drives by result bucket and shows the average points, score versus par, '
+      + 'penalty rate, and gap versus your own average. This is pattern data, not target-handicap '
+      + 'benchmarking.',
+  },
+  approachDistance: {
+    title: 'Approach distance patterns',
+    subtitle: 'Which distances create scoring',
+    explainer: 'Groups approach shots by distance bucket and compares the average points from those '
+      + 'holes with your own scoring average. It highlights the distances that are producing points '
+      + 'and the ones that need practice.',
   },
   teeShotImpact: {
     title: 'Tee shot impact',
@@ -125,6 +148,34 @@ export const statExplainers = {
     title: 'Putting & driving',
     subtitle: 'Shot-tracking detail',
     explainer: 'Putting and driving aggregates from holes where you logged shot detail.',
+  },
+  sgScoring: {
+    title: 'Scoring metrics',
+    subtitle: 'Score by hole type versus your target handicap',
+    explainer: 'Par 3, par 4, and par 5 average score show your gross strokes on each hole type '
+      + 'against the target-handicap benchmark. Birdies, pars, bogeys, and doubles+ are converted '
+      + 'to per-round rates so the result mix is comparable across different sample sizes.',
+  },
+  sgDriving: {
+    title: 'Driving vs target',
+    subtitle: 'Accuracy, misses, penalties, and benchmark distance',
+    explainer: 'Fairways hit, left misses, right misses, and tee penalties compare your logged '
+      + 'tee shots with the target-handicap benchmark. Driver distance is shown as the benchmark '
+      + 'for context because this app does not track measured driving distance yet.',
+  },
+  sgApproach: {
+    title: 'Approach vs target',
+    subtitle: 'Distance-bucket strokes gained and GIR volume',
+    explainer: 'Approach distance rows estimate strokes gained versus your target handicap for '
+      + 'each logged approach bucket. GIR volume compares how often you reach the green in '
+      + 'regulation with the target-handicap benchmark.',
+  },
+  sgPutting: {
+    title: 'Putting vs target',
+    subtitle: 'Putting workload and distance-bucket strokes gained',
+    explainer: 'Putts per round and 3-putts per round compare your putting volume with the '
+      + 'target-handicap benchmark. Distance putting rows compare your average putts and '
+      + '3-putt rate from each first-putt distance bucket with the target expectation.',
   },
   strokesGained: strokesGainedExplainer,
 };

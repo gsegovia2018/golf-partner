@@ -1,9 +1,10 @@
 import React from 'react';
-import { render } from '@testing-library/react-native';
+import { fireEvent, render, waitFor } from '@testing-library/react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { ThemeProvider } from '../../theme/ThemeContext';
 import ProfileScreen from '../ProfileScreen';
+import { loadProfile, upsertProfile } from '../../store/profileStore';
 
 jest.mock('react-native-safe-area-context', () => {
   const React = require('react');
@@ -37,7 +38,6 @@ jest.mock('../../store/profileStore', () => ({
   loadProfile: jest.fn(() => new Promise(() => {})),
   upsertProfile: jest.fn(() => Promise.resolve()),
   uploadAvatar: jest.fn(() => Promise.resolve('https://example.com/avatar.jpg')),
-  computePersonalStats: jest.fn(() => Promise.resolve(null)),
 }));
 
 jest.mock('../../lib/prefs', () => ({
@@ -51,6 +51,8 @@ jest.mock('../../lib/supabase', () => ({
 
 beforeEach(() => {
   AsyncStorage.getItem.mockReturnValue(new Promise(() => {}));
+  loadProfile.mockImplementation(() => new Promise(() => {}));
+  upsertProfile.mockResolvedValue();
 });
 
 function renderScreen(route = {}) {
@@ -81,5 +83,51 @@ describe('ProfileScreen navigation chrome', () => {
     const { queryByLabelText } = renderScreen({ params: { presentation: 'tab' } });
 
     expect(queryByLabelText('Back')).toBeNull();
+  });
+});
+
+describe('ProfileScreen form', () => {
+  test('removes avatar color and personal stats from the profile page', async () => {
+    loadProfile.mockResolvedValue({
+      email: 'marcos@example.com',
+      username: 'marcos',
+      displayName: 'Marcos',
+      handicap: 12.5,
+      targetHandicap: 8.5,
+      avatarUrl: null,
+    });
+
+    const { findByText, queryByText } = renderScreen({ params: { presentation: 'tab' } });
+
+    await findByText('ACCOUNT');
+
+    expect(queryByText('Avatar color')).toBeNull();
+    expect(queryByText('PERSONAL STATS')).toBeNull();
+    expect(queryByText('Tournaments')).toBeNull();
+    expect(queryByText('Best round')).toBeNull();
+  });
+
+  test('saves a decimal handicap value', async () => {
+    loadProfile.mockResolvedValue({
+      email: 'marcos@example.com',
+      username: 'marcos',
+      displayName: 'Marcos',
+      handicap: 12.5,
+      targetHandicap: 8.5,
+      avatarUrl: null,
+    });
+
+    const { findByDisplayValue, getByText } = renderScreen({ params: { presentation: 'tab' } });
+
+    const handicapInput = await findByDisplayValue('12.5');
+    fireEvent.changeText(handicapInput, '13,4');
+    fireEvent.press(getByText('Save changes'));
+
+    await waitFor(() => {
+      expect(upsertProfile).toHaveBeenCalledWith(expect.objectContaining({
+        handicap: '13.4',
+        targetHandicap: '8.5',
+      }));
+    });
   });
 });

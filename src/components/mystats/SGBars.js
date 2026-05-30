@@ -12,8 +12,8 @@ export function SGBar({ label, value }) {
 
   if (value == null) {
     return (
-      <View style={{ flexDirection: 'row', alignItems: 'center', marginVertical: 4 }}>
-        <Text style={{ width: 110, color: theme.text.secondary }}>{label}</Text>
+      <View testID="sg-bar-row" style={styles.row}>
+        <Text style={[styles.label, { color: theme.text.secondary }]} numberOfLines={1}>{label}</Text>
         <Text style={{ color: theme.text.muted }}>—</Text>
       </View>
     );
@@ -28,15 +28,48 @@ export function SGBar({ label, value }) {
   const fill = clamped >= 0 ? theme.scoreColor('good') : theme.scoreColor('poor');
 
   return (
-    <View style={{ flexDirection: 'row', alignItems: 'center', marginVertical: 4 }}>
-      <Text style={{ width: 110, color: theme.text.secondary, fontSize: 13 }}>{label}</Text>
-      <Svg width={WIDTH} height={HEIGHT}>
-        <Line x1={center} y1={0} x2={center} y2={HEIGHT} stroke={theme.border.default} />
-        <Rect x={barX} y={2} width={barW} height={HEIGHT - 4} fill={fill} rx={2} />
-      </Svg>
-      <Text style={{ marginLeft: 8, color: theme.text.primary, fontSize: 13, fontWeight: '600' }}>
+    <View testID="sg-bar-row" style={styles.row}>
+      <Text style={[styles.label, { color: theme.text.secondary }]} numberOfLines={1}>{label}</Text>
+      <View testID="sg-bar-track" style={styles.track}>
+        <Svg width="100%" height={HEIGHT} viewBox={`0 0 ${WIDTH} ${HEIGHT}`}>
+          <Line x1={center} y1={0} x2={center} y2={HEIGHT} stroke={theme.border.default} />
+          <Rect x={barX} y={2} width={barW} height={HEIGHT - 4} fill={fill} rx={2} />
+        </Svg>
+      </View>
+      <Text
+        testID="sg-bar-value"
+        style={[styles.value, { color: theme.text.primary }]}
+      >
         {value >= 0 ? '+' : ''}{value.toFixed(2)}
       </Text>
     </View>
   );
 }
+
+const styles = {
+  row: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    marginVertical: 4,
+    width: '100%',
+  },
+  label: {
+    width: 92,
+    flexShrink: 0,
+    fontSize: 13,
+  },
+  track: {
+    flex: 1,
+    minWidth: 80,
+    maxWidth: WIDTH,
+    height: HEIGHT,
+  },
+  value: {
+    width: 46,
+    flexShrink: 0,
+    textAlign: 'right',
+    fontSize: 13,
+    fontWeight: '600',
+  },
+};

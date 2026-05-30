@@ -1,6 +1,7 @@
 import {
   rowToTournament, reTeeRound,
   tournamentNoun, tournamentNounCapitalized, formatRoundLabel,
+  isRoundInProgress,
 } from '../tournamentStore';
 
 describe('rowToTournament', () => {
@@ -121,5 +122,34 @@ describe('formatRoundLabel', () => {
       .toBe('Round 1');
     expect(formatRoundLabel({ kind: 'official', roundIndex: 2 }))
       .toBe('Round 3');
+  });
+});
+
+describe('isRoundInProgress', () => {
+  const players = [{ id: 'p1' }, { id: 'p2' }];
+  const holes = [{ number: 1 }, { number: 2 }];
+  const partialRound = {
+    holes,
+    scores: {
+      p1: { 1: 4 },
+      p2: { 1: 5 },
+    },
+  };
+
+  test('treats a partial active round as in progress', () => {
+    expect(isRoundInProgress({
+      players,
+      rounds: [partialRound],
+      currentRound: 0,
+    })).toBe(true);
+  });
+
+  test('does not treat an explicitly finished partial round as live scoring', () => {
+    expect(isRoundInProgress({
+      players,
+      rounds: [partialRound],
+      currentRound: 0,
+      finishedAt: '2026-05-24T10:13:52.224Z',
+    })).toBe(false);
   });
 });

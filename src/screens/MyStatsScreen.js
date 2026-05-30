@@ -13,7 +13,7 @@ import { buildRoundReportCard } from '../store/roundReportCard';
 import RoundReportCard from '../components/RoundReportCard';
 import MyStatsRoundSelector from '../components/MyStatsRoundSelector';
 import StatDetailSheet from '../components/StatDetailSheet';
-import OverviewTab from '../components/mystats/tabs/OverviewTab';
+import CoachTab from '../components/mystats/tabs/CoachTab';
 import FormTab from '../components/mystats/tabs/FormTab';
 import BreakdownTab from '../components/mystats/tabs/BreakdownTab';
 import ShotsTab from '../components/mystats/tabs/ShotsTab';
@@ -46,11 +46,17 @@ function buildInfoRows(key, stats) {
 
 const ALL_TABS = [
   { key: 'reportCard', label: 'Report Card' },
-  { key: 'overview',  label: 'Overview' },
+  { key: 'coach', label: 'Coach' },
+  { key: 'shots',     label: 'Strokes Gained' },
   { key: 'form',      label: 'Form' },
   { key: 'breakdown', label: 'Breakdown' },
-  { key: 'shots',     label: 'Shots' },
 ];
+
+function normalizeStatsTab(value) {
+  if (value === 'overview') return 'coach';
+  if (!ALL_TABS.some((t) => t.key === value)) return 'reportCard';
+  return value;
+}
 
 export default function MyStatsScreen({ navigation, route }) {
   const { theme } = useTheme();
@@ -63,15 +69,28 @@ export default function MyStatsScreen({ navigation, route }) {
   const [n, setN] = useState(5);
   const [selectorOpen, setSelectorOpen] = useState(false);
   const [loadNonce, setLoadNonce] = useState(0);
-  const [tab, setTab] = useState(route?.params?.tab ?? 'reportCard');
+  const [tab, setTab] = useState(normalizeStatsTab(route?.params?.tab));
   const [reportRoundKey, setReportRoundKey] = useState(route?.params?.roundKey ?? null);
   const [infoKey, setInfoKey] = useState(null);
   const [targetHandicap, setTargetHandicap] = useState(null);
   const [pickerOpen, setPickerOpen] = useState(false);
   const isTabPresentation = route?.params?.presentation === 'tab';
   const tabScrollRef = useRef(null);
+  const tabLayoutsRef = useRef({});
+  const tabViewportWidthRef = useRef(0);
+  const tabScrollXRef = useRef(0);
 
   const storageKey = user?.id ? `${SELECTION_PREFIX}${user.id}` : null;
+
+  useEffect(() => {
+    setTab(normalizeStatsTab(route?.params?.tab));
+  }, [route?.params?.tab]);
+
+  useEffect(() => {
+    if (route?.params?.roundKey) {
+      setReportRoundKey(route.params.roundKey);
+    }
+  }, [route?.params?.roundKey]);
 
   // Load all tournaments → collect this user's rounds. Restore stored overrides.
   useEffect(() => {
@@ -132,16 +151,33 @@ export default function MyStatsScreen({ navigation, route }) {
 
   const onInfo = useCallback((key) => setInfoKey(key), []);
 
-  useEffect(() => {
-    const frame = requestAnimationFrame(() => {
-      if (tab === 'breakdown' || tab === 'shots') {
-        tabScrollRef.current?.scrollToEnd({ animated: true });
-      } else if (tab === 'reportCard' || tab === 'overview') {
-        tabScrollRef.current?.scrollTo({ x: 0, animated: true });
+  const scrollTabIntoView = useCallback((key, animated = true) => {
+    const layout = tabLayoutsRef.current[key];
+    const viewportWidth = tabViewportWidthRef.current;
+    if (!layout || !viewportWidth) {
+      if (key === 'breakdown') {
+        tabScrollRef.current?.scrollToEnd({ animated });
+      } else {
+        tabScrollXRef.current = 0;
+        tabScrollRef.current?.scrollTo({ x: 0, animated });
       }
+      return;
+    }
+    const targetX = getTabScrollTarget({
+      layout,
+      viewportWidth,
+      currentX: tabScrollXRef.current,
+      pinToStart: key === 'reportCard' || key === 'coach' || key === 'shots',
     });
+    if (targetX == null) return;
+    tabScrollXRef.current = targetX;
+    tabScrollRef.current?.scrollTo({ x: targetX, animated });
+  }, []);
+
+  useEffect(() => {
+    const frame = requestAnimationFrame(() => scrollTabIntoView(tab));
     return () => cancelAnimationFrame(frame);
-  }, [tab]);
+  }, [scrollTabIntoView, tab]);
 
   const selected = useMemo(
     () => (myRounds ? resolveSelection(myRounds, overrides) : []),
@@ -198,15 +234,28 @@ export default function MyStatsScreen({ navigation, route }) {
       showsHorizontalScrollIndicator={false}
       alwaysBounceHorizontal={false}
       nestedScrollEnabled
+      scrollEnabled
+      scrollEventThrottle={16}
       style={s.tabScroller}
       contentContainerStyle={s.tabBar}
       testID="my-stats-tab-scroller"
+      onScroll={(event) => {
+        tabScrollXRef.current = event.nativeEvent.contentOffset?.x ?? 0;
+      }}
+      onLayout={(event) => {
+        tabViewportWidthRef.current = event.nativeEvent.layout.width;
+        scrollTabIntoView(tab, false);
+      }}
     >
       {ALL_TABS.map((t) => (
         <TouchableOpacity
           key={t.key}
           style={[s.tab, tab === t.key && s.tabActive]}
           onPress={() => setTab(t.key)}
+          onLayout={(event) => {
+            tabLayoutsRef.current[t.key] = event.nativeEvent.layout;
+            if (tab === t.key) scrollTabIntoView(t.key, false);
+          }}
           activeOpacity={0.7}
           accessibilityRole="tab"
           accessibilityState={{ selected: tab === t.key }}
@@ -237,7 +286,7 @@ export default function MyStatsScreen({ navigation, route }) {
         {Header}
         <View style={s.center}>
           <Feather name="wifi-off" size={32} color={theme.text.muted} />
-          <Text style={s.emptyText}>Couldn't load your stats.</Text>
+          <Text style={s.emptyText}>Could not load your stats.</Text>
           <TouchableOpacity
             style={s.retryBtn}
             onPress={() => { setMyRounds(null); setError(false); setLoadNonce((v) => v + 1); }}
@@ -277,6 +326,7 @@ export default function MyStatsScreen({ navigation, route }) {
     return (
       <ScreenContainer style={s.container} edges={['top', 'bottom']}>
         {Header}
+        {TabBar}
         <View style={s.center}>
           <Feather name="filter" size={32} color={theme.text.muted} />
           <Text style={s.emptyText}>No rounds selected.</Text>
@@ -302,7 +352,7 @@ export default function MyStatsScreen({ navigation, route }) {
             onSelect={setReportRoundKey}
           />
         )}
-        {tab === 'overview' && <OverviewTab stats={stats} onInfo={onInfo} targetHandicap={targetHandicap} onChangeTarget={() => setPickerOpen(true)} />}
+        {tab === 'coach' && <CoachTab stats={stats} onInfo={onInfo} targetHandicap={targetHandicap} onChangeTarget={() => setPickerOpen(true)} />}
         {tab === 'form' && <FormTab stats={stats} n={n} onChangeN={setN} onInfo={onInfo} />}
         {tab === 'breakdown' && <BreakdownTab stats={stats} onInfo={onInfo} />}
         {tab === 'shots' && <ShotsTab stats={stats} onInfo={onInfo} targetHandicap={targetHandicap} onChangeTarget={() => setPickerOpen(true)} />}
@@ -356,6 +406,10 @@ function makeStyles(theme) {
     roundsBtnText: { ...theme.typography.caption, color: theme.accent.primary, fontWeight: '700' },
     tabScroller: {
       flexGrow: 0,
+      flexShrink: 0,
+      width: '100%',
+      maxWidth: '100%',
+      alignSelf: 'stretch',
       minHeight: 48,
       borderBottomWidth: StyleSheet.hairlineWidth,
       borderBottomColor: theme.border.default,
@@ -363,7 +417,9 @@ function makeStyles(theme) {
     },
     tabBar: {
       flexDirection: 'row', gap: 6,
-      paddingHorizontal: theme.spacing.lg, paddingVertical: theme.spacing.sm,
+      paddingLeft: theme.spacing.lg,
+      paddingRight: theme.spacing.xxxl,
+      paddingVertical: theme.spacing.sm,
       alignItems: 'center',
       minHeight: 48,
     },
@@ -386,3 +442,24 @@ function makeStyles(theme) {
     scroll: { padding: theme.spacing.lg, gap: theme.spacing.lg },
   });
 }
+
+function getTabScrollTarget({
+  layout,
+  viewportWidth,
+  currentX = 0,
+  edgePadding = 16,
+  pinToStart = false,
+}) {
+  if (!layout || !viewportWidth) return null;
+  if (pinToStart) return currentX > 0 ? 0 : null;
+  const left = layout.x;
+  const right = layout.x + layout.width;
+  const visibleLeft = currentX + edgePadding;
+  const visibleRight = currentX + viewportWidth - edgePadding;
+
+  if (left < visibleLeft) return Math.max(0, left - edgePadding);
+  if (right > visibleRight) return Math.max(0, right - viewportWidth + edgePadding);
+  return null;
+}
+
+export { getTabScrollTarget };

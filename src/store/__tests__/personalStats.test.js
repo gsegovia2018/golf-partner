@@ -1,7 +1,7 @@
 import {
   collectMyRounds, buildSyntheticTournament, CANON_ID,
   holeDifficultySplit, computeMetrics, computeRecentVsHistory, FORM_METRICS,
-  rankStrengths, resolveSelection, computeMyStats, computeFormSeries,
+  rankStrengths, resolveSelection, computeMyStats, computeFormSeries, buildActionPlan,
 } from '../personalStats';
 
 // ── Fixture helpers ───────────────────────────────────────────────
@@ -548,6 +548,25 @@ describe('computeMyStats', () => {
     ]));
   });
 
+  test('keeps Strokes Gained action-plan samples labeled as holes', () => {
+    const actionPlan = buildActionPlan({
+      strokesGained: {
+        sampleHoles: 54,
+        byCategory: { tee: 0.2, approach: -0.7, aroundGreen: 0, putting: 0 },
+      },
+    });
+
+    expect(actionPlan.improvements).toEqual(expect.arrayContaining([
+      expect.objectContaining({
+        area: 'Strokes Gained',
+        label: 'Approach',
+        sample: 54,
+        sampleUnit: 'holes',
+        unit: 'SG / round',
+      }),
+    ]));
+  });
+
   test('includes lagPutting, sandSaves, upAndDown, bunkerVisits', () => {
     const rawRound = {
       courseName: 'Test',
@@ -620,5 +639,55 @@ describe('computeMyStats', () => {
     expect(stats.parType.par4.holes).toBe(36);
     expect(stats).toHaveProperty('scrambling');
     expect(stats).toHaveProperty('bounceBack');
+  });
+
+  test('includes a coach block with hero, board groups, and practice plan', () => {
+    const holes = holes18();
+    const scores = {};
+    const shotDetails = { p1: {} };
+    holes.forEach((hole) => {
+      if (hole.number <= 12) {
+        scores[hole.number] = 4;
+        shotDetails.p1[hole.number] = {
+          drive: 'fairway',
+          approachBucket: '100-150',
+          putts: 2,
+          firstPuttBucket: '3-6',
+          sandShots: 0,
+        };
+      } else {
+        scores[hole.number] = 6;
+        shotDetails.p1[hole.number] = {
+          drive: 'right',
+          approachBucket: '200+',
+          putts: 3,
+          firstPuttBucket: '6+',
+          sandShots: 0,
+        };
+      }
+    });
+    const myRound = {
+      key: 'coach:0',
+      round: mkRound({
+        holes,
+        scores: { p1: scores },
+        shotDetails,
+        playerHandicaps: { p1: 0 },
+      }),
+      playerId: 'p1',
+      player: { id: 'p1', name: 'Me', handicap: 0 },
+      courseName: 'Coach',
+      tournamentName: 'T',
+      tournamentDate: '2026-05-29',
+      completed: true,
+    };
+
+    const stats = computeMyStats([myRound], { targetHandicap: 14 });
+
+    expect(stats.coach.hero).toBeTruthy();
+    expect(stats.coach.board).toHaveProperty('fixFirst');
+    expect(stats.coach.board).toHaveProperty('keepDoing');
+    expect(stats.coach.board).toHaveProperty('nextGains');
+    expect(stats.coach.practicePlan).toHaveLength(3);
   });
 });

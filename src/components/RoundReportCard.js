@@ -66,6 +66,8 @@ export default function RoundReportCard({ card, rounds, selectedKey, onSelect })
   }
 
   const { round, headline, callouts, groups, hasHistory } = card;
+  const verdictTone = headline.tone ?? verdictToneFromText(headline.verdict);
+  const verdictColor = toneColor(theme, verdictTone);
 
   return (
     <View style={s.wrap}>
@@ -79,8 +81,20 @@ export default function RoundReportCard({ card, rounds, selectedKey, onSelect })
       </TouchableOpacity>
 
       {/* Verdict */}
-      <View style={s.verdict}>
-        <Text style={s.verdictPhrase}>{headline.verdict}</Text>
+      <View
+        testID="report-card-verdict"
+        style={[
+          s.verdict,
+          verdictTone === 'good' && s.verdictGood,
+          verdictTone === 'bad' && s.verdictBad,
+        ]}
+      >
+        <Text
+          testID="report-card-verdict-phrase"
+          style={[s.verdictPhrase, { color: verdictColor }]}
+        >
+          {headline.verdict}
+        </Text>
         <Text style={s.verdictNums}>
           {headline.points} pts · {headline.perHole} / hole
           {headline.vsAvg != null
@@ -95,7 +109,7 @@ export default function RoundReportCard({ card, rounds, selectedKey, onSelect })
         </Text>
         {!hasHistory && (
           <Text style={s.verdictNote}>
-            The "vs your average" comparison appears once you have more rounds.
+            The vs your average comparison appears once you have more rounds.
           </Text>
         )}
       </View>
@@ -158,6 +172,18 @@ export default function RoundReportCard({ card, rounds, selectedKey, onSelect })
   );
 }
 
+function verdictToneFromText(verdict) {
+  if (verdict === 'Standout round' || verdict === 'Strong round') return 'good';
+  if (verdict === 'Off day' || verdict === 'Tough day') return 'bad';
+  return 'neutral';
+}
+
+function toneColor(theme, tone) {
+  if (tone === 'good') return theme.scoreColor('good');
+  if (tone === 'bad') return theme.destructive;
+  return theme.text.secondary;
+}
+
 function makeStyles(theme) {
   return StyleSheet.create({
     wrap: { padding: 4 },
@@ -176,7 +202,15 @@ function makeStyles(theme) {
       backgroundColor: theme.bg.card, borderRadius: 14, borderWidth: 1,
       borderColor: theme.border.default, padding: 14, marginBottom: 16,
     },
-    verdictPhrase: { fontFamily: 'PlayfairDisplay-Bold', fontSize: 22, color: theme.accent.primary },
+    verdictGood: {
+      backgroundColor: theme.accent.light,
+      borderColor: theme.isDark ? 'rgba(79,174,138,0.34)' : '#c7ddd3',
+    },
+    verdictBad: {
+      backgroundColor: theme.isDark ? 'rgba(248,113,113,0.14)' : '#fff1f2',
+      borderColor: theme.isDark ? 'rgba(248,113,113,0.28)' : '#f3c7cf',
+    },
+    verdictPhrase: { fontFamily: 'PlayfairDisplay-Bold', fontSize: 22 },
     verdictNums: { fontFamily: 'PlusJakartaSans-Bold', fontSize: 13, color: theme.text.primary, marginTop: 4 },
     verdictBench: { fontFamily: 'PlusJakartaSans-Medium', fontSize: 11, color: theme.text.muted, marginTop: 2 },
     verdictNote: { fontFamily: 'PlusJakartaSans-Regular', fontSize: 11, color: theme.text.muted, marginTop: 6 },

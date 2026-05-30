@@ -15,6 +15,8 @@ import {
   sgSeason, driveScoreImpact, approachScoreImpact, puttDeepDive,
   puttingTargetGaps, approachTargetGaps,
 } from './statsEngine';
+import { buildCoachInsights } from './coachInsights';
+import { shotBenchmarkForHandicap } from './shotBenchmarks';
 
 // Canonical player id used inside the synthetic tournament.
 export const CANON_ID = 'me';
@@ -217,15 +219,19 @@ const DRIVE_LABELS = {
 
 const round2 = (n) => Math.round(n * 100) / 100;
 
-function pushImpact(cells, { area, label, score, sample, unit, value }) {
+function pushImpact(cells, {
+  area, label, score, sample, sampleUnit, unit, value, basis,
+}) {
   if (!Number.isFinite(score) || sample < IMPACT_SAMPLE_MIN) return;
   cells.push({
     area,
     label,
     score: round2(score),
     sample,
+    ...(sampleUnit ? { sampleUnit } : {}),
     unit,
     value: value ?? round2(score),
+    ...(basis ? { basis } : {}),
   });
 }
 
@@ -249,6 +255,7 @@ export function buildActionPlan({
           sample: bucket.holes,
           unit: 'pts / hole',
           value: bucket.avgPoints,
+          basis: 'vs your avg',
         });
       });
     }
@@ -262,6 +269,7 @@ export function buildActionPlan({
       sample: row.holes,
       unit: 'SG / shot',
       value: row.avgSg,
+      basis: 'vs target hcp',
     });
   });
 
@@ -273,6 +281,7 @@ export function buildActionPlan({
       sample: row.attempts,
       unit: 'SG / putt',
       value: row.sgPerPutt,
+      basis: 'vs target hcp',
     });
   });
 
@@ -288,8 +297,10 @@ export function buildActionPlan({
       label,
       score: value,
       sample: strokesGained.sampleHoles ?? 0,
+      sampleUnit: 'holes',
       unit: 'SG / round',
       value,
+      basis: 'vs target hcp',
     });
   });
 
@@ -467,6 +478,7 @@ export function computeFormSeries(selectedRounds) {
 export function computeMyStats(selectedRounds, { n = 5, targetHandicap = 0 } = {}) {
   const rounds = selectedRounds || [];
   const synthetic = buildSyntheticTournament(rounds);
+  const shotBenchmark = shotBenchmarkForHandicap(targetHandicap);
   const ranking = rankStrengths(synthetic);
   const driveImpact = driveScoreImpact(synthetic, CANON_ID);
   const approachImpact = approachScoreImpact(synthetic, CANON_ID);
@@ -474,7 +486,7 @@ export function computeMyStats(selectedRounds, { n = 5, targetHandicap = 0 } = {
   const puttingTarget = puttingTargetGaps(synthetic.rounds, CANON_ID, targetHandicap);
   const approachTarget = approachTargetGaps(synthetic.rounds, CANON_ID, targetHandicap);
   const strokesGained = sgSeason(synthetic.rounds, CANON_ID, targetHandicap);
-  return {
+  const baseStats = {
     roundCount: rounds.length,
     metrics: computeMetrics(synthetic),
     form: computeRecentVsHistory(rounds, n),
@@ -498,6 +510,8 @@ export function computeMyStats(selectedRounds, { n = 5, targetHandicap = 0 } = {
     scrambling: scramblingStats(synthetic)[0] ?? null,
     history: playerRoundHistory(synthetic, CANON_ID),
     formSeries: computeFormSeries(rounds),
+    targetHandicap,
+    shotBenchmark,
     // Phase A:
     lagPutting:   lagPuttingQuality(synthetic.rounds, CANON_ID),
     sandSaves:    sandSaveRate(synthetic.rounds, CANON_ID),
@@ -506,4 +520,5 @@ export function computeMyStats(selectedRounds, { n = 5, targetHandicap = 0 } = {
     // Phase B:
     strokesGained,
   };
+  return { ...baseStats, coach: buildCoachInsights(baseStats) };
 }

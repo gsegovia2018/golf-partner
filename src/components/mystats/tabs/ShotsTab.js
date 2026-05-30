@@ -1,39 +1,40 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { View, Text, StyleSheet, TouchableOpacity } from 'react-native';
-import { Feather } from '@expo/vector-icons';
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import { Feather } from '@expo/vector-icons';
 import { useTheme } from '../../../theme/ThemeContext';
+import { shotBenchmarkForHandicap } from '../../../store/shotBenchmarks';
 import SectionCard from '../SectionCard';
-import MetricRow from '../MetricRow';
-import { SGBar } from '../SGBars';
+import ShotDashboard from '../ShotDashboard';
+import {
+  comparisonMeta,
+  toneColor,
+  toneFill,
+  toneFromComparison,
+  toneFromSigned,
+} from '../metricTone';
+import { APPROACH_BUCKETS, PUTT_BUCKETS, sampleText, signed } from '../shotMetrics';
 
-const DRIVE_ORDER = ['super', 'fairway', 'left', 'right', 'short'];
-const DRIVE_LABELS = {
-  super: 'Super drives',
-  fairway: 'Fairway drives',
-  left: 'Left misses',
-  right: 'Right misses',
-  short: 'Short drives',
-};
-const APPROACH_BUCKETS = ['0-50', '50-100', '100-150', '150-200', '200+'];
-const PUTT_BUCKETS = ['0-1', '1-2', '2-3', '3-6', '6+'];
+const TARGET_BASIS = 'vs target hcp';
 
 export default function ShotsTab({ stats, onInfo, targetHandicap, onChangeTarget }) {
   const { theme } = useTheme();
   const s = useMemo(() => makeStyles(theme), [theme]);
+  const shotBenchmark = useMemo(
+    () => shotBenchmarkForHandicap(targetHandicap),
+    [targetHandicap]
+  );
   const {
-    teeShot, shots, sandSaves, upAndDown, bunkerVisits,
-    driveImpact, approachImpact, puttDive, puttingTarget, approachTarget,
+    shots, puttingTarget, approachTarget,
   } = stats;
 
-  const hasAnyShotData = teeShot.hasData || shots.hasData
-    || driveImpact?.hasData || approachImpact?.hasData
-    || puttingTarget?.hasData || approachTarget?.hasData;
+  const hasAnyShotData = shots.hasData || puttingTarget?.hasData || approachTarget?.hasData
+    || stats?.strokesGained?.total != null || stats?.distribution?.total > 0;
 
   if (!hasAnyShotData) {
     return (
       <View style={s.wrap}>
-        <SectionCard title="Shots">
+        <SectionCard title="Strokes Gained">
           <Text style={s.note}>
             Log putts and drives during a round to unlock tee-shot, putting and driving stats.
           </Text>
@@ -42,214 +43,737 @@ export default function ShotsTab({ stats, onInfo, targetHandicap, onChangeTarget
     );
   }
 
-  const sgTitle = (targetHandicap == null || targetHandicap === 0)
-    ? 'Strokes Gained vs scratch'
-    : `Strokes Gained vs ${targetHandicap}-handicap target`;
+  const scoringRows = makeScoringRows(stats, shotBenchmark);
+  const drivingTargetRows = makeDrivingTargetRows(shots, shotBenchmark);
+  const approachTargetRows = approachTarget?.hasData ? makeApproachTargetRows(approachTarget) : [];
+  const puttingVolumeRows = shots.hasData ? makePuttingVolumeRows(shots, shotBenchmark) : [];
+  const puttingTargetRows = puttingTarget?.hasData ? makePuttingTargetRows(puttingTarget) : [];
 
   return (
     <View style={s.wrap}>
-      {stats?.strokesGained && (
-        <SectionCard
-          title={sgTitle}
-          infoKey="strokesGained"
-          onInfo={onInfo}
-          right={
-            onChangeTarget ? (
-              <TouchableOpacity onPress={onChangeTarget} hitSlop={8}>
-                <Feather name="edit-2" size={14} color={theme.text.secondary} />
-              </TouchableOpacity>
-            ) : null
-          }
-        >
-          {stats.strokesGained.total == null ? (
-            <Text style={s.note}>
-              Log first-putt distance and approach bucket on a few rounds to see this.
-            </Text>
-          ) : (
-            <>
-              <Text style={s.sgHeadline}>
-                {stats.strokesGained.total >= 0 ? '+' : ''}
-                {stats.strokesGained.total.toFixed(2)} per round
-              </Text>
-              <Text style={s.sgSubtle}>
-                From {stats.strokesGained.sampleHoles} holes · estimated from buckets
-              </Text>
-              <SGBar label="Off the tee"   value={stats.strokesGained.byCategory?.tee} />
-              <SGBar label="Approach"       value={stats.strokesGained.byCategory?.approach} />
-              <SGBar label="Around green"   value={stats.strokesGained.byCategory?.aroundGreen} />
-              <SGBar label="Putting"        value={stats.strokesGained.byCategory?.putting} />
-              {stats.strokesGained.sampleHoles >= 18
-                && (targetHandicap == null || targetHandicap === 0)
-                && <SGTargetNudge onTap={onChangeTarget} />}
-            </>
-          )}
-        </SectionCard>
-      )}
+      <ShotDashboard
+        stats={stats}
+        targetHandicap={targetHandicap}
+        onChangeTarget={onChangeTarget}
+        onInfo={onInfo}
+        TargetNudge={SGTargetNudge}
+      />
 
-      {teeShot.hasData ? (
-        <SectionCard title="Tee shot impact" infoKey="teeShotImpact" onInfo={onInfo}>
-          <MetricRow label="Fairway found" value={teeShot.fairway.avgPoints} secondary={`${teeShot.fairway.holes} holes`} dim={teeShot.fairway.holes === 0} />
-          <MetricRow label="Fairway missed" value={teeShot.missed.avgPoints} secondary={`${teeShot.missed.holes} holes`} dim={teeShot.missed.holes === 0} />
-          <MetricRow label="Miss left" value={teeShot.byDirection.left.avgPoints} secondary={`${teeShot.byDirection.left.holes} holes`} dim={teeShot.byDirection.left.holes === 0} />
-          <MetricRow label="Miss right" value={teeShot.byDirection.right.avgPoints} secondary={`${teeShot.byDirection.right.holes} holes`} dim={teeShot.byDirection.right.holes === 0} />
-          <MetricRow label="Miss short" value={teeShot.byDirection.short.avgPoints} secondary={`${teeShot.byDirection.short.holes} holes`} dim={teeShot.byDirection.short.holes === 0} />
-          <MetricRow label="After tee penalty" value={teeShot.teePenalty.avgPoints} secondary={`${teeShot.teePenalty.holes} holes`} dim={teeShot.teePenalty.holes === 0} />
-          <MetricRow label="Penalty drag (pts lost)" value={teeShot.penaltyDrag} secondary={`${teeShot.teePenalty.holes} holes`} dim={teeShot.teePenalty.holes === 0} />
-        </SectionCard>
-      ) : null}
-
-      {driveImpact?.hasData ? (
-        <SectionCard title="Drive score impact">
-          <MetricRow
-            label="Worst drive for score"
-            value={worstDriveLabel(driveImpact)}
-            secondary={worstDriveSecondary(driveImpact)}
+      {scoringRows.length ? (
+        <SectionCard title="Scoring" infoKey="sgScoring" onInfo={onInfo}>
+          <ShotSummary
+            title="Scoring vs target"
+            items={makeScoringSummary(scoringRows)}
+            s={s}
+            theme={theme}
           />
-          {DRIVE_ORDER.map((bucket) => {
-            const row = driveImpact.buckets[bucket];
-            if (!row || row.holes === 0) return null;
-            return (
-              <MetricRow
-                key={bucket}
-                label={DRIVE_LABELS[bucket]}
-                value={`${row.avgPoints} pts`}
-                secondary={`${signed(row.avgVsPar)} vs par · ${row.penaltyRate}% pen · ${row.holes} holes`}
-              />
-            );
-          })}
+          <ShotDataBlock title="Scoring mix" s={s} first>
+            {scoringRows.map(({ key, ...row }) => (
+              <ShotDataRow key={key} {...row} s={s} theme={theme} />
+            ))}
+          </ShotDataBlock>
         </SectionCard>
       ) : null}
 
-      {shots.hasData ? (
-        <SectionCard title="Putting & driving" infoKey="puttingDriving" onInfo={onInfo}>
-          <MetricRow label="Putts / round" value={shots.putts.perRound} secondary={`${shots.putts.holes} holes`} dim={shots.putts.holes === 0} />
-          <MetricRow label="1-putts" value={shots.putts.onePutts} secondary={`${shots.putts.holes} holes`} dim={shots.putts.holes === 0} />
-          <MetricRow label="3-putts+" value={shots.putts.threePuttPlus} secondary={`${shots.putts.holes} holes`} dim={shots.putts.holes === 0} />
-          <MetricRow label="Fairways hit %" value={`${shots.drives.fairwayPct}%`} secondary={`${shots.drives.recorded} drives`} dim={shots.drives.recorded === 0} />
-          <MetricRow label="Greens in reg %" value={`${shots.gir.pct}%`} secondary={`${shots.gir.eligible} holes`} dim={shots.gir.eligible === 0} />
-          <MetricRow label="Penalties / round" value={shots.penalties.total} secondary={`${shots.roundsWithData} rounds`} dim={shots.roundsWithData === 0} />
+      {drivingTargetRows.length ? (
+        <SectionCard title="Driving vs target" infoKey="sgDriving" onInfo={onInfo}>
+          <ShotDataBlock title="Driver accuracy" s={s} first>
+            {drivingTargetRows.map(({ key, ...row }) => (
+              <ShotDataRow key={key} {...row} s={s} theme={theme} />
+            ))}
+          </ShotDataBlock>
         </SectionCard>
       ) : null}
 
-      {puttDive?.hasData ? (
-        <SectionCard title="Putting detail">
-          <MetricRow label="2-putt rate" value={`${puttDive.twoPuttPct}%`} secondary={`${puttDive.holes} holes`} />
-          <MetricRow label="Putts on GIR" value={puttDive.girPuttsAvg ?? '—'} secondary={`${puttDive.girHoles} holes`} dim={puttDive.girPuttsAvg == null} />
-          <MetricRow label="Putts off GIR" value={puttDive.nonGirPuttsAvg ?? '—'} secondary={`${puttDive.nonGirHoles} holes`} dim={puttDive.nonGirPuttsAvg == null} />
-          <MetricRow label="1-putt save" value={`${puttDive.onePuttSave.pct}%`} secondary={`${puttDive.onePuttSave.attempts} chances`} dim={puttDive.onePuttSave.attempts === 0} />
-        </SectionCard>
-      ) : null}
-
-      {puttingTarget?.hasData ? (
-        <SectionCard title="Putting vs target">
-          {PUTT_BUCKETS.map((bucket) => {
-            const row = puttingTarget.buckets[bucket];
-            if (!row || row.attempts === 0) return null;
-            return (
-              <MetricRow
-                key={bucket}
-                label={`${bucket} m putts`}
-                value={signed(row.sgPerPutt)}
-                secondary={`${row.avgPutts} avg vs ${row.expectedPutts} target · ${row.threePuttRate}% 3-putt · ${row.attempts} putts`}
-              />
-            );
-          })}
-        </SectionCard>
-      ) : null}
-
-      {approachImpact?.hasData ? (
-        <SectionCard title="Approach score impact">
-          {APPROACH_BUCKETS.map((bucket) => {
-            const row = approachImpact.buckets[bucket];
-            if (!row || row.holes === 0) return null;
-            return (
-              <MetricRow
-                key={bucket}
-                label={`${bucket} m`}
-                value={`${row.avgPoints} pts`}
-                secondary={`${signed(row.avgVsPar)} vs par · ${row.girRate == null ? '—' : `${row.girRate}%`} GIR · ${row.holes} holes`}
-              />
-            );
-          })}
-        </SectionCard>
-      ) : null}
-
-      {approachTarget?.hasData ? (
-        <SectionCard title="Approach vs target">
-          {APPROACH_BUCKETS.map((bucket) => {
-            const row = approachTarget.buckets[bucket];
-            if (!row || row.holes === 0) return null;
-            return (
-              <MetricRow
-                key={bucket}
-                label={`${bucket} m approaches`}
-                value={signed(row.avgSg)}
-                secondary={`${row.girRate}% GIR · ${row.holes} shots`}
-              />
-            );
-          })}
-        </SectionCard>
-      ) : null}
-
-      {(sandSaves || upAndDown || bunkerVisits) ? (
-        <SectionCard title="Around the green">
-          {sandSaves ? (
-            <MetricRow
-              label="Sand-save rate"
-              value={sandSaves.rate != null ? `${sandSaves.saves} of ${sandSaves.attempts} · ${Math.round(sandSaves.rate * 100)}%` : '—'}
-              secondary="Scratch ~51%"
-              dim={sandSaves.rate == null}
-            />
+      {(approachTargetRows.length || shots.hasData) ? (
+        <SectionCard title="Approach vs target" infoKey="sgApproach" onInfo={onInfo}>
+          {approachTargetRows.length ? (
+            <ShotDataBlock title="Approach distance SG" s={s} first>
+              {approachTargetRows.map(({ key, ...row }) => (
+                <ShotDataRow key={key} {...row} s={s} theme={theme} />
+              ))}
+            </ShotDataBlock>
           ) : null}
-          {upAndDown ? (
-            <MetricRow
-              label="Up-and-down rate"
-              value={upAndDown.rate != null ? `${upAndDown.conversions} of ${upAndDown.attempts} · ${Math.round(upAndDown.rate * 100)}%` : '—'}
-              secondary="Scratch ~60%"
-              dim={upAndDown.rate == null}
-            />
-          ) : null}
-          {bunkerVisits ? (
-            <MetricRow
-              label="Bunker visits"
-              value={bunkerVisits.avgPerRound > 0 ? `${bunkerVisits.avgPerRound.toFixed(1)} per round` : '—'}
-              secondary={bunkerVisits.holesWithSand != null ? `${bunkerVisits.holesWithSand} holes` : undefined}
-              dim={bunkerVisits.avgPerRound === 0}
-            />
+
+          {shots.hasData ? (
+            <ShotDataBlock
+              title="GIR volume"
+              s={s}
+              first={!approachTargetRows.length}
+            >
+              <ShotDataRow
+                label="Greens in reg %"
+                value={`${shots.gir.pct}%`}
+                secondary={targetSecondary([
+                  sampleText(shots.gir.eligible, 'holes'),
+                  `target ${formatBenchmarkPercent(shotBenchmark.girPct)}`,
+                ], shots.gir.eligible, 6)}
+                tone={toneFromComparison({
+                  value: shots.gir.pct,
+                  target: shotBenchmark.girPct,
+                  polarity: 'higher',
+                  tolerance: 2,
+                  sample: shots.gir.eligible,
+                  minSample: 6,
+                })}
+                dim={shots.gir.eligible === 0}
+                s={s}
+                theme={theme}
+              />
+            </ShotDataBlock>
           ) : null}
         </SectionCard>
       ) : null}
+
+      {(shots.hasData || puttingTargetRows.length) ? (
+        <SectionCard title="Putting vs target" infoKey="sgPutting" onInfo={onInfo}>
+          {shots.hasData ? (
+            <ShotDataBlock title="Aggregate putting" s={s} first>
+              {puttingVolumeRows.map(({ key, ...row }) => (
+                <ShotDataRow key={key} {...row} s={s} theme={theme} />
+              ))}
+            </ShotDataBlock>
+          ) : null}
+
+          {puttingTargetRows.length ? (
+            <ShotDataBlock title="Distance putting SG" s={s} first={!shots.hasData}>
+              {puttingTargetRows.map(({ key, ...row }) => (
+                <ShotDataRow key={key} {...row} s={s} theme={theme} />
+              ))}
+            </ShotDataBlock>
+          ) : null}
+        </SectionCard>
+      ) : null}
+
     </View>
   );
 }
 
-function signed(value) {
-  if (value == null) return '—';
-  return value > 0 ? `+${value}` : `${value}`;
+function ShotSummary({ title, items, s, theme }) {
+  return (
+    <View style={s.summaryWrap}>
+      <View style={s.summaryHead}>
+        <Feather name="sliders" size={14} color={theme.text.secondary} />
+        <Text style={s.summaryTitle}>{title}</Text>
+      </View>
+      <View style={s.summaryCells}>
+        {items.map((item) => (
+          <SummaryCell key={item.label} {...item} s={s} theme={theme} />
+        ))}
+      </View>
+    </View>
+  );
 }
 
-function driveRows(driveImpact) {
-  return DRIVE_ORDER
-    .map((bucket) => ({ bucket, label: DRIVE_LABELS[bucket], ...(driveImpact?.buckets?.[bucket] ?? {}) }))
-    .filter((row) => row.holes > 0);
+function SummaryCell({ label, value, meta, tone = 'neutral', s, theme }) {
+  const color = toneColor(theme, tone);
+  const icon = tone === 'good' ? 'trending-up' : tone === 'bad' ? 'alert-triangle' : 'activity';
+  return (
+    <View style={s.summaryCell}>
+      <View style={[s.summaryIcon, { backgroundColor: toneFill(theme, tone) }]}>
+        <Feather name={icon} size={14} color={color} />
+      </View>
+      <View style={s.summaryCoachCopy}>
+        <Text style={s.summaryLabel} numberOfLines={1}>{label}</Text>
+        <Text style={[s.summaryValue, { color }]} numberOfLines={2}>{value}</Text>
+        {meta ? <Text style={s.summaryMeta} numberOfLines={2}>{meta}</Text> : null}
+      </View>
+    </View>
+  );
 }
 
-function worstDriveLabel(driveImpact) {
-  const worst = driveRows(driveImpact).sort((a, b) => a.avgPoints - b.avgPoints)[0];
-  return worst?.label ?? '—';
+function ShotDataBlock({ title, children, s, first = false }) {
+  return (
+    <View style={[s.detailBlock, first && s.detailBlockFirst]}>
+      <View style={s.detailHead}>
+        <View style={s.detailDot} />
+        <Text style={s.detailTitle}>{title}</Text>
+      </View>
+      <View style={s.dataRows}>
+        {children}
+      </View>
+    </View>
+  );
 }
 
-function worstDriveSecondary(driveImpact) {
-  const worst = driveRows(driveImpact).sort((a, b) => a.avgPoints - b.avgPoints)[0];
-  return worst ? `${worst.avgPoints} pts · ${worst.holes} holes` : undefined;
+function ShotDataRow({
+  label, value, secondary, tone = 'neutral', dim = false, s, theme,
+}) {
+  const color = dim ? theme.text.muted : toneColor(theme, tone);
+  const icon = dim ? 'minus' : tone === 'good' ? 'check' : tone === 'bad' ? 'alert-circle' : 'circle';
+  return (
+    <View style={[
+      s.dataRow,
+      tone === 'good' && s.dataRowGood,
+      tone === 'bad' && s.dataRowBad,
+      tone === 'neutral' && s.dataRowNeutral,
+      dim && s.dataRowDim,
+    ]}>
+      <View style={s.dataLead}>
+        <View style={[s.dataMarker, { backgroundColor: toneFill(theme, tone) }]}>
+          <Feather name={icon} size={12} color={color} />
+        </View>
+        <View style={s.dataCopy}>
+          <Text style={[s.dataLabel, dim && s.dimText]} numberOfLines={2}>
+            {label}
+          </Text>
+          {secondary ? (
+            <Text style={[s.dataSecondary, dim && s.dimText]} numberOfLines={3}>
+              {secondary}
+            </Text>
+          ) : null}
+        </View>
+      </View>
+      <View style={[s.dataValuePill, { backgroundColor: toneFill(theme, tone) }]}>
+        <Text style={[s.dataValue, { color }]} numberOfLines={2}>
+          {dim ? '-' : value}
+        </Text>
+      </View>
+    </View>
+  );
+}
+
+function makeScoringRows(stats, shotBenchmark) {
+  const rows = [];
+  const distribution = stats?.distribution ?? {};
+  const total = distribution.total ?? Object
+    .values(distribution)
+    .filter(isNumber)
+    .reduce((sum, value) => sum + value, 0);
+  const parType = stats?.parType ?? {};
+
+  [
+    ['par3AvgScore', 'Par 3 avg score', parType.par3, shotBenchmark.par3AvgScore],
+    ['par4AvgScore', 'Par 4 avg score', parType.par4, shotBenchmark.par4AvgScore],
+    ['par5AvgScore', 'Par 5 avg score', parType.par5, shotBenchmark.par5AvgScore],
+  ].forEach(([key, label, row, target]) => {
+    if (!row || row.holes === 0 || !isNumber(row.avgStrokes)) return;
+    rows.push({
+      key,
+      label,
+      value: formatBenchmarkNumber(row.avgStrokes),
+      secondary: targetSecondary([
+        sampleText(row.holes, 'holes'),
+        `target ${formatBenchmarkNumber(target)}`,
+      ], row.holes, 6),
+      tone: toneFromComparison({
+        value: row.avgStrokes,
+        target,
+        polarity: 'lower',
+        tolerance: 0.15,
+        sample: row.holes,
+        minSample: 6,
+      }),
+    });
+  });
+
+  if (total > 0) {
+    rows.push(
+      scoringCountRow({
+        key: 'birdiesPerRound',
+        label: 'Birdies / round',
+        count: (distribution.eagles ?? 0) + (distribution.birdies ?? 0),
+        total,
+        target: shotBenchmark.birdiesPerRound,
+        polarity: 'higher',
+      }),
+      scoringCountRow({
+        key: 'parsPerRound',
+        label: 'Pars / round',
+        count: distribution.pars ?? 0,
+        total,
+        target: shotBenchmark.parsPerRound,
+        polarity: 'higher',
+      }),
+      scoringCountRow({
+        key: 'bogeysPerRound',
+        label: 'Bogeys / round',
+        count: distribution.bogeys ?? 0,
+        total,
+        target: shotBenchmark.bogeysPerRound,
+        polarity: 'lower',
+      }),
+      scoringCountRow({
+        key: 'doublesOrWorsePerRound',
+        label: 'Doubles+ / round',
+        count: (distribution.doubles ?? 0) + (distribution.worse ?? 0),
+        total,
+        target: shotBenchmark.doublesOrWorsePerRound,
+        polarity: 'lower',
+      })
+    );
+  }
+
+  return rows.filter(Boolean);
+}
+
+function scoringCountRow({
+  key, label, count, total, target, polarity,
+}) {
+  const value = per18(count, total);
+  return {
+    key,
+    label,
+    value: formatBenchmarkNumber(value),
+    secondary: targetSecondary([
+      `${count} total`,
+      sampleText(total, 'holes'),
+      `target ${formatBenchmarkNumber(target)}`,
+    ], total, 18),
+    tone: toneFromComparison({
+      value,
+      target,
+      polarity,
+      tolerance: 0.2,
+      sample: total,
+      minSample: 18,
+    }),
+  };
+}
+
+function makeScoringSummary(scoringRows) {
+  const byKey = new Map(scoringRows.map((row) => [row.key, row]));
+  const priority = [
+    ['par3AvgScore', 'Par 3s'],
+    ['par4AvgScore', 'Par 4s'],
+    ['par5AvgScore', 'Par 5s'],
+    ['doublesOrWorsePerRound', 'Damage control'],
+  ];
+  const summary = priority
+    .map(([key, label]) => {
+      const row = byKey.get(key);
+      if (!row) return null;
+      return summaryMetric(label, row.value, row.secondary, row.tone);
+    })
+    .filter(Boolean);
+
+  if (summary.length >= 3) return summary;
+
+  scoringRows.forEach((row) => {
+    if (summary.length >= 3) return;
+    if (priority.some(([key]) => key === row.key)) return;
+    summary.push(summaryMetric(row.label, row.value, row.secondary, row.tone));
+  });
+
+  return summary;
+}
+
+function makeDrivingTargetRows(shots, shotBenchmark) {
+  const recorded = shots?.drives?.recorded ?? 0;
+  const distribution = shots?.drives?.distribution ?? {};
+  const leftPct = percentage(distribution.left ?? 0, recorded);
+  const rightPct = percentage(distribution.right ?? 0, recorded);
+  const teePenaltyPct = percentage(shots?.penalties?.tee ?? 0, recorded);
+
+  return [
+    {
+      key: 'fairways',
+      label: 'Fairways hit',
+      value: `${shots?.drives?.fairwayPct ?? 0}%`,
+      secondary: targetSecondary([
+        sampleText(recorded, 'drives'),
+        `target ${formatBenchmarkPercent(shotBenchmark.fairwayPct)}`,
+      ], recorded, 6),
+      tone: toneFromComparison({
+        value: shots?.drives?.fairwayPct,
+        target: shotBenchmark.fairwayPct,
+        polarity: 'higher',
+        tolerance: 2,
+        sample: recorded,
+        minSample: 6,
+      }),
+      dim: recorded === 0,
+    },
+    {
+      key: 'leftMissPct',
+      label: 'Left miss %',
+      value: `${leftPct}%`,
+      secondary: targetSecondary([
+        `${distribution.left ?? 0} drives`,
+        `target ${formatBenchmarkPercent(shotBenchmark.leftMissPct)}`,
+      ], recorded, 6),
+      tone: toneFromComparison({
+        value: leftPct,
+        target: shotBenchmark.leftMissPct,
+        polarity: 'lower',
+        tolerance: 2,
+        sample: recorded,
+        minSample: 6,
+      }),
+      dim: recorded === 0 || !shots?.drives?.distribution,
+    },
+    {
+      key: 'rightMissPct',
+      label: 'Right miss %',
+      value: `${rightPct}%`,
+      secondary: targetSecondary([
+        `${distribution.right ?? 0} drives`,
+        `target ${formatBenchmarkPercent(shotBenchmark.rightMissPct)}`,
+      ], recorded, 6),
+      tone: toneFromComparison({
+        value: rightPct,
+        target: shotBenchmark.rightMissPct,
+        polarity: 'lower',
+        tolerance: 2,
+        sample: recorded,
+        minSample: 6,
+      }),
+      dim: recorded === 0 || !shots?.drives?.distribution,
+    },
+    {
+      key: 'teePenaltyPct',
+      label: 'Tee penalty %',
+      value: `${teePenaltyPct}%`,
+      secondary: targetSecondary([
+        `${shots?.penalties?.tee ?? 0} penalties`,
+        `target ${formatBenchmarkPercent(shotBenchmark.teePenaltyPct)}`,
+      ], recorded, 6),
+      tone: toneFromComparison({
+        value: teePenaltyPct,
+        target: shotBenchmark.teePenaltyPct,
+        polarity: 'lower',
+        tolerance: 1,
+        sample: recorded,
+        minSample: 6,
+      }),
+      dim: recorded === 0,
+    },
+    {
+      key: 'driverDistance',
+      label: 'Driver distance',
+      value: `${formatBenchmarkNumber(shotBenchmark.driverDistance)} yd`,
+      secondary: 'target benchmark only · distance not tracked',
+      tone: 'neutral',
+    },
+  ];
+}
+
+function makeApproachTargetRows(approachTarget) {
+  return APPROACH_BUCKETS.map((bucket) => {
+    const row = approachTarget.buckets[bucket];
+    if (!row || row.holes === 0) return null;
+    return {
+      key: bucket,
+      bucket,
+      label: `${bucket} m approaches`,
+      value: signed(row.avgSg),
+      raw: row.avgSg,
+      secondary: targetSecondary([
+        `${formatPercent(row.girRate)} GIR`,
+        sampleText(row.holes, 'shots'),
+      ], row.holes, 6),
+      sample: row.holes,
+      girRate: row.girRate,
+      tone: toneFromSigned(row.avgSg, { sample: row.holes, minSample: 6 }),
+    };
+  }).filter(Boolean);
+}
+
+function makePuttingVolumeRows(shots, shotBenchmark) {
+  const threePuttsPerRound = shots.roundsWithData > 0
+    ? round1(shots.putts.threePuttPlus / shots.roundsWithData)
+    : 0;
+  return [
+    {
+      key: 'puttsPerRound',
+      label: 'Putts / round',
+      value: shots.putts.perRound,
+      secondary: targetSecondary([
+        sampleText(shots.putts.holes, 'holes'),
+        `target ${formatBenchmarkNumber(shotBenchmark.puttsPerRound)}`,
+      ], shots.putts.holes, 9),
+      tone: toneFromComparison({
+        value: shots.putts.perRound,
+        target: shotBenchmark.puttsPerRound,
+        polarity: 'lower',
+        tolerance: 0.5,
+        sample: shots.putts.holes,
+        minSample: 9,
+      }),
+      dim: shots.putts.holes === 0,
+    },
+    {
+      key: 'threePutts',
+      label: '3-putts / round',
+      value: threePuttsPerRound,
+      secondary: targetSecondary([
+        `${shots.putts.threePuttPlus} total`,
+        sampleText(shots.roundsWithData, 'rounds'),
+        `target ${formatBenchmarkNumber(shotBenchmark.threePuttsPerRound)}`,
+      ], shots.putts.holes, 9),
+      tone: toneFromComparison({
+        value: threePuttsPerRound,
+        target: shotBenchmark.threePuttsPerRound,
+        polarity: 'lower',
+        tolerance: 0.3,
+        sample: shots.putts.holes,
+        minSample: 9,
+      }),
+      dim: shots.putts.holes === 0,
+    },
+  ];
+}
+
+function makePuttingTargetRows(puttingTarget) {
+  return PUTT_BUCKETS.map((bucket) => {
+    const row = puttingTarget.buckets[bucket];
+    if (!row || row.attempts === 0) return null;
+    return {
+      key: bucket,
+      bucket,
+      label: `${bucket} m putts`,
+      value: signed(row.sgPerPutt),
+      raw: row.sgPerPutt,
+      secondary: targetSecondary([
+        `${formatNumber(row.avgPutts)} avg vs ${formatNumber(row.expectedPutts)} target`,
+        `${formatPercent(row.threePuttRate)} 3-putt`,
+        sampleText(row.attempts, 'putts'),
+      ], row.attempts, 6),
+      sample: row.attempts,
+      threePuttRate: row.threePuttRate,
+      tone: toneFromSigned(row.sgPerPutt, { sample: row.attempts, minSample: 6 }),
+    };
+  }).filter(Boolean);
+}
+
+function summaryMetric(label, value, meta, tone) {
+  return {
+    label,
+    value: value ?? '-',
+    meta: meta ?? 'No sample yet',
+    tone,
+  };
+}
+
+function targetSecondary(parts, sample, minSample) {
+  return comparisonMeta(TARGET_BASIS, parts, { sample, minSample });
+}
+
+function formatPercent(value) {
+  return value == null ? '-' : `${value}%`;
+}
+
+function formatBenchmarkPercent(value) {
+  if (!isNumber(value)) return '-';
+  return `${Math.round(value)}%`;
+}
+
+function formatBenchmarkNumber(value) {
+  if (!isNumber(value)) return '-';
+  return Number.isInteger(value) ? `${value}` : value.toFixed(1);
+}
+
+function formatNumber(value) {
+  return value == null ? '-' : value;
+}
+
+function round1(value) {
+  return Math.round((value + Number.EPSILON) * 10) / 10;
+}
+
+function per18(count, total) {
+  if (!isNumber(count) || !isNumber(total) || total <= 0) return null;
+  return round1((count / total) * 18);
+}
+
+function percentage(count, total) {
+  if (!isNumber(count) || !isNumber(total) || total <= 0) return 0;
+  return Math.round((count / total) * 100);
+}
+
+function isNumber(value) {
+  return typeof value === 'number' && Number.isFinite(value);
 }
 
 function makeStyles(theme) {
+  const goodWash = theme.accent.light;
+  const badWash = theme.isDark ? 'rgba(248,113,113,0.14)' : '#fff1f2';
+  const goodBorder = theme.isDark ? 'rgba(79,174,138,0.28)' : '#c7ddd3';
+  const badBorder = theme.isDark ? 'rgba(248,113,113,0.24)' : '#f3c7cf';
+  const markerSize = 26;
+
   return StyleSheet.create({
     wrap: { gap: theme.spacing.lg },
     note: { ...theme.typography.caption, color: theme.text.muted, fontStyle: 'italic' },
-    sgHeadline: { ...theme.typography.title, color: theme.text.primary, marginBottom: theme.spacing.xs },
-    sgSubtle: { ...theme.typography.caption, color: theme.text.muted, marginBottom: theme.spacing.sm },
+    summaryWrap: {
+      paddingTop: theme.spacing.md,
+      paddingBottom: theme.spacing.md,
+      paddingHorizontal: theme.spacing.md,
+      borderRadius: theme.radius.lg,
+      backgroundColor: theme.bg.secondary,
+      borderWidth: StyleSheet.hairlineWidth,
+      borderColor: theme.border.default,
+      gap: theme.spacing.md,
+    },
+    summaryHead: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: 6,
+    },
+    summaryTitle: {
+      ...theme.typography.subhead,
+      color: theme.text.primary,
+      fontWeight: '800',
+    },
+    summaryCells: {
+      flexDirection: 'row',
+      flexWrap: 'wrap',
+      gap: theme.spacing.sm,
+    },
+    summaryCell: {
+      flexGrow: 1,
+      flexBasis: 250,
+      minWidth: 178,
+      padding: theme.spacing.md,
+      minHeight: 92,
+      borderRadius: theme.radius.md,
+      backgroundColor: theme.bg.card,
+      borderWidth: StyleSheet.hairlineWidth,
+      borderColor: theme.border.default,
+      flexDirection: 'row',
+      alignItems: 'center',
+      justifyContent: 'flex-start',
+      gap: 2,
+    },
+    summaryIcon: {
+      width: 34,
+      height: 34,
+      borderRadius: 17,
+      alignItems: 'center',
+      justifyContent: 'center',
+      marginRight: theme.spacing.sm,
+      flexShrink: 0,
+    },
+    summaryCoachCopy: {
+      flex: 1,
+      minWidth: 0,
+      gap: 1,
+    },
+    summaryLabel: {
+      ...theme.typography.caption,
+      color: theme.text.secondary,
+      fontWeight: '700',
+      textAlign: 'left',
+    },
+    summaryValue: {
+      ...theme.typography.heading,
+      fontWeight: '900',
+      textAlign: 'left',
+    },
+    summaryMeta: {
+      ...theme.typography.tiny,
+      color: theme.text.secondary,
+      textAlign: 'left',
+    },
+    detailBlock: {
+      paddingTop: theme.spacing.md,
+      marginTop: theme.spacing.md,
+      borderTopWidth: StyleSheet.hairlineWidth,
+      borderTopColor: theme.border.default,
+      gap: theme.spacing.sm,
+    },
+    detailBlockFirst: {
+      paddingTop: theme.spacing.md,
+      marginTop: 0,
+      borderTopWidth: 0,
+    },
+    detailHead: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: theme.spacing.sm,
+      paddingBottom: theme.spacing.xs,
+    },
+    detailDot: {
+      width: 9,
+      height: 9,
+      borderRadius: 5,
+      backgroundColor: theme.accent.primary,
+    },
+    detailTitle: {
+      ...theme.typography.subhead,
+      color: theme.text.primary,
+      fontWeight: '800',
+    },
+    dataRows: {
+      gap: 6,
+    },
+    dataRow: {
+      minHeight: 54,
+      flexDirection: 'row',
+      alignItems: 'center',
+      justifyContent: 'space-between',
+      gap: theme.spacing.md,
+      paddingVertical: theme.spacing.sm,
+      paddingHorizontal: theme.spacing.sm,
+      borderWidth: StyleSheet.hairlineWidth,
+      borderColor: theme.border.default,
+      borderRadius: theme.radius.md,
+      backgroundColor: theme.bg.card,
+    },
+    dataRowGood: {
+      backgroundColor: goodWash,
+      borderColor: goodBorder,
+    },
+    dataRowBad: {
+      backgroundColor: badWash,
+      borderColor: badBorder,
+    },
+    dataRowNeutral: {
+      backgroundColor: theme.bg.card,
+      borderColor: theme.border.default,
+    },
+    dataValuePill: {
+      flexShrink: 0,
+      minWidth: 58,
+      maxWidth: 136,
+      alignItems: 'center',
+      justifyContent: 'center',
+      paddingHorizontal: theme.spacing.sm,
+      paddingVertical: 4,
+      borderRadius: theme.radius.pill,
+    },
+    dataRowDim: {
+      opacity: 0.75,
+    },
+    dataLead: {
+      flex: 1,
+      minWidth: 0,
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: theme.spacing.sm,
+    },
+    dataMarker: {
+      width: markerSize,
+      height: markerSize,
+      borderRadius: markerSize / 2,
+      flexShrink: 0,
+      alignItems: 'center',
+      justifyContent: 'center',
+    },
+    dataCopy: {
+      flex: 1,
+      minWidth: 0,
+      gap: 2,
+    },
+    dataLabel: {
+      ...theme.typography.body,
+      color: theme.text.primary,
+      fontWeight: '700',
+    },
+    dataSecondary: {
+      ...theme.typography.caption,
+      color: theme.text.secondary,
+    },
+    dataValue: {
+      ...theme.typography.body,
+      flexShrink: 0,
+      maxWidth: 132,
+      textAlign: 'right',
+      fontWeight: '900',
+    },
+    dimText: {
+      color: theme.text.muted,
+    },
   });
 }
 
@@ -273,7 +797,7 @@ function SGTargetNudge({ onTap }) {
     }}>
       <TouchableOpacity onPress={onTap} style={{ flex: 1 }}>
         <Text style={{ color: theme.text.primary, fontSize: 13 }}>
-          ⓘ Tip: set a target handicap to see where you'd improve most.
+          ⓘ Tip: set a target handicap to see where you would improve most.
         </Text>
       </TouchableOpacity>
       <TouchableOpacity

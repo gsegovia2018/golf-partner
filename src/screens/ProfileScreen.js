@@ -11,11 +11,13 @@ import * as ImageManipulator from 'expo-image-manipulator';
 
 import { useTheme } from '../theme/ThemeContext';
 import { supabase } from '../lib/supabase';
-import { loadProfile, upsertProfile, uploadAvatar, computePersonalStats } from '../store/profileStore';
+import { loadProfile, upsertProfile, uploadAvatar } from '../store/profileStore';
 import { getShowRunningScore, setShowRunningScore } from '../lib/prefs';
 import { parseHandicapIndex } from '../lib/handicap';
 
-const AVATAR_COLORS = ['#006747', '#c77b38', '#1b4965', '#7b3f6b', '#4a6d3f', '#b33951'];
+function normalizeHandicapInput(value) {
+  return String(value ?? '').replace(',', '.');
+}
 
 export default function ProfileScreen({ navigation, route }) {
   const { theme, mode, toggle } = useTheme();
@@ -23,7 +25,6 @@ export default function ProfileScreen({ navigation, route }) {
   const isTabPresentation = route?.params?.presentation === 'tab';
 
   const [profile, setProfile] = useState(null);
-  const [stats, setStats] = useState(null);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
 
@@ -31,7 +32,6 @@ export default function ProfileScreen({ navigation, route }) {
   const [displayName, setDisplayName] = useState('');
   const [handicap, setHandicap] = useState('');
   const [targetHandicap, setTargetHandicap] = useState('');
-  const [avatarColor, setAvatarColor] = useState(null);
   const [avatarUrl, setAvatarUrl] = useState(null);
   const [uploadingAvatar, setUploadingAvatar] = useState(false);
   const [dirty, setDirty] = useState(false);
@@ -47,22 +47,9 @@ export default function ProfileScreen({ navigation, route }) {
       setDisplayName(p?.displayName ?? '');
       setHandicap(p?.handicap != null ? String(p.handicap) : '');
       setTargetHandicap(p?.targetHandicap != null ? String(p.targetHandicap) : '');
-      setAvatarColor(p?.avatarColor ?? null);
       setAvatarUrl(p?.avatarUrl ?? null);
       setShowRunning(running);
       setDirty(false);
-      if (p?.userId || p?.displayName) {
-        // Prefer user_id matching — it's a stable account link, whereas
-        // displayName matching is fuzzy and breaks on renames. Only pass
-        // displayName as a fallback when there is no userId.
-        setStats(await computePersonalStats(
-          p?.userId
-            ? { userId: p.userId }
-            : { displayName: p?.displayName },
-        ));
-      } else {
-        setStats(null);
-      }
     } catch (err) {
       Alert.alert('Error', err.message ?? 'Could not load profile');
     } finally {
@@ -115,8 +102,9 @@ export default function ProfileScreen({ navigation, route }) {
     // Golf handicap range: scratch/low-single digits up to 54 (max index
     // allowed by WHS). Reject clearly wrong values so nobody saves 200
     // and wrecks their Stableford math downstream.
-    if (handicap.trim() !== '') {
-      const parsed = parseHandicapIndex(handicap);
+    const normalizedHandicap = normalizeHandicapInput(handicap);
+    if (normalizedHandicap.trim() !== '') {
+      const parsed = parseHandicapIndex(normalizedHandicap);
       if (!parsed.ok) {
         Alert.alert('Invalid handicap', 'Handicap must be between 0 and 54, with up to one decimal place.');
         return;
@@ -125,16 +113,23 @@ export default function ProfileScreen({ navigation, route }) {
     // Target handicap is the comparison baseline for Strokes Gained.
     // Decimals are fine (12.5 is a valid playing-handicap target). Range
     // matches the picker's previous 0–36 bounds.
-    if (targetHandicap.trim() !== '') {
-      const t = parseFloat(targetHandicap);
-      if (!Number.isFinite(t) || t < 0 || t > 36) {
-        Alert.alert('Invalid target handicap', 'Target handicap must be between 0 and 36.');
+    const normalizedTargetHandicap = normalizeHandicapInput(targetHandicap);
+    if (normalizedTargetHandicap.trim() !== '') {
+      const t = parseHandicapIndex(normalizedTargetHandicap);
+      if (!t.ok || t.value > 36) {
+        Alert.alert('Invalid target handicap', 'Target handicap must be between 0 and 36, with up to one decimal place.');
         return;
       }
     }
     setSaving(true);
     try {
-      await upsertProfile({ username: trimmedUsername, displayName, handicap, targetHandicap, avatarColor, avatarUrl });
+      await upsertProfile({
+        username: trimmedUsername,
+        displayName,
+        handicap: normalizedHandicap,
+        targetHandicap: normalizedTargetHandicap,
+        avatarUrl,
+      });
       await load();
     } catch (err) {
       const msg = err?.message ?? 'Could not save profile';
@@ -209,7 +204,6 @@ export default function ProfileScreen({ navigation, route }) {
   }
 
   const initials = (profile?.displayName || profile?.email || '?').slice(0, 2).toUpperCase();
-  const resolvedAvatarColor = avatarColor || AVATAR_COLORS[0];
 
   return (
     <ScreenContainer style={s.screen} edges={['top', 'bottom']}>
@@ -238,7 +232,7 @@ export default function ProfileScreen({ navigation, route }) {
         <ScrollView style={s.scroll} contentContainerStyle={s.content} automaticallyAdjustKeyboardInsets keyboardShouldPersistTaps="handled">
           <View style={s.heroCard}>
             <TouchableOpacity
-              style={[s.avatar, { backgroundColor: resolvedAvatarColor, overflow: 'hidden' }]}
+              style={[s.avatar, { backgroundColor: theme.accent.primary, overflow: 'hidden' }]}
               onPress={pickAvatar}
               activeOpacity={0.8}
               disabled={uploadingAvatar}
@@ -308,10 +302,11 @@ export default function ProfileScreen({ navigation, route }) {
                 placeholder="—"
                 placeholderTextColor={theme.text.muted}
                 keyboardType="decimal-pad"
+                inputMode="decimal"
                 keyboardAppearance={theme.isDark ? 'dark' : 'light'}
                 selectionColor={theme.accent.primary}
                 value={handicap}
-                onChangeText={(v) => { setHandicap(v); setDirty(true); }}
+                onChangeText={(v) => { setHandicap(normalizeHandicapInput(v)); setDirty(true); }}
               />
             </View>
             <View style={{ flex: 1 }}>
@@ -321,42 +316,14 @@ export default function ProfileScreen({ navigation, route }) {
                 placeholder="—"
                 placeholderTextColor={theme.text.muted}
                 keyboardType="decimal-pad"
+                inputMode="decimal"
                 keyboardAppearance={theme.isDark ? 'dark' : 'light'}
                 selectionColor={theme.accent.primary}
                 value={targetHandicap}
-                onChangeText={(v) => { setTargetHandicap(v); setDirty(true); }}
+                onChangeText={(v) => { setTargetHandicap(normalizeHandicapInput(v)); setDirty(true); }}
               />
             </View>
           </View>
-
-          <View style={s.fieldGroup}>
-            <Text style={s.fieldLabel}>Avatar color</Text>
-            <View style={s.colorRow}>
-              {AVATAR_COLORS.map((c) => (
-                <TouchableOpacity
-                  key={c}
-                  style={[
-                    s.colorDot,
-                    { backgroundColor: c },
-                    resolvedAvatarColor === c && s.colorDotActive,
-                  ]}
-                  onPress={() => { setAvatarColor(c); setDirty(true); }}
-                  activeOpacity={0.7}
-                />
-              ))}
-            </View>
-          </View>
-
-          <TouchableOpacity
-            style={[s.saveBtn, (!dirty || saving) && { opacity: 0.5 }]}
-            onPress={save}
-            disabled={!dirty || saving}
-            activeOpacity={0.8}
-          >
-            {saving
-              ? <ActivityIndicator color={theme.isDark ? theme.accent.primary : theme.text.inverse} />
-              : <Text style={s.saveBtnText}>Save changes</Text>}
-          </TouchableOpacity>
 
           <Text style={s.sectionLabel}>APPEARANCE</Text>
 
@@ -392,7 +359,7 @@ export default function ProfileScreen({ navigation, route }) {
             <View style={{ flex: 1 }}>
               <Text style={s.prefLabel}>Show running points on scorecard</Text>
               <Text style={s.fieldHint}>
-                Displays each player's total Stableford points under their name.
+                Displays total Stableford points under every scorecard name.
               </Text>
             </View>
             <Switch
@@ -402,58 +369,6 @@ export default function ProfileScreen({ navigation, route }) {
               thumbColor={Platform.OS === 'android' ? theme.bg.card : undefined}
             />
           </View>
-
-          <Text style={s.sectionLabel}>PERSONAL STATS</Text>
-
-          {!profile?.displayName ? (
-            <Text style={s.statsHint}>
-              Set a display name above and we'll match it to players in your tournaments.
-            </Text>
-          ) : stats ? (
-            <>
-              <View style={s.statsGrid}>
-                <StatCell label="Tournaments" value={stats.tournamentsPlayed} theme={theme} s={s} />
-                <StatCell label="Rounds" value={stats.roundsPlayed} theme={theme} s={s} />
-                <StatCell label="Total pts" value={stats.totalPoints} theme={theme} s={s} />
-                <StatCell
-                  label="Avg / round"
-                  value={stats.roundsPlayed > 0 ? stats.avgPointsPerRound.toFixed(1) : '—'}
-                  theme={theme}
-                  s={s}
-                />
-                <StatCell label="Wins" value={stats.wins} theme={theme} s={s} />
-                <StatCell
-                  label="Best round"
-                  value={stats.bestRound ? `${stats.bestRound.points} pts` : '—'}
-                  theme={theme}
-                  s={s}
-                />
-              </View>
-
-              {stats.bestRound && (
-                <View style={s.bestRoundCard}>
-                  <Feather name="award" size={18} color={theme.accent.primary} />
-                  <View style={{ flex: 1 }}>
-                    <Text style={s.bestRoundTitle}>Best round</Text>
-                    <Text style={s.bestRoundMeta}>
-                      {stats.bestRound.points} pts · {stats.bestRound.strokes} strokes
-                    </Text>
-                    <Text style={s.bestRoundSub}>
-                      {stats.bestRound.tournamentName} · R{stats.bestRound.roundIndex + 1}
-                      {stats.bestRound.courseName ? ` · ${stats.bestRound.courseName}` : ''}
-                    </Text>
-                  </View>
-                </View>
-              )}
-
-              {stats.tournamentsPlayed === 0 && (
-                <Text style={s.statsHint}>
-                  No tournaments matched "{profile.displayName}" yet. Check the display name
-                  matches a player name exactly.
-                </Text>
-              )}
-            </>
-          ) : null}
 
           <Text style={s.sectionLabel}>SOCIAL</Text>
 
@@ -468,6 +383,17 @@ export default function ProfileScreen({ navigation, route }) {
           </TouchableOpacity>
 
           <TouchableOpacity
+            style={[s.saveBtn, (!dirty || saving) && { opacity: 0.5 }]}
+            onPress={save}
+            disabled={!dirty || saving}
+            activeOpacity={0.8}
+          >
+            {saving
+              ? <ActivityIndicator color={theme.isDark ? theme.accent.primary : theme.text.inverse} />
+              : <Text style={s.saveBtnText}>Save changes</Text>}
+          </TouchableOpacity>
+
+          <TouchableOpacity
             style={s.signOutBtn}
             onPress={signOut}
             activeOpacity={0.7}
@@ -478,15 +404,6 @@ export default function ProfileScreen({ navigation, route }) {
         </ScrollView>
       )}
     </ScreenContainer>
-  );
-}
-
-function StatCell({ label, value, s }) {
-  return (
-    <View style={s.statCell}>
-      <Text style={s.statValue}>{value}</Text>
-      <Text style={s.statLabel}>{label}</Text>
-    </View>
   );
 }
 
@@ -505,7 +422,7 @@ const makeStyles = (theme) => StyleSheet.create({
   headerTitle: { fontFamily: 'PlusJakartaSans-Bold', fontSize: 17, color: theme.text.primary },
   loadingWrap: { flex: 1, alignItems: 'center', justifyContent: 'center' },
   scroll: { flex: 1 },
-  content: { padding: 20, paddingTop: 4, paddingBottom: 60 },
+  content: { padding: 20, paddingTop: 4, paddingBottom: 150 },
 
   heroCard: { alignItems: 'center', marginBottom: 20 },
   avatar: {
@@ -552,16 +469,9 @@ const makeStyles = (theme) => StyleSheet.create({
     fontFamily: 'PlusJakartaSans-Medium',
   },
 
-  colorRow: { flexDirection: 'row', gap: 10, flexWrap: 'wrap' },
-  colorDot: {
-    width: 32, height: 32, borderRadius: 16,
-    borderWidth: 2, borderColor: 'transparent',
-  },
-  colorDotActive: { borderColor: theme.accent.primary },
-
   saveBtn: {
     backgroundColor: theme.isDark ? theme.accent.light : theme.accent.primary,
-    borderRadius: 14, padding: 14, alignItems: 'center', marginTop: 8,
+    borderRadius: 14, padding: 14, alignItems: 'center', marginTop: 22,
     borderWidth: theme.isDark ? 1 : 0,
     borderColor: theme.isDark ? theme.accent.primary + '33' : 'transparent',
   },
@@ -580,37 +490,6 @@ const makeStyles = (theme) => StyleSheet.create({
   prefLabel: {
     fontFamily: 'PlusJakartaSans-SemiBold', color: theme.text.primary, fontSize: 14,
   },
-
-  statsGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: 10 },
-  statCell: {
-    flexGrow: 1, flexBasis: '30%',
-    backgroundColor: theme.bg.card,
-    borderRadius: 14, borderWidth: 1, borderColor: theme.border.default,
-    paddingVertical: 14, paddingHorizontal: 12, alignItems: 'center',
-    ...(theme.isDark ? {} : theme.shadow.card),
-  },
-  statValue: { fontFamily: 'PlayfairDisplay-Bold', fontSize: 22, color: theme.text.primary },
-  statLabel: {
-    fontFamily: 'PlusJakartaSans-SemiBold', fontSize: 10,
-    color: theme.text.muted, marginTop: 4, letterSpacing: 1, textTransform: 'uppercase',
-  },
-  statsHint: {
-    fontFamily: 'PlusJakartaSans-Regular', color: theme.text.muted,
-    fontSize: 13, lineHeight: 19, paddingVertical: 10,
-  },
-
-  bestRoundCard: {
-    flexDirection: 'row', alignItems: 'center', gap: 12,
-    backgroundColor: theme.bg.card, borderRadius: 14, borderWidth: 1,
-    borderColor: theme.border.default, padding: 14, marginTop: 14,
-    ...(theme.isDark ? {} : theme.shadow.card),
-  },
-  bestRoundTitle: {
-    fontFamily: 'PlusJakartaSans-SemiBold', color: theme.text.muted,
-    fontSize: 10, letterSpacing: 1.2, textTransform: 'uppercase',
-  },
-  bestRoundMeta: { fontFamily: 'PlusJakartaSans-Bold', color: theme.text.primary, fontSize: 15, marginTop: 2 },
-  bestRoundSub: { fontFamily: 'PlusJakartaSans-Medium', color: theme.text.secondary, fontSize: 12, marginTop: 2 },
 
   appearanceRow: { flexDirection: 'row', gap: 10 },
   appearanceTile: {

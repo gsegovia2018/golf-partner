@@ -4,7 +4,7 @@ import { StyleSheet } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { ThemeProvider } from '../../theme/ThemeContext';
-import MyStatsScreen from '../MyStatsScreen';
+import MyStatsScreen, { getTabScrollTarget } from '../MyStatsScreen';
 
 jest.mock('react-native-safe-area-context', () => {
   const React = require('react');
@@ -32,16 +32,27 @@ jest.mock('../../store/profileStore', () => ({
 jest.mock('../../store/personalStats', () => ({
   collectMyRounds: jest.fn(() => [{ key: 'round-1', label: 'Round 1' }]),
   resolveSelection: jest.fn((rounds) => rounds),
-  computeMyStats: jest.fn(() => ({ rounds: [] })),
+  computeMyStats: jest.fn(() => ({
+    metrics: { rounds: 1, avgPoints: 30, bestRoundPoints: 30 },
+    form: { hasHistory: false, metrics: [{ key: 'avgPoints', direction: 'flat', delta: null }] },
+    formSeries: { metrics: { avgPoints: [] } },
+    ranking: { baseline: null, strengths: [], weaknesses: [] },
+    coach: { hero: null, board: {}, practicePlan: [] },
+  })),
 }));
 
 jest.mock('../../store/roundReportCard', () => ({
   buildRoundReportCard: jest.fn(() => ({ title: 'Round 1' })),
 }));
 
-jest.mock('../../components/RoundReportCard', () => function MockRoundReportCard() {
+jest.mock('../../components/RoundReportCard', () => function MockRoundReportCard({ selectedKey }) {
   const { Text } = require('react-native');
-  return <Text>Report card content</Text>;
+  return (
+    <>
+      <Text>Report card content</Text>
+      <Text>{`Selected round ${selectedKey}`}</Text>
+    </>
+  );
 });
 
 jest.mock('../../components/MyStatsRoundSelector', () => function MockMyStatsRoundSelector() {
@@ -58,9 +69,9 @@ jest.mock('../../components/mystats/TargetHandicapPicker', () => ({
   },
 }));
 
-jest.mock('../../components/mystats/tabs/OverviewTab', () => function MockOverviewTab() {
+jest.mock('../../components/mystats/tabs/CoachTab', () => function MockCoachTab() {
   const { Text } = require('react-native');
-  return <Text>Overview content</Text>;
+  return <Text>Coach content</Text>;
 });
 
 jest.mock('../../components/mystats/tabs/FormTab', () => function MockFormTab() {
@@ -75,15 +86,15 @@ jest.mock('../../components/mystats/tabs/BreakdownTab', () => function MockBreak
 
 jest.mock('../../components/mystats/tabs/ShotsTab', () => function MockShotsTab() {
   const { Text } = require('react-native');
-  return <Text>Shots content</Text>;
+  return <Text>Strokes Gained content</Text>;
 });
 
 beforeEach(() => {
   AsyncStorage.getItem.mockResolvedValue(null);
 });
 
-function renderScreen(route = {}) {
-  return render(
+function screenElement(route = {}) {
+  return (
     <SafeAreaProvider>
       <ThemeProvider>
         <MyStatsScreen
@@ -93,6 +104,10 @@ function renderScreen(route = {}) {
       </ThemeProvider>
     </SafeAreaProvider>
   );
+}
+
+function renderScreen(route = {}) {
+  return render(screenElement(route));
 }
 
 describe('MyStatsScreen navigation chrome', () => {
@@ -111,26 +126,96 @@ describe('MyStatsScreen navigation chrome', () => {
 
 describe('MyStatsScreen tab strip', () => {
   test('renders the personal stats tabs in a horizontal scroller', async () => {
-    const { findByTestId, getByText } = renderScreen({ params: {} });
+    const { findByTestId, getAllByRole, getByText } = renderScreen({ params: {} });
 
     const tabs = await findByTestId('my-stats-tab-scroller');
+    const labels = getAllByRole('tab').map((tab) => tab.props.accessibilityLabel);
 
     expect(tabs.props.horizontal).toBe(true);
     expect(tabs.props.showsHorizontalScrollIndicator).toBe(false);
+    expect(labels).toEqual(['Report Card', 'Coach', 'Strokes Gained', 'Form', 'Breakdown']);
+    expect(getByText('Coach')).toBeTruthy();
     expect(getByText('Report Card')).toBeTruthy();
-    expect(getByText('Overview')).toBeTruthy();
+    expect(getByText('Form')).toBeTruthy();
     expect(getByText('Breakdown')).toBeTruthy();
-    expect(getByText('Shots')).toBeTruthy();
+    expect(getByText('Strokes Gained')).toBeTruthy();
+    expect(() => getByText('Overview')).toThrow();
+    expect(getByText('Report card content')).toBeTruthy();
   });
 
-  test('keeps the active Shots tab inside an unclipped tab strip', async () => {
+  test('maps legacy overview route param to the Coach tab', async () => {
+    const { findByText, getByLabelText } = renderScreen({ params: { tab: 'overview' } });
+
+    expect(await findByText('Coach content')).toBeTruthy();
+    expect(getByLabelText('Coach').props.accessibilityState?.selected).toBe(true);
+  });
+
+  test('defaults invalid route tab params to the Report Card tab', async () => {
+    const { findByText, getByLabelText } = renderScreen({ params: { tab: 'bogus' } });
+
+    expect(await findByText('Report card content')).toBeTruthy();
+    expect(getByLabelText('Report Card').props.accessibilityState?.selected).toBe(true);
+  });
+
+  test('syncs route params when a mounted screen receives report card navigation', async () => {
+    const { findByText, getByLabelText, rerender } = renderScreen({ params: {} });
+
+    expect(await findByText('Report card content')).toBeTruthy();
+
+    rerender(screenElement({ params: { tab: 'reportCard', roundKey: 'round-1' } }));
+
+    expect(await findByText('Report card content')).toBeTruthy();
+    expect(getByLabelText('Report Card').props.accessibilityState?.selected).toBe(true);
+    expect(await findByText('Selected round round-1')).toBeTruthy();
+  });
+
+  test('keeps the active Strokes Gained tab inside an unclipped tab strip', async () => {
     const { findByTestId, getByLabelText } = renderScreen({ params: { tab: 'shots' } });
 
     const tabs = await findByTestId('my-stats-tab-scroller');
     const tabStripStyle = StyleSheet.flatten(tabs.props.style);
-    const shotsChip = getByLabelText('Shots');
+    const shotsChip = getByLabelText('Strokes Gained');
 
     expect(tabStripStyle.minHeight).toBeGreaterThanOrEqual(48);
+    expect(tabStripStyle.width).toBe('100%');
+    expect(tabStripStyle.maxWidth).toBe('100%');
     expect(shotsChip.props.accessibilityState?.selected).toBe(true);
+  });
+
+  test('does not scroll visible chips out of view', () => {
+    expect(getTabScrollTarget({
+      layout: { x: 90, width: 103 },
+      viewportWidth: 390,
+      currentX: 0,
+      edgePadding: 16,
+    })).toBeNull();
+  });
+
+  test('keeps the first tab group pinned when selecting Report Card', () => {
+    expect(getTabScrollTarget({
+      layout: { x: 90, width: 103 },
+      viewportWidth: 390,
+      currentX: 60,
+      edgePadding: 16,
+      pinToStart: true,
+    })).toBe(0);
+  });
+
+  test('scrolls trailing chips only enough to reveal them', () => {
+    expect(getTabScrollTarget({
+      layout: { x: 369, width: 65 },
+      viewportWidth: 390,
+      currentX: 0,
+      edgePadding: 16,
+    })).toBe(60);
+  });
+
+  test('scrolls back left when the active chip is hidden before the viewport', () => {
+    expect(getTabScrollTarget({
+      layout: { x: 16, width: 68 },
+      viewportWidth: 390,
+      currentX: 120,
+      edgePadding: 16,
+    })).toBe(0);
   });
 });

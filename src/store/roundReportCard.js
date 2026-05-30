@@ -34,6 +34,12 @@ function verdictFromPerHole(perHole) {
   return 'Tough day';
 }
 
+function toneFromVerdict(verdict) {
+  if (verdict === 'Standout round' || verdict === 'Strong round') return 'good';
+  if (verdict === 'Off day' || verdict === 'Tough day') return 'bad';
+  return 'neutral';
+}
+
 // Career points-per-hole across every round in `history` (a stats object
 // from computeMyStats). Returns null when there is no history or no scored holes.
 function careerPerHole(baseStats) {
@@ -230,6 +236,7 @@ export function buildRoundReportCard(myRounds, roundKey) {
       vsAvg,
       clearedBenchmark: perHole >= BENCHMARK,
       verdict,
+      tone: toneFromVerdict(verdict),
     },
     hasHistory,
     callouts,

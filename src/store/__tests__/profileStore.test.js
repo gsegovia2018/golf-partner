@@ -85,6 +85,18 @@ describe('profileStore — target_handicap', () => {
     expect(call.target_handicap).toBe(14);
   });
 
+  test('upsertProfile writes decimal handicap when row exists', async () => {
+    const chain = getChain();
+    chain.maybeSingle.mockResolvedValueOnce({ data: { user_id: 'u1' }, error: null });
+    chain.eq
+      .mockReturnValueOnce(chain)
+      .mockResolvedValueOnce({ error: null });
+    await upsertProfile({ handicap: '12.5' });
+    expect(chain.update).toHaveBeenCalledTimes(1);
+    const call = chain.update.mock.calls[0][0];
+    expect(call.handicap).toBe(12.5);
+  });
+
   test('upsertProfile writes null to clear target_handicap (update path)', async () => {
     const chain = getChain();
     chain.maybeSingle.mockResolvedValueOnce({ data: { user_id: 'u1' }, error: null });

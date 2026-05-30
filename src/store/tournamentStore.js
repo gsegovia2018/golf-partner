@@ -1500,6 +1500,7 @@ export function roundEnteredCount(round, players) {
 
 export function isRoundInProgress(tournament) {
   if (!tournament) return false;
+  if (tournament.finishedAt) return false;
   const round = tournament.rounds?.[tournament.currentRound];
   if (!round || !round.scores) return false;
   const entered = roundEnteredCount(round, tournament.players ?? []);
