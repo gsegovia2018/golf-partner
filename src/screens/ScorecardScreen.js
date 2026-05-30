@@ -2,7 +2,7 @@ import React, { useEffect, useRef, useState, useCallback, useMemo } from 'react'
 import {
   View, Text, TouchableOpacity,
   ScrollView, Modal, Pressable, Platform, Animated,
-  ActivityIndicator,
+  ActivityIndicator, Alert,
 } from 'react-native';
 import ScreenContainer from '../components/ScreenContainer';
 import * as Haptics from 'expo-haptics';
@@ -37,7 +37,6 @@ import { cardDiscrepancyHoles } from '../store/officialScoring';
 import { buildLeaderboard } from '../store/officialLeaderboard';
 import { attestCard } from '../store/officialStore';
 import { notifyRoundFinished } from '../store/notificationStore';
-import { Alert } from 'react-native';
 import {
   DEFAULT_SHOT,
   celebrationFor,
@@ -135,6 +134,27 @@ export function shouldApplyReloadSnapshot({
   return true;
 }
 
+export function shouldMarkTournamentFinishedFromScorecard({ tournament }) {
+  if (!tournament || tournament.kind === 'official') return false;
+  return tournament.kind === 'game';
+}
+
+export function canShowQuickFinish({ tournament, official, viewOnly }) {
+  return !official && !viewOnly && tournament?.kind === 'game';
+}
+
+export function roundDecisionNoticeForPair(pair) {
+  const namedPlayers = Array.isArray(pair)
+    ? pair.map((p) => p?.name).filter(Boolean)
+    : [];
+  const names = namedPlayers.join(' & ') || 'The leading side';
+  const verb = namedPlayers.length > 1 ? 'have' : 'has';
+  return {
+    title: 'Round decided',
+    message: `${names} ${verb} already won this round. You can keep scoring, but the round result will not change.`,
+  };
+}
+
 export default function ScorecardScreen({ navigation, route }) {
   const { theme } = useTheme();
   const s = useMemo(() => makeScorecardStyles(theme), [theme]);
@@ -182,6 +202,7 @@ export default function ScorecardScreen({ navigation, route }) {
   const [syncStatus, setSyncStatus] = useState('idle');
   // Round-complete celebration overlay before navigating to the summary.
   const [roundCompleteVisible, setRoundCompleteVisible] = useState(false);
+  const [finishBusy, setFinishBusy] = useState(false);
   // The finish gate sets this to { hole, playerId } to send the user to a
   // conflicted hole; HoleView consumes it to open the resolve sheet.
   const [conflictFocus, setConflictFocus] = useState(null);
@@ -371,14 +392,18 @@ export default function ScorecardScreen({ navigation, route }) {
   const enqueueSave = useCallback((unit) => {
     inflightSavesRef.current += 1;
     pendingSaveRef.current = true;
-    saveChainRef.current = saveChainRef.current
+    const nextSave = saveChainRef.current
       .then(unit)
-      .then(() => { setSaveError(false); })
+      .then((result) => {
+        setSaveError(false);
+        return result;
+      })
       .catch((e) => {
         // A local save failing (e.g. AsyncStorage full) is rare but must not
         // be silent — the user would believe the score was recorded.
         console.warn('ScorecardScreen: save failed', e);
         setSaveError(true);
+        throw e;
       })
       .finally(() => {
         inflightSavesRef.current -= 1;
@@ -394,18 +419,20 @@ export default function ScorecardScreen({ navigation, route }) {
           }
         }
       });
+    saveChainRef.current = nextSave.catch(() => undefined);
+    return nextSave;
   }, [reload]);
 
   const autoSave = useCallback((newScores) => {
-    if (!tournamentRef.current) return;
-    enqueueSave(async () => {
+    if (!tournamentRef.current) return Promise.resolve(null);
+    return enqueueSave(async () => {
       // Diff against the latest committed tournament — not the baseline at
       // schedule time — so chained saves apply incremental deltas rather
       // than redundantly re-mutating already-persisted cells.
-      if (!tournamentRef.current) return;
+      if (!tournamentRef.current) return null;
       const t0 = tournamentRef.current;
       const round = t0.rounds[roundIndex];
-      if (!round) return;
+      if (!round) return null;
       const prevScores = round.scores ?? {};
 
       const changedCells = [];
@@ -435,6 +462,7 @@ export default function ScorecardScreen({ navigation, route }) {
         // diffs/clones from this state, not from the pre-save baseline.
         tournamentRef.current = t;
       }
+      return t;
     });
   }, [roundIndex, enqueueSave]);
 
@@ -717,8 +745,10 @@ export default function ScorecardScreen({ navigation, route }) {
   const currentMode = settingsMode ?? 'stableford';
   const prevSettingsMode = usePrevious(settingsMode);
   const [noticeMessage, setNoticeMessage] = useState(null);
+  const [roundDecisionNotice, setRoundDecisionNotice] = useState(null);
   const [reopenPrompt, setReopenPrompt] = useState(false);
   const dismissModeNotice = useCallback(() => setNoticeMessage(null), []);
+  const dismissRoundDecisionNotice = useCallback(() => setRoundDecisionNotice(null), []);
   const openModeSheet = useCallback(() => setReopenPrompt(true), []);
 
   useEffect(() => {
@@ -938,15 +968,16 @@ export default function ScorecardScreen({ navigation, route }) {
   }, []);
 
   const lastClinchedPairRef = useRef(null);
-  const clinchInitRef = useRef(false);
+  const clinchInitRoundIdRef = useRef(null);
 
-  // Initialize the clinch ref once per mount so re-entering an already
-  // clinched round does not pop the alert again. Re-runs only if round id
+  // Initialize the clinch ref once per round so re-entering an already
+  // decided round does not show the notice again. Re-runs only if round id
   // changes (different round opened in the same screen instance).
   useEffect(() => {
     if (!round || !tournament) return;
-    if (clinchInitRef.current) return;
-    clinchInitRef.current = true;
+    if (clinchInitRoundIdRef.current === round.id) return;
+    clinchInitRoundIdRef.current = round.id;
+    setRoundDecisionNotice(null);
     const mode = tournament.settings?.scoringMode === 'bestball' ? 'bestball' : 'stableford';
     const liveRound = { ...round, scores };
     lastClinchedPairRef.current = roundPairClinched(liveRound, players, tournament.settings, mode);
@@ -963,11 +994,7 @@ export default function ScorecardScreen({ navigation, route }) {
     if (clinched != null && lastClinchedPairRef.current == null) {
       const pair = round.pairs?.[clinched];
       if (pair) {
-        const names = pair.map((p) => p.name).join(' & ');
-        const title = '🏆 Round clinched';
-        const message = `${names} cannot be caught in this round.`;
-        if (Platform.OS === 'web') window.alert(`${title}\n${message}`);
-        else Alert.alert(title, message);
+        setRoundDecisionNotice(roundDecisionNoticeForPair(pair));
       }
     }
     lastClinchedPairRef.current = clinched;
@@ -1002,10 +1029,11 @@ export default function ScorecardScreen({ navigation, route }) {
     navigation.navigate('Tournament');
   }, [navigation, official, viewOnly]);
 
-  // Finish flow: invoked from the last-hole "Finish" button. Shows a brief
-  // "round complete" celebration, then routes to that round's summary. When
-  // every round of the tournament is complete, also offers to archive it.
-  const handleFinish = useCallback(() => {
+  // Finish flow: invoked from the last-hole "Finish" button or the game-level
+  // header flag. Shows a brief celebration, then routes to the round report.
+  // Single-round games are explicitly archived so partial rounds count as done.
+  const handleFinish = useCallback(async () => {
+    if (finishBusy) return;
     const t = tournamentRef.current;
     const r = t?.rounds?.[roundIndex];
     if (!t || !r) { goBack(); return; }
@@ -1032,19 +1060,6 @@ export default function ScorecardScreen({ navigation, route }) {
       return;
     }
 
-    // Notify the finisher's friends that a casual round wrapped up. Official
-    // rounds notify server-side on attestation, so skip them here.
-    // Best-effort — a failure never blocks finishing the round.
-    if (!official && t.kind !== 'official') {
-      notifyRoundFinished({
-        tournamentId: t.id,
-        roundId: r.id,
-        roundIndex,
-        tournamentName: t.name,
-        courseName: r.courseName,
-      }).catch(() => {});
-    }
-
     const liveRound = { ...r, scores };
     const players = t.players ?? [];
     const liveTournament = {
@@ -1053,6 +1068,10 @@ export default function ScorecardScreen({ navigation, route }) {
     };
     const roundDone = isRoundComplete(liveRound, players);
     const tournamentDone = isTournamentFinished(liveTournament);
+    const shouldMarkFinished = shouldMarkTournamentFinishedFromScorecard({
+      tournament: t,
+      tournamentDone,
+    });
 
     const goToSummary = () => {
       navigation.navigate('RoundSummary', {
@@ -1061,41 +1080,82 @@ export default function ScorecardScreen({ navigation, route }) {
       });
     };
 
-    haptic('success');
-    setRoundCompleteVisible(true);
-    setTimeout(() => {
-      setRoundCompleteVisible(false);
-      if (tournamentDone && t.kind !== 'game' && !official) {
-        const title = '🏆 Tournament complete';
-        const message = 'Every round is finished. Archive this tournament?';
-        if (Platform.OS === 'web') {
-          if (window.confirm(`${title}\n${message}`)) {
-            navigation.navigate('Finished');
+    setFinishBusy(true);
+    try {
+      if (!official) {
+        await autoSave(scoresRef.current);
+      }
+      if (shouldMarkFinished && !t.finishedAt) {
+        const finishedAt = new Date().toISOString();
+        await enqueueSave(async () => {
+          const base = tournamentRef.current ?? liveTournament;
+          if (!base) return null;
+          const updated = await mutate(base, {
+            type: 'tournament.setFinished',
+            finishedAt,
+          });
+          tournamentRef.current = updated;
+          setTournament(updated);
+          setViewOnly(true);
+          return updated;
+        });
+      }
+
+      // Notify the finisher's friends that a casual round wrapped up. Official
+      // rounds notify server-side on attestation, so skip them here.
+      // Best-effort — a failure never blocks finishing the round.
+      if (!official && t.kind !== 'official') {
+        notifyRoundFinished({
+          tournamentId: t.id,
+          roundId: r.id,
+          roundIndex,
+          tournamentName: t.name,
+          courseName: r.courseName,
+        }).catch(() => {});
+      }
+
+      haptic('success');
+      setRoundCompleteVisible(true);
+      setTimeout(() => {
+        setRoundCompleteVisible(false);
+        setFinishBusy(false);
+        if (tournamentDone && t.kind !== 'game' && !official) {
+          const title = '🏆 Tournament complete';
+          const message = 'Every round is finished. Archive this tournament?';
+          if (Platform.OS === 'web') {
+            if (window.confirm(`${title}\n${message}`)) {
+              navigation.navigate('Finished');
+            } else {
+              goToSummary();
+            }
+          } else {
+            Alert.alert(title, message, [
+              { text: 'View round summary', style: 'cancel', onPress: goToSummary },
+              { text: 'Finish tournament', onPress: () => navigation.navigate('Finished') },
+            ]);
+          }
+        } else {
+          // Non-official rounds drop the finisher into their personal Report
+          // Card for the round just played. collectMyRounds keys rounds as
+          // `${tournamentId}:${roundIndex}` — match that here. The tournament-
+          // complete / archive branch above keeps using goToSummary unchanged.
+          if (!official && t.kind !== 'official') {
+            navigation.navigate('MyStats', {
+              tab: 'reportCard',
+              roundKey: `${t.id}:${roundIndex}`,
+            });
           } else {
             goToSummary();
           }
-        } else {
-          Alert.alert(title, message, [
-            { text: 'View round summary', style: 'cancel', onPress: goToSummary },
-            { text: 'Finish tournament', onPress: () => navigation.navigate('Finished') },
-          ]);
         }
-      } else {
-        // Non-official rounds drop the finisher into their personal Report
-        // Card for the round just played. collectMyRounds keys rounds as
-        // `${tournamentId}:${roundIndex}` — match that here. The tournament-
-        // complete / archive branch above keeps using goToSummary unchanged.
-        if (!official && t.kind !== 'official') {
-          navigation.navigate('MyStats', {
-            tab: 'reportCard',
-            roundKey: `${t.id}:${roundIndex}`,
-          });
-        } else {
-          goToSummary();
-        }
-      }
-    }, roundDone ? 1400 : 400);
-  }, [roundIndex, scores, navigation, goBack, official]);
+      }, roundDone ? 1400 : 400);
+    } catch (err) {
+      setFinishBusy(false);
+      const message = err?.message ?? 'Could not finish this game.';
+      if (Platform.OS === 'web') window.alert(message);
+      else Alert.alert('Finish failed', message);
+    }
+  }, [roundIndex, scores, navigation, goBack, official, finishBusy, autoSave, enqueueSave]);
 
   // Official mode (Task 16): attest the token holder's own card. Replaces the
   // casual "finish" affordance for official rounds. Disabled while the holder
@@ -1201,6 +1261,7 @@ export default function ScorecardScreen({ navigation, route }) {
 
   const holeCount = round.holes.length;
   const hole = round.holes.find((h) => h.number === currentHole);
+  const showQuickFinish = canShowQuickFinish({ tournament, official, viewOnly });
 
   return (
     <ScreenContainer style={s.container} edges={['top', 'bottom']}>
@@ -1270,6 +1331,17 @@ export default function ScorecardScreen({ navigation, route }) {
               <Feather name="award" size={20} color={theme.accent.primary} />
             </TouchableOpacity>
           )}
+          {showQuickFinish && (
+            <TouchableOpacity
+              onPress={handleFinish}
+              disabled={finishBusy}
+              style={[s.finishGameBtn, finishBusy && s.saveBtnDisabled]}
+              accessibilityLabel="Finish game"
+            >
+              <Feather name="check-circle" size={15} color="#ffffff" />
+              <Text style={s.finishGameBtnText}>Finish</Text>
+            </TouchableOpacity>
+          )}
           <TouchableOpacity
             onPress={openCapturePicker}
             style={s.cameraBtn}
@@ -1308,6 +1380,30 @@ export default function ScorecardScreen({ navigation, route }) {
         onPress={openModeSheet}
         onDismiss={dismissModeNotice}
       />
+      {roundDecisionNotice && (
+        <View
+          style={s.roundDecisionBanner}
+          accessibilityRole="alert"
+          accessibilityLiveRegion="polite"
+        >
+          <View style={s.roundDecisionIconWrap}>
+            <Feather name="award" size={17} color={theme.accent.primary} />
+          </View>
+          <View style={s.roundDecisionCopy}>
+            <Text style={s.roundDecisionTitle}>{roundDecisionNotice.title}</Text>
+            <Text style={s.roundDecisionMessage}>{roundDecisionNotice.message}</Text>
+          </View>
+          <TouchableOpacity
+            onPress={dismissRoundDecisionNotice}
+            style={s.roundDecisionCloseBtn}
+            accessibilityRole="button"
+            accessibilityLabel="Dismiss round decided notice"
+            hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+          >
+            <Feather name="x" size={16} color={theme.text.secondary} />
+          </TouchableOpacity>
+        </View>
+      )}
       <ScoringModeChangeSheet
         visible={reopenPrompt}
         playerCount={(tournament?.players ?? []).length}

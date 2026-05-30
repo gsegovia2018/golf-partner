@@ -1,6 +1,8 @@
 import {
+  canShowQuickFinish,
   getScorecardBackTarget,
   mergeScores,
+  shouldMarkTournamentFinishedFromScorecard,
   shouldApplyReloadSnapshot,
 } from '../ScorecardScreen';
 
@@ -34,6 +36,45 @@ describe('getScorecardBackTarget', () => {
       viewOnly: false,
       canGoBack: true,
     })).toBe('previous');
+  });
+});
+
+describe('scorecard finish behavior', () => {
+  test('partial single-round games are explicitly marked finished from the scorecard', () => {
+    expect(shouldMarkTournamentFinishedFromScorecard({
+      tournament: { kind: 'game', rounds: [{}] },
+      tournamentDone: false,
+    })).toBe(true);
+  });
+
+  test('partial multi-round tournaments are not archived by finishing one scorecard round', () => {
+    expect(shouldMarkTournamentFinishedFromScorecard({
+      tournament: { kind: 'tournament', rounds: [{}, {}] },
+      tournamentDone: false,
+    })).toBe(false);
+  });
+
+  test('quick finish is shown only for editable casual games', () => {
+    expect(canShowQuickFinish({
+      tournament: { kind: 'game' },
+      official: false,
+      viewOnly: false,
+    })).toBe(true);
+    expect(canShowQuickFinish({
+      tournament: { kind: 'game' },
+      official: true,
+      viewOnly: false,
+    })).toBe(false);
+    expect(canShowQuickFinish({
+      tournament: { kind: 'game' },
+      official: false,
+      viewOnly: true,
+    })).toBe(false);
+    expect(canShowQuickFinish({
+      tournament: { kind: 'tournament' },
+      official: false,
+      viewOnly: false,
+    })).toBe(false);
   });
 });
 
