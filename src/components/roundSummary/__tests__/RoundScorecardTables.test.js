@@ -95,8 +95,8 @@ describe('RoundScorecardTables', () => {
 });
 
 describe('RoundRecapPanel', () => {
-  test('renders winner context and general round stats', () => {
-    const { getByText, queryByText } = render(
+  test('renders winner context and round recap stats', () => {
+    const { getByText } = render(
       <RoundRecapPanel
         tournamentName="Weekend Cup"
         roundLabel="Round 2"
@@ -115,14 +115,16 @@ describe('RoundRecapPanel', () => {
 
     expect(getByText('Marcos won the round.')).toBeTruthy();
     expect(getByText('Winner: Marcos')).toBeTruthy();
-    expect(getByText('Players')).toBeTruthy();
+    expect(getByText('Points')).toBeTruthy();
+    expect(getByText('Margin')).toBeTruthy();
+    expect(getByText('Strokes')).toBeTruthy();
     expect(getByText('Holes')).toBeTruthy();
-    expect(getByText('Photos')).toBeTruthy();
-    expect(getByText('4')).toBeTruthy();
+    expect(getByText('Players')).toBeTruthy();
+    expect(getByText('38')).toBeTruthy();
+    expect(getByText('+4')).toBeTruthy();
+    expect(getByText('72')).toBeTruthy();
     expect(getByText('18')).toBeTruthy();
-    expect(getByText('3')).toBeTruthy();
-    expect(queryByText('38')).toBeNull();
-    expect(queryByText('72')).toBeNull();
+    expect(getByText('4')).toBeTruthy();
   });
 });
 

@@ -136,6 +136,8 @@ export default function StatsScreen({ navigation }) {
   const visibleTabs = ALL_TABS.filter(t => t.key !== 'pairs' || usesTeams);
   const activeTab = visibleTabs.some(t => t.key === tab) ? tab : 'overview';
   const firstCompletedIdx = tournament.rounds.findIndex(r => r.scores && Object.keys(r.scores).length > 0);
+  const showRoundScope = tournament.rounds.length > 1
+    && (activeTab === 'overview' || activeTab === 'holes' || activeTab === 'pairs');
   // Effective per-round scope: when "Total" is selected, per-round sections
   // fall back to the first completed round so they still show data.
   const effectiveRound = roundScope != null ? roundScope : (firstCompletedIdx >= 0 ? firstCompletedIdx : null);
@@ -153,6 +155,7 @@ export default function StatsScreen({ navigation }) {
       <ScrollView
         horizontal
         showsHorizontalScrollIndicator={false}
+        style={s.tabScroller}
         contentContainerStyle={s.tabBar}
       >
         {visibleTabs.map(t => (
@@ -177,8 +180,13 @@ export default function StatsScreen({ navigation }) {
         {/* Round scope only drives the per-round sections (Overview / Holes /
             Pairs). Players & Shame are tournament-wide aggregates, so the
             chip set is hidden there to avoid a control that does nothing. */}
-        {(activeTab === 'overview' || activeTab === 'holes' || activeTab === 'pairs') && (
-          <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={s.scopeChips}>
+        {showRoundScope && (
+          <ScrollView
+            horizontal
+            showsHorizontalScrollIndicator={false}
+            style={s.scopeScroller}
+            contentContainerStyle={s.scopeChips}
+          >
             <RoundScopeChips tournament={tournament} selected={roundScope} onSelect={setRoundScope} theme={theme} s={s} />
           </ScrollView>
         )}
@@ -3009,9 +3017,11 @@ const makeStyles = (t) => StyleSheet.create({
   content: { padding: 20, paddingTop: 4, paddingBottom: 100 },
 
   // Tabs
-  tabBar: { flexDirection: 'row', paddingHorizontal: 16, gap: 6, paddingBottom: 8 },
+  tabScroller: { flexGrow: 0, flexShrink: 0, maxHeight: 42 },
+  tabBar: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: 16, gap: 6, paddingBottom: 8 },
   scopeBar: { paddingBottom: 6, borderBottomWidth: 1, borderBottomColor: t.border.subtle },
-  scopeChips: { flexDirection: 'row', gap: 6, paddingHorizontal: 16, paddingTop: 2, paddingBottom: 2 },
+  scopeScroller: { flexGrow: 0, flexShrink: 0, maxHeight: 36 },
+  scopeChips: { flexDirection: 'row', alignItems: 'center', gap: 6, paddingHorizontal: 16, paddingTop: 2, paddingBottom: 2 },
   scoringToggle: {
     flexDirection: 'row', alignItems: 'center', justifyContent: 'center',
     gap: 10, paddingVertical: 6, paddingHorizontal: 16,
@@ -3036,7 +3046,11 @@ const makeStyles = (t) => StyleSheet.create({
     fontFamily: 'PlusJakartaSans-Medium', color: t.text.muted, fontSize: 12,
     lineHeight: 18, paddingVertical: 10, paddingHorizontal: 2, marginBottom: 4,
   },
-  tab: { paddingVertical: 6, paddingHorizontal: 14, borderRadius: 20, backgroundColor: t.bg.secondary, borderWidth: 1, borderColor: t.border.default },
+  tab: {
+    minHeight: 30, justifyContent: 'center',
+    paddingVertical: 6, paddingHorizontal: 14, borderRadius: 20,
+    backgroundColor: t.bg.secondary, borderWidth: 1, borderColor: t.border.default,
+  },
   tabActive: { backgroundColor: t.accent.primary, borderColor: t.accent.primary },
   tabText: { fontFamily: 'PlusJakartaSans-SemiBold', fontSize: 12, color: t.text.muted },
   tabTextActive: { color: t.text.inverse },
@@ -3479,6 +3493,7 @@ const makeStyles = (t) => StyleSheet.create({
   // Round selector
   roundSelector: { flexDirection: 'row', gap: 6, marginBottom: 12, flexWrap: 'wrap' },
   roundChip: {
+    minHeight: 28, justifyContent: 'center',
     paddingVertical: 5, paddingHorizontal: 12, borderRadius: 14,
     backgroundColor: t.bg.secondary, borderWidth: 1, borderColor: t.border.default,
   },

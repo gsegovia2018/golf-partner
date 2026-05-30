@@ -6,19 +6,26 @@ function statValue(value, fallback = '0') {
   return value == null || value === '' ? fallback : String(value);
 }
 
+function marginValue(value) {
+  const n = Number(value);
+  if (!Number.isFinite(n)) return '0';
+  return n > 0 ? `+${n}` : String(n);
+}
+
 export default function RoundRecapPanel({
   tournamentName,
   roundLabel,
   summary,
   recap,
-  mediaCount = 0,
 }) {
   const { theme } = useTheme();
   const s = useMemo(() => makeStyles(theme), [theme]);
   const stats = [
-    { label: 'Players', value: statValue(recap?.playerCount) },
+    { label: 'Points', value: statValue(recap?.winnerPoints) },
+    { label: 'Margin', value: marginValue(recap?.margin) },
+    { label: 'Strokes', value: statValue(recap?.winnerStrokes) },
     { label: 'Holes', value: statValue(recap?.holesPlayed) },
-    { label: 'Photos', value: statValue(mediaCount) },
+    { label: 'Players', value: statValue(recap?.playerCount) },
   ];
   const winnerLabel = recap?.winnerName
     ? `Winner: ${recap.winnerName}`
@@ -106,13 +113,15 @@ function makeStyles(theme) {
     },
     statsRow: {
       flexDirection: 'row',
+      flexWrap: 'wrap',
       gap: 6,
     },
     stat: {
       backgroundColor: theme.bg.secondary,
       borderRadius: 6,
-      flex: 1,
-      minWidth: 0,
+      flexBasis: '30%',
+      flexGrow: 1,
+      minWidth: 74,
       paddingHorizontal: 6,
       paddingVertical: 7,
     },
