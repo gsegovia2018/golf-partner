@@ -864,6 +864,9 @@ export function makeScorecardStyles(theme) {
       justifyContent: 'space-between',
       gap: 16,
     },
+    soloScoreRowReadOnly: {
+      justifyContent: 'center',
+    },
     soloStepBtn: {
       width: 56, height: 56, borderRadius: 28,
       alignItems: 'center', justifyContent: 'center',

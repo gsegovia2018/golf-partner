@@ -80,6 +80,7 @@ export const PlayerCard = React.memo(function PlayerCard({
   const conflicted = !!conflict;
   const officialTappable = officialState === 'discrepancy' && canResolveHere;
   const heroTappable = conflicted || officialTappable;
+  const showScoreControls = canEdit && !conflicted;
   const HeroCard = heroTappable ? Pressable : View;
   const heroCardProps = conflicted
     ? {
@@ -136,7 +137,7 @@ export const PlayerCard = React.memo(function PlayerCard({
           </Text>
         </View>
         {/* Pickup toggle is a write action — hide on read-only cards. */}
-        {canEdit && !conflicted && (
+        {showScoreControls && (
           <TouchableOpacity
             style={[s.pickupBtn, isPickup && s.pickupBtnActive]}
             onPress={() => onSetScore(player.id, hole.number, isPickup ? hole.par : pickup)}
@@ -152,11 +153,11 @@ export const PlayerCard = React.memo(function PlayerCard({
         )}
       </View>
 
-      <View style={s.soloScoreRow}>
+      <View style={[s.soloScoreRow, !showScoreControls && s.soloScoreRowReadOnly]}>
         {/* Steppers only on cards this device may write. A read-only card
             (official mode: not self / not markee) shows the score with no
             +/- and no long-press-to-clear. */}
-        {canEdit && !conflicted && (
+        {showScoreControls && (
           <TouchableOpacity
             style={s.soloStepBtn}
             onPress={() => onStep(player.id, hole.number, -1)}
@@ -190,7 +191,7 @@ export const PlayerCard = React.memo(function PlayerCard({
             </Text>
           </Animated.View>
         </Pressable>
-        {canEdit && !conflicted && (
+        {showScoreControls && (
           <TouchableOpacity
             style={s.soloStepBtn}
             onPress={() => onStep(player.id, hole.number, 1)}
