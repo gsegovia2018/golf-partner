@@ -17,6 +17,28 @@ const TICK_MS = 50;
 const DISMISS_DISTANCE = 120;
 const STORY_SWIPE_DISTANCE = 54;
 
+export function storySwipeAction(gesture = {}) {
+  const dx = Number(gesture.dx) || 0;
+  const dy = Number(gesture.dy) || 0;
+  if (Math.abs(dx) <= STORY_SWIPE_DISTANCE || Math.abs(dx) <= Math.abs(dy) * 1.2) {
+    return null;
+  }
+  return dx < 0 ? 'next' : 'previous';
+}
+
+export function photoPrefetchUrls(items = [], index = 0) {
+  const urls = [];
+  const seen = new Set();
+  [index - 1, index, index + 1].forEach((i) => {
+    const item = items[i];
+    const url = item?.kind === 'photo' ? item.url : null;
+    if (!url || seen.has(url)) return;
+    seen.add(url);
+    urls.push(url);
+  });
+  return urls;
+}
+
 // `items` is a flat, chronologically ordered list of media across every
 // round; `startIndex` is where playback begins (the round the user tapped).
 // Playback continues across round boundaries, so opening one round's story
@@ -64,6 +86,15 @@ export default function MemoriesStoriesViewer({
     dragY.setValue(0);
   }, [visible, startIndex, dragY]);
 
+  useEffect(() => {
+    if (!visible || typeof ExpoImage.prefetch !== 'function') return;
+    const urls = photoPrefetchUrls(items, index);
+    if (urls.length === 0) return;
+    try {
+      Promise.resolve(ExpoImage.prefetch(urls, { cachePolicy: 'memory-disk' })).catch(() => {});
+    } catch (_) {}
+  }, [visible, items, index]);
+
   // New item → reset progress and the elapsed accumulator.
   useEffect(() => {
     setProgress(0);
@@ -103,10 +134,16 @@ export default function MemoriesStoriesViewer({
     onPanResponderRelease: (_e, g) => {
       if (g.dy > DISMISS_DISTANCE || g.vy > 0.8) {
         onClose();
-      } else if (Math.abs(g.dx) > STORY_SWIPE_DISTANCE && Math.abs(g.dx) > Math.abs(g.dy) * 1.2) {
-        if (g.dx > 0) advance();
-        else back();
       } else {
+        const action = storySwipeAction(g);
+        if (action === 'next') {
+          advance();
+          return;
+        }
+        if (action === 'previous') {
+          back();
+          return;
+        }
         Animated.spring(dragY, { toValue: 0, useNativeDriver: true }).start();
       }
     },
@@ -183,8 +220,13 @@ export default function MemoriesStoriesViewer({
         {current.kind === 'photo' ? (
           <ExpoImage
             source={{ uri: current.url }}
+            placeholder={current.thumbUrl ? { uri: current.thumbUrl } : undefined}
             style={StyleSheet.absoluteFillObject}
             contentFit="contain"
+            placeholderContentFit="contain"
+            cachePolicy="memory-disk"
+            priority="high"
+            recyclingKey={current.id || current.url}
             onLoadStart={() => setBuffering(true)}
             onLoad={() => setBuffering(false)}
             onError={() => setBuffering(false)}
