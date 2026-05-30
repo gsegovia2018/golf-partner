@@ -1,4 +1,8 @@
-import { getScorecardBackTarget, mergeScores } from '../ScorecardScreen';
+import {
+  getScorecardBackTarget,
+  mergeScores,
+  shouldApplyReloadSnapshot,
+} from '../ScorecardScreen';
 
 describe('mergeScores', () => {
   test('adopts blob values for clean cells', () => {
@@ -30,5 +34,23 @@ describe('getScorecardBackTarget', () => {
       viewOnly: false,
       canGoBack: true,
     })).toBe('previous');
+  });
+});
+
+describe('shouldApplyReloadSnapshot', () => {
+  test('skips a reload snapshot when a local save started while the reload was in flight', () => {
+    expect(shouldApplyReloadSnapshot({
+      preserveLocalEdits: false,
+      pendingSave: true,
+      hasTournament: true,
+    })).toBe(false);
+  });
+
+  test('still applies the initial load even if pending state is set defensively', () => {
+    expect(shouldApplyReloadSnapshot({
+      preserveLocalEdits: false,
+      pendingSave: true,
+      hasTournament: false,
+    })).toBe(true);
   });
 });

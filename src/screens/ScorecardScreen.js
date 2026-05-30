@@ -125,6 +125,16 @@ export function getScorecardBackTarget({ official, viewOnly, canGoBack }) {
   return canGoBack ? 'previous' : 'tournament';
 }
 
+export function shouldApplyReloadSnapshot({
+  preserveLocalEdits = false,
+  pendingSave = false,
+  hasTournament = false,
+} = {}) {
+  if (preserveLocalEdits) return false;
+  if (pendingSave && hasTournament) return false;
+  return true;
+}
+
 export default function ScorecardScreen({ navigation, route }) {
   const { theme } = useTheme();
   const s = useMemo(() => makeScorecardStyles(theme), [theme]);
@@ -199,10 +209,14 @@ export default function ScorecardScreen({ navigation, route }) {
   // saveLocal could overwrite the earlier one — dropping the first edit.
   const saveChainRef = useRef(Promise.resolve());
   const inflightSavesRef = useRef(0);
-  // Tracks whether the user has an unsaved edit (scores or notes) that a
-  // subscription-driven reload must not clobber. Set when a debounce is
-  // scheduled, cleared after the save finishes.
+  // Tracks whether the user has an unsaved scorecard edit (scores, shot
+  // details, or notes) that a subscription-driven reload must not clobber.
+  // Set when a debounce/save is scheduled, cleared after the save finishes.
   const pendingSaveRef = useRef(false);
+  // A reload can begin before the user edits, then resolve after the edit has
+  // marked pendingSaveRef. Skip that stale snapshot and replay one fresh reload
+  // after the save chain drains.
+  const skippedReloadRef = useRef(false);
   const scoreAnims = useRef({});
   const hasAutoJumpedRef = useRef(false);
   const [celebration, setCelebration] = useState({ playerId: null, holeNumber: null, label: null });
@@ -254,11 +268,20 @@ export default function ScorecardScreen({ navigation, route }) {
       return;
     }
     setLoadState('ready');
+    const applySnapshot = shouldApplyReloadSnapshot({
+      preserveLocalEdits,
+      pendingSave: pendingSaveRef.current,
+      hasTournament: !!tournamentRef.current,
+    });
+    if (!applySnapshot) {
+      skippedReloadRef.current = true;
+      return;
+    }
     const idx = paramRoundIndex ?? t.currentRound;
     const round = t.rounds[idx];
     const roundScores = round?.scores ?? {};
     setTournament(t);
-    if (!preserveLocalEdits) {
+    if (applySnapshot) {
       // Merge rather than clobber: a stale reload (one that began around a tap
       // and resolved later) must not overwrite a newer local edit. mergeScores
       // keeps any dirty cell whose save has not yet round-tripped.
@@ -365,9 +388,13 @@ export default function ScorecardScreen({ navigation, route }) {
           && Object.keys(notesSaveTimeoutsRef.current).length === 0
         ) {
           pendingSaveRef.current = false;
+          if (skippedReloadRef.current) {
+            skippedReloadRef.current = false;
+            reload();
+          }
         }
       });
-  }, []);
+  }, [reload]);
 
   const autoSave = useCallback((newScores) => {
     if (!tournamentRef.current) return;
