@@ -23,10 +23,29 @@ function cloneTees(tees) {
   return (tees ?? []).map((t) => ({ ...t }));
 }
 
+function numericValue(value) {
+  if (value === '' || value == null) return NaN;
+  return Number(value);
+}
+
+function isHoleComplete(hole) {
+  const number = numericValue(hole?.number);
+  const par = numericValue(hole?.par);
+  const strokeIndex = numericValue(hole?.strokeIndex);
+  return Number.isInteger(number)
+    && number >= 1
+    && number <= 18
+    && Number.isFinite(par)
+    && par > 0
+    && Number.isInteger(strokeIndex)
+    && strokeIndex >= 1
+    && strokeIndex <= 18;
+}
+
 function hasCompleteHoles(holes) {
   return Array.isArray(holes)
     && holes.length === 18
-    && holes.every((h) => h && h.number != null && h.par != null && h.strokeIndex != null);
+    && holes.every(isHoleComplete);
 }
 
 function namedTees(tees) {

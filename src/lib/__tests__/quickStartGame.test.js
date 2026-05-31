@@ -73,6 +73,15 @@ describe('courseToQuickStartRound', () => {
     expect(round.holes).toHaveLength(18);
     expect(round.holes[8]).toEqual({ number: 9, par: 4, strokeIndex: 9 });
   });
+
+  test('falls back to default 18 holes when any hole value is unusable', () => {
+    const invalidHoles = holes.map((hole, index) => (
+      index === 8 ? { ...hole, strokeIndex: 'bad' } : hole
+    ));
+    const round = courseToQuickStartRound({ ...course, holes: invalidHoles });
+    expect(round.holes).toHaveLength(18);
+    expect(round.holes[8]).toEqual({ number: 9, par: 4, strokeIndex: 9 });
+  });
 });
 
 describe('resolveQuickStartPlayerTees', () => {
