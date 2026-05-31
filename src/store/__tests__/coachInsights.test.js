@@ -290,6 +290,21 @@ describe('buildCoachInsights', () => {
     expect(insight.reason).not.toContain('shots');
   });
 
+  test('uses Strokes Gained category-specific samples in category insights', () => {
+    const coach = buildCoachInsights(baseStats({
+      actionPlan: { keep: null, improve: null, practice: null, strengths: [], improvements: [] },
+      strokesGained: {
+        total: -0.4,
+        sampleHoles: 54,
+        sampleHolesByCategory: { approach: 18, putting: 54 },
+        byCategory: { approach: -0.7, putting: 0 },
+      },
+    }));
+
+    const insight = coach.board.fixFirst.find((item) => item.title === 'Approach');
+    expect(insight.reason).toContain('across 18 holes');
+  });
+
   test('uses neutral reason copy when action item sample is missing', () => {
     const coach = buildCoachInsights(baseStats({
       actionPlan: {

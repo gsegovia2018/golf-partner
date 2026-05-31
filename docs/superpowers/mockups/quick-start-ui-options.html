@@ -1,0 +1,1095 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <link rel="icon" href="data:,">
+  <title>Golf Partner Quick Start UI Options</title>
+  <style>
+    :root {
+      --green: #006747;
+      --green-pressed: #005538;
+      --mint: #e6f0eb;
+      --canvas: #f6f3ee;
+      --wash: #ece8e1;
+      --card: #ffffff;
+      --ink: #1a1a1a;
+      --slate: #56616f;
+      --muted: #747467;
+      --gold: #d4af37;
+      --bronze: #c47c3a;
+      --line: #ded8cd;
+      --dark: #0c1a14;
+      --shadow: 0 10px 24px rgba(18, 28, 24, 0.10);
+      --soft-shadow: 0 4px 12px rgba(18, 28, 24, 0.08);
+      font-family: "Plus Jakarta Sans", Inter, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+    }
+
+    * {
+      box-sizing: border-box;
+    }
+
+    body {
+      margin: 0;
+      background: var(--canvas);
+      color: var(--ink);
+    }
+
+    .page {
+      padding: 28px;
+    }
+
+    .board-head {
+      max-width: 960px;
+      margin: 0 auto 22px;
+      display: flex;
+      align-items: flex-end;
+      justify-content: space-between;
+      gap: 24px;
+    }
+
+    h1 {
+      margin: 0 0 6px;
+      font-size: 30px;
+      line-height: 38px;
+      letter-spacing: 0;
+    }
+
+    .intro {
+      margin: 0;
+      color: var(--slate);
+      font-size: 14px;
+      line-height: 20px;
+      max-width: 760px;
+    }
+
+    .rule-note {
+      min-width: 260px;
+      max-width: 340px;
+      border: 1px solid var(--line);
+      border-radius: 14px;
+      background: rgba(255, 255, 255, 0.7);
+      padding: 12px 14px;
+      color: var(--slate);
+      font-size: 12px;
+      line-height: 17px;
+    }
+
+    .versions {
+      max-width: 960px;
+      margin: 0 auto;
+      display: grid;
+      grid-template-columns: repeat(2, minmax(320px, 1fr));
+      gap: 24px;
+      align-items: start;
+    }
+
+    .version {
+      display: grid;
+      gap: 10px;
+    }
+
+    .version-title {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      min-height: 44px;
+    }
+
+    .letter {
+      flex: 0 0 auto;
+      width: 28px;
+      height: 28px;
+      border-radius: 999px;
+      display: grid;
+      place-items: center;
+      background: var(--green);
+      color: white;
+      font-size: 12px;
+      font-weight: 800;
+    }
+
+    .version-title h2 {
+      margin: 0;
+      font-size: 16px;
+      line-height: 21px;
+      letter-spacing: 0;
+    }
+
+    .version-title p {
+      margin: 1px 0 0;
+      color: var(--slate);
+      font-size: 12px;
+      line-height: 16px;
+    }
+
+    .phone {
+      height: 760px;
+      width: 100%;
+      max-width: 390px;
+      margin: 0 auto;
+      border-radius: 28px;
+      background: #101711;
+      padding: 10px;
+      box-shadow: var(--shadow);
+    }
+
+    .screen {
+      position: relative;
+      height: 100%;
+      overflow: hidden;
+      border-radius: 22px;
+      background: var(--canvas);
+      display: flex;
+      flex-direction: column;
+    }
+
+    .status {
+      height: 26px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 0 16px;
+      color: var(--ink);
+      font-size: 11px;
+      font-weight: 700;
+    }
+
+    .header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 10px 16px 8px;
+    }
+
+    .brand {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      min-width: 0;
+    }
+
+    .crest {
+      width: 30px;
+      height: 30px;
+      border-radius: 15px;
+      display: grid;
+      place-items: center;
+      background: var(--green);
+      color: var(--gold);
+      font-size: 15px;
+      font-weight: 800;
+    }
+
+    .brand-title {
+      font-size: 20px;
+      line-height: 24px;
+      font-weight: 800;
+      letter-spacing: -0.2px;
+      white-space: nowrap;
+    }
+
+    .icon-row {
+      display: flex;
+      gap: 8px;
+    }
+
+    .icon-btn {
+      width: 30px;
+      height: 30px;
+      border-radius: 12px;
+      display: grid;
+      place-items: center;
+      border: 1px solid var(--line);
+      background: var(--card);
+      color: var(--green);
+      font-size: 13px;
+      font-weight: 800;
+    }
+
+    .content {
+      flex: 1;
+      overflow: hidden;
+      padding: 10px 16px 92px;
+    }
+
+    .section-title {
+      margin: 0 0 10px;
+      font-size: 17px;
+      line-height: 22px;
+      font-weight: 800;
+      letter-spacing: 0;
+    }
+
+    .start-row {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 10px;
+      margin-bottom: 12px;
+    }
+
+    .start-tile {
+      min-height: 112px;
+      border: 1px solid var(--line);
+      border-radius: 16px;
+      background: var(--card);
+      padding: 12px;
+      display: flex;
+      flex-direction: column;
+      justify-content: space-between;
+      box-shadow: var(--soft-shadow);
+    }
+
+    .start-tile.primary {
+      background: var(--green);
+      border-color: var(--green);
+      color: white;
+    }
+
+    .tile-icon {
+      width: 34px;
+      height: 34px;
+      border-radius: 12px;
+      display: grid;
+      place-items: center;
+      background: var(--mint);
+      color: var(--green);
+      font-weight: 900;
+    }
+
+    .primary .tile-icon {
+      background: rgba(255, 255, 255, 0.18);
+      color: white;
+    }
+
+    .tile-name {
+      margin: 8px 0 0;
+      font-size: 16px;
+      line-height: 19px;
+      font-weight: 800;
+    }
+
+    .tile-sub {
+      margin: 2px 0 0;
+      color: var(--muted);
+      font-size: 11px;
+      line-height: 15px;
+      font-weight: 600;
+    }
+
+    .primary .tile-sub {
+      color: rgba(255, 255, 255, 0.82);
+    }
+
+    .join-tile,
+    .active-card {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      border: 1px solid var(--line);
+      border-radius: 14px;
+      background: var(--card);
+      padding: 12px;
+      margin-bottom: 12px;
+      box-shadow: var(--soft-shadow);
+    }
+
+    .join-icon,
+    .small-icon {
+      width: 34px;
+      height: 34px;
+      border-radius: 12px;
+      display: grid;
+      place-items: center;
+      background: var(--mint);
+      color: var(--green);
+      font-weight: 900;
+      flex: 0 0 auto;
+    }
+
+    .join-title,
+    .active-title {
+      font-size: 13px;
+      line-height: 17px;
+      font-weight: 800;
+    }
+
+    .join-sub,
+    .active-sub {
+      color: var(--slate);
+      font-size: 11px;
+      line-height: 15px;
+      font-weight: 600;
+      margin-top: 2px;
+    }
+
+    .label-row {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      margin: 12px 0 8px;
+      gap: 10px;
+    }
+
+    .label {
+      color: var(--muted);
+      font-size: 10px;
+      line-height: 14px;
+      font-weight: 800;
+      letter-spacing: 1.2px;
+      text-transform: uppercase;
+    }
+
+    .label-action {
+      color: var(--green);
+      font-size: 11px;
+      line-height: 14px;
+      font-weight: 800;
+    }
+
+    .course-rail {
+      display: flex;
+      gap: 10px;
+      overflow: hidden;
+      margin: 0 -16px;
+      padding: 0 16px 2px;
+    }
+
+    .course-card {
+      flex: 0 0 174px;
+      min-height: 112px;
+      border: 1px solid var(--line);
+      border-radius: 16px;
+      background: var(--card);
+      padding: 12px;
+      display: flex;
+      flex-direction: column;
+      justify-content: space-between;
+      box-shadow: var(--soft-shadow);
+    }
+
+    .course-card.selected {
+      border-color: rgba(0, 103, 71, 0.38);
+      background: #fafffc;
+    }
+
+    .course-top {
+      display: flex;
+      justify-content: space-between;
+      gap: 8px;
+    }
+
+    .course-name {
+      margin: 0;
+      font-size: 14px;
+      line-height: 18px;
+      font-weight: 800;
+      color: var(--ink);
+    }
+
+    .course-meta {
+      margin: 4px 0 0;
+      color: var(--slate);
+      font-size: 11px;
+      line-height: 15px;
+      font-weight: 600;
+    }
+
+    .star {
+      color: var(--green);
+      font-size: 14px;
+      line-height: 18px;
+    }
+
+    .start-pill {
+      align-self: flex-start;
+      display: inline-flex;
+      align-items: center;
+      gap: 5px;
+      border-radius: 999px;
+      background: var(--mint);
+      color: var(--green);
+      padding: 6px 9px;
+      font-size: 11px;
+      line-height: 13px;
+      font-weight: 800;
+    }
+
+    .featured-card {
+      min-height: 158px;
+      border-radius: 16px;
+      border: 1px solid var(--green);
+      background: var(--green);
+      color: white;
+      padding: 14px;
+      display: flex;
+      flex-direction: column;
+      justify-content: space-between;
+      box-shadow: var(--soft-shadow);
+      margin-bottom: 10px;
+    }
+
+    .featured-card .course-name {
+      color: white;
+      font-size: 21px;
+      line-height: 25px;
+      letter-spacing: -0.2px;
+    }
+
+    .featured-card .course-meta {
+      color: rgba(255, 255, 255, 0.82);
+    }
+
+    .avatar-row {
+      display: flex;
+      align-items: center;
+      gap: 5px;
+      margin-top: 12px;
+    }
+
+    .avatar {
+      width: 28px;
+      height: 28px;
+      border-radius: 999px;
+      background: var(--dark);
+      color: var(--gold);
+      display: grid;
+      place-items: center;
+      font-size: 10px;
+      font-weight: 900;
+      border: 1px solid rgba(255, 255, 255, 0.26);
+    }
+
+    .avatar.muted {
+      background: var(--wash);
+      color: var(--slate);
+      border-color: var(--line);
+    }
+
+    .pill-row {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+      margin-bottom: 12px;
+    }
+
+    .course-pill {
+      border: 1px solid var(--line);
+      border-radius: 999px;
+      background: var(--card);
+      padding: 8px 10px;
+      color: var(--green);
+      font-size: 12px;
+      line-height: 14px;
+      font-weight: 800;
+      box-shadow: 0 2px 7px rgba(18, 28, 24, 0.05);
+    }
+
+    .expanded-card {
+      border: 1px solid rgba(0, 103, 71, 0.34);
+      border-radius: 16px;
+      background: var(--card);
+      box-shadow: var(--soft-shadow);
+      overflow: hidden;
+      margin-bottom: 12px;
+    }
+
+    .expanded-head {
+      padding: 13px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
+      background: #fafffc;
+      border-bottom: 1px solid var(--line);
+    }
+
+    .player-grid {
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: 8px;
+      padding: 12px;
+    }
+
+    .player-chip {
+      min-height: 56px;
+      border-radius: 13px;
+      border: 1px solid var(--line);
+      background: #fbfaf7;
+      padding: 9px;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      min-width: 0;
+    }
+
+    .player-chip.on {
+      border-color: rgba(0, 103, 71, 0.5);
+      background: var(--mint);
+    }
+
+    .player-name {
+      font-size: 12px;
+      line-height: 15px;
+      font-weight: 800;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+
+    .player-tee {
+      color: var(--slate);
+      font-size: 10px;
+      line-height: 13px;
+      font-weight: 700;
+      margin-top: 1px;
+      white-space: nowrap;
+    }
+
+    .actions {
+      display: grid;
+      grid-template-columns: 1fr auto;
+      gap: 8px;
+      padding: 0 12px 12px;
+      align-items: center;
+    }
+
+    .primary-button {
+      border-radius: 14px;
+      background: var(--green);
+      color: white;
+      padding: 12px 13px;
+      text-align: center;
+      font-size: 12px;
+      line-height: 15px;
+      font-weight: 900;
+    }
+
+    .secondary-link {
+      color: var(--green);
+      font-size: 11px;
+      line-height: 14px;
+      font-weight: 800;
+      white-space: nowrap;
+    }
+
+    .quick-tile {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      min-height: 104px;
+      border-radius: 16px;
+      border: 1px solid rgba(0, 103, 71, 0.35);
+      background: var(--card);
+      box-shadow: var(--soft-shadow);
+      padding: 14px;
+      margin-bottom: 12px;
+    }
+
+    .quick-icon {
+      width: 48px;
+      height: 48px;
+      border-radius: 16px;
+      background: var(--green);
+      color: white;
+      display: grid;
+      place-items: center;
+      font-weight: 900;
+      font-size: 19px;
+      flex: 0 0 auto;
+    }
+
+    .quick-title {
+      font-size: 17px;
+      line-height: 21px;
+      font-weight: 900;
+      letter-spacing: -0.2px;
+    }
+
+    .quick-sub {
+      color: var(--slate);
+      font-size: 11px;
+      line-height: 15px;
+      font-weight: 600;
+      margin-top: 3px;
+    }
+
+    .active-list {
+      display: grid;
+      gap: 8px;
+      margin-top: 8px;
+    }
+
+    .mini-card {
+      border: 1px solid var(--line);
+      border-radius: 14px;
+      background: var(--card);
+      padding: 11px;
+      box-shadow: 0 2px 7px rgba(18, 28, 24, 0.05);
+    }
+
+    .mini-title {
+      font-size: 13px;
+      line-height: 17px;
+      font-weight: 800;
+    }
+
+    .mini-sub {
+      color: var(--slate);
+      font-size: 11px;
+      line-height: 15px;
+      font-weight: 600;
+      margin-top: 2px;
+    }
+
+    .sheet {
+      position: absolute;
+      left: 0;
+      right: 0;
+      bottom: 0;
+      background: var(--card);
+      border-radius: 22px 22px 0 0;
+      border-top: 1px solid var(--line);
+      box-shadow: 0 -10px 24px rgba(18, 28, 24, 0.16);
+      padding: 10px 16px 16px;
+      z-index: 2;
+    }
+
+    .sheet.sm {
+      padding-bottom: 14px;
+    }
+
+    .handle {
+      width: 42px;
+      height: 4px;
+      border-radius: 999px;
+      background: var(--line);
+      margin: 0 auto 12px;
+    }
+
+    .sheet-head {
+      display: flex;
+      justify-content: space-between;
+      gap: 10px;
+      align-items: flex-start;
+      margin-bottom: 10px;
+    }
+
+    .sheet-title {
+      margin: 0;
+      font-size: 17px;
+      line-height: 21px;
+      font-weight: 900;
+    }
+
+    .sheet-sub {
+      color: var(--slate);
+      font-size: 11px;
+      line-height: 15px;
+      font-weight: 600;
+      margin-top: 3px;
+    }
+
+    .tee-rule {
+      border-radius: 12px;
+      background: var(--mint);
+      color: var(--green);
+      padding: 9px 10px;
+      font-size: 11px;
+      line-height: 15px;
+      font-weight: 800;
+      margin: 8px 0 10px;
+    }
+
+    .sheet-course-list {
+      display: grid;
+      gap: 8px;
+      margin-bottom: 12px;
+    }
+
+    .sheet-course-row {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 10px;
+      border: 1px solid var(--line);
+      border-radius: 14px;
+      background: #fbfaf7;
+      padding: 10px;
+    }
+
+    .sheet-course-row.on {
+      border-color: rgba(0, 103, 71, 0.42);
+      background: var(--mint);
+    }
+
+    .tabbar {
+      position: absolute;
+      left: 22px;
+      right: 22px;
+      bottom: 14px;
+      height: 58px;
+      border-radius: 999px;
+      background: rgba(255, 255, 255, 0.96);
+      border: 1px solid var(--line);
+      display: flex;
+      align-items: center;
+      justify-content: space-around;
+      box-shadow: 0 9px 18px rgba(18, 28, 24, 0.18);
+      z-index: 3;
+    }
+
+    .tab {
+      color: var(--muted);
+      font-size: 16px;
+      line-height: 1;
+      font-weight: 900;
+      width: 36px;
+      height: 36px;
+      display: grid;
+      place-items: center;
+      border-radius: 999px;
+    }
+
+    .tab.active {
+      min-width: 76px;
+      padding: 0 12px;
+      display: flex;
+      gap: 6px;
+      background: var(--green);
+      color: white;
+      font-size: 12px;
+      line-height: 15px;
+    }
+
+    .bottom-mask {
+      position: absolute;
+      left: 0;
+      right: 0;
+      bottom: 0;
+      height: 92px;
+      background: linear-gradient(to top, var(--canvas), rgba(246, 243, 238, 0));
+      pointer-events: none;
+      z-index: 1;
+    }
+
+    .sheet + .tabbar {
+      display: none;
+    }
+
+    .notes {
+      margin-top: 8px;
+      border: 1px solid var(--line);
+      border-radius: 14px;
+      background: rgba(255, 255, 255, 0.68);
+      padding: 10px 12px;
+      color: var(--slate);
+      font-size: 12px;
+      line-height: 17px;
+    }
+
+    .notes strong {
+      color: var(--ink);
+    }
+
+    @media (max-width: 720px) {
+      .page {
+        padding: 18px;
+      }
+
+      .board-head {
+        display: block;
+      }
+
+      .rule-note {
+        max-width: none;
+        margin-top: 12px;
+      }
+
+      .versions {
+        grid-template-columns: 1fr;
+      }
+
+      .phone {
+        max-width: 380px;
+      }
+    }
+  </style>
+</head>
+<body>
+  <main class="page">
+    <header class="board-head">
+      <div>
+        <h1>Quick start UI options</h1>
+        <p class="intro">Pick the layout that feels best for starting a single-round game from favorite courses. Each option keeps the same behavior: choose a favorite course, choose players, start the game with course and tees resolved automatically.</p>
+      </div>
+      <div class="rule-note">
+        Tee default rule: for each selected player, use their last-used tee on that course. If the player has no history there, use the course's middle tee.
+      </div>
+    </header>
+
+    <section class="versions">
+      <article class="version">
+        <div class="version-title">
+          <div class="letter">A</div>
+          <div>
+            <h2>Favorite course rail</h2>
+            <p>Visible favorites plus a focused player sheet.</p>
+          </div>
+        </div>
+        <div class="phone">
+          <div class="screen">
+            <div class="status"><span>9:41</span><span>5G 84%</span></div>
+            <div class="header">
+              <div class="brand"><div class="crest">G</div><div class="brand-title">Golf Partner</div></div>
+              <div class="icon-row"><div class="icon-btn">≡</div><div class="icon-btn">○</div></div>
+            </div>
+            <div class="content">
+              <h3 class="section-title">Start playing</h3>
+              <div class="start-row">
+                <div class="start-tile primary">
+                  <div class="tile-icon">⚑</div>
+                  <div><div class="tile-name">Game</div><div class="tile-sub">Single round</div></div>
+                </div>
+                <div class="start-tile">
+                  <div class="tile-icon">★</div>
+                  <div><div class="tile-name">Tournament</div><div class="tile-sub">Multi-day event</div></div>
+                </div>
+              </div>
+              <div class="join-tile">
+                <div class="join-icon">↗</div>
+                <div><div class="join-title">Join with code</div><div class="join-sub">Enter an invite from a friend</div></div>
+              </div>
+              <div class="label-row"><div class="label">Quick start</div><div class="label-action">Manage</div></div>
+              <div class="course-rail">
+                <div class="course-card selected">
+                  <div class="course-top">
+                    <div><p class="course-name">Sant Cugat</p><p class="course-meta">Par 72 · 4 tees</p></div>
+                    <div class="star">★</div>
+                  </div>
+                  <div class="start-pill">Start →</div>
+                </div>
+                <div class="course-card">
+                  <div class="course-top">
+                    <div><p class="course-name">El Prat Pink</p><p class="course-meta">Par 72 · 5 tees</p></div>
+                    <div class="star">★</div>
+                  </div>
+                  <div class="start-pill">Start →</div>
+                </div>
+              </div>
+              <div class="label-row"><div class="label">Games</div></div>
+              <div class="active-card">
+                <div class="small-icon">⚑</div>
+                <div><div class="active-title">PGA Catalunya · 30 May</div><div class="active-sub">Marcos · Alex · Dani</div></div>
+              </div>
+            </div>
+            <div class="sheet sm">
+              <div class="handle"></div>
+              <div class="sheet-head">
+                <div><h3 class="sheet-title">Sant Cugat</h3><div class="sheet-sub">Choose who is playing</div></div>
+                <div class="start-pill">Course set</div>
+              </div>
+              <div class="tee-rule">Tees: last used per player, otherwise middle tee.</div>
+              <div class="player-grid">
+                <div class="player-chip on"><div class="avatar muted">MS</div><div><div class="player-name">Marcos</div><div class="player-tee">Yellow · HCP 13</div></div></div>
+                <div class="player-chip on"><div class="avatar muted">AL</div><div><div class="player-name">Alex</div><div class="player-tee">White · HCP 9</div></div></div>
+                <div class="player-chip on"><div class="avatar muted">DA</div><div><div class="player-name">Dani</div><div class="player-tee">Yellow · HCP 17</div></div></div>
+                <div class="player-chip"><div class="avatar muted">+</div><div><div class="player-name">Add player</div><div class="player-tee">Library</div></div></div>
+              </div>
+              <div class="actions"><div class="primary-button">Start game</div><div class="secondary-link">Edit details</div></div>
+            </div>
+          </div>
+        </div>
+        <div class="notes"><strong>Best for:</strong> showing favorite courses immediately without making the Play screen heavy.</div>
+      </article>
+
+      <article class="version">
+        <div class="version-title">
+          <div class="letter">B</div>
+          <div>
+            <h2>Featured favorite</h2>
+            <p>One likely course gets the biggest tap target.</p>
+          </div>
+        </div>
+        <div class="phone">
+          <div class="screen">
+            <div class="status"><span>9:41</span><span>5G 84%</span></div>
+            <div class="header">
+              <div class="brand"><div class="crest">G</div><div class="brand-title">Golf Partner</div></div>
+              <div class="icon-row"><div class="icon-btn">≡</div><div class="icon-btn">○</div></div>
+            </div>
+            <div class="content">
+              <h3 class="section-title">Start playing</h3>
+              <div class="start-row">
+                <div class="start-tile primary">
+                  <div class="tile-icon">⚑</div>
+                  <div><div class="tile-name">Game</div><div class="tile-sub">Single round</div></div>
+                </div>
+                <div class="start-tile">
+                  <div class="tile-icon">★</div>
+                  <div><div class="tile-name">Tournament</div><div class="tile-sub">Multi-day event</div></div>
+                </div>
+              </div>
+              <div class="label-row"><div class="label">Quick start</div><div class="label-action">See all</div></div>
+              <div class="featured-card">
+                <div>
+                  <p class="course-name">Sant Cugat</p>
+                  <p class="course-meta">Most recent favorite · Par 72 · 4 tees</p>
+                  <div class="avatar-row">
+                    <div class="avatar">MS</div><div class="avatar">AL</div><div class="avatar">DA</div><div class="avatar">+1</div>
+                  </div>
+                </div>
+                <div class="start-pill" style="background: rgba(255,255,255,0.18); color: white;">Choose players →</div>
+              </div>
+              <div class="pill-row">
+                <div class="course-pill">El Prat Pink</div>
+                <div class="course-pill">Vallromanes</div>
+                <div class="course-pill">PGA Catalunya</div>
+              </div>
+              <div class="join-tile">
+                <div class="join-icon">↗</div>
+                <div><div class="join-title">Join with code</div><div class="join-sub">Enter an invite from a friend</div></div>
+              </div>
+              <div class="label-row"><div class="label">Games</div></div>
+              <div class="active-card">
+                <div class="small-icon">⚑</div>
+                <div><div class="active-title">El Prat · 28 May</div><div class="active-sub">Round in progress</div></div>
+              </div>
+            </div>
+            <div class="tabbar">
+              <div class="tab">⌂</div><div class="tab">◷</div><div class="tab active">⚑ Play</div><div class="tab">▣</div><div class="tab">☻</div>
+            </div>
+          </div>
+        </div>
+        <div class="notes"><strong>Best for:</strong> groups that usually repeat one course and want the largest possible target.</div>
+      </article>
+
+      <article class="version">
+        <div class="version-title">
+          <div class="letter">C</div>
+          <div>
+            <h2>Inline expanded card</h2>
+            <p>No sheet; the selected course expands in place.</p>
+          </div>
+        </div>
+        <div class="phone">
+          <div class="screen">
+            <div class="status"><span>9:41</span><span>5G 84%</span></div>
+            <div class="header">
+              <div class="brand"><div class="crest">G</div><div class="brand-title">Golf Partner</div></div>
+              <div class="icon-row"><div class="icon-btn">≡</div><div class="icon-btn">○</div></div>
+            </div>
+            <div class="content">
+              <h3 class="section-title">Start playing</h3>
+              <div class="start-row">
+                <div class="start-tile primary">
+                  <div class="tile-icon">⚑</div>
+                  <div><div class="tile-name">Game</div><div class="tile-sub">Single round</div></div>
+                </div>
+                <div class="start-tile">
+                  <div class="tile-icon">★</div>
+                  <div><div class="tile-name">Tournament</div><div class="tile-sub">Multi-day event</div></div>
+                </div>
+              </div>
+              <div class="label-row"><div class="label">Quick start</div><div class="label-action">Favorites</div></div>
+              <div class="expanded-card">
+                <div class="expanded-head">
+                  <div>
+                    <p class="course-name">Sant Cugat</p>
+                    <p class="course-meta">Par 72 · 4 tees · favorite</p>
+                  </div>
+                  <div class="star">★</div>
+                </div>
+                <div class="tee-rule" style="margin: 12px 12px 0;">Last-used tees are applied as players are selected.</div>
+                <div class="player-grid">
+                  <div class="player-chip on"><div class="avatar muted">MS</div><div><div class="player-name">Marcos</div><div class="player-tee">Yellow · HCP 13</div></div></div>
+                  <div class="player-chip on"><div class="avatar muted">AL</div><div><div class="player-name">Alex</div><div class="player-tee">White · HCP 9</div></div></div>
+                  <div class="player-chip"><div class="avatar muted">DA</div><div><div class="player-name">Dani</div><div class="player-tee">Middle tee</div></div></div>
+                  <div class="player-chip"><div class="avatar muted">+</div><div><div class="player-name">Add player</div><div class="player-tee">Library</div></div></div>
+                </div>
+                <div class="actions"><div class="primary-button">Start game</div><div class="secondary-link">Edit details</div></div>
+              </div>
+              <div class="course-rail" style="margin-bottom: 12px;">
+                <div class="course-card" style="min-height: 92px;"><div class="course-top"><div><p class="course-name">El Prat Pink</p><p class="course-meta">Par 72</p></div><div class="star">★</div></div></div>
+                <div class="course-card" style="min-height: 92px;"><div class="course-top"><div><p class="course-name">Vallromanes</p><p class="course-meta">Par 71</p></div><div class="star">★</div></div></div>
+              </div>
+              <div class="join-tile">
+                <div class="join-icon">↗</div>
+                <div><div class="join-title">Join with code</div><div class="join-sub">Enter an invite from a friend</div></div>
+              </div>
+            </div>
+            <div class="bottom-mask"></div>
+            <div class="tabbar">
+              <div class="tab">⌂</div><div class="tab">◷</div><div class="tab active">⚑ Play</div><div class="tab">▣</div><div class="tab">☻</div>
+            </div>
+          </div>
+        </div>
+        <div class="notes"><strong>Best for:</strong> avoiding a modal while keeping all quick-start work in the Play view.</div>
+      </article>
+
+      <article class="version">
+        <div class="version-title">
+          <div class="letter">D</div>
+          <div>
+            <h2>Quick start tile</h2>
+            <p>Cleaner Play screen; favorites live inside a sheet.</p>
+          </div>
+        </div>
+        <div class="phone">
+          <div class="screen">
+            <div class="status"><span>9:41</span><span>5G 84%</span></div>
+            <div class="header">
+              <div class="brand"><div class="crest">G</div><div class="brand-title">Golf Partner</div></div>
+              <div class="icon-row"><div class="icon-btn">≡</div><div class="icon-btn">○</div></div>
+            </div>
+            <div class="content">
+              <h3 class="section-title">Start playing</h3>
+              <div class="start-row">
+                <div class="start-tile primary">
+                  <div class="tile-icon">⚑</div>
+                  <div><div class="tile-name">Game</div><div class="tile-sub">Single round</div></div>
+                </div>
+                <div class="start-tile">
+                  <div class="tile-icon">★</div>
+                  <div><div class="tile-name">Tournament</div><div class="tile-sub">Multi-day event</div></div>
+                </div>
+              </div>
+              <div class="quick-tile">
+                <div class="quick-icon">★</div>
+                <div>
+                  <div class="quick-title">Quick start</div>
+                  <div class="quick-sub">Pick a favorite course, then choose players.</div>
+                </div>
+              </div>
+              <div class="join-tile">
+                <div class="join-icon">↗</div>
+                <div><div class="join-title">Join with code</div><div class="join-sub">Enter an invite from a friend</div></div>
+              </div>
+              <div class="label-row"><div class="label">Games</div></div>
+              <div class="active-list">
+                <div class="mini-card"><div class="mini-title">Sant Cugat · 31 May</div><div class="mini-sub">Active · Marcos · Alex</div></div>
+                <div class="mini-card"><div class="mini-title">Weekend Golf</div><div class="mini-sub">Round 2 of 3</div></div>
+              </div>
+            </div>
+            <div class="sheet">
+              <div class="handle"></div>
+              <div class="sheet-head">
+                <div><h3 class="sheet-title">Quick start</h3><div class="sheet-sub">Favorite courses</div></div>
+                <div class="label-action">Manage</div>
+              </div>
+              <div class="sheet-course-list">
+                <div class="sheet-course-row on"><div><div class="join-title">Sant Cugat</div><div class="join-sub">Par 72 · 4 tees</div></div><div class="star">★</div></div>
+                <div class="sheet-course-row"><div><div class="join-title">El Prat Pink</div><div class="join-sub">Par 72 · 5 tees</div></div><div class="star">★</div></div>
+                <div class="sheet-course-row"><div><div class="join-title">Vallromanes</div><div class="join-sub">Par 71 · 3 tees</div></div><div class="star">★</div></div>
+              </div>
+              <div class="tee-rule">After course selection: pick players, then auto-assign last-used or middle tees.</div>
+              <div class="primary-button">Continue</div>
+            </div>
+          </div>
+        </div>
+        <div class="notes"><strong>Best for:</strong> keeping the Play screen compact, at the cost of one extra tap before choosing the course.</div>
+      </article>
+    </section>
+  </main>
+</body>
+</html>

@@ -55,6 +55,26 @@ describe('collectMyRounds', () => {
     expect(result[1].completed).toBe(false);
   });
 
+  test('marks a scored partial round completed when the tournament was explicitly finished', () => {
+    const h = holes18();
+    const partial = evenScores(h, 5);
+    delete partial[18];
+    const tournaments = [{
+      id: 22,
+      name: 'May 22 Game',
+      kind: 'game',
+      finishedAt: '2026-05-22T18:00:00.000Z',
+      players: [{ id: 'p1', user_id: 'u1' }],
+      rounds: [
+        mkRound({ holes: h, scores: { p1: partial } }),
+      ],
+    }];
+
+    const result = collectMyRounds(tournaments, 'u1');
+
+    expect(result[0].completed).toBe(true);
+  });
+
   test('excludes rounds where the user has no score, and tournaments without the user', () => {
     const h = holes18();
     const tournaments = [
@@ -563,6 +583,25 @@ describe('computeMyStats', () => {
         sample: 54,
         sampleUnit: 'holes',
         unit: 'SG / round',
+      }),
+    ]));
+  });
+
+  test('uses Strokes Gained category-specific samples for action-plan items', () => {
+    const actionPlan = buildActionPlan({
+      strokesGained: {
+        sampleHoles: 54,
+        sampleHolesByCategory: { approach: 18, aroundGreen: 4, putting: 54 },
+        byCategory: { approach: -0.7, aroundGreen: 0, putting: 0 },
+      },
+    });
+
+    expect(actionPlan.improvements).toEqual(expect.arrayContaining([
+      expect.objectContaining({
+        area: 'Strokes Gained',
+        label: 'Approach',
+        sample: 18,
+        sampleUnit: 'holes',
       }),
     ]));
   });

@@ -240,9 +240,10 @@ function rankingWeaknessInsight(item) {
 function strokesGainedCategoryInsights(stats) {
   const strokesGained = stats?.strokesGained;
   const categories = strokesGained?.byCategory ?? {};
-  const sample = Number(strokesGained?.sampleHoles);
   return Object.entries(categories).map(([category, value]) => {
     if (!Number.isFinite(value) || Math.abs(value) < 0.05) return null;
+    const sample = Number(strokesGained?.sampleHolesByCategory?.[category]
+      ?? strokesGained?.sampleHoles);
     const tone = value > 0 ? 'good' : 'bad';
     const title = SG_CATEGORY_TITLES[category] || AREA_LABELS[normalizeArea(category)];
     const sampleCopy = samplePhrase(sample, 'SG / round', 'holes');

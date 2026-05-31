@@ -176,8 +176,9 @@ export function collectMyRounds(tournaments, userId, displayName) {
       const myScores = round?.scores?.[me.id];
       if (!myScores || Object.keys(myScores).length === 0) return;
       const holes = round.holes || [];
-      const completed = holes.length > 0
-        && holes.every((h) => myScores[h.number] != null);
+      const completed = !!t.finishedAt || (
+        holes.length > 0 && holes.every((h) => myScores[h.number] != null)
+      );
       const handicap = getPlayingHandicap(round, me);
       let points = 0;
       holes.forEach((h) => {
@@ -291,11 +292,14 @@ export function buildActionPlan({
       aroundGreen: 'Around the green',
       putting: 'Putting',
     }[key] ?? key;
+    const categorySample = strokesGained.sampleHolesByCategory?.[key]
+      ?? strokesGained.sampleHoles
+      ?? 0;
     pushImpact(cells, {
       area: 'Strokes Gained',
       label,
       score: value,
-      sample: strokesGained.sampleHoles ?? 0,
+      sample: categorySample,
       sampleUnit: 'holes',
       unit: 'SG / round',
       value,

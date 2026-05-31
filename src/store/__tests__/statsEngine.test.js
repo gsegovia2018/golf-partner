@@ -485,6 +485,36 @@ describe('sgSeason', () => {
   test('returns null total below 18-hole sample', () => {
     expect(sgSeason([], 'me').total).toBeNull();
   });
+  test('does not dilute approach SG with rounds that have no approach samples', () => {
+    const holes = Array.from({ length: 18 }, (_, i) => ({
+      number: i + 1, par: 4, strokeIndex: i + 1, distance: 400,
+    }));
+    const scores = { me: Object.fromEntries(holes.map((hole) => [hole.number, 4])) };
+    const approachRound = {
+      holes,
+      scores,
+      shotDetails: { me: Object.fromEntries(holes.map((hole) => [hole.number, {
+        approachBucket: '100-150',
+        putts: 2,
+        firstPuttBucket: '3-6',
+        sandShots: 0,
+      }])) },
+    };
+    const puttingOnlyRound = {
+      holes,
+      scores,
+      shotDetails: { me: Object.fromEntries(holes.map((hole) => [hole.number, {
+        putts: 2,
+        firstPuttBucket: '3-6',
+        sandShots: 0,
+      }])) },
+    };
+
+    const before = sgSeason([approachRound], 'me');
+    const after = sgSeason([approachRound, puttingOnlyRound], 'me');
+
+    expect(after.byCategory.approach).toBeCloseTo(before.byCategory.approach, 5);
+  });
   test('aggregates across rounds when enough sample holes exist', () => {
     const mkRound = () => ({
       holes: Array.from({ length: 18 }, (_, i) => ({

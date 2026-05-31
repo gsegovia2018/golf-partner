@@ -2280,40 +2280,53 @@ export function sgTotal(round, playerId, targetHandicap = 0) {
     approach.sampleHoles, aroundGreen.sampleHoles, putting.sampleHoles,
     penalties.sampleHoles,
   );
-  return { total, byCategory, sampleHoles };
+  const sampleHolesByCategory = {
+    approach:    approach.sampleHoles,
+    aroundGreen: aroundGreen.sampleHoles,
+    putting:     putting.sampleHoles,
+    penalties:   penalties.sampleHoles,
+  };
+  return { total, byCategory, sampleHoles, sampleHolesByCategory };
 }
 
 const SG_SEASON_MIN_SAMPLE = 18;       // one full round's worth of contributing holes
+const SG_CATEGORIES = ['approach', 'aroundGreen', 'putting', 'penalties'];
 
 export function sgSeason(rounds, playerId, targetHandicap = 0) {
   const byCategory = { approach: 0, aroundGreen: 0, putting: 0, penalties: 0 };
+  const categoryRounds = { approach: 0, aroundGreen: 0, putting: 0, penalties: 0 };
+  const sampleHolesByCategory = { approach: 0, aroundGreen: 0, putting: 0, penalties: 0 };
   let total = 0;
   let sampleHoles = 0;
   const perRound = [];
   rounds.forEach((round, i) => {
     const r = sgTotal(round, playerId, targetHandicap);
     if (r.sampleHoles === 0) return;
-    byCategory.approach    += r.byCategory.approach;
-    byCategory.aroundGreen += r.byCategory.aroundGreen;
-    byCategory.putting     += r.byCategory.putting;
-    byCategory.penalties   += r.byCategory.penalties;
+    SG_CATEGORIES.forEach((category) => {
+      const categorySample = r.sampleHolesByCategory?.[category] ?? 0;
+      if (categorySample <= 0) return;
+      byCategory[category] += r.byCategory[category];
+      categoryRounds[category] += 1;
+      sampleHolesByCategory[category] += categorySample;
+    });
     total += r.total;
     sampleHoles += r.sampleHoles;
     perRound.push({ index: i, total: r.total, sampleHoles: r.sampleHoles });
   });
   if (sampleHoles < SG_SEASON_MIN_SAMPLE) {
-    return { total: null, byCategory: null, sampleHoles, perRound };
+    return { total: null, byCategory: null, sampleHoles, sampleHolesByCategory, perRound };
   }
   const denom = perRound.length;
   return {
     total: total / denom,
     byCategory: {
-      approach:    byCategory.approach    / denom,
-      aroundGreen: byCategory.aroundGreen / denom,
-      putting:     byCategory.putting     / denom,
-      penalties:   byCategory.penalties   / denom,
+      approach:    categoryRounds.approach > 0 ? byCategory.approach / categoryRounds.approach : 0,
+      aroundGreen: categoryRounds.aroundGreen > 0 ? byCategory.aroundGreen / categoryRounds.aroundGreen : 0,
+      putting:     categoryRounds.putting > 0 ? byCategory.putting / categoryRounds.putting : 0,
+      penalties:   categoryRounds.penalties > 0 ? byCategory.penalties / categoryRounds.penalties : 0,
     },
     sampleHoles,
+    sampleHolesByCategory,
     perRound,
   };
 }
