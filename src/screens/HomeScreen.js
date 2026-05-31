@@ -92,6 +92,8 @@ export default function HomeScreen({ navigation, route }) {
   const { theme } = useTheme();
   const { user } = useAuth();
   const currentUserId = user?.id ?? null;
+  const currentUserIdRef = useRef(currentUserId);
+  currentUserIdRef.current = currentUserId;
   const initialTournament = useMemo(() => getActiveTournamentSnapshot(), []);
   const [tournament, setTournament] = useState(() => initialTournament);
   const [allTournaments, setAllTournaments] = useState(() => (initialTournament ? [initialTournament] : []));
@@ -102,6 +104,9 @@ export default function HomeScreen({ navigation, route }) {
   const [roundPagerWidth, setRoundPagerWidth] = useState(0);
   const roundPagerRef = useRef(null);
   const roundScrollOffset = useRef(0);
+  const quickStartCourseLoadRef = useRef(0);
+  const quickStartPlayerLoadRef = useRef(0);
+  const quickStartStartingRef = useRef(false);
   const isUserScrollingRound = useRef(false);
   const roundPagerInitialized = useRef(false);
   const hasAutoOpenedRef = useRef(false);
@@ -237,23 +242,31 @@ export default function HomeScreen({ navigation, route }) {
   }, [reload]);
 
   const loadQuickStartCourses = useCallback(async () => {
-    if (!currentUserId) {
+    const requestId = quickStartCourseLoadRef.current + 1;
+    quickStartCourseLoadRef.current = requestId;
+    const userId = currentUserId;
+    if (!userId) {
       setQuickStartCourses([]);
       return;
     }
     try {
       const library = await loadCourseLibrary();
+      if (quickStartCourseLoadRef.current !== requestId || currentUserIdRef.current !== userId) return;
       const favorites = library?.favorites instanceof Set
         ? library.favorites
         : new Set(library?.favorites ?? []);
       setQuickStartCourses((library?.courses ?? []).filter((course) => favorites.has(course.id)));
     } catch (_) {
+      if (quickStartCourseLoadRef.current !== requestId || currentUserIdRef.current !== userId) return;
       setQuickStartCourses([]);
     }
   }, [currentUserId]);
 
   const loadQuickStartPlayers = useCallback(async () => {
-    if (!currentUserId) {
+    const requestId = quickStartPlayerLoadRef.current + 1;
+    quickStartPlayerLoadRef.current = requestId;
+    const userId = currentUserId;
+    if (!userId) {
       setQuickStartPlayers([]);
       setQuickStartPlayersError(null);
       setQuickStartPlayersLoading(false);
@@ -262,10 +275,14 @@ export default function HomeScreen({ navigation, route }) {
     setQuickStartPlayersLoading(true);
     setQuickStartPlayersError(null);
     try {
-      setQuickStartPlayers(await fetchMyPlayers());
+      const players = await fetchMyPlayers();
+      if (quickStartPlayerLoadRef.current !== requestId || currentUserIdRef.current !== userId) return;
+      setQuickStartPlayers(players);
     } catch (err) {
+      if (quickStartPlayerLoadRef.current !== requestId || currentUserIdRef.current !== userId) return;
       setQuickStartPlayersError(err?.message ?? 'Could not load players.');
     } finally {
+      if (quickStartPlayerLoadRef.current !== requestId || currentUserIdRef.current !== userId) return;
       setQuickStartPlayersLoading(false);
     }
   }, [currentUserId]);
@@ -585,7 +602,7 @@ export default function HomeScreen({ navigation, route }) {
   }
 
   async function handleQuickStartStart({ course, players }) {
-    if (quickStartStarting) return;
+    if (quickStartStartingRef.current) return;
     if (!course) {
       showError('Choose a course before starting.');
       return;
@@ -595,6 +612,7 @@ export default function HomeScreen({ navigation, route }) {
       showError('Select at least 1 player.');
       return;
     }
+    quickStartStartingRef.current = true;
     setQuickStartStarting(true);
     try {
       const playerTees = await resolveQuickStartTees(course, selectedPlayers);
@@ -653,6 +671,7 @@ export default function HomeScreen({ navigation, route }) {
     } catch (err) {
       showError(err?.message ?? 'Could not create game');
     } finally {
+      quickStartStartingRef.current = false;
       setQuickStartStarting(false);
     }
   }
@@ -1045,7 +1064,7 @@ export default function HomeScreen({ navigation, route }) {
           <View style={s.errorCard}>
             <Feather name="alert-triangle" size={18} color={theme.destructive} />
             <View style={{ flex: 1 }}>
-              <Text style={s.errorCardTitle}>Could not load</Text>
+              <Text style={s.errorCardTitle}>Couldn't load</Text>
               <Text style={s.errorCardText}>{reloadError}</Text>
             </View>
             <TouchableOpacity style={s.errorRetryBtn} onPress={reload} activeOpacity={0.8}>
