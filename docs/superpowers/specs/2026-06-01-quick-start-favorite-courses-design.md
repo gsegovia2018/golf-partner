@@ -84,8 +84,7 @@ Avoid growing `HomeScreen` with setup-specific creation logic.
 
 ### New Quick Start Model
 
-Add a small pure/helper module, for example `src/screens/quickStartGame.js` or
-`src/lib/quickStartGame.js`, to own:
+Add a small pure/helper module, `src/lib/quickStartGame.js`, to own:
 
 - `buildQuickStartGameName(courseName, date)`.
 - `courseToQuickStartRound(course)`.
@@ -95,6 +94,11 @@ Add a small pure/helper module, for example `src/screens/quickStartGame.js` or
 The async wrapper that calls `lastTeeForPlayerOnCourse(courseId, playerId)` can
 live next to these helpers, but the defaulting algorithm itself should remain
 pure and unit-testable.
+
+Add a presentational component, `src/components/QuickStartCourses.js`, for the
+rail and sheet. `HomeScreen` should own data loading and navigation callbacks,
+while the component owns layout, selection state, loading/error presentation,
+and button enablement.
 
 ### Home Screen
 
