@@ -135,13 +135,14 @@ describe('QuickStartCourses interactions', () => {
 
   test('calls onEditDetails with selected course and players', () => {
     const onEditDetails = jest.fn();
-    const { getByLabelText, getByText } = renderQuickStart({ onEditDetails });
+    const { getByLabelText, getByText, queryByText } = renderQuickStart({ onEditDetails });
 
     fireEvent.press(getByText('Pine Course'));
     fireEvent.press(getByLabelText('Select Guest'));
     fireEvent.press(getByLabelText('Edit quick start details'));
 
     expect(onEditDetails).toHaveBeenCalledWith({ course: courses[0], players });
+    expect(queryByText('Tees are auto-assigned. Use Edit details to change them.')).toBeNull();
   });
 
   test('shows loading and error states with retry', () => {

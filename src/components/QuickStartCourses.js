@@ -114,6 +114,12 @@ export default function QuickStartCourses({
   };
 
   const startDisabled = selectedPlayers.length === 0 || starting;
+  const editDetails = () => {
+    if (!selectedCourse) return;
+    const payload = { course: selectedCourse, players: selectedPlayers };
+    closeSheet();
+    onEditDetails?.(payload);
+  };
 
   return (
     <View style={s.section}>
@@ -245,7 +251,7 @@ export default function QuickStartCourses({
           <View style={s.actions}>
             <TouchableOpacity
               style={s.secondaryButton}
-              onPress={() => onEditDetails?.({ course: selectedCourse, players: selectedPlayers })}
+              onPress={editDetails}
               disabled={!selectedCourse}
               accessibilityRole="button"
               accessibilityLabel="Edit quick start details"
