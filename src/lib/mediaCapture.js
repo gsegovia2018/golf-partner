@@ -1,6 +1,13 @@
 import * as ImagePicker from 'expo-image-picker';
 import { enqueueMedia } from '../store/mediaQueue';
 import { kickUploadWorker } from './uploadWorker';
+import { MAX_VIDEO_UPLOAD_BYTES, MAX_VIDEO_UPLOAD_LABEL } from './mediaLimits';
+
+const PHOTO_PICKER_QUALITY = 0.9;
+const VIDEO_PICKER_QUALITY = 0.7;
+const VIDEO_EXPORT_PRESET = ImagePicker.VideoExportPreset?.H264_1280x720;
+const VIDEO_QUALITY = ImagePicker.UIImagePickerControllerQualityType?.IFrame1280x720
+  ?? ImagePicker.UIImagePickerControllerQualityType?.Medium;
 
 function uuid() {
   return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, (c) => {
@@ -20,23 +27,33 @@ async function ensurePermissions(source) {
   }
 }
 
+function assertGalleryVideoSize(asset, source) {
+  if (source !== 'library' || asset?.type !== 'video') return;
+  if (typeof asset.fileSize !== 'number' || asset.fileSize <= MAX_VIDEO_UPLOAD_BYTES) return;
+  throw new Error(`Los vídeos de galería deben ser de ${MAX_VIDEO_UPLOAD_LABEL} o menos.`);
+}
+
 export async function pickMedia({ source, mediaTypes, multi = false, selectionLimit = 20 }) {
   await ensurePermissions(source);
 
+  const videoOnly = mediaTypes === 'video';
+  const acceptsVideo = videoOnly || mediaTypes === 'all';
   const opts = {
     mediaTypes: mediaTypes === 'video'
       ? ImagePicker.MediaTypeOptions.Videos
       : mediaTypes === 'photo'
         ? ImagePicker.MediaTypeOptions.Images
         : ImagePicker.MediaTypeOptions.All,
-    // First-pass quality from the picker; the upload pipeline re-encodes
-    // afterward, so keep this high to avoid stacking compression loss.
-    quality: 0.9,
+    // Keep photos high because the upload pipeline re-encodes them. Explicit
+    // video capture gets lower quality so short clips stay under the storage cap.
+    quality: videoOnly ? VIDEO_PICKER_QUALITY : PHOTO_PICKER_QUALITY,
     videoMaxDuration: 20,
     allowsEditing: false,
     allowsMultipleSelection: multi && source === 'library',
     selectionLimit: multi && source === 'library' ? selectionLimit : 1,
   };
+  if (acceptsVideo && VIDEO_QUALITY != null) opts.videoQuality = VIDEO_QUALITY;
+  if (acceptsVideo && VIDEO_EXPORT_PRESET != null) opts.videoExportPreset = VIDEO_EXPORT_PRESET;
 
   const result = source === 'camera'
     ? await ImagePicker.launchCameraAsync(opts)
@@ -44,12 +61,15 @@ export async function pickMedia({ source, mediaTypes, multi = false, selectionLi
 
   if (result.canceled || !result.assets?.length) return multi ? [] : null;
 
+  result.assets.forEach((asset) => assertGalleryVideoSize(asset, source));
+
   const mapped = result.assets.map((asset) => ({
     localUri: asset.uri,
     kind: asset.type === 'video' ? 'video' : 'photo',
     durationS: asset.duration ? asset.duration / 1000 : null,
     mimeType: asset.mimeType ?? null,
     fileName: asset.fileName ?? null,
+    fileSize: asset.fileSize ?? null,
   }));
 
   return multi ? mapped : mapped[0];
@@ -57,12 +77,12 @@ export async function pickMedia({ source, mediaTypes, multi = false, selectionLi
 
 export async function attachMedia({
   tournamentId, roundId, holeIndex, kind, localUri,
-  durationS, caption, uploaderLabel, mimeType, fileName,
+  durationS, caption, uploaderLabel, mimeType, fileName, fileSize,
 }) {
   const id = uuid();
   await enqueueMedia({
     id, tournamentId, roundId, holeIndex, kind, localUri,
-    durationS, caption, uploaderLabel, mimeType, fileName,
+    durationS, caption, uploaderLabel, mimeType, fileName, fileSize,
   });
   kickUploadWorker();
   return { id };
@@ -83,6 +103,7 @@ export async function attachManyMedia({ tournamentId, items }) {
       uploaderLabel: it.uploaderLabel,
       mimeType: it.asset.mimeType,
       fileName: it.asset.fileName,
+      fileSize: it.asset.fileSize,
     });
     ids.push(id);
   }

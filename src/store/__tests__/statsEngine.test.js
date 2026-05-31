@@ -1,4 +1,4 @@
-import { teeShotImpact, lagPuttingQuality, sandSaveRate, upAndDownRate, bunkerVisits, sgPutting, sgAroundGreen, sgApproach, sgTotal, sgSeason, driveScoreImpact, puttDeepDive, approachScoreImpact, puttingTargetGaps, approachTargetGaps } from '../statsEngine';
+import { teeShotImpact, lagPuttingQuality, sandSaveRate, upAndDownRate, bunkerVisits, sgPutting, sgAroundGreen, sgApproach, sgPenalties, sgTotal, sgSeason, driveScoreImpact, puttDeepDive, approachScoreImpact, puttingTargetGaps, approachTargetGaps } from '../statsEngine';
 
 // 18 par-4 holes, strokeIndex = hole number.
 function holes18() {
@@ -97,7 +97,9 @@ describe('teeShotImpact', () => {
 
 // ── lagPuttingQuality helpers ──
 const makeRound = (holes, details, playerId = 'me') => ({
-  holes: holes.map((h, i) => ({ number: i + 1, par: h.par, strokeIndex: i + 1 })),
+  holes: holes.map((h, i) => ({
+    number: i + 1, par: h.par, strokeIndex: i + 1, ...(h.distance != null ? { distance: h.distance } : {}),
+  })),
   scores: { [playerId]: Object.fromEntries(holes.map((h, i) => [i + 1, h.strokes])) },
   shotDetails: { [playerId]: Object.fromEntries(details.map((d, i) => [i + 1, d])) },
 });
@@ -224,13 +226,35 @@ describe('sgAroundGreen', () => {
     );
     expect(sgAroundGreen(round, 'me').perHole[0]).toBeNull();
   });
+  test('charges every recorded sand shot on missed-GIR sand recoveries', () => {
+    const oneSand = makeRound(
+      [{ par: 4, strokes: 5 }],
+      [{ putts: 1, sandShots: 1, firstPuttBucket: '0-1', recoveryOutcome: 'sand-save' }],
+    );
+    const twoSand = makeRound(
+      [{ par: 4, strokes: 6 }],
+      [{ putts: 1, sandShots: 2, firstPuttBucket: '0-1', recoveryOutcome: 'none' }],
+    );
+
+    expect(sgAroundGreen(twoSand, 'me').perHole[0])
+      .toBeCloseTo(sgAroundGreen(oneSand, 'me').perHole[0] - 1, 5);
+  });
 });
 
 describe('sgApproach', () => {
-  test('null on par-3', () => {
+  test('par-3 tee shot uses the logged hole-distance bucket as approach SG', () => {
     const round = makeRound(
       [{ par: 3, strokes: 3 }],
-      [{ putts: 1, approachBucket: null }],
+      [{ putts: 2, approachBucket: '100-150', firstPuttBucket: '3-6' }],
+    );
+    const r = sgApproach(round, 'me');
+    expect(r.perHole[0]).toBeCloseTo(0.05, 1);
+    expect(r.sampleHoles).toBe(1);
+  });
+  test('par-3 does not use stored course distance without a logged bucket', () => {
+    const round = makeRound(
+      [{ par: 3, strokes: 3, distance: 150 }],
+      [{ putts: 2, firstPuttBucket: '3-6' }],
     );
     expect(sgApproach(round, 'me').perHole[0]).toBeNull();
   });
@@ -296,8 +320,24 @@ describe('sgPutting', () => {
   });
 });
 
+describe('sgPenalties', () => {
+  test('subtracts all logged penalties now that off-the-tee SG is not tracked', () => {
+    const round = {
+      holes: [{ number: 1, par: 4, strokeIndex: 1 }],
+      scores: { me: { 1: 6 } },
+      shotDetails: { me: { 1: { teePenalties: 1, otherPenalties: 2 } } },
+    };
+
+    const r = sgPenalties(round, 'me');
+
+    expect(r.perHole[0]).toBe(-3);
+    expect(r.total).toBe(-3);
+    expect(r.sampleHoles).toBe(1);
+  });
+});
+
 describe('sgTotal', () => {
-  test('sums only tracked SG categories and omits off-the-tee', () => {
+  test('sums only tracked SG categories and excludes off-the-tee', () => {
     const round = {
       holes: [{ number: 1, par: 4, strokeIndex: 1, distance: 400 }],
       scores: { me: { 1: 4 } },
@@ -310,11 +350,34 @@ describe('sgTotal', () => {
     };
     const r = sgTotal(round, 'me');
     expect(r.byCategory).not.toHaveProperty('tee');
+    expect(r.byCategory).toHaveProperty('penalties');
     expect(r.total).toBeCloseTo(
-      r.byCategory.approach + r.byCategory.aroundGreen + r.byCategory.putting,
+      r.byCategory.approach + r.byCategory.aroundGreen + r.byCategory.putting
+        + r.byCategory.penalties,
       5,
     );
     expect(r.sampleHoles).toBeGreaterThan(0);
+  });
+
+  test('includes logged other penalties in SG total', () => {
+    const round = {
+      holes: [{ number: 1, par: 4, strokeIndex: 1, distance: 400 }],
+      scores: { me: { 1: 5 } },
+      shotDetails: { me: { 1: {
+        drive: 'fairway', teePenalties: 0, otherPenalties: 1,
+        approachBucket: '100-150',
+        putts: 2, firstPuttBucket: '3-6',
+        sandShots: 0,
+      } } },
+    };
+    const withoutPenalty = sgTotal({
+      ...round,
+      shotDetails: { me: { 1: { ...round.shotDetails.me[1], otherPenalties: 0 } } },
+    }, 'me');
+    const withPenalty = sgTotal(round, 'me');
+
+    expect(withPenalty.byCategory.penalties).toBe(-1);
+    expect(withPenalty.total).toBeCloseTo(withoutPenalty.total - 1, 5);
   });
 });
 
@@ -379,7 +442,7 @@ describe('sgApproach with targetHandicap', () => {
 });
 
 describe('sgTotal with targetHandicap', () => {
-  test('threads targetHandicap into tracked SG categories', () => {
+  test('threads targetHandicap into all tracked SG categories', () => {
     const round = {
       holes: [{ number: 1, par: 4, strokeIndex: 1, distance: 400 }],
       scores: { me: { 1: 4 } },
@@ -392,7 +455,8 @@ describe('sgTotal with targetHandicap', () => {
     const r14 = sgTotal(round, 'me', 14);
     expect(r14.total).toBeGreaterThan(r0.total);
     expect(r14.total).toBeCloseTo(
-      r14.byCategory.approach + r14.byCategory.aroundGreen + r14.byCategory.putting,
+      r14.byCategory.approach + r14.byCategory.aroundGreen
+        + r14.byCategory.putting + r14.byCategory.penalties,
       5,
     );
     expect(r14.byCategory).not.toHaveProperty('tee');
@@ -656,6 +720,30 @@ describe('puttingTargetGaps', () => {
 });
 
 describe('approachTargetGaps', () => {
+  test('uses tee baseline for par-3 hole-distance buckets', () => {
+    const t = {
+      players: [{ id: 'p1', handicap: 0 }],
+      rounds: [{
+        courseName: 'C',
+        holes: [{ number: 1, par: 3, strokeIndex: 1 }],
+        scores: { p1: { 1: 3 } },
+        shotDetails: {
+          p1: {
+            1: { approachBucket: '100-150', putts: 2, firstPuttBucket: '3-6', sandShots: 0 },
+          },
+        },
+      }],
+    };
+
+    const r = approachTargetGaps(t.rounds, 'p1', 0);
+
+    expect(r.buckets['100-150']).toMatchObject({
+      holes: 1,
+      avgSg: 0.05,
+      greenRate: 100,
+    });
+  });
+
   test('compares approach buckets against the target handicap baseline', () => {
     const h = holes18();
     const scores = { ...evenScores(h, 4) };

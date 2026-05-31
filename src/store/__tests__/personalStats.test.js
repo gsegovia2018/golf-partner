@@ -552,7 +552,7 @@ describe('computeMyStats', () => {
     const actionPlan = buildActionPlan({
       strokesGained: {
         sampleHoles: 54,
-        byCategory: { tee: 0.2, approach: -0.7, aroundGreen: 0, putting: 0 },
+        byCategory: { approach: -0.7, aroundGreen: 0, putting: 0 },
       },
     });
 

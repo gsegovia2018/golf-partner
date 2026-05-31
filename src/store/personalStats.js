@@ -286,7 +286,6 @@ export function buildActionPlan({
   });
 
   Object.entries(strokesGained?.byCategory ?? {}).forEach(([key, value]) => {
-    if (key === 'tee') return;
     const label = {
       approach: 'Approach',
       aroundGreen: 'Around the green',

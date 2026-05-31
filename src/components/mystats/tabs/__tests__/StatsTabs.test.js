@@ -56,7 +56,7 @@ function baseStats() {
     strokesGained: {
       total: -1.25,
       sampleHoles: 18,
-      byCategory: { tee: 0.4, approach: -0.2, aroundGreen: -0.1, putting: -1.35 },
+      byCategory: { approach: -0.2, aroundGreen: -0.1, putting: -1.35 },
     },
     actionPlan: {
       keep: { area: 'Driving', label: 'Super drives', score: 0.7, sample: 6, unit: 'pts / hole', value: 2 },

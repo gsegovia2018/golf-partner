@@ -2,6 +2,7 @@ import {
   canShowQuickFinish,
   getScorecardBackTarget,
   mergeScores,
+  mergeShotDetails,
   shouldMarkTournamentFinishedFromScorecard,
   shouldApplyReloadSnapshot,
 } from '../ScorecardScreen';
@@ -26,6 +27,15 @@ describe('mergeScores', () => {
     const local = { a: { 1: 7 } };
     const merged = mergeScores(blob, local, new Set(['a:1']));
     expect(merged.a[1]).toBe(7);
+  });
+});
+
+describe('mergeShotDetails', () => {
+  test('keeps the local detail for a dirty shot cell the blob disagrees with', () => {
+    const blob = { me: { 5: { putts: null, drive: null } } };
+    const local = { me: { 5: { putts: 2, drive: 'fairway' } } };
+    const merged = mergeShotDetails(blob, local, new Set(['me:5']));
+    expect(merged.me[5]).toEqual({ putts: 2, drive: 'fairway' });
   });
 });
 

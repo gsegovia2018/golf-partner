@@ -2,6 +2,7 @@ import React from 'react';
 import { Modal, View, Text, TouchableOpacity, StyleSheet } from 'react-native';
 import { Feather } from '@expo/vector-icons';
 import { useTheme } from '../theme/ThemeContext';
+import { MAX_VIDEO_UPLOAD_LABEL } from '../lib/mediaLimits';
 
 export default function CaptureMenuSheet({ visible, onSelect, onClose, extraActions = [] }) {
   const { theme } = useTheme();
@@ -10,7 +11,14 @@ export default function CaptureMenuSheet({ visible, onSelect, onClose, extraActi
   const options = [
     { key: 'photo',   icon: 'camera', label: 'Tomar foto',        source: 'camera',  mediaTypes: 'photo' },
     { key: 'video',   icon: 'video',  label: 'Grabar video',      source: 'camera',  mediaTypes: 'video' },
-    { key: 'library', icon: 'image',  label: 'Elegir de galería', source: 'library', mediaTypes: 'all' },
+    {
+      key: 'library',
+      icon: 'image',
+      label: 'Elegir de galería',
+      detail: `Vídeos hasta ${MAX_VIDEO_UPLOAD_LABEL}`,
+      source: 'library',
+      mediaTypes: 'all',
+    },
   ];
 
   return (
@@ -31,7 +39,10 @@ export default function CaptureMenuSheet({ visible, onSelect, onClose, extraActi
               onPress={() => onSelect({ source: o.source, mediaTypes: o.mediaTypes })}
             >
               <Feather name={o.icon} size={20} color={theme.accent.primary} />
-              <Text style={s.optionLabel}>{o.label}</Text>
+              <View style={s.optionText}>
+                <Text style={s.optionLabel}>{o.label}</Text>
+                {o.detail ? <Text style={s.optionDetail}>{o.detail}</Text> : null}
+              </View>
               <Feather name="chevron-right" size={18} color={theme.text.muted} />
             </TouchableOpacity>
           ))}
@@ -39,7 +50,9 @@ export default function CaptureMenuSheet({ visible, onSelect, onClose, extraActi
           {extraActions.map((a) => (
             <TouchableOpacity key={a.key} style={s.option} onPress={a.onPress}>
               <Feather name={a.icon} size={20} color={theme.accent.primary} />
-              <Text style={s.optionLabel}>{a.label}</Text>
+              <View style={s.optionText}>
+                <Text style={s.optionLabel}>{a.label}</Text>
+              </View>
               <Feather name="chevron-right" size={18} color={theme.text.muted} />
             </TouchableOpacity>
           ))}
@@ -68,7 +81,14 @@ const makeStyles = (theme) => StyleSheet.create({
     borderBottomWidth: 1, borderBottomColor: theme.border.subtle,
     gap: 14,
   },
-  optionLabel: { flex: 1, fontFamily: 'PlusJakartaSans-SemiBold', fontSize: 15, color: theme.text.primary },
+  optionText: { flex: 1 },
+  optionLabel: { fontFamily: 'PlusJakartaSans-SemiBold', fontSize: 15, color: theme.text.primary },
+  optionDetail: {
+    marginTop: 2,
+    fontFamily: 'PlusJakartaSans-Regular',
+    fontSize: 12,
+    color: theme.text.muted,
+  },
   cancelBtn: { marginTop: 16, paddingVertical: 14, alignItems: 'center' },
   cancelLabel: { fontFamily: 'PlusJakartaSans-SemiBold', color: theme.accent.primary, fontSize: 15 },
 });

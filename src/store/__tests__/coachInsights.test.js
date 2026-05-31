@@ -35,7 +35,7 @@ function baseStats(overrides = {}) {
     strokesGained: {
       total: -1.25,
       sampleHoles: 54,
-      byCategory: { tee: 0.4, approach: -0.35, aroundGreen: -0.1, putting: -1.2 },
+      byCategory: { approach: -0.35, aroundGreen: -0.1, putting: -1.2 },
     },
     warmupClosing: {
       warmup: { avgPoints: 2.1, holes: 24 },
@@ -77,7 +77,7 @@ describe('buildCoachInsights', () => {
   test('can choose an improving trend when there is no strong leak', () => {
     const coach = buildCoachInsights(baseStats({
       actionPlan: { keep: null, improve: null, practice: null, strengths: [], improvements: [] },
-      strokesGained: { total: 0.2, sampleHoles: 54, byCategory: { tee: 0.1, approach: 0.1, aroundGreen: 0, putting: 0 } },
+      strokesGained: { total: 0.2, sampleHoles: 54, byCategory: { approach: 0.1, aroundGreen: 0, putting: 0 } },
       shotBenchmark: null,
     }));
     expect(coach.hero).toMatchObject({ group: 'gettingBetter', title: 'Points / round', tone: 'good' });
@@ -108,7 +108,7 @@ describe('buildCoachInsights', () => {
     });
   });
 
-  test('adds strokes-gained category signals without raw target benchmarks and ignores tee SG', () => {
+  test('adds strokes-gained category signals without raw target benchmarks', () => {
     const coach = buildCoachInsights(baseStats({
       actionPlan: { keep: null, improve: null, practice: null, strengths: [], improvements: [] },
       ranking: { baseline: null, strengths: [], weaknesses: [] },

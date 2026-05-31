@@ -53,6 +53,7 @@ const SG_CATEGORY_TITLES = {
   approach: 'Approach',
   aroundGreen: 'Short game',
   putting: 'Putting',
+  penalties: 'Penalties',
 };
 
 const round2 = (value) => Math.round(value * 100) / 100;
@@ -241,7 +242,6 @@ function strokesGainedCategoryInsights(stats) {
   const categories = strokesGained?.byCategory ?? {};
   const sample = Number(strokesGained?.sampleHoles);
   return Object.entries(categories).map(([category, value]) => {
-    if (category === 'tee') return null;
     if (!Number.isFinite(value) || Math.abs(value) < 0.05) return null;
     const tone = value > 0 ? 'good' : 'bad';
     const title = SG_CATEGORY_TITLES[category] || AREA_LABELS[normalizeArea(category)];

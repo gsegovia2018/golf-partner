@@ -12,6 +12,7 @@ const SG_CATEGORIES = [
   { key: 'approach', label: 'Approach', area: 'Approach', signalTitle: 'Approach shots' },
   { key: 'aroundGreen', label: 'Around green', area: 'Short game' },
   { key: 'putting', label: 'Putting', area: 'Putting', signalTitle: 'Putting performance' },
+  { key: 'penalties', label: 'Penalties', area: 'Scoring', signalTitle: 'Other penalties' },
 ];
 
 function signed(value) {

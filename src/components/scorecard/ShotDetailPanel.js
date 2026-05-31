@@ -132,7 +132,8 @@ export function ShotDetailPanel({ hole, detail, onChange, strokes, theme: themeP
   const s = sProp ?? sOwn;
   const d = { ...DEFAULT_SHOT, ...(detail ?? {}) };
   const isPar3 = hole.par === 3;
-  const approachShotHint = hole.par === 5 ? '3rd shot · metres' : '2nd shot · metres';
+  const approachDistanceLabel = isPar3 ? 'Hole distance' : 'Approach shot distance';
+  const approachShotHint = isPar3 ? 'metres' : hole.par === 5 ? '3rd shot · metres' : '2nd shot · metres';
   const gir = isGIR({ strokes, putts: d.putts, par: hole.par });
   const missedGIR = gir === false;
   const autoOutcome = recoveryOutcomeFromState({
@@ -231,29 +232,29 @@ export function ShotDetailPanel({ hole, detail, onChange, strokes, theme: themeP
           </View>
         </View>
       )}
-      {!isPar3 && (
-        <BucketSegment
-          label="Approach shot distance"
-          value={d.approachBucket}
-          buckets={APPROACH_BUCKETS}
-          labels={APPROACH_LABELS}
-          onSelect={(key) => onChange({
-            approachBucket: key,
-            ...(key == null ? { approachResult: null } : {}),
-          })}
-          theme={theme}
-          s={s}
-          hint={approachShotHint}
-          isLast={false}
-          explainer={
-            <ShotDetailExplainer
-              rowKey="approachBucket"
-              title="Approach shot distance"
-              body="Use the regulation approach shot: your 2nd shot on a par 4, or your 3rd shot on a par 5. Enter the distance you actually played into the green, not distance left after the tee shot."
-            />
-          }
-        />
-      )}
+      <BucketSegment
+        label={approachDistanceLabel}
+        value={d.approachBucket}
+        buckets={APPROACH_BUCKETS}
+        labels={APPROACH_LABELS}
+        onSelect={(key) => onChange({
+          approachBucket: key,
+          ...(key == null ? { approachResult: null } : {}),
+        })}
+        theme={theme}
+        s={s}
+        hint={approachShotHint}
+        isLast={false}
+        explainer={
+          <ShotDetailExplainer
+            rowKey="approachBucket"
+            title={approachDistanceLabel}
+            body={isPar3
+              ? 'Use the hole distance bucket for this par 3. It is stored with approach distance so par-3 strokes gained can use the same bucketed model.'
+              : 'Use the regulation approach shot: your 2nd shot on a par 4, or your 3rd shot on a par 5. Enter the distance you actually played into the green, not distance left after the tee shot.'}
+          />
+        }
+      />
       {!isPar3 && d.approachBucket && (
         <ApproachResultRow
           value={d.approachResult}

@@ -118,6 +118,47 @@ export function mergeScores(blobScores, localScores, dirtyKeys) {
   return out;
 }
 
+function sameShotDetail(a, b) {
+  if (a === b) return true;
+  if (a == null || b == null) return a == null && b == null;
+  if (typeof a !== 'object' || typeof b !== 'object') return false;
+  const keys = new Set([...Object.keys(a), ...Object.keys(b)]);
+  for (const key of keys) {
+    if (a[key] !== b[key]) return false;
+  }
+  return true;
+}
+
+// Same stale-reload protection as mergeScores, but for the "my shot detail"
+// records stored at shotDetails[playerId][holeNumber]. In practice only meId
+// writes these cells; the map stays player-keyed so legacy data and stats code
+// keep their existing shape.
+export function mergeShotDetails(blobShotDetails, localShotDetails, dirtyKeys) {
+  const out = {};
+  const playerIds = new Set([
+    ...Object.keys(blobShotDetails ?? {}),
+    ...Object.keys(localShotDetails ?? {}),
+  ]);
+  for (const pid of playerIds) {
+    const blobByHole = blobShotDetails?.[pid] ?? {};
+    const localByHole = localShotDetails?.[pid] ?? {};
+    const holes = new Set([...Object.keys(blobByHole), ...Object.keys(localByHole)]);
+    const merged = {};
+    for (const h of holes) {
+      const key = `${pid}:${h}`;
+      const blobVal = blobByHole[h];
+      const localVal = localByHole[h];
+      if (dirtyKeys.has(key) && !sameShotDetail(blobVal, localVal)) {
+        merged[h] = localVal;
+      } else if (blobVal !== undefined) {
+        merged[h] = blobVal;
+      }
+    }
+    out[pid] = merged;
+  }
+  return out;
+}
+
 export function getScorecardBackTarget({ official, viewOnly, canGoBack }) {
   if (official) return 'previous';
   if (viewOnly) return 'home';
@@ -301,43 +342,54 @@ export default function ScorecardScreen({ navigation, route }) {
     const idx = paramRoundIndex ?? t.currentRound;
     const round = t.rounds[idx];
     const roundScores = round?.scores ?? {};
+    const roundShotDetails = round?.shotDetails ?? {};
     setTournament(t);
-    if (applySnapshot) {
-      // Merge rather than clobber: a stale reload (one that began around a tap
-      // and resolved later) must not overwrite a newer local edit. mergeScores
-      // keeps any dirty cell whose save has not yet round-tripped.
-      // scoresRef.current is the reliable current-scores source here: score
-      // handlers set it synchronously before calling setScores, and a useEffect
-      // mirrors scores into it after every render — so it is always current.
-      const merged = mergeScores(roundScores, scoresRef.current, dirtyCellsRef.current);
-      // Drop dirty cells the blob has now caught up on.
-      for (const key of [...dirtyCellsRef.current]) {
-        const [pid, h] = key.split(':');
-        if (roundScores?.[pid]?.[String(h)] === merged?.[pid]?.[String(h)]) {
-          dirtyCellsRef.current.delete(key);
-        }
+    // Merge rather than clobber: a stale reload (one that began around a tap
+    // and resolved later) must not overwrite a newer local edit. mergeScores
+    // keeps any dirty cell whose save has not yet round-tripped.
+    // scoresRef.current is the reliable current-scores source here: score
+    // handlers set it synchronously before calling setScores, and a useEffect
+    // mirrors scores into it after every render — so it is always current.
+    const merged = mergeScores(roundScores, scoresRef.current, dirtyCellsRef.current);
+    // Drop dirty cells the blob has now caught up on.
+    for (const key of [...dirtyCellsRef.current]) {
+      const [pid, h] = key.split(':');
+      if (roundScores?.[pid]?.[String(h)] === merged?.[pid]?.[String(h)]) {
+        dirtyCellsRef.current.delete(key);
       }
-      scoresRef.current = merged;
-      setScores(merged);
-      setShotDetails(round?.shotDetails ?? {});
-      // Normalize notes to the { round, hole } object shape. Legacy data may
-      // have stored a bare string — treat that as the round-level note.
-      const rawNotes = round?.notes;
-      setNotes(
-        rawNotes && typeof rawNotes === 'object'
-          ? rawNotes
-          : (typeof rawNotes === 'string' && rawNotes ? { round: rawNotes } : {})
-      );
+    }
+    scoresRef.current = merged;
+    setScores(merged);
+    const mergedShotDetails = mergeShotDetails(
+      roundShotDetails,
+      shotDetailsRef.current,
+      dirtyShotKeysRef.current,
+    );
+    for (const key of [...dirtyShotKeysRef.current]) {
+      const [pid, h] = key.split(':');
+      if (sameShotDetail(roundShotDetails?.[pid]?.[String(h)], mergedShotDetails?.[pid]?.[String(h)])) {
+        dirtyShotKeysRef.current.delete(key);
+      }
+    }
+    shotDetailsRef.current = mergedShotDetails;
+    setShotDetails(mergedShotDetails);
+    // Normalize notes to the { round, hole } object shape. Legacy data may
+    // have stored a bare string — treat that as the round-level note.
+    const rawNotes = round?.notes;
+    setNotes(
+      rawNotes && typeof rawNotes === 'object'
+        ? rawNotes
+        : (typeof rawNotes === 'string' && rawNotes ? { round: rawNotes } : {})
+    );
 
-      // Only on first load: jump to the first hole with no scores entered.
-      if (!hasAutoJumpedRef.current && round?.holes?.length) {
-        hasAutoJumpedRef.current = true;
-        const firstEmpty = round.holes.find((h) =>
-          t.players.every((p) => roundScores[p.id]?.[h.number] == null)
-        );
-        if (firstEmpty) setCurrentHole(firstEmpty.number);
-        else setCurrentHole(round.holes[round.holes.length - 1].number);
-      }
+    // Only on first load: jump to the first hole with no scores entered.
+    if (!hasAutoJumpedRef.current && round?.holes?.length) {
+      hasAutoJumpedRef.current = true;
+      const firstEmpty = round.holes.find((h) =>
+        t.players.every((p) => roundScores[p.id]?.[h.number] == null)
+      );
+      if (firstEmpty) setCurrentHole(firstEmpty.number);
+      else setCurrentHole(round.holes[round.holes.length - 1].number);
     }
   }, [paramRoundIndex, official]);
 
@@ -471,8 +523,13 @@ export default function ScorecardScreen({ navigation, route }) {
   const scoresRef = useRef(scores);
   useEffect(() => { scoresRef.current = scores; }, [scores]);
   // `${playerId}:${holeNumber}` keys for score cells edited locally and not yet
-  // confirmed saved. Scores only — shot-detail saves rely on pendingSaveRef.
+  // confirmed saved.
   const dirtyCellsRef = useRef(new Set());
+  const shotDetailsRef = useRef(shotDetails);
+  useEffect(() => { shotDetailsRef.current = shotDetails; }, [shotDetails]);
+  // Shot details are only written for "me", but keep the key generic because
+  // round.shotDetails is stored as { [playerId]: { [holeNumber]: detail } }.
+  const dirtyShotKeysRef = useRef(new Set());
   const notesRef = useRef(notes);
   useEffect(() => { notesRef.current = notes; }, [notes]);
 
@@ -583,6 +640,8 @@ export default function ScorecardScreen({ navigation, route }) {
         ...prev,
         [playerId]: { ...prev[playerId], [holeNumber]: detail },
       };
+      shotDetailsRef.current = next;
+      dirtyShotKeysRef.current.add(`${playerId}:${holeNumber}`);
       saveShot(playerId, holeNumber, detail);
       return next;
     });
@@ -602,6 +661,8 @@ export default function ScorecardScreen({ navigation, route }) {
         ...prev,
         [playerId]: { ...prev[playerId], [holeNumber]: reconciled },
       };
+      shotDetailsRef.current = next;
+      dirtyShotKeysRef.current.add(`${playerId}:${holeNumber}`);
       saveShot(playerId, holeNumber, reconciled);
       return next;
     });

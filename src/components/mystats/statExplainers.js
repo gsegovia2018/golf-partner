@@ -166,9 +166,10 @@ export const statExplainers = {
   sgApproach: {
     title: 'Approach vs target',
     subtitle: 'Regulation approach SG and green rate',
-    explainer: 'Approach rows use the regulation approach shot: your 2nd shot on a par 4, '
-      + 'or your 3rd shot on a par 5. Green rate uses the logged finish when present, '
-      + 'so approach shots stay separate from short-game recovery shots.',
+    explainer: 'Approach rows use the logged bucket: hole distance on par 3s, '
+      + 'your 2nd shot on a par 4, or your 3rd shot on a par 5. Green rate uses '
+      + 'the logged finish when present, so approach shots stay separate from '
+      + 'short-game recovery shots.',
   },
   sgPutting: {
     title: 'Putting vs target',

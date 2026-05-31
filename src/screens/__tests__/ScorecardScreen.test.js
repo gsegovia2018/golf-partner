@@ -50,6 +50,7 @@ describe('ShotDetailPanel — outcome chips', () => {
 
 describe('ShotDetailPanel — approach capture', () => {
   const wrap = (ui) => <ThemeProvider>{ui}</ThemeProvider>;
+  const par3 = { number: 1, par: 3, strokeIndex: 1 };
   const par4 = { number: 1, par: 4, strokeIndex: 1 };
   const par5 = { number: 1, par: 5, strokeIndex: 1 };
 
@@ -91,6 +92,24 @@ describe('ShotDetailPanel — approach capture', () => {
     ));
     expect(par5Render.getByText('Approach shot distance')).toBeTruthy();
     expect(par5Render.getByText('3rd shot · metres')).toBeTruthy();
+  });
+
+  test('labels par-3 approach bucket as hole distance and stores it in approachBucket', () => {
+    const onChange = jest.fn();
+    const { getByText, queryByText, getByLabelText } = render(wrap(
+      <ShotDetailPanel
+        hole={par3}
+        strokes={3}
+        detail={{ putts: 2 }}
+        onChange={onChange}
+      />
+    ));
+
+    expect(getByText('Hole distance')).toBeTruthy();
+    expect(queryByText('Approach shot distance')).toBeNull();
+
+    fireEvent.press(getByLabelText('Hole distance 100-150'));
+    expect(onChange).toHaveBeenCalledWith({ approachBucket: '100-150' });
   });
 
   test('captures whether the logged approach hit or missed the green', () => {
