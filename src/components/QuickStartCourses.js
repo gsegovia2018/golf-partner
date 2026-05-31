@@ -119,17 +119,17 @@ export default function QuickStartCourses({
     <View style={s.section}>
       <View style={s.header}>
         <Text style={s.heading}>QUICK START</Text>
-        {onManage ? (
-          <TouchableOpacity
-            onPress={onManage}
-            style={s.manageButton}
-            hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
-            accessibilityRole="button"
-            accessibilityLabel="Manage quick start courses"
-          >
-            <Text style={s.manageText}>Manage</Text>
-          </TouchableOpacity>
-        ) : null}
+        <TouchableOpacity
+          onPress={onManage}
+          style={[s.manageButton, !onManage && s.manageButtonDisabled]}
+          disabled={!onManage}
+          hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+          accessibilityRole="button"
+          accessibilityLabel="Manage quick start courses"
+          accessibilityState={{ disabled: !onManage }}
+        >
+          <Text style={[s.manageText, !onManage && s.manageTextDisabled]}>Manage</Text>
+        </TouchableOpacity>
       </View>
 
       <ScrollView
@@ -286,11 +286,13 @@ const makeStyles = (t) => StyleSheet.create({
     color: t.text.muted,
   },
   manageButton: { paddingVertical: 4, paddingLeft: 12 },
+  manageButtonDisabled: { opacity: 0.55 },
   manageText: {
     fontFamily: 'PlusJakartaSans-Bold',
     fontSize: 13,
     color: t.accent.primary,
   },
+  manageTextDisabled: { color: t.text.muted },
   rail: { paddingHorizontal: 20, gap: 12, paddingBottom: 2 },
   courseCard: {
     width: 168,

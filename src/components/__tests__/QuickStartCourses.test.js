@@ -210,9 +210,10 @@ describe('QuickStartCourses interactions', () => {
     expect(view.getByLabelText('Select Me').props.accessibilityState.checked).toBe(false);
   });
 
-  test('hides Manage when no callback is supplied', () => {
-    const { queryByText } = renderQuickStart({ onManage: undefined });
+  test('renders disabled Manage when no callback is supplied', () => {
+    const { getByLabelText, getByText } = renderQuickStart({ onManage: undefined });
 
-    expect(queryByText('Manage')).toBeNull();
+    expect(getByText('Manage')).toBeTruthy();
+    expect(getByLabelText('Manage quick start courses').props.accessibilityState.disabled).toBe(true);
   });
 });
