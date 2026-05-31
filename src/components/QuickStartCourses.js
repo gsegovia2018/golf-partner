@@ -120,6 +120,12 @@ export default function QuickStartCourses({
     closeSheet();
     onEditDetails?.(payload);
   };
+  const startRound = () => {
+    if (startDisabled) return;
+    const payload = { course: selectedCourse, players: selectedPlayers };
+    closeSheet();
+    onStart?.(payload);
+  };
 
   return (
     <View style={s.section}>
@@ -261,7 +267,7 @@ export default function QuickStartCourses({
             </TouchableOpacity>
             <TouchableOpacity
               style={[s.primaryButton, startDisabled && s.primaryButtonDisabled]}
-              onPress={() => !startDisabled && onStart?.({ course: selectedCourse, players: selectedPlayers })}
+              onPress={startRound}
               disabled={startDisabled}
               accessibilityRole="button"
               accessibilityLabel="Start quick start round"
