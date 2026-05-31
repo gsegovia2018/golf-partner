@@ -93,7 +93,6 @@ export default function PerformanceSnapshot({
         <View style={s.block}>
           <Text style={s.blockTitle}>Strokes gained by area</Text>
           <Text style={s.blockMeta}>{sgTitle(targetHandicap)}</Text>
-          <SGBar label="Off the tee" value={strokesGained.byCategory?.tee} />
           <SGBar label="Approach" value={strokesGained.byCategory?.approach} />
           <SGBar label="Around green" value={strokesGained.byCategory?.aroundGreen} />
           <SGBar label="Putting" value={strokesGained.byCategory?.putting} />

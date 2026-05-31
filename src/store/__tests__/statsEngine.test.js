@@ -1,4 +1,4 @@
-import { teeShotImpact, lagPuttingQuality, sandSaveRate, upAndDownRate, bunkerVisits, sgPutting, sgAroundGreen, sgApproach, sgOffTheTee, sgTotal, sgSeason, driveScoreImpact, puttDeepDive, approachScoreImpact, puttingTargetGaps, approachTargetGaps } from '../statsEngine';
+import { teeShotImpact, lagPuttingQuality, sandSaveRate, upAndDownRate, bunkerVisits, sgPutting, sgAroundGreen, sgApproach, sgTotal, sgSeason, driveScoreImpact, puttDeepDive, approachScoreImpact, puttingTargetGaps, approachTargetGaps } from '../statsEngine';
 
 // 18 par-4 holes, strokeIndex = hole number.
 function holes18() {
@@ -211,6 +211,19 @@ describe('sgAroundGreen', () => {
     const r = sgAroundGreen(round, 'me');
     expect(r.perHole[0]).toBeCloseTo(0.53, 1);
   });
+  test('does not infer a recovery shot when explicit approach result reached the green', () => {
+    const round = makeRound(
+      [{ par: 4, strokes: 5 }],
+      [{
+        putts: 2,
+        sandShots: 0,
+        approachBucket: '50-100',
+        approachResult: 'green',
+        firstPuttBucket: '3-6',
+      }],
+    );
+    expect(sgAroundGreen(round, 'me').perHole[0]).toBeNull();
+  });
 });
 
 describe('sgApproach', () => {
@@ -232,27 +245,32 @@ describe('sgApproach', () => {
     const r = sgApproach(round, 'me');
     expect(r.perHole[0]).toBeCloseTo(0.06, 1);
   });
-});
-
-describe('sgOffTheTee', () => {
-  test('fairway drive on a 400m par-4 → SG ≈ +0.60', () => {
-    const round = {
-      holes: [{ number: 1, par: 4, strokeIndex: 1, distance: 400 }],
-      scores: { me: { 1: 4 } },
-      shotDetails: { me: { 1: { drive: 'fairway', teePenalties: 0, approachBucket: '100-150' } } },
-    };
-    const r = sgOffTheTee(round, 'me');
-    // tee@400: interp between 365.8(4.29) and 411.5(4.55): t≈0.749 → 4.485
-    // fairway@125: ≈ 2.888. SG = 4.485 - 2.888 - 1 ≈ 0.597
-    expect(r.perHole[0]).toBeCloseTo(0.60, 1);
+  test('explicit green result can score a non-GIR recovery-hole approach', () => {
+    const round = makeRound(
+      [{ par: 4, strokes: 5 }],
+      [{
+        putts: 2,
+        approachBucket: '50-100',
+        approachResult: 'green',
+        firstPuttBucket: '3-6',
+      }],
+    );
+    const r = sgApproach(round, 'me');
+    // fairway@75m ≈ 2.71, green@4.5m ≈ 1.82. SG = 2.71 - 1.82 - 1 ≈ -0.11
+    expect(r.perHole[0]).toBeCloseTo(-0.11, 1);
   });
-  test('tee penalty drags SG below -0.5', () => {
-    const round = {
-      holes: [{ number: 1, par: 4, strokeIndex: 1, distance: 400 }],
-      scores: { me: { 1: 6 } },
-      shotDetails: { me: { 1: { drive: 'left', teePenalties: 1, approachBucket: '100-150' } } },
-    };
-    expect(sgOffTheTee(round, 'me').perHole[0]).toBeLessThan(-0.5);
+  test('explicit missed result does not use first putt as the approach end state', () => {
+    const round = makeRound(
+      [{ par: 4, strokes: 4 }],
+      [{
+        putts: 2,
+        approachBucket: '100-150',
+        approachResult: 'miss',
+        firstPuttBucket: '0-1',
+      }],
+    );
+    const r = sgApproach(round, 'me');
+    expect(r.perHole[0]).toBeLessThan(0);
   });
 });
 
@@ -279,7 +297,7 @@ describe('sgPutting', () => {
 });
 
 describe('sgTotal', () => {
-  test('sums the four categories', () => {
+  test('sums only tracked SG categories and omits off-the-tee', () => {
     const round = {
       holes: [{ number: 1, par: 4, strokeIndex: 1, distance: 400 }],
       scores: { me: { 1: 4 } },
@@ -291,33 +309,12 @@ describe('sgTotal', () => {
       } } },
     };
     const r = sgTotal(round, 'me');
+    expect(r.byCategory).not.toHaveProperty('tee');
     expect(r.total).toBeCloseTo(
-      r.byCategory.tee + r.byCategory.approach + r.byCategory.aroundGreen + r.byCategory.putting,
+      r.byCategory.approach + r.byCategory.aroundGreen + r.byCategory.putting,
       5,
     );
     expect(r.sampleHoles).toBeGreaterThan(0);
-  });
-});
-
-describe('sgOffTheTee with targetHandicap', () => {
-  test('default targetHandicap=0 matches Phase B', () => {
-    const round = {
-      holes: [{ number: 1, par: 4, strokeIndex: 1, distance: 400 }],
-      scores: { me: { 1: 4 } },
-      shotDetails: { me: { 1: { drive: 'fairway', teePenalties: 0, approachBucket: '100-150' } } },
-    };
-    expect(sgOffTheTee(round, 'me').perHole[0])
-      .toBeCloseTo(sgOffTheTee(round, 'me', 0).perHole[0]);
-  });
-  test('higher targetHandicap shifts SG up', () => {
-    const round = {
-      holes: [{ number: 1, par: 4, strokeIndex: 1, distance: 400 }],
-      scores: { me: { 1: 4 } },
-      shotDetails: { me: { 1: { drive: 'fairway', teePenalties: 0, approachBucket: '100-150' } } },
-    };
-    const scratchSG = sgOffTheTee(round, 'me', 0).perHole[0];
-    const amateurSG = sgOffTheTee(round, 'me', 14).perHole[0];
-    expect(amateurSG).toBeGreaterThan(scratchSG);
   });
 });
 
@@ -382,7 +379,7 @@ describe('sgApproach with targetHandicap', () => {
 });
 
 describe('sgTotal with targetHandicap', () => {
-  test('threads targetHandicap into all four categories', () => {
+  test('threads targetHandicap into tracked SG categories', () => {
     const round = {
       holes: [{ number: 1, par: 4, strokeIndex: 1, distance: 400 }],
       scores: { me: { 1: 4 } },
@@ -395,10 +392,10 @@ describe('sgTotal with targetHandicap', () => {
     const r14 = sgTotal(round, 'me', 14);
     expect(r14.total).toBeGreaterThan(r0.total);
     expect(r14.total).toBeCloseTo(
-      r14.byCategory.tee + r14.byCategory.approach
-      + r14.byCategory.aroundGreen + r14.byCategory.putting,
+      r14.byCategory.approach + r14.byCategory.aroundGreen + r14.byCategory.putting,
       5,
     );
+    expect(r14.byCategory).not.toHaveProperty('tee');
   });
 });
 
@@ -668,7 +665,7 @@ describe('approachTargetGaps', () => {
       shotDetails.p1[n] = { approachBucket: '100-150', putts: 2, firstPuttBucket: '3-6', sandShots: 0 };
     });
     [7, 8, 9].forEach((n) => {
-      shotDetails.p1[n] = { approachBucket: '200+', putts: 2, firstPuttBucket: '3-6', sandShots: 0 };
+      shotDetails.p1[n] = { approachBucket: '200+', approachResult: 'miss', putts: 2, firstPuttBucket: '3-6', sandShots: 0 };
     });
     const t = {
       players: [{ id: 'p1', handicap: 0 }],
@@ -686,7 +683,39 @@ describe('approachTargetGaps', () => {
     expect(r.buckets['200+']).toMatchObject({
       holes: 3,
       avgSg: -0.09,
-      girRate: 0,
+      greenRate: 0,
+    });
+  });
+
+  test('uses explicit approach result instead of GIR for green rate and SG end state', () => {
+    const h = holes18();
+    const scores = { ...evenScores(h, 4), 1: 5 };
+    const t = {
+      players: [{ id: 'p1', handicap: 0 }],
+      rounds: [{
+        courseName: 'C',
+        holes: h,
+        scores: { p1: scores },
+        shotDetails: {
+          p1: {
+            1: {
+              approachBucket: '50-100',
+              approachResult: 'green',
+              putts: 2,
+              firstPuttBucket: '3-6',
+              sandShots: 0,
+            },
+          },
+        },
+      }],
+    };
+
+    const r = approachTargetGaps(t.rounds, 'p1', 0);
+
+    expect(r.buckets['50-100']).toMatchObject({
+      holes: 1,
+      avgSg: -0.11,
+      greenRate: 100,
     });
   });
 });

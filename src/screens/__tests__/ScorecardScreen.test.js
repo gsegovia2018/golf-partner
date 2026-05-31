@@ -48,6 +48,85 @@ describe('ShotDetailPanel — outcome chips', () => {
   });
 });
 
+describe('ShotDetailPanel — approach capture', () => {
+  const wrap = (ui) => <ThemeProvider>{ui}</ThemeProvider>;
+  const par4 = { number: 1, par: 4, strokeIndex: 1 };
+  const par5 = { number: 1, par: 5, strokeIndex: 1 };
+
+  test('does not ask for tee residual distance', () => {
+    const { queryByText, queryByLabelText } = render(wrap(
+      <ShotDetailPanel
+        hole={par5}
+        strokes={5}
+        detail={{ putts: 2 }}
+        onChange={() => {}}
+      />
+    ));
+
+    expect(queryByText('After tee')).toBeNull();
+    expect(queryByLabelText('After tee 200+')).toBeNull();
+  });
+
+  test('labels approach distance as the regulation approach shot by par', () => {
+    const { getByText, unmount } = render(wrap(
+      <ShotDetailPanel
+        hole={par4}
+        strokes={4}
+        detail={{ putts: 2 }}
+        onChange={() => {}}
+      />
+    ));
+    expect(getByText('Approach shot distance')).toBeTruthy();
+    expect(getByText('2nd shot · metres')).toBeTruthy();
+
+    unmount();
+
+    const par5Render = render(wrap(
+      <ShotDetailPanel
+        hole={par5}
+        strokes={5}
+        detail={{ putts: 2 }}
+        onChange={() => {}}
+      />
+    ));
+    expect(par5Render.getByText('Approach shot distance')).toBeTruthy();
+    expect(par5Render.getByText('3rd shot · metres')).toBeTruthy();
+  });
+
+  test('captures whether the logged approach hit or missed the green', () => {
+    const onChange = jest.fn();
+    const { getByText } = render(wrap(
+      <ShotDetailPanel
+        hole={par5}
+        strokes={5}
+        detail={{ putts: 2, approachBucket: '100-150' }}
+        onChange={onChange}
+      />
+    ));
+
+    fireEvent.press(getByText('On green'));
+    expect(onChange).toHaveBeenCalledWith({ approachResult: 'green' });
+
+    fireEvent.press(getByText('Missed green'));
+    expect(onChange).toHaveBeenCalledWith({ approachResult: 'miss' });
+  });
+
+  test('clearing approach distance also clears approach result', () => {
+    const onChange = jest.fn();
+    const { getByLabelText } = render(wrap(
+      <ShotDetailPanel
+        hole={par5}
+        strokes={5}
+        detail={{ putts: 2, approachBucket: '100-150', approachResult: 'green' }}
+        onChange={onChange}
+      />
+    ));
+
+    fireEvent.press(getByLabelText('Approach shot distance 100-150'));
+    expect(onChange).toHaveBeenCalledWith({ approachBucket: null, approachResult: null });
+  });
+});
+
 describe('ShotDetailPanel — stroke budget', () => {
   const wrap = (ui) => <ThemeProvider>{ui}</ThemeProvider>;
   const par4 = { number: 1, par: 4, strokeIndex: 1 };

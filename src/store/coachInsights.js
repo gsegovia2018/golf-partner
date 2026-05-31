@@ -50,7 +50,6 @@ const VALUE_FORM_UNITS = {
   avgPoints: 'pts / round',
 };
 const SG_CATEGORY_TITLES = {
-  tee: 'Tee shot',
   approach: 'Approach',
   aroundGreen: 'Short game',
   putting: 'Putting',
@@ -80,6 +79,11 @@ function actionItemBasis(item) {
   if (unit.includes('sg')) return 'vs target hcp';
   if (unit.includes('pts')) return 'vs your avg';
   return 'tracked sample';
+}
+
+function isRemovedDrivingSgAction(item) {
+  const unit = String(item?.unit || '').toLowerCase();
+  return unit.includes('sg') && normalizeArea(actionItemArea(item)) === 'driving';
 }
 
 function slug(value) {
@@ -156,6 +160,7 @@ function makeInsight({
 
 function actionItemInsight(item, group, tone) {
   if (!item?.label) return null;
+  if (isRemovedDrivingSgAction(item)) return null;
   const sample = Number(item.sample);
   const confidence = confidenceForSample(sample);
   const metric = `${formatSigned(item.score)} ${item.unit || 'pts'}`;
@@ -236,6 +241,7 @@ function strokesGainedCategoryInsights(stats) {
   const categories = strokesGained?.byCategory ?? {};
   const sample = Number(strokesGained?.sampleHoles);
   return Object.entries(categories).map(([category, value]) => {
+    if (category === 'tee') return null;
     if (!Number.isFinite(value) || Math.abs(value) < 0.05) return null;
     const tone = value > 0 ? 'good' : 'bad';
     const title = SG_CATEGORY_TITLES[category] || AREA_LABELS[normalizeArea(category)];

@@ -2051,10 +2051,36 @@ export function bunkerVisits(rounds, playerId) {
 
 // ── Strokes Gained: Putting ──
 
-// Around-the-green: typical chip/pitch is 15-25y from the green. Use 20y
+// Around-the-green: typical chip/pitch is 15-25m from the green. Use 20m
 // as the canonical "missed GIR" recovery start distance for both sand
 // and non-sand lies.
 const AROUND_GREEN_START_DISTANCE = 20;
+
+function approachEndState(d, { strokes, par, targetHandicap }) {
+  if (d.approachResult === 'green') {
+    if (!d.firstPuttBucket) return null;
+    const end = expectedFromBucket('firstPutt', d.firstPuttBucket, targetHandicap);
+    return end == null ? null : { end, green: true };
+  }
+
+  if (d.approachResult === 'miss') {
+    const lie = (d.sandShots ?? 0) >= 1 ? 'sand' : 'recovery';
+    const end = expectedStrokes(lie, AROUND_GREEN_START_DISTANCE, targetHandicap);
+    return end == null ? null : { end, green: false };
+  }
+
+  const gir = isGIR({ strokes, putts: d.putts, par });
+  if (gir === true && d.firstPuttBucket) {
+    const end = expectedFromBucket('firstPutt', d.firstPuttBucket, targetHandicap);
+    return end == null ? null : { end, green: true };
+  }
+  if (gir === false) {
+    const lie = (d.sandShots ?? 0) >= 1 ? 'sand' : 'recovery';
+    const end = expectedStrokes(lie, AROUND_GREEN_START_DISTANCE, targetHandicap);
+    return end == null ? null : { end, green: false };
+  }
+  return null;
+}
 
 export function sgAroundGreen(round, playerId, targetHandicap = 0) {
   const byHole = round?.shotDetails?.[playerId];
@@ -2062,8 +2088,15 @@ export function sgAroundGreen(round, playerId, targetHandicap = 0) {
     const d = byHole?.[hole.number];
     if (!d) return null;
     const strokes = round?.scores?.[playerId]?.[hole.number];
-    const gir = isGIR({ strokes, putts: d.putts, par: hole.par });
-    if (gir !== false) return null;
+    const explicitApproachResult = hole.par !== 3
+      && d.approachBucket
+      && (d.approachResult === 'green' || d.approachResult === 'miss');
+    if (explicitApproachResult) {
+      if (d.approachResult === 'green') return null;
+    } else {
+      const gir = isGIR({ strokes, putts: d.putts, par: hole.par });
+      if (gir !== false) return null;
+    }
     const lie = (d.sandShots ?? 0) >= 1 ? 'sand' : 'recovery';
     const start = expectedStrokes(lie, AROUND_GREEN_START_DISTANCE, targetHandicap);
     let end;
@@ -2093,53 +2126,10 @@ export function sgApproach(round, playerId, targetHandicap = 0) {
     if (startDist == null) return null;
     const start = expectedStrokes('fairway', startDist, targetHandicap);
     const strokes = round?.scores?.[playerId]?.[hole.number];
-    const gir = isGIR({ strokes, putts: d.putts, par: hole.par });
-    let end;
-    if (gir === true && d.firstPuttBucket) {
-      end = expectedFromBucket('firstPutt', d.firstPuttBucket, targetHandicap);
-    } else if (gir === false) {
-      const lie = (d.sandShots ?? 0) >= 1 ? 'sand' : 'recovery';
-      end = expectedStrokes(lie, AROUND_GREEN_START_DISTANCE, targetHandicap);
-    } else {
-      return null;
-    }
+    const endState = approachEndState(d, { strokes, par: hole.par, targetHandicap });
+    if (!endState) return null;
+    const { end } = endState;
     return start - end - 1;
-  });
-  const sample = perHole.filter((x) => x != null);
-  const total = sample.reduce((a, x) => a + x, 0);
-  return { perHole, total, sampleHoles: sample.length };
-}
-
-// ── Strokes Gained: Off the Tee ──
-
-// SG Off-the-Tee uses hole.distance when available (yards). Falls back to
-// par-typical lengths so legacy rounds without distance still get a value.
-const PAR_DEFAULT_DISTANCE = { 3: 170, 4: 400, 5: 530 };
-const PAR_TYPICAL_RESIDUAL = { 3: 0, 4: 150, 5: 220 };
-
-export function sgOffTheTee(round, playerId, targetHandicap = 0) {
-  const byHole = round?.shotDetails?.[playerId];
-  const perHole = (round?.holes ?? []).map((hole) => {
-    const d = byHole?.[hole.number];
-    if (!d || d.drive == null) return null;
-    const teeDistance = hole.distance ?? PAR_DEFAULT_DISTANCE[hole.par] ?? 400;
-    const start = expectedStrokes('tee', teeDistance, targetHandicap);
-
-    let endLie = 'fairway';
-    let residualDistance;
-    if (d.drive === 'short') {
-      residualDistance = teeDistance * 0.40;
-      endLie = 'fairway';
-    } else if (d.approachBucket) {
-      residualDistance = BUCKETS.approach[d.approachBucket];
-      endLie = (d.drive === 'left' || d.drive === 'right') ? 'rough' : 'fairway';
-    } else {
-      residualDistance = PAR_TYPICAL_RESIDUAL[hole.par] ?? 150;
-      endLie = (d.drive === 'left' || d.drive === 'right') ? 'rough' : 'fairway';
-    }
-    const end = expectedStrokes(endLie, residualDistance, targetHandicap);
-    const penalty = d.teePenalties ?? 0;
-    return start - end - 1 - penalty;
   });
   const sample = perHole.filter((x) => x != null);
   const total = sample.reduce((a, x) => a + x, 0);
@@ -2217,19 +2207,14 @@ export function approachTargetGaps(rounds, playerId, targetHandicap = 0) {
       const strokes = round?.scores?.[playerId]?.[hole.number];
       const gir = isGIR({ strokes, putts: d.putts, par: hole.par });
       const start = expectedStrokes('fairway', startDist, targetHandicap);
-      let end;
-      if (gir === true && d.firstPuttBucket) {
-        end = expectedFromBucket('firstPutt', d.firstPuttBucket, targetHandicap);
-      } else if (gir === false) {
-        const lie = (d.sandShots ?? 0) >= 1 ? 'sand' : 'recovery';
-        end = expectedStrokes(lie, AROUND_GREEN_START_DISTANCE, targetHandicap);
-      } else {
-        return;
-      }
+      const endState = approachEndState(d, { strokes, par: hole.par, targetHandicap });
+      if (!endState) return;
+      const { end, green } = endState;
       if (start == null || end == null) return;
       buckets[d.approachBucket].push({
         holeNumber: hole.number,
         gir,
+        green,
         sg: start - end - 1,
       });
     });
@@ -2238,13 +2223,15 @@ export function approachTargetGaps(rounds, playerId, targetHandicap = 0) {
   const round2 = (n) => Math.round(n * 100) / 100;
   const summarize = (arr) => {
     if (arr.length === 0) {
-      return { holes: 0, avgSg: null, girRate: null, breakdown: [] };
+      return { holes: 0, avgSg: null, girRate: null, greenRate: null, breakdown: [] };
     }
     const girHits = arr.filter((e) => e.gir === true).length;
+    const greenHits = arr.filter((e) => e.green === true).length;
     return {
       holes: arr.length,
       avgSg: round2(arr.reduce((sum, e) => sum + e.sg, 0) / arr.length),
       girRate: Math.round((girHits / arr.length) * 100),
+      greenRate: Math.round((greenHits / arr.length) * 100),
       breakdown: arr,
     };
   };
@@ -2256,20 +2243,17 @@ export function approachTargetGaps(rounds, playerId, targetHandicap = 0) {
 }
 
 export function sgTotal(round, playerId, targetHandicap = 0) {
-  const tee         = sgOffTheTee(round, playerId, targetHandicap);
   const approach    = sgApproach(round, playerId, targetHandicap);
   const aroundGreen = sgAroundGreen(round, playerId, targetHandicap);
   const putting     = sgPutting(round, playerId, targetHandicap);
   const byCategory = {
-    tee:         tee.total,
     approach:    approach.total,
     aroundGreen: aroundGreen.total,
     putting:     putting.total,
   };
-  const total = byCategory.tee + byCategory.approach + byCategory.aroundGreen + byCategory.putting;
+  const total = byCategory.approach + byCategory.aroundGreen + byCategory.putting;
   const sampleHoles = Math.max(
-    tee.sampleHoles, approach.sampleHoles,
-    aroundGreen.sampleHoles, putting.sampleHoles,
+    approach.sampleHoles, aroundGreen.sampleHoles, putting.sampleHoles,
   );
   return { total, byCategory, sampleHoles };
 }
@@ -2277,14 +2261,13 @@ export function sgTotal(round, playerId, targetHandicap = 0) {
 const SG_SEASON_MIN_SAMPLE = 18;       // one full round's worth of contributing holes
 
 export function sgSeason(rounds, playerId, targetHandicap = 0) {
-  const byCategory = { tee: 0, approach: 0, aroundGreen: 0, putting: 0 };
+  const byCategory = { approach: 0, aroundGreen: 0, putting: 0 };
   let total = 0;
   let sampleHoles = 0;
   const perRound = [];
   rounds.forEach((round, i) => {
     const r = sgTotal(round, playerId, targetHandicap);
     if (r.sampleHoles === 0) return;
-    byCategory.tee         += r.byCategory.tee;
     byCategory.approach    += r.byCategory.approach;
     byCategory.aroundGreen += r.byCategory.aroundGreen;
     byCategory.putting     += r.byCategory.putting;
@@ -2299,7 +2282,6 @@ export function sgSeason(rounds, playerId, targetHandicap = 0) {
   return {
     total: total / denom,
     byCategory: {
-      tee:         byCategory.tee         / denom,
       approach:    byCategory.approach    / denom,
       aroundGreen: byCategory.aroundGreen / denom,
       putting:     byCategory.putting     / denom,

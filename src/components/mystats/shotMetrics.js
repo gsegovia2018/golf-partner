@@ -9,7 +9,6 @@ const DRIVE_LABELS = {
 const APPROACH_BUCKETS = ['0-50', '50-100', '100-150', '150-200', '200+'];
 const PUTT_BUCKETS = ['0-1', '1-2', '2-3', '3-6', '6+'];
 const SG_CATEGORIES = [
-  { key: 'tee', label: 'Off the tee', area: 'Driving' },
   { key: 'approach', label: 'Approach', area: 'Approach', signalTitle: 'Approach shots' },
   { key: 'aroundGreen', label: 'Around green', area: 'Short game' },
   { key: 'putting', label: 'Putting', area: 'Putting', signalTitle: 'Putting performance' },

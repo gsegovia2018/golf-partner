@@ -459,11 +459,11 @@ function makeApproachTargetRows(approachTarget) {
       value: signed(row.avgSg),
       raw: row.avgSg,
       secondary: targetSecondary([
-        `${formatPercent(row.girRate)} GIR`,
+        `${formatPercent(row.greenRate ?? row.girRate)} green`,
         sampleText(row.holes, 'shots'),
       ], row.holes, 6),
       sample: row.holes,
-      girRate: row.girRate,
+      greenRate: row.greenRate ?? row.girRate,
       tone: toneFromSigned(row.avgSg, { sample: row.holes, minSample: 6 }),
     };
   }).filter(Boolean);

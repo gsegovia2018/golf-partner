@@ -1,8 +1,8 @@
 // Shared constants for the scorecard module: shot-detail schema, driver and
 // distance-bucket option sets, and birdie/eagle celebration tiers.
 
-// One per-hole shot-detail record. firstPuttBucket / approachBucket use the
-// metre ranges in FIRST_PUTT_BUCKETS / APPROACH_BUCKETS.
+// One per-hole shot-detail record. Distance buckets use the metre ranges in
+// FIRST_PUTT_BUCKETS / APPROACH_BUCKETS.
 export const DEFAULT_SHOT = {
   putts: null,
   drive: null,
@@ -12,6 +12,7 @@ export const DEFAULT_SHOT = {
   recoveryOutcome: null,        // 'up-and-down' | 'sand-save' | 'none' | null
   firstPuttBucket: null,        // '0-1' | '1-2' | '2-3' | '3-6' | '6+' | null
   approachBucket: null,         // '0-50' | '50-100' | '100-150' | '150-200' | '200+' | null
+  approachResult: null,         // 'green' | 'miss' | null
 };
 
 // Driver direction, in display order: miss-left, fairway (on target),

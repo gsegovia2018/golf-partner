@@ -108,7 +108,7 @@ describe('buildCoachInsights', () => {
     });
   });
 
-  test('adds strokes-gained category signals without raw target benchmarks', () => {
+  test('adds strokes-gained category signals without raw target benchmarks and ignores tee SG', () => {
     const coach = buildCoachInsights(baseStats({
       actionPlan: { keep: null, improve: null, practice: null, strengths: [], improvements: [] },
       ranking: { baseline: null, strengths: [], weaknesses: [] },
@@ -130,9 +130,7 @@ describe('buildCoachInsights', () => {
       expect.objectContaining({ title: 'Putting', area: 'putting', tone: 'bad' }),
       expect.objectContaining({ title: 'Approach', area: 'approach', tone: 'bad' }),
     ]));
-    expect(coach.board.keepDoing).toEqual(expect.arrayContaining([
-      expect.objectContaining({ title: 'Tee shot', area: 'driving', tone: 'good' }),
-    ]));
+    expect(titles).not.toContain('Tee shot');
     expect(titles).toContain('Points / round');
     expect(titles).not.toEqual(expect.arrayContaining([
       'Score vs par',
@@ -164,7 +162,8 @@ describe('buildCoachInsights', () => {
         improve: null,
         practice: null,
         strengths: [
-          { area: 'Off the tee', label: 'Positive tee shots', score: 0.3, sample: 18, unit: 'SG / shot', value: 0.3 },
+          { area: 'Off the tee', label: 'Fairway drive points', score: 0.3, sample: 18, unit: 'pts / hole', value: 2.1 },
+          { area: 'Off the tee', label: 'Stale tee SG', score: 0.3, sample: 18, unit: 'SG / shot', value: 0.3 },
           { area: 'Around the green', label: 'Up-and-down chances', score: 0.2, sample: 16, unit: 'SG / shot', value: 0.2 },
         ],
         improvements: [],
@@ -176,8 +175,9 @@ describe('buildCoachInsights', () => {
       '3-putts / round',
     ]));
     expect(coach.board.gettingBetter.map((i) => i.title)).not.toContain('Putts / round');
+    expect(coach.board.keepDoing.map((i) => i.title)).not.toContain('Stale tee SG');
     expect(coach.board.keepDoing).toEqual(expect.arrayContaining([
-      expect.objectContaining({ title: 'Positive tee shots', area: 'driving', areaLabel: 'Driving' }),
+      expect.objectContaining({ title: 'Fairway drive points', area: 'driving', areaLabel: 'Driving' }),
       expect.objectContaining({ title: 'Up-and-down chances', area: 'shortGame', areaLabel: 'Short game' }),
     ]));
   });

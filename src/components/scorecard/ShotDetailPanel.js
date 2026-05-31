@@ -82,6 +82,46 @@ function BucketSegment({ label, value, buckets, labels, onSelect, theme, s, expl
   );
 }
 
+function ApproachResultRow({ value, onChange, theme, s, isLast = false }) {
+  const options = [
+    { key: 'green', label: 'On green' },
+    { key: 'miss', label: 'Missed green' },
+  ];
+  return (
+    <View style={[s.shotRow, isLast && s.shotRowLast]}>
+      <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+        <Text style={s.shotRowLabel}>Where did it finish?</Text>
+        <ShotDetailExplainer
+          rowKey="approachResult"
+          title="Approach result"
+          body="Whether the regulation approach finished on the green or missed it. This keeps approach shots separate from short-game recovery shots."
+        />
+      </View>
+      <View style={s.driveBtns}>
+        {options.map(({ key, label }) => {
+          const active = value === key;
+          return (
+            <TouchableOpacity
+              key={key}
+              style={[s.outcomeChip, active && s.outcomeChipActive]}
+              onPress={() => onChange({ approachResult: active ? null : key })}
+              activeOpacity={0.7}
+              accessibilityRole="button"
+              accessibilityLabel={`Approach result ${label}`}
+              accessibilityState={{ selected: active }}
+            >
+              <Text style={[
+                s.outcomeChipLabel,
+                active && { color: theme.text.inverse },
+              ]}>{label}</Text>
+            </TouchableOpacity>
+          );
+        })}
+      </View>
+    </View>
+  );
+}
+
 // Per-hole shot detail for the "me" player, laid out after the Hole19
 // scorecard: stat rows with a stepper, plus a row of round direction
 // buttons for the drive. The drive row is hidden on par 3s.
@@ -92,6 +132,7 @@ export function ShotDetailPanel({ hole, detail, onChange, strokes, theme: themeP
   const s = sProp ?? sOwn;
   const d = { ...DEFAULT_SHOT, ...(detail ?? {}) };
   const isPar3 = hole.par === 3;
+  const approachShotHint = hole.par === 5 ? '3rd shot · metres' : '2nd shot · metres';
   const gir = isGIR({ strokes, putts: d.putts, par: hole.par });
   const missedGIR = gir === false;
   const autoOutcome = recoveryOutcomeFromState({
@@ -165,7 +206,7 @@ export function ShotDetailPanel({ hole, detail, onChange, strokes, theme: themeP
       />
 
       {!isPar3 && (
-        <View style={[s.shotRow, s.shotRowLast]}>
+        <View style={s.shotRow}>
           <Text style={s.shotRowLabel}>Driver</Text>
           <View style={s.driveBtns}>
             {DRIVE_ORDER.map((key) => {
@@ -192,22 +233,34 @@ export function ShotDetailPanel({ hole, detail, onChange, strokes, theme: themeP
       )}
       {!isPar3 && (
         <BucketSegment
-          label="Approach from"
+          label="Approach shot distance"
           value={d.approachBucket}
           buckets={APPROACH_BUCKETS}
           labels={APPROACH_LABELS}
-          onSelect={(key) => onChange({ approachBucket: key })}
+          onSelect={(key) => onChange({
+            approachBucket: key,
+            ...(key == null ? { approachResult: null } : {}),
+          })}
           theme={theme}
           s={s}
-          hint="metres"
+          hint={approachShotHint}
           isLast={false}
           explainer={
             <ShotDetailExplainer
               rowKey="approachBucket"
-              title="Approach distance"
-              body="How far you played your approach into the green from (in meters). Drives Strokes Gained Approach."
+              title="Approach shot distance"
+              body="Use the regulation approach shot: your 2nd shot on a par 4, or your 3rd shot on a par 5. Enter the distance you actually played into the green, not distance left after the tee shot."
             />
           }
+        />
+      )}
+      {!isPar3 && d.approachBucket && (
+        <ApproachResultRow
+          value={d.approachResult}
+          onChange={onChange}
+          theme={theme}
+          s={s}
+          isLast={(d.putts ?? 0) < 1 && !missedGIR}
         />
       )}
       {(d.putts ?? 0) >= 1 && (

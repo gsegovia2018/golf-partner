@@ -53,7 +53,7 @@ export default function ShotDashboard({ stats, targetHandicap, onChangeTarget, o
           >
             {hasStrokesGained ? `${formatSignedFixed(strokesGained.total)} / round` : '-'}
           </Text>
-          <Text style={s.panelMeta}>{hasStrokesGained ? targetCopy : 'Log putt distance and approach buckets.'}</Text>
+          <Text style={s.panelMeta}>{hasStrokesGained ? targetCopy : 'Log putt distance and regulation approach shots.'}</Text>
         </View>
         <View style={s.summaryPanel}>
           <Text style={s.panelLabel}>Evidence</Text>
@@ -178,7 +178,7 @@ function buildShotSignals(stats) {
       area: 'Approach',
       title: `${bucket} m approaches`,
       metric: `${signed(row.avgSg)} SG`,
-      detail: `${row.girRate}% GIR · ${sampleText(row.holes, 'shots')}`,
+      detail: `${row.greenRate ?? row.girRate}% green · ${sampleText(row.holes, 'shots')}`,
       score: row.avgSg,
     });
   });
