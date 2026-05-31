@@ -3,9 +3,12 @@ import { View, Text, TouchableOpacity, StyleSheet, ScrollView, Switch, Alert, Fl
 import ScreenContainer from '../components/ScreenContainer';
 import { Feather } from '@expo/vector-icons';
 import QRCode from 'react-native-qrcode-svg';
+import { CommonActions } from '@react-navigation/native';
 
 import { useTheme } from '../theme/ThemeContext';
 import { ShareableLeaderboard, shareLeaderboard } from '../components/ShareableCard';
+import QuickStartCourses from '../components/QuickStartCourses';
+import PostCreateInviteModal from '../components/PostCreateInviteModal';
 import { scoringModeUsesTeams, leaderboardToggleLabels, mergeScoringSettings } from '../components/scoringModes';
 import ScoringModeField from '../components/ScoringModePicker';
 import PullToRefresh from '../components/PullToRefresh';
@@ -26,13 +29,22 @@ import {
   setScoringModeRoundPatches,
   tournamentNoun, tournamentNounCapitalized,
   getActiveTournamentSnapshot,
+  lastTeeForPlayerOnCourse,
 } from '../store/tournamentStore';
+import { fetchMyPlayers, loadCourseLibrary } from '../store/libraryStore';
 import { playersMeFirst } from '../lib/playerOrder';
+import {
+  buildQuickStartRound,
+  buildQuickStartTournamentDraft,
+  resolveQuickStartPlayerTees,
+} from '../lib/quickStartGame';
 import { mutate } from '../store/mutate';
 import { subscribeConnectivity } from '../lib/connectivity';
 import { getShowRunningScore, setShowRunningScore } from '../lib/prefs';
 import { unreadCount } from '../store/notificationStore';
 import { shouldHandleStoreChange } from '../lib/navigationFocus';
+import { useAuth } from '../context/AuthContext';
+import { shouldOfferPostCreateEditorInvite } from './setupWizard';
 
 // Web-only CSS scroll-snap. See ScorecardScreen.js for the rationale:
 // RNW 0.21's `pagingEnabled` omits `scroll-snap-stop: always`, so a
@@ -78,6 +90,8 @@ if (Platform.OS === 'web' && typeof document !== 'undefined') {
 export default function HomeScreen({ navigation, route }) {
   const viewMode = route?.params?.viewMode ?? 'auto';
   const { theme } = useTheme();
+  const { user } = useAuth();
+  const currentUserId = user?.id ?? null;
   const initialTournament = useMemo(() => getActiveTournamentSnapshot(), []);
   const [tournament, setTournament] = useState(() => initialTournament);
   const [allTournaments, setAllTournaments] = useState(() => (initialTournament ? [initialTournament] : []));
@@ -123,6 +137,18 @@ export default function HomeScreen({ navigation, route }) {
   const [inviteCodes, setInviteCodes] = useState({ editor: '', viewer: '' });
   const [inviteRoleState, setInviteRoleState] = useState('editor');
   const [inviteLoading, setInviteLoading] = useState(false);
+  const [quickStartCourses, setQuickStartCourses] = useState([]);
+  const [quickStartPlayers, setQuickStartPlayers] = useState([]);
+  const [quickStartPlayersLoading, setQuickStartPlayersLoading] = useState(false);
+  const [quickStartPlayersError, setQuickStartPlayersError] = useState(null);
+  const [quickStartStarting, setQuickStartStarting] = useState(false);
+  const [postCreateInvite, setPostCreateInvite] = useState({
+    visible: false,
+    loading: false,
+    link: '',
+    error: '',
+    tournament: null,
+  });
   // Surfaced inline when reload() throws — instead of silently dropping the
   // user into an empty state with no way to recover.
   const [reloadError, setReloadError] = useState(null);
@@ -209,6 +235,50 @@ export default function HomeScreen({ navigation, route }) {
     setRefreshing(true);
     try { await reload(); } finally { setRefreshing(false); }
   }, [reload]);
+
+  const loadQuickStartCourses = useCallback(async () => {
+    if (!currentUserId) {
+      setQuickStartCourses([]);
+      return;
+    }
+    try {
+      const library = await loadCourseLibrary();
+      const favorites = library?.favorites instanceof Set
+        ? library.favorites
+        : new Set(library?.favorites ?? []);
+      setQuickStartCourses((library?.courses ?? []).filter((course) => favorites.has(course.id)));
+    } catch (_) {
+      setQuickStartCourses([]);
+    }
+  }, [currentUserId]);
+
+  const loadQuickStartPlayers = useCallback(async () => {
+    if (!currentUserId) {
+      setQuickStartPlayers([]);
+      setQuickStartPlayersError(null);
+      setQuickStartPlayersLoading(false);
+      return;
+    }
+    setQuickStartPlayersLoading(true);
+    setQuickStartPlayersError(null);
+    try {
+      setQuickStartPlayers(await fetchMyPlayers());
+    } catch (err) {
+      setQuickStartPlayersError(err?.message ?? 'Could not load players.');
+    } finally {
+      setQuickStartPlayersLoading(false);
+    }
+  }, [currentUserId]);
+
+  useEffect(() => {
+    loadQuickStartCourses();
+    loadQuickStartPlayers();
+    const unsubscribe = navigation.addListener('focus', () => {
+      loadQuickStartCourses();
+      loadQuickStartPlayers();
+    });
+    return unsubscribe;
+  }, [loadQuickStartCourses, loadQuickStartPlayers, navigation]);
 
   // Unread-notification badge — refreshes whenever the screen regains focus.
   useEffect(() => {
@@ -428,6 +498,185 @@ export default function HomeScreen({ navigation, route }) {
       navigation.goBack();
     } else {
       navigation.navigate('Main', { screen: 'Home' });
+    }
+  }
+
+  function showError(message, title = 'Error') {
+    if (Platform.OS === 'web') window.alert(message);
+    else Alert.alert(title, message);
+  }
+
+  function currentOrigin() {
+    return Platform.OS === 'web' && typeof window !== 'undefined'
+      ? window.location.origin
+      : '';
+  }
+
+  async function resolveQuickStartTees(course, players) {
+    const lastTeeEntries = await Promise.all(players.map(async (player) => {
+      if (!course?.id || !player?.id) return [player?.id, null];
+      try {
+        return [player.id, await lastTeeForPlayerOnCourse(course.id, player.id)];
+      } catch (_) {
+        return [player.id, null];
+      }
+    }));
+    const lastTeeByPlayer = Object.fromEntries(
+      lastTeeEntries.filter(([playerId]) => playerId),
+    );
+    return resolveQuickStartPlayerTees({
+      course,
+      players,
+      currentUserId,
+      lastTeeByPlayer,
+    });
+  }
+
+  function quickStartPlayersWithFallback(players) {
+    const selectedPlayers = Array.isArray(players) ? players.filter(Boolean) : [];
+    if (selectedPlayers.length > 0) return selectedPlayers;
+    const me = quickStartPlayers.find((p) => p?.user_id === currentUserId || p?.userId === currentUserId);
+    return me ? [me] : [];
+  }
+
+  const navigateToCreatedGame = useCallback(() => {
+    const targetNavigation = navigation.getState?.().routeNames?.includes('Tournament')
+      ? navigation
+      : navigation.getParent?.() ?? navigation;
+    targetNavigation.dispatch((state) => {
+      const index = state.index ?? state.routes.length - 1;
+      const baseRoutes = state.routes.slice(0, index + 1);
+      const routes = [
+        ...baseRoutes,
+        { name: 'Tournament' },
+        { name: 'Scorecard', params: { roundIndex: 0 } },
+      ];
+      return CommonActions.reset({ ...state, routes, index: routes.length - 1 });
+    });
+  }, [navigation]);
+
+  function closePostCreateInvite() {
+    const created = postCreateInvite.tournament;
+    setPostCreateInvite({
+      visible: false,
+      loading: false,
+      link: '',
+      error: '',
+      tournament: null,
+    });
+    if (created) navigateToCreatedGame();
+  }
+
+  function requestClosePostCreateInvite() {
+    if (postCreateInvite.loading) return;
+    closePostCreateInvite();
+  }
+
+  async function sharePostCreateInvite() {
+    if (!postCreateInvite.link) return;
+    try {
+      const label = postCreateInvite.tournament?.name ?? 'my game';
+      await Share.share({
+        message: `Join "${label}" on Golf Partner:\n${postCreateInvite.link}`,
+      });
+    } catch (err) {
+      showError(err?.message ?? 'Could not share the invite link');
+    }
+  }
+
+  async function handleQuickStartStart({ course, players }) {
+    if (quickStartStarting) return;
+    if (!course) {
+      showError('Choose a course before starting.');
+      return;
+    }
+    const selectedPlayers = Array.isArray(players) ? players.filter(Boolean) : [];
+    if (selectedPlayers.length === 0) {
+      showError('Select at least 1 player.');
+      return;
+    }
+    setQuickStartStarting(true);
+    try {
+      const playerTees = await resolveQuickStartTees(course, selectedPlayers);
+      const created = buildQuickStartTournamentDraft({
+        course,
+        players: selectedPlayers,
+        playerTees,
+        settings: DEFAULT_SETTINGS,
+        userId: currentUserId,
+      });
+      await saveTournament(created);
+      setTournament(created);
+      setSelectedRound(0);
+      setAllTournaments((prev) => [
+        created,
+        ...prev.filter((item) => item.id !== created.id),
+      ]);
+      setOpenableIds((prev) => {
+        if (!prev) return prev;
+        const next = new Set(prev);
+        next.add(created.id);
+        return next;
+      });
+      setListStale(false);
+
+      if (shouldOfferPostCreateEditorInvite('game', selectedPlayers, currentUserId)) {
+        setPostCreateInvite({
+          visible: true,
+          loading: true,
+          link: '',
+          error: '',
+          tournament: created,
+        });
+        try {
+          const { editorCode } = await generateInviteCode(created.id);
+          setPostCreateInvite({
+            visible: true,
+            loading: false,
+            link: buildJoinLink(currentOrigin(), editorCode),
+            error: '',
+            tournament: created,
+          });
+        } catch (inviteErr) {
+          setPostCreateInvite({
+            visible: true,
+            loading: false,
+            link: '',
+            error: inviteErr?.message ?? 'Could not create the invite link right now.',
+            tournament: created,
+          });
+        }
+        return;
+      }
+
+      navigateToCreatedGame();
+    } catch (err) {
+      showError(err?.message ?? 'Could not create game');
+    } finally {
+      setQuickStartStarting(false);
+    }
+  }
+
+  async function handleQuickStartEditDetails({ course, players }) {
+    if (!course) {
+      showError('Choose a course before editing details.');
+      return;
+    }
+    try {
+      const selectedPlayers = quickStartPlayersWithFallback(players);
+      const playerTees = await resolveQuickStartTees(course, selectedPlayers);
+      const round = buildQuickStartRound({ course, players: selectedPlayers, playerTees });
+      navigation.navigate('Setup', {
+        kind: 'game',
+        initialStep: 'tees',
+        prefill: {
+          players: selectedPlayers,
+          rounds: [round],
+          settings: DEFAULT_SETTINGS,
+        },
+      });
+    } catch (err) {
+      showError(err?.message ?? 'Could not prepare game details');
     }
   }
 
@@ -779,11 +1028,24 @@ export default function HomeScreen({ navigation, route }) {
           <Feather name="chevron-right" size={18} color={theme.text.muted} />
         </TouchableOpacity>
 
+        <QuickStartCourses
+          courses={quickStartCourses}
+          players={quickStartPlayers}
+          currentUserId={currentUserId}
+          playersLoading={quickStartPlayersLoading}
+          playersError={quickStartPlayersError}
+          starting={quickStartStarting}
+          onManage={() => navigation.navigate('CoursesLibrary')}
+          onRetryPlayers={loadQuickStartPlayers}
+          onStart={handleQuickStartStart}
+          onEditDetails={handleQuickStartEditDetails}
+        />
+
         {reloadError && (
           <View style={s.errorCard}>
             <Feather name="alert-triangle" size={18} color={theme.destructive} />
             <View style={{ flex: 1 }}>
-              <Text style={s.errorCardTitle}>Couldn't load</Text>
+              <Text style={s.errorCardTitle}>Could not load</Text>
               <Text style={s.errorCardText}>{reloadError}</Text>
             </View>
             <TouchableOpacity style={s.errorRetryBtn} onPress={reload} activeOpacity={0.8}>
@@ -1004,6 +1266,15 @@ export default function HomeScreen({ navigation, route }) {
             </Pressable>
           </Pressable>
         </Modal>
+
+        <PostCreateInviteModal
+          visible={postCreateInvite.visible}
+          loading={postCreateInvite.loading}
+          link={postCreateInvite.link}
+          error={postCreateInvite.error}
+          onRequestClose={requestClosePostCreateInvite}
+          onShare={sharePostCreateInvite}
+        />
 
         <ConfirmModal state={confirmState} onResult={resolveConfirm} theme={theme} s={s} />
       </ScreenContainer>
@@ -1742,6 +2013,15 @@ export default function HomeScreen({ navigation, route }) {
         </Pressable>
       </Pressable>
     </Modal>
+
+    <PostCreateInviteModal
+      visible={postCreateInvite.visible}
+      loading={postCreateInvite.loading}
+      link={postCreateInvite.link}
+      error={postCreateInvite.error}
+      onRequestClose={requestClosePostCreateInvite}
+      onShare={sharePostCreateInvite}
+    />
 
     <ConfirmModal state={confirmState} onResult={resolveConfirm} theme={theme} s={s} />
 
