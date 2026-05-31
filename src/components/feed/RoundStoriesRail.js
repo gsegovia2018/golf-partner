@@ -8,6 +8,10 @@ function coverForStory(story) {
   return story?.mediaList?.find((m) => m.thumbUrl || m.url) ?? null;
 }
 
+function coverResizeMode(media) {
+  return media?.kind === 'video' ? 'contain' : 'cover';
+}
+
 function initialsForLabel(label) {
   const words = String(label || '').trim().split(/\s+/).filter(Boolean);
   const initials = words.slice(0, 2).map((word) => word[0]).join('');
@@ -49,7 +53,7 @@ export default function RoundStoriesRail({ stories = [], onPressStory }) {
                     testID={`round-story-cover-${story.key}`}
                     source={{ uri: cover.thumbUrl || cover.url }}
                     style={s.thumb}
-                    resizeMode="cover"
+                    resizeMode={coverResizeMode(cover)}
                   />
                 ) : (
                   <Text style={s.fallbackText}>{initialsForLabel(story.roundLabel)}</Text>

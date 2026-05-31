@@ -91,6 +91,29 @@ describe('RoundStoriesRail', () => {
     expect(cover.props.source.uri).toBe('https://example.com/thumb.jpg');
   });
 
+  test('shows video story covers without cropping the frame', async () => {
+    const videoStories = [
+      {
+        ...stories[0],
+        countLabel: '1 memory',
+        mediaList: [
+          {
+            id: 'video-1',
+            kind: 'video',
+            thumbUrl: 'https://example.com/video.jpg',
+            url: 'https://example.com/video.mp4',
+          },
+        ],
+      },
+    ];
+    const { getByTestId } = render(wrap(
+      <RoundStoriesRail stories={videoStories} onPressStory={() => {}} />,
+    ));
+
+    const cover = await waitFor(() => getByTestId('round-story-cover-story:t1:r1'));
+    expect(cover.props.resizeMode).toBe('contain');
+  });
+
   test('renders fallback initials from the round label when no cover exists', async () => {
     const fallbackStories = [
       {

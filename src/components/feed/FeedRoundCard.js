@@ -51,6 +51,10 @@ function playerCountLabel(count) {
   return `${count} players`;
 }
 
+function mediaResizeMode(media) {
+  return media?.kind === 'video' ? 'contain' : 'cover';
+}
+
 export default function FeedRoundCard({
   item,
   roundLabel,
@@ -124,7 +128,7 @@ export default function FeedRoundCard({
             <Image
               source={{ uri: mediaList[0].thumbUrl || mediaList[0].url }}
               style={s.roundPhoto}
-              resizeMode="cover"
+              resizeMode={mediaResizeMode(mediaList[0])}
             />
             {mediaLabel ? (
               <View style={s.photoBadge}>
@@ -161,7 +165,7 @@ export default function FeedRoundCard({
                 <Image
                   source={{ uri: media.thumbUrl || media.url }}
                   style={s.roundPhoto}
-                  resizeMode="cover"
+                  resizeMode={mediaResizeMode(media)}
                 />
                 <View style={s.photoBadge}>
                   <Feather
