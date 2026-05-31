@@ -46,6 +46,54 @@ export function initialStepIndex(steps, requestedStep) {
   return index >= 0 ? index : 0;
 }
 
+function cloneObject(value) {
+  if (!value || typeof value !== 'object') return value;
+  return { ...value };
+}
+
+function cloneOwnedRoundValue(value) {
+  if (Array.isArray(value)) return [...value];
+  if (value instanceof Map) return new Map(value);
+  return cloneObject(value);
+}
+
+function clonePrefilledRound(round) {
+  if (!round || typeof round !== 'object') return round;
+  return {
+    ...round,
+    holes: cloneOwnedRoundValue(round.holes),
+    tees: cloneOwnedRoundValue(round.tees),
+    playerHandicaps: cloneOwnedRoundValue(round.playerHandicaps),
+    playerTees: cloneOwnedRoundValue(round.playerTees),
+    manualHandicaps: cloneOwnedRoundValue(round.manualHandicaps),
+  };
+}
+
+/**
+ * Normalized setup state from optional prefill route params. Prefilled values
+ * are cloned so the setup screen owns the mutable state it edits.
+ * @param {{ players?: any[], rounds?: any[], settings?: object } | null | undefined} prefill
+ * @returns {{ players: any[], rounds: any[] | null, settingsPatch: object, hasPrefilledPlayers: boolean }}
+ */
+export function setupPrefillState(prefill) {
+  const players = Array.isArray(prefill?.players)
+    ? prefill.players.map(cloneObject)
+    : [];
+  const rounds = Array.isArray(prefill?.rounds) && prefill.rounds.length > 0
+    ? prefill.rounds.map(clonePrefilledRound)
+    : null;
+  const settingsPatch = prefill?.settings && typeof prefill.settings === 'object'
+    ? { ...prefill.settings }
+    : {};
+
+  return {
+    players,
+    rounds,
+    settingsPatch,
+    hasPrefilledPlayers: players.length > 0,
+  };
+}
+
 /**
  * Whether a just-created setup should offer the shared editor invite.
  * @param {'game'|'tournament'|'official'} kind

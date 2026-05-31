@@ -29,6 +29,7 @@ import {
   isStepValid,
   shouldOfferPostCreateEditorInvite,
   initialStepIndex,
+  setupPrefillState,
 } from './setupWizard';
 
 // Deep green used for the Review hero band — fixed in both themes so white
@@ -69,11 +70,12 @@ export default function SetupScreen({ navigation, route }) {
 
   const kind = route?.params?.kind === 'game' ? 'game' : 'tournament';
   const isGame = kind === 'game';
-  const prefill = route?.params?.prefill ?? null;
-  const prefilledPlayers = Array.isArray(prefill?.players) ? prefill.players : [];
-  const prefilledRounds = Array.isArray(prefill?.rounds) && prefill.rounds.length > 0
-    ? prefill.rounds
-    : null;
+  const {
+    players: prefilledPlayers,
+    rounds: prefilledRounds,
+    settingsPatch,
+    hasPrefilledPlayers,
+  } = setupPrefillState(route?.params?.prefill);
   const initialSteps = wizardSteps(kind, prefilledPlayers.length);
 
   const [tournamentName, setTournamentName] = useState(() =>
@@ -84,7 +86,7 @@ export default function SetupScreen({ navigation, route }) {
   const [rounds, setRounds] = useState(() => prefilledRounds ?? [
     { id: newRoundId(), courseName: '', holes: defaultHoles(), tees: [], playerHandicaps: null, playerTees: null },
   ]);
-  const [settings, setSettings] = useState({ ...DEFAULT_SETTINGS, ...(prefill?.settings ?? {}) });
+  const [settings, setSettings] = useState(() => ({ ...DEFAULT_SETTINGS, ...settingsPatch }));
   const [rawStep, setStep] = useState(() => initialStepIndex(initialSteps, route?.params?.initialStep));
   const [postCreateInvite, setPostCreateInvite] = useState({
     visible: false,
@@ -119,7 +121,7 @@ export default function SetupScreen({ navigation, route }) {
   // Runs once; the slot stays removable and the PlayerPicker won't add a
   // duplicate. Offline this no-ops gracefully (the library read fails).
   const mePreaddedRef = useRef(false);
-  const skipMePreaddRef = useRef(prefilledPlayers.length > 0);
+  const skipMePreaddRef = useRef(hasPrefilledPlayers);
   useEffect(() => {
     if (skipMePreaddRef.current || mePreaddedRef.current || !user?.id) return;
     mePreaddedRef.current = true;

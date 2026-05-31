@@ -3,6 +3,7 @@ import {
   isStepValid,
   shouldOfferPostCreateEditorInvite,
   initialStepIndex,
+  setupPrefillState,
 } from '../setupWizard';
 
 describe('wizardSteps', () => {
@@ -30,6 +31,77 @@ describe('initialStepIndex', () => {
     const steps = ['course', 'players', 'review'];
     expect(initialStepIndex(steps, 'tees')).toBe(0);
     expect(initialStepIndex(steps, null)).toBe(0);
+  });
+});
+
+describe('setupPrefillState', () => {
+  test('clones supplied players, rounds, and owned round collections', () => {
+    const player = { id: 'p1', name: 'Ann', handicap: 12 };
+    const holes = [{ number: 1, par: 4 }];
+    const tees = [{ color: 'Blue' }];
+    const playerHandicaps = { p1: 12 };
+    const playerTees = { p1: 'Blue' };
+    const manualHandicaps = { p1: 11 };
+    const round = {
+      id: 'r1',
+      courseName: 'Pebble',
+      holes,
+      tees,
+      playerHandicaps,
+      playerTees,
+      manualHandicaps,
+      extraField: { preserve: true },
+    };
+    const players = [player];
+    const rounds = [round];
+    const settings = { scoringMode: 'teamStableford' };
+
+    const result = setupPrefillState({
+      players,
+      rounds,
+      settings,
+    });
+
+    expect(result.players).toEqual([player]);
+    expect(result.players).not.toBe(players);
+    expect(result.players[0]).not.toBe(player);
+    expect(result.rounds).toEqual([round]);
+    expect(result.rounds).not.toBe(rounds);
+    expect(result.rounds[0]).not.toBe(round);
+    expect(result.rounds[0].holes).toEqual(holes);
+    expect(result.rounds[0].holes).not.toBe(holes);
+    expect(result.rounds[0].tees).toEqual(tees);
+    expect(result.rounds[0].tees).not.toBe(tees);
+    expect(result.rounds[0].playerHandicaps).toEqual(playerHandicaps);
+    expect(result.rounds[0].playerHandicaps).not.toBe(playerHandicaps);
+    expect(result.rounds[0].playerTees).toEqual(playerTees);
+    expect(result.rounds[0].playerTees).not.toBe(playerTees);
+    expect(result.rounds[0].manualHandicaps).toEqual(manualHandicaps);
+    expect(result.rounds[0].manualHandicaps).not.toBe(manualHandicaps);
+    expect(result.rounds[0].extraField).toBe(round.extraField);
+    expect(result.settingsPatch).toEqual({ scoringMode: 'teamStableford' });
+    expect(result.settingsPatch).not.toBe(settings);
+    expect(result.hasPrefilledPlayers).toBe(true);
+  });
+
+  test('falls back for empty or invalid prefill values', () => {
+    expect(setupPrefillState(null)).toEqual({
+      players: [],
+      rounds: null,
+      settingsPatch: {},
+      hasPrefilledPlayers: false,
+    });
+
+    expect(setupPrefillState({
+      players: 'invalid',
+      rounds: [],
+      settings: null,
+    })).toEqual({
+      players: [],
+      rounds: null,
+      settingsPatch: {},
+      hasPrefilledPlayers: false,
+    });
   });
 });
 
