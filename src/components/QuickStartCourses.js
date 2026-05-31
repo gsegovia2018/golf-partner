@@ -34,12 +34,10 @@ export function courseTeeCount(course) {
 }
 
 export function quickStartCourseMeta(course) {
-  const parts = [];
   const par = coursePar(course);
   const teeCount = courseTeeCount(course);
-  if (par != null) parts.push(`Par ${par}`);
-  if (teeCount > 0) parts.push(`${teeCount} ${teeCount === 1 ? 'tee' : 'tees'}`);
-  return parts.join(' · ');
+  if (par == null || teeCount === 0) return '';
+  return `Par ${par} · ${teeCount} ${teeCount === 1 ? 'tee' : 'tees'}`;
 }
 
 export function initialQuickStartPlayerIds(players, userId) {

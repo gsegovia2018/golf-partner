@@ -27,6 +27,17 @@ describe('QuickStartCourses helpers', () => {
     expect(quickStartCourseMeta({ holes: [], tees: [] })).toBe('');
   });
 
+  test('quickStartCourseMeta does not return partial metadata', () => {
+    expect(quickStartCourseMeta({
+      holes: [{ par: 4 }, { par: 5 }],
+      tees: [],
+    })).toBe('');
+    expect(quickStartCourseMeta({
+      holes: [],
+      tees: [{ label: 'White' }, { label: 'Yellow' }],
+    })).toBe('');
+  });
+
   test('initialQuickStartPlayerIds preselects the signed-in user player', () => {
     const players = [
       { id: 'p1', name: 'Guest', user_id: null },
