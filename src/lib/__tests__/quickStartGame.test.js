@@ -64,6 +64,15 @@ describe('courseToQuickStartRound', () => {
     expect(round.holes).toHaveLength(18);
     expect(round.holes[0]).toEqual({ number: 1, par: 4, strokeIndex: 1 });
   });
+
+  test('falls back to default 18 holes when any hole entry is incomplete', () => {
+    const incompleteHoles = holes.map((hole, index) => (
+      index === 8 ? { number: 9, strokeIndex: 9 } : hole
+    ));
+    const round = courseToQuickStartRound({ ...course, holes: incompleteHoles });
+    expect(round.holes).toHaveLength(18);
+    expect(round.holes[8]).toEqual({ number: 9, par: 4, strokeIndex: 9 });
+  });
 });
 
 describe('resolveQuickStartPlayerTees', () => {
@@ -133,6 +142,24 @@ describe('resolveQuickStartPlayerTees', () => {
     expect(out.p3).toEqual({ label: 'White', slope: 128, rating: 70.4 });
   });
 
+  test('does not treat guest histories as signed-in user history when no user is signed in', () => {
+    const guests = [
+      { id: 'g1', name: 'Guest 1', handicap: 12, user_id: null },
+      { id: 'g2', name: 'Guest 2', handicap: 14, user_id: null },
+      { id: 'g3', name: 'Guest 3', handicap: 16, user_id: null },
+    ];
+    const out = resolveQuickStartPlayerTees({
+      course,
+      players: guests,
+      currentUserId: null,
+      lastTeeByPlayer: {
+        g1: { label: 'Yellow' },
+        g2: { label: 'White' },
+      },
+    });
+    expect(out.g3).toEqual({ label: 'White', slope: 128, rating: 70.4 });
+  });
+
   test('falls back to the middle named tee when nobody has history', () => {
     const out = resolveQuickStartPlayerTees({
       course,
@@ -163,7 +190,7 @@ describe('buildQuickStartTournamentDraft', () => {
       course,
       players: players.slice(0, 2),
       playerTees: {
-        p1: { label: 'White', slope: 128, rating: 70.4 },
+        p1: { label: 'Black', slope: 140, rating: 73.2 },
         p2: { label: 'White', slope: 128, rating: 70.4 },
       },
       settings: { scoringMode: 'stableford', bestBallValue: 1, worstBallValue: 1 },
@@ -180,7 +207,7 @@ describe('buildQuickStartTournamentDraft', () => {
       courseId: 'course-1',
       courseName: 'Sant Cugat',
       playerTees: {
-        p1: { label: 'White', slope: 128, rating: 70.4 },
+        p1: { label: 'Black', slope: 140, rating: 73.2 },
         p2: { label: 'White', slope: 128, rating: 70.4 },
       },
       manualHandicaps: {},
@@ -188,7 +215,7 @@ describe('buildQuickStartTournamentDraft', () => {
       notes: '',
       pairs: [[players[0]], [players[1]]],
     });
-    expect(draft.rounds[0].playerHandicaps.p1).toEqual(expect.any(Number));
+    expect(draft.rounds[0].playerHandicaps.p1).toBe(17);
     expect(draft.rounds[0].playerHandicaps.p2).toEqual(expect.any(Number));
   });
 

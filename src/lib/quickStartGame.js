@@ -23,6 +23,12 @@ function cloneTees(tees) {
   return (tees ?? []).map((t) => ({ ...t }));
 }
 
+function hasCompleteHoles(holes) {
+  return Array.isArray(holes)
+    && holes.length === 18
+    && holes.every((h) => h && h.number != null && h.par != null && h.strokeIndex != null);
+}
+
 function namedTees(tees) {
   return (tees ?? []).filter((t) => String(t?.label ?? '').trim());
 }
@@ -52,7 +58,7 @@ export function buildQuickStartGameName(courseName, date = new Date()) {
 }
 
 export function courseToQuickStartRound(course) {
-  const holes = Array.isArray(course?.holes) && course.holes.length === 18
+  const holes = hasCompleteHoles(course?.holes)
     ? cloneHoles(course.holes)
     : defaultHoles();
   return {
@@ -93,7 +99,9 @@ export function resolveQuickStartPlayerTees({
     const tiedLabels = [...counts.entries()]
       .filter(([, count]) => count === maxCount)
       .map(([label]) => label);
-    const currentUserHistory = histories.find(({ player }) => player.user_id === currentUserId);
+    const currentUserHistory = currentUserId
+      ? histories.find(({ player }) => player.user_id === currentUserId)
+      : null;
     const preferredLabel = currentUserHistory && tiedLabels.includes(currentUserHistory.tee.label)
       ? currentUserHistory.tee.label
       : tiedLabels.sort((a, b) => teeOrderIndex(courseTees, a) - teeOrderIndex(courseTees, b))[0];
