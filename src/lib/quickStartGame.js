@@ -24,8 +24,11 @@ function cloneTees(tees) {
 }
 
 function numericValue(value) {
-  if (value === '' || value == null) return NaN;
-  return Number(value);
+  if (typeof value === 'number') return value;
+  if (typeof value !== 'string') return NaN;
+  const trimmed = value.trim();
+  if (!trimmed) return NaN;
+  return Number(trimmed);
 }
 
 function isHoleComplete(hole) {
