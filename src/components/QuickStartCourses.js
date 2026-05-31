@@ -1,4 +1,4 @@
-import React, { useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import {
   ActivityIndicator,
   Modal,
@@ -72,23 +72,42 @@ export default function QuickStartCourses({
   const s = makeStyles(theme);
   const [selectedCourse, setSelectedCourse] = useState(null);
   const [selectedPlayerIds, setSelectedPlayerIds] = useState([]);
+  const [selectionTouched, setSelectionTouched] = useState(false);
   const signedInUserId = currentUserId || userId;
-
-  const selectedPlayers = useMemo(
-    () => (players || []).filter((player) => selectedPlayerIds.includes(player.id)),
-    [players, selectedPlayerIds],
+  const normalizedCourses = Array.isArray(courses) ? courses : [];
+  const normalizedPlayers = useMemo(
+    () => (Array.isArray(players) ? players : []),
+    [players],
   );
 
-  if (!courses.length) return null;
+  const selectedPlayers = useMemo(
+    () => normalizedPlayers.filter((player) => selectedPlayerIds.includes(player.id)),
+    [normalizedPlayers, selectedPlayerIds],
+  );
+
+  useEffect(() => {
+    if (!selectedCourse || selectionTouched) return;
+    const nextIds = initialQuickStartPlayerIds(normalizedPlayers, signedInUserId);
+    setSelectedPlayerIds((prev) => {
+      if (prev.length === nextIds.length && prev.every((id, index) => id === nextIds[index])) {
+        return prev;
+      }
+      return nextIds;
+    });
+  }, [selectedCourse, normalizedPlayers, signedInUserId, selectionTouched]);
+
+  if (!normalizedCourses.length) return null;
 
   const openCourse = (course) => {
     setSelectedCourse(course);
-    setSelectedPlayerIds(initialQuickStartPlayerIds(players, signedInUserId));
+    setSelectionTouched(false);
+    setSelectedPlayerIds(initialQuickStartPlayerIds(normalizedPlayers, signedInUserId));
   };
 
   const closeSheet = () => setSelectedCourse(null);
 
   const togglePlayer = (playerId) => {
+    setSelectionTouched(true);
     setSelectedPlayerIds((prev) => (
       prev.includes(playerId) ? prev.filter((id) => id !== playerId) : [...prev, playerId]
     ));
@@ -100,14 +119,17 @@ export default function QuickStartCourses({
     <View style={s.section}>
       <View style={s.header}>
         <Text style={s.heading}>QUICK START</Text>
-        <TouchableOpacity
-          onPress={onManage}
-          style={s.manageButton}
-          hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
-          accessibilityRole="button"
-        >
-          <Text style={s.manageText}>Manage</Text>
-        </TouchableOpacity>
+        {onManage ? (
+          <TouchableOpacity
+            onPress={onManage}
+            style={s.manageButton}
+            hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+            accessibilityRole="button"
+            accessibilityLabel="Manage quick start courses"
+          >
+            <Text style={s.manageText}>Manage</Text>
+          </TouchableOpacity>
+        ) : null}
       </View>
 
       <ScrollView
@@ -115,7 +137,7 @@ export default function QuickStartCourses({
         showsHorizontalScrollIndicator={false}
         contentContainerStyle={s.rail}
       >
-        {courses.map((course) => {
+        {normalizedCourses.map((course) => {
           const meta = quickStartCourseMeta(course);
           return (
             <TouchableOpacity
@@ -124,6 +146,7 @@ export default function QuickStartCourses({
               activeOpacity={0.78}
               onPress={() => openCourse(course)}
               accessibilityRole="button"
+              accessibilityLabel={`Open ${courseTitle(course)} quick start`}
             >
               <View style={s.courseIcon}>
                 <Feather name="flag" size={18} color={theme.accent.primary} />
@@ -179,13 +202,18 @@ export default function QuickStartCourses({
               <Text style={s.errorText}>
                 {typeof playersError === 'string' ? playersError : 'Could not load players.'}
               </Text>
-              <TouchableOpacity style={s.retryButton} onPress={onRetryPlayers}>
+              <TouchableOpacity
+                style={s.retryButton}
+                onPress={onRetryPlayers}
+                accessibilityRole="button"
+                accessibilityLabel="Retry loading players"
+              >
                 <Text style={s.retryText}>Retry</Text>
               </TouchableOpacity>
             </View>
           ) : (
             <ScrollView style={s.playersList} contentContainerStyle={s.playersContent}>
-              {(players || []).map((player) => {
+              {normalizedPlayers.map((player) => {
                 const selected = selectedPlayerIds.includes(player.id);
                 return (
                   <TouchableOpacity
@@ -194,6 +222,7 @@ export default function QuickStartCourses({
                     activeOpacity={0.75}
                     onPress={() => togglePlayer(player.id)}
                     accessibilityRole="checkbox"
+                    accessibilityLabel={`Select ${playerName(player)}`}
                     accessibilityState={{ checked: selected }}
                   >
                     <View style={[s.checkCircle, selected && s.checkCircleSelected]}>
@@ -218,6 +247,9 @@ export default function QuickStartCourses({
               style={s.secondaryButton}
               onPress={() => onEditDetails?.({ course: selectedCourse, players: selectedPlayers })}
               disabled={!selectedCourse}
+              accessibilityRole="button"
+              accessibilityLabel="Edit quick start details"
+              accessibilityState={{ disabled: !selectedCourse }}
             >
               <Text style={s.secondaryText}>Edit details</Text>
             </TouchableOpacity>
@@ -225,6 +257,9 @@ export default function QuickStartCourses({
               style={[s.primaryButton, startDisabled && s.primaryButtonDisabled]}
               onPress={() => !startDisabled && onStart?.({ course: selectedCourse, players: selectedPlayers })}
               disabled={startDisabled}
+              accessibilityRole="button"
+              accessibilityLabel="Start quick start round"
+              accessibilityState={{ disabled: startDisabled }}
             >
               <Text style={s.primaryText}>{starting ? 'Starting...' : 'Start'}</Text>
             </TouchableOpacity>
