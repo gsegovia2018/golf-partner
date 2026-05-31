@@ -1,4 +1,9 @@
-import { wizardSteps, isStepValid, shouldOfferPostCreateEditorInvite } from '../setupWizard';
+import {
+  wizardSteps,
+  isStepValid,
+  shouldOfferPostCreateEditorInvite,
+  initialStepIndex,
+} from '../setupWizard';
 
 describe('wizardSteps', () => {
   test('solo game omits the scoring step', () => {
@@ -12,6 +17,19 @@ describe('wizardSteps', () => {
   });
   test('multiplayer tournament uses rounds and includes scoring', () => {
     expect(wizardSteps('tournament', 4)).toEqual(['rounds', 'players', 'tees', 'scoring', 'review']);
+  });
+});
+
+describe('initialStepIndex', () => {
+  test('returns the requested step index when it exists', () => {
+    const steps = ['course', 'players', 'tees', 'scoring', 'review'];
+    expect(initialStepIndex(steps, 'tees')).toBe(2);
+  });
+
+  test('falls back to the first step when the requested step is absent', () => {
+    const steps = ['course', 'players', 'review'];
+    expect(initialStepIndex(steps, 'tees')).toBe(0);
+    expect(initialStepIndex(steps, null)).toBe(0);
   });
 });
 

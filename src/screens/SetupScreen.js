@@ -24,7 +24,12 @@ import PostCreateInviteModal from '../components/PostCreateInviteModal';
 import { scoringModeUsesTeams, getScoringMode } from '../components/scoringModes';
 import WizardProgress from '../components/setup/WizardProgress';
 import WizardNav from '../components/setup/WizardNav';
-import { wizardSteps, isStepValid, shouldOfferPostCreateEditorInvite } from './setupWizard';
+import {
+  wizardSteps,
+  isStepValid,
+  shouldOfferPostCreateEditorInvite,
+  initialStepIndex,
+} from './setupWizard';
 
 // Deep green used for the Review hero band — fixed in both themes so white
 // hero text always has strong contrast.
@@ -64,15 +69,23 @@ export default function SetupScreen({ navigation, route }) {
 
   const kind = route?.params?.kind === 'game' ? 'game' : 'tournament';
   const isGame = kind === 'game';
+  const prefill = route?.params?.prefill ?? null;
+  const prefilledPlayers = Array.isArray(prefill?.players) ? prefill.players : [];
+  const prefilledRounds = Array.isArray(prefill?.rounds) && prefill.rounds.length > 0
+    ? prefill.rounds
+    : null;
+  const initialSteps = wizardSteps(kind, prefilledPlayers.length);
 
   const [tournamentName, setTournamentName] = useState(() =>
     isGame ? buildGameName('') : 'Weekend Golf',
   );
   const [nameTouched, setNameTouched] = useState(false);
-  const [players, setPlayers] = useState([]);
-  const [rounds, setRounds] = useState([{ id: newRoundId(), courseName: '', holes: defaultHoles(), tees: [], playerHandicaps: null, playerTees: null }]);
-  const [settings, setSettings] = useState({ ...DEFAULT_SETTINGS });
-  const [rawStep, setStep] = useState(0);
+  const [players, setPlayers] = useState(() => prefilledPlayers);
+  const [rounds, setRounds] = useState(() => prefilledRounds ?? [
+    { id: newRoundId(), courseName: '', holes: defaultHoles(), tees: [], playerHandicaps: null, playerTees: null },
+  ]);
+  const [settings, setSettings] = useState({ ...DEFAULT_SETTINGS, ...(prefill?.settings ?? {}) });
+  const [rawStep, setStep] = useState(() => initialStepIndex(initialSteps, route?.params?.initialStep));
   const [postCreateInvite, setPostCreateInvite] = useState({
     visible: false,
     loading: false,
@@ -106,8 +119,9 @@ export default function SetupScreen({ navigation, route }) {
   // Runs once; the slot stays removable and the PlayerPicker won't add a
   // duplicate. Offline this no-ops gracefully (the library read fails).
   const mePreaddedRef = useRef(false);
+  const skipMePreaddRef = useRef(prefilledPlayers.length > 0);
   useEffect(() => {
-    if (mePreaddedRef.current || !user?.id) return;
+    if (skipMePreaddRef.current || mePreaddedRef.current || !user?.id) return;
     mePreaddedRef.current = true;
     let cancelled = false;
     (async () => {

@@ -33,6 +33,20 @@ export function wizardSteps(kind, playerCount) {
 }
 
 /**
+ * Initial wizard index for prefilled flows. Unknown or unavailable requested
+ * steps fall back to the first step so navigation never opens past the active
+ * step list.
+ * @param {string[]} steps
+ * @param {string | null | undefined} requestedStep
+ * @returns {number}
+ */
+export function initialStepIndex(steps, requestedStep) {
+  if (!requestedStep) return 0;
+  const index = steps.indexOf(requestedStep);
+  return index >= 0 ? index : 0;
+}
+
+/**
  * Whether a just-created setup should offer the shared editor invite.
  * @param {'game'|'tournament'|'official'} kind
  * @param {Array<{ user_id?: string | null }>} players
