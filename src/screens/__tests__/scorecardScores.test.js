@@ -1,5 +1,6 @@
 import {
   canShowQuickFinish,
+  buildScorecardTournamentBackState,
   getScorecardBackTarget,
   mergeScores,
   mergeShotDetails,
@@ -40,12 +41,51 @@ describe('mergeShotDetails', () => {
 });
 
 describe('getScorecardBackTarget', () => {
-  test('in-progress casual scorecards pop back to the existing round details route', () => {
+  test('scorecards opened from the live center action return to the round summary even when stack back is available', () => {
+    expect(getScorecardBackTarget({
+      official: false,
+      viewOnly: false,
+      canGoBack: true,
+      requestedBackTarget: 'tournament',
+    })).toBe('tournament');
+  });
+
+  test('in-progress casual scorecards opened from round details pop back to the existing route', () => {
     expect(getScorecardBackTarget({
       official: false,
       viewOnly: false,
       canGoBack: true,
     })).toBe('previous');
+  });
+});
+
+describe('buildScorecardTournamentBackState', () => {
+  test('anchors a live scorecard back stack under Play before the tournament route', () => {
+    const state = {
+      index: 1,
+      routes: [
+        {
+          key: 'main',
+          name: 'Main',
+          state: {
+            index: 0,
+            routes: [{ name: 'Feed' }, { name: 'Home' }],
+          },
+        },
+        { key: 'scorecard', name: 'Scorecard', params: { backTarget: 'tournament' } },
+      ],
+    };
+
+    expect(buildScorecardTournamentBackState(state)).toMatchObject({
+      index: 1,
+      routes: [
+        {
+          name: 'Main',
+          params: { screen: 'Home', params: { viewMode: 'list' } },
+        },
+        { name: 'Tournament', params: { viewMode: 'tournament' } },
+      ],
+    });
   });
 });
 

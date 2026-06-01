@@ -160,10 +160,28 @@ export function mergeShotDetails(blobShotDetails, localShotDetails, dirtyKeys) {
   return out;
 }
 
-export function getScorecardBackTarget({ official, viewOnly, canGoBack }) {
+export function getScorecardBackTarget({
+  official,
+  viewOnly,
+  canGoBack,
+  requestedBackTarget,
+}) {
   if (official) return 'previous';
+  if (requestedBackTarget === 'tournament') return 'tournament';
+  if (requestedBackTarget === 'home') return 'home';
   if (viewOnly) return 'home';
   return canGoBack ? 'previous' : 'tournament';
+}
+
+export function buildScorecardTournamentBackState(state) {
+  return {
+    ...state,
+    routes: [
+      { name: 'Main', params: { screen: 'Home', params: { viewMode: 'list' } } },
+      { name: 'Tournament', params: { viewMode: 'tournament' } },
+    ],
+    index: 1,
+  };
 }
 
 export function shouldApplyReloadSnapshot({
@@ -209,6 +227,7 @@ export default function ScorecardScreen({ navigation, route }) {
   const official = route.params?.official === true;
   const officialToken = route.params?.token ?? null;
   const officialRoundId = route.params?.roundId ?? null;
+  const requestedBackTarget = route.params?.backTarget ?? null;
   const routeTournamentId = official ? null : route.params?.tournamentId ?? null;
   const initialTournament = useMemo(
     () => (official
@@ -1065,18 +1084,17 @@ export default function ScorecardScreen({ navigation, route }) {
     setCurrentHole(h);
   }, []);
 
-  // Back from the scorecard. Finished casual rounds land on the app home
-  // (Main → Home tab) so users aren't dumped back into the leaderboard of
-  // a game they're already done with. In-progress casual rounds usually have
-  // Tournament already underneath in the stack, so pop instead of navigating
-  // to a fresh Tournament route; otherwise the next back can return here.
-  // Official rounds come from JoinOfficial and need their own pop behavior
-  // preserved.
+  // Back from the scorecard. The live center-tab action requests Tournament so
+  // the user lands on the active round summary while a round is live. Other
+  // in-progress casual scorecards usually have Tournament underneath in the
+  // stack, so pop instead of navigating to a fresh Tournament route. Official
+  // rounds come from JoinOfficial and need their own pop behavior preserved.
   const goBack = useCallback(() => {
     const target = getScorecardBackTarget({
       official,
       viewOnly,
       canGoBack: typeof navigation.canGoBack === 'function' && navigation.canGoBack(),
+      requestedBackTarget,
     });
     if (target === 'previous') {
       navigation.goBack();
@@ -1086,8 +1104,15 @@ export default function ScorecardScreen({ navigation, route }) {
       navigation.navigate('Main', { screen: 'Home', params: { viewMode: 'list' } });
       return;
     }
+    if (target === 'tournament' && typeof navigation.dispatch === 'function') {
+      navigation.dispatch((state) => ({
+        type: 'RESET',
+        payload: buildScorecardTournamentBackState(state),
+      }));
+      return;
+    }
     navigation.navigate('Tournament');
-  }, [navigation, official, viewOnly]);
+  }, [navigation, official, viewOnly, requestedBackTarget]);
 
   // Finish flow: invoked from the last-hole "Finish" button or the game-level
   // header flag. Shows a brief celebration, then routes to the round report.
@@ -1279,7 +1304,7 @@ export default function ScorecardScreen({ navigation, route }) {
     return (
       <ScreenContainer style={s.container} edges={['top', 'bottom']}>
         <View style={s.header}>
-          <TouchableOpacity onPress={() => navigation.goBack()} style={s.backBtn}>
+          <TouchableOpacity onPress={goBack} style={s.backBtn}>
             <Feather name="chevron-left" size={22} color={theme.accent.primary} />
           </TouchableOpacity>
           <Text style={s.headerTitle}>Scorecard</Text>
@@ -1305,7 +1330,7 @@ export default function ScorecardScreen({ navigation, route }) {
     return (
       <ScreenContainer style={s.container} edges={['top', 'bottom']}>
         <View style={s.header}>
-          <TouchableOpacity onPress={() => navigation.goBack()} style={s.backBtn}>
+          <TouchableOpacity onPress={goBack} style={s.backBtn}>
             <Feather name="chevron-left" size={22} color={theme.accent.primary} />
           </TouchableOpacity>
           <Text style={s.headerTitle}>Scorecard</Text>

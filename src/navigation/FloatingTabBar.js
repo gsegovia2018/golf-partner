@@ -28,9 +28,13 @@ export default function FloatingTabBar({ state, navigation }) {
 
     check();
     const unsub = subscribeTournamentChanges(check);
+    const unsubFocus = typeof navigation.addListener === 'function'
+      ? navigation.addListener('focus', check)
+      : () => {};
     return () => {
       cancelled = true;
       unsub();
+      unsubFocus();
     };
   }, [navigation]);
 
@@ -51,6 +55,10 @@ export default function FloatingTabBar({ state, navigation }) {
               canPreventDefault: true,
             });
             if (!event.defaultPrevented && (!focused || item.targetRouteName !== route.name)) {
+              if (item.live && item.targetRouteName === 'Scorecard') {
+                navigation.navigate(item.targetRouteName, { backTarget: 'tournament' });
+                return;
+              }
               navigation.navigate(item.targetRouteName);
             }
           };

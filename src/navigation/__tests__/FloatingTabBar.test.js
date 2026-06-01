@@ -40,6 +40,7 @@ function makeState(index = 2) {
 
 function makeNavigation() {
   return {
+    addListener: jest.fn(() => jest.fn()),
     emit: jest.fn(() => ({ defaultPrevented: false })),
     navigate: jest.fn(),
     isFocused: jest.fn(() => true),
@@ -111,7 +112,7 @@ describe('FloatingTabBar', () => {
     expect(navigation.navigate).toHaveBeenCalledWith('Home');
   });
 
-  test('changes the center action to Score and routes to Scorecard when a round is live', async () => {
+  test('changes the center action to Score and routes to Scorecard with round summary as its back target when a round is live', async () => {
     mockLoadTournament.mockResolvedValue({ id: 'tournament-1' });
     mockIsRoundInProgress.mockReturnValue(true);
     const { getByLabelText, navigation } = renderTabBar({ index: 0 });
@@ -119,7 +120,31 @@ describe('FloatingTabBar', () => {
     await waitFor(() => expect(getByLabelText('Score')).toBeTruthy());
     fireEvent.press(getByLabelText('Score'));
 
-    expect(navigation.navigate).toHaveBeenCalledWith('Scorecard');
+    expect(navigation.navigate).toHaveBeenCalledWith('Scorecard', { backTarget: 'tournament' });
+  });
+
+  test('refreshes the Score action when Play regains focus after being mounted under round summary', async () => {
+    let focused = false;
+    let focusHandler = null;
+    const navigation = makeNavigation();
+    navigation.isFocused.mockImplementation(() => focused);
+    navigation.addListener.mockImplementation((event, handler) => {
+      if (event === 'focus') focusHandler = handler;
+      return jest.fn();
+    });
+    mockLoadTournament.mockResolvedValue({ id: 'tournament-1' });
+    mockIsRoundInProgress.mockReturnValue(true);
+
+    const { getByLabelText, queryByLabelText } = renderTabBar({ index: 2, navigation });
+
+    expect(getByLabelText('Play')).toBeTruthy();
+    expect(queryByLabelText('Score')).toBeNull();
+    expect(mockLoadTournament).not.toHaveBeenCalled();
+
+    focused = true;
+    focusHandler();
+
+    await waitFor(() => expect(getByLabelText('Score')).toBeTruthy());
   });
 
   test('uses the same center colors for Play and Score', async () => {
