@@ -1,7 +1,7 @@
 import React, { useEffect, useRef, useState, useCallback, useMemo, startTransition } from 'react';
 import {
-  View, Text, TextInput, TouchableOpacity,
-  ScrollView, Modal, Pressable, KeyboardAvoidingView, Platform, Animated,
+  View, Text, TouchableOpacity,
+  ScrollView, Modal, Pressable, Platform, Animated,
 } from 'react-native';
 import { Feather } from '@expo/vector-icons';
 import { useTheme } from '../../theme/ThemeContext';
@@ -36,13 +36,9 @@ if (Platform.OS === 'web' && typeof document !== 'undefined') {
   }
 }
 
-export function HoleView({ round, roundIndex, players, scores, shotDetails, meId, onSetShot, onPickMe, notes, currentHole, hole, isBestBall, bbResult, settings, onStep, onSetScore, editable, onRoundNoteChange, onHoleNoteChange, onNext, onGoToHole, onFinish, holeCount, showRunning, getScoreAnim, celebration, celebrationAnim, refreshing, onRefresh, official, officialDiscrepancy, officialEditableSource, officialSetScore, officialHasAttested, officialAttestBusy, officialAttestError, onAttest, onResolveConflict, focusConflict, onFocusConflictHandled }) {
+export function HoleView({ round, roundIndex, players, scores, shotDetails, meId, onSetShot, onPickMe, notes, currentHole, hole, isBestBall, bbResult, settings, onStep, onSetScore, editable, onNext, onGoToHole, onFinish, holeCount, showQuickFinish, finishBusy, showRunning, getScoreAnim, celebration, celebrationAnim, refreshing, onRefresh, official, officialDiscrepancy, officialEditableSource, officialSetScore, officialHasAttested, officialAttestBusy, officialAttestError, onAttest, onResolveConflict, focusConflict, onFocusConflictHandled }) {
   const { theme } = useTheme();
-  // Notes split: the current hole's note plus the shared round-level note.
-  const holeNote = notes?.hole?.[currentHole] ?? '';
-  const roundNote = notes?.round ?? '';
   const s = useMemo(() => makeScorecardStyles(theme), [theme]);
-  const [notesOpen, setNotesOpen] = useState(false);
   const [holePickerOpen, setHolePickerOpen] = useState(false);
   // True once the "which player are you?" modal is dismissed via "Not now",
   // so it stays closed for the rest of this scorecard session.
@@ -88,6 +84,7 @@ export function HoleView({ round, roundIndex, players, scores, shotDetails, meId
     () => new Set(listRoundConflicts(round).map((c) => c.hole)),
     [round],
   );
+  const onLastHole = currentHole >= holeCount;
   const [pagerSize, setPagerSize] = useState({ width: 0, height: 0 });
   const pagerRef = useRef(null);
   const holeScrollOffset = useRef(0);
@@ -269,23 +266,24 @@ export function HoleView({ round, roundIndex, players, scores, shotDetails, meId
         />
       )}
 
-      {/* Bottom controls: actions (notes / go-to-hole / next) */}
+      {/* Bottom controls: actions (finish / go-to-hole / next) */}
       <View style={s.bottomBar}>
         <View style={s.bottomActionsRow}>
-          <TouchableOpacity
-            style={s.notesPillBtn}
-            onPress={() => setNotesOpen(true)}
-            activeOpacity={0.7}
-          >
-            <Feather
-              name={holeNote.trim() ? 'edit-3' : 'edit-2'}
-              size={14}
-              color={holeNote.trim() ? theme.accent.primary : theme.text.muted}
-            />
-            <Text style={[s.notesPillBtnText, holeNote.trim() && s.notesPillBtnTextActive]}>
-              Notes
-            </Text>
-          </TouchableOpacity>
+          {showQuickFinish && !onLastHole && (
+            <TouchableOpacity
+              style={[s.quickFinishBtn, finishBusy && s.saveBtnDisabled]}
+              onPress={onFinish}
+              disabled={finishBusy}
+              activeOpacity={0.75}
+              accessibilityRole="button"
+              accessibilityLabel="Finish game"
+            >
+              <Feather name="flag" size={15} color={theme.text.inverse} />
+              <Text style={s.quickFinishBtnText}>
+                {finishBusy ? 'Finishing' : 'Finish'}
+              </Text>
+            </TouchableOpacity>
+          )}
           <TouchableOpacity
             style={s.notesPillBtn}
             onPress={() => setHolePickerOpen(true)}
@@ -299,7 +297,6 @@ export function HoleView({ round, roundIndex, players, scores, shotDetails, meId
             // Last-hole affordance. Official mode (Task 16) replaces the casual
             // "Finish" with "Attest my card": disabled while the holder has
             // open discrepancies or a request is in flight, hidden once done.
-            const onLastHole = currentHole >= holeCount;
             if (official && onLastHole) {
               const hasDiscrepancies = (officialDiscrepancy?.myHoles?.length ?? 0) > 0;
               const attestDisabled = hasDiscrepancies || officialAttestBusy
@@ -324,14 +321,16 @@ export function HoleView({ round, roundIndex, players, scores, shotDetails, meId
                 </TouchableOpacity>
               );
             }
+            const primaryDisabled = onLastHole && finishBusy;
             return (
               <TouchableOpacity
-                style={s.saveBtn}
+                style={[s.saveBtn, primaryDisabled && s.saveBtnDisabled]}
                 onPress={onLastHole ? onFinish : onNext}
+                disabled={primaryDisabled}
                 activeOpacity={0.8}
               >
                 <Text style={s.saveBtnText}>
-                  {onLastHole ? 'Finish' : `Hole ${currentHole + 1}`}
+                  {primaryDisabled ? 'Finishing' : onLastHole ? 'Finish' : `Hole ${currentHole + 1}`}
                 </Text>
                 <Feather
                   name={onLastHole ? 'flag' : 'chevron-right'}
@@ -353,53 +352,6 @@ export function HoleView({ round, roundIndex, players, scores, shotDetails, meId
           </Text>
         )}
       </View>
-
-      {/* Notes modal — per-hole note + shared round note */}
-      <Modal
-        visible={notesOpen}
-        transparent
-        animationType="slide"
-        onRequestClose={() => setNotesOpen(false)}
-      >
-        <KeyboardAvoidingView
-          behavior={Platform.OS === 'ios' ? 'padding' : undefined}
-          style={s.notesModalKav}
-        >
-          <Pressable style={s.notesBackdrop} onPress={() => setNotesOpen(false)}>
-            <Pressable style={s.notesSheet} onPress={() => {}}>
-              <View style={s.notesHandle} />
-              <View style={s.notesHeader}>
-                <Text style={s.notesTitle}>Notes</Text>
-                <TouchableOpacity onPress={() => setNotesOpen(false)} style={s.notesCloseBtn}>
-                  <Feather name="x" size={18} color={theme.text.secondary} />
-                </TouchableOpacity>
-              </View>
-              <Text style={s.notesFieldLabel}>{`Hole ${currentHole}`}</Text>
-              <TextInput
-                style={s.notesModalInputCompact}
-                placeholder={`Notes for hole ${currentHole}`}
-                placeholderTextColor={theme.text.muted}
-                keyboardAppearance={theme.isDark ? 'dark' : 'light'}
-                selectionColor={theme.accent.primary}
-                multiline
-                value={holeNote}
-                onChangeText={(text) => onHoleNoteChange(currentHole, text)}
-              />
-              <Text style={[s.notesFieldLabel, s.notesFieldLabelSpaced]}>Round</Text>
-              <TextInput
-                style={s.notesModalInputCompact}
-                placeholder="What happened this round?"
-                placeholderTextColor={theme.text.muted}
-                keyboardAppearance={theme.isDark ? 'dark' : 'light'}
-                selectionColor={theme.accent.primary}
-                multiline
-                value={roundNote}
-                onChangeText={onRoundNoteChange}
-              />
-            </Pressable>
-          </Pressable>
-        </KeyboardAvoidingView>
-      </Modal>
 
       {/* Go-to-hole modal */}
       <Modal

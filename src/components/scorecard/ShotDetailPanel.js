@@ -54,8 +54,10 @@ function BucketSegment({ label, value, buckets, labels, onSelect, theme, s, expl
   return (
     <View style={[s.bucketSegBlock, isLast && { borderBottomWidth: 0 }]}>
       <View style={s.bucketSegLabelRow}>
-        <Text style={s.shotRowLabel}>{label}</Text>
-        {explainer}
+        <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+          <Text style={s.shotRowLabel}>{label}</Text>
+          {explainer}
+        </View>
         {hint ? <Text style={s.bucketSegHint}>{hint}</Text> : null}
       </View>
       <View style={s.bucketSegTrack}>
@@ -132,8 +134,8 @@ export function ShotDetailPanel({ hole, detail, onChange, strokes, theme: themeP
   const s = sProp ?? sOwn;
   const d = { ...DEFAULT_SHOT, ...(detail ?? {}) };
   const isPar3 = hole.par === 3;
-  const approachDistanceLabel = isPar3 ? 'Hole distance' : 'Approach shot distance';
-  const approachShotHint = isPar3 ? 'metres' : hole.par === 5 ? '3rd shot · metres' : '2nd shot · metres';
+  const approachDistanceLabel = isPar3 ? 'Hole distance' : 'Approach';
+  const approachShotHint = 'metres';
   const gir = isGIR({ strokes, putts: d.putts, par: hole.par });
   const missedGIR = gir === false;
   const autoOutcome = recoveryOutcomeFromState({
@@ -163,7 +165,6 @@ export function ShotDetailPanel({ hole, detail, onChange, strokes, theme: themeP
 
   return (
     <View style={s.shotPanel}>
-      <Text style={s.shotPanelLabel}>How many were:</Text>
       {budgetCaption && <Text style={s.shotBudgetCaption}>{budgetCaption}</Text>}
 
       <ShotCounterRow
@@ -251,7 +252,7 @@ export function ShotDetailPanel({ hole, detail, onChange, strokes, theme: themeP
             title={approachDistanceLabel}
             body={isPar3
               ? 'Use the hole distance bucket for this par 3. It is stored with approach distance so par-3 strokes gained can use the same bucketed model.'
-              : 'Use the regulation approach shot: your 2nd shot on a par 4, or your 3rd shot on a par 5. Enter the distance you actually played into the green, not distance left after the tee shot.'}
+              : 'Log the shot you intended to hit into the green. Usually this is your 2nd shot on a par 4 or your 3rd shot on a par 5. After a punch-out, lay-up, or penalty, use the later shot that was actually aimed at the green.'}
           />
         }
       />

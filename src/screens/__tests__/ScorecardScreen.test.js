@@ -68,17 +68,22 @@ describe('ShotDetailPanel — approach capture', () => {
     expect(queryByLabelText('After tee 200+')).toBeNull();
   });
 
-  test('labels approach distance as the regulation approach shot by par', () => {
-    const { getByText, unmount } = render(wrap(
+  test('labels approach distance as Approach and only shows the metres hint', () => {
+    const { getByLabelText, getByText, queryByText, unmount } = render(wrap(
       <ShotDetailPanel
         hole={par4}
         strokes={4}
-        detail={{ putts: 2 }}
+        detail={{ putts: 0 }}
         onChange={() => {}}
       />
     ));
-    expect(getByText('Approach shot distance')).toBeTruthy();
-    expect(getByText('2nd shot · metres')).toBeTruthy();
+    expect(queryByText('How many were:')).toBeNull();
+    expect(getByText('Approach')).toBeTruthy();
+    expect(queryByText('Approach shot distance')).toBeNull();
+    expect(getByLabelText('Open Approach info')).toBeTruthy();
+    expect(getByLabelText('Open Sand shots info')).toBeTruthy();
+    expect(getByText('metres')).toBeTruthy();
+    expect(queryByText('2nd shot · metres')).toBeNull();
 
     unmount();
 
@@ -86,12 +91,30 @@ describe('ShotDetailPanel — approach capture', () => {
       <ShotDetailPanel
         hole={par5}
         strokes={5}
+        detail={{ putts: 0 }}
+        onChange={() => {}}
+      />
+    ));
+    expect(par5Render.getByText('Approach')).toBeTruthy();
+    expect(par5Render.queryByText('Approach shot distance')).toBeNull();
+    expect(par5Render.getByText('metres')).toBeTruthy();
+    expect(par5Render.queryByText('3rd shot · metres')).toBeNull();
+  });
+
+  test('approach info explains to log the shot aimed at the green', () => {
+    const { getByLabelText, getByText } = render(wrap(
+      <ShotDetailPanel
+        hole={par4}
+        strokes={4}
         detail={{ putts: 2 }}
         onChange={() => {}}
       />
     ));
-    expect(par5Render.getByText('Approach shot distance')).toBeTruthy();
-    expect(par5Render.getByText('3rd shot · metres')).toBeTruthy();
+
+    fireEvent.press(getByLabelText('Open Approach info'));
+
+    expect(getByText(/shot you intended to hit into the green/i)).toBeTruthy();
+    expect(getByText(/after a punch-out, lay-up, or penalty/i)).toBeTruthy();
   });
 
   test('labels par-3 approach bucket as hole distance and stores it in approachBucket', () => {
@@ -141,7 +164,7 @@ describe('ShotDetailPanel — approach capture', () => {
       />
     ));
 
-    fireEvent.press(getByLabelText('Approach shot distance 100-150'));
+    fireEvent.press(getByLabelText('Approach 100-150'));
     expect(onChange).toHaveBeenCalledWith({ approachBucket: null, approachResult: null });
   });
 });

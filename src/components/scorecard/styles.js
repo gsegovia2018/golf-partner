@@ -191,21 +191,23 @@ export function makeScorecardStyles(theme) {
       alignItems: 'center',
       justifyContent: 'center',
     },
-    finishGameBtn: {
-      flexDirection: 'row',
+    notesHeaderBtn: {
+      width: 32,
+      height: 32,
       alignItems: 'center',
-      gap: 5,
-      minHeight: 32,
-      paddingHorizontal: 10,
-      borderRadius: 999,
-      borderWidth: 1,
-      borderColor: theme.semantic.masters.red,
-      backgroundColor: theme.semantic.masters.red,
+      justifyContent: 'center',
+      position: 'relative',
     },
-    finishGameBtnText: {
-      fontFamily: 'PlusJakartaSans-Bold',
-      color: '#ffffff',
-      fontSize: 12,
+    notesHeaderDot: {
+      position: 'absolute',
+      top: 5,
+      right: 5,
+      width: 7,
+      height: 7,
+      borderRadius: 999,
+      backgroundColor: theme.accent.primary,
+      borderWidth: 1,
+      borderColor: theme.bg.primary,
     },
     headerTitle: {
       fontFamily: 'PlusJakartaSans-Bold',
@@ -214,25 +216,16 @@ export function makeScorecardStyles(theme) {
       letterSpacing: -0.3,
     },
 
-    // Inline view toggle (small, lives in header)
-    togglePill: {
-      flexDirection: 'row',
-      backgroundColor: theme.isDark ? theme.bg.elevated : theme.bg.secondary,
-      borderRadius: 999,
-      borderWidth: 1,
-      borderColor: theme.isDark ? theme.glass?.border : theme.border.default,
-      padding: 2,
-      gap: 2,
-    },
-    toggleBtn: {
+    // Compact scorecard view switcher.
+    viewSwitchBtn: {
       width: 32,
-      height: 28,
+      height: 32,
       alignItems: 'center',
       justifyContent: 'center',
-      borderRadius: 999,
-    },
-    toggleBtnActive: {
-      backgroundColor: theme.accent.primary,
+      borderRadius: 10,
+      backgroundColor: theme.isDark ? theme.bg.elevated : theme.bg.secondary,
+      borderWidth: 1,
+      borderColor: theme.isDark ? theme.glass?.border : theme.border.default,
     },
 
     // "Edit round" pill — header affordance that unlocks a finished round.
@@ -518,6 +511,22 @@ export function makeScorecardStyles(theme) {
       fontFamily: 'PlusJakartaSans-SemiBold',
     },
     notesPillBtnTextActive: { color: theme.accent.primary, fontFamily: 'PlusJakartaSans-Bold' },
+    quickFinishBtn: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: 6,
+      paddingHorizontal: 12,
+      paddingVertical: 12,
+      borderRadius: 999,
+      borderWidth: 1,
+      borderColor: theme.semantic.masters.red,
+      backgroundColor: theme.semantic.masters.red,
+    },
+    quickFinishBtnText: {
+      color: theme.text.inverse,
+      fontSize: 12,
+      fontFamily: 'PlusJakartaSans-Bold',
+    },
 
     // Notes modal (bottom sheet)
     notesModalKav: { flex: 1, justifyContent: 'flex-end' },

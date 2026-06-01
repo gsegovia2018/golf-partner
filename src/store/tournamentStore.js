@@ -1506,7 +1506,7 @@ export function isRoundInProgress(tournament) {
   const entered = roundEnteredCount(round, tournament.players ?? []);
   const holeCount = round.holes?.length ?? 18;
   const expected = (tournament.players?.length ?? 0) * holeCount;
-  return entered > 0 && entered < expected;
+  return expected > 0 && entered < expected;
 }
 
 // ── Conflict log observable ──────────────────────────────────────────────────

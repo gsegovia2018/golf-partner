@@ -1,6 +1,7 @@
 import { syncQueue } from './syncQueue';
 import { saveLocal, _setSyncStatus } from './tournamentStore';
 import { isOnline } from '../lib/connectivity';
+import { normalizeRoundNotes } from './roundNotes';
 
 // Maps a mutation to the in-tournament `_meta` path it bumps.
 // Returns null for library-only mutations (which do not touch the tournament blob).
@@ -116,11 +117,10 @@ export function applyToTournament(t, m) {
       const round = t.rounds.find((r) => r.id === m.roundId);
       if (!round) return;
       if (m.scope === 'hole') {
-        round.notes = { ...(round.notes ?? {}) };
-        round.notes.hole = { ...(round.notes.hole ?? {}) };
+        round.notes = normalizeRoundNotes(round.notes);
         round.notes.hole[m.hole] = m.text;
       } else {
-        round.notes = { ...(round.notes ?? {}), round: m.text };
+        round.notes = { ...normalizeRoundNotes(round.notes), round: m.text };
       }
       break;
     }

@@ -56,9 +56,7 @@ export default function FloatingTabBar({ state, navigation }) {
           };
 
           const iconColor = center
-            ? item.live
-              ? theme.masters.yellow
-              : theme.text.inverse
+            ? theme.text.inverse
             : focused
               ? theme.accent.primary
               : theme.text.secondary;
@@ -77,12 +75,11 @@ export default function FloatingTabBar({ state, navigation }) {
                 testID={`${route.name}-tab-surface`}
                 style={[
                   center ? styles.centerButton : styles.secondaryButton,
-                  center && item.live && styles.centerButtonLive,
                   secondaryFocused && styles.secondaryButtonActive,
                 ]}
               >
                 <MaterialCommunityIcons name={item.icon} size={center ? 25 : secondaryFocused ? 20 : 22} color={iconColor} />
-                {center && <Text style={[styles.centerLabel, item.live && styles.centerLabelLive]}>{item.label}</Text>}
+                {center && <Text style={styles.centerLabel}>{item.label}</Text>}
                 {secondaryFocused && <Text style={styles.secondaryLabel}>{item.label}</Text>}
               </View>
             </TouchableOpacity>
@@ -170,19 +167,11 @@ function tabBarStyles(theme) {
       shadowOffset: { width: 0, height: 8 },
       elevation: 16,
     },
-    centerButtonLive: {
-      backgroundColor: theme.isDark ? theme.bg.primary : '#14231d',
-      shadowColor: '#000',
-      shadowOpacity: theme.isDark ? 0.5 : 0.22,
-    },
     centerLabel: {
       fontFamily: 'PlusJakartaSans-ExtraBold',
       fontSize: 10,
       lineHeight: 12,
       color: theme.text.inverse,
-    },
-    centerLabelLive: {
-      color: theme.masters.yellow,
     },
     secondaryLabel: {
       fontFamily: 'PlusJakartaSans-ExtraBold',

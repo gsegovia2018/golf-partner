@@ -1,7 +1,7 @@
 import React, { useEffect, useRef, useState, useCallback, useMemo } from 'react';
 import {
-  View, Text, TouchableOpacity,
-  ScrollView, Modal, Pressable, Platform, Animated,
+  View, Text, TextInput, TouchableOpacity,
+  ScrollView, Modal, Pressable, KeyboardAvoidingView, Platform, Animated,
   ActivityIndicator, Alert,
 } from 'react-native';
 import ScreenContainer from '../components/ScreenContainer';
@@ -37,6 +37,7 @@ import { cardDiscrepancyHoles } from '../store/officialScoring';
 import { buildLeaderboard } from '../store/officialLeaderboard';
 import { attestCard } from '../store/officialStore';
 import { notifyRoundFinished } from '../store/notificationStore';
+import { normalizeRoundNotes } from '../store/roundNotes';
 import {
   DEFAULT_SHOT,
   celebrationFor,
@@ -227,11 +228,9 @@ export default function ScorecardScreen({ navigation, route }) {
   const [shotDetails, setShotDetails] = useState(() => initialRound?.shotDetails ?? {});
   // Notes object: { round: string, hole: { [holeNumber]: string } }.
   const [notes, setNotes] = useState(() => {
-    const rawNotes = initialRound?.notes;
-    return rawNotes && typeof rawNotes === 'object'
-      ? rawNotes
-      : (typeof rawNotes === 'string' && rawNotes ? { round: rawNotes } : {});
+    return normalizeRoundNotes(initialRound?.notes);
   });
+  const [notesOpen, setNotesOpen] = useState(false);
   const [view, setView] = useState('hole'); // 'grid' | 'hole'
   const [currentHole, setCurrentHole] = useState(1);
   const [refreshing, setRefreshing] = useState(false);
@@ -375,12 +374,7 @@ export default function ScorecardScreen({ navigation, route }) {
     setShotDetails(mergedShotDetails);
     // Normalize notes to the { round, hole } object shape. Legacy data may
     // have stored a bare string — treat that as the round-level note.
-    const rawNotes = round?.notes;
-    setNotes(
-      rawNotes && typeof rawNotes === 'object'
-        ? rawNotes
-        : (typeof rawNotes === 'string' && rawNotes ? { round: rawNotes } : {})
-    );
+    setNotes(normalizeRoundNotes(round?.notes));
 
     // Only on first load: jump to the first hole with no scores entered.
     if (!hasAutoJumpedRef.current && round?.holes?.length) {
@@ -571,19 +565,19 @@ export default function ScorecardScreen({ navigation, route }) {
   }, [autoSave, scheduleNoteSave]);
 
   const saveRoundNote = useCallback((value) => {
-    if (viewOnly) return;
+    if (viewOnly || official) return;
     setNotes((prev) => ({ ...prev, round: value }));
     scheduleNoteSave('round', { scope: 'round', text: value });
-  }, [scheduleNoteSave, viewOnly]);
+  }, [scheduleNoteSave, viewOnly, official]);
 
   const saveHoleNote = useCallback((holeNumber, value) => {
-    if (viewOnly) return;
+    if (viewOnly || official) return;
     setNotes((prev) => ({
       ...prev,
       hole: { ...(prev.hole ?? {}), [holeNumber]: value },
     }));
     scheduleNoteSave(`h${holeNumber}`, { scope: 'hole', hole: holeNumber, text: value });
-  }, [scheduleNoteSave, viewOnly]);
+  }, [scheduleNoteSave, viewOnly, official]);
 
   // Resolve a casual score conflict: write the chosen value and clear the
   // marker. Updates `scores` state optimistically, then dispatches a
@@ -1323,10 +1317,19 @@ export default function ScorecardScreen({ navigation, route }) {
   const holeCount = round.holes.length;
   const hole = round.holes.find((h) => h.number === currentHole);
   const showQuickFinish = canShowQuickFinish({ tournament, official, viewOnly });
+  const showNotesControls = !official;
+  const holeNote = notes?.hole?.[currentHole] ?? '';
+  const roundNote = notes?.round ?? '';
+  const hasCurrentNotes = showNotesControls && !!(holeNote.trim() || roundNote.trim());
+  const nextView = view === 'hole' ? 'grid' : 'hole';
+  const viewSwitchLabel = view === 'hole'
+    ? 'Show full scorecard'
+    : 'Show hole by hole scorecard';
+  const viewSwitchIcon = view === 'hole' ? 'grid' : 'circle';
 
   return (
     <ScreenContainer style={s.container} edges={['top', 'bottom']}>
-      {/* Header with inline view toggle (small, doesn't take a full row) */}
+      {/* Header with compact scorecard view switch. */}
       <View style={s.header}>
         <TouchableOpacity onPress={goBack} style={s.backBtn}>
           <Feather name="chevron-left" size={22} color={theme.accent.primary} />
@@ -1352,30 +1355,14 @@ export default function ScorecardScreen({ navigation, route }) {
               <Text style={s.editRoundBtnText}>Edit round</Text>
             </TouchableOpacity>
           )}
-          <View style={s.togglePill}>
-            <TouchableOpacity
-              style={[s.toggleBtn, view === 'hole' && s.toggleBtnActive]}
-              onPress={() => setView('hole')}
-              accessibilityLabel="Hole by hole view"
-            >
-              <Feather
-                name="circle"
-                size={12}
-                color={view === 'hole' ? theme.text.inverse : theme.text.muted}
-              />
-            </TouchableOpacity>
-            <TouchableOpacity
-              style={[s.toggleBtn, view === 'grid' && s.toggleBtnActive]}
-              onPress={() => setView('grid')}
-              accessibilityLabel="All holes grid view"
-            >
-              <Feather
-                name="grid"
-                size={12}
-                color={view === 'grid' ? theme.text.inverse : theme.text.muted}
-              />
-            </TouchableOpacity>
-          </View>
+          <TouchableOpacity
+            onPress={() => setView(nextView)}
+            style={s.viewSwitchBtn}
+            accessibilityRole="button"
+            accessibilityLabel={viewSwitchLabel}
+          >
+            <Feather name={viewSwitchIcon} size={17} color={theme.accent.primary} />
+          </TouchableOpacity>
           <TouchableOpacity
             onPress={toggleRunning}
             style={s.cameraBtn}
@@ -1392,15 +1379,15 @@ export default function ScorecardScreen({ navigation, route }) {
               <Feather name="award" size={20} color={theme.accent.primary} />
             </TouchableOpacity>
           )}
-          {showQuickFinish && (
+          {showNotesControls && (
             <TouchableOpacity
-              onPress={handleFinish}
-              disabled={finishBusy}
-              style={[s.finishGameBtn, finishBusy && s.saveBtnDisabled]}
-              accessibilityLabel="Finish game"
+              onPress={() => setNotesOpen(true)}
+              style={s.notesHeaderBtn}
+              accessibilityRole="button"
+              accessibilityLabel={hasCurrentNotes ? 'Open notes' : 'Add notes'}
             >
-              <Feather name="check-circle" size={15} color="#ffffff" />
-              <Text style={s.finishGameBtnText}>Finish</Text>
+              <Feather name={hasCurrentNotes ? 'edit-3' : 'edit-2'} size={18} color={theme.accent.primary} />
+              {hasCurrentNotes && <View style={s.notesHeaderDot} />}
             </TouchableOpacity>
           )}
           <TouchableOpacity
@@ -1504,12 +1491,12 @@ export default function ScorecardScreen({ navigation, route }) {
           onStep={stepScore}
           onSetScore={setScore}
           editable={editable}
-          onRoundNoteChange={saveRoundNote}
-          onHoleNoteChange={saveHoleNote}
           onNext={goToNextHole}
           onGoToHole={goToHole}
           onFinish={handleFinish}
           holeCount={holeCount}
+          showQuickFinish={showQuickFinish}
+          finishBusy={finishBusy}
           showRunning={showRunning}
           getScoreAnim={getScoreAnim}
           celebration={celebration}
@@ -1543,6 +1530,55 @@ export default function ScorecardScreen({ navigation, route }) {
           onRefresh={onRefresh}
           meId={meId}
         />
+      )}
+
+      {/* Notes modal — per-hole note + shared round note */}
+      {showNotesControls && (
+        <Modal
+          visible={notesOpen}
+          transparent
+          animationType="slide"
+          onRequestClose={() => setNotesOpen(false)}
+        >
+          <KeyboardAvoidingView
+            behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+            style={s.notesModalKav}
+          >
+            <Pressable style={s.notesBackdrop} onPress={() => setNotesOpen(false)}>
+              <Pressable style={s.notesSheet} onPress={() => {}}>
+                <View style={s.notesHandle} />
+                <View style={s.notesHeader}>
+                  <Text style={s.notesTitle}>Notes</Text>
+                  <TouchableOpacity onPress={() => setNotesOpen(false)} style={s.notesCloseBtn}>
+                    <Feather name="x" size={18} color={theme.text.secondary} />
+                  </TouchableOpacity>
+                </View>
+                <Text style={s.notesFieldLabel}>{`Hole ${currentHole}`}</Text>
+                <TextInput
+                  style={s.notesModalInputCompact}
+                  placeholder={`Notes for hole ${currentHole}`}
+                  placeholderTextColor={theme.text.muted}
+                  keyboardAppearance={theme.isDark ? 'dark' : 'light'}
+                  selectionColor={theme.accent.primary}
+                  multiline
+                  value={holeNote}
+                  onChangeText={(text) => saveHoleNote(currentHole, text)}
+                />
+                <Text style={[s.notesFieldLabel, s.notesFieldLabelSpaced]}>Round</Text>
+                <TextInput
+                  style={s.notesModalInputCompact}
+                  placeholder="What happened this round?"
+                  placeholderTextColor={theme.text.muted}
+                  keyboardAppearance={theme.isDark ? 'dark' : 'light'}
+                  selectionColor={theme.accent.primary}
+                  multiline
+                  value={roundNote}
+                  onChangeText={saveRoundNote}
+                />
+              </Pressable>
+            </Pressable>
+          </KeyboardAvoidingView>
+        </Modal>
       )}
 
       <CaptureMenuSheet

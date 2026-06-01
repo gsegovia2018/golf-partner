@@ -121,4 +121,31 @@ describe('FloatingTabBar', () => {
 
     expect(navigation.navigate).toHaveBeenCalledWith('Scorecard');
   });
+
+  test('uses the same center colors for Play and Score', async () => {
+    const play = renderTabBar({ index: 0 });
+    const playSurface = StyleSheet.flatten(play.getByTestId('Home-tab-surface').props.style);
+    const playIcon = play.UNSAFE_getAllByType('MaterialCommunityIcons')
+      .find((icon) => icon.props.name === 'flag-variant');
+    const playLabel = StyleSheet.flatten(play.getByText('Play').props.style);
+
+    expect(playSurface.backgroundColor).toBe(light.accent.primary);
+    expect(playIcon.props.color).toBe(light.text.inverse);
+    expect(playLabel.color).toBe(light.text.inverse);
+    play.unmount();
+
+    mockLoadTournament.mockResolvedValue({ id: 'tournament-1' });
+    mockIsRoundInProgress.mockReturnValue(true);
+    const score = renderTabBar({ index: 0 });
+
+    await waitFor(() => expect(score.getByLabelText('Score')).toBeTruthy());
+    const scoreSurface = StyleSheet.flatten(score.getByTestId('Home-tab-surface').props.style);
+    const scoreIcon = score.UNSAFE_getAllByType('MaterialCommunityIcons')
+      .find((icon) => icon.props.name === 'scoreboard-outline');
+    const scoreLabel = StyleSheet.flatten(score.getByText('Score').props.style);
+
+    expect(scoreSurface.backgroundColor).toBe(light.accent.primary);
+    expect(scoreIcon.props.color).toBe(light.text.inverse);
+    expect(scoreLabel.color).toBe(light.text.inverse);
+  });
 });

@@ -80,35 +80,56 @@ describe('QuickStartCourses helpers', () => {
 });
 
 describe('QuickStartCourses interactions', () => {
-  test('returns null for nullable courses', () => {
-    const { toJSON } = renderQuickStart({ courses: null });
+  test('shows an empty quick-start zone when there are no favorite courses', () => {
+    const onManage = jest.fn();
+    const { getByLabelText, getByText } = renderQuickStart({ courses: null, onManage });
 
-    expect(toJSON()).toBeNull();
+    expect(getByText('QUICK START')).toBeTruthy();
+    expect(getByText('No favorite courses yet')).toBeTruthy();
+    expect(getByText('Open Courses and tap the star on a course to quick start from here.')).toBeTruthy();
+
+    fireEvent.press(getByLabelText('Manage quick start courses'));
+    expect(onManage).toHaveBeenCalledTimes(1);
   });
 
   test('opens the sheet and preselects the signed-in player', () => {
-    const { getByLabelText, getByText } = renderQuickStart();
+    const { getAllByLabelText, getByLabelText, getByText, queryByLabelText } = renderQuickStart();
 
     fireEvent.press(getByText('Pine Course'));
 
     expect(getByText('Tees are auto-assigned. Use Edit details to change them.')).toBeTruthy();
-    expect(getByLabelText('Select Me').props.accessibilityState.checked).toBe(true);
-    expect(getByLabelText('Select Guest').props.accessibilityState.checked).toBe(false);
+    expect(getByText('Me')).toBeTruthy();
+    expect(getByLabelText('Remove Me')).toBeTruthy();
+    expect(queryByLabelText('Remove Guest')).toBeNull();
+    expect(getAllByLabelText('Add player to quick start')).toHaveLength(3);
   });
 
-  test('toggles players and enables Start when at least one player is selected', () => {
-    const { getByLabelText, getByText } = renderQuickStart({ currentUserId: 'other-user' });
+  test('adds and removes players through setup-style slots', () => {
+    const { getAllByLabelText, getByLabelText, getByText, queryByLabelText } = renderQuickStart({ currentUserId: 'other-user' });
 
     fireEvent.press(getByText('Pine Course'));
     expect(getByLabelText('Start quick start round').props.accessibilityState.disabled).toBe(true);
+    expect(getAllByLabelText('Add player to quick start')).toHaveLength(4);
 
-    fireEvent.press(getByLabelText('Select Guest'));
-    expect(getByLabelText('Select Guest').props.accessibilityState.checked).toBe(true);
+    fireEvent.press(getAllByLabelText('Add player to quick start')[0]);
+    fireEvent.press(getByLabelText('Add Guest'));
+    expect(getByLabelText('Remove Guest')).toBeTruthy();
     expect(getByLabelText('Start quick start round').props.accessibilityState.disabled).toBe(false);
 
-    fireEvent.press(getByLabelText('Select Guest'));
-    expect(getByLabelText('Select Guest').props.accessibilityState.checked).toBe(false);
+    fireEvent.press(getByLabelText('Remove Guest'));
+    expect(queryByLabelText('Remove Guest')).toBeNull();
     expect(getByLabelText('Start quick start round').props.accessibilityState.disabled).toBe(true);
+  });
+
+  test('marks linked app users in the add-player list', () => {
+    const { getAllByLabelText, getAllByText, getByLabelText, getByText } = renderQuickStart({ currentUserId: 'other-user' });
+
+    fireEvent.press(getByText('Pine Course'));
+    fireEvent.press(getAllByLabelText('Add player to quick start')[0]);
+
+    expect(getByLabelText('Add Guest')).toBeTruthy();
+    expect(getByLabelText('Add Me')).toBeTruthy();
+    expect(getAllByText('App user')).toHaveLength(1);
   });
 
   test('disables Start while starting', () => {
@@ -136,13 +157,14 @@ describe('QuickStartCourses interactions', () => {
 
   test('calls onEditDetails with selected course and players', () => {
     const onEditDetails = jest.fn();
-    const { getByLabelText, getByText, queryByText } = renderQuickStart({ onEditDetails });
+    const { getAllByLabelText, getByLabelText, getByText, queryByText } = renderQuickStart({ onEditDetails });
 
     fireEvent.press(getByText('Pine Course'));
-    fireEvent.press(getByLabelText('Select Guest'));
+    fireEvent.press(getAllByLabelText('Add player to quick start')[0]);
+    fireEvent.press(getByLabelText('Add Guest'));
     fireEvent.press(getByLabelText('Edit quick start details'));
 
-    expect(onEditDetails).toHaveBeenCalledWith({ course: courses[0], players });
+    expect(onEditDetails).toHaveBeenCalledWith({ course: courses[0], players: [players[1], players[0]] });
     expect(queryByText('Tees are auto-assigned. Use Edit details to change them.')).toBeNull();
   });
 
@@ -191,7 +213,7 @@ describe('QuickStartCourses interactions', () => {
     );
 
     await waitFor(() => {
-      expect(view.getByLabelText('Select Me').props.accessibilityState.checked).toBe(true);
+      expect(view.getByLabelText('Remove Me')).toBeTruthy();
     });
   });
 
@@ -199,7 +221,7 @@ describe('QuickStartCourses interactions', () => {
     const view = renderQuickStart();
 
     fireEvent.press(view.getByText('Pine Course'));
-    fireEvent.press(view.getByLabelText('Select Me'));
+    fireEvent.press(view.getByLabelText('Remove Me'));
 
     view.rerender(
       <QuickStartCourses
@@ -209,7 +231,7 @@ describe('QuickStartCourses interactions', () => {
       />,
     );
 
-    expect(view.getByLabelText('Select Me').props.accessibilityState.checked).toBe(false);
+    expect(view.queryByLabelText('Remove Me')).toBeNull();
   });
 
   test('renders disabled Manage when no callback is supplied', () => {

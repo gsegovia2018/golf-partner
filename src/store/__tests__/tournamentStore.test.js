@@ -144,6 +144,14 @@ describe('isRoundInProgress', () => {
     })).toBe(true);
   });
 
+  test('treats an unscored active round as in progress', () => {
+    expect(isRoundInProgress({
+      players,
+      rounds: [{ holes, scores: {} }],
+      currentRound: 0,
+    })).toBe(true);
+  });
+
   test('does not treat an explicitly finished partial round as live scoring', () => {
     expect(isRoundInProgress({
       players,

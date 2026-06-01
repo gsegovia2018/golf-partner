@@ -19,6 +19,7 @@ import RoundRecapPanel from '../components/roundSummary/RoundRecapPanel';
 import RoundSummaryTabs from '../components/roundSummary/RoundSummaryTabs';
 import RoundScorecardTables from '../components/roundSummary/RoundScorecardTables';
 import { buildRoundRecap, buildScorecardSections } from './roundSummaryModel';
+import { normalizeRoundNotes } from '../store/roundNotes';
 
 // Read-only summary of a single round — the feed's drill-in target. Works
 // for the current user's own rounds and for friends' rounds (read access
@@ -105,10 +106,11 @@ export default function RoundSummaryScreen({ navigation, route }) {
   });
   const recap = round ? buildRoundRecap({ round, ranked }) : null;
   const scorecardSections = round ? buildScorecardSections({ round, ranked }) : [];
-  const roundNote = typeof round?.notes?.round === 'string'
-    ? round.notes.round.trim()
+  const normalizedNotes = normalizeRoundNotes(round?.notes);
+  const roundNote = typeof normalizedNotes.round === 'string'
+    ? normalizedNotes.round.trim()
     : '';
-  const holeNotes = Object.entries(round?.notes?.hole ?? {})
+  const holeNotes = Object.entries(normalizedNotes.hole ?? {})
     .filter(([, text]) => typeof text === 'string' && text.trim())
     .sort(([a], [b]) => Number(a) - Number(b));
   const hasNotes = Boolean(roundNote) || holeNotes.length > 0;

@@ -22,6 +22,8 @@ const DEFAULT_THEME = {
   isDark: false,
 };
 
+const MAX_QUICK_START_PLAYERS = 4;
+
 export function coursePar(course) {
   const holes = Array.isArray(course?.holes) ? course.holes : [];
   if (holes.length === 0) return null;
@@ -54,6 +56,19 @@ function playerName(player) {
   return player?.name || player?.displayName || 'Player';
 }
 
+function playerInitials(player) {
+  return playerName(player)
+    .split(/\s+/)
+    .filter(Boolean)
+    .slice(0, 2)
+    .map((part) => part[0]?.toUpperCase())
+    .join('') || 'P';
+}
+
+function isLinkedAppUser(player) {
+  return !!(player?.user_id || player?.userId);
+}
+
 export default function QuickStartCourses({
   courses = [],
   players = [],
@@ -73,6 +88,7 @@ export default function QuickStartCourses({
   const [selectedCourse, setSelectedCourse] = useState(null);
   const [selectedPlayerIds, setSelectedPlayerIds] = useState([]);
   const [selectionTouched, setSelectionTouched] = useState(false);
+  const [addingPlayer, setAddingPlayer] = useState(false);
   const signedInUserId = currentUserId || userId;
   const normalizedCourses = Array.isArray(courses) ? courses : [];
   const normalizedPlayers = useMemo(
@@ -80,14 +96,25 @@ export default function QuickStartCourses({
     [players],
   );
 
+  const playerById = useMemo(
+    () => new Map(normalizedPlayers.map((player) => [player.id, player])),
+    [normalizedPlayers],
+  );
+
   const selectedPlayers = useMemo(
-    () => normalizedPlayers.filter((player) => selectedPlayerIds.includes(player.id)),
+    () => selectedPlayerIds.map((id) => playerById.get(id)).filter(Boolean),
+    [playerById, selectedPlayerIds],
+  );
+
+  const availablePlayers = useMemo(
+    () => normalizedPlayers.filter((player) => !selectedPlayerIds.includes(player.id)),
     [normalizedPlayers, selectedPlayerIds],
   );
 
   useEffect(() => {
     if (!selectedCourse || selectionTouched) return;
-    const nextIds = initialQuickStartPlayerIds(normalizedPlayers, signedInUserId);
+    const nextIds = initialQuickStartPlayerIds(normalizedPlayers, signedInUserId)
+      .slice(0, MAX_QUICK_START_PLAYERS);
     setSelectedPlayerIds((prev) => {
       if (prev.length === nextIds.length && prev.every((id, index) => id === nextIds[index])) {
         return prev;
@@ -96,24 +123,37 @@ export default function QuickStartCourses({
     });
   }, [selectedCourse, normalizedPlayers, signedInUserId, selectionTouched]);
 
-  if (!normalizedCourses.length) return null;
-
   const openCourse = (course) => {
     setSelectedCourse(course);
     setSelectionTouched(false);
-    setSelectedPlayerIds(initialQuickStartPlayerIds(normalizedPlayers, signedInUserId));
+    setAddingPlayer(false);
+    setSelectedPlayerIds(
+      initialQuickStartPlayerIds(normalizedPlayers, signedInUserId)
+        .slice(0, MAX_QUICK_START_PLAYERS),
+    );
   };
 
-  const closeSheet = () => setSelectedCourse(null);
+  const closeSheet = () => {
+    setSelectedCourse(null);
+    setAddingPlayer(false);
+  };
 
-  const togglePlayer = (playerId) => {
+  const addPlayer = (playerId) => {
     setSelectionTouched(true);
-    setSelectedPlayerIds((prev) => (
-      prev.includes(playerId) ? prev.filter((id) => id !== playerId) : [...prev, playerId]
-    ));
+    setSelectedPlayerIds((prev) => {
+      if (prev.includes(playerId) || prev.length >= MAX_QUICK_START_PLAYERS) return prev;
+      return [...prev, playerId];
+    });
+    setAddingPlayer(false);
+  };
+
+  const removePlayer = (playerId) => {
+    setSelectionTouched(true);
+    setSelectedPlayerIds((prev) => prev.filter((id) => id !== playerId));
   };
 
   const startDisabled = selectedPlayers.length === 0 || starting;
+  const emptySlots = Math.max(0, MAX_QUICK_START_PLAYERS - selectedPlayers.length);
   const editDetails = () => {
     if (!selectedCourse) return;
     const payload = { course: selectedCourse, players: selectedPlayers };
@@ -144,31 +184,41 @@ export default function QuickStartCourses({
         </TouchableOpacity>
       </View>
 
-      <ScrollView
-        horizontal
-        showsHorizontalScrollIndicator={false}
-        contentContainerStyle={s.rail}
-      >
-        {normalizedCourses.map((course) => {
-          const meta = quickStartCourseMeta(course);
-          return (
-            <TouchableOpacity
-              key={course.id || courseTitle(course)}
-              style={s.courseCard}
-              activeOpacity={0.78}
-              onPress={() => openCourse(course)}
-              accessibilityRole="button"
-              accessibilityLabel={`Open ${courseTitle(course)} quick start`}
-            >
-              <View style={s.courseIcon}>
-                <Feather name="flag" size={18} color={theme.accent.primary} />
-              </View>
-              <Text style={s.courseName} numberOfLines={2}>{courseTitle(course)}</Text>
-              {meta ? <Text style={s.courseMeta}>{meta}</Text> : null}
-            </TouchableOpacity>
-          );
-        })}
-      </ScrollView>
+      {normalizedCourses.length ? (
+        <ScrollView
+          horizontal
+          showsHorizontalScrollIndicator={false}
+          contentContainerStyle={s.rail}
+        >
+          {normalizedCourses.map((course) => {
+            const meta = quickStartCourseMeta(course);
+            return (
+              <TouchableOpacity
+                key={course.id || courseTitle(course)}
+                style={s.courseCard}
+                activeOpacity={0.78}
+                onPress={() => openCourse(course)}
+                accessibilityRole="button"
+                accessibilityLabel={`Open ${courseTitle(course)} quick start`}
+              >
+                <View style={s.courseIcon}>
+                  <Feather name="flag" size={18} color={theme.accent.primary} />
+                </View>
+                <Text style={s.courseName} numberOfLines={2}>{courseTitle(course)}</Text>
+                {meta ? <Text style={s.courseMeta}>{meta}</Text> : null}
+              </TouchableOpacity>
+            );
+          })}
+        </ScrollView>
+      ) : (
+        <View style={s.emptyState}>
+          <Feather name="star" size={32} color={theme.text.muted} />
+          <Text style={s.emptyTitle}>No favorite courses yet</Text>
+          <Text style={s.emptySubtitle}>
+            Open Courses and tap the star on a course to quick start from here.
+          </Text>
+        </View>
+      )}
 
       <Modal
         visible={!!selectedCourse}
@@ -181,100 +231,164 @@ export default function QuickStartCourses({
         </TouchableWithoutFeedback>
         <View style={s.sheet}>
           <View style={s.handle} />
-          <View style={s.sheetHeader}>
-            <View style={s.sheetTitleWrap}>
-              <Text style={s.sheetEyebrow}>Quick start</Text>
-              <Text style={s.sheetTitle}>{courseTitle(selectedCourse)}</Text>
-              {quickStartCourseMeta(selectedCourse) ? (
-                <Text style={s.sheetMeta}>{quickStartCourseMeta(selectedCourse)}</Text>
-              ) : null}
-            </View>
-            <TouchableOpacity
-              onPress={closeSheet}
-              style={s.closeButton}
-              accessibilityRole="button"
-              accessibilityLabel="Close quick start"
-            >
-              <Feather name="x" size={20} color={theme.text.muted} />
-            </TouchableOpacity>
-          </View>
-
-          <Text style={s.notice}>
-            Tees are auto-assigned. Use Edit details to change them.
-          </Text>
-
-          <Text style={s.playersLabel}>Players</Text>
-          {playersLoading ? (
-            <View style={s.stateBox}>
-              <ActivityIndicator color={theme.accent.primary} />
-              <Text style={s.stateText}>Loading players...</Text>
-            </View>
-          ) : playersError ? (
-            <View style={s.stateBox}>
-              <Text style={s.errorText}>
-                {typeof playersError === 'string' ? playersError : 'Could not load players.'}
-              </Text>
+          <View style={s.sheetInner}>
+            <View style={s.sheetHeader}>
+              <View style={s.sheetTitleWrap}>
+                <Text style={s.sheetEyebrow}>Quick start</Text>
+                <Text style={s.sheetTitle}>{courseTitle(selectedCourse)}</Text>
+                {quickStartCourseMeta(selectedCourse) ? (
+                  <Text style={s.sheetMeta}>{quickStartCourseMeta(selectedCourse)}</Text>
+                ) : null}
+              </View>
               <TouchableOpacity
-                style={s.retryButton}
-                onPress={onRetryPlayers}
+                onPress={closeSheet}
+                style={s.closeButton}
                 accessibilityRole="button"
-                accessibilityLabel="Retry loading players"
+                accessibilityLabel="Close quick start"
               >
-                <Text style={s.retryText}>Retry</Text>
+                <Feather name="x" size={20} color={theme.text.muted} />
               </TouchableOpacity>
             </View>
-          ) : (
-            <ScrollView style={s.playersList} contentContainerStyle={s.playersContent}>
-              {normalizedPlayers.map((player) => {
-                const selected = selectedPlayerIds.includes(player.id);
-                return (
+
+            <Text style={s.notice}>
+              Tees are auto-assigned. Use Edit details to change them.
+            </Text>
+
+            <View style={s.playersHeader}>
+              <Text style={s.playersLabel}>Players</Text>
+              {addingPlayer ? (
+                <TouchableOpacity
+                  onPress={() => setAddingPlayer(false)}
+                  accessibilityRole="button"
+                  accessibilityLabel="Back to selected players"
+                  hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+                >
+                  <Text style={s.playersHeaderAction}>Slots</Text>
+                </TouchableOpacity>
+              ) : null}
+            </View>
+            {playersLoading ? (
+              <View style={s.stateBox}>
+                <ActivityIndicator color={theme.accent.primary} />
+                <Text style={s.stateText}>Loading players...</Text>
+              </View>
+            ) : playersError ? (
+              <View style={s.stateBox}>
+                <Text style={s.errorText}>
+                  {typeof playersError === 'string' ? playersError : 'Could not load players.'}
+                </Text>
+                <TouchableOpacity
+                  style={s.retryButton}
+                  onPress={onRetryPlayers}
+                  accessibilityRole="button"
+                  accessibilityLabel="Retry loading players"
+                >
+                  <Text style={s.retryText}>Retry</Text>
+                </TouchableOpacity>
+              </View>
+            ) : addingPlayer ? (
+              <ScrollView style={s.playersList} contentContainerStyle={s.playersContent}>
+                {availablePlayers.length ? availablePlayers.map((player) => (
                   <TouchableOpacity
                     key={player.id}
-                    style={[s.playerCard, selected && s.playerCardSelected]}
+                    style={s.addPlayerRow}
                     activeOpacity={0.75}
-                    onPress={() => togglePlayer(player.id)}
-                    accessibilityRole="checkbox"
-                    accessibilityLabel={`Select ${playerName(player)}`}
-                    accessibilityState={{ checked: selected }}
+                    onPress={() => addPlayer(player.id)}
+                    accessibilityRole="button"
+                    accessibilityLabel={`Add ${playerName(player)}`}
                   >
-                    <View style={[s.checkCircle, selected && s.checkCircleSelected]}>
-                      {selected ? <Feather name="check" size={14} color={theme.text.inverse} /> : null}
+                    <View style={s.addPlayerAvatar}>
+                      <Text style={s.addPlayerInitials}>{playerInitials(player)}</Text>
                     </View>
                     <View style={s.playerTextWrap}>
-                      <Text style={s.playerName}>{playerName(player)}</Text>
+                      <View style={s.addPlayerNameRow}>
+                        <Text style={s.playerName}>{playerName(player)}</Text>
+                        {isLinkedAppUser(player) ? (
+                          <View style={s.linkedBadge}>
+                            <Feather name="user-check" size={10} color={theme.accent.primary} />
+                            <Text style={s.linkedBadgeText}>App user</Text>
+                          </View>
+                        ) : null}
+                      </View>
                       {player?.handicap != null || player?.handicapIndex != null ? (
                         <Text style={s.playerMeta}>
                           HCP {player.handicap ?? player.handicapIndex}
                         </Text>
                       ) : null}
                     </View>
+                    <Feather name="plus" size={18} color={theme.accent.primary} />
                   </TouchableOpacity>
-                );
-              })}
-            </ScrollView>
-          )}
+                )) : (
+                  <View style={s.stateBox}>
+                    <Text style={s.stateText}>All available players are already selected.</Text>
+                  </View>
+                )}
+              </ScrollView>
+            ) : (
+              <ScrollView style={s.playersList} contentContainerStyle={s.playersContent}>
+                <View style={s.slotGrid}>
+                  {selectedPlayers.map((player) => (
+                    <View key={player.id} style={s.slotFilled}>
+                      <TouchableOpacity
+                        style={s.slotRemove}
+                        onPress={() => removePlayer(player.id)}
+                        accessibilityRole="button"
+                        accessibilityLabel={`Remove ${playerName(player)}`}
+                      >
+                        <Feather name="x" size={14} color={theme.text.muted} />
+                      </TouchableOpacity>
+                      <View style={s.slotAvatar}>
+                        <Text style={s.slotAvatarText}>{playerInitials(player)}</Text>
+                      </View>
+                      <Text style={s.slotName} numberOfLines={1}>{playerName(player)}</Text>
+                      {player?.handicap != null || player?.handicapIndex != null ? (
+                        <Text style={s.slotHcp}>
+                          HCP {player.handicap ?? player.handicapIndex}
+                        </Text>
+                      ) : null}
+                    </View>
+                  ))}
+                  {Array.from({ length: emptySlots }).map((_, index) => (
+                    <TouchableOpacity
+                      key={`empty-${index}`}
+                      style={s.slotEmpty}
+                      activeOpacity={0.78}
+                      onPress={() => setAddingPlayer(true)}
+                      accessibilityRole="button"
+                      accessibilityLabel="Add player to quick start"
+                    >
+                      <View style={s.slotPlus}>
+                        <Feather name="plus" size={18} color={theme.accent.primary} />
+                      </View>
+                      <Text style={s.slotEmptyLabel}>ADD PLAYER</Text>
+                    </TouchableOpacity>
+                  ))}
+                </View>
+              </ScrollView>
+            )}
 
-          <View style={s.actions}>
-            <TouchableOpacity
-              style={s.secondaryButton}
-              onPress={editDetails}
-              disabled={!selectedCourse}
-              accessibilityRole="button"
-              accessibilityLabel="Edit quick start details"
-              accessibilityState={{ disabled: !selectedCourse }}
-            >
-              <Text style={s.secondaryText}>Edit details</Text>
-            </TouchableOpacity>
-            <TouchableOpacity
-              style={[s.primaryButton, startDisabled && s.primaryButtonDisabled]}
-              onPress={startRound}
-              disabled={startDisabled}
-              accessibilityRole="button"
-              accessibilityLabel="Start quick start round"
-              accessibilityState={{ disabled: startDisabled }}
-            >
-              <Text style={s.primaryText}>{starting ? 'Starting...' : 'Start'}</Text>
-            </TouchableOpacity>
+            <View style={s.actions}>
+              <TouchableOpacity
+                style={s.secondaryButton}
+                onPress={editDetails}
+                disabled={!selectedCourse}
+                accessibilityRole="button"
+                accessibilityLabel="Edit quick start details"
+                accessibilityState={{ disabled: !selectedCourse }}
+              >
+                <Text style={s.secondaryText}>Edit details</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={[s.primaryButton, startDisabled && s.primaryButtonDisabled]}
+                onPress={startRound}
+                disabled={startDisabled}
+                accessibilityRole="button"
+                accessibilityLabel="Start quick start round"
+                accessibilityState={{ disabled: startDisabled }}
+              >
+                <Text style={s.primaryText}>{starting ? 'Starting...' : 'Start'}</Text>
+              </TouchableOpacity>
+            </View>
           </View>
         </View>
       </Modal>
@@ -288,7 +402,6 @@ const makeStyles = (t) => StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    paddingHorizontal: 20,
     marginBottom: 10,
   },
   heading: {
@@ -305,7 +418,7 @@ const makeStyles = (t) => StyleSheet.create({
     color: t.accent.primary,
   },
   manageTextDisabled: { color: t.text.muted },
-  rail: { paddingHorizontal: 20, gap: 12, paddingBottom: 2 },
+  rail: { paddingRight: 20, gap: 12, paddingBottom: 2 },
   courseCard: {
     width: 168,
     minHeight: 118,
@@ -337,6 +450,30 @@ const makeStyles = (t) => StyleSheet.create({
     color: t.text.secondary,
     marginTop: 5,
   },
+  emptyState: {
+    alignItems: 'center',
+    borderRadius: 14,
+    borderWidth: 1,
+    borderColor: t.border.default,
+    backgroundColor: t.bg.card,
+    paddingHorizontal: 18,
+    paddingVertical: 22,
+    gap: 8,
+    ...t.shadow.card,
+  },
+  emptyTitle: {
+    fontFamily: 'PlusJakartaSans-Bold',
+    fontSize: 15,
+    color: t.text.primary,
+    textAlign: 'center',
+  },
+  emptySubtitle: {
+    fontFamily: 'PlusJakartaSans-Medium',
+    fontSize: 13,
+    lineHeight: 18,
+    color: t.text.secondary,
+    textAlign: 'center',
+  },
   backdrop: { ...StyleSheet.absoluteFillObject, backgroundColor: 'rgba(0,0,0,0.45)' },
   sheet: {
     position: 'absolute',
@@ -358,6 +495,11 @@ const makeStyles = (t) => StyleSheet.create({
     alignSelf: 'center',
     marginTop: 10,
     backgroundColor: t.border.default,
+  },
+  sheetInner: {
+    width: '100%',
+    maxWidth: 960,
+    alignSelf: 'center',
   },
   sheetHeader: {
     flexDirection: 'row',
@@ -406,13 +548,23 @@ const makeStyles = (t) => StyleSheet.create({
     lineHeight: 18,
     color: t.text.secondary,
   },
-  playersLabel: {
+  playersHeader: {
     marginHorizontal: 20,
     marginTop: 18,
     marginBottom: 8,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+  },
+  playersLabel: {
     fontFamily: 'PlusJakartaSans-Bold',
     fontSize: 13,
     color: t.text.primary,
+  },
+  playersHeaderAction: {
+    fontFamily: 'PlusJakartaSans-Bold',
+    fontSize: 13,
+    color: t.accent.primary,
   },
   stateBox: {
     marginHorizontal: 20,
@@ -446,9 +598,103 @@ const makeStyles = (t) => StyleSheet.create({
     fontSize: 13,
     color: t.text.inverse,
   },
-  playersList: { maxHeight: 260, marginHorizontal: 20 },
-  playersContent: { gap: 8, paddingBottom: 4 },
-  playerCard: {
+  playersList: {
+    height: 260,
+    maxHeight: 260,
+    marginHorizontal: 20,
+    overflow: 'hidden',
+  },
+  playersContent: { paddingBottom: 4 },
+  slotGrid: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    justifyContent: 'space-between',
+  },
+  slotFilled: {
+    position: 'relative',
+    width: '48%',
+    minHeight: 116,
+    marginBottom: 10,
+    borderRadius: 16,
+    borderWidth: 1,
+    borderColor: t.border.default,
+    backgroundColor: t.bg.card,
+    padding: 14,
+    alignItems: 'center',
+    justifyContent: 'center',
+    ...t.shadow.card,
+  },
+  slotRemove: {
+    position: 'absolute',
+    top: 6,
+    right: 6,
+    width: 26,
+    height: 26,
+    borderRadius: 13,
+    borderWidth: 1,
+    borderColor: t.border.default,
+    backgroundColor: t.bg.secondary,
+    alignItems: 'center',
+    justifyContent: 'center',
+    zIndex: 2,
+  },
+  slotAvatar: {
+    width: 44,
+    height: 44,
+    borderRadius: 22,
+    backgroundColor: t.accent.primary,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginBottom: 8,
+  },
+  slotAvatarText: {
+    fontFamily: 'PlusJakartaSans-ExtraBold',
+    color: '#ffd700',
+    fontSize: 15,
+  },
+  slotName: {
+    maxWidth: '100%',
+    fontFamily: 'PlusJakartaSans-Bold',
+    color: t.text.primary,
+    fontSize: 14,
+  },
+  slotHcp: {
+    fontFamily: 'PlusJakartaSans-Medium',
+    color: t.text.secondary,
+    fontSize: 12,
+    marginTop: 3,
+  },
+  slotEmpty: {
+    width: '48%',
+    minHeight: 116,
+    marginBottom: 10,
+    borderRadius: 16,
+    borderWidth: 1.5,
+    borderStyle: 'dashed',
+    borderColor: `${t.accent.primary}40`,
+    backgroundColor: t.accent.light,
+    alignItems: 'center',
+    justifyContent: 'center',
+    padding: 14,
+  },
+  slotPlus: {
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    borderWidth: 1.5,
+    borderStyle: 'dashed',
+    borderColor: t.accent.primary,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginBottom: 8,
+  },
+  slotEmptyLabel: {
+    fontFamily: 'PlusJakartaSans-Bold',
+    color: t.accent.primary,
+    fontSize: 11,
+    letterSpacing: 0.8,
+  },
+  addPlayerRow: {
     flexDirection: 'row',
     alignItems: 'center',
     borderRadius: 12,
@@ -457,25 +703,42 @@ const makeStyles = (t) => StyleSheet.create({
     backgroundColor: t.bg.card,
     paddingHorizontal: 12,
     paddingVertical: 11,
+    marginBottom: 8,
   },
-  playerCardSelected: {
-    borderColor: t.accent.primary,
-    backgroundColor: t.accent.light,
-  },
-  checkCircle: {
-    width: 24,
-    height: 24,
-    borderRadius: 12,
-    borderWidth: 1,
-    borderColor: t.border.default,
+  addPlayerAvatar: {
+    width: 34,
+    height: 34,
+    borderRadius: 17,
+    backgroundColor: t.bg.secondary,
     alignItems: 'center',
     justifyContent: 'center',
     marginRight: 10,
-    backgroundColor: t.bg.primary,
   },
-  checkCircleSelected: {
-    borderColor: t.accent.primary,
-    backgroundColor: t.accent.primary,
+  addPlayerInitials: {
+    fontFamily: 'PlusJakartaSans-Bold',
+    fontSize: 12,
+    color: t.accent.primary,
+  },
+  addPlayerNameRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    flexWrap: 'wrap',
+  },
+  linkedBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 3,
+    borderRadius: 6,
+    backgroundColor: t.accent.light,
+    paddingHorizontal: 6,
+    paddingVertical: 2,
+  },
+  linkedBadgeText: {
+    fontFamily: 'PlusJakartaSans-Bold',
+    fontSize: 9,
+    color: t.accent.primary,
+    letterSpacing: 0.3,
   },
   playerTextWrap: { flex: 1 },
   playerName: {

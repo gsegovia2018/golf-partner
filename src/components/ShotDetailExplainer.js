@@ -29,7 +29,12 @@ export function ShotDetailExplainer({ rowKey, title, body }) {
   const iconColor = dismissed ? theme.text.muted : theme.accent.primary;
   return (
     <>
-      <TouchableOpacity onPress={() => setOpen(true)} hitSlop={8}>
+      <TouchableOpacity
+        onPress={() => setOpen(true)}
+        hitSlop={8}
+        accessibilityRole="button"
+        accessibilityLabel={`Open ${title} info`}
+      >
         <Feather name="help-circle" size={14} color={iconColor} />
       </TouchableOpacity>
       <Modal visible={open} transparent animationType="fade" onRequestClose={dismiss}>

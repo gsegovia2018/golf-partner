@@ -5,6 +5,8 @@ import { ThemeProvider } from '../../theme/ThemeContext';
 import ScorecardScreen from '../ScorecardScreen';
 import { roundPairClinched } from '../../store/tournamentStore';
 
+let mockOfficialRoundState;
+
 const mockPlayers = [
   { id: 'p1', name: 'Noé' },
   { id: 'p2', name: 'Alex' },
@@ -83,18 +85,7 @@ jest.mock('../../hooks/useRoundMedia', () => ({
 }));
 
 jest.mock('../../hooks/useOfficialRound', () => ({
-  useOfficialRound: () => ({
-    loading: false,
-    error: null,
-    round: null,
-    members: [],
-    scores: [],
-    myRosterId: null,
-    refresh: jest.fn(),
-    setScore: jest.fn(),
-    hasAttested: false,
-    editableSource: null,
-  }),
+  useOfficialRound: () => mockOfficialRoundState,
 }));
 
 jest.mock('../../context/AuthContext', () => ({
@@ -161,6 +152,18 @@ describe('ScorecardScreen round decision notice', () => {
 
   beforeEach(() => {
     jest.clearAllMocks();
+    mockOfficialRoundState = {
+      loading: false,
+      error: null,
+      round: null,
+      members: [],
+      scores: [],
+      myRosterId: null,
+      refresh: jest.fn(),
+      setScore: jest.fn(),
+      hasAttested: false,
+      editableSource: jest.fn(() => null),
+    };
     roundPairClinched
       .mockReturnValueOnce(null)
       .mockReturnValueOnce(0);
@@ -194,5 +197,44 @@ describe('ScorecardScreen round decision notice', () => {
     expect(global.window.alert).not.toHaveBeenCalled();
     expect(await findByText('Round decided')).toBeTruthy();
     expect(await findByText('Noé has already won this round. You can keep scoring, but the round result will not change.')).toBeTruthy();
+  });
+
+  test('does not show notes controls on official scorecards', async () => {
+    mockOfficialRoundState = {
+      ...mockOfficialRoundState,
+      round: {
+        id: 'official-round-1',
+        tournament_id: 'official-tournament-1',
+        course_name: 'Official Course',
+        course: {
+          holes: [
+            { number: 1, par: 4, strokeIndex: 1 },
+            { number: 2, par: 4, strokeIndex: 2 },
+          ],
+        },
+      },
+      members: [
+        {
+          roster_id: 'p1',
+          display_name: 'Noé',
+          handicap: 0,
+          marks_roster_id: null,
+          withdrawn: false,
+        },
+      ],
+      myRosterId: 'p1',
+      editableSource: jest.fn((playerId) => (playerId === 'p1' ? 'self' : null)),
+    };
+    const officialRoute = {
+      params: { official: true, token: 'token-1', roundId: 'official-round-1' },
+    };
+
+    const { findByText, queryByLabelText } = render(wrap(
+      <ScorecardScreen navigation={navigation} route={officialRoute} />
+    ));
+
+    expect(await findByText('Scorecard')).toBeTruthy();
+    expect(queryByLabelText('Add notes')).toBeNull();
+    expect(queryByLabelText('Open notes')).toBeNull();
   });
 });

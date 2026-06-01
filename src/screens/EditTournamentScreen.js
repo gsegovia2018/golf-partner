@@ -13,6 +13,7 @@ import {
   getActiveTournamentSnapshot,
 } from '../store/tournamentStore';
 import { mutate } from '../store/mutate';
+import { normalizeRoundNotes, roundNoteText } from '../store/roundNotes';
 import { isScoringModeAllowed, fallbackScoringMode } from '../components/ScoringModePicker';
 import { scoringModeUsesTeams } from '../components/scoringModes';
 import { parseHandicapIndex } from '../lib/handicap';
@@ -59,7 +60,7 @@ function editableRoundsFromTournament(t) {
     return {
       ...normalized,
       holes: [...(normalized.holes ?? [])],
-      notes: normalized.notes ?? '',
+      notes: normalizeRoundNotes(normalized.notes),
       playerHandicaps: Object.fromEntries(
         (t.players ?? []).map((p) => [p.id, String(normalized.playerHandicaps[p.id] ?? p.handicap)]),
       ),
@@ -262,7 +263,10 @@ export default function EditTournamentScreen({ navigation }) {
   function updateNotes(roundIndex, value) {
     setRounds((prev) => {
       const next = [...prev];
-      next[roundIndex] = { ...next[roundIndex], notes: value };
+      next[roundIndex] = {
+        ...next[roundIndex],
+        notes: { ...normalizeRoundNotes(next[roundIndex].notes), round: value },
+      };
       return next;
     });
   }
@@ -339,7 +343,7 @@ export default function EditTournamentScreen({ navigation }) {
                 keyboardAppearance={theme.isDark ? 'dark' : 'light'}
                 selectionColor={theme.accent.primary}
                 multiline
-                value={r.notes ?? ''}
+                value={roundNoteText(r.notes)}
                 onChangeText={(v) => updateNotes(ri, v)}
               />
               {!finished && (
