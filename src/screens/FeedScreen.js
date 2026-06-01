@@ -13,6 +13,7 @@ import {
 } from '../store/feedStore';
 import { notifyFeedActivity } from '../store/notificationStore';
 import { subscribeTournamentChanges, formatRoundLabel } from '../store/tournamentStore';
+import { useAuth } from '../context/AuthContext';
 import CommentsSheet from '../components/CommentsSheet';
 import MemoriesStoriesViewer from '../components/MemoriesStoriesViewer';
 import RoundStoriesRail from '../components/feed/RoundStoriesRail';
@@ -181,6 +182,8 @@ function SkeletonCard({ s }) {
 
 export default function FeedScreen({ navigation }) {
   const { theme } = useTheme();
+  const { user } = useAuth() ?? {};
+  const userId = user?.id ?? null;
   const s = makeStyles(theme);
   const now = useNow();
 
@@ -197,28 +200,69 @@ export default function FeedScreen({ navigation }) {
   const [commentCounts, setCommentCounts] = useState({});
   const [openCommentsItem, setOpenCommentsItem] = useState(null);
   const [openStoryKey, setOpenStoryKey] = useState(null);
-  // True once at least one successful load has populated the list, so
-  // focus-driven reloads keep the existing list visible (no full spinner).
+  // True once the first load has settled, so later focus-driven reloads keep
+  // the current screen visible instead of showing the full spinner.
   const loadedOnceRef = useRef(false);
+  const hasVisibleFeedRef = useRef(false);
+
+  const applyFeedResult = useCallback((result) => {
+    const feedItems = result.items ?? [];
+    const stories = result.roundStories ?? [];
+    const hasResultFeed = feedItems.length > 0 || stories.length > 0;
+
+    if (result.error) {
+      if (hasVisibleFeedRef.current) {
+        setStatus('partial');
+      } else {
+        setItems([]);
+        setRoundStories([]);
+        setStatus('error');
+      }
+      loadedOnceRef.current = true;
+      return;
+    }
+
+    setItems(feedItems);
+    setRoundStories(stories);
+    setStatus(result.partial ? 'partial' : 'ok');
+    loadedOnceRef.current = true;
+    hasVisibleFeedRef.current = hasResultFeed;
+    // Reactions + comment counts are best-effort overlays — never block
+    // the feed.
+    const keys = feedItems.map((it) => it.key);
+    loadReactions(keys)
+      .then(setReactions)
+      .catch(() => {});
+    loadCommentCounts(keys)
+      .then(setCommentCounts)
+      .catch(() => {});
+  }, []);
 
   const load = useCallback(async (isRefresh) => {
     if (isRefresh) setRefreshing(true);
     try {
-      const result = await buildFeed();
-      const feedItems = result.items ?? [];
-      setItems(feedItems);
-      setRoundStories(result.roundStories ?? []);
-      setStatus(result.error ? 'error' : (result.partial ? 'partial' : 'ok'));
-      loadedOnceRef.current = true;
-      // Reactions + comment counts are best-effort overlays — never block
-      // the feed.
-      const keys = feedItems.map((it) => it.key);
-      loadReactions(keys)
-        .then(setReactions)
-        .catch(() => {});
-      loadCommentCounts(keys)
-        .then(setCommentCounts)
-        .catch(() => {});
+      if (!isRefresh && !loadedOnceRef.current) {
+        const cachedResult = await buildFeed({
+          userId,
+          source: 'cache',
+          includeMedia: false,
+          limit: 30,
+        });
+        const hasCachedFeed = (cachedResult.items?.length ?? 0) > 0
+          || (cachedResult.roundStories?.length ?? 0) > 0;
+        if (hasCachedFeed) {
+          applyFeedResult(cachedResult);
+          setLoading(false);
+        }
+      }
+
+      const result = await buildFeed({
+        userId,
+        source: 'remote',
+        includeMedia: true,
+        limit: 30,
+      });
+      applyFeedResult(result);
     } catch {
       // buildFeed is defensive and rarely throws; treat a throw as an error
       // state rather than silently showing an empty feed.
@@ -229,7 +273,7 @@ export default function FeedScreen({ navigation }) {
       setLoading(false);
       setRefreshing(false);
     }
-  }, []);
+  }, [applyFeedResult, userId]);
 
   useFocusEffect(useCallback(() => {
     let cancelled = false;

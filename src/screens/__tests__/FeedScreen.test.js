@@ -63,6 +63,10 @@ jest.mock('../../store/feedStore', () => ({
   isValidReactionEmoji: jest.fn((value) => typeof value === 'string' && value.trim().length > 0),
 }));
 
+jest.mock('../../context/AuthContext', () => ({
+  useAuth: jest.fn(() => ({ user: { id: 'u1' } })),
+}));
+
 jest.mock('../../store/notificationStore', () => ({
   notifyFeedActivity: jest.fn(() => Promise.resolve(true)),
 }));
@@ -136,6 +140,132 @@ describe('FeedScreen', () => {
   beforeEach(() => {
     jest.clearAllMocks();
     buildFeed.mockResolvedValue(result);
+  });
+
+  test('renders cached base feed before remote media hydration completes', async () => {
+    let resolveRemote;
+    const cachedResult = {
+      ...result,
+      roundStories: [],
+      items: [{
+        ...result.items[0],
+        tournamentId: 'cached-t1',
+        tournamentName: 'Cached Match',
+        mediaCount: undefined,
+        mediaCountLabel: undefined,
+        mediaCoverUrl: null,
+        mediaList: undefined,
+      }],
+    };
+    const remoteResult = {
+      ...result,
+      items: [{
+        ...result.items[0],
+        tournamentId: 'remote-t1',
+        tournamentName: 'Remote Match',
+      }],
+    };
+
+    buildFeed
+      .mockResolvedValueOnce(cachedResult)
+      .mockReturnValueOnce(new Promise((resolve) => {
+        resolveRemote = () => resolve(remoteResult);
+      }));
+
+    const { findByText, queryByText } = render(wrap(
+      <FeedScreen navigation={navigation} />
+    ));
+
+    expect(await findByText('Cached Match')).toBeTruthy();
+    expect(queryByText('Remote Match')).toBeNull();
+
+    resolveRemote();
+    expect(await findByText('Remote Match')).toBeTruthy();
+    expect(buildFeed).toHaveBeenNthCalledWith(1, expect.objectContaining({
+      userId: 'u1',
+      source: 'cache',
+      includeMedia: false,
+      limit: 30,
+    }));
+    expect(buildFeed).toHaveBeenNthCalledWith(2, expect.objectContaining({
+      userId: 'u1',
+      source: 'remote',
+      includeMedia: true,
+      limit: 30,
+    }));
+  });
+
+  test('preserves cached feed when remote hydration returns an error result', async () => {
+    let resolveRemote;
+    const cachedResult = {
+      ...result,
+      roundStories: [],
+      items: [{
+        ...result.items[0],
+        tournamentId: 'cached-t1',
+        tournamentName: 'Cached Match',
+        mediaCount: undefined,
+        mediaCountLabel: undefined,
+        mediaCoverUrl: null,
+        mediaList: undefined,
+      }],
+    };
+    const remoteErrorResult = {
+      ...result,
+      error: true,
+      partial: false,
+      items: [],
+      roundStories: [],
+    };
+
+    buildFeed
+      .mockResolvedValueOnce(cachedResult)
+      .mockReturnValueOnce(new Promise((resolve) => {
+        resolveRemote = () => resolve(remoteErrorResult);
+      }));
+
+    const { findByText, queryByText } = render(wrap(
+      <FeedScreen navigation={navigation} />
+    ));
+
+    expect(await findByText('Cached Match')).toBeTruthy();
+
+    resolveRemote();
+
+    expect(await findByText('Cached Match')).toBeTruthy();
+    await waitFor(() => expect(queryByText('Could not load your feed')).toBeNull());
+  });
+
+  test('keeps error empty state on retry when no feed content is visible', async () => {
+    const emptyCacheResult = {
+      ...result,
+      items: [],
+      roundStories: [],
+    };
+    const remoteErrorResult = {
+      ...result,
+      error: true,
+      partial: false,
+      items: [],
+      roundStories: [],
+    };
+
+    buildFeed
+      .mockResolvedValueOnce(emptyCacheResult)
+      .mockResolvedValueOnce(remoteErrorResult)
+      .mockResolvedValueOnce(remoteErrorResult);
+
+    const { findByText, getByText, queryByText } = render(wrap(
+      <FeedScreen navigation={navigation} />
+    ));
+
+    expect(await findByText('Could not load your feed')).toBeTruthy();
+
+    fireEvent.press(getByText('Retry'));
+
+    await waitFor(() => expect(buildFeed).toHaveBeenCalledTimes(3));
+    expect(await findByText('Could not load your feed')).toBeTruthy();
+    expect(queryByText('Your feed is quiet')).toBeNull();
   });
 
   test('renders round stories rail and opens the selected story inside the full story sequence', async () => {
