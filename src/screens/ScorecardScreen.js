@@ -17,7 +17,7 @@ import {
   roundPairClinched, setScoringModeRoundPatches,
   isRoundComplete, isTournamentFinished,
   subscribeSyncStatus,
-  getActiveTournamentSnapshot,
+  getActiveTournamentSnapshot, getTournament, getTournamentSnapshot,
 } from '../store/tournamentStore';
 import { mutate } from '../store/mutate';
 import { fetchPlayers } from '../store/libraryStore';
@@ -209,9 +209,14 @@ export default function ScorecardScreen({ navigation, route }) {
   const official = route.params?.official === true;
   const officialToken = route.params?.token ?? null;
   const officialRoundId = route.params?.roundId ?? null;
+  const routeTournamentId = official ? null : route.params?.tournamentId ?? null;
   const initialTournament = useMemo(
-    () => (official ? null : getActiveTournamentSnapshot()),
-    [official],
+    () => (official
+      ? null
+      : routeTournamentId
+        ? getTournamentSnapshot(routeTournamentId)
+        : getActiveTournamentSnapshot()),
+    [official, routeTournamentId],
   );
   const initialRoundIndex = paramRoundIndex ?? initialTournament?.currentRound ?? 0;
   const initialRound = initialTournament?.rounds?.[initialRoundIndex] ?? null;
@@ -317,9 +322,9 @@ export default function ScorecardScreen({ navigation, route }) {
     if (official) return;
     let t;
     try {
-      t = await loadTournament();
+      t = routeTournamentId ? await getTournament(routeTournamentId) : await loadTournament();
     } catch (e) {
-      console.warn('ScorecardScreen: loadTournament failed', e);
+      console.warn('ScorecardScreen: tournament load failed', e);
       t = null;
     }
     if (!t) {
@@ -385,7 +390,7 @@ export default function ScorecardScreen({ navigation, route }) {
       if (firstEmpty) setCurrentHole(firstEmpty.number);
       else setCurrentHole(round.holes[round.holes.length - 1].number);
     }
-  }, [paramRoundIndex, official]);
+  }, [paramRoundIndex, official, routeTournamentId]);
 
   useEffect(() => {
     reload();
@@ -1078,7 +1083,7 @@ export default function ScorecardScreen({ navigation, route }) {
       return;
     }
     if (target === 'home') {
-      navigation.navigate('Main', { screen: 'Home' });
+      navigation.navigate('Main', { screen: 'Home', params: { viewMode: 'list' } });
       return;
     }
     navigation.navigate('Tournament');

@@ -11,7 +11,7 @@ import { Feather } from '@expo/vector-icons';
 
 import { useTheme } from '../theme/ThemeContext';
 import {
-  loadAllTournamentsWithFallback, isTournamentFinished, setActiveTournament,
+  loadAllTournamentsWithFallback, isTournamentFinished,
   subscribeTournamentChanges, deleteTournament,
 } from '../store/tournamentStore';
 import { loadProfile, computePersonalStats } from '../store/profileStore';
@@ -68,9 +68,8 @@ export default function HistoryScreen({ navigation }) {
     return () => { cancelled = true; unsub(); };
   }, [reload]));
 
-  async function openTournament(id) {
-    await setActiveTournament(id);
-    navigation.navigate('Tournament');
+  function openTournament(id) {
+    navigation.navigate('Tournament', { tournamentId: id, viewMode: 'tournament' });
   }
 
   async function confirmDelete(t) {

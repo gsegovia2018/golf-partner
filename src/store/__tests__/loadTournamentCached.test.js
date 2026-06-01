@@ -72,4 +72,76 @@ describe('loadTournament cached reads', () => {
     expect(list.map((t) => t.id)).toContain('cached-feed-1');
     expect(supabase.from).not.toHaveBeenCalled();
   });
+
+  test('does not restore a cached finished tournament as active', async () => {
+    jest.doMock('../../lib/connectivity', () => ({
+      isOnline: () => true,
+      subscribeConnectivity: () => () => {},
+    }));
+
+    const chain = {
+      select: jest.fn(() => chain),
+      eq: jest.fn(() => chain),
+      maybeSingle: jest.fn(() => Promise.resolve({ data: null, error: null })),
+    };
+    jest.doMock('../../lib/supabase', () => ({
+      supabase: {
+        from: jest.fn(() => chain),
+        auth: {
+          getUser: jest.fn(() => Promise.resolve({ data: { user: null } })),
+        },
+      },
+    }));
+
+    const { loadTournament } = require('../tournamentStore');
+    const finished = {
+      id: 'done-1',
+      name: 'Finished Game',
+      kind: 'game',
+      finishedAt: '2026-05-31T18:00:00.000Z',
+      players: [{ id: 'p1' }],
+      rounds: [{ id: 'r1', holes: [{ number: 1 }], scores: { p1: { 1: 4 } } }],
+      currentRound: 0,
+    };
+    await AsyncStorage.setItem('@golf_active_id', 'done-1');
+    await AsyncStorage.setItem('@golf_tournament_done-1', JSON.stringify(finished));
+
+    await expect(loadTournament({ refreshRemote: false, resolveIdentity: false }))
+      .resolves.toBeNull();
+    await expect(loadTournament({ refreshRemote: false, resolveIdentity: false }))
+      .resolves.toBeNull();
+  });
+
+  test('clears the active id when the active tournament is saved as finished', async () => {
+    jest.doMock('../../lib/connectivity', () => ({
+      isOnline: () => true,
+      subscribeConnectivity: () => () => {},
+    }));
+    jest.doMock('../../lib/supabase', () => ({
+      supabase: {
+        from: jest.fn(),
+        auth: {
+          getUser: jest.fn(() => Promise.resolve({ data: { user: null } })),
+        },
+      },
+    }));
+
+    const { saveLocal, loadTournament } = require('../tournamentStore');
+    const active = {
+      id: 'game-1',
+      name: 'Active Game',
+      kind: 'game',
+      players: [{ id: 'p1' }],
+      rounds: [{ id: 'r1', holes: [{ number: 1 }], scores: {} }],
+      currentRound: 0,
+    };
+    await saveLocal(active);
+    await expect(loadTournament({ refreshRemote: false, resolveIdentity: false }))
+      .resolves.toMatchObject({ id: 'game-1' });
+
+    await saveLocal({ ...active, finishedAt: '2026-05-31T18:00:00.000Z' });
+
+    await expect(loadTournament({ refreshRemote: false, resolveIdentity: false }))
+      .resolves.toBeNull();
+  });
 });

@@ -9,7 +9,7 @@ import { useFocusEffect } from '@react-navigation/native';
 import { useTheme } from '../theme/ThemeContext';
 import {
   loadAllTournamentsWithFallback, isTournamentFinished,
-  setActiveTournament, deleteTournament, subscribeTournamentChanges,
+  deleteTournament, subscribeTournamentChanges,
 } from '../store/tournamentStore';
 import { mutate } from '../store/mutate';
 
@@ -50,9 +50,8 @@ export default function FinishedScreen({ navigation }) {
     return () => { cancelled = true; unsub(); };
   }, [reload]));
 
-  async function openTournament(id) {
-    await setActiveTournament(id);
-    navigation.navigate('Tournament');
+  function openTournament(id) {
+    navigation.navigate('Tournament', { tournamentId: id, viewMode: 'tournament' });
   }
 
   async function reopen(t) {

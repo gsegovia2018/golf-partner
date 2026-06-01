@@ -126,14 +126,15 @@ export function deriveMeIdFromAuth(t, authUserId) {
 // next read returns the right identity without re-deriving. Errors are
 // swallowed — identity resolution is a best-effort enhancement, never the
 // reason a load fails.
-async function resolveMeIdForTournament(t) {
+async function resolveMeIdForTournament(t, options = {}) {
+  const { makeActive = true } = options ?? {};
   if (!t) return t;
   let userId = null;
   try { userId = await getCurrentUserId(); } catch (_) { /* offline / no session */ }
   if (!userId) return t;
   const next = deriveMeIdFromAuth(t, userId);
   if (next !== t) {
-    try { await saveLocal(next); } catch (_) { /* best-effort persist */ }
+    try { await saveLocal(next, { makeActive }); } catch (_) { /* best-effort persist */ }
   }
   return next;
 }
@@ -297,7 +298,7 @@ async function fetchRemoteTournament(id) {
 }
 
 export async function loadTournament(options = {}) {
-  const { refreshRemote = true, resolveIdentity = true } = options ?? {};
+  const { refreshRemote = true, resolveIdentity = true, includeFinished = false } = options ?? {};
   const finalize = (t) => (resolveIdentity ? resolveMeIdForTournament(t) : t);
   const activeId = await AsyncStorage.getItem(ACTIVE_ID_KEY);
   if (!activeId) return null;
@@ -305,6 +306,10 @@ export async function loadTournament(options = {}) {
 
   const cached = await readLocal(activeId);
   if (cached) {
+    if (!includeFinished && isTournamentFinished(cached)) {
+      await clearActiveTournamentIfMatches(activeId);
+      return null;
+    }
     // Kick remote refresh in background; do not block the UI. LWW-merge
     // remote into the freshest local blob so we never clobber an
     // in-flight mutation whose sync hasn't landed yet — the overwrite
@@ -328,6 +333,7 @@ export async function loadTournament(options = {}) {
   try {
     const remote = await fetchRemoteTournament(activeId);
     if (remote) await saveLocal(remote);
+    if (!includeFinished && isTournamentFinished(remote)) return null;
     return finalize(remote);
   } catch (_) {
     return null;
@@ -348,17 +354,17 @@ export async function getTournament(id) {
           if (!remote) return;
           const latest = await readLocal(id);
           const { merged } = mergeTournaments(latest ?? cached, remote);
-          await saveLocal(merged);
-          await resolveMeIdForTournament(merged);
+          await saveLocal(merged, { makeActive: false });
+          await resolveMeIdForTournament(merged, { makeActive: false });
         })
         .catch(() => {});
     }
-    return resolveMeIdForTournament(cached);
+    return resolveMeIdForTournament(cached, { makeActive: false });
   }
   if (!isOnline()) return null;
   try {
     const remote = await fetchRemoteTournament(id);
-    return resolveMeIdForTournament(remote);
+    return resolveMeIdForTournament(remote, { makeActive: false });
   } catch (_) {
     return null;
   }
@@ -396,6 +402,15 @@ export function getActiveTournamentSnapshot() {
 export function getTournamentSnapshot(id) {
   if (!id) return null;
   return cloneTournament(_localTournamentCache.get(id));
+}
+
+async function clearActiveTournamentIfMatches(id, { emit = true } = {}) {
+  const activeId = await AsyncStorage.getItem(ACTIVE_ID_KEY);
+  if (activeId !== id && _activeTournamentId !== id) return false;
+  if (activeId === id) await AsyncStorage.removeItem(ACTIVE_ID_KEY);
+  if (_activeTournamentId === id) _activeTournamentId = null;
+  if (emit) _emitChange();
+  return true;
 }
 
 // Mirror the tournament's user-linked players into tournament_participants
@@ -437,16 +452,24 @@ async function persistRemote(tournament) {
 // per tournament id and bail out early when nothing actually changed.
 const _lastWrittenJson = new Map();
 
-export async function saveLocal(tournament) {
+export async function saveLocal(tournament, options = {}) {
+  const { makeActive = true } = options ?? {};
   const json = JSON.stringify(tournament);
-  _activeTournamentId = tournament.id;
+  const finished = isTournamentFinished(tournament);
+  const shouldWriteActive = makeActive && !finished && _activeTournamentId !== tournament.id;
+  if (makeActive && !finished) _activeTournamentId = tournament.id;
+  if (finished && _activeTournamentId === tournament.id) _activeTournamentId = null;
   _localTournamentCache.set(tournament.id, JSON.parse(json));
-  if (_lastWrittenJson.get(tournament.id) === json) return;
-  _lastWrittenJson.set(tournament.id, json);
-  await AsyncStorage.multiSet([
-    [ACTIVE_ID_KEY, tournament.id],
-    [ACTIVE_TOURNAMENT_KEY + tournament.id, json],
-  ]);
+  const blobChanged = _lastWrittenJson.get(tournament.id) !== json;
+  const activeCleared = finished
+    ? await clearActiveTournamentIfMatches(tournament.id, { emit: false })
+    : false;
+  if (!blobChanged && !shouldWriteActive && !activeCleared) return;
+  if (blobChanged) _lastWrittenJson.set(tournament.id, json);
+  const writes = [];
+  if (shouldWriteActive) writes.push([ACTIVE_ID_KEY, tournament.id]);
+  if (blobChanged) writes.push([ACTIVE_TOURNAMENT_KEY + tournament.id, json]);
+  if (writes.length > 0) await AsyncStorage.multiSet(writes);
   _emitChange();
 }
 

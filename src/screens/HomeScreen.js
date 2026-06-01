@@ -28,7 +28,7 @@ import {
   DEFAULT_SETTINGS, generateInviteCode, buildJoinLink,
   setScoringModeRoundPatches,
   tournamentNoun, tournamentNounCapitalized,
-  getActiveTournamentSnapshot,
+  getActiveTournamentSnapshot, getTournament, getTournamentSnapshot,
   lastTeeForPlayerOnCourse,
 } from '../store/tournamentStore';
 import { fetchMyPlayers, loadCourseLibrary } from '../store/libraryStore';
@@ -89,12 +89,16 @@ if (Platform.OS === 'web' && typeof document !== 'undefined') {
 
 export default function HomeScreen({ navigation, route }) {
   const viewMode = route?.params?.viewMode ?? 'auto';
+  const routeTournamentId = route?.params?.tournamentId ?? null;
   const { theme } = useTheme();
   const { user } = useAuth();
   const currentUserId = user?.id ?? null;
   const currentUserIdRef = useRef(currentUserId);
   currentUserIdRef.current = currentUserId;
-  const initialTournament = useMemo(() => getActiveTournamentSnapshot(), []);
+  const initialTournament = useMemo(
+    () => (routeTournamentId ? getTournamentSnapshot(routeTournamentId) : getActiveTournamentSnapshot()),
+    [routeTournamentId],
+  );
   const [tournament, setTournament] = useState(() => initialTournament);
   const [allTournaments, setAllTournaments] = useState(() => (initialTournament ? [initialTournament] : []));
   const [listStale, setListStale] = useState(false);
@@ -207,7 +211,7 @@ export default function HomeScreen({ navigation, route }) {
       if (!hasLoadedOnceRef.current) setLoading(true);
       try {
         const [t, listResult] = await Promise.all([
-          loadTournament(),
+          routeTournamentId ? getTournament(routeTournamentId) : loadTournament(),
           loadAllTournamentsWithFallback(),
         ]);
         setTournament(t);
@@ -234,7 +238,7 @@ export default function HomeScreen({ navigation, route }) {
     });
     reloadInFlight.current = p;
     return p;
-  }, []);
+  }, [routeTournamentId]);
 
   const onRefresh = useCallback(async () => {
     setRefreshing(true);
@@ -382,6 +386,13 @@ export default function HomeScreen({ navigation, route }) {
     navigation.navigate('Tournament');
   }, [viewMode, tournament, navigation]);
 
+  useEffect(() => {
+    if (viewMode !== 'tournament') return;
+    if (routeTournamentId) return;
+    if (loading || tournament || reloadError) return;
+    navigation.navigate('Main', { screen: 'Home', params: { viewMode: 'list' } });
+  }, [viewMode, routeTournamentId, loading, tournament, reloadError, navigation]);
+
   // Keep round pager in sync with selectedRound (tab taps, arrow buttons).
   // Skip while the user is dragging, and skip if this commit came from a
   // scroll (the pager is already at the right place). Animate so taps
@@ -514,7 +525,7 @@ export default function HomeScreen({ navigation, route }) {
     if (navigation.canGoBack()) {
       navigation.goBack();
     } else {
-      navigation.navigate('Main', { screen: 'Home' });
+      navigation.navigate('Main', { screen: 'Home', params: { viewMode: 'list' } });
     }
   }
 
@@ -763,7 +774,7 @@ export default function HomeScreen({ navigation, route }) {
       setTournament(updated);
       if (finished) {
         if (viewMode === 'tournament' && navigation.canGoBack()) navigation.goBack();
-        else navigation.navigate('Main', { screen: 'Home' });
+        else navigation.navigate('Main', { screen: 'Home', params: { viewMode: 'list' } });
       }
     } catch (err) {
       const msg = err?.message ?? 'Could not update tournament';
@@ -1675,7 +1686,7 @@ export default function HomeScreen({ navigation, route }) {
         <View style={s.tournamentBottomBar}>
           <TouchableOpacity
             style={[s.primaryBtn, s.roundActionBtn]}
-            onPress={() => navigation.navigate('Scorecard', { roundIndex: selectedRound })}
+            onPress={() => navigation.navigate('Scorecard', { roundIndex: selectedRound, tournamentId: tournament.id })}
             activeOpacity={0.8}
           >
             <Feather name="edit-2" size={16} color={theme.isDark ? theme.accent.primary : theme.text.inverse} />

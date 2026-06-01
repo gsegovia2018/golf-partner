@@ -10,7 +10,7 @@ import { Feather } from '@expo/vector-icons';
 import { useTheme } from '../theme/ThemeContext';
 import { supabase } from '../lib/supabase';
 import {
-  readLocal, roundTotals, setActiveTournament, formatRoundLabel,
+  readLocal, roundTotals, formatRoundLabel,
   getTournamentSnapshot,
 } from '../store/tournamentStore';
 import { loadRoundMedia } from '../store/mediaStore';
@@ -84,9 +84,8 @@ export default function RoundSummaryScreen({ navigation, route }) {
 
   useFocusEffect(useCallback(() => { load(); }, [load]));
 
-  async function openInScorecard() {
-    await setActiveTournament(tournamentId);
-    navigation.navigate('Tournament');
+  function openInScorecard() {
+    navigation.navigate('Tournament', { tournamentId, viewMode: 'tournament' });
   }
 
   const round = tournament?.rounds?.find((r) => r.id === roundId);

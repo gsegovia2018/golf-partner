@@ -165,6 +165,8 @@ jest.mock('../../store/tournamentStore', () => ({
   deleteTournament: jest.fn(),
   generateInviteCode: jest.fn(),
   getActiveTournamentSnapshot: jest.fn(),
+  getTournament: jest.fn(),
+  getTournamentSnapshot: jest.fn(),
   isRoundComplete: jest.fn(() => false),
   isTournamentFinished: jest.fn(() => false),
   lastTeeForPlayerOnCourse: jest.fn(),

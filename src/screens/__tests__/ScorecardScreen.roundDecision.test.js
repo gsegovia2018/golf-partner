@@ -108,6 +108,8 @@ jest.mock('../../store/tournamentStore', () => ({
   isTournamentFinished: jest.fn(() => false),
   subscribeSyncStatus: jest.fn(() => jest.fn()),
   getActiveTournamentSnapshot: jest.fn(() => mockTournament),
+  getTournament: jest.fn(() => Promise.resolve(mockTournament)),
+  getTournamentSnapshot: jest.fn(() => mockTournament),
 }));
 
 jest.mock('../../store/mutate', () => ({
