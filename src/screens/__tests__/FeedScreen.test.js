@@ -1,8 +1,10 @@
 import React from 'react';
-import { fireEvent, render, waitFor } from '@testing-library/react-native';
+import {
+  act, fireEvent, render, waitFor,
+} from '@testing-library/react-native';
 import { ThemeProvider } from '../../theme/ThemeContext';
 import FeedScreen from '../FeedScreen';
-import { buildFeed } from '../../store/feedStore';
+import { buildFeed, loadCommentCounts, loadReactions } from '../../store/feedStore';
 import { notifyFeedActivity } from '../../store/notificationStore';
 
 jest.mock('@react-navigation/native', () => ({
@@ -149,6 +151,7 @@ describe('FeedScreen', () => {
       roundStories: [],
       items: [{
         ...result.items[0],
+        key: 'round:cached-t1:r1',
         tournamentId: 'cached-t1',
         tournamentName: 'Cached Match',
         mediaCount: undefined,
@@ -161,6 +164,7 @@ describe('FeedScreen', () => {
       ...result,
       items: [{
         ...result.items[0],
+        key: 'round:remote-t1:r1',
         tournamentId: 'remote-t1',
         tournamentName: 'Remote Match',
       }],
@@ -191,8 +195,81 @@ describe('FeedScreen', () => {
       userId: 'u1',
       source: 'remote',
       includeMedia: true,
-      limit: 30,
     }));
+    expect(buildFeed.mock.calls[1][0]).not.toHaveProperty('limit');
+  });
+
+  test('keeps remote overlay results when slower cached overlays finish later', async () => {
+    let resolveCachedReactions;
+    let resolveRemoteReactions;
+    let resolveCachedComments;
+    let resolveRemoteComments;
+    const cachedKey = 'round:cached-t1:r1';
+    const remoteKey = 'round:remote-t1:r1';
+    const cachedResult = {
+      ...result,
+      roundStories: [],
+      items: [{
+        ...result.items[0],
+        key: cachedKey,
+        tournamentId: 'cached-t1',
+        tournamentName: 'Cached Match',
+        mediaCount: undefined,
+        mediaCountLabel: undefined,
+        mediaCoverUrl: null,
+        mediaList: undefined,
+      }],
+    };
+    const remoteResult = {
+      ...result,
+      items: [{
+        ...result.items[0],
+        key: remoteKey,
+        tournamentId: 'remote-t1',
+        tournamentName: 'Remote Match',
+      }],
+    };
+
+    buildFeed
+      .mockResolvedValueOnce(cachedResult)
+      .mockResolvedValueOnce(remoteResult);
+    loadReactions
+      .mockReturnValueOnce(new Promise((resolve) => {
+        resolveCachedReactions = resolve;
+      }))
+      .mockReturnValueOnce(new Promise((resolve) => {
+        resolveRemoteReactions = resolve;
+      }));
+    loadCommentCounts
+      .mockReturnValueOnce(new Promise((resolve) => {
+        resolveCachedComments = resolve;
+      }))
+      .mockReturnValueOnce(new Promise((resolve) => {
+        resolveRemoteComments = resolve;
+      }));
+
+    const { findByText, queryByText } = render(wrap(
+      <FeedScreen navigation={navigation} />
+    ));
+
+    expect(await findByText('Remote Match')).toBeTruthy();
+
+    await act(async () => {
+      resolveRemoteReactions({ [remoteKey]: { counts: { '🔥': 1 }, mine: [] } });
+      resolveRemoteComments({ [remoteKey]: 2 });
+    });
+
+    expect(await findByText('🔥')).toBeTruthy();
+
+    await act(async () => {
+      resolveCachedReactions({ [cachedKey]: { counts: { '💤': 1 }, mine: [] } });
+      resolveCachedComments({ [cachedKey]: 7 });
+    });
+
+    await waitFor(() => {
+      expect(queryByText('🔥')).toBeTruthy();
+      expect(queryByText('💤')).toBeNull();
+    });
   });
 
   test('preserves cached feed when remote hydration returns an error result', async () => {

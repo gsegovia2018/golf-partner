@@ -210,6 +210,7 @@ export default function FeedScreen({ navigation }) {
   // the current screen visible instead of showing the full spinner.
   const loadedOnceRef = useRef(false);
   const hasVisibleFeedRef = useRef(false);
+  const overlayLoadSeqRef = useRef(0);
 
   const applyFeedResult = useCallback((result) => {
     const feedItems = result.items ?? [];
@@ -220,8 +221,11 @@ export default function FeedScreen({ navigation }) {
       if (hasVisibleFeedRef.current) {
         setStatus('partial');
       } else {
+        overlayLoadSeqRef.current += 1;
         setItems([]);
         setRoundStories([]);
+        setReactions({});
+        setCommentCounts({});
         setStatus('error');
       }
       loadedOnceRef.current = true;
@@ -236,11 +240,17 @@ export default function FeedScreen({ navigation }) {
     // Reactions + comment counts are best-effort overlays — never block
     // the feed.
     const keys = feedItems.map((it) => it.key);
+    const overlaySeq = overlayLoadSeqRef.current + 1;
+    overlayLoadSeqRef.current = overlaySeq;
     loadReactions(keys)
-      .then(setReactions)
+      .then((next) => {
+        if (overlayLoadSeqRef.current === overlaySeq) setReactions(next);
+      })
       .catch(() => {});
     loadCommentCounts(keys)
-      .then(setCommentCounts)
+      .then((next) => {
+        if (overlayLoadSeqRef.current === overlaySeq) setCommentCounts(next);
+      })
       .catch(() => {});
   }, []);
 
@@ -269,7 +279,6 @@ export default function FeedScreen({ navigation }) {
         userId,
         source: 'remote',
         includeMedia: true,
-        limit: 30,
       });
       feedMark('remote full', remoteStart);
       applyFeedResult(result);
