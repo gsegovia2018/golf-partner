@@ -248,6 +248,10 @@ async function _loadCachedFullList() {
   });
 }
 
+export async function loadCachedTournamentsList() {
+  return _loadCachedFullList();
+}
+
 // A single transient Supabase error shouldn't paint the "Sin conexión"
 // banner — only flip to stale when the device is truly offline or after
 // repeated failures in a row.

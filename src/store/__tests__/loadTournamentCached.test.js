@@ -43,4 +43,33 @@ describe('loadTournament cached reads', () => {
       .resolves.toMatchObject({ id: 't1', name: 'Saturday' });
     expect(from).not.toHaveBeenCalled();
   });
+
+  test('loadCachedTournamentsList returns local blobs without calling Supabase', async () => {
+    jest.resetModules();
+    const from = jest.fn();
+    jest.doMock('../../lib/supabase', () => ({
+      supabase: {
+        from,
+        auth: {
+          getUser: jest.fn(() => Promise.resolve({ data: { user: null } })),
+        },
+      },
+    }));
+
+    const store = require('../tournamentStore');
+    const { supabase } = require('../../lib/supabase');
+
+    await store.saveLocal({
+      id: 'cached-feed-1',
+      name: 'Cached Feed Game',
+      createdAt: '2026-06-01T10:00:00.000Z',
+      players: [],
+      rounds: [],
+    });
+
+    const list = await store.loadCachedTournamentsList();
+
+    expect(list.map((t) => t.id)).toContain('cached-feed-1');
+    expect(supabase.from).not.toHaveBeenCalled();
+  });
 });
