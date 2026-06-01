@@ -1,6 +1,7 @@
 import { supabase } from '../lib/supabase';
 import { isOnline } from '../lib/connectivity';
 import {
+  loadCachedTournamentsList,
   loadAllTournamentsWithFallback,
   roundTotals,
   isTournamentFinished,
@@ -157,6 +158,29 @@ async function fetchFriendTournaments(friendIds, alreadyHaveIds) {
   }
 }
 
+async function resolveFeedUserId(userId) {
+  if (userId !== undefined) return userId ?? null;
+  return currentUserId();
+}
+
+async function loadFeedFriends(source) {
+  if (source === 'cache') {
+    return { friends: await getCachedFriends(), partial: false };
+  }
+  try {
+    return { friends: await listFriends(), partial: false };
+  } catch {
+    return { friends: await getCachedFriends(), partial: true };
+  }
+}
+
+async function loadFeedTournaments(source) {
+  if (source === 'cache') {
+    return { list: await loadCachedTournamentsList(), stale: true };
+  }
+  return loadAllTournamentsWithFallback();
+}
+
 // Build the full, time-sorted feed. Never throws — degrades to whatever
 // data is reachable. Returns { me, friends, items, roundStories, partial, error }.
 //   - error:   true when the feed could not be built at all (no items).
@@ -164,33 +188,46 @@ async function fetchFriendTournaments(friendIds, alreadyHaveIds) {
 //              feed is incomplete (e.g. friends loaded but media did not).
 // The screen uses these to show a Retry-able error state distinct from a
 // genuinely empty feed.
-export async function buildFeed() {
+export async function buildFeed(options = {}) {
+  const {
+    userId,
+    source = 'remote',
+    includeMedia = true,
+    limit = null,
+  } = options;
   let partial = false;
 
   let me = null;
-  try { me = await currentUserId(); } catch { partial = true; }
+  try { me = await resolveFeedUserId(userId); } catch { partial = true; }
 
   let friends = [];
   try {
-    friends = await listFriends();
+    const friendResult = await loadFeedFriends(source);
+    friends = friendResult.friends;
+    partial = partial || !!friendResult.partial;
   } catch {
     partial = true;
-    friends = await getCachedFriends();
+    friends = [];
   }
   const friendIds = friends.map((f) => f.userId);
   const friendSet = new Set(friendIds);
   const friendById = new Map(friends.map((f) => [f.userId, f]));
 
   let myTournaments = [];
+  let tournamentResult = null;
   try {
-    ({ list: myTournaments } = await loadAllTournamentsWithFallback());
+    tournamentResult = await loadFeedTournaments(source);
+    ({ list: myTournaments } = tournamentResult);
+    partial = partial || !!tournamentResult?.stale;
   } catch {
     // The only hard-fail path: with no tournaments at all there is nothing
     // to build a feed from.
     return { me, friends, items: [], roundStories: [], partial: false, error: true };
   }
   const haveIds = new Set(myTournaments.map((t) => t.id));
-  const friendTournaments = await fetchFriendTournaments(friendIds, haveIds);
+  const friendTournaments = source === 'cache'
+    ? []
+    : await fetchFriendTournaments(friendIds, haveIds);
 
   // De-dupe by id; my own blob wins over a friend-fetched copy.
   const byId = new Map();
@@ -277,35 +314,49 @@ export async function buildFeed() {
     });
   }
 
-  // Photos. Attributed by uploader user id (media.uploaderId) — falling back
-  // to the case-folded uploader_label only for legacy media uploaded before
-  // the id column existed.
-  let media = [];
-  try {
-    media = await loadMediaForTournaments(all.map((t) => t.id));
-  } catch { partial = true; /* offline — feed still shows rounds */ }
+  items.sort((a, b) => b.ts - a.ts);
+  const limitedItems = limit == null ? items : items.slice(0, limit);
 
-  const roundStories = buildRoundStories(all, media);
-  const storyByRoundKey = new Map(roundStories.map((story) => [
-    `${story.tournamentId}:${story.roundId ?? 'none'}`,
-    story,
-  ]));
-  for (const item of items) {
-    if (item.type !== 'round') continue;
-    const story = storyByRoundKey.get(`${item.tournamentId}:${item.roundId ?? 'none'}`);
-    if (!story) continue;
-    const newestMedia = story.mediaList[story.mediaList.length - 1] ?? null;
-    item.mediaCount = story.count;
-    item.mediaCountLabel = story.countLabel;
-    item.mediaId = newestMedia?.id ?? null;
-    item.mediaCoverUrl = newestMedia?.thumbUrl || newestMedia?.url || null;
-    item.mediaUrl = newestMedia?.url || newestMedia?.thumbUrl || null;
-    item.mediaList = story.mediaList.slice();
-    item.mediaHasVideo = story.hasVideo;
+  let roundStories = [];
+  if (includeMedia) {
+    const visibleTournamentIds = [...new Set(limitedItems.map((item) => item.tournamentId))];
+    const visibleRoundKeys = new Set(limitedItems.map((item) => (
+      `${item.tournamentId}:${item.roundId ?? 'none'}`
+    )));
+    const visibleTournaments = all.filter((t) => visibleTournamentIds.includes(t.id));
+
+    // Photos. Attributed by uploader user id (media.uploaderId) — falling back
+    // to the case-folded uploader_label only for legacy media uploaded before
+    // the id column existed.
+    let media = [];
+    try {
+      media = await loadMediaForTournaments(visibleTournamentIds);
+    } catch { partial = true; /* offline — feed still shows rounds */ }
+
+    const visibleMedia = media.filter((item) => (
+      visibleRoundKeys.has(`${item.tournamentId}:${item.roundId ?? 'none'}`)
+    ));
+    roundStories = buildRoundStories(visibleTournaments, visibleMedia);
+    const storyByRoundKey = new Map(roundStories.map((story) => [
+      `${story.tournamentId}:${story.roundId ?? 'none'}`,
+      story,
+    ]));
+    for (const item of limitedItems) {
+      if (item.type !== 'round') continue;
+      const story = storyByRoundKey.get(`${item.tournamentId}:${item.roundId ?? 'none'}`);
+      if (!story) continue;
+      const newestMedia = story.mediaList[story.mediaList.length - 1] ?? null;
+      item.mediaCount = story.count;
+      item.mediaCountLabel = story.countLabel;
+      item.mediaId = newestMedia?.id ?? null;
+      item.mediaCoverUrl = newestMedia?.thumbUrl || newestMedia?.url || null;
+      item.mediaUrl = newestMedia?.url || newestMedia?.thumbUrl || null;
+      item.mediaList = story.mediaList.slice();
+      item.mediaHasVideo = story.hasVideo;
+    }
   }
 
-  items.sort((a, b) => b.ts - a.ts);
-  return { me, friends, items, roundStories, partial, error: false };
+  return { me, friends, items: limitedItems, roundStories, partial, error: false };
 }
 
 // ---------------------------------------------------------------------------
