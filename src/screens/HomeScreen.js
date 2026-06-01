@@ -31,7 +31,7 @@ import {
   getActiveTournamentSnapshot, getTournament, getTournamentSnapshot,
   lastTeeForPlayerOnCourse,
 } from '../store/tournamentStore';
-import { fetchMyPlayers, loadCourseLibrary } from '../store/libraryStore';
+import { fetchMyPlayers, loadQuickStartCourses as loadQuickStartCourseList } from '../store/libraryStore';
 import { playersMeFirst } from '../lib/playerOrder';
 import {
   buildQuickStartRound,
@@ -147,6 +147,7 @@ export default function HomeScreen({ navigation, route }) {
   const [inviteRoleState, setInviteRoleState] = useState('editor');
   const [inviteLoading, setInviteLoading] = useState(false);
   const [quickStartCourses, setQuickStartCourses] = useState([]);
+  const [quickStartCoursesLoading, setQuickStartCoursesLoading] = useState(false);
   const [quickStartPlayers, setQuickStartPlayers] = useState([]);
   const [quickStartPlayersLoading, setQuickStartPlayersLoading] = useState(false);
   const [quickStartPlayersError, setQuickStartPlayersError] = useState(null);
@@ -251,18 +252,20 @@ export default function HomeScreen({ navigation, route }) {
     const userId = currentUserId;
     if (!userId) {
       setQuickStartCourses([]);
+      setQuickStartCoursesLoading(false);
       return;
     }
+    setQuickStartCoursesLoading(true);
     try {
-      const library = await loadCourseLibrary();
+      const library = await loadQuickStartCourseList();
       if (quickStartCourseLoadRef.current !== requestId || currentUserIdRef.current !== userId) return;
-      const favorites = library?.favorites instanceof Set
-        ? library.favorites
-        : new Set(library?.favorites ?? []);
-      setQuickStartCourses((library?.courses ?? []).filter((course) => favorites.has(course.id)));
+      setQuickStartCourses(library?.courses ?? []);
     } catch (_) {
       if (quickStartCourseLoadRef.current !== requestId || currentUserIdRef.current !== userId) return;
       setQuickStartCourses([]);
+    } finally {
+      if (quickStartCourseLoadRef.current !== requestId || currentUserIdRef.current !== userId) return;
+      setQuickStartCoursesLoading(false);
     }
   }, [currentUserId]);
 
@@ -1060,6 +1063,7 @@ export default function HomeScreen({ navigation, route }) {
 
         <QuickStartCourses
           courses={quickStartCourses}
+          coursesLoading={quickStartCoursesLoading}
           players={quickStartPlayers}
           currentUserId={currentUserId}
           playersLoading={quickStartPlayersLoading}

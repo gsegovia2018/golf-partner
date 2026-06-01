@@ -92,6 +92,13 @@ describe('QuickStartCourses interactions', () => {
     expect(onManage).toHaveBeenCalledTimes(1);
   });
 
+  test('shows a course loading state instead of the empty favorite prompt', () => {
+    const { getByText, queryByText } = renderQuickStart({ courses: [], coursesLoading: true });
+
+    expect(getByText('Loading favorite courses...')).toBeTruthy();
+    expect(queryByText('No favorite courses yet')).toBeNull();
+  });
+
   test('opens the sheet and preselects the signed-in player', () => {
     const { getAllByLabelText, getByLabelText, getByText, queryByLabelText } = renderQuickStart();
 

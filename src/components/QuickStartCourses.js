@@ -71,6 +71,7 @@ function isLinkedAppUser(player) {
 
 export default function QuickStartCourses({
   courses = [],
+  coursesLoading = false,
   players = [],
   currentUserId,
   userId,
@@ -184,7 +185,12 @@ export default function QuickStartCourses({
         </TouchableOpacity>
       </View>
 
-      {normalizedCourses.length ? (
+      {coursesLoading && normalizedCourses.length === 0 ? (
+        <View style={s.emptyState}>
+          <ActivityIndicator color={theme.accent.primary} />
+          <Text style={s.emptyTitle}>Loading favorite courses...</Text>
+        </View>
+      ) : normalizedCourses.length ? (
         <ScrollView
           horizontal
           showsHorizontalScrollIndicator={false}

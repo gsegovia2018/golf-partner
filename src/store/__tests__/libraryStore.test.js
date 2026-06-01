@@ -3,7 +3,7 @@ import {
   fetchCourses, getCachedCourses, COURSES_CACHE_KEY,
   fetchClubs, getCachedClubs, CLUBS_CACHE_KEY,
   fetchFavoriteCourseIds, getCachedFavoriteCourseIds, FAVORITE_COURSES_CACHE_KEY,
-  loadCourseLibrary,
+  loadCourseLibrary, loadQuickStartCourses,
 } from '../libraryStore';
 import { listFriends, getCachedFriends } from '../friendStore';
 import AsyncStorage from '@react-native-async-storage/async-storage';
@@ -13,6 +13,7 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 const mockState = {
   user: { id: 'u1' },
   rows: [],
+  rowsByTable: null,
   calls: {},
   orderError: null,
 };
@@ -26,9 +27,19 @@ jest.mock('../../lib/supabase', () => {
   };
 
   const client = {
-    from(table) { mockState.calls.table = table; return client; },
+    from(table) {
+      mockState.calls.table = table;
+      if (!mockState.calls.tables) mockState.calls.tables = [];
+      mockState.calls.tables.push(table);
+      return client;
+    },
     select(cols) { mockState.calls.select = cols; return client; },
     or(expr) { mockState.calls.or = expr; return client; },
+    in(col, vals) {
+      if (!mockState.calls.in) mockState.calls.in = [];
+      mockState.calls.in.push([col, vals]);
+      return client;
+    },
     eq(col, val) {
       if (!mockState.calls.eq) mockState.calls.eq = [];
       mockState.calls.eq.push([col, val]);
@@ -39,7 +50,10 @@ jest.mock('../../lib/supabase', () => {
       mockState.calls.is.push([col, val]);
       return client;
     },
-    order() { return Promise.resolve({ data: mockState.rows, error: mockState.orderError ?? null }); },
+    order() {
+      const rows = mockState.rowsByTable?.[mockState.calls.table] ?? mockState.rows;
+      return Promise.resolve({ data: rows, error: mockState.orderError ?? null });
+    },
     // delete() returns a separate chain so its eq() resolves to { error: null }
     // without affecting the existing client.eq() used by select/filter chains.
     delete() { return deleteChain; },
@@ -50,7 +64,10 @@ jest.mock('../../lib/supabase', () => {
     },
     // Makes a filter chain that ends without .order() (e.g. fetchFavoriteCourseIds,
     // which ends at .eq()) awaitable — `await <chain>` resolves to the rows.
-    then(resolve) { resolve({ data: mockState.rows, error: null }); },
+    then(resolve) {
+      const rows = mockState.rowsByTable?.[mockState.calls.table] ?? mockState.rows;
+      resolve({ data: rows, error: null });
+    },
     auth: {
       getUser: () => Promise.resolve({ data: { user: mockState.user } }),
     },
@@ -184,6 +201,7 @@ describe('courses offline cache', () => {
     await AsyncStorage.clear();
     mockState.user = { id: 'u1' };
     mockState.rows = [];
+    mockState.rowsByTable = null;
     mockState.calls = {};
   });
 
@@ -212,6 +230,7 @@ describe('clubs offline cache', () => {
     await AsyncStorage.clear();
     mockState.user = { id: 'u1' };
     mockState.rows = [];
+    mockState.rowsByTable = null;
     mockState.calls = {};
   });
 
@@ -236,6 +255,7 @@ describe('favorite courses offline cache', () => {
     await AsyncStorage.clear();
     mockState.user = { id: 'u1' };
     mockState.rows = [];
+    mockState.rowsByTable = null;
     mockState.calls = {};
   });
 
@@ -261,6 +281,7 @@ describe('loadCourseLibrary', () => {
     await AsyncStorage.clear();
     mockState.user = { id: 'u1' };
     mockState.rows = [];
+    mockState.rowsByTable = null;
     mockState.calls = {};
     mockState.orderError = null;
   });
@@ -290,5 +311,48 @@ describe('loadCourseLibrary', () => {
     const result = await loadCourseLibrary();
     expect(result.usingCachedData).toBe(true);
     expect(result.courses).toEqual([]);
+  });
+});
+
+describe('loadQuickStartCourses', () => {
+  beforeEach(async () => {
+    await AsyncStorage.clear();
+    mockState.user = { id: 'u1' };
+    mockState.rows = [];
+    mockState.rowsByTable = null;
+    mockState.calls = {};
+    mockState.orderError = null;
+  });
+
+  test('online: fetches only favorite course details and skips clubs', async () => {
+    mockState.rowsByTable = {
+      favorite_courses: [{ course_id: 'c2' }, { course_id: 'c1' }],
+      courses: [
+        { id: 'c2', name: 'Oak', slope: null, rating: null, course_holes: [], course_tees: [] },
+        { id: 'c1', name: 'Pine', slope: null, rating: null, course_holes: [], course_tees: [] },
+      ],
+    };
+
+    const result = await loadQuickStartCourses();
+
+    expect(result.usingCachedData).toBe(false);
+    expect(result.courses.map((course) => course.id)).toEqual(['c2', 'c1']);
+    expect(mockState.calls.tables).toEqual(['favorite_courses', 'courses']);
+    expect(mockState.calls.in).toEqual([['id', ['c2', 'c1']]]);
+  });
+
+  test('online: skips the course detail query when no favorites exist', async () => {
+    mockState.rowsByTable = {
+      favorite_courses: [],
+      courses: [
+        { id: 'c1', name: 'Pine', slope: null, rating: null, course_holes: [], course_tees: [] },
+      ],
+    };
+
+    const result = await loadQuickStartCourses();
+
+    expect(result).toEqual({ courses: [], usingCachedData: false });
+    expect(mockState.calls.tables).toEqual(['favorite_courses']);
+    expect(mockState.calls.in).toBeUndefined();
   });
 });

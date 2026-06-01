@@ -2,7 +2,7 @@ import React from 'react';
 import { act, fireEvent, render, waitFor } from '@testing-library/react-native';
 import HomeScreen from '../HomeScreen';
 import { useAuth } from '../../context/AuthContext';
-import { fetchMyPlayers, loadCourseLibrary } from '../../store/libraryStore';
+import { fetchMyPlayers, loadQuickStartCourses } from '../../store/libraryStore';
 import {
   buildJoinLink,
   generateInviteCode,
@@ -128,6 +128,9 @@ jest.mock('../../components/QuickStartCourses', () => {
         <Text testID="quick-start-players">
           {(props.players ?? []).map((item) => item.name).join(',')}
         </Text>
+        <Text testID="quick-start-courses-loading">
+          {props.coursesLoading ? 'loading' : 'ready'}
+        </Text>
         <TouchableOpacity
           testID="quick-start-start"
           onPress={() => props.onStart?.({ course, players: [player] })}
@@ -156,7 +159,7 @@ jest.mock('../../components/PostCreateInviteModal', () => {
 
 jest.mock('../../store/libraryStore', () => ({
   fetchMyPlayers: jest.fn(),
-  loadCourseLibrary: jest.fn(),
+  loadQuickStartCourses: jest.fn(),
 }));
 
 jest.mock('../../store/tournamentStore', () => ({
@@ -273,7 +276,7 @@ beforeEach(() => {
     stale: false,
     openableIds: null,
   });
-  loadCourseLibrary.mockResolvedValue({ courses: [], favorites: new Set() });
+  loadQuickStartCourses.mockResolvedValue({ courses: [], usingCachedData: false });
   fetchMyPlayers.mockResolvedValue([]);
   lastTeeForPlayerOnCourse.mockResolvedValue(null);
   saveTournament.mockResolvedValue();
@@ -286,7 +289,7 @@ test('ignores stale quick-start loads after the signed-in user changes', async (
   const firstPlayers = deferred();
   const secondCourses = deferred();
   const secondPlayers = deferred();
-  loadCourseLibrary
+  loadQuickStartCourses
     .mockReturnValueOnce(firstCourses.promise)
     .mockReturnValueOnce(secondCourses.promise);
   fetchMyPlayers
@@ -294,7 +297,7 @@ test('ignores stale quick-start loads after the signed-in user changes', async (
     .mockReturnValueOnce(secondPlayers.promise);
 
   const view = renderHome();
-  await waitFor(() => expect(loadCourseLibrary).toHaveBeenCalledTimes(1));
+  await waitFor(() => expect(loadQuickStartCourses).toHaveBeenCalledTimes(1));
 
   mockUserId = 'u-two';
   view.rerender(
@@ -304,12 +307,12 @@ test('ignores stale quick-start loads after the signed-in user changes', async (
     />,
   );
 
-  await waitFor(() => expect(loadCourseLibrary).toHaveBeenCalledTimes(2));
+  await waitFor(() => expect(loadQuickStartCourses).toHaveBeenCalledTimes(2));
 
   await act(async () => {
     secondCourses.resolve({
       courses: [{ id: 'course-two', name: 'Course Two' }],
-      favorites: new Set(['course-two']),
+      usingCachedData: false,
     });
     secondPlayers.resolve([{ id: 'player-two', name: 'Player Two', user_id: 'u-two' }]);
   });
@@ -322,7 +325,7 @@ test('ignores stale quick-start loads after the signed-in user changes', async (
   await act(async () => {
     firstCourses.resolve({
       courses: [{ id: 'course-one', name: 'Course One' }],
-      favorites: new Set(['course-one']),
+      usingCachedData: false,
     });
     firstPlayers.resolve([{ id: 'player-one', name: 'Player One', user_id: 'u-one' }]);
   });
@@ -336,9 +339,9 @@ test('ignores stale quick-start loads after the signed-in user changes', async (
 test('prevents duplicate games from rapid quick-start presses', async () => {
   const save = deferred();
   saveTournament.mockReturnValue(save.promise);
-  loadCourseLibrary.mockResolvedValue({
+  loadQuickStartCourses.mockResolvedValue({
     courses: [{ id: 'course-one', name: 'Course One' }],
-    favorites: new Set(['course-one']),
+    usingCachedData: false,
   });
   fetchMyPlayers.mockResolvedValue([
     { id: 'player-one', name: 'Player One', user_id: 'u-one' },
@@ -359,5 +362,31 @@ test('prevents duplicate games from rapid quick-start presses', async () => {
 
   await act(async () => {
     save.resolve();
+  });
+});
+
+test('passes a loading state while quick-start courses are pending', async () => {
+  const courseLoad = deferred();
+  loadQuickStartCourses.mockReturnValue(courseLoad.promise);
+  fetchMyPlayers.mockResolvedValue([
+    { id: 'player-one', name: 'Player One', user_id: 'u-one' },
+  ]);
+
+  const view = renderHome();
+
+  await waitFor(() => {
+    expect(view.getByTestId('quick-start-courses-loading').props.children).toBe('loading');
+  });
+
+  await act(async () => {
+    courseLoad.resolve({
+      courses: [{ id: 'course-one', name: 'Course One' }],
+      usingCachedData: false,
+    });
+  });
+
+  await waitFor(() => {
+    expect(view.getByTestId('quick-start-courses-loading').props.children).toBe('ready');
+    expect(view.getByTestId('quick-start-courses').props.children).toBe('Course One');
   });
 });

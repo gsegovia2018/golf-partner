@@ -86,6 +86,7 @@ export async function deletePlayer(id) {
 // fails, so a casual game can still be set up without a connection.
 
 export const COURSES_CACHE_KEY = '@golf_courses_cache';
+export const QUICK_START_COURSES_CACHE_KEY = '@golf_quick_start_courses_cache';
 
 export async function fetchCourses() {
   const { data, error } = await supabase
@@ -99,11 +100,32 @@ export async function fetchCourses() {
   return courses;
 }
 
+async function fetchCoursesByIds(ids) {
+  if (!ids.length) return [];
+  const { data, error } = await supabase
+    .from('courses')
+    .select('*, course_holes(*), course_tees(*)')
+    .in('id', ids)
+    .order('name');
+  if (error) throw error;
+  return data.map(normalizeCourse);
+}
+
 // Last-known course library — used when fetchCourses fails (offline). Never
 // throws; returns [] when nothing is cached or the cache is unreadable.
 export async function getCachedCourses() {
   try {
     const raw = await AsyncStorage.getItem(COURSES_CACHE_KEY);
+    const parsed = raw ? JSON.parse(raw) : [];
+    return Array.isArray(parsed) ? parsed : [];
+  } catch {
+    return [];
+  }
+}
+
+export async function getCachedQuickStartCourses() {
+  try {
+    const raw = await AsyncStorage.getItem(QUICK_START_COURSES_CACHE_KEY);
     const parsed = raw ? JSON.parse(raw) : [];
     return Array.isArray(parsed) ? parsed : [];
   } catch {
@@ -246,6 +268,33 @@ export async function loadCourseLibrary() {
       getCachedFavoriteCourseIds(),
     ]);
     return { courses, clubs, favorites, usingCachedData: true };
+  }
+}
+
+export async function loadQuickStartCourses() {
+  try {
+    const favoriteIds = await fetchFavoriteCourseIds();
+    const ids = [...favoriteIds];
+    if (ids.length === 0) {
+      AsyncStorage.setItem(QUICK_START_COURSES_CACHE_KEY, JSON.stringify([])).catch(() => {});
+      return { courses: [], usingCachedData: false };
+    }
+    const courses = await fetchCoursesByIds(ids);
+    AsyncStorage.setItem(QUICK_START_COURSES_CACHE_KEY, JSON.stringify(courses)).catch(() => {});
+    return { courses, usingCachedData: false };
+  } catch {
+    const cachedQuickStartCourses = await getCachedQuickStartCourses();
+    if (cachedQuickStartCourses.length > 0) {
+      return { courses: cachedQuickStartCourses, usingCachedData: true };
+    }
+    const [courses, favoriteIds] = await Promise.all([
+      getCachedCourses(),
+      getCachedFavoriteCourseIds(),
+    ]);
+    return {
+      courses: courses.filter((course) => favoriteIds.has(course.id)),
+      usingCachedData: true,
+    };
   }
 }
 
