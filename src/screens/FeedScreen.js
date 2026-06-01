@@ -180,6 +180,12 @@ function SkeletonCard({ s }) {
   );
 }
 
+function feedMark(label, startedAt) {
+  if (!__DEV__ || process.env.NODE_ENV === 'test' || !startedAt) return;
+  const elapsed = Math.round(Date.now() - startedAt);
+  console.log(`[feed] ${label}: ${elapsed}ms`);
+}
+
 export default function FeedScreen({ navigation }) {
   const { theme } = useTheme();
   const { user } = useAuth() ?? {};
@@ -242,12 +248,14 @@ export default function FeedScreen({ navigation }) {
     if (isRefresh) setRefreshing(true);
     try {
       if (!isRefresh && !loadedOnceRef.current) {
+        const cachedStart = Date.now();
         const cachedResult = await buildFeed({
           userId,
           source: 'cache',
           includeMedia: false,
           limit: 30,
         });
+        feedMark('cache base', cachedStart);
         const hasCachedFeed = (cachedResult.items?.length ?? 0) > 0
           || (cachedResult.roundStories?.length ?? 0) > 0;
         if (hasCachedFeed) {
@@ -256,12 +264,14 @@ export default function FeedScreen({ navigation }) {
         }
       }
 
+      const remoteStart = Date.now();
       const result = await buildFeed({
         userId,
         source: 'remote',
         includeMedia: true,
         limit: 30,
       });
+      feedMark('remote full', remoteStart);
       applyFeedResult(result);
     } catch {
       // buildFeed is defensive and rarely throws; treat a throw as an error
