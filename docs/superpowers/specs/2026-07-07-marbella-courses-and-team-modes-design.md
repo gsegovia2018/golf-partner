@@ -84,7 +84,7 @@ modes):
 | Key | Label | Teams | Scoring |
 |---|---|---|---|
 | `scramblepairs` | Scramble — Pairs | 2 v 2, one ball per team | Team Stableford; team hcp = 35% low + 15% high |
-| `scramble3v1` | Scramble — 3 v 1 | 3-man scramble team vs 1 individual | Team Stableford (30/20/10% allowance) vs individual Stableford on full course handicap |
+| `scramble3v1` | Scramble — 3 v 1 | 3-man scramble team vs 1 individual | Team Stableford (20/15/10% allowance) vs individual Stableford on full course handicap |
 | `scramble4` | Scramble — 4-man | one team of 4 vs the course | Team Stableford; allowance 25/20/15/10% |
 | `pairsmatchplay` | Pairs Match Play | 2 v 2 as two 1v1 duels | 2 pts/hole: each duel gives 1 to net hole winner, ½ each if halved; team totals; clinched when lead > 2 × holes left |
 
@@ -103,10 +103,9 @@ modes):
 - **Team handicaps:** computed once at round start from each member's course
   handicap (their assigned tee, via `calcPlayingHandicap`) using the WHS
   scramble allowances, stored on the round (e.g. `round.teamHandicaps`) so
-  mid-round handicap edits don't shift the game. 2-man = 35%/15% and
-  4-man = 25/20/15/10% (standard USGA/WHS recommendations); 3-man defaults
-  to 30/20/10% (low → high), corrected during implementation only if official
-  USGA guidance differs.
+  mid-round handicap edits don't shift the game. USGA Rules of Handicapping
+  Appendix C allowances: 2-man = 35%/15%, 3-man = 20/15/10%,
+  4-man = 25/20/15/10% (low → high course handicap).
 - **Pairs Match Play structure:** reuse the existing random-pairs mechanism
   for the two teams, then randomly assign the two cross-team duels; duels are
   stored on the round (e.g. `round.duels`) and revealed like partners are
