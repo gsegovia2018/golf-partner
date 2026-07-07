@@ -100,10 +100,10 @@ modes):
 - **Personal stats:** scramble rounds are excluded from individual stat
   aggregation in `statsEngine.js` — a team ball is not an individual score.
   Pairs Match Play counts the same way existing match play does.
-- **Team handicaps:** computed once at round start from each member's course
-  handicap (their assigned tee, via `calcPlayingHandicap`) using the WHS
-  scramble allowances, stored on the round (e.g. `round.teamHandicaps`) so
-  mid-round handicap edits don't shift the game. USGA Rules of Handicapping
+- **Team handicaps:** derived from `round.playerHandicaps` — the per-player
+  course handicaps already frozen at round build — using the WHS scramble
+  allowances. No new round field; manual handicap edits affect the game
+  exactly as they do in every existing mode. USGA Rules of Handicapping
   Appendix C allowances: 2-man = 35%/15%, 3-man = 20/15/10%,
   4-man = 25/20/15/10% (low → high course handicap).
 - **Pairs Match Play structure:** reuse the existing random-pairs mechanism
