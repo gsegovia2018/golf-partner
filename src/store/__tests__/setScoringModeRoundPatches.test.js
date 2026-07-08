@@ -79,3 +79,39 @@ describe('setScoringModeRoundPatches', () => {
     expect(patches[0].roundId).toBe('r2');
   });
 });
+
+describe('new team mode shapes', () => {
+  test('switching to scramble3v1 rebuilds future rounds as 3+1', () => {
+    const t = makeTournament({
+      players: [A, B, C, D],
+      mode: 'stableford',
+      rounds: [makeRound({ id: 'r0' })],
+      currentRound: 0,
+    });
+    const { patches } = setScoringModeRoundPatches(t, 'scramble3v1');
+    expect(patches[0].pairs.map((x) => x.length).sort()).toEqual([1, 3]);
+  });
+
+  test('switching to scramble4 rebuilds future rounds as one team of 4', () => {
+    const t = makeTournament({
+      players: [A, B, C, D],
+      mode: 'stableford',
+      rounds: [makeRound({ id: 'r0' })],
+      currentRound: 0,
+    });
+    const { patches } = setScoringModeRoundPatches(t, 'scramble4');
+    expect(patches[0].pairs).toHaveLength(1);
+    expect(patches[0].pairs[0]).toHaveLength(4);
+  });
+
+  test('switching to pairsmatchplay rebuilds as two pairs of 2', () => {
+    const t = makeTournament({
+      players: [A, B, C, D],
+      mode: 'individual',
+      rounds: [makeRound({ id: 'r0' })],
+      currentRound: 0,
+    });
+    const { patches } = setScoringModeRoundPatches(t, 'pairsmatchplay');
+    expect(patches[0].pairs.map((x) => x.length)).toEqual([2, 2]);
+  });
+});

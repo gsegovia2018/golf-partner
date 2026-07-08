@@ -8,14 +8,13 @@ import { Feather } from '@expo/vector-icons';
 
 import { useTheme } from '../theme/ThemeContext';
 import {
-  loadTournament, saveTournament, subscribeTournamentChanges, DEFAULT_SETTINGS, randomPairs,
+  loadTournament, saveTournament, subscribeTournamentChanges, DEFAULT_SETTINGS, buildTeamsForMode,
   normalizeRoundHandicaps, isRoundComplete,
   getActiveTournamentSnapshot,
 } from '../store/tournamentStore';
 import { mutate } from '../store/mutate';
 import { normalizeRoundNotes, roundNoteText } from '../store/roundNotes';
 import { isScoringModeAllowed, fallbackScoringMode } from '../components/ScoringModePicker';
-import { scoringModeUsesTeams } from '../components/scoringModes';
 import { parseHandicapIndex } from '../lib/handicap';
 import { shouldHandleStoreChange } from '../lib/navigationFocus';
 import {
@@ -200,12 +199,10 @@ export default function EditTournamentScreen({ navigation }) {
         const r = parseHandicapIndex(p.handicap);
         return { ...p, handicap: r.ok ? r.value : 0 };
       });
-      // Team modes get random pairs; solo modes get one singleton pair per
-      // player. scoringModeUsesTeams keeps this in lockstep with the mode list.
+      // buildTeamsForMode covers every team shape (2x2 / 3+1 / 1x4) and
+      // falls back to one singleton pair per player for solo modes.
       const mode = settings?.scoringMode;
-      const pairs = scoringModeUsesTeams(mode, builtPlayers.length)
-        ? randomPairs(builtPlayers)
-        : builtPlayers.map((p) => [p]);
+      const pairs = buildTeamsForMode(mode, builtPlayers);
       const newRound = {
         id: `r${Date.now()}`,
         courseName: '',
