@@ -19,7 +19,7 @@ export async function loadProfile() {
   if (!user) return null;
   const { data, error } = await supabase
     .from('profiles')
-    .select('user_id, username, display_name, handicap, target_handicap, avatar_color, avatar_url, updated_at')
+    .select('user_id, username, display_name, handicap, target_handicap, avatar_color, avatar_url, gender, updated_at')
     .eq('user_id', user.id)
     .maybeSingle();
   if (error) throw error;
@@ -32,6 +32,7 @@ export async function loadProfile() {
     targetHandicap: data?.target_handicap ?? null,
     avatarColor: data?.avatar_color ?? null,
     avatarUrl: data?.avatar_url ?? null,
+    gender: data?.gender ?? null,
     updatedAt: data?.updated_at ?? null,
   };
 }
@@ -66,6 +67,9 @@ export async function upsertProfile(fields) {
   }
   if (fields.avatarUrl !== undefined) {
     row.avatar_url = fields.avatarUrl || null;
+  }
+  if (fields.gender !== undefined) {
+    row.gender = fields.gender === 'male' || fields.gender === 'female' ? fields.gender : null;
   }
   // Only write username when provided non-empty — lowercased so the
   // unique(lower(username)) index can't fail silently.
