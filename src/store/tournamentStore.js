@@ -13,7 +13,7 @@ import {
   recomputeRoundPlayingHandicaps,
   calcStablefordPoints,
   tournamentSindicatoClinched,
-  randomPairs,
+  buildTeamsForMode,
   isRoundPlayed,
 } from './scoring';
 import { isScoringModeAllowed, fallbackScoringMode } from '../components/ScoringModePicker';
@@ -575,6 +575,7 @@ export {
   tournamentMatchPlayStandings,
   pickupStrokes,
   randomPairs,
+  buildTeamsForMode,
 } from './scoring';
 
 // Push a player library edit (name/handicap) into every tournament that
@@ -707,7 +708,7 @@ function buildPairsForAddedPlayer({ roster, newMode, oldMode, existingPairs, new
   if (oldWasTeams && existingPairs?.length && revealed) {
     return [...existingPairs.map((pr) => [...pr]), [newPlayer]];
   }
-  return randomPairs(roster);
+  return buildTeamsForMode(newMode, roster);
 }
 
 // Build the per-round patches for adding `player` to an in-progress
@@ -760,7 +761,7 @@ function buildPairsForRemovedPlayer({ survivors, newMode, oldMode, existingPairs
       .map((pr) => pr.filter((p) => p.id !== removedId))
       .filter((pr) => pr.length > 0);
   }
-  return randomPairs(survivors);
+  return buildTeamsForMode(newMode, survivors);
 }
 
 // Build the per-round patches for removing the player `playerId` from an
@@ -813,7 +814,7 @@ function buildPairsForModeChange({ roster, newMode, oldMode, existingPairs, reve
   if (oldWasTeams && existingPairs?.length && revealed) {
     return existingPairs.map((pr) => [...pr]);
   }
-  return randomPairs(roster);
+  return buildTeamsForMode(newMode, roster);
 }
 
 // Build the per-round pair patches for a mid-tournament scoring-mode change.

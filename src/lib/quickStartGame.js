@@ -3,13 +3,12 @@ import {
   createTournament,
   DEFAULT_SETTINGS,
   deriveRoundPlayingHandicap,
-  randomPairs,
+  buildTeamsForMode,
 } from '../store/tournamentStore';
 import { middleTee, teeByLabel } from '../store/tees';
 import {
   fallbackScoringMode,
   isScoringModeAllowed,
-  scoringModeUsesTeams,
 } from '../components/scoringModes';
 
 const MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
@@ -182,9 +181,7 @@ export function buildQuickStartTournamentDraft({
 }) {
   const normalizedSettings = normalizeQuickStartSettings(settings, players.length);
   const round = buildQuickStartRound({ course, players, playerTees });
-  const pairs = scoringModeUsesTeams(normalizedSettings.scoringMode, players.length)
-    ? randomPairs(players)
-    : players.map((p) => [p]);
+  const pairs = buildTeamsForMode(normalizedSettings.scoringMode, players);
   const meId = players.find((p) => p.user_id && p.user_id === userId)?.id ?? null;
   return createTournament({
     kind: 'game',

@@ -8,7 +8,7 @@ import ScreenContainer from '../components/ScreenContainer';
 import { Feather } from '@expo/vector-icons';
 import { useFocusEffect, CommonActions } from '@react-navigation/native';
 import {
-  createTournament, saveTournament, randomPairs, DEFAULT_SETTINGS,
+  createTournament, saveTournament, buildTeamsForMode, DEFAULT_SETTINGS,
   deriveRoundPlayingHandicap, generateInviteCode, buildJoinLink,
 } from '../store/tournamentStore';
 import { defaultHoles, fetchPlayers, fetchMyPlayers } from '../store/libraryStore';
@@ -21,7 +21,7 @@ import { useAuth } from '../context/AuthContext';
 import ScoringModePicker, { isScoringModeAllowed, fallbackScoringMode } from '../components/ScoringModePicker';
 import RoundTeeAssignments from '../components/RoundTeeAssignments';
 import PostCreateInviteModal from '../components/PostCreateInviteModal';
-import { scoringModeUsesTeams, getScoringMode } from '../components/scoringModes';
+import { getScoringMode } from '../components/scoringModes';
 import WizardProgress from '../components/setup/WizardProgress';
 import WizardNav from '../components/setup/WizardNav';
 import {
@@ -349,16 +349,11 @@ export default function SetupScreen({ navigation, route }) {
       return;
     }
 
-    // Pairs are built from the scoring mode: team modes get random pairs,
-    // every solo mode (including match play and sindicato) gets one
-    // singleton pair per player. scoringModeUsesTeams is the single source
-    // of truth, so new solo modes need no change here.
+    // Pairs are built from the scoring mode via buildTeamsForMode, which
+    // covers every team shape (2x2 / 3+1 / 1x4) and falls back to one
+    // singleton pair per player for solo modes.
     const isMatchPlay = settings.scoringMode === 'matchplay';
-    const buildPairs = () => (
-      scoringModeUsesTeams(settings.scoringMode, players.length)
-        ? randomPairs(players)
-        : players.map((p) => [p])
-    );
+    const buildPairs = () => buildTeamsForMode(settings.scoringMode, players);
 
     const builtRounds = rounds.map((r, i) => {
       // Defensive: if a round somehow has no per-player tees (e.g. the round

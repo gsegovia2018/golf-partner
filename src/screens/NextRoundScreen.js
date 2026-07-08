@@ -10,7 +10,7 @@ import {
 import ScreenContainer from '../components/ScreenContainer';
 import { Feather } from '@expo/vector-icons';
 import {
-  loadTournament, randomPairs, saveTournament, subscribeTournamentChanges,
+  loadTournament, buildTeamsForMode, saveTournament, subscribeTournamentChanges,
 } from '../store/tournamentStore';
 import { scoringModeUsesTeams } from '../components/scoringModes';
 import { useTheme } from '../theme/ThemeContext';
@@ -56,9 +56,7 @@ export default function NextRoundScreen({ navigation, route }) {
   // those modes; everything else still randomises partners each round.
   const buildPairsForRound = (t) => {
     const mode = t?.settings?.scoringMode;
-    return scoringModeUsesTeams(mode, t.players?.length)
-      ? randomPairs(t.players)
-      : t.players.map((p) => [p]);
+    return buildTeamsForMode(mode, t.players);
   };
 
   useEffect(() => {
