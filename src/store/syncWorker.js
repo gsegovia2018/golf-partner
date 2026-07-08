@@ -23,12 +23,13 @@ async function fetchRemote(tournamentId) {
   return data?.data ?? null;
 }
 
-async function drainLibrary(libraryMuts) {
+// Exported for unit testing the mutation → upsertPlayer field mapping.
+export async function drainLibrary(libraryMuts) {
   // Library mutations (player.upsertLibrary) drain independently; no merge.
   for (const entry of libraryMuts) {
     const m = entry.mutation;
     if (m.type === 'player.upsertLibrary') {
-      await upsertPlayer({ id: m.playerId, name: m.name, handicap: m.handicap });
+      await upsertPlayer({ id: m.playerId, name: m.name, handicap: m.handicap, gender: m.gender });
       await syncQueue.drop(entry.id);
     } else if (m.type === 'rpc.call') {
       // Generic RPC dispatch (e.g. official-tournament score writes).

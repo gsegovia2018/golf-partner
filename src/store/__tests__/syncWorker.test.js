@@ -6,8 +6,9 @@
 //
 // jest.mock calls are hoisted above these imports by babel-jest, so the
 // mocks are in place before ../syncWorker and its dependencies load.
-import { drainTournament } from '../syncWorker';
+import { drainTournament, drainLibrary } from '../syncWorker';
 import { readLocal, saveLocal } from '../tournamentStore';
+import { upsertPlayer } from '../libraryStore';
 
 let mockRemote = null;
 
@@ -84,5 +85,24 @@ describe('drainTournament', () => {
     const saved = saveLocal.mock.calls[0][0];
     expect(saved.rounds[0].scores.p1[5]).toBe(6);
     expect(saved.rounds[0].shotDetails.p1[5].putts).toBe(3);
+  });
+});
+
+describe('drainLibrary', () => {
+  beforeEach(() => {
+    jest.clearAllMocks();
+  });
+
+  test('player.upsertLibrary mutation carries gender through to upsertPlayer', async () => {
+    await drainLibrary([{
+      id: 'e1',
+      mutation: {
+        type: 'player.upsertLibrary', playerId: 'p1', name: 'Ana', handicap: 20, gender: 'female',
+      },
+    }]);
+
+    expect(upsertPlayer).toHaveBeenCalledWith(
+      expect.objectContaining({ id: 'p1', gender: 'female' }),
+    );
   });
 });
