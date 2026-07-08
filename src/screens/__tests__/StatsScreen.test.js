@@ -81,6 +81,9 @@ jest.mock('../../store/tournamentStore', () => ({
 
 jest.mock('../../components/scoringModes', () => ({
   scoringModeUsesTeams: jest.fn(() => false),
+  // Real implementation: the H2H gating tests below depend on which modes
+  // actually count as scramble.
+  isScrambleMode: jest.requireActual('../../components/scoringModes').isScrambleMode,
 }));
 
 jest.mock('../../store/statsEngine', () => ({
@@ -90,7 +93,11 @@ jest.mock('../../store/statsEngine', () => ({
   playerStreaks: jest.fn(() => []),
   bestWorstHoles: jest.fn(() => ({ best: [], worst: [] })),
   holeDifficultyMap: jest.fn(() => []),
-  headToHead: jest.fn(() => ({ points: {}, strokes: {}, holes: [] })),
+  headToHead: jest.fn(() => ({
+    points: { p1Wins: 0, p2Wins: 0, ties: 0 },
+    strokes: { p1Wins: 0, p2Wins: 0, ties: 0 },
+    holes: [],
+  })),
   pairPerformance: jest.fn(() => []),
   tournamentHighlights: jest.fn(() => ({})),
   hallOfShame: jest.fn(() => ({})),
@@ -127,11 +134,11 @@ jest.mock('../../store/statsEngine', () => ({
   scramblingStats: jest.fn(() => []),
 }));
 
-function renderStats(rounds) {
+function renderStats(rounds, { players = [player], scoringMode = 'stableford' } = {}) {
   mockActiveTournament = {
     id: 't1',
-    players: [player],
-    settings: { scoringMode: 'stableford' },
+    players,
+    settings: { scoringMode },
     rounds,
   };
   return render(<StatsScreen navigation={{ goBack: jest.fn() }} />);
@@ -161,5 +168,33 @@ describe('StatsScreen chrome', () => {
 
     expect(queryByText('Total')).toBeNull();
     expect(queryByText('R1')).toBeNull();
+  });
+});
+
+describe('StatsScreen head-to-head gating', () => {
+  const fourPlayers = [
+    player,
+    { id: 'p2', name: 'Bob Diaz', user_id: null, handicap: 0 },
+    { id: 'p3', name: 'Cara Ruiz', user_id: null, handicap: 0 },
+    { id: 'p4', name: 'Dan Vega', user_id: null, handicap: 0 },
+  ];
+
+  test('shows the Head-to-Head section for a multi-player non-team mode', () => {
+    const { queryByText } = renderStats([makeRound('r1')], {
+      players: fourPlayers, scoringMode: 'individual',
+    });
+
+    expect(queryByText('HEAD-TO-HEAD')).toBeTruthy();
+  });
+
+  test('hides the Head-to-Head section for scramble modes', () => {
+    // Scramble scores exist only under the team captain — there are no
+    // per-player scores for headToHead() to compare — so the section must
+    // stay hidden even though scramble's usesTeams pair-stats flag is false.
+    const { queryByText } = renderStats([makeRound('r1')], {
+      players: fourPlayers, scoringMode: 'scramblepairs',
+    });
+
+    expect(queryByText('HEAD-TO-HEAD')).toBeNull();
   });
 });
