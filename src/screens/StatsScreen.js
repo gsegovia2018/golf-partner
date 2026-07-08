@@ -2218,8 +2218,10 @@ function PairsTab({ tournament, players, h2hP1, setH2hP1, h2hP2, setH2hP2, selec
           <Text style={s.scopeText}>
             Net holes won across the tournament — row vs column ({metric === 'strokes' ? 'lower strokes wins' : 'higher Stableford wins'}). Tap to load that matchup below.
           </Text>
+          {/* Same scramble-blanked input as the duel card below — the
+              heatmap's cells are headToHead results too. */}
           <H2HMatrix
-            tournament={tournament}
+            tournament={h2hTournament}
             players={players}
             metric={metric}
             theme={theme}

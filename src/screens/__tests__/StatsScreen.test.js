@@ -1,5 +1,5 @@
 import React from 'react';
-import { render } from '@testing-library/react-native';
+import { render, fireEvent } from '@testing-library/react-native';
 import { ScrollView, StyleSheet } from 'react-native';
 import StatsScreen from '../StatsScreen';
 
@@ -100,6 +100,10 @@ jest.mock('../../store/statsEngine', () => ({
   headToHead: jest.fn(() => ({
     points: { p1Wins: 0, p2Wins: 0, ties: 0 },
     strokes: { p1Wins: 0, p2Wins: 0, ties: 0 },
+    // totals/perRound are read by PairsTab's duel card, which the pairs-tab
+    // tests below actually render.
+    totals: { p1Points: 0, p2Points: 0, p1Strokes: 0, p2Strokes: 0, holesCompared: 0 },
+    perRound: [],
     holes: [],
   })),
   pairPerformance: jest.fn(() => []),
@@ -358,6 +362,44 @@ describe('StatsScreen mixed scoring-mode gating (per-round overrides)', () => {
       const { queryByText } = renderStats(rounds, { players: fourPlayers, scoringMode: 'individual' });
 
       expect(queryByText('HEAD-TO-HEAD')).toBeNull();
+    });
+
+    test('feeds the Pairs-tab H2H heatmap a tournament with scramble rounds blanked too', () => {
+      // Sibling of the Overview regression above, but through PairsTab:
+      // anyTeams is true here (round 1 is a genuine stableford team round),
+      // so the H2H surface is the Pairs tab — its "H2H HEATMAP" H2HMatrix
+      // and duel card both call headToHead and must receive the same
+      // scramble-blanked tournament as the Overview matrix, or captain
+      // team balls leak into the heatmap.
+      jest.clearAllMocks();
+      const statsEngine = require('../../store/statsEngine');
+      const perHole = (strokes) => Object.fromEntries(holes.map((h) => [h.number, strokes]));
+      const teamRound = {
+        id: 'r1', courseName: 'La Moraleja', holes, scoringMode: 'stableford',
+        scores: { p1: perHole(4), p2: perHole(5) },
+      };
+      // p1 and p2 are opposing captains — both hold a team-ball score.
+      const scramble = {
+        id: 'r2', courseName: 'La Moraleja', holes, scoringMode: 'scramblepairs',
+        scores: { p1: perHole(4), p2: perHole(4) },
+      };
+      const { getByText, queryByText } = renderStats([teamRound, scramble], {
+        players: fourPlayers, scoringMode: 'individual',
+      });
+
+      fireEvent.press(getByText('Pairs'));
+
+      expect(queryByText('H2H HEATMAP')).toBeTruthy();
+      // The heatmap computes every player pairing at render time.
+      expect(statsEngine.headToHead).toHaveBeenCalled();
+      statsEngine.headToHead.mock.calls.forEach(([t]) => {
+        // Same round count — indices (and R{n} labels) must stay aligned.
+        expect(t.rounds).toHaveLength(2);
+        // The genuine team round's scores reach headToHead intact…
+        expect(t.rounds[0].scores).toEqual(teamRound.scores);
+        // …but the scramble round's captain scores are blanked out.
+        expect(t.rounds[1].scores).toBeNull();
+      });
     });
   });
 });
