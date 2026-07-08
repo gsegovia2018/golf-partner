@@ -332,6 +332,103 @@ export function tournamentSindicatoClinched(tournament) {
   return null;
 }
 
+// ── Scramble ────────────────────────────────────────────────────────────────
+// One ball per team, scored Stableford off a team handicap. The team score
+// lives under the CAPTAIN (first member) in round.scores, so the sync layer
+// is untouched. USGA Rules of Handicapping Appendix C allowances, low→high
+// course handicap. A solo "team" (3v1's individual) plays 100%.
+
+export const SCRAMBLE_ALLOWANCES = {
+  1: [1],
+  2: [0.35, 0.15],
+  3: [0.20, 0.15, 0.10],
+  4: [0.25, 0.20, 0.15, 0.10],
+};
+
+export function scrambleTeamHandicap(handicaps) {
+  const weights = SCRAMBLE_ALLOWANCES[handicaps?.length];
+  if (!weights) return 0;
+  const sorted = [...handicaps].sort((a, b) => a - b);
+  return Math.round(sorted.reduce((acc, h, i) => acc + h * weights[i], 0));
+}
+
+// { [captainId]: teamHandicap } from the round's frozen playerHandicaps.
+export function scrambleTeamHandicaps(round, players) {
+  const byId = Object.fromEntries((players ?? []).map((p) => [p.id, p]));
+  const result = {};
+  for (const team of round?.pairs ?? []) {
+    const captain = team?.[0];
+    if (!captain) continue;
+    const handicaps = team.map((m) => (
+      round?.playerHandicaps?.[m.id] ?? byId[m.id]?.handicap ?? m.handicap ?? 0
+    ));
+    result[captain.id] = scrambleTeamHandicap(handicaps);
+  }
+  return result;
+}
+
+// Synthetic "team players" for the scorecard: one entry per team, carrying
+// the captain's id (where the team ball's scores live), a joined first-name
+// label, and the team handicap. Members kept for chips/labels.
+export function scrambleUnits(round, players) {
+  const teamHcps = scrambleTeamHandicaps(round, players);
+  const byId = Object.fromEntries((players ?? []).map((p) => [p.id, p]));
+  return (round?.pairs ?? [])
+    .filter((team) => team?.length > 0)
+    .map((team) => {
+      const members = team.map((m) => byId[m.id] ?? m);
+      const captain = members[0];
+      return {
+        id: captain.id,
+        name: members.map((m) => m?.name?.split(' ')[0] ?? '—').join(' & '),
+        handicap: teamHcps[captain.id] ?? 0,
+        members,
+      };
+    });
+}
+
+// Round tally across teams. Clinch only applies to two-sided games
+// (scramblepairs, scramble3v1): leader clinches when the trailing side
+// cannot catch up even scoring 1 stroke on every remaining hole.
+export function scrambleRoundTally(round, players) {
+  const units = scrambleUnits(round, players);
+  if (units.length === 0) return null;
+  const holes = round?.holes ?? [];
+  const scores = round?.scores ?? {};
+
+  const rows = units.map((unit) => {
+    let points = 0;
+    let strokes = 0;
+    let scored = 0;
+    for (const hole of holes) {
+      const str = scores?.[unit.id]?.[hole.number];
+      if (str == null) continue;
+      scored++;
+      strokes += str;
+      points += calcStablefordPoints(hole.par, str, unit.handicap, hole.strokeIndex);
+    }
+    let maxRemaining = 0;
+    for (const hole of holes) {
+      if (scores?.[unit.id]?.[hole.number] != null) continue;
+      maxRemaining += calcStablefordPoints(hole.par, 1, unit.handicap, hole.strokeIndex);
+    }
+    return { unit, points, strokes, scored, maxRemaining };
+  });
+
+  const totals = [...rows].sort((a, b) => b.points - a.points);
+  const played = Math.min(...rows.map((r) => r.scored));
+  const holesLeft = holes.length - played;
+  let leaderIdx = null;
+  let lead = 0;
+  let clinched = false;
+  if (totals.length >= 2) {
+    lead = totals[0].points - totals[1].points;
+    leaderIdx = lead > 0 ? 0 : null;
+    clinched = leaderIdx === 0 && totals[0].points > totals[1].points + totals[1].maxRemaining;
+  }
+  return { totals, played, holesLeft, leaderIdx, lead, clinched };
+}
+
 // ── Phase A helpers ─────────────────────────────────────────────────────────
 
 // Green-in-Regulation: reached the green with at least two strokes left

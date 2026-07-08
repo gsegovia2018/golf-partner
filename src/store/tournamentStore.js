@@ -15,6 +15,11 @@ import {
   tournamentSindicatoClinched,
   buildTeamsForMode,
   isRoundPlayed,
+  SCRAMBLE_ALLOWANCES,
+  scrambleTeamHandicap,
+  scrambleTeamHandicaps,
+  scrambleUnits,
+  scrambleRoundTally,
 } from './scoring';
 import { isScoringModeAllowed, fallbackScoringMode } from '../components/ScoringModePicker';
 import { scoringModeUsesTeams } from '../components/scoringModes';
