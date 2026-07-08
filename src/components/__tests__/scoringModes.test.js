@@ -7,6 +7,8 @@ import {
   getScoringMode,
   leaderboardToggleLabels,
   mergeScoringSettings,
+  isScrambleMode,
+  scoringModeUsesTeams,
 } from '../scoringModes';
 
 describe('SCORING_MODES', () => {
@@ -64,7 +66,7 @@ describe('scoringModeCategories', () => {
     expect(sections.map((s) => s.category)).toEqual(['Solo', 'Head-to-head', 'Teams']);
     expect(sections[0].modes.map((m) => m.key)).toEqual(['individual', 'stableford']);
     expect(sections[1].modes.map((m) => m.key)).toEqual(['matchplay', 'sindicato']);
-    expect(sections[2].modes.map((m) => m.key)).toEqual(['bestball']);
+    expect(sections[2].modes.map((m) => m.key)).toEqual(['bestball', 'scramblepairs', 'scramble3v1', 'scramble4', 'pairsmatchplay']);
   });
   test('every mode appears exactly once across sections', () => {
     const keys = scoringModeCategories().flatMap((s) => s.modes.map((m) => m.key));
@@ -166,5 +168,41 @@ describe('mergeScoringSettings', () => {
       scoringMode: 'sindicato', bestBallValue: '1', worstBallValue: '1',
     });
     expect(result.scoringMode).toBe('sindicato');
+  });
+});
+
+describe('new team modes', () => {
+  const NEW_KEYS = ['scramblepairs', 'scramble3v1', 'scramble4', 'pairsmatchplay'];
+
+  it('registers all four modes, teams-based, gated to exactly 4 players', () => {
+    for (const key of NEW_KEYS) {
+      const def = SCORING_MODES.find((m) => m.key === key);
+      expect(def).toBeTruthy();
+      expect(def.teams).toBe(true);
+      expect(isScoringModeAllowed(key, 4)).toBe(true);
+      expect(isScoringModeAllowed(key, 3)).toBe(false);
+      expect(isScoringModeAllowed(key, 5)).toBe(false);
+    }
+  });
+
+  it('identifies scramble modes', () => {
+    expect(isScrambleMode('scramblepairs')).toBe(true);
+    expect(isScrambleMode('scramble3v1')).toBe(true);
+    expect(isScrambleMode('scramble4')).toBe(true);
+    expect(isScrambleMode('pairsmatchplay')).toBe(false);
+    expect(isScrambleMode('stableford')).toBe(false);
+  });
+
+  it('scoringModeUsesTeams is true for the new modes at 4 players', () => {
+    for (const key of NEW_KEYS) {
+      expect(scoringModeUsesTeams(key, 4)).toBe(true);
+      expect(scoringModeUsesTeams(key, 3)).toBe(false);
+    }
+  });
+
+  it('leaderboard toggles', () => {
+    expect(leaderboardToggleLabels('pairsmatchplay')).toEqual({ left: 'Match Play', right: 'Stableford' });
+    expect(leaderboardToggleLabels('scramblepairs')).toEqual({ left: 'Scramble', right: 'Stroke Play' });
+    expect(leaderboardToggleLabels('scramble4')).toEqual({ left: 'Scramble', right: 'Stroke Play' });
   });
 });
