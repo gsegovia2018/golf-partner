@@ -349,6 +349,21 @@ function SectionAnchor({ anchorKey, anchors, children }) {
   );
 }
 
+// headToHead compares each player's own scores directly and skips any round
+// where either player lacks one — but a scramble round DOES leave real
+// scores under both team captains (the team ball, scored off the scramble
+// team handicap), so comparing captain vs captain would count team play as
+// a personal duel. Blank those rounds' scores instead of removing the
+// rounds: the array keeps its length, so the roundIndex values headToHead
+// emits (and the R{n} labels built from them) stay correct, and blanked
+// rounds fall into headToHead's existing "round not played" skip.
+function withoutScrambleScores(tournament) {
+  const rounds = (tournament.rounds ?? []).map((r) => (
+    isScrambleMode(roundScoringMode(tournament, r)) ? { ...r, scores: null } : r
+  ));
+  return { ...tournament, rounds };
+}
+
 // ── Overview Tab ──
 function OverviewTab({ tournament, metric, hasMulti, anyTeams, allScramble, roundScope, scrollRef, theme, s }) {
   // Round scope is now screen-level; treat the prop as the source of truth.
@@ -364,6 +379,8 @@ function OverviewTab({ tournament, metric, hasMulti, anyTeams, allScramble, roun
   const modeLabel = isStrokes ? 'strokes (gross)' : 'points (net Stableford)';
   const [sheet, setSheet] = useState(null);
   const anchors = useRef({});
+  // Head-to-Head input with scramble rounds blanked — see withoutScrambleScores.
+  const h2hTournament = useMemo(() => withoutScrambleScores(tournament), [tournament]);
 
   const scope = roundIndex === null
     ? 'Tournament · all rounds'
@@ -551,9 +568,10 @@ function OverviewTab({ tournament, metric, hasMulti, anyTeams, allScramble, roun
   // team ball lives under the captain) — so the whole-tournament placeholder
   // (allScramble) must still hide this section even though its anyTeams
   // flag is false. A mixed tournament with SOME scramble rounds among
-  // non-team ones is fine: headToHead() already skips any round where
-  // either player lacks a score, so individual scramble rounds are silently
-  // excluded from the comparison rather than polluting it.
+  // non-team ones shows the section, but built from h2hTournament (scramble
+  // rounds' scores blanked — see withoutScrambleScores) so that two team
+  // CAPTAINS, who both hold real team-ball scores in a scramble round,
+  // never have their teams' play counted as a personal duel.
   const showH2H = hasMulti && !anyTeams && !allScramble && roundIndex === null;
   const indexSections = [
     { key: 'highlights', label: 'Highlights' },
@@ -747,7 +765,7 @@ function OverviewTab({ tournament, metric, hasMulti, anyTeams, allScramble, roun
             Net holes won across the tournament — row vs column ({isStrokes ? 'lower strokes wins' : 'higher Stableford wins'}). Tap a cell for the breakdown.
           </Text>
           <H2HMatrix
-            tournament={tournament}
+            tournament={h2hTournament}
             players={tournament.players}
             metric={metric}
             theme={theme}
@@ -755,7 +773,7 @@ function OverviewTab({ tournament, metric, hasMulti, anyTeams, allScramble, roun
             onCellPress={(i, j) => {
               const p1 = tournament.players[i];
               const p2 = tournament.players[j];
-              const result = headToHead(tournament, p1.id, p2.id);
+              const result = headToHead(h2hTournament, p1.id, p2.id);
               const bucket = isStrokes ? result.strokes : result.points;
               setSheet({
                 title: `${firstName(p1)} vs ${firstName(p2)} — by ${isStrokes ? 'strokes' : 'points'}`,
@@ -1673,12 +1691,12 @@ function PairsTab({ tournament, players, h2hP1, setH2hP1, h2hP2, setH2hP2, selec
   const p1 = players[h2hP1];
   const p2Idx = h2hP2 >= players.length ? 0 : h2hP2;
   const p2 = players[p2Idx];
-  // headToHead compares each player's own scores directly — it doesn't read
-  // round.pairs at all — and it already skips any round where either
-  // player lacks a score (true for a scramble non-captain). So the
-  // pairsTournament filter isn't needed here; the untouched tournament is
-  // used deliberately, not an oversight.
-  const h2h = p1 && p2 && p1.id !== p2.id ? headToHead(tournament, p1.id, p2.id, { roundIndex: effectiveRound }) : null;
+  // headToHead doesn't read round.pairs, so pairsTournament is the wrong
+  // filter for it — it needs scramble rounds' SCORES blanked instead
+  // (captain vs captain would otherwise duel with team balls). See
+  // withoutScrambleScores above OverviewTab.
+  const h2hTournament = useMemo(() => withoutScrambleScores(tournament), [tournament]);
+  const h2h = p1 && p2 && p1.id !== p2.id ? headToHead(h2hTournament, p1.id, p2.id, { roundIndex: effectiveRound }) : null;
   const anchors = useRef({});
 
   const [sheet, setSheet] = useState(null);
