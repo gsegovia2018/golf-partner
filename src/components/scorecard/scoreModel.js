@@ -9,15 +9,26 @@ import {
   roundPairLeaderboard,
   sindicatoRoundTally,
   roundPairClinched,
+  scrambleUnits,
+  scrambleRoundTally,
+  pairsMatchHolePts,
+  pairsMatchDuelPts,
+  pairsMatchRoundTally,
 } from '../../store/tournamentStore';
 import { playersMeFirst } from '../../lib/playerOrder';
 
 // Points for every player on one hole. Returns { [playerId]: number|null };
 // null means the player has not scored the hole yet.
-export function holePoints({ mode, hole, players, scores, handicaps }) {
+export function holePoints({ mode, hole, players, scores, handicaps, round }) {
   const result = {};
   for (const p of players) {
     const str = scores?.[p.id]?.[hole.number];
+    if (mode === 'pairsmatchplay') {
+      // Duel result is defined by the duel being fully scored, not by p
+      // having scored — mirror matchPlayHolePts null semantics.
+      result[p.id] = pairsMatchDuelPts(hole, p.id, round?.pairs, scores, handicaps);
+      continue;
+    }
     if (str == null) { result[p.id] = null; continue; }
     if (mode === 'matchplay') {
       // matchPlayHolePts returns null when either player (not just p) has not scored yet.
@@ -46,7 +57,7 @@ export function roundTotals({ mode, round, players, scores, handicaps }) {
       if (sc == null) continue;
       str += sc;
       parPlayed += hole.par;
-      const hp = holePoints({ mode, hole, players, scores, handicaps: hcaps });
+      const hp = holePoints({ mode, hole, players, scores, handicaps: hcaps, round });
       pts += hp[p.id] ?? 0;
     }
     map.set(p.id, { pts, str, parPlayed });
@@ -111,6 +122,101 @@ export function summaryState({ mode, round, players, scores, settings, currentHo
       status: null,
       decided: false,
     };
+  }
+
+  // --- scramble (team ball under the captain) -----------------------------
+  if (mode === 'scramblepairs' || mode === 'scramble3v1' || mode === 'scramble4') {
+    const tally = scrambleRoundTally({ ...round, scores }, playerList);
+    if (tally) {
+      const units = scrambleUnits({ ...round, scores }, playerList);
+      if (mode === 'scramble4' || units.length === 1) {
+        const row = tally.totals[0];
+        const parPlayed = (round?.holes ?? []).reduce((acc, h) => (
+          scores?.[row.unit.id]?.[h.number] != null ? acc + h.par : acc
+        ), 0);
+        const decided = tally.holesLeft === 0;
+        return {
+          variant: 'solo',
+          eyebrow: 'TEAM SCRAMBLE',
+          solo: { str: row.strokes, pts: row.points, vsParLabel: vsParLabel(row.strokes, parPlayed) },
+          status: decided ? `${row.unit.name} finished on ${row.points} pts` : null,
+          decided,
+        };
+      }
+      // Two-sided scramble (pairs, 3v1) — reuse the pairs summary shape.
+      const curScrambleHole = (round?.holes ?? []).find((h) => h.number === currentHole);
+      const holeData = curScrambleHole
+        ? holePoints({
+          mode: 'stableford',
+          hole: curScrambleHole,
+          players: units,
+          scores,
+          handicaps: Object.fromEntries(units.map((u) => [u.id, u.handicap])),
+        })
+        : {};
+      const rowsByCaptain = Object.fromEntries(tally.totals.map((r) => [r.unit.id, r]));
+      const decided = tally.clinched
+        || (tally.holesLeft === 0 && tally.totals[0].points !== tally.totals[1].points);
+      const leaderRow = tally.leaderIdx != null ? tally.totals[tally.leaderIdx] : null;
+      let status;
+      if (tally.clinched && leaderRow) {
+        status = `${leaderRow.unit.name} have won the round`;
+      } else if (leaderRow) {
+        status = `${leaderRow.unit.name} lead by ${tally.lead} · ${tally.holesLeft} to play`;
+      } else {
+        status = `All square · ${tally.holesLeft} to play`;
+      }
+      return {
+        variant: 'pairs',
+        eyebrow: 'SCRAMBLE',
+        pairs: units.map((u, index) => ({
+          index,
+          name: u.name,
+          holePts: holeData[u.id] ?? null,
+          roundPts: rowsByCaptain[u.id]?.points ?? 0,
+          isWinner: decided && leaderRow?.unit.id === u.id,
+        })),
+        status,
+        decided,
+      };
+    }
+  }
+
+  // --- pairs match play (two 1v1 duels, 2 pts per hole) --------------------
+  if (mode === 'pairsmatchplay') {
+    const liveR = { ...round, scores };
+    const tally = pairsMatchRoundTally(liveR, playerList);
+    if (tally) {
+      const curHole = (round?.holes ?? []).find((h) => h.number === currentHole);
+      const holePts = curHole
+        ? pairsMatchHolePts(curHole, round?.pairs, scores, round?.playerHandicaps ?? {})
+        : null;
+      const names = (round?.pairs ?? []).map((pair) => pairLabel(pair));
+      const decided = tally.clinched
+        || (tally.holesLeft === 0 && tally.team1 !== tally.team2);
+      const winnerIdx = tally.team1 > tally.team2 ? 0 : tally.team2 > tally.team1 ? 1 : null;
+      let status;
+      if (decided && winnerIdx != null) {
+        status = `${names[winnerIdx]} have won the match`;
+      } else if (tally.leaderIdx != null) {
+        status = `${names[tally.leaderIdx]} lead by ${tally.lead} · ${tally.holesLeft} to play`;
+      } else {
+        status = `All square · ${tally.holesLeft} to play`;
+      }
+      return {
+        variant: 'pairs',
+        eyebrow: 'PAIRS MATCH PLAY',
+        pairs: [tally.team1, tally.team2].map((pts, index) => ({
+          index,
+          name: names[index],
+          holePts: holePts ? (index === 0 ? holePts.team1 : holePts.team2) : null,
+          roundPts: pts,
+          isWinner: decided && winnerIdx === index,
+        })),
+        status,
+        decided,
+      };
+    }
   }
 
   // --- match play (1v1 — exactly 2 individual players) -------------------
