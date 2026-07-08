@@ -77,6 +77,15 @@ describe('reTeeRound', () => {
     const round = { scores: {} };
     expect(reTeeRound(round, newTees)).toEqual({ scores: {} });
   });
+
+  test('reTeeRound refreshes snapshots with the player\'s gender pair', () => {
+    const round = { playerTees: { p1: { label: 'Amarillas', slope: 1, rating: 1 },
+                                  p2: { label: 'Amarillas', slope: 1, rating: 1 } } };
+    const tees = [{ label: 'Amarillas', rating: 72.7, slope: 141, ratingWomen: 79.3, slopeWomen: 151 }];
+    const next = reTeeRound(round, tees, { p1: 'male', p2: 'female' });
+    expect(next.playerTees.p1).toEqual({ label: 'Amarillas', slope: 141, rating: 72.7 });
+    expect(next.playerTees.p2).toEqual({ label: 'Amarillas', slope: 151, rating: 79.3 });
+  });
 });
 
 describe('tournamentNoun', () => {
