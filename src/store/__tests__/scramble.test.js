@@ -3,6 +3,7 @@ import {
   scrambleTeamHandicaps,
   scrambleUnits,
   scrambleRoundTally,
+  tournamentScrambleLeaderboard,
 } from '../scoring';
 
 const P = (id, name, handicap = 0) => ({ id, name, handicap });
@@ -95,5 +96,42 @@ describe('scramble round', () => {
     expect(units[1].handicap).toBe(8);
     const tally = scrambleRoundTally(round, players);
     expect(tally.totals.map((t) => t.points).every((p) => p >= 2)).toBe(true);
+  });
+});
+
+describe('tournamentScrambleLeaderboard', () => {
+  it('sums team points across rounds', () => {
+    const mk = (scores) => ({
+      holes: [{ number: 1, par: 4, strokeIndex: 1 }],
+      pairs: [[P('a', 'Ann Lee'), P('b', 'Bob Ray')], [P('c', 'Cam Fox'), P('d', 'Dan Oak')]],
+      playerHandicaps: {}, scores,
+    });
+    const t = {
+      players: [P('a', 'Ann Lee'), P('b', 'Bob Ray'), P('c', 'Cam Fox'), P('d', 'Dan Oak')],
+      settings: { scoringMode: 'scramblepairs' },
+      currentRound: 1,
+      rounds: [mk({ a: { 1: 3 }, c: { 1: 4 } }), mk({ a: { 1: 4 }, c: { 1: 3 } })],
+    };
+    const board = tournamentScrambleLeaderboard(t);
+    expect(board).toHaveLength(2);
+    expect(board[0].points).toBe(5);
+    expect(board[0].player.name).toBe('Ann & Bob');
+    expect(board[0].player.id).toBe('a');
+  });
+
+  it('ignores rounds past currentRound', () => {
+    const mk = (scores) => ({
+      holes: [{ number: 1, par: 4, strokeIndex: 1 }],
+      pairs: [[P('a', 'Ann Lee'), P('b', 'Bob Ray')], [P('c', 'Cam Fox'), P('d', 'Dan Oak')]],
+      playerHandicaps: {}, scores,
+    });
+    const t = {
+      players: [P('a', 'Ann Lee'), P('b', 'Bob Ray'), P('c', 'Cam Fox'), P('d', 'Dan Oak')],
+      settings: { scoringMode: 'scramblepairs' },
+      currentRound: 0,
+      rounds: [mk({ a: { 1: 3 }, c: { 1: 4 } }), mk({ a: { 1: 4 }, c: { 1: 3 } })],
+    };
+    const board = tournamentScrambleLeaderboard(t);
+    expect(board.find((r) => r.player.id === 'a').points).toBe(3);
   });
 });

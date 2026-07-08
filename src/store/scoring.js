@@ -530,6 +530,65 @@ export function pairsMatchRoundTally(round, _players) {
   return { team1, team2, played: fullyPlayed, holesLeft, lead, leaderIdx, clinched, duels: duelRows };
 }
 
+// ── Team tournament leaderboards ────────────────────────────────────────────
+// Both boards use { player, points, strokes } rows — the same shape as
+// tournamentSindicatoLeaderboard / tournamentMatchPlayStandings.board — so the
+// HomeScreen leaderboard row renderer works unchanged. `player` is a synthetic
+// unit keyed by the team's captain (first member) id, carrying a joined
+// first-name label as `name`.
+
+// Cumulative scramble team standings across all played rounds. One row per
+// team, summed via scrambleRoundTally's per-round unit rows (already keyed by
+// captain id).
+export function tournamentScrambleLeaderboard(tournament) {
+  const { players, rounds } = tournament ?? {};
+  const acc = new Map(); // captainId -> { player, points, strokes }
+  (rounds ?? []).forEach((round, index) => {
+    if (!isRoundPlayed(round, index, tournament)) return;
+    const tally = scrambleRoundTally(round, players ?? []);
+    if (!tally) return;
+    for (const row of tally.totals) {
+      const cur = acc.get(row.unit.id) ?? {
+        player: { id: row.unit.id, name: row.unit.name },
+        points: 0,
+        strokes: 0,
+      };
+      cur.points += row.points;
+      cur.strokes += row.strokes;
+      acc.set(row.unit.id, cur);
+    }
+  });
+  return [...acc.values()].sort((a, b) => b.points - a.points);
+}
+
+// Cumulative pairs match play team standings across all played rounds. One
+// row per team (round.pairs[0] → team1, round.pairs[1] → team2), summing
+// pairsMatchRoundTally's team1/team2 points under each round's captain id.
+export function tournamentPairsMatchStandings(tournament) {
+  const { players, rounds } = tournament ?? {};
+  const acc = new Map(); // captainId -> { player, points, strokes }
+  (rounds ?? []).forEach((round, index) => {
+    if (!isRoundPlayed(round, index, tournament)) return;
+    const tally = pairsMatchRoundTally(round, players ?? []);
+    if (!tally) return;
+    (round.pairs ?? []).forEach((pair, idx) => {
+      const captain = pair?.[0];
+      if (!captain) return;
+      const name = pair.map((m) => m?.name?.split(' ')[0] ?? '—').join(' & ');
+      const cur = acc.get(captain.id)
+        ?? { player: { id: captain.id, name }, points: 0, strokes: 0 };
+      cur.points += idx === 0 ? tally.team1 : tally.team2;
+      pair.forEach((m) => {
+        const holeScores = round.scores?.[m?.id] ?? {};
+        for (const v of Object.values(holeScores)) cur.strokes += (v || 0);
+      });
+      acc.set(captain.id, cur);
+    });
+  });
+  const board = [...acc.values()].sort((a, b) => b.points - a.points);
+  return { board };
+}
+
 // ── Phase A helpers ─────────────────────────────────────────────────────────
 
 // Green-in-Regulation: reached the green with at least two strokes left

@@ -3,6 +3,7 @@ import {
   pairsMatchHolePts,
   pairsMatchDuelPts,
   pairsMatchRoundTally,
+  tournamentPairsMatchStandings,
 } from '../scoring';
 
 const P = (id, handicap = 0) => ({ id, name: id, handicap });
@@ -103,5 +104,47 @@ describe('pairsMatchRoundTally', () => {
 
   it('null for malformed pairs', () => {
     expect(pairsMatchRoundTally({ holes, pairs: [[P('a')], [P('c')]] }, [])).toBeNull();
+  });
+});
+
+describe('tournamentPairsMatchStandings', () => {
+  const holes2 = [
+    { number: 1, par: 4, strokeIndex: 1 },
+    { number: 2, par: 4, strokeIndex: 2 },
+  ];
+  const mk = (scores) => ({ holes: holes2, pairs, playerHandicaps: {}, scores });
+
+  it('sums team match points across rounds, one row per team', () => {
+    const t = {
+      players: [...pairs[0], ...pairs[1]],
+      settings: { scoringMode: 'pairsmatchplay' },
+      currentRound: 1,
+      rounds: [
+        // round 1: team1 (a,b) sweeps both duels on both holes → team1 4, team2 0
+        mk({ a: { 1: 3, 2: 3 }, c: { 1: 5, 2: 5 }, b: { 1: 3, 2: 3 }, d: { 1: 5, 2: 5 } }),
+        // round 2: every duel halved → team1 2, team2 2
+        mk({ a: { 1: 4, 2: 4 }, c: { 1: 4, 2: 4 }, b: { 1: 4, 2: 4 }, d: { 1: 4, 2: 4 } }),
+      ],
+    };
+    const { board } = tournamentPairsMatchStandings(t);
+    expect(board).toHaveLength(2);
+    expect(board[0].player.id).toBe('a');
+    expect(board[0].points).toBe(6);
+    expect(board[1].player.id).toBe('c');
+    expect(board[1].points).toBe(2);
+  });
+
+  it('ignores rounds past currentRound', () => {
+    const t = {
+      players: [...pairs[0], ...pairs[1]],
+      settings: { scoringMode: 'pairsmatchplay' },
+      currentRound: 0,
+      rounds: [
+        mk({ a: { 1: 3, 2: 3 }, c: { 1: 5, 2: 5 }, b: { 1: 3, 2: 3 }, d: { 1: 5, 2: 5 } }),
+        mk({ a: { 1: 4, 2: 4 }, c: { 1: 4, 2: 4 }, b: { 1: 4, 2: 4 }, d: { 1: 4, 2: 4 } }),
+      ],
+    };
+    const { board } = tournamentPairsMatchStandings(t);
+    expect(board.find((r) => r.player.id === 'a').points).toBe(4);
   });
 });

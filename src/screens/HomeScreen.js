@@ -9,7 +9,7 @@ import { useTheme } from '../theme/ThemeContext';
 import { ShareableLeaderboard, shareLeaderboard } from '../components/ShareableCard';
 import QuickStartCourses from '../components/QuickStartCourses';
 import PostCreateInviteModal from '../components/PostCreateInviteModal';
-import { scoringModeUsesTeams, leaderboardToggleLabels, mergeScoringSettings } from '../components/scoringModes';
+import { scoringModeUsesTeams, leaderboardToggleLabels, mergeScoringSettings, isScrambleMode } from '../components/scoringModes';
 import ScoringModeField from '../components/ScoringModePicker';
 import PullToRefresh from '../components/PullToRefresh';
 import LoadingSplash from '../components/LoadingSplash';
@@ -25,6 +25,8 @@ import {
   matchPlayRoundTally,
   sindicatoRoundTally, tournamentSindicatoLeaderboard,
   tournamentMatchPlayStandings,
+  scrambleRoundTally, tournamentScrambleLeaderboard,
+  pairsMatchRoundTally, tournamentPairsMatchStandings,
   DEFAULT_SETTINGS, generateInviteCode, buildJoinLink,
   setScoringModeRoundPatches,
   tournamentNoun, tournamentNounCapitalized,
@@ -833,6 +835,8 @@ export default function HomeScreen({ navigation, route }) {
       if (settings.scoringMode === 'matchplay') return matchPlayStandings?.board ?? [];
       if (settings.scoringMode === 'sindicato') return tournamentSindicatoLeaderboard(tournament);
       if (settings.scoringMode === 'bestball') return tournamentBestWorstLeaderboard(tournament);
+      if (settings.scoringMode === 'pairsmatchplay') return tournamentPairsMatchStandings(tournament)?.board ?? [];
+      if (isScrambleMode(settings.scoringMode)) return tournamentScrambleLeaderboard(tournament);
       return tournamentLeaderboard(tournament);
     },
     [tournament, settings.scoringMode, matchPlayStandings],
@@ -1407,6 +1411,19 @@ export default function HomeScreen({ navigation, route }) {
     if (settings.scoringMode === 'bestball' && !leaderboardAlt) {
       if (!selectedRoundData || !selectedRoundHasScores || !selectedRoundData.pairs?.length) return null;
       return playerRoundBestWorstPoints(selectedRoundData, playerId, tournament.players, settings);
+    }
+    if (settings.scoringMode === 'pairsmatchplay' && !leaderboardAlt) {
+      if (!selectedRoundData || !selectedRoundHasScores) return null;
+      const tally = pairsMatchRoundTally(selectedRoundData, tournament.players);
+      if (!tally) return null;
+      const idx = (selectedRoundData.pairs ?? []).findIndex((pair) => pair?.[0]?.id === playerId);
+      return idx === 0 ? tally.team1 : idx === 1 ? tally.team2 : null;
+    }
+    if (isScrambleMode(settings.scoringMode) && !leaderboardAlt) {
+      if (!selectedRoundData || !selectedRoundHasScores) return null;
+      const tally = scrambleRoundTally(selectedRoundData, tournament.players);
+      if (!tally) return null;
+      return tally.totals.find((row) => row.unit.id === playerId)?.points ?? null;
     }
     if (!selectedRoundPlayerTotals) return null;
     return selectedRoundPlayerTotals.find((e) => e.player.id === playerId)?.totalPoints ?? 0;
