@@ -77,6 +77,10 @@ jest.mock('../../store/tournamentStore', () => ({
   getPlayingHandicap: jest.fn(() => 0),
   calcStablefordPoints: jest.fn(() => 2),
   playerPartnerSplits: jest.fn(() => ({ partners: [] })),
+  // Real implementation: a round's own scoringMode overrides the
+  // tournament default — the mixed-tournament gating tests below depend on
+  // this per-round resolution actually running.
+  roundScoringMode: jest.fn((t, round) => round?.scoringMode ?? t?.settings?.scoringMode ?? 'stableford'),
 }));
 
 jest.mock('../../components/scoringModes', () => ({
@@ -238,5 +242,85 @@ describe('StatsScreen scramble gating', () => {
     expect(queryByText('Team scramble tournament')).toBeNull();
     expect(queryByText('Players')).toBeTruthy();
     expect(queryByText('Overview')).toBeTruthy();
+  });
+});
+
+describe('StatsScreen mixed scoring-mode gating (per-round overrides)', () => {
+  // Rounds can now carry their own scoringMode that overrides the
+  // tournament default (roundScoringMode) — a tournament is "mixed" when
+  // its rounds don't all resolve to the same effective mode.
+
+  test('a mixed tournament (one normal round, one scramble round) is not the whole-screen placeholder', () => {
+    const rounds = [
+      makeRound('r1'),
+      { ...makeRound('r2', 5), scoringMode: 'scramblepairs' },
+    ];
+    const { queryByText } = renderStats(rounds, { players: fourPlayers, scoringMode: 'individual' });
+
+    expect(queryByText('Team scramble tournament')).toBeNull();
+    expect(queryByText('Overview')).toBeTruthy();
+  });
+
+  test('every round overridden to scramble still shows the placeholder even though the tournament default is not scramble', () => {
+    const rounds = [
+      { ...makeRound('r1'), scoringMode: 'scramble4' },
+      { ...makeRound('r2', 5), scoringMode: 'scramble4' },
+    ];
+    const { queryByText } = renderStats(rounds, { players: fourPlayers, scoringMode: 'individual' });
+
+    expect(queryByText('Team scramble tournament')).toBeTruthy();
+    expect(queryByText('Overview')).toBeNull();
+  });
+
+  test('Head-to-Head still shows for a mixed tournament with no team rounds (scramble + solo only)', () => {
+    // allScramble is false (round 1 is solo) and anyTeams is false (neither
+    // round is a real team mode) — H2H is meaningful for the solo round and
+    // headToHead() itself already skips the scramble round's missing scores.
+    const rounds = [
+      makeRound('r1'),
+      { ...makeRound('r2', 5), scoringMode: 'scramblepairs' },
+    ];
+    const { queryByText } = renderStats(rounds, { players: fourPlayers, scoringMode: 'individual' });
+
+    expect(queryByText('HEAD-TO-HEAD')).toBeTruthy();
+  });
+
+  describe('with a genuine team round in the mix', () => {
+    const scoringModes = require('../../components/scoringModes');
+
+    beforeEach(() => {
+      // The module-level mock stubs scoringModeUsesTeams to always return
+      // false so the rest of this file never has to think about team
+      // rounds. These tests need it to reflect the real "stableford" /
+      // "scramblepairs" distinction, so override it locally and restore the
+      // stub afterwards.
+      scoringModes.scoringModeUsesTeams.mockImplementation(
+        (mode) => mode === 'stableford' || mode === 'bestball' || mode === 'pairsmatchplay',
+      );
+    });
+
+    afterEach(() => {
+      scoringModes.scoringModeUsesTeams.mockImplementation(() => false);
+    });
+
+    test('Pairs tab appears when any round has real team data, even if another round is scramble', () => {
+      const rounds = [
+        { ...makeRound('r1'), scoringMode: 'stableford' },
+        { ...makeRound('r2', 5), scoringMode: 'scramblepairs' },
+      ];
+      const { queryByText } = renderStats(rounds, { players: fourPlayers, scoringMode: 'individual' });
+
+      expect(queryByText('Pairs')).toBeTruthy();
+    });
+
+    test('Head-to-Head stays hidden for a mixed tournament that has any real team round', () => {
+      const rounds = [
+        { ...makeRound('r1'), scoringMode: 'stableford' },
+        { ...makeRound('r2', 5), scoringMode: 'scramblepairs' },
+      ];
+      const { queryByText } = renderStats(rounds, { players: fourPlayers, scoringMode: 'individual' });
+
+      expect(queryByText('HEAD-TO-HEAD')).toBeNull();
+    });
   });
 });

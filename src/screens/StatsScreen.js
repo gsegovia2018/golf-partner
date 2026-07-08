@@ -6,7 +6,7 @@ import { useTheme } from '../theme/ThemeContext';
 import { useAuth } from '../context/AuthContext';
 import {
   loadTournament, getPlayingHandicap, calcStablefordPoints,
-  playerPartnerSplits, getActiveTournamentSnapshot,
+  playerPartnerSplits, getActiveTournamentSnapshot, roundScoringMode,
 } from '../store/tournamentStore';
 import {
   playerRoundHistory, playerAvgStableford, playerScoreDistribution,
@@ -129,18 +129,27 @@ export default function StatsScreen({ navigation }) {
 
   const { players } = tournament;
   const completedRounds = tournament.rounds.filter(r => r.scores && Object.keys(r.scores).length > 0);
-  const scoringMode = tournament.settings?.scoringMode;
   const isSolo = players.length === 1;
-  // Scramble scores exist only under each team's captain — players have no
-  // individual scores — so BOTH the pair stats (usesTeams) and the
-  // Head-to-Head section are meaningless. Keep the flags separate: usesTeams
-  // gates team/pair UI, isScramble must ALSO gate anything that assumes
-  // per-player scores (e.g. H2H), which `!usesTeams` alone would re-enable.
-  const isScramble = isScrambleMode(scoringMode);
-  const usesTeams = !isSolo && scoringModeUsesTeams(scoringMode, players.length)
-    && !isScramble;
+  // A round can now override the tournament's default scoring mode (see
+  // roundScoringMode) — a "mixed" tournament may have some scramble rounds,
+  // some real team rounds, and some solo rounds all at once. Scramble scores
+  // exist only under each team's captain — players have no individual
+  // scores — so BOTH the pair stats and the Head-to-Head section are
+  // meaningless for a scramble round. These two aggregates read every
+  // round's EFFECTIVE mode instead of one tournament-level default:
+  //   - allScramble: every round is scramble → nothing per-player to show
+  //     anywhere, gates the whole-screen placeholder below.
+  //   - anyTeams: at least one round has real (non-scramble) team data →
+  //     gates the Pairs tab and anything else that assumes partners exist.
+  // `allScramble` must ALSO gate anything that assumes per-player scores
+  // (e.g. H2H), which `!anyTeams` alone would re-enable for an all-scramble
+  // tournament (scramble rounds have anyTeams === false too).
+  const roundModes = (tournament.rounds ?? []).map((r) => roundScoringMode(tournament, r));
+  const allScramble = roundModes.length > 0 && roundModes.every((m) => isScrambleMode(m));
+  const anyTeams = !isSolo
+    && roundModes.some((m) => scoringModeUsesTeams(m, players.length) && !isScrambleMode(m));
   const hasMulti = players.length > 1;
-  const visibleTabs = ALL_TABS.filter(t => t.key !== 'pairs' || usesTeams);
+  const visibleTabs = ALL_TABS.filter(t => t.key !== 'pairs' || anyTeams);
   const activeTab = visibleTabs.some(t => t.key === tab) ? tab : 'overview';
   const firstCompletedIdx = tournament.rounds.findIndex(r => r.scores && Object.keys(r.scores).length > 0);
   const showRoundScope = tournament.rounds.length > 1
@@ -156,8 +165,10 @@ export default function StatsScreen({ navigation }) {
   // on scramble data would credit the whole team's play to the captain and
   // show nothing for everyone else. Same reasoning as the H2H/Pairs gating
   // below, applied to the whole stats body: show a friendly placeholder
-  // instead of misleading numbers.
-  if (isScramble) {
+  // instead of misleading numbers. Gated on `allScramble` (every round, not
+  // just the tournament default) so a mixed tournament with even one
+  // non-scramble round still gets the real stats body.
+  if (allScramble) {
     return (
       <ScreenContainer style={s.container} edges={['top', 'bottom']}>
         <View style={s.header}>
@@ -234,8 +245,8 @@ export default function StatsScreen({ navigation }) {
 
       {activeTab === 'overview' && (
         <ScrollView ref={overviewScrollRef} style={s.scrollView} contentContainerStyle={s.content}>
-          <OverviewTab tournament={tournament} metric={metric} hasMulti={hasMulti} usesTeams={usesTeams}
-            isScramble={isScramble} roundScope={roundScope} scrollRef={overviewScrollRef} theme={theme} s={s} />
+          <OverviewTab tournament={tournament} metric={metric} hasMulti={hasMulti} anyTeams={anyTeams}
+            allScramble={allScramble} roundScope={roundScope} scrollRef={overviewScrollRef} theme={theme} s={s} />
         </ScrollView>
       )}
       {activeTab === 'players' && (
@@ -250,7 +261,7 @@ export default function StatsScreen({ navigation }) {
             metric={metric} effectiveRound={effectiveRound} theme={theme} s={s} />
         </ScrollView>
       )}
-      {activeTab === 'pairs' && usesTeams && (
+      {activeTab === 'pairs' && anyTeams && (
         <ScrollView ref={pairsScrollRef} style={s.scrollView} contentContainerStyle={s.content}>
           <PairsTab tournament={tournament} players={players}
             h2hP1={h2hP1} setH2hP1={setH2hP1} h2hP2={h2hP2} setH2hP2={setH2hP2}
@@ -265,7 +276,7 @@ export default function StatsScreen({ navigation }) {
       )}
       {activeTab === 'shame' && (
         <ScrollView style={s.scrollView} contentContainerStyle={s.content}>
-          <ShameTab tournament={tournament} hasMulti={hasMulti} usesTeams={usesTeams} metric={metric} theme={theme} s={s} />
+          <ShameTab tournament={tournament} hasMulti={hasMulti} usesTeams={anyTeams} metric={metric} theme={theme} s={s} />
         </ScrollView>
       )}
     </ScreenContainer>
@@ -339,7 +350,7 @@ function SectionAnchor({ anchorKey, anchors, children }) {
 }
 
 // ── Overview Tab ──
-function OverviewTab({ tournament, metric, hasMulti, usesTeams, isScramble, roundScope, scrollRef, theme, s }) {
+function OverviewTab({ tournament, metric, hasMulti, anyTeams, allScramble, roundScope, scrollRef, theme, s }) {
   // Round scope is now screen-level; treat the prop as the source of truth.
   const roundIndex = roundScope;
   const highlights = tournamentHighlights(tournament, { metric, roundIndex });
@@ -537,9 +548,13 @@ function OverviewTab({ tournament, metric, hasMulti, usesTeams, isScramble, roun
   const showDna = roundIndex === null && dna.length > 0 && dna[0].courses.length > 0;
   const showSi = siAccuracy.length > 0;
   // H2H compares per-player scores, which scramble rounds don't have (the
-  // team ball lives under the captain) — so scramble must stay hidden even
-  // though its usesTeams flag is false.
-  const showH2H = hasMulti && !usesTeams && !isScramble && roundIndex === null;
+  // team ball lives under the captain) — so the whole-tournament placeholder
+  // (allScramble) must still hide this section even though its anyTeams
+  // flag is false. A mixed tournament with SOME scramble rounds among
+  // non-team ones is fine: headToHead() already skips any round where
+  // either player lacks a score, so individual scramble rounds are silently
+  // excluded from the comparison rather than polluting it.
+  const showH2H = hasMulti && !anyTeams && !allScramble && roundIndex === null;
   const indexSections = [
     { key: 'highlights', label: 'Highlights' },
     showMomentum && { key: 'momentum', label: 'Momentum' },
@@ -1615,25 +1630,54 @@ function HolesTab({ tournament, completedRounds, hasMulti, metric, effectiveRoun
 
 // ── Pairs Tab ──
 function PairsTab({ tournament, players, h2hP1, setH2hP1, h2hP2, setH2hP2, selectedPlayer, setSelectedPlayer, metric, effectiveRound, scrollRef, theme, s }) {
-  const pairs = pairPerformance(tournament);
+  // The Pairs tab is visible whenever ANY round has real team data
+  // (anyTeams at the screen level), but a mixed tournament can still hold
+  // scramble rounds and solo-mode rounds alongside genuine team rounds.
+  // Every pair aggregate below keys its output by array position
+  // (roundIndex / R{n} labels), so we can't just filter tournament.rounds
+  // down to the eligible ones — that would shift every later round's index.
+  // Instead we keep the array the same length and strip `pairs` from any
+  // round whose effective mode isn't a non-scramble team mode; every
+  // consumer here already treats a missing `round.pairs` as "skip this
+  // round" (see pairPerformance/pairHoleWins/pairSynergy/pairCarryRatio/
+  // matchPlayResults/pairConfigMatrix — each guards on `!round.pairs`).
+  // Without this, pairPerformance in particular would misattribute a
+  // scramble captain's real score as a "pair" result with their teammate,
+  // since roundTotals() reports an unscored teammate as 0 points rather
+  // than skipping them.
+  const pairsTournament = useMemo(() => ({
+    ...tournament,
+    rounds: (tournament.rounds ?? []).map((r) => {
+      const mode = roundScoringMode(tournament, r);
+      const isTeamRound = scoringModeUsesTeams(mode, players.length) && !isScrambleMode(mode);
+      return isTeamRound ? r : { ...r, pairs: null };
+    }),
+  }), [tournament, players.length]);
+
+  const pairs = pairPerformance(pairsTournament);
   const splitsPlayer = players[selectedPlayer] ?? null;
   const splits = splitsPlayer
-    ? playerPartnerSplits(tournament, splitsPlayer.id)
+    ? playerPartnerSplits(pairsTournament, splitsPlayer.id)
     : { baseline: 0, partners: [] };
   // Hole-wins and H2H read the unified round scope; the per-hole pair
   // difference chart is inherently per-round so it uses effectiveRound.
-  const holeWins = pairHoleWins(tournament, { metric, roundIndex: effectiveRound });
+  const holeWins = pairHoleWins(pairsTournament, { metric, roundIndex: effectiveRound });
   const firstCompletedRound = tournament.rounds.findIndex(r => r.scores && Object.keys(r.scores).length > 0);
   const pdRound = effectiveRound != null ? effectiveRound : (firstCompletedRound >= 0 ? firstCompletedRound : null);
-  const pdData = pdRound != null ? pairDifferenceByHole(tournament, pdRound, { metric }) : null;
-  const synergy = pairSynergy(tournament);
-  const carry = pairCarryRatio(tournament);
-  const swing = pdRound != null ? swingHole(tournament, pdRound) : null;
-  const matchPlay = matchPlayResults(tournament, { metric });
-  const configMatrix = pairConfigMatrix(tournament);
+  const pdData = pdRound != null ? pairDifferenceByHole(pairsTournament, pdRound, { metric }) : null;
+  const synergy = pairSynergy(pairsTournament);
+  const carry = pairCarryRatio(pairsTournament);
+  const swing = pdRound != null ? swingHole(pairsTournament, pdRound) : null;
+  const matchPlay = matchPlayResults(pairsTournament, { metric });
+  const configMatrix = pairConfigMatrix(pairsTournament);
   const p1 = players[h2hP1];
   const p2Idx = h2hP2 >= players.length ? 0 : h2hP2;
   const p2 = players[p2Idx];
+  // headToHead compares each player's own scores directly — it doesn't read
+  // round.pairs at all — and it already skips any round where either
+  // player lacks a score (true for a scramble non-captain). So the
+  // pairsTournament filter isn't needed here; the untouched tournament is
+  // used deliberately, not an oversight.
   const h2h = p1 && p2 && p1.id !== p2.id ? headToHead(tournament, p1.id, p2.id, { roundIndex: effectiveRound }) : null;
   const anchors = useRef({});
 
