@@ -15,11 +15,6 @@ import {
   tournamentSindicatoClinched,
   buildTeamsForMode,
   isRoundPlayed,
-  SCRAMBLE_ALLOWANCES,
-  scrambleTeamHandicap,
-  scrambleTeamHandicaps,
-  scrambleUnits,
-  scrambleRoundTally,
 } from './scoring';
 import { isScoringModeAllowed, fallbackScoringMode } from '../components/ScoringModePicker';
 import { scoringModeUsesTeams } from '../components/scoringModes';
@@ -715,7 +710,7 @@ export async function lastTeeForPlayerOnCourse(courseId, playerId) {
 // - Team new mode AND old mode also used teams AND existing pairs were
 //   revealed → keep the existing partnerships, the new player joins as a
 //   solo group.
-// - Otherwise → fresh randomPairs(roster).
+// - Otherwise → fresh buildTeamsForMode(newMode, roster).
 function buildPairsForAddedPlayer({ roster, newMode, oldMode, existingPairs, newPlayer, revealed }) {
   if (!scoringModeUsesTeams(newMode)) {
     return roster.map((p) => [p]);
@@ -786,7 +781,7 @@ export function addPlayerRoundPatches(tournament, player, { mode } = {}) {
 //   revealed → keep the existing partnerships minus the removed player; a
 //   pair emptied by the removal is discarded, a half-emptied pair becomes a
 //   one-member group.
-// - Otherwise → fresh randomPairs(survivors).
+// - Otherwise → fresh buildTeamsForMode(newMode, survivors).
 function buildPairsForRemovedPlayer({ survivors, newMode, oldMode, existingPairs, removedId, revealed }) {
   if (!scoringModeUsesTeams(newMode)) {
     return survivors.map((p) => [p]);
@@ -860,7 +855,7 @@ export function removePlayerRoundPatches(tournament, playerId, { mode } = {}) {
 // - Team new mode AND old mode also used teams AND existing pairs were
 //   revealed → keep the existing partnerships unchanged.
 // - Otherwise (switching INTO a team mode from a non-team mode) → fresh
-//   randomPairs(roster).
+//   buildTeamsForMode(newMode, roster).
 function buildPairsForModeChange({ roster, newMode, oldMode, existingPairs, revealed }) {
   if (!scoringModeUsesTeams(newMode)) {
     return roster.map((p) => [p]);
@@ -876,8 +871,9 @@ function buildPairsForModeChange({ roster, newMode, oldMode, existingPairs, reve
 // Mirror of addPlayerRoundPatches / removePlayerRoundPatches: currentRound and
 // every later round get their pairs rebuilt to match the new mode;
 // already-played earlier rounds are left untouched. Returns { patches } where
-// each patch is { roundId, pairs }. randomPairs is resolved here, not in the
-// mutation, so the persisted/replayed mutation carries deterministic pairs.
+// each patch is { roundId, pairs }. buildTeamsForMode is resolved here, not
+// in the mutation, so the persisted/replayed mutation carries deterministic
+// pairs.
 export function setScoringModeRoundPatches(tournament, newMode) {
   const oldMode = tournament?.settings?.scoringMode ?? 'stableford';
   const currentRound = tournament?.currentRound ?? 0;
