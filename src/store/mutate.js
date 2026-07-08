@@ -5,7 +5,7 @@ import { normalizeRoundNotes } from './roundNotes';
 
 // Maps a mutation to the in-tournament `_meta` path it bumps.
 // Returns null for library-only mutations (which do not touch the tournament blob).
-function metaPathFor(m) {
+export function metaPathFor(m) {
   switch (m.type) {
     case 'score.set':    return `rounds.${m.roundId}.scores.${m.playerId}.h${m.hole}`;
     // Per-player, per-hole shot detail (putts / drive / penalties).
@@ -15,6 +15,8 @@ function metaPathFor(m) {
         ? `rounds.${m.roundId}.notes.hole.${m.hole}`
         : `rounds.${m.roundId}.notes.round`;
     case 'pairs.set':    return `rounds.${m.roundId}.pairs`;
+    case 'round.setScoringMode':
+      return [`rounds.${m.roundId}.scoringMode`, `rounds.${m.roundId}.pairs`];
     case 'handicap.set': return `rounds.${m.roundId}.playerHandicaps.${m.playerId}`;
     // Structural round deletion: tombstone path consumed by mergeTournaments
     // so the round stays gone after the next remote refresh.
@@ -65,6 +67,7 @@ function metaPathFor(m) {
       const paths = ['settings.scoringMode'];
       for (const patch of (m.roundPatches ?? [])) {
         if (patch.pairs) paths.push(`rounds.${patch.roundId}.pairs`);
+        paths.push(`rounds.${patch.roundId}.scoringMode`);
       }
       return paths;
     }
@@ -132,6 +135,16 @@ export function applyToTournament(t, m) {
       // fixed-teams edit propagates pairs to future rounds that haven't had
       // their own reveal yet (m.reveal === false preserves their state).
       if (m.reveal !== false) round.revealed = true;
+      break;
+    }
+    case 'round.setScoringMode': {
+      const round = t.rounds?.find((r) => r.id === m.roundId);
+      if (!round) return;
+      // Per-round mode override. Teams are rebuilt by the caller for the
+      // new shape; revealed is preserved — changing a future round's mode
+      // must not spoil its reveal.
+      round.scoringMode = m.scoringMode;
+      if (m.pairs) round.pairs = m.pairs;
       break;
     }
     case 'handicap.set': {
@@ -204,13 +217,13 @@ export function applyToTournament(t, m) {
     }
     case 'tournament.setScoringMode': {
       t.settings = { ...(t.settings ?? {}), scoringMode: m.scoringMode };
-      // Rebuild each affected round's pairs so teams match the new mode
-      // (e.g. switching into Best Ball assigns partnerships; switching out
-      // collapses them to individuals). Patches are pre-computed by the
-      // caller via setScoringModeRoundPatches.
       for (const patch of (m.roundPatches ?? [])) {
         const round = t.rounds?.find((r) => r.id === patch.roundId);
-        if (round && patch.pairs) round.pairs = patch.pairs;
+        if (!round) continue;
+        if (patch.pairs) round.pairs = patch.pairs;
+        // The tournament-wide setter makes the tournament uniform again:
+        // per-round overrides on the patched (future) rounds are cleared.
+        delete round.scoringMode;
       }
       break;
     }
