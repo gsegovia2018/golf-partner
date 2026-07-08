@@ -103,8 +103,16 @@ export function recomputeRoundPlayingHandicaps(round, players) {
 }
 
 // Strokes received on a hole: floor(handicap/18) on every hole, plus one more
-// on holes whose stroke index is within the handicap's remainder.
+// on holes whose stroke index is within the handicap's remainder. Plus
+// handicaps (negative) give strokes back starting from the easiest hole
+// (highest stroke index) instead.
 export function calcExtraShots(playerHandicap, holeStrokeIndex) {
+  if (playerHandicap < 0) {
+    const given = -playerHandicap;
+    const base = Math.floor(given / 18);
+    const remainder = given % 18;
+    return (holeStrokeIndex > 18 - remainder ? -1 : 0) - base;
+  }
   const base = Math.floor(playerHandicap / 18);
   const remainder = playerHandicap % 18;
   return base + (holeStrokeIndex <= remainder ? 1 : 0);
