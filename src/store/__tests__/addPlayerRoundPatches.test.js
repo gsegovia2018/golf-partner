@@ -305,4 +305,24 @@ describe('addPlayerRoundPatches per-round mode overrides', () => {
     // Different shape (solo) → not the fixed-team pairs.
     expect(r2.pairs).toEqual([[A], [B], [C], [D]]);
   });
+
+  test('revealed round with a still-valid team override on a non-team default keeps its partnerships', () => {
+    const D = { id: 'd', name: 'D', handicap: 4 };
+    const t = makeTournament({
+      players: [A, B, C],
+      mode: 'individual', // tournament default is NOT a team mode
+      rounds: [{
+        ...makeRound({ id: 'r0', revealed: true, pairs: [[A, B], [C]] }),
+        scoringMode: 'stableford', // round override IS a team mode, valid at 3 and 4
+      }],
+    });
+    const { patches } = addPlayerRoundPatches(t, D);
+    const r0 = patches.find((p) => p.roundId === 'r0');
+    // Documented buildPairsForAddedPlayer behavior for team→team revealed:
+    // existing partnerships preserved, the new player joins as a solo group —
+    // NOT a fresh reshuffle. The round's pre-mutation mode is its override
+    // (stableford), not the tournament default (individual).
+    expect(r0.pairs).toEqual([[A, B], [C], [D]]);
+    expect(r0.clearScoringMode).toBeUndefined();
+  });
 });

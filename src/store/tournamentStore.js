@@ -766,6 +766,11 @@ export function addPlayerRoundPatches(tournament, player, { mode } = {}) {
     const roundMode = round.scoringMode ?? nextScoringMode;
     const roundModeValid = isScoringModeAllowed(roundMode, newCount);
     const effectiveMode = roundModeValid ? roundMode : nextScoringMode;
+    // The round's PRE-mutation mode is round-scoped too: an override was
+    // this round's current mode before the roster changed (the mutation
+    // changes the roster, not the mode), so the builder's team-continuity
+    // decision must be judged against it, not the tournament-wide default.
+    const roundOldMode = round.scoringMode ?? oldMode;
     let pairs;
     if (fixedTeams) {
       const shape = teamShapeOf(effectiveMode);
@@ -773,7 +778,7 @@ export function addPlayerRoundPatches(tournament, player, { mode } = {}) {
         fixedPairsByShape.set(shape, buildPairsForAddedPlayer({
           roster,
           newMode: effectiveMode,
-          oldMode,
+          oldMode: roundOldMode,
           existingPairs: round.pairs,
           newPlayer: player,
           revealed: Boolean(round.revealed),
@@ -784,7 +789,7 @@ export function addPlayerRoundPatches(tournament, player, { mode } = {}) {
       pairs = buildPairsForAddedPlayer({
         roster,
         newMode: effectiveMode,
-        oldMode,
+        oldMode: roundOldMode,
         existingPairs: round.pairs,
         newPlayer: player,
         revealed: Boolean(round.revealed),
@@ -850,6 +855,9 @@ export function removePlayerRoundPatches(tournament, playerId, { mode } = {}) {
     const roundMode = round.scoringMode ?? nextScoringMode;
     const roundModeValid = isScoringModeAllowed(roundMode, newCount);
     const effectiveMode = roundModeValid ? roundMode : nextScoringMode;
+    // See addPlayerRoundPatches: the round's pre-mutation mode is its own
+    // override when present, so team continuity is judged per round.
+    const roundOldMode = round.scoringMode ?? oldMode;
     let pairs;
     if (fixedTeams) {
       const shape = teamShapeOf(effectiveMode);
@@ -857,7 +865,7 @@ export function removePlayerRoundPatches(tournament, playerId, { mode } = {}) {
         fixedPairsByShape.set(shape, buildPairsForRemovedPlayer({
           survivors,
           newMode: effectiveMode,
-          oldMode,
+          oldMode: roundOldMode,
           existingPairs: round.pairs,
           removedId: playerId,
           revealed: Boolean(round.revealed),
@@ -868,7 +876,7 @@ export function removePlayerRoundPatches(tournament, playerId, { mode } = {}) {
       pairs = buildPairsForRemovedPlayer({
         survivors,
         newMode: effectiveMode,
-        oldMode,
+        oldMode: roundOldMode,
         existingPairs: round.pairs,
         removedId: playerId,
         revealed: Boolean(round.revealed),
