@@ -10,14 +10,14 @@ export async function fetchPlayers() {
   // kept explicit to signal downstream consumers what to rely on.
   const { data, error } = await supabase
     .from('players')
-    .select('id, name, handicap, user_id, avatar_url, created_at')
+    .select('id, name, handicap, user_id, avatar_url, created_at, gender')
     .order('name');
   if (error) throw error;
   return data;
 }
 
 // Columns every player consumer relies on. Shared by the scoped readers below.
-const PLAYER_COLUMNS = 'id, name, handicap, user_id, avatar_url, created_at, created_by';
+const PLAYER_COLUMNS = 'id, name, handicap, user_id, avatar_url, created_at, created_by, gender';
 
 // Accepted-friend auth user ids. Falls back to the offline cache when the
 // network read fails, so the picker still scopes sensibly offline.
@@ -67,9 +67,10 @@ export async function fetchMyGuestPlayers() {
   return data;
 }
 
-export async function upsertPlayer({ id, name, handicap }) {
+export async function upsertPlayer({ id, name, handicap, gender }) {
   const parsed = parseHandicapIndex(handicap);
   const row = { name, handicap: parsed.ok ? parsed.value : 0 };
+  if (gender !== undefined) row.gender = gender === 'female' ? 'female' : 'male';
   if (id) row.id = id;
   const { data, error } = await supabase.from('players').upsert(row).select().single();
   if (error) throw error;
@@ -203,6 +204,8 @@ export async function saveCourseTees(courseId, tees) {
     label: String(t.label ?? '').trim(),
     rating: t.rating != null && t.rating !== '' ? parseFloat(t.rating) : null,
     slope: t.slope != null && t.slope !== '' ? parseInt(t.slope, 10) : null,
+    rating_women: t.ratingWomen != null && t.ratingWomen !== '' ? parseFloat(t.ratingWomen) : null,
+    slope_women: t.slopeWomen != null && t.slopeWomen !== '' ? parseInt(t.slopeWomen, 10) : null,
     sort_order: i,
     yardages: t.yardages ?? null,
   }));
@@ -335,6 +338,8 @@ export function normalizeCourse(c) {
       label: t.label,
       rating: t.rating,
       slope: t.slope,
+      ratingWomen: t.rating_women ?? null,
+      slopeWomen: t.slope_women ?? null,
       sortOrder: t.sort_order ?? 0,
       yardages: t.yardages ?? undefined,
     }));
