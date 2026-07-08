@@ -598,14 +598,17 @@ export {
   tournamentPairsMatchStandings,
 } from './scoring';
 
-// Push a player library edit (name/handicap) into every tournament that
-// references this player id. Updates tournament.players and the player
+// Push a player library edit (name/handicap/gender) into every tournament
+// that references this player id. Updates tournament.players and the player
 // snapshot embedded in each round.pairs. Non-manual round playing handicaps
-// are re-derived from the new base index.
-export async function propagatePlayerToTournaments(playerId, { name, handicap }) {
+// are re-derived from the new base index. `gender` is only stamped onto the
+// embedded players when explicitly provided (not `undefined`), so callers
+// that don't track gender can omit it without wiping the existing value.
+export async function propagatePlayerToTournaments(playerId, { name, handicap, gender }) {
   if (!playerId) return [];
   const result = parseHandicapIndex(handicap);
   const parsedIndex = result.ok ? result.value : 0;
+  const genderPatch = gender !== undefined ? { gender } : {};
   const tournaments = await loadAllTournaments();
   const updatedIds = [];
   for (const t of tournaments) {
@@ -613,12 +616,12 @@ export async function propagatePlayerToTournaments(playerId, { name, handicap })
     if (!hasPlayer) continue;
 
     const nextPlayers = t.players.map((p) =>
-      p.id === playerId ? { ...p, name, handicap: parsedIndex } : p,
+      p.id === playerId ? { ...p, name, handicap: parsedIndex, ...genderPatch } : p,
     );
     const nextRounds = t.rounds.map((round) => {
       const nextPairs = round.pairs?.map((pair) =>
         pair.map((pp) =>
-          pp.id === playerId ? { ...pp, name, handicap: parsedIndex } : pp,
+          pp.id === playerId ? { ...pp, name, handicap: parsedIndex, ...genderPatch } : pp,
         ),
       );
       const patched = { ...round, pairs: nextPairs ?? round.pairs };

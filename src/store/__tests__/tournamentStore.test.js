@@ -1,8 +1,45 @@
 import {
   rowToTournament, reTeeRound,
   tournamentNoun, tournamentNounCapitalized, formatRoundLabel,
-  isRoundInProgress,
+  isRoundInProgress, propagatePlayerToTournaments,
 } from '../tournamentStore';
+
+// jest.mock calls are hoisted above these imports by babel-jest, so the mock
+// is in place before ../tournamentStore (and the supabase client it imports)
+// loads. propagatePlayerToTournaments does real IO (loadAllTournaments +
+// persistRemote), so — following the chainable-client pattern already used
+// in officialAdmin.test.js — the supabase client here is a thenable query
+// builder: every chain method (select/order/eq/or) returns the same builder,
+// and awaiting it resolves the canned result for that table.
+const mockState = { tournamentsRow: null, upserts: [] };
+
+jest.mock('../../lib/supabase', () => {
+  function makeBuilder(table) {
+    const builder = {
+      select: () => builder,
+      order: () => builder,
+      eq: () => builder,
+      or: () => builder,
+      upsert: (row) => {
+        mockState.upserts.push({ table, row });
+        return Promise.resolve({ error: null });
+      },
+      then: (resolve) => {
+        if (table === 'tournaments') {
+          return resolve({ data: mockState.tournamentsRow ? [mockState.tournamentsRow] : [], error: null });
+        }
+        return resolve({ data: [], error: null });
+      },
+    };
+    return builder;
+  }
+  return {
+    supabase: {
+      from: (table) => makeBuilder(table),
+      auth: { getUser: () => Promise.resolve({ data: { user: null } }) },
+    },
+  };
+});
 
 describe('rowToTournament', () => {
   test('official tournament: identity comes from columns, content defaults empty', () => {
@@ -168,5 +205,57 @@ describe('isRoundInProgress', () => {
       currentRound: 0,
       finishedAt: '2026-05-24T10:13:52.224Z',
     })).toBe(false);
+  });
+});
+
+describe('propagatePlayerToTournaments', () => {
+  function tournamentWith(p1Gender) {
+    const p1 = { id: 'p1', name: 'Ann', handicap: 10, gender: p1Gender };
+    const p2 = { id: 'p2', name: 'Bea', handicap: 12, gender: 'male' };
+    return {
+      id: 't1',
+      name: 'Cup',
+      kind: 'casual',
+      createdAt: '2026-05-18T09:00:00Z',
+      players: [p1, p2],
+      rounds: [{
+        id: 'r1',
+        holes: [],
+        scores: {},
+        pairs: [[{ ...p1 }], [{ ...p2 }]],
+      }],
+    };
+  }
+
+  beforeEach(() => {
+    mockState.upserts = [];
+  });
+
+  test('stamps the provided gender onto the embedded player and its round.pairs snapshot', async () => {
+    mockState.tournamentsRow = {
+      id: 't1', name: 'Cup', kind: 'casual', created_at: '2026-05-18T09:00:00Z',
+      data: tournamentWith('female'),
+    };
+
+    await propagatePlayerToTournaments('p1', { name: 'Ann', handicap: 10, gender: 'male' });
+
+    const saved = mockState.upserts.find((u) => u.table === 'tournaments').row.data;
+    expect(saved.players.find((p) => p.id === 'p1').gender).toBe('male');
+    expect(saved.rounds[0].pairs[0][0].gender).toBe('male');
+    // The other player (not the one being patched) is untouched.
+    expect(saved.players.find((p) => p.id === 'p2').gender).toBe('male');
+  });
+
+  test('leaves the embedded gender untouched when the patch omits it', async () => {
+    mockState.tournamentsRow = {
+      id: 't1', name: 'Cup', kind: 'casual', created_at: '2026-05-18T09:00:00Z',
+      data: tournamentWith('female'),
+    };
+
+    await propagatePlayerToTournaments('p1', { name: 'Ann', handicap: 10 });
+
+    const saved = mockState.upserts.find((u) => u.table === 'tournaments').row.data;
+    expect(saved.players.find((p) => p.id === 'p1').gender).toBe('female');
+    expect(saved.rounds[0].pairs[0][0].gender).toBe('female');
   });
 });

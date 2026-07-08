@@ -65,7 +65,7 @@ export default function PlayersLibraryScreen() {
     try {
       if (editingId) {
         const saved = await upsertPlayer({ id: editingId, name: name.trim(), handicap, gender });
-        await propagatePlayerToTournaments(saved.id, { name: saved.name, handicap: saved.handicap });
+        await propagatePlayerToTournaments(saved.id, { name: saved.name, handicap: saved.handicap, gender: saved.gender });
         cancelEdit();
         await load();
       } else {
