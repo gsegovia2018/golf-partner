@@ -192,7 +192,7 @@ export default function ScoringModeField({ value, onChange, playerCount, setting
         <View style={s.fixedTeamsRow}>
           <View style={s.fixedTeamsText}>
             <Text style={s.fixedTeamsLabel}>Same teams every round</Text>
-            <Text style={s.fixedTeamsHint}>Keep these partnerships for the whole tournament.</Text>
+            <Text style={s.fixedTeamsHint}>Teams are drawn at random for round 1, then kept for the whole tournament.</Text>
           </View>
           <Switch
             value={Boolean(settings.fixedTeams)}
