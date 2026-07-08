@@ -1,4 +1,5 @@
 import React from 'react';
+import { Alert } from 'react-native';
 import { fireEvent, render, waitFor } from '@testing-library/react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
@@ -115,6 +116,7 @@ describe('ProfileScreen form', () => {
       handicap: 12.5,
       targetHandicap: 8.5,
       avatarUrl: null,
+      gender: 'male',
     });
 
     const { findByDisplayValue, getByText } = renderScreen({ params: { presentation: 'tab' } });
@@ -129,5 +131,41 @@ describe('ProfileScreen form', () => {
         targetHandicap: '8.5',
       }));
     });
+  });
+});
+
+describe('ProfileScreen gender', () => {
+  test('blocks save with an alert when no gender is set, then saves once Female is picked', async () => {
+    const alertSpy = jest.spyOn(Alert, 'alert').mockImplementation(() => {});
+    loadProfile.mockResolvedValue({
+      email: 'marcos@example.com',
+      username: 'marcos',
+      displayName: 'Marcos',
+      handicap: 12.5,
+      targetHandicap: 8.5,
+      avatarUrl: null,
+      gender: null,
+    });
+
+    const { findByDisplayValue, getByLabelText, getByText } = renderScreen({ params: { presentation: 'tab' } });
+
+    const handicapInput = await findByDisplayValue('12.5');
+    fireEvent.changeText(handicapInput, '13.4');
+    upsertProfile.mockClear();
+    fireEvent.press(getByText('Save changes'));
+
+    await waitFor(() => {
+      expect(alertSpy).toHaveBeenCalledWith('Select gender', expect.any(String));
+    });
+    expect(upsertProfile).not.toHaveBeenCalled();
+
+    fireEvent.press(getByLabelText('Female'));
+    fireEvent.press(getByText('Save changes'));
+
+    await waitFor(() => {
+      expect(upsertProfile).toHaveBeenCalledWith(expect.objectContaining({ gender: 'female' }));
+    });
+
+    alertSpy.mockRestore();
   });
 });
