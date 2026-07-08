@@ -143,6 +143,38 @@ describe('sandSaveRate', () => {
     expect(r.saves).toBe(3);
     expect(r.rate).toBeCloseTo(0.6);
   });
+
+  test('auto-derives saves when recoveryOutcome was never stored', () => {
+    // Par saved with 1 putt after a bunker shot: the scorecard shows the
+    // chip as lit without persisting it — the stat must still count it.
+    const rounds = Array.from({ length: 4 }, () => makeRound(
+      [{ par: 4, strokes: 4 }],
+      [{ putts: 1, sandShots: 1 }],
+    ));
+    const r = sandSaveRate(rounds, 'me');
+    expect(r.attempts).toBe(4);
+    expect(r.saves).toBe(4);
+    expect(r.rate).toBeCloseTo(1);
+  });
+
+  test('stored none overrides the auto-derived save', () => {
+    const rounds = Array.from({ length: 4 }, () => makeRound(
+      [{ par: 4, strokes: 4 }],
+      [{ putts: 1, sandShots: 1, recoveryOutcome: 'none' }],
+    ));
+    const r = sandSaveRate(rounds, 'me');
+    expect(r.attempts).toBe(4);
+    expect(r.saves).toBe(0);
+  });
+
+  test('a stored up-and-down on a sand hole counts as a save', () => {
+    const rounds = Array.from({ length: 4 }, () => makeRound(
+      [{ par: 4, strokes: 4 }],
+      [{ putts: 1, sandShots: 1, recoveryOutcome: 'up-and-down' }],
+    ));
+    const r = sandSaveRate(rounds, 'me');
+    expect(r.saves).toBe(4);
+  });
 });
 
 describe('bunkerVisits', () => {
@@ -192,6 +224,40 @@ describe('upAndDownRate', () => {
     expect(r.byLie.sand.conversions).toBe(2);
     expect(r.byLie.nonSand.attempts).toBe(4);
     expect(r.byLie.nonSand.conversions).toBe(2);
+  });
+
+  test('auto-derives conversions when recoveryOutcome was never stored', () => {
+    // Missed GIR, chipped on, holed the putt for par — the scorecard chip
+    // lights automatically but nothing is persisted. Must count.
+    const rounds = Array.from({ length: 6 }, () => makeRound(
+      [{ par: 4, strokes: 4 }],
+      [{ putts: 1, sandShots: 0 }],
+    ));
+    const r = upAndDownRate(rounds, 'me');
+    expect(r.attempts).toBe(6);
+    expect(r.conversions).toBe(6);
+    expect(r.rate).toBeCloseTo(1);
+  });
+
+  test('stored none overrides the auto-derived conversion', () => {
+    const rounds = Array.from({ length: 6 }, () => makeRound(
+      [{ par: 4, strokes: 4 }],
+      [{ putts: 1, sandShots: 0, recoveryOutcome: 'none' }],
+    ));
+    const r = upAndDownRate(rounds, 'me');
+    expect(r.attempts).toBe(6);
+    expect(r.conversions).toBe(0);
+    expect(r.rate).toBeCloseTo(0);
+  });
+
+  test('does not auto-credit 1-putts that fail to save par', () => {
+    const rounds = Array.from({ length: 6 }, () => makeRound(
+      [{ par: 4, strokes: 6 }],
+      [{ putts: 1, sandShots: 0 }],
+    ));
+    const r = upAndDownRate(rounds, 'me');
+    expect(r.attempts).toBe(6);
+    expect(r.conversions).toBe(0);
   });
 });
 

@@ -1,5 +1,5 @@
 import { calcStablefordPoints, calcExtraShots, roundPairLeaderboard, getPlayingHandicap, pickupStrokes } from './tournamentStore';
-import { isGIR } from './scoring';
+import { isGIR, recoveryOutcomeFromState } from './scoring';
 import { expectedFromBucket, expectedStrokes, BUCKETS } from './strokesGainedBaseline';
 
 // ── Player Stats ──
@@ -1968,7 +1968,12 @@ export function sandSaveRate(rounds, playerId) {
       const gir = isGIR({ strokes, putts: d.putts, par: hole.par });
       if (gir !== false) return;             // sand save requires missed GIR
       roundAttempts += 1;
-      if (d.recoveryOutcome === 'sand-save') roundSaves += 1;
+      // The scorecard auto-lights the outcome chip without persisting it, so
+      // fall back to the same derivation; a stored 'none' stays an override.
+      const outcome = d.recoveryOutcome ?? recoveryOutcomeFromState({
+        strokes, putts: d.putts, sandShots: d.sandShots ?? 0, par: hole.par,
+      });
+      if (outcome === 'sand-save' || outcome === 'up-and-down') roundSaves += 1;
     });
     if (roundAttempts > 0) perRound.push({ attempts: roundAttempts, saves: roundSaves });
     attempts += roundAttempts;
@@ -2003,7 +2008,12 @@ export function upAndDownRate(rounds, playerId) {
       const isSand = (d.sandShots ?? 0) >= 1;
       const lieKey = isSand ? 'sand' : 'nonSand';
       byLie[lieKey].attempts += 1;
-      const saved = d.recoveryOutcome === 'up-and-down' || d.recoveryOutcome === 'sand-save';
+      // Same fallback as sandSaveRate: unstored auto-derived outcomes count,
+      // a stored 'none' remains an explicit override.
+      const outcome = d.recoveryOutcome ?? recoveryOutcomeFromState({
+        strokes, putts: d.putts, sandShots: d.sandShots ?? 0, par: hole.par,
+      });
+      const saved = outcome === 'up-and-down' || outcome === 'sand-save';
       if (saved) {
         conversions += 1;
         byLie[lieKey].conversions += 1;
