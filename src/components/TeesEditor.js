@@ -84,7 +84,7 @@ export default function TeesEditor({ tees, onChange, theme }) {
             </TouchableOpacity>
           </View>
           <View style={s.womenRow}>
-            <Text style={[s.womenLabel, s.labelCol]}>Women's</Text>
+            <Text style={[s.womenLabel, s.labelCol]}>Women&apos;s</Text>
             <TextInput
               style={[s.input, s.numCol]}
               keyboardType="decimal-pad"
