@@ -1458,3 +1458,39 @@ Import `isScrambleMode` from `'../components/scoringModes'`.
 - [ ] **Step 2:** Invoke the `verify` skill: drive the app end-to-end (`npm run web`) — quick-start a 4-player game in each of the four new modes; check mode picker gating (modes disabled at 3 players), team reveal, score entry per team/duel, summary panel status lines, leaderboard rendering, and that a scramble game does not appear in My Stats.
 - [ ] **Step 3:** Update `CLAUDE.md` Domain Concepts with one line each: scramble modes (team ball under captain, USGA allowances) and pairs match play (two duels, 2 pts/hole).
 - [ ] **Step 4:** Final commit + concise work summary (per user's standing preference).
+
+---
+
+## ADDENDUM (added during execution, user-approved)
+
+### Design change to Task 13 (user decision 2026-07-08)
+
+Teams re-shuffle each round, so the plan's captain-keyed cross-round leaderboard
+aggregation was wrong for multi-round tournaments. Both boards now aggregate
+PER REAL PLAYER (each player accrues their team's points per round), following
+the `tournamentBestWorstLeaderboard` precedent. Scramble rows carry team
+strokes per player for the "str" sub-label; pairsmatchplay keeps individual
+strokes (own ball).
+
+### Task 16: Fixed teams option ("same teams every round")
+
+**Goal:** optional setting so team modes keep the SAME teams for the whole
+tournament instead of re-randomizing each round.
+
+**Files:**
+- Modify: `src/components/scoringModes.js` (`mergeScoringSettings` — persist `fixedTeams`)
+- Modify: `src/lib/quickStartGame.js` (`normalizeQuickStartSettings` — coerce `fixedTeams` boolean)
+- Modify: `src/components/ScoringModePicker.js` ("Same teams every round" switch, visible when the selected mode is a team mode for the current player count)
+- Modify: `src/screens/SetupScreen.js` (`handleStart`: when `settings.fixedTeams`, build teams ONCE and reuse for every round)
+- Modify: `src/screens/EditTournamentScreen.js` (`addRound`: when fixed, copy pairs from the latest round whose pairs are valid for the current roster; else build fresh)
+- Modify: `src/screens/NextRoundScreen.js` (`buildPairsForRound`: when fixed and a prior round has pairs valid for the roster, reuse them; `canReshuffle = usesTeams && !fixedTeams`)
+- Modify: `src/store/tournamentStore.js` (`addPlayerRoundPatches`, `removePlayerRoundPatches`, `setScoringModeRoundPatches`: when fixed, compute the new team shape once per mutation and apply the same pairs to every future round)
+- Test: `src/store/__tests__/setScoringModeRoundPatches.test.js` (+ siblings): with `fixedTeams: true`, all future-round patches carry IDENTICAL pairs; without it, behavior unchanged. `src/components/__tests__/scoringModes.test.js`: `mergeScoringSettings` persists `fixedTeams`.
+
+**Rules:**
+- `fixedTeams` defaults to false (existing behavior). DEFAULT_SETTINGS in
+  tournamentStore gains `fixedTeams: false`.
+- Reshuffle is disabled in the reveal screen when fixed (teams were locked at
+  creation). Roster changes (add/remove player) still rebuild teams — once —
+  and apply the same shape to all future rounds.
+- Solo modes ignore the flag entirely.
