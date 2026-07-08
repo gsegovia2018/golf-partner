@@ -5,7 +5,11 @@ import { Feather } from '@expo/vector-icons';
 import { useTheme } from '../theme/ThemeContext';
 import { getActiveTournamentSnapshot, loadTournament, subscribeTournamentChanges } from '../store/tournamentStore';
 import { mutate } from '../store/mutate';
+import { pairsMatchDuels } from '../store/scoring';
 import { shouldHandleStoreChange } from '../lib/navigationFocus';
+import { buildThreeVsOne, swapDuelOrder } from '../lib/teamEditing';
+
+const firstName = (p) => (p?.name ?? '').split(' ')[0];
 
 export default function EditTeamsScreen({ navigation, route }) {
   const { theme } = useTheme();
@@ -47,6 +51,27 @@ export default function EditTeamsScreen({ navigation, route }) {
   if (!tournament || !pairs) return null;
 
   const round = tournament.rounds[roundIndex];
+  const scoringMode = tournament?.settings?.scoringMode;
+  const isThreeVsOne = scoringMode === 'scramble3v1';
+  const isPairsMatch = scoringMode === 'pairsmatchplay';
+  const soloSide = pairs.find((side) => side.length === 1);
+  const soloId = (soloSide ?? pairs[1])?.[0]?.id;
+  const duels = isPairsMatch ? pairsMatchDuels(pairs) : null;
+
+  function liveName(player) {
+    const live = tournament.players?.find((p) => p.id === player.id);
+    return firstName(live ?? player);
+  }
+
+  function onTapSolo(playerId) {
+    hasLocalEdits.current = true;
+    setPairs(buildThreeVsOne(tournament.players ?? [], playerId));
+  }
+
+  function onSwapDuels() {
+    hasLocalEdits.current = true;
+    setPairs(swapDuelOrder(pairs));
+  }
 
   function onTapPlayer(pairIdx, slotIdx) {
     if (!selected) {
@@ -111,36 +136,77 @@ export default function EditTeamsScreen({ navigation, route }) {
         <Text style={s.roundLabel}>ROUND {roundIndex + 1}</Text>
         <Text style={s.course}>{round?.courseName}</Text>
         <Text style={s.hint}>
-          {selected ? 'Tap another player to swap' : 'Tap a player to start a swap'}
+          {isThreeVsOne
+            ? 'Tap a player to send them solo'
+            : selected ? 'Tap another player to swap' : 'Tap a player to start a swap'}
         </Text>
 
-        {pairs.map((pair, pi) => {
-          const accent = pi === 0 ? theme.pairA : theme.pairB;
-          return (
-            <View key={pi} style={[s.pairCard, { borderLeftColor: accent }]}>
-              <Text style={[s.pairLabel, { color: accent }]}>PAIR {pi + 1}</Text>
-              {pair.map((player, si) => {
-                const live = tournament.players?.find((p) => p.id === player.id);
-                const displayName = live?.name ?? player.name;
-                return (
-                  <TouchableOpacity
-                    key={`${pi}-${si}-${player.id}`}
-                    style={[s.playerChip, isSelected(pi, si) && s.playerChipSelected]}
-                    onPress={() => onTapPlayer(pi, si)}
-                    activeOpacity={0.7}
-                  >
-                    <Text style={[s.playerName, isSelected(pi, si) && s.playerNameSelected]}>
-                      {displayName}
-                    </Text>
-                    {isSelected(pi, si) && (
-                      <Feather name="repeat" size={16} color={theme.accent.primary} />
-                    )}
-                  </TouchableOpacity>
-                );
-              })}
-            </View>
-          );
-        })}
+        {isThreeVsOne ? (
+          <View style={s.pairCard}>
+            <Text style={s.pairLabel}>WHO PLAYS SOLO?</Text>
+            {(tournament.players ?? []).map((player) => {
+              const solo = soloId === player.id;
+              return (
+                <TouchableOpacity
+                  key={player.id}
+                  style={[s.playerChip, solo && s.playerChipSelected]}
+                  onPress={() => onTapSolo(player.id)}
+                  activeOpacity={0.7}
+                >
+                  <Text style={[s.playerName, solo && s.playerNameSelected]}>
+                    {player.name}
+                  </Text>
+                  {solo && (
+                    <Feather name="check" size={16} color={theme.accent.primary} />
+                  )}
+                </TouchableOpacity>
+              );
+            })}
+          </View>
+        ) : (
+          pairs.map((pair, pi) => {
+            const accent = pi === 0 ? theme.pairA : theme.pairB;
+            return (
+              <View key={pi} style={[s.pairCard, { borderLeftColor: accent }]}>
+                <Text style={[s.pairLabel, { color: accent }]}>PAIR {pi + 1}</Text>
+                {pair.map((player, si) => {
+                  const live = tournament.players?.find((p) => p.id === player.id);
+                  const displayName = live?.name ?? player.name;
+                  return (
+                    <TouchableOpacity
+                      key={`${pi}-${si}-${player.id}`}
+                      style={[s.playerChip, isSelected(pi, si) && s.playerChipSelected]}
+                      onPress={() => onTapPlayer(pi, si)}
+                      activeOpacity={0.7}
+                    >
+                      <Text style={[s.playerName, isSelected(pi, si) && s.playerNameSelected]}>
+                        {displayName}
+                      </Text>
+                      {isSelected(pi, si) && (
+                        <Feather name="repeat" size={16} color={theme.accent.primary} />
+                      )}
+                    </TouchableOpacity>
+                  );
+                })}
+              </View>
+            );
+          })
+        )}
+
+        {isPairsMatch && duels && (
+          <View style={s.pairCard}>
+            <Text style={s.pairLabel}>DUELS</Text>
+            {duels.map(([a, b], di) => (
+              <Text key={di} style={s.duelText}>
+                {liveName(a)} vs {liveName(b)}
+              </Text>
+            ))}
+            <TouchableOpacity style={s.swapDuelsBtn} onPress={onSwapDuels} activeOpacity={0.7}>
+              <Feather name="shuffle" size={16} color={theme.accent.primary} />
+              <Text style={s.swapDuelsBtnText}>Swap Matchups</Text>
+            </TouchableOpacity>
+          </View>
+        )}
 
         <TouchableOpacity
           style={[s.saveBtn, saving && { opacity: 0.6 }]}
@@ -211,6 +277,20 @@ function makeStyles(t) {
       fontFamily: 'PlusJakartaSans-SemiBold', color: t.text.primary, fontSize: 15,
     },
     playerNameSelected: { color: t.accent.primary },
+
+    duelText: {
+      fontFamily: 'PlusJakartaSans-SemiBold', color: t.text.primary,
+      fontSize: 15, marginTop: 8,
+    },
+    swapDuelsBtn: {
+      flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8,
+      backgroundColor: t.bg.secondary,
+      borderRadius: 12, borderWidth: 1, borderColor: t.border.default,
+      paddingVertical: 12, marginTop: 12,
+    },
+    swapDuelsBtnText: {
+      fontFamily: 'PlusJakartaSans-SemiBold', color: t.accent.primary, fontSize: 14,
+    },
 
     saveBtn: {
       marginTop: 24,
