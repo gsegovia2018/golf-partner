@@ -34,6 +34,9 @@ Core features:
 - `npm test` — Jest (jest-expo); ~330 tests, store/lib well-covered
 - `npm run lint` — ESLint 9 flat config (`eslint.config.mjs`); CI-blocking
 - `npm run build:web` — static web export
+- EAS Android builds should use the `preview-arm64` profile by default:
+  `eas build --platform android --profile preview-arm64`. Do not use the
+  `production` profile unless explicitly requested.
 
 ## Domain Concepts
 
