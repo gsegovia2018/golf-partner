@@ -67,6 +67,49 @@ export const SCORING_MODES = [
     isAllowed: (count) => count === 4,
     requirement: 'Requires exactly 4 players',
   },
+  {
+    key: 'scramblepairs',
+    label: 'Scramble — Pairs',
+    subtitle: 'Two teams, one ball each',
+    icon: 'users',
+    category: 'Teams',
+    // Two teams of 2 — teams are assigned and revealed each round.
+    teams: true,
+    isAllowed: (count) => count === 4,
+    requirement: 'Requires exactly 4 players',
+  },
+  {
+    key: 'scramble3v1',
+    label: 'Scramble — 3 vs 1',
+    subtitle: 'Three-man scramble vs a solo player',
+    icon: 'users',
+    category: 'Teams',
+    // A team of 3 against one individual — sides assigned and revealed.
+    teams: true,
+    isAllowed: (count) => count === 4,
+    requirement: 'Requires exactly 4 players',
+  },
+  {
+    key: 'scramble4',
+    label: 'Scramble — 4-man',
+    subtitle: 'One team, one ball, vs the course',
+    icon: 'users',
+    category: 'Teams',
+    teams: true,
+    isAllowed: (count) => count === 4,
+    requirement: 'Requires exactly 4 players',
+  },
+  {
+    key: 'pairsmatchplay',
+    label: 'Pairs Match Play',
+    subtitle: 'Two 1v1 duels, 2 points per hole',
+    icon: 'flag',
+    category: 'Teams',
+    // Two pairs; each player duels one opponent from the other pair.
+    teams: true,
+    isAllowed: (count) => count === 4,
+    requirement: 'Requires exactly 4 players',
+  },
 ];
 
 // Returns true when `mode` is valid for the given player count.
@@ -84,6 +127,15 @@ export function fallbackScoringMode(playerCount) {
 // default so the UI can always render something.
 export function getScoringMode(key) {
   return SCORING_MODES.find((m) => m.key === key) ?? SCORING_MODES[0];
+}
+
+// Scramble modes share one engine: the team plays a single ball, scored
+// under the team captain. Used to route scoring, hide personal stats, and
+// build non-2x2 team shapes.
+export const SCRAMBLE_MODES = new Set(['scramblepairs', 'scramble3v1', 'scramble4']);
+
+export function isScrambleMode(key) {
+  return SCRAMBLE_MODES.has(key);
 }
 
 // True when the mode is played in partners/pairs (Stableford with Partners,
@@ -110,6 +162,8 @@ export function leaderboardToggleLabels(scoringMode) {
   if (scoringMode === 'matchplay') return { left: 'Match Play', right: 'Stableford' };
   if (scoringMode === 'sindicato') return { left: 'Sindicato', right: 'Stableford' };
   if (scoringMode === 'bestball') return { left: 'Best Ball', right: 'Stableford' };
+  if (scoringMode === 'pairsmatchplay') return { left: 'Match Play', right: 'Stableford' };
+  if (isScrambleMode(scoringMode)) return { left: 'Scramble', right: 'Stroke Play' };
   return { left: 'Stableford', right: 'Stroke Play' };
 }
 
