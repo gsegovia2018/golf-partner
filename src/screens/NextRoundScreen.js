@@ -12,7 +12,7 @@ import { Feather } from '@expo/vector-icons';
 import {
   loadTournament, buildTeamsForMode, saveTournament, subscribeTournamentChanges,
 } from '../store/tournamentStore';
-import { scoringModeUsesTeams } from '../components/scoringModes';
+import { scoringModeUsesTeams, needsManualTeamSetup } from '../components/scoringModes';
 import { useTheme } from '../theme/ThemeContext';
 import { shouldHandleStoreChange } from '../lib/navigationFocus';
 
@@ -96,7 +96,15 @@ export default function NextRoundScreen({ navigation, route }) {
       setTournament(t);
       if (!initial) {
         if (phaseRef.current !== 'initial') return;
-        if (revealOnly) setNextPairs(t.rounds[paramRoundIndex].pairs);
+        const idx = revealOnly ? paramRoundIndex : t.currentRound + 1;
+        // Refresh nextPairs from the persisted round whenever it's already
+        // revealed — covers the revealOnly reveal-teams entry point AND a
+        // manual-teams save (EditTeamsScreen sets pairs + revealed=true,
+        // then goBack() lands back here while still in 'initial' phase).
+        // Without this, nextPairs would keep the stale randomly-built teams
+        // from the initial mount and silently overwrite the user's manual
+        // choice on confirm.
+        if (revealOnly || t.rounds[idx]?.revealed) setNextPairs(t.rounds[idx].pairs);
         return;
       }
       if (revealOnly) setNextPairs(t.rounds[paramRoundIndex].pairs);
@@ -170,6 +178,15 @@ export default function NextRoundScreen({ navigation, route }) {
   // were locked in at creation (or the last roster change), not re-rolled
   // per round.
   const canReshuffle = usesTeams && !tournament?.settings?.fixedTeams;
+  // Manual teams: skip the random-draw reveal ceremony for a round that
+  // hasn't been set yet — send the user straight to the team editor. Once
+  // fixedTeams is also on, later rounds already carry the locked-in teams
+  // (buildPairsForRound reuses them), so the normal reveal is fine again.
+  const manualTeamsPending = needsManualTeamSetup(
+    mode,
+    tournament?.players?.length,
+    tournament?.settings?.manualTeams,
+  ) && !tournament?.settings?.fixedTeams && !round?.revealed;
 
   function startReveal() {
     setPhase('countdown');
@@ -397,17 +414,28 @@ export default function NextRoundScreen({ navigation, route }) {
         <Text style={s.roundLabel}>Round {roundIndex + 1}</Text>
         <Text style={s.course}>{round.courseName}</Text>
 
-        <TouchableOpacity style={s.revealBtn} onPress={startReveal}>
-          <Text style={s.revealBtnText}>{usesTeams ? 'Reveal Teams' : 'Reveal Round'}</Text>
-        </TouchableOpacity>
+        {manualTeamsPending ? (
+          <TouchableOpacity
+            style={s.revealBtn}
+            onPress={() => navigation.navigate('EditTeams', { roundIndex })}
+          >
+            <Text style={s.revealBtnText}>Set Teams</Text>
+          </TouchableOpacity>
+        ) : (
+          <>
+            <TouchableOpacity style={s.revealBtn} onPress={startReveal}>
+              <Text style={s.revealBtnText}>{usesTeams ? 'Reveal Teams' : 'Reveal Round'}</Text>
+            </TouchableOpacity>
 
-        <TouchableOpacity
-          style={s.skipBtn}
-          onPress={finishRevealInstant}
-          accessibilityLabel="Skip the reveal animation"
-        >
-          <Text style={s.skipBtnText}>Skip</Text>
-        </TouchableOpacity>
+            <TouchableOpacity
+              style={s.skipBtn}
+              onPress={finishRevealInstant}
+              accessibilityLabel="Skip the reveal animation"
+            >
+              <Text style={s.skipBtnText}>Skip</Text>
+            </TouchableOpacity>
+          </>
+        )}
       </View>
     </ScreenContainer>
   );

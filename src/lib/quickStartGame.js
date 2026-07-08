@@ -169,6 +169,7 @@ export function normalizeQuickStartSettings(settings, playerCount) {
     bestBallValue: parseInt(merged.bestBallValue, 10) || 1,
     worstBallValue: parseInt(merged.worstBallValue, 10) || 1,
     fixedTeams: Boolean(merged.fixedTeams),
+    manualTeams: Boolean(merged.manualTeams),
   };
 }
 

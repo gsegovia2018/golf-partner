@@ -21,7 +21,7 @@ import { useAuth } from '../context/AuthContext';
 import ScoringModePicker, { isScoringModeAllowed, fallbackScoringMode } from '../components/ScoringModePicker';
 import RoundTeeAssignments from '../components/RoundTeeAssignments';
 import PostCreateInviteModal from '../components/PostCreateInviteModal';
-import { getScoringMode } from '../components/scoringModes';
+import { getScoringMode, needsManualTeamSetup } from '../components/scoringModes';
 import WizardProgress from '../components/setup/WizardProgress';
 import WizardNav from '../components/setup/WizardNav';
 import {
@@ -288,7 +288,7 @@ export default function SetupScreen({ navigation, route }) {
   const missingCourseName = rounds.some((r) => !r.courseName.trim());
   const canStart = players.length >= 1 && !missingCourseName;
 
-  const navigateToCreatedTournament = useCallback(() => {
+  const navigateToCreatedTournament = useCallback((tournament) => {
     // saveTournament marks the new tournament active. A game is a single
     // round — jump straight to its scorecard, but seat the Tournament
     // (round details) view underneath so back from the scorecard returns
@@ -306,6 +306,16 @@ export default function SetupScreen({ navigation, route }) {
     } else {
       navigation.replace('Tournament');
     }
+    // Manual team selection: push the team editor for round 0 on top of the
+    // destination above. Its Save goes back (navigation.goBack()), landing
+    // the user on the scorecard/tournament view they'd normally reach.
+    if (needsManualTeamSetup(
+      tournament?.settings?.scoringMode,
+      tournament?.players?.length,
+      tournament?.settings?.manualTeams,
+    )) {
+      navigation.navigate('EditTeams', { roundIndex: 0 });
+    }
   }, [isGame, navigation]);
 
   function closePostCreateInvite() {
@@ -317,7 +327,7 @@ export default function SetupScreen({ navigation, route }) {
       error: '',
       tournament: null,
     });
-    if (tournament) navigateToCreatedTournament();
+    if (tournament) navigateToCreatedTournament(tournament);
   }
 
   function requestClosePostCreateInvite() {
@@ -451,7 +461,7 @@ export default function SetupScreen({ navigation, route }) {
         return;
       }
 
-      navigateToCreatedTournament();
+      navigateToCreatedTournament(tournament);
     } catch (err) {
       const msg = err?.message ?? 'Could not create tournament';
       if (Platform.OS === 'web') window.alert(msg);

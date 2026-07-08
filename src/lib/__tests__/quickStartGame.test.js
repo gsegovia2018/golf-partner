@@ -288,4 +288,25 @@ describe('normalizeQuickStartSettings', () => {
     expect(out.scoringMode).toBe('stableford');
     expect(out.fixedTeams).toBe(true);
   });
+
+  test('defaults manualTeams to false when absent', () => {
+    const out = normalizeQuickStartSettings({ scoringMode: 'stableford' }, 4);
+    expect(out.manualTeams).toBe(false);
+  });
+
+  test('coerces a truthy manualTeams value to boolean true', () => {
+    const out = normalizeQuickStartSettings(
+      { scoringMode: 'stableford', manualTeams: true },
+      4,
+    );
+    expect(out.manualTeams).toBe(true);
+  });
+
+  test('coerces a falsy non-boolean manualTeams value to false', () => {
+    const out = normalizeQuickStartSettings(
+      { scoringMode: 'stableford', manualTeams: 0 },
+      4,
+    );
+    expect(out.manualTeams).toBe(false);
+  });
 });

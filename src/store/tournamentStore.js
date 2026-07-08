@@ -924,6 +924,7 @@ export const DEFAULT_SETTINGS = {
   bestBallValue: 1,          // points awarded per hole won in best ball match
   worstBallValue: 1,         // points awarded per hole won in worst ball match
   fixedTeams: false,         // keep the same teams for every round when true
+  manualTeams: false,        // let the user pick teams instead of a random draw
 };
 
 export function createTournament({ name, players, rounds, settings, kind = 'tournament', meId = null }) {
