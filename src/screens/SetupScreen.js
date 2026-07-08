@@ -139,6 +139,7 @@ export default function SetupScreen({ navigation, route }) {
             handicap: me.handicap,
             user_id: me.user_id ?? null,
             avatar_url: me.avatar_url ?? null,
+            gender: me.gender ?? null,
           }, ...prev];
         });
       } catch (_) { /* offline / no own player row — add players manually */ }
@@ -177,6 +178,7 @@ export default function SetupScreen({ navigation, route }) {
               handicap: p.handicap,
               user_id: p.user_id ?? null,
               avatar_url: p.avatar_url ?? null,
+              gender: p.gender ?? null,
             });
           }
           return next;

@@ -179,6 +179,27 @@ describe('normalizeCourse', () => {
   });
 });
 
+describe('normalizeCourse women tee columns', () => {
+  it('maps rating_women/slope_women to camelCase', () => {
+    const course = normalizeCourse({
+      id: 'c1', name: 'X', course_holes: [],
+      course_tees: [{ id: 't1', label: 'Amarillas', rating: 72.7, slope: 141,
+                      rating_women: 79.3, slope_women: 151, sort_order: 0 }],
+    });
+    expect(course.tees[0].ratingWomen).toBe(79.3);
+    expect(course.tees[0].slopeWomen).toBe(151);
+  });
+
+  it('defaults missing women columns to null', () => {
+    const course = normalizeCourse({
+      id: 'c1', name: 'X', course_holes: [],
+      course_tees: [{ id: 't1', label: 'Rojas', rating: 67.6, slope: 131, sort_order: 0 }],
+    });
+    expect(course.tees[0].ratingWomen).toBeNull();
+    expect(course.tees[0].slopeWomen).toBeNull();
+  });
+});
+
 describe('saveCourseTees', () => {
   beforeEach(() => {
     mockState.calls = {};
@@ -190,8 +211,8 @@ describe('saveCourseTees', () => {
       { label: 'Yellow', rating: 69, slope: 125 },
     ]);
     expect(mockState.calls.insertedRows).toEqual([
-      { course_id: 'c1', label: 'White', rating: 71.8, slope: 132, sort_order: 0, yardages: null },
-      { course_id: 'c1', label: 'Yellow', rating: 69, slope: 125, sort_order: 1, yardages: null },
+      { course_id: 'c1', label: 'White', rating: 71.8, slope: 132, rating_women: null, slope_women: null, sort_order: 0, yardages: null },
+      { course_id: 'c1', label: 'Yellow', rating: 69, slope: 125, rating_women: null, slope_women: null, sort_order: 1, yardages: null },
     ]);
   });
 });

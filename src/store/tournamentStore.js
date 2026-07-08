@@ -3,7 +3,7 @@ import { supabase } from '../lib/supabase';
 import { tournamentsIndex } from './tournamentsIndex';
 import { mergeTournaments } from './merge';
 import { isOnline } from '../lib/connectivity';
-import { teeByLabel } from './tees';
+import { teeByLabel, resolveTeeForPlayer } from './tees';
 // Pure scoring & handicap math lives in ./scoring. Imported here for this
 // module's own use and re-exported below so existing call sites that do
 // `import { calcStablefordPoints } from '../store/tournamentStore'` keep working.
@@ -598,14 +598,17 @@ export {
   tournamentPairsMatchStandings,
 } from './scoring';
 
-// Push a player library edit (name/handicap) into every tournament that
-// references this player id. Updates tournament.players and the player
+// Push a player library edit (name/handicap/gender) into every tournament
+// that references this player id. Updates tournament.players and the player
 // snapshot embedded in each round.pairs. Non-manual round playing handicaps
-// are re-derived from the new base index.
-export async function propagatePlayerToTournaments(playerId, { name, handicap }) {
+// are re-derived from the new base index. `gender` is only stamped onto the
+// embedded players when explicitly provided (not `undefined`), so callers
+// that don't track gender can omit it without wiping the existing value.
+export async function propagatePlayerToTournaments(playerId, { name, handicap, gender }) {
   if (!playerId) return [];
   const result = parseHandicapIndex(handicap);
   const parsedIndex = result.ok ? result.value : 0;
+  const genderPatch = gender !== undefined ? { gender } : {};
   const tournaments = await loadAllTournaments();
   const updatedIds = [];
   for (const t of tournaments) {
@@ -613,12 +616,12 @@ export async function propagatePlayerToTournaments(playerId, { name, handicap })
     if (!hasPlayer) continue;
 
     const nextPlayers = t.players.map((p) =>
-      p.id === playerId ? { ...p, name, handicap: parsedIndex } : p,
+      p.id === playerId ? { ...p, name, handicap: parsedIndex, ...genderPatch } : p,
     );
     const nextRounds = t.rounds.map((round) => {
       const nextPairs = round.pairs?.map((pair) =>
         pair.map((pp) =>
-          pp.id === playerId ? { ...pp, name, handicap: parsedIndex } : pp,
+          pp.id === playerId ? { ...pp, name, handicap: parsedIndex, ...genderPatch } : pp,
         ),
       );
       const patched = { ...round, pairs: nextPairs ?? round.pairs };
@@ -636,14 +639,12 @@ export async function propagatePlayerToTournaments(playerId, { name, handicap })
 // list, matching by label. A player whose tee label still exists gets its
 // slope/rating refreshed; a player whose label is gone keeps the old
 // snapshot. Pure — no IO.
-export function reTeeRound(round, tees) {
+export function reTeeRound(round, tees, genderById = {}) {
   if (!round?.playerTees) return round;
   const next = {};
   for (const [playerId, snapshot] of Object.entries(round.playerTees)) {
     const match = teeByLabel(tees, snapshot?.label);
-    next[playerId] = match
-      ? { label: match.label, slope: match.slope, rating: match.rating }
-      : snapshot;
+    next[playerId] = match ? resolveTeeForPlayer(match, genderById[playerId]) : snapshot;
   }
   return { ...round, playerTees: next };
 }
@@ -658,10 +659,11 @@ export async function propagateCourseToTournaments(courseId, { holes, tees }) {
   const updatedIds = [];
   for (const t of tournaments) {
     let changed = false;
+    const genderById = Object.fromEntries((t.players ?? []).map((p) => [p.id, p.gender]));
     const nextRounds = t.rounds.map((round) => {
       if (round.courseId !== courseId) return round;
       changed = true;
-      const reTeed = reTeeRound(round, tees);
+      const reTeed = reTeeRound(round, tees, genderById);
       const nextRound = {
         ...reTeed,
         holes: holes.map((h) => ({ ...h })),

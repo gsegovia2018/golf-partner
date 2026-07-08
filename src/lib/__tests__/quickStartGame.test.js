@@ -201,6 +201,24 @@ describe('resolveQuickStartPlayerTees', () => {
     });
     expect(out).toEqual({});
   });
+
+  it('gives female players the women\'s rating pair for the group tee', () => {
+    const testCourse = {
+      id: 'c1', name: 'Course', holes: [],
+      tees: [
+        { label: 'Blancas', rating: 74.7, slope: 143, ratingWomen: 81.6, slopeWomen: 155 },
+        { label: 'Amarillas', rating: 72.7, slope: 141, ratingWomen: 79.3, slopeWomen: 151 },
+        { label: 'Rojas', rating: 67.6, slope: 131, ratingWomen: 73.1, slopeWomen: 137 },
+      ],
+    };
+    const testPlayers = [
+      { id: 'p1', name: 'Marcos', handicap: 10, gender: 'male' },
+      { id: 'p2', name: 'Claudia', handicap: 20, gender: 'female' },
+    ];
+    const result = resolveQuickStartPlayerTees({ course: testCourse, players: testPlayers });
+    expect(result.p1).toEqual({ label: 'Amarillas', slope: 141, rating: 72.7 });
+    expect(result.p2).toEqual({ label: 'Amarillas', slope: 151, rating: 79.3 });
+  });
 });
 
 describe('buildQuickStartTournamentDraft', () => {

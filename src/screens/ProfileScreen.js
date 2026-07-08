@@ -34,6 +34,7 @@ export default function ProfileScreen({ navigation, route }) {
   const [targetHandicap, setTargetHandicap] = useState('');
   const [avatarUrl, setAvatarUrl] = useState(null);
   const [uploadingAvatar, setUploadingAvatar] = useState(false);
+  const [gender, setGender] = useState(null);
   const [dirty, setDirty] = useState(false);
   const [showRunning, setShowRunning] = useState(true);
   const hasLoadedOnceRef = useRef(false);
@@ -48,6 +49,7 @@ export default function ProfileScreen({ navigation, route }) {
       setHandicap(p?.handicap != null ? String(p.handicap) : '');
       setTargetHandicap(p?.targetHandicap != null ? String(p.targetHandicap) : '');
       setAvatarUrl(p?.avatarUrl ?? null);
+      setGender(p?.gender ?? null);
       setShowRunning(running);
       setDirty(false);
     } catch (err) {
@@ -121,6 +123,15 @@ export default function ProfileScreen({ navigation, route }) {
         return;
       }
     }
+    // Gender drives which tee rating (men's or women's) a player's handicap
+    // uses, so it can't be left unset. Only block when the profile truly has
+    // no gender at all — existing users were backfilled in the DB, so this
+    // only ever gates new signups.
+    if (gender !== 'male' && gender !== 'female') {
+      Alert.alert('Select gender', 'Choose Male or Female — it sets which tee rating (men\'s or women\'s) your handicap uses.');
+      return;
+    }
+
     setSaving(true);
     try {
       await upsertProfile({
@@ -129,6 +140,7 @@ export default function ProfileScreen({ navigation, route }) {
         handicap: normalizedHandicap,
         targetHandicap: normalizedTargetHandicap,
         avatarUrl,
+        gender,
       });
       await load();
     } catch (err) {
@@ -325,6 +337,28 @@ export default function ProfileScreen({ navigation, route }) {
             </View>
           </View>
 
+          <View style={s.fieldGroup}>
+            <Text style={s.fieldLabel}>Gender</Text>
+            <View style={{ flexDirection: 'row', gap: 8, marginTop: 8 }}>
+              {[['male', 'Male'], ['female', 'Female']].map(([value, label]) => (
+                <TouchableOpacity
+                  key={value}
+                  onPress={() => { setGender(value); setDirty(true); }}
+                  style={[s.genderPill, gender === value && s.genderPillActive]}
+                  accessibilityRole="button"
+                  accessibilityLabel={label}
+                  accessibilityState={{ selected: gender === value }}
+                  activeOpacity={0.7}
+                >
+                  <Text style={[s.genderPillText, gender === value && s.genderPillTextActive]}>{label}</Text>
+                </TouchableOpacity>
+              ))}
+            </View>
+            <Text style={s.fieldHint}>
+              Sets which tee rating (men&apos;s or women&apos;s) your handicap uses.
+            </Text>
+          </View>
+
           <Text style={s.sectionLabel}>APPEARANCE</Text>
 
           <View style={s.appearanceRow}>
@@ -468,6 +502,15 @@ const makeStyles = (theme) => StyleSheet.create({
     borderColor: theme.border.default, padding: 13, fontSize: 15,
     fontFamily: 'PlusJakartaSans-Medium',
   },
+
+  genderPill: {
+    flexDirection: 'row', alignItems: 'center',
+    borderRadius: 10, borderWidth: 1.5, borderColor: theme.border.default,
+    paddingHorizontal: 14, paddingVertical: 7,
+  },
+  genderPillActive: { borderColor: theme.accent.primary, backgroundColor: theme.accent.light },
+  genderPillText: { fontFamily: 'PlusJakartaSans-SemiBold', color: theme.text.secondary, fontSize: 13 },
+  genderPillTextActive: { fontFamily: 'PlusJakartaSans-Bold', color: theme.accent.primary, fontSize: 13 },
 
   saveBtn: {
     backgroundColor: theme.isDark ? theme.accent.light : theme.accent.primary,

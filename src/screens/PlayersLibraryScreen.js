@@ -24,6 +24,7 @@ export default function PlayersLibraryScreen() {
   const [loading, setLoading] = useState(true);
   const [name, setName] = useState('');
   const [handicap, setHandicap] = useState('');
+  const [gender, setGender] = useState('male');
   const [editingId, setEditingId] = useState(null);
   const [saving, setSaving] = useState(false);
   const hasLoadedOnceRef = useRef(false);
@@ -48,12 +49,14 @@ export default function PlayersLibraryScreen() {
     setEditingId(p.id);
     setName(p.name);
     setHandicap(String(p.handicap));
+    setGender(p.gender === 'female' ? 'female' : 'male');
   }
 
   function cancelEdit() {
     setEditingId(null);
     setName('');
     setHandicap('');
+    setGender('male');
   }
 
   async function save() {
@@ -61,8 +64,8 @@ export default function PlayersLibraryScreen() {
     setSaving(true);
     try {
       if (editingId) {
-        const saved = await upsertPlayer({ id: editingId, name: name.trim(), handicap });
-        await propagatePlayerToTournaments(saved.id, { name: saved.name, handicap: saved.handicap });
+        const saved = await upsertPlayer({ id: editingId, name: name.trim(), handicap, gender });
+        await propagatePlayerToTournaments(saved.id, { name: saved.name, handicap: saved.handicap, gender: saved.gender });
         cancelEdit();
         await load();
       } else {
@@ -76,8 +79,9 @@ export default function PlayersLibraryScreen() {
           playerId,
           name: name.trim(),
           handicap: hcp,
+          gender,
         });
-        setPlayers((prev) => [...prev, { id: playerId, name: name.trim(), handicap: hcp }]);
+        setPlayers((prev) => [...prev, { id: playerId, name: name.trim(), handicap: hcp, gender }]);
         cancelEdit();
       }
     } catch (e) {
@@ -146,6 +150,21 @@ export default function PlayersLibraryScreen() {
             </TouchableOpacity>
           )}
         </View>
+        <View style={{ flexDirection: 'row', gap: 8, marginTop: 8 }}>
+          {[['male', 'Male'], ['female', 'Female']].map(([value, label]) => (
+            <TouchableOpacity
+              key={value}
+              onPress={() => setGender(value)}
+              style={[s.genderPill, gender === value && s.genderPillActive]}
+              accessibilityRole="button"
+              accessibilityLabel={label}
+              accessibilityState={{ selected: gender === value }}
+              activeOpacity={0.7}
+            >
+              <Text style={[s.genderPillText, gender === value && s.genderPillTextActive]}>{label}</Text>
+            </TouchableOpacity>
+          ))}
+        </View>
 
         <Text style={s.sectionTitle}>List</Text>
         {loading
@@ -202,6 +221,14 @@ const makeStyles = (theme) => StyleSheet.create({
     fontFamily: 'PlusJakartaSans-Medium',
   },
   hcpInput: { width: 64, textAlign: 'center' },
+  genderPill: {
+    flexDirection: 'row', alignItems: 'center',
+    borderRadius: 10, borderWidth: 1.5, borderColor: theme.border.default,
+    paddingHorizontal: 14, paddingVertical: 7,
+  },
+  genderPillActive: { borderColor: theme.accent.primary, backgroundColor: theme.accent.light },
+  genderPillText: { fontFamily: 'PlusJakartaSans-SemiBold', color: theme.text.secondary, fontSize: 13 },
+  genderPillTextActive: { fontFamily: 'PlusJakartaSans-Bold', color: theme.accent.primary, fontSize: 13 },
   addBtn: {
     backgroundColor: theme.isDark ? theme.accent.light : theme.accent.primary,
     borderRadius: 12, width: 44, height: 44, alignItems: 'center', justifyContent: 'center',

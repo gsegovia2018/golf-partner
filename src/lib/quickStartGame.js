@@ -5,7 +5,7 @@ import {
   deriveRoundPlayingHandicap,
   buildTeamsForMode,
 } from '../store/tournamentStore';
-import { middleTee, teeByLabel } from '../store/tees';
+import { middleTee, teeByLabel, resolveTeeForPlayer } from '../store/tees';
 import {
   fallbackScoringMode,
   isScoringModeAllowed,
@@ -133,7 +133,11 @@ export function resolveQuickStartPlayerTees({
 
   if (!groupTee) return {};
   return Object.fromEntries(
-    playerHistory.map(({ player, tee }) => [player.id, tee ?? groupTee]),
+    playerHistory.map(({ player, tee }) => {
+      const label = tee?.label ?? groupTee.label;
+      const courseTee = teeByLabel(courseTees, label);
+      return [player.id, resolveTeeForPlayer(courseTee, player.gender) ?? (tee ?? groupTee)];
+    }),
   );
 }
 

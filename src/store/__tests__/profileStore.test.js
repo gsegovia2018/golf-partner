@@ -137,6 +137,33 @@ describe('profileStore — target_handicap', () => {
     const call = chain.insert.mock.calls[0][0];
     expect(call.target_handicap).toBe(10);
   });
+
+  test('loadProfile returns gender from the profile row', async () => {
+    const chain = getChain();
+    chain.maybeSingle.mockResolvedValueOnce({
+      data: { user_id: 'u1', gender: 'female' },
+      error: null,
+    });
+    const profile = await loadProfile();
+    expect(profile.gender).toBe('female');
+  });
+
+  test('upsertProfile writes valid gender and nulls invalid', async () => {
+    const chain = getChain();
+    chain.maybeSingle.mockResolvedValueOnce({ data: { user_id: 'u1' }, error: null });
+    chain.eq
+      .mockReturnValueOnce(chain)
+      .mockResolvedValueOnce({ error: null });
+    await upsertProfile({ gender: 'female' });
+    expect(chain.update.mock.calls[0][0].gender).toBe('female');
+
+    chain.maybeSingle.mockResolvedValueOnce({ data: { user_id: 'u1' }, error: null });
+    chain.eq
+      .mockReturnValueOnce(chain)
+      .mockResolvedValueOnce({ error: null });
+    await upsertProfile({ gender: 'other' });
+    expect(chain.update.mock.calls[1][0].gender).toBeNull();
+  });
 });
 
 describe('computePersonalStats — scramble win credit', () => {

@@ -1,4 +1,4 @@
-import { middleTee, teeByLabel, blankTee } from '../tees';
+import { middleTee, teeByLabel, blankTee, resolveTeeForPlayer } from '../tees';
 
 describe('middleTee', () => {
   it('returns null for an empty or missing tee list', () => {
@@ -50,5 +50,37 @@ describe('blankTee', () => {
 
   it('gives distinct ids', () => {
     expect(blankTee().id).not.toBe(blankTee().id);
+  });
+});
+
+describe('resolveTeeForPlayer', () => {
+  const tee = { id: 't1', label: 'Amarillas', rating: 72.7, slope: 141, ratingWomen: 79.3, slopeWomen: 151 };
+
+  it('returns women\'s rating/slope for female players', () => {
+    expect(resolveTeeForPlayer(tee, 'female')).toEqual({ label: 'Amarillas', rating: 79.3, slope: 151 });
+  });
+
+  it('returns base rating/slope for male players', () => {
+    expect(resolveTeeForPlayer(tee, 'male')).toEqual({ label: 'Amarillas', rating: 72.7, slope: 141 });
+  });
+
+  it('falls back to base values when women\'s columns are missing', () => {
+    const plain = { label: 'Rojas', rating: 67.6, slope: 131 };
+    expect(resolveTeeForPlayer(plain, 'female')).toEqual({ label: 'Rojas', rating: 67.6, slope: 131 });
+  });
+
+  it('treats null/undefined gender as male', () => {
+    expect(resolveTeeForPlayer(tee, null)).toEqual({ label: 'Amarillas', rating: 72.7, slope: 141 });
+    expect(resolveTeeForPlayer(tee, undefined).slope).toBe(141);
+  });
+
+  it('returns null for a missing tee', () => {
+    expect(resolveTeeForPlayer(null, 'female')).toBeNull();
+  });
+
+  it('blankTee carries empty women\'s fields', () => {
+    const t = blankTee();
+    expect(t.ratingWomen).toBeNull();
+    expect(t.slopeWomen).toBeNull();
   });
 });

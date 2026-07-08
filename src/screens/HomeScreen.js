@@ -6,6 +6,7 @@ import QRCode from 'react-native-qrcode-svg';
 import { CommonActions } from '@react-navigation/native';
 
 import { useTheme } from '../theme/ThemeContext';
+import { loadProfile } from '../store/profileStore';
 import { ShareableLeaderboard, shareLeaderboard } from '../components/ShareableCard';
 import QuickStartCourses from '../components/QuickStartCourses';
 import PostCreateInviteModal from '../components/PostCreateInviteModal';
@@ -98,6 +99,18 @@ export default function HomeScreen({ navigation, route }) {
   const currentUserId = user?.id ?? null;
   const currentUserIdRef = useRef(currentUserId);
   currentUserIdRef.current = currentUserId;
+  const [needsGender, setNeedsGender] = useState(false);
+  useEffect(() => {
+    let alive = true;
+    const refreshGender = () => {
+      loadProfile()
+        .then((p) => { if (alive) setNeedsGender(!!p && !p.gender); })
+        .catch(() => {});
+    };
+    refreshGender();
+    const unsubFocus = navigation.addListener('focus', refreshGender);
+    return () => { alive = false; unsubFocus(); };
+  }, [navigation]);
   const initialTournament = useMemo(
     () => (routeTournamentId ? getTournamentSnapshot(routeTournamentId) : getActiveTournamentSnapshot()),
     [routeTournamentId],
@@ -1072,6 +1085,23 @@ export default function HomeScreen({ navigation, route }) {
           refreshing={refreshing}
           onRefresh={onRefresh}
         >
+        {needsGender && (
+          <TouchableOpacity
+            onPress={() => navigation.navigate('Profile')}
+            activeOpacity={0.8}
+            accessibilityRole="button"
+            accessibilityLabel="Complete your profile"
+            style={{ flexDirection: 'row', alignItems: 'center', gap: 8, borderRadius: 12,
+                     borderWidth: 1, borderColor: theme.accent.primary + '55',
+                     backgroundColor: theme.accent.light, padding: 12, marginBottom: 12 }}
+          >
+            <Feather name="user" size={16} color={theme.accent.primary} />
+            <Text style={{ fontFamily: 'PlusJakartaSans-SemiBold', color: theme.accent.primary, fontSize: 13, flex: 1 }}>
+              Complete your profile — set your gender so handicaps use the right tee rating.
+            </Text>
+            <Feather name="chevron-right" size={16} color={theme.accent.primary} />
+          </TouchableOpacity>
+        )}
         <Text style={s.startHeading}>Start playing</Text>
         <View style={s.startTilesRow}>
           <TouchableOpacity
