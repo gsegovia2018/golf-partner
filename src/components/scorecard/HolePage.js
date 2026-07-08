@@ -2,8 +2,9 @@ import React, { useMemo } from 'react';
 import { View, Text, ScrollView, TouchableOpacity, Modal, Platform } from 'react-native';
 import { Feather } from '@expo/vector-icons';
 import { playersMeFirst } from '../../lib/playerOrder';
-import { pickupStrokes } from '../../store/tournamentStore';
+import { pickupStrokes, scrambleUnits } from '../../store/tournamentStore';
 import { scoreCellState } from '../../store/officialScoring';
+import { isScrambleMode } from '../scoringModes';
 import { PlayerCard } from './PlayerCard';
 import { holePoints } from './scoreModel';
 import { teamsByPlayer } from './teamModel';
@@ -88,14 +89,25 @@ export const HolePage = React.memo(function HolePage({
   shotCollapsed, onToggleShotDetail,
   totalsMap,
 }) {
-  // Every game mode now renders the unified PlayerCard. Players are ordered
-  // "me first" so the signed-in player's card (with shot detail) is on top.
-  const orderedPlayers = playersMeFirst(players, meId);
+  // Every game mode now renders the unified PlayerCard. Scramble modes score
+  // one ball per team under the captain — swap the roster for synthetic team
+  // "players" so score entry, points, and handicaps all key off the captain's
+  // id. Players are then ordered "me first" so the signed-in player's card
+  // (or their team's card, for scramble) is on top.
+  const isScramble = isScrambleMode(mode);
+  const scoringPlayers = isScramble ? scrambleUnits(round, players) : players;
+  const effectiveMeId = isScramble
+    ? (scoringPlayers.find((u) => u.members?.some((m) => m.id === meId))?.id ?? meId)
+    : meId;
+  const orderedPlayers = playersMeFirst(scoringPlayers, effectiveMeId);
 
   // Per-hole points are computed once per render and then looked up per player.
   // roundTotals is computed once in HoleView and passed down via totalsMap.
-  const handicaps = round.playerHandicaps ?? {};
-  const holePts = holePoints({ mode, hole: pageHole, players, scores, handicaps });
+  // Scramble rows use the team handicap, not the captain's individual one.
+  const handicaps = isScramble
+    ? Object.fromEntries(scoringPlayers.map((u) => [u.id, u.handicap]))
+    : (round.playerHandicaps ?? {});
+  const holePts = holePoints({ mode, hole: pageHole, players: scoringPlayers, scores, handicaps, round });
   const teams = useMemo(() => teamsByPlayer(round), [round]);
 
   return (
@@ -132,7 +144,7 @@ export const HolePage = React.memo(function HolePage({
         keyboardShouldPersistTaps="handled"
       >
         {orderedPlayers.map((player) => {
-          const handicap = round.playerHandicaps?.[player.id] ?? player.handicap;
+          const handicap = handicaps[player.id] ?? player.handicap;
           const strokes = scores[player.id]?.[pageHole.number];
           const points = holePts[player.id] ?? null;
 
@@ -144,7 +156,7 @@ export const HolePage = React.memo(function HolePage({
           // (or one that returns true). In official mode a read-only card
           // renders the score without +/- steppers or the pickup toggle.
           const canEdit = editable ? editable(player.id) : true;
-          const isMe = player.id === meId;
+          const isMe = player.id === effectiveMeId;
 
           // Official mode: classify this player's hole from the raw two-row
           // score data so the card can show an agreed / waiting / discrepancy
