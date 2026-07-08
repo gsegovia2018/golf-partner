@@ -1,5 +1,5 @@
 import React from 'react';
-import { render } from '@testing-library/react-native';
+import { render, fireEvent } from '@testing-library/react-native';
 import { ScrollView, StyleSheet } from 'react-native';
 import StatsScreen from '../StatsScreen';
 
@@ -77,6 +77,10 @@ jest.mock('../../store/tournamentStore', () => ({
   getPlayingHandicap: jest.fn(() => 0),
   calcStablefordPoints: jest.fn(() => 2),
   playerPartnerSplits: jest.fn(() => ({ partners: [] })),
+  // Real implementation: a round's own scoringMode overrides the
+  // tournament default — the mixed-tournament gating tests below depend on
+  // this per-round resolution actually running.
+  roundScoringMode: jest.fn((t, round) => round?.scoringMode ?? t?.settings?.scoringMode ?? 'stableford'),
 }));
 
 jest.mock('../../components/scoringModes', () => ({
@@ -96,6 +100,10 @@ jest.mock('../../store/statsEngine', () => ({
   headToHead: jest.fn(() => ({
     points: { p1Wins: 0, p2Wins: 0, ties: 0 },
     strokes: { p1Wins: 0, p2Wins: 0, ties: 0 },
+    // totals/perRound are read by PairsTab's duel card, which the pairs-tab
+    // tests below actually render.
+    totals: { p1Points: 0, p2Points: 0, p1Strokes: 0, p2Strokes: 0, holesCompared: 0 },
+    perRound: [],
     holes: [],
   })),
   pairPerformance: jest.fn(() => []),
@@ -238,5 +246,160 @@ describe('StatsScreen scramble gating', () => {
     expect(queryByText('Team scramble tournament')).toBeNull();
     expect(queryByText('Players')).toBeTruthy();
     expect(queryByText('Overview')).toBeTruthy();
+  });
+});
+
+describe('StatsScreen mixed scoring-mode gating (per-round overrides)', () => {
+  // Rounds can now carry their own scoringMode that overrides the
+  // tournament default (roundScoringMode) — a tournament is "mixed" when
+  // its rounds don't all resolve to the same effective mode.
+
+  test('a mixed tournament (one normal round, one scramble round) is not the whole-screen placeholder', () => {
+    const rounds = [
+      makeRound('r1'),
+      { ...makeRound('r2', 5), scoringMode: 'scramblepairs' },
+    ];
+    const { queryByText } = renderStats(rounds, { players: fourPlayers, scoringMode: 'individual' });
+
+    expect(queryByText('Team scramble tournament')).toBeNull();
+    expect(queryByText('Overview')).toBeTruthy();
+  });
+
+  test('every round overridden to scramble still shows the placeholder even though the tournament default is not scramble', () => {
+    const rounds = [
+      { ...makeRound('r1'), scoringMode: 'scramble4' },
+      { ...makeRound('r2', 5), scoringMode: 'scramble4' },
+    ];
+    const { queryByText } = renderStats(rounds, { players: fourPlayers, scoringMode: 'individual' });
+
+    expect(queryByText('Team scramble tournament')).toBeTruthy();
+    expect(queryByText('Overview')).toBeNull();
+  });
+
+  test('Head-to-Head still shows for a mixed tournament with no team rounds (scramble + solo only)', () => {
+    // allScramble is false (round 1 is solo) and anyTeams is false (neither
+    // round is a real team mode) — H2H is meaningful for the solo round;
+    // the scramble round is blanked out of its input (next test).
+    const rounds = [
+      makeRound('r1'),
+      { ...makeRound('r2', 5), scoringMode: 'scramblepairs' },
+    ];
+    const { queryByText } = renderStats(rounds, { players: fourPlayers, scoringMode: 'individual' });
+
+    expect(queryByText('HEAD-TO-HEAD')).toBeTruthy();
+  });
+
+  test('feeds headToHead a tournament with scramble rounds blanked, so captain team balls never count as a personal duel', () => {
+    // A scramble round leaves REAL scores under both team captains (each
+    // team's single ball, scored off the team handicap). headToHead can't
+    // tell those apart from personal scores — if two captains are compared,
+    // it would count team play as a 1v1 duel. The screen must therefore
+    // hand headToHead a tournament whose scramble rounds have their scores
+    // stripped, while non-scramble rounds (and round indices) survive
+    // untouched.
+    jest.clearAllMocks();
+    const statsEngine = require('../../store/statsEngine');
+    const perHole = (strokes) => Object.fromEntries(holes.map((h) => [h.number, strokes]));
+    const individual = {
+      id: 'r1', courseName: 'La Moraleja', holes,
+      scores: { p1: perHole(4), p2: perHole(5) },
+    };
+    // p1 and p2 are opposing captains — both hold a team-ball score.
+    const scramble = {
+      id: 'r2', courseName: 'La Moraleja', holes, scoringMode: 'scramblepairs',
+      scores: { p1: perHole(4), p2: perHole(4) },
+    };
+    const { queryByText } = renderStats([individual, scramble], {
+      players: fourPlayers, scoringMode: 'individual',
+    });
+
+    expect(queryByText('HEAD-TO-HEAD')).toBeTruthy();
+    // The H2H matrix computes every player pairing at render time.
+    expect(statsEngine.headToHead).toHaveBeenCalled();
+    statsEngine.headToHead.mock.calls.forEach(([t]) => {
+      // Same round count — indices (and R{n} labels) must stay aligned.
+      expect(t.rounds).toHaveLength(2);
+      // The individual round's scores reach headToHead intact…
+      expect(t.rounds[0].scores).toEqual(individual.scores);
+      // …but the scramble round's captain scores are blanked out.
+      expect(t.rounds[1].scores).toBeNull();
+    });
+  });
+
+  describe('with a genuine team round in the mix', () => {
+    const scoringModes = require('../../components/scoringModes');
+
+    beforeEach(() => {
+      // The module-level mock stubs scoringModeUsesTeams to always return
+      // false so the rest of this file never has to think about team
+      // rounds. These tests need it to reflect the real "stableford" /
+      // "scramblepairs" distinction, so override it locally and restore the
+      // stub afterwards.
+      scoringModes.scoringModeUsesTeams.mockImplementation(
+        (mode) => mode === 'stableford' || mode === 'bestball' || mode === 'pairsmatchplay',
+      );
+    });
+
+    afterEach(() => {
+      scoringModes.scoringModeUsesTeams.mockImplementation(() => false);
+    });
+
+    test('Pairs tab appears when any round has real team data, even if another round is scramble', () => {
+      const rounds = [
+        { ...makeRound('r1'), scoringMode: 'stableford' },
+        { ...makeRound('r2', 5), scoringMode: 'scramblepairs' },
+      ];
+      const { queryByText } = renderStats(rounds, { players: fourPlayers, scoringMode: 'individual' });
+
+      expect(queryByText('Pairs')).toBeTruthy();
+    });
+
+    test('Head-to-Head stays hidden for a mixed tournament that has any real team round', () => {
+      const rounds = [
+        { ...makeRound('r1'), scoringMode: 'stableford' },
+        { ...makeRound('r2', 5), scoringMode: 'scramblepairs' },
+      ];
+      const { queryByText } = renderStats(rounds, { players: fourPlayers, scoringMode: 'individual' });
+
+      expect(queryByText('HEAD-TO-HEAD')).toBeNull();
+    });
+
+    test('feeds the Pairs-tab H2H heatmap a tournament with scramble rounds blanked too', () => {
+      // Sibling of the Overview regression above, but through PairsTab:
+      // anyTeams is true here (round 1 is a genuine stableford team round),
+      // so the H2H surface is the Pairs tab — its "H2H HEATMAP" H2HMatrix
+      // and duel card both call headToHead and must receive the same
+      // scramble-blanked tournament as the Overview matrix, or captain
+      // team balls leak into the heatmap.
+      jest.clearAllMocks();
+      const statsEngine = require('../../store/statsEngine');
+      const perHole = (strokes) => Object.fromEntries(holes.map((h) => [h.number, strokes]));
+      const teamRound = {
+        id: 'r1', courseName: 'La Moraleja', holes, scoringMode: 'stableford',
+        scores: { p1: perHole(4), p2: perHole(5) },
+      };
+      // p1 and p2 are opposing captains — both hold a team-ball score.
+      const scramble = {
+        id: 'r2', courseName: 'La Moraleja', holes, scoringMode: 'scramblepairs',
+        scores: { p1: perHole(4), p2: perHole(4) },
+      };
+      const { getByText, queryByText } = renderStats([teamRound, scramble], {
+        players: fourPlayers, scoringMode: 'individual',
+      });
+
+      fireEvent.press(getByText('Pairs'));
+
+      expect(queryByText('H2H HEATMAP')).toBeTruthy();
+      // The heatmap computes every player pairing at render time.
+      expect(statsEngine.headToHead).toHaveBeenCalled();
+      statsEngine.headToHead.mock.calls.forEach(([t]) => {
+        // Same round count — indices (and R{n} labels) must stay aligned.
+        expect(t.rounds).toHaveLength(2);
+        // The genuine team round's scores reach headToHead intact…
+        expect(t.rounds[0].scores).toEqual(teamRound.scores);
+        // …but the scramble round's captain scores are blanked out.
+        expect(t.rounds[1].scores).toBeNull();
+      });
+    });
   });
 });

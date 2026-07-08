@@ -5,7 +5,7 @@ import { supabase } from '../lib/supabase';
 import {
   loadAllTournaments,
   roundTotals,
-  tournamentLeaderboard,
+  tournamentStablefordLeaderboard,
   isTournamentFinished,
 } from './tournamentStore';
 import { isRoundPlayed } from './scoring';
@@ -192,7 +192,7 @@ export async function computePersonalStats({ userId, displayName }) {
 
     // Tournament is already known finished (guarded above), so topping the
     // leaderboard with a positive score is a win.
-    const leaderboard = tournamentLeaderboard(t);
+    const leaderboard = tournamentStablefordLeaderboard(t);
     if (leaderboard[0]?.player.id === me.id && leaderboard[0]?.points > 0) {
       wins += 1;
     }

@@ -9,8 +9,8 @@ import { useTheme } from '../theme/ThemeContext';
 import { ShareableLeaderboard, shareLeaderboard } from '../components/ShareableCard';
 import QuickStartCourses from '../components/QuickStartCourses';
 import PostCreateInviteModal from '../components/PostCreateInviteModal';
-import { scoringModeUsesTeams, leaderboardToggleLabels, mergeScoringSettings, isScrambleMode } from '../components/scoringModes';
-import ScoringModeField from '../components/ScoringModePicker';
+import { scoringModeUsesTeams, leaderboardToggleLabels, mergeScoringSettings, isScrambleMode, getScoringMode } from '../components/scoringModes';
+import ScoringModeField, { ScoringModeSheet } from '../components/ScoringModePicker';
 import PullToRefresh from '../components/PullToRefresh';
 import LoadingSplash from '../components/LoadingSplash';
 import {
@@ -41,6 +41,7 @@ import {
   resolveQuickStartPlayerTees,
 } from '../lib/quickStartGame';
 import { mutate } from '../store/mutate';
+import { roundScoringMode, tournamentHasMixedModes, tournamentStablefordLeaderboard, buildTeamsForMode } from '../store/scoring';
 import { subscribeConnectivity } from '../lib/connectivity';
 import { getShowRunningScore, setShowRunningScore } from '../lib/prefs';
 import { unreadCount } from '../store/notificationStore';
@@ -139,6 +140,8 @@ export default function HomeScreen({ navigation, route }) {
   const [unreadNotifs, setUnreadNotifs] = useState(0);
   const [showTournamentKindChoice, setShowTournamentKindChoice] = useState(false);
   const [showRoundEdit, setShowRoundEdit] = useState(false);
+  // Per-round "Scoring Mode" picker, opened from the Round N sheet.
+  const [showRoundModeSheet, setShowRoundModeSheet] = useState(false);
   const [showResetHistory, setShowResetHistory] = useState(false);
   const [undoSnack, setUndoSnack] = useState(null); // { roundIndex, snapshot, at }
   const undoTimerRef = useRef(null);
@@ -764,13 +767,42 @@ export default function HomeScreen({ navigation, route }) {
       const updated = {
         ...tournament,
         settings: mergedSettings,
+        // Setting the tournament-wide mode here is a reset to uniform: strip
+        // any round.scoringMode override on every patched round so the whole
+        // tournament goes back to reading settings.scoringMode. `scoringMode:
+        // undefined` is dropped when the object is JSON-serialized on save
+        // (saveLocal/persistRemote both JSON.stringify), so this actually
+        // clears the key rather than leaving an explicit undefined around.
         rounds: (tournament.rounds ?? []).map((r) => (
-          pairsByRound.has(r.id) ? { ...r, pairs: pairsByRound.get(r.id) } : r
+          pairsByRound.has(r.id) ? { ...r, pairs: pairsByRound.get(r.id), scoringMode: undefined } : r
         )),
       };
       await saveTournament(updated);
       await reload();
       setShowScoringModeSheet(false);
+    } catch (err) {
+      const msg = err?.message ?? 'Could not update scoring mode';
+      if (Platform.OS === 'web') window.alert(msg);
+      else Alert.alert('Error', msg);
+    }
+  }
+
+  // Persist a per-round scoring-mode override from the Round N sheet's
+  // "Scoring Mode" item. Rebuilds that round's pairs for the new mode (same
+  // approach as the tournament-wide picker) and dispatches the dedicated
+  // round.setScoringMode mutation rather than a raw saveTournament — this is
+  // a single round's override, not a tournament-wide reset.
+  async function saveRoundScoringMode(key) {
+    if (!tournament) return;
+    const r = tournament.rounds?.[selectedRound];
+    if (!r) return;
+    try {
+      const pairs = buildTeamsForMode(key, tournament.players);
+      await mutate(tournament, {
+        type: 'round.setScoringMode', roundId: r.id, scoringMode: key, pairs,
+      });
+      await reload();
+      setShowRoundModeSheet(false);
     } catch (err) {
       const msg = err?.message ?? 'Could not update scoring mode';
       if (Platform.OS === 'web') window.alert(msg);
@@ -843,6 +875,7 @@ export default function HomeScreen({ navigation, route }) {
   const leaderboard = useMemo(
     () => {
       if (!tournament) return [];
+      if (tournamentHasMixedModes(tournament)) return tournamentStablefordLeaderboard(tournament);
       if (settings.scoringMode === 'matchplay') return matchPlayStandings?.board ?? [];
       if (settings.scoringMode === 'sindicato') return tournamentSindicatoLeaderboard(tournament);
       if (settings.scoringMode === 'bestball') return tournamentBestWorstLeaderboard(tournament);
@@ -855,13 +888,15 @@ export default function HomeScreen({ navigation, route }) {
   // The Stableford board — native view for Stableford modes, alternate view
   // for every other mode, and the source of per-player gross strokes.
   const stablefordBoard = useMemo(
-    () => (tournament ? tournamentLeaderboard(tournament) : []),
+    () => (tournament ? tournamentStablefordLeaderboard(tournament) : []),
     [tournament],
   );
   // Stableford modes: native = Stableford (points), alternate = Stroke Play
   // (gross strokes ascending, unplayed/0-stroke players last). Other modes:
-  // native = the mode board, alternate = Stableford.
-  const isStablefordMode = settings.scoringMode === 'individual'
+  // native = the mode board, alternate = Stableford. Mixed-mode tournaments
+  // always render the Stableford total board natively.
+  const isStablefordMode = tournamentHasMixedModes(tournament)
+    || settings.scoringMode === 'individual'
     || settings.scoringMode === 'stableford';
   const displayedBoard = useMemo(() => {
     if (!leaderboardAlt) return leaderboard;
@@ -874,10 +909,14 @@ export default function HomeScreen({ navigation, route }) {
   const isStrokePlayView = leaderboardAlt && isStablefordMode;
   const selectedRoundData = tournament?.rounds?.[selectedRound] ?? null;
   const selectedRoundHasScores = !!(selectedRoundData?.scores && Object.keys(selectedRoundData.scores).length > 0);
+  // Per-round effective mode — a round may override the tournament default,
+  // so every selected-round-scoped derivation reads THIS instead of
+  // settings.scoringMode.
+  const selectedRoundMode = roundScoringMode(tournament, selectedRoundData);
   const selectedRoundPlayerTotals = useMemo(() => {
     if (!tournament || !selectedRoundData || !selectedRoundHasScores
-      || (settings.scoringMode === 'bestball' && !leaderboardAlt)) return null;
-    if (settings.scoringMode === 'sindicato') {
+      || (selectedRoundMode === 'bestball' && !leaderboardAlt)) return null;
+    if (selectedRoundMode === 'sindicato') {
       const tally = sindicatoRoundTally(selectedRoundData, tournament.players);
       if (!tally) return null;
       return tally.totals.map(({ player, points }) => {
@@ -887,13 +926,16 @@ export default function HomeScreen({ navigation, route }) {
       });
     }
     return roundTotals(selectedRoundData, tournament.players);
-  }, [tournament, selectedRoundData, selectedRoundHasScores, leaderboardAlt, settings.scoringMode]);
+  }, [tournament, selectedRoundData, selectedRoundHasScores, leaderboardAlt, selectedRoundMode]);
   const tournamentMode = settings.scoringMode === 'bestball' ? 'bestball'
     : settings.scoringMode === 'sindicato' ? 'sindicato'
     : settings.scoringMode === 'matchplay' ? 'matchplay'
     : 'stableford';
   const tournamentClinchedId = useMemo(
-    () => (tournament ? tournamentPlayerClinched(tournament, tournamentMode) : null),
+    // Mixed-mode tournaments rank by the cross-mode Stableford total board —
+    // none of the single-mode clinch formulas apply, so skip clinch entirely.
+    () => (tournament && !tournamentHasMixedModes(tournament)
+      ? tournamentPlayerClinched(tournament, tournamentMode) : null),
     [tournament, tournamentMode],
   );
 
@@ -913,11 +955,12 @@ export default function HomeScreen({ navigation, route }) {
   // individual / match-play modes, where every "pair" is a single player and
   // there is nothing to team up. `onClose` dismisses the host sheet.
   function renderTeamsMenuItem(onClose) {
+    const r = tournament.rounds[selectedRound];
     // Teams exist only in a team scoring mode that the current roster can
     // actually support — so an unknown/legacy mode, or a game stuck on a
-    // team mode with too few players, never wrongly shows team UI.
-    if (!scoringModeUsesTeams(settings?.scoringMode, tournament.players.length)) return null;
-    const r = tournament.rounds[selectedRound];
+    // team mode with too few players, never wrongly shows team UI. Reads the
+    // ROUND's effective mode (it may override the tournament default).
+    if (!scoringModeUsesTeams(roundScoringMode(tournament, r), tournament.players.length)) return null;
     const alreadyRevealed = r?.revealed || selectedRound <= tournament.currentRound;
     // Editing pairs only makes sense for the standard two-team split. Modes
     // like scramble4 can produce a single team (everyone on one team), and
@@ -1415,27 +1458,27 @@ export default function HomeScreen({ navigation, route }) {
   }
 
   const isGame = tournament.kind === 'game';
-  // Scramble: scores live under the team captain only, so per-player
-  // Stableford strokes would show 0 for non-captains — use the team strokes
-  // carried on the scramble board rows instead. Other modes (incl. pairs
-  // match play, where everyone plays their own ball) keep individual strokes.
-  const strokesByPlayer = isScrambleMode(settings.scoringMode)
-    ? Object.fromEntries(leaderboard.map((e) => [e.player.id, e.strokes]))
-    : Object.fromEntries(stablefordBoard.map((e) => [e.player.id, e.strokes]));
-  const toggleLabels = leaderboardToggleLabels(settings.scoringMode);
+  // stablefordBoard now comes from tournamentStablefordLeaderboard, which
+  // already attributes scramble rounds' team strokes to each member player —
+  // no separate scramble special case needed here.
+  const strokesByPlayer = Object.fromEntries(stablefordBoard.map((e) => [e.player.id, e.strokes]));
+  const toggleLabels = tournamentHasMixedModes(tournament)
+    ? { left: 'Stableford', right: 'Stroke Play' }
+    : leaderboardToggleLabels(settings.scoringMode);
   const getSelectedRoundValue = (playerId) => {
-    if (settings.scoringMode === 'matchplay') {
+    const selMode = roundScoringMode(tournament, selectedRoundData);
+    if (selMode === 'matchplay') {
       if (!selectedRoundData || !selectedRoundHasScores) return null;
       const tally = matchPlayRoundTally(selectedRoundData, tournament.players);
       if (!tally) return null;
       const idx = tournament.players.findIndex((p) => p.id === playerId);
       return idx === 0 ? tally.aWins : idx === 1 ? tally.bWins : null;
     }
-    if (settings.scoringMode === 'bestball' && !leaderboardAlt) {
+    if (selMode === 'bestball' && !leaderboardAlt) {
       if (!selectedRoundData || !selectedRoundHasScores || !selectedRoundData.pairs?.length) return null;
       return playerRoundBestWorstPoints(selectedRoundData, playerId, tournament.players, settings);
     }
-    if (settings.scoringMode === 'pairsmatchplay' && !leaderboardAlt) {
+    if (selMode === 'pairsmatchplay' && !leaderboardAlt) {
       if (!selectedRoundData || !selectedRoundHasScores) return null;
       const tally = pairsMatchRoundTally(selectedRoundData, tournament.players);
       if (!tally) return null;
@@ -1443,7 +1486,7 @@ export default function HomeScreen({ navigation, route }) {
         .findIndex((pair) => pair?.some((m) => m?.id === playerId));
       return idx === 0 ? tally.team1 : idx === 1 ? tally.team2 : null;
     }
-    if (isScrambleMode(settings.scoringMode) && !leaderboardAlt) {
+    if (isScrambleMode(selMode) && !leaderboardAlt) {
       if (!selectedRoundData || !selectedRoundHasScores) return null;
       const tally = scrambleRoundTally(selectedRoundData, tournament.players);
       if (!tally) return null;
@@ -1531,7 +1574,7 @@ export default function HomeScreen({ navigation, route }) {
           const rankColor = rankColors[i] || 'rgba(255,255,255,0.4)';
           const rankBg = i === 0 ? 'rgba(255,215,0,0.2)' : i === 1 ? 'rgba(192,200,212,0.15)' : i === 2 ? 'rgba(218,160,109,0.15)' : 'rgba(255,255,255,0.08)';
           const roundValue = getSelectedRoundValue(entry.player.id);
-          const roundUnit = settings.scoringMode === 'matchplay'
+          const roundUnit = selectedRoundMode === 'matchplay'
             ? (roundValue === 1 ? 'hole' : 'holes')
             : 'pts';
           const strokes = strokesByPlayer[entry.player.id] ?? 0;
@@ -1557,7 +1600,7 @@ export default function HomeScreen({ navigation, route }) {
                 !showRunning ? '—'
                   : isStrokePlayView
                     ? `${strokes || '-'} str`
-                    : settings.scoringMode === 'matchplay' && !leaderboardAlt
+                    : settings.scoringMode === 'matchplay' && !leaderboardAlt && !tournamentHasMixedModes(tournament)
                       ? `${entry.points} ${entry.points === 1 ? 'hole' : 'holes'}`
                       : `${entry.points} pts`
               }</Text>
@@ -1568,7 +1611,7 @@ export default function HomeScreen({ navigation, route }) {
             </View>
           );
         })}
-        {settings.scoringMode === 'matchplay' && matchPlayStandings && showRunning && (
+        {settings.scoringMode === 'matchplay' && matchPlayStandings && showRunning && !tournamentHasMixedModes(tournament) && (
           <Text style={s.mastersMatchStatus}>{matchPlayStandings.status}</Text>
         )}
       </View>
@@ -1870,11 +1913,33 @@ export default function HomeScreen({ navigation, route }) {
 
           {/* Per-round sheet (multi-round only). Round-scoped actions live
               here; tournament-wide settings live in the gear menu. */}
+          <TouchableOpacity
+            style={s.menuItem}
+            onPress={() => setShowRoundModeSheet(true)}
+            activeOpacity={0.7}
+          >
+            <Feather name="flag" size={18} color={theme.accent.primary} />
+            <View style={{ flex: 1 }}>
+              <Text style={s.menuItemText}>Scoring Mode</Text>
+              <Text style={s.modalSubtle}>
+                {getScoringMode(roundScoringMode(tournament, tournament.rounds[selectedRound])).label}
+              </Text>
+            </View>
+            <Feather name="chevron-right" size={16} color={theme.text.muted} />
+          </TouchableOpacity>
           {renderTeamsMenuItem(() => setShowRoundEdit(false))}
           {renderRoundActions(() => setShowRoundEdit(false))}
         </Pressable>
       </Pressable>
     </Modal>
+
+    <ScoringModeSheet
+      visible={showRoundModeSheet}
+      value={roundScoringMode(tournament, tournament.rounds?.[selectedRound])}
+      playerCount={tournament.players.length}
+      onSelect={saveRoundScoringMode}
+      onClose={() => setShowRoundModeSheet(false)}
+    />
 
     <Modal
       visible={showResetHistory}

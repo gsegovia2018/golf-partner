@@ -127,8 +127,12 @@ export function HoleView({ round, roundIndex, players, scores, shotDetails, meId
   // result — avoids O(holes × players²) redundant work across the pager.
   // Scramble modes total the synthetic team "players" under team handicaps
   // so the totalsMap keys line up with the captain ids HolePage renders.
+  // Effective mode for this round: per-round override wins, then the
+  // tournament setting, then 'stableford'. No tournament object here (this
+  // component only has round + settings props), so this mirrors
+  // roundScoringMode inline rather than importing it.
+  const rawMode = round?.scoringMode ?? settings?.scoringMode ?? 'stableford';
   const scorecardTotals = useMemo(() => {
-    const rawMode = settings?.scoringMode ?? 'stableford';
     if (isScrambleMode(rawMode)) {
       const units = scrambleUnits(round, players);
       return roundTotals({
@@ -146,7 +150,7 @@ export function HoleView({ round, roundIndex, players, scores, shotDetails, meId
       scores,
       handicaps: round?.playerHandicaps ?? {},
     });
-  }, [settings?.scoringMode, round, players, scores]);
+  }, [rawMode, round, players, scores]);
 
   if (!hole) return null;
 
@@ -248,10 +252,10 @@ export function HoleView({ round, roundIndex, players, scores, shotDetails, meId
                 editable={editable}
                 getScoreAnim={getScoreAnim}
                 showRunning={showRunning}
-                mode={settings?.scoringMode === 'matchplay' ? 'matchplay'
-                  : settings?.scoringMode === 'sindicato' ? 'sindicato'
-                  : settings?.scoringMode === 'pairsmatchplay' ? 'pairsmatchplay'
-                  : isScrambleMode(settings?.scoringMode) ? settings.scoringMode
+                mode={rawMode === 'matchplay' ? 'matchplay'
+                  : rawMode === 'sindicato' ? 'sindicato'
+                  : rawMode === 'pairsmatchplay' ? 'pairsmatchplay'
+                  : isScrambleMode(rawMode) ? rawMode
                   : isBestBall ? 'bestball' : 'stableford'}
                 official={official}
                 officialDiscrepancy={officialDiscrepancy}
@@ -272,7 +276,7 @@ export function HoleView({ round, roundIndex, players, scores, shotDetails, meId
           running-score visibility behaviour). */}
       {showRunning && (
         <RoundSummary
-          mode={settings?.scoringMode ?? 'stableford'}
+          mode={rawMode}
           round={round}
           players={players}
           scores={scores}

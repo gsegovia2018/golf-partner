@@ -15,9 +15,12 @@ import {
   tournamentSindicatoClinched,
   buildTeamsForMode,
   isRoundPlayed,
+  roundTotals,
+  roundScoringMode,
+  teamShapeOf,
 } from './scoring';
 import { isScoringModeAllowed, fallbackScoringMode } from '../components/ScoringModePicker';
-import { scoringModeUsesTeams } from '../components/scoringModes';
+import { scoringModeUsesTeams, isScrambleMode } from '../components/scoringModes';
 import { parseHandicapIndex } from '../lib/handicap';
 
 const ACTIVE_ID_KEY = '@golf_active_id';
@@ -579,6 +582,12 @@ export {
   scrambleUnits,
   scrambleRoundTally,
   tournamentScrambleLeaderboard,
+  tournamentStablefordLeaderboard,
+  roundScoringMode,
+  tournamentHasMixedModes,
+  teamShapeOf,
+  roundTotals,
+  pairsForNextRound,
 } from './scoring';
 
 export {
@@ -728,6 +737,13 @@ function buildPairsForAddedPlayer({ roster, newMode, oldMode, existingPairs, new
 // plus the resolved scoring mode after the add — equal to the current
 // mode when it stays valid for the new roster, or the auto-fallback
 // otherwise. Pass { mode } to override (used by the prompt UX).
+//
+// Each round's pairs are built from its OWN effective mode
+// (`round.scoringMode ?? nextScoringMode`), not just the tournament-wide
+// `nextScoringMode` — a round with its own override keeps that override's
+// shape as long as it's still valid for the new roster size. When it isn't,
+// the round falls back to `nextScoringMode` and the patch carries
+// `clearScoringMode: true` so the mutation drops the now-invalid override.
 export function addPlayerRoundPatches(tournament, player, { mode } = {}) {
   const oldMode = tournament?.settings?.scoringMode ?? 'stableford';
   const currentRound = tournament?.currentRound ?? 0;
@@ -739,37 +755,50 @@ export function addPlayerRoundPatches(tournament, player, { mode } = {}) {
       : isScoringModeAllowed(oldMode, newCount) ? oldMode
       : fallbackScoringMode(newCount);
   const patches = [];
-  // When fixedTeams is on, the team shape is computed once (from the first
-  // patched round) and reused verbatim for every later round, instead of
-  // being recomputed — and potentially re-randomized — per round.
-  let fixedPairs = null;
+  // When fixedTeams is on, pairs are computed once per team SHAPE (not once
+  // overall) and reused verbatim for every later round sharing that shape,
+  // instead of being recomputed — and potentially re-randomized — per round.
+  // Rounds on a different per-round mode (a different shape) get their own
+  // cached pairs.
+  const fixedPairsByShape = new Map();
   (tournament?.rounds ?? []).forEach((round, idx) => {
     if (idx < currentRound) return; // already-played rounds untouched
     const playerHandicap = deriveRoundPlayingHandicap(player.handicap, round);
+    const roundMode = round.scoringMode ?? nextScoringMode;
+    const roundModeValid = isScoringModeAllowed(roundMode, newCount);
+    const effectiveMode = roundModeValid ? roundMode : nextScoringMode;
+    // The round's PRE-mutation mode is round-scoped too: an override was
+    // this round's current mode before the roster changed (the mutation
+    // changes the roster, not the mode), so the builder's team-continuity
+    // decision must be judged against it, not the tournament-wide default.
+    const roundOldMode = round.scoringMode ?? oldMode;
     let pairs;
     if (fixedTeams) {
-      if (!fixedPairs) {
-        fixedPairs = buildPairsForAddedPlayer({
+      const shape = teamShapeOf(effectiveMode);
+      if (!fixedPairsByShape.has(shape)) {
+        fixedPairsByShape.set(shape, buildPairsForAddedPlayer({
           roster,
-          newMode: nextScoringMode,
-          oldMode,
+          newMode: effectiveMode,
+          oldMode: roundOldMode,
           existingPairs: round.pairs,
           newPlayer: player,
           revealed: Boolean(round.revealed),
-        });
+        }));
       }
-      pairs = fixedPairs.map((pr) => [...pr]);
+      pairs = fixedPairsByShape.get(shape).map((pr) => [...pr]);
     } else {
       pairs = buildPairsForAddedPlayer({
         roster,
-        newMode: nextScoringMode,
-        oldMode,
+        newMode: effectiveMode,
+        oldMode: roundOldMode,
         existingPairs: round.pairs,
         newPlayer: player,
         revealed: Boolean(round.revealed),
       });
     }
-    patches.push({ roundId: round.id, playerHandicap, pairs });
+    const patch = { roundId: round.id, playerHandicap, pairs };
+    if (!roundModeValid && round.scoringMode) patch.clearScoringMode = true;
+    patches.push(patch);
   });
   return { patches, nextScoringMode };
 }
@@ -803,6 +832,11 @@ function buildPairsForRemovedPlayer({ survivors, newMode, oldMode, existingPairs
 // auto-fallback otherwise. Pass { mode } to override (used by the prompt UX).
 // Each patch carries only the rebuilt `pairs`; deleting the removed player's
 // per-round scores/shotDetails/handicap is the mutation's job.
+//
+// As with addPlayerRoundPatches, each round's pairs are built from its own
+// effective mode (`round.scoringMode ?? nextScoringMode`); a round override
+// invalidated by the smaller roster falls back to `nextScoringMode` and the
+// patch carries `clearScoringMode: true`.
 export function removePlayerRoundPatches(tournament, playerId, { mode } = {}) {
   const oldMode = tournament?.settings?.scoringMode ?? 'stableford';
   const currentRound = tournament?.currentRound ?? 0;
@@ -814,35 +848,44 @@ export function removePlayerRoundPatches(tournament, playerId, { mode } = {}) {
       : isScoringModeAllowed(oldMode, newCount) ? oldMode
       : fallbackScoringMode(newCount);
   const patches = [];
-  // See addPlayerRoundPatches: fixedTeams computes the shape once and
-  // reuses it for every later round instead of recomputing per round.
-  let fixedPairs = null;
+  // See addPlayerRoundPatches: fixedTeams computes pairs once per team
+  // shape and reuses them for every later round sharing that shape.
+  const fixedPairsByShape = new Map();
   (tournament?.rounds ?? []).forEach((round, idx) => {
     if (idx < currentRound) return; // already-played rounds untouched
+    const roundMode = round.scoringMode ?? nextScoringMode;
+    const roundModeValid = isScoringModeAllowed(roundMode, newCount);
+    const effectiveMode = roundModeValid ? roundMode : nextScoringMode;
+    // See addPlayerRoundPatches: the round's pre-mutation mode is its own
+    // override when present, so team continuity is judged per round.
+    const roundOldMode = round.scoringMode ?? oldMode;
     let pairs;
     if (fixedTeams) {
-      if (!fixedPairs) {
-        fixedPairs = buildPairsForRemovedPlayer({
+      const shape = teamShapeOf(effectiveMode);
+      if (!fixedPairsByShape.has(shape)) {
+        fixedPairsByShape.set(shape, buildPairsForRemovedPlayer({
           survivors,
-          newMode: nextScoringMode,
-          oldMode,
+          newMode: effectiveMode,
+          oldMode: roundOldMode,
           existingPairs: round.pairs,
           removedId: playerId,
           revealed: Boolean(round.revealed),
-        });
+        }));
       }
-      pairs = fixedPairs.map((pr) => [...pr]);
+      pairs = fixedPairsByShape.get(shape).map((pr) => [...pr]);
     } else {
       pairs = buildPairsForRemovedPlayer({
         survivors,
-        newMode: nextScoringMode,
-        oldMode,
+        newMode: effectiveMode,
+        oldMode: roundOldMode,
         existingPairs: round.pairs,
         removedId: playerId,
         revealed: Boolean(round.revealed),
       });
     }
-    patches.push({ roundId: round.id, pairs });
+    const patch = { roundId: round.id, pairs };
+    if (!roundModeValid && round.scoringMode) patch.clearScoringMode = true;
+    patches.push(patch);
   });
   return { patches, nextScoringMode };
 }
@@ -941,23 +984,6 @@ export function createTournament({ name, players, rounds, settings, kind = 'tour
     currentRound: 0,
     settings: { ...DEFAULT_SETTINGS, ...settings },
   };
-}
-
-// scores shape: { [playerId]: { [holeNumber]: strokes } }
-export function roundTotals(round, players) {
-  return players.map((player) => {
-    const handicap = getPlayingHandicap(round, player);
-    let totalPoints = 0;
-    let totalStrokes = 0;
-    round.holes.forEach((hole) => {
-      const strokes = round.scores?.[player.id]?.[hole.number];
-      if (strokes) {
-        totalStrokes += strokes;
-        totalPoints += calcStablefordPoints(hole.par, strokes, handicap, hole.strokeIndex);
-      }
-    });
-    return { player, handicap, totalPoints, totalStrokes };
-  });
 }
 
 // Returns pair results for a single round sorted by combined points (Stableford mode)
@@ -1163,6 +1189,7 @@ export function tournamentBestWorstLeaderboard(tournament) {
 
   rounds.forEach((round, index) => {
     if (!isRoundPlayed(round, index, tournament) || !round.pairs?.length) return;
+    if (roundScoringMode(tournament, round) !== 'bestball') return;
     const roles = assignBestWorstRoles(round, players);
     players.forEach((p) => {
       const r = roles[p.id];
@@ -1366,6 +1393,10 @@ export function tournamentLeaderboard(tournament) {
 
   rounds.forEach((round, index) => {
     if (!isRoundPlayed(round, index, tournament)) return;
+    // Scramble rounds have no individual balls — individual points here would
+    // be meaningless (or all zero). Skip; tournamentStablefordLeaderboard
+    // covers those rounds via each player's team result instead.
+    if (isScrambleMode(roundScoringMode(tournament, round))) return;
     roundTotals(round, players).forEach(({ player, totalPoints, totalStrokes }) => {
       const entry = totals.find((t) => t.player.id === player.id);
       entry.points += totalPoints;

@@ -111,6 +111,21 @@ describe('collectMyRounds', () => {
     expect(rounds[0].tournamentId).toBe('t-individual');
   });
 
+  test('excludes only the scramble rounds of a mixed tournament', () => {
+    const me = { id: 'p1', name: 'Ann Lee', user_id: 'u1' };
+    const t = {
+      id: 't-mixed', kind: 'tournament', players: [me],
+      settings: { scoringMode: 'individual' },
+      rounds: [
+        { holes: [{ number: 1, par: 4, strokeIndex: 1 }], scores: { p1: { 1: 4 } }, playerHandicaps: {} },
+        { scoringMode: 'scramblepairs', holes: [{ number: 1, par: 4, strokeIndex: 1 }], scores: { p1: { 1: 4 } }, playerHandicaps: {} },
+      ],
+    };
+    const rounds = collectMyRounds([t], 'u1', 'Ann Lee');
+    expect(rounds).toHaveLength(1);
+    expect(rounds[0].roundIndex).toBe(0);
+  });
+
   test('orders rounds chronologically — oldest tournament first', () => {
     const h = holes18();
     // loaders return newest-first (id desc); collectMyRounds reverses.

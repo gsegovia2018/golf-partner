@@ -167,4 +167,21 @@ describe('tournamentScrambleLeaderboard', () => {
     const board = tournamentScrambleLeaderboard(t);
     expect(board.find((r) => r.player.id === 'a').points).toBe(3);
   });
+
+  it('ignores a round whose effective mode is not scramble', () => {
+    const t = {
+      players: roster,
+      settings: { scoringMode: 'scramblepairs' },
+      currentRound: 1,
+      rounds: [
+        mk(samePairs, { a: { 1: 3 }, c: { 1: 4 } }),
+        // round overridden to plain stableford — no team ball, must not count.
+        { ...mk(samePairs, { a: { 1: 3 }, b: { 1: 3 }, c: { 1: 4 }, d: { 1: 4 } }), scoringMode: 'stableford' },
+      ],
+    };
+    const board = tournamentScrambleLeaderboard(t);
+    const byId = Object.fromEntries(board.map((r) => [r.player.id, r]));
+    expect(byId.a.points).toBe(3);
+    expect(byId.c.points).toBe(2);
+  });
 });

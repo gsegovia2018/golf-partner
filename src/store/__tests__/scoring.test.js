@@ -468,7 +468,9 @@ describe('tournamentSindicatoLeaderboard', () => {
       holes, playerHandicaps: {},
       scores: { a: { 1: 4 }, b: { 1: 5 }, c: { 1: 6 } },
     };
-    const tournament = { players, rounds: [round, round], currentRound: 1 };
+    const tournament = {
+      players, settings: { scoringMode: 'sindicato' }, rounds: [round, round], currentRound: 1,
+    };
     const lb = tournamentSindicatoLeaderboard(tournament);
     expect(lb.map((e) => [e.player.id, e.points])).toEqual([['a', 8], ['b', 4], ['c', 0]]);
   });
@@ -478,7 +480,9 @@ describe('tournamentSindicatoLeaderboard', () => {
       scores: { a: { 1: 4 }, b: { 1: 5 }, c: { 1: 6 } },
     };
     const future = { holes, playerHandicaps: {}, scores: {} };
-    const tournament = { players, rounds: [played, future], currentRound: 0 };
+    const tournament = {
+      players, settings: { scoringMode: 'sindicato' }, rounds: [played, future], currentRound: 0,
+    };
     const lb = tournamentSindicatoLeaderboard(tournament);
     expect(lb.map((e) => [e.player.id, e.points])).toEqual([['a', 4], ['b', 2], ['c', 0]]);
   });
@@ -501,7 +505,7 @@ describe('tournamentSindicatoClinched', () => {
       holes, playerHandicaps: {},
       scores: { a: { 1: 4, 2: 4 }, b: { 1: 5, 2: 5 }, c: { 1: 6, 2: 5 } },
     };
-    const tournament = { players, rounds: [round], currentRound: 0 };
+    const tournament = { players, settings: { scoringMode: 'sindicato' }, rounds: [round], currentRound: 0 };
     expect(tournamentSindicatoClinched(tournament)).toBe('a');
   });
   test('returns null when remaining holes could still overturn the lead', () => {
@@ -542,7 +546,7 @@ describe('tournamentMatchPlayStandings', () => {
       holes, playerHandicaps: {},
       scores: { a: { 1: 4, 2: 4 }, b: { 1: 5, 2: 5 } },
     };
-    const t = { players, rounds: [round], currentRound: 0 };
+    const t = { players, settings: { scoringMode: 'matchplay' }, rounds: [round], currentRound: 0 };
     const r = tournamentMatchPlayStandings(t);
     expect(r.board.map((e) => [e.player.id, e.points])).toEqual([['a', 2], ['b', 0]]);
     expect(r.board[0].strokes).toBe(8);
@@ -555,7 +559,7 @@ describe('tournamentMatchPlayStandings', () => {
       holes, playerHandicaps: {},
       scores: { a: { 1: 4 }, b: { 1: 5 } },
     };
-    const t = { players, rounds: [round], currentRound: 0 };
+    const t = { players, settings: { scoringMode: 'matchplay' }, rounds: [round], currentRound: 0 };
     const r = tournamentMatchPlayStandings(t);
     expect(r.status).toBe('Alex leads by 1');
   });
@@ -565,7 +569,7 @@ describe('tournamentMatchPlayStandings', () => {
       holes, playerHandicaps: {},
       scores: { a: { 1: 4, 2: 5 }, b: { 1: 5, 2: 4 } },
     };
-    const t = { players, rounds: [round], currentRound: 0 };
+    const t = { players, settings: { scoringMode: 'matchplay' }, rounds: [round], currentRound: 0 };
     expect(tournamentMatchPlayStandings(t).status).toBe('All square');
   });
 
@@ -577,7 +581,10 @@ describe('tournamentMatchPlayStandings', () => {
 
   test('shows both players all square before any hole is scored', () => {
     const t = {
-      players, rounds: [{ holes, playerHandicaps: {}, scores: {} }], currentRound: 0,
+      players,
+      settings: { scoringMode: 'matchplay' },
+      rounds: [{ holes, playerHandicaps: {}, scores: {} }],
+      currentRound: 0,
     };
     const r = tournamentMatchPlayStandings(t);
     expect(r.board.map((e) => [e.player.id, e.points])).toEqual([['a', 0], ['b', 0]]);
@@ -593,8 +600,35 @@ describe('tournamentMatchPlayStandings', () => {
       scores: { a: { 1: 4, 2: 4 }, b: { 1: 5, 2: 5 } },
     };
     const future = { holes, playerHandicaps: {}, scores: {} };
-    const t = { players, rounds: [played, future], currentRound: 0 };
+    const t = {
+      players, settings: { scoringMode: 'matchplay' }, rounds: [played, future], currentRound: 0,
+    };
     expect(tournamentMatchPlayStandings(t).status).toBe('Alex leads by 2');
+  });
+
+  test('non-matchplay rounds contribute nothing — not even remaining holes', () => {
+    // Round 0 (played, matchplay, 3 holes): a wins all 3 → lead 3.
+    // Round 1 (future, matchplay, 2 holes): 2 real holes remaining.
+    // Round 2 (stableford override, 2 holes): can never yield match points,
+    // so its holes must NOT count as remaining. Lead 3 > 2 remaining → wins.
+    const holes3 = [
+      { number: 1, par: 4, strokeIndex: 1 },
+      { number: 2, par: 4, strokeIndex: 2 },
+      { number: 3, par: 4, strokeIndex: 3 },
+    ];
+    const played = {
+      holes: holes3, playerHandicaps: {},
+      scores: { a: { 1: 4, 2: 4, 3: 4 }, b: { 1: 5, 2: 5, 3: 5 } },
+    };
+    const futureMp = { holes, playerHandicaps: {}, scores: {} };
+    const stablefordRound = { holes, playerHandicaps: {}, scores: {}, scoringMode: 'stableford' };
+    const t = {
+      players,
+      settings: { scoringMode: 'matchplay' },
+      rounds: [played, futureMp, stablefordRound],
+      currentRound: 0,
+    };
+    expect(tournamentMatchPlayStandings(t).status).toBe('Alex wins');
   });
 });
 

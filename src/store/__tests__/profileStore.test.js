@@ -1,5 +1,14 @@
-import { loadProfile, upsertProfile } from '../profileStore';
+import { loadProfile, upsertProfile, computePersonalStats } from '../profileStore';
 import { supabase } from '../../lib/supabase';
+import * as tournamentStore from '../tournamentStore';
+
+// computePersonalStats pulls tournaments via loadAllTournaments; keep every
+// other tournamentStore export real (isTournamentFinished, roundTotals,
+// tournamentStablefordLeaderboard) and only stub the data-loading call.
+jest.mock('../tournamentStore', () => {
+  const actual = jest.requireActual('../tournamentStore');
+  return { ...actual, loadAllTournaments: jest.fn() };
+});
 
 // Jest hoists jest.mock() before imports, so the chain object must be built
 // entirely inside the factory. We attach it to globalThis so tests can
@@ -127,5 +136,69 @@ describe('profileStore — target_handicap', () => {
     expect(chain.insert).toHaveBeenCalledTimes(1);
     const call = chain.insert.mock.calls[0][0];
     expect(call.target_handicap).toBe(10);
+  });
+});
+
+describe('computePersonalStats — scramble win credit', () => {
+  const HOLE = { number: 1, par: 4, strokeIndex: 1 };
+  const p1 = { id: 'p1', name: 'Ann', handicap: 0, user_id: 'u-p1' };
+  const p2 = { id: 'p2', name: 'Bob', handicap: 0, user_id: 'u-p2' };
+  const p3 = { id: 'p3', name: 'Cam', handicap: 0, user_id: 'u-p3' };
+  const p4 = { id: 'p4', name: 'Dan', handicap: 0, user_id: 'u-p4' };
+
+  // Uniform scramble tournament — settings.scoringMode is scramblepairs for
+  // the whole tournament (no per-round override needed). Only captains carry
+  // scores, as real scramble rounds do (team ball).
+  const scrambleRound = {
+    id: 'r0',
+    holes: [HOLE],
+    pairs: [[p1, p2], [p3, p4]],
+    playerHandicaps: {},
+    // Team 1 (captain p1): 2 + (4-3) = 3 pts. Team 2 (captain p3): 2 + (4-5) = 1 pt.
+    scores: { p1: { 1: 3 }, p3: { 1: 5 } },
+  };
+
+  const scrambleTournament = {
+    id: 't-scramble',
+    kind: 'tournament',
+    name: 'Uniform Scramble',
+    settings: { scoringMode: 'scramblepairs' },
+    players: [p1, p2, p3, p4],
+    rounds: [scrambleRound],
+    currentRound: 0,
+    // Explicitly archived so isTournamentFinished is true regardless of the
+    // (scramble-specific) per-player score-completeness check.
+    finishedAt: '2026-07-01T00:00:00Z',
+  };
+
+  beforeEach(() => {
+    tournamentStore.loadAllTournaments.mockReset();
+    tournamentStore.loadAllTournaments.mockResolvedValue([scrambleTournament]);
+  });
+
+  // Regression: with tournamentLeaderboard (individual-ball board), scramble
+  // rounds were skipped entirely, so every player's points stayed 0 and the
+  // win check (`leaderboard[0]?.points > 0`) never fired for anyone —
+  // including the winning captain, who got credit pre-branch.
+  test('winning team captain gets win credit', async () => {
+    const stats = await computePersonalStats({ userId: 'u-p1', displayName: 'Ann' });
+    expect(stats.wins).toBe(1);
+  });
+
+  // tournamentStablefordLeaderboard attributes the team's points to every
+  // member (not just the scramble captain), so whichever winning-team member
+  // sorts first also gets win credit — an improvement over the old
+  // captain-only credit. Reordering the roster so the non-captain (p2) is
+  // listed before the captain (p1) proves the credit isn't captain-specific.
+  test('winning team non-captain member gets win credit when listed first in the roster', async () => {
+    const reordered = { ...scrambleTournament, players: [p2, p1, p3, p4] };
+    tournamentStore.loadAllTournaments.mockResolvedValue([reordered]);
+    const stats = await computePersonalStats({ userId: 'u-p2', displayName: 'Bob' });
+    expect(stats.wins).toBe(1);
+  });
+
+  test('losing team member gets no win credit', async () => {
+    const stats = await computePersonalStats({ userId: 'u-p3', displayName: 'Cam' });
+    expect(stats.wins).toBe(0);
   });
 });

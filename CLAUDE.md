@@ -37,7 +37,9 @@ Core features:
 
 ## Domain Concepts
 
-- **Tournament:** A multi-round event across different courses.
+- **Tournament:** A multi-round event across different courses. Each round
+  may override the tournament's default scoring mode (`round.scoringMode`);
+  mixed-mode tournaments rank by Stableford totals.
 - **Round:** One 18-hole game on a course with assigned partners.
 - **Official tournament:** A managed tournament with admin controls, a
   shared leaderboard, and invite tokens — see the `official*` store modules.

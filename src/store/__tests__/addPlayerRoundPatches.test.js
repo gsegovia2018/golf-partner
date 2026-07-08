@@ -244,3 +244,85 @@ describe('addPlayerRoundPatches fixedTeams', () => {
     expect(patches[0].pairs).toEqual([[A, B], [C], [D]]);
   });
 });
+
+describe('addPlayerRoundPatches per-round mode overrides', () => {
+  test('builds each future round with its own effective mode', () => {
+    const D = { id: 'd', name: 'D', handicap: 4 };
+    const t = makeTournament({
+      players: [A, B, C],
+      mode: 'individual',
+      rounds: [
+        makeRound({ id: 'r0' }),
+        { ...makeRound({ id: 'r1' }), scoringMode: 'scramble3v1' },
+      ],
+    });
+    const { patches } = addPlayerRoundPatches(t, D);
+    const r0 = patches.find((p) => p.roundId === 'r0');
+    const r1 = patches.find((p) => p.roundId === 'r1');
+    // r0 has no override: falls back to nextScoringMode (individual → solo groups).
+    expect(r0.pairs).toEqual([[A], [B], [C], [D]]);
+    expect(r0.clearScoringMode).toBeUndefined();
+    // scramble3v1 stays valid at 4 players → 3+1 shape, no clear.
+    expect(r1.pairs.map((pr) => pr.length).sort()).toEqual([1, 3]);
+    expect(r1.clearScoringMode).toBeUndefined();
+  });
+
+  test('clears an override that the new roster invalidates', () => {
+    const D = { id: 'd', name: 'D', handicap: 4 };
+    const t = makeTournament({
+      players: [A, B, C],
+      mode: 'individual',
+      rounds: [{ ...makeRound({ id: 'r0' }), scoringMode: 'matchplay' }],
+    });
+    // matchplay is only valid at exactly 2 players — invalid at the new count of 4.
+    const { patches } = addPlayerRoundPatches(t, D);
+    const r0 = patches.find((p) => p.roundId === 'r0');
+    expect(r0.clearScoringMode).toBe(true);
+    // pairs rebuilt for the fallback (nextScoringMode) — individual stays valid at 4.
+    expect(r0.pairs.flat()).toHaveLength(4);
+  });
+
+  test('fixedTeams caches pairs per team shape, not once overall', () => {
+    const D = { id: 'd', name: 'D', handicap: 4 };
+    const t = makeTournament({
+      players: [A, B, C],
+      mode: 'individual',
+      fixedTeams: true,
+      rounds: [
+        { ...makeRound({ id: 'r0' }), scoringMode: 'scramble3v1' },
+        { ...makeRound({ id: 'r1' }), scoringMode: 'scramble3v1' },
+        makeRound({ id: 'r2' }), // no override → individual (solo shape)
+      ],
+    });
+    const { patches } = addPlayerRoundPatches(t, D);
+    const r0 = patches.find((p) => p.roundId === 'r0');
+    const r1 = patches.find((p) => p.roundId === 'r1');
+    const r2 = patches.find((p) => p.roundId === 'r2');
+    // Same shape (3+1) → identical cached pairs across r0/r1.
+    expect(r1.pairs.map((pr) => pr.map((p) => p.id).sort())).toEqual(
+      r0.pairs.map((pr) => pr.map((p) => p.id).sort()),
+    );
+    // Different shape (solo) → not the fixed-team pairs.
+    expect(r2.pairs).toEqual([[A], [B], [C], [D]]);
+  });
+
+  test('revealed round with a still-valid team override on a non-team default keeps its partnerships', () => {
+    const D = { id: 'd', name: 'D', handicap: 4 };
+    const t = makeTournament({
+      players: [A, B, C],
+      mode: 'individual', // tournament default is NOT a team mode
+      rounds: [{
+        ...makeRound({ id: 'r0', revealed: true, pairs: [[A, B], [C]] }),
+        scoringMode: 'stableford', // round override IS a team mode, valid at 3 and 4
+      }],
+    });
+    const { patches } = addPlayerRoundPatches(t, D);
+    const r0 = patches.find((p) => p.roundId === 'r0');
+    // Documented buildPairsForAddedPlayer behavior for team→team revealed:
+    // existing partnerships preserved, the new player joins as a solo group —
+    // NOT a fresh reshuffle. The round's pre-mutation mode is its override
+    // (stableford), not the tournament default (individual).
+    expect(r0.pairs).toEqual([[A, B], [C], [D]]);
+    expect(r0.clearScoringMode).toBeUndefined();
+  });
+});

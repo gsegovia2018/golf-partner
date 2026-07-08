@@ -369,7 +369,9 @@ function ScorecardTable({ round, players, scores, onSetScore, editable, mode, me
 export function GridView({ round, roundIndex, players, scores, isBestBall, bbResult, settings, onSetScore, editable, refreshing, onRefresh, meId }) {
   const { theme } = useTheme();
   const s = useMemo(() => makeScorecardStyles(theme), [theme]);
-  const rawMode = settings?.scoringMode;
+  // No tournament object here (round + settings props only) — mirrors
+  // roundScoringMode inline.
+  const rawMode = round?.scoringMode ?? settings?.scoringMode ?? 'stableford';
   const mode = rawMode === 'matchplay' ? 'matchplay'
     : rawMode === 'sindicato' ? 'sindicato'
     : rawMode === 'pairsmatchplay' ? 'pairsmatchplay'

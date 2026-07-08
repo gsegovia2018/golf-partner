@@ -12,7 +12,7 @@
 // randomPairs, which is deliberately non-deterministic.
 // ============================================================================
 
-import { scoringModeUsesTeams } from '../components/scoringModes';
+import { scoringModeUsesTeams, isScrambleMode } from '../components/scoringModes';
 
 export const STANDARD_SLOPE = 113;
 
@@ -124,6 +124,23 @@ export function calcStablefordPoints(par, strokes, playerHandicap, holeStrokeInd
   const extra = calcExtraShots(playerHandicap, holeStrokeIndex);
   const points = 2 + par - strokes + extra;
   return Math.max(0, points);
+}
+
+// scores shape: { [playerId]: { [holeNumber]: strokes } }
+export function roundTotals(round, players) {
+  return players.map((player) => {
+    const handicap = getPlayingHandicap(round, player);
+    let totalPoints = 0;
+    let totalStrokes = 0;
+    round.holes.forEach((hole) => {
+      const strokes = round.scores?.[player.id]?.[hole.number];
+      if (strokes) {
+        totalStrokes += strokes;
+        totalPoints += calcStablefordPoints(hole.par, strokes, handicap, hole.strokeIndex);
+      }
+    });
+    return { player, handicap, totalPoints, totalStrokes };
+  });
 }
 
 // Match Play: 2 players, per-hole 1-vs-1. Returns 1 if `playerId` won the hole
@@ -279,6 +296,56 @@ export function buildTeamsForMode(mode, players) {
   return randomPairs(players);
 }
 
+// ── Per-round scoring modes ─────────────────────────────────────────────────
+// A round may override the tournament's default mode. This helper is the
+// single source of truth for a round's effective mode — every round-scoped
+// consumer reads it instead of settings.scoringMode.
+export function roundScoringMode(tournament, round) {
+  return round?.scoringMode ?? tournament?.settings?.scoringMode ?? 'stableford';
+}
+
+// Pairs for a round about to be revealed/started. fixedTeams reuses the
+// most recent earlier round's partnerships when the team SHAPES match and
+// the roster is unchanged; otherwise the round gets a fresh build from its
+// own effective mode.
+export function pairsForNextRound(tournament, targetRound) {
+  const players = tournament?.players ?? [];
+  const mode = roundScoringMode(tournament, targetRound);
+  if (tournament?.settings?.fixedTeams) {
+    const rosterIds = players.map((p) => p.id).sort().join(',');
+    const rounds = tournament?.rounds ?? [];
+    const targetIdx = rounds.indexOf(targetRound);
+    const searchEnd = targetIdx >= 0 ? targetIdx : rounds.length;
+    for (let i = searchEnd - 1; i >= 0; i--) {
+      if (teamShapeOf(roundScoringMode(tournament, rounds[i])) !== teamShapeOf(mode)) continue;
+      const pairIds = (rounds[i].pairs ?? []).flat().map((p) => p.id).sort().join(',');
+      if (pairIds && pairIds === rosterIds) {
+        return rounds[i].pairs.map((pr) => [...pr]);
+      }
+    }
+  }
+  return buildTeamsForMode(mode, players);
+}
+
+// True when the tournament's rounds do not all share one effective mode.
+// Mixed tournaments rank by the Stableford total board.
+export function tournamentHasMixedModes(tournament) {
+  const rounds = tournament?.rounds ?? [];
+  if (rounds.length < 2) return false;
+  const first = roundScoringMode(tournament, rounds[0]);
+  return rounds.some((r) => roundScoringMode(tournament, r) !== first);
+}
+
+// The team shape a mode's pairs take. fixedTeams reuses partnerships only
+// across rounds whose modes share a shape.
+export function teamShapeOf(mode) {
+  if (mode === 'scramble4') return '1x4';
+  if (mode === 'scramble3v1') return '3+1';
+  if (mode === 'stableford' || mode === 'bestball'
+    || mode === 'scramblepairs' || mode === 'pairsmatchplay') return '2x2';
+  return 'solo';
+}
+
 // A round counts toward tournament totals once it's been reached (its index is
 // at or before the tournament's currentRound) and has a scores object.
 export function isRoundPlayed(round, index, tournament) {
@@ -296,6 +363,7 @@ export function tournamentSindicatoLeaderboard(tournament) {
   const strokesById = Object.fromEntries(players.map((p) => [p.id, 0]));
   rounds.forEach((round, index) => {
     if (!isRoundPlayed(round, index, tournament)) return;
+    if (roundScoringMode(tournament, round) !== 'sindicato') return;
     const tally = sindicatoRoundTally(round, players);
     if (!tally) return;
     tally.totals.forEach(({ player, points }) => {
@@ -561,6 +629,7 @@ export function tournamentScrambleLeaderboard(tournament) {
   const acc = new Map(players.map((p) => [p.id, { player: p, points: 0, strokes: 0 }]));
   rounds.forEach((round, index) => {
     if (!isRoundPlayed(round, index, tournament)) return;
+    if (!isScrambleMode(roundScoringMode(tournament, round))) return;
     const tally = scrambleRoundTally(round, players);
     if (!tally) return;
     const rowByCaptain = new Map(tally.totals.map((r) => [r.unit.id, r]));
@@ -584,6 +653,7 @@ export function tournamentPairsMatchStandings(tournament) {
   const acc = new Map(players.map((p) => [p.id, { player: p, points: 0 }]));
   rounds.forEach((round, index) => {
     if (!isRoundPlayed(round, index, tournament)) return;
+    if (roundScoringMode(tournament, round) !== 'pairsmatchplay') return;
     const tally = pairsMatchRoundTally(round, players);
     if (!tally) return;
     for (const p of players) {
@@ -596,6 +666,40 @@ export function tournamentPairsMatchStandings(tournament) {
   });
   const board = [...acc.values()].sort((a, b) => b.points - a.points);
   return { board };
+}
+
+// Individual Stableford board across all rounds. Scramble rounds have no
+// individual balls, so each player contributes their TEAM's Stableford
+// points/strokes there. This is the overall board for mixed-mode
+// tournaments and the Stableford alternate view everywhere.
+export function tournamentStablefordLeaderboard(tournament) {
+  const { players = [], rounds = [] } = tournament ?? {};
+  const acc = new Map(players.map((p) => [p.id, { player: p, points: 0, strokes: 0 }]));
+  rounds.forEach((round, index) => {
+    if (!isRoundPlayed(round, index, tournament)) return;
+    const mode = roundScoringMode(tournament, round);
+    if (isScrambleMode(mode)) {
+      const tally = scrambleRoundTally(round, players);
+      if (!tally) return;
+      const rowByCaptain = new Map(tally.totals.map((r) => [r.unit.id, r]));
+      for (const p of players) {
+        const team = teamOfPlayer(round, p.id);
+        const row = team ? rowByCaptain.get(team[0]?.id) : null;
+        if (!row) continue;
+        const cur = acc.get(p.id);
+        cur.points += row.points;
+        cur.strokes += row.strokes;
+      }
+      return;
+    }
+    for (const rt of roundTotals(round, players)) {
+      const cur = acc.get(rt.player.id);
+      if (!cur) continue;
+      cur.points += rt.totalPoints;
+      cur.strokes += rt.totalStrokes;
+    }
+  });
+  return [...acc.values()].sort((a, b) => b.points - a.points);
 }
 
 // ── Phase A helpers ─────────────────────────────────────────────────────────
@@ -696,6 +800,10 @@ export function tournamentMatchPlayStandings(tournament) {
   let holesRemaining = 0;
   const strokes = { [a.id]: 0, [b.id]: 0 };
   rounds.forEach((round, idx) => {
+    // A non-matchplay round can never yield match points, so it contributes
+    // nothing — not even to holesRemaining (its holes would inflate the
+    // clinch denominator and suppress a mathematically-decided "wins").
+    if (roundScoringMode(tournament, round) !== 'matchplay') return;
     const future = idx > (tournament.currentRound ?? 0);
     if (future) {
       holesRemaining += round.holes?.length ?? 0;

@@ -172,4 +172,22 @@ describe('tournamentPairsMatchStandings', () => {
     const { board } = tournamentPairsMatchStandings(t);
     expect(board.find((r) => r.player.id === 'a').points).toBe(4);
   });
+
+  it('ignores a round whose effective mode is not pairsmatchplay', () => {
+    const t = {
+      players: [...pairs[0], ...pairs[1]],
+      settings: { scoringMode: 'pairsmatchplay' },
+      currentRound: 1,
+      rounds: [
+        // round 1: team1 sweeps → team1 4, team2 0
+        mk(pairs, { a: { 1: 3, 2: 3 }, c: { 1: 5, 2: 5 }, b: { 1: 3, 2: 3 }, d: { 1: 5, 2: 5 } }),
+        // round 2 overridden to stableford — must not contribute match points.
+        { ...mk(pairs, { a: { 1: 4, 2: 4 }, c: { 1: 4, 2: 4 }, b: { 1: 4, 2: 4 }, d: { 1: 4, 2: 4 } }), scoringMode: 'stableford' },
+      ],
+    };
+    const { board } = tournamentPairsMatchStandings(t);
+    const byId = Object.fromEntries(board.map((r) => [r.player.id, r]));
+    expect(byId.a.points).toBe(4);
+    expect(byId.c.points).toBe(0);
+  });
 });

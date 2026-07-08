@@ -10,7 +10,8 @@ import {
 import ScreenContainer from '../components/ScreenContainer';
 import { Feather } from '@expo/vector-icons';
 import {
-  loadTournament, buildTeamsForMode, saveTournament, subscribeTournamentChanges,
+  loadTournament, saveTournament, subscribeTournamentChanges,
+  roundScoringMode, pairsForNextRound,
 } from '../store/tournamentStore';
 import { scoringModeUsesTeams, needsManualTeamSetup } from '../components/scoringModes';
 import { useTheme } from '../theme/ThemeContext';
@@ -61,18 +62,8 @@ export default function NextRoundScreen({ navigation, route }) {
   // to a fresh build when no such round exists yet (e.g. the very first
   // round, or a roster change with no matching history).
   const buildPairsForRound = (t) => {
-    const mode = t?.settings?.scoringMode;
-    if (t?.settings?.fixedTeams) {
-      const rosterIds = (t.players ?? []).map((p) => p.id).sort().join(',');
-      const rounds = t.rounds ?? [];
-      for (let i = rounds.length - 1; i >= 0; i--) {
-        const pairIds = (rounds[i].pairs ?? []).flat().map((p) => p.id).sort().join(',');
-        if (pairIds && pairIds === rosterIds) {
-          return rounds[i].pairs.map((pr) => [...pr]);
-        }
-      }
-    }
-    return buildTeamsForMode(mode, t.players);
+    const idx = revealOnly ? paramRoundIndex : (t?.currentRound ?? 0) + 1;
+    return pairsForNextRound(t, t?.rounds?.[idx]);
   };
 
   useEffect(() => {
@@ -172,7 +163,7 @@ export default function NextRoundScreen({ navigation, route }) {
   // Teams (assigned/revealed partners) only exist in team modes. Solo modes
   // (Stableford, Match Play) build single-member "pairs", so there is nothing
   // to re-shuffle and the screen avoids "Teams" wording for them.
-  const mode = tournament?.settings?.scoringMode;
+  const mode = roundScoringMode(tournament, round);
   const usesTeams = scoringModeUsesTeams(mode, tournament?.players?.length);
   // Reshuffle is disabled when teams are fixed for the tournament — they
   // were locked in at creation (or the last roster change), not re-rolled

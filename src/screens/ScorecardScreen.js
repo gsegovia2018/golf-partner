@@ -42,7 +42,7 @@ import {
   DEFAULT_SHOT,
   celebrationFor,
 } from '../components/scorecard/constants';
-import { reconcileShotDetail, listRoundConflicts } from '../store/scoring';
+import { reconcileShotDetail, listRoundConflicts, roundScoringMode } from '../store/scoring';
 import { makeScorecardStyles } from '../components/scorecard/styles';
 import { HoleView } from '../components/scorecard/HoleView';
 import { GridView } from '../components/scorecard/GridView';
@@ -820,7 +820,13 @@ export default function ScorecardScreen({ navigation, route }) {
     () => ({ ...DEFAULT_SETTINGS, ...(tournament?.settings ?? {}) }),
     [tournament?.settings],
   );
-  const settingsMode = tournament?.settings?.scoringMode;
+  // Guard on `tournament` (not just call roundScoringMode unconditionally) so
+  // this stays `undefined` before the tournament loads — the mode-change
+  // notice effect below relies on that undefined→defined transition NOT
+  // counting as a "mode changed" edge (roundScoringMode always falls back to
+  // 'stableford', which would otherwise fire a false notice on cold loads of
+  // tournaments whose real mode isn't stableford).
+  const settingsMode = tournament ? roundScoringMode(tournament, round) : undefined;
   const currentMode = settingsMode ?? 'stableford';
   const prevSettingsMode = usePrevious(settingsMode);
   const [noticeMessage, setNoticeMessage] = useState(null);
@@ -836,7 +842,7 @@ export default function ScorecardScreen({ navigation, route }) {
     }
   }, [prevSettingsMode, settingsMode]);
 
-  const isBestBall = settings.scoringMode === 'bestball';
+  const isBestBall = roundScoringMode(tournament, round) === 'bestball';
   const liveRound = useMemo(
     () => (round ? { ...round, scores } : null),
     [round, scores],
@@ -1057,7 +1063,7 @@ export default function ScorecardScreen({ navigation, route }) {
     if (clinchInitRoundIdRef.current === round.id) return;
     clinchInitRoundIdRef.current = round.id;
     setRoundDecisionNotice(null);
-    const mode = tournament.settings?.scoringMode === 'bestball' ? 'bestball' : 'stableford';
+    const mode = roundScoringMode(tournament, round) === 'bestball' ? 'bestball' : 'stableford';
     const liveRound = { ...round, scores };
     lastClinchedPairRef.current = roundPairClinched(liveRound, players, tournament.settings, mode);
   }, [round, tournament, players, scores]);
@@ -1067,7 +1073,7 @@ export default function ScorecardScreen({ navigation, route }) {
     const maxHole = round?.holes?.length ?? 18;
     setCurrentHole((h) => Math.min(maxHole, h + 1));
     if (!round || !tournament) return;
-    const mode = tournament.settings?.scoringMode === 'bestball' ? 'bestball' : 'stableford';
+    const mode = roundScoringMode(tournament, round) === 'bestball' ? 'bestball' : 'stableford';
     const liveRound = { ...round, scores };
     const clinched = roundPairClinched(liveRound, players, tournament.settings, mode);
     if (clinched != null && lastClinchedPairRef.current == null) {
