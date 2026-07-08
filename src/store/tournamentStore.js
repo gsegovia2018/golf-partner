@@ -587,6 +587,7 @@ export {
   tournamentHasMixedModes,
   teamShapeOf,
   roundTotals,
+  pairsForNextRound,
 } from './scoring';
 
 export {

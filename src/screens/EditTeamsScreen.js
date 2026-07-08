@@ -5,7 +5,7 @@ import { Feather } from '@expo/vector-icons';
 import { useTheme } from '../theme/ThemeContext';
 import { getActiveTournamentSnapshot, loadTournament, subscribeTournamentChanges } from '../store/tournamentStore';
 import { mutate } from '../store/mutate';
-import { pairsMatchDuels } from '../store/scoring';
+import { pairsMatchDuels, roundScoringMode } from '../store/scoring';
 import { shouldHandleStoreChange } from '../lib/navigationFocus';
 import { buildThreeVsOne, swapDuelOrder } from '../lib/teamEditing';
 
@@ -51,7 +51,7 @@ export default function EditTeamsScreen({ navigation, route }) {
   if (!tournament || !pairs) return null;
 
   const round = tournament.rounds[roundIndex];
-  const scoringMode = tournament?.settings?.scoringMode;
+  const scoringMode = roundScoringMode(tournament, round);
   const isThreeVsOne = scoringMode === 'scramble3v1';
   const isPairsMatch = scoringMode === 'pairsmatchplay';
   const soloSide = pairs.find((side) => side.length === 1);

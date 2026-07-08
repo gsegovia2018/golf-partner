@@ -304,6 +304,29 @@ export function roundScoringMode(tournament, round) {
   return round?.scoringMode ?? tournament?.settings?.scoringMode ?? 'stableford';
 }
 
+// Pairs for a round about to be revealed/started. fixedTeams reuses the
+// most recent earlier round's partnerships when the team SHAPES match and
+// the roster is unchanged; otherwise the round gets a fresh build from its
+// own effective mode.
+export function pairsForNextRound(tournament, targetRound) {
+  const players = tournament?.players ?? [];
+  const mode = roundScoringMode(tournament, targetRound);
+  if (tournament?.settings?.fixedTeams) {
+    const rosterIds = players.map((p) => p.id).sort().join(',');
+    const rounds = tournament?.rounds ?? [];
+    const targetIdx = rounds.indexOf(targetRound);
+    const searchEnd = targetIdx >= 0 ? targetIdx : rounds.length;
+    for (let i = searchEnd - 1; i >= 0; i--) {
+      if (teamShapeOf(roundScoringMode(tournament, rounds[i])) !== teamShapeOf(mode)) continue;
+      const pairIds = (rounds[i].pairs ?? []).flat().map((p) => p.id).sort().join(',');
+      if (pairIds && pairIds === rosterIds) {
+        return rounds[i].pairs.map((pr) => [...pr]);
+      }
+    }
+  }
+  return buildTeamsForMode(mode, players);
+}
+
 // True when the tournament's rounds do not all share one effective mode.
 // Mixed tournaments rank by the Stableford total board.
 export function tournamentHasMixedModes(tournament) {
