@@ -57,6 +57,26 @@ describe('calcExtraShots', () => {
     expect(calcExtraShots(36, 1)).toBe(2);
     expect(calcExtraShots(36, 18)).toBe(2);
   });
+
+  it('plus handicaps give back strokes on the easiest holes only', () => {
+    // handicap -2 -> one stroke back on SI 18 and 17, none elsewhere
+    expect(calcExtraShots(-2, 18)).toBe(-1);
+    expect(calcExtraShots(-2, 17)).toBe(-1);
+    expect(calcExtraShots(-2, 16)).toBe(0);
+    expect(calcExtraShots(-2, 1)).toBe(0);
+  });
+
+  it('handles a -18 handicap (exactly one stroke back per hole)', () => {
+    expect(calcExtraShots(-18, 1)).toBe(-1);
+    expect(calcExtraShots(-18, 18)).toBe(-1);
+  });
+
+  it('stacks base strokes back plus the remainder below -18', () => {
+    // handicap -19 -> one back everywhere, a second back on SI 18
+    expect(calcExtraShots(-19, 18)).toBe(-2);
+    expect(calcExtraShots(-19, 17)).toBe(-1);
+    expect(calcExtraShots(-19, 1)).toBe(-1);
+  });
 });
 
 describe('calcStablefordPoints', () => {
