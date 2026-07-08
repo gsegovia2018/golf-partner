@@ -31,6 +31,7 @@ export function metaPathFor(m) {
       for (const patch of (m.roundPatches ?? [])) {
         paths.push(`rounds.${patch.roundId}.playerHandicaps.${m.player.id}`);
         if (patch.pairs) paths.push(`rounds.${patch.roundId}.pairs`);
+        if (patch.clearScoringMode) paths.push(`rounds.${patch.roundId}.scoringMode`);
       }
       if (m.nextScoringMode) paths.push('settings.scoringMode');
       return paths;
@@ -46,6 +47,7 @@ export function metaPathFor(m) {
         paths.push(`rounds.${patch.roundId}.shotDetails.${m.playerId}`);
         paths.push(`rounds.${patch.roundId}.scoreConflicts.${m.playerId}`);
         if (patch.pairs) paths.push(`rounds.${patch.roundId}.pairs`);
+        if (patch.clearScoringMode) paths.push(`rounds.${patch.roundId}.scoringMode`);
       }
       if (m.nextScoringMode) paths.push('settings.scoringMode');
       return paths;
@@ -164,6 +166,9 @@ export function applyToTournament(t, m) {
           [m.player.id]: patch.playerHandicap,
         };
         if (patch.pairs) round.pairs = patch.pairs;
+        // The new roster size invalidated this round's override — it falls
+        // back to the tournament's (possibly also new) default mode.
+        if (patch.clearScoringMode) delete round.scoringMode;
       }
       if (m.nextScoringMode) {
         t.settings = { ...(t.settings ?? {}), scoringMode: m.nextScoringMode };
@@ -190,6 +195,9 @@ export function applyToTournament(t, m) {
           round.scoreConflicts = scoreConflicts;
         }
         if (patch.pairs) round.pairs = patch.pairs;
+        // See tournament.addPlayer: the smaller roster invalidated this
+        // round's override.
+        if (patch.clearScoringMode) delete round.scoringMode;
       }
       if (m.nextScoringMode) {
         t.settings = { ...(t.settings ?? {}), scoringMode: m.nextScoringMode };

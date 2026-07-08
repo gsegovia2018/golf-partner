@@ -210,3 +210,62 @@ describe('removePlayerRoundPatches fixedTeams', () => {
     expect(patches[0].pairs).toEqual([[A, B], [C]]);
   });
 });
+
+describe('removePlayerRoundPatches per-round mode overrides', () => {
+  test('builds each future round with its own effective mode', () => {
+    const t = makeTournament({
+      players: [A, B, C, D],
+      mode: 'stableford',
+      rounds: [
+        makeRound({ id: 'r0' }),
+        { ...makeRound({ id: 'r1', revealed: true, pairs: [[A], [B, C], [D]] }), scoringMode: 'sindicato' },
+      ],
+    });
+    const { patches } = removePlayerRoundPatches(t, 'd'); // 3 survivors
+    const r0 = patches.find((p) => p.roundId === 'r0');
+    const r1 = patches.find((p) => p.roundId === 'r1');
+    // r0 has no override: falls back to nextScoringMode (stableford stays valid at 3).
+    expect(r0.pairs.flat().map((p) => p.id).sort()).toEqual(['a', 'b', 'c']);
+    expect(r0.clearScoringMode).toBeUndefined();
+    // sindicato stays valid at 3 survivors → solo groups, no clear.
+    expect(r1.pairs).toEqual([[A], [B], [C]]);
+    expect(r1.clearScoringMode).toBeUndefined();
+  });
+
+  test('clears an override that the new roster invalidates', () => {
+    const t = makeTournament({
+      players: [A, B, C, D],
+      mode: 'individual',
+      rounds: [{ ...makeRound({ id: 'r0' }), scoringMode: 'scramblepairs' }],
+    });
+    const { patches } = removePlayerRoundPatches(t, 'd'); // 3 survivors
+    const r0 = patches.find((p) => p.roundId === 'r0');
+    // scramblepairs needs exactly 4 — invalid at 3 survivors.
+    expect(r0.clearScoringMode).toBe(true);
+    // pairs rebuilt for the fallback (nextScoringMode → individual, stays valid).
+    expect(r0.pairs.flat()).toHaveLength(3);
+  });
+
+  test('fixedTeams caches pairs per team shape, not once overall', () => {
+    const t = makeTournament({
+      players: [A, B, C, D],
+      mode: 'individual',
+      fixedTeams: true,
+      rounds: [
+        { ...makeRound({ id: 'r0' }), scoringMode: 'stableford' },
+        { ...makeRound({ id: 'r1' }), scoringMode: 'stableford' },
+        makeRound({ id: 'r2' }), // no override → individual (solo shape)
+      ],
+    });
+    const { patches } = removePlayerRoundPatches(t, 'd'); // 3 survivors
+    const r0 = patches.find((p) => p.roundId === 'r0');
+    const r1 = patches.find((p) => p.roundId === 'r1');
+    const r2 = patches.find((p) => p.roundId === 'r2');
+    // Same shape (2x2) → identical cached pairs across r0/r1.
+    expect(r1.pairs.map((pr) => pr.map((p) => p.id).sort())).toEqual(
+      r0.pairs.map((pr) => pr.map((p) => p.id).sort()),
+    );
+    // Different shape (solo) → not the fixed-team pairs.
+    expect(r2.pairs).toEqual([[A], [B], [C]]);
+  });
+});
