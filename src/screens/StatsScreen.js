@@ -131,8 +131,14 @@ export default function StatsScreen({ navigation }) {
   const completedRounds = tournament.rounds.filter(r => r.scores && Object.keys(r.scores).length > 0);
   const scoringMode = tournament.settings?.scoringMode;
   const isSolo = players.length === 1;
+  // Scramble scores exist only under each team's captain — players have no
+  // individual scores — so BOTH the pair stats (usesTeams) and the
+  // Head-to-Head section are meaningless. Keep the flags separate: usesTeams
+  // gates team/pair UI, isScramble must ALSO gate anything that assumes
+  // per-player scores (e.g. H2H), which `!usesTeams` alone would re-enable.
+  const isScramble = isScrambleMode(scoringMode);
   const usesTeams = !isSolo && scoringModeUsesTeams(scoringMode, players.length)
-    && !isScrambleMode(scoringMode);
+    && !isScramble;
   const hasMulti = players.length > 1;
   const visibleTabs = ALL_TABS.filter(t => t.key !== 'pairs' || usesTeams);
   const activeTab = visibleTabs.some(t => t.key === tab) ? tab : 'overview';
@@ -196,7 +202,7 @@ export default function StatsScreen({ navigation }) {
       {activeTab === 'overview' && (
         <ScrollView ref={overviewScrollRef} style={s.scrollView} contentContainerStyle={s.content}>
           <OverviewTab tournament={tournament} metric={metric} hasMulti={hasMulti} usesTeams={usesTeams}
-            roundScope={roundScope} scrollRef={overviewScrollRef} theme={theme} s={s} />
+            isScramble={isScramble} roundScope={roundScope} scrollRef={overviewScrollRef} theme={theme} s={s} />
         </ScrollView>
       )}
       {activeTab === 'players' && (
@@ -300,7 +306,7 @@ function SectionAnchor({ anchorKey, anchors, children }) {
 }
 
 // ── Overview Tab ──
-function OverviewTab({ tournament, metric, hasMulti, usesTeams, roundScope, scrollRef, theme, s }) {
+function OverviewTab({ tournament, metric, hasMulti, usesTeams, isScramble, roundScope, scrollRef, theme, s }) {
   // Round scope is now screen-level; treat the prop as the source of truth.
   const roundIndex = roundScope;
   const highlights = tournamentHighlights(tournament, { metric, roundIndex });
@@ -497,7 +503,10 @@ function OverviewTab({ tournament, metric, hasMulti, usesTeams, roundScope, scro
   const showConsistency = roundIndex === null && consistency.length > 0;
   const showDna = roundIndex === null && dna.length > 0 && dna[0].courses.length > 0;
   const showSi = siAccuracy.length > 0;
-  const showH2H = hasMulti && !usesTeams && roundIndex === null;
+  // H2H compares per-player scores, which scramble rounds don't have (the
+  // team ball lives under the captain) — so scramble must stay hidden even
+  // though its usesTeams flag is false.
+  const showH2H = hasMulti && !usesTeams && !isScramble && roundIndex === null;
   const indexSections = [
     { key: 'highlights', label: 'Highlights' },
     showMomentum && { key: 'momentum', label: 'Momentum' },
