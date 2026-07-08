@@ -26,7 +26,7 @@ const MODE_SECTIONS = scoringModeCategories();
 
 // --- Bottom-sheet mode list ----------------------------------------------
 
-function ScoringModeSheet({ visible, value, playerCount, onSelect, onClose }) {
+export function ScoringModeSheet({ visible, value, playerCount, onSelect, onClose }) {
   const { theme } = useTheme();
   const s = makeStyles(theme);
   const { height } = useWindowDimensions();
