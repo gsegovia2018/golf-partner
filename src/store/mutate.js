@@ -128,8 +128,10 @@ export function applyToTournament(t, m) {
       const round = t.rounds.find((r) => r.id === m.roundId);
       if (!round) return;
       round.pairs = m.pairs;
-      // `revealed` is monotonic — setting pairs always reveals them.
-      round.revealed = true;
+      // `revealed` is monotonic — setting pairs reveals them, except when a
+      // fixed-teams edit propagates pairs to future rounds that haven't had
+      // their own reveal yet (m.reveal === false preserves their state).
+      if (m.reveal !== false) round.revealed = true;
       break;
     }
     case 'handicap.set': {
