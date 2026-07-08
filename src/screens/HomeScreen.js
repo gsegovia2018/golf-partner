@@ -746,13 +746,24 @@ export default function HomeScreen({ navigation, route }) {
   async function saveScoringMode() {
     if (!tournament || !scoringDraft) return;
     try {
-      const { patches } = setScoringModeRoundPatches(tournament, scoringDraft.scoringMode);
+      // Merge the draft first so the patch builder sees the settings being
+      // saved (notably fixedTeams) rather than the pre-save tournament's —
+      // turning "same teams every round" on must unify THIS save's patches.
+      // The tournament handed to the patch builder keeps its pre-save
+      // scoringMode: setScoringModeRoundPatches reads the OLD mode from
+      // settings.scoringMode and takes the NEW mode as its argument.
+      const mergedSettings = mergeScoringSettings(tournament.settings, scoringDraft);
+      const patchSource = {
+        ...tournament,
+        settings: { ...mergedSettings, scoringMode: tournament.settings?.scoringMode ?? 'stableford' },
+      };
+      const { patches } = setScoringModeRoundPatches(patchSource, scoringDraft.scoringMode);
       const pairsByRound = new Map(
         patches.filter((p) => p.pairs).map((p) => [p.roundId, p.pairs]),
       );
       const updated = {
         ...tournament,
-        settings: mergeScoringSettings(tournament.settings, scoringDraft),
+        settings: mergedSettings,
         rounds: (tournament.rounds ?? []).map((r) => (
           pairsByRound.has(r.id) ? { ...r, pairs: pairsByRound.get(r.id) } : r
         )),
@@ -1964,6 +1975,7 @@ export default function HomeScreen({ navigation, route }) {
                   scoringMode: tournament.settings?.scoringMode ?? 'stableford',
                   bestBallValue: String(tournament.settings?.bestBallValue ?? 1),
                   worstBallValue: String(tournament.settings?.worstBallValue ?? 1),
+                  fixedTeams: Boolean(tournament.settings?.fixedTeams),
                 });
                 setShowScoringModeSheet(true);
               }}

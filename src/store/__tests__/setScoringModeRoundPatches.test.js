@@ -1,4 +1,5 @@
 import { setScoringModeRoundPatches } from '../tournamentStore';
+import { mergeScoringSettings } from '../../components/scoringModes';
 
 function makeTournament({ players, mode, rounds, currentRound = 0, fixedTeams = false }) {
   return {
@@ -175,5 +176,44 @@ describe('fixedTeams', () => {
     const { patches } = setScoringModeRoundPatches(t, 'bestball');
     expect(pairIds(patches[0].pairs)).toEqual([['a', 'b'], ['c', 'd']]);
     expect(pairIds(patches[1].pairs)).toEqual(pairIds(patches[0].pairs));
+  });
+
+  // Regression for the Home screen's Scoring Mode sheet: the stored settings
+  // still say fixedTeams:false, but the user just toggled it ON in the draft
+  // being saved. HomeScreen merges the draft first and hands the patch
+  // builder a tournament whose settings carry the draft's fixedTeams while
+  // keeping the PRE-save scoringMode (the builder reads the old mode from
+  // settings.scoringMode and takes the new mode as its argument). Called
+  // that way, the same save that enables the flag must already produce
+  // identical pairs for every future round.
+  test('draft-enabled fixedTeams unifies patches in the same save (HomeScreen call shape)', () => {
+    const t = makeTournament({
+      players: [A, B, C, D],
+      mode: 'individual',
+      fixedTeams: false, // stored settings pre-save
+      currentRound: 0,
+      rounds: [
+        makeRound({ id: 'r0', revealed: false, pairs: [] }),
+        makeRound({ id: 'r1', revealed: false, pairs: [] }),
+        makeRound({ id: 'r2', revealed: false, pairs: [] }),
+      ],
+    });
+    const draft = {
+      scoringMode: 'bestball', bestBallValue: '1', worstBallValue: '1', fixedTeams: true,
+    };
+    const mergedSettings = mergeScoringSettings(t.settings, draft);
+    expect(mergedSettings.fixedTeams).toBe(true);
+    const patchSource = {
+      ...t,
+      settings: { ...mergedSettings, scoringMode: t.settings.scoringMode },
+    };
+    const { patches } = setScoringModeRoundPatches(patchSource, draft.scoringMode);
+    expect(patches).toHaveLength(3);
+    const [p0, p1, p2] = patches.map((p) => pairIds(p.pairs));
+    expect(p0).toEqual(p1);
+    expect(p1).toEqual(p2);
+    // And the shape matches the NEW mode (bestball: two pairs of two).
+    expect(patches[0].pairs).toHaveLength(2);
+    expect(patches[0].pairs.every((pr) => pr.length === 2)).toBe(true);
   });
 });
