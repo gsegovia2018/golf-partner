@@ -6,8 +6,8 @@ import {
 
 // ── Fixture helpers ───────────────────────────────────────────────
 // hcp default 0; SI defaults to hole number; par defaults to 4.
-function mkRound({ courseName = 'Course', holes, scores = {}, shotDetails = {}, playerHandicaps = {} }) {
-  return { courseName, holes, scores, shotDetails, playerHandicaps };
+function mkRound({ courseName = 'Course', holes, scores = {}, shotDetails = {}, playerHandicaps = {}, playerTees = null }) {
+  return { courseName, holes, scores, shotDetails, playerHandicaps, playerTees };
 }
 // 18 holes, par 4, strokeIndex = hole number.
 function holes18() {
@@ -225,6 +225,23 @@ describe('buildSyntheticTournament', () => {
     expect(t.rounds[0].playerHandicaps[CANON_ID]).toBe(9);
   });
 
+  test('re-keys playerTees so legacy rounds fall back to the right tee', () => {
+    const h = holes18();
+    // Legacy round: no playerHandicaps, handicap derives from the tee set.
+    const myRounds = collectMyRounds([{
+      id: 6, name: 'T', players: [{ id: 'origA', name: 'Me', handicap: 9, user_id: 'u1' }],
+      rounds: [mkRound({
+        holes: h,
+        scores: { origA: evenScores(h, 4) },
+        playerHandicaps: {},
+        playerTees: { origA: { label: 'Yellow', slope: 130, rating: 71.2 } },
+      })],
+    }], 'u1');
+    const t = buildSyntheticTournament(myRounds);
+    expect(t.rounds[0].playerTees[CANON_ID]).toEqual({ label: 'Yellow', slope: 130, rating: 71.2 });
+    expect(t.rounds[0].playerTees.origA).toBeUndefined();
+  });
+
   test('keeps each round under its own original player id (different per tournament)', () => {
     const h = holes18();
     const myRounds = collectMyRounds([
@@ -290,6 +307,20 @@ describe('computeMetrics', () => {
     expect(m.fairwayPct).toBe(100);
     expect(m.puttsPerRound).toBe(36);
   });
+
+  test('shot metrics are null, not 0, when no shot detail exists', () => {
+    const h = holes18();
+    const myRounds = collectMyRounds([{
+      id: 1, name: 'T', players: [{ id: 'p1', handicap: 0, user_id: 'u1' }],
+      rounds: [mkRound({ holes: h, scores: { p1: evenScores(h, 4) }, playerHandicaps: { p1: 0 } })],
+    }], 'u1');
+    const m = computeMetrics(buildSyntheticTournament(myRounds));
+    expect(m.hasShotData).toBe(false);
+    expect(m.fairwayPct).toBeNull();
+    expect(m.girPct).toBeNull();
+    expect(m.puttsPerRound).toBeNull();
+    expect(m.threePuttsPerRound).toBeNull();
+  });
 });
 
 describe('computeRecentVsHistory', () => {
@@ -329,6 +360,28 @@ describe('computeRecentVsHistory', () => {
     const points = r.metrics.find((m) => m.key === 'avgPoints');
     expect(points.history).toBeNull();
     expect(points.delta).toBeNull();
+  });
+
+  test('shot metrics show no delta when only recent rounds have shot detail', () => {
+    // 7 rounds, N=5: history = first 2 (no shot detail), recent = last 5 (tracked).
+    const tournaments = roundsTournament([5, 5, 4, 4, 4, 4, 4]);
+    const h = holes18();
+    tournaments[0].rounds.forEach((round, i) => {
+      if (i < 2) return; // history rounds stay untracked
+      round.shotDetails = {
+        p1: Object.fromEntries(h.map((hole) => [hole.number, { putts: 2, drive: 'fairway' }])),
+      };
+    });
+    const my = collectMyRounds(tournaments, 'u1');
+    const r = computeRecentVsHistory(my, 5);
+    expect(r.hasHistory).toBe(true);
+    ['fairwayPct', 'girPct', 'puttsPerRound', 'threePuttsPerRound'].forEach((key) => {
+      const m = r.metrics.find((x) => x.key === key);
+      expect(m.recent).not.toBeNull();
+      expect(m.history).toBeNull();   // untracked slice must not read as 0
+      expect(m.delta).toBeNull();     // no fake "+45 vs 0%" delta
+      expect(m.direction).toBe('flat');
+    });
   });
 
   test('direction respects polarity — fewer strokes-vs-par is an improvement', () => {

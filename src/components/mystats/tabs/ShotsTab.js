@@ -470,8 +470,8 @@ function makeApproachTargetRows(approachTarget) {
 }
 
 function makePuttingVolumeRows(shots, shotBenchmark) {
-  const threePuttsPerRound = shots.roundsWithData > 0
-    ? round1(shots.putts.threePuttPlus / shots.roundsWithData)
+  const threePuttsPerRound = shots.roundsWithPuttData > 0
+    ? round1(shots.putts.threePuttPlus / shots.roundsWithPuttData)
     : 0;
   return [
     {
@@ -498,7 +498,7 @@ function makePuttingVolumeRows(shots, shotBenchmark) {
       value: threePuttsPerRound,
       secondary: targetSecondary([
         `${shots.putts.threePuttPlus} total`,
-        sampleText(shots.roundsWithData, 'rounds'),
+        sampleText(shots.roundsWithPuttData, 'rounds'),
         `target ${formatBenchmarkNumber(shotBenchmark.threePuttsPerRound)}`,
       ], shots.putts.holes, 9),
       tone: toneFromComparison({

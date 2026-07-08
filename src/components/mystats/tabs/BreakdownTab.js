@@ -336,11 +336,11 @@ function makeApproachPatternRows(approachImpact, baseline) {
 function makePuttingPatternRows({ shots, puttDive }) {
   const rows = [];
   if (shots?.hasData) {
-    const threePuttsPerRound = shots.roundsWithData > 0
-      ? round1(shots.putts.threePuttPlus / shots.roundsWithData)
+    const threePuttsPerRound = shots.roundsWithPuttData > 0
+      ? round1(shots.putts.threePuttPlus / shots.roundsWithPuttData)
       : 0;
     const puttsTotal = shots.putts.total ?? (
-      shots.roundsWithData > 0 ? Math.round(shots.putts.perRound * shots.roundsWithData) : null
+      shots.roundsWithPuttData > 0 ? Math.round(shots.putts.perRound * shots.roundsWithPuttData) : null
     );
     rows.push(
       {
@@ -374,7 +374,7 @@ function makePuttingPatternRows({ shots, puttDive }) {
         value: formatNumber(threePuttsPerRound),
         secondary: sampleSecondary([
           `${shots.putts.threePuttPlus} total`,
-          sampleText(shots.roundsWithData, 'rounds'),
+          sampleText(shots.roundsWithPuttData, 'rounds'),
         ], shots.putts.holes, 9),
         tone: toneFromComparison({
           value: threePuttsPerRound,

@@ -286,6 +286,9 @@ export function tournamentHighlights(tournament, { metric = 'points', roundIndex
       .filter(r => roundIndex === null || r.roundIndex === roundIndex);
     history.forEach(r => {
       const round = tournament.rounds[r.roundIndex];
+      // For strokes, only fully-scored rounds are comparable — a 9-hole entry
+      // would otherwise "win" best round on raw stroke count.
+      if (isStrokes && r.holesPlayed !== round.holes.length) return;
       const handicap = getPlayingHandicap(round, p);
       const holes = round.holes
         .map(h => {
@@ -1417,12 +1420,13 @@ export function shotStats(tournament, playerId) {
   const driveDistribution = { fairway: 0, left: 0, right: 0, short: 0, super: 0 };
   let teePenalties = 0, otherPenalties = 0;
   let girHoles = 0, girEligible = 0;
-  let roundsWithData = 0;
+  let roundsWithData = 0, roundsWithPuttData = 0;
 
   rounds.forEach((round) => {
     const byHole = round?.shotDetails?.[playerId];
     if (!byHole) return;
     let roundHasData = false;
+    let roundHasPutts = false;
     (round.holes ?? []).forEach((hole) => {
       const d = byHole[hole.number];
       if (!d) return;
@@ -1433,6 +1437,7 @@ export function shotStats(tournament, playerId) {
       if (d.putts != null) {
         puttsTotal += d.putts;
         holesWithPutts += 1;
+        roundHasPutts = true;
         if (d.putts === 1) onePutts += 1;
         if (d.putts >= 3) threePuttPlus += 1;
       }
@@ -1453,6 +1458,7 @@ export function shotStats(tournament, playerId) {
       }
     });
     if (roundHasData) roundsWithData += 1;
+    if (roundHasPutts) roundsWithPuttData += 1;
   });
 
   const round1 = (n) => Math.round(n * 10) / 10;
@@ -1460,11 +1466,14 @@ export function shotStats(tournament, playerId) {
     hasData: holesWithPutts > 0 || drivesRecorded > 0
       || teePenalties > 0 || otherPenalties > 0,
     roundsWithData,
+    // Per-round putting rates must divide by rounds that logged putts — a
+    // drive-only round in roundsWithData would deflate them.
+    roundsWithPuttData,
     putts: {
       total: puttsTotal,
       holes: holesWithPutts,
       perHole: holesWithPutts > 0 ? round1(puttsTotal / holesWithPutts) : 0,
-      perRound: roundsWithData > 0 ? round1(puttsTotal / roundsWithData) : 0,
+      perRound: roundsWithPuttData > 0 ? round1(puttsTotal / roundsWithPuttData) : 0,
       onePutts,
       threePuttPlus,
     },
@@ -2173,8 +2182,12 @@ export function sgPenalties(round, playerId) {
   const byHole = round?.shotDetails?.[playerId];
   const perHole = (round?.holes ?? []).map((hole) => {
     const d = byHole?.[hole.number];
-    const penalty = (d?.teePenalties ?? 0) + (d?.otherPenalties ?? 0);
-    return penalty > 0 ? -penalty : null;
+    // Every tracked hole counts in the sample — a clean one contributes 0 so
+    // penalty-free rounds stay in the season denominator. Untracked holes
+    // stay null: no shot detail means we don't know there were no penalties.
+    if (!d) return null;
+    const penalty = (d.teePenalties ?? 0) + (d.otherPenalties ?? 0);
+    return penalty > 0 ? -penalty : 0;
   });
   const sample = perHole.filter((x) => x != null);
   const total = sample.reduce((a, x) => a + x, 0);
