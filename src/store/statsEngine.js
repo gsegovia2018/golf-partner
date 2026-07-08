@@ -238,6 +238,7 @@ export function pairPerformance(tournament) {
   tournament.rounds.forEach((round, roundIndex) => {
     if (!round.pairs || !round.scores || Object.keys(round.scores).length === 0) return;
     round.pairs.forEach(pair => {
+      if (!Array.isArray(pair) || pair.length < 2) return; // singleton pair (odd roster)
       const key = [pair[0].id, pair[1].id].sort().join('-');
       if (!pairMap[key]) {
         pairMap[key] = { players: [pair[0], pair[1]], rounds: 0, totalPoints: 0, roundList: [] };
