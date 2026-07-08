@@ -12,6 +12,8 @@
 // randomPairs, which is deliberately non-deterministic.
 // ============================================================================
 
+import { scoringModeUsesTeams } from '../components/scoringModes';
+
 export const STANDARD_SLOPE = 113;
 
 // Sum hole pars; used as the "Par" term in the WHS course-handicap formula.
@@ -231,20 +233,42 @@ export function pickupStrokes(par, playerHandicap, holeStrokeIndex) {
   return par + 2 + extra;
 }
 
-// Split players into pairs at random. Uses an unbiased Fisher-Yates shuffle
-// (the old `sort(() => Math.random() - 0.5)` produced a skewed distribution).
-export function randomPairs(players) {
+// Fisher-Yates copy-shuffle shared by randomPairs and buildTeamsForMode.
+export function shufflePlayers(players) {
   const shuffled = [...players];
   for (let i = shuffled.length - 1; i > 0; i--) {
     const j = Math.floor(Math.random() * (i + 1));
     [shuffled[i], shuffled[j]] = [shuffled[j], shuffled[i]];
   }
+  return shuffled;
+}
+
+// Split players into pairs at random. Uses an unbiased Fisher-Yates shuffle
+// (the old `sort(() => Math.random() - 0.5)` produced a skewed distribution).
+export function randomPairs(players) {
+  const shuffled = shufflePlayers(players);
   const pairs = [];
   for (let i = 0; i < shuffled.length; i += 2) {
     const pair = [shuffled[i], shuffled[i + 1]].filter(Boolean);
     if (pair.length > 0) pairs.push(pair);
   }
   return pairs;
+}
+
+// Team shapes per mode. 2x2 modes ride randomPairs; scramble3v1 splits a
+// shuffled roster 3+1 (the solo player is random); scramble4 is one team.
+// Invalid mode/roster combos degrade to singleton pairs, matching the
+// existing non-team fallback everywhere pairs are built.
+export function buildTeamsForMode(mode, players) {
+  if (!scoringModeUsesTeams(mode, players.length)) {
+    return players.map((p) => [p]);
+  }
+  if (mode === 'scramble4') return [shufflePlayers(players)];
+  if (mode === 'scramble3v1') {
+    const shuffled = shufflePlayers(players);
+    return [shuffled.slice(0, 3), shuffled.slice(3)];
+  }
+  return randomPairs(players);
 }
 
 // A round counts toward tournament totals once it's been reached (its index is

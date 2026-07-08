@@ -13,6 +13,7 @@ import {
   matchPlayRoundTally,
   pickupStrokes,
   randomPairs,
+  buildTeamsForMode,
   isRoundPlayed,
   sindicatoHolePoints,
   sindicatoRoundTally,
@@ -762,5 +763,44 @@ describe('listRoundConflicts / roundHasConflicts', () => {
     const round = { id: 'r1', scoreConflicts: { p1: { 7: undefined } } };
     expect(listRoundConflicts(round)).toEqual([]);
     expect(roundHasConflicts(round)).toBe(false);
+  });
+});
+
+describe('buildTeamsForMode', () => {
+  const four = [{ id: 'a' }, { id: 'b' }, { id: 'c' }, { id: 'd' }];
+
+  it('scramblepairs / pairsmatchplay → two teams of two', () => {
+    for (const mode of ['scramblepairs', 'pairsmatchplay']) {
+      const teams = buildTeamsForMode(mode, four);
+      expect(teams).toHaveLength(2);
+      expect(teams[0]).toHaveLength(2);
+      expect(teams[1]).toHaveLength(2);
+      expect(teams.flat().map((p) => p.id).sort()).toEqual(['a', 'b', 'c', 'd']);
+    }
+  });
+
+  it('scramble3v1 → a team of three and a solo side', () => {
+    const teams = buildTeamsForMode('scramble3v1', four);
+    expect(teams.map((t) => t.length)).toEqual([3, 1]);
+    expect(teams.flat().map((p) => p.id).sort()).toEqual(['a', 'b', 'c', 'd']);
+  });
+
+  it('scramble4 → one team of four', () => {
+    const teams = buildTeamsForMode('scramble4', four);
+    expect(teams).toHaveLength(1);
+    expect(teams[0]).toHaveLength(4);
+  });
+
+  it('non-team or invalid roster → singleton pairs', () => {
+    expect(buildTeamsForMode('individual', four)).toEqual(four.map((p) => [p]));
+    expect(buildTeamsForMode('scramble4', four.slice(0, 3))).toEqual(
+      four.slice(0, 3).map((p) => [p]),
+    );
+  });
+
+  it('existing team mode still routes through randomPairs shape', () => {
+    const teams = buildTeamsForMode('stableford', four);
+    expect(teams).toHaveLength(2);
+    expect(teams.every((t) => t.length === 2)).toBe(true);
   });
 });
