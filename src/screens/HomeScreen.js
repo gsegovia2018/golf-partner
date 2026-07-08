@@ -102,11 +102,15 @@ export default function HomeScreen({ navigation, route }) {
   const [needsGender, setNeedsGender] = useState(false);
   useEffect(() => {
     let alive = true;
-    loadProfile()
-      .then((p) => { if (alive) setNeedsGender(!!p && !p.gender); })
-      .catch(() => {});
-    return () => { alive = false; };
-  }, []);
+    const refreshGender = () => {
+      loadProfile()
+        .then((p) => { if (alive) setNeedsGender(!!p && !p.gender); })
+        .catch(() => {});
+    };
+    refreshGender();
+    const unsubFocus = navigation.addListener('focus', refreshGender);
+    return () => { alive = false; unsubFocus(); };
+  }, [navigation]);
   const initialTournament = useMemo(
     () => (routeTournamentId ? getTournamentSnapshot(routeTournamentId) : getActiveTournamentSnapshot()),
     [routeTournamentId],
