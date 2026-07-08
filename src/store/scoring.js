@@ -777,11 +777,12 @@ export function tournamentMatchPlayStandings(tournament) {
   let holesRemaining = 0;
   const strokes = { [a.id]: 0, [b.id]: 0 };
   rounds.forEach((round, idx) => {
+    // A non-matchplay round can never yield match points, so it contributes
+    // nothing — not even to holesRemaining (its holes would inflate the
+    // clinch denominator and suppress a mathematically-decided "wins").
+    if (roundScoringMode(tournament, round) !== 'matchplay') return;
     const future = idx > (tournament.currentRound ?? 0);
-    // A non-matchplay round contributes no match points (and its strokes
-    // aren't matchplay strokes) — treat it like a future round for the
-    // clinch calculation: its holes stay "remaining", never decided.
-    if (future || roundScoringMode(tournament, round) !== 'matchplay') {
+    if (future) {
       holesRemaining += round.holes?.length ?? 0;
       return;
     }

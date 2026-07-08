@@ -605,6 +605,31 @@ describe('tournamentMatchPlayStandings', () => {
     };
     expect(tournamentMatchPlayStandings(t).status).toBe('Alex leads by 2');
   });
+
+  test('non-matchplay rounds contribute nothing — not even remaining holes', () => {
+    // Round 0 (played, matchplay, 3 holes): a wins all 3 → lead 3.
+    // Round 1 (future, matchplay, 2 holes): 2 real holes remaining.
+    // Round 2 (stableford override, 2 holes): can never yield match points,
+    // so its holes must NOT count as remaining. Lead 3 > 2 remaining → wins.
+    const holes3 = [
+      { number: 1, par: 4, strokeIndex: 1 },
+      { number: 2, par: 4, strokeIndex: 2 },
+      { number: 3, par: 4, strokeIndex: 3 },
+    ];
+    const played = {
+      holes: holes3, playerHandicaps: {},
+      scores: { a: { 1: 4, 2: 4, 3: 4 }, b: { 1: 5, 2: 5, 3: 5 } },
+    };
+    const futureMp = { holes, playerHandicaps: {}, scores: {} };
+    const stablefordRound = { holes, playerHandicaps: {}, scores: {}, scoringMode: 'stableford' };
+    const t = {
+      players,
+      settings: { scoringMode: 'matchplay' },
+      rounds: [played, futureMp, stablefordRound],
+      currentRound: 0,
+    };
+    expect(tournamentMatchPlayStandings(t).status).toBe('Alex wins');
+  });
 });
 
 describe('isGIR', () => {
