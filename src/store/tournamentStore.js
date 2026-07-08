@@ -583,6 +583,7 @@ export {
   buildTeamsForMode,
   scrambleUnits,
   scrambleRoundTally,
+  tournamentScrambleLeaderboard,
 } from './scoring';
 
 export {
@@ -590,6 +591,7 @@ export {
   pairsMatchHolePts,
   pairsMatchDuelPts,
   pairsMatchRoundTally,
+  tournamentPairsMatchStandings,
 } from './scoring';
 
 // Push a player library edit (name/handicap) into every tournament that
