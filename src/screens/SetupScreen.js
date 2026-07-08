@@ -8,7 +8,7 @@ import ScreenContainer from '../components/ScreenContainer';
 import { Feather } from '@expo/vector-icons';
 import { useFocusEffect, CommonActions } from '@react-navigation/native';
 import {
-  createTournament, saveTournament, buildTeamsForMode, DEFAULT_SETTINGS,
+  createTournament, saveTournament, buildTeamsForMode, teamShapeOf, DEFAULT_SETTINGS,
   deriveRoundPlayingHandicap, generateInviteCode, buildJoinLink,
 } from '../store/tournamentStore';
 import { defaultHoles, fetchPlayers, fetchMyPlayers } from '../store/libraryStore';
@@ -308,9 +308,13 @@ export default function SetupScreen({ navigation, route }) {
     }
     // Manual team selection: push the team editor for round 0 on top of the
     // destination above. Its Save goes back (navigation.goBack()), landing
-    // the user on the scorecard/tournament view they'd normally reach.
+    // the user on the scorecard/tournament view they'd normally reach. Keyed
+    // on round 0's EFFECTIVE mode (its own override, or the tournament
+    // default) — a per-round override on round 0 should route the same way
+    // a tournament-wide mode of that shape would.
+    const round0Mode = tournament?.rounds?.[0]?.scoringMode ?? tournament?.settings?.scoringMode;
     if (needsManualTeamSetup(
-      tournament?.settings?.scoringMode,
+      round0Mode,
       tournament?.players?.length,
       tournament?.settings?.manualTeams,
     )) {
@@ -359,16 +363,28 @@ export default function SetupScreen({ navigation, route }) {
       return;
     }
 
-    // Pairs are built from the scoring mode via buildTeamsForMode, which
+    // Pairs are built from each round's effective scoring mode (its own
+    // override, or the tournament default) via buildTeamsForMode, which
     // covers every team shape (2x2 / 3+1 / 1x4) and falls back to one
-    // singleton pair per player for solo modes.
+    // singleton pair per player for solo modes. The matchplay bestBall/
+    // worstBall special-case below is keyed on the tournament DEFAULT mode
+    // only — per-round overrides don't change tournament-level settings
+    // fields, only the built round's own scoringMode/pairs.
     const isMatchPlay = settings.scoringMode === 'matchplay';
-    const buildPairs = () => buildTeamsForMode(settings.scoringMode, players);
-    // With fixedTeams on, build the team shape once and reuse it for every
-    // round instead of calling buildPairs() (and re-randomizing) per round.
-    const fixedPairs = settings.fixedTeams ? buildPairs() : null;
+    // With fixedTeams on, build each team SHAPE once and reuse it for every
+    // round of that shape instead of re-randomizing per round. Rounds whose
+    // effective mode maps to a different shape (e.g. a scramble3v1 override
+    // in an otherwise 2x2 tournament) get their own cached build.
+    const fixedPairsByShape = {};
+    const pairsFor = (mode) => {
+      if (!settings.fixedTeams) return buildTeamsForMode(mode, players);
+      const shape = teamShapeOf(mode);
+      if (!fixedPairsByShape[shape]) fixedPairsByShape[shape] = buildTeamsForMode(mode, players);
+      return fixedPairsByShape[shape].map((pr) => [...pr]);
+    };
 
     const builtRounds = rounds.map((r, i) => {
+      const roundMode = r.scoringMode ?? settings.scoringMode;
       // Defensive: if a round somehow has no per-player tees (e.g. the round
       // object was built outside the Tees & Handicaps step), default every
       // player to the course's middle tee so playing handicaps are
@@ -400,7 +416,8 @@ export default function SetupScreen({ navigation, route }) {
         playerTees,
         manualHandicaps: { ...(r.manualHandicaps ?? {}) },
         notes: '',
-        pairs: fixedPairs ? fixedPairs.map((pr) => [...pr]) : buildPairs(),
+        ...(r.scoringMode ? { scoringMode: r.scoringMode } : {}),
+        pairs: pairsFor(roundMode),
         scores: {},
       };
     });
@@ -693,6 +710,20 @@ export default function SetupScreen({ navigation, route }) {
         settings={settings}
         onSettingsChange={setSettings}
       />
+      {rounds.length > 1 && rounds.map((r, i) => (
+        <View key={r.id ?? `scoring-round-${i}`} style={s.teesRoundBlock}>
+          <Text style={s.roundLabel}>Round {i + 1} · {r.courseName || 'Course'}</Text>
+          <View style={s.teesRoundCard}>
+            <ScoringModePicker
+              value={r.scoringMode ?? settings.scoringMode}
+              onChange={(mode) => setRounds((prev) => prev.map((x, j) => (
+                j === i ? { ...x, scoringMode: mode === settings.scoringMode ? undefined : mode } : x
+              )))}
+              playerCount={players.length}
+            />
+          </View>
+        </View>
+      ))}
     </>
   );
 
