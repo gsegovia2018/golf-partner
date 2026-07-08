@@ -149,6 +149,39 @@ export default function StatsScreen({ navigation }) {
   // fall back to the first completed round so they still show data.
   const effectiveRound = roundScope != null ? roundScope : (firstCompletedIdx >= 0 ? firstCompletedIdx : null);
 
+  // Scramble tournaments store ONE team ball under each team's captain
+  // (pair[0]), scored off the scramble team handicap — there are no personal
+  // scores at all. Every stats tab here is built from per-player aggregates
+  // (highlights, streaks, hole heatmaps, shame, shot impact), so running them
+  // on scramble data would credit the whole team's play to the captain and
+  // show nothing for everyone else. Same reasoning as the H2H/Pairs gating
+  // below, applied to the whole stats body: show a friendly placeholder
+  // instead of misleading numbers.
+  if (isScramble) {
+    return (
+      <ScreenContainer style={s.container} edges={['top', 'bottom']}>
+        <View style={s.header}>
+          <TouchableOpacity onPress={() => navigation.goBack()} style={s.backBtn}>
+            <Feather name="chevron-left" size={22} color={theme.accent.primary} />
+          </TouchableOpacity>
+          <Text style={s.headerTitle}>Statistics</Text>
+          <View style={{ width: 22 }} />
+        </View>
+        <View style={s.scrambleNotice}>
+          <View style={s.scrambleNoticeIcon}>
+            <Feather name="users" size={26} color={theme.accent.primary} />
+          </View>
+          <Text style={s.scrambleNoticeTitle}>Team scramble tournament</Text>
+          <Text style={s.scrambleNoticeText}>
+            Personal stats aren&apos;t available for scramble rounds — each team
+            plays one ball, so scores belong to the team rather than to any
+            individual player. Head to the leaderboard for team results.
+          </Text>
+        </View>
+      </ScreenContainer>
+    );
+  }
+
   return (
     <ScreenContainer style={s.container} edges={['top', 'bottom']}>
       <View style={s.header}>
@@ -3400,6 +3433,21 @@ const makeStyles = (t) => StyleSheet.create({
     marginTop: 6, textAlign: 'center',
   },
   emptyText: { fontFamily: 'PlusJakartaSans-Regular', color: t.text.muted, fontSize: 14, textAlign: 'center', paddingVertical: 40 },
+
+  // Scramble placeholder (personal stats hidden — the team plays one ball)
+  scrambleNotice: { flex: 1, alignItems: 'center', justifyContent: 'center', paddingHorizontal: 36 },
+  scrambleNoticeIcon: {
+    width: 56, height: 56, borderRadius: 18, backgroundColor: t.accent.light,
+    alignItems: 'center', justifyContent: 'center', marginBottom: 16,
+  },
+  scrambleNoticeTitle: {
+    fontFamily: 'PlusJakartaSans-Bold', fontSize: 17, color: t.text.primary,
+    marginBottom: 8, textAlign: 'center',
+  },
+  scrambleNoticeText: {
+    fontFamily: 'PlusJakartaSans-Regular', fontSize: 14, color: t.text.muted,
+    textAlign: 'center', lineHeight: 21,
+  },
 
   // Highlights
   highlightCard: {

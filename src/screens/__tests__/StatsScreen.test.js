@@ -171,13 +171,14 @@ describe('StatsScreen chrome', () => {
   });
 });
 
+const fourPlayers = [
+  player,
+  { id: 'p2', name: 'Bob Diaz', user_id: null, handicap: 0 },
+  { id: 'p3', name: 'Cara Ruiz', user_id: null, handicap: 0 },
+  { id: 'p4', name: 'Dan Vega', user_id: null, handicap: 0 },
+];
+
 describe('StatsScreen head-to-head gating', () => {
-  const fourPlayers = [
-    player,
-    { id: 'p2', name: 'Bob Diaz', user_id: null, handicap: 0 },
-    { id: 'p3', name: 'Cara Ruiz', user_id: null, handicap: 0 },
-    { id: 'p4', name: 'Dan Vega', user_id: null, handicap: 0 },
-  ];
 
   test('shows the Head-to-Head section for a multi-player non-team mode', () => {
     const { queryByText } = renderStats([makeRound('r1')], {
@@ -196,5 +197,46 @@ describe('StatsScreen head-to-head gating', () => {
     });
 
     expect(queryByText('HEAD-TO-HEAD')).toBeNull();
+  });
+});
+
+describe('StatsScreen scramble gating', () => {
+  // Scramble rounds store ONE team ball under the captain (pair[0]). Every
+  // per-player statsEngine aggregate (highlights, streaks, shame, …) would
+  // misattribute the team's play to the captain personally and show zero
+  // data for everyone else, so the whole stats body is replaced by a
+  // placeholder for scramble tournaments.
+  test.each(['scramblepairs', 'scramble3v1', 'scramble4'])(
+    'renders the placeholder instead of stats content for %s',
+    (scoringMode) => {
+      jest.clearAllMocks();
+      const statsEngine = require('../../store/statsEngine');
+      const { queryByText } = renderStats([makeRound('r1')], {
+        players: fourPlayers, scoringMode,
+      });
+
+      // Placeholder shown…
+      expect(queryByText('Team scramble tournament')).toBeTruthy();
+      // …tab bar and stats content hidden…
+      expect(queryByText('Players')).toBeNull();
+      expect(queryByText('Overview')).toBeNull();
+      expect(queryByText('Shame')).toBeNull();
+      expect(queryByText('HEAD-TO-HEAD')).toBeNull();
+      // …and no per-player aggregates are ever computed on team-ball data.
+      expect(statsEngine.tournamentHighlights).not.toHaveBeenCalled();
+      expect(statsEngine.playerScoreDistribution).not.toHaveBeenCalled();
+      expect(statsEngine.hallOfShame).not.toHaveBeenCalled();
+      expect(statsEngine.skinsLeaderboard).not.toHaveBeenCalled();
+    },
+  );
+
+  test('keeps the normal tabs for non-scramble modes', () => {
+    const { queryByText } = renderStats([makeRound('r1')], {
+      players: fourPlayers, scoringMode: 'individual',
+    });
+
+    expect(queryByText('Team scramble tournament')).toBeNull();
+    expect(queryByText('Players')).toBeTruthy();
+    expect(queryByText('Overview')).toBeTruthy();
   });
 });
