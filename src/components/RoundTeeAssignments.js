@@ -2,7 +2,7 @@ import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { View, Text, TextInput, TouchableOpacity, StyleSheet } from 'react-native';
 import { Feather } from '@expo/vector-icons';
 import { calcPlayingHandicap, lastTeeForPlayerOnCourse } from '../store/tournamentStore';
-import { middleTee } from '../store/tees';
+import { middleTee, resolveTeeForPlayer } from '../store/tees';
 
 // Common golf tee colours, keyed by lower-cased label.
 const TEE_COLORS = {
@@ -36,15 +36,16 @@ export function clampPlayingHandicap(n) {
 // otherwise the player's last-used tee (matched the same way) is adopted with
 // the current course tee's data, falling back to the course's middle tee.
 // This drops a stored tee naming one the course no longer has — e.g. a legacy
-// synthetic tee carried over from an older round.
-export function resolvePlayerTee(existing, lastUsed, tees) {
+// synthetic tee carried over from an older round. Gender parameter applies
+// gendered rating/slope when resolving.
+export function resolvePlayerTee(existing, lastUsed, tees, gender) {
   const list = Array.isArray(tees) ? tees : [];
   const find = (tee) => (tee
     ? list.find((t) => String(t?.label ?? '') === String(tee.label ?? '')) ?? null
     : null);
   if (find(existing)) return existing;
   const pick = find(lastUsed) || middleTee(list);
-  return pick ? { label: pick.label, slope: pick.slope, rating: pick.rating } : null;
+  return resolveTeeForPlayer(pick, gender);
 }
 
 // Per-round, per-player tee picker + playing-handicap editor.
@@ -110,7 +111,7 @@ export default function RoundTeeAssignments({ round, players = [], onChange, the
         if (!existingValid && courseId) {
           try { lastUsed = await lastTeeForPlayerOnCourse(courseId, p.id); } catch (_) {}
         }
-        const tee = resolvePlayerTee(existing, lastUsed, tees);
+        const tee = resolvePlayerTee(existing, lastUsed, tees, p.gender);
         if (tee) resolved[p.id] = tee;
         else delete resolved[p.id];
       }
@@ -166,7 +167,8 @@ export default function RoundTeeAssignments({ round, players = [], onChange, the
 
   // Assign a tee to one player and refresh their auto handicap.
   function setPlayerTee(playerId, tee) {
-    const snapshot = { label: tee.label, slope: tee.slope, rating: tee.rating };
+    const gender = players.find((pl) => pl.id === playerId)?.gender;
+    const snapshot = resolveTeeForPlayer(tee, gender);
     const next = { ...playerTees, [playerId]: snapshot };
     setPlayerTees(next);
     recomputeAuto(next, manualHandicaps);

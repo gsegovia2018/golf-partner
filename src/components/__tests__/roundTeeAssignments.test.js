@@ -78,3 +78,32 @@ describe('resolvePlayerTee', () => {
     expect(resolvePlayerTee({ label: 'White' }, { label: 'White' }, [])).toBeNull();
   });
 });
+
+describe('resolvePlayerTee with gender', () => {
+  const tees = [
+    { label: 'Blancas', rating: 74.7, slope: 143, ratingWomen: 81.6, slopeWomen: 155 },
+    { label: 'Amarillas', rating: 72.7, slope: 141, ratingWomen: 79.3, slopeWomen: 151 },
+    { label: 'Rojas', rating: 67.6, slope: 131, ratingWomen: 73.1, slopeWomen: 137 },
+  ];
+
+  it('keeps a valid existing snapshot untouched', () => {
+    const existing = { label: 'Rojas', slope: 131, rating: 67.6 };
+    expect(resolvePlayerTee(existing, null, tees, 'female')).toBe(existing);
+  });
+
+  it("resolves the middle tee with women's values for female players", () => {
+    expect(resolvePlayerTee(null, null, tees, 'female'))
+      .toEqual({ label: 'Amarillas', rating: 79.3, slope: 151 });
+  });
+
+  it('resolves last-used label with gendered values', () => {
+    const lastUsed = { label: 'Rojas', slope: 999, rating: 999 };
+    expect(resolvePlayerTee(null, lastUsed, tees, 'female'))
+      .toEqual({ label: 'Rojas', rating: 73.1, slope: 137 });
+  });
+
+  it("defaults to men's values without gender", () => {
+    expect(resolvePlayerTee(null, null, tees))
+      .toEqual({ label: 'Amarillas', rating: 72.7, slope: 141 });
+  });
+});
