@@ -100,36 +100,70 @@ describe('scramble round', () => {
 });
 
 describe('tournamentScrambleLeaderboard', () => {
-  it('sums team points across rounds', () => {
-    const mk = (scores) => ({
-      holes: [{ number: 1, par: 4, strokeIndex: 1 }],
-      pairs: [[P('a', 'Ann Lee'), P('b', 'Bob Ray')], [P('c', 'Cam Fox'), P('d', 'Dan Oak')]],
-      playerHandicaps: {}, scores,
-    });
+  const roster = [P('a', 'Ann Lee'), P('b', 'Bob Ray'), P('c', 'Cam Fox'), P('d', 'Dan Oak')];
+  const mk = (pairs, scores) => ({
+    holes: [{ number: 1, par: 4, strokeIndex: 1 }],
+    pairs,
+    playerHandicaps: {},
+    scores,
+  });
+  const samePairs = [[roster[0], roster[1]], [roster[2], roster[3]]];
+
+  it('one row per real player; teammates share their team points per round', () => {
     const t = {
-      players: [P('a', 'Ann Lee'), P('b', 'Bob Ray'), P('c', 'Cam Fox'), P('d', 'Dan Oak')],
+      players: roster,
       settings: { scoringMode: 'scramblepairs' },
       currentRound: 1,
-      rounds: [mk({ a: { 1: 3 }, c: { 1: 4 } }), mk({ a: { 1: 4 }, c: { 1: 3 } })],
+      rounds: [
+        // r1: team a/b birdie (3 pts), team c/d par (2 pts)
+        mk(samePairs, { a: { 1: 3 }, c: { 1: 4 } }),
+        // r2: team a/b birdie (3 pts), team c/d bogey (1 pt)
+        mk(samePairs, { a: { 1: 3 }, c: { 1: 5 } }),
+      ],
     };
     const board = tournamentScrambleLeaderboard(t);
-    expect(board).toHaveLength(2);
-    expect(board[0].points).toBe(5);
-    expect(board[0].player.name).toBe('Ann & Bob');
-    expect(board[0].player.id).toBe('a');
+    expect(board).toHaveLength(4);
+    const byId = Object.fromEntries(board.map((r) => [r.player.id, r]));
+    expect(byId.a.points).toBe(6);
+    expect(byId.b.points).toBe(6); // teammate carries the same team points
+    expect(byId.c.points).toBe(3);
+    expect(byId.d.points).toBe(3);
+    expect(byId.a.player.name).toBe('Ann Lee'); // real player, not a team label
+    expect(byId.b.strokes).toBe(6); // team strokes, not individual
+    expect(byId.d.strokes).toBe(9);
+    expect(board[0].points).toBe(6);
+    expect(board[3].points).toBe(3);
+  });
+
+  it('follows a player across re-shuffled teams', () => {
+    const t = {
+      players: roster,
+      settings: { scoringMode: 'scramblepairs' },
+      currentRound: 1,
+      rounds: [
+        // r1: a+b (birdie, 3 pts) vs c+d (par, 2 pts)
+        mk(samePairs, { a: { 1: 3 }, c: { 1: 4 } }),
+        // r2: a+c (par, 2 pts) vs b+d (birdie, 3 pts)
+        mk([[roster[0], roster[2]], [roster[1], roster[3]]], { a: { 1: 4 }, b: { 1: 3 } }),
+      ],
+    };
+    const byId = Object.fromEntries(
+      tournamentScrambleLeaderboard(t).map((r) => [r.player.id, r]));
+    expect(byId.a.points).toBe(5); // 3 + 2
+    expect(byId.b.points).toBe(6); // 3 + 3
+    expect(byId.c.points).toBe(4); // 2 + 2
+    expect(byId.d.points).toBe(5); // 2 + 3
   });
 
   it('ignores rounds past currentRound', () => {
-    const mk = (scores) => ({
-      holes: [{ number: 1, par: 4, strokeIndex: 1 }],
-      pairs: [[P('a', 'Ann Lee'), P('b', 'Bob Ray')], [P('c', 'Cam Fox'), P('d', 'Dan Oak')]],
-      playerHandicaps: {}, scores,
-    });
     const t = {
-      players: [P('a', 'Ann Lee'), P('b', 'Bob Ray'), P('c', 'Cam Fox'), P('d', 'Dan Oak')],
+      players: roster,
       settings: { scoringMode: 'scramblepairs' },
       currentRound: 0,
-      rounds: [mk({ a: { 1: 3 }, c: { 1: 4 } }), mk({ a: { 1: 4 }, c: { 1: 3 } })],
+      rounds: [
+        mk(samePairs, { a: { 1: 3 }, c: { 1: 4 } }),
+        mk(samePairs, { a: { 1: 3 }, c: { 1: 5 } }),
+      ],
     };
     const board = tournamentScrambleLeaderboard(t);
     expect(board.find((r) => r.player.id === 'a').points).toBe(3);

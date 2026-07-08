@@ -1398,7 +1398,13 @@ export default function HomeScreen({ navigation, route }) {
   }
 
   const isGame = tournament.kind === 'game';
-  const strokesByPlayer = Object.fromEntries(stablefordBoard.map((e) => [e.player.id, e.strokes]));
+  // Scramble: scores live under the team captain only, so per-player
+  // Stableford strokes would show 0 for non-captains — use the team strokes
+  // carried on the scramble board rows instead. Other modes (incl. pairs
+  // match play, where everyone plays their own ball) keep individual strokes.
+  const strokesByPlayer = isScrambleMode(settings.scoringMode)
+    ? Object.fromEntries(leaderboard.map((e) => [e.player.id, e.strokes]))
+    : Object.fromEntries(stablefordBoard.map((e) => [e.player.id, e.strokes]));
   const toggleLabels = leaderboardToggleLabels(settings.scoringMode);
   const getSelectedRoundValue = (playerId) => {
     if (settings.scoringMode === 'matchplay') {
@@ -1416,14 +1422,18 @@ export default function HomeScreen({ navigation, route }) {
       if (!selectedRoundData || !selectedRoundHasScores) return null;
       const tally = pairsMatchRoundTally(selectedRoundData, tournament.players);
       if (!tally) return null;
-      const idx = (selectedRoundData.pairs ?? []).findIndex((pair) => pair?.[0]?.id === playerId);
+      const idx = (selectedRoundData.pairs ?? [])
+        .findIndex((pair) => pair?.some((m) => m?.id === playerId));
       return idx === 0 ? tally.team1 : idx === 1 ? tally.team2 : null;
     }
     if (isScrambleMode(settings.scoringMode) && !leaderboardAlt) {
       if (!selectedRoundData || !selectedRoundHasScores) return null;
       const tally = scrambleRoundTally(selectedRoundData, tournament.players);
       if (!tally) return null;
-      return tally.totals.find((row) => row.unit.id === playerId)?.points ?? null;
+      const team = (selectedRoundData.pairs ?? [])
+        .find((pair) => pair?.some((m) => m?.id === playerId));
+      if (!team) return null;
+      return tally.totals.find((row) => row.unit.id === team[0]?.id)?.points ?? null;
     }
     if (!selectedRoundPlayerTotals) return null;
     return selectedRoundPlayerTotals.find((e) => e.player.id === playerId)?.totalPoints ?? 0;

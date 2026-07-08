@@ -112,26 +112,51 @@ describe('tournamentPairsMatchStandings', () => {
     { number: 1, par: 4, strokeIndex: 1 },
     { number: 2, par: 4, strokeIndex: 2 },
   ];
-  const mk = (scores) => ({ holes: holes2, pairs, playerHandicaps: {}, scores });
+  const mk = (roundPairs, scores) => ({ holes: holes2, pairs: roundPairs, playerHandicaps: {}, scores });
 
-  it('sums team match points across rounds, one row per team', () => {
+  it('one row per real player; teammates share their team points per round', () => {
     const t = {
       players: [...pairs[0], ...pairs[1]],
       settings: { scoringMode: 'pairsmatchplay' },
       currentRound: 1,
       rounds: [
         // round 1: team1 (a,b) sweeps both duels on both holes → team1 4, team2 0
-        mk({ a: { 1: 3, 2: 3 }, c: { 1: 5, 2: 5 }, b: { 1: 3, 2: 3 }, d: { 1: 5, 2: 5 } }),
+        mk(pairs, { a: { 1: 3, 2: 3 }, c: { 1: 5, 2: 5 }, b: { 1: 3, 2: 3 }, d: { 1: 5, 2: 5 } }),
         // round 2: every duel halved → team1 2, team2 2
-        mk({ a: { 1: 4, 2: 4 }, c: { 1: 4, 2: 4 }, b: { 1: 4, 2: 4 }, d: { 1: 4, 2: 4 } }),
+        mk(pairs, { a: { 1: 4, 2: 4 }, c: { 1: 4, 2: 4 }, b: { 1: 4, 2: 4 }, d: { 1: 4, 2: 4 } }),
       ],
     };
     const { board } = tournamentPairsMatchStandings(t);
-    expect(board).toHaveLength(2);
-    expect(board[0].player.id).toBe('a');
+    expect(board).toHaveLength(4);
+    const byId = Object.fromEntries(board.map((r) => [r.player.id, r]));
+    expect(byId.a.points).toBe(6);
+    expect(byId.b.points).toBe(6); // teammate carries the same team points
+    expect(byId.c.points).toBe(2);
+    expect(byId.d.points).toBe(2);
     expect(board[0].points).toBe(6);
-    expect(board[1].player.id).toBe('c');
-    expect(board[1].points).toBe(2);
+    expect(board[3].points).toBe(2);
+  });
+
+  it('follows a player across re-shuffled teams', () => {
+    const reshuffled = [[P('a'), P('c')], [P('b'), P('d')]]; // duels: a-b, c-d
+    const t = {
+      players: [...pairs[0], ...pairs[1]],
+      settings: { scoringMode: 'pairsmatchplay' },
+      currentRound: 1,
+      rounds: [
+        // r1 (a,b vs c,d): team1 sweeps → a,b +4; c,d +0
+        mk(pairs, { a: { 1: 3, 2: 3 }, c: { 1: 5, 2: 5 }, b: { 1: 3, 2: 3 }, d: { 1: 5, 2: 5 } }),
+        // r2 (a,c vs b,d): team2 sweeps → b,d +4; a,c +0
+        mk(reshuffled, { a: { 1: 5, 2: 5 }, b: { 1: 3, 2: 3 }, c: { 1: 5, 2: 5 }, d: { 1: 3, 2: 3 } }),
+      ],
+    };
+    const { board } = tournamentPairsMatchStandings(t);
+    const byId = Object.fromEntries(board.map((r) => [r.player.id, r]));
+    expect(byId.a.points).toBe(4); // 4 + 0
+    expect(byId.b.points).toBe(8); // 4 + 4
+    expect(byId.c.points).toBe(0); // 0 + 0
+    expect(byId.d.points).toBe(4); // 0 + 4
+    expect(board[0].player.id).toBe('b');
   });
 
   it('ignores rounds past currentRound', () => {
@@ -140,8 +165,8 @@ describe('tournamentPairsMatchStandings', () => {
       settings: { scoringMode: 'pairsmatchplay' },
       currentRound: 0,
       rounds: [
-        mk({ a: { 1: 3, 2: 3 }, c: { 1: 5, 2: 5 }, b: { 1: 3, 2: 3 }, d: { 1: 5, 2: 5 } }),
-        mk({ a: { 1: 4, 2: 4 }, c: { 1: 4, 2: 4 }, b: { 1: 4, 2: 4 }, d: { 1: 4, 2: 4 } }),
+        mk(pairs, { a: { 1: 3, 2: 3 }, c: { 1: 5, 2: 5 }, b: { 1: 3, 2: 3 }, d: { 1: 5, 2: 5 } }),
+        mk(pairs, { a: { 1: 4, 2: 4 }, c: { 1: 4, 2: 4 }, b: { 1: 4, 2: 4 }, d: { 1: 4, 2: 4 } }),
       ],
     };
     const { board } = tournamentPairsMatchStandings(t);

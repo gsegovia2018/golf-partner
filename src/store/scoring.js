@@ -531,59 +531,60 @@ export function pairsMatchRoundTally(round, _players) {
 }
 
 // ── Team tournament leaderboards ────────────────────────────────────────────
-// Both boards use { player, points, strokes } rows — the same shape as
-// tournamentSindicatoLeaderboard / tournamentMatchPlayStandings.board — so the
-// HomeScreen leaderboard row renderer works unchanged. `player` is a synthetic
-// unit keyed by the team's captain (first member) id, carrying a joined
-// first-name label as `name`.
+// Both boards aggregate PER REAL PLAYER (one row per player, never per team),
+// following the tournamentBestWorstLeaderboard precedent: teams re-shuffle
+// every round, so each player earns their own team's result each round and
+// the rows stay stable across shuffles. Row shape matches the other
+// tournament boards ({ player, points, ... }) so the HomeScreen leaderboard
+// row renderer works unchanged.
 
-// Cumulative scramble team standings across all played rounds. One row per
-// team, summed via scrambleRoundTally's per-round unit rows (already keyed by
-// captain id).
+// The round.pairs entry containing this player, or null.
+function teamOfPlayer(round, playerId) {
+  return (round?.pairs ?? []).find(
+    (pair) => Array.isArray(pair) && pair.some((m) => m?.id === playerId),
+  ) ?? null;
+}
+
+// Cumulative scramble standings across all played rounds. Each player earns
+// their team's Stableford points and gross strokes for the round (the team's
+// tally row lives under the team captain's id in scrambleRoundTally).
 export function tournamentScrambleLeaderboard(tournament) {
-  const { players, rounds } = tournament ?? {};
-  const acc = new Map(); // captainId -> { player, points, strokes }
-  (rounds ?? []).forEach((round, index) => {
+  const { players = [], rounds = [] } = tournament ?? {};
+  const acc = new Map(players.map((p) => [p.id, { player: p, points: 0, strokes: 0 }]));
+  rounds.forEach((round, index) => {
     if (!isRoundPlayed(round, index, tournament)) return;
-    const tally = scrambleRoundTally(round, players ?? []);
+    const tally = scrambleRoundTally(round, players);
     if (!tally) return;
-    for (const row of tally.totals) {
-      const cur = acc.get(row.unit.id) ?? {
-        player: { id: row.unit.id, name: row.unit.name },
-        points: 0,
-        strokes: 0,
-      };
+    const rowByCaptain = new Map(tally.totals.map((r) => [r.unit.id, r]));
+    for (const p of players) {
+      const team = teamOfPlayer(round, p.id);
+      const row = team ? rowByCaptain.get(team[0]?.id) : null;
+      if (!row) continue;
+      const cur = acc.get(p.id);
       cur.points += row.points;
       cur.strokes += row.strokes;
-      acc.set(row.unit.id, cur);
     }
   });
   return [...acc.values()].sort((a, b) => b.points - a.points);
 }
 
-// Cumulative pairs match play team standings across all played rounds. One
-// row per team (round.pairs[0] → team1, round.pairs[1] → team2), summing
-// pairsMatchRoundTally's team1/team2 points under each round's captain id.
+// Cumulative pairs match play standings across all played rounds. Each player
+// earns their team's match points per round (round.pairs[0] → tally.team1,
+// round.pairs[1] → tally.team2).
 export function tournamentPairsMatchStandings(tournament) {
-  const { players, rounds } = tournament ?? {};
-  const acc = new Map(); // captainId -> { player, points, strokes }
-  (rounds ?? []).forEach((round, index) => {
+  const { players = [], rounds = [] } = tournament ?? {};
+  const acc = new Map(players.map((p) => [p.id, { player: p, points: 0 }]));
+  rounds.forEach((round, index) => {
     if (!isRoundPlayed(round, index, tournament)) return;
-    const tally = pairsMatchRoundTally(round, players ?? []);
+    const tally = pairsMatchRoundTally(round, players);
     if (!tally) return;
-    (round.pairs ?? []).forEach((pair, idx) => {
-      const captain = pair?.[0];
-      if (!captain) return;
-      const name = pair.map((m) => m?.name?.split(' ')[0] ?? '—').join(' & ');
-      const cur = acc.get(captain.id)
-        ?? { player: { id: captain.id, name }, points: 0, strokes: 0 };
-      cur.points += idx === 0 ? tally.team1 : tally.team2;
-      pair.forEach((m) => {
-        const holeScores = round.scores?.[m?.id] ?? {};
-        for (const v of Object.values(holeScores)) cur.strokes += (v || 0);
-      });
-      acc.set(captain.id, cur);
-    });
+    for (const p of players) {
+      const idx = (round.pairs ?? []).findIndex(
+        (pair) => Array.isArray(pair) && pair.some((m) => m?.id === p.id),
+      );
+      if (idx !== 0 && idx !== 1) continue;
+      acc.get(p.id).points += idx === 0 ? tally.team1 : tally.team2;
+    }
   });
   const board = [...acc.values()].sort((a, b) => b.points - a.points);
   return { board };
