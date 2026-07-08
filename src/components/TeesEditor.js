@@ -40,48 +40,76 @@ export default function TeesEditor({ tees, onChange, theme }) {
       </View>
 
       {tees.map((tee, i) => (
-        <View key={tee.id} style={s.row}>
-          <TextInput
-            style={[s.input, s.labelCol]}
-            placeholder="White / 3 / Champ"
-            placeholderTextColor={theme.text.muted}
-            keyboardAppearance={theme.isDark ? 'dark' : 'light'}
-            selectionColor={theme.accent.primary}
-            value={tee.label ?? ''}
-            onChangeText={(v) => update(i, { label: v })}
-          />
-          <TextInput
-            style={[s.input, s.numCol]}
-            keyboardType="decimal-pad"
-            maxLength={5}
-            placeholder="71.5"
-            placeholderTextColor={theme.text.muted}
-            keyboardAppearance={theme.isDark ? 'dark' : 'light'}
-            selectionColor={theme.accent.primary}
-            value={tee.rating != null ? String(tee.rating) : ''}
-            onChangeText={(v) => update(i, { rating: v })}
-          />
-          <TextInput
-            style={[s.input, s.numCol]}
-            keyboardType="numeric"
-            maxLength={3}
-            placeholder="128"
-            placeholderTextColor={theme.text.muted}
-            keyboardAppearance={theme.isDark ? 'dark' : 'light'}
-            selectionColor={theme.accent.primary}
-            value={tee.slope != null ? String(tee.slope) : ''}
-            onChangeText={(v) => update(i, { slope: v })}
-          />
-          <TouchableOpacity
-            style={s.removeCol}
-            onPress={() => remove(i)}
-            activeOpacity={0.7}
-            accessibilityRole="button"
-            accessibilityLabel={`Remove ${tee.label || 'tee'}`}
-          >
-            <Feather name="x" size={16} color={theme.destructive} />
-          </TouchableOpacity>
-        </View>
+        <React.Fragment key={tee.id}>
+          <View style={s.row}>
+            <TextInput
+              style={[s.input, s.labelCol]}
+              placeholder="White / 3 / Champ"
+              placeholderTextColor={theme.text.muted}
+              keyboardAppearance={theme.isDark ? 'dark' : 'light'}
+              selectionColor={theme.accent.primary}
+              value={tee.label ?? ''}
+              onChangeText={(v) => update(i, { label: v })}
+            />
+            <TextInput
+              style={[s.input, s.numCol]}
+              keyboardType="decimal-pad"
+              maxLength={5}
+              placeholder="71.5"
+              placeholderTextColor={theme.text.muted}
+              keyboardAppearance={theme.isDark ? 'dark' : 'light'}
+              selectionColor={theme.accent.primary}
+              value={tee.rating != null ? String(tee.rating) : ''}
+              onChangeText={(v) => update(i, { rating: v })}
+            />
+            <TextInput
+              style={[s.input, s.numCol]}
+              keyboardType="numeric"
+              maxLength={3}
+              placeholder="128"
+              placeholderTextColor={theme.text.muted}
+              keyboardAppearance={theme.isDark ? 'dark' : 'light'}
+              selectionColor={theme.accent.primary}
+              value={tee.slope != null ? String(tee.slope) : ''}
+              onChangeText={(v) => update(i, { slope: v })}
+            />
+            <TouchableOpacity
+              style={s.removeCol}
+              onPress={() => remove(i)}
+              activeOpacity={0.7}
+              accessibilityRole="button"
+              accessibilityLabel={`Remove ${tee.label || 'tee'}`}
+            >
+              <Feather name="x" size={16} color={theme.destructive} />
+            </TouchableOpacity>
+          </View>
+          <View style={s.womenRow}>
+            <Text style={[s.womenLabel, s.labelCol]}>Women's</Text>
+            <TextInput
+              style={[s.input, s.numCol]}
+              keyboardType="decimal-pad"
+              maxLength={5}
+              placeholder="79.3"
+              placeholderTextColor={theme.text.muted}
+              keyboardAppearance={theme.isDark ? 'dark' : 'light'}
+              selectionColor={theme.accent.primary}
+              value={tee.ratingWomen != null ? String(tee.ratingWomen) : ''}
+              onChangeText={(v) => update(i, { ratingWomen: v })}
+            />
+            <TextInput
+              style={[s.input, s.numCol]}
+              keyboardType="numeric"
+              maxLength={3}
+              placeholder="151"
+              placeholderTextColor={theme.text.muted}
+              keyboardAppearance={theme.isDark ? 'dark' : 'light'}
+              selectionColor={theme.accent.primary}
+              value={tee.slopeWomen != null ? String(tee.slopeWomen) : ''}
+              onChangeText={(v) => update(i, { slopeWomen: v })}
+            />
+            <View style={s.removeCol} />
+          </View>
+        </React.Fragment>
       ))}
 
       <TouchableOpacity
@@ -125,7 +153,9 @@ const makeStyles = (theme) => StyleSheet.create({
     fontFamily: 'PlusJakartaSans-Bold', color: theme.text.muted,
     fontSize: 11, letterSpacing: 0.5,
   },
+  womenLabel: { fontFamily: 'PlusJakartaSans-Regular', color: theme.text.muted, fontSize: 11, textAlign: 'right', paddingRight: 4 },
   row: { flexDirection: 'row', alignItems: 'center', paddingVertical: 5, gap: 8 },
+  womenRow: { flexDirection: 'row', alignItems: 'center', gap: 8, marginTop: 4, marginBottom: 8 },
   labelCol: { flex: 1 },
   numCol: { width: 64, textAlign: 'center' },
   removeCol: { width: 28, alignItems: 'center', justifyContent: 'center' },
