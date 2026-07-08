@@ -202,7 +202,23 @@ export default function EditTournamentScreen({ navigation }) {
       // buildTeamsForMode covers every team shape (2x2 / 3+1 / 1x4) and
       // falls back to one singleton pair per player for solo modes.
       const mode = settings?.scoringMode;
-      const pairs = buildTeamsForMode(mode, builtPlayers);
+      // With fixedTeams on, copy pairs from the latest existing round whose
+      // pairs cover exactly the current roster (same member ids), instead
+      // of building a fresh (re-randomized) set — keeps the new round's
+      // teams consistent with the rest of the tournament. Falls back to a
+      // fresh build when no round's pairs match the current roster.
+      const rosterIds = builtPlayers.map((p) => p.id).sort().join(',');
+      let pairs = null;
+      if (settings?.fixedTeams) {
+        for (let i = prev.length - 1; i >= 0; i--) {
+          const pairIds = (prev[i].pairs ?? []).flat().map((p) => p.id).sort().join(',');
+          if (pairIds && pairIds === rosterIds) {
+            pairs = prev[i].pairs.map((pr) => [...pr]);
+            break;
+          }
+        }
+      }
+      if (!pairs) pairs = buildTeamsForMode(mode, builtPlayers);
       const newRound = {
         id: `r${Date.now()}`,
         courseName: '',

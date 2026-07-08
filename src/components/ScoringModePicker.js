@@ -1,6 +1,7 @@
 import React, { useEffect, useRef, useState } from 'react';
 import {
   View, Text, TextInput, TouchableOpacity, StyleSheet, Modal, ScrollView, useWindowDimensions,
+  Switch, Platform,
 } from 'react-native';
 import { Feather } from '@expo/vector-icons';
 
@@ -12,6 +13,7 @@ import {
   scoringModeCategories,
   fallbackNoticeText,
   getScoringMode,
+  scoringModeUsesTeams,
 } from './scoringModes';
 
 // Re-export the pure helpers so existing call sites
@@ -186,6 +188,21 @@ export default function ScoringModeField({ value, onChange, playerCount, setting
         </View>
       )}
 
+      {scoringModeUsesTeams(value, playerCount) && settings && onSettingsChange && (
+        <View style={s.fixedTeamsRow}>
+          <View style={s.fixedTeamsText}>
+            <Text style={s.fixedTeamsLabel}>Same teams every round</Text>
+            <Text style={s.fixedTeamsHint}>Keep these partnerships for the whole tournament.</Text>
+          </View>
+          <Switch
+            value={Boolean(settings.fixedTeams)}
+            onValueChange={(v) => onSettingsChange({ ...settings, fixedTeams: v })}
+            trackColor={{ false: theme.border.default, true: theme.accent.primary }}
+            thumbColor={Platform.OS === 'android' ? theme.bg.card : undefined}
+          />
+        </View>
+      )}
+
       <ScoringModeSheet
         visible={sheetOpen}
         value={value}
@@ -287,4 +304,20 @@ const makeStyles = (theme) => StyleSheet.create({
     fontFamily: 'PlusJakartaSans-ExtraBold', padding: 8,
   },
   valueSuffix: { fontFamily: 'PlusJakartaSans-Regular', color: theme.text.muted, fontSize: 11 },
+
+  /* Fixed teams toggle */
+  fixedTeamsRow: {
+    flexDirection: 'row', alignItems: 'center', gap: 12,
+    backgroundColor: theme.isDark ? theme.bg.secondary : theme.bg.card,
+    borderRadius: 12, borderWidth: 1, borderColor: theme.border.default,
+    padding: 14, marginTop: 10,
+    ...(theme.isDark ? {} : theme.shadow.card),
+  },
+  fixedTeamsText: { flex: 1 },
+  fixedTeamsLabel: {
+    fontFamily: 'PlusJakartaSans-Bold', color: theme.text.primary, fontSize: 14,
+  },
+  fixedTeamsHint: {
+    fontFamily: 'PlusJakartaSans-Medium', color: theme.text.muted, fontSize: 12, marginTop: 2,
+  },
 });

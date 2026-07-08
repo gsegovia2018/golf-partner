@@ -203,5 +203,6 @@ export function mergeScoringSettings(currentSettings, draft) {
     scoringMode: draft.scoringMode,
     bestBallValue: parseInt(draft.bestBallValue, 10) || 1,
     worstBallValue: parseInt(draft.worstBallValue, 10) || 1,
+    fixedTeams: Boolean(draft.fixedTeams),
   };
 }

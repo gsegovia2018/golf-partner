@@ -124,6 +124,7 @@ describe('mergeScoringSettings', () => {
       startDate: '2026-05-21',
       bestBallValue: 1,
       worstBallValue: 1,
+      fixedTeams: false,
     });
   });
 
@@ -168,6 +169,30 @@ describe('mergeScoringSettings', () => {
       scoringMode: 'sindicato', bestBallValue: '1', worstBallValue: '1',
     });
     expect(result.scoringMode).toBe('sindicato');
+  });
+
+  test('persists fixedTeams as a coerced boolean', () => {
+    const result = mergeScoringSettings(
+      {},
+      { scoringMode: 'bestball', bestBallValue: '1', worstBallValue: '1', fixedTeams: true },
+    );
+    expect(result.fixedTeams).toBe(true);
+  });
+
+  test('defaults fixedTeams to false when absent from the draft', () => {
+    const result = mergeScoringSettings(
+      { fixedTeams: true },
+      { scoringMode: 'bestball', bestBallValue: '1', worstBallValue: '1' },
+    );
+    expect(result.fixedTeams).toBe(false);
+  });
+
+  test('coerces a truthy non-boolean fixedTeams value', () => {
+    const result = mergeScoringSettings(
+      {},
+      { scoringMode: 'bestball', bestBallValue: '1', worstBallValue: '1', fixedTeams: 'yes' },
+    );
+    expect(result.fixedTeams).toBe(true);
   });
 });
 
