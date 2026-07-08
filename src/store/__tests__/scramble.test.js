@@ -1,6 +1,5 @@
 import {
   scrambleTeamHandicap,
-  scrambleTeamHandicaps,
   scrambleUnits,
   scrambleRoundTally,
   tournamentScrambleLeaderboard,

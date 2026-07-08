@@ -919,6 +919,12 @@ export default function HomeScreen({ navigation, route }) {
     if (!scoringModeUsesTeams(settings?.scoringMode, tournament.players.length)) return null;
     const r = tournament.rounds[selectedRound];
     const alreadyRevealed = r?.revealed || selectedRound <= tournament.currentRound;
+    // Editing pairs only makes sense for the standard two-team split. Modes
+    // like scramble4 can produce a single team (everyone on one team), and
+    // EditTeamsScreen only initializes when there are exactly two pairs —
+    // with any other shape it renders null (a blank screen). Since there's
+    // nothing to edit for a single team anyway, just hide the entry point.
+    if (alreadyRevealed && r?.pairs?.length !== 2) return null;
     return alreadyRevealed ? (
       <TouchableOpacity
         style={s.menuItem}
