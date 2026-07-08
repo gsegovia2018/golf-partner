@@ -583,6 +583,13 @@ export {
   buildTeamsForMode,
 } from './scoring';
 
+export {
+  pairsMatchDuels,
+  pairsMatchHolePts,
+  pairsMatchDuelPts,
+  pairsMatchRoundTally,
+} from './scoring';
+
 // Push a player library edit (name/handicap) into every tournament that
 // references this player id. Updates tournament.players and the player
 // snapshot embedded in each round.pairs. Non-manual round playing handicaps
