@@ -70,11 +70,25 @@ export default function EditTeamsScreen({ navigation, route }) {
   async function onSave() {
     setSaving(true);
     try {
-      await mutate(tournament, {
+      let t = await mutate(tournament, {
         type: 'pairs.set',
         roundId: round.id,
         pairs,
       });
+      // Fixed teams: the edited partnerships ARE the tournament's teams, so
+      // carry them into every later round. reveal:false keeps those rounds'
+      // own reveal moment intact.
+      if (tournament?.settings?.fixedTeams) {
+        const roundIdx = (tournament.rounds ?? []).findIndex((r) => r.id === round.id);
+        for (const later of (tournament.rounds ?? []).slice(roundIdx + 1)) {
+          t = await mutate(t, {
+            type: 'pairs.set',
+            roundId: later.id,
+            pairs,
+            reveal: false,
+          });
+        }
+      }
       navigation.goBack();
     } catch {
       setSaving(false);
