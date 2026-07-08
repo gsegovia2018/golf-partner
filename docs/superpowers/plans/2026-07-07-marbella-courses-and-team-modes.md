@@ -1494,3 +1494,22 @@ tournament instead of re-randomizing each round.
   creation). Roster changes (add/remove player) still rebuild teams — once —
   and apply the same shape to all future rounds.
 - Solo modes ignore the flag entirely.
+
+### Task 17 + 18: Manual team selection (user-approved 2026-07-08)
+
+`settings.manualTeams` (default false, persisted like `fixedTeams`): scoring
+step offers "Teams: Random draw / Choose myself" for team modes except
+`scramble4`. When manual, creation still builds a random valid shape, then
+routes into the team editor before the scorecard; tournament round-1 reveal
+offers "Set teams" instead of reshuffle; later rounds follow `fixedTeams`.
+
+Editor (EditTeamsScreen) extensions:
+- `scramble3v1`: "who plays solo" picker (tap a player; rest form the team)
+- `pairsmatchplay`: pairs slot-swap + a duels row ("A vs C · B vs D") with a
+  swap toggle that reorders the second pair (duels stay index-derived —
+  no data-model change)
+- other 2×2 team modes: existing slot-swap UI unchanged
+
+Task 17 = editor extensions (+ pure helper tests).
+Task 18 = setting, picker UI, merge/normalize/DEFAULT_SETTINGS plumbing,
+post-start routing (Setup, quick start, NextRoundScreen), tests.
