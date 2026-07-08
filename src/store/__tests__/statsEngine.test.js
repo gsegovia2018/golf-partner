@@ -1,4 +1,4 @@
-import { teeShotImpact, lagPuttingQuality, sandSaveRate, upAndDownRate, bunkerVisits, sgPutting, sgAroundGreen, sgApproach, sgPenalties, sgTotal, sgSeason, driveScoreImpact, puttDeepDive, approachScoreImpact, puttingTargetGaps, approachTargetGaps } from '../statsEngine';
+import { teeShotImpact, lagPuttingQuality, sandSaveRate, upAndDownRate, bunkerVisits, sgPutting, sgAroundGreen, sgApproach, sgPenalties, sgTotal, sgSeason, driveScoreImpact, puttDeepDive, approachScoreImpact, puttingTargetGaps, approachTargetGaps, pairPerformance } from '../statsEngine';
 
 // 18 par-4 holes, strokeIndex = hole number.
 function holes18() {
@@ -258,6 +258,28 @@ describe('upAndDownRate', () => {
     const r = upAndDownRate(rounds, 'me');
     expect(r.attempts).toBe(6);
     expect(r.conversions).toBe(0);
+  });
+});
+
+describe('pairPerformance', () => {
+  test('skips singleton pairs from odd rosters instead of crashing', () => {
+    const players = [
+      { id: 'a', name: 'A', handicap: 0 },
+      { id: 'b', name: 'B', handicap: 0 },
+      { id: 'c', name: 'C', handicap: 0 },
+    ];
+    const tournament = {
+      players,
+      rounds: [{
+        courseName: 'Test',
+        holes: [{ number: 1, par: 4, strokeIndex: 1 }],
+        pairs: [[players[0], players[1]], [players[2]]],
+        scores: { a: { 1: 4 }, b: { 1: 5 }, c: { 1: 6 } },
+      }],
+    };
+    const result = pairPerformance(tournament);
+    expect(result).toHaveLength(1);
+    expect(result[0].players.map(p => p.id).sort()).toEqual(['a', 'b']);
   });
 });
 
