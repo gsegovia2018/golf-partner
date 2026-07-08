@@ -1,4 +1,4 @@
-import { teeShotImpact, lagPuttingQuality, sandSaveRate, upAndDownRate, bunkerVisits, sgPutting, sgAroundGreen, sgApproach, sgPenalties, sgTotal, sgSeason, driveScoreImpact, puttDeepDive, approachScoreImpact, puttingTargetGaps, approachTargetGaps, pairPerformance } from '../statsEngine';
+import { teeShotImpact, lagPuttingQuality, sandSaveRate, upAndDownRate, bunkerVisits, sgPutting, sgAroundGreen, sgApproach, sgPenalties, sgTotal, sgSeason, driveScoreImpact, puttDeepDive, approachScoreImpact, puttingTargetGaps, approachTargetGaps, pairPerformance, shotStats, tournamentHighlights } from '../statsEngine';
 
 // 18 par-4 holes, strokeIndex = hole number.
 function holes18() {
@@ -92,6 +92,43 @@ describe('teeShotImpact', () => {
     const r = teeShotImpact(t, 'p1');
     expect(r.withoutPenalty.holes).toBe(0); // untracked holes are not counted
     expect(r.penaltyDrag).toBe(0);          // no clean baseline → no drag figure
+  });
+});
+
+describe('shotStats', () => {
+  test('putts-per-round divides by rounds with putt data, not any shot detail', () => {
+    const h = holes18();
+    // Round 1: putts logged on every hole (36 total). Round 2: drive-only.
+    const puttRound = {
+      courseName: 'C', holes: h, scores: { p1: evenScores(h, 4) },
+      shotDetails: { p1: Object.fromEntries(h.map((hole) => [hole.number, { putts: 2 }])) },
+    };
+    const driveOnlyRound = {
+      courseName: 'D', holes: h, scores: { p1: evenScores(h, 4) },
+      shotDetails: { p1: { 1: { drive: 'fairway' } } },
+    };
+    const t = {
+      players: [{ id: 'p1', handicap: 0 }],
+      rounds: [puttRound, driveOnlyRound],
+    };
+    const r = shotStats(t, 'p1');
+    expect(r.roundsWithData).toBe(2);
+    expect(r.roundsWithPuttData).toBe(1);
+    expect(r.putts.perRound).toBe(36); // not deflated to 18 by the drive-only round
+  });
+
+  test('roundsWithPuttData is 0 when no putts are logged', () => {
+    const h = holes18();
+    const t = {
+      players: [{ id: 'p1', handicap: 0 }],
+      rounds: [{
+        courseName: 'C', holes: h, scores: { p1: evenScores(h, 4) },
+        shotDetails: { p1: { 1: { drive: 'fairway' } } },
+      }],
+    };
+    const r = shotStats(t, 'p1');
+    expect(r.roundsWithPuttData).toBe(0);
+    expect(r.putts.perRound).toBe(0);
   });
 });
 
@@ -261,6 +298,42 @@ describe('upAndDownRate', () => {
   });
 });
 
+describe('tournamentHighlights', () => {
+  // p1 plays all 18 (par golf, 72 strokes); p2 scores only the front 9 (45).
+  function mixedCompletionTournament() {
+    const h = holes18();
+    const partial = {};
+    h.slice(0, 9).forEach((hole) => { partial[hole.number] = 5; });
+    return {
+      players: [
+        { id: 'p1', name: 'Full', handicap: 0 },
+        { id: 'p2', name: 'Partial', handicap: 0 },
+      ],
+      rounds: [{
+        courseName: 'C', holes: h,
+        scores: { p1: evenScores(h, 4), p2: partial },
+      }],
+    };
+  }
+
+  test('strokes best round only ranks fully-scored rounds', () => {
+    const r = tournamentHighlights(mixedCompletionTournament(), { metric: 'strokes' });
+    // p2's 9-hole 45 must not beat p1's complete 72.
+    expect(r.bestRound.entries.map((e) => e.player.id)).toEqual(['p1']);
+    expect(r.bestRound.value).toBe(72);
+  });
+
+  test('points best round still counts partial rounds', () => {
+    const t = mixedCompletionTournament();
+    // Make the full round score badly: double bogeys → 0 pts; p2's partial
+    // round (9 bogeys → 9 pts) should win on points.
+    t.rounds[0].scores.p1 = evenScores(t.rounds[0].holes, 6);
+    const r = tournamentHighlights(t, { metric: 'points' });
+    expect(r.bestRound.entries.map((e) => e.player.id)).toEqual(['p2']);
+    expect(r.bestRound.value).toBe(9);
+  });
+});
+
 describe('pairPerformance', () => {
   test('skips singleton pairs from odd rosters instead of crashing', () => {
     const players = [
@@ -421,6 +494,28 @@ describe('sgPenalties', () => {
     expect(r.perHole[0]).toBe(-3);
     expect(r.total).toBe(-3);
     expect(r.sampleHoles).toBe(1);
+  });
+
+  test('counts penalty-free tracked holes in the sample with 0', () => {
+    const round = {
+      holes: [
+        { number: 1, par: 4, strokeIndex: 1 },
+        { number: 2, par: 4, strokeIndex: 2 },
+        { number: 3, par: 4, strokeIndex: 3 },
+      ],
+      scores: { me: { 1: 6, 2: 4, 3: 4 } },
+      shotDetails: { me: {
+        1: { teePenalties: 1 },
+        2: { putts: 2 },        // tracked, clean → 0, in sample
+        // hole 3 untracked → excluded from sample
+      } },
+    };
+
+    const r = sgPenalties(round, 'me');
+
+    expect(r.perHole).toEqual([-1, 0, null]);
+    expect(r.total).toBe(-1);
+    expect(r.sampleHoles).toBe(2);
   });
 });
 
@@ -602,6 +697,25 @@ describe('sgSeason', () => {
     const after = sgSeason([approachRound, puttingOnlyRound], 'me');
 
     expect(after.byCategory.approach).toBeCloseTo(before.byCategory.approach, 5);
+  });
+  test('averages penalties over every tracked round, not just rounds with penalties', () => {
+    const holes = Array.from({ length: 18 }, (_, i) => ({
+      number: i + 1, par: 4, strokeIndex: i + 1, distance: 400,
+    }));
+    const scores = { me: Object.fromEntries(holes.map((hole) => [hole.number, 4])) };
+    const clean = Object.fromEntries(holes.map((hole) => [hole.number, {
+      putts: 2, firstPuttBucket: '3-6', sandShots: 0,
+    }]));
+    const mkTracked = (details) => ({ holes, scores, shotDetails: { me: details } });
+    // 1 penalty across 10 tracked rounds → −0.1/round, not −1.0.
+    const rounds = [
+      mkTracked({ ...clean, 1: { ...clean[1], teePenalties: 1 } }),
+      ...Array.from({ length: 9 }, () => mkTracked(clean)),
+    ];
+
+    const r = sgSeason(rounds, 'me');
+
+    expect(r.byCategory.penalties).toBeCloseTo(-0.1, 5);
   });
   test('aggregates across rounds when enough sample holes exist', () => {
     const mkRound = () => ({

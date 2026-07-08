@@ -24,8 +24,8 @@ export const CANON_ID = 'me';
 
 // ── buildSyntheticTournament ──
 // Produces { id, name, players: [me], rounds } where every round's scores,
-// shotDetails, playerHandicaps and manualHandicaps are re-keyed from the
-// round's original player id to CANON_ID. This object is the input to the
+// shotDetails, playerHandicaps, manualHandicaps and playerTees are re-keyed
+// from the round's original player id to CANON_ID. This object is the input to the
 // existing per-player engine functions.
 export function buildSyntheticTournament(myRounds) {
   if (!myRounds || myRounds.length === 0) {
@@ -49,6 +49,9 @@ export function buildSyntheticTournament(myRounds) {
       shotDetails: rekey(round.shotDetails),
       playerHandicaps: rekey(round.playerHandicaps),
       manualHandicaps: rekey(round.manualHandicaps),
+      // Without this, legacy rounds (no playerHandicaps) would derive the
+      // playing handicap from the wrong (missing) tee under CANON_ID.
+      playerTees: rekey(round.playerTees),
     };
   });
   return { id: 'mystats', name: 'My Stats', players: [player], rounds };
@@ -119,10 +122,14 @@ export function computeMetrics(synthetic) {
     avgVsPar: div(vsParSum, vsParRounds),
     bestRoundPoints: history.reduce((m, h) => Math.max(m, h.points), 0),
     hasShotData: shots.hasData,
-    fairwayPct: shots.drives.fairwayPct,
-    puttsPerRound: shots.putts.perRound,
-    girPct: shots.gir.pct,
-    threePuttsPerRound: div(shots.putts.threePuttPlus, shots.roundsWithData),
+    // Shot metrics are null (not 0) when the slice has no sample for them, so
+    // recent-vs-history never shows a fake delta against an untracked slice.
+    fairwayPct: shots.drives.recorded > 0 ? shots.drives.fairwayPct : null,
+    puttsPerRound: shots.roundsWithPuttData > 0 ? shots.putts.perRound : null,
+    girPct: shots.gir.eligible > 0 ? shots.gir.pct : null,
+    threePuttsPerRound: shots.roundsWithPuttData > 0
+      ? div(shots.putts.threePuttPlus, shots.roundsWithPuttData)
+      : null,
   };
 }
 
@@ -414,7 +421,10 @@ export function computeRecentVsHistory(myRounds, n = 5) {
   const metrics = FORM_METRICS.map((m) => {
     const recentVal = recent[m.key];
     const historyVal = hasHistory ? history[m.key] : null;
-    const delta = hasHistory ? +(recentVal - historyVal).toFixed(2) : null;
+    // Shot metrics can be null on either side (untracked slice) — no delta then.
+    const delta = recentVal != null && historyVal != null
+      ? +(recentVal - historyVal).toFixed(2)
+      : null;
     let direction = 'flat';
     if (delta != null && delta !== 0) {
       const improved = m.polarity === 'higher' ? delta > 0 : delta < 0;

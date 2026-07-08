@@ -10,6 +10,8 @@ import FormMetricBlock from '../FormMetricBlock';
 const fmtVsPar = (v) => (v > 0 ? `+${v}` : `${v}`);
 const fmtPct = (v) => `${v}%`;
 const fmtNum = (v) => `${v}`;
+// Shot metrics are null for an untracked slice — print a dash, not "null%".
+const orDash = (fmt) => (v) => (v == null ? '—' : fmt(v));
 
 // Per-metric formatting + explainer key + chart colour token, keyed by FORM_METRICS key.
 const META = {
@@ -82,7 +84,7 @@ export default function FormTab({ stats, n, onChangeN, onInfo }) {
               metric={m}
               series={formSeries.metrics[m.key]}
               color={colorFor(meta.colorToken)}
-              formatValue={meta.format}
+              formatValue={orDash(meta.format)}
               infoKey={meta.info}
               onInfo={onInfo}
             />

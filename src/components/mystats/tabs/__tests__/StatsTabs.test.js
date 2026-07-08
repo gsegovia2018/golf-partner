@@ -157,6 +157,7 @@ function shotStats() {
     shots: {
       hasData: true,
       roundsWithData: 1,
+      roundsWithPuttData: 1,
       putts: { perRound: 42, holes: 18, onePutts: 0, threePuttPlus: 6 },
       drives: {
         fairwayPct: 67,
