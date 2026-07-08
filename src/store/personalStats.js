@@ -7,6 +7,7 @@
 // a synthetic single-player "tournament", and reuse the per-player functions
 // in statsEngine.js. See docs/superpowers/specs/2026-05-17-my-stats-personal-view-design.md
 import { getPlayingHandicap, calcStablefordPoints } from './tournamentStore';
+import { isScrambleMode } from '../components/scoringModes';
 import {
   parTypeSplit, warmupVsClosing, frontBackSplit, playerScoreDistribution,
   playerRoundHistory, playerConsistency, bounceBackRate, shotStats,
@@ -170,6 +171,9 @@ export function collectMyRounds(tournaments, userId, displayName) {
   const result = [];
   const chrono = [...(tournaments || [])].reverse();
   chrono.forEach((t) => {
+    // Scramble rounds carry a team ball under the captain, not an individual
+    // score — they must not feed personal stats.
+    if (isScrambleMode(t.settings?.scoringMode)) return;
     const me = resolveMyPlayer(t, userId, displayName);
     if (!me) return;
     (t.rounds || []).forEach((round, roundIndex) => {
