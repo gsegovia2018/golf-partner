@@ -1690,3 +1690,6 @@ export async function markConflictsRead() {
   await AsyncStorage.setItem(CONFLICT_UNREAD_KEY, '0');
   _emitConflicts();
 }
+
+// Re-export scoring helpers for backwards compatibility
+export { roundScoringMode, tournamentHasMixedModes, teamShapeOf } from './scoring';

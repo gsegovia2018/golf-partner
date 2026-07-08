@@ -279,6 +279,33 @@ export function buildTeamsForMode(mode, players) {
   return randomPairs(players);
 }
 
+// ── Per-round scoring modes ─────────────────────────────────────────────────
+// A round may override the tournament's default mode. This helper is the
+// single source of truth for a round's effective mode — every round-scoped
+// consumer reads it instead of settings.scoringMode.
+export function roundScoringMode(tournament, round) {
+  return round?.scoringMode ?? tournament?.settings?.scoringMode ?? 'stableford';
+}
+
+// True when the tournament's rounds do not all share one effective mode.
+// Mixed tournaments rank by the Stableford total board.
+export function tournamentHasMixedModes(tournament) {
+  const rounds = tournament?.rounds ?? [];
+  if (rounds.length < 2) return false;
+  const first = roundScoringMode(tournament, rounds[0]);
+  return rounds.some((r) => roundScoringMode(tournament, r) !== first);
+}
+
+// The team shape a mode's pairs take. fixedTeams reuses partnerships only
+// across rounds whose modes share a shape.
+export function teamShapeOf(mode) {
+  if (mode === 'scramble4') return '1x4';
+  if (mode === 'scramble3v1') return '3+1';
+  if (mode === 'stableford' || mode === 'bestball'
+    || mode === 'scramblepairs' || mode === 'pairsmatchplay') return '2x2';
+  return 'solo';
+}
+
 // A round counts toward tournament totals once it's been reached (its index is
 // at or before the tournament's currentRound) and has a scores object.
 export function isRoundPlayed(round, index, tournament) {
