@@ -15,9 +15,11 @@ import {
   tournamentSindicatoClinched,
   buildTeamsForMode,
   isRoundPlayed,
+  roundTotals,
+  roundScoringMode,
 } from './scoring';
 import { isScoringModeAllowed, fallbackScoringMode } from '../components/ScoringModePicker';
-import { scoringModeUsesTeams } from '../components/scoringModes';
+import { scoringModeUsesTeams, isScrambleMode } from '../components/scoringModes';
 import { parseHandicapIndex } from '../lib/handicap';
 
 const ACTIVE_ID_KEY = '@golf_active_id';
@@ -579,9 +581,11 @@ export {
   scrambleUnits,
   scrambleRoundTally,
   tournamentScrambleLeaderboard,
+  tournamentStablefordLeaderboard,
   roundScoringMode,
   tournamentHasMixedModes,
   teamShapeOf,
+  roundTotals,
 } from './scoring';
 
 export {
@@ -946,23 +950,6 @@ export function createTournament({ name, players, rounds, settings, kind = 'tour
   };
 }
 
-// scores shape: { [playerId]: { [holeNumber]: strokes } }
-export function roundTotals(round, players) {
-  return players.map((player) => {
-    const handicap = getPlayingHandicap(round, player);
-    let totalPoints = 0;
-    let totalStrokes = 0;
-    round.holes.forEach((hole) => {
-      const strokes = round.scores?.[player.id]?.[hole.number];
-      if (strokes) {
-        totalStrokes += strokes;
-        totalPoints += calcStablefordPoints(hole.par, strokes, handicap, hole.strokeIndex);
-      }
-    });
-    return { player, handicap, totalPoints, totalStrokes };
-  });
-}
-
 // Returns pair results for a single round sorted by combined points (Stableford mode)
 export function roundPairLeaderboard(round, players) {
   if (!round.pairs?.length) return [];
@@ -1166,6 +1153,7 @@ export function tournamentBestWorstLeaderboard(tournament) {
 
   rounds.forEach((round, index) => {
     if (!isRoundPlayed(round, index, tournament) || !round.pairs?.length) return;
+    if (roundScoringMode(tournament, round) !== 'bestball') return;
     const roles = assignBestWorstRoles(round, players);
     players.forEach((p) => {
       const r = roles[p.id];
@@ -1369,6 +1357,10 @@ export function tournamentLeaderboard(tournament) {
 
   rounds.forEach((round, index) => {
     if (!isRoundPlayed(round, index, tournament)) return;
+    // Scramble rounds have no individual balls — individual points here would
+    // be meaningless (or all zero). Skip; tournamentStablefordLeaderboard
+    // covers those rounds via each player's team result instead.
+    if (isScrambleMode(roundScoringMode(tournament, round))) return;
     roundTotals(round, players).forEach(({ player, totalPoints, totalStrokes }) => {
       const entry = totals.find((t) => t.player.id === player.id);
       entry.points += totalPoints;
