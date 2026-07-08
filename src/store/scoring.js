@@ -605,7 +605,8 @@ export function isGIR({ strokes, putts, par }) {
 export function recoveryOutcomeFromState({ strokes, putts, sandShots = 0, par }) {
   const gir = isGIR({ strokes, putts, par });
   if (gir !== false) return null;        // GIR hit OR unknown → no recovery
-  if (putts !== 1) return null;          // only 1-putt up-and-downs are unambiguous
+  if (strokes > par) return null;        // a save means par or better
+  if (putts !== 1 && putts !== 0) return null; // 1-putt saves and holed-out chips are unambiguous
   return sandShots >= 1 ? 'sand-save' : 'up-and-down';
 }
 

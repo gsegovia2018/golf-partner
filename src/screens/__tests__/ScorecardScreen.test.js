@@ -20,7 +20,20 @@ describe('ShotDetailPanel — outcome chips', () => {
     expect(queryByText('Sand Save')).toBeNull();
   });
 
-  test('Missed GIR + 1 putt + no sand → Up & Down auto-selected', () => {
+  test('Missed GIR + 1-putt par save + no sand → Up & Down auto-selected', () => {
+    const { getByText } = render(wrap(
+      <ShotDetailPanel
+        hole={par4}
+        strokes={4}
+        detail={{ putts: 1, sandShots: 0, recoveryOutcome: null }}
+        onChange={() => {}}
+      />
+    ));
+    const chip = getByText('Up & Down').parent;
+    expect(chip.props.accessibilityState?.selected).toBe(true);
+  });
+
+  test('1-putt bogey → no chip auto-selected (save requires par or better)', () => {
     const { getByText } = render(wrap(
       <ShotDetailPanel
         hole={par4}
@@ -30,7 +43,7 @@ describe('ShotDetailPanel — outcome chips', () => {
       />
     ));
     const chip = getByText('Up & Down').parent;
-    expect(chip.props.accessibilityState?.selected).toBe(true);
+    expect(chip.props.accessibilityState?.selected).toBe(false);
   });
 
   test('Tapping an auto-selected chip writes recoveryOutcome="none"', () => {
@@ -38,7 +51,7 @@ describe('ShotDetailPanel — outcome chips', () => {
     const { getByText } = render(wrap(
       <ShotDetailPanel
         hole={par4}
-        strokes={5}
+        strokes={4}
         detail={{ putts: 1, sandShots: 1, recoveryOutcome: null }}
         onChange={onChange}
       />

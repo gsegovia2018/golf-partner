@@ -605,25 +605,35 @@ describe('recoveryOutcomeFromState', () => {
       strokes: 4, putts: 2, sandShots: 0, par: 4,
     })).toBeNull();
   });
-  test('missed GIR, 1 putt, no sand → up-and-down', () => {
+  test('missed GIR, 1 putt saving par → up-and-down', () => {
     expect(recoveryOutcomeFromState({
-      strokes: 5, putts: 1, sandShots: 0, par: 4,
+      strokes: 4, putts: 1, sandShots: 0, par: 4,
     })).toBe('up-and-down');
   });
-  test('missed GIR, 1 putt, sand shot → sand-save', () => {
+  test('missed GIR, 1 putt saving par from sand → sand-save', () => {
     expect(recoveryOutcomeFromState({
-      strokes: 5, putts: 1, sandShots: 1, par: 4,
+      strokes: 4, putts: 1, sandShots: 1, par: 4,
     })).toBe('sand-save');
+  });
+  test('1-putt bogey → null (up-and-down requires par or better)', () => {
+    expect(recoveryOutcomeFromState({
+      strokes: 5, putts: 1, sandShots: 0, par: 4,
+    })).toBeNull();
   });
   test('missed GIR, 2 putts → null (heuristic abstains)', () => {
     expect(recoveryOutcomeFromState({
       strokes: 6, putts: 2, sandShots: 0, par: 4,
     })).toBeNull();
   });
-  test('chip-in (0 putts) missed GIR → null (heuristic abstains, user can tap up-and-down)', () => {
+  test('holed-out chip (0 putts) saving par → up-and-down', () => {
     expect(recoveryOutcomeFromState({
       strokes: 4, putts: 0, sandShots: 0, par: 4,
-    })).toBeNull();
+    })).toBe('up-and-down');
+  });
+  test('holed-out bunker shot (0 putts) saving par → sand-save', () => {
+    expect(recoveryOutcomeFromState({
+      strokes: 4, putts: 0, sandShots: 1, par: 4,
+    })).toBe('sand-save');
   });
 });
 
