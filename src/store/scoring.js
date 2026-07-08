@@ -429,6 +429,107 @@ export function scrambleRoundTally(round, players) {
   return { totals, played, holesLeft, leaderIdx, lead, clinched };
 }
 
+// ── Pairs Match Play ────────────────────────────────────────────────────────
+// Two pairs; each player duels the same-index member of the other pair
+// (within-pair order is random via randomPairs, so duel draw is random).
+// Every fully-scored hole distributes exactly 2 points: 1 per duel to the
+// net winner, ½ each on a halve. Nets use calcExtraShots by stroke index.
+
+export function pairsMatchDuels(pairs) {
+  if (!pairs || pairs.length !== 2) return null;
+  const [t1, t2] = pairs;
+  if (!Array.isArray(t1) || !Array.isArray(t2) || t1.length !== 2 || t2.length !== 2) return null;
+  return [[t1[0], t2[0]], [t1[1], t2[1]]];
+}
+
+// 1 = first player wins, 2 = second, 0 = halved, null = not fully scored.
+function duelNetWinner(hole, a, b, scores, playerHandicaps) {
+  const strA = scores?.[a.id]?.[hole.number];
+  const strB = scores?.[b.id]?.[hole.number];
+  if (strA == null || strB == null) return null;
+  const hA = playerHandicaps?.[a.id] ?? a.handicap ?? 0;
+  const hB = playerHandicaps?.[b.id] ?? b.handicap ?? 0;
+  const netA = strA - calcExtraShots(hA, hole.strokeIndex);
+  const netB = strB - calcExtraShots(hB, hole.strokeIndex);
+  if (netA === netB) return 0;
+  return netA < netB ? 1 : 2;
+}
+
+export function pairsMatchHolePts(hole, pairs, scores, playerHandicaps) {
+  const duels = pairsMatchDuels(pairs);
+  if (!duels) return null;
+  let team1 = 0;
+  let team2 = 0;
+  let decidedDuels = 0;
+  for (const [a, b] of duels) {
+    const w = duelNetWinner(hole, a, b, scores, playerHandicaps);
+    if (w == null) continue;
+    decidedDuels++;
+    if (w === 1) team1 += 1;
+    else if (w === 2) team2 += 1;
+    else { team1 += 0.5; team2 += 0.5; }
+  }
+  return { team1, team2, decidedDuels };
+}
+
+// The player's own duel result on one hole: 1 / 0.5 / 0, or null while the
+// duel is not fully scored (mirrors matchPlayHolePts semantics).
+export function pairsMatchDuelPts(hole, playerId, pairs, scores, playerHandicaps) {
+  const duels = pairsMatchDuels(pairs);
+  if (!duels) return null;
+  const duel = duels.find(([a, b]) => a.id === playerId || b.id === playerId);
+  if (!duel) return null;
+  const [a, b] = duel;
+  const w = duelNetWinner(hole, a, b, scores, playerHandicaps);
+  if (w == null) return null;
+  if (w === 0) return 0.5;
+  const winnerId = w === 1 ? a.id : b.id;
+  return playerId === winnerId ? 1 : 0;
+}
+
+export function pairsMatchRoundTally(round, _players) {
+  const duels = pairsMatchDuels(round?.pairs);
+  if (!duels) return null;
+  const holes = round?.holes ?? [];
+  const scores = round?.scores ?? {};
+  const playerHandicaps = round?.playerHandicaps ?? {};
+
+  let team1 = 0;
+  let team2 = 0;
+  const duelRows = duels.map(([a, b]) => ({ aId: a.id, bId: b.id, aPts: 0, bPts: 0 }));
+  let team1Remaining = 0;
+  let team2Remaining = 0;
+  let fullyPlayed = 0;
+
+  for (const hole of holes) {
+    let decided = 0;
+    duels.forEach(([a, b], i) => {
+      const w = duelNetWinner(hole, a, b, scores, playerHandicaps);
+      if (w == null) {
+        team1Remaining += 1;
+        team2Remaining += 1;
+        return;
+      }
+      decided++;
+      if (w === 1) { team1 += 1; duelRows[i].aPts += 1; }
+      else if (w === 2) { team2 += 1; duelRows[i].bPts += 1; }
+      else {
+        team1 += 0.5; team2 += 0.5;
+        duelRows[i].aPts += 0.5; duelRows[i].bPts += 0.5;
+      }
+    });
+    if (decided === duels.length) fullyPlayed++;
+  }
+
+  const holesLeft = holes.length - fullyPlayed;
+  const lead = Math.abs(team1 - team2);
+  const leaderIdx = team1 > team2 ? 0 : team2 > team1 ? 1 : null;
+  const clinched = leaderIdx !== null && (
+    leaderIdx === 0 ? team1 > team2 + team2Remaining : team2 > team1 + team1Remaining
+  );
+  return { team1, team2, played: fullyPlayed, holesLeft, lead, leaderIdx, clinched, duels: duelRows };
+}
+
 // ── Phase A helpers ─────────────────────────────────────────────────────────
 
 // Green-in-Regulation: reached the green with at least two strokes left
