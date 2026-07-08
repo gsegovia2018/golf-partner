@@ -291,3 +291,84 @@ describe('summaryState', () => {
     expect(s.chips.find((c) => c.id === 'a').isLeader).toBe(true);
   });
 });
+
+describe('pairsmatchplay', () => {
+  const pairs = [
+    [{ id: 'p1', name: 'Ann Lee', handicap: 0 }, { id: 'p2', name: 'Bob Ray', handicap: 0 }],
+    [{ id: 'p3', name: 'Cam Fox', handicap: 0 }, { id: 'p4', name: 'Dan Oak', handicap: 0 }],
+  ];
+  const round = {
+    holes: [{ number: 1, par: 4, strokeIndex: 1 }, { number: 2, par: 4, strokeIndex: 2 }],
+    pairs,
+    playerHandicaps: {},
+  };
+  const scores = { p1: { 1: 4 }, p3: { 1: 5 }, p2: { 1: 4 }, p4: { 1: 4 } };
+
+  it('holePoints returns duel points per player when round is provided', () => {
+    const hp = holePoints({
+      mode: 'pairsmatchplay', hole: round.holes[0],
+      players: pairs.flat(), scores, handicaps: {}, round,
+    });
+    expect(hp.p1).toBe(1);
+    expect(hp.p3).toBe(0);
+    expect(hp.p2).toBe(0.5);
+    expect(hp.p4).toBe(0.5);
+  });
+
+  it('summaryState → pairs variant with 2 pts distributed per hole', () => {
+    const s = summaryState({
+      mode: 'pairsmatchplay', round, players: pairs.flat(), scores,
+      settings: { scoringMode: 'pairsmatchplay' }, currentHole: 1, meId: 'p1',
+    });
+    expect(s.variant).toBe('pairs');
+    expect(s.eyebrow).toBe('PAIRS MATCH PLAY');
+    expect(s.pairs[0].roundPts).toBe(1.5);
+    expect(s.pairs[1].roundPts).toBe(0.5);
+    expect(s.pairs[0].name).toBe('Ann & Bob');
+    expect(s.decided).toBe(false);
+    expect(s.status).toMatch(/lead/i);
+  });
+});
+
+describe('scramble', () => {
+  const players = [
+    { id: 'p1', name: 'Ann Lee', handicap: 0 }, { id: 'p2', name: 'Bob Ray', handicap: 0 },
+    { id: 'p3', name: 'Cam Fox', handicap: 0 }, { id: 'p4', name: 'Dan Oak', handicap: 0 },
+  ];
+  const holes = [{ number: 1, par: 4, strokeIndex: 1 }];
+
+  it('scramblepairs summaryState → pairs variant off captain scores', () => {
+    const round = {
+      holes,
+      pairs: [[players[0], players[1]], [players[2], players[3]]],
+      playerHandicaps: {},
+    };
+    const s = summaryState({
+      mode: 'scramblepairs', round, players,
+      scores: { p1: { 1: 3 }, p3: { 1: 4 } },
+      settings: { scoringMode: 'scramblepairs' }, currentHole: 1, meId: 'p1',
+    });
+    expect(s.variant).toBe('pairs');
+    expect(s.eyebrow).toBe('SCRAMBLE');
+    expect(s.pairs[0].roundPts).toBe(3); // birdie
+    expect(s.pairs[1].roundPts).toBe(2); // par
+  });
+
+  it('scramble4 summaryState → solo variant (team vs course)', () => {
+    const round = {
+      holes,
+      pairs: [[players[0], players[1], players[2], players[3]]],
+      playerHandicaps: {},
+    };
+    const s = summaryState({
+      mode: 'scramble4', round, players,
+      scores: { p1: { 1: 3 } },
+      settings: { scoringMode: 'scramble4' }, currentHole: 1, meId: 'p1',
+    });
+    expect(s.variant).toBe('solo');
+    expect(s.eyebrow).toBe('TEAM SCRAMBLE');
+    expect(s.solo.pts).toBe(3);
+    expect(s.solo.str).toBe(3);
+    expect(s.solo.vsParLabel).toBe('-1');
+  });
+});

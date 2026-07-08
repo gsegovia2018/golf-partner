@@ -581,6 +581,8 @@ export {
   pickupStrokes,
   randomPairs,
   buildTeamsForMode,
+  scrambleUnits,
+  scrambleRoundTally,
 } from './scoring';
 
 export {
