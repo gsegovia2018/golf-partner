@@ -45,7 +45,15 @@ Core features:
   index (SI) that determines extra shots.
 - **Stableford scoring:** Points per hole = 2 + (par − strokes + extra shots);
   target is maximizing points. Logic in `store/scoring.js` / `statsEngine.js`.
-- **Partner selection:** Two pairs per round, randomized each day.
+- **Partner selection:** Two pairs per round, randomized each day — unless
+  the `fixedTeams` setting keeps the same teams all tournament.
+- **Scramble modes:** `scramblepairs` / `scramble3v1` / `scramble4` — one
+  ball per team, scored Stableford off a team handicap (USGA Appendix C
+  allowances), stored under the team captain (`pair[0]`). Excluded from
+  personal stats.
+- **Pairs match play:** `pairsmatchplay` — two pairs, two cross-team 1v1
+  duels (index-matched within `round.pairs`), 2 points per hole (1 per duel,
+  ½ each on a halve), net via stroke index.
 
 ## Architecture Notes
 
