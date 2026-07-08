@@ -119,7 +119,7 @@ export default function PlayersScreen({ navigation, route }) {
       if ((t.players ?? []).length >= 4) break;
       if ((t.players ?? []).some((x) => x.id === p.id)) continue;
       const parsed = parseHandicapIndex(p.handicap);
-      const player = { id: p.id, name: p.name, handicap: parsed.ok ? parsed.value : 0 };
+      const player = { id: p.id, name: p.name, handicap: parsed.ok ? parsed.value : 0, gender: p.gender ?? null };
       const { patches: roundPatches, nextScoringMode } = addPlayerRoundPatches(t, player, { mode: chosenMode });
       const modeChanged = nextScoringMode !== (t.settings?.scoringMode ?? 'stableford');
       t = await mutate(t, {

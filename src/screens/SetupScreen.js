@@ -177,6 +177,7 @@ export default function SetupScreen({ navigation, route }) {
               handicap: p.handicap,
               user_id: p.user_id ?? null,
               avatar_url: p.avatar_url ?? null,
+              gender: p.gender ?? null,
             });
           }
           return next;
