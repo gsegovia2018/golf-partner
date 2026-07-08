@@ -24,7 +24,7 @@ import {
   bounceBackRate, frontBackSplit, strokeIndexAccuracy, scramblingStats,
 } from '../store/statsEngine';
 import StatDetailSheet, { captureAndShare } from '../components/StatDetailSheet';
-import { scoringModeUsesTeams } from '../components/scoringModes';
+import { scoringModeUsesTeams, isScrambleMode } from '../components/scoringModes';
 
 const ALL_TABS = [
   { key: 'overview', label: 'Overview' },
@@ -131,7 +131,8 @@ export default function StatsScreen({ navigation }) {
   const completedRounds = tournament.rounds.filter(r => r.scores && Object.keys(r.scores).length > 0);
   const scoringMode = tournament.settings?.scoringMode;
   const isSolo = players.length === 1;
-  const usesTeams = !isSolo && scoringModeUsesTeams(scoringMode, players.length);
+  const usesTeams = !isSolo && scoringModeUsesTeams(scoringMode, players.length)
+    && !isScrambleMode(scoringMode);
   const hasMulti = players.length > 1;
   const visibleTabs = ALL_TABS.filter(t => t.key !== 'pairs' || usesTeams);
   const activeTab = visibleTabs.some(t => t.key === tab) ? tab : 'overview';
