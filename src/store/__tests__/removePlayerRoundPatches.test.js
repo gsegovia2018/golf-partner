@@ -1,12 +1,14 @@
 import { removePlayerRoundPatches } from '../tournamentStore';
 
-function makeTournament({ players, mode, rounds, currentRound = 0 }) {
+function makeTournament({ players, mode, rounds, currentRound = 0, fixedTeams = false }) {
   return {
     id: 't1',
     players,
     rounds,
     currentRound,
-    settings: { scoringMode: mode, bestBallValue: 1, worstBallValue: 1 },
+    settings: {
+      scoringMode: mode, bestBallValue: 1, worstBallValue: 1, fixedTeams,
+    },
   };
 }
 
@@ -169,5 +171,42 @@ describe('removePlayerRoundPatches multi-round behavior', () => {
     const { patches } = removePlayerRoundPatches(t, 'd');
     expect(Array.isArray(patches[0].pairs)).toBe(true);
     expect(patches[0].roundId).toBe('r1');
+  });
+});
+
+describe('removePlayerRoundPatches fixedTeams', () => {
+  function pairIds(pairs) {
+    return pairs.map((pr) => pr.map((p) => p.id).sort());
+  }
+
+  test('with fixedTeams, all future-round patches carry identical pairs', () => {
+    const t = makeTournament({
+      players: [A, B, C, D],
+      mode: 'stableford',
+      fixedTeams: true,
+      currentRound: 0,
+      rounds: [
+        makeRound({ id: 'r0', revealed: false, pairs: [] }),
+        makeRound({ id: 'r1', revealed: false, pairs: [] }),
+        makeRound({ id: 'r2', revealed: false, pairs: [] }),
+      ],
+    });
+    const { patches } = removePlayerRoundPatches(t, 'd');
+    expect(patches).toHaveLength(3);
+    const [p0, p1, p2] = patches.map((p) => pairIds(p.pairs));
+    expect(p0).toEqual(p1);
+    expect(p1).toEqual(p2);
+  });
+
+  test('without fixedTeams, existing per-round behavior is unchanged', () => {
+    const t = makeTournament({
+      players: [A, B, C, D],
+      mode: 'stableford',
+      fixedTeams: false,
+      currentRound: 0,
+      rounds: [makeRound({ id: 'r0', revealed: true, pairs: [[A, B], [C, D]] })],
+    });
+    const { patches } = removePlayerRoundPatches(t, 'd');
+    expect(patches[0].pairs).toEqual([[A, B], [C]]);
   });
 });

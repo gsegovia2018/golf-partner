@@ -3,6 +3,7 @@ import {
   courseToQuickStartRound,
   resolveQuickStartPlayerTees,
   buildQuickStartTournamentDraft,
+  normalizeQuickStartSettings,
 } from '../quickStartGame';
 
 const tees = [
@@ -252,5 +253,39 @@ describe('buildQuickStartTournamentDraft', () => {
     });
     expect(draft.rounds[0].pairs).toHaveLength(2);
     expect(draft.rounds[0].pairs.flat()).toHaveLength(4);
+  });
+});
+
+describe('normalizeQuickStartSettings', () => {
+  test('defaults fixedTeams to false when absent', () => {
+    const out = normalizeQuickStartSettings({ scoringMode: 'stableford' }, 4);
+    expect(out.fixedTeams).toBe(false);
+  });
+
+  test('coerces a truthy fixedTeams value to boolean true', () => {
+    const out = normalizeQuickStartSettings(
+      { scoringMode: 'stableford', fixedTeams: true },
+      4,
+    );
+    expect(out.fixedTeams).toBe(true);
+  });
+
+  test('coerces a falsy non-boolean fixedTeams value to false', () => {
+    const out = normalizeQuickStartSettings(
+      { scoringMode: 'stableford', fixedTeams: 0 },
+      4,
+    );
+    expect(out.fixedTeams).toBe(false);
+  });
+
+  test('persists fixedTeams alongside a fallback scoring mode', () => {
+    // matchplay is invalid at 4 players — forces the fallback path, which
+    // should still carry fixedTeams through unchanged.
+    const out = normalizeQuickStartSettings(
+      { scoringMode: 'matchplay', fixedTeams: true },
+      4,
+    );
+    expect(out.scoringMode).toBe('stableford');
+    expect(out.fixedTeams).toBe(true);
   });
 });

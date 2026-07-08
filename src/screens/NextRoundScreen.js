@@ -54,8 +54,24 @@ export default function NextRoundScreen({ navigation, route }) {
   // player is their own "pair" so the existing pair-based scorecard /
   // leaderboard machinery ranks them solo. Build single-member pairs for
   // those modes; everything else still randomises partners each round.
+  //
+  // When fixedTeams is on, reuse the most recent round whose pairs cover
+  // exactly the current roster (same member ids) instead of randomising —
+  // that keeps the same partnerships for the whole tournament. Falls back
+  // to a fresh build when no such round exists yet (e.g. the very first
+  // round, or a roster change with no matching history).
   const buildPairsForRound = (t) => {
     const mode = t?.settings?.scoringMode;
+    if (t?.settings?.fixedTeams) {
+      const rosterIds = (t.players ?? []).map((p) => p.id).sort().join(',');
+      const rounds = t.rounds ?? [];
+      for (let i = rounds.length - 1; i >= 0; i--) {
+        const pairIds = (rounds[i].pairs ?? []).flat().map((p) => p.id).sort().join(',');
+        if (pairIds && pairIds === rosterIds) {
+          return rounds[i].pairs.map((pr) => [...pr]);
+        }
+      }
+    }
     return buildTeamsForMode(mode, t.players);
   };
 
@@ -150,7 +166,10 @@ export default function NextRoundScreen({ navigation, route }) {
   // to re-shuffle and the screen avoids "Teams" wording for them.
   const mode = tournament?.settings?.scoringMode;
   const usesTeams = scoringModeUsesTeams(mode, tournament?.players?.length);
-  const canReshuffle = usesTeams;
+  // Reshuffle is disabled when teams are fixed for the tournament — they
+  // were locked in at creation (or the last roster change), not re-rolled
+  // per round.
+  const canReshuffle = usesTeams && !tournament?.settings?.fixedTeams;
 
   function startReveal() {
     setPhase('countdown');

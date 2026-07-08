@@ -738,22 +738,42 @@ export function addPlayerRoundPatches(tournament, player, { mode } = {}) {
   const currentRound = tournament?.currentRound ?? 0;
   const roster = [...(tournament?.players ?? []), player];
   const newCount = roster.length;
+  const fixedTeams = Boolean(tournament?.settings?.fixedTeams);
   const nextScoringMode =
     mode && isScoringModeAllowed(mode, newCount) ? mode
       : isScoringModeAllowed(oldMode, newCount) ? oldMode
       : fallbackScoringMode(newCount);
   const patches = [];
+  // When fixedTeams is on, the team shape is computed once (from the first
+  // patched round) and reused verbatim for every later round, instead of
+  // being recomputed — and potentially re-randomized — per round.
+  let fixedPairs = null;
   (tournament?.rounds ?? []).forEach((round, idx) => {
     if (idx < currentRound) return; // already-played rounds untouched
     const playerHandicap = deriveRoundPlayingHandicap(player.handicap, round);
-    const pairs = buildPairsForAddedPlayer({
-      roster,
-      newMode: nextScoringMode,
-      oldMode,
-      existingPairs: round.pairs,
-      newPlayer: player,
-      revealed: Boolean(round.revealed),
-    });
+    let pairs;
+    if (fixedTeams) {
+      if (!fixedPairs) {
+        fixedPairs = buildPairsForAddedPlayer({
+          roster,
+          newMode: nextScoringMode,
+          oldMode,
+          existingPairs: round.pairs,
+          newPlayer: player,
+          revealed: Boolean(round.revealed),
+        });
+      }
+      pairs = fixedPairs.map((pr) => [...pr]);
+    } else {
+      pairs = buildPairsForAddedPlayer({
+        roster,
+        newMode: nextScoringMode,
+        oldMode,
+        existingPairs: round.pairs,
+        newPlayer: player,
+        revealed: Boolean(round.revealed),
+      });
+    }
     patches.push({ roundId: round.id, playerHandicap, pairs });
   });
   return { patches, nextScoringMode };
@@ -793,21 +813,40 @@ export function removePlayerRoundPatches(tournament, playerId, { mode } = {}) {
   const currentRound = tournament?.currentRound ?? 0;
   const survivors = (tournament?.players ?? []).filter((p) => p.id !== playerId);
   const newCount = survivors.length;
+  const fixedTeams = Boolean(tournament?.settings?.fixedTeams);
   const nextScoringMode =
     mode && isScoringModeAllowed(mode, newCount) ? mode
       : isScoringModeAllowed(oldMode, newCount) ? oldMode
       : fallbackScoringMode(newCount);
   const patches = [];
+  // See addPlayerRoundPatches: fixedTeams computes the shape once and
+  // reuses it for every later round instead of recomputing per round.
+  let fixedPairs = null;
   (tournament?.rounds ?? []).forEach((round, idx) => {
     if (idx < currentRound) return; // already-played rounds untouched
-    const pairs = buildPairsForRemovedPlayer({
-      survivors,
-      newMode: nextScoringMode,
-      oldMode,
-      existingPairs: round.pairs,
-      removedId: playerId,
-      revealed: Boolean(round.revealed),
-    });
+    let pairs;
+    if (fixedTeams) {
+      if (!fixedPairs) {
+        fixedPairs = buildPairsForRemovedPlayer({
+          survivors,
+          newMode: nextScoringMode,
+          oldMode,
+          existingPairs: round.pairs,
+          removedId: playerId,
+          revealed: Boolean(round.revealed),
+        });
+      }
+      pairs = fixedPairs.map((pr) => [...pr]);
+    } else {
+      pairs = buildPairsForRemovedPlayer({
+        survivors,
+        newMode: nextScoringMode,
+        oldMode,
+        existingPairs: round.pairs,
+        removedId: playerId,
+        revealed: Boolean(round.revealed),
+      });
+    }
     patches.push({ roundId: round.id, pairs });
   });
   return { patches, nextScoringMode };
@@ -843,16 +882,34 @@ export function setScoringModeRoundPatches(tournament, newMode) {
   const oldMode = tournament?.settings?.scoringMode ?? 'stableford';
   const currentRound = tournament?.currentRound ?? 0;
   const roster = tournament?.players ?? [];
+  const fixedTeams = Boolean(tournament?.settings?.fixedTeams);
   const patches = [];
+  // See addPlayerRoundPatches: fixedTeams computes the shape once and
+  // reuses it for every later round instead of recomputing per round.
+  let fixedPairs = null;
   (tournament?.rounds ?? []).forEach((round, idx) => {
     if (idx < currentRound) return; // already-played rounds untouched
-    const pairs = buildPairsForModeChange({
-      roster,
-      newMode,
-      oldMode,
-      existingPairs: round.pairs,
-      revealed: Boolean(round.revealed),
-    });
+    let pairs;
+    if (fixedTeams) {
+      if (!fixedPairs) {
+        fixedPairs = buildPairsForModeChange({
+          roster,
+          newMode,
+          oldMode,
+          existingPairs: round.pairs,
+          revealed: Boolean(round.revealed),
+        });
+      }
+      pairs = fixedPairs.map((pr) => [...pr]);
+    } else {
+      pairs = buildPairsForModeChange({
+        roster,
+        newMode,
+        oldMode,
+        existingPairs: round.pairs,
+        revealed: Boolean(round.revealed),
+      });
+    }
     patches.push({ roundId: round.id, pairs });
   });
   return { patches };
@@ -870,6 +927,7 @@ export const DEFAULT_SETTINGS = {
   scoringMode: 'stableford',
   bestBallValue: 1,          // points awarded per hole won in best ball match
   worstBallValue: 1,         // points awarded per hole won in worst ball match
+  fixedTeams: false,         // keep the same teams for every round when true
 };
 
 export function createTournament({ name, players, rounds, settings, kind = 'tournament', meId = null }) {

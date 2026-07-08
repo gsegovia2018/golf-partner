@@ -1,12 +1,14 @@
 import { setScoringModeRoundPatches } from '../tournamentStore';
 
-function makeTournament({ players, mode, rounds, currentRound = 0 }) {
+function makeTournament({ players, mode, rounds, currentRound = 0, fixedTeams = false }) {
   return {
     id: 't1',
     players,
     rounds,
     currentRound,
-    settings: { scoringMode: mode, bestBallValue: 1, worstBallValue: 1 },
+    settings: {
+      scoringMode: mode, bestBallValue: 1, worstBallValue: 1, fixedTeams,
+    },
   };
 }
 
@@ -113,5 +115,65 @@ describe('new team mode shapes', () => {
     });
     const { patches } = setScoringModeRoundPatches(t, 'pairsmatchplay');
     expect(patches[0].pairs.map((x) => x.length)).toEqual([2, 2]);
+  });
+});
+
+describe('fixedTeams', () => {
+  function pairIds(pairs) {
+    return pairs.map((pr) => pr.map((p) => p.id).sort());
+  }
+
+  test('with fixedTeams, every future round patch carries identical pairs', () => {
+    const t = makeTournament({
+      players: [A, B, C, D],
+      mode: 'individual',
+      fixedTeams: true,
+      currentRound: 0,
+      rounds: [
+        makeRound({ id: 'r0', revealed: false, pairs: [] }),
+        makeRound({ id: 'r1', revealed: false, pairs: [] }),
+        makeRound({ id: 'r2', revealed: false, pairs: [] }),
+      ],
+    });
+    const { patches } = setScoringModeRoundPatches(t, 'bestball');
+    expect(patches).toHaveLength(3);
+    const [p0, p1, p2] = patches.map((p) => pairIds(p.pairs));
+    expect(p0).toEqual(p1);
+    expect(p1).toEqual(p2);
+  });
+
+  test('without fixedTeams, future rounds may randomize independently (shape still valid each round)', () => {
+    const t = makeTournament({
+      players: [A, B, C, D],
+      mode: 'individual',
+      fixedTeams: false,
+      currentRound: 0,
+      rounds: [
+        makeRound({ id: 'r0', revealed: false, pairs: [] }),
+        makeRound({ id: 'r1', revealed: false, pairs: [] }),
+      ],
+    });
+    const { patches } = setScoringModeRoundPatches(t, 'bestball');
+    expect(patches).toHaveLength(2);
+    patches.forEach((patch) => {
+      expect(patch.pairs).toHaveLength(2);
+      expect(patch.pairs.every((pr) => pr.length === 2)).toBe(true);
+    });
+  });
+
+  test('fixedTeams still respects an already-revealed current round', () => {
+    const t = makeTournament({
+      players: [A, B, C, D],
+      mode: 'stableford',
+      fixedTeams: true,
+      currentRound: 0,
+      rounds: [
+        makeRound({ id: 'r0', revealed: true, pairs: [[A, B], [C, D]] }),
+        makeRound({ id: 'r1', revealed: false, pairs: [] }),
+      ],
+    });
+    const { patches } = setScoringModeRoundPatches(t, 'bestball');
+    expect(pairIds(patches[0].pairs)).toEqual([['a', 'b'], ['c', 'd']]);
+    expect(pairIds(patches[1].pairs)).toEqual(pairIds(patches[0].pairs));
   });
 });

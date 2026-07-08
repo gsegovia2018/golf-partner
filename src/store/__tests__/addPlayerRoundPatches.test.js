@@ -1,12 +1,14 @@
 import { addPlayerRoundPatches } from '../tournamentStore';
 
-function makeTournament({ players, mode, rounds, currentRound = 0 }) {
+function makeTournament({ players, mode, rounds, currentRound = 0, fixedTeams = false }) {
   return {
     id: 't1',
     players,
     rounds,
     currentRound,
-    settings: { scoringMode: mode, bestBallValue: 1, worstBallValue: 1 },
+    settings: {
+      scoringMode: mode, bestBallValue: 1, worstBallValue: 1, fixedTeams,
+    },
   };
 }
 
@@ -199,5 +201,46 @@ describe('addPlayerRoundPatches multi-round behavior', () => {
     });
     const { patches } = addPlayerRoundPatches(t, D);
     expect(patches[0].playerHandicap).toEqual(expect.any(Number));
+  });
+});
+
+describe('addPlayerRoundPatches fixedTeams', () => {
+  function pairIds(pairs) {
+    return pairs.map((pr) => pr.map((p) => p.id).sort());
+  }
+
+  test('with fixedTeams, all future-round patches carry identical pairs', () => {
+    const D = { id: 'd', name: 'D', handicap: 4 };
+    const t = makeTournament({
+      players: [A, B, C],
+      mode: 'stableford',
+      fixedTeams: true,
+      currentRound: 0,
+      rounds: [
+        makeRound({ id: 'r0', revealed: false, pairs: [] }),
+        makeRound({ id: 'r1', revealed: false, pairs: [] }),
+        makeRound({ id: 'r2', revealed: false, pairs: [] }),
+      ],
+    });
+    const { patches } = addPlayerRoundPatches(t, D);
+    expect(patches).toHaveLength(3);
+    const [p0, p1, p2] = patches.map((p) => pairIds(p.pairs));
+    expect(p0).toEqual(p1);
+    expect(p1).toEqual(p2);
+    // Each patch still carries its own per-round derived handicap.
+    patches.forEach((patch) => expect(patch.playerHandicap).toEqual(expect.any(Number)));
+  });
+
+  test('without fixedTeams, existing per-round behavior is unchanged', () => {
+    const D = { id: 'd', name: 'D', handicap: 4 };
+    const t = makeTournament({
+      players: [A, B, C],
+      mode: 'stableford',
+      fixedTeams: false,
+      currentRound: 0,
+      rounds: [makeRound({ id: 'r0', revealed: true, pairs: [[A, B], [C]] })],
+    });
+    const { patches } = addPlayerRoundPatches(t, D);
+    expect(patches[0].pairs).toEqual([[A, B], [C], [D]]);
   });
 });

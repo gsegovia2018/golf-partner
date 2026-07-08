@@ -354,6 +354,9 @@ export default function SetupScreen({ navigation, route }) {
     // singleton pair per player for solo modes.
     const isMatchPlay = settings.scoringMode === 'matchplay';
     const buildPairs = () => buildTeamsForMode(settings.scoringMode, players);
+    // With fixedTeams on, build the team shape once and reuse it for every
+    // round instead of calling buildPairs() (and re-randomizing) per round.
+    const fixedPairs = settings.fixedTeams ? buildPairs() : null;
 
     const builtRounds = rounds.map((r, i) => {
       // Defensive: if a round somehow has no per-player tees (e.g. the round
@@ -387,7 +390,7 @@ export default function SetupScreen({ navigation, route }) {
         playerTees,
         manualHandicaps: { ...(r.manualHandicaps ?? {}) },
         notes: '',
-        pairs: buildPairs(),
+        pairs: fixedPairs ? fixedPairs.map((pr) => [...pr]) : buildPairs(),
         scores: {},
       };
     });
