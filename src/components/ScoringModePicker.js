@@ -203,6 +203,36 @@ export default function ScoringModeField({ value, onChange, playerCount, setting
         </View>
       )}
 
+      {value !== 'scramble4' && scoringModeUsesTeams(value, playerCount) && settings && onSettingsChange && (
+        <View style={s.teamsRow}>
+          <Text style={s.teamsLabel}>Teams</Text>
+          <View style={s.segmentGroup}>
+            <TouchableOpacity
+              style={[s.segmentBtn, !settings.manualTeams && s.segmentBtnActive]}
+              onPress={() => onSettingsChange({ ...settings, manualTeams: false })}
+              activeOpacity={0.7}
+              accessibilityRole="button"
+              accessibilityState={{ selected: !settings.manualTeams }}
+            >
+              <Text style={[s.segmentBtnText, !settings.manualTeams && s.segmentBtnTextActive]}>
+                Random draw
+              </Text>
+            </TouchableOpacity>
+            <TouchableOpacity
+              style={[s.segmentBtn, Boolean(settings.manualTeams) && s.segmentBtnActive]}
+              onPress={() => onSettingsChange({ ...settings, manualTeams: true })}
+              activeOpacity={0.7}
+              accessibilityRole="button"
+              accessibilityState={{ selected: Boolean(settings.manualTeams) }}
+            >
+              <Text style={[s.segmentBtnText, Boolean(settings.manualTeams) && s.segmentBtnTextActive]}>
+                Choose myself
+              </Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+      )}
+
       <ScoringModeSheet
         visible={sheetOpen}
         value={value}
@@ -319,5 +349,32 @@ const makeStyles = (theme) => StyleSheet.create({
   },
   fixedTeamsHint: {
     fontFamily: 'PlusJakartaSans-Medium', color: theme.text.muted, fontSize: 12, marginTop: 2,
+  },
+
+  /* Manual teams segmented choice */
+  teamsRow: {
+    backgroundColor: theme.isDark ? theme.bg.secondary : theme.bg.card,
+    borderRadius: 12, borderWidth: 1, borderColor: theme.border.default,
+    padding: 14, marginTop: 10,
+    ...(theme.isDark ? {} : theme.shadow.card),
+  },
+  teamsLabel: {
+    fontFamily: 'PlusJakartaSans-Bold', color: theme.text.primary, fontSize: 14, marginBottom: 10,
+  },
+  segmentGroup: {
+    flexDirection: 'row', backgroundColor: theme.bg.secondary,
+    borderRadius: 10, borderWidth: 1, borderColor: theme.border.default, padding: 3, gap: 3,
+  },
+  segmentBtn: {
+    flex: 1, borderRadius: 8, paddingVertical: 9, alignItems: 'center', justifyContent: 'center',
+  },
+  segmentBtnActive: {
+    backgroundColor: theme.accent.primary,
+  },
+  segmentBtnText: {
+    fontFamily: 'PlusJakartaSans-SemiBold', color: theme.text.muted, fontSize: 13,
+  },
+  segmentBtnTextActive: {
+    color: theme.isDark ? theme.text.primary : theme.text.inverse,
   },
 });

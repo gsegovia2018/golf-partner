@@ -204,5 +204,16 @@ export function mergeScoringSettings(currentSettings, draft) {
     bestBallValue: parseInt(draft.bestBallValue, 10) || 1,
     worstBallValue: parseInt(draft.worstBallValue, 10) || 1,
     fixedTeams: Boolean(draft.fixedTeams),
+    manualTeams: Boolean(draft.manualTeams),
   };
+}
+
+// True when the mode+settings combination should route the user through the
+// team editor before play, instead of the random-draw reveal ceremony.
+// scramble4 is excluded — it's a single team of everyone, so there is no
+// meaningful "choice" and EditTeamsScreen doesn't support its shape.
+export function needsManualTeamSetup(mode, playerCount, manualTeams) {
+  if (mode === 'scramble4') return false;
+  if (!scoringModeUsesTeams(mode, playerCount)) return false;
+  return Boolean(manualTeams);
 }

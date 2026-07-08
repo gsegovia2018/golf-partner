@@ -9,7 +9,9 @@ import {
   mergeScoringSettings,
   isScrambleMode,
   scoringModeUsesTeams,
+  needsManualTeamSetup,
 } from '../scoringModes';
+import { DEFAULT_SETTINGS } from '../../store/tournamentStore';
 
 describe('SCORING_MODES', () => {
   test('every mode declares a non-empty category', () => {
@@ -125,6 +127,7 @@ describe('mergeScoringSettings', () => {
       bestBallValue: 1,
       worstBallValue: 1,
       fixedTeams: false,
+      manualTeams: false,
     });
   });
 
@@ -193,6 +196,62 @@ describe('mergeScoringSettings', () => {
       { scoringMode: 'bestball', bestBallValue: '1', worstBallValue: '1', fixedTeams: 'yes' },
     );
     expect(result.fixedTeams).toBe(true);
+  });
+
+  test('persists manualTeams as a coerced boolean', () => {
+    const result = mergeScoringSettings(
+      {},
+      { scoringMode: 'scramblepairs', bestBallValue: '1', worstBallValue: '1', manualTeams: true },
+    );
+    expect(result.manualTeams).toBe(true);
+  });
+
+  test('defaults manualTeams to false when absent from the draft', () => {
+    const result = mergeScoringSettings(
+      { manualTeams: true },
+      { scoringMode: 'scramblepairs', bestBallValue: '1', worstBallValue: '1' },
+    );
+    expect(result.manualTeams).toBe(false);
+  });
+
+  test('coerces a truthy non-boolean manualTeams value', () => {
+    const result = mergeScoringSettings(
+      {},
+      { scoringMode: 'scramblepairs', bestBallValue: '1', worstBallValue: '1', manualTeams: 'yes' },
+    );
+    expect(result.manualTeams).toBe(true);
+  });
+});
+
+describe('DEFAULT_SETTINGS', () => {
+  test('manualTeams defaults to false', () => {
+    expect(DEFAULT_SETTINGS.manualTeams).toBe(false);
+  });
+});
+
+describe('needsManualTeamSetup', () => {
+  it('true for a team mode with manualTeams on', () => {
+    expect(needsManualTeamSetup('scramblepairs', 4, true)).toBe(true);
+    expect(needsManualTeamSetup('pairsmatchplay', 4, true)).toBe(true);
+    expect(needsManualTeamSetup('scramble3v1', 4, true)).toBe(true);
+    expect(needsManualTeamSetup('stableford', 4, true)).toBe(true);
+  });
+
+  it('false when manualTeams is off', () => {
+    expect(needsManualTeamSetup('scramblepairs', 4, false)).toBe(false);
+  });
+
+  it('false for scramble4 regardless of manualTeams', () => {
+    expect(needsManualTeamSetup('scramble4', 4, true)).toBe(false);
+  });
+
+  it('false for a non-team mode', () => {
+    expect(needsManualTeamSetup('individual', 4, true)).toBe(false);
+    expect(needsManualTeamSetup('matchplay', 2, true)).toBe(false);
+  });
+
+  it('false when the player count no longer supports the mode', () => {
+    expect(needsManualTeamSetup('scramblepairs', 3, true)).toBe(false);
   });
 });
 

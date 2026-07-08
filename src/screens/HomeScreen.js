@@ -1982,6 +1982,7 @@ export default function HomeScreen({ navigation, route }) {
                   bestBallValue: String(tournament.settings?.bestBallValue ?? 1),
                   worstBallValue: String(tournament.settings?.worstBallValue ?? 1),
                   fixedTeams: Boolean(tournament.settings?.fixedTeams),
+                  manualTeams: Boolean(tournament.settings?.manualTeams),
                 });
                 setShowScoringModeSheet(true);
               }}
