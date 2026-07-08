@@ -54,7 +54,7 @@ function shortPlayerLabel(player, isSolo) {
 
 function NineBlock({
   holes, label, aggLabel, players, scores, onSetScore, editable,
-  playerHandicaps, mode, theme, s, columns, meId,
+  playerHandicaps, mode, round, theme, s, columns, meId,
 }) {
   const { labelW, aggW, holeW, labelFontSize } = columns;
   const labelFont = { fontSize: labelFontSize };
@@ -81,7 +81,7 @@ function NineBlock({
   const holePtsByHole = {};
   for (const h of holes) {
     holePtsByHole[h.number] = holePoints({
-      mode, hole: h, players, scores, handicaps: playerHandicaps,
+      mode, hole: h, players, scores, handicaps: playerHandicaps, round,
     });
   }
   const ptsFor = (hole, player) => holePtsByHole[hole.number]?.[player.id] ?? null;
@@ -275,6 +275,7 @@ function ScorecardTable({ round, players, scores, onSetScore, editable, mode, me
             editable={editable}
             playerHandicaps={playerHandicaps}
             mode={mode}
+            round={round}
             theme={theme}
             s={s}
             columns={columns}
@@ -294,6 +295,7 @@ function ScorecardTable({ round, players, scores, onSetScore, editable, mode, me
               editable={editable}
               playerHandicaps={playerHandicaps}
               mode={mode}
+              round={round}
               theme={theme}
               s={s}
               columns={columns}
