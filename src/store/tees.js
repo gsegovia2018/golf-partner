@@ -26,5 +26,20 @@ export function teeByLabel(tees, label) {
 // saved delete-then-insert).
 export function blankTee() {
   const id = `tee-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
-  return { id, label: '', rating: null, slope: null };
+  return { id, label: '', rating: null, slope: null, ratingWomen: null, slopeWomen: null };
+}
+
+// Effective {label, rating, slope} snapshot for one player on a tee. Every
+// physical tee carries two WHS rating pairs — base (men) and optional
+// women's (ratingWomen/slopeWomen — same markers, different conversion).
+// Female players get the women's pair, falling back per-field when a course
+// only has one rating set. Missing or unknown gender behaves as male.
+export function resolveTeeForPlayer(tee, gender) {
+  if (!tee) return null;
+  const female = gender === 'female';
+  return {
+    label: tee.label,
+    rating: female ? (tee.ratingWomen ?? tee.rating) : tee.rating,
+    slope: female ? (tee.slopeWomen ?? tee.slope) : tee.slope,
+  };
 }
