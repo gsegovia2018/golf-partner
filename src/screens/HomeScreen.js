@@ -1574,7 +1574,7 @@ export default function HomeScreen({ navigation, route }) {
           const rankColor = rankColors[i] || 'rgba(255,255,255,0.4)';
           const rankBg = i === 0 ? 'rgba(255,215,0,0.2)' : i === 1 ? 'rgba(192,200,212,0.15)' : i === 2 ? 'rgba(218,160,109,0.15)' : 'rgba(255,255,255,0.08)';
           const roundValue = getSelectedRoundValue(entry.player.id);
-          const roundUnit = settings.scoringMode === 'matchplay'
+          const roundUnit = selectedRoundMode === 'matchplay'
             ? (roundValue === 1 ? 'hole' : 'holes')
             : 'pts';
           const strokes = strokesByPlayer[entry.player.id] ?? 0;
@@ -1600,7 +1600,7 @@ export default function HomeScreen({ navigation, route }) {
                 !showRunning ? '—'
                   : isStrokePlayView
                     ? `${strokes || '-'} str`
-                    : settings.scoringMode === 'matchplay' && !leaderboardAlt
+                    : settings.scoringMode === 'matchplay' && !leaderboardAlt && !tournamentHasMixedModes(tournament)
                       ? `${entry.points} ${entry.points === 1 ? 'hole' : 'holes'}`
                       : `${entry.points} pts`
               }</Text>
@@ -1611,7 +1611,7 @@ export default function HomeScreen({ navigation, route }) {
             </View>
           );
         })}
-        {settings.scoringMode === 'matchplay' && matchPlayStandings && showRunning && (
+        {settings.scoringMode === 'matchplay' && matchPlayStandings && showRunning && !tournamentHasMixedModes(tournament) && (
           <Text style={s.mastersMatchStatus}>{matchPlayStandings.status}</Text>
         )}
       </View>
