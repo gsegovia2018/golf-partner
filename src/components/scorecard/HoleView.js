@@ -10,6 +10,8 @@ import { HolePage, MePicker } from './HolePage';
 import { RoundSummary } from './RoundSummary';
 import { roundTotals } from './scoreModel';
 import { CELEBRATION_TIERS } from './constants';
+import { isScrambleMode } from '../scoringModes';
+import { scrambleUnits } from '../../store/tournamentStore';
 import DiscrepancySheet from '../DiscrepancySheet';
 import ScoreConflictSheet from '../ScoreConflictSheet';
 import { listRoundConflicts } from '../../store/scoring';
@@ -123,16 +125,28 @@ export function HoleView({ round, roundIndex, players, scores, shotDetails, meId
 
   // Compute round totals once here so all HolePage instances share the same
   // result — avoids O(holes × players²) redundant work across the pager.
-  const scorecardTotals = useMemo(
-    () => roundTotals({
-      mode: settings?.scoringMode ?? 'stableford',
+  // Scramble modes total the synthetic team "players" under team handicaps
+  // so the totalsMap keys line up with the captain ids HolePage renders.
+  const scorecardTotals = useMemo(() => {
+    const rawMode = settings?.scoringMode ?? 'stableford';
+    if (isScrambleMode(rawMode)) {
+      const units = scrambleUnits(round, players);
+      return roundTotals({
+        mode: rawMode,
+        round,
+        players: units,
+        scores,
+        handicaps: Object.fromEntries(units.map((u) => [u.id, u.handicap])),
+      });
+    }
+    return roundTotals({
+      mode: rawMode,
       round,
       players,
       scores,
       handicaps: round?.playerHandicaps ?? {},
-    }),
-    [settings?.scoringMode, round, players, scores],
-  );
+    });
+  }, [settings?.scoringMode, round, players, scores]);
 
   if (!hole) return null;
 
@@ -236,6 +250,8 @@ export function HoleView({ round, roundIndex, players, scores, shotDetails, meId
                 showRunning={showRunning}
                 mode={settings?.scoringMode === 'matchplay' ? 'matchplay'
                   : settings?.scoringMode === 'sindicato' ? 'sindicato'
+                  : settings?.scoringMode === 'pairsmatchplay' ? 'pairsmatchplay'
+                  : isScrambleMode(settings?.scoringMode) ? settings.scoringMode
                   : isBestBall ? 'bestball' : 'stableford'}
                 official={official}
                 officialDiscrepancy={officialDiscrepancy}

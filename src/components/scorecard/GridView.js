@@ -6,10 +6,11 @@ import React, { useMemo, useRef } from 'react';
 import { View, Text, TextInput, useWindowDimensions } from 'react-native';
 import { useTheme } from '../../theme/ThemeContext';
 import { playersMeFirst } from '../../lib/playerOrder';
-import { calcExtraShots } from '../../store/tournamentStore';
+import { calcExtraShots, scrambleUnits } from '../../store/tournamentStore';
 import PullToRefresh from '../PullToRefresh';
 import { makeScorecardStyles } from './styles';
 import { holePoints, roundTotals } from './scoreModel';
+import { isScrambleMode } from '../scoringModes';
 
 // Join a pair's member first names with ' & '.
 function pairLabel(pair) {
@@ -215,7 +216,7 @@ function NineBlock({
   );
 }
 
-function ScorecardTable({ round, players, scores, onSetScore, editable, mode, meId }) {
+function ScorecardTable({ round, players, scores, onSetScore, editable, mode, meId, handicapsOverride }) {
   const { theme } = useTheme();
   const s = useMemo(() => makeScorecardStyles(theme), [theme]);
   const { width } = useWindowDimensions();
@@ -228,7 +229,9 @@ function ScorecardTable({ round, players, scores, onSetScore, editable, mode, me
   const front = holes.slice(0, 9);
   const back = holes.slice(9, 18);
   const hasBack = back.length > 0;
-  const playerHandicaps = round.playerHandicaps ?? {};
+  // Scramble rows pass a team-handicap override (unitId -> team handicap) —
+  // otherwise fall back to the round's individual player handicaps.
+  const playerHandicaps = handicapsOverride ?? (round.playerHandicaps ?? {});
   const displayPlayers = playersMeFirst(players, meId);
 
   // Block inner width: viewport minus content padding (14*2) minus card
@@ -331,6 +334,8 @@ function ScorecardTable({ round, players, scores, onSetScore, editable, mode, me
             <Text style={s.multiTotalLabel}>{
               mode === 'matchplay' ? 'MATCH PLAY'
                 : mode === 'sindicato' ? 'SINDICATO'
+                : mode === 'pairsmatchplay' ? 'PAIRS MATCH PLAY'
+                : isScrambleMode(mode) ? 'SCRAMBLE'
                 : 'STABLEFORD'
             }</Text>
           </View>
@@ -362,10 +367,26 @@ function ScorecardTable({ round, players, scores, onSetScore, editable, mode, me
 export function GridView({ round, roundIndex, players, scores, isBestBall, bbResult, settings, onSetScore, editable, refreshing, onRefresh, meId }) {
   const { theme } = useTheme();
   const s = useMemo(() => makeScorecardStyles(theme), [theme]);
-  const mode = settings?.scoringMode === 'matchplay' ? 'matchplay'
-    : settings?.scoringMode === 'sindicato' ? 'sindicato'
+  const rawMode = settings?.scoringMode;
+  const mode = rawMode === 'matchplay' ? 'matchplay'
+    : rawMode === 'sindicato' ? 'sindicato'
+    : rawMode === 'pairsmatchplay' ? 'pairsmatchplay'
+    : isScrambleMode(rawMode) ? rawMode
     : isBestBall ? 'bestball'
     : 'stableford';
+
+  // Scramble modes score one ball per team under the captain — swap the row
+  // source for synthetic team "players" (scrambleUnits) so score entry,
+  // points, and handicaps all key off the captain's id, and "me first"
+  // resolves to the containing team's row.
+  const isScramble = isScrambleMode(mode);
+  const rowPlayers = isScramble ? scrambleUnits(round, players) : players;
+  const rowHandicaps = isScramble
+    ? Object.fromEntries(rowPlayers.map((u) => [u.id, u.handicap]))
+    : null;
+  const effectiveMeId = isScramble
+    ? (rowPlayers.find((u) => u.members?.some((m) => m.id === meId))?.id ?? meId)
+    : meId;
 
   // Every game mode renders the same front-nine / back-nine card layout
   // (ScorecardTable). Best Ball adds a LiveMatchStrip below the table.
@@ -387,12 +408,13 @@ export function GridView({ round, roundIndex, players, scores, isBestBall, bbRes
 
       <ScorecardTable
         round={round}
-        players={players}
+        players={rowPlayers}
         scores={scores}
         onSetScore={onSetScore}
         editable={editable}
         mode={mode}
-        meId={meId}
+        meId={effectiveMeId}
+        handicapsOverride={rowHandicaps}
       />
 
       {isBestBall && bbResult && <LiveMatchStrip bbResult={bbResult} settings={settings} />}
