@@ -704,24 +704,34 @@ export default function SetupScreen({ navigation, route }) {
     <>
       <Text style={s.stepOverline}>SCORING</Text>
       <Text style={s.stepPrompt}>How do you keep score?</Text>
-      <Text style={s.stepSubtitle}>Pick a format. You can change it later.</Text>
-      <ScoringModePicker
-        value={settings.scoringMode}
-        onChange={(mode) => setSettings((prev) => ({ ...prev, scoringMode: mode }))}
-        playerCount={players.length}
-        settings={settings}
-        onSettingsChange={setSettings}
-      />
-      {rounds.length > 1 && rounds.map((r, i) => (
+      <Text style={s.stepSubtitle}>
+        {rounds.length > 1
+          ? 'Pick a format for each round. You can change it later.'
+          : 'Pick a format. You can change it later.'}
+      </Text>
+      {rounds.length <= 1 ? (
+        <ScoringModePicker
+          value={settings.scoringMode}
+          onChange={(mode) => setSettings((prev) => ({ ...prev, scoringMode: mode }))}
+          playerCount={players.length}
+          settings={settings}
+          onSettingsChange={setSettings}
+        />
+      ) : rounds.map((r, i) => (
         <View key={r.id ?? `scoring-round-${i}`} style={s.teesRoundBlock}>
-          <Text style={s.roundLabel}>Round {i + 1} · {r.courseName || 'Course'}</Text>
+          <Text style={[s.roundLabel, s.teesRoundLabel]}>Round {i + 1} · {r.courseName || 'Course'}</Text>
           <View style={s.teesRoundCard}>
             <ScoringModePicker
               value={r.scoringMode ?? settings.scoringMode}
-              onChange={(mode) => setRounds((prev) => prev.map((x, j) => (
-                j === i ? { ...x, scoringMode: mode === settings.scoringMode ? undefined : mode } : x
-              )))}
+              onChange={(mode) => {
+                setRounds((prev) => prev.map((x, j) => (j === i ? { ...x, scoringMode: mode } : x)));
+                // Round 1's format doubles as the tournament default so the
+                // review label and rounds left untouched stay coherent.
+                if (i === 0) setSettings((prev) => ({ ...prev, scoringMode: mode }));
+              }}
               playerCount={players.length}
+              settings={settings}
+              onSettingsChange={setSettings}
             />
           </View>
         </View>
@@ -738,7 +748,7 @@ export default function SetupScreen({ navigation, route }) {
       </Text>
       {rounds.map((r, i) => (
         <View key={r.id ?? `round-${i}`} style={s.teesRoundBlock}>
-          {!isGame && <Text style={s.roundLabel}>Round {i + 1}</Text>}
+          {!isGame && <Text style={[s.roundLabel, s.teesRoundLabel]}>Round {i + 1}</Text>}
           <View style={s.teesRoundCard}>
             <RoundTeeAssignments
               round={r}
@@ -1189,7 +1199,8 @@ function makeStyles(theme) {
     },
 
     /* Tees step */
-    teesRoundBlock: { marginBottom: 16 },
+    teesRoundBlock: { marginTop: 8, marginBottom: 16 },
+    teesRoundLabel: { marginBottom: 8 },
     teesRoundCard: {
       backgroundColor: theme.bg.card, borderRadius: 16, borderWidth: 1,
       borderColor: theme.isDark ? theme.glass?.border : theme.border.default,

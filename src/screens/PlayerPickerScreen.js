@@ -33,7 +33,6 @@ export default function PlayerPickerScreen({ navigation, route }) {
   const [pickedIds, setPickedIds] = useState([]);
   const [newName, setNewName] = useState('');
   const [newHcp, setNewHcp] = useState('');
-  const [newGender, setNewGender] = useState('male');
   const [saving, setSaving] = useState(false);
   const [query, setQuery] = useState('');
   const [lastUsed, setLastUsed] = useState({});
@@ -103,18 +102,19 @@ export default function PlayerPickerScreen({ navigation, route }) {
       const playerId = uuidv4();
       const parsedHcp = parseHandicapIndex(handicap);
       const hcp = parsedHcp.ok ? parsedHcp.value : 0;
-      const player = { id: playerId, name: trimmed, handicap: hcp, gender: newGender };
+      // Gender is not asked for here — quick-added guests default to male;
+      // exceptions are edited later in the Players library.
+      const player = { id: playerId, name: trimmed, handicap: hcp, gender: 'male' };
       await mutate(null, {
         type: 'player.upsertLibrary',
         playerId,
         name: player.name,
         handicap: hcp,
-        gender: newGender,
+        gender: 'male',
       });
       setPlayers((prev) => [...prev, player]);
       setNewName('');
       setNewHcp('');
-      setNewGender('male');
       setQuery('');
       setPickedIds((prev) => {
         if (prev.length >= maxSelectable) return prev;
@@ -184,22 +184,6 @@ export default function PlayerPickerScreen({ navigation, route }) {
             <Text style={s.addBtnText}>Add</Text>
           </TouchableOpacity>
         </View>
-        <View style={{ flexDirection: 'row', gap: 8, marginTop: 8 }}>
-          {[['male', 'Male'], ['female', 'Female']].map(([value, label]) => (
-            <TouchableOpacity
-              key={value}
-              onPress={() => setNewGender(value)}
-              style={[s.genderPill, newGender === value && s.genderPillActive]}
-              accessibilityRole="button"
-              accessibilityLabel={label}
-              accessibilityState={{ selected: newGender === value }}
-              activeOpacity={0.7}
-            >
-              <Text style={[s.genderPillText, newGender === value && s.genderPillTextActive]}>{label}</Text>
-            </TouchableOpacity>
-          ))}
-        </View>
-
         <Text style={s.sectionTitle}>Library</Text>
         {loading ? (
           <ActivityIndicator color={theme.accent.primary} style={{ marginTop: 20 }} />
@@ -336,14 +320,6 @@ const makeStyles = (theme) => StyleSheet.create({
     fontFamily: 'PlusJakartaSans-Medium',
   },
   hcpInput: { width: 64, textAlign: 'center' },
-  genderPill: {
-    flexDirection: 'row', alignItems: 'center',
-    borderRadius: 10, borderWidth: 1.5, borderColor: theme.border.default,
-    paddingHorizontal: 14, paddingVertical: 7,
-  },
-  genderPillActive: { borderColor: theme.accent.primary, backgroundColor: theme.accent.light },
-  genderPillText: { fontFamily: 'PlusJakartaSans-SemiBold', color: theme.text.secondary, fontSize: 13 },
-  genderPillTextActive: { fontFamily: 'PlusJakartaSans-Bold', color: theme.accent.primary, fontSize: 13 },
   addBtn: {
     backgroundColor: theme.isDark ? theme.accent.light : theme.accent.primary,
     borderRadius: 12,
