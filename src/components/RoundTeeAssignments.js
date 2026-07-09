@@ -4,16 +4,29 @@ import { Feather } from '@expo/vector-icons';
 import { calcPlayingHandicap, lastTeeForPlayerOnCourse } from '../store/tournamentStore';
 import { middleTee, resolveTeeForPlayer } from '../store/tees';
 
-// Common golf tee colours, keyed by lower-cased label.
-const TEE_COLORS = {
-  white: '#FFFFFF', yellow: '#F2C200', red: '#D7372E', blue: '#2F6FB5',
-  black: '#23262B', gold: '#C9A227', green: '#2F7D5B', orange: '#E5862B',
-  silver: '#B8BCC2', bronze: '#A9712E',
-};
+// Common golf tee colours, matched against the tee label by keyword —
+// covers both English ("White") and Spanish ("Blancas") naming, singular
+// or plural, since course tee labels come from free-text course setup
+// (see TeesEditor.js) and this group's course data is Spanish-labeled.
+const TEE_COLOR_KEYWORDS = [
+  { match: /blanc|white/, color: '#FFFFFF' },
+  { match: /amarill|yellow/, color: '#F2C200' },
+  { match: /roj|\bred\b/, color: '#D7372E' },
+  { match: /azul|blue/, color: '#2F6FB5' },
+  { match: /negr|black/, color: '#23262B' },
+  { match: /dorad|gold/, color: '#C9A227' },
+  { match: /verd|green/, color: '#2F7D5B' },
+  { match: /naranj|orange/, color: '#E5862B' },
+  { match: /plat(a|ead)|silver/, color: '#B8BCC2' },
+  { match: /bronc|bronze/, color: '#A9712E' },
+];
 
 // Resolve a tee label to a swatch colour, or null when unknown.
 function teeColor(label) {
-  return TEE_COLORS[String(label || '').trim().toLowerCase()] || null;
+  const norm = String(label || '').trim().toLowerCase();
+  if (!norm) return null;
+  const found = TEE_COLOR_KEYWORDS.find((k) => k.match.test(norm));
+  return found ? found.color : null;
 }
 
 // Up to two uppercase initials for a player's avatar badge.
@@ -255,7 +268,7 @@ export default function RoundTeeAssignments({ round, players = [], onChange, the
                 setExpandedId(expanded ? null : p.id);
               }}
               accessibilityRole="button"
-              accessibilityLabel={`${p.name}${teeLabel ? `, ${teeLabel} tee` : showPickPrompt ? ', no tee selected' : ''}, playing handicap ${valueStr || 'unset'}`}
+              accessibilityLabel={`${p.name}, index ${p.handicap}${teeLabel ? `, ${teeLabel} tee` : showPickPrompt ? ', no tee selected' : ''}, playing handicap ${valueStr || 'unset'}`}
               accessibilityState={{ expanded }}
             >
               <View style={s.avatar}>
@@ -263,6 +276,7 @@ export default function RoundTeeAssignments({ round, players = [], onChange, the
               </View>
               <View style={{ flex: 1 }}>
                 <Text style={s.name}>{p.name}</Text>
+                <Text style={s.indexText}>Index {p.handicap}</Text>
                 {(teeLabel || showPickPrompt || overridden) && (
                   <View style={s.teeSummary}>
                     {teeLabel && (
@@ -277,6 +291,7 @@ export default function RoundTeeAssignments({ round, players = [], onChange, the
                 )}
               </View>
               <View style={s.hcpPill}>
+                <Text style={s.hcpPillLabel}>PLAY</Text>
                 <Text style={s.hcpPillText}>{valueStr || '—'}</Text>
               </View>
               <Feather
@@ -316,7 +331,10 @@ export default function RoundTeeAssignments({ round, players = [], onChange, the
                     </View>
                   </>
                 )}
-                <Text style={s.editorLabel}>PLAYING HANDICAP</Text>
+                <View style={s.editorLabelRow}>
+                  <Text style={s.editorLabel}>PLAYING HANDICAP</Text>
+                  <Text style={s.indexRef}>Index {p.handicap}</Text>
+                </View>
                 <View style={s.stepper}>
                   <TouchableOpacity
                     style={s.stepBtn}
@@ -399,6 +417,7 @@ const makeStyles = (theme) => StyleSheet.create({
   avatarText: { fontFamily: 'PlusJakartaSans-Bold', color: theme.accent.primary, fontSize: 13 },
 
   name: { fontFamily: 'PlusJakartaSans-SemiBold', color: theme.text.primary, fontSize: 15 },
+  indexText: { fontFamily: 'PlusJakartaSans-Regular', color: theme.text.muted, fontSize: 11, marginTop: 1 },
   teeSummary: { flexDirection: 'row', alignItems: 'center', marginTop: 3 },
   teeDot: {
     width: 13, height: 13, borderRadius: 7,
@@ -412,6 +431,10 @@ const makeStyles = (theme) => StyleSheet.create({
     backgroundColor: theme.accent.light, borderRadius: 9,
     paddingHorizontal: 11, paddingVertical: 5, minWidth: 40, alignItems: 'center',
   },
+  hcpPillLabel: {
+    fontFamily: 'PlusJakartaSans-Bold', color: theme.accent.primary, fontSize: 9,
+    letterSpacing: 0.4, opacity: 0.7,
+  },
   hcpPillText: { fontFamily: 'PlusJakartaSans-Bold', color: theme.accent.primary, fontSize: 14 },
 
   editor: {
@@ -422,6 +445,10 @@ const makeStyles = (theme) => StyleSheet.create({
     fontFamily: 'PlusJakartaSans-Bold', color: theme.text.muted,
     fontSize: 10, letterSpacing: 0.6, marginTop: 12, marginBottom: 7,
   },
+  editorLabelRow: {
+    flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
+  },
+  indexRef: { fontFamily: 'PlusJakartaSans-Medium', color: theme.text.muted, fontSize: 11 },
   teePills: { flexDirection: 'row', flexWrap: 'wrap', gap: 7 },
   teePill: {
     flexDirection: 'row', alignItems: 'center', gap: 6,
