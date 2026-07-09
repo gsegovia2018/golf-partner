@@ -18,10 +18,10 @@ import { applyCoursePick, applyLayoutChoice } from '../lib/roundCourse';
 import RoundLayoutSelect from '../components/RoundLayoutSelect';
 import { useTheme } from '../theme/ThemeContext';
 import { useAuth } from '../context/AuthContext';
-import ScoringModePicker, { isScoringModeAllowed, fallbackScoringMode } from '../components/ScoringModePicker';
+import ScoringModePicker, { isScoringModeAllowed, fallbackScoringMode, TeamsSettingsFields } from '../components/ScoringModePicker';
 import RoundTeeAssignments from '../components/RoundTeeAssignments';
 import PostCreateInviteModal from '../components/PostCreateInviteModal';
-import { getScoringMode, needsManualTeamSetup } from '../components/scoringModes';
+import { getScoringMode, needsManualTeamSetup, scoringModeUsesTeams } from '../components/scoringModes';
 import WizardProgress from '../components/setup/WizardProgress';
 import WizardNav from '../components/setup/WizardNav';
 import {
@@ -98,13 +98,23 @@ export default function SetupScreen({ navigation, route }) {
   // Which round's course name is being edited inline (null = none).
   const [renamingIndex, setRenamingIndex] = useState(null);
 
+  // A dedicated 'teams' step only earns its keep for multi-round tournaments
+  // whose (default) scoring mode is played in teams — for a single round
+  // there's nothing to keep "the same" across, so the inline controls on the
+  // Scoring step remain the only place to set it.
+  const showTeamsStep = !isGame && rounds.length > 1
+    && scoringModeUsesTeams(settings.scoringMode, players.length);
+
   // The active step list depends on kind + player count (Scoring only exists
   // for 2+ players). When the roster shrinks the Scoring step away the array
   // gets shorter, so the active index is clamped synchronously here — not via
   // an effect, which would leave a one-render window where the index points
   // past the array and stepKey wrongly resolves to 'review'. stepKey is the
   // key of the currently displayed step.
-  const steps = useMemo(() => wizardSteps(kind, players.length), [kind, players.length]);
+  const steps = useMemo(
+    () => wizardSteps(kind, players.length, { showTeamsStep }),
+    [kind, players.length, showTeamsStep],
+  );
   const step = Math.max(0, Math.min(rawStep, steps.length - 1));
   const stepKey = steps[step];
 
@@ -732,10 +742,27 @@ export default function SetupScreen({ navigation, route }) {
               playerCount={players.length}
               settings={settings}
               onSettingsChange={setSettings}
+              hideTeamsControls={showTeamsStep}
             />
           </View>
         </View>
       ))}
+    </>
+  );
+
+  const renderTeamsStep = () => (
+    <>
+      <Text style={s.stepOverline}>TEAMS</Text>
+      <Text style={s.stepPrompt}>Same teams all tournament?</Text>
+      <Text style={s.stepSubtitle}>
+        Applies whenever a round's format is played in teams.
+      </Text>
+      <TeamsSettingsFields
+        value={settings.scoringMode}
+        playerCount={players.length}
+        settings={settings}
+        onSettingsChange={setSettings}
+      />
     </>
   );
 
@@ -828,7 +855,7 @@ export default function SetupScreen({ navigation, route }) {
           </TouchableOpacity>
 
           <TouchableOpacity
-            style={s.reviewRow}
+            style={[s.reviewRow, showTeamsStep && s.reviewRowDivider]}
             onPress={() => goToStep('scoring')}
             disabled={!hasScoringStep}
           >
@@ -841,6 +868,22 @@ export default function SetupScreen({ navigation, route }) {
               <Feather name="chevron-right" size={18} color={theme.accent.primary} />
             )}
           </TouchableOpacity>
+
+          {showTeamsStep && (
+            <TouchableOpacity
+              style={s.reviewRow}
+              onPress={() => goToStep('teams')}
+            >
+              <Feather name="users" size={16} color={theme.accent.primary} style={s.reviewRowIcon} />
+              <View style={{ flex: 1 }}>
+                <Text style={s.reviewRowTitle}>Teams</Text>
+                <Text style={s.reviewRowSub}>
+                  {settings.fixedTeams ? 'Same teams every round' : 'Random each round'}
+                </Text>
+              </View>
+              <Feather name="chevron-right" size={18} color={theme.accent.primary} />
+            </TouchableOpacity>
+          )}
         </View>
 
         {!canStart && (
@@ -866,6 +909,7 @@ export default function SetupScreen({ navigation, route }) {
         {stepKey === 'players' && renderPlayersStep()}
         {(stepKey === 'course' || stepKey === 'rounds') && renderCourseStep()}
         {stepKey === 'scoring' && renderScoringStep()}
+        {stepKey === 'teams' && renderTeamsStep()}
         {stepKey === 'tees' && renderTeesStep()}
         {stepKey === 'review' && renderReviewStep()}
       </ScrollView>

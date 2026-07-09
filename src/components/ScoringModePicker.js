@@ -33,7 +33,7 @@ export function ScoringModeSheet({ visible, value, playerCount, onSelect, onClos
   const sheetMaxHeight = Math.round(height * 0.7);
 
   return (
-    <Modal visible={visible} transparent animationType="slide" onRequestClose={onClose}>
+    <Modal statusBarTranslucent hardwareAccelerated visible={visible} transparent animationType="slide" onRequestClose={onClose}>
       <TouchableOpacity style={s.backdrop} activeOpacity={1} onPress={onClose}>
         <TouchableOpacity activeOpacity={1} style={s.sheet}>
           <View style={s.sheetHeader}>
@@ -90,9 +90,68 @@ export function ScoringModeSheet({ visible, value, playerCount, onSelect, onClos
   );
 }
 
+// --- Same-teams / manual-vs-random controls -------------------------------
+// Shared by the compact field below (single-round setup, post-creation
+// "Scoring Mode" sheet) and the dedicated 'teams' wizard step for multi-round
+// setups (SetupScreen.js) — same visuals, same settings, one definition.
+export function TeamsSettingsFields({ value, playerCount, settings, onSettingsChange }) {
+  const { theme } = useTheme();
+  const s = makeStyles(theme);
+  if (!settings || !onSettingsChange || !scoringModeUsesTeams(value, playerCount)) return null;
+
+  return (
+    <>
+      <View style={s.fixedTeamsRow}>
+        <View style={s.fixedTeamsText}>
+          <Text style={s.fixedTeamsLabel}>Same teams every round</Text>
+          <Text style={s.fixedTeamsHint}>Teams are drawn at random for round 1, then kept for the whole tournament.</Text>
+        </View>
+        <Switch
+          value={Boolean(settings.fixedTeams)}
+          onValueChange={(v) => onSettingsChange({ ...settings, fixedTeams: v })}
+          trackColor={{ false: theme.border.default, true: theme.accent.primary }}
+          thumbColor={Platform.OS === 'android' ? theme.bg.card : undefined}
+        />
+      </View>
+
+      {value !== 'scramble4' && (
+        <View style={s.teamsRow}>
+          <Text style={s.teamsLabel}>Teams</Text>
+          <View style={s.segmentGroup}>
+            <TouchableOpacity
+              style={[s.segmentBtn, !settings.manualTeams && s.segmentBtnActive]}
+              onPress={() => onSettingsChange({ ...settings, manualTeams: false })}
+              activeOpacity={0.7}
+              accessibilityRole="button"
+              accessibilityState={{ selected: !settings.manualTeams }}
+            >
+              <Text style={[s.segmentBtnText, !settings.manualTeams && s.segmentBtnTextActive]}>
+                Random draw
+              </Text>
+            </TouchableOpacity>
+            <TouchableOpacity
+              style={[s.segmentBtn, Boolean(settings.manualTeams) && s.segmentBtnActive]}
+              onPress={() => onSettingsChange({ ...settings, manualTeams: true })}
+              activeOpacity={0.7}
+              accessibilityRole="button"
+              accessibilityState={{ selected: Boolean(settings.manualTeams) }}
+            >
+              <Text style={[s.segmentBtnText, Boolean(settings.manualTeams) && s.segmentBtnTextActive]}>
+                Choose myself
+              </Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+      )}
+    </>
+  );
+}
+
 // --- Compact field shown on the setup screens ----------------------------
 
-export default function ScoringModeField({ value, onChange, playerCount, settings, onSettingsChange }) {
+export default function ScoringModeField({
+  value, onChange, playerCount, settings, onSettingsChange, hideTeamsControls,
+}) {
   const { theme } = useTheme();
   const s = makeStyles(theme);
 
@@ -188,49 +247,13 @@ export default function ScoringModeField({ value, onChange, playerCount, setting
         </View>
       )}
 
-      {scoringModeUsesTeams(value, playerCount) && settings && onSettingsChange && (
-        <View style={s.fixedTeamsRow}>
-          <View style={s.fixedTeamsText}>
-            <Text style={s.fixedTeamsLabel}>Same teams every round</Text>
-            <Text style={s.fixedTeamsHint}>Teams are drawn at random for round 1, then kept for the whole tournament.</Text>
-          </View>
-          <Switch
-            value={Boolean(settings.fixedTeams)}
-            onValueChange={(v) => onSettingsChange({ ...settings, fixedTeams: v })}
-            trackColor={{ false: theme.border.default, true: theme.accent.primary }}
-            thumbColor={Platform.OS === 'android' ? theme.bg.card : undefined}
-          />
-        </View>
-      )}
-
-      {value !== 'scramble4' && scoringModeUsesTeams(value, playerCount) && settings && onSettingsChange && (
-        <View style={s.teamsRow}>
-          <Text style={s.teamsLabel}>Teams</Text>
-          <View style={s.segmentGroup}>
-            <TouchableOpacity
-              style={[s.segmentBtn, !settings.manualTeams && s.segmentBtnActive]}
-              onPress={() => onSettingsChange({ ...settings, manualTeams: false })}
-              activeOpacity={0.7}
-              accessibilityRole="button"
-              accessibilityState={{ selected: !settings.manualTeams }}
-            >
-              <Text style={[s.segmentBtnText, !settings.manualTeams && s.segmentBtnTextActive]}>
-                Random draw
-              </Text>
-            </TouchableOpacity>
-            <TouchableOpacity
-              style={[s.segmentBtn, Boolean(settings.manualTeams) && s.segmentBtnActive]}
-              onPress={() => onSettingsChange({ ...settings, manualTeams: true })}
-              activeOpacity={0.7}
-              accessibilityRole="button"
-              accessibilityState={{ selected: Boolean(settings.manualTeams) }}
-            >
-              <Text style={[s.segmentBtnText, Boolean(settings.manualTeams) && s.segmentBtnTextActive]}>
-                Choose myself
-              </Text>
-            </TouchableOpacity>
-          </View>
-        </View>
+      {!hideTeamsControls && (
+        <TeamsSettingsFields
+          value={value}
+          playerCount={playerCount}
+          settings={settings}
+          onSettingsChange={onSettingsChange}
+        />
       )}
 
       <ScoringModeSheet

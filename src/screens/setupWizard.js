@@ -19,15 +19,20 @@
  * Ordered list of step keys for the current setup.
  * @param {'game'|'tournament'|'official'} kind
  * @param {number} playerCount
+ * @param {{ showTeamsStep?: boolean }} [options] showTeamsStep inserts a
+ *   dedicated 'teams' step (same-teams-every-round + random/choose-myself)
+ *   right after 'scoring' — used for multi-round tournaments whose format
+ *   is played in teams, so the choice isn't buried per-round.
  * @returns {string[]}
  */
-export function wizardSteps(kind, playerCount) {
+export function wizardSteps(kind, playerCount, options = {}) {
   if (kind === 'official') {
     return ['roster', 'rounds', 'format', 'review'];
   }
   const courseStep = kind === 'tournament' ? 'rounds' : 'course';
   const steps = [courseStep, 'players', 'tees'];
   if (playerCount >= 2) steps.push('scoring');
+  if (options.showTeamsStep) steps.push('teams');
   steps.push('review');
   return steps;
 }
@@ -124,6 +129,7 @@ export function isStepValid(stepKey, { players, rounds, roster }) {
       return rounds.every((r) => (r.courseName || '').trim().length > 0);
     case 'tees':
     case 'scoring':
+    case 'teams':
     case 'review':
       return true;
     case 'roster':
