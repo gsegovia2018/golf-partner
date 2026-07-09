@@ -1321,7 +1321,7 @@ export default function HomeScreen({ navigation, route }) {
         })()}
         </PullToRefresh>
 
-        <Modal
+        <Modal statusBarTranslucent hardwareAccelerated
           visible={showListMenu}
           transparent
           animationType="slide"
@@ -1355,7 +1355,7 @@ export default function HomeScreen({ navigation, route }) {
           </Pressable>
         </Modal>
 
-        <Modal
+        <Modal statusBarTranslucent hardwareAccelerated
           visible={showTournamentKindChoice}
           transparent
           animationType="slide"
@@ -1444,7 +1444,7 @@ export default function HomeScreen({ navigation, route }) {
           </TouchableOpacity>
         </View>
 
-        <Modal
+        <Modal statusBarTranslucent hardwareAccelerated
           visible={showTournamentKindChoice}
           transparent
           animationType="slide"
@@ -1838,7 +1838,7 @@ export default function HomeScreen({ navigation, route }) {
       );
     })()}
 
-    <Modal
+    <Modal statusBarTranslucent hardwareAccelerated
       visible={showInvite}
       transparent
       animationType="slide"
@@ -1930,7 +1930,7 @@ export default function HomeScreen({ navigation, route }) {
       </Pressable>
     </Modal>
 
-    <Modal
+    <Modal statusBarTranslucent hardwareAccelerated
       visible={showRoundEdit}
       transparent
       animationType="fade"
@@ -1971,7 +1971,7 @@ export default function HomeScreen({ navigation, route }) {
       onClose={() => setShowRoundModeSheet(false)}
     />
 
-    <Modal
+    <Modal statusBarTranslucent hardwareAccelerated
       visible={showResetHistory}
       transparent
       animationType="fade"
@@ -2012,7 +2012,7 @@ export default function HomeScreen({ navigation, route }) {
       </Pressable>
     </Modal>
 
-    <Modal
+    <Modal statusBarTranslucent hardwareAccelerated
       visible={showSettings}
       transparent
       animationType="slide"
@@ -2148,7 +2148,7 @@ export default function HomeScreen({ navigation, route }) {
       </Pressable>
     </Modal>
 
-    <Modal
+    <Modal statusBarTranslucent hardwareAccelerated
       visible={showScoringModeSheet}
       transparent
       animationType="slide"
@@ -2208,7 +2208,7 @@ export default function HomeScreen({ navigation, route }) {
 // web build matches the native styling; native uses it too for consistency.
 function ConfirmModal({ state, onResult, theme, s }) {
   return (
-    <Modal
+    <Modal statusBarTranslucent hardwareAccelerated
       visible={!!state}
       transparent
       animationType="fade"
@@ -2358,13 +2358,27 @@ const RoundScoreboard = React.memo(function RoundScoreboard({ round, players, me
         <Text style={s.roundProgressText}>{holesPlayed} / {totalHoles}</Text>
       </View>
       <View style={{ gap: 10 }}>
-        {rows.map((r) => (
+        {rows.map((r) => {
+          // "On hole N": only meaningful mid-round — before the first score
+          // there's no current hole yet, and once every hole is in the round
+          // is done, so neither end gets the glowing badge.
+          const onHole = showRunning && r.played > 0 && r.played < totalHoles
+            ? r.played + 1
+            : null;
+          return (
           <View key={r.player.id} style={s.gamePlayerCard}>
             <View style={s.gamePlayerHeader}>
               <Text style={s.gamePlayerName} numberOfLines={1}>{r.player.name}</Text>
-              <Text style={s.gamePlayerHcp}>
-                HCP {Number.isFinite(r.handicap) ? r.handicap : '—'}
-              </Text>
+              <View style={s.gamePlayerHeaderRight}>
+                {onHole != null && (
+                  <View style={s.holeBadge} accessibilityLabel={`On hole ${onHole}`}>
+                    <Text style={s.holeBadgeText}>HOLE {onHole}</Text>
+                  </View>
+                )}
+                <Text style={s.gamePlayerHcp}>
+                  HCP {Number.isFinite(r.handicap) ? r.handicap : '—'}
+                </Text>
+              </View>
             </View>
             <View style={s.gameStatsRow}>
               <View style={s.gameStatCell}>
@@ -2387,7 +2401,8 @@ const RoundScoreboard = React.memo(function RoundScoreboard({ round, players, me
               </View>
             </View>
           </View>
-        ))}
+          );
+        })}
       </View>
     </>
   );
@@ -2818,12 +2833,38 @@ const makeStyles = (t) => StyleSheet.create({
     fontSize: 15,
     flexShrink: 1,
   },
+  gamePlayerHeaderRight: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
   gamePlayerHcp: {
     fontFamily: 'PlusJakartaSans-Medium',
     color: t.text.muted,
     fontSize: 11,
     marginTop: 2,
     letterSpacing: 0.3,
+  },
+  // Glowing "on hole N" badge — same halo recipe (tinted border + shadow) as
+  // the team-color halo on the live scorecard's PlayerCard.
+  holeBadge: {
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+    borderRadius: 8,
+    backgroundColor: t.accent.light,
+    borderWidth: 1.5,
+    borderColor: t.accent.primary,
+    shadowColor: t.accent.primary,
+    shadowOpacity: 0.5,
+    shadowRadius: 8,
+    shadowOffset: { width: 0, height: 0 },
+    elevation: 4,
+  },
+  holeBadgeText: {
+    fontFamily: 'PlusJakartaSans-Bold',
+    color: t.accent.primary,
+    fontSize: 10,
+    letterSpacing: 0.4,
   },
   gamePlayerPoints: {
     fontFamily: 'PlusJakartaSans-ExtraBold',
