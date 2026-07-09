@@ -10,12 +10,12 @@ import { Feather } from '@expo/vector-icons';
 import { useTheme } from '../theme/ThemeContext';
 import { useAuth } from '../context/AuthContext';
 import {
-  loadTournament, saveTournament, subscribeTournamentChanges,
+  saveTournament, subscribeTournamentChanges,
   normalizeRoundHandicaps, readLocal,
   loadTournamentMembers, findClaimedSlot,
   removeTournamentMember, generateInviteCode, releaseTournamentPlayer, buildJoinLink,
   addPlayerRoundPatches, removePlayerRoundPatches,
-  getActiveTournamentSnapshot,
+  getTournament, getTournamentSnapshot,
 } from '../store/tournamentStore';
 import { supabase } from '../lib/supabase';
 import { mutate } from '../store/mutate';
@@ -67,7 +67,7 @@ export default function PlayersScreen({ navigation, route }) {
   const { theme } = useTheme();
   const { user } = useAuth();
   const s = makeStyles(theme);
-  const initialTournament = useMemo(() => getActiveTournamentSnapshot(), []);
+  const initialTournament = useMemo(() => getTournamentSnapshot(tournamentId), [tournamentId]);
 
   const [tournament, setTournament] = useState(() => initialTournament);
   const [members, setMembers] = useState([]);
@@ -93,7 +93,7 @@ export default function PlayersScreen({ navigation, route }) {
     setLoadError(null);
     try {
       const [t, mem] = await Promise.all([
-        loadTournament(),
+        getTournament(tournamentId),
         tournamentId ? loadTournamentMembers(tournamentId) : Promise.resolve([]),
       ]);
       skipNextSaveRef.current = true;
@@ -112,7 +112,7 @@ export default function PlayersScreen({ navigation, route }) {
   useFocusEffect(useCallback(() => { load(); }, [load]));
 
   const commitAdds = useCallback(async (picked, initialChosenMode) => {
-    let t = await loadTournament();
+    let t = await getTournament(tournamentId);
     if (!t) return;
     let chosenMode = initialChosenMode;
     for (const p of picked) {
@@ -131,10 +131,10 @@ export default function PlayersScreen({ navigation, route }) {
       chosenMode = undefined;
     }
     await load();
-  }, [load]);
+  }, [load, tournamentId]);
 
   const applyAddPlayers = useCallback(async (picked) => {
-    const t = await loadTournament();
+    const t = await getTournament(tournamentId);
     if (!t) return;
     const currentMode = t.settings?.scoringMode ?? 'stableford';
     const existingIds = new Set((t.players ?? []).map((p) => p.id));
@@ -155,10 +155,10 @@ export default function PlayersScreen({ navigation, route }) {
       defaultMode: fallbackScoringMode(simulatedCount),
       prevMode: currentMode,
     });
-  }, [commitAdds]);
+  }, [commitAdds, tournamentId]);
 
   const commitRemove = useCallback(async (playerId, chosenMode) => {
-    let t = await loadTournament();
+    let t = await getTournament(tournamentId);
     if (!t) return;
     const { patches: roundPatches, nextScoringMode } =
       removePlayerRoundPatches(t, playerId, { mode: chosenMode });
@@ -170,10 +170,10 @@ export default function PlayersScreen({ navigation, route }) {
       ...(modeChanged ? { nextScoringMode } : {}),
     });
     await load();
-  }, [load]);
+  }, [load, tournamentId]);
 
   const applyRemovePlayer = useCallback(async (playerId) => {
-    const t = await loadTournament();
+    const t = await getTournament(tournamentId);
     if (!t) return;
     const newCount = (t.players ?? []).length - 1;
     if (newCount < 2) {
@@ -191,7 +191,7 @@ export default function PlayersScreen({ navigation, route }) {
       defaultMode: fallbackScoringMode(newCount),
       prevMode: currentMode,
     });
-  }, [commitRemove]);
+  }, [commitRemove, tournamentId]);
 
   useEffect(() => {
     const unsub = navigation.addListener('focus', () => {
@@ -206,7 +206,7 @@ export default function PlayersScreen({ navigation, route }) {
   useEffect(() => {
     const unsub = subscribeTournamentChanges(async () => {
       if (!shouldHandleStoreChange(navigation)) return;
-      const t = await loadTournament();
+      const t = await getTournament(tournamentId);
       if (!t) return;
       setTournament(t);
       setMembers(tournamentId ? await loadTournamentMembers(tournamentId) : []);
