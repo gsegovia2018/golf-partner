@@ -226,7 +226,7 @@ export default function QuickStartCourses({
         </View>
       )}
 
-      <Modal
+      <Modal statusBarTranslucent hardwareAccelerated
         visible={!!selectedCourse}
         transparent
         animationType="slide"

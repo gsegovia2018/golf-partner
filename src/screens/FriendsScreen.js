@@ -377,7 +377,7 @@ function FriendProfileModal({ friend, theme, onClose }) {
   const rounds = data?.recentRounds ?? [];
 
   return (
-    <Modal visible animationType="slide" transparent onRequestClose={onClose}>
+    <Modal statusBarTranslucent hardwareAccelerated visible animationType="slide" transparent onRequestClose={onClose}>
       <View style={s.modalBackdrop}>
         <View style={s.modalSheet}>
           <View style={s.modalHandle} />

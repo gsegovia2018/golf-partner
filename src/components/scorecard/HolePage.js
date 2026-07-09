@@ -216,7 +216,7 @@ export const HolePage = React.memo(function HolePage({
 // `onSkip` lets you keep scoring without shot tracking.
 export function MePicker({ players, onPickMe, onSkip, theme, s }) {
   return (
-    <Modal visible transparent animationType="fade" onRequestClose={onSkip}>
+    <Modal statusBarTranslucent hardwareAccelerated visible transparent animationType="fade" onRequestClose={onSkip}>
       <View style={s.mePickerBackdrop}>
         <View style={s.mePickerCard}>
           <View style={s.mePickerIcon}>

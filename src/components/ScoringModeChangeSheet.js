@@ -31,7 +31,7 @@ export default function ScoringModeChangeSheet({
   const allowed = SCORING_MODES.filter((m) => isScoringModeAllowed(m.key, playerCount));
 
   return (
-    <Modal visible={visible} animationType="slide" transparent onRequestClose={onCancel}>
+    <Modal statusBarTranslucent hardwareAccelerated visible={visible} animationType="slide" transparent onRequestClose={onCancel}>
       <View style={s.backdrop}>
         <SafeAreaView style={s.sheet}>
           <Text style={s.title}>{title}</Text>

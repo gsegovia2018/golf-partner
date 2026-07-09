@@ -32,7 +32,7 @@ export function TargetHandicapPicker({
   };
 
   return (
-    <Modal visible={visible} transparent animationType="fade" onRequestClose={onCancel}>
+    <Modal statusBarTranslucent hardwareAccelerated visible={visible} transparent animationType="fade" onRequestClose={onCancel}>
       <Pressable
         style={{ flex: 1, backgroundColor: 'rgba(0,0,0,0.45)', justifyContent: 'center', padding: 24 }}
         onPress={onCancel}

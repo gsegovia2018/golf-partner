@@ -374,7 +374,7 @@ export function HoleView({ round, roundIndex, players, scores, shotDetails, meId
       </View>
 
       {/* Go-to-hole modal */}
-      <Modal
+      <Modal statusBarTranslucent hardwareAccelerated
         visible={holePickerOpen}
         transparent
         animationType="fade"

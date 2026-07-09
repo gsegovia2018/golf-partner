@@ -56,7 +56,7 @@ export default function MediaLightbox({ visible, items, initialIndex, onClose })
   const formatDate = (iso) => new Date(iso).toLocaleString('es-ES', { dateStyle: 'short', timeStyle: 'short' });
 
   return (
-    <Modal visible={visible} animationType="fade" onRequestClose={onClose}>
+    <Modal statusBarTranslucent hardwareAccelerated visible={visible} animationType="fade" onRequestClose={onClose}>
       <View style={s.container}>
         <FlatList
           ref={listRef}

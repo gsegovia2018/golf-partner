@@ -204,7 +204,7 @@ export default function HistoryScreen({ navigation }) {
 
 function ConfirmModal({ state, onResult, s }) {
   return (
-    <Modal
+    <Modal statusBarTranslucent hardwareAccelerated
       visible={!!state}
       transparent
       animationType="fade"

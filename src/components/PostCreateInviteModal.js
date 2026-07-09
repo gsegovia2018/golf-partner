@@ -19,7 +19,7 @@ export default function PostCreateInviteModal({
   const s = makeStyles(theme);
 
   return (
-    <Modal
+    <Modal statusBarTranslucent hardwareAccelerated
       visible={visible}
       transparent
       animationType="slide"

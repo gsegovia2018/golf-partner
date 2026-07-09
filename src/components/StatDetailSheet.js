@@ -86,7 +86,7 @@ export default function StatDetailSheet({ visible, onClose, title, subtitle, exp
   };
 
   return (
-    <Modal
+    <Modal statusBarTranslucent hardwareAccelerated
       visible={visible}
       transparent
       animationType="slide"

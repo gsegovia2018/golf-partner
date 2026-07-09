@@ -1570,7 +1570,7 @@ export default function ScorecardScreen({ navigation, route }) {
 
       {/* Notes modal — per-hole note + shared round note */}
       {showNotesControls && (
-        <Modal
+        <Modal statusBarTranslucent hardwareAccelerated
           visible={notesOpen}
           transparent
           animationType="slide"
@@ -1669,7 +1669,7 @@ export default function ScorecardScreen({ navigation, route }) {
           flat members / scores lists via buildLeaderboard. Holes still in
           discrepancy are omitted from each player's gross total. */}
       {official && (
-        <Modal
+        <Modal statusBarTranslucent hardwareAccelerated
           visible={officialLeaderboardOpen}
           transparent
           animationType="slide"

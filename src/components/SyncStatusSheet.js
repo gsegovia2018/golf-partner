@@ -84,7 +84,7 @@ export default function SyncStatusSheet({ visible, onClose }) {
   const onRetry = useCallback(() => { retrySync(); }, []);
 
   return (
-    <Modal visible={visible} transparent animationType="slide" onRequestClose={onClose}>
+    <Modal statusBarTranslucent hardwareAccelerated visible={visible} transparent animationType="slide" onRequestClose={onClose}>
       <TouchableWithoutFeedback onPress={onClose}>
         <View style={s.backdrop} />
       </TouchableWithoutFeedback>

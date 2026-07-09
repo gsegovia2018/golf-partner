@@ -75,7 +75,7 @@ export default function BatchAttachSheet({
   };
 
   return (
-    <Modal visible={visible} transparent animationType="slide" onRequestClose={onCancel}>
+    <Modal statusBarTranslucent hardwareAccelerated visible={visible} transparent animationType="slide" onRequestClose={onCancel}>
       <View style={s.backdrop}>
         <View style={s.sheet}>
           <View style={s.header}>

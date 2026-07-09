@@ -212,7 +212,7 @@ export default function MemoriesStoriesViewer({
     } · ${index + 1}/${items.length}`;
 
   return (
-    <Modal visible animationType="fade" onRequestClose={onClose} transparent={false}>
+    <Modal statusBarTranslucent hardwareAccelerated visible animationType="fade" onRequestClose={onClose} transparent={false}>
       <Animated.View
         style={[s.container, { transform: [{ translateY: dragY }] }]}
         {...panResponder.panHandlers}

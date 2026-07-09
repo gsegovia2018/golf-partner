@@ -57,7 +57,7 @@ export default function ScoreConflictSheet({
   };
 
   return (
-    <Modal visible={visible} transparent animationType="slide" onRequestClose={onClose}>
+    <Modal statusBarTranslucent hardwareAccelerated visible={visible} transparent animationType="slide" onRequestClose={onClose}>
       <Pressable style={s.backdrop} onPress={onClose}>
         {/* Inner onPress stops a tap on the sheet body from closing the backdrop. */}
         <Pressable style={s.sheet} onPress={() => {}}>

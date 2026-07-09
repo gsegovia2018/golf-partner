@@ -37,7 +37,7 @@ export function ShotDetailExplainer({ rowKey, title, body }) {
       >
         <Feather name="help-circle" size={14} color={iconColor} />
       </TouchableOpacity>
-      <Modal visible={open} transparent animationType="fade" onRequestClose={dismiss}>
+      <Modal statusBarTranslucent hardwareAccelerated visible={open} transparent animationType="fade" onRequestClose={dismiss}>
         <Pressable
           style={{ flex: 1, backgroundColor: 'rgba(0,0,0,0.45)', justifyContent: 'center', padding: 24 }}
           onPress={dismiss}

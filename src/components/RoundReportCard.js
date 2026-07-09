@@ -149,7 +149,7 @@ export default function RoundReportCard({ card, rounds, selectedKey, onSelect })
       ))}
 
       {/* Round picker modal */}
-      <Modal visible={pickerOpen} transparent animationType="fade" onRequestClose={() => setPickerOpen(false)}>
+      <Modal statusBarTranslucent hardwareAccelerated visible={pickerOpen} transparent animationType="fade" onRequestClose={() => setPickerOpen(false)}>
         <TouchableOpacity style={s.modalBg} activeOpacity={1} onPress={() => setPickerOpen(false)}>
           <View style={s.modalCard}>
             <Text style={s.modalTitle}>Choose a round</Text>
