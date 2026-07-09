@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { Modal, View, Text, TouchableOpacity, TextInput, ScrollView, Image, StyleSheet } from 'react-native';
+import { Modal, View, Text, TouchableOpacity, TextInput, Image, StyleSheet } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { Feather } from '@expo/vector-icons';
 import { VideoView, useVideoPlayer } from 'expo-video';
@@ -33,7 +33,7 @@ export default function AttachMediaSheet({ visible, asset, holes, defaultHoleInd
   };
 
   return (
-    <Modal visible={visible} transparent animationType="slide" onRequestClose={onCancel}>
+    <Modal statusBarTranslucent hardwareAccelerated visible={visible} transparent animationType="slide" onRequestClose={onCancel}>
       <View style={s.backdrop}>
         <View style={s.sheet}>
           <View style={s.header}>
@@ -50,18 +50,31 @@ export default function AttachMediaSheet({ visible, asset, holes, defaultHoleInd
           )}
 
           <Text style={s.sectionLabel}>Hoyo</Text>
-          <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={s.chipsRow}>
-            <Chip label="Sin hoyo" active={holeIndex == null} onPress={() => setHoleIndex(null)} theme={theme} />
+          <View style={s.holeGrid}>
+            <TouchableOpacity
+              style={[s.holeBtn, s.holeBtnWide, holeIndex == null && s.holeBtnActive]}
+              onPress={() => setHoleIndex(null)}
+              activeOpacity={0.7}
+            >
+              <Text
+                style={[s.holeBtnText, s.holeBtnTextWide, holeIndex == null && s.holeBtnTextActive]}
+                numberOfLines={2}
+                adjustsFontSizeToFit
+              >
+                Sin hoyo
+              </Text>
+            </TouchableOpacity>
             {holes.map((_, i) => (
-              <Chip
+              <TouchableOpacity
                 key={i}
-                label={String(i + 1)}
-                active={holeIndex === i}
+                style={[s.holeBtn, holeIndex === i && s.holeBtnActive]}
                 onPress={() => setHoleIndex(i)}
-                theme={theme}
-              />
+                activeOpacity={0.7}
+              >
+                <Text style={[s.holeBtnText, holeIndex === i && s.holeBtnTextActive]}>{i + 1}</Text>
+              </TouchableOpacity>
             ))}
-          </ScrollView>
+          </View>
 
           <Text style={s.sectionLabel}>Comentario (opcional)</Text>
           <TextInput
@@ -104,27 +117,6 @@ function VideoPreview({ uri, style }) {
   );
 }
 
-function Chip({ label, active, onPress, theme }) {
-  const s = makeChipStyles(theme, active);
-  return (
-    <TouchableOpacity style={s.chip} onPress={onPress}>
-      <Text style={s.label}>{label}</Text>
-    </TouchableOpacity>
-  );
-}
-
-const makeChipStyles = (theme, active) => StyleSheet.create({
-  chip: {
-    paddingHorizontal: 12, paddingVertical: 6, borderRadius: 999,
-    backgroundColor: active ? theme.accent.primary : theme.bg.secondary,
-    marginRight: 6,
-  },
-  label: {
-    color: active ? theme.text.inverse : theme.text.primary,
-    fontFamily: 'PlusJakartaSans-SemiBold', fontSize: 13,
-  },
-});
-
 const makeStyles = (theme) => StyleSheet.create({
   backdrop: { flex: 1, backgroundColor: 'rgba(0,0,0,0.5)', justifyContent: 'flex-end' },
   sheet: {
@@ -136,7 +128,17 @@ const makeStyles = (theme) => StyleSheet.create({
   title: { fontFamily: 'PlayfairDisplay-Bold', fontSize: 20, color: theme.text.primary },
   preview: { width: '100%', aspectRatio: 16 / 9, borderRadius: 12, backgroundColor: theme.bg.secondary, marginBottom: 16, overflow: 'hidden' },
   sectionLabel: { fontFamily: 'PlusJakartaSans-SemiBold', fontSize: 12, color: theme.text.muted, marginTop: 12, marginBottom: 6, textTransform: 'uppercase', letterSpacing: 0.5 },
-  chipsRow: { paddingVertical: 4 },
+  holeGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 },
+  holeBtn: {
+    width: 48, height: 48, borderRadius: 12, alignItems: 'center', justifyContent: 'center',
+    backgroundColor: theme.isDark ? theme.bg.elevated : theme.bg.secondary,
+    borderWidth: 1, borderColor: theme.border.default,
+  },
+  holeBtnWide: { width: 76, paddingHorizontal: 4 },
+  holeBtnActive: { backgroundColor: theme.accent.primary, borderColor: theme.accent.primary },
+  holeBtnText: { color: theme.text.primary, fontSize: 15, fontFamily: 'PlusJakartaSans-Bold' },
+  holeBtnTextWide: { fontSize: 12, textAlign: 'center' },
+  holeBtnTextActive: { color: theme.text.inverse },
   input: {
     borderWidth: 1, borderColor: theme.border.subtle, borderRadius: 10,
     paddingHorizontal: 12, paddingVertical: 10,
