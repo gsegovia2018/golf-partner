@@ -1268,8 +1268,10 @@ export function roundPairClinched(round, players, settings, mode) {
     const p1 = bw.bestBall.pair1 * bestBallValue + bw.worstBall.pair1 * worstBallValue;
     const p2 = bw.bestBall.pair2 * bestBallValue + bw.worstBall.pair2 * worstBallValue;
     const rem = roundMaxRemainingBestBall(round, settings);
-    if (p1 > p2 && p1 >= p2 + rem.pair2) return 0;
-    if (p2 > p1 && p2 >= p1 + rem.pair1) return 1;
+    // Strictly more than the trailer's best possible finish — at exactly
+    // equal the trailing pair can still tie, which is not a clinch.
+    if (p1 > p2 + rem.pair2) return 0;
+    if (p2 > p1 + rem.pair1) return 1;
     return null;
   }
 
@@ -1285,8 +1287,8 @@ export function roundPairClinched(round, players, settings, mode) {
   round.pairs[otherIdx].forEach((p) => {
     otherMax += roundMaxRemainingStableford(round, p);
   });
-  if (lb[0].combinedPoints > lb[1].combinedPoints
-    && lb[0].combinedPoints >= lb[1].combinedPoints + otherMax) return leaderIdx;
+  // Strict: at exactly equal the trailing pair can still tie — not a clinch.
+  if (lb[0].combinedPoints > lb[1].combinedPoints + otherMax) return leaderIdx;
   return null;
 }
 
