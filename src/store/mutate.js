@@ -49,6 +49,7 @@ export function metaPathFor(m) {
         paths.push(`rounds.${patch.roundId}.scores.${m.playerId}`);
         paths.push(`rounds.${patch.roundId}.shotDetails.${m.playerId}`);
         paths.push(`rounds.${patch.roundId}.scoreConflicts.${m.playerId}`);
+        paths.push(`rounds.${patch.roundId}.scoreResolutions.${m.playerId}`);
         if (patch.pairs) paths.push(`rounds.${patch.roundId}.pairs`);
         if (patch.clearScoringMode) paths.push(`rounds.${patch.roundId}.scoringMode`);
       }
@@ -76,11 +77,12 @@ export function metaPathFor(m) {
       }
       return paths;
     }
-    // Resolving a score conflict writes the chosen value AND clears the
-    // marker; both LWW-merge, so both paths are stamped.
+    // Resolving a score conflict writes the chosen value, clears the marker,
+    // AND stamps a resolution marker that outranks raw writes during merge.
     case 'conflict.resolve': return [
       `rounds.${m.roundId}.scores.${m.playerId}.h${m.hole}`,
       `rounds.${m.roundId}.scoreConflicts.${m.playerId}.h${m.hole}`,
+      `rounds.${m.roundId}.scoreResolutions.${m.playerId}.h${m.hole}`,
     ];
     case 'player.upsertLibrary': return null;
     default: throw new Error(`unknown mutation type: ${m.type}`);
@@ -104,12 +106,20 @@ export function applyToTournament(t, m) {
       if (!round) return;
       round.scores = { ...(round.scores ?? {}) };
       round.scores[m.playerId] = { ...(round.scores[m.playerId] ?? {}) };
-      round.scores[m.playerId][m.hole] = m.value;
+      if (m.value == null) delete round.scores[m.playerId][m.hole];
+      else round.scores[m.playerId][m.hole] = m.value;
       if (round.scoreConflicts?.[m.playerId]) {
         round.scoreConflicts = { ...round.scoreConflicts };
         round.scoreConflicts[m.playerId] = { ...round.scoreConflicts[m.playerId] };
         delete round.scoreConflicts[m.playerId][m.hole];
       }
+      // Resolution stamp: mergeTournaments treats a resolution at/after a raw
+      // write as authoritative for that cell on every device.
+      round.scoreResolutions = { ...(round.scoreResolutions ?? {}) };
+      round.scoreResolutions[m.playerId] = {
+        ...(round.scoreResolutions[m.playerId] ?? {}),
+        [m.hole]: m.ts,
+      };
       break;
     }
     case 'shot.set': {
@@ -205,6 +215,11 @@ export function applyToTournament(t, m) {
           const scoreConflicts = { ...round.scoreConflicts };
           delete scoreConflicts[m.playerId];
           round.scoreConflicts = scoreConflicts;
+        }
+        if (round.scoreResolutions) {
+          const scoreResolutions = { ...round.scoreResolutions };
+          delete scoreResolutions[m.playerId];
+          round.scoreResolutions = scoreResolutions;
         }
         if (patch.pairs) round.pairs = patch.pairs;
         // See tournament.addPlayer: the smaller roster invalidated this
