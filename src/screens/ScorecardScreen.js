@@ -1184,7 +1184,7 @@ export default function ScorecardScreen({ navigation, route }) {
       }
     } catch (err) {
       // A failed local save must not abort the finish silently — surface it
-      // exactly like the finalize step's catch below. (syncNow never rejects
+      // exactly like the finalize step's catch below. (syncSettled never rejects
       // — it handles errors internally with backoff — and readLocal is
       // defended above, so this is effectively the autoSave path.)
       const message = err?.message ?? 'Could not finish this game.';
