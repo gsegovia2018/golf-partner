@@ -13,11 +13,15 @@ import { holePoints, roundTotals } from './scoreModel';
 import { classifyHoleResult } from './constants';
 import { isScrambleMode } from '../scoringModes';
 
-// Fixed-size score-shape overlay drawn over a stroke digit. The wrapper fills
-// the cell and centres the ring so alignment never shifts. Nothing renders for
-// par (or a missing result). "eagle"/"double" nest a second, smaller ring.
-// Score colour by result, reusing the app's semantic score palette: birdie &
-// better read green (good), bogey neutral, double-or-worse red (poor).
+// Fixed-size score-result chip drawn behind a stroke digit. The wrapper fills
+// the cell and centres the chip so alignment never shifts. Nothing renders for
+// par (or a missing result). Keeps the golf-scorecard shape convention —
+// circle = under par, square = over par — as a soft colour fill with a thin
+// contour in the same colour, so a busy card stays readable. Severity uses
+// the app's semantic score palette (eagle excellent, birdie good, bogey
+// neutral, double+ poor). The rare eagle gets a solid fill (with an inverse
+// digit — see digitOnSolid in the cell renderer) so it can't be mistaken for
+// a birdie.
 function shapeColor(result, theme) {
   switch (result) {
     case 'eagle': return theme.scoreColor('excellent');
@@ -28,22 +32,33 @@ function shapeColor(result, theme) {
   }
 }
 
+// Score palette colours are hex — soften them into a translucent chip fill.
+function shapeFill(hex, alpha) {
+  const h = hex.replace('#', '');
+  const r = parseInt(h.slice(0, 2), 16);
+  const g = parseInt(h.slice(2, 4), 16);
+  const b = parseInt(h.slice(4, 6), 16);
+  return `rgba(${r},${g},${b},${alpha})`;
+}
+
 function ScoreShape({ result, theme, s }) {
   if (!result || result === 'par') return null;
   const rounded = result === 'birdie' || result === 'eagle';
-  const doubled = result === 'eagle' || result === 'double';
+  const solid = result === 'eagle';
   const color = shapeColor(result, theme);
   return (
     <View style={s.soloNineShapeWrap} pointerEvents="none">
-      <View style={[s.soloNineShape, rounded ? s.soloNineShapeCircle : s.soloNineShapeSquare, { borderColor: color }]}>
-        {doubled && (
-          <View style={[
-            s.soloNineShapeInner,
-            rounded ? s.soloNineShapeInnerCircle : s.soloNineShapeInnerSquare,
-            { borderColor: color },
-          ]} />
-        )}
-      </View>
+      <View
+        style={[
+          s.soloNineShape,
+          rounded ? s.soloNineShapeCircle : s.soloNineShapeSquare,
+          {
+            backgroundColor: solid ? color : shapeFill(color, theme.isDark ? 0.28 : 0.16),
+            borderWidth: 1.25,
+            borderColor: color,
+          },
+        ]}
+      />
     </View>
   );
 }
@@ -142,11 +157,17 @@ function NineBlock({
     }, 0);
     const sumPts = holes.reduce((acc, h) => acc + (ptsFor(h, player) ?? 0), 0);
     const rowLabel = shortPlayerLabel(player, isSolo);
-    const rowChrome = [s.soloNineRow, s.soloNineRowYou, !isFirst && s.soloNinePlayerSeparator];
+    // Highlight only the viewer's own row — tinting every player row turns
+    // the "you" cue into background noise on a 4-player card.
+    const isMe = isSolo || player.id === meId;
+    const rowChrome = [s.soloNineRow, isMe && s.soloNineRowYou, !isFirst && s.soloNinePlayerSeparator];
 
-    // Strokes mode: the editable entry row (with score-shape overlays), Pts
+    // Strokes mode: the editable entry row (with score-result chips), Pts
     // row hidden. Points mode: the strokes inputs are hidden and a points row
     // takes their place, carrying the player label since it is the only row.
+    // Both modes share the digit-box + pip-lane cell anatomy so the handicap
+    // "strokes received" dots stay visible either way and rows keep the same
+    // height across the toggle.
     if (displayMode === 'points') {
       return (
         <View key={player.id} style={rowChrome}>
@@ -155,10 +176,20 @@ function NineBlock({
           </Text>
           {holes.map((h) => {
             const pts = ptsFor(h, player);
+            const extra = calcExtraShots(handicap, h.strokeIndex);
             return (
-              <Text key={h.number} numberOfLines={1} style={[s.soloNineCell, holeCell, s.soloNinePtsText, { color: ptsColorFor(pts) }]}>
-                {pts ?? '·'}
-              </Text>
+              <View key={h.number} style={[s.soloNineCell, holeCell]}>
+                <View style={s.soloNineDigitBox}>
+                  <Text numberOfLines={1} style={[s.soloNinePtsText, { color: ptsColorFor(pts) }]}>
+                    {pts ?? '·'}
+                  </Text>
+                </View>
+                <View style={s.soloNineExtraDots} pointerEvents="none">
+                  {extra > 0 && Array.from({ length: Math.min(extra, 2) }).map((_, i) => (
+                    <View key={i} style={[s.soloNineExtraDot, { backgroundColor: theme.accent.primary }]} />
+                  ))}
+                </View>
+              </View>
             );
           })}
           <Text numberOfLines={1} style={[s.soloNineCell, aggCell, s.soloNineAggDivider, s.soloNineAggPtsTotal]}>{sumPts}</Text>
@@ -177,42 +208,50 @@ function NineBlock({
           const rawScore = scores[player.id]?.[h.number];
           const cellValue = rawScore != null ? String(rawScore) : '';
           const shape = classifyHoleResult(h.par, rawScore);
+          // Eagle chips are solid-filled, so their digit flips to the
+          // inverse text colour to stay legible.
+          const digitOnSolid = shape === 'eagle' && { color: theme.text.inverse };
           return (
             <View key={h.number} style={[s.soloNineCell, holeCell, s.soloNineYouCell]}>
-              {cellEditable ? (
-                <TextInput
-                  ref={(el) => { cellRefs.current[cellKey(player.id, h.number)] = el; }}
-                  style={s.soloNineStrokeInput}
-                  keyboardType="numeric"
-                  keyboardAppearance={theme.isDark ? 'dark' : 'light'}
-                  selectionColor={theme.accent.primary}
-                  maxLength={2}
-                  value={cellValue}
-                  onChangeText={(v) => onSetScore(player.id, h.number, v)}
-                  placeholder="·"
-                  placeholderTextColor={theme.text.muted}
-                  returnKeyType="next"
-                  blurOnSubmit={false}
-                  onSubmitEditing={() => focusNext(player.id, h.number)}
-                />
-              ) : (
-                // Plain Text keeps centering reliable in view-only mode —
-                // a readonly TextInput can pick up browser user-agent
-                // styles that override textAlign on web. The parent cell
-                // already centers via flex, so the Text only needs the
-                // typographic styles.
-                <Text style={s.soloNineStrokeText} numberOfLines={1}>
-                  {cellValue || '·'}
-                </Text>
-              )}
-              <ScoreShape result={shape} theme={theme} s={s} />
-              {extra > 0 && (
-                <View style={s.soloNineExtraDots} pointerEvents="none">
-                  {Array.from({ length: Math.min(extra, 2) }).map((_, i) => (
-                    <View key={i} style={[s.soloNineExtraDot, { backgroundColor: theme.accent.primary }]} />
-                  ))}
-                </View>
-              )}
+              {/* Digit box: chip + digit share this 30px box so they stay
+                  concentric; the handicap pips get their own lane below it
+                  and can never collide with the chip. */}
+              <View style={s.soloNineDigitBox}>
+                {/* Chip first so the digit renders on top of the soft fill. */}
+                <ScoreShape result={shape} theme={theme} s={s} />
+                {cellEditable ? (
+                  <TextInput
+                    ref={(el) => { cellRefs.current[cellKey(player.id, h.number)] = el; }}
+                    style={[s.soloNineStrokeInput, rawScore == null && s.soloNineStrokeInputEmpty, digitOnSolid]}
+                    keyboardType="numeric"
+                    keyboardAppearance={theme.isDark ? 'dark' : 'light'}
+                    selectionColor={theme.accent.primary}
+                    maxLength={2}
+                    value={cellValue}
+                    onChangeText={(v) => onSetScore(player.id, h.number, v)}
+                    placeholder="·"
+                    placeholderTextColor={theme.text.muted}
+                    returnKeyType="next"
+                    blurOnSubmit={false}
+                    onSubmitEditing={() => focusNext(player.id, h.number)}
+                  />
+                ) : (
+                  // Plain Text keeps centering reliable in view-only mode —
+                  // a readonly TextInput can pick up browser user-agent
+                  // styles that override textAlign on web. The digit box
+                  // already centers via flex, so the Text only needs the
+                  // typographic styles.
+                  <Text style={[s.soloNineStrokeText, digitOnSolid]} numberOfLines={1}>
+                    {cellValue || '·'}
+                  </Text>
+                )}
+              </View>
+              {/* Always rendered so every cell is the same height. */}
+              <View style={s.soloNineExtraDots} pointerEvents="none">
+                {extra > 0 && Array.from({ length: Math.min(extra, 2) }).map((_, i) => (
+                  <View key={i} style={[s.soloNineExtraDot, { backgroundColor: theme.accent.primary }]} />
+                ))}
+              </View>
             </View>
           );
         })}

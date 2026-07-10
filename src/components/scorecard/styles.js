@@ -1266,6 +1266,13 @@ export function makeScorecardStyles(theme) {
       fontFamily: 'PlusJakartaSans-ExtraBold',
       textAlign: 'center',
     },
+    // Scored cells carry no box chrome — the digit (plus its result chip)
+    // reads like a printed scorecard. Empty cells keep a faint plate as the
+    // "tap to type" affordance; it disappears once a score lands.
+    // Playfair's default figures are old-style (3/4/5/7/9 descend ~3px below
+    // the vertical centre), which reads as digits floating low inside the
+    // result chips — lining + tabular numerals keep every digit in the same
+    // cap-height box, and the small bottom padding optically centres that box.
     soloNineStrokeInput: {
       color: theme.text.primary,
       width: '92%',
@@ -1273,11 +1280,19 @@ export function makeScorecardStyles(theme) {
       textAlign: 'center',
       fontSize: 16,
       fontFamily: 'PlayfairDisplay-Bold',
+      fontVariant: ['lining-nums', 'tabular-nums'],
       padding: 0,
-      backgroundColor: theme.isDark ? 'rgba(255,255,255,0.04)' : '#ffffff',
-      borderRadius: 4,
-      borderBottomWidth: 1,
-      borderBottomColor: theme.isDark ? theme.glass?.border : theme.border.default,
+      paddingBottom: 2,
+      backgroundColor: 'transparent',
+      borderRadius: 6,
+      // Paint the digit above the absolutely-positioned result chip — on web
+      // a static input would otherwise render underneath it (invisible on the
+      // solid eagle chip).
+      position: 'relative',
+      zIndex: 1,
+    },
+    soloNineStrokeInputEmpty: {
+      backgroundColor: theme.isDark ? 'rgba(255,255,255,0.05)' : 'rgba(0,0,0,0.035)',
     },
     // View-only twin of soloNineStrokeInput. Renders as <Text>, so it drops
     // the input-only bits (height/padding/background/border) and relies on
@@ -1288,23 +1303,35 @@ export function makeScorecardStyles(theme) {
       textAlign: 'center',
       fontSize: 16,
       fontFamily: 'PlayfairDisplay-Bold',
+      fontVariant: ['lining-nums', 'tabular-nums'],
+      // Same stacking fix as soloNineStrokeInput for the view-only twin.
+      position: 'relative',
+      zIndex: 1,
     },
-    // Handicap "strokes received" pips, centred along the bottom edge — below
-    // the score shape's lowest point, so a birdie circle or bogey square never
-    // clips them (a square fills the cell corners, so a corner pip would).
+    // The 30px box that keeps the stroke digit and its result chip
+    // concentric; the pip lane stacks below it inside the cell.
+    soloNineDigitBox: {
+      alignSelf: 'stretch',
+      height: 30,
+      alignItems: 'center',
+      justifyContent: 'center',
+    },
+    // Handicap "strokes received" pips in their own lane under the digit box,
+    // so they sit clearly below the result chip and can never overlap it.
+    // Rendered for every cell (empty when no strokes) to keep row heights
+    // uniform.
     soloNineExtraDots: {
-      position: 'absolute',
-      bottom: 1,
-      left: 0,
-      right: 0,
+      height: 7,
+      alignSelf: 'stretch',
       flexDirection: 'row',
       justifyContent: 'center',
-      gap: 2.5,
+      alignItems: 'center',
+      gap: 3,
     },
     soloNineExtraDot: {
-      width: 2.5,
-      height: 2.5,
-      borderRadius: 1.25,
+      width: 4,
+      height: 4,
+      borderRadius: 2,
     },
 
     // Strokes/Points display toggle — a compact two-cell segmented control
@@ -1334,45 +1361,27 @@ export function makeScorecardStyles(theme) {
       color: theme.text.inverse,
     },
 
-    // Score-shape marker drawn around each stroke digit (strokes mode only) —
-    // the golf-scorecard convention: circle = birdie, double circle = eagle+,
-    // square = bogey, double square = double-bogey+. The wrapper fills the cell
-    // and centres the ring concentric with the digit, so it never shifts
-    // column geometry. The ring hugs the digit with clear breathing room so it
-    // never cuts the number, and is small enough to leave the cell corners
-    // free for the handicap pips. Colour is applied inline per result.
+    // Score-result chip drawn behind each stroke digit (strokes mode only) —
+    // the golf-scorecard convention as a soft fill: circle = under par,
+    // square = over par; fill colour carries severity, and the eagle/double
+    // tier adds a thin solid border (set inline). The wrapper fills the cell
+    // and centres the chip concentric with the digit, so it never shifts
+    // column geometry, and the chip is small enough to leave the bottom edge
+    // free for the handicap pips. Fill colour is applied inline per result.
     soloNineShapeWrap: {
       ...StyleSheet.absoluteFillObject,
       alignItems: 'center',
       justifyContent: 'center',
     },
     soloNineShape: {
-      width: 21,
-      height: 21,
-      borderWidth: 1.5,
-      alignItems: 'center',
-      justifyContent: 'center',
-      backgroundColor: 'transparent',
+      width: 22,
+      height: 22,
     },
     soloNineShapeCircle: {
-      borderRadius: 10.5,
+      borderRadius: 11,
     },
     soloNineShapeSquare: {
-      borderRadius: 3,
-    },
-    // Concentric inner ring for eagle / double-bogey markers. Sized to leave an
-    // even gap inside the outer ring.
-    soloNineShapeInner: {
-      width: 13.5,
-      height: 13.5,
-      borderWidth: 1.25,
-      backgroundColor: 'transparent',
-    },
-    soloNineShapeInnerCircle: {
-      borderRadius: 6.75,
-    },
-    soloNineShapeInnerSquare: {
-      borderRadius: 2,
+      borderRadius: 5,
     },
     soloNineAggText: {
       color: theme.text.secondary,
