@@ -1,5 +1,5 @@
 import React from 'react';
-import { render } from '@testing-library/react-native';
+import { render, fireEvent } from '@testing-library/react-native';
 import { StyleSheet } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
@@ -30,7 +30,7 @@ jest.mock('../../store/profileStore', () => ({
 }));
 
 jest.mock('../../store/personalStats', () => ({
-  collectMyRounds: jest.fn(() => [{ key: 'round-1', label: 'Round 1' }]),
+  collectMyRounds: jest.fn(() => [{ key: 'round-1', label: 'Round 1', tournamentId: 't-1', round: { id: 'r-1' } }]),
   resolveSelection: jest.fn((rounds) => rounds),
   computeMyStats: jest.fn(() => ({
     metrics: { rounds: 1, avgPoints: 30, bestRoundPoints: 30 },
@@ -45,12 +45,17 @@ jest.mock('../../store/roundReportCard', () => ({
   buildRoundReportCard: jest.fn(() => ({ title: 'Round 1' })),
 }));
 
-jest.mock('../../components/RoundReportCard', () => function MockRoundReportCard({ selectedKey }) {
-  const { Text } = require('react-native');
+jest.mock('../../components/RoundReportCard', () => function MockRoundReportCard({ selectedKey, onOpenRound }) {
+  const { Text, TouchableOpacity } = require('react-native');
   return (
     <>
       <Text>Report card content</Text>
       <Text>{`Selected round ${selectedKey}`}</Text>
+      {onOpenRound ? (
+        <TouchableOpacity onPress={onOpenRound}>
+          <Text>Open round stats</Text>
+        </TouchableOpacity>
+      ) : null}
     </>
   );
 });
@@ -93,12 +98,12 @@ beforeEach(() => {
   AsyncStorage.getItem.mockResolvedValue(null);
 });
 
-function screenElement(route = {}) {
+function screenElement(route = {}, navigation = { goBack: jest.fn() }) {
   return (
     <SafeAreaProvider>
       <ThemeProvider>
         <MyStatsScreen
-          navigation={{ goBack: jest.fn() }}
+          navigation={navigation}
           route={route}
         />
       </ThemeProvider>
@@ -217,5 +222,30 @@ describe('MyStatsScreen tab strip', () => {
       currentX: 120,
       edgePadding: 16,
     })).toBe(0);
+  });
+});
+
+describe('MyStatsScreen report card round link', () => {
+  test('navigates to RoundSummary for the selected round', async () => {
+    const navigation = { goBack: jest.fn(), navigate: jest.fn() };
+    const { findByText } = render(screenElement({ params: { tab: 'reportCard' } }, navigation));
+
+    fireEvent.press(await findByText('Open round stats'));
+
+    expect(navigation.navigate).toHaveBeenCalledWith('RoundSummary', {
+      tournamentId: 't-1',
+      roundId: 'r-1',
+    });
+  });
+
+  test('omits the link when the selected round has no id', async () => {
+    const { collectMyRounds } = require('../../store/personalStats');
+    collectMyRounds.mockReturnValueOnce([
+      { key: 'round-1', label: 'Round 1', tournamentId: 't-1', round: {} },
+    ]);
+    const { findByText, queryByText } = render(screenElement({ params: { tab: 'reportCard' } }));
+
+    expect(await findByText('Report card content')).toBeTruthy();
+    expect(queryByText('Open round stats')).toBeNull();
   });
 });
