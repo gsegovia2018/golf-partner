@@ -1087,22 +1087,23 @@ export function calcBestWorstBall(round, players) {
 
 // isRoundPlayed now lives in ./scoring (imported at the top of this file).
 
-// Per-pair, per-hole assign each member a role: exactly one is the "best
-// ball" (higher Stableford on that hole) and the other is the "worst ball".
-// Then compares each pair's best / worst against the other pair's to decide
-// whether that hole was won, tied, or lost inter-pair — and credits the
-// player who was carrying the role for their pair.
+// Per-pair, per-hole assign each member a role: the higher Stableford score
+// is the "best ball" and the lower the "worst ball". Then compares each
+// pair's best / worst against the other pair's to decide whether that hole
+// was won, tied, or lost inter-pair — and credits the player(s) carrying the
+// role for their pair.
 //
-// Within-pair tiebreaker when Stableford points tie:
-//   1. Lower playing handicap is best.
-//   2. Same handicap → whoever was best on the previous hole (walk back).
-//   3. Everything tied → default to the first-listed pair member.
+// When partners tie on Stableford points they SHARE both roles: every role
+// and outcome count for that hole splits ½ each, so a won comparison awards
+// each partner half the point instead of a tiebreaker handing one of them
+// the whole thing.
 //
 // Returns per player:
 //   { best, worst,                               // role assignments
 //     bestWon, bestTied, bestLost,               // inter-pair BB outcomes
 //     worstWon, worstTied, worstLost }           // inter-pair WB outcomes
-// Only holes where all four players have scored contribute to the inter-pair
+// Counts are halves (0.5) on holes where the pair tied internally. Only
+// holes where all four players have scored contribute to the inter-pair
 // outcome counts; holes missing any score still contribute to within-pair
 // role counts when the pair itself has both members' scores.
 export function assignBestWorstRoles(round, players) {
@@ -1131,7 +1132,7 @@ export function assignBestWorstRoles(round, players) {
     });
   });
 
-  const pickPairRoles = (pair, hole, holeIdx) => {
+  const pickPairRoles = (pair, hole) => {
     if (pair.length < 2) return null;
     const m1 = playersById[pair[0].id];
     const m2 = playersById[pair[1].id];
@@ -1139,51 +1140,42 @@ export function assignBestWorstRoles(round, players) {
     const p1 = points[m1.id][hole.number];
     const p2 = points[m2.id][hole.number];
     if (p1 == null || p2 == null) return null;
-    const hcp1 = getPlayingHandicap(round, m1);
-    const hcp2 = getPlayingHandicap(round, m2);
 
-    let bestId, worstId;
-    if (p1 > p2) { bestId = m1.id; worstId = m2.id; }
-    else if (p2 > p1) { bestId = m2.id; worstId = m1.id; }
-    else if (hcp1 < hcp2) { bestId = m1.id; worstId = m2.id; }
-    else if (hcp2 < hcp1) { bestId = m2.id; worstId = m1.id; }
-    else {
-      let decided = false;
-      for (let k = holeIdx - 1; k >= 0; k--) {
-        const prev = round.holes[k];
-        const q1 = points[m1.id][prev.number];
-        const q2 = points[m2.id][prev.number];
-        if (q1 == null || q2 == null) continue;
-        if (q1 > q2) { bestId = m1.id; worstId = m2.id; decided = true; break; }
-        if (q2 > q1) { bestId = m2.id; worstId = m1.id; decided = true; break; }
-      }
-      if (!decided) { bestId = m1.id; worstId = m2.id; }
-    }
+    let bestIds, worstIds;
+    if (p1 > p2) { bestIds = [m1.id]; worstIds = [m2.id]; }
+    else if (p2 > p1) { bestIds = [m2.id]; worstIds = [m1.id]; }
+    else { bestIds = [m1.id, m2.id]; worstIds = [m1.id, m2.id]; }
     return {
-      bestId, worstId,
+      bestIds, worstIds,
       bestVal: Math.max(p1, p2),
       worstVal: Math.min(p1, p2),
     };
   };
 
-  round.holes.forEach((hole, holeIdx) => {
-    const pairResults = round.pairs.map((pair) => pickPairRoles(pair, hole, holeIdx));
+  // Split a count across the player(s) sharing a role (whole point for a
+  // sole holder, ½ each for tied partners).
+  const credit = (ids, field) => {
+    ids.forEach((id) => { roles[id][field] += 1 / ids.length; });
+  };
+
+  round.holes.forEach((hole) => {
+    const pairResults = round.pairs.map((pair) => pickPairRoles(pair, hole));
 
     pairResults.forEach((r) => {
       if (!r) return;
-      roles[r.bestId].best += 1;
-      roles[r.worstId].worst += 1;
+      credit(r.bestIds, 'best');
+      credit(r.worstIds, 'worst');
     });
 
     if (pairResults.length >= 2 && pairResults[0] && pairResults[1]) {
       const [a, b] = pairResults;
-      if (a.bestVal > b.bestVal) { roles[a.bestId].bestWon += 1; roles[b.bestId].bestLost += 1; }
-      else if (b.bestVal > a.bestVal) { roles[b.bestId].bestWon += 1; roles[a.bestId].bestLost += 1; }
-      else { roles[a.bestId].bestTied += 1; roles[b.bestId].bestTied += 1; }
+      if (a.bestVal > b.bestVal) { credit(a.bestIds, 'bestWon'); credit(b.bestIds, 'bestLost'); }
+      else if (b.bestVal > a.bestVal) { credit(b.bestIds, 'bestWon'); credit(a.bestIds, 'bestLost'); }
+      else { credit(a.bestIds, 'bestTied'); credit(b.bestIds, 'bestTied'); }
 
-      if (a.worstVal > b.worstVal) { roles[a.worstId].worstWon += 1; roles[b.worstId].worstLost += 1; }
-      else if (b.worstVal > a.worstVal) { roles[b.worstId].worstWon += 1; roles[a.worstId].worstLost += 1; }
-      else { roles[a.worstId].worstTied += 1; roles[b.worstId].worstTied += 1; }
+      if (a.worstVal > b.worstVal) { credit(a.worstIds, 'worstWon'); credit(b.worstIds, 'worstLost'); }
+      else if (b.worstVal > a.worstVal) { credit(b.worstIds, 'worstWon'); credit(a.worstIds, 'worstLost'); }
+      else { credit(a.worstIds, 'worstTied'); credit(b.worstIds, 'worstTied'); }
     }
   });
 
