@@ -524,7 +524,7 @@ export function scrambleRoundTally(round, players) {
 // Two pairs; each player duels the same-index member of the other pair
 // (within-pair order is random via randomPairs, so duel draw is random).
 // Every fully-scored hole distributes exactly 2 points: 1 per duel to the
-// net winner, ½ each on a halve. Nets use calcExtraShots by stroke index.
+// net winner, ½ each on a halve. Nets use per-duel relative handicaps.
 
 export function pairsMatchDuels(pairs) {
   if (!pairs || pairs.length !== 2) return null;
@@ -575,8 +575,10 @@ function duelNetWinner(hole, a, b, scores, playerHandicaps) {
   if (strA == null || strB == null) return null;
   const hA = playerHandicaps?.[a.id] ?? a.handicap ?? 0;
   const hB = playerHandicaps?.[b.id] ?? b.handicap ?? 0;
-  const netA = strA - calcExtraShots(hA, hole.strokeIndex);
-  const netB = strB - calcExtraShots(hB, hole.strokeIndex);
+  // Each duel is its own match: nets use the within-duel difference.
+  const [rA, rB] = duelRelative(hA, hB);
+  const netA = strA - calcExtraShots(rA, hole.strokeIndex);
+  const netB = strB - calcExtraShots(rB, hole.strokeIndex);
   if (netA === netB) return 0;
   return netA < netB ? 1 : 2;
 }

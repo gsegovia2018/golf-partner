@@ -191,3 +191,38 @@ describe('tournamentPairsMatchStandings', () => {
     expect(byId.c.points).toBe(0);
   });
 });
+
+describe('relative handicaps in duels', () => {
+  // Duels are index-matched: a-c (15 vs 5 → relative 10/0) and
+  // b-d (3 vs 20 → relative 0/17).
+  const hcpPairs = [[P('a', 15), P('b', 3)], [P('c', 5), P('d', 20)]];
+  const handicaps = { a: 15, b: 3, c: 5, d: 20 };
+
+  it('strokes come from the per-duel difference, not full handicaps', () => {
+    // SI 3, equal gross par 4s in duel a-c. Full handicaps would give BOTH
+    // a stroke (halve); relative gives only a (10 vs 0) → a wins the duel.
+    const hole = { number: 1, par: 4, strokeIndex: 3 };
+    const scores = { a: { 1: 4 }, c: { 1: 4 }, b: { 1: 4 }, d: { 1: 4 } };
+    expect(pairsMatchDuelPts(hole, 'a', hcpPairs, scores, handicaps)).toBe(1);
+    expect(pairsMatchDuelPts(hole, 'c', hcpPairs, scores, handicaps)).toBe(0);
+  });
+
+  it('no strokes above the per-duel gap', () => {
+    // SI 12 is outside duel a-c's gap of 10 → gross golf there. Full
+    // handicaps would still stroke a (15 ≥ 12).
+    const hole = { number: 1, par: 4, strokeIndex: 12 };
+    const scores = { a: { 1: 4 }, c: { 1: 4 }, b: { 1: 4 }, d: { 1: 4 } };
+    expect(pairsMatchDuelPts(hole, 'a', hcpPairs, scores, handicaps)).toBe(0.5);
+    expect(pairsMatchDuelPts(hole, 'c', hcpPairs, scores, handicaps)).toBe(0.5);
+  });
+
+  it('each duel relativizes independently', () => {
+    // Duel b-d: relative 0/17 → d strokes SI 3, b does not. Equal gross →
+    // d wins their duel while a wins theirs: 1 point per team on the hole.
+    const hole = { number: 1, par: 4, strokeIndex: 3 };
+    const scores = { a: { 1: 4 }, c: { 1: 4 }, b: { 1: 4 }, d: { 1: 4 } };
+    expect(pairsMatchDuelPts(hole, 'd', hcpPairs, scores, handicaps)).toBe(1);
+    const pts = pairsMatchHolePts(hole, hcpPairs, scores, handicaps);
+    expect(pts).toEqual({ team1: 1, team2: 1, decidedDuels: 2 });
+  });
+});
