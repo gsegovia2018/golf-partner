@@ -32,7 +32,8 @@ function relTime(ts) {
  *   onClose       — () => void
  *   hole          — hole number being resolved
  *   subjectName   — display name of the player whose score this is
- *   candidates    — [{ value, ts }] competing values, newest first
+ *   candidates    — [{ value, ts }] competing values, mine-first (local
+ *                   value first)
  *   currentValue  — the value currently kept in scores (the LWW winner)
  *   onResolve     — (value) => void — picks the final value
  */
@@ -77,7 +78,11 @@ export default function ScoreConflictSheet({
                   style={[s.card, isPicked && s.cardPicked]}
                   onPress={() => { setPicked(c.value); setManual(c.value); }}
                   activeOpacity={0.8}
-                  accessibilityLabel={`Use ${c.value} ${c.value === 1 ? 'stroke' : 'strokes'} for ${subjectName || 'this player'}`}
+                  accessibilityLabel={
+                    c.value == null
+                      ? `Use no score for ${subjectName || 'this player'}`
+                      : `Use ${c.value} ${c.value === 1 ? 'stroke' : 'strokes'} for ${subjectName || 'this player'}`
+                  }
                 >
                   {isPicked && (
                     <View style={s.tick}>
@@ -87,7 +92,7 @@ export default function ScoreConflictSheet({
                   <Text style={s.cardLabel}>
                     {c.value === currentValue ? 'Current score' : 'Other entry'}
                   </Text>
-                  <Text style={s.cardValue}>{c.value}</Text>
+                  <Text style={s.cardValue}>{c.value == null ? '—' : c.value}</Text>
                   <Text style={s.cardHint}>{relTime(c.ts)}</Text>
                 </TouchableOpacity>
               );

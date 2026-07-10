@@ -18,6 +18,7 @@ import {
   isRoundComplete, isTournamentFinished,
   subscribeSyncStatus,
   getActiveTournamentSnapshot, getTournament, getTournamentSnapshot,
+  readLocal,
 } from '../store/tournamentStore';
 import { mutate } from '../store/mutate';
 import { syncNow } from '../store/syncWorker';
@@ -48,6 +49,7 @@ import { reconcileShotDetail, listRoundConflicts, roundScoringMode } from '../st
 import { makeScorecardStyles } from '../components/scorecard/styles';
 import { HoleView } from '../components/scorecard/HoleView';
 import { GridView } from '../components/scorecard/GridView';
+import FinishConflictSheet from '../components/scorecard/FinishConflictSheet';
 
 
 const haptic = (style = 'light') => {
@@ -273,6 +275,9 @@ export default function ScorecardScreen({ navigation, route }) {
   // conflicted hole; HoleView consumes it to open the resolve sheet.
   const [conflictFocus, setConflictFocus] = useState(null);
   const clearConflictFocus = useCallback(() => setConflictFocus(null), []);
+  // Finish-time conflict summary sheet (Task 5) — open while handleFinish is
+  // blocked on unresolved score conflicts after the final flush.
+  const [finishConflictsOpen, setFinishConflictsOpen] = useState(false);
   // Official mode (Task 16): attest-my-card request in flight, and the last
   // attest error message (RPC can reject with "resolve discrepancies first").
   const [attestBusy, setAttestBusy] = useState(false);
@@ -981,6 +986,20 @@ export default function ScorecardScreen({ navigation, route }) {
     });
   }, [official, officialData.members, officialData.scores]);
 
+  // Live rows for the finish-time conflict summary — recomputed from the
+  // blob so a resolved row disappears as soon as resolveConflict commits.
+  const finishConflictRows = useMemo(() => {
+    const r = tournament?.rounds?.[roundIndex];
+    if (!r) return [];
+    return listRoundConflicts(r).map(({ playerId, hole }) => ({
+      playerId,
+      hole,
+      playerName: (tournament.players ?? []).find((p) => p.id === playerId)?.name ?? 'Player',
+      currentValue: r.scores?.[playerId]?.[hole] ?? null,
+      candidates: r.scoreConflicts?.[playerId]?.[hole]?.candidates ?? [],
+    }));
+  }, [tournament, roundIndex]);
+
   const setScore = useCallback((playerId, holeNumber, value) => {
     if (!official && viewOnly) return;
     const parsed = value === '' ? undefined : parseInt(value, 10) || undefined;
@@ -1148,54 +1167,57 @@ export default function ScorecardScreen({ navigation, route }) {
     const r = t?.rounds?.[roundIndex];
     if (!t || !r) { goBack(); return; }
 
-    // A round cannot finish while a hole still has an unresolved score
-    // conflict — every hole must end on one agreed value.
-    const openConflicts = listRoundConflicts(r);
-    if (openConflicts.length > 0) {
-      const first = openConflicts[0];
-      const name = (t.players ?? []).find((p) => p.id === first.playerId)?.name ?? 'a player';
-      const title = 'Resolve conflict to finish';
-      const message = openConflicts.length === 1
-        ? `Hole ${first.hole} still has a conflicting score for ${name}. Every hole needs one agreed score before this round can finish.`
-        : `${openConflicts.length} holes still have conflicting scores. Resolve them before this round can finish.`;
-      const review = () => setConflictFocus({ hole: first.hole, playerId: first.playerId });
-      if (Platform.OS === 'web') {
-        if (window.confirm(`${title}\n\n${message}\n\nReview the conflict now?`)) review();
-      } else {
-        Alert.alert(title, message, [
-          { text: 'Not now', style: 'cancel' },
-          { text: 'Review conflict', onPress: review },
-        ]);
+    // Final flush: push this device's queued score edits and pull the other
+    // phones' latest state, so the conflict summary below is complete.
+    setFinishBusy(true);
+    let freshRound = r;
+    try {
+      if (!official) {
+        await autoSave(scoresRef.current);
+        await syncNow();
+        const fresh = await readLocal(t.id).catch(() => null);
+        if (fresh) {
+          tournamentRef.current = fresh;
+          setTournament(fresh);
+          freshRound = fresh.rounds?.[roundIndex] ?? r;
+        }
       }
+    } finally {
+      setFinishBusy(false);
+    }
+
+    // A round cannot finish while a hole still has an unresolved score
+    // conflict — every hole must end on one agreed value. The summary sheet
+    // lists them all and re-triggers handleFinish once they're settled.
+    if (listRoundConflicts(freshRound).length > 0) {
+      setFinishConflictsOpen(true);
       return;
     }
 
-    const liveRound = { ...r, scores };
-    const players = t.players ?? [];
+    const freshT = tournamentRef.current ?? t;
+    const liveRound = freshRound;
+    const players = freshT.players ?? [];
     const liveTournament = {
-      ...t,
-      rounds: t.rounds.map((rr, i) => (i === roundIndex ? liveRound : rr)),
+      ...freshT,
+      rounds: freshT.rounds.map((rr, i) => (i === roundIndex ? liveRound : rr)),
     };
     const roundDone = isRoundComplete(liveRound, players);
     const tournamentDone = isTournamentFinished(liveTournament);
     const shouldMarkFinished = shouldMarkTournamentFinishedFromScorecard({
-      tournament: t,
+      tournament: freshT,
       tournamentDone,
     });
 
     const goToSummary = () => {
       navigation.navigate('RoundSummary', {
-        tournamentId: t.id,
-        roundId: r.id,
+        tournamentId: freshT.id,
+        roundId: liveRound.id,
       });
     };
 
     setFinishBusy(true);
     try {
-      if (!official) {
-        await autoSave(scoresRef.current);
-      }
-      if (shouldMarkFinished && !t.finishedAt) {
+      if (shouldMarkFinished && !freshT.finishedAt) {
         const finishedAt = new Date().toISOString();
         await enqueueSave(async () => {
           const base = tournamentRef.current ?? liveTournament;
@@ -1214,13 +1236,13 @@ export default function ScorecardScreen({ navigation, route }) {
       // Notify the finisher's friends that a casual round wrapped up. Official
       // rounds notify server-side on attestation, so skip them here.
       // Best-effort — a failure never blocks finishing the round.
-      if (!official && t.kind !== 'official') {
+      if (!official && freshT.kind !== 'official') {
         notifyRoundFinished({
-          tournamentId: t.id,
-          roundId: r.id,
+          tournamentId: freshT.id,
+          roundId: liveRound.id,
           roundIndex,
-          tournamentName: t.name,
-          courseName: r.courseName,
+          tournamentName: freshT.name,
+          courseName: liveRound.courseName,
         }).catch(() => {});
       }
 
@@ -1229,7 +1251,7 @@ export default function ScorecardScreen({ navigation, route }) {
       setTimeout(() => {
         setRoundCompleteVisible(false);
         setFinishBusy(false);
-        if (tournamentDone && t.kind !== 'game' && !official) {
+        if (tournamentDone && freshT.kind !== 'game' && !official) {
           const title = '🏆 Tournament complete';
           const message = 'Every round is finished. Archive this tournament?';
           if (Platform.OS === 'web') {
@@ -1249,10 +1271,10 @@ export default function ScorecardScreen({ navigation, route }) {
           // Card for the round just played. collectMyRounds keys rounds as
           // `${tournamentId}:${roundIndex}` — match that here. The tournament-
           // complete / archive branch above keeps using goToSummary unchanged.
-          if (!official && t.kind !== 'official') {
+          if (!official && freshT.kind !== 'official') {
             navigation.navigate('MyStats', {
               tab: 'reportCard',
-              roundKey: `${t.id}:${roundIndex}`,
+              roundKey: `${freshT.id}:${roundIndex}`,
             });
           } else {
             goToSummary();
@@ -1265,7 +1287,7 @@ export default function ScorecardScreen({ navigation, route }) {
       if (Platform.OS === 'web') window.alert(message);
       else Alert.alert('Finish failed', message);
     }
-  }, [roundIndex, scores, navigation, goBack, official, finishBusy, autoSave, enqueueSave]);
+  }, [roundIndex, navigation, goBack, official, finishBusy, autoSave, enqueueSave]);
 
   // Official mode (Task 16): attest the token holder's own card. Replaces the
   // casual "finish" affordance for official rounds. Disabled while the holder
@@ -1655,6 +1677,16 @@ export default function ScorecardScreen({ navigation, route }) {
       <SyncStatusSheet
         visible={syncSheetOpen}
         onClose={() => setSyncSheetOpen(false)}
+      />
+      <FinishConflictSheet
+        visible={finishConflictsOpen}
+        onClose={() => setFinishConflictsOpen(false)}
+        rows={finishConflictRows}
+        onPick={(playerId, hole, value) => resolveConflict(playerId, hole, value)}
+        onFinish={() => {
+          setFinishConflictsOpen(false);
+          handleFinish();
+        }}
       />
 
       {roundCompleteVisible && (
