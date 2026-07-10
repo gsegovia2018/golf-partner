@@ -29,7 +29,12 @@ const RENDERERS: Record<string, (d: Record<string, unknown>) => Rendered> = {
   added_to_game: (d) => ({
     title: 'Added to a game',
     body: `You were added to ${d.tournament_name ?? 'a game'}`,
-    deepLink: { screen: 'Home', params: { openTournamentId: d.tournament_id } },
+    // Nested form — 'Home' lives inside the 'Main' tab navigator; mirrors
+    // notificationLink() in src/lib/notificationContent.js.
+    deepLink: {
+      screen: 'Main',
+      params: { screen: 'Home', params: { openTournamentId: d.tournament_id } },
+    },
   }),
   round_finished: (d) => ({
     title: 'Round finished',
