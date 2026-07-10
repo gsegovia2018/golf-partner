@@ -1,4 +1,30 @@
-import { holePagePropsEqual } from '../HolePage';
+import React from 'react';
+import { Animated } from 'react-native';
+import { render } from '@testing-library/react-native';
+import { holePagePropsEqual, HolePage } from '../HolePage';
+
+jest.mock('../../../theme/ThemeContext', () => ({
+  useTheme: () => {
+    const { light, semantic, typography, fonts, spacing, radius } = jest.requireActual('../../../theme/tokens');
+    return {
+      theme: {
+        ...light,
+        semantic,
+        masters: semantic.masters,
+        destructive: semantic.destructive.light,
+        pairA: semantic.pair.a.light,
+        pairB: semantic.pair.b.light,
+        scoreColor: (level) => semantic.score[level].light,
+        typography,
+        fonts,
+        spacing,
+        radius,
+        mode: 'light',
+        isDark: false,
+      },
+    };
+  },
+}));
 
 // Minimal HolePage prop set. baseProps() returns a fresh object each call;
 // tests build `next` by spreading `prev` so every unchanged prop keeps its
@@ -34,6 +60,77 @@ function baseProps() {
     totalsMap: new Map(),
   };
 }
+
+// Renders a real HolePage for a 1v1 match play round so full-handicap vs
+// relative-handicap values can be pinned end to end (through PlayerCard).
+// Alice hcp 25, Bob hcp 5 → duel-relative: Alice 20, Bob 0 (Bob is the
+// duel's better player). At SI 5, Alice's full handicap (25, base 1) and
+// Bob's full handicap (5, base 0) also give distinct pickup values (8 vs 7)
+// so each card's pickup button can be pinned unambiguously by its label,
+// while the relative-based bug would give Bob 6 instead of 7.
+function renderMatchPlayHole(overrides = {}) {
+  const players = [
+    { id: 'a', name: 'Alice', handicap: 25 },
+    { id: 'b', name: 'Bob', handicap: 5 },
+  ];
+  const round = {
+    id: 'r1',
+    holes: [],
+    playerHandicaps: { a: 25, b: 5 },
+  };
+  const props = {
+    pageHole: { number: 1, par: 4, strokeIndex: 5 },
+    width: 360,
+    height: 600,
+    courseName: 'Pebble',
+    roundIndex: 0,
+    round,
+    players,
+    scores: { a: {}, b: {} },
+    shotDetails: {},
+    meId: 'a',
+    onSetShot: () => {},
+    theme: { name: 'light' },
+    s: {},
+    onStep: () => {},
+    onSetScore: () => {},
+    editable: null,
+    getScoreAnim: () => new Animated.Value(1),
+    showRunning: false,
+    mode: 'matchplay',
+    official: false,
+    officialDiscrepancy: null,
+    onOpenDiscrepancy: () => {},
+    onOpenConflict: () => {},
+    shotCollapsed: false,
+    onToggleShotDetail: () => {},
+    totalsMap: new Map(),
+    ...overrides,
+  };
+
+  return render(<HolePage {...props} />);
+}
+
+describe('HolePage match play: full vs relative handicap', () => {
+  test('HCP label shows the FULL handicap for both players, not the relative one', () => {
+    const { getByText, queryByText } = renderMatchPlayHole();
+
+    // Alice (hcp 25, relative 20) still has a relative extra shot at SI 5.
+    expect(getByText('HCP 25  ·  +1 on this hole')).toBeTruthy();
+    // Bob (hcp 5, relative 0) must show his FULL handicap, not "HCP 0".
+    expect(getByText('HCP 5')).toBeTruthy();
+    expect(queryByText('HCP 0')).toBeNull();
+  });
+
+  test('pickup button records the FULL-handicap pickup value for Bob, not the relative one', () => {
+    const { getByLabelText, queryByLabelText } = renderMatchPlayHole();
+
+    // Full handicap: pickupStrokes(par 4, hcp 5, SI 5) = 7.
+    expect(getByLabelText('Pickup at 7 strokes')).toBeTruthy();
+    // Relative-handicap bug would compute pickupStrokes(4, 0, 5) = 6.
+    expect(queryByLabelText('Pickup at 6 strokes')).toBeNull();
+  });
+});
 
 describe('holePagePropsEqual', () => {
   test('identical props → skip re-render', () => {
