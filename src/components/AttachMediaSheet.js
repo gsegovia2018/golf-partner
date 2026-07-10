@@ -1,9 +1,10 @@
 import React, { useEffect, useState } from 'react';
-import { Modal, View, Text, TouchableOpacity, TextInput, Image, StyleSheet } from 'react-native';
+import { View, Text, TouchableOpacity, TextInput, Image, StyleSheet } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { Feather } from '@expo/vector-icons';
 import { VideoView, useVideoPlayer } from 'expo-video';
 import { useTheme } from '../theme/ThemeContext';
+import BottomSheet from './BottomSheet';
 
 const UPLOADER_KEY = '@golf_uploader_label';
 
@@ -21,7 +22,7 @@ export default function AttachMediaSheet({ visible, asset, holes, defaultHoleInd
     AsyncStorage.getItem(UPLOADER_KEY).then((v) => setUploader(v ?? ''));
   }, [visible, defaultHoleIndex]);
 
-  if (!visible || !asset) return null;
+  if (!asset) return null;
 
   const submit = async () => {
     if (uploader) await AsyncStorage.setItem(UPLOADER_KEY, uploader);
@@ -33,73 +34,69 @@ export default function AttachMediaSheet({ visible, asset, holes, defaultHoleInd
   };
 
   return (
-    <Modal statusBarTranslucent hardwareAccelerated visible={visible} transparent animationType="slide" onRequestClose={onCancel}>
-      <View style={s.backdrop}>
-        <View style={s.sheet}>
-          <View style={s.header}>
-            <Text style={s.title}>Adjuntar a la ronda</Text>
-            <TouchableOpacity onPress={onCancel} accessibilityLabel="Cancelar">
-              <Feather name="x" size={22} color={theme.text.muted} />
-            </TouchableOpacity>
-          </View>
-
-          {asset.kind === 'photo' ? (
-            <Image source={{ uri: asset.localUri }} style={s.preview} resizeMode="cover" />
-          ) : (
-            <VideoPreview uri={asset.localUri} style={s.preview} />
-          )}
-
-          <Text style={s.sectionLabel}>Hoyo</Text>
-          <View style={s.holeGrid}>
-            <TouchableOpacity
-              style={[s.holeBtn, s.holeBtnWide, holeIndex == null && s.holeBtnActive]}
-              onPress={() => setHoleIndex(null)}
-              activeOpacity={0.7}
-            >
-              <Text
-                style={[s.holeBtnText, s.holeBtnTextWide, holeIndex == null && s.holeBtnTextActive]}
-                numberOfLines={2}
-                adjustsFontSizeToFit
-              >
-                Sin hoyo
-              </Text>
-            </TouchableOpacity>
-            {holes.map((_, i) => (
-              <TouchableOpacity
-                key={i}
-                style={[s.holeBtn, holeIndex === i && s.holeBtnActive]}
-                onPress={() => setHoleIndex(i)}
-                activeOpacity={0.7}
-              >
-                <Text style={[s.holeBtnText, holeIndex === i && s.holeBtnTextActive]}>{i + 1}</Text>
-              </TouchableOpacity>
-            ))}
-          </View>
-
-          <Text style={s.sectionLabel}>Comentario (opcional)</Text>
-          <TextInput
-            style={s.input}
-            value={caption}
-            onChangeText={setCaption}
-            placeholder="Ej. Bunker dramático del 7"
-            placeholderTextColor={theme.text.muted}
-          />
-
-          <Text style={s.sectionLabel}>Tu nombre (opcional)</Text>
-          <TextInput
-            style={s.input}
-            value={uploader}
-            onChangeText={setUploader}
-            placeholder="Ej. Noé"
-            placeholderTextColor={theme.text.muted}
-          />
-
-          <TouchableOpacity style={s.saveBtn} onPress={submit}>
-            <Text style={s.saveLabel}>Guardar</Text>
-          </TouchableOpacity>
-        </View>
+    <BottomSheet visible={visible} onClose={onCancel} sheetStyle={s.sheet}>
+      <View style={s.header}>
+        <Text style={s.title}>Adjuntar a la ronda</Text>
+        <TouchableOpacity onPress={onCancel} accessibilityLabel="Cancelar">
+          <Feather name="x" size={22} color={theme.text.muted} />
+        </TouchableOpacity>
       </View>
-    </Modal>
+
+      {asset.kind === 'photo' ? (
+        <Image source={{ uri: asset.localUri }} style={s.preview} resizeMode="cover" />
+      ) : (
+        <VideoPreview uri={asset.localUri} style={s.preview} />
+      )}
+
+      <Text style={s.sectionLabel}>Hoyo</Text>
+      <View style={s.holeGrid}>
+        <TouchableOpacity
+          style={[s.holeBtn, s.holeBtnWide, holeIndex == null && s.holeBtnActive]}
+          onPress={() => setHoleIndex(null)}
+          activeOpacity={0.7}
+        >
+          <Text
+            style={[s.holeBtnText, s.holeBtnTextWide, holeIndex == null && s.holeBtnTextActive]}
+            numberOfLines={2}
+            adjustsFontSizeToFit
+          >
+            Sin hoyo
+          </Text>
+        </TouchableOpacity>
+        {holes.map((_, i) => (
+          <TouchableOpacity
+            key={i}
+            style={[s.holeBtn, holeIndex === i && s.holeBtnActive]}
+            onPress={() => setHoleIndex(i)}
+            activeOpacity={0.7}
+          >
+            <Text style={[s.holeBtnText, holeIndex === i && s.holeBtnTextActive]}>{i + 1}</Text>
+          </TouchableOpacity>
+        ))}
+      </View>
+
+      <Text style={s.sectionLabel}>Comentario (opcional)</Text>
+      <TextInput
+        style={s.input}
+        value={caption}
+        onChangeText={setCaption}
+        placeholder="Ej. Bunker dramático del 7"
+        placeholderTextColor={theme.text.muted}
+      />
+
+      <Text style={s.sectionLabel}>Tu nombre (opcional)</Text>
+      <TextInput
+        style={s.input}
+        value={uploader}
+        onChangeText={setUploader}
+        placeholder="Ej. Noé"
+        placeholderTextColor={theme.text.muted}
+      />
+
+      <TouchableOpacity style={s.saveBtn} onPress={submit}>
+        <Text style={s.saveLabel}>Guardar</Text>
+      </TouchableOpacity>
+    </BottomSheet>
   );
 }
 
@@ -118,7 +115,6 @@ function VideoPreview({ uri, style }) {
 }
 
 const makeStyles = (theme) => StyleSheet.create({
-  backdrop: { flex: 1, backgroundColor: 'rgba(0,0,0,0.5)', justifyContent: 'flex-end' },
   sheet: {
     backgroundColor: theme.bg.primary, padding: 20,
     borderTopLeftRadius: 24, borderTopRightRadius: 24,

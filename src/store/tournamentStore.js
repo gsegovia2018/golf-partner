@@ -565,6 +565,7 @@ export {
   totalParFromHoles,
   calcPlayingHandicap,
   deriveRoundPlayingHandicap,
+  roundPlayerIndex,
   normalizeRoundHandicaps,
   getPlayingHandicap,
   recomputeRoundPlayingHandicaps,

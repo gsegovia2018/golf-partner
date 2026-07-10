@@ -5,11 +5,12 @@
 // or `onCancel()` if dismissed.
 import React, { useState, useEffect } from 'react';
 import {
-  Modal, View, Text, TouchableOpacity, StyleSheet, SafeAreaView,
+  View, Text, TouchableOpacity, StyleSheet,
 } from 'react-native';
 import { Feather } from '@expo/vector-icons';
 import { useTheme } from '../theme/ThemeContext';
 import { SCORING_MODES, isScoringModeAllowed } from './scoringModes';
+import BottomSheet from './BottomSheet';
 
 export default function ScoringModeChangeSheet({
   visible,
@@ -31,55 +32,50 @@ export default function ScoringModeChangeSheet({
   const allowed = SCORING_MODES.filter((m) => isScoringModeAllowed(m.key, playerCount));
 
   return (
-    <Modal statusBarTranslucent hardwareAccelerated visible={visible} animationType="slide" transparent onRequestClose={onCancel}>
-      <View style={s.backdrop}>
-        <SafeAreaView style={s.sheet}>
-          <Text style={s.title}>{title}</Text>
-          {subtitle ? <Text style={s.subtitle}>{subtitle}</Text> : null}
-          <View style={s.list}>
-            {allowed.map((mode) => {
-              const isSelected = mode.key === selected;
-              return (
-                <TouchableOpacity
-                  key={mode.key}
-                  style={[s.row, isSelected && s.rowSelected]}
-                  onPress={() => setSelected(mode.key)}
-                  accessibilityRole="radio"
-                  accessibilityState={{ selected: isSelected }}
-                >
-                  <Feather name={mode.icon} size={20} color={theme.accent.primary} />
-                  <View style={s.rowText}>
-                    <Text style={s.rowLabel}>{mode.label}</Text>
-                    <Text style={s.rowSubtitle}>{mode.subtitle}</Text>
-                  </View>
-                  {isSelected ? (
-                    <Feather name="check" size={20} color={theme.accent.primary} />
-                  ) : null}
-                </TouchableOpacity>
-              );
-            })}
-          </View>
-          <View style={s.actions}>
-            <TouchableOpacity style={s.cancelBtn} onPress={onCancel}>
-              <Text style={s.cancelText}>Cancel</Text>
-            </TouchableOpacity>
+    <BottomSheet visible={visible} onClose={onCancel} sheetStyle={s.sheet}>
+      <Text style={s.title}>{title}</Text>
+      {subtitle ? <Text style={s.subtitle}>{subtitle}</Text> : null}
+      <View style={s.list}>
+        {allowed.map((mode) => {
+          const isSelected = mode.key === selected;
+          return (
             <TouchableOpacity
-              style={[s.confirmBtn, !selected && s.confirmBtnDisabled]}
-              onPress={() => selected && onConfirm(selected)}
-              disabled={!selected}
+              key={mode.key}
+              style={[s.row, isSelected && s.rowSelected]}
+              onPress={() => setSelected(mode.key)}
+              accessibilityRole="radio"
+              accessibilityState={{ selected: isSelected }}
             >
-              <Text style={s.confirmText}>Continue</Text>
+              <Feather name={mode.icon} size={20} color={theme.accent.primary} />
+              <View style={s.rowText}>
+                <Text style={s.rowLabel}>{mode.label}</Text>
+                <Text style={s.rowSubtitle}>{mode.subtitle}</Text>
+              </View>
+              {isSelected ? (
+                <Feather name="check" size={20} color={theme.accent.primary} />
+              ) : null}
             </TouchableOpacity>
-          </View>
-        </SafeAreaView>
+          );
+        })}
       </View>
-    </Modal>
+      <View style={s.actions}>
+        <TouchableOpacity style={s.cancelBtn} onPress={onCancel}>
+          <Text style={s.cancelText}>Cancel</Text>
+        </TouchableOpacity>
+        <TouchableOpacity
+          style={[s.confirmBtn, !selected && s.confirmBtnDisabled]}
+          onPress={() => selected && onConfirm(selected)}
+          disabled={!selected}
+        >
+          <Text style={s.confirmText}>Continue</Text>
+        </TouchableOpacity>
+      </View>
+    </BottomSheet>
   );
 }
 
 function makeStyles(theme) {
   return StyleSheet.create({
-    backdrop: { flex: 1, justifyContent: 'flex-end', backgroundColor: 'rgba(0,0,0,0.5)' },
     sheet: {
       backgroundColor: theme.bg.primary,
       borderTopLeftRadius: 24,

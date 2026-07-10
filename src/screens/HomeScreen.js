@@ -14,6 +14,7 @@ import { scoringModeUsesTeams, leaderboardToggleLabels, mergeScoringSettings, is
 import ScoringModeField, { ScoringModeSheet } from '../components/ScoringModePicker';
 import PullToRefresh from '../components/PullToRefresh';
 import LoadingSplash from '../components/LoadingSplash';
+import BottomSheet from '../components/BottomSheet';
 import {
   loadTournament, loadAllTournaments, loadAllTournamentsWithFallback,
   setActiveTournament,
@@ -1838,14 +1839,7 @@ export default function HomeScreen({ navigation, route }) {
       );
     })()}
 
-    <Modal statusBarTranslucent hardwareAccelerated
-      visible={showInvite}
-      transparent
-      animationType="slide"
-      onRequestClose={() => setShowInvite(false)}
-    >
-      <Pressable style={s.modalBackdrop} onPress={() => setShowInvite(false)}>
-        <Pressable style={s.modalSheet} onPress={() => {}}>
+    <BottomSheet visible={showInvite} onClose={() => setShowInvite(false)} sheetStyle={s.modalSheet}>
           <View style={s.modalHandle} />
           <Text style={s.modalTitle}>Invite</Text>
           <Text style={s.inviteSubtitle}>
@@ -1926,9 +1920,7 @@ export default function HomeScreen({ navigation, route }) {
             <Text style={s.menuItemText}>Share link</Text>
             <Feather name="chevron-right" size={16} color={theme.text.muted} />
           </TouchableOpacity>
-        </Pressable>
-      </Pressable>
-    </Modal>
+    </BottomSheet>
 
     <Modal statusBarTranslucent hardwareAccelerated
       visible={showRoundEdit}
@@ -2012,14 +2004,7 @@ export default function HomeScreen({ navigation, route }) {
       </Pressable>
     </Modal>
 
-    <Modal statusBarTranslucent hardwareAccelerated
-      visible={showSettings}
-      transparent
-      animationType="slide"
-      onRequestClose={() => setShowSettings(false)}
-    >
-      <Pressable style={s.modalBackdrop} onPress={() => setShowSettings(false)}>
-        <Pressable style={s.modalSheet} onPress={() => {}}>
+    <BottomSheet visible={showSettings} onClose={() => setShowSettings(false)} sheetStyle={s.modalSheet}>
           <View style={s.modalHandle} />
           <Text style={s.modalTitle}>{`${tournamentNounCapitalized(tournament)} Settings`}</Text>
 
@@ -2092,7 +2077,13 @@ export default function HomeScreen({ navigation, route }) {
           {!isViewer && (
             <TouchableOpacity
               style={s.menuItem}
-              onPress={() => { setShowSettings(false); navigation.navigate('EditTournament'); }}
+              onPress={() => {
+                setShowSettings(false);
+                navigation.navigate('EditTournament', {
+                  tournamentId: tournament.id,
+                  tournamentName: tournament.name,
+                });
+              }}
               activeOpacity={0.7}
             >
               <Feather name="edit-3" size={18} color={theme.accent.primary} />
@@ -2144,18 +2135,9 @@ export default function HomeScreen({ navigation, route }) {
               <Text style={[s.menuItemText, { color: theme.destructive }]}>Delete Tournament</Text>
             </TouchableOpacity>
           )}
-        </Pressable>
-      </Pressable>
-    </Modal>
+    </BottomSheet>
 
-    <Modal statusBarTranslucent hardwareAccelerated
-      visible={showScoringModeSheet}
-      transparent
-      animationType="slide"
-      onRequestClose={() => setShowScoringModeSheet(false)}
-    >
-      <Pressable style={s.modalBackdrop} onPress={() => setShowScoringModeSheet(false)}>
-        <Pressable style={s.modalSheet} onPress={() => {}}>
+    <BottomSheet visible={showScoringModeSheet} onClose={() => setShowScoringModeSheet(false)} sheetStyle={s.modalSheet}>
           <View style={s.modalHandle} />
           <Text style={s.modalTitle}>Scoring Mode</Text>
           {scoringDraft && (
@@ -2185,9 +2167,7 @@ export default function HomeScreen({ navigation, route }) {
               </View>
             </>
           )}
-        </Pressable>
-      </Pressable>
-    </Modal>
+    </BottomSheet>
 
     <PostCreateInviteModal
       visible={postCreateInvite.visible}

@@ -242,6 +242,9 @@ export default function PlayersScreen({ navigation, route }) {
             Object.entries(r.playerHandicaps).map(([id, v]) => [id, parseInt(v, 10) || 0]),
           ),
           manualHandicaps: { ...(r.manualHandicaps ?? {}) },
+          playerIndexes: Object.fromEntries(
+            Object.entries(r.playerIndexes ?? {}).map(([id, v]) => [id, Number(v) || 0]),
+          ),
         }));
         const baseId = tournamentRef.current?.id;
         let t = (baseId && (await readLocal(baseId))) || tournamentRef.current;
@@ -252,6 +255,11 @@ export default function PlayersScreen({ navigation, route }) {
             const before = prevRound.playerHandicaps?.[pid];
             if (before === v) continue;
             t = await mutate(t, { type: 'handicap.set', roundId: r.id, playerId: pid, handicap: v });
+          }
+          for (const [pid, v] of Object.entries(r.playerIndexes)) {
+            const before = prevRound.playerIndexes?.[pid];
+            if (before === v) continue;
+            t = await mutate(t, { type: 'index.set', roundId: r.id, playerId: pid, index: v });
           }
         }
         await saveTournament({ ...t, players: builtPlayers, rounds: builtRounds });
@@ -277,6 +285,7 @@ export default function PlayersScreen({ navigation, route }) {
         playerTees: patch.playerTees,
         playerHandicaps: patch.playerHandicaps,
         manualHandicaps: { ...(patch.manualHandicaps ?? {}) },
+        playerIndexes: { ...(patch.playerIndexes ?? {}) },
       };
       return next;
     });

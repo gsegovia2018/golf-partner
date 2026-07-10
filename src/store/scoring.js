@@ -47,6 +47,18 @@ export function resolveRoundTee(round, playerId) {
   return { slope: round?.slope, rating: round?.courseRating };
 }
 
+// The handicap INDEX a player plays off in a round. A round may carry a
+// per-round index override (round.playerIndexes[playerId]) so the group can
+// adjust a player's index for that round only — common in tournaments where
+// handicaps are tweaked between rounds — without touching the player's global
+// index. Falls back to the player's base index when there's no override.
+export function roundPlayerIndex(round, player) {
+  const override = round?.playerIndexes?.[player?.id];
+  if (override == null || override === '') return player?.handicap;
+  const parsed = parseFloat(override);
+  return Number.isFinite(parsed) ? parsed : player?.handicap;
+}
+
 // Convenience: derive a player's auto playing handicap for a given round,
 // using that player's tee. `playerId` is optional — when omitted (e.g. legacy
 // call sites, tests) it falls back to the round-level slope/rating.
@@ -70,7 +82,7 @@ export function normalizeRoundHandicaps(round, players) {
   const manualHandicaps = { ...(round.manualHandicaps ?? {}) };
   const hasLegacyFlags = round.manualHandicaps != null;
   players.forEach((p) => {
-    const auto = deriveRoundPlayingHandicap(p.handicap, round, p.id);
+    const auto = deriveRoundPlayingHandicap(roundPlayerIndex(round, p), round, p.id);
     const current = playerHandicaps[p.id];
     if (current == null) {
       playerHandicaps[p.id] = auto;
@@ -87,7 +99,7 @@ export function normalizeRoundHandicaps(round, players) {
 export function getPlayingHandicap(round, player) {
   const stored = round.playerHandicaps?.[player.id];
   if (stored != null) return Number(stored);
-  return deriveRoundPlayingHandicap(player.handicap, round, player.id);
+  return deriveRoundPlayingHandicap(roundPlayerIndex(round, player), round, player.id);
 }
 
 // Recompute playerHandicaps for non-manual entries when base index or slope
@@ -97,7 +109,7 @@ export function recomputeRoundPlayingHandicaps(round, players) {
   const manual = round.manualHandicaps ?? {};
   players.forEach((p) => {
     if (manual[p.id]) return;
-    playerHandicaps[p.id] = deriveRoundPlayingHandicap(p.handicap, round, p.id);
+    playerHandicaps[p.id] = deriveRoundPlayingHandicap(roundPlayerIndex(round, p), round, p.id);
   });
   return { ...round, playerHandicaps };
 }
