@@ -2,7 +2,7 @@ import React, { useEffect, useRef, useState, useCallback, useMemo } from 'react'
 import {
   View, Text, TextInput, TouchableOpacity,
   ScrollView, Pressable, Platform, Animated,
-  ActivityIndicator, Alert,
+  ActivityIndicator, Alert, AppState,
 } from 'react-native';
 import ScreenContainer from '../components/ScreenContainer';
 import * as Haptics from 'expo-haptics';
@@ -20,6 +20,7 @@ import {
   getActiveTournamentSnapshot, getTournament, getTournamentSnapshot,
 } from '../store/tournamentStore';
 import { mutate } from '../store/mutate';
+import { syncNow } from '../store/syncWorker';
 import { fetchPlayers } from '../store/libraryStore';
 import { useAuth } from '../context/AuthContext';
 import { useTheme } from '../theme/ThemeContext';
@@ -528,7 +529,7 @@ export default function ScorecardScreen({ navigation, route }) {
           playerId: cell.playerId,
           hole: cell.hole,
           value: cell.value,
-        });
+        }, { deferSync: true });
         // Commit immediately so the next chained unit (or a notes save)
         // diffs/clones from this state, not from the pre-save baseline.
         tournamentRef.current = t;
@@ -1090,6 +1091,23 @@ export default function ScorecardScreen({ navigation, route }) {
     haptic('light');
     setCurrentHole(h);
   }, []);
+
+  // Batched score pushes: taps only enqueue (deferSync above); the queue is
+  // drained when the user moves between holes, leaves the scorecard, or
+  // backgrounds the app — never mid-entry on a hole.
+  const flushScoreSync = useCallback(() => {
+    if (official) return; // official rounds push via RPC per entry
+    syncNow();
+  }, [official]);
+
+  useEffect(() => { flushScoreSync(); }, [currentHole, flushScoreSync]);
+  useEffect(() => () => { flushScoreSync(); }, [flushScoreSync]);
+  useEffect(() => {
+    const sub = AppState.addEventListener('change', (state) => {
+      if (state === 'background' || state === 'inactive') flushScoreSync();
+    });
+    return () => sub.remove();
+  }, [flushScoreSync]);
 
   // Back from the scorecard. The live center-tab action requests Tournament so
   // the user lands on the active round summary while a round is live. Other
