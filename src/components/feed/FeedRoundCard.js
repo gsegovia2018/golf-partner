@@ -28,16 +28,21 @@ function statValue(value) {
   return value == null ? '-' : String(value);
 }
 
-// Strokes-vs-par label + colour, matching the live scoreboard's vs-Par cell.
+// Strokes-vs-par label, matching the live scoreboard's vs-Par cell.
 function vsParText(v) {
   if (v == null) return null;
   if (v === 0) return 'E';
   return v > 0 ? `+${v}` : `${v}`;
 }
-function vsParColor(v, theme) {
+// Coloured against the player's handicap pace, not scratch: `allowed` is the
+// handicap allowance over the holes played (e.g. HCP 18 through 5 holes → 5),
+// so +5 there is on pace (grey), better is green, worse is red. Without a
+// handicap the pace falls back to scratch (0).
+function vsParColor(v, allowed, theme) {
   if (v == null) return theme.text.muted;
-  if (v < 0) return theme.scoreColor('excellent');
-  if (v === 0) return theme.scoreColor('good');
+  const pace = allowed ?? 0;
+  if (v < pace) return theme.scoreColor('excellent');
+  if (v === pace) return theme.scoreColor('neutral');
   return theme.scoreColor('poor');
 }
 
@@ -279,7 +284,7 @@ export default function FeedRoundCard({
                   ) : null}
                 </View>
                 {vp != null ? (
-                  <Text style={[s.vsParText, { color: vsParColor(result.vsPar, theme) }]}>
+                  <Text style={[s.vsParText, { color: vsParColor(result.vsPar, result.vsParAllowed, theme) }]}>
                     {vp} vs par
                   </Text>
                 ) : null}

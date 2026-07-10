@@ -7,7 +7,7 @@ import {
   isTournamentFinished,
   formatRoundLabel,
 } from './tournamentStore';
-import { roundScoringMode } from './scoring';
+import { roundScoringMode, calcExtraShots } from './scoring';
 import { loadMediaForTournaments } from './mediaStore';
 import { listFriends, getCachedFriends } from './friendStore';
 
@@ -50,18 +50,28 @@ function holesPlayed(round, playerId) {
 
 // Strokes vs par across only the holes this player has actually scored, so a
 // mid-round card compares like-for-like (through N holes, not against a full
-// 18-hole par). Returns null when nothing is scored yet.
-function vsParThrough(round, playerId) {
+// 18-hole par). `allowed` is the handicap allowance over those same holes —
+// the extra shots (by stroke index) the player's playing handicap grants —
+// so the card can colour vs-par against the pace they "should" be on rather
+// than against scratch. Both are null when nothing is scored yet.
+function vsParThrough(round, playerId, handicap) {
   const scores = round?.scores?.[playerId];
-  if (!scores) return null;
+  if (!scores) return { vsPar: null, allowed: null };
   let strokes = 0;
   let par = 0;
+  let allowed = 0;
   let played = 0;
   for (const hole of round.holes ?? []) {
     const s = scores[hole.number];
-    if (s != null) { strokes += s; par += hole.par ?? 0; played++; }
+    if (s != null) {
+      strokes += s;
+      par += hole.par ?? 0;
+      played++;
+      if (Number.isFinite(handicap)) allowed += calcExtraShots(handicap, hole.strokeIndex);
+    }
   }
-  return played > 0 ? strokes - par : null;
+  if (played === 0) return { vsPar: null, allowed: null };
+  return { vsPar: strokes - par, allowed: Number.isFinite(handicap) ? allowed : null };
 }
 
 const ROUND_STORY_LIMIT = 12;
@@ -280,6 +290,7 @@ export async function buildFeed(options = {}) {
         if (!isMe && !isFriend) continue; // skip guests / strangers
 
         const friendInfo = isFriend ? friendById.get(uid) : null;
+        const pace = vsParThrough(round, player.id, entry.handicap);
         results.push({
           playerId: player.id,
           userId: uid,
@@ -292,7 +303,8 @@ export async function buildFeed(options = {}) {
           strokes: entry.totalStrokes,
           holes: holesPlayed(round, player.id),
           handicap: Number.isFinite(entry.handicap) ? entry.handicap : null,
-          vsPar: vsParThrough(round, player.id),
+          vsPar: pace.vsPar,
+          vsParAllowed: pace.allowed,
         });
       }
       if (results.length === 0) return;
