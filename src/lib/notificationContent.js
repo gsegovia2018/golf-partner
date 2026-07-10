@@ -61,7 +61,13 @@ export function notificationLink(type, data = {}) {
     case 'friend_accepted':
       return { screen: 'Friends' };
     case 'added_to_game':
-      return { screen: 'Home', params: { openTournamentId: data.tournament_id } };
+      // 'Home' lives inside the 'Main' bottom-tab navigator, so the link
+      // must use React Navigation's nested form — a bare navigate('Home')
+      // from the root stack is silently dropped.
+      return {
+        screen: 'Main',
+        params: { screen: 'Home', params: { openTournamentId: data.tournament_id } },
+      };
     case 'round_finished':
     case 'feed_reaction':
     case 'feed_comment':
@@ -72,4 +78,15 @@ export function notificationLink(type, data = {}) {
     default:
       return { screen: 'Notifications' };
   }
+}
+
+// Older send-push deployments (and pushes already delivered before an app
+// update) carry the bare `{ screen: 'Home' }` deep link, which the root
+// navigator cannot resolve. Rewrite it to the nested Main → Home form;
+// every other link passes through untouched.
+export function normalizeDeepLink(link = {}) {
+  if (link.screen === 'Home') {
+    return { screen: 'Main', params: { screen: 'Home', params: link.params } };
+  }
+  return link;
 }

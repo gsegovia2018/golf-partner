@@ -1,4 +1,4 @@
-import { renderNotification, notificationLink } from '../notificationContent';
+import { renderNotification, notificationLink, normalizeDeepLink } from '../notificationContent';
 
 describe('renderNotification', () => {
   test('friend_request uses the actor name', () => {
@@ -66,9 +66,12 @@ describe('notificationLink', () => {
     expect(notificationLink('friend_accepted', {})).toEqual({ screen: 'Friends' });
   });
 
-  test('added_to_game routes to Home with the tournament id', () => {
+  test('added_to_game routes to the Home tab (nested under Main) with the tournament id', () => {
     expect(notificationLink('added_to_game', { tournament_id: 't1' }))
-      .toEqual({ screen: 'Home', params: { openTournamentId: 't1' } });
+      .toEqual({
+        screen: 'Main',
+        params: { screen: 'Home', params: { openTournamentId: 't1' } },
+      });
   });
 
   test('round_finished routes to RoundSummary with tournament and round ids', () => {
@@ -85,5 +88,38 @@ describe('notificationLink', () => {
 
   test('unknown type routes to the Notifications inbox', () => {
     expect(notificationLink('something_else', {})).toEqual({ screen: 'Notifications' });
+  });
+});
+
+describe('normalizeDeepLink', () => {
+  test('rewrites a legacy bare Home link to the nested Main → Home form', () => {
+    expect(normalizeDeepLink({ screen: 'Home', params: { openTournamentId: 't1' } }))
+      .toEqual({
+        screen: 'Main',
+        params: { screen: 'Home', params: { openTournamentId: 't1' } },
+      });
+  });
+
+  test('passes an already-nested link through untouched', () => {
+    const nested = {
+      screen: 'Main',
+      params: { screen: 'Home', params: { openTournamentId: 't1' } },
+    };
+    expect(normalizeDeepLink(nested)).toEqual(nested);
+  });
+
+  test('passes non-Home links through untouched', () => {
+    expect(normalizeDeepLink({ screen: 'Friends' })).toEqual({ screen: 'Friends' });
+    expect(normalizeDeepLink({
+      screen: 'RoundSummary',
+      params: { tournamentId: 't1', roundId: 'r1' },
+    })).toEqual({
+      screen: 'RoundSummary',
+      params: { tournamentId: 't1', roundId: 'r1' },
+    });
+  });
+
+  test('tolerates missing input', () => {
+    expect(normalizeDeepLink(undefined)).toEqual({});
   });
 });
