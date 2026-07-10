@@ -1,5 +1,6 @@
 import React, { useMemo } from 'react';
-import { View, StyleSheet, Text } from 'react-native';
+import { View, StyleSheet, Text, TouchableOpacity } from 'react-native';
+import { Feather } from '@expo/vector-icons';
 import { useTheme } from '../../../theme/ThemeContext';
 import CoachHero from '../CoachHero';
 import CoachBoard from '../CoachBoard';
@@ -7,7 +8,7 @@ import PracticePlanCard from '../PracticePlanCard';
 import SectionCard from '../SectionCard';
 import TrendLineChart from '../TrendLineChart';
 
-export default function CoachTab({ stats }) {
+export default function CoachTab({ stats, targetHandicap, onChangeTarget }) {
   const { theme } = useTheme();
   const s = useMemo(() => makeStyles(theme), [theme]);
   const { metrics = {}, form = {}, formSeries = {}, coach = {} } = stats ?? {};
@@ -15,6 +16,7 @@ export default function CoachTab({ stats }) {
 
   return (
     <View style={s.wrap}>
+      <TargetBenchmarkRow targetHandicap={targetHandicap} onChangeTarget={onChangeTarget} />
       <FormTrendCard form={form} formSeries={formSeries} metrics={metrics} />
       <CoachHero insight={priorityInsight} />
       <CoachBoard
@@ -23,6 +25,35 @@ export default function CoachTab({ stats }) {
         excludeInsightIds={priorityInsight?.id ? [priorityInsight.id] : []}
       />
       <PracticePlanCard plan={coach.practicePlan} />
+    </View>
+  );
+}
+
+// Mirrors ShotDashboard's target title so both tabs describe the same
+// baseline the SG and coach numbers are computed against.
+function targetBenchmarkCopy(targetHandicap) {
+  if (targetHandicap == null || targetHandicap === 0) return 'Benchmarks vs scratch';
+  return `Benchmarks vs ${targetHandicap}-handicap target`;
+}
+
+function TargetBenchmarkRow({ targetHandicap, onChangeTarget }) {
+  const { theme } = useTheme();
+  const s = useMemo(() => makeStyles(theme), [theme]);
+
+  return (
+    <View style={s.targetRow}>
+      <Feather name="crosshair" size={13} color={theme.text.secondary} />
+      <Text style={s.targetText}>{targetBenchmarkCopy(targetHandicap)}</Text>
+      {onChangeTarget ? (
+        <TouchableOpacity
+          onPress={onChangeTarget}
+          hitSlop={8}
+          accessibilityRole="button"
+          accessibilityLabel="Change target handicap"
+        >
+          <Feather name="edit-2" size={13} color={theme.text.secondary} />
+        </TouchableOpacity>
+      ) : null}
     </View>
   );
 }
@@ -83,6 +114,13 @@ function toneFill(theme, tone) {
 function makeStyles(theme) {
   return StyleSheet.create({
     wrap: { gap: theme.spacing.lg },
+    targetRow: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: 6,
+      paddingHorizontal: theme.spacing.xs,
+    },
+    targetText: { ...theme.typography.caption, color: theme.text.secondary, flexShrink: 1 },
     formHead: {
       flexDirection: 'row',
       alignItems: 'flex-start',

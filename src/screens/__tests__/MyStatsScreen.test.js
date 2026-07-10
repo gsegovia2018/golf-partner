@@ -1,5 +1,5 @@
 import React from 'react';
-import { render } from '@testing-library/react-native';
+import { render, act, waitFor } from '@testing-library/react-native';
 import { StyleSheet } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
@@ -93,12 +93,12 @@ beforeEach(() => {
   AsyncStorage.getItem.mockResolvedValue(null);
 });
 
-function screenElement(route = {}) {
+function screenElement(route = {}, navigation = { goBack: jest.fn() }) {
   return (
     <SafeAreaProvider>
       <ThemeProvider>
         <MyStatsScreen
-          navigation={{ goBack: jest.fn() }}
+          navigation={navigation}
           route={route}
         />
       </ThemeProvider>
@@ -106,8 +106,8 @@ function screenElement(route = {}) {
   );
 }
 
-function renderScreen(route = {}) {
-  return render(screenElement(route));
+function renderScreen(route = {}, navigation = undefined) {
+  return render(navigation ? screenElement(route, navigation) : screenElement(route));
 }
 
 describe('MyStatsScreen navigation chrome', () => {
@@ -121,6 +121,43 @@ describe('MyStatsScreen navigation chrome', () => {
     const { queryByLabelText } = renderScreen({ params: { presentation: 'tab' } });
 
     expect(queryByLabelText('Back')).toBeNull();
+  });
+});
+
+describe('MyStatsScreen target handicap', () => {
+  test('reloads the profile target handicap when the screen regains focus', async () => {
+    const { loadProfile } = require('../../store/profileStore');
+    const { computeMyStats } = require('../../store/personalStats');
+    const listeners = {};
+    const navigation = {
+      goBack: jest.fn(),
+      addListener: jest.fn((event, cb) => {
+        listeners[event] = cb;
+        return () => { delete listeners[event]; };
+      }),
+    };
+
+    const { findByText } = renderScreen({ params: {} }, navigation);
+    expect(await findByText('Report card content')).toBeTruthy();
+    await waitFor(() => {
+      expect(computeMyStats).toHaveBeenLastCalledWith(
+        expect.anything(),
+        expect.objectContaining({ targetHandicap: 14 }),
+      );
+    });
+
+    // The target was edited on the Profile screen while this tab stayed
+    // mounted; regaining focus must pick up the new value.
+    loadProfile.mockResolvedValueOnce({ displayName: 'Marco', targetHandicap: 5 });
+    expect(typeof listeners.focus).toBe('function');
+    await act(async () => { await listeners.focus(); });
+
+    await waitFor(() => {
+      expect(computeMyStats).toHaveBeenLastCalledWith(
+        expect.anything(),
+        expect.objectContaining({ targetHandicap: 5 }),
+      );
+    });
   });
 });
 

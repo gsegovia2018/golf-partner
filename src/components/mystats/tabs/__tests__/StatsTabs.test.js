@@ -1,5 +1,5 @@
 import React from 'react';
-import { render } from '@testing-library/react-native';
+import { render, fireEvent } from '@testing-library/react-native';
 import { ThemeProvider } from '../../../../theme/ThemeContext';
 import BreakdownTab from '../BreakdownTab';
 import CoachTab from '../CoachTab';
@@ -243,6 +243,25 @@ describe('My Stats tabs', () => {
     expect(await findByText('Stock tee shot')).toBeTruthy();
     expect(await findByText('Plan: Secondary focus')).toBeTruthy();
     expect(await findByText('Practice Plan')).toBeTruthy();
+  });
+
+  test('CoachTab shows which target handicap the coaching is benchmarked against', async () => {
+    const onChangeTarget = jest.fn();
+    const { findByText, getByLabelText } = render(wrap(
+      <CoachTab stats={baseStats()} onInfo={() => {}} targetHandicap={14} onChangeTarget={onChangeTarget} />
+    ));
+
+    expect(await findByText(/vs 14-handicap target/)).toBeTruthy();
+    fireEvent.press(getByLabelText('Change target handicap'));
+    expect(onChangeTarget).toHaveBeenCalledTimes(1);
+  });
+
+  test('CoachTab benchmarks against scratch when no target handicap is set', async () => {
+    const { findByText } = render(wrap(
+      <CoachTab stats={baseStats()} onInfo={() => {}} targetHandicap={null} onChangeTarget={() => {}} />
+    ));
+
+    expect(await findByText(/vs scratch/)).toBeTruthy();
   });
 
   test('ShotsTab renders target-handicap strokes gained and benchmark sections', async () => {

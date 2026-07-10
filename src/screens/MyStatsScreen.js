@@ -131,6 +131,18 @@ export default function MyStatsScreen({ navigation, route }) {
     return () => { cancelled = true; };
   }, [user?.id, storageKey, loadNonce]);
 
+  // The target handicap can be edited on the Profile screen while this
+  // screen stays mounted in the tab navigator — refresh it on focus so
+  // Strokes Gained and Coach recompute against the current target.
+  useEffect(() => {
+    if (!navigation?.addListener) return undefined;
+    return navigation.addListener('focus', () => (
+      loadProfile()
+        .then((profile) => setTargetHandicap(profile?.targetHandicap ?? null))
+        .catch(() => {})
+    ));
+  }, [navigation]);
+
   // Default the Report Card to the most recent round once rounds are loaded.
   // collectMyRounds returns rounds chronologically (oldest first), so the
   // last entry is the most recent.
