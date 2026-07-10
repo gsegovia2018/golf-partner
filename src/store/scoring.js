@@ -530,6 +530,41 @@ export function pairsMatchDuels(pairs) {
   return [[t1[0], t2[0]], [t1[1], t2[1]]];
 }
 
+// Match play plays off the DIFFERENCE: the duel's lower handicap becomes 0
+// and the opponent keeps the gap, taken on the hardest holes first.
+// Idempotent — relativizing an already-relative pair is a no-op.
+function duelRelative(hA, hB) {
+  const base = Math.min(hA, hB);
+  return [hA - base, hB - base];
+}
+
+// Effective per-player handicaps for a round as MATCH PLAY scores them:
+// per-duel relative in matchplay/pairsmatchplay, the stored map otherwise.
+// Used by the scorecard so strokes-received dots and pickup hints show the
+// same strokes the net comparison actually grants.
+export function matchPlayEffectiveHandicaps(mode, round, players) {
+  const stored = round?.playerHandicaps ?? {};
+  const resolve = (p) => stored[p.id] ?? p.handicap ?? 0;
+  if (mode === 'matchplay' && players?.length === 2) {
+    const [a, b] = players;
+    const [rA, rB] = duelRelative(resolve(a), resolve(b));
+    return { [a.id]: rA, [b.id]: rB };
+  }
+  if (mode === 'pairsmatchplay') {
+    const duels = pairsMatchDuels(round?.pairs);
+    if (duels) {
+      const out = {};
+      for (const [a, b] of duels) {
+        const [rA, rB] = duelRelative(resolve(a), resolve(b));
+        out[a.id] = rA;
+        out[b.id] = rB;
+      }
+      return out;
+    }
+  }
+  return stored;
+}
+
 // 1 = first player wins, 2 = second, 0 = halved, null = not fully scored.
 function duelNetWinner(hole, a, b, scores, playerHandicaps) {
   const strA = scores?.[a.id]?.[hole.number];

@@ -12,6 +12,7 @@ import {
   calcStablefordPoints,
   matchPlayHolePts,
   matchPlayRoundTally,
+  matchPlayEffectiveHandicaps,
   pickupStrokes,
   randomPairs,
   buildTeamsForMode,
@@ -919,3 +920,60 @@ describe('buildTeamsForMode', () => {
     expect(teams.every((t) => t.length === 2)).toBe(true);
   });
 });
+
+describe('matchPlayEffectiveHandicaps', () => {
+  const P = (id, handicap = 0) => ({ id, name: id, handicap });
+
+  test('matchplay: lower player plays off 0, opponent gets the difference', () => {
+    const players = [P('a'), P('b')];
+    const round = { playerHandicaps: { a: 12, b: 5 } };
+    expect(matchPlayEffectiveHandicaps('matchplay', round, players))
+      .toEqual({ a: 7, b: 0 });
+  });
+
+  test('matchplay: equal handicaps → both play off 0', () => {
+    const players = [P('a'), P('b')];
+    const round = { playerHandicaps: { a: 10, b: 10 } };
+    expect(matchPlayEffectiveHandicaps('matchplay', round, players))
+      .toEqual({ a: 0, b: 0 });
+  });
+
+  test('matchplay: falls back to player.handicap when the round map is missing an entry', () => {
+    const players = [P('a', 9), P('b', 4)];
+    const round = { playerHandicaps: {} };
+    expect(matchPlayEffectiveHandicaps('matchplay', round, players))
+      .toEqual({ a: 5, b: 0 });
+  });
+
+  test('pairsmatchplay: each duel relativizes independently (never best-of-four)', () => {
+    // Duels are index-matched: a-c and b-d.
+    const round = {
+      pairs: [[P('a', 15), P('b', 3)], [P('c', 5), P('d', 20)]],
+      playerHandicaps: { a: 15, b: 3, c: 5, d: 20 },
+    };
+    expect(matchPlayEffectiveHandicaps('pairsmatchplay', round, [P('a'), P('b'), P('c'), P('d')]))
+      .toEqual({ a: 10, c: 0, b: 0, d: 17 });
+  });
+
+  test('idempotent: an already-relative map relativizes to itself', () => {
+    const players = [P('a'), P('b')];
+    const round = { playerHandicaps: { a: 7, b: 0 } };
+    expect(matchPlayEffectiveHandicaps('matchplay', round, players))
+      .toEqual({ a: 7, b: 0 });
+  });
+
+  test('other modes: returns the stored map unchanged', () => {
+    const stored = { a: 12, b: 5 };
+    const round = { playerHandicaps: stored };
+    expect(matchPlayEffectiveHandicaps('stableford', round, [P('a'), P('b')])).toBe(stored);
+  });
+
+  test('matchplay with wrong player count or pairsmatchplay without valid pairs → stored map', () => {
+    const stored = { a: 12 };
+    expect(matchPlayEffectiveHandicaps('matchplay', { playerHandicaps: stored }, [P('a')]))
+      .toBe(stored);
+    expect(matchPlayEffectiveHandicaps('pairsmatchplay', { playerHandicaps: stored, pairs: [[P('a')]] }, [P('a')]))
+      .toBe(stored);
+  });
+});
+

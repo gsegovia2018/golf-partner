@@ -620,6 +620,7 @@ export {
   pairsMatchHolePts,
   pairsMatchDuelPts,
   pairsMatchRoundTally,
+  matchPlayEffectiveHandicaps,
   tournamentPairsMatchStandings,
 } from './scoring';
 
