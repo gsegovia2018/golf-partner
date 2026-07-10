@@ -298,7 +298,31 @@ function NineBlock({
   );
 }
 
-function ScorecardTable({ round, players, scores, onSetScore, editable, mode, meId, handicapsOverride }) {
+// Resolve what the scorecard table actually renders for a round: the engine
+// mode, the row "players" (scramble modes collapse to team units keyed by
+// the captain), the handicap override for those rows, and which row counts
+// as "me". Shared by the live GridView and the read-only round summary.
+export function resolveScorecardRows({ round, settings, players, meId, isBestBall = false }) {
+  const rawMode = round?.scoringMode ?? settings?.scoringMode ?? 'stableford';
+  const mode = rawMode === 'matchplay' ? 'matchplay'
+    : rawMode === 'sindicato' ? 'sindicato'
+    : rawMode === 'pairsmatchplay' ? 'pairsmatchplay'
+    : isScrambleMode(rawMode) ? rawMode
+    : rawMode === 'bestball' || isBestBall ? 'bestball'
+    : 'stableford';
+
+  const isScramble = isScrambleMode(mode);
+  const rowPlayers = isScramble ? scrambleUnits(round, players) : players;
+  const rowHandicaps = isScramble
+    ? Object.fromEntries(rowPlayers.map((u) => [u.id, u.handicap]))
+    : null;
+  const effectiveMeId = isScramble
+    ? (rowPlayers.find((u) => u.members?.some((m) => m.id === meId))?.id ?? meId)
+    : meId;
+  return { mode, rowPlayers, rowHandicaps, effectiveMeId };
+}
+
+export function ScorecardTable({ round, players, scores, onSetScore, editable, mode, meId, handicapsOverride }) {
   const { theme } = useTheme();
   const s = useMemo(() => makeScorecardStyles(theme), [theme]);
   const { width } = useWindowDimensions();
@@ -480,28 +504,9 @@ function ScorecardTable({ round, players, scores, onSetScore, editable, mode, me
 export function GridView({ round, roundIndex, players, scores, isBestBall, bbResult, settings, onSetScore, editable, refreshing, onRefresh, meId }) {
   const { theme } = useTheme();
   const s = useMemo(() => makeScorecardStyles(theme), [theme]);
-  // No tournament object here (round + settings props only) — mirrors
-  // roundScoringMode inline.
-  const rawMode = round?.scoringMode ?? settings?.scoringMode ?? 'stableford';
-  const mode = rawMode === 'matchplay' ? 'matchplay'
-    : rawMode === 'sindicato' ? 'sindicato'
-    : rawMode === 'pairsmatchplay' ? 'pairsmatchplay'
-    : isScrambleMode(rawMode) ? rawMode
-    : isBestBall ? 'bestball'
-    : 'stableford';
-
-  // Scramble modes score one ball per team under the captain — swap the row
-  // source for synthetic team "players" (scrambleUnits) so score entry,
-  // points, and handicaps all key off the captain's id, and "me first"
-  // resolves to the containing team's row.
-  const isScramble = isScrambleMode(mode);
-  const rowPlayers = isScramble ? scrambleUnits(round, players) : players;
-  const rowHandicaps = isScramble
-    ? Object.fromEntries(rowPlayers.map((u) => [u.id, u.handicap]))
-    : null;
-  const effectiveMeId = isScramble
-    ? (rowPlayers.find((u) => u.members?.some((m) => m.id === meId))?.id ?? meId)
-    : meId;
+  const { mode, rowPlayers, rowHandicaps, effectiveMeId } = resolveScorecardRows({
+    round, settings, players, meId, isBestBall,
+  });
 
   // Every game mode renders the same front-nine / back-nine card layout
   // (ScorecardTable). Best Ball adds a LiveMatchStrip below the table.

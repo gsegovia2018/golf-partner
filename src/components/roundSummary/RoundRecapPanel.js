@@ -17,6 +17,7 @@ export default function RoundRecapPanel({
   roundLabel,
   summary,
   recap,
+  highlights,
   live = false,
   totalHoles = 18,
 }) {
@@ -38,6 +39,14 @@ export default function RoundRecapPanel({
     ? `${live ? 'Leading' : 'Winner'}: ${recap.winnerName}`
     : null;
 
+  const highlightChips = [
+    { key: 'eagles', count: highlights?.eagles ?? 0, singular: 'eagle', plural: 'eagles', tone: 'excellent' },
+    { key: 'birdies', count: highlights?.birdies ?? 0, singular: 'birdie', plural: 'birdies', tone: 'good' },
+    { key: 'pars', count: highlights?.pars ?? 0, singular: 'par', plural: 'pars', tone: null },
+    { key: 'bogeys', count: highlights?.bogeys ?? 0, singular: 'bogey', plural: 'bogeys', tone: 'neutral' },
+    { key: 'doubles', count: highlights?.doubles ?? 0, singular: 'double+', plural: 'double+', tone: 'poor' },
+  ].filter((c) => c.count > 0);
+
   return (
     <View style={s.card}>
       <View style={s.headerRow}>
@@ -56,6 +65,21 @@ export default function RoundRecapPanel({
         ) : null}
       </View>
       {summary ? <Text style={s.summary}>{summary}</Text> : null}
+      {highlightChips.length > 0 ? (
+        <View style={s.highlightRow}>
+          {highlightChips.map((c) => {
+            const color = c.tone ? theme.scoreColor(c.tone) : theme.text.secondary;
+            return (
+              <View key={c.key} style={[s.highlightChip, { borderColor: color + '55' }]}>
+                <View style={[s.highlightDot, { backgroundColor: color }]} />
+                <Text style={[s.highlightText, { color }]}>
+                  {c.count} {c.count === 1 ? c.singular : c.plural}
+                </Text>
+              </View>
+            );
+          })}
+        </View>
+      ) : null}
       <View style={s.statsRow}>
         {stats.map((stat) => (
           <View key={stat.label} style={s.stat}>
@@ -73,10 +97,10 @@ function makeStyles(theme) {
     card: {
       backgroundColor: theme.bg.card,
       borderColor: theme.border.default,
-      borderRadius: 8,
+      borderRadius: 10,
       borderWidth: 1,
-      gap: 9,
-      padding: 12,
+      gap: 10,
+      padding: 14,
     },
     headerRow: {
       flexDirection: 'row',
@@ -101,14 +125,14 @@ function makeStyles(theme) {
       marginTop: 2,
     },
     playerPill: {
-      backgroundColor: theme.bg.secondary,
+      backgroundColor: theme.accent.light,
       borderRadius: 999,
       maxWidth: '48%',
       paddingHorizontal: 8,
       paddingVertical: 5,
     },
     playerPillText: {
-      color: theme.text.secondary,
+      color: theme.accent.primary,
       fontFamily: 'PlusJakartaSans-SemiBold',
       fontSize: 11,
     },
@@ -118,30 +142,40 @@ function makeStyles(theme) {
       fontSize: 13,
       lineHeight: 19,
     },
+    highlightRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 6 },
+    highlightChip: {
+      flexDirection: 'row', alignItems: 'center', gap: 5,
+      borderRadius: 999, borderWidth: 1,
+      paddingHorizontal: 8, paddingVertical: 4,
+    },
+    highlightDot: { width: 6, height: 6, borderRadius: 3 },
+    highlightText: { fontFamily: 'PlusJakartaSans-Bold', fontSize: 11 },
     statsRow: {
       flexDirection: 'row',
       flexWrap: 'wrap',
       gap: 6,
     },
     stat: {
-      backgroundColor: theme.bg.secondary,
-      borderRadius: 6,
+      backgroundColor: theme.isDark ? 'rgba(255,255,255,0.04)' : 'rgba(0,0,0,0.025)',
+      borderRadius: 10,
       flexBasis: '30%',
       flexGrow: 1,
       minWidth: 74,
-      paddingHorizontal: 6,
-      paddingVertical: 7,
+      paddingHorizontal: 8,
+      paddingVertical: 8,
+      alignItems: 'center',
     },
     statValue: {
       color: theme.text.primary,
-      fontFamily: 'PlusJakartaSans-SemiBold',
-      fontSize: 14,
+      fontFamily: 'PlusJakartaSans-Bold',
+      fontSize: 15,
     },
     statLabel: {
       color: theme.text.muted,
-      fontFamily: 'PlusJakartaSans-Medium',
-      fontSize: 10,
-      marginTop: 2,
+      fontFamily: 'PlusJakartaSans-SemiBold',
+      fontSize: 9,
+      letterSpacing: 0.8,
+      marginTop: 3,
       textTransform: 'uppercase',
     },
   });

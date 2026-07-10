@@ -1,6 +1,8 @@
-import React, { useCallback, useRef, useState } from 'react';
+import React, {
+  useCallback, useRef, useState,
+} from 'react';
 import {
-  View, Text, TouchableOpacity, StyleSheet, ScrollView,
+  View, Text, TouchableOpacity, StyleSheet,
   ActivityIndicator, Image,
 } from 'react-native';
 import ScreenContainer from '../components/ScreenContainer';
@@ -14,11 +16,13 @@ import {
   getTournamentSnapshot, isTournamentFinished,
 } from '../store/tournamentStore';
 import { loadRoundMedia } from '../store/mediaStore';
-import { loadComments } from '../store/feedStore';
 import RoundRecapPanel from '../components/roundSummary/RoundRecapPanel';
 import RoundSummaryTabs from '../components/roundSummary/RoundSummaryTabs';
-import RoundScorecardTables from '../components/roundSummary/RoundScorecardTables';
-import { buildRoundRecap, buildScorecardSections } from './roundSummaryModel';
+import PullToRefresh from '../components/PullToRefresh';
+import RoundScoreboard from '../components/RoundScoreboard';
+import CommentThread from '../components/CommentThread';
+import { ScorecardTable, resolveScorecardRows } from '../components/scorecard/GridView';
+import { buildRoundRecap, buildRoundHighlights } from './roundSummaryModel';
 import { normalizeRoundNotes } from '../store/roundNotes';
 
 // Read-only summary of a single round — the feed's drill-in target. Works
@@ -44,11 +48,6 @@ function roundFeedKey(tournamentId, roundId) {
   return tournamentId && roundId ? `round:${tournamentId}:${roundId}` : null;
 }
 
-function commentName(comment) {
-  if (comment?.isMine) return 'You';
-  return comment?.author?.name || 'Player';
-}
-
 export default function RoundSummaryScreen({ navigation, route }) {
   const { theme } = useTheme();
   const s = makeStyles(theme);
@@ -57,33 +56,33 @@ export default function RoundSummaryScreen({ navigation, route }) {
 
   const [tournament, setTournament] = useState(() => initialTournament);
   const [media, setMedia] = useState([]);
-  const [feedComments, setFeedComments] = useState([]);
   const [me, setMe] = useState(null);
   const [loading, setLoading] = useState(() => !initialTournament);
+  const [refreshing, setRefreshing] = useState(false);
   const hasLoadedOnceRef = useRef(!!initialTournament);
   const [activeTab, setActiveTab] = useState('scorecard');
 
   const load = useCallback(async () => {
     if (!hasLoadedOnceRef.current) setLoading(true);
     try {
-      const itemKey = roundFeedKey(tournamentId, roundId);
-      const [{ data: { user } }, t, roundMedia, comments] = await Promise.all([
+      const [{ data: { user } }, t, roundMedia] = await Promise.all([
         supabase.auth.getUser(),
         fetchTournament(tournamentId),
         loadRoundMedia(tournamentId, roundId).catch(() => []),
-        itemKey ? loadComments(itemKey).catch(() => []) : Promise.resolve([]),
       ]);
       setMe(user?.id ?? null);
       setTournament(t);
       setMedia(roundMedia);
-      setFeedComments(comments);
     } finally {
       hasLoadedOnceRef.current = true;
       setLoading(false);
     }
   }, [tournamentId, roundId]);
 
-  useFocusEffect(useCallback(() => { load(); }, [load]));
+  const onRefresh = useCallback(async () => {
+    setRefreshing(true);
+    try { await load(); } finally { setRefreshing(false); }
+  }, [load]);
 
   function openInScorecard() {
     navigation.navigate('Tournament', { tournamentId, viewMode: 'tournament' });
@@ -112,19 +111,23 @@ export default function RoundSummaryScreen({ navigation, route }) {
     && !isTournamentFinished(tournament)
     && (recap?.holesPlayed ?? 0) > 0
     && (recap?.holesPlayed ?? 0) < totalHoles;
-  const scorecardSections = round ? buildScorecardSections({ round, ranked, live }) : [];
-  // Per-player holes played + current hole, keyed by player id, for the
-  // leaderboard tab's live badges.
-  const liveByPlayer = {};
-  scorecardSections.forEach((section) => {
-    (section.playerRows ?? []).forEach((row) => {
-      if (!row.playerId) return;
-      const existing = liveByPlayer[row.playerId] ?? { holesPlayed: 0, currentHole: null };
-      existing.holesPlayed = Math.max(existing.holesPlayed, row.holesPlayed ?? 0);
-      if (row.currentHole != null) existing.currentHole = row.currentHole;
-      liveByPlayer[row.playerId] = existing;
-    });
+
+  const liveRef = useRef(false);
+  liveRef.current = live;
+
+  useFocusEffect(useCallback(() => {
+    load();
+    // Poll while the round is live so scores tick in without a manual pull.
+    const id = setInterval(() => { if (liveRef.current) load(); }, 45000);
+    return () => clearInterval(id);
+  }, [load]));
+
+  // The scorecard highlights "my" row by player id, not auth user id.
+  const myPlayerId = players.find((p) => p.user_id && p.user_id === me)?.id ?? null;
+  const { mode, rowPlayers, rowHandicaps, effectiveMeId } = resolveScorecardRows({
+    round, settings: tournament?.settings, players, meId: myPlayerId,
   });
+
   const normalizedNotes = normalizeRoundNotes(round?.notes);
   const roundNote = typeof normalizedNotes.round === 'string'
     ? normalizedNotes.round.trim()
@@ -133,7 +136,6 @@ export default function RoundSummaryScreen({ navigation, route }) {
     .filter(([, text]) => typeof text === 'string' && text.trim())
     .sort(([a], [b]) => Number(a) - Number(b));
   const hasNotes = Boolean(roundNote) || holeNotes.length > 0;
-  const hasFeedComments = feedComments.length > 0;
 
   return (
     <ScreenContainer style={s.container} edges={['top', 'bottom']}>
@@ -160,7 +162,11 @@ export default function RoundSummaryScreen({ navigation, route }) {
           <Text style={s.missingText}>This round is no longer available.</Text>
         </View>
       ) : (
-        <ScrollView contentContainerStyle={s.content}>
+        <PullToRefresh
+          contentContainerStyle={s.content}
+          refreshing={refreshing}
+          onRefresh={onRefresh}
+        >
           <RoundRecapPanel
             recap={recap}
             roundLabel={roundLabel}
@@ -169,71 +175,60 @@ export default function RoundSummaryScreen({ navigation, route }) {
             live={live}
             totalHoles={totalHoles}
             mediaCount={media.length}
+            highlights={buildRoundHighlights({ round })}
           />
 
           <RoundSummaryTabs active={activeTab} onChange={setActiveTab} />
 
           {activeTab === 'scorecard' ? (
-            <RoundScorecardTables sections={scorecardSections} />
+            <ScorecardTable
+              round={round}
+              players={rowPlayers}
+              scores={round.scores ?? {}}
+              onSetScore={() => {}}
+              editable={() => false}
+              mode={mode}
+              meId={effectiveMeId}
+              handicapsOverride={rowHandicaps}
+            />
           ) : null}
 
           {activeTab === 'leaderboard' ? (
-            <View>
-              {ranked.length === 0 ? (
-                <Text style={s.empty}>No scores recorded for this round.</Text>
-              ) : ranked.map((entry, i) => {
-                const isMe = entry.player.user_id && entry.player.user_id === me;
-                const pl = liveByPlayer[entry.player.id] ?? {};
-                const onHole = live ? pl.currentHole : null;
-                const played = pl.holesPlayed ?? 0;
-                return (
-                  <View key={entry.player.id} style={[s.lbRow, isMe && s.lbRowMe]}>
-                    <Text style={s.lbRank}>{i + 1}</Text>
-                    <View style={s.lbNameWrap}>
-                      <Text style={[s.lbName, isMe && s.lbNameMe]} numberOfLines={1}>
-                        {entry.player.name}{isMe ? '  (you)' : ''}
-                      </Text>
-                      {onHole != null ? (
-                        <View style={s.onHoleBadge}>
-                          <Text style={s.onHoleBadgeText}>HOLE {onHole}</Text>
-                        </View>
-                      ) : played > 0 && live ? (
-                        <Text style={s.thruText}>done</Text>
-                      ) : null}
-                      {round.playerTees?.[entry.player.id]?.label ? (
-                        <Text style={s.teeBadge}>{round.playerTees[entry.player.id].label}</Text>
-                      ) : null}
-                    </View>
-                    <View style={s.lbStat}>
-                      <Text style={s.lbStatValue}>{entry.totalPoints}</Text>
-                      <Text style={s.lbStatLabel}>PTS</Text>
-                    </View>
-                    <View style={s.lbStat}>
-                      <Text style={s.lbStatValue}>{entry.totalStrokes}</Text>
-                      <Text style={s.lbStatLabel}>STR</Text>
-                    </View>
-                    <View style={s.lbStat}>
-                      <Text style={s.lbStatValue}>{live ? `${played}` : totalHoles}</Text>
-                      <Text style={s.lbStatLabel}>THRU</Text>
-                    </View>
-                  </View>
-                );
-              })}
-            </View>
+            ranked.length === 0 ? (
+              <Text style={s.empty}>No scores recorded for this round.</Text>
+            ) : (
+              <RoundScoreboard
+                round={round}
+                players={players}
+                meId={myPlayerId}
+                ranked
+                teeLabels={round.playerTees}
+                showHoleBadges={live}
+              />
+            )
           ) : null}
 
           {activeTab === 'photos' ? (
             media.length > 0 ? (
-              <ScrollView horizontal showsHorizontalScrollIndicator={false}>
+              <View style={s.photoGrid}>
                 {media.map((m) => (
-                  <Image
+                  <TouchableOpacity
                     key={m.id}
-                    source={{ uri: m.thumbUrl || m.url }}
-                    style={s.photo}
-                    resizeMode="cover"
-                  />
+                    style={s.photoCell}
+                    activeOpacity={0.85}
+                    onPress={() => navigation.navigate('Gallery', { tournamentId, mediaId: m.id })}
+                    accessibilityRole="imagebutton"
+                    accessibilityLabel="Open photo in gallery"
+                  >
+                    <Image source={{ uri: m.thumbUrl || m.url }} style={s.photo} resizeMode="cover" />
+                    {m.kind === 'video' ? (
+                      <View style={s.photoKindBadge}>
+                        <Feather name="film" size={11} color="#fff" />
+                      </View>
+                    ) : null}
+                  </TouchableOpacity>
                 ))}
-              </ScrollView>
+              </View>
             ) : (
               <Text style={s.empty}>No photos for this round.</Text>
             )
@@ -241,40 +236,7 @@ export default function RoundSummaryScreen({ navigation, route }) {
 
           {activeTab === 'comments' ? (
             <View>
-              {hasFeedComments ? (
-                <>
-                  <Text style={s.sectionLabel}>COMMENTS</Text>
-                  <View style={s.commentList}>
-                    {feedComments.map((comment) => (
-                      <View key={comment.id} style={s.commentRow}>
-                        <View
-                          style={[
-                            s.commentAvatar,
-                            { backgroundColor: comment.author?.avatarColor || theme.accent.primary },
-                          ]}
-                        >
-                          {comment.author?.avatarUrl ? (
-                            <Image
-                              source={{ uri: comment.author.avatarUrl }}
-                              style={s.commentAvatarImage}
-                            />
-                          ) : (
-                            <Text style={s.commentAvatarText}>
-                              {commentName(comment).trim().charAt(0).toUpperCase() || '?'}
-                            </Text>
-                          )}
-                        </View>
-                        <View style={s.commentBodyWrap}>
-                          <Text style={s.commentAuthor} numberOfLines={1}>
-                            {commentName(comment)}
-                          </Text>
-                          <Text style={s.commentBody}>{comment.body}</Text>
-                        </View>
-                      </View>
-                    ))}
-                  </View>
-                </>
-              ) : null}
+              <CommentThread itemKey={roundFeedKey(tournamentId, roundId)} active={activeTab === 'comments'} />
 
               {hasNotes ? (
                 <>
@@ -296,8 +258,6 @@ export default function RoundSummaryScreen({ navigation, route }) {
                     </>
                   ) : null}
                 </>
-              ) : !hasFeedComments ? (
-                <Text style={s.empty}>Comments appear from the feed thread for this round.</Text>
               ) : null}
             </View>
           ) : null}
@@ -312,7 +272,7 @@ export default function RoundSummaryScreen({ navigation, route }) {
               <Text style={s.openBtnText}>Open in scorecard</Text>
             </TouchableOpacity>
           )}
-        </ScrollView>
+        </PullToRefresh>
       )}
     </ScreenContainer>
   );
@@ -341,125 +301,21 @@ function makeStyles(theme) {
       paddingBottom: 60,
       gap: 12,
     },
-    subTitle: {
-      fontFamily: 'PlusJakartaSans-Medium', color: theme.text.secondary,
-      fontSize: 13, marginBottom: 4,
-    },
     sectionLabel: {
       fontFamily: 'PlusJakartaSans-SemiBold', color: theme.text.muted, fontSize: 10,
       letterSpacing: 1.5, marginTop: 22, marginBottom: 10, textTransform: 'uppercase',
     },
     empty: { fontFamily: 'PlusJakartaSans-Regular', color: theme.text.muted, fontSize: 13 },
-    commentList: {
-      gap: 10,
-    },
-    commentRow: {
-      backgroundColor: theme.bg.card,
-      borderColor: theme.border.default,
-      borderRadius: 10,
-      borderWidth: 1,
-      flexDirection: 'row',
-      gap: 10,
-      padding: 10,
-    },
-    commentAvatar: {
-      alignItems: 'center',
-      borderRadius: 15,
-      height: 30,
-      justifyContent: 'center',
-      overflow: 'hidden',
-      width: 30,
-    },
-    commentAvatarImage: {
-      height: '100%',
-      width: '100%',
-    },
-    commentAvatarText: {
-      color: '#ffd700',
-      fontFamily: 'PlusJakartaSans-ExtraBold',
-      fontSize: 12,
-    },
-    commentBodyWrap: {
-      flex: 1,
-      minWidth: 0,
-    },
-    commentAuthor: {
-      color: theme.text.primary,
-      fontFamily: 'PlusJakartaSans-Bold',
-      fontSize: 13,
-    },
-    commentBody: {
-      color: theme.text.secondary,
-      fontFamily: 'PlusJakartaSans-Regular',
-      fontSize: 13,
-      lineHeight: 18,
-      marginTop: 2,
-    },
 
-    lbRow: {
-      flexDirection: 'row', alignItems: 'center', gap: 10,
-      backgroundColor: theme.bg.card, borderRadius: 14, borderWidth: 1,
-      borderColor: theme.border.default, padding: 12, marginBottom: 8,
-    },
-    lbRowMe: { borderColor: theme.accent.primary },
-    lbRank: {
-      fontFamily: 'PlayfairDisplay-Bold', fontSize: 16, color: theme.text.muted,
-      width: 22, textAlign: 'center',
-    },
-    lbNameWrap: {
-      flex: 1, flexDirection: 'row', alignItems: 'center', flexWrap: 'nowrap', overflow: 'hidden', gap: 6,
-    },
-    lbName: {
-      fontFamily: 'PlusJakartaSans-Bold', fontSize: 15, color: theme.text.primary, flexShrink: 1,
-    },
-    lbNameMe: { color: theme.accent.primary },
-    lbStat: { alignItems: 'center', minWidth: 42 },
-    lbStatValue: { fontFamily: 'PlayfairDisplay-Bold', fontSize: 17, color: theme.text.primary },
-    lbStatLabel: {
-      fontFamily: 'PlusJakartaSans-Bold', fontSize: 8, letterSpacing: 1,
-      color: theme.text.muted, marginTop: 1,
-    },
-
-    gridWrap: {
-      flexDirection: 'row', backgroundColor: theme.bg.card,
-      borderRadius: 14, borderWidth: 1, borderColor: theme.border.default,
-      overflow: 'hidden',
-    },
-    gridLabelCol: {
-      borderRightWidth: 1, borderRightColor: theme.border.default, width: 84,
-    },
-    gridRow: { flexDirection: 'row' },
-    gridHeadCell: {
-      height: 34, alignItems: 'center', justifyContent: 'center',
-      backgroundColor: theme.bg.secondary, paddingHorizontal: 8,
-    },
-    gridCell: {
-      height: 34, alignItems: 'center', justifyContent: 'center', paddingHorizontal: 8,
-    },
-    gridDataCell: { width: 34, paddingHorizontal: 0 },
-    gridTotCell: {
-      width: 42, borderLeftWidth: 1, borderLeftColor: theme.border.default,
-    },
-    gridHeadText: {
-      fontFamily: 'PlusJakartaSans-Bold', fontSize: 11, color: theme.text.muted,
-    },
-    gridParLabel: {
-      fontFamily: 'PlusJakartaSans-SemiBold', fontSize: 11, color: theme.text.muted,
-    },
-    gridParValue: {
-      fontFamily: 'PlusJakartaSans-SemiBold', fontSize: 12, color: theme.text.muted,
-    },
-    gridNameText: {
-      fontFamily: 'PlusJakartaSans-SemiBold', fontSize: 11, color: theme.text.primary,
-    },
-    gridScore: { fontFamily: 'PlusJakartaSans-Bold', fontSize: 13 },
-    gridTotValue: {
-      fontFamily: 'PlusJakartaSans-ExtraBold', fontSize: 13, color: theme.text.primary,
-    },
-
-    photo: {
-      width: 130, height: 130, borderRadius: 12, marginRight: 8,
+    photoGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 },
+    photoCell: {
+      width: '31.5%', aspectRatio: 1, borderRadius: 12, overflow: 'hidden',
       backgroundColor: theme.bg.secondary,
+    },
+    photo: { width: '100%', height: '100%' },
+    photoKindBadge: {
+      position: 'absolute', right: 6, bottom: 6,
+      borderRadius: 999, backgroundColor: 'rgba(0,0,0,0.58)', padding: 5,
     },
     notes: {
       fontFamily: 'PlusJakartaSans-Regular', color: theme.text.secondary,
@@ -487,12 +343,6 @@ function makeStyles(theme) {
       fontFamily: 'PlusJakartaSans-ExtraBold', color: theme.text.inverse, fontSize: 15,
     },
 
-    teeBadge: {
-      fontFamily: 'PlusJakartaSans-SemiBold', fontSize: 11,
-      color: theme.accent.primary, backgroundColor: theme.accent.light,
-      borderRadius: 6, paddingHorizontal: 6, paddingVertical: 2,
-    },
-
     // Glowing red "LIVE" badge in the header while the round is in progress.
     liveBadge: {
       flexDirection: 'row', alignItems: 'center', gap: 5,
@@ -508,20 +358,6 @@ function makeStyles(theme) {
     liveBadgeText: {
       fontFamily: 'PlusJakartaSans-ExtraBold', color: theme.scoreColor('poor'),
       fontSize: 10, letterSpacing: 0.5,
-    },
-    // Glowing "HOLE N" badge next to a player mid-round on the leaderboard.
-    onHoleBadge: {
-      paddingHorizontal: 7, paddingVertical: 2, borderRadius: 7,
-      backgroundColor: theme.accent.light, borderWidth: 1.5, borderColor: theme.accent.primary,
-      shadowColor: theme.accent.primary, shadowOpacity: 0.5, shadowRadius: 7,
-      shadowOffset: { width: 0, height: 0 }, elevation: 4,
-    },
-    onHoleBadgeText: {
-      fontFamily: 'PlusJakartaSans-ExtraBold', color: theme.accent.primary,
-      fontSize: 10, letterSpacing: 0.3,
-    },
-    thruText: {
-      fontFamily: 'PlusJakartaSans-SemiBold', color: theme.text.muted, fontSize: 11,
     },
   });
 }
