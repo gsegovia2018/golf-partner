@@ -1,16 +1,15 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import {
   ActivityIndicator,
-  Modal,
   ScrollView,
   StyleSheet,
   Text,
   TouchableOpacity,
-  TouchableWithoutFeedback,
   View,
 } from 'react-native';
 import { Feather } from '@expo/vector-icons';
 import { useTheme } from '../theme/ThemeContext';
+import BottomSheet from './BottomSheet';
 import { light, semantic, typography, spacing, radius } from '../theme/tokens';
 
 const DEFAULT_THEME = {
@@ -226,18 +225,9 @@ export default function QuickStartCourses({
         </View>
       )}
 
-      <Modal statusBarTranslucent hardwareAccelerated
-        visible={!!selectedCourse}
-        transparent
-        animationType="slide"
-        onRequestClose={closeSheet}
-      >
-        <TouchableWithoutFeedback onPress={closeSheet}>
-          <View style={s.backdrop} />
-        </TouchableWithoutFeedback>
-        <View style={s.sheet}>
-          <View style={s.handle} />
-          <View style={s.sheetInner}>
+      <BottomSheet visible={!!selectedCourse} onClose={closeSheet} sheetStyle={s.sheet}>
+        <View style={s.handle} />
+        <View style={s.sheetInner}>
             <View style={s.sheetHeader}>
               <View style={s.sheetTitleWrap}>
                 <Text style={s.sheetEyebrow}>Quick start</Text>
@@ -396,8 +386,7 @@ export default function QuickStartCourses({
               </TouchableOpacity>
             </View>
           </View>
-        </View>
-      </Modal>
+      </BottomSheet>
     </View>
   );
 }
@@ -480,12 +469,7 @@ const makeStyles = (t) => StyleSheet.create({
     color: t.text.secondary,
     textAlign: 'center',
   },
-  backdrop: { ...StyleSheet.absoluteFillObject, backgroundColor: 'rgba(0,0,0,0.45)' },
   sheet: {
-    position: 'absolute',
-    left: 0,
-    right: 0,
-    bottom: 0,
     maxHeight: '86%',
     borderTopLeftRadius: 24,
     borderTopRightRadius: 24,

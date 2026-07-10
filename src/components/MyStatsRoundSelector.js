@@ -1,8 +1,9 @@
 import React, { useMemo, useState } from 'react';
-import { View, Text, TouchableOpacity, StyleSheet, Modal, Pressable, ScrollView } from 'react-native';
+import { View, Text, TouchableOpacity, StyleSheet, ScrollView } from 'react-native';
 import { Feather } from '@expo/vector-icons';
 import { useTheme } from '../theme/ThemeContext';
 import { resolveSelection } from '../store/personalStats';
+import BottomSheet from './BottomSheet';
 
 // "12 May" — short day+month from the tournament's createdAt ISO string.
 function formatRoundDate(iso) {
@@ -75,10 +76,8 @@ export default function MyStatsRoundSelector({ visible, myRounds, overrides, onC
   };
 
   return (
-    <Modal statusBarTranslucent hardwareAccelerated visible={visible} transparent animationType="slide" onRequestClose={onClose}>
-      <Pressable style={s.backdrop} onPress={onClose}>
-        <Pressable style={s.sheet} onPress={() => {}}>
-          <View style={s.handle} />
+    <BottomSheet visible={visible} onClose={onClose} sheetStyle={s.sheet}>
+      <View style={s.handle} />
           <View style={s.titleRow}>
             <Text style={s.title}>Rounds counted</Text>
             <View style={s.bulkRow}>
@@ -168,15 +167,12 @@ export default function MyStatsRoundSelector({ visible, myRounds, overrides, onC
           <TouchableOpacity style={s.doneBtn} onPress={onClose}>
             <Text style={s.doneText}>Done</Text>
           </TouchableOpacity>
-        </Pressable>
-      </Pressable>
-    </Modal>
+    </BottomSheet>
   );
 }
 
 function makeStyles(theme) {
   return StyleSheet.create({
-    backdrop: { flex: 1, backgroundColor: 'rgba(0,0,0,0.5)', justifyContent: 'flex-end' },
     sheet: {
       backgroundColor: theme.bg.elevated,
       borderTopLeftRadius: theme.radius.xl, borderTopRightRadius: theme.radius.xl,

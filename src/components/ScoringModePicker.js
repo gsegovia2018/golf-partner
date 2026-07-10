@@ -1,11 +1,12 @@
 import React, { useEffect, useRef, useState } from 'react';
 import {
-  View, Text, TextInput, TouchableOpacity, StyleSheet, Modal, ScrollView, useWindowDimensions,
+  View, Text, TextInput, TouchableOpacity, StyleSheet, ScrollView, useWindowDimensions,
   Switch, Platform,
 } from 'react-native';
 import { Feather } from '@expo/vector-icons';
 
 import { useTheme } from '../theme/ThemeContext';
+import BottomSheet from './BottomSheet';
 import {
   SCORING_MODES,
   isScoringModeAllowed,
@@ -33,10 +34,8 @@ export function ScoringModeSheet({ visible, value, playerCount, onSelect, onClos
   const sheetMaxHeight = Math.round(height * 0.7);
 
   return (
-    <Modal statusBarTranslucent hardwareAccelerated visible={visible} transparent animationType="slide" onRequestClose={onClose}>
-      <TouchableOpacity style={s.backdrop} activeOpacity={1} onPress={onClose}>
-        <TouchableOpacity activeOpacity={1} style={s.sheet}>
-          <View style={s.sheetHeader}>
+    <BottomSheet visible={visible} onClose={onClose} sheetStyle={s.sheet}>
+      <View style={s.sheetHeader}>
             <Text style={s.sheetTitle}>Choose scoring mode</Text>
             <TouchableOpacity onPress={onClose} accessibilityLabel="Close" accessibilityRole="button">
               <Feather name="x" size={22} color={theme.text.muted} />
@@ -84,9 +83,7 @@ export function ScoringModeSheet({ visible, value, playerCount, onSelect, onClos
               </View>
             ))}
           </ScrollView>
-        </TouchableOpacity>
-      </TouchableOpacity>
-    </Modal>
+    </BottomSheet>
   );
 }
 
@@ -300,7 +297,6 @@ const makeStyles = (theme) => StyleSheet.create({
   },
 
   /* Bottom sheet */
-  backdrop: { flex: 1, backgroundColor: 'rgba(0,0,0,0.5)', justifyContent: 'flex-end' },
   sheet: {
     backgroundColor: theme.bg.primary, padding: 20,
     borderTopLeftRadius: 24, borderTopRightRadius: 24, paddingBottom: 32,

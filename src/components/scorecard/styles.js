@@ -1289,17 +1289,22 @@ export function makeScorecardStyles(theme) {
       fontSize: 16,
       fontFamily: 'PlayfairDisplay-Bold',
     },
+    // Handicap "strokes received" pips, centred along the bottom edge — below
+    // the score shape's lowest point, so a birdie circle or bogey square never
+    // clips them (a square fills the cell corners, so a corner pip would).
     soloNineExtraDots: {
       position: 'absolute',
-      top: 1,
-      right: 4,
+      bottom: 1,
+      left: 0,
+      right: 0,
       flexDirection: 'row',
-      gap: 2,
+      justifyContent: 'center',
+      gap: 2.5,
     },
     soloNineExtraDot: {
-      width: 3,
-      height: 3,
-      borderRadius: 2,
+      width: 2.5,
+      height: 2.5,
+      borderRadius: 1.25,
     },
 
     // Strokes/Points display toggle — a compact two-cell segmented control
@@ -1329,42 +1334,45 @@ export function makeScorecardStyles(theme) {
       color: theme.text.inverse,
     },
 
-    // Score-shape overlay drawn over each stroke digit (strokes mode only).
-    // The wrapper fills the cell and centres the ring, so the shape never
-    // shifts column geometry. The ring is a fixed-size bordered View: rounded
-    // for birdie/eagle, square for bogey/double; "double" nests a second ring.
+    // Score-shape marker drawn around each stroke digit (strokes mode only) —
+    // the golf-scorecard convention: circle = birdie, double circle = eagle+,
+    // square = bogey, double square = double-bogey+. The wrapper fills the cell
+    // and centres the ring concentric with the digit, so it never shifts
+    // column geometry. The ring hugs the digit with clear breathing room so it
+    // never cuts the number, and is small enough to leave the cell corners
+    // free for the handicap pips. Colour is applied inline per result.
     soloNineShapeWrap: {
       ...StyleSheet.absoluteFillObject,
       alignItems: 'center',
       justifyContent: 'center',
     },
     soloNineShape: {
-      width: 26,
-      height: 26,
+      width: 21,
+      height: 21,
       borderWidth: 1.5,
-      borderColor: theme.text.muted,
       alignItems: 'center',
       justifyContent: 'center',
       backgroundColor: 'transparent',
     },
     soloNineShapeCircle: {
-      borderRadius: 13,
+      borderRadius: 10.5,
     },
     soloNineShapeSquare: {
-      borderRadius: 0,
+      borderRadius: 3,
     },
+    // Concentric inner ring for eagle / double-bogey markers. Sized to leave an
+    // even gap inside the outer ring.
     soloNineShapeInner: {
-      width: 20,
-      height: 20,
-      borderWidth: 1.5,
-      borderColor: theme.text.muted,
+      width: 13.5,
+      height: 13.5,
+      borderWidth: 1.25,
       backgroundColor: 'transparent',
     },
     soloNineShapeInnerCircle: {
-      borderRadius: 10,
+      borderRadius: 6.75,
     },
     soloNineShapeInnerSquare: {
-      borderRadius: 0,
+      borderRadius: 2,
     },
     soloNineAggText: {
       color: theme.text.secondary,

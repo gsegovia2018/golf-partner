@@ -1,11 +1,12 @@
 import React from 'react';
 import {
-  ActivityIndicator, Modal, Pressable, StyleSheet,
+  ActivityIndicator, StyleSheet,
   Text, TouchableOpacity, View,
 } from 'react-native';
 import { Feather } from '@expo/vector-icons';
 import QRCode from 'react-native-qrcode-svg';
 import { useTheme } from '../theme/ThemeContext';
+import BottomSheet from './BottomSheet';
 
 export default function PostCreateInviteModal({
   visible,
@@ -19,78 +20,64 @@ export default function PostCreateInviteModal({
   const s = makeStyles(theme);
 
   return (
-    <Modal statusBarTranslucent hardwareAccelerated
-      visible={visible}
-      transparent
-      animationType="slide"
-      onRequestClose={onRequestClose}
-    >
-      <Pressable style={s.backdrop} onPress={onRequestClose}>
-        <Pressable style={s.sheet} onPress={() => {}}>
-          <View style={s.handle} />
-          <Text style={s.title}>Invite players</Text>
-          <Text style={s.subtitle}>
-            Share this QR with players who do not have the app yet. App users will see this game in Golf Partner.
+    <BottomSheet visible={visible} onClose={onRequestClose} sheetStyle={s.sheet}>
+      <View style={s.handle} />
+      <Text style={s.title}>Invite players</Text>
+      <Text style={s.subtitle}>
+        Share this QR with players who do not have the app yet. App users will see this game in Golf Partner.
+      </Text>
+
+      {loading ? (
+        <View style={s.loading}>
+          <ActivityIndicator color={theme.accent.primary} />
+          <Text style={s.loadingText}>Creating invite link…</Text>
+        </View>
+      ) : link ? (
+        <>
+          <View style={s.qrBox}>
+            <QRCode
+              value={link}
+              size={156}
+              backgroundColor="#ffffff"
+              color="#000000"
+            />
+          </View>
+          <Text style={s.link} selectable>{link}</Text>
+          <TouchableOpacity
+            style={s.primaryBtn}
+            onPress={onShare}
+            activeOpacity={0.8}
+          >
+            <Feather name="share-2" size={16} color={theme.text.inverse} style={{ marginRight: 8 }} />
+            <Text style={s.primaryText}>Share link</Text>
+          </TouchableOpacity>
+        </>
+      ) : (
+        <>
+          <Text style={s.error}>
+            Game created, but the invite link could not be created right now. You can invite players later from the game menu.
           </Text>
+          {!!error && <Text style={s.errorDetail}>{error}</Text>}
+        </>
+      )}
 
-          {loading ? (
-            <View style={s.loading}>
-              <ActivityIndicator color={theme.accent.primary} />
-              <Text style={s.loadingText}>Creating invite link…</Text>
-            </View>
-          ) : link ? (
-            <>
-              <View style={s.qrBox}>
-                <QRCode
-                  value={link}
-                  size={156}
-                  backgroundColor="#ffffff"
-                  color="#000000"
-                />
-              </View>
-              <Text style={s.link} selectable>{link}</Text>
-              <TouchableOpacity
-                style={s.primaryBtn}
-                onPress={onShare}
-                activeOpacity={0.8}
-              >
-                <Feather name="share-2" size={16} color={theme.text.inverse} style={{ marginRight: 8 }} />
-                <Text style={s.primaryText}>Share link</Text>
-              </TouchableOpacity>
-            </>
-          ) : (
-            <>
-              <Text style={s.error}>
-                Game created, but the invite link could not be created right now. You can invite players later from the game menu.
-              </Text>
-              {!!error && <Text style={s.errorDetail}>{error}</Text>}
-            </>
-          )}
-
-          {!loading && (
-            <TouchableOpacity
-              style={s.secondaryBtn}
-              onPress={onRequestClose}
-              activeOpacity={0.8}
-            >
-              <Text style={s.secondaryText}>
-                {link ? 'Skip for now' : 'Continue'}
-              </Text>
-            </TouchableOpacity>
-          )}
-        </Pressable>
-      </Pressable>
-    </Modal>
+      {!loading && (
+        <TouchableOpacity
+          style={s.secondaryBtn}
+          onPress={onRequestClose}
+          activeOpacity={0.8}
+        >
+          <Text style={s.secondaryText}>
+            {link ? 'Skip for now' : 'Continue'}
+          </Text>
+        </TouchableOpacity>
+      )}
+    </BottomSheet>
   );
 }
 
 function makeStyles(theme) {
   return StyleSheet.create({
-    backdrop: {
-      flex: 1,
-      backgroundColor: 'rgba(0,0,0,0.45)',
-      justifyContent: 'flex-end',
-    },
     sheet: {
       backgroundColor: theme.bg.card,
       borderTopLeftRadius: 22,

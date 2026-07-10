@@ -1,7 +1,8 @@
 import React, { useEffect, useState, useCallback } from 'react';
-import { View, Text, Modal, TouchableOpacity, TouchableWithoutFeedback, ScrollView, StyleSheet } from 'react-native';
+import { View, Text, TouchableOpacity, ScrollView, StyleSheet } from 'react-native';
 import { Feather } from '@expo/vector-icons';
 import { useTheme } from '../theme/ThemeContext';
+import BottomSheet from './BottomSheet';
 import {
   subscribeSyncStatus,
   subscribeConflicts,
@@ -84,12 +85,8 @@ export default function SyncStatusSheet({ visible, onClose }) {
   const onRetry = useCallback(() => { retrySync(); }, []);
 
   return (
-    <Modal statusBarTranslucent hardwareAccelerated visible={visible} transparent animationType="slide" onRequestClose={onClose}>
-      <TouchableWithoutFeedback onPress={onClose}>
-        <View style={s.backdrop} />
-      </TouchableWithoutFeedback>
-      <View style={s.sheet}>
-        <View style={s.handle} />
+    <BottomSheet visible={visible} onClose={onClose} sheetStyle={s.sheet}>
+      <View style={s.handle} />
         <View style={s.header}>
           <Text style={s.title}>Sincronización</Text>
           <TouchableOpacity onPress={onClose} hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}>
@@ -129,15 +126,12 @@ export default function SyncStatusSheet({ visible, onClose }) {
             ))
           )}
         </ScrollView>
-      </View>
-    </Modal>
+    </BottomSheet>
   );
 }
 
 const makeStyles = (t) => StyleSheet.create({
-  backdrop: { ...StyleSheet.absoluteFillObject, backgroundColor: 'rgba(0,0,0,0.45)' },
   sheet: {
-    position: 'absolute', left: 0, right: 0, bottom: 0,
     backgroundColor: t.bg.primary,
     borderTopLeftRadius: 24, borderTopRightRadius: 24,
     maxHeight: '80%',
