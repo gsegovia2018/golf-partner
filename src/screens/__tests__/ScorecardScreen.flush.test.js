@@ -50,7 +50,7 @@ jest.mock('../../components/scorecard/HoleView', () => {
   const React = require('react');
   const { Text, TouchableOpacity, View } = require('react-native');
   return {
-    HoleView: ({ onSetScore, onNext }) => (
+    HoleView: ({ onSetScore, onNext, onFinish }) => (
       <View>
         <TouchableOpacity
           accessibilityRole="button"
@@ -65,6 +65,13 @@ jest.mock('../../components/scorecard/HoleView', () => {
           onPress={onNext}
         >
           <Text>Next hole</Text>
+        </TouchableOpacity>
+        <TouchableOpacity
+          accessibilityRole="button"
+          accessibilityLabel="Finish round"
+          onPress={onFinish}
+        >
+          <Text>Finish round</Text>
         </TouchableOpacity>
       </View>
     ),
@@ -111,6 +118,7 @@ jest.mock('../../store/tournamentStore', () => ({
   getActiveTournamentSnapshot: jest.fn(() => mockTournament),
   getTournament: jest.fn(() => Promise.resolve(mockTournament)),
   getTournamentSnapshot: jest.fn(() => mockTournament),
+  readLocal: jest.fn(() => Promise.resolve(mockTournament)),
 }));
 
 jest.mock('../../store/mutate', () => {
@@ -236,6 +244,34 @@ describe('ScorecardScreen batched score sync', () => {
     await waitFor(() => {
       expect(syncNow).toHaveBeenCalled();
     });
+  });
+
+  test('a failing save at finish time surfaces the finish-failed alert and aborts', async () => {
+    const { findByLabelText } = render(wrap(
+      <ScorecardScreen navigation={navigation} route={route} />
+    ));
+
+    // Dirty a cell. In this fixture the real mutate rejects (the
+    // tournamentStore mock has no saveLocal), so the tap's own autoSave fails
+    // and the score stays uncommitted — exactly the dirty state the
+    // finish-time flush has to re-push (and fail on again).
+    fireEvent.press(await findByLabelText('Score plus'));
+    await waitFor(() => {
+      expect(mutate).toHaveBeenCalled();
+    });
+
+    syncNow.mockClear();
+    navigation.navigate.mockClear();
+
+    fireEvent.press(await findByLabelText('Finish round'));
+
+    // The flush's catch must surface the failure (web branch: window.alert)…
+    await waitFor(() => {
+      expect(global.window.alert).toHaveBeenCalled();
+    });
+    // …and abort the finish: no sync kick, no navigation.
+    expect(syncNow).not.toHaveBeenCalled();
+    expect(navigation.navigate).not.toHaveBeenCalled();
   });
 
   test('unmounting the screen kicks syncNow', async () => {

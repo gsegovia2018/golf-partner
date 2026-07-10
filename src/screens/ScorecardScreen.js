@@ -1182,6 +1182,15 @@ export default function ScorecardScreen({ navigation, route }) {
           freshRound = fresh.rounds?.[roundIndex] ?? r;
         }
       }
+    } catch (err) {
+      // A failed local save must not abort the finish silently — surface it
+      // exactly like the finalize step's catch below. (syncNow never rejects
+      // — it handles errors internally with backoff — and readLocal is
+      // defended above, so this is effectively the autoSave path.)
+      const message = err?.message ?? 'Could not finish this game.';
+      if (Platform.OS === 'web') window.alert(message);
+      else Alert.alert('Finish failed', message);
+      return;
     } finally {
       setFinishBusy(false);
     }
