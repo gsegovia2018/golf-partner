@@ -64,6 +64,7 @@ import { startUploadWorker } from './src/lib/uploadWorker';
 import * as ScreenOrientation from 'expo-screen-orientation';
 import * as Notifications from 'expo-notifications';
 import { registerPushToken, configureNotificationHandler } from './src/lib/pushNotifications';
+import { normalizeDeepLink } from './src/lib/notificationContent';
 
 const Stack = createStackNavigator();
 const Tab = createBottomTabNavigator();
@@ -158,7 +159,10 @@ function AppNavigator() {
     const sub = Notifications.addNotificationResponseReceivedListener((response) => {
       const data = response?.notification?.request?.content?.data;
       if (data?.screen && navigationRef.isReady()) {
-        navigationRef.navigate(data.screen, data.params);
+        // Legacy pushes carry a bare 'Home' target the root navigator can't
+        // resolve — normalize to the nested form before navigating.
+        const link = normalizeDeepLink(data);
+        navigationRef.navigate(link.screen, link.params);
       }
     });
     return () => sub.remove();
