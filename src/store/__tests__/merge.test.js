@@ -329,6 +329,41 @@ describe('mergeTournaments — always-mine score cells', () => {
     expect(merged.rounds[0].scoreConflicts?.p1?.[3] ?? null).toBeNull();
   });
 
+  it('a post-resolution edit from the other device raises a marker instead of silently replacing the resolved value', () => {
+    // Both devices settled on 6 via a resolution at ts=300. The other device
+    // then edited the cell to 4 at ts=400 WITHOUT a new resolution — its
+    // stale resolution stamp must not smuggle the new value in silently.
+    const local = t({
+      score: 6, meta: { [cell]: 300, [resolution]: 300 },
+      resolutions: { p1: { 3: 300 } },
+    });
+    const remote = t({
+      score: 4, meta: { [cell]: 400, [resolution]: 300 },
+      resolutions: { p1: { 3: 300 } },
+    });
+    const { merged } = mergeTournaments(local, remote);
+    expect(merged.rounds[0].scores.p1[3]).toBe(6);
+    const m = merged.rounds[0].scoreConflicts.p1[3];
+    expect(m.candidates[0]).toMatchObject({ value: 6, ts: 300 });
+    expect(m.candidates[1]).toMatchObject({ value: 4, ts: 400 });
+  });
+
+  it('a normal resolution (stamp equals the resolved write) is still accepted and clears the marker', () => {
+    // Guards the rRes >= rTs conjunct: conflict.resolve stamps the score
+    // write and the resolution with the SAME ts, so rTs === rRes must pass.
+    const local = t({
+      score: 5, meta: { [cell]: 100, [marker]: 110 },
+      conflicts: { p1: { 3: { candidates: [{ value: 5, ts: 100 }, { value: 6, ts: 90 }], detectedAt: 110 } } },
+    });
+    const remote = t({
+      score: 6, meta: { [cell]: 500, [resolution]: 500 },
+      resolutions: { p1: { 3: 500 } },
+    });
+    const { merged } = mergeTournaments(local, remote);
+    expect(merged.rounds[0].scores.p1[3]).toBe(6);
+    expect(merged.rounds[0].scoreConflicts?.p1?.[3] ?? null).toBeNull();
+  });
+
   it('a raw write NEWER than the resolution re-enters always-mine flow', () => {
     // Remote resolved at 500; local deliberately edited again at 600.
     const local = t({ score: 4, meta: { [cell]: 600 } });

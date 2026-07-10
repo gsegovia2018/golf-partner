@@ -151,8 +151,12 @@ export function mergeTournaments(local, remote) {
     const rRes = getAtPath(remote, resPath) ?? 0;
 
     // 1. Remote carries a resolution at/after my raw write (and at/after any
-    //    resolution of mine): the resolved value is authoritative.
-    if (remoteWrote && rRes > 0 && rRes >= lTs && rRes >= lRes) {
+    //    resolution of mine): the resolved value is authoritative. The stamp
+    //    must also cover the remote's OWN write (rRes >= rTs) — otherwise the
+    //    remote value is a post-resolution edit riding on a stale stamp, and
+    //    accepting it would silently flip an agreed cell. Such an edit falls
+    //    through to step 2, which keeps my value and raises a marker.
+    if (remoteWrote && rRes > 0 && rRes >= lTs && rRes >= lRes && rRes >= rTs) {
       mergedMeta[path] = rTs; // merged is a clone of remote — value already there
       if (getAtPath(merged, cPath) != null) {
         setAtPath(merged, cPath, null);
