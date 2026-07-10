@@ -1,6 +1,7 @@
 import React, { useEffect, useState, useCallback, useRef, useMemo, startTransition } from 'react';
 import { View, Text, TouchableOpacity, StyleSheet, ScrollView, Switch, Alert, FlatList, Platform, Modal, Pressable, ActivityIndicator, Share } from 'react-native';
 import ScreenContainer from '../components/ScreenContainer';
+import RoundScoreboard from '../components/RoundScoreboard';
 import { Feather } from '@expo/vector-icons';
 import QRCode from 'react-native-qrcode-svg';
 import { CommonActions } from '@react-navigation/native';
@@ -36,7 +37,6 @@ import {
   lastTeeForPlayerOnCourse,
 } from '../store/tournamentStore';
 import { fetchMyPlayers, loadQuickStartCourses as loadQuickStartCourseList } from '../store/libraryStore';
-import { playersMeFirst } from '../lib/playerOrder';
 import {
   buildQuickStartRound,
   buildQuickStartTournamentDraft,
@@ -2248,116 +2248,11 @@ const RoundPage = React.memo(function RoundPage({
         </View>
       )}
       {hasScores || revealed ? (
-        <RoundScoreboard round={round} players={players} meId={meId} theme={theme} s={s} showRunning={showRunning} />
+        <RoundScoreboard round={round} players={players} meId={meId} showRunning={showRunning} />
       ) : (
         <Text style={s.emptyRoundHint}>No scores yet for this round.</Text>
       )}
     </View>
-  );
-});
-
-
-
-// Universal round card — identical in every scoring mode. Shows a holes-played
-// progress bar, then each player (me first, then join order) with POINTS /
-// STROKES / VS PAR stat cells. No rank badge or winner highlight — the green
-// LEADERBOARD card is where standings are shown.
-const RoundScoreboard = React.memo(function RoundScoreboard({ round, players, meId, theme, s, showRunning = true }) {
-  const holes = round?.holes ?? [];
-  const totalHoles = holes.length || 18;
-
-  const totals = roundTotals(round, players);
-  const totalsById = Object.fromEntries(totals.map((t) => [t.player.id, t]));
-  const rows = playersMeFirst(players, meId).map((player) => {
-    const ps = round?.scores?.[player.id] ?? {};
-    let strokes = 0;
-    let parThrough = 0;
-    let played = 0;
-    for (const hole of holes) {
-      const sc = ps[hole.number];
-      if (sc) { strokes += sc; parThrough += hole.par ?? 0; played++; }
-    }
-    return {
-      player,
-      handicap: totalsById[player.id]?.handicap,
-      points: totalsById[player.id]?.totalPoints ?? 0,
-      strokes,
-      played,
-      vsPar: strokes - parThrough,
-    };
-  });
-
-  const holesPlayed = rows.length ? Math.max(...rows.map((r) => r.played)) : 0;
-  const progressPct = totalHoles > 0 ? Math.min(100, Math.round((holesPlayed / totalHoles) * 100)) : 0;
-
-  const vsParText = (r) => {
-    if (r.played === 0) return '—';
-    if (r.vsPar === 0) return 'E';
-    return r.vsPar > 0 ? `+${r.vsPar}` : `${r.vsPar}`;
-  };
-  const vsParColor = (r) => {
-    if (r.played === 0) return theme.text.muted;
-    if (r.vsPar < 0) return theme.scoreColor('excellent');
-    if (r.vsPar === 0) return theme.scoreColor('good');
-    return theme.scoreColor('poor');
-  };
-
-  return (
-    <>
-      <View style={s.roundProgressRow}>
-        <View style={s.roundProgressTrack}>
-          <View style={[s.roundProgressFill, { width: `${progressPct}%` }]} />
-        </View>
-        <Text style={s.roundProgressText}>{holesPlayed} / {totalHoles}</Text>
-      </View>
-      <View style={{ gap: 10 }}>
-        {rows.map((r) => {
-          // "On hole N": only meaningful mid-round — before the first score
-          // there's no current hole yet, and once every hole is in the round
-          // is done, so neither end gets the glowing badge.
-          const onHole = showRunning && r.played > 0 && r.played < totalHoles
-            ? r.played + 1
-            : null;
-          return (
-          <View key={r.player.id} style={s.gamePlayerCard}>
-            <View style={s.gamePlayerHeader}>
-              <Text style={s.gamePlayerName} numberOfLines={1}>{r.player.name}</Text>
-              <View style={s.gamePlayerHeaderRight}>
-                {onHole != null && (
-                  <View style={s.holeBadge} accessibilityLabel={`On hole ${onHole}`}>
-                    <Text style={s.holeBadgeText}>HOLE {onHole}</Text>
-                  </View>
-                )}
-                <Text style={s.gamePlayerHcp}>
-                  HCP {Number.isFinite(r.handicap) ? r.handicap : '—'}
-                </Text>
-              </View>
-            </View>
-            <View style={s.gameStatsRow}>
-              <View style={s.gameStatCell}>
-                <Text style={s.gameStatValue}>{showRunning ? r.points : '—'}</Text>
-                <Text style={s.gameStatLabel}>Points</Text>
-              </View>
-              <View style={s.gameStatDivider} />
-              <View style={s.gameStatCell}>
-                <Text style={s.gameStatValue}>
-                  {showRunning && r.played > 0 ? r.strokes : '—'}
-                </Text>
-                <Text style={s.gameStatLabel}>Strokes</Text>
-              </View>
-              <View style={s.gameStatDivider} />
-              <View style={s.gameStatCell}>
-                <Text style={[s.gameStatValue, showRunning && { color: vsParColor(r) }]}>
-                  {showRunning ? vsParText(r) : '—'}
-                </Text>
-                <Text style={s.gameStatLabel}>vs Par</Text>
-              </View>
-            </View>
-          </View>
-          );
-        })}
-      </View>
-    </>
   );
 });
 
@@ -2687,15 +2582,6 @@ const makeStyles = (t) => StyleSheet.create({
     fontSize: 12, textAlign: 'center', marginTop: 10,
   },
 
-  roundProgressRow: { flexDirection: 'row', alignItems: 'center', gap: 10, marginBottom: 14 },
-  roundProgressTrack: {
-    flex: 1, height: 6, borderRadius: 3,
-    backgroundColor: t.isDark ? 'rgba(255,255,255,0.08)' : 'rgba(0,0,0,0.06)',
-    overflow: 'hidden',
-  },
-  roundProgressFill: { height: 6, borderRadius: 3, backgroundColor: t.accent.primary },
-  roundProgressText: { fontFamily: 'PlusJakartaSans-Bold', color: t.text.muted, fontSize: 11 },
-
   // Pair blocks
   pairBlock: {
     borderRadius: 12,
@@ -2762,63 +2648,6 @@ const makeStyles = (t) => StyleSheet.create({
     fontSize: 11,
     letterSpacing: 0.5,
   },
-  gamePlayerCard: {
-    borderRadius: 14,
-    backgroundColor: t.isDark ? t.bg.secondary : t.bg.secondary,
-    borderWidth: 1,
-    borderColor: t.border.default,
-    padding: 14,
-  },
-  gamePlayerCardLeader: {
-    backgroundColor: t.isDark ? 'rgba(255,215,0,0.06)' : '#fffaeb',
-    borderColor: '#ffd700' + '66',
-  },
-  gamePlayerHeader: {
-    flexDirection: 'row',
-    alignItems: 'flex-start',
-    justifyContent: 'space-between',
-    gap: 8,
-    marginBottom: 12,
-  },
-  gamePlayerName: {
-    fontFamily: 'PlusJakartaSans-Bold',
-    color: t.text.primary,
-    fontSize: 15,
-    flexShrink: 1,
-  },
-  gamePlayerHeaderRight: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 8,
-  },
-  gamePlayerHcp: {
-    fontFamily: 'PlusJakartaSans-Medium',
-    color: t.text.muted,
-    fontSize: 11,
-    marginTop: 2,
-    letterSpacing: 0.3,
-  },
-  // Glowing "on hole N" badge — same halo recipe (tinted border + shadow) as
-  // the team-color halo on the live scorecard's PlayerCard.
-  holeBadge: {
-    paddingHorizontal: 8,
-    paddingVertical: 3,
-    borderRadius: 8,
-    backgroundColor: t.accent.light,
-    borderWidth: 1.5,
-    borderColor: t.accent.primary,
-    shadowColor: t.accent.primary,
-    shadowOpacity: 0.5,
-    shadowRadius: 8,
-    shadowOffset: { width: 0, height: 0 },
-    elevation: 4,
-  },
-  holeBadgeText: {
-    fontFamily: 'PlusJakartaSans-Bold',
-    color: t.accent.primary,
-    fontSize: 10,
-    letterSpacing: 0.4,
-  },
   gamePlayerPoints: {
     fontFamily: 'PlusJakartaSans-ExtraBold',
     color: t.accent.primary,
@@ -2833,34 +2662,8 @@ const makeStyles = (t) => StyleSheet.create({
     textTransform: 'uppercase',
     marginTop: -2,
   },
-  gameStatsRow: {
-    flexDirection: 'row',
-    alignItems: 'stretch',
-    backgroundColor: t.isDark ? 'rgba(255,255,255,0.04)' : 'rgba(0,0,0,0.025)',
-    borderRadius: 10,
-    paddingVertical: 8,
-  },
-  gameStatCell: { flex: 1, alignItems: 'center', justifyContent: 'center', paddingVertical: 2 },
-  gameStatDivider: {
-    width: 1,
-    backgroundColor: t.isDark ? 'rgba(255,255,255,0.08)' : 'rgba(0,0,0,0.06)',
-    marginVertical: 4,
-  },
-  gameStatValue: {
-    fontFamily: 'PlusJakartaSans-Bold',
-    color: t.text.primary,
-    fontSize: 15,
-  },
   gameStatValueGood: { color: t.accent.primary },
   gameStatValueWarn: { color: t.text.secondary },
-  gameStatLabel: {
-    fontFamily: 'PlusJakartaSans-SemiBold',
-    color: t.text.muted,
-    fontSize: 9,
-    letterSpacing: 0.8,
-    textTransform: 'uppercase',
-    marginTop: 3,
-  },
   // Round action row (Scorecard + Next Round side-by-side)
   roundActionsRow: { flexDirection: 'row', gap: 10 },
   roundActionBtn: { flex: 1, marginTop: 0 },
