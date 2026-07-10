@@ -138,13 +138,18 @@ async function _markPendingOrIdle() {
   }
 }
 
-export function scheduleSync() {
-  if (!isOnline()) { _markPendingOrIdle(); return; }
-  if (_running) return;
+let _currentDrain = null;
+
+// Awaitable drain. Resolves when the current pass finishes (or immediately
+// when offline). A call while a drain is in flight returns that drain's
+// promise rather than starting a second pass.
+export function syncNow() {
+  if (!isOnline()) { _markPendingOrIdle(); return Promise.resolve(); }
+  if (_running) return _currentDrain ?? Promise.resolve();
   if (_timer) { clearTimeout(_timer); _timer = null; }
 
   _running = true;
-  drainOnce()
+  _currentDrain = drainOnce()
     .then(() => { _attempt = 0; })
     .catch(() => {
       _setSyncStatus('error');
@@ -152,8 +157,11 @@ export function scheduleSync() {
       _attempt++;
       _timer = setTimeout(() => { _timer = null; scheduleSync(); }, delay);
     })
-    .finally(() => { _running = false; });
+    .finally(() => { _running = false; _currentDrain = null; });
+  return _currentDrain;
 }
+
+export function scheduleSync() { syncNow(); }
 
 export function retrySync() {
   _attempt = 0;

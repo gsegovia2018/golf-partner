@@ -252,7 +252,7 @@ export function applyToTournament(t, m) {
   }
 }
 
-export async function mutate(tournamentBefore, mutation) {
+export async function mutate(tournamentBefore, mutation, opts = {}) {
   const ts = mutation.ts ?? Date.now();
   const m = { ...mutation, ts };
 
@@ -293,10 +293,16 @@ export async function mutate(tournamentBefore, mutation) {
   // 3. Enqueue for sync
   await syncQueue.enqueue({ tournamentId: t.id, mutation: m, path });
 
-  // 4. Kick worker (lazy require to break circular import)
-  const { scheduleSync } = require('./syncWorker');
-  if (isOnline()) scheduleSync();
-  else _setSyncStatus('pending');
+  // 4. Kick worker (lazy require to break circular import). Score entry
+  // passes deferSync so taps batch locally; the scorecard flushes the queue
+  // on hole change / finish / background instead.
+  if (opts.deferSync) {
+    _setSyncStatus('pending');
+  } else {
+    const { scheduleSync } = require('./syncWorker');
+    if (isOnline()) scheduleSync();
+    else _setSyncStatus('pending');
+  }
 
   return t;
 }

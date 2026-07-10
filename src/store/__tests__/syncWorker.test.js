@@ -106,3 +106,19 @@ describe('drainLibrary', () => {
     );
   });
 });
+
+describe('syncNow', () => {
+  it('returns a promise that resolves after the drain completes', async () => {
+    const { syncNow } = require('../syncWorker');
+    // With the queue mock empty, drainOnce sets status idle and resolves.
+    await expect(syncNow()).resolves.toBeUndefined();
+  });
+
+  it('a second call while a drain is running returns the same in-flight promise', async () => {
+    const { syncNow } = require('../syncWorker');
+    const p1 = syncNow();
+    const p2 = syncNow();
+    expect(p2).toBe(p1);
+    await p1;
+  });
+});
