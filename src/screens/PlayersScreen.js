@@ -22,6 +22,8 @@ import { mutate } from '../store/mutate';
 import RoundTeeAssignments, { playerInitials } from '../components/RoundTeeAssignments';
 import { isScoringModeAllowed, fallbackScoringMode, getScoringMode } from '../components/scoringModes';
 import ScoringModeChangeSheet from '../components/ScoringModeChangeSheet';
+import BottomSheet from '../components/BottomSheet';
+import { listFriends, getCachedFriends } from '../store/friendStore';
 import { consumePendingPlayers } from '../lib/selectionBridge';
 import { parseHandicapIndex } from '../lib/handicap';
 import { shouldHandleStoreChange } from '../lib/navigationFocus';
@@ -83,6 +85,10 @@ export default function PlayersScreen({ navigation, route }) {
   const [removingId, setRemovingId] = useState(null);
   const [modePrompt, setModePrompt] = useState(null);
   const [removeModePrompt, setRemoveModePrompt] = useState(null);
+  // Friend-chooser sheet for linking a local roster slot to an app account.
+  const [linkTarget, setLinkTarget] = useState(null);   // the roster player being linked
+  const [friends, setFriends] = useState([]);
+  const [friendsLoading, setFriendsLoading] = useState(false);
   const tournamentRef = useRef(null);
   const saveTimeoutRef = useRef(null);
   const skipNextSaveRef = useRef(false);
@@ -119,7 +125,18 @@ export default function PlayersScreen({ navigation, route }) {
       if ((t.players ?? []).length >= 4) break;
       if ((t.players ?? []).some((x) => x.id === p.id)) continue;
       const parsed = parseHandicapIndex(p.handicap);
-      const player = { id: p.id, name: p.name, handicap: parsed.ok ? parsed.value : 0, gender: p.gender ?? null };
+      // Carry the account link (user_id) + avatar through. Dropping them here
+      // saved a friend-with-account as a plain local name, so the participant
+      // → member → "added to game" notification path never fired and that
+      // person never saw the tournament. SetupScreen already preserves these.
+      const player = {
+        id: p.id,
+        name: p.name,
+        handicap: parsed.ok ? parsed.value : 0,
+        gender: p.gender ?? null,
+        user_id: p.user_id ?? null,
+        avatar_url: p.avatar_url ?? null,
+      };
       const { patches: roundPatches, nextScoringMode } = addPlayerRoundPatches(t, player, { mode: chosenMode });
       const modeChanged = nextScoringMode !== (t.settings?.scoringMode ?? 'stableford');
       t = await mutate(t, {
@@ -275,6 +292,42 @@ export default function PlayersScreen({ navigation, route }) {
 
   function updateBaseHandicap(playerId, value) {
     setEditPlayers((prev) => prev.map((p) => (p.id === playerId ? { ...p, handicap: value } : p)));
+  }
+
+  // Open the friend chooser to link a local roster slot to an app account.
+  async function openLinkSheet(player) {
+    setLinkTarget(player);
+    setFriendsLoading(true);
+    try {
+      const list = await listFriends();
+      setFriends(list);
+    } catch (_) {
+      setFriends(await getCachedFriends());
+    } finally {
+      setFriendsLoading(false);
+    }
+  }
+
+  // Attach a friend's account to the target slot. Setting user_id and letting
+  // the debounced save run triggers the participant → member → "added to game"
+  // notification path, so the friend now sees the game. Guards against linking
+  // an account already used by another slot in this roster.
+  function pickFriendForSlot(friend) {
+    const target = linkTarget;
+    setLinkTarget(null);
+    if (!target) return;
+    const alreadyUsed = editPlayers.some((p) => p.id !== target.id && p.user_id === friend.userId);
+    if (alreadyUsed) {
+      const msg = `${friend.displayName} is already linked to another player in this game.`;
+      if (Platform.OS === 'web') window.alert(msg);
+      else Alert.alert('Already linked', msg);
+      return;
+    }
+    setEditPlayers((prev) => prev.map((p) => (
+      p.id === target.id
+        ? { ...p, user_id: friend.userId, avatar_url: friend.avatarUrl ?? null }
+        : p
+    )));
   }
 
   const handleRoundTeesChange = useCallback((roundIndex, patch) => {
@@ -488,6 +541,17 @@ export default function PlayersScreen({ navigation, route }) {
                         </Text>
                       </View>
                     ) : null}
+                    {p.user_id ? (
+                      <View style={s.linkedBadge}>
+                        <Feather name="user-check" size={10} color={theme.accent.primary} />
+                        <Text style={s.linkedBadgeText}>Linked</Text>
+                      </View>
+                    ) : (
+                      <View style={s.localBadge}>
+                        <Feather name="user" size={10} color={theme.text.muted} />
+                        <Text style={s.localBadgeText}>Local</Text>
+                      </View>
+                    )}
                   </View>
                 </View>
                 {isViewer ? (
@@ -504,6 +568,16 @@ export default function PlayersScreen({ navigation, route }) {
                     placeholderTextColor={theme.text.muted}
                     accessibilityLabel={`Handicap for ${p.name}`}
                   />
+                )}
+                {!isViewer && !p.user_id && (
+                  <TouchableOpacity
+                    onPress={() => openLinkSheet(p)}
+                    style={s.linkBtn}
+                    hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+                    accessibilityLabel={`Link ${p.name} to an app account`}
+                  >
+                    <Feather name="link" size={16} color={theme.accent.primary} />
+                  </TouchableOpacity>
                 )}
                 {!isViewer && editPlayers.length > 2 && (
                   removingId === `roster:${p.id}`
@@ -640,6 +714,53 @@ export default function PlayersScreen({ navigation, route }) {
         }}
         onCancel={() => setRemoveModePrompt(null)}
       />
+
+      <BottomSheet visible={!!linkTarget} onClose={() => setLinkTarget(null)} sheetStyle={s.linkSheet}>
+        <View style={s.linkSheetHandle} />
+        <Text style={s.linkSheetTitle}>
+          {linkTarget ? `Link ${linkTarget.name} to an account` : 'Link to an account'}
+        </Text>
+        <Text style={s.linkSheetSubtitle}>
+          Pick the friend who plays as this player so the game shows up for them.
+        </Text>
+        {friendsLoading ? (
+          <ActivityIndicator color={theme.accent.primary} style={{ marginVertical: 24 }} />
+        ) : friends.length === 0 ? (
+          <Text style={s.linkSheetEmpty}>
+            No friends yet. Add friends first, or share an invite link from “Invite people”.
+          </Text>
+        ) : (
+          <ScrollView style={s.linkSheetList}>
+            {friends.map((f) => {
+              const used = editPlayers.some((p) => p.user_id === f.userId);
+              return (
+                <TouchableOpacity
+                  key={f.userId}
+                  style={[s.linkFriendRow, used && s.linkFriendRowDisabled]}
+                  onPress={() => !used && pickFriendForSlot(f)}
+                  disabled={used}
+                  activeOpacity={0.7}
+                  accessibilityRole="button"
+                  accessibilityLabel={`Link to ${f.displayName}${used ? ', already linked' : ''}`}
+                >
+                  <View style={[s.linkFriendAvatar, { backgroundColor: f.avatarColor || theme.accent.primary }]}>
+                    {f.avatarUrl
+                      ? <Image source={{ uri: f.avatarUrl }} style={s.linkFriendAvatarImg} />
+                      : <Text style={s.linkFriendAvatarText}>{playerInitials(f.displayName)}</Text>}
+                  </View>
+                  <View style={{ flex: 1 }}>
+                    <Text style={s.linkFriendName}>{f.displayName}</Text>
+                    {f.username ? <Text style={s.linkFriendMeta}>@{f.username}</Text> : null}
+                  </View>
+                  {used
+                    ? <Text style={s.linkFriendUsed}>Linked</Text>
+                    : <Feather name="chevron-right" size={18} color={theme.text.muted} />}
+                </TouchableOpacity>
+              );
+            })}
+          </ScrollView>
+        )}
+      </BottomSheet>
     </ScreenContainer>
   );
 }
@@ -682,6 +803,48 @@ const makeStyles = (theme) => StyleSheet.create({
   roleBadgeOwner: { backgroundColor: 'rgba(212,175,55,0.15)' },
   roleText: { fontFamily: 'PlusJakartaSans-SemiBold', fontSize: 9, color: theme.text.muted, letterSpacing: 0.8 },
   roleTextOwner: { color: '#d4af37' },
+  // --- linked account vs local badge ---
+  linkedBadge: {
+    flexDirection: 'row', alignItems: 'center', gap: 3,
+    paddingHorizontal: 8, paddingVertical: 2, borderRadius: 8,
+    backgroundColor: theme.accent.light,
+  },
+  linkedBadgeText: { fontFamily: 'PlusJakartaSans-SemiBold', fontSize: 9, color: theme.accent.primary, letterSpacing: 0.4 },
+  localBadge: {
+    flexDirection: 'row', alignItems: 'center', gap: 3,
+    paddingHorizontal: 8, paddingVertical: 2, borderRadius: 8,
+    backgroundColor: theme.bg.secondary,
+  },
+  localBadgeText: { fontFamily: 'PlusJakartaSans-SemiBold', fontSize: 9, color: theme.text.muted, letterSpacing: 0.4 },
+  linkBtn: {
+    width: 32, height: 32, borderRadius: 8, backgroundColor: theme.accent.light,
+    borderWidth: 1, borderColor: theme.accent.primary + '33',
+    alignItems: 'center', justifyContent: 'center',
+  },
+  // --- link-account friend chooser sheet ---
+  linkSheet: { backgroundColor: theme.bg.primary, paddingHorizontal: 20, paddingTop: 10, paddingBottom: 32 },
+  linkSheetHandle: {
+    width: 40, height: 4, borderRadius: 2, backgroundColor: theme.border.default,
+    alignSelf: 'center', marginBottom: 14,
+  },
+  linkSheetTitle: { fontFamily: 'PlayfairDisplay-Bold', fontSize: 19, color: theme.text.primary },
+  linkSheetSubtitle: { fontFamily: 'PlusJakartaSans-Medium', fontSize: 12.5, color: theme.text.muted, marginTop: 4, marginBottom: 12 },
+  linkSheetEmpty: { fontFamily: 'PlusJakartaSans-Regular', fontSize: 13, color: theme.text.muted, marginVertical: 20, lineHeight: 19 },
+  linkSheetList: { maxHeight: 340 },
+  linkFriendRow: {
+    flexDirection: 'row', alignItems: 'center', gap: 12,
+    paddingVertical: 10, borderBottomWidth: 1, borderBottomColor: theme.border.subtle,
+  },
+  linkFriendRowDisabled: { opacity: 0.45 },
+  linkFriendAvatar: {
+    width: 38, height: 38, borderRadius: 19, overflow: 'hidden',
+    alignItems: 'center', justifyContent: 'center',
+  },
+  linkFriendAvatarImg: { width: '100%', height: '100%' },
+  linkFriendAvatarText: { fontFamily: 'PlusJakartaSans-ExtraBold', color: '#ffd700', fontSize: 13 },
+  linkFriendName: { fontFamily: 'PlusJakartaSans-SemiBold', fontSize: 15, color: theme.text.primary },
+  linkFriendMeta: { fontFamily: 'PlusJakartaSans-Regular', fontSize: 12, color: theme.text.muted, marginTop: 1 },
+  linkFriendUsed: { fontFamily: 'PlusJakartaSans-SemiBold', fontSize: 11, color: theme.accent.primary },
   // --- handicap input (Task 2) ---
   hcpInput: {
     backgroundColor: theme.isDark ? theme.bg.secondary : theme.bg.card,
