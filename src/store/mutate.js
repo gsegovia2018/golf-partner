@@ -18,6 +18,9 @@ export function metaPathFor(m) {
     case 'round.setScoringMode':
       return [`rounds.${m.roundId}.scoringMode`, `rounds.${m.roundId}.pairs`];
     case 'handicap.set': return `rounds.${m.roundId}.playerHandicaps.${m.playerId}`;
+    // Per-round handicap INDEX override (recomputes the playing handicap for
+    // non-manual entries). Scoped to one round, one player.
+    case 'index.set': return `rounds.${m.roundId}.playerIndexes.${m.playerId}`;
     // Structural round deletion: tombstone path consumed by mergeTournaments
     // so the round stays gone after the next remote refresh.
     case 'round.remove': return `rounds.${m.roundId}._deleted`;
@@ -154,6 +157,15 @@ export function applyToTournament(t, m) {
       if (!round) return;
       round.playerHandicaps = { ...(round.playerHandicaps ?? {}), [m.playerId]: m.handicap };
       round.manualHandicaps = { ...(round.manualHandicaps ?? {}), [m.playerId]: true };
+      break;
+    }
+    case 'index.set': {
+      const round = t.rounds.find((r) => r.id === m.roundId);
+      if (!round) return;
+      // Per-round index override. The recomputed playing handicap rides its
+      // own handicap.set path; this just records the index for that round so
+      // display + later auto-recomputes (e.g. a tee change) use it.
+      round.playerIndexes = { ...(round.playerIndexes ?? {}), [m.playerId]: m.index };
       break;
     }
     case 'tournament.addPlayer': {

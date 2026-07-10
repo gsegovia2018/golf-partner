@@ -6,6 +6,7 @@ import {
   resolveRoundTee,
   getPlayingHandicap,
   recomputeRoundPlayingHandicaps,
+  roundPlayerIndex,
   normalizeRoundHandicaps,
   calcExtraShots,
   calcStablefordPoints,
@@ -218,6 +219,56 @@ describe('recomputeRoundPlayingHandicaps', () => {
     const out = recomputeRoundPlayingHandicaps(round, players);
     expect(out.playerHandicaps.p1).toBe(99); // manual preserved
     expect(out.playerHandicaps.p2).toBe(14); // auto recomputed
+  });
+});
+
+describe('roundPlayerIndex', () => {
+  const player = { id: 'p1', handicap: 12 };
+
+  it('falls back to the base index when there is no override', () => {
+    expect(roundPlayerIndex({}, player)).toBe(12);
+    expect(roundPlayerIndex({ playerIndexes: {} }, player)).toBe(12);
+    expect(roundPlayerIndex({ playerIndexes: { p1: '' } }, player)).toBe(12);
+  });
+
+  it('uses the per-round override when present', () => {
+    expect(roundPlayerIndex({ playerIndexes: { p1: 18 } }, player)).toBe(18);
+    expect(roundPlayerIndex({ playerIndexes: { p1: '7.5' } }, player)).toBe(7.5);
+    expect(roundPlayerIndex({ playerIndexes: { p1: 0 } }, player)).toBe(0);
+  });
+});
+
+describe('per-round index override drives playing handicap', () => {
+  const holes = Array.from({ length: 18 }, () => ({ par: 4 }));
+  const players = [{ id: 'p1', handicap: 10 }];
+
+  it('recomputeRoundPlayingHandicaps derives from the round index override', () => {
+    const round = {
+      slope: STANDARD_SLOPE, courseRating: 72, holes,
+      playerHandicaps: { p1: 10 }, manualHandicaps: {},
+      playerIndexes: { p1: 18 },
+    };
+    // slope = 113 (standard), rating = par → course handicap equals the index.
+    const out = recomputeRoundPlayingHandicaps(round, players);
+    expect(out.playerHandicaps.p1).toBe(18);
+  });
+
+  it('normalizeRoundHandicaps backfills from the round index override', () => {
+    const round = {
+      slope: STANDARD_SLOPE, courseRating: 72, holes,
+      playerHandicaps: {}, manualHandicaps: {},
+      playerIndexes: { p1: 22 },
+    };
+    const out = normalizeRoundHandicaps(round, players);
+    expect(out.playerHandicaps.p1).toBe(22);
+  });
+
+  it('getPlayingHandicap uses the override when no stored value exists', () => {
+    const round = {
+      slope: STANDARD_SLOPE, courseRating: 72, holes,
+      playerHandicaps: {}, playerIndexes: { p1: 15 },
+    };
+    expect(getPlayingHandicap(round, players[0])).toBe(15);
   });
 });
 

@@ -2,15 +2,51 @@
 // same front-nine / back-nine block layout (ScorecardTable). Best Ball adds a
 // LiveMatchStrip below the table; there is no longer a separate "classic"
 // horizontally-scrolling grid for 4-player Best Ball.
-import React, { useMemo, useRef } from 'react';
-import { View, Text, TextInput, useWindowDimensions } from 'react-native';
+import React, { useMemo, useRef, useState } from 'react';
+import { View, Text, TextInput, Pressable, useWindowDimensions } from 'react-native';
 import { useTheme } from '../../theme/ThemeContext';
 import { playersMeFirst } from '../../lib/playerOrder';
 import { calcExtraShots, scrambleUnits } from '../../store/tournamentStore';
 import PullToRefresh from '../PullToRefresh';
 import { makeScorecardStyles } from './styles';
 import { holePoints, roundTotals } from './scoreModel';
+import { classifyHoleResult } from './constants';
 import { isScrambleMode } from '../scoringModes';
+
+// Fixed-size score-shape overlay drawn over a stroke digit. The wrapper fills
+// the cell and centres the ring so alignment never shifts. Nothing renders for
+// par (or a missing result). "eagle"/"double" nest a second, smaller ring.
+// Score colour by result, reusing the app's semantic score palette: birdie &
+// better read green (good), bogey neutral, double-or-worse red (poor).
+function shapeColor(result, theme) {
+  switch (result) {
+    case 'eagle': return theme.scoreColor('excellent');
+    case 'birdie': return theme.scoreColor('good');
+    case 'bogey': return theme.scoreColor('neutral');
+    case 'double': return theme.scoreColor('poor');
+    default: return theme.text.muted;
+  }
+}
+
+function ScoreShape({ result, theme, s }) {
+  if (!result || result === 'par') return null;
+  const rounded = result === 'birdie' || result === 'eagle';
+  const doubled = result === 'eagle' || result === 'double';
+  const color = shapeColor(result, theme);
+  return (
+    <View style={s.soloNineShapeWrap} pointerEvents="none">
+      <View style={[s.soloNineShape, rounded ? s.soloNineShapeCircle : s.soloNineShapeSquare, { borderColor: color }]}>
+        {doubled && (
+          <View style={[
+            s.soloNineShapeInner,
+            rounded ? s.soloNineShapeInnerCircle : s.soloNineShapeInnerSquare,
+            { borderColor: color },
+          ]} />
+        )}
+      </View>
+    </View>
+  );
+}
 
 // Join a pair's member first names with ' & '.
 function pairLabel(pair) {
@@ -54,7 +90,7 @@ function shortPlayerLabel(player, isSolo) {
 
 function NineBlock({
   holes, label, aggLabel, players, scores, onSetScore, editable,
-  playerHandicaps, mode, round, theme, s, columns, meId,
+  playerHandicaps, mode, round, theme, s, columns, meId, displayMode,
 }) {
   const { labelW, aggW, holeW, labelFontSize } = columns;
   const labelFont = { fontSize: labelFontSize };
@@ -106,64 +142,17 @@ function NineBlock({
     }, 0);
     const sumPts = holes.reduce((acc, h) => acc + (ptsFor(h, player) ?? 0), 0);
     const rowLabel = shortPlayerLabel(player, isSolo);
+    const rowChrome = [s.soloNineRow, s.soloNineRowYou, !isFirst && s.soloNinePlayerSeparator];
 
-    return (
-      <React.Fragment key={player.id}>
-        {/* strokes entry row */}
-        <View style={[s.soloNineRow, s.soloNineRowYou, !isFirst && s.soloNinePlayerSeparator]}>
+    // Strokes mode: the editable entry row (with score-shape overlays), Pts
+    // row hidden. Points mode: the strokes inputs are hidden and a points row
+    // takes their place, carrying the player label since it is the only row.
+    if (displayMode === 'points') {
+      return (
+        <View key={player.id} style={rowChrome}>
           <Text numberOfLines={1} style={[s.soloNineCell, s.soloNineLabelCell, labelCell, s.soloNineRowLabel, s.soloNineYouLabel, labelFont]}>
             {rowLabel}
           </Text>
-          {holes.map((h) => {
-            const extra = calcExtraShots(handicap, h.strokeIndex);
-            const cellEditable = editable ? editable(player.id) !== false : true;
-            const cellValue = scores[player.id]?.[h.number] != null
-              ? String(scores[player.id][h.number])
-              : '';
-            return (
-              <View key={h.number} style={[s.soloNineCell, holeCell, s.soloNineYouCell]}>
-                {cellEditable ? (
-                  <TextInput
-                    ref={(el) => { cellRefs.current[cellKey(player.id, h.number)] = el; }}
-                    style={s.soloNineStrokeInput}
-                    keyboardType="numeric"
-                    keyboardAppearance={theme.isDark ? 'dark' : 'light'}
-                    selectionColor={theme.accent.primary}
-                    maxLength={2}
-                    value={cellValue}
-                    onChangeText={(v) => onSetScore(player.id, h.number, v)}
-                    placeholder="·"
-                    placeholderTextColor={theme.text.muted}
-                    returnKeyType="next"
-                    blurOnSubmit={false}
-                    onSubmitEditing={() => focusNext(player.id, h.number)}
-                  />
-                ) : (
-                  // Plain Text keeps centering reliable in view-only mode —
-                  // a readonly TextInput can pick up browser user-agent
-                  // styles that override textAlign on web. The parent cell
-                  // already centers via flex, so the Text only needs the
-                  // typographic styles.
-                  <Text style={s.soloNineStrokeText} numberOfLines={1}>
-                    {cellValue || '·'}
-                  </Text>
-                )}
-                {extra > 0 && (
-                  <View style={s.soloNineExtraDots} pointerEvents="none">
-                    {Array.from({ length: Math.min(extra, 2) }).map((_, i) => (
-                      <View key={i} style={[s.soloNineExtraDot, { backgroundColor: theme.accent.primary }]} />
-                    ))}
-                  </View>
-                )}
-              </View>
-            );
-          })}
-          <Text numberOfLines={1} style={[s.soloNineCell, aggCell, s.soloNineAggDivider, s.soloNineAggStrokesTotal]}>{sumStr || '·'}</Text>
-        </View>
-
-        {/* pts row */}
-        <View style={s.soloNineRow}>
-          <Text numberOfLines={1} style={[s.soloNineCell, s.soloNineLabelCell, labelCell, s.soloNineRowLabel, labelFont]}>Pts</Text>
           {holes.map((h) => {
             const pts = ptsFor(h, player);
             return (
@@ -174,7 +163,61 @@ function NineBlock({
           })}
           <Text numberOfLines={1} style={[s.soloNineCell, aggCell, s.soloNineAggDivider, s.soloNineAggPtsTotal]}>{sumPts}</Text>
         </View>
-      </React.Fragment>
+      );
+    }
+
+    return (
+      <View key={player.id} style={rowChrome}>
+        <Text numberOfLines={1} style={[s.soloNineCell, s.soloNineLabelCell, labelCell, s.soloNineRowLabel, s.soloNineYouLabel, labelFont]}>
+          {rowLabel}
+        </Text>
+        {holes.map((h) => {
+          const extra = calcExtraShots(handicap, h.strokeIndex);
+          const cellEditable = editable ? editable(player.id) !== false : true;
+          const rawScore = scores[player.id]?.[h.number];
+          const cellValue = rawScore != null ? String(rawScore) : '';
+          const shape = classifyHoleResult(h.par, rawScore);
+          return (
+            <View key={h.number} style={[s.soloNineCell, holeCell, s.soloNineYouCell]}>
+              {cellEditable ? (
+                <TextInput
+                  ref={(el) => { cellRefs.current[cellKey(player.id, h.number)] = el; }}
+                  style={s.soloNineStrokeInput}
+                  keyboardType="numeric"
+                  keyboardAppearance={theme.isDark ? 'dark' : 'light'}
+                  selectionColor={theme.accent.primary}
+                  maxLength={2}
+                  value={cellValue}
+                  onChangeText={(v) => onSetScore(player.id, h.number, v)}
+                  placeholder="·"
+                  placeholderTextColor={theme.text.muted}
+                  returnKeyType="next"
+                  blurOnSubmit={false}
+                  onSubmitEditing={() => focusNext(player.id, h.number)}
+                />
+              ) : (
+                // Plain Text keeps centering reliable in view-only mode —
+                // a readonly TextInput can pick up browser user-agent
+                // styles that override textAlign on web. The parent cell
+                // already centers via flex, so the Text only needs the
+                // typographic styles.
+                <Text style={s.soloNineStrokeText} numberOfLines={1}>
+                  {cellValue || '·'}
+                </Text>
+              )}
+              <ScoreShape result={shape} theme={theme} s={s} />
+              {extra > 0 && (
+                <View style={s.soloNineExtraDots} pointerEvents="none">
+                  {Array.from({ length: Math.min(extra, 2) }).map((_, i) => (
+                    <View key={i} style={[s.soloNineExtraDot, { backgroundColor: theme.accent.primary }]} />
+                  ))}
+                </View>
+              )}
+            </View>
+          );
+        })}
+        <Text numberOfLines={1} style={[s.soloNineCell, aggCell, s.soloNineAggDivider, s.soloNineAggStrokesTotal]}>{sumStr || '·'}</Text>
+      </View>
     );
   };
 
@@ -221,6 +264,10 @@ function ScorecardTable({ round, players, scores, onSetScore, editable, mode, me
   const s = useMemo(() => makeScorecardStyles(theme), [theme]);
   const { width } = useWindowDimensions();
 
+  // Whole-table display toggle: 'strokes' shows the editable stroke rows (with
+  // score-shape overlays); 'points' swaps them for per-hole Stableford points.
+  const [displayMode, setDisplayMode] = useState('strokes');
+
   // Landscape / large-phone / tablet — put FRONT + BACK side by side so the
   // whole card fits in one screenful without scrolling.
   const sideBySide = width >= 720;
@@ -263,6 +310,26 @@ function ScorecardTable({ round, players, scores, onSetScore, editable, mode, me
 
   return (
     <View style={s.soloBoard}>
+      {/* Strokes / Points toggle — sits above both nines in either layout. */}
+      <View style={s.soloModeToggleRow}>
+        {['strokes', 'points'].map((m) => {
+          const active = displayMode === m;
+          return (
+            <Pressable
+              key={m}
+              onPress={() => setDisplayMode(m)}
+              style={[s.soloModeToggleBtn, active && s.soloModeToggleBtnActive]}
+              accessibilityRole="button"
+              accessibilityState={{ selected: active }}
+            >
+              <Text style={[s.soloModeToggleText, active && s.soloModeToggleTextActive]}>
+                {m === 'strokes' ? 'Strokes' : 'Points'}
+              </Text>
+            </Pressable>
+          );
+        })}
+      </View>
+
       <View style={sideBySide ? s.soloNinesRow : s.soloNinesStack}>
         <View style={sideBySide ? s.soloNineFlex : null}>
           <NineBlock
@@ -280,6 +347,7 @@ function ScorecardTable({ round, players, scores, onSetScore, editable, mode, me
             s={s}
             columns={columns}
             meId={meId}
+            displayMode={displayMode}
           />
         </View>
 
@@ -300,6 +368,7 @@ function ScorecardTable({ round, players, scores, onSetScore, editable, mode, me
               s={s}
               columns={columns}
               meId={meId}
+              displayMode={displayMode}
             />
           </View>
         )}

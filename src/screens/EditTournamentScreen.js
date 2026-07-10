@@ -10,7 +10,7 @@ import { useTheme } from '../theme/ThemeContext';
 import {
   loadTournament, saveTournament, subscribeTournamentChanges, DEFAULT_SETTINGS, buildTeamsForMode,
   normalizeRoundHandicaps, isRoundComplete,
-  getActiveTournamentSnapshot,
+  getActiveTournamentSnapshot, getTournamentSnapshot, getTournament,
 } from '../store/tournamentStore';
 import { mutate } from '../store/mutate';
 import { normalizeRoundNotes, roundNoteText } from '../store/roundNotes';
@@ -68,10 +68,17 @@ function editableRoundsFromTournament(t) {
   });
 }
 
-export default function EditTournamentScreen({ navigation }) {
+export default function EditTournamentScreen({ navigation, route }) {
   const { theme } = useTheme();
   const s = makeStyles(theme);
-  const initialTournament = useMemo(() => getActiveTournamentSnapshot(), []);
+  // Edit the tournament the user navigated into (route param), not the global
+  // active one. Falls back to the active tournament for legacy callers that
+  // navigate here without params.
+  const routeTournamentId = route?.params?.tournamentId ?? null;
+  const initialTournament = useMemo(
+    () => (routeTournamentId ? getTournamentSnapshot(routeTournamentId) : getActiveTournamentSnapshot()),
+    [routeTournamentId],
+  );
 
   const [tournament, setTournament] = useState(() => initialTournament);
   const [players, setPlayers] = useState(() => editablePlayersFromTournament(initialTournament));
@@ -92,7 +99,7 @@ export default function EditTournamentScreen({ navigation }) {
     let cancelled = false;
 
     async function initialLoad() {
-      const t = await loadTournament();
+      const t = routeTournamentId ? await getTournament(routeTournamentId) : await loadTournament();
       if (cancelled) return;
       setTournament(t);
       setPlayers(editablePlayersFromTournament(t));
@@ -106,7 +113,7 @@ export default function EditTournamentScreen({ navigation }) {
     // propagation, another screen's save) should not discard the user's
     // in-flight handicap/course-name/notes edits on this screen.
     async function mergeLoad() {
-      const t = await loadTournament();
+      const t = routeTournamentId ? await getTournament(routeTournamentId) : await loadTournament();
       if (cancelled || !t) return;
       setTournament(t);
       setPlayers((prev) => {
@@ -130,7 +137,7 @@ export default function EditTournamentScreen({ navigation }) {
       if (shouldHandleStoreChange(navigation)) mergeLoad();
     });
     return () => { cancelled = true; unsub(); };
-  }, [navigation]);
+  }, [navigation, routeTournamentId]);
 
   useEffect(() => {
     if (isFirstRender.current) { isFirstRender.current = false; return; }

@@ -76,3 +76,24 @@ export function celebrationFor(par, strokes) {
   if (diff === 1) return 'BIRDIE';
   return null;
 }
+
+// Classify a hole's strokes relative to par, for the scorecard shape overlay
+// (circle for birdie, double circle for eagle-or-better, square for bogey,
+// double square for double-bogey-or-worse, nothing for par). Pure; returns
+// null when par or strokes are missing / non-positive.
+//   'eagle'  — strokes <= par - 2 (eagle or better; a hole-in-one on any
+//              par > 1 also counts here)
+//   'birdie' — par - 1
+//   'par'    — level par
+//   'bogey'  — par + 1
+//   'double' — strokes >= par + 2 (double bogey or worse)
+export function classifyHoleResult(par, strokes) {
+  if (!par || !strokes || par < 1 || strokes < 1) return null;
+  if (strokes === 1 && par > 1) return 'eagle';
+  const diff = strokes - par;
+  if (diff <= -2) return 'eagle';
+  if (diff === -1) return 'birdie';
+  if (diff === 0) return 'par';
+  if (diff === 1) return 'bogey';
+  return 'double';
+}

@@ -99,10 +99,31 @@ export default function RoundTeeAssignments({ round, players = [], onChange, the
   const [manualHandicaps, setManualHandicaps] = useState(
     () => ({ ...(round?.manualHandicaps ?? {}) }),
   );
+  // playerIndexes: { [playerId]: string } — per-round handicap INDEX override,
+  // editable. Defaults to the player's base index; changing it recomputes the
+  // (non-manual) playing handicap for THIS round only, without touching the
+  // player's global/tournament index.
+  const [playerIndexes, setPlayerIndexes] = useState(() => {
+    const init = {};
+    players.forEach((p) => {
+      const existing = round?.playerIndexes?.[p.id];
+      init[p.id] = existing != null ? String(existing) : String(p.handicap);
+    });
+    return init;
+  });
   // expandedId: which player's row is open (only one at a time).
   // editingHandicapId: which player's handicap is in type-to-edit mode.
   const [expandedId, setExpandedId] = useState(null);
   const [editingHandicapId, setEditingHandicapId] = useState(null);
+
+  // The effective index a player plays off this round: the round override if
+  // set and valid, else the player's base index.
+  const effIndex = (p, indexes = playerIndexes) => {
+    const parsed = parseFloat(indexes[p.id]);
+    if (Number.isFinite(parsed)) return parsed;
+    const base = parseFloat(p.handicap);
+    return Number.isFinite(base) ? base : 0;
+  };
 
   const isFirstRender = useRef(true);
   const onChangeRef = useRef(onChange);
@@ -142,7 +163,7 @@ export default function RoundTeeAssignments({ round, players = [], onChange, the
         players.forEach((p) => {
           if (manualHandicaps[p.id]) return;
           const tee = resolved[p.id];
-          const auto = String(calcPlayingHandicap(p.handicap, tee?.slope, tee?.rating, totalPar));
+          const auto = String(calcPlayingHandicap(effIndex(p), tee?.slope, tee?.rating, totalPar));
           if (next[p.id] !== auto) { next[p.id] = auto; changed = true; }
         });
         return changed ? next : prev;
@@ -157,22 +178,27 @@ export default function RoundTeeAssignments({ round, players = [], onChange, the
   useEffect(() => {
     if (isFirstRender.current) { isFirstRender.current = false; return; }
     const parsedHandicaps = {};
-    players.forEach((p) => { parsedHandicaps[p.id] = parseInt(playerHandicaps[p.id], 10) || 0; });
+    const parsedIndexes = {};
+    players.forEach((p) => {
+      parsedHandicaps[p.id] = parseInt(playerHandicaps[p.id], 10) || 0;
+      parsedIndexes[p.id] = effIndex(p);
+    });
     onChangeRef.current({
       playerTees,
       playerHandicaps: parsedHandicaps,
       manualHandicaps,
+      playerIndexes: parsedIndexes,
     });
-  }, [playerTees, playerHandicaps, manualHandicaps]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [playerTees, playerHandicaps, manualHandicaps, playerIndexes]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  // Recompute non-manual handicaps from each player's current tee.
+  // Recompute non-manual handicaps from each player's current tee (and index).
   function recomputeAuto(nextPlayerTees, manual) {
     setPlayerHandicaps((prev) => {
       const next = { ...prev };
       players.forEach((p) => {
         if (manual[p.id]) return;
         const tee = nextPlayerTees[p.id];
-        next[p.id] = String(calcPlayingHandicap(p.handicap, tee?.slope, tee?.rating, totalPar));
+        next[p.id] = String(calcPlayingHandicap(effIndex(p), tee?.slope, tee?.rating, totalPar));
       });
       return next;
     });
@@ -195,10 +221,32 @@ export default function RoundTeeAssignments({ round, players = [], onChange, the
       const next = {};
       players.forEach((p) => {
         const tee = playerTees[p.id];
-        next[p.id] = String(calcPlayingHandicap(p.handicap, tee?.slope, tee?.rating, totalPar));
+        next[p.id] = String(calcPlayingHandicap(effIndex(p), tee?.slope, tee?.rating, totalPar));
       });
       return next;
     });
+  }
+
+  // Set a player's per-round index override and recompute their playing
+  // handicap from it — unless the playing handicap was manually overridden,
+  // in which case the manual value is preserved.
+  function setIndexValue(playerId, value) {
+    setPlayerIndexes((prev) => ({ ...prev, [playerId]: value }));
+    if (manualHandicaps[playerId]) return;
+    const p = players.find((pl) => pl.id === playerId);
+    const parsed = parseFloat(value);
+    const idx = Number.isFinite(parsed) ? parsed : (parseFloat(p?.handicap) || 0);
+    const tee = playerTees[playerId];
+    setPlayerHandicaps((prev) => ({
+      ...prev,
+      [playerId]: String(calcPlayingHandicap(idx, tee?.slope, tee?.rating, totalPar)),
+    }));
+  }
+
+  // Restore a player's round index to their base index (and recompute).
+  function resetIndex(playerId) {
+    const base = players.find((pl) => pl.id === playerId)?.handicap ?? 0;
+    setIndexValue(playerId, String(base));
   }
 
   // Set a player's handicap to an explicit value and mark it a manual override.
@@ -254,6 +302,8 @@ export default function RoundTeeAssignments({ round, players = [], onChange, the
         const valueStr = playerHandicaps[p.id] ?? '';
         const overridden = !!manualHandicaps[p.id];
         const editing = editingHandicapId === p.id;
+        const indexStr = playerIndexes[p.id] ?? String(p.handicap);
+        const indexChanged = effIndex(p) !== (parseFloat(p.handicap) || 0);
         // On a course with named tees every player gets one resolved on mount,
         // so "Pick a tee" only ever shows defensively. A player on an unnamed
         // (legacy synthetic) tee shows no tee line at all.
@@ -276,7 +326,9 @@ export default function RoundTeeAssignments({ round, players = [], onChange, the
               </View>
               <View style={{ flex: 1 }}>
                 <Text style={s.name}>{p.name}</Text>
-                <Text style={s.indexText}>Index {p.handicap}</Text>
+                <Text style={s.indexText}>
+                  Index {indexChanged ? `${indexStr} · base ${p.handicap}` : p.handicap}
+                </Text>
                 {(teeLabel || showPickPrompt || overridden) && (
                   <View style={s.teeSummary}>
                     {teeLabel && (
@@ -332,8 +384,36 @@ export default function RoundTeeAssignments({ round, players = [], onChange, the
                   </>
                 )}
                 <View style={s.editorLabelRow}>
+                  <Text style={s.editorLabel}>INDEX · THIS ROUND</Text>
+                  {indexChanged && (
+                    <TouchableOpacity onPress={() => resetIndex(p.id)} activeOpacity={0.7}
+                      accessibilityRole="button"
+                      accessibilityLabel={`Reset ${p.name} index to base ${p.handicap}`}>
+                      <Text style={s.indexResetText}>Reset to {p.handicap}</Text>
+                    </TouchableOpacity>
+                  )}
+                </View>
+                <TextInput
+                  style={s.indexInput}
+                  keyboardType="decimal-pad"
+                  maxLength={5}
+                  returnKeyType="done"
+                  keyboardAppearance={theme.isDark ? 'dark' : 'light'}
+                  selectionColor={theme.accent.primary}
+                  value={indexStr}
+                  placeholder={String(p.handicap)}
+                  placeholderTextColor={theme.text.muted}
+                  onChangeText={(v) => setIndexValue(p.id, v)}
+                  accessibilityLabel={`${p.name} handicap index for this round`}
+                />
+                <Text style={s.indexHint}>
+                  Changing the index recalculates this round&apos;s playing handicap only —
+                  the player&apos;s saved index is unchanged.
+                </Text>
+
+                <View style={s.editorLabelRow}>
                   <Text style={s.editorLabel}>PLAYING HANDICAP</Text>
-                  <Text style={s.indexRef}>Index {p.handicap}</Text>
+                  <Text style={s.indexRef}>Index {effIndex(p)}</Text>
                 </View>
                 <View style={s.stepper}>
                   <TouchableOpacity
@@ -449,6 +529,17 @@ const makeStyles = (theme) => StyleSheet.create({
     flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
   },
   indexRef: { fontFamily: 'PlusJakartaSans-Medium', color: theme.text.muted, fontSize: 11 },
+  indexResetText: { fontFamily: 'PlusJakartaSans-SemiBold', color: theme.accent.primary, fontSize: 11 },
+  indexInput: {
+    backgroundColor: theme.isDark ? theme.bg.card : theme.bg.secondary,
+    borderRadius: 10, borderWidth: 1, borderColor: theme.border.default,
+    paddingHorizontal: 12, paddingVertical: 9,
+    color: theme.text.primary, fontFamily: 'PlusJakartaSans-Bold', fontSize: 16,
+  },
+  indexHint: {
+    fontFamily: 'PlusJakartaSans-Regular', color: theme.text.muted,
+    fontSize: 10.5, marginTop: 5, lineHeight: 15,
+  },
   teePills: { flexDirection: 'row', flexWrap: 'wrap', gap: 7 },
   teePill: {
     flexDirection: 'row', alignItems: 'center', gap: 6,

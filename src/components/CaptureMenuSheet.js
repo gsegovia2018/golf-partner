@@ -1,8 +1,9 @@
 import React from 'react';
-import { Modal, View, Text, TouchableOpacity, StyleSheet } from 'react-native';
+import { View, Text, TouchableOpacity, StyleSheet } from 'react-native';
 import { Feather } from '@expo/vector-icons';
 import { useTheme } from '../theme/ThemeContext';
 import { MAX_VIDEO_UPLOAD_LABEL } from '../lib/mediaLimits';
+import BottomSheet from './BottomSheet';
 
 export default function CaptureMenuSheet({ visible, onSelect, onClose, extraActions = [] }) {
   const { theme } = useTheme();
@@ -22,52 +23,47 @@ export default function CaptureMenuSheet({ visible, onSelect, onClose, extraActi
   ];
 
   return (
-    <Modal statusBarTranslucent hardwareAccelerated visible={visible} transparent animationType="slide" onRequestClose={onClose}>
-      <TouchableOpacity style={s.backdrop} activeOpacity={1} onPress={onClose}>
-        <TouchableOpacity activeOpacity={1} style={s.sheet}>
-          <View style={s.header}>
-            <Text style={s.title}>Adjuntar recuerdo</Text>
-            <TouchableOpacity onPress={onClose} accessibilityLabel="Cancelar">
-              <Feather name="x" size={22} color={theme.text.muted} />
-            </TouchableOpacity>
-          </View>
-
-          {options.map((o) => (
-            <TouchableOpacity
-              key={o.key}
-              style={s.option}
-              onPress={() => onSelect({ source: o.source, mediaTypes: o.mediaTypes })}
-            >
-              <Feather name={o.icon} size={20} color={theme.accent.primary} />
-              <View style={s.optionText}>
-                <Text style={s.optionLabel}>{o.label}</Text>
-                {o.detail ? <Text style={s.optionDetail}>{o.detail}</Text> : null}
-              </View>
-              <Feather name="chevron-right" size={18} color={theme.text.muted} />
-            </TouchableOpacity>
-          ))}
-
-          {extraActions.map((a) => (
-            <TouchableOpacity key={a.key} style={s.option} onPress={a.onPress}>
-              <Feather name={a.icon} size={20} color={theme.accent.primary} />
-              <View style={s.optionText}>
-                <Text style={s.optionLabel}>{a.label}</Text>
-              </View>
-              <Feather name="chevron-right" size={18} color={theme.text.muted} />
-            </TouchableOpacity>
-          ))}
-
-          <TouchableOpacity style={s.cancelBtn} onPress={onClose}>
-            <Text style={s.cancelLabel}>Cancelar</Text>
-          </TouchableOpacity>
+    <BottomSheet visible={visible} onClose={onClose} sheetStyle={s.sheet}>
+      <View style={s.header}>
+        <Text style={s.title}>Adjuntar recuerdo</Text>
+        <TouchableOpacity onPress={onClose} accessibilityLabel="Cancelar">
+          <Feather name="x" size={22} color={theme.text.muted} />
         </TouchableOpacity>
+      </View>
+
+      {options.map((o) => (
+        <TouchableOpacity
+          key={o.key}
+          style={s.option}
+          onPress={() => onSelect({ source: o.source, mediaTypes: o.mediaTypes })}
+        >
+          <Feather name={o.icon} size={20} color={theme.accent.primary} />
+          <View style={s.optionText}>
+            <Text style={s.optionLabel}>{o.label}</Text>
+            {o.detail ? <Text style={s.optionDetail}>{o.detail}</Text> : null}
+          </View>
+          <Feather name="chevron-right" size={18} color={theme.text.muted} />
+        </TouchableOpacity>
+      ))}
+
+      {extraActions.map((a) => (
+        <TouchableOpacity key={a.key} style={s.option} onPress={a.onPress}>
+          <Feather name={a.icon} size={20} color={theme.accent.primary} />
+          <View style={s.optionText}>
+            <Text style={s.optionLabel}>{a.label}</Text>
+          </View>
+          <Feather name="chevron-right" size={18} color={theme.text.muted} />
+        </TouchableOpacity>
+      ))}
+
+      <TouchableOpacity style={s.cancelBtn} onPress={onClose}>
+        <Text style={s.cancelLabel}>Cancelar</Text>
       </TouchableOpacity>
-    </Modal>
+    </BottomSheet>
   );
 }
 
 const makeStyles = (theme) => StyleSheet.create({
-  backdrop: { flex: 1, backgroundColor: 'rgba(0,0,0,0.5)', justifyContent: 'flex-end' },
   sheet: {
     backgroundColor: theme.bg.primary, padding: 20,
     borderTopLeftRadius: 24, borderTopRightRadius: 24,

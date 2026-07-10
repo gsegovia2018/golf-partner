@@ -1301,6 +1301,71 @@ export function makeScorecardStyles(theme) {
       height: 3,
       borderRadius: 2,
     },
+
+    // Strokes/Points display toggle — a compact two-cell segmented control
+    // that sits above both nines. Mirrors bucketSegTrack styling.
+    soloModeToggleRow: {
+      flexDirection: 'row',
+      alignSelf: 'center',
+      backgroundColor: theme.bg.secondary,
+      borderRadius: 10,
+      padding: 3,
+    },
+    soloModeToggleBtn: {
+      paddingVertical: 6,
+      paddingHorizontal: 20,
+      borderRadius: 8,
+    },
+    soloModeToggleBtnActive: {
+      backgroundColor: theme.accent.primary,
+    },
+    soloModeToggleText: {
+      color: theme.text.secondary,
+      fontSize: 12,
+      fontFamily: 'PlusJakartaSans-Bold',
+      letterSpacing: 0.3,
+    },
+    soloModeToggleTextActive: {
+      color: theme.text.inverse,
+    },
+
+    // Score-shape overlay drawn over each stroke digit (strokes mode only).
+    // The wrapper fills the cell and centres the ring, so the shape never
+    // shifts column geometry. The ring is a fixed-size bordered View: rounded
+    // for birdie/eagle, square for bogey/double; "double" nests a second ring.
+    soloNineShapeWrap: {
+      ...StyleSheet.absoluteFillObject,
+      alignItems: 'center',
+      justifyContent: 'center',
+    },
+    soloNineShape: {
+      width: 26,
+      height: 26,
+      borderWidth: 1.5,
+      borderColor: theme.text.muted,
+      alignItems: 'center',
+      justifyContent: 'center',
+      backgroundColor: 'transparent',
+    },
+    soloNineShapeCircle: {
+      borderRadius: 13,
+    },
+    soloNineShapeSquare: {
+      borderRadius: 0,
+    },
+    soloNineShapeInner: {
+      width: 20,
+      height: 20,
+      borderWidth: 1.5,
+      borderColor: theme.text.muted,
+      backgroundColor: 'transparent',
+    },
+    soloNineShapeInnerCircle: {
+      borderRadius: 10,
+    },
+    soloNineShapeInnerSquare: {
+      borderRadius: 0,
+    },
     soloNineAggText: {
       color: theme.text.secondary,
       fontSize: 13,
