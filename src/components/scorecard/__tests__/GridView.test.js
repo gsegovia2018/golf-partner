@@ -53,3 +53,46 @@ describe('GridView pairsmatchplay per-hole points', () => {
     expect(queryAllByText('·').length).toBe(0);
   });
 });
+
+describe('GridView match play stroke dots', () => {
+  test('dots follow the relative handicap: only the gap holes stroke, off-gap and better player get none', () => {
+    // a hcp 12, b hcp 5 → relative 7 / 0. Hole 1 (SI 1) is inside the gap:
+    // a gets a dot. Hole 2 (SI 8) is outside: nobody strokes. b never
+    // strokes — under full handicaps b (hcp 5) would dot SI 1.
+    const players = [
+      { id: 'a', name: 'Ann Lee', handicap: 0 },
+      { id: 'b', name: 'Bob Ray', handicap: 0 },
+    ];
+    const round = {
+      holes: [
+        { number: 1, par: 4, strokeIndex: 1 },
+        { number: 2, par: 4, strokeIndex: 8 },
+      ],
+      playerHandicaps: { a: 12, b: 5 },
+    };
+
+    const { getAllByTestId, queryAllByTestId } = render(
+      <ThemeProvider>
+        <GridView
+          round={round}
+          roundIndex={0}
+          players={players}
+          scores={{}}
+          isBestBall={false}
+          bbResult={null}
+          settings={{ scoringMode: 'matchplay' }}
+          onSetScore={() => {}}
+          editable={() => false}
+          refreshing={false}
+          onRefresh={() => {}}
+          meId="a"
+        />
+      </ThemeProvider>
+    );
+
+    expect(getAllByTestId('hcp-dot-a-h1').length).toBe(1);
+    expect(queryAllByTestId('hcp-dot-a-h2').length).toBe(0);
+    expect(queryAllByTestId('hcp-dot-b-h1').length).toBe(0);
+    expect(queryAllByTestId('hcp-dot-b-h2').length).toBe(0);
+  });
+});

@@ -2,7 +2,7 @@ import React, { useMemo } from 'react';
 import { View, Text, ScrollView, TouchableOpacity, Modal, Platform } from 'react-native';
 import { Feather } from '@expo/vector-icons';
 import { playersMeFirst } from '../../lib/playerOrder';
-import { pickupStrokes, scrambleUnits } from '../../store/tournamentStore';
+import { pickupStrokes, scrambleUnits, matchPlayEffectiveHandicaps } from '../../store/tournamentStore';
 import { scoreCellState } from '../../store/officialScoring';
 import { isScrambleMode } from '../scoringModes';
 import { PlayerCard } from './PlayerCard';
@@ -106,7 +106,9 @@ export const HolePage = React.memo(function HolePage({
   // Scramble rows use the team handicap, not the captain's individual one.
   const handicaps = isScramble
     ? Object.fromEntries(scoringPlayers.map((u) => [u.id, u.handicap]))
-    : (round.playerHandicaps ?? {});
+    // Match play modes: per-duel relative map so the extra-shot markers and
+    // pickup hint match how the duel is actually scored (identity elsewhere).
+    : matchPlayEffectiveHandicaps(mode, round, players);
   const holePts = holePoints({ mode, hole: pageHole, players: scoringPlayers, scores, handicaps, round });
   const teams = useMemo(() => teamsByPlayer(round), [round]);
 
