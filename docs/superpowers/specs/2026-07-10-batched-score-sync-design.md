@@ -49,6 +49,8 @@ Non-score paths keep existing LWW behavior.
 
 This closes all silent-overwrite paths: a cell the user wrote either keeps its value or gains a visible marker — never a quiet flip. Clock skew no longer affects what is displayed.
 
+**Mixed-version caveat:** the always-mine rule runs on the device doing the merge. A phone still running a pre-feature build merges score cells with timestamp-LWW and can (a) silently overwrite as before when it acts as the merger, and (b) resolve conflicts without writing a resolution stamp, which an upgraded device may re-flag. Full protection requires every device in the group to run the updated build; upgraded devices are protected regardless.
+
 ### 3. Resolution propagation
 
 Resolving (existing `conflict.resolve` mutation) writes the chosen value, clears the marker, and additionally records a **resolution stamp** per cell (e.g. `rounds.<rid>.scoreResolutions.<pid>.h<hole> = ts`, with its own `_meta` path).

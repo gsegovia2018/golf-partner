@@ -138,13 +138,18 @@ async function _markPendingOrIdle() {
   }
 }
 
-export function scheduleSync() {
-  if (!isOnline()) { _markPendingOrIdle(); return; }
-  if (_running) return;
+let _currentDrain = null;
+
+// Awaitable drain. Resolves when the current pass finishes (or immediately
+// when offline). A call while a drain is in flight returns that drain's
+// promise rather than starting a second pass.
+export function syncNow() {
+  if (!isOnline()) { _markPendingOrIdle(); return Promise.resolve(); }
+  if (_running) return _currentDrain ?? Promise.resolve();
   if (_timer) { clearTimeout(_timer); _timer = null; }
 
   _running = true;
-  drainOnce()
+  _currentDrain = drainOnce()
     .then(() => { _attempt = 0; })
     .catch(() => {
       _setSyncStatus('error');
@@ -152,8 +157,22 @@ export function scheduleSync() {
       _attempt++;
       _timer = setTimeout(() => { _timer = null; scheduleSync(); }, delay);
     })
-    .finally(() => { _running = false; });
+    .finally(() => { _running = false; _currentDrain = null; });
+  return _currentDrain;
 }
+
+// Drain-and-settle for callers that need the queue empty before reading
+// merged state (the finish-time conflict summary). syncNow() alone can
+// return a drain that was already in flight and snapshotted the queue
+// before the caller's latest enqueue; one follow-up pass covers entries
+// that arrived mid-drain.
+export async function syncSettled() {
+  await syncNow();
+  const remaining = await syncQueue.all();
+  if (remaining.length > 0) await syncNow();
+}
+
+export function scheduleSync() { syncNow(); }
 
 export function retrySync() {
   _attempt = 0;

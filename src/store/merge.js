@@ -63,13 +63,24 @@ function deepClone(o) {
   return o == null ? o : JSON.parse(JSON.stringify(o));
 }
 
+// Score cells (rounds.<rid>.scores.<pid>.h<hole>) are exempt from the generic
+// LWW loop below and get dedicated always-mine handling instead: a cell this
+// device wrote never silently changes value on merge, no matter what the
+// remote timestamp says (device clocks skew, and a remote overwrite of a
+// score you just entered reads as data loss, not "the other phone is right").
+// Disagreements become a `scoreConflicts` marker instead of a generic
+// `conflicts` log entry; an explicit resolution stamp (`scoreResolutions`,
+// written by conflict.resolve) is the only thing that outranks a raw write.
+const SCORE_PATH = /^rounds\.([^.]+)\.scores\.([^.]+)\.h(\d+)$/;
+
 // LWW merge. Compares _meta[path] on both sides; higher ts wins; ties go to local
-// (local has an in-flight mutation not yet pushed).
+// (local has an in-flight mutation not yet pushed). Score cells are excluded
+// from this loop — see the always-mine pass below.
 //
-// Returns { merged, conflicts } where `conflicts` is the subset of paths where
-// BOTH sides had a _meta ts AND remote's ts was strictly higher (i.e. remote
-// overwrote a value the user had also written). Ties, one-sided-ts cases, and
-// local-wins cases do not emit conflict entries.
+// Returns { merged, conflicts } where `conflicts` is the subset of non-score
+// paths where BOTH sides had a _meta ts AND remote's ts was strictly higher
+// (i.e. remote overwrote a value the user had also written). Ties, one-sided-ts
+// cases, and local-wins cases do not emit conflict entries.
 export function mergeTournaments(local, remote) {
   if (!remote) return { merged: local, conflicts: [] };
   if (!local) return { merged: remote, conflicts: [] };
@@ -87,6 +98,9 @@ export function mergeTournaments(local, remote) {
     // LWW, never flagged as a conflict. Skipping here prevents a joiner's
     // setMe push from overwriting the creator's meId on the next pull.
     if (path === 'meId') continue;
+    // Score cells have dedicated always-mine semantics (pass below) — the
+    // generic LWW loop must not touch them or log them as overwrites.
+    if (SCORE_PATH.test(path)) continue;
     const lTs = localMeta[path] ?? 0;
     const rTs = mergedMeta[path] ?? 0;
     const bothHadTs = localMeta[path] != null && mergedMeta[path] != null;
@@ -94,7 +108,11 @@ export function mergeTournaments(local, remote) {
     if (lTs >= rTs) {
       setAtPath(merged, path, getAtPath(local, path));
       mergedMeta[path] = lTs;
-    } else if (bothHadTs && !path.includes('.scoreConflicts.')) {
+    } else if (
+      bothHadTs
+      && !path.includes('.scoreConflicts.')
+      && !path.includes('.scoreResolutions.')
+    ) {
       // Remote wins AND local had also written this path → same-cell conflict.
       conflicts.push({
         path,
@@ -108,49 +126,76 @@ export function mergeTournaments(local, remote) {
     }
   }
 
-  // ── Score conflict markers ─────────────────────────────────────────────────
-  // When two devices wrote the same score cell with genuinely different values,
-  // the LWW above silently kept one. Record the other in a conflict marker
-  // stored in the blob (round.scoreConflicts[pid][hole]) so every device can
-  // see and resolve it. This runs as a pass after LWW so it reads the settled
-  // `merged` / `mergedMeta`, free of loop-order effects. `remote._meta` is the
-  // remote's original (pre-merge) meta.
+  // ── Score cells: always-mine + explicit resolution ─────────────────────────
+  // A score cell this device wrote NEVER silently changes: the local value is
+  // kept regardless of timestamps (device clocks skew). If the other side wrote
+  // a different value, it is recorded as a conflict marker candidate instead of
+  // replacing the display. The only thing that outranks a raw write is an
+  // explicit resolution (conflict.resolve stamps round.scoreResolutions) at or
+  // after that write. Runs after the generic loop so markers/resolutions have
+  // already LWW-settled into `merged`.
   const originalRemoteMeta = remote._meta ?? {};
-  const SCORE_PATH = /^rounds\.([^.]+)\.scores\.([^.]+)\.h(\d+)$/;
   for (const path of paths) {
     const sm = path.match(SCORE_PATH);
     if (!sm) continue;
     const [, rid, pid, holeStr] = sm;
     const lTs = localMeta[path] ?? 0;
     const rTs = originalRemoteMeta[path] ?? 0;
-    // Only a remote-wins, both-sides-wrote case can be a same-cell conflict.
-    if (!(rTs > lTs)) continue;
-    if (localMeta[path] == null) continue;
-    const winnerValue = getAtPath(remote, path);
-    const loserValue = getAtPath(local, path);
-    // A cleared cell (null) or two equal values is not a conflict.
-    if (winnerValue == null || loserValue == null) continue;
-    if (winnerValue === loserValue) continue;
-
+    const localWrote = localMeta[path] != null;
+    const remoteWrote = originalRemoteMeta[path] != null;
+    const lVal = getAtPath(local, path) ?? null;
+    const rVal = getAtPath(remote, path) ?? null;
     const cPath = `rounds.${rid}.scoreConflicts.${pid}.h${holeStr}`;
-    // Already flagged → leave the existing marker untouched.
-    if (getAtPath(merged, cPath) != null) continue;
-    // Resolved after the losing value was written → do not resurrect it.
-    // This relies on conflict.resolve stamping _meta[cPath] with the
-    // resolution timestamp (see store/mutate.js) — a resolution that cleared
-    // the marker without stamping _meta would let a stale value re-flag here.
-    const cMeta = mergedMeta[cPath];
-    if (cMeta != null && cMeta >= lTs) continue;
+    const resPath = `rounds.${rid}.scoreResolutions.${pid}.h${holeStr}`;
+    const lRes = getAtPath(local, resPath) ?? 0;
+    const rRes = getAtPath(remote, resPath) ?? 0;
 
-    const markerDetectedAt = Date.now();
-    setAtPath(merged, cPath, {
-      candidates: [
-        { value: winnerValue, ts: rTs },
-        { value: loserValue, ts: lTs },
-      ],
-      detectedAt: markerDetectedAt,
-    });
-    mergedMeta[cPath] = markerDetectedAt;
+    // 1. Remote carries a resolution at/after my raw write (and at/after any
+    //    resolution of mine): the resolved value is authoritative. The stamp
+    //    must also cover the remote's OWN write (rRes >= rTs) — otherwise the
+    //    remote value is a post-resolution edit riding on a stale stamp, and
+    //    accepting it would silently flip an agreed cell. Such an edit falls
+    //    through to step 2, which keeps my value and raises a marker.
+    if (remoteWrote && rRes > 0 && rRes >= lTs && rRes >= lRes && rRes >= rTs) {
+      mergedMeta[path] = rTs; // merged is a clone of remote — value already there
+      if (getAtPath(merged, cPath) != null) {
+        setAtPath(merged, cPath, null);
+        mergedMeta[cPath] = Math.max(mergedMeta[cPath] ?? 0, rRes);
+      }
+      continue;
+    }
+
+    // 2. I wrote this cell → my value stays, whatever the timestamps say.
+    if (localWrote) {
+      setAtPath(merged, path, getAtPath(local, path));
+      mergedMeta[path] = lTs;
+      const bothDiffer = remoteWrote && lVal !== rVal;
+      const cMeta = mergedMeta[cPath] ?? 0;
+      // My resolution at/after their write means their value is already
+      // settled history, not a new conflict. Likewise a marker-clear stamped
+      // at/after their write.
+      const resolvedPastTheirs = lRes > 0 && lRes >= rTs;
+      const clearCoversTheirs = cMeta >= rTs && getAtPath(merged, cPath) == null;
+      if (bothDiffer && !resolvedPastTheirs && !clearCoversTheirs) {
+        const existing = getAtPath(merged, cPath);
+        const markerDetectedAt = existing?.detectedAt ?? Date.now();
+        setAtPath(merged, cPath, {
+          candidates: [
+            { value: lVal, ts: lTs },
+            { value: rVal, ts: rTs },
+          ],
+          detectedAt: markerDetectedAt,
+        });
+        mergedMeta[cPath] = Math.max(cMeta, markerDetectedAt);
+      } else if (!bothDiffer && getAtPath(merged, cPath) != null) {
+        // Values agree (or theirs vanished): the dispute is over.
+        setAtPath(merged, cPath, null);
+        mergedMeta[cPath] = Date.now();
+      }
+      continue;
+    }
+
+    // 3. I never wrote it → remote's value (already in merged) stands.
   }
 
   merged._meta = mergedMeta;

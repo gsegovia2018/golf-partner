@@ -93,7 +93,7 @@ describe('mergeTournaments — deletion tombstones', () => {
 });
 
 describe('mergeTournaments — score conflict markers', () => {
-  it('writes a marker when two devices wrote different values for one cell', () => {
+  it('keeps the local value (always-mine) and writes a marker with mine first', () => {
     const local = {
       id: 't1',
       rounds: [{ id: 'r1', scores: { p1: { 5: 4 } } }],
@@ -105,11 +105,11 @@ describe('mergeTournaments — score conflict markers', () => {
       _meta: { 'rounds.r1.scores.p1.h5': 200 },
     };
     const { merged } = mergeTournaments(local, remote);
-    expect(merged.rounds[0].scores.p1['5']).toBe(6); // remote wins LWW
+    expect(merged.rounds[0].scores.p1['5']).toBe(4); // local always wins, regardless of ts
     const marker = merged.rounds[0].scoreConflicts.p1['5'];
     expect(marker.candidates).toEqual([
-      { value: 6, ts: 200 },
       { value: 4, ts: 100 },
+      { value: 6, ts: 200 },
     ]);
     expect(typeof marker.detectedAt).toBe('number');
     expect(merged._meta['rounds.r1.scoreConflicts.p1.h5']).toBe(marker.detectedAt);
@@ -136,13 +136,16 @@ describe('mergeTournaments — score conflict markers', () => {
     expect(mergeTournaments(local, remote).merged.rounds[0].scoreConflicts).toBeUndefined();
   });
 
-  it('does not resurrect a conflict that was already resolved', () => {
-    // Stale device still holds the old losing value 4 @ 100.
+  it('a stale remote marker-clear stamp does not spuriously re-flag my raw write', () => {
+    // Local wrote 4 @ 100, no resolution stamp of its own.
     const local = {
       id: 't1', rounds: [{ id: 'r1', scores: { p1: { 5: 4 } } }],
       _meta: { 'rounds.r1.scores.p1.h5': 100 },
     };
-    // Remote was resolved to 6: marker cleared, both paths stamped at 500.
+    // Remote wrote 6 @ 500 and its marker-clear stamp (500) covers that write,
+    // but carries no scoreResolutions stamp — so it does not outrank the local
+    // raw write. Always-mine keeps the local value; the marker-clear coverage
+    // means no NEW marker is spuriously created either.
     const remote = {
       id: 't1', rounds: [{ id: 'r1', scores: { p1: { 5: 6 } } }],
       _meta: {
@@ -151,7 +154,7 @@ describe('mergeTournaments — score conflict markers', () => {
       },
     };
     const { merged } = mergeTournaments(local, remote);
-    expect(merged.rounds[0].scores.p1['5']).toBe(6);
+    expect(merged.rounds[0].scores.p1['5']).toBe(4);
     expect(merged.rounds[0].scoreConflicts).toBeUndefined();
   });
 
@@ -210,9 +213,10 @@ describe('mergeTournaments — score conflict markers', () => {
       _meta: { 'rounds.r1.scores.p1.h5': 200 },
     };
     const { merged } = mergeTournaments(local, remote);
+    expect(merged.rounds[0].scores.p1['5']).toBe(0); // local always wins
     expect(merged.rounds[0].scoreConflicts.p1['5'].candidates).toEqual([
-      { value: 3, ts: 200 },
       { value: 0, ts: 100 },
+      { value: 3, ts: 200 },
     ]);
   });
 });
@@ -231,6 +235,146 @@ describe('path helpers', () => {
     const obj = { rounds: [{ id: 'r1', scores: { p1: { 7: 3 } } }] };
     setAtPath(obj, 'rounds.r1.scores.p1.h7', 5);
     expect(obj.rounds[0].scores.p1['7']).toBe(5);
+  });
+});
+
+describe('mergeTournaments — always-mine score cells', () => {
+  const cell = 'rounds.r1.scores.p1.h3';
+  const marker = 'rounds.r1.scoreConflicts.p1.h3';
+  const resolution = 'rounds.r1.scoreResolutions.p1.h3';
+  const t = ({ score, meta, conflicts, resolutions }) => ({
+    id: 't1',
+    rounds: [{
+      id: 'r1',
+      scores: score === undefined ? {} : { p1: { 3: score } },
+      ...(conflicts ? { scoreConflicts: conflicts } : {}),
+      ...(resolutions ? { scoreResolutions: resolutions } : {}),
+    }],
+    _meta: meta ?? {},
+  });
+
+  it('keeps the LOCAL value even when remote ts is higher (clock skew)', () => {
+    const local = t({ score: 5, meta: { [cell]: 100 } });
+    const remote = t({ score: 6, meta: { [cell]: 900 } });
+    const { merged } = mergeTournaments(local, remote);
+    expect(merged.rounds[0].scores.p1[3]).toBe(5);
+  });
+
+  it('creates a marker with mine first when both wrote different values', () => {
+    const local = t({ score: 5, meta: { [cell]: 100 } });
+    const remote = t({ score: 6, meta: { [cell]: 900 } });
+    const { merged } = mergeTournaments(local, remote);
+    const m = merged.rounds[0].scoreConflicts.p1[3];
+    expect(m.candidates[0]).toMatchObject({ value: 5, ts: 100 });
+    expect(m.candidates[1]).toMatchObject({ value: 6, ts: 900 });
+  });
+
+  it('does not emit a generic conflicts entry for a score cell', () => {
+    const local = t({ score: 5, meta: { [cell]: 100 } });
+    const remote = t({ score: 6, meta: { [cell]: 900 } });
+    expect(mergeTournaments(local, remote).conflicts).toHaveLength(0);
+  });
+
+  it('equal values clear a stale marker instead of flagging', () => {
+    const local = t({
+      score: 5, meta: { [cell]: 100, [marker]: 90 },
+      conflicts: { p1: { 3: { candidates: [{ value: 5, ts: 100 }, { value: 6, ts: 80 }], detectedAt: 90 } } },
+    });
+    const remote = t({ score: 5, meta: { [cell]: 200 } });
+    const { merged } = mergeTournaments(local, remote);
+    expect(merged.rounds[0].scoreConflicts?.p1?.[3] ?? null).toBeNull();
+  });
+
+  it('a cell local never wrote takes the remote value with no marker', () => {
+    const local = t({ score: undefined, meta: {} });
+    const remote = t({ score: 6, meta: { [cell]: 900 } });
+    const { merged } = mergeTournaments(local, remote);
+    expect(merged.rounds[0].scores.p1[3]).toBe(6);
+    expect(merged.rounds[0].scoreConflicts?.p1?.[3] ?? null).toBeNull();
+  });
+
+  it('null-vs-value counts as a conflict when both stamped the cell', () => {
+    // Local explicitly cleared the cell (stamped, value deleted); remote wrote 6.
+    const local = t({ score: undefined, meta: { [cell]: 100 } });
+    const remote = t({ score: 6, meta: { [cell]: 900 } });
+    const { merged } = mergeTournaments(local, remote);
+    expect(merged.rounds[0].scores?.p1?.[3] ?? null).toBeNull();
+    const m = merged.rounds[0].scoreConflicts.p1[3];
+    expect(m.candidates[0]).toMatchObject({ value: null, ts: 100 });
+    expect(m.candidates[1]).toMatchObject({ value: 6, ts: 900 });
+  });
+
+  it('a remote resolution at/after my write wins and clears my marker', () => {
+    const local = t({
+      score: 5, meta: { [cell]: 100, [marker]: 110 },
+      conflicts: { p1: { 3: { candidates: [{ value: 5, ts: 100 }, { value: 6, ts: 90 }], detectedAt: 110 } } },
+    });
+    const remote = t({
+      score: 6, meta: { [cell]: 500, [resolution]: 500 },
+      resolutions: { p1: { 3: 500 } },
+    });
+    const { merged } = mergeTournaments(local, remote);
+    expect(merged.rounds[0].scores.p1[3]).toBe(6);
+    expect(merged.rounds[0].scoreConflicts?.p1?.[3] ?? null).toBeNull();
+  });
+
+  it('my own resolution does not get re-flagged by their stale value', () => {
+    const local = t({
+      score: 6, meta: { [cell]: 500, [resolution]: 500 },
+      resolutions: { p1: { 3: 500 } },
+    });
+    const remote = t({ score: 5, meta: { [cell]: 100 } });
+    const { merged } = mergeTournaments(local, remote);
+    expect(merged.rounds[0].scores.p1[3]).toBe(6);
+    expect(merged.rounds[0].scoreConflicts?.p1?.[3] ?? null).toBeNull();
+  });
+
+  it('a post-resolution edit from the other device raises a marker instead of silently replacing the resolved value', () => {
+    // Both devices settled on 6 via a resolution at ts=300. The other device
+    // then edited the cell to 4 at ts=400 WITHOUT a new resolution — its
+    // stale resolution stamp must not smuggle the new value in silently.
+    const local = t({
+      score: 6, meta: { [cell]: 300, [resolution]: 300 },
+      resolutions: { p1: { 3: 300 } },
+    });
+    const remote = t({
+      score: 4, meta: { [cell]: 400, [resolution]: 300 },
+      resolutions: { p1: { 3: 300 } },
+    });
+    const { merged } = mergeTournaments(local, remote);
+    expect(merged.rounds[0].scores.p1[3]).toBe(6);
+    const m = merged.rounds[0].scoreConflicts.p1[3];
+    expect(m.candidates[0]).toMatchObject({ value: 6, ts: 300 });
+    expect(m.candidates[1]).toMatchObject({ value: 4, ts: 400 });
+  });
+
+  it('a normal resolution (stamp equals the resolved write) is still accepted and clears the marker', () => {
+    // Guards the rRes >= rTs conjunct: conflict.resolve stamps the score
+    // write and the resolution with the SAME ts, so rTs === rRes must pass.
+    const local = t({
+      score: 5, meta: { [cell]: 100, [marker]: 110 },
+      conflicts: { p1: { 3: { candidates: [{ value: 5, ts: 100 }, { value: 6, ts: 90 }], detectedAt: 110 } } },
+    });
+    const remote = t({
+      score: 6, meta: { [cell]: 500, [resolution]: 500 },
+      resolutions: { p1: { 3: 500 } },
+    });
+    const { merged } = mergeTournaments(local, remote);
+    expect(merged.rounds[0].scores.p1[3]).toBe(6);
+    expect(merged.rounds[0].scoreConflicts?.p1?.[3] ?? null).toBeNull();
+  });
+
+  it('a raw write NEWER than the resolution re-enters always-mine flow', () => {
+    // Remote resolved at 500; local deliberately edited again at 600.
+    const local = t({ score: 4, meta: { [cell]: 600 } });
+    const remote = t({
+      score: 6, meta: { [cell]: 500, [resolution]: 500 },
+      resolutions: { p1: { 3: 500 } },
+    });
+    const { merged } = mergeTournaments(local, remote);
+    expect(merged.rounds[0].scores.p1[3]).toBe(4);
+    const m = merged.rounds[0].scoreConflicts.p1[3];
+    expect(m.candidates[0]).toMatchObject({ value: 4, ts: 600 });
   });
 });
 
