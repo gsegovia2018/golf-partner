@@ -142,6 +142,12 @@ export default function HomeScreen({ navigation, route }) {
   // this guard, a transition commit lagging behind the scroll settle can
   // trigger a visible mini-scroll back to an intermediate page.
   const selectedRoundFromScroll = useRef(false);
+  // True once the user has picked a round themselves (tab tap, swipe, or
+  // round menu). Background reloads (store-change / focus / connectivity)
+  // must not snap the pager back to the smart default while this is set —
+  // only a tournament switch or a currentRound advance clears it.
+  const userPickedRoundRef = useRef(false);
+  const lastLoadedTournamentIdRef = useRef(initialTournament?.id ?? null);
   const [showSettings, setShowSettings] = useState(false);
   const [showScoringModeSheet, setShowScoringModeSheet] = useState(false);
   // Draft scoring settings while the sheet is open. Best Ball values are held
@@ -238,7 +244,17 @@ export default function HomeScreen({ navigation, route }) {
         setAllTournaments(listResult.list);
         setListStale(listResult.stale);
         setOpenableIds(listResult.openableIds);
-        if (t) setSelectedRound(chooseInitialRound(t));
+        if (t) {
+          // Snap to the smart default only when the viewed tournament
+          // changed or the user hasn't manually picked a round yet. A
+          // background reload (sync emit, refocus) must not yank the
+          // pager off the round the user chose to look at.
+          if (t.id !== lastLoadedTournamentIdRef.current) {
+            lastLoadedTournamentIdRef.current = t.id;
+            userPickedRoundRef.current = false;
+          }
+          if (!userPickedRoundRef.current) setSelectedRound(chooseInitialRound(t));
+        }
         setReloadError(null);
       } catch (err) {
         // Surface the failure inline (with a Retry) rather than letting the
@@ -371,6 +387,9 @@ export default function HomeScreen({ navigation, route }) {
   // 0 before the tournament has loaded.
   useEffect(() => {
     if (tournament) {
+      // Play advanced to a new round — the user's previous manual pick is
+      // stale, so let the pager (and future reloads) follow play again.
+      userPickedRoundRef.current = false;
       setSelectedRound(chooseInitialRound(tournament));
     }
     // Intentionally only re-run when currentRound advances; editing a
@@ -658,6 +677,8 @@ export default function HomeScreen({ navigation, route }) {
       });
       await saveTournament(created);
       setTournament(created);
+      lastLoadedTournamentIdRef.current = created.id;
+      userPickedRoundRef.current = false;
       setSelectedRound(0);
       setAllTournaments((prev) => [
         created,
@@ -955,11 +976,15 @@ export default function HomeScreen({ navigation, route }) {
 
   // Stable callbacks for the memoised round pager pages. Keep references
   // stable across swipes so <RoundPage /> memoisation holds.
-  const goToRound = useCallback((i) => setSelectedRound(i), []);
+  const goToRound = useCallback((i) => {
+    userPickedRoundRef.current = true;
+    setSelectedRound(i);
+  }, []);
   // Opens the per-round (•••) sheet. Multi-round only — single-round
   // tournaments collapse "round" and "tournament" into one thing, so they
   // use just the header gear (Tournament Settings) as the single entry point.
   const openRoundEdit = useCallback((i) => {
+    userPickedRoundRef.current = true;
     setSelectedRound(i);
     setShowRoundEdit(true);
   }, []);
@@ -1643,7 +1668,10 @@ export default function HomeScreen({ navigation, route }) {
               renderItem={({ item: round, index }) => (
                 <TouchableOpacity
                   style={[s.tab, selectedRound === index && s.tabActive]}
-                  onPress={() => setSelectedRound(index)}
+                  onPress={() => {
+                    userPickedRoundRef.current = true;
+                    setSelectedRound(index);
+                  }}
                   activeOpacity={0.7}
                 >
                   <Text style={[s.tabText, selectedRound === index && s.tabTextActive]}>
@@ -1709,6 +1737,7 @@ export default function HomeScreen({ navigation, route }) {
                     // Tag so the sync effect skips scrollTo — the pager is
                     // already at `idx`; a scrollTo would fight the scroll.
                     selectedRoundFromScroll.current = true;
+                    userPickedRoundRef.current = true;
                     // Non-urgent: let the native scroll keep running smoothly
                     // while React reconciles leaderboard / tabs / round card.
                     startTransition(() => setSelectedRound(idx));
@@ -1726,6 +1755,7 @@ export default function HomeScreen({ navigation, route }) {
                   const idx = Math.round(x / roundPagerWidth);
                   if (idx !== selectedRound) {
                     selectedRoundFromScroll.current = true;
+                    userPickedRoundRef.current = true;
                     setSelectedRound(idx);
                   }
                 }}
