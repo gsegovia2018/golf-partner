@@ -195,27 +195,51 @@ export async function loadAllTournaments() {
     return list;
   }
 
-  const [{ data: owned, error: ownedErr }, { data: memberships, error: memberErr }] = await Promise.all([
+  const [
+    { data: owned, error: ownedErr },
+    { data: memberships, error: memberErr },
+    { data: participantOf, error: partErr },
+  ] = await Promise.all([
     supabase.from('tournaments').select(TOURNAMENT_LIST_COLUMNS)
       .or(`created_by.eq.${userId},created_by.is.null`)
       .order('created_at', { ascending: false }),
     supabase.from('tournament_members')
       .select(`role, tournaments(${TOURNAMENT_LIST_COLUMNS})`)
       .eq('user_id', userId),
+    // Fallback: when a friend adds us to a tournament, a DB trigger is supposed
+    // to grant us a `tournament_members` row — but that only happens for casual
+    // tournaments and only if the granting migration is applied. When it isn't,
+    // we still get a `tournament_participants` row and RLS still lets us read
+    // the tournament (self/friend path), so surface it here too. The nested
+    // `tournaments` is null whenever RLS denies the join.
+    supabase.from('tournament_participants')
+      .select(`tournaments(${TOURNAMENT_LIST_COLUMNS})`)
+      .eq('user_id', userId),
   ]);
   if (ownedErr) throw ownedErr;
   if (memberErr) throw memberErr;
+  // A participant-table hiccup must not blank the whole Home list — the two
+  // primary queries above already succeeded, so treat this one as best-effort.
 
-  const ownedIds = new Set();
+  const seenIds = new Set();
   const result = (owned ?? []).map((row) => {
     const t = rowToTournament(row, 'owner');
-    ownedIds.add(t.id);
+    seenIds.add(t.id);
     return t;
   });
   (memberships ?? []).forEach((m) => {
-    if (!m.tournaments || ownedIds.has(m.tournaments.id)) return;
+    if (!m.tournaments || seenIds.has(m.tournaments.id)) return;
+    seenIds.add(m.tournaments.id);
     result.push(rowToTournament(m.tournaments, m.role));
   });
+  if (!partErr) {
+    (participantOf ?? []).forEach((p) => {
+      const t = p.tournaments;
+      if (!t || seenIds.has(t.id)) return;
+      seenIds.add(t.id);
+      result.push(rowToTournament(t, 'participant'));
+    });
+  }
   const sorted = result.sort(byCreatedAtDesc);
   // Fire-and-forget: keep the offline index in sync with the latest remote list.
   tournamentsIndex.writeIndex(sorted).catch(() => {});
