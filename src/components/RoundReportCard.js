@@ -50,7 +50,7 @@ function BreakdownRow({ cell, s, theme }) {
   );
 }
 
-export default function RoundReportCard({ card, rounds, selectedKey, onSelect }) {
+export default function RoundReportCard({ card, rounds, selectedKey, onSelect, onOpenRound }) {
   const { theme } = useTheme();
   const s = useMemo(() => makeStyles(theme), [theme]);
   const [expanded, setExpanded] = useState(false);
@@ -148,6 +148,19 @@ export default function RoundReportCard({ card, rounds, selectedKey, onSelect })
         </View>
       ))}
 
+      {/* Link to the full round page (scorecard, leaderboard, photos, comments) */}
+      {onOpenRound && (
+        <TouchableOpacity
+          testID="report-card-open-round"
+          style={[s.expandBtn, s.openRoundBtn]}
+          onPress={onOpenRound}
+          activeOpacity={0.8}
+        >
+          <Text style={s.expandText}>Round Stats</Text>
+          <Feather name="chevron-right" size={16} color={theme.accent.primary} />
+        </TouchableOpacity>
+      )}
+
       {/* Round picker modal */}
       <Modal statusBarTranslucent hardwareAccelerated visible={pickerOpen} transparent animationType="fade" onRequestClose={() => setPickerOpen(false)}>
         <TouchableOpacity style={s.modalBg} activeOpacity={1} onPress={() => setPickerOpen(false)}>
@@ -236,6 +249,7 @@ function makeStyles(theme) {
       backgroundColor: theme.bg.secondary, borderRadius: 12, padding: 12, marginTop: 12,
     },
     expandText: { fontFamily: 'PlusJakartaSans-ExtraBold', fontSize: 12, color: theme.accent.primary },
+    openRoundBtn: { marginTop: 8 },
 
     group: { marginTop: 14 },
     groupLabel: {

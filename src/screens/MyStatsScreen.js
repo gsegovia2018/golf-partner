@@ -207,6 +207,20 @@ export default function MyStatsScreen({ navigation, route }) {
     [myRounds, reportRoundKey],
   );
 
+  // Link to the full RoundSummary page — only when the selected round is
+  // resolvable there (RoundSummary looks rounds up by round.id, which older
+  // local rounds may lack).
+  const openReportRound = useMemo(() => {
+    const r = myRounds && reportRoundKey
+      ? myRounds.find((it) => it.key === reportRoundKey)
+      : null;
+    if (!r?.tournamentId || !r?.round?.id) return null;
+    return () => navigation.navigate('RoundSummary', {
+      tournamentId: r.tournamentId,
+      roundId: r.round.id,
+    });
+  }, [myRounds, reportRoundKey, navigation]);
+
   const activeExplainer = useMemo(() => {
     const rawExplainer = infoKey ? statExplainers[infoKey] : null;
     return typeof rawExplainer === 'function' ? rawExplainer(targetHandicap) : rawExplainer;
@@ -362,6 +376,7 @@ export default function MyStatsScreen({ navigation, route }) {
             rounds={myRounds}
             selectedKey={reportRoundKey}
             onSelect={setReportRoundKey}
+            onOpenRound={openReportRound}
           />
         )}
         {tab === 'coach' && <CoachTab stats={stats} onInfo={onInfo} targetHandicap={targetHandicap} onChangeTarget={() => setPickerOpen(true)} />}
