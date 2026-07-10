@@ -1,9 +1,10 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import {
   View, Text, TextInput, TouchableOpacity, StyleSheet, ScrollView,
-  ActivityIndicator, Alert, Platform, Image, Modal,
+  ActivityIndicator, Alert, Platform, Image,
 } from 'react-native';
 import ScreenContainer from '../components/ScreenContainer';
+import BottomSheet from '../components/BottomSheet';
 import { useFocusEffect } from '@react-navigation/native';
 import { Feather } from '@expo/vector-icons';
 
@@ -377,9 +378,7 @@ function FriendProfileModal({ friend, theme, onClose }) {
   const rounds = data?.recentRounds ?? [];
 
   return (
-    <Modal statusBarTranslucent hardwareAccelerated visible animationType="slide" transparent onRequestClose={onClose}>
-      <View style={s.modalBackdrop}>
-        <View style={s.modalSheet}>
+    <BottomSheet visible onClose={onClose} sheetStyle={s.modalSheet}>
           <View style={s.modalHandle} />
           <View style={s.modalHead}>
             <PersonAvatar person={friend} theme={theme} size={52} />
@@ -442,9 +441,7 @@ function FriendProfileModal({ friend, theme, onClose }) {
               )}
             </ScrollView>
           )}
-        </View>
-      </View>
-    </Modal>
+    </BottomSheet>
   );
 }
 

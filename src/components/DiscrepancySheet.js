@@ -1,9 +1,10 @@
 import React, { useEffect } from 'react';
 import {
-  View, Text, TouchableOpacity, StyleSheet, Modal, Pressable,
+  View, Text, TouchableOpacity, StyleSheet,
 } from 'react-native';
 import { Feather } from '@expo/vector-icons';
 
+import BottomSheet from './BottomSheet';
 import { useTheme } from '../theme/ThemeContext';
 import { scoreCellState } from '../store/officialScoring';
 
@@ -87,10 +88,8 @@ export default function DiscrepancySheet({
   );
 
   return (
-    <Modal statusBarTranslucent hardwareAccelerated visible={visible} transparent animationType="slide" onRequestClose={onClose}>
-      <Pressable style={s.backdrop} onPress={onClose}>
-        <Pressable style={s.sheet} onPress={() => {}}>
-          <View style={s.handle} />
+    <BottomSheet visible={visible} onClose={onClose} sheetStyle={s.sheet}>
+      <View style={s.handle} />
           <View style={s.titleRow}>
             <Feather name="alert-circle" size={16} color={theme.destructive} />
             <Text style={s.title}>Resolve hole {hole}</Text>
@@ -117,16 +116,11 @@ export default function DiscrepancySheet({
           <Text style={s.resolveHint}>
             Resolves automatically when both entries match.
           </Text>
-        </Pressable>
-      </Pressable>
-    </Modal>
+    </BottomSheet>
   );
 }
 
 const makeStyles = (theme) => StyleSheet.create({
-  backdrop: {
-    flex: 1, backgroundColor: 'rgba(0,0,0,0.45)', justifyContent: 'flex-end',
-  },
   sheet: {
     backgroundColor: theme.bg.primary,
     borderTopLeftRadius: 20, borderTopRightRadius: 20,

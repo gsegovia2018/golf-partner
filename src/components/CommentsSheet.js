@@ -1,10 +1,11 @@
 import React, { useCallback, useEffect, useState } from 'react';
 import {
-  View, Text, TextInput, TouchableOpacity, StyleSheet, Modal, Pressable,
-  ScrollView, ActivityIndicator, Image, KeyboardAvoidingView, Platform, Alert,
+  View, Text, TextInput, TouchableOpacity, StyleSheet,
+  ScrollView, ActivityIndicator, Image, Platform, Alert,
 } from 'react-native';
 import { Feather } from '@expo/vector-icons';
 
+import BottomSheet from './BottomSheet';
 import { useTheme } from '../theme/ThemeContext';
 import { loadComments, addComment, deleteComment } from '../store/feedStore';
 
@@ -137,13 +138,8 @@ export default function CommentsSheet({
   };
 
   return (
-    <Modal statusBarTranslucent hardwareAccelerated visible={visible} transparent animationType="slide" onRequestClose={onClose}>
-      <Pressable style={s.backdrop} onPress={onClose}>
-        <Pressable style={s.sheet} onPress={() => {}}>
-          <KeyboardAvoidingView
-            behavior={Platform.OS === 'ios' ? 'padding' : undefined}
-          >
-            <View style={s.handle} />
+    <BottomSheet visible={visible} onClose={onClose} sheetStyle={s.sheet}>
+      <View style={s.handle} />
             <Text style={s.title}>Comments</Text>
 
             {state === 'loading' ? (
@@ -201,17 +197,11 @@ export default function CommentsSheet({
                   : <Feather name="send" size={16} color={theme.text.inverse} />}
               </TouchableOpacity>
             </View>
-          </KeyboardAvoidingView>
-        </Pressable>
-      </Pressable>
-    </Modal>
+    </BottomSheet>
   );
 }
 
 const makeStyles = (theme) => StyleSheet.create({
-  backdrop: {
-    flex: 1, backgroundColor: 'rgba(0,0,0,0.45)', justifyContent: 'flex-end',
-  },
   sheet: {
     backgroundColor: theme.bg.primary,
     borderTopLeftRadius: 20, borderTopRightRadius: 20,

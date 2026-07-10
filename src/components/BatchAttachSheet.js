@@ -1,8 +1,9 @@
 import React, { useEffect, useMemo, useState } from 'react';
-import { Modal, View, Text, TouchableOpacity, TextInput, ScrollView, Image, StyleSheet } from 'react-native';
+import { View, Text, TouchableOpacity, TextInput, ScrollView, Image, StyleSheet } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { Feather } from '@expo/vector-icons';
 import { useTheme } from '../theme/ThemeContext';
+import BottomSheet from './BottomSheet';
 
 const UPLOADER_KEY = '@golf_uploader_label';
 
@@ -46,7 +47,7 @@ export default function BatchAttachSheet({
     };
   }), [assets, perItem, batchHole, batchCaption]);
 
-  if (!visible || !assets?.length) return null;
+  if (!assets?.length) return null;
 
   const setItemHole = (i, hole) => {
     setPerItem((prev) => prev.map((p, idx) => idx === i ? { ...p, holeOverride: hole } : p));
@@ -75,10 +76,8 @@ export default function BatchAttachSheet({
   };
 
   return (
-    <Modal statusBarTranslucent hardwareAccelerated visible={visible} transparent animationType="slide" onRequestClose={onCancel}>
-      <View style={s.backdrop}>
-        <View style={s.sheet}>
-          <View style={s.header}>
+    <BottomSheet visible={visible} onClose={onCancel} sheetStyle={s.sheet}>
+      <View style={s.header}>
             <Text style={s.title}>Adjuntar {assets.length} {assets.length === 1 ? 'recuerdo' : 'recuerdos'}</Text>
             <TouchableOpacity onPress={onCancel} accessibilityLabel="Cancelar">
               <Feather name="x" size={22} color={theme.text.muted} />
@@ -193,9 +192,7 @@ export default function BatchAttachSheet({
           <TouchableOpacity style={s.saveBtn} onPress={submit}>
             <Text style={s.saveLabel}>Guardar {assets.length}</Text>
           </TouchableOpacity>
-        </View>
-      </View>
-    </Modal>
+    </BottomSheet>
   );
 }
 
@@ -226,7 +223,6 @@ const makeChipStyles = (theme, active, small, muted) => StyleSheet.create({
 });
 
 const makeStyles = (theme) => StyleSheet.create({
-  backdrop: { flex: 1, backgroundColor: 'rgba(0,0,0,0.5)', justifyContent: 'flex-end' },
   sheet: {
     backgroundColor: theme.bg.primary,
     padding: 20,

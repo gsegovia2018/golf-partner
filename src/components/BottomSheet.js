@@ -16,9 +16,9 @@
 //   sheetStyle  - style(s) applied to the sliding sheet container (bg, radius,
 //                 padding). Defaults to a rounded card on theme.bg.primary.
 //   backdropOpacity - max scrim opacity (default 0.5)
-import React, { useEffect, useRef, useState } from 'react';
+import React, { useEffect, useRef } from 'react';
 import {
-  Modal, Animated, Pressable, StyleSheet, View,
+  Modal, Animated, Pressable, StyleSheet, KeyboardAvoidingView, Platform,
 } from 'react-native';
 import { useTheme } from '../theme/ThemeContext';
 
@@ -29,36 +29,33 @@ export default function BottomSheet({
   sheetStyle,
   backdropOpacity = 0.5,
 }) {
-  const { theme } = useTheme();
+  // Tolerate a missing ThemeProvider (some render tests mount sheets without
+  // one) — fall back to no explicit background, matching the app's other
+  // theme-defensive components.
+  const { theme } = useTheme() || {};
   const progress = useRef(new Animated.Value(0)).current;
-  // Keep the Modal mounted through the closing animation, then unmount.
-  const [rendered, setRendered] = useState(visible);
   // Measured sheet height drives the slide distance so any sheet size slides
   // fully off-screen; a generous default covers the first frame before layout.
   const sheetH = useRef(new Animated.Value(600)).current;
   const sheetHValue = useRef(600);
 
+  // Only the ENTRANCE animates (scrim appears at once, sheet slides up). Close
+  // is immediate: gating unmount on an exit animation is fragile — the
+  // native-driver completion callback doesn't fire in every environment (test
+  // renderers, reduced motion), and a sheet that never unmounts leaves an
+  // invisible full-screen pressable swallowing taps.
   useEffect(() => {
-    if (visible) {
-      setRendered(true);
-      Animated.timing(progress, {
-        toValue: 1,
-        duration: 240,
-        useNativeDriver: true,
-      }).start();
-    } else if (rendered) {
-      Animated.timing(progress, {
-        toValue: 0,
-        duration: 200,
-        useNativeDriver: true,
-      }).start(({ finished }) => {
-        if (finished) setRendered(false);
-      });
-    }
+    if (!visible) return;
+    progress.setValue(0);
+    Animated.timing(progress, {
+      toValue: 1,
+      duration: 240,
+      useNativeDriver: true,
+    }).start();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [visible]);
 
-  if (!rendered) return null;
+  if (!visible) return null;
 
   const backdropStyle = {
     opacity: progress.interpolate({
@@ -80,14 +77,21 @@ export default function BottomSheet({
       animationType="none"
       onRequestClose={onClose}
     >
-      <View style={styles.root}>
-        <Animated.View style={[styles.backdrop, backdropStyle]}>
-          <Pressable style={StyleSheet.absoluteFill} onPress={onClose} accessibilityLabel="Close" />
-        </Animated.View>
+      {/* Scrim: full-screen from the first frame, only its opacity animates. */}
+      <Animated.View style={[styles.backdrop, backdropStyle]}>
+        <Pressable style={StyleSheet.absoluteFill} onPress={onClose} accessibilityLabel="Close" />
+      </Animated.View>
+      {/* box-none lets taps above the sheet fall through to the scrim, while
+          the keyboard lifts the sheet when a field inside it is focused. */}
+      <KeyboardAvoidingView
+        style={styles.root}
+        pointerEvents="box-none"
+        behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+      >
         <Animated.View
           style={[
             styles.sheet,
-            { backgroundColor: theme.bg.primary },
+            { backgroundColor: theme?.bg?.primary },
             sheetStyle,
             { transform: [{ translateY }] },
           ]}
@@ -101,7 +105,7 @@ export default function BottomSheet({
         >
           {children}
         </Animated.View>
-      </View>
+      </KeyboardAvoidingView>
     </Modal>
   );
 }

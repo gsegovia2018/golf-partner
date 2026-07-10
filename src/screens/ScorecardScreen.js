@@ -1,7 +1,7 @@
 import React, { useEffect, useRef, useState, useCallback, useMemo } from 'react';
 import {
   View, Text, TextInput, TouchableOpacity,
-  ScrollView, Modal, Pressable, KeyboardAvoidingView, Platform, Animated,
+  ScrollView, Pressable, Platform, Animated,
   ActivityIndicator, Alert,
 } from 'react-native';
 import ScreenContainer from '../components/ScreenContainer';
@@ -26,6 +26,7 @@ import { useTheme } from '../theme/ThemeContext';
 import MediaLightbox from '../components/MediaLightbox';
 import AttachMediaSheet from '../components/AttachMediaSheet';
 import CaptureMenuSheet from '../components/CaptureMenuSheet';
+import BottomSheet from '../components/BottomSheet';
 import SyncStatusSheet from '../components/SyncStatusSheet';
 import { pickMedia, attachMedia } from '../lib/mediaCapture';
 import { useRoundMedia } from '../hooks/useRoundMedia';
@@ -1570,51 +1571,37 @@ export default function ScorecardScreen({ navigation, route }) {
 
       {/* Notes modal — per-hole note + shared round note */}
       {showNotesControls && (
-        <Modal statusBarTranslucent hardwareAccelerated
-          visible={notesOpen}
-          transparent
-          animationType="slide"
-          onRequestClose={() => setNotesOpen(false)}
-        >
-          <KeyboardAvoidingView
-            behavior={Platform.OS === 'ios' ? 'padding' : undefined}
-            style={s.notesModalKav}
-          >
-            <Pressable style={s.notesBackdrop} onPress={() => setNotesOpen(false)}>
-              <Pressable style={s.notesSheet} onPress={() => {}}>
-                <View style={s.notesHandle} />
-                <View style={s.notesHeader}>
-                  <Text style={s.notesTitle}>Notes</Text>
-                  <TouchableOpacity onPress={() => setNotesOpen(false)} style={s.notesCloseBtn}>
-                    <Feather name="x" size={18} color={theme.text.secondary} />
-                  </TouchableOpacity>
-                </View>
-                <Text style={s.notesFieldLabel}>{`Hole ${currentHole}`}</Text>
-                <TextInput
-                  style={s.notesModalInputCompact}
-                  placeholder={`Notes for hole ${currentHole}`}
-                  placeholderTextColor={theme.text.muted}
-                  keyboardAppearance={theme.isDark ? 'dark' : 'light'}
-                  selectionColor={theme.accent.primary}
-                  multiline
-                  value={holeNote}
-                  onChangeText={(text) => saveHoleNote(currentHole, text)}
-                />
-                <Text style={[s.notesFieldLabel, s.notesFieldLabelSpaced]}>Round</Text>
-                <TextInput
-                  style={s.notesModalInputCompact}
-                  placeholder="What happened this round?"
-                  placeholderTextColor={theme.text.muted}
-                  keyboardAppearance={theme.isDark ? 'dark' : 'light'}
-                  selectionColor={theme.accent.primary}
-                  multiline
-                  value={roundNote}
-                  onChangeText={saveRoundNote}
-                />
-              </Pressable>
-            </Pressable>
-          </KeyboardAvoidingView>
-        </Modal>
+        <BottomSheet visible={notesOpen} onClose={() => setNotesOpen(false)} sheetStyle={s.notesSheet}>
+          <View style={s.notesHandle} />
+          <View style={s.notesHeader}>
+            <Text style={s.notesTitle}>Notes</Text>
+            <TouchableOpacity onPress={() => setNotesOpen(false)} style={s.notesCloseBtn}>
+              <Feather name="x" size={18} color={theme.text.secondary} />
+            </TouchableOpacity>
+          </View>
+          <Text style={s.notesFieldLabel}>{`Hole ${currentHole}`}</Text>
+          <TextInput
+            style={s.notesModalInputCompact}
+            placeholder={`Notes for hole ${currentHole}`}
+            placeholderTextColor={theme.text.muted}
+            keyboardAppearance={theme.isDark ? 'dark' : 'light'}
+            selectionColor={theme.accent.primary}
+            multiline
+            value={holeNote}
+            onChangeText={(text) => saveHoleNote(currentHole, text)}
+          />
+          <Text style={[s.notesFieldLabel, s.notesFieldLabelSpaced]}>Round</Text>
+          <TextInput
+            style={s.notesModalInputCompact}
+            placeholder="What happened this round?"
+            placeholderTextColor={theme.text.muted}
+            keyboardAppearance={theme.isDark ? 'dark' : 'light'}
+            selectionColor={theme.accent.primary}
+            multiline
+            value={roundNote}
+            onChangeText={saveRoundNote}
+          />
+        </BottomSheet>
       )}
 
       <CaptureMenuSheet
@@ -1669,49 +1656,41 @@ export default function ScorecardScreen({ navigation, route }) {
           flat members / scores lists via buildLeaderboard. Holes still in
           discrepancy are omitted from each player's gross total. */}
       {official && (
-        <Modal statusBarTranslucent hardwareAccelerated
+        <BottomSheet
           visible={officialLeaderboardOpen}
-          transparent
-          animationType="slide"
-          onRequestClose={() => setOfficialLeaderboardOpen(false)}
+          onClose={() => setOfficialLeaderboardOpen(false)}
+          sheetStyle={s.notesSheet}
         >
-          <Pressable
-            style={s.notesBackdrop}
-            onPress={() => setOfficialLeaderboardOpen(false)}
-          >
-            <Pressable style={s.notesSheet} onPress={() => {}}>
-              <View style={s.notesHandle} />
-              <View style={s.notesHeader}>
-                <Text style={s.notesTitle}>Leaderboard</Text>
-                <TouchableOpacity
-                  onPress={() => setOfficialLeaderboardOpen(false)}
-                  style={s.notesCloseBtn}
-                  accessibilityLabel="Close leaderboard"
-                >
-                  <Feather name="x" size={18} color={theme.text.secondary} />
-                </TouchableOpacity>
-              </View>
-              {officialLeaderboard.length === 0 ? (
-                <Text style={s.statusSubtitle}>No scores yet.</Text>
-              ) : (
-                <ScrollView style={s.officialLbList}>
-                  {officialLeaderboard.map((row, i) => (
-                    <View key={row.rosterId} style={s.officialLbRow}>
-                      <Text style={s.officialLbRank}>{i + 1}</Text>
-                      <Text style={s.officialLbName} numberOfLines={1}>
-                        {row.name}
-                      </Text>
-                      <Text style={s.officialLbThru}>
-                        {row.thru > 0 ? `thru ${row.thru}` : '—'}
-                      </Text>
-                      <Text style={s.officialLbGross}>{row.gross}</Text>
-                    </View>
-                  ))}
-                </ScrollView>
-              )}
-            </Pressable>
-          </Pressable>
-        </Modal>
+          <View style={s.notesHandle} />
+          <View style={s.notesHeader}>
+            <Text style={s.notesTitle}>Leaderboard</Text>
+            <TouchableOpacity
+              onPress={() => setOfficialLeaderboardOpen(false)}
+              style={s.notesCloseBtn}
+              accessibilityLabel="Close leaderboard"
+            >
+              <Feather name="x" size={18} color={theme.text.secondary} />
+            </TouchableOpacity>
+          </View>
+          {officialLeaderboard.length === 0 ? (
+            <Text style={s.statusSubtitle}>No scores yet.</Text>
+          ) : (
+            <ScrollView style={s.officialLbList}>
+              {officialLeaderboard.map((row, i) => (
+                <View key={row.rosterId} style={s.officialLbRow}>
+                  <Text style={s.officialLbRank}>{i + 1}</Text>
+                  <Text style={s.officialLbName} numberOfLines={1}>
+                    {row.name}
+                  </Text>
+                  <Text style={s.officialLbThru}>
+                    {row.thru > 0 ? `thru ${row.thru}` : '—'}
+                  </Text>
+                  <Text style={s.officialLbGross}>{row.gross}</Text>
+                </View>
+              ))}
+            </ScrollView>
+          )}
+        </BottomSheet>
       )}
     </ScreenContainer>
   );

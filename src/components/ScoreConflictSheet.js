@@ -1,8 +1,9 @@
 import React, { useState, useEffect } from 'react';
 import {
-  View, Text, TouchableOpacity, StyleSheet, Modal, Pressable,
+  View, Text, TouchableOpacity, StyleSheet,
 } from 'react-native';
 import { Feather } from '@expo/vector-icons';
+import BottomSheet from './BottomSheet';
 import { useTheme } from '../theme/ThemeContext';
 
 const CONFLICT = '#c77a0a';
@@ -57,11 +58,8 @@ export default function ScoreConflictSheet({
   };
 
   return (
-    <Modal statusBarTranslucent hardwareAccelerated visible={visible} transparent animationType="slide" onRequestClose={onClose}>
-      <Pressable style={s.backdrop} onPress={onClose}>
-        {/* Inner onPress stops a tap on the sheet body from closing the backdrop. */}
-        <Pressable style={s.sheet} onPress={() => {}}>
-          <View style={s.handle} />
+    <BottomSheet visible={visible} onClose={onClose} sheetStyle={s.sheet}>
+      <View style={s.handle} />
           <View style={s.titleRow}>
             <Feather name="alert-circle" size={16} color={CONFLICT} />
             <Text style={s.title}>Resolve hole {hole}</Text>
@@ -130,14 +128,11 @@ export default function ScoreConflictSheet({
             </Text>
           </TouchableOpacity>
           <Text style={s.foot}>Anyone in the group can resolve this · syncs to every phone</Text>
-        </Pressable>
-      </Pressable>
-    </Modal>
+    </BottomSheet>
   );
 }
 
 const makeStyles = (theme) => StyleSheet.create({
-  backdrop: { flex: 1, backgroundColor: 'rgba(0,0,0,0.45)', justifyContent: 'flex-end' },
   sheet: {
     backgroundColor: theme.bg.primary,
     borderTopLeftRadius: 20, borderTopRightRadius: 20,
