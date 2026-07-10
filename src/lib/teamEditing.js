@@ -19,3 +19,11 @@ export function swapDuelOrder(pairs) {
   if (!Array.isArray(pairs) || pairs.length !== 2) return pairs;
   return [pairs[0], [...(pairs[1] ?? [])].reverse()];
 }
+
+// pairsmatchplay: randomly draws one of the two possible duel assignments —
+// with fixed 2x2 pairs, "keep" and "swap" (swapDuelOrder) are the whole
+// space. `rand` is injectable so tests can pin the coin flip.
+export function randomizeDuelOrder(pairs, rand = Math.random) {
+  if (!Array.isArray(pairs) || pairs.length !== 2) return pairs;
+  return rand() < 0.5 ? [pairs[0], [...(pairs[1] ?? [])]] : swapDuelOrder(pairs);
+}
