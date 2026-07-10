@@ -203,6 +203,7 @@ export default function RoundSummaryScreen({ navigation, route }) {
                 meId={myPlayerId}
                 ranked
                 teeLabels={round.playerTees}
+                showHoleBadges={live}
               />
             )
           ) : null}

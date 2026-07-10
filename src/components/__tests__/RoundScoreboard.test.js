@@ -91,4 +91,20 @@ describe('RoundScoreboard', () => {
     ));
     expect(getByText('Yellow')).toBeTruthy();
   });
+
+  test('suppresses HOLE badge when showHoleBadges={false}', () => {
+    const partial = Object.fromEntries(
+      Array.from({ length: 5 }, (_, i) => [i + 1, 4]),
+    );
+    const { queryByLabelText, getByText } = render(wrap(
+      <RoundScoreboard
+        round={{ holes, scores: { p1: partial } }}
+        players={[players[0]]}
+        meId="p1"
+        showHoleBadges={false}
+      />,
+    ));
+    expect(queryByLabelText(/On hole/)).toBeNull();
+    expect(getByText('Points')).toBeTruthy();
+  });
 });

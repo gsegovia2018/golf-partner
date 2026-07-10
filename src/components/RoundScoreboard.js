@@ -8,9 +8,10 @@ import { playersMeFirst } from '../lib/playerOrder';
 // mode. Home shows it unranked (me first, no standings); the round summary
 // shows it ranked (sorted by Stableford points with rank badges and a
 // leader tint). Holes-played progress bar on top; glowing HOLE badge while
-// a player is mid-round.
+// a player is mid-round. Hole badges can be suppressed for finished rounds via
+// showHoleBadges.
 export default function RoundScoreboard({
-  round, players, meId, showRunning = true, ranked = false, teeLabels = null,
+  round, players, meId, showRunning = true, ranked = false, teeLabels = null, showHoleBadges = true,
 }) {
   const { theme } = useTheme();
   const s = useMemo(() => makeStyles(theme), [theme]);
@@ -65,7 +66,7 @@ export default function RoundScoreboard({
       </View>
       <View style={{ gap: 10 }}>
         {rows.map((r, i) => {
-          const onHole = showRunning && r.played > 0 && r.played < totalHoles
+          const onHole = showRunning && showHoleBadges && r.played > 0 && r.played < totalHoles
             ? r.played + 1
             : null;
           const isLeader = ranked && i === 0 && r.points > 0;
