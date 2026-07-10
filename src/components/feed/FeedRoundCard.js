@@ -4,6 +4,7 @@ import {
 } from 'react-native';
 import { Feather } from '@expo/vector-icons';
 import { useTheme } from '../../theme/ThemeContext';
+import { getScoringMode } from '../scoringModes';
 
 function Avatar({ item, theme }) {
   const initial = (item.actorName || '?').trim().charAt(0).toUpperCase();
@@ -25,6 +26,34 @@ function resultKey(result, index) {
 
 function statValue(value) {
   return value == null ? '-' : String(value);
+}
+
+// Strokes-vs-par label + colour, matching the live scoreboard's vs-Par cell.
+function vsParText(v) {
+  if (v == null) return null;
+  if (v === 0) return 'E';
+  return v > 0 ? `+${v}` : `${v}`;
+}
+function vsParColor(v, theme) {
+  if (v == null) return theme.text.muted;
+  if (v < 0) return theme.scoreColor('excellent');
+  if (v === 0) return theme.scoreColor('good');
+  return theme.scoreColor('poor');
+}
+
+// The current hole a player is on, only mid-round: after ≥1 hole and before
+// the round is complete. Mirrors HomeScreen's RoundScoreboard `onHole`.
+function onHoleFor(result, live, totalHoles) {
+  const played = result?.holes ?? 0;
+  return live && played > 0 && played < totalHoles ? played + 1 : null;
+}
+
+// Modes where the plain per-player "points / strokes" tiles don't tell the
+// whole story — surface the mode so a viewer knows what they're looking at.
+// Solo & partner Stableford (individual/stableford) read correctly as-is.
+function modeBadgeLabel(scoringMode) {
+  if (!scoringMode || scoringMode === 'individual' || scoringMode === 'stableford') return null;
+  return getScoringMode(scoringMode).label;
 }
 
 function roundTitle(item, roundLabel) {
@@ -84,6 +113,9 @@ export default function FeedRoundCard({
     }] : []);
   const mediaFrameWidth = Math.max(220, Math.min(520, (Number(width) || 390) - 60));
   const showScorePreview = results.length > 0;
+  const live = !!item.live;
+  const totalHoles = item.totalHoles ?? 18;
+  const modeLabel = modeBadgeLabel(item.scoringMode);
 
   return (
     <TouchableOpacity
@@ -93,13 +125,28 @@ export default function FeedRoundCard({
       accessibilityRole="button"
     >
       <View style={s.kickerRow}>
-        <View style={s.statusPill}>
-          <Feather
-            name={item.withMe || item.isMine ? 'check-circle' : 'users'}
-            size={11}
-            color={theme.accent.primary}
-          />
-          <Text style={s.statusText}>{contextLabel}</Text>
+        <View style={s.kickerLeft}>
+          {live ? (
+            <View style={s.livePill} accessibilityLabel="Live round in progress">
+              <View style={s.liveDot} />
+              <Text style={s.liveText}>LIVE</Text>
+            </View>
+          ) : (
+            <View style={s.statusPill}>
+              <Feather
+                name={item.withMe || item.isMine ? 'check-circle' : 'users'}
+                size={11}
+                color={theme.accent.primary}
+              />
+              <Text style={s.statusText}>{contextLabel}</Text>
+            </View>
+          )}
+          {modeLabel ? (
+            <View style={s.modePill}>
+              <Feather name="flag" size={10} color={theme.text.secondary} />
+              <Text style={s.modeText} numberOfLines={1}>{modeLabel}</Text>
+            </View>
+          ) : null}
         </View>
         <Text style={s.timeText}>{timestamp}</Text>
       </View>
@@ -203,13 +250,25 @@ export default function FeedRoundCard({
       {showScorePreview ? (
         <View style={s.scorePreview}>
           <View style={s.scoreStrip}>
-            {results.map((result, index) => (
+            {results.map((result, index) => {
+              const onHole = onHoleFor(result, live, totalHoles);
+              const vp = vsParText(result.vsPar);
+              return (
               <View
                 key={resultKey(result, index)}
                 style={[s.scoreTile, index === 0 && s.scoreTileLead]}
               >
-                <View style={[s.rankWrap, index === 0 && s.rankWrapLead]}>
-                  <Text style={s.rank}>{index + 1}</Text>
+                <View style={s.tileTopRow}>
+                  <View style={[s.rankWrap, index === 0 && s.rankWrapLead]}>
+                    <Text style={s.rank}>{index + 1}</Text>
+                  </View>
+                  {onHole != null ? (
+                    <View style={s.holeBadge} accessibilityLabel={`On hole ${onHole}`}>
+                      <Text style={s.holeBadgeText}>H{onHole}</Text>
+                    </View>
+                  ) : result.handicap != null ? (
+                    <Text style={s.hcpText}>HCP {result.handicap}</Text>
+                  ) : null}
                 </View>
                 <Text style={s.resultName} numberOfLines={1}>{result.name || 'Player'}</Text>
                 <View style={s.pointsLine}>
@@ -219,8 +278,14 @@ export default function FeedRoundCard({
                     <Text style={s.strokesText}>{statValue(result.strokes)} str</Text>
                   ) : null}
                 </View>
+                {vp != null ? (
+                  <Text style={[s.vsParText, { color: vsParColor(result.vsPar, theme) }]}>
+                    {vp} vs par
+                  </Text>
+                ) : null}
               </View>
-            ))}
+              );
+            })}
           </View>
           {hiddenCount > 0 ? (
             <View style={s.overflowRow}>
@@ -284,6 +349,59 @@ function makeStyles(theme) {
       fontFamily: 'PlusJakartaSans-SemiBold',
       color: theme.accent.primary,
       fontSize: 11,
+    },
+    kickerLeft: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: 6,
+      flexShrink: 1,
+      minWidth: 0,
+    },
+    // Glowing "LIVE" pill — red halo so an in-progress round pops in the feed.
+    livePill: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: 5,
+      backgroundColor: theme.scoreColor('poor') + '22',
+      borderRadius: 999,
+      paddingHorizontal: 8,
+      paddingVertical: 4,
+      borderWidth: 1,
+      borderColor: theme.scoreColor('poor'),
+      shadowColor: theme.scoreColor('poor'),
+      shadowOpacity: 0.5,
+      shadowRadius: 7,
+      shadowOffset: { width: 0, height: 0 },
+      elevation: 4,
+    },
+    liveDot: {
+      width: 6,
+      height: 6,
+      borderRadius: 3,
+      backgroundColor: theme.scoreColor('poor'),
+    },
+    liveText: {
+      fontFamily: 'PlusJakartaSans-ExtraBold',
+      color: theme.scoreColor('poor'),
+      fontSize: 10,
+      letterSpacing: 0.5,
+    },
+    modePill: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: 4,
+      backgroundColor: theme.bg.secondary,
+      borderRadius: 999,
+      paddingHorizontal: 8,
+      paddingVertical: 4,
+      flexShrink: 1,
+      minWidth: 0,
+    },
+    modeText: {
+      fontFamily: 'PlusJakartaSans-SemiBold',
+      color: theme.text.secondary,
+      fontSize: 10,
+      flexShrink: 1,
     },
     timeText: {
       fontFamily: 'PlusJakartaSans-Medium',
@@ -419,6 +537,43 @@ function makeStyles(theme) {
       fontFamily: 'PlusJakartaSans-Bold',
       color: theme.text.muted,
       fontSize: 12,
+    },
+    tileTopRow: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      justifyContent: 'space-between',
+      gap: 4,
+    },
+    // Glowing "on hole N" badge — same halo recipe as the live scoreboard's
+    // per-player HOLE badge on HomeScreen.
+    holeBadge: {
+      paddingHorizontal: 6,
+      paddingVertical: 2,
+      borderRadius: 7,
+      backgroundColor: theme.accent.light,
+      borderWidth: 1.5,
+      borderColor: theme.accent.primary,
+      shadowColor: theme.accent.primary,
+      shadowOpacity: 0.5,
+      shadowRadius: 7,
+      shadowOffset: { width: 0, height: 0 },
+      elevation: 4,
+    },
+    holeBadgeText: {
+      fontFamily: 'PlusJakartaSans-ExtraBold',
+      color: theme.accent.primary,
+      fontSize: 10,
+      letterSpacing: 0.3,
+    },
+    hcpText: {
+      fontFamily: 'PlusJakartaSans-SemiBold',
+      color: theme.text.muted,
+      fontSize: 10,
+    },
+    vsParText: {
+      fontFamily: 'PlusJakartaSans-Bold',
+      fontSize: 10,
+      marginTop: 3,
     },
     rankWrap: {
       width: 20,

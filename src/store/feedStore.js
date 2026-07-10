@@ -7,6 +7,7 @@ import {
   isTournamentFinished,
   formatRoundLabel,
 } from './tournamentStore';
+import { roundScoringMode } from './scoring';
 import { loadMediaForTournaments } from './mediaStore';
 import { listFriends, getCachedFriends } from './friendStore';
 
@@ -45,6 +46,22 @@ function holesPlayed(round, playerId) {
   const scores = round?.scores?.[playerId];
   if (!scores) return 0;
   return Object.values(scores).filter((v) => v != null).length;
+}
+
+// Strokes vs par across only the holes this player has actually scored, so a
+// mid-round card compares like-for-like (through N holes, not against a full
+// 18-hole par). Returns null when nothing is scored yet.
+function vsParThrough(round, playerId) {
+  const scores = round?.scores?.[playerId];
+  if (!scores) return null;
+  let strokes = 0;
+  let par = 0;
+  let played = 0;
+  for (const hole of round.holes ?? []) {
+    const s = scores[hole.number];
+    if (s != null) { strokes += s; par += hole.par ?? 0; played++; }
+  }
+  return played > 0 ? strokes - par : null;
 }
 
 const ROUND_STORY_LIMIT = 12;
@@ -274,9 +291,18 @@ export async function buildFeed(options = {}) {
           points: entry.totalPoints,
           strokes: entry.totalStrokes,
           holes: holesPlayed(round, player.id),
+          handicap: Number.isFinite(entry.handicap) ? entry.handicap : null,
+          vsPar: vsParThrough(round, player.id),
         });
       }
       if (results.length === 0) return;
+
+      // A round is "live" when the tournament is still open and the leading
+      // player has scored at least one hole but not the whole round. Drives
+      // the feed card's LIVE pill and per-player glowing "on hole N" badge.
+      const totalHoles = round.holes?.length ?? 18;
+      const maxHoles = Math.max(0, ...results.map((r) => r.holes ?? 0));
+      const live = !finished && maxHoles > 0 && maxHoles < totalHoles;
 
       // Best result (most points) leads the card. Mine wins ties so the feed
       // foregrounds the current user when they were in the round.
@@ -308,6 +334,10 @@ export async function buildFeed(options = {}) {
         results,
         playerCount: scoredPlayerCount,
         finished,
+        // Live-round + mode metadata for the feed card.
+        live,
+        totalHoles,
+        scoringMode: roundScoringMode(t, round),
         // A friend's round the current user did not play in.
         withMe: iAmIn || anyMine,
       });
