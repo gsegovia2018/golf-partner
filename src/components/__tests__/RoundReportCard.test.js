@@ -1,6 +1,6 @@
 import React from 'react';
 import { StyleSheet } from 'react-native';
-import { render } from '@testing-library/react-native';
+import { render, fireEvent } from '@testing-library/react-native';
 import { ThemeProvider } from '../../theme/ThemeContext';
 import RoundReportCard from '../RoundReportCard';
 
@@ -50,5 +50,35 @@ describe('RoundReportCard', () => {
     expect(tough.getByTestId('report-card-verdict-phrase').props.style).toEqual(expect.arrayContaining([
       expect.objectContaining({ color: expect.any(String) }),
     ]));
+  });
+
+  test('renders a Round Stats link that fires onOpenRound', () => {
+    const onOpenRound = jest.fn();
+    const { getByText, getByTestId } = render(wrap(
+      <RoundReportCard
+        card={card('good', 'Strong round')}
+        rounds={[]}
+        selectedKey="round-1"
+        onSelect={() => {}}
+        onOpenRound={onOpenRound}
+      />
+    ));
+
+    expect(getByTestId('report-card-open-round')).toBeTruthy();
+    fireEvent.press(getByText('Round Stats'));
+    expect(onOpenRound).toHaveBeenCalledTimes(1);
+  });
+
+  test('hides the Round Stats link when onOpenRound is not provided', () => {
+    const { queryByText } = render(wrap(
+      <RoundReportCard
+        card={card('good', 'Strong round')}
+        rounds={[]}
+        selectedKey="round-1"
+        onSelect={() => {}}
+      />
+    ));
+
+    expect(queryByText('Round Stats')).toBeNull();
   });
 });
