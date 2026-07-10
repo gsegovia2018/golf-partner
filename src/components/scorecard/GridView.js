@@ -6,7 +6,7 @@ import React, { useMemo, useRef, useState } from 'react';
 import { View, Text, TextInput, Pressable, useWindowDimensions } from 'react-native';
 import { useTheme } from '../../theme/ThemeContext';
 import { playersMeFirst } from '../../lib/playerOrder';
-import { calcExtraShots, scrambleUnits } from '../../store/tournamentStore';
+import { calcExtraShots, scrambleUnits, matchPlayEffectiveHandicaps } from '../../store/tournamentStore';
 import PullToRefresh from '../PullToRefresh';
 import { makeScorecardStyles } from './styles';
 import { holePoints, roundTotals } from './scoreModel';
@@ -186,7 +186,7 @@ function NineBlock({
                 </View>
                 <View style={s.soloNineExtraDots} pointerEvents="none">
                   {extra > 0 && Array.from({ length: Math.min(extra, 2) }).map((_, i) => (
-                    <View key={i} style={[s.soloNineExtraDot, { backgroundColor: theme.accent.primary }]} />
+                    <View key={i} testID={`hcp-dot-${player.id}-h${h.number}`} style={[s.soloNineExtraDot, { backgroundColor: theme.accent.primary }]} />
                   ))}
                 </View>
               </View>
@@ -249,7 +249,7 @@ function NineBlock({
               {/* Always rendered so every cell is the same height. */}
               <View style={s.soloNineExtraDots} pointerEvents="none">
                 {extra > 0 && Array.from({ length: Math.min(extra, 2) }).map((_, i) => (
-                  <View key={i} style={[s.soloNineExtraDot, { backgroundColor: theme.accent.primary }]} />
+                  <View key={i} testID={`hcp-dot-${player.id}-h${h.number}`} style={[s.soloNineExtraDot, { backgroundColor: theme.accent.primary }]} />
                 ))}
               </View>
             </View>
@@ -317,7 +317,10 @@ function ScorecardTable({ round, players, scores, onSetScore, editable, mode, me
   const hasBack = back.length > 0;
   // Scramble rows pass a team-handicap override (unitId -> team handicap) —
   // otherwise fall back to the round's individual player handicaps.
-  const playerHandicaps = handicapsOverride ?? (round.playerHandicaps ?? {});
+  // Match play modes stroke off the per-duel difference — show the dots
+  // where the net comparison actually grants them.
+  const playerHandicaps = handicapsOverride
+    ?? matchPlayEffectiveHandicaps(mode, round, players);
   const displayPlayers = playersMeFirst(players, meId);
 
   // Block inner width: viewport minus content padding (14*2) minus card

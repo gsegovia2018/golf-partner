@@ -2,7 +2,9 @@ import React, { useMemo } from 'react';
 import { View, Text, ScrollView, TouchableOpacity, Modal, Platform } from 'react-native';
 import { Feather } from '@expo/vector-icons';
 import { playersMeFirst } from '../../lib/playerOrder';
-import { pickupStrokes, scrambleUnits } from '../../store/tournamentStore';
+import {
+  pickupStrokes, scrambleUnits, matchPlayEffectiveHandicaps, calcExtraShots,
+} from '../../store/tournamentStore';
 import { scoreCellState } from '../../store/officialScoring';
 import { isScrambleMode } from '../scoringModes';
 import { PlayerCard } from './PlayerCard';
@@ -104,9 +106,21 @@ export const HolePage = React.memo(function HolePage({
   // Per-hole points are computed once per render and then looked up per player.
   // roundTotals is computed once in HoleView and passed down via totalsMap.
   // Scramble rows use the team handicap, not the captain's individual one.
-  const handicaps = isScramble
+  //
+  // Two maps are kept: `handicaps` (effective/relative in match play modes)
+  // drives the extra-shot dots and net-vs-par scoring, since that's how the
+  // duel is actually scored. `fullHandicaps` is always the FULL handicap
+  // (team handicap for scramble) — it drives the pickup value/threshold and
+  // the "HCP n" label, both of which must reflect the player's real handicap
+  // regardless of who they happen to be matched against this round.
+  const fullHandicaps = isScramble
     ? Object.fromEntries(scoringPlayers.map((u) => [u.id, u.handicap]))
     : (round.playerHandicaps ?? {});
+  const handicaps = isScramble
+    ? fullHandicaps
+    // Match play modes: per-duel relative map so the extra-shot markers and
+    // pickup hint match how the duel is actually scored (identity elsewhere).
+    : matchPlayEffectiveHandicaps(mode, round, players);
   const holePts = holePoints({ mode, hole: pageHole, players: scoringPlayers, scores, handicaps, round });
   const teams = useMemo(() => teamsByPlayer(round), [round]);
 
@@ -144,13 +158,22 @@ export const HolePage = React.memo(function HolePage({
         keyboardShouldPersistTaps="handled"
       >
         {orderedPlayers.map((player) => {
+          // Relative (or team, for scramble) handicap — drives the
+          // extra-shot dots only; that's the handicap the duel actually
+          // plays off.
           const handicap = handicaps[player.id] ?? player.handicap;
+          // Full (or team, for scramble) handicap — drives the pickup value
+          // and the "HCP n" label. Pickup stats and the mixed-mode
+          // Stableford leaderboard both key off the full handicap, so the
+          // recorded pickup and the button's threshold text must match it,
+          // not the relative value used for the match play dots.
+          const fullHandicap = fullHandicaps[player.id] ?? player.handicap;
           const strokes = scores[player.id]?.[pageHole.number];
           const points = holePts[player.id] ?? null;
 
-          const extraShots = handicap >= pageHole.strokeIndex ? (Math.floor(handicap / 18) + (handicap % 18 >= pageHole.strokeIndex ? 1 : 0)) : 0;
+          const extraShots = calcExtraShots(handicap, pageHole.strokeIndex);
 
-          const pickup = pickupStrokes(pageHole.par, handicap, pageHole.strokeIndex);
+          const pickup = pickupStrokes(pageHole.par, fullHandicap, pageHole.strokeIndex);
           const isPickup = strokes != null && strokes >= pickup;
           // Per-card write permission. Casual mode passes no `editable` prop
           // (or one that returns true). In official mode a read-only card
@@ -180,7 +203,7 @@ export const HolePage = React.memo(function HolePage({
               hole={pageHole}
               strokes={strokes}
               points={points}
-              handicap={handicap}
+              handicap={fullHandicap}
               extraShots={extraShots}
               pickup={pickup}
               isPickup={isPickup}

@@ -158,7 +158,8 @@ export function roundTotals(round, players) {
 // Match Play: 2 players, per-hole 1-vs-1. Returns 1 if `playerId` won the hole
 // (lower net strokes), 0 if they lost OR halved, null if either side hasn't
 // scored yet. Caller can derive halved holes by checking that both sides
-// returned 0 for the same hole.
+// returned 0 for the same hole. Nets are computed off the RELATIVE handicap
+// (best player off 0, opponent gets the difference).
 export function matchPlayHolePts(hole, playerId, players, scores, playerHandicapsByPlayerId) {
   if (!players || players.length !== 2) return null;
   const [a, b] = players;
@@ -167,8 +168,10 @@ export function matchPlayHolePts(hole, playerId, players, scores, playerHandicap
   if (strA == null || strB == null) return null;
   const hA = playerHandicapsByPlayerId?.[a.id] ?? a.handicap ?? 0;
   const hB = playerHandicapsByPlayerId?.[b.id] ?? b.handicap ?? 0;
-  const netA = strA - calcExtraShots(hA, hole.strokeIndex);
-  const netB = strB - calcExtraShots(hB, hole.strokeIndex);
+  // Match play is scored off the handicap DIFFERENCE (best player off 0).
+  const [rA, rB] = duelRelative(hA, hB);
+  const netA = strA - calcExtraShots(rA, hole.strokeIndex);
+  const netB = strB - calcExtraShots(rB, hole.strokeIndex);
   if (netA === netB) return 0;
   const winnerId = netA < netB ? a.id : b.id;
   return playerId === winnerId ? 1 : 0;
@@ -521,13 +524,48 @@ export function scrambleRoundTally(round, players) {
 // Two pairs; each player duels the same-index member of the other pair
 // (within-pair order is random via randomPairs, so duel draw is random).
 // Every fully-scored hole distributes exactly 2 points: 1 per duel to the
-// net winner, ½ each on a halve. Nets use calcExtraShots by stroke index.
+// net winner, ½ each on a halve. Nets use per-duel relative handicaps.
 
 export function pairsMatchDuels(pairs) {
   if (!pairs || pairs.length !== 2) return null;
   const [t1, t2] = pairs;
   if (!Array.isArray(t1) || !Array.isArray(t2) || t1.length !== 2 || t2.length !== 2) return null;
   return [[t1[0], t2[0]], [t1[1], t2[1]]];
+}
+
+// Match play plays off the DIFFERENCE: the duel's lower handicap becomes 0
+// and the opponent keeps the gap, taken on the hardest holes first.
+// Idempotent — relativizing an already-relative pair is a no-op.
+function duelRelative(hA, hB) {
+  const base = Math.min(hA, hB);
+  return [hA - base, hB - base];
+}
+
+// Effective per-player handicaps for a round as MATCH PLAY scores them:
+// per-duel relative in matchplay/pairsmatchplay, the stored map otherwise.
+// Used by the scorecard so strokes-received dots and pickup hints show the
+// same strokes the net comparison actually grants.
+export function matchPlayEffectiveHandicaps(mode, round, players) {
+  const stored = round?.playerHandicaps ?? {};
+  const resolve = (p) => stored[p.id] ?? p.handicap ?? 0;
+  if (mode === 'matchplay' && players?.length === 2) {
+    const [a, b] = players;
+    const [rA, rB] = duelRelative(resolve(a), resolve(b));
+    return { [a.id]: rA, [b.id]: rB };
+  }
+  if (mode === 'pairsmatchplay') {
+    const duels = pairsMatchDuels(round?.pairs);
+    if (duels) {
+      const out = {};
+      for (const [a, b] of duels) {
+        const [rA, rB] = duelRelative(resolve(a), resolve(b));
+        out[a.id] = rA;
+        out[b.id] = rB;
+      }
+      return out;
+    }
+  }
+  return stored;
 }
 
 // 1 = first player wins, 2 = second, 0 = halved, null = not fully scored.
@@ -537,8 +575,10 @@ function duelNetWinner(hole, a, b, scores, playerHandicaps) {
   if (strA == null || strB == null) return null;
   const hA = playerHandicaps?.[a.id] ?? a.handicap ?? 0;
   const hB = playerHandicaps?.[b.id] ?? b.handicap ?? 0;
-  const netA = strA - calcExtraShots(hA, hole.strokeIndex);
-  const netB = strB - calcExtraShots(hB, hole.strokeIndex);
+  // Each duel is its own match: nets use the within-duel difference.
+  const [rA, rB] = duelRelative(hA, hB);
+  const netA = strA - calcExtraShots(rA, hole.strokeIndex);
+  const netB = strB - calcExtraShots(rB, hole.strokeIndex);
   if (netA === netB) return 0;
   return netA < netB ? 1 : 2;
 }

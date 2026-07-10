@@ -12,6 +12,7 @@ import {
   calcStablefordPoints,
   matchPlayHolePts,
   matchPlayRoundTally,
+  matchPlayEffectiveHandicaps,
   pickupStrokes,
   randomPairs,
   buildTeamsForMode,
@@ -324,6 +325,47 @@ describe('matchPlayHolePts', () => {
 
   it('returns null unless exactly two players are passed', () => {
     expect(matchPlayHolePts(hole, 'a', [players[0]], {}, {})).toBeNull();
+  });
+
+  test('relative handicaps: only the difference gives strokes (SI within the gap)', () => {
+    // a hcp 12, b hcp 5 → relative 7 / 0. SI 5 is inside the gap, so only
+    // a strokes. Under full handicaps BOTH would stroke here and b (net 3)
+    // would win; relative makes it a halve.
+    const hole = { number: 1, par: 4, strokeIndex: 5 };
+    const players = [{ id: 'a', handicap: 0 }, { id: 'b', handicap: 0 }];
+    const scores = { a: { 1: 5 }, b: { 1: 4 } };
+    const handicaps = { a: 12, b: 5 };
+    expect(matchPlayHolePts(hole, 'b', players, scores, handicaps)).toBe(0);
+    expect(matchPlayHolePts(hole, 'a', players, scores, handicaps)).toBe(0);
+  });
+
+  test('relative handicaps: no strokes outside the gap', () => {
+    // Relative 7 / 0: SI 8 is outside the gap → nobody strokes. Under full
+    // handicaps a (hcp 12) would stroke SI 8 and win; relative halves it.
+    const hole = { number: 1, par: 4, strokeIndex: 8 };
+    const players = [{ id: 'a', handicap: 0 }, { id: 'b', handicap: 0 }];
+    const scores = { a: { 1: 5 }, b: { 1: 5 } };
+    const handicaps = { a: 12, b: 5 };
+    expect(matchPlayHolePts(hole, 'a', players, scores, handicaps)).toBe(0);
+    expect(matchPlayHolePts(hole, 'b', players, scores, handicaps)).toBe(0);
+  });
+
+  test('relative handicaps: the stroke flips the hole inside the gap', () => {
+    // Equal gross 4s on SI 5 → a's relative stroke wins the hole.
+    const hole = { number: 1, par: 4, strokeIndex: 5 };
+    const players = [{ id: 'a', handicap: 0 }, { id: 'b', handicap: 0 }];
+    const scores = { a: { 1: 4 }, b: { 1: 4 } };
+    const handicaps = { a: 12, b: 5 };
+    expect(matchPlayHolePts(hole, 'a', players, scores, handicaps)).toBe(1);
+    expect(matchPlayHolePts(hole, 'b', players, scores, handicaps)).toBe(0);
+  });
+
+  test('equal handicaps play pure gross', () => {
+    const hole = { number: 1, par: 4, strokeIndex: 1 };
+    const players = [{ id: 'a', handicap: 0 }, { id: 'b', handicap: 0 }];
+    const scores = { a: { 1: 4 }, b: { 1: 5 } };
+    const handicaps = { a: 18, b: 18 };
+    expect(matchPlayHolePts(hole, 'a', players, scores, handicaps)).toBe(1);
   });
 });
 
@@ -919,3 +961,60 @@ describe('buildTeamsForMode', () => {
     expect(teams.every((t) => t.length === 2)).toBe(true);
   });
 });
+
+describe('matchPlayEffectiveHandicaps', () => {
+  const P = (id, handicap = 0) => ({ id, name: id, handicap });
+
+  test('matchplay: lower player plays off 0, opponent gets the difference', () => {
+    const players = [P('a'), P('b')];
+    const round = { playerHandicaps: { a: 12, b: 5 } };
+    expect(matchPlayEffectiveHandicaps('matchplay', round, players))
+      .toEqual({ a: 7, b: 0 });
+  });
+
+  test('matchplay: equal handicaps → both play off 0', () => {
+    const players = [P('a'), P('b')];
+    const round = { playerHandicaps: { a: 10, b: 10 } };
+    expect(matchPlayEffectiveHandicaps('matchplay', round, players))
+      .toEqual({ a: 0, b: 0 });
+  });
+
+  test('matchplay: falls back to player.handicap when the round map is missing an entry', () => {
+    const players = [P('a', 9), P('b', 4)];
+    const round = { playerHandicaps: {} };
+    expect(matchPlayEffectiveHandicaps('matchplay', round, players))
+      .toEqual({ a: 5, b: 0 });
+  });
+
+  test('pairsmatchplay: each duel relativizes independently (never best-of-four)', () => {
+    // Duels are index-matched: a-c and b-d.
+    const round = {
+      pairs: [[P('a', 15), P('b', 3)], [P('c', 5), P('d', 20)]],
+      playerHandicaps: { a: 15, b: 3, c: 5, d: 20 },
+    };
+    expect(matchPlayEffectiveHandicaps('pairsmatchplay', round, [P('a'), P('b'), P('c'), P('d')]))
+      .toEqual({ a: 10, c: 0, b: 0, d: 17 });
+  });
+
+  test('idempotent: an already-relative map relativizes to itself', () => {
+    const players = [P('a'), P('b')];
+    const round = { playerHandicaps: { a: 7, b: 0 } };
+    expect(matchPlayEffectiveHandicaps('matchplay', round, players))
+      .toEqual({ a: 7, b: 0 });
+  });
+
+  test('other modes: returns the stored map unchanged', () => {
+    const stored = { a: 12, b: 5 };
+    const round = { playerHandicaps: stored };
+    expect(matchPlayEffectiveHandicaps('stableford', round, [P('a'), P('b')])).toBe(stored);
+  });
+
+  test('matchplay with wrong player count or pairsmatchplay without valid pairs → stored map', () => {
+    const stored = { a: 12 };
+    expect(matchPlayEffectiveHandicaps('matchplay', { playerHandicaps: stored }, [P('a')]))
+      .toBe(stored);
+    expect(matchPlayEffectiveHandicaps('pairsmatchplay', { playerHandicaps: stored, pairs: [[P('a')]] }, [P('a')]))
+      .toBe(stored);
+  });
+});
+
