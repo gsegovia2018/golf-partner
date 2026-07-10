@@ -1,4 +1,5 @@
 import React from 'react';
+import { ScrollView } from 'react-native';
 import { fireEvent, render, waitFor } from '@testing-library/react-native';
 import { ThemeProvider } from '../../theme/ThemeContext';
 import CommentThread from '../CommentThread';
@@ -53,5 +54,23 @@ describe('CommentThread', () => {
     fireEvent.press(getByLabelText('Post comment'));
 
     expect(await findByText(/Couldn't post/)).toBeTruthy();
+  });
+
+  test('scroll={false} (default) renders the list without a ScrollView', async () => {
+    const { findByText, UNSAFE_queryAllByType } = render(wrap(
+      <CommentThread itemKey="round:t1:r1" />,
+    ));
+    await findByText('Nice round!');
+
+    expect(UNSAFE_queryAllByType(ScrollView).length).toBe(0);
+  });
+
+  test('scroll renders the list inside a ScrollView', async () => {
+    const { findByText, UNSAFE_queryAllByType } = render(wrap(
+      <CommentThread itemKey="round:t1:r1" scroll />,
+    ));
+    await findByText('Nice round!');
+
+    expect(UNSAFE_queryAllByType(ScrollView).length).toBeGreaterThanOrEqual(1);
   });
 });
