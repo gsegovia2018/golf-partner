@@ -11,7 +11,7 @@ import { useTheme } from '../theme/ThemeContext';
 import { supabase } from '../lib/supabase';
 import {
   readLocal, roundTotals, formatRoundLabel,
-  getTournamentSnapshot,
+  getTournamentSnapshot, isTournamentFinished,
 } from '../store/tournamentStore';
 import { loadRoundMedia } from '../store/mediaStore';
 import { loadComments } from '../store/feedStore';
@@ -34,8 +34,9 @@ async function fetchTournament(id) {
   return readLocal(id);
 }
 
-function recapSummary(recap) {
+function recapSummary(recap, live) {
   if (!recap?.winnerName) return 'No scores recorded for this round.';
+  if (live) return `${recap.winnerName} is leading the round.`;
   return `${recap.winnerName} won the round.`;
 }
 
@@ -104,7 +105,26 @@ export default function RoundSummaryScreen({ navigation, route }) {
     roundIndex,
   });
   const recap = round ? buildRoundRecap({ round, ranked }) : null;
-  const scorecardSections = round ? buildScorecardSections({ round, ranked }) : [];
+  const totalHoles = round?.holes?.length ?? 18;
+  // Round is live when the tournament is still open and play has started but
+  // not everyone has finished — mirrors the feed's `live` flag.
+  const live = !!round
+    && !isTournamentFinished(tournament)
+    && (recap?.holesPlayed ?? 0) > 0
+    && (recap?.holesPlayed ?? 0) < totalHoles;
+  const scorecardSections = round ? buildScorecardSections({ round, ranked, live }) : [];
+  // Per-player holes played + current hole, keyed by player id, for the
+  // leaderboard tab's live badges.
+  const liveByPlayer = {};
+  scorecardSections.forEach((section) => {
+    (section.playerRows ?? []).forEach((row) => {
+      if (!row.playerId) return;
+      const existing = liveByPlayer[row.playerId] ?? { holesPlayed: 0, currentHole: null };
+      existing.holesPlayed = Math.max(existing.holesPlayed, row.holesPlayed ?? 0);
+      if (row.currentHole != null) existing.currentHole = row.currentHole;
+      liveByPlayer[row.playerId] = existing;
+    });
+  });
   const normalizedNotes = normalizeRoundNotes(round?.notes);
   const roundNote = typeof normalizedNotes.round === 'string'
     ? normalizedNotes.round.trim()
@@ -122,7 +142,14 @@ export default function RoundSummaryScreen({ navigation, route }) {
           <Feather name="chevron-left" size={22} color={theme.accent.primary} />
         </TouchableOpacity>
         <Text style={s.headerTitle} numberOfLines={1}>{roundLabel}</Text>
-        <View style={{ width: 22 }} />
+        {live ? (
+          <View style={s.liveBadge} accessibilityLabel="Live round in progress">
+            <View style={s.liveDot} />
+            <Text style={s.liveBadgeText}>LIVE</Text>
+          </View>
+        ) : (
+          <View style={{ width: 22 }} />
+        )}
       </View>
 
       {loading ? (
@@ -138,7 +165,9 @@ export default function RoundSummaryScreen({ navigation, route }) {
             recap={recap}
             roundLabel={roundLabel}
             tournamentName={tournament?.name}
-            summary={recapSummary(recap)}
+            summary={recapSummary(recap, live)}
+            live={live}
+            totalHoles={totalHoles}
             mediaCount={media.length}
           />
 
@@ -154,6 +183,9 @@ export default function RoundSummaryScreen({ navigation, route }) {
                 <Text style={s.empty}>No scores recorded for this round.</Text>
               ) : ranked.map((entry, i) => {
                 const isMe = entry.player.user_id && entry.player.user_id === me;
+                const pl = liveByPlayer[entry.player.id] ?? {};
+                const onHole = live ? pl.currentHole : null;
+                const played = pl.holesPlayed ?? 0;
                 return (
                   <View key={entry.player.id} style={[s.lbRow, isMe && s.lbRowMe]}>
                     <Text style={s.lbRank}>{i + 1}</Text>
@@ -161,6 +193,13 @@ export default function RoundSummaryScreen({ navigation, route }) {
                       <Text style={[s.lbName, isMe && s.lbNameMe]} numberOfLines={1}>
                         {entry.player.name}{isMe ? '  (you)' : ''}
                       </Text>
+                      {onHole != null ? (
+                        <View style={s.onHoleBadge}>
+                          <Text style={s.onHoleBadgeText}>HOLE {onHole}</Text>
+                        </View>
+                      ) : played > 0 && live ? (
+                        <Text style={s.thruText}>done</Text>
+                      ) : null}
                       {round.playerTees?.[entry.player.id]?.label ? (
                         <Text style={s.teeBadge}>{round.playerTees[entry.player.id].label}</Text>
                       ) : null}
@@ -172,6 +211,10 @@ export default function RoundSummaryScreen({ navigation, route }) {
                     <View style={s.lbStat}>
                       <Text style={s.lbStatValue}>{entry.totalStrokes}</Text>
                       <Text style={s.lbStatLabel}>STR</Text>
+                    </View>
+                    <View style={s.lbStat}>
+                      <Text style={s.lbStatValue}>{live ? `${played}` : totalHoles}</Text>
+                      <Text style={s.lbStatLabel}>THRU</Text>
                     </View>
                   </View>
                 );
@@ -448,6 +491,37 @@ function makeStyles(theme) {
       fontFamily: 'PlusJakartaSans-SemiBold', fontSize: 11,
       color: theme.accent.primary, backgroundColor: theme.accent.light,
       borderRadius: 6, paddingHorizontal: 6, paddingVertical: 2,
+    },
+
+    // Glowing red "LIVE" badge in the header while the round is in progress.
+    liveBadge: {
+      flexDirection: 'row', alignItems: 'center', gap: 5,
+      backgroundColor: theme.scoreColor('poor') + '22',
+      borderRadius: 999, paddingHorizontal: 8, paddingVertical: 4,
+      borderWidth: 1, borderColor: theme.scoreColor('poor'),
+      shadowColor: theme.scoreColor('poor'), shadowOpacity: 0.5,
+      shadowRadius: 7, shadowOffset: { width: 0, height: 0 }, elevation: 4,
+    },
+    liveDot: {
+      width: 6, height: 6, borderRadius: 3, backgroundColor: theme.scoreColor('poor'),
+    },
+    liveBadgeText: {
+      fontFamily: 'PlusJakartaSans-ExtraBold', color: theme.scoreColor('poor'),
+      fontSize: 10, letterSpacing: 0.5,
+    },
+    // Glowing "HOLE N" badge next to a player mid-round on the leaderboard.
+    onHoleBadge: {
+      paddingHorizontal: 7, paddingVertical: 2, borderRadius: 7,
+      backgroundColor: theme.accent.light, borderWidth: 1.5, borderColor: theme.accent.primary,
+      shadowColor: theme.accent.primary, shadowOpacity: 0.5, shadowRadius: 7,
+      shadowOffset: { width: 0, height: 0 }, elevation: 4,
+    },
+    onHoleBadgeText: {
+      fontFamily: 'PlusJakartaSans-ExtraBold', color: theme.accent.primary,
+      fontSize: 10, letterSpacing: 0.3,
+    },
+    thruText: {
+      fontFamily: 'PlusJakartaSans-SemiBold', color: theme.text.muted, fontSize: 11,
     },
   });
 }

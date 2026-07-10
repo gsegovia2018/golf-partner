@@ -209,16 +209,28 @@ export default function RoundScorecardTables({ sections }) {
                   </View>
                   {playerRows.map((row) => (
                     <View key={row.playerId || row.name} style={s.row}>
-                      {holes.map((hole, index) => (
+                      {holes.map((hole, index) => {
+                        const isCurrent = hole?.number != null && hole.number === row.currentHole;
+                        return (
                         <View
                           key={hole?.number ?? index}
-                          style={[s.cell, s.scoreCell, { width: layout.scoreWidth }]}
+                          style={[
+                            s.cell,
+                            s.scoreCell,
+                            { width: layout.scoreWidth },
+                            isCurrent && s.scoreCellCurrent,
+                          ]}
                         >
-                          <Text style={[s.scoreText, layout.compact && s.scoreTextCompact]}>
-                            {displayScore(row.scores?.[index])}
+                          <Text style={[
+                            s.scoreText,
+                            layout.compact && s.scoreTextCompact,
+                            isCurrent && s.scoreTextCurrent,
+                          ]}>
+                            {isCurrent ? '⛳' : displayScore(row.scores?.[index])}
                           </Text>
                         </View>
-                      ))}
+                        );
+                      })}
                       <View style={[s.cell, s.totalCell, { width: layout.totalWidth }]}>
                         <Text style={[s.totalText, layout.compact && s.totalTextCompact]}>
                           {row.total ?? '·'}
@@ -352,6 +364,21 @@ function makeStyles(theme) {
       alignItems: 'flex-start',
     },
     scoreCell: {},
+    // Glowing cell for the hole a live player is currently on — accent halo,
+    // matching the feed card's "on hole" badge recipe.
+    scoreCellCurrent: {
+      backgroundColor: theme.accent.light,
+      borderWidth: 1.5,
+      borderColor: theme.accent.primary,
+      shadowColor: theme.accent.primary,
+      shadowOpacity: 0.5,
+      shadowRadius: 6,
+      shadowOffset: { width: 0, height: 0 },
+      elevation: 4,
+    },
+    scoreTextCurrent: {
+      fontSize: 12,
+    },
     totalCell: {
       backgroundColor: theme.bg.secondary,
     },

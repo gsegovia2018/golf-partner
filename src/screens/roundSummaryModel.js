@@ -13,6 +13,25 @@ function scoreTotal(scores) {
   ), 0);
 }
 
+// Holes this player has scored, in the round's own hole order.
+function playerHolesPlayed(round, playerId) {
+  const scores = round?.scores?.[playerId] ?? {};
+  return asArray(round?.holes)
+    .filter((hole) => hole?.number != null && scores[hole.number] != null)
+    .length;
+}
+
+// The hole a player is currently on: the first hole (in order) they have not
+// yet scored. Returns null once every hole is scored. Used to glow the cell a
+// live player is about to play.
+function currentHoleNumber(round, playerId) {
+  const scores = round?.scores?.[playerId] ?? {};
+  for (const hole of asArray(round?.holes)) {
+    if (hole?.number != null && scores[hole.number] == null) return hole.number;
+  }
+  return null;
+}
+
 function countPlayedHoles(round) {
   const scores = round?.scores ?? {};
   const holes = asArray(round?.holes);
@@ -45,7 +64,7 @@ export function buildRoundRecap({ round, ranked } = {}) {
   };
 }
 
-export function buildScorecardSections({ round, ranked } = {}) {
+export function buildScorecardSections({ round, ranked, live = false } = {}) {
   const holes = asArray(round?.holes);
   const rows = asArray(ranked);
   const scores = round?.scores ?? {};
@@ -68,6 +87,10 @@ export function buildScorecardSections({ round, ranked } = {}) {
           name: entry?.player?.name ?? '',
           scores: playerScores,
           total: scoreTotal(playerScores),
+          holesPlayed: playerId ? playerHolesPlayed(round, playerId) : 0,
+          // The hole this player is on — only surfaced while the round is live
+          // so finished cards don't glow. null when they've finished the round.
+          currentHole: live && playerId ? currentHoleNumber(round, playerId) : null,
         };
       }),
     }));

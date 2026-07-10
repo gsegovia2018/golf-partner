@@ -126,12 +126,16 @@ describe('roundSummaryModel', () => {
         name: 'Marcos',
         scores: [4, null, 5, null, null, null, null, null, 3],
         total: 12,
+        holesPlayed: 5,
+        currentHole: null,
       },
       {
         playerId: 'p2',
         name: 'Pablo',
         scores: [5, 4, null, null, null, null, null, null, 4],
         total: 13,
+        holesPlayed: 5,
+        currentHole: null,
       },
     ]);
     expect(sections[1]).not.toHaveProperty('rows');
@@ -141,12 +145,16 @@ describe('roundSummaryModel', () => {
         name: 'Marcos',
         scores: [4, 4, null, null, null, null, null, null, null],
         total: 8,
+        holesPlayed: 5,
+        currentHole: null,
       },
       {
         playerId: 'p2',
         name: 'Pablo',
         scores: [null, null, 6, null, null, null, null, null, 5],
         total: 11,
+        holesPlayed: 5,
+        currentHole: null,
       },
     ]);
   });

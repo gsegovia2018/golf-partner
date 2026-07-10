@@ -17,18 +17,25 @@ export default function RoundRecapPanel({
   roundLabel,
   summary,
   recap,
+  live = false,
+  totalHoles = 18,
 }) {
   const { theme } = useTheme();
   const s = useMemo(() => makeStyles(theme), [theme]);
   const stats = [
-    { label: 'Points', value: statValue(recap?.winnerPoints) },
-    { label: 'Margin', value: marginValue(recap?.margin) },
+    { label: live ? 'Leader pts' : 'Points', value: statValue(recap?.winnerPoints) },
+    { label: live ? 'Lead' : 'Margin', value: marginValue(recap?.margin) },
     { label: 'Strokes', value: statValue(recap?.winnerStrokes) },
-    { label: 'Holes', value: statValue(recap?.holesPlayed) },
+    {
+      label: 'Holes',
+      value: live
+        ? `${statValue(recap?.holesPlayed)}/${totalHoles}`
+        : statValue(recap?.holesPlayed),
+    },
     { label: 'Players', value: statValue(recap?.playerCount) },
   ];
   const winnerLabel = recap?.winnerName
-    ? `Winner: ${recap.winnerName}`
+    ? `${live ? 'Leading' : 'Winner'}: ${recap.winnerName}`
     : null;
 
   return (

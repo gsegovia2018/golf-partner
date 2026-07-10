@@ -283,6 +283,11 @@ export default function FeedRoundCard({
                     {vp} vs par
                   </Text>
                 ) : null}
+                {result.holes > 0 ? (
+                  <Text style={s.thruText}>
+                    {live ? `thru ${result.holes}/${totalHoles}` : `${result.holes} holes`}
+                  </Text>
+                ) : null}
               </View>
               );
             })}
@@ -574,6 +579,12 @@ function makeStyles(theme) {
       fontFamily: 'PlusJakartaSans-Bold',
       fontSize: 10,
       marginTop: 3,
+    },
+    thruText: {
+      fontFamily: 'PlusJakartaSans-SemiBold',
+      fontSize: 9,
+      color: theme.text.muted,
+      marginTop: 2,
     },
     rankWrap: {
       width: 20,

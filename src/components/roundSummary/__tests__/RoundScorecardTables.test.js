@@ -11,6 +11,8 @@ jest.mock('../../../theme/ThemeContext', () => ({
       bg: { card: '#fff', secondary: '#f4f4f4' },
       border: { default: '#ddd' },
       text: { primary: '#111', secondary: '#555', muted: '#777' },
+      accent: { light: '#e6f0ea', primary: '#006747' },
+      scoreColor: () => '#ef4444',
     },
   }),
 }));
