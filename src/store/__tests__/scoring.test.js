@@ -326,6 +326,47 @@ describe('matchPlayHolePts', () => {
   it('returns null unless exactly two players are passed', () => {
     expect(matchPlayHolePts(hole, 'a', [players[0]], {}, {})).toBeNull();
   });
+
+  test('relative handicaps: only the difference gives strokes (SI within the gap)', () => {
+    // a hcp 12, b hcp 5 → relative 7 / 0. SI 5 is inside the gap, so only
+    // a strokes. Under full handicaps BOTH would stroke here and b (net 3)
+    // would win; relative makes it a halve.
+    const hole = { number: 1, par: 4, strokeIndex: 5 };
+    const players = [{ id: 'a', handicap: 0 }, { id: 'b', handicap: 0 }];
+    const scores = { a: { 1: 5 }, b: { 1: 4 } };
+    const handicaps = { a: 12, b: 5 };
+    expect(matchPlayHolePts(hole, 'b', players, scores, handicaps)).toBe(0);
+    expect(matchPlayHolePts(hole, 'a', players, scores, handicaps)).toBe(0);
+  });
+
+  test('relative handicaps: no strokes outside the gap', () => {
+    // Relative 7 / 0: SI 8 is outside the gap → nobody strokes. Under full
+    // handicaps a (hcp 12) would stroke SI 8 and win; relative halves it.
+    const hole = { number: 1, par: 4, strokeIndex: 8 };
+    const players = [{ id: 'a', handicap: 0 }, { id: 'b', handicap: 0 }];
+    const scores = { a: { 1: 5 }, b: { 1: 5 } };
+    const handicaps = { a: 12, b: 5 };
+    expect(matchPlayHolePts(hole, 'a', players, scores, handicaps)).toBe(0);
+    expect(matchPlayHolePts(hole, 'b', players, scores, handicaps)).toBe(0);
+  });
+
+  test('relative handicaps: the stroke flips the hole inside the gap', () => {
+    // Equal gross 4s on SI 5 → a's relative stroke wins the hole.
+    const hole = { number: 1, par: 4, strokeIndex: 5 };
+    const players = [{ id: 'a', handicap: 0 }, { id: 'b', handicap: 0 }];
+    const scores = { a: { 1: 4 }, b: { 1: 4 } };
+    const handicaps = { a: 12, b: 5 };
+    expect(matchPlayHolePts(hole, 'a', players, scores, handicaps)).toBe(1);
+    expect(matchPlayHolePts(hole, 'b', players, scores, handicaps)).toBe(0);
+  });
+
+  test('equal handicaps play pure gross', () => {
+    const hole = { number: 1, par: 4, strokeIndex: 1 };
+    const players = [{ id: 'a', handicap: 0 }, { id: 'b', handicap: 0 }];
+    const scores = { a: { 1: 4 }, b: { 1: 5 } };
+    const handicaps = { a: 18, b: 18 };
+    expect(matchPlayHolePts(hole, 'a', players, scores, handicaps)).toBe(1);
+  });
 });
 
 describe('matchPlayRoundTally', () => {

@@ -158,7 +158,8 @@ export function roundTotals(round, players) {
 // Match Play: 2 players, per-hole 1-vs-1. Returns 1 if `playerId` won the hole
 // (lower net strokes), 0 if they lost OR halved, null if either side hasn't
 // scored yet. Caller can derive halved holes by checking that both sides
-// returned 0 for the same hole.
+// returned 0 for the same hole. Nets are computed off the RELATIVE handicap
+// (best player off 0, opponent gets the difference).
 export function matchPlayHolePts(hole, playerId, players, scores, playerHandicapsByPlayerId) {
   if (!players || players.length !== 2) return null;
   const [a, b] = players;
@@ -167,8 +168,10 @@ export function matchPlayHolePts(hole, playerId, players, scores, playerHandicap
   if (strA == null || strB == null) return null;
   const hA = playerHandicapsByPlayerId?.[a.id] ?? a.handicap ?? 0;
   const hB = playerHandicapsByPlayerId?.[b.id] ?? b.handicap ?? 0;
-  const netA = strA - calcExtraShots(hA, hole.strokeIndex);
-  const netB = strB - calcExtraShots(hB, hole.strokeIndex);
+  // Match play is scored off the handicap DIFFERENCE (best player off 0).
+  const [rA, rB] = duelRelative(hA, hB);
+  const netA = strA - calcExtraShots(rA, hole.strokeIndex);
+  const netB = strB - calcExtraShots(rB, hole.strokeIndex);
   if (netA === netB) return 0;
   const winnerId = netA < netB ? a.id : b.id;
   return playerId === winnerId ? 1 : 0;
