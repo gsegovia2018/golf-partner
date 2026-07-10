@@ -1,35 +1,7 @@
+import { classifyHoleResult } from '../components/scorecard/constants';
+
 function asArray(value) {
   return Array.isArray(value) ? value : [];
-}
-
-function scoreValue(scores, playerId, holeNumber) {
-  const value = scores?.[playerId]?.[holeNumber];
-  return value == null ? null : value;
-}
-
-function scoreTotal(scores) {
-  return scores.reduce((sum, value) => (
-    Number.isFinite(Number(value)) ? sum + Number(value) : sum
-  ), 0);
-}
-
-// Holes this player has scored, in the round's own hole order.
-function playerHolesPlayed(round, playerId) {
-  const scores = round?.scores?.[playerId] ?? {};
-  return asArray(round?.holes)
-    .filter((hole) => hole?.number != null && scores[hole.number] != null)
-    .length;
-}
-
-// The hole a player is currently on: the first hole (in order) they have not
-// yet scored. Returns null once every hole is scored. Used to glow the cell a
-// live player is about to play.
-function currentHoleNumber(round, playerId) {
-  const scores = round?.scores?.[playerId] ?? {};
-  for (const hole of asArray(round?.holes)) {
-    if (hole?.number != null && scores[hole.number] == null) return hole.number;
-  }
-  return null;
 }
 
 function countPlayedHoles(round) {
@@ -64,34 +36,19 @@ export function buildRoundRecap({ round, ranked } = {}) {
   };
 }
 
-export function buildScorecardSections({ round, ranked, live = false } = {}) {
-  const holes = asArray(round?.holes);
-  const rows = asArray(ranked);
-  const scores = round?.scores ?? {};
-  const sectionDefs = [
-    { label: 'Front', holes: holes.slice(0, 9) },
-    { label: 'Back', holes: holes.slice(9, 18) },
-  ];
-
-  return sectionDefs
-    .filter((section) => section.holes.length > 0)
-    .map((section) => ({
-      ...section,
-      parTotal: section.holes.reduce((sum, hole) => sum + (Number(hole?.par) || 0), 0),
-      playerRows: rows.map((entry) => {
-        const playerId = entry?.player?.id;
-        const playerScores = section.holes.map((hole) => scoreValue(scores, playerId, hole?.number));
-
-        return {
-          playerId: playerId ?? null,
-          name: entry?.player?.name ?? '',
-          scores: playerScores,
-          total: scoreTotal(playerScores),
-          holesPlayed: playerId ? playerHolesPlayed(round, playerId) : 0,
-          // The hole this player is on — only surfaced while the round is live
-          // so finished cards don't glow. null when they've finished the round.
-          currentHole: live && playerId ? currentHoleNumber(round, playerId) : null,
-        };
-      }),
-    }));
+// Count semantic hole results (same buckets as the scorecard's score-shape
+// chips) across every player in the round, for the recap highlights row.
+export function buildRoundHighlights({ round } = {}) {
+  const counts = { eagles: 0, birdies: 0, pars: 0, bogeys: 0, doubles: 0 };
+  const keyByResult = {
+    eagle: 'eagles', birdie: 'birdies', par: 'pars', bogey: 'bogeys', double: 'doubles',
+  };
+  for (const hole of asArray(round?.holes)) {
+    for (const playerScores of Object.values(round?.scores ?? {})) {
+      const result = classifyHoleResult(hole?.par, playerScores?.[hole?.number]);
+      const key = keyByResult[result];
+      if (key) counts[key] += 1;
+    }
+  }
+  return counts;
 }

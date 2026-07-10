@@ -43,6 +43,8 @@ jest.mock('../../store/feedStore', () => ({
       author: { name: 'Marcos', avatarUrl: null, avatarColor: '#123456' },
     },
   ])),
+  addComment: jest.fn(() => Promise.resolve(null)),
+  deleteComment: jest.fn(() => Promise.resolve(true)),
 }));
 
 const mockTournament = {
@@ -74,17 +76,27 @@ const mockTournament = {
   }],
 };
 
-jest.mock('../../store/tournamentStore', () => ({
-  getTournamentSnapshot: jest.fn(() => null),
-  isTournamentFinished: jest.fn(() => true),
-  readLocal: jest.fn(() => Promise.resolve(mockTournament)),
-  setActiveTournament: jest.fn(() => Promise.resolve()),
-  formatRoundLabel: jest.fn(({ courseName }) => courseName),
-  roundTotals: jest.fn((round, players) => [
-    { player: players[0], totalPoints: 38, totalStrokes: 72 },
-    { player: players[1], totalPoints: 34, totalStrokes: 90 },
-  ]),
-}));
+// Real ScorecardTable renders through the actual scoreModel scoring engines
+// (calcStablefordPoints etc., pulled from this same module), so this mock
+// keeps the real module and only overrides what the screen itself calls
+// directly — same pattern as store/__tests__/profileStore.test.js.
+jest.mock('../../store/tournamentStore', () => {
+  const actual = jest.requireActual('../../store/tournamentStore');
+  return {
+    ...actual,
+    getTournamentSnapshot: jest.fn(() => null),
+    isTournamentFinished: jest.fn(() => true),
+    readLocal: jest.fn(() => Promise.resolve(mockTournament)),
+    setActiveTournament: jest.fn(() => Promise.resolve()),
+    formatRoundLabel: jest.fn(({ courseName }) => courseName),
+    roundTotals: jest.fn((round, players) => [
+      { player: players[0], totalPoints: 38, totalStrokes: 72 },
+      { player: players[1], totalPoints: 34, totalStrokes: 90 },
+    ]),
+    calcExtraShots: jest.fn(() => 0),
+    scrambleUnits: jest.fn((round, players) => players),
+  };
+});
 
 const navigation = { goBack: jest.fn(), navigate: jest.fn() };
 const route = { params: { tournamentId: 't1', roundId: 'r1' } };
@@ -95,26 +107,41 @@ describe('RoundSummaryScreen', () => {
     jest.clearAllMocks();
   });
 
-  test('defaults to scorecard tab with recap and front/back scorecards', async () => {
-    const { findByText, getByLabelText, getByText } = render(wrap(
+  test('defaults to scorecard tab with recap', async () => {
+    const { findByText, getByLabelText } = render(wrap(
       <RoundSummaryScreen navigation={navigation} route={route} />,
     ));
 
     expect(await findByText('Marcos won the round.')).toBeTruthy();
     expect(getByLabelText('Scorecard').props.accessibilityState.selected).toBe(true);
-    expect(getByText('Front nine')).toBeTruthy();
-    expect(getByText('Back nine')).toBeTruthy();
   });
 
-  test('switches to leaderboard tab', async () => {
-    const { findAllByText, findByLabelText, findByText } = render(wrap(
+  test('scorecard tab renders the real scorecard table', async () => {
+    const { findByText, getAllByText } = render(wrap(
       <RoundSummaryScreen navigation={navigation} route={route} />,
     ));
+    expect(await findByText('FRONT NINE')).toBeTruthy();
+    expect(await findByText('BACK NINE')).toBeTruthy();
+    // Strokes / Points display toggle from the live scorecard
+    expect(getAllByText('Points').length).toBeGreaterThan(0);
+    expect(getAllByText('Strokes').length).toBeGreaterThan(0);
+  });
 
+  test('leaderboard tab renders shared RoundScoreboard ranked', async () => {
+    const { findByLabelText } = render(wrap(
+      <RoundSummaryScreen navigation={navigation} route={route} />,
+    ));
     fireEvent.press(await findByLabelText('Leaderboard'));
+    expect(await findByLabelText('Rank 1: Marcos')).toBeTruthy();
+    expect(await findByLabelText('Rank 2: Pablo')).toBeTruthy();
+  });
 
-    expect(await findByText('Marcos  (you)')).toBeTruthy();
-    expect((await findAllByText('38')).length).toBeGreaterThan(0);
+  test('comments tab has a composer wired to the feed thread', async () => {
+    const { findByLabelText, findByPlaceholderText } = render(wrap(
+      <RoundSummaryScreen navigation={navigation} route={route} />,
+    ));
+    fireEvent.press(await findByLabelText('Comments'));
+    expect(await findByPlaceholderText('Add a comment…')).toBeTruthy();
   });
 
   test('preserves existing round and hole notes in comments tab', async () => {

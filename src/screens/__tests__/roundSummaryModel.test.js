@@ -1,4 +1,4 @@
-import { buildRoundRecap, buildScorecardSections } from '../roundSummaryModel';
+import { buildRoundRecap, buildRoundHighlights } from '../roundSummaryModel';
 
 const players = [
   { id: 'p1', name: 'Marcos' },
@@ -78,84 +78,31 @@ describe('roundSummaryModel', () => {
     });
   });
 
-  test('buildScorecardSections splits front/back nine and totals null or missing scores as 0', () => {
+});
+
+describe('buildRoundHighlights', () => {
+  const highlightHoles = [
+    { number: 1, par: 4 },
+    { number: 2, par: 4 },
+    { number: 3, par: 5 },
+  ];
+
+  test('counts hole results across all players', () => {
     const round = {
-      holes,
+      holes: highlightHoles,
       scores: {
-        p1: {
-          1: 4,
-          2: null,
-          3: 5,
-          9: 3,
-          10: 4,
-          11: 4,
-          18: null,
-        },
-        p2: {
-          1: 5,
-          2: 4,
-          9: 4,
-          10: null,
-          12: 6,
-          18: 5,
-        },
+        p1: { 1: 3, 2: 4, 3: 7 },  // birdie, par, double
+        p2: { 1: 5, 2: 3, 3: 3 },  // bogey, birdie, eagle
       },
     };
-    const ranked = [
-      { player: players[0], totalPoints: 20, totalStrokes: 20 },
-      { player: players[1], totalPoints: 18, totalStrokes: 24 },
-    ];
-
-    const sections = buildScorecardSections({ round, ranked });
-
-    expect(sections).toHaveLength(2);
-    expect(sections[0]).toMatchObject({
-      label: 'Front',
-      holes: holes.slice(0, 9),
-      parTotal: holes.slice(0, 9).reduce((sum, h) => sum + h.par, 0),
+    expect(buildRoundHighlights({ round })).toEqual({
+      eagles: 1, birdies: 2, pars: 1, bogeys: 1, doubles: 1,
     });
-    expect(sections[1]).toMatchObject({
-      label: 'Back',
-      holes: holes.slice(9, 18),
-      parTotal: holes.slice(9, 18).reduce((sum, h) => sum + h.par, 0),
+  });
+
+  test('returns zeros for empty scores', () => {
+    expect(buildRoundHighlights({ round: { holes: highlightHoles, scores: {} } })).toEqual({
+      eagles: 0, birdies: 0, pars: 0, bogeys: 0, doubles: 0,
     });
-    expect(sections[0]).not.toHaveProperty('rows');
-    expect(sections[0].playerRows).toEqual([
-      {
-        playerId: 'p1',
-        name: 'Marcos',
-        scores: [4, null, 5, null, null, null, null, null, 3],
-        total: 12,
-        holesPlayed: 5,
-        currentHole: null,
-      },
-      {
-        playerId: 'p2',
-        name: 'Pablo',
-        scores: [5, 4, null, null, null, null, null, null, 4],
-        total: 13,
-        holesPlayed: 5,
-        currentHole: null,
-      },
-    ]);
-    expect(sections[1]).not.toHaveProperty('rows');
-    expect(sections[1].playerRows).toEqual([
-      {
-        playerId: 'p1',
-        name: 'Marcos',
-        scores: [4, 4, null, null, null, null, null, null, null],
-        total: 8,
-        holesPlayed: 5,
-        currentHole: null,
-      },
-      {
-        playerId: 'p2',
-        name: 'Pablo',
-        scores: [null, null, 6, null, null, null, null, null, 5],
-        total: 11,
-        holesPlayed: 5,
-        currentHole: null,
-      },
-    ]);
   });
 });
