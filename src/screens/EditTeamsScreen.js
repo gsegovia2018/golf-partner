@@ -7,7 +7,7 @@ import { getActiveTournamentSnapshot, loadTournament, subscribeTournamentChanges
 import { mutate } from '../store/mutate';
 import { pairsMatchDuels, roundScoringMode } from '../store/scoring';
 import { shouldHandleStoreChange } from '../lib/navigationFocus';
-import { buildThreeVsOne, swapDuelOrder } from '../lib/teamEditing';
+import { buildThreeVsOne, swapDuelOrder, randomizeDuelOrder } from '../lib/teamEditing';
 
 const firstName = (p) => (p?.name ?? '').split(' ')[0];
 
@@ -71,6 +71,11 @@ export default function EditTeamsScreen({ navigation, route }) {
   function onSwapDuels() {
     hasLocalEdits.current = true;
     setPairs(swapDuelOrder(pairs));
+  }
+
+  function onRandomizeDuels() {
+    hasLocalEdits.current = true;
+    setPairs(randomizeDuelOrder(pairs));
   }
 
   function onTapPlayer(pairIdx, slotIdx) {
@@ -201,8 +206,12 @@ export default function EditTeamsScreen({ navigation, route }) {
                 {liveName(a)} vs {liveName(b)}
               </Text>
             ))}
-            <TouchableOpacity style={s.swapDuelsBtn} onPress={onSwapDuels} activeOpacity={0.7}>
+            <TouchableOpacity style={s.swapDuelsBtn} onPress={onRandomizeDuels} activeOpacity={0.7}>
               <Feather name="shuffle" size={16} color={theme.accent.primary} />
+              <Text style={s.swapDuelsBtnText}>Randomize Matchups</Text>
+            </TouchableOpacity>
+            <TouchableOpacity style={s.swapDuelsBtn} onPress={onSwapDuels} activeOpacity={0.7}>
+              <Feather name="repeat" size={16} color={theme.accent.primary} />
               <Text style={s.swapDuelsBtnText}>Swap Matchups</Text>
             </TouchableOpacity>
           </View>
