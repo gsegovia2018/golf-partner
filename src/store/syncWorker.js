@@ -161,6 +161,17 @@ export function syncNow() {
   return _currentDrain;
 }
 
+// Drain-and-settle for callers that need the queue empty before reading
+// merged state (the finish-time conflict summary). syncNow() alone can
+// return a drain that was already in flight and snapshotted the queue
+// before the caller's latest enqueue; one follow-up pass covers entries
+// that arrived mid-drain.
+export async function syncSettled() {
+  await syncNow();
+  const remaining = await syncQueue.all();
+  if (remaining.length > 0) await syncNow();
+}
+
 export function scheduleSync() { syncNow(); }
 
 export function retrySync() {

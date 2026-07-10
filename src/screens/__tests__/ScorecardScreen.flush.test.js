@@ -129,6 +129,7 @@ jest.mock('../../store/mutate', () => {
 jest.mock('../../store/syncWorker', () => ({
   scheduleSync: jest.fn(),
   syncNow: jest.fn(() => Promise.resolve()),
+  syncSettled: jest.fn(() => Promise.resolve()),
   retrySync: jest.fn(),
 }));
 

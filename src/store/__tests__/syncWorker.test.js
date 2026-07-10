@@ -7,8 +7,9 @@
 // jest.mock calls are hoisted above these imports by babel-jest, so the
 // mocks are in place before ../syncWorker and its dependencies load.
 import { drainTournament, drainLibrary } from '../syncWorker';
-import { readLocal, saveLocal } from '../tournamentStore';
+import { readLocal, saveLocal, _setSyncStatus } from '../tournamentStore';
 import { upsertPlayer } from '../libraryStore';
+import { syncQueue } from '../syncQueue';
 
 let mockRemote = null;
 
@@ -120,5 +121,56 @@ describe('syncNow', () => {
     const p2 = syncNow();
     expect(p2).toBe(p1);
     await p1;
+  });
+});
+
+describe('syncSettled', () => {
+  beforeEach(() => {
+    jest.clearAllMocks();
+    mockRemote = null;
+  });
+
+  it('resolves immediately when the queue is empty (single pass, no second drain)', async () => {
+    const { syncSettled } = require('../syncWorker');
+    syncQueue.all.mockResolvedValue([]);
+
+    await syncSettled();
+
+    // An empty queue never reaches the 'syncing' branch of drainOnce — it
+    // short-circuits straight to 'idle'. Exactly one 'idle' call proves only
+    // one drainOnce pass ran (syncNow's, from inside syncSettled); a second
+    // pass would have produced a second 'idle' call.
+    expect(_setSyncStatus.mock.calls.filter((c) => c[0] === 'idle').length).toBe(1);
+    expect(_setSyncStatus.mock.calls.filter((c) => c[0] === 'syncing').length).toBe(0);
+  });
+
+  it('drains entries enqueued while a drain was in flight', async () => {
+    const { syncSettled } = require('../syncWorker');
+
+    // First drainOnce pass sees one entry; after it drops that entry the
+    // queue is still reported non-empty once more (simulating an entry that
+    // was enqueued mid-drain, after this pass's syncQueue.all() snapshot was
+    // taken but before the pass finished). syncSettled's follow-up check
+    // observes that leftover and triggers a second drainOnce pass.
+    syncQueue.all
+      .mockResolvedValueOnce([{ id: 'e1', tournamentId: 't1' }]) // drainOnce pass 1: initial snapshot
+      .mockResolvedValueOnce([{ id: 'e2', tournamentId: 't1' }]) // drainOnce pass 1: remaining check -> pending
+      .mockResolvedValueOnce([{ id: 'e2', tournamentId: 't1' }]) // syncSettled's own remaining check -> non-empty
+      .mockResolvedValueOnce([{ id: 'e2', tournamentId: 't1' }]) // drainOnce pass 2: initial snapshot
+      .mockResolvedValueOnce([]); // drainOnce pass 2: remaining check -> idle
+
+    readLocal.mockResolvedValue({
+      id: 't1',
+      rounds: [{ id: 'r1', scores: {}, shotDetails: {} }],
+      _meta: {},
+    });
+    mockRemote = null;
+
+    await syncSettled();
+
+    const syncingCalls = _setSyncStatus.mock.calls.filter((c) => c[0] === 'syncing').length;
+    expect(syncingCalls).toBe(2);
+    expect(syncQueue.drop).toHaveBeenCalledWith('e1');
+    expect(syncQueue.drop).toHaveBeenCalledWith('e2');
   });
 });

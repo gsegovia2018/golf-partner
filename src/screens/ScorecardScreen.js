@@ -21,7 +21,7 @@ import {
   readLocal,
 } from '../store/tournamentStore';
 import { mutate } from '../store/mutate';
-import { syncNow } from '../store/syncWorker';
+import { syncNow, syncSettled } from '../store/syncWorker';
 import { fetchPlayers } from '../store/libraryStore';
 import { useAuth } from '../context/AuthContext';
 import { useTheme } from '../theme/ThemeContext';
@@ -1174,7 +1174,7 @@ export default function ScorecardScreen({ navigation, route }) {
     try {
       if (!official) {
         await autoSave(scoresRef.current);
-        await syncNow();
+        await syncSettled();
         const fresh = await readLocal(t.id).catch(() => null);
         if (fresh) {
           tournamentRef.current = fresh;
