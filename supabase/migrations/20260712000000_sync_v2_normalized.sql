@@ -328,6 +328,16 @@ DECLARE
   v_prev_strokes int;
   v_prev_at timestamptz;
 BEGIN
+  -- Serialize same-cell calls BEFORE reading: SELECT ... FOR UPDATE takes no
+  -- lock when the row doesn't exist yet, so two concurrent FIRST writes to
+  -- the same cell would otherwise both capture previous=null and the loser
+  -- would report a wrong previous value — missing exactly the conflict
+  -- signal this function exists to provide. The transaction-scoped advisory
+  -- lock covers the nonexistent-row case too and releases automatically on
+  -- commit/rollback.
+  PERFORM pg_advisory_xact_lock(
+    hashtextextended(p_round_id || ':' || p_player_id || ':' || p_hole::text, 0));
+
   SELECT strokes, updated_at INTO v_prev_strokes, v_prev_at
   FROM public.game_scores
   WHERE round_id = p_round_id AND player_id = p_player_id AND hole = p_hole
@@ -407,12 +417,19 @@ BEGIN
   END IF;
 
   FOR v_k, v_v IN SELECT * FROM jsonb_each(p_patch) LOOP
+    -- name/kind are NOT NULL columns: a jsonb null for either is treated as
+    -- "skip the column update" (and, like every name/kind value, is never
+    -- merged into props). Unlike body/props keys, null cannot mean "clear".
     IF v_k = 'name' THEN
-      v_name := v_v #>> '{}';
-      v_set_name := true;
+      IF jsonb_typeof(v_v) <> 'null' THEN
+        v_name := v_v #>> '{}';
+        v_set_name := true;
+      END IF;
     ELSIF v_k = 'kind' THEN
-      v_kind := v_v #>> '{}';
-      v_set_kind := true;
+      IF jsonb_typeof(v_v) <> 'null' THEN
+        v_kind := v_v #>> '{}';
+        v_set_kind := true;
+      END IF;
     ELSIF v_k = 'currentRound' THEN
       PERFORM public.advance_game_round(p_id, (v_v #>> '{}')::int);
     ELSE
