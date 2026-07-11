@@ -715,3 +715,156 @@ describe('StatsScreen Holes tab — heatmap honesty', () => {
     expect(getAllByText('-')).toHaveLength(2);
   });
 });
+
+describe('StatsScreen Shots tab — sample-floor gating', () => {
+  // Same reset caveat as the Overview tab block above: mockReturnValue
+  // persists across tests, so every test here starts from a known-good
+  // baseline (one player, real data, everything else empty) and only
+  // overrides the aggregate it's actually exercising.
+  beforeEach(() => {
+    jest.clearAllMocks();
+    const statsEngine = require('../../store/statsEngine');
+    statsEngine.playersWithShotData.mockReturnValue([player]);
+    statsEngine.shotStats.mockReturnValue({
+      hasData: true,
+      roundsWithData: 1,
+      putts: { perRound: 32, perHole: 1.8, onePutts: 2, threePuttPlus: 1 },
+      drives: {
+        recorded: 2,
+        fairwayPct: 50,
+        fairwaysHit: 1,
+        distribution: { fairway: 1, left: 0, right: 1, short: 0, super: 0 },
+      },
+      penalties: { tee: 0, other: 0, total: 0 },
+      gir: { eligible: 0, pct: 0, holes: 0 },
+    });
+    statsEngine.driveScoreImpact.mockReturnValue({ hasData: false });
+    statsEngine.approachScoreImpact.mockReturnValue({ hasData: false });
+    statsEngine.puttDeepDive.mockReturnValue({ hasData: false });
+  });
+
+  const emptyBucket = { holes: 0, avgPoints: 0, avgVsPar: 0, penaltyRate: 0, breakdown: [] };
+  const emptyApproachBucket = { holes: 0, avgPoints: 0, avgVsPar: 0, girRate: null, girEligible: 0, breakdown: [] };
+
+  test('a 2-sample drive bucket renders grey "need more data" instead of a colored verdict', () => {
+    const statsEngine = require('../../store/statsEngine');
+    statsEngine.driveScoreImpact.mockReturnValue({
+      hasData: true,
+      totalHoles: 2,
+      buckets: {
+        fairway: { holes: 2, avgPoints: 2, avgVsPar: 1, penaltyRate: 0, breakdown: [] },
+        left: emptyBucket,
+        right: emptyBucket,
+        short: emptyBucket,
+        super: emptyBucket,
+      },
+    });
+
+    const { getByText } = renderStats([makeRound('r1')]);
+    fireEvent.press(getByText('My Shots'));
+
+    expect(getByText('2 holes — need more data')).toBeTruthy();
+    // A 2-sample bucket must not be painted as a good/bad verdict — the "vs
+    // par" value renders in the muted color, not a scoreColor tone.
+    const vsParStyle = StyleSheet.flatten(getByText('+1').props.style);
+    expect(vsParStyle.color).toBe(mockTheme.text.muted);
+  });
+
+  test('a 6+ sample drive bucket still renders a colored verdict', () => {
+    const statsEngine = require('../../store/statsEngine');
+    statsEngine.driveScoreImpact.mockReturnValue({
+      hasData: true,
+      totalHoles: 6,
+      buckets: {
+        fairway: { holes: 6, avgPoints: 2, avgVsPar: 1, penaltyRate: 0, breakdown: [] },
+        left: emptyBucket,
+        right: emptyBucket,
+        short: emptyBucket,
+        super: emptyBucket,
+      },
+    });
+
+    const { getByText, queryByText } = renderStats([makeRound('r1')]);
+    fireEvent.press(getByText('My Shots'));
+
+    expect(getByText('6 holes')).toBeTruthy();
+    expect(queryByText(/need more data/)).toBeNull();
+    // At/above the floor the verdict color is restored (poor: avgVsPar > 0).
+    const vsParStyle = StyleSheet.flatten(getByText('+1').props.style);
+    expect(vsParStyle.color).not.toBe(mockTheme.text.muted);
+  });
+
+  test('a low-sample approach bucket renders grey "need more data"', () => {
+    const statsEngine = require('../../store/statsEngine');
+    statsEngine.approachScoreImpact.mockReturnValue({
+      hasData: true,
+      totalHoles: 3,
+      buckets: {
+        '0-50': { holes: 3, avgPoints: 2, avgVsPar: -1, girRate: 100, girEligible: 3, breakdown: [] },
+        '50-100': emptyApproachBucket,
+        '100-150': emptyApproachBucket,
+        '150-200': emptyApproachBucket,
+        '200+': emptyApproachBucket,
+      },
+    });
+
+    const { getByText } = renderStats([makeRound('r1')]);
+    fireEvent.press(getByText('My Shots'));
+
+    expect(getByText('3 holes — need more data')).toBeTruthy();
+    // avgVsPar -1 would normally render 'excellent'; low sample keeps it muted.
+    const vsParStyle = StyleSheet.flatten(getByText('-1').props.style);
+    expect(vsParStyle.color).toBe(mockTheme.text.muted);
+    const girStyle = StyleSheet.flatten(getByText('100%').props.style);
+    expect(girStyle.color).toBe(mockTheme.text.muted);
+  });
+
+  test('a low-sample putt deep-dive par bucket renders grey "need more data"', () => {
+    const statsEngine = require('../../store/statsEngine');
+    statsEngine.puttDeepDive.mockReturnValue({
+      hasData: true,
+      holes: 2,
+      twoPuttPct: 50,
+      girPuttsAvg: 1.8,
+      nonGirPuttsAvg: 2.1,
+      girHoles: 1,
+      nonGirHoles: 1,
+      byPar: {
+        3: { holes: 2, avg: 1.5 },
+        4: null,
+        5: null,
+      },
+      onePuttSave: { attempts: 1, saves: 1, pct: 100 },
+    });
+
+    const { getByText } = renderStats([makeRound('r1')]);
+    fireEvent.press(getByText('My Shots'));
+
+    expect(getByText('2 holes — need more data')).toBeTruthy();
+  });
+
+  test('a 6+ sample putt deep-dive par bucket renders the plain hole count', () => {
+    const statsEngine = require('../../store/statsEngine');
+    statsEngine.puttDeepDive.mockReturnValue({
+      hasData: true,
+      holes: 6,
+      twoPuttPct: 50,
+      girPuttsAvg: 1.8,
+      nonGirPuttsAvg: 2.1,
+      girHoles: 3,
+      nonGirHoles: 3,
+      byPar: {
+        3: { holes: 6, avg: 1.5 },
+        4: null,
+        5: null,
+      },
+      onePuttSave: { attempts: 3, saves: 2, pct: 67 },
+    });
+
+    const { getByText, queryByText } = renderStats([makeRound('r1')]);
+    fireEvent.press(getByText('My Shots'));
+
+    expect(getByText('6 holes')).toBeTruthy();
+    expect(queryByText(/need more data/)).toBeNull();
+  });
+});

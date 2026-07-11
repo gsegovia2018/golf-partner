@@ -27,6 +27,9 @@ import {
 import StatDetailSheet, { captureAndShare } from '../components/StatDetailSheet';
 import { scoringModeUsesTeams, isScrambleMode } from '../components/scoringModes';
 import PtsBadge from '../components/PtsBadge';
+// Same 6-sample floor MyStats' Breakdown tab uses (metricTone.js) — below it
+// a bucket's average is too noisy to paint as a good/bad verdict.
+import { isLowSample } from '../components/mystats/metricTone';
 
 const ALL_TABS = [
   { key: 'overview', label: 'Overview' },
@@ -2747,12 +2750,20 @@ function ShotsTab({ tournament, theme, s }) {
             <View style={s.puttByParRow}>
               {[3, 4, 5].map((par) => {
                 const row = puttDive.byPar[par];
+                // Same sample floor as the drive/approach impact rows —
+                // a 1-5 hole average reads as a verdict it hasn't earned.
+                const lowSample = row && isLowSample(row.holes);
+                const holeWord = row && (row.holes === 1 ? 'hole' : 'holes');
                 return (
                   <View key={par} style={s.puttByParCell}>
                     <Text style={s.puttByParLabel}>par {par}</Text>
-                    <Text style={s.puttByParVal}>{row ? row.avg : '—'}</Text>
+                    <Text style={[s.puttByParVal, lowSample && { color: theme.text.muted }]}>
+                      {row ? row.avg : '—'}
+                    </Text>
                     <Text style={s.puttByParSub}>
-                      {row ? `${row.holes} ${row.holes === 1 ? 'hole' : 'holes'}` : 'no data'}
+                      {!row ? 'no data'
+                        : lowSample ? `${row.holes} ${holeWord} — need more data`
+                          : `${row.holes} ${holeWord}`}
                     </Text>
                   </View>
                 );
@@ -2797,18 +2808,24 @@ function ShotsTab({ tournament, theme, s }) {
             {DRIVE_KEYS.map((k) => {
               const b = driveImpact.buckets[k];
               if (b.holes === 0) return null;
-              const vsParColor = b.avgVsPar > 0
-                ? theme.scoreColor('poor')
-                : b.avgVsPar < 0
-                  ? theme.scoreColor('excellent')
-                  : theme.text.primary;
-              const penColor = b.penaltyRate > 0 ? theme.scoreColor('poor') : theme.text.muted;
+              // Below the sample floor, a bucket's average is too noisy to
+              // paint as a good/bad verdict — grey it out and say so instead.
+              const lowSample = isLowSample(b.holes);
+              const vsParColor = lowSample ? theme.text.muted
+                : b.avgVsPar > 0
+                  ? theme.scoreColor('poor')
+                  : b.avgVsPar < 0
+                    ? theme.scoreColor('excellent')
+                    : theme.text.primary;
+              const penColor = lowSample ? theme.text.muted
+                : b.penaltyRate > 0 ? theme.scoreColor('poor') : theme.text.muted;
+              const holeWord = b.holes === 1 ? 'hole' : 'holes';
               return (
                 <View key={k} style={s.driveImpactRow}>
                   <View style={[s.driveImpactSwatch, { backgroundColor: driveColors[k] }]} />
                   <Text style={s.driveImpactLabel}>{DRIVE_LABELS[k]}</Text>
                   <Text style={s.driveImpactCount}>
-                    {b.holes} {b.holes === 1 ? 'hole' : 'holes'}
+                    {lowSample ? `${b.holes} ${holeWord} — need more data` : `${b.holes} ${holeWord}`}
                   </Text>
                   <View style={s.driveImpactStat}>
                     <Text style={s.driveImpactStatVal}>{b.avgPoints}</Text>
@@ -2840,25 +2857,30 @@ function ShotsTab({ tournament, theme, s }) {
             {['0-50', '50-100', '100-150', '150-200', '200+'].map((k) => {
               const b = approachImpact.buckets[k];
               if (b.holes === 0) return null;
-              const vsParColor = b.avgVsPar > 0
-                ? theme.scoreColor('poor')
-                : b.avgVsPar < 0
-                  ? theme.scoreColor('excellent')
-                  : theme.text.primary;
-              const girColor = b.girRate == null
-                ? theme.text.muted
-                : b.girRate >= 50
-                  ? theme.scoreColor('excellent')
-                  : b.girRate >= 25
-                    ? theme.scoreColor('neutral')
-                    : theme.scoreColor('poor');
+              // Same sample floor as the drive-impact rows above.
+              const lowSample = isLowSample(b.holes);
+              const vsParColor = lowSample ? theme.text.muted
+                : b.avgVsPar > 0
+                  ? theme.scoreColor('poor')
+                  : b.avgVsPar < 0
+                    ? theme.scoreColor('excellent')
+                    : theme.text.primary;
+              const girColor = lowSample ? theme.text.muted
+                : b.girRate == null
+                  ? theme.text.muted
+                  : b.girRate >= 50
+                    ? theme.scoreColor('excellent')
+                    : b.girRate >= 25
+                      ? theme.scoreColor('neutral')
+                      : theme.scoreColor('poor');
+              const holeWord = b.holes === 1 ? 'hole' : 'holes';
               return (
                 <View key={k} style={s.driveImpactRow}>
                   <View style={s.approachBucketPill}>
                     <Text style={s.approachBucketPillText}>{k}m</Text>
                   </View>
                   <Text style={s.driveImpactCount}>
-                    {b.holes} {b.holes === 1 ? 'hole' : 'holes'}
+                    {lowSample ? `${b.holes} ${holeWord} — need more data` : `${b.holes} ${holeWord}`}
                   </Text>
                   <View style={s.driveImpactStat}>
                     <Text style={s.driveImpactStatVal}>{b.avgPoints}</Text>

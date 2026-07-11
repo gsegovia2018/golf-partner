@@ -180,6 +180,15 @@ export const HolePage = React.memo(function HolePage({
           // renders the score without +/- steppers or the pickup toggle.
           const canEdit = editable ? editable(player.id) : true;
           const isMe = player.id === effectiveMeId;
+          // Scramble rounds score one ball per team under the captain
+          // (`player.id` here is the unit/captain id, not the signed-in
+          // member's personal `meId`). The shot-detail write path has no
+          // honest place to store per-member taps in that case — a
+          // non-captain "me" would write under the captain's id and never
+          // see it again; the captain's own card would silently absorb
+          // whichever teammate is signed in. Hide the section entirely
+          // rather than let it lie.
+          const showShotDetail = isMe && !isScramble;
 
           // Official mode: classify this player's hole from the raw two-row
           // score data so the card can show an agreed / waiting / discrepancy
@@ -216,10 +225,11 @@ export const HolePage = React.memo(function HolePage({
               getScoreAnim={getScoreAnim}
               onStep={onStep}
               onSetScore={onSetScore}
-              shotDetail={isMe ? shotDetails[meId]?.[pageHole.number] : undefined}
+              shotDetail={showShotDetail ? shotDetails[meId]?.[pageHole.number] : undefined}
               onSetShot={onSetShot}
               shotCollapsed={shotCollapsed}
               onToggleShotDetail={onToggleShotDetail}
+              showShotDetail={showShotDetail}
               officialState={officialState}
               canResolveHere={canResolveHere}
               onOpenDiscrepancy={onOpenDiscrepancy}
