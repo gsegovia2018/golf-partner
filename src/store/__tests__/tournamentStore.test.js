@@ -305,6 +305,41 @@ describe('propagatePlayerToTournaments', () => {
     expect(saved.rounds[0].pairs[0][0].name).toBe('Ann');
     expect(saved.rounds[0].pairs[0][0].handicap).toBe(20);
   });
+
+  test('single-round game: currentRound stays 0 after the only round is scored, so it must still be protected', async () => {
+    // Casual single-round games never advance currentRound past 0 — there's
+    // no "next round" to move to. A naive idx < currentRound check therefore
+    // gives zero protection to a played game. The round having scores is
+    // what actually means "played" here.
+    const p1 = { id: 'p1', name: 'Ann', handicap: 10 };
+    const tournament = {
+      id: 't1',
+      name: 'Cup',
+      kind: 'casual',
+      createdAt: '2026-05-18T09:00:00Z',
+      currentRound: 0,
+      players: [p1],
+      rounds: [
+        {
+          id: 'r1',
+          holes: [],
+          scores: { p1: { 1: 4 } }, // the game has been played
+          pairs: [[{ ...p1 }]],
+          playerHandicaps: { p1: 99 },
+        },
+      ],
+    };
+    mockState.tournamentsRow = {
+      id: 't1', name: 'Cup', kind: 'casual', created_at: '2026-05-18T09:00:00Z',
+      data: tournament,
+    };
+
+    await propagatePlayerToTournaments('p1', { name: 'Ann', handicap: 20 });
+
+    const saved = mockState.upserts.find((u) => u.table === 'tournaments').row.data;
+    // Played round: playing handicaps must stay frozen even though idx === currentRound.
+    expect(saved.rounds[0].playerHandicaps).toEqual({ p1: 99 });
+  });
 });
 
 describe('propagateCourseToTournaments', () => {
@@ -362,5 +397,61 @@ describe('propagateCourseToTournaments', () => {
     expect(saved.rounds[1].holes).toEqual(newHoles);
     expect(saved.rounds[1].tees).toEqual(newTees);
     expect(saved.rounds[1].playerHandicaps.p1).not.toBe(99);
+  });
+
+  test('finished tournament: the last round is scored and idx === currentRound, so it must still be protected', async () => {
+    // HomeScreen clamps currentRound so it never advances past the last
+    // round; NextRoundScreen only bumps it when starting a NEXT round. So a
+    // finished tournament's currentRound sits on the last (played) round's
+    // index — idx < currentRound is false there. The round having scores is
+    // what actually means "played".
+    const p1 = { id: 'p1', name: 'Ann', handicap: 10 };
+    const oldHoles = [{ number: 1, par: 4, strokeIndex: 1 }];
+    const oldTees = [{ label: 'White', slope: 113, rating: 71 }];
+    const tournament = {
+      id: 't1',
+      name: 'Cup',
+      kind: 'casual',
+      createdAt: '2026-05-18T09:00:00Z',
+      currentRound: 1, // clamped to the last round index once finished
+      players: [p1],
+      rounds: [
+        {
+          id: 'r1',
+          courseId: 'c1',
+          holes: oldHoles,
+          tees: oldTees,
+          scores: { p1: { 1: 4 } },
+          pairs: [[{ ...p1 }]],
+          playerHandicaps: { p1: 99 },
+        },
+        {
+          id: 'r2',
+          courseId: 'c1',
+          holes: oldHoles,
+          tees: oldTees,
+          scores: { p1: { 1: 4 } }, // the final round has been played too
+          pairs: [[{ ...p1 }]],
+          playerHandicaps: { p1: 99 },
+        },
+      ],
+    };
+    mockState.tournamentsRow = {
+      id: 't1', name: 'Cup', kind: 'casual', created_at: '2026-05-18T09:00:00Z',
+      data: tournament,
+    };
+
+    const newHoles = [{ number: 1, par: 5, strokeIndex: 2 }];
+    const newTees = [{ label: 'White', slope: 130, rating: 72 }];
+    const updatedIds = await propagateCourseToTournaments('c1', { holes: newHoles, tees: newTees });
+
+    // Both rounds reference courseId c1 and both are played (round 0 via
+    // idx < currentRound, round 1 via having scores despite idx ===
+    // currentRound), so nothing in this tournament changes — no upsert at
+    // all, distinct from the "leaves an already-played round untouched,
+    // replaces a future round's" case above where the future round drives a
+    // real persist.
+    expect(updatedIds).toEqual([]);
+    expect(mockState.upserts).toHaveLength(0);
   });
 });
