@@ -1,21 +1,30 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
-import { View, Text, TouchableOpacity, StyleSheet } from 'react-native';
-import ScreenContainer from '../components/ScreenContainer';
-import { Feather } from '@expo/vector-icons';
-import { useTheme } from '../theme/ThemeContext';
-import { getActiveTournamentSnapshot, loadTournament, subscribeTournamentChanges } from '../store/tournamentStore';
+import {
+  getActiveTournamentSnapshot,
+  loadTournament,
+  getTournament,
+  getTournamentSnapshot,
+  subscribeTournamentChanges,
+  getPlayingHandicap,
+} from '../store/tournamentStore';
 import { mutate } from '../store/mutate';
-import { pairsMatchDuels, roundScoringMode } from '../store/scoring';
+import { roundScoringMode } from '../store/scoring';
 import { shouldHandleStoreChange } from '../lib/navigationFocus';
-import { buildThreeVsOne, swapDuelOrder, randomizeDuelOrder } from '../lib/teamEditing';
-
-const firstName = (p) => (p?.name ?? '').split(' ')[0];
+import { buildThreeVsOne, swapDuelOrder, shuffleTeams } from '../lib/teamEditing';
+import EditTeamsView from './editTeams/EditTeamsView';
 
 export default function EditTeamsScreen({ navigation, route }) {
-  const { theme } = useTheme();
-  const s = makeStyles(theme);
-  const { roundIndex } = route?.params ?? {};
-  const initialTournament = useMemo(() => getActiveTournamentSnapshot(), []);
+  const { roundIndex, tournamentId } = route?.params ?? {};
+
+  // Load the tournament this screen was opened for. Fall back to the active
+  // one only when no id was passed (older entry points), so every edit is
+  // saved back to the *linked* round/game — never whatever happens to be
+  // active. mutate() persists by the passed tournament's id, so as long as we
+  // load the right one, the save lands on the right one.
+  const initialTournament = useMemo(
+    () => (tournamentId ? getTournamentSnapshot(tournamentId) : getActiveTournamentSnapshot()),
+    [tournamentId],
+  );
   const initialPairs = initialTournament?.rounds?.[roundIndex]?.pairs;
 
   const [tournament, setTournament] = useState(() => initialTournament);
@@ -24,14 +33,14 @@ export default function EditTeamsScreen({ navigation, route }) {
   ));
   const [selected, setSelected] = useState(null);
   const [saving, setSaving] = useState(false);
-  // Set when the user performs a local swap so a subscription-driven
-  // reload (e.g. a player rename in the library) doesn't discard it.
+  // Set when the user performs a local edit so a subscription-driven reload
+  // (e.g. a player rename in the library) doesn't discard it.
   const hasLocalEdits = useRef(false);
 
   useEffect(() => {
     let cancelled = false;
     async function load({ force }) {
-      const t = await loadTournament();
+      const t = tournamentId ? await getTournament(tournamentId) : await loadTournament();
       if (cancelled) return;
       setTournament(t);
       const current = t?.rounds?.[roundIndex]?.pairs;
@@ -46,36 +55,34 @@ export default function EditTeamsScreen({ navigation, route }) {
       if (shouldHandleStoreChange(navigation)) load({ force: false });
     });
     return () => { cancelled = true; unsub(); };
-  }, [navigation, roundIndex]);
+  }, [navigation, roundIndex, tournamentId]);
 
   if (!tournament || !pairs) return null;
 
   const round = tournament.rounds[roundIndex];
   const scoringMode = roundScoringMode(tournament, round);
-  const isThreeVsOne = scoringMode === 'scramble3v1';
-  const isPairsMatch = scoringMode === 'pairsmatchplay';
   const soloSide = pairs.find((side) => side.length === 1);
   const soloId = (soloSide ?? pairs[1])?.[0]?.id;
-  const duels = isPairsMatch ? pairsMatchDuels(pairs) : null;
-
-  function liveName(player) {
-    const live = tournament.players?.find((p) => p.id === player.id);
-    return firstName(live ?? player);
-  }
+  // Per-player playing handicap for this round — shown on each tile and summed
+  // per team so the editor doubles as a fair-teams aid.
+  const handicaps = Object.fromEntries(
+    (tournament.players ?? []).map((p) => [p.id, getPlayingHandicap(round, p)]),
+  );
 
   function onTapSolo(playerId) {
     hasLocalEdits.current = true;
     setPairs(buildThreeVsOne(tournament.players ?? [], playerId));
   }
 
+  function onShuffle() {
+    hasLocalEdits.current = true;
+    setSelected(null);
+    setPairs((prev) => shuffleTeams(prev));
+  }
+
   function onSwapDuels() {
     hasLocalEdits.current = true;
     setPairs(swapDuelOrder(pairs));
-  }
-
-  function onRandomizeDuels() {
-    hasLocalEdits.current = true;
-    setPairs(randomizeDuelOrder(pairs));
   }
 
   function onTapPlayer(pairIdx, slotIdx) {
@@ -125,195 +132,23 @@ export default function EditTeamsScreen({ navigation, route }) {
     }
   }
 
-  const isSelected = (pi, si) => selected?.pairIdx === pi && selected?.slotIdx === si;
-
   return (
-    <ScreenContainer style={s.screen} edges={['top', 'bottom']}>
-      <View style={s.header}>
-        <TouchableOpacity onPress={() => navigation.goBack()} style={s.backBtn}>
-          <Feather name="chevron-left" size={22} color={theme.accent.primary} />
-        </TouchableOpacity>
-        <Text style={s.headerTitle}>Edit Teams</Text>
-        <View style={{ width: 36 }} />
-      </View>
-
-      <View style={s.body}>
-        <Text style={s.roundLabel}>ROUND {roundIndex + 1}</Text>
-        <Text style={s.course}>{round?.courseName}</Text>
-        <Text style={s.hint}>
-          {isThreeVsOne
-            ? 'Tap a player to send them solo'
-            : selected ? 'Tap another player to swap' : 'Tap a player to start a swap'}
-        </Text>
-
-        {isThreeVsOne ? (
-          <View style={s.pairCard}>
-            <Text style={s.pairLabel}>WHO PLAYS SOLO?</Text>
-            {(tournament.players ?? []).map((player) => {
-              const solo = soloId === player.id;
-              return (
-                <TouchableOpacity
-                  key={player.id}
-                  style={[s.playerChip, solo && s.playerChipSelected]}
-                  onPress={() => onTapSolo(player.id)}
-                  activeOpacity={0.7}
-                >
-                  <Text style={[s.playerName, solo && s.playerNameSelected]}>
-                    {player.name}
-                  </Text>
-                  {solo && (
-                    <Feather name="check" size={16} color={theme.accent.primary} />
-                  )}
-                </TouchableOpacity>
-              );
-            })}
-          </View>
-        ) : (
-          pairs.map((pair, pi) => {
-            const accent = pi === 0 ? theme.pairA : theme.pairB;
-            return (
-              <View key={pi} style={[s.pairCard, { borderLeftColor: accent }]}>
-                <Text style={[s.pairLabel, { color: accent }]}>PAIR {pi + 1}</Text>
-                {pair.map((player, si) => {
-                  const live = tournament.players?.find((p) => p.id === player.id);
-                  const displayName = live?.name ?? player.name;
-                  return (
-                    <TouchableOpacity
-                      key={`${pi}-${si}-${player.id}`}
-                      style={[s.playerChip, isSelected(pi, si) && s.playerChipSelected]}
-                      onPress={() => onTapPlayer(pi, si)}
-                      activeOpacity={0.7}
-                    >
-                      <Text style={[s.playerName, isSelected(pi, si) && s.playerNameSelected]}>
-                        {displayName}
-                      </Text>
-                      {isSelected(pi, si) && (
-                        <Feather name="repeat" size={16} color={theme.accent.primary} />
-                      )}
-                    </TouchableOpacity>
-                  );
-                })}
-              </View>
-            );
-          })
-        )}
-
-        {isPairsMatch && duels && (
-          <View style={s.pairCard}>
-            <Text style={s.pairLabel}>DUELS</Text>
-            {duels.map(([a, b], di) => (
-              <Text key={di} style={s.duelText}>
-                {liveName(a)} vs {liveName(b)}
-              </Text>
-            ))}
-            <TouchableOpacity style={s.swapDuelsBtn} onPress={onRandomizeDuels} activeOpacity={0.7}>
-              <Feather name="shuffle" size={16} color={theme.accent.primary} />
-              <Text style={s.swapDuelsBtnText}>Randomize Matchups</Text>
-            </TouchableOpacity>
-            <TouchableOpacity style={s.swapDuelsBtn} onPress={onSwapDuels} activeOpacity={0.7}>
-              <Feather name="repeat" size={16} color={theme.accent.primary} />
-              <Text style={s.swapDuelsBtnText}>Swap Matchups</Text>
-            </TouchableOpacity>
-          </View>
-        )}
-
-        <TouchableOpacity
-          style={[s.saveBtn, saving && { opacity: 0.6 }]}
-          onPress={onSave}
-          disabled={saving}
-          activeOpacity={0.8}
-        >
-          <Feather name="check" size={18} color={theme.isDark ? theme.accent.primary : theme.text.inverse} />
-          <Text style={s.saveBtnText}>{saving ? 'Saving…' : 'Save Teams'}</Text>
-        </TouchableOpacity>
-      </View>
-    </ScreenContainer>
+    <EditTeamsView
+      roundNumber={roundIndex + 1}
+      courseName={round?.courseName}
+      scoringMode={scoringMode}
+      players={tournament.players ?? []}
+      pairs={pairs}
+      soloId={soloId}
+      selected={selected}
+      saving={saving}
+      handicaps={handicaps}
+      onBack={() => navigation.goBack()}
+      onTapPlayer={onTapPlayer}
+      onTapSolo={onTapSolo}
+      onShuffle={onShuffle}
+      onSwapDuels={onSwapDuels}
+      onSave={onSave}
+    />
   );
-}
-
-function makeStyles(t) {
-  return StyleSheet.create({
-    screen: { ...StyleSheet.absoluteFillObject, backgroundColor: t.bg.primary },
-    header: {
-      flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
-      paddingHorizontal: 20, paddingTop: 16, paddingBottom: 12,
-    },
-    backBtn: {
-      width: 36, height: 36, borderRadius: 12,
-      alignItems: 'center', justifyContent: 'center',
-      backgroundColor: t.isDark ? t.bg.secondary : t.bg.card,
-      borderWidth: 1, borderColor: t.isDark ? t.glass?.border || t.border.default : t.border.default,
-    },
-    headerTitle: { fontFamily: 'PlusJakartaSans-Bold', fontSize: 17, color: t.text.primary },
-
-    body: { flex: 1, padding: 20, gap: 12 },
-    roundLabel: {
-      fontFamily: 'PlusJakartaSans-SemiBold', color: t.text.muted,
-      fontSize: 11, letterSpacing: 1.5, textTransform: 'uppercase',
-    },
-    course: {
-      fontFamily: 'PlusJakartaSans-ExtraBold', color: t.text.primary,
-      fontSize: 22, marginBottom: 4,
-    },
-    hint: {
-      fontFamily: 'PlusJakartaSans-Medium', color: t.text.muted,
-      fontSize: 13, marginBottom: 8,
-    },
-
-    pairCard: {
-      backgroundColor: t.bg.card,
-      borderRadius: 16, borderWidth: 1,
-      borderColor: t.isDark ? t.glass?.border || t.border.default : t.border.default,
-      borderLeftWidth: 4,
-      padding: 14,
-      ...(t.isDark ? {} : t.shadow.card),
-    },
-    pairLabel: {
-      fontFamily: 'PlusJakartaSans-ExtraBold', fontSize: 10,
-      letterSpacing: 2, marginBottom: 10,
-    },
-    playerChip: {
-      flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
-      backgroundColor: t.bg.secondary,
-      borderRadius: 12, borderWidth: 1, borderColor: t.border.default,
-      paddingVertical: 14, paddingHorizontal: 14, marginTop: 8,
-    },
-    playerChipSelected: {
-      backgroundColor: t.accent.light,
-      borderColor: t.accent.primary,
-    },
-    playerName: {
-      fontFamily: 'PlusJakartaSans-SemiBold', color: t.text.primary, fontSize: 15,
-    },
-    playerNameSelected: { color: t.accent.primary },
-
-    duelText: {
-      fontFamily: 'PlusJakartaSans-SemiBold', color: t.text.primary,
-      fontSize: 15, marginTop: 8,
-    },
-    swapDuelsBtn: {
-      flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8,
-      backgroundColor: t.bg.secondary,
-      borderRadius: 12, borderWidth: 1, borderColor: t.border.default,
-      paddingVertical: 12, marginTop: 12,
-    },
-    swapDuelsBtnText: {
-      fontFamily: 'PlusJakartaSans-SemiBold', color: t.accent.primary, fontSize: 14,
-    },
-
-    saveBtn: {
-      marginTop: 24,
-      backgroundColor: t.isDark ? t.accent.light : t.accent.primary,
-      borderRadius: 14, padding: 16,
-      flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8,
-      borderWidth: t.isDark ? 1 : 0,
-      borderColor: t.isDark ? t.accent.primary + '33' : 'transparent',
-      ...(t.isDark ? {} : t.shadow.accent),
-    },
-    saveBtnText: {
-      fontFamily: 'PlusJakartaSans-Bold',
-      color: t.isDark ? t.accent.primary : t.text.inverse,
-      fontSize: 15,
-    },
-  });
 }

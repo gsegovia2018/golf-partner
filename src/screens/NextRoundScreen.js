@@ -408,7 +408,7 @@ export default function NextRoundScreen({ navigation, route }) {
         {manualTeamsPending ? (
           <TouchableOpacity
             style={s.revealBtn}
-            onPress={() => navigation.navigate('EditTeams', { roundIndex })}
+            onPress={() => navigation.navigate('EditTeams', { roundIndex, tournamentId: tournament.id })}
           >
             <Text style={s.revealBtnText}>Set Teams</Text>
           </TouchableOpacity>

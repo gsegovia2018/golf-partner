@@ -20,10 +20,32 @@ export function swapDuelOrder(pairs) {
   return [pairs[0], [...(pairs[1] ?? [])].reverse()];
 }
 
-// pairsmatchplay: randomly draws one of the two possible duel assignments —
-// with fixed 2x2 pairs, "keep" and "swap" (swapDuelOrder) are the whole
-// space. `rand` is injectable so tests can pin the coin flip.
-export function randomizeDuelOrder(pairs, rand = Math.random) {
+// Re-rolls the whole matchup: redistributes every player across the two sides
+// while preserving each side's size (so a 2v2 stays 2v2 and a 3v1 stays 3v1).
+// For pairsmatchplay the new member order also re-draws the duels. Retries a
+// bounded number of times so the result differs from the input when the roster
+// allows one — the control should never look like it did nothing. `rand` is
+// injectable so tests can pin the shuffle.
+export function shuffleTeams(pairs, rand = Math.random) {
   if (!Array.isArray(pairs) || pairs.length !== 2) return pairs;
-  return rand() < 0.5 ? [pairs[0], [...(pairs[1] ?? [])]] : swapDuelOrder(pairs);
+  const flat = pairs.flat();
+  if (flat.length < 2) return pairs;
+  const sizes = pairs.map((p) => p.length);
+  const key = (prs) => prs.map((p) => p.map((x) => x.id).join(',')).join('|');
+  const before = key(pairs);
+  const redistribute = (order) => {
+    let i = 0;
+    return sizes.map((sz) => order.slice(i, i += sz));
+  };
+  let result = pairs;
+  for (let attempt = 0; attempt < 12; attempt++) {
+    const next = [...flat];
+    for (let i = next.length - 1; i > 0; i--) {
+      const j = Math.floor(rand() * (i + 1));
+      [next[i], next[j]] = [next[j], next[i]];
+    }
+    result = redistribute(next);
+    if (key(result) !== before) break;
+  }
+  return result;
 }

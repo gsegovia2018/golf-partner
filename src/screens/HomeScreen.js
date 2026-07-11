@@ -1022,7 +1022,7 @@ export default function HomeScreen({ navigation, route }) {
     return alreadyRevealed ? (
       <TouchableOpacity
         style={s.menuItem}
-        onPress={() => { onClose(); navigation.navigate('EditTeams', { roundIndex: selectedRound }); }}
+        onPress={() => { onClose(); navigation.navigate('EditTeams', { roundIndex: selectedRound, tournamentId: tournament.id }); }}
         activeOpacity={0.7}
       >
         <Feather name="users" size={18} color={theme.accent.primary} />
@@ -2227,7 +2227,7 @@ export default function HomeScreen({ navigation, route }) {
           {Boolean(tournament.settings?.fixedTeams) && tournament.rounds[0]?.pairs?.length === 2 && (
             <TouchableOpacity
               style={s.menuItem}
-              onPress={() => { setShowTeamSettings(false); navigation.navigate('EditTeams', { roundIndex: 0 }); }}
+              onPress={() => { setShowTeamSettings(false); navigation.navigate('EditTeams', { roundIndex: 0, tournamentId: tournament.id }); }}
               activeOpacity={0.7}
             >
               <Feather name="edit-2" size={18} color={theme.accent.primary} />
