@@ -1328,6 +1328,32 @@ export function zeroHero(tournament) {
   return { value: max, entries: entries.sort((a, b) => b.count - a.count) };
 }
 
+// ── Nemesis Encore ──
+// A hole becomes a player's "nemesis encore" when it zeroes them (0
+// Stableford points) on the SAME physical hole — courseId ?? courseName +
+// hole number, the pooling convention strokeIndexAccuracy uses for a course
+// played more than once — in 2 or more different rounds. One entry per
+// (player, course, hole) that qualifies; sorted worst-repeat-offender first
+// so callers can headline entries[0].
+export function nemesisEncore(tournament) {
+  const byKey = new Map(); // `${playerId}::${courseKey}::${holeNumber}` -> entry
+  forEachHole(tournament, ({ player, round, roundIndex, hole, points }) => {
+    if (points !== 0) return;
+    const courseKey = round.courseId ?? round.courseName;
+    const key = `${player.id}::${courseKey}::${hole.number}`;
+    let entry = byKey.get(key);
+    if (!entry) {
+      entry = { player, courseName: round.courseName, holeNumber: hole.number, rounds: [] };
+      byKey.set(key, entry);
+    }
+    entry.rounds.push(roundIndex);
+  });
+  const entries = Array.from(byKey.values())
+    .filter(e => e.rounds.length >= 2)
+    .sort((a, b) => b.rounds.length - a.rounds.length || a.holeNumber - b.holeNumber);
+  return entries.length ? entries : null;
+}
+
 // ── Skins Leaderboard ──
 // Per-hole skins: the player with the strictly best score wins 1 skin. Ties
 // award nothing (no carry-over to keep scoring simple and deterministic).

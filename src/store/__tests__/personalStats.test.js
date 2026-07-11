@@ -345,6 +345,35 @@ describe('holeDifficultySplit', () => {
     expect(split.easy.holes).toBe(6);
     expect(split.hard.avgPoints).toBe(2); // gross par, scratch → 2 pts
   });
+
+  // The Players tab (StatsScreen.js) calls this straight off a real,
+  // multi-player tournament — not a synthetic single-player one — so the
+  // (tournament, playerId) signature must work unmodified against that
+  // shape too. This locks in "reuse directly" over adding a thin wrapper.
+  test('works against a real multi-player tournament, isolating the selected player', () => {
+    const h = holes18();
+    const tournament = {
+      players: [
+        { id: 'p1', name: 'Alice', handicap: 0 },
+        { id: 'p2', name: 'Bob', handicap: 0 },
+      ],
+      rounds: [
+        mkRound({
+          holes: h,
+          scores: { p1: evenScores(h, 4), p2: evenScores(h, 6) },
+          playerHandicaps: { p1: 0, p2: 0 },
+        }),
+      ],
+    };
+    const split = holeDifficultySplit(tournament, 'p2');
+    expect(split.hard.holes).toBe(6);
+    // par 4, 6 strokes, handicap 0 → 2 + (4 - 6) = 0 pts on every band.
+    expect(split.hard.avgPoints).toBe(0);
+    expect(split.mid.avgPoints).toBe(0);
+    expect(split.easy.avgPoints).toBe(0);
+    // p1's holes must not leak into p2's split.
+    expect(split.hard.breakdown.every((b) => b.strokes === 6)).toBe(true);
+  });
 });
 
 describe('computeMetrics', () => {

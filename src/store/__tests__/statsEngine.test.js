@@ -1,4 +1,4 @@
-import { teeShotImpact, lagPuttingQuality, sandSaveRate, upAndDownRate, bunkerVisits, sgPutting, sgAroundGreen, sgApproach, sgPenalties, sgTotal, sgSeason, driveScoreImpact, puttDeepDive, approachScoreImpact, puttingTargetGaps, approachTargetGaps, pairPerformance, shotStats, playersWithShotData, tournamentHighlights, withoutScrambleScores, playerAvgStableford, pickupChampion, hallOfShame, chaosHoles, skinsLeaderboard, playerStreaks, bounceBackRate, strokeIndexAccuracy, bestWorstHoles, holeDifficultyMap, collectiveExtremes, pairConfigMatrix, matchPlayResults, pairHoleWins, anchor, par3Heartbreak, playingToHandicap, hotStretch } from '../statsEngine';
+import { teeShotImpact, lagPuttingQuality, sandSaveRate, upAndDownRate, bunkerVisits, sgPutting, sgAroundGreen, sgApproach, sgPenalties, sgTotal, sgSeason, driveScoreImpact, puttDeepDive, approachScoreImpact, puttingTargetGaps, approachTargetGaps, pairPerformance, shotStats, playersWithShotData, tournamentHighlights, withoutScrambleScores, playerAvgStableford, pickupChampion, hallOfShame, chaosHoles, skinsLeaderboard, playerStreaks, bounceBackRate, strokeIndexAccuracy, bestWorstHoles, holeDifficultyMap, collectiveExtremes, pairConfigMatrix, matchPlayResults, pairHoleWins, anchor, par3Heartbreak, playingToHandicap, hotStretch, nemesisEncore } from '../statsEngine';
 import { mixedModeTournament, buildTournament } from './statsFixtures';
 
 // 18 par-4 holes, strokeIndex = hole number.
@@ -1610,6 +1610,127 @@ describe('strokeIndexAccuracy — pooled per course+hole, average-rank ties, rou
     // course name must not leak in.
     expect(results).toHaveLength(3);
     results.forEach(r => expect(r.avgVsPar).toBeCloseTo(0));
+  });
+});
+
+describe('nemesisEncore — same physical hole zeroing the same player across ≥2 rounds', () => {
+  it('returns null when a player is only zeroed on a hole once', () => {
+    const holes = [{ number: 5, par: 4, strokeIndex: 5 }];
+    const players = [{ id: 'p1', name: 'Alice', handicap: 0 }];
+    const round = { courseName: 'Sunset Ridge', holes, playerHandicaps: { p1: 0 }, scores: { p1: { 5: 6 } } }; // 0 pts
+    const t = buildTournament({ players, rounds: [round] });
+
+    expect(nemesisEncore(t)).toBeNull();
+  });
+
+  it('awards an entry when the same hole on the same course zeroes the player in 2 different rounds', () => {
+    const holes = [{ number: 5, par: 4, strokeIndex: 5 }];
+    const players = [{ id: 'p1', name: 'Alice', handicap: 0 }];
+    const round0 = { courseName: 'Sunset Ridge', holes, playerHandicaps: { p1: 0 }, scores: { p1: { 5: 6 } } }; // 0 pts
+    const round1 = { courseName: 'Sunset Ridge', holes, playerHandicaps: { p1: 0 }, scores: { p1: { 5: 7 } } }; // 0 pts
+    const t = buildTournament({ players, rounds: [round0, round1] });
+
+    const result = nemesisEncore(t);
+
+    expect(result).not.toBeNull();
+    expect(result).toHaveLength(1);
+    expect(result[0].player.id).toBe('p1');
+    expect(result[0].holeNumber).toBe(5);
+    expect(result[0].courseName).toBe('Sunset Ridge');
+    expect(result[0].rounds).toEqual([0, 1]);
+  });
+
+  it('does not award when the zeroed hole number differs between rounds', () => {
+    const holes = [
+      { number: 5, par: 4, strokeIndex: 5 },
+      { number: 6, par: 4, strokeIndex: 6 },
+    ];
+    const players = [{ id: 'p1', name: 'Alice', handicap: 0 }];
+    const round0 = { courseName: 'Sunset Ridge', holes, playerHandicaps: { p1: 0 }, scores: { p1: { 5: 6, 6: 4 } } }; // hole 5 zeroed
+    const round1 = { courseName: 'Sunset Ridge', holes, playerHandicaps: { p1: 0 }, scores: { p1: { 5: 4, 6: 6 } } }; // hole 6 zeroed
+    const t = buildTournament({ players, rounds: [round0, round1] });
+
+    expect(nemesisEncore(t)).toBeNull();
+  });
+
+  it('does not award when the course differs (no shared courseId, different courseName)', () => {
+    const holes = [{ number: 5, par: 4, strokeIndex: 5 }];
+    const players = [{ id: 'p1', name: 'Alice', handicap: 0 }];
+    const round0 = { courseName: 'Sunset Ridge', holes, playerHandicaps: { p1: 0 }, scores: { p1: { 5: 6 } } };
+    const round1 = { courseName: 'Northwood', holes, playerHandicaps: { p1: 0 }, scores: { p1: { 5: 6 } } };
+    const t = buildTournament({ players, rounds: [round0, round1] });
+
+    expect(nemesisEncore(t)).toBeNull();
+  });
+
+  it('pools by courseId (not courseName) so a renamed course still counts as the same physical hole', () => {
+    const holes = [{ number: 5, par: 4, strokeIndex: 5 }];
+    const players = [{ id: 'p1', name: 'Alice', handicap: 0 }];
+    const round0 = { courseId: 'c1', courseName: 'Sunset Ridge', holes, playerHandicaps: { p1: 0 }, scores: { p1: { 5: 6 } } };
+    const round1 = { courseId: 'c1', courseName: 'Sunset Ridge Resort', holes, playerHandicaps: { p1: 0 }, scores: { p1: { 5: 6 } } };
+    const t = buildTournament({ players, rounds: [round0, round1] });
+
+    const result = nemesisEncore(t);
+
+    expect(result).not.toBeNull();
+    expect(result[0].rounds).toEqual([0, 1]);
+  });
+
+  it('does not pool across different courseIds even when courseName happens to match', () => {
+    const holes = [{ number: 5, par: 4, strokeIndex: 5 }];
+    const players = [{ id: 'p1', name: 'Alice', handicap: 0 }];
+    const round0 = { courseId: 'c1', courseName: 'Sunset Ridge', holes, playerHandicaps: { p1: 0 }, scores: { p1: { 5: 6 } } };
+    const round1 = { courseId: 'c2', courseName: 'Sunset Ridge', holes, playerHandicaps: { p1: 0 }, scores: { p1: { 5: 6 } } };
+    const t = buildTournament({ players, rounds: [round0, round1] });
+
+    expect(nemesisEncore(t)).toBeNull();
+  });
+
+  it('does not award when the player scores nonzero on repeat visits', () => {
+    const holes = [{ number: 5, par: 4, strokeIndex: 5 }];
+    const players = [{ id: 'p1', name: 'Alice', handicap: 0 }];
+    const round0 = { courseName: 'Sunset Ridge', holes, playerHandicaps: { p1: 0 }, scores: { p1: { 5: 6 } } }; // 0 pts
+    const round1 = { courseName: 'Sunset Ridge', holes, playerHandicaps: { p1: 0 }, scores: { p1: { 5: 4 } } }; // 2 pts — not a repeat zero
+    const t = buildTournament({ players, rounds: [round0, round1] });
+
+    expect(nemesisEncore(t)).toBeNull();
+  });
+
+  it('sorts the worst repeat offender first (most rounds)', () => {
+    const holes = [
+      { number: 5, par: 4, strokeIndex: 5 },
+      { number: 9, par: 4, strokeIndex: 9 },
+    ];
+    const players = [{ id: 'p1', name: 'Alice', handicap: 0 }];
+    // Hole 5 zeroed in all 3 rounds; hole 9 zeroed in only 2.
+    const round0 = { courseName: 'Sunset Ridge', holes, playerHandicaps: { p1: 0 }, scores: { p1: { 5: 6, 9: 6 } } };
+    const round1 = { courseName: 'Sunset Ridge', holes, playerHandicaps: { p1: 0 }, scores: { p1: { 5: 6, 9: 6 } } };
+    const round2 = { courseName: 'Sunset Ridge', holes, playerHandicaps: { p1: 0 }, scores: { p1: { 5: 6, 9: 4 } } }; // hole 9 not zeroed here
+    const t = buildTournament({ players, rounds: [round0, round1, round2] });
+
+    const result = nemesisEncore(t);
+
+    expect(result).toHaveLength(2);
+    expect(result[0].holeNumber).toBe(5);
+    expect(result[0].rounds).toEqual([0, 1, 2]);
+    expect(result[1].holeNumber).toBe(9);
+    expect(result[1].rounds).toEqual([0, 1]);
+  });
+
+  it('isolates the offending player — a teammate zeroed once on the same hole does not count', () => {
+    const holes = [{ number: 5, par: 4, strokeIndex: 5 }];
+    const players = [
+      { id: 'p1', name: 'Alice', handicap: 0 },
+      { id: 'p2', name: 'Bob', handicap: 0 },
+    ];
+    const round0 = { courseName: 'Sunset Ridge', holes, playerHandicaps: { p1: 0, p2: 0 }, scores: { p1: { 5: 6 }, p2: { 5: 6 } } };
+    const round1 = { courseName: 'Sunset Ridge', holes, playerHandicaps: { p1: 0, p2: 0 }, scores: { p1: { 5: 6 }, p2: { 5: 4 } } }; // p2 not zeroed this time
+    const t = buildTournament({ players, rounds: [round0, round1] });
+
+    const result = nemesisEncore(t);
+
+    expect(result).toHaveLength(1);
+    expect(result[0].player.id).toBe('p1');
   });
 });
 

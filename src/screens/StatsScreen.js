@@ -18,13 +18,17 @@ import {
   parTypeSplit, warmupVsClosing, handicapROI,
   playerNemesisAndCrushed, chaosHoles, collectiveExtremes,
   pairSynergy, pairCarryRatio, swingHole,
-  par3Heartbreak, pickupChampion, anchor, zeroHero,
+  par3Heartbreak, pickupChampion, anchor, zeroHero, nemesisEncore,
   skinsLeaderboard, matchPlayResults, pairConfigMatrix,
   shotStats, playersWithShotData, driveScoreImpact, puttDeepDive,
   approachScoreImpact,
   bounceBackRate, frontBackSplit, strokeIndexAccuracy, scramblingStats,
   withoutScrambleScores,
 } from '../store/statsEngine';
+// holeDifficultySplit already takes (tournament, playerId) generically — no
+// synthetic-tournament assumptions inside it — so the Players tab reuses it
+// directly instead of adding a thin wrapper in statsEngine.js.
+import { holeDifficultySplit } from '../store/personalStats';
 import StatDetailSheet, { captureAndShare } from '../components/StatDetailSheet';
 import { scoringModeUsesTeams, isScrambleMode } from '../components/scoringModes';
 import PtsBadge from '../components/PtsBadge';
@@ -1204,6 +1208,7 @@ function PlayersTab({ tournament, players, selectedPlayer, setSelectedPlayer, me
   const history = playerRoundHistory(tournament, player.id);
   const avg = playerAvgStableford(tournament, player.id);
   const parSplit = parTypeSplit(tournament, player.id);
+  const difficulty = holeDifficultySplit(tournament, player.id);
   const wc = warmupVsClosing(tournament, player.id);
   const roi = handicapROI(tournament, player.id);
   const bounceBack = bounceBackRate(tournament).find(r => r.player.id === player.id) || null;
@@ -1274,6 +1279,19 @@ function PlayersTab({ tournament, players, selectedPlayer, setSelectedPlayer, me
     explainer: `Every ${label} hole played in this tournament, hole by hole.`,
     rows: (bucket.breakdown || []).map((b, i) => ({
       key: `ps-${b.roundIndex}-${b.holeNumber}-${i}`,
+      primary: `R${b.roundIndex + 1} · ${b.courseName} · Hole ${b.holeNumber}`,
+      secondary: `Par ${b.par} · SI ${b.si} · ${b.strokes} strokes`,
+      rightPrimary: `${b.points} pts`,
+      tone: toneForPoints(b.points),
+    })),
+  });
+
+  const openDifficulty = (label, bucket) => bucket.holes > 0 && setSheet({
+    title: `${player.name} — ${label}`,
+    subtitle: `${bucket.avgPoints} avg pts · ${bucket.holes} holes`,
+    explainer: `Every hole with printed stroke index ${label.replace('SI ', '')} played in this tournament, hole by hole.`,
+    rows: (bucket.breakdown || []).map((b, i) => ({
+      key: `df-${b.roundIndex}-${b.holeNumber}-${i}`,
       primary: `R${b.roundIndex + 1} · ${b.courseName} · Hole ${b.holeNumber}`,
       secondary: `Par ${b.par} · SI ${b.si} · ${b.strokes} strokes`,
       rightPrimary: `${b.points} pts`,
@@ -1400,6 +1418,35 @@ function PlayersTab({ tournament, players, selectedPlayer, setSelectedPlayer, me
                   key={key}
                   style={s.parSplitCell}
                   onPress={() => openParSplit(label, bucket)}
+                  activeOpacity={0.7}
+                  disabled={bucket.holes === 0}
+                >
+                  <Text style={s.parSplitLabel}>{label}</Text>
+                  <Text style={[s.parSplitValue, {
+                    color: bucket.holes === 0
+                      ? theme.text.muted
+                      : theme.scoreColor(bucket.avgPoints >= 2 ? 'good' : bucket.avgPoints >= 1.5 ? 'neutral' : 'poor'),
+                  }]}>
+                    {bucket.holes === 0 ? '—' : bucket.avgPoints}
+                  </Text>
+                  <Text style={s.parSplitSub}>{bucket.holes} holes</Text>
+                </TouchableOpacity>
+              ))}
+            </View>
+          </View>
+
+          <Text style={s.sectionTitle}>DIFFICULTY SPLIT</Text>
+          <View style={s.card}>
+            <View style={s.parSplitRow}>
+              {[
+                { key: 'hard', label: 'SI 1-6', bucket: difficulty.hard },
+                { key: 'mid', label: 'SI 7-12', bucket: difficulty.mid },
+                { key: 'easy', label: 'SI 13-18', bucket: difficulty.easy },
+              ].map(({ key, label, bucket }) => (
+                <TouchableOpacity
+                  key={key}
+                  style={s.parSplitCell}
+                  onPress={() => openDifficulty(label, bucket)}
                   activeOpacity={0.7}
                   disabled={bucket.holes === 0}
                 >
@@ -3037,6 +3084,7 @@ function ShameTab({ tournament, hasMulti, usesTeams, metric, theme, s }) {
   const pickup = pickupChampion(tournament);
   const anchorStat = anchor(tournament);
   const zero = zeroHero(tournament);
+  const encore = nemesisEncore(tournament);
   const [sheet, setSheet] = useState(null);
   const modeLabel = metric === 'strokes' ? 'strokes (gross)' : 'points (net Stableford)';
 
@@ -3219,7 +3267,27 @@ function ShameTab({ tournament, hasMulti, usesTeams, metric, theme, s }) {
     ]),
   });
 
-  const any = shame.tripleBogey || shame.bogeyStreak || shame.doubleBogeyStreak || shame.pointlessStreak || (hasMulti && shame.gift) || shame.collapse || shame.blowup || par3 || pickup || (usesTeams && anchorStat) || zero;
+  const openEncore = () => encore && setSheet({
+    title: `${firstName(encore[0].player)} — Nemesis Encore`,
+    subtitle: `Hole ${encore[0].holeNumber} · ${encore[0].courseName}`,
+    explainer: 'The same hole, on the same course, worth exactly nothing — and it keeps happening. Rows show every round it struck.',
+    rows: encore.flatMap((e, i) => [
+      { key: `sec-${i}`, section: true, label: `${e.player.name} · Hole ${e.holeNumber} · ${e.courseName}`, rightLabel: `${e.rounds.length} rounds` },
+      ...e.rounds.map((ri, j) => {
+        const round = tournament.rounds[ri];
+        const holeInfo = round?.holes?.find(h => h.number === e.holeNumber);
+        return {
+          key: `${i}-${j}`,
+          primary: `R${ri + 1} · ${round?.courseName ?? e.courseName}`,
+          secondary: holeInfo ? `Par ${holeInfo.par} · SI ${holeInfo.strokeIndex}` : '',
+          rightPrimary: '0 pts',
+          tone: 'poor',
+        };
+      }),
+    ]),
+  });
+
+  const any = shame.tripleBogey || shame.bogeyStreak || shame.doubleBogeyStreak || shame.pointlessStreak || (hasMulti && shame.gift) || shame.collapse || shame.blowup || par3 || pickup || (usesTeams && anchorStat) || zero || encore;
 
   return (
     <View>
@@ -3322,6 +3390,15 @@ function ShameTab({ tournament, hasMulti, usesTeams, metric, theme, s }) {
           value={`${firstName(zero.entries[0].player)} — ${zero.entries[0].count} pointless holes in R${zero.entries[0].roundIndex + 1}`}
           sub={`${zero.entries.length} round${zero.entries.length === 1 ? '' : 's'} with ≥3 zero-pt holes`}
           onPress={openZero} theme={theme} s={s}
+        />
+      )}
+      {encore && (
+        <HighlightCard
+          icon="repeat"
+          label="🔁 Nemesis Encore"
+          value={`Hole ${encore[0].holeNumber} owns ${firstName(encore[0].player)} (${encore[0].rounds.length} rounds)`}
+          sub={`${encore[0].courseName} · ${encore.length} nemesis hole${encore.length === 1 ? '' : 's'}`}
+          onPress={openEncore} theme={theme} s={s}
         />
       )}
 

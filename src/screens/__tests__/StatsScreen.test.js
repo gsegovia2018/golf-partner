@@ -121,7 +121,14 @@ jest.mock('../../store/statsEngine', () => ({
   playingToHandicap: jest.fn(() => []),
   hotStretch: jest.fn(() => []),
   parTypeSplit: jest.fn(() => ({ par3: {}, par4: {}, par5: {} })),
-  warmupVsClosing: jest.fn(() => []),
+  // Real shape: { warmup: { avgPoints, holes, breakdown }, closing: {...}, delta }
+  // — PlayersTab reads `.warmup.holes`/`.closing.holes` directly, so a bare
+  // `[]` default crashes the very first Players-tab render.
+  warmupVsClosing: jest.fn(() => ({
+    warmup: { avgPoints: 0, holes: 0, breakdown: [] },
+    closing: { avgPoints: 0, holes: 0, breakdown: [] },
+    delta: 0,
+  })),
   handicapROI: jest.fn(() => []),
   playerNemesisAndCrushed: jest.fn(() => []),
   chaosHoles: jest.fn(() => ({})),
@@ -137,6 +144,7 @@ jest.mock('../../store/statsEngine', () => ({
   pickupChampion: jest.fn(() => null),
   anchor: jest.fn(() => null),
   zeroHero: jest.fn(() => null),
+  nemesisEncore: jest.fn(() => null),
   skinsLeaderboard: jest.fn(() => ({ leaderboard: [], rounds: [], totalSkins: 0 })),
   matchPlayResults: jest.fn(() => []),
   pairConfigMatrix: jest.fn(() => []),
@@ -185,6 +193,27 @@ describe('StatsScreen chrome', () => {
 
     expect(queryByText('Total')).toBeNull();
     expect(queryByText('R1')).toBeNull();
+  });
+});
+
+describe('StatsScreen Players tab — Difficulty Split', () => {
+  test('renders the DIFFICULTY SPLIT card with per-band averages and opens the hole breakdown on tap', () => {
+    const { getByText, getAllByText, UNSAFE_getByType } = renderStats([makeRound('r1')]);
+    fireEvent.press(getByText('Players'));
+
+    expect(getByText('DIFFICULTY SPLIT')).toBeTruthy();
+    expect(getByText('SI 1-6')).toBeTruthy();
+    expect(getByText('SI 7-12')).toBeTruthy();
+    expect(getByText('SI 13-18')).toBeTruthy();
+    // 18 holes split 6/6/6 across the three bands.
+    expect(getAllByText('6 holes')).toHaveLength(3);
+    // calcStablefordPoints is mocked to always return 2 pts — every band averages 2.
+    expect(getAllByText('2').length).toBeGreaterThanOrEqual(3);
+
+    fireEvent.press(getByText('SI 1-6'));
+    const sheet = UNSAFE_getByType('StatDetailSheet');
+    expect(sheet.props.title).toBe('Marcos — SI 1-6');
+    expect(sheet.props.rows).toHaveLength(6);
   });
 });
 
@@ -960,6 +989,41 @@ describe('StatsScreen Shame tab — fairness fixes', () => {
     fireEvent.press(getByText('Shame'));
 
     expect(getAllByText('Marcos — 5 pointless holes in R1').length).toBeGreaterThan(0);
+  });
+
+  test('Nemesis Encore leads with the worst repeat offender: "Hole 7 owns {FirstName} ({n} rounds)"', () => {
+    const statsEngine = require('../../store/statsEngine');
+    statsEngine.nemesisEncore.mockReturnValue([
+      { player: fourPlayers[0], holeNumber: 7, courseName: 'La Moraleja', rounds: [0, 1, 2] },
+      { player: fourPlayers[1], holeNumber: 3, courseName: 'La Moraleja', rounds: [0, 1] },
+    ]);
+
+    const { getByText, getAllByText } = renderStats([makeRound('r1')], { players: fourPlayers });
+    fireEvent.press(getByText('Shame'));
+
+    expect(getAllByText('Hole 7 owns Marcos (3 rounds)').length).toBeGreaterThan(0);
+    expect(getAllByText('La Moraleja · 2 nemesis holes').length).toBeGreaterThan(0);
+  });
+
+  test('tapping Nemesis Encore opens a detail sheet with a row per repeat round', () => {
+    const statsEngine = require('../../store/statsEngine');
+    statsEngine.nemesisEncore.mockReturnValue([
+      { player: fourPlayers[0], holeNumber: 7, courseName: 'La Moraleja', rounds: [0, 1] },
+    ]);
+
+    const { getByText, getAllByText, UNSAFE_getByType } = renderStats(
+      [makeRound('r1'), makeRound('r2', 5)],
+      { players: fourPlayers },
+    );
+    fireEvent.press(getByText('Shame'));
+    fireEvent.press(getAllByText(/Nemesis Encore/)[0]);
+
+    const sheet = UNSAFE_getByType('StatDetailSheet');
+    expect(sheet.props.title).toBe('Marcos — Nemesis Encore');
+    // one section header + one row per round the hole zeroed the player.
+    expect(sheet.props.rows).toHaveLength(3);
+    expect(sheet.props.rows[1].rightPrimary).toBe('0 pts');
+    expect(sheet.props.rows[2].rightPrimary).toBe('0 pts');
   });
 
   test('Par-3 Heartbreak renders every tied leader, not just one player', () => {
