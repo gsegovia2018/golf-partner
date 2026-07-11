@@ -180,6 +180,117 @@ DO $$ BEGIN
   ALTER PUBLICATION supabase_realtime ADD TABLE public.tournaments;
 EXCEPTION WHEN duplicate_object THEN NULL; END $$;
 
+-- 5) Read RPCs ----------------------------------------------------------------
+-- get_game_tournament(id) reassembles the exact legacy JSONB blob shape (the
+-- shape rowToTournament()/mergeTournaments() already expect) from the
+-- normalized game_* tables + tournaments.props, so client code that switches
+-- to sync-v2 sees no shape change. STABLE + SECURITY INVOKER (the default):
+-- callers only ever see rows the tournaments/game_* RLS policies above already
+-- let them see — no privilege escalation here.
+CREATE OR REPLACE FUNCTION public.get_game_tournament(p_id text)
+RETURNS jsonb LANGUAGE plpgsql STABLE AS $$
+DECLARE
+  v_t   record;
+  v_out jsonb;
+BEGIN
+  SELECT * INTO v_t FROM public.tournaments WHERE id = p_id;
+  IF NOT FOUND THEN RETURN NULL; END IF;
+
+  v_out := v_t.props || jsonb_build_object(
+    'id', v_t.id, 'name', v_t.name, 'kind', v_t.kind, 'createdAt', v_t.created_at,
+    'players', COALESCE((
+      SELECT jsonb_agg(gp.body ORDER BY gp.pos, gp.player_id)
+      FROM public.game_players gp WHERE gp.tournament_id = p_id), '[]'::jsonb),
+    'rounds', COALESCE((
+      SELECT jsonb_agg(
+        gr.body
+        || jsonb_build_object('id', gr.id)
+        || jsonb_build_object('scores', COALESCE((
+             SELECT jsonb_object_agg(q.player_id, q.per) FROM (
+               SELECT s.player_id, jsonb_object_agg(s.hole::text, s.strokes) AS per
+               FROM public.game_scores s
+               WHERE s.round_id = gr.id AND s.strokes IS NOT NULL
+               GROUP BY s.player_id) q), '{}'::jsonb))
+        || jsonb_build_object('shotDetails', COALESCE((
+             SELECT jsonb_object_agg(q.player_id, q.per) FROM (
+               SELECT d.player_id, jsonb_object_agg(d.hole::text, d.detail) AS per
+               FROM public.game_shot_details d
+               WHERE d.round_id = gr.id AND d.detail IS NOT NULL
+               GROUP BY d.player_id) q), '{}'::jsonb))
+        || COALESCE((
+             SELECT jsonb_build_object('notes',
+               COALESCE((SELECT jsonb_build_object('round', n.note)
+                         FROM public.game_round_notes n
+                         WHERE n.round_id = gr.id AND n.hole_key = 'round' AND n.note IS NOT NULL), '{}'::jsonb)
+               || COALESCE((SELECT jsonb_build_object('hole', jsonb_object_agg(n.hole_key, n.note))
+                            FROM public.game_round_notes n
+                            WHERE n.round_id = gr.id AND n.hole_key <> 'round' AND n.note IS NOT NULL), '{}'::jsonb))
+             WHERE EXISTS (SELECT 1 FROM public.game_round_notes n2
+                           WHERE n2.round_id = gr.id AND n2.note IS NOT NULL)), '{}'::jsonb)
+        ORDER BY gr.round_index, gr.id)
+      FROM public.game_rounds gr WHERE gr.tournament_id = p_id), '[]'::jsonb));
+
+  IF v_t.current_round IS NOT NULL THEN
+    v_out := v_out || jsonb_build_object('currentRound', v_t.current_round);
+  END IF;
+  RETURN v_out;
+END $$;
+
+-- get_my_game_tournaments() replicates loadAllTournaments()'s role logic
+-- (src/store/tournamentStore.js:204-263) server-side: owner (created_by =
+-- auth.uid() OR created_by IS NULL) beats tournament_members beats
+-- tournament_participants when the same tournament shows up in more than one
+-- bucket, same precedence the client already applies via seenIds. Each
+-- tournament appears once, newest-first by created_at (id is a client-side
+-- timestamp string and can drift from created_at — see schema-facts decision
+-- #6 — so created_at is the only safe recency key). With no session
+-- (auth.uid() IS NULL) this mirrors the client's no-user branch: every
+-- tournament visible under RLS, all tagged 'owner'.
+CREATE OR REPLACE FUNCTION public.get_my_game_tournaments()
+RETURNS jsonb LANGUAGE plpgsql STABLE AS $$
+DECLARE
+  v_uid uuid := auth.uid();
+  v_out jsonb;
+BEGIN
+  IF v_uid IS NULL THEN
+    SELECT COALESCE(jsonb_agg(
+             jsonb_build_object('tournament', public.get_game_tournament(t.id), 'role', 'owner')
+             ORDER BY t.created_at DESC), '[]'::jsonb)
+      INTO v_out
+      FROM public.tournaments t;
+    RETURN v_out;
+  END IF;
+
+  SELECT COALESCE(jsonb_agg(
+           jsonb_build_object('tournament', public.get_game_tournament(x.id), 'role', x.role)
+           ORDER BY x.created_at DESC), '[]'::jsonb)
+    INTO v_out
+    FROM (
+      SELECT DISTINCT ON (u.id) u.id, u.created_at, u.role
+      FROM (
+        -- owner: created_by = me, or NULL (anonymous-era rows) — prio 1
+        SELECT t.id, t.created_at, 'owner'::text AS role, 1 AS prio
+        FROM public.tournaments t
+        WHERE t.created_by = v_uid OR t.created_by IS NULL
+        UNION ALL
+        -- member: tournament_members row for me, role carried through as-is — prio 2
+        SELECT t.id, t.created_at, tm.role, 2 AS prio
+        FROM public.tournament_members tm
+        JOIN public.tournaments t ON t.id = tm.tournament_id
+        WHERE tm.user_id = v_uid
+        UNION ALL
+        -- participant fallback (see tournamentStore.js comment on the
+        -- tournament_participants query) — prio 3
+        SELECT t.id, t.created_at, 'participant'::text AS role, 3 AS prio
+        FROM public.tournament_participants tp
+        JOIN public.tournaments t ON t.id = tp.tournament_id
+        WHERE tp.user_id = v_uid
+      ) u
+      ORDER BY u.id, u.prio) x;
+
+  RETURN v_out;
+END $$;
+
 /* ===========================================================================
    VERIFY
    ---------------------------------------------------------------------------
@@ -206,4 +317,14 @@ EXCEPTION WHEN duplicate_object THEN NULL; END $$;
     WHERE pubname = 'supabase_realtime'
       AND (tablename LIKE 'game_%' OR tablename = 'tournaments')
     ORDER BY tablename;
+
+   -- Read RPCs present:
+   SELECT proname FROM pg_proc
+    WHERE pronamespace = 'public'::regnamespace
+      AND proname IN ('get_game_tournament', 'get_my_game_tournaments')
+    ORDER BY proname;
+
+   -- Smoke test (replace :id with a real tournament id):
+   -- SELECT public.get_game_tournament(:'id');
+   -- SELECT public.get_my_game_tournaments();
    =========================================================================== */
