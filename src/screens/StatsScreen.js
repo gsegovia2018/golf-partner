@@ -3268,8 +3268,13 @@ function ShameTab({ tournament, hasMulti, usesTeams, metric, theme, s }) {
   });
 
   const openEncore = () => encore && setSheet({
-    title: `${firstName(encore[0].player)} — Nemesis Encore`,
-    subtitle: `Hole ${encore[0].holeNumber} · ${encore[0].courseName}`,
+    // joinNames across every offender (dedup by player id) — the openZero
+    // convention — since entries can belong to several different players.
+    title: `${joinNames([...new Set(encore.map(e => e.player.id))].map(id => encore.find(e => e.player.id === id).player))} — Nemesis Encore`,
+    // Only a lone entry can honestly headline its own hole/course here.
+    subtitle: encore.length === 1
+      ? `Hole ${encore[0].holeNumber} · ${encore[0].courseName}`
+      : `${encore.length} repeat-offender holes`,
     explainer: 'The same hole, on the same course, worth exactly nothing — and it keeps happening. Rows show every round it struck.',
     rows: encore.flatMap((e, i) => [
       { key: `sec-${i}`, section: true, label: `${e.player.name} · Hole ${e.holeNumber} · ${e.courseName}`, rightLabel: `${e.rounds.length} rounds` },
@@ -3397,7 +3402,9 @@ function ShameTab({ tournament, hasMulti, usesTeams, metric, theme, s }) {
           icon="repeat"
           label="🔁 Nemesis Encore"
           value={`Hole ${encore[0].holeNumber} owns ${firstName(encore[0].player)} (${encore[0].rounds.length} rounds)`}
-          sub={`${encore[0].courseName} · ${encore.length} nemesis hole${encore.length === 1 ? '' : 's'}`}
+          sub={encore.length === 1
+            ? `${encore[0].courseName} · 1 nemesis hole`
+            : `${encore.length} nemesis holes across the group`}
           onPress={openEncore} theme={theme} s={s}
         />
       )}

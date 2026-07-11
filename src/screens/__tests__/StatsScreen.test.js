@@ -1002,7 +1002,9 @@ describe('StatsScreen Shame tab — fairness fixes', () => {
     fireEvent.press(getByText('Shame'));
 
     expect(getAllByText('Hole 7 owns Marcos (3 rounds)').length).toBeGreaterThan(0);
-    expect(getAllByText('La Moraleja · 2 nemesis holes').length).toBeGreaterThan(0);
+    // The sub must not pin entry[0]'s course onto a count that can span
+    // other entries' courses — with 2+ entries it goes course-agnostic.
+    expect(getAllByText('2 nemesis holes across the group').length).toBeGreaterThan(0);
   });
 
   test('tapping Nemesis Encore opens a detail sheet with a row per repeat round', () => {
@@ -1016,6 +1018,8 @@ describe('StatsScreen Shame tab — fairness fixes', () => {
       { players: fourPlayers },
     );
     fireEvent.press(getByText('Shame'));
+    // A lone entry's sub CAN honestly carry its own course.
+    expect(getAllByText('La Moraleja · 1 nemesis hole').length).toBeGreaterThan(0);
     fireEvent.press(getAllByText(/Nemesis Encore/)[0]);
 
     const sheet = UNSAFE_getByType('StatDetailSheet');
@@ -1024,6 +1028,28 @@ describe('StatsScreen Shame tab — fairness fixes', () => {
     expect(sheet.props.rows).toHaveLength(3);
     expect(sheet.props.rows[1].rightPrimary).toBe('0 pts');
     expect(sheet.props.rows[2].rightPrimary).toBe('0 pts');
+  });
+
+  test('Nemesis Encore sheet names every offender when entries span multiple players', () => {
+    const statsEngine = require('../../store/statsEngine');
+    statsEngine.nemesisEncore.mockReturnValue([
+      { player: fourPlayers[0], holeNumber: 7, courseName: 'La Moraleja', rounds: [0, 1, 2] },
+      { player: fourPlayers[1], holeNumber: 3, courseName: 'Northwood', rounds: [0, 1] },
+    ]);
+
+    const { getByText, getAllByText, UNSAFE_getByType } = renderStats(
+      [makeRound('r1'), makeRound('r2', 5)],
+      { players: fourPlayers },
+    );
+    fireEvent.press(getByText('Shame'));
+    fireEvent.press(getAllByText(/Nemesis Encore/)[0]);
+
+    const sheet = UNSAFE_getByType('StatDetailSheet');
+    // joinNames across ALL qualifying players — the openZero / openTripleBogey
+    // convention for multi-entry shame sheets.
+    expect(sheet.props.title).toBe('Marcos & Bob — Nemesis Encore');
+    // 2 section headers + 3 repeat rounds + 2 repeat rounds.
+    expect(sheet.props.rows).toHaveLength(7);
   });
 
   test('Par-3 Heartbreak renders every tied leader, not just one player', () => {
