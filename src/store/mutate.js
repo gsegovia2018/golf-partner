@@ -17,6 +17,13 @@ export function metaPathFor(m) {
     case 'pairs.set':    return `rounds.${m.roundId}.pairs`;
     case 'round.setScoringMode':
       return [`rounds.${m.roundId}.scoringMode`, `rounds.${m.roundId}.pairs`];
+    // Per-round best/worst ball point value overrides. Two scalar LWW paths.
+    case 'round.setBestBallValues':
+      return [`rounds.${m.roundId}.bestBallValue`, `rounds.${m.roundId}.worstBallValue`];
+    // Tournament-wide team behavior (fixed teams / manual teams). Edited from
+    // the gear Team Settings sheet; each toggle is its own LWW path.
+    case 'tournament.setTeamSettings':
+      return ['settings.fixedTeams', 'settings.manualTeams'];
     case 'handicap.set': return `rounds.${m.roundId}.playerHandicaps.${m.playerId}`;
     // Per-round handicap INDEX override (recomputes the playing handicap for
     // non-manual entries). Scoped to one round, one player.
@@ -160,6 +167,21 @@ export function applyToTournament(t, m) {
       // must not spoil its reveal.
       round.scoringMode = m.scoringMode;
       if (m.pairs) round.pairs = m.pairs;
+      break;
+    }
+    case 'round.setBestBallValues': {
+      const round = t.rounds?.find((r) => r.id === m.roundId);
+      if (!round) return;
+      round.bestBallValue = m.bestBallValue;
+      round.worstBallValue = m.worstBallValue;
+      break;
+    }
+    case 'tournament.setTeamSettings': {
+      t.settings = {
+        ...(t.settings ?? {}),
+        fixedTeams: Boolean(m.fixedTeams),
+        manualTeams: Boolean(m.manualTeams),
+      };
       break;
     }
     case 'handicap.set': {
