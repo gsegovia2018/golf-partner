@@ -455,4 +455,52 @@ describe('route params', () => {
     const totalChip = await findByText('Total');
     expect(StyleSheet.flatten(totalChip.props.style).color).not.toBe(mockTheme.text.inverse);
   });
+
+  test('leaves the Total scope when roundId is not found', async () => {
+    mockRouteTournament = {
+      id: 't-old',
+      name: 'Old Casual Game',
+      players: [player],
+      rounds: [makeRound('r-1'), makeRound('r-2')],
+    };
+    const { findByText } = render(
+      <StatsScreen
+        navigation={{ goBack: jest.fn(), navigate: jest.fn() }}
+        route={{ params: { tournamentId: 't-old', roundId: 'nope' } }}
+      />,
+    );
+    // "Total" chip must be the active one since roundId didn't match any round.
+    const totalChip = await findByText('Total');
+    expect(StyleSheet.flatten(totalChip.props.style).color).toBe(mockTheme.text.inverse);
+    const chip = await findByText('R2');
+    expect(StyleSheet.flatten(chip.props.style).color).not.toBe(mockTheme.text.inverse);
+  });
+
+  test('does not scope a single-round game to its only round', async () => {
+    // Single-round tournament: the round-scope chip row is hidden (see
+    // "hides Total and R1..." above), so an active-chip assertion can't
+    // observe the regression. Instead assert on the Overview section title,
+    // which flips between "TOURNAMENT HIGHLIGHTS" (Total scope) and "ROUND
+    // HIGHLIGHTS" (round scope) — that's the only rendered signal of whether
+    // roundScope got set to 0 for a one-round game.
+    const { getTournament } = require('../../store/tournamentStore');
+    mockRouteTournament = {
+      id: 't-old',
+      name: 'Old Casual Game',
+      players: [player],
+      rounds: [makeRound('r-1')],
+    };
+    const { findByText, queryByText } = render(
+      <StatsScreen
+        navigation={{ goBack: jest.fn(), navigate: jest.fn() }}
+        route={{ params: { tournamentId: 't-old', roundId: 'r-1' } }}
+      />,
+    );
+    await findByText('TOURNAMENT HIGHLIGHTS');
+    expect(queryByText('ROUND HIGHLIGHTS')).toBeNull();
+    // Chip row stays hidden for a single-round game either way.
+    expect(queryByText('Total')).toBeNull();
+    expect(queryByText('R1')).toBeNull();
+    expect(getTournament).toHaveBeenCalledWith('t-old');
+  });
 });
