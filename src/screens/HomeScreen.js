@@ -1765,6 +1765,9 @@ export default function HomeScreen({ navigation, route }) {
                 showsHorizontalScrollIndicator={false}
                 scrollEventThrottle={16}
                 onLayout={() => {
+                  // Never scroll out from under the user's finger — e.g. a
+                  // viewport reflow firing layout mid-swipe on web.
+                  if (isUserScrollingRound.current) return;
                   // A remount (list ↔ tournament switch, or a modal-driven
                   // re-layout) resets the ScrollView's real offset to 0 on web
                   // while roundScrollOffset still holds the last position, so

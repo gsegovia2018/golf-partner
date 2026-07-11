@@ -336,3 +336,26 @@ test('pager re-asserts the selected round when it re-lays-out', async () => {
   });
   expect(scrollTo).toHaveBeenCalledWith({ x: 320, animated: false });
 });
+
+test('pager does not re-assert the round while the user is dragging', async () => {
+  const { ScrollView } = require('react-native');
+  const view = renderTournamentHome();
+  await waitFor(() => expect(activeTabLabel(view)).toBe('R2'));
+
+  fireEvent(view.getByTestId('round-pager-wrap'), 'layout', {
+    nativeEvent: { layout: { width: 320, height: 400 } },
+  });
+  const pagerNode = view.UNSAFE_getAllByType(ScrollView)
+    .find((n) => n.props.testID === 'round-pager');
+  expect(pagerNode).toBeTruthy();
+
+  // The user starts a swipe; a layout event mid-drag (e.g. a viewport
+  // reflow on web) must NOT yank the pager under their finger.
+  const scrollTo = jest.fn();
+  pagerNode.instance.scrollTo = scrollTo;
+  fireEvent(view.getByTestId('round-pager'), 'scrollBeginDrag');
+  fireEvent(view.getByTestId('round-pager'), 'layout', {
+    nativeEvent: { layout: { width: 320, height: 400 } },
+  });
+  expect(scrollTo).not.toHaveBeenCalled();
+});
