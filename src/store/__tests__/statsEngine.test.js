@@ -1,4 +1,4 @@
-import { teeShotImpact, lagPuttingQuality, sandSaveRate, upAndDownRate, bunkerVisits, sgPutting, sgAroundGreen, sgApproach, sgPenalties, sgTotal, sgSeason, driveScoreImpact, puttDeepDive, approachScoreImpact, puttingTargetGaps, approachTargetGaps, pairPerformance, shotStats, tournamentHighlights, withoutScrambleScores, playerAvgStableford, pickupChampion, hallOfShame, chaosHoles, skinsLeaderboard } from '../statsEngine';
+import { teeShotImpact, lagPuttingQuality, sandSaveRate, upAndDownRate, bunkerVisits, sgPutting, sgAroundGreen, sgApproach, sgPenalties, sgTotal, sgSeason, driveScoreImpact, puttDeepDive, approachScoreImpact, puttingTargetGaps, approachTargetGaps, pairPerformance, shotStats, tournamentHighlights, withoutScrambleScores, playerAvgStableford, pickupChampion, hallOfShame, chaosHoles, skinsLeaderboard, playerStreaks, bounceBackRate } from '../statsEngine';
 import { mixedModeTournament, buildTournament } from './statsFixtures';
 
 // 18 par-4 holes, strokeIndex = hole number.
@@ -1195,5 +1195,105 @@ describe('skinsLeaderboard strokes mode — a pickup can tie/lose a hole but nev
 
     expect(skins.totalSkins).toBe(0);
     expect(skins.leaderboard.every((r) => r.skins === 0)).toBe(true);
+  });
+});
+
+// ── RC3: streaks and bounce-back respect hole adjacency and round
+// boundaries — a run may not bridge an unscored hole or cross into a new
+// round, even though such holes are simply absent from the per-player
+// entries array. ──
+
+describe('playerStreaks — adjacency-aware runs', () => {
+  it('does not bridge the unscored hole 5 gap in R3: par streak is 2, not 4', () => {
+    // mixedModeTournament R3: p2 plays holes 1-4,6-9 at gross strokes 4 on
+    // pars [4,3,5,4,3,5,4,3,5] — vsPar<=0 ("par or better") holds at holes
+    // 1,3,4,6,7,9 and fails at 2,8. Holes 3,4 are physically adjacent (a
+    // real 2-hole run); holes 4 and 6 are NOT (hole 5 is missing), so a
+    // correct implementation must not chain 3,4,6,7 into a run of 4.
+    const t = mixedModeTournament();
+
+    const streaks = playerStreaks(t, 'p2', { metric: 'strokes', roundIndex: 2 });
+
+    expect(streaks.bestParStreak).toBe(2);
+    expect(streaks.parStreakHoles.map((h) => h.holeNumber)).toEqual([3, 4]);
+  });
+
+  it('does not chain the last hole of one round into the first hole of the next', () => {
+    // Round A: hole 1 bogey (breaks any streak), hole 2 par. Round B: hole 1
+    // par, hole 2 bogey. A's par (hole 2) and B's par (hole 1) sit back to
+    // back in the flat per-player entries array with no gap between them —
+    // an implementation that ignores round boundaries would chain them into
+    // a streak of 2 despite them belonging to different rounds/courses.
+    const holes = [
+      { number: 1, par: 4, strokeIndex: 1 },
+      { number: 2, par: 4, strokeIndex: 2 },
+    ];
+    const players = [{ id: 'p1', name: 'Alice', handicap: 0 }];
+    const roundA = {
+      courseName: 'Course A',
+      holes,
+      playerHandicaps: { p1: 0 },
+      scores: { p1: { 1: 5, 2: 4 } }, // bogey, par
+    };
+    const roundB = {
+      courseName: 'Course B',
+      holes,
+      playerHandicaps: { p1: 0 },
+      scores: { p1: { 1: 4, 2: 5 } }, // par, bogey
+    };
+    const t = buildTournament({ players, rounds: [roundA, roundB] });
+
+    const streaks = playerStreaks(t, 'p1', { metric: 'strokes' });
+
+    expect(streaks.bestParStreak).toBe(1);
+  });
+});
+
+describe('hallOfShame.bogeyStreak — adjacency-aware runs', () => {
+  it('does not bridge an unscored hole between two bogeys', () => {
+    // Bogey on hole 1, hole 2 unscored, bogey on hole 3 — physically
+    // non-adjacent, so this must not register as a 2-hole bogey streak
+    // (hallOfShame requires >= 2 to report a streak at all).
+    const holes = [1, 2, 3].map((n) => ({ number: n, par: 4, strokeIndex: n }));
+    const players = [{ id: 'p1', name: 'Alice', handicap: 0 }];
+    const round = {
+      courseName: 'Test Course',
+      holes,
+      playerHandicaps: { p1: 0 },
+      scores: { p1: { 1: 5, 3: 5 } }, // bogey, (2 unscored), bogey
+    };
+    const t = buildTournament({ players, rounds: [round] });
+
+    const shame = hallOfShame(t, { metric: 'strokes' });
+
+    expect(shame.bogeyStreak).toBeNull();
+  });
+});
+
+describe('bounceBackRate — recovery must land on the very next hole', () => {
+  it('counts the opportunity after a bogey but does not count a birdie 2 holes later as a bounce-back', () => {
+    // Par, par, par, bogey (hole 4), hole 5 unscored, birdie (hole 6). The
+    // bogey on hole 4 is still a bounce-back opportunity, but since hole 5
+    // was never scored there is no result on the hole immediately after —
+    // the birdie on hole 6 must NOT count as the recovery.
+    const holes = [1, 2, 3, 4, 5, 6].map((n) => ({ number: n, par: 4, strokeIndex: n }));
+    const players = [{ id: 'p1', name: 'Alice', handicap: 0 }];
+    const round = {
+      courseName: 'Test Course',
+      holes,
+      playerHandicaps: { p1: 0 },
+      scores: { p1: { 1: 4, 2: 4, 3: 4, 4: 5, 6: 3 } }, // par, par, par, bogey, (5 unscored), birdie
+    };
+    const t = buildTournament({ players, rounds: [round] });
+
+    const results = bounceBackRate(t);
+
+    expect(results).toHaveLength(1);
+    const [p1Result] = results;
+    expect(p1Result.opportunities).toBe(1);
+    expect(p1Result.bounceBacks).toBe(0);
+    expect(p1Result.rate).toBe(0);
+    expect(p1Result.breakdown).toHaveLength(1);
+    expect(p1Result.breakdown[0]).toMatchObject({ holeNumber: 6, afterHole: 4, recovered: false });
   });
 });

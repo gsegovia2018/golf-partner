@@ -437,7 +437,7 @@ function OverviewTab({ tournament, metric, hasMulti, anyTeams, allScramble, roun
     setSheet({
       title: `${joinNames(h.entries.map(e => e.player))} — ${h.value} holes`,
       subtitle: `Longest par streak · ${modeLabel}`,
-      explainer: 'The longest run of consecutive holes scored at par or better (no interruption by a bogey or worse).',
+      explainer: 'The longest run of consecutive holes scored at par or better (no interruption by a bogey or worse), within a round.',
       rows: tiedRowsByPlayer(
         h.entries,
         (e) => e.breakdown.map((b, i) => ({
@@ -613,7 +613,7 @@ function OverviewTab({ tournament, metric, hasMulti, anyTeams, allScramble, roun
           icon="trending-up"
           label="Longest Par Streak"
           value={`${joinNames(ps.entries.map(e => e.player))} — ${ps.value} holes`}
-          sub={`Consecutive holes at par or better (${modeLabel})`}
+          sub={`Consecutive holes at par or better, within a round (${modeLabel})`}
           onPress={openParStreak} theme={theme} s={s}
         />
       )}
@@ -1114,7 +1114,7 @@ function PlayersTab({ tournament, players, selectedPlayer, setSelectedPlayer, me
   const openBounceBack = (row) => setSheet({
     title: `${row.player.name} — bounce-back`,
     subtitle: `${row.bounceBacks}/${row.opportunities} recoveries · ${row.rate}%`,
-    explainer: 'After a bogey-or-worse, how often the very next hole was par-or-better. Each row is one such follow-up hole.',
+    explainer: 'After a bogey-or-worse, how often the very next hole (within the same round) was par-or-better. Each row is one such follow-up hole.',
     rows: row.breakdown.map((b, i) => ({
       key: `bb-${b.roundIndex}-${b.holeNumber}-${i}`,
       primary: `R${b.roundIndex + 1} · ${b.courseName} · Hole ${b.holeNumber}`,
@@ -1196,10 +1196,10 @@ function PlayersTab({ tournament, players, selectedPlayer, setSelectedPlayer, me
           <View style={s.card}>
             <View style={s.streakRow}>
               {[
-                { key: 'birdie', label: 'Birdie streak', value: streaks.bestBirdieStreak, tone: 'excellent', holes: streaks.birdieStreakHoles, toneFn: () => 'excellent', explainer: 'Longest run of consecutive holes at birdie or better.' },
-                { key: 'par', label: 'Par streak', value: streaks.bestParStreak, tone: 'good', holes: streaks.parStreakHoles, toneFn: defaultTone, explainer: 'Longest run of consecutive holes at par or better.' },
-                { key: 'bogey', label: 'Bogey streak', value: streaks.bogeyOnlyStreak, tone: 'neutral', holes: streaks.bogeyOnlyStreakHoles, toneFn: () => 'neutral', explainer: 'Longest run of consecutive holes at exactly 1 over par.' },
-                { key: 'dbl', label: 'Dbl+ streak', value: streaks.doubleBogeyPlusStreak, tone: 'poor', holes: streaks.doubleBogeyPlusStreakHoles, toneFn: () => 'poor', explainer: 'Longest run of consecutive holes at 2 or more over par.' },
+                { key: 'birdie', label: 'Birdie streak', value: streaks.bestBirdieStreak, tone: 'excellent', holes: streaks.birdieStreakHoles, toneFn: () => 'excellent', explainer: 'Longest run of consecutive holes at birdie or better, within a round.' },
+                { key: 'par', label: 'Par streak', value: streaks.bestParStreak, tone: 'good', holes: streaks.parStreakHoles, toneFn: defaultTone, explainer: 'Longest run of consecutive holes at par or better, within a round.' },
+                { key: 'bogey', label: 'Bogey streak', value: streaks.bogeyOnlyStreak, tone: 'neutral', holes: streaks.bogeyOnlyStreakHoles, toneFn: () => 'neutral', explainer: 'Longest run of consecutive holes at exactly 1 over par, within a round.' },
+                { key: 'dbl', label: 'Dbl+ streak', value: streaks.doubleBogeyPlusStreak, tone: 'poor', holes: streaks.doubleBogeyPlusStreakHoles, toneFn: () => 'poor', explainer: 'Longest run of consecutive holes at 2 or more over par, within a round.' },
               ].map(st => {
                 const zero = st.value === 0;
                 return (
@@ -2867,19 +2867,19 @@ function ShameTab({ tournament, hasMulti, usesTeams, metric, theme, s }) {
   const openBogeyStreak = () => openStreakTied(
     shame.bogeyStreak,
     'bogeys in a row',
-    'Longest run of consecutive holes scored exactly 1 over par. Bogey-only (not triggered by doubles or worse).',
+    'Longest run of consecutive holes scored exactly 1 over par, within a round. Bogey-only (not triggered by doubles or worse).',
   );
 
   const openDoubleBogeyStreak = () => openStreakTied(
     shame.doubleBogeyStreak,
     'dbl+ in a row',
-    'Longest run of consecutive holes scored 2 or more over par.',
+    'Longest run of consecutive holes scored 2 or more over par, within a round.',
   );
 
   const openPointless = () => openStreakTied(
     shame.pointlessStreak,
     '0-pt holes',
-    'Longest run of consecutive holes scoring zero Stableford points.',
+    'Longest run of consecutive holes scoring zero Stableford points, within a round.',
   );
 
   const openGift = () => {

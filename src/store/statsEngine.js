@@ -84,6 +84,36 @@ export function playerScoreDistribution(tournament, playerId, { metric = 'points
   return dist;
 }
 
+// ── Shared hole-adjacency run helper ──
+// A "run" only continues onto the physically next hole of the SAME round —
+// entries carry {roundIndex, holeNumber, …}. Skipping an unscored hole, or
+// crossing into a new round, breaks the run even when the entries on both
+// sides satisfy `predicate`; entries must already be in ascending
+// (roundIndex, holeNumber) order. Shared by playerStreaks, hallOfShame's
+// longestRunPerPlayer, and bounceBackRate (and reused by hotStretch later).
+function isAdjacentHole(prev, cur) {
+  return cur.roundIndex === prev.roundIndex && cur.holeNumber === prev.holeNumber + 1;
+}
+
+function longestAdjacentRun(entries, predicate) {
+  let bestCount = 0, bestStart = -1, bestEnd = -1;
+  let curStart = -1;
+  entries.forEach((e, i) => {
+    if (i === 0 || !isAdjacentHole(entries[i - 1], e)) curStart = -1;
+    if (predicate(e)) {
+      if (curStart === -1) curStart = i;
+      const curCount = i - curStart + 1;
+      if (curCount > bestCount) { bestCount = curCount; bestStart = curStart; bestEnd = i; }
+    } else {
+      curStart = -1;
+    }
+  });
+  return {
+    count: bestCount,
+    entries: bestCount > 0 ? entries.slice(bestStart, bestEnd + 1) : [],
+  };
+}
+
 // ── Streaks ──
 
 export function playerStreaks(tournament, playerId, { metric = 'points', roundIndex = null } = {}) {
@@ -108,21 +138,8 @@ export function playerStreaks(tournament, playerId, { metric = 'points', roundIn
   });
 
   const longestRun = (predicate) => {
-    let bestCount = 0, bestStart = -1, bestEnd = -1;
-    let curStart = -1;
-    entries.forEach((e, i) => {
-      if (predicate(e)) {
-        if (curStart === -1) curStart = i;
-        const curCount = i - curStart + 1;
-        if (curCount > bestCount) { bestCount = curCount; bestStart = curStart; bestEnd = i; }
-      } else {
-        curStart = -1;
-      }
-    });
-    return {
-      count: bestCount,
-      holes: bestCount > 0 ? entries.slice(bestStart, bestEnd + 1) : [],
-    };
+    const run = longestAdjacentRun(entries, predicate);
+    return { count: run.count, holes: run.entries };
   };
 
   const par = longestRun(e => e.vsPar <= 0);
@@ -583,20 +600,9 @@ export function hallOfShame(tournament, { metric = 'points' } = {}) {
   const longestRunPerPlayer = (predicate) => {
     const holder = tied(1);
     tournament.players.forEach(p => {
-      const entries = perPlayerEntries[p.id];
-      let curStart = -1, bestCount = 0, bestStart = -1, bestEnd = -1;
-      entries.forEach((e, i) => {
-        if (predicate(e)) {
-          if (curStart === -1) curStart = i;
-          const curCount = i - curStart + 1;
-          if (curCount > bestCount) { bestCount = curCount; bestStart = curStart; bestEnd = i; }
-        } else { curStart = -1; }
-      });
-      if (bestCount > 0) {
-        push(holder, bestCount, {
-          player: p, count: bestCount,
-          breakdown: entries.slice(bestStart, bestEnd + 1),
-        });
+      const run = longestAdjacentRun(perPlayerEntries[p.id], predicate);
+      if (run.count > 0) {
+        push(holder, run.count, { player: p, count: run.count, breakdown: run.entries });
       }
     });
     return holder;
@@ -1549,8 +1555,11 @@ export function playersWithShotData(tournament) {
 
 // ── Bounce-back Rate ──
 // Share of holes immediately following a bogey-or-worse on which the player
-// scored par-or-better. Walks each round in hole order; the hole after the
-// last hole of a round does NOT chain into the next round.
+// scored par-or-better. A bogey-or-worse hole always counts as an
+// opportunity, but it only converts into a bounce-back when the very next
+// physical hole (same round, holeNumber + 1) was scored par-or-better — an
+// unscored hole in between (or the round ending) breaks the chain, so the
+// next hole that DOES have a score is never mistaken for the recovery.
 export function bounceBackRate(tournament) {
   const perPlayer = {};
   tournament.players.forEach(p => { perPlayer[p.id] = { player: p, opportunities: 0, bounceBacks: 0, breakdown: [] }; });
@@ -1565,7 +1574,7 @@ export function bounceBackRate(tournament) {
         const sc = round.scores[player.id]?.[hole.number];
         if (!sc) return;
         seq.push({
-          holeNumber: hole.number, par: hole.par, si: hole.strokeIndex,
+          roundIndex, holeNumber: hole.number, par: hole.par, si: hole.strokeIndex,
           strokes: sc, vsPar: sc - hole.par,
           points: calcStablefordPoints(hole.par, sc, handicap, hole.strokeIndex),
         });
@@ -1576,7 +1585,7 @@ export function bounceBackRate(tournament) {
         if (prev.vsPar < 1) continue; // prior hole was par-or-better — no opportunity
         const rec = perPlayer[player.id];
         rec.opportunities++;
-        const recovered = cur.vsPar <= 0;
+        const recovered = isAdjacentHole(prev, cur) && cur.vsPar <= 0;
         if (recovered) rec.bounceBacks++;
         rec.breakdown.push({
           roundIndex, courseName: round.courseName,
