@@ -5,6 +5,15 @@ import { ThemeProvider } from '../../theme/ThemeContext';
 import ScorecardScreen from '../ScorecardScreen';
 import { roundPairClinched } from '../../store/tournamentStore';
 
+// The screen uses useFocusEffect for its cross-device live pull; run the effect
+// on mount (and its cleanup on unmount) without needing a NavigationContainer.
+jest.mock('@react-navigation/native', () => ({
+  useFocusEffect: (cb) => {
+    const ReactModule = require('react');
+    ReactModule.useEffect(() => cb(), [cb]);
+  },
+}));
+
 let mockOfficialRoundState;
 
 const mockPlayers = [
