@@ -458,6 +458,112 @@ describe('StatsScreen mixed scoring-mode gating (per-round overrides)', () => {
       expect(getAllByText('R1 · La Moraleja').length).toBeGreaterThanOrEqual(2);
     });
   });
+
+  describe('unified Pair Cards and Pair Difference drama strip', () => {
+    const scoringModes = require('../../components/scoringModes');
+    const pairsField = [[fourPlayers[0], fourPlayers[1]], [fourPlayers[2], fourPlayers[3]]];
+    const teamRounds = () => [
+      { ...makeRound('r1'), scoringMode: 'stableford', pairs: pairsField },
+      { ...makeRound('r2', 5), scoringMode: 'stableford', pairs: pairsField },
+    ];
+
+    beforeEach(() => {
+      jest.clearAllMocks();
+      scoringModes.scoringModeUsesTeams.mockImplementation((mode) => mode === 'stableford');
+    });
+
+    afterEach(() => {
+      scoringModes.scoringModeUsesTeams.mockImplementation(() => false);
+    });
+
+    test('Pair Cards renders one card per pairing with a synergy badge and a carry bar that always sums to 100%; old three section titles are gone', () => {
+      const statsEngine = require('../../store/statsEngine');
+      const pairKey = [fourPlayers[0].id, fourPlayers[1].id].sort().join('|');
+      statsEngine.pairPerformance.mockReturnValue([
+        {
+          players: [fourPlayers[0], fourPlayers[1]],
+          rounds: 2,
+          avgPoints: 35,
+          totalPoints: 70,
+          roundList: [
+            {
+              roundIndex: 0, courseName: 'La Moraleja', combinedPoints: 35, combinedStrokes: 80,
+              memberPoints: [
+                { playerId: 'p1', playerName: 'Marcos', points: 18 },
+                { playerId: 'p2', playerName: 'Bob Diaz', points: 17 },
+              ],
+            },
+          ],
+        },
+      ]);
+      statsEngine.pairSynergy.mockReturnValue([
+        {
+          members: [fourPlayers[0], fourPlayers[1]],
+          rounds: 2, combined: 70, expected: 60, synergy: 1.17, holesPlayed: 36,
+          roundList: [{ roundIndex: 0, courseName: 'La Moraleja', holesPlayed: 18, combined: 35, expected: 30, synergy: 1.17 }],
+        },
+      ]);
+      statsEngine.pairCarryRatio.mockReturnValue([
+        {
+          members: [fourPlayers[0], fourPlayers[1]],
+          // Each share independently rounds to 51 and 50 — a naive
+          // implementation that rounds both would sum to 101%.
+          shares: [
+            { player: fourPlayers[0], points: 40, share: 0.505 },
+            { player: fourPlayers[1], points: 30, share: 0.495 },
+          ],
+          totalPoints: 70, holesPlayed: 36, imbalance: 0.01,
+        },
+      ]);
+
+      const { getByText, queryByText, getByTestId } = renderStats(teamRounds(), {
+        players: fourPlayers, scoringMode: 'individual',
+      });
+
+      fireEvent.press(getByText('Pairs'));
+
+      expect(getByText('PAIR CARDS')).toBeTruthy();
+      expect(queryByText('PAIR CHEMISTRY')).toBeNull();
+      expect(queryByText('PAIR SYNERGY')).toBeNull();
+      expect(queryByText('CARRY RATIO')).toBeNull();
+
+      // One card per pairing, with its synergy badge...
+      expect(getByText('×1.17')).toBeTruthy();
+
+      // ...and a carry bar whose two shares always sum to 100%.
+      const fillA = getByTestId(`pair-carry-fill-a-${pairKey}`);
+      const fillB = getByTestId(`pair-carry-fill-b-${pairKey}`);
+      const widthA = parseInt(StyleSheet.flatten(fillA.props.style).width, 10);
+      const widthB = parseInt(StyleSheet.flatten(fillB.props.style).width, 10);
+      expect(widthA).toBe(51);
+      expect(widthB).toBe(49);
+      expect(widthA + widthB).toBe(100);
+    });
+
+    test('renders a drama strip under the Pair Difference chart from crossovers/maxLead/maxDeficit/finalDelta', () => {
+      const statsEngine = require('../../store/statsEngine');
+      statsEngine.pairDifferenceByHole.mockReturnValue({
+        pair1: [fourPlayers[0], fourPlayers[1]],
+        pair2: [fourPlayers[2], fourPlayers[3]],
+        metric: 'points',
+        courseName: 'La Moraleja',
+        holes: [],
+        maxLead: 5,
+        maxDeficit: -2,
+        finalDelta: 2,
+        crossovers: 3,
+        maxAbs: 5,
+      });
+
+      const { getByText } = renderStats(teamRounds(), {
+        players: fourPlayers, scoringMode: 'individual',
+      });
+
+      fireEvent.press(getByText('Pairs'));
+
+      expect(getByText('Lead changes: 3 · Biggest lead: Marcos & Bob +5 pts · Final: +2 pts')).toBeTruthy();
+    });
+  });
 });
 
 describe('StatsScreen Overview tab — presentation honesty', () => {

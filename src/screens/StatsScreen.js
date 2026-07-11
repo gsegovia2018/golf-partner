@@ -1793,11 +1793,49 @@ function PairsTab({ tournament, players, h2hP1, setH2hP1, h2hP2, setH2hP2, selec
     ? 'All rounds'
     : `R${idx + 1} · ${tournament.rounds[idx]?.courseName ?? ''}`);
   const pdData = pdRound != null ? pairDifferenceByHole(pairsTournament, pdRound, { metric }) : null;
+  // Lead changes / biggest lead / final margin — a one-line "drama strip"
+  // under the Pair Difference chart, built entirely from fields
+  // pairDifferenceByHole already computes. maxLead is the largest cumulative
+  // gap in pair1's favor (>=0), maxDeficit the largest in pair2's favor
+  // (<=0) — whichever has the bigger magnitude is the "biggest lead".
+  const dramaStrip = pdData ? (() => {
+    const unit = metric === 'strokes' ? 'str' : 'pts';
+    const pair1Label = pdData.pair1.map(firstName).join(' & ');
+    const pair2Label = pdData.pair2.map(firstName).join(' & ');
+    const leadMagnitude = Math.max(Math.abs(pdData.maxLead), Math.abs(pdData.maxDeficit));
+    const leader = Math.abs(pdData.maxLead) >= Math.abs(pdData.maxDeficit) ? pair1Label : pair2Label;
+    const finalSigned = `${pdData.finalDelta >= 0 ? '+' : ''}${pdData.finalDelta}`;
+    return `Lead changes: ${pdData.crossovers} · Biggest lead: ${leader} +${leadMagnitude} ${unit} · Final: ${finalSigned} ${unit}`;
+  })() : null;
   const synergy = pairSynergy(pairsTournament);
   const carry = pairCarryRatio(pairsTournament);
   const swing = pdRound != null ? swingHole(pairsTournament, pdRound) : null;
   const matchPlay = matchPlayResults(pairsTournament, { metric });
   const configMatrix = pairConfigMatrix(pairsTournament);
+  // Pair Chemistry / Pair Synergy / Carry Ratio used to be three separate
+  // section lists fragmenting the same pairing. pairPerformance is the
+  // primary list (avg pts + rounds); pairSynergy and pairCarryRatio don't
+  // necessarily key their pairs in the same order or use the same key
+  // separator, so match identity by sorted member ids rather than trusting
+  // either function's own key. Task 18 adds a coverage line to these cards —
+  // keep this shape easy to extend with another badge/row.
+  const pairCardKey = (ids) => [...ids].sort().join('|');
+  const synergyByPairKey = {};
+  synergy.forEach(p => { synergyByPairKey[pairCardKey(p.members.map(m => m.id))] = p; });
+  const carryByPairKey = {};
+  carry.forEach(p => { carryByPairKey[pairCardKey(p.members.map(m => m.id))] = p; });
+  const pairCards = pairs.map(p => {
+    const key = pairCardKey(p.players.map(pl => pl.id));
+    return {
+      key,
+      players: p.players,
+      avgPoints: p.avgPoints,
+      rounds: p.rounds,
+      roundList: p.roundList,
+      synergy: synergyByPairKey[key] || null,
+      carry: carryByPairKey[key] || null,
+    };
+  });
   const p1 = players[h2hP1];
   const p2Idx = h2hP2 >= players.length ? 0 : h2hP2;
   const p2 = players[p2Idx];
@@ -1809,18 +1847,37 @@ function PairsTab({ tournament, players, h2hP1, setH2hP1, h2hP2, setH2hP2, selec
 
   const [sheet, setSheet] = useState(null);
 
-  const openPair = (pair) => setSheet({
-    title: `${pair.players[0].name} & ${pair.players[1].name}`,
-    subtitle: `${pair.avgPoints} avg pts · ${pair.rounds} round${pair.rounds !== 1 ? 's' : ''}`,
-    explainer: 'Combined Stableford points this pairing scored together each round, averaged across rounds played.',
-    rows: pair.roundList.map(r => ({
-      key: `r${r.roundIndex}`,
-      primary: `R${r.roundIndex + 1} · ${r.courseName}`,
-      secondary: r.memberPoints.map(m => `${firstName({ name: m.playerName })} ${m.points}`).join(' · '),
-      rightPrimary: `${r.combinedPoints} pts`,
-      rightSecondary: `${r.combinedStrokes} strokes`,
-    })),
-  });
+  const openPairCard = (card) => {
+    const synergyRoundByIndex = {};
+    (card.synergy?.roundList || []).forEach(r => { synergyRoundByIndex[r.roundIndex] = r; });
+    const roundRows = card.roundList.map(r => {
+      const syn = synergyRoundByIndex[r.roundIndex];
+      return {
+        key: `r${r.roundIndex}`,
+        primary: `R${r.roundIndex + 1} · ${r.courseName}`,
+        secondary: r.memberPoints.map(m => `${firstName({ name: m.playerName })} ${m.points}`).join(' · '),
+        rightPrimary: `${r.combinedPoints} pts`,
+        rightSecondary: syn?.synergy != null ? `×${syn.synergy} synergy` : `${r.combinedStrokes} strokes`,
+      };
+    });
+    const carryRows = card.carry ? [
+      { key: 'sec-carry', section: true, label: 'Carry split' },
+      ...card.carry.shares.map(sh => ({
+        key: `carry-${sh.player.id}`,
+        primary: sh.player.name,
+        secondary: `${sh.points} pts`,
+        rightPrimary: `${Math.round(sh.share * 100)}%`,
+        tone: sh.share >= 0.55 ? 'excellent' : sh.share >= 0.45 ? 'good' : 'poor',
+      })),
+    ] : [];
+    setSheet({
+      title: `${card.players[0].name} & ${card.players[1].name}`,
+      subtitle: `${card.avgPoints} avg pts · ${card.rounds} round${card.rounds !== 1 ? 's' : ''}`
+        + (card.synergy ? ` · ×${card.synergy.synergy} synergy` : ''),
+      explainer: 'Combined Stableford points this pairing scored together each round, synergy vs. their individual averages (1.00 = as expected), and how their combined points split between the two of them.',
+      rows: [...roundRows, ...carryRows],
+    });
+  };
 
   const openHoleWinsInfo = () => setSheet({
     title: 'Hole Wins — how W·T·L works',
@@ -1871,32 +1928,6 @@ function PairsTab({ tournament, players, h2hP1, setH2hP1, h2hP2, setH2hP2, selec
       }),
     });
   };
-
-  const openSynergy = (pair) => setSheet({
-    title: `${pair.members[0].name} & ${pair.members[1].name} — synergy`,
-    subtitle: `${pair.synergy}× baseline · ${pair.rounds} round${pair.rounds === 1 ? '' : 's'}`,
-    explainer: `Actual combined Stableford (${pair.combined}) over expected-from-each-members-average (${pair.expected}). 1.00 = as expected, above = lift each other, below = drag each other. Rows show each round they played together.`,
-    rows: (pair.roundList || []).map(r => ({
-      key: `syn-${r.roundIndex}`,
-      primary: `R${r.roundIndex + 1} · ${r.courseName}`,
-      secondary: `${r.combined} actual / ${r.expected} expected · ${r.holesPlayed} holes`,
-      rightPrimary: r.synergy != null ? `×${r.synergy}` : '—',
-      tone: r.synergy != null ? (r.synergy >= 1.05 ? 'excellent' : r.synergy >= 0.95 ? 'good' : 'poor') : 'neutral',
-    })),
-  });
-
-  const openCarry = (pair) => setSheet({
-    title: `${pair.members[0].name} & ${pair.members[1].name} — carry split`,
-    subtitle: `${pair.totalPoints} combined pts`,
-    explainer: 'Share of the pair\'s total points contributed by each member across every round they played together.',
-    rows: pair.shares.map(sh => ({
-      key: sh.player.id,
-      primary: sh.player.name,
-      secondary: `${sh.points} pts`,
-      rightPrimary: `${Math.round(sh.share * 100)}%`,
-      tone: sh.share >= 0.55 ? 'excellent' : sh.share >= 0.45 ? 'good' : 'poor',
-    })),
-  });
 
   const openMatchPlay = (round) => {
     if (!round.available) return;
@@ -2031,12 +2062,10 @@ function PairsTab({ tournament, players, h2hP1, setH2hP1, h2hP2, setH2hP2, selec
 
   const hasPairRounds = tournament.rounds.some(r => r.pairs && r.scores && Object.keys(r.scores).length > 0);
   const indexSections = [
-    { key: 'chemistry', label: 'Chemistry' },
+    { key: 'paircards', label: 'Pair Cards' },
     splitsPlayer && { key: 'splits', label: 'Splits' },
     { key: 'holewins', label: 'Hole Wins' },
     { key: 'pairdiff', label: 'Pair Diff' },
-    { key: 'synergy', label: 'Synergy' },
-    { key: 'carry', label: 'Carry' },
     { key: 'matchplay', label: 'Match Play' },
     { key: 'config', label: 'Config' },
     { key: 'h2h', label: 'Head-to-Head' },
@@ -2046,24 +2075,64 @@ function PairsTab({ tournament, players, h2hP1, setH2hP1, h2hP2, setH2hP2, selec
     <View>
       <SectionIndex sections={indexSections} anchors={anchors} scrollRef={scrollRef} theme={theme} s={s} />
 
-      <SectionAnchor anchorKey="chemistry" anchors={anchors}>
-        <Text style={s.sectionTitle}>PAIR CHEMISTRY</Text>
-        {pairs.length > 0 ? (
-          pairs.map((p, i) => (
-            <TouchableOpacity key={i} style={s.pairCard} onPress={() => openPair(p)} activeOpacity={0.7}>
-              <View style={s.pairNames}>
-                <Text style={s.pairName}>{p.players[0].name}</Text>
-                <Text style={s.pairAmp}>&</Text>
-                <Text style={s.pairName}>{p.players[1].name}</Text>
-              </View>
-              <View style={s.pairStats}>
-                <Text style={s.pairAvg}>{p.avgPoints} avg pts</Text>
-                <Text style={s.pairRounds}>{p.rounds} round{p.rounds !== 1 ? 's' : ''}</Text>
-              </View>
-            </TouchableOpacity>
-          ))
+      <SectionAnchor anchorKey="paircards" anchors={anchors}>
+        <Text style={s.sectionTitle}>PAIR CARDS</Text>
+        <Text style={s.scopeText}>{scopeLabel(null)}</Text>
+        {pairCards.length > 0 ? (
+          pairCards.map((card) => {
+            const synergyValue = card.synergy?.synergy ?? null;
+            const synergyTone = synergyValue == null ? null
+              : synergyValue >= 1.05 ? 'excellent' : synergyValue >= 0.95 ? 'good' : 'poor';
+            const shareA = card.carry ? Math.round(card.carry.shares[0].share * 100) : null;
+            // Fix the 101% width bug: derive the second share from the
+            // first instead of independently rounding both — two shares
+            // that each round up (e.g. 56.5% and 43.5%) used to sum to 101%.
+            const shareB = shareA != null ? 100 - shareA : null;
+            return (
+              <TouchableOpacity
+                key={card.key}
+                testID={`pair-card-${card.key}`}
+                style={s.pairCard}
+                onPress={() => openPairCard(card)}
+                activeOpacity={0.7}
+              >
+                <View style={s.pairNames}>
+                  <Text style={s.pairName}>{card.players[0].name}</Text>
+                  <Text style={s.pairAmp}>&</Text>
+                  <Text style={s.pairName}>{card.players[1].name}</Text>
+                  {synergyValue != null && (
+                    <View style={[s.synergyBadge, { backgroundColor: theme.scoreColor(synergyTone) + '20' }]}>
+                      <Text style={[s.synergyBadgeText, { color: theme.scoreColor(synergyTone) }]}>×{synergyValue}</Text>
+                    </View>
+                  )}
+                </View>
+                <View style={s.pairStats}>
+                  <Text style={s.pairAvg}>{card.avgPoints} avg pts</Text>
+                  <Text style={s.pairRounds}>{card.rounds} round{card.rounds !== 1 ? 's' : ''}</Text>
+                </View>
+                {shareA != null && (
+                  <>
+                    <View style={s.carryBar}>
+                      <View testID={`pair-carry-fill-a-${card.key}`} style={[s.carryFill, {
+                        width: `${shareA}%`,
+                        backgroundColor: theme.pairA,
+                      }]} />
+                      <View testID={`pair-carry-fill-b-${card.key}`} style={[s.carryFill, {
+                        width: `${shareB}%`,
+                        backgroundColor: theme.pairB,
+                      }]} />
+                    </View>
+                    <View style={s.carryLabels}>
+                      <Text style={s.carryName}>{firstName(card.carry.shares[0].player)} {shareA}%</Text>
+                      <Text style={s.carryName}>{shareB}% {firstName(card.carry.shares[1].player)}</Text>
+                    </View>
+                  </>
+                )}
+              </TouchableOpacity>
+            );
+          })
         ) : (
-          <Text style={s.mutedNote}>Pair chemistry needs at least one completed round with assigned pairs.</Text>
+          <Text style={s.mutedNote}>Pair cards need at least one completed round with assigned pairs.</Text>
         )}
       </SectionAnchor>
 
@@ -2159,7 +2228,10 @@ function PairsTab({ tournament, players, h2hP1, setH2hP1, h2hP2, setH2hP2, selec
           <>
             <Text style={s.scopeText}>R{pdRound + 1} · {tournament.rounds[pdRound]?.courseName} — change the round chip above</Text>
             {pdData ? (
-              <PairDifferenceChart data={pdData} metric={metric} onHolePress={openPairDiffHole} theme={theme} s={s} />
+              <>
+                <PairDifferenceChart data={pdData} metric={metric} onHolePress={openPairDiffHole} theme={theme} s={s} />
+                <Text style={s.dramaStrip}>{dramaStrip}</Text>
+              </>
             ) : (
               <Text style={s.mutedNote}>This round has no assigned pairs to compare.</Text>
             )}
@@ -2181,68 +2253,11 @@ function PairsTab({ tournament, players, h2hP1, setH2hP1, h2hP2, setH2hP2, selec
         )}
       </SectionAnchor>
 
-      <SectionAnchor anchorKey="synergy" anchors={anchors}>
-        <Text style={s.sectionTitle}>PAIR SYNERGY</Text>
-        {synergy.length > 0 ? (
-          <>
-          <Text style={s.scopeText}>Combined pts vs expected from each partner's average</Text>
-          {synergy.map((pair, i) => (
-            <TouchableOpacity key={i} style={s.pairCard} onPress={() => openSynergy(pair)} activeOpacity={0.7}>
-              <View style={s.pairNames}>
-                <Text style={s.pairName}>{pair.members[0].name}</Text>
-                <Text style={s.pairAmp}>&</Text>
-                <Text style={s.pairName}>{pair.members[1].name}</Text>
-              </View>
-              <View style={s.pairStats}>
-                <Text style={[s.pairAvg, {
-                  color: pair.synergy >= 1.05 ? theme.scoreColor('excellent')
-                    : pair.synergy >= 0.95 ? theme.scoreColor('good')
-                    : theme.scoreColor('poor'),
-                }]}>×{pair.synergy}</Text>
-                <Text style={s.pairRounds}>{pair.combined} / {pair.expected} pts</Text>
-              </View>
-            </TouchableOpacity>
-          ))}
-          </>
-        ) : (
-          <Text style={s.mutedNote}>Synergy needs a paired round to compare against each player's average.</Text>
-        )}
-      </SectionAnchor>
-
-      <SectionAnchor anchorKey="carry" anchors={anchors}>
-        <Text style={s.sectionTitle}>CARRY RATIO</Text>
-        {carry.length > 0 ? (
-          <>
-          <Text style={s.scopeText}>Who contributed more inside the pair</Text>
-          {carry.map((pair, i) => (
-            <TouchableOpacity key={i} style={s.carryCard} onPress={() => openCarry(pair)} activeOpacity={0.7}>
-              <View style={s.carryBar}>
-                <View style={[s.carryFill, {
-                  width: `${Math.round(pair.shares[0].share * 100)}%`,
-                  backgroundColor: theme.pairA,
-                }]} />
-                <View style={[s.carryFill, {
-                  width: `${Math.round(pair.shares[1].share * 100)}%`,
-                  backgroundColor: theme.pairB,
-                }]} />
-              </View>
-              <View style={s.carryLabels}>
-                <Text style={s.carryName}>{firstName(pair.shares[0].player)} {Math.round(pair.shares[0].share * 100)}%</Text>
-                <Text style={s.carryName}>{Math.round(pair.shares[1].share * 100)}% {firstName(pair.shares[1].player)}</Text>
-              </View>
-              <Text style={s.carryMeta}>{pair.totalPoints} combined pts · imbalance {pair.imbalance}</Text>
-            </TouchableOpacity>
-          ))}
-          </>
-        ) : (
-          <Text style={s.mutedNote}>Carry ratio needs a paired round to split each pair's contribution.</Text>
-        )}
-      </SectionAnchor>
-
       <SectionAnchor anchorKey="matchplay" anchors={anchors}>
         <Text style={s.sectionTitle}>MATCH PLAY</Text>
         {matchPlay.some(r => r.available) ? (
           <>
+          <Text style={s.scopeText}>{scopeLabel(null)}</Text>
           <Text style={s.scopeText}>Per round, hole-by-hole up/down — closes when lead {'>'} holes remaining</Text>
           {matchPlay.filter(r => r.available).map(round => {
             const p1Label = round.pair1.map(p => firstName(p)).join(' + ');
@@ -2285,6 +2300,7 @@ function PairsTab({ tournament, players, h2hP1, setH2hP1, h2hP2, setH2hP2, selec
         <Text style={s.sectionTitle}>PAIR CONFIG MATRIX</Text>
         {configMatrix.length > 0 ? (
           <>
+          <Text style={s.scopeText}>{scopeLabel(null)}</Text>
           <Text style={s.scopeText}>The 2-vs-2 combinations that actually played · W·T·L by holes won</Text>
           {configMatrix.map((cfg, i) => {
             const aWon = cfg.holeWins.A > cfg.holeWins.B;
@@ -3519,22 +3535,19 @@ const makeStyles = (t) => StyleSheet.create({
   },
   swingSub: { fontFamily: 'PlusJakartaSans-Medium', fontSize: 11, color: t.text.muted, marginTop: 2 },
 
-  // Carry ratio bar
-  carryCard: {
-    backgroundColor: t.bg.card, borderRadius: 14, borderWidth: 1,
-    borderColor: t.border.default, padding: 12, marginBottom: 8,
-    ...(t.isDark ? {} : t.shadow.card),
-  },
+  // Carry ratio bar (used inside a Pair Card)
   carryBar: {
     flexDirection: 'row', height: 10, borderRadius: 5,
-    backgroundColor: t.bg.secondary, overflow: 'hidden', marginBottom: 6,
+    backgroundColor: t.bg.secondary, overflow: 'hidden', marginBottom: 6, marginTop: 8,
   },
   carryFill: { height: '100%' },
   carryLabels: { flexDirection: 'row', justifyContent: 'space-between' },
   carryName: { fontFamily: 'PlusJakartaSans-SemiBold', fontSize: 12, color: t.text.primary },
-  carryMeta: {
-    fontFamily: 'PlusJakartaSans-Medium', fontSize: 10, color: t.text.muted,
-    marginTop: 6, textAlign: 'center',
+
+  // Pair difference drama strip
+  dramaStrip: {
+    fontFamily: 'PlusJakartaSans-Medium', fontSize: 11, color: t.text.muted,
+    marginTop: 8, marginBottom: 4,
   },
 
   // Skins footer
@@ -3709,6 +3722,10 @@ const makeStyles = (t) => StyleSheet.create({
   pairStats: { flexDirection: 'row', gap: 12 },
   pairAvg: { fontFamily: 'PlusJakartaSans-SemiBold', color: t.accent.primary, fontSize: 13 },
   pairRounds: { fontFamily: 'PlusJakartaSans-Medium', color: t.text.muted, fontSize: 12 },
+  synergyBadge: {
+    borderRadius: 8, paddingHorizontal: 6, paddingVertical: 2,
+  },
+  synergyBadgeText: { fontFamily: 'PlusJakartaSans-Bold', fontSize: 12 },
 
   // Head to Head
   h2hSelector: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 16, marginBottom: 16 },
