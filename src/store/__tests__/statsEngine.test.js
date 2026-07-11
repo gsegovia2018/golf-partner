@@ -1,4 +1,5 @@
-import { teeShotImpact, lagPuttingQuality, sandSaveRate, upAndDownRate, bunkerVisits, sgPutting, sgAroundGreen, sgApproach, sgPenalties, sgTotal, sgSeason, driveScoreImpact, puttDeepDive, approachScoreImpact, puttingTargetGaps, approachTargetGaps, pairPerformance, shotStats, tournamentHighlights } from '../statsEngine';
+import { teeShotImpact, lagPuttingQuality, sandSaveRate, upAndDownRate, bunkerVisits, sgPutting, sgAroundGreen, sgApproach, sgPenalties, sgTotal, sgSeason, driveScoreImpact, puttDeepDive, approachScoreImpact, puttingTargetGaps, approachTargetGaps, pairPerformance, shotStats, tournamentHighlights, withoutScrambleScores, playerAvgStableford } from '../statsEngine';
+import { mixedModeTournament } from './statsFixtures';
 
 // 18 par-4 holes, strokeIndex = hole number.
 function holes18() {
@@ -1037,5 +1038,23 @@ describe('approachTargetGaps', () => {
       avgSg: -0.11,
       greenRate: 100,
     });
+  });
+});
+
+describe('withoutScrambleScores', () => {
+  it('blanks scores, shotDetails and pairs on scramble rounds only', () => {
+    const t = mixedModeTournament();
+    const clean = withoutScrambleScores(t);
+    expect(clean.rounds).toHaveLength(3);
+    expect(clean.rounds[1].scores).toBeNull();
+    expect(clean.rounds[1].shotDetails).toBeNull();
+    expect(clean.rounds[1].pairs).toBeNull();
+    expect(clean.rounds[0].scores).toBe(t.rounds[0].scores);
+  });
+  it('keeps captain team-ball points out of personal aggregates', () => {
+    const t = mixedModeTournament();
+    const dirty = playerAvgStableford(t, 'p1');
+    const clean = playerAvgStableford(withoutScrambleScores(t), 'p1');
+    expect(clean).not.toEqual(dirty); // R2 team ball no longer credited to p1
   });
 });

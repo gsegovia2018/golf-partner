@@ -5,6 +5,14 @@
 //
 // Order is fixed: solo modes first, then head-to-head, then team modes.
 
+// SCRAMBLE_MODES / isScrambleMode live in store/scoring.js — store modules
+// (statsEngine in particular) need the predicate without importing from
+// src/components. Imported (and re-exported below) so existing call sites
+// that import it from this file keep working.
+import { SCRAMBLE_MODES, isScrambleMode } from '../store/scoring';
+
+export { SCRAMBLE_MODES, isScrambleMode };
+
 export const SCORING_MODES = [
   {
     key: 'individual',
@@ -127,15 +135,6 @@ export function fallbackScoringMode(playerCount) {
 // default so the UI can always render something.
 export function getScoringMode(key) {
   return SCORING_MODES.find((m) => m.key === key) ?? SCORING_MODES[0];
-}
-
-// Scramble modes share one engine: the team plays a single ball, scored
-// under the team captain. Used to route scoring, hide personal stats, and
-// build non-2x2 team shapes.
-export const SCRAMBLE_MODES = new Set(['scramblepairs', 'scramble3v1', 'scramble4']);
-
-export function isScrambleMode(key) {
-  return SCRAMBLE_MODES.has(key);
 }
 
 // True when the mode is played in partners/pairs (Stableford with Partners,

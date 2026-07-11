@@ -91,6 +91,9 @@ jest.mock('../../components/scoringModes', () => ({
 }));
 
 jest.mock('../../store/statsEngine', () => ({
+  // Real implementation: the scramble-gating tests below depend on scores/
+  // shotDetails/pairs actually being blanked on scramble rounds.
+  withoutScrambleScores: jest.requireActual('../../store/statsEngine').withoutScrambleScores,
   playerRoundHistory: jest.fn(() => []),
   playerAvgStableford: jest.fn(() => 0),
   playerScoreDistribution: jest.fn(() => []),

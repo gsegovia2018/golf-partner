@@ -22,6 +22,7 @@ import {
   shotStats, playersWithShotData, driveScoreImpact, puttDeepDive,
   approachScoreImpact,
   bounceBackRate, frontBackSplit, strokeIndexAccuracy, scramblingStats,
+  withoutScrambleScores,
 } from '../store/statsEngine';
 import StatDetailSheet, { captureAndShare } from '../components/StatDetailSheet';
 import { scoringModeUsesTeams, isScrambleMode } from '../components/scoringModes';
@@ -124,6 +125,20 @@ export default function StatsScreen({ navigation }) {
       console.warn('StatsScreen: failed to load tournament', e);
     });
   }, [user?.id]);
+
+  // Every personal-stat tab (Overview/Players/Holes/Pairs/Shots/Shame) reads
+  // `statsTournament` instead of the raw `tournament` — scramble rounds
+  // store one team ball under the captain, scored off a team handicap, and
+  // withoutScrambleScores blanks that round's scores/shotDetails/pairs so it
+  // never gets misattributed to the captain personally (see statsEngine).
+  // The header and RoundScopeChips below still read the raw `tournament` —
+  // chips label scramble rounds by name too, which needs the real round
+  // data, not the blanked one. Computed above the `!tournament` guard (with
+  // a null-safe fallback) so this hook always runs in the same order.
+  const statsTournament = useMemo(
+    () => (tournament ? withoutScrambleScores(tournament) : null),
+    [tournament],
+  );
 
   if (!tournament) return null;
 
@@ -245,25 +260,25 @@ export default function StatsScreen({ navigation }) {
 
       {activeTab === 'overview' && (
         <ScrollView ref={overviewScrollRef} style={s.scrollView} contentContainerStyle={s.content}>
-          <OverviewTab tournament={tournament} metric={metric} hasMulti={hasMulti} anyTeams={anyTeams}
+          <OverviewTab tournament={statsTournament} metric={metric} hasMulti={hasMulti} anyTeams={anyTeams}
             allScramble={allScramble} roundScope={roundScope} scrollRef={overviewScrollRef} theme={theme} s={s} />
         </ScrollView>
       )}
       {activeTab === 'players' && (
         <ScrollView style={s.scrollView} contentContainerStyle={s.content}>
-          <PlayersTab tournament={tournament} players={players} selectedPlayer={playersTabPlayer}
+          <PlayersTab tournament={statsTournament} players={players} selectedPlayer={playersTabPlayer}
             setSelectedPlayer={setPlayersTabPlayer} metric={metric} theme={theme} s={s} />
         </ScrollView>
       )}
       {activeTab === 'holes' && (
         <ScrollView style={s.scrollView} contentContainerStyle={s.content}>
-          <HolesTab tournament={tournament} completedRounds={completedRounds} hasMulti={hasMulti}
+          <HolesTab tournament={statsTournament} completedRounds={completedRounds} hasMulti={hasMulti}
             metric={metric} effectiveRound={effectiveRound} theme={theme} s={s} />
         </ScrollView>
       )}
       {activeTab === 'pairs' && anyTeams && (
         <ScrollView ref={pairsScrollRef} style={s.scrollView} contentContainerStyle={s.content}>
-          <PairsTab tournament={tournament} players={players}
+          <PairsTab tournament={statsTournament} players={players}
             h2hP1={h2hP1} setH2hP1={setH2hP1} h2hP2={h2hP2} setH2hP2={setH2hP2}
             selectedPlayer={pairsTabPlayer} setSelectedPlayer={setPairsTabPlayer}
             metric={metric} effectiveRound={effectiveRound} scrollRef={pairsScrollRef} theme={theme} s={s} />
@@ -271,12 +286,12 @@ export default function StatsScreen({ navigation }) {
       )}
       {activeTab === 'shots' && (
         <ScrollView style={s.scrollView} contentContainerStyle={s.content}>
-          <ShotsTab tournament={tournament} theme={theme} s={s} />
+          <ShotsTab tournament={statsTournament} theme={theme} s={s} />
         </ScrollView>
       )}
       {activeTab === 'shame' && (
         <ScrollView style={s.scrollView} contentContainerStyle={s.content}>
-          <ShameTab tournament={tournament} hasMulti={hasMulti} usesTeams={anyTeams} metric={metric} theme={theme} s={s} />
+          <ShameTab tournament={statsTournament} hasMulti={hasMulti} usesTeams={anyTeams} metric={metric} theme={theme} s={s} />
         </ScrollView>
       )}
     </ScreenContainer>
@@ -349,21 +364,6 @@ function SectionAnchor({ anchorKey, anchors, children }) {
   );
 }
 
-// headToHead compares each player's own scores directly and skips any round
-// where either player lacks one — but a scramble round DOES leave real
-// scores under both team captains (the team ball, scored off the scramble
-// team handicap), so comparing captain vs captain would count team play as
-// a personal duel. Blank those rounds' scores instead of removing the
-// rounds: the array keeps its length, so the roundIndex values headToHead
-// emits (and the R{n} labels built from them) stay correct, and blanked
-// rounds fall into headToHead's existing "round not played" skip.
-function withoutScrambleScores(tournament) {
-  const rounds = (tournament.rounds ?? []).map((r) => (
-    isScrambleMode(roundScoringMode(tournament, r)) ? { ...r, scores: null } : r
-  ));
-  return { ...tournament, rounds };
-}
-
 // ── Overview Tab ──
 function OverviewTab({ tournament, metric, hasMulti, anyTeams, allScramble, roundScope, scrollRef, theme, s }) {
   // Round scope is now screen-level; treat the prop as the source of truth.
@@ -379,8 +379,6 @@ function OverviewTab({ tournament, metric, hasMulti, anyTeams, allScramble, roun
   const modeLabel = isStrokes ? 'strokes (gross)' : 'points (net Stableford)';
   const [sheet, setSheet] = useState(null);
   const anchors = useRef({});
-  // Head-to-Head input with scramble rounds blanked — see withoutScrambleScores.
-  const h2hTournament = useMemo(() => withoutScrambleScores(tournament), [tournament]);
 
   const scope = roundIndex === null
     ? 'Tournament · all rounds'
@@ -568,10 +566,11 @@ function OverviewTab({ tournament, metric, hasMulti, anyTeams, allScramble, roun
   // team ball lives under the captain) — so the whole-tournament placeholder
   // (allScramble) must still hide this section even though its anyTeams
   // flag is false. A mixed tournament with SOME scramble rounds among
-  // non-team ones shows the section, but built from h2hTournament (scramble
-  // rounds' scores blanked — see withoutScrambleScores) so that two team
-  // CAPTAINS, who both hold real team-ball scores in a scramble round,
-  // never have their teams' play counted as a personal duel.
+  // non-team ones shows the section, but `tournament` here is already the
+  // screen-level statsTournament (scramble rounds' scores blanked — see
+  // withoutScrambleScores) so that two team CAPTAINS, who both hold real
+  // team-ball scores in a scramble round, never have their teams' play
+  // counted as a personal duel.
   const showH2H = hasMulti && !anyTeams && !allScramble && roundIndex === null;
   const indexSections = [
     { key: 'highlights', label: 'Highlights' },
@@ -765,7 +764,7 @@ function OverviewTab({ tournament, metric, hasMulti, anyTeams, allScramble, roun
             Net holes won across the tournament — row vs column ({isStrokes ? 'lower strokes wins' : 'higher Stableford wins'}). Tap a cell for the breakdown.
           </Text>
           <H2HMatrix
-            tournament={h2hTournament}
+            tournament={tournament}
             players={tournament.players}
             metric={metric}
             theme={theme}
@@ -773,7 +772,7 @@ function OverviewTab({ tournament, metric, hasMulti, anyTeams, allScramble, roun
             onCellPress={(i, j) => {
               const p1 = tournament.players[i];
               const p2 = tournament.players[j];
-              const result = headToHead(h2hTournament, p1.id, p2.id);
+              const result = headToHead(tournament, p1.id, p2.id);
               const bucket = isStrokes ? result.strokes : result.points;
               setSheet({
                 title: `${firstName(p1)} vs ${firstName(p2)} — by ${isStrokes ? 'strokes' : 'points'}`,
@@ -1648,6 +1647,8 @@ function HolesTab({ tournament, completedRounds, hasMulti, metric, effectiveRoun
 
 // ── Pairs Tab ──
 function PairsTab({ tournament, players, h2hP1, setH2hP1, h2hP2, setH2hP2, selectedPlayer, setSelectedPlayer, metric, effectiveRound, scrollRef, theme, s }) {
+  // `tournament` here is already the screen-level statsTournament (scramble
+  // rounds' scores/shotDetails/pairs blanked — see withoutScrambleScores).
   // The Pairs tab is visible whenever ANY round has real team data
   // (anyTeams at the screen level), but a mixed tournament can still hold
   // scramble rounds and solo-mode rounds alongside genuine team rounds.
@@ -1662,7 +1663,9 @@ function PairsTab({ tournament, players, h2hP1, setH2hP1, h2hP2, setH2hP2, selec
   // Without this, pairPerformance in particular would misattribute a
   // scramble captain's real score as a "pair" result with their teammate,
   // since roundTotals() reports an unscored teammate as 0 points rather
-  // than skipping them.
+  // than skipping them. (Scramble rounds already have `pairs: null` from
+  // withoutScrambleScores; this additionally strips non-scramble rounds
+  // that simply aren't a team mode, e.g. a solo round in a mixed tournament.)
   const pairsTournament = useMemo(() => ({
     ...tournament,
     rounds: (tournament.rounds ?? []).map((r) => {
@@ -1691,12 +1694,10 @@ function PairsTab({ tournament, players, h2hP1, setH2hP1, h2hP2, setH2hP2, selec
   const p1 = players[h2hP1];
   const p2Idx = h2hP2 >= players.length ? 0 : h2hP2;
   const p2 = players[p2Idx];
-  // headToHead doesn't read round.pairs, so pairsTournament is the wrong
-  // filter for it — it needs scramble rounds' SCORES blanked instead
-  // (captain vs captain would otherwise duel with team balls). See
-  // withoutScrambleScores above OverviewTab.
-  const h2hTournament = useMemo(() => withoutScrambleScores(tournament), [tournament]);
-  const h2h = p1 && p2 && p1.id !== p2.id ? headToHead(h2hTournament, p1.id, p2.id, { roundIndex: effectiveRound }) : null;
+  // headToHead doesn't read round.pairs, so pairsTournament (pairs stripped)
+  // is the wrong input for it — but `tournament` is already scramble-score
+  // blanked at the screen level, which is exactly what it needs.
+  const h2h = p1 && p2 && p1.id !== p2.id ? headToHead(tournament, p1.id, p2.id, { roundIndex: effectiveRound }) : null;
   const anchors = useRef({});
 
   const [sheet, setSheet] = useState(null);
@@ -2218,10 +2219,10 @@ function PairsTab({ tournament, players, h2hP1, setH2hP1, h2hP2, setH2hP2, selec
           <Text style={s.scopeText}>
             Net holes won across the tournament — row vs column ({metric === 'strokes' ? 'lower strokes wins' : 'higher Stableford wins'}). Tap to load that matchup below.
           </Text>
-          {/* Same scramble-blanked input as the duel card below — the
+          {/* Same scramble-blanked `tournament` as the duel card below — the
               heatmap's cells are headToHead results too. */}
           <H2HMatrix
-            tournament={h2hTournament}
+            tournament={tournament}
             players={players}
             metric={metric}
             theme={theme}

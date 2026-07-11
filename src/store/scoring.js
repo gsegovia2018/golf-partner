@@ -12,9 +12,19 @@
 // randomPairs, which is deliberately non-deterministic.
 // ============================================================================
 
-import { scoringModeUsesTeams, isScrambleMode } from '../components/scoringModes';
-
 export const STANDARD_SLOPE = 113;
+
+// Scramble modes share one engine: the team plays a single ball, scored
+// under the team captain. Used to route scoring, hide personal stats, and
+// build non-2x2 team shapes. Lives here (not scoringModes.js) so store
+// modules — statsEngine in particular — can depend on it without importing
+// from src/components; scoringModes.js re-exports it so its existing
+// call sites (screens/components) keep their import path.
+export const SCRAMBLE_MODES = new Set(['scramblepairs', 'scramble3v1', 'scramble4']);
+
+export function isScrambleMode(key) {
+  return SCRAMBLE_MODES.has(key);
+}
 
 // Sum hole pars; used as the "Par" term in the WHS course-handicap formula.
 export function totalParFromHoles(holes) {
@@ -300,6 +310,11 @@ export function randomPairs(players) {
 // Invalid mode/roster combos degrade to singleton pairs, matching the
 // existing non-team fallback everywhere pairs are built.
 export function buildTeamsForMode(mode, players) {
+  // Lazy require (not a static top-level import): scoringModes.js imports
+  // isScrambleMode back from this file, so a static import here would form
+  // a circular module dependency. Deferring the require to call time avoids
+  // it — by then both modules have finished initializing.
+  const { scoringModeUsesTeams } = require('../components/scoringModes');
   if (!scoringModeUsesTeams(mode, players.length)) {
     return players.map((p) => [p]);
   }

@@ -1,6 +1,26 @@
 import { calcStablefordPoints, calcExtraShots, roundPairLeaderboard, getPlayingHandicap, pickupStrokes } from './tournamentStore';
-import { isGIR, recoveryOutcomeFromState } from './scoring';
+import { isGIR, recoveryOutcomeFromState, roundScoringMode, isScrambleMode } from './scoring';
 import { expectedFromBucket, expectedStrokes, BUCKETS } from './strokesGainedBaseline';
+
+// Scramble rounds store ONE team ball under the team's captain (pair[0]),
+// scored off a team handicap — there are no real personal scores, shot
+// details, or pairings for that round. Every stats aggregate below is built
+// from per-player data, so running it on a scramble round would credit the
+// whole team's play to the captain and show nothing for their teammates.
+// Blanks `scores`, `shotDetails`, and `pairs` (to null) on every round whose
+// EFFECTIVE mode (roundScoringMode — a round can override the tournament's
+// default) is a scramble mode, and leaves every other round untouched. The
+// rounds array keeps its length and order, so roundIndex values (and the
+// R{n} labels built from them) stay correct — blanked rounds simply fall
+// into each consumer's existing "round not played" skip.
+export function withoutScrambleScores(tournament) {
+  const rounds = (tournament.rounds ?? []).map((r) => (
+    isScrambleMode(roundScoringMode(tournament, r))
+      ? { ...r, scores: null, shotDetails: null, pairs: null }
+      : r
+  ));
+  return { ...tournament, rounds };
+}
 
 // ── Player Stats ──
 
