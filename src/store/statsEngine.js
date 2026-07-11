@@ -2528,3 +2528,95 @@ export function sgSeason(rounds, playerId, targetHandicap = 0) {
     perRound,
   };
 }
+
+// ── Overview: Playing to Handicap ──
+
+// A golfer playing exactly to their handicap nets 2 Stableford points on
+// every hole (par, net). `delta = points − 2×holesPlayed` measures how far
+// above/below that baseline a player's whole tournament sits — positive
+// means outperforming the handicap overall, negative means underperforming.
+// Always net Stableford points, regardless of the screen's strokes/points
+// toggle (see PtsBadge). Skips players with zero holes played, and sorts
+// best (highest delta) first. Each row also carries a `rounds` breakdown
+// (points/holesPlayed/delta per round) for the detail sheet.
+export function playingToHandicap(tournament) {
+  const rows = tournament.players.map((p) => {
+    let points = 0, holesPlayed = 0;
+    const rounds = [];
+    tournament.rounds.forEach((round, roundIndex) => {
+      if (!round.scores?.[p.id]) return;
+      const handicap = getPlayingHandicap(round, p);
+      let roundPoints = 0, roundHoles = 0;
+      round.holes.forEach((hole) => {
+        const sc = round.scores[p.id]?.[hole.number];
+        if (!sc) return;
+        roundPoints += calcStablefordPoints(hole.par, sc, handicap, hole.strokeIndex);
+        roundHoles++;
+      });
+      if (roundHoles === 0) return;
+      points += roundPoints;
+      holesPlayed += roundHoles;
+      rounds.push({
+        roundIndex, courseName: round.courseName,
+        points: roundPoints, holesPlayed: roundHoles, delta: roundPoints - 2 * roundHoles,
+      });
+    });
+    if (holesPlayed === 0) return null;
+    return { player: p, points, holesPlayed, delta: points - 2 * holesPlayed, rounds };
+  }).filter(Boolean);
+  return rows.sort((a, b) => b.delta - a.delta);
+}
+
+// ── Overview: Hot Stretch ──
+
+// The best rolling `windowSize`-hole sum of Stableford points over
+// physically ADJACENT holes within a single round — reuses isAdjacentHole,
+// the same rule playerStreaks/hallOfShame use, so a window may never span
+// an unscored hole or cross a round boundary even though such gaps are
+// simply absent from the flat per-player entries array. Always net
+// Stableford points, regardless of the screen's strokes/points toggle (see
+// PtsBadge). Players who never have `windowSize` adjacent holes scored are
+// omitted entirely (no partial-window fallback). Ties keep the earliest
+// (roundIndex, startHole) window. Returned list is sorted best (highest
+// points) first, ready for a top-3 rendering.
+export function hotStretch(tournament, { windowSize = 6 } = {}) {
+  const results = [];
+  tournament.players.forEach((p) => {
+    const entries = [];
+    tournament.rounds.forEach((round, roundIndex) => {
+      if (!round.scores?.[p.id]) return;
+      const handicap = getPlayingHandicap(round, p);
+      round.holes.forEach((hole) => {
+        const sc = round.scores[p.id]?.[hole.number];
+        if (!sc) return;
+        entries.push({
+          roundIndex, courseName: round.courseName, holeNumber: hole.number,
+          par: hole.par, strokes: sc,
+          points: calcStablefordPoints(hole.par, sc, handicap, hole.strokeIndex),
+        });
+      });
+    });
+
+    let best = null;
+    for (let i = 0; i + windowSize <= entries.length; i++) {
+      const window = entries.slice(i, i + windowSize);
+      let contiguous = true;
+      for (let j = 1; j < window.length; j++) {
+        if (!isAdjacentHole(window[j - 1], window[j])) { contiguous = false; break; }
+      }
+      if (!contiguous) continue;
+      const windowPoints = window.reduce((sum, e) => sum + e.points, 0);
+      if (!best || windowPoints > best.points) {
+        best = {
+          player: p, points: windowPoints,
+          roundIndex: window[0].roundIndex,
+          startHole: window[0].holeNumber,
+          endHole: window[window.length - 1].holeNumber,
+          breakdown: window,
+        };
+      }
+    }
+    if (best) results.push(best);
+  });
+  return results.sort((a, b) => b.points - a.points);
+}

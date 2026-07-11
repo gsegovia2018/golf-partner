@@ -1,4 +1,4 @@
-import { teeShotImpact, lagPuttingQuality, sandSaveRate, upAndDownRate, bunkerVisits, sgPutting, sgAroundGreen, sgApproach, sgPenalties, sgTotal, sgSeason, driveScoreImpact, puttDeepDive, approachScoreImpact, puttingTargetGaps, approachTargetGaps, pairPerformance, shotStats, playersWithShotData, tournamentHighlights, withoutScrambleScores, playerAvgStableford, pickupChampion, hallOfShame, chaosHoles, skinsLeaderboard, playerStreaks, bounceBackRate, strokeIndexAccuracy, bestWorstHoles, holeDifficultyMap, collectiveExtremes, pairConfigMatrix, matchPlayResults, pairHoleWins, anchor, par3Heartbreak } from '../statsEngine';
+import { teeShotImpact, lagPuttingQuality, sandSaveRate, upAndDownRate, bunkerVisits, sgPutting, sgAroundGreen, sgApproach, sgPenalties, sgTotal, sgSeason, driveScoreImpact, puttDeepDive, approachScoreImpact, puttingTargetGaps, approachTargetGaps, pairPerformance, shotStats, playersWithShotData, tournamentHighlights, withoutScrambleScores, playerAvgStableford, pickupChampion, hallOfShame, chaosHoles, skinsLeaderboard, playerStreaks, bounceBackRate, strokeIndexAccuracy, bestWorstHoles, holeDifficultyMap, collectiveExtremes, pairConfigMatrix, matchPlayResults, pairHoleWins, anchor, par3Heartbreak, playingToHandicap, hotStretch } from '../statsEngine';
 import { mixedModeTournament, buildTournament } from './statsFixtures';
 
 // 18 par-4 holes, strokeIndex = hole number.
@@ -1915,5 +1915,122 @@ describe('hallOfShame.gift — fires with as few as 3 players', () => {
     const shame = hallOfShame(t, { metric: 'points' });
 
     expect(shame.gift).toBeNull();
+  });
+});
+
+// ── Task 16: Overview metrics — Playing to Handicap, Hot Stretch ──
+
+describe('playingToHandicap', () => {
+  it('computes points, holesPlayed and delta = points − 2×holesPlayed, sorted best-first', () => {
+    // handicap 0 for both players → extra shots are always 0, so points on
+    // each hole are simply 2 + par − strokes. 4 holes, all par 4.
+    const holes = [1, 2, 3, 4].map((n) => ({ number: n, par: 4, strokeIndex: n }));
+    const players = [
+      { id: 'p1', name: 'Alice', handicap: 0 },
+      { id: 'p2', name: 'Bob', handicap: 0 },
+      { id: 'p3', name: 'Cara', handicap: 0 }, // never plays — must be skipped
+    ];
+    const round = {
+      courseName: 'Test Course',
+      holes,
+      playerHandicaps: { p1: 0, p2: 0, p3: 0 },
+      scores: {
+        // p1 strokes 4,4,3,5 → points 2,2,3,1 → total 8 over 4 holes → delta 8-8=0
+        p1: { 1: 4, 2: 4, 3: 3, 4: 5 },
+        // p2 strokes 3,3,3,3 → points 3,3,3,3 → total 12 over 4 holes → delta 12-8=4
+        p2: { 1: 3, 2: 3, 3: 3, 4: 3 },
+      },
+    };
+    const t = buildTournament({ players, rounds: [round] });
+
+    const result = playingToHandicap(t);
+
+    expect(result.map((r) => r.player.id)).toEqual(['p2', 'p1']);
+    expect(result[0]).toMatchObject({ points: 12, holesPlayed: 4, delta: 4 });
+    expect(result[1]).toMatchObject({ points: 8, holesPlayed: 4, delta: 0 });
+    // p3 never played a hole — must not appear at all.
+    expect(result.some((r) => r.player.id === 'p3')).toBe(false);
+  });
+
+  it('sums points/holesPlayed/delta across multiple rounds and exposes a per-round breakdown', () => {
+    const holes = [1, 2].map((n) => ({ number: n, par: 4, strokeIndex: n }));
+    const players = [{ id: 'p1', name: 'Alice', handicap: 0 }];
+    const roundA = {
+      courseName: 'Course A', holes, playerHandicaps: { p1: 0 },
+      // strokes 4,4 → points 2,2 → 4 pts over 2 holes → round delta 4-4=0
+      scores: { p1: { 1: 4, 2: 4 } },
+    };
+    const roundB = {
+      courseName: 'Course B', holes, playerHandicaps: { p1: 0 },
+      // strokes 3,3 → points 3,3 → 6 pts over 2 holes → round delta 6-4=2
+      scores: { p1: { 1: 3, 2: 3 } },
+    };
+    const t = buildTournament({ players, rounds: [roundA, roundB] });
+
+    const result = playingToHandicap(t);
+
+    expect(result).toHaveLength(1);
+    expect(result[0]).toMatchObject({ points: 10, holesPlayed: 4, delta: 2 });
+    expect(result[0].rounds.map((r) => ({ roundIndex: r.roundIndex, points: r.points, holesPlayed: r.holesPlayed, delta: r.delta })))
+      .toEqual([
+        { roundIndex: 0, points: 4, holesPlayed: 2, delta: 0 },
+        { roundIndex: 1, points: 6, holesPlayed: 2, delta: 2 },
+      ]);
+  });
+});
+
+describe('hotStretch', () => {
+  it('finds the best rolling windowSize-hole sum, ties keep the earliest window', () => {
+    // handicap 0 → points = 2 + par − strokes. 5 holes, windowSize override 3.
+    const holes = [
+      { number: 1, par: 4, strokeIndex: 1 },
+      { number: 2, par: 3, strokeIndex: 2 },
+      { number: 3, par: 5, strokeIndex: 3 },
+      { number: 4, par: 4, strokeIndex: 4 },
+      { number: 5, par: 3, strokeIndex: 5 },
+    ];
+    const players = [{ id: 'p1', name: 'Alice', handicap: 0 }];
+    const round = {
+      courseName: 'Test Course', holes, playerHandicaps: { p1: 0 },
+      // strokes 5,2,5,3,2 → points 1,3,2,3,3
+      // windows: [1,2,3]=6 (h1-3), [2,3,4]=8 (h2-4), [3,4,5]=8 (h3-5) — tie, first wins
+      scores: { p1: { 1: 5, 2: 2, 3: 5, 4: 3, 5: 2 } },
+    };
+    const t = buildTournament({ players, rounds: [round] });
+
+    const result = hotStretch(t, { windowSize: 3 });
+
+    expect(result).toHaveLength(1);
+    expect(result[0]).toMatchObject({ points: 8, roundIndex: 0, startHole: 2, endHole: 4 });
+    expect(result[0].breakdown.map((b) => b.holeNumber)).toEqual([2, 3, 4]);
+  });
+
+  it('omits a player who never has windowSize adjacent holes scored', () => {
+    const holes = [1, 2].map((n) => ({ number: n, par: 4, strokeIndex: n }));
+    const players = [{ id: 'p1', name: 'Alice', handicap: 0 }];
+    const round = {
+      courseName: 'Test Course', holes, playerHandicaps: { p1: 0 },
+      scores: { p1: { 1: 4, 2: 4 } }, // only 2 holes played, default windowSize 6
+    };
+    const t = buildTournament({ players, rounds: [round] });
+
+    expect(hotStretch(t)).toEqual([]);
+  });
+
+  it('does not bridge R3\'s unscored hole 5 gap: best window for p2 comes from R1, not a stitched R3 window', () => {
+    // mixedModeTournament R3 (front nine only) skips p2's hole 5, splitting
+    // p2's R3 entries into two runs of 4 holes each (1-4, 6-9) — neither
+    // reaches the default windowSize of 6, so R3 cannot contribute a window
+    // at all. An implementation that slides over the flat per-player entries
+    // array without checking real hole adjacency would wrongly treat holes
+    // [1,2,3,4,6,7] as 6 "consecutive" entries (points 3+2+4+3+4+3=19),
+    // beating every legitimate R1 window (best legitimate window is R1
+    // holes 1-6, worked out below at 18 points) — so 19 must never appear.
+    const t = withoutScrambleScores(mixedModeTournament());
+
+    const result = hotStretch(t);
+    const p2 = result.find((r) => r.player.id === 'p2');
+
+    expect(p2).toMatchObject({ points: 18, roundIndex: 0, startHole: 1, endHole: 6 });
   });
 });

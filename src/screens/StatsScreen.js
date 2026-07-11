@@ -14,6 +14,7 @@ import {
   headToHead, pairPerformance, tournamentHighlights,
   hallOfShame, pairHoleWins, pairDifferenceByHole,
   tournamentMomentum, clutchOnHardest, playerConsistency, courseDNA,
+  playingToHandicap, hotStretch,
   parTypeSplit, warmupVsClosing, handicapROI,
   playerNemesisAndCrushed, chaosHoles, collectiveExtremes,
   pairSynergy, pairCarryRatio, swingHole,
@@ -393,6 +394,8 @@ function OverviewTab({ tournament, metric, hasMulti, anyTeams, allScramble, roun
   const consistency = playerConsistency(tournament);
   const dna = courseDNA(tournament);
   const skins = skinsLeaderboard(tournament, { metric });
+  const pth = playingToHandicap(tournament);
+  const hotStretchList = hotStretch(tournament);
   const siAccuracy = strokeIndexAccuracy(tournament, { roundIndex });
   const isStrokes = metric === 'strokes';
   const modeLabel = isStrokes ? 'strokes (gross)' : 'points (net Stableford)';
@@ -597,6 +600,26 @@ function OverviewTab({ tournament, metric, hasMulti, anyTeams, allScramble, roun
     })),
   });
 
+  const openPth = (row) => setSheet({
+    title: `${row.player.name} — ${row.delta >= 0 ? '+' : ''}${row.delta}`,
+    subtitle: `${row.points} pts over ${row.holesPlayed} holes · net Stableford`,
+    explainer: 'Total Stableford points compared to the 2 points per hole a player nets when playing exactly to their handicap. Positive means outperforming the handicap overall; negative means underperforming. Always net points, even in strokes mode.',
+    rows: row.rounds.map((r) => ({
+      key: `${row.player.id}-${r.roundIndex}`,
+      primary: `R${r.roundIndex + 1} · ${r.courseName}`,
+      secondary: `${r.points} pts over ${r.holesPlayed} holes`,
+      rightPrimary: `${r.delta >= 0 ? '+' : ''}${r.delta}`,
+      tone: r.delta >= 0 ? 'good' : 'poor',
+    })),
+  });
+
+  const openHotStretch = (row) => setSheet({
+    title: `${row.player.name} — ${row.points} pts`,
+    subtitle: `R${row.roundIndex + 1} · ${row.breakdown[0]?.courseName} · H${row.startHole}–H${row.endHole}`,
+    explainer: 'The best rolling 6-hole run of Stableford points within a single round — always net points, even in strokes mode. Never spans an unscored hole or crosses into a different round.',
+    rows: row.breakdown.map((b, i) => holeRowFromBreakdown(b, i)),
+  });
+
   const bestRoundLabel = roundIndex === null ? 'Best Round' : 'Top Scorer';
   const br = highlights.bestRound;
   const mb = highlights.mostBirdies;
@@ -613,8 +636,13 @@ function OverviewTab({ tournament, metric, hasMulti, anyTeams, allScramble, roun
   const qualifiedConsistency = consistency.filter((r) => r.holesPlayed >= 18);
   const unqualifiedConsistency = consistency.filter((r) => r.holesPlayed < 18);
   const consistencyRanks = tiedRanks(qualifiedConsistency, (r) => r.stdev);
+  const pthRanks = tiedRanks(pth, (r) => r.delta);
 
   // Build the sticky section index from whichever sections will actually render.
+  // Playing to Handicap and Hot Stretch are tournament-wide-only (like
+  // Clutch/Consistency/Course DNA below), so both gate on roundIndex === null.
+  const showPth = roundIndex === null && pth.length > 0;
+  const showHotStretch = roundIndex === null && hotStretchList.length > 0;
   const showMomentum = hasMulti && roundIndex === null && momentum.some(m => m.rounds.some(r => r.points != null));
   const showSkins = hasMulti && roundIndex === null && skins.totalSkins > 0;
   const showClutch = roundIndex === null && clutch.length > 0;
@@ -633,6 +661,8 @@ function OverviewTab({ tournament, metric, hasMulti, anyTeams, allScramble, roun
   const showH2H = hasMulti && !anyTeams && !allScramble && roundIndex === null;
   const indexSections = [
     { key: 'highlights', label: 'Highlights' },
+    showPth && { key: 'pth', label: 'Playing to Cap' },
+    showHotStretch && { key: 'hotstretch', label: 'Hot Stretch' },
     showMomentum && { key: 'momentum', label: 'Momentum' },
     showSkins && { key: 'skins', label: 'Skins' },
     showClutch && { key: 'clutch', label: 'Clutch' },
@@ -704,6 +734,48 @@ function OverviewTab({ tournament, metric, hasMulti, anyTeams, allScramble, roun
       )}
 
       </SectionAnchor>
+
+      {showPth && (
+        <SectionAnchor anchorKey="pth" anchors={anchors}>
+          <View style={s.sectionTitleRow}>
+            <Text style={s.sectionTitle}>PLAYING TO HANDICAP</Text>
+            {isStrokes && <PtsBadge />}
+          </View>
+          <Text style={s.scopeText}>Total points vs. 2 pts/hole expected at your handicap · tap for per-round deltas</Text>
+          <View style={s.card}>
+            {pth.map((row, i) => (
+              <TouchableOpacity key={row.player.id} style={s.leaderRow} onPress={() => openPth(row)} activeOpacity={0.7}>
+                <Text style={[s.leaderRank, { color: pthRanks[i] === 1 ? theme.semantic.rank.gold : theme.text.muted }]}>#{pthRanks[i]}</Text>
+                <Text style={s.leaderName}>{firstName(row.player)}</Text>
+                <Text style={[s.leaderValue, { color: row.delta >= 0 ? theme.scoreColor('good') : theme.scoreColor('poor') }]}>
+                  {row.delta >= 0 ? '+' : ''}{row.delta}
+                </Text>
+              </TouchableOpacity>
+            ))}
+          </View>
+        </SectionAnchor>
+      )}
+
+      {showHotStretch && (
+        <SectionAnchor anchorKey="hotstretch" anchors={anchors}>
+          <View style={s.sectionTitleRow}>
+            <Text style={s.sectionTitle}>HOT STRETCH</Text>
+            {isStrokes && <PtsBadge />}
+          </View>
+          <Text style={s.scopeText}>Best 6-hole rolling run of points, within a round</Text>
+          {hotStretchList.slice(0, 3).map((row, i) => (
+            <HighlightCard
+              key={row.player.id}
+              icon="thermometer"
+              label={i === 0 ? 'Hottest Stretch' : `#${i + 1}`}
+              value={`${firstName(row.player)} — ${row.points} pts · R${row.roundIndex + 1} H${row.startHole}–H${row.endHole}`}
+              sub={row.breakdown[0]?.courseName}
+              onPress={() => openHotStretch(row)}
+              theme={theme} s={s}
+            />
+          ))}
+        </SectionAnchor>
+      )}
 
       {showMomentum && (
         <SectionAnchor anchorKey="momentum" anchors={anchors}>

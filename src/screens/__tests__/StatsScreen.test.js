@@ -118,6 +118,8 @@ jest.mock('../../store/statsEngine', () => ({
   clutchOnHardest: jest.fn(() => []),
   playerConsistency: jest.fn(() => []),
   courseDNA: jest.fn(() => []),
+  playingToHandicap: jest.fn(() => []),
+  hotStretch: jest.fn(() => []),
   parTypeSplit: jest.fn(() => ({ par3: {}, par4: {}, par5: {} })),
   warmupVsClosing: jest.fn(() => []),
   handicapROI: jest.fn(() => []),
@@ -583,6 +585,8 @@ describe('StatsScreen Overview tab — presentation honesty', () => {
     statsEngine.playerConsistency.mockReturnValue([]);
     statsEngine.tournamentMomentum.mockReturnValue([]);
     statsEngine.clutchOnHardest.mockReturnValue([]);
+    statsEngine.playingToHandicap.mockReturnValue([]);
+    statsEngine.hotStretch.mockReturnValue([]);
   });
 
   test('two tied skins leaders both render rank #1, styled gold', () => {
@@ -701,6 +705,70 @@ describe('StatsScreen Overview tab — presentation honesty', () => {
 
     expect(getByText('CLUTCH ON HARDEST HOLES')).toBeTruthy();
     expect(getByText('pts')).toBeTruthy();
+  });
+
+  test('playing to handicap renders ranked rows with signed deltas and opens a per-round sheet', () => {
+    const statsEngine = require('../../store/statsEngine');
+    statsEngine.playingToHandicap.mockReturnValue([
+      {
+        player: fourPlayers[0], points: 40, holesPlayed: 18, delta: 4,
+        rounds: [{ roundIndex: 0, courseName: 'La Moraleja', points: 40, holesPlayed: 18, delta: 4 }],
+      },
+      {
+        player: fourPlayers[1], points: 28, holesPlayed: 18, delta: -8,
+        rounds: [{ roundIndex: 0, courseName: 'La Moraleja', points: 28, holesPlayed: 18, delta: -8 }],
+      },
+    ]);
+
+    const { getByText, getAllByText, UNSAFE_getByType } = renderStats([makeRound('r1')], { players: fourPlayers });
+
+    expect(getByText('PLAYING TO HANDICAP')).toBeTruthy();
+    expect(getByText('+4')).toBeTruthy();
+    expect(getByText('-8')).toBeTruthy();
+
+    // Section renders before the H2H matrix (which also lists every
+    // player's first name), so the leaderboard row is the first match.
+    fireEvent.press(getAllByText(fourPlayers[0].name.split(' ')[0])[0]);
+
+    const sheet = UNSAFE_getByType('StatDetailSheet');
+    expect(sheet.props.visible).toBe(true);
+    expect(sheet.props.title).toContain('+4');
+    expect(sheet.props.rows).toHaveLength(1);
+    expect(sheet.props.rows[0].rightPrimary).toBe('+4');
+  });
+
+  test('hot stretch renders the top 3 cards only and opens a hole-by-hole sheet', () => {
+    const statsEngine = require('../../store/statsEngine');
+    const breakdown = [
+      { roundIndex: 0, courseName: 'La Moraleja', holeNumber: 7, par: 4, strokes: 3, points: 3 },
+      { roundIndex: 0, courseName: 'La Moraleja', holeNumber: 8, par: 3, strokes: 2, points: 3 },
+    ];
+    statsEngine.hotStretch.mockReturnValue([
+      { player: fourPlayers[0], points: 11, roundIndex: 1, startHole: 7, endHole: 12, breakdown },
+      { player: fourPlayers[1], points: 9, roundIndex: 0, startHole: 3, endHole: 8, breakdown },
+      { player: fourPlayers[2], points: 8, roundIndex: 0, startHole: 1, endHole: 6, breakdown },
+      // 4th-place player must not render — top-3 cards only.
+      { player: fourPlayers[3], points: 7, roundIndex: 0, startHole: 2, endHole: 7, breakdown },
+    ]);
+
+    const { getByText, getAllByText, queryByText, UNSAFE_getByType } = renderStats([makeRound('r1')], { players: fourPlayers });
+
+    expect(getByText('HOT STRETCH')).toBeTruthy();
+    // HighlightCard renders the value twice — once visible, once in the
+    // off-screen share-capture host — so match the first (visible) one.
+    const cardValues = getAllByText(/Marcos — 11 pts · R2 H7–H12/);
+    expect(cardValues.length).toBeGreaterThan(0);
+    // 4th-place Dan must not get a card — only the top 3 render. (Dan's
+    // first name still legitimately appears elsewhere, e.g. the H2H
+    // matrix headers, so match the card's exact value string instead.)
+    expect(queryByText(/Dan — 7 pts/)).toBeNull();
+
+    fireEvent.press(cardValues[0]);
+
+    const sheet = UNSAFE_getByType('StatDetailSheet');
+    expect(sheet.props.visible).toBe(true);
+    expect(sheet.props.rows).toHaveLength(2);
+    expect(sheet.props.rows[0].primary).toContain('Hole 7');
   });
 });
 
