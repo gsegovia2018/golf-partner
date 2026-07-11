@@ -314,6 +314,220 @@ BEGIN
   RETURN v_out;
 END $$;
 
+-- 6) Write RPCs ---------------------------------------------------------------
+-- set_game_score: row-locked read-before-write so the client can show a
+-- meaningful conflict/undo affordance (previousStrokes/previousUpdatedAt).
+-- tournament_id is denormalized onto game_scores for fast per-tournament
+-- queries; it never changes for an existing (round_id, player_id, hole) row
+-- (a round's tournament is immutable), so the ON CONFLICT branch only needs
+-- to touch strokes/updated_at/updated_by.
+CREATE OR REPLACE FUNCTION public.set_game_score(
+  p_round_id text, p_tournament_id text, p_player_id text, p_hole int, p_strokes int)
+RETURNS jsonb LANGUAGE plpgsql AS $$
+DECLARE
+  v_prev_strokes int;
+  v_prev_at timestamptz;
+BEGIN
+  SELECT strokes, updated_at INTO v_prev_strokes, v_prev_at
+  FROM public.game_scores
+  WHERE round_id = p_round_id AND player_id = p_player_id AND hole = p_hole
+  FOR UPDATE;
+
+  INSERT INTO public.game_scores (round_id, tournament_id, player_id, hole, strokes, updated_at, updated_by)
+  VALUES (p_round_id, p_tournament_id, p_player_id, p_hole, p_strokes, now(), auth.uid())
+  ON CONFLICT (round_id, player_id, hole)
+  DO UPDATE SET strokes = EXCLUDED.strokes, updated_at = now(), updated_by = auth.uid();
+
+  RETURN jsonb_build_object('previousStrokes', v_prev_strokes, 'previousUpdatedAt', v_prev_at);
+END $$;
+
+-- advance_game_round: monotonic bump of tournaments.current_round. Pulled out
+-- of patch_game_tournament as its own function because it's also the routing
+-- target for a 'currentRound' key in a patch payload (see below), and is
+-- callable directly by later tasks' client code without going through the
+-- generic patch path.
+CREATE OR REPLACE FUNCTION public.advance_game_round(p_id text, p_round int)
+RETURNS void LANGUAGE sql AS $$
+  UPDATE public.tournaments
+     SET current_round = GREATEST(COALESCE(current_round, 0), p_round)
+   WHERE id = p_id;
+$$;
+
+-- patch_game_round: one-level-deep merge into game_rounds.body. jsonb object
+-- values merge one level via (body->k) || v; scalars/arrays/jsonb null
+-- replace outright (jsonb_set stores a JSON null when v_v is 'null'::jsonb —
+-- it is never skipped, since the client uses null to explicitly clear a
+-- field). updated_at is bumped on every patch so realtime subscribers keyed
+-- on row events see the change even when body's content ends up identical.
+CREATE OR REPLACE FUNCTION public.patch_game_round(p_round_id text, p_patch jsonb)
+RETURNS void LANGUAGE plpgsql AS $$
+DECLARE
+  v_body jsonb;
+  v_k text;
+  v_v jsonb;
+BEGIN
+  SELECT body INTO v_body FROM public.game_rounds WHERE id = p_round_id FOR UPDATE;
+  IF NOT FOUND THEN
+    RAISE EXCEPTION 'No such round %', p_round_id;
+  END IF;
+
+  FOR v_k, v_v IN SELECT * FROM jsonb_each(p_patch) LOOP
+    IF jsonb_typeof(v_v) = 'object' AND jsonb_typeof(v_body -> v_k) = 'object' THEN
+      v_body := jsonb_set(v_body, ARRAY[v_k], (v_body -> v_k) || v_v);
+    ELSE
+      v_body := jsonb_set(v_body, ARRAY[v_k], v_v);
+    END IF;
+  END LOOP;
+
+  UPDATE public.game_rounds SET body = v_body, updated_at = now() WHERE id = p_round_id;
+END $$;
+
+-- patch_game_tournament: same one-level merge, but targeting
+-- tournaments.props with two routing exceptions: 'name'/'kind' land on the
+-- real tournaments columns (never merged into props), and 'currentRound'
+-- routes to advance_game_round's monotonic GREATEST (also never merged into
+-- props — there is no props.currentRound). Every other key merges into props
+-- exactly like patch_game_round merges into body. tournaments has no
+-- updated_at column (see schema-facts doc) so there is nothing to bump here;
+-- game_players/game_rounds/game_scores each carry their own updated_at.
+CREATE OR REPLACE FUNCTION public.patch_game_tournament(p_id text, p_patch jsonb)
+RETURNS void LANGUAGE plpgsql AS $$
+DECLARE
+  v_props jsonb;
+  v_k text;
+  v_v jsonb;
+  v_set_name boolean := false;
+  v_set_kind boolean := false;
+  v_name text;
+  v_kind text;
+BEGIN
+  SELECT props INTO v_props FROM public.tournaments WHERE id = p_id FOR UPDATE;
+  IF NOT FOUND THEN
+    RAISE EXCEPTION 'No such tournament %', p_id;
+  END IF;
+
+  FOR v_k, v_v IN SELECT * FROM jsonb_each(p_patch) LOOP
+    IF v_k = 'name' THEN
+      v_name := v_v #>> '{}';
+      v_set_name := true;
+    ELSIF v_k = 'kind' THEN
+      v_kind := v_v #>> '{}';
+      v_set_kind := true;
+    ELSIF v_k = 'currentRound' THEN
+      PERFORM public.advance_game_round(p_id, (v_v #>> '{}')::int);
+    ELSE
+      IF jsonb_typeof(v_v) = 'object' AND jsonb_typeof(v_props -> v_k) = 'object' THEN
+        v_props := jsonb_set(v_props, ARRAY[v_k], (v_props -> v_k) || v_v);
+      ELSE
+        v_props := jsonb_set(v_props, ARRAY[v_k], v_v);
+      END IF;
+    END IF;
+  END LOOP;
+
+  UPDATE public.tournaments
+     SET props = v_props,
+         name  = CASE WHEN v_set_name THEN v_name ELSE name END,
+         kind  = CASE WHEN v_set_kind THEN v_kind ELSE kind END
+   WHERE id = p_id;
+END $$;
+
+-- 7) claim_tournament_player — dual-write onto game_players ------------------
+-- Re-created with its EXACT current body (see
+-- 20260522000002_fix_claim_jsonb_set.sql — the create_missing=true fix for
+-- the players[].user_id stamp), plus a dual-write onto game_players so a
+-- claim made through the legacy blob path is also visible to sync-v2 readers
+-- (get_game_tournament()/get_my_game_tournaments() serve game_players.body,
+-- not the blob). The UPDATE is a plain no-op (0 rows, no error) when the
+-- tournament hasn't been backfilled into game_players yet — migration order
+-- means casual tournaments existing before Task 5's backfill will have no
+-- matching row here until then.
+CREATE OR REPLACE FUNCTION public.claim_tournament_player(
+  p_tournament_id text,
+  p_player_id     text
+)
+RETURNS text
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = public
+AS $$
+DECLARE
+  v_uid     uuid   := auth.uid();
+  v_idx     int;
+  v_data    jsonb;
+  v_players jsonb;
+  v_slot    jsonb;
+  v_now_ms  bigint := (extract(epoch from now()) * 1000)::bigint;
+BEGIN
+  IF v_uid IS NULL THEN
+    RAISE EXCEPTION 'Must be signed in to claim a player';
+  END IF;
+  -- can_edit_tournament passes for the owner, legacy NULL-owner rows, and
+  -- editor/owner members; the join flow establishes editor membership via
+  -- redeem_invite_code before this is called.
+  IF NOT public.can_edit_tournament(p_tournament_id, v_uid) THEN
+    RAISE EXCEPTION 'You are not a member of this tournament';
+  END IF;
+
+  -- Lock the tournament row. A concurrent claim of the same slot blocks here
+  -- and, once this transaction commits, re-reads the post-claim row below.
+  SELECT data INTO v_data
+    FROM public.tournaments
+   WHERE id = p_tournament_id
+   FOR UPDATE;
+  IF v_data IS NULL THEN
+    RAISE EXCEPTION 'No such tournament';
+  END IF;
+
+  v_players := v_data -> 'players';
+  IF v_players IS NULL THEN
+    RAISE EXCEPTION 'Tournament has no players';
+  END IF;
+
+  SELECT ord - 1, elem
+    INTO v_idx, v_slot
+    FROM jsonb_array_elements(v_players) WITH ORDINALITY AS t(elem, ord)
+   WHERE elem ->> 'id' = p_player_id
+   LIMIT 1;
+
+  IF v_idx IS NULL THEN
+    RAISE EXCEPTION 'No such player slot';
+  END IF;
+
+  IF v_slot ->> 'user_id' IS NOT NULL
+     AND v_slot ->> 'user_id' <> v_uid::text THEN
+    RAISE EXCEPTION 'SLOT_TAKEN';
+  END IF;
+
+  -- Ensure _meta exists, set the slot's user_id, and bump the players LWW
+  -- timestamp so the claim wins the next casual-tournament sync merge.
+  v_data := v_data || jsonb_build_object(
+              '_meta', COALESCE(v_data -> '_meta', '{}'::jsonb));
+  -- create_missing = true: a never-claimed slot has no 'user_id' key yet, and
+  -- jsonb_set() with false would return the document unchanged (the bug).
+  v_data := jsonb_set(v_data,
+              ARRAY['players', v_idx::text, 'user_id'],
+              to_jsonb(v_uid::text), true);
+  v_data := jsonb_set(v_data,
+              ARRAY['_meta', 'players'],
+              to_jsonb(v_now_ms), true);
+
+  UPDATE public.tournaments SET data = v_data WHERE id = p_tournament_id;
+
+  -- sync-v2 dual-write: stamp the matching game_players row (if the
+  -- tournament has been backfilled into the normalized tables already).
+  -- A missing row is a plain 0-row UPDATE, not an error.
+  UPDATE public.game_players
+     SET user_id    = v_uid,
+         body       = jsonb_set(body, '{user_id}', to_jsonb(v_uid::text), true),
+         updated_at = now()
+   WHERE tournament_id = p_tournament_id AND player_id = p_player_id;
+
+  RETURN p_player_id;
+END;
+$$;
+REVOKE EXECUTE ON FUNCTION public.claim_tournament_player(text, text) FROM anon;
+GRANT  EXECUTE ON FUNCTION public.claim_tournament_player(text, text) TO authenticated;
+
 /* ===========================================================================
    VERIFY
    ---------------------------------------------------------------------------
@@ -350,4 +564,18 @@ END $$;
    -- Smoke test (replace :id with a real tournament id):
    -- SELECT public.get_game_tournament(:'id');
    -- SELECT public.get_my_game_tournaments();
+
+   -- Write RPCs present:
+   SELECT proname FROM pg_proc
+    WHERE pronamespace = 'public'::regnamespace
+      AND proname IN ('set_game_score', 'patch_game_round',
+                       'patch_game_tournament', 'advance_game_round')
+    ORDER BY proname;
+
+   -- claim_tournament_player still SECURITY DEFINER, still locked to
+   -- authenticated only:
+   SELECT proname, prosecdef FROM pg_proc
+    WHERE pronamespace = 'public'::regnamespace AND proname = 'claim_tournament_player';
+   SELECT grantee, privilege_type FROM information_schema.role_routine_grants
+    WHERE routine_name = 'claim_tournament_player';
    =========================================================================== */
