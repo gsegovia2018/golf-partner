@@ -172,9 +172,13 @@ export async function upsertRound(tournamentId, roundIndex, round) {
 // props) plus game_players/game_rounds rows, and — for offline-created
 // tournaments that already carry scores/shotDetails/notes by the time they
 // drain — fans those out into their own row sets too. Plain upserts
-// throughout: idempotent, since the sync queue may retry this write.
+// throughout: idempotent, since the sync queue may retry this write. Every
+// row carries an explicit updated_at stamp for the same reason — a retry
+// hits the UPDATE arm of the upsert, which does not fire the column's
+// INSERT-only DEFAULT now(), and would otherwise leave updated_at stale.
 export async function createTournament(t) {
   const userId = await getCurrentUserId();
+  const now = new Date().toISOString();
   const {
     id, name, kind, createdAt, currentRound, players, rounds, meId, _meta, ...props
   } = t;
@@ -198,6 +202,7 @@ export async function createTournament(t) {
     user_id: player.user_id ?? null,
     pos,
     body: player,
+    updated_at: now,
   }));
   if (playerRows.length) {
     const { error } = await supabase.from('game_players')
@@ -216,12 +221,14 @@ export async function createTournament(t) {
       tournament_id: id,
       round_index: roundIndex,
       body: stripRoundHotKeys(round),
+      updated_at: now,
     });
 
     Object.entries(round.scores ?? {}).forEach(([playerId, holes]) => {
       Object.entries(holes ?? {}).forEach(([hole, strokes]) => {
         scoreRows.push({
           round_id: round.id, tournament_id: id, player_id: playerId, hole: Number(hole), strokes,
+          updated_at: now,
         });
       });
     });
@@ -230,6 +237,7 @@ export async function createTournament(t) {
       Object.entries(holes ?? {}).forEach(([hole, detail]) => {
         shotDetailRows.push({
           round_id: round.id, tournament_id: id, player_id: playerId, hole: Number(hole), detail,
+          updated_at: now,
         });
       });
     });
@@ -237,11 +245,13 @@ export async function createTournament(t) {
     if (round.notes?.round != null) {
       noteRows.push({
         round_id: round.id, tournament_id: id, hole_key: 'round', note: round.notes.round,
+        updated_at: now,
       });
     }
     Object.entries(round.notes?.hole ?? {}).forEach(([holeKey, note]) => {
       noteRows.push({
         round_id: round.id, tournament_id: id, hole_key: holeKey, note,
+        updated_at: now,
       });
     });
   });

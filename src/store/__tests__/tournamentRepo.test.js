@@ -182,6 +182,10 @@ describe('setShotDetail', () => {
     expect(call.ops[0].rows).toMatchObject({
       tournament_id: 't1', round_id: 'r0', player_id: 'p1', hole: 5, detail: { club: 'driver' },
     });
+    // onConflict must name the exact composite PK: supabase-js sends the
+    // string to PostgREST verbatim, so a typo/transposition here only fails
+    // at runtime — assert it exactly.
+    expect(call.ops[0].opts).toEqual({ onConflict: 'tournament_id,round_id,player_id,hole' });
   });
 
   test('a null detail still upserts the row (tombstone)', async () => {
@@ -223,6 +227,7 @@ describe('setNote', () => {
     expect(call.ops[0].rows).toMatchObject({
       tournament_id: 't1', round_id: 'r0', hole_key: '5', note: 'wet fairway',
     });
+    expect(call.ops[0].opts).toEqual({ onConflict: 'tournament_id,round_id,hole_key' });
   });
 
   test.each([null, ''])('a %p note still upserts the row as null (tombstone)', async (note) => {
@@ -292,6 +297,7 @@ describe('upsertPlayer', () => {
     expect(call.ops[0].rows).toMatchObject({
       tournament_id: 't1', player_id: 'p1', user_id: 'u1', pos: 2, body: player,
     });
+    expect(call.ops[0].opts).toEqual({ onConflict: 'tournament_id,player_id' });
   });
 
   test('a player with no user_id upserts user_id as null', async () => {
@@ -359,6 +365,7 @@ describe('upsertRound', () => {
     const call = lastFromCall('game_rounds');
     expect(call.ops[0].rows).toMatchObject({ id: 'r0', tournament_id: 't1', round_index: 0 });
     expect(call.ops[0].rows.body).toEqual({ id: 'r0', holes: [{ number: 1, par: 4, strokeIndex: 1 }] });
+    expect(call.ops[0].opts).toEqual({ onConflict: 'tournament_id,id' });
   });
 
   test('also strips scoreConflicts/scoreResolutions (matches the server round-body contract)', async () => {
@@ -422,9 +429,10 @@ describe('createTournament', () => {
 
     const call = lastFromCall('game_players');
     expect(call.ops[0].rows).toEqual([
-      { tournament_id: 't1', player_id: 'p1', user_id: null, pos: 0, body: players[0] },
-      { tournament_id: 't1', player_id: 'p2', user_id: 'u2', pos: 1, body: players[1] },
+      { tournament_id: 't1', player_id: 'p1', user_id: null, pos: 0, body: players[0], updated_at: expect.any(String) },
+      { tournament_id: 't1', player_id: 'p2', user_id: 'u2', pos: 1, body: players[1], updated_at: expect.any(String) },
     ]);
+    expect(call.ops[0].opts).toEqual({ onConflict: 'tournament_id,player_id' });
   });
 
   test('inserts game_rounds rows with body = round minus scores/shotDetails/notes', async () => {
@@ -444,7 +452,9 @@ describe('createTournament', () => {
     expect(call.ops[0].rows).toEqual([{
       id: 'r0', tournament_id: 't1', round_index: 0,
       body: { id: 'r0', holes: [{ number: 1, par: 4, strokeIndex: 1 }] },
+      updated_at: expect.any(String),
     }]);
+    expect(call.ops[0].opts).toEqual({ onConflict: 'tournament_id,id' });
   });
 
   test('fans scores/shotDetails/notes out into their own row sets when present (offline-created tournament)', async () => {
@@ -464,22 +474,31 @@ describe('createTournament', () => {
 
     const scoresCall = lastFromCall('game_scores');
     expect(scoresCall.ops[0].rows).toEqual(expect.arrayContaining([
-      { round_id: 'r0', tournament_id: 't1', player_id: 'p1', hole: 1, strokes: 4 },
-      { round_id: 'r0', tournament_id: 't1', player_id: 'p1', hole: 2, strokes: 5 },
+      { round_id: 'r0', tournament_id: 't1', player_id: 'p1', hole: 1, strokes: 4, updated_at: expect.any(String) },
+      { round_id: 'r0', tournament_id: 't1', player_id: 'p1', hole: 2, strokes: 5, updated_at: expect.any(String) },
     ]));
     expect(scoresCall.ops[0].rows).toHaveLength(2);
+    // The drain may retry createTournament; the UPDATE arm of an upsert does
+    // not fire the column default, so every retried row needs an explicit
+    // updated_at stamp — asserted above per row and pinned to ISO here.
+    expect(scoresCall.ops[0].rows.every(
+      (r) => !Number.isNaN(Date.parse(r.updated_at)),
+    )).toBe(true);
+    expect(scoresCall.ops[0].opts).toEqual({ onConflict: 'tournament_id,round_id,player_id,hole' });
 
     const shotDetailsCall = lastFromCall('game_shot_details');
     expect(shotDetailsCall.ops[0].rows).toEqual([
-      { round_id: 'r0', tournament_id: 't1', player_id: 'p1', hole: 1, detail: { club: 'driver' } },
+      { round_id: 'r0', tournament_id: 't1', player_id: 'p1', hole: 1, detail: { club: 'driver' }, updated_at: expect.any(String) },
     ]);
+    expect(shotDetailsCall.ops[0].opts).toEqual({ onConflict: 'tournament_id,round_id,player_id,hole' });
 
     const notesCall = lastFromCall('game_round_notes');
     expect(notesCall.ops[0].rows).toEqual(expect.arrayContaining([
-      { round_id: 'r0', tournament_id: 't1', hole_key: 'round', note: 'sunny' },
-      { round_id: 'r0', tournament_id: 't1', hole_key: '3', note: 'wet' },
+      { round_id: 'r0', tournament_id: 't1', hole_key: 'round', note: 'sunny', updated_at: expect.any(String) },
+      { round_id: 'r0', tournament_id: 't1', hole_key: '3', note: 'wet', updated_at: expect.any(String) },
     ]));
     expect(notesCall.ops[0].rows).toHaveLength(2);
+    expect(notesCall.ops[0].opts).toEqual({ onConflict: 'tournament_id,round_id,hole_key' });
   });
 
   test('skips game_scores/game_shot_details/game_round_notes upserts when a round has none', async () => {
