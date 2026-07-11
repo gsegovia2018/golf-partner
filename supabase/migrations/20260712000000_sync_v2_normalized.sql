@@ -196,14 +196,24 @@ BEGIN
   SELECT * INTO v_t FROM public.tournaments WHERE id = p_id;
   IF NOT FOUND THEN RETURN NULL; END IF;
 
+  -- createdAt must byte-match what the legacy client wrote with JS
+  -- `new Date().toISOString()` — "YYYY-MM-DDTHH:MM:SS.mmmZ" (milliseconds
+  -- always exactly 3 digits, literal trailing 'Z'). jsonb_build_object on a
+  -- raw timestamptz would emit "+00:00" instead of "Z", failing round-trip
+  -- equality, so format explicitly.
   v_out := v_t.props || jsonb_build_object(
-    'id', v_t.id, 'name', v_t.name, 'kind', v_t.kind, 'createdAt', v_t.created_at,
+    'id', v_t.id, 'name', v_t.name, 'kind', v_t.kind,
+    'createdAt', to_char(v_t.created_at AT TIME ZONE 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.MS"Z"'),
     'players', COALESCE((
       SELECT jsonb_agg(gp.body ORDER BY gp.pos, gp.player_id)
       FROM public.game_players gp WHERE gp.tournament_id = p_id), '[]'::jsonb),
     'rounds', COALESCE((
       SELECT jsonb_agg(
-        gr.body
+        -- Strip any stale 'notes' left inside body before merging: 'notes'
+        -- is only conditionally re-added below (when live note rows exist),
+        -- so unlike scores/shotDetails it wouldn't be overwritten — a stale
+        -- copy in body would leak through after every note was deleted.
+        (gr.body - 'notes')
         || jsonb_build_object('id', gr.id)
         || jsonb_build_object('scores', COALESCE((
              SELECT jsonb_object_agg(q.player_id, q.per) FROM (
@@ -237,8 +247,14 @@ BEGIN
         ORDER BY gr.round_index, gr.id)
       FROM public.game_rounds gr WHERE gr.tournament_id = p_id), '[]'::jsonb));
 
+  -- Same stale-key defense for the tournament level: 'currentRound' is only
+  -- conditionally added, so a stale copy inside props must not survive when
+  -- the column is NULL — strip it in both branches, re-adding the live
+  -- column value only when present.
   IF v_t.current_round IS NOT NULL THEN
-    v_out := v_out || jsonb_build_object('currentRound', v_t.current_round);
+    v_out := (v_out - 'currentRound') || jsonb_build_object('currentRound', v_t.current_round);
+  ELSE
+    v_out := v_out - 'currentRound';
   END IF;
   RETURN v_out;
 END $$;
