@@ -20,28 +20,21 @@ export function swapDuelOrder(pairs) {
   return [pairs[0], [...(pairs[1] ?? [])].reverse()];
 }
 
-// pairsmatchplay: draws a random duel assignment for the CURRENT teams by
-// shuffling the second pair's member order (teams and their membership stay
-// put; only who-faces-who changes). Retries so the draw differs from the
-// current matchups when another assignment exists — so "Randomize" never looks
-// like it did nothing. `rand` is injectable so tests can pin the draw.
+// pairsmatchplay: draws a genuinely random duel assignment for the CURRENT
+// teams by shuffling the second pair's member order (teams and their
+// membership stay put; only who-faces-who changes). This is a true random
+// draw — with a 2-player team it is a coin flip, so it may return the current
+// line-up unchanged. `rand` is injectable so tests can pin the draw.
 export function randomizeDuelOrder(pairs, rand = Math.random) {
   if (!Array.isArray(pairs) || pairs.length !== 2) return pairs;
   const second = pairs[1] ?? [];
   if (second.length < 2) return pairs;
-  const key = (arr) => arr.map((p) => p.id).join(',');
-  const before = key(second);
-  let shuffled = second;
-  for (let attempt = 0; attempt < 12; attempt++) {
-    const next = [...second];
-    for (let i = next.length - 1; i > 0; i--) {
-      const j = Math.floor(rand() * (i + 1));
-      [next[i], next[j]] = [next[j], next[i]];
-    }
-    shuffled = next;
-    if (key(next) !== before) break;
+  const next = [...second];
+  for (let i = next.length - 1; i > 0; i--) {
+    const j = Math.floor(rand() * (i + 1));
+    [next[i], next[j]] = [next[j], next[i]];
   }
-  return [pairs[0], shuffled];
+  return [pairs[0], next];
 }
 
 // Re-rolls the whole matchup: redistributes every player across the two sides

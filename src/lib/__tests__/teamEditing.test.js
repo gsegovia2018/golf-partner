@@ -81,10 +81,12 @@ describe('randomizeDuelOrder', () => {
     expect(out[1].map((p) => p.id).sort()).toEqual(pairs[1].map((p) => p.id).sort());
   });
 
-  test('produces a different duel assignment than the input (never a no-op)', () => {
-    const before = pairsMatchDuels(pairs);
-    const after = pairsMatchDuels(randomizeDuelOrder(pairs, () => 0));
-    expect(after).not.toEqual(before);
+  test('is a genuine coin flip — can draw either line-up (including the current one)', () => {
+    // Fisher-Yates on a 2-player pair: rand < 0.5 swaps, rand >= 0.5 keeps.
+    const swapped = pairsMatchDuels(randomizeDuelOrder(pairs, () => 0));
+    const kept = pairsMatchDuels(randomizeDuelOrder(pairs, () => 0.9));
+    expect(swapped).toEqual(pairsMatchDuels(swapDuelOrder(pairs)));
+    expect(kept).toEqual(pairsMatchDuels(pairs));
   });
 
   test('default randomness stays within the valid duel assignments', () => {
