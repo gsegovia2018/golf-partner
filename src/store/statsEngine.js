@@ -1647,15 +1647,26 @@ export function frontBackSplit(tournament) {
 }
 
 // ── Stroke Index Accuracy ──
-// Ranks every hole of every round by actual average strokes-over-par and
-// compares that empirical difficulty rank to the course's printed stroke
-// index. A large positive `siGap` means the hole played much harder than its
-// printed SI suggested (mislabeled handicap hole), negative means easier.
-export function strokeIndexAccuracy(tournament) {
-  const results = [];
-  tournament.rounds.forEach((round, roundIndex) => {
+// Pools every observation of a physical hole — identified by
+// courseId ?? courseName + hole number — across all rounds that share it, so
+// a course played more than once contributes one row per hole instead of a
+// contradictory row per round. Ranks holes by pooled average strokes-over-par
+// and compares that empirical difficulty rank to the course's printed stroke
+// index. Tied holes (equal pooled avgVsPar) share the average of the ranks
+// they span, so ties never produce a fake siGap between them. A large
+// positive `siGap` means the hole played much harder than its printed SI
+// suggested (mislabeled handicap hole), negative means easier.
+//
+// Pass `{ roundIndex }` to pool only that single round (used when the screen
+// is scoped to one round instead of the whole tournament).
+export function strokeIndexAccuracy(tournament, { roundIndex = null } = {}) {
+  const byHole = new Map(); // `${courseKey}::${holeNumber}` -> pooled accumulator
+
+  tournament.rounds.forEach((round, ri) => {
+    if (roundIndex !== null && ri !== roundIndex) return;
     if (!round.scores || Object.keys(round.scores).length === 0) return;
-    const holeStats = round.holes.map(hole => {
+    const courseKey = round.courseId ?? round.courseName;
+    round.holes.forEach(hole => {
       let totalVsPar = 0, count = 0;
       tournament.players.forEach(p => {
         const sc = round.scores[p.id]?.[hole.number];
@@ -1663,27 +1674,56 @@ export function strokeIndexAccuracy(tournament) {
         totalVsPar += sc - hole.par;
         count++;
       });
-      return {
-        holeNumber: hole.number, par: hole.par, printedSi: hole.strokeIndex,
-        avgVsPar: count > 0 ? totalVsPar / count : null, count,
-      };
-    }).filter(h => h.avgVsPar != null);
-    if (holeStats.length === 0) return;
-    // Rank hardest (highest avgVsPar) as actualSi 1.
-    const ranked = [...holeStats].sort((a, b) => b.avgVsPar - a.avgVsPar);
-    ranked.forEach((h, i) => { h.actualSi = i + 1; });
-    holeStats.forEach(h => {
-      results.push({
-        roundIndex, courseName: round.courseName,
-        holeNumber: h.holeNumber, par: h.par,
-        printedSi: h.printedSi, actualSi: h.actualSi,
-        avgVsPar: +h.avgVsPar.toFixed(2),
-        // Positive = played harder than its SI label predicted.
-        siGap: h.printedSi - h.actualSi,
-      });
+      if (count === 0) return;
+      const key = `${courseKey}::${hole.number}`;
+      let entry = byHole.get(key);
+      if (!entry) {
+        entry = {
+          courseName: round.courseName, holeNumber: hole.number, par: hole.par,
+          printedSi: hole.strokeIndex, totalVsPar: 0, count: 0, roundIndices: new Set(),
+        };
+        byHole.set(key, entry);
+      }
+      entry.totalVsPar += totalVsPar;
+      entry.count += count;
+      entry.roundIndices.add(ri);
     });
   });
-  return results.sort((a, b) => Math.abs(b.siGap) - Math.abs(a.siGap));
+
+  if (byHole.size === 0) return [];
+
+  const holeStats = Array.from(byHole.values()).map(h => ({
+    ...h,
+    // Round for tie comparison so float noise from summed fractions doesn't
+    // split holes that are really tied.
+    avgVsPar: +(h.totalVsPar / h.count).toFixed(6),
+    roundIndices: [...h.roundIndices].sort((a, b) => a - b),
+  }));
+
+  // Rank hardest (highest avgVsPar) as actualSi 1; equal avgVsPar shares the
+  // average of the ranks its group spans (average-rank ties).
+  const sorted = [...holeStats].sort((a, b) => b.avgVsPar - a.avgVsPar);
+  let i = 0;
+  while (i < sorted.length) {
+    let j = i;
+    while (j + 1 < sorted.length && sorted[j + 1].avgVsPar === sorted[i].avgVsPar) j++;
+    const avgRank = (i + 1 + j + 1) / 2; // ranks are 1-indexed, spanning i..j
+    for (let k = i; k <= j; k++) sorted[k].actualSi = avgRank;
+    i = j + 1;
+  }
+
+  return sorted
+    .map(h => ({
+      courseName: h.courseName,
+      roundIndices: h.roundIndices,
+      holeNumber: h.holeNumber, par: h.par,
+      printedSi: h.printedSi, actualSi: h.actualSi,
+      avgVsPar: +h.avgVsPar.toFixed(2),
+      count: h.count,
+      // Positive = played harder than its SI label predicted.
+      siGap: +(h.printedSi - h.actualSi).toFixed(2),
+    }))
+    .sort((a, b) => Math.abs(b.siGap) - Math.abs(a.siGap));
 }
 
 // ── Scrambling % ──

@@ -1,4 +1,4 @@
-import { teeShotImpact, lagPuttingQuality, sandSaveRate, upAndDownRate, bunkerVisits, sgPutting, sgAroundGreen, sgApproach, sgPenalties, sgTotal, sgSeason, driveScoreImpact, puttDeepDive, approachScoreImpact, puttingTargetGaps, approachTargetGaps, pairPerformance, shotStats, tournamentHighlights, withoutScrambleScores, playerAvgStableford, pickupChampion, hallOfShame, chaosHoles, skinsLeaderboard, playerStreaks, bounceBackRate } from '../statsEngine';
+import { teeShotImpact, lagPuttingQuality, sandSaveRate, upAndDownRate, bunkerVisits, sgPutting, sgAroundGreen, sgApproach, sgPenalties, sgTotal, sgSeason, driveScoreImpact, puttDeepDive, approachScoreImpact, puttingTargetGaps, approachTargetGaps, pairPerformance, shotStats, tournamentHighlights, withoutScrambleScores, playerAvgStableford, pickupChampion, hallOfShame, chaosHoles, skinsLeaderboard, playerStreaks, bounceBackRate, strokeIndexAccuracy } from '../statsEngine';
 import { mixedModeTournament, buildTournament } from './statsFixtures';
 
 // 18 par-4 holes, strokeIndex = hole number.
@@ -1295,5 +1295,91 @@ describe('bounceBackRate — recovery must land on the very next hole', () => {
     expect(p1Result.rate).toBe(0);
     expect(p1Result.breakdown).toHaveLength(1);
     expect(p1Result.breakdown[0]).toMatchObject({ holeNumber: 6, afterHole: 4, recovered: false });
+  });
+});
+
+describe('strokeIndexAccuracy — pooled per course+hole, average-rank ties, round scope', () => {
+  it('pools a course played twice into one row per hole instead of one row per round per hole', () => {
+    const holes = holes18().slice(0, 3); // SI 1, 2, 3 — par 4 each
+    const players = [{ id: 'p1', handicap: 0 }, { id: 'p2', handicap: 0 }];
+    const round1 = {
+      courseName: 'Sunset Ridge',
+      holes,
+      scores: { p1: { 1: 5, 2: 4, 3: 4 }, p2: { 1: 5, 2: 4, 3: 4 } }, // hole1 +1/+1, hole2/3 even
+    };
+    const round2 = {
+      courseName: 'Sunset Ridge',
+      holes,
+      scores: { p1: { 1: 4, 2: 4, 3: 6 }, p2: { 1: 4, 2: 4, 3: 6 } }, // hole1/2 even, hole3 +2/+2
+    };
+    const t = buildTournament({ players, rounds: [round1, round2] });
+
+    const results = strokeIndexAccuracy(t);
+
+    // One row per physical hole (3), not one row per round per hole (6).
+    expect(results).toHaveLength(3);
+    expect(new Set(results.map(r => r.holeNumber))).toEqual(new Set([1, 2, 3]));
+
+    const hole1 = results.find(r => r.holeNumber === 1);
+    const hole2 = results.find(r => r.holeNumber === 2);
+    const hole3 = results.find(r => r.holeNumber === 3);
+    // hole1: (1+1+0+0)/4 = 0.5, hole2: 0, hole3: (0+0+2+2)/4 = 1
+    expect(hole1.avgVsPar).toBeCloseTo(0.5);
+    expect(hole2.avgVsPar).toBeCloseTo(0);
+    expect(hole3.avgVsPar).toBeCloseTo(1);
+  });
+
+  it('gives tied holes the average of the ranks they span instead of an arbitrary order', () => {
+    const holes = holes18().slice(0, 3); // printed SI 1, 2, 3 — par 4 each
+    const players = [{ id: 'p1', handicap: 0 }];
+    const round = {
+      courseName: 'Course C',
+      holes,
+      scores: { p1: { 1: 5, 2: 5, 3: 4 } }, // hole1 & hole2 tied at +1 vs par, hole3 at 0
+    };
+    const t = buildTournament({ players, rounds: [round] });
+
+    const results = strokeIndexAccuracy(t);
+
+    const hole1 = results.find(r => r.holeNumber === 1);
+    const hole2 = results.find(r => r.holeNumber === 2);
+    const hole3 = results.find(r => r.holeNumber === 3);
+    // hole1 and hole2 tie for the hardest two ranks (1 and 2) — average rank 1.5 each.
+    expect(hole1.actualSi).toBe(1.5);
+    expect(hole2.actualSi).toBe(1.5);
+    // hole3 is clearly easiest — rank 3, no tie.
+    expect(hole3.actualSi).toBe(3);
+    // siGap = printedSi - actualSi stays consistent with the tie-adjusted rank.
+    expect(hole1.siGap).toBeCloseTo(1 - 1.5);
+    expect(hole2.siGap).toBeCloseTo(2 - 1.5);
+    expect(hole3.siGap).toBeCloseTo(3 - 3);
+  });
+
+  it('honors the roundIndex option, pooling only the selected round even when another round shares its course name', () => {
+    const holes = holes18().slice(0, 3);
+    const players = [{ id: 'p1', handicap: 0 }];
+    const round0 = {
+      courseName: 'Shared Course',
+      holes,
+      scores: { p1: { 1: 6, 2: 6, 3: 6 } }, // +2 vs par on every hole
+    };
+    const round1 = {
+      courseName: 'Other Course',
+      holes,
+      scores: { p1: { 1: 5, 2: 5, 3: 5 } },
+    };
+    const round2 = {
+      courseName: 'Shared Course', // same course name as round0
+      holes,
+      scores: { p1: { 1: 4, 2: 4, 3: 4 } }, // even par on every hole
+    };
+    const t = buildTournament({ players, rounds: [round0, round1, round2] });
+
+    const results = strokeIndexAccuracy(t, { roundIndex: 2 });
+
+    // Only round index 2's data should be pooled — round0's data on the same
+    // course name must not leak in.
+    expect(results).toHaveLength(3);
+    results.forEach(r => expect(r.avgVsPar).toBeCloseTo(0));
   });
 });

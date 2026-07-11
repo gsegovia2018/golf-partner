@@ -374,7 +374,7 @@ function OverviewTab({ tournament, metric, hasMulti, anyTeams, allScramble, roun
   const consistency = playerConsistency(tournament);
   const dna = courseDNA(tournament);
   const skins = skinsLeaderboard(tournament, { metric });
-  const siAccuracy = strokeIndexAccuracy(tournament);
+  const siAccuracy = strokeIndexAccuracy(tournament, { roundIndex });
   const isStrokes = metric === 'strokes';
   const modeLabel = isStrokes ? 'strokes (gross)' : 'points (net Stableford)';
   const [sheet, setSheet] = useState(null);
@@ -383,6 +383,11 @@ function OverviewTab({ tournament, metric, hasMulti, anyTeams, allScramble, roun
   const scope = roundIndex === null
     ? 'Tournament · all rounds'
     : `R${roundIndex + 1} · ${tournament.rounds[roundIndex]?.courseName || ''}`;
+
+  // Stroke-index-accuracy rows pool observations across every round on a
+  // course, so a row's `roundIndices` may span more than one round — label
+  // it "R1+R3" rather than assuming a single round.
+  const roundsLabel = (h) => h.roundIndices.map(ri => `R${ri + 1}`).join('+');
 
   const hasAnyData = tournament.rounds.some(r => r.scores && Object.keys(r.scores).length > 0);
   if (!hasAnyData) {
@@ -504,11 +509,11 @@ function OverviewTab({ tournament, metric, hasMulti, anyTeams, allScramble, roun
 
   const openSiAccuracy = () => setSheet({
     title: 'Stroke index accuracy',
-    subtitle: `${siAccuracy.length} holes ranked by real difficulty`,
-    explainer: 'Every hole is ranked by its actual average strokes-over-par (1 = hardest). We compare that to the course\'s printed stroke index. A large gap means the printed SI mislabels the hole — positive gap = played harder than its label, negative = easier.',
+    subtitle: `${siAccuracy.length} holes ranked by real difficulty · ${scope}`,
+    explainer: 'Every hole is ranked by its actual average strokes-over-par, pooled across every round on that course (1 = hardest). We compare that to the course\'s printed stroke index. Holes with identical pooled difficulty share the average of the ranks they span. A large gap means the printed SI mislabels the hole — positive gap = played harder than its label, negative = easier.',
     rows: siAccuracy.map((h, i) => ({
-      key: `${h.roundIndex}-${h.holeNumber}-${i}`,
-      primary: `R${h.roundIndex + 1} · ${h.courseName} · Hole ${h.holeNumber}`,
+      key: `${h.courseName}-${h.holeNumber}-${i}`,
+      primary: `${roundsLabel(h)} · ${h.courseName} · Hole ${h.holeNumber}`,
       secondary: `Par ${h.par} · printed SI ${h.printedSi} · played-as SI ${h.actualSi} · ${h.avgVsPar >= 0 ? '+' : ''}${h.avgVsPar} avg vs par`,
       rightPrimary: `${h.siGap > 0 ? '+' : ''}${h.siGap}`,
       rightSecondary: 'SI gap',
@@ -739,11 +744,11 @@ function OverviewTab({ tournament, metric, hasMulti, anyTeams, allScramble, roun
       {showSi && (
         <SectionAnchor anchorKey="si" anchors={anchors}>
           <Text style={s.sectionTitle}>STROKE INDEX ACCURACY</Text>
-          <Text style={s.scopeText}>Does the printed SI match how the holes actually played?</Text>
+          <Text style={s.scopeText}>Does the printed SI match how the holes actually played? · {scope}</Text>
           <TouchableOpacity style={s.card} onPress={openSiAccuracy} activeOpacity={0.7}>
             {siAccuracy.slice(0, 4).map((h, i) => (
-              <View key={`${h.roundIndex}-${h.holeNumber}-${i}`} style={s.leaderRow}>
-                <Text style={s.leaderName}>R{h.roundIndex + 1} · H{h.holeNumber}</Text>
+              <View key={`${h.courseName}-${h.holeNumber}-${i}`} style={s.leaderRow}>
+                <Text style={s.leaderName}>{roundsLabel(h)} · H{h.holeNumber}</Text>
                 <Text style={s.leaderUnit}>SI {h.printedSi} → played {h.actualSi}</Text>
                 <Text style={[s.leaderValue, {
                   color: Math.abs(h.siGap) >= 6 ? theme.scoreColor('poor')
