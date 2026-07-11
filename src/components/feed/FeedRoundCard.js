@@ -101,11 +101,15 @@ export default function FeedRoundCard({
   const { width } = useWindowDimensions();
   const s = makeStyles(theme);
   const allResults = item.results ?? [];
-  const results = allResults.slice(0, 3);
+  const results = allResults;
   const resultCount = item.playerCount ?? allResults.length;
+  // Players counted in the round but with no card of their own (e.g. guests
+  // filtered out of `results`). Rendered friends all get a scrollable tile;
+  // this only notes the remainder we have no per-player data for.
   const hiddenCount = Math.max(0, resultCount - results.length);
   const leader = results[0] ?? null;
   const second = results[1] ?? null;
+  const scrollScores = results.length > 3;
   const contextLabel = item.withMe || item.isMine ? 'Your round' : 'Friends round';
   const mediaLabel = item.mediaCountLabel || (item.mediaCount ? `${item.mediaCount} photos` : null);
   const mediaList = Array.isArray(item.mediaList) && item.mediaList.length > 0
@@ -121,6 +125,52 @@ export default function FeedRoundCard({
   const live = !!item.live;
   const totalHoles = item.totalHoles ?? 18;
   const modeLabel = modeBadgeLabel(item.scoringMode);
+
+  const renderScoreTile = (result, index, scroll) => {
+    const onHole = onHoleFor(result, live, totalHoles);
+    const vp = vsParText(result.vsPar);
+    return (
+      <View
+        key={resultKey(result, index)}
+        style={[
+          s.scoreTile,
+          scroll ? s.scoreTileScroll : s.scoreTileFlex,
+          index === 0 && s.scoreTileLead,
+        ]}
+      >
+        <View style={s.tileTopRow}>
+          <View style={[s.rankWrap, index === 0 && s.rankWrapLead]}>
+            <Text style={s.rank}>{index + 1}</Text>
+          </View>
+          {onHole != null ? (
+            <View style={s.holeBadge} accessibilityLabel={`On hole ${onHole}`}>
+              <Text style={s.holeBadgeText}>H{onHole}</Text>
+            </View>
+          ) : result.handicap != null ? (
+            <Text style={s.hcpText}>HCP {result.handicap}</Text>
+          ) : null}
+        </View>
+        <Text style={s.resultName} numberOfLines={1}>{result.name || 'Player'}</Text>
+        <View style={s.pointsLine}>
+          <Text style={s.statValue}>{statValue(result.points)}</Text>
+          <Text style={s.statLabel}>pts</Text>
+          {result.strokes != null ? (
+            <Text style={s.strokesText}>{statValue(result.strokes)} str</Text>
+          ) : null}
+        </View>
+        {vp != null ? (
+          <Text style={[s.vsParText, { color: vsParColor(result.vsPar, result.vsParAllowed, theme) }]}>
+            {vp} vs par
+          </Text>
+        ) : null}
+        {result.holes > 0 ? (
+          <Text style={s.thruText}>
+            {live ? `thru ${result.holes}/${totalHoles}` : `${result.holes} holes`}
+          </Text>
+        ) : null}
+      </View>
+    );
+  };
 
   return (
     <TouchableOpacity
@@ -254,49 +304,19 @@ export default function FeedRoundCard({
 
       {showScorePreview ? (
         <View style={s.scorePreview}>
-          <View style={s.scoreStrip}>
-            {results.map((result, index) => {
-              const onHole = onHoleFor(result, live, totalHoles);
-              const vp = vsParText(result.vsPar);
-              return (
-              <View
-                key={resultKey(result, index)}
-                style={[s.scoreTile, index === 0 && s.scoreTileLead]}
-              >
-                <View style={s.tileTopRow}>
-                  <View style={[s.rankWrap, index === 0 && s.rankWrapLead]}>
-                    <Text style={s.rank}>{index + 1}</Text>
-                  </View>
-                  {onHole != null ? (
-                    <View style={s.holeBadge} accessibilityLabel={`On hole ${onHole}`}>
-                      <Text style={s.holeBadgeText}>H{onHole}</Text>
-                    </View>
-                  ) : result.handicap != null ? (
-                    <Text style={s.hcpText}>HCP {result.handicap}</Text>
-                  ) : null}
-                </View>
-                <Text style={s.resultName} numberOfLines={1}>{result.name || 'Player'}</Text>
-                <View style={s.pointsLine}>
-                  <Text style={s.statValue}>{statValue(result.points)}</Text>
-                  <Text style={s.statLabel}>pts</Text>
-                  {result.strokes != null ? (
-                    <Text style={s.strokesText}>{statValue(result.strokes)} str</Text>
-                  ) : null}
-                </View>
-                {vp != null ? (
-                  <Text style={[s.vsParText, { color: vsParColor(result.vsPar, result.vsParAllowed, theme) }]}>
-                    {vp} vs par
-                  </Text>
-                ) : null}
-                {result.holes > 0 ? (
-                  <Text style={s.thruText}>
-                    {live ? `thru ${result.holes}/${totalHoles}` : `${result.holes} holes`}
-                  </Text>
-                ) : null}
-              </View>
-              );
-            })}
-          </View>
+          {scrollScores ? (
+            <ScrollView
+              horizontal
+              showsHorizontalScrollIndicator={false}
+              contentContainerStyle={s.scoreStripScroll}
+            >
+              {results.map((result, index) => renderScoreTile(result, index, true))}
+            </ScrollView>
+          ) : (
+            <View style={s.scoreStrip}>
+              {results.map((result, index) => renderScoreTile(result, index, false))}
+            </View>
+          )}
           {hiddenCount > 0 ? (
             <View style={s.overflowRow}>
               <Text style={s.overflowText}>
@@ -521,14 +541,24 @@ function makeStyles(theme) {
       flexDirection: 'row',
       gap: 8,
     },
+    scoreStripScroll: {
+      flexDirection: 'row',
+      gap: 8,
+      paddingRight: 4,
+    },
     scoreTile: {
-      flex: 1,
       minWidth: 0,
       borderRadius: 10,
       borderWidth: 1,
       borderColor: theme.border.default,
       backgroundColor: theme.bg.card,
       padding: 8,
+    },
+    scoreTileFlex: {
+      flex: 1,
+    },
+    scoreTileScroll: {
+      width: 132,
     },
     scoreTileLead: {
       backgroundColor: theme.accent.light,
