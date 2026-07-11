@@ -2045,13 +2045,12 @@ export function driveScoreImpact(tournament, playerId) {
 
 // ── GIR by Drive Result ──
 // For one player, splits per-hole GIR (strokes − putts ≤ par − 2) by what
-// the drive that hole did: found the literal `fairway` tag, or missed
-// (`left`/`right`/`short`/`super` all bucket as "miss" here — this asks the
-// narrower "did the fairway tag precede a green in regulation" question,
-// unlike shotStats' fairwaysHit% which treats `super` as a hit). Requires
-// BOTH putts and drive logged for the hole — GIR can't be computed without
-// putts, and an unclassified drive can't be bucketed. Drive is excluded on
-// par 3s, same as driveScoreImpact/shotStats (no driver off that tee).
+// the drive that hole did: hit the fairway (`fairway` OR `super` — same
+// hit-equivalence as shotStats' fairwaysHit% and teeShotImpact) or missed
+// it (`left`/`right`/`short`). Requires BOTH putts and drive logged for the
+// hole — GIR can't be computed without putts, and an unclassified drive
+// can't be bucketed. Drive is excluded on par 3s, same as
+// driveScoreImpact/shotStats (no driver off that tee).
 export function girByDriveResult(tournament, playerId) {
   const player = (tournament.players || []).find((p) => p.id === playerId);
   const fairway = [];
@@ -2072,7 +2071,7 @@ export function girByDriveResult(tournament, playerId) {
         roundIndex, courseName: round.courseName,
         holeNumber: hole.number, par: hole.par, strokes, putts: d.putts, gir,
       };
-      if (d.drive === 'fairway') fairway.push(entry);
+      if (d.drive === 'fairway' || d.drive === 'super') fairway.push(entry);
       else miss.push(entry);
     });
   });

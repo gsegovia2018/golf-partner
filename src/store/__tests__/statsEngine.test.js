@@ -1112,8 +1112,8 @@ describe('driveScoreImpact', () => {
 });
 
 describe('girByDriveResult', () => {
-  // Non-par-3 holes only (drive isn't logged on a par 3) — 1,3,4 fairway,
-  // 6,7,9,10 miss. GIR = strokes - putts <= par - 2.
+  // Non-par-3 holes only (drive isn't logged on a par 3) — 1,3,4 fairway +
+  // 10 super count as hits, 6,7,9 as misses. GIR = strokes - putts <= par - 2.
   const holes = [
     { number: 1, par: 4, strokeIndex: 1 },
     { number: 2, par: 3, strokeIndex: 2 },
@@ -1125,7 +1125,7 @@ describe('girByDriveResult', () => {
     { number: 10, par: 4, strokeIndex: 10 },
   ];
 
-  test('splits GIR% by fairway vs a miss (left/right/short/super all bucket as miss)', () => {
+  test('splits GIR% by fairway hit vs a miss (super is a hit; left/right/short are misses)', () => {
     const scores = {
       1: 4,  // fairway, par4, putts 2 → 4-2=2 <= 2 → GIR
       3: 6,  // fairway, par5, putts 3 → 6-3=3 <= 3 → GIR
@@ -1152,10 +1152,24 @@ describe('girByDriveResult', () => {
     };
 
     const r = girByDriveResult(t, 'p1');
-    expect(r.fairway.holes).toBe(3);
-    expect(r.fairway.girPct).toBe(67); // 2/3
-    expect(r.miss.holes).toBe(4);
-    expect(r.miss.girPct).toBe(50); // 2/4
+    expect(r.fairway.holes).toBe(4); // holes 1, 3, 4 + the super drive on 10
+    expect(r.fairway.girPct).toBe(50); // 2/4
+    expect(r.miss.holes).toBe(3);
+    expect(r.miss.girPct).toBe(67); // 2/3
+  });
+
+  test('a super drive lands in the fairway bucket, not the miss bucket (hit-equivalent, as in shotStats/teeShotImpact)', () => {
+    const h = [{ number: 1, par: 4, strokeIndex: 1 }];
+    const shotDetails = { p1: { 1: { drive: 'super', putts: 2 } } };
+    const t = {
+      players: [{ id: 'p1', handicap: 0 }],
+      rounds: [{ courseName: 'C', holes: h, scores: { p1: { 1: 4 } }, shotDetails }],
+    };
+
+    const r = girByDriveResult(t, 'p1');
+    expect(r.fairway.holes).toBe(1);
+    expect(r.fairway.girPct).toBe(100);
+    expect(r.miss.holes).toBe(0);
   });
 
   test('skips holes where drive or putts is missing, and excludes par-3s even if a drive is logged there', () => {
