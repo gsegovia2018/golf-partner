@@ -1,6 +1,6 @@
 import React from 'react';
 import { Animated, StyleSheet } from 'react-native';
-import { render } from '@testing-library/react-native';
+import { render, fireEvent } from '@testing-library/react-native';
 import { PlayerCard } from '../PlayerCard';
 
 jest.mock('../../../theme/ThemeContext', () => ({
@@ -72,5 +72,23 @@ describe('PlayerCard layout', () => {
     );
 
     expect(scoreRowStyle.justifyContent).toBe('center');
+  });
+});
+
+describe('PlayerCard pickup toggle', () => {
+  test('toggling pickup off clears the hole instead of recording a par', () => {
+    const onSetScore = jest.fn();
+    const { getByLabelText } = renderPlayerCard({
+      canEdit: true,
+      isPickup: true,
+      pickup: 8,
+      strokes: 8,
+      hole: { number: 1, par: 4, strokeIndex: 8 },
+      onSetScore,
+    });
+
+    fireEvent.press(getByLabelText('Picked up at 8 strokes — tap to clear'));
+
+    expect(onSetScore).toHaveBeenCalledWith('p1', 1, null);
   });
 });

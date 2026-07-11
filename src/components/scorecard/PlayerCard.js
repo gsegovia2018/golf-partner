@@ -140,7 +140,7 @@ export const PlayerCard = React.memo(function PlayerCard({
         {showScoreControls && (
           <TouchableOpacity
             style={[s.pickupBtn, isPickup && s.pickupBtnActive]}
-            onPress={() => onSetScore(player.id, hole.number, isPickup ? hole.par : pickup)}
+            onPress={() => onSetScore(player.id, hole.number, isPickup ? null : pickup)}
             activeOpacity={0.7}
             accessibilityLabel={isPickup ? `Picked up at ${pickup} strokes — tap to clear` : `Pickup at ${pickup} strokes`}
           >
