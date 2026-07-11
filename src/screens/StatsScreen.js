@@ -23,7 +23,7 @@ import {
   shotStats, playersWithShotData, driveScoreImpact, puttDeepDive,
   approachScoreImpact,
   bounceBackRate, frontBackSplit, strokeIndexAccuracy, scramblingStats,
-  withoutScrambleScores,
+  withoutScrambleScores, pairCoverage, girByDriveResult,
 } from '../store/statsEngine';
 // holeDifficultySplit already takes (tournament, playerId) generically — no
 // synthetic-tournament assumptions inside it — so the Players tab reuses it
@@ -1931,6 +1931,7 @@ function PairsTab({ tournament, players, h2hP1, setH2hP1, h2hP2, setH2hP2, selec
   })() : null;
   const synergy = pairSynergy(pairsTournament);
   const carry = pairCarryRatio(pairsTournament);
+  const coverage = pairCoverage(pairsTournament);
   const swing = pdRound != null ? swingHole(pairsTournament, pdRound) : null;
   const matchPlay = matchPlayResults(pairsTournament, { metric });
   const configMatrix = pairConfigMatrix(pairsTournament);
@@ -1946,6 +1947,8 @@ function PairsTab({ tournament, players, h2hP1, setH2hP1, h2hP2, setH2hP2, selec
   synergy.forEach(p => { synergyByPairKey[pairCardKey(p.members.map(m => m.id))] = p; });
   const carryByPairKey = {};
   carry.forEach(p => { carryByPairKey[pairCardKey(p.members.map(m => m.id))] = p; });
+  const coverageByPairKey = {};
+  coverage.forEach(p => { coverageByPairKey[pairCardKey(p.pair.map(m => m.id))] = p; });
   const pairCards = pairs.map(p => {
     const key = pairCardKey(p.players.map(pl => pl.id));
     return {
@@ -1956,6 +1959,7 @@ function PairsTab({ tournament, players, h2hP1, setH2hP1, h2hP2, setH2hP2, selec
       roundList: p.roundList,
       synergy: synergyByPairKey[key] || null,
       carry: carryByPairKey[key] || null,
+      coverage: coverageByPairKey[key] || null,
     };
   });
   const p1 = players[h2hP1];
@@ -2232,6 +2236,11 @@ function PairsTab({ tournament, players, h2hP1, setH2hP1, h2hP2, setH2hP2, selec
                   <Text style={s.pairAvg}>{card.avgPoints} avg pts</Text>
                   <Text style={s.pairRounds}>{card.rounds} round{card.rounds !== 1 ? 's' : ''}</Text>
                 </View>
+                {card.coverage && (
+                  <Text style={s.pairCoverageLine} testID={`pair-coverage-${card.key}`}>
+                    {card.coverage.coveragePct}% covered · {card.coverage.bothBlanked} double-blank{card.coverage.bothBlanked !== 1 ? 's' : ''}
+                  </Text>
+                )}
                 {shareA != null && (
                   <>
                     <View style={s.carryBar}>
@@ -2770,6 +2779,10 @@ function ShotsTab({ tournament, theme, s }) {
     () => (selected ? driveScoreImpact(tournament, selected.id) : null),
     [tournament, selected],
   );
+  const girByDrive = useMemo(
+    () => (selected ? girByDriveResult(tournament, selected.id) : null),
+    [tournament, selected],
+  );
   const puttDive = useMemo(
     () => (selected ? puttDeepDive(tournament, selected.id) : null),
     [tournament, selected],
@@ -2902,6 +2915,18 @@ function ShotsTab({ tournament, theme, s }) {
             <Text style={s.cardSub}>
               fairways hit · {drives.fairwaysHit}/{drives.recorded} drives
             </Text>
+            {girByDrive && (girByDrive.fairway.holes > 0 || girByDrive.miss.holes > 0) && (
+              <View style={s.girDriveRow}>
+                <Text style={s.cardSub}>GIR after fairway </Text>
+                <Text style={[s.girDriveValue, isLowSample(girByDrive.fairway.holes) && { color: theme.text.muted }]}>
+                  {girByDrive.fairway.girPct}%
+                </Text>
+                <Text style={s.cardSub}> · after a miss </Text>
+                <Text style={[s.girDriveValue, isLowSample(girByDrive.miss.holes) && { color: theme.text.muted }]}>
+                  {girByDrive.miss.girPct}%
+                </Text>
+              </View>
+            )}
             <View style={[s.distRow, { marginTop: 12 }]}>
               {DRIVE_KEYS.map((k) => (
                 <DistBar
@@ -3487,6 +3512,12 @@ const makeStyles = (t) => StyleSheet.create({
   shotStatNum: { fontFamily: 'PlayfairDisplay-Bold', color: t.text.primary, fontSize: 24 },
   shotStatLabel: { fontFamily: 'PlusJakartaSans-Medium', color: t.text.muted, fontSize: 10, marginTop: 2, textAlign: 'center' },
 
+  // GIR-after-drive-result line under the Driving card's fairways-hit sub —
+  // each percentage is its own Text node (not nested) so isLowSample can
+  // grey either side independently.
+  girDriveRow: { flexDirection: 'row', flexWrap: 'wrap', alignItems: 'center', marginTop: 6 },
+  girDriveValue: { fontFamily: 'PlusJakartaSans-SemiBold', color: t.text.primary, fontSize: 12 },
+
   // Drive impact rows — one row per bucket (super/fairway/left/right/short),
   // each with a small colored dot and three mini-stats (pts / vs par / pen).
   driveImpactRow: {
@@ -3906,6 +3937,7 @@ const makeStyles = (t) => StyleSheet.create({
   pairStats: { flexDirection: 'row', gap: 12 },
   pairAvg: { fontFamily: 'PlusJakartaSans-SemiBold', color: t.accent.primary, fontSize: 13 },
   pairRounds: { fontFamily: 'PlusJakartaSans-Medium', color: t.text.muted, fontSize: 12 },
+  pairCoverageLine: { fontFamily: 'PlusJakartaSans-Regular', color: t.text.muted, fontSize: 12, marginTop: 4 },
   synergyBadge: {
     borderRadius: 8, paddingHorizontal: 6, paddingVertical: 2,
   },

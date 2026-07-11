@@ -135,6 +135,7 @@ jest.mock('../../store/statsEngine', () => ({
   collectiveExtremes: jest.fn(() => ({})),
   pairSynergy: jest.fn(() => []),
   pairCarryRatio: jest.fn(() => []),
+  pairCoverage: jest.fn(() => []),
   swingHole: jest.fn(() => []),
   // Real par3Heartbreak/pickupChampion/anchor/zeroHero return null (not an
   // empty array/object) when there's no qualifying data — ShameTab reads
@@ -151,6 +152,10 @@ jest.mock('../../store/statsEngine', () => ({
   shotStats: jest.fn(() => ({ hasData: false })),
   playersWithShotData: jest.fn(() => []),
   driveScoreImpact: jest.fn(() => []),
+  girByDriveResult: jest.fn(() => ({
+    fairway: { holes: 0, girPct: 0, breakdown: [] },
+    miss: { holes: 0, girPct: 0, breakdown: [] },
+  })),
   puttDeepDive: jest.fn(() => ({})),
   approachScoreImpact: jest.fn(() => []),
   bounceBackRate: jest.fn(() => []),
@@ -598,6 +603,32 @@ describe('StatsScreen mixed scoring-mode gating (per-round overrides)', () => {
 
       expect(getByText('Lead changes: 3 · Biggest lead: Marcos & Bob +5 pts · Final: +2 pts')).toBeTruthy();
     });
+
+    test('Pair Cards render a coverage line matched to the card by sorted member ids', () => {
+      const statsEngine = require('../../store/statsEngine');
+      const pairKey = [fourPlayers[0].id, fourPlayers[1].id].sort().join('|');
+      statsEngine.pairPerformance.mockReturnValue([
+        {
+          players: [fourPlayers[0], fourPlayers[1]],
+          rounds: 2, avgPoints: 35, totalPoints: 70, roundList: [],
+        },
+      ]);
+      // pairCoverage returns `pair` (not `members`) and members in the
+      // OPPOSITE array order from pairPerformance's `players` — the card
+      // must still match by sorted id, not array position or field name.
+      statsEngine.pairCoverage.mockReturnValue([
+        { pair: [fourPlayers[1], fourPlayers[0]], holes: 20, coveragePct: 65, bothBlanked: 3 },
+      ]);
+
+      const { getByText, getByTestId } = renderStats(teamRounds(), {
+        players: fourPlayers, scoringMode: 'individual',
+      });
+
+      fireEvent.press(getByText('Pairs'));
+
+      expect(getByTestId(`pair-coverage-${pairKey}`)).toBeTruthy();
+      expect(getByText('65% covered · 3 double-blanks')).toBeTruthy();
+    });
   });
 });
 
@@ -967,6 +998,39 @@ describe('StatsScreen Shots tab — sample-floor gating', () => {
 
     expect(getByText('6 holes')).toBeTruthy();
     expect(queryByText(/need more data/)).toBeNull();
+  });
+
+  test('GIR-after-drive-result greys a side under the 6-sample floor and colors the other side plainly', () => {
+    const statsEngine = require('../../store/statsEngine');
+    statsEngine.girByDriveResult.mockReturnValue({
+      fairway: { holes: 8, girPct: 44, breakdown: [] },
+      miss: { holes: 3, girPct: 18, breakdown: [] },
+    });
+
+    const { getByText } = renderStats([makeRound('r1')]);
+    fireEvent.press(getByText('My Shots'));
+
+    expect(getByText('GIR after fairway ')).toBeTruthy();
+    expect(getByText(' · after a miss ')).toBeTruthy();
+    const fairwayStyle = StyleSheet.flatten(getByText('44%').props.style);
+    const missStyle = StyleSheet.flatten(getByText('18%').props.style);
+    // fairway (8 samples) is at/above the floor — not greyed.
+    expect(fairwayStyle.color).not.toBe(mockTheme.text.muted);
+    // miss (3 samples) is below the 6-sample floor — greyed.
+    expect(missStyle.color).toBe(mockTheme.text.muted);
+  });
+
+  test('GIR-after-drive-result is omitted when neither side has a sample', () => {
+    const statsEngine = require('../../store/statsEngine');
+    statsEngine.girByDriveResult.mockReturnValue({
+      fairway: { holes: 0, girPct: 0, breakdown: [] },
+      miss: { holes: 0, girPct: 0, breakdown: [] },
+    });
+
+    const { getByText, queryByText } = renderStats([makeRound('r1')]);
+    fireEvent.press(getByText('My Shots'));
+
+    expect(queryByText(/GIR after fairway/)).toBeNull();
   });
 });
 

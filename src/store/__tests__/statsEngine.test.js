@@ -1,4 +1,4 @@
-import { teeShotImpact, lagPuttingQuality, sandSaveRate, upAndDownRate, bunkerVisits, sgPutting, sgAroundGreen, sgApproach, sgPenalties, sgTotal, sgSeason, driveScoreImpact, puttDeepDive, approachScoreImpact, puttingTargetGaps, approachTargetGaps, pairPerformance, shotStats, playersWithShotData, tournamentHighlights, withoutScrambleScores, playerAvgStableford, pickupChampion, hallOfShame, chaosHoles, skinsLeaderboard, playerStreaks, bounceBackRate, strokeIndexAccuracy, bestWorstHoles, holeDifficultyMap, collectiveExtremes, pairConfigMatrix, matchPlayResults, pairHoleWins, anchor, par3Heartbreak, playingToHandicap, hotStretch, nemesisEncore } from '../statsEngine';
+import { teeShotImpact, lagPuttingQuality, sandSaveRate, upAndDownRate, bunkerVisits, sgPutting, sgAroundGreen, sgApproach, sgPenalties, sgTotal, sgSeason, driveScoreImpact, puttDeepDive, approachScoreImpact, puttingTargetGaps, approachTargetGaps, pairPerformance, shotStats, playersWithShotData, tournamentHighlights, withoutScrambleScores, playerAvgStableford, pickupChampion, hallOfShame, chaosHoles, skinsLeaderboard, playerStreaks, bounceBackRate, strokeIndexAccuracy, bestWorstHoles, holeDifficultyMap, collectiveExtremes, pairConfigMatrix, matchPlayResults, pairHoleWins, anchor, par3Heartbreak, playingToHandicap, hotStretch, nemesisEncore, pairCoverage, girByDriveResult } from '../statsEngine';
 import { mixedModeTournament, buildTournament } from './statsFixtures';
 
 // 18 par-4 holes, strokeIndex = hole number.
@@ -449,6 +449,98 @@ describe('pairPerformance', () => {
 
     const ab = result.find(p => p.players.map(x => x.id).sort().join(',') === 'a,b');
     expect(ab.rounds).toBe(1);
+  });
+});
+
+describe('pairCoverage', () => {
+  // handicap 0 for both partners → no extra shots, points = 2 + par - strokes
+  // (floored at 0). Hole 1: A birdies (3 pts) while B blanks (0 pts) — the
+  // pair is "covered" because at least one partner cleared 2 pts. Hole 2:
+  // both partners blank — a double-blank.
+  const players = [
+    { id: 'a', name: 'A', handicap: 0 },
+    { id: 'b', name: 'B', handicap: 0 },
+  ];
+  const [A, B] = players;
+  const holes = [
+    { number: 1, par: 4, strokeIndex: 1 },
+    { number: 2, par: 4, strokeIndex: 2 },
+  ];
+
+  test('reports coverage% (>=1 partner scored >=2 pts) and the both-blanked count', () => {
+    const tournament = {
+      players,
+      rounds: [{
+        courseName: 'R1',
+        holes,
+        pairs: [[A, B]],
+        scores: {
+          a: { 1: 3, 2: 6 }, // hole1: 3 pts (covers) · hole2: 0 pts (blanked)
+          b: { 1: 6, 2: 6 }, // hole1: 0 pts · hole2: 0 pts (blanked)
+        },
+      }],
+    };
+
+    const result = pairCoverage(tournament);
+    expect(result).toHaveLength(1);
+    expect(result[0].pair.map(p => p.id).sort()).toEqual(['a', 'b']);
+    expect(result[0].holes).toBe(2);
+    expect(result[0].coveragePct).toBe(50);
+    expect(result[0].bothBlanked).toBe(1);
+  });
+
+  test('only counts a hole when BOTH partners have a recorded score', () => {
+    const tournament = {
+      players,
+      rounds: [{
+        courseName: 'R1',
+        holes,
+        pairs: [[A, B]],
+        scores: {
+          a: { 1: 3 }, // hole2 unscored for A — hole2 must not count at all
+          b: { 1: 6, 2: 6 },
+        },
+      }],
+    };
+
+    const result = pairCoverage(tournament);
+    expect(result[0].holes).toBe(1);
+    expect(result[0].coveragePct).toBe(100);
+    expect(result[0].bothBlanked).toBe(0);
+  });
+
+  test('skips rounds with no pairs or no scores (scramble rounds already blanked by withoutScrambleScores)', () => {
+    const t = mixedModeTournament();
+    const clean = withoutScrambleScores(t);
+    // R2 is the scramblepairs round — its pairs/scores are nulled by
+    // withoutScrambleScores, so it must not contribute any holes. Only R1
+    // (18 holes) and R3 (front 9) count: pair p1/p2 loses R3 hole 5 to p2's
+    // gap (18+8=26), pair p3/p4 has no gap (18+9=27). If R2 leaked in, both
+    // totals would be 18 holes higher.
+    const result = pairCoverage(clean);
+    const ab = result.find(p => p.pair.map(x => x.id).sort().join(',') === 'p1,p2');
+    const cd = result.find(p => p.pair.map(x => x.id).sort().join(',') === 'p3,p4');
+    expect(ab.holes).toBe(26);
+    expect(cd.holes).toBe(27);
+  });
+
+  test('skips singleton pairs from odd rosters instead of crashing', () => {
+    const three = [
+      { id: 'a', name: 'A', handicap: 0 },
+      { id: 'b', name: 'B', handicap: 0 },
+      { id: 'c', name: 'C', handicap: 0 },
+    ];
+    const tournament = {
+      players: three,
+      rounds: [{
+        courseName: 'Test',
+        holes: [{ number: 1, par: 4, strokeIndex: 1 }],
+        pairs: [[three[0], three[1]], [three[2]]],
+        scores: { a: { 1: 4 }, b: { 1: 5 }, c: { 1: 6 } },
+      }],
+    };
+    expect(() => pairCoverage(tournament)).not.toThrow();
+    expect(pairCoverage(tournament)).toHaveLength(1);
   });
 });
 
@@ -1016,6 +1108,89 @@ describe('driveScoreImpact', () => {
       rounds: [{ courseName: 'C', holes: h, scores: { p1: evenScores(h, 4) }, shotDetails }],
     };
     expect(driveScoreImpact(t, 'p1').buckets.fairway.holes).toBe(0);
+  });
+});
+
+describe('girByDriveResult', () => {
+  // Non-par-3 holes only (drive isn't logged on a par 3) — 1,3,4 fairway,
+  // 6,7,9,10 miss. GIR = strokes - putts <= par - 2.
+  const holes = [
+    { number: 1, par: 4, strokeIndex: 1 },
+    { number: 2, par: 3, strokeIndex: 2 },
+    { number: 3, par: 5, strokeIndex: 3 },
+    { number: 4, par: 4, strokeIndex: 4 },
+    { number: 6, par: 5, strokeIndex: 6 },
+    { number: 7, par: 4, strokeIndex: 7 },
+    { number: 9, par: 5, strokeIndex: 9 },
+    { number: 10, par: 4, strokeIndex: 10 },
+  ];
+
+  test('splits GIR% by fairway vs a miss (left/right/short/super all bucket as miss)', () => {
+    const scores = {
+      1: 4,  // fairway, par4, putts 2 → 4-2=2 <= 2 → GIR
+      3: 6,  // fairway, par5, putts 3 → 6-3=3 <= 3 → GIR
+      4: 5,  // fairway, par4, putts 2 → 5-2=3 <= 2 → NOT GIR
+      6: 7,  // left, par5, putts 2 → 7-2=5 <= 3 → NOT GIR
+      7: 4,  // right, par4, putts 2 → 4-2=2 <= 2 → GIR
+      9: 5,  // short, par5, putts 2 → 5-2=3 <= 3 → GIR
+      10: 6, // super, par4, putts 2 → 6-2=4 <= 2 → NOT GIR
+    };
+    const shotDetails = {
+      p1: {
+        1: { drive: 'fairway', putts: 2 },
+        3: { drive: 'fairway', putts: 3 },
+        4: { drive: 'fairway', putts: 2 },
+        6: { drive: 'left', putts: 2 },
+        7: { drive: 'right', putts: 2 },
+        9: { drive: 'short', putts: 2 },
+        10: { drive: 'super', putts: 2 },
+      },
+    };
+    const t = {
+      players: [{ id: 'p1', handicap: 0 }],
+      rounds: [{ courseName: 'C', holes, scores: { p1: scores }, shotDetails }],
+    };
+
+    const r = girByDriveResult(t, 'p1');
+    expect(r.fairway.holes).toBe(3);
+    expect(r.fairway.girPct).toBe(67); // 2/3
+    expect(r.miss.holes).toBe(4);
+    expect(r.miss.girPct).toBe(50); // 2/4
+  });
+
+  test('skips holes where drive or putts is missing, and excludes par-3s even if a drive is logged there', () => {
+    const h = [
+      { number: 1, par: 4, strokeIndex: 1 }, // drive only, no putts → skip
+      { number: 2, par: 4, strokeIndex: 2 }, // putts only, no drive → skip
+      { number: 3, par: 3, strokeIndex: 3 }, // par 3 with a (bogus) drive logged → skip
+    ];
+    const shotDetails = {
+      p1: {
+        1: { drive: 'fairway' },
+        2: { putts: 2 },
+        3: { drive: 'fairway', putts: 1 },
+      },
+    };
+    const t = {
+      players: [{ id: 'p1', handicap: 0 }],
+      rounds: [{ courseName: 'C', holes: h, scores: { p1: { 1: 4, 2: 4, 3: 3 } }, shotDetails }],
+    };
+
+    const r = girByDriveResult(t, 'p1');
+    expect(r.fairway.holes).toBe(0);
+    expect(r.miss.holes).toBe(0);
+  });
+
+  test('skips scramble rounds (shotDetails blanked by withoutScrambleScores)', () => {
+    const t = mixedModeTournament();
+    const clean = withoutScrambleScores(t);
+    // mixedModeTournament's fixtures never log shotDetails at all, so both
+    // buckets stay empty — the point is this must not throw when a round's
+    // shotDetails is null (R2, the scramble round).
+    expect(() => girByDriveResult(clean, 'p1')).not.toThrow();
+    const r = girByDriveResult(clean, 'p1');
+    expect(r.fairway.holes).toBe(0);
+    expect(r.miss.holes).toBe(0);
   });
 });
 

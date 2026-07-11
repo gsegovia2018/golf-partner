@@ -1152,6 +1152,47 @@ export function pairSynergy(tournament) {
     .sort((a, b) => b.synergy - a.synergy);
 }
 
+// ── Pair Coverage ──
+// Per pairing, the % of holes where AT LEAST ONE partner scored 2+
+// Stableford points ("someone saved the hole") plus how many holes BOTH
+// partners blanked (<2 pts) at once — a double-blank sinks the pair
+// regardless of who's carrying. A hole only counts when BOTH partners have a
+// recorded score, same convention as pairSynergy/pairCarryRatio above. Relies
+// on the caller having already stripped scramble-round pairs/scores (see
+// withoutScrambleScores) — same as every other pair aggregate in this file.
+export function pairCoverage(tournament) {
+  const pairMap = {};
+  tournament.rounds.forEach((round) => {
+    if (!round.scores || !round.pairs) return;
+    round.pairs.forEach((pair) => {
+      if (!Array.isArray(pair) || pair.length < 2) return; // singleton pair (odd roster)
+      const key = [pair[0].id, pair[1].id].sort().join('|');
+      if (!pairMap[key]) pairMap[key] = { pair: [pair[0], pair[1]], holes: 0, covered: 0, bothBlanked: 0 };
+      const h1 = getPlayingHandicap(round, tournament.players.find((p) => p.id === pair[0].id));
+      const h2 = getPlayingHandicap(round, tournament.players.find((p) => p.id === pair[1].id));
+      round.holes.forEach((hole) => {
+        const s1 = round.scores[pair[0].id]?.[hole.number];
+        const s2 = round.scores[pair[1].id]?.[hole.number];
+        if (!s1 || !s2) return;
+        const p1 = calcStablefordPoints(hole.par, s1, h1, hole.strokeIndex);
+        const p2 = calcStablefordPoints(hole.par, s2, h2, hole.strokeIndex);
+        pairMap[key].holes += 1;
+        if (p1 >= 2 || p2 >= 2) pairMap[key].covered += 1;
+        else pairMap[key].bothBlanked += 1;
+      });
+    });
+  });
+  return Object.values(pairMap)
+    .filter((p) => p.holes > 0)
+    .map((p) => ({
+      pair: p.pair,
+      holes: p.holes,
+      coveragePct: Math.round((p.covered / p.holes) * 100),
+      bothBlanked: p.bothBlanked,
+    }))
+    .sort((a, b) => b.coveragePct - a.coveragePct);
+}
+
 // ── Pair Carry Ratio ──
 // Within every pair, what share of their combined Stableford points each
 // member contributed. 0.5 is an even split. Higher = carried the pair.
@@ -2000,6 +2041,49 @@ export function driveScoreImpact(tournament, playerId) {
       short: summarize(buckets.short),
     },
   };
+}
+
+// ── GIR by Drive Result ──
+// For one player, splits per-hole GIR (strokes − putts ≤ par − 2) by what
+// the drive that hole did: found the literal `fairway` tag, or missed
+// (`left`/`right`/`short`/`super` all bucket as "miss" here — this asks the
+// narrower "did the fairway tag precede a green in regulation" question,
+// unlike shotStats' fairwaysHit% which treats `super` as a hit). Requires
+// BOTH putts and drive logged for the hole — GIR can't be computed without
+// putts, and an unclassified drive can't be bucketed. Drive is excluded on
+// par 3s, same as driveScoreImpact/shotStats (no driver off that tee).
+export function girByDriveResult(tournament, playerId) {
+  const player = (tournament.players || []).find((p) => p.id === playerId);
+  const fairway = [];
+  const miss = [];
+
+  (tournament.rounds || []).forEach((round, roundIndex) => {
+    if (!round.scores?.[playerId] || !player) return;
+    const details = round.shotDetails?.[playerId] || {};
+    (round.holes || []).forEach((hole) => {
+      if (hole.par === 3) return;
+      const d = details[hole.number];
+      if (!d || d.drive == null || d.putts == null) return;
+      const strokes = round.scores[playerId]?.[hole.number];
+      if (strokes == null) return;
+      const gir = isGIR({ strokes, putts: d.putts, par: hole.par });
+      if (gir == null) return;
+      const entry = {
+        roundIndex, courseName: round.courseName,
+        holeNumber: hole.number, par: hole.par, strokes, putts: d.putts, gir,
+      };
+      if (d.drive === 'fairway') fairway.push(entry);
+      else miss.push(entry);
+    });
+  });
+
+  const summarize = (arr) => ({
+    holes: arr.length,
+    girPct: arr.length ? Math.round((arr.filter((e) => e.gir).length / arr.length) * 100) : 0,
+    breakdown: arr,
+  });
+
+  return { fairway: summarize(fairway), miss: summarize(miss) };
 }
 
 // ── Approach → Score Impact ──
