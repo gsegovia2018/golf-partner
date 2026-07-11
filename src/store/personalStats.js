@@ -554,30 +554,23 @@ export function computeFormSeries(selectedRounds) {
 // drag a course's average down, inflate/deflate its best, and fake a trend.
 // avgPoints/bestPoints are ROUND-TOTAL figures (same scale as
 // computeMetrics.avgPoints/bestRoundPoints), not per-hole averages.
+// bestPoints/trend come from courseDNA's own chronological `roundTotals`,
+// so they always share courseDNA's course keying (courseId ?? courseName,
+// `R{n}` fallback for unnamed rounds) — no second grouping that can
+// silently miss (e.g. courseName '' vs the 'R{n}' display key).
+// trend is the sign of the latest complete round here vs the one before
+// it, and null — not a fake "flat" 0 — when there is no previous round
+// to compare against.
 export function courseMastery(synthetic) {
   const completeRounds = (synthetic.rounds || []).filter((r) => r.isComplete);
-  const completeSynthetic = { ...synthetic, rounds: completeRounds };
-  const dna = courseDNA(completeSynthetic)[0];
+  const dna = courseDNA({ ...synthetic, rounds: completeRounds })[0];
   if (!dna || dna.courses.length === 0) return [];
-  // playerRoundHistory runs over the SAME completeSynthetic, so its
-  // roundIndex values (and the `round.courseName || 'R{n}'` fallback used
-  // by both this and courseDNA) line up with dna's course keys.
-  const history = playerRoundHistory(completeSynthetic, CANON_ID);
-  const byCourse = {};
-  history.forEach((h) => {
-    (byCourse[h.courseName] ??= []).push(h);
-  });
   return dna.courses.map((c) => {
-    const entries = byCourse[c.courseName] || [];
-    const bestPoints = entries.reduce((m, e) => Math.max(m, e.points), 0);
-    // Trend = sign of the latest complete round at this course vs the one
-    // before it (0 when there's nothing to compare against yet).
-    let trend = 0;
-    if (entries.length >= 2) {
-      const latest = entries[entries.length - 1].points;
-      const previous = entries[entries.length - 2].points;
-      trend = Math.sign(latest - previous);
-    }
+    const totals = c.roundTotals;
+    const bestPoints = totals.reduce((m, e) => Math.max(m, e.points), 0);
+    const trend = totals.length >= 2
+      ? Math.sign(totals[totals.length - 1].points - totals[totals.length - 2].points)
+      : null;
     return {
       courseName: c.courseName,
       rounds: c.rounds,

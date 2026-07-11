@@ -1,4 +1,4 @@
-import { teeShotImpact, lagPuttingQuality, sandSaveRate, upAndDownRate, bunkerVisits, sgPutting, sgAroundGreen, sgApproach, sgPenalties, sgTotal, sgSeason, driveScoreImpact, puttDeepDive, approachScoreImpact, puttingTargetGaps, approachTargetGaps, pairPerformance, shotStats, playersWithShotData, tournamentHighlights, withoutScrambleScores, playerAvgStableford, pickupChampion, hallOfShame, chaosHoles, skinsLeaderboard, playerStreaks, bounceBackRate, strokeIndexAccuracy, bestWorstHoles, holeDifficultyMap, collectiveExtremes, pairConfigMatrix, matchPlayResults, pairHoleWins, anchor, par3Heartbreak, playingToHandicap, hotStretch, nemesisEncore, pairCoverage, girByDriveResult } from '../statsEngine';
+import { teeShotImpact, lagPuttingQuality, sandSaveRate, upAndDownRate, bunkerVisits, sgPutting, sgAroundGreen, sgApproach, sgPenalties, sgTotal, sgSeason, driveScoreImpact, puttDeepDive, approachScoreImpact, puttingTargetGaps, approachTargetGaps, pairPerformance, shotStats, playersWithShotData, tournamentHighlights, withoutScrambleScores, playerAvgStableford, pickupChampion, hallOfShame, chaosHoles, skinsLeaderboard, playerStreaks, bounceBackRate, strokeIndexAccuracy, bestWorstHoles, holeDifficultyMap, collectiveExtremes, pairConfigMatrix, matchPlayResults, pairHoleWins, anchor, par3Heartbreak, playingToHandicap, hotStretch, nemesisEncore, pairCoverage, girByDriveResult, courseDNA } from '../statsEngine';
 import { mixedModeTournament, buildTournament } from './statsFixtures';
 
 // 18 par-4 holes, strokeIndex = hole number.
@@ -2342,5 +2342,42 @@ describe('hotStretch', () => {
     const p2 = result.find((r) => r.player.id === 'p2');
 
     expect(p2).toMatchObject({ points: 18, roundIndex: 0, startHole: 1, endHole: 6 });
+  });
+});
+
+describe('courseDNA — pools by courseId ?? courseName, keeps per-round totals', () => {
+  test('a renamed course label with the same courseId stays one course, shown under its latest name', () => {
+    const h = holes18();
+    const t = {
+      players: [{ id: 'p1', handicap: 0 }],
+      rounds: [
+        { courseId: 'c9', courseName: 'Pine', holes: h, scores: { p1: evenScores(h, 4) } },
+        { courseId: 'c9', courseName: 'Pine GC', holes: h, scores: { p1: evenScores(h, 5) } },
+      ],
+    };
+    const dna = courseDNA(t)[0];
+    expect(dna.courses).toHaveLength(1);
+    const c = dna.courses[0];
+    expect(c.courseName).toBe('Pine GC');       // latest label wins for display
+    expect(c.rounds).toBe(2);
+    expect(c.roundPoints).toBe(27);             // (36 + 18) / 2
+    // Chronological per-round totals so consumers (courseMastery) can take
+    // best/trend without re-deriving courseDNA's keying.
+    expect(c.roundTotals.map((r) => r.points)).toEqual([36, 18]);
+    expect(c.roundTotals.map((r) => r.roundIndex)).toEqual([0, 1]);
+  });
+
+  test('rounds with no courseId and an empty name each keep their own R{n} identity', () => {
+    const h = holes18();
+    const t = {
+      players: [{ id: 'p1', handicap: 0 }],
+      rounds: [
+        { courseName: '', holes: h, scores: { p1: evenScores(h, 4) } },
+        { courseName: '', holes: h, scores: { p1: evenScores(h, 5) } },
+      ],
+    };
+    const dna = courseDNA(t)[0];
+    expect(dna.courses.map((c) => c.courseName).sort()).toEqual(['R1', 'R2']);
+    expect(dna.courses.every((c) => c.rounds === 1)).toBe(true);
   });
 });

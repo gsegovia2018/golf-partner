@@ -863,6 +863,14 @@ export function playerConsistency(tournament) {
 // ── Course DNA ──
 // Per-player average points and strokes on each course. Highlights whose game
 // suits each venue.
+// Courses are pooled by the stable physical identity `courseId ?? courseName`
+// (the strokeIndexAccuracy/nemesisEncore convention) — EditTournamentScreen
+// lets users rename a round's course label without changing courseId, and a
+// rename must not split one course into several rows. Rounds with neither
+// (unnamed ad-hoc courses) each keep their own `R{n}` identity. The display
+// `courseName` is the pooled course's most recent label. Each course also
+// carries chronological per-round `roundTotals` so consumers (courseMastery)
+// can take best/trend without re-deriving this keying.
 export function courseDNA(tournament) {
   const perPlayer = {};
   tournament.players.forEach(p => { perPlayer[p.id] = { player: p, courses: {} }; });
@@ -881,12 +889,15 @@ export function courseDNA(tournament) {
         holesPlayed++;
       });
       if (holesPlayed === 0) return;
-      const key = round.courseName || `R${roundIndex + 1}`;
-      const cur = perPlayer[player.id].courses[key] || { courseName: key, points: 0, strokes: 0, holesPlayed: 0, rounds: 0 };
+      const label = round.courseName || `R${roundIndex + 1}`;
+      const key = round.courseId ?? label;
+      const cur = perPlayer[player.id].courses[key] || { courseName: label, points: 0, strokes: 0, holesPlayed: 0, rounds: 0, roundTotals: [] };
+      cur.courseName = label; // rounds iterate chronologically — latest label wins
       cur.points += points;
       cur.strokes += strokes;
       cur.holesPlayed += holesPlayed;
       cur.rounds++;
+      cur.roundTotals.push({ roundIndex, points, strokes, holesPlayed });
       perPlayer[player.id].courses[key] = cur;
     });
   });

@@ -60,7 +60,8 @@ function baseStats() {
       ],
     },
     courseMastery: [
-      { courseName: 'Oak', rounds: 1, avgPoints: 54, bestPoints: 54, trend: 0 },
+      { courseName: 'Oak', rounds: 1, avgPoints: 54, bestPoints: 54, trend: null },
+      { courseName: 'Elm', rounds: 2, avgPoints: 30, bestPoints: 30, trend: 0 },
       { courseName: 'Pine', rounds: 2, avgPoints: 27, bestPoints: 36, trend: -1 },
     ],
     careerMilestones: {
@@ -390,7 +391,7 @@ describe('My Stats tabs', () => {
   });
 
   test('BreakdownTab shows Course Mastery rows and Career Milestones tiles', async () => {
-    const { findByText, findAllByText, getByLabelText } = render(wrap(
+    const { findByText, findAllByText, getByLabelText, queryByLabelText } = render(wrap(
       <BreakdownTab stats={baseStats()} onInfo={() => {}} />
     ));
 
@@ -403,7 +404,10 @@ describe('My Stats tabs', () => {
     expect(await findByText('54 pts avg')).toBeTruthy();
     expect(await findByText('27 pts avg')).toBeTruthy();
     expect(getByLabelText('Pine trend bad')).toBeTruthy();
-    expect(getByLabelText('Oak trend neutral')).toBeTruthy();
+    // trend 0 = two genuinely equal rounds → minus icon; trend null = only
+    // one complete round → no trend claim rendered at all.
+    expect(getByLabelText('Elm trend neutral')).toBeTruthy();
+    expect(queryByLabelText(/Oak trend/)).toBeNull();
 
     // Career Milestones: birdies/eagles/streak counts plus best nine/round.
     // birdies and longestParStreak are both 18 in this fixture — two tiles
@@ -416,6 +420,9 @@ describe('My Stats tabs', () => {
     expect(await findByText('Best nine (pts)')).toBeTruthy();
     expect(await findByText('54')).toBeTruthy();
     expect(await findByText('Best round (pts)')).toBeTruthy();
+    // The counts are NET (handicap-adjusted) — ShotsTab's birdie benchmark
+    // is gross, so the card must disclose the basis.
+    expect(await findByText(/net \(handicap-adjusted\)/i)).toBeTruthy();
   });
 
   test('BreakdownTab hides Course Mastery when there is no complete round at any course', async () => {

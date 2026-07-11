@@ -1069,12 +1069,61 @@ describe('courseMastery', () => {
     const mastery = courseMastery(synthetic);
 
     // Oak: 1 complete round (54 pts) — the 6-hole round is excluded, so
-    // rounds=1 and trend has nothing to compare against (0).
+    // rounds=1 and trend has nothing to compare against (null, NOT 0 —
+    // 0 is a claim about two equal rounds, not a missing comparison).
     // Pine: 2 complete rounds (36, then 18) — avg 27, best 36, trend down
     // (latest 18 < previous 36 → -1).
     expect(mastery).toEqual([
-      { courseName: 'Oak', rounds: 1, avgPoints: 54, bestPoints: 54, trend: 0 },
+      { courseName: 'Oak', rounds: 1, avgPoints: 54, bestPoints: 54, trend: null },
       { courseName: 'Pine', rounds: 2, avgPoints: 27, bestPoints: 36, trend: -1 },
+    ]);
+  });
+
+  test('a complete round with an empty courseName keeps its real bestPoints under the R{n} identity', () => {
+    // SetupScreen/OfficialCreateScreen default courseName to '' — courseDNA
+    // keys such a round 'R{n}'. bestPoints/trend must come from the same
+    // keying, not silently collapse to 0 on a name mismatch.
+    const h = holes18();
+    const tournaments = [{
+      id: 1, name: 'T', players: [{ id: 'p1', handicap: 0, user_id: 'u1' }],
+      rounds: [mkRound({ courseName: '', holes: h, scores: { p1: evenScores(h, 4) }, playerHandicaps: { p1: 0 } })],
+    }];
+    const mastery = courseMastery(buildSyntheticTournament(collectMyRounds(tournaments, 'u1')));
+    expect(mastery).toEqual([
+      { courseName: 'R1', rounds: 1, avgPoints: 36, bestPoints: 36, trend: null },
+    ]);
+  });
+
+  test('pools rounds by courseId when the course label was renamed', () => {
+    // EditTournamentScreen lets users rename a round's course label without
+    // changing courseId — one physical course must stay one mastery row
+    // (courseId ?? courseName, the strokeIndexAccuracy/nemesisEncore
+    // convention), shown under its most recent label.
+    const h = holes18();
+    const r1 = mkRound({ courseName: 'Pine', holes: h, scores: { p1: evenScores(h, 4) }, playerHandicaps: { p1: 0 } });
+    r1.courseId = 'c9';
+    const r2 = mkRound({ courseName: 'Pine GC (renamed)', holes: h, scores: { p1: evenScores(h, 5) }, playerHandicaps: { p1: 0 } });
+    r2.courseId = 'c9';
+    const tournaments = [{
+      id: 1, name: 'T', players: [{ id: 'p1', handicap: 0, user_id: 'u1' }],
+      rounds: [r1, r2],
+    }];
+    const mastery = courseMastery(buildSyntheticTournament(collectMyRounds(tournaments, 'u1')));
+    expect(mastery).toEqual([
+      { courseName: 'Pine GC (renamed)', rounds: 2, avgPoints: 27, bestPoints: 36, trend: -1 },
+    ]);
+  });
+
+  test('trend is 0 only for genuinely equal consecutive rounds', () => {
+    const h = holes18();
+    const mk = () => mkRound({ courseName: 'Elm', holes: h, scores: { p1: evenScores(h, 4) }, playerHandicaps: { p1: 0 } });
+    const tournaments = [{
+      id: 1, name: 'T', players: [{ id: 'p1', handicap: 0, user_id: 'u1' }],
+      rounds: [mk(), mk()],
+    }];
+    const mastery = courseMastery(buildSyntheticTournament(collectMyRounds(tournaments, 'u1')));
+    expect(mastery).toEqual([
+      { courseName: 'Elm', rounds: 2, avgPoints: 36, bestPoints: 36, trend: 0 },
     ]);
   });
 

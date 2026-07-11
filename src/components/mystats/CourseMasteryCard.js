@@ -26,6 +26,11 @@ export default function CourseMasteryCard({ courses, onInfo }) {
 }
 
 function CourseRow({ course, s, theme }) {
+  // trend null = only one complete round here — there is no trend claim to
+  // make, so no icon at all (a minus would read as "flat", i.e. two equal
+  // rounds). trend 0 IS a claim (two genuinely equal consecutive rounds)
+  // and keeps the minus.
+  const hasTrend = course.trend != null;
   const tone = course.trend > 0 ? 'good' : course.trend < 0 ? 'bad' : 'neutral';
   const icon = course.trend > 0 ? 'trending-up' : course.trend < 0 ? 'trending-down' : 'minus';
   const color = toneColor(theme, tone);
@@ -39,13 +44,17 @@ function CourseRow({ course, s, theme }) {
       </View>
       <View style={s.right}>
         <Text style={s.avg}>{`${course.avgPoints} pts avg`}</Text>
-        <View
-          style={[s.trendPill, { backgroundColor: toneFill(theme, tone) }]}
-          accessible
-          accessibilityLabel={`${course.courseName} trend ${tone}`}
-        >
-          <Feather name={icon} size={13} color={color} />
-        </View>
+        {hasTrend ? (
+          <View
+            style={[s.trendPill, { backgroundColor: toneFill(theme, tone) }]}
+            accessible
+            accessibilityLabel={`${course.courseName} trend ${tone}`}
+          >
+            <Feather name={icon} size={13} color={color} />
+          </View>
+        ) : (
+          <View style={s.trendPill} />
+        )}
       </View>
     </View>
   );
