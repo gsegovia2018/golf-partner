@@ -158,3 +158,14 @@ Structural writes (pairs, settings, course, roster, `current_round`, `finished_a
 - Server-first deploy is backward-compatible (old builds keep blob-writing, unaware) until the group updates.
 - Biggest-change-yet caveat: multi-day effort, staged with review gates per plan task.
 - Rollback: the frozen blobs + previous APK.
+
+## Amendments (planning recon, 2026-07-11)
+
+1. **Table names:** official mode already owns `tournament_rounds`, `tournament_scores`, `tournament_roster`. The new tables are named `game_players`, `game_rounds`, `game_scores`, `game_shot_details`, `game_round_notes`. Hot tables carry a denormalized `tournament_id` so realtime channels filter on one column.
+2. **Losslessness by construction:** instead of enumerating cold columns, `game_rounds` stores the whole round object minus hot keys in a `body jsonb` catch-all (`body = round − {scores, shotDetails, notes}`); `game_players` likewise (`body` + extracted `user_id`, `pos` preserves array order); tournament-level leftovers (settings, `finishedAt`, misc) live in a `tournaments.props jsonb`. Unknown/future fields round-trip automatically. `current_round` stays a real column, advanced server-side with `GREATEST` (monotonic).
+3. **RPC names:** `get_game_tournament`, `get_my_game_tournaments` (computes owner/member/participant role server-side, replacing the client's 3-query union), `set_game_score` (row-locked, returns previous value), `patch_game_round` / `patch_game_tournament` (one-level-deep jsonb merge), `advance_game_round`, `backfill_game_tournament`.
+4. **`claim_tournament_player` dual-writes** during transition: keeps its existing blob `jsonb_set` (old builds) and also stamps `game_players.user_id` (new builds).
+5. **Backfill vs straggler sweep:** the backfill uses the blob's `_meta` per-cell timestamps — a re-run only overwrites a `game_scores` row when the blob cell is genuinely newer, so sweeping after cut-over cannot clobber new-build writes.
+6. **Round-trip normalization:** absent `scores`/`shotDetails` and empty `{}` compare equal; `_meta`, `scoreConflicts`, `scoreResolutions`, `meId` are excluded from equality. `get_game_tournament` always emits `scores: {}` / `shotDetails: {}`.
+7. **Offline overlay replaces merge:** after any fetch, undrained queue mutations for that tournament re-apply on top via `applyPendingMutations(t, entries)` (reusing `applyToTournament`) — server truth + my pending ops, no LWW.
+8. **`tournaments` table predates the migrations dir** (dashboard-created; known drift). A schema-facts task runs first and the DDL's FK/id types follow its findings.
