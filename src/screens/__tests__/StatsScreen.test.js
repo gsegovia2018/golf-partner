@@ -1032,6 +1032,42 @@ describe('StatsScreen Shots tab — sample-floor gating', () => {
 
     expect(queryByText(/GIR after fairway/)).toBeNull();
   });
+
+  test('a zero-sample miss side is hidden entirely, never rendered as a full-color 0%', () => {
+    const statsEngine = require('../../store/statsEngine');
+    statsEngine.girByDriveResult.mockReturnValue({
+      fairway: { holes: 8, girPct: 44, breakdown: [] },
+      miss: { holes: 0, girPct: 0, breakdown: [] },
+    });
+
+    const { getByText, queryByText } = renderStats([makeRound('r1')]);
+    fireEvent.press(getByText('My Shots'));
+
+    // The populated side still renders...
+    expect(getByText('GIR after fairway ')).toBeTruthy();
+    expect(getByText('44%')).toBeTruthy();
+    // ...but the empty side is gone — no label, no misleading full-color 0%
+    // (mirrors the sibling Drive/Approach Impact rows, which skip
+    // zero-sample buckets outright).
+    expect(queryByText(/after a miss/)).toBeNull();
+    expect(queryByText('0%')).toBeNull();
+  });
+
+  test('a zero-sample fairway side is hidden while the miss side renders with its own lead-in label', () => {
+    const statsEngine = require('../../store/statsEngine');
+    statsEngine.girByDriveResult.mockReturnValue({
+      fairway: { holes: 0, girPct: 0, breakdown: [] },
+      miss: { holes: 7, girPct: 18, breakdown: [] },
+    });
+
+    const { getByText, queryByText } = renderStats([makeRound('r1')]);
+    fireEvent.press(getByText('My Shots'));
+
+    expect(getByText('GIR after a miss ')).toBeTruthy();
+    expect(getByText('18%')).toBeTruthy();
+    expect(queryByText(/after fairway/)).toBeNull();
+    expect(queryByText('0%')).toBeNull();
+  });
 });
 
 describe('StatsScreen Shame tab — fairness fixes', () => {

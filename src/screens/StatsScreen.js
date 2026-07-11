@@ -2916,15 +2916,31 @@ function ShotsTab({ tournament, theme, s }) {
               fairways hit · {drives.fairwaysHit}/{drives.recorded} drives
             </Text>
             {girByDrive && (girByDrive.fairway.holes > 0 || girByDrive.miss.holes > 0) && (
+              // A side with zero samples is hidden outright — rendering it
+              // as a full-color 0% would read as a verdict on holes that
+              // were never logged (isLowSample(0) is false by design; the
+              // sibling Drive/Approach Impact rows skip empty buckets the
+              // same way). The miss side's lead-in absorbs the "GIR" prefix
+              // when it is the only side left.
               <View style={s.girDriveRow}>
-                <Text style={s.cardSub}>GIR after fairway </Text>
-                <Text style={[s.girDriveValue, isLowSample(girByDrive.fairway.holes) && { color: theme.text.muted }]}>
-                  {girByDrive.fairway.girPct}%
-                </Text>
-                <Text style={s.cardSub}> · after a miss </Text>
-                <Text style={[s.girDriveValue, isLowSample(girByDrive.miss.holes) && { color: theme.text.muted }]}>
-                  {girByDrive.miss.girPct}%
-                </Text>
+                {girByDrive.fairway.holes > 0 && (
+                  <>
+                    <Text style={s.cardSub}>GIR after fairway </Text>
+                    <Text style={[s.girDriveValue, isLowSample(girByDrive.fairway.holes) && { color: theme.text.muted }]}>
+                      {girByDrive.fairway.girPct}%
+                    </Text>
+                  </>
+                )}
+                {girByDrive.miss.holes > 0 && (
+                  <>
+                    <Text style={s.cardSub}>
+                      {girByDrive.fairway.holes > 0 ? ' · after a miss ' : 'GIR after a miss '}
+                    </Text>
+                    <Text style={[s.girDriveValue, isLowSample(girByDrive.miss.holes) && { color: theme.text.muted }]}>
+                      {girByDrive.miss.girPct}%
+                    </Text>
+                  </>
+                )}
               </View>
             )}
             <View style={[s.distRow, { marginTop: 12 }]}>
