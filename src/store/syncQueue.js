@@ -23,7 +23,11 @@ export function createSyncQueue({ storage = AsyncStorage, key = QUEUE_KEY } = {}
 
   return {
     async enqueue(mutation) {
-      const entry = { id: uuidv4(), ...mutation };
+      // Stamp ts (queue-entry enqueue time, distinct from mutation.ts) when
+      // not already present, so later consumers (e.g. replaying a single
+      // tournament's pending entries) can order/inspect entries without
+      // reaching into the nested mutation payload.
+      const entry = { id: uuidv4(), ...mutation, ts: mutation.ts ?? Date.now() };
       const all = await readAll();
       all.push(entry);
       await writeAll(all);

@@ -92,6 +92,20 @@ export function metaPathFor(m) {
       `rounds.${m.roundId}.scoreResolutions.${m.playerId}.h${m.hole}`,
     ];
     case 'player.upsertLibrary': return null;
+    // Advances the tournament's "current round" pointer (drives which round
+    // the app opens by default). Monotonic — mirrors advance_game_round's
+    // GREATEST() on the server, so an out-of-order replay never regresses it.
+    case 'tournament.advanceRound': return 'currentRound';
+    // Reveals a round's pairs (post-randomize reveal moment). Optionally
+    // carries the pairs themselves when reveal and pairing happen together.
+    case 'round.reveal': return `rounds.${m.roundId}.revealed`;
+    // Tournament profile edit (name/kind/settings/etc.) — mirrors
+    // patch_game_tournament's one-level-deep merge. Single LWW path: the
+    // whole patch lands together.
+    case 'tournament.updateProfile': return 'props';
+    // Tournament creation: the row is already saved locally by the creation
+    // flow itself, so this mutation only needs to reach the server queue.
+    case 'tournament.create': return 'create';
     default: throw new Error(`unknown mutation type: ${m.type}`);
   }
 }
@@ -284,9 +298,63 @@ export function applyToTournament(t, m) {
       }
       break;
     }
+    case 'tournament.advanceRound': {
+      // Monotonic like the server's advance_game_round: an out-of-order
+      // replay (e.g. a stale queued mutation applied after a newer local
+      // state) never regresses the pointer.
+      t.currentRound = Math.max(t.currentRound ?? 0, m.roundIndex);
+      break;
+    }
+    case 'round.reveal': {
+      const round = t.rounds?.find((r) => r.id === m.roundId);
+      if (!round) return;
+      round.revealed = true;
+      if (m.pairs) round.pairs = m.pairs;
+      break;
+    }
+    case 'tournament.updateProfile': {
+      for (const [k, v] of Object.entries(m.patch ?? {})) {
+        // name/kind are plain top-level fields, never merged into any
+        // nested object — mirrors patch_game_tournament's dedicated columns.
+        if (k === 'name') { t.name = v; continue; }
+        if (k === 'kind') { t.kind = v; continue; }
+        // currentRound routes through the same monotonic rule as
+        // tournament.advanceRound (mirrors the server's routing to
+        // advance_game_round from within patch_game_tournament).
+        if (k === 'currentRound') { t.currentRound = Math.max(t.currentRound ?? 0, v); continue; }
+        // Object values merge one level deep; scalars/arrays/null replace
+        // outright (an explicit null clears the field locally).
+        if (v !== null && typeof v === 'object' && !Array.isArray(v)
+          && t[k] && typeof t[k] === 'object' && !Array.isArray(t[k])) {
+          t[k] = { ...t[k], ...v };
+        } else {
+          t[k] = v;
+        }
+      }
+      break;
+    }
+    case 'tournament.create': {
+      // No-op: the tournament creation flow already saves this tournament
+      // locally before this mutation is enqueued.
+      break;
+    }
     default:
       break; // library-only mutations don't change the tournament object
   }
+}
+
+// Replays a queue of pending mutations on top of a freshly fetched
+// tournament — the read-path replacement for LWW merging (server truth +
+// my undrained ops). `entries` is the syncQueue entry array for ONE
+// tournament ({ tournamentId, mutation, path, ts }); mutations are applied
+// in order via applyToTournament, which is already defensive about
+// mutations referencing rounds/players that no longer exist.
+export function applyPendingMutations(tournament, entries) {
+  const t = JSON.parse(JSON.stringify(tournament));
+  for (const entry of entries) {
+    applyToTournament(t, entry.mutation);
+  }
+  return t;
 }
 
 export async function mutate(tournamentBefore, mutation, opts = {}) {
