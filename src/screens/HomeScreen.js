@@ -43,7 +43,7 @@ import {
   resolveQuickStartPlayerTees,
 } from '../lib/quickStartGame';
 import { mutate } from '../store/mutate';
-import { roundScoringMode, tournamentHasMixedModes, tournamentStablefordLeaderboard, buildTeamsForMode } from '../store/scoring';
+import { roundScoringMode, tournamentHasMixedModes, tournamentStablefordLeaderboard, buildTeamsForMode, roundBestBallValues } from '../store/scoring';
 import { subscribeConnectivity } from '../lib/connectivity';
 import { getShowRunningScore, setShowRunningScore } from '../lib/prefs';
 import { unreadCount } from '../store/notificationStore';
@@ -1505,7 +1505,10 @@ export default function HomeScreen({ navigation, route }) {
     }
     if (selMode === 'bestball' && !leaderboardAlt) {
       if (!selectedRoundData || !selectedRoundHasScores || !selectedRoundData.pairs?.length) return null;
-      return playerRoundBestWorstPoints(selectedRoundData, playerId, tournament.players, settings);
+      return playerRoundBestWorstPoints(
+        selectedRoundData, playerId, tournament.players,
+        { ...settings, ...roundBestBallValues(tournament, selectedRoundData) },
+      );
     }
     if (selMode === 'pairsmatchplay' && !leaderboardAlt) {
       if (!selectedRoundData || !selectedRoundHasScores) return null;

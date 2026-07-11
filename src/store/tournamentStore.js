@@ -17,6 +17,7 @@ import {
   isRoundPlayed,
   roundTotals,
   roundScoringMode,
+  roundBestBallValues,
   teamShapeOf,
 } from './scoring';
 import { isScoringModeAllowed, fallbackScoringMode } from '../components/ScoringModePicker';
@@ -1199,8 +1200,7 @@ export function playerRoundBestWorstPoints(round, playerId, players, settings) {
 // losses do not count), scaled by bestBallValue / worstBallValue. Also
 // exposes bestTies/bestLosses and worstTies/worstLosses for display.
 export function tournamentBestWorstLeaderboard(tournament) {
-  const { players, rounds, settings } = tournament;
-  const { bestBallValue, worstBallValue } = { ...DEFAULT_SETTINGS, ...settings };
+  const { players, rounds } = tournament;
   const totals = Object.fromEntries(players.map((p) => [p.id, {
     player: p, points: 0,
     bestWins: 0, bestTies: 0, bestLosses: 0,
@@ -1210,6 +1210,7 @@ export function tournamentBestWorstLeaderboard(tournament) {
   rounds.forEach((round, index) => {
     if (!isRoundPlayed(round, index, tournament) || !round.pairs?.length) return;
     if (roundScoringMode(tournament, round) !== 'bestball') return;
+    const { bestBallValue, worstBallValue } = roundBestBallValues(tournament, round);
     const roles = assignBestWorstRoles(round, players);
     players.forEach((p) => {
       const r = roles[p.id];
@@ -1307,20 +1308,20 @@ export function tournamentPlayerClinched(tournament, mode) {
   const hasAnyScore = rounds.some((r) => r.scores && Object.keys(r.scores).length > 0);
   if (!hasAnyScore) return null;
 
-  const { bestBallValue, worstBallValue } = { ...DEFAULT_SETTINGS, ...settings };
-  const bbCap = bestBallValue + worstBallValue;
   const remainingPerPlayer = new Map(players.map((p) => [p.id, 0]));
 
   rounds.forEach((round, idx) => {
     const future = idx > (tournament.currentRound ?? 0);
     if (mode === 'bestball') {
+      const { bestBallValue, worstBallValue } = roundBestBallValues(tournament, round);
+      const bbCap = bestBallValue + worstBallValue;
       if (future) {
         players.forEach((p) => {
           remainingPerPlayer.set(p.id, remainingPerPlayer.get(p.id) + round.holes.length * bbCap);
         });
         return;
       }
-      const rem = roundMaxRemainingBestBall(round, settings);
+      const rem = roundMaxRemainingBestBall(round, { ...settings, bestBallValue, worstBallValue });
       round.pairs?.forEach((pair, pairIdx) => {
         const r = pairIdx === 0 ? rem.pair1 : rem.pair2;
         pair.forEach((p) => remainingPerPlayer.set(p.id, remainingPerPlayer.get(p.id) + r));
