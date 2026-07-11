@@ -30,7 +30,7 @@ import {
 // directly instead of adding a thin wrapper in statsEngine.js.
 import { holeDifficultySplit } from '../store/personalStats';
 import StatDetailSheet, { captureAndShare } from '../components/StatDetailSheet';
-import { scoringModeUsesTeams, isScrambleMode } from '../components/scoringModes';
+import { scoringModeUsesTeams, isScrambleMode, getScoringMode } from '../components/scoringModes';
 import PtsBadge from '../components/PtsBadge';
 // Same 6-sample floor MyStats' Breakdown tab uses (metricTone.js) — below it
 // a bucket's average is too noisy to paint as a good/bad verdict.
@@ -49,17 +49,47 @@ const DRIVE_KEYS = ['fairway', 'left', 'right', 'short', 'super'];
 const DRIVE_LABELS = { fairway: 'Fairway', left: 'Left', right: 'Right', short: 'Short', super: 'Super' };
 
 const firstName = (p) => p.name.split(' ')[0];
-const joinNames = (players) => {
+// How many players in this roster share each first name. joinNames uses it
+// to fold duplicate names into a single "Name ×N" token; the Players tab
+// chip selector (Task 20) reuses the same tally to tell two same-first-name
+// players' chips apart instead of rendering two identical "Bob" buttons.
+const firstNameCounts = (players) => {
   const counts = new Map();
   players.forEach(p => {
     const n = firstName(p);
     counts.set(n, (counts.get(n) || 0) + 1);
   });
+  return counts;
+};
+const joinNames = (players) => {
+  const counts = firstNameCounts(players);
   const tokens = [...counts.entries()].map(([n, c]) => c > 1 ? `${n} ×${c}` : n);
   if (tokens.length <= 1) return tokens[0] || '';
   if (tokens.length === 2) return `${tokens[0]} & ${tokens[1]}`;
   return `${tokens.slice(0, -1).join(', ')} & ${tokens[tokens.length - 1]}`;
 };
+// Chip label for a player within `players` — the full name when their first
+// name collides with another player's on the roster, otherwise just the
+// first name (the common case, kept short for the chip row).
+const disambiguatedFirstName = (player, players) => (
+  firstNameCounts(players).get(firstName(player)) > 1 ? player.name : firstName(player)
+);
+// Compact scoring-mode labels for a small badge chip — SCORING_MODES' own
+// `label` strings ("Stableford with Partners") are too long for a Round
+// History row. A round's EFFECTIVE mode can override the tournament default
+// (roundScoringMode), so a mixed tournament's history can legitimately show
+// different badges per row. Scramble rounds never reach here: the tab reads
+// the screen-level scramble-sanitized tournament, and playerRoundHistory
+// only returns rounds with real personal scores.
+const MODE_BADGE_LABELS = {
+  individual: 'Stableford',
+  stableford: 'Partners',
+  matchplay: 'Match Play',
+  sindicato: 'Sindicato',
+  bestball: 'Best Ball',
+  pairsmatchplay: 'Pairs MP',
+};
+const modeBadgeLabel = (mode) => MODE_BADGE_LABELS[mode] || getScoringMode(mode).label;
 const toneForPoints = (p) => p >= 3 ? 'excellent' : p === 2 ? 'good' : p === 1 ? 'neutral' : 'poor';
 // Ranks a list already sorted best-first so equal values share a rank
 // (1,1,3 rather than 1,2,3) instead of a plain array index. `valueFn` reads
@@ -126,6 +156,7 @@ export default function StatsScreen({ navigation }) {
   // Per-tab scroll refs + section anchor offsets, for the sticky section index.
   const overviewScrollRef = useRef(null);
   const pairsScrollRef = useRef(null);
+  const playersScrollRef = useRef(null);
 
   useEffect(() => {
     loadTournament().then(t => {
@@ -191,7 +222,7 @@ export default function StatsScreen({ navigation }) {
   const activeTab = visibleTabs.some(t => t.key === tab) ? tab : 'overview';
   const firstCompletedIdx = tournament.rounds.findIndex(r => r.scores && Object.keys(r.scores).length > 0);
   const showRoundScope = tournament.rounds.length > 1
-    && (activeTab === 'overview' || activeTab === 'holes' || activeTab === 'pairs');
+    && (activeTab === 'overview' || activeTab === 'holes' || activeTab === 'pairs' || activeTab === 'players');
   // Effective per-round scope: when "Total" is selected, per-round sections
   // fall back to the first completed round so they still show data.
   const effectiveRound = roundScope != null ? roundScope : (firstCompletedIdx >= 0 ? firstCompletedIdx : null);
@@ -266,9 +297,11 @@ export default function StatsScreen({ navigation }) {
           />
           <Text style={[s.scoringLabel, metric === 'points' && s.scoringLabelActive]}>Points</Text>
         </View>
-        {/* Round scope only drives the per-round sections (Overview / Holes /
-            Pairs). Players & Shame are tournament-wide aggregates, so the
-            chip set is hidden there to avoid a control that does nothing. */}
+        {/* Round scope drives the per-round sections on Overview / Holes /
+            Pairs / Players (distribution + streaks there — the rest of
+            Players is tournament-wide and labeled "All rounds"). Shame stays
+            a tournament-wide aggregate, so the chip set is hidden there to
+            avoid a control that does nothing. */}
         {showRoundScope && (
           <ScrollView
             horizontal
@@ -288,9 +321,10 @@ export default function StatsScreen({ navigation }) {
         </ScrollView>
       )}
       {activeTab === 'players' && (
-        <ScrollView style={s.scrollView} contentContainerStyle={s.content}>
+        <ScrollView ref={playersScrollRef} style={s.scrollView} contentContainerStyle={s.content}>
           <PlayersTab tournament={statsTournament} players={players} selectedPlayer={playersTabPlayer}
-            setSelectedPlayer={setPlayersTabPlayer} metric={metric} theme={theme} s={s} />
+            setSelectedPlayer={setPlayersTabPlayer} metric={metric} roundScope={roundScope}
+            scrollRef={playersScrollRef} theme={theme} s={s} />
         </ScrollView>
       )}
       {activeTab === 'holes' && (
@@ -1197,14 +1231,20 @@ const shareCardStyles = StyleSheet.create({
 });
 
 // ── Players Tab ──
-function PlayersTab({ tournament, players, selectedPlayer, setSelectedPlayer, metric, theme, s }) {
+function PlayersTab({ tournament, players, selectedPlayer, setSelectedPlayer, metric, roundScope, scrollRef, theme, s }) {
   const player = players[selectedPlayer];
   const [sheet, setSheet] = useState(null);
+  const anchors = useRef({});
   if (!player) return null;
 
   const isStrokes = metric === 'strokes';
-  const dist = playerScoreDistribution(tournament, player.id, { metric });
-  const streaks = playerStreaks(tournament, player.id, { metric });
+  // Distribution and streaks are the only two engine functions here that
+  // accept a roundIndex — everything else on this tab pools the whole
+  // tournament, so those sections read `roundScope` and the rest are
+  // explicitly labeled "All rounds" (via scopeLabel below) rather than
+  // silently ignoring the round-scope chip.
+  const dist = playerScoreDistribution(tournament, player.id, { metric, roundIndex: roundScope });
+  const streaks = playerStreaks(tournament, player.id, { metric, roundIndex: roundScope });
   const history = playerRoundHistory(tournament, player.id);
   const avg = playerAvgStableford(tournament, player.id);
   const parSplit = parTypeSplit(tournament, player.id);
@@ -1214,6 +1254,12 @@ function PlayersTab({ tournament, players, selectedPlayer, setSelectedPlayer, me
   const bounceBack = bounceBackRate(tournament).find(r => r.player.id === player.id) || null;
   const frontBack = frontBackSplit(tournament).find(r => r.player.id === player.id) || null;
   const modeLabel = isStrokes ? 'strokes (gross)' : 'points (net Stableford)';
+  // Same scope-label convention Pairs uses: null reads as "All rounds"
+  // instead of silently substituting the first completed round.
+  const scopeLabel = (idx) => (idx == null
+    ? 'All rounds'
+    : `R${idx + 1} · ${tournament.rounds[idx]?.courseName ?? ''}`);
+  const totalHolesPlayed = history.reduce((sum, r) => sum + r.holesPlayed, 0);
 
   const defaultTone = (b) => toneForPoints(b.points);
 
@@ -1244,7 +1290,7 @@ function PlayersTab({ tournament, players, selectedPlayer, setSelectedPlayer, me
       { key: 'sec-w', section: true, label: 'Warm-up (H1-3)' },
       ...wc.warmup.breakdown.map((b, i) => ({
         key: `w-${i}`,
-        primary: `${b.courseName} · H${b.holeNumber}`,
+        primary: `R${b.roundIndex + 1} · ${b.courseName} · H${b.holeNumber}`,
         secondary: `Par ${b.par} · ${b.strokes} strokes`,
         rightPrimary: `${b.points} pts`,
         tone: toneForPoints(b.points),
@@ -1252,7 +1298,7 @@ function PlayersTab({ tournament, players, selectedPlayer, setSelectedPlayer, me
       { key: 'sec-c', section: true, label: 'Closing (H16-18)' },
       ...wc.closing.breakdown.map((b, i) => ({
         key: `c-${i}`,
-        primary: `${b.courseName} · H${b.holeNumber}`,
+        primary: `R${b.roundIndex + 1} · ${b.courseName} · H${b.holeNumber}`,
         secondary: `Par ${b.par} · ${b.strokes} strokes`,
         rightPrimary: `${b.points} pts`,
         tone: toneForPoints(b.points),
@@ -1349,38 +1395,74 @@ function PlayersTab({ tournament, players, selectedPlayer, setSelectedPlayer, me
     });
   };
 
+  // history is NOT round-scoped (playerRoundHistory has no roundIndex param)
+  // — it's the honest "has this player ever scored anything" check. Gating
+  // the whole tab on `dist.total` instead would blank every section
+  // (Average, ROI, Round History...) the moment someone picks a round chip
+  // for a round this player sat out, even though those sections have real
+  // tournament-wide data to show.
+  const hasAnyScores = history.length > 0;
+
+  const showWc = wc.warmup.holes > 0 || wc.closing.holes > 0;
+  const indexSections = hasAnyScores ? [
+    { key: 'avg', label: 'Average' },
+    { key: 'distribution', label: 'Distribution' },
+    { key: 'streaks', label: 'Streaks' },
+    { key: 'partype', label: 'Par Type' },
+    { key: 'difficulty', label: 'Difficulty' },
+    showWc && { key: 'warmup', label: 'Warm-up/Closing' },
+    roi && { key: 'roi', label: 'ROI' },
+    { key: 'bounceback', label: 'Bounce-back' },
+    { key: 'frontback', label: 'Front/Back' },
+    { key: 'history', label: 'History' },
+  ].filter(Boolean) : [];
+
   return (
     <View>
       <View style={s.playerSelector}>
         {players.map((p, i) => (
           <TouchableOpacity key={p.id} style={[s.playerChip, selectedPlayer === i && s.playerChipActive]} onPress={() => setSelectedPlayer(i)} activeOpacity={0.7}>
-            <Text style={[s.playerChipText, selectedPlayer === i && s.playerChipTextActive]}>{p.name.split(' ')[0]}</Text>
+            <Text style={[s.playerChipText, selectedPlayer === i && s.playerChipTextActive]}>{disambiguatedFirstName(p, players)}</Text>
           </TouchableOpacity>
         ))}
       </View>
 
-      {dist.total === 0 ? (
+      {!hasAnyScores ? (
         <Text style={s.emptyText}>No scores for {player.name} yet.</Text>
       ) : (
         <>
+          <SectionIndex sections={indexSections} anchors={anchors} scrollRef={scrollRef} theme={theme} s={s} />
+
+          <SectionAnchor anchorKey="avg" anchors={anchors}>
           <View style={s.card}>
             <Text style={s.cardLabel}>Average per Round</Text>
             <Text style={s.bigNumber}>{avg}</Text>
             <Text style={s.cardSub}>Stableford points</Text>
+            <Text style={s.cardSub}>{history.length} round{history.length === 1 ? '' : 's'} · {totalHolesPlayed} holes</Text>
           </View>
+          </SectionAnchor>
 
+          <SectionAnchor anchorKey="distribution" anchors={anchors}>
           <Text style={s.sectionTitle}>SCORE DISTRIBUTION</Text>
-          <View style={s.card}>
-            <View style={s.distRow}>
-              <DistBar label="Eagle+" count={dist.eagles} total={dist.total} color={theme.scoreColor('excellent')} onPress={() => openBucket('Eagles', dist.eagleHoles, 'Holes scored at least 2 under par.')} s={s} />
-              <DistBar label="Birdie" count={dist.birdies} total={dist.total} color={theme.scoreColor('excellent')} onPress={() => openBucket('Birdies', dist.birdieHoles, 'Holes scored exactly 1 under par.')} s={s} />
-              <DistBar label="Par" count={dist.pars} total={dist.total} color={theme.scoreColor('good')} onPress={() => openBucket('Pars', dist.parHoles, 'Holes scored at par.')} s={s} />
-              <DistBar label="Bogey" count={dist.bogeys} total={dist.total} color={theme.scoreColor('neutral')} onPress={() => openBucket('Bogeys', dist.bogeyHoles, 'Holes scored exactly 1 over par.')} s={s} />
-              <DistBar label="Dbl+" count={dist.doubles + dist.worse} total={dist.total} color={theme.scoreColor('poor')} onPress={() => openBucket('Doubles or worse', [...dist.doubleHoles, ...dist.worseHoles], 'Holes scored 2 or more over par.')} s={s} />
+          <Text style={s.scopeText}>{scopeLabel(roundScope)}</Text>
+          {dist.total === 0 ? (
+            <Text style={s.mutedNote}>No scores for {firstName(player)} in this round.</Text>
+          ) : (
+            <View style={s.card}>
+              <View style={s.distRow}>
+                <DistBar label="Eagle+" count={dist.eagles} total={dist.total} color={theme.scoreColor('excellent')} onPress={() => openBucket('Eagles', dist.eagleHoles, 'Holes scored at least 2 under par.')} s={s} />
+                <DistBar label="Birdie" count={dist.birdies} total={dist.total} color={theme.scoreColor('excellent')} onPress={() => openBucket('Birdies', dist.birdieHoles, 'Holes scored exactly 1 under par.')} s={s} />
+                <DistBar label="Par" count={dist.pars} total={dist.total} color={theme.scoreColor('good')} onPress={() => openBucket('Pars', dist.parHoles, 'Holes scored at par.')} s={s} />
+                <DistBar label="Bogey" count={dist.bogeys} total={dist.total} color={theme.scoreColor('neutral')} onPress={() => openBucket('Bogeys', dist.bogeyHoles, 'Holes scored exactly 1 over par.')} s={s} />
+                <DistBar label="Dbl+" count={dist.doubles + dist.worse} total={dist.total} color={theme.scoreColor('poor')} onPress={() => openBucket('Doubles or worse', [...dist.doubleHoles, ...dist.worseHoles], 'Holes scored 2 or more over par.')} s={s} />
+              </View>
             </View>
-          </View>
+          )}
+          </SectionAnchor>
 
+          <SectionAnchor anchorKey="streaks" anchors={anchors}>
           <Text style={s.sectionTitle}>STREAKS</Text>
+          <Text style={s.scopeText}>{scopeLabel(roundScope)}</Text>
           <View style={s.card}>
             <View style={s.streakRow}>
               {[
@@ -1405,8 +1487,11 @@ function PlayersTab({ tournament, players, selectedPlayer, setSelectedPlayer, me
               })}
             </View>
           </View>
+          </SectionAnchor>
 
+          <SectionAnchor anchorKey="partype" anchors={anchors}>
           <Text style={s.sectionTitle}>PAR-TYPE SPLIT</Text>
+          <Text style={s.scopeText}>All rounds</Text>
           <View style={s.card}>
             <View style={s.parSplitRow}>
               {[
@@ -1434,8 +1519,11 @@ function PlayersTab({ tournament, players, selectedPlayer, setSelectedPlayer, me
               ))}
             </View>
           </View>
+          </SectionAnchor>
 
+          <SectionAnchor anchorKey="difficulty" anchors={anchors}>
           <Text style={s.sectionTitle}>DIFFICULTY SPLIT</Text>
+          <Text style={s.scopeText}>All rounds</Text>
           <View style={s.card}>
             <View style={s.parSplitRow}>
               {[
@@ -1463,10 +1551,12 @@ function PlayersTab({ tournament, players, selectedPlayer, setSelectedPlayer, me
               ))}
             </View>
           </View>
+          </SectionAnchor>
 
-          {(wc.warmup.holes > 0 || wc.closing.holes > 0) && (
-            <>
+          {showWc && (
+            <SectionAnchor anchorKey="warmup" anchors={anchors}>
               <Text style={s.sectionTitle}>WARM-UP vs CLOSING</Text>
+              <Text style={s.scopeText}>All rounds</Text>
               <TouchableOpacity style={s.card} onPress={openWarmupClosing} activeOpacity={0.7}>
                 <View style={s.wcRow}>
                   <View style={s.wcCol}>
@@ -1490,12 +1580,13 @@ function PlayersTab({ tournament, players, selectedPlayer, setSelectedPlayer, me
                   </View>
                 </View>
               </TouchableOpacity>
-            </>
+            </SectionAnchor>
           )}
 
           {roi && (
-            <>
+            <SectionAnchor anchorKey="roi" anchors={anchors}>
               <Text style={s.sectionTitle}>HANDICAP ROI</Text>
+              <Text style={s.scopeText}>All rounds</Text>
               <TouchableOpacity style={s.card} onPress={openROI} activeOpacity={0.7}>
                 <View style={s.roiRow}>
                   <View style={s.roiCol}>
@@ -1515,10 +1606,12 @@ function PlayersTab({ tournament, players, selectedPlayer, setSelectedPlayer, me
                 </View>
                 <Text style={s.roiSub}>Baseline: 2 pts/hole (a handicap that matches the player's level)</Text>
               </TouchableOpacity>
-            </>
+            </SectionAnchor>
           )}
 
+          <SectionAnchor anchorKey="bounceback" anchors={anchors}>
           <Text style={s.sectionTitle}>BOUNCE-BACK RATE</Text>
+          <Text style={s.scopeText}>All rounds</Text>
           {bounceBack ? (
             <TouchableOpacity style={s.card} onPress={() => openBounceBack(bounceBack)} activeOpacity={0.7}>
               <Text style={s.bigNumber}>{bounceBack.rate}%</Text>
@@ -1529,8 +1622,11 @@ function PlayersTab({ tournament, players, selectedPlayer, setSelectedPlayer, me
           ) : (
             <Text style={s.mutedNote}>No bogey-or-worse holes yet — nothing to bounce back from.</Text>
           )}
+          </SectionAnchor>
 
+          <SectionAnchor anchorKey="frontback" anchors={anchors}>
           <Text style={s.sectionTitle}>FRONT 9 vs BACK 9</Text>
+          <Text style={s.scopeText}>All rounds</Text>
           {frontBack ? (
             <TouchableOpacity style={s.card} onPress={() => openFrontBack(frontBack)} activeOpacity={0.7}>
               <View style={s.wcRow}>
@@ -1556,16 +1652,33 @@ function PlayersTab({ tournament, players, selectedPlayer, setSelectedPlayer, me
           ) : (
             <Text style={s.mutedNote}>Needs a completed 18-hole round to split the nines.</Text>
           )}
+          </SectionAnchor>
 
+          <SectionAnchor anchorKey="history" anchors={anchors}>
           <Text style={s.sectionTitle}>ROUND HISTORY</Text>
-          {history.map((r, i) => (
-            <TouchableOpacity key={i} style={s.historyRow} onPress={() => openRound(r)} activeOpacity={0.7}>
-              <Text style={s.historyRound}>R{r.roundIndex + 1}</Text>
-              <Text style={s.historyCourse}>{r.courseName}</Text>
-              <Text style={s.historyPts}>{r.points} pts</Text>
-              <Text style={s.historyStr}>{r.strokes} str</Text>
-            </TouchableOpacity>
-          ))}
+          <Text style={s.scopeText}>All rounds</Text>
+          {history.map((r, i) => {
+            const mode = roundScoringMode(tournament, tournament.rounds[r.roundIndex]);
+            return (
+              <TouchableOpacity key={i} style={s.historyRow} onPress={() => openRound(r)} activeOpacity={0.7}>
+                <View style={s.historyMain}>
+                  <View style={s.historyTopRow}>
+                    <Text style={s.historyRound}>R{r.roundIndex + 1}</Text>
+                    <Text style={s.historyCourse}>{r.courseName}</Text>
+                    <View style={s.historyModeBadge}>
+                      <Text style={s.historyModeBadgeText}>{modeBadgeLabel(mode)}</Text>
+                    </View>
+                  </View>
+                  <Text style={s.historySub}>{r.holesPlayed} holes · {r.avgPerHole} pts/hole</Text>
+                </View>
+                <View style={s.historyRight}>
+                  <Text style={s.historyPts}>{r.points} pts</Text>
+                  <Text style={s.historyStr}>{r.strokes} str</Text>
+                </View>
+              </TouchableOpacity>
+            );
+          })}
+          </SectionAnchor>
         </>
       )}
 
@@ -3909,8 +4022,19 @@ const makeStyles = (t) => StyleSheet.create({
     flexDirection: 'row', alignItems: 'center', paddingVertical: 10,
     borderBottomWidth: 1, borderBottomColor: t.border.subtle,
   },
+  historyMain: { flex: 1, marginRight: 8 },
+  historyTopRow: { flexDirection: 'row', alignItems: 'center', gap: 6 },
   historyRound: { fontFamily: 'PlusJakartaSans-Bold', color: t.accent.primary, fontSize: 13, width: 30 },
   historyCourse: { fontFamily: 'PlusJakartaSans-Medium', color: t.text.secondary, fontSize: 13, flex: 1 },
+  historyModeBadge: {
+    borderRadius: 6, paddingHorizontal: 6, paddingVertical: 2, backgroundColor: t.accent.light,
+  },
+  historyModeBadgeText: {
+    fontFamily: 'PlusJakartaSans-Bold', fontSize: 9, color: t.accent.primary,
+    textTransform: 'uppercase', letterSpacing: 0.3,
+  },
+  historySub: { fontFamily: 'PlusJakartaSans-Regular', color: t.text.muted, fontSize: 11, marginTop: 2 },
+  historyRight: { alignItems: 'flex-end' },
   historyPts: { fontFamily: 'PlusJakartaSans-Bold', color: t.text.primary, fontSize: 14, width: 55, textAlign: 'right' },
   historyStr: { fontFamily: 'PlusJakartaSans-Medium', color: t.text.muted, fontSize: 12, width: 50, textAlign: 'right' },
 

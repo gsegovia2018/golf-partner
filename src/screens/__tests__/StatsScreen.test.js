@@ -94,7 +94,13 @@ jest.mock('../../store/statsEngine', () => ({
   // Real implementation: the scramble-gating tests below depend on scores/
   // shotDetails/pairs actually being blanked on scramble rounds.
   withoutScrambleScores: jest.requireActual('../../store/statsEngine').withoutScrambleScores,
-  playerRoundHistory: jest.fn(() => []),
+  // Real shape: [{roundIndex, courseName, points, strokes, holesPlayed,
+  // avgPerHole}] — PlayersTab now gates its whole body on history.length
+  // (not the round-scoped `dist.total`), so an empty default here would
+  // collapse every Players-tab test straight to "No scores yet."
+  playerRoundHistory: jest.fn(() => [
+    { roundIndex: 0, courseName: 'La Moraleja', points: 36, strokes: 72, holesPlayed: 18, avgPerHole: 2 },
+  ]),
   playerAvgStableford: jest.fn(() => 0),
   playerScoreDistribution: jest.fn(() => []),
   playerStreaks: jest.fn(() => []),
@@ -219,6 +225,105 @@ describe('StatsScreen Players tab — Difficulty Split', () => {
     const sheet = UNSAFE_getByType('StatDetailSheet');
     expect(sheet.props.title).toBe('Marcos — SI 1-6');
     expect(sheet.props.rows).toHaveLength(6);
+  });
+});
+
+describe('StatsScreen Players tab — Task 20 honesty items', () => {
+  // A test further down overrides playerRoundHistory's return value; without
+  // resetting it here, that override would leak into later tests in this
+  // block (jest.clearAllMocks() clears call history, not return values) and
+  // could, e.g., make a leftover "R2" history row collide with the "R2"
+  // round-scope chip in a getByText query.
+  beforeEach(() => {
+    jest.clearAllMocks();
+    const statsEngine = require('../../store/statsEngine');
+    statsEngine.playerRoundHistory.mockReturnValue([
+      { roundIndex: 0, courseName: 'La Moraleja', points: 36, strokes: 72, holesPlayed: 18, avgPerHole: 2 },
+    ]);
+  });
+
+  test('player chips disambiguate duplicate first names by falling back to the full name', () => {
+    const duplicateFirstNamePlayers = [
+      { id: 'p1', name: 'Bob Diaz', user_id: 'u1', handicap: 0 },
+      { id: 'p2', name: 'Bob Smith', user_id: null, handicap: 0 },
+    ];
+    const { getByText, queryByText } = renderStats([makeRound('r1')], { players: duplicateFirstNamePlayers });
+    fireEvent.press(getByText('Players'));
+
+    expect(getByText('Bob Diaz')).toBeTruthy();
+    expect(getByText('Bob Smith')).toBeTruthy();
+    // The bare "Bob" chip label must not survive — it would be ambiguous
+    // between the two players.
+    expect(queryByText('Bob')).toBeNull();
+  });
+
+  test('a roster with no duplicate first names keeps the short chip labels', () => {
+    const { getByText, queryByText } = renderStats([makeRound('r1')], {
+      players: [player, { id: 'p2', name: 'Bob Diaz', user_id: null, handicap: 0 }],
+    });
+    fireEvent.press(getByText('Players'));
+
+    expect(getByText('Marcos')).toBeTruthy();
+    expect(getByText('Bob')).toBeTruthy();
+    expect(queryByText('Bob Diaz')).toBeNull();
+  });
+
+  test("Round History row shows the round's scoring-mode badge, holes played, and avg per hole", () => {
+    jest.clearAllMocks();
+    const statsEngine = require('../../store/statsEngine');
+    statsEngine.playerRoundHistory.mockReturnValue([
+      { roundIndex: 0, courseName: 'La Moraleja', points: 30, strokes: 76, holesPlayed: 15, avgPerHole: 2 },
+    ]);
+    const round = { ...makeRound('r1'), scoringMode: 'matchplay' };
+    const { getByText } = renderStats([round]);
+    fireEvent.press(getByText('Players'));
+
+    expect(getByText('ROUND HISTORY')).toBeTruthy();
+    expect(getByText('Match Play')).toBeTruthy();
+    expect(getByText('15 holes · 2 pts/hole')).toBeTruthy();
+  });
+
+  test('Average per Round card shows an "n rounds · m holes" subtitle', () => {
+    jest.clearAllMocks();
+    const statsEngine = require('../../store/statsEngine');
+    statsEngine.playerRoundHistory.mockReturnValue([
+      { roundIndex: 0, courseName: 'La Moraleja', points: 36, strokes: 72, holesPlayed: 18, avgPerHole: 2 },
+      { roundIndex: 1, courseName: 'Sotogrande', points: 34, strokes: 74, holesPlayed: 18, avgPerHole: 1.89 },
+    ]);
+    const { getByText } = renderStats([makeRound('r1'), makeRound('r2', 5)]);
+    fireEvent.press(getByText('Players'));
+
+    expect(getByText('2 rounds · 36 holes')).toBeTruthy();
+  });
+
+  test('renders the sticky section index with a chip for each rendered section', () => {
+    const { getByText } = renderStats([makeRound('r1')]);
+    fireEvent.press(getByText('Players'));
+
+    expect(getByText('Distribution')).toBeTruthy();
+    expect(getByText('Streaks')).toBeTruthy();
+    expect(getByText('History')).toBeTruthy();
+  });
+
+  test('round-scope chips are enabled on the Players tab and pass roundIndex through to distribution + streaks', () => {
+    jest.clearAllMocks();
+    const statsEngine = require('../../store/statsEngine');
+    const { getByText, getAllByText } = renderStats([makeRound('r1'), makeRound('r2', 5)]);
+    fireEvent.press(getByText('Players'));
+
+    // Chip set is now visible on this tab (was hidden before Task 20).
+    expect(getByText('Total')).toBeTruthy();
+    expect(getByText('R2')).toBeTruthy();
+    // Tournament-wide sections that don't accept roundIndex are labeled
+    // honestly instead of silently ignoring the chip.
+    expect(getAllByText('All rounds').length).toBeGreaterThan(0);
+
+    fireEvent.press(getByText('R2'));
+
+    const distCall = statsEngine.playerScoreDistribution.mock.calls.at(-1);
+    expect(distCall[2]).toEqual(expect.objectContaining({ roundIndex: 1 }));
+    const streaksCall = statsEngine.playerStreaks.mock.calls.at(-1);
+    expect(streaksCall[2]).toEqual(expect.objectContaining({ roundIndex: 1 }));
   });
 });
 

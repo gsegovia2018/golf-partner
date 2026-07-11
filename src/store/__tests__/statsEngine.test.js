@@ -1,4 +1,4 @@
-import { teeShotImpact, lagPuttingQuality, sandSaveRate, upAndDownRate, bunkerVisits, sgPutting, sgAroundGreen, sgApproach, sgPenalties, sgTotal, sgSeason, driveScoreImpact, puttDeepDive, approachScoreImpact, puttingTargetGaps, approachTargetGaps, pairPerformance, shotStats, playersWithShotData, tournamentHighlights, withoutScrambleScores, playerAvgStableford, pickupChampion, hallOfShame, chaosHoles, skinsLeaderboard, playerStreaks, bounceBackRate, strokeIndexAccuracy, bestWorstHoles, holeDifficultyMap, collectiveExtremes, pairConfigMatrix, matchPlayResults, pairHoleWins, anchor, par3Heartbreak, playingToHandicap, hotStretch, nemesisEncore, pairCoverage, girByDriveResult, courseDNA } from '../statsEngine';
+import { teeShotImpact, lagPuttingQuality, sandSaveRate, upAndDownRate, bunkerVisits, sgPutting, sgAroundGreen, sgApproach, sgPenalties, sgTotal, sgSeason, driveScoreImpact, puttDeepDive, approachScoreImpact, puttingTargetGaps, approachTargetGaps, pairPerformance, shotStats, playersWithShotData, tournamentHighlights, withoutScrambleScores, playerAvgStableford, pickupChampion, hallOfShame, chaosHoles, skinsLeaderboard, playerStreaks, bounceBackRate, strokeIndexAccuracy, bestWorstHoles, holeDifficultyMap, collectiveExtremes, pairConfigMatrix, matchPlayResults, pairHoleWins, anchor, par3Heartbreak, playingToHandicap, hotStretch, nemesisEncore, pairCoverage, girByDriveResult, courseDNA, warmupVsClosing } from '../statsEngine';
 import { mixedModeTournament, buildTournament } from './statsFixtures';
 
 // 18 par-4 holes, strokeIndex = hole number.
@@ -2379,5 +2379,24 @@ describe('courseDNA — pools by courseId ?? courseName, keeps per-round totals'
     const dna = courseDNA(t)[0];
     expect(dna.courses.map((c) => c.courseName).sort()).toEqual(['R1', 'R2']);
     expect(dna.courses.every((c) => c.rounds === 1)).toBe(true);
+  });
+});
+
+describe('warmupVsClosing — breakdown roundIndex', () => {
+  test('breakdown entries carry roundIndex so same-course rows from different rounds are distinguishable', () => {
+    const h = holes18();
+    const t = {
+      players: [{ id: 'p1', handicap: 0 }],
+      rounds: [
+        { courseName: 'Course A', holes: h, scores: { p1: evenScores(h, 4) } },
+        { courseName: 'Course A', holes: h, scores: { p1: evenScores(h, 4) } },
+      ],
+    };
+    const wc = warmupVsClosing(t, 'p1');
+    // 3 warm-up holes (H1-3) and 3 closing holes (H16-18), doubled across 2 rounds.
+    expect(wc.warmup.breakdown).toHaveLength(6);
+    expect(wc.closing.breakdown).toHaveLength(6);
+    expect(wc.warmup.breakdown.map((b) => b.roundIndex)).toEqual([0, 0, 0, 1, 1, 1]);
+    expect(wc.closing.breakdown.map((b) => b.roundIndex)).toEqual([0, 0, 0, 1, 1, 1]);
   });
 });

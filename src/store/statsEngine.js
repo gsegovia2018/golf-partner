@@ -945,7 +945,7 @@ export function parTypeSplit(tournament, playerId) {
 // rounds. Reveals nerves / fatigue patterns.
 export function warmupVsClosing(tournament, playerId) {
   const warmup = [], closing = [];
-  tournament.rounds.forEach((round) => {
+  tournament.rounds.forEach((round, roundIndex) => {
     if (!round.scores?.[playerId]) return;
     const player = tournament.players.find(p => p.id === playerId);
     if (!player) return;
@@ -954,8 +954,11 @@ export function warmupVsClosing(tournament, playerId) {
       const sc = round.scores[playerId]?.[hole.number];
       if (!sc) return;
       const points = calcStablefordPoints(hole.par, sc, handicap, hole.strokeIndex);
-      if (hole.number <= 3) warmup.push({ points, strokes: sc, par: hole.par, holeNumber: hole.number, courseName: round.courseName });
-      else if (hole.number >= round.holes.length - 2) closing.push({ points, strokes: sc, par: hole.par, holeNumber: hole.number, courseName: round.courseName });
+      // roundIndex on each entry — without it, two rounds on the same course
+      // produce breakdown rows that read as identical ("Course A · H1" twice)
+      // even though they're from different days.
+      if (hole.number <= 3) warmup.push({ roundIndex, points, strokes: sc, par: hole.par, holeNumber: hole.number, courseName: round.courseName });
+      else if (hole.number >= round.holes.length - 2) closing.push({ roundIndex, points, strokes: sc, par: hole.par, holeNumber: hole.number, courseName: round.courseName });
     });
   });
   const avg = (arr) => arr.length ? +(arr.reduce((s, h) => s + h.points, 0) / arr.length).toFixed(2) : 0;
