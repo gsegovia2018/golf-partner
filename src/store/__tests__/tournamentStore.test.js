@@ -1,7 +1,7 @@
 import {
   rowToTournament, reTeeRound,
   tournamentNoun, tournamentNounCapitalized, formatRoundLabel,
-  isRoundInProgress, propagatePlayerToTournaments,
+  isRoundInProgress, propagatePlayerToTournaments, propagateCourseToTournaments,
 } from '../tournamentStore';
 
 // jest.mock calls are hoisted above these imports by babel-jest, so the mock
@@ -257,5 +257,110 @@ describe('propagatePlayerToTournaments', () => {
     const saved = mockState.upserts.find((u) => u.table === 'tournaments').row.data;
     expect(saved.players.find((p) => p.id === 'p1').gender).toBe('female');
     expect(saved.rounds[0].pairs[0][0].gender).toBe('female');
+  });
+
+  test('does not re-derive playing handicaps for an already-played round, but does for a future round', async () => {
+    // No slope/tees on either round, so calcPlayingHandicap falls back to
+    // Math.round(index) — a deliberately stale 99 could only still be 99 by
+    // being left alone; a recomputed round would show the new index (20).
+    const p1 = { id: 'p1', name: 'Ann', handicap: 10 };
+    const p2 = { id: 'p2', name: 'Bea', handicap: 12 };
+    const tournament = {
+      id: 't1',
+      name: 'Cup',
+      kind: 'casual',
+      createdAt: '2026-05-18T09:00:00Z',
+      currentRound: 1, // round 0 already played; round 1 is current/future
+      players: [p1, p2],
+      rounds: [
+        {
+          id: 'r1',
+          holes: [],
+          scores: {},
+          pairs: [[{ ...p1 }], [{ ...p2 }]],
+          playerHandicaps: { p1: 99, p2: 99 },
+        },
+        {
+          id: 'r2',
+          holes: [],
+          scores: {},
+          pairs: [[{ ...p1 }], [{ ...p2 }]],
+          playerHandicaps: { p1: 99, p2: 99 },
+        },
+      ],
+    };
+    mockState.tournamentsRow = {
+      id: 't1', name: 'Cup', kind: 'casual', created_at: '2026-05-18T09:00:00Z',
+      data: tournament,
+    };
+
+    await propagatePlayerToTournaments('p1', { name: 'Ann', handicap: 20 });
+
+    const saved = mockState.upserts.find((u) => u.table === 'tournaments').row.data;
+    // Played round: playing handicaps frozen.
+    expect(saved.rounds[0].playerHandicaps).toEqual({ p1: 99, p2: 99 });
+    // Future round: re-derived from the new index.
+    expect(saved.rounds[1].playerHandicaps.p1).toBe(20);
+    // Cosmetic pair-name/index-snapshot refresh still applies to the played round.
+    expect(saved.rounds[0].pairs[0][0].name).toBe('Ann');
+    expect(saved.rounds[0].pairs[0][0].handicap).toBe(20);
+  });
+});
+
+describe('propagateCourseToTournaments', () => {
+  beforeEach(() => {
+    mockState.upserts = [];
+  });
+
+  test('leaves an already-played round\'s holes/tees/handicaps untouched, replaces a future round\'s', async () => {
+    const p1 = { id: 'p1', name: 'Ann', handicap: 10 };
+    const oldHoles = [{ number: 1, par: 4, strokeIndex: 1 }];
+    const oldTees = [{ label: 'White', slope: 113, rating: 71 }];
+    const tournament = {
+      id: 't1',
+      name: 'Cup',
+      kind: 'casual',
+      createdAt: '2026-05-18T09:00:00Z',
+      currentRound: 1, // round 0 already played; round 1 is current/future
+      players: [p1],
+      rounds: [
+        {
+          id: 'r1',
+          courseId: 'c1',
+          holes: oldHoles,
+          tees: oldTees,
+          scores: {},
+          pairs: [[{ ...p1 }]],
+          playerHandicaps: { p1: 99 },
+        },
+        {
+          id: 'r2',
+          courseId: 'c1',
+          holes: oldHoles,
+          tees: oldTees,
+          scores: {},
+          pairs: [[{ ...p1 }]],
+          playerHandicaps: { p1: 99 },
+        },
+      ],
+    };
+    mockState.tournamentsRow = {
+      id: 't1', name: 'Cup', kind: 'casual', created_at: '2026-05-18T09:00:00Z',
+      data: tournament,
+    };
+
+    const newHoles = [{ number: 1, par: 5, strokeIndex: 2 }];
+    const newTees = [{ label: 'White', slope: 130, rating: 72 }];
+    await propagateCourseToTournaments('c1', { holes: newHoles, tees: newTees });
+
+    const saved = mockState.upserts.find((u) => u.table === 'tournaments').row.data;
+    // Played round: holes/tees/handicaps entirely untouched.
+    expect(saved.rounds[0].holes).toEqual(oldHoles);
+    expect(saved.rounds[0].tees).toEqual(oldTees);
+    expect(saved.rounds[0].playerHandicaps).toEqual({ p1: 99 });
+    // Future round: replaced with the new library holes/tees, handicaps re-derived.
+    expect(saved.rounds[1].holes).toEqual(newHoles);
+    expect(saved.rounds[1].tees).toEqual(newTees);
+    expect(saved.rounds[1].playerHandicaps.p1).not.toBe(99);
   });
 });
