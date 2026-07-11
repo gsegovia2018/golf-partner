@@ -29,7 +29,7 @@ export default function ShotsTab({ stats, onInfo, targetHandicap, onChangeTarget
   } = stats;
 
   const hasAnyShotData = shots.hasData || puttingTarget?.hasData || approachTarget?.hasData
-    || stats?.strokesGained?.total != null || stats?.distribution?.total > 0;
+    || stats?.strokesGained?.total != null || stats?.distributionGross?.total > 0;
 
   if (!hasAnyShotData) {
     return (
@@ -235,7 +235,10 @@ function ShotDataRow({
 
 function makeScoringRows(stats, shotBenchmark) {
   const rows = [];
-  const distribution = stats?.distribution ?? {};
+  // GROSS vs-par mix — the benchmark tables are gross scoring data, so the
+  // net `distribution` (whose birdie counts inflate with handicap) must not
+  // feed these rows. BreakdownTab/roundReportCard keep using the net field.
+  const distribution = stats?.distributionGross ?? {};
   const total = distribution.total ?? Object
     .values(distribution)
     .filter(isNumber)
@@ -485,7 +488,7 @@ function makePuttingVolumeRows(shots, shotBenchmark) {
       value: puttsPer18,
       secondary: targetSecondary([
         sampleText(shots.putts.holes, 'holes'),
-        `target ${formatBenchmarkNumber(shotBenchmark.puttsPerRound)}`,
+        `target ${formatBenchmarkNumber(shotBenchmark.puttsPerRound)} / 18 holes`,
       ], shots.putts.holes, 9),
       tone: toneFromComparison({
         value: puttsPer18,
@@ -503,8 +506,10 @@ function makePuttingVolumeRows(shots, shotBenchmark) {
       value: threePuttsPer18,
       secondary: targetSecondary([
         `${shots.putts.threePuttPlus} total`,
-        sampleText(shots.roundsWithPuttData, 'rounds'),
-        `target ${formatBenchmarkNumber(shotBenchmark.threePuttsPerRound)}`,
+        // The value is normalized off logged holes to an 18-hole rate, so
+        // the sample shown is holes (the actual basis), not raw rounds.
+        sampleText(shots.putts.holes, 'holes'),
+        `target ${formatBenchmarkNumber(shotBenchmark.threePuttsPerRound)} / 18 holes`,
       ], shots.putts.holes, 9),
       tone: toneFromComparison({
         value: threePuttsPer18,

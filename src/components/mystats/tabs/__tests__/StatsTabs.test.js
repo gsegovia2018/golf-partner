@@ -18,6 +18,12 @@ function baseStats() {
     distribution: {
       eagles: 0, birdies: 2, pars: 8, bogeys: 5, doubles: 2, worse: 1, total: 18,
     },
+    // Gross vs-par mix for the ShotsTab benchmark rows — deliberately
+    // different from the net `distribution` so tests can prove the
+    // benchmark reads gross (one net birdie was handicap-assisted).
+    distributionGross: {
+      eagles: 0, birdies: 1, pars: 9, bogeys: 5, doubles: 2, worse: 1, total: 18,
+    },
     parType: {
       par3: { holes: 4, avgPoints: 1.5, avgStrokes: 4 },
       par4: { holes: 10, avgPoints: 1.7, avgStrokes: 5.2 },
@@ -158,7 +164,7 @@ function shotStats() {
       hasData: true,
       roundsWithData: 1,
       roundsWithPuttData: 1,
-      putts: { perRound: 42, holes: 18, onePutts: 0, threePuttPlus: 6 },
+      putts: { perRound: 42, per18: 42, holes: 18, onePutts: 0, threePuttPlus: 6 },
       drives: {
         fairwayPct: 67,
         fairwaysHit: 12,
@@ -166,7 +172,7 @@ function shotStats() {
         distribution: { fairway: 12, left: 0, right: 6, short: 0, super: 0 },
       },
       gir: { pct: 67, eligible: 18 },
-      penalties: { tee: 0, other: 0, total: 0 },
+      penalties: { tee: 0, other: 0, total: 0, teeOnDriveHoles: 0 },
     },
     driveImpact: {
       hasData: true,
@@ -295,9 +301,14 @@ describe('My Stats tabs', () => {
     ));
 
     expect(await findByText('3-putts / round')).toBeTruthy();
-    expect(await findByText('vs target hcp · 6 total · 1 round · target 3.5')).toBeTruthy();
+    // Putting rows are normalized to an 18-hole rate off logged holes —
+    // the secondary copy states the per-18 basis instead of raw rounds.
+    expect(await findByText('vs target hcp · 6 total · 18 holes · target 3.5 / 18 holes')).toBeTruthy();
     expect((await findAllByText('vs target hcp · 18 holes · target 25%')).length).toBeGreaterThan(0);
-    expect((await findAllByText('vs target hcp · 18 holes · target 31.9')).length).toBeGreaterThan(0);
+    expect((await findAllByText('vs target hcp · 18 holes · target 31.9 / 18 holes')).length).toBeGreaterThan(0);
+    // Scoring-mix benchmark rows read the GROSS distribution (1 gross
+    // birdie), not the net distribution (2 net birdies).
+    expect(await findByText('vs target hcp · 1 total · 18 holes · target 0.4')).toBeTruthy();
   });
 
   test('ShotsTab flags low-sample benchmark rows instead of over-coloring them', async () => {

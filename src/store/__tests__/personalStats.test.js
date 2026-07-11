@@ -818,11 +818,13 @@ describe('computeMyStats', () => {
     expect(stats.coach.practicePlan).toHaveLength(3);
   });
 
-  test('scoring-mix distribution is gross vs par, not net Stableford-adjusted', () => {
+  test('distributionGross is gross vs par while distribution stays net', () => {
     // Handicap 18 gives exactly 1 extra shot on every hole. Scoring gross
     // par (4) nets out as a net birdie under the points metric — comparing
     // that inflated net-birdie count against a gross benchmark table would
-    // always read as green. The benchmark distribution must be gross.
+    // always read as green, so the ShotsTab benchmark reads the separate
+    // gross field. The shared `distribution` must STAY net: BreakdownTab,
+    // roundReportCard and formSeries.scoreMix all report net and must agree.
     const h = holes18();
     const myRound = {
       key: 'gross:0',
@@ -842,7 +844,11 @@ describe('computeMyStats', () => {
 
     const stats = computeMyStats([myRound]);
 
-    expect(stats.distribution.birdies).toBe(0);
-    expect(stats.distribution.pars).toBe(18);
+    // Gross benchmark field: 18 gross pars, no birdies.
+    expect(stats.distributionGross.birdies).toBe(0);
+    expect(stats.distributionGross.pars).toBe(18);
+    // Net field is unchanged: every gross par is a net birdie at hcp 18.
+    expect(stats.distribution.birdies).toBe(18);
+    expect(stats.distribution.pars).toBe(0);
   });
 });
