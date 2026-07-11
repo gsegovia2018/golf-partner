@@ -116,6 +116,23 @@ describe('RoundSummaryScreen', () => {
     expect(getByLabelText('Scorecard').props.accessibilityState.selected).toBe(true);
   });
 
+  test('recap card only shows on the scorecard tab', async () => {
+    const { findByText, findByLabelText, queryByText } = render(wrap(
+      <RoundSummaryScreen navigation={navigation} route={route} />,
+    ));
+    await findByText('Winner: Marcos');
+
+    fireEvent.press(await findByLabelText('Photos'));
+    expect(queryByText('Winner: Marcos')).toBeNull();
+    expect(queryByText(/holes/)).toBeNull();
+
+    fireEvent.press(await findByLabelText('Comments'));
+    expect(queryByText('Winner: Marcos')).toBeNull();
+
+    fireEvent.press(await findByLabelText('Scorecard'));
+    expect(await findByText('Winner: Marcos')).toBeTruthy();
+  });
+
   test('scorecard tab renders the real scorecard table and the quiet leaderboard, without the gray totals card', async () => {
     const { findByText, getAllByText, queryByText } = render(wrap(
       <RoundSummaryScreen navigation={navigation} route={route} />,

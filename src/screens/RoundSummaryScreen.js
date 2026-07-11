@@ -163,16 +163,17 @@ export default function RoundSummaryScreen({ navigation, route }) {
         >
           <RoundSummaryTabs active={activeTab} onChange={setActiveTab} />
 
-          <RoundRecapPanel
-            recap={recap}
-            roundLabel={roundLabel}
-            tournamentName={tournament?.name}
-            live={live}
-            totalHoles={totalHoles}
-          />
-
           {activeTab === 'scorecard' ? (
             <>
+              {/* Recap belongs to the scorecard story — Photos and Comments
+                  go straight to their content under the tabs. */}
+              <RoundRecapPanel
+                recap={recap}
+                roundLabel={roundLabel}
+                tournamentName={tournament?.name}
+                live={live}
+                totalHoles={totalHoles}
+              />
               <RoundLeaderboard entries={ranked} round={round} live={live} />
               <ScorecardTable
                 round={round}
