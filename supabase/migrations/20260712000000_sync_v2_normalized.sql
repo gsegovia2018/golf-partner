@@ -26,6 +26,13 @@
 --      when the caller can already see the matching public.tournaments row.
 --   4. Realtime publication for the five new tables plus public.tournaments,
 --      so clients get live updates without polling.
+--   5. get_game_tournament / get_my_game_tournaments (read RPCs), set_game_score
+--      / patch_game_round / patch_game_tournament / advance_game_round (write
+--      RPCs), a claim_tournament_player dual-write, a round-scoping fix for
+--      the section-2 tables (round ids are only unique per-tournament — see
+--      section 8), and backfill_game_tournament (idempotent blob → normalized
+--      backfill, section 9) plus its apply/verify Node scripts under
+--      scripts/sync-v2/.
 --
 -- NOTE ON tournaments RLS drift (see schema-facts doc, decision #3): the live
 -- `tournaments` table currently carries a stray permissive `allow_all`
@@ -545,6 +552,314 @@ $$;
 REVOKE EXECUTE ON FUNCTION public.claim_tournament_player(text, text) FROM anon;
 GRANT  EXECUTE ON FUNCTION public.claim_tournament_player(text, text) TO authenticated;
 
+-- 8) Round-scoping fix -------------------------------------------------------
+-- Discovered while building Task 5's backfill and validating it against real
+-- fixtures in Docker: round ids are only unique WITHIN a tournament, never
+-- across tournaments. `SetupScreen.js` assigns every tournament's rounds
+-- `r${i}` (so every tournament's first round is literally "r0", second
+-- "r1", ...); `EditTournamentScreen.js`'s "add round" handler instead uses
+-- `r${Date.now()}` for rounds appended later — neither scheme is globally
+-- unique, and the app has never needed it to be (every round lookup in the
+-- existing codebase already pairs tournamentId + roundId; see
+-- src/store/mediaStore.js / mediaQueue.js).
+--
+-- Section 2 above defined `game_rounds.id` as a bare global PRIMARY KEY, and
+-- game_scores/game_shot_details/game_round_notes keyed off `round_id` alone.
+-- Backfilling two different tournaments that each have a round "r0" — the
+-- overwhelmingly common case — collides on that PK: the second tournament's
+-- backfill silently steals the first tournament's "r0" row (`ON CONFLICT
+-- (id) DO UPDATE` reassigns tournament_id), and that round then vanishes
+-- from the first tournament's get_game_tournament() output. Reproduced with
+-- two of the Task 1 fixtures (both start with round "r0") before this fix —
+-- see the Task 5 report for the transcript. Since apply-migration.mjs (Task
+-- 5, below) backfills every tournament in one pass, this would have silently
+-- corrupted round data for nearly every multi-tournament account on rollout.
+--
+-- Fix: fold tournament_id into every one of these tables' uniqueness scope,
+-- matching the scoping the rest of the app already assumes. The bare `id`/
+-- `round_id` values on-disk are unchanged (still "r0" etc.) — only what
+-- counts as "the same row" widens to (tournament_id, id). Child-table FKs
+-- depend on game_rounds' PK, so they're dropped before it's widened and
+-- re-added as composite FKs afterward. Every ALTER here names the
+-- replacement constraint identically to the one it drops, so — like the
+-- rest of this file — the whole block is safe to re-run.
+ALTER TABLE public.game_scores       DROP CONSTRAINT IF EXISTS game_scores_round_id_fkey;
+ALTER TABLE public.game_shot_details DROP CONSTRAINT IF EXISTS game_shot_details_round_id_fkey;
+ALTER TABLE public.game_round_notes  DROP CONSTRAINT IF EXISTS game_round_notes_round_id_fkey;
+
+ALTER TABLE public.game_rounds DROP CONSTRAINT IF EXISTS game_rounds_pkey;
+ALTER TABLE public.game_rounds ADD CONSTRAINT game_rounds_pkey PRIMARY KEY (tournament_id, id);
+
+ALTER TABLE public.game_scores DROP CONSTRAINT IF EXISTS game_scores_pkey;
+ALTER TABLE public.game_scores ADD CONSTRAINT game_scores_pkey PRIMARY KEY (tournament_id, round_id, player_id, hole);
+ALTER TABLE public.game_scores ADD CONSTRAINT game_scores_round_id_fkey
+  FOREIGN KEY (tournament_id, round_id) REFERENCES public.game_rounds (tournament_id, id) ON DELETE CASCADE;
+
+ALTER TABLE public.game_shot_details DROP CONSTRAINT IF EXISTS game_shot_details_pkey;
+ALTER TABLE public.game_shot_details ADD CONSTRAINT game_shot_details_pkey PRIMARY KEY (tournament_id, round_id, player_id, hole);
+ALTER TABLE public.game_shot_details ADD CONSTRAINT game_shot_details_round_id_fkey
+  FOREIGN KEY (tournament_id, round_id) REFERENCES public.game_rounds (tournament_id, id) ON DELETE CASCADE;
+
+ALTER TABLE public.game_round_notes DROP CONSTRAINT IF EXISTS game_round_notes_pkey;
+ALTER TABLE public.game_round_notes ADD CONSTRAINT game_round_notes_pkey PRIMARY KEY (tournament_id, round_id, hole_key);
+ALTER TABLE public.game_round_notes ADD CONSTRAINT game_round_notes_round_id_fkey
+  FOREIGN KEY (tournament_id, round_id) REFERENCES public.game_rounds (tournament_id, id) ON DELETE CASCADE;
+
+-- get_game_tournament, updated: the scores/shotDetails/notes subqueries
+-- joined on `round_id = gr.id` alone, which was safe only while `id` was
+-- globally unique. Now that it's tournament-scoped, each subquery also
+-- filters `tournament_id = gr.tournament_id` so a round in another
+-- tournament that happens to share the same bare id can never leak in.
+-- Nothing else about this function changes — it supersedes the version
+-- from section 5 above (same signature, so CREATE OR REPLACE applies
+-- cleanly; no DROP needed).
+CREATE OR REPLACE FUNCTION public.get_game_tournament(p_id text)
+RETURNS jsonb LANGUAGE plpgsql STABLE AS $$
+DECLARE
+  v_t   record;
+  v_out jsonb;
+BEGIN
+  SELECT * INTO v_t FROM public.tournaments WHERE id = p_id;
+  IF NOT FOUND THEN RETURN NULL; END IF;
+
+  v_out := v_t.props || jsonb_build_object(
+    'id', v_t.id, 'name', v_t.name, 'kind', v_t.kind,
+    'createdAt', to_char(v_t.created_at AT TIME ZONE 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.MS"Z"'),
+    'players', COALESCE((
+      SELECT jsonb_agg(gp.body ORDER BY gp.pos, gp.player_id)
+      FROM public.game_players gp WHERE gp.tournament_id = p_id), '[]'::jsonb),
+    'rounds', COALESCE((
+      SELECT jsonb_agg(
+        (gr.body - 'notes')
+        || jsonb_build_object('id', gr.id)
+        || jsonb_build_object('scores', COALESCE((
+             SELECT jsonb_object_agg(q.player_id, q.per) FROM (
+               SELECT s.player_id, jsonb_object_agg(s.hole::text, s.strokes) AS per
+               FROM public.game_scores s
+               WHERE s.round_id = gr.id AND s.tournament_id = gr.tournament_id AND s.strokes IS NOT NULL
+               GROUP BY s.player_id) q), '{}'::jsonb))
+        || jsonb_build_object('shotDetails', COALESCE((
+             SELECT jsonb_object_agg(q.player_id, q.per) FROM (
+               SELECT d.player_id, jsonb_object_agg(d.hole::text, d.detail) AS per
+               FROM public.game_shot_details d
+               WHERE d.round_id = gr.id AND d.tournament_id = gr.tournament_id AND d.detail IS NOT NULL
+               GROUP BY d.player_id) q), '{}'::jsonb))
+        || COALESCE((
+             SELECT jsonb_build_object('notes',
+               COALESCE((SELECT jsonb_build_object('round', n.note)
+                         FROM public.game_round_notes n
+                         WHERE n.round_id = gr.id AND n.tournament_id = gr.tournament_id AND n.hole_key = 'round' AND n.note IS NOT NULL), '{}'::jsonb)
+               || COALESCE((SELECT jsonb_build_object('hole', jsonb_object_agg(n.hole_key, n.note))
+                            FROM public.game_round_notes n
+                            WHERE n.round_id = gr.id AND n.tournament_id = gr.tournament_id AND n.hole_key <> 'round' AND n.note IS NOT NULL
+                            HAVING count(*) > 0), '{}'::jsonb))
+             WHERE EXISTS (SELECT 1 FROM public.game_round_notes n2
+                           WHERE n2.round_id = gr.id AND n2.tournament_id = gr.tournament_id AND n2.note IS NOT NULL)), '{}'::jsonb)
+        ORDER BY gr.round_index, gr.id)
+      FROM public.game_rounds gr WHERE gr.tournament_id = p_id), '[]'::jsonb));
+
+  IF v_t.current_round IS NOT NULL THEN
+    v_out := (v_out - 'currentRound') || jsonb_build_object('currentRound', v_t.current_round);
+  ELSE
+    v_out := v_out - 'currentRound';
+  END IF;
+  RETURN v_out;
+END $$;
+
+-- patch_game_round, updated: now needs the tournament id to disambiguate
+-- round_id (round ids are only unique per-tournament, see above). Signature
+-- changed from (p_round_id, p_patch) to (p_tournament_id, p_round_id,
+-- p_patch) — CREATE OR REPLACE cannot change an argument list, so the old
+-- 2-arg overload is dropped explicitly first (no callers exist yet; the
+-- client repo that will call this is Task 6+, not yet built).
+DROP FUNCTION IF EXISTS public.patch_game_round(text, jsonb);
+CREATE OR REPLACE FUNCTION public.patch_game_round(p_tournament_id text, p_round_id text, p_patch jsonb)
+RETURNS void LANGUAGE plpgsql AS $$
+DECLARE
+  v_body jsonb;
+  v_k text;
+  v_v jsonb;
+BEGIN
+  SELECT body INTO v_body FROM public.game_rounds
+   WHERE tournament_id = p_tournament_id AND id = p_round_id FOR UPDATE;
+  IF NOT FOUND THEN
+    RAISE EXCEPTION 'No such round % in tournament %', p_round_id, p_tournament_id;
+  END IF;
+
+  FOR v_k, v_v IN SELECT * FROM jsonb_each(p_patch) LOOP
+    IF jsonb_typeof(v_v) = 'object' AND jsonb_typeof(v_body -> v_k) = 'object' THEN
+      v_body := jsonb_set(v_body, ARRAY[v_k], (v_body -> v_k) || v_v);
+    ELSE
+      v_body := jsonb_set(v_body, ARRAY[v_k], v_v);
+    END IF;
+  END LOOP;
+
+  UPDATE public.game_rounds SET body = v_body, updated_at = now()
+   WHERE tournament_id = p_tournament_id AND id = p_round_id;
+END $$;
+
+-- set_game_score, updated: lookup + advisory lock key + ON CONFLICT target
+-- widened to include tournament_id (matches the widened game_scores PK
+-- above). Same signature as section 6 above, so this cleanly supersedes it.
+CREATE OR REPLACE FUNCTION public.set_game_score(
+  p_round_id text, p_tournament_id text, p_player_id text, p_hole int, p_strokes int)
+RETURNS jsonb LANGUAGE plpgsql AS $$
+DECLARE
+  v_prev_strokes int;
+  v_prev_at timestamptz;
+BEGIN
+  PERFORM pg_advisory_xact_lock(
+    hashtextextended(p_tournament_id || ':' || p_round_id || ':' || p_player_id || ':' || p_hole::text, 0));
+
+  SELECT strokes, updated_at INTO v_prev_strokes, v_prev_at
+  FROM public.game_scores
+  WHERE tournament_id = p_tournament_id AND round_id = p_round_id AND player_id = p_player_id AND hole = p_hole
+  FOR UPDATE;
+
+  INSERT INTO public.game_scores (round_id, tournament_id, player_id, hole, strokes, updated_at, updated_by)
+  VALUES (p_round_id, p_tournament_id, p_player_id, p_hole, p_strokes, now(), auth.uid())
+  ON CONFLICT (tournament_id, round_id, player_id, hole)
+  DO UPDATE SET strokes = EXCLUDED.strokes, updated_at = now(), updated_by = auth.uid();
+
+  RETURN jsonb_build_object('previousStrokes', v_prev_strokes, 'previousUpdatedAt', v_prev_at);
+END $$;
+
+-- 9) backfill_game_tournament — idempotent, _meta-aware blob → normalized-
+-- tables backfill (spec Amendment 5) -----------------------------------------
+-- One-shot per tournament: strips the hot keys out of the blob into
+-- tournaments.props / game_rounds.body (the exact same strip contract
+-- get_game_tournament's reassembly depends on — see the comments on that
+-- function above), and fans every scores/shotDetails/notes cell out into its
+-- own row. Safe to re-run (apply-migration.mjs calls it for every tournament
+-- on every deploy of this migration): a re-run only overwrites a
+-- game_scores/game_shot_details/game_round_notes row when the blob cell is
+-- genuinely newer than what's already stored (the `_meta` per-cell
+-- timestamp, falling back to the tournament's created_at when no stamp
+-- exists), so sweeping after client cut-over cannot clobber a newer write
+-- that already landed through set_game_score. Skips official-mode rows
+-- (kind = 'official') and rows with no blob at all — those never had
+-- anything to normalize.
+CREATE OR REPLACE FUNCTION public.backfill_game_tournament(p_id text)
+RETURNS void LANGUAGE plpgsql AS $$
+DECLARE
+  v_data       jsonb;
+  v_kind       text;
+  v_created_at timestamptz;
+  v_round      jsonb;
+  v_ridx       int;
+  v_round_id   text;
+  v_body       jsonb;
+  v_player     jsonb;
+  v_pidx       int;
+  v_pid        text;
+  v_holes      jsonb;
+  v_hole       text;
+  v_strokes    jsonb;
+  v_stamp      bigint;
+  v_cell_ts    timestamptz;
+  v_detail     jsonb;
+  v_hkey       text;
+  v_note       text;
+BEGIN
+  SELECT data, kind, created_at INTO v_data, v_kind, v_created_at
+  FROM public.tournaments WHERE id = p_id;
+
+  -- kind = NULL (very old rows, predating the column's NOT NULL default)
+  -- falls through here too: `v_kind = 'official'` evaluates to NULL, which
+  -- IF treats as not-satisfied, same as a casual row.
+  IF v_data IS NULL OR v_data = '{}'::jsonb OR v_kind = 'official' THEN
+    RETURN;
+  END IF;
+
+  UPDATE public.tournaments
+     SET props = v_data - 'players' - 'rounds' - 'id' - 'name' - 'kind' - 'createdAt' - 'currentRound' - '_meta' - 'meId',
+         current_round = GREATEST(COALESCE(current_round, 0), COALESCE((v_data->>'currentRound')::int, 0))
+   WHERE id = p_id;
+
+  -- Players -------------------------------------------------------------
+  FOR v_player, v_pidx IN
+    SELECT value, ordinality - 1 FROM jsonb_array_elements(v_data->'players') WITH ORDINALITY AS t(value, ordinality)
+  LOOP
+    v_pid := v_player->>'id';
+    INSERT INTO public.game_players (tournament_id, player_id, user_id, pos, body)
+    VALUES (p_id, v_pid, NULLIF(v_player->>'user_id', '')::uuid, v_pidx, v_player)
+    ON CONFLICT (tournament_id, player_id) DO UPDATE
+      SET body = EXCLUDED.body,
+          user_id = COALESCE(EXCLUDED.user_id, public.game_players.user_id),
+          pos = EXCLUDED.pos;
+  END LOOP;
+
+  -- Rounds (+ nested scores/shotDetails/notes) -----------------------------
+  FOR v_round, v_ridx IN
+    SELECT value, ordinality - 1 FROM jsonb_array_elements(v_data->'rounds') WITH ORDINALITY AS t(value, ordinality)
+  LOOP
+    v_round_id := v_round->>'id';
+    -- Strip contract (load-bearing — see get_game_tournament above): the
+    -- round body stored here is the round minus its hot per-cell keys.
+    v_body := v_round - 'scores' - 'shotDetails' - 'notes' - 'scoreConflicts' - 'scoreResolutions';
+
+    INSERT INTO public.game_rounds (id, tournament_id, round_index, body)
+    VALUES (v_round_id, p_id, v_ridx, v_body)
+    ON CONFLICT (tournament_id, id) DO UPDATE
+      SET round_index = EXCLUDED.round_index,
+          body = EXCLUDED.body;
+
+    -- Scores --------------------------------------------------------------
+    FOR v_pid, v_holes IN SELECT * FROM jsonb_each(COALESCE(v_round->'scores', '{}'::jsonb)) LOOP
+      FOR v_hole, v_strokes IN SELECT * FROM jsonb_each(v_holes) LOOP
+        v_stamp := (v_data->'_meta'->>('rounds.' || v_round_id || '.scores.' || v_pid || '.h' || v_hole))::bigint;
+        v_cell_ts := CASE WHEN v_stamp IS NULL THEN v_created_at ELSE to_timestamp(v_stamp / 1000.0) END;
+
+        INSERT INTO public.game_scores (round_id, tournament_id, player_id, hole, strokes, updated_at)
+        VALUES (v_round_id, p_id, v_pid, v_hole::int, (v_strokes #>> '{}')::int, v_cell_ts)
+        ON CONFLICT (tournament_id, round_id, player_id, hole) DO UPDATE
+          SET strokes = EXCLUDED.strokes, updated_at = EXCLUDED.updated_at
+          WHERE public.game_scores.updated_at < EXCLUDED.updated_at;
+      END LOOP;
+    END LOOP;
+
+    -- Shot details ----------------------------------------------------------
+    FOR v_pid, v_holes IN SELECT * FROM jsonb_each(COALESCE(v_round->'shotDetails', '{}'::jsonb)) LOOP
+      FOR v_hole, v_detail IN SELECT * FROM jsonb_each(v_holes) LOOP
+        v_stamp := (v_data->'_meta'->>('rounds.' || v_round_id || '.shotDetails.' || v_pid || '.h' || v_hole))::bigint;
+        v_cell_ts := CASE WHEN v_stamp IS NULL THEN v_created_at ELSE to_timestamp(v_stamp / 1000.0) END;
+
+        INSERT INTO public.game_shot_details (round_id, tournament_id, player_id, hole, detail, updated_at)
+        VALUES (v_round_id, p_id, v_pid, v_hole::int, v_detail, v_cell_ts)
+        ON CONFLICT (tournament_id, round_id, player_id, hole) DO UPDATE
+          SET detail = EXCLUDED.detail, updated_at = EXCLUDED.updated_at
+          WHERE public.game_shot_details.updated_at < EXCLUDED.updated_at;
+      END LOOP;
+    END LOOP;
+
+    -- Notes: one row for the whole-round note ('round'), one per hole note --
+    IF (v_round -> 'notes') ? 'round' THEN
+      v_stamp := (v_data->'_meta'->>('rounds.' || v_round_id || '.notes.round'))::bigint;
+      v_cell_ts := CASE WHEN v_stamp IS NULL THEN v_created_at ELSE to_timestamp(v_stamp / 1000.0) END;
+      v_note := v_round->'notes'->>'round';
+
+      INSERT INTO public.game_round_notes (round_id, tournament_id, hole_key, note, updated_at)
+      VALUES (v_round_id, p_id, 'round', v_note, v_cell_ts)
+      ON CONFLICT (tournament_id, round_id, hole_key) DO UPDATE
+        SET note = EXCLUDED.note, updated_at = EXCLUDED.updated_at
+        WHERE public.game_round_notes.updated_at < EXCLUDED.updated_at;
+    END IF;
+
+    IF (v_round -> 'notes') ? 'hole' THEN
+      FOR v_hkey, v_note IN SELECT * FROM jsonb_each_text(v_round->'notes'->'hole') LOOP
+        v_stamp := (v_data->'_meta'->>('rounds.' || v_round_id || '.notes.hole.' || v_hkey))::bigint;
+        v_cell_ts := CASE WHEN v_stamp IS NULL THEN v_created_at ELSE to_timestamp(v_stamp / 1000.0) END;
+
+        INSERT INTO public.game_round_notes (round_id, tournament_id, hole_key, note, updated_at)
+        VALUES (v_round_id, p_id, v_hkey, v_note, v_cell_ts)
+        ON CONFLICT (tournament_id, round_id, hole_key) DO UPDATE
+          SET note = EXCLUDED.note, updated_at = EXCLUDED.updated_at
+          WHERE public.game_round_notes.updated_at < EXCLUDED.updated_at;
+      END LOOP;
+    END IF;
+  END LOOP;
+END $$;
+
 /* ===========================================================================
    VERIFY
    ---------------------------------------------------------------------------
@@ -595,4 +910,24 @@ GRANT  EXECUTE ON FUNCTION public.claim_tournament_player(text, text) TO authent
     WHERE pronamespace = 'public'::regnamespace AND proname = 'claim_tournament_player';
    SELECT grantee, privilege_type FROM information_schema.role_routine_grants
     WHERE routine_name = 'claim_tournament_player';
+
+   -- backfill_game_tournament present, patch_game_round now 3-arg:
+   SELECT proname, pg_get_function_identity_arguments(oid) FROM pg_proc
+    WHERE pronamespace = 'public'::regnamespace
+      AND proname IN ('backfill_game_tournament', 'patch_game_round')
+    ORDER BY proname;
+
+   -- Round-scoping fix landed (composite PKs, no bare-id PK survives):
+   SELECT conrelid::regclass::text AS tbl, conname, pg_get_constraintdef(oid)
+    FROM pg_constraint
+    WHERE conrelid::regclass::text IN
+          ('game_rounds', 'game_scores', 'game_shot_details', 'game_round_notes')
+      AND contype IN ('p', 'f')
+    ORDER BY tbl, contype;
+
+   -- Backfill smoke test (replace :id with a real tournament id), then
+   -- confirm round-trip equality against the original blob:
+   -- SELECT public.backfill_game_tournament(:'id');
+   -- SELECT data FROM public.tournaments WHERE id = :'id';
+   -- SELECT public.get_game_tournament(:'id');
    =========================================================================== */
