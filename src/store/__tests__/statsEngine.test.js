@@ -681,6 +681,18 @@ describe('sgAroundGreen', () => {
     );
     expect(sgAroundGreen(round, 'me').perHole[0]).toBeNull();
   });
+  test('a non-sand greenside recovery starts from the greenside node', () => {
+    // Chaining check: the around-green START must equal the approach-miss END,
+    // so re-anchoring the missed-green node to a realistic greenside value
+    // flows through here too. greenside@20m (scratch) ≈ 2.41; end green@2.5m
+    // ≈ 1.61; one recovery shot → SG = 2.41 − 1.61 − 1 ≈ −0.20. The old
+    // recovery node (~2.85) made this a falsely positive ≈ +0.24.
+    const round = makeRound(
+      [{ par: 4, strokes: 5 }],
+      [{ putts: 2, sandShots: 0, firstPuttBucket: '2-3' }],
+    );
+    expect(sgAroundGreen(round, 'me').perHole[0]).toBeCloseTo(-0.20, 1);
+  });
   test('charges every recorded sand shot on missed-GIR sand recoveries', () => {
     const oneSand = makeRound(
       [{ par: 4, strokes: 5 }],
@@ -750,6 +762,17 @@ describe('sgApproach', () => {
     );
     const r = sgApproach(round, 'me');
     expect(r.perHole[0]).toBeLessThan(0);
+  });
+  test('a missed green lands on the greenside node, not a recovery-from-trouble node', () => {
+    // A routine missed green must NOT be scored as if the player is now in a
+    // recovery lie (trees). fairway@125 (scratch) ≈ 2.888; greenside@20m
+    // (scratch) ≈ 2.41; SG = 2.888 − 2.41 − 1 ≈ −0.52. The old recovery node
+    // (~2.85) produced ≈ −0.96, over-penalising every miss by ~0.45 strokes.
+    const round = makeRound(
+      [{ par: 4, strokes: 5 }],
+      [{ putts: 2, sandShots: 0, approachBucket: '100-150', approachResult: 'miss', firstPuttBucket: '2-3' }],
+    );
+    expect(sgApproach(round, 'me').perHole[0]).toBeCloseTo(-0.52, 1);
   });
 });
 
@@ -1419,9 +1442,12 @@ describe('approachTargetGaps', () => {
       avgSg: 0.31,
       girRate: 100,
     });
+    // Missing the green from 200+ but advancing to a greenside lie is a good
+    // outcome for a 14-hcp (baseline ~4.11 from 230m): 4.11 − 2.69 − 1 ≈ +0.43.
+    // (Was −0.09 when a miss was scored as a recovery-from-trouble node.)
     expect(r.buckets['200+']).toMatchObject({
       holes: 3,
-      avgSg: -0.09,
+      avgSg: 0.43,
       greenRate: 0,
     });
   });

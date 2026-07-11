@@ -2380,7 +2380,7 @@ function approachEndState(d, { strokes, par, targetHandicap }) {
   }
 
   if (d.approachResult === 'miss') {
-    const lie = (d.sandShots ?? 0) >= 1 ? 'sand' : 'recovery';
+    const lie = (d.sandShots ?? 0) >= 1 ? 'sand' : 'greenside';
     const end = expectedStrokes(lie, AROUND_GREEN_START_DISTANCE, targetHandicap);
     return end == null ? null : { end, green: false };
   }
@@ -2394,7 +2394,7 @@ function approachEndState(d, { strokes, par, targetHandicap }) {
     return end == null ? null : { end, green: true };
   }
   if (gir === false) {
-    const lie = (d.sandShots ?? 0) >= 1 ? 'sand' : 'recovery';
+    const lie = (d.sandShots ?? 0) >= 1 ? 'sand' : 'greenside';
     const end = expectedStrokes(lie, AROUND_GREEN_START_DISTANCE, targetHandicap);
     return end == null ? null : { end, green: false };
   }
@@ -2416,7 +2416,7 @@ export function sgAroundGreen(round, playerId, targetHandicap = 0) {
       const gir = isGIR({ strokes, putts: d.putts, par: hole.par });
       if (gir !== false) return null;
     }
-    const lie = (d.sandShots ?? 0) >= 1 ? 'sand' : 'recovery';
+    const lie = (d.sandShots ?? 0) >= 1 ? 'sand' : 'greenside';
     const start = expectedStrokes(lie, AROUND_GREEN_START_DISTANCE, targetHandicap);
     let end;
     if (d.putts === 0) {
