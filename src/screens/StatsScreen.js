@@ -114,7 +114,11 @@ export default function StatsScreen({ navigation, route }) {
     const load = routeTournamentId ? getTournament(routeTournamentId) : loadTournament();
     load.then(t => {
       setTournament(t);
-      if (routeRoundId && t?.rounds) {
+      // Only preselect a round scope when there's more than one round — the
+      // chip row is hidden for single-round games, so scoping there would
+      // strand the user off "Total" with no way back, and whole-game scope
+      // shows strictly more for a one-round game anyway.
+      if (routeRoundId && t?.rounds?.length > 1) {
         const idx = t.rounds.findIndex((r) => r.id === routeRoundId);
         if (idx >= 0) setRoundScope(idx);
       }
