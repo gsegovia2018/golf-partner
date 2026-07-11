@@ -127,10 +127,14 @@ jest.mock('../../store/statsEngine', () => ({
   pairSynergy: jest.fn(() => []),
   pairCarryRatio: jest.fn(() => []),
   swingHole: jest.fn(() => []),
-  par3Heartbreak: jest.fn(() => []),
-  pickupChampion: jest.fn(() => []),
-  anchor: jest.fn(() => []),
-  zeroHero: jest.fn(() => ({})),
+  // Real par3Heartbreak/pickupChampion/anchor/zeroHero return null (not an
+  // empty array/object) when there's no qualifying data — ShameTab reads
+  // `.entries` straight off these, so a falsy-but-truthy `[]`/`{}` default
+  // would crash the very first render.
+  par3Heartbreak: jest.fn(() => null),
+  pickupChampion: jest.fn(() => null),
+  anchor: jest.fn(() => null),
+  zeroHero: jest.fn(() => null),
   skinsLeaderboard: jest.fn(() => ({ leaderboard: [], rounds: [], totalSkins: 0 })),
   matchPlayResults: jest.fn(() => []),
   pairConfigMatrix: jest.fn(() => []),
@@ -866,5 +870,83 @@ describe('StatsScreen Shots tab — sample-floor gating', () => {
 
     expect(getByText('6 holes')).toBeTruthy();
     expect(queryByText(/need more data/)).toBeNull();
+  });
+});
+
+describe('StatsScreen Shame tab — fairness fixes', () => {
+  beforeEach(() => {
+    jest.clearAllMocks();
+  });
+
+  test('Zero Hero leads with the worst offender: "{FirstName} — {n} pointless holes in R{k}"', () => {
+    const statsEngine = require('../../store/statsEngine');
+    statsEngine.zeroHero.mockReturnValue({
+      value: 5,
+      entries: [
+        { player: fourPlayers[0], roundIndex: 0, courseName: 'La Moraleja', count: 5, breakdown: [] },
+        { player: fourPlayers[1], roundIndex: 1, courseName: 'La Moraleja', count: 3, breakdown: [] },
+      ],
+    });
+
+    const { getByText, getAllByText } = renderStats([makeRound('r1')], { players: fourPlayers });
+    fireEvent.press(getByText('Shame'));
+
+    expect(getAllByText('Marcos — 5 pointless holes in R1').length).toBeGreaterThan(0);
+  });
+
+  test('Par-3 Heartbreak renders every tied leader, not just one player', () => {
+    const statsEngine = require('../../store/statsEngine');
+    statsEngine.par3Heartbreak.mockReturnValue({
+      value: 5,
+      entries: [
+        { player: fourPlayers[0], avgStrokes: 5, holes: 3, totalPoints: 3, breakdown: [] },
+        { player: fourPlayers[1], avgStrokes: 5, holes: 3, totalPoints: 2, breakdown: [] },
+      ],
+      all: [],
+    });
+
+    const { getByText, getAllByText } = renderStats([makeRound('r1')], { players: fourPlayers });
+    fireEvent.press(getByText('Shame'));
+
+    expect(getAllByText(/Marcos & Bob/).length).toBeGreaterThan(0);
+    expect(getAllByText('2 tied').length).toBeGreaterThan(0);
+  });
+
+  describe('Triple Bogey Club — metric-aware wording', () => {
+    const tripleBogeyShame = {
+      tripleBogey: {
+        value: 3,
+        entries: [{
+          player: fourPlayers[0], roundIndex: 0, courseName: 'La Moraleja',
+          holeNumber: 5, par: 4, si: 3, strokes: 7, points: 0, vsPar: 3, breakdown: [],
+        }],
+      },
+    };
+
+    test('explainer says "net over par" in points mode', () => {
+      const statsEngine = require('../../store/statsEngine');
+      statsEngine.hallOfShame.mockReturnValue(tripleBogeyShame);
+
+      const { getByText, getAllByText, UNSAFE_getByType } = renderStats([makeRound('r1')], { players: fourPlayers });
+      fireEvent.press(getByText('Shame'));
+      fireEvent.press(getAllByText(/Triple Bogey Club/)[0]);
+
+      const sheet = UNSAFE_getByType('StatDetailSheet');
+      expect(sheet.props.explainer).toMatch(/net over par/);
+    });
+
+    test('explainer says "gross over par" in strokes mode', () => {
+      const statsEngine = require('../../store/statsEngine');
+      statsEngine.hallOfShame.mockReturnValue(tripleBogeyShame);
+
+      const { getByText, getAllByText, UNSAFE_getByType } = renderStats([makeRound('r1')], { players: fourPlayers });
+      fireEvent.press(getByText('Shame'));
+      const switchEl = UNSAFE_getByType(Switch);
+      fireEvent(switchEl, 'valueChange', false); // toggle to Strokes
+      fireEvent.press(getAllByText(/Triple Bogey Club/)[0]);
+
+      const sheet = UNSAFE_getByType('StatDetailSheet');
+      expect(sheet.props.explainer).toMatch(/gross over par/);
+    });
   });
 });

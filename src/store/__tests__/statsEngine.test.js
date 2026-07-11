@@ -1,4 +1,4 @@
-import { teeShotImpact, lagPuttingQuality, sandSaveRate, upAndDownRate, bunkerVisits, sgPutting, sgAroundGreen, sgApproach, sgPenalties, sgTotal, sgSeason, driveScoreImpact, puttDeepDive, approachScoreImpact, puttingTargetGaps, approachTargetGaps, pairPerformance, shotStats, playersWithShotData, tournamentHighlights, withoutScrambleScores, playerAvgStableford, pickupChampion, hallOfShame, chaosHoles, skinsLeaderboard, playerStreaks, bounceBackRate, strokeIndexAccuracy, bestWorstHoles, holeDifficultyMap, collectiveExtremes, pairConfigMatrix, matchPlayResults, pairHoleWins } from '../statsEngine';
+import { teeShotImpact, lagPuttingQuality, sandSaveRate, upAndDownRate, bunkerVisits, sgPutting, sgAroundGreen, sgApproach, sgPenalties, sgTotal, sgSeason, driveScoreImpact, puttDeepDive, approachScoreImpact, puttingTargetGaps, approachTargetGaps, pairPerformance, shotStats, playersWithShotData, tournamentHighlights, withoutScrambleScores, playerAvgStableford, pickupChampion, hallOfShame, chaosHoles, skinsLeaderboard, playerStreaks, bounceBackRate, strokeIndexAccuracy, bestWorstHoles, holeDifficultyMap, collectiveExtremes, pairConfigMatrix, matchPlayResults, pairHoleWins, anchor, par3Heartbreak } from '../statsEngine';
 import { mixedModeTournament, buildTournament } from './statsFixtures';
 
 // 18 par-4 holes, strokeIndex = hole number.
@@ -1772,5 +1772,148 @@ describe('bestWorstHoles — sample guards, overlap-free split, round scope', ()
     expect(all).toHaveLength(1);
     expect(all[0].roundIndex).toBe(1);
     expect(all[0].avgPoints).toBe(4);
+  });
+});
+
+describe('anchor — tied holes must not count toward either MB or PB', () => {
+  it('excludes genuine partner ties from anchor scoring, so a real 6-2 outright split (not the 10 tie-broken holes) decides the anchor', () => {
+    // p1 (hcp 0) and p2 (hcp 10) are partners. Stroke indices are all > 10
+    // so p2 never receives a handicap stroke here — extra shots stay 0 for
+    // both players on every hole, keeping the points math simple.
+    //   Holes 1-2 (2 holes):  p1 outright better  → p1 MB, p2 PB
+    //   Holes 3-8 (6 holes):  p2 outright better  → p2 MB, p1 PB
+    //   Holes 9-18 (10 holes): a genuine tie — pickMBTiebreak always
+    //     resolves to the lower handicap (p1) as MB, since the two partners
+    //     really did score the same. The old implementation counted these
+    //     10 tie-broken holes as real MB/PB roles, which incorrectly made
+    //     p2 (the higher handicapper) look like the anchor (+6) even though
+    //     p2 actually outplayed p1 outright 6 times to 2.
+    const holes = Array.from({ length: 18 }, (_, i) => ({
+      number: i + 1, par: 4, strokeIndex: i + 11,
+    }));
+    const players = [
+      { id: 'p1', name: 'Alice', handicap: 0 },
+      { id: 'p2', name: 'Bob', handicap: 10 },
+      { id: 'p3', name: 'Cara', handicap: 0 },
+      { id: 'p4', name: 'Dan', handicap: 0 },
+    ];
+    const playerHandicaps = { p1: 0, p2: 10, p3: 0, p4: 0 };
+    const pairs = [[players[0], players[1]], [players[2], players[3]]];
+
+    const p1Scores = {}, p2Scores = {}, p3Scores = {}, p4Scores = {};
+    holes.forEach(h => {
+      if (h.number <= 2) { p1Scores[h.number] = 3; p2Scores[h.number] = 5; } // p1 outright MB
+      else if (h.number <= 8) { p1Scores[h.number] = 5; p2Scores[h.number] = 3; } // p2 outright MB
+      else { p1Scores[h.number] = 4; p2Scores[h.number] = 4; } // genuine tie
+      p3Scores[h.number] = 4;
+      p4Scores[h.number] = 4;
+    });
+
+    const round = {
+      courseName: 'Test Course', holes, playerHandicaps, pairs,
+      scores: { p1: p1Scores, p2: p2Scores, p3: p3Scores, p4: p4Scores },
+    };
+    const t = buildTournament({ players, rounds: [round] });
+
+    const result = anchor(t);
+
+    expect(result).not.toBeNull();
+    expect(result.entries).toHaveLength(1);
+    expect(result.entries[0].player.id).toBe('p1');
+    expect(result.value).toBe(4);
+
+    const p1All = result.all.find(r => r.player.id === 'p1');
+    const p2All = result.all.find(r => r.player.id === 'p2');
+    expect(p1All.mbCount).toBe(2);
+    expect(p1All.pbCount).toBe(6);
+    expect(p1All.anchorScore).toBe(4);
+    expect(p2All.mbCount).toBe(6);
+    expect(p2All.pbCount).toBe(2);
+    expect(p2All.anchorScore).toBe(-4);
+  });
+});
+
+describe('par3Heartbreak — minimum sample and ties', () => {
+  it('requires at least 3 par-3 holes played and returns every tied leader', () => {
+    const holes = [1, 2, 3, 4, 5].map((n) => ({ number: n, par: 3, strokeIndex: n }));
+    const players = [
+      { id: 'p1', name: 'Alice', handicap: 0 }, // 2 par-3 holes — below the sample floor
+      { id: 'p2', name: 'Bob', handicap: 0 },   // 3 holes, tied worst avg among eligible players
+      { id: 'p3', name: 'Cara', handicap: 0 },  // 3 holes, tied worst avg among eligible players
+      { id: 'p4', name: 'Dan', handicap: 0 },   // 3 holes, better avg
+    ];
+    const playerHandicaps = { p1: 0, p2: 0, p3: 0, p4: 0 };
+    const round = {
+      courseName: 'Test Course',
+      holes,
+      playerHandicaps,
+      scores: {
+        p1: { 1: 6, 2: 6 },
+        p2: { 1: 5, 2: 5, 3: 5 },
+        p3: { 1: 5, 2: 5, 3: 5 },
+        p4: { 1: 3, 2: 3, 3: 3 },
+      },
+    };
+    const t = buildTournament({ players, rounds: [round] });
+
+    const result = par3Heartbreak(t);
+
+    expect(result).not.toBeNull();
+    expect(result.value).toBe(5);
+    expect(result.entries.map((e) => e.player.id).sort()).toEqual(['p2', 'p3']);
+    // p1's 6.00 avg would win outright, but 2 holes is below the 3-hole
+    // minimum sample — it must not appear among the leaders.
+    expect(result.entries.some((e) => e.player.id === 'p1')).toBe(false);
+  });
+
+  it('returns null when nobody has played 3+ par-3 holes', () => {
+    const holes = [1, 2].map((n) => ({ number: n, par: 3, strokeIndex: n }));
+    const players = [{ id: 'p1', name: 'Alice', handicap: 0 }];
+    const round = {
+      courseName: 'Test Course', holes, playerHandicaps: { p1: 0 },
+      scores: { p1: { 1: 5, 2: 5 } },
+    };
+    const t = buildTournament({ players, rounds: [round] });
+
+    expect(par3Heartbreak(t)).toBeNull();
+  });
+});
+
+describe('hallOfShame.gift — fires with as few as 3 players', () => {
+  it('awards the gift on a hole with exactly 3 scored players', () => {
+    const holes = [{ number: 1, par: 4, strokeIndex: 1 }];
+    const players = [
+      { id: 'p1', name: 'Alice', handicap: 0 },
+      { id: 'p2', name: 'Bob', handicap: 0 },
+      { id: 'p3', name: 'Cara', handicap: 0 },
+    ];
+    const round = {
+      courseName: 'Test Course', holes, playerHandicaps: { p1: 0, p2: 0, p3: 0 },
+      scores: { p1: { 1: 4 }, p2: { 1: 4 }, p3: { 1: 8 } }, // p3 tanks while the other two par
+    };
+    const t = buildTournament({ players, rounds: [round] });
+
+    const shame = hallOfShame(t, { metric: 'points' });
+
+    expect(shame.gift).not.toBeNull();
+    expect(shame.gift.entries).toHaveLength(1);
+    expect(shame.gift.entries[0].player.id).toBe('p3');
+  });
+
+  it('still does not fire on a hole with only 2 scored players', () => {
+    const holes = [{ number: 1, par: 4, strokeIndex: 1 }];
+    const players = [
+      { id: 'p1', name: 'Alice', handicap: 0 },
+      { id: 'p2', name: 'Bob', handicap: 0 },
+    ];
+    const round = {
+      courseName: 'Test Course', holes, playerHandicaps: { p1: 0, p2: 0 },
+      scores: { p1: { 1: 4 }, p2: { 1: 8 } },
+    };
+    const t = buildTournament({ players, rounds: [round] });
+
+    const shame = hallOfShame(t, { metric: 'points' });
+
+    expect(shame.gift).toBeNull();
   });
 });

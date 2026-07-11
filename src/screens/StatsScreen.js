@@ -2990,7 +2990,9 @@ function ShameTab({ tournament, hasMulti, usesTeams, metric, theme, s }) {
   const openTripleBogey = () => openSingleHoleTied(
     shame.tripleBogey,
     `+${shame.tripleBogey.value} over par`,
-    'Single hole with the highest number of strokes above par across all players.',
+    metric === 'strokes'
+      ? 'The ugliest single hole of the trip — worst gross over par, no handicap mercy involved.'
+      : 'The ugliest single hole of the trip — worst net over par, and the handicap already had its say.',
     (e) => [{
       key: `${e.player.id}-tb`,
       primary: `Par ${e.par} · SI ${e.si}`,
@@ -3014,19 +3016,19 @@ function ShameTab({ tournament, hasMulti, usesTeams, metric, theme, s }) {
   const openBogeyStreak = () => openStreakTied(
     shame.bogeyStreak,
     'bogeys in a row',
-    'Longest run of consecutive holes scored exactly 1 over par, within a round. Bogey-only (not triggered by doubles or worse).',
+    'A polite, well-mannered string of one-over bogeys — death by a thousand small cuts.',
   );
 
   const openDoubleBogeyStreak = () => openStreakTied(
     shame.doubleBogeyStreak,
     'dbl+ in a row',
-    'Longest run of consecutive holes scored 2 or more over par, within a round.',
+    "Back-to-back holes at two-over or worse — the wheels didn't wobble, they came off.",
   );
 
   const openPointless = () => openStreakTied(
     shame.pointlessStreak,
     '0-pt holes',
-    'Longest run of consecutive holes scoring zero Stableford points, within a round.',
+    'A run of holes worth exactly nothing on the scorecard — the group chat wrote itself.',
   );
 
   const openGift = () => {
@@ -3034,7 +3036,7 @@ function ShameTab({ tournament, hasMulti, usesTeams, metric, theme, s }) {
     setSheet({
       title: `${joinNames(stat.entries.map(e => e.player))} — gap ${stat.value} pts`,
       subtitle: modeLabel,
-      explainer: "The biggest positive gap between the other players' average points on a hole and this player's points on the same hole.",
+      explainer: 'The hole where everyone else quietly got on with their round and this player did not.',
       rows: tiedRowsByPlayer(
         stat.entries,
         (e) => e.breakdown.map(b => ({
@@ -3054,7 +3056,7 @@ function ShameTab({ tournament, hasMulti, usesTeams, metric, theme, s }) {
     setSheet({
       title: `${joinNames(stat.entries.map(e => e.player))} — drop of ${stat.value} pts`,
       subtitle: modeLabel,
-      explainer: 'Biggest drop-off in Stableford points between the front 9 and the back 9 within a single round.',
+      explainer: 'Cruised on the front nine, then imploded on the back — the biggest front-to-back crash of the trip.',
       rows: tiedRowsByPlayer(
         stat.entries,
         (e) => e.breakdown.map(b => ({
@@ -3072,7 +3074,7 @@ function ShameTab({ tournament, hasMulti, usesTeams, metric, theme, s }) {
   const openBlowup = () => openSingleHoleTied(
     shame.blowup,
     `${shame.blowup.value} strokes on one hole`,
-    'The highest raw stroke count recorded on any single hole.',
+    'One hole, an embarrassing pile of strokes — the single worst blow-up of the tournament.',
     (e) => [{
       key: `${e.player.id}-bu`,
       primary: `Par ${e.par} · SI ${e.si}`,
@@ -3083,22 +3085,26 @@ function ShameTab({ tournament, hasMulti, usesTeams, metric, theme, s }) {
   );
 
   const openPar3 = () => par3 && setSheet({
-    title: `${par3.player.name} — Par-3 heartbreak`,
-    subtitle: `${par3.avgStrokes} avg str on ${par3.holes} par-3 holes`,
-    explainer: 'Highest average strokes on par-3 holes. Par-3s are meant to be the free lunch of a round.',
-    rows: par3.breakdown.map((b, i) => ({
-      key: `${i}`,
-      primary: `R${b.roundIndex + 1} · ${b.courseName} · Hole ${b.holeNumber}`,
-      secondary: `Par ${b.par} · SI ${b.si}`,
-      rightPrimary: `${b.strokes} str · ${b.points} pts`,
-      tone: b.points === 0 ? 'poor' : b.points === 1 ? 'neutral' : 'good',
-    })),
+    title: `${joinNames(par3.entries.map(e => e.player))} — Par-3 heartbreak`,
+    subtitle: `${par3.value} avg str (min. 3 par-3 holes played)`,
+    explainer: 'Par-3s are supposed to be the free hole — not for this player, apparently.',
+    rows: tiedRowsByPlayer(
+      par3.entries,
+      (e) => e.breakdown.map((b, i) => ({
+        key: `${e.player.id}-${i}`,
+        primary: `R${b.roundIndex + 1} · ${b.courseName} · Hole ${b.holeNumber}`,
+        secondary: `Par ${b.par} · SI ${b.si}`,
+        rightPrimary: `${b.strokes} str · ${b.points} pts`,
+        tone: b.points === 0 ? 'poor' : b.points === 1 ? 'neutral' : 'good',
+      })),
+      (e) => `${e.avgStrokes} avg str · ${e.holes} holes`,
+    ),
   });
 
   const openPickup = () => pickup && setSheet({
     title: `${joinNames(pickup.entries.map(e => e.player))} — ${pickup.value} pickups`,
     subtitle: 'Ball-in-pocket champion',
-    explainer: 'Holes where the recorded strokes equal the "pickup" value (par + 2 + extra shots) — i.e. the player bailed out of that hole. Ties listed together.',
+    explainer: 'Picked it up, put it away, pretended it never happened.',
     rows: tiedRowsByPlayer(
       pickup.entries,
       (e) => e.breakdown.map((b, i) => ({
@@ -3115,7 +3121,7 @@ function ShameTab({ tournament, hasMulti, usesTeams, metric, theme, s }) {
   const openAnchor = () => anchorStat && setSheet({
     title: `${joinNames(anchorStat.entries.map(e => e.player))} — the anchor`,
     subtitle: `${anchorStat.value} more PB than MB`,
-    explainer: 'Player who was their pair\'s worst ball (PB) far more often than the best ball (MB). Tiebreakers inside the pair: lower handicap → better prior hole → stable id sort.',
+    explainer: 'Carried by the team on the good holes, dragging it down on the bad ones — the anchor of the pair.',
     rows: anchorStat.all.filter(a => a.mbCount + a.pbCount > 0).map(a => ({
       key: a.player.id,
       primary: a.player.name,
@@ -3128,7 +3134,7 @@ function ShameTab({ tournament, hasMulti, usesTeams, metric, theme, s }) {
   const openZero = () => zero && setSheet({
     title: `${joinNames([...new Set(zero.entries.map(e => e.player.id))].map(id => zero.entries.find(e => e.player.id === id).player))} — Zero Hero`,
     subtitle: `Rounds with 3+ zero-point holes`,
-    explainer: 'Rounds where the player scored zero Stableford points on three or more holes. Tap through the rounds below to see which holes drowned the round.',
+    explainer: 'Ironically named — the holes below produced exactly nothing on the scorecard.',
     rows: zero.entries.flatMap((e, i) => [
       { key: `sec-${i}`, section: true, label: `${e.player.name} · R${e.roundIndex + 1} · ${e.courseName}`, rightLabel: `${e.count} zero-pt holes` },
       ...e.breakdown.map((b, j) => ({
@@ -3214,8 +3220,8 @@ function ShameTab({ tournament, hasMulti, usesTeams, metric, theme, s }) {
         <HighlightCard
           icon="target"
           label="⛳ Par-3 Heartbreak"
-          value={`${firstName(par3.player)} — ${par3.avgStrokes} avg str`}
-          sub={`${par3.holes} par-3 holes · ${par3.totalPoints} total pts`}
+          value={`${joinNames(par3.entries.map(e => e.player))} — ${par3.value} avg str`}
+          sub={par3.entries.length === 1 ? `${par3.entries[0].holes} par-3 holes · ${par3.entries[0].totalPoints} total pts` : `${par3.entries.length} tied`}
           onPress={openPar3} theme={theme} s={s}
         />
       )}
@@ -3241,8 +3247,8 @@ function ShameTab({ tournament, hasMulti, usesTeams, metric, theme, s }) {
         <HighlightCard
           icon="slash"
           label="🧟 Zero Hero"
-          value={`${zero.entries.length} round${zero.entries.length === 1 ? '' : 's'} with ≥3 zero-pt holes`}
-          sub={`Worst: ${zero.value} zero-point holes in one round`}
+          value={`${firstName(zero.entries[0].player)} — ${zero.entries[0].count} pointless holes in R${zero.entries[0].roundIndex + 1}`}
+          sub={`${zero.entries.length} round${zero.entries.length === 1 ? '' : 's'} with ≥3 zero-pt holes`}
           onPress={openZero} theme={theme} s={s}
         />
       )}

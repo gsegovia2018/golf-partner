@@ -414,15 +414,19 @@ function pickMBTiebreak(aPlayer, bPlayer, round, holeOrderIndex, isStrokes) {
 }
 
 // Assigns each pair member a unique MB/PB role on a hole, using the tiebreaker
-// above when the two partners share the same metric value. Returns ids.
+// above when the two partners share the same metric value. Returns ids plus
+// `tied`, which flags when the two partners genuinely matched on this hole
+// (the role was decided by pickMBTiebreak rather than an outright
+// difference). Consumers that treat MB/PB as an earned role — like anchor()
+// — need this to avoid crediting an arbitrary tiebreak as if it were real.
 function assignPairRoles(aPlayer, aValue, bPlayer, bValue, round, holeOrderIndex, isStrokes) {
   const aIsBetter = isStrokes ? aValue < bValue : aValue > bValue;
   const bIsBetter = isStrokes ? bValue < aValue : bValue > aValue;
-  if (aIsBetter) return { mbId: aPlayer.id, pbId: bPlayer.id };
-  if (bIsBetter) return { mbId: bPlayer.id, pbId: aPlayer.id };
+  if (aIsBetter) return { mbId: aPlayer.id, pbId: bPlayer.id, tied: false };
+  if (bIsBetter) return { mbId: bPlayer.id, pbId: aPlayer.id, tied: false };
   const mbId = pickMBTiebreak(aPlayer, bPlayer, round, holeOrderIndex, isStrokes);
   const pbId = mbId === aPlayer.id ? bPlayer.id : aPlayer.id;
-  return { mbId, pbId };
+  return { mbId, pbId, tied: true };
 }
 
 export function pairHoleWins(tournament, { metric = 'points', roundIndex = null } = {}) {
@@ -488,6 +492,11 @@ export function pairHoleWins(tournament, { metric = 'points', roundIndex = null 
           oppBest, oppWorst, metric,
           bestRole: null, bestOutcome: null,
           worstRole: null, worstOutcome: null,
+          // Whether the MB/PB role itself came from a genuine tie between
+          // the two partners on this hole (pickMBTiebreak), rather than an
+          // outright difference. Does not change W/T/L (that's the outcome
+          // vs the opposing pair) — only flags the role assignment.
+          roleTied: roles.tied,
         };
         if (roles.mbId === playerId) {
           rec.best[bestOutcome]++;
@@ -657,7 +666,7 @@ export function hallOfShame(tournament, { metric = 'points' } = {}) {
         const points = calcStablefordPoints(hole.par, sc, useNet ? handicap : 0, hole.strokeIndex);
         return { player: p, strokes: sc, points, netVsPar: sc - extra - hole.par };
       }).filter(Boolean);
-      if (scores.length < 4) return;
+      if (scores.length < 3) return;
       scores.forEach(entry => {
         const others = scores.filter(s => s.player.id !== entry.player.id);
         const othersAvg = others.reduce((s, o) => s + o.points, 0) / others.length;
@@ -1213,8 +1222,11 @@ export function swingHole(tournament, roundIndex) {
 }
 
 // ── Par-3 Heartbreak ──
-// Player with the worst average strokes on par-3 holes. Par-3s should be
-// the "free" holes but sometimes drown someone in sand.
+// Player(s) with the worst average strokes on par-3 holes. Par-3s should be
+// the "free" holes but sometimes drown someone in sand. Requires at least 3
+// par-3 holes played — below that a single bad hole can swing the average
+// into a misleading "worst" spot — and returns every player tied for worst,
+// not just one.
 export function par3Heartbreak(tournament) {
   const perPlayer = {};
   tournament.players.forEach(p => { perPlayer[p.id] = { player: p, strokes: 0, holes: 0, points: 0, breakdown: [] }; });
@@ -1226,17 +1238,23 @@ export function par3Heartbreak(tournament) {
     rec.holes++;
     rec.breakdown.push({ roundIndex, courseName: round.courseName, holeNumber: hole.number, par: hole.par, si: hole.strokeIndex, strokes, points });
   });
-  const candidates = Object.values(perPlayer).filter(r => r.holes > 0);
+  const MIN_PAR3_HOLES = 3;
+  const candidates = Object.values(perPlayer)
+    .filter(r => r.holes >= MIN_PAR3_HOLES)
+    .map(r => ({
+      player: r.player,
+      avgStrokes: +(r.strokes / r.holes).toFixed(2),
+      holes: r.holes,
+      totalPoints: r.points,
+      breakdown: r.breakdown,
+    }));
   if (candidates.length === 0) return null;
-  const worst = candidates.reduce((best, r) => r.strokes / r.holes > best.strokes / best.holes ? r : best, candidates[0]);
+  const worstAvg = Math.max(...candidates.map(c => c.avgStrokes));
+  const entries = candidates.filter(c => c.avgStrokes === worstAvg);
   return {
-    player: worst.player,
-    avgStrokes: +(worst.strokes / worst.holes).toFixed(2),
-    holes: worst.holes,
-    totalPoints: worst.points,
-    breakdown: worst.breakdown,
-    all: candidates.map(r => ({ player: r.player, avgStrokes: +(r.strokes / r.holes).toFixed(2), holes: r.holes }))
-      .sort((a, b) => b.avgStrokes - a.avgStrokes),
+    value: worstAvg,
+    entries,
+    all: candidates.slice().sort((a, b) => b.avgStrokes - a.avgStrokes),
   };
 }
 
@@ -1263,12 +1281,16 @@ export function pickupChampion(tournament) {
 
 // ── Anchor ──
 // Player who was their pair's PB (worst ball) most often minus MB (best ball).
-// Uses the tiebreaker rules in pairHoleWins.
+// Only outright role assignments count — a hole where the two partners
+// genuinely tied (and pickMBTiebreak had to pick one of them, always
+// favoring the lower handicap) contributes to NEITHER count. Without this,
+// a run of ties within a pair silently piles PB credit onto the higher
+// handicapper regardless of who actually played worse.
 export function anchor(tournament) {
   const stats = pairHoleWins(tournament, { metric: 'points' });
   const enriched = stats.map(r => {
-    const mbCount = r.best.W + r.best.T + r.best.L;
-    const pbCount = r.worst.W + r.worst.T + r.worst.L;
+    const mbCount = r.breakdown.filter(e => e.bestRole === 'MB' && !e.roleTied).length;
+    const pbCount = r.breakdown.filter(e => e.worstRole === 'PB' && !e.roleTied).length;
     return { player: r.player, mbCount, pbCount, anchorScore: pbCount - mbCount };
   });
   const candidates = enriched.filter(r => r.mbCount + r.pbCount > 0);
