@@ -68,6 +68,7 @@ export default function EditTeamsView({
   onTapPlayer,
   onTapSolo,
   onShuffle,
+  onRandomizeDuels,
   onSwapDuels,
   onSave,
 }) {
@@ -233,10 +234,16 @@ export default function EditTeamsView({
           <View style={s.card}>
             <View style={s.cardHead}>
               <Text style={s.cardLabel}>DUELS · 1 v 1</Text>
-              <TouchableOpacity style={s.swapBtn} onPress={onSwapDuels} activeOpacity={0.7}>
-                <Feather name="repeat" size={14} color={theme.accent.primary} />
-                <Text style={s.swapBtnText}>Swap</Text>
-              </TouchableOpacity>
+              <View style={s.duelActions}>
+                <TouchableOpacity style={s.swapBtn} onPress={onRandomizeDuels} activeOpacity={0.7}>
+                  <Feather name="shuffle" size={14} color={theme.accent.primary} />
+                  <Text style={s.swapBtnText}>Randomize</Text>
+                </TouchableOpacity>
+                <TouchableOpacity style={s.swapBtn} onPress={onSwapDuels} activeOpacity={0.7}>
+                  <Feather name="repeat" size={14} color={theme.accent.primary} />
+                  <Text style={s.swapBtnText}>Swap</Text>
+                </TouchableOpacity>
+              </View>
             </View>
             {duels.map(([a, b], di) => (
               <View key={di} style={s.duel}>
@@ -399,6 +406,7 @@ function makeStyles(t) {
       paddingVertical: 6, paddingHorizontal: 10,
     },
     swapBtnText: { fontFamily: 'PlusJakartaSans-SemiBold', color: t.accent.primary, fontSize: 12 },
+    duelActions: { flexDirection: 'row', gap: 8 },
     duel: {
       flexDirection: 'row', alignItems: 'center',
       backgroundColor: t.bg.secondary,

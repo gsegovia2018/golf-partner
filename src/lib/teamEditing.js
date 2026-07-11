@@ -20,6 +20,30 @@ export function swapDuelOrder(pairs) {
   return [pairs[0], [...(pairs[1] ?? [])].reverse()];
 }
 
+// pairsmatchplay: draws a random duel assignment for the CURRENT teams by
+// shuffling the second pair's member order (teams and their membership stay
+// put; only who-faces-who changes). Retries so the draw differs from the
+// current matchups when another assignment exists — so "Randomize" never looks
+// like it did nothing. `rand` is injectable so tests can pin the draw.
+export function randomizeDuelOrder(pairs, rand = Math.random) {
+  if (!Array.isArray(pairs) || pairs.length !== 2) return pairs;
+  const second = pairs[1] ?? [];
+  if (second.length < 2) return pairs;
+  const key = (arr) => arr.map((p) => p.id).join(',');
+  const before = key(second);
+  let shuffled = second;
+  for (let attempt = 0; attempt < 12; attempt++) {
+    const next = [...second];
+    for (let i = next.length - 1; i > 0; i--) {
+      const j = Math.floor(rand() * (i + 1));
+      [next[i], next[j]] = [next[j], next[i]];
+    }
+    shuffled = next;
+    if (key(next) !== before) break;
+  }
+  return [pairs[0], shuffled];
+}
+
 // Re-rolls the whole matchup: redistributes every player across the two sides
 // while preserving each side's size (so a 2v2 stays 2v2 and a 3v1 stays 3v1).
 // For pairsmatchplay the new member order also re-draws the duels. Retries a

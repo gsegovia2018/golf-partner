@@ -10,7 +10,7 @@ import {
 import { mutate } from '../store/mutate';
 import { roundScoringMode } from '../store/scoring';
 import { shouldHandleStoreChange } from '../lib/navigationFocus';
-import { buildThreeVsOne, swapDuelOrder, shuffleTeams } from '../lib/teamEditing';
+import { buildThreeVsOne, swapDuelOrder, shuffleTeams, randomizeDuelOrder } from '../lib/teamEditing';
 import EditTeamsView from './editTeams/EditTeamsView';
 
 export default function EditTeamsScreen({ navigation, route }) {
@@ -85,6 +85,11 @@ export default function EditTeamsScreen({ navigation, route }) {
     setPairs(swapDuelOrder(pairs));
   }
 
+  function onRandomizeDuels() {
+    hasLocalEdits.current = true;
+    setPairs((prev) => randomizeDuelOrder(prev));
+  }
+
   function onTapPlayer(pairIdx, slotIdx) {
     if (!selected) {
       setSelected({ pairIdx, slotIdx });
@@ -147,6 +152,7 @@ export default function EditTeamsScreen({ navigation, route }) {
       onTapPlayer={onTapPlayer}
       onTapSolo={onTapSolo}
       onShuffle={onShuffle}
+      onRandomizeDuels={onRandomizeDuels}
       onSwapDuels={onSwapDuels}
       onSave={onSave}
     />

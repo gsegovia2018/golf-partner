@@ -1,4 +1,4 @@
-import { buildThreeVsOne, swapDuelOrder, shuffleTeams } from '../teamEditing';
+import { buildThreeVsOne, swapDuelOrder, shuffleTeams, randomizeDuelOrder } from '../teamEditing';
 import { pairsMatchDuels } from '../../store/scoring';
 
 const players = [
@@ -66,6 +66,42 @@ describe('swapDuelOrder', () => {
     const solo = [[players[0]], [players[1]], [players[2]]];
     expect(swapDuelOrder(solo)).toBe(solo);
     expect(swapDuelOrder(null)).toBeNull();
+  });
+});
+
+describe('randomizeDuelOrder', () => {
+  const pairs = [
+    [players[0], players[1]],
+    [players[2], players[3]],
+  ];
+
+  test('keeps both teams and their membership, changing only who faces who', () => {
+    const out = randomizeDuelOrder(pairs, () => 0);
+    expect(out[0]).toEqual(pairs[0]);
+    expect(out[1].map((p) => p.id).sort()).toEqual(pairs[1].map((p) => p.id).sort());
+  });
+
+  test('produces a different duel assignment than the input (never a no-op)', () => {
+    const before = pairsMatchDuels(pairs);
+    const after = pairsMatchDuels(randomizeDuelOrder(pairs, () => 0));
+    expect(after).not.toEqual(before);
+  });
+
+  test('default randomness stays within the valid duel assignments', () => {
+    const valid = new Set([
+      JSON.stringify(pairsMatchDuels(pairs).map((d) => d.map((p) => p.id))),
+      JSON.stringify(pairsMatchDuels(swapDuelOrder(pairs)).map((d) => d.map((p) => p.id))),
+    ]);
+    for (let i = 0; i < 32; i++) {
+      const key = JSON.stringify(pairsMatchDuels(randomizeDuelOrder(pairs)).map((d) => d.map((p) => p.id)));
+      expect(valid.has(key)).toBe(true);
+    }
+  });
+
+  test('non-2-pair input is returned unchanged', () => {
+    const solo = [[players[0]], [players[1]], [players[2]]];
+    expect(randomizeDuelOrder(solo, () => 0)).toBe(solo);
+    expect(randomizeDuelOrder(null, () => 0)).toBeNull();
   });
 });
 
