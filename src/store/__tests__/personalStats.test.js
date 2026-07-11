@@ -3,6 +3,7 @@ import {
   holeDifficultySplit, computeMetrics, computeRecentVsHistory, FORM_METRICS,
   rankStrengths, resolveSelection, computeMyStats, computeFormSeries, buildActionPlan,
 } from '../personalStats';
+import { getPlayingHandicap } from '../tournamentStore';
 
 // ── Fixture helpers ───────────────────────────────────────────────
 // hcp default 0; SI defaults to hole number; par defaults to 4.
@@ -202,6 +203,28 @@ describe('collectMyRounds', () => {
     expect(result[0].playerId).toBe('p1');
   });
 
+  test('gains holesPlayed and isComplete — an early-finished 6-hole game is incomplete', () => {
+    const h = holes18();
+    const sixHoles = evenScores(h, 4);
+    h.slice(6).forEach((hole) => { delete sixHoles[hole.number]; }); // only holes 1-6 scored
+    const tournaments = [{
+      id: 7, name: 'T', kind: 'game', finishedAt: '2026-05-22T18:00:00.000Z',
+      players: [{ id: 'p1', user_id: 'u1' }],
+      rounds: [
+        mkRound({ holes: h, scores: { p1: sixHoles } }),
+        mkRound({ holes: h, scores: { p1: evenScores(h, 4) } }),
+      ],
+    }];
+    const result = collectMyRounds(tournaments, 'u1');
+    // Tournament-level finishedAt still marks it `completed` (selection default)...
+    expect(result[0].completed).toBe(true);
+    // ...but isComplete is the honest "every hole scored" signal.
+    expect(result[0].isComplete).toBe(false);
+    expect(result[0].holesPlayed).toBe(6);
+    expect(result[1].isComplete).toBe(true);
+    expect(result[1].holesPlayed).toBe(18);
+  });
+
   test('does not claim a multi-player game when nothing identifies the user', () => {
     const h = holes18();
     const tournaments = [{
@@ -255,6 +278,41 @@ describe('buildSyntheticTournament', () => {
     const t = buildSyntheticTournament(myRounds);
     expect(t.rounds[0].playerTees[CANON_ID]).toEqual({ label: 'Yellow', slope: 130, rating: 71.2 });
     expect(t.rounds[0].playerTees.origA).toBeUndefined();
+  });
+
+  test('re-keys playerIndexes so a legacy round without playerHandicaps honors the override', () => {
+    const h = holes18();
+    // Legacy round: no playerHandicaps, no slope/tee — handicap resolves
+    // purely from roundPlayerIndex, which reads round.playerIndexes.
+    const myRounds = collectMyRounds([{
+      id: 6, name: 'T', players: [{ id: 'origA', name: 'Me', handicap: 20, user_id: 'u1' }],
+      rounds: [mkRound({
+        holes: h,
+        scores: { origA: evenScores(h, 4) },
+        playerHandicaps: {},
+        playerTees: null,
+      })],
+    }], 'u1');
+    myRounds[0].round.playerIndexes = { origA: '9' };
+    const t = buildSyntheticTournament(myRounds);
+    expect(t.rounds[0].playerIndexes[CANON_ID]).toBe('9');
+    expect(t.rounds[0].playerIndexes.origA).toBeUndefined();
+    // No slope on this legacy round → calcPlayingHandicap rounds the index as-is.
+    expect(getPlayingHandicap(t.rounds[0], t.players[0])).toBe(9);
+  });
+
+  test('derives the fallback player handicap from the most recent collected round', () => {
+    const h = holes18();
+    // Loaders return newest-first; collectMyRounds reverses to chronological.
+    const myRounds = collectMyRounds([
+      { id: 2, name: 'Newer', players: [{ id: 'p1', name: 'New Me', handicap: 8, user_id: 'u1' }],
+        rounds: [mkRound({ holes: h, scores: { p1: evenScores(h, 4) }, playerHandicaps: { p1: 8 } })] },
+      { id: 1, name: 'Older', players: [{ id: 'p1', name: 'Old Me', handicap: 20, user_id: 'u1' }],
+        rounds: [mkRound({ holes: h, scores: { p1: evenScores(h, 4) }, playerHandicaps: { p1: 20 } })] },
+    ], 'u1');
+    const t = buildSyntheticTournament(myRounds);
+    expect(t.players[0].handicap).toBe(8);
+    expect(t.players[0].name).toBe('New Me');
   });
 
   test('keeps each round under its own original player id (different per tournament)', () => {
@@ -335,6 +393,33 @@ describe('computeMetrics', () => {
     expect(m.girPct).toBeNull();
     expect(m.puttsPerRound).toBeNull();
     expect(m.threePuttsPerRound).toBeNull();
+  });
+
+  test('excludes an early-finished 6-hole game from avgPoints/bestRoundPoints/avgVsPar, but keeps its holes in per-hole metrics', () => {
+    const h = holes18(); // par 4 x 18, scratch handicap → 2 pts/hole
+    const sixHoles = evenScores(h, 4);
+    h.slice(6).forEach((hole) => { delete sixHoles[hole.number]; }); // only holes 1-6 scored, 12 pts
+    const tournaments = [{
+      id: 1, name: 'T', kind: 'game', finishedAt: '2026-05-22T18:00:00.000Z',
+      players: [{ id: 'p1', handicap: 0, user_id: 'u1' }],
+      rounds: [
+        mkRound({ holes: h, scores: { p1: sixHoles }, playerHandicaps: { p1: 0 } }),
+        mkRound({ holes: h, scores: { p1: evenScores(h, 4) }, playerHandicaps: { p1: 0 } }), // 36 pts, complete
+      ],
+    }];
+    const myRounds = collectMyRounds(tournaments, 'u1');
+    const synthetic = buildSyntheticTournament(myRounds);
+    const m = computeMetrics(synthetic);
+    // Only the complete 18-hole round counts toward the round-total averages —
+    // averaging in the 6-hole game's 12 pts as if it were a full round would
+    // pull avgPoints down to 24.
+    expect(m.avgPoints).toBe(36);
+    expect(m.bestRoundPoints).toBe(36);
+    expect(m.avgVsPar).toBe(0);
+    // But per-hole metrics still see all 24 scored holes (6 from the partial
+    // round + 18 from the complete one).
+    const diff = holeDifficultySplit(synthetic, CANON_ID);
+    expect(diff.hard.holes + diff.mid.holes + diff.easy.holes).toBe(24);
   });
 });
 
@@ -492,6 +577,8 @@ describe('computeFormSeries', () => {
       playerId: 'p1',
       player: { id: 'p1', name: 'Me', handicap: 0, user_id: 'u1' },
       completed: true,
+      isComplete: true,
+      holesPlayed: holes.length,
     };
   }
 
@@ -531,6 +618,27 @@ describe('computeFormSeries', () => {
     expect(r.metrics.avgPoints).toEqual([]);
     expect(r.scoreMix).toEqual([]);
     expect(r.hasShotData).toBe(false);
+  });
+
+  test('appends a short date to the label when the round has a tournament date', () => {
+    const h = holes18();
+    const mr = myRound('Pine', h, 4);
+    mr.tournamentDate = '2026-05-12T10:00:00.000Z';
+    const { metrics } = computeFormSeries([mr]);
+    expect(metrics.avgPoints[0].label).toBe('Pine · 12 May');
+  });
+
+  test('avgPoints/avgVsPar are null (a gap) for an incomplete round, not its partial total', () => {
+    const h = holes18();
+    const sixHoleScores = evenScores(h, 4);
+    h.slice(6).forEach((hole) => { delete sixHoleScores[hole.number]; });
+    const mr = myRound('Oak', h, 4);
+    mr.round.scores.p1 = sixHoleScores;
+    mr.isComplete = false;
+    mr.holesPlayed = 6;
+    const { metrics } = computeFormSeries([mr]);
+    expect(metrics.avgPoints[0].value).toBeNull();
+    expect(metrics.avgVsPar[0].value).toBeNull();
   });
 
   test('populates shot metrics and hasShotData when the round has shot detail', () => {
