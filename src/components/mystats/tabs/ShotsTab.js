@@ -29,7 +29,7 @@ export default function ShotsTab({ stats, onInfo, targetHandicap, onChangeTarget
   } = stats;
 
   const hasAnyShotData = shots.hasData || puttingTarget?.hasData || approachTarget?.hasData
-    || stats?.strokesGained?.total != null || stats?.distribution?.total > 0;
+    || stats?.strokesGained?.total != null || stats?.distributionGross?.total > 0;
 
   if (!hasAnyShotData) {
     return (
@@ -235,7 +235,10 @@ function ShotDataRow({
 
 function makeScoringRows(stats, shotBenchmark) {
   const rows = [];
-  const distribution = stats?.distribution ?? {};
+  // GROSS vs-par mix — the benchmark tables are gross scoring data, so the
+  // net `distribution` (whose birdie counts inflate with handicap) must not
+  // feed these rows. BreakdownTab/roundReportCard keep using the net field.
+  const distribution = stats?.distributionGross ?? {};
   const total = distribution.total ?? Object
     .values(distribution)
     .filter(isNumber)
@@ -363,7 +366,10 @@ function makeDrivingTargetRows(shots, shotBenchmark) {
   const distribution = shots?.drives?.distribution ?? {};
   const leftPct = percentage(distribution.left ?? 0, recorded);
   const rightPct = percentage(distribution.right ?? 0, recorded);
-  const teePenaltyPct = percentage(shots?.penalties?.tee ?? 0, recorded);
+  // Numerator and denominator share the same drive-logged, non-par-3 hole
+  // population — shots.penalties.tee includes penalties from holes outside
+  // that population (e.g. par 3s), which would otherwise inflate the %.
+  const teePenaltyPct = percentage(shots?.penalties?.teeOnDriveHoles ?? 0, recorded);
 
   return [
     {
@@ -425,7 +431,7 @@ function makeDrivingTargetRows(shots, shotBenchmark) {
       label: 'Tee penalty %',
       value: `${teePenaltyPct}%`,
       secondary: targetSecondary([
-        `${shots?.penalties?.tee ?? 0} penalties`,
+        `${shots?.penalties?.teeOnDriveHoles ?? 0} penalties`,
         `target ${formatBenchmarkPercent(shotBenchmark.teePenaltyPct)}`,
       ], recorded, 6),
       tone: toneFromComparison({
@@ -470,20 +476,22 @@ function makeApproachTargetRows(approachTarget) {
 }
 
 function makePuttingVolumeRows(shots, shotBenchmark) {
-  const threePuttsPerRound = shots.roundsWithPuttData > 0
-    ? round1(shots.putts.threePuttPlus / shots.roundsWithPuttData)
-    : 0;
+  // Both rows normalize off holes that actually logged putts, to an
+  // 18-hole rate — dividing a partial round's raw total by "rounds" instead
+  // understates it against a full-round benchmark.
+  const puttsPer18 = shots.putts.per18 ?? 0;
+  const threePuttsPer18 = per18(shots.putts.threePuttPlus, shots.putts.holes) ?? 0;
   return [
     {
       key: 'puttsPerRound',
       label: 'Putts / round',
-      value: shots.putts.perRound,
+      value: puttsPer18,
       secondary: targetSecondary([
         sampleText(shots.putts.holes, 'holes'),
-        `target ${formatBenchmarkNumber(shotBenchmark.puttsPerRound)}`,
+        `target ${formatBenchmarkNumber(shotBenchmark.puttsPerRound)} / 18 holes`,
       ], shots.putts.holes, 9),
       tone: toneFromComparison({
-        value: shots.putts.perRound,
+        value: puttsPer18,
         target: shotBenchmark.puttsPerRound,
         polarity: 'lower',
         tolerance: 0.5,
@@ -495,14 +503,16 @@ function makePuttingVolumeRows(shots, shotBenchmark) {
     {
       key: 'threePutts',
       label: '3-putts / round',
-      value: threePuttsPerRound,
+      value: threePuttsPer18,
       secondary: targetSecondary([
         `${shots.putts.threePuttPlus} total`,
-        sampleText(shots.roundsWithPuttData, 'rounds'),
-        `target ${formatBenchmarkNumber(shotBenchmark.threePuttsPerRound)}`,
+        // The value is normalized off logged holes to an 18-hole rate, so
+        // the sample shown is holes (the actual basis), not raw rounds.
+        sampleText(shots.putts.holes, 'holes'),
+        `target ${formatBenchmarkNumber(shotBenchmark.threePuttsPerRound)} / 18 holes`,
       ], shots.putts.holes, 9),
       tone: toneFromComparison({
-        value: threePuttsPerRound,
+        value: threePuttsPer18,
         target: shotBenchmark.threePuttsPerRound,
         polarity: 'lower',
         tolerance: 0.3,

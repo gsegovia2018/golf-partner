@@ -132,6 +132,77 @@ describe('HolePage match play: full vs relative handicap', () => {
   });
 });
 
+// Scramble rounds score one ball per team under the captain (`unit.id`).
+// The shot-detail write path keys off `player.id`, which in a scramble
+// round IS the captain's id — not the signed-in member's personal `meId`.
+// A non-captain member's logged shots would vanish (written under the
+// captain's id, read under their own); a captain's would silently pollute
+// their own detail with whichever member is "me". The honest fix is to
+// not render shot logging in scramble rounds at all.
+function renderScrambleHole(overrides = {}) {
+  const players = [
+    { id: 'a', name: 'Alice', handicap: 10 },
+    { id: 'b', name: 'Bob', handicap: 15 },
+  ];
+  const round = {
+    id: 'r1',
+    holes: [],
+    pairs: [[{ id: 'a', name: 'Alice', handicap: 10 }, { id: 'b', name: 'Bob', handicap: 15 }]],
+    playerHandicaps: { a: 10, b: 15 },
+  };
+  const props = {
+    pageHole: { number: 1, par: 4, strokeIndex: 5 },
+    width: 360,
+    height: 600,
+    courseName: 'Pebble',
+    roundIndex: 0,
+    round,
+    players,
+    scores: { a: {} },
+    shotDetails: {},
+    meId: 'a',
+    onSetShot: () => {},
+    theme: { name: 'light' },
+    s: {},
+    onStep: () => {},
+    onSetScore: () => {},
+    editable: null,
+    getScoreAnim: () => new Animated.Value(1),
+    showRunning: false,
+    mode: 'scramblepairs',
+    official: false,
+    officialDiscrepancy: null,
+    onOpenDiscrepancy: () => {},
+    onOpenConflict: () => {},
+    shotCollapsed: false,
+    onToggleShotDetail: () => {},
+    totalsMap: new Map(),
+    ...overrides,
+  };
+
+  return render(<HolePage {...props} />);
+}
+
+describe('HolePage scramble rounds: no shot-detail section', () => {
+  test('does not render the shot-detail section for the captain (unit id === meId)', () => {
+    const { queryByText } = renderScrambleHole();
+    expect(queryByText('Shot detail')).toBeNull();
+  });
+
+  test('does not render the shot-detail section for a non-captain member', () => {
+    // meId is Bob, a team member but not the captain — the unit still
+    // renders as "me" (effectiveMeId resolves to the team), so this is the
+    // clearest case of the write/read id mismatch the gate prevents.
+    const { queryByText } = renderScrambleHole({ meId: 'b' });
+    expect(queryByText('Shot detail')).toBeNull();
+  });
+
+  test('a non-scramble round for the same players still renders shot detail for "me"', () => {
+    const { getByText } = renderMatchPlayHole({ mode: 'stableford' });
+    expect(getByText('Shot detail')).toBeTruthy();
+  });
+});
+
 describe('holePagePropsEqual', () => {
   test('identical props → skip re-render', () => {
     const prev = baseProps();

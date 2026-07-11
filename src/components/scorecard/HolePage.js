@@ -3,7 +3,7 @@ import { View, Text, ScrollView, TouchableOpacity, Modal, Platform } from 'react
 import { Feather } from '@expo/vector-icons';
 import { playersMeFirst } from '../../lib/playerOrder';
 import {
-  pickupStrokes, scrambleUnits, matchPlayEffectiveHandicaps, calcExtraShots,
+  pickupStrokes, isPickupScore, scrambleUnits, matchPlayEffectiveHandicaps, calcExtraShots,
 } from '../../store/tournamentStore';
 import { scoreCellState } from '../../store/officialScoring';
 import { isScrambleMode } from '../scoringModes';
@@ -174,12 +174,21 @@ export const HolePage = React.memo(function HolePage({
           const extraShots = calcExtraShots(handicap, pageHole.strokeIndex);
 
           const pickup = pickupStrokes(pageHole.par, fullHandicap, pageHole.strokeIndex);
-          const isPickup = strokes != null && strokes >= pickup;
+          const isPickup = isPickupScore(strokes, pageHole.par, fullHandicap, pageHole.strokeIndex);
           // Per-card write permission. Casual mode passes no `editable` prop
           // (or one that returns true). In official mode a read-only card
           // renders the score without +/- steppers or the pickup toggle.
           const canEdit = editable ? editable(player.id) : true;
           const isMe = player.id === effectiveMeId;
+          // Scramble rounds score one ball per team under the captain
+          // (`player.id` here is the unit/captain id, not the signed-in
+          // member's personal `meId`). The shot-detail write path has no
+          // honest place to store per-member taps in that case — a
+          // non-captain "me" would write under the captain's id and never
+          // see it again; the captain's own card would silently absorb
+          // whichever teammate is signed in. Hide the section entirely
+          // rather than let it lie.
+          const showShotDetail = isMe && !isScramble;
 
           // Official mode: classify this player's hole from the raw two-row
           // score data so the card can show an agreed / waiting / discrepancy
@@ -216,10 +225,11 @@ export const HolePage = React.memo(function HolePage({
               getScoreAnim={getScoreAnim}
               onStep={onStep}
               onSetScore={onSetScore}
-              shotDetail={isMe ? shotDetails[meId]?.[pageHole.number] : undefined}
+              shotDetail={showShotDetail ? shotDetails[meId]?.[pageHole.number] : undefined}
               onSetShot={onSetShot}
               shotCollapsed={shotCollapsed}
               onToggleShotDetail={onToggleShotDetail}
+              showShotDetail={showShotDetail}
               officialState={officialState}
               canResolveHere={canResolveHere}
               onOpenDiscrepancy={onOpenDiscrepancy}

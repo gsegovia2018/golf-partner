@@ -179,4 +179,23 @@ export const statExplainers = {
       + '3-putt rate from each first-putt distance bucket with the target expectation.',
   },
   strokesGained: strokesGainedExplainer,
+  courseMastery: {
+    title: 'Course Mastery',
+    subtitle: 'How you score, course by course',
+    explainer: 'Rounds, average points, and best points per round at each course you\'ve '
+      + 'played — only fully-scored rounds count, so an early-finished game never drags '
+      + 'a course average down. Rounds are grouped by the course itself, so renaming a '
+      + 'course label keeps its history together. Trend compares your latest complete '
+      + 'round there with the one before it; a course you\'ve only completed once shows '
+      + 'no trend yet.',
+  },
+  careerMilestones: {
+    title: 'Career Milestones',
+    subtitle: 'Your best feats across every selected round',
+    explainer: 'All counts are net (handicap-adjusted) Stableford results — the Strokes '
+      + 'Gained tab\'s scoring mix counts gross, so the two can legitimately differ. '
+      + 'Birdies, eagles, and your longest streak of par-or-better holes count every '
+      + 'scored hole, including holes from an early-finished round. Best nine and best round '
+      + 'only look at fully-scored rounds, so a partial game can never claim a personal best.',
+  },
 };

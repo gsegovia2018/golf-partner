@@ -140,7 +140,7 @@ export default function MyStatsRoundSelector({ visible, myRounds, overrides, onC
                         activeOpacity={0.7}
                         accessibilityRole="checkbox"
                         accessibilityState={{ checked: on }}
-                        accessibilityLabel={`Round ${r.roundIndex + 1}, ${r.courseName}${r.completed ? `, ${r.points} points` : ', in progress'}`}
+                        accessibilityLabel={`Round ${r.roundIndex + 1}, ${r.courseName}${r.isComplete ? `, ${r.points} points` : `, partial, ${r.holesPlayed} holes`}`}
                       >
                         <Feather
                           name={on ? 'check-square' : 'square'}
@@ -150,9 +150,9 @@ export default function MyStatsRoundSelector({ visible, myRounds, overrides, onC
                         <Text style={s.rowText} numberOfLines={1}>
                           Round {r.roundIndex + 1} · {r.courseName}
                         </Text>
-                        {r.completed
+                        {r.isComplete
                           ? <Text style={s.pts}>{r.points} pts</Text>
-                          : <Text style={s.tag}>In progress</Text>}
+                          : <Text style={s.tag}>{`partial · ${r.holesPlayed} hole${r.holesPlayed === 1 ? '' : 's'}`}</Text>}
                       </TouchableOpacity>
                     );
                   })}
