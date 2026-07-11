@@ -825,7 +825,9 @@ describe('computeMyStats', () => {
     expect(stats.approachImpact.buckets['200+']).toMatchObject({ holes: 6, avgPoints: 0, girRate: 0 });
     expect(stats.puttDive).toMatchObject({ hasData: true, twoPuttPct: 67 });
     expect(stats.puttingTarget.buckets['6+']).toMatchObject({ attempts: 6, sgPerPutt: -0.81 });
-    expect(stats.approachTarget.buckets['200+']).toMatchObject({ holes: 6, avgSg: -0.09 });
+    // +0.43 (was −0.09): a 200+ miss to a greenside lie now uses a realistic
+    // greenside node instead of a recovery-from-trouble node.
+    expect(stats.approachTarget.buckets['200+']).toMatchObject({ holes: 6, avgSg: 0.43 });
     expect(stats.actionPlan.strengths).toEqual(expect.arrayContaining([
       expect.objectContaining({ area: 'Driving', label: 'Super drives' }),
     ]));
