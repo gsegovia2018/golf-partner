@@ -19,10 +19,10 @@ import { loadRoundMedia } from '../store/mediaStore';
 import RoundRecapPanel from '../components/roundSummary/RoundRecapPanel';
 import RoundSummaryTabs from '../components/roundSummary/RoundSummaryTabs';
 import PullToRefresh from '../components/PullToRefresh';
-import RoundScoreboard from '../components/RoundScoreboard';
+import RoundLeaderboard from '../components/roundSummary/RoundLeaderboard';
 import CommentThread from '../components/CommentThread';
 import { ScorecardTable, resolveScorecardRows } from '../components/scorecard/GridView';
-import { buildRoundRecap, buildRoundHighlights } from './roundSummaryModel';
+import { buildRoundRecap } from './roundSummaryModel';
 import { normalizeRoundNotes } from '../store/roundNotes';
 
 // Read-only summary of a single round — the feed's drill-in target. Works
@@ -36,12 +36,6 @@ async function fetchTournament(id) {
     if (data?.data) return data.data;
   } catch { /* fall through to local cache */ }
   return readLocal(id);
-}
-
-function recapSummary(recap, live) {
-  if (!recap?.winnerName) return 'No scores recorded for this round.';
-  if (live) return `${recap.winnerName} is leading the round.`;
-  return `${recap.winnerName} won the round.`;
 }
 
 function roundFeedKey(tournamentId, roundId) {
@@ -167,45 +161,32 @@ export default function RoundSummaryScreen({ navigation, route }) {
           refreshing={refreshing}
           onRefresh={onRefresh}
         >
+          <RoundSummaryTabs active={activeTab} onChange={setActiveTab} />
+
           <RoundRecapPanel
             recap={recap}
             roundLabel={roundLabel}
             tournamentName={tournament?.name}
-            summary={recapSummary(recap, live)}
             live={live}
             totalHoles={totalHoles}
-            mediaCount={media.length}
-            highlights={buildRoundHighlights({ round })}
           />
 
-          <RoundSummaryTabs active={activeTab} onChange={setActiveTab} />
-
           {activeTab === 'scorecard' ? (
-            <ScorecardTable
-              round={round}
-              players={rowPlayers}
-              scores={round.scores ?? {}}
-              onSetScore={() => {}}
-              editable={() => false}
-              mode={mode}
-              meId={effectiveMeId}
-              handicapsOverride={rowHandicaps}
-            />
-          ) : null}
-
-          {activeTab === 'leaderboard' ? (
-            ranked.length === 0 ? (
-              <Text style={s.empty}>No scores recorded for this round.</Text>
-            ) : (
-              <RoundScoreboard
+            <>
+              <RoundLeaderboard entries={ranked} round={round} live={live} />
+              <ScorecardTable
                 round={round}
-                players={players}
-                meId={myPlayerId}
-                ranked
-                teeLabels={round.playerTees}
-                showHoleBadges={live}
+                players={rowPlayers}
+                scores={round.scores ?? {}}
+                onSetScore={() => {}}
+                editable={() => false}
+                mode={mode}
+                meId={effectiveMeId}
+                handicapsOverride={rowHandicaps}
+                showTotalsCard={false}
+                highlightCurrentHole={live}
               />
-            )
+            </>
           ) : null}
 
           {activeTab === 'photos' ? (
