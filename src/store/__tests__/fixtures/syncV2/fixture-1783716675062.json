@@ -1,0 +1,411 @@
+{
+  "id": "1783716675062",
+  "kind": "game",
+  "meId": "06789d03-92d6-4779-959a-da4a50ef7fe4",
+  "name": "Golf Torrequebrada · 10 Jul",
+  "_meta": {
+    "rounds.r0.scores.06789d03-92d6-4779-959a-da4a50ef7fe4.h1": 1783716730260,
+    "rounds.r0.scores.06789d03-92d6-4779-959a-da4a50ef7fe4.h2": 1783717116509,
+    "rounds.r0.scores.06789d03-92d6-4779-959a-da4a50ef7fe4.h3": 1783716730381,
+    "rounds.r0.scores.06789d03-92d6-4779-959a-da4a50ef7fe4.h4": 1783716730426,
+    "rounds.r0.scores.06789d03-92d6-4779-959a-da4a50ef7fe4.h5": 1783716730472,
+    "rounds.r0.scores.06789d03-92d6-4779-959a-da4a50ef7fe4.h6": 1783717924164,
+    "rounds.r0.scores.06789d03-92d6-4779-959a-da4a50ef7fe4.h7": 1783716730542,
+    "rounds.r0.scores.06789d03-92d6-4779-959a-da4a50ef7fe4.h8": 1783716730570,
+    "rounds.r0.scores.06789d03-92d6-4779-959a-da4a50ef7fe4.h9": 1783716730598,
+    "rounds.r0.scores.111637f2-e14e-438c-8357-69b48f09962a.h1": 1783716730625,
+    "rounds.r0.scores.111637f2-e14e-438c-8357-69b48f09962a.h2": 1783716730652,
+    "rounds.r0.scores.111637f2-e14e-438c-8357-69b48f09962a.h3": 1783716730679,
+    "rounds.r0.scores.111637f2-e14e-438c-8357-69b48f09962a.h4": 1783717116511,
+    "rounds.r0.scores.111637f2-e14e-438c-8357-69b48f09962a.h5": 1783716730731,
+    "rounds.r0.scores.111637f2-e14e-438c-8357-69b48f09962a.h6": 1783716730758,
+    "rounds.r0.scores.111637f2-e14e-438c-8357-69b48f09962a.h7": 1783716730783,
+    "rounds.r0.scores.111637f2-e14e-438c-8357-69b48f09962a.h8": 1783716730816,
+    "rounds.r0.scores.111637f2-e14e-438c-8357-69b48f09962a.h9": 1783716730841,
+    "rounds.r0.scores.be49bc4e-5133-4147-94fd-0bcc137c020e.h1": 1783716731175,
+    "rounds.r0.scores.be49bc4e-5133-4147-94fd-0bcc137c020e.h2": 1783716731175,
+    "rounds.r0.scores.be49bc4e-5133-4147-94fd-0bcc137c020e.h3": 1783716731176,
+    "rounds.r0.scores.be49bc4e-5133-4147-94fd-0bcc137c020e.h4": 1783717116511,
+    "rounds.r0.scores.be49bc4e-5133-4147-94fd-0bcc137c020e.h5": 1783716731200,
+    "rounds.r0.scores.be49bc4e-5133-4147-94fd-0bcc137c020e.h6": 1783716731226,
+    "rounds.r0.scores.be49bc4e-5133-4147-94fd-0bcc137c020e.h7": 1783716731271,
+    "rounds.r0.scores.be49bc4e-5133-4147-94fd-0bcc137c020e.h8": 1783716731316,
+    "rounds.r0.scores.be49bc4e-5133-4147-94fd-0bcc137c020e.h9": 1783716731371,
+    "rounds.r0.scores.d8bd9768-0ba8-481e-88df-f42034cef0ac.h1": 1783716730866,
+    "rounds.r0.scores.d8bd9768-0ba8-481e-88df-f42034cef0ac.h2": 1783716730891,
+    "rounds.r0.scores.d8bd9768-0ba8-481e-88df-f42034cef0ac.h3": 1783716730917,
+    "rounds.r0.scores.d8bd9768-0ba8-481e-88df-f42034cef0ac.h4": 1783716730943,
+    "rounds.r0.scores.d8bd9768-0ba8-481e-88df-f42034cef0ac.h5": 1783717901133,
+    "rounds.r0.scores.d8bd9768-0ba8-481e-88df-f42034cef0ac.h6": 1783716731175,
+    "rounds.r0.scores.d8bd9768-0ba8-481e-88df-f42034cef0ac.h7": 1783716731175,
+    "rounds.r0.scores.d8bd9768-0ba8-481e-88df-f42034cef0ac.h8": 1783716731175,
+    "rounds.r0.scores.d8bd9768-0ba8-481e-88df-f42034cef0ac.h9": 1783716731175,
+    "rounds.r0.scores.06789d03-92d6-4779-959a-da4a50ef7fe4.h10": 1783716731431,
+    "rounds.r0.scores.06789d03-92d6-4779-959a-da4a50ef7fe4.h11": 1783716731460,
+    "rounds.r0.scores.06789d03-92d6-4779-959a-da4a50ef7fe4.h12": 1783716731487,
+    "rounds.r0.scores.06789d03-92d6-4779-959a-da4a50ef7fe4.h13": 1783716731514,
+    "rounds.r0.scores.06789d03-92d6-4779-959a-da4a50ef7fe4.h14": 1783716731543,
+    "rounds.r0.scores.06789d03-92d6-4779-959a-da4a50ef7fe4.h15": 1783716731571,
+    "rounds.r0.scores.06789d03-92d6-4779-959a-da4a50ef7fe4.h16": 1783716731599,
+    "rounds.r0.scores.06789d03-92d6-4779-959a-da4a50ef7fe4.h17": 1783716731626,
+    "rounds.r0.scores.06789d03-92d6-4779-959a-da4a50ef7fe4.h18": 1783716731653,
+    "rounds.r0.scores.111637f2-e14e-438c-8357-69b48f09962a.h10": 1783716731680,
+    "rounds.r0.scores.111637f2-e14e-438c-8357-69b48f09962a.h11": 1783716731707,
+    "rounds.r0.scores.111637f2-e14e-438c-8357-69b48f09962a.h12": 1783716731734,
+    "rounds.r0.scores.111637f2-e14e-438c-8357-69b48f09962a.h13": 1783716731761,
+    "rounds.r0.scores.111637f2-e14e-438c-8357-69b48f09962a.h14": 1783716731788,
+    "rounds.r0.scores.111637f2-e14e-438c-8357-69b48f09962a.h15": 1783716731814,
+    "rounds.r0.scores.111637f2-e14e-438c-8357-69b48f09962a.h16": 1783716731841,
+    "rounds.r0.scores.111637f2-e14e-438c-8357-69b48f09962a.h17": 1783716731869,
+    "rounds.r0.scores.111637f2-e14e-438c-8357-69b48f09962a.h18": 1783716731896,
+    "rounds.r0.scores.be49bc4e-5133-4147-94fd-0bcc137c020e.h10": 1783716732168,
+    "rounds.r0.scores.be49bc4e-5133-4147-94fd-0bcc137c020e.h11": 1783716732193,
+    "rounds.r0.scores.be49bc4e-5133-4147-94fd-0bcc137c020e.h12": 1783716732220,
+    "rounds.r0.scores.be49bc4e-5133-4147-94fd-0bcc137c020e.h13": 1783716732264,
+    "rounds.r0.scores.be49bc4e-5133-4147-94fd-0bcc137c020e.h14": 1783716732310,
+    "rounds.r0.scores.be49bc4e-5133-4147-94fd-0bcc137c020e.h15": 1783716732356,
+    "rounds.r0.scores.be49bc4e-5133-4147-94fd-0bcc137c020e.h16": 1783717116510,
+    "rounds.r0.scores.be49bc4e-5133-4147-94fd-0bcc137c020e.h17": 1783717116511,
+    "rounds.r0.scores.be49bc4e-5133-4147-94fd-0bcc137c020e.h18": 1783717116511,
+    "rounds.r0.scores.d8bd9768-0ba8-481e-88df-f42034cef0ac.h10": 1783716731929,
+    "rounds.r0.scores.d8bd9768-0ba8-481e-88df-f42034cef0ac.h11": 1783716731955,
+    "rounds.r0.scores.d8bd9768-0ba8-481e-88df-f42034cef0ac.h12": 1783716731980,
+    "rounds.r0.scores.d8bd9768-0ba8-481e-88df-f42034cef0ac.h13": 1783716732008,
+    "rounds.r0.scores.d8bd9768-0ba8-481e-88df-f42034cef0ac.h14": 1783716732036,
+    "rounds.r0.scores.d8bd9768-0ba8-481e-88df-f42034cef0ac.h15": 1783716732062,
+    "rounds.r0.scores.d8bd9768-0ba8-481e-88df-f42034cef0ac.h16": 1783716732089,
+    "rounds.r0.scores.d8bd9768-0ba8-481e-88df-f42034cef0ac.h17": 1783716732115,
+    "rounds.r0.scores.d8bd9768-0ba8-481e-88df-f42034cef0ac.h18": 1783716732141
+  },
+  "rounds": [
+    {
+      "id": "r0",
+      "tees": [
+        {
+          "id": "d2d8b615-ed50-4e2f-bcc4-c70ecf462f35",
+          "label": "Blancas",
+          "slope": 139,
+          "rating": 71.2,
+          "sortOrder": 0,
+          "slopeWomen": 141,
+          "ratingWomen": 77.5
+        },
+        {
+          "id": "aeaaa84c-5f22-4a04-bcfa-7c938b1dd27d",
+          "label": "Amarillas",
+          "slope": 139,
+          "rating": 70.9,
+          "sortOrder": 2,
+          "slopeWomen": 140,
+          "ratingWomen": 77.1
+        },
+        {
+          "id": "2cf85782-1514-4916-b865-89c79c8ae638",
+          "label": "Azules",
+          "slope": 130,
+          "rating": 67.3,
+          "sortOrder": 4,
+          "slopeWomen": 131,
+          "ratingWomen": 72.3
+        },
+        {
+          "id": "a19e51e3-85aa-493f-b80c-059829f35d29",
+          "label": "Rojas",
+          "slope": 127,
+          "rating": 66.5,
+          "sortOrder": 6,
+          "slopeWomen": 129,
+          "ratingWomen": 71.3
+        }
+      ],
+      "holes": [
+        {
+          "par": 5,
+          "number": 1,
+          "strokeIndex": 8
+        },
+        {
+          "par": 4,
+          "number": 2,
+          "strokeIndex": 6
+        },
+        {
+          "par": 3,
+          "number": 3,
+          "strokeIndex": 18
+        },
+        {
+          "par": 4,
+          "number": 4,
+          "strokeIndex": 10
+        },
+        {
+          "par": 4,
+          "number": 5,
+          "strokeIndex": 14
+        },
+        {
+          "par": 5,
+          "number": 6,
+          "strokeIndex": 4
+        },
+        {
+          "par": 4,
+          "number": 7,
+          "strokeIndex": 12
+        },
+        {
+          "par": 4,
+          "number": 8,
+          "strokeIndex": 2
+        },
+        {
+          "par": 3,
+          "number": 9,
+          "strokeIndex": 16
+        },
+        {
+          "par": 4,
+          "number": 10,
+          "strokeIndex": 3
+        },
+        {
+          "par": 3,
+          "number": 11,
+          "strokeIndex": 15
+        },
+        {
+          "par": 5,
+          "number": 12,
+          "strokeIndex": 5
+        },
+        {
+          "par": 3,
+          "number": 13,
+          "strokeIndex": 17
+        },
+        {
+          "par": 5,
+          "number": 14,
+          "strokeIndex": 7
+        },
+        {
+          "par": 4,
+          "number": 15,
+          "strokeIndex": 11
+        },
+        {
+          "par": 4,
+          "number": 16,
+          "strokeIndex": 1
+        },
+        {
+          "par": 4,
+          "number": 17,
+          "strokeIndex": 9
+        },
+        {
+          "par": 4,
+          "number": 18,
+          "strokeIndex": 13
+        }
+      ],
+      "notes": "",
+      "pairs": [
+        [
+          {
+            "id": "06789d03-92d6-4779-959a-da4a50ef7fe4",
+            "name": "qa-gridview-0710",
+            "gender": null,
+            "user_id": "b3f9e14b-4691-45cf-8cd4-986d43c0f474",
+            "handicap": 0,
+            "avatar_url": null
+          }
+        ],
+        [
+          {
+            "id": "111637f2-e14e-438c-8357-69b48f09962a",
+            "name": "Marcos",
+            "gender": "male",
+            "user_id": null,
+            "handicap": 19,
+            "avatar_url": null
+          }
+        ],
+        [
+          {
+            "id": "d8bd9768-0ba8-481e-88df-f42034cef0ac",
+            "name": "Noe",
+            "gender": "male",
+            "user_id": null,
+            "handicap": 20,
+            "avatar_url": null
+          }
+        ],
+        [
+          {
+            "id": "be49bc4e-5133-4147-94fd-0bcc137c020e",
+            "name": "Alex",
+            "gender": "male",
+            "user_id": null,
+            "handicap": 12,
+            "avatar_url": null
+          }
+        ]
+      ],
+      "scores": {
+        "06789d03-92d6-4779-959a-da4a50ef7fe4": {
+          "1": 3,
+          "3": 5,
+          "4": 6,
+          "5": 7,
+          "6": 2,
+          "7": 4,
+          "8": 5,
+          "9": 6,
+          "10": 4,
+          "11": 5,
+          "12": 6,
+          "13": 7,
+          "14": 3,
+          "15": 4,
+          "16": 5,
+          "17": 6,
+          "18": 7
+        },
+        "111637f2-e14e-438c-8357-69b48f09962a": {
+          "1": 5,
+          "2": 6,
+          "3": 7,
+          "5": 4,
+          "6": 5,
+          "7": 6,
+          "8": 7,
+          "9": 3,
+          "10": 6,
+          "11": 7,
+          "12": 3,
+          "13": 4,
+          "14": 5,
+          "15": 6,
+          "16": 7,
+          "17": 3,
+          "18": 4
+        },
+        "be49bc4e-5133-4147-94fd-0bcc137c020e": {
+          "1": 4,
+          "2": 5,
+          "3": 6,
+          "5": 3,
+          "6": 4,
+          "7": 5,
+          "8": 6,
+          "9": 7,
+          "10": 5,
+          "11": 6,
+          "12": 7,
+          "13": 3,
+          "14": 4,
+          "15": 5,
+          "16": 6,
+          "17": 7,
+          "18": 3
+        },
+        "d8bd9768-0ba8-481e-88df-f42034cef0ac": {
+          "1": 7,
+          "2": 3,
+          "3": 4,
+          "4": 5,
+          "5": 7,
+          "6": 7,
+          "7": 3,
+          "8": 4,
+          "9": 5,
+          "10": 3,
+          "11": 4,
+          "12": 5,
+          "13": 6,
+          "14": 7,
+          "15": 3,
+          "16": 4,
+          "17": 5,
+          "18": 6
+        }
+      },
+      "courseId": "e6b357db-c8ef-4a5f-b51d-699b1b2dcfd4",
+      "courseName": "Golf Torrequebrada",
+      "playerTees": {
+        "06789d03-92d6-4779-959a-da4a50ef7fe4": {
+          "label": "Azules",
+          "slope": 130,
+          "rating": 67.3
+        },
+        "111637f2-e14e-438c-8357-69b48f09962a": {
+          "label": "Azules",
+          "slope": 130,
+          "rating": 67.3
+        },
+        "be49bc4e-5133-4147-94fd-0bcc137c020e": {
+          "label": "Azules",
+          "slope": 130,
+          "rating": 67.3
+        },
+        "d8bd9768-0ba8-481e-88df-f42034cef0ac": {
+          "label": "Azules",
+          "slope": 130,
+          "rating": 67.3
+        }
+      },
+      "manualHandicaps": {},
+      "playerHandicaps": {
+        "06789d03-92d6-4779-959a-da4a50ef7fe4": -5,
+        "111637f2-e14e-438c-8357-69b48f09962a": 17,
+        "be49bc4e-5133-4147-94fd-0bcc137c020e": 9,
+        "d8bd9768-0ba8-481e-88df-f42034cef0ac": 18
+      }
+    }
+  ],
+  "players": [
+    {
+      "id": "06789d03-92d6-4779-959a-da4a50ef7fe4",
+      "name": "qa-gridview-0710",
+      "gender": null,
+      "user_id": "b3f9e14b-4691-45cf-8cd4-986d43c0f474",
+      "handicap": 0,
+      "avatar_url": null
+    },
+    {
+      "id": "111637f2-e14e-438c-8357-69b48f09962a",
+      "name": "Marcos",
+      "gender": "male",
+      "user_id": null,
+      "handicap": 19,
+      "avatar_url": null
+    },
+    {
+      "id": "d8bd9768-0ba8-481e-88df-f42034cef0ac",
+      "name": "Noe",
+      "gender": "male",
+      "user_id": null,
+      "handicap": 20,
+      "avatar_url": null
+    },
+    {
+      "id": "be49bc4e-5133-4147-94fd-0bcc137c020e",
+      "name": "Alex",
+      "gender": "male",
+      "user_id": null,
+      "handicap": 12,
+      "avatar_url": null
+    }
+  ],
+  "settings": {
+    "fixedTeams": false,
+    "manualTeams": false,
+    "scoringMode": "individual",
+    "bestBallValue": 1,
+    "worstBallValue": 1
+  },
+  "createdAt": "2026-07-10T20:51:15.062Z",
+  "currentRound": 0
+}

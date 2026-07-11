@@ -1,0 +1,2435 @@
+{
+  "id": "1783584580051",
+  "kind": "tournament",
+  "meId": "3f7ed0af-81e7-4b5e-94f8-bc15d0b45b4d",
+  "name": "Weekend Golf",
+  "_meta": {
+    "rounds.r0.pairs": 1783725411439,
+    "rounds.r1.pairs": 1783792430731,
+    "rounds.r2.pairs": 1783792430805,
+    "rounds.r1.scoringMode": 1783724025246,
+    "rounds.r2.scoringMode": 1783725411439,
+    "rounds.r0.scores.3f7ed0af-81e7-4b5e-94f8-bc15d0b45b4d.h1": 1783691331713,
+    "rounds.r0.scores.3f7ed0af-81e7-4b5e-94f8-bc15d0b45b4d.h2": 1783692195790,
+    "rounds.r0.scores.3f7ed0af-81e7-4b5e-94f8-bc15d0b45b4d.h3": 1783692887849,
+    "rounds.r0.scores.3f7ed0af-81e7-4b5e-94f8-bc15d0b45b4d.h4": 1783693895139,
+    "rounds.r0.scores.3f7ed0af-81e7-4b5e-94f8-bc15d0b45b4d.h5": 1783694865293,
+    "rounds.r0.scores.3f7ed0af-81e7-4b5e-94f8-bc15d0b45b4d.h6": 1783696238059,
+    "rounds.r0.scores.3f7ed0af-81e7-4b5e-94f8-bc15d0b45b4d.h7": 1783697362190,
+    "rounds.r0.scores.3f7ed0af-81e7-4b5e-94f8-bc15d0b45b4d.h8": 1783698361613,
+    "rounds.r0.scores.3f7ed0af-81e7-4b5e-94f8-bc15d0b45b4d.h9": 1783699314370,
+    "rounds.r0.scores.95c89948-dc93-4ef1-a7ad-dbb638af98d9.h1": 1783691224002,
+    "rounds.r0.scores.95c89948-dc93-4ef1-a7ad-dbb638af98d9.h2": 1783692231213,
+    "rounds.r0.scores.95c89948-dc93-4ef1-a7ad-dbb638af98d9.h3": 1783692841053,
+    "rounds.r0.scores.95c89948-dc93-4ef1-a7ad-dbb638af98d9.h4": 1783693818626,
+    "rounds.r0.scores.95c89948-dc93-4ef1-a7ad-dbb638af98d9.h5": 1783694821469,
+    "rounds.r0.scores.95c89948-dc93-4ef1-a7ad-dbb638af98d9.h6": 1783696172217,
+    "rounds.r0.scores.95c89948-dc93-4ef1-a7ad-dbb638af98d9.h7": 1783697208119,
+    "rounds.r0.scores.95c89948-dc93-4ef1-a7ad-dbb638af98d9.h8": 1783698308454,
+    "rounds.r0.scores.95c89948-dc93-4ef1-a7ad-dbb638af98d9.h9": 1783699130476,
+    "rounds.r0.scores.e6e97499-d506-4030-9183-5c96861258cf.h1": 1783691345399,
+    "rounds.r0.scores.e6e97499-d506-4030-9183-5c96861258cf.h2": 1783692291606,
+    "rounds.r0.scores.e6e97499-d506-4030-9183-5c96861258cf.h3": 1783692872674,
+    "rounds.r0.scores.e6e97499-d506-4030-9183-5c96861258cf.h4": 1783693805204,
+    "rounds.r0.scores.e6e97499-d506-4030-9183-5c96861258cf.h5": 1783694841588,
+    "rounds.r0.scores.e6e97499-d506-4030-9183-5c96861258cf.h6": 1783696169992,
+    "rounds.r0.scores.e6e97499-d506-4030-9183-5c96861258cf.h7": 1783697335186,
+    "rounds.r0.scores.e6e97499-d506-4030-9183-5c96861258cf.h8": 1783698320418,
+    "rounds.r0.scores.e6e97499-d506-4030-9183-5c96861258cf.h9": 1783699169356,
+    "rounds.r0.scores.ec134d36-53ce-458f-b34e-f11b13e53616.h1": 1783691256450,
+    "rounds.r0.scores.ec134d36-53ce-458f-b34e-f11b13e53616.h2": 1783692249432,
+    "rounds.r0.scores.ec134d36-53ce-458f-b34e-f11b13e53616.h3": 1783692849702,
+    "rounds.r0.scores.ec134d36-53ce-458f-b34e-f11b13e53616.h4": 1783693853158,
+    "rounds.r0.scores.ec134d36-53ce-458f-b34e-f11b13e53616.h5": 1783694868649,
+    "rounds.r0.scores.ec134d36-53ce-458f-b34e-f11b13e53616.h6": 1783696227117,
+    "rounds.r0.scores.ec134d36-53ce-458f-b34e-f11b13e53616.h7": 1783697291193,
+    "rounds.r0.scores.ec134d36-53ce-458f-b34e-f11b13e53616.h8": 1783699304978,
+    "rounds.r0.scores.ec134d36-53ce-458f-b34e-f11b13e53616.h9": 1783699148558,
+    "rounds.r1.scores.3f7ed0af-81e7-4b5e-94f8-bc15d0b45b4d.h1": 1783775290431,
+    "rounds.r1.scores.3f7ed0af-81e7-4b5e-94f8-bc15d0b45b4d.h2": 1783775821152,
+    "rounds.r1.scores.3f7ed0af-81e7-4b5e-94f8-bc15d0b45b4d.h3": 1783776909767,
+    "rounds.r1.scores.3f7ed0af-81e7-4b5e-94f8-bc15d0b45b4d.h4": 1783777991858,
+    "rounds.r1.scores.3f7ed0af-81e7-4b5e-94f8-bc15d0b45b4d.h5": 1783779139006,
+    "rounds.r1.scores.3f7ed0af-81e7-4b5e-94f8-bc15d0b45b4d.h6": 1783779890247,
+    "rounds.r1.scores.3f7ed0af-81e7-4b5e-94f8-bc15d0b45b4d.h7": 1783781319329,
+    "rounds.r1.scores.3f7ed0af-81e7-4b5e-94f8-bc15d0b45b4d.h8": 1783781274967,
+    "rounds.r1.scores.3f7ed0af-81e7-4b5e-94f8-bc15d0b45b4d.h9": 1783782146986,
+    "rounds.r1.scores.95c89948-dc93-4ef1-a7ad-dbb638af98d9.h1": 1783806996490,
+    "rounds.r1.scores.95c89948-dc93-4ef1-a7ad-dbb638af98d9.h2": 1783807027236,
+    "rounds.r1.scores.95c89948-dc93-4ef1-a7ad-dbb638af98d9.h3": 1783776896490,
+    "rounds.r1.scores.95c89948-dc93-4ef1-a7ad-dbb638af98d9.h4": 1783777872049,
+    "rounds.r1.scores.95c89948-dc93-4ef1-a7ad-dbb638af98d9.h5": 1783779126757,
+    "rounds.r1.scores.95c89948-dc93-4ef1-a7ad-dbb638af98d9.h6": 1783807032877,
+    "rounds.r1.scores.95c89948-dc93-4ef1-a7ad-dbb638af98d9.h7": 1783780595201,
+    "rounds.r1.scores.95c89948-dc93-4ef1-a7ad-dbb638af98d9.h8": 1783781261749,
+    "rounds.r1.scores.95c89948-dc93-4ef1-a7ad-dbb638af98d9.h9": 1783782102999,
+    "rounds.r1.scores.e6e97499-d506-4030-9183-5c96861258cf.h1": 1783807037297,
+    "rounds.r1.scores.e6e97499-d506-4030-9183-5c96861258cf.h2": 1783775796453,
+    "rounds.r1.scores.e6e97499-d506-4030-9183-5c96861258cf.h3": 1783776904925,
+    "rounds.r1.scores.e6e97499-d506-4030-9183-5c96861258cf.h4": 1783806629608,
+    "rounds.r1.scores.e6e97499-d506-4030-9183-5c96861258cf.h5": 1783779160669,
+    "rounds.r1.scores.e6e97499-d506-4030-9183-5c96861258cf.h6": 1783779880334,
+    "rounds.r1.scores.e6e97499-d506-4030-9183-5c96861258cf.h7": 1783780612835,
+    "rounds.r1.scores.e6e97499-d506-4030-9183-5c96861258cf.h8": 1783781279018,
+    "rounds.r1.scores.e6e97499-d506-4030-9183-5c96861258cf.h9": 1783782162594,
+    "rounds.r1.scores.ec134d36-53ce-458f-b34e-f11b13e53616.h1": 1783807009788,
+    "rounds.r1.scores.ec134d36-53ce-458f-b34e-f11b13e53616.h2": 1783775809123,
+    "rounds.r1.scores.ec134d36-53ce-458f-b34e-f11b13e53616.h3": 1783776907799,
+    "rounds.r1.scores.ec134d36-53ce-458f-b34e-f11b13e53616.h4": 1783777902442,
+    "rounds.r1.scores.ec134d36-53ce-458f-b34e-f11b13e53616.h5": 1783779150676,
+    "rounds.r1.scores.ec134d36-53ce-458f-b34e-f11b13e53616.h6": 1783779874822,
+    "rounds.r1.scores.ec134d36-53ce-458f-b34e-f11b13e53616.h7": 1783780607895,
+    "rounds.r1.scores.ec134d36-53ce-458f-b34e-f11b13e53616.h8": 1783781271868,
+    "rounds.r1.scores.ec134d36-53ce-458f-b34e-f11b13e53616.h9": 1783782112317,
+    "rounds.r0.scores.3f7ed0af-81e7-4b5e-94f8-bc15d0b45b4d.h10": 1783700412279,
+    "rounds.r0.scores.3f7ed0af-81e7-4b5e-94f8-bc15d0b45b4d.h11": 1783701237619,
+    "rounds.r0.scores.3f7ed0af-81e7-4b5e-94f8-bc15d0b45b4d.h12": 1783702398891,
+    "rounds.r0.scores.3f7ed0af-81e7-4b5e-94f8-bc15d0b45b4d.h13": 1783703104677,
+    "rounds.r0.scores.3f7ed0af-81e7-4b5e-94f8-bc15d0b45b4d.h14": 1783719157273,
+    "rounds.r0.scores.3f7ed0af-81e7-4b5e-94f8-bc15d0b45b4d.h15": 1783705171890,
+    "rounds.r0.scores.3f7ed0af-81e7-4b5e-94f8-bc15d0b45b4d.h16": 1783707613205,
+    "rounds.r0.scores.3f7ed0af-81e7-4b5e-94f8-bc15d0b45b4d.h17": 1783707499218,
+    "rounds.r0.scores.3f7ed0af-81e7-4b5e-94f8-bc15d0b45b4d.h18": 1783708597152,
+    "rounds.r0.scores.95c89948-dc93-4ef1-a7ad-dbb638af98d9.h10": 1783700431339,
+    "rounds.r0.scores.95c89948-dc93-4ef1-a7ad-dbb638af98d9.h11": 1783701180187,
+    "rounds.r0.scores.95c89948-dc93-4ef1-a7ad-dbb638af98d9.h12": 1783702457226,
+    "rounds.r0.scores.95c89948-dc93-4ef1-a7ad-dbb638af98d9.h13": 1783703044775,
+    "rounds.r0.scores.95c89948-dc93-4ef1-a7ad-dbb638af98d9.h14": 1783704015969,
+    "rounds.r0.scores.95c89948-dc93-4ef1-a7ad-dbb638af98d9.h15": 1783705187964,
+    "rounds.r0.scores.95c89948-dc93-4ef1-a7ad-dbb638af98d9.h16": 1783706432125,
+    "rounds.r0.scores.95c89948-dc93-4ef1-a7ad-dbb638af98d9.h17": 1783707472059,
+    "rounds.r0.scores.95c89948-dc93-4ef1-a7ad-dbb638af98d9.h18": 1783708511184,
+    "rounds.r0.scores.e6e97499-d506-4030-9183-5c96861258cf.h10": 1783700409459,
+    "rounds.r0.scores.e6e97499-d506-4030-9183-5c96861258cf.h11": 1783701401463,
+    "rounds.r0.scores.e6e97499-d506-4030-9183-5c96861258cf.h12": 1783702486234,
+    "rounds.r0.scores.e6e97499-d506-4030-9183-5c96861258cf.h13": 1783703089705,
+    "rounds.r0.scores.e6e97499-d506-4030-9183-5c96861258cf.h14": 1783704012473,
+    "rounds.r0.scores.e6e97499-d506-4030-9183-5c96861258cf.h15": 1783705150835,
+    "rounds.r0.scores.e6e97499-d506-4030-9183-5c96861258cf.h16": 1783706473010,
+    "rounds.r0.scores.e6e97499-d506-4030-9183-5c96861258cf.h17": 1783707497743,
+    "rounds.r0.scores.e6e97499-d506-4030-9183-5c96861258cf.h18": 1783708557620,
+    "rounds.r0.scores.ec134d36-53ce-458f-b34e-f11b13e53616.h10": 1783700523659,
+    "rounds.r0.scores.ec134d36-53ce-458f-b34e-f11b13e53616.h11": 1783701211008,
+    "rounds.r0.scores.ec134d36-53ce-458f-b34e-f11b13e53616.h12": 1783702478085,
+    "rounds.r0.scores.ec134d36-53ce-458f-b34e-f11b13e53616.h13": 1783703055188,
+    "rounds.r0.scores.ec134d36-53ce-458f-b34e-f11b13e53616.h14": 1783704046893,
+    "rounds.r0.scores.ec134d36-53ce-458f-b34e-f11b13e53616.h15": 1783708614737,
+    "rounds.r0.scores.ec134d36-53ce-458f-b34e-f11b13e53616.h16": 1783706451842,
+    "rounds.r0.scores.ec134d36-53ce-458f-b34e-f11b13e53616.h17": 1783707596592,
+    "rounds.r0.scores.ec134d36-53ce-458f-b34e-f11b13e53616.h18": 1783708529436,
+    "rounds.r1.scores.3f7ed0af-81e7-4b5e-94f8-bc15d0b45b4d.h10": 1783783065335,
+    "rounds.r1.scores.3f7ed0af-81e7-4b5e-94f8-bc15d0b45b4d.h11": 1783783762152,
+    "rounds.r1.scores.3f7ed0af-81e7-4b5e-94f8-bc15d0b45b4d.h12": 1783784803502,
+    "rounds.r1.scores.3f7ed0af-81e7-4b5e-94f8-bc15d0b45b4d.h13": 1783785970312,
+    "rounds.r1.scores.3f7ed0af-81e7-4b5e-94f8-bc15d0b45b4d.h14": 1783786766157,
+    "rounds.r1.scores.3f7ed0af-81e7-4b5e-94f8-bc15d0b45b4d.h15": 1783787963931,
+    "rounds.r1.scores.3f7ed0af-81e7-4b5e-94f8-bc15d0b45b4d.h16": 1783788617324,
+    "rounds.r1.scores.3f7ed0af-81e7-4b5e-94f8-bc15d0b45b4d.h17": 1783789419841,
+    "rounds.r1.scores.3f7ed0af-81e7-4b5e-94f8-bc15d0b45b4d.h18": 1783790403154,
+    "rounds.r1.scores.95c89948-dc93-4ef1-a7ad-dbb638af98d9.h10": 1783782967149,
+    "rounds.r1.scores.95c89948-dc93-4ef1-a7ad-dbb638af98d9.h11": 1783783750546,
+    "rounds.r1.scores.95c89948-dc93-4ef1-a7ad-dbb638af98d9.h12": 1783784749663,
+    "rounds.r1.scores.95c89948-dc93-4ef1-a7ad-dbb638af98d9.h13": 1783785908285,
+    "rounds.r1.scores.95c89948-dc93-4ef1-a7ad-dbb638af98d9.h14": 1783786730744,
+    "rounds.r1.scores.95c89948-dc93-4ef1-a7ad-dbb638af98d9.h15": 1783787950607,
+    "rounds.r1.scores.95c89948-dc93-4ef1-a7ad-dbb638af98d9.h16": 1783807042153,
+    "rounds.r1.scores.95c89948-dc93-4ef1-a7ad-dbb638af98d9.h17": 1783789361676,
+    "rounds.r1.scores.95c89948-dc93-4ef1-a7ad-dbb638af98d9.h18": 1783790372571,
+    "rounds.r1.scores.e6e97499-d506-4030-9183-5c96861258cf.h10": 1783783029415,
+    "rounds.r1.scores.e6e97499-d506-4030-9183-5c96861258cf.h11": 1783783732953,
+    "rounds.r1.scores.e6e97499-d506-4030-9183-5c96861258cf.h12": 1783784771436,
+    "rounds.r1.scores.e6e97499-d506-4030-9183-5c96861258cf.h13": 1783785933656,
+    "rounds.r1.scores.e6e97499-d506-4030-9183-5c96861258cf.h14": 1783786760636,
+    "rounds.r1.scores.e6e97499-d506-4030-9183-5c96861258cf.h15": 1783787957437,
+    "rounds.r1.scores.e6e97499-d506-4030-9183-5c96861258cf.h16": 1783788587025,
+    "rounds.r1.scores.e6e97499-d506-4030-9183-5c96861258cf.h17": 1783789408782,
+    "rounds.r1.scores.e6e97499-d506-4030-9183-5c96861258cf.h18": 1783789492770,
+    "rounds.r1.scores.ec134d36-53ce-458f-b34e-f11b13e53616.h10": 1783782990128,
+    "rounds.r1.scores.ec134d36-53ce-458f-b34e-f11b13e53616.h11": 1783783775428,
+    "rounds.r1.scores.ec134d36-53ce-458f-b34e-f11b13e53616.h12": 1783784761755,
+    "rounds.r1.scores.ec134d36-53ce-458f-b34e-f11b13e53616.h13": 1783785921807,
+    "rounds.r1.scores.ec134d36-53ce-458f-b34e-f11b13e53616.h14": 1783786742944,
+    "rounds.r1.scores.ec134d36-53ce-458f-b34e-f11b13e53616.h15": 1783787953500,
+    "rounds.r1.scores.ec134d36-53ce-458f-b34e-f11b13e53616.h16": 1783788541174,
+    "rounds.r1.scores.ec134d36-53ce-458f-b34e-f11b13e53616.h17": 1783789375626,
+    "rounds.r1.scores.ec134d36-53ce-458f-b34e-f11b13e53616.h18": 1783790415386,
+    "rounds.r1.playerIndexes.3f7ed0af-81e7-4b5e-94f8-bc15d0b45b4d": 1783726684202,
+    "rounds.r1.playerIndexes.95c89948-dc93-4ef1-a7ad-dbb638af98d9": 1783726684637,
+    "rounds.r1.playerIndexes.e6e97499-d506-4030-9183-5c96861258cf": 1783727704084,
+    "rounds.r1.playerIndexes.ec134d36-53ce-458f-b34e-f11b13e53616": 1783726694235,
+    "rounds.r2.playerIndexes.3f7ed0af-81e7-4b5e-94f8-bc15d0b45b4d": 1783727572662,
+    "rounds.r2.playerIndexes.95c89948-dc93-4ef1-a7ad-dbb638af98d9": 1783727572655,
+    "rounds.r2.playerIndexes.e6e97499-d506-4030-9183-5c96861258cf": 1783727587298,
+    "rounds.r2.playerIndexes.ec134d36-53ce-458f-b34e-f11b13e53616": 1783727572659,
+    "rounds.r0.shotDetails.3f7ed0af-81e7-4b5e-94f8-bc15d0b45b4d.h1": 1783691373393,
+    "rounds.r0.shotDetails.3f7ed0af-81e7-4b5e-94f8-bc15d0b45b4d.h2": 1783692225904,
+    "rounds.r0.shotDetails.3f7ed0af-81e7-4b5e-94f8-bc15d0b45b4d.h3": 1783692898981,
+    "rounds.r0.shotDetails.3f7ed0af-81e7-4b5e-94f8-bc15d0b45b4d.h4": 1783693923490,
+    "rounds.r0.shotDetails.3f7ed0af-81e7-4b5e-94f8-bc15d0b45b4d.h5": 1783694925470,
+    "rounds.r0.shotDetails.3f7ed0af-81e7-4b5e-94f8-bc15d0b45b4d.h6": 1783696267411,
+    "rounds.r0.shotDetails.3f7ed0af-81e7-4b5e-94f8-bc15d0b45b4d.h7": 1783697418044,
+    "rounds.r0.shotDetails.3f7ed0af-81e7-4b5e-94f8-bc15d0b45b4d.h8": 1783698425357,
+    "rounds.r0.shotDetails.3f7ed0af-81e7-4b5e-94f8-bc15d0b45b4d.h9": 1783699277961,
+    "rounds.r0.shotDetails.95c89948-dc93-4ef1-a7ad-dbb638af98d9.h1": 1783691250556,
+    "rounds.r0.shotDetails.95c89948-dc93-4ef1-a7ad-dbb638af98d9.h2": 1783692241844,
+    "rounds.r0.shotDetails.95c89948-dc93-4ef1-a7ad-dbb638af98d9.h3": 1783692846478,
+    "rounds.r0.shotDetails.95c89948-dc93-4ef1-a7ad-dbb638af98d9.h4": 1783693829884,
+    "rounds.r0.shotDetails.95c89948-dc93-4ef1-a7ad-dbb638af98d9.h5": 1783694836308,
+    "rounds.r0.shotDetails.95c89948-dc93-4ef1-a7ad-dbb638af98d9.h6": 1783696224738,
+    "rounds.r0.shotDetails.95c89948-dc93-4ef1-a7ad-dbb638af98d9.h7": 1783697222748,
+    "rounds.r0.shotDetails.95c89948-dc93-4ef1-a7ad-dbb638af98d9.h8": 1783698318717,
+    "rounds.r0.shotDetails.95c89948-dc93-4ef1-a7ad-dbb638af98d9.h9": 1783699146626,
+    "rounds.r0.shotDetails.e6e97499-d506-4030-9183-5c96861258cf.h1": 1783691392601,
+    "rounds.r0.shotDetails.e6e97499-d506-4030-9183-5c96861258cf.h2": 1783692320673,
+    "rounds.r0.shotDetails.e6e97499-d506-4030-9183-5c96861258cf.h3": 1783692888591,
+    "rounds.r0.shotDetails.e6e97499-d506-4030-9183-5c96861258cf.h4": 1783693821603,
+    "rounds.r0.shotDetails.e6e97499-d506-4030-9183-5c96861258cf.h5": 1783694881018,
+    "rounds.r0.shotDetails.e6e97499-d506-4030-9183-5c96861258cf.h6": 1783696197558,
+    "rounds.r0.shotDetails.e6e97499-d506-4030-9183-5c96861258cf.h7": 1783697353477,
+    "rounds.r0.shotDetails.e6e97499-d506-4030-9183-5c96861258cf.h8": 1783698433520,
+    "rounds.r0.shotDetails.e6e97499-d506-4030-9183-5c96861258cf.h9": 1783699178361,
+    "rounds.r1.shotDetails.3f7ed0af-81e7-4b5e-94f8-bc15d0b45b4d.h1": 1783775354980,
+    "rounds.r1.shotDetails.3f7ed0af-81e7-4b5e-94f8-bc15d0b45b4d.h2": 1783775835089,
+    "rounds.r1.shotDetails.3f7ed0af-81e7-4b5e-94f8-bc15d0b45b4d.h3": 1783776957372,
+    "rounds.r1.shotDetails.3f7ed0af-81e7-4b5e-94f8-bc15d0b45b4d.h4": 1783778020125,
+    "rounds.r1.shotDetails.3f7ed0af-81e7-4b5e-94f8-bc15d0b45b4d.h5": 1783779262664,
+    "rounds.r1.shotDetails.3f7ed0af-81e7-4b5e-94f8-bc15d0b45b4d.h6": 1783779909560,
+    "rounds.r1.shotDetails.3f7ed0af-81e7-4b5e-94f8-bc15d0b45b4d.h7": 1783781371257,
+    "rounds.r1.shotDetails.3f7ed0af-81e7-4b5e-94f8-bc15d0b45b4d.h8": 1783781382107,
+    "rounds.r1.shotDetails.3f7ed0af-81e7-4b5e-94f8-bc15d0b45b4d.h9": 1783782286704,
+    "rounds.r1.shotDetails.95c89948-dc93-4ef1-a7ad-dbb638af98d9.h1": 1783775222625,
+    "rounds.r1.shotDetails.95c89948-dc93-4ef1-a7ad-dbb638af98d9.h2": 1783775844913,
+    "rounds.r1.shotDetails.95c89948-dc93-4ef1-a7ad-dbb638af98d9.h3": 1783776905959,
+    "rounds.r1.shotDetails.95c89948-dc93-4ef1-a7ad-dbb638af98d9.h4": 1783777899892,
+    "rounds.r1.shotDetails.95c89948-dc93-4ef1-a7ad-dbb638af98d9.h5": 1783779147245,
+    "rounds.r1.shotDetails.95c89948-dc93-4ef1-a7ad-dbb638af98d9.h6": 1783779872724,
+    "rounds.r1.shotDetails.95c89948-dc93-4ef1-a7ad-dbb638af98d9.h7": 1783780605218,
+    "rounds.r1.shotDetails.95c89948-dc93-4ef1-a7ad-dbb638af98d9.h8": 1783781270191,
+    "rounds.r1.shotDetails.95c89948-dc93-4ef1-a7ad-dbb638af98d9.h9": 1783782110649,
+    "rounds.r1.shotDetails.e6e97499-d506-4030-9183-5c96861258cf.h1": 1783775270621,
+    "rounds.r1.shotDetails.e6e97499-d506-4030-9183-5c96861258cf.h2": 1783775834469,
+    "rounds.r1.shotDetails.e6e97499-d506-4030-9183-5c96861258cf.h3": 1783776920938,
+    "rounds.r1.shotDetails.e6e97499-d506-4030-9183-5c96861258cf.h5": 1783779362039,
+    "rounds.r1.shotDetails.e6e97499-d506-4030-9183-5c96861258cf.h6": 1783780713095,
+    "rounds.r1.shotDetails.e6e97499-d506-4030-9183-5c96861258cf.h7": 1783780648346,
+    "rounds.r1.shotDetails.e6e97499-d506-4030-9183-5c96861258cf.h8": 1783781510563,
+    "rounds.r1.shotDetails.e6e97499-d506-4030-9183-5c96861258cf.h9": 1783782181414,
+    "rounds.r0.playerHandicaps.3f7ed0af-81e7-4b5e-94f8-bc15d0b45b4d": 1783584621676,
+    "rounds.r0.playerHandicaps.e6e97499-d506-4030-9183-5c96861258cf": 1783584623767,
+    "rounds.r0.playerHandicaps.ec134d36-53ce-458f-b34e-f11b13e53616": 1783584637239,
+    "rounds.r0.shotDetails.3f7ed0af-81e7-4b5e-94f8-bc15d0b45b4d.h10": 1783700444409,
+    "rounds.r0.shotDetails.3f7ed0af-81e7-4b5e-94f8-bc15d0b45b4d.h11": 1783701253335,
+    "rounds.r0.shotDetails.3f7ed0af-81e7-4b5e-94f8-bc15d0b45b4d.h12": 1783702422965,
+    "rounds.r0.shotDetails.3f7ed0af-81e7-4b5e-94f8-bc15d0b45b4d.h13": 1783703121490,
+    "rounds.r0.shotDetails.3f7ed0af-81e7-4b5e-94f8-bc15d0b45b4d.h14": 1783704107109,
+    "rounds.r0.shotDetails.3f7ed0af-81e7-4b5e-94f8-bc15d0b45b4d.h15": 1783705240956,
+    "rounds.r0.shotDetails.3f7ed0af-81e7-4b5e-94f8-bc15d0b45b4d.h16": 1783706532900,
+    "rounds.r0.shotDetails.3f7ed0af-81e7-4b5e-94f8-bc15d0b45b4d.h17": 1783707540813,
+    "rounds.r0.shotDetails.3f7ed0af-81e7-4b5e-94f8-bc15d0b45b4d.h18": 1783708618175,
+    "rounds.r0.shotDetails.95c89948-dc93-4ef1-a7ad-dbb638af98d9.h10": 1783700442201,
+    "rounds.r0.shotDetails.95c89948-dc93-4ef1-a7ad-dbb638af98d9.h11": 1783701188378,
+    "rounds.r0.shotDetails.95c89948-dc93-4ef1-a7ad-dbb638af98d9.h12": 1783702465904,
+    "rounds.r0.shotDetails.95c89948-dc93-4ef1-a7ad-dbb638af98d9.h13": 1783703050672,
+    "rounds.r0.shotDetails.95c89948-dc93-4ef1-a7ad-dbb638af98d9.h14": 1783704030536,
+    "rounds.r0.shotDetails.95c89948-dc93-4ef1-a7ad-dbb638af98d9.h15": 1783705186454,
+    "rounds.r0.shotDetails.95c89948-dc93-4ef1-a7ad-dbb638af98d9.h16": 1783706449950,
+    "rounds.r0.shotDetails.95c89948-dc93-4ef1-a7ad-dbb638af98d9.h17": 1783707491419,
+    "rounds.r0.shotDetails.95c89948-dc93-4ef1-a7ad-dbb638af98d9.h18": 1783708527441,
+    "rounds.r0.shotDetails.e6e97499-d506-4030-9183-5c96861258cf.h10": 1783700420893,
+    "rounds.r0.shotDetails.e6e97499-d506-4030-9183-5c96861258cf.h11": 1783701411085,
+    "rounds.r0.shotDetails.e6e97499-d506-4030-9183-5c96861258cf.h12": 1783702498751,
+    "rounds.r0.shotDetails.e6e97499-d506-4030-9183-5c96861258cf.h13": 1783703098942,
+    "rounds.r0.shotDetails.e6e97499-d506-4030-9183-5c96861258cf.h14": 1783704030951,
+    "rounds.r0.shotDetails.e6e97499-d506-4030-9183-5c96861258cf.h15": 1783705169281,
+    "rounds.r0.shotDetails.e6e97499-d506-4030-9183-5c96861258cf.h16": 1783706483416,
+    "rounds.r0.shotDetails.e6e97499-d506-4030-9183-5c96861258cf.h17": 1783707493908,
+    "rounds.r0.shotDetails.e6e97499-d506-4030-9183-5c96861258cf.h18": 1783708653123,
+    "rounds.r1.playerHandicaps.3f7ed0af-81e7-4b5e-94f8-bc15d0b45b4d": 1783584621677,
+    "rounds.r1.playerHandicaps.95c89948-dc93-4ef1-a7ad-dbb638af98d9": 1783726684633,
+    "rounds.r1.playerHandicaps.e6e97499-d506-4030-9183-5c96861258cf": 1783727704078,
+    "rounds.r1.playerHandicaps.ec134d36-53ce-458f-b34e-f11b13e53616": 1783726694230,
+    "rounds.r1.shotDetails.3f7ed0af-81e7-4b5e-94f8-bc15d0b45b4d.h10": 1783783084475,
+    "rounds.r1.shotDetails.3f7ed0af-81e7-4b5e-94f8-bc15d0b45b4d.h11": 1783783784390,
+    "rounds.r1.shotDetails.3f7ed0af-81e7-4b5e-94f8-bc15d0b45b4d.h12": 1783784838256,
+    "rounds.r1.shotDetails.3f7ed0af-81e7-4b5e-94f8-bc15d0b45b4d.h13": 1783785985487,
+    "rounds.r1.shotDetails.3f7ed0af-81e7-4b5e-94f8-bc15d0b45b4d.h14": 1783786784560,
+    "rounds.r1.shotDetails.3f7ed0af-81e7-4b5e-94f8-bc15d0b45b4d.h15": 1783787977531,
+    "rounds.r1.shotDetails.3f7ed0af-81e7-4b5e-94f8-bc15d0b45b4d.h16": 1783788623263,
+    "rounds.r1.shotDetails.3f7ed0af-81e7-4b5e-94f8-bc15d0b45b4d.h17": 1783789451452,
+    "rounds.r1.shotDetails.3f7ed0af-81e7-4b5e-94f8-bc15d0b45b4d.h18": 1783790423029,
+    "rounds.r1.shotDetails.95c89948-dc93-4ef1-a7ad-dbb638af98d9.h10": 1783782975382,
+    "rounds.r1.shotDetails.95c89948-dc93-4ef1-a7ad-dbb638af98d9.h11": 1783783773943,
+    "rounds.r1.shotDetails.95c89948-dc93-4ef1-a7ad-dbb638af98d9.h12": 1783784759691,
+    "rounds.r1.shotDetails.95c89948-dc93-4ef1-a7ad-dbb638af98d9.h13": 1783785920515,
+    "rounds.r1.shotDetails.95c89948-dc93-4ef1-a7ad-dbb638af98d9.h14": 1783786739886,
+    "rounds.r1.shotDetails.95c89948-dc93-4ef1-a7ad-dbb638af98d9.h16": 1783788539165,
+    "rounds.r1.shotDetails.95c89948-dc93-4ef1-a7ad-dbb638af98d9.h17": 1783789374448,
+    "rounds.r1.shotDetails.95c89948-dc93-4ef1-a7ad-dbb638af98d9.h18": 1783790391754,
+    "rounds.r1.shotDetails.e6e97499-d506-4030-9183-5c96861258cf.h10": 1783783346507,
+    "rounds.r1.shotDetails.e6e97499-d506-4030-9183-5c96861258cf.h11": 1783783737987,
+    "rounds.r1.shotDetails.e6e97499-d506-4030-9183-5c96861258cf.h12": 1783784845226,
+    "rounds.r1.shotDetails.e6e97499-d506-4030-9183-5c96861258cf.h13": 1783786012876,
+    "rounds.r1.shotDetails.e6e97499-d506-4030-9183-5c96861258cf.h14": 1783786777685,
+    "rounds.r1.shotDetails.e6e97499-d506-4030-9183-5c96861258cf.h15": 1783788035954,
+    "rounds.r1.shotDetails.e6e97499-d506-4030-9183-5c96861258cf.h16": 1783788597351,
+    "rounds.r1.shotDetails.e6e97499-d506-4030-9183-5c96861258cf.h17": 1783790467375,
+    "rounds.r1.shotDetails.e6e97499-d506-4030-9183-5c96861258cf.h18": 1783790478086,
+    "rounds.r2.playerHandicaps.3f7ed0af-81e7-4b5e-94f8-bc15d0b45b4d": 1783584621678,
+    "rounds.r2.playerHandicaps.e6e97499-d506-4030-9183-5c96861258cf": 1783727587293,
+    "rounds.r2.playerHandicaps.ec134d36-53ce-458f-b34e-f11b13e53616": 1783584637242,
+    "rounds.r0.scoreConflicts.3f7ed0af-81e7-4b5e-94f8-bc15d0b45b4d.h4": 1783693895139,
+    "rounds.r0.scoreConflicts.3f7ed0af-81e7-4b5e-94f8-bc15d0b45b4d.h5": 1783694865293,
+    "rounds.r0.scoreConflicts.e6e97499-d506-4030-9183-5c96861258cf.h2": 1783692291606,
+    "rounds.r0.scoreConflicts.ec134d36-53ce-458f-b34e-f11b13e53616.h4": 1783693853158,
+    "rounds.r0.scoreConflicts.ec134d36-53ce-458f-b34e-f11b13e53616.h5": 1783694868649,
+    "rounds.r0.scoreConflicts.ec134d36-53ce-458f-b34e-f11b13e53616.h8": 1783699304978,
+    "rounds.r1.scoreConflicts.3f7ed0af-81e7-4b5e-94f8-bc15d0b45b4d.h1": 1783775833822,
+    "rounds.r1.scoreConflicts.3f7ed0af-81e7-4b5e-94f8-bc15d0b45b4d.h2": 1783775841675,
+    "rounds.r1.scoreConflicts.3f7ed0af-81e7-4b5e-94f8-bc15d0b45b4d.h4": 1783777996544,
+    "rounds.r1.scoreConflicts.3f7ed0af-81e7-4b5e-94f8-bc15d0b45b4d.h6": 1783780576457,
+    "rounds.r1.scoreConflicts.95c89948-dc93-4ef1-a7ad-dbb638af98d9.h1": 1783775345183,
+    "rounds.r1.scoreConflicts.95c89948-dc93-4ef1-a7ad-dbb638af98d9.h2": 1783775856377,
+    "rounds.r1.scoreConflicts.95c89948-dc93-4ef1-a7ad-dbb638af98d9.h6": 1783784838727,
+    "rounds.r1.scoreConflicts.e6e97499-d506-4030-9183-5c96861258cf.h1": 1783775345183,
+    "rounds.r1.scoreConflicts.e6e97499-d506-4030-9183-5c96861258cf.h4": 1783807070593,
+    "rounds.r1.scoreConflicts.ec134d36-53ce-458f-b34e-f11b13e53616.h1": 1783775345183,
+    "rounds.r0.scoreConflicts.3f7ed0af-81e7-4b5e-94f8-bc15d0b45b4d.h14": 1783719157273,
+    "rounds.r0.scoreConflicts.3f7ed0af-81e7-4b5e-94f8-bc15d0b45b4d.h16": 1783707613205,
+    "rounds.r0.scoreConflicts.ec134d36-53ce-458f-b34e-f11b13e53616.h15": 1783708614737,
+    "rounds.r0.scoreConflicts.ec134d36-53ce-458f-b34e-f11b13e53616.h17": 1783707596592,
+    "rounds.r1.scoreConflicts.3f7ed0af-81e7-4b5e-94f8-bc15d0b45b4d.h16": 1783788617324,
+    "rounds.r1.scoreConflicts.3f7ed0af-81e7-4b5e-94f8-bc15d0b45b4d.h18": 1783790403154,
+    "rounds.r1.scoreConflicts.95c89948-dc93-4ef1-a7ad-dbb638af98d9.h16": 1783788590452,
+    "rounds.r1.scoreConflicts.e6e97499-d506-4030-9183-5c96861258cf.h18": 1783790423222,
+    "rounds.r1.scoreConflicts.ec134d36-53ce-458f-b34e-f11b13e53616.h18": 1783790415386,
+    "rounds.r1.scoreResolutions.3f7ed0af-81e7-4b5e-94f8-bc15d0b45b4d.h1": 1783726617784,
+    "rounds.r1.scoreResolutions.3f7ed0af-81e7-4b5e-94f8-bc15d0b45b4d.h2": 1783726454078,
+    "rounds.r1.scoreResolutions.3f7ed0af-81e7-4b5e-94f8-bc15d0b45b4d.h16": 1783788617324,
+    "rounds.r1.scoreResolutions.3f7ed0af-81e7-4b5e-94f8-bc15d0b45b4d.h18": 1783790403154,
+    "rounds.r1.scoreResolutions.ec134d36-53ce-458f-b34e-f11b13e53616.h18": 1783790415386
+  },
+  "rounds": [
+    {
+      "id": "r0",
+      "tees": [
+        {
+          "id": "d2d8b615-ed50-4e2f-bcc4-c70ecf462f35",
+          "label": "Blancas",
+          "slope": 139,
+          "rating": 71.2,
+          "sortOrder": 0,
+          "slopeWomen": 141,
+          "ratingWomen": 77.5
+        },
+        {
+          "id": "aeaaa84c-5f22-4a04-bcfa-7c938b1dd27d",
+          "label": "Amarillas",
+          "slope": 139,
+          "rating": 70.9,
+          "sortOrder": 2,
+          "slopeWomen": 140,
+          "ratingWomen": 77.1
+        },
+        {
+          "id": "2cf85782-1514-4916-b865-89c79c8ae638",
+          "label": "Azules",
+          "slope": 130,
+          "rating": 67.3,
+          "sortOrder": 4,
+          "slopeWomen": 131,
+          "ratingWomen": 72.3
+        },
+        {
+          "id": "a19e51e3-85aa-493f-b80c-059829f35d29",
+          "label": "Rojas",
+          "slope": 127,
+          "rating": 66.5,
+          "sortOrder": 6,
+          "slopeWomen": 129,
+          "ratingWomen": 71.3
+        }
+      ],
+      "holes": [
+        {
+          "par": 5,
+          "number": 1,
+          "strokeIndex": 8
+        },
+        {
+          "par": 4,
+          "number": 2,
+          "strokeIndex": 6
+        },
+        {
+          "par": 3,
+          "number": 3,
+          "strokeIndex": 18
+        },
+        {
+          "par": 4,
+          "number": 4,
+          "strokeIndex": 10
+        },
+        {
+          "par": 4,
+          "number": 5,
+          "strokeIndex": 14
+        },
+        {
+          "par": 5,
+          "number": 6,
+          "strokeIndex": 4
+        },
+        {
+          "par": 4,
+          "number": 7,
+          "strokeIndex": 12
+        },
+        {
+          "par": 4,
+          "number": 8,
+          "strokeIndex": 2
+        },
+        {
+          "par": 3,
+          "number": 9,
+          "strokeIndex": 16
+        },
+        {
+          "par": 4,
+          "number": 10,
+          "strokeIndex": 3
+        },
+        {
+          "par": 3,
+          "number": 11,
+          "strokeIndex": 15
+        },
+        {
+          "par": 5,
+          "number": 12,
+          "strokeIndex": 5
+        },
+        {
+          "par": 3,
+          "number": 13,
+          "strokeIndex": 17
+        },
+        {
+          "par": 5,
+          "number": 14,
+          "strokeIndex": 7
+        },
+        {
+          "par": 4,
+          "number": 15,
+          "strokeIndex": 11
+        },
+        {
+          "par": 4,
+          "number": 16,
+          "strokeIndex": 1
+        },
+        {
+          "par": 4,
+          "number": 17,
+          "strokeIndex": 9
+        },
+        {
+          "par": 4,
+          "number": 18,
+          "strokeIndex": 13
+        }
+      ],
+      "notes": {
+        "hole": {}
+      },
+      "pairs": [
+        [
+          {
+            "id": "95c89948-dc93-4ef1-a7ad-dbb638af98d9",
+            "name": "Marcos",
+            "gender": "male",
+            "user_id": "7a9ec70d-4a4c-4509-bfbb-f1ba09120729",
+            "handicap": 17,
+            "avatar_url": "https://cxqugzmgbcknlxfipfse.supabase.co/storage/v1/object/public/avatars/7a9ec70d-4a4c-4509-bfbb-f1ba09120729/avatar-1779264018278.jpg"
+          },
+          {
+            "id": "e6e97499-d506-4030-9183-5c96861258cf",
+            "name": "Noé",
+            "gender": "male",
+            "user_id": "785bafbe-c2fe-4733-affb-e3c199d3fafe",
+            "handicap": 17,
+            "avatar_url": "https://cxqugzmgbcknlxfipfse.supabase.co/storage/v1/object/public/avatars/785bafbe-c2fe-4733-affb-e3c199d3fafe/avatar-1776703925568.jpg"
+          }
+        ],
+        [
+          {
+            "id": "3f7ed0af-81e7-4b5e-94f8-bc15d0b45b4d",
+            "name": "Guille",
+            "gender": "male",
+            "user_id": null,
+            "handicap": 15,
+            "avatar_url": null
+          },
+          {
+            "id": "ec134d36-53ce-458f-b34e-f11b13e53616",
+            "name": "Alex",
+            "gender": "male",
+            "user_id": null,
+            "handicap": 12,
+            "avatar_url": null
+          }
+        ]
+      ],
+      "scores": {
+        "3f7ed0af-81e7-4b5e-94f8-bc15d0b45b4d": {
+          "1": 7,
+          "2": 4,
+          "3": 3,
+          "4": 5,
+          "5": 5,
+          "6": 6,
+          "7": 4,
+          "8": 6,
+          "9": 4,
+          "10": 5,
+          "11": 4,
+          "12": 6,
+          "13": 3,
+          "14": 5,
+          "15": 5,
+          "16": 7,
+          "17": 4,
+          "18": 6
+        },
+        "95c89948-dc93-4ef1-a7ad-dbb638af98d9": {
+          "1": 6,
+          "2": 4,
+          "3": 3,
+          "4": 4,
+          "5": 4,
+          "6": 7,
+          "7": 6,
+          "8": 6,
+          "9": 4,
+          "10": 5,
+          "11": 5,
+          "12": 5,
+          "13": 4,
+          "14": 4,
+          "15": 5,
+          "16": 7,
+          "17": 6,
+          "18": 5
+        },
+        "e6e97499-d506-4030-9183-5c96861258cf": {
+          "1": 8,
+          "2": 4,
+          "3": 4,
+          "4": 4,
+          "5": 5,
+          "6": 6,
+          "7": 5,
+          "8": 4,
+          "9": 4,
+          "10": 6,
+          "11": 4,
+          "12": 7,
+          "13": 4,
+          "14": 5,
+          "15": 5,
+          "16": 5,
+          "17": 6,
+          "18": 5
+        },
+        "ec134d36-53ce-458f-b34e-f11b13e53616": {
+          "1": 6,
+          "2": 5,
+          "3": 4,
+          "4": 6,
+          "5": 5,
+          "6": 5,
+          "7": 6,
+          "8": 6,
+          "9": 4,
+          "10": 4,
+          "11": 3,
+          "12": 7,
+          "13": 3,
+          "14": 4,
+          "15": 5,
+          "16": 4,
+          "17": 6,
+          "18": 5
+        }
+      },
+      "courseId": "e6b357db-c8ef-4a5f-b51d-699b1b2dcfd4",
+      "courseName": "Golf Torrequebrada",
+      "playerTees": {
+        "3f7ed0af-81e7-4b5e-94f8-bc15d0b45b4d": {
+          "label": "Amarillas",
+          "slope": 139,
+          "rating": 70.9
+        },
+        "95c89948-dc93-4ef1-a7ad-dbb638af98d9": {
+          "label": "Amarillas",
+          "slope": 139,
+          "rating": 70.9
+        },
+        "e6e97499-d506-4030-9183-5c96861258cf": {
+          "label": "Amarillas",
+          "slope": 139,
+          "rating": 70.9
+        },
+        "ec134d36-53ce-458f-b34e-f11b13e53616": {
+          "label": "Amarillas",
+          "slope": 139,
+          "rating": 70.9
+        }
+      },
+      "shotDetails": {
+        "3f7ed0af-81e7-4b5e-94f8-bc15d0b45b4d": {
+          "1": {
+            "drive": "super",
+            "putts": 2,
+            "sandShots": 0,
+            "teePenalties": 0,
+            "approachBucket": "100-150",
+            "approachResult": "miss",
+            "otherPenalties": 0,
+            "firstPuttBucket": "3-6",
+            "recoveryOutcome": null
+          },
+          "2": {
+            "drive": "fairway",
+            "putts": 1,
+            "sandShots": 0,
+            "teePenalties": 0,
+            "approachBucket": "100-150",
+            "approachResult": "miss",
+            "otherPenalties": 0,
+            "firstPuttBucket": "1-2",
+            "recoveryOutcome": null
+          },
+          "3": {
+            "drive": null,
+            "putts": 2,
+            "sandShots": 0,
+            "teePenalties": 0,
+            "approachBucket": "50-100",
+            "approachResult": null,
+            "otherPenalties": 0,
+            "firstPuttBucket": "3-6",
+            "recoveryOutcome": null
+          },
+          "4": {
+            "drive": "right",
+            "putts": 2,
+            "sandShots": 0,
+            "teePenalties": 0,
+            "approachBucket": "100-150",
+            "approachResult": "miss",
+            "otherPenalties": 0,
+            "firstPuttBucket": "3-6",
+            "recoveryOutcome": null
+          },
+          "5": {
+            "drive": "left",
+            "putts": 1,
+            "sandShots": 1,
+            "teePenalties": 0,
+            "approachBucket": "100-150",
+            "approachResult": "miss",
+            "otherPenalties": 0,
+            "firstPuttBucket": "0-1",
+            "recoveryOutcome": null
+          },
+          "6": {
+            "drive": "left",
+            "putts": 2,
+            "sandShots": 0,
+            "teePenalties": 0,
+            "approachBucket": "100-150",
+            "approachResult": "miss",
+            "otherPenalties": 0,
+            "firstPuttBucket": "3-6",
+            "recoveryOutcome": null
+          },
+          "7": {
+            "drive": "fairway",
+            "putts": 1,
+            "sandShots": 0,
+            "teePenalties": 0,
+            "approachBucket": "50-100",
+            "approachResult": "miss",
+            "otherPenalties": 0,
+            "firstPuttBucket": "1-2",
+            "recoveryOutcome": null
+          },
+          "8": {
+            "drive": "right",
+            "putts": 2,
+            "sandShots": 0,
+            "teePenalties": 0,
+            "approachBucket": "100-150",
+            "approachResult": "green",
+            "otherPenalties": 0,
+            "firstPuttBucket": "6+",
+            "recoveryOutcome": null
+          },
+          "9": {
+            "drive": null,
+            "putts": 3,
+            "sandShots": 0,
+            "teePenalties": 0,
+            "approachBucket": "100-150",
+            "approachResult": null,
+            "otherPenalties": 0,
+            "firstPuttBucket": "6+",
+            "recoveryOutcome": null
+          },
+          "10": {
+            "drive": "fairway",
+            "putts": 1,
+            "sandShots": 0,
+            "teePenalties": 0,
+            "approachBucket": "50-100",
+            "approachResult": "miss",
+            "otherPenalties": 0,
+            "firstPuttBucket": "2-3",
+            "recoveryOutcome": null
+          },
+          "11": {
+            "drive": null,
+            "putts": 2,
+            "sandShots": 1,
+            "teePenalties": 0,
+            "approachBucket": "100-150",
+            "approachResult": null,
+            "otherPenalties": 0,
+            "firstPuttBucket": "2-3",
+            "recoveryOutcome": null
+          },
+          "12": {
+            "drive": "left",
+            "putts": 3,
+            "sandShots": 0,
+            "teePenalties": 0,
+            "approachBucket": "150-200",
+            "approachResult": "green",
+            "otherPenalties": 0,
+            "firstPuttBucket": "6+",
+            "recoveryOutcome": null
+          },
+          "13": {
+            "drive": null,
+            "putts": 1,
+            "sandShots": 0,
+            "teePenalties": 0,
+            "approachBucket": "100-150",
+            "approachResult": null,
+            "otherPenalties": 0,
+            "firstPuttBucket": "2-3",
+            "recoveryOutcome": null
+          },
+          "14": {
+            "drive": "fairway",
+            "putts": 2,
+            "sandShots": 0,
+            "teePenalties": 0,
+            "approachBucket": "200+",
+            "approachResult": "miss",
+            "otherPenalties": 0,
+            "firstPuttBucket": "2-3",
+            "recoveryOutcome": null
+          },
+          "15": {
+            "drive": "short",
+            "putts": 2,
+            "sandShots": 0,
+            "teePenalties": 0,
+            "approachBucket": "0-50",
+            "approachResult": "green",
+            "otherPenalties": 0,
+            "firstPuttBucket": "6+",
+            "recoveryOutcome": null
+          },
+          "16": {
+            "drive": "super",
+            "putts": 2,
+            "sandShots": 0,
+            "teePenalties": 0,
+            "approachBucket": "100-150",
+            "approachResult": "miss",
+            "otherPenalties": 0,
+            "firstPuttBucket": "2-3",
+            "recoveryOutcome": null
+          },
+          "17": {
+            "drive": "super",
+            "putts": 2,
+            "sandShots": 0,
+            "teePenalties": 0,
+            "approachBucket": "100-150",
+            "approachResult": "green",
+            "otherPenalties": 0,
+            "firstPuttBucket": "6+",
+            "recoveryOutcome": null
+          },
+          "18": {
+            "drive": "right",
+            "putts": 2,
+            "sandShots": 0,
+            "teePenalties": 0,
+            "approachBucket": "50-100",
+            "approachResult": "green",
+            "otherPenalties": 0,
+            "firstPuttBucket": "1-2",
+            "recoveryOutcome": null
+          }
+        },
+        "95c89948-dc93-4ef1-a7ad-dbb638af98d9": {
+          "1": {
+            "drive": "right",
+            "putts": 1,
+            "sandShots": 0,
+            "teePenalties": 1,
+            "approachBucket": "100-150",
+            "approachResult": "miss",
+            "otherPenalties": 0,
+            "firstPuttBucket": "3-6",
+            "recoveryOutcome": null
+          },
+          "2": {
+            "drive": "super",
+            "putts": 2,
+            "sandShots": 0,
+            "teePenalties": 0,
+            "approachBucket": "100-150",
+            "approachResult": "green",
+            "otherPenalties": 0,
+            "firstPuttBucket": "6+",
+            "recoveryOutcome": null
+          },
+          "3": {
+            "drive": null,
+            "putts": 2,
+            "sandShots": 0,
+            "teePenalties": 0,
+            "approachBucket": "50-100",
+            "approachResult": null,
+            "otherPenalties": 0,
+            "firstPuttBucket": "3-6",
+            "recoveryOutcome": null
+          },
+          "4": {
+            "drive": "fairway",
+            "putts": 2,
+            "sandShots": 0,
+            "teePenalties": 0,
+            "approachBucket": "50-100",
+            "approachResult": "green",
+            "otherPenalties": 0,
+            "firstPuttBucket": "6+",
+            "recoveryOutcome": null
+          },
+          "5": {
+            "drive": "fairway",
+            "putts": 2,
+            "sandShots": 0,
+            "teePenalties": 0,
+            "approachBucket": "50-100",
+            "approachResult": "green",
+            "otherPenalties": 0,
+            "firstPuttBucket": "3-6",
+            "recoveryOutcome": null
+          },
+          "6": {
+            "drive": "super",
+            "putts": 2,
+            "sandShots": 0,
+            "teePenalties": 0,
+            "approachBucket": "100-150",
+            "approachResult": "miss",
+            "otherPenalties": 0,
+            "firstPuttBucket": "6+",
+            "recoveryOutcome": null
+          },
+          "7": {
+            "drive": "left",
+            "putts": 2,
+            "sandShots": 0,
+            "teePenalties": 0,
+            "approachBucket": "150-200",
+            "approachResult": "miss",
+            "otherPenalties": 0,
+            "firstPuttBucket": "6+",
+            "recoveryOutcome": null
+          },
+          "8": {
+            "drive": "short",
+            "putts": 2,
+            "sandShots": 0,
+            "teePenalties": 0,
+            "approachBucket": "50-100",
+            "approachResult": "miss",
+            "otherPenalties": 0,
+            "firstPuttBucket": "6+",
+            "recoveryOutcome": null
+          },
+          "9": {
+            "drive": null,
+            "putts": 2,
+            "sandShots": 1,
+            "teePenalties": 0,
+            "approachBucket": "100-150",
+            "approachResult": null,
+            "otherPenalties": 0,
+            "firstPuttBucket": "6+",
+            "recoveryOutcome": null
+          },
+          "10": {
+            "drive": "left",
+            "putts": 2,
+            "sandShots": 0,
+            "teePenalties": 0,
+            "approachBucket": "150-200",
+            "approachResult": "miss",
+            "otherPenalties": 0,
+            "firstPuttBucket": "6+",
+            "recoveryOutcome": null
+          },
+          "11": {
+            "drive": null,
+            "putts": 3,
+            "sandShots": 1,
+            "teePenalties": 0,
+            "approachBucket": "100-150",
+            "approachResult": null,
+            "otherPenalties": 0,
+            "firstPuttBucket": "6+",
+            "recoveryOutcome": null
+          },
+          "12": {
+            "drive": "fairway",
+            "putts": 2,
+            "sandShots": 0,
+            "teePenalties": 0,
+            "approachBucket": "50-100",
+            "approachResult": "green",
+            "otherPenalties": 0,
+            "firstPuttBucket": "6+",
+            "recoveryOutcome": null
+          },
+          "13": {
+            "drive": null,
+            "putts": 3,
+            "sandShots": 0,
+            "teePenalties": 0,
+            "approachBucket": "100-150",
+            "approachResult": null,
+            "otherPenalties": 0,
+            "firstPuttBucket": "6+",
+            "recoveryOutcome": null
+          },
+          "14": {
+            "drive": "fairway",
+            "putts": 2,
+            "sandShots": 0,
+            "teePenalties": 0,
+            "approachBucket": "200+",
+            "approachResult": "green",
+            "otherPenalties": 0,
+            "firstPuttBucket": "6+",
+            "recoveryOutcome": null
+          },
+          "15": {
+            "drive": "left",
+            "putts": 2,
+            "sandShots": 0,
+            "teePenalties": 0,
+            "approachBucket": "100-150",
+            "approachResult": "green",
+            "otherPenalties": 0,
+            "firstPuttBucket": "6+",
+            "recoveryOutcome": null
+          },
+          "16": {
+            "drive": "right",
+            "putts": 2,
+            "sandShots": 1,
+            "teePenalties": 0,
+            "approachBucket": "100-150",
+            "approachResult": "miss",
+            "otherPenalties": 1,
+            "firstPuttBucket": "2-3",
+            "recoveryOutcome": null
+          },
+          "17": {
+            "drive": "right",
+            "putts": 2,
+            "sandShots": 0,
+            "teePenalties": 0,
+            "approachBucket": "50-100",
+            "approachResult": "green",
+            "otherPenalties": 0,
+            "firstPuttBucket": "6+",
+            "recoveryOutcome": null
+          },
+          "18": {
+            "drive": "short",
+            "putts": 2,
+            "sandShots": 0,
+            "teePenalties": 0,
+            "approachBucket": "150-200",
+            "approachResult": "green",
+            "otherPenalties": 0,
+            "firstPuttBucket": "6+",
+            "recoveryOutcome": null
+          }
+        },
+        "e6e97499-d506-4030-9183-5c96861258cf": {
+          "1": {
+            "drive": "fairway",
+            "putts": 2,
+            "sandShots": 1,
+            "teePenalties": 0,
+            "approachBucket": "50-100",
+            "approachResult": "miss",
+            "otherPenalties": 0,
+            "firstPuttBucket": "1-2",
+            "recoveryOutcome": null
+          },
+          "2": {
+            "drive": "fairway",
+            "putts": 2,
+            "sandShots": 0,
+            "teePenalties": 0,
+            "approachBucket": "50-100",
+            "approachResult": "green",
+            "otherPenalties": 0,
+            "firstPuttBucket": "3-6",
+            "recoveryOutcome": null
+          },
+          "3": {
+            "drive": null,
+            "putts": 3,
+            "sandShots": 0,
+            "teePenalties": 0,
+            "approachBucket": "50-100",
+            "approachResult": null,
+            "otherPenalties": 0,
+            "firstPuttBucket": "6+",
+            "recoveryOutcome": null
+          },
+          "4": {
+            "drive": "fairway",
+            "putts": 2,
+            "sandShots": 0,
+            "teePenalties": 0,
+            "approachBucket": "50-100",
+            "approachResult": "green",
+            "otherPenalties": 0,
+            "firstPuttBucket": "3-6",
+            "recoveryOutcome": null
+          },
+          "5": {
+            "drive": "fairway",
+            "putts": 2,
+            "sandShots": 1,
+            "teePenalties": 0,
+            "approachBucket": "150-200",
+            "approachResult": "miss",
+            "otherPenalties": 0,
+            "firstPuttBucket": "2-3",
+            "recoveryOutcome": null
+          },
+          "6": {
+            "drive": "fairway",
+            "putts": 2,
+            "sandShots": 0,
+            "teePenalties": 0,
+            "approachBucket": "100-150",
+            "approachResult": "miss",
+            "otherPenalties": 0,
+            "firstPuttBucket": "2-3",
+            "recoveryOutcome": null
+          },
+          "7": {
+            "drive": "fairway",
+            "putts": 3,
+            "sandShots": 0,
+            "teePenalties": 0,
+            "approachBucket": "50-100",
+            "approachResult": "green",
+            "otherPenalties": 0,
+            "firstPuttBucket": "6+",
+            "recoveryOutcome": null
+          },
+          "8": {
+            "drive": "fairway",
+            "putts": 1,
+            "sandShots": 0,
+            "teePenalties": 0,
+            "approachBucket": "150-200",
+            "approachResult": null,
+            "otherPenalties": 0,
+            "firstPuttBucket": "0-1",
+            "recoveryOutcome": null
+          },
+          "9": {
+            "drive": null,
+            "putts": 3,
+            "sandShots": 0,
+            "teePenalties": 0,
+            "approachBucket": "100-150",
+            "approachResult": null,
+            "otherPenalties": 0,
+            "firstPuttBucket": "6+",
+            "recoveryOutcome": null
+          },
+          "10": {
+            "drive": "left",
+            "putts": 3,
+            "sandShots": 0,
+            "teePenalties": 0,
+            "approachBucket": "100-150",
+            "approachResult": null,
+            "otherPenalties": 0,
+            "firstPuttBucket": "6+",
+            "recoveryOutcome": null
+          },
+          "11": {
+            "drive": null,
+            "putts": 3,
+            "sandShots": 0,
+            "teePenalties": 0,
+            "approachBucket": "100-150",
+            "approachResult": null,
+            "otherPenalties": 0,
+            "firstPuttBucket": "6+",
+            "recoveryOutcome": null
+          },
+          "12": {
+            "drive": "fairway",
+            "putts": 2,
+            "sandShots": 2,
+            "teePenalties": 0,
+            "approachBucket": "50-100",
+            "approachResult": "miss",
+            "otherPenalties": 0,
+            "firstPuttBucket": "3-6",
+            "recoveryOutcome": null
+          },
+          "13": {
+            "drive": null,
+            "putts": 2,
+            "sandShots": 0,
+            "teePenalties": 0,
+            "approachBucket": "100-150",
+            "approachResult": null,
+            "otherPenalties": 0,
+            "firstPuttBucket": "2-3",
+            "recoveryOutcome": null
+          },
+          "14": {
+            "drive": "fairway",
+            "putts": 2,
+            "sandShots": 0,
+            "teePenalties": 0,
+            "approachBucket": "50-100",
+            "approachResult": "green",
+            "otherPenalties": 0,
+            "firstPuttBucket": "6+",
+            "recoveryOutcome": null
+          },
+          "15": {
+            "drive": "short",
+            "putts": 2,
+            "sandShots": 0,
+            "teePenalties": 0,
+            "approachBucket": "100-150",
+            "approachResult": "green",
+            "otherPenalties": 0,
+            "firstPuttBucket": "3-6",
+            "recoveryOutcome": null
+          },
+          "16": {
+            "drive": "fairway",
+            "putts": 2,
+            "sandShots": 0,
+            "teePenalties": 0,
+            "approachBucket": "100-150",
+            "approachResult": "miss",
+            "otherPenalties": 0,
+            "firstPuttBucket": "6+",
+            "recoveryOutcome": null
+          },
+          "17": {
+            "drive": null,
+            "putts": 2,
+            "sandShots": 0,
+            "teePenalties": 0,
+            "approachBucket": null,
+            "approachResult": null,
+            "otherPenalties": 0,
+            "firstPuttBucket": null,
+            "recoveryOutcome": null
+          },
+          "18": {
+            "drive": "fairway",
+            "putts": 3,
+            "sandShots": 0,
+            "teePenalties": 0,
+            "approachBucket": "100-150",
+            "approachResult": "green",
+            "otherPenalties": 0,
+            "firstPuttBucket": "6+",
+            "recoveryOutcome": null
+          }
+        }
+      },
+      "playerIndexes": {},
+      "scoreConflicts": {
+        "3f7ed0af-81e7-4b5e-94f8-bc15d0b45b4d": {},
+        "e6e97499-d506-4030-9183-5c96861258cf": {},
+        "ec134d36-53ce-458f-b34e-f11b13e53616": {}
+      },
+      "manualHandicaps": {},
+      "playerHandicaps": {
+        "3f7ed0af-81e7-4b5e-94f8-bc15d0b45b4d": 17,
+        "95c89948-dc93-4ef1-a7ad-dbb638af98d9": 20,
+        "e6e97499-d506-4030-9183-5c96861258cf": 20,
+        "ec134d36-53ce-458f-b34e-f11b13e53616": 14
+      }
+    },
+    {
+      "id": "r1",
+      "tees": [
+        {
+          "id": "e56a4938-947a-419f-b6d0-c1d4831eefe9",
+          "label": "Blancas",
+          "slope": 126,
+          "rating": 73.7,
+          "yardages": {
+            "1": 508,
+            "2": 162,
+            "3": 344,
+            "4": 390,
+            "5": 580,
+            "6": 423,
+            "7": 387,
+            "8": 220,
+            "9": 348,
+            "10": 418,
+            "11": 176,
+            "12": 370,
+            "13": 535,
+            "14": 361,
+            "15": 475,
+            "16": 150,
+            "17": 351,
+            "18": 338
+          },
+          "sortOrder": 0,
+          "slopeWomen": 142,
+          "ratingWomen": 82.2
+        },
+        {
+          "id": "683c176b-2e0d-4a0c-8e29-af45ca6b1d90",
+          "label": "Amarillas",
+          "slope": 124,
+          "rating": 72.6,
+          "yardages": {
+            "1": 499,
+            "2": 148,
+            "3": 323,
+            "4": 374,
+            "5": 536,
+            "6": 415,
+            "7": 379,
+            "8": 210,
+            "9": 341,
+            "10": 408,
+            "11": 160,
+            "12": 359,
+            "13": 520,
+            "14": 353,
+            "15": 466,
+            "16": 142,
+            "17": 342,
+            "18": 332
+          },
+          "sortOrder": 2,
+          "slopeWomen": 141,
+          "ratingWomen": 81
+        },
+        {
+          "id": "798b38ef-f896-45da-b772-deba566b22d9",
+          "label": "Azules",
+          "slope": 121,
+          "rating": 68.3,
+          "sortOrder": 4,
+          "slopeWomen": 128,
+          "ratingWomen": 74.5
+        },
+        {
+          "id": "966af537-5895-4609-80b7-6311b120be4b",
+          "label": "Rojas",
+          "slope": 114,
+          "rating": 65.8,
+          "sortOrder": 6,
+          "slopeWomen": 120,
+          "ratingWomen": 71.6
+        }
+      ],
+      "holes": [
+        {
+          "par": 5,
+          "number": 1,
+          "strokeIndex": 9
+        },
+        {
+          "par": 3,
+          "number": 2,
+          "strokeIndex": 17
+        },
+        {
+          "par": 4,
+          "number": 3,
+          "strokeIndex": 15
+        },
+        {
+          "par": 4,
+          "number": 4,
+          "strokeIndex": 7
+        },
+        {
+          "par": 5,
+          "number": 5,
+          "strokeIndex": 3
+        },
+        {
+          "par": 4,
+          "number": 6,
+          "strokeIndex": 1
+        },
+        {
+          "par": 4,
+          "number": 7,
+          "strokeIndex": 13
+        },
+        {
+          "par": 3,
+          "number": 8,
+          "strokeIndex": 5
+        },
+        {
+          "par": 4,
+          "number": 9,
+          "strokeIndex": 11
+        },
+        {
+          "par": 4,
+          "number": 10,
+          "strokeIndex": 2
+        },
+        {
+          "par": 3,
+          "number": 11,
+          "strokeIndex": 8
+        },
+        {
+          "par": 4,
+          "number": 12,
+          "strokeIndex": 10
+        },
+        {
+          "par": 5,
+          "number": 13,
+          "strokeIndex": 4
+        },
+        {
+          "par": 4,
+          "number": 14,
+          "strokeIndex": 6
+        },
+        {
+          "par": 5,
+          "number": 15,
+          "strokeIndex": 16
+        },
+        {
+          "par": 3,
+          "number": 16,
+          "strokeIndex": 18
+        },
+        {
+          "par": 4,
+          "number": 17,
+          "strokeIndex": 14
+        },
+        {
+          "par": 4,
+          "number": 18,
+          "strokeIndex": 12
+        }
+      ],
+      "notes": {},
+      "pairs": [
+        [
+          {
+            "id": "95c89948-dc93-4ef1-a7ad-dbb638af98d9",
+            "name": "Marcos",
+            "gender": "male",
+            "user_id": "7a9ec70d-4a4c-4509-bfbb-f1ba09120729",
+            "handicap": 17,
+            "avatar_url": "https://cxqugzmgbcknlxfipfse.supabase.co/storage/v1/object/public/avatars/7a9ec70d-4a4c-4509-bfbb-f1ba09120729/avatar-1779264018278.jpg"
+          },
+          {
+            "id": "e6e97499-d506-4030-9183-5c96861258cf",
+            "name": "Noé",
+            "gender": "male",
+            "user_id": "785bafbe-c2fe-4733-affb-e3c199d3fafe",
+            "handicap": 17,
+            "avatar_url": "https://cxqugzmgbcknlxfipfse.supabase.co/storage/v1/object/public/avatars/785bafbe-c2fe-4733-affb-e3c199d3fafe/avatar-1776703925568.jpg"
+          }
+        ],
+        [
+          {
+            "id": "ec134d36-53ce-458f-b34e-f11b13e53616",
+            "name": "Alex",
+            "gender": "male",
+            "user_id": null,
+            "handicap": 12,
+            "avatar_url": null
+          },
+          {
+            "id": "3f7ed0af-81e7-4b5e-94f8-bc15d0b45b4d",
+            "name": "Guille",
+            "gender": "male",
+            "user_id": null,
+            "handicap": 15,
+            "avatar_url": null
+          }
+        ]
+      ],
+      "scores": {
+        "3f7ed0af-81e7-4b5e-94f8-bc15d0b45b4d": {
+          "1": 8,
+          "2": 2,
+          "3": 5,
+          "4": 7,
+          "5": 6,
+          "6": 5,
+          "7": 5,
+          "8": 7,
+          "9": 4,
+          "10": 7,
+          "11": 3,
+          "12": 6,
+          "13": 6,
+          "14": 4,
+          "15": 6,
+          "16": 4,
+          "17": 4,
+          "18": 6
+        },
+        "95c89948-dc93-4ef1-a7ad-dbb638af98d9": {
+          "1": 4,
+          "2": 3,
+          "3": 4,
+          "4": 7,
+          "5": 7,
+          "6": 6,
+          "7": 5,
+          "8": 5,
+          "9": 6,
+          "10": 5,
+          "11": 4,
+          "12": 5,
+          "13": 6,
+          "14": 4,
+          "15": 8,
+          "16": 3,
+          "17": 5,
+          "18": 5
+        },
+        "e6e97499-d506-4030-9183-5c96861258cf": {
+          "1": 5,
+          "2": 4,
+          "3": 5,
+          "4": 8,
+          "5": 8,
+          "6": 5,
+          "7": 6,
+          "8": 5,
+          "9": 5,
+          "10": 6,
+          "11": 4,
+          "12": 7,
+          "13": 7,
+          "14": 5,
+          "15": 8,
+          "16": 4,
+          "17": 5,
+          "18": 5
+        },
+        "ec134d36-53ce-458f-b34e-f11b13e53616": {
+          "1": 5,
+          "2": 4,
+          "3": 5,
+          "4": 5,
+          "5": 8,
+          "6": 6,
+          "7": 6,
+          "8": 4,
+          "9": 4,
+          "10": 5,
+          "11": 3,
+          "12": 5,
+          "13": 5,
+          "14": 5,
+          "15": 5,
+          "16": 3,
+          "17": 4,
+          "18": 7
+        }
+      },
+      "courseId": "112645b0-2634-4e66-b2c1-75abab918bce",
+      "revealed": true,
+      "courseName": "Mijas Golf Los Lagos",
+      "playerTees": {
+        "3f7ed0af-81e7-4b5e-94f8-bc15d0b45b4d": {
+          "label": "Amarillas",
+          "slope": 124,
+          "rating": 72.6
+        },
+        "95c89948-dc93-4ef1-a7ad-dbb638af98d9": {
+          "label": "Amarillas",
+          "slope": 124,
+          "rating": 72.6
+        },
+        "e6e97499-d506-4030-9183-5c96861258cf": {
+          "label": "Amarillas",
+          "slope": 124,
+          "rating": 72.6
+        },
+        "ec134d36-53ce-458f-b34e-f11b13e53616": {
+          "label": "Amarillas",
+          "slope": 124,
+          "rating": 72.6
+        }
+      },
+      "scoringMode": "pairsmatchplay",
+      "shotDetails": {
+        "3f7ed0af-81e7-4b5e-94f8-bc15d0b45b4d": {
+          "1": {
+            "drive": "left",
+            "putts": 2,
+            "sandShots": 0,
+            "teePenalties": 1,
+            "approachBucket": "150-200",
+            "approachResult": "miss",
+            "otherPenalties": 0,
+            "firstPuttBucket": "2-3",
+            "recoveryOutcome": null
+          },
+          "2": {
+            "drive": null,
+            "putts": 1,
+            "sandShots": 0,
+            "teePenalties": 0,
+            "approachBucket": "100-150",
+            "approachResult": null,
+            "otherPenalties": 0,
+            "firstPuttBucket": "0-1",
+            "recoveryOutcome": null
+          },
+          "3": {
+            "drive": "left",
+            "putts": 2,
+            "sandShots": 0,
+            "teePenalties": 0,
+            "approachBucket": "0-50",
+            "approachResult": "green",
+            "otherPenalties": 0,
+            "firstPuttBucket": "6+",
+            "recoveryOutcome": null
+          },
+          "4": {
+            "drive": "left",
+            "putts": 2,
+            "sandShots": 1,
+            "teePenalties": 0,
+            "approachBucket": "100-150",
+            "approachResult": "miss",
+            "otherPenalties": 1,
+            "firstPuttBucket": "2-3",
+            "recoveryOutcome": null
+          },
+          "5": {
+            "drive": "fairway",
+            "putts": 2,
+            "sandShots": 1,
+            "teePenalties": 0,
+            "approachBucket": "150-200",
+            "approachResult": "miss",
+            "otherPenalties": 0,
+            "firstPuttBucket": "3-6",
+            "recoveryOutcome": null
+          },
+          "6": {
+            "drive": "super",
+            "putts": 2,
+            "sandShots": 0,
+            "teePenalties": 0,
+            "approachBucket": "150-200",
+            "approachResult": "miss",
+            "otherPenalties": 0,
+            "firstPuttBucket": "3-6",
+            "recoveryOutcome": null
+          },
+          "7": {
+            "drive": "super",
+            "putts": 2,
+            "sandShots": 0,
+            "teePenalties": 0,
+            "approachBucket": "100-150",
+            "approachResult": "miss",
+            "otherPenalties": 0,
+            "firstPuttBucket": "2-3",
+            "recoveryOutcome": null
+          },
+          "8": {
+            "drive": null,
+            "putts": 2,
+            "sandShots": 1,
+            "teePenalties": 0,
+            "approachBucket": "100-150",
+            "approachResult": null,
+            "otherPenalties": 1,
+            "firstPuttBucket": "3-6",
+            "recoveryOutcome": null
+          },
+          "9": {
+            "drive": "super",
+            "putts": 1,
+            "sandShots": 0,
+            "teePenalties": 0,
+            "approachBucket": "150-200",
+            "approachResult": "miss",
+            "otherPenalties": 0,
+            "firstPuttBucket": "2-3",
+            "recoveryOutcome": null
+          },
+          "10": {
+            "drive": "left",
+            "putts": 2,
+            "sandShots": 2,
+            "teePenalties": 0,
+            "approachBucket": "100-150",
+            "approachResult": "miss",
+            "otherPenalties": 0,
+            "firstPuttBucket": "3-6",
+            "recoveryOutcome": null
+          },
+          "11": {
+            "drive": null,
+            "putts": 2,
+            "sandShots": 0,
+            "teePenalties": 0,
+            "approachBucket": "100-150",
+            "approachResult": null,
+            "otherPenalties": 0,
+            "firstPuttBucket": "6+",
+            "recoveryOutcome": null
+          },
+          "12": {
+            "drive": "left",
+            "putts": 1,
+            "sandShots": 2,
+            "teePenalties": 0,
+            "approachBucket": "100-150",
+            "approachResult": "miss",
+            "otherPenalties": 0,
+            "firstPuttBucket": "1-2",
+            "recoveryOutcome": "up-and-down"
+          },
+          "13": {
+            "drive": "right",
+            "putts": 2,
+            "sandShots": 0,
+            "teePenalties": 0,
+            "approachBucket": "0-50",
+            "approachResult": "green",
+            "otherPenalties": 0,
+            "firstPuttBucket": "2-3",
+            "recoveryOutcome": null
+          },
+          "14": {
+            "drive": "fairway",
+            "putts": 2,
+            "sandShots": 0,
+            "teePenalties": 0,
+            "approachBucket": "150-200",
+            "approachResult": "green",
+            "otherPenalties": 0,
+            "firstPuttBucket": "6+",
+            "recoveryOutcome": null
+          },
+          "15": {
+            "drive": "short",
+            "putts": 2,
+            "sandShots": 0,
+            "teePenalties": 0,
+            "approachBucket": "0-50",
+            "approachResult": "green",
+            "otherPenalties": 0,
+            "firstPuttBucket": "6+",
+            "recoveryOutcome": null
+          },
+          "16": {
+            "drive": null,
+            "putts": 2,
+            "sandShots": 0,
+            "teePenalties": 0,
+            "approachBucket": "100-150",
+            "approachResult": null,
+            "otherPenalties": 0,
+            "firstPuttBucket": "2-3",
+            "recoveryOutcome": null
+          },
+          "17": {
+            "drive": "super",
+            "putts": 2,
+            "sandShots": 0,
+            "teePenalties": 0,
+            "approachBucket": "50-100",
+            "approachResult": "green",
+            "otherPenalties": 0,
+            "firstPuttBucket": "6+",
+            "recoveryOutcome": null
+          },
+          "18": {
+            "drive": "right",
+            "putts": 3,
+            "sandShots": 0,
+            "teePenalties": 0,
+            "approachBucket": "50-100",
+            "approachResult": "green",
+            "otherPenalties": 0,
+            "firstPuttBucket": "6+",
+            "recoveryOutcome": null
+          }
+        },
+        "95c89948-dc93-4ef1-a7ad-dbb638af98d9": {
+          "1": {
+            "drive": "left",
+            "putts": 1,
+            "sandShots": 0,
+            "teePenalties": 0,
+            "approachBucket": "150-200",
+            "approachResult": "green",
+            "otherPenalties": 0,
+            "firstPuttBucket": "6+",
+            "recoveryOutcome": null
+          },
+          "2": {
+            "drive": null,
+            "putts": 1,
+            "sandShots": 1,
+            "teePenalties": 0,
+            "approachBucket": "100-150",
+            "approachResult": null,
+            "otherPenalties": 0,
+            "firstPuttBucket": "1-2",
+            "recoveryOutcome": null
+          },
+          "3": {
+            "drive": "super",
+            "putts": 2,
+            "sandShots": 0,
+            "teePenalties": 0,
+            "approachBucket": "100-150",
+            "approachResult": "green",
+            "otherPenalties": 0,
+            "firstPuttBucket": "6+",
+            "recoveryOutcome": null
+          },
+          "4": {
+            "drive": "right",
+            "putts": 2,
+            "sandShots": 0,
+            "teePenalties": 0,
+            "approachBucket": "100-150",
+            "approachResult": "miss",
+            "otherPenalties": 1,
+            "firstPuttBucket": "6+",
+            "recoveryOutcome": null
+          },
+          "5": {
+            "drive": "fairway",
+            "putts": 2,
+            "sandShots": 0,
+            "teePenalties": 0,
+            "approachBucket": "50-100",
+            "approachResult": "green",
+            "otherPenalties": 1,
+            "firstPuttBucket": "2-3",
+            "recoveryOutcome": null
+          },
+          "6": {
+            "drive": "short",
+            "putts": 3,
+            "sandShots": 0,
+            "teePenalties": 0,
+            "approachBucket": "50-100",
+            "approachResult": "green",
+            "otherPenalties": 0,
+            "firstPuttBucket": "6+",
+            "recoveryOutcome": null
+          },
+          "7": {
+            "drive": "fairway",
+            "putts": 2,
+            "sandShots": 0,
+            "teePenalties": 0,
+            "approachBucket": "100-150",
+            "approachResult": "miss",
+            "otherPenalties": 0,
+            "firstPuttBucket": "3-6",
+            "recoveryOutcome": null
+          },
+          "8": {
+            "drive": null,
+            "putts": 2,
+            "sandShots": 2,
+            "teePenalties": 0,
+            "approachBucket": "150-200",
+            "approachResult": null,
+            "otherPenalties": 0,
+            "firstPuttBucket": "3-6",
+            "recoveryOutcome": null
+          },
+          "9": {
+            "drive": "left",
+            "putts": 3,
+            "sandShots": 0,
+            "teePenalties": 0,
+            "approachBucket": "50-100",
+            "approachResult": "green",
+            "otherPenalties": 0,
+            "firstPuttBucket": "6+",
+            "recoveryOutcome": null
+          },
+          "10": {
+            "drive": "fairway",
+            "putts": 2,
+            "sandShots": 0,
+            "teePenalties": 0,
+            "approachBucket": "150-200",
+            "approachResult": "miss",
+            "otherPenalties": 0,
+            "firstPuttBucket": "6+",
+            "recoveryOutcome": null
+          },
+          "11": {
+            "drive": null,
+            "putts": 2,
+            "sandShots": 0,
+            "teePenalties": 0,
+            "approachBucket": "100-150",
+            "approachResult": null,
+            "otherPenalties": 0,
+            "firstPuttBucket": "3-6",
+            "recoveryOutcome": null
+          },
+          "12": {
+            "drive": "fairway",
+            "putts": 2,
+            "sandShots": 0,
+            "teePenalties": 0,
+            "approachBucket": "100-150",
+            "approachResult": "miss",
+            "otherPenalties": 0,
+            "firstPuttBucket": "3-6",
+            "recoveryOutcome": null
+          },
+          "13": {
+            "drive": "fairway",
+            "putts": 2,
+            "sandShots": 0,
+            "teePenalties": 0,
+            "approachBucket": "50-100",
+            "approachResult": "green",
+            "otherPenalties": 0,
+            "firstPuttBucket": "2-3",
+            "recoveryOutcome": null
+          },
+          "14": {
+            "drive": "super",
+            "putts": 2,
+            "sandShots": 0,
+            "teePenalties": 0,
+            "approachBucket": "50-100",
+            "approachResult": "green",
+            "otherPenalties": 0,
+            "firstPuttBucket": "3-6",
+            "recoveryOutcome": null
+          },
+          "16": {
+            "drive": null,
+            "putts": 2,
+            "sandShots": 0,
+            "teePenalties": 0,
+            "approachBucket": "100-150",
+            "approachResult": null,
+            "otherPenalties": 0,
+            "firstPuttBucket": "6+",
+            "recoveryOutcome": null
+          },
+          "17": {
+            "drive": "right",
+            "putts": 1,
+            "sandShots": 1,
+            "teePenalties": 0,
+            "approachBucket": "100-150",
+            "approachResult": "miss",
+            "otherPenalties": 0,
+            "firstPuttBucket": "6+",
+            "recoveryOutcome": null
+          },
+          "18": {
+            "drive": "right",
+            "putts": 2,
+            "sandShots": 1,
+            "teePenalties": 0,
+            "approachBucket": "0-50",
+            "approachResult": "green",
+            "otherPenalties": 0,
+            "firstPuttBucket": "3-6",
+            "recoveryOutcome": null
+          }
+        },
+        "e6e97499-d506-4030-9183-5c96861258cf": {
+          "1": {
+            "drive": "fairway",
+            "putts": 2,
+            "sandShots": 0,
+            "teePenalties": 0,
+            "approachBucket": "100-150",
+            "approachResult": "green",
+            "otherPenalties": 0,
+            "firstPuttBucket": null,
+            "recoveryOutcome": null
+          },
+          "2": {
+            "drive": null,
+            "putts": 2,
+            "sandShots": 0,
+            "teePenalties": 0,
+            "approachBucket": "100-150",
+            "approachResult": null,
+            "otherPenalties": 0,
+            "firstPuttBucket": "6+",
+            "recoveryOutcome": null
+          },
+          "3": {
+            "drive": "fairway",
+            "putts": 2,
+            "sandShots": 0,
+            "teePenalties": 0,
+            "approachBucket": "50-100",
+            "approachResult": null,
+            "otherPenalties": 1,
+            "firstPuttBucket": null,
+            "recoveryOutcome": null
+          },
+          "5": {
+            "drive": "fairway",
+            "putts": 2,
+            "sandShots": 0,
+            "teePenalties": 0,
+            "approachBucket": "50-100",
+            "approachResult": "miss",
+            "otherPenalties": 2,
+            "firstPuttBucket": "3-6",
+            "recoveryOutcome": null
+          },
+          "6": {
+            "drive": "fairway",
+            "putts": 2,
+            "sandShots": 0,
+            "teePenalties": 0,
+            "approachBucket": "150-200",
+            "approachResult": "miss",
+            "otherPenalties": 0,
+            "firstPuttBucket": "2-3",
+            "recoveryOutcome": null
+          },
+          "7": {
+            "drive": "right",
+            "putts": 2,
+            "sandShots": 0,
+            "teePenalties": 0,
+            "approachBucket": "100-150",
+            "approachResult": "miss",
+            "otherPenalties": 0,
+            "firstPuttBucket": "2-3",
+            "recoveryOutcome": null
+          },
+          "8": {
+            "drive": null,
+            "putts": 2,
+            "sandShots": 0,
+            "teePenalties": 1,
+            "approachBucket": "150-200",
+            "approachResult": null,
+            "otherPenalties": 0,
+            "firstPuttBucket": "2-3",
+            "recoveryOutcome": null
+          },
+          "9": {
+            "drive": "fairway",
+            "putts": 3,
+            "sandShots": 0,
+            "teePenalties": 0,
+            "approachBucket": "100-150",
+            "approachResult": "green",
+            "otherPenalties": 0,
+            "firstPuttBucket": "6+",
+            "recoveryOutcome": null
+          },
+          "10": {
+            "drive": "left",
+            "putts": 2,
+            "sandShots": 1,
+            "teePenalties": 0,
+            "approachBucket": "0-50",
+            "approachResult": "miss",
+            "otherPenalties": 0,
+            "firstPuttBucket": "1-2",
+            "recoveryOutcome": null
+          },
+          "11": {
+            "drive": null,
+            "putts": 3,
+            "sandShots": 0,
+            "teePenalties": 0,
+            "approachBucket": "100-150",
+            "approachResult": null,
+            "otherPenalties": 0,
+            "firstPuttBucket": "6+",
+            "recoveryOutcome": null
+          },
+          "12": {
+            "drive": "left",
+            "putts": 2,
+            "sandShots": 3,
+            "teePenalties": 0,
+            "approachBucket": "50-100",
+            "approachResult": "miss",
+            "otherPenalties": 0,
+            "firstPuttBucket": "2-3",
+            "recoveryOutcome": null
+          },
+          "13": {
+            "drive": "fairway",
+            "putts": 2,
+            "sandShots": 0,
+            "teePenalties": 0,
+            "approachBucket": "50-100",
+            "approachResult": "miss",
+            "otherPenalties": 1,
+            "firstPuttBucket": "2-3",
+            "recoveryOutcome": null
+          },
+          "14": {
+            "drive": "right",
+            "putts": 2,
+            "sandShots": 1,
+            "teePenalties": 0,
+            "approachBucket": "100-150",
+            "approachResult": "miss",
+            "otherPenalties": 0,
+            "firstPuttBucket": "2-3",
+            "recoveryOutcome": null
+          },
+          "15": {
+            "drive": "fairway",
+            "putts": null,
+            "sandShots": 1,
+            "teePenalties": 0,
+            "approachBucket": null,
+            "approachResult": null,
+            "otherPenalties": 1,
+            "firstPuttBucket": null,
+            "recoveryOutcome": null
+          },
+          "16": {
+            "drive": null,
+            "putts": 2,
+            "sandShots": 0,
+            "teePenalties": 0,
+            "approachBucket": "100-150",
+            "approachResult": null,
+            "otherPenalties": 0,
+            "firstPuttBucket": "2-3",
+            "recoveryOutcome": null
+          },
+          "17": {
+            "drive": "fairway",
+            "putts": 2,
+            "sandShots": 1,
+            "teePenalties": 0,
+            "approachBucket": "50-100",
+            "approachResult": "green",
+            "otherPenalties": 0,
+            "firstPuttBucket": "3-6",
+            "recoveryOutcome": null
+          },
+          "18": {
+            "drive": "fairway",
+            "putts": 2,
+            "sandShots": 0,
+            "teePenalties": 0,
+            "approachBucket": "50-100",
+            "approachResult": "green",
+            "otherPenalties": 0,
+            "firstPuttBucket": "6+",
+            "recoveryOutcome": null
+          }
+        }
+      },
+      "resetHistory": [
+        {
+          "at": "2026-07-11T09:22:49.133Z",
+          "notes": {
+            "hole": {}
+          },
+          "scores": {
+            "3f7ed0af-81e7-4b5e-94f8-bc15d0b45b4d": {
+              "1": 5,
+              "6": 4,
+              "16": 3
+            },
+            "95c89948-dc93-4ef1-a7ad-dbb638af98d9": {
+              "1": 5,
+              "6": 4,
+              "16": 3
+            },
+            "e6e97499-d506-4030-9183-5c96861258cf": {
+              "1": 5
+            },
+            "ec134d36-53ce-458f-b34e-f11b13e53616": {
+              "1": 5
+            }
+          }
+        }
+      ],
+      "playerIndexes": {
+        "3f7ed0af-81e7-4b5e-94f8-bc15d0b45b4d": 15,
+        "95c89948-dc93-4ef1-a7ad-dbb638af98d9": 16,
+        "e6e97499-d506-4030-9183-5c96861258cf": 16,
+        "ec134d36-53ce-458f-b34e-f11b13e53616": 13
+      },
+      "scoreConflicts": {
+        "3f7ed0af-81e7-4b5e-94f8-bc15d0b45b4d": {
+          "1": null,
+          "2": null,
+          "4": null,
+          "6": null
+        },
+        "95c89948-dc93-4ef1-a7ad-dbb638af98d9": {
+          "1": null,
+          "6": null,
+          "16": null
+        },
+        "e6e97499-d506-4030-9183-5c96861258cf": {
+          "1": null,
+          "4": null,
+          "18": null
+        },
+        "ec134d36-53ce-458f-b34e-f11b13e53616": {
+          "1": null
+        }
+      },
+      "manualHandicaps": {},
+      "playerHandicaps": {
+        "3f7ed0af-81e7-4b5e-94f8-bc15d0b45b4d": 17,
+        "95c89948-dc93-4ef1-a7ad-dbb638af98d9": 18,
+        "e6e97499-d506-4030-9183-5c96861258cf": 18,
+        "ec134d36-53ce-458f-b34e-f11b13e53616": 15
+      },
+      "scoreResolutions": {
+        "3f7ed0af-81e7-4b5e-94f8-bc15d0b45b4d": {
+          "1": 1783726617784,
+          "2": 1783726454078,
+          "16": 1783788617324,
+          "18": 1783790403154
+        },
+        "ec134d36-53ce-458f-b34e-f11b13e53616": {
+          "18": 1783790415386
+        }
+      }
+    },
+    {
+      "id": "r2",
+      "tees": [
+        {
+          "id": "6855cae3-4073-4c5a-af9b-5424bc991e9d",
+          "label": "Blancas",
+          "slope": 135,
+          "rating": 71,
+          "sortOrder": 0,
+          "slopeWomen": 132,
+          "ratingWomen": 77.7
+        },
+        {
+          "id": "d773236a-ccce-417d-9d12-ab7f44461619",
+          "label": "Amarillas",
+          "slope": 132,
+          "rating": 69.3,
+          "sortOrder": 2,
+          "slopeWomen": 128,
+          "ratingWomen": 75.7
+        },
+        {
+          "id": "f0e9ffcc-b476-422b-aeb7-ff410b07eba6",
+          "label": "Azules",
+          "slope": 128,
+          "rating": 67.7,
+          "sortOrder": 4,
+          "slopeWomen": 126,
+          "ratingWomen": 73.3
+        },
+        {
+          "id": "f1533287-05d7-408c-835e-9e6ca8efac8b",
+          "label": "Rojas",
+          "slope": 123,
+          "rating": 65.6,
+          "sortOrder": 6,
+          "slopeWomen": 122,
+          "ratingWomen": 70.5
+        }
+      ],
+      "holes": [
+        {
+          "par": 4,
+          "number": 1,
+          "strokeIndex": 14
+        },
+        {
+          "par": 3,
+          "number": 2,
+          "strokeIndex": 12
+        },
+        {
+          "par": 4,
+          "number": 3,
+          "strokeIndex": 18
+        },
+        {
+          "par": 4,
+          "number": 4,
+          "strokeIndex": 8
+        },
+        {
+          "par": 4,
+          "number": 5,
+          "strokeIndex": 10
+        },
+        {
+          "par": 3,
+          "number": 6,
+          "strokeIndex": 6
+        },
+        {
+          "par": 4,
+          "number": 7,
+          "strokeIndex": 4
+        },
+        {
+          "par": 5,
+          "number": 8,
+          "strokeIndex": 2
+        },
+        {
+          "par": 4,
+          "number": 9,
+          "strokeIndex": 16
+        },
+        {
+          "par": 5,
+          "number": 10,
+          "strokeIndex": 3
+        },
+        {
+          "par": 4,
+          "number": 11,
+          "strokeIndex": 11
+        },
+        {
+          "par": 4,
+          "number": 12,
+          "strokeIndex": 5
+        },
+        {
+          "par": 3,
+          "number": 13,
+          "strokeIndex": 9
+        },
+        {
+          "par": 5,
+          "number": 14,
+          "strokeIndex": 1
+        },
+        {
+          "par": 3,
+          "number": 15,
+          "strokeIndex": 15
+        },
+        {
+          "par": 4,
+          "number": 16,
+          "strokeIndex": 17
+        },
+        {
+          "par": 4,
+          "number": 17,
+          "strokeIndex": 7
+        },
+        {
+          "par": 4,
+          "number": 18,
+          "strokeIndex": 13
+        }
+      ],
+      "notes": {
+        "hole": {}
+      },
+      "pairs": [
+        [
+          {
+            "id": "95c89948-dc93-4ef1-a7ad-dbb638af98d9",
+            "name": "Marcos",
+            "gender": "male",
+            "user_id": "7a9ec70d-4a4c-4509-bfbb-f1ba09120729",
+            "handicap": 17,
+            "avatar_url": "https://cxqugzmgbcknlxfipfse.supabase.co/storage/v1/object/public/avatars/7a9ec70d-4a4c-4509-bfbb-f1ba09120729/avatar-1779264018278.jpg"
+          },
+          {
+            "id": "e6e97499-d506-4030-9183-5c96861258cf",
+            "name": "Noé",
+            "gender": "male",
+            "user_id": "785bafbe-c2fe-4733-affb-e3c199d3fafe",
+            "handicap": 17,
+            "avatar_url": "https://cxqugzmgbcknlxfipfse.supabase.co/storage/v1/object/public/avatars/785bafbe-c2fe-4733-affb-e3c199d3fafe/avatar-1776703925568.jpg"
+          }
+        ],
+        [
+          {
+            "id": "ec134d36-53ce-458f-b34e-f11b13e53616",
+            "name": "Alex",
+            "gender": "male",
+            "user_id": null,
+            "handicap": 12,
+            "avatar_url": null
+          },
+          {
+            "id": "3f7ed0af-81e7-4b5e-94f8-bc15d0b45b4d",
+            "name": "Guille",
+            "gender": "male",
+            "user_id": null,
+            "handicap": 15,
+            "avatar_url": null
+          }
+        ]
+      ],
+      "scores": {},
+      "courseId": "942f2c50-a854-4ffd-b42b-6933a2890790",
+      "courseName": "Santa Clara Golf Marbella",
+      "playerTees": {
+        "3f7ed0af-81e7-4b5e-94f8-bc15d0b45b4d": {
+          "label": "Amarillas",
+          "slope": 132,
+          "rating": 69.3
+        },
+        "95c89948-dc93-4ef1-a7ad-dbb638af98d9": {
+          "label": "Amarillas",
+          "slope": 132,
+          "rating": 69.3
+        },
+        "e6e97499-d506-4030-9183-5c96861258cf": {
+          "label": "Amarillas",
+          "slope": 132,
+          "rating": 69.3
+        },
+        "ec134d36-53ce-458f-b34e-f11b13e53616": {
+          "label": "Amarillas",
+          "slope": 132,
+          "rating": 69.3
+        }
+      },
+      "scoringMode": "scramblepairs",
+      "playerIndexes": {
+        "3f7ed0af-81e7-4b5e-94f8-bc15d0b45b4d": 15,
+        "95c89948-dc93-4ef1-a7ad-dbb638af98d9": 17,
+        "e6e97499-d506-4030-9183-5c96861258cf": 17,
+        "ec134d36-53ce-458f-b34e-f11b13e53616": 12
+      },
+      "manualHandicaps": {},
+      "playerHandicaps": {
+        "3f7ed0af-81e7-4b5e-94f8-bc15d0b45b4d": 16,
+        "95c89948-dc93-4ef1-a7ad-dbb638af98d9": 18,
+        "e6e97499-d506-4030-9183-5c96861258cf": 18,
+        "ec134d36-53ce-458f-b34e-f11b13e53616": 12
+      }
+    }
+  ],
+  "players": [
+    {
+      "id": "95c89948-dc93-4ef1-a7ad-dbb638af98d9",
+      "name": "Marcos",
+      "gender": "male",
+      "user_id": "7a9ec70d-4a4c-4509-bfbb-f1ba09120729",
+      "handicap": 17,
+      "avatar_url": "https://cxqugzmgbcknlxfipfse.supabase.co/storage/v1/object/public/avatars/7a9ec70d-4a4c-4509-bfbb-f1ba09120729/avatar-1779264018278.jpg"
+    },
+    {
+      "id": "ec134d36-53ce-458f-b34e-f11b13e53616",
+      "name": "Alex",
+      "gender": "male",
+      "user_id": null,
+      "handicap": 12,
+      "avatar_url": null
+    },
+    {
+      "id": "3f7ed0af-81e7-4b5e-94f8-bc15d0b45b4d",
+      "name": "Guille",
+      "gender": "male",
+      "user_id": "9a2d6444-2777-4ec7-af26-6c5605a31495",
+      "handicap": 15,
+      "avatar_url": "https://cxqugzmgbcknlxfipfse.supabase.co/storage/v1/object/public/avatars/9a2d6444-2777-4ec7-af26-6c5605a31495/avatar-1783679688773.jpg"
+    },
+    {
+      "id": "e6e97499-d506-4030-9183-5c96861258cf",
+      "name": "Noé",
+      "gender": "male",
+      "user_id": "785bafbe-c2fe-4733-affb-e3c199d3fafe",
+      "handicap": 17,
+      "avatar_url": "https://cxqugzmgbcknlxfipfse.supabase.co/storage/v1/object/public/avatars/785bafbe-c2fe-4733-affb-e3c199d3fafe/avatar-1776703925568.jpg"
+    }
+  ],
+  "settings": {
+    "fixedTeams": true,
+    "manualTeams": true,
+    "scoringMode": "bestball",
+    "bestBallValue": 1,
+    "worstBallValue": 1
+  },
+  "createdAt": "2026-07-09T08:09:40.051Z",
+  "currentRound": 0
+}
