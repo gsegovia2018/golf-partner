@@ -540,3 +540,19 @@ describe('StatsScreen Overview tab — presentation honesty', () => {
     expect(getByText('pts')).toBeTruthy();
   });
 });
+
+describe('StatsScreen Holes tab — heatmap honesty', () => {
+  test('avg cell renders "-" (not 0) for a hole nobody scored', () => {
+    const statsEngine = require('../../store/statsEngine');
+    statsEngine.holeDifficultyMap.mockReturnValue([
+      { holeNumber: 1, par: 4, si: 1, playerScores: [], avgPoints: null, avgStrokes: null },
+    ]);
+
+    const { getByText, getAllByText } = renderStats([makeRound('r1')]);
+    fireEvent.press(getByText('Holes'));
+
+    // One dash for the lone player's empty cell, one for the Avg column —
+    // a null average must never fall back to rendering "0".
+    expect(getAllByText('-')).toHaveLength(2);
+  });
+});

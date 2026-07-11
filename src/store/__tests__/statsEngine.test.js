@@ -1,4 +1,4 @@
-import { teeShotImpact, lagPuttingQuality, sandSaveRate, upAndDownRate, bunkerVisits, sgPutting, sgAroundGreen, sgApproach, sgPenalties, sgTotal, sgSeason, driveScoreImpact, puttDeepDive, approachScoreImpact, puttingTargetGaps, approachTargetGaps, pairPerformance, shotStats, tournamentHighlights, withoutScrambleScores, playerAvgStableford, pickupChampion, hallOfShame, chaosHoles, skinsLeaderboard, playerStreaks, bounceBackRate, strokeIndexAccuracy } from '../statsEngine';
+import { teeShotImpact, lagPuttingQuality, sandSaveRate, upAndDownRate, bunkerVisits, sgPutting, sgAroundGreen, sgApproach, sgPenalties, sgTotal, sgSeason, driveScoreImpact, puttDeepDive, approachScoreImpact, puttingTargetGaps, approachTargetGaps, pairPerformance, shotStats, tournamentHighlights, withoutScrambleScores, playerAvgStableford, pickupChampion, hallOfShame, chaosHoles, skinsLeaderboard, playerStreaks, bounceBackRate, strokeIndexAccuracy, bestWorstHoles, holeDifficultyMap, collectiveExtremes } from '../statsEngine';
 import { mixedModeTournament, buildTournament } from './statsFixtures';
 
 // 18 par-4 holes, strokeIndex = hole number.
@@ -1381,5 +1381,167 @@ describe('strokeIndexAccuracy — pooled per course+hole, average-rank ties, rou
     // course name must not leak in.
     expect(results).toHaveLength(3);
     results.forEach(r => expect(r.avgVsPar).toBeCloseTo(0));
+  });
+});
+
+describe('collectiveExtremes — qualifies on round participants, not the whole tournament roster', () => {
+  it('counts a hole as a disaster when every player who actually played the round tanked it, even if a non-participating tournament player is never scored', () => {
+    // 3 tournament players, but p3 never appears anywhere in round.scores —
+    // they didn't play this round at all (e.g. a sub joined for one round
+    // only). p1 and p2 both score 6 on a par-4 SI-1 hole at handicap 0 →
+    // 2 + (4 - 6) = 0 points each, a collective disaster among the two who
+    // actually played.
+    const holes = [{ number: 1, par: 4, strokeIndex: 1 }];
+    const players = [
+      { id: 'p1', name: 'Alice', handicap: 0 },
+      { id: 'p2', name: 'Bob', handicap: 0 },
+      { id: 'p3', name: 'Cara', handicap: 0 },
+    ];
+    const round = {
+      courseName: 'Test Course',
+      holes,
+      playerHandicaps: { p1: 0, p2: 0, p3: 0 },
+      scores: { p1: { 1: 6 }, p2: { 1: 6 } }, // p3 absent entirely
+    };
+    const t = buildTournament({ players, rounds: [round] });
+
+    const { disasters } = collectiveExtremes(t);
+
+    expect(disasters).toHaveLength(1);
+    expect(disasters[0].holeNumber).toBe(1);
+    expect(disasters[0].scores.map(s => s.playerId).sort()).toEqual(['p1', 'p2']);
+  });
+
+  it('does not qualify a hole when a round participant played the round but missed that specific hole', () => {
+    const holes = [
+      { number: 1, par: 4, strokeIndex: 1 },
+      { number: 2, par: 4, strokeIndex: 2 },
+    ];
+    const players = [
+      { id: 'p1', name: 'Alice', handicap: 0 },
+      { id: 'p2', name: 'Bob', handicap: 0 },
+    ];
+    const round = {
+      courseName: 'Test Course',
+      holes,
+      playerHandicaps: { p1: 0, p2: 0 },
+      // p2 is a round participant (has a score on hole 2) but has no score
+      // on hole 1 — hole 1 must not qualify even though the only score
+      // present (p1's) is a disaster-level 0.
+      scores: { p1: { 1: 6, 2: 6 }, p2: { 2: 6 } },
+    };
+    const t = buildTournament({ players, rounds: [round] });
+
+    const { disasters } = collectiveExtremes(t);
+
+    expect(disasters.find(d => d.holeNumber === 1)).toBeUndefined();
+    expect(disasters.find(d => d.holeNumber === 2)).toBeDefined();
+  });
+});
+
+describe('holeDifficultyMap — honest averages', () => {
+  it('reports null (not 0) avgPoints/avgStrokes for a hole nobody scored', () => {
+    const holes = [
+      { number: 1, par: 4, strokeIndex: 1 },
+      { number: 2, par: 4, strokeIndex: 2 },
+    ];
+    const players = [{ id: 'p1', name: 'Alice', handicap: 0 }];
+    const round = {
+      courseName: 'Test Course',
+      holes,
+      playerHandicaps: { p1: 0 },
+      scores: { p1: { 1: 4 } }, // hole 2 never scored by anyone
+    };
+    const t = buildTournament({ players, rounds: [round] });
+
+    const map = holeDifficultyMap(t, 0);
+    const hole1 = map.find(h => h.holeNumber === 1);
+    const hole2 = map.find(h => h.holeNumber === 2);
+
+    expect(hole1.avgPoints).toBe(2); // par → 2 + (4-4) = 2
+    expect(hole1.avgStrokes).toBe(4);
+    expect(hole2.avgPoints).toBeNull();
+    expect(hole2.avgStrokes).toBeNull();
+  });
+});
+
+describe('bestWorstHoles — sample guards, overlap-free split, round scope', () => {
+  // Helper: one hole scored identically by two players at handicap 0, so
+  // avgPoints = 2 + (par - strokes).
+  function scoredHole(number, strokes, par = 4) {
+    return {
+      hole: { number, par, strokeIndex: number },
+      scores: { p1: { [number]: strokes }, p2: { [number]: strokes } },
+    };
+  }
+
+  it('excludes holes with fewer than minScores(2 default) scores', () => {
+    const specs = [scoredHole(1, 2), scoredHole(2, 3), scoredHole(3, 5)]; // avgPoints 4, 3, 1
+    const underScored = { number: 4, par: 4, strokeIndex: 4 }; // only p1 scores it
+    const holes = [...specs.map(s => s.hole), underScored];
+    const players = [{ id: 'p1', name: 'Alice', handicap: 0 }, { id: 'p2', name: 'Bob', handicap: 0 }];
+    const round = {
+      courseName: 'Test Course', holes, playerHandicaps: { p1: 0, p2: 0 },
+      scores: {
+        p1: { ...specs.reduce((o, s) => ({ ...o, ...s.scores.p1 }), {}), 4: 4 },
+        p2: specs.reduce((o, s) => ({ ...o, ...s.scores.p2 }), {}),
+      },
+    };
+    const t = buildTournament({ players, rounds: [round] });
+
+    const defaultResult = bestWorstHoles(t, { metric: 'points' });
+    const allHoleNumbers = [...defaultResult.best, ...defaultResult.worst].map(h => h.holeNumber);
+    expect(allHoleNumbers).not.toContain(4);
+    expect(allHoleNumbers.sort()).toEqual([1, 2, 3]);
+
+    const permissiveResult = bestWorstHoles(t, { metric: 'points', minScores: 1 });
+    const permissiveHoleNumbers = [...permissiveResult.best, ...permissiveResult.worst].map(h => h.holeNumber);
+    expect(permissiveHoleNumbers).toContain(4);
+  });
+
+  it('splits 4 entries 2/2 with no hole in both best and worst', () => {
+    const specs = [scoredHole(1, 2), scoredHole(2, 3), scoredHole(3, 5), scoredHole(4, 6)]; // avgPoints 4, 3, 1, 0
+    const holes = specs.map(s => s.hole);
+    const players = [{ id: 'p1', name: 'Alice', handicap: 0 }, { id: 'p2', name: 'Bob', handicap: 0 }];
+    const round = {
+      courseName: 'Test Course', holes, playerHandicaps: { p1: 0, p2: 0 },
+      scores: {
+        p1: specs.reduce((o, s) => ({ ...o, ...s.scores.p1 }), {}),
+        p2: specs.reduce((o, s) => ({ ...o, ...s.scores.p2 }), {}),
+      },
+    };
+    const t = buildTournament({ players, rounds: [round] });
+
+    const { best, worst } = bestWorstHoles(t, { metric: 'points' });
+
+    expect(best).toHaveLength(2);
+    expect(worst).toHaveLength(2);
+    const bestNums = best.map(h => h.holeNumber);
+    const worstNums = worst.map(h => h.holeNumber);
+    expect(bestNums).toEqual([1, 2]);
+    expect(worstNums).toEqual([4, 3]); // hardest first
+    expect(bestNums.filter(n => worstNums.includes(n))).toEqual([]);
+  });
+
+  it('honors roundIndex, and every returned entry carries its own roundIndex', () => {
+    const specs0 = [scoredHole(1, 4)]; // avgPoints 2 (par)
+    const specs1 = [scoredHole(1, 2)]; // avgPoints 4 (eagle-ish)
+    const players = [{ id: 'p1', name: 'Alice', handicap: 0 }, { id: 'p2', name: 'Bob', handicap: 0 }];
+    const round0 = {
+      courseName: 'Course A', holes: specs0.map(s => s.hole), playerHandicaps: { p1: 0, p2: 0 },
+      scores: { p1: specs0[0].scores.p1, p2: specs0[0].scores.p2 },
+    };
+    const round1 = {
+      courseName: 'Course B', holes: specs1.map(s => s.hole), playerHandicaps: { p1: 0, p2: 0 },
+      scores: { p1: specs1[0].scores.p1, p2: specs1[0].scores.p2 },
+    };
+    const t = buildTournament({ players, rounds: [round0, round1] });
+
+    const scoped = bestWorstHoles(t, { metric: 'points', roundIndex: 1 });
+
+    const all = [...scoped.best, ...scoped.worst];
+    expect(all).toHaveLength(1);
+    expect(all[0].roundIndex).toBe(1);
+    expect(all[0].avgPoints).toBe(4);
   });
 });

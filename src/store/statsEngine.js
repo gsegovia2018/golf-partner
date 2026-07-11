@@ -161,7 +161,13 @@ export function playerStreaks(tournament, playerId, { metric = 'points', roundIn
 
 // ── Hole Analysis ──
 
-export function bestWorstHoles(tournament, { metric = 'points', roundIndex = null } = {}) {
+// minScores guards against a hole "winning" best/worst off a single stray
+// score — by default a hole needs at least 2 recorded scores to be ranked
+// at all. best/worst never share an entry: with n qualifying holes, best
+// takes the top min(3, ceil(n/2)) and worst takes the bottom
+// min(3, floor(n/2)), so when n < 6 the middle is simply dropped rather
+// than double-counted.
+export function bestWorstHoles(tournament, { metric = 'points', roundIndex = null, minScores = 2 } = {}) {
   const holeMap = {};
   tournament.rounds.forEach((round, ri) => {
     if (roundIndex !== null && ri !== roundIndex) return;
@@ -181,7 +187,7 @@ export function bestWorstHoles(tournament, { metric = 'points', roundIndex = nul
         count++;
         playerScores.push({ playerId: p.id, playerName: p.name, strokes: sc, points: pts });
       });
-      if (count > 0) {
+      if (count >= minScores) {
         holeMap[key] = {
           roundIndex: ri,
           holeNumber: hole.number,
@@ -202,9 +208,13 @@ export function bestWorstHoles(tournament, { metric = 'points', roundIndex = nul
   const sorted = metric === 'strokes'
     ? [...all].sort((a, b) => a.avgVsPar - b.avgVsPar) // ascending vsPar; easiest first
     : [...all].sort((a, b) => b.avgPoints - a.avgPoints); // descending points; easiest first
+
+  const n = sorted.length;
+  const bestCount = Math.min(3, Math.ceil(n / 2));
+  const worstCount = Math.min(3, Math.floor(n / 2));
   return {
-    best: sorted.slice(0, 3),
-    worst: sorted.slice(-3).reverse(),
+    best: sorted.slice(0, bestCount),
+    worst: sorted.slice(n - worstCount).reverse(),
   };
 }
 
@@ -218,8 +228,8 @@ export function holeDifficultyMap(tournament, roundIndex) {
       const handicap = getPlayingHandicap(round, p);
       return { playerId: p.id, playerName: p.name, points: calcStablefordPoints(hole.par, sc, handicap, hole.strokeIndex), strokes: sc };
     }).filter(Boolean);
-    const avgPts = playerScores.length > 0 ? +(playerScores.reduce((s, x) => s + x.points, 0) / playerScores.length).toFixed(2) : 0;
-    const avgStr = playerScores.length > 0 ? +(playerScores.reduce((s, x) => s + x.strokes, 0) / playerScores.length).toFixed(2) : 0;
+    const avgPts = playerScores.length > 0 ? +(playerScores.reduce((s, x) => s + x.points, 0) / playerScores.length).toFixed(2) : null;
+    const avgStr = playerScores.length > 0 ? +(playerScores.reduce((s, x) => s + x.strokes, 0) / playerScores.length).toFixed(2) : null;
     return { holeNumber: hole.number, par: hole.par, si: hole.strokeIndex, playerScores, avgPoints: avgPts, avgStrokes: avgStr };
   });
 }
@@ -1024,21 +1034,31 @@ export function chaosHoles(tournament) {
 
 // ── Collective Extremes ──
 // Holes where every playing member tanked (0 points each) or every playing
-// member scored ≥2 points.
+// member scored ≥2 points. "Every playing member" means every player who
+// has ANY score recorded in that round — not every player on the
+// tournament roster. A sub who only joined for a different round, or a
+// player who simply hasn't played this round yet, must not block a hole
+// from qualifying just because the tournament roster is bigger than the
+// group that actually teed off that day.
 export function collectiveExtremes(tournament) {
   const disasters = [], gimmes = [];
   tournament.rounds.forEach((round, roundIndex) => {
     if (!round.scores) return;
+    const participants = tournament.players.filter(player => {
+      const playerScores = round.scores[player.id];
+      return playerScores && Object.keys(playerScores).length > 0;
+    });
+    if (participants.length === 0) return;
     round.holes.forEach(hole => {
       const scores = [];
-      tournament.players.forEach(player => {
+      participants.forEach(player => {
         const sc = round.scores[player.id]?.[hole.number];
         if (!sc) return;
         const handicap = getPlayingHandicap(round, player);
         const pts = calcStablefordPoints(hole.par, sc, handicap, hole.strokeIndex);
         scores.push({ playerId: player.id, playerName: player.name, strokes: sc, points: pts });
       });
-      if (scores.length < tournament.players.length) return;
+      if (scores.length < participants.length) return;
       const entry = {
         roundIndex, courseName: round.courseName,
         holeNumber: hole.number, par: hole.par, si: hole.strokeIndex, scores,

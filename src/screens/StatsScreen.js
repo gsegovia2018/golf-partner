@@ -288,7 +288,7 @@ export default function StatsScreen({ navigation }) {
       {activeTab === 'holes' && (
         <ScrollView style={s.scrollView} contentContainerStyle={s.content}>
           <HolesTab tournament={statsTournament} completedRounds={completedRounds} hasMulti={hasMulti}
-            metric={metric} effectiveRound={effectiveRound} theme={theme} s={s} />
+            metric={metric} effectiveRound={effectiveRound} roundScope={roundScope} theme={theme} s={s} />
         </ScrollView>
       )}
       {activeTab === 'pairs' && anyTeams && (
@@ -1473,9 +1473,12 @@ function DistBar({ label, count, total, color, onPress, s }) {
 }
 
 // ── Holes Tab ──
-function HolesTab({ tournament, completedRounds, hasMulti, metric, effectiveRound, theme, s }) {
+function HolesTab({ tournament, completedRounds, hasMulti, metric, effectiveRound, roundScope, theme, s }) {
   const isStrokes = metric === 'strokes';
-  const bw = bestWorstHoles(tournament, { metric });
+  // Best/worst honors the screen's round scope directly (null = Total,
+  // aggregated across every round) rather than falling back to a single
+  // round the way the heatmap does below.
+  const bw = bestWorstHoles(tournament, { metric, roundIndex: roundScope });
   // The heatmap is inherently per-round — it reads the unified screen scope.
   const heatRound = effectiveRound != null ? effectiveRound : 0;
   const heatmap = holeDifficultyMap(tournament, heatRound);
@@ -1489,7 +1492,7 @@ function HolesTab({ tournament, completedRounds, hasMulti, metric, effectiveRoun
     : `${h.avgPoints} avg pts`;
 
   const openHole = (h, label, explainer) => setSheet({
-    title: `Hole ${h.holeNumber} · ${h.courseName}`,
+    title: `R${h.roundIndex + 1} · Hole ${h.holeNumber} · ${h.courseName}`,
     subtitle: `${label} · Par ${h.par} · SI ${h.si} · ${renderAvg(h)}`,
     explainer,
     rows: h.playerScores.map(ps => ({
@@ -1553,42 +1556,6 @@ function HolesTab({ tournament, completedRounds, hasMulti, metric, effectiveRoun
 
   return (
     <View>
-      {bw.best.length > 0 && (
-        <>
-          <Text style={s.sectionTitle}>EASIEST HOLES</Text>
-          {bw.best.map((h, i) => (
-            <TouchableOpacity key={`b${i}`} style={s.holeCard} onPress={() => openHole(h, 'Easiest Hole', isStrokes ? 'Hole with the lowest average strokes-vs-par.' : 'Hole with the highest average Stableford points.')} activeOpacity={0.7}>
-              <View style={[s.holeRank, { backgroundColor: theme.scoreColor('excellent') + '20' }]}>
-                <Text style={[s.holeRankText, { color: theme.scoreColor('excellent') }]}>#{i + 1}</Text>
-              </View>
-              <View style={s.holeInfo}>
-                <Text style={s.holeName}>Hole {h.holeNumber} · Par {h.par} · SI {h.si}</Text>
-                <Text style={s.holeCourse}>{h.courseName}</Text>
-              </View>
-              <Text style={[s.holeAvg, { color: theme.scoreColor('excellent') }]}>{renderAvg(h)}</Text>
-            </TouchableOpacity>
-          ))}
-        </>
-      )}
-
-      {bw.worst.length > 0 && (
-        <>
-          <Text style={s.sectionTitle}>HARDEST HOLES</Text>
-          {bw.worst.map((h, i) => (
-            <TouchableOpacity key={`w${i}`} style={s.holeCard} onPress={() => openHole(h, 'Hardest Hole', isStrokes ? 'Hole with the highest average strokes-vs-par.' : 'Hole with the lowest average Stableford points.')} activeOpacity={0.7}>
-              <View style={[s.holeRank, { backgroundColor: theme.scoreColor('poor') + '20' }]}>
-                <Text style={[s.holeRankText, { color: theme.scoreColor('poor') }]}>#{i + 1}</Text>
-              </View>
-              <View style={s.holeInfo}>
-                <Text style={s.holeName}>Hole {h.holeNumber} · Par {h.par} · SI {h.si}</Text>
-                <Text style={s.holeCourse}>{h.courseName}</Text>
-              </View>
-              <Text style={[s.holeAvg, { color: theme.scoreColor('poor') }]}>{renderAvg(h)}</Text>
-            </TouchableOpacity>
-          ))}
-        </>
-      )}
-
       {completedRounds.length > 0 && (
         <>
           <Text style={s.sectionTitle}>HOLE HEATMAP</Text>
@@ -1638,12 +1605,48 @@ function HolesTab({ tournament, completedRounds, hasMulti, metric, effectiveRoun
                     );
                   })}
                   <View style={[s.heatCell, s.heatValue]}>
-                    <Text style={s.heatAvgText}>{isStrokes ? (h.avgStrokes ?? '-') : h.avgPoints}</Text>
+                    <Text style={s.heatAvgText}>{isStrokes ? (h.avgStrokes ?? '-') : (h.avgPoints ?? '-')}</Text>
                   </View>
                 </View>
               ))}
             </View>
           </ScrollView>
+        </>
+      )}
+
+      {bw.best.length > 0 && (
+        <>
+          <Text style={s.sectionTitle}>EASIEST HOLES</Text>
+          {bw.best.map((h, i) => (
+            <TouchableOpacity key={`b${i}`} style={s.holeCard} onPress={() => openHole(h, 'Easiest Hole', isStrokes ? 'Hole with the lowest average strokes-vs-par.' : 'Hole with the highest average Stableford points.')} activeOpacity={0.7}>
+              <View style={[s.holeRank, { backgroundColor: theme.scoreColor('excellent') + '20' }]}>
+                <Text style={[s.holeRankText, { color: theme.scoreColor('excellent') }]}>#{i + 1}</Text>
+              </View>
+              <View style={s.holeInfo}>
+                <Text style={s.holeName}>R{h.roundIndex + 1} · Hole {h.holeNumber} · Par {h.par} · SI {h.si}</Text>
+                <Text style={s.holeCourse}>{h.courseName}</Text>
+              </View>
+              <Text style={[s.holeAvg, { color: theme.scoreColor('excellent') }]}>{renderAvg(h)}</Text>
+            </TouchableOpacity>
+          ))}
+        </>
+      )}
+
+      {bw.worst.length > 0 && (
+        <>
+          <Text style={s.sectionTitle}>HARDEST HOLES</Text>
+          {bw.worst.map((h, i) => (
+            <TouchableOpacity key={`w${i}`} style={s.holeCard} onPress={() => openHole(h, 'Hardest Hole', isStrokes ? 'Hole with the highest average strokes-vs-par.' : 'Hole with the lowest average Stableford points.')} activeOpacity={0.7}>
+              <View style={[s.holeRank, { backgroundColor: theme.scoreColor('poor') + '20' }]}>
+                <Text style={[s.holeRankText, { color: theme.scoreColor('poor') }]}>#{i + 1}</Text>
+              </View>
+              <View style={s.holeInfo}>
+                <Text style={s.holeName}>R{h.roundIndex + 1} · Hole {h.holeNumber} · Par {h.par} · SI {h.si}</Text>
+                <Text style={s.holeCourse}>{h.courseName}</Text>
+              </View>
+              <Text style={[s.holeAvg, { color: theme.scoreColor('poor') }]}>{renderAvg(h)}</Text>
+            </TouchableOpacity>
+          ))}
         </>
       )}
 
