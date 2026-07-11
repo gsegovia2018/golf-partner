@@ -45,7 +45,7 @@ import {
   DEFAULT_SHOT,
   celebrationFor,
 } from '../components/scorecard/constants';
-import { reconcileShotDetail, listRoundConflicts, roundScoringMode } from '../store/scoring';
+import { reconcileShotDetail, listRoundConflicts, roundScoringMode, roundBestBallValues } from '../store/scoring';
 import { makeScorecardStyles } from '../components/scorecard/styles';
 import { HoleView } from '../components/scorecard/HoleView';
 import { GridView } from '../components/scorecard/GridView';
@@ -824,8 +824,12 @@ export default function ScorecardScreen({ navigation, route }) {
     setViewOnly(finished);
   }, [official, round, players, tournament?.finishedAt]);
   const settings = useMemo(
-    () => ({ ...DEFAULT_SETTINGS, ...(tournament?.settings ?? {}) }),
-    [tournament?.settings],
+    () => ({
+      ...DEFAULT_SETTINGS,
+      ...(tournament?.settings ?? {}),
+      ...(tournament && round ? roundBestBallValues(tournament, round) : {}),
+    }),
+    [tournament, round],
   );
   // Guard on `tournament` (not just call roundScoringMode unconditionally) so
   // this stays `undefined` before the tournament loads — the mode-change
@@ -1086,8 +1090,8 @@ export default function ScorecardScreen({ navigation, route }) {
     setRoundDecisionNotice(null);
     const mode = roundScoringMode(tournament, round) === 'bestball' ? 'bestball' : 'stableford';
     const liveRound = { ...round, scores };
-    lastClinchedPairRef.current = roundPairClinched(liveRound, players, tournament.settings, mode);
-  }, [round, tournament, players, scores]);
+    lastClinchedPairRef.current = roundPairClinched(liveRound, players, settings, mode);
+  }, [round, tournament, players, scores, settings]);
 
   const goToNextHole = useCallback(() => {
     haptic('medium');
@@ -1096,7 +1100,7 @@ export default function ScorecardScreen({ navigation, route }) {
     if (!round || !tournament) return;
     const mode = roundScoringMode(tournament, round) === 'bestball' ? 'bestball' : 'stableford';
     const liveRound = { ...round, scores };
-    const clinched = roundPairClinched(liveRound, players, tournament.settings, mode);
+    const clinched = roundPairClinched(liveRound, players, settings, mode);
     if (clinched != null && lastClinchedPairRef.current == null) {
       const pair = round.pairs?.[clinched];
       if (pair) {
@@ -1104,7 +1108,7 @@ export default function ScorecardScreen({ navigation, route }) {
       }
     }
     lastClinchedPairRef.current = clinched;
-  }, [round, tournament, players, scores]);
+  }, [round, tournament, players, scores, settings]);
 
   const goToHole = useCallback((h) => {
     haptic('light');

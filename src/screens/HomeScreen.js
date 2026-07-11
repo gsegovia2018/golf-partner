@@ -11,8 +11,8 @@ import { loadProfile } from '../store/profileStore';
 import { ShareableLeaderboard, shareLeaderboard } from '../components/ShareableCard';
 import QuickStartCourses from '../components/QuickStartCourses';
 import PostCreateInviteModal from '../components/PostCreateInviteModal';
-import { scoringModeUsesTeams, leaderboardToggleLabels, mergeScoringSettings, isScrambleMode, getScoringMode } from '../components/scoringModes';
-import ScoringModeField, { ScoringModeSheet } from '../components/ScoringModePicker';
+import { scoringModeUsesTeams, leaderboardToggleLabels, isScrambleMode, getScoringMode } from '../components/scoringModes';
+import { ScoringModeSheet, TeamsSettingsFields, BestBallValueFields } from '../components/ScoringModePicker';
 import PullToRefresh from '../components/PullToRefresh';
 import LoadingSplash from '../components/LoadingSplash';
 import BottomSheet from '../components/BottomSheet';
@@ -31,7 +31,6 @@ import {
   scrambleRoundTally, tournamentScrambleLeaderboard,
   pairsMatchRoundTally, tournamentPairsMatchStandings,
   DEFAULT_SETTINGS, generateInviteCode, buildJoinLink,
-  setScoringModeRoundPatches,
   tournamentNoun, tournamentNounCapitalized,
   getActiveTournamentSnapshot, getTournament, getTournamentSnapshot,
   lastTeeForPlayerOnCourse,
@@ -43,7 +42,7 @@ import {
   resolveQuickStartPlayerTees,
 } from '../lib/quickStartGame';
 import { mutate } from '../store/mutate';
-import { roundScoringMode, tournamentHasMixedModes, tournamentStablefordLeaderboard, buildTeamsForMode } from '../store/scoring';
+import { roundScoringMode, tournamentHasMixedModes, tournamentStablefordLeaderboard, buildTeamsForMode, roundBestBallValues } from '../store/scoring';
 import { subscribeConnectivity } from '../lib/connectivity';
 import { getShowRunningScore, setShowRunningScore } from '../lib/prefs';
 import { unreadCount } from '../store/notificationStore';
@@ -77,6 +76,18 @@ function chooseInitialRound(tournament) {
   }
   if (entered >= expected && cur < rounds.length - 1) return cur + 1;
   return cur;
+}
+
+// "Marcos + Noé vs Guille + Alex" — the tournament's fixed pairs, first
+// names only, read from round 1 (fixedTeams keeps them identical everywhere).
+function pairsPreviewText(t) {
+  const pairs = t?.rounds?.[0]?.pairs ?? [];
+  if (pairs.length !== 2) return '';
+  const firstName = (p) => {
+    const live = t.players?.find((x) => x.id === p.id);
+    return ((live ?? p)?.name ?? '').split(' ')[0];
+  };
+  return pairs.map((pr) => pr.map(firstName).join(' + ')).join(' vs ');
 }
 
 // Belt-and-braces: inject the snap rules via a real <style> tag so they
@@ -149,11 +160,10 @@ export default function HomeScreen({ navigation, route }) {
   const userPickedRoundRef = useRef(false);
   const lastLoadedTournamentIdRef = useRef(initialTournament?.id ?? null);
   const [showSettings, setShowSettings] = useState(false);
-  const [showScoringModeSheet, setShowScoringModeSheet] = useState(false);
-  // Draft scoring settings while the sheet is open. Best Ball values are held
-  // as strings because ScoringModeField edits them through TextInputs. null
-  // until the sheet is opened.
-  const [scoringDraft, setScoringDraft] = useState(null);
+  const [showTeamSettings, setShowTeamSettings] = useState(false);
+  const [showPointValues, setShowPointValues] = useState(false);
+  // Strings — BestBallValueFields edits through TextInputs.
+  const [pointValuesDraft, setPointValuesDraft] = useState(null);
   // List-view overflow menu — surfaces the Course/Player libraries, which
   // otherwise have no entry point here.
   const [showListMenu, setShowListMenu] = useState(false);
@@ -777,51 +787,6 @@ export default function HomeScreen({ navigation, route }) {
     }
   }
 
-  // Persist the scoring-mode draft. Rebuilds each affected round's pairs so
-  // teams match the new mode — the same pair patches ScorecardScreen applies
-  // for a mid-game change — then saves the whole tournament blob so the Best
-  // Ball point values ride along too. reload() refreshes local state.
-  async function saveScoringMode() {
-    if (!tournament || !scoringDraft) return;
-    try {
-      // Merge the draft first so the patch builder sees the settings being
-      // saved (notably fixedTeams) rather than the pre-save tournament's —
-      // turning "same teams every round" on must unify THIS save's patches.
-      // The tournament handed to the patch builder keeps its pre-save
-      // scoringMode: setScoringModeRoundPatches reads the OLD mode from
-      // settings.scoringMode and takes the NEW mode as its argument.
-      const mergedSettings = mergeScoringSettings(tournament.settings, scoringDraft);
-      const patchSource = {
-        ...tournament,
-        settings: { ...mergedSettings, scoringMode: tournament.settings?.scoringMode ?? 'stableford' },
-      };
-      const { patches } = setScoringModeRoundPatches(patchSource, scoringDraft.scoringMode);
-      const pairsByRound = new Map(
-        patches.filter((p) => p.pairs).map((p) => [p.roundId, p.pairs]),
-      );
-      const updated = {
-        ...tournament,
-        settings: mergedSettings,
-        // Setting the tournament-wide mode here is a reset to uniform: strip
-        // any round.scoringMode override on every patched round so the whole
-        // tournament goes back to reading settings.scoringMode. `scoringMode:
-        // undefined` is dropped when the object is JSON-serialized on save
-        // (saveLocal/persistRemote both JSON.stringify), so this actually
-        // clears the key rather than leaving an explicit undefined around.
-        rounds: (tournament.rounds ?? []).map((r) => (
-          pairsByRound.has(r.id) ? { ...r, pairs: pairsByRound.get(r.id), scoringMode: undefined } : r
-        )),
-      };
-      await saveTournament(updated);
-      await reload();
-      setShowScoringModeSheet(false);
-    } catch (err) {
-      const msg = err?.message ?? 'Could not update scoring mode';
-      if (Platform.OS === 'web') window.alert(msg);
-      else Alert.alert('Error', msg);
-    }
-  }
-
   // Persist a per-round scoring-mode override from the Round N sheet's
   // "Scoring Mode" item. Rebuilds that round's pairs for the new mode (same
   // approach as the tournament-wide picker) and dispatches the dedicated
@@ -840,6 +805,45 @@ export default function HomeScreen({ navigation, route }) {
       setShowRoundModeSheet(false);
     } catch (err) {
       const msg = err?.message ?? 'Could not update scoring mode';
+      if (Platform.OS === 'web') window.alert(msg);
+      else Alert.alert('Error', msg);
+    }
+  }
+
+  // Persist the selected round's best/worst point values (round override).
+  async function savePointValues() {
+    const r = tournament?.rounds?.[selectedRound];
+    if (!r || !pointValuesDraft) return;
+    try {
+      await mutate(tournament, {
+        type: 'round.setBestBallValues',
+        roundId: r.id,
+        bestBallValue: parseInt(pointValuesDraft.bestBallValue, 10) || 1,
+        worstBallValue: parseInt(pointValuesDraft.worstBallValue, 10) || 1,
+      });
+      await reload();
+      setShowPointValues(false);
+    } catch (err) {
+      const msg = err?.message ?? 'Could not update point values';
+      if (Platform.OS === 'web') window.alert(msg);
+      else Alert.alert('Error', msg);
+    }
+  }
+
+  // Persist the gear sheet's team toggles. Tournament-wide by design —
+  // fixedTeams/manualTeams shape how EVERY round builds its pairs. No eager
+  // pair rebuilds: pairsForNextRound applies fixedTeams lazily at reveal.
+  async function saveTeamSettings(next) {
+    if (!tournament) return;
+    try {
+      await mutate(tournament, {
+        type: 'tournament.setTeamSettings',
+        fixedTeams: Boolean(next.fixedTeams),
+        manualTeams: Boolean(next.manualTeams),
+      });
+      await reload();
+    } catch (err) {
+      const msg = err?.message ?? 'Could not update team settings';
       if (Platform.OS === 'web') window.alert(msg);
       else Alert.alert('Error', msg);
     }
@@ -948,6 +952,14 @@ export default function HomeScreen({ navigation, route }) {
   // so every selected-round-scoped derivation reads THIS instead of
   // settings.scoringMode.
   const selectedRoundMode = roundScoringMode(tournament, selectedRoundData);
+  // The mode that decides whether team settings apply: the first round whose
+  // effective mode is a team mode the roster supports. Null → no team rounds,
+  // the gear hides Team Settings entirely.
+  const teamSettingsMode = tournament
+    ? ((tournament.rounds ?? [])
+        .map((r) => roundScoringMode(tournament, r))
+        .find((m) => scoringModeUsesTeams(m, tournament.players.length)) ?? null)
+    : null;
   const selectedRoundPlayerTotals = useMemo(() => {
     if (!tournament || !selectedRoundData || !selectedRoundHasScores
       || (selectedRoundMode === 'bestball' && !leaderboardAlt)) return null;
@@ -1025,6 +1037,35 @@ export default function HomeScreen({ navigation, route }) {
       >
         <Feather name="eye" size={18} color={theme.accent.primary} />
         <Text style={s.menuItemText}>Reveal Teams</Text>
+        <Feather name="chevron-right" size={16} color={theme.text.muted} />
+      </TouchableOpacity>
+    );
+  }
+
+  // Point values are only meaningful for a Best Ball round. Rendered in the
+  // per-round sheet (multi-round) and the gear sheet (single-round).
+  function renderPointValuesMenuItem(onClose) {
+    const r = tournament.rounds[selectedRound];
+    if (isViewer || roundScoringMode(tournament, r) !== 'bestball') return null;
+    const vals = roundBestBallValues(tournament, r);
+    return (
+      <TouchableOpacity
+        style={s.menuItem}
+        onPress={() => {
+          onClose();
+          setPointValuesDraft({
+            bestBallValue: String(vals.bestBallValue),
+            worstBallValue: String(vals.worstBallValue),
+          });
+          setShowPointValues(true);
+        }}
+        activeOpacity={0.7}
+      >
+        <Feather name="hash" size={18} color={theme.accent.primary} />
+        <View style={{ flex: 1 }}>
+          <Text style={s.menuItemText}>Point Values</Text>
+          <Text style={s.modalSubtle}>{`Best ${vals.bestBallValue} · Worst ${vals.worstBallValue} pts / hole`}</Text>
+        </View>
         <Feather name="chevron-right" size={16} color={theme.text.muted} />
       </TouchableOpacity>
     );
@@ -1505,7 +1546,10 @@ export default function HomeScreen({ navigation, route }) {
     }
     if (selMode === 'bestball' && !leaderboardAlt) {
       if (!selectedRoundData || !selectedRoundHasScores || !selectedRoundData.pairs?.length) return null;
-      return playerRoundBestWorstPoints(selectedRoundData, playerId, tournament.players, settings);
+      return playerRoundBestWorstPoints(
+        selectedRoundData, playerId, tournament.players,
+        { ...settings, ...roundBestBallValues(tournament, selectedRoundData) },
+      );
     }
     if (selMode === 'pairsmatchplay' && !leaderboardAlt) {
       if (!selectedRoundData || !selectedRoundHasScores) return null;
@@ -1684,6 +1728,7 @@ export default function HomeScreen({ navigation, route }) {
 
           {/* Horizontal pager — swipe to change round, stays in sync with tabs */}
           <View
+            testID="round-pager-wrap"
             style={s.roundPagerWrap}
             onLayout={(e) => {
               // Don't prefill roundScrollOffset from selectedRound — on web
@@ -1712,12 +1757,26 @@ export default function HomeScreen({ navigation, route }) {
               />
             ) : (
               <ScrollView
+                testID="round-pager"
                 ref={roundPagerRef}
                 horizontal
                 pagingEnabled={Platform.OS !== 'web'}
                 style={PAGER_SNAP_TYPE_STYLE}
                 showsHorizontalScrollIndicator={false}
                 scrollEventThrottle={16}
+                onLayout={() => {
+                  // Never scroll out from under the user's finger — e.g. a
+                  // viewport reflow firing layout mid-swipe on web.
+                  if (isUserScrollingRound.current) return;
+                  // A remount (list ↔ tournament switch, or a modal-driven
+                  // re-layout) resets the ScrollView's real offset to 0 on web
+                  // while roundScrollOffset still holds the last position, so
+                  // the sync effect thinks nothing moved. Re-assert the
+                  // selected page — a no-op when already there.
+                  const target = selectedRound * roundPagerWidth;
+                  roundPagerRef.current?.scrollTo({ x: target, animated: false });
+                  roundScrollOffset.current = target;
+                }}
                 onScrollBeginDrag={() => {
                   isUserScrollingRound.current = true;
                   // User gesture overrides any in-flight programmatic scroll.
@@ -1952,6 +2011,7 @@ export default function HomeScreen({ navigation, route }) {
             </View>
             <Feather name="chevron-right" size={16} color={theme.text.muted} />
           </TouchableOpacity>
+          {renderPointValuesMenuItem(() => setShowRoundEdit(false))}
           {renderTeamsMenuItem(() => setShowRoundEdit(false))}
           {renderRoundActions(() => setShowRoundEdit(false))}
         </Pressable>
@@ -2055,24 +2115,36 @@ export default function HomeScreen({ navigation, route }) {
             <Feather name="chevron-right" size={16} color={theme.text.muted} />
           </TouchableOpacity>
 
-          {!isViewer && (
+          {/* Scoring mode is round-scoped. Single-round games have no
+              per-round sheet, so the round-scoped picker surfaces here;
+              multi-round tournaments edit each round from its own sheet. */}
+          {!isViewer && tournament.rounds.length === 1 && (
             <TouchableOpacity
               style={s.menuItem}
-              onPress={() => {
-                setShowSettings(false);
-                setScoringDraft({
-                  scoringMode: tournament.settings?.scoringMode ?? 'stableford',
-                  bestBallValue: String(tournament.settings?.bestBallValue ?? 1),
-                  worstBallValue: String(tournament.settings?.worstBallValue ?? 1),
-                  fixedTeams: Boolean(tournament.settings?.fixedTeams),
-                  manualTeams: Boolean(tournament.settings?.manualTeams),
-                });
-                setShowScoringModeSheet(true);
-              }}
+              onPress={() => { setShowSettings(false); setShowRoundModeSheet(true); }}
               activeOpacity={0.7}
             >
-              <Feather name="sliders" size={18} color={theme.accent.primary} />
-              <Text style={s.menuItemText}>Scoring Mode</Text>
+              <Feather name="flag" size={18} color={theme.accent.primary} />
+              <View style={{ flex: 1 }}>
+                <Text style={s.menuItemText}>Scoring Mode</Text>
+                <Text style={s.modalSubtle}>
+                  {getScoringMode(roundScoringMode(tournament, tournament.rounds[0])).label}
+                </Text>
+              </View>
+              <Feather name="chevron-right" size={16} color={theme.text.muted} />
+            </TouchableOpacity>
+          )}
+
+          {tournament.rounds.length === 1 && renderPointValuesMenuItem(() => setShowSettings(false))}
+
+          {!isViewer && teamSettingsMode && (
+            <TouchableOpacity
+              style={s.menuItem}
+              onPress={() => { setShowSettings(false); setShowTeamSettings(true); }}
+              activeOpacity={0.7}
+            >
+              <Feather name="users" size={18} color={theme.accent.primary} />
+              <Text style={s.menuItemText}>Team Settings</Text>
               <Feather name="chevron-right" size={16} color={theme.text.muted} />
             </TouchableOpacity>
           )}
@@ -2140,34 +2212,48 @@ export default function HomeScreen({ navigation, route }) {
           )}
     </BottomSheet>
 
-    <BottomSheet visible={showScoringModeSheet} onClose={() => setShowScoringModeSheet(false)} sheetStyle={s.modalSheet}>
+    <BottomSheet visible={showTeamSettings} onClose={() => setShowTeamSettings(false)} sheetStyle={s.modalSheet}>
           <View style={s.modalHandle} />
-          <Text style={s.modalTitle}>Scoring Mode</Text>
-          {scoringDraft && (
-            <>
-              <ScoringModeField
-                value={scoringDraft.scoringMode}
-                onChange={(mode) => setScoringDraft((d) => ({ ...d, scoringMode: mode }))}
-                playerCount={tournament.players.length}
-                settings={scoringDraft}
-                onSettingsChange={(next) => setScoringDraft(next)}
-              />
-              <View style={[s.confirmActions, { marginTop: 16 }]}>
-                <TouchableOpacity
-                  style={[s.confirmBtn, s.confirmBtnCancel]}
-                  onPress={() => setShowScoringModeSheet(false)}
-                  activeOpacity={0.7}
-                >
-                  <Text style={s.confirmBtnCancelText}>Cancel</Text>
-                </TouchableOpacity>
-                <TouchableOpacity
-                  style={[s.confirmBtn, s.confirmBtnPrimary]}
-                  onPress={saveScoringMode}
-                  activeOpacity={0.7}
-                >
-                  <Text style={s.confirmBtnPrimaryText}>Save</Text>
-                </TouchableOpacity>
+          <Text style={s.modalTitle}>Team Settings</Text>
+          <TeamsSettingsFields
+            value={teamSettingsMode}
+            playerCount={tournament.players.length}
+            settings={{
+              fixedTeams: Boolean(tournament.settings?.fixedTeams),
+              manualTeams: Boolean(tournament.settings?.manualTeams),
+            }}
+            onSettingsChange={saveTeamSettings}
+          />
+          {Boolean(tournament.settings?.fixedTeams) && tournament.rounds[0]?.pairs?.length === 2 && (
+            <TouchableOpacity
+              style={s.menuItem}
+              onPress={() => { setShowTeamSettings(false); navigation.navigate('EditTeams', { roundIndex: 0 }); }}
+              activeOpacity={0.7}
+            >
+              <Feather name="edit-2" size={18} color={theme.accent.primary} />
+              <View style={{ flex: 1 }}>
+                <Text style={s.menuItemText}>Edit Pairs</Text>
+                <Text style={s.modalSubtle}>{pairsPreviewText(tournament)}</Text>
               </View>
+              <Feather name="chevron-right" size={16} color={theme.text.muted} />
+            </TouchableOpacity>
+          )}
+    </BottomSheet>
+
+    <BottomSheet visible={showPointValues} onClose={() => setShowPointValues(false)} sheetStyle={s.modalSheet}>
+          <View style={s.modalHandle} />
+          <Text style={s.modalTitle}>{`Point Values · Round ${selectedRound + 1}`}</Text>
+          {pointValuesDraft && (
+            <>
+              <BestBallValueFields settings={pointValuesDraft} onSettingsChange={setPointValuesDraft} />
+              <TouchableOpacity
+                style={[s.menuItem, { borderBottomWidth: 0, justifyContent: 'center' }]}
+                onPress={savePointValues}
+                activeOpacity={0.7}
+              >
+                <Feather name="check" size={18} color={theme.accent.primary} />
+                <Text style={s.menuItemText}>Save</Text>
+              </TouchableOpacity>
             </>
           )}
     </BottomSheet>
@@ -2263,7 +2349,7 @@ const RoundPage = React.memo(function RoundPage({
               hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
               accessibilityLabel="Round options"
             >
-              <Feather name="more-horizontal" size={16} color={theme.text.muted} />
+              <Feather name="settings" size={16} color={theme.text.muted} />
             </TouchableOpacity>
           )}
           <TouchableOpacity
