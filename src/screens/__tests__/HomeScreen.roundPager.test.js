@@ -92,8 +92,8 @@ jest.mock('../../components/ShareableCard', () => ({
 
 jest.mock('../../components/ScoringModePicker', () => ({
   __esModule: true,
-  default: () => null,
   ScoringModeSheet: () => null,
+  TeamsSettingsFields: () => null,
 }));
 
 jest.mock('react-native-qrcode-svg', () => () => null);
