@@ -283,6 +283,16 @@ export function pickupStrokes(par, playerHandicap, holeStrokeIndex) {
   return par + 2 + extra;
 }
 
+// Single source of truth for "was this hole picked up?" A recorded stroke
+// count at or ABOVE the pickup value is a pickup — once you've reached the
+// zero-points threshold, extra strokes are meaningless, so the scorecard UI
+// lets a player record anything from that point up. Uses `>=` (not `===`)
+// so an over-pickup entry (e.g. a stale synthetic value from before a
+// handicap edit) still reads as picked up.
+export function isPickupScore(strokes, par, playerHandicap, holeStrokeIndex) {
+  return strokes != null && strokes >= pickupStrokes(par, playerHandicap, holeStrokeIndex);
+}
+
 // Fisher-Yates copy-shuffle shared by randomPairs and buildTeamsForMode.
 export function shufflePlayers(players) {
   const shuffled = [...players];

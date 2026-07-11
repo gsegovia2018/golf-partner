@@ -3,7 +3,7 @@ import { View, Text, ScrollView, TouchableOpacity, Modal, Platform } from 'react
 import { Feather } from '@expo/vector-icons';
 import { playersMeFirst } from '../../lib/playerOrder';
 import {
-  pickupStrokes, scrambleUnits, matchPlayEffectiveHandicaps, calcExtraShots,
+  pickupStrokes, isPickupScore, scrambleUnits, matchPlayEffectiveHandicaps, calcExtraShots,
 } from '../../store/tournamentStore';
 import { scoreCellState } from '../../store/officialScoring';
 import { isScrambleMode } from '../scoringModes';
@@ -174,7 +174,7 @@ export const HolePage = React.memo(function HolePage({
           const extraShots = calcExtraShots(handicap, pageHole.strokeIndex);
 
           const pickup = pickupStrokes(pageHole.par, fullHandicap, pageHole.strokeIndex);
-          const isPickup = strokes != null && strokes >= pickup;
+          const isPickup = isPickupScore(strokes, pageHole.par, fullHandicap, pageHole.strokeIndex);
           // Per-card write permission. Casual mode passes no `editable` prop
           // (or one that returns true). In official mode a read-only card
           // renders the score without +/- steppers or the pickup toggle.

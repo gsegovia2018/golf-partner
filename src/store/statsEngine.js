@@ -1,5 +1,5 @@
-import { calcStablefordPoints, calcExtraShots, roundPairLeaderboard, getPlayingHandicap, pickupStrokes } from './tournamentStore';
-import { isGIR, recoveryOutcomeFromState, roundScoringMode, isScrambleMode } from './scoring';
+import { calcStablefordPoints, calcExtraShots, roundPairLeaderboard, getPlayingHandicap } from './tournamentStore';
+import { isGIR, recoveryOutcomeFromState, roundScoringMode, isScrambleMode, isPickupScore } from './scoring';
 import { expectedFromBucket, expectedStrokes, BUCKETS } from './strokesGainedBaseline';
 
 // Scramble rounds store ONE team ball under the team's captain (pair[0]),
@@ -558,6 +558,8 @@ export function hallOfShame(tournament, { metric = 'points' } = {}) {
           roundIndex, courseName: round.courseName,
           holeNumber: hole.number, par: hole.par, si: hole.strokeIndex,
           strokes: sc, vsPar, points,
+          grossVsPar: sc - hole.par,
+          isPickup: isPickupScore(sc, hole.par, handicap, hole.strokeIndex),
         });
       });
     });
@@ -684,10 +686,14 @@ export function hallOfShame(tournament, { metric = 'points' } = {}) {
     });
   });
 
-  // 7. Blow-up Hole — highest raw stroke count on any hole
+  // 7. Blow-up Hole — highest raw stroke count on any hole. Pickup-valued
+  // scores are synthetic (par + 2 + extraShots), not real strokes, so they
+  // never win this award; a real gross triple-bogey-or-worse (vsPar >= 3)
+  // is required.
   const blowup = { value: 0, entries: [] };
   tournament.players.forEach(p => {
     perPlayerEntries[p.id].forEach(e => {
+      if (e.isPickup || e.grossVsPar < 3) return;
       const payload = { player: p, ...e, breakdown: [e] };
       if (e.strokes > blowup.value) { blowup.value = e.strokes; blowup.entries = [payload]; }
       else if (e.strokes === blowup.value) blowup.entries.push(payload);
@@ -976,6 +982,10 @@ export function playerNemesisAndCrushed(tournament) {
 // ── Chaos Holes ──
 // Holes whose stroke counts among the group had the widest range. Useful for
 // spotting holes that split the field. Returns top-5 by descending range.
+// Pickup-valued scores are synthetic strokes, not real ones, so they're
+// excluded from the range/min/max ranking (points are unaffected — a pickup
+// is legitimately 0 points); a hole needs at least 2 non-pickup scores to be
+// emitted at all.
 export function chaosHoles(tournament) {
   const out = [];
   tournament.rounds.forEach((round, roundIndex) => {
@@ -987,11 +997,13 @@ export function chaosHoles(tournament) {
         if (sc) {
           const handicap = getPlayingHandicap(round, player);
           const points = calcStablefordPoints(hole.par, sc, handicap, hole.strokeIndex);
-          scores.push({ playerId: player.id, playerName: player.name, strokes: sc, points });
+          const isPickup = isPickupScore(sc, hole.par, handicap, hole.strokeIndex);
+          scores.push({ playerId: player.id, playerName: player.name, strokes: sc, points, isPickup });
         }
       });
       if (scores.length < 2) return;
-      const strokeValues = scores.map(s => s.strokes);
+      const strokeValues = scores.filter(s => !s.isPickup).map(s => s.strokes);
+      if (strokeValues.length < 2) return;
       const range = Math.max(...strokeValues) - Math.min(...strokeValues);
       if (range === 0) return;
       out.push({
@@ -1193,13 +1205,14 @@ export function par3Heartbreak(tournament) {
 }
 
 // ── Pickup Champion ──
-// Player with the most picked-up holes. A pickup is detected when the recorded
-// strokes equal the deterministic pickup value (par + 2 + extra shots).
+// Player with the most picked-up holes. A pickup is detected when the
+// recorded strokes are AT OR ABOVE the deterministic pickup value (par + 2 +
+// extra shots) — see isPickupScore in ./scoring.
 export function pickupChampion(tournament) {
   const perPlayer = {};
   tournament.players.forEach(p => { perPlayer[p.id] = { player: p, pickups: 0, breakdown: [] }; });
   forEachHole(tournament, ({ player, round, roundIndex, hole, strokes, handicap }) => {
-    if (strokes === pickupStrokes(hole.par, handicap, hole.strokeIndex) && strokes > hole.par + 1) {
+    if (isPickupScore(strokes, hole.par, handicap, hole.strokeIndex) && strokes > hole.par + 1) {
       const rec = perPlayer[player.id];
       rec.pickups++;
       rec.breakdown.push({ roundIndex, courseName: round.courseName, holeNumber: hole.number, par: hole.par, si: hole.strokeIndex, strokes, points: 0 });
@@ -1260,7 +1273,11 @@ export function zeroHero(tournament) {
 // ── Skins Leaderboard ──
 // Per-hole skins: the player with the strictly best score wins 1 skin. Ties
 // award nothing (no carry-over to keep scoring simple and deterministic).
-// Uses Stableford points in points mode, strokes in strokes mode.
+// Uses Stableford points in points mode, strokes in strokes mode. In strokes
+// mode, a pickup-valued score is synthetic (par + 2 + extra shots) — it can
+// still tie or lose a hole, but the "best" (lowest) value is drawn only from
+// non-pickup candidates, so a pickup never wins a skin outright. A hole
+// where every score is a pickup awards no skin at all.
 export function skinsLeaderboard(tournament, { metric = 'points' } = {}) {
   const isStrokes = metric === 'strokes';
   const perPlayer = {};
@@ -1279,11 +1296,18 @@ export function skinsLeaderboard(tournament, { metric = 'points' } = {}) {
         if (!sc) return;
         const handicap = getPlayingHandicap(round, player);
         const points = calcStablefordPoints(hole.par, sc, handicap, hole.strokeIndex);
-        candidates.push({ player, strokes: sc, points });
+        const isPickup = isPickupScore(sc, hole.par, handicap, hole.strokeIndex);
+        candidates.push({ player, strokes: sc, points, isPickup });
       });
       if (candidates.length < 2) return;
-      const values = candidates.map(c => isStrokes ? c.strokes : c.points);
-      const bestVal = isStrokes ? Math.min(...values) : Math.max(...values);
+      let bestVal;
+      if (isStrokes) {
+        const nonPickupStrokes = candidates.filter(c => !c.isPickup).map(c => c.strokes);
+        if (nonPickupStrokes.length === 0) return; // every score is a pickup — no skin possible
+        bestVal = Math.min(...nonPickupStrokes);
+      } else {
+        bestVal = Math.max(...candidates.map(c => c.points));
+      }
       const leaders = candidates.filter(c => (isStrokes ? c.strokes : c.points) === bestVal);
 
       const holeEntry = {

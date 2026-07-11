@@ -1,5 +1,5 @@
-import { teeShotImpact, lagPuttingQuality, sandSaveRate, upAndDownRate, bunkerVisits, sgPutting, sgAroundGreen, sgApproach, sgPenalties, sgTotal, sgSeason, driveScoreImpact, puttDeepDive, approachScoreImpact, puttingTargetGaps, approachTargetGaps, pairPerformance, shotStats, tournamentHighlights, withoutScrambleScores, playerAvgStableford } from '../statsEngine';
-import { mixedModeTournament } from './statsFixtures';
+import { teeShotImpact, lagPuttingQuality, sandSaveRate, upAndDownRate, bunkerVisits, sgPutting, sgAroundGreen, sgApproach, sgPenalties, sgTotal, sgSeason, driveScoreImpact, puttDeepDive, approachScoreImpact, puttingTargetGaps, approachTargetGaps, pairPerformance, shotStats, tournamentHighlights, withoutScrambleScores, playerAvgStableford, pickupChampion, hallOfShame, chaosHoles, skinsLeaderboard } from '../statsEngine';
+import { mixedModeTournament, buildTournament } from './statsFixtures';
 
 // 18 par-4 holes, strokeIndex = hole number.
 function holes18() {
@@ -1056,5 +1056,144 @@ describe('withoutScrambleScores', () => {
     const dirty = playerAvgStableford(t, 'p1');
     const clean = playerAvgStableford(withoutScrambleScores(t), 'p1');
     expect(clean).not.toEqual(dirty); // R2 team ball no longer credited to p1
+  });
+});
+
+// ── RC2: unified pickup detection ──
+// pickupStrokes(par, handicap, strokeIndex) = par + 2 + extraShots. These
+// fixtures pick handicaps/holes that land the pickup value exactly where
+// each scenario needs it — see per-test comments for the arithmetic.
+
+describe('pickupChampion — uses isPickupScore (>=) not === ', () => {
+  it('still counts a hole recorded one stroke OVER the pickup value', () => {
+    // par 4, SI 1, handicap 0 → extraShots 0 → pickupStrokes === 6.
+    const holes = [{ number: 1, par: 4, strokeIndex: 1 }];
+    const players = [{ id: 'p1', name: 'Alice', handicap: 0 }];
+    const round = {
+      courseName: 'Test Course',
+      holes,
+      playerHandicaps: { p1: 0 },
+      scores: { p1: { 1: 7 } }, // pickup value is 6 — this is an over-pickup 7
+    };
+    const t = buildTournament({ players, rounds: [round] });
+
+    const champ = pickupChampion(t);
+
+    expect(champ).not.toBeNull();
+    expect(champ.value).toBe(1);
+    expect(champ.entries[0].player.id).toBe('p1');
+  });
+});
+
+describe('hallOfShame.blowup — ignores pickup-valued scores, requires gross vsPar >= 3', () => {
+  it('skips a pickup-valued 9 but keeps a real gross +4', () => {
+    const holes = [
+      { number: 1, par: 5, strokeIndex: 1 }, // p1's hole
+      { number: 2, par: 4, strokeIndex: 2 }, // p2's hole
+    ];
+    const players = [
+      { id: 'p1', name: 'Alice', handicap: 36 }, // extraShots 2 → pickup = 5+2+2 = 9
+      { id: 'p2', name: 'Bob', handicap: 54 },   // extraShots 3 → pickup = 4+2+3 = 9
+    ];
+    const round = {
+      courseName: 'Test Course',
+      holes,
+      playerHandicaps: { p1: 36, p2: 54 },
+      scores: {
+        p1: { 1: 9 },  // exactly the pickup value on hole 1 — must be excluded
+        p2: { 2: 8 },  // real gross +4 (8 - par 4), below its own pickup value (9)
+      },
+    };
+    const t = buildTournament({ players, rounds: [round] });
+
+    const shame = hallOfShame(t, { metric: 'points' });
+
+    expect(shame.blowup).not.toBeNull();
+    expect(shame.blowup.value).toBe(8);
+    expect(shame.blowup.entries).toHaveLength(1);
+    expect(shame.blowup.entries[0].player.id).toBe('p2');
+  });
+
+  it('does not award blowup when the only strokes are pickups', () => {
+    const holes = [{ number: 1, par: 4, strokeIndex: 1 }];
+    const players = [{ id: 'p1', name: 'Alice', handicap: 0 }]; // pickup = 6
+    const round = {
+      courseName: 'Test Course',
+      holes,
+      playerHandicaps: { p1: 0 },
+      scores: { p1: { 1: 6 } },
+    };
+    const t = buildTournament({ players, rounds: [round] });
+
+    const shame = hallOfShame(t, { metric: 'points' });
+
+    expect(shame.blowup).toBeNull();
+  });
+});
+
+describe('chaosHoles — pickups do not distort the stroke range', () => {
+  it('needs at least 2 non-pickup scores to emit a hole', () => {
+    // Both scores on hole 1 are pickups (handicap 0 → pickup 6, handicap 36
+    // → pickup 9), so despite a wide raw-stroke range the hole must not
+    // appear in the output.
+    const holes = [{ number: 1, par: 4, strokeIndex: 1 }];
+    const players = [
+      { id: 'p1', name: 'Alice', handicap: 0 },  // pickup 6
+      { id: 'p2', name: 'Bob', handicap: 36 },   // pickup 8
+    ];
+    const round = {
+      courseName: 'Test Course',
+      holes,
+      playerHandicaps: { p1: 0, p2: 36 },
+      scores: { p1: { 1: 6 }, p2: { 1: 8 } },
+    };
+    const t = buildTournament({ players, rounds: [round] });
+
+    expect(chaosHoles(t)).toEqual([]);
+  });
+
+  it('ranks strokes using only non-pickup scores', () => {
+    const holes = [{ number: 1, par: 4, strokeIndex: 1 }];
+    const players = [
+      { id: 'p1', name: 'Alice', handicap: 0 },  // pickup 6
+      { id: 'p2', name: 'Bob', handicap: 0 },
+      { id: 'p3', name: 'Cara', handicap: 0 },
+    ];
+    const round = {
+      courseName: 'Test Course',
+      holes,
+      playerHandicaps: { p1: 0, p2: 0, p3: 0 },
+      scores: { p1: { 1: 9 }, p2: { 1: 3 }, p3: { 1: 5 } }, // p1 is a pickup (>= 6)
+    };
+    const t = buildTournament({ players, rounds: [round] });
+
+    const [hole] = chaosHoles(t);
+
+    expect(hole.minStrokes).toBe(3);
+    expect(hole.maxStrokes).toBe(5);
+    expect(hole.range).toBe(2); // NOT 6 (which the pickup's 9 would produce)
+  });
+});
+
+describe('skinsLeaderboard strokes mode — a pickup can tie/lose a hole but never win it', () => {
+  it('awards no skin when the lowest strokes on the hole is a pickup', () => {
+    // par 4, SI 1: scratch player's pickup value is 6, hcp-18 player's is 7.
+    const holes = [{ number: 1, par: 4, strokeIndex: 1 }];
+    const players = [
+      { id: 'p1', name: 'Alice', handicap: 0 },
+      { id: 'p2', name: 'Bob', handicap: 18 },
+    ];
+    const round = {
+      courseName: 'Test Course',
+      holes,
+      playerHandicaps: { p1: 0, p2: 18 },
+      scores: { p1: { 1: 6 }, p2: { 1: 7 } }, // both pickup-valued
+    };
+    const t = buildTournament({ players, rounds: [round] });
+
+    const skins = skinsLeaderboard(t, { metric: 'strokes' });
+
+    expect(skins.totalSkins).toBe(0);
+    expect(skins.leaderboard.every((r) => r.skins === 0)).toBe(true);
   });
 });

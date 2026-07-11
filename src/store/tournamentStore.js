@@ -603,6 +603,7 @@ export {
   tournamentSindicatoLeaderboard,
   tournamentMatchPlayStandings,
   pickupStrokes,
+  isPickupScore,
   randomPairs,
   buildTeamsForMode,
   scrambleUnits,

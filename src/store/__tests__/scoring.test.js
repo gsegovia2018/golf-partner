@@ -14,6 +14,7 @@ import {
   matchPlayRoundTally,
   matchPlayEffectiveHandicaps,
   pickupStrokes,
+  isPickupScore,
   randomPairs,
   buildTeamsForMode,
   isRoundPlayed,
@@ -297,6 +298,26 @@ describe('pickupStrokes', () => {
   it('accounts for handicap strokes on the hole', () => {
     const strokes = pickupStrokes(4, 18, 1);
     expect(calcStablefordPoints(4, strokes, 18, 1)).toBe(0);
+  });
+});
+
+describe('isPickupScore', () => {
+  // pickupStrokes(4, 18, 1) === 7 (par 4 + 2 + 1 extra shot on SI 1).
+  it('is true for an over-pickup score (strictly above the pickup value)', () => {
+    expect(isPickupScore(8, 4, 18, 1)).toBe(true);
+  });
+
+  it('is true for a score exactly at the pickup value', () => {
+    expect(isPickupScore(7, 4, 18, 1)).toBe(true);
+  });
+
+  it('is false for a score below the pickup value', () => {
+    expect(isPickupScore(6, 4, 18, 1)).toBe(false);
+  });
+
+  it('is false for a null/undefined strokes value', () => {
+    expect(isPickupScore(null, 4, 18, 1)).toBe(false);
+    expect(isPickupScore(undefined, 4, 18, 1)).toBe(false);
   });
 });
 
