@@ -144,6 +144,44 @@ export function TeamsSettingsFields({ value, playerCount, settings, onSettingsCh
   );
 }
 
+// The Best Ball / Worst Ball "pts / hole" inputs. Shared by ScoringModeField
+// (tournament defaults at setup) and HomeScreen's per-round Point Values
+// sheet. `settings` holds the two values as strings (TextInput-backed).
+export function BestBallValueFields({ settings, onSettingsChange }) {
+  const { theme } = useTheme();
+  const s = makeStyles(theme);
+  return (
+    <View style={s.valueRow}>
+      <View style={s.valueBlock}>
+        <Text style={s.valueLabel}>Best Ball</Text>
+        <TextInput
+          style={s.valueInput}
+          keyboardType="numeric"
+          keyboardAppearance={theme.isDark ? 'dark' : 'light'}
+          selectionColor={theme.accent.primary}
+          maxLength={2}
+          value={String(settings.bestBallValue)}
+          onChangeText={(v) => onSettingsChange({ ...settings, bestBallValue: v })}
+        />
+        <Text style={s.valueSuffix}>pts / hole</Text>
+      </View>
+      <View style={s.valueBlock}>
+        <Text style={s.valueLabel}>Worst Ball</Text>
+        <TextInput
+          style={s.valueInput}
+          keyboardType="numeric"
+          keyboardAppearance={theme.isDark ? 'dark' : 'light'}
+          selectionColor={theme.accent.primary}
+          maxLength={2}
+          value={String(settings.worstBallValue)}
+          onChangeText={(v) => onSettingsChange({ ...settings, worstBallValue: v })}
+        />
+        <Text style={s.valueSuffix}>pts / hole</Text>
+      </View>
+    </View>
+  );
+}
+
 // --- Compact field shown on the setup screens ----------------------------
 
 export default function ScoringModeField({
@@ -214,34 +252,7 @@ export default function ScoringModeField({
       )}
 
       {value === 'bestball' && settings && onSettingsChange && (
-        <View style={s.valueRow}>
-          <View style={s.valueBlock}>
-            <Text style={s.valueLabel}>Best Ball</Text>
-            <TextInput
-              style={s.valueInput}
-              keyboardType="numeric"
-              keyboardAppearance={theme.isDark ? 'dark' : 'light'}
-              selectionColor={theme.accent.primary}
-              maxLength={2}
-              value={String(settings.bestBallValue)}
-              onChangeText={(v) => onSettingsChange({ ...settings, bestBallValue: v })}
-            />
-            <Text style={s.valueSuffix}>pts / hole</Text>
-          </View>
-          <View style={s.valueBlock}>
-            <Text style={s.valueLabel}>Worst Ball</Text>
-            <TextInput
-              style={s.valueInput}
-              keyboardType="numeric"
-              keyboardAppearance={theme.isDark ? 'dark' : 'light'}
-              selectionColor={theme.accent.primary}
-              maxLength={2}
-              value={String(settings.worstBallValue)}
-              onChangeText={(v) => onSettingsChange({ ...settings, worstBallValue: v })}
-            />
-            <Text style={s.valueSuffix}>pts / hole</Text>
-          </View>
-        </View>
+        <BestBallValueFields settings={settings} onSettingsChange={onSettingsChange} />
       )}
 
       {!hideTeamsControls && (

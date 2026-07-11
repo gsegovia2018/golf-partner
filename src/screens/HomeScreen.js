@@ -12,7 +12,7 @@ import { ShareableLeaderboard, shareLeaderboard } from '../components/ShareableC
 import QuickStartCourses from '../components/QuickStartCourses';
 import PostCreateInviteModal from '../components/PostCreateInviteModal';
 import { scoringModeUsesTeams, leaderboardToggleLabels, isScrambleMode, getScoringMode } from '../components/scoringModes';
-import { ScoringModeSheet, TeamsSettingsFields } from '../components/ScoringModePicker';
+import { ScoringModeSheet, TeamsSettingsFields, BestBallValueFields } from '../components/ScoringModePicker';
 import PullToRefresh from '../components/PullToRefresh';
 import LoadingSplash from '../components/LoadingSplash';
 import BottomSheet from '../components/BottomSheet';
@@ -161,6 +161,9 @@ export default function HomeScreen({ navigation, route }) {
   const lastLoadedTournamentIdRef = useRef(initialTournament?.id ?? null);
   const [showSettings, setShowSettings] = useState(false);
   const [showTeamSettings, setShowTeamSettings] = useState(false);
+  const [showPointValues, setShowPointValues] = useState(false);
+  // Strings — BestBallValueFields edits through TextInputs.
+  const [pointValuesDraft, setPointValuesDraft] = useState(null);
   // List-view overflow menu — surfaces the Course/Player libraries, which
   // otherwise have no entry point here.
   const [showListMenu, setShowListMenu] = useState(false);
@@ -807,6 +810,26 @@ export default function HomeScreen({ navigation, route }) {
     }
   }
 
+  // Persist the selected round's best/worst point values (round override).
+  async function savePointValues() {
+    const r = tournament?.rounds?.[selectedRound];
+    if (!r || !pointValuesDraft) return;
+    try {
+      await mutate(tournament, {
+        type: 'round.setBestBallValues',
+        roundId: r.id,
+        bestBallValue: parseInt(pointValuesDraft.bestBallValue, 10) || 1,
+        worstBallValue: parseInt(pointValuesDraft.worstBallValue, 10) || 1,
+      });
+      await reload();
+      setShowPointValues(false);
+    } catch (err) {
+      const msg = err?.message ?? 'Could not update point values';
+      if (Platform.OS === 'web') window.alert(msg);
+      else Alert.alert('Error', msg);
+    }
+  }
+
   // Persist the gear sheet's team toggles. Tournament-wide by design —
   // fixedTeams/manualTeams shape how EVERY round builds its pairs. No eager
   // pair rebuilds: pairsForNextRound applies fixedTeams lazily at reveal.
@@ -1014,6 +1037,35 @@ export default function HomeScreen({ navigation, route }) {
       >
         <Feather name="eye" size={18} color={theme.accent.primary} />
         <Text style={s.menuItemText}>Reveal Teams</Text>
+        <Feather name="chevron-right" size={16} color={theme.text.muted} />
+      </TouchableOpacity>
+    );
+  }
+
+  // Point values are only meaningful for a Best Ball round. Rendered in the
+  // per-round sheet (multi-round) and the gear sheet (single-round).
+  function renderPointValuesMenuItem(onClose) {
+    const r = tournament.rounds[selectedRound];
+    if (isViewer || roundScoringMode(tournament, r) !== 'bestball') return null;
+    const vals = roundBestBallValues(tournament, r);
+    return (
+      <TouchableOpacity
+        style={s.menuItem}
+        onPress={() => {
+          onClose();
+          setPointValuesDraft({
+            bestBallValue: String(vals.bestBallValue),
+            worstBallValue: String(vals.worstBallValue),
+          });
+          setShowPointValues(true);
+        }}
+        activeOpacity={0.7}
+      >
+        <Feather name="hash" size={18} color={theme.accent.primary} />
+        <View style={{ flex: 1 }}>
+          <Text style={s.menuItemText}>Point Values</Text>
+          <Text style={s.modalSubtle}>{`Best ${vals.bestBallValue} · Worst ${vals.worstBallValue} pts / hole`}</Text>
+        </View>
         <Feather name="chevron-right" size={16} color={theme.text.muted} />
       </TouchableOpacity>
     );
@@ -1944,6 +1996,7 @@ export default function HomeScreen({ navigation, route }) {
             </View>
             <Feather name="chevron-right" size={16} color={theme.text.muted} />
           </TouchableOpacity>
+          {renderPointValuesMenuItem(() => setShowRoundEdit(false))}
           {renderTeamsMenuItem(() => setShowRoundEdit(false))}
           {renderRoundActions(() => setShowRoundEdit(false))}
         </Pressable>
@@ -2067,6 +2120,8 @@ export default function HomeScreen({ navigation, route }) {
             </TouchableOpacity>
           )}
 
+          {tournament.rounds.length === 1 && renderPointValuesMenuItem(() => setShowSettings(false))}
+
           {!isViewer && teamSettingsMode && (
             <TouchableOpacity
               style={s.menuItem}
@@ -2167,6 +2222,24 @@ export default function HomeScreen({ navigation, route }) {
               </View>
               <Feather name="chevron-right" size={16} color={theme.text.muted} />
             </TouchableOpacity>
+          )}
+    </BottomSheet>
+
+    <BottomSheet visible={showPointValues} onClose={() => setShowPointValues(false)} sheetStyle={s.modalSheet}>
+          <View style={s.modalHandle} />
+          <Text style={s.modalTitle}>{`Point Values · Round ${selectedRound + 1}`}</Text>
+          {pointValuesDraft && (
+            <>
+              <BestBallValueFields settings={pointValuesDraft} onSettingsChange={setPointValuesDraft} />
+              <TouchableOpacity
+                style={[s.menuItem, { borderBottomWidth: 0, justifyContent: 'center' }]}
+                onPress={savePointValues}
+                activeOpacity={0.7}
+              >
+                <Feather name="check" size={18} color={theme.accent.primary} />
+                <Text style={s.menuItemText}>Save</Text>
+              </TouchableOpacity>
+            </>
           )}
     </BottomSheet>
 
