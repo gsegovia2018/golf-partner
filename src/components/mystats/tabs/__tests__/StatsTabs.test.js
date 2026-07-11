@@ -59,6 +59,13 @@ function baseStats() {
         { label: '200+ m approaches', avgPoints: 0.7, deviation: -0.9 },
       ],
     },
+    courseMastery: [
+      { courseName: 'Oak', rounds: 1, avgPoints: 54, bestPoints: 54, trend: 0 },
+      { courseName: 'Pine', rounds: 2, avgPoints: 27, bestPoints: 36, trend: -1 },
+    ],
+    careerMilestones: {
+      birdies: 18, eagles: 0, longestParStreak: 18, bestNine: 27, bestRound: 54,
+    },
     strokesGained: {
       total: -1.25,
       sampleHoles: 18,
@@ -342,6 +349,8 @@ describe('My Stats tabs', () => {
       <BreakdownTab stats={shotStats()} onInfo={() => {}} />
     ));
 
+    expect(await findByText('Course Mastery')).toBeTruthy();
+    expect(await findByText('Career Milestones')).toBeTruthy();
     expect(await findByText('Scoring patterns')).toBeTruthy();
     expect(await findByText('Course scoring patterns')).toBeTruthy();
     expect(await findByText('Round timing patterns')).toBeTruthy();
@@ -378,5 +387,43 @@ describe('My Stats tabs', () => {
 
     expect((await findAllByText('vs your avg · 18 holes · avg 1.67 pts/hole · +0')).length).toBeGreaterThan(0);
     expect(queryByText(/-1.5 vs your avg/)).toBeNull();
+  });
+
+  test('BreakdownTab shows Course Mastery rows and Career Milestones tiles', async () => {
+    const { findByText, findAllByText, getByLabelText } = render(wrap(
+      <BreakdownTab stats={baseStats()} onInfo={() => {}} />
+    ));
+
+    // Course Mastery: sorted best-avg-first (Oak 54 before Pine 27), each
+    // row showing rounds/best/avg, and a trend icon per course.
+    expect(await findByText('Oak')).toBeTruthy();
+    expect(await findByText('Pine')).toBeTruthy();
+    expect(await findByText('1 round · best 54 pts')).toBeTruthy();
+    expect(await findByText('2 rounds · best 36 pts')).toBeTruthy();
+    expect(await findByText('54 pts avg')).toBeTruthy();
+    expect(await findByText('27 pts avg')).toBeTruthy();
+    expect(getByLabelText('Pine trend bad')).toBeTruthy();
+    expect(getByLabelText('Oak trend neutral')).toBeTruthy();
+
+    // Career Milestones: birdies/eagles/streak counts plus best nine/round.
+    // birdies and longestParStreak are both 18 in this fixture — two tiles
+    // legitimately share the value.
+    expect((await findAllByText('18')).length).toBe(2);
+    expect(await findByText('Birdies')).toBeTruthy();
+    expect(await findByText('Eagles')).toBeTruthy();
+    expect(await findByText('Best par streak')).toBeTruthy();
+    expect(await findByText('27')).toBeTruthy();
+    expect(await findByText('Best nine (pts)')).toBeTruthy();
+    expect(await findByText('54')).toBeTruthy();
+    expect(await findByText('Best round (pts)')).toBeTruthy();
+  });
+
+  test('BreakdownTab hides Course Mastery when there is no complete round at any course', async () => {
+    const stats = { ...baseStats(), courseMastery: [] };
+    const { queryByText } = render(wrap(
+      <BreakdownTab stats={stats} onInfo={() => {}} />
+    ));
+
+    expect(queryByText('Course Mastery')).toBeNull();
   });
 });

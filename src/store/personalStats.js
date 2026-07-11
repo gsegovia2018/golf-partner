@@ -14,7 +14,7 @@ import {
   teeShotImpact, scramblingStats,
   lagPuttingQuality, sandSaveRate, upAndDownRate, bunkerVisits,
   sgSeason, driveScoreImpact, approachScoreImpact, puttDeepDive,
-  puttingTargetGaps, approachTargetGaps,
+  puttingTargetGaps, approachTargetGaps, courseDNA, playerStreaks,
 } from './statsEngine';
 import { buildCoachInsights } from './coachInsights';
 import { shotBenchmarkForHandicap } from './shotBenchmarks';
@@ -547,6 +547,78 @@ export function computeFormSeries(selectedRounds) {
   return { metrics, scoreMix, hasShotData };
 }
 
+// ── courseMastery ──
+// Per-course rounds/avgPoints/bestPoints/trend, built on courseDNA over a
+// complete-rounds-only slice of the synthetic tournament (Task 15's
+// isComplete) — an early-finished round's partial total would otherwise
+// drag a course's average down, inflate/deflate its best, and fake a trend.
+// avgPoints/bestPoints are ROUND-TOTAL figures (same scale as
+// computeMetrics.avgPoints/bestRoundPoints), not per-hole averages.
+export function courseMastery(synthetic) {
+  const completeRounds = (synthetic.rounds || []).filter((r) => r.isComplete);
+  const completeSynthetic = { ...synthetic, rounds: completeRounds };
+  const dna = courseDNA(completeSynthetic)[0];
+  if (!dna || dna.courses.length === 0) return [];
+  // playerRoundHistory runs over the SAME completeSynthetic, so its
+  // roundIndex values (and the `round.courseName || 'R{n}'` fallback used
+  // by both this and courseDNA) line up with dna's course keys.
+  const history = playerRoundHistory(completeSynthetic, CANON_ID);
+  const byCourse = {};
+  history.forEach((h) => {
+    (byCourse[h.courseName] ??= []).push(h);
+  });
+  return dna.courses.map((c) => {
+    const entries = byCourse[c.courseName] || [];
+    const bestPoints = entries.reduce((m, e) => Math.max(m, e.points), 0);
+    // Trend = sign of the latest complete round at this course vs the one
+    // before it (0 when there's nothing to compare against yet).
+    let trend = 0;
+    if (entries.length >= 2) {
+      const latest = entries[entries.length - 1].points;
+      const previous = entries[entries.length - 2].points;
+      trend = Math.sign(latest - previous);
+    }
+    return {
+      courseName: c.courseName,
+      rounds: c.rounds,
+      avgPoints: c.roundPoints,
+      bestPoints,
+      trend,
+    };
+  }).sort((a, b) => b.avgPoints - a.avgPoints);
+}
+
+// ── careerMilestones ──
+// Career-wide feats across the current selection. birdies/eagles/
+// longestParStreak are per-hole feats (same convention as
+// holeDifficultySplit) and see every scored hole, including holes from an
+// early-finished round — a birdie doesn't need the rest of the round
+// played. longestParStreak reuses playerStreaks' adjacency-aware run
+// (Task 5): a streak never crosses a round boundary or an unscored hole.
+// bestNine/bestRound are ROUND-TOTAL metrics and only look at complete
+// rounds (Task 15), returning null — not a fabricated 0 — when none
+// qualify, matching computeMetrics' convention.
+export function careerMilestones(synthetic) {
+  const dist = playerScoreDistribution(synthetic, CANON_ID);
+  const streaks = playerStreaks(synthetic, CANON_ID);
+  const completeRounds = (synthetic.rounds || []).filter((r) => r.isComplete);
+  const completeSynthetic = { ...synthetic, rounds: completeRounds };
+  // frontBackSplit already only ever pushes a round whose front AND back
+  // nine are both fully scored (fc>=9 && bc>=9 on an 18-hole round), so
+  // pre-filtering to isComplete here is belt-and-braces, not load-bearing.
+  const fb = frontBackSplit(completeSynthetic)[0] ?? null;
+  const bestNine = fb
+    ? fb.rounds.reduce((m, r) => Math.max(m, r.front, r.back), -Infinity)
+    : null;
+  return {
+    birdies: dist.birdies,
+    eagles: dist.eagles,
+    longestParStreak: streaks.bestParStreak,
+    bestNine: bestNine === -Infinity ? null : bestNine,
+    bestRound: computeMetrics(synthetic).bestRoundPoints,
+  };
+}
+
 // ── computeMyStats ──
 // Single entry point for the screen. `selectedRounds` is the active selection
 // (already filtered via resolveSelection). The selection is the universe —
@@ -602,6 +674,8 @@ export function computeMyStats(selectedRounds, { n = 5, targetHandicap = 0 } = {
     bunkerVisits: bunkerVisits(synthetic.rounds, CANON_ID),
     // Phase B:
     strokesGained,
+    courseMastery: courseMastery(synthetic),
+    careerMilestones: careerMilestones(synthetic),
   };
   return { ...baseStats, coach: buildCoachInsights(baseStats) };
 }

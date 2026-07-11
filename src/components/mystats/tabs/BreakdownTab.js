@@ -2,6 +2,8 @@ import React, { useMemo } from 'react';
 import { View, Text, StyleSheet } from 'react-native';
 import { useTheme } from '../../../theme/ThemeContext';
 import SectionCard from '../SectionCard';
+import CourseMasteryCard from '../CourseMasteryCard';
+import CareerMilestonesCard from '../CareerMilestonesCard';
 import {
   comparisonMeta,
   toneColor,
@@ -57,6 +59,8 @@ export default function BreakdownTab({ stats, onInfo }) {
     sandSaves,
     upAndDown,
     bunkerVisits,
+    courseMastery,
+    careerMilestones,
   } = stats ?? {};
   const distribution = { ...EMPTY_DISTRIBUTION, ...(rawDistribution ?? {}) };
   const baseline = stablefordBaseline(stats);
@@ -73,6 +77,12 @@ export default function BreakdownTab({ stats, onInfo }) {
 
   return (
     <View style={s.wrap}>
+      <CourseMasteryCard courses={courseMastery} onInfo={onInfo} />
+
+      {careerMilestones ? (
+        <CareerMilestonesCard milestones={careerMilestones} onInfo={onInfo} />
+      ) : null}
+
       {scoringRows.length ? (
         <SectionCard title="Scoring patterns" infoKey="scoreDistribution" onInfo={onInfo}>
           <PatternRows rows={scoringRows} s={s} theme={theme} />

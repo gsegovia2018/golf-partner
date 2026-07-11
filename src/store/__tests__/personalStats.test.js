@@ -2,6 +2,7 @@ import {
   collectMyRounds, buildSyntheticTournament, CANON_ID,
   holeDifficultySplit, computeMetrics, computeRecentVsHistory, FORM_METRICS,
   rankStrengths, resolveSelection, computeMyStats, computeFormSeries, buildActionPlan,
+  courseMastery, careerMilestones,
 } from '../personalStats';
 import { getPlayingHandicap } from '../tournamentStore';
 
@@ -1028,5 +1029,106 @@ describe('computeMyStats', () => {
     // Net field is unchanged: every gross par is a net birdie at hcp 18.
     expect(stats.distribution.birdies).toBe(18);
     expect(stats.distribution.pars).toBe(0);
+  });
+});
+
+// ── Two-course fixture shared by courseMastery / careerMilestones ──
+// Chronological order: Pine (36 pts), Oak (54 pts, complete), Pine (18 pts),
+// Oak (incomplete — only holes 1-6 scored, must be excluded from every
+// round-total figure below). Handicap 0 throughout, par 4 x 18, so net
+// points/hole = 2 + par - strokes:
+//   strokes 4 → 2 pts/hole → 36 pts/round (Pine A)
+//   strokes 5 → 1 pt/hole  → 18 pts/round (Pine B)
+//   strokes 3 → 3 pts/hole → 54 pts/round (Oak C)
+function twoCourseTournament() {
+  const h = holes18();
+  const pineA = mkRound({
+    courseName: 'Pine', holes: h, scores: { p1: evenScores(h, 4) }, playerHandicaps: { p1: 0 },
+  });
+  const oakC = mkRound({
+    courseName: 'Oak', holes: h, scores: { p1: evenScores(h, 3) }, playerHandicaps: { p1: 0 },
+  });
+  const pineB = mkRound({
+    courseName: 'Pine', holes: h, scores: { p1: evenScores(h, 5) }, playerHandicaps: { p1: 0 },
+  });
+  const oakDScores = evenScores(h, 6);
+  h.slice(6).forEach((hole) => { delete oakDScores[hole.number]; }); // only holes 1-6 scored
+  const oakD = mkRound({
+    courseName: 'Oak', holes: h, scores: { p1: oakDScores }, playerHandicaps: { p1: 0 },
+  });
+  return [{
+    id: 1, name: 'T', players: [{ id: 'p1', handicap: 0, user_id: 'u1' }],
+    rounds: [pineA, oakC, pineB, oakD],
+  }];
+}
+
+describe('courseMastery', () => {
+  test('per-course rounds/avgPoints/bestPoints/trend, complete rounds only', () => {
+    const myRounds = collectMyRounds(twoCourseTournament(), 'u1');
+    const synthetic = buildSyntheticTournament(myRounds);
+    const mastery = courseMastery(synthetic);
+
+    // Oak: 1 complete round (54 pts) — the 6-hole round is excluded, so
+    // rounds=1 and trend has nothing to compare against (0).
+    // Pine: 2 complete rounds (36, then 18) — avg 27, best 36, trend down
+    // (latest 18 < previous 36 → -1).
+    expect(mastery).toEqual([
+      { courseName: 'Oak', rounds: 1, avgPoints: 54, bestPoints: 54, trend: 0 },
+      { courseName: 'Pine', rounds: 2, avgPoints: 27, bestPoints: 36, trend: -1 },
+    ]);
+  });
+
+  test('returns an empty list with no rounds', () => {
+    expect(courseMastery(buildSyntheticTournament([]))).toEqual([]);
+  });
+});
+
+describe('careerMilestones', () => {
+  test('birdies/eagles/streak see every scored hole; bestNine/bestRound use complete rounds only', () => {
+    const myRounds = collectMyRounds(twoCourseTournament(), 'u1');
+    const synthetic = buildSyntheticTournament(myRounds);
+    const milestones = careerMilestones(synthetic);
+
+    // Oak's complete round (strokes 3, vsPar -1) is a birdie on all 18
+    // holes — no eagles anywhere. The 6-hole incomplete round (vsPar +2,
+    // double bogey) still contributes its holes to the distribution but
+    // never a birdie/eagle.
+    expect(milestones.birdies).toBe(18);
+    expect(milestones.eagles).toBe(0);
+    // Longest run of par-or-better holes: a full 18-hole round at par
+    // (Pine A) or birdie (Oak C) — either way, 18 consecutive holes.
+    expect(milestones.longestParStreak).toBe(18);
+    // Best nine: max single-nine total across complete 18-hole rounds —
+    // Oak C's front/back nine (27 each) beats Pine's 18/9.
+    expect(milestones.bestNine).toBe(27);
+    // Best round: highest round-total points among complete rounds — Oak C
+    // at 54, ahead of Pine's 36 and 18.
+    expect(milestones.bestRound).toBe(54);
+  });
+
+  test('bestNine/bestRound are null (not 0) with no complete rounds, but per-hole feats still count', () => {
+    const h = holes18();
+    const sixHoles = evenScores(h, 3); // birdie pace, but only 6 holes scored
+    h.slice(6).forEach((hole) => { delete sixHoles[hole.number]; });
+    const tournaments = [{
+      id: 1, name: 'T', kind: 'game', finishedAt: '2026-05-22T18:00:00.000Z',
+      players: [{ id: 'p1', handicap: 0, user_id: 'u1' }],
+      rounds: [mkRound({ holes: h, scores: { p1: sixHoles }, playerHandicaps: { p1: 0 } })],
+    }];
+    const myRounds = collectMyRounds(tournaments, 'u1');
+    const synthetic = buildSyntheticTournament(myRounds);
+    const milestones = careerMilestones(synthetic);
+
+    expect(milestones.bestNine).toBeNull();
+    expect(milestones.bestRound).toBeNull();
+    expect(milestones.birdies).toBe(6);
+    expect(milestones.longestParStreak).toBe(6);
+  });
+
+  test('returns zeros and nulls with no rounds at all', () => {
+    const milestones = careerMilestones(buildSyntheticTournament([]));
+    expect(milestones).toEqual({
+      birdies: 0, eagles: 0, longestParStreak: 0, bestNine: null, bestRound: null,
+    });
   });
 });
