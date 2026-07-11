@@ -2091,7 +2091,7 @@ export default function HomeScreen({ navigation, route }) {
 
           <TouchableOpacity
             style={s.menuItem}
-            onPress={() => { setShowSettings(false); navigation.navigate('Stats'); }}
+            onPress={() => { setShowSettings(false); navigation.navigate('Stats', { tournamentId: tournament.id }); }}
             activeOpacity={0.7}
           >
             <Feather name="bar-chart-2" size={18} color={theme.accent.primary} />
