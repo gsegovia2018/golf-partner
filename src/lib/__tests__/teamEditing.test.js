@@ -1,4 +1,4 @@
-import { buildThreeVsOne, swapDuelOrder } from '../teamEditing';
+import { buildThreeVsOne, swapDuelOrder, randomizeDuelOrder } from '../teamEditing';
 import { pairsMatchDuels } from '../../store/scoring';
 
 const players = [
@@ -66,5 +66,44 @@ describe('swapDuelOrder', () => {
     const solo = [[players[0]], [players[1]], [players[2]]];
     expect(swapDuelOrder(solo)).toBe(solo);
     expect(swapDuelOrder(null)).toBeNull();
+  });
+});
+
+describe('randomizeDuelOrder', () => {
+  const pairs = [
+    [players[0], players[1]],
+    [players[2], players[3]],
+  ];
+
+  test('rand below 0.5 keeps the current duel assignment', () => {
+    expect(randomizeDuelOrder(pairs, () => 0)).toEqual(pairs);
+  });
+
+  test('rand at/above 0.5 returns the swapped assignment', () => {
+    expect(randomizeDuelOrder(pairs, () => 0.9)).toEqual(swapDuelOrder(pairs));
+  });
+
+  test('never changes pair membership, only within-pair order', () => {
+    for (const roll of [0, 0.9]) {
+      const out = randomizeDuelOrder(pairs, () => roll);
+      expect(out[0]).toEqual(pairs[0]);
+      expect(out[1].map((p) => p.id).sort()).toEqual(
+        pairs[1].map((p) => p.id).sort(),
+      );
+    }
+  });
+
+  test('default randomness produces both outcomes across runs', () => {
+    const seen = new Set();
+    for (let i = 0; i < 64 && seen.size < 2; i++) {
+      seen.add(JSON.stringify(randomizeDuelOrder(pairs).map((pr) => pr.map((p) => p.id))));
+    }
+    expect(seen.size).toBe(2);
+  });
+
+  test('non-2-pair input is returned unchanged', () => {
+    const solo = [[players[0]], [players[1]], [players[2]]];
+    expect(randomizeDuelOrder(solo, () => 0)).toBe(solo);
+    expect(randomizeDuelOrder(null, () => 0)).toBeNull();
   });
 });
