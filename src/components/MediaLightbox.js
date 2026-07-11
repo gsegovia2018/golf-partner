@@ -5,11 +5,28 @@ import { Feather } from '@expo/vector-icons';
 import { Image as ExpoImage } from 'expo-image';
 import { VideoView, useVideoPlayer } from 'expo-video';
 import * as Sharing from 'expo-sharing';
+import { File as FsFile, Paths } from 'expo-file-system';
 import { useTheme } from '../theme/ThemeContext';
 import { deleteMedia } from '../store/mediaStore';
 import { removeQueueEntry } from '../store/mediaQueue';
 
 const { width, height } = Dimensions.get('window');
+
+// Derive a filename + mime type for the shared file from the item's storage
+// path (or URL). A real extension lets iOS/Android hand the actual bytes to the
+// right app (WhatsApp, Photos, …) instead of treating it as an opaque link.
+const MIME_BY_EXT = {
+  jpg: 'image/jpeg', jpeg: 'image/jpeg', png: 'image/png', webp: 'image/webp',
+  gif: 'image/gif', heic: 'image/heic',
+  mp4: 'video/mp4', mov: 'video/quicktime', webm: 'video/webm', mkv: 'video/x-matroska',
+};
+function mediaFileMeta(item) {
+  const source = (item.storagePath || item.url || '').split('?')[0];
+  const m = source.match(/\.([a-z0-9]+)$/i);
+  const ext = m ? m[1].toLowerCase() : (item.kind === 'video' ? 'mp4' : 'jpg');
+  const mimeType = MIME_BY_EXT[ext] || (item.kind === 'video' ? 'video/mp4' : 'image/jpeg');
+  return { ext, mimeType, filename: `golf-partner-${item.id}.${ext}` };
+}
 
 export default function MediaLightbox({ visible, items, initialIndex, onClose }) {
   const { theme } = useTheme();
@@ -24,8 +41,41 @@ export default function MediaLightbox({ visible, items, initialIndex, onClose })
   if (!visible || !current) return null;
 
   const onShare = async () => {
-    if (!(await Sharing.isAvailableAsync())) return;
-    await Sharing.shareAsync(current.url);
+    const { mimeType, filename } = mediaFileMeta(current);
+    try {
+      if (Platform.OS === 'web') {
+        const res = await fetch(current.url);
+        if (!res.ok) throw new Error(`No se pudo descargar (${res.status})`);
+        const blob = await res.blob();
+        const file = new File([blob], filename, { type: blob.type || mimeType });
+        // Native share sheet (WhatsApp, etc.) when the browser can share files;
+        // otherwise fall back to a download so the user still gets the real file.
+        if (navigator.canShare?.({ files: [file] })) {
+          await navigator.share({ files: [file], title: current.caption || 'Golf Partner' });
+        } else {
+          const href = URL.createObjectURL(blob);
+          const a = document.createElement('a');
+          a.href = href;
+          a.download = filename;
+          document.body.appendChild(a);
+          a.click();
+          document.body.removeChild(a);
+          URL.revokeObjectURL(href);
+        }
+        return;
+      }
+      if (!(await Sharing.isAvailableAsync())) return;
+      // Download the remote file to a local cache path so the OS share sheet
+      // sends the actual photo/video bytes (WhatsApp, Photos, …) rather than
+      // just a link to the Supabase URL.
+      const target = new FsFile(Paths.cache, filename);
+      const downloaded = await FsFile.downloadFileAsync(current.url, target, { overwrite: true });
+      await Sharing.shareAsync(downloaded.uri, { mimeType, dialogTitle: 'Compartir' });
+    } catch (e) {
+      // A user-cancelled share sheet is not an error worth surfacing.
+      if (e?.name === 'AbortError' || /cancel/i.test(e?.message ?? '')) return;
+      console.warn('Media share failed:', e);
+    }
   };
 
   const onDelete = () => {
@@ -83,7 +133,7 @@ export default function MediaLightbox({ visible, items, initialIndex, onClose })
           <View style={s.topActions}>
             {current.status === 'uploaded' && (
               <TouchableOpacity onPress={onShare} style={s.iconBtn} accessibilityLabel="Compartir">
-                <Feather name="share" size={22} color="#fff" />
+                <Feather name="share-2" size={22} color="#fff" />
               </TouchableOpacity>
             )}
             <TouchableOpacity onPress={onDelete} style={s.iconBtn} accessibilityLabel="Borrar">

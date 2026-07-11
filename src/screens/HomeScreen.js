@@ -1590,7 +1590,7 @@ export default function HomeScreen({ navigation, route }) {
         <View style={s.headerActions}>
           {!isViewer && (
             <TouchableOpacity style={s.iconBtn} onPress={handleInvite} activeOpacity={0.7}>
-              <Feather name="share" size={18} color={theme.accent.primary} />
+              <Feather name="share-2" size={18} color={theme.accent.primary} />
             </TouchableOpacity>
           )}
           <TouchableOpacity
