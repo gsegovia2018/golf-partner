@@ -1728,6 +1728,7 @@ export default function HomeScreen({ navigation, route }) {
 
           {/* Horizontal pager — swipe to change round, stays in sync with tabs */}
           <View
+            testID="round-pager-wrap"
             style={s.roundPagerWrap}
             onLayout={(e) => {
               // Don't prefill roundScrollOffset from selectedRound — on web
@@ -1756,12 +1757,23 @@ export default function HomeScreen({ navigation, route }) {
               />
             ) : (
               <ScrollView
+                testID="round-pager"
                 ref={roundPagerRef}
                 horizontal
                 pagingEnabled={Platform.OS !== 'web'}
                 style={PAGER_SNAP_TYPE_STYLE}
                 showsHorizontalScrollIndicator={false}
                 scrollEventThrottle={16}
+                onLayout={() => {
+                  // A remount (list ↔ tournament switch, or a modal-driven
+                  // re-layout) resets the ScrollView's real offset to 0 on web
+                  // while roundScrollOffset still holds the last position, so
+                  // the sync effect thinks nothing moved. Re-assert the
+                  // selected page — a no-op when already there.
+                  const target = selectedRound * roundPagerWidth;
+                  roundPagerRef.current?.scrollTo({ x: target, animated: false });
+                  roundScrollOffset.current = target;
+                }}
                 onScrollBeginDrag={() => {
                   isUserScrollingRound.current = true;
                   // User gesture overrides any in-flight programmatic scroll.
