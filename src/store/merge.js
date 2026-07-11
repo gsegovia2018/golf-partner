@@ -205,6 +205,12 @@ export function mergeTournaments(local, remote) {
   // the user has not claimed a player yet on this device).
   if (local && 'meId' in local) merged.meId = local.meId;
 
+  // `currentRound` is a progression high-water mark written via an unstamped
+  // raw upsert, so it has no _meta entry and the LWW tie-to-local rule would
+  // pin each peer to its own stale value. It only moves forward, so take the
+  // max — the device that advanced the round propagates it and stale peers heal.
+  merged.currentRound = Math.max(local.currentRound ?? 0, remote.currentRound ?? 0);
+
   // Apply structural deletion tombstones. Path-based LWW alone can't tell
   // "round was deleted" from "round was never written" — without a tombstone,
   // the next remote refresh deepClones remote's full rounds list and silently

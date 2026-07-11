@@ -182,6 +182,25 @@ function byCreatedAtDesc(a, b) {
   return new Date(b?.createdAt ?? 0) - new Date(a?.createdAt ?? 0);
 }
 
+// Fold each remote list row together with its local blob before the list is
+// trusted: the Home card's completed-round count reads whatever this returns,
+// and a remote-only snapshot lags local (batched score sync) so it would
+// flicker as reloads fire. mergeTournaments(local, remote) keeps this device's
+// unsynced scores/edits while preserving anything only the server has; rows
+// with no local blob pass through unchanged. Then sort newest-first (same key
+// as the offline list) and refresh the offline index. Shared tail for both
+// the no-userId and userId branches.
+async function _finalizeTournamentList(result) {
+  const merged = await Promise.all(result.map(async (t) => {
+    const local = await readLocal(t.id);
+    return local ? { ...mergeTournaments(local, t).merged, _role: t._role } : t;
+  }));
+  const sorted = merged.sort(byCreatedAtDesc);
+  // Fire-and-forget: keep the offline index in sync with the latest remote list.
+  tournamentsIndex.writeIndex(sorted).catch(() => {});
+  return sorted;
+}
+
 export async function loadAllTournaments() {
   await ensureMigrated();
   const userId = await getCurrentUserId();
@@ -192,8 +211,7 @@ export async function loadAllTournaments() {
       .order('created_at', { ascending: false });
     if (error) throw error;
     const list = (data ?? []).map((row) => rowToTournament(row, 'owner'));
-    tournamentsIndex.writeIndex(list).catch(() => {});
-    return list;
+    return _finalizeTournamentList(list);
   }
 
   const [
@@ -241,10 +259,7 @@ export async function loadAllTournaments() {
       result.push(rowToTournament(t, 'participant'));
     });
   }
-  const sorted = result.sort(byCreatedAtDesc);
-  // Fire-and-forget: keep the offline index in sync with the latest remote list.
-  tournamentsIndex.writeIndex(sorted).catch(() => {});
-  return sorted;
+  return _finalizeTournamentList(result);
 }
 
 // Full offline list: union of blobs on disk + any index-only entries we
@@ -270,11 +285,10 @@ async function _loadCachedFullList() {
       updatedAt: meta.updatedAt,
     };
   }));
-  return rows.filter(Boolean).sort((a, b) => {
-    const ai = Number(a.id) || 0;
-    const bi = Number(b.id) || 0;
-    return bi - ai;
-  });
+  // Sort by createdAt (same key as the online list) so offline and online
+  // order identically — a Number(id) sort disagreed for UUID-id official
+  // tournaments and made the Home count/order jump when the source switched.
+  return rows.filter(Boolean).sort(byCreatedAtDesc);
 }
 
 export async function loadCachedTournamentsList() {
@@ -516,12 +530,38 @@ export async function readLocal(id) {
 
 // Backwards-compatible entry: local first, then attempt remote. Never throws on
 // remote failure — the sync worker will retry later.
+//
+// A raw full-blob upsert would clobber a peer's score cell already on the
+// server (the local copy hasn't pulled it yet). So when online we mirror
+// syncWorker.drainTournament: fetch the remote blob, LWW-merge THIS device's
+// edits over it (mergeTournaments(local, remote) — local's always-mine scores
+// and stamped fields win, currentRound takes the monotonic max), persist the
+// merged result, and push that. On any fetch/merge failure we fall back to
+// pushing the local blob (today's behavior) so an offline/transient hiccup
+// still eventually syncs via the worker.
 export async function saveTournament(tournament) {
   await saveLocal(tournament);
-  try {
-    await persistRemote(tournament);
-  } catch (_) {
-    // Swallow: the sync worker will retry.
+  if (isOnline()) {
+    try {
+      const remote = await fetchRemoteTournament(tournament.id);
+      if (remote) {
+        const { merged } = mergeTournaments(tournament, remote);
+        await saveLocal(merged);
+        await persistRemote(merged);
+      } else {
+        await persistRemote(tournament);
+      }
+    } catch (_) {
+      // Fetch/merge/push failed — push the local blob so the change still
+      // lands; the sync worker will retry on any further failure.
+      await persistRemote(tournament).catch(() => {});
+    }
+  } else {
+    try {
+      await persistRemote(tournament);
+    } catch (_) {
+      // Swallow: the sync worker will retry.
+    }
   }
 }
 
