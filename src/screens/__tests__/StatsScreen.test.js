@@ -1,6 +1,6 @@
 import React from 'react';
 import { render, fireEvent } from '@testing-library/react-native';
-import { ScrollView, StyleSheet } from 'react-native';
+import { ScrollView, StyleSheet, Switch } from 'react-native';
 import StatsScreen from '../StatsScreen';
 
 jest.mock('@expo/vector-icons', () => ({
@@ -404,5 +404,139 @@ describe('StatsScreen mixed scoring-mode gating (per-round overrides)', () => {
         expect(t.rounds[1].scores).toBeNull();
       });
     });
+  });
+});
+
+describe('StatsScreen Overview tab — presentation honesty', () => {
+  // jest.clearAllMocks() only clears call history — a .mockReturnValue() set
+  // by one test keeps applying in the next one. These tests each customize a
+  // different statsEngine aggregate, so every test starts from the same
+  // known-empty baseline (matching the module-level mock factory defaults)
+  // and only overrides what it actually needs.
+  beforeEach(() => {
+    jest.clearAllMocks();
+    const statsEngine = require('../../store/statsEngine');
+    statsEngine.skinsLeaderboard.mockReturnValue({ leaderboard: [], rounds: [], totalSkins: 0 });
+    statsEngine.playerConsistency.mockReturnValue([]);
+    statsEngine.tournamentMomentum.mockReturnValue([]);
+    statsEngine.clutchOnHardest.mockReturnValue([]);
+  });
+
+  test('two tied skins leaders both render rank #1, styled gold', () => {
+    const statsEngine = require('../../store/statsEngine');
+    statsEngine.skinsLeaderboard.mockReturnValue({
+      leaderboard: [
+        { player: fourPlayers[0], skins: 3, ties: 0, breakdown: [] },
+        { player: fourPlayers[1], skins: 3, ties: 0, breakdown: [] },
+        { player: fourPlayers[2], skins: 1, ties: 0, breakdown: [] },
+      ],
+      rounds: [],
+      totalSkins: 7,
+    });
+
+    const { getAllByText } = renderStats([makeRound('r1')], { players: fourPlayers });
+
+    const rankOnes = getAllByText('#1');
+    expect(rankOnes).toHaveLength(2);
+    rankOnes.forEach((el) => {
+      const flat = StyleSheet.flatten(el.props.style);
+      expect(flat.color).toBe(mockTheme.semantic.rank.gold);
+    });
+  });
+
+  test('consistency list hides players under 18 counted holes behind a muted note', () => {
+    const statsEngine = require('../../store/statsEngine');
+    statsEngine.playerConsistency.mockReturnValue([
+      { player: fourPlayers[0], stdev: 0.5, mean: 2, holesPlayed: 18, breakdown: [] },
+      { player: fourPlayers[1], stdev: 0.3, mean: 2.5, holesPlayed: 9, breakdown: [] },
+    ]);
+
+    const { getByText, queryByText } = renderStats([makeRound('r1')], { players: fourPlayers });
+
+    // Qualified player (18 holes) shows a real ranked row.
+    expect(getByText(/σ 0\.5/)).toBeTruthy();
+    // Under-18-hole player's raw stdev never renders...
+    expect(queryByText(/σ 0\.3/)).toBeNull();
+    // ...replaced by an honest muted note.
+    expect(getByText('Needs a full round of data.')).toBeTruthy();
+  });
+
+  test('strokes-mode Best Round empty state explains the 18-hole requirement', () => {
+    const { getByText, queryByText, UNSAFE_getByType } = renderStats([makeRound('r1')], {
+      players: fourPlayers,
+    });
+
+    // Points mode (default) keeps the original generic copy.
+    expect(getByText('No scores for this round yet.')).toBeTruthy();
+
+    const switchEl = UNSAFE_getByType(Switch);
+    fireEvent(switchEl, 'valueChange', false); // toggle to Strokes
+
+    expect(queryByText('No scores for this round yet.')).toBeNull();
+    expect(getByText('No completed rounds yet — strokes mode needs all 18 holes.')).toBeTruthy();
+  });
+
+  test('a skins row with zero skins but a tied hole is tappable and lists the ties', () => {
+    const statsEngine = require('../../store/statsEngine');
+    const [p1, p2] = fourPlayers;
+    const tiedHoleEntry = {
+      roundIndex: 0, courseName: 'La Moraleja', holeNumber: 5, par: 4, si: 3,
+      bestVal: 2, winner: null, tiedLeaders: [p1, p2], players: [],
+    };
+    statsEngine.skinsLeaderboard.mockReturnValue({
+      leaderboard: [
+        { player: p1, skins: 0, ties: 1, breakdown: [] },
+        { player: p2, skins: 0, ties: 1, breakdown: [] },
+        { player: fourPlayers[2], skins: 2, ties: 0, breakdown: [] },
+      ],
+      rounds: [{ roundIndex: 0, courseName: 'La Moraleja', skinsPerPlayer: {}, holes: [tiedHoleEntry] }],
+      totalSkins: 2,
+    });
+
+    const { getAllByText, UNSAFE_getByType } = renderStats([makeRound('r1')], { players: fourPlayers });
+
+    // The Head-to-Head matrix also renders every player's first name as a
+    // row/column header below the Skins section, so match the leaderboard
+    // row specifically: it's the first (and only pressable) occurrence.
+    fireEvent.press(getAllByText(p1.name.split(' ')[0])[0]);
+
+    const sheet = UNSAFE_getByType('StatDetailSheet');
+    expect(sheet.props.visible).toBe(true);
+    expect(sheet.props.rows).toHaveLength(1);
+    expect(sheet.props.rows[0].primary).toContain('Hole 5');
+  });
+
+  test('momentum bar tone accounts for holes played, not just the raw points total', () => {
+    const statsEngine = require('../../store/statsEngine');
+    // 16 pts over only 9 holes is a strong pace (16/9 === 32/18, the
+    // "excellent" cutoff) even though 16 alone would read as "poor" against
+    // the old full-round-only thresholds.
+    statsEngine.tournamentMomentum.mockReturnValue([
+      { player: fourPlayers[0], rounds: [
+        { roundIndex: 0, courseName: 'La Moraleja', points: 16, strokes: 40, holesPlayed: 9 },
+      ], minPts: 16, maxPts: 16 },
+    ]);
+
+    renderStats([makeRound('r1')], { players: fourPlayers });
+
+    expect(mockTheme.scoreColor).toHaveBeenCalledWith('excellent');
+    expect(mockTheme.scoreColor).not.toHaveBeenCalledWith('poor');
+  });
+
+  test('shows a pts badge beside points-only section titles when the Strokes toggle is active', () => {
+    const statsEngine = require('../../store/statsEngine');
+    statsEngine.clutchOnHardest.mockReturnValue([
+      { player: fourPlayers[0], points: 6, strokes: 12, holesPlayed: 3, breakdown: [], avgPoints: 2, avgStrokes: 4 },
+    ]);
+
+    const { getByText, queryByText, UNSAFE_getByType } = renderStats([makeRound('r1')], { players: fourPlayers });
+
+    expect(queryByText('pts')).toBeNull();
+
+    const switchEl = UNSAFE_getByType(Switch);
+    fireEvent(switchEl, 'valueChange', false); // toggle to Strokes
+
+    expect(getByText('CLUTCH ON HARDEST HOLES')).toBeTruthy();
+    expect(getByText('pts')).toBeTruthy();
   });
 });

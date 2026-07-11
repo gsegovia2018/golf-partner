@@ -26,6 +26,7 @@ import {
 } from '../store/statsEngine';
 import StatDetailSheet, { captureAndShare } from '../components/StatDetailSheet';
 import { scoringModeUsesTeams, isScrambleMode } from '../components/scoringModes';
+import PtsBadge from '../components/PtsBadge';
 
 const ALL_TABS = [
   { key: 'overview', label: 'Overview' },
@@ -52,6 +53,20 @@ const joinNames = (players) => {
   return `${tokens.slice(0, -1).join(', ')} & ${tokens[tokens.length - 1]}`;
 };
 const toneForPoints = (p) => p >= 3 ? 'excellent' : p === 2 ? 'good' : p === 1 ? 'neutral' : 'poor';
+// Ranks a list already sorted best-first so equal values share a rank
+// (1,1,3 rather than 1,2,3) instead of a plain array index. `valueFn` reads
+// whatever "best" means for that list (higher skins, higher avg points,
+// lower stdev) — direction doesn't matter here since the list is presorted.
+const tiedRanks = (items, valueFn) => {
+  let rank = 0;
+  let prevValue;
+  return items.map((item, i) => {
+    const v = valueFn(item);
+    if (i === 0 || v !== prevValue) rank = i + 1;
+    prevValue = v;
+    return rank;
+  });
+};
 const holeRowFromBreakdown = (b, i, tone) => ({
   key: `${b.roundIndex}-${b.holeNumber}-${i}`,
   primary: `R${b.roundIndex + 1} · ${b.courseName} · Hole ${b.holeNumber}`,
@@ -524,6 +539,29 @@ function OverviewTab({ tournament, metric, hasMulti, anyTeams, allScramble, roun
   const openSkins = (player) => {
     const rec = skins.leaderboard.find(r => r.player.id === player.id);
     if (!rec) return;
+    // A player with zero skins but at least one tie still has something to
+    // show — the holes where they matched the best score but no skin was
+    // awarded to anyone. Surface those instead of an empty sheet.
+    if (rec.skins === 0 && rec.ties > 0) {
+      const tiedHoles = skins.rounds.flatMap(r =>
+        r.holes.filter(h => h.tiedLeaders?.some(p => p.id === player.id)));
+      setSheet({
+        title: `${player.name} — ${rec.ties} tied hole${rec.ties === 1 ? '' : 's'}`,
+        subtitle: `No skin awarded on a tie · ${skins.totalSkins} total skins awarded`,
+        explainer:
+          (isStrokes
+            ? 'A skin on a hole goes to the player with the strictly lowest strokes. This player matched the best score on these holes, so the skin went unawarded (no carry-over).'
+            : 'A skin on a hole goes to the player with the strictly highest Stableford points. This player matched the best score on these holes, so the skin went unawarded (no carry-over).'),
+        rows: tiedHoles.map((h, i) => ({
+          key: `${h.roundIndex}-${h.holeNumber}-${i}`,
+          primary: `R${h.roundIndex + 1} · ${h.courseName} · Hole ${h.holeNumber}`,
+          secondary: `Par ${h.par} · SI ${h.si}`,
+          rightPrimary: isStrokes ? `${h.bestVal} str` : `${h.bestVal} pts`,
+          tone: 'neutral',
+        })),
+      });
+      return;
+    }
     setSheet({
       title: `${player.name} — ${rec.skins} skin${rec.skins === 1 ? '' : 's'}`,
       subtitle: `${rec.ties} tied holes · ${skins.totalSkins} total skins awarded`,
@@ -560,6 +598,18 @@ function OverviewTab({ tournament, metric, hasMulti, anyTeams, allScramble, roun
   const mb = highlights.mostBirdies;
   const ps = highlights.longestParStreak;
 
+  // Shared tie-aware ranks for the leaderboard-style lists below (skins is
+  // already sorted desc by skins, clutch desc by avgPoints, consistency asc
+  // by stdev — see statsEngine).
+  const skinsRanks = tiedRanks(skins.leaderboard, (r) => r.skins);
+  const clutchRanks = tiedRanks(clutch, (r) => r.avgPoints);
+  // A stdev over a handful of holes is noise, not signal — only players with
+  // a full round's worth of counted holes get a ranked row; the rest get an
+  // honest "not enough data yet" note instead of a misleading number.
+  const qualifiedConsistency = consistency.filter((r) => r.holesPlayed >= 18);
+  const unqualifiedConsistency = consistency.filter((r) => r.holesPlayed < 18);
+  const consistencyRanks = tiedRanks(qualifiedConsistency, (r) => r.stdev);
+
   // Build the sticky section index from whichever sections will actually render.
   const showMomentum = hasMulti && roundIndex === null && momentum.some(m => m.rounds.some(r => r.points != null));
   const showSkins = hasMulti && roundIndex === null && skins.totalSkins > 0;
@@ -594,7 +644,13 @@ function OverviewTab({ tournament, metric, hasMulti, anyTeams, allScramble, roun
       <SectionAnchor anchorKey="highlights" anchors={anchors}>
       <Text style={s.sectionTitle}>{roundIndex === null ? 'TOURNAMENT HIGHLIGHTS' : 'ROUND HIGHLIGHTS'}</Text>
       <Text style={s.scopeText}>{scope}</Text>
-      {!br && <Text style={s.emptyText}>No scores for this round yet.</Text>}
+      {!br && (
+        <Text style={s.emptyText}>
+          {isStrokes
+            ? 'No completed rounds yet — strokes mode needs all 18 holes.'
+            : 'No scores for this round yet.'}
+        </Text>
+      )}
       {br && (
         <HighlightCard
           icon="award"
@@ -647,7 +703,10 @@ function OverviewTab({ tournament, metric, hasMulti, anyTeams, allScramble, roun
 
       {showMomentum && (
         <SectionAnchor anchorKey="momentum" anchors={anchors}>
-          <Text style={s.sectionTitle}>TOURNAMENT MOMENTUM</Text>
+          <View style={s.sectionTitleRow}>
+            <Text style={s.sectionTitle}>TOURNAMENT MOMENTUM</Text>
+            {isStrokes && <PtsBadge />}
+          </View>
           <MomentumChart momentum={momentum} onRowPress={openMomentum} theme={theme} s={s} />
         </SectionAnchor>
       )}
@@ -665,9 +724,9 @@ function OverviewTab({ tournament, metric, hasMulti, anyTeams, allScramble, roun
                 style={s.leaderRow}
                 onPress={() => openSkins(rec.player)}
                 activeOpacity={0.7}
-                disabled={rec.skins === 0}
+                disabled={rec.skins === 0 && rec.ties === 0}
               >
-                <Text style={[s.leaderRank, { color: i === 0 && rec.skins > 0 ? theme.semantic.rank.gold : theme.text.muted }]}>#{i + 1}</Text>
+                <Text style={[s.leaderRank, { color: skinsRanks[i] === 1 && rec.skins > 0 ? theme.semantic.rank.gold : theme.text.muted }]}>#{skinsRanks[i]}</Text>
                 <Text style={s.leaderName}>{firstName(rec.player)}</Text>
                 <Text style={s.leaderValue}>
                   {rec.skins} <Text style={s.leaderUnit}>{rec.skins === 1 ? 'skin' : 'skins'}</Text>
@@ -683,12 +742,15 @@ function OverviewTab({ tournament, metric, hasMulti, anyTeams, allScramble, roun
 
       {showClutch && (
         <SectionAnchor anchorKey="clutch" anchors={anchors}>
-          <Text style={s.sectionTitle}>CLUTCH ON HARDEST HOLES</Text>
+          <View style={s.sectionTitleRow}>
+            <Text style={s.sectionTitle}>CLUTCH ON HARDEST HOLES</Text>
+            {isStrokes && <PtsBadge />}
+          </View>
           <Text style={s.scopeText}>Avg points on the 3 lowest-SI holes of each round</Text>
           <View style={s.card}>
             {clutch.map((row, i) => (
               <TouchableOpacity key={row.player.id} style={s.leaderRow} onPress={() => openClutch(row)} activeOpacity={0.7}>
-                <Text style={[s.leaderRank, { color: i === 0 ? theme.semantic.rank.gold : theme.text.muted }]}>#{i + 1}</Text>
+                <Text style={[s.leaderRank, { color: clutchRanks[i] === 1 ? theme.semantic.rank.gold : theme.text.muted }]}>#{clutchRanks[i]}</Text>
                 <Text style={s.leaderName}>{firstName(row.player)}</Text>
                 <Text style={s.leaderValue}>{row.avgPoints} <Text style={s.leaderUnit}>pts/hole</Text></Text>
               </TouchableOpacity>
@@ -699,15 +761,25 @@ function OverviewTab({ tournament, metric, hasMulti, anyTeams, allScramble, roun
 
       {showConsistency && (
         <SectionAnchor anchorKey="consistency" anchors={anchors}>
-          <Text style={s.sectionTitle}>CONSISTENCY INDEX</Text>
+          <View style={s.sectionTitleRow}>
+            <Text style={s.sectionTitle}>CONSISTENCY INDEX</Text>
+            {isStrokes && <PtsBadge />}
+          </View>
           <Text style={s.scopeText}>Stdev of pts per hole — lower is steadier · tap for hole breakdown</Text>
           <View style={s.card}>
-            {consistency.map((row, i) => (
+            {qualifiedConsistency.map((row, i) => (
               <TouchableOpacity key={row.player.id} style={s.leaderRow} onPress={() => openConsistency(row)} activeOpacity={0.7}>
-                <Text style={[s.leaderRank, { color: i === 0 ? theme.semantic.rank.gold : theme.text.muted }]}>#{i + 1}</Text>
+                <Text style={[s.leaderRank, { color: consistencyRanks[i] === 1 ? theme.semantic.rank.gold : theme.text.muted }]}>#{consistencyRanks[i]}</Text>
                 <Text style={s.leaderName}>{firstName(row.player)}</Text>
                 <Text style={s.leaderValue}>σ {row.stdev} <Text style={s.leaderUnit}>μ {row.mean}</Text></Text>
               </TouchableOpacity>
+            ))}
+            {unqualifiedConsistency.map((row) => (
+              <View key={row.player.id} style={s.leaderRow}>
+                <Text style={[s.leaderRank, { color: theme.text.muted }]}>—</Text>
+                <Text style={[s.leaderName, { color: theme.text.muted }]}>{firstName(row.player)}</Text>
+                <Text style={s.leaderUnit}>Needs a full round of data.</Text>
+              </View>
             ))}
           </View>
         </SectionAnchor>
@@ -715,7 +787,10 @@ function OverviewTab({ tournament, metric, hasMulti, anyTeams, allScramble, roun
 
       {showDna && (
         <SectionAnchor anchorKey="dna" anchors={anchors}>
-          <Text style={s.sectionTitle}>COURSE DNA</Text>
+          <View style={s.sectionTitleRow}>
+            <Text style={s.sectionTitle}>COURSE DNA</Text>
+            {isStrokes && <PtsBadge />}
+          </View>
           <Text style={s.scopeText}>Avg pts/hole per course · tap a player</Text>
           {dna.map(row => {
             if (row.courses.length === 0) return null;
@@ -817,6 +892,20 @@ function OverviewTab({ tournament, metric, hasMulti, anyTeams, allScramble, roun
   );
 }
 
+// Same excellent/good/neutral/poor cutoffs the bars have always used
+// (32/28/22 points over a full 18-hole round), but expressed as a
+// points-per-hole rate. A raw points total alone unfairly tones down a
+// partial round (front 9, a round cut short) even when the pace was strong,
+// so this normalizes against however many holes were actually played.
+const momentumTone = (points, holesPlayed) => {
+  if (!holesPlayed) return 'poor';
+  const perHole = points / holesPlayed;
+  if (perHole >= 32 / 18) return 'excellent';
+  if (perHole >= 28 / 18) return 'good';
+  if (perHole >= 22 / 18) return 'neutral';
+  return 'poor';
+};
+
 // Momentum bars with axes: a labelled value scale on the left and a zero
 // baseline so the per-round trajectory is readable, not just relative.
 function MomentumChart({ momentum, onRowPress, theme, s }) {
@@ -853,7 +942,7 @@ function MomentumChart({ momentum, onRowPress, theme, s }) {
                       {
                         height: Math.max(played ? 2 : 0, ROW_H * pct),
                         backgroundColor: played ? theme.scoreColor(
-                          r.points >= 32 ? 'excellent' : r.points >= 28 ? 'good' : r.points >= 22 ? 'neutral' : 'poor'
+                          momentumTone(r.points, r.holesPlayed)
                         ) : theme.border.default,
                       },
                     ]}
