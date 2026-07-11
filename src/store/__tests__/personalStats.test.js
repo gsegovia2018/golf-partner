@@ -817,4 +817,32 @@ describe('computeMyStats', () => {
     expect(stats.coach.board).toHaveProperty('nextGains');
     expect(stats.coach.practicePlan).toHaveLength(3);
   });
+
+  test('scoring-mix distribution is gross vs par, not net Stableford-adjusted', () => {
+    // Handicap 18 gives exactly 1 extra shot on every hole. Scoring gross
+    // par (4) nets out as a net birdie under the points metric — comparing
+    // that inflated net-birdie count against a gross benchmark table would
+    // always read as green. The benchmark distribution must be gross.
+    const h = holes18();
+    const myRound = {
+      key: 'gross:0',
+      round: mkRound({
+        holes: h,
+        scores: { p1: evenScores(h, 4) },
+        shotDetails: {},
+        playerHandicaps: { p1: 18 },
+      }),
+      playerId: 'p1',
+      player: { id: 'p1', name: 'Me', handicap: 18 },
+      courseName: 'Gross',
+      tournamentName: 'T',
+      tournamentDate: '2026-05-30',
+      completed: true,
+    };
+
+    const stats = computeMyStats([myRound]);
+
+    expect(stats.distribution.birdies).toBe(0);
+    expect(stats.distribution.pars).toBe(18);
+  });
 });

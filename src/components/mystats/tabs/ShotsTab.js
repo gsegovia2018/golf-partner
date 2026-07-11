@@ -363,7 +363,10 @@ function makeDrivingTargetRows(shots, shotBenchmark) {
   const distribution = shots?.drives?.distribution ?? {};
   const leftPct = percentage(distribution.left ?? 0, recorded);
   const rightPct = percentage(distribution.right ?? 0, recorded);
-  const teePenaltyPct = percentage(shots?.penalties?.tee ?? 0, recorded);
+  // Numerator and denominator share the same drive-logged, non-par-3 hole
+  // population — shots.penalties.tee includes penalties from holes outside
+  // that population (e.g. par 3s), which would otherwise inflate the %.
+  const teePenaltyPct = percentage(shots?.penalties?.teeOnDriveHoles ?? 0, recorded);
 
   return [
     {
@@ -425,7 +428,7 @@ function makeDrivingTargetRows(shots, shotBenchmark) {
       label: 'Tee penalty %',
       value: `${teePenaltyPct}%`,
       secondary: targetSecondary([
-        `${shots?.penalties?.tee ?? 0} penalties`,
+        `${shots?.penalties?.teeOnDriveHoles ?? 0} penalties`,
         `target ${formatBenchmarkPercent(shotBenchmark.teePenaltyPct)}`,
       ], recorded, 6),
       tone: toneFromComparison({
@@ -470,20 +473,22 @@ function makeApproachTargetRows(approachTarget) {
 }
 
 function makePuttingVolumeRows(shots, shotBenchmark) {
-  const threePuttsPerRound = shots.roundsWithPuttData > 0
-    ? round1(shots.putts.threePuttPlus / shots.roundsWithPuttData)
-    : 0;
+  // Both rows normalize off holes that actually logged putts, to an
+  // 18-hole rate — dividing a partial round's raw total by "rounds" instead
+  // understates it against a full-round benchmark.
+  const puttsPer18 = shots.putts.per18 ?? 0;
+  const threePuttsPer18 = per18(shots.putts.threePuttPlus, shots.putts.holes) ?? 0;
   return [
     {
       key: 'puttsPerRound',
       label: 'Putts / round',
-      value: shots.putts.perRound,
+      value: puttsPer18,
       secondary: targetSecondary([
         sampleText(shots.putts.holes, 'holes'),
         `target ${formatBenchmarkNumber(shotBenchmark.puttsPerRound)}`,
       ], shots.putts.holes, 9),
       tone: toneFromComparison({
-        value: shots.putts.perRound,
+        value: puttsPer18,
         target: shotBenchmark.puttsPerRound,
         polarity: 'lower',
         tolerance: 0.5,
@@ -495,14 +500,14 @@ function makePuttingVolumeRows(shots, shotBenchmark) {
     {
       key: 'threePutts',
       label: '3-putts / round',
-      value: threePuttsPerRound,
+      value: threePuttsPer18,
       secondary: targetSecondary([
         `${shots.putts.threePuttPlus} total`,
         sampleText(shots.roundsWithPuttData, 'rounds'),
         `target ${formatBenchmarkNumber(shotBenchmark.threePuttsPerRound)}`,
       ], shots.putts.holes, 9),
       tone: toneFromComparison({
-        value: threePuttsPerRound,
+        value: threePuttsPer18,
         target: shotBenchmark.threePuttsPerRound,
         polarity: 'lower',
         tolerance: 0.3,

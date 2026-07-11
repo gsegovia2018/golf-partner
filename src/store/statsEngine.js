@@ -1507,9 +1507,19 @@ export function shotStats(tournament, playerId) {
   let puttsTotal = 0, holesWithPutts = 0, onePutts = 0, threePuttPlus = 0;
   let drivesRecorded = 0, fairwaysHit = 0;
   const driveDistribution = { fairway: 0, left: 0, right: 0, short: 0, super: 0 };
-  let teePenalties = 0, otherPenalties = 0;
+  let teePenalties = 0, otherPenalties = 0, teeOnDriveHoles = 0;
   let girHoles = 0, girEligible = 0;
   let roundsWithData = 0, roundsWithPuttData = 0;
+  let anyDetailHoles = 0;
+
+  // Any of these fields being present marks a hole (and therefore the
+  // player) as having logged shot detail — hasData must not be limited to
+  // putts/drive/penalties, or an approach- or short-game-only logger would
+  // be invisible to the picker and benchmark sections.
+  const hasAnyDetail = (d) => d.putts != null || d.drive != null
+    || (d.teePenalties ?? 0) > 0 || (d.otherPenalties ?? 0) > 0
+    || (d.sandShots ?? 0) > 0 || d.recoveryOutcome != null
+    || d.firstPuttBucket != null || d.approachBucket != null || d.approachResult != null;
 
   rounds.forEach((round) => {
     const byHole = round?.shotDetails?.[playerId];
@@ -1519,9 +1529,9 @@ export function shotStats(tournament, playerId) {
     (round.holes ?? []).forEach((hole) => {
       const d = byHole[hole.number];
       if (!d) return;
-      if (d.putts != null || d.drive != null
-        || (d.teePenalties ?? 0) > 0 || (d.otherPenalties ?? 0) > 0) {
+      if (hasAnyDetail(d)) {
         roundHasData = true;
+        anyDetailHoles += 1;
       }
       if (d.putts != null) {
         puttsTotal += d.putts;
@@ -1534,6 +1544,10 @@ export function shotStats(tournament, playerId) {
         drivesRecorded += 1;
         if (driveDistribution[d.drive] != null) driveDistribution[d.drive] += 1;
         if (d.drive === 'fairway' || d.drive === 'super') fairwaysHit += 1;
+        // Tee penalties counted here share the same population as
+        // drivesRecorded, so teePenaltyPct's numerator and denominator
+        // are honest against each other.
+        teeOnDriveHoles += d.teePenalties ?? 0;
       }
       teePenalties += d.teePenalties ?? 0;
       otherPenalties += d.otherPenalties ?? 0;
@@ -1552,8 +1566,7 @@ export function shotStats(tournament, playerId) {
 
   const round1 = (n) => Math.round(n * 10) / 10;
   return {
-    hasData: holesWithPutts > 0 || drivesRecorded > 0
-      || teePenalties > 0 || otherPenalties > 0,
+    hasData: anyDetailHoles > 0,
     roundsWithData,
     // Per-round putting rates must divide by rounds that logged putts — a
     // drive-only round in roundsWithData would deflate them.
@@ -1563,6 +1576,10 @@ export function shotStats(tournament, playerId) {
       holes: holesWithPutts,
       perHole: holesWithPutts > 0 ? round1(puttsTotal / holesWithPutts) : 0,
       perRound: roundsWithPuttData > 0 ? round1(puttsTotal / roundsWithPuttData) : 0,
+      // Normalized to an 18-hole rate off the holes that actually logged
+      // putts — comparing a partial round's raw total against a full-round
+      // benchmark otherwise understates it.
+      per18: holesWithPutts > 0 ? round1((puttsTotal / holesWithPutts) * 18) : null,
       onePutts,
       threePuttPlus,
     },
@@ -1576,6 +1593,7 @@ export function shotStats(tournament, playerId) {
       tee: teePenalties,
       other: otherPenalties,
       total: teePenalties + otherPenalties,
+      teeOnDriveHoles,
     },
     gir: {
       holes: girHoles,
@@ -2452,7 +2470,6 @@ export function sgSeason(rounds, playerId, targetHandicap = 0) {
   const byCategory = { approach: 0, aroundGreen: 0, putting: 0, penalties: 0 };
   const categoryRounds = { approach: 0, aroundGreen: 0, putting: 0, penalties: 0 };
   const sampleHolesByCategory = { approach: 0, aroundGreen: 0, putting: 0, penalties: 0 };
-  let total = 0;
   let sampleHoles = 0;
   const perRound = [];
   rounds.forEach((round, i) => {
@@ -2465,22 +2482,25 @@ export function sgSeason(rounds, playerId, targetHandicap = 0) {
       categoryRounds[category] += 1;
       sampleHolesByCategory[category] += categorySample;
     });
-    total += r.total;
     sampleHoles += r.sampleHoles;
     perRound.push({ index: i, total: r.total, sampleHoles: r.sampleHoles });
   });
   if (sampleHoles < SG_SEASON_MIN_SAMPLE) {
     return { total: null, byCategory: null, sampleHoles, sampleHolesByCategory, perRound };
   }
-  const denom = perRound.length;
+  const perCategory = {
+    approach:    categoryRounds.approach > 0 ? byCategory.approach / categoryRounds.approach : 0,
+    aroundGreen: categoryRounds.aroundGreen > 0 ? byCategory.aroundGreen / categoryRounds.aroundGreen : 0,
+    putting:     categoryRounds.putting > 0 ? byCategory.putting / categoryRounds.putting : 0,
+    penalties:   categoryRounds.penalties > 0 ? byCategory.penalties / categoryRounds.penalties : 0,
+  };
   return {
-    total: total / denom,
-    byCategory: {
-      approach:    categoryRounds.approach > 0 ? byCategory.approach / categoryRounds.approach : 0,
-      aroundGreen: categoryRounds.aroundGreen > 0 ? byCategory.aroundGreen / categoryRounds.aroundGreen : 0,
-      putting:     categoryRounds.putting > 0 ? byCategory.putting / categoryRounds.putting : 0,
-      penalties:   categoryRounds.penalties > 0 ? byCategory.penalties / categoryRounds.penalties : 0,
-    },
+    // The headline total must equal what a user summing the category bars
+    // would get — each category can carry a different round count (e.g. an
+    // approach-less round still contributes to putting), so re-deriving
+    // total from the raw per-round sum/denom can silently disagree with it.
+    total: perCategory.approach + perCategory.aroundGreen + perCategory.putting + perCategory.penalties,
+    byCategory: perCategory,
     sampleHoles,
     sampleHolesByCategory,
     perRound,

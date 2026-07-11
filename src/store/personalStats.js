@@ -512,7 +512,11 @@ export function computeMyStats(selectedRounds, { n = 5, targetHandicap = 0 } = {
     difficulty: holeDifficultySplit(synthetic, CANON_ID),
     frontBack: frontBackSplit(synthetic)[0] ?? null,
     warmupClosing: warmupVsClosing(synthetic, CANON_ID),
-    distribution: playerScoreDistribution(synthetic, CANON_ID),
+    // Gross vs-par, not net Stableford-adjusted — the shot benchmarks this
+    // feeds (birdies/pars/bogeys per round) come from real-world gross
+    // scoring tables. Net birdies inflate with handicap and would always
+    // read green against a gross target.
+    distribution: playerScoreDistribution(synthetic, CANON_ID, { metric: 'strokes' }),
     teeShot: teeShotImpact(synthetic, CANON_ID),
     shots: shotStats(synthetic, CANON_ID),
     driveImpact,

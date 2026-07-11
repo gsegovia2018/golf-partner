@@ -1,4 +1,4 @@
-import { teeShotImpact, lagPuttingQuality, sandSaveRate, upAndDownRate, bunkerVisits, sgPutting, sgAroundGreen, sgApproach, sgPenalties, sgTotal, sgSeason, driveScoreImpact, puttDeepDive, approachScoreImpact, puttingTargetGaps, approachTargetGaps, pairPerformance, shotStats, tournamentHighlights, withoutScrambleScores, playerAvgStableford, pickupChampion, hallOfShame, chaosHoles, skinsLeaderboard, playerStreaks, bounceBackRate, strokeIndexAccuracy, bestWorstHoles, holeDifficultyMap, collectiveExtremes, pairConfigMatrix, matchPlayResults, pairHoleWins } from '../statsEngine';
+import { teeShotImpact, lagPuttingQuality, sandSaveRate, upAndDownRate, bunkerVisits, sgPutting, sgAroundGreen, sgApproach, sgPenalties, sgTotal, sgSeason, driveScoreImpact, puttDeepDive, approachScoreImpact, puttingTargetGaps, approachTargetGaps, pairPerformance, shotStats, playersWithShotData, tournamentHighlights, withoutScrambleScores, playerAvgStableford, pickupChampion, hallOfShame, chaosHoles, skinsLeaderboard, playerStreaks, bounceBackRate, strokeIndexAccuracy, bestWorstHoles, holeDifficultyMap, collectiveExtremes, pairConfigMatrix, matchPlayResults, pairHoleWins } from '../statsEngine';
 import { mixedModeTournament, buildTournament } from './statsFixtures';
 
 // 18 par-4 holes, strokeIndex = hole number.
@@ -130,6 +130,69 @@ describe('shotStats', () => {
     const r = shotStats(t, 'p1');
     expect(r.roundsWithPuttData).toBe(0);
     expect(r.putts.perRound).toBe(0);
+  });
+
+  test('a tee penalty on a par-3 (no drive logged) does not move penalties.teeOnDriveHoles', () => {
+    const h = holes18().map((hole, i) => (i === 0 ? { ...hole, par: 3 } : hole));
+    const scores = { ...evenScores(h, 4) };
+    scores[1] = 5;
+    const shotDetails = {
+      p1: {
+        1: { teePenalties: 1 }, // par 3, no drive direction logged
+        2: { drive: 'fairway', teePenalties: 1 }, // drive-logged hole with a penalty
+      },
+    };
+    const t = {
+      players: [{ id: 'p1', handicap: 0 }],
+      rounds: [{ courseName: 'C', holes: h, scores: { p1: scores }, shotDetails }],
+    };
+    const r = shotStats(t, 'p1');
+    expect(r.penalties.tee).toBe(2); // raw total is unchanged
+    expect(r.penalties.teeOnDriveHoles).toBe(1); // only the drive-logged hole counts
+  });
+
+  test('putts.per18 normalizes a 9-logged-hole round to an 18-hole rate', () => {
+    const h = holes18();
+    const nineHoles = h.slice(0, 9);
+    const shotDetails = {
+      p1: Object.fromEntries(nineHoles.map((hole) => [hole.number, { putts: 2 }])),
+    };
+    const t = {
+      players: [{ id: 'p1', handicap: 0 }],
+      rounds: [{ courseName: 'C', holes: h, scores: { p1: evenScores(h, 4) }, shotDetails }],
+    };
+    const r = shotStats(t, 'p1');
+    expect(r.putts.holes).toBe(9);
+    expect(r.putts.per18).toBe(36); // 2 per hole × 18
+  });
+
+  test('putts.per18 is null when no putts are logged', () => {
+    const h = holes18();
+    const t = {
+      players: [{ id: 'p1', handicap: 0 }],
+      rounds: [{
+        courseName: 'C', holes: h, scores: { p1: evenScores(h, 4) },
+        shotDetails: { p1: { 1: { drive: 'fairway' } } },
+      }],
+    };
+    const r = shotStats(t, 'p1');
+    expect(r.putts.per18).toBeNull();
+  });
+
+  test('an approach-only logger counts as hasData and appears in playersWithShotData', () => {
+    const h = holes18();
+    const shotDetails = {
+      p1: Object.fromEntries(h.map((hole) => [hole.number, {
+        approachBucket: '100-150', approachResult: 'green',
+      }])),
+    };
+    const t = {
+      players: [{ id: 'p1', handicap: 0 }, { id: 'p2', handicap: 0 }],
+      rounds: [{ courseName: 'C', holes: h, scores: { p1: evenScores(h, 4) }, shotDetails }],
+    };
+    expect(shotStats(t, 'p1').hasData).toBe(true);
+    const withData = playersWithShotData(t);
+    expect(withData.map((p) => p.id)).toEqual(['p1']);
   });
 });
 
@@ -873,6 +936,34 @@ describe('sgSeason', () => {
     expect(r.perRound.length).toBe(2);
     expect(r.sampleHoles).toBeGreaterThanOrEqual(18);
     expect(r.total).not.toBeNull();
+  });
+
+  test('headline total equals the sum of the reported per-category values', () => {
+    // Round A has approach + putting + penalties data; round B is putting-only
+    // (no approachBucket) — the per-category round counts diverge, which
+    // previously made the headline total disagree with sum(byCategory).
+    const holes = Array.from({ length: 18 }, (_, i) => ({
+      number: i + 1, par: 4, strokeIndex: i + 1, distance: 400,
+    }));
+    const scores = { me: Object.fromEntries(holes.map((hole) => [hole.number, 4])) };
+    const approachRound = {
+      holes,
+      scores,
+      shotDetails: { me: Object.fromEntries(holes.map((hole) => [hole.number, {
+        approachBucket: '100-150', putts: 2, firstPuttBucket: '3-6', sandShots: 0,
+      }])) },
+    };
+    const puttingOnlyRound = {
+      holes,
+      scores,
+      shotDetails: { me: Object.fromEntries(holes.map((hole) => [hole.number, {
+        putts: 2, firstPuttBucket: '3-6', sandShots: 0,
+      }])) },
+    };
+    const r = sgSeason([approachRound, puttingOnlyRound], 'me');
+    const categorySum = r.byCategory.approach + r.byCategory.aroundGreen
+      + r.byCategory.putting + r.byCategory.penalties;
+    expect(r.total).toBeCloseTo(categorySum, 5);
   });
 });
 
