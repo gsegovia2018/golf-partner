@@ -222,9 +222,16 @@ BEGIN
                COALESCE((SELECT jsonb_build_object('round', n.note)
                          FROM public.game_round_notes n
                          WHERE n.round_id = gr.id AND n.hole_key = 'round' AND n.note IS NOT NULL), '{}'::jsonb)
+               -- HAVING count(*) > 0 makes this subquery yield ZERO rows
+               -- (hitting the COALESCE) when the round has no hole notes,
+               -- instead of one row whose bare aggregate is NULL — which
+               -- would otherwise surface as "hole": null. The legacy blob
+               -- simply omits the key, so round-trip equality requires the
+               -- same here.
                || COALESCE((SELECT jsonb_build_object('hole', jsonb_object_agg(n.hole_key, n.note))
                             FROM public.game_round_notes n
-                            WHERE n.round_id = gr.id AND n.hole_key <> 'round' AND n.note IS NOT NULL), '{}'::jsonb))
+                            WHERE n.round_id = gr.id AND n.hole_key <> 'round' AND n.note IS NOT NULL
+                            HAVING count(*) > 0), '{}'::jsonb))
              WHERE EXISTS (SELECT 1 FROM public.game_round_notes n2
                            WHERE n2.round_id = gr.id AND n2.note IS NOT NULL)), '{}'::jsonb)
         ORDER BY gr.round_index, gr.id)
