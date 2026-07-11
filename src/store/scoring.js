@@ -319,6 +319,20 @@ export function roundScoringMode(tournament, round) {
   return round?.scoringMode ?? tournament?.settings?.scoringMode ?? 'stableford';
 }
 
+// A round may override the tournament's best/worst ball point values. Same
+// single-source-of-truth pattern as roundScoringMode above — every best-ball
+// points consumer resolves values here instead of reading settings directly.
+// Only positive integers count as present; anything else falls through to
+// the tournament settings, then 1, so legacy data renders unchanged.
+export function roundBestBallValues(tournament, round) {
+  const num = (v) => (Number.isInteger(v) && v > 0 ? v : null);
+  const s = tournament?.settings ?? {};
+  return {
+    bestBallValue: num(round?.bestBallValue) ?? num(s.bestBallValue) ?? 1,
+    worstBallValue: num(round?.worstBallValue) ?? num(s.worstBallValue) ?? 1,
+  };
+}
+
 // Pairs for a round about to be revealed/started. fixedTeams reuses the
 // most recent earlier round's partnerships when the team SHAPES match and
 // the roster is unchanged; otherwise the round gets a fresh build from its
