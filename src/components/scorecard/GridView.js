@@ -106,6 +106,7 @@ function shortPlayerLabel(player, isSolo) {
 function NineBlock({
   holes, label, aggLabel, players, scores, onSetScore, editable,
   playerHandicaps, mode, round, theme, s, columns, meId, displayMode,
+  currentHoleByPlayer,
 }) {
   const { labelW, aggW, holeW, labelFontSize } = columns;
   const labelFont = { fontSize: labelFontSize };
@@ -177,9 +178,10 @@ function NineBlock({
           {holes.map((h) => {
             const pts = ptsFor(h, player);
             const extra = calcExtraShots(handicap, h.strokeIndex);
+            const isCurrent = currentHoleByPlayer?.[player.id] === h.number;
             return (
               <View key={h.number} style={[s.soloNineCell, holeCell]}>
-                <View style={s.soloNineDigitBox}>
+                <View style={[s.soloNineDigitBox, isCurrent && s.soloNineDigitBoxCurrent]}>
                   <Text numberOfLines={1} style={[s.soloNinePtsText, { color: ptsColorFor(pts) }]}>
                     {pts ?? '·'}
                   </Text>
@@ -211,12 +213,13 @@ function NineBlock({
           // Eagle chips are solid-filled, so their digit flips to the
           // inverse text colour to stay legible.
           const digitOnSolid = shape === 'eagle' && { color: theme.text.inverse };
+          const isCurrent = currentHoleByPlayer?.[player.id] === h.number;
           return (
             <View key={h.number} style={[s.soloNineCell, holeCell, s.soloNineYouCell]}>
               {/* Digit box: chip + digit share this 30px box so they stay
                   concentric; the handicap pips get their own lane below it
                   and can never collide with the chip. */}
-              <View style={s.soloNineDigitBox}>
+              <View style={[s.soloNineDigitBox, isCurrent && s.soloNineDigitBoxCurrent]}>
                 {/* Chip first so the digit renders on top of the soft fill. */}
                 <ScoreShape result={shape} theme={theme} s={s} />
                 {cellEditable ? (
@@ -322,7 +325,7 @@ export function resolveScorecardRows({ round, settings, players, meId, isBestBal
   return { mode, rowPlayers, rowHandicaps, effectiveMeId };
 }
 
-export function ScorecardTable({ round, players, scores, onSetScore, editable, mode, meId, handicapsOverride }) {
+export function ScorecardTable({ round, players, scores, onSetScore, editable, mode, meId, handicapsOverride, showTotalsCard = true, highlightCurrentHole = false }) {
   const { theme } = useTheme();
   const s = useMemo(() => makeScorecardStyles(theme), [theme]);
   const { width } = useWindowDimensions();
@@ -358,6 +361,17 @@ export function ScorecardTable({ round, players, scores, onSetScore, editable, m
 
   const coursePar = holes.reduce((acc, h) => acc + h.par, 0);
   const isSolo = players.length === 1;
+
+  // Live rounds on the read-only summary glow the digit box each player is
+  // about to fill: their first unscored hole in round order. Off by default
+  // so the editable scorecard keeps its focused-input affordance instead.
+  const currentHoleByPlayer = highlightCurrentHole
+    ? Object.fromEntries(players.map((p) => {
+      const ps = scores[p.id] ?? {};
+      const next = holes.find((h) => h?.number != null && ps[h.number] == null);
+      return [p.id, next?.number ?? null];
+    }))
+    : null;
 
   // Per-player round totals via scoreModel — same numbers as the previous
   // inline branching. roundTotals returns Map<playerId, {pts,str,parPlayed}>.
@@ -414,6 +428,7 @@ export function ScorecardTable({ round, players, scores, onSetScore, editable, m
             columns={columns}
             meId={meId}
             displayMode={displayMode}
+            currentHoleByPlayer={currentHoleByPlayer}
           />
         </View>
 
@@ -435,13 +450,16 @@ export function ScorecardTable({ round, players, scores, onSetScore, editable, m
               columns={columns}
               meId={meId}
               displayMode={displayMode}
+              currentHoleByPlayer={currentHoleByPlayer}
             />
           </View>
         )}
       </View>
 
       {/* Round total — single bar for solo (course par + personal totals),
-          compact per-player leaderboard for 2+ players. */}
+          compact per-player leaderboard for 2+ players. The multi-player card
+          can be suppressed (showTotalsCard) when the host screen renders its
+          own leaderboard, e.g. the round summary's green board. */}
       {isSolo ? (
         <View style={s.soloTotalBar}>
           <View style={s.soloTotalCol}>
@@ -464,7 +482,7 @@ export function ScorecardTable({ round, players, scores, onSetScore, editable, m
             <Text style={s.soloTotalNumber}>{playerTotals[0].vsParLabel}</Text>
           </View>
         </View>
-      ) : (
+      ) : !showTotalsCard ? null : (
         <View style={s.multiTotalCard}>
           <View style={s.multiTotalHeader}>
             <Text style={s.multiTotalLabel}>PAR {coursePar}</Text>

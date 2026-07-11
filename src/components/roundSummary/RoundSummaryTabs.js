@@ -4,11 +4,12 @@ import { useTheme } from '../../theme/ThemeContext';
 
 export const ROUND_SUMMARY_TABS = [
   { key: 'scorecard', label: 'Scorecard' },
-  { key: 'leaderboard', label: 'Leaderboard' },
   { key: 'photos', label: 'Photos' },
   { key: 'comments', label: 'Comments' },
 ];
 
+// Top-of-page underline tabs: active tab gets accent text and a rounded
+// indicator bar; inactive tabs stay muted on a transparent ground.
 export default function RoundSummaryTabs({ active, onChange }) {
   const { theme } = useTheme();
   const s = useMemo(() => makeStyles(theme), [theme]);
@@ -20,7 +21,7 @@ export default function RoundSummaryTabs({ active, onChange }) {
         return (
           <TouchableOpacity
             key={tab.key}
-            style={[s.tab, selected && s.tabSelected]}
+            style={s.tab}
             onPress={() => onChange?.(tab.key)}
             activeOpacity={0.75}
             accessibilityRole="button"
@@ -30,6 +31,7 @@ export default function RoundSummaryTabs({ active, onChange }) {
             <Text style={[s.tabText, selected && s.tabTextSelected]} numberOfLines={1}>
               {tab.label}
             </Text>
+            <View style={[s.indicator, selected && s.indicatorSelected]} />
           </TouchableOpacity>
         );
       })}
@@ -40,33 +42,36 @@ export default function RoundSummaryTabs({ active, onChange }) {
 function makeStyles(theme) {
   return StyleSheet.create({
     tabs: {
-      backgroundColor: theme.bg.secondary,
-      borderRadius: 8,
+      borderBottomColor: theme.border.default,
+      borderBottomWidth: 1,
       flexDirection: 'row',
-      gap: 4,
-      padding: 4,
     },
     tab: {
       alignItems: 'center',
-      borderRadius: 6,
       flex: 1,
-      justifyContent: 'center',
-      minHeight: 34,
+      gap: 7,
       minWidth: 0,
-      paddingHorizontal: 8,
-    },
-    tabSelected: {
-      backgroundColor: theme.bg.card,
-      borderColor: theme.border.default,
-      borderWidth: 1,
+      paddingHorizontal: 4,
+      paddingTop: 8,
     },
     tabText: {
-      color: theme.text.secondary,
+      color: theme.text.muted,
       fontFamily: 'PlusJakartaSans-SemiBold',
-      fontSize: 12,
+      fontSize: 13,
     },
     tabTextSelected: {
       color: theme.text.primary,
+      fontFamily: 'PlusJakartaSans-ExtraBold',
+    },
+    indicator: {
+      backgroundColor: 'transparent',
+      borderTopLeftRadius: 3,
+      borderTopRightRadius: 3,
+      height: 3,
+      width: '64%',
+    },
+    indicatorSelected: {
+      backgroundColor: theme.accent.primary,
     },
   });
 }

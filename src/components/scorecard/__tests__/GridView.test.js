@@ -1,7 +1,7 @@
 import React from 'react';
 import { render } from '@testing-library/react-native';
 import { ThemeProvider } from '../../../theme/ThemeContext';
-import { GridView } from '../GridView';
+import { GridView, ScorecardTable } from '../GridView';
 
 // Regression test for a bug where NineBlock never received `round`, so its
 // holePoints() call omitted round — for pairsmatchplay (which needs
@@ -94,5 +94,106 @@ describe('GridView match play stroke dots', () => {
     expect(queryAllByTestId('hcp-dot-a-h2').length).toBe(0);
     expect(queryAllByTestId('hcp-dot-b-h1').length).toBe(0);
     expect(queryAllByTestId('hcp-dot-b-h2').length).toBe(0);
+  });
+});
+
+// showTotalsCard / highlightCurrentHole — added for the round-summary v2
+// screen, which renders its own quiet leaderboard and suppresses the
+// scorecard's gray multi-totals card, and glows each player's next hole
+// while the round is live.
+describe('ScorecardTable showTotalsCard', () => {
+  const holes = Array.from({ length: 18 }, (_, i) => ({ number: i + 1, par: 4, strokeIndex: i + 1 }));
+  const players = [
+    { id: 'p1', name: 'Ann Lee', handicap: 0 },
+    { id: 'p2', name: 'Bob Ray', handicap: 0 },
+  ];
+  const round = { holes };
+  const scores = {
+    p1: Object.fromEntries(Array.from({ length: 9 }, (_, i) => [i + 1, 4])),
+    p2: Object.fromEntries(Array.from({ length: 9 }, (_, i) => [i + 1, 5])),
+  };
+
+  test('defaults to showing the gray multi totals card', () => {
+    const { getByText } = render(
+      <ThemeProvider>
+        <ScorecardTable
+          round={round}
+          players={players}
+          scores={scores}
+          onSetScore={() => {}}
+          editable={() => false}
+          mode="stableford"
+          meId="p1"
+        />
+      </ThemeProvider>,
+    );
+    expect(getByText('STABLEFORD')).toBeTruthy();
+  });
+
+  test('showTotalsCard={false} hides the gray multi totals card', () => {
+    const { queryByText } = render(
+      <ThemeProvider>
+        <ScorecardTable
+          round={round}
+          players={players}
+          scores={scores}
+          onSetScore={() => {}}
+          editable={() => false}
+          mode="stableford"
+          meId="p1"
+          showTotalsCard={false}
+        />
+      </ThemeProvider>,
+    );
+    expect(queryByText('STABLEFORD')).toBeNull();
+  });
+});
+
+describe('ScorecardTable highlightCurrentHole', () => {
+  const holes = Array.from({ length: 18 }, (_, i) => ({ number: i + 1, par: 4, strokeIndex: i + 1 }));
+  const players = [
+    { id: 'p1', name: 'Ann Lee', handicap: 0 },
+    { id: 'p2', name: 'Bob Ray', handicap: 0 },
+  ];
+  const round = { holes };
+  const scores = {
+    p1: Object.fromEntries(Array.from({ length: 9 }, (_, i) => [i + 1, 4])),
+    p2: Object.fromEntries(Array.from({ length: 9 }, (_, i) => [i + 1, 5])),
+  };
+
+  test('renders normally when off by default', () => {
+    const { getByText } = render(
+      <ThemeProvider>
+        <ScorecardTable
+          round={round}
+          players={players}
+          scores={scores}
+          onSetScore={() => {}}
+          editable={() => false}
+          mode="stableford"
+          meId="p1"
+        />
+      </ThemeProvider>,
+    );
+    expect(getByText('FRONT NINE')).toBeTruthy();
+  });
+
+  test('renders without crashing when on, glowing each player\'s next unscored hole', () => {
+    const { getByText } = render(
+      <ThemeProvider>
+        <ScorecardTable
+          round={round}
+          players={players}
+          scores={scores}
+          onSetScore={() => {}}
+          editable={() => false}
+          mode="stableford"
+          meId="p1"
+          highlightCurrentHole
+        />
+      </ThemeProvider>,
+    );
+    expect(getByText('FRONT NINE')).toBeTruthy();
+    expect(getByText('BACK NINE')).toBeTruthy();
   });
 });

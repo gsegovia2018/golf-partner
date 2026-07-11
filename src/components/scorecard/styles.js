@@ -1235,6 +1235,20 @@ export function makeScorecardStyles(theme) {
     soloNineYouCell: {
       position: 'relative',
     },
+    // Glowing halo on the digit box a live player is about to fill — only
+    // used by the read-only summary (highlightCurrentHole), same accent-glow
+    // recipe as the Home scoreboard's HOLE badge.
+    soloNineDigitBoxCurrent: {
+      backgroundColor: theme.accent.light,
+      borderColor: theme.accent.primary,
+      borderRadius: 8,
+      borderWidth: 1.5,
+      elevation: 4,
+      shadowColor: theme.accent.primary,
+      shadowOffset: { width: 0, height: 0 },
+      shadowOpacity: 0.5,
+      shadowRadius: 6,
+    },
     soloNineRowLabel: {
       color: theme.text.secondary,
       fontSize: 11,

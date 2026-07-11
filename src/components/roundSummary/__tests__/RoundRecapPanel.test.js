@@ -6,32 +6,59 @@ import RoundRecapPanel from '../RoundRecapPanel';
 const wrap = (ui) => <ThemeProvider>{ui}</ThemeProvider>;
 const recap = { winnerName: 'Ana', winnerPoints: 38, margin: 4, winnerStrokes: 82, holesPlayed: 18, playerCount: 2 };
 
-describe('RoundRecapPanel highlights', () => {
-  test('renders highlight chips for non-zero counts only', () => {
-    const { getByText, queryByText } = render(wrap(
+describe('RoundRecapPanel', () => {
+  test('shows a "Winner" pill and the finished meta line when the round is over', () => {
+    const { getByText } = render(wrap(
       <RoundRecapPanel
         recap={recap}
         roundLabel="Round 1"
-        summary="Ana won the round."
-        highlights={{ eagles: 0, birdies: 3, pars: 10, bogeys: 4, doubles: 1 }}
+        live={false}
+        totalHoles={18}
       />,
     ));
-    expect(getByText('3 birdies')).toBeTruthy();
-    expect(getByText('10 pars')).toBeTruthy();
-    expect(getByText('4 bogeys')).toBeTruthy();
-    expect(getByText('1 double+')).toBeTruthy();
-    expect(queryByText(/eagle/)).toBeNull();
+    expect(getByText('Winner: Ana')).toBeTruthy();
+    expect(getByText('18 holes')).toBeTruthy();
+    expect(getByText('2 players')).toBeTruthy();
   });
 
-  test('hides the highlights row when all counts are zero', () => {
+  test('shows a "Leading" pill and the in-progress meta line while live', () => {
+    const liveRecap = { ...recap, holesPlayed: 9 };
+    const { getByText } = render(wrap(
+      <RoundRecapPanel
+        recap={liveRecap}
+        roundLabel="Round 1"
+        live
+        totalHoles={18}
+      />,
+    ));
+    expect(getByText('Leading: Ana')).toBeTruthy();
+    expect(getByText('9/18 holes')).toBeTruthy();
+  });
+
+  test('no longer renders the old stat tiles, highlight chips, or summary sentence', () => {
     const { queryByText } = render(wrap(
       <RoundRecapPanel
         recap={recap}
         roundLabel="Round 1"
-        summary="Ana won the round."
-        highlights={{ eagles: 0, birdies: 0, pars: 0, bogeys: 0, doubles: 0 }}
+        live={false}
+        totalHoles={18}
       />,
     ));
-    expect(queryByText(/birdies|pars|bogeys/)).toBeNull();
+    expect(queryByText('Ana won the round.')).toBeNull();
+    expect(queryByText(/Leader pts/i)).toBeNull();
+    expect(queryByText(/Margin/i)).toBeNull();
+    expect(queryByText(/birdies|pars|bogeys|eagle/i)).toBeNull();
+  });
+
+  test('omits the winner pill when there is no recap yet', () => {
+    const { queryByText } = render(wrap(
+      <RoundRecapPanel
+        recap={null}
+        roundLabel="Round 1"
+        live={false}
+        totalHoles={18}
+      />,
+    ));
+    expect(queryByText(/Winner:|Leading:/)).toBeNull();
   });
 });
