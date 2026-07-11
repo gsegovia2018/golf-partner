@@ -107,33 +107,36 @@ describe('RoundSummaryScreen', () => {
     jest.clearAllMocks();
   });
 
-  test('defaults to scorecard tab with recap', async () => {
+  test('defaults to scorecard tab with the recap winner pill', async () => {
     const { findByText, getByLabelText } = render(wrap(
       <RoundSummaryScreen navigation={navigation} route={route} />,
     ));
 
-    expect(await findByText('Marcos won the round.')).toBeTruthy();
+    expect(await findByText('Winner: Marcos')).toBeTruthy();
     expect(getByLabelText('Scorecard').props.accessibilityState.selected).toBe(true);
   });
 
-  test('scorecard tab renders the real scorecard table', async () => {
-    const { findByText, getAllByText } = render(wrap(
+  test('scorecard tab renders the real scorecard table and the quiet leaderboard, without the gray totals card', async () => {
+    const { findByText, getAllByText, queryByText } = render(wrap(
       <RoundSummaryScreen navigation={navigation} route={route} />,
     ));
     expect(await findByText('FRONT NINE')).toBeTruthy();
     expect(await findByText('BACK NINE')).toBeTruthy();
+    expect(await findByText('LEADERBOARD')).toBeTruthy();
     // Strokes / Points display toggle from the live scorecard
     expect(getAllByText('Points').length).toBeGreaterThan(0);
     expect(getAllByText('Strokes').length).toBeGreaterThan(0);
+    // The gray multi-player totals card is suppressed on this screen — its
+    // header label only ever renders inside that card.
+    expect(queryByText('STABLEFORD')).toBeNull();
   });
 
-  test('leaderboard tab renders shared RoundScoreboard ranked', async () => {
-    const { findByLabelText } = render(wrap(
+  test('no longer exposes a Leaderboard tab', async () => {
+    const { findByText, queryByLabelText } = render(wrap(
       <RoundSummaryScreen navigation={navigation} route={route} />,
     ));
-    fireEvent.press(await findByLabelText('Leaderboard'));
-    expect(await findByLabelText('Rank 1: Marcos')).toBeTruthy();
-    expect(await findByLabelText('Rank 2: Pablo')).toBeTruthy();
+    await findByText('LEADERBOARD');
+    expect(queryByLabelText('Leaderboard')).toBeNull();
   });
 
   test('comments tab has a composer wired to the feed thread', async () => {

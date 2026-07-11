@@ -1,4 +1,4 @@
-import { buildRoundRecap, buildRoundHighlights } from '../roundSummaryModel';
+import { buildRoundRecap } from '../roundSummaryModel';
 
 const players = [
   { id: 'p1', name: 'Marcos' },
@@ -78,31 +78,4 @@ describe('roundSummaryModel', () => {
     });
   });
 
-});
-
-describe('buildRoundHighlights', () => {
-  const highlightHoles = [
-    { number: 1, par: 4 },
-    { number: 2, par: 4 },
-    { number: 3, par: 5 },
-  ];
-
-  test('counts hole results across all players', () => {
-    const round = {
-      holes: highlightHoles,
-      scores: {
-        p1: { 1: 3, 2: 4, 3: 7 },  // birdie, par, double
-        p2: { 1: 5, 2: 3, 3: 3 },  // bogey, birdie, eagle
-      },
-    };
-    expect(buildRoundHighlights({ round })).toEqual({
-      eagles: 1, birdies: 2, pars: 1, bogeys: 1, doubles: 1,
-    });
-  });
-
-  test('returns zeros for empty scores', () => {
-    expect(buildRoundHighlights({ round: { holes: highlightHoles, scores: {} } })).toEqual({
-      eagles: 0, birdies: 0, pars: 0, bogeys: 0, doubles: 0,
-    });
-  });
 });
