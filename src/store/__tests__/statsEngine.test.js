@@ -1,4 +1,4 @@
-import { teeShotImpact, lagPuttingQuality, sandSaveRate, upAndDownRate, bunkerVisits, sgPutting, sgAroundGreen, sgApproach, sgPenalties, sgTotal, sgSeason, driveScoreImpact, puttDeepDive, approachScoreImpact, puttingTargetGaps, approachTargetGaps, pairPerformance, shotStats, tournamentHighlights, withoutScrambleScores, playerAvgStableford, pickupChampion, hallOfShame, chaosHoles, skinsLeaderboard, playerStreaks, bounceBackRate, strokeIndexAccuracy, bestWorstHoles, holeDifficultyMap, collectiveExtremes } from '../statsEngine';
+import { teeShotImpact, lagPuttingQuality, sandSaveRate, upAndDownRate, bunkerVisits, sgPutting, sgAroundGreen, sgApproach, sgPenalties, sgTotal, sgSeason, driveScoreImpact, puttDeepDive, approachScoreImpact, puttingTargetGaps, approachTargetGaps, pairPerformance, shotStats, tournamentHighlights, withoutScrambleScores, playerAvgStableford, pickupChampion, hallOfShame, chaosHoles, skinsLeaderboard, playerStreaks, bounceBackRate, strokeIndexAccuracy, bestWorstHoles, holeDifficultyMap, collectiveExtremes, pairConfigMatrix, matchPlayResults, pairHoleWins } from '../statsEngine';
 import { mixedModeTournament, buildTournament } from './statsFixtures';
 
 // 18 par-4 holes, strokeIndex = hole number.
@@ -354,6 +354,144 @@ describe('pairPerformance', () => {
     const result = pairPerformance(tournament);
     expect(result).toHaveLength(1);
     expect(result[0].players.map(p => p.id).sort()).toEqual(['a', 'b']);
+  });
+
+  test('a round only counts toward a pair when at least one member of THAT pair has a score', () => {
+    // R1 has real scores for pair A/B only — pair C/D never touched a
+    // scorecard this round, but round.scores is non-empty (A/B's entries),
+    // so the round-level guard alone would let C/D through as a phantom
+    // 0-point round via roundPairLeaderboard (roundTotals reports 0 for
+    // every unscored player rather than omitting them).
+    const players = [
+      { id: 'a', name: 'A', handicap: 0 },
+      { id: 'b', name: 'B', handicap: 0 },
+      { id: 'c', name: 'C', handicap: 0 },
+      { id: 'd', name: 'D', handicap: 0 },
+    ];
+    const [A, B, C, D] = players;
+    const hole = [{ number: 1, par: 4, strokeIndex: 1 }];
+    const tournament = {
+      players,
+      rounds: [{
+        courseName: 'R1',
+        holes: hole,
+        pairs: [[A, B], [C, D]],
+        scores: { a: { 1: 4 }, b: { 1: 4 } }, // C/D untouched this round
+      }],
+    };
+
+    const result = pairPerformance(tournament);
+    const cd = result.find(p => p.players.map(x => x.id).sort().join(',') === 'c,d');
+    expect(cd).toBeUndefined();
+
+    const ab = result.find(p => p.players.map(x => x.id).sort().join(',') === 'a,b');
+    expect(ab.rounds).toBe(1);
+  });
+});
+
+describe('pairConfigMatrix — orients each round onto the config\'s canonical sides', () => {
+  test('a rematch with pair1/pair2 flipped still credits the same side, not the opponent', () => {
+    // A/B is the dominant team in BOTH rounds. R3 stores the pairing with
+    // sides flipped (pair1 = C/D, pair2 = A/B) — same two teams, same
+    // rematch, just recorded in the other order. The aggregate must still
+    // show A/B winning both holes, not a 1-1 split from mislabeling R3's
+    // pair1/pair2 as "side A"/"side B" verbatim.
+    const players = [
+      { id: 'a', name: 'A', handicap: 0 },
+      { id: 'b', name: 'B', handicap: 0 },
+      { id: 'c', name: 'C', handicap: 0 },
+      { id: 'd', name: 'D', handicap: 0 },
+    ];
+    const [A, B, C, D] = players;
+    const hole = [{ number: 1, par: 4, strokeIndex: 1 }];
+    const round1 = {
+      courseName: 'R1',
+      holes: hole,
+      pairs: [[A, B], [C, D]],
+      scores: { a: { 1: 3 }, b: { 1: 3 }, c: { 1: 6 }, d: { 1: 6 } }, // AB pts 6, CD pts 0
+    };
+    const round3 = {
+      courseName: 'R3',
+      holes: hole,
+      pairs: [[C, D], [A, B]], // same teams, sides flipped in storage order
+      scores: { a: { 1: 3 }, b: { 1: 3 }, c: { 1: 6 }, d: { 1: 6 } }, // AB pts 6, CD pts 0
+    };
+    const tournament = { players, rounds: [round1, round3] };
+
+    const configs = pairConfigMatrix(tournament);
+    expect(configs).toHaveLength(1);
+    const [config] = configs;
+    expect(config.holeWins).toEqual({ A: 2, B: 0, T: 0 });
+    expect(config.pointsA).toBe(12);
+    expect(config.pointsB).toBe(0);
+  });
+});
+
+describe('matchPlayResults / pairConfigMatrix — skip rounds with no scores recorded at all', () => {
+  test('an empty scores object produces no phantom match-play card or config round', () => {
+    const players = [
+      { id: 'a', name: 'A', handicap: 0 },
+      { id: 'b', name: 'B', handicap: 0 },
+      { id: 'c', name: 'C', handicap: 0 },
+      { id: 'd', name: 'D', handicap: 0 },
+    ];
+    const [A, B, C, D] = players;
+    const hole = [{ number: 1, par: 4, strokeIndex: 1 }];
+    const round1 = {
+      courseName: 'Real',
+      holes: hole,
+      pairs: [[A, B], [C, D]],
+      scores: { a: { 1: 3 }, b: { 1: 3 }, c: { 1: 6 }, d: { 1: 6 } },
+    };
+    const phantomRound = {
+      courseName: 'Phantom',
+      holes: hole,
+      pairs: [[A, B], [C, D]],
+      scores: {}, // round exists (e.g. created, never scored) — no scores at all
+    };
+    const tournament = { players, rounds: [round1, phantomRound] };
+
+    const mp = matchPlayResults(tournament);
+    expect(mp[0].available).toBe(true);
+    expect(mp[1].available).toBe(false);
+
+    const configs = pairConfigMatrix(tournament);
+    expect(configs).toHaveLength(1);
+    expect(configs[0].rounds).toHaveLength(1);
+    expect(configs[0].rounds[0].roundIndex).toBe(0);
+  });
+});
+
+describe('pairHoleWins — tournament-wide aggregation (roundIndex: null)', () => {
+  test('aggregates across every round instead of only the first completed one', () => {
+    const players = [
+      { id: 'a', name: 'A', handicap: 0 },
+      { id: 'b', name: 'B', handicap: 0 },
+      { id: 'c', name: 'C', handicap: 0 },
+      { id: 'd', name: 'D', handicap: 0 },
+    ];
+    const [A, B, C, D] = players;
+    const hole = [{ number: 1, par: 4, strokeIndex: 1 }];
+    const round1 = {
+      courseName: 'R1',
+      holes: hole,
+      pairs: [[A, B], [C, D]],
+      scores: { a: { 1: 3 }, b: { 1: 3 }, c: { 1: 6 }, d: { 1: 6 } }, // AB best ball wins hole1
+    };
+    const round2 = {
+      courseName: 'R2',
+      holes: hole,
+      pairs: [[A, B], [C, D]],
+      scores: { a: { 1: 3 }, b: { 1: 3 }, c: { 1: 6 }, d: { 1: 6 } }, // AB best ball wins again
+    };
+    const tournament = { players, rounds: [round1, round2] };
+
+    const totalWins = pairHoleWins(tournament, { metric: 'points', roundIndex: null });
+    const aRec = totalWins.find(r => r.player.id === 'a');
+    // A is MB (best ball) in both rounds and wins both — total.W should
+    // reflect both rounds, not just the first one.
+    expect(aRec.best.W).toBe(2);
+    expect(aRec.breakdown.map(b => b.roundIndex)).toEqual([0, 1]);
   });
 });
 

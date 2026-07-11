@@ -296,7 +296,8 @@ export default function StatsScreen({ navigation }) {
           <PairsTab tournament={statsTournament} players={players}
             h2hP1={h2hP1} setH2hP1={setH2hP1} h2hP2={h2hP2} setH2hP2={setH2hP2}
             selectedPlayer={pairsTabPlayer} setSelectedPlayer={setPairsTabPlayer}
-            metric={metric} effectiveRound={effectiveRound} scrollRef={pairsScrollRef} theme={theme} s={s} />
+            metric={metric} effectiveRound={effectiveRound} roundScope={roundScope}
+            scrollRef={pairsScrollRef} theme={theme} s={s} />
         </ScrollView>
       )}
       {activeTab === 'shots' && (
@@ -1743,7 +1744,7 @@ function HolesTab({ tournament, completedRounds, hasMulti, metric, effectiveRoun
 }
 
 // ── Pairs Tab ──
-function PairsTab({ tournament, players, h2hP1, setH2hP1, h2hP2, setH2hP2, selectedPlayer, setSelectedPlayer, metric, effectiveRound, scrollRef, theme, s }) {
+function PairsTab({ tournament, players, h2hP1, setH2hP1, h2hP2, setH2hP2, selectedPlayer, setSelectedPlayer, metric, effectiveRound, roundScope, scrollRef, theme, s }) {
   // `tournament` here is already the screen-level statsTournament (scramble
   // rounds' scores/shotDetails/pairs blanked — see withoutScrambleScores).
   // The Pairs tab is visible whenever ANY round has real team data
@@ -1777,11 +1778,20 @@ function PairsTab({ tournament, players, h2hP1, setH2hP1, h2hP2, setH2hP2, selec
   const splits = splitsPlayer
     ? playerPartnerSplits(pairsTournament, splitsPlayer.id)
     : { baseline: 0, partners: [] };
-  // Hole-wins and H2H read the unified round scope; the per-hole pair
-  // difference chart is inherently per-round so it uses effectiveRound.
-  const holeWins = pairHoleWins(pairsTournament, { metric, roundIndex: effectiveRound });
+  // Hole-wins and H2H read the raw round scope — both aggregates already
+  // support a null roundIndex as "whole tournament", so "Total" means what
+  // it says instead of silently substituting the first completed round. The
+  // per-hole pair difference chart IS inherently per-round (it's a single
+  // round's hole-by-hole chart), so that one still falls back to
+  // effectiveRound.
+  const holeWins = pairHoleWins(pairsTournament, { metric, roundIndex: roundScope });
   const firstCompletedRound = tournament.rounds.findIndex(r => r.scores && Object.keys(r.scores).length > 0);
   const pdRound = effectiveRound != null ? effectiveRound : (firstCompletedRound >= 0 ? firstCompletedRound : null);
+  // Label for sections that now read the raw (nullable) scope, so "Total"
+  // reads as "All rounds" instead of silently showing one round's data.
+  const scopeLabel = (idx) => (idx == null
+    ? 'All rounds'
+    : `R${idx + 1} · ${tournament.rounds[idx]?.courseName ?? ''}`);
   const pdData = pdRound != null ? pairDifferenceByHole(pairsTournament, pdRound, { metric }) : null;
   const synergy = pairSynergy(pairsTournament);
   const carry = pairCarryRatio(pairsTournament);
@@ -1794,7 +1804,7 @@ function PairsTab({ tournament, players, h2hP1, setH2hP1, h2hP2, setH2hP2, selec
   // headToHead doesn't read round.pairs, so pairsTournament (pairs stripped)
   // is the wrong input for it — but `tournament` is already scramble-score
   // blanked at the screen level, which is exactly what it needs.
-  const h2h = p1 && p2 && p1.id !== p2.id ? headToHead(tournament, p1.id, p2.id, { roundIndex: effectiveRound }) : null;
+  const h2h = p1 && p2 && p1.id !== p2.id ? headToHead(tournament, p1.id, p2.id, { roundIndex: roundScope }) : null;
   const anchors = useRef({});
 
   const [sheet, setSheet] = useState(null);
@@ -2126,6 +2136,7 @@ function PairsTab({ tournament, players, h2hP1, setH2hP1, h2hP2, setH2hP2, selec
             <Feather name="info" size={14} color={theme.text.muted} />
           </TouchableOpacity>
         </View>
+        <Text style={s.scopeText}>{scopeLabel(roundScope)}</Text>
         {hasPairRounds ? (
           <HoleWinsTable rows={holeWins} metricMode={metric} openRow={openHoleWins} theme={theme} s={s} />
         ) : (
@@ -2330,6 +2341,7 @@ function PairsTab({ tournament, players, h2hP1, setH2hP1, h2hP2, setH2hP2, selec
       )}
 
       <Text style={s.sectionTitle}>HEAD TO HEAD</Text>
+      <Text style={s.scopeText}>{scopeLabel(roundScope)}</Text>
       <View style={s.h2hSelector}>
         <View style={s.h2hCol}>
           {players.map((p, i) => (

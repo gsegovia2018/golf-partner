@@ -404,6 +404,59 @@ describe('StatsScreen mixed scoring-mode gating (per-round overrides)', () => {
         expect(t.rounds[1].scores).toBeNull();
       });
     });
+
+    test('Total round scope passes roundIndex: null (not the first completed round) to hole-wins and the H2H duel', () => {
+      // Regression for the old effectiveRound substitution: with "Total"
+      // selected, Pairs-tab sections that support a tournament-wide
+      // aggregate must actually get one instead of silently narrowing to
+      // round 1.
+      jest.clearAllMocks();
+      const statsEngine = require('../../store/statsEngine');
+      const rounds = [
+        { ...makeRound('r1'), scoringMode: 'stableford' },
+        { ...makeRound('r2', 5), scoringMode: 'stableford' },
+      ];
+      const { getByText, getAllByText } = renderStats(rounds, { players: fourPlayers, scoringMode: 'individual' });
+
+      fireEvent.press(getByText('Pairs'));
+
+      const holeWinsCall = statsEngine.pairHoleWins.mock.calls.at(-1);
+      expect(holeWinsCall[1]).toEqual(expect.objectContaining({ roundIndex: null }));
+
+      // Only the duel card's headToHead call carries a 4th (options) arg —
+      // the H2H heatmap calls headToHead with just the 3 player args. Check
+      // only the most recent duel call — mock.calls accumulates across every
+      // render, including earlier renders before state settled.
+      const duelCalls = statsEngine.headToHead.mock.calls.filter((call) => call.length === 4);
+      expect(duelCalls.length).toBeGreaterThan(0);
+      expect(duelCalls.at(-1)[3]).toEqual(expect.objectContaining({ roundIndex: null }));
+
+      // Both sections (Hole Wins + Head to Head) label their effective scope.
+      expect(getAllByText('All rounds').length).toBeGreaterThanOrEqual(2);
+    });
+
+    test('selecting a round chip scopes hole-wins and the H2H duel to that round, and labels it', () => {
+      jest.clearAllMocks();
+      const statsEngine = require('../../store/statsEngine');
+      const rounds = [
+        { ...makeRound('r1'), scoringMode: 'stableford' },
+        { ...makeRound('r2', 5), scoringMode: 'stableford' },
+      ];
+      const { getByText, getAllByText } = renderStats(rounds, { players: fourPlayers, scoringMode: 'individual' });
+
+      fireEvent.press(getByText('Pairs'));
+      fireEvent.press(getByText('R1'));
+
+      const holeWinsCall = statsEngine.pairHoleWins.mock.calls.at(-1);
+      expect(holeWinsCall[1]).toEqual(expect.objectContaining({ roundIndex: 0 }));
+
+      const duelCalls = statsEngine.headToHead.mock.calls.filter((call) => call.length === 4);
+      expect(duelCalls.length).toBeGreaterThan(0);
+      expect(duelCalls.at(-1)[3]).toEqual(expect.objectContaining({ roundIndex: 0 }));
+
+      // Both sections (Hole Wins + Head to Head) label their effective scope.
+      expect(getAllByText('R1 · La Moraleja').length).toBeGreaterThanOrEqual(2);
+    });
   });
 });
 

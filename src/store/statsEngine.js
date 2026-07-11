@@ -286,6 +286,16 @@ export function pairPerformance(tournament) {
     if (!round.pairs || !round.scores || Object.keys(round.scores).length === 0) return;
     round.pairs.forEach(pair => {
       if (!Array.isArray(pair) || pair.length < 2) return; // singleton pair (odd roster)
+      // roundTotals() reports 0 for every unscored player rather than
+      // omitting them, so a non-empty round.scores object (the guard above)
+      // isn't proof THIS pair played — the opposing pair alone can satisfy
+      // it. Require at least one member of THIS pair to actually have a
+      // score, or the pair gets a phantom 0-point round dragging its avg down.
+      const pairHasScore = pair.some(m => {
+        const playerScores = round.scores[m.id];
+        return playerScores && Object.keys(playerScores).length > 0;
+      });
+      if (!pairHasScore) return;
       const key = [pair[0].id, pair[1].id].sort().join('-');
       if (!pairMap[key]) {
         pairMap[key] = { players: [pair[0], pair[1]], rounds: 0, totalPoints: 0, roundList: [] };
@@ -1370,7 +1380,7 @@ export function skinsLeaderboard(tournament, { metric = 'points' } = {}) {
 export function matchPlayResults(tournament, { metric = 'points' } = {}) {
   const isStrokes = metric === 'strokes';
   return tournament.rounds.map((round, roundIndex) => {
-    if (!round.scores || !round.pairs || round.pairs.length < 2) {
+    if (!round.scores || Object.keys(round.scores).length === 0 || !round.pairs || round.pairs.length < 2) {
       return { roundIndex, courseName: round.courseName, available: false };
     }
     const [pair1, pair2] = round.pairs;
@@ -1435,15 +1445,24 @@ export function matchPlayResults(tournament, { metric = 'points' } = {}) {
 export function pairConfigMatrix(tournament) {
   const configs = {};
   tournament.rounds.forEach((round, roundIndex) => {
-    if (!round.scores || !round.pairs || round.pairs.length < 2) return;
-    const [pair1, pair2] = round.pairs;
-    if (pair1.length < 2 || pair2.length < 2) return;
-    const sideA = [pair1[0].id, pair1[1].id].sort();
-    const sideB = [pair2[0].id, pair2[1].id].sort();
-    const key = [sideA.join('+'), sideB.join('+')].sort().join(' vs ');
-    if (!configs[key]) configs[key] = { sideA: pair1, sideB: pair2, holeWins: { A: 0, B: 0, T: 0 }, pointsA: 0, pointsB: 0, rounds: [] };
+    if (!round.scores || Object.keys(round.scores).length === 0 || !round.pairs || round.pairs.length < 2) return;
+    const [rawPair1, rawPair2] = round.pairs;
+    if (rawPair1.length < 2 || rawPair2.length < 2) return;
+    const sideAKey = [rawPair1[0].id, rawPair1[1].id].sort().join('+');
+    const sideBKey = [rawPair2[0].id, rawPair2[1].id].sort().join('+');
+    const key = [sideAKey, sideBKey].sort().join(' vs ');
+    if (!configs[key]) configs[key] = { sideA: rawPair1, sideB: rawPair2, holeWins: { A: 0, B: 0, T: 0 }, pointsA: 0, pointsB: 0, rounds: [] };
 
     const cur = configs[key];
+    // The config's sideA/sideB were fixed by whichever round first created
+    // this entry. A rematch can record its pairs in the opposite order
+    // (round.pairs[0] === the OTHER side this time) — orient this round's
+    // pair1/pair2 onto the stored sides before accumulating, or a flipped
+    // rematch silently credits everything to the wrong team.
+    const curSideAKey = [cur.sideA[0].id, cur.sideA[1].id].sort().join('+');
+    const flipped = sideAKey !== curSideAKey;
+    const pair1 = flipped ? rawPair2 : rawPair1;
+    const pair2 = flipped ? rawPair1 : rawPair2;
     let roundA = 0, roundB = 0, roundT = 0, roundPtsA = 0, roundPtsB = 0;
     round.holes.forEach(hole => {
       let aPts = 0, bPts = 0, complete = true;
