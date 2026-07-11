@@ -70,10 +70,13 @@ function makeRound(id, score = 4) {
 }
 
 let mockActiveTournament;
+let mockRouteTournament;
 
 jest.mock('../../store/tournamentStore', () => ({
   loadTournament: jest.fn(() => Promise.resolve(mockActiveTournament)),
   getActiveTournamentSnapshot: jest.fn(() => mockActiveTournament),
+  getTournament: jest.fn(() => Promise.resolve(mockRouteTournament)),
+  getTournamentSnapshot: jest.fn(() => null),
   getPlayingHandicap: jest.fn(() => 0),
   calcStablefordPoints: jest.fn(() => 2),
   playerPartnerSplits: jest.fn(() => ({ partners: [] })),
@@ -401,5 +404,55 @@ describe('StatsScreen mixed scoring-mode gating (per-round overrides)', () => {
         expect(t.rounds[1].scores).toBeNull();
       });
     });
+  });
+});
+
+describe('route params', () => {
+  test('loads the tournament from route.params.tournamentId instead of the active one', async () => {
+    // Earlier tests in this file call loadTournament() via renderStats();
+    // clear call history so "not.toHaveBeenCalled()" below reflects only
+    // this test's render.
+    jest.clearAllMocks();
+    const { loadTournament, getTournament } = require('../../store/tournamentStore');
+    // Two rounds: the round-scope chip is hidden for a single-round
+    // tournament (see "hides Total and R1..." above), so it takes a second
+    // round for the chip to render as proof the route tournament loaded.
+    mockRouteTournament = {
+      id: 't-old',
+      name: 'Old Casual Game',
+      players: [player],
+      rounds: [makeRound('r-1'), makeRound('r-2')],
+    };
+    const { findByText } = render(
+      <StatsScreen
+        navigation={{ goBack: jest.fn(), navigate: jest.fn() }}
+        route={{ params: { tournamentId: 't-old' } }}
+      />,
+    );
+    // The round-scope chip proves the route tournament rendered.
+    await findByText('R1');
+    expect(getTournament).toHaveBeenCalledWith('t-old');
+    expect(loadTournament).not.toHaveBeenCalled();
+  });
+
+  test('preselects the round scope from route.params.roundId', async () => {
+    mockRouteTournament = {
+      id: 't-old',
+      name: 'Old Casual Game',
+      players: [player],
+      rounds: [makeRound('r-1'), makeRound('r-2')],
+    };
+    const { findByText } = render(
+      <StatsScreen
+        navigation={{ goBack: jest.fn(), navigate: jest.fn() }}
+        route={{ params: { tournamentId: 't-old', roundId: 'r-2' } }}
+      />,
+    );
+    const chip = await findByText('R2');
+    // roundChipTextActive sets color to theme.text.inverse — the selected chip.
+    expect(StyleSheet.flatten(chip.props.style).color).toBe(mockTheme.text.inverse);
+    // "Total" chip must NOT be the active one.
+    const totalChip = await findByText('Total');
+    expect(StyleSheet.flatten(totalChip.props.style).color).not.toBe(mockTheme.text.inverse);
   });
 });
