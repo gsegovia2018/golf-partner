@@ -171,9 +171,13 @@ describe('buildRoundReportCard — meta & headline', () => {
     const h = mkHoles();
     const partial = {};
     h.slice(0, 9).forEach((hole) => { partial[hole.number] = 4; });
-    const rounds = [mkMyRound({
-      key: 'p', holes: h, scores: partial, completed: false,
-    })];
+    // No explicit `completed` override: like a real early-finished game
+    // (tournament finishedAt set), the loose flag stays true while
+    // isComplete is derived false from the 9 unscored holes. The card's
+    // `complete` field — which drives the "through N holes" caveat — must
+    // key off isComplete, or an early-finished round masquerades as full.
+    const rounds = [mkMyRound({ key: 'p', holes: h, scores: partial })];
+    expect(rounds[0].completed).toBe(true);
     const card = buildRoundReportCard(rounds, 'p');
     expect(card.round.holesPlayed).toBe(9);
     expect(card.round.complete).toBe(false);

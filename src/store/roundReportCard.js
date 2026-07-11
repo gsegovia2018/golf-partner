@@ -240,7 +240,10 @@ export function buildRoundReportCard(myRounds, roundKey) {
       tournamentName: selected.tournamentName,
       tournamentDate: selected.tournamentDate,
       holesPlayed,
-      complete: !!selected.completed,
+      // The honest per-round flag, NOT `completed`: an early-finished game
+      // carries completed=true (tournament finishedAt) with unscored holes,
+      // and the card's "through N holes" caveat must still show for it.
+      complete: !!selected.isComplete,
     },
     headline: {
       points,

@@ -117,6 +117,13 @@ export function holeDifficultySplit(tournament, playerId) {
 // silently dragging the average down. They only ever look at rounds where
 // every hole was scored (`isComplete`); per-hole metrics elsewhere in this
 // file are unaffected and keep seeing every round.
+//
+// When NO selected round is complete, those three are null, not 0 — the
+// same convention as the shot metrics below: consumers print '-' for null
+// (PerformanceSnapshot, CoachTab, orDash in FormTab), and
+// computeRecentVsHistory turns a null side into a null delta / flat
+// direction instead of a fabricated "declining" trend against a 0-point
+// recent window.
 export function computeMetrics(synthetic) {
   const history = playerRoundHistory(synthetic, CANON_ID);
   const rounds = history.length;
@@ -139,9 +146,13 @@ export function computeMetrics(synthetic) {
   const totalPoints = completeHistory.reduce((s, h) => s + h.points, 0);
   return {
     rounds,
-    avgPoints: div(totalPoints, completeHistory.length),
-    avgVsPar: div(vsParSum, vsParRounds),
-    bestRoundPoints: completeHistory.reduce((m, h) => Math.max(m, h.points), 0),
+    avgPoints: completeHistory.length > 0
+      ? div(totalPoints, completeHistory.length)
+      : null,
+    avgVsPar: vsParRounds > 0 ? div(vsParSum, vsParRounds) : null,
+    bestRoundPoints: completeHistory.length > 0
+      ? completeHistory.reduce((m, h) => Math.max(m, h.points), 0)
+      : null,
     hasShotData: shots.hasData,
     // Shot metrics are null (not 0) when the slice has no sample for them, so
     // recent-vs-history never shows a fake delta against an untracked slice.

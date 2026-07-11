@@ -395,6 +395,25 @@ describe('computeMetrics', () => {
     expect(m.threePuttsPerRound).toBeNull();
   });
 
+  test('round-total metrics are null, not 0, when no selected round is complete', () => {
+    const h = holes18();
+    const sixHoles = evenScores(h, 4);
+    h.slice(6).forEach((hole) => { delete sixHoles[hole.number]; }); // only holes 1-6 scored
+    // An early-finished game: selectable by default (finishedAt), but there
+    // is no round-total sample at all. Returning 0 would render as a
+    // fabricated "Avg pts: 0 / Best round: 0" — the UI prints '-' for null.
+    const myRounds = collectMyRounds([{
+      id: 1, name: 'T', kind: 'game', finishedAt: '2026-05-22T18:00:00.000Z',
+      players: [{ id: 'p1', handicap: 0, user_id: 'u1' }],
+      rounds: [mkRound({ holes: h, scores: { p1: sixHoles }, playerHandicaps: { p1: 0 } })],
+    }], 'u1');
+    const m = computeMetrics(buildSyntheticTournament(myRounds));
+    expect(m.rounds).toBe(1); // still counts as a round played
+    expect(m.avgPoints).toBeNull();
+    expect(m.bestRoundPoints).toBeNull();
+    expect(m.avgVsPar).toBeNull();
+  });
+
   test('excludes an early-finished 6-hole game from avgPoints/bestRoundPoints/avgVsPar, but keeps its holes in per-hole metrics', () => {
     const h = holes18(); // par 4 x 18, scratch handicap → 2 pts/hole
     const sixHoles = evenScores(h, 4);
@@ -480,6 +499,28 @@ describe('computeRecentVsHistory', () => {
       expect(m.recent).not.toBeNull();
       expect(m.history).toBeNull();   // untracked slice must not read as 0
       expect(m.delta).toBeNull();     // no fake "+45 vs 0%" delta
+      expect(m.direction).toBe('flat');
+    });
+  });
+
+  test('an all-incomplete recent window yields null deltas and a flat direction, not a false decline', () => {
+    // 7 rounds, N=5: the last 5 are early-finished 6-hole games (partial,
+    // low round totals). If they fed avgPoints, "recent" would read ~12 pts
+    // vs a 36-pt history — a fabricated "Declining" verdict.
+    const tournaments = roundsTournament([4, 4, 4, 4, 4, 4, 4]);
+    tournaments[0].finishedAt = '2026-05-22T18:00:00.000Z';
+    const h = holes18();
+    tournaments[0].rounds.forEach((round, i) => {
+      if (i < 2) return; // first 2 (history) stay complete
+      h.slice(6).forEach((hole) => { delete round.scores.p1[hole.number]; });
+    });
+    const my = collectMyRounds(tournaments, 'u1');
+    const r = computeRecentVsHistory(my, 5);
+    expect(r.hasHistory).toBe(true);
+    ['avgPoints', 'avgVsPar'].forEach((key) => {
+      const m = r.metrics.find((x) => x.key === key);
+      expect(m.recent).toBeNull();
+      expect(m.delta).toBeNull();
       expect(m.direction).toBe('flat');
     });
   });
