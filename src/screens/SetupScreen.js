@@ -330,7 +330,7 @@ export default function SetupScreen({ navigation, route }) {
       tournament?.players?.length,
       tournament?.settings?.manualTeams,
     )) {
-      navigation.navigate('EditTeams', { roundIndex: 0 });
+      navigation.navigate('EditTeams', { roundIndex: 0, tournamentId: tournament?.id });
     }
   }, [isGame, navigation]);
 

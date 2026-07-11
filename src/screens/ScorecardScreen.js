@@ -1,4 +1,5 @@
 import React, { useEffect, useRef, useState, useCallback, useMemo } from 'react';
+import { useFocusEffect } from '@react-navigation/native';
 import {
   View, Text, TextInput, TouchableOpacity,
   ScrollView, Pressable, Platform, Animated,
@@ -18,8 +19,9 @@ import {
   isRoundComplete, isTournamentFinished,
   subscribeSyncStatus,
   getActiveTournamentSnapshot, getTournament, getTournamentSnapshot,
-  readLocal,
+  readLocal, refreshTournamentFromRemote,
 } from '../store/tournamentStore';
+import { isOnline } from '../lib/connectivity';
 import { mutate } from '../store/mutate';
 import { syncNow, syncSettled } from '../store/syncWorker';
 import { fetchPlayers } from '../store/libraryStore';
@@ -291,6 +293,10 @@ export default function ScorecardScreen({ navigation, route }) {
   const [viewOnly, setViewOnly] = useState(false);
   const viewOnlyInitRoundIdRef = useRef(null);
   const tournamentRef = useRef(null);
+  // Guards the cross-device live pull (Fix 4) against overlapping refreshes —
+  // an interval tick that fires while a previous refresh is still awaiting the
+  // network is skipped rather than stacked.
+  const refreshInFlightRef = useRef(false);
   const saveTimeoutRef = useRef(null);
   // Keyed debounce timers for notes: key is 'round' or `h<holeNumber>`, so a
   // hole-note edit and a round-note edit never cancel each other's save.
@@ -433,6 +439,36 @@ export default function ScorecardScreen({ navigation, route }) {
     });
     return unsub;
   }, [reload]);
+
+  // Cross-device live pull (Fix 4). Without this, a device that is only
+  // watching never re-fetches peers' scores: the sync worker only pulls when
+  // its own queue is non-empty, and the subscription above only fires on local
+  // writes. Here we pull the remote tournament on focus and every 20s while
+  // focused + online. refreshTournamentFromRemote() fetches → merges →
+  // saveLocal(), whose change emit drives the subscription above to re-render
+  // with the newly pulled peer scores. Official mode reads the RPC data layer
+  // (useOfficialRound), not the tournament blob, so it is excluded.
+  useFocusEffect(
+    useCallback(() => {
+      if (official) return undefined;
+      const pull = async () => {
+        const tid = routeTournamentId ?? tournamentRef.current?.id;
+        if (!tid || !isOnline() || refreshInFlightRef.current) return;
+        refreshInFlightRef.current = true;
+        try {
+          await refreshTournamentFromRemote(tid);
+        } catch (_) {
+          // Swallow — the sync worker retries and the next interval tick will
+          // attempt another pull. A failed pull must not blank the live round.
+        } finally {
+          refreshInFlightRef.current = false;
+        }
+      };
+      pull();
+      const interval = setInterval(pull, 20000);
+      return () => clearInterval(interval);
+    }, [official, routeTournamentId]),
+  );
 
   // Mirror the store's sync status into a header indicator.
   useEffect(() => subscribeSyncStatus(setSyncStatus), []);

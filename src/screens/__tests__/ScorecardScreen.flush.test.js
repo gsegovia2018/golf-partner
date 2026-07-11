@@ -6,6 +6,15 @@ import ScorecardScreen from '../ScorecardScreen';
 import { mutate } from '../../store/mutate';
 import { syncNow } from '../../store/syncWorker';
 
+// The screen uses useFocusEffect for its cross-device live pull; run the effect
+// on mount (and its cleanup on unmount) without needing a NavigationContainer.
+jest.mock('@react-navigation/native', () => ({
+  useFocusEffect: (cb) => {
+    const ReactModule = require('react');
+    ReactModule.useEffect(() => cb(), [cb]);
+  },
+}));
+
 let mockOfficialRoundState;
 
 const mockPlayers = [

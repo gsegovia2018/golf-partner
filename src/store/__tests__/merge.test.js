@@ -408,3 +408,45 @@ describe('mergeTournaments — meId is device-local', () => {
     expect(conflicts.find((c) => c.path === 'meId')).toBeUndefined();
   });
 });
+
+// `currentRound` is a progression high-water mark written via an unstamped raw
+// upsert (no `_meta` entry), so the generic tie-to-local LWW rule would keep a
+// peer's stale value forever. It only ever moves forward, so merge takes the
+// max of both sides — the device that advanced the round heals the peers.
+describe('mergeTournaments — currentRound is monotonic', () => {
+  it('adopts the higher remote currentRound when local is behind', () => {
+    const local = { id: 't1', currentRound: 0 };
+    const remote = { id: 't1', currentRound: 1 };
+    expect(mergeTournaments(local, remote).merged.currentRound).toBe(1);
+  });
+
+  it('keeps the higher local currentRound even though merged clones remote', () => {
+    const local = { id: 't1', currentRound: 2 };
+    const remote = { id: 't1', currentRound: 1 };
+    expect(mergeTournaments(local, remote).merged.currentRound).toBe(2);
+  });
+
+  it('defaults to 0 when neither side has a currentRound', () => {
+    const local = { id: 't1' };
+    const remote = { id: 't1' };
+    expect(mergeTournaments(local, remote).merged.currentRound).toBe(0);
+  });
+
+  it('takes the max currentRound without regressing always-mine score handling', () => {
+    const local = {
+      id: 't1',
+      currentRound: 2,
+      rounds: [{ id: 'r1', scores: { p1: { 5: 4 } } }],
+      _meta: { 'rounds.r1.scores.p1.h5': 200 },
+    };
+    const remote = {
+      id: 't1',
+      currentRound: 1,
+      rounds: [{ id: 'r1', scores: { p1: { 5: 9 } } }],
+      _meta: { 'rounds.r1.scores.p1.h5': 100 },
+    };
+    const { merged } = mergeTournaments(local, remote);
+    expect(merged.currentRound).toBe(2);
+    expect(merged.rounds[0].scores.p1['5']).toBe(4);
+  });
+});

@@ -8,6 +8,12 @@ import {
   shouldApplyReloadSnapshot,
 } from '../ScorecardScreen';
 
+// ScorecardScreen imports useFocusEffect from @react-navigation/native, whose
+// published ESM isn't transformed under jest; stub it (jest hoists this above
+// the import) so pulling in the screen's helper exports doesn't load the
+// untransformed module.
+jest.mock('@react-navigation/native', () => ({ useFocusEffect: jest.fn() }));
+
 describe('mergeScores', () => {
   test('adopts blob values for clean cells', () => {
     const blob = { a: { 1: 4, 2: 5 } };

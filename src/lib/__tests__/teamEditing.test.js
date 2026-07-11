@@ -1,4 +1,4 @@
-import { buildThreeVsOne, swapDuelOrder, randomizeDuelOrder } from '../teamEditing';
+import { buildThreeVsOne, swapDuelOrder, shuffleTeams, randomizeDuelOrder } from '../teamEditing';
 import { pairsMatchDuels } from '../../store/scoring';
 
 const players = [
@@ -75,35 +75,82 @@ describe('randomizeDuelOrder', () => {
     [players[2], players[3]],
   ];
 
-  test('rand below 0.5 keeps the current duel assignment', () => {
-    expect(randomizeDuelOrder(pairs, () => 0)).toEqual(pairs);
+  test('keeps both teams and their membership, changing only who faces who', () => {
+    const out = randomizeDuelOrder(pairs, () => 0);
+    expect(out[0]).toEqual(pairs[0]);
+    expect(out[1].map((p) => p.id).sort()).toEqual(pairs[1].map((p) => p.id).sort());
   });
 
-  test('rand at/above 0.5 returns the swapped assignment', () => {
-    expect(randomizeDuelOrder(pairs, () => 0.9)).toEqual(swapDuelOrder(pairs));
+  test('is a genuine coin flip — can draw either line-up (including the current one)', () => {
+    // Fisher-Yates on a 2-player pair: rand < 0.5 swaps, rand >= 0.5 keeps.
+    const swapped = pairsMatchDuels(randomizeDuelOrder(pairs, () => 0));
+    const kept = pairsMatchDuels(randomizeDuelOrder(pairs, () => 0.9));
+    expect(swapped).toEqual(pairsMatchDuels(swapDuelOrder(pairs)));
+    expect(kept).toEqual(pairsMatchDuels(pairs));
   });
 
-  test('never changes pair membership, only within-pair order', () => {
-    for (const roll of [0, 0.9]) {
-      const out = randomizeDuelOrder(pairs, () => roll);
-      expect(out[0]).toEqual(pairs[0]);
-      expect(out[1].map((p) => p.id).sort()).toEqual(
-        pairs[1].map((p) => p.id).sort(),
-      );
+  test('default randomness stays within the valid duel assignments', () => {
+    const valid = new Set([
+      JSON.stringify(pairsMatchDuels(pairs).map((d) => d.map((p) => p.id))),
+      JSON.stringify(pairsMatchDuels(swapDuelOrder(pairs)).map((d) => d.map((p) => p.id))),
+    ]);
+    for (let i = 0; i < 32; i++) {
+      const key = JSON.stringify(pairsMatchDuels(randomizeDuelOrder(pairs)).map((d) => d.map((p) => p.id)));
+      expect(valid.has(key)).toBe(true);
     }
-  });
-
-  test('default randomness produces both outcomes across runs', () => {
-    const seen = new Set();
-    for (let i = 0; i < 64 && seen.size < 2; i++) {
-      seen.add(JSON.stringify(randomizeDuelOrder(pairs).map((pr) => pr.map((p) => p.id))));
-    }
-    expect(seen.size).toBe(2);
   });
 
   test('non-2-pair input is returned unchanged', () => {
     const solo = [[players[0]], [players[1]], [players[2]]];
     expect(randomizeDuelOrder(solo, () => 0)).toBe(solo);
     expect(randomizeDuelOrder(null, () => 0)).toBeNull();
+  });
+});
+
+describe('shuffleTeams', () => {
+  const pairs = [
+    [players[0], players[1]],
+    [players[2], players[3]],
+  ];
+  const key = (prs) => prs.map((p) => p.map((x) => x.id).join(',')).join('|');
+
+  test('preserves each side size and the full roster (no dupes, no drops)', () => {
+    const out = shuffleTeams(pairs);
+    expect(out.map((p) => p.length)).toEqual([2, 2]);
+    const ids = out.flat().map((p) => p.id).sort();
+    expect(ids).toEqual(['p1', 'p2', 'p3', 'p4']);
+  });
+
+  test('preserves a 3v1 (uneven) shape', () => {
+    const three = [[players[0], players[1], players[2]], [players[3]]];
+    const out = shuffleTeams(three, () => 0.99);
+    expect(out.map((p) => p.length)).toEqual([3, 1]);
+    expect(out.flat().map((p) => p.id).sort()).toEqual(['p1', 'p2', 'p3', 'p4']);
+  });
+
+  test('returns a different arrangement than the input (never a no-op)', () => {
+    // A deterministic rand that always maps to index 0 in Fisher-Yates
+    // reverses the array — guaranteed different from the input order.
+    const out = shuffleTeams(pairs, () => 0);
+    expect(key(out)).not.toEqual(key(pairs));
+  });
+
+  test('for pairsmatchplay a shuffle re-draws the duels', () => {
+    const out = shuffleTeams(pairs, () => 0);
+    expect(pairsMatchDuels(out)).not.toEqual(pairsMatchDuels(pairs));
+  });
+
+  test('default randomness eventually explores more than one arrangement', () => {
+    const seen = new Set();
+    for (let i = 0; i < 64 && seen.size < 2; i++) {
+      seen.add(key(shuffleTeams(pairs)));
+    }
+    expect(seen.size).toBeGreaterThan(1);
+  });
+
+  test('non-2-pair input is returned unchanged', () => {
+    const three = [[players[0]], [players[1]], [players[2]]];
+    expect(shuffleTeams(three, () => 0)).toBe(three);
+    expect(shuffleTeams(null, () => 0)).toBeNull();
   });
 });

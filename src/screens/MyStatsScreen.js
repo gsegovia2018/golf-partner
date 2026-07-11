@@ -207,15 +207,15 @@ export default function MyStatsScreen({ navigation, route }) {
     [myRounds, reportRoundKey],
   );
 
-  // Link to the full RoundSummary page — only when the selected round is
-  // resolvable there (RoundSummary looks rounds up by round.id, which older
-  // local rounds may lack).
+  // Link to the full statistics screen (holes, players, etc.) scoped to the
+  // selected round — only when the round is resolvable there (StatsScreen
+  // matches rounds by round.id, which older local rounds may lack).
   const openReportRound = useMemo(() => {
     const r = myRounds && reportRoundKey
       ? myRounds.find((it) => it.key === reportRoundKey)
       : null;
     if (!r?.tournamentId || !r?.round?.id) return null;
-    return () => navigation.navigate('RoundSummary', {
+    return () => navigation.navigate('Stats', {
       tournamentId: r.tournamentId,
       roundId: r.round.id,
     });

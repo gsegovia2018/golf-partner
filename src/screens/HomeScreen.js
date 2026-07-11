@@ -1022,7 +1022,7 @@ export default function HomeScreen({ navigation, route }) {
     return alreadyRevealed ? (
       <TouchableOpacity
         style={s.menuItem}
-        onPress={() => { onClose(); navigation.navigate('EditTeams', { roundIndex: selectedRound }); }}
+        onPress={() => { onClose(); navigation.navigate('EditTeams', { roundIndex: selectedRound, tournamentId: tournament.id }); }}
         activeOpacity={0.7}
       >
         <Feather name="users" size={18} color={theme.accent.primary} />
@@ -1590,7 +1590,7 @@ export default function HomeScreen({ navigation, route }) {
         <View style={s.headerActions}>
           {!isViewer && (
             <TouchableOpacity style={s.iconBtn} onPress={handleInvite} activeOpacity={0.7}>
-              <Feather name="share" size={18} color={theme.accent.primary} />
+              <Feather name="share-2" size={18} color={theme.accent.primary} />
             </TouchableOpacity>
           )}
           <TouchableOpacity
@@ -2091,7 +2091,7 @@ export default function HomeScreen({ navigation, route }) {
 
           <TouchableOpacity
             style={s.menuItem}
-            onPress={() => { setShowSettings(false); navigation.navigate('Stats'); }}
+            onPress={() => { setShowSettings(false); navigation.navigate('Stats', { tournamentId: tournament.id }); }}
             activeOpacity={0.7}
           >
             <Feather name="bar-chart-2" size={18} color={theme.accent.primary} />
@@ -2227,7 +2227,7 @@ export default function HomeScreen({ navigation, route }) {
           {Boolean(tournament.settings?.fixedTeams) && tournament.rounds[0]?.pairs?.length === 2 && (
             <TouchableOpacity
               style={s.menuItem}
-              onPress={() => { setShowTeamSettings(false); navigation.navigate('EditTeams', { roundIndex: 0 }); }}
+              onPress={() => { setShowTeamSettings(false); navigation.navigate('EditTeams', { roundIndex: 0, tournamentId: tournament.id }); }}
               activeOpacity={0.7}
             >
               <Feather name="edit-2" size={18} color={theme.accent.primary} />
