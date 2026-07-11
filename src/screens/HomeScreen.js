@@ -2334,7 +2334,7 @@ const RoundPage = React.memo(function RoundPage({
               hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
               accessibilityLabel="Round options"
             >
-              <Feather name="more-horizontal" size={16} color={theme.text.muted} />
+              <Feather name="settings" size={16} color={theme.text.muted} />
             </TouchableOpacity>
           )}
           <TouchableOpacity
