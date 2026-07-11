@@ -59,4 +59,30 @@ describe('FeedRoundCard', () => {
 
     await waitFor(() => expect(mediaImage.props.resizeMode).toBe('contain'));
   });
+
+  test('renders every player tile for a four-player round without an overflow note', () => {
+    const item = {
+      type: 'round',
+      key: 'round:t1:r2',
+      tournamentId: 't1',
+      tournamentName: 'Weekend Match',
+      roundId: 'r2',
+      playerCount: 4,
+      results: [
+        { playerId: 'p1', name: 'Marcos', points: 38, strokes: 82, holes: 18, isMine: true },
+        { playerId: 'p2', name: 'Pablo', points: 34, strokes: 88, holes: 18 },
+        { playerId: 'p3', name: 'Luis', points: 31, strokes: 91, holes: 18 },
+        { playerId: 'p4', name: 'Javi', points: 29, strokes: 94, holes: 18 },
+      ],
+    };
+    const { getByText, queryByText } = render(wrap(
+      <FeedRoundCard item={item} timestamp="Today" onPress={() => {}} />
+    ));
+
+    expect(getByText('Marcos')).toBeTruthy();
+    expect(getByText('Pablo')).toBeTruthy();
+    expect(getByText('Luis')).toBeTruthy();
+    expect(getByText('Javi')).toBeTruthy();
+    expect(queryByText(/more player/)).toBeNull();
+  });
 });

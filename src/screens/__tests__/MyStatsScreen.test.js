@@ -263,13 +263,13 @@ describe('MyStatsScreen tab strip', () => {
 });
 
 describe('MyStatsScreen report card round link', () => {
-  test('navigates to RoundSummary for the selected round', async () => {
+  test('navigates to the round statistics for the selected round', async () => {
     const navigation = { goBack: jest.fn(), navigate: jest.fn() };
     const { findByText } = render(screenElement({ params: { tab: 'reportCard' } }, navigation));
 
     fireEvent.press(await findByText('Open round stats'));
 
-    expect(navigation.navigate).toHaveBeenCalledWith('RoundSummary', {
+    expect(navigation.navigate).toHaveBeenCalledWith('Stats', {
       tournamentId: 't-1',
       roundId: 'r-1',
     });
