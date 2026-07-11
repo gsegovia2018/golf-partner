@@ -5,8 +5,9 @@ import { Feather } from '@expo/vector-icons';
 import { useTheme } from '../theme/ThemeContext';
 import { useAuth } from '../context/AuthContext';
 import {
-  loadTournament, getPlayingHandicap, calcStablefordPoints,
-  playerPartnerSplits, getActiveTournamentSnapshot, roundScoringMode,
+  loadTournament, getTournament, getPlayingHandicap, calcStablefordPoints,
+  playerPartnerSplits, getActiveTournamentSnapshot, getTournamentSnapshot,
+  roundScoringMode,
 } from '../store/tournamentStore';
 import {
   playerRoundHistory, playerAvgStableford, playerScoreDistribution,
@@ -80,13 +81,19 @@ const tiedRowsByPlayer = (entries, makeRows, headerRight) => {
   return result;
 };
 
-export default function StatsScreen({ navigation }) {
+export default function StatsScreen({ navigation, route }) {
   const { theme } = useTheme();
   const { user } = useAuth();
+  // Which tournament to show: an explicit id when opened from a specific
+  // game (History, My Stats round link), otherwise the active tournament.
+  const routeTournamentId = route?.params?.tournamentId ?? null;
+  const routeRoundId = route?.params?.roundId ?? null;
   // Memoised so StyleSheet.create only re-runs when the theme actually
   // changes — not on every tab switch / metric toggle re-render.
   const s = useMemo(() => makeStyles(theme), [theme]);
-  const [tournament, setTournament] = useState(() => getActiveTournamentSnapshot());
+  const [tournament, setTournament] = useState(() => (
+    routeTournamentId ? getTournamentSnapshot(routeTournamentId) : getActiveTournamentSnapshot()
+  ));
   const [tab, setTab] = useState('overview');
   // Each tab keeps its own player selection so navigating tabs no longer
   // silently changes the selection elsewhere.
@@ -104,8 +111,13 @@ export default function StatsScreen({ navigation }) {
   const pairsScrollRef = useRef(null);
 
   useEffect(() => {
-    loadTournament().then(t => {
+    const load = routeTournamentId ? getTournament(routeTournamentId) : loadTournament();
+    load.then(t => {
       setTournament(t);
+      if (routeRoundId && t?.rounds) {
+        const idx = t.rounds.findIndex((r) => r.id === routeRoundId);
+        if (idx >= 0) setRoundScope(idx);
+      }
       // Default selections to the signed-in user when they're one of the
       // players in this tournament. Falls back to the first player otherwise.
       if (t?.players?.length && user?.id) {
@@ -123,7 +135,7 @@ export default function StatsScreen({ navigation }) {
       // "no tournament" fallback below.
       console.warn('StatsScreen: failed to load tournament', e);
     });
-  }, [user?.id]);
+  }, [user?.id, routeTournamentId, routeRoundId]);
 
   if (!tournament) return null;
 
