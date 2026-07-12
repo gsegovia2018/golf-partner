@@ -8,7 +8,7 @@ import { Feather } from '@expo/vector-icons';
 
 import { useTheme } from '../theme/ThemeContext';
 import {
-  loadTournament, saveTournament, subscribeTournamentChanges, DEFAULT_SETTINGS, buildTeamsForMode,
+  loadTournament, subscribeTournamentChanges, DEFAULT_SETTINGS, buildTeamsForMode,
   normalizeRoundHandicaps, isRoundComplete,
   getActiveTournamentSnapshot, getTournamentSnapshot, getTournament,
 } from '../store/tournamentStore';
@@ -155,13 +155,26 @@ export default function EditTournamentScreen({ navigation, route }) {
           manualHandicaps: { ...(r.manualHandicaps ?? {}) },
         }));
 
-        await saveTournament({
-          ...tournamentRef.current,
-          rounds: builtRounds,
-          settings: {
-            ...settings,
-            bestBallValue: parseInt(settings.bestBallValue, 10) || 1,
-            worstBallValue: parseInt(settings.worstBallValue, 10) || 1,
+        // Round-level fields (course/holes/tees/handicaps, and brand-new
+        // rounds from addRound) go through round.upsert — a whole-round
+        // upsert, since a tournament.updateProfile patch only ever reaches
+        // tournaments.props/name/kind (see patch_game_tournament), never the
+        // normalized game_rounds rows. Tournament-wide settings still go
+        // through tournament.updateProfile.
+        let current = tournamentRef.current;
+        for (let i = 0; i < builtRounds.length; i++) {
+          current = await mutate(current, {
+            type: 'round.upsert', roundId: builtRounds[i].id, roundIndex: i, round: builtRounds[i],
+          });
+        }
+        await mutate(current, {
+          type: 'tournament.updateProfile',
+          patch: {
+            settings: {
+              ...settings,
+              bestBallValue: parseInt(settings.bestBallValue, 10) || 1,
+              worstBallValue: parseInt(settings.worstBallValue, 10) || 1,
+            },
           },
         });
         setSaveState('saved');

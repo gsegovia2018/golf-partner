@@ -10,9 +10,10 @@ import {
 import ScreenContainer from '../components/ScreenContainer';
 import { Feather } from '@expo/vector-icons';
 import {
-  loadTournament, saveTournament, subscribeTournamentChanges,
+  loadTournament, subscribeTournamentChanges,
   roundScoringMode, pairsForNextRound,
 } from '../store/tournamentStore';
+import { mutate } from '../store/mutate';
 import { scoringModeUsesTeams, needsManualTeamSetup } from '../components/scoringModes';
 import { useTheme } from '../theme/ThemeContext';
 import { shouldHandleStoreChange } from '../lib/navigationFocus';
@@ -262,23 +263,21 @@ export default function NextRoundScreen({ navigation, route }) {
     const newPairs = buildPairsForRound(tournament);
     setNextPairs(newPairs);
     if (revealOnly) {
-      const updated = { ...tournament };
-      updated.rounds[roundIndex].pairs = newPairs;
-      updated.rounds[roundIndex].revealed = true;
-      await saveTournament(updated);
+      await mutate(tournament, {
+        type: 'round.reveal', roundId: tournament.rounds[roundIndex].id, pairs: newPairs,
+      });
     }
     setPhase('reveal');
     revealPairs();
   }
 
   async function handleConfirm() {
-    const updated = { ...tournament };
-    updated.rounds[roundIndex].pairs = nextPairs;
-    updated.rounds[roundIndex].revealed = true;
+    const updated = await mutate(tournament, {
+      type: 'round.reveal', roundId: tournament.rounds[roundIndex].id, pairs: nextPairs,
+    });
     if (!revealOnly) {
-      updated.currentRound = roundIndex;
+      await mutate(updated, { type: 'tournament.advanceRound', roundIndex });
     }
-    await saveTournament(updated);
     navigation.replace('Home');
   }
 

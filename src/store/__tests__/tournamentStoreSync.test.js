@@ -1,16 +1,13 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 
-// saveTournament merge-before-push tests (Fix 2) + the sync-v2 read-path
-// overlay tests that replace the old local-inclusive loadAllTournaments
-// merge (Fix 3, superseded — see tournamentStore.js's loadAllTournaments and
-// mutate.js's applyPendingMutations).
+// sync-v2 read-path overlay tests that replace the old local-inclusive
+// loadAllTournaments merge (Fix 3, superseded — see tournamentStore.js's
+// loadAllTournaments and mutate.js's applyPendingMutations).
 //
-// saveTournament still goes through fetchRemoteTournament -> repo.fetchTournament
-// (a supabase.rpc('get_game_tournament') call) before merging + pushing, so
-// the mocked supabase client below implements `.rpc` for both
-// get_game_tournament (single tournament) and get_my_game_tournaments (the
-// Home list), mirroring tournamentRepo.js. The `.from` chain is still used
-// for persistRemote's raw blob upsert.
+// These go through fetchRemoteTournament -> repo.fetchTournament (a
+// supabase.rpc('get_game_tournament') call), so the mocked supabase client
+// below implements `.rpc` for both get_game_tournament (single tournament)
+// and get_my_game_tournaments (the Home list), mirroring tournamentRepo.js.
 //
 // Uses the per-test doMock + resetModules + require pattern (see
 // loadTournamentCached.test.js) so each test controls isOnline, the remote
@@ -91,61 +88,6 @@ function blob({ id = 't1', name = 'Cup', createdAt = '2026-07-11T09:00:00Z', sco
     _meta: meta,
   };
 }
-
-describe('saveTournament merges before pushing (Fix 2)', () => {
-  test('keeps a peer score cell present only on the remote (no clobber)', async () => {
-    installMocks({ online: true });
-    mockState.userId = 'u1';
-    // Remote already holds a cell the local copy has never written.
-    mockState.remote = blob({
-      scores: { p1: { 1: 4 }, p2: { 1: 5 } },
-      currentRound: 0,
-      meta: { 'rounds.r1.scores.p1.h1': 1000, 'rounds.r1.scores.p2.h1': 1500 },
-    });
-    const local = blob({
-      scores: { p1: { 1: 4 } },
-      currentRound: 1,
-      meta: { 'rounds.r1.scores.p1.h1': 2000 },
-    });
-
-    const { saveTournament } = require('../tournamentStore');
-    await saveTournament(local);
-
-    const pushed = mockState.upserts.filter((u) => u.table === 'tournaments').pop();
-    expect(pushed).toBeTruthy();
-    // The peer's cell survives the save instead of being overwritten by local.
-    expect(pushed.row.data.rounds[0].scores.p2[1]).toBe(5);
-    expect(pushed.row.data.rounds[0].scores.p1[1]).toBe(4);
-  });
-
-  test('pushes the higher local currentRound (monotonic through merge)', async () => {
-    installMocks({ online: true });
-    mockState.userId = 'u1';
-    mockState.remote = blob({ scores: { p1: { 1: 4 } }, currentRound: 0 });
-    const local = blob({ scores: { p1: { 1: 4 } }, currentRound: 2 });
-
-    const { saveTournament } = require('../tournamentStore');
-    await saveTournament(local);
-
-    const pushed = mockState.upserts.filter((u) => u.table === 'tournaments').pop();
-    expect(pushed.row.data.currentRound).toBe(2);
-  });
-
-  test('falls back to pushing local when the remote fetch throws', async () => {
-    installMocks({ online: true });
-    mockState.userId = 'u1';
-    mockState.fetchError = { message: 'boom' }; // fetchRemoteTournament throws
-    const local = blob({ scores: { p1: { 1: 4 } }, currentRound: 1 });
-
-    const { saveTournament } = require('../tournamentStore');
-    await expect(saveTournament(local)).resolves.toBeUndefined(); // never throws
-
-    const pushed = mockState.upserts.filter((u) => u.table === 'tournaments').pop();
-    expect(pushed).toBeTruthy();
-    expect(pushed.row.data.currentRound).toBe(1);
-    expect(pushed.row.data.rounds[0].scores.p1[1]).toBe(4);
-  });
-});
 
 describe('loadAllTournaments overlays undrained pending mutations (Fix 3, superseded)', () => {
   test('a queued score.set for one tournament is reflected in the returned entry', async () => {

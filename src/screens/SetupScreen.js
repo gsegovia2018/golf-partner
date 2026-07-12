@@ -8,7 +8,7 @@ import ScreenContainer from '../components/ScreenContainer';
 import { Feather } from '@expo/vector-icons';
 import { useFocusEffect, CommonActions } from '@react-navigation/native';
 import {
-  createTournament, saveTournament, buildTeamsForMode, teamShapeOf, DEFAULT_SETTINGS,
+  createTournament, buildTeamsForMode, teamShapeOf, DEFAULT_SETTINGS,
   deriveRoundPlayingHandicap, generateInviteCode, buildJoinLink,
 } from '../store/tournamentStore';
 import { defaultHoles, fetchPlayers, fetchMyPlayers } from '../store/libraryStore';
@@ -31,6 +31,7 @@ import {
   initialStepIndex,
   setupPrefillState,
 } from './setupWizard';
+import { mutate } from '../store/mutate';
 
 // Deep green used for the Review hero band — fixed in both themes so white
 // hero text always has strong contrast.
@@ -301,7 +302,7 @@ export default function SetupScreen({ navigation, route }) {
   const canStart = players.length >= 1 && !missingCourseName;
 
   const navigateToCreatedTournament = useCallback((tournament) => {
-    // saveTournament marks the new tournament active. A game is a single
+    // mutate(tournament.create) marks the new tournament active. A game is a single
     // round — jump straight to its scorecard, but seat the Tournament
     // (round details) view underneath so back from the scorecard returns
     // there instead of bouncing all the way to Home. A multi-round
@@ -456,7 +457,7 @@ export default function SetupScreen({ navigation, route }) {
     });
 
     try {
-      await saveTournament(tournament);
+      await mutate(tournament, { type: 'tournament.create', tournament });
 
       if (shouldOfferPostCreateEditorInvite(kind, players, user?.id)) {
         setPostCreateInvite({

@@ -1,5 +1,5 @@
 import { syncQueue } from './syncQueue';
-import { saveLocal, _setSyncStatus } from './tournamentStore';
+import { saveLocal, readLocal, _setSyncStatus } from './tournamentStore';
 import { isOnline } from '../lib/connectivity';
 import { normalizeRoundNotes } from './roundNotes';
 
@@ -106,6 +106,23 @@ export function metaPathFor(m) {
     // Tournament creation: the row is already saved locally by the creation
     // flow itself, so this mutation only needs to reach the server queue.
     case 'tournament.create': return 'create';
+    // Whole-round content replace (Reset Round / Undo / Restore snapshot in
+    // HomeScreen). scores/notes live in their own normalized tables (never
+    // stamped in _meta by the per-cell mutations above), so this bumps the
+    // coarse parent paths instead of one per cell.
+    case 'round.resetContent': return [
+      `rounds.${m.roundId}.scores`,
+      `rounds.${m.roundId}.notes`,
+      `rounds.${m.roundId}.resetHistory`,
+    ];
+    // Whole-round upsert (EditTournamentScreen / PlayersScreen bulk round
+    // save — course/holes/tees/handicaps edited together). Mirrors
+    // tournament.create: a coarse bump, not a per-field one.
+    case 'round.upsert': return `rounds.${m.roundId}.upsert`;
+    // Edit an EXISTING roster player's fields (e.g. base handicap) — distinct
+    // from tournament.addPlayer (new player) / tournament.claimPlayer (just
+    // user_id).
+    case 'tournament.updatePlayer': return 'players';
     default: throw new Error(`unknown mutation type: ${m.type}`);
   }
 }
@@ -343,6 +360,28 @@ export function applyToTournament(t, m) {
       // locally before this mutation is enqueued.
       break;
     }
+    case 'round.resetContent': {
+      const round = t.rounds?.find((r) => r.id === m.roundId);
+      if (!round) return;
+      round.scores = m.scores ?? {};
+      round.notes = normalizeRoundNotes(m.notes);
+      round.resetHistory = m.resetHistory ?? [];
+      break;
+    }
+    case 'round.upsert': {
+      const rounds = [...(t.rounds ?? [])];
+      const idx = rounds.findIndex((r) => r.id === m.roundId);
+      if (idx === -1) rounds.splice(m.roundIndex ?? rounds.length, 0, m.round);
+      else rounds[idx] = m.round;
+      t.rounds = rounds;
+      break;
+    }
+    case 'tournament.updatePlayer': {
+      t.players = (t.players ?? []).map((p) => (
+        p.id === m.playerId ? { ...p, ...m.patch } : p
+      ));
+      break;
+    }
     default:
       break; // library-only mutations don't change the tournament object
   }
@@ -359,6 +398,59 @@ export function applyPendingMutations(tournament, entries) {
   for (const entry of entries) {
     applyToTournament(t, entry.mutation);
   }
+  return t;
+}
+
+// scoreConflicts markers are LOCAL-ONLY: tournamentRepo.js strips them from
+// every round body before it ever reaches the server (stripRoundHotKeys),
+// and get_game_tournament never reassembles them — so a freshly fetched
+// `target` (repo read, or applyPendingMutations(fresh, ...) replay) NEVER
+// carries them. Both reconcile paths that recompute local state from a
+// fresh fetch (syncWorker's drainTournament post-drain reconcile, and
+// tournamentStore's _overlayAndSave) must carry `source`'s (the previous
+// local blob's) round.scoreConflicts forward, or an unresolved conflict the
+// user hasn't seen yet silently vanishes the moment ANYTHING else for that
+// tournament syncs or the screen pulls a background refresh. Mutates and
+// returns `target`.
+export function preserveLocalScoreConflicts(target, source) {
+  if (!target?.rounds?.length || !source?.rounds?.length) return target;
+  const byId = new Map(source.rounds.map((r) => [r.id, r?.scoreConflicts]));
+  target.rounds = target.rounds.map((r) => {
+    const sc = byId.get(r.id);
+    return sc ? { ...r, scoreConflicts: sc } : r;
+  });
+  return target;
+}
+
+// Records a score conflict marker directly into the LOCAL blob — never
+// enqueued, never synced (see preserveLocalScoreConflicts above for why).
+// Shape mirrors what the UI already reads (ScorecardScreen's
+// finishConflictRows, HoleView/HolePage's inline conflict card,
+// ScoreConflictSheet/FinishConflictSheet's candidate cards): keyed by the
+// PLAIN hole number (not "h"+hole — conflict.resolve's applyToTournament
+// already deletes round.scoreConflicts[playerId][hole] the same way, and
+// listRoundConflicts parses the key back via Number(holeKey)). candidates
+// carry `ts` (used for the sheets' relative-time hint) stamped to the
+// detection time, since executeMutation's conflict payload has no
+// per-candidate timestamp of its own.
+export async function recordScoreConflict(tournamentId, {
+  roundId, playerId, hole, mine, theirs,
+}) {
+  const t = await readLocal(tournamentId);
+  if (!t) return null;
+  const round = t.rounds?.find((r) => r.id === roundId);
+  if (!round) return t;
+  const detectedAt = Date.now();
+  round.scoreConflicts = { ...(round.scoreConflicts ?? {}) };
+  round.scoreConflicts[playerId] = { ...(round.scoreConflicts[playerId] ?? {}) };
+  round.scoreConflicts[playerId][hole] = {
+    candidates: [
+      { value: mine, ts: detectedAt },
+      { value: theirs, ts: detectedAt },
+    ],
+    detectedAt,
+  };
+  await saveLocal(t);
   return t;
 }
 

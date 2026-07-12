@@ -19,7 +19,7 @@ import BottomSheet from '../components/BottomSheet';
 import {
   loadTournament, loadAllTournaments, loadAllTournamentsWithFallback,
   setActiveTournament,
-  deleteTournament, saveTournament,
+  deleteTournament,
   tournamentLeaderboard, tournamentBestWorstLeaderboard,
   roundTotals,
   playerRoundBestWorstPoints,
@@ -492,18 +492,15 @@ export default function HomeScreen({ navigation, route }) {
     const hasContent = Object.keys(prevScores).length > 0 || hasNoteContent;
     const snapshot = { scores: prevScores, notes: prevNotes, at: new Date().toISOString() };
 
-    const updated = { ...tournament };
-    updated.rounds = updated.rounds.map((r, i) => {
-      if (i !== idx) return r;
-      const history = [...(r.resetHistory ?? [])];
-      if (hasContent) {
-        history.push(snapshot);
-        // Cap to last 10 entries to avoid unbounded growth
-        if (history.length > 10) history.splice(0, history.length - 10);
-      }
-      return { ...r, scores: {}, notes: {}, resetHistory: history };
+    const history = [...(roundBefore?.resetHistory ?? [])];
+    if (hasContent) {
+      history.push(snapshot);
+      // Cap to last 10 entries to avoid unbounded growth
+      if (history.length > 10) history.splice(0, history.length - 10);
+    }
+    await mutate(tournament, {
+      type: 'round.resetContent', roundId: roundBefore.id, scores: {}, notes: {}, resetHistory: history,
     });
-    await saveTournament(updated);
     await reload();
 
     if (hasContent) {
@@ -517,15 +514,17 @@ export default function HomeScreen({ navigation, route }) {
     if (!undoSnack || !tournament) return;
     const { roundIndex, snapshot } = undoSnack;
     if (undoTimerRef.current) { clearTimeout(undoTimerRef.current); undoTimerRef.current = null; }
-    const updated = { ...tournament };
-    updated.rounds = updated.rounds.map((r, i) => {
-      if (i !== roundIndex) return r;
-      // Pop the entry we just pushed (the snapshot we're restoring)
-      const history = [...(r.resetHistory ?? [])];
-      if (history.length > 0 && history[history.length - 1].at === snapshot.at) history.pop();
-      return { ...r, scores: snapshot.scores, notes: snapshot.notes, resetHistory: history };
+    const round = tournament.rounds[roundIndex];
+    // Pop the entry we just pushed (the snapshot we're restoring)
+    const history = [...(round?.resetHistory ?? [])];
+    if (history.length > 0 && history[history.length - 1].at === snapshot.at) history.pop();
+    await mutate(tournament, {
+      type: 'round.resetContent',
+      roundId: round.id,
+      scores: snapshot.scores ?? {},
+      notes: snapshot.notes ?? {},
+      resetHistory: history,
     });
-    await saveTournament(updated);
     await reload();
     setUndoSnack(null);
   }
@@ -542,11 +541,13 @@ export default function HomeScreen({ navigation, route }) {
       confirmLabel: 'Restore',
     });
     if (!confirmed) return;
-    const updated = { ...tournament };
-    updated.rounds = updated.rounds.map((r, i) => (
-      i === idx ? { ...r, scores: entry.scores ?? {}, notes: entry.notes ?? '' } : r
-    ));
-    await saveTournament(updated);
+    await mutate(tournament, {
+      type: 'round.resetContent',
+      roundId: round.id,
+      scores: entry.scores ?? {},
+      notes: entry.notes ?? {},
+      resetHistory: round.resetHistory ?? [],
+    });
     await reload();
     setShowResetHistory(false);
   }
@@ -685,7 +686,7 @@ export default function HomeScreen({ navigation, route }) {
         settings: DEFAULT_SETTINGS,
         userId: currentUserId,
       });
-      await saveTournament(created);
+      await mutate(created, { type: 'tournament.create', tournament: created });
       setTournament(created);
       lastLoadedTournamentIdRef.current = created.id;
       userPickedRoundRef.current = false;
@@ -790,8 +791,8 @@ export default function HomeScreen({ navigation, route }) {
   // Persist a per-round scoring-mode override from the Round N sheet's
   // "Scoring Mode" item. Rebuilds that round's pairs for the new mode (same
   // approach as the tournament-wide picker) and dispatches the dedicated
-  // round.setScoringMode mutation rather than a raw saveTournament — this is
-  // a single round's override, not a tournament-wide reset.
+  // round.setScoringMode mutation rather than a whole-tournament write — this
+  // is a single round's override, not a tournament-wide reset.
   async function saveRoundScoringMode(key) {
     if (!tournament) return;
     const r = tournament.rounds?.[selectedRound];

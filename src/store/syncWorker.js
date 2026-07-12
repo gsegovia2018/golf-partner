@@ -5,7 +5,7 @@ import {
 } from './tournamentStore';
 import { fetchTournament } from './tournamentRepo';
 import { executeMutation } from './mutationWrites';
-import { applyPendingMutations } from './mutate';
+import { applyPendingMutations, recordScoreConflict, preserveLocalScoreConflicts } from './mutate';
 import { upsertPlayer } from './libraryStore';
 import { isOnline, subscribeConnectivity } from '../lib/connectivity';
 
@@ -14,12 +14,15 @@ let _attempt = 0;
 let _timer = null;
 let _running = false;
 
-// Conflict seam: Task 11 registers the real marker-writer here. Defaults to
-// a no-op so drains never crash before that wiring lands.
+// Conflict seam. Registered with the real marker-writer immediately below
+// (module init) so it's always wired before any drain can run; kept as a
+// seam (rather than calling recordScoreConflict directly) so tests can swap
+// in a spy/stub.
 let _scoreConflictHandler = null;
 export function setScoreConflictHandler(fn) {
   _scoreConflictHandler = fn;
 }
+setScoreConflictHandler(recordScoreConflict);
 
 async function notifyScoreConflict(tournamentId, conflict) {
   if (!_scoreConflictHandler) return;
@@ -126,11 +129,24 @@ export async function drainTournament(tournamentId, entries) {
   try {
     const fresh = await fetchTournament(tournamentId);
     if (fresh) {
+      // Snapshot local's CURRENT scoreConflicts markers once, before the
+      // settle loop below — any conflict this pass just detected (via
+      // notifyScoreConflict, above) is already written to local by now, and
+      // any resolve already cleared its marker from local directly (mutate()
+      // saves locally before it ever reaches this drain). `fresh` and
+      // applyPendingMutations' replay never carry scoreConflicts (see
+      // preserveLocalScoreConflicts) so every pass below must re-stamp them
+      // back onto the freshly computed state or the reconcile save wipes
+      // them.
+      const localForConflicts = await readLocal(tournamentId);
       const queuedForTournament = async () => (await syncQueue.all())
         .filter((e) => e.tournamentId === tournamentId);
       let snapshot = await queuedForTournament();
       for (let pass = 0; pass < 3; pass++) {
-        await saveLocal(applyPendingMutations(fresh, snapshot));
+        const merged = preserveLocalScoreConflicts(
+          applyPendingMutations(fresh, snapshot), localForConflicts,
+        );
+        await saveLocal(merged);
         const latest = await queuedForTournament();
         const stable = latest.length === snapshot.length
           && latest.every((e, i) => e.id === snapshot[i].id);

@@ -1,7 +1,6 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { supabase } from '../lib/supabase';
 import { tournamentsIndex } from './tournamentsIndex';
-import { mergeTournaments } from './merge';
 import { fetchTournament as repoFetchTournament, fetchMyTournaments } from './tournamentRepo';
 import { syncQueue } from './syncQueue';
 import { isOnline } from '../lib/connectivity';
@@ -168,6 +167,16 @@ function _applyPendingMutations(tournament, entries) {
   return applyPendingMutations(tournament, entries);
 }
 
+// scoreConflicts markers are local-only (see mutate.js's
+// preserveLocalScoreConflicts) — a repo-fetched `remote` never carries them,
+// so every background refresh through this module must carry `source`'s
+// forward or an unresolved conflict the user hasn't seen yet silently
+// disappears the next time any screen focuses.
+function _preserveScoreConflicts(target, source) {
+  const { preserveLocalScoreConflicts } = require('./mutate');
+  return preserveLocalScoreConflicts(target, source);
+}
+
 // The syncQueue entries for one tournament, read fresh at overlay time (not
 // captured earlier) so a background refresh sees whatever is still undrained
 // right now.
@@ -202,6 +211,7 @@ async function _overlayAndSave(id, remote, { makeActive = true } = {}) {
     // merge.js:203-206, the LWW path this overlay replaces). Local wins,
     // including an explicit null.
     if (local && 'meId' in local) merged.meId = local.meId;
+    _preserveScoreConflicts(merged, local);
     await saveLocal(merged, { makeActive });
     const latest = await _pendingEntriesFor(id);
     const stable = latest.length === snapshot.length
@@ -420,10 +430,14 @@ async function clearActiveTournamentIfMatches(id, { emit = true } = {}) {
 // Mirror the tournament's user-linked players into tournament_participants
 // so the activity feed can discover tournaments a friend played without the
 // current user (see migrations/20260515_friends_and_feed.sql). Guarded by a
-// per-tournament signature so it only writes when the player set changes —
-// every score entry calls persistRemote and we don't want a write each time.
+// per-tournament signature so it only writes when the player set changes.
+// Exported (sync-v2): the old whole-tournament writer used to fire this
+// after every save; there is no such single choke point any more, so
+// mutationWrites.js calls this directly (best-effort) after every mutation
+// that can change a player's user_id — tournament.create,
+// tournament.addPlayer, tournament.claimPlayer, tournament.updatePlayer.
 const _participantSig = new Map();
-async function syncTournamentParticipants(tournament) {
+export async function syncTournamentParticipants(tournament) {
   const ids = [...new Set(
     (tournament.players ?? []).map((p) => p?.user_id).filter(Boolean),
   )];
@@ -434,17 +448,6 @@ async function syncTournamentParticipants(tournament) {
   const { error } = await supabase.from('tournament_participants').upsert(rows);
   if (error) throw error;
   _participantSig.set(tournament.id, sig);
-}
-
-async function persistRemote(tournament) {
-  const userId = await getCurrentUserId();
-  const { _role, ...cleanData } = tournament;
-  const row = { id: cleanData.id, name: cleanData.name, created_at: cleanData.createdAt, data: cleanData };
-  if (userId) row.created_by = userId;
-  const { error } = await supabase.from('tournaments').upsert(row);
-  if (error) throw error;
-  // Best-effort: a failed participant sync must not fail the tournament save.
-  syncTournamentParticipants(cleanData).catch(() => {});
 }
 
 // Skip redundant writes: loadTournament's background refresh and
@@ -488,48 +491,6 @@ export async function readLocal(id) {
     _localTournamentCache.set(id, parsed);
     return cloneTournament(parsed);
   } catch { return null; }
-}
-
-// Backwards-compatible entry: local first, then attempt remote. Never throws on
-// remote failure — the sync worker will retry later.
-//
-// A raw full-blob upsert would clobber a peer's score cell already on the
-// server (the local copy hasn't pulled it yet). So when online we mirror
-// syncWorker.drainTournament: fetch the remote blob, LWW-merge THIS device's
-// edits over it (mergeTournaments(local, remote) — local's always-mine scores
-// and stamped fields win, currentRound takes the monotonic max), persist the
-// merged result, and push that. On any fetch/merge failure we fall back to
-// pushing the local blob (today's behavior) so an offline/transient hiccup
-// still eventually syncs via the worker.
-export async function saveTournament(tournament) {
-  await saveLocal(tournament);
-  if (isOnline()) {
-    try {
-      const remote = await fetchRemoteTournament(tournament.id);
-      if (remote) {
-        const { merged } = mergeTournaments(tournament, remote);
-        await saveLocal(merged);
-        await persistRemote(merged);
-      } else {
-        await persistRemote(tournament);
-      }
-    } catch (_) {
-      // Fetch/merge/push failed — push the local blob so the change still
-      // lands; the sync worker will retry on any further failure.
-      await persistRemote(tournament).catch(() => {});
-    }
-  } else {
-    try {
-      await persistRemote(tournament);
-    } catch (_) {
-      // Swallow: the sync worker will retry.
-    }
-  }
-}
-
-// Worker-only: used by syncWorker when pushing a merged blob.
-export async function pushRemote(tournament) {
-  await persistRemote(tournament);
 }
 
 // ── Sync status observable ───────────────────────────────────────────────────
@@ -633,8 +594,27 @@ export {
 // are re-derived from the new base index. `gender` is only stamped onto the
 // embedded players when explicitly provided (not `undefined`), so callers
 // that don't track gender can omit it without wiping the existing value.
+//
+// sync-v2 design note: this is a maintenance sweep across POSSIBLY MANY
+// tournaments (every tournament that ever rostered this library player), not
+// a single-tournament user edit — so unlike the screen call sites (which
+// route every write through mutate()), this fans the network side out
+// through mutate() PER AFFECTED TOURNAMENT rather than adding a bespoke
+// multi-tournament mutation type. Each tournament's writes are independent
+// and best-effort: saveLocal happens first (offline-safe, the UI reflects
+// the rename immediately), then tournament.updatePlayer (→ repo.upsertPlayer)
+// plus one round.upsert per round (→ repo.upsertRound, carrying the
+// re-derived pairs snapshot + recomputed playerHandicaps together — a plain
+// handicap.set mutation was considered and rejected here because its
+// applyToTournament ALSO stamps manualHandicaps[playerId] = true, which
+// would incorrectly convert this auto-recompute into a manual override).
+// mutate() itself already queues/retries offline, so a tournament mid-sweep
+// that's offline (or whose write throws) just keeps its queued entries for
+// the worker to drain later; the sweep moves on to the next tournament
+// rather than aborting.
 export async function propagatePlayerToTournaments(playerId, { name, handicap, gender }) {
   if (!playerId) return [];
+  const { mutate } = require('./mutate');
   const result = parseHandicapIndex(handicap);
   const parsedIndex = result.ok ? result.value : 0;
   const genderPatch = gender !== undefined ? { gender } : {};
@@ -657,7 +637,23 @@ export async function propagatePlayerToTournaments(playerId, { name, handicap, g
       return recomputeRoundPlayingHandicaps(patched, nextPlayers);
     });
 
-    await persistRemote({ ...t, players: nextPlayers, rounds: nextRounds });
+    let current = { ...t, players: nextPlayers, rounds: nextRounds };
+    await saveLocal(current, { makeActive: false });
+    try {
+      current = await mutate(current, {
+        type: 'tournament.updatePlayer',
+        playerId,
+        patch: { name, handicap: parsedIndex, ...genderPatch },
+      });
+      for (let i = 0; i < current.rounds.length; i++) {
+        current = await mutate(current, {
+          type: 'round.upsert', roundId: current.rounds[i].id, roundIndex: i, round: current.rounds[i],
+        });
+      }
+    } catch (_) {
+      // Best-effort sweep — see note above. Local already reflects the
+      // change; whatever DID enqueue before the failure still drains later.
+    }
     updatedIds.push(t.id);
   }
   if (updatedIds.length > 0) _emitChange();
@@ -682,16 +678,26 @@ export function reTeeRound(round, tees, genderById = {}) {
 // references this courseId. Holes and tees are deep-copied per round. Each
 // round's per-player tee snapshots are re-resolved by label, then non-manual
 // playing handicaps are re-derived.
+//
+// sync-v2 design note: same maintenance-sweep shape as
+// propagatePlayerToTournaments above (possibly many tournaments, each write
+// independent/best-effort) — saveLocal first, then one round.upsert mutation
+// per CHANGED round (round.upsert → repo.upsertRound carries holes/tees/
+// playerTees/recomputed playerHandicaps together in one write; there's no
+// players-array change here so no tournament.updatePlayer is needed).
 export async function propagateCourseToTournaments(courseId, { holes, tees }) {
   if (!courseId) return [];
+  const { mutate } = require('./mutate');
   const tournaments = await loadAllTournaments();
   const updatedIds = [];
   for (const t of tournaments) {
     let changed = false;
+    const changedRoundIds = new Set();
     const genderById = Object.fromEntries((t.players ?? []).map((p) => [p.id, p.gender]));
     const nextRounds = t.rounds.map((round) => {
       if (round.courseId !== courseId) return round;
       changed = true;
+      changedRoundIds.add(round.id);
       const reTeed = reTeeRound(round, tees, genderById);
       const nextRound = {
         ...reTeed,
@@ -700,11 +706,21 @@ export async function propagateCourseToTournaments(courseId, { holes, tees }) {
       };
       return recomputeRoundPlayingHandicaps(nextRound, t.players);
     });
-    if (changed) {
-      const next = { ...t, rounds: nextRounds };
-      await persistRemote(next);
-      updatedIds.push(next.id);
+    if (!changed) continue;
+
+    let current = { ...t, rounds: nextRounds };
+    await saveLocal(current, { makeActive: false });
+    try {
+      for (let i = 0; i < current.rounds.length; i++) {
+        if (!changedRoundIds.has(current.rounds[i].id)) continue;
+        current = await mutate(current, {
+          type: 'round.upsert', roundId: current.rounds[i].id, roundIndex: i, round: current.rounds[i],
+        });
+      }
+    } catch (_) {
+      // Best-effort sweep — see propagatePlayerToTournaments above.
     }
+    updatedIds.push(current.id);
   }
   if (updatedIds.length > 0) _emitChange();
   return updatedIds;

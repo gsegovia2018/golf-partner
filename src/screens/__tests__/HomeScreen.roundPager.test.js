@@ -134,7 +134,6 @@ jest.mock('../../store/tournamentStore', () => ({
   playerRoundBestWorstPoints: jest.fn(),
   randomPairs: jest.fn((players) => players.map((player) => [player])),
   roundTotals: jest.fn(() => []),
-  saveTournament: jest.fn(),
   setActiveTournament: jest.fn(),
   setScoringModeRoundPatches: jest.fn(() => ({ patches: [] })),
   subscribeTournamentChanges: jest.fn(() => jest.fn()),

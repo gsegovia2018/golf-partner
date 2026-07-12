@@ -10,8 +10,8 @@ import {
   lastTeeForPlayerOnCourse,
   loadAllTournamentsWithFallback,
   loadTournament,
-  saveTournament,
 } from '../../store/tournamentStore';
+import { mutate } from '../../store/mutate';
 
 const mockTheme = {
   bg: {
@@ -185,7 +185,6 @@ jest.mock('../../store/tournamentStore', () => ({
   playerRoundBestWorstPoints: jest.fn(),
   randomPairs: jest.fn((players) => players.map((player) => [player])),
   roundTotals: jest.fn(() => []),
-  saveTournament: jest.fn(),
   setActiveTournament: jest.fn(),
   setScoringModeRoundPatches: jest.fn(() => ({ patches: [] })),
   subscribeTournamentChanges: jest.fn(() => jest.fn()),
@@ -198,6 +197,10 @@ jest.mock('../../store/tournamentStore', () => ({
   tournamentNounCapitalized: jest.fn(() => 'Game'),
   tournamentPlayerClinched: jest.fn(),
   tournamentSindicatoLeaderboard: jest.fn(() => []),
+}));
+
+jest.mock('../../store/mutate', () => ({
+  mutate: jest.fn(),
 }));
 
 jest.mock('../../lib/quickStartGame', () => ({
@@ -284,7 +287,7 @@ beforeEach(() => {
   loadQuickStartCourses.mockResolvedValue({ courses: [], usingCachedData: false });
   fetchMyPlayers.mockResolvedValue([]);
   lastTeeForPlayerOnCourse.mockResolvedValue(null);
-  saveTournament.mockResolvedValue();
+  mutate.mockResolvedValue();
   generateInviteCode.mockResolvedValue({ editorCode: 'EDIT123' });
   buildJoinLink.mockReturnValue('https://example.test/join?invite=EDIT123');
 });
@@ -343,7 +346,7 @@ test('ignores stale quick-start loads after the signed-in user changes', async (
 
 test('prevents duplicate games from rapid quick-start presses', async () => {
   const save = deferred();
-  saveTournament.mockReturnValue(save.promise);
+  mutate.mockReturnValue(save.promise);
   loadQuickStartCourses.mockResolvedValue({
     courses: [{ id: 'course-one', name: 'Course One' }],
     usingCachedData: false,
@@ -362,7 +365,7 @@ test('prevents duplicate games from rapid quick-start presses', async () => {
   fireEvent.press(view.getByTestId('quick-start-double-start'));
 
   await waitFor(() => {
-    expect(saveTournament).toHaveBeenCalledTimes(1);
+    expect(mutate).toHaveBeenCalledTimes(1);
   });
 
   await act(async () => {

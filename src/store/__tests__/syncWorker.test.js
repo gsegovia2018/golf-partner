@@ -16,7 +16,11 @@ jest.mock('../../lib/supabase', () => ({
 
 jest.mock('../mutationWrites', () => ({ executeMutation: jest.fn() }));
 
-jest.mock('../mutate', () => ({ applyPendingMutations: jest.fn((t) => t) }));
+jest.mock('../mutate', () => ({
+  applyPendingMutations: jest.fn((t) => t),
+  recordScoreConflict: jest.fn(),
+  preserveLocalScoreConflicts: jest.fn((target) => target),
+}));
 
 jest.mock('../tournamentRepo', () => ({ fetchTournament: jest.fn(() => Promise.resolve(null)) }));
 

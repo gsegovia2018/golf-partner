@@ -10,7 +10,7 @@ import { Feather } from '@expo/vector-icons';
 import { useTheme } from '../theme/ThemeContext';
 import { useAuth } from '../context/AuthContext';
 import {
-  saveTournament, subscribeTournamentChanges,
+  subscribeTournamentChanges,
   normalizeRoundHandicaps, readLocal,
   loadTournamentMembers, findClaimedSlot,
   removeTournamentMember, generateInviteCode, releaseTournamentPlayer, buildJoinLink,
@@ -279,7 +279,21 @@ export default function PlayersScreen({ navigation, route }) {
             t = await mutate(t, { type: 'index.set', roundId: r.id, playerId: pid, index: v });
           }
         }
-        await saveTournament({ ...t, players: builtPlayers, rounds: builtRounds });
+        // Roster edits (base handicap, and any friend-link user_id/avatar_url
+        // patched via pickFriendForSlot) go through tournament.updatePlayer —
+        // NOT tournament.updateProfile, whose patch only ever reaches
+        // tournaments.props (players live in the normalized game_players
+        // table and would be silently invisible to reads otherwise). Round
+        // fields (playerTees from handleRoundTeesChange, plus the
+        // handicaps/indexes already stamped above) go through round.upsert.
+        for (const p of builtPlayers) {
+          t = await mutate(t, { type: 'tournament.updatePlayer', playerId: p.id, patch: p });
+        }
+        for (let i = 0; i < builtRounds.length; i++) {
+          t = await mutate(t, {
+            type: 'round.upsert', roundId: builtRounds[i].id, roundIndex: i, round: builtRounds[i],
+          });
+        }
         setSaveState('saved');
       } catch (err) {
         setSaveState('error');

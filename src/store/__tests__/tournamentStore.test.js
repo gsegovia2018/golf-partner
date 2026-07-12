@@ -1,40 +1,46 @@
 import {
   reTeeRound,
   tournamentNoun, tournamentNounCapitalized, formatRoundLabel,
-  isRoundInProgress, propagatePlayerToTournaments,
+  isRoundInProgress, propagatePlayerToTournaments, readLocal,
 } from '../tournamentStore';
 
 // jest.mock calls are hoisted above these imports by babel-jest, so the mock
 // is in place before ../tournamentStore (and the supabase client it imports)
 // loads. propagatePlayerToTournaments does real IO (loadAllTournaments +
-// persistRemote). loadAllTournaments now resolves via the
+// saveLocal + mutate()). loadAllTournaments now resolves via the
 // get_my_game_tournaments RPC (see tournamentRepo.js) rather than a raw
 // `tournaments` table select, so the mocked client below answers that RPC
 // with `tournamentsRow.data` (the same blob the old row-shaped mock carried)
 // wrapped in the `{ tournament, role }` shape fetchMyTournaments expects.
-// persistRemote still does a raw blob upsert to `tournaments`, so `.from` is
-// still a thenable query builder for that — following the chainable-client
-// pattern already used in officialAdmin.test.js.
-const mockState = { tournamentsRow: null, upserts: [] };
+//
+// mutate() itself (the server-write side — tournament.updatePlayer/
+// round.upsert queued through the real sync worker) is exercised end-to-end
+// in mutationWrites.test.js; here it's mocked to a no-op so this suite can
+// assert on the thing THIS function is responsible for: the locally
+// persisted (saveLocal'd) player/round data, read back via readLocal.
+const mockState = { tournamentsRow: null };
+
+jest.mock('../mutate', () => ({
+  mutate: jest.fn((t) => Promise.resolve(t)),
+  applyPendingMutations: jest.fn((t) => t),
+  preserveLocalScoreConflicts: jest.fn((target) => target),
+}));
 
 jest.mock('../../lib/supabase', () => {
-  function makeBuilder(table) {
+  function makeBuilder() {
     const builder = {
       select: () => builder,
       order: () => builder,
       eq: () => builder,
       or: () => builder,
-      upsert: (row) => {
-        mockState.upserts.push({ table, row });
-        return Promise.resolve({ error: null });
-      },
+      upsert: () => Promise.resolve({ error: null }),
       then: (resolve) => resolve({ data: [], error: null }),
     };
     return builder;
   }
   return {
     supabase: {
-      from: (table) => makeBuilder(table),
+      from: () => makeBuilder(),
       rpc: (name) => {
         if (name === 'get_my_game_tournaments') {
           const rows = mockState.tournamentsRow
@@ -189,7 +195,7 @@ describe('propagatePlayerToTournaments', () => {
   }
 
   beforeEach(() => {
-    mockState.upserts = [];
+    jest.clearAllMocks();
   });
 
   test('stamps the provided gender onto the embedded player and its round.pairs snapshot', async () => {
@@ -200,7 +206,7 @@ describe('propagatePlayerToTournaments', () => {
 
     await propagatePlayerToTournaments('p1', { name: 'Ann', handicap: 10, gender: 'male' });
 
-    const saved = mockState.upserts.find((u) => u.table === 'tournaments').row.data;
+    const saved = await readLocal('t1');
     expect(saved.players.find((p) => p.id === 'p1').gender).toBe('male');
     expect(saved.rounds[0].pairs[0][0].gender).toBe('male');
     // The other player (not the one being patched) is untouched.
@@ -215,7 +221,7 @@ describe('propagatePlayerToTournaments', () => {
 
     await propagatePlayerToTournaments('p1', { name: 'Ann', handicap: 10 });
 
-    const saved = mockState.upserts.find((u) => u.table === 'tournaments').row.data;
+    const saved = await readLocal('t1');
     expect(saved.players.find((p) => p.id === 'p1').gender).toBe('female');
     expect(saved.rounds[0].pairs[0][0].gender).toBe('female');
   });

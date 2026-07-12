@@ -520,6 +520,66 @@ describe('tournament.create', () => {
   });
 });
 
+describe('round.resetContent', () => {
+  test('writes the full scores/notes grid cell by cell, plus the resetHistory patch', async () => {
+    const local = baseTournament({
+      rounds: [{
+        id: 'r1',
+        holes: [{ number: 1 }, { number: 2 }],
+        scores: { p1: { 1: 4 }, p2: {} },
+        notes: { round: 'Windy', hole: { 2: 'GIR miss' } },
+        resetHistory: [{ at: '2026-01-01T00:00:00Z' }],
+      }],
+    });
+    const mutation = { type: 'round.resetContent', roundId: 'r1', scores: {}, notes: {}, resetHistory: [] };
+
+    await executeMutation(entry(mutation), local);
+
+    // Every (player, hole) cell in the round is written — cleared cells go
+    // through as strokes: null (tombstone), matching setScore's contract.
+    expect(repo.setScore).toHaveBeenCalledWith({ tournamentId: TID, roundId: 'r1', playerId: 'p1', hole: 1, strokes: 4 });
+    expect(repo.setScore).toHaveBeenCalledWith({ tournamentId: TID, roundId: 'r1', playerId: 'p2', hole: 1, strokes: null });
+    expect(repo.setScore).toHaveBeenCalledWith({ tournamentId: TID, roundId: 'r1', playerId: 'p1', hole: 2, strokes: null });
+    expect(repo.setNote).toHaveBeenCalledWith({ tournamentId: TID, roundId: 'r1', holeKey: 'round', note: 'Windy' });
+    expect(repo.setNote).toHaveBeenCalledWith({ tournamentId: TID, roundId: 'r1', holeKey: '1', note: null });
+    expect(repo.setNote).toHaveBeenCalledWith({ tournamentId: TID, roundId: 'r1', holeKey: '2', note: 'GIR miss' });
+    expect(repo.patchRound).toHaveBeenCalledWith(TID, 'r1', { resetHistory: [{ at: '2026-01-01T00:00:00Z' }] });
+  });
+
+  test('is a no-op when the round no longer exists locally', async () => {
+    const mutation = { type: 'round.resetContent', roundId: 'gone', scores: {}, notes: {}, resetHistory: [] };
+    const result = await executeMutation(entry(mutation), baseTournament());
+    expect(repo.setScore).not.toHaveBeenCalled();
+    expect(result).toEqual({ conflict: null });
+  });
+});
+
+describe('round.upsert', () => {
+  test('upserts the round via repo.upsertRound with the mutation payload verbatim', async () => {
+    const round = { id: 'r2', courseName: 'Second Course', holes: [] };
+    const mutation = { type: 'round.upsert', roundId: 'r2', roundIndex: 1, round };
+    await executeMutation(entry(mutation), baseTournament());
+    expect(repo.upsertRound).toHaveBeenCalledWith(TID, 1, round);
+  });
+});
+
+describe('tournament.updatePlayer', () => {
+  test('upserts the local (post-mutation) player object at its current index', async () => {
+    const local = baseTournament();
+    local.players[0] = { id: 'p1', name: 'Alice', handicap: 8 };
+    const mutation = { type: 'tournament.updatePlayer', playerId: 'p1', patch: { handicap: 8 } };
+    await executeMutation(entry(mutation), local);
+    expect(repo.upsertPlayer).toHaveBeenCalledWith(TID, { id: 'p1', name: 'Alice', handicap: 8 }, 0);
+  });
+
+  test('skips when the player no longer exists locally', async () => {
+    const mutation = { type: 'tournament.updatePlayer', playerId: 'pX', patch: { handicap: 1 } };
+    const result = await executeMutation(entry(mutation), baseTournament());
+    expect(repo.upsertPlayer).not.toHaveBeenCalled();
+    expect(result).toEqual({ conflict: null });
+  });
+});
+
 describe('unknown mutation types', () => {
   test('throws, matching metaPathFor\'s default contract', async () => {
     await expect(executeMutation(entry({ type: 'not.a.real.type' }), baseTournament()))

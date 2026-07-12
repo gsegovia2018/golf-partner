@@ -13,6 +13,15 @@
 // referenced round/player is no longer present locally (a later queued
 // mutation removed it), the write is skipped rather than crashing.
 import * as repo from './tournamentRepo';
+import { syncTournamentParticipants } from './tournamentStore';
+
+// Mirrors user-linked players into tournament_participants (see
+// tournamentStore.js's syncTournamentParticipants) after any mutation that
+// can change a player's user_id. Best-effort: a failed participant sync must
+// never fail the mutation that already landed.
+function syncParticipantsBestEffort(localTournament) {
+  syncTournamentParticipants(localTournament).catch(() => {});
+}
 
 function findRound(localTournament, roundId) {
   return (localTournament.rounds ?? []).find((r) => r.id === roundId);
@@ -170,6 +179,9 @@ export async function executeMutation(entry, localTournament) {
       if (m.nextScoringMode) {
         await repo.patchTournament(id, { settings: { scoringMode: m.nextScoringMode } });
       }
+      // A player added directly from a friend picker can already carry a
+      // user_id — mirror it into tournament_participants same as claimPlayer.
+      syncParticipantsBestEffort(localTournament);
       return NO_CONFLICT;
     }
 
@@ -211,6 +223,7 @@ export async function executeMutation(entry, localTournament) {
       const idx = findPlayerIndex(localTournament, m.playerId);
       if (idx === -1) return NO_CONFLICT;
       await repo.upsertPlayer(id, localTournament.players[idx], idx);
+      syncParticipantsBestEffort(localTournament);
       return NO_CONFLICT;
     }
 
@@ -246,6 +259,59 @@ export async function executeMutation(entry, localTournament) {
 
     case 'tournament.create': {
       await repo.createTournament(m.tournament);
+      syncParticipantsBestEffort(m.tournament);
+      return NO_CONFLICT;
+    }
+
+    case 'round.resetContent': {
+      // Reset Round / Undo / Restore snapshot (HomeScreen): a whole-round
+      // scores+notes replace. There's no bulk-replace RPC for the normalized
+      // game_scores/game_round_notes tables, so this writes the round's full
+      // grid cell by cell, mirroring the granular score.set/note.set writes.
+      // A rare, low-frequency user action, so the extra round trips are an
+      // acceptable trade for reusing the existing per-cell repo primitives
+      // instead of adding bulk endpoints.
+      const round = findRound(localTournament, m.roundId);
+      if (!round) return NO_CONFLICT;
+      const players = localTournament.players ?? [];
+      const holes = round.holes ?? [];
+      for (const p of players) {
+        for (const h of holes) {
+          const strokes = round.scores?.[p.id]?.[h.number] ?? null;
+          await repo.setScore({
+            tournamentId: id, roundId: m.roundId, playerId: p.id, hole: h.number, strokes,
+          });
+        }
+      }
+      const notes = round.notes ?? {};
+      await repo.setNote({
+        tournamentId: id, roundId: m.roundId, holeKey: 'round', note: notes.round ?? null,
+      });
+      for (const h of holes) {
+        await repo.setNote({
+          tournamentId: id, roundId: m.roundId, holeKey: String(h.number), note: notes.hole?.[h.number] ?? null,
+        });
+      }
+      await repo.patchRound(id, m.roundId, { resetHistory: round.resetHistory ?? [] });
+      return NO_CONFLICT;
+    }
+
+    case 'round.upsert': {
+      // Whole-round upsert (EditTournamentScreen / PlayersScreen bulk save —
+      // course/holes/tees/handicaps edited together, and brand-new rounds
+      // added mid-edit). upsertRound already strips scores/shotDetails/notes/
+      // scoreConflicts/scoreResolutions before writing body, so this can't
+      // clobber per-cell tables it doesn't own.
+      await repo.upsertRound(id, m.roundIndex, m.round);
+      return NO_CONFLICT;
+    }
+
+    case 'tournament.updatePlayer': {
+      const idx = findPlayerIndex(localTournament, m.playerId);
+      if (idx === -1) return NO_CONFLICT;
+      await repo.upsertPlayer(id, localTournament.players[idx], idx);
+      // e.g. PlayersScreen's friend-link flow patches user_id through here.
+      syncParticipantsBestEffort(localTournament);
       return NO_CONFLICT;
     }
 
