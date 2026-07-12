@@ -610,6 +610,9 @@ GRANT  EXECUTE ON FUNCTION public.claim_tournament_player(text, text) TO authent
 --     once patch_game_tournament has merged anything into it (making it
 --     non-empty) a re-run leaves it untouched. current_round stays a
 --     monotonic GREATEST.
+--   * tournaments.kind: restored from the blob's DOMAIN kind (data.kind),
+--     because the column carries a stale added-later 'casual' default the
+--     app never wrote. See the detailed comment on the UPDATE below.
 --
 -- Skips official-mode rows (kind = 'official') and rows with no blob at all —
 -- those never had anything to normalize.
@@ -651,13 +654,36 @@ BEGIN
   -- patch_game_tournament has merged a live edit in (props <> '{}'), a
   -- straggler re-run leaves it alone rather than reverting to the frozen
   -- blob. current_round is independently GREATEST-guarded (monotonic).
+  --
+  -- kind: the app's DOMAIN kind ('game' | 'tournament') lived in the blob
+  -- (data.kind), NOT in the tournaments.kind column — that column was added
+  -- later as NOT NULL DEFAULT 'casual', so every legacy casual row carries a
+  -- stale 'casual' the app never wrote and never branches on ('casual' is
+  -- not a valid domain kind; the UI reads kind === 'game' as a single game
+  -- and treats everything else as a multi-round tournament). get_game_
+  -- tournament emits the COLUMN, and props strips kind, so without this the
+  -- reassembled blob would surface 'casual' and fail round-trip against the
+  -- legacy blob's real kind. Restore it here from the blob. This runs AFTER
+  -- the kind='official' early-return guard above (which reads v_kind, the
+  -- column value captured before any write), so official rows are never
+  -- reached, and a casual-column row whose blob kind is 'game'/'tournament'
+  -- still passed that guard ('casual' <> 'official'). Idempotent on re-run:
+  -- v_data is the frozen blob, so the same kind is recomputed. Fallback when
+  -- the blob has NO kind at all (one known prod row, "Marbella Abril 2026"):
+  -- derive from round count — >1 round is a multi-round tournament, else a
+  -- single game — matching how the app itself distinguishes the two.
   UPDATE public.tournaments
      SET props = CASE
                    WHEN props = '{}'::jsonb
                    THEN v_data - 'players' - 'rounds' - 'id' - 'name' - 'kind' - 'createdAt' - 'currentRound' - '_meta' - 'meId'
                    ELSE props
                  END,
-         current_round = GREATEST(COALESCE(current_round, 0), COALESCE((v_data->>'currentRound')::int, 0))
+         current_round = GREATEST(COALESCE(current_round, 0), COALESCE((v_data->>'currentRound')::int, 0)),
+         kind = CASE
+                  WHEN v_data ? 'kind' THEN v_data->>'kind'
+                  WHEN jsonb_array_length(COALESCE(v_data->'rounds', '[]'::jsonb)) > 1 THEN 'tournament'
+                  ELSE 'game'
+                END
    WHERE id = p_id;
 
   -- Players -------------------------------------------------------------
