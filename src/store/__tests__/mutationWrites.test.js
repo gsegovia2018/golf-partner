@@ -91,6 +91,16 @@ describe('score.set', () => {
     const result = await executeMutation(entry(mutation, { ts: 1000 }), baseTournament());
     expect(result).toEqual({ conflict: null });
   });
+
+  test('score clear (value null) passes strokes null through as a tombstone', async () => {
+    repo.setScore.mockResolvedValue({ previousStrokes: null, previousUpdatedAt: null });
+    const clear = { type: 'score.set', roundId: 'r1', playerId: 'p1', hole: 5, value: null };
+    const result = await executeMutation(entry(clear), baseTournament());
+    expect(repo.setScore).toHaveBeenCalledWith({
+      tournamentId: TID, roundId: 'r1', playerId: 'p1', hole: 5, strokes: null,
+    });
+    expect(result).toEqual({ conflict: null });
+  });
 });
 
 describe('conflict.resolve', () => {
@@ -104,6 +114,20 @@ describe('conflict.resolve', () => {
     const result = await executeMutation(entry(mutation, { ts: 1 }), baseTournament());
     expect(repo.setScore).toHaveBeenCalledWith({
       tournamentId: TID, roundId: 'r1', playerId: 'p1', hole: 5, strokes: 4,
+    });
+    expect(result).toEqual({ conflict: null });
+  });
+
+  test('resolving to a cleared cell (value null) passes strokes null through as a tombstone', async () => {
+    repo.setScore.mockResolvedValue({
+      previousStrokes: 9, previousUpdatedAt: new Date(999999).toISOString(),
+    });
+    const mutation = {
+      type: 'conflict.resolve', roundId: 'r1', playerId: 'p1', hole: 5, value: null,
+    };
+    const result = await executeMutation(entry(mutation, { ts: 1 }), baseTournament());
+    expect(repo.setScore).toHaveBeenCalledWith({
+      tournamentId: TID, roundId: 'r1', playerId: 'p1', hole: 5, strokes: null,
     });
     expect(result).toEqual({ conflict: null });
   });
@@ -145,12 +169,31 @@ describe('note.set', () => {
 });
 
 describe('pairs.set', () => {
-  test('patches round pairs from the local round', async () => {
+  test('patches round pairs AND revealed from the local round (setting pairs reveals them locally)', async () => {
     const mutation = { type: 'pairs.set', roundId: 'r1', pairs: [['p1', 'p3'], ['p2', 'p4']] };
     const local = baseTournament();
+    // Post-apply local state: applyToTournament set pairs and revealed=true.
+    local.rounds[0].pairs = [['p1', 'p3'], ['p2', 'p4']];
+    local.rounds[0].revealed = true;
+    await executeMutation(entry(mutation), local);
+    expect(repo.patchRound).toHaveBeenCalledWith(TID, 'r1', {
+      pairs: [['p1', 'p3'], ['p2', 'p4']],
+      revealed: true,
+    });
+  });
+
+  test('fixed-teams propagation (reveal: false) preserves the unrevealed state on the server', async () => {
+    const mutation = {
+      type: 'pairs.set', roundId: 'r1', pairs: [['p1', 'p3'], ['p2', 'p4']], reveal: false,
+    };
+    const local = baseTournament();
+    // Post-apply local state: pairs changed, revealed untouched (still false).
     local.rounds[0].pairs = [['p1', 'p3'], ['p2', 'p4']];
     await executeMutation(entry(mutation), local);
-    expect(repo.patchRound).toHaveBeenCalledWith(TID, 'r1', { pairs: [['p1', 'p3'], ['p2', 'p4']] });
+    expect(repo.patchRound).toHaveBeenCalledWith(TID, 'r1', {
+      pairs: [['p1', 'p3'], ['p2', 'p4']],
+      revealed: false,
+    });
   });
 
   test('skips the write when the local round no longer exists', async () => {
@@ -201,7 +244,23 @@ describe('tournament.setTeamSettings', () => {
 });
 
 describe('handicap.set', () => {
-  test('patches playerHandicaps for the single player from the local round', async () => {
+  test('patches playerHandicaps AND the manualHandicaps flag for the single player from the local round', async () => {
+    const mutation = {
+      type: 'handicap.set', roundId: 'r1', playerId: 'p1', handicap: 15,
+    };
+    const local = baseTournament();
+    // Post-apply local state: applyToTournament set the handicap and stamped
+    // manualHandicaps[p1] = true (load-bearing for recomputeRoundPlayingHandicaps).
+    local.rounds[0].playerHandicaps = { p1: 15, p2: 8 };
+    local.rounds[0].manualHandicaps = { p1: true };
+    await executeMutation(entry(mutation), local);
+    expect(repo.patchRound).toHaveBeenCalledWith(TID, 'r1', {
+      playerHandicaps: { p1: 15 },
+      manualHandicaps: { p1: true },
+    });
+  });
+
+  test('writes manualHandicaps null when the local round carries no flag (defensive)', async () => {
     const mutation = {
       type: 'handicap.set', roundId: 'r1', playerId: 'p1', handicap: 15,
     };
@@ -210,18 +269,24 @@ describe('handicap.set', () => {
     await executeMutation(entry(mutation), local);
     expect(repo.patchRound).toHaveBeenCalledWith(TID, 'r1', {
       playerHandicaps: { p1: 15 },
+      manualHandicaps: { p1: null },
     });
   });
 });
 
 describe('index.set', () => {
-  test('patches playerIndexes for the single player from the local round', async () => {
+  // applyToTournament's index.set touches ONLY playerIndexes — the recomputed
+  // playing handicap rides its own handicap.set mutation, and manualHandicaps
+  // is untouched. toHaveBeenCalledWith asserts the FULL patch shape, so any
+  // extra or missing field fails here.
+  test('patches ONLY playerIndexes for the single player from the local round', async () => {
     const mutation = {
       type: 'index.set', roundId: 'r1', playerId: 'p1', index: 16,
     };
     const local = baseTournament();
     local.rounds[0].playerIndexes = { p1: 16, p2: 9 };
     await executeMutation(entry(mutation), local);
+    expect(repo.patchRound).toHaveBeenCalledTimes(1);
     expect(repo.patchRound).toHaveBeenCalledWith(TID, 'r1', {
       playerIndexes: { p1: 16 },
     });
@@ -297,7 +362,7 @@ describe('tournament.addPlayer', () => {
 });
 
 describe('tournament.removePlayer', () => {
-  test('deletes the player, clears each roundPatch, and patches pairs/scoringMode', async () => {
+  test('deletes the player, clears each roundPatch, nulls the removed player\'s per-round keys, and patches pairs/scoringMode', async () => {
     const local = baseTournament();
     local.players = local.players.filter((p) => p.id !== 'p2');
     delete local.rounds[0].scoringMode;
@@ -313,13 +378,17 @@ describe('tournament.removePlayer', () => {
     expect(repo.deletePlayer).toHaveBeenCalledWith(TID, 'p2');
     expect(repo.clearPlayerRound).toHaveBeenCalledWith(TID, 'r1', 'p2');
     expect(repo.patchRound).toHaveBeenCalledWith(TID, 'r1', {
+      playerHandicaps: { p2: null },
+      playerIndexes: { p2: null },
+      manualHandicaps: { p2: null },
       pairs: [['p1'], ['p3', 'p4']],
       scoringMode: null,
     });
   });
 
-  test('skips the patchRound call when the roundPatch has no pairs/clearScoringMode', async () => {
+  test('still patches the removed player\'s per-round keys to null when the roundPatch has no pairs/clearScoringMode', async () => {
     const local = baseTournament();
+    local.players = local.players.filter((p) => p.id !== 'p2');
     const mutation = {
       type: 'tournament.removePlayer',
       playerId: 'p2',
@@ -327,10 +396,14 @@ describe('tournament.removePlayer', () => {
     };
     await executeMutation(entry(mutation), local);
     expect(repo.clearPlayerRound).toHaveBeenCalledWith(TID, 'r1', 'p2');
-    expect(repo.patchRound).not.toHaveBeenCalled();
+    expect(repo.patchRound).toHaveBeenCalledWith(TID, 'r1', {
+      playerHandicaps: { p2: null },
+      playerIndexes: { p2: null },
+      manualHandicaps: { p2: null },
+    });
   });
 
-  test('still clears the round even when the local round no longer exists', async () => {
+  test('still clears the round even when the local round no longer exists (patchRound skipped)', async () => {
     const mutation = {
       type: 'tournament.removePlayer',
       playerId: 'p2',

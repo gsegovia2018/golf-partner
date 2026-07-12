@@ -82,7 +82,15 @@ export async function executeMutation(entry, localTournament) {
     case 'pairs.set': {
       const round = findRound(localTournament, m.roundId);
       if (!round) return NO_CONFLICT;
-      await repo.patchRound(id, m.roundId, { pairs: round.pairs });
+      // applyToTournament also flips `revealed` (setting pairs reveals them,
+      // unless m.reveal === false preserved a future round's unrevealed
+      // state) — mirror whatever the local round now holds. This is the only
+      // live reveal path for team edits (EditTeamsScreen), so dropping it
+      // would leave the reveal state stranded on other devices.
+      await repo.patchRound(id, m.roundId, {
+        pairs: round.pairs,
+        revealed: !!round.revealed,
+      });
       return NO_CONFLICT;
     }
 
@@ -117,8 +125,13 @@ export async function executeMutation(entry, localTournament) {
     case 'handicap.set': {
       const round = findRound(localTournament, m.roundId);
       if (!round) return NO_CONFLICT;
+      // applyToTournament also stamps manualHandicaps[playerId] = true — the
+      // flag recomputeRoundPlayingHandicaps uses to know this entry is a
+      // manual override (never auto-recomputed). One-level merge preserves
+      // other players' keys in both maps.
       await repo.patchRound(id, m.roundId, {
         playerHandicaps: { [m.playerId]: round.playerHandicaps?.[m.playerId] ?? null },
+        manualHandicaps: { [m.playerId]: round.manualHandicaps?.[m.playerId] ?? null },
       });
       return NO_CONFLICT;
     }
@@ -126,6 +139,10 @@ export async function executeMutation(entry, localTournament) {
     case 'index.set': {
       const round = findRound(localTournament, m.roundId);
       if (!round) return NO_CONFLICT;
+      // applyToTournament's index.set touches ONLY playerIndexes: the
+      // recomputed playing handicap rides its own handicap.set mutation
+      // (queued alongside by the caller) and manualHandicaps is untouched —
+      // so this patch deliberately carries nothing else.
       await repo.patchRound(id, m.roundId, {
         playerIndexes: { [m.playerId]: round.playerIndexes?.[m.playerId] ?? null },
       });
@@ -162,12 +179,22 @@ export async function executeMutation(entry, localTournament) {
         await repo.clearPlayerRound(id, patch.roundId, m.playerId);
         const round = findRound(localTournament, patch.roundId);
         if (!round) continue;
-        if (patch.pairs || patch.clearScoringMode) {
-          const roundPatch = {};
-          if (patch.pairs) roundPatch.pairs = round.pairs;
-          if (patch.clearScoringMode) roundPatch.scoringMode = round.scoringMode ?? null;
-          await repo.patchRound(id, patch.roundId, roundPatch);
-        }
+        // Null out the removed player's per-round body keys. Locally,
+        // applyToTournament DELETES playerHandicaps[pid]; patch_game_round's
+        // one-level merge can't delete nested keys, so we write JSON null
+        // instead — a deliberate null-vs-absent cosmetic divergence: every
+        // consumer reads these maps with ?./??, so null and absent behave
+        // identically. playerIndexes/manualHandicaps get the same null for
+        // hygiene (a re-added player with the same id must not inherit
+        // stale index/manual-override state from the server body).
+        const roundPatch = {
+          playerHandicaps: { [m.playerId]: null },
+          playerIndexes: { [m.playerId]: null },
+          manualHandicaps: { [m.playerId]: null },
+        };
+        if (patch.pairs) roundPatch.pairs = round.pairs;
+        if (patch.clearScoringMode) roundPatch.scoringMode = round.scoringMode ?? null;
+        await repo.patchRound(id, patch.roundId, roundPatch);
       }
       if (m.nextScoringMode) {
         await repo.patchTournament(id, { settings: { scoringMode: m.nextScoringMode } });
