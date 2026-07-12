@@ -308,11 +308,22 @@ describe('applyTournamentRow', () => {
     expect(out2.currentRound).toBe(3);
   });
 
-  test('takes name/kind from row columns', () => {
+  test('takes name from the row column; kind is the domain kind from props, column as fallback', () => {
     const t = { id: 't1', name: 'Old', kind: 'game', rounds: [], players: [] };
-    const out = applyTournamentRow(t, { id: 't1', name: 'New Name', kind: 'tournament', props: {} });
+    // The tournaments.kind COLUMN is CHECK-constrained to 'casual'/'official' —
+    // it can never actually hold 'tournament'/'game'. The domain kind lives in
+    // props.kind and wins, mirroring get_game_tournament's
+    // COALESCE(props->>'kind', column).
+    const out = applyTournamentRow(t, {
+      id: 't1', name: 'New Name', kind: 'casual', props: { kind: 'tournament' },
+    });
     expect(out.name).toBe('New Name');
     expect(out.kind).toBe('tournament');
+
+    // No domain kind in props (e.g. an official-mode row, which has empty
+    // props) — the column value surfaces as the fallback.
+    const out2 = applyTournamentRow(t, { id: 't1', name: 'New Name', kind: 'official', props: {} });
+    expect(out2.kind).toBe('official');
   });
 
   test('never lets props/columns stomp rounds/players', () => {

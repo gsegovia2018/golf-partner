@@ -178,9 +178,12 @@ export function applyPlayerRow(t, row, eventType) {
 }
 
 // tournaments row: { id, name, kind, props, current_round }. props merges
-// into the top level one level deep (Object.assign, not recursive) — name/
-// kind come from their own columns, and currentRound only ever advances
-// (Math.max), matching advance_game_round's GREATEST semantics server-side.
+// into the top level one level deep (Object.assign, not recursive) — name
+// comes from its own column; kind is the domain kind from props, falling
+// back to the (CHECK-constrained 'casual'/'official') column, exactly like
+// get_game_tournament's COALESCE(props->>'kind', column); currentRound only
+// ever advances (Math.max), matching advance_game_round's GREATEST semantics
+// server-side.
 // rounds/players are restored after the merge so a props payload can never
 // stomp them (props never carries either key server-side — see
 // tournamentRepo.createTournament's destructure — but this patcher does not
@@ -195,7 +198,13 @@ export function applyTournamentRow(t, row) {
   next.rounds = rounds;
   next.players = players;
   if (row.name != null) next.name = row.name;
-  if (row.kind != null) next.kind = row.kind;
+  // kind: row.kind is the tournaments.kind COLUMN, CHECK-constrained to
+  // 'casual'/'official' — it can never hold the app's domain kind
+  // ('game'/'tournament'). The domain kind lives in props.kind (already
+  // merged into next above). Mirror get_game_tournament's exact emission
+  // rule — COALESCE(props->>'kind', column) — so the column is only a
+  // fallback, never a clobber, when props carries no kind (official rows).
+  next.kind = row.props?.kind ?? row.kind;
   next.currentRound = Math.max(next.currentRound ?? 0, row.current_round ?? 0);
   return next;
 }

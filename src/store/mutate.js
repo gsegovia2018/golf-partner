@@ -357,11 +357,15 @@ export function applyToTournament(t, m) {
     }
     case 'tournament.updateProfile': {
       for (const [k, v] of Object.entries(m.patch ?? {})) {
-        // name/kind are plain top-level fields, never merged into any
-        // nested object — mirrors patch_game_tournament's dedicated columns.
-        // They map to NOT NULL columns server-side, where a null means
-        // "skip the column update" (never "clear") — mirror that here so
-        // local and server state can't diverge on a null name/kind patch.
+        // name/kind are plain top-level fields on the local object, never
+        // merged into any nested object. Server-side, name is a dedicated
+        // (unconstrained) column; kind is the app's domain kind and now
+        // lives in tournaments.props.kind (patch_game_tournament also derives
+        // the CHECK-constrained casual/official column from it, but that
+        // column is never what this local object's `kind` reflects). Both
+        // map to NOT NULL fields server-side, where a null means "skip the
+        // update" (never "clear") — mirror that here so local and server
+        // state can't diverge on a null name/kind patch.
         if (k === 'name' || k === 'kind') {
           if (v != null) t[k] = v;
           continue;

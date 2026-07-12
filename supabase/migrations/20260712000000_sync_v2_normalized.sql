@@ -436,12 +436,20 @@ BEGIN
 END $$;
 
 -- patch_game_tournament: same one-level merge, but targeting
--- tournaments.props with two routing exceptions: 'name'/'kind' land on the
--- real tournaments columns (never merged into props), and 'currentRound'
--- routes to advance_game_round's monotonic GREATEST (also never merged into
--- props — there is no props.currentRound). Every other key merges into props
--- exactly like patch_game_round merges into body. tournaments has no
--- updated_at column (see schema-facts doc) so there is nothing to bump here;
+-- tournaments.props with three routing exceptions: 'name' lands on the real
+-- (unconstrained) tournaments column, never merged into props; 'kind' is
+-- routed onto BOTH — the app's domain kind ('game'/'tournament'/'official')
+-- is written into props.kind (so get_game_tournament's
+-- COALESCE(props->>'kind', column) keeps emitting the domain value), while
+-- the CHECK-constrained tournaments.kind COLUMN (only 'casual'/'official')
+-- gets the derived 'official'/'casual' mapping — mirrors
+-- tournamentRepo.createTournament. Writing the raw patched value straight to
+-- the column would throw 23514 (tournaments_kind_check) for any
+-- 'game'/'tournament' patch. 'currentRound' routes to advance_game_round's
+-- monotonic GREATEST (also never merged into props — there is no
+-- props.currentRound). Every other key merges into props exactly like
+-- patch_game_round merges into body. tournaments has no updated_at column
+-- (see schema-facts doc) so there is nothing to bump here;
 -- game_players/game_rounds/game_scores each carry their own updated_at.
 CREATE OR REPLACE FUNCTION public.patch_game_tournament(p_id text, p_patch jsonb)
 RETURNS void LANGUAGE plpgsql AS $$
@@ -461,8 +469,9 @@ BEGIN
 
   FOR v_k, v_v IN SELECT * FROM jsonb_each(p_patch) LOOP
     -- name/kind are NOT NULL columns: a jsonb null for either is treated as
-    -- "skip the column update" (and, like every name/kind value, is never
-    -- merged into props). Unlike body/props keys, null cannot mean "clear".
+    -- "skip the column update". Unlike body/props keys, null cannot mean
+    -- "clear". name is never merged into props (real, unconstrained column).
+    -- kind IS additionally merged into props — see the function header.
     IF v_k = 'name' THEN
       IF jsonb_typeof(v_v) <> 'null' THEN
         v_name := v_v #>> '{}';
@@ -470,7 +479,11 @@ BEGIN
       END IF;
     ELSIF v_k = 'kind' THEN
       IF jsonb_typeof(v_v) <> 'null' THEN
-        v_kind := v_v #>> '{}';
+        -- Domain kind into props (what get_game_tournament emits)...
+        v_props := jsonb_set(v_props, ARRAY['kind'], v_v);
+        -- ...and the derived casual/official value into the CHECK-
+        -- constrained column, never the raw patched value.
+        v_kind := CASE WHEN (v_v #>> '{}') = 'official' THEN 'official' ELSE 'casual' END;
         v_set_kind := true;
       END IF;
     ELSIF v_k = 'currentRound' THEN
