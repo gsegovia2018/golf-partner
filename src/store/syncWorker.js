@@ -25,9 +25,10 @@ async function notifyScoreConflict(tournamentId, conflict) {
   if (!_scoreConflictHandler) return;
   try {
     await _scoreConflictHandler(tournamentId, conflict);
-  } catch (_) {
+  } catch (error) {
     // The handler's own failure (e.g. a marker write) must never abort the
     // drain — the mutation that produced this conflict already landed.
+    console.warn(`score-conflict handler failed for ${tournamentId}: ${error?.message}`);
   }
 }
 
@@ -106,19 +107,40 @@ export async function drainTournament(tournamentId, entries) {
   }
 
   // Every entry for this tournament landed on the server. Pull the fresh row
-  // state and overlay whatever queued elsewhere for this tournament arrived
-  // while we were draining (the read-path replacement for the old
-  // fetch/merge race guard). Reconcile failures are swallowed — the worker
-  // retries on the next drain pass.
+  // state and overlay whatever queued for this tournament arrived while we
+  // were draining (the read-path replacement for the old fetch/merge race
+  // guard). Reconcile failures are logged and swallowed — the worker retries
+  // on the next drain pass.
+  //
+  // The overlay snapshot races mutate(): mutate saves locally BEFORE it
+  // enqueues, so a score entered right now can be present in local state but
+  // absent from the queue snapshot — and a reconcile save computed from that
+  // snapshot would erase the just-entered value until the next drain (the
+  // "scores erased as entered" scar). Take the snapshot as late as possible
+  // (after the fetch), and after each save re-read the queue: if it changed,
+  // recompute the overlay from the SAME fresh base and save again. Bounded
+  // to 3 passes — on hitting the bound, skip the further save and leave
+  // local as-is (local wins; the still-queued mutations drain next pass and
+  // re-reconcile anyway). This shrinks the exposure window from a full
+  // network round-trip to a couple of JS ticks.
   try {
     const fresh = await fetchTournament(tournamentId);
     if (fresh) {
-      const all = await syncQueue.all();
-      const stillQueued = all.filter((e) => e.tournamentId === tournamentId);
-      await saveLocal(applyPendingMutations(fresh, stillQueued));
+      const queuedForTournament = async () => (await syncQueue.all())
+        .filter((e) => e.tournamentId === tournamentId);
+      let snapshot = await queuedForTournament();
+      for (let pass = 0; pass < 3; pass++) {
+        await saveLocal(applyPendingMutations(fresh, snapshot));
+        const latest = await queuedForTournament();
+        const stable = latest.length === snapshot.length
+          && latest.every((e, i) => e.id === snapshot[i].id);
+        if (stable) break;
+        snapshot = latest;
+      }
     }
-  } catch (_) {
+  } catch (error) {
     // Swallow — worker retries next drain.
+    console.warn(`post-drain reconcile failed for ${tournamentId}: ${error?.message}`);
   }
 }
 

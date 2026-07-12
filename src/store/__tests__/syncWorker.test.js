@@ -51,6 +51,10 @@ describe('drainTournament', () => {
     executeMutation.mockResolvedValue({ conflict: null });
     fetchTournament.mockResolvedValue(null);
     syncQueue.all.mockResolvedValue([]);
+    // Re-pin the pass-through implementation: jest.clearAllMocks() does NOT
+    // undo a mockReturnValue/mockImplementation set inside a test body, so
+    // without this a per-test override would leak into later tests.
+    applyPendingMutations.mockImplementation((t) => t);
   });
 
   test('executes queued mutations via executeMutation in order, dropping each on success', async () => {
@@ -159,6 +163,57 @@ describe('drainTournament', () => {
     expect(fetchTournament).toHaveBeenCalledWith('t1');
     expect(applyPendingMutations).toHaveBeenCalledWith(fresh, [leftover]);
     expect(saveLocal).toHaveBeenCalledWith(reconciled);
+    // Stable queue (same entries on the post-save re-check) → exactly one save.
+    expect(saveLocal).toHaveBeenCalledTimes(1);
+  });
+
+  test('a mutation enqueued between the reconcile snapshot and its saveLocal is overlaid by a follow-up save', async () => {
+    // The "scores erased as entered" race: mutate() runs saveLocal BEFORE
+    // syncQueue.enqueue, so a score entered while reconcile is snapshotting
+    // has already landed in local state but is missing from the queue
+    // snapshot — an overlay computed from that snapshot, saved over local,
+    // erases the just-entered value. The drain must detect the queue change
+    // after saving and re-save with the late entry overlaid.
+    const fresh = { id: 't1', rounds: [] };
+    fetchTournament.mockResolvedValue(fresh);
+    applyPendingMutations.mockImplementation((t, queued) => ({
+      ...t, _applied: queued.map((e) => e.id),
+    }));
+    const late = { id: 'late', tournamentId: 't1', mutation: { type: 'score.set' } };
+    syncQueue.all
+      .mockResolvedValueOnce([]) // reconcile snapshot: late's enqueue hasn't landed yet
+      .mockResolvedValue([late]); // every later check: it has
+
+    const e1 = { id: 'e1', tournamentId: 't1', mutation: { type: 'score.set' } };
+    await drainTournament('t1', [e1]);
+
+    // First save overlaid [] (would have erased the late score); the post-
+    // save re-check saw the queue change and saved again with it applied.
+    const lastSave = saveLocal.mock.calls[saveLocal.mock.calls.length - 1][0];
+    expect(lastSave._applied).toEqual(['late']);
+    expect(applyPendingMutations).toHaveBeenLastCalledWith(fresh, [late]);
+  });
+
+  test('the reconcile re-save loop is bounded: a queue that never stabilizes stops after 3 saves', async () => {
+    const fresh = { id: 't1', rounds: [] };
+    fetchTournament.mockResolvedValue(fresh);
+    applyPendingMutations.mockImplementation((t, queued) => ({
+      ...t, _applied: queued.map((e) => e.id),
+    }));
+    // Every queue read returns a different (growing) entry set, so the
+    // stability check never passes — the loop must give up after 3 saves
+    // rather than spin (the still-queued mutations drain on the next pass).
+    let reads = 0;
+    syncQueue.all.mockImplementation(() => {
+      reads += 1;
+      return Promise.resolve(
+        Array.from({ length: reads }, (_, i) => ({ id: `q${i}`, tournamentId: 't1' })),
+      );
+    });
+
+    await drainTournament('t1', [{ id: 'e1', tournamentId: 't1', mutation: { type: 'score.set' } }]);
+
+    expect(saveLocal).toHaveBeenCalledTimes(3);
   });
 
   test('skips the reconcile write entirely when fetchTournament resolves null', async () => {
@@ -224,6 +279,7 @@ describe('syncSettled', () => {
     readLocal.mockResolvedValue(localBlob);
     executeMutation.mockResolvedValue({ conflict: null });
     fetchTournament.mockResolvedValue(null);
+    applyPendingMutations.mockImplementation((t) => t);
   });
 
   it('resolves immediately when the queue is empty (single pass, no second drain)', async () => {
@@ -240,19 +296,26 @@ describe('syncSettled', () => {
   });
 
   it('drains entries enqueued while a drain was in flight', async () => {
-    // First drainOnce pass sees one entry; after it drops that entry the
-    // queue is still reported non-empty once more (simulating an entry that
-    // was enqueued mid-drain, after this pass's syncQueue.all() snapshot was
-    // taken but before the pass finished). syncSettled's follow-up check
-    // observes that leftover and triggers a second drainOnce pass.
+    // First drainOnce pass sees one entry (e1); an entry e2 lands mid-drain
+    // (after pass 1's initial snapshot). Pass 1's reconcile overlays e2, its
+    // remaining check reports 'pending', and syncSettled's follow-up check
+    // observes the leftover and triggers a second drainOnce pass, which
+    // drains e2 and settles to 'idle'. fetchTournament returns a row so the
+    // reconcile path (2 syncQueue.all reads per pass: snapshot + post-save
+    // stability re-check) actually executes.
+    fetchTournament.mockResolvedValue({ id: 't1', rounds: [] });
+    const e1 = { id: 'e1', tournamentId: 't1', mutation: { type: 'score.set' } };
+    const e2 = { id: 'e2', tournamentId: 't1', mutation: { type: 'score.set' } };
     syncQueue.all
-      .mockResolvedValueOnce([{ id: 'e1', tournamentId: 't1' }]) // drainOnce pass 1: initial snapshot
-      .mockResolvedValueOnce([{ id: 'e2', tournamentId: 't1' }]) // drainTournament pass 1: reconcile stillQueued
-      .mockResolvedValueOnce([{ id: 'e2', tournamentId: 't1' }]) // drainOnce pass 1: remaining check -> pending
-      .mockResolvedValueOnce([{ id: 'e2', tournamentId: 't1' }]) // syncSettled's own remaining check -> non-empty
-      .mockResolvedValueOnce([{ id: 'e2', tournamentId: 't1' }]) // drainOnce pass 2: initial snapshot
-      .mockResolvedValueOnce([]) // drainTournament pass 2: reconcile stillQueued
-      .mockResolvedValueOnce([]); // drainOnce pass 2: remaining check -> idle
+      .mockResolvedValueOnce([e1]) // drainOnce pass 1: initial snapshot
+      .mockResolvedValueOnce([e2]) // pass 1 reconcile: overlay snapshot (e2 landed mid-drain)
+      .mockResolvedValueOnce([e2]) // pass 1 reconcile: stability re-check -> unchanged, stop
+      .mockResolvedValueOnce([e2]) // drainOnce pass 1: remaining check -> 'pending'
+      .mockResolvedValueOnce([e2]) // syncSettled's own remaining check -> non-empty, second pass
+      .mockResolvedValueOnce([e2]) // drainOnce pass 2: initial snapshot
+      .mockResolvedValueOnce([]) // pass 2 reconcile: overlay snapshot (queue drained)
+      .mockResolvedValueOnce([]) // pass 2 reconcile: stability re-check -> unchanged, stop
+      .mockResolvedValueOnce([]); // drainOnce pass 2: remaining check -> 'idle'
 
     await syncSettled();
 
@@ -260,5 +323,9 @@ describe('syncSettled', () => {
     expect(syncingCalls).toBe(2);
     expect(syncQueue.drop).toHaveBeenCalledWith('e1');
     expect(syncQueue.drop).toHaveBeenCalledWith('e2');
+    expect(fetchTournament).toHaveBeenCalledTimes(2); // one reconcile per pass
+    // The settled state is 'idle' — pass 2's remaining check found an empty queue.
+    const statusCalls = _setSyncStatus.mock.calls;
+    expect(statusCalls[statusCalls.length - 1][0]).toBe('idle');
   });
 });
