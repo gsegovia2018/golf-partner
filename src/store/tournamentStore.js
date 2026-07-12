@@ -646,8 +646,18 @@ export async function propagatePlayerToTournaments(playerId, { name, handicap, g
         patch: { name, handicap: parsedIndex, ...genderPatch },
       });
       for (let i = 0; i < current.rounds.length; i++) {
+        // isNew: false — this sweep only ever touches rounds already loaded
+        // from the server (loadAllTournaments), never a brand-new one.
+        // mutationWrites.js's round.upsert branch then patches only the
+        // fields this sweep owns (courseName/courseId/holes/tees/notes/
+        // playerTees); the pairs-snapshot + playerHandicaps refresh this
+        // function computes stays local-only post-fix, since both are owned
+        // by their own dedicated mutations (pairs.set / handicap.set) and
+        // sending them here would risk clobbering a concurrent device's
+        // write to those same fields — the exact regression this guards
+        // against.
         current = await mutate(current, {
-          type: 'round.upsert', roundId: current.rounds[i].id, roundIndex: i, round: current.rounds[i],
+          type: 'round.upsert', roundId: current.rounds[i].id, roundIndex: i, round: current.rounds[i], isNew: false,
         });
       }
     } catch (_) {
@@ -713,8 +723,14 @@ export async function propagateCourseToTournaments(courseId, { holes, tees }) {
     try {
       for (let i = 0; i < current.rounds.length; i++) {
         if (!changedRoundIds.has(current.rounds[i].id)) continue;
+        // isNew: false — every round here already exists server-side (this
+        // sweep only ever edits rounds loaded from the server). It owns
+        // holes/tees/playerTees, all in mutationWrites.js's owned-fields
+        // allowlist, so those DO reach the server; the playerHandicaps
+        // recompute above stays local-only (see propagatePlayerToTournaments'
+        // matching comment).
         current = await mutate(current, {
-          type: 'round.upsert', roundId: current.rounds[i].id, roundIndex: i, round: current.rounds[i],
+          type: 'round.upsert', roundId: current.rounds[i].id, roundIndex: i, round: current.rounds[i], isNew: false,
         });
       }
     } catch (_) {

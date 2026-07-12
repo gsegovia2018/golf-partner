@@ -33,6 +33,43 @@ function findPlayerIndex(localTournament, playerId) {
 
 const NO_CONFLICT = { conflict: null };
 
+// Fields the round.upsert emitters actually own/rebuild themselves — read
+// each site before touching this list:
+//   - EditTournamentScreen.js: courseName (updateCourseName), holes+tees
+//     (handleHolesSaved, fed by CourseEditorScreen's onSave({holes, tees})),
+//     notes (updateNotes). addRound also seeds a brand-new round's playerTees
+//     (empty {}), which is otherwise PlayersScreen's field (below).
+//   - PlayersScreen.js: playerTees (handleRoundTeesChange).
+//   - courseId: never edited directly by either screen, but travels with
+//     holes/tees as "which library course this round is" identity, and no
+//     other mutation type owns it — safe/expected to ride along.
+//   - tournamentStore.js's propagatePlayerToTournaments /
+//     propagateCourseToTournaments sweeps also emit round.upsert (course
+//     propagation rebuilds holes/tees/playerTees; player propagation only
+//     touches pairs/playerHandicaps, both excluded below, so its round.upsert
+//     becomes a no-op post-fix — see the callers for why that's the accepted
+//     trade-off).
+//
+// Every field NOT in this list is derived/owned-elsewhere state with its own
+// dedicated mutation (pairs.set, round.reveal, round.setScoringMode,
+// round.setBestBallValues, handicap.set, index.set) and must NEVER ride along
+// in this patch — these screens deliberately don't refresh round-level
+// fields while open (to protect in-flight edits), so m.round can be stale
+// w.r.t. a concurrent device's write to one of those fields. Sending the
+// stale value here would silently revert that concurrent write (the HIGH
+// regression this fixes). Kept as an explicit allowlist (not a blocklist) so
+// a future round field defaults to NOT syncing here until someone deliberately
+// adds it.
+const ROUND_UPSERT_OWNED_FIELDS = ['courseName', 'courseId', 'holes', 'tees', 'notes', 'playerTees'];
+
+function roundUpsertOwnedPatch(round) {
+  const patch = {};
+  for (const key of ROUND_UPSERT_OWNED_FIELDS) {
+    if (round[key] !== undefined) patch[key] = round[key];
+  }
+  return patch;
+}
+
 // Executes one queued mutation against the server. Returns { conflict }
 // where conflict is null except for score.set: a
 // { roundId, playerId, hole, mine, theirs } object when the row we just
@@ -297,12 +334,36 @@ export async function executeMutation(entry, localTournament) {
     }
 
     case 'round.upsert': {
-      // Whole-round upsert (EditTournamentScreen / PlayersScreen bulk save —
-      // course/holes/tees/handicaps edited together, and brand-new rounds
-      // added mid-edit). upsertRound already strips scores/shotDetails/notes/
-      // scoreConflicts/scoreResolutions before writing body, so this can't
-      // clobber per-cell tables it doesn't own.
-      await repo.upsertRound(id, m.roundIndex, m.round);
+      // Whole-round upsert (EditTournamentScreen / PlayersScreen bulk save,
+      // plus tournamentStore's propagatePlayerToTournaments /
+      // propagateCourseToTournaments sweeps). A genuinely NEW round (server
+      // has never seen this id — e.g. EditTournamentScreen's addRound mid-
+      // edit) can't clobber anything, so it still gets the full-body
+      // repo.upsertRound (which already strips scores/shotDetails/notes-
+      // table-owned keys/scoreConflicts/scoreResolutions before writing body).
+      //
+      // An EXISTING round instead gets ONLY its owned fields (see
+      // ROUND_UPSERT_OWNED_FIELDS above) patched via repo.patchRound's
+      // one-level merge — never the whole stale body — so a screen that's
+      // deliberately not refreshing round-level fields while open can't
+      // silently revert a concurrent device's pairs.set / round.reveal /
+      // round.setScoringMode / round.setBestBallValues / handicap.set /
+      // index.set write.
+      //
+      // isNew is stamped by the emitting screen/sweep from whether the round
+      // existed in its pre-edit tournament snapshot. A caller that omits it
+      // defaults to false/existing (patch-only) — the safe default: a missed
+      // NEW round just means its non-owned fields arrive via their own
+      // dedicated mutations, whereas a missed EXISTING round is exactly the
+      // clobber being fixed here.
+      if (m.isNew) {
+        await repo.upsertRound(id, m.roundIndex, m.round);
+        return NO_CONFLICT;
+      }
+      const patch = roundUpsertOwnedPatch(m.round ?? {});
+      if (Object.keys(patch).length > 0) {
+        await repo.patchRound(id, m.roundId, patch);
+      }
       return NO_CONFLICT;
     }
 

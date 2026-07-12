@@ -87,6 +87,22 @@ describe('round.upsert mutation', () => {
 
     expect(t.rounds.map((r) => r.id)).toEqual(['r1', 'r2']);
   });
+
+  // Regression fix follow-up: `isNew` is a hint consumed ONLY by
+  // mutationWrites.js (server-write side, to pick upsertRound vs patchRound)
+  // — it's pure metadata here and must not change the local full-replace
+  // apply, nor the coarse _meta path.
+  test('isNew is inert for local apply/metaPathFor (server-write-only signal)', () => {
+    const t = baseTournament();
+    const newRound = { id: 'r1', courseName: 'New Course', holes: [{ number: 1, par: 4 }], playerHandicaps: { p1: 12 } };
+
+    applyToTournament(t, {
+      type: 'round.upsert', roundId: 'r1', roundIndex: 0, round: newRound, isNew: true,
+    });
+
+    expect(t.rounds[0]).toEqual(newRound);
+    expect(metaPathFor({ type: 'round.upsert', roundId: 'r1', isNew: true })).toBe('rounds.r1.upsert');
+  });
 });
 
 describe('tournament.updatePlayer mutation', () => {

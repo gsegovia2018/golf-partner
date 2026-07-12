@@ -555,11 +555,89 @@ describe('round.resetContent', () => {
 });
 
 describe('round.upsert', () => {
-  test('upserts the round via repo.upsertRound with the mutation payload verbatim', async () => {
+  // Regression fix (review-mandated): EditTournamentScreen/PlayersScreen fire
+  // this mutation from a debounced bulk-save that loops over EVERY round with
+  // that screen's local (deliberately-not-refreshed) round state. A raw
+  // full-body upsert on an EXISTING round would silently revert whatever a
+  // concurrent device wrote via pairs.set / round.reveal /
+  // round.setScoringMode / round.setBestBallValues / handicap.set / index.set
+  // in the meantime. So an EXISTING round now gets patched with ONLY the
+  // fields these screens actually own; a genuinely NEW round (isNew: true,
+  // e.g. EditTournamentScreen's addRound) still gets the full-body upsert
+  // since a brand-new row can't clobber anything.
+
+  test('brand-new round (isNew: true) still upserts the full body via repo.upsertRound', async () => {
     const round = { id: 'r2', courseName: 'Second Course', holes: [] };
-    const mutation = { type: 'round.upsert', roundId: 'r2', roundIndex: 1, round };
+    const mutation = {
+      type: 'round.upsert', roundId: 'r2', roundIndex: 1, round, isNew: true,
+    };
     await executeMutation(entry(mutation), baseTournament());
     expect(repo.upsertRound).toHaveBeenCalledWith(TID, 1, round);
+    expect(repo.patchRound).not.toHaveBeenCalled();
+  });
+
+  test('existing round (no isNew flag) patches ONLY the owned structural fields, never the derived/dedicated-mutation fields', async () => {
+    const round = {
+      id: 'r1',
+      courseName: 'Updated Course',
+      courseId: 'course-9',
+      holes: [{ number: 1, par: 4, strokeIndex: 1 }],
+      tees: [{ label: 'Blue' }],
+      notes: { round: 'Wet today', hole: {} },
+      playerTees: { p1: { label: 'Blue' } },
+      // Every one of these has its own dedicated mutation type and must NEVER
+      // ride along in this patch:
+      pairs: [['p1', 'p3'], ['p2', 'p4']],
+      revealed: true,
+      scoringMode: 'bestball',
+      bestBallValue: 3,
+      worstBallValue: 2,
+      playerHandicaps: { p1: 5 },
+      playerIndexes: { p1: 10 },
+      manualHandicaps: { p1: true },
+    };
+    const mutation = { type: 'round.upsert', roundId: 'r1', roundIndex: 0, round };
+    await executeMutation(entry(mutation), baseTournament());
+
+    expect(repo.upsertRound).not.toHaveBeenCalled();
+    expect(repo.patchRound).toHaveBeenCalledTimes(1);
+    const [tid, roundId, patch] = repo.patchRound.mock.calls[0];
+    expect(tid).toBe(TID);
+    expect(roundId).toBe('r1');
+    expect(patch).toEqual({
+      courseName: 'Updated Course',
+      courseId: 'course-9',
+      holes: [{ number: 1, par: 4, strokeIndex: 1 }],
+      tees: [{ label: 'Blue' }],
+      notes: { round: 'Wet today', hole: {} },
+      playerTees: { p1: { label: 'Blue' } },
+    });
+    for (const forbidden of [
+      'pairs', 'revealed', 'scoringMode', 'bestBallValue', 'worstBallValue',
+      'playerHandicaps', 'playerIndexes', 'manualHandicaps',
+    ]) {
+      expect(patch).not.toHaveProperty(forbidden);
+    }
+  });
+
+  test('existing round with isNew: false explicitly also patches owned fields only', async () => {
+    const round = {
+      id: 'r1', courseName: 'X', holes: [], pairs: [['p1', 'p2']],
+    };
+    const mutation = {
+      type: 'round.upsert', roundId: 'r1', roundIndex: 0, round, isNew: false,
+    };
+    await executeMutation(entry(mutation), baseTournament());
+    expect(repo.upsertRound).not.toHaveBeenCalled();
+    expect(repo.patchRound).toHaveBeenCalledWith(TID, 'r1', { courseName: 'X', holes: [] });
+  });
+
+  test('existing round whose payload carries no owned fields skips the write entirely', async () => {
+    const round = { id: 'r1', pairs: [['p1', 'p2']], revealed: true };
+    const mutation = { type: 'round.upsert', roundId: 'r1', roundIndex: 0, round };
+    await executeMutation(entry(mutation), baseTournament());
+    expect(repo.upsertRound).not.toHaveBeenCalled();
+    expect(repo.patchRound).not.toHaveBeenCalled();
   });
 });
 

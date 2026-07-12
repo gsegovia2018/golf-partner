@@ -289,9 +289,15 @@ export default function PlayersScreen({ navigation, route }) {
         for (const p of builtPlayers) {
           t = await mutate(t, { type: 'tournament.updatePlayer', playerId: p.id, patch: p });
         }
+        // isNew tells mutationWrites.js whether this round already exists on
+        // the server — see EditTournamentScreen's matching comment. This
+        // screen never adds rounds, so it's always false in practice, but is
+        // still derived from the pre-edit snapshot rather than hardcoded, so
+        // a future round-adding feature here stays covered automatically.
         for (let i = 0; i < builtRounds.length; i++) {
+          const isNew = !t.rounds?.some((r) => r.id === builtRounds[i].id);
           t = await mutate(t, {
-            type: 'round.upsert', roundId: builtRounds[i].id, roundIndex: i, round: builtRounds[i],
+            type: 'round.upsert', roundId: builtRounds[i].id, roundIndex: i, round: builtRounds[i], isNew,
           });
         }
         setSaveState('saved');

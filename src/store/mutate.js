@@ -117,7 +117,9 @@ export function metaPathFor(m) {
     ];
     // Whole-round upsert (EditTournamentScreen / PlayersScreen bulk round
     // save — course/holes/tees/handicaps edited together). Mirrors
-    // tournament.create: a coarse bump, not a per-field one.
+    // tournament.create: a coarse bump, not a per-field one. `m.isNew` (see
+    // mutationWrites.js's round.upsert branch) is server-write-only metadata
+    // — it doesn't change this local _meta bump.
     case 'round.upsert': return `rounds.${m.roundId}.upsert`;
     // Edit an EXISTING roster player's fields (e.g. base handicap) — distinct
     // from tournament.addPlayer (new player) / tournament.claimPlayer (just
@@ -369,6 +371,9 @@ export function applyToTournament(t, m) {
       break;
     }
     case 'round.upsert': {
+      // Local apply always writes the full round (the UI's own view is never
+      // stale to itself) regardless of `m.isNew` — that flag only steers
+      // mutationWrites.js's server write (full upsert vs owned-fields patch).
       const rounds = [...(t.rounds ?? [])];
       const idx = rounds.findIndex((r) => r.id === m.roundId);
       if (idx === -1) rounds.splice(m.roundIndex ?? rounds.length, 0, m.round);

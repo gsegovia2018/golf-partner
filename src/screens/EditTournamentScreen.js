@@ -161,10 +161,21 @@ export default function EditTournamentScreen({ navigation, route }) {
         // tournaments.props/name/kind (see patch_game_tournament), never the
         // normalized game_rounds rows. Tournament-wide settings still go
         // through tournament.updateProfile.
+        //
+        // isNew tells mutationWrites.js whether this round already exists on
+        // the server: this screen deliberately never refreshes round-level
+        // fields while open, so builtRounds[i] can be stale for an EXISTING
+        // round — mutationWrites.js patches only the fields this screen owns
+        // in that case (never the whole stale body) rather than clobbering a
+        // concurrent device's pairs.set/round.reveal/handicap.set/etc. A
+        // round this screen just created via addRound (not yet in
+        // `current.rounds`, the pre-edit snapshot) is genuinely new and safe
+        // to upsert in full.
         let current = tournamentRef.current;
         for (let i = 0; i < builtRounds.length; i++) {
+          const isNew = !current.rounds?.some((r) => r.id === builtRounds[i].id);
           current = await mutate(current, {
-            type: 'round.upsert', roundId: builtRounds[i].id, roundIndex: i, round: builtRounds[i],
+            type: 'round.upsert', roundId: builtRounds[i].id, roundIndex: i, round: builtRounds[i], isNew,
           });
         }
         await mutate(current, {
