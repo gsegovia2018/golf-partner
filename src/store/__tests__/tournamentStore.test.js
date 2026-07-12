@@ -131,8 +131,10 @@ describe('formatRoundLabel', () => {
     expect(formatRoundLabel({ kind: 'game', roundIndex: 0 }))
       .toBe('Round');
   });
-  test('non-game shows "Round N" with a 1-based index', () => {
-    expect(formatRoundLabel({ kind: 'casual', courseName: 'Ignored', roundIndex: 0 }))
+  test('multi-round tournament appends the course when known, else "Round N"', () => {
+    expect(formatRoundLabel({ kind: 'tournament', courseName: 'Santa Clara Golf Marbella', roundIndex: 2 }))
+      .toBe('Round 3 · Santa Clara Golf Marbella');
+    expect(formatRoundLabel({ kind: 'casual', courseName: '', roundIndex: 0 }))
       .toBe('Round 1');
     expect(formatRoundLabel({ kind: 'official', roundIndex: 2 }))
       .toBe('Round 3');
