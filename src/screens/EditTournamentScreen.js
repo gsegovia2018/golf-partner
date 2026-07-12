@@ -68,6 +68,23 @@ function editableRoundsFromTournament(t) {
   });
 }
 
+// The last round-note text this screen has EMITTED (or been seeded with from
+// a load), keyed by round id. The note.set dedup gates on this — NOT on the
+// tournament STATE — because tournamentRef lags the autosave (it's only
+// updated by initialLoad/mergeLoad, never by the debounced save effect). If
+// the dedup diffed against loaded state instead, a clear-after-save
+// (load '' → type "Wet" → emit → delete back to '') would read prev='' /
+// next='' and suppress the clear, so the server keeps "Wet" and the next
+// load silently re-fills the field — a real data-loss bug. Seeding from the
+// loaded value means a genuine revert-to-loaded-value still emits.
+function emittedNotesSeed(t) {
+  const seed = {};
+  for (const r of t?.rounds ?? []) {
+    seed[r.id] = normalizeRoundNotes(r.notes).round ?? '';
+  }
+  return seed;
+}
+
 export default function EditTournamentScreen({ navigation, route }) {
   const { theme } = useTheme();
   const s = makeStyles(theme);
@@ -89,6 +106,9 @@ export default function EditTournamentScreen({ navigation, route }) {
   const tournamentRef = useRef(null);
   const saveTimeoutRef = useRef(null);
   const isFirstRender = useRef(true);
+  // Last note text emitted (or seeded from a load) per round id — the dedup
+  // baseline for note.set. See emittedNotesSeed above.
+  const lastEmittedNotesRef = useRef(emittedNotesSeed(initialTournament));
   // Set when a subscription-driven reload pushes fresh display-only data
   // into local state so the debounced save effect doesn't echo it back.
   const skipNextSaveRef = useRef(false);
@@ -101,6 +121,10 @@ export default function EditTournamentScreen({ navigation, route }) {
     async function initialLoad() {
       const t = routeTournamentId ? await getTournament(routeTournamentId) : await loadTournament();
       if (cancelled) return;
+      // Reset the note-dedup baseline to the freshly loaded server values
+      // BEFORE the load-triggered autosave runs (debounced 400ms later), so
+      // that save doesn't spuriously re-emit an unchanged note.
+      lastEmittedNotesRef.current = emittedNotesSeed(t);
       setTournament(t);
       setPlayers(editablePlayersFromTournament(t));
       setSettings(editableSettingsFromTournament(t));
@@ -115,6 +139,12 @@ export default function EditTournamentScreen({ navigation, route }) {
     async function mergeLoad() {
       const t = routeTournamentId ? await getTournament(routeTournamentId) : await loadTournament();
       if (cancelled || !t) return;
+      // Re-seed the note-dedup baseline to the server's latest note per round.
+      // mergeLoad deliberately does NOT overwrite the editor's in-flight note
+      // text (only player names), so if the user's local note differs from
+      // the reseeded baseline the next autosave still emits it — conservative
+      // (may re-emit, never suppresses a needed write).
+      lastEmittedNotesRef.current = emittedNotesSeed(t);
       setTournament(t);
       setPlayers((prev) => {
         let changed = false;
@@ -182,22 +212,26 @@ export default function EditTournamentScreen({ navigation, route }) {
         // it can't race the round.upsert call for the same round.
         //
         // The debounce fires on ANY field edit (course name, a handicap, …),
-        // so note.set is emitted ONLY when this round's note text actually
-        // changed vs the last-saved snapshot (prevNote captured BEFORE the
-        // round.upsert mutate, which would otherwise overwrite the note in
-        // `current`). Without this diff every autosave would re-push an
-        // unchanged note for every round, doubling round RPC/queue traffic.
+        // so note.set is emitted ONLY when this round's note text differs
+        // from the last value we EMITTED for it (lastEmittedNotesRef, seeded
+        // from the loaded value). Gating on the last-emitted value — NOT the
+        // tournament STATE, which lags this effect — is what lets a
+        // revert-to-loaded-value still emit: load '' → type "Wet" → emit →
+        // delete back to '' must re-emit '' to clear the server row, or the
+        // next load silently re-fills the field (data loss). Without any
+        // dedup, every autosave would re-push an unchanged note for every
+        // round, doubling round RPC/queue traffic.
         let current = tournamentRef.current;
         for (let i = 0; i < builtRounds.length; i++) {
           const built = builtRounds[i];
-          const existing = current.rounds?.find((r) => r.id === built.id);
-          const isNew = !existing;
-          const prevNote = normalizeRoundNotes(existing?.notes).round ?? '';
+          const isNew = !current.rounds?.some((r) => r.id === built.id);
           const nextNote = normalizeRoundNotes(built.notes).round ?? '';
+          const lastEmittedNote = lastEmittedNotesRef.current[built.id] ?? '';
           current = await mutate(current, {
             type: 'round.upsert', roundId: built.id, roundIndex: i, round: built, isNew,
           });
-          if (nextNote !== prevNote) {
+          if (nextNote !== lastEmittedNote) {
+            lastEmittedNotesRef.current[built.id] = nextNote;
             current = await mutate(current, {
               type: 'note.set',
               scope: 'round',

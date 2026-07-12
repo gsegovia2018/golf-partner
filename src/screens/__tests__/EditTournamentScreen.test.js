@@ -132,4 +132,39 @@ describe('EditTournamentScreen round notes', () => {
 
     expect(mutate.mock.calls.some(([, m]) => m.type === 'note.set')).toBe(false);
   });
+
+  // Re-review data-loss regression: the dedup must gate on the last-EMITTED
+  // note, not the tournament STATE (which lags the autosave). Otherwise a
+  // clear-after-save reads prev='' / next='' and silently drops the clear,
+  // so the server keeps the stale note and the next load re-fills the field.
+  test('clearing a note after it was saved re-emits an empty note.set (revert-to-loaded value is NOT suppressed), while a truly unchanged note does not', async () => {
+    const { mutate } = require('../../store/mutate');
+    const { findByPlaceholderText } = render(wrap(
+      <EditTournamentScreen navigation={navigation} route={route} />,
+    ));
+
+    const notesInput = await findByPlaceholderText('Round notes...');
+
+    // '' -> 'Wet' : emits
+    mutate.mockClear();
+    fireEvent.changeText(notesInput, 'Wet');
+    await waitFor(() => {
+      expect(mutate.mock.calls.some(([, m]) => m.type === 'note.set' && m.text === 'Wet')).toBe(true);
+    }, { timeout: 2000 });
+
+    // 'Wet' -> '' : MUST emit the clear (the bug suppressed this)
+    mutate.mockClear();
+    fireEvent.changeText(notesInput, '');
+    await waitFor(() => {
+      expect(mutate.mock.calls.some(([, m]) => m.type === 'note.set' && m.text === '')).toBe(true);
+    }, { timeout: 2000 });
+
+    // '' -> '' : truly unchanged now, must NOT emit again
+    mutate.mockClear();
+    fireEvent.changeText(notesInput, '');
+    await waitFor(() => {
+      expect(mutate.mock.calls.some(([, m]) => m.type === 'round.upsert' && m.roundId === 'r1')).toBe(true);
+    }, { timeout: 2000 });
+    expect(mutate.mock.calls.some(([, m]) => m.type === 'note.set')).toBe(false);
+  });
 });
