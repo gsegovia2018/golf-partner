@@ -316,8 +316,13 @@ export function applyToTournament(t, m) {
       for (const [k, v] of Object.entries(m.patch ?? {})) {
         // name/kind are plain top-level fields, never merged into any
         // nested object — mirrors patch_game_tournament's dedicated columns.
-        if (k === 'name') { t.name = v; continue; }
-        if (k === 'kind') { t.kind = v; continue; }
+        // They map to NOT NULL columns server-side, where a null means
+        // "skip the column update" (never "clear") — mirror that here so
+        // local and server state can't diverge on a null name/kind patch.
+        if (k === 'name' || k === 'kind') {
+          if (v != null) t[k] = v;
+          continue;
+        }
         // currentRound routes through the same monotonic rule as
         // tournament.advanceRound (mirrors the server's routing to
         // advance_game_round from within patch_game_tournament).

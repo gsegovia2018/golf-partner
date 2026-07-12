@@ -89,6 +89,16 @@ describe('tournament.updateProfile mutation', () => {
     expect(t.kind).toBe('official');
   });
 
+  test('a null name/kind is skipped, leaving the existing value (server parity)', () => {
+    const t = { id: 't1', name: 'Cup', kind: 'casual', rounds: [] };
+    applyToTournament(t, {
+      type: 'tournament.updateProfile',
+      patch: { name: null, kind: null },
+    });
+    expect(t.name).toBe('Cup');
+    expect(t.kind).toBe('casual');
+  });
+
   test('a currentRound key in the patch applies monotonically', () => {
     const t = { id: 't1', currentRound: 2, rounds: [] };
     applyToTournament(t, {
