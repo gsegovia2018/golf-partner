@@ -609,10 +609,15 @@ describe('round.upsert', () => {
       courseId: 'course-9',
       holes: [{ number: 1, par: 4, strokeIndex: 1 }],
       tees: [{ label: 'Blue' }],
-      notes: { round: 'Wet today', hole: {} },
       playerTees: { p1: { label: 'Blue' } },
     });
     for (const forbidden of [
+      // notes is read-stripped from game_rounds.body by get_game_tournament
+      // (it's reassembled from game_round_notes instead) — patching it here
+      // would be a dead write, so round.upsert must never carry it. Editors
+      // route note edits through their own note.set mutation instead (Task
+      // 13.2 fix).
+      'notes',
       'pairs', 'revealed', 'scoringMode', 'bestBallValue', 'worstBallValue',
       'playerHandicaps', 'playerIndexes', 'manualHandicaps',
     ]) {

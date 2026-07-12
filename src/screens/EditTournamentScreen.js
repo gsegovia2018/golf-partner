@@ -171,11 +171,26 @@ export default function EditTournamentScreen({ navigation, route }) {
         // round this screen just created via addRound (not yet in
         // `current.rounds`, the pre-edit snapshot) is genuinely new and safe
         // to upsert in full.
+        //
+        // Round notes are deliberately NOT part of round.upsert's payload
+        // (mutationWrites.js's ROUND_UPSERT_OWNED_FIELDS excludes `notes`):
+        // get_game_tournament reassembles notes from game_round_notes, not
+        // game_rounds.body, so a body patch would be a dead write — the
+        // exact bug this fixes (Task 11 review finding C: editor notes never
+        // reached peers). Each round's note is instead pushed through its own
+        // note.set mutation, chained in the same sequential `current` pass so
+        // it can't race the round.upsert call for the same round.
         let current = tournamentRef.current;
         for (let i = 0; i < builtRounds.length; i++) {
           const isNew = !current.rounds?.some((r) => r.id === builtRounds[i].id);
           current = await mutate(current, {
             type: 'round.upsert', roundId: builtRounds[i].id, roundIndex: i, round: builtRounds[i], isNew,
+          });
+          current = await mutate(current, {
+            type: 'note.set',
+            scope: 'round',
+            roundId: builtRounds[i].id,
+            text: normalizeRoundNotes(builtRounds[i].notes).round ?? '',
           });
         }
         await mutate(current, {

@@ -15,6 +15,7 @@ import {
   readLocal, roundTotals, formatRoundLabel,
   getTournamentSnapshot, isTournamentFinished,
 } from '../store/tournamentStore';
+import { fetchTournament as fetchTournamentRemote } from '../store/tournamentRepo';
 import { ensureRealtimeForTournament } from '../store/realtimeSync';
 import { loadRoundMedia } from '../store/mediaStore';
 import RoundRecapPanel from '../components/roundSummary/RoundRecapPanel';
@@ -30,11 +31,16 @@ import { normalizeRoundNotes } from '../store/roundNotes';
 // for the current user's own rounds and for friends' rounds (read access
 // granted by the friend-aware RLS in 20260515_friends_and_feed.sql).
 
+// Network-first, live read via the sync-v2 normalized path (get_game_tournament
+// RPC — see tournamentRepo.js). The legacy `tournaments.data` blob column this
+// used to select directly is frozen (nothing has written it since Task 11),
+// so a blob read here would show permanently stale scores/notes and the 45s
+// live-poll below would never see new activity. Falls back to the local
+// cache on any failure (offline / RLS denial) same as before.
 async function fetchTournament(id) {
   try {
-    const { data } = await supabase
-      .from('tournaments').select('data').eq('id', id).maybeSingle();
-    if (data?.data) return data.data;
+    const t = await fetchTournamentRemote(id);
+    if (t) return t;
   } catch { /* fall through to local cache */ }
   return readLocal(id);
 }

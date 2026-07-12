@@ -7,6 +7,7 @@ import {
   isTournamentFinished,
   formatRoundLabel,
 } from './tournamentStore';
+import { fetchTournament as fetchTournamentRemote } from './tournamentRepo';
 import { roundScoringMode, calcExtraShots } from './scoring';
 import { loadMediaForTournaments } from './mediaStore';
 import { listFriends, getCachedFriends } from './friendStore';
@@ -26,20 +27,56 @@ async function currentUserId() {
   return user?.id ?? null;
 }
 
-// Best "when did this round happen" proxy: the newest LWW timestamp stamped
-// on any path under this round. Falls back to tournament creation time.
-function roundActivityTs(t, roundId, roundIndex) {
-  let max = 0;
-  const meta = t._meta ?? {};
-  const prefix = `rounds.${roundId}.`;
-  for (const key in meta) {
-    if (key.startsWith(prefix)) {
-      const v = meta[key];
-      if (typeof v === 'number' && v > max) max = v;
+// Real per-round "last touched" timestamp, used purely for feed ordering.
+// game_rounds.updated_at is bumped by every write path that touches that
+// round (set_game_score, patch_game_round, ...), so it's a genuine
+// server-side recency signal for the round — unlike the legacy `t._meta`
+// LWW-stamp heuristic this replaces, which no longer exists post-Task-11
+// (blob writers were deleted, so _meta was never being stamped and every
+// lookup silently fell through to the tournament-id fallback).
+//
+// This is a single lightweight query against game_rounds directly (not a
+// change to get_game_tournament — that RPC's assembled shape intentionally
+// carries no per-cell timestamps, see its migration comment), covering every
+// tournament the feed is about to render. game_rounds carries the same RLS
+// policy as tournaments/game_players, so this is exactly as visible as the
+// tournament data itself. Returns an empty Map on any failure (offline / RLS
+// denial) — callers must treat a missing entry as "timestamp unknown", not
+// zero, and fall back accordingly.
+async function fetchRoundActivityTimestamps(tournamentIds) {
+  const map = new Map();
+  if (tournamentIds.length === 0 || !isOnline()) return map;
+  try {
+    const { data, error } = await supabase
+      .from('game_rounds')
+      .select('tournament_id, id, updated_at')
+      .in('tournament_id', tournamentIds);
+    if (error) throw error;
+    for (const row of data ?? []) {
+      const ms = Date.parse(row.updated_at);
+      if (Number.isFinite(ms)) map.set(`${row.tournament_id}:${row.id}`, ms);
     }
+  } catch {
+    // Swallowed — roundActivityTs falls back to a deterministic-but-not-
+    // recency-based ordering below when a round's timestamp is missing.
   }
-  if (max) return max;
-  return (Number(t.id) || 0) + roundIndex;
+  return map;
+}
+
+// "When did this round last see activity" for feed ordering. Prefers the
+// real game_rounds.updated_at timestamp (activityTsByKey, from
+// fetchRoundActivityTimestamps above). Falls back to the tournament's
+// creation instant folded with the round's position ONLY when the real
+// timestamp couldn't be fetched (offline / query failure / cache-only
+// build, or a round somehow missing from the map) — this keeps the sort
+// stable and roughly tournament-grouped rather than silently randomizing,
+// but it is NOT a recency signal in that degraded case: two rounds from the
+// same tournament sort by index, not by which was actually played/edited
+// more recently.
+function roundActivityTs(t, roundId, roundIndex, activityTsByKey) {
+  const real = activityTsByKey?.get(`${t.id}:${roundId}`);
+  if (typeof real === 'number' && Number.isFinite(real)) return real;
+  return (Date.parse(t.createdAt) || Number(t.id) || 0) + roundIndex;
 }
 
 function holesPlayed(round, playerId) {
@@ -163,6 +200,15 @@ export function buildRoundStories(tournaments, media, options = {}) {
 // not already include. Relies on the friend-aware RLS added in
 // migrations/20260515_friends_and_feed.sql. Network-only; returns [] on
 // failure so the feed still renders the user's own activity.
+//
+// One get_game_tournament RPC call per missing id (not a bulk blob select) —
+// the legacy `tournaments.data` blob column is frozen (nothing has written it
+// since Task 11), so a bulk select would return permanently stale copies.
+// The feed is not a hot path, so N small round-trips here (N = friend
+// tournaments the caller doesn't already have, typically a handful) is an
+// accepted trade for reusing the already-correct per-tournament read path
+// rather than adding a new batched-fetch RPC. A single friend tournament
+// failing to fetch doesn't drop the rest (Promise.allSettled).
 async function fetchFriendTournaments(friendIds, alreadyHaveIds) {
   if (friendIds.length === 0 || !isOnline()) return [];
   try {
@@ -174,12 +220,10 @@ async function fetchFriendTournaments(friendIds, alreadyHaveIds) {
     const missing = [...new Set((parts ?? []).map((p) => p.tournament_id))]
       .filter((id) => !alreadyHaveIds.has(id));
     if (missing.length === 0) return [];
-    const { data, error } = await supabase
-      .from('tournaments')
-      .select('data')
-      .in('id', missing);
-    if (error) throw error;
-    return (data ?? []).map((r) => ({ ...r.data, _role: 'friend' }));
+    const settled = await Promise.allSettled(missing.map((id) => fetchTournamentRemote(id)));
+    return settled
+      .filter((r) => r.status === 'fulfilled' && r.value)
+      .map((r) => ({ ...r.value, _role: 'friend' }));
   } catch {
     return [];
   }
@@ -263,6 +307,14 @@ export async function buildFeed(options = {}) {
   }
   const all = [...byId.values()];
 
+  // Real per-round recency for ordering (see roundActivityTs above). Skipped
+  // for a cache-only build — same as fetchFriendTournaments above, there's no
+  // network to query and every round falls back to the deterministic (not
+  // recency-based) ordering instead.
+  const activityTsByKey = source === 'cache'
+    ? new Map()
+    : await fetchRoundActivityTimestamps([...new Set(all.map((t) => t.id))]);
+
   const items = [];
 
   for (const t of all) {
@@ -273,7 +325,7 @@ export async function buildFeed(options = {}) {
     (t.rounds ?? []).forEach((round, roundIndex) => {
       if (!round || round._deleted || !round.scores) return;
       const totals = roundTotals(round, players);
-      const ts = roundActivityTs(t, round.id, roundIndex);
+      const ts = roundActivityTs(t, round.id, roundIndex, activityTsByKey);
 
       // A 4-player round produces up to 4 per-player entries. Collect them
       // all into ONE feed card for the round-event so the feed shows a

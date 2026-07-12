@@ -36,9 +36,9 @@ const NO_CONFLICT = { conflict: null };
 // Fields the round.upsert emitters actually own/rebuild themselves — read
 // each site before touching this list:
 //   - EditTournamentScreen.js: courseName (updateCourseName), holes+tees
-//     (handleHolesSaved, fed by CourseEditorScreen's onSave({holes, tees})),
-//     notes (updateNotes). addRound also seeds a brand-new round's playerTees
-//     (empty {}), which is otherwise PlayersScreen's field (below).
+//     (handleHolesSaved, fed by CourseEditorScreen's onSave({holes, tees})).
+//     addRound also seeds a brand-new round's playerTees (empty {}), which
+//     is otherwise PlayersScreen's field (below).
 //   - PlayersScreen.js: playerTees (handleRoundTeesChange).
 //   - courseId: never edited directly by either screen, but travels with
 //     holes/tees as "which library course this round is" identity, and no
@@ -50,17 +50,25 @@ const NO_CONFLICT = { conflict: null };
 //     becomes a no-op post-fix — see the callers for why that's the accepted
 //     trade-off).
 //
+// `notes` is deliberately NOT in this list (Task 13.2 fix): get_game_tournament
+// reassembles a round's notes from game_round_notes, not game_rounds.body (see
+// that RPC's `gr.body - 'notes'` strip), so patching notes into body here
+// would write data the read path can never see — a dead write masking the
+// real bug (round-note edits never reaching game_round_notes). Round-note
+// edits must go through their own note.set mutation instead (see
+// EditTournamentScreen.js's debounced save effect).
+//
 // Every field NOT in this list is derived/owned-elsewhere state with its own
 // dedicated mutation (pairs.set, round.reveal, round.setScoringMode,
-// round.setBestBallValues, handicap.set, index.set) and must NEVER ride along
-// in this patch — these screens deliberately don't refresh round-level
-// fields while open (to protect in-flight edits), so m.round can be stale
-// w.r.t. a concurrent device's write to one of those fields. Sending the
-// stale value here would silently revert that concurrent write (the HIGH
+// round.setBestBallValues, handicap.set, index.set, note.set) and must NEVER
+// ride along in this patch — these screens deliberately don't refresh
+// round-level fields while open (to protect in-flight edits), so m.round can
+// be stale w.r.t. a concurrent device's write to one of those fields. Sending
+// the stale value here would silently revert that concurrent write (the HIGH
 // regression this fixes). Kept as an explicit allowlist (not a blocklist) so
 // a future round field defaults to NOT syncing here until someone deliberately
 // adds it.
-const ROUND_UPSERT_OWNED_FIELDS = ['courseName', 'courseId', 'holes', 'tees', 'notes', 'playerTees'];
+const ROUND_UPSERT_OWNED_FIELDS = ['courseName', 'courseId', 'holes', 'tees', 'playerTees'];
 
 function roundUpsertOwnedPatch(round) {
   const patch = {};

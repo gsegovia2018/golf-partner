@@ -14,18 +14,18 @@ jest.mock('@expo/vector-icons', () => ({
   Feather: 'Feather',
 }));
 
+// The screen no longer reads the legacy tournaments.data blob column directly
+// (frozen since Task 11) — it reads via tournamentRepo.fetchTournament, which
+// calls the get_game_tournament RPC. Default the mock to "no remote row" so
+// existing tests exercise the readLocal(mockTournament) fallback exactly as
+// before; a dedicated test below overrides this to prove the RPC path is
+// actually wired up and used for live data.
 jest.mock('../../lib/supabase', () => ({
   supabase: {
     auth: {
       getUser: jest.fn(() => Promise.resolve({ data: { user: { id: 'u1' } } })),
     },
-    from: jest.fn(() => ({
-      select: jest.fn(() => ({
-        eq: jest.fn(() => ({
-          maybeSingle: jest.fn(() => Promise.resolve({ data: null })),
-        })),
-      })),
-    })),
+    rpc: jest.fn(() => Promise.resolve({ data: null, error: null })),
   },
 }));
 
@@ -187,5 +187,40 @@ describe('RoundSummaryScreen', () => {
     expect(loadComments).toHaveBeenCalledWith('round:t1:r1');
     expect(await findByText('Great match from the feed.')).toBeTruthy();
     expect(await findByText('You')).toBeTruthy();
+  });
+
+  // Task 13.2: this screen used to read tournaments.data (the legacy blob
+  // column, frozen since Task 11's write-side deletion) directly. It must
+  // now go through get_game_tournament instead, so both the initial load and
+  // the 45s live-poll actually see fresh normalized data rather than a
+  // permanently stale snapshot.
+  test('fetches tournament data via the get_game_tournament RPC, not the legacy blob column', async () => {
+    const { supabase } = require('../../lib/supabase');
+    const { findByText } = render(wrap(
+      <RoundSummaryScreen navigation={navigation} route={route} />,
+    ));
+
+    await findByText(/Winner:/);
+
+    expect(supabase.rpc).toHaveBeenCalledWith('get_game_tournament', { p_id: 't1' });
+  });
+
+  test('renders live data returned by the RPC rather than the local-cache fallback', async () => {
+    const { supabase } = require('../../lib/supabase');
+    const liveTournament = {
+      ...mockTournament,
+      rounds: [{
+        ...mockTournament.rounds[0],
+        notes: { round: 'Live update from the RPC.', hole: {} },
+      }],
+    };
+    supabase.rpc.mockResolvedValueOnce({ data: liveTournament, error: null });
+
+    const { findByLabelText, findByText } = render(wrap(
+      <RoundSummaryScreen navigation={navigation} route={route} />,
+    ));
+
+    fireEvent.press(await findByLabelText('Comments'));
+    expect(await findByText('Live update from the RPC.')).toBeTruthy();
   });
 });
