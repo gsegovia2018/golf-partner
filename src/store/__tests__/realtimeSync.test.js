@@ -1,0 +1,358 @@
+// jest.mock calls are hoisted above these imports by babel-jest, so the
+// mocks are in place before ../realtimeSync and its dependencies load.
+import {
+  applyScoreRow, applyShotDetailRow, applyNoteRow, applyRoundRow,
+  applyPlayerRow, applyTournamentRow,
+  ensureRealtimeForTournament, stopRealtime,
+} from '../realtimeSync';
+import { readLocal, saveLocal } from '../tournamentStore';
+import { applyPendingMutations, preserveLocalScoreConflicts } from '../mutate';
+import { syncQueue } from '../syncQueue';
+import { supabase } from '../../lib/supabase';
+
+jest.mock('../tournamentStore', () => ({
+  readLocal: jest.fn(),
+  saveLocal: jest.fn(() => Promise.resolve()),
+}));
+
+jest.mock('../mutate', () => ({
+  applyPendingMutations: jest.fn((t) => t),
+  preserveLocalScoreConflicts: jest.fn((target) => target),
+}));
+
+jest.mock('../syncQueue', () => ({
+  syncQueue: { all: jest.fn(() => Promise.resolve([])) },
+}));
+
+jest.mock('../../lib/supabase', () => {
+  const channel = {
+    on: jest.fn(function on() { return this; }),
+    subscribe: jest.fn(function subscribe() { return this; }),
+  };
+  return {
+    supabase: {
+      channel: jest.fn(() => channel),
+      removeChannel: jest.fn(),
+    },
+  };
+});
+
+describe('applyScoreRow', () => {
+  test('sets strokes at rounds[byId].scores[player][hole]', () => {
+    const t = { id: 't1', rounds: [{ id: 'r1', scores: {} }] };
+    const row = { round_id: 'r1', player_id: 'p1', hole: 3, strokes: 5 };
+    const out = applyScoreRow(t, row);
+    expect(out.rounds[0].scores).toEqual({ p1: { 3: 5 } });
+    // pure: input untouched
+    expect(t.rounds[0].scores).toEqual({});
+  });
+
+  test('creates nested player/hole objects when missing', () => {
+    const t = { id: 't1', rounds: [{ id: 'r1' }] };
+    const out = applyScoreRow(t, { round_id: 'r1', player_id: 'p2', hole: 1, strokes: 4 });
+    expect(out.rounds[0].scores).toEqual({ p2: { 1: 4 } });
+  });
+
+  test('merges into existing sibling holes/players without clobbering them', () => {
+    const t = { id: 't1', rounds: [{ id: 'r1', scores: { p1: { 1: 4 }, p2: { 1: 3 } } }] };
+    const out = applyScoreRow(t, { round_id: 'r1', player_id: 'p1', hole: 2, strokes: 5 });
+    expect(out.rounds[0].scores).toEqual({ p1: { 1: 4, 2: 5 }, p2: { 1: 3 } });
+  });
+
+  test('strokes == null deletes the hole key (tombstone)', () => {
+    const t = { id: 't1', rounds: [{ id: 'r1', scores: { p1: { 1: 4, 2: 5 } } }] };
+    const out = applyScoreRow(t, { round_id: 'r1', player_id: 'p1', hole: 1, strokes: null });
+    expect(out.rounds[0].scores).toEqual({ p1: { 2: 5 } });
+  });
+
+  test('no-op if round not found', () => {
+    const t = { id: 't1', rounds: [{ id: 'r1', scores: {} }] };
+    const out = applyScoreRow(t, { round_id: 'rX', player_id: 'p1', hole: 1, strokes: 4 });
+    expect(out.rounds).toEqual(t.rounds);
+  });
+});
+
+describe('applyShotDetailRow', () => {
+  test('sets detail at rounds[byId].shotDetails[player][hole]', () => {
+    const t = { id: 't1', rounds: [{ id: 'r1', shotDetails: {} }] };
+    const detail = { putts: 2, club: '7i' };
+    const out = applyShotDetailRow(t, { round_id: 'r1', player_id: 'p1', hole: 4, detail });
+    expect(out.rounds[0].shotDetails).toEqual({ p1: { 4: detail } });
+  });
+
+  test('detail == null deletes the hole key (tombstone)', () => {
+    const t = { id: 't1', rounds: [{ id: 'r1', shotDetails: { p1: { 4: { putts: 2 }, 5: { putts: 1 } } } }] };
+    const out = applyShotDetailRow(t, { round_id: 'r1', player_id: 'p1', hole: 4, detail: null });
+    expect(out.rounds[0].shotDetails).toEqual({ p1: { 5: { putts: 1 } } });
+  });
+
+  test('no-op if round not found', () => {
+    const t = { id: 't1', rounds: [{ id: 'r1', shotDetails: {} }] };
+    const out = applyShotDetailRow(t, { round_id: 'rX', player_id: 'p1', hole: 1, detail: { putts: 1 } });
+    expect(out.rounds).toEqual(t.rounds);
+  });
+});
+
+describe('applyNoteRow', () => {
+  test("hole_key 'round' sets notes.round", () => {
+    const t = { id: 't1', rounds: [{ id: 'r1' }] };
+    const out = applyNoteRow(t, { round_id: 'r1', hole_key: 'round', note: 'Great day' });
+    expect(out.rounds[0].notes).toEqual({ round: 'Great day' });
+  });
+
+  test('non-round hole_key sets notes.hole[holeKey]', () => {
+    const t = { id: 't1', rounds: [{ id: 'r1' }] };
+    const out = applyNoteRow(t, { round_id: 'r1', hole_key: '7', note: 'water left' });
+    expect(out.rounds[0].notes).toEqual({ hole: { 7: 'water left' } });
+  });
+
+  test('preserves sibling notes (round + other holes) when adding one', () => {
+    const t = { id: 't1', rounds: [{ id: 'r1', notes: { round: 'Great day', hole: { 3: 'bunker' } } }] };
+    const out = applyNoteRow(t, { round_id: 'r1', hole_key: '7', note: 'water left' });
+    expect(out.rounds[0].notes).toEqual({ round: 'Great day', hole: { 3: 'bunker', 7: 'water left' } });
+  });
+
+  test('note == null deletes round note key, dropping notes entirely when nothing else remains', () => {
+    const t = { id: 't1', rounds: [{ id: 'r1', notes: { round: 'Great day' } }] };
+    const out = applyNoteRow(t, { round_id: 'r1', hole_key: 'round', note: null });
+    expect(out.rounds[0].notes).toBeUndefined();
+  });
+
+  test('note == null deletes a hole note key, dropping the hole bucket when empty but keeping round note', () => {
+    const t = { id: 't1', rounds: [{ id: 'r1', notes: { round: 'Great day', hole: { 3: 'bunker' } } }] };
+    const out = applyNoteRow(t, { round_id: 'r1', hole_key: '3', note: null });
+    expect(out.rounds[0].notes).toEqual({ round: 'Great day' });
+  });
+
+  test('no-op if round not found', () => {
+    const t = { id: 't1', rounds: [{ id: 'r1' }] };
+    const out = applyNoteRow(t, { round_id: 'rX', hole_key: 'round', note: 'x' });
+    expect(out.rounds).toEqual(t.rounds);
+  });
+});
+
+describe('applyRoundRow', () => {
+  test('upserts a new round at its round_index, preserving array order', () => {
+    const t = {
+      id: 't1',
+      rounds: [{ id: 'r0', courseName: 'A' }, { id: 'r2', courseName: 'C' }],
+    };
+    const out = applyRoundRow(t, { id: 'r1', round_index: 1, body: { courseName: 'B' } });
+    expect(out.rounds.map((r) => r.id)).toEqual(['r0', 'r1', 'r2']);
+    expect(out.rounds[1]).toEqual({ id: 'r1', courseName: 'B' });
+  });
+
+  test('updates an existing round body while preserving hot keys (scores/shotDetails/notes)', () => {
+    const t = {
+      id: 't1',
+      rounds: [{
+        id: 'r0', courseName: 'Old', scores: { p1: { 1: 4 } }, shotDetails: { p1: { 1: { putts: 2 } } }, notes: { round: 'hi' },
+      }],
+    };
+    const out = applyRoundRow(t, { id: 'r0', round_index: 0, body: { courseName: 'New' } });
+    expect(out.rounds[0]).toEqual({
+      id: 'r0', courseName: 'New', scores: { p1: { 1: 4 } }, shotDetails: { p1: { 1: { putts: 2 } } }, notes: { round: 'hi' },
+    });
+  });
+
+  test('reorders when round_index changes for an existing round', () => {
+    const t = { id: 't1', rounds: [{ id: 'r0' }, { id: 'r1' }] };
+    const out = applyRoundRow(t, { id: 'r0', round_index: 1, body: {} });
+    expect(out.rounds.map((r) => r.id)).toEqual(['r1', 'r0']);
+  });
+
+  test('clamps an index beyond current length to append at the end', () => {
+    const t = { id: 't1', rounds: [{ id: 'r0' }] };
+    const out = applyRoundRow(t, { id: 'r5', round_index: 99, body: { courseName: 'Z' } });
+    expect(out.rounds.map((r) => r.id)).toEqual(['r0', 'r5']);
+  });
+
+  test('does not invent scores/shotDetails/notes for a brand-new round with no existing hot keys', () => {
+    const t = { id: 't1', rounds: [] };
+    const out = applyRoundRow(t, { id: 'r0', round_index: 0, body: { courseName: 'A' } });
+    expect(out.rounds[0]).toEqual({ id: 'r0', courseName: 'A' });
+  });
+});
+
+describe('applyPlayerRow', () => {
+  test('upserts a new player at its pos, preserving array order', () => {
+    const t = { id: 't1', players: [{ id: 'p0', name: 'A' }, { id: 'p2', name: 'C' }] };
+    const out = applyPlayerRow(t, { player_id: 'p1', pos: 1, body: { id: 'p1', name: 'B' } });
+    expect(out.players.map((p) => p.id)).toEqual(['p0', 'p1', 'p2']);
+    expect(out.players[1]).toEqual({ id: 'p1', name: 'B' });
+  });
+
+  test('updates an existing player body in place at its pos', () => {
+    const t = { id: 't1', players: [{ id: 'p0', name: 'Old' }] };
+    const out = applyPlayerRow(t, { player_id: 'p0', pos: 0, body: { id: 'p0', name: 'New' } });
+    expect(out.players).toEqual([{ id: 'p0', name: 'New' }]);
+  });
+
+  test('reorders when pos changes for an existing player', () => {
+    const t = { id: 't1', players: [{ id: 'p0' }, { id: 'p1' }] };
+    const out = applyPlayerRow(t, { player_id: 'p0', pos: 1, body: { id: 'p0' } });
+    expect(out.players.map((p) => p.id)).toEqual(['p1', 'p0']);
+  });
+
+  test('clamps an index beyond current length to append at the end', () => {
+    const t = { id: 't1', players: [{ id: 'p0' }] };
+    const out = applyPlayerRow(t, { player_id: 'p5', pos: 99, body: { id: 'p5' } });
+    expect(out.players.map((p) => p.id)).toEqual(['p0', 'p5']);
+  });
+});
+
+describe('applyTournamentRow', () => {
+  test('merges props into top-level fields one level deep', () => {
+    const t = { id: 't1', name: 'Old', kind: 'game', settings: { fixedTeams: false }, rounds: [], players: [] };
+    const out = applyTournamentRow(t, {
+      id: 't1', name: 'Old', kind: 'game', props: { settings: { fixedTeams: true } }, current_round: 0,
+    });
+    expect(out.settings).toEqual({ fixedTeams: true });
+  });
+
+  test('currentRound becomes the max of existing and incoming', () => {
+    const t = { id: 't1', currentRound: 2, rounds: [], players: [] };
+    const out = applyTournamentRow(t, { id: 't1', props: {}, current_round: 1 });
+    expect(out.currentRound).toBe(2);
+    const out2 = applyTournamentRow(t, { id: 't1', props: {}, current_round: 3 });
+    expect(out2.currentRound).toBe(3);
+  });
+
+  test('takes name/kind from row columns', () => {
+    const t = { id: 't1', name: 'Old', kind: 'game', rounds: [], players: [] };
+    const out = applyTournamentRow(t, { id: 't1', name: 'New Name', kind: 'tournament', props: {} });
+    expect(out.name).toBe('New Name');
+    expect(out.kind).toBe('tournament');
+  });
+
+  test('never lets props/columns stomp rounds/players', () => {
+    const t = {
+      id: 't1',
+      rounds: [{ id: 'r0', scores: { p1: { 1: 4 } } }],
+      players: [{ id: 'p1' }],
+    };
+    const out = applyTournamentRow(t, {
+      id: 't1', props: { rounds: ['bogus'], players: ['bogus'] }, current_round: 0,
+    });
+    expect(out.rounds).toEqual(t.rounds);
+    expect(out.players).toEqual(t.players);
+  });
+});
+
+describe('ensureRealtimeForTournament / stopRealtime', () => {
+  beforeEach(() => {
+    jest.clearAllMocks();
+    readLocal.mockResolvedValue({ id: 't1', kind: 'game', rounds: [], players: [] });
+    saveLocal.mockResolvedValue();
+    syncQueue.all.mockResolvedValue([]);
+  });
+
+  afterEach(() => {
+    stopRealtime();
+  });
+
+  test('subscribes a channel named game-<id> with six postgres_changes bindings', async () => {
+    await ensureRealtimeForTournament('t1');
+    expect(supabase.channel).toHaveBeenCalledWith('game-t1');
+    const channel = supabase.channel.mock.results[0].value;
+    expect(channel.on).toHaveBeenCalledTimes(6);
+    expect(channel.subscribe).toHaveBeenCalledTimes(1);
+    const tables = channel.on.mock.calls.map(([, cfg]) => cfg.table);
+    expect(tables.sort()).toEqual([
+      'game_players', 'game_round_notes', 'game_rounds', 'game_scores', 'game_shot_details', 'tournaments',
+    ].sort());
+  });
+
+  test('game_* bindings filter on tournament_id=eq.<id>; tournaments binding filters on id=eq.<id>', async () => {
+    await ensureRealtimeForTournament('t1');
+    const channel = supabase.channel.mock.results[0].value;
+    for (const [, cfg] of channel.on.mock.calls) {
+      if (cfg.table === 'tournaments') {
+        expect(cfg.filter).toBe('id=eq.t1');
+      } else {
+        expect(cfg.filter).toBe('tournament_id=eq.t1');
+      }
+    }
+  });
+
+  test('is idempotent: calling again with the same id does not open a new channel', async () => {
+    await ensureRealtimeForTournament('t1');
+    await ensureRealtimeForTournament('t1');
+    expect(supabase.channel).toHaveBeenCalledTimes(1);
+  });
+
+  test('switches channel when id changes: removes the old channel and subscribes a new one', async () => {
+    await ensureRealtimeForTournament('t1');
+    const firstChannel = supabase.channel.mock.results[0].value;
+    readLocal.mockResolvedValue({ id: 't2', kind: 'game', rounds: [], players: [] });
+    await ensureRealtimeForTournament('t2');
+    expect(supabase.removeChannel).toHaveBeenCalledWith(firstChannel);
+    expect(supabase.channel).toHaveBeenCalledWith('game-t2');
+    expect(supabase.channel).toHaveBeenCalledTimes(2);
+  });
+
+  test('no-op for a null id, and tears down any existing channel', async () => {
+    await ensureRealtimeForTournament('t1');
+    const firstChannel = supabase.channel.mock.results[0].value;
+    await ensureRealtimeForTournament(null);
+    expect(supabase.removeChannel).toHaveBeenCalledWith(firstChannel);
+    expect(supabase.channel).toHaveBeenCalledTimes(1);
+  });
+
+  test('skips subscribing for an official-kind tournament', async () => {
+    readLocal.mockResolvedValue({ id: 't1', kind: 'official', rounds: [], players: [] });
+    await ensureRealtimeForTournament('t1');
+    expect(supabase.channel).not.toHaveBeenCalled();
+  });
+
+  test('stopRealtime removes the current channel and clears state so a later ensure re-subscribes', async () => {
+    await ensureRealtimeForTournament('t1');
+    const firstChannel = supabase.channel.mock.results[0].value;
+    stopRealtime();
+    expect(supabase.removeChannel).toHaveBeenCalledWith(firstChannel);
+    await ensureRealtimeForTournament('t1');
+    expect(supabase.channel).toHaveBeenCalledTimes(2);
+  });
+
+  test('stopRealtime with no active channel is a no-op', () => {
+    stopRealtime();
+    expect(supabase.removeChannel).not.toHaveBeenCalled();
+  });
+
+  test('row handler patches the cache, re-applies pending mutations, restores meId, preserves score conflicts, and saves', async () => {
+    const cached = {
+      id: 't1', kind: 'game', meId: 'p9', rounds: [{ id: 'r1', scores: {}, scoreConflicts: { p1: { 1: { candidates: [] } } } }], players: [],
+    };
+    readLocal.mockResolvedValue(cached);
+    const pendingEntry = { id: 'e1', tournamentId: 't1', mutation: { type: 'score.set' } };
+    syncQueue.all.mockResolvedValue([pendingEntry, { id: 'e2', tournamentId: 'other', mutation: {} }]);
+
+    await ensureRealtimeForTournament('t1');
+    const channel = supabase.channel.mock.results[0].value;
+    const scoreHandlerCall = channel.on.mock.calls.find(([, cfg]) => cfg.table === 'game_scores');
+    const handler = scoreHandlerCall[2];
+
+    await handler({ new: { round_id: 'r1', player_id: 'p1', hole: 1, strokes: 5 } });
+
+    expect(applyPendingMutations).toHaveBeenCalledWith(
+      expect.objectContaining({ id: 't1' }),
+      [pendingEntry],
+    );
+    expect(preserveLocalScoreConflicts).toHaveBeenCalled();
+    expect(saveLocal).toHaveBeenCalledTimes(1);
+    const [savedArg] = saveLocal.mock.calls[0];
+    expect(savedArg.meId).toBe('p9');
+  });
+
+  test('row handler no-ops when readLocal returns null (tournament not cached locally)', async () => {
+    await ensureRealtimeForTournament('t1');
+    const channel = supabase.channel.mock.results[0].value;
+    const scoreHandlerCall = channel.on.mock.calls.find(([, cfg]) => cfg.table === 'game_scores');
+    const handler = scoreHandlerCall[2];
+
+    readLocal.mockResolvedValue(null);
+    await handler({ new: { round_id: 'r1', player_id: 'p1', hole: 1, strokes: 5 } });
+
+    expect(saveLocal).not.toHaveBeenCalled();
+  });
+});

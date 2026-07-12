@@ -22,6 +22,7 @@ import {
   readLocal, refreshTournamentFromRemote,
 } from '../store/tournamentStore';
 import { isOnline } from '../lib/connectivity';
+import { ensureRealtimeForTournament } from '../store/realtimeSync';
 import { mutate } from '../store/mutate';
 import { syncNow, syncSettled } from '../store/syncWorker';
 import { fetchPlayers } from '../store/libraryStore';
@@ -380,6 +381,7 @@ export default function ScorecardScreen({ navigation, route }) {
     const roundScores = round?.scores ?? {};
     const roundShotDetails = round?.shotDetails ?? {};
     setTournament(t);
+    ensureRealtimeForTournament(t.id).catch(() => {});
     // Merge rather than clobber: a stale reload (one that began around a tap
     // and resolved later) must not overwrite a newer local edit. mergeScores
     // keeps any dirty cell whose save has not yet round-tripped.

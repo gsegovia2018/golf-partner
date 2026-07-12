@@ -35,6 +35,7 @@ import {
   getActiveTournamentSnapshot, getTournament, getTournamentSnapshot,
   lastTeeForPlayerOnCourse,
 } from '../store/tournamentStore';
+import { ensureRealtimeForTournament, stopRealtime } from '../store/realtimeSync';
 import { fetchMyPlayers, loadQuickStartCourses as loadQuickStartCourseList } from '../store/libraryStore';
 import {
   buildQuickStartRound,
@@ -251,6 +252,7 @@ export default function HomeScreen({ navigation, route }) {
           loadAllTournamentsWithFallback(),
         ]);
         setTournament(t);
+        ensureRealtimeForTournament(t?.id ?? null).catch(() => {});
         setAllTournaments(listResult.list);
         setListStale(listResult.stale);
         setOpenableIds(listResult.openableIds);
@@ -376,6 +378,10 @@ export default function HomeScreen({ navigation, route }) {
     });
     return () => { unsubscribe(); unsubStore(); unsubConn(); };
   }, [navigation, reload]);
+
+  // Home owns the realtime channel's lifetime — torn down on unmount so a
+  // signed-out/backgrounded Home doesn't leave a stale subscription open.
+  useEffect(() => () => stopRealtime(), []);
 
   // Web deep-link: if the URL has ?invite=CODE, auto-open the Join screen
   // with the code pre-filled once the user is signed in. Strip the param

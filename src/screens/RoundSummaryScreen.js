@@ -15,6 +15,7 @@ import {
   readLocal, roundTotals, formatRoundLabel,
   getTournamentSnapshot, isTournamentFinished,
 } from '../store/tournamentStore';
+import { ensureRealtimeForTournament } from '../store/realtimeSync';
 import { loadRoundMedia } from '../store/mediaStore';
 import RoundRecapPanel from '../components/roundSummary/RoundRecapPanel';
 import RoundSummaryTabs from '../components/roundSummary/RoundSummaryTabs';
@@ -111,10 +112,11 @@ export default function RoundSummaryScreen({ navigation, route }) {
 
   useFocusEffect(useCallback(() => {
     load();
+    ensureRealtimeForTournament(tournamentId).catch(() => {});
     // Poll while the round is live so scores tick in without a manual pull.
     const id = setInterval(() => { if (liveRef.current) load(); }, 45000);
     return () => clearInterval(id);
-  }, [load]));
+  }, [load, tournamentId]));
 
   // The scorecard highlights "my" row by player id, not auth user id.
   const myPlayerId = players.find((p) => p.user_id && p.user_id === me)?.id ?? null;
