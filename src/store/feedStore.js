@@ -7,7 +7,10 @@ import {
   isTournamentFinished,
   formatRoundLabel,
 } from './tournamentStore';
-import { fetchTournament as fetchTournamentRemote } from './tournamentRepo';
+import {
+  fetchTournament as fetchTournamentRemote,
+  fetchRoundActivity,
+} from './tournamentRepo';
 import { roundScoringMode, calcExtraShots } from './scoring';
 import { loadMediaForTournaments } from './mediaStore';
 import { listFriends, getCachedFriends } from './friendStore';
@@ -28,47 +31,39 @@ async function currentUserId() {
 }
 
 // Real per-round "last touched" timestamp, used purely for feed ordering.
-// Computed as GREATEST(max(game_scores.updated_at), game_rounds.updated_at)
-// per round — CRUCIALLY including game_scores, because set_game_score writes
-// ONLY the game_scores row and does NOT bump game_rounds.updated_at (verified
-// against the migration: only patch_game_round / upsertRound touch
+// Sourced from the get_round_activity RPC, which computes
+// GREATEST(max(game_scores.updated_at), game_rounds.updated_at) per round
+// server-side — CRUCIALLY including game_scores, because set_game_score
+// writes ONLY the game_scores row and does NOT bump game_rounds.updated_at
+// (verified against the migration: only patch_game_round / upsertRound touch
 // game_rounds.updated_at). Scoring is the single most common round activity,
 // so keying off game_rounds.updated_at alone would leave an actively-scored
 // round frozen at its last config edit and let a stale finished round
-// outrank a live one. Both sources together give a genuine server-side
-// recency signal, replacing the legacy `t._meta` LWW-stamp heuristic (gone
-// post-Task-11: blob writers were deleted, so _meta was never stamped and
-// every lookup silently fell through to the tournament-id fallback).
+// outrank a live one. This replaces the legacy `t._meta` LWW-stamp heuristic
+// (gone post-Task-11: blob writers were deleted, so _meta was never stamped
+// and every lookup silently fell through to the tournament-id fallback).
 //
-// Two lightweight queries (game_scores + game_rounds), not a change to
-// get_game_tournament — that RPC's assembled shape intentionally carries no
-// per-cell timestamps (see its migration comment). Both tables share the
-// same RLS delegation as tournaments/game_players, so this is exactly as
-// visible as the tournament data itself. Returns an empty Map on any failure
-// (offline / RLS denial) — callers must treat a missing entry as "timestamp
-// unknown", not zero, and fall back accordingly.
+// Previously this issued two unpaginated .from('game_scores') /
+// .from('game_rounds') selects directly — PostgREST caps an unpaginated
+// response at 1000 rows, and prod's game_scores table (~1398 rows and
+// growing) silently truncated past that cap, leaving whichever tournaments'
+// score rows fell outside the first (unordered) 1000 with no activity
+// timestamp at all. get_round_activity aggregates server-side instead,
+// returning one row PER ROUND — bounded by round count, never by score-cell
+// count — so it can't hit that cap regardless of how large game_scores
+// grows. Same RLS as game_rounds/game_scores (SECURITY INVOKER — see the
+// migration). Returns an empty Map on any failure (offline / RLS denial /
+// RPC error) — callers must treat a missing entry as "timestamp unknown",
+// not zero, and fall back accordingly.
 async function fetchRoundActivityTimestamps(tournamentIds) {
   const map = new Map();
   if (tournamentIds.length === 0 || !isOnline()) return map;
-  const bump = (key, iso) => {
-    const ms = Date.parse(iso);
-    if (Number.isFinite(ms) && ms > (map.get(key) ?? 0)) map.set(key, ms);
-  };
   try {
-    const [scoresRes, roundsRes] = await Promise.all([
-      supabase.from('game_scores')
-        .select('tournament_id, round_id, updated_at')
-        .in('tournament_id', tournamentIds),
-      supabase.from('game_rounds')
-        .select('tournament_id, id, updated_at')
-        .in('tournament_id', tournamentIds),
-    ]);
-    if (scoresRes.error) throw scoresRes.error;
-    if (roundsRes.error) throw roundsRes.error;
-    // GREATEST across both sources: whichever of the two carries the more
-    // recent stamp for a round wins (bump keeps the max seen for the key).
-    for (const row of scoresRes.data ?? []) bump(`${row.tournament_id}:${row.round_id}`, row.updated_at);
-    for (const row of roundsRes.data ?? []) bump(`${row.tournament_id}:${row.id}`, row.updated_at);
+    const rows = await fetchRoundActivity(tournamentIds);
+    for (const row of rows ?? []) {
+      const ms = Date.parse(row.activity_ts);
+      if (Number.isFinite(ms)) map.set(`${row.tournament_id}:${row.round_id}`, ms);
+    }
   } catch {
     // Swallowed — roundActivityTs falls back to a deterministic-but-not-
     // recency-based ordering below when a round's timestamp is missing.

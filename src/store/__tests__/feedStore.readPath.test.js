@@ -1,18 +1,22 @@
 // Task 13.2 regression coverage for feedStore's last two legacy-blob-reader
-// fixes:
+// fixes, plus the fix/finish-and-feed-order follow-up:
 //   1. fetchFriendTournaments used to bulk-select the frozen tournaments.data
 //      blob column directly; it must now go through tournamentRepo's
 //      get_game_tournament-backed fetchTournament, one call per id.
 //   2. roundActivityTs used to read the deleted t._meta LWW-stamp heuristic
 //      (always falling through since Task 11 removed the writer that stamped
-//      it); it must now order by a REAL server timestamp — game_rounds.
-//      updated_at, fetched via a lightweight direct query — so recently
-//      active rounds actually sort first in the feed.
+//      it); it must now order by a REAL server timestamp.
+//   3. (fix/finish-and-feed-order) That real timestamp used to come from two
+//      unpaginated .from('game_scores') / .from('game_rounds') selects —
+//      PostgREST caps unpaginated responses at 1000 rows, and prod's
+//      game_scores table (~1398 rows) silently truncated past that cap,
+//      leaving some tournaments' rounds with no activity timestamp at all.
+//      It must now come from the bounded get_round_activity RPC (one row per
+//      round, never per score cell) via tournamentRepo.fetchRoundActivity.
 
 const mockSupabaseState = {
   participantRows: [],
-  roundRows: [],
-  scoreRows: [],
+  roundActivityRows: [],
 };
 
 jest.mock('../../lib/connectivity', () => ({ isOnline: jest.fn(() => true) }));
@@ -32,34 +36,19 @@ jest.mock('../../lib/supabase', () => ({
           })),
         };
       }
-      if (table === 'game_rounds') {
-        return {
-          select: jest.fn(() => ({
-            in: jest.fn(() => Promise.resolve({
-              data: mockSupabaseState.roundRows, error: null,
-            })),
-          })),
-        };
-      }
-      if (table === 'game_scores') {
-        return {
-          select: jest.fn(() => ({
-            in: jest.fn(() => Promise.resolve({
-              data: mockSupabaseState.scoreRows, error: null,
-            })),
-          })),
-        };
-      }
-      // The legacy blob column ('tournaments') must never be queried by
-      // either fixed code path — surface any regression loudly instead of
-      // silently swallowing it inside feedStore's try/catch.
-      throw new Error(`unexpected supabase.from("${table}") call — legacy blob read?`);
+      // Neither game_scores nor game_rounds should ever be queried directly
+      // by feedStore any more (that's the bug this fix removes — see the
+      // comment above), nor the legacy blob column ('tournaments'). Surface
+      // any regression loudly instead of silently swallowing it inside
+      // feedStore's try/catch.
+      throw new Error(`unexpected supabase.from("${table}") call — legacy blob/unpaginated read?`);
     }),
   },
 }));
 
 jest.mock('../tournamentRepo', () => ({
   fetchTournament: jest.fn(),
+  fetchRoundActivity: jest.fn(() => Promise.resolve(mockSupabaseState.roundActivityRows)),
 }));
 
 jest.mock('../tournamentStore', () => {
@@ -107,13 +96,14 @@ describe('feedStore read-path conversions (Task 13.2)', () => {
   beforeEach(() => {
     jest.clearAllMocks();
     mockSupabaseState.participantRows = [];
-    mockSupabaseState.roundRows = [];
-    mockSupabaseState.scoreRows = [];
+    mockSupabaseState.roundActivityRows = [];
     mockSupabaseState.myTournaments = [];
     mockSupabaseState.friends = [];
+    require('../tournamentRepo').fetchRoundActivity
+      .mockImplementation(() => Promise.resolve(mockSupabaseState.roundActivityRows));
   });
 
-  describe('round ordering uses real game_rounds.updated_at, not the deleted _meta heuristic', () => {
+  describe('round ordering uses the get_round_activity RPC, not the deleted _meta heuristic', () => {
     test('a round with more recent server activity sorts first even if its tournament is older', async () => {
       const { buildFeed } = require('../feedStore');
       const players = [{ id: 'p1', name: 'Marcos', user_id: 'me-user' }];
@@ -128,9 +118,9 @@ describe('feedStore read-path conversions (Task 13.2)', () => {
         baseTournament('B', { createdAt: new Date(5000).toISOString(), roundId: 'rB', players }),
         baseTournament('A', { createdAt: new Date(1000).toISOString(), roundId: 'rA', players }),
       ];
-      mockSupabaseState.roundRows = [
-        { tournament_id: 'A', id: 'rA', updated_at: '2026-07-11T12:00:00.000Z' },
-        { tournament_id: 'B', id: 'rB', updated_at: '2020-01-01T00:00:00.000Z' },
+      mockSupabaseState.roundActivityRows = [
+        { tournament_id: 'A', round_id: 'rA', activity_ts: '2026-07-11T12:00:00.000Z' },
+        { tournament_id: 'B', round_id: 'rB', activity_ts: '2020-01-01T00:00:00.000Z' },
       ];
 
       const result = await buildFeed({
@@ -140,31 +130,24 @@ describe('feedStore read-path conversions (Task 13.2)', () => {
       expect(result.items.map((i) => i.tournamentId)).toEqual(['A', 'B']);
     });
 
-    test('a live round with ONLY score writes (game_rounds.updated_at older-but-nonzero) sorts by that recency, since set_game_score never bumps game_rounds', async () => {
+    test('the RPC row already folds in score recency (set_game_score never bumps game_rounds), so a round scored more recently than another round\'s config-edit still sorts first', async () => {
       const { buildFeed } = require('../feedStore');
       const players = [{ id: 'p1', name: 'Marcos', user_id: 'me-user' }];
 
-      // LIVE is the tournament being actively scored right now: its
-      // game_rounds.updated_at is old (config was last patched long ago —
-      // set_game_score does NOT bump game_rounds), but a score row was just
-      // written. STALE was config-edited more recently than LIVE's round
-      // row but has seen no scoring since. Ordering must key off the score
-      // recency (LIVE first), not game_rounds.updated_at (which would rank
-      // STALE first). Both game_rounds rows are non-zero, so this fails if
-      // the code ignores game_scores entirely.
+      // LIVE is the tournament being actively scored right now — the RPC's
+      // GREATEST(max(game_scores.updated_at), game_rounds.updated_at) means
+      // its returned activity_ts reflects the score write, not the older
+      // game_rounds row. STALE was config-edited more recently than LIVE's
+      // *round row* but has seen no scoring since, so its activity_ts is
+      // older than LIVE's. Ordering must key off the RPC's activity_ts
+      // (LIVE first).
       mockSupabaseState.myTournaments = [
         baseTournament('STALE', { createdAt: new Date(1000).toISOString(), roundId: 'rStale', players }),
         baseTournament('LIVE', { createdAt: new Date(2000).toISOString(), roundId: 'rLive', players }),
       ];
-      mockSupabaseState.roundRows = [
-        { tournament_id: 'LIVE', id: 'rLive', updated_at: '2026-07-10T09:00:00.000Z' },
-        { tournament_id: 'STALE', id: 'rStale', updated_at: '2026-07-11T09:00:00.000Z' },
-      ];
-      mockSupabaseState.scoreRows = [
-        // LIVE's most recent score is newer than STALE's game_rounds stamp.
-        { tournament_id: 'LIVE', round_id: 'rLive', updated_at: '2026-07-11T09:00:00.000Z' },
-        { tournament_id: 'LIVE', round_id: 'rLive', updated_at: '2026-07-12T18:00:00.000Z' },
-        { tournament_id: 'STALE', round_id: 'rStale', updated_at: '2020-01-01T00:00:00.000Z' },
+      mockSupabaseState.roundActivityRows = [
+        { tournament_id: 'LIVE', round_id: 'rLive', activity_ts: '2026-07-12T18:00:00.000Z' },
+        { tournament_id: 'STALE', round_id: 'rStale', activity_ts: '2026-07-11T09:00:00.000Z' },
       ];
 
       const result = await buildFeed({
@@ -174,16 +157,16 @@ describe('feedStore read-path conversions (Task 13.2)', () => {
       expect(result.items.map((i) => i.tournamentId)).toEqual(['LIVE', 'STALE']);
     });
 
-    test('falls back to a deterministic (not recency-based) order when the timestamp query fails, instead of silently degrading', async () => {
+    test('falls back to a deterministic (not recency-based) order when the RPC returns no rows, instead of silently degrading', async () => {
       const { buildFeed } = require('../feedStore');
       const players = [{ id: 'p1', name: 'Marcos', user_id: 'me-user' }];
       mockSupabaseState.myTournaments = [
         baseTournament('old', { createdAt: new Date(1000).toISOString(), roundId: 'r-old', players }),
         baseTournament('new', { createdAt: new Date(5000).toISOString(), roundId: 'r-new', players }),
       ];
-      // No matching rows for either round id — simulates the query
-      // returning nothing (e.g. RLS denial) rather than throwing.
-      mockSupabaseState.roundRows = [];
+      // No matching rows for either round id — simulates the RPC returning
+      // nothing (e.g. RLS denial) rather than throwing.
+      mockSupabaseState.roundActivityRows = [];
 
       const result = await buildFeed({
         userId: 'me-user', source: 'remote', includeMedia: false,
@@ -192,6 +175,69 @@ describe('feedStore read-path conversions (Task 13.2)', () => {
       // Deterministic fallback: newest-created tournament's round still
       // sorts first, rather than an arbitrary/undefined order.
       expect(result.items.map((i) => i.tournamentId)).toEqual(['new', 'old']);
+    });
+
+    test('falls back to the deterministic order when the RPC throws (offline / query failure), never surfacing the error', async () => {
+      const { buildFeed } = require('../feedStore');
+      const { fetchRoundActivity } = require('../tournamentRepo');
+      const players = [{ id: 'p1', name: 'Marcos', user_id: 'me-user' }];
+      mockSupabaseState.myTournaments = [
+        baseTournament('old', { createdAt: new Date(1000).toISOString(), roundId: 'r-old', players }),
+        baseTournament('new', { createdAt: new Date(5000).toISOString(), roundId: 'r-new', players }),
+      ];
+      fetchRoundActivity.mockImplementation(() => Promise.reject(new Error('network down')));
+
+      const result = await buildFeed({
+        userId: 'me-user', source: 'remote', includeMedia: false,
+      });
+
+      expect(result.items.map((i) => i.tournamentId)).toEqual(['new', 'old']);
+    });
+
+    // The Claudia's-game repro (fix/finish-and-feed-order): a weekend
+    // tournament created 2026-07-09T08:09 with three rounds actually played
+    // on 07-10 / 07-11 / 07-12, alongside a second tournament ("Claudia's
+    // game") created LATER the same day (2026-07-09T15:38) but played
+    // EARLIER, at ~2026-07-09T17:38 — before the weekend tournament's first
+    // round was even played. Before this fix, prod's unpaginated
+    // .from('game_scores') query silently truncated past PostgREST's
+    // 1000-row cap and could drop this tournament's score rows entirely,
+    // making it fall back to createdAt ordering and jump to the top. The RPC
+    // path must order purely by activity_ts: Round3 > Round2 > Round1 >
+    // Claudia.
+    test('orders a later-created-but-earlier-played tournament by activity ts, not createdAt', async () => {
+      const { buildFeed } = require('../feedStore');
+      const players = [{ id: 'p1', name: 'Marcos', user_id: 'me-user' }];
+
+      mockSupabaseState.myTournaments = [
+        baseTournament('weekend', {
+          createdAt: '2026-07-09T08:09:00.000Z', roundId: 'r0', players,
+        }),
+        baseTournament('claudia', {
+          createdAt: '2026-07-09T15:38:00.000Z', roundId: 'r0', players,
+        }),
+      ];
+      // weekend has three rounds; baseTournament only wires up one round
+      // object, so extend it with r1/r2 sharing the same holes/scores shape.
+      mockSupabaseState.myTournaments[0].rounds.push(
+        { ...mockSupabaseState.myTournaments[0].rounds[0], id: 'r1' },
+        { ...mockSupabaseState.myTournaments[0].rounds[0], id: 'r2' },
+      );
+
+      mockSupabaseState.roundActivityRows = [
+        { tournament_id: 'weekend', round_id: 'r0', activity_ts: '2026-07-10T18:00:00.000Z' },
+        { tournament_id: 'weekend', round_id: 'r1', activity_ts: '2026-07-11T18:00:00.000Z' },
+        { tournament_id: 'weekend', round_id: 'r2', activity_ts: '2026-07-12T18:00:00.000Z' },
+        { tournament_id: 'claudia', round_id: 'r0', activity_ts: '2026-07-09T17:38:00.000Z' },
+      ];
+
+      const result = await buildFeed({
+        userId: 'me-user', source: 'remote', includeMedia: false,
+      });
+
+      expect(result.items.map((i) => `${i.tournamentId}:${i.roundId}`)).toEqual([
+        'weekend:r2', 'weekend:r1', 'weekend:r0', 'claudia:r0',
+      ]);
     });
   });
 
@@ -215,8 +261,8 @@ describe('feedStore read-path conversions (Task 13.2)', () => {
         }
         return Promise.resolve(null);
       });
-      mockSupabaseState.roundRows = [
-        { tournament_id: 'F1', id: 'rF1', updated_at: '2026-07-11T12:00:00.000Z' },
+      mockSupabaseState.roundActivityRows = [
+        { tournament_id: 'F1', round_id: 'rF1', activity_ts: '2026-07-11T12:00:00.000Z' },
       ];
 
       const result = await buildFeed({

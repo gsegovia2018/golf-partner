@@ -41,6 +41,19 @@ export async function fetchMyTournaments() {
   return (data ?? []).map(({ tournament, role }) => ({ ...tournament, _role: role }));
 }
 
+// One row per round across the given tournaments — see
+// supabase/migrations/20260713000000_round_activity_rpc.sql. Bounded by round
+// count, not score-cell count, so (unlike a raw .from('game_scores') select)
+// it never hits PostgREST's default 1000-row response cap as game_scores
+// grows. Used by feedStore for real per-round activity recency.
+export async function fetchRoundActivity(tournamentIds) {
+  const { data, error } = await supabase.rpc('get_round_activity', {
+    p_tournament_ids: tournamentIds,
+  });
+  if (error) throw error;
+  return data ?? [];
+}
+
 // -- Per-cell writes ------------------------------------------------------
 
 export async function setScore({
