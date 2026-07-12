@@ -2,6 +2,8 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import { supabase } from '../lib/supabase';
 import { tournamentsIndex } from './tournamentsIndex';
 import { mergeTournaments } from './merge';
+import { fetchTournament as repoFetchTournament, fetchMyTournaments } from './tournamentRepo';
+import { syncQueue } from './syncQueue';
 import { isOnline } from '../lib/connectivity';
 import { teeByLabel, resolveTeeForPlayer } from './tees';
 // Pure scoring & handicap math lives in ./scoring. Imported here for this
@@ -152,11 +154,6 @@ export function subscribeTournamentChanges(fn) {
   return () => _subs.delete(fn);
 }
 
-// Columns needed to build a Home-list entry. Casual tournaments carry their
-// whole state in the `data` blob; official tournaments keep their identity in
-// real columns (their `data` blob is empty), so both are always selected.
-const TOURNAMENT_LIST_COLUMNS = 'id, name, kind, created_at, data';
-
 // Build a Home-list tournament entry from a `tournaments` table row. For a
 // casual tournament every field comes from the `data` blob (unchanged from the
 // historical behaviour). For an official tournament the blob is empty, so
@@ -182,84 +179,55 @@ function byCreatedAtDesc(a, b) {
   return new Date(b?.createdAt ?? 0) - new Date(a?.createdAt ?? 0);
 }
 
-// Fold each remote list row together with its local blob before the list is
-// trusted: the Home card's completed-round count reads whatever this returns,
-// and a remote-only snapshot lags local (batched score sync) so it would
-// flicker as reloads fire. mergeTournaments(local, remote) keeps this device's
-// unsynced scores/edits while preserving anything only the server has; rows
-// with no local blob pass through unchanged. Then sort newest-first (same key
-// as the offline list) and refresh the offline index. Shared tail for both
-// the no-userId and userId branches.
-async function _finalizeTournamentList(result) {
-  const merged = await Promise.all(result.map(async (t) => {
-    const local = await readLocal(t.id);
-    return local ? { ...mergeTournaments(local, t).merged, _role: t._role } : t;
-  }));
-  const sorted = merged.sort(byCreatedAtDesc);
-  // Fire-and-forget: keep the offline index in sync with the latest remote list.
-  tournamentsIndex.writeIndex(sorted).catch(() => {});
-  return sorted;
+// Lazy require: mutate.js imports saveLocal/_setSyncStatus from this module,
+// so a static import here would form a cycle. Every other cross-reference to
+// syncWorker.js in this codebase breaks the same cycle the same way.
+function _applyPendingMutations(tournament, entries) {
+  const { applyPendingMutations } = require('./mutate');
+  return applyPendingMutations(tournament, entries);
+}
+
+// The syncQueue entries for one tournament, read fresh at overlay time (not
+// captured earlier) so a background refresh sees whatever is still undrained
+// right now.
+async function _pendingEntriesFor(id) {
+  const all = await syncQueue.all();
+  return all.filter((e) => e.tournamentId === id);
 }
 
 export async function loadAllTournaments() {
   await ensureMigrated();
-  const userId = await getCurrentUserId();
+  // get_my_game_tournaments resolves owner/member/participant role logic
+  // server-side (including the anonymous/no-user case), so a single RPC call
+  // replaces the old owned + tournament_members + tournament_participants
+  // query union.
+  const list = await fetchMyTournaments();
 
-  if (!userId) {
-    const { data, error } = await supabase
-      .from('tournaments').select(TOURNAMENT_LIST_COLUMNS)
-      .order('created_at', { ascending: false });
-    if (error) throw error;
-    const list = (data ?? []).map((row) => rowToTournament(row, 'owner'));
-    return _finalizeTournamentList(list);
+  const all = await syncQueue.all();
+  const byTournament = new Map();
+  for (const e of all) {
+    if (!e.tournamentId) continue;
+    if (!byTournament.has(e.tournamentId)) byTournament.set(e.tournamentId, []);
+    byTournament.get(e.tournamentId).push(e);
   }
 
-  const [
-    { data: owned, error: ownedErr },
-    { data: memberships, error: memberErr },
-    { data: participantOf, error: partErr },
-  ] = await Promise.all([
-    supabase.from('tournaments').select(TOURNAMENT_LIST_COLUMNS)
-      .or(`created_by.eq.${userId},created_by.is.null`)
-      .order('created_at', { ascending: false }),
-    supabase.from('tournament_members')
-      .select(`role, tournaments(${TOURNAMENT_LIST_COLUMNS})`)
-      .eq('user_id', userId),
-    // Fallback: when a friend adds us to a tournament, a DB trigger is supposed
-    // to grant us a `tournament_members` row — but that only happens for casual
-    // tournaments and only if the granting migration is applied. When it isn't,
-    // we still get a `tournament_participants` row and RLS still lets us read
-    // the tournament (self/friend path), so surface it here too. The nested
-    // `tournaments` is null whenever RLS denies the join.
-    supabase.from('tournament_participants')
-      .select(`tournaments(${TOURNAMENT_LIST_COLUMNS})`)
-      .eq('user_id', userId),
-  ]);
-  if (ownedErr) throw ownedErr;
-  if (memberErr) throw memberErr;
-  // A participant-table hiccup must not blank the whole Home list — the two
-  // primary queries above already succeeded, so treat this one as best-effort.
+  // Overlay each tournament's still-undrained mutations (the read-path
+  // replacement for the old local-blob merge — see mutate.js's
+  // applyPendingMutations), then restore this device's local meId when a
+  // local blob exists (meId is device-local, never trusted from the server —
+  // see merge.js's identical restore for the LWW path this replaces).
+  const result = await Promise.all(list.map(async (t) => {
+    const entries = byTournament.get(t.id) ?? [];
+    const overlaid = entries.length ? _applyPendingMutations(t, entries) : t;
+    const local = await readLocal(t.id);
+    if (local && 'meId' in local) overlaid.meId = local.meId;
+    return overlaid;
+  }));
 
-  const seenIds = new Set();
-  const result = (owned ?? []).map((row) => {
-    const t = rowToTournament(row, 'owner');
-    seenIds.add(t.id);
-    return t;
-  });
-  (memberships ?? []).forEach((m) => {
-    if (!m.tournaments || seenIds.has(m.tournaments.id)) return;
-    seenIds.add(m.tournaments.id);
-    result.push(rowToTournament(m.tournaments, m.role));
-  });
-  if (!partErr) {
-    (participantOf ?? []).forEach((p) => {
-      const t = p.tournaments;
-      if (!t || seenIds.has(t.id)) return;
-      seenIds.add(t.id);
-      result.push(rowToTournament(t, 'participant'));
-    });
-  }
-  return _finalizeTournamentList(result);
+  const sorted = result.sort(byCreatedAtDesc);
+  // Fire-and-forget: keep the offline index in sync with the latest list.
+  tournamentsIndex.writeIndex(sorted).catch(() => {});
+  return sorted;
 }
 
 // Full offline list: union of blobs on disk + any index-only entries we
@@ -327,16 +295,12 @@ export async function loadAllTournamentsWithFallback() {
   };
 }
 
-// Fetch a single tournament row by id. Used by loadTournament's background
-// refresh so we don't pull the user's entire list just to merge one blob.
+// Fetch a single assembled tournament by id via the sync-v2 repository (the
+// get_game_tournament RPC — see tournamentRepo.js). Used by loadTournament's
+// background refresh so we don't pull the user's entire list just to refresh
+// one tournament.
 async function fetchRemoteTournament(id) {
-  const { data, error } = await supabase
-    .from('tournaments')
-    .select('data')
-    .eq('id', id)
-    .maybeSingle();
-  if (error) throw error;
-  return data?.data ?? null;
+  return repoFetchTournament(id);
 }
 
 export async function loadTournament(options = {}) {
@@ -352,17 +316,23 @@ export async function loadTournament(options = {}) {
       await clearActiveTournamentIfMatches(activeId);
       return null;
     }
-    // Kick remote refresh in background; do not block the UI. LWW-merge
-    // remote into the freshest local blob so we never clobber an
-    // in-flight mutation whose sync hasn't landed yet — the overwrite
-    // path was erasing scores the moment they were entered. Skip when
-    // offline to avoid stacking failed round-trips behind every focus.
+    // Kick remote refresh in background; do not block the UI. Overlay this
+    // tournament's still-undrained queued mutations onto the fresh remote
+    // state so we never clobber an in-flight mutation whose sync hasn't
+    // landed yet — the overwrite path was erasing scores the moment they
+    // were entered. Skip when offline to avoid stacking failed round-trips
+    // behind every focus.
     if (refreshRemote && isOnline()) {
       fetchRemoteTournament(activeId)
         .then(async (remote) => {
           if (!remote) return;
           const latest = await readLocal(activeId);
-          const { merged } = mergeTournaments(latest ?? cached, remote);
+          const localForIdentity = latest ?? cached;
+          const entries = await _pendingEntriesFor(activeId);
+          const merged = _applyPendingMutations(remote, entries);
+          // meId is device-local — never trusted from the server (see
+          // merge.js:203-206, the LWW path this overlay replaces).
+          if (localForIdentity && 'meId' in localForIdentity) merged.meId = localForIdentity.meId;
           await saveLocal(merged);
           if (resolveIdentity) await resolveMeIdForTournament(merged);
         })
@@ -395,7 +365,10 @@ export async function getTournament(id) {
         .then(async (remote) => {
           if (!remote) return;
           const latest = await readLocal(id);
-          const { merged } = mergeTournaments(latest ?? cached, remote);
+          const localForIdentity = latest ?? cached;
+          const entries = await _pendingEntriesFor(id);
+          const merged = _applyPendingMutations(remote, entries);
+          if (localForIdentity && 'meId' in localForIdentity) merged.meId = localForIdentity.meId;
           await saveLocal(merged, { makeActive: false });
           await resolveMeIdForTournament(merged, { makeActive: false });
         })
@@ -422,7 +395,9 @@ export async function refreshTournamentFromRemote(id) {
   const remote = await fetchRemoteTournament(id);
   if (!remote) return resolveMeIdForTournament(await readLocal(id));
   const local = await readLocal(id);
-  const merged = local ? mergeTournaments(local, remote).merged : remote;
+  const entries = await _pendingEntriesFor(id);
+  const merged = _applyPendingMutations(remote, entries);
+  if (local && 'meId' in local) merged.meId = local.meId;
   await saveLocal(merged);
   return resolveMeIdForTournament(merged);
 }

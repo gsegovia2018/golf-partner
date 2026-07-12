@@ -12,16 +12,14 @@ describe('loadTournament cached reads', () => {
       subscribeConnectivity: () => () => {},
     }));
 
-    const maybeSingle = jest.fn(() => Promise.resolve({ data: null, error: null }));
-    const chain = {
-      select: jest.fn(() => chain),
-      eq: jest.fn(() => chain),
-      maybeSingle,
-    };
-    const from = jest.fn(() => chain);
+    const fetchTournament = jest.fn(() => Promise.resolve(null));
+    jest.doMock('../tournamentRepo', () => ({
+      fetchTournament,
+      fetchMyTournaments: jest.fn(() => Promise.resolve([])),
+    }));
     jest.doMock('../../lib/supabase', () => ({
       supabase: {
-        from,
+        from: jest.fn(),
         auth: {
           getUser: jest.fn(() => Promise.resolve({ data: { user: null } })),
         },
@@ -37,11 +35,11 @@ describe('loadTournament cached reads', () => {
       currentRound: 0,
     };
     await saveLocal(cached);
-    from.mockClear();
+    fetchTournament.mockClear();
 
     await expect(loadTournament({ refreshRemote: false, resolveIdentity: false }))
       .resolves.toMatchObject({ id: 't1', name: 'Saturday' });
-    expect(from).not.toHaveBeenCalled();
+    expect(fetchTournament).not.toHaveBeenCalled();
   });
 
   test('loadCachedTournamentsList returns local blobs without calling Supabase', async () => {
@@ -79,14 +77,13 @@ describe('loadTournament cached reads', () => {
       subscribeConnectivity: () => () => {},
     }));
 
-    const chain = {
-      select: jest.fn(() => chain),
-      eq: jest.fn(() => chain),
-      maybeSingle: jest.fn(() => Promise.resolve({ data: null, error: null })),
-    };
+    jest.doMock('../tournamentRepo', () => ({
+      fetchTournament: jest.fn(() => Promise.resolve(null)),
+      fetchMyTournaments: jest.fn(() => Promise.resolve([])),
+    }));
     jest.doMock('../../lib/supabase', () => ({
       supabase: {
-        from: jest.fn(() => chain),
+        from: jest.fn(),
         auth: {
           getUser: jest.fn(() => Promise.resolve({ data: { user: null } })),
         },
@@ -143,5 +140,63 @@ describe('loadTournament cached reads', () => {
 
     await expect(loadTournament({ refreshRemote: false, resolveIdentity: false }))
       .resolves.toBeNull();
+  });
+
+  test('background refresh (refreshRemote: true) overlays a queued mutation onto the fresh remote tournament', async () => {
+    jest.doMock('../../lib/connectivity', () => ({
+      isOnline: () => true,
+      subscribeConnectivity: () => () => {},
+    }));
+
+    const remote = {
+      id: 't1',
+      name: 'Saturday',
+      players: [{ id: 'p1' }, { id: 'p2' }],
+      rounds: [{ id: 'r1', holes: [{ number: 1 }], scores: { p1: { 1: 4 } } }],
+      currentRound: 0,
+    };
+    const fetchTournament = jest.fn(() => Promise.resolve(remote));
+    jest.doMock('../tournamentRepo', () => ({
+      fetchTournament,
+      fetchMyTournaments: jest.fn(() => Promise.resolve([])),
+    }));
+    jest.doMock('../../lib/supabase', () => ({
+      supabase: {
+        from: jest.fn(),
+        auth: {
+          getUser: jest.fn(() => Promise.resolve({ data: { user: null } })),
+        },
+      },
+    }));
+
+    const { saveLocal, loadTournament, readLocal } = require('../tournamentStore');
+    const { syncQueue } = require('../syncQueue');
+
+    const cached = {
+      id: 't1',
+      name: 'Saturday',
+      players: [{ id: 'p1' }, { id: 'p2' }],
+      rounds: [{ id: 'r1', holes: [{ number: 1 }], scores: { p1: { 1: 4 } } }],
+      currentRound: 0,
+    };
+    await saveLocal(cached);
+
+    // A score for p2 was entered locally but has not drained to the server
+    // yet — the background refresh must not clobber it with server truth.
+    await syncQueue.enqueue({
+      tournamentId: 't1',
+      mutation: {
+        type: 'score.set', roundId: 'r1', playerId: 'p2', hole: 1, value: 5, ts: Date.now(),
+      },
+      path: 'rounds.r1.scores.p2.h1',
+    });
+
+    await loadTournament({ refreshRemote: true, resolveIdentity: false });
+    // The background refresh is fire-and-forget; flush the microtask queue.
+    await new Promise((resolve) => setTimeout(resolve, 0));
+
+    expect(fetchTournament).toHaveBeenCalledWith('t1');
+    const persisted = await readLocal('t1');
+    expect(persisted.rounds[0].scores.p2[1]).toBe(5);
   });
 });

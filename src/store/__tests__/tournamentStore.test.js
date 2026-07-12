@@ -7,10 +7,14 @@ import {
 // jest.mock calls are hoisted above these imports by babel-jest, so the mock
 // is in place before ../tournamentStore (and the supabase client it imports)
 // loads. propagatePlayerToTournaments does real IO (loadAllTournaments +
-// persistRemote), so — following the chainable-client pattern already used
-// in officialAdmin.test.js — the supabase client here is a thenable query
-// builder: every chain method (select/order/eq/or) returns the same builder,
-// and awaiting it resolves the canned result for that table.
+// persistRemote). loadAllTournaments now resolves via the
+// get_my_game_tournaments RPC (see tournamentRepo.js) rather than a raw
+// `tournaments` table select, so the mocked client below answers that RPC
+// with `tournamentsRow.data` (the same blob the old row-shaped mock carried)
+// wrapped in the `{ tournament, role }` shape fetchMyTournaments expects.
+// persistRemote still does a raw blob upsert to `tournaments`, so `.from` is
+// still a thenable query builder for that — following the chainable-client
+// pattern already used in officialAdmin.test.js.
 const mockState = { tournamentsRow: null, upserts: [] };
 
 jest.mock('../../lib/supabase', () => {
@@ -24,18 +28,22 @@ jest.mock('../../lib/supabase', () => {
         mockState.upserts.push({ table, row });
         return Promise.resolve({ error: null });
       },
-      then: (resolve) => {
-        if (table === 'tournaments') {
-          return resolve({ data: mockState.tournamentsRow ? [mockState.tournamentsRow] : [], error: null });
-        }
-        return resolve({ data: [], error: null });
-      },
+      then: (resolve) => resolve({ data: [], error: null }),
     };
     return builder;
   }
   return {
     supabase: {
       from: (table) => makeBuilder(table),
+      rpc: (name) => {
+        if (name === 'get_my_game_tournaments') {
+          const rows = mockState.tournamentsRow
+            ? [{ tournament: mockState.tournamentsRow.data, role: 'owner' }]
+            : [];
+          return Promise.resolve({ data: rows, error: null });
+        }
+        return Promise.resolve({ data: null, error: null });
+      },
       auth: { getUser: () => Promise.resolve({ data: { user: null } }) },
     },
   };
