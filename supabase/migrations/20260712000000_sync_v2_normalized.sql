@@ -231,8 +231,17 @@ BEGIN
   -- always exactly 3 digits, literal trailing 'Z'). jsonb_build_object on a
   -- raw timestamptz would emit "+00:00" instead of "Z", failing round-trip
   -- equality, so format explicitly.
+  --
+  -- kind: the app's DOMAIN kind ('game'/'tournament') lives in props.kind
+  -- (backfilled there, and written there by the sync-v2 client) because the
+  -- tournaments.kind COLUMN has a CHECK constraint allowing only
+  -- 'casual'/'official'. Emit props.kind when present, falling back to the
+  -- column — which is what carries 'official' for official-mode rows (they
+  -- have empty props, so props.kind is absent and the column 'official'
+  -- surfaces).
   v_out := v_t.props || jsonb_build_object(
-    'id', v_t.id, 'name', v_t.name, 'kind', v_t.kind,
+    'id', v_t.id, 'name', v_t.name,
+    'kind', COALESCE(v_t.props->>'kind', v_t.kind),
     'createdAt', to_char(v_t.created_at AT TIME ZONE 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.MS"Z"'),
     'players', COALESCE((
       SELECT jsonb_agg(gp.body ORDER BY gp.pos, gp.player_id)
@@ -610,9 +619,10 @@ GRANT  EXECUTE ON FUNCTION public.claim_tournament_player(text, text) TO authent
 --     once patch_game_tournament has merged anything into it (making it
 --     non-empty) a re-run leaves it untouched. current_round stays a
 --     monotonic GREATEST.
---   * tournaments.kind: restored from the blob's DOMAIN kind (data.kind),
---     because the column carries a stale added-later 'casual' default the
---     app never wrote. See the detailed comment on the UPDATE below.
+--   * domain kind ('game'/'tournament'): backfilled into props.kind (NOT
+--     the tournaments.kind column, which a CHECK constraint restricts to
+--     'casual'/'official'), via an additive idempotent patch. See the
+--     detailed comment on the second UPDATE below.
 --
 -- Skips official-mode rows (kind = 'official') and rows with no blob at all —
 -- those never had anything to normalize.
@@ -654,37 +664,39 @@ BEGIN
   -- patch_game_tournament has merged a live edit in (props <> '{}'), a
   -- straggler re-run leaves it alone rather than reverting to the frozen
   -- blob. current_round is independently GREATEST-guarded (monotonic).
-  --
-  -- kind: the app's DOMAIN kind ('game' | 'tournament') lived in the blob
-  -- (data.kind), NOT in the tournaments.kind column — that column was added
-  -- later as NOT NULL DEFAULT 'casual', so every legacy casual row carries a
-  -- stale 'casual' the app never wrote and never branches on ('casual' is
-  -- not a valid domain kind; the UI reads kind === 'game' as a single game
-  -- and treats everything else as a multi-round tournament). get_game_
-  -- tournament emits the COLUMN, and props strips kind, so without this the
-  -- reassembled blob would surface 'casual' and fail round-trip against the
-  -- legacy blob's real kind. Restore it here from the blob. This runs AFTER
-  -- the kind='official' early-return guard above (which reads v_kind, the
-  -- column value captured before any write), so official rows are never
-  -- reached, and a casual-column row whose blob kind is 'game'/'tournament'
-  -- still passed that guard ('casual' <> 'official'). Idempotent on re-run:
-  -- v_data is the frozen blob, so the same kind is recomputed. Fallback when
-  -- the blob has NO kind at all (one known prod row, "Marbella Abril 2026"):
-  -- derive from round count — >1 round is a multi-round tournament, else a
-  -- single game — matching how the app itself distinguishes the two.
   UPDATE public.tournaments
      SET props = CASE
                    WHEN props = '{}'::jsonb
-                   THEN v_data - 'players' - 'rounds' - 'id' - 'name' - 'kind' - 'createdAt' - 'currentRound' - '_meta' - 'meId'
+                   THEN v_data - 'players' - 'rounds' - 'id' - 'name' - 'createdAt' - 'currentRound' - '_meta' - 'meId'
                    ELSE props
                  END,
-         current_round = GREATEST(COALESCE(current_round, 0), COALESCE((v_data->>'currentRound')::int, 0)),
-         kind = CASE
-                  WHEN v_data ? 'kind' THEN v_data->>'kind'
-                  WHEN jsonb_array_length(COALESCE(v_data->'rounds', '[]'::jsonb)) > 1 THEN 'tournament'
-                  ELSE 'game'
-                END
+         current_round = GREATEST(COALESCE(current_round, 0), COALESCE((v_data->>'currentRound')::int, 0))
    WHERE id = p_id;
+
+  -- kind: the app's DOMAIN kind ('game' | 'tournament') lived in the blob
+  -- (data.kind), and the app reads object.kind as 'game'/'tournament'/
+  -- 'official'. But the tournaments.kind COLUMN carries a CHECK constraint
+  -- (tournaments_kind_check: kind = ANY('casual','official')) — it CANNOT
+  -- hold 'game'/'tournament', so the domain kind must live in props and be
+  -- emitted by get_game_tournament (COALESCE(props->>'kind', column)), never
+  -- written to the column. The fresh-props CASE above already keeps 'kind'
+  -- in props for a clean backfill (it's no longer in the strip list), but on
+  -- prod the props were ALREADY written (stripped of kind) on the first
+  -- apply, and props is now write-once-guarded, so that rewrite is skipped.
+  -- This ADDITIVE patch backfills kind into props independently — it is NOT
+  -- gated by the write-once guard, only by "kind still missing" — so it
+  -- lands on already-populated rows on re-apply and is idempotent. Runs
+  -- AFTER the kind='official' early-return guard, so official rows never
+  -- reach it. Blob kind wins; when the blob has NO kind (one prod row,
+  -- "Marbella Abril 2026"), derive from round count — >1 round is a
+  -- multi-round tournament, else a single game — matching how the app itself
+  -- distinguishes the two.
+  UPDATE public.tournaments
+     SET props = props || jsonb_build_object('kind',
+                   COALESCE(v_data->>'kind',
+                     CASE WHEN jsonb_array_length(COALESCE(v_data->'rounds', '[]'::jsonb)) > 1
+                          THEN 'tournament' ELSE 'game' END))
+   WHERE id = p_id AND (props->>'kind') IS NULL;
 
   -- Players -------------------------------------------------------------
   FOR v_player, v_pidx IN

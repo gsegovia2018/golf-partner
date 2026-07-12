@@ -180,13 +180,20 @@ export async function createTournament(t) {
   const userId = await getCurrentUserId();
   const now = new Date().toISOString();
   const {
-    id, name, kind, createdAt, currentRound, players, rounds, meId, _meta, ...props
+    id, name, kind, createdAt, currentRound, players, rounds, meId, _meta, ...rest
   } = t;
+
+  // The tournaments.kind COLUMN is CHECK-constrained to 'casual'/'official',
+  // so the app's domain kind ('game'/'tournament') can't live there — it goes
+  // in props.kind, which get_game_tournament re-emits via
+  // COALESCE(props->>'kind', column). Map the column to 'official' for
+  // official mode, else 'casual'; keep the true domain kind in props.
+  const props = { ...rest, kind };
 
   const tournamentRow = {
     id,
     name,
-    kind,
+    kind: kind === 'official' ? 'official' : 'casual',
     created_at: createdAt,
     props,
     current_round: currentRound ?? null,

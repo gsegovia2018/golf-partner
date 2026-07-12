@@ -16,6 +16,15 @@
 //     from an earlier edit.
 //   - compare `createdAt` as `new Date(x).getTime()` (byte-format
 //     differences, e.g. missing trailing zero milliseconds, don't matter).
+//   - `dropKind` option: drop the top-level `kind` from BOTH sides. The
+//     domain kind ('game'/'tournament') lives in props.kind and
+//     get_game_tournament emits it, but one legacy prod blob has NO `kind`
+//     key at all — for that row the reassembled side legitimately emits a
+//     DERIVED kind (from round count), which isn't a "loss" of an absent
+//     field, so the caller passes dropKind=true (computed from whether the
+//     source blob carries a `kind` key) to exclude kind from the compare.
+//     Rows WHOSE blob carries a kind still compare it strictly (dropKind
+//     defaults false).
 //   - everything else: left as-is for the caller's own deep-equal. Hole keys
 //     are strings on both sides already (jsonb object keys, and
 //     get_game_tournament emits `hole::text`) — no coercion needed.
@@ -34,11 +43,12 @@ function isEmptyNotes(notes) {
   return Object.keys(stripEmptyNotesDeep(notes)).length === 0;
 }
 
-export function normalize(blob) {
+export function normalize(blob, { dropKind = false } = {}) {
   if (blob == null) return blob;
   const out = { ...blob };
   delete out._meta;
   delete out.meId;
+  if (dropKind) delete out.kind;
 
   if (out.createdAt != null) {
     out.createdAt = new Date(out.createdAt).getTime();

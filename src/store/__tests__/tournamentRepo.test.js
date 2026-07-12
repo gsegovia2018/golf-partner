@@ -384,11 +384,16 @@ describe('upsertRound', () => {
 });
 
 describe('createTournament', () => {
-  test('splits t into tournament columns + props (props = t minus hot keys)', async () => {
+  test('maps domain kind onto the casual/official column and keeps it in props', async () => {
+    // The tournaments.kind COLUMN has a CHECK constraint (casual/official
+    // only), so a domain kind of 'game'/'tournament' must land as 'casual'
+    // on the column, while the real domain kind is preserved in props.kind
+    // (which get_game_tournament re-emits via COALESCE(props->>'kind',
+    // column)).
     mockState.userId = 'u1';
     const { createTournament } = require('../tournamentRepo');
     const t = {
-      id: 't1', name: 'Cup', kind: 'casual', createdAt: '2026-07-10T00:00:00Z',
+      id: 't1', name: 'Cup', kind: 'tournament', createdAt: '2026-07-10T00:00:00Z',
       currentRound: 1, players: [], rounds: [], meId: 'p1', _meta: { foo: 1 },
       settings: { fixedTeams: true },
     };
@@ -399,8 +404,38 @@ describe('createTournament', () => {
     expect(call.ops[0].method).toBe('upsert');
     expect(call.ops[0].rows).toEqual({
       id: 't1', name: 'Cup', kind: 'casual', created_at: '2026-07-10T00:00:00Z',
-      created_by: 'u1', props: { settings: { fixedTeams: true } }, current_round: 1,
+      created_by: 'u1',
+      props: { settings: { fixedTeams: true }, kind: 'tournament' },
+      current_round: 1,
     });
+  });
+
+  test("maps a 'game' domain kind to a casual column with props.kind='game'", async () => {
+    mockState.userId = 'u1';
+    const { createTournament } = require('../tournamentRepo');
+
+    await createTournament({
+      id: 't1', name: 'Cup', kind: 'game', createdAt: '2026-07-10T00:00:00Z',
+      currentRound: 0, players: [], rounds: [],
+    });
+
+    const row = lastFromCall('tournaments').ops[0].rows;
+    expect(row.kind).toBe('casual');
+    expect(row.props.kind).toBe('game');
+  });
+
+  test("passes an 'official' domain kind straight through on the column", async () => {
+    mockState.userId = 'u1';
+    const { createTournament } = require('../tournamentRepo');
+
+    await createTournament({
+      id: 't1', name: 'Cup', kind: 'official', createdAt: '2026-07-10T00:00:00Z',
+      currentRound: 0, players: [], rounds: [],
+    });
+
+    const row = lastFromCall('tournaments').ops[0].rows;
+    expect(row.kind).toBe('official');
+    expect(row.props.kind).toBe('official');
   });
 
   test('omits created_by when there is no signed-in user (matches persistRemote)', async () => {

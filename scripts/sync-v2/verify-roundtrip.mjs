@@ -60,8 +60,13 @@ async function main() {
 
   let failCount = 0;
   for (const row of rows) {
-    const legacy = normalize(asObj(row.data));
-    const assembled = normalize(asObj(row.assembled));
+    const rawLegacy = asObj(row.data);
+    // When the legacy blob has no `kind` key, get_game_tournament emits a
+    // derived kind (from round count) that has nothing to round-trip against
+    // — drop kind from both sides for that row only.
+    const dropKind = !(rawLegacy && Object.prototype.hasOwnProperty.call(rawLegacy, 'kind'));
+    const legacy = normalize(rawLegacy, { dropKind });
+    const assembled = normalize(asObj(row.assembled), { dropKind });
     const d = diff(legacy, assembled);
     if (d) {
       failCount++;
