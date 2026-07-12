@@ -154,25 +154,6 @@ export function subscribeTournamentChanges(fn) {
   return () => _subs.delete(fn);
 }
 
-// Build a Home-list tournament entry from a `tournaments` table row. For a
-// casual tournament every field comes from the `data` blob (unchanged from the
-// historical behaviour). For an official tournament the blob is empty, so
-// identity falls back to the columns and rounds/players default to empty
-// arrays — letting every list consumer treat both kinds uniformly.
-export function rowToTournament(row, role) {
-  const data = (row && row.data) || {};
-  return {
-    id: row?.id,
-    name: row?.name,
-    kind: row?.kind,
-    createdAt: row?.created_at,
-    rounds: [],
-    players: [],
-    ...data,
-    _role: role,
-  };
-}
-
 // Newest first. Used instead of an id subtraction because official tournament
 // ids are UUID strings, not the numeric timestamps casual tournaments use.
 function byCreatedAtDesc(a, b) {
@@ -195,6 +176,42 @@ async function _pendingEntriesFor(id) {
   return all.filter((e) => e.tournamentId === id);
 }
 
+// Shared overlay tail for every remote read path: overlay this tournament's
+// still-undrained queued mutations onto the freshly fetched `remote` (the
+// read-path replacement for the old local-blob LWW merge — see mutate.js's
+// applyPendingMutations), restore the device-local meId, and persist via
+// saveLocal.
+//
+// The overlay snapshot races mutate(): mutate saves locally BEFORE it
+// enqueues, so a score entered right now can be present in local state but
+// absent from the queue snapshot — and a saveLocal computed from that
+// snapshot would erase the just-entered value until the next refresh (the
+// "scores erased as entered" scar). Same bounded settle loop as syncWorker's
+// post-drain reconcile (syncWorker.js:126-140): after each save, re-read the
+// queue; if it changed, recompute the overlay from the SAME fetched base and
+// save again. Bounded to 3 passes — on hitting the bound, stop WITHOUT a
+// further stale save (local wins; the still-queued mutations drain and
+// re-reconcile on the next worker pass anyway).
+async function _overlayAndSave(id, remote, { makeActive = true } = {}) {
+  const local = await readLocal(id);
+  let snapshot = await _pendingEntriesFor(id);
+  let merged = remote;
+  for (let pass = 0; pass < 3; pass++) {
+    merged = _applyPendingMutations(remote, snapshot);
+    // meId is device-local — never trusted from the server (see
+    // merge.js:203-206, the LWW path this overlay replaces). Local wins,
+    // including an explicit null.
+    if (local && 'meId' in local) merged.meId = local.meId;
+    await saveLocal(merged, { makeActive });
+    const latest = await _pendingEntriesFor(id);
+    const stable = latest.length === snapshot.length
+      && latest.every((e, i) => e.id === snapshot[i].id);
+    if (stable) break;
+    snapshot = latest;
+  }
+  return merged;
+}
+
 export async function loadAllTournaments() {
   await ensureMigrated();
   // get_my_game_tournaments resolves owner/member/participant role logic
@@ -203,26 +220,12 @@ export async function loadAllTournaments() {
   // query union.
   const list = await fetchMyTournaments();
 
-  const all = await syncQueue.all();
-  const byTournament = new Map();
-  for (const e of all) {
-    if (!e.tournamentId) continue;
-    if (!byTournament.has(e.tournamentId)) byTournament.set(e.tournamentId, []);
-    byTournament.get(e.tournamentId).push(e);
-  }
-
-  // Overlay each tournament's still-undrained mutations (the read-path
-  // replacement for the old local-blob merge — see mutate.js's
-  // applyPendingMutations), then restore this device's local meId when a
-  // local blob exists (meId is device-local, never trusted from the server —
-  // see merge.js's identical restore for the LWW path this replaces).
-  const result = await Promise.all(list.map(async (t) => {
-    const entries = byTournament.get(t.id) ?? [];
-    const overlaid = entries.length ? _applyPendingMutations(t, entries) : t;
-    const local = await readLocal(t.id);
-    if (local && 'meId' in local) overlaid.meId = local.meId;
-    return overlaid;
-  }));
+  // Same race-guarded overlay as the single-tournament refresh paths: a list
+  // refresh racing a score tap must not compute (and persist) an entry from
+  // a queue snapshot that missed the tap's enqueue.
+  const result = await Promise.all(
+    list.map((t) => _overlayAndSave(t.id, t, { makeActive: false })),
+  );
 
   const sorted = result.sort(byCreatedAtDesc);
   // Fire-and-forget: keep the offline index in sync with the latest list.
@@ -318,22 +321,15 @@ export async function loadTournament(options = {}) {
     }
     // Kick remote refresh in background; do not block the UI. Overlay this
     // tournament's still-undrained queued mutations onto the fresh remote
-    // state so we never clobber an in-flight mutation whose sync hasn't
-    // landed yet — the overwrite path was erasing scores the moment they
-    // were entered. Skip when offline to avoid stacking failed round-trips
-    // behind every focus.
+    // state (race-guarded — see _overlayAndSave) so we never clobber an
+    // in-flight mutation whose sync hasn't landed yet — the overwrite path
+    // was erasing scores the moment they were entered. Skip when offline to
+    // avoid stacking failed round-trips behind every focus.
     if (refreshRemote && isOnline()) {
       fetchRemoteTournament(activeId)
         .then(async (remote) => {
           if (!remote) return;
-          const latest = await readLocal(activeId);
-          const localForIdentity = latest ?? cached;
-          const entries = await _pendingEntriesFor(activeId);
-          const merged = _applyPendingMutations(remote, entries);
-          // meId is device-local — never trusted from the server (see
-          // merge.js:203-206, the LWW path this overlay replaces).
-          if (localForIdentity && 'meId' in localForIdentity) merged.meId = localForIdentity.meId;
-          await saveLocal(merged);
+          const merged = await _overlayAndSave(activeId, remote);
           if (resolveIdentity) await resolveMeIdForTournament(merged);
         })
         .catch(() => {});
@@ -364,12 +360,7 @@ export async function getTournament(id) {
       fetchRemoteTournament(id)
         .then(async (remote) => {
           if (!remote) return;
-          const latest = await readLocal(id);
-          const localForIdentity = latest ?? cached;
-          const entries = await _pendingEntriesFor(id);
-          const merged = _applyPendingMutations(remote, entries);
-          if (localForIdentity && 'meId' in localForIdentity) merged.meId = localForIdentity.meId;
-          await saveLocal(merged, { makeActive: false });
+          const merged = await _overlayAndSave(id, remote, { makeActive: false });
           await resolveMeIdForTournament(merged, { makeActive: false });
         })
         .catch(() => {});
@@ -394,11 +385,7 @@ export async function refreshTournamentFromRemote(id) {
   if (!id) return null;
   const remote = await fetchRemoteTournament(id);
   if (!remote) return resolveMeIdForTournament(await readLocal(id));
-  const local = await readLocal(id);
-  const entries = await _pendingEntriesFor(id);
-  const merged = _applyPendingMutations(remote, entries);
-  if (local && 'meId' in local) merged.meId = local.meId;
-  await saveLocal(merged);
+  const merged = await _overlayAndSave(id, remote);
   return resolveMeIdForTournament(merged);
 }
 

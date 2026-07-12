@@ -212,4 +212,84 @@ describe('background refresh overlays undrained pending mutations onto fresh rem
     const persisted = await store.readLocal('t1');
     expect(persisted.rounds[0].scores.p2[1]).toBe(5);
   });
+
+  test('only this tournament\'s queued entries are overlaid (two-tournament isolation)', async () => {
+    installMocks({ online: true });
+    mockState.userId = 'u1';
+    // Server truth for t1: only p1 has scored.
+    mockState.remote = blob({ scores: { p1: { 1: 4 } }, currentRound: 0 });
+
+    const { syncQueue } = require('../syncQueue');
+    // t1's own pending score…
+    await syncQueue.enqueue({
+      tournamentId: 't1',
+      mutation: {
+        type: 'score.set', roundId: 'r1', playerId: 'p2', hole: 1, value: 5, ts: Date.now(),
+      },
+      path: 'rounds.r1.scores.p2.h1',
+    });
+    // …and a pending score for a DIFFERENT tournament that happens to share
+    // round/player ids — it must not leak into t1's overlay.
+    await syncQueue.enqueue({
+      tournamentId: 't2',
+      mutation: {
+        type: 'score.set', roundId: 'r1', playerId: 'p1', hole: 1, value: 9, ts: Date.now(),
+      },
+      path: 'rounds.r1.scores.p1.h1',
+    });
+
+    const store = require('../tournamentStore');
+    const result = await store.refreshTournamentFromRemote('t1');
+
+    expect(result.rounds[0].scores.p2[1]).toBe(5);   // t1's entry applied
+    expect(result.rounds[0].scores.p1[1]).toBe(4);   // t2's entry did NOT leak in
+    // Read paths never drain: both entries are still queued afterwards.
+    const remaining = await syncQueue.all();
+    expect(remaining.map((e) => e.tournamentId).sort()).toEqual(['t1', 't2']);
+  });
+
+  test('a score enqueued after the first queue snapshot still lands in the saved blob (save-then-enqueue race)', async () => {
+    installMocks({ online: true });
+    mockState.userId = 'u1';
+    // Server truth: p2 has not scored yet.
+    mockState.remote = blob({ scores: { p1: { 1: 4 } }, currentRound: 0 });
+
+    // mutate() saves locally BEFORE it enqueues, so an overlay's queue
+    // snapshot can miss a score that is already in local state — and a
+    // saveLocal computed from that snapshot would erase the just-entered
+    // value. Simulate the race with a queue whose first read returns [] and
+    // whose subsequent reads return the late entry: the refresh must settle
+    // (re-snapshot after saving, same bounded loop as syncWorker's
+    // post-drain reconcile) so the final saved blob includes the late score.
+    const lateEntry = {
+      id: 'late-1',
+      tournamentId: 't1',
+      mutation: {
+        type: 'score.set', roundId: 'r1', playerId: 'p2', hole: 1, value: 5, ts: Date.now(),
+      },
+      path: 'rounds.r1.scores.p2.h1',
+      ts: Date.now(),
+    };
+    let queueReads = 0;
+    jest.doMock('../syncQueue', () => ({
+      syncQueue: {
+        all: jest.fn(() => {
+          queueReads += 1;
+          return Promise.resolve(queueReads === 1 ? [] : [lateEntry]);
+        }),
+        enqueue: jest.fn(() => Promise.resolve(lateEntry)),
+        drop: jest.fn(() => Promise.resolve()),
+        clear: jest.fn(() => Promise.resolve()),
+      },
+    }));
+
+    const store = require('../tournamentStore');
+    const result = await store.refreshTournamentFromRemote('t1');
+    expect(result.rounds[0].scores.p2[1]).toBe(5);
+
+    const persisted = await store.readLocal('t1');
+    expect(persisted.rounds[0].scores.p2[1]).toBe(5);
+    // The settle loop re-read the queue after saving (>= 2 reads).
+    expect(queueReads).toBeGreaterThanOrEqual(2);
+  });
 });
