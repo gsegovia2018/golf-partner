@@ -2,6 +2,7 @@
 // mocks are in place before ../syncWorker and its dependencies load.
 import {
   drainTournament, drainLibrary, setScoreConflictHandler, syncNow, syncSettled,
+  isPermanentSyncError,
 } from '../syncWorker';
 import { readLocal, saveLocal, _setSyncStatus } from '../tournamentStore';
 import { executeMutation } from '../mutationWrites';
@@ -9,6 +10,7 @@ import { applyPendingMutations } from '../mutate';
 import { fetchTournament } from '../tournamentRepo';
 import { upsertPlayer } from '../libraryStore';
 import { syncQueue } from '../syncQueue';
+import { supabase } from '../../lib/supabase';
 
 jest.mock('../../lib/supabase', () => ({
   supabase: { rpc: jest.fn(() => Promise.resolve({ error: null })) },
@@ -35,6 +37,7 @@ jest.mock('../syncQueue', () => ({
   syncQueue: {
     drop: jest.fn(() => Promise.resolve()),
     all: jest.fn(() => Promise.resolve([])),
+    incrementAttempts: jest.fn(() => Promise.resolve(1)),
   },
 }));
 
@@ -59,6 +62,7 @@ describe('drainTournament', () => {
     // undo a mockReturnValue/mockImplementation set inside a test body, so
     // without this a per-test override would leak into later tests.
     applyPendingMutations.mockImplementation((t) => t);
+    syncQueue.incrementAttempts.mockImplementation(() => Promise.resolve(1));
   });
 
   test('executes queued mutations via executeMutation in order, dropping each on success', async () => {
@@ -109,6 +113,68 @@ describe('drainTournament', () => {
     expect(syncQueue.drop).toHaveBeenCalledWith('e1');
     expect(syncQueue.drop).toHaveBeenCalledWith('e2');
     expect(executeMutation).toHaveBeenCalledTimes(2);
+    // Permanent drops must be visible on the sync indicator, not just a
+    // console.warn nobody sees.
+    expect(_setSyncStatus).toHaveBeenCalledWith('error');
+  });
+
+  test('a recoverable coded error (expired session) is NOT dropped — it stays queued and stops the drain', async () => {
+    // This is the "Finish tournament" bug: PGRST301 (JWT expired) carries a
+    // `.code`, but it is a transient auth hiccup, not a poison mutation. It
+    // must behave like the no-code transient path — entry stays queued,
+    // draining this tournament stops, nothing is silently lost.
+    const authError = Object.assign(new Error('JWT expired'), { code: 'PGRST301' });
+    executeMutation.mockRejectedValueOnce(authError);
+    const e1 = { id: 'e1', tournamentId: 't1', mutation: { type: 'tournament.setFinished', finishedAt: 123 } };
+    const e2 = { id: 'e2', tournamentId: 't1', mutation: { type: 'score.set' } };
+
+    await expect(drainTournament('t1', [e1, e2])).rejects.toThrow('JWT expired');
+
+    expect(syncQueue.drop).not.toHaveBeenCalled();
+    expect(executeMutation).toHaveBeenCalledTimes(1); // e2 never attempted
+    expect(fetchTournament).not.toHaveBeenCalled(); // reconcile skipped
+    // Never falsely report all-clear while a mutation is still stuck.
+    expect(_setSyncStatus).not.toHaveBeenCalledWith('idle');
+
+    // A later drain (session refreshed) succeeds and lands it.
+    executeMutation.mockResolvedValueOnce({ conflict: null });
+    await drainTournament('t1', [e1]);
+    expect(syncQueue.drop).toHaveBeenCalledWith('e1');
+  });
+
+  test('the finish-tournament scenario: setFinished hits a transient PGRST301 once, then succeeds and is not lost', async () => {
+    const authError = Object.assign(new Error('JWT expired'), { code: 'PGRST301' });
+    executeMutation.mockRejectedValueOnce(authError).mockResolvedValueOnce({ conflict: null });
+    const e1 = {
+      id: 'e1', tournamentId: 't1', mutation: { type: 'tournament.setFinished', finishedAt: 123 },
+    };
+
+    await expect(drainTournament('t1', [e1])).rejects.toThrow('JWT expired');
+    expect(syncQueue.drop).not.toHaveBeenCalled();
+
+    // Next drain pass reaches executeMutation (→ repo.patchTournament →
+    // patch_game_tournament in the real stack) again and this time lands.
+    await drainTournament('t1', [e1]);
+    expect(executeMutation).toHaveBeenCalledTimes(2);
+    expect(syncQueue.drop).toHaveBeenCalledWith('e1');
+  });
+
+  test('poison guard: a recoverable coded error that keeps failing past the retry cap is eventually dropped and surfaced', async () => {
+    const authError = Object.assign(new Error('JWT expired'), { code: 'PGRST301' });
+    executeMutation.mockRejectedValue(authError);
+    let attempts = 0;
+    syncQueue.incrementAttempts.mockImplementation(() => Promise.resolve(++attempts));
+    const e1 = { id: 'e1', tournamentId: 't1', mutation: { type: 'tournament.setFinished' } };
+
+    for (let i = 0; i < 7; i++) {
+      await expect(drainTournament('t1', [e1])).rejects.toThrow('JWT expired');
+    }
+    expect(syncQueue.drop).not.toHaveBeenCalled();
+
+    // 8th failure crosses the cap — dropped, but surfaced, not silent.
+    await drainTournament('t1', [e1]);
+    expect(syncQueue.drop).toHaveBeenCalledWith('e1');
+    expect(_setSyncStatus).toHaveBeenCalledWith('error');
   });
 
   test('a returned conflict is forwarded to the registered conflict handler', async () => {
@@ -239,6 +305,43 @@ describe('drainTournament', () => {
   });
 });
 
+describe('isPermanentSyncError', () => {
+  test.each([
+    ['PGRST301', false], // JWT expired / auth — recoverable
+    ['401', false],
+    ['403', false],
+    ['429', false], // rate limit — recoverable
+    ['500', false],
+    ['503', false],
+    ['08006', false], // SQLSTATE connection-exception class — recoverable
+    ['08003', false],
+    ['UNKNOWN_WEIRD_CODE', false], // any unrecognized code — recoverable
+    ['23505', true], // SQLSTATE integrity constraint (unique violation)
+    ['22P02', true], // SQLSTATE data exception (invalid text representation)
+    ['42501', true], // SQLSTATE syntax/insufficient-privilege
+    ['PGRST116', true], // PostgREST "no rows"
+    ['P0001', true], // PL/pgSQL RAISE EXCEPTION default (business rule, e.g. 'party locked')
+    ['P0002', true], // no_data_found
+    ['P0003', true], // too_many_rows
+    ['P0004', true], // assert_failure
+  ])('error.code %s -> permanent = %s', (code, expected) => {
+    expect(isPermanentSyncError({ code, message: 'x' })).toBe(expected);
+  });
+
+  test('no error.code (network/transport failure) is recoverable, not permanent', () => {
+    expect(isPermanentSyncError(new Error('network down'))).toBe(false);
+  });
+
+  test('the "unknown mutation type" throw from executeMutation is permanent (genuinely un-processable)', () => {
+    expect(isPermanentSyncError(new Error('unknown mutation type: bogus.op'))).toBe(true);
+  });
+
+  test('a nullish error is not permanent', () => {
+    expect(isPermanentSyncError(null)).toBe(false);
+    expect(isPermanentSyncError(undefined)).toBe(false);
+  });
+});
+
 describe('drainLibrary', () => {
   beforeEach(() => {
     jest.clearAllMocks();
@@ -255,6 +358,88 @@ describe('drainLibrary', () => {
     expect(upsertPlayer).toHaveBeenCalledWith(
       expect.objectContaining({ id: 'p1', gender: 'female' }),
     );
+  });
+
+  test('rpc.call: a recoverable coded error (e.g. 429 rate limit) is rethrown so the entry retries, not dropped', async () => {
+    // Supabase errors are plain objects, not Error instances, so assert via
+    // the rejected value's shape rather than jest's toThrow (which expects
+    // an Error-like prototype).
+    supabase.rpc.mockResolvedValueOnce({ error: { code: '429', message: 'rate limited' } });
+    const e1 = { id: 'e1', mutation: { type: 'rpc.call', fn: 'do_thing', args: {} } };
+
+    await expect(drainLibrary([e1])).rejects.toMatchObject({ code: '429', message: 'rate limited' });
+    expect(syncQueue.drop).not.toHaveBeenCalled();
+  });
+
+  test('rpc.call: a permanent coded error (e.g. unique violation) is dropped as before', async () => {
+    supabase.rpc.mockResolvedValueOnce({ error: { code: '23505', message: 'dup' } });
+    const e1 = { id: 'e1', mutation: { type: 'rpc.call', fn: 'do_thing', args: {} } };
+
+    await drainLibrary([e1]);
+
+    expect(syncQueue.drop).toHaveBeenCalledWith('e1');
+  });
+
+  test('rpc.call: a P0001 business-rule raise (e.g. "party locked" from submit_score) is dropped + surfaced, never retried', async () => {
+    // submit_score RAISE EXCEPTION 'party locked' surfaces as code P0001.
+    // It is permanent — retrying can never succeed. It must drop
+    // immediately (not sit queued forever wedging the pipeline) and flip
+    // the sync indicator so the failure is visible.
+    supabase.rpc.mockResolvedValueOnce({ error: { code: 'P0001', message: 'party locked' } });
+    const e1 = { id: 'e1', mutation: { type: 'rpc.call', fn: 'submit_score', args: {} } };
+
+    await drainLibrary([e1]);
+
+    expect(syncQueue.drop).toHaveBeenCalledWith('e1');
+    expect(_setSyncStatus).toHaveBeenCalledWith('error');
+  });
+
+  test('rpc.call: a recoverable coded error that keeps failing past the retry cap is eventually dropped + surfaced (no infinite retry)', async () => {
+    // drainLibrary must have the same poison guard as drainTournament — a
+    // recoverable error that never actually recovers can't be allowed to
+    // retry forever (that is what wedged the whole pipeline).
+    supabase.rpc.mockResolvedValue({ error: { code: 'PGRST301', message: 'JWT expired' } });
+    let attempts = 0;
+    syncQueue.incrementAttempts.mockImplementation(() => Promise.resolve(++attempts));
+    const e1 = { id: 'e1', mutation: { type: 'rpc.call', fn: 'submit_score', args: {} } };
+
+    for (let i = 0; i < 7; i++) {
+      await expect(drainLibrary([e1])).rejects.toMatchObject({ code: 'PGRST301' });
+    }
+    expect(syncQueue.drop).not.toHaveBeenCalled();
+
+    // 8th failure crosses the cap — dropped and surfaced, not silent, not
+    // thrown (so drainOnce continues).
+    await drainLibrary([e1]);
+    expect(syncQueue.drop).toHaveBeenCalledWith('e1');
+    expect(_setSyncStatus).toHaveBeenCalledWith('error');
+  });
+});
+
+describe('drainOnce isolation (via syncNow)', () => {
+  beforeEach(() => {
+    jest.clearAllMocks();
+    readLocal.mockResolvedValue(localBlob);
+    executeMutation.mockResolvedValue({ conflict: null });
+    fetchTournament.mockResolvedValue(null);
+    applyPendingMutations.mockImplementation((t) => t);
+    syncQueue.incrementAttempts.mockImplementation(() => Promise.resolve(1));
+  });
+
+  it('a throwing drainLibrary (recoverable, under cap) does NOT prevent the tournament loop from draining', async () => {
+    // The wedge: a stuck official-score rpc.call must not block casual
+    // tournament score/finish sync. drainLibrary throws (recoverable, under
+    // cap) but drainOnce isolates it, so the tournament entry still drains.
+    const libEntry = { id: 'lib1', mutation: { type: 'rpc.call', fn: 'submit_score', args: {} } };
+    const tournEntry = { id: 't-e1', tournamentId: 't1', mutation: { type: 'score.set' } };
+    supabase.rpc.mockResolvedValue({ error: { code: 'PGRST301', message: 'JWT expired' } });
+    syncQueue.all.mockResolvedValue([libEntry, tournEntry]);
+
+    await syncNow();
+
+    // The tournament drain ran despite the library mutation throwing.
+    expect(executeMutation).toHaveBeenCalledWith(tournEntry, localBlob);
+    expect(syncQueue.drop).toHaveBeenCalledWith('t-e1');
   });
 });
 

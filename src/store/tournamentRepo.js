@@ -41,6 +41,24 @@ export async function fetchMyTournaments() {
   return (data ?? []).map(({ tournament, role }) => ({ ...tournament, _role: role }));
 }
 
+// One row per round across the given tournaments — see
+// supabase/migrations/20260713000000_round_activity_rpc.sql. Returns one row
+// per ROUND (not per score cell), which dramatically raises the response-size
+// ceiling vs a raw .from('game_scores') select — but does NOT remove it:
+// PostgREST's db-max-rows (config.toml max_rows, 1000) also caps RPCs that
+// return SETOF/TABLE, so a caller with enough tournaments could still exceed
+// it in one call. This wrapper issues a single RPC for the ids it is given;
+// the caller (feedStore) is responsible for chunking a large id list into
+// bounded batches so each call stays well under the cap. Used by feedStore
+// for real per-round activity recency.
+export async function fetchRoundActivity(tournamentIds) {
+  const { data, error } = await supabase.rpc('get_round_activity', {
+    p_tournament_ids: tournamentIds,
+  });
+  if (error) throw error;
+  return data ?? [];
+}
+
 // -- Per-cell writes ------------------------------------------------------
 
 export async function setScore({

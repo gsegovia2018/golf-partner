@@ -14,6 +14,60 @@ let _attempt = 0;
 let _timer = null;
 let _running = false;
 
+// How many times a RECOVERABLE coded error may fail before we give up on an
+// entry as poison (see isPermanentSyncError below for why "has a .code"
+// alone can't be trusted to mean "give up now").
+const RECOVERABLE_ATTEMPT_CAP = 8;
+
+// Classifies a write failure as PERMANENT (retrying can never succeed, so
+// drop the mutation now) vs RECOVERABLE (the write may succeed on a later
+// attempt, so keep it queued).
+//
+// The historical heuristic here was "has a .code -> permanent". That is
+// backwards for a whole class of coded errors that ARE transient: an
+// expired/invalid session (PostgREST 'PGRST301', JWT expired), plain
+// 401/403, 429 rate-limiting, 5xx, and SQLSTATE class 08 (connection
+// exception) all carry a `.code` but describe a temporary condition, not a
+// malformed or rejected write. Treating them as permanent silently and
+// PERMANENTLY drops the user's action (e.g. a "Finish tournament" mutation
+// dropped because the JWT happened to be stale at drain time).
+//
+// Genuinely permanent (drop-now) cases:
+//   - SQLSTATE class 22 (data exception, e.g. 22P02 invalid text repr.)
+//   - SQLSTATE class 23 (integrity constraint violation, e.g. 23505 unique)
+//   - SQLSTATE class 42 (syntax error / undefined object / insufficient
+//     privilege, e.g. 42501)
+//   - PostgREST 'PGRST116' (no rows) and other PGRST1xx malformed-request
+//     codes
+//   - the "unknown mutation type" throw from executeMutation — the op
+//     itself is unprocessable, not a server hiccup
+//
+// Everything else that carries a `.code` (auth, rate-limit, 5xx, connection
+// errors, or any code this list doesn't recognize) is treated as
+// RECOVERABLE, same as the historical no-code/network-error path.
+export function isPermanentSyncError(error) {
+  if (!error) return false;
+  if (typeof error.message === 'string' && error.message.startsWith('unknown mutation type')) {
+    return true;
+  }
+  const code = error.code;
+  if (!code) return false;
+  const codeStr = String(code);
+  if (codeStr === 'PGRST116') return true;
+  if (codeStr.startsWith('PGRST1')) return true; // PostgREST malformed/parse-request codes
+  // PL/pgSQL RAISE default class: a `RAISE EXCEPTION 'party locked'` with no
+  // explicit errcode surfaces as SQLSTATE P0001 (P0002 no_data_found, P0003
+  // too_many_rows, P0004 assert_failure). These are business-rule raises
+  // (e.g. official-mode submit_score rejecting a locked party / invalid
+  // token) — never transient, so retrying can never succeed.
+  if (codeStr.length === 5 && codeStr.startsWith('P0')) return true;
+  // SQLSTATE codes are always 5 characters (e.g. '23505', '22P02',
+  // '42501') — gate on length too, or a 3-digit HTTP code like '429'
+  // (rate-limit, recoverable) would false-positive on the '42' prefix.
+  if (codeStr.length === 5 && /^(22|23|42)/.test(codeStr)) return true;
+  return false;
+}
+
 // Conflict seam. Registered with the real marker-writer immediately below
 // (module init) so it's always wired before any drain can run; kept as a
 // seam (rather than calling recordScoreConflict directly) so tests can swap
@@ -47,19 +101,36 @@ export async function drainLibrary(libraryMuts) {
       // Generic RPC dispatch (e.g. official-tournament score writes).
       const { error } = await supabase.rpc(m.fn, m.args);
       if (error) {
-        if (error.code) {
+        if (isPermanentSyncError(error)) {
           // Terminal failure: the RPC reached the database and the
-          // function raised an exception / hit a constraint (SQLSTATE
-          // codes like P0001, 23xxx — "party locked", "invalid token").
-          // Retrying will never succeed, so drop the entry rather than
-          // let it sit forever pinning the sync dot to orange.
+          // function raised a genuinely un-retryable exception / hit a
+          // constraint (SQLSTATE classes 22/23/42, PGRST1xx). Retrying
+          // will never succeed, so drop the entry — but still flip the
+          // sync indicator so the failure isn't invisible.
           console.warn(`rpc.call ${m.fn} permanently rejected; dropping: ${error.message}`);
           await syncQueue.drop(entry.id);
+          _setSyncStatus('error');
           continue;
         }
-        // Transient failure: no SQLSTATE means a network/transport
-        // error. Leave the entry queued and let scheduleSync's backoff
-        // retry it on the next pass.
+
+        // Recoverable failure: network/transport error, expired session
+        // (PGRST301/JWT), 401/403, 429, 5xx, or any unrecognized code.
+        // Bump the poison counter — a recoverable error that never actually
+        // recovers must NOT retry forever (that is what wedged the whole
+        // pipeline: a stuck rpc.call throwing on every pass, aborting
+        // drainOnce before any tournament could drain).
+        const attempts = await syncQueue.incrementAttempts(entry.id);
+        if (attempts >= RECOVERABLE_ATTEMPT_CAP) {
+          console.warn(
+            `rpc.call ${m.fn} failed ${attempts} times with a recoverable `
+            + `error (${error?.code ?? 'no code'}); dropping as poison: ${error?.message}`,
+          );
+          await syncQueue.drop(entry.id);
+          _setSyncStatus('error');
+          continue;
+        }
+        // Under the cap: leave the entry queued and let scheduleSync's
+        // backoff retry it on the next pass.
         throw error;
       }
       await syncQueue.drop(entry.id);
@@ -79,15 +150,24 @@ export async function drainLibrary(libraryMuts) {
 // readLocal is an in-memory cache) so entry N sees whatever entry N-1 (or a
 // concurrent screen edit) just saved.
 //
-// Error heuristic (unchanged from the legacy blob-push path, see
-// drainLibrary's rpc.call branch above): a terminal failure — error.code
-// present, meaning the write reached the database and was rejected there —
-// drops the entry permanently, since retrying can never succeed. A
-// transient failure — no error.code, i.e. a network/transport error — is
-// rethrown, which leaves the entry (and any not-yet-attempted entries for
-// this tournament) queued and aborts the reconcile below; drainOnce's caller
-// (syncNow) catches it, flips status to 'error', and schedules a backoff
-// retry.
+// Error heuristic: see isPermanentSyncError above for the full
+// classification. A PERMANENT failure (genuinely un-retryable — SQLSTATE
+// 22/23/42, PGRST1xx, or an unknown mutation type) drops the entry now,
+// since retrying can never succeed, and flips the sync status to 'error' so
+// the drop is visible rather than a console.warn nobody sees. A RECOVERABLE
+// failure — no error.code (network/transport), OR a code that isn't
+// genuinely terminal (expired session, 401/403, 429, 5xx, connection
+// errors) — is rethrown, which leaves the entry (and any not-yet-attempted
+// entries for this tournament) queued and aborts the reconcile below;
+// drainOnce's caller (syncNow) catches it, flips status to 'error', and
+// schedules a backoff retry.
+//
+// A recoverable entry's `attempts` counter (persisted via
+// syncQueue.incrementAttempts) is a poison guard: if the SAME entry keeps
+// failing recoverably past RECOVERABLE_ATTEMPT_CAP attempts, something is
+// wrong beyond a one-off blip (e.g. a permanently expired credential that
+// never refreshes) and we drop it rather than retry forever — surfaced via
+// 'error' status, never silently.
 export async function drainTournament(tournamentId, entries) {
   for (const entry of entries) {
     const local = await readLocal(tournamentId);
@@ -96,15 +176,28 @@ export async function drainTournament(tournamentId, entries) {
       if (conflict) await notifyScoreConflict(tournamentId, conflict);
       await syncQueue.drop(entry.id);
     } catch (error) {
-      if (error && error.code) {
+      if (isPermanentSyncError(error)) {
         console.warn(
           `mutation ${entry.mutation?.type} permanently rejected; dropping: ${error.message}`,
         );
         await syncQueue.drop(entry.id);
+        _setSyncStatus('error');
         continue;
       }
-      // Transient: leave this entry (and the rest of this tournament's
-      // batch) queued and stop draining it.
+
+      const attempts = await syncQueue.incrementAttempts(entry.id);
+      if (attempts >= RECOVERABLE_ATTEMPT_CAP) {
+        console.warn(
+          `mutation ${entry.mutation?.type} failed ${attempts} times with a recoverable `
+          + `error (${error?.code ?? 'no code'}); dropping as poison: ${error?.message}`,
+        );
+        await syncQueue.drop(entry.id);
+        _setSyncStatus('error');
+        continue;
+      }
+
+      // Recoverable and under the cap: leave this entry (and the rest of
+      // this tournament's batch) queued and stop draining it.
       throw error;
     }
   }
@@ -170,7 +263,19 @@ async function drainOnce() {
   _setSyncStatus('syncing');
 
   const libraryMuts = all.filter((e) => !e.tournamentId);
-  await drainLibrary(libraryMuts);
+  // Isolate the library drain: a single stuck library mutation (e.g. an
+  // official-mode submit_score rejected by a business-rule raise, or a
+  // recoverable error still under its retry cap) throws here, but it must
+  // NEVER abort the per-tournament drains below — a wedged official-score
+  // write must not block casual-tournament score/finish sync. The entry
+  // stays queued (or was already dropped by drainLibrary); the worker
+  // retries on the next pass.
+  try {
+    await drainLibrary(libraryMuts);
+  } catch (error) {
+    _setSyncStatus('error');
+    console.warn(`library drain failed; continuing with tournament drains: ${error?.message}`);
+  }
 
   const byTournament = new Map();
   for (const e of all) {
