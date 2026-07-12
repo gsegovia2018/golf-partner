@@ -13,8 +13,8 @@ describe('deriveMeIdFromAuth', () => {
   });
 
   it('corrects a stale meId left over from another device', () => {
-    // Without this, mergeTournaments preserves a stale local meId that no
-    // longer matches the auth user (e.g. account-switch on the same device).
+    // Without this, a fetched/cached blob's stale local meId (e.g. after an
+    // account switch on the same device) would stick around unchallenged.
     const t = {
       meId: 'p1',
       players: [

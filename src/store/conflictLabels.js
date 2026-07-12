@@ -1,9 +1,10 @@
-// Maps the dotted `_meta` paths emitted by mutate.js into Spanish human labels
-// for display in the SyncStatusSheet's "Cambios sobrescritos" list.
+// Maps the dotted paths returned by mutate.js's metaPathFor into Spanish
+// human labels for display in the SyncStatusSheet's "Cambios sobrescritos"
+// list.
 //
-// The `blob` argument is the post-merge tournament; we use it to resolve
-// round indices and player names. If it's null/incomplete, we fall back
-// to em-dashes rather than failing.
+// The `blob` argument is the tournament we resolve round indices and player
+// names against. If it's null/incomplete, we fall back to em-dashes rather
+// than failing.
 
 function roundIndex(blob, roundId) {
   const rounds = blob?.rounds;

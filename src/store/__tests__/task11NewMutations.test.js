@@ -32,7 +32,9 @@ describe('round.resetContent mutation', () => {
     });
 
     expect(t.rounds[0].scores).toEqual({});
-    expect(t.rounds[0].notes).toEqual({ round: undefined, hole: {} });
+    // normalizeRoundNotes no longer forces an empty `hole: {}` bucket (parity
+    // fix, task 13.1) — an empty notes input round-trips to an empty object.
+    expect(t.rounds[0].notes).toEqual({});
     expect(t.rounds[0].resetHistory).toHaveLength(2);
   });
 
@@ -91,7 +93,7 @@ describe('round.upsert mutation', () => {
   // Regression fix follow-up: `isNew` is a hint consumed ONLY by
   // mutationWrites.js (server-write side, to pick upsertRound vs patchRound)
   // — it's pure metadata here and must not change the local full-replace
-  // apply, nor the coarse _meta path.
+  // apply, nor the coarse path metaPathFor returns.
   test('isNew is inert for local apply/metaPathFor (server-write-only signal)', () => {
     const t = baseTournament();
     const newRound = { id: 'r1', courseName: 'New Course', holes: [{ number: 1, par: 4 }], playerHandicaps: { p1: 12 } };

@@ -35,9 +35,4 @@ describe('mutate deferSync option', () => {
     await mutate(baseTournament(), scoreMutation);
     expect(scheduleSync).toHaveBeenCalledTimes(1);
   });
-
-  it('deferSync still stamps _meta for the score cell', async () => {
-    const t = await mutate(baseTournament(), scoreMutation, { deferSync: true });
-    expect(t._meta['rounds.r1.scores.p1.h3']).toEqual(expect.any(Number));
-  });
 });

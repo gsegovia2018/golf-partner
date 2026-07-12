@@ -26,7 +26,7 @@ describe('round.remove mutation', () => {
     jest.clearAllMocks();
   });
 
-  test('removes the round and stamps the deletion tombstone path', async () => {
+  test('removes the round and enqueues the deletion under its tombstone path', async () => {
     const tournament = {
       id: 't1',
       name: 'Cup',
@@ -42,7 +42,6 @@ describe('round.remove mutation', () => {
     });
 
     expect(updated.rounds.map((r) => r.id)).toEqual(['r2']);
-    expect(updated._meta['rounds.r1._deleted']).toBe(99);
     expect(saveLocal).toHaveBeenCalledWith(updated);
     expect(syncQueue.enqueue).toHaveBeenCalledWith({
       tournamentId: 't1',

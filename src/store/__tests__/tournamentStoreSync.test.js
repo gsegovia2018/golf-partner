@@ -74,9 +74,9 @@ function installMocks({ online = true } = {}) {
   });
 }
 
-// One tournament, one round, one hole. `scores`/`meta` let each test stamp the
-// score cells so mergeTournaments' always-mine pass can act on them.
-function blob({ id = 't1', name = 'Cup', createdAt = '2026-07-11T09:00:00Z', scores, currentRound = 0, meta = {} }) {
+// One tournament, one round, one hole. `scores` lets each test seed the score
+// cells the row-based read path should return.
+function blob({ id = 't1', name = 'Cup', createdAt = '2026-07-11T09:00:00Z', scores, currentRound = 0 }) {
   return {
     id,
     name,
@@ -85,7 +85,6 @@ function blob({ id = 't1', name = 'Cup', createdAt = '2026-07-11T09:00:00Z', sco
     players: [{ id: 'p1', name: 'Ann' }, { id: 'p2', name: 'Bea' }],
     rounds: [{ id: 'r1', holes: [{ number: 1, par: 4, strokeIndex: 1 }], scores }],
     currentRound,
-    _meta: meta,
   };
 }
 

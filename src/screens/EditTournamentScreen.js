@@ -279,9 +279,10 @@ export default function EditTournamentScreen({ navigation, route }) {
       confirmation.confirmLabel,
     );
     if (!ok) return;
-    // Persist the deletion through mutate() so a `rounds.<id>._deleted`
-    // tombstone lands in _meta. Without it the next loadTournament merge
-    // would deepClone the still-present remote round back into local state.
+    // Persist the deletion through mutate() so the round.remove mutation is
+    // queued and the round drops out of the local blob immediately — the
+    // repo-backed read path (row-based, not blob-merged) never resurrects a
+    // deleted round from a stale remote copy.
     if (target?.id && tournamentRef.current) {
       try {
         const updated = await mutate(tournamentRef.current, {

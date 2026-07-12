@@ -34,7 +34,6 @@ describe('conflict.resolve', () => {
     expect(t.rounds[0].scores.p1[3]).toBe(6);
     expect(t.rounds[0].scoreConflicts.p1[3]).toBeUndefined();
     expect(t.rounds[0].scoreResolutions.p1[3]).toBe(500);
-    expect(t._meta['rounds.r1.scoreResolutions.p1.h3']).toBe(500);
   });
 
   it('resolving to null deletes the score key', async () => {

@@ -3,7 +3,10 @@ import { saveLocal, readLocal, _setSyncStatus } from './tournamentStore';
 import { isOnline } from '../lib/connectivity';
 import { normalizeRoundNotes } from './roundNotes';
 
-// Maps a mutation to the in-tournament `_meta` path it bumps.
+// Maps a mutation to a stable dotted path identifying what it touches. Used
+// as the sync-queue entry's coalescing/identity key and for labeling entries
+// in SyncStatusSheet's log (see conflictLabels.js) — it no longer stamps
+// anything on the tournament blob (sync is row-based, not blob-merged).
 // Returns null for library-only mutations (which do not touch the tournament blob).
 export function metaPathFor(m) {
   switch (m.type) {
@@ -28,8 +31,10 @@ export function metaPathFor(m) {
     // Per-round handicap INDEX override (recomputes the playing handicap for
     // non-manual entries). Scoped to one round, one player.
     case 'index.set': return `rounds.${m.roundId}.playerIndexes.${m.playerId}`;
-    // Structural round deletion: tombstone path consumed by mergeTournaments
-    // so the round stays gone after the next remote refresh.
+    // Structural round deletion. The path itself is no longer consumed by
+    // any merge/reconcile logic (deletion now flows through repo.deleteRound
+    // + the row-based read path) — it survives purely as the queue entry's
+    // coalescing/identity key.
     case 'round.remove': return `rounds.${m.roundId}._deleted`;
     // Players array LWW's as a single unit. Two concurrent offline adds
     // from different devices → last sync wins; this edge case is out of v1
@@ -66,13 +71,15 @@ export function metaPathFor(m) {
     // Archive / reopen a tournament. Scalar LWW path.
     case 'tournament.setFinished': return `finishedAt`;
     // Which tournament player is "me" (drives shot-detail tracking). Per-
-    // device identity — never synced, never stamped in _meta. Handled as a
-    // local-only mutation in mutate() below (short-circuited before enqueue).
+    // device identity — never synced. Handled as a local-only mutation in
+    // mutate() below (short-circuited before enqueue).
     case 'tournament.setMe': return null;
     // A joining editor links their account to a tournament player: stamps
     // that player's user_id (the joiner's claim must propagate to other
-    // devices). The local meId update is intentional but device-local, so
-    // it is NOT stamped — mergeTournaments restores local meId per device.
+    // devices). The local meId update is intentional but device-local — see
+    // deriveMeIdFromAuth in tournamentStore.js, which re-derives meId from
+    // auth on every read instead of trusting whatever the fetched/merged
+    // blob carried.
     case 'tournament.claimPlayer': return 'players';
     // Mid-game scoring-mode change: bumps the mode flag plus, for every round
     // whose pairs were rebuilt to match the new mode, that round's pairs path.
@@ -108,8 +115,8 @@ export function metaPathFor(m) {
     case 'tournament.create': return 'create';
     // Whole-round content replace (Reset Round / Undo / Restore snapshot in
     // HomeScreen). scores/notes live in their own normalized tables (never
-    // stamped in _meta by the per-cell mutations above), so this bumps the
-    // coarse parent paths instead of one per cell.
+    // touched path-by-path by the per-cell mutations above), so this returns
+    // the coarse parent paths instead of one per cell.
     case 'round.resetContent': return [
       `rounds.${m.roundId}.scores`,
       `rounds.${m.roundId}.notes`,
@@ -117,9 +124,9 @@ export function metaPathFor(m) {
     ];
     // Whole-round upsert (EditTournamentScreen / PlayersScreen bulk round
     // save — course/holes/tees/handicaps edited together). Mirrors
-    // tournament.create: a coarse bump, not a per-field one. `m.isNew` (see
+    // tournament.create: a coarse path, not a per-field one. `m.isNew` (see
     // mutationWrites.js's round.upsert branch) is server-write-only metadata
-    // — it doesn't change this local _meta bump.
+    // — it doesn't change this path.
     case 'round.upsert': return `rounds.${m.roundId}.upsert`;
     // Edit an EXISTING roster player's fields (e.g. base handicap) — distinct
     // from tournament.addPlayer (new player) / tournament.claimPlayer (just
@@ -153,8 +160,10 @@ export function applyToTournament(t, m) {
         round.scoreConflicts[m.playerId] = { ...round.scoreConflicts[m.playerId] };
         delete round.scoreConflicts[m.playerId][m.hole];
       }
-      // Resolution stamp: mergeTournaments treats a resolution at/after a raw
-      // write as authoritative for that cell on every device.
+      // Resolution stamp: records when this device explicitly resolved the
+      // conflict. Local-only bookkeeping (stripped before every server
+      // write — see tournamentRepo.js's stripRoundHotKeys) — no reconcile
+      // pass reads it now that sync is row-based rather than blob-merged.
       round.scoreResolutions = { ...(round.scoreResolutions ?? {}) };
       round.scoreResolutions[m.playerId] = {
         ...(round.scoreResolutions[m.playerId] ?? {}),
@@ -175,8 +184,12 @@ export function applyToTournament(t, m) {
       const round = t.rounds.find((r) => r.id === m.roundId);
       if (!round) return;
       if (m.scope === 'hole') {
-        round.notes = normalizeRoundNotes(round.notes);
-        round.notes.hole[m.hole] = m.text;
+        // normalizeRoundNotes omits `hole` entirely when there are no hole
+        // notes (matches get_game_tournament's shape) — so it can't be
+        // indexed into directly; build the bucket here instead.
+        const notes = normalizeRoundNotes(round.notes);
+        notes.hole = { ...(notes.hole ?? {}), [m.hole]: m.text };
+        round.notes = notes;
       } else {
         round.notes = { ...normalizeRoundNotes(round.notes), round: m.text };
       }
@@ -491,17 +504,12 @@ export async function mutate(tournamentBefore, mutation, opts = {}) {
     return t;
   }
 
-  // 1. Clone + apply + bump _meta
+  // 1. Clone + apply. `path` no longer stamps anything on the blob (sync is
+  // row-based now, not blob-merged) — it rides along on the queue entry
+  // purely as metaPathFor's coalescing/identity key (see conflictLabels.js).
   const t = JSON.parse(JSON.stringify(tournamentBefore));
   applyToTournament(t, m);
   const path = metaPathFor(m);
-  if (path) {
-    // Most mutations stamp one _meta path; some (addPlayer) stamp several.
-    const paths = Array.isArray(path) ? path : [path];
-    const meta = { ...(t._meta ?? {}) };
-    for (const p of paths) meta[p] = ts;
-    t._meta = meta;
-  }
 
   // 2. Persist local (UI source of truth)
   await saveLocal(t);
