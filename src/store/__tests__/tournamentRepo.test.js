@@ -132,6 +132,43 @@ describe('fetchMyTournaments', () => {
   });
 });
 
+describe('fetchRoundActivity', () => {
+  test('calls get_round_activity with p_tournament_ids and returns the rows', async () => {
+    mockState.rpcResult = {
+      data: [
+        { tournament_id: 't1', round_id: 'r0', activity_ts: '2026-07-10T00:00:00Z' },
+        { tournament_id: 't2', round_id: 'r1', activity_ts: '2026-07-11T00:00:00Z' },
+      ],
+      error: null,
+    };
+    const { fetchRoundActivity } = require('../tournamentRepo');
+
+    const result = await fetchRoundActivity(['t1', 't2']);
+
+    expect(mockState.rpcCalls).toEqual([
+      { name: 'get_round_activity', args: { p_tournament_ids: ['t1', 't2'] } },
+    ]);
+    expect(result).toEqual([
+      { tournament_id: 't1', round_id: 'r0', activity_ts: '2026-07-10T00:00:00Z' },
+      { tournament_id: 't2', round_id: 'r1', activity_ts: '2026-07-11T00:00:00Z' },
+    ]);
+  });
+
+  test('returns [] when the RPC returns null', async () => {
+    mockState.rpcResult = { data: null, error: null };
+    const { fetchRoundActivity } = require('../tournamentRepo');
+
+    expect(await fetchRoundActivity(['t1'])).toEqual([]);
+  });
+
+  test('throws on RPC error', async () => {
+    mockState.rpcResult = { data: null, error: { message: 'boom' } };
+    const { fetchRoundActivity } = require('../tournamentRepo');
+
+    await expect(fetchRoundActivity(['t1'])).rejects.toEqual({ message: 'boom' });
+  });
+});
+
 describe('setScore', () => {
   test('calls set_game_score with the confirmed param order and returns previous* fields', async () => {
     mockState.rpcResult = {

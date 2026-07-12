@@ -239,6 +239,58 @@ describe('feedStore read-path conversions (Task 13.2)', () => {
         'weekend:r2', 'weekend:r1', 'weekend:r0', 'claudia:r0',
       ]);
     });
+
+    // Robustness: get_round_activity returns one row per ROUND, which raises
+    // but does NOT remove PostgREST's max_rows=1000 response cap (it applies
+    // to SETOF/TABLE RPCs too). feedStore therefore chunks the id list into
+    // bounded batches (ROUND_ACTIVITY_CHUNK=200 tournaments/call) so each RPC
+    // stays far under the cap. With >200 tournaments this must fan out into
+    // multiple calls, each ≤200 ids, and merge EVERY chunk's rows into the
+    // map — including the last, smaller chunk.
+    test('chunks >200 tournament ids into multiple bounded get_round_activity calls, merging all rows into the map', async () => {
+      const { fetchRoundActivity } = require('../tournamentRepo');
+      const { buildFeed } = require('../feedStore');
+      const players = [{ id: 'p1', name: 'Marcos', user_id: 'me-user' }];
+
+      const N = 201; // → two chunks: 200 + 1
+      const tsById = {};
+      const tournaments = [];
+      for (let i = 0; i < N; i += 1) {
+        const id = `t${i}`;
+        tournaments.push(baseTournament(id, {
+          createdAt: new Date(1000 + i).toISOString(), roundId: `r${i}`, players,
+        }));
+        tsById[id] = '2026-07-01T00:00:00.000Z';
+      }
+      // Probe in the FIRST chunk gets the OLDEST ts (must sort last); probe in
+      // the SECOND (last, size-1) chunk gets the NEWEST ts (must sort first).
+      // If the second chunk's rows didn't land in the map, t200 would fall
+      // back to createdAt and not reliably lead.
+      tsById.t0 = '2020-01-01T00:00:00.000Z';
+      tsById.t200 = '2030-01-01T00:00:00.000Z';
+      mockSupabaseState.myTournaments = tournaments;
+
+      // Echo back a per-round activity row for exactly the ids in each chunk,
+      // so the assertion depends on the chunking actually covering all ids.
+      fetchRoundActivity.mockImplementation((ids) => Promise.resolve(
+        ids.map((id) => ({
+          tournament_id: id, round_id: `r${id.slice(1)}`, activity_ts: tsById[id],
+        })),
+      ));
+
+      const result = await buildFeed({
+        userId: 'me-user', source: 'remote', includeMedia: false,
+      });
+
+      expect(fetchRoundActivity).toHaveBeenCalledTimes(2);
+      for (const call of fetchRoundActivity.mock.calls) {
+        expect(call[0].length).toBeLessThanOrEqual(200);
+      }
+      // Both chunks' rows made it into the map: the last chunk's newest-ts
+      // tournament leads, the first chunk's oldest-ts tournament trails.
+      expect(result.items[0].tournamentId).toBe('t200');
+      expect(result.items[result.items.length - 1].tournamentId).toBe('t0');
+    });
   });
 
   describe('friend tournaments are fetched via tournamentRepo.fetchTournament, not the frozen tournaments.data blob', () => {

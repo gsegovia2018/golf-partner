@@ -49,25 +49,36 @@ async function currentUserId() {
 // growing) silently truncated past that cap, leaving whichever tournaments'
 // score rows fell outside the first (unordered) 1000 with no activity
 // timestamp at all. get_round_activity aggregates server-side instead,
-// returning one row PER ROUND — bounded by round count, never by score-cell
-// count — so it can't hit that cap regardless of how large game_scores
-// grows. Same RLS as game_rounds/game_scores (SECURITY INVOKER — see the
-// migration). Returns an empty Map on any failure (offline / RLS denial /
-// RPC error) — callers must treat a missing entry as "timestamp unknown",
-// not zero, and fall back accordingly.
+// returning one row PER ROUND rather than per score cell — which dramatically
+// raises the ceiling (from ~total-score-cell count to ~total-round count),
+// but does NOT remove it: PostgREST's db-max-rows (max_rows=1000) caps
+// SETOF/TABLE-returning RPCs too, so a caller with enough tournaments could
+// still exceed 1000 rounds in one RPC. So we also CHUNK the id list into
+// bounded batches (ROUND_ACTIVITY_CHUNK tournaments per call): with only a
+// handful of rounds per tournament, 200 tournaments/call keeps each response
+// far under 1000 rows with large headroom, and it scales to any number of
+// tournaments. Chunks run concurrently; a single failing chunk is swallowed
+// (Promise.allSettled) so the rest still contribute their real timestamps —
+// rounds from a failed chunk are simply absent from the map, and
+// roundActivityTs falls back for them. Same RLS as game_rounds/game_scores
+// (SECURITY INVOKER — see the migration). Callers must treat a missing entry
+// as "timestamp unknown", not zero, and fall back accordingly.
+const ROUND_ACTIVITY_CHUNK = 200;
+
 async function fetchRoundActivityTimestamps(tournamentIds) {
   const map = new Map();
   if (tournamentIds.length === 0 || !isOnline()) return map;
-  try {
-    const rows = await fetchRoundActivity(tournamentIds);
-    for (const row of rows ?? []) {
+  const chunks = [];
+  for (let i = 0; i < tournamentIds.length; i += ROUND_ACTIVITY_CHUNK) {
+    chunks.push(tournamentIds.slice(i, i + ROUND_ACTIVITY_CHUNK));
+  }
+  const settled = await Promise.allSettled(chunks.map((chunk) => fetchRoundActivity(chunk)));
+  for (const res of settled) {
+    if (res.status !== 'fulfilled') continue; // failed chunk → its rounds fall back
+    for (const row of res.value ?? []) {
       const ms = Date.parse(row.activity_ts);
       if (Number.isFinite(ms)) map.set(`${row.tournament_id}:${row.round_id}`, ms);
     }
-  } catch {
-    // Swallowed — roundActivityTs falls back to a deterministic-but-not-
-    // recency-based ordering below when a round's timestamp is missing.
-    return new Map();
   }
   return map;
 }
