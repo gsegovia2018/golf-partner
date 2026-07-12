@@ -234,7 +234,16 @@ export function applyToTournament(t, m) {
       break;
     }
     case 'tournament.addPlayer': {
-      t.players = [...(t.players ?? []), m.player];
+      // Dedupe by id: a realtime game_players INSERT can patch this player
+      // into the cache before this still-queued addPlayer replays on top of
+      // that same base (the read-path overlay in realtimeSync/tournamentStore
+      // applies pending mutations over a freshly-patched object). Without the
+      // guard the player would land in players[] twice. The roundPatches /
+      // nextScoringMode below are re-applied either way — they set handicaps/
+      // pairs/mode the row event never carried, and doing so is idempotent.
+      if (!(t.players ?? []).some((p) => p.id === m.player.id)) {
+        t.players = [...(t.players ?? []), m.player];
+      }
       for (const patch of (m.roundPatches ?? [])) {
         const round = t.rounds?.find((r) => r.id === patch.roundId);
         if (!round) continue;

@@ -127,6 +127,27 @@ describe('tournament.create mutation', () => {
   });
 });
 
+describe('tournament.addPlayer mutation', () => {
+  test('appends a new player', () => {
+    const t = { id: 't1', players: [{ id: 'p0' }], rounds: [] };
+    applyToTournament(t, { type: 'tournament.addPlayer', player: { id: 'p1', name: 'A' } });
+    expect(t.players.map((p) => p.id)).toEqual(['p0', 'p1']);
+  });
+
+  // Idempotency guards the realtime self-echo race: a realtime INSERT patches
+  // the new player into the cache, then applyPendingMutations replays the
+  // still-queued addPlayer on top of that same base — without a dedupe the
+  // player would appear twice.
+  test('is idempotent by player id — applying twice yields a single entry', () => {
+    const t = { id: 't1', players: [{ id: 'p0' }], rounds: [] };
+    const m = { type: 'tournament.addPlayer', player: { id: 'p1', name: 'A' } };
+    applyToTournament(t, m);
+    applyToTournament(t, m);
+    expect(t.players.filter((p) => p.id === 'p1')).toHaveLength(1);
+    expect(t.players.map((p) => p.id)).toEqual(['p0', 'p1']);
+  });
+});
+
 describe('applyPendingMutations', () => {
   test('applies a queued score.set on top of a fetched object without mutating the input', () => {
     const fetched = { id: 't1', rounds: [{ id: 'r1', scores: {} }] };

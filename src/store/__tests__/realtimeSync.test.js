@@ -70,6 +70,24 @@ describe('applyScoreRow', () => {
     const out = applyScoreRow(t, { round_id: 'rX', player_id: 'p1', hole: 1, strokes: 4 });
     expect(out.rounds).toEqual(t.rounds);
   });
+
+  test('deleting the last hole for a player prunes the now-empty player bucket', () => {
+    const t = { id: 't1', rounds: [{ id: 'r1', scores: { p1: { 1: 4 }, p2: { 1: 3 } } }] };
+    const out = applyScoreRow(t, { round_id: 'r1', player_id: 'p1', hole: 1, strokes: null });
+    expect(out.rounds[0].scores).toEqual({ p2: { 1: 3 } });
+  });
+
+  test('DELETE (PK-only old record, no strokes field) deletes the cell', () => {
+    const t = { id: 't1', rounds: [{ id: 'r1', scores: { p1: { 1: 4, 2: 5 } } }] };
+    const out = applyScoreRow(t, { round_id: 'r1', player_id: 'p1', hole: 1 }, 'DELETE');
+    expect(out.rounds[0].scores).toEqual({ p1: { 2: 5 } });
+  });
+
+  test('DELETE is a no-op when the cell is already absent', () => {
+    const t = { id: 't1', rounds: [{ id: 'r1', scores: { p1: { 2: 5 } } }] };
+    const out = applyScoreRow(t, { round_id: 'r1', player_id: 'p1', hole: 1 }, 'DELETE');
+    expect(out.rounds[0].scores).toEqual({ p1: { 2: 5 } });
+  });
 });
 
 describe('applyShotDetailRow', () => {
@@ -90,6 +108,24 @@ describe('applyShotDetailRow', () => {
     const t = { id: 't1', rounds: [{ id: 'r1', shotDetails: {} }] };
     const out = applyShotDetailRow(t, { round_id: 'rX', player_id: 'p1', hole: 1, detail: { putts: 1 } });
     expect(out.rounds).toEqual(t.rounds);
+  });
+
+  test('deleting the last hole for a player prunes the now-empty player bucket', () => {
+    const t = { id: 't1', rounds: [{ id: 'r1', shotDetails: { p1: { 4: { putts: 2 } } } }] };
+    const out = applyShotDetailRow(t, { round_id: 'r1', player_id: 'p1', hole: 4, detail: null });
+    expect(out.rounds[0].shotDetails).toEqual({});
+  });
+
+  test('DELETE (PK-only old record, no detail field) deletes the cell', () => {
+    const t = { id: 't1', rounds: [{ id: 'r1', shotDetails: { p1: { 4: { putts: 2 }, 5: { putts: 1 } } } }] };
+    const out = applyShotDetailRow(t, { round_id: 'r1', player_id: 'p1', hole: 4 }, 'DELETE');
+    expect(out.rounds[0].shotDetails).toEqual({ p1: { 5: { putts: 1 } } });
+  });
+
+  test('DELETE is a no-op when the cell is already absent', () => {
+    const t = { id: 't1', rounds: [{ id: 'r1', shotDetails: { p1: { 5: { putts: 1 } } } }] };
+    const out = applyShotDetailRow(t, { round_id: 'r1', player_id: 'p1', hole: 4 }, 'DELETE');
+    expect(out.rounds[0].shotDetails).toEqual({ p1: { 5: { putts: 1 } } });
   });
 });
 
@@ -129,6 +165,24 @@ describe('applyNoteRow', () => {
     const out = applyNoteRow(t, { round_id: 'rX', hole_key: 'round', note: 'x' });
     expect(out.rounds).toEqual(t.rounds);
   });
+
+  test('DELETE (PK-only old record, no note field) removes a round note', () => {
+    const t = { id: 't1', rounds: [{ id: 'r1', notes: { round: 'Great day', hole: { 3: 'bunker' } } }] };
+    const out = applyNoteRow(t, { round_id: 'r1', hole_key: 'round' }, 'DELETE');
+    expect(out.rounds[0].notes).toEqual({ hole: { 3: 'bunker' } });
+  });
+
+  test('DELETE (PK-only old record) removes a hole note', () => {
+    const t = { id: 't1', rounds: [{ id: 'r1', notes: { hole: { 3: 'bunker' } } }] };
+    const out = applyNoteRow(t, { round_id: 'r1', hole_key: '3' }, 'DELETE');
+    expect(out.rounds[0].notes).toBeUndefined();
+  });
+
+  test('DELETE is a no-op when the note is already absent', () => {
+    const t = { id: 't1', rounds: [{ id: 'r1', notes: { round: 'Great day' } }] };
+    const out = applyNoteRow(t, { round_id: 'r1', hole_key: '3' }, 'DELETE');
+    expect(out.rounds[0].notes).toEqual({ round: 'Great day' });
+  });
 });
 
 describe('applyRoundRow', () => {
@@ -139,7 +193,10 @@ describe('applyRoundRow', () => {
     };
     const out = applyRoundRow(t, { id: 'r1', round_index: 1, body: { courseName: 'B' } });
     expect(out.rounds.map((r) => r.id)).toEqual(['r0', 'r1', 'r2']);
-    expect(out.rounds[1]).toEqual({ id: 'r1', courseName: 'B' });
+    // A brand-new round carries empty scores/shotDetails for refetch parity.
+    expect(out.rounds[1]).toEqual({
+      id: 'r1', courseName: 'B', scores: {}, shotDetails: {},
+    });
   });
 
   test('updates an existing round body while preserving hot keys (scores/shotDetails/notes)', () => {
@@ -167,10 +224,31 @@ describe('applyRoundRow', () => {
     expect(out.rounds.map((r) => r.id)).toEqual(['r0', 'r5']);
   });
 
-  test('does not invent scores/shotDetails/notes for a brand-new round with no existing hot keys', () => {
+  test('a brand-new round gets empty scores/shotDetails (parity with get_game_tournament) but no notes key', () => {
     const t = { id: 't1', rounds: [] };
     const out = applyRoundRow(t, { id: 'r0', round_index: 0, body: { courseName: 'A' } });
-    expect(out.rounds[0]).toEqual({ id: 'r0', courseName: 'A' });
+    expect(out.rounds[0]).toEqual({
+      id: 'r0', courseName: 'A', scores: {}, shotDetails: {},
+    });
+  });
+
+  test('an update preserves existing hot keys rather than resetting them to {}', () => {
+    const t = { id: 't1', rounds: [{ id: 'r0', scores: { p1: { 1: 4 } }, shotDetails: { p1: { 1: { putts: 2 } } } }] };
+    const out = applyRoundRow(t, { id: 'r0', round_index: 0, body: { courseName: 'B' } });
+    expect(out.rounds[0].scores).toEqual({ p1: { 1: 4 } });
+    expect(out.rounds[0].shotDetails).toEqual({ p1: { 1: { putts: 2 } } });
+  });
+
+  test('DELETE (PK-only old record) removes the round by id', () => {
+    const t = { id: 't1', rounds: [{ id: 'r0' }, { id: 'r1' }] };
+    const out = applyRoundRow(t, { tournament_id: 't1', id: 'r0' }, 'DELETE');
+    expect(out.rounds.map((r) => r.id)).toEqual(['r1']);
+  });
+
+  test('DELETE is a no-op when the round is already absent', () => {
+    const t = { id: 't1', rounds: [{ id: 'r1' }] };
+    const out = applyRoundRow(t, { tournament_id: 't1', id: 'rX' }, 'DELETE');
+    expect(out.rounds.map((r) => r.id)).toEqual(['r1']);
   });
 });
 
@@ -198,6 +276,18 @@ describe('applyPlayerRow', () => {
     const t = { id: 't1', players: [{ id: 'p0' }] };
     const out = applyPlayerRow(t, { player_id: 'p5', pos: 99, body: { id: 'p5' } });
     expect(out.players.map((p) => p.id)).toEqual(['p0', 'p5']);
+  });
+
+  test('DELETE (PK-only old record, no body) removes the player by player_id', () => {
+    const t = { id: 't1', players: [{ id: 'p0' }, { id: 'p1' }] };
+    const out = applyPlayerRow(t, { tournament_id: 't1', player_id: 'p0' }, 'DELETE');
+    expect(out.players.map((p) => p.id)).toEqual(['p1']);
+  });
+
+  test('DELETE is a no-op when the player is already absent', () => {
+    const t = { id: 't1', players: [{ id: 'p1' }] };
+    const out = applyPlayerRow(t, { tournament_id: 't1', player_id: 'p0' }, 'DELETE');
+    expect(out.players.map((p) => p.id)).toEqual(['p1']);
   });
 });
 
@@ -342,6 +432,27 @@ describe('ensureRealtimeForTournament / stopRealtime', () => {
     expect(saveLocal).toHaveBeenCalledTimes(1);
     const [savedArg] = saveLocal.mock.calls[0];
     expect(savedArg.meId).toBe('p9');
+  });
+
+  test('a DELETE event routes through payload.old (PK-only) and removes the round rather than resurrecting a stub', async () => {
+    const cached = {
+      id: 't1', kind: 'game', rounds: [{ id: 'r1', holes: [{ number: 1 }], scores: {} }], players: [],
+    };
+    readLocal.mockResolvedValue(cached);
+    // Pass-through so the patched (round removed) object is what reaches saveLocal.
+    applyPendingMutations.mockImplementation((t) => t);
+    preserveLocalScoreConflicts.mockImplementation((target) => target);
+
+    await ensureRealtimeForTournament('t1');
+    const channel = supabase.channel.mock.results[0].value;
+    const roundHandlerCall = channel.on.mock.calls.find(([, cfg]) => cfg.table === 'game_rounds');
+    const handler = roundHandlerCall[2];
+
+    await handler({ eventType: 'DELETE', old: { tournament_id: 't1', id: 'r1' }, new: {} });
+
+    expect(saveLocal).toHaveBeenCalledTimes(1);
+    const [savedArg] = saveLocal.mock.calls[0];
+    expect(savedArg.rounds).toEqual([]);
   });
 
   test('row handler no-ops when readLocal returns null (tournament not cached locally)', async () => {

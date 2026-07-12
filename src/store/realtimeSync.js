@@ -27,57 +27,79 @@ function clampIndex(index, length) {
 
 // ── Pure row → tournament patchers (exported for tests) ─────────────────────
 
+// Realtime payloads carry an `eventType` of 'INSERT' | 'UPDATE' | 'DELETE'.
+// A DELETE delivers only the OLD record, which for these tables is the
+// primary key alone (no strokes/detail/note/body) — so the patchers below
+// must locate the addressed row by PK and REMOVE it rather than treat a
+// field-less record as an upsert (which would resurrect a corrupt stub —
+// an {id}-only round or a {} player — that crashes unguarded consumers like
+// round.holes). This helper centralizes the "is this a delete?" decision:
+// an explicit DELETE event, OR (for the per-cell tables) a null value in an
+// INSERT/UPDATE, which get_game_tournament treats identically (its
+// `WHERE ... IS NOT NULL` filters drop the cell either way).
+function isDeleteEvent(eventType) {
+  return eventType === 'DELETE';
+}
+
 // game_scores row: { round_id, tournament_id, player_id, hole, strokes, ... }.
-// strokes === null is a tombstone (cleared cell) — delete the hole key rather
-// than store null, mirroring get_game_tournament's `WHERE s.strokes IS NOT
-// NULL` filter (a stored null would never round-trip back out of the RPC).
-export function applyScoreRow(t, row) {
+// strokes === null (an INSERT/UPDATE tombstone) and a DELETE event both clear
+// the cell, mirroring get_game_tournament's `WHERE s.strokes IS NOT NULL`
+// filter (a stored null would never round-trip back out of the RPC). After
+// clearing the last hole for a player, the now-empty per-player bucket is
+// pruned entirely — get_game_tournament omits players with zero cells, and
+// roundPairClinched (tournamentStore.js) keys off Object.keys(scores).length,
+// so a stray `scores[pid] = {}` would diverge from a refetch and mis-count.
+export function applyScoreRow(t, row, eventType) {
   const next = deepClone(t);
   const round = next.rounds?.find((r) => r.id === row.round_id);
   if (!round) return next;
   const holeKey = String(row.hole);
   const scores = { ...(round.scores ?? {}) };
   const playerScores = { ...(scores[row.player_id] ?? {}) };
-  if (row.strokes == null) delete playerScores[holeKey];
+  if (isDeleteEvent(eventType) || row.strokes == null) delete playerScores[holeKey];
   else playerScores[holeKey] = row.strokes;
-  scores[row.player_id] = playerScores;
+  if (Object.keys(playerScores).length === 0) delete scores[row.player_id];
+  else scores[row.player_id] = playerScores;
   round.scores = scores;
   return next;
 }
 
 // game_shot_details row: { round_id, tournament_id, player_id, hole, detail }.
-// detail === null is a tombstone, same reasoning as applyScoreRow.
-export function applyShotDetailRow(t, row) {
+// detail === null / DELETE clear the cell; empty per-player bucket pruned —
+// same reasoning as applyScoreRow.
+export function applyShotDetailRow(t, row, eventType) {
   const next = deepClone(t);
   const round = next.rounds?.find((r) => r.id === row.round_id);
   if (!round) return next;
   const holeKey = String(row.hole);
   const shotDetails = { ...(round.shotDetails ?? {}) };
   const playerDetails = { ...(shotDetails[row.player_id] ?? {}) };
-  if (row.detail == null) delete playerDetails[holeKey];
+  if (isDeleteEvent(eventType) || row.detail == null) delete playerDetails[holeKey];
   else playerDetails[holeKey] = row.detail;
-  shotDetails[row.player_id] = playerDetails;
+  if (Object.keys(playerDetails).length === 0) delete shotDetails[row.player_id];
+  else shotDetails[row.player_id] = playerDetails;
   round.shotDetails = shotDetails;
   return next;
 }
 
 // game_round_notes row: { round_id, tournament_id, hole_key, note }.
 // Mirrors get_game_tournament's notes assembly exactly: 'round' → notes.round,
-// any other hole_key → notes.hole[holeKey]; note === null tombstones that
-// key, and an empty bucket (or an empty `notes` object entirely) is dropped
-// rather than left as `{}`/`{ hole: {} }` so a fully-cleared round has no
-// stray `notes` key at all — same as the RPC's COALESCE-to-omitted shape.
-export function applyNoteRow(t, row) {
+// any other hole_key → notes.hole[holeKey]; note === null / DELETE tombstones
+// that key, and an empty bucket (or an empty `notes` object entirely) is
+// dropped rather than left as `{}`/`{ hole: {} }` so a fully-cleared round has
+// no stray `notes` key at all — same as the RPC's COALESCE-to-omitted shape.
+export function applyNoteRow(t, row, eventType) {
   const next = deepClone(t);
   const round = next.rounds?.find((r) => r.id === row.round_id);
   if (!round) return next;
+  const remove = isDeleteEvent(eventType) || row.note == null;
   const notes = { ...(round.notes ?? {}) };
   if (row.hole_key === 'round') {
-    if (row.note == null) delete notes.round;
+    if (remove) delete notes.round;
     else notes.round = row.note;
   } else {
     const hole = { ...(notes.hole ?? {}) };
-    if (row.note == null) delete hole[row.hole_key];
+    if (remove) delete hole[row.hole_key];
     else hole[row.hole_key] = row.note;
     if (Object.keys(hole).length === 0) delete notes.hole;
     else notes.hole = hole;
@@ -95,16 +117,33 @@ export function applyNoteRow(t, row) {
 // field (array position IS the order — see get_game_tournament's `ORDER BY
 // round_index, id`), so the existing entry is pulled out and the new one
 // spliced back in at the target position rather than patched in place.
-export function applyRoundRow(t, row) {
+export function applyRoundRow(t, row, eventType) {
   const next = deepClone(t);
   const rounds = (next.rounds ?? []).slice();
   const existingIdx = rounds.findIndex((r) => r.id === row.id);
+
+  // DELETE (round.remove → deleteRound, cascading its game_scores/
+  // game_shot_details/game_round_notes rows) removes the round outright. A
+  // field-less old record must never fall through to the upsert path below —
+  // that would resurrect an {id}-only stub with no `holes`, crashing every
+  // unguarded round.holes consumer (including on the removing device via the
+  // DELETE self-echo). No-op when already absent.
+  if (isDeleteEvent(eventType)) {
+    if (existingIdx !== -1) rounds.splice(existingIdx, 1);
+    next.rounds = rounds;
+    return next;
+  }
+
   const existing = existingIdx === -1 ? null : rounds[existingIdx];
   if (existingIdx !== -1) rounds.splice(existingIdx, 1);
 
   const assembled = { ...(row.body ?? {}), id: row.id };
-  if (existing && 'scores' in existing) assembled.scores = existing.scores;
-  if (existing && 'shotDetails' in existing) assembled.shotDetails = existing.shotDetails;
+  // Preserve existing hot keys on an update; for a brand-new round emit empty
+  // scores/shotDetails so the shape matches get_game_tournament (which always
+  // includes both objects, even when empty). notes stays omitted unless the
+  // existing round had it — the RPC only adds notes when live note rows exist.
+  assembled.scores = existing && 'scores' in existing ? existing.scores : {};
+  assembled.shotDetails = existing && 'shotDetails' in existing ? existing.shotDetails : {};
   if (existing && 'notes' in existing) assembled.notes = existing.notes;
 
   const idx = clampIndex(row.round_index, rounds.length);
@@ -116,12 +155,21 @@ export function applyRoundRow(t, row) {
 // game_players row: { tournament_id, player_id, user_id, pos, body }. body IS
 // the whole player object (see tournamentRepo.upsertPlayer) — upsert it at
 // `pos`, reordering the same way applyRoundRow does for round_index.
-export function applyPlayerRow(t, row) {
+export function applyPlayerRow(t, row, eventType) {
   const next = deepClone(t);
   const players = (next.players ?? []).slice();
   const existingIdx = players.findIndex((p) => p.id === row.player_id);
-  if (existingIdx !== -1) players.splice(existingIdx, 1);
 
+  // DELETE (removePlayer → deletePlayer) removes the player by player_id. A
+  // field-less old record must not upsert a `{}` stub — downstream code reads
+  // p.id / p.name / p.user_id unguarded. No-op when already absent.
+  if (isDeleteEvent(eventType)) {
+    if (existingIdx !== -1) players.splice(existingIdx, 1);
+    next.players = players;
+    return next;
+  }
+
+  if (existingIdx !== -1) players.splice(existingIdx, 1);
   const assembled = { ...(row.body ?? {}) };
   const idx = clampIndex(row.pos, players.length);
   players.splice(idx, 0, assembled);
@@ -137,6 +185,9 @@ export function applyPlayerRow(t, row) {
 // stomp them (props never carries either key server-side — see
 // tournamentRepo.createTournament's destructure — but this patcher does not
 // trust that as its only guard).
+// No eventType branch: a tournaments DELETE is never wired here (the row is
+// the tournament itself, handled by its own deletion flow, not a game_*
+// patch), and the shared handler harmlessly passes a third arg this ignores.
 export function applyTournamentRow(t, row) {
   const next = deepClone(t);
   const { rounds, players } = next;
@@ -175,11 +226,15 @@ let _channelId = null;
 // cache to patch (nothing to preserve, nothing to render).
 function makeHandler(id, applyFn) {
   return async (payload) => {
-    const row = payload?.new ?? payload?.old;
+    const eventType = payload?.eventType;
+    // A DELETE delivers only `old` (the PK); INSERT/UPDATE deliver `new`. The
+    // patchers key off eventType to decide remove-vs-upsert, so a DELETE must
+    // route through `old` (which for these tables is the primary key alone).
+    const row = eventType === 'DELETE' ? payload?.old : (payload?.new ?? payload?.old);
     if (!row) return;
     const cached = await readLocal(id);
     if (!cached) return;
-    const patched = applyFn(cached, row);
+    const patched = applyFn(cached, row, eventType);
     const entries = (await syncQueue.all()).filter((e) => e.tournamentId === id);
     let merged = applyPendingMutations(patched, entries);
     if ('meId' in cached) merged.meId = cached.meId;
