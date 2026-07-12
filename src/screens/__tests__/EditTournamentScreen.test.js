@@ -110,4 +110,26 @@ describe('EditTournamentScreen round notes', () => {
     const upsertCall = mutate.mock.calls.find(([, m]) => m.type === 'round.upsert' && m.roundId === 'r1');
     expect(upsertCall).toBeTruthy();
   });
+
+  // MEDIUM regression: the debounced autosave fires on ANY field edit. It
+  // must NOT re-push an unchanged note (that would double round RPC/queue
+  // traffic on every keystroke to an unrelated field). Editing the course
+  // name — leaving the note untouched — must fire round.upsert but NOT
+  // note.set.
+  test('an unrelated field edit that leaves the note unchanged does NOT emit note.set (but still fires round.upsert)', async () => {
+    const { mutate } = require('../../store/mutate');
+    const { findByPlaceholderText } = render(wrap(
+      <EditTournamentScreen navigation={navigation} route={route} />,
+    ));
+
+    const courseInput = await findByPlaceholderText('Course name');
+    mutate.mockClear();
+    fireEvent.changeText(courseInput, 'Nuevo Course');
+
+    await waitFor(() => {
+      expect(mutate.mock.calls.some(([, m]) => m.type === 'round.upsert' && m.roundId === 'r1')).toBe(true);
+    }, { timeout: 2000 });
+
+    expect(mutate.mock.calls.some(([, m]) => m.type === 'note.set')).toBe(false);
+  });
 });

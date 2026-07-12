@@ -12,6 +12,7 @@
 const mockSupabaseState = {
   participantRows: [],
   roundRows: [],
+  scoreRows: [],
 };
 
 jest.mock('../../lib/connectivity', () => ({ isOnline: jest.fn(() => true) }));
@@ -36,6 +37,15 @@ jest.mock('../../lib/supabase', () => ({
           select: jest.fn(() => ({
             in: jest.fn(() => Promise.resolve({
               data: mockSupabaseState.roundRows, error: null,
+            })),
+          })),
+        };
+      }
+      if (table === 'game_scores') {
+        return {
+          select: jest.fn(() => ({
+            in: jest.fn(() => Promise.resolve({
+              data: mockSupabaseState.scoreRows, error: null,
             })),
           })),
         };
@@ -98,6 +108,7 @@ describe('feedStore read-path conversions (Task 13.2)', () => {
     jest.clearAllMocks();
     mockSupabaseState.participantRows = [];
     mockSupabaseState.roundRows = [];
+    mockSupabaseState.scoreRows = [];
     mockSupabaseState.myTournaments = [];
     mockSupabaseState.friends = [];
   });
@@ -127,6 +138,40 @@ describe('feedStore read-path conversions (Task 13.2)', () => {
       });
 
       expect(result.items.map((i) => i.tournamentId)).toEqual(['A', 'B']);
+    });
+
+    test('a live round with ONLY score writes (game_rounds.updated_at older-but-nonzero) sorts by that recency, since set_game_score never bumps game_rounds', async () => {
+      const { buildFeed } = require('../feedStore');
+      const players = [{ id: 'p1', name: 'Marcos', user_id: 'me-user' }];
+
+      // LIVE is the tournament being actively scored right now: its
+      // game_rounds.updated_at is old (config was last patched long ago —
+      // set_game_score does NOT bump game_rounds), but a score row was just
+      // written. STALE was config-edited more recently than LIVE's round
+      // row but has seen no scoring since. Ordering must key off the score
+      // recency (LIVE first), not game_rounds.updated_at (which would rank
+      // STALE first). Both game_rounds rows are non-zero, so this fails if
+      // the code ignores game_scores entirely.
+      mockSupabaseState.myTournaments = [
+        baseTournament('STALE', { createdAt: new Date(1000).toISOString(), roundId: 'rStale', players }),
+        baseTournament('LIVE', { createdAt: new Date(2000).toISOString(), roundId: 'rLive', players }),
+      ];
+      mockSupabaseState.roundRows = [
+        { tournament_id: 'LIVE', id: 'rLive', updated_at: '2026-07-10T09:00:00.000Z' },
+        { tournament_id: 'STALE', id: 'rStale', updated_at: '2026-07-11T09:00:00.000Z' },
+      ];
+      mockSupabaseState.scoreRows = [
+        // LIVE's most recent score is newer than STALE's game_rounds stamp.
+        { tournament_id: 'LIVE', round_id: 'rLive', updated_at: '2026-07-11T09:00:00.000Z' },
+        { tournament_id: 'LIVE', round_id: 'rLive', updated_at: '2026-07-12T18:00:00.000Z' },
+        { tournament_id: 'STALE', round_id: 'rStale', updated_at: '2020-01-01T00:00:00.000Z' },
+      ];
+
+      const result = await buildFeed({
+        userId: 'me-user', source: 'remote', includeMedia: false,
+      });
+
+      expect(result.items.map((i) => i.tournamentId)).toEqual(['LIVE', 'STALE']);
     });
 
     test('falls back to a deterministic (not recency-based) order when the timestamp query fails, instead of silently degrading', async () => {

@@ -180,18 +180,31 @@ export default function EditTournamentScreen({ navigation, route }) {
         // reached peers). Each round's note is instead pushed through its own
         // note.set mutation, chained in the same sequential `current` pass so
         // it can't race the round.upsert call for the same round.
+        //
+        // The debounce fires on ANY field edit (course name, a handicap, …),
+        // so note.set is emitted ONLY when this round's note text actually
+        // changed vs the last-saved snapshot (prevNote captured BEFORE the
+        // round.upsert mutate, which would otherwise overwrite the note in
+        // `current`). Without this diff every autosave would re-push an
+        // unchanged note for every round, doubling round RPC/queue traffic.
         let current = tournamentRef.current;
         for (let i = 0; i < builtRounds.length; i++) {
-          const isNew = !current.rounds?.some((r) => r.id === builtRounds[i].id);
+          const built = builtRounds[i];
+          const existing = current.rounds?.find((r) => r.id === built.id);
+          const isNew = !existing;
+          const prevNote = normalizeRoundNotes(existing?.notes).round ?? '';
+          const nextNote = normalizeRoundNotes(built.notes).round ?? '';
           current = await mutate(current, {
-            type: 'round.upsert', roundId: builtRounds[i].id, roundIndex: i, round: builtRounds[i], isNew,
+            type: 'round.upsert', roundId: built.id, roundIndex: i, round: built, isNew,
           });
-          current = await mutate(current, {
-            type: 'note.set',
-            scope: 'round',
-            roundId: builtRounds[i].id,
-            text: normalizeRoundNotes(builtRounds[i].notes).round ?? '',
-          });
+          if (nextNote !== prevNote) {
+            current = await mutate(current, {
+              type: 'note.set',
+              scope: 'round',
+              roundId: built.id,
+              text: nextNote,
+            });
+          }
         }
         await mutate(current, {
           type: 'tournament.updateProfile',
