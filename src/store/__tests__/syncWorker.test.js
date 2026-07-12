@@ -320,6 +320,10 @@ describe('isPermanentSyncError', () => {
     ['22P02', true], // SQLSTATE data exception (invalid text representation)
     ['42501', true], // SQLSTATE syntax/insufficient-privilege
     ['PGRST116', true], // PostgREST "no rows"
+    ['P0001', true], // PL/pgSQL RAISE EXCEPTION default (business rule, e.g. 'party locked')
+    ['P0002', true], // no_data_found
+    ['P0003', true], // too_many_rows
+    ['P0004', true], // assert_failure
   ])('error.code %s -> permanent = %s', (code, expected) => {
     expect(isPermanentSyncError({ code, message: 'x' })).toBe(expected);
   });
@@ -374,6 +378,68 @@ describe('drainLibrary', () => {
     await drainLibrary([e1]);
 
     expect(syncQueue.drop).toHaveBeenCalledWith('e1');
+  });
+
+  test('rpc.call: a P0001 business-rule raise (e.g. "party locked" from submit_score) is dropped + surfaced, never retried', async () => {
+    // submit_score RAISE EXCEPTION 'party locked' surfaces as code P0001.
+    // It is permanent — retrying can never succeed. It must drop
+    // immediately (not sit queued forever wedging the pipeline) and flip
+    // the sync indicator so the failure is visible.
+    supabase.rpc.mockResolvedValueOnce({ error: { code: 'P0001', message: 'party locked' } });
+    const e1 = { id: 'e1', mutation: { type: 'rpc.call', fn: 'submit_score', args: {} } };
+
+    await drainLibrary([e1]);
+
+    expect(syncQueue.drop).toHaveBeenCalledWith('e1');
+    expect(_setSyncStatus).toHaveBeenCalledWith('error');
+  });
+
+  test('rpc.call: a recoverable coded error that keeps failing past the retry cap is eventually dropped + surfaced (no infinite retry)', async () => {
+    // drainLibrary must have the same poison guard as drainTournament — a
+    // recoverable error that never actually recovers can't be allowed to
+    // retry forever (that is what wedged the whole pipeline).
+    supabase.rpc.mockResolvedValue({ error: { code: 'PGRST301', message: 'JWT expired' } });
+    let attempts = 0;
+    syncQueue.incrementAttempts.mockImplementation(() => Promise.resolve(++attempts));
+    const e1 = { id: 'e1', mutation: { type: 'rpc.call', fn: 'submit_score', args: {} } };
+
+    for (let i = 0; i < 7; i++) {
+      await expect(drainLibrary([e1])).rejects.toMatchObject({ code: 'PGRST301' });
+    }
+    expect(syncQueue.drop).not.toHaveBeenCalled();
+
+    // 8th failure crosses the cap — dropped and surfaced, not silent, not
+    // thrown (so drainOnce continues).
+    await drainLibrary([e1]);
+    expect(syncQueue.drop).toHaveBeenCalledWith('e1');
+    expect(_setSyncStatus).toHaveBeenCalledWith('error');
+  });
+});
+
+describe('drainOnce isolation (via syncNow)', () => {
+  beforeEach(() => {
+    jest.clearAllMocks();
+    readLocal.mockResolvedValue(localBlob);
+    executeMutation.mockResolvedValue({ conflict: null });
+    fetchTournament.mockResolvedValue(null);
+    applyPendingMutations.mockImplementation((t) => t);
+    syncQueue.incrementAttempts.mockImplementation(() => Promise.resolve(1));
+  });
+
+  it('a throwing drainLibrary (recoverable, under cap) does NOT prevent the tournament loop from draining', async () => {
+    // The wedge: a stuck official-score rpc.call must not block casual
+    // tournament score/finish sync. drainLibrary throws (recoverable, under
+    // cap) but drainOnce isolates it, so the tournament entry still drains.
+    const libEntry = { id: 'lib1', mutation: { type: 'rpc.call', fn: 'submit_score', args: {} } };
+    const tournEntry = { id: 't-e1', tournamentId: 't1', mutation: { type: 'score.set' } };
+    supabase.rpc.mockResolvedValue({ error: { code: 'PGRST301', message: 'JWT expired' } });
+    syncQueue.all.mockResolvedValue([libEntry, tournEntry]);
+
+    await syncNow();
+
+    // The tournament drain ran despite the library mutation throwing.
+    expect(executeMutation).toHaveBeenCalledWith(tournEntry, localBlob);
+    expect(syncQueue.drop).toHaveBeenCalledWith('t-e1');
   });
 });
 

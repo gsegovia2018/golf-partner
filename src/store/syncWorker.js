@@ -55,6 +55,12 @@ export function isPermanentSyncError(error) {
   const codeStr = String(code);
   if (codeStr === 'PGRST116') return true;
   if (codeStr.startsWith('PGRST1')) return true; // PostgREST malformed/parse-request codes
+  // PL/pgSQL RAISE default class: a `RAISE EXCEPTION 'party locked'` with no
+  // explicit errcode surfaces as SQLSTATE P0001 (P0002 no_data_found, P0003
+  // too_many_rows, P0004 assert_failure). These are business-rule raises
+  // (e.g. official-mode submit_score rejecting a locked party / invalid
+  // token) — never transient, so retrying can never succeed.
+  if (codeStr.length === 5 && codeStr.startsWith('P0')) return true;
   // SQLSTATE codes are always 5 characters (e.g. '23505', '22P02',
   // '42501') — gate on length too, or a 3-digit HTTP code like '429'
   // (rate-limit, recoverable) would false-positive on the '42' prefix.
@@ -106,10 +112,25 @@ export async function drainLibrary(libraryMuts) {
           _setSyncStatus('error');
           continue;
         }
+
         // Recoverable failure: network/transport error, expired session
         // (PGRST301/JWT), 401/403, 429, 5xx, or any unrecognized code.
-        // Leave the entry queued and let scheduleSync's backoff retry it
-        // on the next pass.
+        // Bump the poison counter — a recoverable error that never actually
+        // recovers must NOT retry forever (that is what wedged the whole
+        // pipeline: a stuck rpc.call throwing on every pass, aborting
+        // drainOnce before any tournament could drain).
+        const attempts = await syncQueue.incrementAttempts(entry.id);
+        if (attempts >= RECOVERABLE_ATTEMPT_CAP) {
+          console.warn(
+            `rpc.call ${m.fn} failed ${attempts} times with a recoverable `
+            + `error (${error?.code ?? 'no code'}); dropping as poison: ${error?.message}`,
+          );
+          await syncQueue.drop(entry.id);
+          _setSyncStatus('error');
+          continue;
+        }
+        // Under the cap: leave the entry queued and let scheduleSync's
+        // backoff retry it on the next pass.
         throw error;
       }
       await syncQueue.drop(entry.id);
@@ -242,7 +263,19 @@ async function drainOnce() {
   _setSyncStatus('syncing');
 
   const libraryMuts = all.filter((e) => !e.tournamentId);
-  await drainLibrary(libraryMuts);
+  // Isolate the library drain: a single stuck library mutation (e.g. an
+  // official-mode submit_score rejected by a business-rule raise, or a
+  // recoverable error still under its retry cap) throws here, but it must
+  // NEVER abort the per-tournament drains below — a wedged official-score
+  // write must not block casual-tournament score/finish sync. The entry
+  // stays queued (or was already dropped by drainLibrary); the worker
+  // retries on the next pass.
+  try {
+    await drainLibrary(libraryMuts);
+  } catch (error) {
+    _setSyncStatus('error');
+    console.warn(`library drain failed; continuing with tournament drains: ${error?.message}`);
+  }
 
   const byTournament = new Map();
   for (const e of all) {
