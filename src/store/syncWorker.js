@@ -1,10 +1,11 @@
 import { supabase } from '../lib/supabase';
 import { syncQueue } from './syncQueue';
-import { mergeTournaments } from './merge';
 import {
-  saveLocal, pushRemote, readLocal, _setSyncStatus,
-  _appendConflicts, _setLastSyncAt,
+  saveLocal, readLocal, _setSyncStatus, _setLastSyncAt,
 } from './tournamentStore';
+import { fetchTournament } from './tournamentRepo';
+import { executeMutation } from './mutationWrites';
+import { applyPendingMutations } from './mutate';
 import { upsertPlayer } from './libraryStore';
 import { isOnline, subscribeConnectivity } from '../lib/connectivity';
 
@@ -13,14 +14,21 @@ let _attempt = 0;
 let _timer = null;
 let _running = false;
 
-async function fetchRemote(tournamentId) {
-  const { data, error } = await supabase
-    .from('tournaments')
-    .select('data')
-    .eq('id', tournamentId)
-    .maybeSingle();
-  if (error) throw error;
-  return data?.data ?? null;
+// Conflict seam: Task 11 registers the real marker-writer here. Defaults to
+// a no-op so drains never crash before that wiring lands.
+let _scoreConflictHandler = null;
+export function setScoreConflictHandler(fn) {
+  _scoreConflictHandler = fn;
+}
+
+async function notifyScoreConflict(tournamentId, conflict) {
+  if (!_scoreConflictHandler) return;
+  try {
+    await _scoreConflictHandler(tournamentId, conflict);
+  } catch (_) {
+    // The handler's own failure (e.g. a marker write) must never abort the
+    // drain — the mutation that produced this conflict already landed.
+  }
 }
 
 // Exported for unit testing the mutation → upsertPlayer field mapping.
@@ -59,38 +67,58 @@ export async function drainLibrary(libraryMuts) {
   }
 }
 
-// Exported for unit testing the fetch/merge/save ordering.
+// Exported for unit testing the row-write drain + post-drain reconcile.
+//
+// Executes each queued mutation for one tournament, in order, via
+// executeMutation (Task 8) — the row-write replacement for the old
+// fetch→merge→push blob cycle. Local is re-read before every entry (cheap:
+// readLocal is an in-memory cache) so entry N sees whatever entry N-1 (or a
+// concurrent screen edit) just saved.
+//
+// Error heuristic (unchanged from the legacy blob-push path, see
+// drainLibrary's rpc.call branch above): a terminal failure — error.code
+// present, meaning the write reached the database and was rejected there —
+// drops the entry permanently, since retrying can never succeed. A
+// transient failure — no error.code, i.e. a network/transport error — is
+// rethrown, which leaves the entry (and any not-yet-attempted entries for
+// this tournament) queued and aborts the reconcile below; drainOnce's caller
+// (syncNow) catches it, flips status to 'error', and schedules a backoff
+// retry.
 export async function drainTournament(tournamentId, entries) {
-  const local = await readLocal(tournamentId);
-  if (!local) {
-    // Nothing to push — drop the stale entries.
-    for (const e of entries) await syncQueue.drop(e.id);
-    return;
-  }
-  const remote = await fetchRemote(tournamentId);
-  // Re-read the local blob AFTER the network round-trip. A score or
-  // shot-detail edit the user makes WHILE fetchRemote is in flight is saved
-  // locally but is absent from the `local` snapshot taken before the fetch.
-  // Merging that stale snapshot and writing it back would silently revert
-  // the just-entered value. loadTournament()'s background refresh guards
-  // itself the same way.
-  const latest = await readLocal(tournamentId);
-  const { merged, conflicts } = mergeTournaments(latest ?? local, remote);
-
-  await saveLocal(merged);
-  await pushRemote(merged);
-
-  if (conflicts.length > 0) {
-    await _appendConflicts(conflicts);
+  for (const entry of entries) {
+    const local = await readLocal(tournamentId);
+    try {
+      const { conflict } = await executeMutation(entry, local);
+      if (conflict) await notifyScoreConflict(tournamentId, conflict);
+      await syncQueue.drop(entry.id);
+    } catch (error) {
+      if (error && error.code) {
+        console.warn(
+          `mutation ${entry.mutation?.type} permanently rejected; dropping: ${error.message}`,
+        );
+        await syncQueue.drop(entry.id);
+        continue;
+      }
+      // Transient: leave this entry (and the rest of this tournament's
+      // batch) queued and stop draining it.
+      throw error;
+    }
   }
 
-  // Push succeeded: every entry for this tournament is now reflected in
-  // the remote blob (either as the winner of its LWW cell or as a
-  // captured conflict). Drop them unconditionally; the previous ts-gate
-  // occasionally left entries stuck when `merged._meta[path]` didn't
-  // bump — those would linger and paint the dot orange permanently.
-  for (const e of entries) {
-    await syncQueue.drop(e.id);
+  // Every entry for this tournament landed on the server. Pull the fresh row
+  // state and overlay whatever queued elsewhere for this tournament arrived
+  // while we were draining (the read-path replacement for the old
+  // fetch/merge race guard). Reconcile failures are swallowed — the worker
+  // retries on the next drain pass.
+  try {
+    const fresh = await fetchTournament(tournamentId);
+    if (fresh) {
+      const all = await syncQueue.all();
+      const stillQueued = all.filter((e) => e.tournamentId === tournamentId);
+      await saveLocal(applyPendingMutations(fresh, stillQueued));
+    }
+  } catch (_) {
+    // Swallow — worker retries next drain.
   }
 }
 
