@@ -466,4 +466,59 @@ describe('ensureRealtimeForTournament / stopRealtime', () => {
 
     expect(saveLocal).not.toHaveBeenCalled();
   });
+
+  // Save-then-enqueue race, bounded settle. mutate() saveLocal's BEFORE it
+  // enqueues, so a score entered right as this handler runs can be in local
+  // state but absent from the handler's first queue snapshot — a save computed
+  // from that stale snapshot would erase it. The handler must re-snapshot the
+  // queue after saving and recompute (same bounded loop as syncWorker's
+  // post-drain reconcile and tournamentStore._overlayAndSave) so the final
+  // saved blob includes the late score. Kept last in this block: it installs a
+  // custom applyPendingMutations implementation that must not leak into the
+  // call-args assertions above.
+  test('a mutation enqueued after the first queue snapshot still lands in the saved blob (save-then-enqueue race)', async () => {
+    const cached = { id: 't1', kind: 'game', rounds: [{ id: 'r1', scores: {} }], players: [] };
+    readLocal.mockResolvedValue(cached);
+    const lateEntry = {
+      id: 'late-1', tournamentId: 't1',
+      mutation: { type: 'score.set', roundId: 'r1', playerId: 'p2', hole: 1, value: 5 },
+    };
+    let queueReads = 0;
+    syncQueue.all.mockImplementation(() => {
+      queueReads += 1;
+      // First read (the handler's initial snapshot) misses the late entry;
+      // every subsequent read sees it — the race the settle loop must close.
+      return Promise.resolve(queueReads === 1 ? [] : [lateEntry]);
+    });
+    // Real-ish overlay: actually apply score.set entries so the late p2 score
+    // can be asserted in the saved blob.
+    applyPendingMutations.mockImplementation((t, entries) => {
+      const nextT = JSON.parse(JSON.stringify(t));
+      for (const e of entries) {
+        const m = e.mutation;
+        if (m.type === 'score.set') {
+          const round = nextT.rounds.find((r) => r.id === m.roundId);
+          round.scores[m.playerId] = { ...(round.scores[m.playerId] ?? {}), [m.hole]: m.value };
+        }
+      }
+      return nextT;
+    });
+    preserveLocalScoreConflicts.mockImplementation((target) => target);
+
+    await ensureRealtimeForTournament('t1');
+    const channel = supabase.channel.mock.results[0].value;
+    const scoreHandlerCall = channel.on.mock.calls.find(([, cfg]) => cfg.table === 'game_scores');
+    const handler = scoreHandlerCall[2];
+
+    // A realtime row for a DIFFERENT cell (p1) arrives while p2's score.set is
+    // mid-flight (saved locally, not yet in the first queue snapshot).
+    await handler({ new: { round_id: 'r1', player_id: 'p1', hole: 1, strokes: 4 } });
+
+    // The settle loop re-read the queue after saving (>= 2 reads) and the final
+    // saved blob includes the late p2 score — the row's own p1 edit too.
+    expect(queueReads).toBeGreaterThanOrEqual(2);
+    const finalSave = saveLocal.mock.calls[saveLocal.mock.calls.length - 1][0];
+    expect(finalSave.rounds[0].scores.p2[1]).toBe(5);
+    expect(finalSave.rounds[0].scores.p1[1]).toBe(4);
+  });
 });

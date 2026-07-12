@@ -214,6 +214,13 @@ const APPLIERS = {
 let _channel = null;
 let _channelId = null;
 
+// This tournament's still-undrained queue entries, read fresh (not captured
+// earlier) so each settle pass sees whatever is queued right now.
+async function pendingEntriesFor(id) {
+  const all = await syncQueue.all();
+  return all.filter((e) => e.tournamentId === id);
+}
+
 // Shared handler tail for every table: reads the current local cache, patches
 // it with the row, re-applies this tournament's still-undrained pending
 // mutations on top (a realtime row is SERVER state — replaying pending
@@ -224,6 +231,19 @@ let _channelId = null;
 // see mutate.js's preserveLocalScoreConflicts — that no row event ever
 // carries) before saving. Skips entirely if this tournament has no local
 // cache to patch (nothing to preserve, nothing to render).
+//
+// Bounded settle loop — the SAME race guard as syncWorker.drainTournament and
+// tournamentStore._overlayAndSave (neither is exported, so this mirrors their
+// semantics rather than sharing): mutate() saves locally BEFORE it enqueues,
+// so a score entered right as this handler runs can be present in local state
+// but absent from the first queue snapshot — and a saveLocal computed from
+// that snapshot would erase the just-entered value (the "scores erased as
+// entered" scar). After each save, re-read the queue; if it changed, recompute
+// the overlay from the SAME row-patched base (never a re-read — the patch, i.e.
+// which key this row changed, must stay applied across passes) and save again.
+// Bounded to 3 passes — on hitting the bound, stop WITHOUT a further stale save
+// (local wins; the still-queued mutations drain and re-reconcile on the next
+// worker pass / poll anyway).
 function makeHandler(id, applyFn) {
   return async (payload) => {
     const eventType = payload?.eventType;
@@ -235,11 +255,18 @@ function makeHandler(id, applyFn) {
     const cached = await readLocal(id);
     if (!cached) return;
     const patched = applyFn(cached, row, eventType);
-    const entries = (await syncQueue.all()).filter((e) => e.tournamentId === id);
-    let merged = applyPendingMutations(patched, entries);
-    if ('meId' in cached) merged.meId = cached.meId;
-    merged = preserveLocalScoreConflicts(merged, cached);
-    await saveLocal(merged, { makeActive: false });
+    let snapshot = await pendingEntriesFor(id);
+    for (let pass = 0; pass < 3; pass++) {
+      let merged = applyPendingMutations(patched, snapshot);
+      if ('meId' in cached) merged.meId = cached.meId;
+      merged = preserveLocalScoreConflicts(merged, cached);
+      await saveLocal(merged, { makeActive: false });
+      const latest = await pendingEntriesFor(id);
+      const stable = latest.length === snapshot.length
+        && latest.every((e, i) => e.id === snapshot[i].id);
+      if (stable) break;
+      snapshot = latest;
+    }
   };
 }
 
