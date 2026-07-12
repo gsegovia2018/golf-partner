@@ -763,30 +763,53 @@ BEGIN
       END LOOP;
     END LOOP;
 
-    -- Notes: one row for the whole-round note ('round'), one per hole note --
-    IF (v_round -> 'notes') ? 'round' THEN
-      v_stamp := (v_data->'_meta'->>('rounds.' || v_round_id || '.notes.round'))::bigint;
-      v_cell_ts := CASE WHEN v_stamp IS NULL THEN v_created_at ELSE to_timestamp(v_stamp / 1000.0) END;
-      v_note := v_round->'notes'->>'round';
-
-      INSERT INTO public.game_round_notes (round_id, tournament_id, hole_key, note, updated_at)
-      VALUES (v_round_id, p_id, 'round', v_note, v_cell_ts)
-      ON CONFLICT (tournament_id, round_id, hole_key) DO UPDATE
-        SET note = EXCLUDED.note, updated_at = EXCLUDED.updated_at
-        WHERE public.game_round_notes.updated_at < EXCLUDED.updated_at;
-    END IF;
-
-    IF (v_round -> 'notes') ? 'hole' THEN
-      FOR v_hkey, v_note IN SELECT * FROM jsonb_each_text(v_round->'notes'->'hole') LOOP
-        v_stamp := (v_data->'_meta'->>('rounds.' || v_round_id || '.notes.hole.' || v_hkey))::bigint;
+    -- Notes. Two on-disk shapes exist in the wild:
+    --   * newer rounds: an OBJECT — { round: <str>, hole: { "<n>": <str> } }
+    --   * older rounds: a bare STRING — the whole-round note itself (this is
+    --     the legacy notes format; normalizeRoundNotes(str) -> { round: str },
+    --     which is exactly what get_game_tournament reassembles from a 'round'
+    --     note row). Missing this shape silently dropped real notes on
+    --     backfill (e.g. tournament 1776469141517 round[1]'s "Un dispendio
+    --     general"). One game_round_notes row, hole_key='round', is created
+    --     for a non-empty string; empty strings are dropped, matching
+    --     normalizeRoundNotes('') -> {}.
+    IF jsonb_typeof(v_round -> 'notes') = 'string' THEN
+      IF (v_round ->> 'notes') <> '' THEN
+        v_stamp := (v_data->'_meta'->>('rounds.' || v_round_id || '.notes.round'))::bigint;
         v_cell_ts := CASE WHEN v_stamp IS NULL THEN v_created_at ELSE to_timestamp(v_stamp / 1000.0) END;
 
         INSERT INTO public.game_round_notes (round_id, tournament_id, hole_key, note, updated_at)
-        VALUES (v_round_id, p_id, v_hkey, v_note, v_cell_ts)
+        VALUES (v_round_id, p_id, 'round', v_round ->> 'notes', v_cell_ts)
         ON CONFLICT (tournament_id, round_id, hole_key) DO UPDATE
           SET note = EXCLUDED.note, updated_at = EXCLUDED.updated_at
           WHERE public.game_round_notes.updated_at < EXCLUDED.updated_at;
-      END LOOP;
+      END IF;
+    ELSE
+      -- Object shape: one row for the whole-round note ('round'), one per hole.
+      IF (v_round -> 'notes') ? 'round' THEN
+        v_stamp := (v_data->'_meta'->>('rounds.' || v_round_id || '.notes.round'))::bigint;
+        v_cell_ts := CASE WHEN v_stamp IS NULL THEN v_created_at ELSE to_timestamp(v_stamp / 1000.0) END;
+        v_note := v_round->'notes'->>'round';
+
+        INSERT INTO public.game_round_notes (round_id, tournament_id, hole_key, note, updated_at)
+        VALUES (v_round_id, p_id, 'round', v_note, v_cell_ts)
+        ON CONFLICT (tournament_id, round_id, hole_key) DO UPDATE
+          SET note = EXCLUDED.note, updated_at = EXCLUDED.updated_at
+          WHERE public.game_round_notes.updated_at < EXCLUDED.updated_at;
+      END IF;
+
+      IF (v_round -> 'notes') ? 'hole' THEN
+        FOR v_hkey, v_note IN SELECT * FROM jsonb_each_text(v_round->'notes'->'hole') LOOP
+          v_stamp := (v_data->'_meta'->>('rounds.' || v_round_id || '.notes.hole.' || v_hkey))::bigint;
+          v_cell_ts := CASE WHEN v_stamp IS NULL THEN v_created_at ELSE to_timestamp(v_stamp / 1000.0) END;
+
+          INSERT INTO public.game_round_notes (round_id, tournament_id, hole_key, note, updated_at)
+          VALUES (v_round_id, p_id, v_hkey, v_note, v_cell_ts)
+          ON CONFLICT (tournament_id, round_id, hole_key) DO UPDATE
+            SET note = EXCLUDED.note, updated_at = EXCLUDED.updated_at
+            WHERE public.game_round_notes.updated_at < EXCLUDED.updated_at;
+        END LOOP;
+      END IF;
     END IF;
   END LOOP;
 END $$;

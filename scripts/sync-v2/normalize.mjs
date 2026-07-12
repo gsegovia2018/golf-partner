@@ -9,11 +9,16 @@
 //     `scoreResolutions` (per round) from both sides — these are sync
 //     bookkeeping, never part of the tournament's "real" shape.
 //   - default a round's `scores` / `shotDetails` to `{}` when absent, so a
-//     round with no cells compares equal to one that never had the key.
-//   - drop `notes` entirely when it's absent or only holds empty objects
-//     (`{}`, `{ hole: {} }`, ...) — get_game_tournament never emits an empty
-//     `notes`, but the legacy blob sometimes carries one as leftover shape
-//     from an earlier edit.
+//     round with no cells compares equal to one that never had the key. Also
+//     drop any per-player bucket whose value is an empty object (`{}`): a
+//     player entered but with zero scores exists in the legacy blob, but
+//     get_game_tournament omits zero-cell players (its aggregate only sees
+//     players with a non-null cell), so an empty bucket is a shape-only diff.
+//   - canonicalize a round's `notes` through normalizeRoundNotes (the app's
+//     own rule, src/store/roundNotes.js) on BOTH sides: a legacy bare-STRING
+//     note becomes `{ round: <str> }` (matching what get_game_tournament
+//     reassembles from a 'round' note row), an empty `hole: {}` bucket is
+//     stripped, and an empty result drops `notes` entirely.
 //   - compare `createdAt` as `new Date(x).getTime()` (byte-format
 //     differences, e.g. missing trailing zero milliseconds, don't matter).
 //   - `dropKind` option: drop the top-level `kind` from BOTH sides. The
@@ -28,19 +33,19 @@
 //   - everything else: left as-is for the caller's own deep-equal. Hole keys
 //     are strings on both sides already (jsonb object keys, and
 //     get_game_tournament emits `hole::text`) — no coercion needed.
-export function stripEmptyNotesDeep(notes) {
-  if (!notes || typeof notes !== 'object') return notes;
+import { normalizeRoundNotes } from '../../src/store/roundNotes.js';
+
+// Drop any per-player bucket that is an empty object ({}) — a player entered
+// with zero scores/shotDetails, which get_game_tournament omits entirely.
+function dropEmptyPlayerBuckets(map) {
+  if (!map || typeof map !== 'object' || Array.isArray(map)) return map ?? {};
   const out = {};
-  for (const [k, v] of Object.entries(notes)) {
-    if (k === 'hole' && v && typeof v === 'object' && Object.keys(v).length === 0) continue;
-    out[k] = v;
+  for (const [player, cells] of Object.entries(map)) {
+    if (cells && typeof cells === 'object' && !Array.isArray(cells)
+      && Object.keys(cells).length === 0) continue;
+    out[player] = cells;
   }
   return out;
-}
-
-function isEmptyNotes(notes) {
-  if (notes == null) return true;
-  return Object.keys(stripEmptyNotesDeep(notes)).length === 0;
 }
 
 export function normalize(blob, { dropKind = false } = {}) {
@@ -59,12 +64,13 @@ export function normalize(blob, { dropKind = false } = {}) {
       const round = { ...r };
       delete round.scoreConflicts;
       delete round.scoreResolutions;
-      round.scores = round.scores ?? {};
-      round.shotDetails = round.shotDetails ?? {};
-      if (isEmptyNotes(round.notes)) {
+      round.scores = dropEmptyPlayerBuckets(round.scores ?? {});
+      round.shotDetails = dropEmptyPlayerBuckets(round.shotDetails ?? {});
+      const notes = normalizeRoundNotes(round.notes);
+      if (Object.keys(notes).length === 0) {
         delete round.notes;
       } else {
-        round.notes = stripEmptyNotesDeep(round.notes);
+        round.notes = notes;
       }
       return round;
     });
