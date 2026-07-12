@@ -586,14 +586,33 @@ GRANT  EXECUTE ON FUNCTION public.claim_tournament_player(text, text) TO authent
 -- get_game_tournament's reassembly depends on — see the comments on that
 -- function above), and fans every scores/shotDetails/notes cell out into its
 -- own row. Safe to re-run (apply-migration.mjs calls it for every tournament
--- on every deploy of this migration): a re-run only overwrites a
--- game_scores/game_shot_details/game_round_notes row when the blob cell is
--- genuinely newer than what's already stored (the `_meta` per-cell
--- timestamp, falling back to the tournament's created_at when no stamp
--- exists), so sweeping after client cut-over cannot clobber a newer write
--- that already landed through set_game_score. Skips official-mode rows
--- (kind = 'official') and rows with no blob at all — those never had
--- anything to normalize.
+-- on every deploy of this migration), and — critically — a straggler re-run
+-- after client cut-over NEVER reverts a live edit made through the sync-v2
+-- write path back to the frozen blob. Every table this touches is guarded:
+--
+--   * game_scores / game_shot_details / game_round_notes (per-cell): the
+--     blob cell only overwrites the stored row when it is genuinely newer,
+--     `WHERE existing.updated_at < EXCLUDED.updated_at`. The backfilled
+--     updated_at is the `_meta` per-cell timestamp, falling back to the
+--     tournament's created_at when no stamp exists.
+--   * game_players / game_rounds (structural — roster, course, holes, pairs,
+--     reveal, settings, a claim's user_id, round body): the same guard, but
+--     these are NOT `_meta`-stamped per field, so the backfilled updated_at
+--     is ALWAYS the tournament's created_at (the oldest possible baseline).
+--     Any genuine server write (patch_game_round / patch_game_tournament /
+--     claim / upsert, all stamped now()) therefore always compares newer and
+--     survives a re-run; a fresh untouched row (also stamped created_at)
+--     stays a no-op re-run — idempotent either way.
+--   * tournaments.props: written ONLY when still default '{}' (see the CASE
+--     below). props has no updated_at column of its own, so a value-compare
+--     guard isn't available; instead the backfill treats props as
+--     write-once. The first backfill populates it from the stripped blob;
+--     once patch_game_tournament has merged anything into it (making it
+--     non-empty) a re-run leaves it untouched. current_round stays a
+--     monotonic GREATEST.
+--
+-- Skips official-mode rows (kind = 'official') and rows with no blob at all —
+-- those never had anything to normalize.
 CREATE OR REPLACE FUNCTION public.backfill_game_tournament(p_id text)
 RETURNS void LANGUAGE plpgsql AS $$
 DECLARE
@@ -627,8 +646,17 @@ BEGIN
     RETURN;
   END IF;
 
+  -- props is write-once (no per-value updated_at to guard on): populate it
+  -- from the stripped blob only while it's still default '{}'. Once
+  -- patch_game_tournament has merged a live edit in (props <> '{}'), a
+  -- straggler re-run leaves it alone rather than reverting to the frozen
+  -- blob. current_round is independently GREATEST-guarded (monotonic).
   UPDATE public.tournaments
-     SET props = v_data - 'players' - 'rounds' - 'id' - 'name' - 'kind' - 'createdAt' - 'currentRound' - '_meta' - 'meId',
+     SET props = CASE
+                   WHEN props = '{}'::jsonb
+                   THEN v_data - 'players' - 'rounds' - 'id' - 'name' - 'kind' - 'createdAt' - 'currentRound' - '_meta' - 'meId'
+                   ELSE props
+                 END,
          current_round = GREATEST(COALESCE(current_round, 0), COALESCE((v_data->>'currentRound')::int, 0))
    WHERE id = p_id;
 
@@ -637,12 +665,16 @@ BEGIN
     SELECT value, ordinality - 1 FROM jsonb_array_elements(v_data->'players') WITH ORDINALITY AS t(value, ordinality)
   LOOP
     v_pid := v_player->>'id';
-    INSERT INTO public.game_players (tournament_id, player_id, user_id, pos, body)
-    VALUES (p_id, v_pid, NULLIF(v_player->>'user_id', '')::uuid, v_pidx, v_player)
+    -- updated_at = created_at (oldest baseline): a live roster/claim edit
+    -- (stamped now()) always wins the guard below on a straggler re-run.
+    INSERT INTO public.game_players (tournament_id, player_id, user_id, pos, body, updated_at)
+    VALUES (p_id, v_pid, NULLIF(v_player->>'user_id', '')::uuid, v_pidx, v_player, v_created_at)
     ON CONFLICT (tournament_id, player_id) DO UPDATE
       SET body = EXCLUDED.body,
           user_id = COALESCE(EXCLUDED.user_id, public.game_players.user_id),
-          pos = EXCLUDED.pos;
+          pos = EXCLUDED.pos,
+          updated_at = EXCLUDED.updated_at
+      WHERE public.game_players.updated_at < EXCLUDED.updated_at;
   END LOOP;
 
   -- Rounds (+ nested scores/shotDetails/notes) -----------------------------
@@ -654,11 +686,16 @@ BEGIN
     -- round body stored here is the round minus its hot per-cell keys.
     v_body := v_round - 'scores' - 'shotDetails' - 'notes' - 'scoreConflicts' - 'scoreResolutions';
 
-    INSERT INTO public.game_rounds (id, tournament_id, round_index, body)
-    VALUES (v_round_id, p_id, v_ridx, v_body)
+    -- updated_at = created_at (oldest baseline): a live round-body edit via
+    -- patch_game_round (stamped now()) always wins the guard below on a
+    -- straggler re-run.
+    INSERT INTO public.game_rounds (id, tournament_id, round_index, body, updated_at)
+    VALUES (v_round_id, p_id, v_ridx, v_body, v_created_at)
     ON CONFLICT (tournament_id, id) DO UPDATE
       SET round_index = EXCLUDED.round_index,
-          body = EXCLUDED.body;
+          body = EXCLUDED.body,
+          updated_at = EXCLUDED.updated_at
+      WHERE public.game_rounds.updated_at < EXCLUDED.updated_at;
 
     -- Scores --------------------------------------------------------------
     FOR v_pid, v_holes IN SELECT * FROM jsonb_each(COALESCE(v_round->'scores', '{}'::jsonb)) LOOP

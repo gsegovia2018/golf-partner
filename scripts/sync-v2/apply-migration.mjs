@@ -42,17 +42,46 @@ async function main() {
   await dbQuery(sql);
   console.log('Migration applied.');
 
-  console.log('Backfilling every tournament (backfill_game_tournament is idempotent — ' +
-    'safe to re-run this script)...');
-  const backfillResult = await dbQuery(
-    'SELECT count(*) AS n FROM (SELECT public.backfill_game_tournament(id) FROM public.tournaments) t;'
-  );
-  console.log(`Backfilled ${backfillResult?.[0]?.n ?? '?'} tournament rows.`);
+  // Backfill each tournament in its OWN statement so a single malformed
+  // historical blob can't abort the whole batch. `SELECT backfill(id) FROM
+  // tournaments` runs as one statement — one bad row (a blob shape the
+  // function chokes on) rolls the entire SELECT back with no indication of
+  // which id failed. Iterating per id isolates failures, reports each one,
+  // and lets the rest complete. backfill_game_tournament is idempotent, so
+  // re-running this script after fixing a bad blob only re-touches what
+  // changed.
+  const idRows = await dbQuery('SELECT id FROM public.tournaments ORDER BY created_at;');
+  console.log(`Backfilling ${idRows.length} tournaments (one statement each)...`);
+
+  const failures = [];
+  let ok = 0;
+  for (const { id } of idRows) {
+    try {
+      // Parameterless quoting: ids are client timestamp strings, but escape
+      // defensively anyway (single-quote doubling) — dbQuery has no bind API.
+      await dbQuery(`SELECT public.backfill_game_tournament('${String(id).replace(/'/g, "''")}');`);
+      ok++;
+    } catch (err) {
+      failures.push({ id, error: err?.message ?? String(err) });
+    }
+  }
+  console.log(`Backfilled ${ok}/${idRows.length} tournaments.`);
+
+  if (failures.length > 0) {
+    console.error(`\n${failures.length} tournament(s) FAILED to backfill:`);
+    for (const f of failures) {
+      console.error(`  ${f.id}: ${f.error}`);
+    }
+  }
 
   console.log('\nRow counts after backfill:');
   for (const table of ROW_COUNT_TABLES) {
     const rows = await dbQuery(`SELECT count(*) AS n FROM public.${table};`);
     console.log(`  ${table}: ${rows[0].n}`);
+  }
+
+  if (failures.length > 0) {
+    process.exit(1);
   }
 }
 
