@@ -18,6 +18,12 @@ function baseStats() {
     distribution: {
       eagles: 0, birdies: 2, pars: 8, bogeys: 5, doubles: 2, worse: 1, total: 18,
     },
+    // Gross vs-par mix for the ShotsTab benchmark rows — deliberately
+    // different from the net `distribution` so tests can prove the
+    // benchmark reads gross (one net birdie was handicap-assisted).
+    distributionGross: {
+      eagles: 0, birdies: 1, pars: 9, bogeys: 5, doubles: 2, worse: 1, total: 18,
+    },
     parType: {
       par3: { holes: 4, avgPoints: 1.5, avgStrokes: 4 },
       par4: { holes: 10, avgPoints: 1.7, avgStrokes: 5.2 },
@@ -52,6 +58,14 @@ function baseStats() {
         { label: 'Right misses', avgPoints: 0.5, deviation: -1.1 },
         { label: '200+ m approaches', avgPoints: 0.7, deviation: -0.9 },
       ],
+    },
+    courseMastery: [
+      { courseName: 'Oak', rounds: 1, avgPoints: 54, bestPoints: 54, trend: null },
+      { courseName: 'Elm', rounds: 2, avgPoints: 30, bestPoints: 30, trend: 0 },
+      { courseName: 'Pine', rounds: 2, avgPoints: 27, bestPoints: 36, trend: -1 },
+    ],
+    careerMilestones: {
+      birdies: 18, eagles: 0, longestParStreak: 18, bestNine: 27, bestRound: 54,
     },
     strokesGained: {
       total: -1.25,
@@ -158,7 +172,7 @@ function shotStats() {
       hasData: true,
       roundsWithData: 1,
       roundsWithPuttData: 1,
-      putts: { perRound: 42, holes: 18, onePutts: 0, threePuttPlus: 6 },
+      putts: { perRound: 42, per18: 42, holes: 18, onePutts: 0, threePuttPlus: 6 },
       drives: {
         fairwayPct: 67,
         fairwaysHit: 12,
@@ -166,7 +180,7 @@ function shotStats() {
         distribution: { fairway: 12, left: 0, right: 6, short: 0, super: 0 },
       },
       gir: { pct: 67, eligible: 18 },
-      penalties: { tee: 0, other: 0, total: 0 },
+      penalties: { tee: 0, other: 0, total: 0, teeOnDriveHoles: 0 },
     },
     driveImpact: {
       hasData: true,
@@ -295,9 +309,14 @@ describe('My Stats tabs', () => {
     ));
 
     expect(await findByText('3-putts / round')).toBeTruthy();
-    expect(await findByText('vs target hcp · 6 total · 1 round · target 3.5')).toBeTruthy();
+    // Putting rows are normalized to an 18-hole rate off logged holes —
+    // the secondary copy states the per-18 basis instead of raw rounds.
+    expect(await findByText('vs target hcp · 6 total · 18 holes · target 3.5 / 18 holes')).toBeTruthy();
     expect((await findAllByText('vs target hcp · 18 holes · target 25%')).length).toBeGreaterThan(0);
-    expect((await findAllByText('vs target hcp · 18 holes · target 31.9')).length).toBeGreaterThan(0);
+    expect((await findAllByText('vs target hcp · 18 holes · target 31.9 / 18 holes')).length).toBeGreaterThan(0);
+    // Scoring-mix benchmark rows read the GROSS distribution (1 gross
+    // birdie), not the net distribution (2 net birdies).
+    expect(await findByText('vs target hcp · 1 total · 18 holes · target 0.4')).toBeTruthy();
   });
 
   test('ShotsTab flags low-sample benchmark rows instead of over-coloring them', async () => {
@@ -331,6 +350,8 @@ describe('My Stats tabs', () => {
       <BreakdownTab stats={shotStats()} onInfo={() => {}} />
     ));
 
+    expect(await findByText('Course Mastery')).toBeTruthy();
+    expect(await findByText('Career Milestones')).toBeTruthy();
     expect(await findByText('Scoring patterns')).toBeTruthy();
     expect(await findByText('Course scoring patterns')).toBeTruthy();
     expect(await findByText('Round timing patterns')).toBeTruthy();
@@ -367,5 +388,49 @@ describe('My Stats tabs', () => {
 
     expect((await findAllByText('vs your avg · 18 holes · avg 1.67 pts/hole · +0')).length).toBeGreaterThan(0);
     expect(queryByText(/-1.5 vs your avg/)).toBeNull();
+  });
+
+  test('BreakdownTab shows Course Mastery rows and Career Milestones tiles', async () => {
+    const { findByText, findAllByText, getByLabelText, queryByLabelText } = render(wrap(
+      <BreakdownTab stats={baseStats()} onInfo={() => {}} />
+    ));
+
+    // Course Mastery: sorted best-avg-first (Oak 54 before Pine 27), each
+    // row showing rounds/best/avg, and a trend icon per course.
+    expect(await findByText('Oak')).toBeTruthy();
+    expect(await findByText('Pine')).toBeTruthy();
+    expect(await findByText('1 round · best 54 pts')).toBeTruthy();
+    expect(await findByText('2 rounds · best 36 pts')).toBeTruthy();
+    expect(await findByText('54 pts avg')).toBeTruthy();
+    expect(await findByText('27 pts avg')).toBeTruthy();
+    expect(getByLabelText('Pine trend bad')).toBeTruthy();
+    // trend 0 = two genuinely equal rounds → minus icon; trend null = only
+    // one complete round → no trend claim rendered at all.
+    expect(getByLabelText('Elm trend neutral')).toBeTruthy();
+    expect(queryByLabelText(/Oak trend/)).toBeNull();
+
+    // Career Milestones: birdies/eagles/streak counts plus best nine/round.
+    // birdies and longestParStreak are both 18 in this fixture — two tiles
+    // legitimately share the value.
+    expect((await findAllByText('18')).length).toBe(2);
+    expect(await findByText('Birdies')).toBeTruthy();
+    expect(await findByText('Eagles')).toBeTruthy();
+    expect(await findByText('Best par streak')).toBeTruthy();
+    expect(await findByText('27')).toBeTruthy();
+    expect(await findByText('Best nine (pts)')).toBeTruthy();
+    expect(await findByText('54')).toBeTruthy();
+    expect(await findByText('Best round (pts)')).toBeTruthy();
+    // The counts are NET (handicap-adjusted) — ShotsTab's birdie benchmark
+    // is gross, so the card must disclose the basis.
+    expect(await findByText(/net \(handicap-adjusted\)/i)).toBeTruthy();
+  });
+
+  test('BreakdownTab hides Course Mastery when there is no complete round at any course', async () => {
+    const stats = { ...baseStats(), courseMastery: [] };
+    const { queryByText } = render(wrap(
+      <BreakdownTab stats={stats} onInfo={() => {}} />
+    ));
+
+    expect(queryByText('Course Mastery')).toBeNull();
   });
 });

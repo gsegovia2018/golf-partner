@@ -11,11 +11,15 @@ function evenScores(holes, strokes) {
   holes.forEach((h) => { o[h.number] = strokes; });
   return o;
 }
-// Build a MyRound record (matches collectMyRounds output shape).
+// Build a MyRound record (matches collectMyRounds output shape). isComplete
+// and holesPlayed are derived from `scores` the same way collectMyRounds
+// derives them, so fixtures stay honest about what was actually scored.
 function mkMyRound({
   key, courseName = 'Course', holes, scores, shotDetails = {},
   completed = true, tournamentName = 'Cup', tournamentDate = '2026-05-01',
 }) {
+  const isComplete = holes.length > 0 && holes.every((h) => scores[h.number] != null);
+  const holesPlayed = holes.filter((h) => scores[h.number] != null).length;
   return {
     key, courseName, tournamentName, tournamentDate, roundIndex: 0,
     playerId: 'p1',
@@ -27,6 +31,8 @@ function mkMyRound({
       playerHandicaps: { p1: 0 },
     },
     completed,
+    isComplete,
+    holesPlayed,
     points: 0,
   };
 }
@@ -165,14 +171,37 @@ describe('buildRoundReportCard — meta & headline', () => {
     const h = mkHoles();
     const partial = {};
     h.slice(0, 9).forEach((hole) => { partial[hole.number] = 4; });
-    const rounds = [mkMyRound({
-      key: 'p', holes: h, scores: partial, completed: false,
-    })];
+    // No explicit `completed` override: like a real early-finished game
+    // (tournament finishedAt set), the loose flag stays true while
+    // isComplete is derived false from the 9 unscored holes. The card's
+    // `complete` field — which drives the "through N holes" caveat — must
+    // key off isComplete, or an early-finished round masquerades as full.
+    const rounds = [mkMyRound({ key: 'p', holes: h, scores: partial })];
+    expect(rounds[0].completed).toBe(true);
     const card = buildRoundReportCard(rounds, 'p');
     expect(card.round.holesPlayed).toBe(9);
     expect(card.round.complete).toBe(false);
     expect(card.headline.points).toBe(18);
     expect(card.headline.perHole).toBe(2);
+  });
+
+  test('career baseline excludes an early-finished partial round from the history average', () => {
+    const h = mkHoles();
+    // Partial history round: only 6 of 18 holes scored, at birdie pace
+    // (3 pts/hole) — a very different rate than the full round below, so
+    // wrongly including it would visibly move the baseline.
+    const partialScores = {};
+    h.slice(0, 6).forEach((hole) => { partialScores[hole.number] = 3; });
+    const partial = mkMyRound({ key: 'partial', holes: h, scores: partialScores });
+    const full = mkMyRound({ key: 'full', holes: h, scores: evenScores(h, 4) }); // 2 pts/hole
+    const target = mkMyRound({ key: 'target', holes: h, scores: evenScores(h, 3) }); // 3 pts/hole
+
+    const card = buildRoundReportCard([partial, full, target], 'target');
+    expect(card.hasHistory).toBe(true);
+    // Baseline is the full round's 2.0 pts/hole only: (3.0 - 2.0) * 18 = +18.
+    // If the partial round leaked in, the baseline would blend toward 2.25
+    // and vsAvg would read +13.5 instead.
+    expect(card.headline.vsAvg).toBe(18);
   });
 });
 

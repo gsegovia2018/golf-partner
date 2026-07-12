@@ -1,6 +1,6 @@
 import React from 'react';
 import { render, fireEvent } from '@testing-library/react-native';
-import { ScrollView, StyleSheet } from 'react-native';
+import { ScrollView, StyleSheet, Switch } from 'react-native';
 import StatsScreen from '../StatsScreen';
 
 jest.mock('@expo/vector-icons', () => ({
@@ -94,7 +94,16 @@ jest.mock('../../components/scoringModes', () => ({
 }));
 
 jest.mock('../../store/statsEngine', () => ({
-  playerRoundHistory: jest.fn(() => []),
+  // Real implementation: the scramble-gating tests below depend on scores/
+  // shotDetails/pairs actually being blanked on scramble rounds.
+  withoutScrambleScores: jest.requireActual('../../store/statsEngine').withoutScrambleScores,
+  // Real shape: [{roundIndex, courseName, points, strokes, holesPlayed,
+  // avgPerHole}] — PlayersTab now gates its whole body on history.length
+  // (not the round-scoped `dist.total`), so an empty default here would
+  // collapse every Players-tab test straight to "No scores yet."
+  playerRoundHistory: jest.fn(() => [
+    { roundIndex: 0, courseName: 'La Moraleja', points: 36, strokes: 72, holesPlayed: 18, avgPerHole: 2 },
+  ]),
   playerAvgStableford: jest.fn(() => 0),
   playerScoreDistribution: jest.fn(() => []),
   playerStreaks: jest.fn(() => []),
@@ -118,25 +127,44 @@ jest.mock('../../store/statsEngine', () => ({
   clutchOnHardest: jest.fn(() => []),
   playerConsistency: jest.fn(() => []),
   courseDNA: jest.fn(() => []),
+  playingToHandicap: jest.fn(() => []),
+  hotStretch: jest.fn(() => []),
   parTypeSplit: jest.fn(() => ({ par3: {}, par4: {}, par5: {} })),
-  warmupVsClosing: jest.fn(() => []),
+  // Real shape: { warmup: { avgPoints, holes, breakdown }, closing: {...}, delta }
+  // — PlayersTab reads `.warmup.holes`/`.closing.holes` directly, so a bare
+  // `[]` default crashes the very first Players-tab render.
+  warmupVsClosing: jest.fn(() => ({
+    warmup: { avgPoints: 0, holes: 0, breakdown: [] },
+    closing: { avgPoints: 0, holes: 0, breakdown: [] },
+    delta: 0,
+  })),
   handicapROI: jest.fn(() => []),
   playerNemesisAndCrushed: jest.fn(() => []),
   chaosHoles: jest.fn(() => ({})),
   collectiveExtremes: jest.fn(() => ({})),
   pairSynergy: jest.fn(() => []),
   pairCarryRatio: jest.fn(() => []),
+  pairCoverage: jest.fn(() => []),
   swingHole: jest.fn(() => []),
-  par3Heartbreak: jest.fn(() => []),
-  pickupChampion: jest.fn(() => []),
-  anchor: jest.fn(() => []),
-  zeroHero: jest.fn(() => ({})),
+  // Real par3Heartbreak/pickupChampion/anchor/zeroHero return null (not an
+  // empty array/object) when there's no qualifying data — ShameTab reads
+  // `.entries` straight off these, so a falsy-but-truthy `[]`/`{}` default
+  // would crash the very first render.
+  par3Heartbreak: jest.fn(() => null),
+  pickupChampion: jest.fn(() => null),
+  anchor: jest.fn(() => null),
+  zeroHero: jest.fn(() => null),
+  nemesisEncore: jest.fn(() => null),
   skinsLeaderboard: jest.fn(() => ({ leaderboard: [], rounds: [], totalSkins: 0 })),
   matchPlayResults: jest.fn(() => []),
   pairConfigMatrix: jest.fn(() => []),
   shotStats: jest.fn(() => ({ hasData: false })),
   playersWithShotData: jest.fn(() => []),
   driveScoreImpact: jest.fn(() => []),
+  girByDriveResult: jest.fn(() => ({
+    fairway: { holes: 0, girPct: 0, breakdown: [] },
+    miss: { holes: 0, girPct: 0, breakdown: [] },
+  })),
   puttDeepDive: jest.fn(() => ({})),
   approachScoreImpact: jest.fn(() => []),
   bounceBackRate: jest.fn(() => []),
@@ -179,6 +207,126 @@ describe('StatsScreen chrome', () => {
 
     expect(queryByText('Total')).toBeNull();
     expect(queryByText('R1')).toBeNull();
+  });
+});
+
+describe('StatsScreen Players tab — Difficulty Split', () => {
+  test('renders the DIFFICULTY SPLIT card with per-band averages and opens the hole breakdown on tap', () => {
+    const { getByText, getAllByText, UNSAFE_getByType } = renderStats([makeRound('r1')]);
+    fireEvent.press(getByText('Players'));
+
+    expect(getByText('DIFFICULTY SPLIT')).toBeTruthy();
+    expect(getByText('SI 1-6')).toBeTruthy();
+    expect(getByText('SI 7-12')).toBeTruthy();
+    expect(getByText('SI 13-18')).toBeTruthy();
+    // 18 holes split 6/6/6 across the three bands.
+    expect(getAllByText('6 holes')).toHaveLength(3);
+    // calcStablefordPoints is mocked to always return 2 pts — every band averages 2.
+    expect(getAllByText('2').length).toBeGreaterThanOrEqual(3);
+
+    fireEvent.press(getByText('SI 1-6'));
+    const sheet = UNSAFE_getByType('StatDetailSheet');
+    expect(sheet.props.title).toBe('Marcos — SI 1-6');
+    expect(sheet.props.rows).toHaveLength(6);
+  });
+});
+
+describe('StatsScreen Players tab — Task 20 honesty items', () => {
+  // A test further down overrides playerRoundHistory's return value; without
+  // resetting it here, that override would leak into later tests in this
+  // block (jest.clearAllMocks() clears call history, not return values) and
+  // could, e.g., make a leftover "R2" history row collide with the "R2"
+  // round-scope chip in a getByText query.
+  beforeEach(() => {
+    jest.clearAllMocks();
+    const statsEngine = require('../../store/statsEngine');
+    statsEngine.playerRoundHistory.mockReturnValue([
+      { roundIndex: 0, courseName: 'La Moraleja', points: 36, strokes: 72, holesPlayed: 18, avgPerHole: 2 },
+    ]);
+  });
+
+  test('player chips disambiguate duplicate first names by falling back to the full name', () => {
+    const duplicateFirstNamePlayers = [
+      { id: 'p1', name: 'Bob Diaz', user_id: 'u1', handicap: 0 },
+      { id: 'p2', name: 'Bob Smith', user_id: null, handicap: 0 },
+    ];
+    const { getByText, queryByText } = renderStats([makeRound('r1')], { players: duplicateFirstNamePlayers });
+    fireEvent.press(getByText('Players'));
+
+    expect(getByText('Bob Diaz')).toBeTruthy();
+    expect(getByText('Bob Smith')).toBeTruthy();
+    // The bare "Bob" chip label must not survive — it would be ambiguous
+    // between the two players.
+    expect(queryByText('Bob')).toBeNull();
+  });
+
+  test('a roster with no duplicate first names keeps the short chip labels', () => {
+    const { getByText, queryByText } = renderStats([makeRound('r1')], {
+      players: [player, { id: 'p2', name: 'Bob Diaz', user_id: null, handicap: 0 }],
+    });
+    fireEvent.press(getByText('Players'));
+
+    expect(getByText('Marcos')).toBeTruthy();
+    expect(getByText('Bob')).toBeTruthy();
+    expect(queryByText('Bob Diaz')).toBeNull();
+  });
+
+  test("Round History row shows the round's scoring-mode badge, holes played, and avg per hole", () => {
+    jest.clearAllMocks();
+    const statsEngine = require('../../store/statsEngine');
+    statsEngine.playerRoundHistory.mockReturnValue([
+      { roundIndex: 0, courseName: 'La Moraleja', points: 30, strokes: 76, holesPlayed: 15, avgPerHole: 2 },
+    ]);
+    const round = { ...makeRound('r1'), scoringMode: 'matchplay' };
+    const { getByText } = renderStats([round]);
+    fireEvent.press(getByText('Players'));
+
+    expect(getByText('ROUND HISTORY')).toBeTruthy();
+    expect(getByText('Match Play')).toBeTruthy();
+    expect(getByText('15 holes · 2 pts/hole')).toBeTruthy();
+  });
+
+  test('Average per Round card shows an "n rounds · m holes" subtitle', () => {
+    jest.clearAllMocks();
+    const statsEngine = require('../../store/statsEngine');
+    statsEngine.playerRoundHistory.mockReturnValue([
+      { roundIndex: 0, courseName: 'La Moraleja', points: 36, strokes: 72, holesPlayed: 18, avgPerHole: 2 },
+      { roundIndex: 1, courseName: 'Sotogrande', points: 34, strokes: 74, holesPlayed: 18, avgPerHole: 1.89 },
+    ]);
+    const { getByText } = renderStats([makeRound('r1'), makeRound('r2', 5)]);
+    fireEvent.press(getByText('Players'));
+
+    expect(getByText('2 rounds · 36 holes')).toBeTruthy();
+  });
+
+  test('renders the sticky section index with a chip for each rendered section', () => {
+    const { getByText } = renderStats([makeRound('r1')]);
+    fireEvent.press(getByText('Players'));
+
+    expect(getByText('Distribution')).toBeTruthy();
+    expect(getByText('Streaks')).toBeTruthy();
+    expect(getByText('History')).toBeTruthy();
+  });
+
+  test('round-scope chips are enabled on the Players tab and pass roundIndex through to distribution + streaks', () => {
+    jest.clearAllMocks();
+    const statsEngine = require('../../store/statsEngine');
+    const { getByText, getAllByText } = renderStats([makeRound('r1'), makeRound('r2', 5)]);
+    fireEvent.press(getByText('Players'));
+
+    // Chip set is now visible on this tab (was hidden before Task 20).
+    expect(getByText('Total')).toBeTruthy();
+    expect(getByText('R2')).toBeTruthy();
+    // Tournament-wide sections that don't accept roundIndex are labeled
+    // honestly instead of silently ignoring the chip.
+    expect(getAllByText('All rounds').length).toBeGreaterThan(0);
+
+    fireEvent.press(getByText('R2'));
+
+    const distCall = statsEngine.playerScoreDistribution.mock.calls.at(-1);
+    expect(distCall[2]).toEqual(expect.objectContaining({ roundIndex: 1 }));
+    const streaksCall = statsEngine.playerStreaks.mock.calls.at(-1);
+    expect(streaksCall[2]).toEqual(expect.objectContaining({ roundIndex: 1 }));
   });
 });
 
@@ -403,6 +551,768 @@ describe('StatsScreen mixed scoring-mode gating (per-round overrides)', () => {
         // …but the scramble round's captain scores are blanked out.
         expect(t.rounds[1].scores).toBeNull();
       });
+    });
+
+    test('Total round scope passes roundIndex: null (not the first completed round) to hole-wins and the H2H duel', () => {
+      // Regression for the old effectiveRound substitution: with "Total"
+      // selected, Pairs-tab sections that support a tournament-wide
+      // aggregate must actually get one instead of silently narrowing to
+      // round 1.
+      jest.clearAllMocks();
+      const statsEngine = require('../../store/statsEngine');
+      const rounds = [
+        { ...makeRound('r1'), scoringMode: 'stableford' },
+        { ...makeRound('r2', 5), scoringMode: 'stableford' },
+      ];
+      const { getByText, getAllByText } = renderStats(rounds, { players: fourPlayers, scoringMode: 'individual' });
+
+      fireEvent.press(getByText('Pairs'));
+
+      const holeWinsCall = statsEngine.pairHoleWins.mock.calls.at(-1);
+      expect(holeWinsCall[1]).toEqual(expect.objectContaining({ roundIndex: null }));
+
+      // Only the duel card's headToHead call carries a 4th (options) arg —
+      // the H2H heatmap calls headToHead with just the 3 player args. Check
+      // only the most recent duel call — mock.calls accumulates across every
+      // render, including earlier renders before state settled.
+      const duelCalls = statsEngine.headToHead.mock.calls.filter((call) => call.length === 4);
+      expect(duelCalls.length).toBeGreaterThan(0);
+      expect(duelCalls.at(-1)[3]).toEqual(expect.objectContaining({ roundIndex: null }));
+
+      // Both sections (Hole Wins + Head to Head) label their effective scope.
+      expect(getAllByText('All rounds').length).toBeGreaterThanOrEqual(2);
+    });
+
+    test('selecting a round chip scopes hole-wins and the H2H duel to that round, and labels it', () => {
+      jest.clearAllMocks();
+      const statsEngine = require('../../store/statsEngine');
+      const rounds = [
+        { ...makeRound('r1'), scoringMode: 'stableford' },
+        { ...makeRound('r2', 5), scoringMode: 'stableford' },
+      ];
+      const { getByText, getAllByText } = renderStats(rounds, { players: fourPlayers, scoringMode: 'individual' });
+
+      fireEvent.press(getByText('Pairs'));
+      fireEvent.press(getByText('R1'));
+
+      const holeWinsCall = statsEngine.pairHoleWins.mock.calls.at(-1);
+      expect(holeWinsCall[1]).toEqual(expect.objectContaining({ roundIndex: 0 }));
+
+      const duelCalls = statsEngine.headToHead.mock.calls.filter((call) => call.length === 4);
+      expect(duelCalls.length).toBeGreaterThan(0);
+      expect(duelCalls.at(-1)[3]).toEqual(expect.objectContaining({ roundIndex: 0 }));
+
+      // Both sections (Hole Wins + Head to Head) label their effective scope.
+      expect(getAllByText('R1 · La Moraleja').length).toBeGreaterThanOrEqual(2);
+    });
+  });
+
+  describe('unified Pair Cards and Pair Difference drama strip', () => {
+    const scoringModes = require('../../components/scoringModes');
+    const pairsField = [[fourPlayers[0], fourPlayers[1]], [fourPlayers[2], fourPlayers[3]]];
+    const teamRounds = () => [
+      { ...makeRound('r1'), scoringMode: 'stableford', pairs: pairsField },
+      { ...makeRound('r2', 5), scoringMode: 'stableford', pairs: pairsField },
+    ];
+
+    beforeEach(() => {
+      jest.clearAllMocks();
+      scoringModes.scoringModeUsesTeams.mockImplementation((mode) => mode === 'stableford');
+    });
+
+    afterEach(() => {
+      scoringModes.scoringModeUsesTeams.mockImplementation(() => false);
+    });
+
+    test('Pair Cards renders one card per pairing with a synergy badge and a carry bar that always sums to 100%; old three section titles are gone', () => {
+      const statsEngine = require('../../store/statsEngine');
+      const pairKey = [fourPlayers[0].id, fourPlayers[1].id].sort().join('|');
+      statsEngine.pairPerformance.mockReturnValue([
+        {
+          players: [fourPlayers[0], fourPlayers[1]],
+          rounds: 2,
+          avgPoints: 35,
+          totalPoints: 70,
+          roundList: [
+            {
+              roundIndex: 0, courseName: 'La Moraleja', combinedPoints: 35, combinedStrokes: 80,
+              memberPoints: [
+                { playerId: 'p1', playerName: 'Marcos', points: 18 },
+                { playerId: 'p2', playerName: 'Bob Diaz', points: 17 },
+              ],
+            },
+          ],
+        },
+      ]);
+      statsEngine.pairSynergy.mockReturnValue([
+        {
+          members: [fourPlayers[0], fourPlayers[1]],
+          rounds: 2, combined: 70, expected: 60, synergy: 1.17, holesPlayed: 36,
+          roundList: [{ roundIndex: 0, courseName: 'La Moraleja', holesPlayed: 18, combined: 35, expected: 30, synergy: 1.17 }],
+        },
+      ]);
+      statsEngine.pairCarryRatio.mockReturnValue([
+        {
+          members: [fourPlayers[0], fourPlayers[1]],
+          // Each share independently rounds to 51 and 50 — a naive
+          // implementation that rounds both would sum to 101%.
+          shares: [
+            { player: fourPlayers[0], points: 40, share: 0.505 },
+            { player: fourPlayers[1], points: 30, share: 0.495 },
+          ],
+          totalPoints: 70, holesPlayed: 36, imbalance: 0.01,
+        },
+      ]);
+
+      const { getByText, queryByText, getByTestId } = renderStats(teamRounds(), {
+        players: fourPlayers, scoringMode: 'individual',
+      });
+
+      fireEvent.press(getByText('Pairs'));
+
+      expect(getByText('PAIR CARDS')).toBeTruthy();
+      expect(queryByText('PAIR CHEMISTRY')).toBeNull();
+      expect(queryByText('PAIR SYNERGY')).toBeNull();
+      expect(queryByText('CARRY RATIO')).toBeNull();
+
+      // One card per pairing, with its synergy badge...
+      expect(getByText('×1.17')).toBeTruthy();
+
+      // ...and a carry bar whose two shares always sum to 100%.
+      const fillA = getByTestId(`pair-carry-fill-a-${pairKey}`);
+      const fillB = getByTestId(`pair-carry-fill-b-${pairKey}`);
+      const widthA = parseInt(StyleSheet.flatten(fillA.props.style).width, 10);
+      const widthB = parseInt(StyleSheet.flatten(fillB.props.style).width, 10);
+      expect(widthA).toBe(51);
+      expect(widthB).toBe(49);
+      expect(widthA + widthB).toBe(100);
+    });
+
+    test('renders a drama strip under the Pair Difference chart from crossovers/maxLead/maxDeficit/finalDelta', () => {
+      const statsEngine = require('../../store/statsEngine');
+      statsEngine.pairDifferenceByHole.mockReturnValue({
+        pair1: [fourPlayers[0], fourPlayers[1]],
+        pair2: [fourPlayers[2], fourPlayers[3]],
+        metric: 'points',
+        courseName: 'La Moraleja',
+        holes: [],
+        maxLead: 5,
+        maxDeficit: -2,
+        finalDelta: 2,
+        crossovers: 3,
+        maxAbs: 5,
+      });
+
+      const { getByText } = renderStats(teamRounds(), {
+        players: fourPlayers, scoringMode: 'individual',
+      });
+
+      fireEvent.press(getByText('Pairs'));
+
+      expect(getByText('Lead changes: 3 · Biggest lead: Marcos & Bob +5 pts · Final: +2 pts')).toBeTruthy();
+    });
+
+    test('Pair Cards render a coverage line matched to the card by sorted member ids', () => {
+      const statsEngine = require('../../store/statsEngine');
+      const pairKey = [fourPlayers[0].id, fourPlayers[1].id].sort().join('|');
+      statsEngine.pairPerformance.mockReturnValue([
+        {
+          players: [fourPlayers[0], fourPlayers[1]],
+          rounds: 2, avgPoints: 35, totalPoints: 70, roundList: [],
+        },
+      ]);
+      // pairCoverage returns `pair` (not `members`) and members in the
+      // OPPOSITE array order from pairPerformance's `players` — the card
+      // must still match by sorted id, not array position or field name.
+      statsEngine.pairCoverage.mockReturnValue([
+        { pair: [fourPlayers[1], fourPlayers[0]], holes: 20, coveragePct: 65, bothBlanked: 3 },
+      ]);
+
+      const { getByText, getByTestId } = renderStats(teamRounds(), {
+        players: fourPlayers, scoringMode: 'individual',
+      });
+
+      fireEvent.press(getByText('Pairs'));
+
+      expect(getByTestId(`pair-coverage-${pairKey}`)).toBeTruthy();
+      expect(getByText('65% covered · 3 double-blanks')).toBeTruthy();
+    });
+  });
+});
+
+describe('StatsScreen Overview tab — presentation honesty', () => {
+  // jest.clearAllMocks() only clears call history — a .mockReturnValue() set
+  // by one test keeps applying in the next one. These tests each customize a
+  // different statsEngine aggregate, so every test starts from the same
+  // known-empty baseline (matching the module-level mock factory defaults)
+  // and only overrides what it actually needs.
+  beforeEach(() => {
+    jest.clearAllMocks();
+    const statsEngine = require('../../store/statsEngine');
+    statsEngine.skinsLeaderboard.mockReturnValue({ leaderboard: [], rounds: [], totalSkins: 0 });
+    statsEngine.playerConsistency.mockReturnValue([]);
+    statsEngine.tournamentMomentum.mockReturnValue([]);
+    statsEngine.clutchOnHardest.mockReturnValue([]);
+    statsEngine.playingToHandicap.mockReturnValue([]);
+    statsEngine.hotStretch.mockReturnValue([]);
+  });
+
+  test('two tied skins leaders both render rank #1, styled gold', () => {
+    const statsEngine = require('../../store/statsEngine');
+    statsEngine.skinsLeaderboard.mockReturnValue({
+      leaderboard: [
+        { player: fourPlayers[0], skins: 3, ties: 0, breakdown: [] },
+        { player: fourPlayers[1], skins: 3, ties: 0, breakdown: [] },
+        { player: fourPlayers[2], skins: 1, ties: 0, breakdown: [] },
+      ],
+      rounds: [],
+      totalSkins: 7,
+    });
+
+    const { getAllByText } = renderStats([makeRound('r1')], { players: fourPlayers });
+
+    const rankOnes = getAllByText('#1');
+    expect(rankOnes).toHaveLength(2);
+    rankOnes.forEach((el) => {
+      const flat = StyleSheet.flatten(el.props.style);
+      expect(flat.color).toBe(mockTheme.semantic.rank.gold);
+    });
+  });
+
+  test('consistency list hides players under 18 counted holes behind a muted note', () => {
+    const statsEngine = require('../../store/statsEngine');
+    statsEngine.playerConsistency.mockReturnValue([
+      { player: fourPlayers[0], stdev: 0.5, mean: 2, holesPlayed: 18, breakdown: [] },
+      { player: fourPlayers[1], stdev: 0.3, mean: 2.5, holesPlayed: 9, breakdown: [] },
+    ]);
+
+    const { getByText, queryByText } = renderStats([makeRound('r1')], { players: fourPlayers });
+
+    // Qualified player (18 holes) shows a real ranked row.
+    expect(getByText(/σ 0\.5/)).toBeTruthy();
+    // Under-18-hole player's raw stdev never renders...
+    expect(queryByText(/σ 0\.3/)).toBeNull();
+    // ...replaced by an honest muted note.
+    expect(getByText('Needs a full round of data.')).toBeTruthy();
+  });
+
+  test('strokes-mode Best Round empty state explains the 18-hole requirement', () => {
+    const { getByText, queryByText, UNSAFE_getByType } = renderStats([makeRound('r1')], {
+      players: fourPlayers,
+    });
+
+    // Points mode (default) keeps the original generic copy.
+    expect(getByText('No scores for this round yet.')).toBeTruthy();
+
+    const switchEl = UNSAFE_getByType(Switch);
+    fireEvent(switchEl, 'valueChange', false); // toggle to Strokes
+
+    expect(queryByText('No scores for this round yet.')).toBeNull();
+    expect(getByText('No completed rounds yet — strokes mode needs all 18 holes.')).toBeTruthy();
+  });
+
+  test('a skins row with zero skins but a tied hole is tappable and lists the ties', () => {
+    const statsEngine = require('../../store/statsEngine');
+    const [p1, p2] = fourPlayers;
+    const tiedHoleEntry = {
+      roundIndex: 0, courseName: 'La Moraleja', holeNumber: 5, par: 4, si: 3,
+      bestVal: 2, winner: null, tiedLeaders: [p1, p2], players: [],
+    };
+    statsEngine.skinsLeaderboard.mockReturnValue({
+      leaderboard: [
+        { player: p1, skins: 0, ties: 1, breakdown: [] },
+        { player: p2, skins: 0, ties: 1, breakdown: [] },
+        { player: fourPlayers[2], skins: 2, ties: 0, breakdown: [] },
+      ],
+      rounds: [{ roundIndex: 0, courseName: 'La Moraleja', skinsPerPlayer: {}, holes: [tiedHoleEntry] }],
+      totalSkins: 2,
+    });
+
+    const { getAllByText, UNSAFE_getByType } = renderStats([makeRound('r1')], { players: fourPlayers });
+
+    // The Head-to-Head matrix also renders every player's first name as a
+    // row/column header below the Skins section, so match the leaderboard
+    // row specifically: it's the first (and only pressable) occurrence.
+    fireEvent.press(getAllByText(p1.name.split(' ')[0])[0]);
+
+    const sheet = UNSAFE_getByType('StatDetailSheet');
+    expect(sheet.props.visible).toBe(true);
+    expect(sheet.props.rows).toHaveLength(1);
+    expect(sheet.props.rows[0].primary).toContain('Hole 5');
+  });
+
+  test('momentum bar tone accounts for holes played, not just the raw points total', () => {
+    const statsEngine = require('../../store/statsEngine');
+    // 16 pts over only 9 holes is a strong pace (16/9 === 32/18, the
+    // "excellent" cutoff) even though 16 alone would read as "poor" against
+    // the old full-round-only thresholds.
+    statsEngine.tournamentMomentum.mockReturnValue([
+      { player: fourPlayers[0], rounds: [
+        { roundIndex: 0, courseName: 'La Moraleja', points: 16, strokes: 40, holesPlayed: 9 },
+      ], minPts: 16, maxPts: 16 },
+    ]);
+
+    renderStats([makeRound('r1')], { players: fourPlayers });
+
+    expect(mockTheme.scoreColor).toHaveBeenCalledWith('excellent');
+    expect(mockTheme.scoreColor).not.toHaveBeenCalledWith('poor');
+  });
+
+  test('shows a pts badge beside points-only section titles when the Strokes toggle is active', () => {
+    const statsEngine = require('../../store/statsEngine');
+    statsEngine.clutchOnHardest.mockReturnValue([
+      { player: fourPlayers[0], points: 6, strokes: 12, holesPlayed: 3, breakdown: [], avgPoints: 2, avgStrokes: 4 },
+    ]);
+
+    const { getByText, queryByText, UNSAFE_getByType } = renderStats([makeRound('r1')], { players: fourPlayers });
+
+    expect(queryByText('pts')).toBeNull();
+
+    const switchEl = UNSAFE_getByType(Switch);
+    fireEvent(switchEl, 'valueChange', false); // toggle to Strokes
+
+    expect(getByText('CLUTCH ON HARDEST HOLES')).toBeTruthy();
+    expect(getByText('pts')).toBeTruthy();
+  });
+
+  test('playing to handicap renders ranked rows with signed deltas and opens a per-round sheet', () => {
+    const statsEngine = require('../../store/statsEngine');
+    statsEngine.playingToHandicap.mockReturnValue([
+      {
+        player: fourPlayers[0], points: 40, holesPlayed: 18, delta: 4,
+        rounds: [{ roundIndex: 0, courseName: 'La Moraleja', points: 40, holesPlayed: 18, delta: 4 }],
+      },
+      {
+        player: fourPlayers[1], points: 28, holesPlayed: 18, delta: -8,
+        rounds: [{ roundIndex: 0, courseName: 'La Moraleja', points: 28, holesPlayed: 18, delta: -8 }],
+      },
+    ]);
+
+    const { getByText, getAllByText, UNSAFE_getByType } = renderStats([makeRound('r1')], { players: fourPlayers });
+
+    expect(getByText('PLAYING TO HANDICAP')).toBeTruthy();
+    expect(getByText('+4')).toBeTruthy();
+    expect(getByText('-8')).toBeTruthy();
+
+    // Section renders before the H2H matrix (which also lists every
+    // player's first name), so the leaderboard row is the first match.
+    fireEvent.press(getAllByText(fourPlayers[0].name.split(' ')[0])[0]);
+
+    const sheet = UNSAFE_getByType('StatDetailSheet');
+    expect(sheet.props.visible).toBe(true);
+    expect(sheet.props.title).toContain('+4');
+    expect(sheet.props.rows).toHaveLength(1);
+    expect(sheet.props.rows[0].rightPrimary).toBe('+4');
+  });
+
+  test('hot stretch renders the top 3 cards only and opens a hole-by-hole sheet', () => {
+    const statsEngine = require('../../store/statsEngine');
+    const breakdown = [
+      { roundIndex: 0, courseName: 'La Moraleja', holeNumber: 7, par: 4, strokes: 3, points: 3 },
+      { roundIndex: 0, courseName: 'La Moraleja', holeNumber: 8, par: 3, strokes: 2, points: 3 },
+    ];
+    statsEngine.hotStretch.mockReturnValue([
+      { player: fourPlayers[0], points: 11, roundIndex: 1, startHole: 7, endHole: 12, breakdown },
+      { player: fourPlayers[1], points: 9, roundIndex: 0, startHole: 3, endHole: 8, breakdown },
+      { player: fourPlayers[2], points: 8, roundIndex: 0, startHole: 1, endHole: 6, breakdown },
+      // 4th-place player must not render — top-3 cards only.
+      { player: fourPlayers[3], points: 7, roundIndex: 0, startHole: 2, endHole: 7, breakdown },
+    ]);
+
+    const { getByText, getAllByText, queryByText, UNSAFE_getByType } = renderStats([makeRound('r1')], { players: fourPlayers });
+
+    expect(getByText('HOT STRETCH')).toBeTruthy();
+    // HighlightCard renders the value twice — once visible, once in the
+    // off-screen share-capture host — so match the first (visible) one.
+    const cardValues = getAllByText(/Marcos — 11 pts · R2 H7–H12/);
+    expect(cardValues.length).toBeGreaterThan(0);
+    // 4th-place Dan must not get a card — only the top 3 render. (Dan's
+    // first name still legitimately appears elsewhere, e.g. the H2H
+    // matrix headers, so match the card's exact value string instead.)
+    expect(queryByText(/Dan — 7 pts/)).toBeNull();
+
+    fireEvent.press(cardValues[0]);
+
+    const sheet = UNSAFE_getByType('StatDetailSheet');
+    expect(sheet.props.visible).toBe(true);
+    expect(sheet.props.rows).toHaveLength(2);
+    expect(sheet.props.rows[0].primary).toContain('Hole 7');
+  });
+});
+
+describe('StatsScreen Holes tab — heatmap honesty', () => {
+  test('avg cell renders "-" (not 0) for a hole nobody scored', () => {
+    const statsEngine = require('../../store/statsEngine');
+    statsEngine.holeDifficultyMap.mockReturnValue([
+      { holeNumber: 1, par: 4, si: 1, playerScores: [], avgPoints: null, avgStrokes: null },
+    ]);
+
+    const { getByText, getAllByText } = renderStats([makeRound('r1')]);
+    fireEvent.press(getByText('Holes'));
+
+    // One dash for the lone player's empty cell, one for the Avg column —
+    // a null average must never fall back to rendering "0".
+    expect(getAllByText('-')).toHaveLength(2);
+  });
+});
+
+describe('StatsScreen Shots tab — sample-floor gating', () => {
+  // Same reset caveat as the Overview tab block above: mockReturnValue
+  // persists across tests, so every test here starts from a known-good
+  // baseline (one player, real data, everything else empty) and only
+  // overrides the aggregate it's actually exercising.
+  beforeEach(() => {
+    jest.clearAllMocks();
+    const statsEngine = require('../../store/statsEngine');
+    statsEngine.playersWithShotData.mockReturnValue([player]);
+    statsEngine.shotStats.mockReturnValue({
+      hasData: true,
+      roundsWithData: 1,
+      putts: { perRound: 32, perHole: 1.8, onePutts: 2, threePuttPlus: 1 },
+      drives: {
+        recorded: 2,
+        fairwayPct: 50,
+        fairwaysHit: 1,
+        distribution: { fairway: 1, left: 0, right: 1, short: 0, super: 0 },
+      },
+      penalties: { tee: 0, other: 0, total: 0 },
+      gir: { eligible: 0, pct: 0, holes: 0 },
+    });
+    statsEngine.driveScoreImpact.mockReturnValue({ hasData: false });
+    statsEngine.approachScoreImpact.mockReturnValue({ hasData: false });
+    statsEngine.puttDeepDive.mockReturnValue({ hasData: false });
+  });
+
+  const emptyBucket = { holes: 0, avgPoints: 0, avgVsPar: 0, penaltyRate: 0, breakdown: [] };
+  const emptyApproachBucket = { holes: 0, avgPoints: 0, avgVsPar: 0, girRate: null, girEligible: 0, breakdown: [] };
+
+  test('a 2-sample drive bucket renders grey "need more data" instead of a colored verdict', () => {
+    const statsEngine = require('../../store/statsEngine');
+    statsEngine.driveScoreImpact.mockReturnValue({
+      hasData: true,
+      totalHoles: 2,
+      buckets: {
+        fairway: { holes: 2, avgPoints: 2, avgVsPar: 1, penaltyRate: 0, breakdown: [] },
+        left: emptyBucket,
+        right: emptyBucket,
+        short: emptyBucket,
+        super: emptyBucket,
+      },
+    });
+
+    const { getByText } = renderStats([makeRound('r1')]);
+    fireEvent.press(getByText('My Shots'));
+
+    expect(getByText('2 holes — need more data')).toBeTruthy();
+    // A 2-sample bucket must not be painted as a good/bad verdict — the "vs
+    // par" value renders in the muted color, not a scoreColor tone.
+    const vsParStyle = StyleSheet.flatten(getByText('+1').props.style);
+    expect(vsParStyle.color).toBe(mockTheme.text.muted);
+  });
+
+  test('a 6+ sample drive bucket still renders a colored verdict', () => {
+    const statsEngine = require('../../store/statsEngine');
+    statsEngine.driveScoreImpact.mockReturnValue({
+      hasData: true,
+      totalHoles: 6,
+      buckets: {
+        fairway: { holes: 6, avgPoints: 2, avgVsPar: 1, penaltyRate: 0, breakdown: [] },
+        left: emptyBucket,
+        right: emptyBucket,
+        short: emptyBucket,
+        super: emptyBucket,
+      },
+    });
+
+    const { getByText, queryByText } = renderStats([makeRound('r1')]);
+    fireEvent.press(getByText('My Shots'));
+
+    expect(getByText('6 holes')).toBeTruthy();
+    expect(queryByText(/need more data/)).toBeNull();
+    // At/above the floor the verdict color is restored (poor: avgVsPar > 0).
+    const vsParStyle = StyleSheet.flatten(getByText('+1').props.style);
+    expect(vsParStyle.color).not.toBe(mockTheme.text.muted);
+  });
+
+  test('a low-sample approach bucket renders grey "need more data"', () => {
+    const statsEngine = require('../../store/statsEngine');
+    statsEngine.approachScoreImpact.mockReturnValue({
+      hasData: true,
+      totalHoles: 3,
+      buckets: {
+        '0-50': { holes: 3, avgPoints: 2, avgVsPar: -1, girRate: 100, girEligible: 3, breakdown: [] },
+        '50-100': emptyApproachBucket,
+        '100-150': emptyApproachBucket,
+        '150-200': emptyApproachBucket,
+        '200+': emptyApproachBucket,
+      },
+    });
+
+    const { getByText } = renderStats([makeRound('r1')]);
+    fireEvent.press(getByText('My Shots'));
+
+    expect(getByText('3 holes — need more data')).toBeTruthy();
+    // avgVsPar -1 would normally render 'excellent'; low sample keeps it muted.
+    const vsParStyle = StyleSheet.flatten(getByText('-1').props.style);
+    expect(vsParStyle.color).toBe(mockTheme.text.muted);
+    const girStyle = StyleSheet.flatten(getByText('100%').props.style);
+    expect(girStyle.color).toBe(mockTheme.text.muted);
+  });
+
+  test('a low-sample putt deep-dive par bucket renders grey "need more data"', () => {
+    const statsEngine = require('../../store/statsEngine');
+    statsEngine.puttDeepDive.mockReturnValue({
+      hasData: true,
+      holes: 2,
+      twoPuttPct: 50,
+      girPuttsAvg: 1.8,
+      nonGirPuttsAvg: 2.1,
+      girHoles: 1,
+      nonGirHoles: 1,
+      byPar: {
+        3: { holes: 2, avg: 1.5 },
+        4: null,
+        5: null,
+      },
+      onePuttSave: { attempts: 1, saves: 1, pct: 100 },
+    });
+
+    const { getByText } = renderStats([makeRound('r1')]);
+    fireEvent.press(getByText('My Shots'));
+
+    expect(getByText('2 holes — need more data')).toBeTruthy();
+  });
+
+  test('a 6+ sample putt deep-dive par bucket renders the plain hole count', () => {
+    const statsEngine = require('../../store/statsEngine');
+    statsEngine.puttDeepDive.mockReturnValue({
+      hasData: true,
+      holes: 6,
+      twoPuttPct: 50,
+      girPuttsAvg: 1.8,
+      nonGirPuttsAvg: 2.1,
+      girHoles: 3,
+      nonGirHoles: 3,
+      byPar: {
+        3: { holes: 6, avg: 1.5 },
+        4: null,
+        5: null,
+      },
+      onePuttSave: { attempts: 3, saves: 2, pct: 67 },
+    });
+
+    const { getByText, queryByText } = renderStats([makeRound('r1')]);
+    fireEvent.press(getByText('My Shots'));
+
+    expect(getByText('6 holes')).toBeTruthy();
+    expect(queryByText(/need more data/)).toBeNull();
+  });
+
+  test('GIR-after-drive-result greys a side under the 6-sample floor and colors the other side plainly', () => {
+    const statsEngine = require('../../store/statsEngine');
+    statsEngine.girByDriveResult.mockReturnValue({
+      fairway: { holes: 8, girPct: 44, breakdown: [] },
+      miss: { holes: 3, girPct: 18, breakdown: [] },
+    });
+
+    const { getByText } = renderStats([makeRound('r1')]);
+    fireEvent.press(getByText('My Shots'));
+
+    expect(getByText('GIR after fairway ')).toBeTruthy();
+    expect(getByText(' · after a miss ')).toBeTruthy();
+    const fairwayStyle = StyleSheet.flatten(getByText('44%').props.style);
+    const missStyle = StyleSheet.flatten(getByText('18%').props.style);
+    // fairway (8 samples) is at/above the floor — not greyed.
+    expect(fairwayStyle.color).not.toBe(mockTheme.text.muted);
+    // miss (3 samples) is below the 6-sample floor — greyed.
+    expect(missStyle.color).toBe(mockTheme.text.muted);
+  });
+
+  test('GIR-after-drive-result is omitted when neither side has a sample', () => {
+    const statsEngine = require('../../store/statsEngine');
+    statsEngine.girByDriveResult.mockReturnValue({
+      fairway: { holes: 0, girPct: 0, breakdown: [] },
+      miss: { holes: 0, girPct: 0, breakdown: [] },
+    });
+
+    const { getByText, queryByText } = renderStats([makeRound('r1')]);
+    fireEvent.press(getByText('My Shots'));
+
+    expect(queryByText(/GIR after fairway/)).toBeNull();
+  });
+
+  test('a zero-sample miss side is hidden entirely, never rendered as a full-color 0%', () => {
+    const statsEngine = require('../../store/statsEngine');
+    statsEngine.girByDriveResult.mockReturnValue({
+      fairway: { holes: 8, girPct: 44, breakdown: [] },
+      miss: { holes: 0, girPct: 0, breakdown: [] },
+    });
+
+    const { getByText, queryByText } = renderStats([makeRound('r1')]);
+    fireEvent.press(getByText('My Shots'));
+
+    // The populated side still renders...
+    expect(getByText('GIR after fairway ')).toBeTruthy();
+    expect(getByText('44%')).toBeTruthy();
+    // ...but the empty side is gone — no label, no misleading full-color 0%
+    // (mirrors the sibling Drive/Approach Impact rows, which skip
+    // zero-sample buckets outright).
+    expect(queryByText(/after a miss/)).toBeNull();
+    expect(queryByText('0%')).toBeNull();
+  });
+
+  test('a zero-sample fairway side is hidden while the miss side renders with its own lead-in label', () => {
+    const statsEngine = require('../../store/statsEngine');
+    statsEngine.girByDriveResult.mockReturnValue({
+      fairway: { holes: 0, girPct: 0, breakdown: [] },
+      miss: { holes: 7, girPct: 18, breakdown: [] },
+    });
+
+    const { getByText, queryByText } = renderStats([makeRound('r1')]);
+    fireEvent.press(getByText('My Shots'));
+
+    expect(getByText('GIR after a miss ')).toBeTruthy();
+    expect(getByText('18%')).toBeTruthy();
+    expect(queryByText(/after fairway/)).toBeNull();
+    expect(queryByText('0%')).toBeNull();
+  });
+});
+
+describe('StatsScreen Shame tab — fairness fixes', () => {
+  beforeEach(() => {
+    jest.clearAllMocks();
+  });
+
+  test('Zero Hero leads with the worst offender: "{FirstName} — {n} pointless holes in R{k}"', () => {
+    const statsEngine = require('../../store/statsEngine');
+    statsEngine.zeroHero.mockReturnValue({
+      value: 5,
+      entries: [
+        { player: fourPlayers[0], roundIndex: 0, courseName: 'La Moraleja', count: 5, breakdown: [] },
+        { player: fourPlayers[1], roundIndex: 1, courseName: 'La Moraleja', count: 3, breakdown: [] },
+      ],
+    });
+
+    const { getByText, getAllByText } = renderStats([makeRound('r1')], { players: fourPlayers });
+    fireEvent.press(getByText('Shame'));
+
+    expect(getAllByText('Marcos — 5 pointless holes in R1').length).toBeGreaterThan(0);
+  });
+
+  test('Nemesis Encore leads with the worst repeat offender: "Hole 7 owns {FirstName} ({n} rounds)"', () => {
+    const statsEngine = require('../../store/statsEngine');
+    statsEngine.nemesisEncore.mockReturnValue([
+      { player: fourPlayers[0], holeNumber: 7, courseName: 'La Moraleja', rounds: [0, 1, 2] },
+      { player: fourPlayers[1], holeNumber: 3, courseName: 'La Moraleja', rounds: [0, 1] },
+    ]);
+
+    const { getByText, getAllByText } = renderStats([makeRound('r1')], { players: fourPlayers });
+    fireEvent.press(getByText('Shame'));
+
+    expect(getAllByText('Hole 7 owns Marcos (3 rounds)').length).toBeGreaterThan(0);
+    // The sub must not pin entry[0]'s course onto a count that can span
+    // other entries' courses — with 2+ entries it goes course-agnostic.
+    expect(getAllByText('2 nemesis holes across the group').length).toBeGreaterThan(0);
+  });
+
+  test('tapping Nemesis Encore opens a detail sheet with a row per repeat round', () => {
+    const statsEngine = require('../../store/statsEngine');
+    statsEngine.nemesisEncore.mockReturnValue([
+      { player: fourPlayers[0], holeNumber: 7, courseName: 'La Moraleja', rounds: [0, 1] },
+    ]);
+
+    const { getByText, getAllByText, UNSAFE_getByType } = renderStats(
+      [makeRound('r1'), makeRound('r2', 5)],
+      { players: fourPlayers },
+    );
+    fireEvent.press(getByText('Shame'));
+    // A lone entry's sub CAN honestly carry its own course.
+    expect(getAllByText('La Moraleja · 1 nemesis hole').length).toBeGreaterThan(0);
+    fireEvent.press(getAllByText(/Nemesis Encore/)[0]);
+
+    const sheet = UNSAFE_getByType('StatDetailSheet');
+    expect(sheet.props.title).toBe('Marcos — Nemesis Encore');
+    // one section header + one row per round the hole zeroed the player.
+    expect(sheet.props.rows).toHaveLength(3);
+    expect(sheet.props.rows[1].rightPrimary).toBe('0 pts');
+    expect(sheet.props.rows[2].rightPrimary).toBe('0 pts');
+  });
+
+  test('Nemesis Encore sheet names every offender when entries span multiple players', () => {
+    const statsEngine = require('../../store/statsEngine');
+    statsEngine.nemesisEncore.mockReturnValue([
+      { player: fourPlayers[0], holeNumber: 7, courseName: 'La Moraleja', rounds: [0, 1, 2] },
+      { player: fourPlayers[1], holeNumber: 3, courseName: 'Northwood', rounds: [0, 1] },
+    ]);
+
+    const { getByText, getAllByText, UNSAFE_getByType } = renderStats(
+      [makeRound('r1'), makeRound('r2', 5)],
+      { players: fourPlayers },
+    );
+    fireEvent.press(getByText('Shame'));
+    fireEvent.press(getAllByText(/Nemesis Encore/)[0]);
+
+    const sheet = UNSAFE_getByType('StatDetailSheet');
+    // joinNames across ALL qualifying players — the openZero / openTripleBogey
+    // convention for multi-entry shame sheets.
+    expect(sheet.props.title).toBe('Marcos & Bob — Nemesis Encore');
+    // 2 section headers + 3 repeat rounds + 2 repeat rounds.
+    expect(sheet.props.rows).toHaveLength(7);
+  });
+
+  test('Par-3 Heartbreak renders every tied leader, not just one player', () => {
+    const statsEngine = require('../../store/statsEngine');
+    statsEngine.par3Heartbreak.mockReturnValue({
+      value: 5,
+      entries: [
+        { player: fourPlayers[0], avgStrokes: 5, holes: 3, totalPoints: 3, breakdown: [] },
+        { player: fourPlayers[1], avgStrokes: 5, holes: 3, totalPoints: 2, breakdown: [] },
+      ],
+      all: [],
+    });
+
+    const { getByText, getAllByText } = renderStats([makeRound('r1')], { players: fourPlayers });
+    fireEvent.press(getByText('Shame'));
+
+    expect(getAllByText(/Marcos & Bob/).length).toBeGreaterThan(0);
+    expect(getAllByText('2 tied').length).toBeGreaterThan(0);
+  });
+
+  describe('Triple Bogey Club — metric-aware wording', () => {
+    const tripleBogeyShame = {
+      tripleBogey: {
+        value: 3,
+        entries: [{
+          player: fourPlayers[0], roundIndex: 0, courseName: 'La Moraleja',
+          holeNumber: 5, par: 4, si: 3, strokes: 7, points: 0, vsPar: 3, breakdown: [],
+        }],
+      },
+    };
+
+    test('explainer says "net over par" in points mode', () => {
+      const statsEngine = require('../../store/statsEngine');
+      statsEngine.hallOfShame.mockReturnValue(tripleBogeyShame);
+
+      const { getByText, getAllByText, UNSAFE_getByType } = renderStats([makeRound('r1')], { players: fourPlayers });
+      fireEvent.press(getByText('Shame'));
+      fireEvent.press(getAllByText(/Triple Bogey Club/)[0]);
+
+      const sheet = UNSAFE_getByType('StatDetailSheet');
+      expect(sheet.props.explainer).toMatch(/net over par/);
+    });
+
+    test('explainer says "gross over par" in strokes mode', () => {
+      const statsEngine = require('../../store/statsEngine');
+      statsEngine.hallOfShame.mockReturnValue(tripleBogeyShame);
+
+      const { getByText, getAllByText, UNSAFE_getByType } = renderStats([makeRound('r1')], { players: fourPlayers });
+      fireEvent.press(getByText('Shame'));
+      const switchEl = UNSAFE_getByType(Switch);
+      fireEvent(switchEl, 'valueChange', false); // toggle to Strokes
+      fireEvent.press(getAllByText(/Triple Bogey Club/)[0]);
+
+      const sheet = UNSAFE_getByType('StatDetailSheet');
+      expect(sheet.props.explainer).toMatch(/gross over par/);
     });
   });
 });

@@ -53,6 +53,16 @@ export const BASELINES_SCRATCH = {
     { distance: 137.2, expected: 3.20 },
     { distance: 182.9, expected: 3.60 },
   ],
+  // "Just off the green" after a missed approach — a normal greenside chip/pitch,
+  // NOT a recovery-from-trouble lie. Broadie around-the-green scratch baselines.
+  // This is the hand-off node between approach (end) and around-green (start),
+  // so the same lie must be used on both sides to keep total SG conserved.
+  greenside: [
+    { distance:   9.1, expected: 2.18 },
+    { distance:  18.3, expected: 2.38 },
+    { distance:  27.4, expected: 2.52 },
+    { distance:  45.7, expected: 2.75 },
+  ],
   green: [
     { distance:  0.91, expected: 1.05 },
     { distance:  1.83, expected: 1.50 },
@@ -155,6 +165,14 @@ export const BASELINES_AMATEUR = {
     { distance:  91.4, expected: 3.40 },
     { distance: 137.2, expected: 3.60 },
     { distance: 182.9, expected: 4.00 },
+  ],
+  // Average-amateur (~14 hcp) greenside chip/pitch node — see the scratch table
+  // note above. Roughly +0.28 over scratch, the same gap the other lies carry.
+  greenside: [
+    { distance:   9.1, expected: 2.45 },
+    { distance:  18.3, expected: 2.66 },
+    { distance:  27.4, expected: 2.80 },
+    { distance:  45.7, expected: 3.02 },
   ],
   green: [
     { distance:  0.91, expected: 1.10 },

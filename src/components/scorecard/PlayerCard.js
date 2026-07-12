@@ -29,6 +29,11 @@ function haptic(style = 'medium') {
 //   getScoreAnim                          — (playerId) => Animated.Value
 //   onStep(playerId, holeNumber, delta), onSetScore(playerId, holeNumber, value)
 //   shotDetail, onSetShot, shotCollapsed, onToggleShotDetail   — me-only
+//   showShotDetail — whether the shot-detail section may render at all. In
+//     scramble rounds `player.id` is the team unit (captain) id, not the
+//     signed-in member's personal id — the write path has no honest place
+//     to store shot detail, so the caller passes false there even when
+//     `isMe` is true.
 //   officialState, canResolveHere, onOpenDiscrepancy — official mode
 //   conflict, onOpenConflict — casual-mode score conflict (amber flag + resolve sheet)
 export const PlayerCard = React.memo(function PlayerCard({
@@ -38,7 +43,7 @@ export const PlayerCard = React.memo(function PlayerCard({
   isMe, canEdit, showRunning, totals,
   getScoreAnim,
   onStep, onSetScore,
-  shotDetail, onSetShot, shotCollapsed, onToggleShotDetail,
+  shotDetail, onSetShot, shotCollapsed, onToggleShotDetail, showShotDetail,
   officialState, canResolveHere, onOpenDiscrepancy,
   conflict, onOpenConflict,
 }) {
@@ -77,6 +82,10 @@ export const PlayerCard = React.memo(function PlayerCard({
   // A conflicted card, or an official discrepancy card the viewer can act on,
   // opens its resolve sheet on tap. Conflict takes priority over official
   // state (the two never co-occur — official rounds have no casual conflicts).
+  // Defaults to `isMe` when the caller doesn't pass it explicitly, so
+  // existing callers keep the old behavior — only HolePage's scramble path
+  // passes `showShotDetail={false}` while `isMe` is still true.
+  const shouldShowShotDetail = showShotDetail ?? isMe;
   const conflicted = !!conflict;
   const officialTappable = officialState === 'discrepancy' && canResolveHere;
   const heroTappable = conflicted || officialTappable;
@@ -140,7 +149,7 @@ export const PlayerCard = React.memo(function PlayerCard({
         {showScoreControls && (
           <TouchableOpacity
             style={[s.pickupBtn, isPickup && s.pickupBtnActive]}
-            onPress={() => onSetScore(player.id, hole.number, isPickup ? hole.par : pickup)}
+            onPress={() => onSetScore(player.id, hole.number, isPickup ? null : pickup)}
             activeOpacity={0.7}
             accessibilityLabel={isPickup ? `Picked up at ${pickup} strokes — tap to clear` : `Pickup at ${pickup} strokes`}
           >
@@ -236,7 +245,7 @@ export const PlayerCard = React.memo(function PlayerCard({
         </View>
       )}
 
-      {isMe && !conflicted && (
+      {shouldShowShotDetail && !conflicted && (
         <ShotDetailSection
           hole={hole}
           detail={shotDetail}

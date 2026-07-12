@@ -40,14 +40,26 @@ function toneFromVerdict(verdict) {
   return 'neutral';
 }
 
-// Career points-per-hole across every round in `history` (a stats object
-// from computeMyStats). Returns null when there is no history or no scored holes.
-function careerPerHole(baseStats) {
+// Career points-per-hole across every COMPLETE round in `history` (the
+// MyRound[] the career baseline is built from — see buildRoundReportCard).
+// `baseStats` (computeMyStats(history)) supplies the recomputed per-round
+// points/strokes/holesPlayed via playerRoundHistory; `history[h.roundIndex]`
+// maps each of those back to its source MyRound to read `isComplete` — an
+// early-finished partial round would otherwise pull this average toward its
+// own (smaller-sample) per-hole rate. This restriction is intentionally
+// narrow: it only affects the headline vs-average verdict. The per-hole
+// breakdown cells (pointsPerHoleCells, distributionCells, shotCells) keep
+// using every round in `history`, complete or not — those are honest
+// per-hole/per-round splits already, not round-total averages.
+// Returns null when there is no history or no complete round to anchor on.
+function careerPerHole(history, baseStats) {
   if (!baseStats) return null;
-  const totals = (baseStats.history || []).reduce(
-    (acc, h) => ({ pts: acc.pts + h.points, holes: acc.holes + h.holesPlayed }),
-    { pts: 0, holes: 0 },
-  );
+  const totals = (baseStats.history || [])
+    .filter((h) => history[h.roundIndex]?.isComplete)
+    .reduce(
+      (acc, h) => ({ pts: acc.pts + h.points, holes: acc.holes + h.holesPlayed }),
+      { pts: 0, holes: 0 },
+    );
   return totals.holes > 0 ? totals.pts / totals.holes : null;
 }
 
@@ -194,7 +206,7 @@ export function buildRoundReportCard(myRounds, roundKey) {
   const holesPlayed = hist.holesPlayed;
   const perHole = holesPlayed > 0 ? +(points / holesPlayed).toFixed(2) : 0;
 
-  const baseline = careerPerHole(baseStats);
+  const baseline = careerPerHole(history, baseStats);
   // vsAvg is a round-sized figure: per-hole delta projected over 18 holes,
   // which keeps it fair for 9-hole and incomplete rounds.
   const vsAvg = baseline != null ? +(((perHole - baseline) * 18)).toFixed(1) : null;
@@ -228,7 +240,10 @@ export function buildRoundReportCard(myRounds, roundKey) {
       tournamentName: selected.tournamentName,
       tournamentDate: selected.tournamentDate,
       holesPlayed,
-      complete: !!selected.completed,
+      // The honest per-round flag, NOT `completed`: an early-finished game
+      // carries completed=true (tournament finishedAt) with unscored holes,
+      // and the card's "through N holes" caveat must still show for it.
+      complete: !!selected.isComplete,
     },
     headline: {
       points,

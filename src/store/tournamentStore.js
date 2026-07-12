@@ -566,6 +566,7 @@ export {
   tournamentSindicatoLeaderboard,
   tournamentMatchPlayStandings,
   pickupStrokes,
+  isPickupScore,
   randomPairs,
   buildTeamsForMode,
   scrambleUnits,
@@ -591,7 +592,14 @@ export {
 // Push a player library edit (name/handicap/gender) into every tournament
 // that references this player id. Updates tournament.players and the player
 // snapshot embedded in each round.pairs. Non-manual round playing handicaps
-// are re-derived from the new base index. `gender` is only stamped onto the
+// are re-derived from the new base index — except for already-played rounds
+// (a round is "played" when it has any scores, or idx < currentRound — the
+// latter catches a round that's been superseded without ever being scored;
+// currentRound alone isn't enough since it never advances past the last
+// round, so a finished tournament's final round and a scored single-round
+// game both need the scores check), which keep their frozen
+// playerHandicaps; the cosmetic pairs snapshot (name/handicap index/gender)
+// still refreshes on those rounds too. `gender` is only stamped onto the
 // embedded players when explicitly provided (not `undefined`), so callers
 // that don't track gender can omit it without wiping the existing value.
 //
@@ -624,16 +632,19 @@ export async function propagatePlayerToTournaments(playerId, { name, handicap, g
     const hasPlayer = t.players?.some((p) => p.id === playerId);
     if (!hasPlayer) continue;
 
+    const currentRound = t.currentRound ?? 0;
     const nextPlayers = t.players.map((p) =>
       p.id === playerId ? { ...p, name, handicap: parsedIndex, ...genderPatch } : p,
     );
-    const nextRounds = t.rounds.map((round) => {
+    const nextRounds = t.rounds.map((round, idx) => {
       const nextPairs = round.pairs?.map((pair) =>
         pair.map((pp) =>
           pp.id === playerId ? { ...pp, name, handicap: parsedIndex, ...genderPatch } : pp,
         ),
       );
       const patched = { ...round, pairs: nextPairs ?? round.pairs };
+      const isPlayed = Object.keys(round.scores ?? {}).length > 0 || idx < currentRound;
+      if (isPlayed) return patched; // already-played round: playing handicaps frozen
       return recomputeRoundPlayingHandicaps(patched, nextPlayers);
     });
 
@@ -687,14 +698,18 @@ export function reTeeRound(round, tees, genderById = {}) {
 // Push a course library edit (holes + tees) into every tournament round that
 // references this courseId. Holes and tees are deep-copied per round. Each
 // round's per-player tee snapshots are re-resolved by label, then non-manual
-// playing handicaps are re-derived.
+// playing handicaps are re-derived — except already-played rounds (a round
+// is "played" when it has any scores, or idx < currentRound; see
+// propagatePlayerToTournaments for why the scores check is required),
+// which keep their holes/tees/handicaps entirely untouched.
 //
 // sync-v2 design note: same maintenance-sweep shape as
 // propagatePlayerToTournaments above (possibly many tournaments, each write
 // independent/best-effort) — saveLocal first, then one round.upsert mutation
-// per CHANGED round (round.upsert → repo.upsertRound carries holes/tees/
-// playerTees/recomputed playerHandicaps together in one write; there's no
-// players-array change here so no tournament.updatePlayer is needed).
+// per CHANGED round. round.upsert only patches owned fields
+// (holes/tees/playerTees/course*), so a concurrent device's writes to
+// pairs/scoring/handicaps are never clobbered; the local playerHandicaps
+// recompute stays local-only.
 export async function propagateCourseToTournaments(courseId, { holes, tees }) {
   if (!courseId) return [];
   const { mutate } = require('./mutate');
@@ -703,9 +718,12 @@ export async function propagateCourseToTournaments(courseId, { holes, tees }) {
   for (const t of tournaments) {
     let changed = false;
     const changedRoundIds = new Set();
+    const currentRound = t.currentRound ?? 0;
     const genderById = Object.fromEntries((t.players ?? []).map((p) => [p.id, p.gender]));
-    const nextRounds = t.rounds.map((round) => {
+    const nextRounds = t.rounds.map((round, idx) => {
       if (round.courseId !== courseId) return round;
+      const isPlayed = Object.keys(round.scores ?? {}).length > 0 || idx < currentRound;
+      if (isPlayed) return round; // already-played round: left entirely untouched
       changed = true;
       changedRoundIds.add(round.id);
       const reTeed = reTeeRound(round, tees, genderById);

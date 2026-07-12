@@ -14,7 +14,7 @@ import {
   teeShotImpact, scramblingStats,
   lagPuttingQuality, sandSaveRate, upAndDownRate, bunkerVisits,
   sgSeason, driveScoreImpact, approachScoreImpact, puttDeepDive,
-  puttingTargetGaps, approachTargetGaps,
+  puttingTargetGaps, approachTargetGaps, courseDNA, playerStreaks,
 } from './statsEngine';
 import { buildCoachInsights } from './coachInsights';
 import { shotBenchmarkForHandicap } from './shotBenchmarks';
@@ -24,14 +24,17 @@ export const CANON_ID = 'me';
 
 // ── buildSyntheticTournament ──
 // Produces { id, name, players: [me], rounds } where every round's scores,
-// shotDetails, playerHandicaps, manualHandicaps and playerTees are re-keyed
-// from the round's original player id to CANON_ID. This object is the input to the
-// existing per-player engine functions.
+// shotDetails, playerHandicaps, manualHandicaps, playerTees and playerIndexes
+// are re-keyed from the round's original player id to CANON_ID. This object
+// is the input to the existing per-player engine functions.
 export function buildSyntheticTournament(myRounds) {
   if (!myRounds || myRounds.length === 0) {
     return { id: 'mystats', name: 'My Stats', players: [], rounds: [] };
   }
-  const base = myRounds[0].player || {};
+  // myRounds is chronological (oldest-first, see collectMyRounds) — the
+  // fallback player identity/handicap should reflect who the user is NOW,
+  // so it comes from the most recent round, not the oldest.
+  const base = myRounds[myRounds.length - 1].player || {};
   const player = {
     id: CANON_ID,
     name: base.name || 'Me',
@@ -52,6 +55,14 @@ export function buildSyntheticTournament(myRounds) {
       // Without this, legacy rounds (no playerHandicaps) would derive the
       // playing handicap from the wrong (missing) tee under CANON_ID.
       playerTees: rekey(round.playerTees),
+      // Legacy rounds (no playerHandicaps) fall back to this per-round index
+      // override — without rekeying it, getPlayingHandicap can't find it
+      // under CANON_ID and silently drops back to the fallback player above.
+      playerIndexes: rekey(round.playerIndexes),
+      // Carried through so round-total aggregates (computeMetrics,
+      // computeFormSeries) can restrict themselves to fully-scored rounds.
+      isComplete: !!mr.isComplete,
+      holesPlayed: mr.holesPlayed ?? 0,
     };
   });
   return { id: 'mystats', name: 'My Stats', players: [player], rounds };
@@ -98,12 +109,29 @@ export function holeDifficultySplit(tournament, playerId) {
 // ── computeMetrics ──
 // Round-level aggregates over a synthetic tournament. Used for the Snapshot
 // card and for both sides of the recent-vs-history comparison.
+//
+// `rounds` counts every round the user has any score in (informational —
+// "rounds played"). avgPoints/avgVsPar/bestRoundPoints are ROUND-TOTAL
+// aggregates: averaging a round's whole-round total alongside full rounds
+// gives an early-finished 6-hole game the same weight as an 18-hole round,
+// silently dragging the average down. They only ever look at rounds where
+// every hole was scored (`isComplete`); per-hole metrics elsewhere in this
+// file are unaffected and keep seeing every round.
+//
+// When NO selected round is complete, those three are null, not 0 — the
+// same convention as the shot metrics below: consumers print '-' for null
+// (PerformanceSnapshot, CoachTab, orDash in FormTab), and
+// computeRecentVsHistory turns a null side into a null delta / flat
+// direction instead of a fabricated "declining" trend against a 0-point
+// recent window.
 export function computeMetrics(synthetic) {
   const history = playerRoundHistory(synthetic, CANON_ID);
   const rounds = history.length;
+  const completeHistory = history.filter((h) => synthetic.rounds[h.roundIndex]?.isComplete);
   let vsParSum = 0;
   let vsParRounds = 0;
   (synthetic.rounds || []).forEach((round, ri) => {
+    if (!round.isComplete) return;
     const h = history.find((x) => x.roundIndex === ri);
     if (!h) return;
     let parPlayed = 0;
@@ -115,12 +143,16 @@ export function computeMetrics(synthetic) {
   });
   const shots = shotStats(synthetic, CANON_ID);
   const div = (a, b) => (b > 0 ? +(a / b).toFixed(2) : 0);
-  const totalPoints = history.reduce((s, h) => s + h.points, 0);
+  const totalPoints = completeHistory.reduce((s, h) => s + h.points, 0);
   return {
     rounds,
-    avgPoints: div(totalPoints, rounds),
-    avgVsPar: div(vsParSum, vsParRounds),
-    bestRoundPoints: history.reduce((m, h) => Math.max(m, h.points), 0),
+    avgPoints: completeHistory.length > 0
+      ? div(totalPoints, completeHistory.length)
+      : null,
+    avgVsPar: vsParRounds > 0 ? div(vsParSum, vsParRounds) : null,
+    bestRoundPoints: completeHistory.length > 0
+      ? completeHistory.reduce((m, h) => Math.max(m, h.points), 0)
+      : null,
     hasShotData: shots.hasData,
     // Shot metrics are null (not 0) when the slice has no sample for them, so
     // recent-vs-history never shows a fake delta against an untracked slice.
@@ -187,15 +219,23 @@ export function collectMyRounds(tournaments, userId, displayName) {
       const myScores = round?.scores?.[me.id];
       if (!myScores || Object.keys(myScores).length === 0) return;
       const holes = round.holes || [];
-      const completed = !!t.finishedAt || (
-        holes.length > 0 && holes.every((h) => myScores[h.number] != null)
-      );
+      // isComplete is the honest signal: every round hole actually has a
+      // score. `completed` is looser — it also trusts an explicit
+      // tournament finish (finishedAt) even when the round itself stopped
+      // early, e.g. a game called after 6 of 18 holes. That looseness is
+      // fine for "should this round be selected by default", but round-total
+      // metrics (avgPoints, bestRoundPoints, …) need isComplete or a 6-hole
+      // game gets averaged in as if it were a full round.
+      const isComplete = holes.length > 0 && holes.every((h) => myScores[h.number] != null);
+      const completed = !!t.finishedAt || isComplete;
       const handicap = getPlayingHandicap(round, me);
       let points = 0;
+      let holesPlayed = 0;
       holes.forEach((h) => {
         const sc = myScores[h.number];
         if (sc != null) {
           points += calcStablefordPoints(h.par, sc, handicap, h.strokeIndex);
+          holesPlayed += 1;
         }
       });
       result.push({
@@ -209,6 +249,8 @@ export function collectMyRounds(tournaments, userId, displayName) {
         playerId: me.id,
         player: me,
         completed,
+        isComplete,
+        holesPlayed,
         // Total Stableford points; partial for in-progress (incomplete) rounds.
         points,
       });
@@ -442,11 +484,22 @@ export function computeRecentVsHistory(myRounds, n = 5) {
   };
 }
 
+// "12 May" — short day+month from an ISO date string. Matches the round
+// selector's date format (MyStatsRoundSelector.formatRoundDate).
+function shortDate(iso) {
+  if (!iso) return '';
+  const d = new Date(iso);
+  if (Number.isNaN(d.getTime())) return '';
+  return d.toLocaleDateString('en-GB', { day: 'numeric', month: 'short' });
+}
+
 // ── computeFormSeries ──
 // Per-round series for the Form-tab charts. Each selected round is sliced into
 // a one-round synthetic tournament and run back through the existing engine —
 // no parallel per-round math. Shot-derived values are null for rounds with no
-// shot detail so charts render a gap rather than a fake zero.
+// shot detail so charts render a gap rather than a fake zero. Course name
+// alone can be ambiguous across a season of repeat visits, so the label
+// appends a short date when the round's tournament carries one.
 export function computeFormSeries(selectedRounds) {
   const rounds = selectedRounds || [];
   const metrics = {
@@ -457,7 +510,9 @@ export function computeFormSeries(selectedRounds) {
   let hasShotData = false;
 
   rounds.forEach((mr, i) => {
-    const label = mr.courseName || `R${i + 1}`;
+    const baseLabel = mr.courseName || `R${i + 1}`;
+    const dateLabel = shortDate(mr.tournamentDate);
+    const label = dateLabel ? `${baseLabel} · ${dateLabel}` : baseLabel;
     const synthetic = buildSyntheticTournament([mr]);
     const round = synthetic.rounds[0];
     const hist = playerRoundHistory(synthetic, CANON_ID)[0] || null;
@@ -468,8 +523,12 @@ export function computeFormSeries(selectedRounds) {
     const shots = shotStats(synthetic, CANON_ID);
     if (shots.hasData) hasShotData = true;
 
-    metrics.avgPoints.push({ label, value: hist ? hist.points : 0 });
-    metrics.avgVsPar.push({ label, value: hist ? hist.strokes - parPlayed : null });
+    // avgPoints/avgVsPar are round-total figures — an incomplete round's
+    // partial total isn't a meaningful "points this round" point, so it
+    // renders as a gap rather than a misleadingly low value.
+    const roundTotal = round.isComplete && hist;
+    metrics.avgPoints.push({ label, value: roundTotal ? hist.points : null });
+    metrics.avgVsPar.push({ label, value: roundTotal ? hist.strokes - parPlayed : null });
     metrics.fairwayPct.push({ label, value: shots.drives.recorded > 0 ? shots.drives.fairwayPct : null });
     metrics.girPct.push({ label, value: shots.gir.eligible > 0 ? shots.gir.pct : null });
     // `total` equals per-round here because shotStats runs on a one-round synthetic slice.
@@ -486,6 +545,71 @@ export function computeFormSeries(selectedRounds) {
   });
 
   return { metrics, scoreMix, hasShotData };
+}
+
+// ── courseMastery ──
+// Per-course rounds/avgPoints/bestPoints/trend, built on courseDNA over a
+// complete-rounds-only slice of the synthetic tournament (Task 15's
+// isComplete) — an early-finished round's partial total would otherwise
+// drag a course's average down, inflate/deflate its best, and fake a trend.
+// avgPoints/bestPoints are ROUND-TOTAL figures (same scale as
+// computeMetrics.avgPoints/bestRoundPoints), not per-hole averages.
+// bestPoints/trend come from courseDNA's own chronological `roundTotals`,
+// so they always share courseDNA's course keying (courseId ?? courseName,
+// `R{n}` fallback for unnamed rounds) — no second grouping that can
+// silently miss (e.g. courseName '' vs the 'R{n}' display key).
+// trend is the sign of the latest complete round here vs the one before
+// it, and null — not a fake "flat" 0 — when there is no previous round
+// to compare against.
+export function courseMastery(synthetic) {
+  const completeRounds = (synthetic.rounds || []).filter((r) => r.isComplete);
+  const dna = courseDNA({ ...synthetic, rounds: completeRounds })[0];
+  if (!dna || dna.courses.length === 0) return [];
+  return dna.courses.map((c) => {
+    const totals = c.roundTotals;
+    const bestPoints = totals.reduce((m, e) => Math.max(m, e.points), 0);
+    const trend = totals.length >= 2
+      ? Math.sign(totals[totals.length - 1].points - totals[totals.length - 2].points)
+      : null;
+    return {
+      courseName: c.courseName,
+      rounds: c.rounds,
+      avgPoints: c.roundPoints,
+      bestPoints,
+      trend,
+    };
+  }).sort((a, b) => b.avgPoints - a.avgPoints);
+}
+
+// ── careerMilestones ──
+// Career-wide feats across the current selection. birdies/eagles/
+// longestParStreak are per-hole feats (same convention as
+// holeDifficultySplit) and see every scored hole, including holes from an
+// early-finished round — a birdie doesn't need the rest of the round
+// played. longestParStreak reuses playerStreaks' adjacency-aware run
+// (Task 5): a streak never crosses a round boundary or an unscored hole.
+// bestNine/bestRound are ROUND-TOTAL metrics and only look at complete
+// rounds (Task 15), returning null — not a fabricated 0 — when none
+// qualify, matching computeMetrics' convention.
+export function careerMilestones(synthetic) {
+  const dist = playerScoreDistribution(synthetic, CANON_ID);
+  const streaks = playerStreaks(synthetic, CANON_ID);
+  const completeRounds = (synthetic.rounds || []).filter((r) => r.isComplete);
+  const completeSynthetic = { ...synthetic, rounds: completeRounds };
+  // frontBackSplit already only ever pushes a round whose front AND back
+  // nine are both fully scored (fc>=9 && bc>=9 on an 18-hole round), so
+  // pre-filtering to isComplete here is belt-and-braces, not load-bearing.
+  const fb = frontBackSplit(completeSynthetic)[0] ?? null;
+  const bestNine = fb
+    ? fb.rounds.reduce((m, r) => Math.max(m, r.front, r.back), -Infinity)
+    : null;
+  return {
+    birdies: dist.birdies,
+    eagles: dist.eagles,
+    longestParStreak: streaks.bestParStreak,
+    bestNine: bestNine === -Infinity ? null : bestNine,
+    bestRound: computeMetrics(synthetic).bestRoundPoints,
+  };
 }
 
 // ── computeMyStats ──
@@ -512,7 +636,14 @@ export function computeMyStats(selectedRounds, { n = 5, targetHandicap = 0 } = {
     difficulty: holeDifficultySplit(synthetic, CANON_ID),
     frontBack: frontBackSplit(synthetic)[0] ?? null,
     warmupClosing: warmupVsClosing(synthetic, CANON_ID),
+    // Net (Stableford-adjusted) — BreakdownTab, roundReportCard and
+    // formSeries.scoreMix all report net and must agree with each other.
     distribution: playerScoreDistribution(synthetic, CANON_ID),
+    // Gross vs-par twin, ONLY for the ShotsTab scoring-mix benchmark rows —
+    // the benchmark tables (birdies/pars/bogeys per round) come from
+    // real-world gross scoring data. Net birdies inflate with handicap and
+    // would always read green against a gross target.
+    distributionGross: playerScoreDistribution(synthetic, CANON_ID, { metric: 'strokes' }),
     teeShot: teeShotImpact(synthetic, CANON_ID),
     shots: shotStats(synthetic, CANON_ID),
     driveImpact,
@@ -536,6 +667,8 @@ export function computeMyStats(selectedRounds, { n = 5, targetHandicap = 0 } = {
     bunkerVisits: bunkerVisits(synthetic.rounds, CANON_ID),
     // Phase B:
     strokesGained,
+    courseMastery: courseMastery(synthetic),
+    careerMilestones: careerMilestones(synthetic),
   };
   return { ...baseStats, coach: buildCoachInsights(baseStats) };
 }
