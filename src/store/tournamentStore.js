@@ -1636,7 +1636,11 @@ export function tournamentNounCapitalized(tournament) {
 // object so it serves both full tournament objects and the flattened
 // feed-item shape. roundIndex is zero-based; the label shows roundIndex + 1.
 export function formatRoundLabel({ kind, courseName, roundIndex }) {
-  return kind === 'game' ? (courseName || 'Round') : `Round ${roundIndex + 1}`;
+  if (kind === 'game') return courseName || 'Round';
+  // Multi-round tournaments: keep the ordinal for sequencing context and
+  // append the course when known (each round is usually a different course).
+  const ordinal = `Round ${roundIndex + 1}`;
+  return courseName ? `${ordinal} · ${courseName}` : ordinal;
 }
 
 // Atomic player-slot claim. Wraps the claim_tournament_player RPC (migration
