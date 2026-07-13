@@ -54,8 +54,9 @@ test('sindicato: 3-player round-robin points, sorted descending, entries carry p
   ]);
 });
 
-test('pairsmatchplay: teammates carry their shared team points, sorted descending', () => {
-  // team1 (a,b) sweeps all duels on both holes -> team1 4, team2 0.
+test('pairsmatchplay: each player carries their own duel points, sorted descending', () => {
+  // team1 (a,b) sweeps all duels on both holes: duel a-vs-c and duel b-vs-d,
+  // each decided in a's/b's favor on both holes -> a 2, b 2, c 0, d 0.
   const pmpHoles = [
     { number: 1, par: 4, strokeIndex: 1 },
     { number: 2, par: 4, strokeIndex: 2 },
@@ -77,11 +78,11 @@ test('pairsmatchplay: teammates carry their shared team points, sorted descendin
   expect(unit).toBe('pts');
   expect(entries).toHaveLength(4);
   const byId = Object.fromEntries(entries.map((e) => [e.player.id, e.points]));
-  expect(byId.a).toBe(4);
-  expect(byId.b).toBe(4); // shares a's team points
+  expect(byId.a).toBe(2); // a's own duel points (vs c), not the team total
+  expect(byId.b).toBe(2); // b's own duel points (vs d), not the team total
   expect(byId.c).toBe(0);
-  expect(byId.d).toBe(0); // shares c's team points
-  expect(entries[0].points).toBe(4);
+  expect(byId.d).toBe(0);
+  expect(entries[0].points).toBe(2);
   expect(entries[3].points).toBe(0);
 });
 

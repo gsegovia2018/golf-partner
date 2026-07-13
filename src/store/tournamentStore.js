@@ -1525,12 +1525,11 @@ export function roundLeaderboard(tournament, round) {
     const tally = pairsMatchRoundTally(round, players);
     if (!tally) return { mode, unit: 'pts', entries: [] };
     const entries = [];
-    (round.pairs ?? []).forEach((pair, idx) => {
-      const pts = idx === 0 ? tally.team1 : tally.team2;
-      (pair ?? []).forEach((m) => {
-        const player = players.find((p) => p.id === m?.id);
-        if (player) entries.push({ player, points: pts, strokes: strokesOf(player.id) });
-      });
+    (tally.duels ?? []).forEach(({ aId, bId, aPts, bPts }) => {
+      const aPlayer = players.find((p) => p.id === aId);
+      if (aPlayer) entries.push({ player: aPlayer, points: aPts, strokes: strokesOf(aId) });
+      const bPlayer = players.find((p) => p.id === bId);
+      if (bPlayer) entries.push({ player: bPlayer, points: bPts, strokes: strokesOf(bId) });
     });
     entries.sort((a, b) => b.points - a.points);
     return { mode, unit: 'pts', entries };
