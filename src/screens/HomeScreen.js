@@ -1790,7 +1790,7 @@ export default function HomeScreen({ navigation, route }) {
       )}
 
       <View style={{ position: 'absolute', left: -9999 }}>
-        <ShareableLeaderboard ref={leaderboardRef} tournamentName={tournament.name} leaderboard={resolvedBoard.entries} />
+        <ShareableLeaderboard ref={leaderboardRef} tournamentName={tournament.name} leaderboard={displayedBoard.entries} />
       </View>
     </PullToRefresh>
 
@@ -2024,7 +2024,7 @@ export default function HomeScreen({ navigation, route }) {
           {tournament.players.length > 1 && (
             <TouchableOpacity
               style={s.menuItem}
-              onPress={() => { setShowSettings(false); shareLeaderboard({ tournamentName: tournament.name, leaderboard: resolvedBoard.entries, theme, viewRef: leaderboardRef }); }}
+              onPress={() => { setShowSettings(false); shareLeaderboard({ tournamentName: tournament.name, leaderboard: displayedBoard.entries, theme, viewRef: leaderboardRef }); }}
               activeOpacity={0.7}
             >
               <Feather name="share-2" size={18} color={theme.accent.primary} />
