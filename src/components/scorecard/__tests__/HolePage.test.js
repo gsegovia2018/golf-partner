@@ -203,6 +203,69 @@ describe('HolePage scramble rounds: no shot-detail section', () => {
   });
 });
 
+// Two authors submitted different values for the same cell — deriveCell
+// reports 'conflict' regardless of presence. The hero-card flag must only
+// light up once the hole is in the presence-gated `conflictHoles` set (the
+// same set HoleView's go-to-hole dots use), matching the "everyone off the
+// hole" surfacing rule elsewhere in the conflict-sync overhaul.
+function renderConflictHole(overrides = {}) {
+  const players = [{ id: 'a', name: 'Alice', handicap: 10 }];
+  const round = {
+    id: 'r1',
+    holes: [],
+    playerHandicaps: { a: 10 },
+    scoreEntries: { a: { 1: { m1: { value: 4, ts: 1 }, m2: { value: 5, ts: 2 } } } },
+  };
+  const props = {
+    pageHole: { number: 1, par: 4, strokeIndex: 5 },
+    width: 360,
+    height: 600,
+    courseName: 'Pebble',
+    roundIndex: 0,
+    round,
+    players,
+    scores: { a: {} },
+    shotDetails: {},
+    meId: 'a',
+    onSetShot: () => {},
+    theme: { name: 'light' },
+    s: {},
+    onStep: () => {},
+    onSetScore: () => {},
+    editable: null,
+    getScoreAnim: () => new Animated.Value(1),
+    showRunning: false,
+    mode: 'stableford',
+    official: false,
+    officialDiscrepancy: null,
+    onOpenDiscrepancy: () => {},
+    onOpenConflict: () => {},
+    shotCollapsed: false,
+    onToggleShotDetail: () => {},
+    totalsMap: new Map(),
+    conflictHoles: new Set(),
+    ...overrides,
+  };
+
+  return render(<HolePage {...props} />);
+}
+
+describe('HolePage hero-card conflict flag: gated by presence (conflictHoles)', () => {
+  test('conflicting cell on a NOT-yet-surfaceable hole → score controls stay visible, no resolve state', () => {
+    const { getByLabelText, queryByLabelText } = renderConflictHole();
+
+    expect(getByLabelText('Decrease strokes on hole 1')).toBeTruthy();
+    expect(queryByLabelText("Resolve Alice's conflicting score on hole 1")).toBeNull();
+  });
+
+  test('conflicting cell on a surfaceable hole (in conflictHoles) → resolve state shown, score controls hidden', () => {
+    const { getByLabelText, queryByLabelText } = renderConflictHole({ conflictHoles: new Set([1]) });
+
+    expect(getByLabelText("Resolve Alice's conflicting score on hole 1")).toBeTruthy();
+    expect(queryByLabelText('Decrease strokes on hole 1')).toBeNull();
+  });
+});
+
 describe('holePagePropsEqual', () => {
   test('identical props → skip re-render', () => {
     const prev = baseProps();
@@ -259,5 +322,18 @@ describe('holePagePropsEqual', () => {
     const prev = baseProps();
     const next = { ...prev, onOpenConflict: () => {} };
     expect(holePagePropsEqual(prev, next)).toBe(false);
+  });
+
+  test('new conflictHoles reference → re-render (gates the hero-card conflict flag)', () => {
+    const prev = baseProps();
+    const next = { ...prev, conflictHoles: new Set([3]) };
+    expect(holePagePropsEqual(prev, next)).toBe(false);
+  });
+
+  test('same conflictHoles reference (memoized upstream) → skip re-render', () => {
+    const conflictHoles = new Set([3]);
+    const prev = { ...baseProps(), conflictHoles };
+    const next = { ...prev, conflictHoles };
+    expect(holePagePropsEqual(prev, next)).toBe(true);
   });
 });

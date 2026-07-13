@@ -259,6 +259,7 @@ export function HoleView({ round, roundIndex, players, scores, shotDetails, meId
                 shotCollapsed={shotCollapsed}
                 onToggleShotDetail={toggleShotDetail}
                 totalsMap={scorecardTotals}
+                conflictHoles={conflictHoles}
               />
             ))}
           </ScrollView>
