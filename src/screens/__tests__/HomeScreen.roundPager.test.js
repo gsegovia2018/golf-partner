@@ -1,5 +1,5 @@
 import React from 'react';
-import { act, fireEvent, render, waitFor } from '@testing-library/react-native';
+import { act, fireEvent, render, waitFor, within } from '@testing-library/react-native';
 import { StyleSheet } from 'react-native';
 import HomeScreen from '../HomeScreen';
 import { useAuth } from '../../context/AuthContext';
@@ -235,8 +235,12 @@ function renderTournamentHome() {
 }
 
 function activeTabLabel(view) {
+  // Scoped to the round pager's own tab bar — the leaderboard card renders
+  // its own "R1"/"R2" scope chips with the same text, so an unscoped query
+  // would match both.
+  const tabBar = within(view.getByTestId('round-tabs'));
   for (const label of ['R1', 'R2', 'R3']) {
-    const node = view.getByText(label);
+    const node = tabBar.getByText(label);
     const style = StyleSheet.flatten(node.props.style);
     if (style.color === mockTheme.text.inverse) return label;
   }
@@ -273,7 +277,7 @@ test('background store-change reload keeps the round the user selected', async (
   await waitFor(() => expect(activeTabLabel(view)).toBe('R2'));
 
   // User explicitly opens round 1.
-  fireEvent.press(view.getByText('R1'));
+  fireEvent.press(within(view.getByTestId('round-tabs')).getByText('R1'));
   expect(activeTabLabel(view)).toBe('R1');
 
   // A background sync emits a store change → HomeScreen reloads. The reload
@@ -297,7 +301,7 @@ test('pager still follows play when currentRound advances after a manual pick', 
   const view = renderTournamentHome();
   await waitFor(() => expect(activeTabLabel(view)).toBe('R2'));
 
-  fireEvent.press(view.getByText('R1'));
+  fireEvent.press(within(view.getByTestId('round-tabs')).getByText('R1'));
   expect(activeTabLabel(view)).toBe('R1');
 
   // Another device starts round 2: the synced tournament advances
