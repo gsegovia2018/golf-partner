@@ -1,7 +1,10 @@
 // mutationWrites.js executes one queued mutation against the server via the
 // Task 6 repository (tournamentRepo). Only tournamentRepo is mocked here —
-// every branch asserts the exact call args it produces, plus the four
-// score.set conflict-detection cases.
+// every branch asserts the exact call args it produces. score.set and
+// conflict.resolve route through repo.submitScore/repo.resolveScore (Task 7)
+// and never raise a conflict of their own — conflict state is derived from
+// synced per-author entries (store/scoreEntries.js) instead; see
+// mutationWrites.scoreEntries.test.js for the author/resolvedBy plumbing.
 jest.mock('../tournamentRepo');
 
 // eslint-disable-next-line import/first
@@ -46,88 +49,52 @@ beforeEach(() => {
 
 describe('score.set', () => {
   const mutation = {
-    type: 'score.set', roundId: 'r1', playerId: 'p1', hole: 5, value: 4,
+    type: 'score.set', roundId: 'r1', playerId: 'p1', hole: 5, value: 4, authorId: 'p1',
   };
 
-  test('writes via repo.setScore with exact args', async () => {
-    repo.setScore.mockResolvedValue({ previousStrokes: null, previousUpdatedAt: null });
+  test('writes via repo.submitScore with exact args, including authorId, and never raises a conflict', async () => {
+    repo.submitScore.mockResolvedValue({ status: 'agreed' });
     const result = await executeMutation(entry(mutation), baseTournament());
-    expect(repo.setScore).toHaveBeenCalledWith({
-      tournamentId: TID, roundId: 'r1', playerId: 'p1', hole: 5, strokes: 4,
+    expect(repo.submitScore).toHaveBeenCalledWith({
+      tournamentId: TID, roundId: 'r1', playerId: 'p1', hole: 5, authorId: 'p1', strokes: 4,
     });
-    expect(result).toEqual({ conflict: null });
-  });
-
-  test('no previous value -> no conflict', async () => {
-    repo.setScore.mockResolvedValue({ previousStrokes: null, previousUpdatedAt: null });
-    const result = await executeMutation(entry(mutation, { ts: 1000 }), baseTournament());
-    expect(result).toEqual({ conflict: null });
-  });
-
-  test('previous value same as written -> no conflict', async () => {
-    repo.setScore.mockResolvedValue({
-      previousStrokes: 4, previousUpdatedAt: new Date(2000).toISOString(),
-    });
-    const result = await executeMutation(entry(mutation, { ts: 1000 }), baseTournament());
-    expect(result).toEqual({ conflict: null });
-  });
-
-  test('previous value different and newer than entry.ts -> conflict', async () => {
-    repo.setScore.mockResolvedValue({
-      previousStrokes: 6, previousUpdatedAt: new Date(2000).toISOString(),
-    });
-    const result = await executeMutation(entry(mutation, { ts: 1000 }), baseTournament());
-    expect(result).toEqual({
-      conflict: {
-        roundId: 'r1', playerId: 'p1', hole: 5, mine: 4, theirs: 6,
-      },
-    });
-  });
-
-  test('previous value different but OLDER than entry.ts -> no conflict (normal overwrite)', async () => {
-    repo.setScore.mockResolvedValue({
-      previousStrokes: 6, previousUpdatedAt: new Date(500).toISOString(),
-    });
-    const result = await executeMutation(entry(mutation, { ts: 1000 }), baseTournament());
     expect(result).toEqual({ conflict: null });
   });
 
   test('score clear (value null) passes strokes null through as a tombstone', async () => {
-    repo.setScore.mockResolvedValue({ previousStrokes: null, previousUpdatedAt: null });
-    const clear = { type: 'score.set', roundId: 'r1', playerId: 'p1', hole: 5, value: null };
+    repo.submitScore.mockResolvedValue({ status: 'agreed' });
+    const clear = {
+      type: 'score.set', roundId: 'r1', playerId: 'p1', hole: 5, value: null, authorId: 'p1',
+    };
     const result = await executeMutation(entry(clear), baseTournament());
-    expect(repo.setScore).toHaveBeenCalledWith({
-      tournamentId: TID, roundId: 'r1', playerId: 'p1', hole: 5, strokes: null,
+    expect(repo.submitScore).toHaveBeenCalledWith({
+      tournamentId: TID, roundId: 'r1', playerId: 'p1', hole: 5, authorId: 'p1', strokes: null,
     });
     expect(result).toEqual({ conflict: null });
   });
 });
 
 describe('conflict.resolve', () => {
-  test('writes via repo.setScore and never raises a conflict, even when server row is newer/different', async () => {
-    repo.setScore.mockResolvedValue({
-      previousStrokes: 9, previousUpdatedAt: new Date(999999).toISOString(),
-    });
+  test('writes via repo.resolveScore with resolvedBy and never raises a conflict', async () => {
+    repo.resolveScore.mockResolvedValue();
     const mutation = {
-      type: 'conflict.resolve', roundId: 'r1', playerId: 'p1', hole: 5, value: 4,
+      type: 'conflict.resolve', roundId: 'r1', playerId: 'p1', hole: 5, value: 4, resolvedBy: 'p1',
     };
     const result = await executeMutation(entry(mutation, { ts: 1 }), baseTournament());
-    expect(repo.setScore).toHaveBeenCalledWith({
-      tournamentId: TID, roundId: 'r1', playerId: 'p1', hole: 5, strokes: 4,
+    expect(repo.resolveScore).toHaveBeenCalledWith({
+      tournamentId: TID, roundId: 'r1', playerId: 'p1', hole: 5, value: 4, resolvedBy: 'p1',
     });
     expect(result).toEqual({ conflict: null });
   });
 
-  test('resolving to a cleared cell (value null) passes strokes null through as a tombstone', async () => {
-    repo.setScore.mockResolvedValue({
-      previousStrokes: 9, previousUpdatedAt: new Date(999999).toISOString(),
-    });
+  test('resolving to a cleared cell (value null) passes value null through as a tombstone', async () => {
+    repo.resolveScore.mockResolvedValue();
     const mutation = {
-      type: 'conflict.resolve', roundId: 'r1', playerId: 'p1', hole: 5, value: null,
+      type: 'conflict.resolve', roundId: 'r1', playerId: 'p1', hole: 5, value: null, resolvedBy: 'p1',
     };
     const result = await executeMutation(entry(mutation, { ts: 1 }), baseTournament());
-    expect(repo.setScore).toHaveBeenCalledWith({
-      tournamentId: TID, roundId: 'r1', playerId: 'p1', hole: 5, strokes: null,
+    expect(repo.resolveScore).toHaveBeenCalledWith({
+      tournamentId: TID, roundId: 'r1', playerId: 'p1', hole: 5, value: null, resolvedBy: 'p1',
     });
     expect(result).toEqual({ conflict: null });
   });

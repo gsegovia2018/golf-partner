@@ -5,7 +5,7 @@ import {
 } from './tournamentStore';
 import { fetchTournament } from './tournamentRepo';
 import { executeMutation } from './mutationWrites';
-import { applyPendingMutations, recordScoreConflict, preserveLocalScoreConflicts } from './mutate';
+import { applyPendingMutations, preserveLocalScoreConflicts } from './mutate';
 import { upsertPlayer } from './libraryStore';
 import { isOnline, subscribeConnectivity } from '../lib/connectivity';
 
@@ -66,27 +66,6 @@ export function isPermanentSyncError(error) {
   // (rate-limit, recoverable) would false-positive on the '42' prefix.
   if (codeStr.length === 5 && /^(22|23|42)/.test(codeStr)) return true;
   return false;
-}
-
-// Conflict seam. Registered with the real marker-writer immediately below
-// (module init) so it's always wired before any drain can run; kept as a
-// seam (rather than calling recordScoreConflict directly) so tests can swap
-// in a spy/stub.
-let _scoreConflictHandler = null;
-export function setScoreConflictHandler(fn) {
-  _scoreConflictHandler = fn;
-}
-setScoreConflictHandler(recordScoreConflict);
-
-async function notifyScoreConflict(tournamentId, conflict) {
-  if (!_scoreConflictHandler) return;
-  try {
-    await _scoreConflictHandler(tournamentId, conflict);
-  } catch (error) {
-    // The handler's own failure (e.g. a marker write) must never abort the
-    // drain — the mutation that produced this conflict already landed.
-    console.warn(`score-conflict handler failed for ${tournamentId}: ${error?.message}`);
-  }
 }
 
 // Exported for unit testing the mutation → upsertPlayer field mapping.
@@ -172,8 +151,7 @@ export async function drainTournament(tournamentId, entries) {
   for (const entry of entries) {
     const local = await readLocal(tournamentId);
     try {
-      const { conflict } = await executeMutation(entry, local);
-      if (conflict) await notifyScoreConflict(tournamentId, conflict);
+      await executeMutation(entry, local);
       await syncQueue.drop(entry.id);
     } catch (error) {
       if (isPermanentSyncError(error)) {
@@ -223,9 +201,9 @@ export async function drainTournament(tournamentId, entries) {
     const fresh = await fetchTournament(tournamentId);
     if (fresh) {
       // Snapshot local's CURRENT scoreConflicts markers once, before the
-      // settle loop below — any conflict this pass just detected (via
-      // notifyScoreConflict, above) is already written to local by now, and
-      // any resolve already cleared its marker from local directly (mutate()
+      // settle loop below — conflict state is derived from synced entries
+      // elsewhere, not raised by this drain, and any resolve already cleared
+      // its marker from local directly (mutate()
       // saves locally before it ever reaches this drain). `fresh` and
       // applyPendingMutations' replay never carry scoreConflicts (see
       // preserveLocalScoreConflicts) so every pass below must re-stamp them

@@ -78,42 +78,29 @@ function roundUpsertOwnedPatch(round) {
   return patch;
 }
 
-// Executes one queued mutation against the server. Returns { conflict }
-// where conflict is null except for score.set: a
-// { roundId, playerId, hole, mine, theirs } object when the row we just
-// overwrote held a different value that was committed server-side after our
-// local write went stale (entry.ts) — i.e. we stomped a newer value.
+// Executes one queued mutation against the server. Always returns
+// { conflict: null } — score.set/conflict.resolve no longer raise a
+// one-sided, clock-based conflict here; conflict state is derived from
+// synced per-author score entries (store/scoreEntries.js) instead.
 export async function executeMutation(entry, localTournament) {
   const { tournamentId: id, mutation: m } = entry;
 
   switch (m.type) {
     case 'score.set': {
-      const result = await repo.setScore({
-        tournamentId: id, roundId: m.roundId, playerId: m.playerId, hole: m.hole, strokes: m.value,
+      await repo.submitScore({
+        tournamentId: id, roundId: m.roundId, playerId: m.playerId,
+        hole: m.hole, authorId: m.authorId, strokes: m.value,
       });
-      if (
-        result
-        && result.previousStrokes != null
-        && result.previousStrokes !== m.value
-        && new Date(result.previousUpdatedAt).getTime() > entry.ts
-      ) {
-        return {
-          conflict: {
-            roundId: m.roundId,
-            playerId: m.playerId,
-            hole: m.hole,
-            mine: m.value,
-            theirs: result.previousStrokes,
-          },
-        };
-      }
+      // Conflict state is derived from synced entries (store/scoreEntries.js),
+      // never raised one-sidedly here.
       return NO_CONFLICT;
     }
 
     case 'conflict.resolve': {
       // This IS the resolution — it never raises a conflict of its own.
-      await repo.setScore({
-        tournamentId: id, roundId: m.roundId, playerId: m.playerId, hole: m.hole, strokes: m.value,
+      await repo.resolveScore({
+        tournamentId: id, roundId: m.roundId, playerId: m.playerId,
+        hole: m.hole, value: m.value, resolvedBy: m.resolvedBy,
       });
       return NO_CONFLICT;
     }
