@@ -1589,9 +1589,21 @@ export default function HomeScreen({ navigation, route }) {
       {tournament.players.length >= 2 && (
       <View style={s.mastersCard}>
         <View style={[s.cardTitleRow, { marginBottom: 8 }]}>
-          <Text style={s.mastersCardTitle}>
+          <Text style={[s.mastersCardTitle, { flexShrink: 1 }]} numberOfLines={1}>
             {leaderboardOverall && !isGame ? 'OVERALL' : `R${selectedRound + 1} · ${roundModeLabel(displayedBoard.mode)}`}
           </Text>
+          {resolvedBoard.entries.length > 0 && (
+            <View style={s.inlineToggle}>
+              <Text style={[s.mastersToggleLabel, !leaderboardAlt && s.mastersToggleLabelActive]}>{toggleLabels.left}</Text>
+              <Switch
+                value={leaderboardAlt}
+                onValueChange={setLeaderboardAlt}
+                trackColor={{ false: 'rgba(255,255,255,0.2)', true: 'rgba(255,215,0,0.4)' }}
+                thumbColor="#fff"
+              />
+              <Text style={[s.mastersToggleLabel, leaderboardAlt && s.mastersToggleLabelActive]}>{toggleLabels.right}</Text>
+            </View>
+          )}
         </View>
         {!isGame && (
           <ScrollView
@@ -1625,18 +1637,6 @@ export default function HomeScreen({ navigation, route }) {
               </TouchableOpacity>
             ))}
           </ScrollView>
-        )}
-        {resolvedBoard.entries.length > 0 && (
-          <View style={[s.inlineToggle, { justifyContent: 'flex-end', marginBottom: 14 }]}>
-            <Text style={[s.mastersToggleLabel, !leaderboardAlt && s.mastersToggleLabelActive]}>{toggleLabels.left}</Text>
-            <Switch
-              value={leaderboardAlt}
-              onValueChange={setLeaderboardAlt}
-              trackColor={{ false: 'rgba(255,255,255,0.2)', true: 'rgba(255,215,0,0.4)' }}
-              thumbColor="#fff"
-            />
-            <Text style={[s.mastersToggleLabel, leaderboardAlt && s.mastersToggleLabelActive]}>{toggleLabels.right}</Text>
-          </View>
         )}
         {displayedBoard.entries.map((entry, i) => {
           const rankColors = ['#ffd700', '#c0c8d4', '#daa06d'];

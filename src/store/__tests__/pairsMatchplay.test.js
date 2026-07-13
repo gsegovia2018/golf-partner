@@ -159,18 +159,23 @@ describe('tournamentPairsMatchStandings', () => {
     expect(board[0].player.id).toBe('b');
   });
 
-  it('ignores rounds past currentRound', () => {
+  it('counts every scored round even when currentRound is stale', () => {
+    // currentRound is an unreliable cross-device pointer that can lag at 0
+    // while later rounds are fully scored — a scored round must still count.
     const t = {
       players: [...pairs[0], ...pairs[1]],
       settings: { scoringMode: 'pairsmatchplay' },
       currentRound: 0,
       rounds: [
+        // r1: team1 sweeps both duels on both holes → a +4
         mk(pairs, { a: { 1: 3, 2: 3 }, c: { 1: 5, 2: 5 }, b: { 1: 3, 2: 3 }, d: { 1: 5, 2: 5 } }),
+        // r2: every duel halved → a +2
         mk(pairs, { a: { 1: 4, 2: 4 }, c: { 1: 4, 2: 4 }, b: { 1: 4, 2: 4 }, d: { 1: 4, 2: 4 } }),
       ],
     };
     const { board } = tournamentPairsMatchStandings(t);
-    expect(board.find((r) => r.player.id === 'a').points).toBe(4);
+    // Both rounds count: 4 + 2 = 6, not just the first round.
+    expect(board.find((r) => r.player.id === 'a').points).toBe(6);
   });
 
   it('ignores a round whose effective mode is not pairsmatchplay', () => {

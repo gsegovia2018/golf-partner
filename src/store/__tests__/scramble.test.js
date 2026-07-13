@@ -154,7 +154,9 @@ describe('tournamentScrambleLeaderboard', () => {
     expect(byId.d.points).toBe(5); // 2 + 3
   });
 
-  it('ignores rounds past currentRound', () => {
+  it('counts every scored round even when currentRound is stale', () => {
+    // currentRound is an unreliable cross-device pointer that can lag at 0
+    // while later rounds are fully scored — a scored round must still count.
     const t = {
       players: roster,
       settings: { scoringMode: 'scramblepairs' },
@@ -165,7 +167,8 @@ describe('tournamentScrambleLeaderboard', () => {
       ],
     };
     const board = tournamentScrambleLeaderboard(t);
-    expect(board.find((r) => r.player.id === 'a').points).toBe(3);
+    // Both birdie rounds count: 3 + 3 = 6, not just the first round.
+    expect(board.find((r) => r.player.id === 'a').points).toBe(6);
   });
 
   it('ignores a round whose effective mode is not scramble', () => {

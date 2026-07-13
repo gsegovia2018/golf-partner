@@ -48,6 +48,33 @@ describe('tournamentStablefordLeaderboard', () => {
   });
 });
 
+// Regression: currentRound is an unreliable, often-stale cross-device pointer.
+// A tournament can have every round fully scored while currentRound still reads
+// 0. Cumulative boards must count a round once it actually has scores, not gate
+// on currentRound (which previously dropped every round after currentRound).
+describe('stale currentRound does not drop scored rounds', () => {
+  const stale = { ...t, currentRound: 0 };
+
+  it('sums all scored rounds even when currentRound is 0', () => {
+    const board = tournamentStablefordLeaderboard(stale);
+    const byId = Object.fromEntries(board.map((e) => [e.player.id, e]));
+    // Same totals as the currentRound:1 case — round 2 must not be dropped.
+    expect(byId.a.points).toBe(3 + 3);
+    expect(byId.b.points).toBe(2 + 3);
+    expect(byId.c.points).toBe(1 + 2);
+    expect(byId.d.points).toBe(2 + 2);
+  });
+
+  it('credits both scramble teammates their team result in Overall', () => {
+    const board = tournamentStablefordLeaderboard(stale);
+    const byId = Object.fromEntries(board.map((e) => [e.player.id, e]));
+    // Non-captain teammates (b, d) must receive their team's scramble points,
+    // not zero — all players show a score, not just one per pair.
+    expect(byId.b.points).toBeGreaterThan(0);
+    expect(byId.d.points).toBeGreaterThan(0);
+  });
+});
+
 describe('mode-family gating of cumulative boards', () => {
   it('tournamentScrambleLeaderboard ignores non-scramble rounds', () => {
     const board = tournamentScrambleLeaderboard(t);

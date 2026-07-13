@@ -400,11 +400,15 @@ export function teamShapeOf(mode) {
   return 'solo';
 }
 
-// A round counts toward tournament totals once it's been reached (its index is
-// at or before the tournament's currentRound) and has a scores object.
+// A round counts toward tournament totals once it actually has recorded scores.
+// A round with no scores yet still counts as "reached" up to currentRound.
 export function isRoundPlayed(round, index, tournament) {
-  if (index > (tournament.currentRound ?? 0)) return false;
-  return !!round.scores;
+  // A round counts as played once it actually has recorded scores. currentRound
+  // is an unreliable, often-stale cross-device pointer (it can lag at 0 while
+  // later rounds are fully scored), so it must never gate a round that already
+  // has scores — otherwise cumulative boards silently drop finished rounds.
+  if (round?.scores && Object.keys(round.scores).length > 0) return true;
+  return index <= (tournament?.currentRound ?? 0) && !!round?.scores;
 }
 
 // Cumulative Sindicato standings across all played rounds. Returns
