@@ -438,7 +438,59 @@ export function applyPendingMutations(tournament, entries) {
 // (the previous local blob's) round.scoreEntries/scoreResolutions forward,
 // or a conflict the user hasn't seen yet silently vanishes the moment
 // ANYTHING else for that tournament syncs or the screen pulls a background
-// refresh. Mutates and returns `target`.
+// refresh.
+//
+// But `target` is NOT always entries-less: realtimeSync's makeHandler calls
+// this with `target` = cached-plus-just-applied-row (a fresh
+// game_score_entries/game_score_resolutions row legitimately carries a new
+// peer's entry) and `source` = the pre-row cache. A wholesale replace with
+// `source` there would discard that peer's entry before deriveCell ever sees
+// two authors — the conflict feature would never fire cross-device. So this
+// is a deep UNION per round, with `target` winning per cell/author:
+//   scoreEntries[playerId][hole]: union of authorIds from both sides;
+//     target's entry wins when an authorId appears on both.
+//   scoreResolutions[playerId][hole]: union of cells from both sides; target
+//     wins per cell (a resolution is one atomic stamp, not per-author).
+// This is correct for both callers: on the realtime path `target` already
+// contains everything `source` (cached) had plus the new row, so the union
+// with target-precedence reduces to `target`, entry intact. On the
+// fetch/overlay path `target` has no entries at all, so the union reduces to
+// `source`, restoring what the fetch stripped. Mutates and returns `target`.
+function unionScoreEntries(targetEntries, sourceEntries) {
+  if (!sourceEntries && !targetEntries) return undefined;
+  const playerIds = new Set([
+    ...Object.keys(sourceEntries ?? {}),
+    ...Object.keys(targetEntries ?? {}),
+  ]);
+  const out = {};
+  for (const playerId of playerIds) {
+    const sHoles = sourceEntries?.[playerId] ?? {};
+    const tHoles = targetEntries?.[playerId] ?? {};
+    const holes = new Set([...Object.keys(sHoles), ...Object.keys(tHoles)]);
+    const byHole = {};
+    for (const hole of holes) {
+      byHole[hole] = { ...(sHoles[hole] ?? {}), ...(tHoles[hole] ?? {}) };
+    }
+    out[playerId] = byHole;
+  }
+  return out;
+}
+
+function unionScoreResolutions(targetResolutions, sourceResolutions) {
+  if (!sourceResolutions && !targetResolutions) return undefined;
+  const playerIds = new Set([
+    ...Object.keys(sourceResolutions ?? {}),
+    ...Object.keys(targetResolutions ?? {}),
+  ]);
+  const out = {};
+  for (const playerId of playerIds) {
+    const sHoles = sourceResolutions?.[playerId] ?? {};
+    const tHoles = targetResolutions?.[playerId] ?? {};
+    out[playerId] = { ...sHoles, ...tHoles };
+  }
+  return out;
+}
+
 export function preserveLocalConflictState(target, source) {
   if (!target?.rounds?.length || !source?.rounds?.length) return target;
   const byId = new Map(source.rounds.map((r) => [r.id, {
@@ -447,10 +499,12 @@ export function preserveLocalConflictState(target, source) {
   target.rounds = target.rounds.map((r) => {
     const s = byId.get(r.id);
     if (!s) return r;
+    const mergedEntries = unionScoreEntries(r?.scoreEntries, s.scoreEntries);
+    const mergedResolutions = unionScoreResolutions(r?.scoreResolutions, s.scoreResolutions);
     return {
       ...r,
-      ...(s.scoreEntries ? { scoreEntries: s.scoreEntries } : {}),
-      ...(s.scoreResolutions ? { scoreResolutions: s.scoreResolutions } : {}),
+      ...(mergedEntries ? { scoreEntries: mergedEntries } : {}),
+      ...(mergedResolutions ? { scoreResolutions: mergedResolutions } : {}),
     };
   });
   return target;
