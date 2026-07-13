@@ -352,13 +352,16 @@ describe('ensureRealtimeForTournament / stopRealtime', () => {
     stopRealtime();
   });
 
-  test('subscribes a channel named game-<id> with eight postgres_changes bindings', async () => {
+  test('subscribes a channel named game-<id> with eight postgres_changes bindings plus a presence binding', async () => {
     await ensureRealtimeForTournament('t1');
     expect(supabase.channel).toHaveBeenCalledWith('game-t1');
     const channel = supabase.channel.mock.results[0].value;
-    expect(channel.on).toHaveBeenCalledTimes(8);
+    expect(channel.on).toHaveBeenCalledTimes(9);
     expect(channel.subscribe).toHaveBeenCalledTimes(1);
-    const tables = channel.on.mock.calls.map(([, cfg]) => cfg.table);
+    const postgresCalls = channel.on.mock.calls.filter(([type]) => type === 'postgres_changes');
+    const presenceCalls = channel.on.mock.calls.filter(([type]) => type === 'presence');
+    expect(presenceCalls).toHaveLength(1);
+    const tables = postgresCalls.map(([, cfg]) => cfg.table);
     expect(tables.sort()).toEqual([
       'game_players', 'game_round_notes', 'game_rounds', 'game_score_entries',
       'game_score_resolutions', 'game_scores', 'game_shot_details', 'tournaments',
@@ -368,7 +371,8 @@ describe('ensureRealtimeForTournament / stopRealtime', () => {
   test('game_* bindings filter on tournament_id=eq.<id>; tournaments binding filters on id=eq.<id>', async () => {
     await ensureRealtimeForTournament('t1');
     const channel = supabase.channel.mock.results[0].value;
-    for (const [, cfg] of channel.on.mock.calls) {
+    const postgresCalls = channel.on.mock.calls.filter(([type]) => type === 'postgres_changes');
+    for (const [, cfg] of postgresCalls) {
       if (cfg.table === 'tournaments') {
         expect(cfg.filter).toBe('id=eq.t1');
       } else {

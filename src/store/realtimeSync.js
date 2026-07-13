@@ -269,6 +269,41 @@ const APPLIERS = {
 let _channel = null;
 let _channelId = null;
 
+// ── Presence: per-device currentHole broadcast ───────────────────────────────
+// Supabase presence state shape: { [presenceKey]: [{ authorId, currentHole },
+// ...] }. Reduced to the highest currentHole seen per authorId — pure, so the
+// conflict-surfacing gate (authorProgress/isCellSurfaceable) can consume it
+// without touching the channel itself.
+export function reducePresenceProgress(state) {
+  const out = {};
+  for (const metas of Object.values(state ?? {})) {
+    for (const m of metas ?? []) {
+      if (m?.authorId && (m.currentHole ?? 0) > (out[m.authorId] ?? 0)) out[m.authorId] = m.currentHole;
+    }
+  }
+  return out;
+}
+
+const _presenceCbs = new Set();
+let _lastHole = null;
+let _lastAuthor = null;
+
+export function getPresenceProgress() {
+  if (!_channel) return {};
+  return reducePresenceProgress(_channel.presenceState());
+}
+
+export function subscribeProgress(cb) {
+  _presenceCbs.add(cb);
+  return () => _presenceCbs.delete(cb);
+}
+
+export function setPresenceHole(authorId, hole) {
+  _lastAuthor = authorId;
+  _lastHole = hole;
+  if (_channel && authorId) _channel.track({ authorId, currentHole: hole });
+}
+
 // This tournament's still-undrained queue entries, read fresh (not captured
 // earlier) so each settle pass sees whatever is queued right now.
 async function pendingEntriesFor(id) {
@@ -359,7 +394,13 @@ export async function ensureRealtimeForTournament(id) {
       makeHandler(id, applyFn),
     );
   }
-  channel.subscribe();
+  channel.on('presence', { event: 'sync' }, () => {
+    const progress = reducePresenceProgress(channel.presenceState());
+    for (const cb of _presenceCbs) cb(progress);
+  });
+  channel.subscribe((status) => {
+    if (status === 'SUBSCRIBED' && _lastAuthor) channel.track({ authorId: _lastAuthor, currentHole: _lastHole });
+  });
 
   _channel = channel;
   _channelId = id;
