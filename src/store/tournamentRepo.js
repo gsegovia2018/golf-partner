@@ -75,6 +75,35 @@ export async function setScore({
   return data;
 }
 
+export async function submitScore({
+  tournamentId, roundId, playerId, hole, authorId, strokes,
+}) {
+  const { data, error } = await supabase.rpc('submit_game_score', {
+    p_tournament_id: tournamentId,
+    p_round_id: roundId,
+    p_player_id: playerId,
+    p_hole: hole,
+    p_author_id: authorId,
+    p_strokes: strokes,
+  });
+  if (error) throw error;
+  return data;
+}
+
+export async function resolveScore({
+  tournamentId, roundId, playerId, hole, value, resolvedBy,
+}) {
+  const { error } = await supabase.rpc('resolve_game_score', {
+    p_tournament_id: tournamentId,
+    p_round_id: roundId,
+    p_player_id: playerId,
+    p_hole: hole,
+    p_value: value,
+    p_resolver: resolvedBy,
+  });
+  if (error) throw error;
+}
+
 // detail === null is a tombstone (a cleared cell), not "skip the write" —
 // the row is upserted either way so deletes replicate correctly.
 export async function setShotDetail({
