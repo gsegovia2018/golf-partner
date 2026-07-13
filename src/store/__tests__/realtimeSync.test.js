@@ -6,7 +6,7 @@ import {
   ensureRealtimeForTournament, stopRealtime,
 } from '../realtimeSync';
 import { readLocal, saveLocal } from '../tournamentStore';
-import { applyPendingMutations, preserveLocalScoreConflicts } from '../mutate';
+import { applyPendingMutations, preserveLocalConflictState } from '../mutate';
 import { syncQueue } from '../syncQueue';
 import { supabase } from '../../lib/supabase';
 
@@ -17,7 +17,7 @@ jest.mock('../tournamentStore', () => ({
 
 jest.mock('../mutate', () => ({
   applyPendingMutations: jest.fn((t) => t),
-  preserveLocalScoreConflicts: jest.fn((target) => target),
+  preserveLocalConflictState: jest.fn((target) => target),
 }));
 
 jest.mock('../syncQueue', () => ({
@@ -352,15 +352,16 @@ describe('ensureRealtimeForTournament / stopRealtime', () => {
     stopRealtime();
   });
 
-  test('subscribes a channel named game-<id> with six postgres_changes bindings', async () => {
+  test('subscribes a channel named game-<id> with eight postgres_changes bindings', async () => {
     await ensureRealtimeForTournament('t1');
     expect(supabase.channel).toHaveBeenCalledWith('game-t1');
     const channel = supabase.channel.mock.results[0].value;
-    expect(channel.on).toHaveBeenCalledTimes(6);
+    expect(channel.on).toHaveBeenCalledTimes(8);
     expect(channel.subscribe).toHaveBeenCalledTimes(1);
     const tables = channel.on.mock.calls.map(([, cfg]) => cfg.table);
     expect(tables.sort()).toEqual([
-      'game_players', 'game_round_notes', 'game_rounds', 'game_scores', 'game_shot_details', 'tournaments',
+      'game_players', 'game_round_notes', 'game_rounds', 'game_score_entries',
+      'game_score_resolutions', 'game_scores', 'game_shot_details', 'tournaments',
     ].sort());
   });
 
@@ -439,7 +440,7 @@ describe('ensureRealtimeForTournament / stopRealtime', () => {
       expect.objectContaining({ id: 't1' }),
       [pendingEntry],
     );
-    expect(preserveLocalScoreConflicts).toHaveBeenCalled();
+    expect(preserveLocalConflictState).toHaveBeenCalled();
     expect(saveLocal).toHaveBeenCalledTimes(1);
     const [savedArg] = saveLocal.mock.calls[0];
     expect(savedArg.meId).toBe('p9');
@@ -452,7 +453,7 @@ describe('ensureRealtimeForTournament / stopRealtime', () => {
     readLocal.mockResolvedValue(cached);
     // Pass-through so the patched (round removed) object is what reaches saveLocal.
     applyPendingMutations.mockImplementation((t) => t);
-    preserveLocalScoreConflicts.mockImplementation((target) => target);
+    preserveLocalConflictState.mockImplementation((target) => target);
 
     await ensureRealtimeForTournament('t1');
     const channel = supabase.channel.mock.results[0].value;
@@ -514,7 +515,7 @@ describe('ensureRealtimeForTournament / stopRealtime', () => {
       }
       return nextT;
     });
-    preserveLocalScoreConflicts.mockImplementation((target) => target);
+    preserveLocalConflictState.mockImplementation((target) => target);
 
     await ensureRealtimeForTournament('t1');
     const channel = supabase.channel.mock.results[0].value;

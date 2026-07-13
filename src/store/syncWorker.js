@@ -5,7 +5,7 @@ import {
 } from './tournamentStore';
 import { fetchTournament } from './tournamentRepo';
 import { executeMutation } from './mutationWrites';
-import { applyPendingMutations, preserveLocalScoreConflicts } from './mutate';
+import { applyPendingMutations, preserveLocalConflictState } from './mutate';
 import { upsertPlayer } from './libraryStore';
 import { isOnline, subscribeConnectivity } from '../lib/connectivity';
 
@@ -206,7 +206,7 @@ export async function drainTournament(tournamentId, entries) {
       // its marker from local directly (mutate()
       // saves locally before it ever reaches this drain). `fresh` and
       // applyPendingMutations' replay never carry scoreConflicts (see
-      // preserveLocalScoreConflicts) so every pass below must re-stamp them
+      // preserveLocalConflictState) so every pass below must re-stamp them
       // back onto the freshly computed state or the reconcile save wipes
       // them.
       const localForConflicts = await readLocal(tournamentId);
@@ -214,7 +214,7 @@ export async function drainTournament(tournamentId, entries) {
         .filter((e) => e.tournamentId === tournamentId);
       let snapshot = await queuedForTournament();
       for (let pass = 0; pass < 3; pass++) {
-        const merged = preserveLocalScoreConflicts(
+        const merged = preserveLocalConflictState(
           applyPendingMutations(fresh, snapshot), localForConflicts,
         );
         await saveLocal(merged);

@@ -20,7 +20,7 @@ jest.mock('../mutationWrites', () => ({ executeMutation: jest.fn() }));
 
 jest.mock('../mutate', () => ({
   applyPendingMutations: jest.fn((t) => t),
-  preserveLocalScoreConflicts: jest.fn((target) => target),
+  preserveLocalConflictState: jest.fn((target) => target),
 }));
 
 jest.mock('../tournamentRepo', () => ({ fetchTournament: jest.fn(() => Promise.resolve(null)) }));

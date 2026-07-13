@@ -168,13 +168,13 @@ function _applyPendingMutations(tournament, entries) {
 }
 
 // scoreConflicts markers are local-only (see mutate.js's
-// preserveLocalScoreConflicts) — a repo-fetched `remote` never carries them,
+// preserveLocalConflictState) — a repo-fetched `remote` never carries them,
 // so every background refresh through this module must carry `source`'s
 // forward or an unresolved conflict the user hasn't seen yet silently
 // disappears the next time any screen focuses.
 function _preserveScoreConflicts(target, source) {
-  const { preserveLocalScoreConflicts } = require('./mutate');
-  return preserveLocalScoreConflicts(target, source);
+  const { preserveLocalConflictState } = require('./mutate');
+  return preserveLocalConflictState(target, source);
 }
 
 // The syncQueue entries for one tournament, read fresh at overlay time (not
