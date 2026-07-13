@@ -82,7 +82,7 @@ BEGIN
    WHERE tournament_id = p_tournament_id AND round_id = p_round_id
      AND player_id = p_player_id AND hole = p_hole;
 
-  IF v_res_at IS NOT NULL AND (v_max_ts IS NULL OR v_res_at >= v_max_ts) THEN
+  IF v_res_at IS NOT NULL AND v_max_ts IS NOT NULL AND v_res_at >= v_max_ts THEN
     v_eff := v_res_val;
   ELSE
     -- most-recent non-null author value (NULL when every author is blank)
@@ -131,12 +131,17 @@ BEGIN
   v_status := CASE WHEN v_distinct >= 2 THEN 'conflict'
                    WHEN v_distinct = 1 THEN 'agreed' ELSE 'empty' END;
 
-  SELECT COALESCE(jsonb_agg(jsonb_build_object(
-           'value', strokes, 'authorId', author_id,
-           'ts', (extract(epoch from updated_at) * 1000)::bigint) ORDER BY updated_at), '[]'::jsonb)
-    INTO v_candidates FROM public.game_score_entries
-   WHERE tournament_id = p_tournament_id AND round_id = p_round_id
-     AND player_id = p_player_id AND hole = p_hole AND strokes IS NOT NULL;
+  SELECT COALESCE(jsonb_agg(q.c ORDER BY (q.c->>'ts')::bigint), '[]'::jsonb)
+    INTO v_candidates
+    FROM (
+      SELECT DISTINCT ON (strokes) jsonb_build_object(
+               'value', strokes, 'authorId', author_id,
+               'ts', (extract(epoch from updated_at) * 1000)::bigint) AS c
+        FROM public.game_score_entries
+       WHERE tournament_id = p_tournament_id AND round_id = p_round_id
+         AND player_id = p_player_id AND hole = p_hole AND strokes IS NOT NULL
+       ORDER BY strokes, updated_at DESC
+    ) q;
 
   RETURN jsonb_build_object('status', v_status, 'effective', v_eff, 'candidates', v_candidates);
 END $$;
@@ -147,6 +152,9 @@ CREATE OR REPLACE FUNCTION public.resolve_game_score(
   p_value int, p_resolver text)
 RETURNS void LANGUAGE plpgsql AS $$
 BEGIN
+  PERFORM pg_advisory_xact_lock(
+    hashtextextended(p_tournament_id || ':' || p_round_id || ':' || p_player_id || ':' || p_hole::text, 0));
+
   INSERT INTO public.game_score_resolutions
     (tournament_id, round_id, player_id, hole, value, resolved_by, resolved_at)
   VALUES (p_tournament_id, p_round_id, p_player_id, p_hole, p_value, p_resolver, now())
@@ -158,7 +166,9 @@ END $$;
 
 -- 6) Backfill: seed a single 'legacy' author entry from every existing
 -- game_scores cell, so historical rounds derive as 'agreed' (no false
--- conflicts). Idempotent: ON CONFLICT keeps the newer updated_at.
+-- conflicts). Seed-only-missing + re-run-safe: only inserts for cells with
+-- no game_score_entries row yet, so a straggler re-run after real authors
+-- have submitted never overwrites or fabricates entries (ON CONFLICT DO NOTHING).
 CREATE OR REPLACE FUNCTION public.backfill_game_score_entries(p_id text)
 RETURNS void LANGUAGE plpgsql AS $$
 BEGIN
@@ -167,7 +177,9 @@ BEGIN
   SELECT s.tournament_id, s.round_id, s.player_id, s.hole, 'legacy', s.strokes, s.updated_at
     FROM public.game_scores s
    WHERE s.tournament_id = p_id
-  ON CONFLICT (tournament_id, round_id, player_id, hole, author_id)
-  DO UPDATE SET strokes = EXCLUDED.strokes, updated_at = EXCLUDED.updated_at
-    WHERE public.game_score_entries.updated_at < EXCLUDED.updated_at;
+     AND NOT EXISTS (
+       SELECT 1 FROM public.game_score_entries e
+        WHERE e.tournament_id = s.tournament_id AND e.round_id = s.round_id
+          AND e.player_id = s.player_id AND e.hole = s.hole)
+  ON CONFLICT (tournament_id, round_id, player_id, hole, author_id) DO NOTHING;
 END $$;
