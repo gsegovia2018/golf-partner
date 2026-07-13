@@ -916,18 +916,21 @@ describe('calcPlayingHandicap with decimal index', () => {
 });
 
 describe('listRoundConflicts / roundHasConflicts', () => {
-  it('returns [] and false when the round has no scoreConflicts', () => {
+  it('returns [] and false when the round has no scoreEntries', () => {
     const round = { id: 'r1', scores: {} };
     expect(listRoundConflicts(round)).toEqual([]);
     expect(roundHasConflicts(round)).toBe(false);
   });
 
   it('lists each unresolved conflict as { playerId, hole }, sorted by hole', () => {
+    // Two different non-null values for the same cell, from two authors,
+    // is the derivation-based definition of a conflict (see scoreEntries.js
+    // deriveCell). p1/hole7 and p2/hole3 each get two competing values.
     const round = {
       id: 'r1',
-      scoreConflicts: {
-        p1: { 7: { candidates: [], detectedAt: 1 } },
-        p2: { 3: { candidates: [], detectedAt: 1 } },
+      scoreEntries: {
+        p1: { 7: { a: { value: 4, ts: 10 }, b: { value: 5, ts: 20 } } },
+        p2: { 3: { a: { value: 3, ts: 10 }, b: { value: 4, ts: 20 } } },
       },
     };
     expect(listRoundConflicts(round)).toEqual([
@@ -937,8 +940,13 @@ describe('listRoundConflicts / roundHasConflicts', () => {
     expect(roundHasConflicts(round)).toBe(true);
   });
 
-  it('ignores cells whose marker was cleared to undefined by a merge', () => {
-    const round = { id: 'r1', scoreConflicts: { p1: { 7: undefined } } };
+  it('does not report a conflict once every author agrees on one value', () => {
+    // Equivalent to the old "marker cleared" case: two authors converge on
+    // the same value, so the cell derives to 'agreed', not 'conflict'.
+    const round = {
+      id: 'r1',
+      scoreEntries: { p1: { 7: { a: { value: 4, ts: 10 }, b: { value: 4, ts: 20 } } } },
+    };
     expect(listRoundConflicts(round)).toEqual([]);
     expect(roundHasConflicts(round)).toBe(false);
   });
