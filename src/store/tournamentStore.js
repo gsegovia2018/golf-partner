@@ -25,6 +25,12 @@ import {
   sindicatoRoundTally,
   pairsMatchRoundTally,
   scrambleRoundTally,
+  tournamentHasMixedModes,
+  tournamentStablefordLeaderboard,
+  tournamentSindicatoLeaderboard,
+  tournamentScrambleLeaderboard,
+  tournamentMatchPlayStandings,
+  tournamentPairsMatchStandings,
 } from './scoring';
 import { isScoringModeAllowed, fallbackScoringMode } from '../components/ScoringModePicker';
 import { scoringModeUsesTeams, isScrambleMode } from '../components/scoringModes';
@@ -1560,6 +1566,33 @@ export function roundLeaderboard(tournament, round) {
     .map((t) => ({ player: t.player, points: t.totalPoints, strokes: t.totalStrokes, handicap: t.handicap }))
     .sort(stablefordComparator);
   return { mode, unit: 'pts', entries };
+}
+
+// The whole-tournament board: native aggregate when every round shares one
+// effective mode, else the Stableford total (already strokes-tiebroken).
+// Centralizes the routing that used to live inline in HomeScreen.
+export function tournamentLeaderboardResolved(tournament) {
+  const rounds = tournament?.rounds ?? [];
+  if (tournamentHasMixedModes(tournament)) {
+    return { mode: 'stableford', unit: 'pts', entries: tournamentStablefordLeaderboard(tournament) };
+  }
+  const mode = roundScoringMode(tournament, rounds[0]);
+  if (mode === 'matchplay') {
+    return { mode, unit: 'holes', entries: tournamentMatchPlayStandings(tournament)?.board ?? [] };
+  }
+  if (mode === 'sindicato') {
+    return { mode, unit: 'pts', entries: tournamentSindicatoLeaderboard(tournament) };
+  }
+  if (mode === 'bestball') {
+    return { mode, unit: 'pts', entries: tournamentBestWorstLeaderboard(tournament) };
+  }
+  if (mode === 'pairsmatchplay') {
+    return { mode, unit: 'pts', entries: tournamentPairsMatchStandings(tournament)?.board ?? [] };
+  }
+  if (isScrambleMode(mode)) {
+    return { mode, unit: 'pts', entries: tournamentScrambleLeaderboard(tournament) };
+  }
+  return { mode: mode ?? 'stableford', unit: 'pts', entries: tournamentLeaderboard(tournament) };
 }
 
 // Ensure the tournament has one editor invite code and one viewer invite
