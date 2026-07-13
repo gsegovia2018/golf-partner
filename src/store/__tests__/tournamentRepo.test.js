@@ -442,9 +442,37 @@ describe('createTournament', () => {
     expect(call.ops[0].rows).toEqual({
       id: 't1', name: 'Cup', kind: 'casual', created_at: '2026-07-10T00:00:00Z',
       created_by: 'u1',
+      // data is the legacy NOT NULL jsonb blob — a device-agnostic snapshot
+      // (meId and _meta excluded) that also feeds claim_tournament_player.
+      data: {
+        id: 't1', name: 'Cup', kind: 'tournament', createdAt: '2026-07-10T00:00:00Z',
+        currentRound: 1, players: [], rounds: [], settings: { fixedTeams: true },
+      },
       props: { settings: { fixedTeams: true }, kind: 'tournament' },
       current_round: 1,
     });
+  });
+
+  test('writes a device-agnostic data blob (with players, excluding meId/_meta)', async () => {
+    mockState.userId = 'u1';
+    const { createTournament } = require('../tournamentRepo');
+    await createTournament({
+      id: 't1', name: 'Cup', kind: 'game', createdAt: '2026-07-10T00:00:00Z',
+      currentRound: 0,
+      players: [{ id: 'p1', user_id: 'u1' }, { id: 'p2', user_id: null }],
+      rounds: [], meId: 'p1', _meta: { foo: 1 }, settings: { a: 1 },
+    });
+
+    const row = lastFromCall('tournaments').ops[0].rows;
+    // NOT NULL data column must be populated so the upsert doesn't 23502.
+    expect(row.data).toBeDefined();
+    // claim_tournament_player reads data->'players'.
+    expect(row.data.players).toEqual([{ id: 'p1', user_id: 'u1' }, { id: 'p2', user_id: null }]);
+    // Device-local / retired keys never enter the shared blob.
+    expect(row.data).not.toHaveProperty('meId');
+    expect(row.data).not.toHaveProperty('_meta');
+    // Domain kind (not the casual/official column mapping) lives in the blob.
+    expect(row.data.kind).toBe('game');
   });
 
   test("maps a 'game' domain kind to a casual column with props.kind='game'", async () => {
