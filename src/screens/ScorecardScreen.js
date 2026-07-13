@@ -542,6 +542,18 @@ export default function ScorecardScreen({ navigation, route }) {
     return nextSave;
   }, [reload]);
 
+  // Author identity for score writes. Declared BEFORE autoSave/resolveConflict
+  // because those useCallbacks list `authorId` in their dependency arrays,
+  // which React evaluates at render time — declaring it further down would be a
+  // temporal-dead-zone ReferenceError that crashes the scorecard on mount.
+  const meId = tournament?.meId ?? null;
+  const authorId = meId ?? getDeviceAuthorId();
+  const authorName = useCallback((aId) => {
+    if (aId === 'legacy') return 'Earlier entry';
+    const p = (tournament?.players ?? []).find((pl) => pl.id === aId);
+    return p?.name ?? 'Someone';
+  }, [tournament]);
+
   const autoSave = useCallback((newScores) => {
     if (!tournamentRef.current) return Promise.resolve(null);
     return enqueueSave(async () => {
@@ -850,13 +862,6 @@ export default function ScorecardScreen({ navigation, route }) {
   // stays stable while the tournament loads.
   const round = tournament?.rounds?.[roundIndex] ?? null;
   const players = tournament?.players ?? [];
-  const meId = tournament?.meId ?? null;
-  const authorId = meId ?? getDeviceAuthorId();
-  const authorName = useCallback((aId) => {
-    if (aId === 'legacy') return 'Earlier entry';
-    const p = (tournament?.players ?? []).find((pl) => pl.id === aId);
-    return p?.name ?? 'Someone';
-  }, [tournament]);
 
   // Lock a freshly opened finished round to view-only. "Finished" means
   // either this specific round has every player scored on every hole, OR the
