@@ -2,6 +2,7 @@ import React, { useMemo } from 'react';
 import { StyleSheet, Text, View } from 'react-native';
 import { useTheme } from '../theme/ThemeContext';
 import { roundTotals } from '../store/tournamentStore';
+import { isScrambleMode, scrambleRoundTally } from '../store/scoring';
 import { playersMeFirst } from '../lib/playerOrder';
 
 // Universal round scoreboard — the same player stat cards in every scoring
@@ -12,6 +13,7 @@ import { playersMeFirst } from '../lib/playerOrder';
 // showHoleBadges.
 export default function RoundScoreboard({
   round, players, meId, showRunning = true, ranked = false, teeLabels = null, showHoleBadges = true,
+  scoringMode = null,
 }) {
   const { theme } = useTheme();
   const s = useMemo(() => makeStyles(theme), [theme]);
@@ -21,8 +23,29 @@ export default function RoundScoreboard({
 
   const totals = roundTotals(round, players);
   const totalsById = Object.fromEntries(totals.map((t) => [t.player.id, t]));
+
+  // Scramble rounds play one team ball, stored under the captain (pair[0]).
+  // Both teammates share that ball's result, so map every player to their
+  // captain's scores and credit the team's Stableford points to each — otherwise
+  // non-captains would show blank ("—") in the round-scores card.
+  const mode = scoringMode ?? round?.scoringMode ?? null;
+  const scramble = isScrambleMode(mode);
+  const captainOf = {};
+  const teamPointsByCaptain = {};
+  if (scramble) {
+    for (const pair of (round?.pairs ?? [])) {
+      if (!Array.isArray(pair) || pair.length === 0) continue;
+      const capId = pair[0]?.id;
+      if (!capId) continue;
+      for (const m of pair) if (m?.id) captainOf[m.id] = capId;
+    }
+    const tally = scrambleRoundTally(round, players);
+    for (const r of (tally?.totals ?? [])) teamPointsByCaptain[r.unit.id] = r.points;
+  }
+
   let rows = playersMeFirst(players, meId).map((player) => {
-    const ps = round?.scores?.[player.id] ?? {};
+    const sourceId = scramble ? (captainOf[player.id] ?? player.id) : player.id;
+    const ps = round?.scores?.[sourceId] ?? {};
     let strokes = 0;
     let parThrough = 0;
     let played = 0;
@@ -30,10 +53,13 @@ export default function RoundScoreboard({
       const sc = ps[hole.number];
       if (sc) { strokes += sc; parThrough += hole.par ?? 0; played++; }
     }
+    const points = scramble
+      ? (teamPointsByCaptain[captainOf[player.id]] ?? 0)
+      : (totalsById[player.id]?.totalPoints ?? 0);
     return {
       player,
       handicap: totalsById[player.id]?.handicap,
-      points: totalsById[player.id]?.totalPoints ?? 0,
+      points,
       strokes,
       played,
       vsPar: strokes - parThrough,

@@ -51,26 +51,24 @@ import { shouldOfferPostCreateEditorInvite } from './setupWizard';
 const PAGER_SNAP_TYPE_STYLE = Platform.OS === 'web' ? { scrollSnapType: 'x mandatory', overflowX: 'auto' } : null;
 const PAGER_PAGE_SNAP_STYLE = Platform.OS === 'web' ? { scrollSnapAlign: 'start', scrollSnapStop: 'always' } : null;
 
-// Pick the round to land on when entering the tournament view:
-// - Default is `currentRound`.
-// - If that round is fully played (every player scored every hole) AND
-//   a next round exists, jump to the next one. Keeps the UI pointing at
-//   where play is actually headed.
-function chooseInitialRound(tournament) {
-  const cur = tournament?.currentRound ?? 0;
+// Pick the round to land on when entering the tournament view.
+// currentRound is an unreliable, often-stale cross-device pointer (it can lag
+// at 0 while later rounds are fully scored), so derive the landing round from
+// the scores themselves: go to the furthest round play has actually reached
+// (the last round with any scores). If that round is complete and a later
+// round exists, jump to the next one — that's where play is headed.
+export function chooseInitialRound(tournament) {
   const rounds = tournament?.rounds ?? [];
-  const round = rounds[cur];
-  if (!round) return cur;
-  const playersCount = tournament?.players?.length ?? 0;
-  const holeCount = round.holes?.length ?? 18;
-  const expected = playersCount * holeCount;
-  if (expected === 0) return cur;
-  let entered = 0;
-  for (const pid in (round.scores ?? {})) {
-    entered += Object.keys(round.scores[pid] ?? {}).length;
+  if (rounds.length === 0) return 0;
+  const players = tournament?.players ?? [];
+  let last = -1;
+  for (let i = 0; i < rounds.length; i++) {
+    const scores = rounds[i]?.scores;
+    if (scores && Object.keys(scores).length > 0) last = i;
   }
-  if (entered >= expected && cur < rounds.length - 1) return cur + 1;
-  return cur;
+  if (last < 0) return Math.min(tournament?.currentRound ?? 0, rounds.length - 1);
+  if (last < rounds.length - 1 && isRoundComplete(rounds[last], players)) return last + 1;
+  return last;
 }
 
 // "Marcos + Noé vs Guille + Alex" — the tournament's fixed pairs, first
@@ -1737,6 +1735,7 @@ export default function HomeScreen({ navigation, route }) {
                 onGoToRound={goToRound}
                 isSingleRound
                 showRunning={showRunning}
+                scoringMode={roundScoringMode(tournament, tournament.rounds[0])}
               />
             ) : (
               <ScrollView
@@ -1820,6 +1819,7 @@ export default function HomeScreen({ navigation, route }) {
                     onOpenEdit={isViewer ? null : openRoundEdit}
                     isSingleRound={tournament.rounds.length === 1}
                     showRunning={showRunning}
+                    scoringMode={roundScoringMode(tournament, round)}
                   />
                 ))}
               </ScrollView>
@@ -2303,7 +2303,7 @@ function ConfirmModal({ state, onResult, theme, s }) {
 const RoundPage = React.memo(function RoundPage({
   round, index, width, hasPrev, hasNext, revealed,
   players, meId, theme, s,
-  onGoToRound, onOpenEdit, isSingleRound, showRunning = true,
+  onGoToRound, onOpenEdit, isSingleRound, showRunning = true, scoringMode = null,
 }) {
   const hasScores = round.scores && Object.keys(round.scores).length > 0;
   return (
@@ -2347,7 +2347,7 @@ const RoundPage = React.memo(function RoundPage({
         </View>
       )}
       {hasScores || revealed ? (
-        <RoundScoreboard round={round} players={players} meId={meId} showRunning={showRunning} />
+        <RoundScoreboard round={round} players={players} meId={meId} showRunning={showRunning} scoringMode={scoringMode} />
       ) : (
         <Text style={s.emptyRoundHint}>No scores yet for this round.</Text>
       )}

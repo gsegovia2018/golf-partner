@@ -1,7 +1,7 @@
 import React from 'react';
 import { act, fireEvent, render, waitFor, within } from '@testing-library/react-native';
 import { StyleSheet } from 'react-native';
-import HomeScreen from '../HomeScreen';
+import HomeScreen, { chooseInitialRound } from '../HomeScreen';
 import { useAuth } from '../../context/AuthContext';
 import { fetchMyPlayers, loadQuickStartCourses } from '../../store/libraryStore';
 import {
@@ -120,7 +120,13 @@ jest.mock('../../store/tournamentStore', () => ({
   getActiveTournamentSnapshot: jest.fn(),
   getTournament: jest.fn(),
   getTournamentSnapshot: jest.fn(),
-  isRoundComplete: jest.fn(() => false),
+  isRoundComplete: jest.fn((round, players) => {
+    if (!round?.scores || !round.holes?.length || !players?.length) return false;
+    return players.every((p) => {
+      const ps = round.scores[p.id];
+      return ps && round.holes.every((h) => ps[h.number] != null);
+    });
+  }),
   isTournamentFinished: jest.fn(() => false),
   lastTeeForPlayerOnCourse: jest.fn(),
   loadAllTournaments: jest.fn(() => Promise.resolve([])),
@@ -363,4 +369,33 @@ test('pager does not re-assert the round while the user is dragging', async () =
     nativeEvent: { layout: { width: 320, height: 400 } },
   });
   expect(scrollTo).not.toHaveBeenCalled();
+});
+
+describe('chooseInitialRound', () => {
+  const holes = [{ number: 1, par: 4, strokeIndex: 1 }];
+  const players = [{ id: 'p1', name: 'Ana' }, { id: 'p2', name: 'Ben' }];
+  const scored = { p1: { 1: 4 }, p2: { 1: 4 } };
+  const mk = (roundScores, currentRound) => ({
+    players,
+    currentRound,
+    rounds: roundScores.map((sc, i) => ({ id: `r${i}`, holes, scores: sc, pairs: [['p1', 'p2']] })),
+  });
+
+  test('all rounds scored but currentRound stale at 0 → lands on the last round', () => {
+    // The exact Weekend Golf bug: currentRound never advanced past 0 while
+    // every round was finished. Must land on the last round, not round 2.
+    expect(chooseInitialRound(mk([scored, scored, scored], 0))).toBe(2);
+  });
+
+  test('round 1 complete, rest empty → jumps to the next round', () => {
+    expect(chooseInitialRound(mk([scored, {}, {}], 0))).toBe(1);
+  });
+
+  test('mid-round-2 → stays on the in-progress round', () => {
+    expect(chooseInitialRound(mk([scored, { p1: { 1: 4 } }, {}], 0))).toBe(1);
+  });
+
+  test('nothing scored yet → falls back to currentRound', () => {
+    expect(chooseInitialRound(mk([{}, {}, {}], 0))).toBe(0);
+  });
 });

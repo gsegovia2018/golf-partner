@@ -92,6 +92,34 @@ describe('RoundScoreboard', () => {
     expect(getByText('Yellow')).toBeTruthy();
   });
 
+  test('scramble round: both teammates show the team ball, not just the captain', () => {
+    // Team ball is stored under the captain (pair[0]). The non-captain teammate
+    // must still show scores (strokes/vs Par), not a blank card.
+    const capScores = Object.fromEntries(
+      Array.from({ length: 18 }, (_, i) => [i + 1, 4]),
+    );
+    const scramblePlayers = [
+      { id: 'cap', name: 'Captain' },
+      { id: 'mate', name: 'Teammate' },
+    ];
+    const { getAllByText, queryAllByText } = render(wrap(
+      <RoundScoreboard
+        round={{
+          holes,
+          pairs: [[scramblePlayers[0], scramblePlayers[1]]],
+          scores: { cap: capScores }, // only the captain holds the ball
+        }}
+        players={scramblePlayers}
+        meId="cap"
+        scoringMode="scramblepairs"
+      />,
+    ));
+    // 18 pars → 72 strokes, E vs par — both cards show the team's strokes.
+    expect(getAllByText('72').length).toBe(2);
+    // Neither card is blank: no "—" strokes placeholder for the teammate.
+    expect(queryAllByText('—').length).toBe(0);
+  });
+
   test('suppresses HOLE badge when showHoleBadges={false}', () => {
     const partial = Object.fromEntries(
       Array.from({ length: 5 }, (_, i) => [i + 1, 4]),
