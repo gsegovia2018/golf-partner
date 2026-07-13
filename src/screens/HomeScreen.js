@@ -194,7 +194,9 @@ export default function HomeScreen({ navigation, route }) {
   const undoTimerRef = useRef(null);
   const [leaderboardAlt, setLeaderboardAlt] = useState(false);
   // false = follows the pager's selected round; true = whole-tournament board.
-  const [leaderboardOverall, setLeaderboardOverall] = useState(false);
+  // Defaults to true so a multi-round tournament opens on Overall standings;
+  // the isGame single-game path ignores this flag entirely.
+  const [leaderboardOverall, setLeaderboardOverall] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [showInvite, setShowInvite] = useState(false);
   const [inviteCodes, setInviteCodes] = useState({ editor: '', viewer: '' });
@@ -1527,9 +1529,7 @@ export default function HomeScreen({ navigation, route }) {
     );
   }
 
-  const toggleLabels = tournamentHasMixedModes(tournament)
-    ? { left: 'Stableford', right: 'Stroke Play' }
-    : leaderboardToggleLabels(settings.scoringMode);
+  const toggleLabels = leaderboardToggleLabels(resolvedBoard.mode);
 
   return (
     <ScreenContainer style={s.screen} edges={['top', 'bottom']}>
@@ -1626,7 +1626,7 @@ export default function HomeScreen({ navigation, route }) {
             ))}
           </ScrollView>
         )}
-        {(resolvedBoard.mode === 'stableford' || resolvedBoard.mode === 'individual') && (
+        {resolvedBoard.entries.length > 0 && (
           <View style={[s.inlineToggle, { justifyContent: 'flex-end', marginBottom: 14 }]}>
             <Text style={[s.mastersToggleLabel, !leaderboardAlt && s.mastersToggleLabelActive]}>{toggleLabels.left}</Text>
             <Switch
