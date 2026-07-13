@@ -193,7 +193,8 @@ export default function HomeScreen({ navigation, route }) {
   const [undoSnack, setUndoSnack] = useState(null); // { roundIndex, snapshot, at }
   const undoTimerRef = useRef(null);
   const [leaderboardAlt, setLeaderboardAlt] = useState(false);
-  const [leaderboardScope, setLeaderboardScope] = useState('round'); // 'round' | 'global'
+  // false = follows the pager's selected round; true = whole-tournament board.
+  const [leaderboardOverall, setLeaderboardOverall] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
   const [showInvite, setShowInvite] = useState(false);
   const [inviteCodes, setInviteCodes] = useState({ editor: '', viewer: '' });
@@ -951,17 +952,17 @@ export default function HomeScreen({ navigation, route }) {
   // tournament). Casual games are always round-scoped (there's only one).
   const resolvedBoard = useMemo(() => {
     if (!tournament) return { mode: 'stableford', unit: 'pts', entries: [] };
-    if (isGame || leaderboardScope === 'round') {
+    if (isGame || !leaderboardOverall) {
       return roundLeaderboard(tournament, selectedRoundData);
     }
     return tournamentLeaderboardResolved(tournament);
-  }, [tournament, isGame, leaderboardScope, selectedRoundData]);
+  }, [tournament, isGame, leaderboardOverall, selectedRoundData]);
   // Stroke-play alt-view: a Stableford board for the current scope, sorted by
   // gross strokes ascending (unplayed last). Preserves the existing toggle,
   // now scope-aware.
   const displayedBoard = useMemo(() => {
     if (!leaderboardAlt) return resolvedBoard;
-    const sb = (isGame || leaderboardScope === 'round')
+    const sb = (isGame || !leaderboardOverall)
       ? roundLeaderboard(tournament, { ...selectedRoundData, scoringMode: 'stableford' })
       : { mode: 'stableford', unit: 'pts', entries: tournamentStablefordLeaderboard(tournament) };
     // Only a true "Stroke Play" alt view (stableford/individual/scramble
@@ -972,7 +973,7 @@ export default function HomeScreen({ navigation, route }) {
     const entries = [...sb.entries].sort(
       (a, b) => (a.strokes > 0 ? a.strokes : Infinity) - (b.strokes > 0 ? b.strokes : Infinity));
     return { ...sb, entries };
-  }, [leaderboardAlt, resolvedBoard, isGame, leaderboardScope, selectedRoundData, tournament]);
+  }, [leaderboardAlt, resolvedBoard, isGame, leaderboardOverall, selectedRoundData, tournament]);
   const tournamentMode = settings.scoringMode === 'bestball' ? 'bestball'
     : settings.scoringMode === 'sindicato' ? 'sindicato'
     : settings.scoringMode === 'matchplay' ? 'matchplay'
@@ -1589,29 +1590,54 @@ export default function HomeScreen({ navigation, route }) {
       <View style={s.mastersCard}>
         <View style={[s.cardTitleRow, { marginBottom: 8 }]}>
           <Text style={s.mastersCardTitle}>
-            {leaderboardScope === 'global' && !isGame ? 'OVERALL' : `R${selectedRound + 1} · ${roundModeLabel(displayedBoard.mode)}`}
+            {leaderboardOverall && !isGame ? 'OVERALL' : `R${selectedRound + 1} · ${roundModeLabel(displayedBoard.mode)}`}
           </Text>
-          {!isGame && (
-            <View style={s.inlineToggle}>
-              <TouchableOpacity onPress={() => setLeaderboardScope('round')}>
-                <Text style={[s.mastersToggleLabel, leaderboardScope === 'round' && s.mastersToggleLabelActive]}>Round</Text>
-              </TouchableOpacity>
-              <TouchableOpacity onPress={() => setLeaderboardScope('global')}>
-                <Text style={[s.mastersToggleLabel, leaderboardScope === 'global' && s.mastersToggleLabelActive]}>Global</Text>
-              </TouchableOpacity>
-            </View>
-          )}
         </View>
-        <View style={[s.inlineToggle, { justifyContent: 'flex-end', marginBottom: 14 }]}>
-          <Text style={[s.mastersToggleLabel, !leaderboardAlt && s.mastersToggleLabelActive]}>{toggleLabels.left}</Text>
-          <Switch
-            value={leaderboardAlt}
-            onValueChange={setLeaderboardAlt}
-            trackColor={{ false: 'rgba(255,255,255,0.2)', true: 'rgba(255,215,0,0.4)' }}
-            thumbColor="#fff"
-          />
-          <Text style={[s.mastersToggleLabel, leaderboardAlt && s.mastersToggleLabelActive]}>{toggleLabels.right}</Text>
-        </View>
+        {!isGame && (
+          <ScrollView
+            testID="leaderboard-scope-chips"
+            horizontal
+            showsHorizontalScrollIndicator={false}
+            style={[s.mastersChipRow, { marginBottom: 12 }]}
+            contentContainerStyle={{ gap: 6 }}
+          >
+            <TouchableOpacity
+              style={[s.mastersChip, leaderboardOverall && s.mastersChipActive]}
+              onPress={() => setLeaderboardOverall(true)}
+              activeOpacity={0.7}
+            >
+              <Text style={[s.mastersChipText, leaderboardOverall && s.mastersChipTextActive]}>Overall</Text>
+            </TouchableOpacity>
+            {tournament.rounds.map((round, index) => (
+              <TouchableOpacity
+                key={round.id}
+                style={[s.mastersChip, !leaderboardOverall && selectedRound === index && s.mastersChipActive]}
+                onPress={() => {
+                  userPickedRoundRef.current = true;
+                  setLeaderboardOverall(false);
+                  setSelectedRound(index);
+                }}
+                activeOpacity={0.7}
+              >
+                <Text style={[s.mastersChipText, !leaderboardOverall && selectedRound === index && s.mastersChipTextActive]}>
+                  R{index + 1}
+                </Text>
+              </TouchableOpacity>
+            ))}
+          </ScrollView>
+        )}
+        {(resolvedBoard.mode === 'stableford' || resolvedBoard.mode === 'individual') && (
+          <View style={[s.inlineToggle, { justifyContent: 'flex-end', marginBottom: 14 }]}>
+            <Text style={[s.mastersToggleLabel, !leaderboardAlt && s.mastersToggleLabelActive]}>{toggleLabels.left}</Text>
+            <Switch
+              value={leaderboardAlt}
+              onValueChange={setLeaderboardAlt}
+              trackColor={{ false: 'rgba(255,255,255,0.2)', true: 'rgba(255,215,0,0.4)' }}
+              thumbColor="#fff"
+            />
+            <Text style={[s.mastersToggleLabel, leaderboardAlt && s.mastersToggleLabelActive]}>{toggleLabels.right}</Text>
+          </View>
+        )}
         {displayedBoard.entries.map((entry, i) => {
           const rankColors = ['#ffd700', '#c0c8d4', '#daa06d'];
           const rankColor = rankColors[i] || 'rgba(255,255,255,0.4)';
@@ -1660,6 +1686,7 @@ export default function HomeScreen({ navigation, route }) {
           </View>
           {!isGame && (
             <FlatList
+              testID="round-tabs"
               horizontal
               showsHorizontalScrollIndicator={false}
               data={tournament.rounds}
@@ -2631,6 +2658,15 @@ const makeStyles = (t) => StyleSheet.create({
   },
   mastersToggleLabel: { fontFamily: 'PlusJakartaSans-SemiBold', color: 'rgba(255,255,255,0.4)', fontSize: 11 },
   mastersToggleLabelActive: { color: 'rgba(255,255,255,0.9)' },
+  // Overall/R1/R2/… scope chip strip in the leaderboard card header.
+  mastersChipRow: { flexGrow: 0 },
+  mastersChip: {
+    paddingHorizontal: 12, paddingVertical: 6, borderRadius: 999,
+    backgroundColor: 'rgba(255,255,255,0.08)',
+  },
+  mastersChipActive: { backgroundColor: 'rgba(255,255,255,0.9)' },
+  mastersChipText: { fontFamily: 'PlusJakartaSans-SemiBold', color: 'rgba(255,255,255,0.6)', fontSize: 12 },
+  mastersChipTextActive: { color: '#006747' },
   mastersRow: {
     flexDirection: 'row', alignItems: 'center', paddingVertical: 10,
     borderBottomWidth: 1, borderBottomColor: 'rgba(255,255,255,0.12)',
