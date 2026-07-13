@@ -7,7 +7,9 @@ import { useTheme } from '../../theme/ThemeContext';
 // points. The leader reads through the accent: tinted rank circle, accent
 // left bar, accent points. While live, each player carries the app's
 // standard glowing HOLE badge.
-export default function RoundLeaderboard({ entries, round, live = false }) {
+export default function RoundLeaderboard({
+  entries, unit = 'pts', round, live = false,
+}) {
   const { theme } = useTheme();
   const s = useMemo(() => makeStyles(theme), [theme]);
   const rows = Array.isArray(entries) ? entries : [];
@@ -24,7 +26,7 @@ export default function RoundLeaderboard({ entries, round, live = false }) {
     <View style={s.card}>
       <Text style={s.title}>LEADERBOARD</Text>
       {rows.map((entry, i) => {
-        const isLeader = i === 0 && entry.totalPoints > 0;
+        const isLeader = i === 0 && entry.points > 0;
         const played = playedFor(entry.player.id);
         // Glowing "on hole N" badge, only meaningful mid-round — same rule
         // and recipe as the Home scoreboard.
@@ -56,9 +58,11 @@ export default function RoundLeaderboard({ entries, round, live = false }) {
               {Number.isFinite(hcp) ? <Text style={s.rowSub}>HCP {hcp}</Text> : null}
             </View>
             <Text style={[s.points, isLeader && s.pointsLead]}>
-              {entry.totalPoints} pts
+              {entry.points} {unit}
             </Text>
-            <Text style={s.strokes}>{entry.totalStrokes || '-'} str</Text>
+            {entry.strokes != null ? (
+              <Text style={s.strokes}>{entry.strokes || '-'} str</Text>
+            ) : null}
           </View>
         );
       })}

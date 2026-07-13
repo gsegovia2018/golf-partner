@@ -12,7 +12,7 @@ import { Feather } from '@expo/vector-icons';
 import { useTheme } from '../theme/ThemeContext';
 import { supabase } from '../lib/supabase';
 import {
-  readLocal, roundTotals, formatRoundLabel,
+  readLocal, roundLeaderboard, formatRoundLabel,
   getTournamentSnapshot, isTournamentFinished,
 } from '../store/tournamentStore';
 import { fetchTournament as fetchTournamentRemote } from '../store/tournamentRepo';
@@ -94,10 +94,9 @@ export default function RoundSummaryScreen({ navigation, route }) {
   const players = tournament?.players ?? [];
   const iAmPlaying = players.some((p) => p.user_id && p.user_id === me);
 
-  const totals = round ? roundTotals(round, players) : [];
-  const ranked = [...totals]
-    .filter((e) => e.totalStrokes > 0)
-    .sort((a, b) => b.totalPoints - a.totalPoints);
+  const { unit, entries: ranked } = round
+    ? roundLeaderboard(tournament, round)
+    : { unit: 'pts', entries: [] };
 
   const roundLabel = formatRoundLabel({
     kind: tournament?.kind,
@@ -182,7 +181,7 @@ export default function RoundSummaryScreen({ navigation, route }) {
                 live={live}
                 totalHoles={totalHoles}
               />
-              <RoundLeaderboard entries={ranked} round={round} live={live} />
+              <RoundLeaderboard entries={ranked} unit={unit} round={round} live={live} />
               <ScorecardTable
                 round={round}
                 players={rowPlayers}
