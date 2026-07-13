@@ -32,15 +32,18 @@ function relTime(ts) {
  *   onClose       — () => void
  *   hole          — hole number being resolved
  *   subjectName   — display name of the player whose score this is
- *   candidates    — [{ value, ts }] competing values, mine-first (local
- *                   value first)
+ *   candidates    — [{ value, ts, authorId, authorName }] competing values,
+ *                   mine-first (local value first)
+ *   blankAuthors  — [name] authors who reported no score for this cell
  *   currentValue  — the value currently kept in scores (the LWW winner)
  *   onResolve     — (value) => void — picks the final value
  */
 export default function ScoreConflictSheet({
-  visible, onClose, hole, subjectName, candidates, currentValue, onResolve,
+  visible, onClose, hole, subjectName, candidates, blankAuthors, currentValue, onResolve,
 }) {
-  const { theme } = useTheme();
+  // Tolerate a missing ThemeProvider (some render tests mount sheets without
+  // one) — matches BottomSheet.js / FinishConflictSheet.js.
+  const { theme } = useTheme() || {};
   const s = makeStyles(theme);
   const [picked, setPicked] = useState(null);
   const [manual, setManual] = useState(currentValue ?? DEFAULT_STROKES);
@@ -86,11 +89,11 @@ export default function ScoreConflictSheet({
                 >
                   {isPicked && (
                     <View style={s.tick}>
-                      <Feather name="check" size={12} color={theme.text.inverse} />
+                      <Feather name="check" size={12} color={theme?.text?.inverse} />
                     </View>
                   )}
                   <Text style={s.cardLabel}>
-                    {c.value === currentValue ? 'Current score' : 'Other entry'}
+                    {c.authorName ?? (c.value === currentValue ? 'Current score' : 'Other entry')}
                   </Text>
                   <Text style={s.cardValue}>{c.value == null ? '—' : c.value}</Text>
                   <Text style={s.cardHint}>{relTime(c.ts)}</Text>
@@ -98,6 +101,10 @@ export default function ScoreConflictSheet({
               );
             })}
           </View>
+
+          {Array.isArray(blankAuthors) && blankAuthors.length > 0 && (
+            <Text style={s.blankNote}>{`No score from ${blankAuthors.join(', ')}`}</Text>
+          )}
 
           <View style={s.manualRow}>
             <Text style={s.manualLabel}>Or enter a different score</Text>
@@ -107,7 +114,7 @@ export default function ScoreConflictSheet({
                 onPress={() => stepManual(-1)}
                 accessibilityLabel={subjectName ? `Decrease ${subjectName}'s score` : 'Decrease score'}
               >
-                <Feather name="minus" size={18} color={theme.text.primary} />
+                <Feather name="minus" size={18} color={theme?.text?.primary} />
               </TouchableOpacity>
               <Text style={s.manualValue}>{manual}</Text>
               <TouchableOpacity
@@ -115,7 +122,7 @@ export default function ScoreConflictSheet({
                 onPress={() => stepManual(1)}
                 accessibilityLabel={subjectName ? `Increase ${subjectName}'s score` : 'Increase score'}
               >
-                <Feather name="plus" size={18} color={theme.text.primary} />
+                <Feather name="plus" size={18} color={theme?.text?.primary} />
               </TouchableOpacity>
             </View>
           </View>
@@ -139,69 +146,73 @@ export default function ScoreConflictSheet({
 
 const makeStyles = (theme) => StyleSheet.create({
   sheet: {
-    backgroundColor: theme.bg.primary,
+    backgroundColor: theme?.bg?.primary,
     borderTopLeftRadius: 20, borderTopRightRadius: 20,
     paddingHorizontal: 20, paddingTop: 8, paddingBottom: 24,
     width: '100%', maxWidth: 560, alignSelf: 'center',
   },
   handle: {
     alignSelf: 'center', width: 36, height: 4, borderRadius: 2,
-    backgroundColor: theme.border.default, marginBottom: 12,
+    backgroundColor: theme?.border?.default, marginBottom: 12,
   },
   titleRow: { flexDirection: 'row', alignItems: 'center', gap: 8 },
-  title: { fontFamily: 'PlusJakartaSans-Bold', fontSize: 16, color: theme.text.primary },
+  title: { fontFamily: 'PlusJakartaSans-Bold', fontSize: 16, color: theme?.text?.primary },
   subtitle: {
-    fontFamily: 'PlusJakartaSans-Medium', fontSize: 13, color: theme.text.muted,
+    fontFamily: 'PlusJakartaSans-Medium', fontSize: 13, color: theme?.text?.muted,
     marginTop: 4, marginBottom: 16,
   },
   cardsRow: { flexDirection: 'row', gap: 12, flexWrap: 'wrap' },
   card: {
     flexGrow: 1, flexBasis: 0, minWidth: 120,
-    backgroundColor: theme.bg.card,
-    borderRadius: 14, borderWidth: 1.5, borderColor: theme.border.default,
+    backgroundColor: theme?.bg?.card,
+    borderRadius: 14, borderWidth: 1.5, borderColor: theme?.border?.default,
     paddingVertical: 16, paddingHorizontal: 12,
     alignItems: 'center', gap: 6, position: 'relative',
   },
-  cardPicked: { borderColor: theme.accent.primary, backgroundColor: theme.accent.light },
+  cardPicked: { borderColor: theme?.accent?.primary, backgroundColor: theme?.accent?.light },
   tick: {
     position: 'absolute', top: 8, right: 8,
-    width: 20, height: 20, borderRadius: 10, backgroundColor: theme.accent.primary,
+    width: 20, height: 20, borderRadius: 10, backgroundColor: theme?.accent?.primary,
     alignItems: 'center', justifyContent: 'center',
   },
   cardLabel: {
-    fontFamily: 'PlusJakartaSans-Bold', fontSize: 11, color: theme.text.muted,
+    fontFamily: 'PlusJakartaSans-Bold', fontSize: 11, color: theme?.text?.muted,
     textTransform: 'uppercase', letterSpacing: 0.5,
   },
   cardValue: {
-    fontFamily: 'PlusJakartaSans-ExtraBold', fontSize: 30, color: theme.text.primary,
+    fontFamily: 'PlusJakartaSans-ExtraBold', fontSize: 30, color: theme?.text?.primary,
   },
-  cardHint: { fontFamily: 'PlusJakartaSans-Medium', fontSize: 11, color: theme.text.muted },
+  cardHint: { fontFamily: 'PlusJakartaSans-Medium', fontSize: 11, color: theme?.text?.muted },
+  blankNote: {
+    fontFamily: 'PlusJakartaSans-Medium', fontSize: 12, color: theme?.text?.muted,
+    marginTop: 10,
+  },
   manualRow: {
     flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
     marginTop: 16, paddingTop: 16,
-    borderTopWidth: 1, borderTopColor: theme.border.default,
+    borderTopWidth: 1, borderTopColor: theme?.border?.default,
   },
-  manualLabel: { fontFamily: 'PlusJakartaSans-SemiBold', fontSize: 13, color: theme.text.secondary },
+  manualLabel: { fontFamily: 'PlusJakartaSans-SemiBold', fontSize: 13, color: theme?.text?.secondary },
   stepper: { flexDirection: 'row', alignItems: 'center', gap: 12 },
   stepBtn: {
     width: 34, height: 34, borderRadius: 10,
-    backgroundColor: theme.bg.secondary,
-    borderWidth: 1, borderColor: theme.border.default,
+    backgroundColor: theme?.bg?.secondary,
+    borderWidth: 1, borderColor: theme?.border?.default,
     alignItems: 'center', justifyContent: 'center',
   },
   manualValue: {
-    fontFamily: 'PlusJakartaSans-ExtraBold', fontSize: 20, color: theme.text.primary,
+    fontFamily: 'PlusJakartaSans-ExtraBold', fontSize: 20, color: theme?.text?.primary,
     minWidth: 24, textAlign: 'center',
   },
   confirm: {
-    marginTop: 18, backgroundColor: theme.accent.primary,
+    marginTop: 18, backgroundColor: theme?.accent?.primary,
     borderRadius: 14, paddingVertical: 14, alignItems: 'center',
   },
-  confirmDisabled: { backgroundColor: theme.bg.secondary },
-  confirmText: { fontFamily: 'PlusJakartaSans-ExtraBold', fontSize: 15, color: theme.text.inverse },
-  confirmTextDisabled: { color: theme.text.muted },
+  confirmDisabled: { backgroundColor: theme?.bg?.secondary },
+  confirmText: { fontFamily: 'PlusJakartaSans-ExtraBold', fontSize: 15, color: theme?.text?.inverse },
+  confirmTextDisabled: { color: theme?.text?.muted },
   foot: {
-    fontFamily: 'PlusJakartaSans-Medium', fontSize: 11, color: theme.text.muted,
+    fontFamily: 'PlusJakartaSans-Medium', fontSize: 11, color: theme?.text?.muted,
     textAlign: 'center', marginTop: 10,
   },
 });

@@ -6,6 +6,7 @@ import {
   pickupStrokes, isPickupScore, scrambleUnits, matchPlayEffectiveHandicaps, calcExtraShots,
 } from '../../store/tournamentStore';
 import { scoreCellState } from '../../store/officialScoring';
+import { deriveCell } from '../../store/scoreEntries';
 import { isScrambleMode } from '../scoringModes';
 import { PlayerCard } from './PlayerCard';
 import { holePoints } from './scoreModel';
@@ -65,6 +66,7 @@ export function holePagePropsEqual(prev, next) {
     || prev.onOpenConflict !== next.onOpenConflict
     || prev.shotCollapsed !== next.shotCollapsed
     || prev.onToggleShotDetail !== next.onToggleShotDetail
+    || prev.conflictHoles !== next.conflictHoles
   ) {
     return false;
   }
@@ -90,6 +92,7 @@ export const HolePage = React.memo(function HolePage({
   onOpenConflict,
   shotCollapsed, onToggleShotDetail,
   totalsMap,
+  conflictHoles = new Set(),
 }) {
   // Every game mode now renders the unified PlayerCard. Scramble modes score
   // one ball per team under the captain — swap the roster for synthetic team
@@ -203,7 +206,15 @@ export const HolePage = React.memo(function HolePage({
             canResolveHere = canEdit;
           }
 
-          const conflict = round.scoreConflicts?.[player.id]?.[pageHole.number] ?? null;
+          // Casual-mode conflict flag: derived live from per-author score
+          // entries via deriveCell, but gated by the same "everyone off the
+          // hole" presence set the go-to-hole dots use (ScorecardScreen's
+          // surfaceable-gated conflictHoles). Surfacing a disagreement on the
+          // hole you're actively playing — before every scorer has even left
+          // it — is the premature-surfacing problem the overhaul removes
+          // elsewhere; gating here keeps the hero card consistent with that.
+          const conflict = deriveCell(round, player.id, pageHole.number).status === 'conflict'
+            && conflictHoles.has(pageHole.number);
 
           return (
             <PlayerCard

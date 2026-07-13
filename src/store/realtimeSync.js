@@ -13,7 +13,7 @@
 // the assembled tournament object cached locally.
 import { supabase } from '../lib/supabase';
 import { readLocal, saveLocal } from './tournamentStore';
-import { applyPendingMutations, preserveLocalScoreConflicts } from './mutate';
+import { applyPendingMutations, preserveLocalConflictState } from './mutate';
 import { syncQueue } from './syncQueue';
 
 function deepClone(x) {
@@ -61,6 +61,50 @@ export function applyScoreRow(t, row, eventType) {
   if (Object.keys(playerScores).length === 0) delete scores[row.player_id];
   else scores[row.player_id] = playerScores;
   round.scores = scores;
+  return next;
+}
+
+// game_score_entries row: { round_id, tournament_id, player_id, hole,
+// author_id, strokes, updated_at }. Per-author scoring entries, keyed three
+// levels deep (player → hole → author) so each contributor's independent
+// entry survives alongside the others — unlike game_scores (one settled
+// value per player+hole), this table can hold multiple simultaneous authors
+// for the same cell pending resolution. DELETE (or the row simply being
+// retracted) removes just that author's entry; empty author/hole/player
+// buckets are pruned the same way applyScoreRow prunes empty player buckets.
+export function applyScoreEntryRow(t, row, eventType) {
+  const next = deepClone(t);
+  const round = next.rounds?.find((r) => r.id === row.round_id);
+  if (!round) return next;
+  const entries = { ...(round.scoreEntries ?? {}) };
+  const byHole = { ...(entries[row.player_id] ?? {}) };
+  const byAuthor = { ...(byHole[row.hole] ?? {}) };
+  if (isDeleteEvent(eventType)) delete byAuthor[row.author_id];
+  else byAuthor[row.author_id] = { value: row.strokes ?? null, ts: new Date(row.updated_at).getTime() };
+  if (Object.keys(byAuthor).length === 0) delete byHole[row.hole];
+  else byHole[row.hole] = byAuthor;
+  if (Object.keys(byHole).length === 0) delete entries[row.player_id];
+  else entries[row.player_id] = byHole;
+  round.scoreEntries = entries;
+  return next;
+}
+
+// game_score_resolutions row: { round_id, tournament_id, player_id, hole,
+// value, resolved_by, resolved_at }. The settled outcome once conflicting
+// game_score_entries rows for a cell have been reconciled — one resolution
+// per player+hole. DELETE removes it outright; empty per-player buckets are
+// pruned the same way applyScoreRow prunes empty player buckets.
+export function applyScoreResolutionRow(t, row, eventType) {
+  const next = deepClone(t);
+  const round = next.rounds?.find((r) => r.id === row.round_id);
+  if (!round) return next;
+  const res = { ...(round.scoreResolutions ?? {}) };
+  const byHole = { ...(res[row.player_id] ?? {}) };
+  if (isDeleteEvent(eventType)) delete byHole[row.hole];
+  else byHole[row.hole] = { value: row.value ?? null, by: row.resolved_by, ts: new Date(row.resolved_at).getTime() };
+  if (Object.keys(byHole).length === 0) delete res[row.player_id];
+  else res[row.player_id] = byHole;
+  round.scoreResolutions = res;
   return next;
 }
 
@@ -211,6 +255,8 @@ export function applyTournamentRow(t, row) {
 
 const APPLIERS = {
   game_scores: applyScoreRow,
+  game_score_entries: applyScoreEntryRow,
+  game_score_resolutions: applyScoreResolutionRow,
   game_shot_details: applyShotDetailRow,
   game_round_notes: applyNoteRow,
   game_rounds: applyRoundRow,
@@ -222,6 +268,41 @@ const APPLIERS = {
 
 let _channel = null;
 let _channelId = null;
+
+// ── Presence: per-device currentHole broadcast ───────────────────────────────
+// Supabase presence state shape: { [presenceKey]: [{ authorId, currentHole },
+// ...] }. Reduced to the highest currentHole seen per authorId — pure, so the
+// conflict-surfacing gate (authorProgress/isCellSurfaceable) can consume it
+// without touching the channel itself.
+export function reducePresenceProgress(state) {
+  const out = {};
+  for (const metas of Object.values(state ?? {})) {
+    for (const m of metas ?? []) {
+      if (m?.authorId && (m.currentHole ?? 0) > (out[m.authorId] ?? 0)) out[m.authorId] = m.currentHole;
+    }
+  }
+  return out;
+}
+
+const _presenceCbs = new Set();
+let _lastHole = null;
+let _lastAuthor = null;
+
+export function getPresenceProgress() {
+  if (!_channel) return {};
+  return reducePresenceProgress(_channel.presenceState());
+}
+
+export function subscribeProgress(cb) {
+  _presenceCbs.add(cb);
+  return () => _presenceCbs.delete(cb);
+}
+
+export function setPresenceHole(authorId, hole) {
+  _lastAuthor = authorId;
+  _lastHole = hole;
+  if (_channel && authorId) _channel.track({ authorId, currentHole: hole });
+}
 
 // This tournament's still-undrained queue entries, read fresh (not captured
 // earlier) so each settle pass sees whatever is queued right now.
@@ -236,10 +317,10 @@ async function pendingEntriesFor(id) {
 // mutations mirrors tournamentStore's own read-path overlay, so we never
 // clobber an optimistic local edit whose write hasn't round-tripped yet),
 // restores the device-local meId (never trusted from a realtime row, same as
-// _overlayAndSave), and preserves round.scoreConflicts (LOCAL-ONLY markers —
-// see mutate.js's preserveLocalScoreConflicts — that no row event ever
-// carries) before saving. Skips entirely if this tournament has no local
-// cache to patch (nothing to preserve, nothing to render).
+// _overlayAndSave), and preserves round.scoreEntries/scoreResolutions
+// (LOCAL-ONLY hot keys — see mutate.js's preserveLocalConflictState — that no
+// row event ever carries) before saving. Skips entirely if this tournament
+// has no local cache to patch (nothing to preserve, nothing to render).
 //
 // Bounded settle loop — the SAME race guard as syncWorker.drainTournament and
 // tournamentStore._overlayAndSave (neither is exported, so this mirrors their
@@ -268,7 +349,7 @@ function makeHandler(id, applyFn) {
     for (let pass = 0; pass < 3; pass++) {
       let merged = applyPendingMutations(patched, snapshot);
       if ('meId' in cached) merged.meId = cached.meId;
-      merged = preserveLocalScoreConflicts(merged, cached);
+      merged = preserveLocalConflictState(merged, cached);
       await saveLocal(merged, { makeActive: false });
       const latest = await pendingEntriesFor(id);
       const stable = latest.length === snapshot.length
@@ -313,7 +394,13 @@ export async function ensureRealtimeForTournament(id) {
       makeHandler(id, applyFn),
     );
   }
-  channel.subscribe();
+  channel.on('presence', { event: 'sync' }, () => {
+    const progress = reducePresenceProgress(channel.presenceState());
+    for (const cb of _presenceCbs) cb(progress);
+  });
+  channel.subscribe((status) => {
+    if (status === 'SUBSCRIBED' && _lastAuthor) channel.track({ authorId: _lastAuthor, currentHole: _lastHole });
+  });
 
   _channel = channel;
   _channelId = id;

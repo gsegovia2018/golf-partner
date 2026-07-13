@@ -14,7 +14,7 @@ import { isScrambleMode } from '../scoringModes';
 import { scrambleUnits } from '../../store/tournamentStore';
 import DiscrepancySheet from '../DiscrepancySheet';
 import ScoreConflictSheet from '../ScoreConflictSheet';
-import { listRoundConflicts } from '../../store/scoring';
+import { deriveCell } from '../../store/scoreEntries';
 import { getShotDetailCollapsed, setShotDetailCollapsed } from '../../lib/prefs';
 
 // Web-only CSS scroll-snap. On native, `pagingEnabled` is handled by the
@@ -38,7 +38,7 @@ if (Platform.OS === 'web' && typeof document !== 'undefined') {
   }
 }
 
-export function HoleView({ round, roundIndex, players, scores, shotDetails, meId, onSetShot, onPickMe, notes, currentHole, hole, isBestBall, bbResult, settings, onStep, onSetScore, editable, onNext, onGoToHole, onFinish, holeCount, showQuickFinish, finishBusy, showRunning, getScoreAnim, celebration, celebrationAnim, refreshing, onRefresh, official, officialDiscrepancy, officialEditableSource, officialSetScore, officialHasAttested, officialAttestBusy, officialAttestError, onAttest, onResolveConflict, focusConflict, onFocusConflictHandled }) {
+export function HoleView({ round, roundIndex, players, scores, shotDetails, meId, onSetShot, onPickMe, notes, currentHole, hole, isBestBall, bbResult, settings, onStep, onSetScore, editable, onNext, onGoToHole, onFinish, holeCount, showQuickFinish, finishBusy, showRunning, getScoreAnim, celebration, celebrationAnim, refreshing, onRefresh, official, officialDiscrepancy, officialEditableSource, officialSetScore, officialHasAttested, officialAttestBusy, officialAttestError, onAttest, onResolveConflict, focusConflict, onFocusConflictHandled, conflictHoles = new Set(), authorName }) {
   const { theme } = useTheme();
   const s = useMemo(() => makeScorecardStyles(theme), [theme]);
   const [holePickerOpen, setHolePickerOpen] = useState(false);
@@ -81,11 +81,6 @@ export function HoleView({ round, roundIndex, players, scores, shotDetails, meId
     }
   }, [focusConflict, onGoToHole, onFocusConflictHandled]);
 
-  // Holes with at least one unresolved conflict — drives the go-to-hole dot.
-  const conflictHoles = useMemo(
-    () => new Set(listRoundConflicts(round).map((c) => c.hole)),
-    [round],
-  );
   const onLastHole = currentHole >= holeCount;
   const [pagerSize, setPagerSize] = useState({ width: 0, height: 0 });
   const pagerRef = useRef(null);
@@ -264,6 +259,7 @@ export function HoleView({ round, roundIndex, players, scores, shotDetails, meId
                 shotCollapsed={shotCollapsed}
                 onToggleShotDetail={toggleShotDetail}
                 totalsMap={scorecardTotals}
+                conflictHoles={conflictHoles}
               />
             ))}
           </ScrollView>
@@ -468,18 +464,18 @@ export function HoleView({ round, roundIndex, players, scores, shotDetails, meId
           card flagged with a conflict marker. */}
       {conflictTarget && (() => {
         const { hole: cHole, playerId } = conflictTarget;
-        const marker = round.scoreConflicts?.[playerId]?.[cHole];
-        if (!marker) return null;
+        const d = deriveCell(round, playerId, cHole);
+        if (d.status !== 'conflict') return null;
         const subject = players.find((p) => p.id === playerId);
-        const currentValue = scores?.[playerId]?.[cHole] ?? null;
         return (
           <ScoreConflictSheet
             visible
             onClose={() => setConflictTarget(null)}
             hole={cHole}
             subjectName={subject?.name ?? 'Player'}
-            candidates={marker.candidates ?? []}
-            currentValue={currentValue}
+            candidates={d.candidates.map((c) => ({ value: c.value, ts: c.ts, authorId: c.authorId, authorName: authorName?.(c.authorId) ?? 'Someone' }))}
+            blankAuthors={d.blankAuthors.map((a) => authorName?.(a) ?? 'Someone')}
+            currentValue={d.effective}
             onResolve={(value) => {
               onResolveConflict?.(playerId, cHole, value);
               setConflictTarget(null);

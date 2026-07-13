@@ -22,7 +22,9 @@ import {
   readLocal, refreshTournamentFromRemote,
 } from '../store/tournamentStore';
 import { isOnline } from '../lib/connectivity';
-import { ensureRealtimeForTournament } from '../store/realtimeSync';
+import {
+  ensureRealtimeForTournament, setPresenceHole, getPresenceProgress, subscribeProgress,
+} from '../store/realtimeSync';
 import { mutate } from '../store/mutate';
 import { syncNow, syncSettled } from '../store/syncWorker';
 import { fetchPlayers } from '../store/libraryStore';
@@ -49,6 +51,8 @@ import {
   celebrationFor,
 } from '../components/scorecard/constants';
 import { reconcileShotDetail, listRoundConflicts, roundScoringMode, roundBestBallValues } from '../store/scoring';
+import { surfaceableConflicts, deriveCell } from '../store/scoreEntries';
+import { getDeviceAuthorId } from '../store/deviceId';
 import { makeScorecardStyles } from '../components/scorecard/styles';
 import { HoleView } from '../components/scorecard/HoleView';
 import { GridView } from '../components/scorecard/GridView';
@@ -538,6 +542,18 @@ export default function ScorecardScreen({ navigation, route }) {
     return nextSave;
   }, [reload]);
 
+  // Author identity for score writes. Declared BEFORE autoSave/resolveConflict
+  // because those useCallbacks list `authorId` in their dependency arrays,
+  // which React evaluates at render time — declaring it further down would be a
+  // temporal-dead-zone ReferenceError that crashes the scorecard on mount.
+  const meId = tournament?.meId ?? null;
+  const authorId = meId ?? getDeviceAuthorId();
+  const authorName = useCallback((aId) => {
+    if (aId === 'legacy') return 'Earlier entry';
+    const p = (tournament?.players ?? []).find((pl) => pl.id === aId);
+    return p?.name ?? 'Someone';
+  }, [tournament]);
+
   const autoSave = useCallback((newScores) => {
     if (!tournamentRef.current) return Promise.resolve(null);
     return enqueueSave(async () => {
@@ -572,6 +588,7 @@ export default function ScorecardScreen({ navigation, route }) {
           playerId: cell.playerId,
           hole: cell.hole,
           value: cell.value,
+          authorId,
         }, { deferSync: true });
         // Commit immediately so the next chained unit (or a notes save)
         // diffs/clones from this state, not from the pre-save baseline.
@@ -579,7 +596,7 @@ export default function ScorecardScreen({ navigation, route }) {
       }
       return t;
     });
-  }, [roundIndex, enqueueSave]);
+  }, [roundIndex, enqueueSave, authorId]);
 
   // Keep the latest scores/notes in refs so retrySave can re-push them
   // without being re-created on every keystroke.
@@ -668,11 +685,12 @@ export default function ScorecardScreen({ navigation, route }) {
         playerId,
         hole: holeNumber,
         value,
+        resolvedBy: authorId,
       });
       tournamentRef.current = t;
       setTournament(t);
     });
-  }, [roundIndex, enqueueSave]);
+  }, [roundIndex, enqueueSave, authorId]);
 
   // Persist a single hole's shot detail for the "me" player. Routed through
   // the same serial save chain as scores so concurrent edits don't race.
@@ -844,7 +862,6 @@ export default function ScorecardScreen({ navigation, route }) {
   // stays stable while the tournament loads.
   const round = tournament?.rounds?.[roundIndex] ?? null;
   const players = tournament?.players ?? [];
-  const meId = tournament?.meId ?? null;
 
   // Lock a freshly opened finished round to view-only. "Finished" means
   // either this specific round has every player scored on every hole, OR the
@@ -1029,18 +1046,27 @@ export default function ScorecardScreen({ navigation, route }) {
   }, [official, officialData.members, officialData.scores]);
 
   // Live rows for the finish-time conflict summary — recomputed from the
-  // blob so a resolved row disappears as soon as resolveConflict commits.
+  // per-author score entries (via deriveCell) so a resolved row disappears
+  // as soon as resolveConflict commits, and each candidate carries the
+  // author who wrote it.
   const finishConflictRows = useMemo(() => {
-    const r = tournament?.rounds?.[roundIndex];
+    const t = tournament;
+    const r = t?.rounds?.[roundIndex];
     if (!r) return [];
-    return listRoundConflicts(r).map(({ playerId, hole }) => ({
-      playerId,
-      hole,
-      playerName: (tournament.players ?? []).find((p) => p.id === playerId)?.name ?? 'Player',
-      currentValue: r.scores?.[playerId]?.[hole] ?? null,
-      candidates: r.scoreConflicts?.[playerId]?.[hole]?.candidates ?? [],
-    }));
-  }, [tournament, roundIndex]);
+    return listRoundConflicts(r).map(({ playerId, hole }) => {
+      const d = deriveCell(r, playerId, hole);
+      return {
+        playerId,
+        hole,
+        playerName: (t.players ?? []).find((p) => p.id === playerId)?.name ?? 'Player',
+        currentValue: d.effective,
+        candidates: d.candidates.map((c) => ({
+          value: c.value, ts: c.ts, authorId: c.authorId, authorName: authorName(c.authorId),
+        })),
+        blankAuthors: d.blankAuthors.map((a) => authorName(a)),
+      };
+    });
+  }, [tournament, roundIndex, authorName]);
 
   const setScore = useCallback((playerId, holeNumber, value) => {
     if (!official && viewOnly) return;
@@ -1161,14 +1187,35 @@ export default function ScorecardScreen({ navigation, route }) {
     syncNow();
   }, [official]);
 
-  useEffect(() => { flushScoreSync(); }, [currentHole, flushScoreSync]);
+  useEffect(() => {
+    flushScoreSync();
+    setPresenceHole(authorId, currentHole);
+  }, [currentHole, flushScoreSync, authorId]);
   useEffect(() => () => { flushScoreSync(); }, [flushScoreSync]);
+
+  // Live presence progress from other phones — seeded on mount/tournament
+  // change, then kept current via the realtime subscription. Drives the
+  // presence-gated conflict dots (a conflict only surfaces once every author
+  // who touched that hole has moved past it).
+  const [presenceProgress, setPresenceProgress] = useState({});
+  useEffect(() => {
+    setPresenceProgress(getPresenceProgress());
+    return subscribeProgress(setPresenceProgress);
+  }, [tournament?.id]);
   useEffect(() => {
     const sub = AppState.addEventListener('change', (state) => {
       if (state === 'background' || state === 'inactive') flushScoreSync();
     });
     return () => sub.remove();
   }, [flushScoreSync]);
+
+  // Mid-round conflict dots: presence-gated so a hole only lights up once
+  // every author who wrote to it has moved past it (avoids flashing a
+  // conflict for a value someone is still actively re-typing).
+  const conflictHoles = useMemo(
+    () => new Set(surfaceableConflicts(round, presenceProgress).map((c) => c.hole)),
+    [round, presenceProgress],
+  );
 
   // Back from the scorecard. The live center-tab action requests Tournament so
   // the user lands on the active round summary while a round is live. Other
@@ -1642,6 +1689,8 @@ export default function ScorecardScreen({ navigation, route }) {
           onResolveConflict={resolveConflict}
           focusConflict={conflictFocus}
           onFocusConflictHandled={clearConflictFocus}
+          conflictHoles={conflictHoles}
+          authorName={authorName}
         />
       ) : (
         <GridView

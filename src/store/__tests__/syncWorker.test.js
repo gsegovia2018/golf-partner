@@ -1,7 +1,7 @@
 // jest.mock calls are hoisted above these imports by babel-jest, so the
 // mocks are in place before ../syncWorker and its dependencies load.
 import {
-  drainTournament, drainLibrary, setScoreConflictHandler, syncNow, syncSettled,
+  drainTournament, drainLibrary, syncNow, syncSettled,
   isPermanentSyncError,
 } from '../syncWorker';
 import { readLocal, saveLocal, _setSyncStatus } from '../tournamentStore';
@@ -20,8 +20,7 @@ jest.mock('../mutationWrites', () => ({ executeMutation: jest.fn() }));
 
 jest.mock('../mutate', () => ({
   applyPendingMutations: jest.fn((t) => t),
-  recordScoreConflict: jest.fn(),
-  preserveLocalScoreConflicts: jest.fn((target) => target),
+  preserveLocalConflictState: jest.fn((target) => target),
 }));
 
 jest.mock('../tournamentRepo', () => ({ fetchTournament: jest.fn(() => Promise.resolve(null)) }));
@@ -53,7 +52,6 @@ const localBlob = { id: 't1', rounds: [{ id: 'r1', scores: {} }] };
 describe('drainTournament', () => {
   beforeEach(() => {
     jest.clearAllMocks();
-    setScoreConflictHandler(null);
     readLocal.mockResolvedValue(localBlob);
     executeMutation.mockResolvedValue({ conflict: null });
     fetchTournament.mockResolvedValue(null);
@@ -177,43 +175,12 @@ describe('drainTournament', () => {
     expect(_setSyncStatus).toHaveBeenCalledWith('error');
   });
 
-  test('a returned conflict is forwarded to the registered conflict handler', async () => {
-    const handler = jest.fn(() => Promise.resolve());
-    setScoreConflictHandler(handler);
-    const conflict = {
-      roundId: 'r1', playerId: 'p1', hole: 5, mine: 6, theirs: 5,
-    };
-    executeMutation.mockResolvedValueOnce({ conflict });
+  test('executeMutation always resolving { conflict: null } never blocks the drop (conflict state is derived, not raised, here)', async () => {
+    executeMutation.mockResolvedValueOnce({ conflict: null });
     const e1 = { id: 'e1', tournamentId: 't1', mutation: { type: 'score.set' } };
 
     await drainTournament('t1', [e1]);
 
-    expect(handler).toHaveBeenCalledWith('t1', conflict);
-    expect(syncQueue.drop).toHaveBeenCalledWith('e1'); // still dropped
-  });
-
-  test('a conflict handler that throws does not abort the drain', async () => {
-    setScoreConflictHandler(() => { throw new Error('marker write failed'); });
-    executeMutation.mockResolvedValueOnce({
-      conflict: {
-        roundId: 'r1', playerId: 'p1', hole: 5, mine: 6, theirs: 5,
-      },
-    });
-    const e1 = { id: 'e1', tournamentId: 't1', mutation: { type: 'score.set' } };
-
-    await expect(drainTournament('t1', [e1])).resolves.toBeUndefined();
-    expect(syncQueue.drop).toHaveBeenCalledWith('e1');
-  });
-
-  test('with no conflict handler registered, a conflict is silently ignored', async () => {
-    executeMutation.mockResolvedValueOnce({
-      conflict: {
-        roundId: 'r1', playerId: 'p1', hole: 5, mine: 6, theirs: 5,
-      },
-    });
-    const e1 = { id: 'e1', tournamentId: 't1', mutation: { type: 'score.set' } };
-
-    await expect(drainTournament('t1', [e1])).resolves.toBeUndefined();
     expect(syncQueue.drop).toHaveBeenCalledWith('e1');
   });
 

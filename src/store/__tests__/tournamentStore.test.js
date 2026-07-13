@@ -24,7 +24,7 @@ const mockState = { tournamentsRow: null };
 jest.mock('../mutate', () => ({
   mutate: jest.fn((t) => Promise.resolve(t)),
   applyPendingMutations: jest.fn((t) => t),
-  preserveLocalScoreConflicts: jest.fn((target) => target),
+  preserveLocalConflictState: jest.fn((target) => target),
 }));
 
 jest.mock('../../lib/supabase', () => {

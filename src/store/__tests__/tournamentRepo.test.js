@@ -405,11 +405,11 @@ describe('upsertRound', () => {
     expect(call.ops[0].opts).toEqual({ onConflict: 'tournament_id,id' });
   });
 
-  test('also strips scoreConflicts/scoreResolutions (matches the server round-body contract)', async () => {
+  test('also strips scoreEntries/scoreResolutions (matches the server round-body contract)', async () => {
     const { upsertRound } = require('../tournamentRepo');
     const round = {
       id: 'r0',
-      scoreConflicts: { p1: {} },
+      scoreEntries: { p1: {} },
       scoreResolutions: { p1: {} },
     };
 
