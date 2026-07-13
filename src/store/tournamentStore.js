@@ -20,6 +20,17 @@ import {
   roundScoringMode,
   roundBestBallValues,
   teamShapeOf,
+  stablefordComparator,
+  matchPlayRoundTally,
+  sindicatoRoundTally,
+  pairsMatchRoundTally,
+  scrambleRoundTally,
+  tournamentHasMixedModes,
+  tournamentStablefordLeaderboard,
+  tournamentSindicatoLeaderboard,
+  tournamentScrambleLeaderboard,
+  tournamentMatchPlayStandings,
+  tournamentPairsMatchStandings,
 } from './scoring';
 import { isScoringModeAllowed, fallbackScoringMode } from '../components/ScoringModePicker';
 import { scoringModeUsesTeams, isScrambleMode } from '../components/scoringModes';
@@ -1479,7 +1490,109 @@ export function tournamentLeaderboard(tournament) {
     });
   });
 
-  return totals.sort((a, b) => b.points - a.points);
+  return totals.sort(stablefordComparator);
+}
+
+// Per-round leaderboard in the round's own effective mode, normalized to
+// { player, points, strokes, handicap? } entries. Mirrors the per-mode mapping
+// HomeScreen's old getSelectedRoundValue did, but returns the whole board.
+export function roundLeaderboard(tournament, round) {
+  const players = tournament?.players ?? [];
+  const mode = roundScoringMode(tournament, round);
+  const totals = roundTotals(round, players); // { player, handicap, totalPoints, totalStrokes }
+  const strokesOf = (pid) => totals.find((t) => t.player.id === pid)?.totalStrokes ?? 0;
+
+  if (mode === 'matchplay') {
+    const tally = matchPlayRoundTally(round, players);
+    if (!tally) return { mode, unit: 'holes', entries: [] };
+    const entries = [
+      { player: players[0], points: tally.aWins, strokes: strokesOf(players[0].id) },
+      { player: players[1], points: tally.bWins, strokes: strokesOf(players[1].id) },
+    ].sort((a, b) => b.points - a.points);
+    return { mode, unit: 'holes', entries };
+  }
+
+  if (mode === 'sindicato') {
+    const tally = sindicatoRoundTally(round, players);
+    if (!tally) return { mode, unit: 'pts', entries: [] };
+    const entries = tally.totals.map((t) => ({
+      player: t.player, points: t.points, strokes: strokesOf(t.player.id),
+    }));
+    return { mode, unit: 'pts', entries }; // sindicatoRoundTally.totals is points-desc
+  }
+
+  if (mode === 'pairsmatchplay') {
+    const tally = pairsMatchRoundTally(round, players);
+    if (!tally) return { mode, unit: 'pts', entries: [] };
+    const entries = [];
+    (round.pairs ?? []).forEach((pair, idx) => {
+      const pts = idx === 0 ? tally.team1 : tally.team2;
+      (pair ?? []).forEach((m) => {
+        const player = players.find((p) => p.id === m?.id);
+        if (player) entries.push({ player, points: pts, strokes: strokesOf(player.id) });
+      });
+    });
+    entries.sort((a, b) => b.points - a.points);
+    return { mode, unit: 'pts', entries };
+  }
+
+  if (isScrambleMode(mode)) {
+    const tally = scrambleRoundTally(round, players);
+    if (!tally) return { mode, unit: 'pts', entries: [] };
+    const entries = [];
+    tally.totals.forEach((row) => {
+      (row.unit.members ?? []).forEach((member) => {
+        const player = players.find((p) => p.id === member?.id) ?? member;
+        entries.push({ player, points: row.points, strokes: row.strokes });
+      });
+    });
+    entries.sort((a, b) => b.points - a.points);
+    return { mode, unit: 'pts', entries };
+  }
+
+  if (mode === 'bestball') {
+    const roles = assignBestWorstRoles(round, players);
+    const { bestBallValue, worstBallValue } = roundBestBallValues(tournament, round);
+    const entries = players.map((player) => {
+      const r = roles[player.id];
+      const points = r ? r.bestWon * bestBallValue + r.worstWon * worstBallValue : 0;
+      return { player, points, strokes: strokesOf(player.id) };
+    }).sort((a, b) => b.points - a.points);
+    return { mode, unit: 'pts', entries };
+  }
+
+  // individual / stableford
+  const entries = totals
+    .map((t) => ({ player: t.player, points: t.totalPoints, strokes: t.totalStrokes, handicap: t.handicap }))
+    .sort(stablefordComparator);
+  return { mode, unit: 'pts', entries };
+}
+
+// The whole-tournament board: native aggregate when every round shares one
+// effective mode, else the Stableford total (already strokes-tiebroken).
+// Centralizes the routing that used to live inline in HomeScreen.
+export function tournamentLeaderboardResolved(tournament) {
+  const rounds = tournament?.rounds ?? [];
+  if (tournamentHasMixedModes(tournament)) {
+    return { mode: 'stableford', unit: 'pts', entries: tournamentStablefordLeaderboard(tournament) };
+  }
+  const mode = roundScoringMode(tournament, rounds[0]);
+  if (mode === 'matchplay') {
+    return { mode, unit: 'holes', entries: tournamentMatchPlayStandings(tournament)?.board ?? [] };
+  }
+  if (mode === 'sindicato') {
+    return { mode, unit: 'pts', entries: tournamentSindicatoLeaderboard(tournament) };
+  }
+  if (mode === 'bestball') {
+    return { mode, unit: 'pts', entries: tournamentBestWorstLeaderboard(tournament) };
+  }
+  if (mode === 'pairsmatchplay') {
+    return { mode, unit: 'pts', entries: tournamentPairsMatchStandings(tournament)?.board ?? [] };
+  }
+  if (isScrambleMode(mode)) {
+    return { mode, unit: 'pts', entries: tournamentScrambleLeaderboard(tournament) };
+  }
+  return { mode: mode ?? 'stableford', unit: 'pts', entries: tournamentLeaderboard(tournament) };
 }
 
 // Ensure the tournament has one editor invite code and one viewer invite

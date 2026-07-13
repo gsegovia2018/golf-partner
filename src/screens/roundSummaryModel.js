@@ -21,14 +21,14 @@ export function buildRoundRecap({ round, ranked } = {}) {
   const rows = asArray(ranked);
   const winnerEntry = rows[0] ?? null;
   const runnerUpEntry = rows[1] ?? null;
-  const winnerPoints = Number(winnerEntry?.totalPoints) || 0;
-  const runnerUpPoints = Number(runnerUpEntry?.totalPoints) || 0;
+  const winnerPoints = Number(winnerEntry?.points) || 0;
+  const runnerUpPoints = Number(runnerUpEntry?.points) || 0;
 
   return {
     winnerName: winnerEntry?.player?.name ?? '',
     winnerPoints,
     margin: winnerEntry && runnerUpEntry ? Math.max(0, winnerPoints - runnerUpPoints) : 0,
-    winnerStrokes: winnerEntry?.totalStrokes ?? 0,
+    winnerStrokes: winnerEntry?.strokes ?? 0,
     holesPlayed: countPlayedHoles(round),
     playerCount: rows.length,
   };

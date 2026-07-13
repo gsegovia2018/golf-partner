@@ -23,8 +23,8 @@ function makeRound(playedByPlayer) {
 }
 
 const entries = [
-  { player: players[0], totalPoints: 19, totalStrokes: 37, handicap: 3 },
-  { player: players[1], totalPoints: 12, totalStrokes: 41, handicap: NaN },
+  { player: players[0], points: 19, strokes: 37, handicap: 3 },
+  { player: players[1], points: 12, strokes: 41, handicap: NaN },
 ];
 
 describe('RoundLeaderboard', () => {
@@ -71,5 +71,30 @@ describe('RoundLeaderboard', () => {
     ));
     expect(getByText('HCP 3')).toBeTruthy();
     expect(queryByText(/HCP NaN/)).toBeNull();
+  });
+
+  test('renders points with a non-default unit label (e.g. matchplay holes)', () => {
+    const round = makeRound({ p1: 9, p2: 9 });
+    const matchPlayEntries = [
+      { player: players[0], points: 5, strokes: 37 },
+      { player: players[1], points: 3, strokes: 41 },
+    ];
+    const { getByText } = render(wrap(
+      <RoundLeaderboard entries={matchPlayEntries} unit="holes" round={round} live={false} />,
+    ));
+    expect(getByText('5 holes')).toBeTruthy();
+    expect(getByText('3 holes')).toBeTruthy();
+  });
+
+  test('omits the strokes column for team entries that carry no strokes', () => {
+    const round = makeRound({ p1: 9, p2: 9 });
+    const teamEntries = [
+      { player: players[0], points: 4 },
+      { player: players[1], points: 0 },
+    ];
+    const { queryByText } = render(wrap(
+      <RoundLeaderboard entries={teamEntries} round={round} live={false} />,
+    ));
+    expect(queryByText(/str$/)).toBeNull();
   });
 });

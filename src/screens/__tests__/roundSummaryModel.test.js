@@ -23,9 +23,9 @@ describe('roundSummaryModel', () => {
       },
     };
     const ranked = [
-      { player: players[0], totalPoints: 38, totalStrokes: 72 },
-      { player: players[1], totalPoints: 34, totalStrokes: 81 },
-      { player: players[2], totalPoints: 30, totalStrokes: 90 },
+      { player: players[0], points: 38, strokes: 72 },
+      { player: players[1], points: 34, strokes: 81 },
+      { player: players[2], points: 30, strokes: 90 },
     ];
 
     expect(buildRoundRecap({ round, ranked })).toEqual({
@@ -48,9 +48,9 @@ describe('roundSummaryModel', () => {
       },
     };
     const ranked = [
-      { player: players[0], totalPoints: 9, totalStrokes: 13 },
-      { player: players[1], totalPoints: 8, totalStrokes: 12 },
-      { player: players[2], totalPoints: 5, totalStrokes: 10 },
+      { player: players[0], points: 9, strokes: 13 },
+      { player: players[1], points: 8, strokes: 12 },
+      { player: players[2], points: 5, strokes: 10 },
     ];
 
     expect(buildRoundRecap({ round, ranked })).toMatchObject({
@@ -67,7 +67,7 @@ describe('roundSummaryModel', () => {
       },
     };
     const ranked = [
-      { player: players[0], totalPoints: 23, totalStrokes: 49 },
+      { player: players[0], points: 23, strokes: 49 },
     ];
 
     expect(buildRoundRecap({ round, ranked })).toMatchObject({

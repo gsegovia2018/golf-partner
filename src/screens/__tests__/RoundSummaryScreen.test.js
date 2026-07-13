@@ -89,10 +89,9 @@ jest.mock('../../store/tournamentStore', () => {
     readLocal: jest.fn(() => Promise.resolve(mockTournament)),
     setActiveTournament: jest.fn(() => Promise.resolve()),
     formatRoundLabel: jest.fn(({ courseName }) => courseName),
-    roundTotals: jest.fn((round, players) => [
-      { player: players[0], totalPoints: 38, totalStrokes: 72 },
-      { player: players[1], totalPoints: 34, totalStrokes: 90 },
-    ]),
+    // roundLeaderboard is left unmocked (actual implementation) — it now
+    // drives the round-summary board via the mock tournament's real scores,
+    // same as HomeScreen's Round|Global toggle (Task 4).
     calcExtraShots: jest.fn(() => 0),
     scrambleUnits: jest.fn((round, players) => players),
   };
@@ -146,6 +145,24 @@ describe('RoundSummaryScreen', () => {
     // The gray multi-player totals card is suppressed on this screen — its
     // header label only ever renders inside that card.
     expect(queryByText('STABLEFORD')).toBeNull();
+  });
+
+  // Task 5 (per-round-global-leaderboards): the board now comes from
+  // roundLeaderboard(tournament, round) — mode-aware, `unit`-labeled — not
+  // the old plain-Stableford roundTotals. Every hole here is par 4 with no
+  // handicap, so Marcos (all pars) beats Pablo (all bogeys) 36-18 pts,
+  // 72-90 strokes; assert the actual normalized values render, proving the
+  // screen -> roundLeaderboard -> RoundLeaderboard `points`/`strokes`/`unit`
+  // wiring, not just that a leaderboard exists.
+  test('leaderboard renders roundLeaderboard entries with the "pts"/"str" unit labels', async () => {
+    const { findByText } = render(wrap(
+      <RoundSummaryScreen navigation={navigation} route={route} />,
+    ));
+    await findByText('LEADERBOARD');
+    expect(await findByText('36 pts')).toBeTruthy();
+    expect(await findByText('72 str')).toBeTruthy();
+    expect(await findByText('18 pts')).toBeTruthy();
+    expect(await findByText('90 str')).toBeTruthy();
   });
 
   test('no longer exposes a Leaderboard tab', async () => {

@@ -11,7 +11,7 @@ import { loadProfile } from '../store/profileStore';
 import { ShareableLeaderboard, shareLeaderboard } from '../components/ShareableCard';
 import QuickStartCourses from '../components/QuickStartCourses';
 import PostCreateInviteModal from '../components/PostCreateInviteModal';
-import { scoringModeUsesTeams, leaderboardToggleLabels, isScrambleMode, getScoringMode } from '../components/scoringModes';
+import { scoringModeUsesTeams, leaderboardToggleLabels, getScoringMode, isScrambleMode } from '../components/scoringModes';
 import { ScoringModeSheet, TeamsSettingsFields, BestBallValueFields } from '../components/ScoringModePicker';
 import PullToRefresh from '../components/PullToRefresh';
 import LoadingSplash from '../components/LoadingSplash';
@@ -20,16 +20,10 @@ import {
   loadTournament, loadAllTournaments, loadAllTournamentsWithFallback,
   setActiveTournament,
   deleteTournament,
-  tournamentLeaderboard, tournamentBestWorstLeaderboard,
-  roundTotals,
-  playerRoundBestWorstPoints,
   tournamentPlayerClinched,
   isRoundComplete, isTournamentFinished, subscribeTournamentChanges,
-  matchPlayRoundTally,
-  sindicatoRoundTally, tournamentSindicatoLeaderboard,
   tournamentMatchPlayStandings,
-  scrambleRoundTally, tournamentScrambleLeaderboard,
-  pairsMatchRoundTally, tournamentPairsMatchStandings,
+  roundLeaderboard, tournamentLeaderboardResolved,
   DEFAULT_SETTINGS, generateInviteCode, buildJoinLink,
   tournamentNoun, tournamentNounCapitalized,
   getActiveTournamentSnapshot, getTournament, getTournamentSnapshot,
@@ -89,6 +83,28 @@ function pairsPreviewText(t) {
     return ((live ?? p)?.name ?? '').split(' ')[0];
   };
   return pairs.map((pr) => pr.map(firstName).join(' + ')).join(' vs ');
+}
+
+// Short label for a leaderboard's native scoring mode, used in the LEADERBOARD
+// card header ("R2 · Match Play"). Mirrors scoringModes.js's fuller labels but
+// stays local since this card only ever needs the short form.
+const ROUND_MODE_LABELS = {
+  stableford: 'Stableford',
+  matchplay: 'Match Play',
+  sindicato: 'Sindicato',
+  bestball: 'Best Ball',
+  pairsmatchplay: 'Pairs Match Play',
+};
+function roundModeLabel(mode) {
+  if (mode?.startsWith?.('scramble')) return 'Scramble';
+  return ROUND_MODE_LABELS[mode] ?? 'Stableford';
+}
+// True "Stroke Play" alt-view modes: the alt toggle re-sorts by gross
+// strokes. Other modes (matchplay/sindicato/bestball/pairsmatchplay) label
+// their alt toggle "Stableford" instead, so their alt view stays in points
+// order rather than being strokes-sorted.
+function isStrokePlayAlt(m) {
+  return m === 'stableford' || m === 'individual' || isScrambleMode(m);
 }
 
 // Belt-and-braces: inject the snap rules via a real <style> tag so they
@@ -177,6 +193,7 @@ export default function HomeScreen({ navigation, route }) {
   const [undoSnack, setUndoSnack] = useState(null); // { roundIndex, snapshot, at }
   const undoTimerRef = useRef(null);
   const [leaderboardAlt, setLeaderboardAlt] = useState(false);
+  const [leaderboardScope, setLeaderboardScope] = useState('round'); // 'round' | 'global'
   const [refreshing, setRefreshing] = useState(false);
   const [showInvite, setShowInvite] = useState(false);
   const [inviteCodes, setInviteCodes] = useState({ editor: '', viewer: '' });
@@ -918,47 +935,7 @@ export default function HomeScreen({ navigation, route }) {
       : null),
     [tournament, settings.scoringMode],
   );
-  const leaderboard = useMemo(
-    () => {
-      if (!tournament) return [];
-      if (tournamentHasMixedModes(tournament)) return tournamentStablefordLeaderboard(tournament);
-      if (settings.scoringMode === 'matchplay') return matchPlayStandings?.board ?? [];
-      if (settings.scoringMode === 'sindicato') return tournamentSindicatoLeaderboard(tournament);
-      if (settings.scoringMode === 'bestball') return tournamentBestWorstLeaderboard(tournament);
-      if (settings.scoringMode === 'pairsmatchplay') return tournamentPairsMatchStandings(tournament)?.board ?? [];
-      if (isScrambleMode(settings.scoringMode)) return tournamentScrambleLeaderboard(tournament);
-      return tournamentLeaderboard(tournament);
-    },
-    [tournament, settings.scoringMode, matchPlayStandings],
-  );
-  // The Stableford board — native view for Stableford modes, alternate view
-  // for every other mode, and the source of per-player gross strokes.
-  const stablefordBoard = useMemo(
-    () => (tournament ? tournamentStablefordLeaderboard(tournament) : []),
-    [tournament],
-  );
-  // Stableford modes: native = Stableford (points), alternate = Stroke Play
-  // (gross strokes ascending, unplayed/0-stroke players last). Other modes:
-  // native = the mode board, alternate = Stableford. Mixed-mode tournaments
-  // always render the Stableford total board natively.
-  const isStablefordMode = tournamentHasMixedModes(tournament)
-    || settings.scoringMode === 'individual'
-    || settings.scoringMode === 'stableford';
-  const displayedBoard = useMemo(() => {
-    if (!leaderboardAlt) return leaderboard;
-    if (isStablefordMode) {
-      return [...stablefordBoard].sort(
-        (a, b) => (a.strokes || Infinity) - (b.strokes || Infinity));
-    }
-    return stablefordBoard;
-  }, [leaderboardAlt, isStablefordMode, leaderboard, stablefordBoard]);
-  const isStrokePlayView = leaderboardAlt && isStablefordMode;
   const selectedRoundData = tournament?.rounds?.[selectedRound] ?? null;
-  const selectedRoundHasScores = !!(selectedRoundData?.scores && Object.keys(selectedRoundData.scores).length > 0);
-  // Per-round effective mode — a round may override the tournament default,
-  // so every selected-round-scoped derivation reads THIS instead of
-  // settings.scoringMode.
-  const selectedRoundMode = roundScoringMode(tournament, selectedRoundData);
   // The mode that decides whether team settings apply: the first round whose
   // effective mode is a team mode the roster supports. Null → no team rounds,
   // the gear hides Team Settings entirely.
@@ -967,20 +944,35 @@ export default function HomeScreen({ navigation, route }) {
         .map((r) => roundScoringMode(tournament, r))
         .find((m) => scoringModeUsesTeams(m, tournament.players.length)) ?? null)
     : null;
-  const selectedRoundPlayerTotals = useMemo(() => {
-    if (!tournament || !selectedRoundData || !selectedRoundHasScores
-      || (selectedRoundMode === 'bestball' && !leaderboardAlt)) return null;
-    if (selectedRoundMode === 'sindicato') {
-      const tally = sindicatoRoundTally(selectedRoundData, tournament.players);
-      if (!tally) return null;
-      return tally.totals.map(({ player, points }) => {
-        const totalStrokes = Object.values(selectedRoundData.scores?.[player.id] ?? {})
-          .reduce((sum, v) => sum + (v || 0), 0);
-        return { player, totalPoints: points, totalStrokes };
-      });
+  // Hoisted above the early returns (used by resolvedBoard/displayedBoard
+  // below as well as the render further down).
+  const isGame = tournament?.kind === 'game';
+  // Native mode board for the current scope (selected round, or whole
+  // tournament). Casual games are always round-scoped (there's only one).
+  const resolvedBoard = useMemo(() => {
+    if (!tournament) return { mode: 'stableford', unit: 'pts', entries: [] };
+    if (isGame || leaderboardScope === 'round') {
+      return roundLeaderboard(tournament, selectedRoundData);
     }
-    return roundTotals(selectedRoundData, tournament.players);
-  }, [tournament, selectedRoundData, selectedRoundHasScores, leaderboardAlt, selectedRoundMode]);
+    return tournamentLeaderboardResolved(tournament);
+  }, [tournament, isGame, leaderboardScope, selectedRoundData]);
+  // Stroke-play alt-view: a Stableford board for the current scope, sorted by
+  // gross strokes ascending (unplayed last). Preserves the existing toggle,
+  // now scope-aware.
+  const displayedBoard = useMemo(() => {
+    if (!leaderboardAlt) return resolvedBoard;
+    const sb = (isGame || leaderboardScope === 'round')
+      ? roundLeaderboard(tournament, { ...selectedRoundData, scoringMode: 'stableford' })
+      : { mode: 'stableford', unit: 'pts', entries: tournamentStablefordLeaderboard(tournament) };
+    // Only a true "Stroke Play" alt view (stableford/individual/scramble
+    // modes) re-sorts by gross strokes. For other modes (matchplay,
+    // sindicato, bestball, pairsmatchplay) the toggle's alt view is the
+    // Stableford board itself, shown in its native points order.
+    if (!isStrokePlayAlt(resolvedBoard.mode)) return sb;
+    const entries = [...sb.entries].sort(
+      (a, b) => (a.strokes > 0 ? a.strokes : Infinity) - (b.strokes > 0 ? b.strokes : Infinity));
+    return { ...sb, entries };
+  }, [leaderboardAlt, resolvedBoard, isGame, leaderboardScope, selectedRoundData, tournament]);
   const tournamentMode = settings.scoringMode === 'bestball' ? 'bestball'
     : settings.scoringMode === 'sindicato' ? 'sindicato'
     : settings.scoringMode === 'matchplay' ? 'matchplay'
@@ -1534,50 +1526,9 @@ export default function HomeScreen({ navigation, route }) {
     );
   }
 
-  const isGame = tournament.kind === 'game';
-  // stablefordBoard now comes from tournamentStablefordLeaderboard, which
-  // already attributes scramble rounds' team strokes to each member player —
-  // no separate scramble special case needed here.
-  const strokesByPlayer = Object.fromEntries(stablefordBoard.map((e) => [e.player.id, e.strokes]));
   const toggleLabels = tournamentHasMixedModes(tournament)
     ? { left: 'Stableford', right: 'Stroke Play' }
     : leaderboardToggleLabels(settings.scoringMode);
-  const getSelectedRoundValue = (playerId) => {
-    const selMode = roundScoringMode(tournament, selectedRoundData);
-    if (selMode === 'matchplay') {
-      if (!selectedRoundData || !selectedRoundHasScores) return null;
-      const tally = matchPlayRoundTally(selectedRoundData, tournament.players);
-      if (!tally) return null;
-      const idx = tournament.players.findIndex((p) => p.id === playerId);
-      return idx === 0 ? tally.aWins : idx === 1 ? tally.bWins : null;
-    }
-    if (selMode === 'bestball' && !leaderboardAlt) {
-      if (!selectedRoundData || !selectedRoundHasScores || !selectedRoundData.pairs?.length) return null;
-      return playerRoundBestWorstPoints(
-        selectedRoundData, playerId, tournament.players,
-        { ...settings, ...roundBestBallValues(tournament, selectedRoundData) },
-      );
-    }
-    if (selMode === 'pairsmatchplay' && !leaderboardAlt) {
-      if (!selectedRoundData || !selectedRoundHasScores) return null;
-      const tally = pairsMatchRoundTally(selectedRoundData, tournament.players);
-      if (!tally) return null;
-      const idx = (selectedRoundData.pairs ?? [])
-        .findIndex((pair) => pair?.some((m) => m?.id === playerId));
-      return idx === 0 ? tally.team1 : idx === 1 ? tally.team2 : null;
-    }
-    if (isScrambleMode(selMode) && !leaderboardAlt) {
-      if (!selectedRoundData || !selectedRoundHasScores) return null;
-      const tally = scrambleRoundTally(selectedRoundData, tournament.players);
-      if (!tally) return null;
-      const team = (selectedRoundData.pairs ?? [])
-        .find((pair) => pair?.some((m) => m?.id === playerId));
-      if (!team) return null;
-      return tally.totals.find((row) => row.unit.id === team[0]?.id)?.points ?? null;
-    }
-    if (!selectedRoundPlayerTotals) return null;
-    return selectedRoundPlayerTotals.find((e) => e.player.id === playerId)?.totalPoints ?? 0;
-  };
 
   return (
     <ScreenContainer style={s.screen} edges={['top', 'bottom']}>
@@ -1636,30 +1587,37 @@ export default function HomeScreen({ navigation, route }) {
 
       {tournament.players.length >= 2 && (
       <View style={s.mastersCard}>
-        <View style={s.cardTitleRow}>
-          <Text style={s.mastersCardTitle}>LEADERBOARD</Text>
-          <View style={s.inlineToggle}>
-            <Text style={[s.mastersToggleLabel, !leaderboardAlt && s.mastersToggleLabelActive]}>{toggleLabels.left}</Text>
-            <Switch
-              value={leaderboardAlt}
-              onValueChange={setLeaderboardAlt}
-              trackColor={{ false: 'rgba(255,255,255,0.2)', true: 'rgba(255,215,0,0.4)' }}
-              thumbColor="#fff"
-            />
-            <Text style={[s.mastersToggleLabel, leaderboardAlt && s.mastersToggleLabelActive]}>{toggleLabels.right}</Text>
-          </View>
+        <View style={[s.cardTitleRow, { marginBottom: 8 }]}>
+          <Text style={s.mastersCardTitle}>
+            {leaderboardScope === 'global' && !isGame ? 'OVERALL' : `R${selectedRound + 1} · ${roundModeLabel(displayedBoard.mode)}`}
+          </Text>
+          {!isGame && (
+            <View style={s.inlineToggle}>
+              <TouchableOpacity onPress={() => setLeaderboardScope('round')}>
+                <Text style={[s.mastersToggleLabel, leaderboardScope === 'round' && s.mastersToggleLabelActive]}>Round</Text>
+              </TouchableOpacity>
+              <TouchableOpacity onPress={() => setLeaderboardScope('global')}>
+                <Text style={[s.mastersToggleLabel, leaderboardScope === 'global' && s.mastersToggleLabelActive]}>Global</Text>
+              </TouchableOpacity>
+            </View>
+          )}
         </View>
-        {displayedBoard.map((entry, i) => {
+        <View style={[s.inlineToggle, { justifyContent: 'flex-end', marginBottom: 14 }]}>
+          <Text style={[s.mastersToggleLabel, !leaderboardAlt && s.mastersToggleLabelActive]}>{toggleLabels.left}</Text>
+          <Switch
+            value={leaderboardAlt}
+            onValueChange={setLeaderboardAlt}
+            trackColor={{ false: 'rgba(255,255,255,0.2)', true: 'rgba(255,215,0,0.4)' }}
+            thumbColor="#fff"
+          />
+          <Text style={[s.mastersToggleLabel, leaderboardAlt && s.mastersToggleLabelActive]}>{toggleLabels.right}</Text>
+        </View>
+        {displayedBoard.entries.map((entry, i) => {
           const rankColors = ['#ffd700', '#c0c8d4', '#daa06d'];
           const rankColor = rankColors[i] || 'rgba(255,255,255,0.4)';
           const rankBg = i === 0 ? 'rgba(255,215,0,0.2)' : i === 1 ? 'rgba(192,200,212,0.15)' : i === 2 ? 'rgba(218,160,109,0.15)' : 'rgba(255,255,255,0.08)';
-          const roundValue = getSelectedRoundValue(entry.player.id);
-          const roundUnit = selectedRoundMode === 'matchplay'
-            ? (roundValue === 1 ? 'hole' : 'holes')
-            : 'pts';
-          const strokes = strokesByPlayer[entry.player.id] ?? 0;
           return (
-            <View key={entry.player.id} style={[s.mastersRow, i === 0 && s.mastersRowFirst, i === displayedBoard.length - 1 && { borderBottomWidth: 0 }]}>
+            <View key={entry.player.id} style={[s.mastersRow, i === 0 && s.mastersRowFirst, i === displayedBoard.entries.length - 1 && { borderBottomWidth: 0 }]}>
               <View style={[s.mastersRankBadge, { backgroundColor: rankBg }]}>
                 <Text style={[s.mastersRankText, { color: rankColor }]}>{i + 1}</Text>
               </View>
@@ -1672,22 +1630,13 @@ export default function HomeScreen({ navigation, route }) {
                     <Feather name="award" size={12} color="#ffd700" />
                   )}
                 </View>
-                <Text style={s.mastersRoundSub}>
-                  R{selectedRound + 1} · {!showRunning ? '—' : roundValue == null ? '—' : `${roundValue} ${roundUnit}`}
-                </Text>
               </View>
               <Text style={[s.mastersPoints, i === 0 && { fontSize: 18 }]}>{
-                !showRunning ? '—'
-                  : isStrokePlayView
-                    ? `${strokes || '-'} str`
-                    : settings.scoringMode === 'matchplay' && !leaderboardAlt && !tournamentHasMixedModes(tournament)
-                      ? `${entry.points} ${entry.points === 1 ? 'hole' : 'holes'}`
-                      : `${entry.points} pts`
+                !showRunning ? '—' : `${entry.points} ${displayedBoard.unit}`
               }</Text>
-              <Text style={s.mastersSub}>{
-                !showRunning ? ''
-                  : isStrokePlayView ? `${entry.points} pts` : `${strokes || '-'} str`
-              }</Text>
+              {entry.strokes != null && (
+                <Text style={s.mastersSub}>{!showRunning ? '' : `${entry.strokes || '-'} str`}</Text>
+              )}
             </View>
           );
         })}
@@ -1853,7 +1802,7 @@ export default function HomeScreen({ navigation, route }) {
       )}
 
       <View style={{ position: 'absolute', left: -9999 }}>
-        <ShareableLeaderboard ref={leaderboardRef} tournamentName={tournament.name} leaderboard={leaderboard} />
+        <ShareableLeaderboard ref={leaderboardRef} tournamentName={tournament.name} leaderboard={displayedBoard.entries} />
       </View>
     </PullToRefresh>
 
@@ -2087,7 +2036,7 @@ export default function HomeScreen({ navigation, route }) {
           {tournament.players.length > 1 && (
             <TouchableOpacity
               style={s.menuItem}
-              onPress={() => { setShowSettings(false); shareLeaderboard({ tournamentName: tournament.name, leaderboard, theme, viewRef: leaderboardRef }); }}
+              onPress={() => { setShowSettings(false); shareLeaderboard({ tournamentName: tournament.name, leaderboard: displayedBoard.entries, theme, viewRef: leaderboardRef }); }}
               activeOpacity={0.7}
             >
               <Feather name="share-2" size={18} color={theme.accent.primary} />
