@@ -69,11 +69,14 @@ export default function FinishConflictSheet({
                     }
                   >
                     <Text style={s.chipValue}>{valueLabel(c.value)}</Text>
-                    <Text style={s.chipHint}>{isCurrent ? 'On this phone' : 'Other phone'}</Text>
+                    <Text style={s.chipHint}>{c.authorName ?? (isCurrent ? 'On this phone' : 'Other phone')}</Text>
                   </TouchableOpacity>
                 );
               })}
             </View>
+            {Array.isArray(row.blankAuthors) && row.blankAuthors.length > 0 && (
+              <Text style={s.rowBlank}>{`No score from ${row.blankAuthors.join(', ')}`}</Text>
+            )}
           </View>
         ))}
       </ScrollView>
@@ -130,6 +133,10 @@ const makeStyles = (theme) => StyleSheet.create({
   chipCurrent: { borderColor: CONFLICT },
   chipValue: { fontFamily: 'PlusJakartaSans-ExtraBold', fontSize: 22, color: theme?.text?.primary },
   chipHint: { fontFamily: 'PlusJakartaSans-Medium', fontSize: 11, color: theme?.text?.muted },
+  rowBlank: {
+    fontFamily: 'PlusJakartaSans-Medium', fontSize: 12, color: theme?.text?.muted,
+    marginTop: 8,
+  },
   finish: {
     marginTop: 16, backgroundColor: theme?.accent?.primary,
     borderRadius: 14, paddingVertical: 14, alignItems: 'center',

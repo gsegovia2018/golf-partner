@@ -167,7 +167,7 @@ function _applyPendingMutations(tournament, entries) {
   return applyPendingMutations(tournament, entries);
 }
 
-// scoreConflicts markers are local-only (see mutate.js's
+// scoreEntries/scoreResolutions are LOCAL-ONLY hot keys (see mutate.js's
 // preserveLocalConflictState) — a repo-fetched `remote` never carries them,
 // so every background refresh through this module must carry `source`'s
 // forward or an unresolved conflict the user hasn't seen yet silently

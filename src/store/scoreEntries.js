@@ -2,7 +2,7 @@
 // Local round-blob shapes (mirrors of game_score_entries / game_score_resolutions):
 //   round.scoreEntries[playerId][hole]     = { [authorId]: { value, ts } }
 //   round.scoreResolutions[playerId][hole] = { value, by, ts }
-// Holes are keyed by the plain number (matches the legacy scoreConflicts keying).
+// Holes are keyed by the plain number.
 // A blank is value == null; it never contributes a conflict candidate.
 
 export function cellEntries(round, playerId, hole) {

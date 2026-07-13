@@ -317,10 +317,10 @@ async function pendingEntriesFor(id) {
 // mutations mirrors tournamentStore's own read-path overlay, so we never
 // clobber an optimistic local edit whose write hasn't round-tripped yet),
 // restores the device-local meId (never trusted from a realtime row, same as
-// _overlayAndSave), and preserves round.scoreConflicts (LOCAL-ONLY markers —
-// see mutate.js's preserveLocalConflictState — that no row event ever
-// carries) before saving. Skips entirely if this tournament has no local
-// cache to patch (nothing to preserve, nothing to render).
+// _overlayAndSave), and preserves round.scoreEntries/scoreResolutions
+// (LOCAL-ONLY hot keys — see mutate.js's preserveLocalConflictState — that no
+// row event ever carries) before saving. Skips entirely if this tournament
+// has no local cache to patch (nothing to preserve, nothing to render).
 //
 // Bounded settle loop — the SAME race guard as syncWorker.drainTournament and
 // tournamentStore._overlayAndSave (neither is exported, so this mirrors their

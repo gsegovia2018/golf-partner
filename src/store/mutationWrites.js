@@ -335,7 +335,7 @@ export async function executeMutation(entry, localTournament) {
       // has never seen this id — e.g. EditTournamentScreen's addRound mid-
       // edit) can't clobber anything, so it still gets the full-body
       // repo.upsertRound (which already strips scores/shotDetails/notes-
-      // table-owned keys/scoreConflicts/scoreResolutions before writing body).
+      // table-owned keys/scoreEntries/scoreResolutions before writing body).
       //
       // An EXISTING round instead gets ONLY its owned fields (see
       // ROUND_UPSERT_OWNED_FIELDS above) patched via repo.patchRound's

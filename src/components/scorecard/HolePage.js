@@ -6,6 +6,7 @@ import {
   pickupStrokes, isPickupScore, scrambleUnits, matchPlayEffectiveHandicaps, calcExtraShots,
 } from '../../store/tournamentStore';
 import { scoreCellState } from '../../store/officialScoring';
+import { deriveCell } from '../../store/scoreEntries';
 import { isScrambleMode } from '../scoringModes';
 import { PlayerCard } from './PlayerCard';
 import { holePoints } from './scoreModel';
@@ -203,7 +204,13 @@ export const HolePage = React.memo(function HolePage({
             canResolveHere = canEdit;
           }
 
-          const conflict = round.scoreConflicts?.[player.id]?.[pageHole.number] ?? null;
+          // Casual-mode conflict flag: derived live from per-author score
+          // entries via deriveCell. Intentionally ungated by presence —
+          // unlike the go-to-hole dots
+          // (ScorecardScreen's surfaceable-gated conflictHoles), the hero
+          // card the viewer is actively looking at should surface a
+          // conflict as soon as it's derived so they can resolve it here.
+          const conflict = deriveCell(round, player.id, pageHole.number).status === 'conflict';
 
           return (
             <PlayerCard
