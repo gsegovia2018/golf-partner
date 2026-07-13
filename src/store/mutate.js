@@ -1,5 +1,5 @@
 import { syncQueue } from './syncQueue';
-import { saveLocal, readLocal, _setSyncStatus } from './tournamentStore';
+import { saveLocal, _setSyncStatus } from './tournamentStore';
 import { isOnline } from '../lib/connectivity';
 import { normalizeRoundNotes } from './roundNotes';
 
@@ -62,7 +62,6 @@ export function metaPathFor(m) {
         paths.push(`rounds.${patch.roundId}.playerHandicaps.${m.playerId}`);
         paths.push(`rounds.${patch.roundId}.scores.${m.playerId}`);
         paths.push(`rounds.${patch.roundId}.shotDetails.${m.playerId}`);
-        paths.push(`rounds.${patch.roundId}.scoreConflicts.${m.playerId}`);
         paths.push(`rounds.${patch.roundId}.scoreResolutions.${m.playerId}`);
         if (patch.pairs) paths.push(`rounds.${patch.roundId}.pairs`);
         if (patch.clearScoringMode) paths.push(`rounds.${patch.roundId}.scoringMode`);
@@ -93,11 +92,10 @@ export function metaPathFor(m) {
       }
       return paths;
     }
-    // Resolving a score conflict writes the chosen value, clears the marker,
-    // AND stamps a resolution marker that outranks raw writes during merge.
+    // Resolving a score conflict writes the chosen value AND stamps a
+    // resolution marker that other devices merge in as the winning value.
     case 'conflict.resolve': return [
       `rounds.${m.roundId}.scores.${m.playerId}.h${m.hole}`,
-      `rounds.${m.roundId}.scoreConflicts.${m.playerId}.h${m.hole}`,
       `rounds.${m.roundId}.scoreResolutions.${m.playerId}.h${m.hole}`,
     ];
     case 'player.upsertLibrary': return null;
@@ -148,6 +146,13 @@ export function applyToTournament(t, m) {
       round.scores[m.playerId] = { ...(round.scores[m.playerId] ?? {}) };
       if (m.value == null) delete round.scores[m.playerId][m.hole];
       else round.scores[m.playerId][m.hole] = m.value;
+      // Per-author submission mirror (source of derived conflict state).
+      round.scoreEntries = { ...(round.scoreEntries ?? {}) };
+      round.scoreEntries[m.playerId] = { ...(round.scoreEntries[m.playerId] ?? {}) };
+      round.scoreEntries[m.playerId][m.hole] = {
+        ...(round.scoreEntries[m.playerId][m.hole] ?? {}),
+        [m.authorId]: { value: m.value ?? null, ts: m.ts },
+      };
       break;
     }
     case 'conflict.resolve': {
@@ -157,20 +162,13 @@ export function applyToTournament(t, m) {
       round.scores[m.playerId] = { ...(round.scores[m.playerId] ?? {}) };
       if (m.value == null) delete round.scores[m.playerId][m.hole];
       else round.scores[m.playerId][m.hole] = m.value;
-      if (round.scoreConflicts?.[m.playerId]) {
-        round.scoreConflicts = { ...round.scoreConflicts };
-        round.scoreConflicts[m.playerId] = { ...round.scoreConflicts[m.playerId] };
-        delete round.scoreConflicts[m.playerId][m.hole];
-      }
-      // Resolution stamp: records when this device explicitly resolved the
-      // conflict. Local-only bookkeeping (stripped before every server
-      // write — see tournamentRepo.js's stripRoundHotKeys) — no reconcile
-      // pass reads it now that sync is row-based rather than blob-merged.
+      // Resolution stamp: records the explicit resolution (value + who +
+      // when). Synced like any other cell — conflicts are now DERIVED from
+      // scoreEntries vs. scores (see scoreEntries.js), so this stamp is what
+      // lets every device converge on the same chosen value.
       round.scoreResolutions = { ...(round.scoreResolutions ?? {}) };
-      round.scoreResolutions[m.playerId] = {
-        ...(round.scoreResolutions[m.playerId] ?? {}),
-        [m.hole]: m.ts,
-      };
+      round.scoreResolutions[m.playerId] = { ...(round.scoreResolutions[m.playerId] ?? {}) };
+      round.scoreResolutions[m.playerId][m.hole] = { value: m.value ?? null, by: m.resolvedBy, ts: m.ts };
       break;
     }
     case 'shot.set': {
@@ -290,11 +288,6 @@ export function applyToTournament(t, m) {
         const shotDetails = { ...(round.shotDetails ?? {}) };
         delete shotDetails[m.playerId];
         round.shotDetails = shotDetails;
-        if (round.scoreConflicts) {
-          const scoreConflicts = { ...round.scoreConflicts };
-          delete scoreConflicts[m.playerId];
-          round.scoreConflicts = scoreConflicts;
-        }
         if (round.scoreResolutions) {
           const scoreResolutions = { ...round.scoreResolutions };
           delete scoreResolutions[m.playerId];
@@ -434,57 +427,33 @@ export function applyPendingMutations(tournament, entries) {
   return t;
 }
 
-// scoreConflicts markers are LOCAL-ONLY: tournamentRepo.js strips them from
-// every round body before it ever reaches the server (stripRoundHotKeys),
-// and get_game_tournament never reassembles them — so a freshly fetched
-// `target` (repo read, or applyPendingMutations(fresh, ...) replay) NEVER
-// carries them. Both reconcile paths that recompute local state from a
-// fresh fetch (syncWorker's drainTournament post-drain reconcile, and
-// tournamentStore's _overlayAndSave) must carry `source`'s (the previous
-// local blob's) round.scoreConflicts forward, or an unresolved conflict the
-// user hasn't seen yet silently vanishes the moment ANYTHING else for that
-// tournament syncs or the screen pulls a background refresh. Mutates and
-// returns `target`.
-export function preserveLocalScoreConflicts(target, source) {
+// scoreEntries (per-author submissions) and scoreResolutions (explicit
+// resolution stamps) are LOCAL-ONLY hot keys: tournamentRepo.js strips them
+// from every round body before it ever reaches the server
+// (stripRoundHotKeys), and get_game_tournament never reassembles them — so a
+// freshly fetched `target` (repo read, or applyPendingMutations(fresh, ...)
+// replay) NEVER carries them. Both reconcile paths that recompute local
+// state from a fresh fetch (syncWorker's drainTournament post-drain
+// reconcile, and tournamentStore's _overlayAndSave) must carry `source`'s
+// (the previous local blob's) round.scoreEntries/scoreResolutions forward,
+// or a conflict the user hasn't seen yet silently vanishes the moment
+// ANYTHING else for that tournament syncs or the screen pulls a background
+// refresh. Mutates and returns `target`.
+export function preserveLocalConflictState(target, source) {
   if (!target?.rounds?.length || !source?.rounds?.length) return target;
-  const byId = new Map(source.rounds.map((r) => [r.id, r?.scoreConflicts]));
+  const byId = new Map(source.rounds.map((r) => [r.id, {
+    scoreEntries: r?.scoreEntries, scoreResolutions: r?.scoreResolutions,
+  }]));
   target.rounds = target.rounds.map((r) => {
-    const sc = byId.get(r.id);
-    return sc ? { ...r, scoreConflicts: sc } : r;
+    const s = byId.get(r.id);
+    if (!s) return r;
+    return {
+      ...r,
+      ...(s.scoreEntries ? { scoreEntries: s.scoreEntries } : {}),
+      ...(s.scoreResolutions ? { scoreResolutions: s.scoreResolutions } : {}),
+    };
   });
   return target;
-}
-
-// Records a score conflict marker directly into the LOCAL blob — never
-// enqueued, never synced (see preserveLocalScoreConflicts above for why).
-// Shape mirrors what the UI already reads (ScorecardScreen's
-// finishConflictRows, HoleView/HolePage's inline conflict card,
-// ScoreConflictSheet/FinishConflictSheet's candidate cards): keyed by the
-// PLAIN hole number (not "h"+hole — conflict.resolve's applyToTournament
-// already deletes round.scoreConflicts[playerId][hole] the same way, and
-// listRoundConflicts parses the key back via Number(holeKey)). candidates
-// carry `ts` (used for the sheets' relative-time hint) stamped to the
-// detection time, since executeMutation's conflict payload has no
-// per-candidate timestamp of its own.
-export async function recordScoreConflict(tournamentId, {
-  roundId, playerId, hole, mine, theirs,
-}) {
-  const t = await readLocal(tournamentId);
-  if (!t) return null;
-  const round = t.rounds?.find((r) => r.id === roundId);
-  if (!round) return t;
-  const detectedAt = Date.now();
-  round.scoreConflicts = { ...(round.scoreConflicts ?? {}) };
-  round.scoreConflicts[playerId] = { ...(round.scoreConflicts[playerId] ?? {}) };
-  round.scoreConflicts[playerId][hole] = {
-    candidates: [
-      { value: mine, ts: detectedAt },
-      { value: theirs, ts: detectedAt },
-    ],
-    detectedAt,
-  };
-  await saveLocal(t);
-  return t;
 }
 
 export async function mutate(tournamentBefore, mutation, opts = {}) {

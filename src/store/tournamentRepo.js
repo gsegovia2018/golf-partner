@@ -22,7 +22,7 @@ async function getCurrentUserId() {
 // backfill script), so a stale local computed field never lands in body.
 function stripRoundHotKeys(round) {
   const {
-    scores, shotDetails, notes, scoreConflicts, scoreResolutions, ...body
+    scores, shotDetails, notes, scoreEntries, scoreResolutions, ...body
   } = round;
   return body;
 }

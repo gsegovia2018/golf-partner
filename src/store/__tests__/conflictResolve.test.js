@@ -13,32 +13,30 @@ const baseTournament = () => ({
   rounds: [{
     id: 'r1',
     scores: { p1: { 3: 5 } },
-    scoreConflicts: { p1: { 3: { candidates: [{ value: 5, ts: 100 }, { value: 6, ts: 90 }], detectedAt: 110 } } },
+    scoreEntries: { p1: { 3: { a: { value: 5, ts: 100 }, b: { value: 6, ts: 90 } } } },
   }],
 });
 
 describe('conflict.resolve', () => {
-  it('stamps a scoreResolutions path alongside score and marker paths', () => {
+  it('stamps a scoreResolutions path alongside the score path', () => {
     const paths = metaPathFor({ type: 'conflict.resolve', roundId: 'r1', playerId: 'p1', hole: 3 });
     expect(paths).toEqual([
       'rounds.r1.scores.p1.h3',
-      'rounds.r1.scoreConflicts.p1.h3',
       'rounds.r1.scoreResolutions.p1.h3',
     ]);
   });
 
-  it('records the resolution timestamp in the blob', async () => {
+  it('records the resolution stamp in the blob', async () => {
     const t = await mutate(baseTournament(), {
-      type: 'conflict.resolve', roundId: 'r1', playerId: 'p1', hole: 3, value: 6, ts: 500,
+      type: 'conflict.resolve', roundId: 'r1', playerId: 'p1', hole: 3, value: 6, resolvedBy: 'a', ts: 500,
     });
     expect(t.rounds[0].scores.p1[3]).toBe(6);
-    expect(t.rounds[0].scoreConflicts.p1[3]).toBeUndefined();
-    expect(t.rounds[0].scoreResolutions.p1[3]).toBe(500);
+    expect(t.rounds[0].scoreResolutions.p1[3]).toEqual({ value: 6, by: 'a', ts: 500 });
   });
 
   it('resolving to null deletes the score key', async () => {
     const t = await mutate(baseTournament(), {
-      type: 'conflict.resolve', roundId: 'r1', playerId: 'p1', hole: 3, value: null, ts: 500,
+      type: 'conflict.resolve', roundId: 'r1', playerId: 'p1', hole: 3, value: null, resolvedBy: 'a', ts: 500,
     });
     expect(Object.prototype.hasOwnProperty.call(t.rounds[0].scores.p1, '3')).toBe(false);
   });

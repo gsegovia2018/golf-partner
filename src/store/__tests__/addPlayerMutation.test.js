@@ -200,18 +200,18 @@ describe('tournament.removePlayer mutation', () => {
     expect(t.settings.scoringMode).toBe('bestball');
   });
 
-  test('drops the removed player from scoreConflicts', () => {
+  test('drops the removed player from scoreResolutions', () => {
     const t = fourPlayerTournament();
-    t.rounds[0].scoreConflicts = {
-      d: { 1: { candidates: [], detectedAt: 1 } },
-      a: { 2: { candidates: [], detectedAt: 1 } },
+    t.rounds[0].scoreResolutions = {
+      d: { 1: { value: 3, by: 'a', ts: 1 } },
+      a: { 2: { value: 4, by: 'a', ts: 1 } },
     };
     applyToTournament(t, {
       type: 'tournament.removePlayer',
       playerId: 'd',
       roundPatches: [{ roundId: 'r1', pairs: [] }],
     });
-    expect(t.rounds[0].scoreConflicts.d).toBeUndefined();
-    expect(t.rounds[0].scoreConflicts.a).toBeDefined();
+    expect(t.rounds[0].scoreResolutions.d).toBeUndefined();
+    expect(t.rounds[0].scoreResolutions.a).toBeDefined();
   });
 });

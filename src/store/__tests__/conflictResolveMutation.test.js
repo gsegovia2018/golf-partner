@@ -6,21 +6,21 @@ function roundWithConflict() {
     rounds: [{
       id: 'r1',
       scores: { p1: { 5: 6 } },
-      scoreConflicts: {
-        p1: { 5: { candidates: [{ value: 6, ts: 200 }, { value: 4, ts: 100 }], detectedAt: 300 } },
+      scoreEntries: {
+        p1: { 5: { a: { value: 6, ts: 200 }, b: { value: 4, ts: 100 } } },
       },
     }],
   };
 }
 
 describe('conflict.resolve mutation', () => {
-  test('sets the chosen score and clears the conflict marker', () => {
+  test('sets the chosen score and stamps a resolution', () => {
     const t = roundWithConflict();
     applyToTournament(t, {
-      type: 'conflict.resolve', roundId: 'r1', playerId: 'p1', hole: 5, value: 4,
+      type: 'conflict.resolve', roundId: 'r1', playerId: 'p1', hole: 5, value: 4, resolvedBy: 'a', ts: 400,
     });
     expect(t.rounds[0].scores.p1[5]).toBe(4);
-    expect(t.rounds[0].scoreConflicts.p1[5]).toBeUndefined();
+    expect(t.rounds[0].scoreResolutions.p1[5]).toEqual({ value: 4, by: 'a', ts: 400 });
   });
 
   test('is a no-op for an unknown round', () => {
