@@ -11,7 +11,7 @@ import { loadProfile } from '../store/profileStore';
 import { ShareableLeaderboard, shareLeaderboard } from '../components/ShareableCard';
 import QuickStartCourses from '../components/QuickStartCourses';
 import PostCreateInviteModal from '../components/PostCreateInviteModal';
-import { scoringModeUsesTeams, leaderboardToggleLabels, getScoringMode } from '../components/scoringModes';
+import { scoringModeUsesTeams, leaderboardToggleLabels, getScoringMode, isScrambleMode } from '../components/scoringModes';
 import { ScoringModeSheet, TeamsSettingsFields, BestBallValueFields } from '../components/ScoringModePicker';
 import PullToRefresh from '../components/PullToRefresh';
 import LoadingSplash from '../components/LoadingSplash';
@@ -98,6 +98,13 @@ const ROUND_MODE_LABELS = {
 function roundModeLabel(mode) {
   if (mode?.startsWith?.('scramble')) return 'Scramble';
   return ROUND_MODE_LABELS[mode] ?? 'Stableford';
+}
+// True "Stroke Play" alt-view modes: the alt toggle re-sorts by gross
+// strokes. Other modes (matchplay/sindicato/bestball/pairsmatchplay) label
+// their alt toggle "Stableford" instead, so their alt view stays in points
+// order rather than being strokes-sorted.
+function isStrokePlayAlt(m) {
+  return m === 'stableford' || m === 'individual' || isScrambleMode(m);
 }
 
 // Belt-and-braces: inject the snap rules via a real <style> tag so they
@@ -957,6 +964,11 @@ export default function HomeScreen({ navigation, route }) {
     const sb = (isGame || leaderboardScope === 'round')
       ? roundLeaderboard(tournament, { ...selectedRoundData, scoringMode: 'stableford' })
       : { mode: 'stableford', unit: 'pts', entries: tournamentStablefordLeaderboard(tournament) };
+    // Only a true "Stroke Play" alt view (stableford/individual/scramble
+    // modes) re-sorts by gross strokes. For other modes (matchplay,
+    // sindicato, bestball, pairsmatchplay) the toggle's alt view is the
+    // Stableford board itself, shown in its native points order.
+    if (!isStrokePlayAlt(resolvedBoard.mode)) return sb;
     const entries = [...sb.entries].sort(
       (a, b) => (a.strokes > 0 ? a.strokes : Infinity) - (b.strokes > 0 ? b.strokes : Infinity));
     return { ...sb, entries };
