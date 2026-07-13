@@ -389,11 +389,12 @@ git commit -m "feat(leaderboard): tournamentLeaderboardResolved — global board
 - Consumes: `roundLeaderboard`, `tournamentLeaderboardResolved` (from `store/tournamentStore`).
 - Produces: a `leaderboardScope: 'round' | 'global'` control on the LEADERBOARD card; the board shown reflects the selected round's mode (scope `round`) or the whole tournament (scope `global`); header label `R{n} · {mode}` or `Overall`; each row shows `entry.points {unit}` and `entry.strokes`; the `getSelectedRoundValue` sub-annotation is removed.
 
-- [ ] **Step 1: Add scope state + the resolved board** (near the existing board memos, `HomeScreen.js:~915-955`). Import `roundLeaderboard, tournamentLeaderboardResolved` from `../store/tournamentStore`.
+- [ ] **Step 1: Add scope state + the resolved/displayed board** (near the existing board memos, `HomeScreen.js:~915-955`). Import `roundLeaderboard, tournamentLeaderboardResolved` from `../store/tournamentStore` and `tournamentStablefordLeaderboard, stablefordComparator` from `../store/scoring` (if not already imported). **Keep** the existing `leaderboardAlt` state + its stroke-play Switch.
 
 ```js
 const [leaderboardScope, setLeaderboardScope] = useState('round'); // 'round' | 'global'
 
+// Native mode board for the current scope (selected round, or whole tournament).
 const resolvedBoard = useMemo(() => {
   if (!tournament) return { mode: 'stableford', unit: 'pts', entries: [] };
   if (isGame || leaderboardScope === 'round') {
@@ -401,27 +402,40 @@ const resolvedBoard = useMemo(() => {
   }
   return tournamentLeaderboardResolved(tournament);
 }, [tournament, isGame, leaderboardScope, selectedRoundData]);
+
+// Stroke-play alt-view: a Stableford board for the current scope, sorted by
+// gross strokes ascending (unplayed last). Preserves the existing toggle,
+// now scope-aware.
+const displayedBoard = useMemo(() => {
+  if (!leaderboardAlt) return resolvedBoard;
+  const sb = (isGame || leaderboardScope === 'round')
+    ? roundLeaderboard(tournament, { ...selectedRoundData, scoringMode: 'stableford' })
+    : { mode: 'stableford', unit: 'pts', entries: tournamentStablefordLeaderboard(tournament) };
+  const entries = [...sb.entries].sort(
+    (a, b) => (a.strokes > 0 ? a.strokes : Infinity) - (b.strokes > 0 ? b.strokes : Infinity));
+  return { ...sb, entries };
+}, [leaderboardAlt, resolvedBoard, isGame, leaderboardScope, selectedRoundData, tournament]);
 ```
 
-(`selectedRoundData` already exists at `:956-961`; `isGame` at `:1537` — hoist references as needed so they precede this memo, matching the file's "hoist above early return" pattern.)
+(`selectedRoundData` already exists at `:956-961`; `isGame` at `:1537`; `leaderboardAlt` at `:179` — hoist references as needed so they precede these memos, matching the file's "hoist above early return" pattern. `roundLeaderboard` forcing `scoringMode:'stableford'` yields the round's individual Stableford board regardless of the round's real mode.)
 
-- [ ] **Step 2: Render the board from `resolvedBoard.entries`**. Replace the `displayedBoard`/`leaderboard`/`strokesByPlayer` row source in the LEADERBOARD card (`:1637-1698`) so each row reads `entry.points` + `entry.strokes` off the entry, and the value unit is `resolvedBoard.unit`:
+- [ ] **Step 2: Render the board from `displayedBoard.entries`**. Replace the old `leaderboard`/`strokesByPlayer` row source in the LEADERBOARD card (`:1637-1698`) so each row reads `entry.points` + `entry.strokes` off the entry, and the value unit is `displayedBoard.unit`:
 
 ```jsx
 // value cell
-<Text style={s.mastersPoints}>{`${entry.points} ${resolvedBoard.unit}`}</Text>
+<Text style={s.mastersPoints}>{`${entry.points} ${displayedBoard.unit}`}</Text>
 // strokes cell (only when present)
 {entry.strokes != null && <Text style={s.mastersStr}>{entry.strokes || '-'} str</Text>}
 ```
 
 Remove the `getSelectedRoundValue(entry.player.id)` sub-line (`:1675-1677`) and the now-unused `getSelectedRoundValue` / `selectedRoundPlayerTotals` / `strokesByPlayer` memos if nothing else references them (grep first; delete only if unused).
 
-- [ ] **Step 3: Add the `Round | Global` toggle to the card header** (`:1639-1651`), shown only for multi-round tournaments. Reuse the existing segmented-toggle styling:
+- [ ] **Step 3: Add the `Round | Global` toggle to the card header** (`:1639-1651`), **alongside the existing stroke-play Switch** — the header now carries both controls. Round|Global is shown only for multi-round tournaments; the stroke-play Switch stays as-is. Reuse the existing segmented-toggle styling:
 
 ```jsx
 <View style={s.cardTitleRow}>
   <Text style={s.mastersCardTitle}>
-    {leaderboardScope === 'global' && !isGame ? 'OVERALL' : `R${selectedRound + 1} · ${roundModeLabel(resolvedBoard.mode)}`}
+    {leaderboardScope === 'global' && !isGame ? 'OVERALL' : `R${selectedRound + 1} · ${roundModeLabel(displayedBoard.mode)}`}
   </Text>
   {!isGame && (
     <View style={s.inlineToggle}>
@@ -433,14 +447,15 @@ Remove the `getSelectedRoundValue(entry.player.id)` sub-line (`:1675-1677`) and 
       </TouchableOpacity>
     </View>
   )}
+  {/* existing stroke-play Switch (leaderboardAlt) stays here, unchanged */}
 </View>
 ```
 
-`roundModeLabel(mode)` — a small local map (`stableford`→'Stableford', `matchplay`→'Match Play', `sindicato`→'Sindicato', `bestball`→'Best Ball', `pairsmatchplay`→'Pairs Match Play', scramble*→'Scramble', default→'Stableford'); reuse `scoringModes.js` label data if a suitable label already exists, otherwise inline the map.
+`roundModeLabel(mode)` — a small local map (`stableford`→'Stableford', `matchplay`→'Match Play', `sindicato`→'Sindicato', `bestball`→'Best Ball', `pairsmatchplay`→'Pairs Match Play', scramble*→'Scramble', default→'Stableford'); reuse `scoringModes.js` label data if a suitable label already exists, otherwise inline the map. Place the two controls so the header isn't cramped (e.g. Round|Global on the title row, the stroke-play Switch on its existing row) — verify the layout in Task 6.
 
-- [ ] **Step 4: Reconcile the existing alt-view (`leaderboardAlt`) Switch.** With the strokes tiebreak now built in and the scope toggle added, keep the card uncluttered: **remove the `leaderboardAlt` Switch and its state** (`:179`, `:912-914`, `:1641-1650`, and `displayedBoard`/`isStablefordMode`/`isStrokePlayView` at `:934-955`) — the board is now driven solely by `leaderboardScope`. Grep for every `leaderboardAlt`/`displayedBoard`/`isStrokePlayView`/`toggleLabels` reference and remove them.
+- [ ] **Step 4: Keep the alt-view wired to the new board.** The `leaderboardAlt` Switch and its `toggleLabels` stay. Its effect is now expressed through `displayedBoard` (Step 1): off → native scope board; on → the scope's Stableford board sorted by strokes. Remove only the *old* board plumbing that `displayedBoard` replaces — the previous `leaderboard` memo (`:921-933`), `stablefordBoard`/`isStablefordMode`/`isStrokePlayView` (`:934-955`), and `strokesByPlayer` (`:1541`) — after grep-confirming nothing else (clinch, share card) reads them; if something does, adapt it to `displayedBoard`/`resolvedBoard` rather than deleting.
 
-> If removing the alt-view turns out to touch clinch or other logic, stop and report — the intent is only to drop the stroke-play re-sort toggle, nothing else.
+> If a removal touches clinch or the shareable-card logic, stop and report — the intent is to reroute the board source through `displayedBoard`, not to change clinch/share behavior.
 
 - [ ] **Step 5: Lint + full suite**
 
@@ -526,4 +541,4 @@ git commit -m "feat(leaderboard): mode-aware round summary board"
 
 **Type consistency:** normalized entry `{ player, points, strokes, handicap? }` consistent across `roundLeaderboard` (Task 2), `tournamentLeaderboardResolved` (Task 3), HomeScreen rows (Task 4), and RoundLeaderboard (Task 5). `roundScoringMode(tournament, round)` order used everywhere. Resolvers return `{ mode, unit, entries }` uniformly. ✅
 
-**Deviation from spec (noted):** the resolvers live in `store/tournamentStore.js`, not `store/scoring.js`, to avoid a `scoring ↔ tournamentStore` import cycle (bestball helpers live in tournamentStore). `stablefordComparator` stays in `scoring.js`. Task 4 additionally **removes** the legacy stroke-play alt-view Switch (spec §3 kept it "available"); the scope toggle supersedes it and two toggles on one card is cluttered — flagged for the reviewer/runtime check.
+**Deviation from spec (noted):** the resolvers live in `store/tournamentStore.js`, not `store/scoring.js`, to avoid a `scoring ↔ tournamentStore` import cycle (bestball helpers live in tournamentStore). `stablefordComparator` stays in `scoring.js`. The stroke-play alt-view Switch is **kept** (per user decision) alongside the new Round|Global toggle — Task 4 reroutes both through the `displayedBoard` memo; the runtime check (Task 6) confirms the two-control header layout reads cleanly.
