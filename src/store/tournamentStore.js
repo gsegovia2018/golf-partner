@@ -20,6 +20,7 @@ import {
   roundScoringMode,
   roundBestBallValues,
   teamShapeOf,
+  stablefordComparator,
 } from './scoring';
 import { isScoringModeAllowed, fallbackScoringMode } from '../components/ScoringModePicker';
 import { scoringModeUsesTeams, isScrambleMode } from '../components/scoringModes';
@@ -1479,7 +1480,7 @@ export function tournamentLeaderboard(tournament) {
     });
   });
 
-  return totals.sort((a, b) => b.points - a.points);
+  return totals.sort(stablefordComparator);
 }
 
 // Ensure the tournament has one editor invite code and one viewer invite

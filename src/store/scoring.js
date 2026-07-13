@@ -759,6 +759,15 @@ export function tournamentPairsMatchStandings(tournament) {
   return { board };
 }
 
+// Shared Stableford ranking: points desc, then fewer gross strokes first.
+// An unplayed entry (strokes <= 0) sorts last on a points tie, never first.
+export function stablefordComparator(a, b) {
+  if (b.points !== a.points) return b.points - a.points;
+  const as = a.strokes > 0 ? a.strokes : Infinity;
+  const bs = b.strokes > 0 ? b.strokes : Infinity;
+  return as - bs;
+}
+
 // Individual Stableford board across all rounds. Scramble rounds have no
 // individual balls, so each player contributes their TEAM's Stableford
 // points/strokes there. This is the overall board for mixed-mode
@@ -790,7 +799,7 @@ export function tournamentStablefordLeaderboard(tournament) {
       cur.strokes += rt.totalStrokes;
     }
   });
-  return [...acc.values()].sort((a, b) => b.points - a.points);
+  return [...acc.values()].sort(stablefordComparator);
 }
 
 // ── Phase A helpers ─────────────────────────────────────────────────────────
