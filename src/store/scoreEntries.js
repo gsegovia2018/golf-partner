@@ -49,3 +49,66 @@ export function deriveCell(round, playerId, hole) {
   const mostRecent = nonBlank.reduce((a, b) => (b.ts > a.ts ? b : a));
   return { status: 'conflict', effective: mostRecent.value, candidates, blankAuthors };
 }
+
+export function activeAuthors(round) {
+  const out = new Set();
+  const byPlayer = round?.scoreEntries;
+  if (!byPlayer || typeof byPlayer !== 'object') return out;
+  for (const byHole of Object.values(byPlayer)) {
+    if (!byHole || typeof byHole !== 'object') continue;
+    for (const byAuthor of Object.values(byHole)) {
+      if (byAuthor && typeof byAuthor === 'object') {
+        for (const a of Object.keys(byAuthor)) out.add(a);
+      }
+    }
+  }
+  return out;
+}
+
+export function listRoundConflicts(round) {
+  const byPlayer = round?.scoreEntries;
+  if (!byPlayer || typeof byPlayer !== 'object') return [];
+  const out = [];
+  for (const [playerId, byHole] of Object.entries(byPlayer)) {
+    if (!byHole || typeof byHole !== 'object') continue;
+    for (const holeKey of Object.keys(byHole)) {
+      const hole = Number(holeKey);
+      if (deriveCell(round, playerId, hole).status === 'conflict') out.push({ playerId, hole });
+    }
+  }
+  return out.sort((a, b) => a.hole - b.hole);
+}
+
+export function roundHasConflicts(round) {
+  return listRoundConflicts(round).length > 0;
+}
+
+export function authorProgress(round, presence = {}) {
+  const progress = {};
+  for (const a of activeAuthors(round)) progress[a] = presence[a] ?? 0;
+  const byPlayer = round?.scoreEntries ?? {};
+  for (const byHole of Object.values(byPlayer)) {
+    if (!byHole || typeof byHole !== 'object') continue;
+    for (const [holeKey, byAuthor] of Object.entries(byHole)) {
+      const hole = Number(holeKey);
+      for (const [authorId, entry] of Object.entries(byAuthor ?? {})) {
+        if (entry?.value != null && hole > (progress[authorId] ?? 0)) progress[authorId] = hole;
+      }
+    }
+  }
+  for (const [authorId, cur] of Object.entries(presence)) {
+    if (cur > (progress[authorId] ?? 0)) progress[authorId] = cur;
+  }
+  return progress;
+}
+
+export function isCellSurfaceable(round, hole, progress) {
+  const authors = [...activeAuthors(round)];
+  if (authors.length === 0) return false;
+  return authors.every((a) => (progress?.[a] ?? 0) > hole);
+}
+
+export function surfaceableConflicts(round, presence = {}) {
+  const progress = authorProgress(round, presence);
+  return listRoundConflicts(round).filter((c) => isCellSurfaceable(round, c.hole, progress));
+}

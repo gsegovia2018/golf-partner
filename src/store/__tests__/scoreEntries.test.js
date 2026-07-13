@@ -1,4 +1,8 @@
 import { cellEntries, deriveCell } from '../scoreEntries';
+import {
+  activeAuthors, listRoundConflicts, roundHasConflicts,
+  authorProgress, isCellSurfaceable, surfaceableConflicts,
+} from '../scoreEntries';
 
 const round = (scoreEntries = {}, scoreResolutions = {}) => ({
   id: 'r0', scoreEntries, scoreResolutions,
@@ -69,5 +73,36 @@ describe('deriveCell', () => {
       { p1: { 3: { value: 4, by: 'a', ts: 25 } } },
     );
     expect(deriveCell(r, 'p1', 3).status).toBe('conflict');
+  });
+});
+
+describe('conflict listing + gate', () => {
+  const conflicted = () => round({
+    p1: { 3: { a: { value: 4, ts: 10 }, b: { value: 5, ts: 20 } } },
+    p2: { 1: { a: { value: 3, ts: 5 } } },
+  });
+
+  test('activeAuthors spans the whole round', () => {
+    expect(activeAuthors(conflicted())).toEqual(new Set(['a', 'b']));
+  });
+
+  test('listRoundConflicts returns only conflict cells, ascending', () => {
+    expect(listRoundConflicts(conflicted())).toEqual([{ playerId: 'p1', hole: 3 }]);
+    expect(roundHasConflicts(conflicted())).toBe(true);
+  });
+
+  test('authorProgress uses max(presence, highest entered hole)', () => {
+    const r = round({ p1: { 3: { a: { value: 4, ts: 10 } }, 7: { a: { value: 4, ts: 10 } } } });
+    expect(authorProgress(r, { a: 2 })).toEqual({ a: 7 });   // entries win
+    expect(authorProgress(r, { a: 9 })).toEqual({ a: 9 });   // presence wins
+  });
+
+  test('a conflict is not surfaceable until every active author is past the hole', () => {
+    const r = conflicted();
+    // author b is still on hole 3 (progress 3, not > 3)
+    expect(isCellSurfaceable(r, 3, { a: 5, b: 3 })).toBe(false);
+    expect(isCellSurfaceable(r, 3, { a: 5, b: 4 })).toBe(true);
+    expect(surfaceableConflicts(r, { a: 5, b: 3 })).toEqual([]);
+    expect(surfaceableConflicts(r, { a: 5, b: 4 })).toEqual([{ playerId: 'p1', hole: 3 }]);
   });
 });
