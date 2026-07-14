@@ -642,6 +642,35 @@ describe('tournamentSindicatoClinched', () => {
     };
     expect(tournamentSindicatoClinched(tournament)).toBeNull();
   });
+
+  test('detects clinch from a fully-scored later round even when currentRound is stale at 0', () => {
+    // Round 0 (idx 0): all three tie every hole → 0 lead, fully played.
+    // Round 1 (idx 1): a wins decisively, fully played — but currentRound
+    // never advanced past 0. The old idx > currentRound check treated round 1
+    // as "future" and counted its 2 holes toward holesRemaining, capping the
+    // possible swing at 8 and hiding a lead of 5. Scored state (isRoundPlayed)
+    // must recognize round 1 as played, so holesRemaining is 0 and a's lead
+    // of 5 clinches.
+    const holes = [
+      { number: 1, par: 4, strokeIndex: 1 },
+      { number: 2, par: 4, strokeIndex: 2 },
+    ];
+    const tied = {
+      holes, playerHandicaps: {},
+      scores: { a: { 1: 4, 2: 4 }, b: { 1: 4, 2: 4 }, c: { 1: 4, 2: 4 } },
+    };
+    const decisive = {
+      holes, playerHandicaps: {},
+      scores: { a: { 1: 4, 2: 4 }, b: { 1: 5, 2: 5 }, c: { 1: 6, 2: 5 } },
+    };
+    const tournament = {
+      players,
+      settings: { scoringMode: 'sindicato' },
+      rounds: [tied, decisive],
+      currentRound: 0,
+    };
+    expect(tournamentSindicatoClinched(tournament)).toBe('a');
+  });
 });
 
 describe('tournamentMatchPlayStandings', () => {
@@ -740,6 +769,30 @@ describe('tournamentMatchPlayStandings', () => {
       players,
       settings: { scoringMode: 'matchplay' },
       rounds: [played, futureMp, stablefordRound],
+      currentRound: 0,
+    };
+    expect(tournamentMatchPlayStandings(t).status).toBe('Alex wins');
+  });
+
+  test('reports a win from a fully-scored later round even when currentRound is stale at 0', () => {
+    // Round 0 (idx 0): halved both holes — 0-0, fully played.
+    // Round 1 (idx 1): a wins both holes — fully played — but currentRound
+    // never advanced past 0. idx(1) > currentRound(0) used to mark round 1
+    // as "future" and keep its 2 holes in holesRemaining, capping a's lead
+    // of 2 at "leads by" instead of "wins". Scored state must recognize
+    // round 1 as played (0 holes actually remaining), so a's 2-0 lead wins.
+    const tiedRound = {
+      holes, playerHandicaps: {},
+      scores: { a: { 1: 4, 2: 4 }, b: { 1: 4, 2: 4 } },
+    };
+    const decisiveRound = {
+      holes, playerHandicaps: {},
+      scores: { a: { 1: 4, 2: 4 }, b: { 1: 5, 2: 5 } },
+    };
+    const t = {
+      players,
+      settings: { scoringMode: 'matchplay' },
+      rounds: [tiedRound, decisiveRound],
       currentRound: 0,
     };
     expect(tournamentMatchPlayStandings(t).status).toBe('Alex wins');

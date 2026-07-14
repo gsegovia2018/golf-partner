@@ -1374,7 +1374,10 @@ export function tournamentPlayerClinched(tournament, mode) {
   const remainingPerPlayer = new Map(players.map((p) => [p.id, 0]));
 
   rounds.forEach((round, idx) => {
-    const future = idx > (tournament.currentRound ?? 0);
+    // currentRound is an unreliable, often-stale cross-device pointer (see
+    // isRoundPlayed) — a round that's already scored must never be treated
+    // as "future" just because the pointer lagged behind it.
+    const future = !isRoundPlayed(round, idx, tournament);
     if (mode === 'bestball') {
       const { bestBallValue, worstBallValue } = roundBestBallValues(tournament, round);
       const bbCap = bestBallValue + worstBallValue;

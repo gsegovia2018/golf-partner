@@ -454,7 +454,10 @@ export function tournamentSindicatoClinched(tournament) {
   if (lb.length < 2) return null;
   let holesRemaining = 0;
   rounds.forEach((round, idx) => {
-    const future = idx > (tournament.currentRound ?? 0);
+    // currentRound is an unreliable, often-stale cross-device pointer (see
+    // isRoundPlayed) — a round that's already scored must never be treated
+    // as "future" just because the pointer lagged behind it.
+    const future = !isRoundPlayed(round, idx, tournament);
     if (future) {
       holesRemaining += round.holes?.length ?? 0;
       return;
@@ -890,7 +893,10 @@ export function tournamentMatchPlayStandings(tournament) {
     // nothing — not even to holesRemaining (its holes would inflate the
     // clinch denominator and suppress a mathematically-decided "wins").
     if (roundScoringMode(tournament, round) !== 'matchplay') return;
-    const future = idx > (tournament.currentRound ?? 0);
+    // currentRound is an unreliable, often-stale cross-device pointer (see
+    // isRoundPlayed) — a round that's already scored must never be treated
+    // as "future" just because the pointer lagged behind it.
+    const future = !isRoundPlayed(round, idx, tournament);
     if (future) {
       holesRemaining += round.holes?.length ?? 0;
       return;
