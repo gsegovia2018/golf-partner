@@ -154,8 +154,10 @@ describe('addPlayerRoundPatches pair construction', () => {
     const flat = patches[0].pairs.flat();
     expect(flat).toHaveLength(3);
     expect(flat.map((p) => p.id).sort()).toEqual(['a', 'b', 'c']);
-    // randomPairs(3) → [[x, y], [z]] (one pair + one solo)
-    expect(patches[0].pairs.length).toBe(2);
+    // Task 12: an odd Stableford-with-Partners roster forms ONE 3-player
+    // team instead of the old unwinnable pair + solo singleton.
+    expect(patches[0].pairs.length).toBe(1);
+    expect(patches[0].pairs[0]).toHaveLength(3);
   });
 
   test('non-team old + team new (sindicato 3→4 fallback to stableford): randomizes fresh', () => {

@@ -2,6 +2,7 @@ import {
   reTeeRound,
   tournamentNoun, tournamentNounCapitalized, formatRoundLabel,
   isRoundInProgress, propagatePlayerToTournaments, propagateCourseToTournaments, readLocal,
+  roundPairLeaderboard,
 } from '../tournamentStore';
 import { mutate } from '../mutate';
 
@@ -480,5 +481,67 @@ describe('propagateCourseToTournaments', () => {
       .map(([, m]) => m)
       .filter((m) => m.type === 'round.upsert');
     expect(roundUpsertCalls.length).toBe(0);
+  });
+});
+
+describe('roundPairLeaderboard', () => {
+  const players = [
+    { id: 'a', name: 'A', handicap: 0 },
+    { id: 'b', name: 'B', handicap: 0 },
+    { id: 'c', name: 'C', handicap: 0 },
+    { id: 'd', name: 'D', handicap: 0 },
+  ];
+  const holes = [
+    { number: 1, par: 4, strokeIndex: 1 },
+    { number: 2, par: 4, strokeIndex: 2 },
+  ];
+
+  // Task 12: an odd Stableford-with-Partners roster forms one 3-player team
+  // instead of a singleton (see randomPartnerTeams in store/scoring.js).
+  // The board total for that team must be its three members' combined
+  // Stableford points — the same summation rule 2-player pairs already use,
+  // not some special-cased rule for the 3-player case.
+  test("a 3-player team's board total is its members' combined Stableford points", () => {
+    const round = {
+      holes,
+      playerHandicaps: {},
+      pairs: [[players[0], players[1]], [players[2], players[3], { id: 'e', name: 'E', handicap: 0 }]],
+      scores: {
+        a: { 1: 4, 2: 5 },
+        b: { 1: 5, 2: 4 },
+        c: { 1: 3, 2: 4 },
+        d: { 1: 4, 2: 4 },
+        e: { 1: 5, 2: 3 },
+      },
+    };
+    const fivePlayers = [...players, { id: 'e', name: 'E', handicap: 0 }];
+    const lb = roundPairLeaderboard(round, fivePlayers);
+    expect(lb).toHaveLength(2);
+
+    const threePlayerTeam = lb.find((entry) => entry.members.length === 3);
+    expect(threePlayerTeam).toBeDefined();
+    const expectedTotal = threePlayerTeam.members.reduce((s, m) => s + m.totalPoints, 0);
+    expect(threePlayerTeam.combinedPoints).toBe(expectedTotal);
+
+    const twoPlayerTeam = lb.find((entry) => entry.members.length === 2);
+    const expectedPairTotal = twoPlayerTeam.members.reduce((s, m) => s + m.totalPoints, 0);
+    expect(twoPlayerTeam.combinedPoints).toBe(expectedPairTotal);
+  });
+
+  test('sorts a 3-player team by its combined total, same as a 2-player pair', () => {
+    const round = {
+      holes,
+      playerHandicaps: {},
+      pairs: [[players[0], players[1]], [players[2], players[3]]],
+      scores: {
+        a: { 1: 4, 2: 4 }, // strong pair
+        b: { 1: 4, 2: 4 },
+        c: { 1: 6, 2: 6 }, // weak pair
+        d: { 1: 6, 2: 6 },
+      },
+    };
+    const lb = roundPairLeaderboard(round, players);
+    expect(lb[0].members.map((m) => m.player.id).sort()).toEqual(['a', 'b']);
+    expect(lb[0].combinedPoints).toBeGreaterThan(lb[1].combinedPoints);
   });
 });

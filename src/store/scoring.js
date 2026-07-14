@@ -333,6 +333,9 @@ export function shufflePlayers(players) {
 
 // Split players into pairs at random. Uses an unbiased Fisher-Yates shuffle
 // (the old `sort(() => Math.random() - 0.5)` produced a skewed distribution).
+// An odd roster leaves a trailing singleton pair — callers that can't seat a
+// lone player against a full pair (e.g. Stableford with Partners) must not
+// use this directly; see randomPartnerTeams.
 export function randomPairs(players) {
   const shuffled = shufflePlayers(players);
   const pairs = [];
@@ -343,10 +346,29 @@ export function randomPairs(players) {
   return pairs;
 }
 
+// Stableford-with-Partners team builder: 2-player teams, except an odd
+// roster folds its leftover player into the LAST pair to form one 3-player
+// team instead of leaving them as an unwinnable solo singleton (product
+// decision — one team of 3 absorbs the odd player out; every other team
+// stays a pair). 5 → [2,3]; 7 → [2,2,3]; 3 → [3] (the whole roster, since
+// there's no other pair to fold into).
+export function randomPartnerTeams(players) {
+  const pairs = randomPairs(players);
+  const last = pairs[pairs.length - 1];
+  if (pairs.length >= 2 && last?.length === 1) {
+    const leftover = last[0];
+    pairs.pop();
+    pairs[pairs.length - 1] = [...pairs[pairs.length - 1], leftover];
+  }
+  return pairs;
+}
+
 // Team shapes per mode. 2x2 modes ride randomPairs; scramble3v1 splits a
-// shuffled roster 3+1 (the solo player is random); scramble4 is one team.
-// Invalid mode/roster combos degrade to singleton pairs, matching the
-// existing non-team fallback everywhere pairs are built.
+// shuffled roster 3+1 (the solo player is random); scramble4 is one team;
+// stableford (partners) rides randomPartnerTeams so an odd roster forms one
+// 3-player team instead of a singleton — see randomPartnerTeams. Invalid
+// mode/roster combos degrade to singleton pairs, matching the existing
+// non-team fallback everywhere pairs are built.
 export function buildTeamsForMode(mode, players) {
   // Lazy require (not a static top-level import): scoringModes.js imports
   // isScrambleMode back from this file, so a static import here would form
@@ -361,6 +383,7 @@ export function buildTeamsForMode(mode, players) {
     const shuffled = shufflePlayers(players);
     return [shuffled.slice(0, 3), shuffled.slice(3)];
   }
+  if (mode === 'stableford') return randomPartnerTeams(players);
   return randomPairs(players);
 }
 

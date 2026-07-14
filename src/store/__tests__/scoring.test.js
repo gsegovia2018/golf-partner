@@ -18,6 +18,7 @@ import {
   clampScoreInput,
   resolvePlayerHandicap,
   randomPairs,
+  randomPartnerTeams,
   buildTeamsForMode,
   isRoundPlayed,
   sindicatoHolePoints,
@@ -493,6 +494,41 @@ describe('randomPairs', () => {
 
   it('returns no pairs for an empty roster', () => {
     expect(randomPairs([])).toEqual([]);
+  });
+});
+
+describe('randomPartnerTeams', () => {
+  // 5-player roster: the leftover from randomPairs folds into the last
+  // pair to make ONE 3-player team — no unwinnable solo (product decision).
+  it('5 players → one pair, one 3-player team (no singleton)', () => {
+    const players = ['1', '2', '3', '4', '5'].map((id) => ({ id }));
+    const teams = randomPartnerTeams(players);
+    expect(teams.map((t) => t.length).sort()).toEqual([2, 3]);
+    expect(teams.some((t) => t.length === 1)).toBe(false);
+    expect(teams.flat().map((p) => p.id).sort()).toEqual(['1', '2', '3', '4', '5']);
+  });
+
+  it('7 players → two pairs, one 3-player team', () => {
+    const players = ['1', '2', '3', '4', '5', '6', '7'].map((id) => ({ id }));
+    const teams = randomPartnerTeams(players);
+    expect(teams.map((t) => t.length).sort()).toEqual([2, 2, 3]);
+    expect(teams.flat().map((p) => p.id).sort()).toEqual(['1', '2', '3', '4', '5', '6', '7']);
+  });
+
+  it('3 players (the minimum) → a single 3-player team, not a pair + solo', () => {
+    const players = ['1', '2', '3'].map((id) => ({ id }));
+    const teams = randomPartnerTeams(players);
+    expect(teams).toHaveLength(1);
+    expect(teams[0]).toHaveLength(3);
+  });
+
+  it('even rosters are unaffected — all 2-player teams', () => {
+    for (const n of [4, 6]) {
+      const players = Array.from({ length: n }, (_, i) => ({ id: String(i) }));
+      const teams = randomPartnerTeams(players);
+      expect(teams.every((t) => t.length === 2)).toBe(true);
+      expect(teams).toHaveLength(n / 2);
+    }
   });
 });
 
@@ -1100,6 +1136,29 @@ describe('buildTeamsForMode', () => {
     const teams = buildTeamsForMode('stableford', four);
     expect(teams).toHaveLength(2);
     expect(teams.every((t) => t.length === 2)).toBe(true);
+  });
+
+  it('stableford odd roster (5) → [2,3], no singleton', () => {
+    const five = [...four, { id: 'e' }];
+    const teams = buildTeamsForMode('stableford', five);
+    expect(teams.map((t) => t.length).sort()).toEqual([2, 3]);
+    expect(teams.some((t) => t.length === 1)).toBe(false);
+  });
+
+  it('stableford odd roster (3) → a single 3-player team', () => {
+    const teams = buildTeamsForMode('stableford', four.slice(0, 3));
+    expect(teams).toEqual([expect.arrayContaining([four[0], four[1], four[2]])]);
+    expect(teams).toHaveLength(1);
+  });
+
+  it('the odd-roster fix is scoped to stableford — other 2x2 modes still need exactly 4', () => {
+    // scramblepairs/bestball/pairsmatchplay require count === 4, so parity
+    // never arises for them; confirm they're untouched by staying on the
+    // plain randomPairs shape for an even roster.
+    for (const mode of ['scramblepairs', 'pairsmatchplay']) {
+      const teams = buildTeamsForMode(mode, four);
+      expect(teams.every((t) => t.length === 2)).toBe(true);
+    }
   });
 });
 

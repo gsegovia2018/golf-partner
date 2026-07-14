@@ -92,4 +92,22 @@ describe('pairsForNextRound', () => {
     };
     expect(pairsForNextRound(t, t.rounds[0])).toHaveLength(1);
   });
+
+  it('fixedTeams reuses a [2,3] partners shape without a spurious rebuild', () => {
+    // Odd-roster Stableford-with-Partners forms one 3-player team (task 12).
+    // teamShapeOf keys purely off the mode string, so this [2,3] shape must
+    // round-trip through the fixedTeams reuse path exactly, not get rebuilt.
+    const five = [...players, P4('e')];
+    const prevPairs = [[five[0], five[1]], [five[2], five[3], five[4]]];
+    const t = {
+      settings: { scoringMode: 'stableford', fixedTeams: true },
+      players: five,
+      rounds: [
+        { id: 'r0', pairs: prevPairs, scoringMode: 'stableford' },
+        { id: 'r1', scoringMode: 'stableford' },
+      ],
+    };
+    const pairs = pairsForNextRound(t, t.rounds[1]);
+    expect(pairs.map((pr) => pr.map((p) => p.id))).toEqual([['a', 'b'], ['c', 'd', 'e']]);
+  });
 });
