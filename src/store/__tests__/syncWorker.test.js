@@ -408,6 +408,34 @@ describe('drainOnce isolation (via syncNow)', () => {
     expect(executeMutation).toHaveBeenCalledWith(tournEntry, localBlob);
     expect(syncQueue.drop).toHaveBeenCalledWith('t-e1');
   });
+
+  it('a throwing drainTournament for one tournament does NOT starve sibling tournaments', async () => {
+    // Head-of-line blocking: byTournament preserves insertion order (tA
+    // before tB). Before the fix, an unwrapped `await drainTournament(...)`
+    // in the loop meant tA's recoverable throw aborted the whole for-loop —
+    // tB (and every tournament after it) never got a chance to drain until
+    // tA's entry either recovered or crossed the poison cap (up to
+    // RECOVERABLE_ATTEMPT_CAP cycles later). Each tournament's drain must be
+    // isolated, like the library drain immediately above it.
+    const aEntry = { id: 'a-e1', tournamentId: 'tA', mutation: { type: 'score.set' } };
+    const bEntry = { id: 'b-e1', tournamentId: 'tB', mutation: { type: 'score.set' } };
+    syncQueue.all.mockResolvedValue([aEntry, bEntry]);
+    executeMutation.mockImplementation((entry) => (
+      entry.tournamentId === 'tA'
+        ? Promise.reject(new Error('network down'))
+        : Promise.resolve({ conflict: null })
+    ));
+
+    await syncNow();
+
+    // tA's entry stays queued (recoverable, under cap) — never dropped.
+    expect(syncQueue.drop).not.toHaveBeenCalledWith('a-e1');
+    // tB drained successfully despite tA's failure preceding it in the loop.
+    expect(executeMutation).toHaveBeenCalledWith(bEntry, localBlob);
+    expect(syncQueue.drop).toHaveBeenCalledWith('b-e1');
+    // The failure is still surfaced so backoff/retry indicators trigger.
+    expect(_setSyncStatus).toHaveBeenCalledWith('error');
+  });
 });
 
 describe('syncNow', () => {

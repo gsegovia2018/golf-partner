@@ -261,8 +261,21 @@ async function drainOnce() {
     if (!byTournament.has(e.tournamentId)) byTournament.set(e.tournamentId, []);
     byTournament.get(e.tournamentId).push(e);
   }
+  // Isolate each tournament's drain, mirroring the library-drain try/catch
+  // above: a mutation for tournament A that throws (recoverable, under its
+  // retry cap) must not abort this for-loop and starve every tournament
+  // after it in iteration order — that head-of-line blocking could stall a
+  // sibling tournament's score/finish sync for up to RECOVERABLE_ATTEMPT_CAP
+  // drain passes. The failure is still surfaced via 'error' so backoff
+  // triggers; the entry stays queued (or was already dropped inside
+  // drainTournament) and this tournament retries on the next pass.
   for (const [tid, entries] of byTournament) {
-    await drainTournament(tid, entries);
+    try {
+      await drainTournament(tid, entries);
+    } catch (error) {
+      _setSyncStatus('error');
+      console.warn(`tournament ${tid} drain failed; continuing with other tournaments: ${error?.message}`);
+    }
   }
 
   const remaining = await syncQueue.all();

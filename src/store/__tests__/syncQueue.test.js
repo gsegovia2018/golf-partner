@@ -97,3 +97,66 @@ describe('syncQueue attempts tracking', () => {
     expect(result).toBe(0);
   });
 });
+
+describe('syncQueue concurrency (mutex serialization)', () => {
+  test('two concurrent enqueue calls both persist — neither writeAll clobbers the other', async () => {
+    // Without a mutex, both calls read the same (empty) array before either
+    // writes: enqueue A reads [], pushes A, writes [A]; enqueue B ALSO reads
+    // [] (racing A's read), pushes B, writes [B] — clobbering A's write. The
+    // queue must serialize these read-modify-write ops so both survive.
+    const queue = createSyncQueue({ storage: memoryStorage(), key: 'q7' });
+
+    const [a, b] = await Promise.all([
+      queue.enqueue({ tournamentId: 't1', mutation: { type: 'score.set', hole: 1 } }),
+      queue.enqueue({ tournamentId: 't1', mutation: { type: 'score.set', hole: 2 } }),
+    ]);
+
+    const all = await queue.all();
+    expect(all).toHaveLength(2);
+    expect(all.map((e) => e.id).sort()).toEqual([a.id, b.id].sort());
+  });
+
+  test('many concurrent enqueue calls all persist (stress the mutex ordering)', async () => {
+    const queue = createSyncQueue({ storage: memoryStorage(), key: 'q8' });
+
+    const entries = await Promise.all(
+      Array.from({ length: 20 }, (_, i) => queue.enqueue({
+        tournamentId: 't1',
+        mutation: { type: 'score.set', hole: i },
+      })),
+    );
+
+    const all = await queue.all();
+    expect(all).toHaveLength(20);
+    expect(new Set(all.map((e) => e.id)).size).toBe(20);
+    expect(entries.map((e) => e.id).sort()).toEqual(all.map((e) => e.id).sort());
+  });
+
+  test('a concurrent drop and enqueue do not clobber each other', async () => {
+    const queue = createSyncQueue({ storage: memoryStorage(), key: 'q9' });
+    const e1 = await queue.enqueue({ tournamentId: 't1', mutation: { type: 'score.set' } });
+
+    const [, e2] = await Promise.all([
+      queue.drop(e1.id),
+      queue.enqueue({ tournamentId: 't1', mutation: { type: 'shot.set' } }),
+    ]);
+
+    const all = await queue.all();
+    expect(all.map((e) => e.id)).toEqual([e2.id]);
+  });
+
+  test('concurrent incrementAttempts calls on different entries both land', async () => {
+    const queue = createSyncQueue({ storage: memoryStorage(), key: 'q10' });
+    const e1 = await queue.enqueue({ tournamentId: 't1', mutation: { type: 'score.set' } });
+    const e2 = await queue.enqueue({ tournamentId: 't1', mutation: { type: 'shot.set' } });
+
+    await Promise.all([
+      queue.incrementAttempts(e1.id),
+      queue.incrementAttempts(e2.id),
+    ]);
+
+    const all = await queue.all();
+    expect(all.find((e) => e.id === e1.id).attempts).toBe(1);
+    expect(all.find((e) => e.id === e2.id).attempts).toBe(1);
+  });
+});
