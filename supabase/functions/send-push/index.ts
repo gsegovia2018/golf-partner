@@ -3,6 +3,16 @@
 // delivers a push. Generic: a new notification type only needs a new entry
 // in RENDERERS below.
 import { createClient } from 'jsr:@supabase/supabase-js@2';
+import { isAuthorized } from './auth.ts';
+
+// Expo's push API caps each request at 100 messages.
+const EXPO_PUSH_CHUNK_SIZE = 100;
+
+function chunk<T>(items: T[], size: number): T[][] {
+  const out: T[][] = [];
+  for (let i = 0; i < items.length; i += size) out.push(items.slice(i, i + size));
+  return out;
+}
 
 type NotificationRow = {
   user_id: string;
@@ -67,6 +77,16 @@ const RENDERERS: Record<string, (d: Record<string, unknown>) => Rendered> = {
 
 Deno.serve(async (req) => {
   try {
+    // Require a shared secret matching PUSH_WEBHOOK_SECRET before doing
+    // anything else. This endpoint uses the service-role key, so an
+    // unauthenticated caller could otherwise push arbitrary
+    // title/body/deepLink notifications to any user. Fails closed: if the
+    // secret isn't configured, every request is rejected.
+    const expectedSecret = Deno.env.get('PUSH_WEBHOOK_SECRET');
+    if (!isAuthorized(req.headers, expectedSecret)) {
+      return new Response('unauthorized', { status: 401 });
+    }
+
     const payload = await req.json();
     const note: NotificationRow | undefined = payload?.record;
     if (!note) return new Response('no record', { status: 400 });
@@ -94,20 +114,33 @@ Deno.serve(async (req) => {
       data: deepLink,
     }));
 
-    const expoResp = await fetch('https://exp.host/--/api/v2/push/send', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(messages),
-    });
-    const result = await expoResp.json();
+    // Expo caps each push request at 100 messages, so chunk when a user has
+    // registered more tokens than that.
+    const messageChunks = chunk(messages, EXPO_PUSH_CHUNK_SIZE);
+    const tokenChunks = chunk(tokens, EXPO_PUSH_CHUNK_SIZE);
+    const receipts: { status?: string; details?: { error?: string } }[] = [];
+    for (const messageChunk of messageChunks) {
+      const expoResp = await fetch('https://exp.host/--/api/v2/push/send', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(messageChunk),
+      });
+      const result = await expoResp.json();
+      receipts.push(...(Array.isArray(result?.data) ? result.data : []));
+    }
 
     // Prune tokens Expo reports as no longer registered.
-    const receipts = Array.isArray(result?.data) ? result.data : [];
+    // NOTE: this only inspects the synchronous send ticket, not the async
+    // receipts endpoint, and only handles DeviceNotRegistered — out of
+    // scope for this task, tracked as a follow-up.
     const stale: string[] = [];
-    receipts.forEach((r: { status?: string; details?: { error?: string } }, i: number) => {
-      if (r?.status === 'error' && r?.details?.error === 'DeviceNotRegistered') {
-        stale.push(tokens[i].token);
-      }
+    tokenChunks.forEach((tokenChunk, chunkIndex) => {
+      tokenChunk.forEach((t: { token: string }, i: number) => {
+        const r = receipts[chunkIndex * EXPO_PUSH_CHUNK_SIZE + i];
+        if (r?.status === 'error' && r?.details?.error === 'DeviceNotRegistered') {
+          stale.push(t.token);
+        }
+      });
     });
     if (stale.length > 0) {
       await supabase.from('push_tokens').delete().in('token', stale);
