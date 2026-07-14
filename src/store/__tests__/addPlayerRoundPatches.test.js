@@ -120,18 +120,38 @@ describe('addPlayerRoundPatches pair construction', () => {
     expect(patches[0].pairs).toEqual([[A], [B], [C]]);
   });
 
-  test('team→team with revealed pairs: preserves existing pairs, new player folds into the short team (no singleton)', () => {
+  test('team→team with a revealed 3-player round (3 -> 4): the triple splits, new player pairs with the odd one out (no singleton)', () => {
+    // A revealed 3-player Stableford-with-Partners round is one 3-team
+    // ([[A,B,C]]) via randomPartnerTeams — NOT [2,1]. Adding a 4th splits
+    // it so A,B keep their partnership and C pairs with the newcomer.
     const D = { id: 'd', name: 'D', handicap: 4 };
     const t = makeTournament({
       players: [A, B, C],
       mode: 'stableford',
-      rounds: [makeRound({ revealed: true, pairs: [[A, B], [C]] })],
+      rounds: [makeRound({ revealed: true, pairs: [[A, B, C]] })],
     });
     const { patches } = addPlayerRoundPatches(t, D);
-    // Task 14: a solo group here would be the exact unwinnable singleton
-    // Task 12 already eliminated from the initial random draw — D folds
-    // into C's short team instead.
     expect(patches[0].pairs).toEqual([[A, B], [C, D]]);
+    expect(patches[0].pairs.some((pr) => pr.length === 1)).toBe(false);
+  });
+
+  test('legacy multi-singleton revealed round ([2,1,1]) + new player: rebuilds — no singleton, no team over 3', () => {
+    // Guards the reported gap: a legacy [[A,B],[C],[D]] shape (still possible
+    // in Supabase under the staggered client rollout) has TWO lone players;
+    // one new player can't seat both, so insertIntoPartnerTeams must rebuild
+    // rather than incrementally patch (which would leave one singleton).
+    const D = { id: 'd', name: 'D', handicap: 4 };
+    const E = { id: 'e', name: 'E', handicap: 6 };
+    const t = makeTournament({
+      players: [A, B, C, D],
+      mode: 'stableford',
+      rounds: [makeRound({ revealed: true, pairs: [[A, B], [C], [D]] })],
+    });
+    const { patches } = addPlayerRoundPatches(t, E);
+    expect(patches[0].pairs.some((pr) => pr.length === 1)).toBe(false);
+    expect(patches[0].pairs.every((pr) => pr.length <= 3)).toBe(true);
+    expect(patches[0].pairs.map((pr) => pr.length).sort()).toEqual([2, 3]);
+    expect(patches[0].pairs.flat().map((pl) => pl.id).sort()).toEqual(['a', 'b', 'c', 'd', 'e']);
   });
 
   test('team→team with revealed clean pairs (4th -> 5th player): new player joins the last pair, forming one 3-team', () => {
@@ -330,7 +350,7 @@ describe('addPlayerRoundPatches fixedTeams', () => {
       mode: 'stableford',
       fixedTeams: false,
       currentRound: 0,
-      rounds: [makeRound({ id: 'r0', revealed: true, pairs: [[A, B], [C]] })],
+      rounds: [makeRound({ id: 'r0', revealed: true, pairs: [[A, B, C]] })],
     });
     const { patches } = addPlayerRoundPatches(t, D);
     expect(patches[0].pairs).toEqual([[A, B], [C, D]]);
@@ -404,17 +424,17 @@ describe('addPlayerRoundPatches per-round mode overrides', () => {
       players: [A, B, C],
       mode: 'individual', // tournament default is NOT a team mode
       rounds: [{
-        ...makeRound({ id: 'r0', revealed: true, pairs: [[A, B], [C]] }),
+        ...makeRound({ id: 'r0', revealed: true, pairs: [[A, B, C]] }),
         scoringMode: 'stableford', // round override IS a team mode, valid at 3 and 4
       }],
     });
     const { patches } = addPlayerRoundPatches(t, D);
     const r0 = patches.find((p) => p.roundId === 'r0');
     // Documented buildPairsForAddedPlayer behavior for team→team revealed:
-    // existing partnerships preserved, the new player folds into the short
-    // team (Task 14: no singleton) — NOT a fresh reshuffle. The round's
-    // pre-mutation mode is its override (stableford), not the tournament
-    // default (individual).
+    // the revealed 3-team splits, A,B keep their partnership and C pairs
+    // with the newcomer (Task 14: no singleton) — NOT a fresh reshuffle. The
+    // round's pre-mutation mode is its override (stableford), not the
+    // tournament default (individual).
     expect(r0.pairs).toEqual([[A, B], [C, D]]);
     expect(r0.clearScoringMode).toBeUndefined();
   });

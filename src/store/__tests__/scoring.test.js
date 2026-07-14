@@ -555,11 +555,23 @@ describe('insertIntoPartnerTeams', () => {
     expect(result.every((g) => g.length <= 3)).toBe(true);
   });
 
-  it('a legacy/degenerate singleton absorbs the new player directly', () => {
+  it('a legacy single-singleton shape is rebuilt (non-conforming) — no singleton, all present', () => {
     const [p1, p2, p3, p4] = ['1', '2', '3', '4'].map(p);
     const groups = [[p1, p2], [p3]];
     const result = insertIntoPartnerTeams(groups, p4);
-    expect(result).toEqual([[p1, p2], [p3, p4]]);
+    expect(result.every((g) => g.length === 2)).toBe(true);
+    expect(result.some((g) => g.length === 1)).toBe(false);
+    expect(result.flat().map((x) => x.id).sort()).toEqual(['1', '2', '3', '4']);
+  });
+
+  it('a legacy MULTI-singleton shape ([2,1,1]) rebuilds — one new player cannot seat two lone players', () => {
+    const [p1, p2, p3, p4, p5] = ['1', '2', '3', '4', '5'].map(p);
+    const groups = [[p1, p2], [p3], [p4]];
+    const result = insertIntoPartnerTeams(groups, p5);
+    expect(result.map((g) => g.length).sort()).toEqual([2, 3]);
+    expect(result.some((g) => g.length === 1)).toBe(false);
+    expect(result.every((g) => g.length <= 3)).toBe(true);
+    expect(result.flat().map((x) => x.id).sort()).toEqual(['1', '2', '3', '4', '5']);
   });
 
   it('single 3-team (minimum roster) splits when a 4th player joins', () => {
