@@ -2,6 +2,7 @@ import React from 'react';
 import { View, Text, TextInput, TouchableOpacity, StyleSheet } from 'react-native';
 import { Feather } from '@expo/vector-icons';
 import { blankTee } from '../store/tees';
+import { computeDupeTeeLabels } from '../lib/courseLibrary';
 
 // Controlled tee-list editor. `tees` is an array of
 // { id, label, rating, slope } (rating/slope may be '' while editing).
@@ -21,12 +22,7 @@ export default function TeesEditor({ tees, onChange, theme }) {
 
   // Duplicate-label detection — labels must be unique within a course
   // because tee snapshots are matched by label.
-  const labelCounts = tees.reduce((m, t) => {
-    const k = String(t.label ?? '').trim().toLowerCase();
-    if (k) m[k] = (m[k] ?? 0) + 1;
-    return m;
-  }, {});
-  const dupes = Object.entries(labelCounts).filter(([, n]) => n > 1).map(([k]) => k);
+  const dupes = computeDupeTeeLabels(tees);
 
   return (
     <View style={s.card}>
