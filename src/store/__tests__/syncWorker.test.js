@@ -417,6 +417,7 @@ describe('drainOnce isolation (via syncNow)', () => {
     // tA's entry either recovered or crossed the poison cap (up to
     // RECOVERABLE_ATTEMPT_CAP cycles later). Each tournament's drain must be
     // isolated, like the library drain immediately above it.
+    jest.useFakeTimers(); // syncNow's backoff .catch() schedules a retry timer
     const aEntry = { id: 'a-e1', tournamentId: 'tA', mutation: { type: 'score.set' } };
     const bEntry = { id: 'b-e1', tournamentId: 'tB', mutation: { type: 'score.set' } };
     syncQueue.all.mockResolvedValue([aEntry, bEntry]);
@@ -435,6 +436,39 @@ describe('drainOnce isolation (via syncNow)', () => {
     expect(syncQueue.drop).toHaveBeenCalledWith('b-e1');
     // The failure is still surfaced so backoff/retry indicators trigger.
     expect(_setSyncStatus).toHaveBeenCalledWith('error');
+
+    jest.clearAllTimers();
+    jest.useRealTimers();
+  });
+
+  it('a recoverable tournament failure still triggers syncNow backoff (schedules a retry timer)', async () => {
+    // Isolation must not swallow the failure outright: drainOnce catches each
+    // tournament's throw so siblings drain, but must rethrow afterward so
+    // drainOnce() rejects → syncNow's .catch() bumps _attempt and schedules a
+    // backoff retry for the still-queued entry. Asserting ONLY that
+    // _setSyncStatus('error') fired would miss this — the entry would sit
+    // queued with no scheduled retry.
+    jest.useFakeTimers();
+    const setTimeoutSpy = jest.spyOn(global, 'setTimeout');
+    const aEntry = { id: 'a-e1', tournamentId: 'tA', mutation: { type: 'score.set' } };
+    syncQueue.all.mockResolvedValue([aEntry]);
+    executeMutation.mockRejectedValue(new Error('network down'));
+
+    await syncNow();
+
+    // A backoff retry timer was scheduled — its delay is one of the known
+    // BACKOFF_MS steps (which step depends on the module-level _attempt
+    // counter carried across tests, so assert membership, not an exact ms).
+    const BACKOFF_MS = [1000, 2000, 4000, 8000, 16000, 32000, 60000];
+    expect(setTimeoutSpy).toHaveBeenCalled();
+    const delays = setTimeoutSpy.mock.calls.map((c) => c[1]);
+    expect(delays.some((d) => BACKOFF_MS.includes(d))).toBe(true);
+    // The failing entry stays queued — never dropped by isolation.
+    expect(syncQueue.drop).not.toHaveBeenCalledWith('a-e1');
+
+    setTimeoutSpy.mockRestore();
+    jest.clearAllTimers();
+    jest.useRealTimers();
   });
 });
 
