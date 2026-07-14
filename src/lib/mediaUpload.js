@@ -118,15 +118,30 @@ export async function processUpload(entry) {
   const thumbPath = `${tournamentId}/${roundId}/thumbs/${id}.jpg`;
 
   const finalUri = kind === 'photo' ? await compressPhoto(localUri) : localUri;
-  const thumbUri = await makeThumbnail(localUri, kind);
+
+  // Thumbnail generation is best-effort: an unsupported codec, a null
+  // canvas.toBlob() on web, or any other decode failure must not block the
+  // original photo/video from uploading. Fall back to no thumbnail rather
+  // than losing the whole item after retries are exhausted.
+  let thumbUri = null;
+  try {
+    thumbUri = await makeThumbnail(localUri, kind);
+  } catch (err) {
+    console.warn('[mediaUpload] thumbnail generation failed; uploading original without a thumbnail', err);
+    thumbUri = null;
+  }
 
   await uploadFile(storagePath, finalUri, contentType);
-  await uploadFile(thumbPath, thumbUri, 'image/jpeg');
+  if (thumbUri) {
+    await uploadFile(thumbPath, thumbUri, 'image/jpeg');
+  }
+
+  const finalThumbPath = thumbUri ? thumbPath : null;
 
   await insertMediaRow({
     id, tournamentId, roundId, holeIndex, kind,
-    storagePath, thumbPath, durationS, caption, uploaderLabel,
+    storagePath, thumbPath: finalThumbPath, durationS, caption, uploaderLabel,
   });
 
-  return { storagePath, thumbPath };
+  return { storagePath, thumbPath: finalThumbPath };
 }
