@@ -15,7 +15,7 @@ import {
   loadTournamentMembers, findClaimedSlot,
   removeTournamentMember, generateInviteCode, releaseTournamentPlayer, buildJoinLink,
   addPlayerRoundPatches, removePlayerRoundPatches,
-  getTournament, getTournamentSnapshot,
+  getTournament, getTournamentSnapshot, rosterCap,
 } from '../store/tournamentStore';
 import { supabase } from '../lib/supabase';
 import { mutate } from '../store/mutate';
@@ -121,8 +121,9 @@ export default function PlayersScreen({ navigation, route }) {
     let t = await getTournament(tournamentId);
     if (!t) return;
     let chosenMode = initialChosenMode;
+    const cap = rosterCap(t.kind);
     for (const p of picked) {
-      if ((t.players ?? []).length >= 4) break;
+      if ((t.players ?? []).length >= cap) break;
       if ((t.players ?? []).some((x) => x.id === p.id)) continue;
       const parsed = parseHandicapIndex(p.handicap);
       // Carry the account link (user_id) + avatar through. Dropping them here
@@ -156,8 +157,9 @@ export default function PlayersScreen({ navigation, route }) {
     const currentMode = t.settings?.scoringMode ?? 'stableford';
     const existingIds = new Set((t.players ?? []).map((p) => p.id));
     let simulatedCount = (t.players ?? []).length;
+    const cap = rosterCap(t.kind);
     for (const p of picked) {
-      if (simulatedCount >= 4) break;
+      if (simulatedCount >= cap) break;
       if (existingIds.has(p.id)) continue;
       simulatedCount += 1;
     }
@@ -527,11 +529,12 @@ export default function PlayersScreen({ navigation, route }) {
         <ScrollView style={s.scroll} contentContainerStyle={s.content}>
           <View style={s.topRow}>
             <Text style={s.sectionLabel}>{editPlayers.length} {editPlayers.length === 1 ? 'player' : 'players'}</Text>
-            {!isViewer && editPlayers.length < 4 && (
+            {!isViewer && editPlayers.length < rosterCap(tournament?.kind) && (
               <TouchableOpacity
                 style={s.addBtn}
                 onPress={() => navigation.navigate('PlayerPicker', {
                   alreadySelectedIds: editPlayers.map((p) => p.id),
+                  kind: tournament?.kind,
                 })}
                 activeOpacity={0.7}
               >

@@ -11,7 +11,7 @@ import { v4 as uuidv4 } from 'uuid';
 
 import { useTheme } from '../theme/ThemeContext';
 import { fetchMyPlayers } from '../store/libraryStore';
-import { loadAllTournaments } from '../store/tournamentStore';
+import { loadAllTournaments, rosterCap } from '../store/tournamentStore';
 import { setPendingPlayers } from '../lib/selectionBridge';
 import { buildPlayerLastUsed } from '../lib/recentUse';
 import { mutate } from '../store/mutate';
@@ -24,8 +24,12 @@ export default function PlayerPickerScreen({ navigation, route }) {
   const { theme } = useTheme();
   const s = makeStyles(theme);
 
-  const { alreadySelectedIds = [] } = route.params;
-  const maxSelectable = 4 - alreadySelectedIds.length;
+  // `kind` drives the roster cap (Task 3, audit-tier3): a tournament has no
+  // real cap, only a casual game stays capped at a foursome. Callers that
+  // don't pass `kind` (none currently do) default to the old 'game' (4)
+  // behavior so this never silently opens up an uncapped picker.
+  const { alreadySelectedIds = [], kind } = route.params;
+  const maxSelectable = rosterCap(kind ?? 'game') - alreadySelectedIds.length;
 
   const [players, setPlayers] = useState([]);
   const [loading, setLoading] = useState(true);

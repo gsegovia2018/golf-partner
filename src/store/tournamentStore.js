@@ -1091,6 +1091,20 @@ export const DEFAULT_SETTINGS = {
   manualTeams: false,        // let the user pick teams instead of a random draw
 };
 
+// Roster size cap by kind. Casual games (`kind === 'game'`) stay capped at a
+// foursome — the quick single-round setup assumes a small group. A real
+// tournament (`kind === 'tournament'`, or any other/unknown kind) has no
+// meaningful fixed cap — multi-flight events can run much larger fields —
+// so it gets a generous upper bound instead, purely so the setup wizard and
+// roster UIs never render/admit an unbounded slot grid. Individual
+// Stableford and Stableford-with-Partners scale to any roster size; only
+// team-mode ROUNDS (bestball/scramble*/pairsmatchplay) still require exactly
+// 4, enforced separately by scoringModes.js's isAllowed(count) — this cap is
+// about the roster, not any one round's scoring mode.
+export function rosterCap(kind) {
+  return kind === 'game' ? 4 : 24;
+}
+
 export function createTournament({ name, players, rounds, settings, kind = 'tournament', meId = null }) {
   return {
     id: Date.now().toString(),

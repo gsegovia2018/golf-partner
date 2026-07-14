@@ -9,14 +9,12 @@ import { v4 as uuidv4 } from 'uuid';
 import { useTheme } from '../theme/ThemeContext';
 import {
   getTournament, addPlayerRoundPatches, claimTournamentPlayer,
-  refreshTournamentFromRemote, tournamentNoun,
+  refreshTournamentFromRemote, tournamentNoun, rosterCap,
 } from '../store/tournamentStore';
 import { loadProfile } from '../store/profileStore';
 import { mutate } from '../store/mutate';
 import { useAuth } from '../context/AuthContext';
 import { parseHandicapIndex } from '../lib/handicap';
-
-const MAX_PLAYERS = 4;
 
 // Shown right after an editor joins via an invite code. They pick which
 // existing player they are (links their account to that player) or add
@@ -123,7 +121,8 @@ export default function ClaimPlayerScreen({ navigation, route }) {
   }
 
   const players = tournament?.players ?? [];
-  const rosterFull = players.length >= MAX_PLAYERS;
+  const maxPlayers = rosterCap(tournament?.kind);
+  const rosterFull = players.length >= maxPlayers;
   const noun = tournamentNoun(tournament);
   // Already linked to me — nothing more to claim.
   const iAmClaimed = players.some((p) => p.user_id && p.user_id === profile?.userId);
@@ -209,7 +208,7 @@ export default function ClaimPlayerScreen({ navigation, route }) {
             <Text style={s.sectionLabel}>Not listed? Add yourself</Text>
             {rosterFull ? (
               <Text style={s.fullNote}>
-                This {noun} already has {MAX_PLAYERS} players — claim one above
+                This {noun} already has {maxPlayers} players — claim one above
                 or skip.
               </Text>
             ) : adding ? (
