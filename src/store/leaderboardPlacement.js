@@ -40,11 +40,18 @@ export function assignPlacements(rows, comparator) {
 // The comparator a board's entries were sorted with, keyed by board mode —
 // mirrors the sort each producer in tournamentStore.js/scoring.js already
 // uses, so assignPlacements' tie definition matches the board's own order.
-// "stableford", "bestball" and the scramble* modes all tiebreak on fewer
-// gross strokes (stablefordComparator) — every other mode (matchplay,
-// sindicato, pairsmatchplay) has no strokes tiebreak wired into its
-// producer yet, so those still sort purely on points.
+// "individual", "stableford", "bestball" and the scramble* modes all
+// tiebreak on fewer gross strokes (stablefordComparator) — their producers
+// (tournamentLeaderboard / tournamentStablefordLeaderboard /
+// tournamentBestWorstLeaderboard / tournamentScrambleLeaderboard and the
+// matching roundLeaderboard branches) all sort with stablefordComparator, so
+// this MUST agree or assignPlacements (which only compares adjacent rows and
+// trusts the incoming order) mislabels the medal on a strokes-tiebroken tie.
+// The remaining modes (matchplay, sindicato, pairsmatchplay) have no strokes
+// tiebreak wired into their producers, so those still sort purely on points.
 export function comparatorForBoardMode(mode) {
-  if (mode === 'stableford' || mode === 'bestball' || isScrambleMode(mode)) return stablefordComparator;
+  if (mode === 'individual' || mode === 'stableford' || mode === 'bestball' || isScrambleMode(mode)) {
+    return stablefordComparator;
+  }
   return (a, b) => b.points - a.points;
 }

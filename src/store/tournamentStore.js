@@ -1553,7 +1553,11 @@ export function roundLeaderboard(tournament, round) {
         entries.push({ player, points: row.points, strokes: row.strokes });
       });
     });
-    entries.sort((a, b) => b.points - a.points);
+    // Match comparatorForBoardMode(mode): points desc, fewer gross strokes
+    // breaks a tie. assignPlacements compares only adjacent rows and assumes
+    // this array is already ordered by that same comparator, so a points-only
+    // sort here would mislabel the medal on a strokes-tiebroken tie.
+    entries.sort(stablefordComparator);
     return { mode, unit: 'pts', entries };
   }
 
@@ -1564,7 +1568,7 @@ export function roundLeaderboard(tournament, round) {
       const r = roles[player.id];
       const points = r ? r.bestWon * bestBallValue + r.worstWon * worstBallValue : 0;
       return { player, points, strokes: strokesOf(player.id) };
-    }).sort((a, b) => b.points - a.points);
+    }).sort(stablefordComparator); // see scramble branch: keep in step with comparatorForBoardMode
     return { mode, unit: 'pts', entries };
   }
 

@@ -1,5 +1,6 @@
 import { stablefordComparator, tournamentStablefordLeaderboard, tournamentScrambleLeaderboard } from '../scoring';
-import { tournamentLeaderboard, tournamentBestWorstLeaderboard } from '../tournamentStore';
+import { tournamentLeaderboard, tournamentBestWorstLeaderboard, roundLeaderboard } from '../tournamentStore';
+import { assignPlacements, comparatorForBoardMode } from '../leaderboardPlacement';
 
 describe('stablefordComparator', () => {
   test('points desc, then fewer strokes first', () => {
@@ -132,5 +133,94 @@ describe('tournamentScrambleLeaderboard tiebreak', () => {
     const cIdx = board.findIndex((r) => r.player.id === 'c');
     expect(aIdx).toBeLessThan(cIdx); // team1 (fewer strokes) ranks above team2
     expect(board[0].player.id).toBe('a');
+  });
+});
+
+// The medal (place 1, gold) is assigned by assignPlacements, which compares
+// only ADJACENT rows and trusts the array is already sorted by the comparator
+// it's handed. HomeScreen feeds it roundLeaderboard(...).entries (the
+// round-scoped board used for every casual game and per-round tab) with
+// comparatorForBoardMode(mode). If the producer's sort disagrees with that
+// comparator on a strokes-tiebroken points tie, the WRONG player is labelled
+// place 1. These tests exercise that exact end-to-end combination.
+describe('round-scoped board: place 1 goes to the fewer-strokes player/team', () => {
+  const rank = (board) => assignPlacements(board.entries, comparatorForBoardMode(board.mode));
+
+  test('bestball round board: fewer gross strokes wins the points tie for place 1', () => {
+    const A = { id: 'a', name: 'A', handicap: 0 };
+    const B = { id: 'b', name: 'B', handicap: 0 };
+    const C = { id: 'c', name: 'C', handicap: 0 };
+    const D = { id: 'd', name: 'D', handicap: 0 };
+    const players = [A, B, C, D];
+    const holes = [
+      { number: 1, par: 4, strokeIndex: 1 },
+      { number: 2, par: 4, strokeIndex: 2 },
+    ];
+    // Hole 1 pair AB wins both roles (A best +1, B worst +1); hole 2 pair CD
+    // wins both (C best +1, D worst +1). Everyone ends on 1 point, but gross
+    // strokes differ: A 8, B 10, C 7, D 9. So on the points tie C (7) must
+    // take place 1, not A — even though A is first in roster/insertion order.
+    const round = {
+      id: 'r0', holes,
+      pairs: [[A, B], [C, D]],
+      playerHandicaps: { a: 0, b: 0, c: 0, d: 0 },
+      scores: {
+        a: { 1: 3, 2: 5 }, b: { 1: 4, 2: 6 },
+        c: { 1: 4, 2: 3 }, d: { 1: 5, 2: 4 },
+      },
+    };
+    const tournament = {
+      players, rounds: [round], currentRound: 0,
+      settings: { scoringMode: 'bestball', bestBallValue: 1, worstBallValue: 1 },
+    };
+
+    const board = roundLeaderboard(tournament, round);
+    expect(board.mode).toBe('bestball');
+    const byId = Object.fromEntries(board.entries.map((e) => [e.player.id, e]));
+    expect(byId.a.points).toBe(1);
+    expect(byId.c.points).toBe(1);
+    expect(byId.a.strokes).toBe(8);
+    expect(byId.c.strokes).toBe(7);
+
+    const ranked = rank(board);
+    expect(ranked[0].player.id).toBe('c'); // fewer strokes → gold
+    expect(ranked[0].place).toBe(1);
+    // A, tied on points but more strokes, must NOT be place 1.
+    expect(ranked.find((r) => r.player.id === 'a').place).not.toBe(1);
+  });
+
+  test('scramble round board: the fewer-strokes team takes place 1', () => {
+    // Same single scramble round as the cumulative test above: team1 (a,b) and
+    // team2 (c,d) both net 5 points, but team1 shoots 7 gross vs team2's 8.
+    const A = { id: 'a', name: 'A', handicap: 0 };
+    const B = { id: 'b', name: 'B', handicap: 0 };
+    const C = { id: 'c', name: 'C', handicap: 2 };
+    const D = { id: 'd', name: 'D', handicap: 2 };
+    const players = [A, B, C, D];
+    const holes = [
+      { number: 1, par: 4, strokeIndex: 1 },
+      { number: 2, par: 4, strokeIndex: 2 },
+    ];
+    const round = {
+      id: 'r0', holes,
+      pairs: [[A, B], [C, D]],
+      playerHandicaps: { a: 0, b: 0, c: 2, d: 2 },
+      scores: { a: { 1: 3, 2: 4 }, c: { 1: 4, 2: 4 } },
+    };
+    const tournament = {
+      players, rounds: [round], currentRound: 0,
+      settings: { scoringMode: 'scramblepairs' },
+    };
+
+    const board = roundLeaderboard(tournament, round);
+    expect(board.mode).toBe('scramblepairs');
+    const ranked = rank(board);
+    // team1 (a,b) fewer strokes → both share place 1; team2 (c,d) → place 3.
+    const byId = Object.fromEntries(ranked.map((r) => [r.player.id, r]));
+    expect(byId.a.place).toBe(1);
+    expect(byId.b.place).toBe(1);
+    expect(byId.c.place).toBe(3);
+    expect(byId.d.place).toBe(3);
+    expect(ranked[0].player.id === 'a' || ranked[0].player.id === 'b').toBe(true);
   });
 });
