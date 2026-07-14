@@ -15,6 +15,7 @@ import {
   matchPlayEffectiveHandicaps,
   pickupStrokes,
   isPickupScore,
+  clampScoreInput,
   randomPairs,
   buildTeamsForMode,
   isRoundPlayed,
@@ -298,6 +299,39 @@ describe('pickupStrokes', () => {
   it('accounts for handicap strokes on the hole', () => {
     const strokes = pickupStrokes(4, 18, 1);
     expect(calcStablefordPoints(4, strokes, 18, 1)).toBe(0);
+  });
+});
+
+describe('clampScoreInput', () => {
+  it('passes an in-range score through unchanged', () => {
+    expect(clampScoreInput(4, 4, 0, 1)).toBe(4);
+  });
+
+  it('clamps an over-entered score (44 meant 4) down to the pickup max', () => {
+    // pickupStrokes(4, 0, 1) === 6 (par 4 + 2, no extra shots).
+    expect(clampScoreInput(44, 4, 0, 1)).toBe(pickupStrokes(4, 0, 1));
+    expect(clampScoreInput(44, 4, 0, 1)).toBe(6);
+  });
+
+  it('clamps a negative entry up to 1', () => {
+    expect(clampScoreInput(-1, 4, 0, 1)).toBe(1);
+  });
+
+  it('clamps a zero entry up to 1', () => {
+    expect(clampScoreInput(0, 4, 0, 1)).toBe(1);
+  });
+
+  it('leaves a cleared score (null/undefined) untouched — clearing must not become 1', () => {
+    expect(clampScoreInput(null, 4, 0, 1)).toBeNull();
+    expect(clampScoreInput(undefined, 4, 0, 1)).toBeUndefined();
+  });
+
+  it('raises the pickup ceiling when the player has extra shots on this hole', () => {
+    // pickupStrokes(4, 18, 1) === 7 (par 4 + 2 + 1 extra shot on SI 1).
+    expect(clampScoreInput(44, 4, 18, 1)).toBe(7);
+    // A value between the no-extra ceiling (6) and the with-extra ceiling (7)
+    // is preserved rather than clamped down further.
+    expect(clampScoreInput(7, 4, 18, 1)).toBe(7);
   });
 });
 

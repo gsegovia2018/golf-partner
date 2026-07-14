@@ -293,6 +293,20 @@ export function isPickupScore(strokes, par, playerHandicap, holeStrokeIndex) {
   return strokes != null && strokes >= pickupStrokes(par, playerHandicap, holeStrokeIndex);
 }
 
+// Clamps a raw entered stroke count to the recordable range [1, pickup] —
+// per-product-decision, an out-of-range entry (a fat-fingered "44" meaning
+// "4", or a stray "-1"/"0") is silently clamped rather than rejected. Reuses
+// pickupStrokes for the ceiling so the clamp and the pickup threshold can
+// never drift apart. `strokes == null` means "no score" (a cleared cell) and
+// passes through untouched — clearing a score must never become a 1.
+export function clampScoreInput(strokes, par, playerHandicap, holeStrokeIndex) {
+  if (strokes == null) return strokes;
+  const max = pickupStrokes(par, playerHandicap, holeStrokeIndex);
+  if (strokes < 1) return 1;
+  if (strokes > max) return max;
+  return strokes;
+}
+
 // Fisher-Yates copy-shuffle shared by randomPairs and buildTeamsForMode.
 export function shufflePlayers(players) {
   const shuffled = [...players];

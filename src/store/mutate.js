@@ -2,6 +2,7 @@ import { syncQueue } from './syncQueue';
 import { saveLocal, _setSyncStatus } from './tournamentStore';
 import { isOnline } from '../lib/connectivity';
 import { normalizeRoundNotes } from './roundNotes';
+import { clampScoreInput } from './scoring';
 
 // Maps a mutation to a stable dotted path identifying what it touches. Used
 // for labeling entries in SyncStatusSheet's log (see conflictLabels.js) and
@@ -513,6 +514,29 @@ export function preserveLocalConflictState(target, source) {
 export async function mutate(tournamentBefore, mutation, opts = {}) {
   const ts = mutation.ts ?? Date.now();
   const m = { ...mutation, ts };
+
+  // Clamp a raw entered stroke count to [1, pickup] HERE — the single choke
+  // point every score.set mutation passes through (keypad text field, +/-
+  // stepper, and any future entry path), so an out-of-range value (a
+  // fat-fingered "44" for "4", or a stray "-1"/"0") never reaches local
+  // state OR the server. Clamping `m.value` itself (not just what
+  // applyToTournament later writes into the round) matters: `m` is the same
+  // object handed to syncQueue.enqueue below and replayed by
+  // mutationWrites.js's score.set case (`strokes: m.value`) — clamping only
+  // the local write would leave the corrupted number queued for the server,
+  // which would then hand it right back on the next fetch/realtime sync.
+  // `m.value == null` (a cleared cell) and a hole we can't find (defensive
+  // fallback — should not happen in practice) both pass through untouched.
+  if (m.type === 'score.set' && m.value != null) {
+    const round = tournamentBefore?.rounds?.find((r) => r.id === m.roundId);
+    const hole = round?.holes?.find((h) => h.number === m.hole);
+    if (hole) {
+      const playerHandicap = round.playerHandicaps?.[m.playerId]
+        ?? tournamentBefore?.players?.find((p) => p.id === m.playerId)?.handicap
+        ?? 0;
+      m.value = clampScoreInput(m.value, hole.par, playerHandicap, hole.strokeIndex);
+    }
+  }
 
   // Library-only mutations do not touch any tournament blob — just enqueue.
   if (m.type === 'player.upsertLibrary') {

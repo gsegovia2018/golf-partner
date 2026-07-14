@@ -50,7 +50,9 @@ import {
   DEFAULT_SHOT,
   celebrationFor,
 } from '../components/scorecard/constants';
-import { reconcileShotDetail, listRoundConflicts, roundScoringMode, roundBestBallValues } from '../store/scoring';
+import {
+  reconcileShotDetail, listRoundConflicts, roundScoringMode, roundBestBallValues, clampScoreInput,
+} from '../store/scoring';
 import { surfaceableConflicts, deriveCell } from '../store/scoreEntries';
 import { getDeviceAuthorId } from '../store/deviceId';
 import { makeScorecardStyles } from '../components/scorecard/styles';
@@ -1047,8 +1049,20 @@ export default function ScorecardScreen({ navigation, route }) {
 
   const setScore = useCallback((playerId, holeNumber, value) => {
     if (!official && viewOnly) return;
-    const parsed = value === '' ? undefined : parseInt(value, 10) || undefined;
-    const holePar = round?.holes?.find((h) => h.number === holeNumber)?.par ?? 4;
+    const rawParsed = value === '' ? undefined : parseInt(value, 10) || undefined;
+    const hole = round?.holes?.find((h) => h.number === holeNumber);
+    const holePar = hole?.par ?? 4;
+    // Clamp a raw typed entry to [1, pickup] right here — the product
+    // decision is a silent clamp (no interruption), and doing it before the
+    // optimistic setScores() below means the field itself shows the
+    // corrected number instead of briefly displaying "44" for a fat-fingered
+    // "4". mutate()'s score.set case clamps again for the casual autoSave
+    // path (defense in depth / covers any non-UI caller); this call is what
+    // also protects the OFFICIAL-mode path, which writes via officialWrite
+    // straight to the RPC layer and never touches mutate.js.
+    const parsed = hole
+      ? clampScoreInput(rawParsed, hole.par, round?.playerHandicaps?.[playerId] ?? 0, hole.strokeIndex)
+      : rawParsed;
     const cur = scoresRef.current;
     const current = cur[playerId]?.[holeNumber];
     const next = {
@@ -1077,14 +1091,20 @@ export default function ScorecardScreen({ navigation, route }) {
     anim.setValue(1.18);
     Animated.spring(anim, { toValue: 1, friction: 5, useNativeDriver: true }).start();
 
-    const holePar = round?.holes?.find((h) => h.number === holeNumber)?.par ?? 4;
+    const hole = round?.holes?.find((h) => h.number === holeNumber);
+    const holePar = hole?.par ?? 4;
     const cur = scoresRef.current;
     const current = cur[playerId]?.[holeNumber];
     // First interaction on an un-scored hole: + lands on par, - lands on birdie.
-    // After that, +/- step by one as usual. Minimum is 1 stroke.
-    const newStrokes = current == null
+    // After that, +/- step by one as usual. Minimum is 1 stroke; clamped to
+    // the pickup ceiling too, so holding + past pickup can't run away to an
+    // arbitrarily large gross stroke count.
+    const rawNewStrokes = current == null
       ? (delta > 0 ? holePar : Math.max(1, holePar - 1))
       : Math.max(1, current + delta);
+    const newStrokes = hole
+      ? clampScoreInput(rawNewStrokes, hole.par, round?.playerHandicaps?.[playerId] ?? 0, hole.strokeIndex)
+      : rawNewStrokes;
     const next = {
       ...cur,
       [playerId]: { ...cur[playerId], [holeNumber]: newStrokes },
