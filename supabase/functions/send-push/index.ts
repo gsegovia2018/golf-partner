@@ -4,15 +4,10 @@
 // in RENDERERS below.
 import { createClient } from 'jsr:@supabase/supabase-js@2';
 import { isAuthorized } from './auth.ts';
+import { chunk, staleTokensForChunk } from './push.ts';
 
 // Expo's push API caps each request at 100 messages.
 const EXPO_PUSH_CHUNK_SIZE = 100;
-
-function chunk<T>(items: T[], size: number): T[][] {
-  const out: T[][] = [];
-  for (let i = 0; i < items.length; i += size) out.push(items.slice(i, i + size));
-  return out;
-}
 
 type NotificationRow = {
   user_id: string;
@@ -115,33 +110,36 @@ Deno.serve(async (req) => {
     }));
 
     // Expo caps each push request at 100 messages, so chunk when a user has
-    // registered more tokens than that.
+    // registered more tokens than that. Each chunk's response is mapped back
+    // to its OWN token slice locally (see staleTokensForChunk) — a malformed
+    // or mis-sized response for one chunk can never corrupt another chunk's
+    // token->receipt alignment.
+    //
+    // NOTE: pruning only inspects the synchronous send ticket, not the async
+    // receipts endpoint, and only handles DeviceNotRegistered — out of scope
+    // for this task, tracked as a follow-up.
     const messageChunks = chunk(messages, EXPO_PUSH_CHUNK_SIZE);
     const tokenChunks = chunk(tokens, EXPO_PUSH_CHUNK_SIZE);
-    const receipts: { status?: string; details?: { error?: string } }[] = [];
-    for (const messageChunk of messageChunks) {
+    const stale: string[] = [];
+    for (let c = 0; c < messageChunks.length; c++) {
       const expoResp = await fetch('https://exp.host/--/api/v2/push/send', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(messageChunk),
+        body: JSON.stringify(messageChunks[c]),
       });
       const result = await expoResp.json();
-      receipts.push(...(Array.isArray(result?.data) ? result.data : []));
+      const chunkTokens = tokenChunks[c];
+      if (!Array.isArray(result?.data) || result.data.length !== chunkTokens.length) {
+        // Can't trust positional mapping for this chunk — skip pruning it
+        // rather than risk deleting a still-valid token.
+        console.warn(
+          `send-push: chunk ${c} receipt shape mismatch `
+          + `(sent ${chunkTokens.length}, got ${Array.isArray(result?.data) ? result.data.length : 'non-array'}); skipping prune`,
+        );
+        continue;
+      }
+      stale.push(...staleTokensForChunk(chunkTokens, result.data));
     }
-
-    // Prune tokens Expo reports as no longer registered.
-    // NOTE: this only inspects the synchronous send ticket, not the async
-    // receipts endpoint, and only handles DeviceNotRegistered — out of
-    // scope for this task, tracked as a follow-up.
-    const stale: string[] = [];
-    tokenChunks.forEach((tokenChunk, chunkIndex) => {
-      tokenChunk.forEach((t: { token: string }, i: number) => {
-        const r = receipts[chunkIndex * EXPO_PUSH_CHUNK_SIZE + i];
-        if (r?.status === 'error' && r?.details?.error === 'DeviceNotRegistered') {
-          stale.push(t.token);
-        }
-      });
-    });
     if (stale.length > 0) {
       await supabase.from('push_tokens').delete().in('token', stale);
     }
