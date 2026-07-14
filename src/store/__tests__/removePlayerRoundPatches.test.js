@@ -103,24 +103,76 @@ describe('removePlayerRoundPatches pair construction', () => {
     expect(patches[0].pairs).toEqual([[A], [B]]);
   });
 
-  test('team→team revealed: removed player dropped from their pair, others preserved', () => {
+  test('team→team revealed: removed player dropped from their pair, the emptied-to-singleton survivor merges into the other pair (no singleton)', () => {
     const t = makeTournament({
       players: [A, B, C, D],
       mode: 'stableford',
       rounds: [makeRound({ revealed: true, pairs: [[A, B], [C, D]] })],
     });
     const { patches } = removePlayerRoundPatches(t, 'd');
-    expect(patches[0].pairs).toEqual([[A, B], [C]]);
+    // Task 14: [A,B],[C] would leave C as an unwinnable singleton — C
+    // merges into the other pair instead, forming one 3-team.
+    expect(patches[0].pairs).toEqual([[A, B, C]]);
   });
 
-  test('team→team revealed: a pair emptied by removal is discarded', () => {
+  test('team→team revealed: a pair emptied by removal is discarded, and the pre-existing singleton merges into the survivor pair', () => {
     const t = makeTournament({
       players: [A, B, C, D],
       mode: 'stableford',
       rounds: [makeRound({ revealed: true, pairs: [[A, B], [C], [D]] })],
     });
     const { patches } = removePlayerRoundPatches(t, 'c');
-    expect(patches[0].pairs).toEqual([[A, B], [D]]);
+    // Task 14: [A,B],[D] would leave D as a singleton — D merges into the
+    // surviving pair instead.
+    expect(patches[0].pairs).toEqual([[A, B, D]]);
+  });
+
+  test('team→team revealed (5 -> 4 survivors): removing from the pair borrows from the 3-team so both end up pairs', () => {
+    const E = { id: 'e', name: 'E', handicap: 6 };
+    const t = makeTournament({
+      players: [A, B, C, D, E],
+      mode: 'stableford',
+      rounds: [makeRound({ revealed: true, pairs: [[A, B], [C, D, E]] })],
+    });
+    const { patches } = removePlayerRoundPatches(t, 'b');
+    expect(patches[0].pairs.map((pr) => pr.length).sort()).toEqual([2, 2]);
+    expect(patches[0].pairs.some((pr) => pr.length === 1)).toBe(false);
+    expect(patches[0].pairs.flat().map((p) => p.id).sort()).toEqual(['a', 'c', 'd', 'e']);
+  });
+
+  test('team→team revealed (6 -> 5 survivors): a pair emptied to a singleton merges into another pair ([2,3]-style, no singleton)', () => {
+    const E = { id: 'e', name: 'E', handicap: 6 };
+    const F = { id: 'f', name: 'F', handicap: 9 };
+    const t = makeTournament({
+      players: [A, B, C, D, E, F],
+      mode: 'stableford',
+      rounds: [makeRound({ revealed: true, pairs: [[A, B], [C, D], [E, F]] })],
+    });
+    const { patches } = removePlayerRoundPatches(t, 'f');
+    expect(patches[0].pairs.map((pr) => pr.length).sort()).toEqual([2, 3]);
+    expect(patches[0].pairs.some((pr) => pr.length === 1)).toBe(false);
+    expect(patches[0].pairs.every((pr) => pr.length <= 3)).toBe(true);
+    expect(patches[0].pairs.flat().map((p) => p.id).sort()).toEqual(['a', 'b', 'c', 'd', 'e']);
+  });
+
+  test('non-partners team mode (bestball) is unaffected: legacy filter/discard behavior, singletons not repaired', () => {
+    // stableford is the only team mode without a fixed player-count
+    // requirement, so it's the only mode buildPairsForRemovedPlayer can
+    // reach the continuity branch for after a roster-size change UNLESS an
+    // explicit { mode } override forces a fixed-count mode — here bestball
+    // becomes valid again once the roster lands back on exactly 4.
+    const E = { id: 'e', name: 'E', handicap: 6 };
+    const t = makeTournament({
+      players: [A, B, C, D, E],
+      mode: 'stableford',
+      rounds: [makeRound({ revealed: true, pairs: [[A, B], [C, D, E]] })],
+    });
+    const { patches, nextScoringMode } = removePlayerRoundPatches(t, 'a', { mode: 'bestball' });
+    expect(nextScoringMode).toBe('bestball');
+    // Task 14's no-singleton repair is scoped to newMode === 'stableford' —
+    // bestball keeps the legacy behavior: B is left as a half-emptied
+    // singleton, unrepaired.
+    expect(patches[0].pairs).toEqual([[B], [C, D, E]]);
   });
 
   test('team new mode but not-yet-revealed round: randomizes fresh', () => {
@@ -135,14 +187,17 @@ describe('removePlayerRoundPatches pair construction', () => {
     expect(flat.map((p) => p.id).sort()).toEqual(['a', 'b', 'c']);
   });
 
-  test('bestball 4→3 fallback to stableford: existing pairs kept minus removed player', () => {
+  test('bestball 4→3 fallback to stableford: existing pairs kept minus removed player, singleton merged (no singleton)', () => {
     const t = makeTournament({
       players: [A, B, C, D],
       mode: 'bestball',
       rounds: [makeRound({ revealed: true, pairs: [[A, B], [C, D]] })],
     });
     const { patches } = removePlayerRoundPatches(t, 'd');
-    expect(patches[0].pairs).toEqual([[A, B], [C]]);
+    // The round ends up in stableford (bestball fallback) — Task 14's
+    // no-singleton rule applies since the round is now stableford-shaped,
+    // regardless of the pre-mutation mode having been bestball.
+    expect(patches[0].pairs).toEqual([[A, B, C]]);
   });
 });
 
@@ -207,7 +262,7 @@ describe('removePlayerRoundPatches fixedTeams', () => {
       rounds: [makeRound({ id: 'r0', revealed: true, pairs: [[A, B], [C, D]] })],
     });
     const { patches } = removePlayerRoundPatches(t, 'd');
-    expect(patches[0].pairs).toEqual([[A, B], [C]]);
+    expect(patches[0].pairs).toEqual([[A, B, C]]);
   });
 });
 
@@ -281,11 +336,12 @@ describe('removePlayerRoundPatches per-round mode overrides', () => {
     const { patches } = removePlayerRoundPatches(t, 'd'); // 3 survivors
     const r0 = patches.find((p) => p.roundId === 'r0');
     // Documented buildPairsForRemovedPlayer behavior for team→team revealed:
-    // existing partnerships kept minus the removed player (a half-emptied
-    // pair becomes a one-member group) — NOT a fresh reshuffle. The round's
+    // existing partnerships kept minus the removed player, with a
+    // half-emptied pair merged into another team instead of left as a
+    // singleton (Task 14) — NOT a fresh reshuffle. The round's
     // pre-mutation mode is its override (stableford), not the tournament
     // default (individual).
-    expect(r0.pairs).toEqual([[A, B], [C]]);
+    expect(r0.pairs).toEqual([[A, B, C]]);
     expect(r0.clearScoringMode).toBeUndefined();
   });
 });

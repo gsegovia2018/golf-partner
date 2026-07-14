@@ -363,6 +363,83 @@ export function randomPartnerTeams(players) {
   return pairs;
 }
 
+// Insert `player` into an already-revealed set of Stableford-with-Partners
+// groups (add-player continuation — see tournamentStore's
+// buildPairsForAddedPlayer) without ever creating a singleton. Continues
+// randomPartnerTeams' "no lone player" rule incrementally instead of via a
+// fresh shuffle:
+//   1. A group already short a member (a legacy/degenerate singleton)
+//      absorbs the new player directly.
+//   2. Otherwise, if a 3-player team exists, the roster is going odd->even:
+//      that team splits back to a pair, and its odd member out pairs with
+//      the new player as a fresh 2-team.
+//   3. Otherwise every group is a clean pair — the roster is going
+//      even->odd — so the new player joins the last pair, forming one
+//      3-team (mirrors randomPartnerTeams' fold-into-the-last-pair rule).
+export function insertIntoPartnerTeams(groups, player) {
+  const next = groups.map((g) => [...g]);
+  const singletonIdx = next.findIndex((g) => g.length === 1);
+  if (singletonIdx !== -1) {
+    next[singletonIdx] = [...next[singletonIdx], player];
+    return next;
+  }
+  const tripleIdx = next.findIndex((g) => g.length === 3);
+  if (tripleIdx !== -1) {
+    const triple = next[tripleIdx];
+    const leftover = triple[triple.length - 1];
+    next[tripleIdx] = triple.slice(0, -1);
+    next.push([leftover, player]);
+    return next;
+  }
+  if (next.length > 0) {
+    next[next.length - 1] = [...next[next.length - 1], player];
+  } else {
+    next.push([player]);
+  }
+  return next;
+}
+
+// Remove `removedId` from an already-revealed set of Stableford-with-Partners
+// groups (remove-player continuation — see tournamentStore's
+// buildPairsForRemovedPlayer) without ever leaving a singleton behind.
+// Mirror of insertIntoPartnerTeams. A single removal can shrink at most one
+// group by one seat, so at most one singleton (or emptied group) can result;
+// repair it:
+//   - a 3-team elsewhere lends one member back to the singleton, so both
+//     end up pairs (e.g. [1,3] -> [2,2]);
+//   - otherwise a 2-team absorbs the singleton, forming a 3-team
+//     (e.g. [1,2] -> [3]);
+//   - otherwise (only singletons remain) merge into whatever's left —
+//     a defensive fallback for already-degenerate input.
+export function removeFromPartnerTeams(groups, removedId) {
+  let next = groups
+    .map((g) => g.filter((p) => p.id !== removedId))
+    .filter((g) => g.length > 0);
+  for (;;) {
+    const singletonIdx = next.findIndex((g) => g.length === 1);
+    if (singletonIdx === -1) return next;
+    const singleton = next[singletonIdx][0];
+    const tripleIdx = next.findIndex((g, i) => i !== singletonIdx && g.length === 3);
+    if (tripleIdx !== -1) {
+      const triple = next[tripleIdx];
+      const borrowed = triple[triple.length - 1];
+      next[tripleIdx] = triple.slice(0, -1);
+      next[singletonIdx] = [singleton, borrowed];
+      continue;
+    }
+    const pairIdx = next.findIndex((g, i) => i !== singletonIdx && g.length === 2);
+    if (pairIdx !== -1) {
+      next[pairIdx] = [...next[pairIdx], singleton];
+      next = next.filter((_, i) => i !== singletonIdx);
+      continue;
+    }
+    const otherIdx = next.findIndex((g, i) => i !== singletonIdx && g.length >= 1);
+    if (otherIdx === -1) return next; // only one group total — nothing to merge into
+    next[otherIdx] = [...next[otherIdx], singleton];
+    next = next.filter((_, i) => i !== singletonIdx);
+  }
+}
+
 // Team shapes per mode. 2x2 modes ride randomPairs; scramble3v1 splits a
 // shuffled roster 3+1 (the solo player is random); scramble4 is one team;
 // stableford (partners) rides randomPartnerTeams so an odd roster forms one

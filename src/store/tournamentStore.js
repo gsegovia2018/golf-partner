@@ -15,6 +15,8 @@ import {
   calcStablefordPoints,
   tournamentSindicatoClinched,
   buildTeamsForMode,
+  insertIntoPartnerTeams,
+  removeFromPartnerTeams,
   isRoundPlayed,
   roundTotals,
   roundScoringMode,
@@ -802,15 +804,28 @@ export async function lastTeeForPlayerOnCourse(courseId, playerId) {
 // Pairs:
 //   individual → append the player as their own solo pair.
 //   stableford → not-yet-revealed rounds re-randomise with the full
-//     roster; revealed rounds slot the player into a pair short of two
-//     members, or a new solo pair if none is short.
+//     roster; revealed rounds fold the player into an existing team via
+//     insertIntoPartnerTeams (see below) — never a solo pair.
 // Pair construction for a round after a player is added. Closed over all
 // modes via scoringModeUsesTeams — no per-mode ladder.
 // - Non-team new mode (individual / matchplay / sindicato) → every player
 //   is their own group.
 // - Team new mode AND old mode also used teams AND existing pairs were
-//   revealed → keep the existing partnerships, the new player joins as a
-//   solo group.
+//   revealed:
+//     - stableford (Stableford with Partners) → insertIntoPartnerTeams
+//       folds the new player into an existing team instead of appending a
+//       solo group — a solo group there would be the exact unwinnable
+//       singleton randomPartnerTeams' initial draw already avoids (Task
+//       12); gated on newMode alone since 'stableford' is the only team
+//       mode without a fixed player-count requirement, so it's the only
+//       mode this add/remove path can ever leave in a team shape after the
+//       roster size changes.
+//     - every other team mode (bestball / scramble* / pairsmatchplay,
+//       all fixed-count) → keep the existing partnerships verbatim, the
+//       new player joins as its own solo group (unchanged legacy
+//       behavior — these modes require an exact player count, so they
+//       can't actually stay on their own mode through an add; this branch
+//       only fires via an explicit mode override).
 // - Otherwise → fresh buildTeamsForMode(newMode, roster).
 function buildPairsForAddedPlayer({ roster, newMode, oldMode, existingPairs, newPlayer, revealed }) {
   if (!scoringModeUsesTeams(newMode)) {
@@ -818,6 +833,9 @@ function buildPairsForAddedPlayer({ roster, newMode, oldMode, existingPairs, new
   }
   const oldWasTeams = scoringModeUsesTeams(oldMode, roster.length - 1);
   if (oldWasTeams && existingPairs?.length && revealed) {
+    if (newMode === 'stableford') {
+      return insertIntoPartnerTeams(existingPairs, newPlayer);
+    }
     return [...existingPairs.map((pr) => [...pr]), [newPlayer]];
   }
   return buildTeamsForMode(newMode, roster);
@@ -899,9 +917,17 @@ export function addPlayerRoundPatches(tournament, player, { mode } = {}) {
 // buildPairsForAddedPlayer, keyed on scoringModeUsesTeams.
 // - Non-team new mode → every survivor is their own group.
 // - Team new mode AND old mode also used teams AND existing pairs were
-//   revealed → keep the existing partnerships minus the removed player; a
-//   pair emptied by the removal is discarded, a half-emptied pair becomes a
-//   one-member group.
+//   revealed:
+//     - stableford (Stableford with Partners) → drop the removed player,
+//       then repair via removeFromPartnerTeams so a pair emptied to a
+//       singleton by the removal is merged back into another team instead
+//       of being left as an unwinnable solo group. Same gating rationale
+//       as buildPairsForAddedPlayer: 'stableford' is the only team mode
+//       this path can leave the round in after a roster-size change.
+//     - every other team mode (fixed-count) → keep the existing
+//       partnerships minus the removed player; a pair emptied by the
+//       removal is discarded, a half-emptied pair becomes a one-member
+//       group (unchanged legacy behavior).
 // - Otherwise → fresh buildTeamsForMode(newMode, survivors).
 function buildPairsForRemovedPlayer({ survivors, newMode, oldMode, existingPairs, removedId, revealed }) {
   if (!scoringModeUsesTeams(newMode)) {
@@ -909,6 +935,9 @@ function buildPairsForRemovedPlayer({ survivors, newMode, oldMode, existingPairs
   }
   const oldWasTeams = scoringModeUsesTeams(oldMode, survivors.length + 1);
   if (oldWasTeams && existingPairs?.length && revealed) {
+    if (newMode === 'stableford') {
+      return removeFromPartnerTeams(existingPairs, removedId);
+    }
     return existingPairs
       .map((pr) => pr.filter((p) => p.id !== removedId))
       .filter((pr) => pr.length > 0);

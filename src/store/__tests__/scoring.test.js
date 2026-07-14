@@ -19,6 +19,8 @@ import {
   resolvePlayerHandicap,
   randomPairs,
   randomPartnerTeams,
+  insertIntoPartnerTeams,
+  removeFromPartnerTeams,
   buildTeamsForMode,
   isRoundPlayed,
   sindicatoHolePoints,
@@ -529,6 +531,78 @@ describe('randomPartnerTeams', () => {
       expect(teams.every((t) => t.length === 2)).toBe(true);
       expect(teams).toHaveLength(n / 2);
     }
+  });
+});
+
+describe('insertIntoPartnerTeams', () => {
+  const p = (id) => ({ id });
+
+  it('clean pairs + odd result: new player joins the last pair (4 -> 5, [2,3])', () => {
+    const [p1, p2, p3, p4, p5] = ['1', '2', '3', '4', '5'].map(p);
+    const groups = [[p1, p2], [p3, p4]];
+    const result = insertIntoPartnerTeams(groups, p5);
+    expect(result).toEqual([[p1, p2], [p3, p4, p5]]);
+    expect(result.some((g) => g.length === 1)).toBe(false);
+    expect(result.every((g) => g.length <= 3)).toBe(true);
+  });
+
+  it('existing 3-team + even result: the 3-team splits, leftover pairs with the new player (5 -> 6, [2,2,2])', () => {
+    const [p1, p2, p3, p4, p5, p6] = ['1', '2', '3', '4', '5', '6'].map(p);
+    const groups = [[p1, p2], [p3, p4, p5]];
+    const result = insertIntoPartnerTeams(groups, p6);
+    expect(result).toEqual([[p1, p2], [p3, p4], [p5, p6]]);
+    expect(result.some((g) => g.length === 1)).toBe(false);
+    expect(result.every((g) => g.length <= 3)).toBe(true);
+  });
+
+  it('a legacy/degenerate singleton absorbs the new player directly', () => {
+    const [p1, p2, p3, p4] = ['1', '2', '3', '4'].map(p);
+    const groups = [[p1, p2], [p3]];
+    const result = insertIntoPartnerTeams(groups, p4);
+    expect(result).toEqual([[p1, p2], [p3, p4]]);
+  });
+
+  it('single 3-team (minimum roster) splits when a 4th player joins', () => {
+    const [p1, p2, p3, p4] = ['1', '2', '3', '4'].map(p);
+    const groups = [[p1, p2, p3]];
+    const result = insertIntoPartnerTeams(groups, p4);
+    expect(result).toEqual([[p1, p2], [p3, p4]]);
+  });
+});
+
+describe('removeFromPartnerTeams', () => {
+  const p = (id) => ({ id });
+
+  it('4 -> 3: removed player\'s pair absorbs into the other pair (no singleton)', () => {
+    const [p1, p2, p3, p4] = ['1', '2', '3', '4'].map(p);
+    const groups = [[p1, p2], [p3, p4]];
+    const result = removeFromPartnerTeams(groups, '4');
+    expect(result).toEqual([[p1, p2, p3]]);
+  });
+
+  it('5 -> 4: removing from the pair borrows from the 3-team so both end up pairs ([2,2])', () => {
+    const [p1, p2, p3, p4, p5] = ['1', '2', '3', '4', '5'].map(p);
+    const groups = [[p1, p2], [p3, p4, p5]];
+    const result = removeFromPartnerTeams(groups, '2');
+    expect(result.map((g) => g.length).sort()).toEqual([2, 2]);
+    expect(result.some((g) => g.length === 1)).toBe(false);
+    expect(result.flat().map((x) => x.id).sort()).toEqual(['1', '3', '4', '5']);
+  });
+
+  it('5 -> 4: removing from the 3-team itself needs no repair', () => {
+    const [p1, p2, p3, p4, p5] = ['1', '2', '3', '4', '5'].map(p);
+    const groups = [[p1, p2], [p3, p4, p5]];
+    const result = removeFromPartnerTeams(groups, '5');
+    expect(result).toEqual([[p1, p2], [p3, p4]]);
+  });
+
+  it('6 -> 5: a pair emptied to a singleton merges into another pair ([2,3]-style, no singleton)', () => {
+    const [p1, p2, p3, p4, p5, p6] = ['1', '2', '3', '4', '5', '6'].map(p);
+    const groups = [[p1, p2], [p3, p4], [p5, p6]];
+    const result = removeFromPartnerTeams(groups, '6');
+    expect(result.map((g) => g.length).sort()).toEqual([2, 3]);
+    expect(result.some((g) => g.length === 1)).toBe(false);
+    expect(result.flat().map((x) => x.id).sort()).toEqual(['1', '2', '3', '4', '5']);
   });
 });
 
