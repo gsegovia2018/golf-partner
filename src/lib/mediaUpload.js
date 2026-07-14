@@ -121,22 +121,31 @@ export async function processUpload(entry) {
 
   // Thumbnail generation is best-effort: an unsupported codec, a null
   // canvas.toBlob() on web, or any other decode failure must not block the
-  // original photo/video from uploading. Fall back to no thumbnail rather
+  // original photo/video from uploading. Fall back to a placeholder rather
   // than losing the whole item after retries are exhausted.
   let thumbUri = null;
   try {
     thumbUri = await makeThumbnail(localUri, kind);
   } catch (err) {
-    console.warn('[mediaUpload] thumbnail generation failed; uploading original without a thumbnail', err);
+    console.warn('[mediaUpload] thumbnail generation failed; uploading original as the thumbnail placeholder', err);
     thumbUri = null;
   }
 
   await uploadFile(storagePath, finalUri, contentType);
+
+  // tournament_media.thumb_path is NOT NULL, and consumers render thumbUrl
+  // directly with no original-url fallback (e.g. MemoryCard). When the
+  // thumbnail failed, point thumb_path at the original we just uploaded:
+  // this satisfies the constraint and shows the full image instead of a
+  // broken one, rather than passing null (which would 23502 on insert and
+  // lose the media through retries — the very bug this fix prevents).
+  let finalThumbPath;
   if (thumbUri) {
     await uploadFile(thumbPath, thumbUri, 'image/jpeg');
+    finalThumbPath = thumbPath;
+  } else {
+    finalThumbPath = storagePath;
   }
-
-  const finalThumbPath = thumbUri ? thumbPath : null;
 
   await insertMediaRow({
     id, tournamentId, roundId, holeIndex, kind,
