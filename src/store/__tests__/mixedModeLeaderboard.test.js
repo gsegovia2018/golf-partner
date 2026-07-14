@@ -41,10 +41,20 @@ describe('tournamentStablefordLeaderboard', () => {
     expect(board[0].player.id).toBe('a');
   });
 
-  it('scramble rounds contribute team strokes, not zeros', () => {
+  it('does not credit a scramble teammate the full team strokes on top of their own (would double-count and corrupt the tiebreak)', () => {
     const board = tournamentStablefordLeaderboard(t);
     const byId = Object.fromEntries(board.map((e) => [e.player.id, e]));
-    expect(byId.b.strokes).toBe(4 + 3); // own 4 + team ball 3
+    // Both the captain (a) and the non-captain teammate (b) keep only their
+    // own individual-round strokes — the scramble round's team-ball strokes
+    // are not added on top for either of them. Adding the whole team total
+    // to every teammate mixes team-scale numbers into an individual-scale
+    // tally, inflating scramble-heavy players' strokes and corrupting the
+    // strokes tiebreak / the "N str" column.
+    expect(byId.a.strokes).toBe(3); // own round-1 strokes only
+    expect(byId.b.strokes).toBe(4); // own round-1 strokes only
+    // Points attribution is unchanged — still the full team result.
+    expect(byId.a.points).toBe(3 + 3);
+    expect(byId.b.points).toBe(2 + 3);
   });
 });
 

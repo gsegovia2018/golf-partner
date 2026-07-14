@@ -95,12 +95,18 @@ describe('comparatorForBoardMode', () => {
     expect(cmp).toBe(stablefordComparator);
   });
 
-  test('routes other modes (matchplay, sindicato, bestball, pairsmatchplay, scramble*) to a points-desc comparator', () => {
-    for (const mode of ['matchplay', 'sindicato', 'bestball', 'pairsmatchplay', 'scramblepairs', 'scramble3v1', 'scramble4']) {
+  test('routes modes with no strokes tiebreak wired yet (matchplay, sindicato, pairsmatchplay) to a points-desc comparator', () => {
+    for (const mode of ['matchplay', 'sindicato', 'pairsmatchplay']) {
       const cmp = comparatorForBoardMode(mode);
       expect(cmp({ points: 3 }, { points: 5 })).toBeGreaterThan(0);
       expect(cmp({ points: 5 }, { points: 3 })).toBeLessThan(0);
       expect(cmp({ points: 5 }, { points: 5 })).toBe(0);
+    }
+  });
+
+  test('routes bestball and scramble* modes to stablefordComparator, same as "stableford" (points, then fewer strokes)', () => {
+    for (const mode of ['bestball', 'scramblepairs', 'scramble3v1', 'scramble4']) {
+      expect(comparatorForBoardMode(mode)).toBe(stablefordComparator);
     }
   });
 });

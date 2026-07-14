@@ -11,7 +11,7 @@
 // This module is pure and mode-agnostic: pass it the board's own comparator
 // (the same one it was sorted with) so the tie definition here always
 // matches the tie definition the board already sorted by.
-import { stablefordComparator } from './scoring';
+import { stablefordComparator, isScrambleMode } from './scoring';
 
 // rows must already be sorted by `comparator`. Returns a new array of
 // `{ ...row, place, isTie }`. `place` is the 1-based competition rank;
@@ -40,10 +40,11 @@ export function assignPlacements(rows, comparator) {
 // The comparator a board's entries were sorted with, keyed by board mode —
 // mirrors the sort each producer in tournamentStore.js/scoring.js already
 // uses, so assignPlacements' tie definition matches the board's own order.
-// Only the individual/"stableford" board tiebreaks on strokes; every other
-// mode (matchplay, sindicato, bestball, pairsmatchplay, scramble*) sorts
-// purely on points.
+// "stableford", "bestball" and the scramble* modes all tiebreak on fewer
+// gross strokes (stablefordComparator) — every other mode (matchplay,
+// sindicato, pairsmatchplay) has no strokes tiebreak wired into its
+// producer yet, so those still sort purely on points.
 export function comparatorForBoardMode(mode) {
-  if (mode === 'stableford') return stablefordComparator;
+  if (mode === 'stableford' || mode === 'bestball' || isScrambleMode(mode)) return stablefordComparator;
   return (a, b) => b.points - a.points;
 }

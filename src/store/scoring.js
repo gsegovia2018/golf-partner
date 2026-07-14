@@ -749,7 +749,13 @@ function teamOfPlayer(round, playerId) {
 
 // Cumulative scramble standings across all played rounds. Each player earns
 // their team's Stableford points and gross strokes for the round (the team's
-// tally row lives under the team captain's id in scrambleRoundTally).
+// tally row lives under the team captain's id in scrambleRoundTally). Every
+// row here is a scramble-team result, so crediting each teammate their full
+// team strokes is homogeneous across the whole board — unlike the mixed-mode
+// Stableford board (tournamentStablefordLeaderboard), which also mixes in
+// individual-round strokes and must NOT do this (see there). Ranks with
+// stablefordComparator (points desc, fewer strokes breaks a tie) for the same
+// tiebreak the individual/Stableford board uses.
 export function tournamentScrambleLeaderboard(tournament) {
   const { players = [], rounds = [] } = tournament ?? {};
   const acc = new Map(players.map((p) => [p.id, { player: p, points: 0, strokes: 0 }]));
@@ -768,7 +774,7 @@ export function tournamentScrambleLeaderboard(tournament) {
       cur.strokes += row.strokes;
     }
   });
-  return [...acc.values()].sort((a, b) => b.points - a.points);
+  return [...acc.values()].sort(stablefordComparator);
 }
 
 // Cumulative pairs match play standings across all played rounds. Each player
@@ -805,8 +811,8 @@ export function stablefordComparator(a, b) {
 
 // Individual Stableford board across all rounds. Scramble rounds have no
 // individual balls, so each player contributes their TEAM's Stableford
-// points/strokes there. This is the overall board for mixed-mode
-// tournaments and the Stableford alternate view everywhere.
+// points there. This is the overall board for mixed-mode tournaments and
+// the Stableford alternate view everywhere.
 export function tournamentStablefordLeaderboard(tournament) {
   const { players = [], rounds = [] } = tournament ?? {};
   const acc = new Map(players.map((p) => [p.id, { player: p, points: 0, strokes: 0 }]));
@@ -821,9 +827,17 @@ export function tournamentStablefordLeaderboard(tournament) {
         const team = teamOfPlayer(round, p.id);
         const row = team ? rowByCaptain.get(team[0]?.id) : null;
         if (!row) continue;
-        const cur = acc.get(p.id);
-        cur.points += row.points;
-        cur.strokes += row.strokes;
+        // Points are the team's whole result, credited to every teammate —
+        // by design (matches tournamentScrambleLeaderboard). Strokes are
+        // deliberately NOT added here: unlike points, this board's strokes
+        // field also accumulates individual-round gross strokes for
+        // non-scramble rounds, so crediting the full team ball's strokes to
+        // BOTH (or all) teammates on top of that would double/quadruple-
+        // count a single team score across the roster, corrupting the
+        // strokes tiebreak and the "N str" column for scramble-heavy
+        // tournaments. Scramble rounds simply don't contribute to this
+        // board's strokes total.
+        acc.get(p.id).points += row.points;
       }
       return;
     }

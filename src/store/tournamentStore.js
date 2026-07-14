@@ -1262,10 +1262,13 @@ export function playerRoundBestWorstPoints(round, playerId, players, settings) {
 // holes they *won* carrying the best / worst ball for their pair (ties and
 // losses do not count), scaled by bestBallValue / worstBallValue. Also
 // exposes bestTies/bestLosses and worstTies/worstLosses for display.
+// Ranks with stablefordComparator (points desc, fewer gross strokes breaks a
+// tie) — same tiebreak the individual/Stableford board uses, so tie order is
+// consistent across modes instead of an arbitrary sort-stable order.
 export function tournamentBestWorstLeaderboard(tournament) {
   const { players, rounds } = tournament;
   const totals = Object.fromEntries(players.map((p) => [p.id, {
-    player: p, points: 0,
+    player: p, points: 0, strokes: 0,
     bestWins: 0, bestTies: 0, bestLosses: 0,
     worstWins: 0, worstTies: 0, worstLosses: 0,
   }]));
@@ -1275,10 +1278,12 @@ export function tournamentBestWorstLeaderboard(tournament) {
     if (roundScoringMode(tournament, round) !== 'bestball') return;
     const { bestBallValue, worstBallValue } = roundBestBallValues(tournament, round);
     const roles = assignBestWorstRoles(round, players);
+    const strokesByPlayer = new Map(roundTotals(round, players).map((rt) => [rt.player.id, rt.totalStrokes]));
     players.forEach((p) => {
       const r = roles[p.id];
       if (!r) return;
       totals[p.id].points += r.bestWon * bestBallValue + r.worstWon * worstBallValue;
+      totals[p.id].strokes += strokesByPlayer.get(p.id) ?? 0;
       totals[p.id].bestWins += r.bestWon;
       totals[p.id].bestTies += r.bestTied;
       totals[p.id].bestLosses += r.bestLost;
@@ -1288,7 +1293,7 @@ export function tournamentBestWorstLeaderboard(tournament) {
     });
   });
 
-  return Object.values(totals).sort((a, b) => b.points - a.points);
+  return Object.values(totals).sort(stablefordComparator);
 }
 
 // Maximum additional Stableford points a player could score on a round's
