@@ -8,7 +8,7 @@ import {
   getPlayingHandicap,
 } from '../store/tournamentStore';
 import { mutate } from '../store/mutate';
-import { roundScoringMode } from '../store/scoring';
+import { roundScoringMode, laterRoundsForFixedTeamsPropagation } from '../store/scoring';
 import { shouldHandleStoreChange } from '../lib/navigationFocus';
 import { buildThreeVsOne, swapDuelOrder, shuffleTeams, randomizeDuelOrder } from '../lib/teamEditing';
 import EditTeamsView from './editTeams/EditTeamsView';
@@ -118,11 +118,13 @@ export default function EditTeamsScreen({ navigation, route }) {
         pairs,
       });
       // Fixed teams: the edited partnerships ARE the tournament's teams, so
-      // carry them into every later round. reveal:false keeps those rounds'
-      // own reveal moment intact.
+      // carry them into every later round whose own effective mode shares
+      // this round's team shape (a later round with a different shape —
+      // e.g. scramble3v1 after a bestball edit — keeps its own pairs;
+      // pairsForNextRound rebuilds it for its own mode at reveal time).
+      // reveal:false keeps those rounds' own reveal moment intact.
       if (tournament?.settings?.fixedTeams) {
-        const roundIdx = (tournament.rounds ?? []).findIndex((r) => r.id === round.id);
-        for (const later of (tournament.rounds ?? []).slice(roundIdx + 1)) {
+        for (const later of laterRoundsForFixedTeamsPropagation(tournament, round)) {
           t = await mutate(t, {
             type: 'pairs.set',
             roundId: later.id,

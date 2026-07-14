@@ -28,6 +28,19 @@ const makeTournament = (id) => ({
   rounds: [{ id: `${id}-r0`, courseName: 'St Andrews', pairs: [[P('a'), P('b')], [P('c'), P('d')]], revealed: true }],
 });
 
+// fixedTeams on, three rounds: r0 (bestball, edited — 2x2), r1 (scramble3v1 —
+// 3+1, mismatched shape), r2 (pairsmatchplay — 2x2, matches).
+const makeFixedTeamsTournament = (id) => ({
+  id,
+  players: [P('a'), P('b'), P('c'), P('d')],
+  settings: { scoringMode: 'bestball', fixedTeams: true },
+  rounds: [
+    { id: `${id}-r0`, courseName: 'St Andrews', scoringMode: 'bestball', pairs: [[P('a'), P('b')], [P('c'), P('d')]], revealed: true },
+    { id: `${id}-r1`, courseName: 'Pebble Beach', scoringMode: 'scramble3v1', pairs: [[P('a'), P('b'), P('c')], [P('d')]], revealed: false },
+    { id: `${id}-r2`, courseName: 'Augusta', scoringMode: 'pairsmatchplay', pairs: [[P('a'), P('c')], [P('b'), P('d')]], revealed: false },
+  ],
+});
+
 const metrics = {
   frame: { x: 0, y: 0, width: 390, height: 844 },
   insets: { top: 0, left: 0, right: 0, bottom: 0 },
@@ -72,6 +85,21 @@ describe('EditTeamsScreen — linked tournament', () => {
     const [tournamentArg, mutationArg] = mutate.mock.calls[0];
     expect(tournamentArg.id).toBe('linked');
     expect(mutationArg).toMatchObject({ type: 'pairs.set', roundId: 'linked-r0' });
+  });
+
+  test('fixedTeams save skips a later round whose mode has a mismatched team shape', async () => {
+    const linked = makeFixedTeamsTournament('linked');
+    store.getTournamentSnapshot.mockReturnValue(linked);
+    store.getTournament.mockResolvedValue(linked);
+
+    const { getByText } = renderScreen({ roundIndex: 0, tournamentId: 'linked' });
+    fireEvent.press(getByText('Save Teams'));
+
+    await waitFor(() => expect(mutate).toHaveBeenCalled());
+    const roundIds = mutate.mock.calls.map(([, m]) => m.roundId);
+    expect(roundIds).toContain('linked-r0');
+    expect(roundIds).toContain('linked-r2');
+    expect(roundIds).not.toContain('linked-r1');
   });
 
   test('falls back to the active tournament when no id is passed', () => {
