@@ -3,7 +3,7 @@
 import {
   applyScoreRow, applyShotDetailRow, applyNoteRow, applyRoundRow,
   applyPlayerRow, applyTournamentRow,
-  ensureRealtimeForTournament, stopRealtime,
+  ensureRealtimeForTournament, stopRealtime, setPresenceHole,
 } from '../realtimeSync';
 import { readLocal, saveLocal } from '../tournamentStore';
 import { applyPendingMutations, preserveLocalConflictState } from '../mutate';
@@ -28,6 +28,8 @@ jest.mock('../../lib/supabase', () => {
   const channel = {
     on: jest.fn(function on() { return this; }),
     subscribe: jest.fn(function subscribe() { return this; }),
+    track: jest.fn(),
+    presenceState: jest.fn(() => ({})),
   };
   return {
     supabase: {
@@ -536,5 +538,150 @@ describe('ensureRealtimeForTournament / stopRealtime', () => {
     const finalSave = saveLocal.mock.calls[saveLocal.mock.calls.length - 1][0];
     expect(finalSave.rounds[0].scores.p2[1]).toBe(5);
     expect(finalSave.rounds[0].scores.p1[1]).toBe(4);
+  });
+
+  // Two row events for the SAME tournament arriving close together each read
+  // the local blob, patch their own cell, and (absent serialization) save the
+  // whole blob back — the second save clobbers the first handler's patch. The
+  // fix must serialize the handlers' read-modify-write per tournament so both
+  // patches survive regardless of interleaving.
+  test('two concurrent row-event handlers for the same tournament both persist their patches (no lost update)', async () => {
+    let localBlob = { id: 't1', kind: 'game', rounds: [{ id: 'r1', scores: {} }], players: [] };
+    readLocal.mockImplementation(async () => JSON.parse(JSON.stringify(localBlob)));
+    saveLocal.mockImplementation(async (blob) => { localBlob = blob; });
+    applyPendingMutations.mockImplementation((t) => t);
+    preserveLocalConflictState.mockImplementation((target) => target);
+
+    // Block the FIRST handler invocation's pendingEntriesFor call (a real
+    // async gap in the real code) so the second invocation is issued while
+    // the first is still in flight — the exact race the fix must close.
+    let releaseFirst;
+    const gate = new Promise((resolve) => { releaseFirst = resolve; });
+    let callCount = 0;
+    syncQueue.all.mockImplementation(async () => {
+      callCount += 1;
+      if (callCount === 1) await gate;
+      return [];
+    });
+
+    await ensureRealtimeForTournament('t1');
+    const channel = supabase.channel.mock.results[0].value;
+    const scoreHandlerCall = channel.on.mock.calls.find(([, cfg]) => cfg.table === 'game_scores');
+    const handler = scoreHandlerCall[2];
+
+    const p1 = handler({ new: { round_id: 'r1', player_id: 'p1', hole: 1, strokes: 4 } });
+    const p2 = handler({ new: { round_id: 'r1', player_id: 'p2', hole: 1, strokes: 5 } });
+    releaseFirst();
+    await Promise.all([p1, p2]);
+
+    expect(localBlob.rounds[0].scores).toEqual({ p1: { 1: 4 }, p2: { 1: 5 } });
+  });
+});
+
+describe('channel error recovery (backoff rejoin)', () => {
+  beforeEach(() => {
+    jest.clearAllMocks();
+    jest.useFakeTimers();
+    readLocal.mockResolvedValue({ id: 't1', kind: 'game', rounds: [], players: [] });
+    saveLocal.mockResolvedValue();
+    syncQueue.all.mockResolvedValue([]);
+  });
+
+  afterEach(() => {
+    stopRealtime();
+    jest.useRealTimers();
+  });
+
+  test.each(['CHANNEL_ERROR', 'TIMED_OUT', 'CLOSED'])('rejoins the channel with backoff after %s', async (status) => {
+    await ensureRealtimeForTournament('t1');
+    const channel = supabase.channel.mock.results[0].value;
+    const statusCb = channel.subscribe.mock.calls[0][0];
+
+    statusCb(status);
+    // No immediate rejoin — it's scheduled with a backoff delay.
+    expect(supabase.channel).toHaveBeenCalledTimes(1);
+
+    await jest.advanceTimersByTimeAsync(30000);
+
+    expect(supabase.removeChannel).toHaveBeenCalledWith(channel);
+    expect(supabase.channel).toHaveBeenCalledTimes(2);
+    expect(channel.subscribe).toHaveBeenCalledTimes(2);
+  });
+
+  test('does not schedule a second rejoin while one is already pending', async () => {
+    await ensureRealtimeForTournament('t1');
+    const channel = supabase.channel.mock.results[0].value;
+    const statusCb = channel.subscribe.mock.calls[0][0];
+
+    statusCb('CHANNEL_ERROR');
+    statusCb('CHANNEL_ERROR');
+    statusCb('TIMED_OUT');
+
+    await jest.advanceTimersByTimeAsync(30000);
+
+    // Exactly one rejoin happened despite three error signals.
+    expect(supabase.channel).toHaveBeenCalledTimes(2);
+  });
+
+  test('a manual stopRealtime cancels a pending rejoin', async () => {
+    await ensureRealtimeForTournament('t1');
+    const statusCb = supabase.channel.mock.results[0].value.subscribe.mock.calls[0][0];
+
+    statusCb('CHANNEL_ERROR');
+    stopRealtime();
+
+    await jest.advanceTimersByTimeAsync(60000);
+
+    // No rejoin fired after the manual stop.
+    expect(supabase.channel).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe('presence state reset on tournament switch', () => {
+  beforeEach(() => {
+    jest.clearAllMocks();
+    readLocal.mockResolvedValue({ id: 't1', kind: 'game', rounds: [], players: [] });
+    saveLocal.mockResolvedValue();
+    syncQueue.all.mockResolvedValue([]);
+  });
+
+  afterEach(() => {
+    stopRealtime();
+  });
+
+  test('switching to a different tournament resets _lastAuthor/_lastHole so SUBSCRIBED does not track the previous tournament\'s hole', async () => {
+    await ensureRealtimeForTournament('t1');
+    setPresenceHole('author-on-t1', 7);
+
+    readLocal.mockResolvedValue({ id: 't2', kind: 'game', rounds: [], players: [] });
+    await ensureRealtimeForTournament('t2');
+
+    const channel = supabase.channel.mock.results[1].value;
+    const statusCb = channel.subscribe.mock.calls[1][0];
+    channel.track.mockClear();
+    statusCb('SUBSCRIBED');
+
+    expect(channel.track).not.toHaveBeenCalled();
+  });
+
+  test('a same-tournament reconnect (rejoin) preserves the last known presence hole', async () => {
+    jest.useFakeTimers();
+    try {
+      await ensureRealtimeForTournament('t1');
+      const channel = supabase.channel.mock.results[0].value;
+      const statusCb = channel.subscribe.mock.calls[0][0];
+
+      setPresenceHole('author-on-t1', 7);
+      statusCb('CHANNEL_ERROR');
+      await jest.advanceTimersByTimeAsync(30000);
+
+      const rejoinStatusCb = channel.subscribe.mock.calls[1][0];
+      channel.track.mockClear();
+      rejoinStatusCb('SUBSCRIBED');
+
+      expect(channel.track).toHaveBeenCalledWith({ authorId: 'author-on-t1', currentHole: 7 });
+    } finally {
+      jest.useRealTimers();
+    }
   });
 });
