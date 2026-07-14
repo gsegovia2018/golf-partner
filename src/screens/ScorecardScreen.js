@@ -41,7 +41,7 @@ import { useOfficialRound } from '../hooks/useOfficialRound';
 import ScoringModeChangeBanner from '../components/ScoringModeChangeBanner';
 import ScoringModeChangeSheet from '../components/ScoringModeChangeSheet';
 import { fallbackNoticeText } from '../components/scoringModes';
-import { cardDiscrepancyHoles } from '../store/officialScoring';
+import { cardDiscrepancyHoles, officialHolesFromCourse } from '../store/officialScoring';
 import { buildLeaderboard } from '../store/officialLeaderboard';
 import { attestCard } from '../store/officialStore';
 import { notifyRoundFinished } from '../store/notificationStore';
@@ -65,33 +65,6 @@ const haptic = (style = 'light') => {
   else if (style === 'medium') Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
   else if (style === 'success') Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
 };
-
-
-// Fallback 18-hole layout for official rounds whose `course` JSONB is empty
-// or missing — keeps the scorecard usable until course data lands.
-// TODO: official course data (Spec 2)
-function defaultOfficialHoles() {
-  return Array.from({ length: 18 }, (_, i) => ({
-    number: i + 1,
-    par: 4,
-    strokeIndex: i + 1,
-  }));
-}
-
-// Map an official round's `course` JSONB to the casual `round.holes` shape
-// ({ number, par, strokeIndex }). The JSONB may store either a bare holes
-// array or a { holes: [...] } object; tolerate both, fall back to default.
-function officialHolesFromCourse(course) {
-  const raw = Array.isArray(course)
-    ? course
-    : (Array.isArray(course?.holes) ? course.holes : null);
-  if (!raw || raw.length === 0) return defaultOfficialHoles();
-  return raw.map((h, i) => ({
-    number: h.number ?? i + 1,
-    par: h.par ?? 4,
-    strokeIndex: h.strokeIndex ?? h.stroke_index ?? i + 1,
-  }));
-}
 
 
 function usePrevious(value) {
@@ -1034,16 +1007,20 @@ export default function ScorecardScreen({ navigation, route }) {
     };
   }, [official, officialData.scores, officialData.members, officialData.myRosterId]);
 
-  // Official-only: ranked gross leaderboard rows built from the flat
-  // members / scores lists. Discrepancy holes are omitted from each total
-  // (see officialLeaderboard.js). Casual mode never builds this.
+  // Official-only: ranked NET Stableford leaderboard rows built from the
+  // flat members / scores lists, using the round's real course holes for
+  // par/stroke-index (see officialLeaderboard.js). Discrepancy holes are
+  // excluded from each total and flagged on the row. Casual mode never
+  // builds this.
   const officialLeaderboard = useMemo(() => {
     if (!official) return [];
     return buildLeaderboard({
       members: officialData.members ?? [],
       scores: officialData.scores ?? [],
+      holes: officialHolesFromCourse(officialData.round?.course),
+      format: 'net_stableford',
     });
-  }, [official, officialData.members, officialData.scores]);
+  }, [official, officialData.members, officialData.scores, officialData.round]);
 
   // Live rows for the finish-time conflict summary — recomputed from the
   // per-author score entries (via deriveCell) so a resolved row disappears
@@ -1802,9 +1779,10 @@ export default function ScorecardScreen({ navigation, route }) {
         </View>
       )}
 
-      {/* Official gross leaderboard (Task 17). Official-only; built from the
-          flat members / scores lists via buildLeaderboard. Holes still in
-          discrepancy are omitted from each player's gross total. */}
+      {/* Official leaderboard (Task 17). Official-only; built from the flat
+          members / scores lists via buildLeaderboard, ranked by NET
+          Stableford points (Task 7). Holes still in discrepancy are
+          excluded from both gross and points, and flag the row below. */}
       {official && (
         <BottomSheet
           visible={officialLeaderboardOpen}
@@ -1831,11 +1809,12 @@ export default function ScorecardScreen({ navigation, route }) {
                   <Text style={s.officialLbRank}>{i + 1}</Text>
                   <Text style={s.officialLbName} numberOfLines={1}>
                     {row.name}
+                    {row.discrepancy ? ' ⚠' : ''}
                   </Text>
                   <Text style={s.officialLbThru}>
-                    {row.thru > 0 ? `thru ${row.thru}` : '—'}
+                    {row.thru > 0 ? `thru ${row.thru} · gross ${row.gross}` : '—'}
                   </Text>
-                  <Text style={s.officialLbGross}>{row.gross}</Text>
+                  <Text style={s.officialLbGross}>{row.points} pts</Text>
                 </View>
               ))}
             </ScrollView>
