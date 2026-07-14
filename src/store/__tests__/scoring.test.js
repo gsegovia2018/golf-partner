@@ -16,6 +16,7 @@ import {
   pickupStrokes,
   isPickupScore,
   clampScoreInput,
+  resolvePlayerHandicap,
   randomPairs,
   buildTeamsForMode,
   isRoundPlayed,
@@ -299,6 +300,30 @@ describe('pickupStrokes', () => {
   it('accounts for handicap strokes on the hole', () => {
     const strokes = pickupStrokes(4, 18, 1);
     expect(calcStablefordPoints(4, strokes, 18, 1)).toBe(0);
+  });
+});
+
+describe('resolvePlayerHandicap', () => {
+  it('uses the round per-player handicap when present', () => {
+    const round = { playerHandicaps: { p1: 12 } };
+    expect(resolvePlayerHandicap(round, [{ id: 'p1', handicap: 20 }], 'p1')).toBe(12);
+  });
+
+  it('falls back to the player base handicap when the round entry is missing', () => {
+    // Legacy / pre-normalization round: playerHandicaps has no entry for p1.
+    const round = { playerHandicaps: {} };
+    expect(resolvePlayerHandicap(round, [{ id: 'p1', handicap: 18 }], 'p1')).toBe(18);
+  });
+
+  it('falls back to 0 when neither source has a handicap', () => {
+    expect(resolvePlayerHandicap({}, [{ id: 'p1' }], 'p1')).toBe(0);
+    expect(resolvePlayerHandicap(null, null, 'p1')).toBe(0);
+  });
+
+  it('does NOT collapse a real handicap to 0 just because the round map is empty', () => {
+    // Regression guard: a missing round entry must not silently become scratch.
+    const round = { playerHandicaps: {} };
+    expect(resolvePlayerHandicap(round, [{ id: 'p1', handicap: 18 }], 'p1')).not.toBe(0);
   });
 });
 

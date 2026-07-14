@@ -84,6 +84,19 @@ describe('score.set clamps to [1, pickup] in the store', () => {
     expect(t.rounds[0].scores.p1[3]).toBe(7);
   });
 
+  it('uses the player-level handicap fallback when the round map has no entry (legacy round)', async () => {
+    // round.playerHandicaps is EMPTY (pre-normalization round), but the player
+    // carries a base handicap of 18 => +1 extra shot on SI 1 => pickup ceiling
+    // is 7, NOT the handicap-0 ceiling of 6. A "44" must clamp to 7, proving
+    // the resolvePlayerHandicap fallback is used rather than defaulting to 0.
+    const base = tournamentWithHole({}); // no per-round handicaps
+    base.players = [{ id: 'p1', handicap: 18 }];
+    const t = await mutate(base, {
+      type: 'score.set', roundId: 'r1', playerId: 'p1', hole: 3, value: 44, authorId: 'p1',
+    });
+    expect(t.rounds[0].scores.p1[3]).toBe(7);
+  });
+
   it('passes through unclamped when the hole cannot be found (defensive fallback)', async () => {
     const t = await mutate(tournamentWithHole(), {
       type: 'score.set', roundId: 'r1', playerId: 'p1', hole: 99, value: 44, authorId: 'p1',

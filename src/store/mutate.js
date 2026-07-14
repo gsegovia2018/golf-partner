@@ -2,7 +2,7 @@ import { syncQueue } from './syncQueue';
 import { saveLocal, _setSyncStatus } from './tournamentStore';
 import { isOnline } from '../lib/connectivity';
 import { normalizeRoundNotes } from './roundNotes';
-import { clampScoreInput } from './scoring';
+import { clampScoreInput, resolvePlayerHandicap } from './scoring';
 
 // Maps a mutation to a stable dotted path identifying what it touches. Used
 // for labeling entries in SyncStatusSheet's log (see conflictLabels.js) and
@@ -531,9 +531,7 @@ export async function mutate(tournamentBefore, mutation, opts = {}) {
     const round = tournamentBefore?.rounds?.find((r) => r.id === m.roundId);
     const hole = round?.holes?.find((h) => h.number === m.hole);
     if (hole) {
-      const playerHandicap = round.playerHandicaps?.[m.playerId]
-        ?? tournamentBefore?.players?.find((p) => p.id === m.playerId)?.handicap
-        ?? 0;
+      const playerHandicap = resolvePlayerHandicap(round, tournamentBefore?.players, m.playerId);
       m.value = clampScoreInput(m.value, hole.par, playerHandicap, hole.strokeIndex);
     }
   }

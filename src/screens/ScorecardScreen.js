@@ -51,7 +51,8 @@ import {
   celebrationFor,
 } from '../components/scorecard/constants';
 import {
-  reconcileShotDetail, listRoundConflicts, roundScoringMode, roundBestBallValues, clampScoreInput,
+  reconcileShotDetail, listRoundConflicts, roundScoringMode, roundBestBallValues,
+  clampScoreInput, resolvePlayerHandicap,
 } from '../store/scoring';
 import { surfaceableConflicts, deriveCell } from '../store/scoreEntries';
 import { getDeviceAuthorId } from '../store/deviceId';
@@ -103,6 +104,25 @@ export function mergeScores(blobScores, localScores, dirtyKeys) {
     out[pid] = merged;
   }
   return out;
+}
+
+// Clamp a raw entered stroke count for one hole to the recordable range
+// [1, pickup], per the silent-clamp product decision. Shared by both entry
+// paths (setScore text field + stepScore +/-) so they can never diverge, and
+// exported so the clamp — including the handicap-fallback edge case — is unit
+// testable without mounting the whole screen. Handicap is resolved via the
+// SAME resolvePlayerHandicap fallback the store setter uses: a round with no
+// per-player handicap entry (legacy / pre-normalization) falls back to the
+// player's base handicap, NOT scratch, so a legitimately high score with real
+// extra shots isn't over-clamped. Returns the raw value untouched when the
+// hole can't be found (defensive) — including a cleared cell (null/undefined),
+// which clampScoreInput itself passes through.
+export function clampEnteredScore(round, players, playerId, holeNumber, rawValue) {
+  const hole = round?.holes?.find((h) => h.number === holeNumber);
+  if (!hole) return rawValue;
+  return clampScoreInput(
+    rawValue, hole.par, resolvePlayerHandicap(round, players, playerId), hole.strokeIndex,
+  );
 }
 
 function sameShotDetail(a, b) {
@@ -1050,8 +1070,7 @@ export default function ScorecardScreen({ navigation, route }) {
   const setScore = useCallback((playerId, holeNumber, value) => {
     if (!official && viewOnly) return;
     const rawParsed = value === '' ? undefined : parseInt(value, 10) || undefined;
-    const hole = round?.holes?.find((h) => h.number === holeNumber);
-    const holePar = hole?.par ?? 4;
+    const holePar = round?.holes?.find((h) => h.number === holeNumber)?.par ?? 4;
     // Clamp a raw typed entry to [1, pickup] right here — the product
     // decision is a silent clamp (no interruption), and doing it before the
     // optimistic setScores() below means the field itself shows the
@@ -1060,9 +1079,7 @@ export default function ScorecardScreen({ navigation, route }) {
     // path (defense in depth / covers any non-UI caller); this call is what
     // also protects the OFFICIAL-mode path, which writes via officialWrite
     // straight to the RPC layer and never touches mutate.js.
-    const parsed = hole
-      ? clampScoreInput(rawParsed, hole.par, round?.playerHandicaps?.[playerId] ?? 0, hole.strokeIndex)
-      : rawParsed;
+    const parsed = clampEnteredScore(round, players, playerId, holeNumber, rawParsed);
     const cur = scoresRef.current;
     const current = cur[playerId]?.[holeNumber];
     const next = {
@@ -1082,7 +1099,7 @@ export default function ScorecardScreen({ navigation, route }) {
       const label = celebrationFor(holePar, parsed);
       if (label) triggerCelebration(playerId, holeNumber, label);
     }
-  }, [round, autoSave, triggerCelebration, official, officialWrite, reconcileMeShot, viewOnly]);
+  }, [round, players, autoSave, triggerCelebration, official, officialWrite, reconcileMeShot, viewOnly]);
 
   const stepScore = useCallback((playerId, holeNumber, delta) => {
     if (!official && viewOnly) return;
@@ -1091,8 +1108,7 @@ export default function ScorecardScreen({ navigation, route }) {
     anim.setValue(1.18);
     Animated.spring(anim, { toValue: 1, friction: 5, useNativeDriver: true }).start();
 
-    const hole = round?.holes?.find((h) => h.number === holeNumber);
-    const holePar = hole?.par ?? 4;
+    const holePar = round?.holes?.find((h) => h.number === holeNumber)?.par ?? 4;
     const cur = scoresRef.current;
     const current = cur[playerId]?.[holeNumber];
     // First interaction on an un-scored hole: + lands on par, - lands on birdie.
@@ -1102,9 +1118,7 @@ export default function ScorecardScreen({ navigation, route }) {
     const rawNewStrokes = current == null
       ? (delta > 0 ? holePar : Math.max(1, holePar - 1))
       : Math.max(1, current + delta);
-    const newStrokes = hole
-      ? clampScoreInput(rawNewStrokes, hole.par, round?.playerHandicaps?.[playerId] ?? 0, hole.strokeIndex)
-      : rawNewStrokes;
+    const newStrokes = clampEnteredScore(round, players, playerId, holeNumber, rawNewStrokes);
     const next = {
       ...cur,
       [playerId]: { ...cur[playerId], [holeNumber]: newStrokes },
@@ -1120,7 +1134,7 @@ export default function ScorecardScreen({ navigation, route }) {
       const label = celebrationFor(holePar, newStrokes);
       if (label) triggerCelebration(playerId, holeNumber, label);
     }
-  }, [round, autoSave, triggerCelebration, getScoreAnim, official, officialWrite, reconcileMeShot, viewOnly]);
+  }, [round, players, autoSave, triggerCelebration, getScoreAnim, official, officialWrite, reconcileMeShot, viewOnly]);
 
   const [showRunning, setShowRunning] = useState(true);
   useEffect(() => {

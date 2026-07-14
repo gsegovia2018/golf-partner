@@ -293,6 +293,20 @@ export function isPickupScore(strokes, par, playerHandicap, holeStrokeIndex) {
   return strokes != null && strokes >= pickupStrokes(par, playerHandicap, holeStrokeIndex);
 }
 
+// The playing handicap to use for a player on a round: the round's
+// normalized per-player handicap when present, else the player's base
+// handicap, else 0. round.playerHandicaps CAN legitimately miss entries on
+// legacy / pre-normalization rounds (see normalizeRoundHandicaps), so the
+// player-level fallback is required — a missing entry must NOT silently
+// collapse to a scratch (0) handicap. Single source of truth so every
+// caller (clamp math in mutate.js + ScorecardScreen, GridView display, etc.)
+// resolves it identically and can't drift.
+export function resolvePlayerHandicap(round, players, playerId) {
+  return round?.playerHandicaps?.[playerId]
+    ?? (players ?? []).find((p) => p.id === playerId)?.handicap
+    ?? 0;
+}
+
 // Clamps a raw entered stroke count to the recordable range [1, pickup] —
 // per-product-decision, an out-of-range entry (a fat-fingered "44" meaning
 // "4", or a stray "-1"/"0") is silently clamped rather than rejected. Reuses
