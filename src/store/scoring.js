@@ -363,11 +363,28 @@ export function randomPartnerTeams(players) {
   return pairs;
 }
 
+// True when a group set already satisfies the Stableford-with-Partners
+// invariant — every team is a pair, save at most one 3-player team — so the
+// incremental insert/remove absorb logic below can safely edit it in place
+// without ever producing a team of 4+. A revealed round from ANOTHER team
+// mode can violate this: e.g. scramble4's `[[a,b,c,d]]` (one 4-team) reaches
+// these helpers when a roster change forces the fallback to 'stableford'.
+// Such shapes must be rebuilt from scratch (see below), not appended onto.
+function conformsToPartnerInvariant(groups) {
+  let triples = 0;
+  for (const g of groups) {
+    if (g.length >= 4) return false;      // a 4+ team can never be a partner shape
+    if (g.length === 3 && ++triples > 1) return false; // at most one 3-team
+  }
+  return true;
+}
+
 // Insert `player` into an already-revealed set of Stableford-with-Partners
 // groups (add-player continuation — see tournamentStore's
-// buildPairsForAddedPlayer) without ever creating a singleton. Continues
-// randomPartnerTeams' "no lone player" rule incrementally instead of via a
-// fresh shuffle:
+// buildPairsForAddedPlayer) without ever creating a singleton OR a team of
+// 4+. When the existing groups already conform to the partner invariant,
+// continue randomPartnerTeams' "no lone player" rule incrementally (this
+// preserves the revealed partnerships):
 //   1. A group already short a member (a legacy/degenerate singleton)
 //      absorbs the new player directly.
 //   2. Otherwise, if a 3-player team exists, the roster is going odd->even:
@@ -376,7 +393,14 @@ export function randomPartnerTeams(players) {
 //   3. Otherwise every group is a clean pair — the roster is going
 //      even->odd — so the new player joins the last pair, forming one
 //      3-team (mirrors randomPartnerTeams' fold-into-the-last-pair rule).
+// When the existing groups do NOT conform (e.g. a scramble4 `[4]` round that
+// fell back to stableford on the add), a fresh randomPartnerTeams build of
+// the full roster is the only way to guarantee no team exceeds 3 — partner
+// continuity is unavailable there anyway (the prior mode wasn't partners).
 export function insertIntoPartnerTeams(groups, player) {
+  if (!conformsToPartnerInvariant(groups)) {
+    return randomPartnerTeams([...groups.flat(), player]);
+  }
   const next = groups.map((g) => [...g]);
   const singletonIdx = next.findIndex((g) => g.length === 1);
   if (singletonIdx !== -1) {
@@ -401,10 +425,13 @@ export function insertIntoPartnerTeams(groups, player) {
 
 // Remove `removedId` from an already-revealed set of Stableford-with-Partners
 // groups (remove-player continuation — see tournamentStore's
-// buildPairsForRemovedPlayer) without ever leaving a singleton behind.
-// Mirror of insertIntoPartnerTeams. A single removal can shrink at most one
-// group by one seat, so at most one singleton (or emptied group) can result;
-// repair it:
+// buildPairsForRemovedPlayer) without ever leaving a singleton behind OR a
+// team of 4+. Mirror of insertIntoPartnerTeams. When the existing groups do
+// NOT conform to the partner invariant (e.g. a scramble4 `[4]` round that
+// fell back to stableford on the remove), the incremental repair can't
+// shrink an oversized team, so rebuild the survivors from scratch instead.
+// When they DO conform, a single removal shrinks at most one group by one
+// seat, so at most one singleton (or emptied group) can result; repair it:
 //   - a 3-team elsewhere lends one member back to the singleton, so both
 //     end up pairs (e.g. [1,3] -> [2,2]);
 //   - otherwise a 2-team absorbs the singleton, forming a 3-team
@@ -412,6 +439,9 @@ export function insertIntoPartnerTeams(groups, player) {
 //   - otherwise (only singletons remain) merge into whatever's left —
 //     a defensive fallback for already-degenerate input.
 export function removeFromPartnerTeams(groups, removedId) {
+  if (!conformsToPartnerInvariant(groups)) {
+    return randomPartnerTeams(groups.flat().filter((p) => p.id !== removedId));
+  }
   let next = groups
     .map((g) => g.filter((p) => p.id !== removedId))
     .filter((g) => g.length > 0);

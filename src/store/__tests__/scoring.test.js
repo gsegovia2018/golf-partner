@@ -568,6 +568,25 @@ describe('insertIntoPartnerTeams', () => {
     const result = insertIntoPartnerTeams(groups, p4);
     expect(result).toEqual([[p1, p2], [p3, p4]]);
   });
+
+  it('oversized input (scramble4 [4] shape): rebuilds instead of appending — no team over 3', () => {
+    const [p1, p2, p3, p4, p5] = ['1', '2', '3', '4', '5'].map(p);
+    const groups = [[p1, p2, p3, p4]];
+    const result = insertIntoPartnerTeams(groups, p5);
+    expect(result.map((g) => g.length).sort()).toEqual([2, 3]);
+    expect(result.some((g) => g.length === 1)).toBe(false);
+    expect(result.every((g) => g.length <= 3)).toBe(true);
+    expect(result.flat().map((x) => x.id).sort()).toEqual(['1', '2', '3', '4', '5']);
+  });
+
+  it('already-corrupted 5-team input: rebuilds to a valid 6-player shape, no team over 3', () => {
+    const [p1, p2, p3, p4, p5, p6] = ['1', '2', '3', '4', '5', '6'].map(p);
+    const groups = [[p1, p2, p3, p4, p5]];
+    const result = insertIntoPartnerTeams(groups, p6);
+    expect(result.every((g) => g.length === 2)).toBe(true);
+    expect(result.some((g) => g.length === 1)).toBe(false);
+    expect(result.flat().map((x) => x.id).sort()).toEqual(['1', '2', '3', '4', '5', '6']);
+  });
 });
 
 describe('removeFromPartnerTeams', () => {
@@ -603,6 +622,15 @@ describe('removeFromPartnerTeams', () => {
     expect(result.map((g) => g.length).sort()).toEqual([2, 3]);
     expect(result.some((g) => g.length === 1)).toBe(false);
     expect(result.flat().map((x) => x.id).sort()).toEqual(['1', '2', '3', '4', '5']);
+  });
+
+  it('oversized input (scramble4 [4] shape) 4 -> 3: rebuilds survivors, no team over 3, no singleton', () => {
+    const [p1, p2, p3, p4] = ['1', '2', '3', '4'].map(p);
+    const groups = [[p1, p2, p3, p4]];
+    const result = removeFromPartnerTeams(groups, '4');
+    expect(result.map((g) => g.length).sort()).toEqual([3]);
+    expect(result.some((g) => g.length === 1)).toBe(false);
+    expect(result.flat().map((x) => x.id).sort()).toEqual(['1', '2', '3']);
   });
 });
 

@@ -163,6 +163,44 @@ describe('addPlayerRoundPatches pair construction', () => {
     expect(patches[0].pairs.every((pr) => pr.length <= 3)).toBe(true);
   });
 
+  test('revealed scramble4 [4] round + 5th player: falls back to stableford and rebuilds — no team over 3, no singleton', () => {
+    // scramble4 stores one 4-player team ([[a,b,c,d]]). Adding a 5th player
+    // makes scramble4 invalid (needs exactly 4), so nextScoringMode falls
+    // back to stableford and the team-continuity gate fires with a
+    // non-conforming [4] shape. insertIntoPartnerTeams must rebuild rather
+    // than append a 5-player team.
+    const D = { id: 'd', name: 'D', handicap: 4 };
+    const E = { id: 'e', name: 'E', handicap: 6 };
+    const t = makeTournament({
+      players: [A, B, C, D],
+      mode: 'scramble4',
+      rounds: [makeRound({ revealed: true, pairs: [[A, B, C, D]] })],
+    });
+    const { patches, nextScoringMode } = addPlayerRoundPatches(t, E);
+    expect(nextScoringMode).toBe('stableford');
+    expect(patches[0].pairs.every((pr) => pr.length <= 3)).toBe(true);
+    expect(patches[0].pairs.some((pr) => pr.length === 1)).toBe(false);
+    expect(patches[0].pairs.map((pr) => pr.length).sort()).toEqual([2, 3]);
+    expect(patches[0].pairs.flat().map((pl) => pl.id).sort()).toEqual(['a', 'b', 'c', 'd', 'e']);
+  });
+
+  test('revealed scramble4-derived 5-player round + 6th player: rebuilds — no team over 3, no singleton', () => {
+    // Guards the follow-on add: even a corrupted 5-player team input is
+    // rebuilt to a clean shape rather than grown to 6.
+    const D = { id: 'd', name: 'D', handicap: 4 };
+    const E = { id: 'e', name: 'E', handicap: 6 };
+    const F = { id: 'f', name: 'F', handicap: 9 };
+    const t = makeTournament({
+      players: [A, B, C, D, E],
+      mode: 'stableford',
+      rounds: [makeRound({ revealed: true, pairs: [[A, B, C, D, E]] })],
+    });
+    const { patches } = addPlayerRoundPatches(t, F);
+    expect(patches[0].pairs.every((pr) => pr.length <= 3)).toBe(true);
+    expect(patches[0].pairs.some((pr) => pr.length === 1)).toBe(false);
+    expect(patches[0].pairs.flat().map((pl) => pl.id).sort()).toEqual(['a', 'b', 'c', 'd', 'e', 'f']);
+  });
+
   test('non-partners team mode (bestball) is unaffected: pairs construction only reached via non-team fallback stays solo-group append', () => {
     // bestball/scramble*/pairsmatchplay are fixed at exactly 4 players, so
     // they can never remain their own mode through an add — the mode

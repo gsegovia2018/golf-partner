@@ -155,6 +155,25 @@ describe('removePlayerRoundPatches pair construction', () => {
     expect(patches[0].pairs.flat().map((p) => p.id).sort()).toEqual(['a', 'b', 'c', 'd', 'e']);
   });
 
+  test('revealed scramble4 [4] round - 1 player: falls back to stableford and rebuilds survivors — no team over 3, no singleton', () => {
+    // scramble4 stores one 4-team ([[a,b,c,d]]). Removing a player makes it
+    // invalid (needs exactly 4) → fallback stableford → the continuity gate
+    // fires with a non-conforming [4] shape. removeFromPartnerTeams must
+    // rebuild the 3 survivors rather than return a 4-team minus one via the
+    // legacy filter (which would still be safe here) — the key guarantee is
+    // no team over 3, no singleton.
+    const t = makeTournament({
+      players: [A, B, C, D],
+      mode: 'scramble4',
+      rounds: [makeRound({ revealed: true, pairs: [[A, B, C, D]] })],
+    });
+    const { patches, nextScoringMode } = removePlayerRoundPatches(t, 'd');
+    expect(nextScoringMode).toBe('stableford');
+    expect(patches[0].pairs.every((pr) => pr.length <= 3)).toBe(true);
+    expect(patches[0].pairs.some((pr) => pr.length === 1)).toBe(false);
+    expect(patches[0].pairs.flat().map((pl) => pl.id).sort()).toEqual(['a', 'b', 'c']);
+  });
+
   test('non-partners team mode (bestball) is unaffected: legacy filter/discard behavior, singletons not repaired', () => {
     // stableford is the only team mode without a fixed player-count
     // requirement, so it's the only mode buildPairsForRemovedPlayer can
