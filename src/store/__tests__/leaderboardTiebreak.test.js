@@ -201,11 +201,17 @@ describe('round-scoped board: place 1 goes to the fewer-strokes player/team', ()
       { number: 1, par: 4, strokeIndex: 1 },
       { number: 2, par: 4, strokeIndex: 2 },
     ];
+    // The MORE-strokes team (c,d: 8 gross, off a team-handicap extra shot) is
+    // listed FIRST in pairs, so it is inserted into `entries` first. A stable
+    // points-only sort would therefore leave c,d ahead of the tied a,b team
+    // and label c place 1 — the exact pre-fix bug. Only a strokes-tiebroken
+    // sort (the fix) moves the fewer-strokes team a,b to place 1. (Verified:
+    // reverting the scramble branch's sort to points-only turns this red.)
     const round = {
       id: 'r0', holes,
-      pairs: [[A, B], [C, D]],
+      pairs: [[C, D], [A, B]],
       playerHandicaps: { a: 0, b: 0, c: 2, d: 2 },
-      scores: { a: { 1: 3, 2: 4 }, c: { 1: 4, 2: 4 } },
+      scores: { c: { 1: 4, 2: 4 }, a: { 1: 3, 2: 4 } },
     };
     const tournament = {
       players, rounds: [round], currentRound: 0,
@@ -214,13 +220,19 @@ describe('round-scoped board: place 1 goes to the fewer-strokes player/team', ()
 
     const board = roundLeaderboard(tournament, round);
     expect(board.mode).toBe('scramblepairs');
+    const byId = Object.fromEntries(board.entries.map((e) => [e.player.id, e]));
+    expect(byId.a.points).toBe(5);
+    expect(byId.c.points).toBe(5);
+    expect(byId.a.strokes).toBe(7); // team a,b gross
+    expect(byId.c.strokes).toBe(8); // team c,d gross (extra shot)
+
     const ranked = rank(board);
-    // team1 (a,b) fewer strokes → both share place 1; team2 (c,d) → place 3.
-    const byId = Object.fromEntries(ranked.map((r) => [r.player.id, r]));
-    expect(byId.a.place).toBe(1);
-    expect(byId.b.place).toBe(1);
-    expect(byId.c.place).toBe(3);
-    expect(byId.d.place).toBe(3);
+    // team a,b fewer strokes → both share place 1; team c,d → place 3.
+    const byIdRanked = Object.fromEntries(ranked.map((r) => [r.player.id, r]));
+    expect(byIdRanked.a.place).toBe(1);
+    expect(byIdRanked.b.place).toBe(1);
+    expect(byIdRanked.c.place).toBe(3);
+    expect(byIdRanked.d.place).toBe(3);
     expect(ranked[0].player.id === 'a' || ranked[0].player.id === 'b').toBe(true);
   });
 });
