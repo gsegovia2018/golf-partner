@@ -41,7 +41,7 @@ import { useOfficialRound } from '../hooks/useOfficialRound';
 import ScoringModeChangeBanner from '../components/ScoringModeChangeBanner';
 import ScoringModeChangeSheet from '../components/ScoringModeChangeSheet';
 import { fallbackNoticeText } from '../components/scoringModes';
-import { cardDiscrepancyHoles } from '../store/officialScoring';
+import { cardDiscrepancyHoles, officialHolesFromCourse } from '../store/officialScoring';
 import { buildLeaderboard } from '../store/officialLeaderboard';
 import { attestCard } from '../store/officialStore';
 import { notifyRoundFinished } from '../store/notificationStore';
@@ -50,7 +50,10 @@ import {
   DEFAULT_SHOT,
   celebrationFor,
 } from '../components/scorecard/constants';
-import { reconcileShotDetail, listRoundConflicts, roundScoringMode, roundBestBallValues } from '../store/scoring';
+import {
+  reconcileShotDetail, listRoundConflicts, roundScoringMode, roundBestBallValues,
+  clampScoreInput, resolvePlayerHandicap,
+} from '../store/scoring';
 import { surfaceableConflicts, deriveCell } from '../store/scoreEntries';
 import { getDeviceAuthorId } from '../store/deviceId';
 import { makeScorecardStyles } from '../components/scorecard/styles';
@@ -65,33 +68,6 @@ const haptic = (style = 'light') => {
   else if (style === 'medium') Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
   else if (style === 'success') Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
 };
-
-
-// Fallback 18-hole layout for official rounds whose `course` JSONB is empty
-// or missing — keeps the scorecard usable until course data lands.
-// TODO: official course data (Spec 2)
-function defaultOfficialHoles() {
-  return Array.from({ length: 18 }, (_, i) => ({
-    number: i + 1,
-    par: 4,
-    strokeIndex: i + 1,
-  }));
-}
-
-// Map an official round's `course` JSONB to the casual `round.holes` shape
-// ({ number, par, strokeIndex }). The JSONB may store either a bare holes
-// array or a { holes: [...] } object; tolerate both, fall back to default.
-function officialHolesFromCourse(course) {
-  const raw = Array.isArray(course)
-    ? course
-    : (Array.isArray(course?.holes) ? course.holes : null);
-  if (!raw || raw.length === 0) return defaultOfficialHoles();
-  return raw.map((h, i) => ({
-    number: h.number ?? i + 1,
-    par: h.par ?? 4,
-    strokeIndex: h.strokeIndex ?? h.stroke_index ?? i + 1,
-  }));
-}
 
 
 function usePrevious(value) {
@@ -128,6 +104,25 @@ export function mergeScores(blobScores, localScores, dirtyKeys) {
     out[pid] = merged;
   }
   return out;
+}
+
+// Clamp a raw entered stroke count for one hole to the recordable range
+// [1, pickup], per the silent-clamp product decision. Shared by both entry
+// paths (setScore text field + stepScore +/-) so they can never diverge, and
+// exported so the clamp — including the handicap-fallback edge case — is unit
+// testable without mounting the whole screen. Handicap is resolved via the
+// SAME resolvePlayerHandicap fallback the store setter uses: a round with no
+// per-player handicap entry (legacy / pre-normalization) falls back to the
+// player's base handicap, NOT scratch, so a legitimately high score with real
+// extra shots isn't over-clamped. Returns the raw value untouched when the
+// hole can't be found (defensive) — including a cleared cell (null/undefined),
+// which clampScoreInput itself passes through.
+export function clampEnteredScore(round, players, playerId, holeNumber, rawValue) {
+  const hole = round?.holes?.find((h) => h.number === holeNumber);
+  if (!hole) return rawValue;
+  return clampScoreInput(
+    rawValue, hole.par, resolvePlayerHandicap(round, players, playerId), hole.strokeIndex,
+  );
 }
 
 function sameShotDetail(a, b) {
@@ -1034,16 +1029,20 @@ export default function ScorecardScreen({ navigation, route }) {
     };
   }, [official, officialData.scores, officialData.members, officialData.myRosterId]);
 
-  // Official-only: ranked gross leaderboard rows built from the flat
-  // members / scores lists. Discrepancy holes are omitted from each total
-  // (see officialLeaderboard.js). Casual mode never builds this.
+  // Official-only: ranked NET Stableford leaderboard rows built from the
+  // flat members / scores lists, using the round's real course holes for
+  // par/stroke-index (see officialLeaderboard.js). Discrepancy holes are
+  // excluded from each total and flagged on the row. Casual mode never
+  // builds this.
   const officialLeaderboard = useMemo(() => {
     if (!official) return [];
     return buildLeaderboard({
       members: officialData.members ?? [],
       scores: officialData.scores ?? [],
+      holes: officialHolesFromCourse(officialData.round?.course),
+      format: 'net_stableford',
     });
-  }, [official, officialData.members, officialData.scores]);
+  }, [official, officialData.members, officialData.scores, officialData.round]);
 
   // Live rows for the finish-time conflict summary — recomputed from the
   // per-author score entries (via deriveCell) so a resolved row disappears
@@ -1070,8 +1069,17 @@ export default function ScorecardScreen({ navigation, route }) {
 
   const setScore = useCallback((playerId, holeNumber, value) => {
     if (!official && viewOnly) return;
-    const parsed = value === '' ? undefined : parseInt(value, 10) || undefined;
+    const rawParsed = value === '' ? undefined : parseInt(value, 10) || undefined;
     const holePar = round?.holes?.find((h) => h.number === holeNumber)?.par ?? 4;
+    // Clamp a raw typed entry to [1, pickup] right here — the product
+    // decision is a silent clamp (no interruption), and doing it before the
+    // optimistic setScores() below means the field itself shows the
+    // corrected number instead of briefly displaying "44" for a fat-fingered
+    // "4". mutate()'s score.set case clamps again for the casual autoSave
+    // path (defense in depth / covers any non-UI caller); this call is what
+    // also protects the OFFICIAL-mode path, which writes via officialWrite
+    // straight to the RPC layer and never touches mutate.js.
+    const parsed = clampEnteredScore(round, players, playerId, holeNumber, rawParsed);
     const cur = scoresRef.current;
     const current = cur[playerId]?.[holeNumber];
     const next = {
@@ -1091,7 +1099,7 @@ export default function ScorecardScreen({ navigation, route }) {
       const label = celebrationFor(holePar, parsed);
       if (label) triggerCelebration(playerId, holeNumber, label);
     }
-  }, [round, autoSave, triggerCelebration, official, officialWrite, reconcileMeShot, viewOnly]);
+  }, [round, players, autoSave, triggerCelebration, official, officialWrite, reconcileMeShot, viewOnly]);
 
   const stepScore = useCallback((playerId, holeNumber, delta) => {
     if (!official && viewOnly) return;
@@ -1104,10 +1112,13 @@ export default function ScorecardScreen({ navigation, route }) {
     const cur = scoresRef.current;
     const current = cur[playerId]?.[holeNumber];
     // First interaction on an un-scored hole: + lands on par, - lands on birdie.
-    // After that, +/- step by one as usual. Minimum is 1 stroke.
-    const newStrokes = current == null
+    // After that, +/- step by one as usual. Minimum is 1 stroke; clamped to
+    // the pickup ceiling too, so holding + past pickup can't run away to an
+    // arbitrarily large gross stroke count.
+    const rawNewStrokes = current == null
       ? (delta > 0 ? holePar : Math.max(1, holePar - 1))
       : Math.max(1, current + delta);
+    const newStrokes = clampEnteredScore(round, players, playerId, holeNumber, rawNewStrokes);
     const next = {
       ...cur,
       [playerId]: { ...cur[playerId], [holeNumber]: newStrokes },
@@ -1123,7 +1134,7 @@ export default function ScorecardScreen({ navigation, route }) {
       const label = celebrationFor(holePar, newStrokes);
       if (label) triggerCelebration(playerId, holeNumber, label);
     }
-  }, [round, autoSave, triggerCelebration, getScoreAnim, official, officialWrite, reconcileMeShot, viewOnly]);
+  }, [round, players, autoSave, triggerCelebration, getScoreAnim, official, officialWrite, reconcileMeShot, viewOnly]);
 
   const [showRunning, setShowRunning] = useState(true);
   useEffect(() => {
@@ -1802,9 +1813,10 @@ export default function ScorecardScreen({ navigation, route }) {
         </View>
       )}
 
-      {/* Official gross leaderboard (Task 17). Official-only; built from the
-          flat members / scores lists via buildLeaderboard. Holes still in
-          discrepancy are omitted from each player's gross total. */}
+      {/* Official leaderboard (Task 17). Official-only; built from the flat
+          members / scores lists via buildLeaderboard, ranked by NET
+          Stableford points (Task 7). Holes still in discrepancy are
+          excluded from both gross and points, and flag the row below. */}
       {official && (
         <BottomSheet
           visible={officialLeaderboardOpen}
@@ -1831,11 +1843,12 @@ export default function ScorecardScreen({ navigation, route }) {
                   <Text style={s.officialLbRank}>{i + 1}</Text>
                   <Text style={s.officialLbName} numberOfLines={1}>
                     {row.name}
+                    {row.discrepancy ? ' ⚠' : ''}
                   </Text>
                   <Text style={s.officialLbThru}>
-                    {row.thru > 0 ? `thru ${row.thru}` : '—'}
+                    {row.thru > 0 ? `thru ${row.thru} · gross ${row.gross}` : '—'}
                   </Text>
-                  <Text style={s.officialLbGross}>{row.gross}</Text>
+                  <Text style={s.officialLbGross}>{row.points} pts</Text>
                 </View>
               ))}
             </ScrollView>

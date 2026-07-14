@@ -261,9 +261,33 @@ async function drainOnce() {
     if (!byTournament.has(e.tournamentId)) byTournament.set(e.tournamentId, []);
     byTournament.get(e.tournamentId).push(e);
   }
+  // Isolate each tournament's drain, mirroring the library-drain try/catch
+  // above: a mutation for tournament A that throws (recoverable, under its
+  // retry cap) must not abort this for-loop and starve every tournament
+  // after it in iteration order — that head-of-line blocking could stall a
+  // sibling tournament's score/finish sync for up to RECOVERABLE_ATTEMPT_CAP
+  // drain passes. Each failure is caught so siblings keep draining, but we
+  // remember that one occurred and rethrow AFTER the loop (below) so the
+  // failing entries (which stay queued) still trigger syncNow's backoff
+  // retry — swallowing the throw entirely would let drainOnce resolve, reset
+  // _attempt to 0, and never schedule the next pass.
+  let drainFailure = null;
   for (const [tid, entries] of byTournament) {
-    await drainTournament(tid, entries);
+    try {
+      await drainTournament(tid, entries);
+    } catch (error) {
+      drainFailure = error;
+      _setSyncStatus('error');
+      console.warn(`tournament ${tid} drain failed; continuing with other tournaments: ${error?.message}`);
+    }
   }
+
+  // Every sibling has now had its chance to drain. If any tournament failed
+  // recoverably, propagate so syncNow's .catch() schedules a backoff retry
+  // for the still-queued entries. This runs after the loop, so isolation
+  // (siblings drain independently) and durability (backoff still fires) both
+  // hold.
+  if (drainFailure) throw drainFailure;
 
   const remaining = await syncQueue.all();
   if (remaining.length === 0) {

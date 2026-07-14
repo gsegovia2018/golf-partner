@@ -38,6 +38,7 @@ import {
 } from '../lib/quickStartGame';
 import { mutate } from '../store/mutate';
 import { roundScoringMode, tournamentHasMixedModes, tournamentStablefordLeaderboard, buildTeamsForMode, roundBestBallValues } from '../store/scoring';
+import { assignPlacements, comparatorForBoardMode } from '../store/leaderboardPlacement';
 import { subscribeConnectivity } from '../lib/connectivity';
 import { getShowRunningScore, setShowRunningScore } from '../lib/prefs';
 import { unreadCount } from '../store/notificationStore';
@@ -961,7 +962,9 @@ export default function HomeScreen({ navigation, route }) {
   // gross strokes ascending (unplayed last). Preserves the existing toggle,
   // now scope-aware.
   const displayedBoard = useMemo(() => {
-    if (!leaderboardAlt) return resolvedBoard;
+    if (!leaderboardAlt) {
+      return { ...resolvedBoard, comparator: comparatorForBoardMode(resolvedBoard.mode) };
+    }
     const sb = (isGame || !leaderboardOverall)
       ? roundLeaderboard(tournament, { ...selectedRoundData, scoringMode: 'stableford' })
       : { mode: 'stableford', unit: 'pts', entries: tournamentStablefordLeaderboard(tournament) };
@@ -969,11 +972,26 @@ export default function HomeScreen({ navigation, route }) {
     // modes) re-sorts by gross strokes. For other modes (matchplay,
     // sindicato, bestball, pairsmatchplay) the toggle's alt view is the
     // Stableford board itself, shown in its native points order.
-    if (!isStrokePlayAlt(resolvedBoard.mode)) return sb;
-    const entries = [...sb.entries].sort(
-      (a, b) => (a.strokes > 0 ? a.strokes : Infinity) - (b.strokes > 0 ? b.strokes : Infinity));
-    return { ...sb, entries };
+    if (!isStrokePlayAlt(resolvedBoard.mode)) {
+      return { ...sb, comparator: comparatorForBoardMode(sb.mode) };
+    }
+    // Ties in this view are defined by gross strokes alone (the order it's
+    // actually sorted by here), not by points — keep the comparator in sync
+    // with the sort below so assignPlacements' tie definition matches.
+    const strokesComparator = (a, b) =>
+      (a.strokes > 0 ? a.strokes : Infinity) - (b.strokes > 0 ? b.strokes : Infinity);
+    const entries = [...sb.entries].sort(strokesComparator);
+    return { ...sb, entries, comparator: strokesComparator };
   }, [leaderboardAlt, resolvedBoard, isGame, leaderboardOverall, selectedRoundData, tournament]);
+  // Tie-aware competition ranking (1,2,2,4) for the board currently on
+  // screen, using the SAME comparator the board above was sorted with, so
+  // players who compare equal (e.g. same points AND strokes) share a place
+  // and are rendered as "T{n}" with a shared medal color instead of getting
+  // distinct array-index ranks that imply an order the data doesn't have.
+  const rankedLeaderboardEntries = useMemo(
+    () => assignPlacements(displayedBoard.entries, displayedBoard.comparator),
+    [displayedBoard],
+  );
   const tournamentMode = settings.scoringMode === 'bestball' ? 'bestball'
     : settings.scoringMode === 'sindicato' ? 'sindicato'
     : settings.scoringMode === 'matchplay' ? 'matchplay'
@@ -1636,18 +1654,21 @@ export default function HomeScreen({ navigation, route }) {
             ))}
           </ScrollView>
         )}
-        {displayedBoard.entries.map((entry, i) => {
+        {rankedLeaderboardEntries.map((entry, i) => {
           const rankColors = ['#ffd700', '#c0c8d4', '#daa06d'];
-          const rankColor = rankColors[i] || 'rgba(255,255,255,0.4)';
-          const rankBg = i === 0 ? 'rgba(255,215,0,0.2)' : i === 1 ? 'rgba(192,200,212,0.15)' : i === 2 ? 'rgba(218,160,109,0.15)' : 'rgba(255,255,255,0.08)';
+          const placeIdx = entry.place - 1;
+          const isFirstPlace = entry.place === 1;
+          const rankColor = rankColors[placeIdx] || 'rgba(255,255,255,0.4)';
+          const rankBg = placeIdx === 0 ? 'rgba(255,215,0,0.2)' : placeIdx === 1 ? 'rgba(192,200,212,0.15)' : placeIdx === 2 ? 'rgba(218,160,109,0.15)' : 'rgba(255,255,255,0.08)';
+          const rankLabel = entry.isTie ? `T${entry.place}` : entry.place;
           return (
-            <View key={entry.player.id} style={[s.mastersRow, i === 0 && s.mastersRowFirst, i === displayedBoard.entries.length - 1 && { borderBottomWidth: 0 }]}>
+            <View key={entry.player.id} style={[s.mastersRow, isFirstPlace && s.mastersRowFirst, i === rankedLeaderboardEntries.length - 1 && { borderBottomWidth: 0 }]}>
               <View style={[s.mastersRankBadge, { backgroundColor: rankBg }]}>
-                <Text style={[s.mastersRankText, { color: rankColor }]}>{i + 1}</Text>
+                <Text style={[s.mastersRankText, { color: rankColor }]}>{rankLabel}</Text>
               </View>
               <View style={s.mastersNameCol}>
                 <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
-                  <Text style={[s.mastersName, i === 0 && { fontFamily: 'PlusJakartaSans-Bold' }]} numberOfLines={1}>
+                  <Text style={[s.mastersName, isFirstPlace && { fontFamily: 'PlusJakartaSans-Bold' }]} numberOfLines={1}>
                     {entry.player.name}
                   </Text>
                   {showRunning && entry.player.id === tournamentClinchedId && (
@@ -1655,7 +1676,7 @@ export default function HomeScreen({ navigation, route }) {
                   )}
                 </View>
               </View>
-              <Text style={[s.mastersPoints, i === 0 && { fontSize: 18 }]}>{
+              <Text style={[s.mastersPoints, isFirstPlace && { fontSize: 18 }]}>{
                 !showRunning ? '—' : `${entry.points} ${displayedBoard.unit}`
               }</Text>
               {entry.strokes != null && (

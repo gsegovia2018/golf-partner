@@ -13,6 +13,7 @@ import {
 } from '../store/tournamentStore';
 import { defaultHoles, fetchPlayers, fetchMyPlayers } from '../store/libraryStore';
 import { middleTee } from '../store/tees';
+import { canSaveCourse } from '../lib/courseLibrary';
 import { consumePendingPlayers, consumePendingCourses } from '../lib/selectionBridge';
 import { applyCoursePick, applyLayoutChoice } from '../lib/roundCourse';
 import RoundLayoutSelect from '../components/RoundLayoutSelect';
@@ -373,6 +374,23 @@ export default function SetupScreen({ navigation, route }) {
     }
     if (missingCourseName) {
       Alert.alert('Missing info', 'All course names are required.');
+      return;
+    }
+
+    // Stroke-index / tee-label validation (Task 13): the round-holes editor
+    // (CourseEditorScreen opened WITHOUT a courseId from the "Configure
+    // holes" row below) writes straight into round.holes/tees with no
+    // save-guard of its own — a different path than the course-library
+    // screens' canSaveCourse gate. Creation is a single discrete user
+    // action (not a keystroke autosave), so — mirroring Task 5's pattern —
+    // block it outright with an alert rather than silently dropping holes.
+    const invalidRound = rounds.find((r) => !canSaveCourse(r.holes, r.tees).ok);
+    if (invalidRound) {
+      const { siIssues, dupes } = canSaveCourse(invalidRound.holes, invalidRound.tees);
+      Alert.alert(
+        'Fix course data before creating',
+        [...siIssues, ...(dupes.length > 0 ? [`Duplicate tee labels: ${dupes.join(', ')}`] : [])].join('\n'),
+      );
       return;
     }
 

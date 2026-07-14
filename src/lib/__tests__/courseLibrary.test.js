@@ -1,5 +1,6 @@
 import {
   normalizeText, buildCourseLibraryItems, filterCourseLibraryItems,
+  computeSiIssues, computeDupeTeeLabels, canSaveCourse, roundHolesArePersistable,
 } from '../courseLibrary';
 
 const course = (id, name, extra = {}) => ({
@@ -85,5 +86,159 @@ describe('filterCourseLibraryItems', () => {
   test('standalone course matched by city', () => {
     const out = filterCourseLibraryItems(items, 'madrid');
     expect(out.map((i) => i.kind)).toEqual(['course']);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Save-guard: stroke-index + duplicate tee-label validation.
+// ---------------------------------------------------------------------------
+
+function cleanHoles() {
+  return Array.from({ length: 18 }, (_, i) => ({ number: i + 1, par: 4, strokeIndex: i + 1 }));
+}
+
+function cleanTees() {
+  return [
+    { id: 't1', label: 'White', rating: 71.5, slope: 128 },
+    { id: 't2', label: 'Blue', rating: 73.2, slope: 132 },
+  ];
+}
+
+describe('computeSiIssues', () => {
+  test('complete 1..18 permutation → no issues', () => {
+    expect(computeSiIssues(cleanHoles())).toEqual([]);
+  });
+
+  test('duplicate SI values are flagged', () => {
+    const holes = cleanHoles();
+    holes[1] = { ...holes[1], strokeIndex: holes[0].strokeIndex }; // hole 2 dupes hole 1's SI
+    const issues = computeSiIssues(holes);
+    expect(issues.some((i) => i.startsWith('Duplicate SI'))).toBe(true);
+  });
+
+  test('missing SI values are flagged', () => {
+    const holes = cleanHoles();
+    holes[0] = { ...holes[0], strokeIndex: 2 }; // now nothing has SI 1, SI 2 used twice
+    const issues = computeSiIssues(holes);
+    expect(issues.some((i) => i.startsWith('Missing SI'))).toBe(true);
+  });
+
+  test('SI of 0 is flagged as invalid', () => {
+    const holes = cleanHoles();
+    holes[0] = { ...holes[0], strokeIndex: 0 };
+    const issues = computeSiIssues(holes);
+    expect(issues.some((i) => i.includes('Hole 1'))).toBe(true);
+  });
+
+  test('missing/undefined strokeIndex is flagged as invalid', () => {
+    const holes = cleanHoles();
+    delete holes[0].strokeIndex;
+    const issues = computeSiIssues(holes);
+    expect(issues.some((i) => i.includes('Hole 1'))).toBe(true);
+  });
+});
+
+describe('computeDupeTeeLabels', () => {
+  test('unique labels → no dupes', () => {
+    expect(computeDupeTeeLabels(cleanTees())).toEqual([]);
+  });
+
+  test('duplicate labels (case/whitespace-insensitive) are flagged', () => {
+    const tees = [
+      { id: 't1', label: 'White', rating: 71.5, slope: 128 },
+      { id: 't2', label: ' white ', rating: 73.2, slope: 132 },
+    ];
+    expect(computeDupeTeeLabels(tees)).toEqual(['white']);
+  });
+
+  test('empty labels are ignored, not treated as dupes', () => {
+    const tees = [
+      { id: 't1', label: '', rating: 71.5, slope: 128 },
+      { id: 't2', label: '', rating: 73.2, slope: 132 },
+    ];
+    expect(computeDupeTeeLabels(tees)).toEqual([]);
+  });
+});
+
+describe('canSaveCourse', () => {
+  test('clean course passes', () => {
+    const result = canSaveCourse(cleanHoles(), cleanTees());
+    expect(result).toEqual({ ok: true, siIssues: [], dupes: [] });
+  });
+
+  test('blocks on duplicate SI', () => {
+    const holes = cleanHoles();
+    holes[1] = { ...holes[1], strokeIndex: holes[0].strokeIndex };
+    const result = canSaveCourse(holes, cleanTees());
+    expect(result.ok).toBe(false);
+    expect(result.siIssues.length).toBeGreaterThan(0);
+  });
+
+  test('blocks on missing SI', () => {
+    const holes = cleanHoles();
+    holes[0] = { ...holes[0], strokeIndex: 2 };
+    const result = canSaveCourse(holes, cleanTees());
+    expect(result.ok).toBe(false);
+    expect(result.siIssues.length).toBeGreaterThan(0);
+  });
+
+  test('blocks on SI of 0', () => {
+    const holes = cleanHoles();
+    holes[0] = { ...holes[0], strokeIndex: 0 };
+    const result = canSaveCourse(holes, cleanTees());
+    expect(result.ok).toBe(false);
+    expect(result.siIssues.length).toBeGreaterThan(0);
+  });
+
+  test('blocks on duplicate tee labels', () => {
+    const tees = [
+      { id: 't1', label: 'White', rating: 71.5, slope: 128 },
+      { id: 't2', label: 'White', rating: 73.2, slope: 132 },
+    ];
+    const result = canSaveCourse(cleanHoles(), tees);
+    expect(result.ok).toBe(false);
+    expect(result.dupes).toEqual(['white']);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// roundHolesArePersistable — Task 13: the round-holes editor (SetupScreen /
+// EditTournamentScreen, via CourseEditorScreen opened WITHOUT a courseId)
+// writes straight into a round's `holes`/`tees`, bypassing the course-library
+// save-guard entirely. This predicate is the shared gate reused on that
+// persist path so the SAME SI/tee-label rules apply there too.
+// ---------------------------------------------------------------------------
+
+describe('roundHolesArePersistable', () => {
+  test('a round with a clean, complete SI set and unique tee labels is persistable', () => {
+    expect(roundHolesArePersistable({ holes: cleanHoles(), tees: cleanTees() })).toBe(true);
+  });
+
+  test('a round with duplicate SI is not persistable', () => {
+    const holes = cleanHoles();
+    holes[1] = { ...holes[1], strokeIndex: holes[0].strokeIndex };
+    expect(roundHolesArePersistable({ holes, tees: cleanTees() })).toBe(false);
+  });
+
+  test('a round with a partial (incomplete) SI set is not persistable', () => {
+    const holes = cleanHoles();
+    holes[0] = { ...holes[0], strokeIndex: 2 }; // now nothing has SI 1, SI 2 used twice
+    expect(roundHolesArePersistable({ holes, tees: cleanTees() })).toBe(false);
+  });
+
+  test('a round with duplicate tee labels is not persistable even with clean SI', () => {
+    const tees = [
+      { id: 't1', label: 'White', rating: 71.5, slope: 128 },
+      { id: 't2', label: 'White', rating: 73.2, slope: 132 },
+    ];
+    expect(roundHolesArePersistable({ holes: cleanHoles(), tees })).toBe(false);
+  });
+
+  test('an empty/not-yet-populated holes array is persistable (nothing to contradict yet)', () => {
+    expect(roundHolesArePersistable({ holes: [], tees: [] })).toBe(true);
+  });
+
+  test('a round missing holes/tees entirely (null round fields) does not throw and is persistable', () => {
+    expect(roundHolesArePersistable({})).toBe(true);
   });
 });

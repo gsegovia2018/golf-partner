@@ -15,7 +15,12 @@ import {
   matchPlayEffectiveHandicaps,
   pickupStrokes,
   isPickupScore,
+  clampScoreInput,
+  resolvePlayerHandicap,
   randomPairs,
+  randomPartnerTeams,
+  insertIntoPartnerTeams,
+  removeFromPartnerTeams,
   buildTeamsForMode,
   isRoundPlayed,
   sindicatoHolePoints,
@@ -301,6 +306,63 @@ describe('pickupStrokes', () => {
   });
 });
 
+describe('resolvePlayerHandicap', () => {
+  it('uses the round per-player handicap when present', () => {
+    const round = { playerHandicaps: { p1: 12 } };
+    expect(resolvePlayerHandicap(round, [{ id: 'p1', handicap: 20 }], 'p1')).toBe(12);
+  });
+
+  it('falls back to the player base handicap when the round entry is missing', () => {
+    // Legacy / pre-normalization round: playerHandicaps has no entry for p1.
+    const round = { playerHandicaps: {} };
+    expect(resolvePlayerHandicap(round, [{ id: 'p1', handicap: 18 }], 'p1')).toBe(18);
+  });
+
+  it('falls back to 0 when neither source has a handicap', () => {
+    expect(resolvePlayerHandicap({}, [{ id: 'p1' }], 'p1')).toBe(0);
+    expect(resolvePlayerHandicap(null, null, 'p1')).toBe(0);
+  });
+
+  it('does NOT collapse a real handicap to 0 just because the round map is empty', () => {
+    // Regression guard: a missing round entry must not silently become scratch.
+    const round = { playerHandicaps: {} };
+    expect(resolvePlayerHandicap(round, [{ id: 'p1', handicap: 18 }], 'p1')).not.toBe(0);
+  });
+});
+
+describe('clampScoreInput', () => {
+  it('passes an in-range score through unchanged', () => {
+    expect(clampScoreInput(4, 4, 0, 1)).toBe(4);
+  });
+
+  it('clamps an over-entered score (44 meant 4) down to the pickup max', () => {
+    // pickupStrokes(4, 0, 1) === 6 (par 4 + 2, no extra shots).
+    expect(clampScoreInput(44, 4, 0, 1)).toBe(pickupStrokes(4, 0, 1));
+    expect(clampScoreInput(44, 4, 0, 1)).toBe(6);
+  });
+
+  it('clamps a negative entry up to 1', () => {
+    expect(clampScoreInput(-1, 4, 0, 1)).toBe(1);
+  });
+
+  it('clamps a zero entry up to 1', () => {
+    expect(clampScoreInput(0, 4, 0, 1)).toBe(1);
+  });
+
+  it('leaves a cleared score (null/undefined) untouched — clearing must not become 1', () => {
+    expect(clampScoreInput(null, 4, 0, 1)).toBeNull();
+    expect(clampScoreInput(undefined, 4, 0, 1)).toBeUndefined();
+  });
+
+  it('raises the pickup ceiling when the player has extra shots on this hole', () => {
+    // pickupStrokes(4, 18, 1) === 7 (par 4 + 2 + 1 extra shot on SI 1).
+    expect(clampScoreInput(44, 4, 18, 1)).toBe(7);
+    // A value between the no-extra ceiling (6) and the with-extra ceiling (7)
+    // is preserved rather than clamped down further.
+    expect(clampScoreInput(7, 4, 18, 1)).toBe(7);
+  });
+});
+
 describe('isPickupScore', () => {
   // pickupStrokes(4, 18, 1) === 7 (par 4 + 2 + 1 extra shot on SI 1).
   it('is true for an over-pickup score (strictly above the pickup value)', () => {
@@ -434,6 +496,153 @@ describe('randomPairs', () => {
 
   it('returns no pairs for an empty roster', () => {
     expect(randomPairs([])).toEqual([]);
+  });
+});
+
+describe('randomPartnerTeams', () => {
+  // 5-player roster: the leftover from randomPairs folds into the last
+  // pair to make ONE 3-player team — no unwinnable solo (product decision).
+  it('5 players → one pair, one 3-player team (no singleton)', () => {
+    const players = ['1', '2', '3', '4', '5'].map((id) => ({ id }));
+    const teams = randomPartnerTeams(players);
+    expect(teams.map((t) => t.length).sort()).toEqual([2, 3]);
+    expect(teams.some((t) => t.length === 1)).toBe(false);
+    expect(teams.flat().map((p) => p.id).sort()).toEqual(['1', '2', '3', '4', '5']);
+  });
+
+  it('7 players → two pairs, one 3-player team', () => {
+    const players = ['1', '2', '3', '4', '5', '6', '7'].map((id) => ({ id }));
+    const teams = randomPartnerTeams(players);
+    expect(teams.map((t) => t.length).sort()).toEqual([2, 2, 3]);
+    expect(teams.flat().map((p) => p.id).sort()).toEqual(['1', '2', '3', '4', '5', '6', '7']);
+  });
+
+  it('3 players (the minimum) → a single 3-player team, not a pair + solo', () => {
+    const players = ['1', '2', '3'].map((id) => ({ id }));
+    const teams = randomPartnerTeams(players);
+    expect(teams).toHaveLength(1);
+    expect(teams[0]).toHaveLength(3);
+  });
+
+  it('even rosters are unaffected — all 2-player teams', () => {
+    for (const n of [4, 6]) {
+      const players = Array.from({ length: n }, (_, i) => ({ id: String(i) }));
+      const teams = randomPartnerTeams(players);
+      expect(teams.every((t) => t.length === 2)).toBe(true);
+      expect(teams).toHaveLength(n / 2);
+    }
+  });
+});
+
+describe('insertIntoPartnerTeams', () => {
+  const p = (id) => ({ id });
+
+  it('clean pairs + odd result: new player joins the last pair (4 -> 5, [2,3])', () => {
+    const [p1, p2, p3, p4, p5] = ['1', '2', '3', '4', '5'].map(p);
+    const groups = [[p1, p2], [p3, p4]];
+    const result = insertIntoPartnerTeams(groups, p5);
+    expect(result).toEqual([[p1, p2], [p3, p4, p5]]);
+    expect(result.some((g) => g.length === 1)).toBe(false);
+    expect(result.every((g) => g.length <= 3)).toBe(true);
+  });
+
+  it('existing 3-team + even result: the 3-team splits, leftover pairs with the new player (5 -> 6, [2,2,2])', () => {
+    const [p1, p2, p3, p4, p5, p6] = ['1', '2', '3', '4', '5', '6'].map(p);
+    const groups = [[p1, p2], [p3, p4, p5]];
+    const result = insertIntoPartnerTeams(groups, p6);
+    expect(result).toEqual([[p1, p2], [p3, p4], [p5, p6]]);
+    expect(result.some((g) => g.length === 1)).toBe(false);
+    expect(result.every((g) => g.length <= 3)).toBe(true);
+  });
+
+  it('a legacy single-singleton shape is rebuilt (non-conforming) — no singleton, all present', () => {
+    const [p1, p2, p3, p4] = ['1', '2', '3', '4'].map(p);
+    const groups = [[p1, p2], [p3]];
+    const result = insertIntoPartnerTeams(groups, p4);
+    expect(result.every((g) => g.length === 2)).toBe(true);
+    expect(result.some((g) => g.length === 1)).toBe(false);
+    expect(result.flat().map((x) => x.id).sort()).toEqual(['1', '2', '3', '4']);
+  });
+
+  it('a legacy MULTI-singleton shape ([2,1,1]) rebuilds — one new player cannot seat two lone players', () => {
+    const [p1, p2, p3, p4, p5] = ['1', '2', '3', '4', '5'].map(p);
+    const groups = [[p1, p2], [p3], [p4]];
+    const result = insertIntoPartnerTeams(groups, p5);
+    expect(result.map((g) => g.length).sort()).toEqual([2, 3]);
+    expect(result.some((g) => g.length === 1)).toBe(false);
+    expect(result.every((g) => g.length <= 3)).toBe(true);
+    expect(result.flat().map((x) => x.id).sort()).toEqual(['1', '2', '3', '4', '5']);
+  });
+
+  it('single 3-team (minimum roster) splits when a 4th player joins', () => {
+    const [p1, p2, p3, p4] = ['1', '2', '3', '4'].map(p);
+    const groups = [[p1, p2, p3]];
+    const result = insertIntoPartnerTeams(groups, p4);
+    expect(result).toEqual([[p1, p2], [p3, p4]]);
+  });
+
+  it('oversized input (scramble4 [4] shape): rebuilds instead of appending — no team over 3', () => {
+    const [p1, p2, p3, p4, p5] = ['1', '2', '3', '4', '5'].map(p);
+    const groups = [[p1, p2, p3, p4]];
+    const result = insertIntoPartnerTeams(groups, p5);
+    expect(result.map((g) => g.length).sort()).toEqual([2, 3]);
+    expect(result.some((g) => g.length === 1)).toBe(false);
+    expect(result.every((g) => g.length <= 3)).toBe(true);
+    expect(result.flat().map((x) => x.id).sort()).toEqual(['1', '2', '3', '4', '5']);
+  });
+
+  it('already-corrupted 5-team input: rebuilds to a valid 6-player shape, no team over 3', () => {
+    const [p1, p2, p3, p4, p5, p6] = ['1', '2', '3', '4', '5', '6'].map(p);
+    const groups = [[p1, p2, p3, p4, p5]];
+    const result = insertIntoPartnerTeams(groups, p6);
+    expect(result.every((g) => g.length === 2)).toBe(true);
+    expect(result.some((g) => g.length === 1)).toBe(false);
+    expect(result.flat().map((x) => x.id).sort()).toEqual(['1', '2', '3', '4', '5', '6']);
+  });
+});
+
+describe('removeFromPartnerTeams', () => {
+  const p = (id) => ({ id });
+
+  it('4 -> 3: removed player\'s pair absorbs into the other pair (no singleton)', () => {
+    const [p1, p2, p3, p4] = ['1', '2', '3', '4'].map(p);
+    const groups = [[p1, p2], [p3, p4]];
+    const result = removeFromPartnerTeams(groups, '4');
+    expect(result).toEqual([[p1, p2, p3]]);
+  });
+
+  it('5 -> 4: removing from the pair borrows from the 3-team so both end up pairs ([2,2])', () => {
+    const [p1, p2, p3, p4, p5] = ['1', '2', '3', '4', '5'].map(p);
+    const groups = [[p1, p2], [p3, p4, p5]];
+    const result = removeFromPartnerTeams(groups, '2');
+    expect(result.map((g) => g.length).sort()).toEqual([2, 2]);
+    expect(result.some((g) => g.length === 1)).toBe(false);
+    expect(result.flat().map((x) => x.id).sort()).toEqual(['1', '3', '4', '5']);
+  });
+
+  it('5 -> 4: removing from the 3-team itself needs no repair', () => {
+    const [p1, p2, p3, p4, p5] = ['1', '2', '3', '4', '5'].map(p);
+    const groups = [[p1, p2], [p3, p4, p5]];
+    const result = removeFromPartnerTeams(groups, '5');
+    expect(result).toEqual([[p1, p2], [p3, p4]]);
+  });
+
+  it('6 -> 5: a pair emptied to a singleton merges into another pair ([2,3]-style, no singleton)', () => {
+    const [p1, p2, p3, p4, p5, p6] = ['1', '2', '3', '4', '5', '6'].map(p);
+    const groups = [[p1, p2], [p3, p4], [p5, p6]];
+    const result = removeFromPartnerTeams(groups, '6');
+    expect(result.map((g) => g.length).sort()).toEqual([2, 3]);
+    expect(result.some((g) => g.length === 1)).toBe(false);
+    expect(result.flat().map((x) => x.id).sort()).toEqual(['1', '2', '3', '4', '5']);
+  });
+
+  it('oversized input (scramble4 [4] shape) 4 -> 3: rebuilds survivors, no team over 3, no singleton', () => {
+    const [p1, p2, p3, p4] = ['1', '2', '3', '4'].map(p);
+    const groups = [[p1, p2, p3, p4]];
+    const result = removeFromPartnerTeams(groups, '4');
+    expect(result.map((g) => g.length).sort()).toEqual([3]);
+    expect(result.some((g) => g.length === 1)).toBe(false);
+    expect(result.flat().map((x) => x.id).sort()).toEqual(['1', '2', '3']);
   });
 });
 
@@ -642,6 +851,35 @@ describe('tournamentSindicatoClinched', () => {
     };
     expect(tournamentSindicatoClinched(tournament)).toBeNull();
   });
+
+  test('detects clinch from a fully-scored later round even when currentRound is stale at 0', () => {
+    // Round 0 (idx 0): all three tie every hole → 0 lead, fully played.
+    // Round 1 (idx 1): a wins decisively, fully played — but currentRound
+    // never advanced past 0. The old idx > currentRound check treated round 1
+    // as "future" and counted its 2 holes toward holesRemaining, capping the
+    // possible swing at 8 and hiding a lead of 5. Scored state (isRoundPlayed)
+    // must recognize round 1 as played, so holesRemaining is 0 and a's lead
+    // of 5 clinches.
+    const holes = [
+      { number: 1, par: 4, strokeIndex: 1 },
+      { number: 2, par: 4, strokeIndex: 2 },
+    ];
+    const tied = {
+      holes, playerHandicaps: {},
+      scores: { a: { 1: 4, 2: 4 }, b: { 1: 4, 2: 4 }, c: { 1: 4, 2: 4 } },
+    };
+    const decisive = {
+      holes, playerHandicaps: {},
+      scores: { a: { 1: 4, 2: 4 }, b: { 1: 5, 2: 5 }, c: { 1: 6, 2: 5 } },
+    };
+    const tournament = {
+      players,
+      settings: { scoringMode: 'sindicato' },
+      rounds: [tied, decisive],
+      currentRound: 0,
+    };
+    expect(tournamentSindicatoClinched(tournament)).toBe('a');
+  });
 });
 
 describe('tournamentMatchPlayStandings', () => {
@@ -740,6 +978,30 @@ describe('tournamentMatchPlayStandings', () => {
       players,
       settings: { scoringMode: 'matchplay' },
       rounds: [played, futureMp, stablefordRound],
+      currentRound: 0,
+    };
+    expect(tournamentMatchPlayStandings(t).status).toBe('Alex wins');
+  });
+
+  test('reports a win from a fully-scored later round even when currentRound is stale at 0', () => {
+    // Round 0 (idx 0): halved both holes — 0-0, fully played.
+    // Round 1 (idx 1): a wins both holes — fully played — but currentRound
+    // never advanced past 0. idx(1) > currentRound(0) used to mark round 1
+    // as "future" and keep its 2 holes in holesRemaining, capping a's lead
+    // of 2 at "leads by" instead of "wins". Scored state must recognize
+    // round 1 as played (0 holes actually remaining), so a's 2-0 lead wins.
+    const tiedRound = {
+      holes, playerHandicaps: {},
+      scores: { a: { 1: 4, 2: 4 }, b: { 1: 4, 2: 4 } },
+    };
+    const decisiveRound = {
+      holes, playerHandicaps: {},
+      scores: { a: { 1: 4, 2: 4 }, b: { 1: 5, 2: 5 } },
+    };
+    const t = {
+      players,
+      settings: { scoringMode: 'matchplay' },
+      rounds: [tiedRound, decisiveRound],
       currentRound: 0,
     };
     expect(tournamentMatchPlayStandings(t).status).toBe('Alex wins');
@@ -988,6 +1250,29 @@ describe('buildTeamsForMode', () => {
     const teams = buildTeamsForMode('stableford', four);
     expect(teams).toHaveLength(2);
     expect(teams.every((t) => t.length === 2)).toBe(true);
+  });
+
+  it('stableford odd roster (5) → [2,3], no singleton', () => {
+    const five = [...four, { id: 'e' }];
+    const teams = buildTeamsForMode('stableford', five);
+    expect(teams.map((t) => t.length).sort()).toEqual([2, 3]);
+    expect(teams.some((t) => t.length === 1)).toBe(false);
+  });
+
+  it('stableford odd roster (3) → a single 3-player team', () => {
+    const teams = buildTeamsForMode('stableford', four.slice(0, 3));
+    expect(teams).toEqual([expect.arrayContaining([four[0], four[1], four[2]])]);
+    expect(teams).toHaveLength(1);
+  });
+
+  it('the odd-roster fix is scoped to stableford — other 2x2 modes still need exactly 4', () => {
+    // scramblepairs/bestball/pairsmatchplay require count === 4, so parity
+    // never arises for them; confirm they're untouched by staying on the
+    // plain randomPairs shape for an even roster.
+    for (const mode of ['scramblepairs', 'pairsmatchplay']) {
+      const teams = buildTeamsForMode(mode, four);
+      expect(teams.every((t) => t.length === 2)).toBe(true);
+    }
   });
 });
 

@@ -91,7 +91,11 @@ export async function insertMediaRow({
     caption: caption ?? null,
     uploader_label: uploaderLabel ?? null,
   });
-  if (error) throw error;
+  // A duplicate (23505) means this row was already inserted by a prior run
+  // that crashed between insert and the queue-entry removal — the upload
+  // already fully succeeded, so treat the re-run as success rather than
+  // failing/retrying an item that has nothing left to do.
+  if (error && error.code !== '23505') throw error;
   _emitChange();
 }
 

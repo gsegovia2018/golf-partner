@@ -120,15 +120,125 @@ describe('addPlayerRoundPatches pair construction', () => {
     expect(patches[0].pairs).toEqual([[A], [B], [C]]);
   });
 
-  test('team→team with revealed pairs: preserves existing pairs, new player joins as solo group', () => {
+  test('team→team with a revealed 3-player round (3 -> 4): the triple splits, new player pairs with the odd one out (no singleton)', () => {
+    // A revealed 3-player Stableford-with-Partners round is one 3-team
+    // ([[A,B,C]]) via randomPartnerTeams — NOT [2,1]. Adding a 4th splits
+    // it so A,B keep their partnership and C pairs with the newcomer.
     const D = { id: 'd', name: 'D', handicap: 4 };
     const t = makeTournament({
       players: [A, B, C],
       mode: 'stableford',
-      rounds: [makeRound({ revealed: true, pairs: [[A, B], [C]] })],
+      rounds: [makeRound({ revealed: true, pairs: [[A, B, C]] })],
     });
     const { patches } = addPlayerRoundPatches(t, D);
-    expect(patches[0].pairs).toEqual([[A, B], [C], [D]]);
+    expect(patches[0].pairs).toEqual([[A, B], [C, D]]);
+    expect(patches[0].pairs.some((pr) => pr.length === 1)).toBe(false);
+  });
+
+  test('legacy multi-singleton revealed round ([2,1,1]) + new player: rebuilds — no singleton, no team over 3', () => {
+    // Guards the reported gap: a legacy [[A,B],[C],[D]] shape (still possible
+    // in Supabase under the staggered client rollout) has TWO lone players;
+    // one new player can't seat both, so insertIntoPartnerTeams must rebuild
+    // rather than incrementally patch (which would leave one singleton).
+    const D = { id: 'd', name: 'D', handicap: 4 };
+    const E = { id: 'e', name: 'E', handicap: 6 };
+    const t = makeTournament({
+      players: [A, B, C, D],
+      mode: 'stableford',
+      rounds: [makeRound({ revealed: true, pairs: [[A, B], [C], [D]] })],
+    });
+    const { patches } = addPlayerRoundPatches(t, E);
+    expect(patches[0].pairs.some((pr) => pr.length === 1)).toBe(false);
+    expect(patches[0].pairs.every((pr) => pr.length <= 3)).toBe(true);
+    expect(patches[0].pairs.map((pr) => pr.length).sort()).toEqual([2, 3]);
+    expect(patches[0].pairs.flat().map((pl) => pl.id).sort()).toEqual(['a', 'b', 'c', 'd', 'e']);
+  });
+
+  test('team→team with revealed clean pairs (4th -> 5th player): new player joins the last pair, forming one 3-team', () => {
+    const D = { id: 'd', name: 'D', handicap: 4 };
+    const E = { id: 'e', name: 'E', handicap: 6 };
+    const t = makeTournament({
+      players: [A, B, C, D],
+      mode: 'stableford',
+      rounds: [makeRound({ revealed: true, pairs: [[A, B], [C, D]] })],
+    });
+    const { patches } = addPlayerRoundPatches(t, E);
+    expect(patches[0].pairs).toEqual([[A, B], [C, D, E]]);
+    expect(patches[0].pairs.some((pr) => pr.length === 1)).toBe(false);
+    expect(patches[0].pairs.every((pr) => pr.length <= 3)).toBe(true);
+  });
+
+  test('team→team with a revealed 3-team (5th -> 6th player): the 3-team splits, no singleton, no team over 3', () => {
+    const D = { id: 'd', name: 'D', handicap: 4 };
+    const E = { id: 'e', name: 'E', handicap: 6 };
+    const F = { id: 'f', name: 'F', handicap: 9 };
+    const t = makeTournament({
+      players: [A, B, C, D, E],
+      mode: 'stableford',
+      rounds: [makeRound({ revealed: true, pairs: [[A, B], [C, D, E]] })],
+    });
+    const { patches } = addPlayerRoundPatches(t, F);
+    expect(patches[0].pairs).toEqual([[A, B], [C, D], [E, F]]);
+    expect(patches[0].pairs.some((pr) => pr.length === 1)).toBe(false);
+    expect(patches[0].pairs.every((pr) => pr.length <= 3)).toBe(true);
+  });
+
+  test('revealed scramble4 [4] round + 5th player: falls back to stableford and rebuilds — no team over 3, no singleton', () => {
+    // scramble4 stores one 4-player team ([[a,b,c,d]]). Adding a 5th player
+    // makes scramble4 invalid (needs exactly 4), so nextScoringMode falls
+    // back to stableford and the team-continuity gate fires with a
+    // non-conforming [4] shape. insertIntoPartnerTeams must rebuild rather
+    // than append a 5-player team.
+    const D = { id: 'd', name: 'D', handicap: 4 };
+    const E = { id: 'e', name: 'E', handicap: 6 };
+    const t = makeTournament({
+      players: [A, B, C, D],
+      mode: 'scramble4',
+      rounds: [makeRound({ revealed: true, pairs: [[A, B, C, D]] })],
+    });
+    const { patches, nextScoringMode } = addPlayerRoundPatches(t, E);
+    expect(nextScoringMode).toBe('stableford');
+    expect(patches[0].pairs.every((pr) => pr.length <= 3)).toBe(true);
+    expect(patches[0].pairs.some((pr) => pr.length === 1)).toBe(false);
+    expect(patches[0].pairs.map((pr) => pr.length).sort()).toEqual([2, 3]);
+    expect(patches[0].pairs.flat().map((pl) => pl.id).sort()).toEqual(['a', 'b', 'c', 'd', 'e']);
+  });
+
+  test('revealed scramble4-derived 5-player round + 6th player: rebuilds — no team over 3, no singleton', () => {
+    // Guards the follow-on add: even a corrupted 5-player team input is
+    // rebuilt to a clean shape rather than grown to 6.
+    const D = { id: 'd', name: 'D', handicap: 4 };
+    const E = { id: 'e', name: 'E', handicap: 6 };
+    const F = { id: 'f', name: 'F', handicap: 9 };
+    const t = makeTournament({
+      players: [A, B, C, D, E],
+      mode: 'stableford',
+      rounds: [makeRound({ revealed: true, pairs: [[A, B, C, D, E]] })],
+    });
+    const { patches } = addPlayerRoundPatches(t, F);
+    expect(patches[0].pairs.every((pr) => pr.length <= 3)).toBe(true);
+    expect(patches[0].pairs.some((pr) => pr.length === 1)).toBe(false);
+    expect(patches[0].pairs.flat().map((pl) => pl.id).sort()).toEqual(['a', 'b', 'c', 'd', 'e', 'f']);
+  });
+
+  test('non-partners team mode (bestball) is unaffected: pairs construction only reached via non-team fallback stays solo-group append', () => {
+    // bestball/scramble*/pairsmatchplay are fixed at exactly 4 players, so
+    // they can never remain their own mode through an add — the mode
+    // always falls back (here to stableford) before the team-continuity
+    // branch is reached. Confirms the add doesn't spuriously stay on a
+    // fixed-count team mode.
+    const t = makeTournament({
+      players: [A, B, C],
+      mode: 'sindicato',
+      rounds: [makeRound({ revealed: true, pairs: [[A], [B], [C]] })],
+    });
+    const D = { id: 'd', name: 'D', handicap: 4 };
+    const { patches, nextScoringMode } = addPlayerRoundPatches(t, D, { mode: 'bestball' });
+    expect(nextScoringMode).toBe('bestball');
+    // sindicato isn't a team mode, so this is a fresh buildTeamsForMode
+    // build, not the continuity/absorb branch under test — just confirms
+    // bestball's own 2x2 shape, unaffected by the partners-mode logic.
+    expect(patches[0].pairs.map((pr) => pr.length).sort()).toEqual([2, 2]);
   });
 
   test('team mode but not-yet-revealed round: randomizes fresh', () => {
@@ -154,8 +264,10 @@ describe('addPlayerRoundPatches pair construction', () => {
     const flat = patches[0].pairs.flat();
     expect(flat).toHaveLength(3);
     expect(flat.map((p) => p.id).sort()).toEqual(['a', 'b', 'c']);
-    // randomPairs(3) → [[x, y], [z]] (one pair + one solo)
-    expect(patches[0].pairs.length).toBe(2);
+    // Task 12: an odd Stableford-with-Partners roster forms ONE 3-player
+    // team instead of the old unwinnable pair + solo singleton.
+    expect(patches[0].pairs.length).toBe(1);
+    expect(patches[0].pairs[0]).toHaveLength(3);
   });
 
   test('non-team old + team new (sindicato 3→4 fallback to stableford): randomizes fresh', () => {
@@ -238,10 +350,10 @@ describe('addPlayerRoundPatches fixedTeams', () => {
       mode: 'stableford',
       fixedTeams: false,
       currentRound: 0,
-      rounds: [makeRound({ id: 'r0', revealed: true, pairs: [[A, B], [C]] })],
+      rounds: [makeRound({ id: 'r0', revealed: true, pairs: [[A, B, C]] })],
     });
     const { patches } = addPlayerRoundPatches(t, D);
-    expect(patches[0].pairs).toEqual([[A, B], [C], [D]]);
+    expect(patches[0].pairs).toEqual([[A, B], [C, D]]);
   });
 });
 
@@ -312,17 +424,18 @@ describe('addPlayerRoundPatches per-round mode overrides', () => {
       players: [A, B, C],
       mode: 'individual', // tournament default is NOT a team mode
       rounds: [{
-        ...makeRound({ id: 'r0', revealed: true, pairs: [[A, B], [C]] }),
+        ...makeRound({ id: 'r0', revealed: true, pairs: [[A, B, C]] }),
         scoringMode: 'stableford', // round override IS a team mode, valid at 3 and 4
       }],
     });
     const { patches } = addPlayerRoundPatches(t, D);
     const r0 = patches.find((p) => p.roundId === 'r0');
     // Documented buildPairsForAddedPlayer behavior for team→team revealed:
-    // existing partnerships preserved, the new player joins as a solo group —
-    // NOT a fresh reshuffle. The round's pre-mutation mode is its override
-    // (stableford), not the tournament default (individual).
-    expect(r0.pairs).toEqual([[A, B], [C], [D]]);
+    // the revealed 3-team splits, A,B keep their partnership and C pairs
+    // with the newcomer (Task 14: no singleton) — NOT a fresh reshuffle. The
+    // round's pre-mutation mode is its override (stableford), not the
+    // tournament default (individual).
+    expect(r0.pairs).toEqual([[A, B], [C, D]]);
     expect(r0.clearScoringMode).toBeUndefined();
   });
 });

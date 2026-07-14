@@ -142,6 +142,7 @@ jest.mock('../../store/notificationStore', () => ({
 
 jest.mock('../../store/officialScoring', () => ({
   cardDiscrepancyHoles: jest.fn(() => []),
+  officialHolesFromCourse: jest.fn(() => []),
 }));
 
 jest.mock('../../store/officialLeaderboard', () => ({

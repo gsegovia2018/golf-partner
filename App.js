@@ -61,6 +61,7 @@ import ProfileScreen from './src/screens/ProfileScreen';
 import PlayersScreen from './src/screens/PlayersScreen';
 import FinishedScreen from './src/screens/FinishedScreen';
 import { startUploadWorker } from './src/lib/uploadWorker';
+import { initDeviceAuthorId } from './src/store/deviceId';
 import * as ScreenOrientation from 'expo-screen-orientation';
 import * as Notifications from 'expo-notifications';
 import { registerPushToken, configureNotificationHandler } from './src/lib/pushNotifications';
@@ -256,6 +257,18 @@ const linking = {
 };
 
 export default function App() {
+  // Hydrate the persisted, stable device author id BEFORE any scoring UI can
+  // mount. getDeviceAuthorId() (used for score stamping on unclaimed
+  // devices) returns null until this resolves — awaiting it here, alongside
+  // the fonts gate, guarantees the sync getter is always safe by the time
+  // ScorecardScreen renders. See src/store/deviceId.js.
+  const [deviceIdReady, setDeviceIdReady] = useState(false);
+  useEffect(() => {
+    let cancelled = false;
+    initDeviceAuthorId().finally(() => { if (!cancelled) setDeviceIdReady(true); });
+    return () => { cancelled = true; };
+  }, []);
+
   const [fontsLoaded] = useFonts({
     'PlusJakartaSans-Light': PlusJakartaSans_300Light,
     'PlusJakartaSans-Regular': PlusJakartaSans_400Regular,
@@ -276,7 +289,7 @@ export default function App() {
     ScreenOrientation.lockAsync(ScreenOrientation.OrientationLock.PORTRAIT_UP).catch(() => {});
   }, []);
 
-  if (!fontsLoaded) {
+  if (!fontsLoaded || !deviceIdReady) {
     return <LoadingSplash />;
   }
 

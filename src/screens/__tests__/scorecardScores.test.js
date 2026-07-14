@@ -6,6 +6,7 @@ import {
   mergeShotDetails,
   shouldMarkTournamentFinishedFromScorecard,
   shouldApplyReloadSnapshot,
+  clampEnteredScore,
 } from '../ScorecardScreen';
 
 // ScorecardScreen imports useFocusEffect from @react-navigation/native, whose
@@ -43,6 +44,49 @@ describe('mergeShotDetails', () => {
     const local = { me: { 5: { putts: 2, drive: 'fairway' } } };
     const merged = mergeShotDetails(blob, local, new Set(['me:5']));
     expect(merged.me[5]).toEqual({ putts: 2, drive: 'fairway' });
+  });
+});
+
+describe('clampEnteredScore (screen-level score entry clamp)', () => {
+  // Par-4, SI-1 hole. Scratch pickup ceiling = par + 2 + 0 extra = 6.
+  const round = (playerHandicaps = {}) => ({
+    holes: [{ number: 3, par: 4, strokeIndex: 1 }],
+    playerHandicaps,
+  });
+
+  test('clamps an over-entered score (44) down to the pickup max', () => {
+    expect(clampEnteredScore(round(), [{ id: 'p1', handicap: 0 }], 'p1', 3, 44)).toBe(6);
+  });
+
+  test('leaves a normal in-range score unchanged', () => {
+    expect(clampEnteredScore(round(), [{ id: 'p1', handicap: 0 }], 'p1', 3, 4)).toBe(4);
+  });
+
+  test('clears (undefined) pass through — clearing must not become 1', () => {
+    expect(clampEnteredScore(round(), [{ id: 'p1', handicap: 0 }], 'p1', 3, undefined)).toBeUndefined();
+  });
+
+  test('a missing hole passes the raw value through (defensive)', () => {
+    expect(clampEnteredScore(round(), [{ id: 'p1', handicap: 0 }], 'p1', 99, 44)).toBe(44);
+  });
+
+  // The bug this guards: when round.playerHandicaps has NO entry for the
+  // player (legacy / pre-normalization round, or official members whose
+  // handicap lives only on the player object), the clamp must resolve the
+  // handicap from players[].handicap — NOT default to scratch (0). A base
+  // handicap of 18 gives +1 extra shot on SI 1, so the pickup ceiling is 7,
+  // and a legitimately high "44" must clamp to 7, not be over-clamped to 6.
+  test('uses the player-level handicap fallback when the round map has no entry', () => {
+    expect(clampEnteredScore(round({}), [{ id: 'p1', handicap: 18 }], 'p1', 3, 44)).toBe(7);
+  });
+
+  test('does not over-clamp to the scratch ceiling when the round map is empty', () => {
+    expect(clampEnteredScore(round({}), [{ id: 'p1', handicap: 18 }], 'p1', 3, 44)).not.toBe(6);
+  });
+
+  test('prefers the round per-player handicap over the player base when present', () => {
+    // Round override 0 (scratch) even though base is 18 → scratch ceiling 6.
+    expect(clampEnteredScore(round({ p1: 0 }), [{ id: 'p1', handicap: 18 }], 'p1', 3, 44)).toBe(6);
   });
 });
 

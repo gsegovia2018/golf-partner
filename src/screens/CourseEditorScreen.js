@@ -9,6 +9,7 @@ import { Feather } from '@expo/vector-icons';
 import { useTheme } from '../theme/ThemeContext';
 import { updateCourseFromEditor } from '../store/libraryStore';
 import TeesEditor from '../components/TeesEditor';
+import { canSaveCourse } from '../lib/courseLibrary';
 
 function defaultHoles() {
   return Array.from({ length: 18 }, (_, i) => ({
@@ -71,29 +72,10 @@ export default function CourseEditorScreen({ navigation, route }) {
     setHoles((prev) => prev.map((h) => ({ ...h, par })));
   }
 
-  // Validate the stroke-index set: every value must be 1-18 and used exactly
-  // once. Returns a human-readable list of problems (empty when valid).
-  const siIssues = (() => {
-    const issues = [];
-    const seen = new Map();
-    holes.forEach((h) => {
-      const si = h.strokeIndex;
-      if (!si || si < 1 || si > 18) {
-        issues.push(`Hole ${h.number}: SI must be 1–18`);
-      }
-      if (si) seen.set(si, (seen.get(si) ?? 0) + 1);
-    });
-    const dupes = [...seen.entries()].filter(([, n]) => n > 1).map(([si]) => si);
-    if (dupes.length > 0) {
-      issues.push(`Duplicate SI: ${dupes.sort((a, b) => a - b).join(', ')}`);
-    }
-    const missing = [];
-    for (let i = 1; i <= 18; i += 1) if (!seen.has(i)) missing.push(i);
-    if (missing.length > 0 && missing.length < 18) {
-      issues.push(`Missing SI: ${missing.join(', ')}`);
-    }
-    return issues;
-  })();
+  // Save-guard: stroke-index set must be a complete 1-18 permutation and tee
+  // labels must be unique (they're matched by label downstream). Blocking
+  // here — not just warning — is what keeps bad courses out of the DB.
+  const { ok: canSave, siIssues, dupes } = canSaveCourse(holes, tees);
 
   const totalPar = holes.reduce((sum, h) => sum + h.par, 0);
 
@@ -193,8 +175,16 @@ export default function CourseEditorScreen({ navigation, route }) {
 
         <View>
           <TouchableOpacity
-            style={s.btn}
+            style={[s.btn, !canSave && s.btnDisabled]}
+            disabled={!canSave}
             onPress={async () => {
+              if (!canSave) {
+                Alert.alert(
+                  'Fix course data before saving',
+                  [...siIssues, ...(dupes.length > 0 ? [`Duplicate tee labels: ${dupes.join(', ')}`] : [])].join('\n'),
+                );
+                return;
+              }
               if (courseId) {
                 try {
                   await updateCourseFromEditor(courseId, holes, tees);
@@ -311,6 +301,7 @@ const makeStyles = (theme) => StyleSheet.create({
     borderWidth: theme.isDark ? 1 : 0,
     borderColor: theme.isDark ? theme.accent.primary + '33' : 'transparent',
   },
+  btnDisabled: { opacity: 0.5 },
   btnText: {
     fontFamily: 'PlusJakartaSans-ExtraBold',
     color: theme.isDark ? theme.accent.primary : theme.text.inverse,

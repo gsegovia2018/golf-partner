@@ -14,6 +14,7 @@
 // mutation removed it), the write is skipped rather than crashing.
 import * as repo from './tournamentRepo';
 import { syncTournamentParticipants } from './tournamentStore';
+import { roundHolesArePersistable } from '../lib/courseLibrary';
 
 // Mirrors user-linked players into tournament_participants (see
 // tournamentStore.js's syncTournamentParticipants) after any mutation that
@@ -70,9 +71,22 @@ const NO_CONFLICT = { conflict: null };
 // adds it.
 const ROUND_UPSERT_OWNED_FIELDS = ['courseName', 'courseId', 'holes', 'tees', 'playerTees'];
 
-function roundUpsertOwnedPatch(round) {
+// Task 13: the round-holes editor (CourseEditorScreen opened WITHOUT a
+// courseId, from SetupScreen/EditTournamentScreen) writes round.holes/tees
+// straight through round.upsert with no validation of its own — a different
+// write path than canSaveCourse's course-library save-guard, so the same
+// duplicate/missing/zero stroke-index corruption it exists to prevent could
+// still reach Supabase here. `holesOk` (roundHolesArePersistable, reusing
+// canSaveCourse's exact SI + tee-label rules) holds `holes`/`tees` out of
+// the patch while invalid; every OTHER owned field (courseName, courseId,
+// playerTees) still persists normally. The debounced EditTournamentScreen
+// autosave fires on every keystroke, so this must not alert — CourseEditor
+// already renders the inline siIssues warning while open, and the next
+// autosave persists holes/tees as soon as they become valid.
+function roundUpsertOwnedPatch(round, holesOk = true) {
   const patch = {};
   for (const key of ROUND_UPSERT_OWNED_FIELDS) {
+    if (!holesOk && (key === 'holes' || key === 'tees')) continue;
     if (round[key] !== undefined) patch[key] = round[key];
   }
   return patch;
@@ -351,11 +365,23 @@ export async function executeMutation(entry, localTournament) {
       // NEW round just means its non-owned fields arrive via their own
       // dedicated mutations, whereas a missed EXISTING round is exactly the
       // clobber being fixed here.
+      // holesOk gates the SI/tee-label validity of this round's holes/tees
+      // (Task 13) — see roundUpsertOwnedPatch above for why an invalid round
+      // must never write those two fields to Supabase.
+      const holesOk = roundHolesArePersistable(m.round ?? {});
       if (m.isNew) {
+        if (!holesOk) {
+          // A brand-new round can't clobber anything server-side (the row
+          // doesn't exist yet), so there's no "other fields" to salvage —
+          // simply hold the whole row out until the SI is valid. isNew is
+          // recomputed from local state on the next autosave pass, so this
+          // round is created as soon as the user fixes it.
+          return NO_CONFLICT;
+        }
         await repo.upsertRound(id, m.roundIndex, m.round);
         return NO_CONFLICT;
       }
-      const patch = roundUpsertOwnedPatch(m.round ?? {});
+      const patch = roundUpsertOwnedPatch(m.round ?? {}, holesOk);
       if (Object.keys(patch).length > 0) {
         await repo.patchRound(id, m.roundId, patch);
       }

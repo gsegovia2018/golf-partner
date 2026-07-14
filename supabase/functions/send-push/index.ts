@@ -3,6 +3,11 @@
 // delivers a push. Generic: a new notification type only needs a new entry
 // in RENDERERS below.
 import { createClient } from 'jsr:@supabase/supabase-js@2';
+import { isAuthorized } from './auth.ts';
+import { chunk, staleTokensForChunk } from './push.ts';
+
+// Expo's push API caps each request at 100 messages.
+const EXPO_PUSH_CHUNK_SIZE = 100;
 
 type NotificationRow = {
   user_id: string;
@@ -67,6 +72,16 @@ const RENDERERS: Record<string, (d: Record<string, unknown>) => Rendered> = {
 
 Deno.serve(async (req) => {
   try {
+    // Require a shared secret matching PUSH_WEBHOOK_SECRET before doing
+    // anything else. This endpoint uses the service-role key, so an
+    // unauthenticated caller could otherwise push arbitrary
+    // title/body/deepLink notifications to any user. Fails closed: if the
+    // secret isn't configured, every request is rejected.
+    const expectedSecret = Deno.env.get('PUSH_WEBHOOK_SECRET');
+    if (!isAuthorized(req.headers, expectedSecret)) {
+      return new Response('unauthorized', { status: 401 });
+    }
+
     const payload = await req.json();
     const note: NotificationRow | undefined = payload?.record;
     if (!note) return new Response('no record', { status: 400 });
@@ -94,21 +109,37 @@ Deno.serve(async (req) => {
       data: deepLink,
     }));
 
-    const expoResp = await fetch('https://exp.host/--/api/v2/push/send', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(messages),
-    });
-    const result = await expoResp.json();
-
-    // Prune tokens Expo reports as no longer registered.
-    const receipts = Array.isArray(result?.data) ? result.data : [];
+    // Expo caps each push request at 100 messages, so chunk when a user has
+    // registered more tokens than that. Each chunk's response is mapped back
+    // to its OWN token slice locally (see staleTokensForChunk) — a malformed
+    // or mis-sized response for one chunk can never corrupt another chunk's
+    // token->receipt alignment.
+    //
+    // NOTE: pruning only inspects the synchronous send ticket, not the async
+    // receipts endpoint, and only handles DeviceNotRegistered — out of scope
+    // for this task, tracked as a follow-up.
+    const messageChunks = chunk(messages, EXPO_PUSH_CHUNK_SIZE);
+    const tokenChunks = chunk(tokens, EXPO_PUSH_CHUNK_SIZE);
     const stale: string[] = [];
-    receipts.forEach((r: { status?: string; details?: { error?: string } }, i: number) => {
-      if (r?.status === 'error' && r?.details?.error === 'DeviceNotRegistered') {
-        stale.push(tokens[i].token);
+    for (let c = 0; c < messageChunks.length; c++) {
+      const expoResp = await fetch('https://exp.host/--/api/v2/push/send', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(messageChunks[c]),
+      });
+      const result = await expoResp.json();
+      const chunkTokens = tokenChunks[c];
+      if (!Array.isArray(result?.data) || result.data.length !== chunkTokens.length) {
+        // Can't trust positional mapping for this chunk — skip pruning it
+        // rather than risk deleting a still-valid token.
+        console.warn(
+          `send-push: chunk ${c} receipt shape mismatch `
+          + `(sent ${chunkTokens.length}, got ${Array.isArray(result?.data) ? result.data.length : 'non-array'}); skipping prune`,
+        );
+        continue;
       }
-    });
+      stale.push(...staleTokensForChunk(chunkTokens, result.data));
+    }
     if (stale.length > 0) {
       await supabase.from('push_tokens').delete().in('token', stale);
     }

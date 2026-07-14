@@ -2,6 +2,32 @@
 // Round-robin markers, party auto-balance, discrepancy state, withdrawal
 // re-link. Every function here is unit-tested in officialScoring.test.js.
 
+// Fallback 18-hole layout for official rounds whose `course` JSONB is empty
+// or missing — keeps the scorecard and leaderboard usable until course data
+// lands. Par 4 throughout, stroke index ascending by hole number.
+export function defaultOfficialHoles() {
+  return Array.from({ length: 18 }, (_, i) => ({
+    number: i + 1,
+    par: 4,
+    strokeIndex: i + 1,
+  }));
+}
+
+// Map an official round's `course` JSONB to the casual `round.holes` shape
+// ({ number, par, strokeIndex }). The JSONB may store either a bare holes
+// array or a { holes: [...] } object; tolerate both, fall back to default.
+export function officialHolesFromCourse(course) {
+  const raw = Array.isArray(course)
+    ? course
+    : (Array.isArray(course?.holes) ? course.holes : null);
+  if (!raw || raw.length === 0) return defaultOfficialHoles();
+  return raw.map((h, i) => ({
+    number: h.number ?? i + 1,
+    par: h.par ?? 4,
+    strokeIndex: h.strokeIndex ?? h.stroke_index ?? i + 1,
+  }));
+}
+
 // Each player marks the next player by seat order; the last wraps to the
 // first. Returns [{ rosterId, marksRosterId }] in seat order.
 export function assignRoundRobinMarkers(members) {

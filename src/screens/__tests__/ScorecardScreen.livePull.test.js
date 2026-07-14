@@ -117,7 +117,10 @@ jest.mock('../../store/syncWorker', () => ({
 }));
 jest.mock('../../store/libraryStore', () => ({ fetchPlayers: jest.fn(() => Promise.resolve([])) }));
 jest.mock('../../store/notificationStore', () => ({ notifyRoundFinished: jest.fn(() => Promise.resolve()) }));
-jest.mock('../../store/officialScoring', () => ({ cardDiscrepancyHoles: jest.fn(() => []) }));
+jest.mock('../../store/officialScoring', () => ({
+  cardDiscrepancyHoles: jest.fn(() => []),
+  officialHolesFromCourse: jest.fn(() => []),
+}));
 jest.mock('../../store/officialLeaderboard', () => ({ buildLeaderboard: jest.fn(() => []) }));
 jest.mock('../../store/officialStore', () => ({ attestCard: jest.fn(() => Promise.resolve()) }));
 jest.mock('../../lib/mediaCapture', () => ({

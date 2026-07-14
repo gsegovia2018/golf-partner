@@ -293,6 +293,34 @@ export function isPickupScore(strokes, par, playerHandicap, holeStrokeIndex) {
   return strokes != null && strokes >= pickupStrokes(par, playerHandicap, holeStrokeIndex);
 }
 
+// The playing handicap to use for a player on a round: the round's
+// normalized per-player handicap when present, else the player's base
+// handicap, else 0. round.playerHandicaps CAN legitimately miss entries on
+// legacy / pre-normalization rounds (see normalizeRoundHandicaps), so the
+// player-level fallback is required — a missing entry must NOT silently
+// collapse to a scratch (0) handicap. Single source of truth so every
+// caller (clamp math in mutate.js + ScorecardScreen, GridView display, etc.)
+// resolves it identically and can't drift.
+export function resolvePlayerHandicap(round, players, playerId) {
+  return round?.playerHandicaps?.[playerId]
+    ?? (players ?? []).find((p) => p.id === playerId)?.handicap
+    ?? 0;
+}
+
+// Clamps a raw entered stroke count to the recordable range [1, pickup] —
+// per-product-decision, an out-of-range entry (a fat-fingered "44" meaning
+// "4", or a stray "-1"/"0") is silently clamped rather than rejected. Reuses
+// pickupStrokes for the ceiling so the clamp and the pickup threshold can
+// never drift apart. `strokes == null` means "no score" (a cleared cell) and
+// passes through untouched — clearing a score must never become a 1.
+export function clampScoreInput(strokes, par, playerHandicap, holeStrokeIndex) {
+  if (strokes == null) return strokes;
+  const max = pickupStrokes(par, playerHandicap, holeStrokeIndex);
+  if (strokes < 1) return 1;
+  if (strokes > max) return max;
+  return strokes;
+}
+
 // Fisher-Yates copy-shuffle shared by randomPairs and buildTeamsForMode.
 export function shufflePlayers(players) {
   const shuffled = [...players];
@@ -305,6 +333,9 @@ export function shufflePlayers(players) {
 
 // Split players into pairs at random. Uses an unbiased Fisher-Yates shuffle
 // (the old `sort(() => Math.random() - 0.5)` produced a skewed distribution).
+// An odd roster leaves a trailing singleton pair — callers that can't seat a
+// lone player against a full pair (e.g. Stableford with Partners) must not
+// use this directly; see randomPartnerTeams.
 export function randomPairs(players) {
   const shuffled = shufflePlayers(players);
   const pairs = [];
@@ -315,10 +346,143 @@ export function randomPairs(players) {
   return pairs;
 }
 
+// Stableford-with-Partners team builder: 2-player teams, except an odd
+// roster folds its leftover player into the LAST pair to form one 3-player
+// team instead of leaving them as an unwinnable solo singleton (product
+// decision — one team of 3 absorbs the odd player out; every other team
+// stays a pair). 5 → [2,3]; 7 → [2,2,3]; 3 → [3] (the whole roster, since
+// there's no other pair to fold into).
+export function randomPartnerTeams(players) {
+  const pairs = randomPairs(players);
+  const last = pairs[pairs.length - 1];
+  if (pairs.length >= 2 && last?.length === 1) {
+    const leftover = last[0];
+    pairs.pop();
+    pairs[pairs.length - 1] = [...pairs[pairs.length - 1], leftover];
+  }
+  return pairs;
+}
+
+// True when a group set already satisfies the Stableford-with-Partners
+// invariant — every team is a pair, save at most one 3-player team, and NO
+// lone player — so the incremental insert/remove absorb logic below can
+// safely edit it in place without ever producing a singleton or a team of
+// 4+. A revealed round from ANOTHER team mode (or legacy pre-fix data still
+// sitting in Supabase under the staggered client rollout) can violate this:
+//   - scramble4's `[[a,b,c,d]]` (one 4-team) reaches these helpers when a
+//     roster change forces the fallback to 'stableford';
+//   - a legacy multi-singleton shape like `[[a,b],[c],[d]]` (the original
+//     pre-fix bug signature) has TWO lone players — incremental insert only
+//     absorbs the first (one new player can't seat two singletons), so it
+//     must be rebuilt, not patched.
+// Non-conforming shapes are rebuilt from scratch via randomPartnerTeams (see
+// below), which normalizes any legacy corruption to clean pairs/one triple.
+function conformsToPartnerInvariant(groups) {
+  let triples = 0;
+  for (const g of groups) {
+    if (g.length <= 1) return false;      // a lone player is never a partner shape
+    if (g.length >= 4) return false;      // a 4+ team can never be a partner shape
+    if (g.length === 3 && ++triples > 1) return false; // at most one 3-team
+  }
+  return true;
+}
+
+// Insert `player` into an already-revealed set of Stableford-with-Partners
+// groups (add-player continuation — see tournamentStore's
+// buildPairsForAddedPlayer) without ever creating a singleton OR a team of
+// 4+. When the existing groups already conform to the partner invariant
+// (all pairs, at most one triple, no lone player), continue
+// randomPartnerTeams' rule incrementally — this preserves the revealed
+// partnerships:
+//   1. If a 3-player team exists, the roster is going odd->even: that team
+//      splits back to a pair, and its odd member out pairs with the new
+//      player as a fresh 2-team.
+//   2. Otherwise every group is a clean pair — the roster is going
+//      even->odd — so the new player joins the last pair, forming one
+//      3-team (mirrors randomPartnerTeams' fold-into-the-last-pair rule).
+// When the existing groups do NOT conform — a scramble4 `[4]` round that
+// fell back to stableford, or a legacy `[2,1]`/`[2,1,1]` shape with a lone
+// player (one new player can't seat two singletons) — a fresh
+// randomPartnerTeams build of the full roster is the only way to guarantee
+// no singleton and no team over 3. Partner continuity is unavailable /
+// meaningless for those shapes anyway (the round was corrupt or non-partners).
+export function insertIntoPartnerTeams(groups, player) {
+  if (!conformsToPartnerInvariant(groups)) {
+    return randomPartnerTeams([...groups.flat(), player]);
+  }
+  const next = groups.map((g) => [...g]);
+  const tripleIdx = next.findIndex((g) => g.length === 3);
+  if (tripleIdx !== -1) {
+    const triple = next[tripleIdx];
+    const leftover = triple[triple.length - 1];
+    next[tripleIdx] = triple.slice(0, -1);
+    next.push([leftover, player]);
+    return next;
+  }
+  if (next.length > 0) {
+    next[next.length - 1] = [...next[next.length - 1], player];
+  } else {
+    next.push([player]);
+  }
+  return next;
+}
+
+// Remove `removedId` from an already-revealed set of Stableford-with-Partners
+// groups (remove-player continuation — see tournamentStore's
+// buildPairsForRemovedPlayer) without ever leaving a singleton behind OR a
+// team of 4+. Unlike insertIntoPartnerTeams (where one new player can't seat
+// two lone players), the repair here is a LOOP, so it cleanly resolves ANY
+// number of pre-existing singletons — a legacy `[2,1]`/`[2,1,1]` shape is
+// fixed in place with its partnerships preserved, no reshuffle needed. The
+// only input the loop can't repair is an oversized (4+) team (it can shrink a
+// team but not split one), so THAT is the sole rebuild trigger — e.g. a
+// scramble4 `[[a,b,c,d]]` round that fell back to stableford on the remove.
+// Otherwise, each removal shrinks at most one group by one seat; the loop
+// repairs whatever singletons exist:
+//   - a 3-team elsewhere lends one member back to the singleton, so both
+//     end up pairs (e.g. [1,3] -> [2,2]);
+//   - otherwise a 2-team absorbs the singleton, forming a 3-team
+//     (e.g. [1,2] -> [3]);
+//   - otherwise (only singletons remain) merge into whatever's left —
+//     a defensive fallback for already-degenerate input.
+export function removeFromPartnerTeams(groups, removedId) {
+  if (groups.some((g) => g.length >= 4)) {
+    return randomPartnerTeams(groups.flat().filter((p) => p.id !== removedId));
+  }
+  let next = groups
+    .map((g) => g.filter((p) => p.id !== removedId))
+    .filter((g) => g.length > 0);
+  for (;;) {
+    const singletonIdx = next.findIndex((g) => g.length === 1);
+    if (singletonIdx === -1) return next;
+    const singleton = next[singletonIdx][0];
+    const tripleIdx = next.findIndex((g, i) => i !== singletonIdx && g.length === 3);
+    if (tripleIdx !== -1) {
+      const triple = next[tripleIdx];
+      const borrowed = triple[triple.length - 1];
+      next[tripleIdx] = triple.slice(0, -1);
+      next[singletonIdx] = [singleton, borrowed];
+      continue;
+    }
+    const pairIdx = next.findIndex((g, i) => i !== singletonIdx && g.length === 2);
+    if (pairIdx !== -1) {
+      next[pairIdx] = [...next[pairIdx], singleton];
+      next = next.filter((_, i) => i !== singletonIdx);
+      continue;
+    }
+    const otherIdx = next.findIndex((g, i) => i !== singletonIdx && g.length >= 1);
+    if (otherIdx === -1) return next; // only one group total — nothing to merge into
+    next[otherIdx] = [...next[otherIdx], singleton];
+    next = next.filter((_, i) => i !== singletonIdx);
+  }
+}
+
 // Team shapes per mode. 2x2 modes ride randomPairs; scramble3v1 splits a
-// shuffled roster 3+1 (the solo player is random); scramble4 is one team.
-// Invalid mode/roster combos degrade to singleton pairs, matching the
-// existing non-team fallback everywhere pairs are built.
+// shuffled roster 3+1 (the solo player is random); scramble4 is one team;
+// stableford (partners) rides randomPartnerTeams so an odd roster forms one
+// 3-player team instead of a singleton — see randomPartnerTeams. Invalid
+// mode/roster combos degrade to singleton pairs, matching the existing
+// non-team fallback everywhere pairs are built.
 export function buildTeamsForMode(mode, players) {
   // Lazy require (not a static top-level import): scoringModes.js imports
   // isScrambleMode back from this file, so a static import here would form
@@ -333,6 +497,7 @@ export function buildTeamsForMode(mode, players) {
     const shuffled = shufflePlayers(players);
     return [shuffled.slice(0, 3), shuffled.slice(3)];
   }
+  if (mode === 'stableford') return randomPartnerTeams(players);
   return randomPairs(players);
 }
 
@@ -454,7 +619,10 @@ export function tournamentSindicatoClinched(tournament) {
   if (lb.length < 2) return null;
   let holesRemaining = 0;
   rounds.forEach((round, idx) => {
-    const future = idx > (tournament.currentRound ?? 0);
+    // currentRound is an unreliable, often-stale cross-device pointer (see
+    // isRoundPlayed) — a round that's already scored must never be treated
+    // as "future" just because the pointer lagged behind it.
+    const future = !isRoundPlayed(round, idx, tournament);
     if (future) {
       holesRemaining += round.holes?.length ?? 0;
       return;
@@ -718,7 +886,13 @@ function teamOfPlayer(round, playerId) {
 
 // Cumulative scramble standings across all played rounds. Each player earns
 // their team's Stableford points and gross strokes for the round (the team's
-// tally row lives under the team captain's id in scrambleRoundTally).
+// tally row lives under the team captain's id in scrambleRoundTally). Every
+// row here is a scramble-team result, so crediting each teammate their full
+// team strokes is homogeneous across the whole board — unlike the mixed-mode
+// Stableford board (tournamentStablefordLeaderboard), which also mixes in
+// individual-round strokes and must NOT do this (see there). Ranks with
+// stablefordComparator (points desc, fewer strokes breaks a tie) for the same
+// tiebreak the individual/Stableford board uses.
 export function tournamentScrambleLeaderboard(tournament) {
   const { players = [], rounds = [] } = tournament ?? {};
   const acc = new Map(players.map((p) => [p.id, { player: p, points: 0, strokes: 0 }]));
@@ -737,7 +911,7 @@ export function tournamentScrambleLeaderboard(tournament) {
       cur.strokes += row.strokes;
     }
   });
-  return [...acc.values()].sort((a, b) => b.points - a.points);
+  return [...acc.values()].sort(stablefordComparator);
 }
 
 // Cumulative pairs match play standings across all played rounds. Each player
@@ -774,8 +948,8 @@ export function stablefordComparator(a, b) {
 
 // Individual Stableford board across all rounds. Scramble rounds have no
 // individual balls, so each player contributes their TEAM's Stableford
-// points/strokes there. This is the overall board for mixed-mode
-// tournaments and the Stableford alternate view everywhere.
+// points there. This is the overall board for mixed-mode tournaments and
+// the Stableford alternate view everywhere.
 export function tournamentStablefordLeaderboard(tournament) {
   const { players = [], rounds = [] } = tournament ?? {};
   const acc = new Map(players.map((p) => [p.id, { player: p, points: 0, strokes: 0 }]));
@@ -790,9 +964,17 @@ export function tournamentStablefordLeaderboard(tournament) {
         const team = teamOfPlayer(round, p.id);
         const row = team ? rowByCaptain.get(team[0]?.id) : null;
         if (!row) continue;
-        const cur = acc.get(p.id);
-        cur.points += row.points;
-        cur.strokes += row.strokes;
+        // Points are the team's whole result, credited to every teammate —
+        // by design (matches tournamentScrambleLeaderboard). Strokes are
+        // deliberately NOT added here: unlike points, this board's strokes
+        // field also accumulates individual-round gross strokes for
+        // non-scramble rounds, so crediting the full team ball's strokes to
+        // BOTH (or all) teammates on top of that would double/quadruple-
+        // count a single team score across the roster, corrupting the
+        // strokes tiebreak and the "N str" column for scramble-heavy
+        // tournaments. Scramble rounds simply don't contribute to this
+        // board's strokes total.
+        acc.get(p.id).points += row.points;
       }
       return;
     }
@@ -890,7 +1072,10 @@ export function tournamentMatchPlayStandings(tournament) {
     // nothing — not even to holesRemaining (its holes would inflate the
     // clinch denominator and suppress a mathematically-decided "wins").
     if (roundScoringMode(tournament, round) !== 'matchplay') return;
-    const future = idx > (tournament.currentRound ?? 0);
+    // currentRound is an unreliable, often-stale cross-device pointer (see
+    // isRoundPlayed) — a round that's already scored must never be treated
+    // as "future" just because the pointer lagged behind it.
+    const future = !isRoundPlayed(round, idx, tournament);
     if (future) {
       holesRemaining += round.holes?.length ?? 0;
       return;

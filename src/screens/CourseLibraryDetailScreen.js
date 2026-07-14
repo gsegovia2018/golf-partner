@@ -10,6 +10,7 @@ import { useTheme } from '../theme/ThemeContext';
 import { fetchCourses, updateCourseFromEditor, upsertCourse } from '../store/libraryStore';
 import { propagateCourseToTournaments } from '../store/tournamentStore';
 import TeesEditor from '../components/TeesEditor';
+import { canSaveCourse } from '../lib/courseLibrary';
 
 function defaultHoles() {
   return Array.from({ length: 18 }, (_, i) => ({ number: i + 1, par: 4, strokeIndex: i + 1 }));
@@ -49,6 +50,14 @@ export default function CourseLibraryDetailScreen({ navigation, route }) {
 
   async function handleSave() {
     if (!name.trim()) return;
+    const { ok, siIssues, dupes } = canSaveCourse(holes, tees);
+    if (!ok) {
+      Alert.alert(
+        'Fix course data before saving',
+        [...siIssues, ...(dupes.length > 0 ? [`Duplicate tee labels: ${dupes.join(', ')}`] : [])].join('\n'),
+      );
+      return;
+    }
     setSaving(true);
     try {
       await upsertCourse({ id: courseId, name: name.trim(), city, province });
@@ -79,6 +88,7 @@ export default function CourseLibraryDetailScreen({ navigation, route }) {
   }
 
   const totalPar = holes.reduce((sum, h) => sum + h.par, 0);
+  const { ok: canSave } = canSaveCourse(holes, tees);
 
   if (loading) {
     return (
@@ -176,9 +186,9 @@ export default function CourseLibraryDetailScreen({ navigation, route }) {
         </View>
 
         <TouchableOpacity
-          style={[s.saveBtn, saving && s.saveBtnDisabled]}
+          style={[s.saveBtn, (saving || !canSave) && s.saveBtnDisabled]}
           onPress={handleSave}
-          disabled={saving}
+          disabled={saving || !canSave}
           activeOpacity={0.7}
         >
           <Feather name="check" size={18} color={theme.isDark ? theme.accent.primary : theme.text.inverse} style={{ marginRight: 8 }} />

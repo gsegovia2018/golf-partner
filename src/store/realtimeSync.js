@@ -269,6 +269,12 @@ const APPLIERS = {
 let _channel = null;
 let _channelId = null;
 
+// Backoff rejoin state for the current channel. A fresh ensureRealtimeForTournament
+// call (a real tournament switch, or stopRealtime) always cancels any pending
+// rejoin — see stopRealtime — so this never fires for a superseded channel.
+let _reconnectTimer = null;
+let _reconnectAttempts = 0;
+
 // ── Presence: per-device currentHole broadcast ───────────────────────────────
 // Supabase presence state shape: { [presenceKey]: [{ authorId, currentHole },
 // ...] }. Reduced to the highest currentHole seen per authorId — pure, so the
@@ -311,6 +317,30 @@ async function pendingEntriesFor(id) {
   return all.filter((e) => e.tournamentId === id);
 }
 
+// Per-tournament promise-chain mutex for the row-handler read-modify-write.
+// Two row events for the SAME tournament can arrive close together; each
+// handler's readLocal→patch→saveLocal is a read-modify-write over the whole
+// cached blob, so without serialization the second handler clones the same
+// pre-patch base and its saveLocal clobbers the first handler's patch (lost
+// update). Keying by tournament id (rather than a single global chain) keeps
+// unrelated tournaments' handlers from queuing behind each other. Modeled on
+// syncQueue.js's runExclusive: the chain promise itself must never reject (a
+// rejection would break the chain for every subsequent queued op for this
+// id), so failures are swallowed on the chain but still propagate to the
+// caller via the returned promise. Entries are pruned once their chain empties
+// so this map never grows unbounded across a long session's tournaments.
+const _handlerMutex = new Map();
+function runExclusiveForTournament(id, fn) {
+  const prev = _handlerMutex.get(id) ?? Promise.resolve();
+  const result = prev.then(fn, fn);
+  const settled = result.then(() => undefined, () => undefined);
+  _handlerMutex.set(id, settled);
+  settled.then(() => {
+    if (_handlerMutex.get(id) === settled) _handlerMutex.delete(id);
+  });
+  return result;
+}
+
 // Shared handler tail for every table: reads the current local cache, patches
 // it with the row, re-applies this tournament's still-undrained pending
 // mutations on top (a realtime row is SERVER state — replaying pending
@@ -335,13 +365,18 @@ async function pendingEntriesFor(id) {
 // (local wins; the still-queued mutations drain and re-reconcile on the next
 // worker pass / poll anyway).
 function makeHandler(id, applyFn) {
-  return async (payload) => {
+  return (payload) => runExclusiveForTournament(id, async () => {
     const eventType = payload?.eventType;
     // A DELETE delivers only `old` (the PK); INSERT/UPDATE deliver `new`. The
     // patchers key off eventType to decide remove-vs-upsert, so a DELETE must
     // route through `old` (which for these tables is the primary key alone).
     const row = eventType === 'DELETE' ? payload?.old : (payload?.new ?? payload?.old);
     if (!row) return;
+    // readLocal happens INSIDE the exclusive region (not before it's
+    // acquired) so a queued second handler observes the first handler's
+    // saveLocal, not the entry-time snapshot — otherwise both handlers would
+    // clone the same pre-patch base and the second saveLocal would clobber
+    // the first handler's patch.
     const cached = await readLocal(id);
     if (!cached) return;
     const patched = applyFn(cached, row, eventType);
@@ -357,34 +392,19 @@ function makeHandler(id, applyFn) {
       if (stable) break;
       snapshot = latest;
     }
-  };
+  });
 }
 
-export function stopRealtime() {
-  if (_channel) supabase.removeChannel(_channel);
-  _channel = null;
-  _channelId = null;
-}
-
-// Idempotent: a repeat call for the same id is a no-op. A call for a
-// different id tears down the old channel first. null/undefined and
-// official-kind tournaments never get a channel (official tournaments have
-// no game_*-backed local blob for these patchers to act on).
-export async function ensureRealtimeForTournament(id) {
-  if (!id) {
-    stopRealtime();
-    return;
-  }
-  if (_channelId === id) return;
-
-  const cached = await readLocal(id);
-  if (cached?.kind === 'official') {
-    stopRealtime();
-    return;
-  }
-
-  stopRealtime();
-
+// Builds and subscribes a channel for `id`, wiring the same bindings every
+// time: the eight postgres_changes row handlers, the presence 'sync' relay,
+// and a subscribe status callback that (a) flushes the last known presence
+// hole once SUBSCRIBED and resets the backoff counter, and (b) schedules a
+// backoff rejoin on CHANNEL_ERROR/TIMED_OUT/CLOSED. Deliberately NOT exported
+// and does not touch _lastAuthor/_lastHole itself — callers decide whether
+// this is a fresh tournament (ensureRealtimeForTournament resets presence
+// first) or a same-tournament reconnect (scheduleRejoin's callback, which
+// must preserve presence so the rejoin resumes broadcasting the right hole).
+function buildChannel(id) {
   const channel = supabase.channel(`game-${id}`);
   for (const [table, applyFn] of Object.entries(APPLIERS)) {
     const filter = table === 'tournaments' ? `id=eq.${id}` : `tournament_id=eq.${id}`;
@@ -399,9 +419,82 @@ export async function ensureRealtimeForTournament(id) {
     for (const cb of _presenceCbs) cb(progress);
   });
   channel.subscribe((status) => {
-    if (status === 'SUBSCRIBED' && _lastAuthor) channel.track({ authorId: _lastAuthor, currentHole: _lastHole });
+    if (status === 'SUBSCRIBED') {
+      _reconnectAttempts = 0;
+      if (_lastAuthor) channel.track({ authorId: _lastAuthor, currentHole: _lastHole });
+    } else if (status === 'CHANNEL_ERROR' || status === 'TIMED_OUT' || status === 'CLOSED') {
+      scheduleRejoin(id);
+    }
   });
 
   _channel = channel;
   _channelId = id;
+}
+
+// After a network blip (or the server dropping the socket) the channel stops
+// delivering game_* events with no signal — degrading silently to the 20s
+// cross-device poll. Reconnect with exponential backoff (capped at 30s)
+// rather than hammering Supabase on a flaky connection; a successful
+// SUBSCRIBED (in buildChannel above) resets the counter so a later blip
+// starts its own backoff from zero rather than inheriting an earlier one.
+// Coalesced: a rejoin already pending for this channel is left alone rather
+// than restarting the backoff on every error signal.
+function scheduleRejoin(id) {
+  if (_reconnectTimer) return;
+  const delay = Math.min(1000 * 2 ** _reconnectAttempts, 30000);
+  _reconnectAttempts += 1;
+  _reconnectTimer = setTimeout(() => {
+    _reconnectTimer = null;
+    // The channel may have been superseded (a tournament switch or an
+    // explicit stopRealtime) while this timer was pending — stopRealtime
+    // always cancels the timer, so in practice this guard is a belt-and-
+    // braces check against that race rather than the primary defense.
+    if (_channelId !== id) return;
+    if (_channel) supabase.removeChannel(_channel);
+    buildChannel(id);
+  }, delay);
+}
+
+export function stopRealtime() {
+  if (_reconnectTimer) {
+    clearTimeout(_reconnectTimer);
+    _reconnectTimer = null;
+  }
+  _reconnectAttempts = 0;
+  if (_channel) supabase.removeChannel(_channel);
+  _channel = null;
+  _channelId = null;
+}
+
+// Idempotent: a repeat call for the same id is a no-op. A call for a
+// different id tears down the old channel first. null/undefined and
+// official-kind tournaments never get a channel (official tournaments have
+// no game_*-backed local blob for these patchers to act on).
+//
+// _lastAuthor/_lastHole are reset here (not in buildChannel) whenever this
+// call actually proceeds past the idempotent guard above — i.e. on a genuine
+// channel-id change. Without this, switching tournaments left the previous
+// tournament's presence state in place, so the new channel's first
+// SUBSCRIBED would broadcast/gate conflict-surfacing off the WRONG
+// tournament's last-known hole. A backoff rejoin of the SAME tournament
+// (scheduleRejoin, above) intentionally bypasses this function so a
+// reconnect keeps broadcasting the right hole instead of resetting it.
+export async function ensureRealtimeForTournament(id) {
+  if (!id) {
+    stopRealtime();
+    return;
+  }
+  if (_channelId === id) return;
+
+  const cached = await readLocal(id);
+  if (cached?.kind === 'official') {
+    stopRealtime();
+    return;
+  }
+
+  stopRealtime();
+  _lastAuthor = null;
+  _lastHole = null;
+
+  buildChannel(id);
 }
