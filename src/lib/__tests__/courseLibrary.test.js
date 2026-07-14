@@ -1,6 +1,6 @@
 import {
   normalizeText, buildCourseLibraryItems, filterCourseLibraryItems,
-  computeSiIssues, computeDupeTeeLabels, canSaveCourse,
+  computeSiIssues, computeDupeTeeLabels, canSaveCourse, roundHolesArePersistable,
 } from '../courseLibrary';
 
 const course = (id, name, extra = {}) => ({
@@ -198,5 +198,47 @@ describe('canSaveCourse', () => {
     const result = canSaveCourse(cleanHoles(), tees);
     expect(result.ok).toBe(false);
     expect(result.dupes).toEqual(['white']);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// roundHolesArePersistable — Task 13: the round-holes editor (SetupScreen /
+// EditTournamentScreen, via CourseEditorScreen opened WITHOUT a courseId)
+// writes straight into a round's `holes`/`tees`, bypassing the course-library
+// save-guard entirely. This predicate is the shared gate reused on that
+// persist path so the SAME SI/tee-label rules apply there too.
+// ---------------------------------------------------------------------------
+
+describe('roundHolesArePersistable', () => {
+  test('a round with a clean, complete SI set and unique tee labels is persistable', () => {
+    expect(roundHolesArePersistable({ holes: cleanHoles(), tees: cleanTees() })).toBe(true);
+  });
+
+  test('a round with duplicate SI is not persistable', () => {
+    const holes = cleanHoles();
+    holes[1] = { ...holes[1], strokeIndex: holes[0].strokeIndex };
+    expect(roundHolesArePersistable({ holes, tees: cleanTees() })).toBe(false);
+  });
+
+  test('a round with a partial (incomplete) SI set is not persistable', () => {
+    const holes = cleanHoles();
+    holes[0] = { ...holes[0], strokeIndex: 2 }; // now nothing has SI 1, SI 2 used twice
+    expect(roundHolesArePersistable({ holes, tees: cleanTees() })).toBe(false);
+  });
+
+  test('a round with duplicate tee labels is not persistable even with clean SI', () => {
+    const tees = [
+      { id: 't1', label: 'White', rating: 71.5, slope: 128 },
+      { id: 't2', label: 'White', rating: 73.2, slope: 132 },
+    ];
+    expect(roundHolesArePersistable({ holes: cleanHoles(), tees })).toBe(false);
+  });
+
+  test('an empty/not-yet-populated holes array is persistable (nothing to contradict yet)', () => {
+    expect(roundHolesArePersistable({ holes: [], tees: [] })).toBe(true);
+  });
+
+  test('a round missing holes/tees entirely (null round fields) does not throw and is persistable', () => {
+    expect(roundHolesArePersistable({})).toBe(true);
   });
 });

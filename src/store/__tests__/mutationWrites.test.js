@@ -548,7 +548,7 @@ describe('round.upsert', () => {
       id: 'r1',
       courseName: 'Updated Course',
       courseId: 'course-9',
-      holes: [{ number: 1, par: 4, strokeIndex: 1 }],
+      holes: Array.from({ length: 18 }, (_, i) => ({ number: i + 1, par: 4, strokeIndex: i + 1 })),
       tees: [{ label: 'Blue' }],
       notes: { round: 'Wet today', hole: {} },
       playerTees: { p1: { label: 'Blue' } },
@@ -574,7 +574,7 @@ describe('round.upsert', () => {
     expect(patch).toEqual({
       courseName: 'Updated Course',
       courseId: 'course-9',
-      holes: [{ number: 1, par: 4, strokeIndex: 1 }],
+      holes: round.holes,
       tees: [{ label: 'Blue' }],
       playerTees: { p1: { label: 'Blue' } },
     });
@@ -610,6 +610,69 @@ describe('round.upsert', () => {
     await executeMutation(entry(mutation), baseTournament());
     expect(repo.upsertRound).not.toHaveBeenCalled();
     expect(repo.patchRound).not.toHaveBeenCalled();
+  });
+
+  // Task 13: the round-holes editor (CourseEditorScreen opened WITHOUT a
+  // courseId, from SetupScreen/EditTournamentScreen) writes round.holes/tees
+  // straight into round.upsert with no validation of its own — a different
+  // path than the course-library save-guard (canSaveCourse) added for the
+  // course-editing screens. This is the actual Supabase persist boundary for
+  // round.upsert, so it's where the SAME SI/tee-label rules are enforced
+  // (via the shared roundHolesArePersistable helper) regardless of which
+  // screen queued the mutation.
+  describe('SI validation (Task 13)', () => {
+    const badHoles = [{ number: 1, par: 4, strokeIndex: 1 }]; // 17 SI missing
+
+    test('existing round with invalid SI: holes/tees are held out of the patch, but other owned fields still persist', async () => {
+      const round = {
+        id: 'r1', courseName: 'Updated Course', holes: badHoles, tees: [{ label: 'Blue' }],
+      };
+      const mutation = { type: 'round.upsert', roundId: 'r1', roundIndex: 0, round };
+      await executeMutation(entry(mutation), baseTournament());
+      expect(repo.upsertRound).not.toHaveBeenCalled();
+      expect(repo.patchRound).toHaveBeenCalledWith(TID, 'r1', { courseName: 'Updated Course' });
+    });
+
+    test('existing round with duplicate tee labels (clean SI) also holds holes/tees out of the patch', async () => {
+      const holes = Array.from({ length: 18 }, (_, i) => ({ number: i + 1, par: 4, strokeIndex: i + 1 }));
+      const round = {
+        id: 'r1',
+        courseName: 'Updated Course',
+        holes,
+        tees: [{ label: 'Blue' }, { label: 'blue ' }],
+      };
+      const mutation = { type: 'round.upsert', roundId: 'r1', roundIndex: 0, round };
+      await executeMutation(entry(mutation), baseTournament());
+      expect(repo.patchRound).toHaveBeenCalledWith(TID, 'r1', { courseName: 'Updated Course' });
+    });
+
+    test('existing round whose ONLY owned-field changes are the invalid holes/tees skips the write entirely (nothing left to patch)', async () => {
+      const round = { id: 'r1', holes: badHoles, tees: [] };
+      const mutation = { type: 'round.upsert', roundId: 'r1', roundIndex: 0, round };
+      await executeMutation(entry(mutation), baseTournament());
+      expect(repo.patchRound).not.toHaveBeenCalled();
+    });
+
+    test('brand-new round (isNew: true) with invalid SI is NOT upserted at all — held out entirely, retried once valid', async () => {
+      const round = { id: 'r2', courseName: 'Second Course', holes: badHoles };
+      const mutation = {
+        type: 'round.upsert', roundId: 'r2', roundIndex: 1, round, isNew: true,
+      };
+      const result = await executeMutation(entry(mutation), baseTournament());
+      expect(repo.upsertRound).not.toHaveBeenCalled();
+      expect(repo.patchRound).not.toHaveBeenCalled();
+      expect(result).toEqual({ conflict: null });
+    });
+
+    test('brand-new round (isNew: true) with valid SI upserts normally (regression: valid rounds are unaffected)', async () => {
+      const holes = Array.from({ length: 18 }, (_, i) => ({ number: i + 1, par: 4, strokeIndex: i + 1 }));
+      const round = { id: 'r2', courseName: 'Second Course', holes };
+      const mutation = {
+        type: 'round.upsert', roundId: 'r2', roundIndex: 1, round, isNew: true,
+      };
+      await executeMutation(entry(mutation), baseTournament());
+      expect(repo.upsertRound).toHaveBeenCalledWith(TID, 1, round);
+    });
   });
 });
 

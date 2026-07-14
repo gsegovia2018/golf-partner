@@ -157,3 +157,15 @@ export function canSaveCourse(holes, tees) {
   const dupes = computeDupeTeeLabels(tees);
   return { ok: siIssues.length === 0 && dupes.length === 0, siIssues, dupes };
 }
+
+// Persist-guard for the ROUND-holes editor path (SetupScreen /
+// EditTournamentScreen, via CourseEditorScreen opened WITHOUT a courseId).
+// That path edits round.holes/round.tees directly and writes them to
+// Supabase through round.upsert — a different write path than the
+// course-library screens, with no validation of its own. Reuses the exact
+// same SI + tee-label rules as canSaveCourse so a round's holes can never
+// diverge from what the course editor would allow: same handicap/Stableford
+// math depends on both.
+export function roundHolesArePersistable(round) {
+  return canSaveCourse(round?.holes, round?.tees).ok;
+}
