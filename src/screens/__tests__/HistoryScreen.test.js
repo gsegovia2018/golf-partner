@@ -34,6 +34,7 @@ jest.mock('../../store/tournamentStore', () => ({
   setActiveTournament: jest.fn(() => Promise.resolve()),
   subscribeTournamentChanges: jest.fn(() => jest.fn()),
   deleteTournament: jest.fn(() => Promise.resolve()),
+  tournamentNounCapitalized: jest.fn((t) => (t?.kind === 'game' ? 'Game' : 'Tournament')),
 }));
 
 jest.mock('../../store/profileStore', () => ({
@@ -88,7 +89,7 @@ describe('HistoryScreen', () => {
 
     fireEvent.press(await findByLabelText('Delete 28 May game'));
 
-    expect(await findByText('Delete Tournament')).toBeTruthy();
+    expect(await findByText('Delete Game')).toBeTruthy();
     expect(await findByText('Delete "28 May game"? This cannot be undone.')).toBeTruthy();
     expect(Alert.alert).not.toHaveBeenCalled();
   });

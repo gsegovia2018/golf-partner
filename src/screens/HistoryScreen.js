@@ -12,7 +12,7 @@ import { Feather } from '@expo/vector-icons';
 import { useTheme } from '../theme/ThemeContext';
 import {
   loadAllTournamentsWithFallback, isTournamentFinished,
-  subscribeTournamentChanges, deleteTournament,
+  subscribeTournamentChanges, deleteTournament, tournamentNounCapitalized,
 } from '../store/tournamentStore';
 import { loadProfile, computePersonalStats } from '../store/profileStore';
 
@@ -74,7 +74,7 @@ export default function HistoryScreen({ navigation }) {
 
   async function confirmDelete(t) {
     const confirmed = await confirm({
-      title: 'Delete Tournament',
+      title: `Delete ${tournamentNounCapitalized(t)}`,
       message: `Delete "${t.name}"? This cannot be undone.`,
       confirmLabel: 'Delete',
       destructive: true,

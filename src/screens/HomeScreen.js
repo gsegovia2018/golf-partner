@@ -791,7 +791,7 @@ export default function HomeScreen({ navigation, route }) {
 
   async function confirmDelete(t) {
     const confirmed = await confirm({
-      title: 'Delete Tournament',
+      title: `Delete ${tournamentNounCapitalized(t)}`,
       message: `Delete "${t.name}"? This cannot be undone.`,
       confirmLabel: 'Delete',
       destructive: true,
@@ -808,8 +808,8 @@ export default function HomeScreen({ navigation, route }) {
         navigation.goBack();
       }
     } catch (err) {
-      if (Platform.OS === 'web') window.alert(err.message ?? 'Could not delete tournament');
-      else Alert.alert('Error', err.message ?? 'Could not delete tournament');
+      if (Platform.OS === 'web') window.alert(err.message ?? `Could not delete ${tournamentNoun(t)}`);
+      else Alert.alert('Error', err.message ?? `Could not delete ${tournamentNoun(t)}`);
     }
   }
 
@@ -2211,7 +2211,7 @@ export default function HomeScreen({ navigation, route }) {
               activeOpacity={0.7}
             >
               <Feather name="trash-2" size={18} color={theme.destructive} />
-              <Text style={[s.menuItemText, { color: theme.destructive }]}>Delete Tournament</Text>
+              <Text style={[s.menuItemText, { color: theme.destructive }]}>{`Delete ${tournamentNounCapitalized(tournament)}`}</Text>
             </TouchableOpacity>
           )}
     </BottomSheet>
