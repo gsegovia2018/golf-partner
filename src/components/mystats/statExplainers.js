@@ -15,12 +15,19 @@ const strokesGainedExplainer = (targetHandicap) => {
   return {
     title,
     subtitle,
-    explainer: `Strokes Gained tells you how your round compares to ${reference} from the same spots `
+    explainer: `Strokes Gained tells you how your game compares to ${reference} from the same spots `
       + `on the course. Positive means you played that part of the game better than ${positiveCmp}; `
       + 'negative means worse.\n\n'
-      + "We use Mark Broadie's published baselines (the same ones the PGA Tour uses). Because "
-      + 'you log buckets instead of exact yardage, your numbers are estimates — accurate to '
-      + 'about ±0.2 strokes per round.',
+      + 'Five categories: Off the tee compares each logged drive (distance + lie) against the typical '
+      + 'drive for your target on a standard-length hole — no course measurements needed. Approach, '
+      + 'short game and putting use the distance buckets you log; penalties count penalty strokes '
+      + 'directly.\n\n'
+      + 'Recovery shots and lay-ups between the drive and the approach are not attributed to a '
+      + 'category — the "Where your strokes go" card shows them honestly as "In-between & untracked" '
+      + 'so everything always adds up to your real scores.\n\n'
+      + 'A category only shows a number once it has enough logged holes behind it. Because you log '
+      + "buckets instead of exact yardage, numbers are estimates built on Mark Broadie's published "
+      + 'baselines — accurate to about ±0.2 strokes per round.',
   };
 };
 
