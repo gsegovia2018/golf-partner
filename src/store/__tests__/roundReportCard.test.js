@@ -271,10 +271,10 @@ describe('buildRoundReportCard — callouts', () => {
     const brightLabels = card.callouts.bright.map((c) => c.label);
     const costLabels = card.callouts.cost.map((c) => c.label);
     expect(brightLabels).toContain('Par 3s');
-    expect(costLabels).toContain('Hard holes (SI 1-6)');
+    expect(costLabels).toContain('Hard holes');
     // The strongest bright spot / worst cost cell must rank first.
     expect(brightLabels[0]).toBe('Par 3s');
-    expect(costLabels[0]).toBe('Hard holes (SI 1-6)');
+    expect(costLabels[0]).toBe('Hard holes');
     expect(card.callouts.bright.length).toBeLessThanOrEqual(2);
     expect(card.callouts.cost.length).toBeLessThanOrEqual(2);
   });
@@ -306,7 +306,7 @@ describe('buildRoundReportCard — callouts', () => {
     const card = buildRoundReportCard(rounds, 'solo');
     expect(card.hasHistory).toBe(false);
     expect(card.callouts.bright.map((c) => c.label)).toContain('Par 3s');
-    expect(card.callouts.cost.map((c) => c.label)).toContain('Hard holes (SI 1-6)');
+    expect(card.callouts.cost.map((c) => c.label)).toContain('Hard holes');
   });
 });
 

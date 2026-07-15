@@ -415,9 +415,9 @@ export function rankStrengths(synthetic) {
   addCell('Par 5s', pt.par5.avgPoints, pt.par5.holes);
 
   const diff = holeDifficultySplit(synthetic, CANON_ID);
-  addCell('Hard holes (SI 1-6)', diff.hard.avgPoints, diff.hard.holes);
-  addCell('Mid holes (SI 7-12)', diff.mid.avgPoints, diff.mid.holes);
-  addCell('Easy holes (SI 13-18)', diff.easy.avgPoints, diff.easy.holes);
+  addCell('Hard holes', diff.hard.avgPoints, diff.hard.holes);
+  addCell('Mid holes', diff.mid.avgPoints, diff.mid.holes);
+  addCell('Easy holes', diff.easy.avgPoints, diff.easy.holes);
 
   const wc = warmupVsClosing(synthetic, CANON_ID);
   addCell('Opening 3 holes', wc.warmup.avgPoints, wc.warmup.holes);

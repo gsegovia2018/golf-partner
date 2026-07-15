@@ -93,9 +93,9 @@ function pointsPerHoleCells(thisStats, baseStats) {
     hpCell('Par 3s', 'course', thisStats.parType.par3, base.parType?.par3),
     hpCell('Par 4s', 'course', thisStats.parType.par4, base.parType?.par4),
     hpCell('Par 5s', 'course', thisStats.parType.par5, base.parType?.par5),
-    hpCell('Hard holes (SI 1-6)', 'course', thisStats.difficulty.hard, base.difficulty?.hard),
-    hpCell('Mid holes (SI 7-12)', 'course', thisStats.difficulty.mid, base.difficulty?.mid),
-    hpCell('Easy holes (SI 13-18)', 'course', thisStats.difficulty.easy, base.difficulty?.easy),
+    hpCell('Hard holes', 'course', thisStats.difficulty.hard, base.difficulty?.hard),
+    hpCell('Mid holes', 'course', thisStats.difficulty.mid, base.difficulty?.mid),
+    hpCell('Easy holes', 'course', thisStats.difficulty.easy, base.difficulty?.easy),
     hpCell('Opening 3', 'timing', thisStats.warmupClosing.warmup, base.warmupClosing?.warmup),
     hpCell('Closing 3', 'timing', thisStats.warmupClosing.closing, base.warmupClosing?.closing),
   ];
