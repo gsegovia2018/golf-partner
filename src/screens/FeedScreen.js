@@ -1,7 +1,7 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   View, Text, TouchableOpacity, StyleSheet, FlatList, ScrollView,
-  RefreshControl, TextInput,
+  RefreshControl, TextInput, Alert,
 } from 'react-native';
 import ScreenContainer from '../components/ScreenContainer';
 import { useFocusEffect } from '@react-navigation/native';
@@ -13,12 +13,13 @@ import {
   invalidateFeedCache,
 } from '../store/feedStore';
 import { notifyFeedActivity } from '../store/notificationStore';
-import { subscribeTournamentChanges, formatRoundLabel } from '../store/tournamentStore';
+import { subscribeTournamentChanges, formatRoundLabel, getTournament } from '../store/tournamentStore';
 import { useAuth } from '../context/AuthContext';
 import CommentsSheet from '../components/CommentsSheet';
 import MemoriesStoriesViewer from '../components/MemoriesStoriesViewer';
 import RoundStoriesRail from '../components/feed/RoundStoriesRail';
 import FeedRoundCard from '../components/feed/FeedRoundCard';
+import useMediaAttachFlow from '../hooks/useMediaAttachFlow';
 
 const EMPTY_REACTION_COUNTS = {};
 const EMPTY_REACTION_MINE = [];
@@ -74,6 +75,7 @@ function ReactionBar({
   commentCount,
   onOpenComments,
   onReactionAdded,
+  onAddPhoto,
   s,
   theme,
 }) {
@@ -148,6 +150,17 @@ function ReactionBar({
           <Text style={s.reactionCount}>{commentCount}</Text>
         ) : null}
       </TouchableOpacity>
+      {onAddPhoto ? (
+        <TouchableOpacity
+          style={s.reactionChip}
+          onPress={onAddPhoto}
+          activeOpacity={0.7}
+          accessibilityLabel="Add photo"
+        >
+          <Feather name="camera" size={13} color={theme.text.muted} />
+          <Text style={s.reactionActionText}>Add photo</Text>
+        </TouchableOpacity>
+      ) : null}
       {pickerOpen ? (
         <View style={s.emojiInputWrap}>
           <TextInput
@@ -409,6 +422,29 @@ export default function FeedScreen({ navigation }) {
     }
   }, [hasMore, loading, userId, appendFeedPage]);
 
+  // The round the user is adding a photo to, loaded on demand when they tap
+  // a card's "Add photo" chip. The hook renders the capture/attach sheets.
+  const [attachTarget, setAttachTarget] = useState(null);
+  const { openCaptureMenu, sheets: attachSheets } = useMediaAttachFlow({
+    tournament: attachTarget?.tournament ?? null,
+    defaultRoundIndex: attachTarget?.roundIndex ?? 0,
+    onAttached: () => {
+      invalidateFeedCache();
+      load(false);
+    },
+  });
+
+  const handleAddPhoto = useCallback(async (item) => {
+    try {
+      const t = await getTournament(item.tournamentId);
+      if (!t) throw new Error('not found');
+      setAttachTarget({ tournament: t, roundIndex: item.roundIndex ?? 0 });
+      openCaptureMenu();
+    } catch {
+      Alert.alert("Couldn't load this round", 'Try again in a moment.');
+    }
+  }, [openCaptureMenu]);
+
   useFocusEffect(useCallback(() => {
     let cancelled = false;
     let debounceTimer = null;
@@ -532,6 +568,7 @@ export default function FeedScreen({ navigation }) {
           commentCount={commentCounts[item.key] ?? 0}
           onOpenComments={() => setOpenCommentsItem(item)}
           onReactionAdded={(emoji) => notifyForFeedItem(item, 'feed_reaction', { emoji })}
+          onAddPhoto={(item.withMe || item.isMine) ? () => handleAddPhoto(item) : undefined}
           s={s}
           theme={theme}
         />
@@ -649,6 +686,7 @@ export default function FeedScreen({ navigation }) {
         rounds={[]}
         onClose={() => setOpenStoryKey(null)}
       />
+      {attachSheets}
     </ScreenContainer>
   );
 }
