@@ -8,6 +8,7 @@ import { executeMutation } from './mutationWrites';
 import { applyPendingMutations, preserveLocalConflictState } from './mutate';
 import { upsertPlayer } from './libraryStore';
 import { isOnline, subscribeConnectivity } from '../lib/connectivity';
+import { captureException, captureMessage } from '../lib/errorReporting';
 
 const BACKOFF_MS = [1000, 2000, 4000, 8000, 16000, 32000, 60000];
 let _attempt = 0;
@@ -117,7 +118,7 @@ export async function drainLibrary(libraryMuts) {
           // constraint (SQLSTATE classes 22/23/42, PGRST1xx). Retrying
           // will never succeed, so drop the entry — but still flip the
           // sync indicator so the failure isn't invisible.
-          console.warn(`rpc.call ${m.fn} permanently rejected; dropping: ${error.message}`);
+          captureException(error, { op: 'rpc.call', fn: m.fn, drop: 'permanent' });
           await syncQueue.drop(entry.id);
           _setSyncStatus('error');
           continue;
@@ -137,10 +138,9 @@ export async function drainLibrary(libraryMuts) {
         // tournament could drain).
         const attempts = await syncQueue.incrementAttempts(entry.id);
         if (attempts >= RECOVERABLE_ATTEMPT_CAP) {
-          console.warn(
-            `rpc.call ${m.fn} failed ${attempts} times with a recoverable `
-            + `error (${error?.code ?? 'no code'}); dropping as poison: ${error?.message}`,
-          );
+          captureException(error, {
+            op: 'rpc.call', fn: m.fn, drop: 'poison-cap', attempts,
+          });
           await syncQueue.drop(entry.id);
           _setSyncStatus('error');
           continue;
@@ -192,9 +192,9 @@ export async function drainTournament(tournamentId, entries) {
       await syncQueue.drop(entry.id);
     } catch (error) {
       if (isPermanentSyncError(error)) {
-        console.warn(
-          `mutation ${entry.mutation?.type} permanently rejected; dropping: ${error.message}`,
-        );
+        captureException(error, {
+          op: 'mutation', type: entry.mutation?.type, tournamentId, drop: 'permanent',
+        });
         await syncQueue.drop(entry.id);
         _setSyncStatus('error');
         continue;
@@ -208,10 +208,9 @@ export async function drainTournament(tournamentId, entries) {
 
       const attempts = await syncQueue.incrementAttempts(entry.id);
       if (attempts >= RECOVERABLE_ATTEMPT_CAP) {
-        console.warn(
-          `mutation ${entry.mutation?.type} failed ${attempts} times with a recoverable `
-          + `error (${error?.code ?? 'no code'}); dropping as poison: ${error?.message}`,
-        );
+        captureException(error, {
+          op: 'mutation', type: entry.mutation?.type, tournamentId, drop: 'poison-cap', attempts,
+        });
         await syncQueue.drop(entry.id);
         _setSyncStatus('error');
         continue;
@@ -269,8 +268,11 @@ export async function drainTournament(tournamentId, entries) {
       }
     }
   } catch (error) {
-    // Swallow — worker retries next drain.
-    console.warn(`post-drain reconcile failed for ${tournamentId}: ${error?.message}`);
+    // Swallow — worker retries next drain. Recorded (not silently dropped) so a
+    // reconcile that never succeeds is visible rather than invisible.
+    captureMessage(`post-drain reconcile failed for ${tournamentId}`, {
+      op: 'reconcile', tournamentId, error: error?.message,
+    });
   }
 }
 

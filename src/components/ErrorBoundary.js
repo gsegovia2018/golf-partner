@@ -1,5 +1,6 @@
 import React from 'react';
 import { View, Text, TouchableOpacity, StyleSheet } from 'react-native';
+import { captureException } from '../lib/errorReporting';
 
 // App-wide error boundary. Without it, any uncaught render error unmounts the
 // whole React tree and the user is left staring at a blank screen with no way
@@ -17,9 +18,10 @@ export default class ErrorBoundary extends React.Component {
   }
 
   componentDidCatch(error, info) {
-    // Surfaced to the console so it's visible in dev / device logs. Wire a
-    // crash reporter (e.g. Sentry) in here when one is added.
-    console.error('Uncaught UI error', error, info?.componentStack);
+    // Route through the reporting layer: it logs to the console (dev/device
+    // logs) AND records the crash so it isn't invisible in production. Attach a
+    // vendor SDK via installReporter (see src/lib/errorReporting.js) to ship it.
+    captureException(error, { source: 'ErrorBoundary', componentStack: info?.componentStack });
   }
 
   handleRetry = () => this.setState({ error: null });
