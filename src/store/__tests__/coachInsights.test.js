@@ -435,3 +435,33 @@ describe('offTheTee category insights', () => {
     expect(insight.area).toBe('driving');
   });
 });
+
+describe('pointsPerRound framing', () => {
+  test('SG-per-round category insights carry pointsPerRound ≈ impact', () => {
+    const stats = {
+      strokesGained: {
+        byCategory: { offTheTee: 0, approach: -1.4, aroundGreen: 0, putting: 0, penalties: 0 },
+        sampleHolesByCategory: { offTheTee: 30, approach: 30, aroundGreen: 30, putting: 30, penalties: 30 },
+        sampleHoles: 30,
+      },
+    };
+    const { board } = buildCoachInsights(stats);
+    const approach = [...board.fixFirst, ...board.nextGains].find((i) => i.title === 'Approach');
+    expect(approach.pointsPerRound).toBeCloseTo(-1.4, 2);
+  });
+  test('per-shot and pts-based insights never get pointsPerRound', () => {
+    const stats = {
+      actionPlan: {
+        improvements: [
+          { label: '150-200 m approaches', area: 'Approach', score: -0.31, sample: 14, unit: 'SG / shot', basis: 'vs target hcp' },
+          { label: 'Left misses', area: 'Driving', score: -0.5, sample: 12, unit: 'pts / hole', basis: 'vs your avg' },
+        ],
+      },
+    };
+    const { board } = buildCoachInsights(stats);
+    const all = [...board.fixFirst, ...board.nextGains, ...board.watch];
+    all.forEach((insight) => {
+      expect(insight.pointsPerRound).toBeUndefined();
+    });
+  });
+});

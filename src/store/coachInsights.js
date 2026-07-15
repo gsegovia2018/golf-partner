@@ -138,6 +138,7 @@ function makeInsight({
   confidence,
   tone,
   priority = 0,
+  pointsPerRound,
 }) {
   const normalizedArea = normalizeArea(area);
   return {
@@ -151,6 +152,7 @@ function makeInsight({
     ...(Number.isFinite(impact) ? { impact: round2(impact) } : {}),
     ...(Number.isFinite(sample) ? { sample } : {}),
     ...(basis ? { basis } : {}),
+    ...(Number.isFinite(pointsPerRound) ? { pointsPerRound: round2(pointsPerRound) } : {}),
     confidence: confidence || confidenceForSample(sample),
     tone,
     priority,
@@ -165,6 +167,7 @@ function actionItemInsight(item, group, tone) {
   const reason = tone === 'good'
     ? `${item.label} is gaining ${metric} ${samplePhrase(sample, item.unit, item.sampleUnit)}.`
     : `${item.label} is costing ${metric.replace('-', '')} ${samplePhrase(sample, item.unit, item.sampleUnit)}.`;
+  const isSgPerRound = String(item.unit || '') === 'SG / round';
   return makeInsight({
     group,
     area: actionItemArea(item),
@@ -176,6 +179,7 @@ function actionItemInsight(item, group, tone) {
     basis: actionItemBasis(item),
     confidence,
     tone,
+    ...(isSgPerRound ? { pointsPerRound: item.score } : {}),
   });
 }
 
@@ -258,6 +262,7 @@ function strokesGainedCategoryInsights(stats) {
       confidence: confidenceForSample(sample),
       tone,
       priority: 1,
+      pointsPerRound: value,
     });
     // Penalties are almost always non-positive and tracked on nearly every
     // round, so they are almost always "high confidence". Left unguarded,
