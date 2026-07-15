@@ -13,11 +13,7 @@ import { useTheme } from '../theme/ThemeContext';
 import { supabase } from '../lib/supabase';
 import { loadProfile, upsertProfile, uploadAvatar } from '../store/profileStore';
 import { getShowRunningScore, setShowRunningScore } from '../lib/prefs';
-import { parseHandicapIndex } from '../lib/handicap';
-
-function normalizeHandicapInput(value) {
-  return String(value ?? '').replace(',', '.');
-}
+import { parseHandicapIndex, normalizeHandicapInput } from '../lib/handicap';
 
 export default function ProfileScreen({ navigation, route }) {
   const { theme, mode, toggle } = useTheme();

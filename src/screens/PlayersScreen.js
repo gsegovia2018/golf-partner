@@ -122,10 +122,20 @@ export default function PlayersScreen({ navigation, route }) {
     if (!t) return;
     let chosenMode = initialChosenMode;
     const cap = rosterCap(t.kind);
+    const skipped = [];
     for (const p of picked) {
       if ((t.players ?? []).length >= cap) break;
       if ((t.players ?? []).some((x) => x.id === p.id)) continue;
       const parsed = parseHandicapIndex(p.handicap);
+      if (!parsed.ok && parsed.reason === 'invalid') {
+        // A library-stored handicap should already be valid (libraryStore /
+        // PlayersLibraryScreen block invalid saves at the source) — this is
+        // a defensive guard, not the primary entry point. Skip adding this
+        // player rather than silently defaulting their handicap to 0, which
+        // would badly skew their net scoring.
+        skipped.push(p.name);
+        continue;
+      }
       // Carry the account link (user_id) + avatar through. Dropping them here
       // saved a friend-with-account as a plain local name, so the participant
       // → member → "added to game" notification path never fired and that
@@ -149,6 +159,11 @@ export default function PlayersScreen({ navigation, route }) {
       chosenMode = undefined;
     }
     await load();
+    if (skipped.length > 0) {
+      const msg = `Could not add ${skipped.join(', ')}: invalid handicap on file. Fix it in the players library first.`;
+      if (Platform.OS === 'web') window.alert(msg);
+      else Alert.alert('Some players not added', msg);
+    }
   }, [load, tournamentId]);
 
   const applyAddPlayers = useCallback(async (picked) => {
@@ -250,6 +265,20 @@ export default function PlayersScreen({ navigation, route }) {
     if (saveTimeoutRef.current) clearTimeout(saveTimeoutRef.current);
     setSaveState('saving');
     saveTimeoutRef.current = setTimeout(async () => {
+      // A genuinely invalid handicap (garbage, out of range) must never be
+      // silently persisted as 0 — that badly skews net scoring. Block the
+      // whole autosave (keeping the last-synced value on the server) until
+      // the field is fixed or cleared; the save pill already renders an
+      // 'error' state for this. parseHandicapIndex normalizes a comma
+      // decimal on its own, so this only fires for real typos.
+      const hasInvalidHandicap = editPlayers.some((p) => {
+        const r = parseHandicapIndex(p.handicap);
+        return !r.ok && r.reason === 'invalid';
+      });
+      if (hasInvalidHandicap) {
+        setSaveState('error');
+        return;
+      }
       try {
         const builtPlayers = editPlayers.map((p) => {
           const r = parseHandicapIndex(p.handicap);

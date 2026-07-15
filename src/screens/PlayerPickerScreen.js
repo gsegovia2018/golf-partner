@@ -101,10 +101,18 @@ export default function PlayerPickerScreen({ navigation, route }) {
   async function addAndSelect({ name, handicap } = { name: newName, handicap: newHcp }) {
     const trimmed = (name ?? '').trim();
     if (!trimmed) return;
+    // Reject a genuinely bad handicap (garbage, out of range) up front rather
+    // than silently saving it as 0 — a comma-locale Android keyboard yields
+    // "12,5" here, which parseHandicapIndex now normalizes on its own, so
+    // this only fires for actual typos.
+    const parsedHcp = parseHandicapIndex(handicap);
+    if (!parsedHcp.ok && parsedHcp.reason === 'invalid') {
+      Alert.alert('Invalid handicap', 'Handicap must be a number between 0 and 54, with up to one decimal place.');
+      return;
+    }
     setSaving(true);
     try {
       const playerId = uuidv4();
-      const parsedHcp = parseHandicapIndex(handicap);
       const hcp = parsedHcp.ok ? parsedHcp.value : 0;
       // Gender is not asked for here — quick-added guests default to male;
       // exceptions are edited later in the Players library.

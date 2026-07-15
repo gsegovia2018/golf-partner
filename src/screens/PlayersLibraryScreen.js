@@ -61,6 +61,17 @@ export default function PlayersLibraryScreen() {
 
   async function save() {
     if (!name.trim()) return;
+    // Reject a genuinely bad handicap (garbage, out of range) up front rather
+    // than silently saving it as 0. parseHandicapIndex normalizes a comma
+    // decimal (comma-locale Android keyboards emit "12,5" from this
+    // decimal-pad field) on its own, so this only fires for real typos.
+    const parsed = parseHandicapIndex(handicap);
+    if (!parsed.ok && parsed.reason === 'invalid') {
+      const msg = 'Handicap must be a number between 0 and 54, with up to one decimal place.';
+      if (Platform.OS === 'web') window.alert(msg);
+      else Alert.alert('Invalid handicap', msg);
+      return;
+    }
     setSaving(true);
     try {
       if (editingId) {
@@ -72,7 +83,6 @@ export default function PlayersLibraryScreen() {
         // Create path goes through mutate() with a client UUID so it works
         // offline; the sync worker flushes to Supabase when back online.
         const playerId = uuidv4();
-        const parsed = parseHandicapIndex(handicap);
         const hcp = parsed.ok ? parsed.value : 0;
         await mutate(null, {
           type: 'player.upsertLibrary',
@@ -141,7 +151,13 @@ export default function PlayersLibraryScreen() {
             value={handicap}
             onChangeText={setHandicap}
           />
-          <TouchableOpacity style={s.addBtn} onPress={save} disabled={saving || !name.trim()} activeOpacity={0.7}>
+          <TouchableOpacity
+            style={s.addBtn}
+            onPress={save}
+            disabled={saving || !name.trim()}
+            activeOpacity={0.7}
+            accessibilityLabel={editingId ? 'Save player' : 'Add player'}
+          >
             <Feather name={editingId ? 'check' : 'plus'} size={20} color={theme.isDark ? theme.accent.primary : theme.text.inverse} />
           </TouchableOpacity>
           {editingId && (
