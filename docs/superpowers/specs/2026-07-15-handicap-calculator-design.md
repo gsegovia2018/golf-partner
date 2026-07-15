@@ -102,10 +102,9 @@ existing tab components:
 2. **Differentials list** — the last-20 rounds with course name, date, AGS,
    and differential; counting rounds visually highlighted. Ineligible recent
    rounds are not listed (the explainer covers eligibility rules).
-3. **Course handicap preview** — course picker (library courses) + tee picker;
-   shows `calcPlayingHandicap(index, tee.slope, tee.rating, par)` — "you'd
-   play off N there". Uses the calculated index; falls back to the profile
-   handicap when the calculated index is unavailable.
+3. Course handicap preview: built, then removed by user decision 2026-07-15 —
+   read as per-course calculation and duplicated game setup's automatic
+   conversion.
 4. **"Set as my handicap" button** — writes the calculated index to the
    profile via `upsertProfile({ handicap })`, with a confirmation state
    showing the current profile value next to the calculated one. Explicit

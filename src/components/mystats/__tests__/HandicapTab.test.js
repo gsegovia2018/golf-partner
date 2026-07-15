@@ -8,20 +8,6 @@ jest.mock('../../../store/profileStore', () => ({
   upsertProfile: jest.fn(() => Promise.resolve()),
 }));
 
-const mockCourses = [{
-  id: 'c1',
-  name: 'Villaitana Levante',
-  holes: Array.from({ length: 18 }, (_, i) => ({ number: i + 1, par: 4, strokeIndex: i + 1 })),
-  tees: [
-    { id: 'tee-y', label: 'Yellow', rating: 71.5, slope: 128, ratingWomen: null, slopeWomen: null },
-    { id: 'tee-r', label: 'Red', rating: 69.0, slope: 118, ratingWomen: 71.0, slopeWomen: 124 },
-  ],
-}];
-jest.mock('../../../store/libraryStore', () => ({
-  fetchCourses: jest.fn(() => Promise.resolve(mockCourses)),
-  getCachedCourses: jest.fn(() => Promise.resolve([])),
-}));
-
 const holes = Array.from({ length: 18 }, (_, i) => ({
   number: i + 1, par: 4, strokeIndex: i + 1,
 }));
@@ -85,23 +71,5 @@ describe('HandicapTab', () => {
   it('shows the empty state below 3 eligible rounds', async () => {
     const { findByText } = renderTab({ myRounds: [myRound('a', 10)] });
     expect(await findByText(/2 more/i)).toBeTruthy();
-  });
-});
-
-describe('course handicap preview', () => {
-  it('shows the playing handicap for the selected course and tee', async () => {
-    const { findByText } = renderTab();
-    fireEvent.press(await findByText('Villaitana Levante'));
-    fireEvent.press(await findByText('Yellow'));
-    // index 8.0 → round(8 × 128/113 + (71.5 − 72)) = round(8.56) = 9
-    expect(await findByText(/you'd play off 9/i)).toBeTruthy();
-  });
-
-  it('uses women’s ratings for female players', async () => {
-    const { findByText } = renderTab({ gender: 'female' });
-    fireEvent.press(await findByText('Villaitana Levante'));
-    fireEvent.press(await findByText('Red'));
-    // index 8.0 → round(8 × 124/113 + (71.0 − 72)) = round(7.78) = 8
-    expect(await findByText(/you'd play off 8/i)).toBeTruthy();
   });
 });
