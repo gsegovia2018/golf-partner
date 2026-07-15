@@ -2,7 +2,7 @@ import React, { useMemo } from 'react';
 import { View, Text, StyleSheet, TouchableOpacity } from 'react-native';
 import { Feather } from '@expo/vector-icons';
 import { useTheme } from '../../theme/ThemeContext';
-import { formatConfidence, formatSample } from './CoachInsightRow';
+import { formatConfidence, formatSample, formatPointsPerRound } from './CoachInsightRow';
 
 const GROUP_LABELS = {
   fixFirst: 'Fix first',
@@ -39,7 +39,14 @@ export default function CoachHero({ insight, onCommitFocus, focusActive = false 
       <Text style={s.title}>{insight.title}</Text>
       {insight.reason ? <Text style={s.reason}>{insight.reason}</Text> : null}
       <View style={s.bottomRow}>
-        {insight.metric ? <Text style={[s.metric, { color: tone.color }]}>{insight.metric}</Text> : null}
+        {insight.metric ? (
+          <View style={{ flexShrink: 1 }}>
+            <Text style={[s.metric, { color: tone.color }]}>{insight.metric}</Text>
+            {Number.isFinite(insight.pointsPerRound) ? (
+              <Text style={[s.pointsCaption, { color: tone.metaColor }]}>{formatPointsPerRound(insight.pointsPerRound)}</Text>
+            ) : null}
+          </View>
+        ) : null}
         <View style={s.chips}>
           {proofs.map((proof) => (
             <View key={proof} style={[s.chip, { backgroundColor: tone.chipColor }]}>
@@ -110,6 +117,7 @@ function makeStyles(theme) {
     reason: { ...theme.typography.body, color: theme.text.secondary },
     bottomRow: { flexDirection: 'row', alignItems: 'flex-end', justifyContent: 'space-between', gap: theme.spacing.md },
     metric: { ...theme.typography.title, flexShrink: 1 },
+    pointsCaption: { ...theme.typography.tiny, fontWeight: '700' },
     chips: { flexDirection: 'row', justifyContent: 'flex-end', flexWrap: 'wrap', gap: theme.spacing.xs, flex: 1 },
     chip: {
       flexDirection: 'row',

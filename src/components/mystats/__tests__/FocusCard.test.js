@@ -77,4 +77,12 @@ describe('CoachHero focus button', () => {
     const noHandler = render(<CoachHero insight={insight} />);
     expect(noHandler.queryByLabelText('Make this my focus')).toBeNull();
   });
+  test('shows the points equivalent when present', () => {
+    const r = render(<CoachHero insight={{ ...insight, pointsPerRound: -1.8 }} />);
+    expect(r.getByText('≈ -1.8 pts / round')).toBeTruthy();
+  });
+  test('no points caption without pointsPerRound', () => {
+    const r = render(<CoachHero insight={insight} />);
+    expect(r.queryByText(/pts \/ round/)).toBeNull();
+  });
 });

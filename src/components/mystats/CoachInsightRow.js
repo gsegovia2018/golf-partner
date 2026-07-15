@@ -40,6 +40,12 @@ function formatConfidence(confidence) {
   return `${confidence.slice(0, 1).toUpperCase()}${confidence.slice(1)} confidence`;
 }
 
+function formatPointsPerRound(pointsPerRound) {
+  if (!Number.isFinite(pointsPerRound)) return null;
+  const sign = pointsPerRound > 0 ? '+' : '';
+  return `≈ ${sign}${pointsPerRound} pts / round`;
+}
+
 export default function CoachInsightRow({ insight, practiceRole }) {
   const { theme } = useTheme();
   const s = useMemo(() => makeStyles(theme), [theme]);
@@ -74,9 +80,14 @@ export default function CoachInsightRow({ insight, practiceRole }) {
         {insight.reason ? <Text style={s.reason}>{insight.reason}</Text> : null}
       </View>
       {insight.metric ? (
-        <Text style={[s.metric, { color }]} testID={`coach-insight-metric-${toneName}`}>
-          {insight.metric}
-        </Text>
+        <View style={s.metricWrap}>
+          <Text style={[s.metric, { color }]} testID={`coach-insight-metric-${toneName}`}>
+            {insight.metric}
+          </Text>
+          {Number.isFinite(insight.pointsPerRound) ? (
+            <Text style={s.pointsCaption}>{formatPointsPerRound(insight.pointsPerRound)}</Text>
+          ) : null}
+        </View>
       ) : null}
     </View>
   );
@@ -114,8 +125,10 @@ function makeStyles(theme) {
     practiceText: { ...theme.typography.tiny, color: theme.text.secondary, fontWeight: '800' },
     title: { ...theme.typography.subhead, color: theme.text.primary },
     reason: { ...theme.typography.caption, color: theme.text.secondary },
-    metric: { ...theme.typography.caption, fontWeight: '800', maxWidth: 92, textAlign: 'right' },
+    metricWrap: { maxWidth: 92 },
+    metric: { ...theme.typography.caption, fontWeight: '800', textAlign: 'right' },
+    pointsCaption: { ...theme.typography.tiny, color: theme.text.muted, textAlign: 'right' },
   });
 }
 
-export { formatConfidence, formatSample };
+export { formatConfidence, formatSample, formatPointsPerRound };

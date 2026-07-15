@@ -78,6 +78,16 @@ describe('Coach components', () => {
     expect(new Set(rendered.map((state) => state.backgroundColor)).size).toBe(3);
   });
 
+  test('CoachInsightRow shows the points equivalent when pointsPerRound is present', () => {
+    const { getByText, queryByText, rerender } = render(
+      wrap(<CoachInsightRow insight={{ ...insight, pointsPerRound: -1.4 }} />),
+    );
+    expect(getByText('≈ -1.4 pts / round')).toBeTruthy();
+
+    rerender(wrap(<CoachInsightRow insight={insight} />));
+    expect(queryByText(/pts \/ round/)).toBeNull();
+  });
+
   test('CoachBoard renders multiple diagnostic groups', () => {
     const board = {
       fixFirst: [insight],
