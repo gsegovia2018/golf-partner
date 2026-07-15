@@ -42,6 +42,22 @@ export default function SetNewPasswordScreen() {
     }
   }
 
+  // Escape hatch: without this the user is stuck on this screen until an
+  // updateUser succeeds. Sign out any recovery session (they arrived via a
+  // reset link, not a normal login) and clear the recovery flag so App.js
+  // returns to the sign-in screen.
+  async function cancel() {
+    setLoading(true);
+    try {
+      await supabase.auth.signOut();
+    } catch {
+      // Ignore — clearing the recovery flag below still frees the user.
+    } finally {
+      setLoading(false);
+      clearPasswordRecovery();
+    }
+  }
+
   return (
     <KeyboardAvoidingView style={s.screen} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
       <View style={s.inner}>
@@ -88,6 +104,15 @@ export default function SetNewPasswordScreen() {
             {loading
               ? <ActivityIndicator color={theme.isDark ? theme.accent.primary : theme.text.inverse} />
               : <Text style={s.btnText}>Set new password</Text>}
+          </TouchableOpacity>
+
+          <TouchableOpacity
+            style={s.cancelBtn}
+            onPress={cancel}
+            disabled={loading}
+            activeOpacity={0.7}
+          >
+            <Text style={s.cancelText}>Back to sign in</Text>
           </TouchableOpacity>
         </View>
       </View>
@@ -139,5 +164,10 @@ const makeStyles = (theme) => StyleSheet.create({
     fontFamily: 'PlusJakartaSans-ExtraBold',
     color: theme.isDark ? theme.accent.primary : theme.text.inverse,
     fontSize: 16,
+  },
+  cancelBtn: { alignItems: 'center', paddingVertical: 14, marginTop: 4 },
+  cancelText: {
+    fontFamily: 'PlusJakartaSans-SemiBold',
+    fontSize: 13, color: theme.text.muted,
   },
 });

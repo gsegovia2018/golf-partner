@@ -3,6 +3,7 @@ import { Platform } from 'react-native';
 import * as Linking from 'expo-linking';
 import { supabase } from '../lib/supabase';
 import { parseRecoveryUrl, isResetPasswordUrl, isRecoveryRedirectType } from '../lib/passwordReset';
+import { stripRecoveryMarker } from '../lib/oauth';
 
 const isWeb = Platform.OS === 'web';
 
@@ -42,13 +43,23 @@ export function AuthProvider({ children }) {
     if (!isResetPasswordUrl(url)) return;
 
     if (isWeb) {
-      // Supabase's `detectSessionInUrl` already exchanges the `code` for a
-      // session in the background on web (same mechanism as OAuth), and that
-      // PKCE auto-exchange can't emit PASSWORD_RECOVERY — so we recognise the
-      // recovery load via the `type=recovery` marker we appended to the web
-      // redirect (see getPasswordResetRedirectTo) and just flag it. App.js
-      // then routes to the set-password screen once the session lands.
-      setPasswordRecovery(true);
+      // Supabase's `detectSessionInUrl` exchanges a VALID recovery link's
+      // `code` for a session during client init; `getSession()` awaits that
+      // init, so if it still returns no session the link was expired/invalid.
+      // Only enter recovery mode with an actually-established session —
+      // otherwise `updateUser` could never succeed and, since the set-password
+      // screen's only auto-exit is on success, we'd strand the user with no
+      // escape. On a bad link we fall through to the normal auth screen.
+      const { data: { session: s } } = await supabase.auth.getSession();
+      if (s) setPasswordRecovery(true);
+      // Strip our `type=recovery` marker either way so a reload (e.g. after a
+      // successful reset) doesn't re-trigger recovery. detectSessionInUrl
+      // already removed `code`.
+      if (typeof window !== 'undefined' && window.history && window.location) {
+        window.history.replaceState(
+          window.history.state, '', stripRecoveryMarker(window.location.href),
+        );
+      }
       return;
     }
 

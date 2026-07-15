@@ -1,4 +1,6 @@
-import { parseOAuthError, getWebRedirectTo, getPasswordResetRedirectTo } from '../oauth';
+import {
+  parseOAuthError, getWebRedirectTo, getPasswordResetRedirectTo, stripRecoveryMarker,
+} from '../oauth';
 
 describe('parseOAuthError', () => {
   it('returns null when the URL carries no error', () => {
@@ -78,5 +80,38 @@ describe('getPasswordResetRedirectTo', () => {
   it('prefers the deep link over an incidentally-present window on native', () => {
     global.window = { location: { origin: 'https://app.example.com', pathname: '/' } };
     expect(getPasswordResetRedirectTo('android', 'golf://reset-password')).toBe('golf://reset-password');
+  });
+});
+
+describe('stripRecoveryMarker', () => {
+  it('removes the type=recovery marker, leaving a clean URL', () => {
+    expect(stripRecoveryMarker('https://app.example.com/?type=recovery'))
+      .toBe('https://app.example.com/');
+  });
+
+  it('keeps other query params while removing only the marker', () => {
+    expect(stripRecoveryMarker('https://app.example.com/?foo=1&type=recovery&bar=2'))
+      .toBe('https://app.example.com/?foo=1&bar=2');
+  });
+
+  it('preserves a sub-path deploy', () => {
+    expect(stripRecoveryMarker('https://example.com/golf/?type=recovery'))
+      .toBe('https://example.com/golf/');
+  });
+
+  it('leaves a URL without the marker unchanged', () => {
+    expect(stripRecoveryMarker('https://app.example.com/?code=abc'))
+      .toBe('https://app.example.com/?code=abc');
+  });
+
+  it('does not touch a non-recovery type value', () => {
+    expect(stripRecoveryMarker('https://app.example.com/?type=signup'))
+      .toBe('https://app.example.com/?type=signup');
+  });
+
+  it('returns the input as-is for empty / non-string values', () => {
+    expect(stripRecoveryMarker('')).toBe('');
+    expect(stripRecoveryMarker(undefined)).toBeUndefined();
+    expect(stripRecoveryMarker(null)).toBeNull();
   });
 });

@@ -8,6 +8,7 @@ jest.mock('../../lib/supabase', () => ({
   supabase: {
     auth: {
       updateUser: jest.fn(),
+      signOut: jest.fn(() => Promise.resolve({ error: null })),
     },
   },
 }));
@@ -88,5 +89,23 @@ describe('SetNewPasswordScreen', () => {
       expect(Alert.alert).toHaveBeenCalledWith('Error', 'Session expired');
     });
     expect(mockClearPasswordRecovery).not.toHaveBeenCalled();
+  });
+
+  test('offers a "Back to sign in" escape that signs out and clears recovery', async () => {
+    const { getByText } = render(<SetNewPasswordScreen />);
+
+    fireEvent.press(getByText('Back to sign in'));
+
+    await waitFor(() => expect(supabase.auth.signOut).toHaveBeenCalled());
+    expect(mockClearPasswordRecovery).toHaveBeenCalled();
+  });
+
+  test('escape still frees the user even if signOut throws', async () => {
+    supabase.auth.signOut.mockRejectedValueOnce(new Error('network'));
+    const { getByText } = render(<SetNewPasswordScreen />);
+
+    fireEvent.press(getByText('Back to sign in'));
+
+    await waitFor(() => expect(mockClearPasswordRecovery).toHaveBeenCalled());
   });
 });
