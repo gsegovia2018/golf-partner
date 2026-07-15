@@ -221,3 +221,18 @@ Two separate implementation plans:
 1. **Phase 1 — Trustworthy SG** (data fields → engine → UI).
 2. **Phase 2 — Coach** (drills → focus loop → strategy → points framing),
    building on Phase 1's outputs.
+
+## Amendment (2026-07-15, post-Phase 2): penalties vs target
+
+User finding: penalties was the only category benchmarked against zero
+(raw count), so it never responded to the target handicap — vs a 25 target
+it overstated the loss by the ~2 penalties/round a real 25 takes.
+
+Change: `sgPenalties(round, playerId, targetHandicap)` now scores each
+tracked hole as `expectedPenaltiesPerHole(target) − actualPenalties`.
+Expected penalties per round = linear blend anchored at 0 (scratch) and
+1.0 (14 hcp), t clamped [0, 2] (→ ~1.79 at 25, cap 2.0). Scratch behavior
+is unchanged (expected 0). Clean holes now contribute a small positive vs
+a non-scratch target, matching every other category's semantics. The SG
+explainer's penalties sentence is updated accordingly. Reconciliation and
+coach routing consume the new values unchanged.
