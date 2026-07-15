@@ -13,11 +13,6 @@ import {
 
 const round1 = (n) => Math.round(n * 10) / 10;
 
-// WHS score differential for one MyRound, or null when the round doesn't
-// qualify: must be a complete 18-hole round with a numeric slope > 0 and a
-// numeric course rating (from the player's tee snapshot, with round-level
-// legacy fallback). Gross scores are capped per hole at net double bogey
-// (par + 2 + extra shots) before the differential is computed.
 // Why a round doesn't qualify for a differential. Check order matters: an
 // unfinished short round reads as 'partial' (the actionable problem), only a
 // finished non-18-hole round reads as 'nine-holes'.
@@ -32,6 +27,11 @@ export function roundEligibility(myRound) {
   return { eligible: true };
 }
 
+// WHS score differential for one MyRound, or null when the round doesn't
+// qualify: must be a complete 18-hole round with a numeric slope > 0 and a
+// numeric course rating (from the player's tee snapshot, with round-level
+// legacy fallback). Gross scores are capped per hole at net double bogey
+// (par + 2 + extra shots) before the differential is computed.
 export function roundDifferential(myRound) {
   if (!myRound?.isComplete) return null;
   const { round, player, playerId } = myRound;
