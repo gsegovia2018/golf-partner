@@ -291,6 +291,13 @@ export const statExplainers = {
       + 'other stats tabs. Rounds only qualify when they are complete 18-hole, non-scramble '
       + 'rounds on a tee with a slope and course rating.\n\n'
       + 'Playing-conditions adjustments, caps against your historical low index, and 9-hole '
-      + 'differentials are not applied — treat this as a strong estimate, not an official index.',
+      + 'differentials are not applied — treat this as a strong estimate, not an official index.'
+      + '\n\nYou can exclude a round from the calculation — it is then treated '
+      + 'as never played, and an older round may re-enter the 20-round window. '
+      + 'The official WHS index always counts every qualifying round, so an '
+      + 'edited calculation is your personal estimate.\n\n'
+      + 'Grey rounds do not qualify and show why: partial (not all 18 holes '
+      + 'scored), not an 18-hole course, or no slope/course rating on the tee '
+      + 'you played. Scramble rounds never appear — they have no individual score.',
   },
 };

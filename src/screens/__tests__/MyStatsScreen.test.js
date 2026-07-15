@@ -115,9 +115,17 @@ jest.mock('../../components/mystats/tabs/ShotsTab', () => function MockShotsTab(
   return <Text>Strokes Gained content</Text>;
 });
 
-jest.mock('../../components/mystats/tabs/HandicapTab', () => function MockHandicapTab({ myRounds, profileHandicap }) {
-  const { Text } = require('react-native');
-  return <Text>{`Handicap tab: ${myRounds.length} rounds, profile ${profileHandicap}`}</Text>;
+jest.mock('../../components/mystats/tabs/HandicapTab', () => function MockHandicapTab({ myRounds, profileHandicap, excludedKeys, onToggleExcluded }) {
+  const { Text, TouchableOpacity } = require('react-native');
+  return (
+    <>
+      <Text>{`Handicap tab: ${myRounds.length} rounds, profile ${profileHandicap}`}</Text>
+      <Text>{`Excluded count: ${excludedKeys ? excludedKeys.size : 'none'}`}</Text>
+      <TouchableOpacity onPress={() => onToggleExcluded('t-1:0')}>
+        <Text>Toggle exclusion</Text>
+      </TouchableOpacity>
+    </>
+  );
 });
 
 beforeEach(() => {
@@ -373,5 +381,36 @@ describe('round selection persistence', () => {
       const raw = await AsyncStorage.getItem('@mystats_round_selection:local');
       expect(raw).not.toBeNull();
     });
+  });
+});
+
+describe('handicap exclusion persistence', () => {
+  beforeEach(async () => {
+    await AsyncStorage.clear();
+    // These tests are about storage round-trips, so restore the real
+    // per-key read against the mock's in-memory backing store (the
+    // file-level beforeEach forces getItem to resolve null).
+    AsyncStorage.getItem.mockImplementation((key) => (
+      Promise.resolve(AsyncStorage.__INTERNAL_MOCK_STORAGE__[key] ?? null)
+    ));
+  });
+
+  it('persists a toggled exclusion under the user-scoped key', async () => {
+    const view = renderScreen();
+    const tabs = await view.findAllByText('Handicap');
+    fireEvent.press(tabs[0]);
+    fireEvent.press(await view.findByText('Toggle exclusion'));
+    await waitFor(async () => {
+      const raw = await AsyncStorage.getItem('@handicap_round_exclusions:user-1');
+      expect(JSON.parse(raw)).toEqual(['t-1:0']);
+    });
+  });
+
+  it('restores stored exclusions on load', async () => {
+    await AsyncStorage.setItem('@handicap_round_exclusions:user-1', JSON.stringify(['t-1:0']));
+    const view = renderScreen();
+    const tabs = await view.findAllByText('Handicap');
+    fireEvent.press(tabs[0]);
+    expect(await view.findByText('Excluded count: 1')).toBeTruthy();
   });
 });
