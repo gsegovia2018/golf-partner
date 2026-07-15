@@ -125,3 +125,95 @@ describe('buildCourseBreakdown summary', () => {
     expect(b.shots.drives.fairwayPct).toBe(100);
   });
 });
+
+describe('buildCourseBreakdown holes', () => {
+  test('pools each hole across rounds: averages, best score, latest-wins metadata', () => {
+    const h1 = mkHoles(18);
+    // Second visit: hole 1 re-labelled par 5, SI unchanged.
+    const h2 = mkHoles(18).map((h) => (h.number === 1 ? { ...h, par: 5 } : h));
+    const s1 = evenScores(h1, 5); // hole 1: 5 (+1 on par 4)
+    const s2 = evenScores(h2, 4); // hole 1: 4 (-1 on par 5)
+    const rounds = myRoundsFor([
+      mkRound({ courseId: 'c-1', holes: h1, scores: { p1: s1 } }),
+      mkRound({ courseId: 'c-1', holes: h2, scores: { p1: s2 } }),
+    ]);
+    const { holes } = buildCourseBreakdown(filterRoundsToCourse(rounds, 'c-1'));
+    expect(holes).toHaveLength(18);
+    const hole1 = holes[0];
+    expect(hole1).toMatchObject({
+      holeNumber: 1,
+      par: 5,               // latest round's metadata wins
+      strokeIndex: 1,
+      timesPlayed: 2,
+      avgStrokes: 4.5,
+      avgVsPar: 0,          // (+1 + -1) / 2
+      bestStrokes: 4,
+    });
+    // hole 2 (par 4 both rounds): 5 then 4 → avgVsPar +0.5, points (1+2)/2
+    expect(holes[1]).toMatchObject({ avgVsPar: 0.5, avgPoints: 1.5, bestStrokes: 4 });
+  });
+
+  test('partial rounds contribute only their scored holes', () => {
+    const h = mkHoles(18);
+    const partial = evenScores(h, 6);
+    delete partial[18];
+    const rounds = myRoundsFor([
+      mkRound({ courseId: 'c-1', scores: { p1: evenScores(h, 4) } }),
+      mkRound({ courseId: 'c-1', scores: { p1: partial } }),
+    ]);
+    const { holes } = buildCourseBreakdown(filterRoundsToCourse(rounds, 'c-1'));
+    expect(holes[0].timesPlayed).toBe(2);
+    expect(holes[17].timesPlayed).toBe(1);   // hole 18 unscored in round 2
+    expect(holes[17].avgStrokes).toBe(4);
+  });
+
+  test('per-hole putts average and penalty totals; null putts when never logged', () => {
+    const h = mkHoles(18);
+    const d1 = { 1: { putts: 3, teePenalties: 1 }, 2: { putts: 2 } };
+    const d2 = { 1: { putts: 1, otherPenalties: 1 } };
+    const rounds = myRoundsFor([
+      mkRound({ courseId: 'c-1', scores: { p1: evenScores(h, 5) }, shotDetails: { p1: d1 } }),
+      mkRound({ courseId: 'c-1', scores: { p1: evenScores(h, 5) }, shotDetails: { p1: d2 } }),
+    ]);
+    const { holes } = buildCourseBreakdown(filterRoundsToCourse(rounds, 'c-1'));
+    expect(holes[0].avgPutts).toBe(2);       // (3+1)/2
+    expect(holes[0].penalties).toBe(2);      // 1 tee + 1 other
+    expect(holes[1].avgPutts).toBe(2);       // logged once
+    expect(holes[2].avgPutts).toBeNull();
+    expect(holes[2].penalties).toBe(0);
+  });
+
+  test('9-hole course produces 9 rows', () => {
+    const h = mkHoles(9);
+    const rounds = myRoundsFor([
+      mkRound({ courseId: 'c-9', holes: h, scores: { p1: evenScores(h, 5) } }),
+    ]);
+    expect(buildCourseBreakdown(filterRoundsToCourse(rounds, 'c-9')).holes).toHaveLength(9);
+  });
+});
+
+describe('buildCourseBreakdown highlights', () => {
+  test('nemesis is the worst pooled hole, best the lowest, needing 2+ rounds per hole', () => {
+    const h = mkHoles(18);
+    const bad = evenScores(h, 5);
+    bad[7] = 8;   // hole 7 blows up both rounds
+    const good = evenScores(h, 5);
+    good[7] = 8;
+    good[3] = 3;  // hole 3 shines once
+    const rounds = myRoundsFor([
+      mkRound({ courseId: 'c-1', scores: { p1: bad } }),
+      mkRound({ courseId: 'c-1', scores: { p1: good } }),
+    ]);
+    const { highlights } = buildCourseBreakdown(filterRoundsToCourse(rounds, 'c-1'));
+    expect(highlights.nemesis.holeNumber).toBe(7);
+    expect(highlights.best.holeNumber).toBe(3);
+  });
+
+  test('a single-round course makes no highlight claim', () => {
+    const h = mkHoles(18);
+    const rounds = myRoundsFor([
+      mkRound({ courseId: 'c-1', scores: { p1: evenScores(h, 5) } }),
+    ]);
+    expect(buildCourseBreakdown(filterRoundsToCourse(rounds, 'c-1')).highlights).toBeNull();
+  });
+});

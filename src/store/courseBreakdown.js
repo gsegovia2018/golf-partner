@@ -11,6 +11,9 @@ import {
 import {
   shotStats, playerScoreDistribution, frontBackSplit, courseDNA,
 } from './statsEngine';
+import {
+  getPlayingHandicap, calcStablefordPoints,
+} from './tournamentStore';
 
 // Navigable identity of a collectMyRounds entry — courseId when the round has
 // one, else the raw (non-empty) courseName, else null. Must match the
@@ -70,10 +73,81 @@ export function buildCourseBreakdown(courseRounds) {
   };
 }
 
-// Implemented in the next task.
-function buildHoleRows() {
-  return [];
+const round2 = (n) => Math.round(n * 100) / 100;
+const round1 = (n) => Math.round(n * 10) / 10;
+
+// One row per physical hole, pooled by hole number across every round that
+// scored it (courseDNA's partial-rounds-count-their-holes rule). Chronological
+// iteration makes par/SI metadata and row order latest-wins.
+function buildHoleRows(synthetic) {
+  const me = synthetic.players[0];
+  const byNumber = new Map();
+  let latestOrder = [];
+
+  synthetic.rounds.forEach((round) => {
+    const scores = round.scores?.[CANON_ID];
+    if (!scores) return;
+    const handicap = getPlayingHandicap(round, me);
+    (round.holes ?? []).forEach((hole) => {
+      const sc = scores[hole.number];
+      if (sc == null) return;
+      let e = byNumber.get(hole.number);
+      if (!e) {
+        e = {
+          holeNumber: hole.number, timesPlayed: 0, strokesSum: 0, vsParSum: 0,
+          pointsSum: 0, bestStrokes: Infinity, puttsSum: 0, puttsCount: 0, penalties: 0,
+        };
+        byNumber.set(hole.number, e);
+      }
+      e.par = hole.par;
+      e.strokeIndex = hole.strokeIndex ?? null;
+      e.timesPlayed += 1;
+      e.strokesSum += sc;
+      e.vsParSum += sc - hole.par;
+      e.pointsSum += calcStablefordPoints(hole.par, sc, handicap, hole.strokeIndex);
+      if (sc < e.bestStrokes) e.bestStrokes = sc;
+      const d = round.shotDetails?.[CANON_ID]?.[hole.number];
+      if (d?.putts != null) { e.puttsSum += d.putts; e.puttsCount += 1; }
+      e.penalties += (d?.teePenalties ?? 0) + (d?.otherPenalties ?? 0);
+    });
+    if (round.holes?.length) latestOrder = round.holes.map((h) => h.number);
+  });
+
+  // Latest round's hole order first; holes that only exist in older rounds
+  // (course edited/renumbered) append in number order.
+  const ordered = [];
+  const seen = new Set();
+  latestOrder.forEach((n) => {
+    const e = byNumber.get(n);
+    if (e) { ordered.push(e); seen.add(n); }
+  });
+  [...byNumber.keys()].filter((n) => !seen.has(n)).sort((a, b) => a - b)
+    .forEach((n) => ordered.push(byNumber.get(n)));
+
+  return ordered.map((e) => ({
+    holeNumber: e.holeNumber,
+    par: e.par,
+    strokeIndex: e.strokeIndex,
+    timesPlayed: e.timesPlayed,
+    avgStrokes: round2(e.strokesSum / e.timesPlayed),
+    avgVsPar: round2(e.vsParSum / e.timesPlayed),
+    avgPoints: round2(e.pointsSum / e.timesPlayed),
+    bestStrokes: e.bestStrokes,
+    avgPutts: e.puttsCount > 0 ? round1(e.puttsSum / e.puttsCount) : null,
+    penalties: e.penalties,
+  }));
 }
-function buildHighlights() {
-  return null;
+
+// Nemesis/best claims need at least 2 observations of a hole (one bad day is
+// noise, not a nemesis) and at least 2 distinct eligible holes — with one,
+// "nemesis" and "best" would be the same row.
+const HIGHLIGHT_MIN_ROUNDS = 2;
+
+function buildHighlights(holes) {
+  const eligible = holes.filter((h) => h.timesPlayed >= HIGHLIGHT_MIN_ROUNDS);
+  if (eligible.length < 2) return null;
+  const nemesis = eligible.reduce((m, h) => (h.avgVsPar > m.avgVsPar ? h : m));
+  const best = eligible.reduce((m, h) => (h.avgVsPar < m.avgVsPar ? h : m));
+  if (nemesis === best) return null;
+  return { nemesis, best };
 }
