@@ -4,11 +4,13 @@ import { Feather } from '@expo/vector-icons';
 import { useTheme } from '../../../theme/ThemeContext';
 import CoachHero from '../CoachHero';
 import CoachBoard from '../CoachBoard';
+import FocusCard from '../FocusCard';
+import PlaySmarterCard from '../PlaySmarterCard';
 import PracticePlanCard from '../PracticePlanCard';
 import SectionCard from '../SectionCard';
 import TrendLineChart from '../TrendLineChart';
 
-export default function CoachTab({ stats, targetHandicap, onChangeTarget }) {
+export default function CoachTab({ stats, onInfo, targetHandicap, onChangeTarget, focus, focusVerdict, onCommitFocus, onEndFocus }) {
   const { theme } = useTheme();
   const s = useMemo(() => makeStyles(theme), [theme]);
   const { metrics = {}, form = {}, formSeries = {}, coach = {} } = stats ?? {};
@@ -17,14 +19,16 @@ export default function CoachTab({ stats, targetHandicap, onChangeTarget }) {
   return (
     <View style={s.wrap}>
       <TargetBenchmarkRow targetHandicap={targetHandicap} onChangeTarget={onChangeTarget} />
+      {focus ? <FocusCard focus={focus} verdict={focusVerdict} onEndFocus={onEndFocus} /> : null}
       <FormTrendCard form={form} formSeries={formSeries} metrics={metrics} />
-      <CoachHero insight={priorityInsight} />
+      <CoachHero insight={priorityInsight} onCommitFocus={onCommitFocus} focusActive={!!focus} />
       <CoachBoard
         board={coach.board}
         practicePlan={coach.practicePlan}
         excludeInsightIds={priorityInsight?.id ? [priorityInsight.id] : []}
       />
-      <PracticePlanCard plan={coach.practicePlan} />
+      <PlaySmarterCard tips={stats?.coachStrategy} onInfo={onInfo} />
+      <PracticePlanCard plan={coach.practicePlan} onInfo={onInfo} />
     </View>
   );
 }
