@@ -943,6 +943,16 @@ export function parTypeSplit(tournament, playerId) {
 // ── Warm-up vs Closing ──
 // Average points on the opening 3 holes vs the closing 3 holes across all
 // rounds. Reveals nerves / fatigue patterns.
+//
+// Warmup/closing are the first-3 / last-3 holes of `round.holes` AS PLAYED
+// (array order), not `hole.number <= 3` / `>= length - 2`. round.holes is
+// already in play order, so this is a no-op for an ordinary 18-hole round
+// numbered 1-18 (indices 0-2 = H1-3, indices 15-17 = H16-18, matching the
+// old hardcoded thresholds exactly) — but a back-nine-only round (holes
+// numbered 10-18) has hole.number never dip to 1-3, so the old check
+// produced zero warmup holes and mislabeled closing. Using array position
+// instead correctly treats that round's own first/last holes as its
+// warmup/closing stretch regardless of printed numbering.
 export function warmupVsClosing(tournament, playerId) {
   const warmup = [], closing = [];
   tournament.rounds.forEach((round, roundIndex) => {
@@ -950,15 +960,16 @@ export function warmupVsClosing(tournament, playerId) {
     const player = tournament.players.find(p => p.id === playerId);
     if (!player) return;
     const handicap = getPlayingHandicap(round, player);
-    round.holes.forEach(hole => {
+    const holes = round.holes;
+    holes.forEach((hole, idx) => {
       const sc = round.scores[playerId]?.[hole.number];
       if (!sc) return;
       const points = calcStablefordPoints(hole.par, sc, handicap, hole.strokeIndex);
       // roundIndex on each entry — without it, two rounds on the same course
       // produce breakdown rows that read as identical ("Course A · H1" twice)
       // even though they're from different days.
-      if (hole.number <= 3) warmup.push({ roundIndex, points, strokes: sc, par: hole.par, holeNumber: hole.number, courseName: round.courseName });
-      else if (hole.number >= round.holes.length - 2) closing.push({ roundIndex, points, strokes: sc, par: hole.par, holeNumber: hole.number, courseName: round.courseName });
+      if (idx <= 2) warmup.push({ roundIndex, points, strokes: sc, par: hole.par, holeNumber: hole.number, courseName: round.courseName });
+      else if (idx >= holes.length - 3) closing.push({ roundIndex, points, strokes: sc, par: hole.par, holeNumber: hole.number, courseName: round.courseName });
     });
   });
   const avg = (arr) => arr.length ? +(arr.reduce((s, h) => s + h.points, 0) / arr.length).toFixed(2) : 0;

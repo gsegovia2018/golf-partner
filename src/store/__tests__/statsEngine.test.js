@@ -2486,4 +2486,22 @@ describe('warmupVsClosing — breakdown roundIndex', () => {
     expect(wc.warmup.breakdown.map((b) => b.roundIndex)).toEqual([0, 0, 0, 1, 1, 1]);
     expect(wc.closing.breakdown.map((b) => b.roundIndex)).toEqual([0, 0, 0, 1, 1, 1]);
   });
+
+  // Regression lock: a back-nine-only round (holes numbered 10-18, played
+  // in that order) must NOT produce zero warmup holes just because
+  // hole.number never dips to 1-3. Warmup/closing are derived from the
+  // round's actual hole ORDER (first-N / last-N as played), not the
+  // 1-based printed hole.number.
+  test('a back-nine-only round (holes 10-18) treats its first/last played holes as warmup/closing', () => {
+    const h = Array.from({ length: 9 }, (_, i) => ({ number: i + 10, par: 4, strokeIndex: i + 1 }));
+    const t = {
+      players: [{ id: 'p1', handicap: 0 }],
+      rounds: [{ courseName: 'Back Nine', holes: h, scores: { p1: evenScores(h, 4) } }],
+    };
+    const wc = warmupVsClosing(t, 'p1');
+    expect(wc.warmup.holes).toBe(3);
+    expect(wc.warmup.breakdown.map((b) => b.holeNumber)).toEqual([10, 11, 12]);
+    expect(wc.closing.holes).toBe(3);
+    expect(wc.closing.breakdown.map((b) => b.holeNumber)).toEqual([16, 17, 18]);
+  });
 });

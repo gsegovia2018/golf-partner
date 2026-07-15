@@ -69,8 +69,21 @@ export function buildSyntheticTournament(myRounds) {
 }
 
 // ── holeDifficultySplit ──
-// Buckets a player's holes by printed stroke index: hard 1-6, mid 7-12,
-// easy 13-18. avgPoints is net Stableford points per hole in each band.
+// Buckets a player's holes by printed stroke index into thirds: hard,
+// mid, easy. avgPoints is net Stableford points per hole in each band.
+//
+// Thresholds are derived PER ROUND from that round's own max stroke index
+// (e.g. 18 for a full round, 9 for a 9-hole round) rather than a hardcoded
+// 1-18 scale — a fixed hard≤6/mid≤12/easy>12 split leaves the "easy" band
+// permanently empty for 9-hole rounds (SI only ever reaches 9), skewing
+// strength ranking and the report card's "where on the course" group. For
+// an 18-hole round with SI 1-18 this reduces to the original 6/12 split
+// exactly, so ordinary rounds are unaffected.
+function difficultyBand(strokeIndex, maxStrokeIndex) {
+  const third = (maxStrokeIndex || 18) / 3;
+  return strokeIndex <= third ? 'hard' : strokeIndex <= 2 * third ? 'mid' : 'easy';
+}
+
 export function holeDifficultySplit(tournament, playerId) {
   const bands = { hard: [], mid: [], easy: [] };
   const player = (tournament.players || []).find((p) => p.id === playerId);
@@ -78,12 +91,13 @@ export function holeDifficultySplit(tournament, playerId) {
     (tournament.rounds || []).forEach((round, roundIndex) => {
       if (!round.scores?.[playerId]) return;
       const handicap = getPlayingHandicap(round, player);
-      (round.holes || []).forEach((hole) => {
+      const holes = round.holes || [];
+      const maxSI = holes.reduce((m, h) => Math.max(m, h.strokeIndex || 0), 0);
+      holes.forEach((hole) => {
         const sc = round.scores[playerId]?.[hole.number];
         if (!sc) return;
         const points = calcStablefordPoints(hole.par, sc, handicap, hole.strokeIndex);
-        const band = hole.strokeIndex <= 6 ? 'hard'
-          : hole.strokeIndex <= 12 ? 'mid' : 'easy';
+        const band = difficultyBand(hole.strokeIndex, maxSI);
         bands[band].push({
           roundIndex, courseName: round.courseName,
           holeNumber: hole.number, par: hole.par, si: hole.strokeIndex,

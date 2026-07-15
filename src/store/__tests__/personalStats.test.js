@@ -377,6 +377,23 @@ describe('holeDifficultySplit', () => {
     // p1's holes must not leak into p2's split.
     expect(split.hard.breakdown.every((b) => b.strokes === 6)).toBe(true);
   });
+
+  // Regression lock: a 9-hole round (SI 1-9) must NOT collapse into just
+  // hard/mid with an always-empty easy band. Thresholds are derived from
+  // the round's own max SI (here 9), not a hardcoded 18-hole scale, so the
+  // 9 holes split evenly into three 3-hole bands.
+  test('splits a 9-hole round (SI 1-9) into three non-empty bands', () => {
+    const h = Array.from({ length: 9 }, (_, i) => ({ number: i + 1, par: 4, strokeIndex: i + 1 }));
+    const myRounds = collectMyRounds([{
+      id: 1, name: 'T', players: [{ id: 'p1', handicap: 0, user_id: 'u1' }],
+      rounds: [mkRound({ holes: h, scores: { p1: evenScores(h, 4) }, playerHandicaps: { p1: 0 } })],
+    }], 'u1');
+    const split = holeDifficultySplit(buildSyntheticTournament(myRounds), CANON_ID);
+    expect(split.hard.holes).toBe(3);
+    expect(split.mid.holes).toBe(3);
+    expect(split.easy.holes).toBe(3);
+    expect(split.easy.holes).toBeGreaterThan(0);
+  });
 });
 
 describe('computeMetrics', () => {
