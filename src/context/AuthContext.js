@@ -2,7 +2,7 @@ import React, { createContext, useCallback, useContext, useEffect, useRef, useSt
 import { Platform } from 'react-native';
 import * as Linking from 'expo-linking';
 import { supabase } from '../lib/supabase';
-import { parseRecoveryUrl, isRecoveryCallback } from '../lib/passwordReset';
+import { parseRecoveryUrl, isResetPasswordUrl, isRecoveryRedirectType } from '../lib/passwordReset';
 
 const isWeb = Platform.OS === 'web';
 
@@ -36,22 +36,39 @@ export function AuthProvider({ children }) {
   const lastRecoveryCode = useRef(null);
 
   const handleRecoveryUrl = useCallback(async (url) => {
-    const parsed = parseRecoveryUrl(url);
-    if (!isRecoveryCallback(parsed)) return;
+    // Ownership gate: only act on OUR reset-password redirect targets, so
+    // this never fights AuthScreen's OAuth handler over a normal login
+    // `?code=` link. AuthScreen mirrors this by ignoring reset-password URLs.
+    if (!isResetPasswordUrl(url)) return;
+
     if (isWeb) {
       // Supabase's `detectSessionInUrl` already exchanges the `code` for a
-      // session in the background on web (same mechanism as OAuth) — we
-      // only need to flag that this particular load is a recovery, so
-      // App.js routes to the set-password screen once the session lands.
+      // session in the background on web (same mechanism as OAuth), and that
+      // PKCE auto-exchange can't emit PASSWORD_RECOVERY — so we recognise the
+      // recovery load via the `type=recovery` marker we appended to the web
+      // redirect (see getPasswordResetRedirectTo) and just flag it. App.js
+      // then routes to the set-password screen once the session lands.
       setPasswordRecovery(true);
       return;
     }
-    if (recoveryBusy.current || lastRecoveryCode.current === parsed.code) return;
+
+    const parsed = parseRecoveryUrl(url);
+    const code = parsed?.code;
+    if (!code) return;
+    if (recoveryBusy.current || lastRecoveryCode.current === code) return;
     recoveryBusy.current = true;
-    lastRecoveryCode.current = parsed.code;
+    lastRecoveryCode.current = code;
     try {
-      const { error } = await supabase.auth.exchangeCodeForSession(parsed.code);
-      if (!error) setPasswordRecovery(true);
+      // Native has `detectSessionInUrl: false`, so we own the exchange. Its
+      // `redirectType` is the authoritative recovery signal — a real reset
+      // link is just `?code=...` with no `type=recovery` in the URL, so we
+      // must NOT rely on the URL to confirm recovery. Only route to the
+      // set-password screen when the exchange itself says it was a recovery;
+      // otherwise this was a normal sign-in and we leave the user signed in.
+      const { data, error } = await supabase.auth.exchangeCodeForSession(code);
+      if (!error && isRecoveryRedirectType(data?.redirectType)) {
+        setPasswordRecovery(true);
+      }
     } finally {
       recoveryBusy.current = false;
     }

@@ -245,11 +245,19 @@ function AppNavigator() {
 
 // Deep-link config: maps web URL paths to routes so invite links open the
 // right flow directly. `join/:token` → official magic-token redeem;
-// `join-tournament/:code` → casual shared-invite redeem + claim.
+// `join-tournament/:code` → casual shared-invite redeem + claim;
+// `reset-password` → the set-new-password screen (also short-circuited in
+// AppNavigator via the passwordRecovery flag, which is the primary path —
+// this mapping just makes the deep link literally resolvable).
 const linking = {
-  prefixes: [typeof window !== 'undefined' && window.location?.origin
-    ? window.location.origin
-    : 'https://golf-partner.vercel.app'],
+  prefixes: [
+    typeof window !== 'undefined' && window.location?.origin
+      ? window.location.origin
+      : 'https://golf-partner.vercel.app',
+    // Native custom scheme so `golf://reset-password` resolves through the
+    // navigator too, not only the manual recovery routing in AuthContext.
+    'golf://',
+  ],
   config: {
     // Anchor deep-linked screens on top of Main so they always have a screen
     // to return to. Without this, opening /join-tournament/:code builds a
@@ -260,6 +268,7 @@ const linking = {
     screens: {
       JoinOfficial: 'join/:token',
       JoinTournament: 'join-tournament/:code',
+      ResetPassword: 'reset-password',
     },
   },
 };

@@ -1,4 +1,9 @@
-import { validateNewPassword, parseRecoveryUrl } from '../passwordReset';
+import {
+  validateNewPassword,
+  parseRecoveryUrl,
+  isResetPasswordUrl,
+  isRecoveryRedirectType,
+} from '../passwordReset';
 
 describe('validateNewPassword', () => {
   it('rejects an empty password', () => {
@@ -44,8 +49,14 @@ describe('parseRecoveryUrl', () => {
     expect(parseRecoveryUrl(null)).toBeNull();
   });
 
-  it('extracts code and type from the query string', () => {
-    const url = 'https://app.example.com/?code=abc123&type=recovery';
+  it('extracts the code from a bare recovery deep link (no type param)', () => {
+    // A REAL GoTrue PKCE recovery link looks like this — just a code.
+    const url = 'golf://reset-password?code=abc123';
+    expect(parseRecoveryUrl(url)).toEqual({ code: 'abc123', type: null });
+  });
+
+  it('extracts code and our own type marker from the web redirect', () => {
+    const url = 'https://app.example.com/?type=recovery&code=abc123';
     expect(parseRecoveryUrl(url)).toEqual({ code: 'abc123', type: 'recovery' });
   });
 
@@ -57,9 +68,47 @@ describe('parseRecoveryUrl', () => {
   it('returns nulls for fields that are absent', () => {
     expect(parseRecoveryUrl('https://app.example.com/')).toEqual({ code: null, type: null });
   });
+});
 
-  it('does not flag a plain OAuth callback as a recovery link', () => {
-    const url = 'https://app.example.com/?code=oauth-code';
-    expect(parseRecoveryUrl(url)).toEqual({ code: 'oauth-code', type: null });
+describe('isResetPasswordUrl', () => {
+  it('recognises the native reset-password deep link by path (no type needed)', () => {
+    expect(isResetPasswordUrl('golf://reset-password?code=abc123')).toBe(true);
+  });
+
+  it('recognises the web redirect by our own type=recovery marker', () => {
+    expect(isResetPasswordUrl('https://app.example.com/?type=recovery&code=abc')).toBe(true);
+  });
+
+  it('recognises a web reset path even after code is stripped', () => {
+    expect(isResetPasswordUrl('https://app.example.com/reset-password')).toBe(true);
+  });
+
+  it('does NOT claim a plain OAuth login deep link', () => {
+    expect(isResetPasswordUrl('golf://auth?code=oauth-code')).toBe(false);
+  });
+
+  it('does NOT claim a plain web OAuth callback', () => {
+    expect(isResetPasswordUrl('https://app.example.com/?code=oauth-code')).toBe(false);
+  });
+
+  it('is false for empty / non-string input', () => {
+    expect(isResetPasswordUrl('')).toBe(false);
+    expect(isResetPasswordUrl(undefined)).toBe(false);
+    expect(isResetPasswordUrl(null)).toBe(false);
+  });
+});
+
+describe('isRecoveryRedirectType', () => {
+  it('matches the SDK recovery marker regardless of casing/form', () => {
+    expect(isRecoveryRedirectType('recovery')).toBe(true);
+    expect(isRecoveryRedirectType('PASSWORD_RECOVERY')).toBe(true);
+    expect(isRecoveryRedirectType('Recovery')).toBe(true);
+  });
+
+  it('is false for a normal sign-in exchange', () => {
+    expect(isRecoveryRedirectType(null)).toBe(false);
+    expect(isRecoveryRedirectType(undefined)).toBe(false);
+    expect(isRecoveryRedirectType('')).toBe(false);
+    expect(isRecoveryRedirectType('signup')).toBe(false);
   });
 });

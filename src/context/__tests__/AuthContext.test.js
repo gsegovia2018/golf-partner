@@ -48,9 +48,16 @@ describe('AuthProvider password recovery', () => {
     Linking.getInitialURL.mockResolvedValue(null);
   });
 
-  test('exchanges the code and flags recovery for a native reset-password deep link', async () => {
-    Linking.getInitialURL.mockResolvedValue('golf://reset-password?code=abc123&type=recovery');
-    supabase.auth.exchangeCodeForSession.mockResolvedValue({ error: null });
+  test('detects recovery from a BARE ?code= link via the exchange redirectType (no type=recovery in URL)', async () => {
+    // This is the shape of a REAL GoTrue PKCE recovery link — just a code,
+    // no `type=recovery`. Detection must come from exchangeCodeForSession's
+    // returned redirectType, not from the URL. Regression guard for the bug
+    // where URL-`type=recovery` matching never fired on real links.
+    Linking.getInitialURL.mockResolvedValue('golf://reset-password?code=abc123');
+    supabase.auth.exchangeCodeForSession.mockResolvedValue({
+      data: { session: { user: { id: 'u1' } }, redirectType: 'recovery' },
+      error: null,
+    });
 
     const { getByText } = render(<AuthProvider><Probe /></AuthProvider>);
 
@@ -60,7 +67,37 @@ describe('AuthProvider password recovery', () => {
     await waitFor(() => expect(getByText('recovery')).toBeTruthy());
   });
 
-  test('does not flag recovery for a plain OAuth callback deep link', async () => {
+  test('also accepts the PASSWORD_RECOVERY redirectType form from the exchange', async () => {
+    Linking.getInitialURL.mockResolvedValue('golf://reset-password?code=abc123');
+    supabase.auth.exchangeCodeForSession.mockResolvedValue({
+      data: { session: {}, redirectType: 'PASSWORD_RECOVERY' },
+      error: null,
+    });
+
+    const { getByText } = render(<AuthProvider><Probe /></AuthProvider>);
+    await waitFor(() => expect(getByText('recovery')).toBeTruthy());
+  });
+
+  test('does NOT flag recovery when the exchange was a normal sign-in (redirectType null)', async () => {
+    // A reset-password URL whose exchange turns out non-recovery must NOT
+    // hijack the user into the set-password screen — it just signs them in.
+    Linking.getInitialURL.mockResolvedValue('golf://reset-password?code=abc123');
+    supabase.auth.exchangeCodeForSession.mockResolvedValue({
+      data: { session: {}, redirectType: null },
+      error: null,
+    });
+
+    const { getByText } = render(<AuthProvider><Probe /></AuthProvider>);
+
+    await waitFor(() => {
+      expect(supabase.auth.exchangeCodeForSession).toHaveBeenCalledWith('abc123');
+    });
+    await waitFor(() => expect(getByText('no-recovery')).toBeTruthy());
+  });
+
+  test('does not flag recovery, and does not exchange, for a plain OAuth callback deep link', async () => {
+    // OAuth login links are owned by AuthScreen — AuthContext must ignore
+    // them so the one-time PKCE code isn't double-consumed.
     Linking.getInitialURL.mockResolvedValue('golf://auth?code=oauth-code');
 
     const { getByText } = render(<AuthProvider><Probe /></AuthProvider>);
@@ -79,8 +116,11 @@ describe('AuthProvider password recovery', () => {
   });
 
   test('clearPasswordRecovery resets the flag', async () => {
-    Linking.getInitialURL.mockResolvedValue('golf://reset-password?code=abc123&type=recovery');
-    supabase.auth.exchangeCodeForSession.mockResolvedValue({ error: null });
+    Linking.getInitialURL.mockResolvedValue('golf://reset-password?code=abc123');
+    supabase.auth.exchangeCodeForSession.mockResolvedValue({
+      data: { session: {}, redirectType: 'recovery' },
+      error: null,
+    });
 
     const { getByText } = render(<AuthProvider><Probe /></AuthProvider>);
     await waitFor(() => expect(getByText('recovery')).toBeTruthy());

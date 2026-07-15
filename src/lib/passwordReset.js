@@ -1,8 +1,15 @@
-// Pure helpers for the set-new-password flow (see AuthContext's
-// PASSWORD_RECOVERY handling and SetNewPasswordScreen). Kept dependency-free
-// so they're trivially unit-testable without mocking Supabase or RN.
+// Pure helpers for the set-new-password flow (see AuthContext's recovery
+// handling and SetNewPasswordScreen). Kept dependency-free so they're
+// trivially unit-testable without mocking Supabase or RN.
 
 const MIN_LENGTH = 8;
+
+// The path segment of the redirect we hand to `resetPasswordForEmail`
+// (native: `golf://reset-password`; web: same root + a `type=recovery`
+// marker we append ourselves). We OWN this marker — it's how we route a
+// recovery URL to the recovery handler without depending on GoTrue
+// populating anything in the URL. See `getPasswordResetRedirectTo`.
+export const RESET_PASSWORD_PATH = 'reset-password';
 
 /**
  * Validate a new password + confirmation pair before calling
@@ -26,14 +33,20 @@ export function validateNewPassword(password, confirm) {
 }
 
 /**
- * Extract the `code` and `type` params from a Supabase auth redirect URL
- * (recovery links look like `<redirectTo>?code=...&type=recovery`, and the
- * same shape shows up in the hash fragment on some native deep links). A
- * `type` of `'recovery'` is what distinguishes a password-reset callback
- * from a plain OAuth sign-in callback, which carries a `code` but no `type`.
+ * Extract the `code` and `type` params from a Supabase auth redirect URL.
+ * Merges query string + hash fragment (same strategy as `parseOAuthError`)
+ * so it reads a `code` whichever side it lands on. Returns null only when
+ * there's no URL at all.
+ *
+ * NOTE: with this app's PKCE config, GoTrue does NOT put `type=recovery` in
+ * a real recovery redirect — a genuine reset link is just `?code=...`. The
+ * `type` field here only reflects the marker WE append to the web
+ * redirectTo. Recovery is authoritatively confirmed by the `redirectType`
+ * that `exchangeCodeForSession` returns (see `isRecoveryRedirectType`), not
+ * by this field.
  *
  * @param {string} urlString
- * @returns {{ code: string|null, type: string|null }|null} null when there's no URL to parse
+ * @returns {{ code: string|null, type: string|null }|null}
  */
 export function parseRecoveryUrl(urlString) {
   if (!urlString || typeof urlString !== 'string') return null;
@@ -52,13 +65,36 @@ export function parseRecoveryUrl(urlString) {
 }
 
 /**
- * Whether a parsed recovery URL (see `parseRecoveryUrl`) represents a
- * password-recovery callback specifically, as opposed to a plain OAuth
- * sign-in callback or an unrelated URL.
+ * Whether a URL is one of OUR password-reset redirect targets, and therefore
+ * should be owned by the recovery handler (AuthContext) rather than the
+ * OAuth deep-link handler (AuthScreen). Recognised by the `reset-password`
+ * path segment we put in the deep link, or the `type=recovery` marker we
+ * append to the web redirect — both are markers we control, so this does not
+ * depend on GoTrue populating anything.
  *
- * @param {{ code: string|null, type: string|null }|null} parsed
+ * This is a *routing* signal (who consumes the URL), deliberately independent
+ * of whether the code exchange ultimately confirms recovery.
+ *
+ * @param {string} urlString
  * @returns {boolean}
  */
-export function isRecoveryCallback(parsed) {
-  return !!parsed && parsed.type === 'recovery' && !!parsed.code;
+export function isResetPasswordUrl(urlString) {
+  if (!urlString || typeof urlString !== 'string') return false;
+  if (urlString.includes(RESET_PASSWORD_PATH)) return true;
+  const parsed = parseRecoveryUrl(urlString);
+  return parsed?.type === 'recovery';
+}
+
+/**
+ * The authoritative recovery signal: the `redirectType` that
+ * `supabase.auth.exchangeCodeForSession(code)` returns for a PKCE code that
+ * was issued by `resetPasswordForEmail`. Depending on SDK version this is
+ * either `'recovery'` or `'PASSWORD_RECOVERY'`, so match case-insensitively
+ * on the substring rather than an exact string.
+ *
+ * @param {unknown} redirectType
+ * @returns {boolean}
+ */
+export function isRecoveryRedirectType(redirectType) {
+  return typeof redirectType === 'string' && redirectType.toLowerCase().includes('recovery');
 }

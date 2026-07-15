@@ -10,6 +10,7 @@ import * as QueryParams from 'expo-auth-session/build/QueryParams';
 import * as Linking from 'expo-linking';
 import { supabase } from '../lib/supabase';
 import { parseOAuthError, getWebRedirectTo, getPasswordResetRedirectTo } from '../lib/oauth';
+import { isResetPasswordUrl } from '../lib/passwordReset';
 import { useTheme } from '../theme/ThemeContext';
 
 const isWeb = Platform.OS === 'web';
@@ -70,6 +71,13 @@ export default function AuthScreen() {
   // the deep-link listener (Android routes the `golf://` redirect to the app).
   const completeOAuth = useCallback(async (url) => {
     if (!url) return;
+    // Password-recovery links (`golf://reset-password?code=...`) are owned by
+    // AuthContext, which exchanges the one-time PKCE code and routes to the
+    // set-new-password screen. Ignore them here so both handlers don't race
+    // to consume the same code — a race the OAuth path would win by silently
+    // signing the user in, skipping the reset screen (or by showing a bogus
+    // error when it loses).
+    if (isResetPasswordUrl(url)) return;
     const { params, errorCode } = QueryParams.getQueryParams(url);
     if (errorCode || params.error) {
       Alert.alert('Sign-in failed', params.error_description || errorCode || params.error);

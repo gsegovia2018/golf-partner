@@ -56,9 +56,17 @@ describe('getPasswordResetRedirectTo', () => {
   const originalWindow = global.window;
   afterEach(() => { global.window = originalWindow; });
 
-  it('returns the web URL on web', () => {
+  it('returns the web URL with our own recovery marker on web', () => {
     global.window = { location: { origin: 'https://app.example.com', pathname: '/' } };
-    expect(getPasswordResetRedirectTo('web', 'golf://reset-password')).toBe('https://app.example.com/');
+    // The `type=recovery` marker is ours (survives detectSessionInUrl), not
+    // something GoTrue populates — it's how the web load is recognised as a
+    // recovery, since the PKCE auto-exchange never emits PASSWORD_RECOVERY.
+    expect(getPasswordResetRedirectTo('web', 'golf://reset-password')).toBe('https://app.example.com/?type=recovery');
+  });
+
+  it('carries the marker for a sub-path web deploy too', () => {
+    global.window = { location: { origin: 'https://example.com', pathname: '/golf/' } };
+    expect(getPasswordResetRedirectTo('web', 'golf://reset-password')).toBe('https://example.com/golf/?type=recovery');
   });
 
   it('returns the native deep link off-web', () => {

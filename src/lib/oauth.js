@@ -56,6 +56,13 @@ export function getWebRedirectTo() {
  * recovery email link into the app instead of opening a bare browser tab
  * with nothing listening for the `code`.
  *
+ * On web we append a `type=recovery` marker that WE control. It survives
+ * Supabase's `detectSessionInUrl` auto-exchange (which strips only `code`),
+ * and it's needed because that PKCE auto-exchange never emits a
+ * `PASSWORD_RECOVERY` event — so without our own marker there's no way to
+ * tell a recovery load apart from a normal OAuth `?code=` load on web. This
+ * is our marker, not something GoTrue populates.
+ *
  * Takes `platformOS`/`nativeDeepLink` as params (rather than reading
  * `Platform.OS` / calling `Linking.createURL` itself) so this stays a pure,
  * dependency-free function — see callers in AuthScreen.
@@ -66,7 +73,11 @@ export function getWebRedirectTo() {
  * @returns {string|undefined} redirect URL
  */
 export function getPasswordResetRedirectTo(platformOS, nativeDeepLink) {
-  if (platformOS === 'web') return getWebRedirectTo();
+  if (platformOS === 'web') {
+    const base = getWebRedirectTo();
+    if (!base) return undefined;
+    return `${base}${base.includes('?') ? '&' : '?'}type=recovery`;
+  }
   return nativeDeepLink;
 }
 
