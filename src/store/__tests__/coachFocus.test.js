@@ -1,3 +1,9 @@
+import AsyncStorage from '@react-native-async-storage/async-storage';
+import {
+  makeFocusCommit, focusVerdict,
+  loadFocus, saveFocus, clearFocus, loadFocusHistory, archiveFocus,
+} from '../coachFocus';
+
 jest.mock('@react-native-async-storage/async-storage', () => {
   const store = new Map();
   return {
@@ -7,12 +13,6 @@ jest.mock('@react-native-async-storage/async-storage', () => {
     __store: store,
   };
 });
-
-import AsyncStorage from '@react-native-async-storage/async-storage';
-import {
-  makeFocusCommit, focusVerdict,
-  loadFocus, saveFocus, clearFocus, loadFocusHistory, archiveFocus,
-} from '../coachFocus';
 
 const insight = {
   id: 'putting:putting', area: 'putting', areaLabel: 'Putting',
@@ -89,9 +89,7 @@ describe('persistence', () => {
   test('archive prepends history, caps at 10, clears active focus', async () => {
     const focus = makeFocusCommit(insight, { roundCount: 8 }, '2026-07-15T00:00:00Z');
     for (let i = 0; i < 12; i += 1) {
-      // eslint-disable-next-line no-await-in-loop
       await saveFocus('u1', { ...focus, title: `Focus ${i}` });
-      // eslint-disable-next-line no-await-in-loop
       await archiveFocus('u1', { ...focus, title: `Focus ${i}` }, { state: 'improving', current: -1.2 });
     }
     const history = await loadFocusHistory('u1');
