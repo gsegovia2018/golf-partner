@@ -85,6 +85,20 @@ describe('buildCourseBreakdown summary', () => {
     expect(b.summary.scoreMix.total).toBe(35);
   });
 
+  test('score mix classifies gross vs par — the handicap must not upgrade a bogey', () => {
+    const h = mkHoles(18);
+    const t = {
+      id: 1, name: 'T',
+      players: [{ id: 'p1', name: 'Me', handicap: 18, user_id: 'u1' }],
+      rounds: [mkRound({ courseId: 'c-1', scores: { p1: evenScores(h, 5) } })],
+    };
+    const rounds = collectMyRounds([t], 'u1');
+    const b = buildCourseBreakdown(filterRoundsToCourse(rounds, 'c-1'));
+    // 5 on a par 4 is a gross bogey on every hole; net (with 18 extra shots)
+    // it would read as 18 pars — the mix must show the gross picture.
+    expect(b.summary.scoreMix).toMatchObject({ pars: 0, bogeys: 18, total: 18 });
+  });
+
   test('courseName is the most recent label; score mix and front/back populate', () => {
     const h = mkHoles(18);
     const rounds = myRoundsFor([

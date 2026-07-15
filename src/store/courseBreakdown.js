@@ -43,7 +43,10 @@ export function buildCourseBreakdown(courseRounds) {
     ? (courseDNA({ ...synthetic, rounds: completeRounds })[0]?.courses[0] ?? null)
     : null;
 
-  const dist = playerScoreDistribution(synthetic, CANON_ID);
+  // Gross classification (metric: 'strokes') — the score mix answers "what
+  // did I actually shoot on this course", so handicap shots must not
+  // upgrade a bogey to a par.
+  const dist = playerScoreDistribution(synthetic, CANON_ID, { metric: 'strokes' });
   const fb = frontBackSplit(synthetic)[0] ?? null;
   const shots = shotStats(synthetic, CANON_ID);
   const holes = buildHoleRows(synthetic);

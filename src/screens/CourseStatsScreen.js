@@ -13,6 +13,8 @@ import StatTile from '../components/mystats/StatTile';
 import DistributionBars from '../components/mystats/DistributionBars';
 import HoleBreakdownTable from '../components/mystats/HoleBreakdownTable';
 import { toneColor, toneFill } from '../components/mystats/metricTone';
+import { statExplainers } from '../components/mystats/statExplainers';
+import StatDetailSheet from '../components/StatDetailSheet';
 // Spatial display order for the drive bars (miss-short, miss-left, fairway,
 // super, miss-right) — deliberately NOT shotMetrics' canonical DRIVE_ORDER.
 const DRIVE_BAR_ORDER = ['short', 'left', 'fairway', 'super', 'right'];
@@ -35,6 +37,8 @@ export default function CourseStatsScreen({ navigation, route }) {
   const [breakdown, setBreakdown] = useState(undefined); // undefined = loading, null = no rounds
   const [error, setError] = useState(false);
   const [loadNonce, setLoadNonce] = useState(0);
+  const [infoKey, setInfoKey] = useState(null);
+  const activeExplainer = infoKey ? statExplainers[infoKey] : null;
 
   useEffect(() => {
     let cancelled = false;
@@ -117,7 +121,7 @@ export default function CourseStatsScreen({ navigation, route }) {
     <ScreenContainer style={s.container} edges={['top', 'bottom']}>
       {Header}
       <ScrollView contentContainerStyle={s.scroll} showsVerticalScrollIndicator={false}>
-        <SectionCard title="Course record">
+        <SectionCard title="Course record" infoKey="courseRecord" onInfo={setInfoKey}>
           <View style={s.tileRow}>
             <StatTile value={summary.rounds} caption="rounds" />
             <StatTile value={summary.avgPoints ?? '—'} caption="avg pts" />
@@ -135,7 +139,7 @@ export default function CourseStatsScreen({ navigation, route }) {
         </SectionCard>
 
         {summary.scoreMix.total > 0 ? (
-          <SectionCard title="Score mix">
+          <SectionCard title="Score mix" infoKey="courseScoreMix" onInfo={setInfoKey}>
             <DistributionBars bars={[
               { label: 'Eagle+', count: summary.scoreMix.eagles, muted: summary.scoreMix.eagles === 0 },
               { label: 'Birdie', count: summary.scoreMix.birdies, muted: summary.scoreMix.birdies === 0 },
@@ -148,7 +152,7 @@ export default function CourseStatsScreen({ navigation, route }) {
         ) : null}
 
         {highlights ? (
-          <SectionCard title="Highlights">
+          <SectionCard title="Highlights" infoKey="courseHighlights" onInfo={setInfoKey}>
             <HighlightRow
               icon="alert-triangle"
               tone="bad"
@@ -169,7 +173,7 @@ export default function CourseStatsScreen({ navigation, route }) {
         ) : null}
 
         {shots ? (
-          <SectionCard title="Shot detail">
+          <SectionCard title="Shot detail" infoKey="courseShotDetail" onInfo={setInfoKey}>
             <View style={s.tileRow}>
               <StatTile
                 value={shots.putts.per18 ?? '—'}
@@ -200,17 +204,26 @@ export default function CourseStatsScreen({ navigation, route }) {
             ) : null}
           </SectionCard>
         ) : (
-          <SectionCard title="Shot detail">
+          <SectionCard title="Shot detail" infoKey="courseShotDetail" onInfo={setInfoKey}>
             <Text style={s.metaLine}>No shot detail logged at this course yet.</Text>
           </SectionCard>
         )}
 
         {holes.length > 0 ? (
-          <SectionCard title="Hole by hole">
+          <SectionCard title="Hole by hole" infoKey="courseHoleByHole" onInfo={setInfoKey}>
             <HoleBreakdownTable holes={holes} />
           </SectionCard>
         ) : null}
       </ScrollView>
+      <StatDetailSheet
+        visible={!!infoKey}
+        onClose={() => setInfoKey(null)}
+        title={activeExplainer?.title ?? ''}
+        subtitle={activeExplainer?.subtitle ?? ''}
+        explainer={activeExplainer?.explainer ?? ''}
+        rows={[]}
+        shareable={false}
+      />
     </ScreenContainer>
   );
 }

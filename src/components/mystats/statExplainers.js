@@ -206,4 +206,59 @@ export const statExplainers = {
       + 'scored hole, including holes from an early-finished round. Best nine and best round '
       + 'only look at fully-scored rounds, so a partial game can never claim a personal best.',
   },
+
+  // ── Course drill-down screen (CourseStatsScreen) ──
+  courseRecord: {
+    title: 'Course record',
+    subtitle: 'Your rounds at this course',
+    explainer: 'Rounds, average points, and best points count only fully-scored rounds '
+      + 'here — a game called early never drags the average down. Points are net '
+      + '(handicap-adjusted) Stableford totals per round; average strokes is your gross '
+      + 'strokes per complete round. The trend arrow compares your latest complete round '
+      + 'with the one before it — a swing under 2 points reads as flat. The front/back '
+      + 'line is average points per hole on holes 1–9 vs 10–18, counting only rounds '
+      + 'where both nines were fully scored.',
+  },
+  courseScoreMix: {
+    title: 'Score mix',
+    subtitle: 'What you actually shot, hole by hole',
+    explainer: 'Every scored hole you\'ve played at this course, including holes from '
+      + 'unfinished rounds. Each hole is classified by your GROSS score against par — '
+      + 'your handicap is not considered: eagle+ is two or more under, then birdie, par, '
+      + 'bogey, double, and worse. Bar heights compare how often each result happens; '
+      + 'the number is the count of holes.',
+  },
+  courseHighlights: {
+    title: 'Highlights',
+    subtitle: 'Your nemesis and best hole here',
+    explainer: 'Each hole\'s average gross strokes vs par, pooled across every round '
+      + 'you\'ve played it. The nemesis is the hole with the worst average, the best '
+      + 'hole the lowest. A hole only qualifies once you\'ve played it in at least two '
+      + 'rounds — one bad day is noise, not a nemesis.',
+  },
+  courseShotDetail: {
+    title: 'Shot detail',
+    subtitle: 'From the shots you logged at this course',
+    explainer: 'Only holes where you logged shot detail count — nothing is guessed for '
+      + 'unlogged holes.\n\n'
+      + 'Putts / 18 holes: total putts divided by holes with putts logged, scaled to 18 — '
+      + 'so a half-logged round can\'t deflate it. 3-putts / 18 uses the same scaling for '
+      + 'holes with three or more putts.\n\n'
+      + 'Penalties / 18: tee and other penalty strokes divided by holes with any logged '
+      + 'detail, scaled to 18.\n\n'
+      + 'GIR: of the holes with a score and putts logged, the share where you reached '
+      + 'the green in regulation (strokes minus putts is at least two under par).\n\n'
+      + 'The bars split every logged drive (par 3s excluded) by result — each bar shows '
+      + 'its percentage of all recorded drives, ordered short, left, fairway, super, right.',
+  },
+  courseHoleByHole: {
+    title: 'Hole by hole',
+    subtitle: 'Every hole, pooled across your rounds',
+    explainer: 'One row per hole, combining every round you\'ve scored it ("3x" = played '
+      + 'three times). Par and stroke index come from the most recent round, so course '
+      + 'edits show current values. Avg is your average gross strokes with the difference '
+      + 'to par under it; Best is your lowest gross score on the hole; Pts is your average '
+      + 'net (handicap-adjusted) Stableford points. Where you logged them, the small line '
+      + 'adds average putts (over the holes that logged putts) and total penalties.',
+  },
 };
