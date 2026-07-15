@@ -1,4 +1,4 @@
-import { roundDifferential } from '../handicapIndex';
+import { roundDifferential, computeHandicapIndex } from '../handicapIndex';
 
 // 18 identical holes: par 4, SI = hole number. Total par 72.
 const holes = Array.from({ length: 18 }, (_, i) => ({
@@ -75,5 +75,86 @@ describe('roundDifferential', () => {
   it('returns null for null/undefined input', () => {
     expect(roundDifferential(null)).toBeNull();
     expect(roundDifferential(undefined)).toBeNull();
+  });
+});
+
+// N complete rounds whose differentials are exactly the `diffs` values:
+// slope 113, rating 72, par-72 course → differential = gross − 72.
+// Playing handicap 54 keeps net double bogey caps out of the way.
+function makeRounds(diffs) {
+  return diffs.map((d, i) => {
+    const r = makeMyRound({ playingHandicap: 54 });
+    r.key = `t:${i}`;
+    const total = 72 + d;
+    const base = Math.floor(total / 18);
+    const extra = total - base * 18; // first `extra` holes get one more stroke
+    r.round.scores.p1 = Object.fromEntries(
+      holes.map((h, j) => [h.number, base + (j < extra ? 1 : 0)]),
+    );
+    return r;
+  });
+}
+
+describe('computeHandicapIndex', () => {
+  it('returns null index with fewer than 3 eligible rounds', () => {
+    const res = computeHandicapIndex(makeRounds([10, 12]));
+    expect(res.index).toBeNull();
+    expect(res.eligibleCount).toBe(2);
+    expect(res.windowCount).toBe(2);
+  });
+
+  it('3 rounds: lowest 1 minus 2.0', () => {
+    const res = computeHandicapIndex(makeRounds([10, 14, 12]));
+    expect(res.index).toBe(8);         // 10 − 2
+    expect(res.usedCount).toBe(1);
+    expect(res.differentials.filter((d) => d.counting)).toHaveLength(1);
+    expect(res.differentials.find((d) => d.counting).differential).toBe(10);
+  });
+
+  it('4 rounds: lowest 1 minus 1.0', () => {
+    expect(computeHandicapIndex(makeRounds([10, 14, 12, 16])).index).toBe(9);
+  });
+
+  it('5 rounds: lowest 1, no adjustment', () => {
+    expect(computeHandicapIndex(makeRounds([10, 14, 12, 16, 18])).index).toBe(10);
+  });
+
+  it('6 rounds: average of lowest 2 minus 1.0', () => {
+    // lowest two: 10, 12 → avg 11 → 10.0
+    expect(computeHandicapIndex(makeRounds([10, 14, 12, 16, 18, 20])).index).toBe(10);
+  });
+
+  it('8 rounds: average of lowest 2', () => {
+    expect(computeHandicapIndex(makeRounds([10, 14, 12, 16, 18, 20, 22, 24])).index).toBe(11);
+  });
+
+  it('20 rounds: average of lowest 8, only last 20 count', () => {
+    // 21 rounds: the first (differential 1) falls outside the window.
+    // Window = 20 rounds with diffs 2..21 → lowest 8 = 2..9 → avg 5.5
+    const res = computeHandicapIndex(makeRounds([1, ...Array.from({ length: 20 }, (_, i) => i + 2)]));
+    expect(res.index).toBe(5.5);
+    expect(res.usedCount).toBe(8);
+    expect(res.windowCount).toBe(20);
+    expect(res.eligibleCount).toBe(21);
+    expect(res.differentials).toHaveLength(20);
+  });
+
+  it('caps the index at 54', () => {
+    const res = computeHandicapIndex(makeRounds([60, 61, 62, 63, 64]));
+    expect(res.index).toBe(54);
+  });
+
+  it('skips ineligible rounds but keeps eligible ones', () => {
+    const rounds = makeRounds([10, 12, 14, 16]);
+    rounds[1].isComplete = false; // drops the 12
+    const res = computeHandicapIndex(rounds);
+    expect(res.eligibleCount).toBe(3);
+    expect(res.index).toBe(8);   // 3-round rule: lowest (10) − 2
+    expect(res.totalCount).toBe(4);
+  });
+
+  it('handles empty/null input', () => {
+    expect(computeHandicapIndex([]).index).toBeNull();
+    expect(computeHandicapIndex(null).index).toBeNull();
   });
 });

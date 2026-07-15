@@ -46,3 +46,52 @@ export function roundDifferential(myRound) {
     date: myRound.tournamentDate ?? null,
   };
 }
+
+// WHS "number of differentials → how many count + adjustment" table (2020).
+function whsCounting(n) {
+  if (n <= 3) return { use: 1, adj: -2 };
+  if (n === 4) return { use: 1, adj: -1 };
+  if (n === 5) return { use: 1, adj: 0 };
+  if (n === 6) return { use: 2, adj: -1 };
+  if (n <= 8) return { use: 2, adj: 0 };
+  if (n <= 11) return { use: 3, adj: 0 };
+  if (n <= 14) return { use: 4, adj: 0 };
+  if (n <= 16) return { use: 5, adj: 0 };
+  if (n <= 18) return { use: 6, adj: 0 };
+  if (n === 19) return { use: 7, adj: 0 };
+  return { use: 8, adj: 0 };
+}
+
+export const MIN_DIFFERENTIALS = 3;
+export const MAX_INDEX = 54;
+
+// Handicap Index from ALL of the user's rounds (chronological). Uses the
+// last 20 eligible differentials — deliberately independent of the My Stats
+// round selector, because WHS always uses the most recent scores.
+export function computeHandicapIndex(myRounds) {
+  const eligible = (myRounds ?? []).map(roundDifferential).filter(Boolean);
+  const window = eligible.slice(-20);
+  const base = {
+    windowCount: window.length,
+    eligibleCount: eligible.length,
+    totalCount: (myRounds ?? []).length,
+  };
+  if (window.length < MIN_DIFFERENTIALS) {
+    return {
+      ...base,
+      index: null,
+      usedCount: 0,
+      differentials: window.map((d) => ({ ...d, counting: false })),
+    };
+  }
+  const { use, adj } = whsCounting(window.length);
+  const sorted = [...window].sort((a, b) => a.differential - b.differential);
+  const countingKeys = new Set(sorted.slice(0, use).map((d) => d.key));
+  const avg = sorted.slice(0, use).reduce((s, d) => s + d.differential, 0) / use;
+  return {
+    ...base,
+    index: Math.min(MAX_INDEX, round1(avg + adj)),
+    usedCount: use,
+    differentials: window.map((d) => ({ ...d, counting: countingKeys.has(d.key) })),
+  };
+}
