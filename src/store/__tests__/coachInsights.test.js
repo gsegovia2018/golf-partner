@@ -163,7 +163,6 @@ describe('buildCoachInsights', () => {
         practice: null,
         strengths: [
           { area: 'Off the tee', label: 'Fairway drive points', score: 0.3, sample: 18, unit: 'pts / hole', value: 2.1 },
-          { area: 'Off the tee', label: 'Stale tee SG', score: 0.3, sample: 18, unit: 'SG / shot', value: 0.3 },
           { area: 'Around the green', label: 'Up-and-down chances', score: 0.2, sample: 16, unit: 'SG / shot', value: 0.2 },
         ],
         improvements: [],
@@ -175,7 +174,6 @@ describe('buildCoachInsights', () => {
       '3-putts / round',
     ]));
     expect(coach.board.gettingBetter.map((i) => i.title)).not.toContain('Putts / round');
-    expect(coach.board.keepDoing.map((i) => i.title)).not.toContain('Stale tee SG');
     expect(coach.board.keepDoing).toEqual(expect.arrayContaining([
       expect.objectContaining({ title: 'Fairway drive points', area: 'driving', areaLabel: 'Driving' }),
       expect.objectContaining({ title: 'Up-and-down chances', area: 'shortGame', areaLabel: 'Short game' }),
@@ -419,5 +417,21 @@ describe('buildCoachInsights', () => {
     expect(coach.practicePlan).toEqual(expect.arrayContaining([
       expect.objectContaining({ role: 'onCourseCue' }),
     ]));
+  });
+});
+
+describe('offTheTee category insights', () => {
+  test('a strong offTheTee leak lands in the board with a Driving area', () => {
+    const stats = {
+      strokesGained: {
+        byCategory: { offTheTee: -1.2, approach: 0, aroundGreen: 0, putting: 0, penalties: 0 },
+        sampleHolesByCategory: { offTheTee: 30, approach: 30, aroundGreen: 30, putting: 30, penalties: 30 },
+        sampleHoles: 30,
+      },
+    };
+    const { board } = buildCoachInsights(stats);
+    const insight = board.fixFirst.find((i) => i.title === 'Off the tee');
+    expect(insight).toBeDefined();
+    expect(insight.area).toBe('driving');
   });
 });

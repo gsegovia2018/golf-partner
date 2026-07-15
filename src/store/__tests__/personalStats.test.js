@@ -2,7 +2,7 @@ import {
   collectMyRounds, buildSyntheticTournament, CANON_ID,
   holeDifficultySplit, computeMetrics, computeRecentVsHistory, FORM_METRICS,
   rankStrengths, resolveSelection, computeMyStats, computeFormSeries, buildActionPlan,
-  courseMastery, careerMilestones,
+  courseMastery, careerMilestones, computeSgFormDelta,
 } from '../personalStats';
 import { getPlayingHandicap } from '../tournamentStore';
 import * as statsEngine from '../statsEngine';
@@ -1373,5 +1373,57 @@ describe('careerMilestones', () => {
     expect(milestones).toEqual({
       birdies: 0, eagles: 0, longestParStreak: 0, bestNine: null, bestRound: null,
     });
+  });
+});
+
+// 18-hole round where every hole is a 2-putt (or 1-putt) from the 2-3 m bucket.
+// E(green, 2.5 m, scratch) = 1.60984 → 2-putt SG/hole = -0.39016, 1-putt = +0.60984.
+function puttingRound(putts) {
+  const holes = Array.from({ length: 18 }, (_, i) => ({ number: i + 1, par: 4, strokeIndex: i + 1 }));
+  return {
+    round: {
+      holes,
+      scores: { p1: Object.fromEntries(holes.map((h) => [h.number, 2 + putts])) },
+      shotDetails: { p1: Object.fromEntries(holes.map((h) => [h.number, { putts, firstPuttBucket: '2-3' }])) },
+    },
+    playerId: 'p1',
+    player: { id: 'p1', name: 'Me', handicap: 10 },
+    isComplete: true,
+    holesPlayed: 18,
+  };
+}
+
+describe('computeSgFormDelta', () => {
+  test('putting delta = recent SG/round − previous SG/round', () => {
+    const history = [puttingRound(2), puttingRound(2), puttingRound(2)];
+    const recent = [puttingRound(1)];
+    const deltas = computeSgFormDelta([...history, ...recent], { n: 1, targetHandicap: 0 });
+    // previous: 18·(-0.39016) = -7.023; recent: 18·(+0.60984) = +10.977
+    expect(deltas.putting.previous).toBeCloseTo(-7.02, 1);
+    expect(deltas.putting.recent).toBeCloseTo(10.98, 1);
+    expect(deltas.putting.delta).toBeCloseTo(18.0, 1);
+    expect(deltas.putting.direction).toBe('up');
+  });
+  test('null with fewer than 3 history rounds', () => {
+    expect(computeSgFormDelta([puttingRound(2), puttingRound(1)], { n: 1 })).toBeNull();
+  });
+  test('categories without data on either side get null delta', () => {
+    const history = [puttingRound(2), puttingRound(2), puttingRound(2)];
+    const deltas = computeSgFormDelta([...history, puttingRound(1)], { n: 1 });
+    expect(deltas.offTheTee.delta).toBeNull();
+    expect(deltas.offTheTee.direction).toBe('flat');
+  });
+});
+
+describe('computeMyStats strokesGained extensions', () => {
+  test('personalDelta and reconciliation ride on strokesGained', () => {
+    const rounds = [puttingRound(2), puttingRound(2), puttingRound(2), puttingRound(1)];
+    const stats = computeMyStats(rounds, { n: 1, targetHandicap: 0 });
+    expect(stats.strokesGained.personalDelta.putting.direction).toBe('up');
+    expect(stats.strokesGained.reconciliation.rounds).toBe(4);
+    // Reconciliation invariant survives assembly.
+    const rec = stats.strokesGained.reconciliation;
+    const catSum = Object.values(rec.byCategoryAvg).reduce((a, x) => a + x, 0);
+    expect(rec.gapAvg).toBeCloseTo(catSum + rec.residualAvg, 10);
   });
 });

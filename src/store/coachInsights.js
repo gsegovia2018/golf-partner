@@ -52,6 +52,7 @@ const VALUE_FORM_UNITS = {
   avgPoints: 'pts / round',
 };
 const SG_CATEGORY_TITLES = {
+  offTheTee: 'Off the tee',
   approach: 'Approach',
   aroundGreen: 'Short game',
   putting: 'Putting',
@@ -82,11 +83,6 @@ function actionItemBasis(item) {
   if (unit.includes('sg')) return 'vs target hcp';
   if (unit.includes('pts')) return 'vs your avg';
   return 'tracked sample';
-}
-
-function isRemovedDrivingSgAction(item) {
-  const unit = String(item?.unit || '').toLowerCase();
-  return unit.includes('sg') && normalizeArea(actionItemArea(item)) === 'driving';
 }
 
 function slug(value) {
@@ -163,7 +159,6 @@ function makeInsight({
 
 function actionItemInsight(item, group, tone) {
   if (!item?.label) return null;
-  if (isRemovedDrivingSgAction(item)) return null;
   const sample = Number(item.sample);
   const confidence = confidenceForSample(sample);
   const metric = `${formatSigned(item.score)} ${item.unit || 'pts'}`;
