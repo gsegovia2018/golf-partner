@@ -891,7 +891,13 @@ export function courseDNA(tournament) {
       if (holesPlayed === 0) return;
       const label = round.courseName || `R${roundIndex + 1}`;
       const key = round.courseId ?? label;
-      const cur = perPlayer[player.id].courses[key] || { courseName: label, points: 0, strokes: 0, holesPlayed: 0, rounds: 0, roundTotals: [] };
+      const cur = perPlayer[player.id].courses[key] || {
+        // Navigable identity for drill-down screens: a real courseId, else a real
+        // (non-empty) courseName, else null — the R{n} display fallback is an
+        // index-dependent label, not an identity a screen can re-derive later.
+        courseKey: round.courseId ?? (round.courseName || null),
+        courseName: label, points: 0, strokes: 0, holesPlayed: 0, rounds: 0, roundTotals: [],
+      };
       cur.courseName = label; // rounds iterate chronologically — latest label wins
       cur.points += points;
       cur.strokes += strokes;
