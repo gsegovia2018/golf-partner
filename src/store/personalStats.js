@@ -603,6 +603,7 @@ export function courseMastery(synthetic) {
       trend = Math.abs(diff) < COURSE_TREND_BAND ? 0 : Math.sign(diff);
     }
     return {
+      courseKey: c.courseKey,
       courseName: c.courseName,
       rounds: c.rounds,
       avgPoints: c.roundPoints,

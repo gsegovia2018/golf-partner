@@ -163,6 +163,14 @@ export default function MyStatsScreen({ navigation, route }) {
 
   const onInfo = useCallback((key) => setInfoKey(key), []);
 
+  const openCourseStats = useCallback((course) => {
+    if (!course?.courseKey) return;
+    navigation.navigate('CourseStats', {
+      courseKey: course.courseKey,
+      courseName: course.courseName,
+    });
+  }, [navigation]);
+
   const scrollTabIntoView = useCallback((key, animated = true) => {
     const layout = tabLayoutsRef.current[key];
     const viewportWidth = tabViewportWidthRef.current;
@@ -381,7 +389,7 @@ export default function MyStatsScreen({ navigation, route }) {
         )}
         {tab === 'coach' && <CoachTab stats={stats} onInfo={onInfo} targetHandicap={targetHandicap} onChangeTarget={() => setPickerOpen(true)} />}
         {tab === 'form' && <FormTab stats={stats} n={n} onChangeN={setN} onInfo={onInfo} />}
-        {tab === 'breakdown' && <BreakdownTab stats={stats} onInfo={onInfo} />}
+        {tab === 'breakdown' && <BreakdownTab stats={stats} onInfo={onInfo} onSelectCourse={openCourseStats} />}
         {tab === 'shots' && <ShotsTab stats={stats} onInfo={onInfo} targetHandicap={targetHandicap} onChangeTarget={() => setPickerOpen(true)} />}
       </ScrollView>
       <StatDetailSheet

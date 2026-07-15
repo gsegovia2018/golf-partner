@@ -2467,6 +2467,25 @@ describe('courseDNA — pools by courseId ?? courseName, keeps per-round totals'
     expect(dna.courses.map((c) => c.courseName).sort()).toEqual(['R1', 'R2']);
     expect(dna.courses.every((c) => c.rounds === 1)).toBe(true);
   });
+
+  test('courseDNA rows carry courseKey: courseId first, courseName fallback, null when unnamed', () => {
+    const holes = Array.from({ length: 18 }, (_, i) => ({ number: i + 1, par: 4, strokeIndex: i + 1 }));
+    const scores = {};
+    holes.forEach((h) => { scores[h.number] = 5; });
+    const t = {
+      players: [{ id: 'p1', name: 'Me', handicap: 0 }],
+      rounds: [
+        { courseId: 'c-9', courseName: 'Pine Valley', holes, scores: { p1: scores } },
+        { courseName: 'Oak Ridge', holes, scores: { p1: scores } },
+        { holes, scores: { p1: scores } }, // unnamed ad-hoc round
+      ],
+    };
+    const courses = courseDNA(t)[0].courses;
+    const byName = Object.fromEntries(courses.map((c) => [c.courseName, c.courseKey]));
+    expect(byName['Pine Valley']).toBe('c-9');
+    expect(byName['Oak Ridge']).toBe('Oak Ridge');
+    expect(byName['R3']).toBeNull();
+  });
 });
 
 describe('warmupVsClosing — breakdown roundIndex', () => {
