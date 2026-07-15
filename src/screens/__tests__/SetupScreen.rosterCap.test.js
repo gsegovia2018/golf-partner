@@ -79,6 +79,53 @@ describe('SetupScreen roster cap is kind-aware (Task 3)', () => {
     expect(getByText('Player 6')).toBeTruthy();
   });
 
+  test('a fresh tournament renders only ONE empty ADD PLAYER tile, not ~23', async () => {
+    // The roster cap is 24, but the empty-slot count that renders must be
+    // bounded (UX regression fix): the players grid is a launcher into the
+    // picker, so a nearly-empty tournament should show its filled tiles plus
+    // a single "ADD PLAYER" tile — never one dashed tile per unused seat.
+    const route = {
+      params: {
+        kind: 'tournament',
+        initialStep: 'players',
+        prefill: {
+          players: [{ id: 'p1', name: 'Player 1', handicap: 10 }],
+          rounds: [{
+            id: 'r1', courseName: 'Pine Valley', holes: [], tees: [], playerHandicaps: null, playerTees: null,
+          }],
+        },
+      },
+    };
+    const { getByText, getAllByText } = render(wrap(<SetupScreen navigation={navigation} route={route} />));
+
+    await waitFor(() => {
+      expect(getByText('Player 1')).toBeTruthy();
+    });
+    expect(getAllByText('ADD PLAYER')).toHaveLength(1);
+  });
+
+  test('a game renders its remaining empty tiles up to the cap (unchanged look)', async () => {
+    const route = {
+      params: {
+        kind: 'game',
+        initialStep: 'players',
+        prefill: {
+          players: [{ id: 'p1', name: 'Player 1', handicap: 10 }],
+          rounds: [{
+            id: 'r1', courseName: 'Pine Valley', holes: [], tees: [], playerHandicaps: null, playerTees: null,
+          }],
+        },
+      },
+    };
+    const { getByText, getAllByText } = render(wrap(<SetupScreen navigation={navigation} route={route} />));
+
+    await waitFor(() => {
+      expect(getByText('Player 1')).toBeTruthy();
+    });
+    // cap 4 − 1 filled = 3 empty launcher tiles, as before the cap change.
+    expect(getAllByText('ADD PLAYER')).toHaveLength(3);
+  });
+
   test('a casual game still caps the roster at 4 — the 5th/6th are dropped', async () => {
     setPendingPlayers(twoMorePlayers());
     const route = { params: baseParams('game') };

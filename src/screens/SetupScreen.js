@@ -549,7 +549,15 @@ export default function SetupScreen({ navigation, route }) {
 
   const renderPlayersStep = () => {
     const cap = rosterCap(kind);
-    const emptySlots = Math.max(0, cap - players.length);
+    const remaining = Math.max(0, cap - players.length);
+    // Render only a small, bounded number of empty "ADD PLAYER" tiles — the
+    // grid is a launcher into the picker, not a per-seat form. A game's cap
+    // of 4 means `remaining` is already small, so show them all (preserves
+    // the original look); a tournament's cap of 24 would otherwise render
+    // ~23 dashed tiles, so cap the visible empties to one. Either way it
+    // drops to 0 once the roster is full. The picker can still add players
+    // right up to `cap` — this only affects how many launcher tiles show.
+    const emptySlots = isGame ? remaining : Math.min(remaining, 1);
     return (
       <>
         <Text style={s.stepOverline}>PLAYERS</Text>
