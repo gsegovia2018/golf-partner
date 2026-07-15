@@ -11,7 +11,6 @@ import {
   SG_CATEGORIES,
   formatSignedFixed,
   sampleText,
-  signed,
 } from './shotMetrics';
 
 function CategoryRow({ category, strokesGained }) {
@@ -190,35 +189,39 @@ function buildShotSignals(stats) {
       id: `sg-${category.key}`,
       area: category.area,
       title: category.signalTitle ?? category.label,
-      metric: `${formatSignedFixed(value)} SG`,
+      metric: `${formatSignedFixed(value)} SG/rnd`,
       detail: `${sampleText(stats?.strokesGained?.sampleHoles, 'holes') ?? 'Tracked holes'} against target.`,
       score: value,
     });
   });
 
+  const puttingRounds = stats?.strokesGained?.roundsByCategory?.putting ?? 0;
   PUTT_BUCKETS.forEach((bucket) => {
     const row = stats?.puttingTarget?.buckets?.[bucket];
-    if (!row || row.attempts === 0 || row.sgPerPutt == null) return;
+    if (!row || row.attempts === 0 || row.sgPerPutt == null || puttingRounds === 0) return;
+    const perRound = (row.sgPerPutt * row.attempts) / puttingRounds;
     push({
       id: `putt-${bucket}`,
       area: 'Putting',
       title: `${bucket} m putts`,
-      metric: `${signed(row.sgPerPutt)} SG`,
+      metric: `${formatSignedFixed(perRound)} SG/rnd`,
       detail: `${row.avgPutts} avg vs ${row.expectedPutts} target · ${sampleText(row.attempts, 'putts')}`,
-      score: row.sgPerPutt,
+      score: perRound,
     });
   });
 
+  const approachRounds = stats?.strokesGained?.roundsByCategory?.approach ?? 0;
   APPROACH_BUCKETS.forEach((bucket) => {
     const row = stats?.approachTarget?.buckets?.[bucket];
-    if (!row || row.holes === 0 || row.avgSg == null) return;
+    if (!row || row.holes === 0 || row.avgSg == null || approachRounds === 0) return;
+    const perRound = (row.avgSg * row.holes) / approachRounds;
     push({
       id: `approach-${bucket}`,
       area: 'Approach',
       title: `${bucket} m approaches`,
-      metric: `${signed(row.avgSg)} SG`,
+      metric: `${formatSignedFixed(perRound)} SG/rnd`,
       detail: `${row.greenRate ?? row.girRate}% green · ${sampleText(row.holes, 'shots')}`,
-      score: row.avgSg,
+      score: perRound,
     });
   });
 

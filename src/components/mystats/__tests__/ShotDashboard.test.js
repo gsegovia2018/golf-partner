@@ -60,3 +60,34 @@ describe('ShotDashboard category gating and deltas', () => {
     expect(r.queryByText(/vs your last stretch/)).toBeNull();
   });
 });
+
+import { buildShotSignals } from '../ShotDashboard';
+
+describe('buildShotSignals per-round units', () => {
+  test('putt bucket impact = sgPerPutt · attempts / puttingRounds', () => {
+    const stats = {
+      strokesGained: {
+        byCategory: { offTheTee: 0, approach: 0, aroundGreen: 0, putting: 0, penalties: 0 },
+        sampleHolesByCategory: { offTheTee: 20, approach: 20, aroundGreen: 20, putting: 20, penalties: 20 },
+        sampleHoles: 20,
+        roundsByCategory: { offTheTee: 4, approach: 4, aroundGreen: 4, putting: 4, penalties: 4 },
+      },
+      puttingTarget: {
+        buckets: { '6+': { attempts: 16, sgPerPutt: -0.2, avgPutts: 2.4, expectedPutts: 2.1 } },
+      },
+    };
+    const { bad } = buildShotSignals(stats);
+    const putt = bad.find((sig) => sig.id === 'putt-6+');
+    // -0.2 · 16 / 4 = -0.8 per round
+    expect(putt.score).toBeCloseTo(-0.8, 5);
+    expect(putt.metric).toBe('-0.80 SG/rnd');
+  });
+  test('bucket signals without a rounds denominator are skipped', () => {
+    const stats = {
+      strokesGained: { byCategory: null, sampleHoles: 0, roundsByCategory: null },
+      puttingTarget: { buckets: { '6+': { attempts: 16, sgPerPutt: -0.2 } } },
+    };
+    const { bad } = buildShotSignals(stats);
+    expect(bad.find((sig) => sig.id === 'putt-6+')).toBeUndefined();
+  });
+});
