@@ -2,7 +2,8 @@ import React, { useMemo, useState } from 'react';
 import { View, Text, TouchableOpacity, StyleSheet } from 'react-native';
 import { useTheme } from '../../../theme/ThemeContext';
 import SectionCard from '../SectionCard';
-import { computeHandicapIndex, MIN_DIFFERENTIALS } from '../../../store/handicapIndex';
+import TrendLineChart from '../TrendLineChart';
+import { computeHandicapIndex, handicapIndexSeries, MIN_DIFFERENTIALS } from '../../../store/handicapIndex';
 import { upsertProfile } from '../../../store/profileStore';
 
 // "12 May" — short date for a differential row.
@@ -15,10 +16,23 @@ function fmtDate(iso) {
 
 const fmt1 = (n) => n.toFixed(1);
 
-export default function HandicapTab({ myRounds, profileHandicap, onInfo, onApplied }) {
+export default function HandicapTab({
+  myRounds, profileHandicap, onInfo, onApplied, excludedKeys, onToggleExcluded,
+}) {
   const { theme } = useTheme();
   const s = useMemo(() => makeStyles(theme), [theme]);
-  const result = useMemo(() => computeHandicapIndex(myRounds), [myRounds]);
+  const result = useMemo(
+    () => computeHandicapIndex(myRounds, { excludedKeys }),
+    [myRounds, excludedKeys],
+  );
+  const series = useMemo(
+    () => handicapIndexSeries(myRounds, { excludedKeys }),
+    [myRounds, excludedKeys],
+  );
+  const chartSeries = useMemo(
+    () => series.map((p) => ({ label: fmtDate(p.date), value: p.value })),
+    [series],
+  );
   const [applyState, setApplyState] = useState('idle'); // idle | saving | done | error
 
   // Profile writes clamp at 0 — the profile validator rejects plus (negative)
@@ -53,6 +67,17 @@ export default function HandicapTab({ myRounds, profileHandicap, onInfo, onAppli
     );
   }
 
+  const evolutionCard = chartSeries.length >= 2 ? (
+    <SectionCard title="Index evolution" infoKey="handicapIndex" onInfo={onInfo}>
+      <TrendLineChart
+        series={chartSeries}
+        color={theme.accent.primary}
+        formatValue={fmt1}
+        caption="After each qualifying round · oldest → newest"
+      />
+    </SectionCard>
+  ) : null;
+
   return (
     <View style={s.wrap}>
       <SectionCard title="Handicap Index" infoKey="handicapIndex" onInfo={onInfo}>
@@ -82,6 +107,8 @@ export default function HandicapTab({ myRounds, profileHandicap, onInfo, onAppli
             : 'No handicap on your profile yet.'}
         </Text>
       </SectionCard>
+
+      {evolutionCard}
 
       <SectionCard title="Score differentials" infoKey="handicapIndex" onInfo={onInfo}>
         <Text style={s.caption}>Last {result.windowCount} qualifying rounds · lowest count</Text>

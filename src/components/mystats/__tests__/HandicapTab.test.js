@@ -73,3 +73,19 @@ describe('HandicapTab', () => {
     expect(await findByText(/2 more/i)).toBeTruthy();
   });
 });
+
+describe('index evolution chart', () => {
+  it('renders the evolution card once there are 2+ points (4+ rounds)', async () => {
+    const { findByText } = renderTab({
+      myRounds: [myRound('a', 10), myRound('b', 14), myRound('c', 12), myRound('d', 16)],
+    });
+    expect(await findByText('Index evolution')).toBeTruthy();
+    expect(await findByText(/After each qualifying round/)).toBeTruthy();
+  });
+
+  it('is absent with only one point (3 rounds)', async () => {
+    const { findByText, queryByText } = renderTab();
+    await findByText('8.0'); // wait for the hero so the tab is fully rendered
+    expect(queryByText('Index evolution')).toBeNull();
+  });
+});
