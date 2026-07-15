@@ -1440,3 +1440,12 @@ describe('computeMyStats strokesGained extensions', () => {
     expect(rec.gapAvg).toBeCloseTo(catSum + rec.residualAvg, 10);
   });
 });
+
+describe('computeMyStats coach strategy wiring', () => {
+  test('driveLies and coachStrategy ride on the stats object', () => {
+    const rounds = [puttingRound(2), puttingRound(2), puttingRound(2), puttingRound(2)];
+    const stats = computeMyStats(rounds, { n: 1, targetHandicap: 0 });
+    expect(stats.driveLies).toEqual({ drives: 0, byLie: { fairway: 0, rough: 0, sand: 0, trouble: 0 }, troubleRate: null });
+    expect(Array.isArray(stats.coachStrategy)).toBe(true);
+  });
+});
