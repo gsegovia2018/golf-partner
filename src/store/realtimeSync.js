@@ -211,15 +211,25 @@ export function applyPlayerRow(t, row, eventType) {
     if (existingIdx !== -1) players.splice(existingIdx, 1);
     next.players = players;
     // Stamp the removedPlayerIds tombstone (see mutate.js's
-    // preserveLocalConflictState) on every round: this device may not be
-    // the one that ran removePlayer — the actor's own local apply already
-    // stripped scoreEntries/scoreResolutions for this player on ITS device,
-    // but this device's local cache can still carry a stale copy that a
-    // later union-merge would otherwise resurrect once the corresponding
-    // game_score_entries DELETE rows are processed out of order (or not at
-    // all, e.g. this device was offline for part of the removal window).
+    // preserveLocalConflictState) so a later union-merge on THIS device
+    // never resurrects the removed player's scoreEntries/scoreResolutions
+    // from a stale cache copy — this device may not be the one that ran
+    // removePlayer, and the corresponding game_score_entries DELETE rows can
+    // arrive out of order (or not at all, e.g. this device was offline for
+    // part of the removal window).
+    //
+    // CRITICAL: scope the tombstone to the SAME rounds the removal actually
+    // cleared — not-yet-played rounds only (idx >= currentRound), mirroring
+    // removePlayerRoundPatches (tournamentStore.js), which leaves
+    // already-played earlier rounds untouched and preserves the removed
+    // player's scores/entries there as history. Tombstoning a played round
+    // would make preserveLocalConflictState strip that legitimate history —
+    // a data-loss regression, since repo.deletePlayer broadcasts this DELETE
+    // to every device.
     if (Array.isArray(next.rounds)) {
-      next.rounds = next.rounds.map((round) => {
+      const currentRound = next.currentRound ?? 0;
+      next.rounds = next.rounds.map((round, idx) => {
+        if (idx < currentRound) return round; // already-played — leave history intact
         const removedPlayerIds = new Set(round.removedPlayerIds ?? []);
         removedPlayerIds.add(row.player_id);
         return { ...round, removedPlayerIds: [...removedPlayerIds] };
