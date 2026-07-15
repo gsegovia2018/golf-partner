@@ -18,6 +18,20 @@ const round1 = (n) => Math.round(n * 10) / 10;
 // numeric course rating (from the player's tee snapshot, with round-level
 // legacy fallback). Gross scores are capped per hole at net double bogey
 // (par + 2 + extra shots) before the differential is computed.
+// Why a round doesn't qualify for a differential. Check order matters: an
+// unfinished short round reads as 'partial' (the actionable problem), only a
+// finished non-18-hole round reads as 'nine-holes'.
+export function roundEligibility(myRound) {
+  if (!myRound?.isComplete) return { eligible: false, reason: 'partial' };
+  const holes = myRound.round?.holes ?? [];
+  if (holes.length !== 18) return { eligible: false, reason: 'nine-holes' };
+  const { slope, rating } = resolveRoundTee(myRound.round, myRound.playerId);
+  const sv = parseInt(slope, 10) || 0;
+  const cr = parseFloat(rating);
+  if (sv <= 0 || !Number.isFinite(cr)) return { eligible: false, reason: 'no-rating' };
+  return { eligible: true };
+}
+
 export function roundDifferential(myRound) {
   if (!myRound?.isComplete) return null;
   const { round, player, playerId } = myRound;
@@ -65,33 +79,64 @@ function whsCounting(n) {
 export const MIN_DIFFERENTIALS = 3;
 export const MAX_INDEX = 54;
 
-// Handicap Index from ALL of the user's rounds (chronological). Uses the
-// last 20 eligible differentials — deliberately independent of the My Stats
-// round selector, because WHS always uses the most recent scores.
-export function computeHandicapIndex(myRounds) {
-  const eligible = (myRounds ?? []).map(roundDifferential).filter(Boolean);
-  const window = eligible.slice(-20);
-  const base = {
-    windowCount: window.length,
-    eligibleCount: eligible.length,
-    totalCount: (myRounds ?? []).length,
-  };
+// Window + WHS table over an already-filtered chronological differential
+// list. Shared by computeHandicapIndex and handicapIndexSeries.
+function indexFromDifferentials(diffs) {
+  const window = diffs.slice(-20);
   if (window.length < MIN_DIFFERENTIALS) {
-    return {
-      ...base,
-      index: null,
-      usedCount: 0,
-      differentials: window.map((d) => ({ ...d, counting: false })),
-    };
+    return { index: null, usedCount: 0, windowCount: window.length, countingKeys: new Set(), window };
   }
   const { use, adj } = whsCounting(window.length);
   const sorted = [...window].sort((a, b) => a.differential - b.differential);
   const countingKeys = new Set(sorted.slice(0, use).map((d) => d.key));
   const avg = sorted.slice(0, use).reduce((s, d) => s + d.differential, 0) / use;
   return {
-    ...base,
     index: Math.min(MAX_INDEX, round1(avg + adj)),
     usedCount: use,
+    windowCount: window.length,
+    countingKeys,
+    window,
+  };
+}
+
+// Handicap Index from ALL of the user's rounds (chronological). Uses the
+// last 20 eligible differentials — deliberately independent of the My Stats
+// round selector, because WHS always uses the most recent scores.
+// `excludedKeys` (Set of MyRound keys) removes rounds BEFORE windowing, as
+// if they were never played; excluded eligible rounds are returned in
+// `excluded` so the UI can offer re-inclusion, and non-qualifying rounds in
+// `ineligible` with the reason.
+export function computeHandicapIndex(myRounds, { excludedKeys } = {}) {
+  const rounds = myRounds ?? [];
+  const included = [];
+  const excluded = [];
+  const ineligible = [];
+  rounds.forEach((r) => {
+    const d = roundDifferential(r);
+    if (!d) {
+      const { reason } = roundEligibility(r);
+      ineligible.push({
+        key: r?.key,
+        courseName: r?.courseName,
+        date: r?.tournamentDate ?? null,
+        reason,
+        holesPlayed: r?.holesPlayed ?? 0,
+      });
+      return;
+    }
+    if (excludedKeys?.has(d.key)) excluded.push(d);
+    else included.push(d);
+  });
+  const { index, usedCount, windowCount, countingKeys, window } = indexFromDifferentials(included);
+  return {
+    index,
+    usedCount,
+    windowCount,
+    eligibleCount: included.length + excluded.length,
+    totalCount: rounds.length,
+    excludedCount: excluded.length,
     differentials: window.map((d) => ({ ...d, counting: countingKeys.has(d.key) })),
+    excluded,
+    ineligible,
   };
 }
