@@ -1828,6 +1828,31 @@ export async function claimTournamentPlayer(tournamentId, playerId) {
   return data; // the claimed player id
 }
 
+// Atomic, cap-enforcing player add. Wraps the add_tournament_player_if_room
+// RPC (migration 20260715000001) — the server re-counts game_players under a
+// per-tournament advisory lock and rejects once the roster has reached
+// rosterCap(kind), so two joiners racing addNewPlayer (each seeing room in
+// their own stale local players.length) can't push the roster past the cap.
+// Throws Error('ROSTER_FULL') on rejection; the caller should refresh the
+// roster and tell the joiner it's full, same shape as claimTournamentPlayer's
+// SLOT_TAKEN handling. Call this BEFORE the normal tournament.addPlayer
+// mutation — that mutation's own upsert of the same tournament_id/player_id
+// afterwards is an idempotent no-op overwrite of the row this RPC creates.
+export async function addTournamentPlayerIfRoom(tournamentId, player) {
+  const { data, error } = await supabase
+    .rpc('add_tournament_player_if_room', {
+      p_tournament_id: String(tournamentId),
+      p_player: player,
+    });
+  if (error) {
+    if ((error.message || '').includes('ROSTER_FULL')) {
+      throw new Error('ROSTER_FULL');
+    }
+    throw error;
+  }
+  return data; // the added player id
+}
+
 // Owner-only: clear a player slot's user_id and drop that member, reopening
 // the slot. Wraps the release_tournament_player RPC.
 export async function releaseTournamentPlayer(tournamentId, playerId) {

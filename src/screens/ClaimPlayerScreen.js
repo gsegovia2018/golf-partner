@@ -10,6 +10,7 @@ import { useTheme } from '../theme/ThemeContext';
 import {
   getTournament, addPlayerRoundPatches, claimTournamentPlayer,
   refreshTournamentFromRemote, tournamentNoun, rosterCap,
+  addTournamentPlayerIfRoom,
 } from '../store/tournamentStore';
 import { loadProfile } from '../store/profileStore';
 import { mutate } from '../store/mutate';
@@ -108,6 +109,26 @@ export default function ClaimPlayerScreen({ navigation, route }) {
         handicap: parsedHcp.ok ? parsedHcp.value : 0,
         user_id: profile.userId,
       };
+      // Atomic, server-enforced cap check (Task 9) — two joiners can each
+      // observe a locally-stale players.length under the cap and both reach
+      // here; only the RPC's race-safe recount can actually reject the
+      // loser. Do this BEFORE any local/offline-queued write so a rejected
+      // add never shows up in this device's own roster.
+      try {
+        await addTournamentPlayerIfRoom(tournament.id, player);
+      } catch (err) {
+        if (err?.message === 'ROSTER_FULL') {
+          try {
+            const fresh = await refreshTournamentFromRemote(tournament.id);
+            if (fresh) setTournament(fresh);
+          } catch (_) { /* keep the stale roster; the alert is enough */ }
+          Alert.alert('Roster full',
+            `This ${noun} already has the maximum number of players.`);
+          setSaving(false);
+          return;
+        }
+        throw err;
+      }
       const { patches: roundPatches } = addPlayerRoundPatches(tournament, player);
       const t = await mutate(tournament, {
         type: 'tournament.addPlayer', player, roundPatches,
@@ -233,6 +254,7 @@ export default function ClaimPlayerScreen({ navigation, route }) {
                   keyboardAppearance={theme.isDark ? 'dark' : 'light'}
                 />
                 <TouchableOpacity
+                  testID="claim-add-new-player-confirm"
                   style={[s.addBtn, saving && { opacity: 0.5 }]}
                   onPress={addNewPlayer}
                   disabled={saving}
