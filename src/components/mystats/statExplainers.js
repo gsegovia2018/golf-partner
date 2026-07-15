@@ -168,8 +168,8 @@ export const statExplainers = {
     title: 'Driving vs target',
     subtitle: 'Accuracy, misses, penalties, and benchmark distance',
     explainer: 'Fairways hit, left misses, right misses, and tee penalties compare your logged '
-      + 'tee shots with the target-handicap benchmark. Driver distance is shown as the benchmark '
-      + 'for context because this app does not track measured driving distance yet.',
+      + 'tee shots with the target-handicap benchmark. Drive distance averages the distance '
+      + 'buckets you log on the scorecard against the benchmark driver distance.',
   },
   sgApproach: {
     title: 'Approach vs target',

@@ -452,14 +452,7 @@ function makeDrivingTargetRows(shots, shotBenchmark, driveDistance) {
       }),
       dim: recorded === 0,
     },
-    {
-      key: 'driverDistance',
-      label: 'Driver distance',
-      value: `${formatBenchmarkNumber(shotBenchmark.driverDistance)} yd`,
-      secondary: 'target benchmark only · distance not tracked',
-      tone: 'neutral',
-    },
-    ...(driveDistance?.drives > 0 ? [{
+    driveDistance?.drives > 0 ? {
       key: 'driveDistance',
       label: 'Drive distance',
       value: `~${driveDistance.avgDistance} m`,
@@ -476,7 +469,17 @@ function makeDrivingTargetRows(shots, shotBenchmark, driveDistance) {
         minSample: 6,
       }),
       dim: false,
-    }] : []),
+    } : {
+      key: 'driveDistance',
+      label: 'Drive distance',
+      value: '—',
+      secondary: targetSecondary([
+        `target ~${Math.round(shotBenchmark.driverDistance * YD_TO_M)} m`,
+        'log drive distance on the scorecard to track this',
+      ], 0, 6),
+      tone: 'neutral',
+      dim: true,
+    },
   ];
 }
 
