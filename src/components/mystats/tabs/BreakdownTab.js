@@ -245,9 +245,9 @@ function makeCoursePatternRows({ parType, difficulty, baseline }) {
     pointPatternRow('par3', 'Par 3s', parType.par3, baseline),
     pointPatternRow('par4', 'Par 4s', parType.par4, baseline),
     pointPatternRow('par5', 'Par 5s', parType.par5, baseline),
-    pointPatternRow('hard', 'Hard holes (SI 1-6)', difficulty.hard, baseline),
-    pointPatternRow('mid', 'Mid holes (SI 7-12)', difficulty.mid, baseline),
-    pointPatternRow('easy', 'Easy holes (SI 13-18)', difficulty.easy, baseline),
+    pointPatternRow('hard', 'Hard holes (hardest third)', difficulty.hard, baseline),
+    pointPatternRow('mid', 'Mid holes (middle third)', difficulty.mid, baseline),
+    pointPatternRow('easy', 'Easy holes (easiest third)', difficulty.easy, baseline),
   ].filter(Boolean);
 }
 

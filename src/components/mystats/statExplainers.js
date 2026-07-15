@@ -101,8 +101,9 @@ export const statExplainers = {
   holeDifficulty: {
     title: 'Hole difficulty',
     subtitle: 'Net points by stroke index',
-    explainer: 'Average net points per hole, split by the printed stroke index: hard (SI 1-6), '
-      + 'mid (SI 7-12), easy (SI 13-18).',
+    explainer: 'Average net points per hole, split into thirds by the printed stroke index: the '
+      + 'hardest third, the middle third, and the easiest third of holes (e.g. SI 1-6/7-12/13-18 '
+      + 'on an 18-hole round, SI 1-3/4-6/7-9 on a 9-hole round).',
   },
   roundShape: {
     title: 'Round timing patterns',
