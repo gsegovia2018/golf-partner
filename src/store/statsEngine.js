@@ -2684,23 +2684,26 @@ export function approachTargetGaps(rounds, playerId, targetHandicap = 0) {
 }
 
 export function sgTotal(round, playerId, targetHandicap = 0) {
+  const offTheTee   = sgOffTheTee(round, playerId, targetHandicap);
   const approach    = sgApproach(round, playerId, targetHandicap);
   const aroundGreen = sgAroundGreen(round, playerId, targetHandicap);
   const putting     = sgPutting(round, playerId, targetHandicap);
   const penalties   = sgPenalties(round, playerId);
   const byCategory = {
+    offTheTee:   offTheTee.total,
     approach:    approach.total,
     aroundGreen: aroundGreen.total,
     putting:     putting.total,
     penalties:   penalties.total,
   };
-  const total = byCategory.approach + byCategory.aroundGreen + byCategory.putting
-    + byCategory.penalties;
+  const total = byCategory.offTheTee + byCategory.approach + byCategory.aroundGreen
+    + byCategory.putting + byCategory.penalties;
   const sampleHoles = Math.max(
-    approach.sampleHoles, aroundGreen.sampleHoles, putting.sampleHoles,
-    penalties.sampleHoles,
+    offTheTee.sampleHoles, approach.sampleHoles, aroundGreen.sampleHoles,
+    putting.sampleHoles, penalties.sampleHoles,
   );
   const sampleHolesByCategory = {
+    offTheTee:   offTheTee.sampleHoles,
     approach:    approach.sampleHoles,
     aroundGreen: aroundGreen.sampleHoles,
     putting:     putting.sampleHoles,
@@ -2710,12 +2713,12 @@ export function sgTotal(round, playerId, targetHandicap = 0) {
 }
 
 const SG_SEASON_MIN_SAMPLE = 18;       // one full round's worth of contributing holes
-const SG_CATEGORIES = ['approach', 'aroundGreen', 'putting', 'penalties'];
+const SG_CATEGORIES = ['offTheTee', 'approach', 'aroundGreen', 'putting', 'penalties'];
 
 export function sgSeason(rounds, playerId, targetHandicap = 0) {
-  const byCategory = { approach: 0, aroundGreen: 0, putting: 0, penalties: 0 };
-  const categoryRounds = { approach: 0, aroundGreen: 0, putting: 0, penalties: 0 };
-  const sampleHolesByCategory = { approach: 0, aroundGreen: 0, putting: 0, penalties: 0 };
+  const byCategory = { offTheTee: 0, approach: 0, aroundGreen: 0, putting: 0, penalties: 0 };
+  const categoryRounds = { offTheTee: 0, approach: 0, aroundGreen: 0, putting: 0, penalties: 0 };
+  const sampleHolesByCategory = { offTheTee: 0, approach: 0, aroundGreen: 0, putting: 0, penalties: 0 };
   let sampleHoles = 0;
   const perRound = [];
   rounds.forEach((round, i) => {
@@ -2729,10 +2732,13 @@ export function sgSeason(rounds, playerId, targetHandicap = 0) {
       sampleHolesByCategory[category] += categorySample;
     });
     sampleHoles += r.sampleHoles;
-    perRound.push({ index: i, total: r.total, sampleHoles: r.sampleHoles });
+    perRound.push({ index: i, total: r.total, sampleHoles: r.sampleHoles, byCategory: r.byCategory });
   });
   if (sampleHoles < SG_SEASON_MIN_SAMPLE) {
-    return { total: null, byCategory: null, sampleHoles, sampleHolesByCategory, perRound };
+    return {
+      total: null, byCategory: null, sampleHoles, sampleHolesByCategory,
+      roundsByCategory: categoryRounds, perRound,
+    };
   }
   // Per-category "SG / round" figures (shown on the category bars) are each
   // averaged over THAT category's own denominator — e.g. putting averages
@@ -2752,6 +2758,7 @@ export function sgSeason(rounds, playerId, targetHandicap = 0) {
   // the same round count, so it's a real "average SG per round" a group of
   // rounds could actually produce, not a sum of differently-scaled averages.
   const perCategory = {
+    offTheTee:   categoryRounds.offTheTee > 0 ? byCategory.offTheTee / categoryRounds.offTheTee : 0,
     approach:    categoryRounds.approach > 0 ? byCategory.approach / categoryRounds.approach : 0,
     aroundGreen: categoryRounds.aroundGreen > 0 ? byCategory.aroundGreen / categoryRounds.aroundGreen : 0,
     putting:     categoryRounds.putting > 0 ? byCategory.putting / categoryRounds.putting : 0,
@@ -2766,6 +2773,7 @@ export function sgSeason(rounds, playerId, targetHandicap = 0) {
     byCategory: perCategory,
     sampleHoles,
     sampleHolesByCategory,
+    roundsByCategory: categoryRounds,
     roundsWithAnySample,
     perRound,
   };

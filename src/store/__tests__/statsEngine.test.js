@@ -881,6 +881,54 @@ describe('sgTotal', () => {
   });
 });
 
+describe('sgTotal with offTheTee', () => {
+  test('offTheTee joins byCategory and the headline total', () => {
+    const round = makeRound(
+      [{ par: 4, strokes: 5 }],
+      [{
+        drive: 'left', driveLie: 'rough', driveDistBucket: '180-210',
+        putts: 2, approachBucket: '100-150', approachResult: 'green', firstPuttBucket: '3-6',
+      }],
+    );
+    const r = sgTotal(round, 'me');
+    expect(r.byCategory.offTheTee).toBeCloseTo(-0.32, 2);
+    expect(r.sampleHolesByCategory.offTheTee).toBe(1);
+    const sum = r.byCategory.offTheTee + r.byCategory.approach
+      + r.byCategory.aroundGreen + r.byCategory.putting + r.byCategory.penalties;
+    expect(r.total).toBeCloseTo(sum, 10);
+  });
+});
+
+describe('sgSeason with offTheTee', () => {
+  // 18 tracked holes so the season min-sample gate opens.
+  const holes18 = Array.from({ length: 18 }, () => ({ par: 4, strokes: 4 }));
+  const detail = {
+    drive: 'fairway', driveDistBucket: '210-240',
+    putts: 2, approachBucket: '100-150', approachResult: 'green', firstPuttBucket: '3-6',
+  };
+  const details18 = Array.from({ length: 18 }, () => ({ ...detail }));
+  const round = makeRound(holes18, details18);
+
+  test('per-category average, roundsByCategory, and perRound.byCategory', () => {
+    const season = sgSeason([round], 'me');
+    expect(season.byCategory.offTheTee).toBeCloseTo(18 * -0.0131, 1);
+    expect(season.roundsByCategory).toEqual({
+      offTheTee: 1, approach: 1, aroundGreen: 0, putting: 1, penalties: 1,
+    });
+    expect(season.perRound[0].byCategory.offTheTee).toBeCloseTo(18 * -0.0131, 1);
+    expect(season.perRound[0].byCategory.putting).toBeDefined();
+  });
+  test('legacy rounds without drive buckets leave offTheTee unsampled', () => {
+    const legacy = makeRound(holes18, Array.from({ length: 18 }, () => ({
+      putts: 2, approachBucket: '100-150', approachResult: 'green', firstPuttBucket: '3-6',
+    })));
+    const season = sgSeason([legacy], 'me');
+    expect(season.roundsByCategory.offTheTee).toBe(0);
+    expect(season.byCategory.offTheTee).toBe(0);
+    expect(season.sampleHolesByCategory.offTheTee).toBe(0);
+  });
+});
+
 describe('sgPutting with targetHandicap', () => {
   test('default targetHandicap=0 matches Phase B', () => {
     const round = makeRound(
