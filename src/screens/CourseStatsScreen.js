@@ -13,7 +13,9 @@ import StatTile from '../components/mystats/StatTile';
 import DistributionBars from '../components/mystats/DistributionBars';
 import HoleBreakdownTable from '../components/mystats/HoleBreakdownTable';
 import { toneColor, toneFill } from '../components/mystats/metricTone';
-import { DRIVE_ORDER } from '../components/mystats/shotMetrics';
+// Spatial display order for the drive bars (miss-short, miss-left, fairway,
+// super, miss-right) — deliberately NOT shotMetrics' canonical DRIVE_ORDER.
+const DRIVE_BAR_ORDER = ['short', 'left', 'fairway', 'super', 'right'];
 
 // Short bar labels — the long DRIVE_LABELS copy doesn't fit under a bar.
 const DRIVE_BAR_LABELS = {
@@ -182,7 +184,7 @@ export default function CourseStatsScreen({ navigation, route }) {
             </View>
             {shots.drives.recorded > 0 ? (
               <View style={s.drivesBlock}>
-                <DistributionBars bars={DRIVE_ORDER.map((k) => {
+                <DistributionBars bars={DRIVE_BAR_ORDER.map((k) => {
                   const count = shots.drives.distribution[k] ?? 0;
                   return {
                     label: DRIVE_BAR_LABELS[k],
