@@ -366,6 +366,45 @@ describe('buildCoachInsights', () => {
     expect(coach.practicePlan[1]).toMatchObject({ role: 'secondaryFocus', sourceInsightId: 'driving:fairway-drives' });
   });
 
+  test('labels a strong penalties strokes-gained leak as Penalties, not Scoring', () => {
+    const coach = buildCoachInsights(baseStats({
+      actionPlan: { keep: null, improve: null, practice: null, strengths: [], improvements: [] },
+      strokesGained: {
+        total: -0.9,
+        sampleHoles: 54,
+        byCategory: { approach: 0, aroundGreen: 0, putting: 0, penalties: -0.6 },
+      },
+    }));
+    const penaltyInsight = Object.values(coach.board).flat().find((i) => i.title === 'Penalties');
+    expect(penaltyInsight).toBeDefined();
+    expect(penaltyInsight.area).toBe('penalties');
+    expect(penaltyInsight.areaLabel).toBe('Penalties');
+    expect(penaltyInsight.areaLabel).not.toBe('Scoring');
+  });
+
+  test('does not let a persistent small penalties leak crowd out a bigger leak in pickHero', () => {
+    const coach = buildCoachInsights(baseStats({
+      actionPlan: { keep: null, improve: null, practice: null, strengths: [], improvements: [] },
+      ranking: { baseline: null, strengths: [], weaknesses: [] },
+      strokesGained: {
+        total: -0.9,
+        sampleHoles: 54,
+        sampleHolesByCategory: { approach: 8, penalties: 54 },
+        // Approach is the real, bigger leak but only medium-confidence
+        // (sample 8). Penalties is small (-0.15) but high-confidence
+        // (tracked almost every round, sample 54) and near-permanently
+        // non-positive - it must not win the fixFirst/hero slot over the
+        // genuinely larger approach leak.
+        byCategory: { approach: -0.7, aroundGreen: 0, putting: 0, penalties: -0.15 },
+      },
+    }));
+
+    expect(coach.hero).toMatchObject({ title: 'Approach', confidence: 'medium' });
+    expect(coach.board.fixFirst.map((i) => i.title)).not.toContain('Penalties');
+    expect(coach.board.nextGains.map((i) => i.title)).toContain('Penalties');
+    expect(coach.practicePlan[0]).toMatchObject({ sourceInsightId: 'approach:approach' });
+  });
+
   test('falls back to form and data-collection guidance without shot data', () => {
     const coach = buildCoachInsights(baseStats({
       actionPlan: { keep: null, improve: null, practice: null, strengths: [], improvements: [] },

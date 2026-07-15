@@ -15,6 +15,7 @@ const AREA_LABELS = {
   shortGame: 'Short game',
   scoring: 'Scoring',
   roundShape: 'Round shape',
+  penalties: 'Penalties',
 };
 
 const AREA_ALIASES = {
@@ -36,6 +37,7 @@ const AREA_ALIASES = {
   form: 'form',
   roundshape: 'roundShape',
   closing: 'roundShape',
+  penalties: 'penalties',
 };
 
 const LOW_SAMPLE_MAX = 5;
@@ -247,7 +249,7 @@ function strokesGainedCategoryInsights(stats) {
     const tone = value > 0 ? 'good' : 'bad';
     const title = SG_CATEGORY_TITLES[category] || AREA_LABELS[normalizeArea(category)];
     const sampleCopy = samplePhrase(sample, 'SG / round', 'holes');
-    return makeInsight({
+    const insight = makeInsight({
       group: value > 0 ? 'keepDoing' : 'fixFirst',
       area: category,
       title,
@@ -262,6 +264,18 @@ function strokesGainedCategoryInsights(stats) {
       tone,
       priority: 1,
     });
+    // Penalties are almost always non-positive and tracked on nearly every
+    // round, so they are almost always "high confidence". Left unguarded,
+    // that lets a small-but-persistent penalties cost outrank a genuinely
+    // bigger leak elsewhere (which may only have medium/low confidence) for
+    // the fixFirst/hero slot. Route penalties leaks through the same
+    // confidence + strength gate used for actionPlan leaks so only a
+    // *strong*, well-sampled penalties leak stays in fixFirst; a weak one
+    // moves to nextGains/watch instead of crowding out other insights.
+    if (category === 'penalties' && tone === 'bad') {
+      return routeLeakInsight(insight, value);
+    }
+    return insight;
   }).filter(Boolean);
 }
 
