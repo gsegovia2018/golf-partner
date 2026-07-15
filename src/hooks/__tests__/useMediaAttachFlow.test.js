@@ -1,5 +1,5 @@
 import React from 'react';
-import { Text, TouchableOpacity } from 'react-native';
+import { Text, TouchableOpacity, Alert } from 'react-native';
 import { render, fireEvent, waitFor } from '@testing-library/react-native';
 import useMediaAttachFlow from '../useMediaAttachFlow';
 import { pickMedia, attachMedia, attachManyMedia } from '../../lib/mediaCapture';
@@ -22,11 +22,18 @@ jest.mock('../../components/CaptureMenuSheet', () => function MockCaptureMenu({ 
 jest.mock('../../components/AttachMediaSheet', () => function MockAttach({ visible, onConfirm }) {
   const { Text, TouchableOpacity } = require('react-native');
   return visible ? (
-    <TouchableOpacity onPress={() => onConfirm({
-      roundIndex: 1, roundId: 'r2', holeIndex: 4, caption: 'c', uploaderLabel: null,
-    })}>
-      <Text>mock-attach-sheet</Text>
-    </TouchableOpacity>
+    <>
+      <TouchableOpacity onPress={() => onConfirm({
+        roundIndex: 1, roundId: 'r2', holeIndex: 4, caption: 'c', uploaderLabel: null,
+      })}>
+        <Text>mock-attach-sheet</Text>
+      </TouchableOpacity>
+      <TouchableOpacity onPress={() => onConfirm({
+        roundIndex: 99, roundId: null, holeIndex: null, caption: null, uploaderLabel: null,
+      })}>
+        <Text>mock-attach-sheet-stale</Text>
+      </TouchableOpacity>
+    </>
   ) : null;
 });
 
@@ -96,6 +103,25 @@ describe('useMediaAttachFlow', () => {
       tournamentId: 't1',
       items: [expect.objectContaining({ roundId: 'r1' })],
     }));
+  });
+
+  test('stale roundIndex with no resolvable roundId alerts instead of silently dropping the photo', async () => {
+    const alertSpy = jest.spyOn(Alert, 'alert').mockImplementation(() => {});
+    pickMedia.mockResolvedValue({
+      kind: 'photo', localUri: 'file://a.jpg', durationS: null,
+      mimeType: 'image/jpeg', fileName: 'a.jpg', fileSize: 123,
+    });
+    const onAttached = jest.fn();
+    const { getByText, findByText } = render(<Harness onAttached={onAttached} />);
+    fireEvent.press(getByText('open'));
+    fireEvent.press(getByText('mock-capture-menu'));
+    fireEvent.press(await findByText('mock-attach-sheet-stale'));
+    await waitFor(() => expect(alertSpy).toHaveBeenCalledWith(
+      "Couldn't attach", 'This round is no longer available.',
+    ));
+    expect(attachMedia).not.toHaveBeenCalled();
+    expect(onAttached).not.toHaveBeenCalled();
+    alertSpy.mockRestore();
   });
 
   test('allowBatch: false picks a single asset even from the library', async () => {

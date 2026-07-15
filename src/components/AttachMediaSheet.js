@@ -9,12 +9,18 @@ import WheelPicker from './WheelPicker';
 
 const UPLOADER_KEY = '@golf_uploader_label';
 
+// A stale feed item's roundIndex can exceed the loaded tournament's rounds
+// (e.g. a round was removed). Clamp so `rounds[roundIndex]` is always
+// defined instead of silently producing an undefined round downstream.
+const clampRoundIndex = (index, rounds) =>
+  Math.min(Math.max(0, index ?? 0), Math.max(0, (rounds?.length ?? 1) - 1));
+
 export default function AttachMediaSheet({
   visible, asset, rounds, defaultRoundIndex, defaultHoleIndex, onCancel, onConfirm,
 }) {
   const { theme } = useTheme();
   const s = makeStyles(theme);
-  const [roundIndex, setRoundIndex] = useState(defaultRoundIndex ?? 0);
+  const [roundIndex, setRoundIndex] = useState(clampRoundIndex(defaultRoundIndex, rounds));
   // Hole wheel index 0 is "No hole"; hole N is wheel index N.
   const [holeWheelIndex, setHoleWheelIndex] = useState((defaultHoleIndex ?? -1) + 1);
   const [caption, setCaption] = useState('');
@@ -22,11 +28,11 @@ export default function AttachMediaSheet({
 
   useEffect(() => {
     if (!visible) return;
-    setRoundIndex(defaultRoundIndex ?? 0);
+    setRoundIndex(clampRoundIndex(defaultRoundIndex, rounds));
     setHoleWheelIndex((defaultHoleIndex ?? -1) + 1);
     setCaption('');
     AsyncStorage.getItem(UPLOADER_KEY).then((v) => setUploader(v ?? ''));
-  }, [visible, defaultRoundIndex, defaultHoleIndex]);
+  }, [visible, defaultRoundIndex, defaultHoleIndex, rounds]);
 
   const round = rounds?.[roundIndex];
   const holes = round?.holes ?? [];

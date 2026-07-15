@@ -53,7 +53,10 @@ export default function useMediaAttachFlow({
     setSingleAsset(null);
     if (!asset || !tournament) return;
     const resolvedRoundId = roundId ?? tournament.rounds?.[roundIndex]?.id;
-    if (!resolvedRoundId) return;
+    if (!resolvedRoundId) {
+      Alert.alert("Couldn't attach", 'This round is no longer available.');
+      return;
+    }
     try {
       await attachMedia({
         tournamentId: tournament.id,

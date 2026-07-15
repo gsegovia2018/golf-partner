@@ -79,4 +79,16 @@ describe('AttachMediaSheet', () => {
       uploaderLabel: null,
     }));
   });
+
+  test('clamps an out-of-range defaultRoundIndex from a stale feed item', async () => {
+    const { onConfirm, getByText } = setup({ defaultRoundIndex: 5 });
+    fireEvent.press(getByText('Save'));
+    await waitFor(() => expect(onConfirm).toHaveBeenCalledWith({
+      roundIndex: 1,
+      roundId: 'r2',
+      holeIndex: null,
+      caption: null,
+      uploaderLabel: null,
+    }));
+  });
 });
