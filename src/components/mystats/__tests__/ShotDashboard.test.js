@@ -1,6 +1,6 @@
 import React from 'react';
 import { render } from '@testing-library/react-native';
-import ShotDashboard from '../ShotDashboard';
+import ShotDashboard, { buildShotSignals } from '../ShotDashboard';
 
 jest.mock('../../../theme/ThemeContext', () => ({
   useTheme: () => {
@@ -60,8 +60,6 @@ describe('ShotDashboard category gating and deltas', () => {
     expect(r.queryByText(/vs your last stretch/)).toBeNull();
   });
 });
-
-import { buildShotSignals } from '../ShotDashboard';
 
 describe('buildShotSignals per-round units', () => {
   test('putt bucket impact = sgPerPutt · attempts / puttingRounds', () => {
