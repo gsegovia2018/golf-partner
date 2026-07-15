@@ -2591,3 +2591,33 @@ describe('sgOffTheTee', () => {
     expect(r.total).toBe(0);
   });
 });
+
+describe('sgApproach with approachLie', () => {
+  const holes = [{ par: 4, strokes: 4 }];
+  const base = { putts: 2, approachBucket: '100-150', approachResult: 'green', firstPuttBucket: '3-6' };
+  // end state for all three: E(green, 4.5) = 1.82401
+
+  test('null approachLie behaves exactly like fairway (legacy)', () => {
+    const nullLie = sgApproach(makeRound(holes, [{ ...base }]), 'me');
+    const fairway = sgApproach(makeRound(holes, [{ ...base, approachLie: 'fairway' }]), 'me');
+    expect(nullLie.perHole[0]).toBeCloseTo(fairway.perHole[0], 10);
+    // E(fairway, 125) = 2.88803 → 2.88803 - 1.82401 - 1
+    expect(nullLie.perHole[0]).toBeCloseTo(0.06, 2);
+  });
+  test('rough start lie raises the expected strokes, so the same shot gains more', () => {
+    const r = sgApproach(makeRound(holes, [{ ...base, approachLie: 'rough' }]), 'me');
+    // E(rough, 125) = 3.06803 → 3.06803 - 1.82401 - 1
+    expect(r.perHole[0]).toBeCloseTo(0.24, 2);
+  });
+  test('sand start lie uses the sand table (clamped at its 91.4 m endpoint)', () => {
+    const r = sgApproach(makeRound(holes, [{ ...base, approachLie: 'sand' }]), 'me');
+    // E(sand, 125) clamps to 3.25 → 3.25 - 1.82401 - 1
+    expect(r.perHole[0]).toBeCloseTo(0.43, 2);
+  });
+  test('par 3 ignores approachLie — start is always the tee', () => {
+    const p3 = [{ par: 3, strokes: 3 }];
+    const withLie = sgApproach(makeRound(p3, [{ ...base, approachLie: 'rough' }]), 'me');
+    const without = sgApproach(makeRound(p3, [{ ...base }]), 'me');
+    expect(withLie.perHole[0]).toBeCloseTo(without.perHole[0], 10);
+  });
+});
