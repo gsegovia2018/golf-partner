@@ -49,7 +49,10 @@ export default function HandicapTab({
       ...result.excluded.map((d) => ({ ...d, type: 'excluded' })),
       ...result.ineligible.map((d) => ({ ...d, type: 'ineligible' })),
     ];
-    return merged.sort((a, b) => String(b.date ?? '').localeCompare(String(a.date ?? '')));
+    return merged.sort((a, b) => (
+      String(b.date ?? '').localeCompare(String(a.date ?? ''))
+        || String(b.key ?? '').localeCompare(String(a.key ?? ''))
+    ));
   }, [result]);
   const [applyState, setApplyState] = useState('idle'); // idle | saving | done | error
 
@@ -72,7 +75,7 @@ export default function HandicapTab({
 
   const listCard = rows.length > 0 ? (
     <SectionCard title="Score differentials" infoKey="handicapIndex" onInfo={onInfo}>
-      <Text style={s.caption}>Newest first · grey rounds don't count</Text>
+      <Text style={s.caption}>{`Newest first · grey rounds don't count`}</Text>
       {rows.map((d) => (
         <View key={d.key} style={[s.row, d.type === 'included' && d.counting && s.rowCounting]}>
           <View style={s.rowMain}>
