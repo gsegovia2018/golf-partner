@@ -1,6 +1,9 @@
 import { calcStablefordPoints, calcExtraShots, roundPairLeaderboard, getPlayingHandicap } from './tournamentStore';
 import { isGIR, recoveryOutcomeFromState, roundScoringMode, isScrambleMode, isPickupScore } from './scoring';
-import { expectedFromBucket, expectedStrokes, BUCKETS } from './strokesGainedBaseline';
+import {
+  expectedFromBucket, expectedStrokes, BUCKETS,
+  PAR_ANCHOR_DISTANCE, benchmarkDriveDistance,
+} from './strokesGainedBaseline';
 
 // Scramble rounds store ONE team ball under the team's captain (pair[0]),
 // scored off a team handicap — there are no real personal scores, shot
@@ -2517,6 +2520,58 @@ export function sgPenalties(round, playerId) {
     if (!d) return null;
     const penalty = (d.teePenalties ?? 0) + (d.otherPenalties ?? 0);
     return penalty > 0 ? -penalty : 0;
+  });
+  const sample = perHole.filter((x) => x != null);
+  const total = sample.reduce((a, x) => a + x, 0);
+  return { perHole, total, sampleHoles: sample.length };
+}
+
+// ── Strokes Gained: Off the Tee ──
+
+// Which baseline table a drive lie reads from.
+const DRIVE_LIE_TABLE = { fairway: 'fairway', rough: 'rough', sand: 'sand', trouble: 'recovery' };
+
+// A drive's lie: the explicit driveLie field when logged, otherwise derived
+// from the direction chip — fairway/super hit the fairway; any miss
+// direction defaults to rough (the most common miss).
+export function driveLieFromDetail(detail) {
+  if (!detail) return null;
+  if (detail.driveLie && DRIVE_LIE_TABLE[detail.driveLie]) return detail.driveLie;
+  if (detail.drive === 'fairway' || detail.drive === 'super') return 'fairway';
+  if (detail.drive === 'left' || detail.drive === 'right' || detail.drive === 'short') return 'rough';
+  return null;
+}
+
+// Never let "remaining to the green" collapse below a normal wedge — a 240+
+// drive on the 340 m anchor still leaves a real shot.
+const MIN_REMAINING_DISTANCE = 30;
+
+// Benchmark-drive model (spec §1.2): compare the drive's end position against
+// the end position of the target handicap's typical drive (fairway lie) on a
+// fixed anchor-length hole. Both sides spend exactly one stroke, so no -1
+// term. Penalty strokes stay in sgPenalties — not double-counted here.
+export function sgOffTheTee(round, playerId, targetHandicap = 0) {
+  const byHole = round?.shotDetails?.[playerId];
+  const perHole = (round?.holes ?? []).map((hole) => {
+    const anchor = hole.par === 4 ? PAR_ANCHOR_DISTANCE[4]
+      : hole.par >= 5 ? PAR_ANCHOR_DISTANCE[5] : null;
+    if (anchor == null) return null;
+    const d = byHole?.[hole.number];
+    const lie = driveLieFromDetail(d);
+    const dist = BUCKETS.driveDist[d?.driveDistBucket];
+    if (lie == null || dist == null) return null;
+    const bench = expectedStrokes(
+      'fairway',
+      Math.max(MIN_REMAINING_DISTANCE, anchor - benchmarkDriveDistance(targetHandicap)),
+      targetHandicap,
+    );
+    const actual = expectedStrokes(
+      DRIVE_LIE_TABLE[lie],
+      Math.max(MIN_REMAINING_DISTANCE, anchor - dist),
+      targetHandicap,
+    );
+    if (bench == null || actual == null) return null;
+    return bench - actual;
   });
   const sample = perHole.filter((x) => x != null);
   const total = sample.reduce((a, x) => a + x, 0);

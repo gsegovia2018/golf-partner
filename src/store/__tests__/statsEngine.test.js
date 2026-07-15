@@ -1,4 +1,4 @@
-import { teeShotImpact, lagPuttingQuality, sandSaveRate, upAndDownRate, bunkerVisits, sgPutting, sgAroundGreen, sgApproach, sgPenalties, sgTotal, sgSeason, driveScoreImpact, puttDeepDive, approachScoreImpact, puttingTargetGaps, approachTargetGaps, pairPerformance, shotStats, playersWithShotData, tournamentHighlights, withoutScrambleScores, playerAvgStableford, pickupChampion, hallOfShame, chaosHoles, skinsLeaderboard, playerStreaks, bounceBackRate, strokeIndexAccuracy, bestWorstHoles, holeDifficultyMap, collectiveExtremes, pairConfigMatrix, matchPlayResults, pairHoleWins, anchor, par3Heartbreak, playingToHandicap, hotStretch, nemesisEncore, pairCoverage, girByDriveResult, courseDNA, warmupVsClosing } from '../statsEngine';
+import { teeShotImpact, lagPuttingQuality, sandSaveRate, upAndDownRate, bunkerVisits, sgPutting, sgAroundGreen, sgApproach, sgPenalties, sgOffTheTee, sgTotal, sgSeason, driveScoreImpact, puttDeepDive, approachScoreImpact, puttingTargetGaps, approachTargetGaps, pairPerformance, shotStats, playersWithShotData, tournamentHighlights, withoutScrambleScores, playerAvgStableford, pickupChampion, hallOfShame, chaosHoles, skinsLeaderboard, playerStreaks, bounceBackRate, strokeIndexAccuracy, bestWorstHoles, holeDifficultyMap, collectiveExtremes, pairConfigMatrix, matchPlayResults, pairHoleWins, anchor, par3Heartbreak, playingToHandicap, hotStretch, nemesisEncore, pairCoverage, girByDriveResult, courseDNA, warmupVsClosing, driveLieFromDetail } from '../statsEngine';
 import { mixedModeTournament, buildTournament } from './statsFixtures';
 
 // 18 par-4 holes, strokeIndex = hole number.
@@ -2503,5 +2503,91 @@ describe('warmupVsClosing — breakdown roundIndex', () => {
     expect(wc.warmup.breakdown.map((b) => b.holeNumber)).toEqual([10, 11, 12]);
     expect(wc.closing.holes).toBe(3);
     expect(wc.closing.breakdown.map((b) => b.holeNumber)).toEqual([16, 17, 18]);
+  });
+});
+
+describe('driveLieFromDetail', () => {
+  test('explicit driveLie wins over direction', () => {
+    expect(driveLieFromDetail({ drive: 'fairway', driveLie: 'sand' })).toBe('sand');
+  });
+  test('fairway/super direction implies fairway lie', () => {
+    expect(driveLieFromDetail({ drive: 'fairway' })).toBe('fairway');
+    expect(driveLieFromDetail({ drive: 'super' })).toBe('fairway');
+  });
+  test('miss directions default to rough', () => {
+    expect(driveLieFromDetail({ drive: 'left' })).toBe('rough');
+    expect(driveLieFromDetail({ drive: 'right' })).toBe('rough');
+    expect(driveLieFromDetail({ drive: 'short' })).toBe('rough');
+  });
+  test('null without any drive info', () => {
+    expect(driveLieFromDetail({})).toBeNull();
+    expect(driveLieFromDetail(null)).toBeNull();
+  });
+});
+
+describe('sgOffTheTee', () => {
+  // Scratch benchmark on a par 4: E(fairway, 340-230=110) = 2.84873
+  test('fairway drive slightly shorter than scratch benchmark ≈ 0', () => {
+    const round = makeRound(
+      [{ par: 4, strokes: 4 }],
+      [{ drive: 'fairway', driveDistBucket: '210-240' }],
+    );
+    // actual: E(fairway, 340-225=115) = 2.86183 → 2.84873 - 2.86183
+    const r = sgOffTheTee(round, 'me');
+    expect(r.perHole[0]).toBeCloseTo(-0.01, 2);
+    expect(r.sampleHoles).toBe(1);
+  });
+  test('rough drive at 180-210 costs about a third of a stroke vs scratch', () => {
+    const round = makeRound(
+      [{ par: 4, strokes: 5 }],
+      [{ drive: 'left', driveLie: 'rough', driveDistBucket: '180-210' }],
+    );
+    // actual: E(rough, 340-195=145) = 3.16827 → 2.84873 - 3.16827
+    expect(sgOffTheTee(round, 'me').perHole[0]).toBeCloseTo(-0.32, 2);
+  });
+  test('trouble maps to the recovery table', () => {
+    const round = makeRound(
+      [{ par: 4, strokes: 6 }],
+      [{ drive: 'right', driveLie: 'trouble', driveDistBucket: '150-180' }],
+    );
+    // actual: E(recovery, 340-165=175) = 3.53085 → 2.84873 - 3.53085
+    expect(sgOffTheTee(round, 'me').perHole[0]).toBeCloseTo(-0.68, 2);
+  });
+  test('par 5 uses the 470 m anchor', () => {
+    const round = makeRound(
+      [{ par: 5, strokes: 5 }],
+      [{ drive: 'fairway', driveDistBucket: '240+' }],
+    );
+    // bench: E(fairway, 470-230=240) = 3.78481; actual: E(fairway, 470-255=215) = 3.58692
+    expect(sgOffTheTee(round, 'me').perHole[0]).toBeCloseTo(0.20, 2);
+  });
+  test('same drive is positive against a 14-handicap benchmark', () => {
+    const round = makeRound(
+      [{ par: 4, strokes: 4 }],
+      [{ drive: 'fairway', driveDistBucket: '210-240' }],
+    );
+    // bench(14): E_blend(fairway, 340-200=140) = 3.34328; actual: E_blend(fairway, 115) = 3.21336
+    expect(sgOffTheTee(round, 'me', 14).perHole[0]).toBeCloseTo(0.13, 2);
+  });
+  test('derived rough lie from a miss direction without explicit driveLie', () => {
+    const round = makeRound(
+      [{ par: 4, strokes: 5 }],
+      [{ drive: 'left', driveDistBucket: '180-210' }],
+    );
+    expect(sgOffTheTee(round, 'me').perHole[0]).toBeCloseTo(-0.32, 2);
+  });
+  test('null on par 3s, legacy holes without a distance bucket, and untracked holes', () => {
+    const round = makeRound(
+      [{ par: 3, strokes: 3 }, { par: 4, strokes: 4 }, { par: 4, strokes: 4 }],
+      [
+        { drive: 'fairway', driveDistBucket: '180-210' }, // par 3 → null
+        { drive: 'fairway' },                              // no bucket → null
+        {},                                                // no drive info → null
+      ],
+    );
+    const r = sgOffTheTee(round, 'me');
+    expect(r.perHole).toEqual([null, null, null]);
+    expect(r.sampleHoles).toBe(0);
+    expect(r.total).toBe(0);
   });
 });
