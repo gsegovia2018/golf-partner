@@ -92,7 +92,9 @@ export default function MyStatsScreen({ navigation, route }) {
   const tabViewportWidthRef = useRef(0);
   const tabScrollXRef = useRef(0);
 
-  const storageKey = user?.id ? `${SELECTION_PREFIX}${user.id}` : null;
+  // Device-scoped fallback key when signed out, so a signed-out user's
+  // selection still persists (and can later be migrated onto their account).
+  const storageKey = `${SELECTION_PREFIX}${user?.id ?? 'local'}`;
 
   useEffect(() => {
     setTab(normalizeStatsTab(route?.params?.tab));
@@ -123,21 +125,27 @@ export default function MyStatsScreen({ navigation, route }) {
         }
         const rounds = collectMyRounds(list, user?.id, profile?.displayName);
         let stored = {};
-        if (storageKey) {
-          try {
-            const raw = await AsyncStorage.getItem(storageKey);
-            if (raw) stored = JSON.parse(raw) || {};
-          } catch (_) { /* ignore corrupt storage */ }
-        }
-        // Drop overrides whose round no longer exists.
-        const liveKeys = new Set(rounds.map((r) => r.key));
-        const clean = {};
-        Object.keys(stored).forEach((k) => {
-          if (liveKeys.has(k)) clean[k] = stored[k];
-        });
+        try {
+          let raw = await AsyncStorage.getItem(storageKey);
+          if (raw == null && user?.id) {
+            // First signed-in load on this device: adopt any signed-out selection.
+            const localKey = `${SELECTION_PREFIX}local`;
+            const localRaw = await AsyncStorage.getItem(localKey);
+            if (localRaw != null) {
+              raw = localRaw;
+              AsyncStorage.setItem(storageKey, localRaw).catch(() => {});
+              AsyncStorage.removeItem(localKey).catch(() => {});
+            }
+          }
+          if (raw) stored = JSON.parse(raw) || {};
+        } catch (_) { /* ignore corrupt storage */ }
+        // Deliberately keep stale keys rather than pruning: resolveSelection
+        // only consults overrides for rounds that exist, the map is bounded
+        // by rounds ever played, and pruning on load permanently loses
+        // selections whenever a load is partial (offline / transient failure).
         if (!cancelled) {
           setMyRounds(rounds);
-          setOverrides(clean);
+          setOverrides(stored);
         }
       } catch (e) {
         console.warn('MyStatsScreen: failed to load tournaments', e);
@@ -176,9 +184,7 @@ export default function MyStatsScreen({ navigation, route }) {
 
   const persistOverrides = useCallback((next) => {
     setOverrides(next);
-    if (storageKey) {
-      AsyncStorage.setItem(storageKey, JSON.stringify(next)).catch(() => {});
-    }
+    AsyncStorage.setItem(storageKey, JSON.stringify(next)).catch(() => {});
   }, [storageKey]);
 
   const onInfo = useCallback((key) => setInfoKey(key), []);

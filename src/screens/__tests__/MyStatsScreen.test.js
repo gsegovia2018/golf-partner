@@ -16,8 +16,11 @@ jest.mock('react-native-safe-area-context', () => {
   };
 });
 
+// Mutable holder so individual tests can simulate a signed-out session.
+let mockUser = { id: 'user-1' };
+const setMockUser = (u) => { mockUser = u; };
 jest.mock('../../context/AuthContext', () => ({
-  useAuth: () => ({ user: { id: 'user-1' } }),
+  useAuth: () => ({ user: mockUser }),
 }));
 
 jest.mock('../../store/tournamentStore', () => ({
@@ -60,8 +63,26 @@ jest.mock('../../components/RoundReportCard', () => function MockRoundReportCard
   );
 });
 
-jest.mock('../../components/MyStatsRoundSelector', () => function MockMyStatsRoundSelector() {
-  return null;
+// Renders one pressable per round when visible, so tests can drive the real
+// onChange(next) contract (persistOverrides) without the real BottomSheet /
+// grouping logic. accessibilityLabel is index-based ("Round 1", "Round 2", …)
+// since the fixture rounds used below don't carry `roundIndex`/`courseName`.
+jest.mock('../../components/MyStatsRoundSelector', () => function MockMyStatsRoundSelector({ visible, myRounds, overrides, onChange }) {
+  const { View, Text, TouchableOpacity } = require('react-native');
+  if (!visible) return null;
+  return (
+    <View>
+      {myRounds.map((r, i) => (
+        <TouchableOpacity
+          key={r.key}
+          accessibilityLabel={`Round ${i + 1}`}
+          onPress={() => onChange({ ...overrides, [r.key]: !overrides[r.key] })}
+        >
+          <Text>{`Round ${i + 1}`}</Text>
+        </TouchableOpacity>
+      ))}
+    </View>
+  );
 });
 
 jest.mock('../../components/StatDetailSheet', () => function MockStatDetailSheet() {
@@ -100,6 +121,7 @@ jest.mock('../../components/mystats/tabs/HandicapTab', () => function MockHandic
 });
 
 beforeEach(() => {
+  mockUser = { id: 'user-1' };
   AsyncStorage.getItem.mockResolvedValue(null);
 });
 
@@ -299,5 +321,57 @@ describe('MyStatsScreen handicap tab', () => {
     const tabs = await view.findAllByText('Handicap');
     fireEvent.press(tabs[0]);
     expect(await view.findByText(/Handicap tab: 1 rounds, profile 12/)).toBeTruthy();
+  });
+});
+
+describe('round selection persistence', () => {
+  const { collectMyRounds } = require('../../store/personalStats');
+
+  beforeEach(async () => {
+    await AsyncStorage.clear();
+    // The file-level beforeEach above forces getItem to resolve null so most
+    // tests don't need a live storage round-trip. These tests are
+    // specifically about storage round-trips, so restore the real per-key
+    // read against the mock's in-memory backing store.
+    AsyncStorage.getItem.mockImplementation((key) => (
+      Promise.resolve(AsyncStorage.__INTERNAL_MOCK_STORAGE__[key] ?? null)
+    ));
+  });
+
+  it('keeps stored overrides for rounds missing from the current load', async () => {
+    // Stored override deselects round t-2:0, but this load only returns
+    // t-1:0 (partial load). A toggle during this state must not wipe the
+    // override for the round that failed to load.
+    await AsyncStorage.setItem('@mystats_round_selection:user-1', JSON.stringify({ 't-2:0': false }));
+    collectMyRounds.mockReturnValue([
+      { key: 't-1:0', tournamentId: 't-1', completed: true, round: { id: 'r-1' } },
+    ]);
+
+    const view = renderScreen();
+    await view.findByText(/1 of 1/);
+    fireEvent.press(view.getByText(/1 of 1/));
+    fireEvent.press(await view.findByLabelText(/Round 1/));
+
+    await waitFor(async () => {
+      const raw = await AsyncStorage.getItem('@mystats_round_selection:user-1');
+      expect(JSON.parse(raw)).toMatchObject({ 't-2:0': false });
+    });
+  });
+
+  it('persists selection under a device-scoped key when signed out', async () => {
+    setMockUser(null);
+    collectMyRounds.mockReturnValue([
+      { key: 'round-1', tournamentId: 't-1', completed: true, round: { id: 'r-1' } },
+    ]);
+
+    const view = renderScreen();
+    await view.findByText(/1 of 1/);
+    fireEvent.press(view.getByText(/1 of 1/));
+    fireEvent.press(await view.findByLabelText(/Round 1/));
+
+    await waitFor(async () => {
+      const raw = await AsyncStorage.getItem('@mystats_round_selection:local');
+      expect(raw).not.toBeNull();
+    });
   });
 });
