@@ -58,7 +58,7 @@ describe('pickMedia', () => {
     });
 
     await expect(pickMedia({ source: 'library', mediaTypes: 'all' }))
-      .rejects.toThrow('Los vídeos de galería deben ser de 100 MB o menos.');
+      .rejects.toThrow('Gallery videos must be 100 MB or smaller.');
   });
 
   test('rejects camera-recorded videos over the upload limit — the size cap is not gallery-only', async () => {

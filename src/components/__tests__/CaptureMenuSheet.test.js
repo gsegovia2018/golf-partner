@@ -22,6 +22,6 @@ describe('CaptureMenuSheet', () => {
       <CaptureMenuSheet visible onSelect={jest.fn()} onClose={jest.fn()} />
     );
 
-    expect(getByText('Vídeos hasta 100 MB')).toBeTruthy();
+    expect(getByText('Videos up to 100 MB')).toBeTruthy();
   });
 });

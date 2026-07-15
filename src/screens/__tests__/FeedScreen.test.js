@@ -65,6 +65,7 @@ jest.mock('../../store/tournamentStore', () => ({
     return () => { mockTournamentChangeHandler = null; };
   }),
   formatRoundLabel: jest.fn(({ courseName, roundIndex }) => courseName || `Round ${roundIndex + 1}`),
+  getTournament: jest.fn(),
 }));
 
 jest.mock('../../store/feedStore', () => ({

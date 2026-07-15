@@ -31,11 +31,9 @@ import { fetchPlayers } from '../store/libraryStore';
 import { useAuth } from '../context/AuthContext';
 import { useTheme } from '../theme/ThemeContext';
 import MediaLightbox from '../components/MediaLightbox';
-import AttachMediaSheet from '../components/AttachMediaSheet';
-import CaptureMenuSheet from '../components/CaptureMenuSheet';
 import BottomSheet from '../components/BottomSheet';
 import SyncStatusSheet from '../components/SyncStatusSheet';
-import { pickMedia, attachMedia } from '../lib/mediaCapture';
+import useMediaAttachFlow from '../hooks/useMediaAttachFlow';
 import { useRoundMedia } from '../hooks/useRoundMedia';
 import { useOfficialRound } from '../hooks/useOfficialRound';
 import ScoringModeChangeBanner from '../components/ScoringModeChangeBanner';
@@ -319,11 +317,9 @@ export default function ScorecardScreen({ navigation, route }) {
   const hasAutoJumpedRef = useRef(false);
   const [celebration, setCelebration] = useState({ playerId: null, holeNumber: null, label: null });
   const celebrationAnim = useRef(new Animated.Value(0)).current;
-  const [pickerAsset, setPickerAsset] = useState(null);
   const [lightboxItems, setLightboxItems] = useState([]);
   const [lightboxIndex, setLightboxIndex] = useState(0);
   const [lightboxVisible, setLightboxVisible] = useState(false);
-  const [captureMenuVisible, setCaptureMenuVisible] = useState(false);
   const [syncSheetOpen, setSyncSheetOpen] = useState(false);
   const { items: roundMediaItems } = useRoundMedia(
     tournament?.id,
@@ -1419,41 +1415,22 @@ export default function ScorecardScreen({ navigation, route }) {
     }
   }, [official, attestBusy, officialToken, officialRoundId, officialData]);
 
-  const openCapturePicker = useCallback(() => {
-    setCaptureMenuVisible(true);
-  }, []);
-
-  const handleCaptureMenuSelect = useCallback(async ({ source, mediaTypes }) => {
-    setCaptureMenuVisible(false);
-    try {
-      const asset = await pickMedia({ source, mediaTypes });
-      if (asset) setPickerAsset(asset);
-    } catch (e) {
-      Alert.alert("Couldn't capture", String(e?.message ?? e));
-    }
-  }, []);
-
-  const onAttachConfirm = useCallback(async ({ holeIndex, caption, uploaderLabel }) => {
-    const asset = pickerAsset;
-    setPickerAsset(null);
-    if (!asset || !tournament || !round) return;
-    try {
-      await attachMedia({
-        tournamentId: tournament.id,
-        roundId: round.id,
-        holeIndex,
-        kind: asset.kind,
-        localUri: asset.localUri,
-        durationS: asset.durationS,
-        caption,
-        uploaderLabel,
-        mimeType: asset.mimeType,
-        fileName: asset.fileName,
-      });
-    } catch (e) {
-      Alert.alert("Couldn't attach", String(e?.message ?? e));
-    }
-  }, [pickerAsset, tournament, round]);
+  const { openCaptureMenu: openCapturePicker, sheets: mediaSheets } = useMediaAttachFlow({
+    tournament,
+    defaultRoundIndex: roundIndex,
+    defaultHoleIndex: typeof currentHole === 'number' ? currentHole - 1 : null,
+    allowBatch: false,
+    extraActions: roundMediaCount > 0 ? [{
+      key: 'view',
+      icon: 'image',
+      label: `View this round's memories (${roundMediaCount})`,
+      onPress: () => {
+        setLightboxItems(roundMediaItems);
+        setLightboxIndex(0);
+        setLightboxVisible(true);
+      },
+    }] : [],
+  });
 
   // Explicit load failure — never a blank screen. Keep a working back button.
   if (loadState === 'error' && !tournament) {
@@ -1755,30 +1732,7 @@ export default function ScorecardScreen({ navigation, route }) {
         </BottomSheet>
       )}
 
-      <CaptureMenuSheet
-        visible={captureMenuVisible}
-        onSelect={handleCaptureMenuSelect}
-        onClose={() => setCaptureMenuVisible(false)}
-        extraActions={roundMediaCount > 0 ? [{
-          key: 'view',
-          icon: 'image',
-          label: `View this round's memories (${roundMediaCount})`,
-          onPress: () => {
-            setCaptureMenuVisible(false);
-            setLightboxItems(roundMediaItems);
-            setLightboxIndex(0);
-            setLightboxVisible(true);
-          },
-        }] : []}
-      />
-      <AttachMediaSheet
-        visible={!!pickerAsset}
-        asset={pickerAsset}
-        holes={round.holes ?? []}
-        defaultHoleIndex={typeof currentHole === 'number' ? currentHole - 1 : null}
-        onCancel={() => setPickerAsset(null)}
-        onConfirm={onAttachConfirm}
-      />
+      {mediaSheets}
       <MediaLightbox
         visible={lightboxVisible}
         items={lightboxItems}

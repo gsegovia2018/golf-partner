@@ -1,6 +1,6 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
-  View, Text, TouchableOpacity, ScrollView, StyleSheet, Alert,
+  View, Text, TouchableOpacity, ScrollView, StyleSheet,
   ActivityIndicator,
 } from 'react-native';
 import ScreenContainer from '../components/ScreenContainer';
@@ -14,9 +14,7 @@ import MemoriesHoleStrip from '../components/MemoriesHoleStrip';
 import MemoriesKindChips from '../components/MemoriesKindChips';
 import MemoryCard from '../components/MemoryCard';
 import MemoriesStoriesViewer from '../components/MemoriesStoriesViewer';
-import CaptureMenuSheet from '../components/CaptureMenuSheet';
-import AttachMediaSheet from '../components/AttachMediaSheet';
-import BatchAttachSheet from '../components/BatchAttachSheet';
+import useMediaAttachFlow from '../hooks/useMediaAttachFlow';
 import {
   deriveRoundEntries,
   deriveHolesWithMedia,
@@ -25,7 +23,6 @@ import {
   applyFilters,
   resolveRoundIndex,
 } from '../lib/memoriesGalleryData';
-import { pickMedia, attachMedia, attachManyMedia } from '../lib/mediaCapture';
 
 export default function GalleryScreen({ route, navigation }) {
   const { tournamentId, mediaId } = route.params ?? {};
@@ -45,9 +42,6 @@ export default function GalleryScreen({ route, navigation }) {
   const [activeKind, setActiveKind] = useState('all');
   const [lightbox, setLightbox] = useState({ visible: false, index: 0 });
   const [stories, setStories] = useState({ visible: false, items: [], startIndex: 0 });
-  const [captureMenuVisible, setCaptureMenuVisible] = useState(false);
-  const [singleAsset, setSingleAsset] = useState(null);
-  const [batchAssets, setBatchAssets] = useState(null);
 
   // Load the tournament the gallery was opened for — not whatever is the
   // active tournament. Opening a gallery from the feed targets a different
@@ -110,62 +104,10 @@ export default function GalleryScreen({ route, navigation }) {
     return Math.min(tournament.currentRound ?? 0, tournament.rounds.length - 1);
   }, [tournament]);
 
-  const openAdd = useCallback(() => setCaptureMenuVisible(true), []);
-
-  const handleCaptureSelect = useCallback(async ({ source, mediaTypes }) => {
-    setCaptureMenuVisible(false);
-    try {
-      const result = await pickMedia({
-        source,
-        mediaTypes,
-        multi: source === 'library',
-      });
-      if (!result) return;
-      if (Array.isArray(result)) {
-        if (result.length === 0) return;
-        if (result.length === 1) setSingleAsset(result[0]);
-        else setBatchAssets(result);
-      } else {
-        setSingleAsset(result);
-      }
-    } catch (e) {
-      Alert.alert('Could not capture', String(e?.message ?? e));
-    }
-  }, []);
-
-  const onSingleConfirm = useCallback(async ({ holeIndex, caption, uploaderLabel }) => {
-    const asset = singleAsset;
-    setSingleAsset(null);
-    if (!asset || !tournament) return;
-    const round = tournament.rounds?.[defaultRoundIndex];
-    if (!round) return;
-    try {
-      await attachMedia({
-        tournamentId: tournament.id,
-        roundId: round.id,
-        holeIndex,
-        kind: asset.kind,
-        localUri: asset.localUri,
-        durationS: asset.durationS,
-        caption,
-        uploaderLabel,
-        mimeType: asset.mimeType,
-        fileName: asset.fileName,
-      });
-    } catch (e) {
-      Alert.alert('Could not attach', String(e?.message ?? e));
-    }
-  }, [singleAsset, tournament, defaultRoundIndex]);
-
-  const onBatchConfirm = useCallback(async (payload) => {
-    setBatchAssets(null);
-    if (!tournament) return;
-    try {
-      await attachManyMedia({ tournamentId: tournament.id, items: payload });
-    } catch (e) {
-      Alert.alert('Could not attach', String(e?.message ?? e));
-    }
-  }, [tournament]);
+  const { openCaptureMenu, sheets } = useMediaAttachFlow({
+    tournament,
+    defaultRoundIndex,
+  });
 
   const openCard = (filteredIndex) => setLightbox({ visible: true, index: filteredIndex });
 
@@ -300,31 +242,11 @@ export default function GalleryScreen({ route, navigation }) {
         onClose={() => setStories({ visible: false, items: [], startIndex: 0 })}
       />
 
-      <TouchableOpacity style={s.fab} onPress={openAdd} accessibilityLabel="Add memory" activeOpacity={0.85}>
+      <TouchableOpacity style={s.fab} onPress={openCaptureMenu} accessibilityLabel="Add memory" activeOpacity={0.85}>
         <Feather name="plus" size={26} color={theme.text.inverse} />
       </TouchableOpacity>
 
-      <CaptureMenuSheet
-        visible={captureMenuVisible}
-        onSelect={handleCaptureSelect}
-        onClose={() => setCaptureMenuVisible(false)}
-      />
-      <AttachMediaSheet
-        visible={!!singleAsset}
-        asset={singleAsset}
-        holes={tournament?.rounds?.[defaultRoundIndex]?.holes ?? []}
-        defaultHoleIndex={null}
-        onCancel={() => setSingleAsset(null)}
-        onConfirm={onSingleConfirm}
-      />
-      <BatchAttachSheet
-        visible={!!batchAssets}
-        assets={batchAssets ?? []}
-        rounds={tournament?.rounds ?? []}
-        defaultRoundIndex={defaultRoundIndex}
-        onCancel={() => setBatchAssets(null)}
-        onConfirm={onBatchConfirm}
-      />
+      {sheets}
     </ScreenContainer>
   );
 }

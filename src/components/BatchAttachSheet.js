@@ -4,6 +4,7 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import { Feather } from '@expo/vector-icons';
 import { useTheme } from '../theme/ThemeContext';
 import BottomSheet from './BottomSheet';
+import WheelPicker from './WheelPicker';
 
 const UPLOADER_KEY = '@golf_uploader_label';
 
@@ -19,7 +20,8 @@ export default function BatchAttachSheet({
   const s = makeStyles(theme);
 
   const [roundIndex, setRoundIndex] = useState(defaultRoundIndex ?? 0);
-  const [batchHole, setBatchHole] = useState(null);
+  // Header hole wheel: index 0 is "No hole"; hole N is wheel index N.
+  const [batchHoleWheelIndex, setBatchHoleWheelIndex] = useState(0);
   const [batchCaption, setBatchCaption] = useState('');
   const [perItem, setPerItem] = useState([]);
   const [uploader, setUploader] = useState('');
@@ -27,7 +29,7 @@ export default function BatchAttachSheet({
   useEffect(() => {
     if (!visible) return;
     setRoundIndex(defaultRoundIndex ?? 0);
-    setBatchHole(null);
+    setBatchHoleWheelIndex(0);
     setBatchCaption('');
     setPerItem((assets ?? []).map(() => ({ holeOverride: undefined, captionOverride: undefined })));
     AsyncStorage.getItem(UPLOADER_KEY).then((v) => setUploader(v ?? ''));
@@ -35,6 +37,29 @@ export default function BatchAttachSheet({
 
   const round = rounds?.[roundIndex];
   const holes = round?.holes ?? [];
+
+  const batchHole = batchHoleWheelIndex === 0 ? null : batchHoleWheelIndex - 1;
+
+  const roundItems = useMemo(() => (rounds ?? []).map((r, i) => ({
+    key: r.id ?? String(i),
+    label: `R${i + 1}`,
+    sublabel: r.courseName || undefined,
+  })), [rounds]);
+
+  const holeItems = useMemo(() => [
+    { key: 'none', label: 'No hole' },
+    ...holes.map((h, i) => ({
+      key: String(i),
+      label: `Hole ${i + 1}`,
+      sublabel: h?.par ? `Par ${h.par}` : undefined,
+    })),
+  ], [holes]);
+
+  const onRoundChange = (i) => {
+    setRoundIndex(i);
+    const nextHoles = rounds?.[i]?.holes ?? [];
+    if (batchHoleWheelIndex - 1 >= nextHoles.length) setBatchHoleWheelIndex(0);
+  };
 
   const effective = useMemo(() => (assets ?? []).map((a, i) => {
     const p = perItem[i] ?? {};
@@ -78,59 +103,50 @@ export default function BatchAttachSheet({
   return (
     <BottomSheet visible={visible} onClose={onCancel} sheetStyle={s.sheet}>
       <View style={s.header}>
-            <Text style={s.title}>Adjuntar {assets.length} {assets.length === 1 ? 'recuerdo' : 'recuerdos'}</Text>
-            <TouchableOpacity onPress={onCancel} accessibilityLabel="Cancelar">
+            <Text style={s.title}>Attach {assets.length} {assets.length === 1 ? 'memory' : 'memories'}</Text>
+            <TouchableOpacity onPress={onCancel} accessibilityLabel="Cancel">
               <Feather name="x" size={22} color={theme.text.muted} />
             </TouchableOpacity>
           </View>
 
           <ScrollView contentContainerStyle={{ paddingBottom: 8 }}>
-            <Text style={s.sectionLabel}>Ronda</Text>
-            <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={s.chipsRow}>
-              {rounds.map((r, i) => (
-                <Chip
-                  key={r.id ?? i}
-                  label={`R${i + 1}`}
-                  active={roundIndex === i}
-                  onPress={() => setRoundIndex(i)}
-                  theme={theme}
+            <Text style={s.sectionLabel}>Apply to all — round &amp; hole</Text>
+            <View style={s.wheels}>
+              {(rounds?.length ?? 0) > 1 ? (
+                <WheelPicker
+                  testID="batch-round-wheel"
+                  items={roundItems}
+                  selectedIndex={roundIndex}
+                  onChange={onRoundChange}
                 />
-              ))}
-            </ScrollView>
+              ) : null}
+              <WheelPicker
+                testID="batch-hole-wheel"
+                items={holeItems}
+                selectedIndex={batchHoleWheelIndex}
+                onChange={setBatchHoleWheelIndex}
+              />
+            </View>
 
-            <Text style={s.sectionLabel}>Aplicar a todas — hoyo</Text>
-            <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={s.chipsRow}>
-              <Chip label="Sin hoyo" active={batchHole == null} onPress={() => setBatchHole(null)} theme={theme} />
-              {holes.map((_, i) => (
-                <Chip
-                  key={i}
-                  label={String(i + 1)}
-                  active={batchHole === i}
-                  onPress={() => setBatchHole(i)}
-                  theme={theme}
-                />
-              ))}
-            </ScrollView>
-
-            <Text style={s.sectionLabel}>Aplicar a todas — comentario</Text>
+            <Text style={s.sectionLabel}>Apply to all — caption</Text>
             <TextInput
               style={s.input}
               value={batchCaption}
               onChangeText={setBatchCaption}
-              placeholder="Ej. Domingo en el 18"
+              placeholder="e.g. Sunday on 18"
               placeholderTextColor={theme.text.muted}
             />
 
-            <Text style={s.sectionLabel}>Tu nombre (opcional)</Text>
+            <Text style={s.sectionLabel}>Your name (optional)</Text>
             <TextInput
               style={s.input}
               value={uploader}
               onChangeText={setUploader}
-              placeholder="Ej. Noé"
+              placeholder="e.g. Noé"
               placeholderTextColor={theme.text.muted}
             />
 
-            <Text style={[s.sectionLabel, { marginTop: 18 }]}>Detalle por foto</Text>
+            <Text style={[s.sectionLabel, { marginTop: 18 }]}>Per-photo detail</Text>
             {effective.map((e, i) => (
               <View key={i} style={s.itemRow}>
                 <Image source={{ uri: e.asset.localUri }} style={s.itemThumb} />
@@ -140,7 +156,7 @@ export default function BatchAttachSheet({
                 <View style={s.itemMain}>
                   <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={s.chipsRow}>
                     <Chip
-                      label={e.holeIndex == null ? 'Sin hoyo' : `Hoyo ${e.holeIndex + 1}`}
+                      label={e.holeIndex == null ? 'No hole' : `Hole ${e.holeIndex + 1}`}
                       active={e.holeOverridden}
                       muted={!e.holeOverridden}
                       onPress={() => {
@@ -157,7 +173,7 @@ export default function BatchAttachSheet({
                   </ScrollView>
                   {e.holeOverridden && (
                     <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={s.chipsRow}>
-                      <Chip label="Sin hoyo" active={e.holeIndex == null} onPress={() => setItemHole(i, null)} theme={theme} small />
+                      <Chip label="No hole" active={e.holeIndex == null} onPress={() => setItemHole(i, null)} theme={theme} small />
                       {holes.map((_, h) => (
                         <Chip
                           key={h}
@@ -175,7 +191,7 @@ export default function BatchAttachSheet({
                       style={[s.input, s.captionInput, e.captionOverridden && s.inputOverridden]}
                       value={e.caption ?? ''}
                       onChangeText={(v) => setItemCaption(i, v)}
-                      placeholder="Comentario específico"
+                      placeholder="Caption for this one"
                       placeholderTextColor={theme.text.muted}
                     />
                     {e.captionOverridden && (
@@ -190,7 +206,7 @@ export default function BatchAttachSheet({
           </ScrollView>
 
           <TouchableOpacity style={s.saveBtn} onPress={submit}>
-            <Text style={s.saveLabel}>Guardar {assets.length}</Text>
+            <Text style={s.saveLabel}>Save {assets.length}</Text>
           </TouchableOpacity>
     </BottomSheet>
   );
@@ -238,6 +254,7 @@ const makeStyles = (theme) => StyleSheet.create({
     textTransform: 'uppercase', letterSpacing: 0.5,
   },
   chipsRow: { paddingVertical: 4 },
+  wheels: { flexDirection: 'row', gap: 10 },
   input: {
     borderWidth: 1, borderColor: theme.border.subtle, borderRadius: 10,
     paddingHorizontal: 12, paddingVertical: 10,

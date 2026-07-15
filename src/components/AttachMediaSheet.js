@@ -1,33 +1,78 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import { View, Text, TouchableOpacity, TextInput, Image, StyleSheet } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { Feather } from '@expo/vector-icons';
 import { VideoView, useVideoPlayer } from 'expo-video';
 import { useTheme } from '../theme/ThemeContext';
 import BottomSheet from './BottomSheet';
+import WheelPicker from './WheelPicker';
 
 const UPLOADER_KEY = '@golf_uploader_label';
 
-export default function AttachMediaSheet({ visible, asset, holes, defaultHoleIndex, onCancel, onConfirm }) {
+// A stale feed item's roundIndex can exceed the loaded tournament's rounds
+// (e.g. a round was removed). Clamp so `rounds[roundIndex]` is always
+// defined instead of silently producing an undefined round downstream.
+const clampRoundIndex = (index, rounds) =>
+  Math.min(Math.max(0, index ?? 0), Math.max(0, (rounds?.length ?? 1) - 1));
+
+export default function AttachMediaSheet({
+  visible, asset, rounds, defaultRoundIndex, defaultHoleIndex, onCancel, onConfirm,
+}) {
   const { theme } = useTheme();
   const s = makeStyles(theme);
-  const [holeIndex, setHoleIndex] = useState(defaultHoleIndex ?? null);
+  const [roundIndex, setRoundIndex] = useState(clampRoundIndex(defaultRoundIndex, rounds));
+  // Hole wheel index 0 is "No hole"; hole N is wheel index N.
+  const [holeWheelIndex, setHoleWheelIndex] = useState((defaultHoleIndex ?? -1) + 1);
   const [caption, setCaption] = useState('');
   const [uploader, setUploader] = useState('');
 
   useEffect(() => {
     if (!visible) return;
-    setHoleIndex(defaultHoleIndex ?? null);
+    // Set the raw index here (not clamped against `rounds`) so this effect
+    // doesn't depend on `rounds` — ScorecardScreen replaces the tournament
+    // object (and `rounds` identity) on background realtime syncs, and we
+    // don't want that to reset the sheet mid-edit. `rounds` is instead
+    // clamped at use-site via `safeRoundIndex` below.
+    setRoundIndex(defaultRoundIndex ?? 0);
+    setHoleWheelIndex((defaultHoleIndex ?? -1) + 1);
     setCaption('');
     AsyncStorage.getItem(UPLOADER_KEY).then((v) => setUploader(v ?? ''));
-  }, [visible, defaultHoleIndex]);
+  }, [visible, defaultRoundIndex, defaultHoleIndex]);
+
+  const safeRoundIndex = clampRoundIndex(roundIndex, rounds);
+  const round = rounds?.[safeRoundIndex];
+  const holes = round?.holes ?? [];
+
+  const roundItems = useMemo(() => (rounds ?? []).map((r, i) => ({
+    key: r.id ?? String(i),
+    label: `R${i + 1}`,
+    sublabel: r.courseName || undefined,
+  })), [rounds]);
+
+  const holeItems = useMemo(() => [
+    { key: 'none', label: 'No hole' },
+    ...holes.map((h, i) => ({
+      key: String(i),
+      label: `Hole ${i + 1}`,
+      sublabel: h?.par ? `Par ${h.par}` : undefined,
+    })),
+  ], [holes]);
 
   if (!asset) return null;
+
+  const onRoundChange = (i) => {
+    setRoundIndex(i);
+    const nextHoles = rounds?.[i]?.holes ?? [];
+    // The previously picked hole may not exist on the new round.
+    if (holeWheelIndex - 1 >= nextHoles.length) setHoleWheelIndex(0);
+  };
 
   const submit = async () => {
     if (uploader) await AsyncStorage.setItem(UPLOADER_KEY, uploader);
     onConfirm({
-      holeIndex,
+      roundIndex: safeRoundIndex,
+      roundId: round?.id ?? null,
+      holeIndex: holeWheelIndex === 0 ? null : holeWheelIndex - 1,
       caption: caption.trim() || null,
       uploaderLabel: uploader.trim() || null,
     });
@@ -36,8 +81,8 @@ export default function AttachMediaSheet({ visible, asset, holes, defaultHoleInd
   return (
     <BottomSheet visible={visible} onClose={onCancel} sheetStyle={s.sheet}>
       <View style={s.header}>
-        <Text style={s.title}>Adjuntar a la ronda</Text>
-        <TouchableOpacity onPress={onCancel} accessibilityLabel="Cancelar">
+        <Text style={s.title}>Add photo</Text>
+        <TouchableOpacity onPress={onCancel} accessibilityLabel="Cancel">
           <Feather name="x" size={22} color={theme.text.muted} />
         </TouchableOpacity>
       </View>
@@ -48,53 +93,44 @@ export default function AttachMediaSheet({ visible, asset, holes, defaultHoleInd
         <VideoPreview uri={asset.localUri} style={s.preview} />
       )}
 
-      <Text style={s.sectionLabel}>Hoyo</Text>
-      <View style={s.holeGrid}>
-        <TouchableOpacity
-          style={[s.holeBtn, s.holeBtnWide, holeIndex == null && s.holeBtnActive]}
-          onPress={() => setHoleIndex(null)}
-          activeOpacity={0.7}
-        >
-          <Text
-            style={[s.holeBtnText, s.holeBtnTextWide, holeIndex == null && s.holeBtnTextActive]}
-            numberOfLines={2}
-            adjustsFontSizeToFit
-          >
-            Sin hoyo
-          </Text>
-        </TouchableOpacity>
-        {holes.map((_, i) => (
-          <TouchableOpacity
-            key={i}
-            style={[s.holeBtn, holeIndex === i && s.holeBtnActive]}
-            onPress={() => setHoleIndex(i)}
-            activeOpacity={0.7}
-          >
-            <Text style={[s.holeBtnText, holeIndex === i && s.holeBtnTextActive]}>{i + 1}</Text>
-          </TouchableOpacity>
-        ))}
+      <Text style={s.sectionLabel}>Round &amp; hole</Text>
+      <View style={s.wheels}>
+        {(rounds?.length ?? 0) > 1 ? (
+          <WheelPicker
+            testID="attach-round-wheel"
+            items={roundItems}
+            selectedIndex={safeRoundIndex}
+            onChange={onRoundChange}
+          />
+        ) : null}
+        <WheelPicker
+          testID="attach-hole-wheel"
+          items={holeItems}
+          selectedIndex={holeWheelIndex}
+          onChange={setHoleWheelIndex}
+        />
       </View>
 
-      <Text style={s.sectionLabel}>Comentario (opcional)</Text>
+      <Text style={s.sectionLabel}>Caption (optional)</Text>
       <TextInput
         style={s.input}
         value={caption}
         onChangeText={setCaption}
-        placeholder="Ej. Bunker dramático del 7"
+        placeholder="e.g. Bunker drama on 7"
         placeholderTextColor={theme.text.muted}
       />
 
-      <Text style={s.sectionLabel}>Tu nombre (opcional)</Text>
+      <Text style={s.sectionLabel}>Your name (optional)</Text>
       <TextInput
         style={s.input}
         value={uploader}
         onChangeText={setUploader}
-        placeholder="Ej. Noé"
+        placeholder="e.g. Noé"
         placeholderTextColor={theme.text.muted}
       />
 
       <TouchableOpacity style={s.saveBtn} onPress={submit}>
-        <Text style={s.saveLabel}>Guardar</Text>
+        <Text style={s.saveLabel}>Save</Text>
       </TouchableOpacity>
     </BottomSheet>
   );
@@ -124,17 +160,7 @@ const makeStyles = (theme) => StyleSheet.create({
   title: { fontFamily: 'PlayfairDisplay-Bold', fontSize: 20, color: theme.text.primary },
   preview: { width: '100%', aspectRatio: 16 / 9, borderRadius: 12, backgroundColor: theme.bg.secondary, marginBottom: 16, overflow: 'hidden' },
   sectionLabel: { fontFamily: 'PlusJakartaSans-SemiBold', fontSize: 12, color: theme.text.muted, marginTop: 12, marginBottom: 6, textTransform: 'uppercase', letterSpacing: 0.5 },
-  holeGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 },
-  holeBtn: {
-    width: 48, height: 48, borderRadius: 12, alignItems: 'center', justifyContent: 'center',
-    backgroundColor: theme.isDark ? theme.bg.elevated : theme.bg.secondary,
-    borderWidth: 1, borderColor: theme.border.default,
-  },
-  holeBtnWide: { width: 76, paddingHorizontal: 4 },
-  holeBtnActive: { backgroundColor: theme.accent.primary, borderColor: theme.accent.primary },
-  holeBtnText: { color: theme.text.primary, fontSize: 15, fontFamily: 'PlusJakartaSans-Bold' },
-  holeBtnTextWide: { fontSize: 12, textAlign: 'center' },
-  holeBtnTextActive: { color: theme.text.inverse },
+  wheels: { flexDirection: 'row', gap: 10 },
   input: {
     borderWidth: 1, borderColor: theme.border.subtle, borderRadius: 10,
     paddingHorizontal: 12, paddingVertical: 10,
