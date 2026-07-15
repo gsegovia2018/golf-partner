@@ -4,9 +4,8 @@ import { isOnline } from '../lib/connectivity';
 import { normalizeRoundNotes } from './roundNotes';
 import { clampScoreInput, resolvePlayerHandicap } from './scoring';
 
-// Maps a mutation to a stable dotted path identifying what it touches. Used
-// for labeling entries in SyncStatusSheet's log (see conflictLabels.js) and
-// asserted on directly by tests/legacy call sites — it is NOT a queue
+// Maps a mutation to a stable dotted path identifying what it touches.
+// Asserted on directly by tests/legacy call sites — it is NOT a queue
 // coalescing/identity key (the queue never reads entry.path) and it no
 // longer stamps anything on the tournament blob (sync is row-based, not
 // blob-merged).
@@ -639,8 +638,8 @@ export async function mutate(tournamentBefore, mutation, opts = {}) {
 
   // 1. Clone + apply. `path` no longer stamps anything on the blob (sync is
   // row-based now, not blob-merged) — it rides along on the queue entry as a
-  // stable label only (see metaPathFor above / conflictLabels.js), not a
-  // coalescing key the queue reads.
+  // stable label only (see metaPathFor above), not a coalescing key the
+  // queue reads.
   const t = JSON.parse(JSON.stringify(tournamentBefore));
   applyToTournament(t, m);
   const path = metaPathFor(m);

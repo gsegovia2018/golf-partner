@@ -42,11 +42,8 @@ const ACTIVE_ID_KEY = '@golf_active_id';
 const LEGACY_TOURNAMENTS_KEY = '@golf_tournaments';
 const LEGACY_KEY = '@golf_tournament';
 
-const CONFLICT_LOG_KEY = '@golf_conflict_log';       // array of conflict entries, cap 20 FIFO
 const CONFLICT_UNREAD_KEY = '@golf_conflict_unread'; // integer
 const LAST_SYNC_AT_KEY = '@golf_last_sync_at';       // ms epoch of last successful drain
-
-const CONFLICT_LOG_CAP = 20;
 
 function _safeParse(json, label) {
   try {
@@ -1911,25 +1908,26 @@ export function isRoundInProgress(tournament) {
 }
 
 // ── Conflict log observable ──────────────────────────────────────────────────
+// NOTE: this used to also track a FIFO log of overwritten-value conflicts
+// (`_conflictLog` / `_appendConflicts`), surfaced in SyncStatusSheet as
+// "Cambios sobrescritos". Sync v2 replaced blob-merge overwrites with
+// per-author derived conflicts (ScoreConflictSheet / DiscrepancySheet), so
+// nothing ever wrote to that log — it was removed. `unread`/`lastSyncAt`
+// below remain live (last-sync timestamp shown in SyncStatusSheet).
 
-let _conflictLog = null;      // lazy-loaded array
 let _conflictUnread = null;   // lazy-loaded integer
 let _lastSyncAt = null;       // lazy-loaded number | null
 const _conflictSubs = new Set();
 let _hydrationPromise = null;
 
 async function _ensureConflictLoaded() {
-  if (_conflictLog != null) return;
+  if (_conflictUnread != null) return;
   if (!_hydrationPromise) {
     _hydrationPromise = (async () => {
-      const [rawLog, rawUnread, rawLast] = await Promise.all([
-        AsyncStorage.getItem(CONFLICT_LOG_KEY),
+      const [rawUnread, rawLast] = await Promise.all([
         AsyncStorage.getItem(CONFLICT_UNREAD_KEY),
         AsyncStorage.getItem(LAST_SYNC_AT_KEY),
       ]);
-      try { _conflictLog = rawLog ? JSON.parse(rawLog) : []; }
-      catch { _conflictLog = []; }
-      if (!Array.isArray(_conflictLog)) _conflictLog = [];
       const n = parseInt(rawUnread ?? '0', 10);
       _conflictUnread = Number.isFinite(n) && n >= 0 ? n : 0;
       const t = parseInt(rawLast ?? '0', 10);
@@ -1940,42 +1938,24 @@ async function _ensureConflictLoaded() {
 }
 
 function _emitConflicts() {
-  const snapshot = { log: _conflictLog.slice(), unread: _conflictUnread, lastSyncAt: _lastSyncAt };
+  const snapshot = { unread: _conflictUnread, lastSyncAt: _lastSyncAt };
   _conflictSubs.forEach((fn) => { try { fn(snapshot); } catch (_) {} });
 }
 
 export function subscribeConflicts(fn) {
   _conflictSubs.add(fn);
   _ensureConflictLoaded().then(() => {
-    try { fn({ log: _conflictLog.slice(), unread: _conflictUnread, lastSyncAt: _lastSyncAt }); }
+    try { fn({ unread: _conflictUnread, lastSyncAt: _lastSyncAt }); }
     catch (_) {}
   });
   return () => _conflictSubs.delete(fn);
 }
 
-// INVARIANT: the writer helpers below (_appendConflicts, _setLastSyncAt,
-// markConflictsRead) are expected to run serially. The sync worker drains
-// through `drainOnce` which is itself guarded by the `_running` flag in
-// syncWorker.js, and markConflictsRead is only called from UI open events.
-// If a second concurrent writer is introduced, add a write-chain mutex here.
-
-// Worker-only: append a batch of conflicts and bump unread. FIFO cap.
-export async function _appendConflicts(entries) {
-  if (!entries || entries.length === 0) return;
-  await _ensureConflictLoaded();
-  const next = _conflictLog.concat(entries);
-  // Drop oldest if we exceed cap.
-  const trimmed = next.length > CONFLICT_LOG_CAP
-    ? next.slice(next.length - CONFLICT_LOG_CAP)
-    : next;
-  _conflictLog = trimmed;
-  _conflictUnread = _conflictUnread + entries.length;
-  await AsyncStorage.multiSet([
-    [CONFLICT_LOG_KEY, JSON.stringify(_conflictLog)],
-    [CONFLICT_UNREAD_KEY, String(_conflictUnread)],
-  ]);
-  _emitConflicts();
-}
+// INVARIANT: the writer helpers below (_setLastSyncAt, markConflictsRead)
+// are expected to run serially. The sync worker drains through `drainOnce`
+// which is itself guarded by the `_running` flag in syncWorker.js, and
+// markConflictsRead is only called from UI open events. If a second
+// concurrent writer is introduced, add a write-chain mutex here.
 
 // Worker-only: record a successful drain timestamp.
 export async function _setLastSyncAt(ts) {
