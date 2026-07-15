@@ -7,6 +7,7 @@ import { shotBenchmarkForHandicap } from '../../../store/shotBenchmarks';
 import SectionCard from '../SectionCard';
 import ShotDashboard from '../ShotDashboard';
 import SGTrendCard from '../SGTrendCard';
+import SGReconciliationCard from '../SGReconciliationCard';
 import {
   comparisonMeta,
   toneColor,
@@ -60,6 +61,10 @@ export default function ShotsTab({ stats, onInfo, targetHandicap, onChangeTarget
         TargetNudge={SGTargetNudge}
       />
       <SGTrendCard strokesGained={stats.strokesGained} />
+      <SGReconciliationCard
+        reconciliation={stats.strokesGained?.reconciliation}
+        targetHandicap={targetHandicap}
+      />
 
       {scoringRows.length ? (
         <SectionCard title="Scoring" infoKey="sgScoring" onInfo={onInfo}>
