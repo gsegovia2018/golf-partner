@@ -101,8 +101,9 @@ export const statExplainers = {
   holeDifficulty: {
     title: 'Hole difficulty',
     subtitle: 'Net points by stroke index',
-    explainer: 'Average net points per hole, split by the printed stroke index: hard (SI 1-6), '
-      + 'mid (SI 7-12), easy (SI 13-18).',
+    explainer: 'Average net points per hole, split into thirds by the printed stroke index: the '
+      + 'hardest third, the middle third, and the easiest third of holes (e.g. SI 1-6/7-12/13-18 '
+      + 'on an 18-hole round, SI 1-3/4-6/7-9 on a 9-hole round).',
   },
   roundShape: {
     title: 'Round timing patterns',
@@ -114,7 +115,7 @@ export const statExplainers = {
     title: 'Recovery patterns',
     subtitle: 'Bouncing back and scrambling',
     explainer: 'Bounce-back rate is how often you follow a bogey-or-worse with a birdie-or-better. '
-      + 'Scrambling, sand saves, up-and-downs, and bunker visits show how well you limit damage '
+      + 'Scrambling, sand saves, 1-putt saves, and bunker visits show how well you limit damage '
       + 'after missing the ideal route.',
   },
   teeShot: {

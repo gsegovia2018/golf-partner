@@ -943,6 +943,16 @@ export function parTypeSplit(tournament, playerId) {
 // ── Warm-up vs Closing ──
 // Average points on the opening 3 holes vs the closing 3 holes across all
 // rounds. Reveals nerves / fatigue patterns.
+//
+// Warmup/closing are the first-3 / last-3 holes of `round.holes` AS PLAYED
+// (array order), not `hole.number <= 3` / `>= length - 2`. round.holes is
+// already in play order, so this is a no-op for an ordinary 18-hole round
+// numbered 1-18 (indices 0-2 = H1-3, indices 15-17 = H16-18, matching the
+// old hardcoded thresholds exactly) — but a back-nine-only round (holes
+// numbered 10-18) has hole.number never dip to 1-3, so the old check
+// produced zero warmup holes and mislabeled closing. Using array position
+// instead correctly treats that round's own first/last holes as its
+// warmup/closing stretch regardless of printed numbering.
 export function warmupVsClosing(tournament, playerId) {
   const warmup = [], closing = [];
   tournament.rounds.forEach((round, roundIndex) => {
@@ -950,15 +960,16 @@ export function warmupVsClosing(tournament, playerId) {
     const player = tournament.players.find(p => p.id === playerId);
     if (!player) return;
     const handicap = getPlayingHandicap(round, player);
-    round.holes.forEach(hole => {
+    const holes = round.holes;
+    holes.forEach((hole, idx) => {
       const sc = round.scores[playerId]?.[hole.number];
       if (!sc) return;
       const points = calcStablefordPoints(hole.par, sc, handicap, hole.strokeIndex);
       // roundIndex on each entry — without it, two rounds on the same course
       // produce breakdown rows that read as identical ("Course A · H1" twice)
       // even though they're from different days.
-      if (hole.number <= 3) warmup.push({ roundIndex, points, strokes: sc, par: hole.par, holeNumber: hole.number, courseName: round.courseName });
-      else if (hole.number >= round.holes.length - 2) closing.push({ roundIndex, points, strokes: sc, par: hole.par, holeNumber: hole.number, courseName: round.courseName });
+      if (idx <= 2) warmup.push({ roundIndex, points, strokes: sc, par: hole.par, holeNumber: hole.number, courseName: round.courseName });
+      else if (idx >= holes.length - 3) closing.push({ roundIndex, points, strokes: sc, par: hole.par, holeNumber: hole.number, courseName: round.courseName });
     });
   });
   const avg = (arr) => arr.length ? +(arr.reduce((s, h) => s + h.points, 0) / arr.length).toFixed(2) : 0;
@@ -1890,6 +1901,12 @@ export function strokeIndexAccuracy(tournament, { roundIndex = null } = {}) {
 // Of the holes where the green was missed in regulation, the share on which
 // the player still scored par-or-better. Requires per-hole shot detail
 // (putts) to determine GIR. One entry per player who has the data.
+//
+// Note: this matches the standard golf definition of "scrambling %", which
+// counts every missed-GIR hole as an attempt regardless of how the save
+// happened (chip-and-putt, fringe two-putt, long lag putt, etc). Unlike
+// upAndDownRate below, the label "scrambling" doesn't promise a greenside
+// recovery shot, so no gating is needed here.
 export function scramblingStats(tournament) {
   const perPlayer = {};
   tournament.players.forEach(p => { perPlayer[p.id] = { player: p, missedGir: 0, saves: 0, breakdown: [] }; });
@@ -2294,6 +2311,23 @@ export function sandSaveRate(rounds, playerId) {
 
 const UP_AND_DOWN_MIN_ATTEMPTS = 6;
 
+// ── Up-and-down rate (internal name) ──
+// Attempts are every missed-GIR hole with logged shot detail — the same as
+// scramblingStats above — including a two-putt from the fringe or a long
+// 3-putt where no chip/recovery shot was ever played near the green. There
+// is no reliable "played a greenside shot" marker in shot detail:
+// `approachResult` ('green' | 'miss') is optional and frequently unset (see
+// puttDeepDive's comment on the same gap), so it can't safely gate this
+// denominator. `sandShots` is a reliable signal but only covers the sand
+// half of the split (see sandSaveRate above, and the `byLie.sand` bucket
+// below); it says nothing about non-sand misses.
+//
+// Because the denominator can't be honestly restricted to real recovery
+// attempts, this is NOT the classic "up and down" stat (which implies a
+// chip/pitch onto the green followed by one putt) even though the
+// conversion side (`conversions`) does require a clean 0-or-1-putt save.
+// The UI surfaces this as a scrambling-family metric ("Scrambling (1-putt
+// saves)" in BreakdownTab.js) rather than "up and down" — see task-6-brief.
 export function upAndDownRate(rounds, playerId) {
   let attempts = 0, conversions = 0;
   const byLie = {
@@ -2633,21 +2667,39 @@ export function sgSeason(rounds, playerId, targetHandicap = 0) {
   if (sampleHoles < SG_SEASON_MIN_SAMPLE) {
     return { total: null, byCategory: null, sampleHoles, sampleHolesByCategory, perRound };
   }
+  // Per-category "SG / round" figures (shown on the category bars) are each
+  // averaged over THAT category's own denominator — e.g. putting averages
+  // over rounds with putting data, even if the same rounds are missing
+  // approach data. That is correct in isolation, but summing those averages
+  // together for the headline is not: penalties counts nearly every round
+  // (a clean hole still contributes 0 — see sgPenalties), while approach/
+  // putting only count the rounds that actually tracked them. Summing
+  // per-category values with mismatched denominators produces a headline
+  // figure no real round produced (e.g. putting/2 + penalties/10).
+  //
+  // Fix: the headline `total` uses ONE consistent denominator — rounds with
+  // ANY SG sample (`perRound.length`, since perRound only gets an entry when
+  // r.sampleHoles > 0) — by averaging each round's OWN total (sgTotal, which
+  // already sums that round's four categories) across all sampled rounds.
+  // This is equivalent to summing every category's raw total and dividing by
+  // the same round count, so it's a real "average SG per round" a group of
+  // rounds could actually produce, not a sum of differently-scaled averages.
   const perCategory = {
     approach:    categoryRounds.approach > 0 ? byCategory.approach / categoryRounds.approach : 0,
     aroundGreen: categoryRounds.aroundGreen > 0 ? byCategory.aroundGreen / categoryRounds.aroundGreen : 0,
     putting:     categoryRounds.putting > 0 ? byCategory.putting / categoryRounds.putting : 0,
     penalties:   categoryRounds.penalties > 0 ? byCategory.penalties / categoryRounds.penalties : 0,
   };
+  const roundsWithAnySample = perRound.length;
+  const total = roundsWithAnySample > 0
+    ? perRound.reduce((sum, r) => sum + r.total, 0) / roundsWithAnySample
+    : 0;
   return {
-    // The headline total must equal what a user summing the category bars
-    // would get — each category can carry a different round count (e.g. an
-    // approach-less round still contributes to putting), so re-deriving
-    // total from the raw per-round sum/denom can silently disagree with it.
-    total: perCategory.approach + perCategory.aroundGreen + perCategory.putting + perCategory.penalties,
+    total,
     byCategory: perCategory,
     sampleHoles,
     sampleHolesByCategory,
+    roundsWithAnySample,
     perRound,
   };
 }

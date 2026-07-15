@@ -245,9 +245,9 @@ function makeCoursePatternRows({ parType, difficulty, baseline }) {
     pointPatternRow('par3', 'Par 3s', parType.par3, baseline),
     pointPatternRow('par4', 'Par 4s', parType.par4, baseline),
     pointPatternRow('par5', 'Par 5s', parType.par5, baseline),
-    pointPatternRow('hard', 'Hard holes (SI 1-6)', difficulty.hard, baseline),
-    pointPatternRow('mid', 'Mid holes (SI 7-12)', difficulty.mid, baseline),
-    pointPatternRow('easy', 'Easy holes (SI 13-18)', difficulty.easy, baseline),
+    pointPatternRow('hard', 'Hard holes (hardest third)', difficulty.hard, baseline),
+    pointPatternRow('mid', 'Mid holes (middle third)', difficulty.mid, baseline),
+    pointPatternRow('easy', 'Easy holes (easiest third)', difficulty.easy, baseline),
   ].filter(Boolean);
 }
 
@@ -507,7 +507,14 @@ function makeRecoveryRows({
     } : null,
     upAndDown ? {
       key: 'upAndDown',
-      label: 'Up-and-down rate',
+      // Honest-labeling note: this counts every missed-GIR hole with logged
+      // putts as an "attempt" — including a two-putt from the fringe or a
+      // long 3-putt with no chip/recovery shot near the green. There's no
+      // reliable signal in shot detail (approachResult is optional and
+      // often unset) to gate that denominator to real around-the-green
+      // shots, so this is presented as a scrambling-family metric rather
+      // than the classic "up and down" (see statsEngine.js upAndDownRate).
+      label: 'Scrambling (1-putt saves)',
       value: rateValue(upAndDown.conversions, upAndDown.attempts, upAndDown.rate),
       secondary: sampleSecondary([sampleText(upAndDown.attempts, 'tries')], upAndDown.attempts, 6),
       tone: toneFromRate(upAndDown.rate, 0.45, { sample: upAndDown.attempts, minSample: 6 }),

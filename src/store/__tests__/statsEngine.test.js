@@ -1053,10 +1053,15 @@ describe('sgSeason', () => {
     expect(r.total).not.toBeNull();
   });
 
-  test('headline total equals the sum of the reported per-category values', () => {
+  test('headline total need not equal the sum of the reported per-category averages', () => {
     // Round A has approach + putting + penalties data; round B is putting-only
-    // (no approachBucket) — the per-category round counts diverge, which
-    // previously made the headline total disagree with sum(byCategory).
+    // (no approachBucket) — the per-category round counts diverge (approach
+    // denom=1, putting/penalties denom=2). Summing per-category averages over
+    // mismatched denominators produces a number no real round could produce,
+    // so the headline total is now a mean of each round's own total instead
+    // (see the "single consistent denominator" test below for the precise
+    // contract). This test just guards against re-introducing the old
+    // sum-of-mismatched-averages identity as an invariant.
     const holes = Array.from({ length: 18 }, (_, i) => ({
       number: i + 1, par: 4, strokeIndex: i + 1, distance: 400,
     }));
@@ -1078,7 +1083,63 @@ describe('sgSeason', () => {
     const r = sgSeason([approachRound, puttingOnlyRound], 'me');
     const categorySum = r.byCategory.approach + r.byCategory.aroundGreen
       + r.byCategory.putting + r.byCategory.penalties;
-    expect(r.total).toBeCloseTo(categorySum, 5);
+    // approach.total is nonzero here (approachRound has approachBucket data),
+    // so summing per-category averages over mismatched denominators diverges
+    // from the coherent per-round mean headline.
+    expect(r.total).not.toBeCloseTo(categorySum, 5);
+  });
+
+  test('headline total uses ONE consistent denominator (rounds with any SG sample) across categories', () => {
+    // 5 rounds: putting tracked in only 2 of them, penalties tracked in all 5
+    // (every tracked hole counts as a penalties sample, clean holes included —
+    // see sgPenalties). Before the fix, the headline total summed
+    // (puttingSum / 2) + (penaltiesSum / 5), mismatched denominators that no
+    // single round could have produced. After the fix, the headline is the
+    // mean of each round's own total — one shared denominator throughout.
+    const holes = Array.from({ length: 18 }, (_, i) => ({
+      number: i + 1, par: 4, strokeIndex: i + 1, distance: 400,
+    }));
+    const scores = { me: Object.fromEntries(holes.map((hole) => [hole.number, 4])) };
+    const puttingRound = {
+      holes,
+      scores,
+      shotDetails: { me: Object.fromEntries(holes.map((hole) => [hole.number, {
+        putts: 2, firstPuttBucket: '3-6', sandShots: 0, teePenalties: 0,
+      }])) },
+    };
+    const penaltyOnlyRound = (teePenalties) => ({
+      holes,
+      scores,
+      shotDetails: { me: Object.fromEntries(holes.map((hole, i) => [hole.number, {
+        sandShots: 0, teePenalties: i === 0 ? teePenalties : 0,
+      }])) },
+    });
+    const rounds = [
+      puttingRound, puttingRound,
+      penaltyOnlyRound(1), penaltyOnlyRound(0), penaltyOnlyRound(2),
+    ];
+
+    const r = sgSeason(rounds, 'me');
+
+    // The coherent contract: headline total = mean of each round's own total
+    // (rounds with ANY SG sample), independent of which categories each
+    // round happened to track.
+    const perRoundTotals = rounds.map((round) => sgTotal(round, 'me').total);
+    const expectedTotal = perRoundTotals.reduce((a, b) => a + b, 0) / perRoundTotals.length;
+    expect(r.total).toBeCloseTo(expectedTotal, 5);
+
+    // Guard against regressing to the old, broken sum-of-mismatched-averages:
+    // putting divided by 2 tracked rounds, penalties divided by 5 tracked
+    // rounds, summed together — a figure no actual round produced.
+    const brokenSumOfAverages = r.byCategory.approach + r.byCategory.aroundGreen
+      + r.byCategory.putting + r.byCategory.penalties;
+    expect(r.total).not.toBeCloseTo(brokenSumOfAverages, 5);
+
+    // Per-category detail values remain their own (sensible) per-category
+    // averages, each over its own denominator (2 rounds of putting data,
+    // not all 5) — only the headline total changes to a single shared
+    // denominator.
+    expect(r.byCategory.putting).toBeCloseTo(sgPutting(puttingRound, 'me').total, 5);
   });
 });
 
@@ -2424,5 +2485,23 @@ describe('warmupVsClosing — breakdown roundIndex', () => {
     expect(wc.closing.breakdown).toHaveLength(6);
     expect(wc.warmup.breakdown.map((b) => b.roundIndex)).toEqual([0, 0, 0, 1, 1, 1]);
     expect(wc.closing.breakdown.map((b) => b.roundIndex)).toEqual([0, 0, 0, 1, 1, 1]);
+  });
+
+  // Regression lock: a back-nine-only round (holes numbered 10-18, played
+  // in that order) must NOT produce zero warmup holes just because
+  // hole.number never dips to 1-3. Warmup/closing are derived from the
+  // round's actual hole ORDER (first-N / last-N as played), not the
+  // 1-based printed hole.number.
+  test('a back-nine-only round (holes 10-18) treats its first/last played holes as warmup/closing', () => {
+    const h = Array.from({ length: 9 }, (_, i) => ({ number: i + 10, par: 4, strokeIndex: i + 1 }));
+    const t = {
+      players: [{ id: 'p1', handicap: 0 }],
+      rounds: [{ courseName: 'Back Nine', holes: h, scores: { p1: evenScores(h, 4) } }],
+    };
+    const wc = warmupVsClosing(t, 'p1');
+    expect(wc.warmup.holes).toBe(3);
+    expect(wc.warmup.breakdown.map((b) => b.holeNumber)).toEqual([10, 11, 12]);
+    expect(wc.closing.holes).toBe(3);
+    expect(wc.closing.breakdown.map((b) => b.holeNumber)).toEqual([16, 17, 18]);
   });
 });

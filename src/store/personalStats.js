@@ -69,8 +69,21 @@ export function buildSyntheticTournament(myRounds) {
 }
 
 // ── holeDifficultySplit ──
-// Buckets a player's holes by printed stroke index: hard 1-6, mid 7-12,
-// easy 13-18. avgPoints is net Stableford points per hole in each band.
+// Buckets a player's holes by printed stroke index into thirds: hard,
+// mid, easy. avgPoints is net Stableford points per hole in each band.
+//
+// Thresholds are derived PER ROUND from that round's own max stroke index
+// (e.g. 18 for a full round, 9 for a 9-hole round) rather than a hardcoded
+// 1-18 scale — a fixed hard≤6/mid≤12/easy>12 split leaves the "easy" band
+// permanently empty for 9-hole rounds (SI only ever reaches 9), skewing
+// strength ranking and the report card's "where on the course" group. For
+// an 18-hole round with SI 1-18 this reduces to the original 6/12 split
+// exactly, so ordinary rounds are unaffected.
+function difficultyBand(strokeIndex, maxStrokeIndex) {
+  const third = (maxStrokeIndex || 18) / 3;
+  return strokeIndex <= third ? 'hard' : strokeIndex <= 2 * third ? 'mid' : 'easy';
+}
+
 export function holeDifficultySplit(tournament, playerId) {
   const bands = { hard: [], mid: [], easy: [] };
   const player = (tournament.players || []).find((p) => p.id === playerId);
@@ -78,12 +91,13 @@ export function holeDifficultySplit(tournament, playerId) {
     (tournament.rounds || []).forEach((round, roundIndex) => {
       if (!round.scores?.[playerId]) return;
       const handicap = getPlayingHandicap(round, player);
-      (round.holes || []).forEach((hole) => {
+      const holes = round.holes || [];
+      const maxSI = holes.reduce((m, h) => Math.max(m, h.strokeIndex || 0), 0);
+      holes.forEach((hole) => {
         const sc = round.scores[playerId]?.[hole.number];
         if (!sc) return;
         const points = calcStablefordPoints(hole.par, sc, handicap, hole.strokeIndex);
-        const band = hole.strokeIndex <= 6 ? 'hard'
-          : hole.strokeIndex <= 12 ? 'mid' : 'easy';
+        const band = difficultyBand(hole.strokeIndex, maxSI);
         bands[band].push({
           roundIndex, courseName: round.courseName,
           holeNumber: hole.number, par: hole.par, si: hole.strokeIndex,
@@ -401,9 +415,9 @@ export function rankStrengths(synthetic) {
   addCell('Par 5s', pt.par5.avgPoints, pt.par5.holes);
 
   const diff = holeDifficultySplit(synthetic, CANON_ID);
-  addCell('Hard holes (SI 1-6)', diff.hard.avgPoints, diff.hard.holes);
-  addCell('Mid holes (SI 7-12)', diff.mid.avgPoints, diff.mid.holes);
-  addCell('Easy holes (SI 13-18)', diff.easy.avgPoints, diff.easy.holes);
+  addCell('Hard holes', diff.hard.avgPoints, diff.hard.holes);
+  addCell('Mid holes', diff.mid.avgPoints, diff.mid.holes);
+  addCell('Easy holes', diff.easy.avgPoints, diff.easy.holes);
 
   const wc = warmupVsClosing(synthetic, CANON_ID);
   addCell('Opening 3 holes', wc.warmup.avgPoints, wc.warmup.holes);
@@ -448,14 +462,24 @@ export function resolveSelection(myRounds, overrides = {}) {
   ));
 }
 
+// A history slice smaller than this is one or two rounds — a single noisy
+// round (an off day, an unusually easy course) then drives the whole
+// improving/declining verdict, which flowed straight into Coach
+// formInsight (it keys off `delta`, not `direction`). Below this minimum
+// we still surface the raw recent/history values (informational), but
+// suppress delta/direction into null/'flat' — no confident claim.
+const MIN_FORM_HISTORY_ROUNDS = 3;
+
 // ── computeRecentVsHistory ──
 // "Recent" = the last N rounds (chronologically). "History" = every earlier
-// round. Disjoint, so the delta is a true improving/declining signal.
+// round. Disjoint, so the delta is a true improving/declining signal —
+// but only once history has MIN_FORM_HISTORY_ROUNDS rounds behind it.
 export function computeRecentVsHistory(myRounds, n = 5) {
   const all = myRounds || [];
   const recentRounds = all.slice(-n);
   const historyRounds = all.slice(0, Math.max(0, all.length - n));
   const hasHistory = historyRounds.length > 0;
+  const confidentHistory = historyRounds.length >= MIN_FORM_HISTORY_ROUNDS;
   const recent = computeMetrics(buildSyntheticTournament(recentRounds));
   const history = hasHistory
     ? computeMetrics(buildSyntheticTournament(historyRounds))
@@ -463,8 +487,10 @@ export function computeRecentVsHistory(myRounds, n = 5) {
   const metrics = FORM_METRICS.map((m) => {
     const recentVal = recent[m.key];
     const historyVal = hasHistory ? history[m.key] : null;
-    // Shot metrics can be null on either side (untracked slice) — no delta then.
-    const delta = recentVal != null && historyVal != null
+    // Shot metrics can be null on either side (untracked slice) — no delta
+    // then. Below MIN_FORM_HISTORY_ROUNDS the history slice itself is too
+    // thin to trust for a delta, even when both values are present.
+    const delta = confidentHistory && recentVal != null && historyVal != null
       ? +(recentVal - historyVal).toFixed(2)
       : null;
     let direction = 'flat';
@@ -560,7 +586,10 @@ export function computeFormSeries(selectedRounds) {
 // silently miss (e.g. courseName '' vs the 'R{n}' display key).
 // trend is the sign of the latest complete round here vs the one before
 // it, and null — not a fake "flat" 0 — when there is no previous round
-// to compare against.
+// to compare against. A swing smaller than COURSE_TREND_BAND (a single
+// stray stroke on one hole) reads as noise, not a real trend, so it's
+// clamped to 0 ("flat") rather than painting a confident arrow.
+const COURSE_TREND_BAND = 2;
 export function courseMastery(synthetic) {
   const completeRounds = (synthetic.rounds || []).filter((r) => r.isComplete);
   const dna = courseDNA({ ...synthetic, rounds: completeRounds })[0];
@@ -568,9 +597,11 @@ export function courseMastery(synthetic) {
   return dna.courses.map((c) => {
     const totals = c.roundTotals;
     const bestPoints = totals.reduce((m, e) => Math.max(m, e.points), 0);
-    const trend = totals.length >= 2
-      ? Math.sign(totals[totals.length - 1].points - totals[totals.length - 2].points)
-      : null;
+    let trend = null;
+    if (totals.length >= 2) {
+      const diff = totals[totals.length - 1].points - totals[totals.length - 2].points;
+      trend = Math.abs(diff) < COURSE_TREND_BAND ? 0 : Math.sign(diff);
+    }
     return {
       courseName: c.courseName,
       rounds: c.rounds,

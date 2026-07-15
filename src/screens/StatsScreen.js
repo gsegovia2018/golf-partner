@@ -1596,9 +1596,9 @@ function PlayersTab({ tournament, players, selectedPlayer, setSelectedPlayer, me
           <View style={s.card}>
             <View style={s.parSplitRow}>
               {[
-                { key: 'hard', label: 'SI 1-6', bucket: difficulty.hard },
-                { key: 'mid', label: 'SI 7-12', bucket: difficulty.mid },
-                { key: 'easy', label: 'SI 13-18', bucket: difficulty.easy },
+                { key: 'hard', label: 'Hardest third', bucket: difficulty.hard },
+                { key: 'mid', label: 'Middle third', bucket: difficulty.mid },
+                { key: 'easy', label: 'Easiest third', bucket: difficulty.easy },
               ].map(({ key, label, bucket }) => (
                 <TouchableOpacity
                   key={key}

@@ -7,11 +7,9 @@ import {
   subscribeSyncStatus,
   subscribeConflicts,
   markConflictsRead,
-  readLocal,
 } from '../store/tournamentStore';
 import { syncQueue } from '../store/syncQueue';
 import { retrySync } from '../store/syncWorker';
-import { pathToLabel } from '../store/conflictLabels';
 
 const STATE_LABEL = {
   idle: 'Al día',
@@ -41,27 +39,17 @@ function formatRelative(ts) {
   return `hace ${day} d`;
 }
 
-function formatValue(v) {
-  if (v == null) return '—';
-  if (typeof v === 'object') return '…';
-  const str = String(v);
-  return str.length > 24 ? str.slice(0, 23) + '…' : str;
-}
-
 export default function SyncStatusSheet({ visible, onClose }) {
   const { theme } = useTheme();
   const s = makeStyles(theme);
   const [status, setStatus] = useState('idle');
-  const [log, setLog] = useState([]);
   const [lastSyncAt, setLastSyncAt] = useState(null);
   const [pending, setPending] = useState(0);
-  const [blob, setBlob] = useState(null);
 
   useEffect(() => {
     if (!visible) return;
     const offStatus = subscribeSyncStatus(setStatus);
-    const offConflicts = subscribeConflicts(({ log: nextLog, lastSyncAt: nextTs }) => {
-      setLog(nextLog);
+    const offConflicts = subscribeConflicts(({ lastSyncAt: nextTs }) => {
       setLastSyncAt(nextTs);
     });
     return () => { offStatus(); offConflicts(); };
@@ -72,15 +60,6 @@ export default function SyncStatusSheet({ visible, onClose }) {
     markConflictsRead().catch(() => {});
     syncQueue.all().then((all) => setPending(all.length)).catch(() => setPending(0));
   }, [visible]);
-
-  // Best-effort: resolve the blob for the most recent conflict's tournament
-  // so labels can show player names. Unknown tournaments fall back to em-dashes.
-  useEffect(() => {
-    if (!visible || log.length === 0) { setBlob(null); return; }
-    const latest = log[log.length - 1]?.tournamentId;
-    if (!latest) { setBlob(null); return; }
-    readLocal(latest).then(setBlob).catch(() => setBlob(null));
-  }, [visible, log]);
 
   const onRetry = useCallback(() => { retrySync(); }, []);
 
@@ -105,25 +84,6 @@ export default function SyncStatusSheet({ visible, onClose }) {
             <TouchableOpacity onPress={onRetry} style={s.retry}>
               <Text style={s.retryLabel}>Reintentar</Text>
             </TouchableOpacity>
-          )}
-
-          <View style={s.divider} />
-
-          <Text style={s.sectionTitle}>Cambios sobrescritos</Text>
-          {log.length === 0 ? (
-            <Text style={s.empty}>Sin cambios sobrescritos recientes</Text>
-          ) : (
-            log.slice().reverse().map((entry, i) => (
-              <View key={`${entry.detectedAt}-${entry.path}-${i}`} style={s.logItem}>
-                <Text style={s.logPrimary}>{pathToLabel(entry, blob)}</Text>
-                <Text style={s.logSecondary}>
-                  {formatRelative(entry.detectedAt)}
-                  {entry.winnerValue !== undefined && entry.losingValue !== undefined
-                    ? ` · quedó en ${formatValue(entry.winnerValue)} (antes ${formatValue(entry.losingValue)})`
-                    : ''}
-                </Text>
-              </View>
-            ))
           )}
         </ScrollView>
     </BottomSheet>
@@ -173,9 +133,4 @@ const makeStyles = (t) => StyleSheet.create({
     alignSelf: 'flex-start',
   },
   retryLabel: { fontFamily: 'PlusJakartaSans-SemiBold', color: t.text.inverse, fontSize: 14 },
-  divider: { height: 1, backgroundColor: t.border.subtle, marginVertical: 14 },
-  empty: { fontFamily: 'PlusJakartaSans-Regular', fontSize: 13, color: t.text.muted, fontStyle: 'italic' },
-  logItem: { paddingVertical: 8 },
-  logPrimary: { fontFamily: 'PlusJakartaSans-Medium', fontSize: 14, color: t.text.primary },
-  logSecondary: { fontFamily: 'PlusJakartaSans-Regular', fontSize: 12, color: t.text.secondary, marginTop: 2 },
 });

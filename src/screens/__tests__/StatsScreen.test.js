@@ -215,19 +215,52 @@ describe('StatsScreen Players tab — Difficulty Split', () => {
     const { getByText, getAllByText, UNSAFE_getByType } = renderStats([makeRound('r1')]);
     fireEvent.press(getByText('Players'));
 
+    // Labels are shape-agnostic ("Hardest/Middle/Easiest third") rather than
+    // hardcoded SI ranges, since holeDifficultySplit derives its bands from
+    // each round's actual max stroke index (18-hole vs 9-hole rounds split
+    // differently) — see the 9-hole case below.
     expect(getByText('DIFFICULTY SPLIT')).toBeTruthy();
-    expect(getByText('SI 1-6')).toBeTruthy();
-    expect(getByText('SI 7-12')).toBeTruthy();
-    expect(getByText('SI 13-18')).toBeTruthy();
+    expect(getByText('Hardest third')).toBeTruthy();
+    expect(getByText('Middle third')).toBeTruthy();
+    expect(getByText('Easiest third')).toBeTruthy();
     // 18 holes split 6/6/6 across the three bands.
     expect(getAllByText('6 holes')).toHaveLength(3);
     // calcStablefordPoints is mocked to always return 2 pts — every band averages 2.
     expect(getAllByText('2').length).toBeGreaterThanOrEqual(3);
 
-    fireEvent.press(getByText('SI 1-6'));
+    fireEvent.press(getByText('Hardest third'));
     const sheet = UNSAFE_getByType('StatDetailSheet');
-    expect(sheet.props.title).toBe('Marcos — SI 1-6');
+    expect(sheet.props.title).toBe('Marcos — Hardest third');
     expect(sheet.props.rows).toHaveLength(6);
+  });
+
+  test('labels a 9-hole round\'s bands as thirds too, not the 18-hole SI ranges', () => {
+    const nineHoles = Array.from({ length: 9 }, (_, index) => ({
+      number: index + 1,
+      par: 4,
+      strokeIndex: index + 1,
+    }));
+    const nineHoleRound = {
+      id: 'r1',
+      courseName: 'La Moraleja',
+      holes: nineHoles,
+      scores: {
+        p1: Object.fromEntries(nineHoles.map((hole) => [hole.number, 4])),
+      },
+    };
+    const { getByText, getAllByText, queryByText } = renderStats([nineHoleRound]);
+    fireEvent.press(getByText('Players'));
+
+    // hard=SI 1-3, mid=SI 4-6, easy=SI 7-9 for a 9-hole round — the old
+    // hardcoded "SI 1-6"/"SI 7-12"/"SI 13-18" labels would be wrong here.
+    expect(getByText('Hardest third')).toBeTruthy();
+    expect(getByText('Middle third')).toBeTruthy();
+    expect(getByText('Easiest third')).toBeTruthy();
+    expect(queryByText('SI 1-6')).toBeNull();
+    expect(queryByText('SI 7-12')).toBeNull();
+    expect(queryByText('SI 13-18')).toBeNull();
+    // 9 holes split 3/3/3 across the three bands.
+    expect(getAllByText('3 holes')).toHaveLength(3);
   });
 });
 

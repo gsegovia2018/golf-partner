@@ -390,6 +390,31 @@ describe('My Stats tabs', () => {
     expect(queryByText(/-1.5 vs your avg/)).toBeNull();
   });
 
+  test('BreakdownTab labels the recovery-putting metric as scrambling, not "up and down"', async () => {
+    // The metric's denominator counts every missed-GIR hole with logged
+    // putts as an "attempt" — including a two-putt from the fringe or a
+    // long 3-putt with no chip/recovery shot. There is no reliable signal
+    // in shot detail (approachResult is optional and frequently unset) to
+    // gate that denominator on an actual around-the-green shot, so the UI
+    // must not claim the classic "up and down" definition. It should read
+    // as a scrambling-family metric instead, distinct from the plain
+    // "Scrambling" row already on this tab.
+    const stats = {
+      ...shotStats(),
+      sandSaves: { attempts: 5, saves: 2, rate: 0.4 },
+      upAndDown: { attempts: 8, conversions: 4, rate: 0.5 },
+      bunkerVisits: { totalShots: 6, holesWithSand: 4, avgPerRound: 2 },
+    };
+    const { findAllByText, queryByText } = render(wrap(
+      <BreakdownTab stats={stats} onInfo={() => {}} />
+    ));
+
+    const scramblingLabels = await findAllByText(/scrambling/i);
+    expect(scramblingLabels.length).toBeGreaterThanOrEqual(2); // the existing row + the renamed one
+    expect(queryByText(/up.and.down/i)).toBeNull();
+    expect(queryByText(/up & down/i)).toBeNull();
+  });
+
   test('BreakdownTab shows Course Mastery rows and Career Milestones tiles', async () => {
     const { findByText, findAllByText, getByLabelText, queryByLabelText } = render(wrap(
       <BreakdownTab stats={baseStats()} onInfo={() => {}} />

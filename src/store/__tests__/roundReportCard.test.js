@@ -204,6 +204,42 @@ describe('buildRoundReportCard — meta & headline', () => {
     // and vsAvg would read +13.5 instead.
     expect(card.headline.vsAvg).toBe(18);
   });
+
+  test('distribution baseline (Birdies+) excludes an early-finished partial round from the per-round rate', () => {
+    const h = mkHoles();
+    // Partial history round: 6 of 18 holes scored, birdied at the SAME rate
+    // (1-in-6) as the full round below (3-in-18) — a typical partial round,
+    // not birdie-heavy.
+    const partialScores = {};
+    h.slice(0, 6).forEach((hole) => { partialScores[hole.number] = hole.par; });
+    partialScores[1] = 3; // one birdie
+    const partial = mkMyRound({ key: 'partial', holes: h, scores: partialScores });
+
+    // Full history round: 3 birdies (holes 1-3), rest par.
+    const fullScores = evenScores(h, 4);
+    [1, 2, 3].forEach((n) => { fullScores[n] = 3; });
+    const full = mkMyRound({ key: 'full', holes: h, scores: fullScores });
+
+    // Target round: identical birdie pattern to the full history round —
+    // an ordinary round that should read as exactly average.
+    const targetScores = evenScores(h, 4);
+    [1, 2, 3].forEach((n) => { targetScores[n] = 3; });
+    const target = mkMyRound({ key: 'target', holes: h, scores: targetScores });
+
+    const card = buildRoundReportCard([partial, full, target], 'target');
+    const dist = card.groups.find((g) => g.key === 'distribution');
+    const birdies = dist.cells.find((c) => c.label === 'Birdies+');
+
+    // Baseline must be the full (complete) round's own birdie count, 3 —
+    // NOT diluted by averaging in the 6-hole partial round: the old buggy
+    // math was (3 full + 1 partial) / 2 rounds = 2.0, which would falsely
+    // flag this target's 3 birdies as +1.0 above average (a false "bright
+    // spot"). With only complete rounds counted, baseline = 3 / 1 = 3, and
+    // the target's matching 3 birdies reads as exactly average.
+    expect(birdies.baseline).toBe(3);
+    expect(birdies.value).toBe(3);
+    expect(birdies.deltaVsAvg).toBe(0);
+  });
 });
 
 describe('buildRoundReportCard — callouts', () => {
@@ -235,10 +271,10 @@ describe('buildRoundReportCard — callouts', () => {
     const brightLabels = card.callouts.bright.map((c) => c.label);
     const costLabels = card.callouts.cost.map((c) => c.label);
     expect(brightLabels).toContain('Par 3s');
-    expect(costLabels).toContain('Hard holes (SI 1-6)');
+    expect(costLabels).toContain('Hard holes');
     // The strongest bright spot / worst cost cell must rank first.
     expect(brightLabels[0]).toBe('Par 3s');
-    expect(costLabels[0]).toBe('Hard holes (SI 1-6)');
+    expect(costLabels[0]).toBe('Hard holes');
     expect(card.callouts.bright.length).toBeLessThanOrEqual(2);
     expect(card.callouts.cost.length).toBeLessThanOrEqual(2);
   });
@@ -270,7 +306,7 @@ describe('buildRoundReportCard — callouts', () => {
     const card = buildRoundReportCard(rounds, 'solo');
     expect(card.hasHistory).toBe(false);
     expect(card.callouts.bright.map((c) => c.label)).toContain('Par 3s');
-    expect(card.callouts.cost.map((c) => c.label)).toContain('Hard holes (SI 1-6)');
+    expect(card.callouts.cost.map((c) => c.label)).toContain('Hard holes');
   });
 });
 
@@ -360,7 +396,7 @@ describe('buildRoundReportCard — breakdown groups', () => {
 });
 
 describe('buildRoundReportCard — baseline-only compute path', () => {
-  test('computes thisStats and baseStats via computeMyStats({ baselineOnly: true })', () => {
+  test('computes thisStats, baseStats and completeBaseStats via computeMyStats({ baselineOnly: true })', () => {
     const spy = jest.spyOn(personalStats, 'computeMyStats');
     const h = mkHoles();
     const rounds = [
@@ -368,7 +404,11 @@ describe('buildRoundReportCard — baseline-only compute path', () => {
       mkMyRound({ key: 'target', holes: h, scores: evenScores(h, 3) }),
     ];
     buildRoundReportCard(rounds, 'target');
-    expect(spy).toHaveBeenCalledTimes(2);
+    // 3 calls: the target round, the full history, and the complete-only
+    // slice of history (distributionCells' per-round baseline must exclude
+    // partial rounds — see the "distribution baseline" test above). Here
+    // 'h1' is a complete round, so the third call is a same-sized re-slice.
+    expect(spy).toHaveBeenCalledTimes(3);
     spy.mock.calls.forEach((call) => {
       expect(call[1]).toMatchObject({ baselineOnly: true });
     });
