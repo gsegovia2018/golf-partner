@@ -293,4 +293,16 @@ export const statExplainers = {
       + 'Playing-conditions adjustments, caps against your historical low index, and 9-hole '
       + 'differentials are not applied — treat this as a strong estimate, not an official index.',
   },
+  courseHandicap: {
+    title: 'Course Handicap',
+    subtitle: 'Your index, converted for one course and tee',
+    explainer: 'Your Handicap Index travels with you, but the strokes you actually receive change '
+      + 'per course and tee. This card converts your index into a course handicap for whichever '
+      + 'course and tee you pick.\n\n'
+      + 'The formula: index × (slope ÷ 113) + (course rating − par), rounded to the nearest whole '
+      + 'number. Harder tees — higher slope, or a course rating above par — hand out more strokes; '
+      + 'easier ones fewer.\n\n'
+      + 'The preview uses your calculated Handicap Index once you have enough qualifying rounds; '
+      + 'until then it falls back to your profile handicap.',
+  },
 };

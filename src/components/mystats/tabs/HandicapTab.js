@@ -69,7 +69,7 @@ export default function HandicapTab({ myRounds, profileHandicap, gender, onInfo,
     : null;
 
   const previewCard = (courses && courses.length > 0 && previewIndex != null) ? (
-    <SectionCard title="Course handicap" infoKey="handicapIndex" onInfo={onInfo}>
+    <SectionCard title="Course handicap" infoKey="courseHandicap" onInfo={onInfo}>
       <Text style={s.caption}>What you'd play off, per course and tee</Text>
       <ScrollView horizontal showsHorizontalScrollIndicator={false}>
         <View style={s.chips}>
