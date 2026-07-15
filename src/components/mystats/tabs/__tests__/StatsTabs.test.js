@@ -292,7 +292,7 @@ describe('My Stats tabs', () => {
     expect(await findByText('Par 4 avg score')).toBeTruthy();
     expect(await findByText('Par 5 avg score')).toBeTruthy();
     expect(await findByText('Driving vs target')).toBeTruthy();
-    expect(await findByText('Driver distance')).toBeTruthy();
+    expect(await findByText('Drive distance')).toBeTruthy();
     expect((await findAllByText('Approach')).length).toBeGreaterThan(0);
     expect(await findByText('Approach vs target')).toBeTruthy();
     expect((await findAllByText('Putting')).length).toBeGreaterThan(0);

@@ -15,7 +15,7 @@ import {
   lagPuttingQuality, sandSaveRate, upAndDownRate, bunkerVisits,
   sgSeason, sgReconciliation, driveScoreImpact, approachScoreImpact, puttDeepDive,
   puttingTargetGaps, approachTargetGaps, courseDNA, playerStreaks,
-  driveLieBreakdown,
+  driveLieBreakdown, driveDistanceAverage,
 } from './statsEngine';
 import { buildCoachInsights } from './coachInsights';
 import { buildStrategyTips } from './coachStrategy';
@@ -759,6 +759,7 @@ export function computeMyStats(selectedRounds, { n = 5, targetHandicap = 0, base
     courseMastery: courseMastery(synthetic),
     careerMilestones: careerMilestones(synthetic),
     driveLies: driveLieBreakdown(synthetic.rounds, CANON_ID),
+    driveDistance: driveDistanceAverage(synthetic.rounds, CANON_ID),
   };
   return {
     ...baseStats,
