@@ -254,6 +254,39 @@ async function resolveFeedUserId(userId) {
   return currentUserId();
 }
 
+// ---------------------------------------------------------------------------
+// Build-pipeline cache. The remote path fans out into a friend-list RPC, one
+// fetchTournament RPC per not-already-owned friend tournament, and chunked
+// get_round_activity RPCs (see fetchFriendTournaments / fetchRoundActivityTimestamps
+// above) — expensive, and identical work whether it's re-run because the
+// screen refocused with nothing new to show, or because `onEndReached` asked
+// for the next slice of the SAME already-sorted list. Every successful
+// non-'cache'-source build stores its fetched ingredients here so a caller
+// that opts in with `useCache: true` (a plain refocus, or a pagination page
+// fetch — see FeedScreen) can reuse them and skip the network entirely.
+// Never read unless the caller explicitly asks (default `useCache: false`),
+// so every existing direct buildFeed() call keeps doing a fresh fetch exactly
+// as before. A tournament-change event (real data change) must call
+// invalidateFeedCache() first so the next build is guaranteed fresh.
+//
+// Safety net: subscribeTournamentChanges only fires for changes THIS device
+// observes locally (its own edits, or a realtime event for a tournament it
+// has an open channel on) — a friend's edit landing purely server-side while
+// this device sits idle on the Feed screen produces no local event to
+// invalidate the cache. A short TTL bounds that worst case so a stale-cache
+// refocus can never show data older than FEED_CACHE_TTL_MS, without
+// defeating the point of caching rapid pagination/refocus bursts.
+const FEED_CACHE_TTL_MS = 3 * 60 * 1000;
+let feedBuildCache = null; // { key, ts, friends, friendSet, friendById, all, activityTsByKey, partial }
+
+function feedCacheKey(userId, source) {
+  return `${userId ?? 'anon'}::${source}`;
+}
+
+export function invalidateFeedCache() {
+  feedBuildCache = null;
+}
+
 async function loadFeedFriends(source) {
   if (source === 'cache') {
     return { friends: await getCachedFriends(), partial: false };
@@ -285,55 +318,88 @@ export async function buildFeed(options = {}) {
     source = 'remote',
     includeMedia = true,
     limit = null,
+    offset = 0,
+    // Opt-in only: every direct call keeps doing a fresh fetch unless the
+    // caller explicitly asks to reuse the last build's ingredients (see the
+    // feedBuildCache block above).
+    useCache = false,
   } = options;
   let partial = false;
 
   let me = null;
   try { me = await resolveFeedUserId(userId); } catch { partial = true; }
 
-  let friends = [];
-  try {
-    const friendResult = await loadFeedFriends(source);
-    friends = friendResult.friends;
-    partial = partial || !!friendResult.partial;
-  } catch {
-    partial = true;
+  const cacheKey = feedCacheKey(me, source);
+  const cached = feedBuildCache;
+  const cacheFresh = !!cached && (Date.now() - cached.ts) < FEED_CACHE_TTL_MS;
+  const canReuseCache = useCache && source !== 'cache' && cacheFresh && cached.key === cacheKey;
+
+  let friends;
+  let friendSet;
+  let friendById;
+  let all;
+  let activityTsByKey;
+
+  if (canReuseCache) {
+    ({
+      friends, friendSet, friendById, all, activityTsByKey,
+    } = cached);
+    partial = partial || cached.partial;
+  } else {
+    let basePartial = false;
+
     friends = [];
-  }
-  const friendIds = friends.map((f) => f.userId);
-  const friendSet = new Set(friendIds);
-  const friendById = new Map(friends.map((f) => [f.userId, f]));
+    try {
+      const friendResult = await loadFeedFriends(source);
+      friends = friendResult.friends;
+      basePartial = basePartial || !!friendResult.partial;
+    } catch {
+      basePartial = true;
+      friends = [];
+    }
+    const friendIds = friends.map((f) => f.userId);
+    friendSet = new Set(friendIds);
+    friendById = new Map(friends.map((f) => [f.userId, f]));
 
-  let myTournaments = [];
-  let tournamentResult = null;
-  try {
-    tournamentResult = await loadFeedTournaments(source);
-    ({ list: myTournaments } = tournamentResult);
-    partial = partial || !!tournamentResult?.stale;
-  } catch {
-    // The only hard-fail path: with no tournaments at all there is nothing
-    // to build a feed from.
-    return { me, friends, items: [], roundStories: [], partial: false, error: true };
-  }
-  const haveIds = new Set(myTournaments.map((t) => t.id));
-  const friendTournaments = source === 'cache'
-    ? []
-    : await fetchFriendTournaments(friendIds, haveIds);
+    let myTournaments = [];
+    let tournamentResult = null;
+    try {
+      tournamentResult = await loadFeedTournaments(source);
+      ({ list: myTournaments } = tournamentResult);
+      basePartial = basePartial || !!tournamentResult?.stale;
+    } catch {
+      // The only hard-fail path: with no tournaments at all there is nothing
+      // to build a feed from. Leave any existing cache untouched.
+      return { me, friends, items: [], roundStories: [], partial: false, error: true };
+    }
+    const haveIds = new Set(myTournaments.map((t) => t.id));
+    const friendTournaments = source === 'cache'
+      ? []
+      : await fetchFriendTournaments(friendIds, haveIds);
 
-  // De-dupe by id; my own blob wins over a friend-fetched copy.
-  const byId = new Map();
-  for (const t of [...myTournaments, ...friendTournaments]) {
-    if (!byId.has(t.id)) byId.set(t.id, t);
-  }
-  const all = [...byId.values()];
+    // De-dupe by id; my own blob wins over a friend-fetched copy.
+    const byId = new Map();
+    for (const t of [...myTournaments, ...friendTournaments]) {
+      if (!byId.has(t.id)) byId.set(t.id, t);
+    }
+    all = [...byId.values()];
 
-  // Real per-round recency for ordering (see roundActivityTs above). Skipped
-  // for a cache-only build — same as fetchFriendTournaments above, there's no
-  // network to query and every round falls back to the deterministic (not
-  // recency-based) ordering instead.
-  const activityTsByKey = source === 'cache'
-    ? new Map()
-    : await fetchRoundActivityTimestamps([...new Set(all.map((t) => t.id))]);
+    // Real per-round recency for ordering (see roundActivityTs above). Skipped
+    // for a cache-only build — same as fetchFriendTournaments above, there's no
+    // network to query and every round falls back to the deterministic (not
+    // recency-based) ordering instead.
+    activityTsByKey = source === 'cache'
+      ? new Map()
+      : await fetchRoundActivityTimestamps([...new Set(all.map((t) => t.id))]);
+
+    partial = partial || basePartial;
+
+    if (source !== 'cache') {
+      feedBuildCache = {
+        key: cacheKey, ts: Date.now(), friends, friendSet, friendById, all, activityTsByKey, partial: basePartial,
+      };
+    }
+  }
 
   const items = [];
 
@@ -429,7 +495,13 @@ export async function buildFeed(options = {}) {
   }
 
   items.sort((a, b) => b.ts - a.ts);
-  const limitedItems = limit == null ? items : items.slice(0, limit);
+  const limitedItems = limit == null
+    ? items.slice(offset)
+    : items.slice(offset, offset + limit);
+  // True when there are more items beyond this page — drives infinite-scroll
+  // pagination in FeedScreen (`onEndReached`). Always false when `limit` is
+  // unset (an unbounded build has nothing left to page).
+  const hasMore = limit != null && (offset + limit) < items.length;
 
   let roundStories = [];
   if (includeMedia) {
@@ -470,7 +542,16 @@ export async function buildFeed(options = {}) {
     }
   }
 
-  return { me, friends, items: limitedItems, roundStories, partial, error: false };
+  return {
+    me,
+    friends,
+    items: limitedItems,
+    roundStories,
+    partial,
+    error: false,
+    hasMore,
+    nextOffset: offset + limitedItems.length,
+  };
 }
 
 // ---------------------------------------------------------------------------
