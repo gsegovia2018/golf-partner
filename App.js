@@ -54,6 +54,7 @@ import PlayerPickerScreen from './src/screens/PlayerPickerScreen';
 import CoursePickerScreen from './src/screens/CoursePickerScreen';
 import StatsScreen from './src/screens/StatsScreen';
 import MyStatsScreen from './src/screens/MyStatsScreen';
+import CourseStatsScreen from './src/screens/CourseStatsScreen';
 import EditTeamsScreen from './src/screens/EditTeamsScreen';
 import GalleryScreen from './src/screens/GalleryScreen';
 import JoinTournamentScreen from './src/screens/JoinTournamentScreen';
@@ -228,6 +229,7 @@ function AppNavigator() {
         <Stack.Screen name="CoursePicker" component={CoursePickerScreen} />
         <Stack.Screen name="Stats" component={StatsScreen} />
         <Stack.Screen name="MyStats" component={MyStatsScreen} />
+        <Stack.Screen name="CourseStats" component={CourseStatsScreen} />
         <Stack.Screen name="EditTeams" component={EditTeamsScreen} />
         <Stack.Screen name="Gallery" component={GalleryScreen} />
         <Stack.Screen name="JoinTournament" component={JoinTournamentScreen} />
