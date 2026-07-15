@@ -17,6 +17,7 @@ import CoachTab from '../components/mystats/tabs/CoachTab';
 import FormTab from '../components/mystats/tabs/FormTab';
 import BreakdownTab from '../components/mystats/tabs/BreakdownTab';
 import ShotsTab from '../components/mystats/tabs/ShotsTab';
+import HandicapTab from '../components/mystats/tabs/HandicapTab';
 import { statExplainers } from '../components/mystats/statExplainers';
 import { loadFocus, saveFocus, clearFocus, archiveFocus, makeFocusCommit, focusVerdict } from '../store/coachFocus';
 
@@ -51,6 +52,7 @@ const ALL_TABS = [
   { key: 'shots',     label: 'Strokes Gained' },
   { key: 'form',      label: 'Form' },
   { key: 'breakdown', label: 'Breakdown' },
+  { key: 'handicap', label: 'Handicap' },
 ];
 
 function normalizeStatsTab(value) {
@@ -74,6 +76,8 @@ export default function MyStatsScreen({ navigation, route }) {
   const [reportRoundKey, setReportRoundKey] = useState(route?.params?.roundKey ?? null);
   const [infoKey, setInfoKey] = useState(null);
   const [targetHandicap, setTargetHandicap] = useState(null);
+  const [profileHandicap, setProfileHandicap] = useState(null);
+  const [profileGender, setProfileGender] = useState(null);
   const [pickerOpen, setPickerOpen] = useState(false);
   const [coachFocus, setCoachFocus] = useState(null);
 
@@ -112,7 +116,11 @@ export default function MyStatsScreen({ navigation, route }) {
           loadAllTournamentsWithFallback(),
           loadProfile().catch(() => null),
         ]);
-        if (!cancelled) setTargetHandicap(profile?.targetHandicap ?? null);
+        if (!cancelled) {
+          setTargetHandicap(profile?.targetHandicap ?? null);
+          setProfileHandicap(profile?.handicap ?? null);
+          setProfileGender(profile?.gender ?? null);
+        }
         const rounds = collectMyRounds(list, user?.id, profile?.displayName);
         let stored = {};
         if (storageKey) {
@@ -146,7 +154,11 @@ export default function MyStatsScreen({ navigation, route }) {
     if (!navigation?.addListener) return undefined;
     return navigation.addListener('focus', () => (
       loadProfile()
-        .then((profile) => setTargetHandicap(profile?.targetHandicap ?? null))
+        .then((profile) => {
+          setTargetHandicap(profile?.targetHandicap ?? null);
+          setProfileHandicap(profile?.handicap ?? null);
+          setProfileGender(profile?.gender ?? null);
+        })
         .catch(() => {})
     ));
   }, [navigation]);
@@ -384,7 +396,7 @@ export default function MyStatsScreen({ navigation, route }) {
   );
 
   // ── Empty: every round deselected ──
-  if (selected.length === 0 && tab !== 'reportCard') {
+  if (selected.length === 0 && tab !== 'reportCard' && tab !== 'handicap') {
     return (
       <ScreenContainer style={s.container} edges={['top', 'bottom']}>
         {Header}
@@ -430,6 +442,15 @@ export default function MyStatsScreen({ navigation, route }) {
         {tab === 'form' && <FormTab stats={stats} n={n} onChangeN={setN} onInfo={onInfo} />}
         {tab === 'breakdown' && <BreakdownTab stats={stats} onInfo={onInfo} onSelectCourse={openCourseStats} />}
         {tab === 'shots' && <ShotsTab stats={stats} onInfo={onInfo} targetHandicap={targetHandicap} onChangeTarget={() => setPickerOpen(true)} />}
+        {tab === 'handicap' && (
+          <HandicapTab
+            myRounds={myRounds}
+            profileHandicap={profileHandicap}
+            gender={profileGender}
+            onInfo={onInfo}
+            onApplied={setProfileHandicap}
+          />
+        )}
       </ScrollView>
       <StatDetailSheet
         visible={!!infoKey}

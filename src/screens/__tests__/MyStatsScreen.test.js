@@ -25,7 +25,7 @@ jest.mock('../../store/tournamentStore', () => ({
 }));
 
 jest.mock('../../store/profileStore', () => ({
-  loadProfile: jest.fn(() => Promise.resolve({ displayName: 'Marco', targetHandicap: 14 })),
+  loadProfile: jest.fn(() => Promise.resolve({ displayName: 'Marco', targetHandicap: 14, handicap: 12, gender: null })),
   upsertProfile: jest.fn(() => Promise.resolve()),
 }));
 
@@ -92,6 +92,11 @@ jest.mock('../../components/mystats/tabs/BreakdownTab', () => function MockBreak
 jest.mock('../../components/mystats/tabs/ShotsTab', () => function MockShotsTab() {
   const { Text } = require('react-native');
   return <Text>Strokes Gained content</Text>;
+});
+
+jest.mock('../../components/mystats/tabs/HandicapTab', () => function MockHandicapTab({ myRounds, profileHandicap }) {
+  const { Text } = require('react-native');
+  return <Text>{`Handicap tab: ${myRounds.length} rounds, profile ${profileHandicap}`}</Text>;
 });
 
 beforeEach(() => {
@@ -175,12 +180,13 @@ describe('MyStatsScreen tab strip', () => {
 
     expect(tabs.props.horizontal).toBe(true);
     expect(tabs.props.showsHorizontalScrollIndicator).toBe(false);
-    expect(labels).toEqual(['Report Card', 'Coach', 'Strokes Gained', 'Form', 'Breakdown']);
+    expect(labels).toEqual(['Report Card', 'Coach', 'Strokes Gained', 'Form', 'Breakdown', 'Handicap']);
     expect(getByText('Coach')).toBeTruthy();
     expect(getByText('Report Card')).toBeTruthy();
     expect(getByText('Form')).toBeTruthy();
     expect(getByText('Breakdown')).toBeTruthy();
     expect(getByText('Strokes Gained')).toBeTruthy();
+    expect(getByText('Handicap')).toBeTruthy();
     expect(() => getByText('Overview')).toThrow();
     expect(getByText('Report card content')).toBeTruthy();
   });
@@ -284,5 +290,14 @@ describe('MyStatsScreen report card round link', () => {
 
     expect(await findByText('Report card content')).toBeTruthy();
     expect(queryByText('Open round stats')).toBeNull();
+  });
+});
+
+describe('MyStatsScreen handicap tab', () => {
+  it('shows the Handicap tab and passes all rounds plus the profile handicap', async () => {
+    const view = renderScreen();
+    const tabs = await view.findAllByText('Handicap');
+    fireEvent.press(tabs[0]);
+    expect(await view.findByText(/Handicap tab: 1 rounds, profile 12/)).toBeTruthy();
   });
 });
