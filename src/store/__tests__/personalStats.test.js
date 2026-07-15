@@ -508,16 +508,37 @@ describe('computeRecentVsHistory', () => {
     expect(computeRecentVsHistory(my, 5).metrics).toHaveLength(FORM_METRICS.length);
   });
 
-  test('splits into recent (last N) and history (earlier), disjoint', () => {
-    // 7 rounds; N=5 → history = first 2, recent = last 5
-    const my = collectMyRounds(roundsTournament([6, 6, 5, 5, 5, 4, 4]), 'u1');
+  test('splits into recent (last N) and history (earlier), disjoint — adequate history sample', () => {
+    // 8 rounds; N=5 → history = first 3 (adequate, ≥3), recent = last 5
+    const my = collectMyRounds(roundsTournament([6, 6, 6, 5, 5, 5, 5, 4]), 'u1');
     const r = computeRecentVsHistory(my, 5);
     expect(r.recentCount).toBe(5);
-    expect(r.historyCount).toBe(2);
+    expect(r.historyCount).toBe(3);
     expect(r.hasHistory).toBe(true);
     const points = r.metrics.find((m) => m.key === 'avgPoints');
     expect(points.recent).toBeGreaterThan(points.history); // recent rounds lower strokes → more points
+    expect(points.delta).not.toBeNull();
     expect(points.direction).toBe('up');
+  });
+
+  // Below MIN_HISTORY_ROUNDS (3), one noisy early round drove a confident
+  // "declining"/"improving" verdict that fed straight into Coach
+  // formInsight (which keys off `delta`, not `direction`). A 1-round
+  // history is not a baseline — delta/direction must stay null/flat, not
+  // a confident claim, even though the raw recent/history values are
+  // still shown.
+  test('a 1-round history sample is not enough to claim a direction — stays flat/null', () => {
+    // 6 rounds; N=5 → history = first 1 (below the 3-round minimum), recent = last 5
+    const my = collectMyRounds(roundsTournament([6, 5, 5, 5, 5, 4]), 'u1');
+    const r = computeRecentVsHistory(my, 5);
+    expect(r.recentCount).toBe(5);
+    expect(r.historyCount).toBe(1);
+    expect(r.hasHistory).toBe(true); // there IS a history round — just not enough of one
+    const points = r.metrics.find((m) => m.key === 'avgPoints');
+    expect(points.recent).not.toBeNull();
+    expect(points.history).not.toBeNull(); // raw values still surface — only the verdict is suppressed
+    expect(points.delta).toBeNull();
+    expect(points.direction).toBe('flat');
   });
 
   test('marks no history when total rounds <= N', () => {
@@ -1252,7 +1273,7 @@ describe('courseMastery', () => {
     ]);
   });
 
-  test('trend is 0 only for genuinely equal consecutive rounds', () => {
+  test('trend is 0 for genuinely equal consecutive rounds', () => {
     const h = holes18();
     const mk = () => mkRound({ courseName: 'Elm', holes: h, scores: { p1: evenScores(h, 4) }, playerHandicaps: { p1: 0 } });
     const tournaments = [{
@@ -1262,6 +1283,41 @@ describe('courseMastery', () => {
     const mastery = courseMastery(buildSyntheticTournament(collectMyRounds(tournaments, 'u1')));
     expect(mastery).toEqual([
       { courseName: 'Elm', rounds: 2, avgPoints: 36, bestPoints: 36, trend: 0 },
+    ]);
+  });
+
+  // A 1-point swing between the two most recent rounds is inside the noise
+  // band (one extra stroke on a single hole) — it must not paint a
+  // confident "improving"/"declining" arrow in the Course Mastery UI.
+  test('a 1-point difference between the two latest rounds is flat, not a fake trend arrow', () => {
+    const h = holes18();
+    // strokes 4 → 36 pts/round; strokes 4 on all but one hole (that hole
+    // strokes 5) → 35 pts/round. A genuine 1-point swing.
+    const roundA = mkRound({ courseName: 'Birch', holes: h, scores: { p1: evenScores(h, 4) }, playerHandicaps: { p1: 0 } });
+    const scoresB = evenScores(h, 4);
+    scoresB[1] = 5;
+    const roundB = mkRound({ courseName: 'Birch', holes: h, scores: { p1: scoresB }, playerHandicaps: { p1: 0 } });
+    const tournaments = [{
+      id: 1, name: 'T', players: [{ id: 'p1', handicap: 0, user_id: 'u1' }],
+      rounds: [roundA, roundB],
+    }];
+    const mastery = courseMastery(buildSyntheticTournament(collectMyRounds(tournaments, 'u1')));
+    expect(mastery).toEqual([
+      { courseName: 'Birch', rounds: 2, avgPoints: 35.5, bestPoints: 36, trend: 0 },
+    ]);
+  });
+
+  test('a real multi-point swing still yields a confident trend arrow', () => {
+    const h = holes18();
+    const roundA = mkRound({ courseName: 'Cedar', holes: h, scores: { p1: evenScores(h, 4) }, playerHandicaps: { p1: 0 } });
+    const roundB = mkRound({ courseName: 'Cedar', holes: h, scores: { p1: evenScores(h, 5) }, playerHandicaps: { p1: 0 } });
+    const tournaments = [{
+      id: 1, name: 'T', players: [{ id: 'p1', handicap: 0, user_id: 'u1' }],
+      rounds: [roundA, roundB],
+    }];
+    const mastery = courseMastery(buildSyntheticTournament(collectMyRounds(tournaments, 'u1')));
+    expect(mastery).toEqual([
+      { courseName: 'Cedar', rounds: 2, avgPoints: 27, bestPoints: 36, trend: -1 },
     ]);
   });
 
