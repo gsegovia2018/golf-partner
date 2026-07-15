@@ -442,15 +442,28 @@ function SectionAnchor({ anchorKey, anchors, children }) {
 function OverviewTab({ tournament, metric, hasMulti, anyTeams, allScramble, roundScope, scrollRef, theme, s }) {
   // Round scope is now screen-level; treat the prop as the source of truth.
   const roundIndex = roundScope;
-  const highlights = tournamentHighlights(tournament, { metric, roundIndex });
-  const momentum = tournamentMomentum(tournament);
-  const clutch = clutchOnHardest(tournament, { topN: 3 });
-  const consistency = playerConsistency(tournament);
-  const dna = courseDNA(tournament);
-  const skins = skinsLeaderboard(tournament, { metric });
-  const pth = playingToHandicap(tournament);
-  const hotStretchList = hotStretch(tournament);
-  const siAccuracy = strokeIndexAccuracy(tournament, { roundIndex });
+  // Each of these is an O(players×rounds×holes) pass (tournamentHighlights
+  // fans out further per player). The tab holds local `sheet` state below,
+  // so without memoization tapping a highlight card to open its detail
+  // sheet would re-run every one of these on the JS thread. Deps are keyed
+  // on exactly the scope vars each function reads — `sheet` must never be a
+  // dep, or opening a sheet would defeat the memo entirely. Mirrors the
+  // useMemo pattern in ShotsTab (~line 2893).
+  const highlights = useMemo(
+    () => tournamentHighlights(tournament, { metric, roundIndex }),
+    [tournament, metric, roundIndex],
+  );
+  const momentum = useMemo(() => tournamentMomentum(tournament), [tournament]);
+  const clutch = useMemo(() => clutchOnHardest(tournament, { topN: 3 }), [tournament]);
+  const consistency = useMemo(() => playerConsistency(tournament), [tournament]);
+  const dna = useMemo(() => courseDNA(tournament), [tournament]);
+  const skins = useMemo(() => skinsLeaderboard(tournament, { metric }), [tournament, metric]);
+  const pth = useMemo(() => playingToHandicap(tournament), [tournament]);
+  const hotStretchList = useMemo(() => hotStretch(tournament), [tournament]);
+  const siAccuracy = useMemo(
+    () => strokeIndexAccuracy(tournament, { roundIndex }),
+    [tournament, roundIndex],
+  );
   const isStrokes = metric === 'strokes';
   const modeLabel = isStrokes ? 'strokes (gross)' : 'points (net Stableford)';
   const [sheet, setSheet] = useState(null);

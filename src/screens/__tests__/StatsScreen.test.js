@@ -940,6 +940,76 @@ describe('StatsScreen Overview tab — presentation honesty', () => {
   });
 });
 
+describe('StatsScreen Overview tab — aggregate memoization (Task 4.1)', () => {
+  // The nine Overview aggregates are each an O(players×rounds×holes) pass.
+  // OverviewTab holds local `sheet` state for its detail sheets — opening
+  // one must only flip that state, not re-run every aggregate. This spies
+  // on the (module-mocked) statsEngine functions themselves, so it fails if
+  // a future edit drops a useMemo or slips `sheet` into a dep array.
+  beforeEach(() => {
+    jest.clearAllMocks();
+    const statsEngine = require('../../store/statsEngine');
+    statsEngine.skinsLeaderboard.mockReturnValue({ leaderboard: [], rounds: [], totalSkins: 0 });
+    statsEngine.playerConsistency.mockReturnValue([]);
+    statsEngine.tournamentMomentum.mockReturnValue([]);
+    statsEngine.clutchOnHardest.mockReturnValue([]);
+    statsEngine.playingToHandicap.mockReturnValue([]);
+    statsEngine.hotStretch.mockReturnValue([
+      {
+        player: fourPlayers[0], points: 11, roundIndex: 0, startHole: 7, endHole: 12,
+        breakdown: [
+          { roundIndex: 0, courseName: 'La Moraleja', holeNumber: 7, par: 4, strokes: 3, points: 3 },
+        ],
+      },
+    ]);
+  });
+
+  test('opening the Hot Stretch detail sheet does not re-invoke any of the nine Overview aggregates', () => {
+    const statsEngine = require('../../store/statsEngine');
+    const { getAllByText } = renderStats([makeRound('r1')], { players: fourPlayers });
+
+    const aggregateMocks = [
+      statsEngine.tournamentHighlights,
+      statsEngine.tournamentMomentum,
+      statsEngine.clutchOnHardest,
+      statsEngine.playerConsistency,
+      statsEngine.courseDNA,
+      statsEngine.skinsLeaderboard,
+      statsEngine.playingToHandicap,
+      statsEngine.hotStretch,
+      statsEngine.strokeIndexAccuracy,
+    ];
+    const callsBefore = aggregateMocks.map((fn) => fn.mock.calls.length);
+    expect(callsBefore.every((n) => n > 0)).toBe(true); // sanity: initial render did compute them
+
+    // Tapping a highlight card only sets OverviewTab's local `sheet` state —
+    // tournament/metric/roundIndex are unchanged, so a correctly memoized
+    // tab recomputes nothing on this re-render.
+    fireEvent.press(getAllByText(/Marcos — 11 pts · R1 H7–H12/)[0]);
+
+    const callsAfter = aggregateMocks.map((fn) => fn.mock.calls.length);
+    expect(callsAfter).toEqual(callsBefore);
+  });
+
+  test('toggling the points/strokes metric DOES recompute the metric-dependent aggregates', () => {
+    const statsEngine = require('../../store/statsEngine');
+    const { UNSAFE_getByType } = renderStats([makeRound('r1')], { players: fourPlayers });
+
+    const highlightsCallsBefore = statsEngine.tournamentHighlights.mock.calls.length;
+    const skinsCallsBefore = statsEngine.skinsLeaderboard.mock.calls.length;
+    const momentumCallsBefore = statsEngine.tournamentMomentum.mock.calls.length;
+
+    const switchEl = UNSAFE_getByType(Switch);
+    fireEvent(switchEl, 'valueChange', false); // toggle to Strokes — flips `metric`
+
+    // tournamentHighlights/skinsLeaderboard read `metric` — they must recompute.
+    expect(statsEngine.tournamentHighlights.mock.calls.length).toBeGreaterThan(highlightsCallsBefore);
+    expect(statsEngine.skinsLeaderboard.mock.calls.length).toBeGreaterThan(skinsCallsBefore);
+    // tournamentMomentum doesn't take a metric arg at all — must NOT recompute.
+    expect(statsEngine.tournamentMomentum.mock.calls.length).toBe(momentumCallsBefore);
+  });
+});
+
 describe('StatsScreen Holes tab — heatmap honesty', () => {
   test('avg cell renders "-" (not 0) for a hole nobody scored', () => {
     const statsEngine = require('../../store/statsEngine');
