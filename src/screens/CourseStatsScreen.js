@@ -167,21 +167,21 @@ export default function CourseStatsScreen({ navigation, route }) {
         ) : null}
 
         {shots ? (
-          <SectionCard title="Shot detail here">
+          <SectionCard title="Shot detail">
             <View style={s.tileRow}>
               <StatTile
                 value={shots.putts.per18 ?? '—'}
                 caption="putts / 18 holes"
               />
-              <StatTile value={shots.drives.recorded > 0 ? `${shots.drives.fairwayPct}%` : '—'} caption="fairways" />
-              <StatTile value={shots.penalties.total} caption="penalties" />
+              <StatTile value={shots.putts.threePuttPer18 ?? '—'} caption="3-putts / 18" />
+              <StatTile value={shots.penalties.per18 ?? '—'} caption="penalties / 18" />
               <StatTile
                 value={shots.gir.eligible > 0 ? `${shots.gir.pct}%` : '—'}
                 caption={shots.gir.eligible > 0 ? `GIR · ${shots.gir.eligible} holes` : 'GIR'}
               />
             </View>
             {shots.drives.recorded > 0 ? (
-              <>
+              <View style={s.drivesBlock}>
                 <DistributionBars bars={DRIVE_ORDER.map((k) => {
                   const count = shots.drives.distribution[k] ?? 0;
                   return {
@@ -194,11 +194,11 @@ export default function CourseStatsScreen({ navigation, route }) {
                 <Text style={s.metaLine}>
                   {`${shots.drives.recorded} drive${shots.drives.recorded === 1 ? '' : 's'} logged`}
                 </Text>
-              </>
+              </View>
             ) : null}
           </SectionCard>
         ) : (
-          <SectionCard title="Shot detail here">
+          <SectionCard title="Shot detail">
             <Text style={s.metaLine}>No shot detail logged at this course yet.</Text>
           </SectionCard>
         )}
@@ -256,6 +256,9 @@ function makeStyles(theme) {
     retryText: { ...theme.typography.subhead, color: theme.text.inverse },
     scroll: { padding: theme.spacing.md, gap: theme.spacing.lg, paddingBottom: theme.spacing.lg * 2 },
     tileRow: { flexDirection: 'row', gap: theme.spacing.sm },
+    // The bar chart's value labels sit at its very top edge — without extra
+    // margin they visually collide with the stat tiles above.
+    drivesBlock: { marginTop: theme.spacing.md, gap: theme.spacing.sm },
     metaLine: { ...theme.typography.caption, color: theme.text.secondary },
     highlightRow: { flexDirection: 'row', alignItems: 'center', gap: theme.spacing.sm, paddingVertical: 4 },
     highlightIcon: {

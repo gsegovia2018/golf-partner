@@ -1705,6 +1705,8 @@ export function shotStats(tournament, playerId) {
       per18: holesWithPutts > 0 ? round1((puttsTotal / holesWithPutts) * 18) : null,
       onePutts,
       threePuttPlus,
+      // 3-putt frequency on the same 18-hole normalization as per18.
+      threePuttPer18: holesWithPutts > 0 ? round1((threePuttPlus / holesWithPutts) * 18) : null,
     },
     drives: {
       recorded: drivesRecorded,
@@ -1717,6 +1719,12 @@ export function shotStats(tournament, playerId) {
       other: otherPenalties,
       total: teePenalties + otherPenalties,
       teeOnDriveHoles,
+      // Normalized over holes that logged ANY shot detail (penalty absence on
+      // an unlogged hole is unknown, not zero) — raw totals just grow with
+      // rounds played, and dividing by rounds lets partial rounds deflate.
+      per18: anyDetailHoles > 0
+        ? round1(((teePenalties + otherPenalties) / anyDetailHoles) * 18)
+        : null,
     },
     gir: {
       holes: girHoles,

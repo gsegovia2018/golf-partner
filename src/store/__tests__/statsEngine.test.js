@@ -118,6 +118,33 @@ describe('shotStats', () => {
     expect(r.putts.perRound).toBe(36); // not deflated to 18 by the drive-only round
   });
 
+  test('per-18 normalizations: penalties over detail-logged holes, 3-putts over putt holes', () => {
+    const h = holes18();
+    // 9 holes logged: putts on all 9 (one 3-putt), 2 penalties total.
+    const detail = {};
+    for (let n = 1; n <= 9; n += 1) detail[n] = { putts: n === 1 ? 3 : 2 };
+    detail[1].teePenalties = 1;
+    detail[2].otherPenalties = 1;
+    const t = {
+      players: [{ id: 'p1', handicap: 0 }],
+      rounds: [{ courseName: 'C', holes: h, scores: { p1: evenScores(h, 4) }, shotDetails: { p1: detail } }],
+    };
+    const r = shotStats(t, 'p1');
+    expect(r.penalties.per18).toBe(4);      // 2 penalties / 9 logged holes × 18
+    expect(r.putts.threePuttPer18).toBe(2); // 1 three-putt / 9 putt holes × 18
+  });
+
+  test('per-18 normalizations are null with no logged holes', () => {
+    const h = holes18();
+    const t = {
+      players: [{ id: 'p1', handicap: 0 }],
+      rounds: [{ courseName: 'C', holes: h, scores: { p1: evenScores(h, 4) }, shotDetails: {} }],
+    };
+    const r = shotStats(t, 'p1');
+    expect(r.penalties.per18).toBeNull();
+    expect(r.putts.threePuttPer18).toBeNull();
+  });
+
   test('roundsWithPuttData is 0 when no putts are logged', () => {
     const h = holes18();
     const t = {
