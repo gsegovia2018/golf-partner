@@ -60,4 +60,117 @@ describe('pickMedia', () => {
     await expect(pickMedia({ source: 'library', mediaTypes: 'all' }))
       .rejects.toThrow('Los vídeos de galería deben ser de 100 MB o menos.');
   });
+
+  test('rejects camera-recorded videos over the upload limit — the size cap is not gallery-only', async () => {
+    ImagePicker.launchCameraAsync.mockResolvedValueOnce({
+      canceled: false,
+      assets: [{
+        uri: 'file:///camera-video.mov',
+        type: 'video',
+        duration: 15_000,
+        fileSize: 150 * 1024 * 1024,
+        mimeType: 'video/quicktime',
+        fileName: 'camera-video.mov',
+      }],
+    });
+
+    await expect(pickMedia({ source: 'camera', mediaTypes: 'video' }))
+      .rejects.toThrow('100 MB');
+  });
+
+  test('accepts an in-size gallery video and returns the mapped asset', async () => {
+    ImagePicker.launchImageLibraryAsync.mockResolvedValueOnce({
+      canceled: false,
+      assets: [{
+        uri: 'file:///small-video.mov',
+        type: 'video',
+        duration: 12_000,
+        fileSize: 10 * 1024 * 1024,
+        mimeType: 'video/quicktime',
+        fileName: 'small-video.mov',
+      }],
+    });
+
+    const result = await pickMedia({ source: 'library', mediaTypes: 'all' });
+
+    expect(result).toEqual(expect.objectContaining({
+      localUri: 'file:///small-video.mov',
+      kind: 'video',
+      fileSize: 10 * 1024 * 1024,
+    }));
+  });
+});
+
+describe('pickMedia on web — size cap when fileSize is missing', () => {
+  const originalFetch = global.fetch;
+
+  beforeEach(() => {
+    jest.clearAllMocks();
+  });
+
+  afterEach(() => {
+    global.fetch = originalFetch;
+  });
+
+  test('rejects an oversized web video by deriving its size from the Blob when fileSize is absent', async () => {
+    jest.resetModules();
+    jest.doMock('react-native', () => {
+      const RN = jest.requireActual('react-native');
+      RN.Platform.OS = 'web';
+      return RN;
+    });
+    const ImagePickerWeb = require('expo-image-picker');
+    ImagePickerWeb.launchImageLibraryAsync.mockResolvedValueOnce({
+      canceled: false,
+      assets: [{
+        uri: 'blob:web-large-video',
+        type: 'video',
+        duration: 12_000,
+        // Web pickers can omit fileSize entirely.
+        mimeType: 'video/webm',
+        fileName: 'large.webm',
+      }],
+    });
+    global.fetch = jest.fn(() => Promise.resolve({
+      blob: () => Promise.resolve({ size: 150 * 1024 * 1024 }),
+    }));
+
+    const { pickMedia: pickMediaWeb } = require('../mediaCapture');
+
+    await expect(pickMediaWeb({ source: 'library', mediaTypes: 'all' }))
+      .rejects.toThrow('100 MB');
+
+    jest.dontMock('react-native');
+  });
+
+  test('accepts an in-size web video when fileSize is absent but the derived Blob size is under the cap', async () => {
+    jest.resetModules();
+    jest.doMock('react-native', () => {
+      const RN = jest.requireActual('react-native');
+      RN.Platform.OS = 'web';
+      return RN;
+    });
+    const ImagePickerWeb = require('expo-image-picker');
+    ImagePickerWeb.launchImageLibraryAsync.mockResolvedValueOnce({
+      canceled: false,
+      assets: [{
+        uri: 'blob:web-small-video',
+        type: 'video',
+        duration: 12_000,
+        mimeType: 'video/webm',
+        fileName: 'small.webm',
+      }],
+    });
+    global.fetch = jest.fn(() => Promise.resolve({
+      blob: () => Promise.resolve({ size: 5 * 1024 * 1024 }),
+    }));
+
+    const { pickMedia: pickMediaWeb } = require('../mediaCapture');
+
+    const result = await pickMediaWeb({ source: 'library', mediaTypes: 'all' });
+
+    expect(result).toEqual(expect.objectContaining({ localUri: 'blob:web-small-video', kind: 'video' }));
+
+    jest.dontMock('react-native');
+  });
 });
