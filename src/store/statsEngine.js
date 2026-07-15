@@ -2633,21 +2633,39 @@ export function sgSeason(rounds, playerId, targetHandicap = 0) {
   if (sampleHoles < SG_SEASON_MIN_SAMPLE) {
     return { total: null, byCategory: null, sampleHoles, sampleHolesByCategory, perRound };
   }
+  // Per-category "SG / round" figures (shown on the category bars) are each
+  // averaged over THAT category's own denominator — e.g. putting averages
+  // over rounds with putting data, even if the same rounds are missing
+  // approach data. That is correct in isolation, but summing those averages
+  // together for the headline is not: penalties counts nearly every round
+  // (a clean hole still contributes 0 — see sgPenalties), while approach/
+  // putting only count the rounds that actually tracked them. Summing
+  // per-category values with mismatched denominators produces a headline
+  // figure no real round produced (e.g. putting/2 + penalties/10).
+  //
+  // Fix: the headline `total` uses ONE consistent denominator — rounds with
+  // ANY SG sample (`perRound.length`, since perRound only gets an entry when
+  // r.sampleHoles > 0) — by averaging each round's OWN total (sgTotal, which
+  // already sums that round's four categories) across all sampled rounds.
+  // This is equivalent to summing every category's raw total and dividing by
+  // the same round count, so it's a real "average SG per round" a group of
+  // rounds could actually produce, not a sum of differently-scaled averages.
   const perCategory = {
     approach:    categoryRounds.approach > 0 ? byCategory.approach / categoryRounds.approach : 0,
     aroundGreen: categoryRounds.aroundGreen > 0 ? byCategory.aroundGreen / categoryRounds.aroundGreen : 0,
     putting:     categoryRounds.putting > 0 ? byCategory.putting / categoryRounds.putting : 0,
     penalties:   categoryRounds.penalties > 0 ? byCategory.penalties / categoryRounds.penalties : 0,
   };
+  const roundsWithAnySample = perRound.length;
+  const total = roundsWithAnySample > 0
+    ? perRound.reduce((sum, r) => sum + r.total, 0) / roundsWithAnySample
+    : 0;
   return {
-    // The headline total must equal what a user summing the category bars
-    // would get — each category can carry a different round count (e.g. an
-    // approach-less round still contributes to putting), so re-deriving
-    // total from the raw per-round sum/denom can silently disagree with it.
-    total: perCategory.approach + perCategory.aroundGreen + perCategory.putting + perCategory.penalties,
+    total,
     byCategory: perCategory,
     sampleHoles,
     sampleHolesByCategory,
+    roundsWithAnySample,
     perRound,
   };
 }
