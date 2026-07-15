@@ -82,6 +82,9 @@ export const BASELINES = BASELINES_SCRATCH;
 export const BUCKETS = {
   firstPutt: { '0-1': 0.5, '1-2': 1.5, '2-3': 2.5, '3-6': 4.5, '6+': 9 },
   approach:  { '0-50': 25, '50-100': 75, '100-150': 125, '150-200': 175, '200+': 230 },
+  // '0-150' uses 135, not the arithmetic midpoint: real drives logged in
+  // that bucket cluster near its top, and 75 would fabricate a huge miss.
+  driveDist: { '0-150': 135, '150-180': 165, '180-210': 195, '210-240': 225, '240+': 255 },
 };
 
 // Private: look up a single table by distance using binary search + linear
@@ -186,3 +189,19 @@ export const BASELINES_AMATEUR = {
 };
 
 export const AMATEUR_ANCHOR_HANDICAP = 14;
+
+// ── Off-the-tee benchmark (see spec §1.2) ──
+// The OTT model compares a drive against the *benchmark drive* for the
+// target handicap on a typical hole, so it needs no course distances.
+// Anchor hole lengths per par; par 3s have no tee category.
+export const PAR_ANCHOR_DISTANCE = { 4: 340, 5: 470 };
+
+const SCRATCH_DRIVE_DISTANCE = 230;
+const AMATEUR_DRIVE_DISTANCE = 200;
+
+// Typical drive distance for a target handicap, blended the same way as the
+// baseline tables: t = hcp / 14, clamped to [0, 2].
+export function benchmarkDriveDistance(targetHandicap = 0) {
+  const t = Math.max(0, Math.min(2, (targetHandicap ?? 0) / AMATEUR_ANCHOR_HANDICAP));
+  return SCRATCH_DRIVE_DISTANCE + t * (AMATEUR_DRIVE_DISTANCE - SCRATCH_DRIVE_DISTANCE);
+}

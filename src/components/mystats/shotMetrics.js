@@ -9,11 +9,16 @@ const DRIVE_LABELS = {
 const APPROACH_BUCKETS = ['0-50', '50-100', '100-150', '150-200', '200+'];
 const PUTT_BUCKETS = ['0-1', '1-2', '2-3', '3-6', '6+'];
 const SG_CATEGORIES = [
+  { key: 'offTheTee', label: 'Off the tee', area: 'Driving', signalTitle: 'Tee shots' },
   { key: 'approach', label: 'Approach', area: 'Approach', signalTitle: 'Approach shots' },
   { key: 'aroundGreen', label: 'Around green', area: 'Short game' },
   { key: 'putting', label: 'Putting', area: 'Putting', signalTitle: 'Putting performance' },
   { key: 'penalties', label: 'Penalties', area: 'Scoring', signalTitle: 'Other penalties' },
 ];
+
+// Below this many contributing holes a category shows "needs N more holes"
+// instead of a number (spec §1.7).
+const MIN_SG_CATEGORY_SAMPLE = 10;
 
 function signed(value) {
   if (value == null) return '-';
@@ -40,6 +45,7 @@ export {
   APPROACH_BUCKETS,
   DRIVE_LABELS,
   DRIVE_ORDER,
+  MIN_SG_CATEGORY_SAMPLE,
   PUTT_BUCKETS,
   SG_CATEGORIES,
   driveRows,

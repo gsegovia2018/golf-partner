@@ -13,7 +13,7 @@ import {
   playerRoundHistory, playerConsistency, bounceBackRate, shotStats,
   teeShotImpact, scramblingStats,
   lagPuttingQuality, sandSaveRate, upAndDownRate, bunkerVisits,
-  sgSeason, driveScoreImpact, approachScoreImpact, puttDeepDive,
+  sgSeason, sgReconciliation, driveScoreImpact, approachScoreImpact, puttDeepDive,
   puttingTargetGaps, approachTargetGaps, courseDNA, playerStreaks,
 } from './statsEngine';
 import { buildCoachInsights } from './coachInsights';
@@ -355,6 +355,7 @@ export function buildActionPlan({
 
   Object.entries(strokesGained?.byCategory ?? {}).forEach(([key, value]) => {
     const label = {
+      offTheTee: 'Off the tee',
       approach: 'Approach',
       aroundGreen: 'Around the green',
       putting: 'Putting',
@@ -508,6 +509,35 @@ export function computeRecentVsHistory(myRounds, n = 5) {
     hasShotData: recent.hasShotData || (history?.hasShotData ?? false),
     metrics,
   };
+}
+
+// ── computeSgFormDelta ──
+// Per-category SG "recent vs previous" — same disjoint split (and the same
+// MIN_FORM_HISTORY_ROUNDS guard) as computeRecentVsHistory, but over
+// sgSeason. A side without enough SG sample (sgSeason returns byCategory:
+// null under 18 holes) yields null deltas rather than fabricated ones.
+const SG_DELTA_CATEGORIES = ['offTheTee', 'approach', 'aroundGreen', 'putting', 'penalties'];
+
+export function computeSgFormDelta(myRounds, { n = 5, targetHandicap = 0 } = {}) {
+  const all = myRounds || [];
+  const recentRounds = all.slice(-n);
+  const historyRounds = all.slice(0, Math.max(0, all.length - n));
+  if (historyRounds.length < MIN_FORM_HISTORY_ROUNDS) return null;
+  const recent = sgSeason(buildSyntheticTournament(recentRounds).rounds, CANON_ID, targetHandicap);
+  const previous = sgSeason(buildSyntheticTournament(historyRounds).rounds, CANON_ID, targetHandicap);
+  return Object.fromEntries(SG_DELTA_CATEGORIES.map((category) => {
+    const recentVal = recent.byCategory?.[category] ?? null;
+    const previousVal = previous.byCategory?.[category] ?? null;
+    const bothSampled = recentVal != null && previousVal != null
+      && (recent.roundsByCategory?.[category] ?? 0) > 0
+      && (previous.roundsByCategory?.[category] ?? 0) > 0;
+    const delta = bothSampled ? +(recentVal - previousVal).toFixed(2) : null;
+    let direction = 'flat';
+    if (delta != null && delta !== 0) direction = delta > 0 ? 'up' : 'down';
+    return [category, {
+      recent: recentVal, previous: previousVal, delta, direction,
+    }];
+  }));
 }
 
 // "12 May" — short day+month from an ISO date string. Matches the round
@@ -689,7 +719,11 @@ export function computeMyStats(selectedRounds, { n = 5, targetHandicap = 0, base
   const puttDive = puttDeepDive(synthetic, CANON_ID);
   const puttingTarget = puttingTargetGaps(synthetic.rounds, CANON_ID, targetHandicap);
   const approachTarget = approachTargetGaps(synthetic.rounds, CANON_ID, targetHandicap);
-  const strokesGained = sgSeason(synthetic.rounds, CANON_ID, targetHandicap);
+  const strokesGained = {
+    ...sgSeason(synthetic.rounds, CANON_ID, targetHandicap),
+    personalDelta: computeSgFormDelta(rounds, { n, targetHandicap }),
+    reconciliation: sgReconciliation(synthetic.rounds, CANON_ID, targetHandicap),
+  };
   const baseStats = {
     ...baseline,
     metrics: computeMetrics(synthetic),

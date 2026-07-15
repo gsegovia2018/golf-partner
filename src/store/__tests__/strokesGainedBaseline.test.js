@@ -2,6 +2,7 @@ import {
   BASELINES, BASELINES_SCRATCH,
   expectedStrokes, expectedFromBucket,
   BASELINES_AMATEUR, AMATEUR_ANCHOR_HANDICAP,
+  benchmarkDriveDistance, PAR_ANCHOR_DISTANCE, BUCKETS,
 } from '../strokesGainedBaseline';
 
 describe('BASELINES', () => {
@@ -100,5 +101,24 @@ describe('expectedFromBucket(category, bucketKey, targetHandicap)', () => {
     const direct = expectedStrokes('fairway', 125, 10);
     const via = expectedFromBucket('approach', '100-150', 10);
     expect(via).toBeCloseTo(direct);
+  });
+});
+
+describe('drive benchmark constants', () => {
+  test('driveDist bucket midpoints', () => {
+    expect(BUCKETS.driveDist).toEqual({
+      '0-150': 135, '150-180': 165, '180-210': 195, '210-240': 225, '240+': 255,
+    });
+  });
+  test('par anchors', () => {
+    expect(PAR_ANCHOR_DISTANCE).toEqual({ 4: 340, 5: 470 });
+  });
+  test('benchmarkDriveDistance blends 230 (scratch) to 200 (14 hcp) and clamps', () => {
+    expect(benchmarkDriveDistance(0)).toBe(230);
+    expect(benchmarkDriveDistance(14)).toBe(200);
+    expect(benchmarkDriveDistance(7)).toBe(215);
+    expect(benchmarkDriveDistance(28)).toBe(170);
+    expect(benchmarkDriveDistance(50)).toBe(170); // clamped at t = 2
+    expect(benchmarkDriveDistance()).toBe(230);   // default scratch
   });
 });

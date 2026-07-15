@@ -6,12 +6,54 @@ import SectionCard from './SectionCard';
 import { SGBar } from './SGBars';
 import {
   APPROACH_BUCKETS,
+  MIN_SG_CATEGORY_SAMPLE,
   PUTT_BUCKETS,
   SG_CATEGORIES,
   formatSignedFixed,
   sampleText,
-  signed,
 } from './shotMetrics';
+
+function CategoryRow({ category, strokesGained }) {
+  const { theme } = useTheme();
+  const s = useMemo(() => makeStyles(theme), [theme]);
+  const sample = strokesGained?.sampleHolesByCategory?.[category.key] ?? 0;
+  if (sample < MIN_SG_CATEGORY_SAMPLE) {
+    return (
+      <Text style={s.gatedRow}>
+        {`${category.label}: needs ${MIN_SG_CATEGORY_SAMPLE - sample} more holes`}
+      </Text>
+    );
+  }
+  const delta = strokesGained?.personalDelta?.[category.key];
+  const showDelta = delta?.delta != null && delta.delta !== 0;
+  const up = delta?.direction === 'up';
+  return (
+    <View style={s.categoryRow}>
+      <SGBar label={category.label} value={strokesGained.byCategory?.[category.key]} />
+      <View style={s.categoryMeta}>
+        {showDelta ? (
+          <Text style={[s.deltaBadge, { color: up ? theme.scoreColor('good') : theme.destructive }]}>
+            {`${up ? '▲' : '▼'} ${delta.delta > 0 ? '+' : ''}${delta.delta} vs your last stretch`}
+          </Text>
+        ) : <View />}
+        <Text style={s.sampleChip}>{sampleText(sample, 'holes')}</Text>
+      </View>
+    </View>
+  );
+}
+
+// Weakest-category call-out: name the thinnest sample when anything is still
+// gated, otherwise confirm the tracked base.
+function evidenceMeta(strokesGained) {
+  const samples = strokesGained?.sampleHolesByCategory;
+  if (!samples) return 'Bucketed from logged shots.';
+  const gated = SG_CATEGORIES
+    .map((c) => ({ label: c.label, sample: samples[c.key] ?? 0 }))
+    .filter((c) => c.sample < MIN_SG_CATEGORY_SAMPLE)
+    .sort((a, b) => a.sample - b.sample);
+  if (gated.length === 0) return 'All five categories sampled.';
+  return `${gated[0].label}: needs ${MIN_SG_CATEGORY_SAMPLE - gated[0].sample} more holes`;
+}
 
 export default function ShotDashboard({ stats, targetHandicap, onChangeTarget, onInfo, TargetNudge }) {
   const { theme } = useTheme();
@@ -58,18 +100,14 @@ export default function ShotDashboard({ stats, targetHandicap, onChangeTarget, o
         <View style={s.summaryPanel}>
           <Text style={s.panelLabel}>Evidence</Text>
           <Text style={s.panelValue}>{sample ?? 'Tracked data'}</Text>
-          <Text style={s.panelMeta}>Bucketed from logged shots.</Text>
+          <Text style={s.panelMeta}>{evidenceMeta(strokesGained)}</Text>
         </View>
       </View>
 
       {strokesGained?.byCategory ? (
         <View style={s.sgBlock}>
           {SG_CATEGORIES.map((category) => (
-            <SGBar
-              key={category.key}
-              label={category.label}
-              value={strokesGained.byCategory?.[category.key]}
-            />
+            <CategoryRow key={category.key} category={category} strokesGained={strokesGained} />
           ))}
           {TargetNudge && strokesGained.sampleHoles >= 18
             && (targetHandicap == null || targetHandicap === 0)
@@ -151,35 +189,39 @@ function buildShotSignals(stats) {
       id: `sg-${category.key}`,
       area: category.area,
       title: category.signalTitle ?? category.label,
-      metric: `${formatSignedFixed(value)} SG`,
+      metric: `${formatSignedFixed(value)} SG/rnd`,
       detail: `${sampleText(stats?.strokesGained?.sampleHoles, 'holes') ?? 'Tracked holes'} against target.`,
       score: value,
     });
   });
 
+  const puttingRounds = stats?.strokesGained?.roundsByCategory?.putting ?? 0;
   PUTT_BUCKETS.forEach((bucket) => {
     const row = stats?.puttingTarget?.buckets?.[bucket];
-    if (!row || row.attempts === 0 || row.sgPerPutt == null) return;
+    if (!row || row.attempts === 0 || row.sgPerPutt == null || puttingRounds === 0) return;
+    const perRound = (row.sgPerPutt * row.attempts) / puttingRounds;
     push({
       id: `putt-${bucket}`,
       area: 'Putting',
       title: `${bucket} m putts`,
-      metric: `${signed(row.sgPerPutt)} SG`,
+      metric: `${formatSignedFixed(perRound)} SG/rnd`,
       detail: `${row.avgPutts} avg vs ${row.expectedPutts} target · ${sampleText(row.attempts, 'putts')}`,
-      score: row.sgPerPutt,
+      score: perRound,
     });
   });
 
+  const approachRounds = stats?.strokesGained?.roundsByCategory?.approach ?? 0;
   APPROACH_BUCKETS.forEach((bucket) => {
     const row = stats?.approachTarget?.buckets?.[bucket];
-    if (!row || row.holes === 0 || row.avgSg == null) return;
+    if (!row || row.holes === 0 || row.avgSg == null || approachRounds === 0) return;
+    const perRound = (row.avgSg * row.holes) / approachRounds;
     push({
       id: `approach-${bucket}`,
       area: 'Approach',
       title: `${bucket} m approaches`,
-      metric: `${signed(row.avgSg)} SG`,
+      metric: `${formatSignedFixed(perRound)} SG/rnd`,
       detail: `${row.greenRate ?? row.girRate}% green · ${sampleText(row.holes, 'shots')}`,
-      score: row.avgSg,
+      score: perRound,
     });
   });
 
@@ -204,6 +246,11 @@ function makeStyles(theme) {
     panelValue: { ...theme.typography.heading, color: theme.text.primary, fontWeight: '800' },
     panelMeta: { ...theme.typography.caption, color: theme.text.secondary, flexShrink: 1 },
     sgBlock: { gap: 1, paddingTop: theme.spacing.sm },
+    categoryRow: { gap: 2, paddingVertical: 2 },
+    categoryMeta: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
+    deltaBadge: { ...theme.typography.tiny, fontWeight: '800' },
+    sampleChip: { ...theme.typography.tiny, color: theme.text.muted },
+    gatedRow: { ...theme.typography.caption, color: theme.text.muted, fontStyle: 'italic', paddingVertical: 6 },
     signalList: {
       gap: 0,
       paddingTop: theme.spacing.md,

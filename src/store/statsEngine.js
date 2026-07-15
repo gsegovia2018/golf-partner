@@ -1,6 +1,9 @@
 import { calcStablefordPoints, calcExtraShots, roundPairLeaderboard, getPlayingHandicap } from './tournamentStore';
 import { isGIR, recoveryOutcomeFromState, roundScoringMode, isScrambleMode, isPickupScore } from './scoring';
-import { expectedFromBucket, expectedStrokes, BUCKETS } from './strokesGainedBaseline';
+import {
+  expectedFromBucket, expectedStrokes, BUCKETS,
+  PAR_ANCHOR_DISTANCE, benchmarkDriveDistance,
+} from './strokesGainedBaseline';
 
 // Scramble rounds store ONE team ball under the team's captain (pair[0]),
 // scored off a team handicap — there are no real personal scores, shot
@@ -2485,7 +2488,7 @@ export function sgApproach(round, playerId, targetHandicap = 0) {
     if (!d.approachBucket) return null;
     const startDist = BUCKETS.approach[d.approachBucket];
     if (startDist == null) return null;
-    const startLie = isPar3 ? 'tee' : 'fairway';
+    const startLie = approachStartLie(d, isPar3);
     const start = expectedStrokes(startLie, startDist, targetHandicap);
     if (start == null) return null;
     const strokes = round?.scores?.[playerId]?.[hole.number];
@@ -2523,6 +2526,70 @@ export function sgPenalties(round, playerId) {
     if (!d) return null;
     const penalty = (d.teePenalties ?? 0) + (d.otherPenalties ?? 0);
     return penalty > 0 ? -penalty : 0;
+  });
+  const sample = perHole.filter((x) => x != null);
+  const total = sample.reduce((a, x) => a + x, 0);
+  return { perHole, total, sampleHoles: sample.length };
+}
+
+// ── Strokes Gained: Off the Tee ──
+
+// Which baseline table a drive lie reads from.
+const DRIVE_LIE_TABLE = { fairway: 'fairway', rough: 'rough', sand: 'sand', trouble: 'recovery' };
+
+// A drive's lie: the explicit driveLie field when logged, otherwise derived
+// from the direction chip — fairway/super hit the fairway; any miss
+// direction defaults to rough (the most common miss).
+export function driveLieFromDetail(detail) {
+  if (!detail) return null;
+  if (detail.driveLie && DRIVE_LIE_TABLE[detail.driveLie]) return detail.driveLie;
+  if (detail.drive === 'fairway' || detail.drive === 'super') return 'fairway';
+  if (detail.drive === 'left' || detail.drive === 'right' || detail.drive === 'short') return 'rough';
+  return null;
+}
+
+// ── Strokes Gained: Approach ──
+
+const APPROACH_LIES = new Set(['fairway', 'rough', 'sand']);
+
+// The approach's own start lie — the logged shot aimed at the green may be
+// played from anywhere (the drive's lie says nothing about it after a
+// punch-out or lay-up). Null means fairway: the legacy assumption.
+function approachStartLie(d, isPar3) {
+  if (isPar3) return 'tee';
+  return APPROACH_LIES.has(d?.approachLie) ? d.approachLie : 'fairway';
+}
+
+// Never let "remaining to the green" collapse below a normal wedge — a 240+
+// drive on the 340 m anchor still leaves a real shot.
+const MIN_REMAINING_DISTANCE = 30;
+
+// Benchmark-drive model (spec §1.2): compare the drive's end position against
+// the end position of the target handicap's typical drive (fairway lie) on a
+// fixed anchor-length hole. Both sides spend exactly one stroke, so no -1
+// term. Penalty strokes stay in sgPenalties — not double-counted here.
+export function sgOffTheTee(round, playerId, targetHandicap = 0) {
+  const byHole = round?.shotDetails?.[playerId];
+  const perHole = (round?.holes ?? []).map((hole) => {
+    const anchor = hole.par === 4 ? PAR_ANCHOR_DISTANCE[4]
+      : hole.par >= 5 ? PAR_ANCHOR_DISTANCE[5] : null;
+    if (anchor == null) return null;
+    const d = byHole?.[hole.number];
+    const lie = driveLieFromDetail(d);
+    const dist = BUCKETS.driveDist[d?.driveDistBucket];
+    if (lie == null || dist == null) return null;
+    const bench = expectedStrokes(
+      'fairway',
+      Math.max(MIN_REMAINING_DISTANCE, anchor - benchmarkDriveDistance(targetHandicap)),
+      targetHandicap,
+    );
+    const actual = expectedStrokes(
+      DRIVE_LIE_TABLE[lie],
+      Math.max(MIN_REMAINING_DISTANCE, anchor - dist),
+      targetHandicap,
+    );
+    if (bench == null || actual == null) return null;
+    return bench - actual;
   });
   const sample = perHole.filter((x) => x != null);
   const total = sample.reduce((a, x) => a + x, 0);
@@ -2585,7 +2652,7 @@ export function approachTargetGaps(rounds, playerId, targetHandicap = 0) {
       if (startDist == null) return;
       const strokes = round?.scores?.[playerId]?.[hole.number];
       const gir = isGIR({ strokes, putts: d.putts, par: hole.par });
-      const startLie = hole.par === 3 ? 'tee' : 'fairway';
+      const startLie = approachStartLie(d, hole.par === 3);
       const start = expectedStrokes(startLie, startDist, targetHandicap);
       const endState = approachEndState(d, { strokes, par: hole.par, targetHandicap });
       if (!endState) return;
@@ -2623,23 +2690,26 @@ export function approachTargetGaps(rounds, playerId, targetHandicap = 0) {
 }
 
 export function sgTotal(round, playerId, targetHandicap = 0) {
+  const offTheTee   = sgOffTheTee(round, playerId, targetHandicap);
   const approach    = sgApproach(round, playerId, targetHandicap);
   const aroundGreen = sgAroundGreen(round, playerId, targetHandicap);
   const putting     = sgPutting(round, playerId, targetHandicap);
   const penalties   = sgPenalties(round, playerId);
   const byCategory = {
+    offTheTee:   offTheTee.total,
     approach:    approach.total,
     aroundGreen: aroundGreen.total,
     putting:     putting.total,
     penalties:   penalties.total,
   };
-  const total = byCategory.approach + byCategory.aroundGreen + byCategory.putting
-    + byCategory.penalties;
+  const total = byCategory.offTheTee + byCategory.approach + byCategory.aroundGreen
+    + byCategory.putting + byCategory.penalties;
   const sampleHoles = Math.max(
-    approach.sampleHoles, aroundGreen.sampleHoles, putting.sampleHoles,
-    penalties.sampleHoles,
+    offTheTee.sampleHoles, approach.sampleHoles, aroundGreen.sampleHoles,
+    putting.sampleHoles, penalties.sampleHoles,
   );
   const sampleHolesByCategory = {
+    offTheTee:   offTheTee.sampleHoles,
     approach:    approach.sampleHoles,
     aroundGreen: aroundGreen.sampleHoles,
     putting:     putting.sampleHoles,
@@ -2649,12 +2719,12 @@ export function sgTotal(round, playerId, targetHandicap = 0) {
 }
 
 const SG_SEASON_MIN_SAMPLE = 18;       // one full round's worth of contributing holes
-const SG_CATEGORIES = ['approach', 'aroundGreen', 'putting', 'penalties'];
+const SG_CATEGORIES = ['offTheTee', 'approach', 'aroundGreen', 'putting', 'penalties'];
 
 export function sgSeason(rounds, playerId, targetHandicap = 0) {
-  const byCategory = { approach: 0, aroundGreen: 0, putting: 0, penalties: 0 };
-  const categoryRounds = { approach: 0, aroundGreen: 0, putting: 0, penalties: 0 };
-  const sampleHolesByCategory = { approach: 0, aroundGreen: 0, putting: 0, penalties: 0 };
+  const byCategory = { offTheTee: 0, approach: 0, aroundGreen: 0, putting: 0, penalties: 0 };
+  const categoryRounds = { offTheTee: 0, approach: 0, aroundGreen: 0, putting: 0, penalties: 0 };
+  const sampleHolesByCategory = { offTheTee: 0, approach: 0, aroundGreen: 0, putting: 0, penalties: 0 };
   let sampleHoles = 0;
   const perRound = [];
   rounds.forEach((round, i) => {
@@ -2668,10 +2738,13 @@ export function sgSeason(rounds, playerId, targetHandicap = 0) {
       sampleHolesByCategory[category] += categorySample;
     });
     sampleHoles += r.sampleHoles;
-    perRound.push({ index: i, total: r.total, sampleHoles: r.sampleHoles });
+    perRound.push({ index: i, total: r.total, sampleHoles: r.sampleHoles, byCategory: r.byCategory });
   });
   if (sampleHoles < SG_SEASON_MIN_SAMPLE) {
-    return { total: null, byCategory: null, sampleHoles, sampleHolesByCategory, perRound };
+    return {
+      total: null, byCategory: null, sampleHoles, sampleHolesByCategory,
+      roundsByCategory: categoryRounds, perRound,
+    };
   }
   // Per-category "SG / round" figures (shown on the category bars) are each
   // averaged over THAT category's own denominator — e.g. putting averages
@@ -2691,6 +2764,7 @@ export function sgSeason(rounds, playerId, targetHandicap = 0) {
   // the same round count, so it's a real "average SG per round" a group of
   // rounds could actually produce, not a sum of differently-scaled averages.
   const perCategory = {
+    offTheTee:   categoryRounds.offTheTee > 0 ? byCategory.offTheTee / categoryRounds.offTheTee : 0,
     approach:    categoryRounds.approach > 0 ? byCategory.approach / categoryRounds.approach : 0,
     aroundGreen: categoryRounds.aroundGreen > 0 ? byCategory.aroundGreen / categoryRounds.aroundGreen : 0,
     putting:     categoryRounds.putting > 0 ? byCategory.putting / categoryRounds.putting : 0,
@@ -2705,8 +2779,65 @@ export function sgSeason(rounds, playerId, targetHandicap = 0) {
     byCategory: perCategory,
     sampleHoles,
     sampleHolesByCategory,
+    roundsByCategory: categoryRounds,
     roundsWithAnySample,
     perRound,
+  };
+}
+
+// ── SG Reconciliation ──
+// "Where the strokes go": ties SG categories back to real scores. Expected
+// score = par + targetHandicap (scaled by holes played) — the plain meaning
+// of playing to a handicap; needs no course data. The residual absorbs
+// everything the categories don't measure (lay-ups, punch-outs, holes with
+// partial detail), so the panel always sums exactly instead of pretending
+// full attribution.
+export function sgReconciliation(rounds, playerId, targetHandicap = 0) {
+  const perRound = [];
+  (rounds ?? []).forEach((round, index) => {
+    if (!round?.isComplete) return;
+    const r = sgTotal(round, playerId, targetHandicap);
+    if (r.sampleHoles === 0) return;
+    let parPlayed = 0;
+    let actual = 0;
+    let holesPlayed = 0;
+    (round.holes ?? []).forEach((hole) => {
+      const sc = round.scores?.[playerId]?.[hole.number];
+      if (sc == null) return;
+      parPlayed += hole.par;
+      actual += sc;
+      holesPlayed += 1;
+    });
+    if (holesPlayed === 0) return;
+    const expected = parPlayed + targetHandicap * (holesPlayed / 18);
+    const gap = expected - actual;
+    const explained = SG_CATEGORIES.reduce((sum, c) => sum + r.byCategory[c], 0);
+    perRound.push({
+      index, expected, actual, gap,
+      byCategory: r.byCategory,
+      residual: gap - explained,
+    });
+  });
+  const n = perRound.length;
+  if (n === 0) {
+    return {
+      rounds: 0, perRound,
+      expectedAvg: null, actualAvg: null, gapAvg: null,
+      byCategoryAvg: null, residualAvg: null,
+    };
+  }
+  const avg = (pick) => perRound.reduce((sum, r) => sum + pick(r), 0) / n;
+  const byCategoryAvg = Object.fromEntries(
+    SG_CATEGORIES.map((c) => [c, avg((r) => r.byCategory[c])]),
+  );
+  return {
+    rounds: n,
+    perRound,
+    expectedAvg: avg((r) => r.expected),
+    actualAvg: avg((r) => r.actual),
+    gapAvg: avg((r) => r.gap),
+    byCategoryAvg,
+    residualAvg: avg((r) => r.residual),
   };
 }
 
