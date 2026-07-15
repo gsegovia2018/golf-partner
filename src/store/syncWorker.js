@@ -68,6 +68,37 @@ export function isPermanentSyncError(error) {
   return false;
 }
 
+// Classifies a RECOVERABLE failure as a TRANSPORT / infrastructure-transient
+// error: the write never reached a definitive server verdict (the server was
+// unreachable, dropped the connection, or is temporarily overloaded). Repeated
+// occurrences are therefore NOT evidence the entry is poison, so these must be
+// retried indefinitely (with backoff) and NEVER counted toward the poison cap.
+//
+// This is the fix for a silent data-loss bug: an online device whose server is
+// unreachable (outage, flaky link) fails recoverably on every pass; the poison
+// cap (RECOVERABLE_ATTEMPT_CAP) then dropped the user's queued scores/finish
+// after ~8 passes even though nothing was wrong with the write.
+//
+// Transport / infra-transient:
+//   - no `.code` at all — a fetch/network error (offline, DNS, timeout, reset)
+//   - SQLSTATE class 08 (connection_exception, e.g. 08006/08003)
+//   - HTTP 5xx or 429, whether surfaced as `.status` or in the `.code` field
+// A stuck CREDENTIAL (expired-and-never-refreshed JWT: PGRST301, 401/403) is
+// deliberately NOT transport — those keep the bounded poison cap, since a
+// permanently bad credential can never land and shouldn't wedge an entry's
+// tournament forever.
+export function isTransportError(error) {
+  if (!error) return false;
+  const status = Number(error.status);
+  if (status >= 500 || status === 429) return true;
+  const code = error.code;
+  if (!code) return true; // network/transport error — server returned no verdict
+  const codeStr = String(code);
+  if (codeStr.length === 5 && codeStr.startsWith('08')) return true; // connection_exception
+  if (/^(5\d\d|429)$/.test(codeStr)) return true; // HTTP 5xx / 429 surfaced as the code
+  return false;
+}
+
 // Exported for unit testing the mutation → upsertPlayer field mapping.
 export async function drainLibrary(libraryMuts) {
   // Library mutations (player.upsertLibrary) drain independently; no merge.
@@ -92,12 +123,18 @@ export async function drainLibrary(libraryMuts) {
           continue;
         }
 
-        // Recoverable failure: network/transport error, expired session
-        // (PGRST301/JWT), 401/403, 429, 5xx, or any unrecognized code.
-        // Bump the poison counter — a recoverable error that never actually
-        // recovers must NOT retry forever (that is what wedged the whole
-        // pipeline: a stuck rpc.call throwing on every pass, aborting
-        // drainOnce before any tournament could drain).
+        // Transport / infra-transient failure (server unreachable, connection
+        // dropped, 5xx/429): the write never got a server verdict, so this is
+        // not evidence of poison. Retry forever — never bump the counter, never
+        // drop. Dropping here silently loses the user's queued write.
+        if (isTransportError(error)) throw error;
+
+        // Recoverable CODED failure the server actively returned: expired
+        // session (PGRST301/JWT), 401/403, or any unrecognized code. Bump the
+        // poison counter — a stuck credential that never recovers must NOT
+        // retry forever (that is what wedged the whole pipeline: a stuck
+        // rpc.call throwing on every pass, aborting drainOnce before any
+        // tournament could drain).
         const attempts = await syncQueue.incrementAttempts(entry.id);
         if (attempts >= RECOVERABLE_ATTEMPT_CAP) {
           console.warn(
@@ -162,6 +199,12 @@ export async function drainTournament(tournamentId, entries) {
         _setSyncStatus('error');
         continue;
       }
+
+      // Transport / infra-transient failure (server unreachable, connection
+      // dropped, 5xx/429): the write never got a server verdict, so it is not
+      // poison. Retry forever — never bump the counter, never drop — or the
+      // user's queued scores/finish silently vanish during a server outage.
+      if (isTransportError(error)) throw error;
 
       const attempts = await syncQueue.incrementAttempts(entry.id);
       if (attempts >= RECOVERABLE_ATTEMPT_CAP) {

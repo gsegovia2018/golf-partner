@@ -2,7 +2,7 @@
 // mocks are in place before ../syncWorker and its dependencies load.
 import {
   drainTournament, drainLibrary, syncNow, syncSettled,
-  isPermanentSyncError,
+  isPermanentSyncError, isTransportError,
 } from '../syncWorker';
 import { readLocal, saveLocal, _setSyncStatus } from '../tournamentStore';
 import { executeMutation } from '../mutationWrites';
@@ -173,6 +173,36 @@ describe('drainTournament', () => {
     await drainTournament('t1', [e1]);
     expect(syncQueue.drop).toHaveBeenCalledWith('e1');
     expect(_setSyncStatus).toHaveBeenCalledWith('error');
+  });
+
+  test('a transport error (no code — server unreachable) is retried forever and NEVER dropped, even far past the poison cap', async () => {
+    // The data-loss bug: an online device whose server is unreachable (outage,
+    // dropped connection) gets a codeless network error on every pass. The
+    // server never saw the write, so repeated failures are NOT evidence the
+    // entry is poison — it must never be dropped, or the user's queued scores
+    // vanish silently after ~8 passes.
+    executeMutation.mockRejectedValue(new Error('Network request failed'));
+    let attempts = 0;
+    syncQueue.incrementAttempts.mockImplementation(() => Promise.resolve(++attempts));
+    const e1 = { id: 'e1', tournamentId: 't1', mutation: { type: 'score.set', roundId: 'r1', playerId: 'p1', hole: 1, value: 4 } };
+
+    for (let i = 0; i < 20; i++) {
+      await expect(drainTournament('t1', [e1])).rejects.toThrow('Network request failed');
+    }
+    expect(syncQueue.drop).not.toHaveBeenCalled();
+  });
+
+  test('an infra-transient error (SQLSTATE class 08 connection-exception / HTTP 5xx) is never dropped by the poison cap', async () => {
+    const connErr = Object.assign(new Error('server closed the connection unexpectedly'), { code: '08006' });
+    executeMutation.mockRejectedValue(connErr);
+    let attempts = 0;
+    syncQueue.incrementAttempts.mockImplementation(() => Promise.resolve(++attempts));
+    const e1 = { id: 'e1', tournamentId: 't1', mutation: { type: 'score.set' } };
+
+    for (let i = 0; i < 12; i++) {
+      await expect(drainTournament('t1', [e1])).rejects.toThrow('server closed the connection');
+    }
+    expect(syncQueue.drop).not.toHaveBeenCalled();
   });
 
   test('executeMutation always resolving { conflict: null } never blocks the drop (conflict state is derived, not raised, here)', async () => {
@@ -380,6 +410,43 @@ describe('drainLibrary', () => {
     await drainLibrary([e1]);
     expect(syncQueue.drop).toHaveBeenCalledWith('e1');
     expect(_setSyncStatus).toHaveBeenCalledWith('error');
+  });
+
+  test('rpc.call: a transport error (no code / 5xx) is retried forever and NEVER dropped as poison', async () => {
+    // Same data-loss guard as drainTournament: an official-score rpc.call that
+    // fails because the server is unreachable must not be dropped after the cap.
+    supabase.rpc.mockResolvedValue({ error: { message: 'Failed to fetch' } }); // no code
+    let attempts = 0;
+    syncQueue.incrementAttempts.mockImplementation(() => Promise.resolve(++attempts));
+    const e1 = { id: 'e1', mutation: { type: 'rpc.call', fn: 'submit_score', args: {} } };
+
+    for (let i = 0; i < 20; i++) {
+      await expect(drainLibrary([e1])).rejects.toMatchObject({ message: 'Failed to fetch' });
+    }
+    expect(syncQueue.drop).not.toHaveBeenCalled();
+  });
+});
+
+describe('isTransportError', () => {
+  test.each([
+    [{ message: 'Failed to fetch' }, true], // no code — pure network error
+    [{ code: '08006', message: 'x' }, true], // SQLSTATE connection_exception class
+    [{ code: '08003', message: 'x' }, true],
+    [{ code: '503', message: 'x' }, true], // HTTP 5xx surfaced as code
+    [{ code: '500', message: 'x' }, true],
+    [{ code: '429', message: 'x' }, true], // rate limit / too busy
+    [{ status: 502, message: 'x' }, true], // HTTP status field
+    [{ code: 'PGRST301', message: 'x' }, false], // auth (expired JWT) — capped, not transport
+    [{ code: '401', message: 'x' }, false],
+    [{ code: '23505', message: 'x' }, false], // permanent anyway
+    [{ code: 'PGRST116', message: 'x' }, false],
+  ])('%o -> transport = %s', (err, expected) => {
+    expect(isTransportError(err)).toBe(expected);
+  });
+
+  test('a nullish error is not a transport error', () => {
+    expect(isTransportError(null)).toBe(false);
+    expect(isTransportError(undefined)).toBe(false);
   });
 });
 
