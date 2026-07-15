@@ -205,3 +205,15 @@ export function benchmarkDriveDistance(targetHandicap = 0) {
   const t = Math.max(0, Math.min(2, (targetHandicap ?? 0) / AMATEUR_ANCHOR_HANDICAP));
   return SCRATCH_DRIVE_DISTANCE + t * (AMATEUR_DRIVE_DISTANCE - SCRATCH_DRIVE_DISTANCE);
 }
+
+// Typical penalty strokes per round for a target handicap. Anchored at 0
+// for scratch — so "vs scratch" stays the raw count the app always showed —
+// and 1.0/round at the 14-hcp anchor, same linear blend as the tables
+// (t clamped to [0, 2] → ~1.79 at a 25 target, 2.0 cap). Approximation,
+// stated in the SG explainer.
+const AMATEUR_PENALTIES_PER_ROUND = 1.0;
+
+export function expectedPenaltiesPerRound(targetHandicap = 0) {
+  const t = Math.max(0, Math.min(2, (targetHandicap ?? 0) / AMATEUR_ANCHOR_HANDICAP));
+  return t * AMATEUR_PENALTIES_PER_ROUND;
+}

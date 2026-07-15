@@ -20,8 +20,8 @@ const strokesGainedExplainer = (targetHandicap) => {
       + 'negative means worse.\n\n'
       + 'Five categories: Off the tee compares each logged drive (distance + lie) against the typical '
       + 'drive for your target on a standard-length hole — no course measurements needed. Approach, '
-      + 'short game and putting use the distance buckets you log; penalties count penalty strokes '
-      + 'directly.\n\n'
+      + 'short game and putting use the distance buckets you log; penalties compare your penalty count with the typical count for '
+      + `${reference}.\n\n`
       + 'Recovery shots and lay-ups between the drive and the approach are not attributed to a '
       + 'category — the "Where your strokes go" card shows them honestly as "In-between & untracked" '
       + 'so everything always adds up to your real scores.\n\n'

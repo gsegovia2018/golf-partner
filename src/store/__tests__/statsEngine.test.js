@@ -2780,3 +2780,38 @@ describe('sgApproach with approachLie', () => {
     expect(withLie.perHole[0]).toBeCloseTo(without.perHole[0], 10);
   });
 });
+
+describe('sgPenalties vs target handicap', () => {
+  const clean18 = makeRound(
+    Array.from({ length: 18 }, () => ({ par: 4, strokes: 4 })),
+    Array.from({ length: 18 }, () => ({ putts: 2 })),
+  );
+  test('scratch target: identical to raw count (expected 0)', () => {
+    const r = sgPenalties(clean18, 'me');
+    expect(r.total).toBe(0);
+    expect(r.sampleHoles).toBe(18);
+  });
+  test('a clean 18-hole round gains the full target allowance', () => {
+    expect(sgPenalties(clean18, 'me', 14).total).toBeCloseTo(1.0, 10);
+    expect(sgPenalties(clean18, 'me', 25).total).toBeCloseTo(25 / 14, 10);
+  });
+  test('per-hole: allowance minus actual penalties', () => {
+    const round = makeRound(
+      [{ par: 4, strokes: 7 }, { par: 4, strokes: 4 }],
+      [{ putts: 2, teePenalties: 2 }, { putts: 2 }],
+    );
+    const r = sgPenalties(round, 'me', 14);
+    expect(r.perHole[0]).toBeCloseTo(1 / 18 - 2, 10);
+    expect(r.perHole[1]).toBeCloseTo(1 / 18, 10);
+  });
+  test('untracked holes stay null', () => {
+    const round = makeRound([{ par: 4, strokes: 4 }], []);
+    expect(sgPenalties(round, 'me', 14).perHole[0]).toBeNull();
+    expect(sgPenalties(round, 'me', 14).sampleHoles).toBe(0);
+  });
+  test('sgTotal threads the target into penalties', () => {
+    const withPen = makeRound([{ par: 4, strokes: 6 }], [{ putts: 2, teePenalties: 1 }]);
+    expect(sgTotal(withPen, 'me', 14).byCategory.penalties).toBeCloseTo(1 / 18 - 1, 10);
+    expect(sgTotal(withPen, 'me', 0).byCategory.penalties).toBe(-1);
+  });
+});

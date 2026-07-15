@@ -3,6 +3,7 @@ import {
   expectedStrokes, expectedFromBucket,
   BASELINES_AMATEUR, AMATEUR_ANCHOR_HANDICAP,
   benchmarkDriveDistance, PAR_ANCHOR_DISTANCE, BUCKETS,
+  expectedPenaltiesPerRound,
 } from '../strokesGainedBaseline';
 
 describe('BASELINES', () => {
@@ -120,5 +121,15 @@ describe('drive benchmark constants', () => {
     expect(benchmarkDriveDistance(28)).toBe(170);
     expect(benchmarkDriveDistance(50)).toBe(170); // clamped at t = 2
     expect(benchmarkDriveDistance()).toBe(230);   // default scratch
+  });
+});
+
+describe('expectedPenaltiesPerRound', () => {
+  test('anchored at 0 (scratch) and 1.0 (14 hcp), clamped at 2.0', () => {
+    expect(expectedPenaltiesPerRound(0)).toBe(0);
+    expect(expectedPenaltiesPerRound()).toBe(0);
+    expect(expectedPenaltiesPerRound(14)).toBeCloseTo(1.0, 10);
+    expect(expectedPenaltiesPerRound(25)).toBeCloseTo(25 / 14, 10);
+    expect(expectedPenaltiesPerRound(50)).toBeCloseTo(2.0, 10);
   });
 });

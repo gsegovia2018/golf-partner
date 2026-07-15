@@ -2,7 +2,7 @@ import { calcStablefordPoints, calcExtraShots, roundPairLeaderboard, getPlayingH
 import { isGIR, recoveryOutcomeFromState, roundScoringMode, isScrambleMode, isPickupScore } from './scoring';
 import {
   expectedFromBucket, expectedStrokes, BUCKETS,
-  PAR_ANCHOR_DISTANCE, benchmarkDriveDistance,
+  PAR_ANCHOR_DISTANCE, benchmarkDriveDistance, expectedPenaltiesPerRound,
 } from './strokesGainedBaseline';
 
 // Scramble rounds store ONE team ball under the team's captain (pair[0]),
@@ -2524,16 +2524,18 @@ export function sgPutting(round, playerId, targetHandicap = 0) {
   return { perHole, total, sampleHoles: sample.length };
 }
 
-export function sgPenalties(round, playerId) {
+export function sgPenalties(round, playerId, targetHandicap = 0) {
   const byHole = round?.shotDetails?.[playerId];
+  const expectedPerHole = expectedPenaltiesPerRound(targetHandicap) / 18;
   const perHole = (round?.holes ?? []).map((hole) => {
     const d = byHole?.[hole.number];
-    // Every tracked hole counts in the sample — a clean one contributes 0 so
-    // penalty-free rounds stay in the season denominator. Untracked holes
-    // stay null: no shot detail means we don't know there were no penalties.
+    // Every tracked hole counts in the sample — a clean one contributes the
+    // target's small per-hole allowance so penalty-free rounds gain vs a
+    // non-scratch target, matching the other categories' semantics.
+    // Untracked holes stay null: no shot detail means we don't know.
     if (!d) return null;
     const penalty = (d.teePenalties ?? 0) + (d.otherPenalties ?? 0);
-    return penalty > 0 ? -penalty : 0;
+    return expectedPerHole - penalty;
   });
   const sample = perHole.filter((x) => x != null);
   const total = sample.reduce((a, x) => a + x, 0);
@@ -2725,7 +2727,7 @@ export function sgTotal(round, playerId, targetHandicap = 0) {
   const approach    = sgApproach(round, playerId, targetHandicap);
   const aroundGreen = sgAroundGreen(round, playerId, targetHandicap);
   const putting     = sgPutting(round, playerId, targetHandicap);
-  const penalties   = sgPenalties(round, playerId);
+  const penalties   = sgPenalties(round, playerId, targetHandicap);
   const byCategory = {
     offTheTee:   offTheTee.total,
     approach:    approach.total,

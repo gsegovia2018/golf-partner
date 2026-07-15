@@ -361,6 +361,7 @@ export function buildActionPlan({
       approach: 'Approach',
       aroundGreen: 'Around the green',
       putting: 'Putting',
+      penalties: 'Penalties',
     }[key] ?? key;
     const categorySample = strokesGained.sampleHolesByCategory?.[key]
       ?? strokesGained.sampleHoles
