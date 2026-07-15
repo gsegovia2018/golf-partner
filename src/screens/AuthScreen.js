@@ -9,7 +9,7 @@ import { makeRedirectUri } from 'expo-auth-session';
 import * as QueryParams from 'expo-auth-session/build/QueryParams';
 import * as Linking from 'expo-linking';
 import { supabase } from '../lib/supabase';
-import { parseOAuthError, getWebRedirectTo } from '../lib/oauth';
+import { parseOAuthError, getWebRedirectTo, getPasswordResetRedirectTo } from '../lib/oauth';
 import { useTheme } from '../theme/ThemeContext';
 
 const isWeb = Platform.OS === 'web';
@@ -136,7 +136,7 @@ export default function AuthScreen() {
     }
     setLoading(true);
     try {
-      const redirectTo = getWebRedirectTo();
+      const redirectTo = getPasswordResetRedirectTo(Platform.OS, Linking.createURL('reset-password'));
       const options = redirectTo ? { redirectTo } : undefined;
       const { error } = await supabase.auth.resetPasswordForEmail(email.trim(), options);
       if (error) Alert.alert('Error', error.message);

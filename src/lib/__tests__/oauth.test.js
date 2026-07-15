@@ -1,4 +1,4 @@
-import { parseOAuthError, getWebRedirectTo } from '../oauth';
+import { parseOAuthError, getWebRedirectTo, getPasswordResetRedirectTo } from '../oauth';
 
 describe('parseOAuthError', () => {
   it('returns null when the URL carries no error', () => {
@@ -49,5 +49,26 @@ describe('getWebRedirectTo', () => {
   it('works for a root deploy', () => {
     global.window = { location: { origin: 'https://app.example.com', pathname: '/' } };
     expect(getWebRedirectTo()).toBe('https://app.example.com/');
+  });
+});
+
+describe('getPasswordResetRedirectTo', () => {
+  const originalWindow = global.window;
+  afterEach(() => { global.window = originalWindow; });
+
+  it('returns the web URL on web', () => {
+    global.window = { location: { origin: 'https://app.example.com', pathname: '/' } };
+    expect(getPasswordResetRedirectTo('web', 'golf://reset-password')).toBe('https://app.example.com/');
+  });
+
+  it('returns the native deep link off-web', () => {
+    delete global.window;
+    expect(getPasswordResetRedirectTo('android', 'golf://reset-password')).toBe('golf://reset-password');
+    expect(getPasswordResetRedirectTo('ios', 'golf://reset-password')).toBe('golf://reset-password');
+  });
+
+  it('prefers the deep link over an incidentally-present window on native', () => {
+    global.window = { location: { origin: 'https://app.example.com', pathname: '/' } };
+    expect(getPasswordResetRedirectTo('android', 'golf://reset-password')).toBe('golf://reset-password');
   });
 });

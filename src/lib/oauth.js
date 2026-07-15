@@ -50,6 +50,27 @@ export function getWebRedirectTo() {
 }
 
 /**
+ * Redirect target for `resetPasswordForEmail`. Web needs a URL Supabase can
+ * send the browser back to (reuses the same origin+pathname OAuth already
+ * redirects to); native needs an app deep link so the OS routes the
+ * recovery email link into the app instead of opening a bare browser tab
+ * with nothing listening for the `code`.
+ *
+ * Takes `platformOS`/`nativeDeepLink` as params (rather than reading
+ * `Platform.OS` / calling `Linking.createURL` itself) so this stays a pure,
+ * dependency-free function — see callers in AuthScreen.
+ *
+ * @param {string} platformOS `Platform.OS` — 'web' | 'ios' | 'android'
+ * @param {string} nativeDeepLink app deep link to use off-web, e.g.
+ *   `Linking.createURL('reset-password')`
+ * @returns {string|undefined} redirect URL
+ */
+export function getPasswordResetRedirectTo(platformOS, nativeDeepLink) {
+  if (platformOS === 'web') return getWebRedirectTo();
+  return nativeDeepLink;
+}
+
+/**
  * Start an anonymous Supabase session. Used by the "Continue without an
  * account" path on the join screen: the guest gets a real (but anonymous)
  * auth.uid(), so every RLS-gated casual feature works for them unchanged.
