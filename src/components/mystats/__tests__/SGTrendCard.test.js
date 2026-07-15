@@ -1,0 +1,64 @@
+import React from 'react';
+import { render, fireEvent } from '@testing-library/react-native';
+import SGTrendCard from '../SGTrendCard';
+
+jest.mock('../../../theme/ThemeContext', () => ({
+  useTheme: () => ({
+    theme: {
+      spacing: {
+        xs: 8,
+        sm: 12,
+        md: 16,
+        lg: 24,
+      },
+      radius: {
+        pill: 20,
+      },
+      border: {
+        default: '#E0E0E0',
+      },
+      bg: {
+        primary: '#FFFFFF',
+        secondary: '#F5F5F5',
+      },
+      text: {
+        primary: '#000000',
+        secondary: '#666666',
+        inverse: '#FFFFFF',
+      },
+      accent: {
+        primary: '#007AFF',
+      },
+      typography: {
+        caption: {
+          fontSize: 12,
+          lineHeight: 16,
+        },
+      },
+    },
+  }),
+}));
+
+const perRound = [
+  { index: 0, total: -2.1, sampleHoles: 18, byCategory: { offTheTee: -0.5, approach: -1, aroundGreen: 0, putting: -0.6, penalties: 0 } },
+  { index: 1, total: 0.4, sampleHoles: 18, byCategory: { offTheTee: 0.2, approach: 0.1, aroundGreen: 0, putting: 0.1, penalties: 0 } },
+];
+
+describe('SGTrendCard', () => {
+  test('renders a chip per category plus Total and defaults to Total', () => {
+    const r = render(<SGTrendCard strokesGained={{ perRound }} />);
+    expect(r.getByText('Total')).toBeTruthy();
+    expect(r.getByText('Off the tee')).toBeTruthy();
+    expect(r.getByText('Putting')).toBeTruthy();
+    expect(r.getByLabelText('SG trend Total').props.accessibilityState.selected).toBe(true);
+  });
+  test('switching chips switches the plotted series', () => {
+    const r = render(<SGTrendCard strokesGained={{ perRound }} />);
+    fireEvent.press(r.getByLabelText('SG trend Putting'));
+    expect(r.getByLabelText('SG trend Putting').props.accessibilityState.selected).toBe(true);
+  });
+  test('renders nothing with fewer than 2 sampled rounds', () => {
+    const r = render(<SGTrendCard strokesGained={{ perRound: [perRound[0]] }} />);
+    expect(r.toJSON()).toBeNull();
+  });
+});

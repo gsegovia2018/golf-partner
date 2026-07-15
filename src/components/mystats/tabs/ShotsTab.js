@@ -6,6 +6,7 @@ import { useTheme } from '../../../theme/ThemeContext';
 import { shotBenchmarkForHandicap } from '../../../store/shotBenchmarks';
 import SectionCard from '../SectionCard';
 import ShotDashboard from '../ShotDashboard';
+import SGTrendCard from '../SGTrendCard';
 import {
   comparisonMeta,
   toneColor,
@@ -58,6 +59,7 @@ export default function ShotsTab({ stats, onInfo, targetHandicap, onChangeTarget
         onInfo={onInfo}
         TargetNudge={SGTargetNudge}
       />
+      <SGTrendCard strokesGained={stats.strokesGained} />
 
       {scoringRows.length ? (
         <SectionCard title="Scoring" infoKey="sgScoring" onInfo={onInfo}>
