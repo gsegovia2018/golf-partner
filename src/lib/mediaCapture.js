@@ -88,10 +88,9 @@ export async function pickMedia({ source, mediaTypes, multi = false, selectionLi
 
   if (result.canceled || !result.assets?.length) return multi ? [] : null;
 
+  // Each asset must be validated before any are enqueued; the sequential
+  // await keeps failure order deterministic and readable.
   for (const asset of result.assets) {
-    // eslint-disable-next-line no-await-in-loop -- each asset must be
-    // validated before any are enqueued; a Promise.all would still reject
-    // early but this keeps failure order deterministic and readable.
     await assertVideoSize(asset, source);
   }
 
