@@ -22,6 +22,7 @@ export default function PlayersLibraryScreen() {
 
   const [players, setPlayers] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState(null);
   const [name, setName] = useState('');
   const [handicap, setHandicap] = useState('');
   const [gender, setGender] = useState('male');
@@ -37,8 +38,11 @@ export default function PlayersLibraryScreen() {
 
   async function load() {
     if (!hasLoadedOnceRef.current) setLoading(true);
+    setLoadError(null);
     try {
       setPlayers(await fetchMyGuestPlayers());
+    } catch (err) {
+      setLoadError(err?.message ?? 'Could not load players');
     } finally {
       hasLoadedOnceRef.current = true;
       setLoading(false);
@@ -185,7 +189,19 @@ export default function PlayersLibraryScreen() {
         <Text style={s.sectionTitle}>List</Text>
         {loading
           ? <ActivityIndicator color={theme.accent.primary} style={{ marginTop: 20 }} />
-          : players.length === 0
+          : loadError
+            ? (
+              <View style={s.errorBox}>
+                <Feather name="wifi-off" size={20} color={theme.destructive} />
+                <Text style={s.errorTitle}>Couldn't load players</Text>
+                <Text style={s.errorMsg}>{loadError}</Text>
+                <TouchableOpacity style={s.retryBtn} onPress={load} activeOpacity={0.7}>
+                  <Feather name="refresh-cw" size={14} color={theme.accent.primary} style={{ marginRight: 6 }} />
+                  <Text style={s.retryBtnText}>Retry</Text>
+                </TouchableOpacity>
+              </View>
+            )
+            : players.length === 0
             ? (
               <View style={s.emptyState}>
                 <Feather name="users" size={48} color={theme.text.muted} />
@@ -270,4 +286,24 @@ const makeStyles = (theme) => StyleSheet.create({
   hcpLabel: { fontFamily: 'PlusJakartaSans-Medium', color: theme.text.secondary, fontSize: 12, marginTop: 3 },
   editBtn: { paddingHorizontal: 10, paddingVertical: 6 },
   deleteBtn: { paddingHorizontal: 8, paddingVertical: 6 },
+  errorBox: {
+    alignItems: 'center', padding: 24, marginTop: 12,
+    backgroundColor: theme.bg.card, borderRadius: 16,
+    borderWidth: 1, borderColor: theme.border.default,
+  },
+  errorTitle: {
+    fontFamily: 'PlusJakartaSans-Bold', color: theme.text.primary,
+    fontSize: 15, marginTop: 10,
+  },
+  errorMsg: {
+    fontFamily: 'PlusJakartaSans-Regular', color: theme.text.muted,
+    fontSize: 13, marginTop: 4, textAlign: 'center',
+  },
+  retryBtn: {
+    flexDirection: 'row', alignItems: 'center',
+    backgroundColor: theme.accent.light, borderRadius: 10,
+    borderWidth: 1, borderColor: theme.accent.primary + '40',
+    paddingHorizontal: 16, paddingVertical: 10, marginTop: 14,
+  },
+  retryBtnText: { fontFamily: 'PlusJakartaSans-Bold', color: theme.accent.primary, fontSize: 14 },
 });

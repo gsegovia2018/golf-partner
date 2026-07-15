@@ -93,6 +93,23 @@ export default function PlayersScreen({ navigation, route }) {
   const saveTimeoutRef = useRef(null);
   const skipNextSaveRef = useRef(false);
   const hasLoadedOnceRef = useRef(!!initialTournament);
+  const isMountedRef = useRef(true);
+
+  // The debounced autosave below schedules a setTimeout whose async callback
+  // calls setState/Alert. If the screen unmounts before the timer fires, or
+  // while the callback's awaits are still in flight, those calls would hit
+  // an unmounted component. Clear the pending timer on unmount and gate the
+  // callback's setState/Alert calls behind isMountedRef.
+  useEffect(() => {
+    isMountedRef.current = true;
+    return () => {
+      isMountedRef.current = false;
+      if (saveTimeoutRef.current) {
+        clearTimeout(saveTimeoutRef.current);
+        saveTimeoutRef.current = null;
+      }
+    };
+  }, []);
 
   const load = useCallback(async () => {
     if (!hasLoadedOnceRef.current) setLoading(true);
@@ -265,6 +282,7 @@ export default function PlayersScreen({ navigation, route }) {
     if (saveTimeoutRef.current) clearTimeout(saveTimeoutRef.current);
     setSaveState('saving');
     saveTimeoutRef.current = setTimeout(async () => {
+      saveTimeoutRef.current = null;
       // A genuinely invalid handicap (garbage, out of range) must never be
       // silently persisted as 0 — that badly skews net scoring. Block the
       // whole autosave (keeping the last-synced value on the server) until
@@ -276,7 +294,7 @@ export default function PlayersScreen({ navigation, route }) {
         return !r.ok && r.reason === 'invalid';
       });
       if (hasInvalidHandicap) {
-        setSaveState('error');
+        if (isMountedRef.current) setSaveState('error');
         return;
       }
       try {
@@ -331,12 +349,14 @@ export default function PlayersScreen({ navigation, route }) {
             type: 'round.upsert', roundId: builtRounds[i].id, roundIndex: i, round: builtRounds[i], isNew,
           });
         }
-        setSaveState('saved');
+        if (isMountedRef.current) setSaveState('saved');
       } catch (err) {
-        setSaveState('error');
-        const msg = err?.message ?? 'Could not save changes';
-        if (Platform.OS === 'web') window.alert(msg);
-        else Alert.alert('Save failed', msg);
+        if (isMountedRef.current) {
+          setSaveState('error');
+          const msg = err?.message ?? 'Could not save changes';
+          if (Platform.OS === 'web') window.alert(msg);
+          else Alert.alert('Save failed', msg);
+        }
       }
     }, 400);
   }, [editPlayers, rounds]);
