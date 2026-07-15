@@ -124,6 +124,23 @@ describe('buildCourseBreakdown summary', () => {
     expect(b.shots.putts.perRound).toBe(36);
     expect(b.shots.drives.fairwayPct).toBe(100);
   });
+
+  test('a course with only partial rounds keeps hole stats but makes no round-total claims', () => {
+    const h = mkHoles(18);
+    const partial = evenScores(h, 5);
+    delete partial[18];
+    const rounds = myRoundsFor([
+      mkRound({ courseId: 'c-1', scores: { p1: partial } }),
+    ]);
+    const b = buildCourseBreakdown(filterRoundsToCourse(rounds, 'c-1'));
+    expect(b.summary.rounds).toBe(0);
+    expect(b.summary.avgPoints).toBeNull();
+    expect(b.summary.bestPoints).toBeNull();
+    expect(b.summary.avgStrokes).toBeNull();
+    expect(b.summary.holesPlayed).toBe(17);
+    expect(b.holes).toHaveLength(17);
+    expect(b.highlights).toBeNull();
+  });
 });
 
 describe('buildCourseBreakdown holes', () => {

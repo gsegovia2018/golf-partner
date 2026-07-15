@@ -14,9 +14,9 @@ export default function HoleBreakdownTable({ holes }) {
     <View style={s.table}>
       <View style={s.headRow}>
         <Text style={[s.headCell, s.holeCol]}>Hole</Text>
-        <Text style={[s.headCell, s.numCol]}>Avg</Text>
-        <Text style={[s.headCell, s.numCol]}>Best</Text>
-        <Text style={[s.headCell, s.numCol]}>Pts</Text>
+        <Text style={s.headNum}>Avg</Text>
+        <Text style={s.headNum}>Best</Text>
+        <Text style={s.headNum}>Pts</Text>
       </View>
       {holes.map((h) => <HoleRow key={h.holeNumber} hole={h} s={s} theme={theme} />)}
     </View>
@@ -72,6 +72,11 @@ function makeStyles(theme) {
     headCell: {
       ...theme.typography.tiny, color: theme.text.muted,
       fontWeight: '700', textTransform: 'uppercase',
+    },
+    headNum: {
+      ...theme.typography.tiny, color: theme.text.muted,
+      fontWeight: '700', textTransform: 'uppercase',
+      width: 52, textAlign: 'center',
     },
     row: {
       flexDirection: 'row', alignItems: 'center',

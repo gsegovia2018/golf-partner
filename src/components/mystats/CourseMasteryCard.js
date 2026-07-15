@@ -23,7 +23,7 @@ export default function CourseMasteryCard({ courses, onInfo, onSelectCourse }) {
             course={course}
             s={s}
             theme={theme}
-            onPress={course.courseKey != null && onSelectCourse
+            onPress={course.courseKey && onSelectCourse
               ? () => onSelectCourse(course)
               : null}
           />

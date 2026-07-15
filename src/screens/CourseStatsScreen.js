@@ -158,7 +158,7 @@ export default function CourseStatsScreen({ navigation, route }) {
             <HighlightRow
               icon="award"
               tone="good"
-              label={`Best hole · ${highlights.best.holeNumber}`}
+              label={`Best · hole ${highlights.best.holeNumber}`}
               detail={`${signed(highlights.best.avgVsPar)} vs par over ${highlights.best.timesPlayed} rounds`}
               s={s}
               theme={theme}
