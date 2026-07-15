@@ -279,4 +279,18 @@ export const statExplainers = {
       + 'net (handicap-adjusted) Stableford points. Where you logged them, the small line '
       + 'adds average putts (over the holes that logged putts) and total penalties.',
   },
+  handicapIndex: {
+    title: 'Handicap Index',
+    subtitle: 'Your WHS index from real rounds',
+    explainer: 'Calculated with World Handicap System math from your complete 18-hole rounds. '
+      + 'Each round becomes a score differential: your gross score (capped at net double bogey '
+      + 'per hole) compared to the course rating, scaled by slope. Your index averages the best '
+      + '8 of your last 20 differentials — with fewer rounds, WHS uses fewer differentials and '
+      + 'a small safety deduction.\n\n'
+      + 'This always uses your most recent rounds, regardless of the rounds selected for the '
+      + 'other stats tabs. Rounds only qualify when they are complete 18-hole, non-scramble '
+      + 'rounds on a tee with a slope and course rating.\n\n'
+      + 'Playing-conditions adjustments, caps against your historical low index, and 9-hole '
+      + 'differentials are not applied — treat this as a strong estimate, not an official index.',
+  },
 };

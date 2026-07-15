@@ -16,8 +16,11 @@ jest.mock('react-native-safe-area-context', () => {
   };
 });
 
+// Mutable holder so individual tests can simulate a signed-out session.
+let mockUser = { id: 'user-1' };
+const setMockUser = (u) => { mockUser = u; };
 jest.mock('../../context/AuthContext', () => ({
-  useAuth: () => ({ user: { id: 'user-1' } }),
+  useAuth: () => ({ user: mockUser }),
 }));
 
 jest.mock('../../store/tournamentStore', () => ({
@@ -25,7 +28,7 @@ jest.mock('../../store/tournamentStore', () => ({
 }));
 
 jest.mock('../../store/profileStore', () => ({
-  loadProfile: jest.fn(() => Promise.resolve({ displayName: 'Marco', targetHandicap: 14 })),
+  loadProfile: jest.fn(() => Promise.resolve({ displayName: 'Marco', targetHandicap: 14, handicap: 12, gender: null })),
   upsertProfile: jest.fn(() => Promise.resolve()),
 }));
 
@@ -60,8 +63,26 @@ jest.mock('../../components/RoundReportCard', () => function MockRoundReportCard
   );
 });
 
-jest.mock('../../components/MyStatsRoundSelector', () => function MockMyStatsRoundSelector() {
-  return null;
+// Renders one pressable per round when visible, so tests can drive the real
+// onChange(next) contract (persistOverrides) without the real BottomSheet /
+// grouping logic. accessibilityLabel is index-based ("Round 1", "Round 2", …)
+// since the fixture rounds used below don't carry `roundIndex`/`courseName`.
+jest.mock('../../components/MyStatsRoundSelector', () => function MockMyStatsRoundSelector({ visible, myRounds, overrides, onChange }) {
+  const { View, Text, TouchableOpacity } = require('react-native');
+  if (!visible) return null;
+  return (
+    <View>
+      {myRounds.map((r, i) => (
+        <TouchableOpacity
+          key={r.key}
+          accessibilityLabel={`Round ${i + 1}`}
+          onPress={() => onChange({ ...overrides, [r.key]: !overrides[r.key] })}
+        >
+          <Text>{`Round ${i + 1}`}</Text>
+        </TouchableOpacity>
+      ))}
+    </View>
+  );
 });
 
 jest.mock('../../components/StatDetailSheet', () => function MockStatDetailSheet() {
@@ -94,7 +115,13 @@ jest.mock('../../components/mystats/tabs/ShotsTab', () => function MockShotsTab(
   return <Text>Strokes Gained content</Text>;
 });
 
+jest.mock('../../components/mystats/tabs/HandicapTab', () => function MockHandicapTab({ myRounds, profileHandicap }) {
+  const { Text } = require('react-native');
+  return <Text>{`Handicap tab: ${myRounds.length} rounds, profile ${profileHandicap}`}</Text>;
+});
+
 beforeEach(() => {
+  mockUser = { id: 'user-1' };
   AsyncStorage.getItem.mockResolvedValue(null);
 });
 
@@ -175,12 +202,13 @@ describe('MyStatsScreen tab strip', () => {
 
     expect(tabs.props.horizontal).toBe(true);
     expect(tabs.props.showsHorizontalScrollIndicator).toBe(false);
-    expect(labels).toEqual(['Report Card', 'Coach', 'Strokes Gained', 'Form', 'Breakdown']);
+    expect(labels).toEqual(['Report Card', 'Coach', 'Strokes Gained', 'Form', 'Breakdown', 'Handicap']);
     expect(getByText('Coach')).toBeTruthy();
     expect(getByText('Report Card')).toBeTruthy();
     expect(getByText('Form')).toBeTruthy();
     expect(getByText('Breakdown')).toBeTruthy();
     expect(getByText('Strokes Gained')).toBeTruthy();
+    expect(getByText('Handicap')).toBeTruthy();
     expect(() => getByText('Overview')).toThrow();
     expect(getByText('Report card content')).toBeTruthy();
   });
@@ -284,5 +312,66 @@ describe('MyStatsScreen report card round link', () => {
 
     expect(await findByText('Report card content')).toBeTruthy();
     expect(queryByText('Open round stats')).toBeNull();
+  });
+});
+
+describe('MyStatsScreen handicap tab', () => {
+  it('shows the Handicap tab and passes all rounds plus the profile handicap', async () => {
+    const view = renderScreen();
+    const tabs = await view.findAllByText('Handicap');
+    fireEvent.press(tabs[0]);
+    expect(await view.findByText(/Handicap tab: 1 rounds, profile 12/)).toBeTruthy();
+  });
+});
+
+describe('round selection persistence', () => {
+  const { collectMyRounds } = require('../../store/personalStats');
+
+  beforeEach(async () => {
+    await AsyncStorage.clear();
+    // The file-level beforeEach above forces getItem to resolve null so most
+    // tests don't need a live storage round-trip. These tests are
+    // specifically about storage round-trips, so restore the real per-key
+    // read against the mock's in-memory backing store.
+    AsyncStorage.getItem.mockImplementation((key) => (
+      Promise.resolve(AsyncStorage.__INTERNAL_MOCK_STORAGE__[key] ?? null)
+    ));
+  });
+
+  it('keeps stored overrides for rounds missing from the current load', async () => {
+    // Stored override deselects round t-2:0, but this load only returns
+    // t-1:0 (partial load). A toggle during this state must not wipe the
+    // override for the round that failed to load.
+    await AsyncStorage.setItem('@mystats_round_selection:user-1', JSON.stringify({ 't-2:0': false }));
+    collectMyRounds.mockReturnValue([
+      { key: 't-1:0', tournamentId: 't-1', completed: true, round: { id: 'r-1' } },
+    ]);
+
+    const view = renderScreen();
+    await view.findByText(/1 of 1/);
+    fireEvent.press(view.getByText(/1 of 1/));
+    fireEvent.press(await view.findByLabelText(/Round 1/));
+
+    await waitFor(async () => {
+      const raw = await AsyncStorage.getItem('@mystats_round_selection:user-1');
+      expect(JSON.parse(raw)).toMatchObject({ 't-2:0': false });
+    });
+  });
+
+  it('persists selection under a device-scoped key when signed out', async () => {
+    setMockUser(null);
+    collectMyRounds.mockReturnValue([
+      { key: 'round-1', tournamentId: 't-1', completed: true, round: { id: 'r-1' } },
+    ]);
+
+    const view = renderScreen();
+    await view.findByText(/1 of 1/);
+    fireEvent.press(view.getByText(/1 of 1/));
+    fireEvent.press(await view.findByLabelText(/Round 1/));
+
+    await waitFor(async () => {
+      const raw = await AsyncStorage.getItem('@mystats_round_selection:local');
+      expect(raw).not.toBeNull();
+    });
   });
 });
