@@ -2581,6 +2581,25 @@ export function driveLieBreakdown(rounds, playerId) {
   };
 }
 
+// Average logged drive distance (bucket midpoints, metres) on par 4+ holes.
+// Surfaces the driveDistBucket data the scorecard collects for off-the-tee SG.
+export function driveDistanceAverage(rounds, playerId) {
+  let sum = 0;
+  let drives = 0;
+  (rounds ?? []).forEach((round) => {
+    const byHole = round?.shotDetails?.[playerId];
+    if (!byHole) return;
+    (round.holes ?? []).forEach((hole) => {
+      if (hole.par < 4) return;
+      const mid = BUCKETS.driveDist[byHole[hole.number]?.driveDistBucket];
+      if (mid == null) return;
+      sum += mid;
+      drives += 1;
+    });
+  });
+  return { drives, avgDistance: drives > 0 ? Math.round(sum / drives) : null };
+}
+
 // ── Strokes Gained: Approach ──
 
 const APPROACH_LIES = new Set(['fairway', 'rough', 'sand']);
@@ -2695,6 +2714,7 @@ export function approachTargetGaps(rounds, playerId, targetHandicap = 0) {
         holeNumber: hole.number,
         gir,
         green,
+        start,
         sg: start - end - 1,
       });
     });
@@ -2703,15 +2723,22 @@ export function approachTargetGaps(rounds, playerId, targetHandicap = 0) {
   const round2 = (n) => Math.round(n * 100) / 100;
   const summarize = (arr) => {
     if (arr.length === 0) {
-      return { holes: 0, avgSg: null, girRate: null, greenRate: null, breakdown: [] };
+      return {
+        holes: 0, avgSg: null, girRate: null, greenRate: null,
+        targetStrokes: null, yourStrokes: null, breakdown: [],
+      };
     }
     const girHits = arr.filter((e) => e.gir === true).length;
     const greenHits = arr.filter((e) => e.green === true).length;
+    const startAvg = arr.reduce((sum, e) => sum + e.start, 0) / arr.length;
+    const sgAvgRaw = arr.reduce((sum, e) => sum + e.sg, 0) / arr.length;
     return {
       holes: arr.length,
       avgSg: round2(arr.reduce((sum, e) => sum + e.sg, 0) / arr.length),
       girRate: Math.round((girHits / arr.length) * 100),
       greenRate: Math.round((greenHits / arr.length) * 100),
+      targetStrokes: round2(startAvg),
+      yourStrokes: round2(startAvg - sgAvgRaw),
       breakdown: arr,
     };
   };

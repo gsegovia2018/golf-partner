@@ -1449,3 +1449,10 @@ describe('computeMyStats coach strategy wiring', () => {
     expect(Array.isArray(stats.coachStrategy)).toBe(true);
   });
 });
+
+describe('computeMyStats drive distance wiring', () => {
+  test('driveDistance rides on stats', () => {
+    const stats = computeMyStats([puttingRound(2)], { n: 1, targetHandicap: 0 });
+    expect(stats.driveDistance).toEqual({ drives: 0, avgDistance: null });
+  });
+});

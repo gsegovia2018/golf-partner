@@ -18,6 +18,7 @@ import {
 import { APPROACH_BUCKETS, PUTT_BUCKETS, sampleText, signed } from '../shotMetrics';
 
 const TARGET_BASIS = 'vs target hcp';
+const YD_TO_M = 0.9144;
 
 export default function ShotsTab({ stats, onInfo, targetHandicap, onChangeTarget }) {
   const { theme } = useTheme();
@@ -46,7 +47,7 @@ export default function ShotsTab({ stats, onInfo, targetHandicap, onChangeTarget
   }
 
   const scoringRows = makeScoringRows(stats, shotBenchmark);
-  const drivingTargetRows = makeDrivingTargetRows(shots, shotBenchmark);
+  const drivingTargetRows = makeDrivingTargetRows(shots, shotBenchmark, stats.driveDistance);
   const approachTargetRows = approachTarget?.hasData ? makeApproachTargetRows(approachTarget) : [];
   const puttingVolumeRows = shots.hasData ? makePuttingVolumeRows(shots, shotBenchmark) : [];
   const puttingTargetRows = puttingTarget?.hasData ? makePuttingTargetRows(puttingTarget) : [];
@@ -368,7 +369,7 @@ function makeScoringSummary(scoringRows) {
   return summary;
 }
 
-function makeDrivingTargetRows(shots, shotBenchmark) {
+function makeDrivingTargetRows(shots, shotBenchmark, driveDistance) {
   const recorded = shots?.drives?.recorded ?? 0;
   const distribution = shots?.drives?.distribution ?? {};
   const leftPct = percentage(distribution.left ?? 0, recorded);
@@ -458,6 +459,24 @@ function makeDrivingTargetRows(shots, shotBenchmark) {
       secondary: 'target benchmark only · distance not tracked',
       tone: 'neutral',
     },
+    ...(driveDistance?.drives > 0 ? [{
+      key: 'driveDistance',
+      label: 'Drive distance',
+      value: `~${driveDistance.avgDistance} m`,
+      secondary: targetSecondary([
+        sampleText(driveDistance.drives, 'drives'),
+        `target ~${Math.round(shotBenchmark.driverDistance * YD_TO_M)} m`,
+      ], driveDistance.drives, 6),
+      tone: toneFromComparison({
+        value: driveDistance.avgDistance,
+        target: Math.round(shotBenchmark.driverDistance * YD_TO_M),
+        polarity: 'higher',
+        tolerance: 10,
+        sample: driveDistance.drives,
+        minSample: 6,
+      }),
+      dim: false,
+    }] : []),
   ];
 }
 
@@ -469,12 +488,13 @@ function makeApproachTargetRows(approachTarget) {
       key: bucket,
       bucket,
       label: `${bucket} m approaches`,
-      value: signed(row.avgSg),
+      value: row.yourStrokes != null ? `you ≈ ${row.yourStrokes}` : signed(row.avgSg),
       raw: row.avgSg,
       secondary: targetSecondary([
+        row.targetStrokes != null ? `target ≈ ${row.targetStrokes}` : null,
         `${formatPercent(row.greenRate ?? row.girRate)} green`,
         sampleText(row.holes, 'shots'),
-      ], row.holes, 6),
+      ].filter(Boolean), row.holes, 6),
       sample: row.holes,
       greenRate: row.greenRate ?? row.girRate,
       tone: toneFromSigned(row.avgSg, { sample: row.holes, minSample: 6 }),

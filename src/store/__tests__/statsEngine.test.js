@@ -1,4 +1,4 @@
-import { teeShotImpact, lagPuttingQuality, sandSaveRate, upAndDownRate, bunkerVisits, sgPutting, sgAroundGreen, sgApproach, sgPenalties, sgOffTheTee, sgTotal, sgSeason, sgReconciliation, driveScoreImpact, puttDeepDive, approachScoreImpact, puttingTargetGaps, approachTargetGaps, pairPerformance, shotStats, playersWithShotData, tournamentHighlights, withoutScrambleScores, playerAvgStableford, pickupChampion, hallOfShame, chaosHoles, skinsLeaderboard, playerStreaks, bounceBackRate, strokeIndexAccuracy, bestWorstHoles, holeDifficultyMap, collectiveExtremes, pairConfigMatrix, matchPlayResults, pairHoleWins, anchor, par3Heartbreak, playingToHandicap, hotStretch, nemesisEncore, pairCoverage, girByDriveResult, courseDNA, warmupVsClosing, driveLieFromDetail, driveLieBreakdown } from '../statsEngine';
+import { teeShotImpact, lagPuttingQuality, sandSaveRate, upAndDownRate, bunkerVisits, sgPutting, sgAroundGreen, sgApproach, sgPenalties, sgOffTheTee, sgTotal, sgSeason, sgReconciliation, driveScoreImpact, puttDeepDive, approachScoreImpact, puttingTargetGaps, approachTargetGaps, pairPerformance, shotStats, playersWithShotData, tournamentHighlights, withoutScrambleScores, playerAvgStableford, pickupChampion, hallOfShame, chaosHoles, skinsLeaderboard, playerStreaks, bounceBackRate, strokeIndexAccuracy, bestWorstHoles, holeDifficultyMap, collectiveExtremes, pairConfigMatrix, matchPlayResults, pairHoleWins, anchor, par3Heartbreak, playingToHandicap, hotStretch, nemesisEncore, pairCoverage, girByDriveResult, courseDNA, warmupVsClosing, driveLieFromDetail, driveLieBreakdown, driveDistanceAverage } from '../statsEngine';
 import { mixedModeTournament, buildTournament } from './statsFixtures';
 
 // 18 par-4 holes, strokeIndex = hole number.
@@ -2813,5 +2813,45 @@ describe('sgPenalties vs target handicap', () => {
     const withPen = makeRound([{ par: 4, strokes: 6 }], [{ putts: 2, teePenalties: 1 }]);
     expect(sgTotal(withPen, 'me', 14).byCategory.penalties).toBeCloseTo(1 / 18 - 1, 10);
     expect(sgTotal(withPen, 'me', 0).byCategory.penalties).toBe(-1);
+  });
+});
+
+describe('approachTargetGaps you-vs-target strokes', () => {
+  test('targetStrokes = avg expected start; yourStrokes = target − avgSg', () => {
+    const round = makeRound(
+      [{ par: 4, strokes: 4 }],
+      [{ putts: 2, approachBucket: '100-150', approachResult: 'green', firstPuttBucket: '3-6' }],
+    );
+    const r = approachTargetGaps([round], 'me', 0);
+    const b = r.buckets['100-150'];
+    // start = E(fairway, 125) = 2.88803; sg = +0.064 → you = 2.824
+    expect(b.targetStrokes).toBeCloseTo(2.89, 2);
+    expect(b.yourStrokes).toBeCloseTo(2.82, 2);
+    expect(b.yourStrokes).toBeCloseTo(b.targetStrokes - b.avgSg, 1);
+  });
+  test('empty buckets keep null strokes fields', () => {
+    const r = approachTargetGaps([], 'me', 0);
+    expect(r.buckets['0-50'].targetStrokes).toBeNull();
+    expect(r.buckets['0-50'].yourStrokes).toBeNull();
+  });
+});
+
+describe('driveDistanceAverage', () => {
+  test('averages logged bucket midpoints on par 4+', () => {
+    const round = makeRound(
+      [{ par: 4, strokes: 4 }, { par: 5, strokes: 5 }, { par: 3, strokes: 3 }, { par: 4, strokes: 4 }],
+      [
+        { drive: 'fairway', driveDistBucket: '210-240' }, // 225
+        { drive: 'left', driveDistBucket: '150-180' },    // 165
+        { drive: 'fairway', driveDistBucket: '210-240' }, // par 3 → ignored
+        { drive: 'fairway' },                              // no bucket → ignored
+      ],
+    );
+    const r = driveDistanceAverage([round], 'me');
+    expect(r.drives).toBe(2);
+    expect(r.avgDistance).toBe(195);
+  });
+  test('null average with no logged distances', () => {
+    expect(driveDistanceAverage([], 'me')).toEqual({ drives: 0, avgDistance: null });
   });
 });
