@@ -33,6 +33,18 @@ function myRound(key, diff) {
   };
 }
 
+// A round with only `played` of 18 holes scored — ineligible ('partial').
+function partialRound(key, played) {
+  const r = myRound(key, 10);
+  r.isComplete = false;
+  r.holesPlayed = played;
+  r.round = {
+    ...r.round,
+    scores: { p1: Object.fromEntries(holes.slice(0, played).map((h) => [h.number, 5])) },
+  };
+  return r;
+}
+
 const renderTab = (props = {}) => render(
   <ThemeProvider>
     <HandicapTab
@@ -87,5 +99,46 @@ describe('index evolution chart', () => {
     const { findByText, queryByText } = renderTab();
     await findByText('8.0'); // wait for the hero so the tab is fully rendered
     expect(queryByText('Index evolution')).toBeNull();
+  });
+});
+
+describe('round exclusion toggles', () => {
+  it('fires onToggleExcluded with the round key', async () => {
+    const onToggleExcluded = jest.fn();
+    const { findAllByLabelText } = renderTab({ onToggleExcluded });
+    const buttons = await findAllByLabelText('Exclude round from handicap');
+    fireEvent.press(buttons[0]);
+    expect(onToggleExcluded).toHaveBeenCalledWith(expect.stringMatching(/^(a|b|c)$/));
+  });
+
+  it('renders excluded rounds greyed with an include button and updates the hero', async () => {
+    const { findByText, findAllByLabelText } = renderTab({
+      myRounds: [myRound('a', 10), myRound('b', 14), myRound('c', 12), myRound('d', 16)],
+      excludedKeys: new Set(['b']),
+      onToggleExcluded: jest.fn(),
+    });
+    expect(await findByText('Excluded')).toBeTruthy();
+    expect(await findAllByLabelText('Include round in handicap')).toHaveLength(1);
+    expect(await findByText(/1 excluded/)).toBeTruthy();
+  });
+
+  it('shows ineligible rounds with the reason and no toggle', async () => {
+    const { findByText, queryAllByLabelText } = renderTab({
+      myRounds: [myRound('a', 10), myRound('b', 14), myRound('c', 12), partialRound('p', 14)],
+      onToggleExcluded: jest.fn(),
+    });
+    expect(await findByText(/partial · 14 holes/)).toBeTruthy();
+    // 3 included rows have exclude buttons; the partial row has none.
+    expect(queryAllByLabelText('Exclude round from handicap')).toHaveLength(3);
+  });
+
+  it('keeps excluded rows reachable when exclusions drop the index below 3 rounds', async () => {
+    const { findByText, findAllByLabelText } = renderTab({
+      excludedKeys: new Set(['a']),
+      onToggleExcluded: jest.fn(),
+    });
+    expect(await findByText(/Not enough qualifying rounds yet/)).toBeTruthy();
+    expect(await findByText('Excluded')).toBeTruthy();
+    expect(await findAllByLabelText('Include round in handicap')).toHaveLength(1);
   });
 });
