@@ -616,10 +616,41 @@ export function careerMilestones(synthetic) {
 // Single entry point for the screen. `selectedRounds` is the active selection
 // (already filtered via resolveSelection). The selection is the universe —
 // every selected round counts in metrics, form and ranking alike.
-export function computeMyStats(selectedRounds, { n = 5, targetHandicap = 0 } = {}) {
+//
+// `baselineOnly: true` short-circuits after the split-aggregate baseline —
+// distribution/shots/parType/difficulty/warmupClosing/frontBack/history/
+// roundCount — and skips the rest of the pipeline (ranking, drive/approach/
+// putt impact & target-gap analysis, strokes-gained, the action plan, the
+// per-round form series, course mastery, career milestones and coach
+// insights). Callers like roundReportCard that only read the split
+// aggregates get the same values back without paying for the discarded
+// work. The baseline fields returned here are computed identically (same
+// functions, same args) to the full path, so they are value-identical for
+// any selection.
+export function computeMyStats(selectedRounds, { n = 5, targetHandicap = 0, baselineOnly = false } = {}) {
   const rounds = selectedRounds || [];
   const synthetic = buildSyntheticTournament(rounds);
   const shotBenchmark = shotBenchmarkForHandicap(targetHandicap);
+
+  const baseline = {
+    roundCount: rounds.length,
+    parType: parTypeSplit(synthetic, CANON_ID),
+    difficulty: holeDifficultySplit(synthetic, CANON_ID),
+    frontBack: frontBackSplit(synthetic)[0] ?? null,
+    warmupClosing: warmupVsClosing(synthetic, CANON_ID),
+    // Net (Stableford-adjusted) — BreakdownTab, roundReportCard and
+    // formSeries.scoreMix all report net and must agree with each other.
+    distribution: playerScoreDistribution(synthetic, CANON_ID),
+    shots: shotStats(synthetic, CANON_ID),
+    history: playerRoundHistory(synthetic, CANON_ID),
+    targetHandicap,
+    shotBenchmark,
+  };
+
+  if (baselineOnly) {
+    return baseline;
+  }
+
   const ranking = rankStrengths(synthetic);
   const driveImpact = driveScoreImpact(synthetic, CANON_ID);
   const approachImpact = approachScoreImpact(synthetic, CANON_ID);
@@ -628,24 +659,16 @@ export function computeMyStats(selectedRounds, { n = 5, targetHandicap = 0 } = {
   const approachTarget = approachTargetGaps(synthetic.rounds, CANON_ID, targetHandicap);
   const strokesGained = sgSeason(synthetic.rounds, CANON_ID, targetHandicap);
   const baseStats = {
-    roundCount: rounds.length,
+    ...baseline,
     metrics: computeMetrics(synthetic),
     form: computeRecentVsHistory(rounds, n),
     ranking,
-    parType: parTypeSplit(synthetic, CANON_ID),
-    difficulty: holeDifficultySplit(synthetic, CANON_ID),
-    frontBack: frontBackSplit(synthetic)[0] ?? null,
-    warmupClosing: warmupVsClosing(synthetic, CANON_ID),
-    // Net (Stableford-adjusted) — BreakdownTab, roundReportCard and
-    // formSeries.scoreMix all report net and must agree with each other.
-    distribution: playerScoreDistribution(synthetic, CANON_ID),
     // Gross vs-par twin, ONLY for the ShotsTab scoring-mix benchmark rows —
     // the benchmark tables (birdies/pars/bogeys per round) come from
     // real-world gross scoring data. Net birdies inflate with handicap and
     // would always read green against a gross target.
     distributionGross: playerScoreDistribution(synthetic, CANON_ID, { metric: 'strokes' }),
     teeShot: teeShotImpact(synthetic, CANON_ID),
-    shots: shotStats(synthetic, CANON_ID),
     driveImpact,
     approachImpact,
     puttDive,
@@ -656,10 +679,7 @@ export function computeMyStats(selectedRounds, { n = 5, targetHandicap = 0 } = {
     }),
     bounceBack: bounceBackRate(synthetic)[0] ?? null,
     scrambling: scramblingStats(synthetic)[0] ?? null,
-    history: playerRoundHistory(synthetic, CANON_ID),
     formSeries: computeFormSeries(rounds),
-    targetHandicap,
-    shotBenchmark,
     // Phase A:
     lagPutting:   lagPuttingQuality(synthetic.rounds, CANON_ID),
     sandSaves:    sandSaveRate(synthetic.rounds, CANON_ID),

@@ -198,8 +198,13 @@ export function buildRoundReportCard(myRounds, roundKey) {
   const history = all.filter((r) => r.key !== roundKey && r.completed);
   const hasHistory = history.length > 0;
 
-  const thisStats = computeMyStats([selected]);
-  const baseStats = hasHistory ? computeMyStats(history) : null;
+  // This module only ever reads the split-aggregate baselines (distribution/
+  // shots/parType/difficulty/warmupClosing/frontBack/history/roundCount) off
+  // computeMyStats's result — never coach insights, action plan, form series
+  // or strokes-gained. baselineOnly skips that discarded work for both the
+  // single-round and career-history computations.
+  const thisStats = computeMyStats([selected], { baselineOnly: true });
+  const baseStats = hasHistory ? computeMyStats(history, { baselineOnly: true }) : null;
 
   const hist = thisStats.history[0] || { points: 0, strokes: 0, holesPlayed: 0 };
   const points = hist.points;

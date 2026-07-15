@@ -5,6 +5,8 @@ import {
   courseMastery, careerMilestones,
 } from '../personalStats';
 import { getPlayingHandicap } from '../tournamentStore';
+import * as statsEngine from '../statsEngine';
+import * as coachInsights from '../coachInsights';
 
 // ── Fixture helpers ───────────────────────────────────────────────
 // hcp default 0; SI defaults to hole number; par defaults to 4.
@@ -1031,6 +1033,123 @@ describe('computeMyStats', () => {
     // Net field is unchanged: every gross par is a net birdie at hcp 18.
     expect(stats.distribution.birdies).toBe(18);
     expect(stats.distribution.pars).toBe(0);
+  });
+});
+
+describe('computeMyStats baselineOnly', () => {
+  // Two rounds with shot detail so the discarded pipeline (shot-impact,
+  // strokes gained, form series) would have real data to chew on if it ran.
+  function twoRoundsWithShots() {
+    const h = holes18();
+    const shotDetails = {};
+    h.forEach((hole) => {
+      shotDetails[hole.number] = {
+        drive: 'fairway', approachBucket: '100-150', putts: 2, firstPuttBucket: '3-6', sandShots: 0,
+      };
+    });
+    const mk = (key, strokes, date) => ({
+      key,
+      round: mkRound({ holes: h, scores: { p1: evenScores(h, strokes) }, shotDetails: { p1: shotDetails }, playerHandicaps: { p1: 0 } }),
+      playerId: 'p1',
+      player: { id: 'p1', name: 'Me', handicap: 0 },
+      courseName: 'Baseline',
+      tournamentName: 'T',
+      tournamentDate: date,
+      completed: true,
+    });
+    return [mk('r1', 4, '2026-05-01'), mk('r2', 5, '2026-05-08')];
+  }
+
+  const BASELINE_FIELDS = [
+    'distribution', 'shots', 'parType', 'difficulty', 'warmupClosing', 'frontBack',
+    'history', 'roundCount',
+  ];
+
+  test('returns byte-identical baseline fields to the full pipeline', () => {
+    const rounds = twoRoundsWithShots();
+    const full = computeMyStats(rounds, { targetHandicap: 10 });
+    const baseline = computeMyStats(rounds, { targetHandicap: 10, baselineOnly: true });
+    BASELINE_FIELDS.forEach((field) => {
+      expect(baseline[field]).toEqual(full[field]);
+    });
+    expect(baseline.targetHandicap).toBe(full.targetHandicap);
+    expect(baseline.shotBenchmark).toEqual(full.shotBenchmark);
+  });
+
+  test('omits the coach/action/form/SG-season pipeline entirely', () => {
+    const rounds = twoRoundsWithShots();
+    const baseline = computeMyStats(rounds, { baselineOnly: true });
+    [
+      'coach', 'actionPlan', 'formSeries', 'strokesGained', 'ranking', 'metrics', 'form',
+      'driveImpact', 'approachImpact', 'puttDive', 'puttingTarget', 'approachTarget',
+      'teeShot', 'distributionGross', 'bounceBack', 'scrambling', 'courseMastery',
+      'careerMilestones', 'lagPutting', 'sandSaves', 'upAndDown', 'bunkerVisits',
+    ].forEach((field) => {
+      expect(baseline[field]).toBeUndefined();
+    });
+  });
+
+  test('does not invoke the coach/impact/target-gap/SG pipeline (cross-module spies)', () => {
+    const spies = [
+      jest.spyOn(coachInsights, 'buildCoachInsights'),
+      jest.spyOn(statsEngine, 'sgSeason'),
+      jest.spyOn(statsEngine, 'driveScoreImpact'),
+      jest.spyOn(statsEngine, 'approachScoreImpact'),
+      jest.spyOn(statsEngine, 'puttDeepDive'),
+      jest.spyOn(statsEngine, 'puttingTargetGaps'),
+      jest.spyOn(statsEngine, 'approachTargetGaps'),
+      jest.spyOn(statsEngine, 'teeShotImpact'),
+      jest.spyOn(statsEngine, 'playerConsistency'),
+      jest.spyOn(statsEngine, 'courseDNA'),
+      jest.spyOn(statsEngine, 'bounceBackRate'),
+      jest.spyOn(statsEngine, 'scramblingStats'),
+      jest.spyOn(statsEngine, 'lagPuttingQuality'),
+      jest.spyOn(statsEngine, 'sandSaveRate'),
+      jest.spyOn(statsEngine, 'upAndDownRate'),
+      jest.spyOn(statsEngine, 'bunkerVisits'),
+    ];
+
+    const rounds = twoRoundsWithShots();
+    computeMyStats(rounds, { baselineOnly: true });
+    spies.forEach((spy) => expect(spy).not.toHaveBeenCalled());
+
+    // Sanity: the same spies DO fire on the full (non-baseline) path, so a
+    // false negative above (e.g. import wiring) would show up here instead.
+    computeMyStats(rounds);
+    spies.forEach((spy) => expect(spy).toHaveBeenCalled());
+
+    spies.forEach((spy) => spy.mockRestore());
+  });
+
+  test('does not run the per-round form-series pass (call-count spy)', () => {
+    // computeFormSeries and computeMetrics are local to personalStats.js, so
+    // they can't be spied on directly (same-module self-calls bypass a
+    // jest.spyOn on the exports object). Instead we prove they didn't run by
+    // counting calls to the cross-module functions they delegate to:
+    // baselineOnly should call each exactly once (for the direct baseline
+    // field), never once-per-round (formSeries) or an extra time
+    // (computeMetrics/distributionGross/careerMilestones).
+    const distSpy = jest.spyOn(statsEngine, 'playerScoreDistribution');
+    const shotsSpy = jest.spyOn(statsEngine, 'shotStats');
+
+    const rounds = twoRoundsWithShots();
+    computeMyStats(rounds, { baselineOnly: true });
+    expect(distSpy).toHaveBeenCalledTimes(1);
+    expect(shotsSpy).toHaveBeenCalledTimes(1);
+
+    distSpy.mockClear();
+    shotsSpy.mockClear();
+
+    // Full path: distribution + distributionGross + one per round (formSeries)
+    // + careerMilestones's own call = more than 1; shots: direct + metrics +
+    // one per round (formSeries) = more than 1. We only assert "more", not an
+    // exact count, so this stays robust to unrelated internal refactors.
+    computeMyStats(rounds);
+    expect(distSpy.mock.calls.length).toBeGreaterThan(1);
+    expect(shotsSpy.mock.calls.length).toBeGreaterThan(1);
+
+    distSpy.mockRestore();
+    shotsSpy.mockRestore();
   });
 });
 
