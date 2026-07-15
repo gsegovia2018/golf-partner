@@ -1,5 +1,5 @@
 import React, { useMemo } from 'react';
-import { View, Text, StyleSheet } from 'react-native';
+import { View, Text, StyleSheet, TouchableOpacity } from 'react-native';
 import { Feather } from '@expo/vector-icons';
 import { useTheme } from '../../theme/ThemeContext';
 import { formatConfidence, formatSample } from './CoachInsightRow';
@@ -14,7 +14,7 @@ const GROUP_LABELS = {
   watch: 'Watch',
 };
 
-export default function CoachHero({ insight }) {
+export default function CoachHero({ insight, onCommitFocus, focusActive = false }) {
   const { theme } = useTheme();
   const s = useMemo(() => makeStyles(theme), [theme]);
   const proofs = [insight?.basis, formatSample(insight?.sample), formatConfidence(insight?.confidence)].filter(Boolean);
@@ -49,6 +49,18 @@ export default function CoachHero({ insight }) {
           ))}
         </View>
       </View>
+      {onCommitFocus && insight && !focusActive ? (
+        <TouchableOpacity
+          onPress={() => onCommitFocus(insight)}
+          accessibilityRole="button"
+          accessibilityLabel="Make this my focus"
+          style={[s.focusBtn, { borderColor: tone.borderColor }]}
+          activeOpacity={0.7}
+        >
+          <Feather name="target" size={14} color={tone.color} />
+          <Text style={[s.focusBtnText, { color: tone.color }]}>Make this my focus</Text>
+        </TouchableOpacity>
+      ) : null}
     </View>
   );
 }
@@ -108,6 +120,14 @@ function makeStyles(theme) {
       borderRadius: theme.radius.pill,
     },
     chipText: { ...theme.typography.tiny, fontWeight: '800' },
+    focusBtn: {
+      flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 6,
+      marginTop: theme.spacing.xs,
+      paddingVertical: theme.spacing.sm,
+      borderRadius: theme.radius.sm,
+      borderWidth: StyleSheet.hairlineWidth,
+    },
+    focusBtnText: { ...theme.typography.caption, fontWeight: '800' },
   });
 }
 
