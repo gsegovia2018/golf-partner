@@ -570,4 +570,80 @@ describe('FeedScreen', () => {
       jest.useRealTimers();
     }
   });
+
+  test('discards a loadMore result that resolves after a concurrent rebuild (epoch guard)', async () => {
+    jest.useFakeTimers();
+    try {
+      const page1Result = {
+        ...result,
+        items: [{ ...result.items[0], key: 'round:t1:r1', tournamentName: 'Weekend Match' }],
+        roundStories: [],
+        hasMore: true,
+        nextOffset: 1,
+      };
+      const rebuildResult = {
+        ...result,
+        items: [{
+          ...result.items[0], key: 'round:reb:r1', tournamentId: 'reb', tournamentName: 'Rebuilt Match',
+        }],
+        roundStories: [],
+        hasMore: false,
+        nextOffset: 1,
+      };
+      const stalePage2 = {
+        ...result,
+        items: [{
+          ...result.items[0], key: 'round:stale:r2', tournamentId: 'stale', tournamentName: 'Stale Page2',
+        }],
+        roundStories: [],
+        hasMore: true,
+        nextOffset: 2,
+      };
+      let resolvePage2;
+      const page2Promise = new Promise((res) => { resolvePage2 = () => res(stalePage2); });
+
+      buildFeed
+        .mockResolvedValueOnce({ ...page1Result, roundStories: [] }) // cache base
+        .mockResolvedValueOnce(page1Result) // remote page 1
+        .mockReturnValueOnce(page2Promise) // loadMore — stays pending across the rebuild
+        .mockResolvedValueOnce(rebuildResult); // debounced full rebuild
+
+      const { findByText, getByTestId, queryByText } = render(wrap(
+        <FeedScreen navigation={navigation} />
+      ));
+
+      await act(async () => { await Promise.resolve(); await Promise.resolve(); });
+      expect(await findByText('Weekend Match')).toBeTruthy();
+
+      // Start a page fetch that will still be in flight when the rebuild lands.
+      const list = getByTestId('feed-list');
+      act(() => { list.props.onEndReached(); });
+
+      // A tournament-change event triggers a debounced full rebuild while the
+      // page fetch is still pending.
+      act(() => { mockTournamentChangeHandler(); });
+      await act(async () => {
+        jest.advanceTimersByTime(1000);
+        await Promise.resolve();
+        await Promise.resolve();
+      });
+      expect(await findByText('Rebuilt Match')).toBeTruthy();
+
+      // The stale page finally resolves — its result must be discarded, not
+      // appended on top of the rebuilt list.
+      await act(async () => {
+        resolvePage2();
+        await Promise.resolve();
+        await Promise.resolve();
+      });
+
+      expect(queryByText('Stale Page2')).toBeNull();
+      expect(queryByText('Rebuilt Match')).toBeTruthy();
+      // The rebuild fully replaced the list, so the pre-rebuild page-1 item
+      // is gone (and was never duplicated by the discarded page).
+      expect(queryByText('Weekend Match')).toBeNull();
+    } finally {
+      jest.useRealTimers();
+    }
+  });
 });

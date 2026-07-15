@@ -505,25 +505,45 @@ export async function buildFeed(options = {}) {
 
   let roundStories = [];
   if (includeMedia) {
-    const visibleTournamentIds = [...new Set(limitedItems.map((item) => item.tournamentId))];
-    const visibleRoundKeys = new Set(limitedItems.map((item) => (
+    // The round-stories rail must reflect the FULL feed history — every round
+    // that has media — NOT just the paginated feed-card window. Before
+    // pagination the remote build passed no `limit`, so `limitedItems ===
+    // items` (the whole history) fed the rail; narrowing the rail to page 1
+    // would silently drop a round whose fresh photo activity sorts outside
+    // the newest-30-by-date window (a content regression). So the rail is
+    // built from the full `items` set, decoupled from the card window.
+    //
+    // Only the FIRST page (offset 0) builds and owns the rail — it needs
+    // media for every tournament in the history, exactly the cost the
+    // pre-pagination remote build already paid on each build. Paginated
+    // pages (offset > 0) skip the rail entirely (FeedScreen keeps page 1's)
+    // and only load media for their own cards' tournaments, so scrolling
+    // doesn't re-pay the full-history media fetch each page.
+    const buildStoryRail = offset === 0;
+    const storyItems = buildStoryRail ? items : limitedItems;
+    const mediaTournamentIds = [...new Set(storyItems.map((item) => item.tournamentId))];
+    const storyRoundKeys = new Set(storyItems.map((item) => (
       `${item.tournamentId}:${item.roundId ?? 'none'}`
     )));
-    const visibleTournaments = all.filter((t) => visibleTournamentIds.includes(t.id));
+    const storyTournaments = all.filter((t) => mediaTournamentIds.includes(t.id));
 
     // Photos. Attributed by uploader user id (media.uploaderId) — falling back
     // to the case-folded uploader_label only for legacy media uploaded before
     // the id column existed.
     let media = [];
     try {
-      media = await loadMediaForTournaments(visibleTournamentIds);
+      media = await loadMediaForTournaments(mediaTournamentIds);
     } catch { partial = true; /* offline — feed still shows rounds */ }
 
-    const visibleMedia = media.filter((item) => (
-      visibleRoundKeys.has(`${item.tournamentId}:${item.roundId ?? 'none'}`)
+    const storyMedia = media.filter((item) => (
+      storyRoundKeys.has(`${item.tournamentId}:${item.roundId ?? 'none'}`)
     ));
-    roundStories = buildRoundStories(visibleTournaments, visibleMedia);
-    const storyByRoundKey = new Map(roundStories.map((story) => [
+    // buildRoundStories covers every round in `storyItems`, which is a
+    // superset of the page (`limitedItems`) on page 1 and equal to it on
+    // later pages — so it can hydrate this page's cards in both cases.
+    const builtStories = buildRoundStories(storyTournaments, storyMedia);
+    if (buildStoryRail) roundStories = builtStories;
+    const storyByRoundKey = new Map(builtStories.map((story) => [
       `${story.tournamentId}:${story.roundId ?? 'none'}`,
       story,
     ]));

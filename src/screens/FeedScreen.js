@@ -229,11 +229,16 @@ export default function FeedScreen({ navigation }) {
   const loadedOnceRef = useRef(false);
   const hasVisibleFeedRef = useRef(false);
   const overlayLoadSeqRef = useRef(0);
-  // Mirrors `items` synchronously so loadMore can compute the next page's
-  // offset without depending on (and re-creating itself around) `items`.
-  const itemsRef = useRef(items);
   const loadingMoreRef = useRef(false);
-  useEffect(() => { itemsRef.current = items; }, [items]);
+  // The server's notion of where the next page starts (buildFeed's returned
+  // `nextOffset`) — used instead of the rendered item count so client-side
+  // dedup dropping an item never makes the next page skip/gap a server row.
+  const nextOffsetRef = useRef(0);
+  // Request-generation guard: every fresh full rebuild (`load`) bumps this,
+  // and an in-flight `loadMore` discards its result if the epoch changed
+  // while it was awaiting — so a slow page fetch can't clobber `items`/
+  // `hasMore` with stale data after a concurrent rebuild superseded it.
+  const loadEpochRef = useRef(0);
 
   const applyFeedResult = useCallback((result) => {
     const feedItems = result.items ?? [];
@@ -260,6 +265,9 @@ export default function FeedScreen({ navigation }) {
     setRoundStories(stories);
     setStatus(result.partial ? 'partial' : 'ok');
     setHasMore(!!result.hasMore);
+    // Where the next page starts, straight from the server's slice math —
+    // never re-derived from the (possibly deduped) rendered item count.
+    nextOffsetRef.current = result.nextOffset ?? feedItems.length;
     loadedOnceRef.current = true;
     hasVisibleFeedRef.current = hasResultFeed;
     // Reactions + comment counts are best-effort overlays — never block
@@ -304,6 +312,7 @@ export default function FeedScreen({ navigation }) {
       });
     }
     setHasMore(!!result.hasMore);
+    if (typeof result.nextOffset === 'number') nextOffsetRef.current = result.nextOffset;
     if (newItems.length > 0) {
       const keys = newItems.map((it) => it.key);
       loadReactions(keys)
@@ -316,6 +325,10 @@ export default function FeedScreen({ navigation }) {
   }, []);
 
   const load = useCallback(async (isRefresh) => {
+    // A fresh full rebuild supersedes any in-flight paginated page fetch:
+    // bump the epoch so a slow loadMore that resolves after this rebuild
+    // discards its (now stale) result instead of clobbering the list.
+    loadEpochRef.current += 1;
     // Captured before any state mutation below — distinguishes "first ever
     // load" (must be a fully fresh fetch) from "refocusing a screen that's
     // already shown a feed" (safe to reuse the last build's ingredients when
@@ -370,6 +383,10 @@ export default function FeedScreen({ navigation }) {
   const loadMore = useCallback(async () => {
     if (!hasMore || loadingMoreRef.current || loading) return;
     loadingMoreRef.current = true;
+    // Snapshot the epoch: if a full rebuild (`load`) runs while this page
+    // fetch is awaiting, the epoch changes and the result below is discarded
+    // rather than appended on top of the rebuilt list.
+    const epoch = loadEpochRef.current;
     setLoadingMore(true);
     try {
       const result = await buildFeed({
@@ -377,9 +394,12 @@ export default function FeedScreen({ navigation }) {
         source: 'remote',
         includeMedia: true,
         limit: FEED_PAGE_SIZE,
-        offset: itemsRef.current.length,
+        // Continue from where the server sliced the previous page, not the
+        // rendered length (dedup may have dropped a row).
+        offset: nextOffsetRef.current,
         useCache: true,
       });
+      if (loadEpochRef.current !== epoch) return; // superseded by a rebuild
       appendFeedPage(result);
     } catch {
       // Best-effort — leave `hasMore` as-is so the user can just scroll/retry.

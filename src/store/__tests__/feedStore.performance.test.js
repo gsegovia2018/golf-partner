@@ -99,7 +99,7 @@ describe('feed performance paths', () => {
     expect(mockState.userCalls).toBe(0);
   });
 
-  test('buildFeed limits base round items before media hydration', async () => {
+  test('buildFeed paginates the feed-card list but hydrates media/story rail from the FULL history (page 1)', async () => {
     const { buildFeed } = require('../feedStore');
     mockState.cachedTournaments = [tournament('old', 1000), tournament('new', 2000)];
 
@@ -110,10 +110,37 @@ describe('feed performance paths', () => {
       limit: 1,
     });
 
+    // The feed CARD list is still windowed to the page (1 item)…
     expect(result.items).toHaveLength(1);
     expect(result.items[0].tournamentId).toBe('new');
+    // …but the story rail must reflect the whole history, not just page 1,
+    // so media is fetched for every tournament (newest-first), not only the
+    // single visible card. This is the decoupling fix: a round with fresh
+    // photo activity outside the newest-N feed-card window must still show
+    // in the rail.
     expect(mockState.mediaCalls).toBe(1);
-    expect(mockState.mediaTournamentIds).toEqual([['new']]);
+    expect(mockState.mediaTournamentIds).toEqual([['new', 'old']]);
+  });
+
+  test('buildFeed on a paginated page (offset > 0) only hydrates that page\'s tournaments, not the full history', async () => {
+    const { buildFeed } = require('../feedStore');
+    mockState.cachedTournaments = [tournament('old', 1000), tournament('new', 2000)];
+
+    const result = await buildFeed({
+      userId: 'me-user',
+      source: 'cache',
+      includeMedia: true,
+      limit: 1,
+      offset: 1,
+    });
+
+    // Page 2 shows the older tournament's card…
+    expect(result.items).toHaveLength(1);
+    expect(result.items[0].tournamentId).toBe('old');
+    // …and does NOT re-pay the full-history media fetch — page 1 already
+    // owns the rail (roundStories empty here so FeedScreen keeps page 1's).
+    expect(result.roundStories).toEqual([]);
+    expect(mockState.mediaTournamentIds).toEqual([['old']]);
   });
 
   test('buildFeed defaults to all remote feed items when no limit is passed', async () => {

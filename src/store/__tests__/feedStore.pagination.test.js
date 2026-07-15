@@ -48,7 +48,13 @@ jest.mock('../friendStore', () => ({
 }));
 
 jest.mock('../mediaStore', () => ({
-  loadMediaForTournaments: jest.fn(() => Promise.resolve([])),
+  // Echoes back whichever configured media belong to the requested
+  // tournament ids, so a test can assert the story rail spans tournaments
+  // OUTSIDE the paginated feed-card window.
+  loadMediaForTournaments: jest.fn((ids) => {
+    const wanted = new Set(ids);
+    return Promise.resolve((mockState.media ?? []).filter((m) => wanted.has(m.tournamentId)));
+  }),
 }));
 
 function tournament(id, ts) {
@@ -80,6 +86,7 @@ describe('feedStore remote pagination + build cache (Task 4)', () => {
     invalidateFeedCache();
     mockState.friends = [];
     mockState.roundActivityRows = [];
+    mockState.media = [];
     mockState.remoteTournaments = Array.from({ length: 35 }, (_, i) => (
       tournament(`t${i}`, 1000 + i)
     ));
@@ -109,6 +116,37 @@ describe('feedStore remote pagination + build cache (Task 4)', () => {
     // No overlap, no gap, no duplicates across the two pages.
     const seen = new Set([...page1.items, ...page2.items].map((i) => i.key));
     expect(seen.size).toBe(35);
+  });
+
+  test('the story rail includes a round whose media activity is OUTSIDE the first 30 feed-card items', async () => {
+    const { buildFeed } = require('../feedStore');
+
+    // t0 is the OLDEST tournament (createdAt 1000), so it sorts at position
+    // 35 — well outside the 30-item first page. It's the only tournament
+    // with photos.
+    mockState.media = [{
+      id: 'photo-1',
+      tournamentId: 't0',
+      roundId: 'r-t0',
+      kind: 'photo',
+      createdAt: '2026-07-14T10:00:00.000Z',
+      uploaderLabel: 'Marcos',
+      url: 'https://example.com/photo-1.jpg',
+      thumbUrl: 'https://example.com/photo-1-thumb.jpg',
+    }];
+
+    const page1 = await buildFeed({
+      userId: 'me-user', source: 'remote', includeMedia: true, limit: 30, offset: 0,
+    });
+
+    // t0's round is NOT among the 30 visible feed cards…
+    expect(page1.items).toHaveLength(30);
+    expect(page1.items.some((i) => i.tournamentId === 't0')).toBe(false);
+    // …yet its photos still surface in the story rail, because the rail is
+    // built from the full history, not the paginated card window. (This is
+    // the content-regression guard: it would fail if the rail were scoped
+    // to page 1.)
+    expect(page1.roundStories.map((story) => story.key)).toContain('story:t0:r-t0');
   });
 
   test('useCache: true reuses the previous build\'s friends/tournaments/activity instead of re-fetching', async () => {
