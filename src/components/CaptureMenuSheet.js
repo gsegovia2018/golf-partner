@@ -10,13 +10,13 @@ export default function CaptureMenuSheet({ visible, onSelect, onClose, extraActi
   const s = makeStyles(theme);
 
   const options = [
-    { key: 'photo',   icon: 'camera', label: 'Tomar foto',        source: 'camera',  mediaTypes: 'photo' },
-    { key: 'video',   icon: 'video',  label: 'Grabar video',      source: 'camera',  mediaTypes: 'video' },
+    { key: 'photo',   icon: 'camera', label: 'Take photo',        source: 'camera',  mediaTypes: 'photo' },
+    { key: 'video',   icon: 'video',  label: 'Record video',      source: 'camera',  mediaTypes: 'video' },
     {
       key: 'library',
       icon: 'image',
-      label: 'Elegir de galería',
-      detail: `Vídeos hasta ${MAX_VIDEO_UPLOAD_LABEL}`,
+      label: 'Choose from gallery',
+      detail: `Videos up to ${MAX_VIDEO_UPLOAD_LABEL}`,
       source: 'library',
       mediaTypes: 'all',
     },
@@ -25,8 +25,8 @@ export default function CaptureMenuSheet({ visible, onSelect, onClose, extraActi
   return (
     <BottomSheet visible={visible} onClose={onClose} sheetStyle={s.sheet}>
       <View style={s.header}>
-        <Text style={s.title}>Adjuntar recuerdo</Text>
-        <TouchableOpacity onPress={onClose} accessibilityLabel="Cancelar">
+        <Text style={s.title}>Add a memory</Text>
+        <TouchableOpacity onPress={onClose} accessibilityLabel="Cancel">
           <Feather name="x" size={22} color={theme.text.muted} />
         </TouchableOpacity>
       </View>
@@ -57,7 +57,7 @@ export default function CaptureMenuSheet({ visible, onSelect, onClose, extraActi
       ))}
 
       <TouchableOpacity style={s.cancelBtn} onPress={onClose}>
-        <Text style={s.cancelLabel}>Cancelar</Text>
+        <Text style={s.cancelLabel}>Cancel</Text>
       </TouchableOpacity>
     </BottomSheet>
   );

@@ -21,17 +21,17 @@ function uuid() {
 async function ensurePermissions(source) {
   if (source === 'camera') {
     const cam = await ImagePicker.requestCameraPermissionsAsync();
-    if (!cam.granted) throw new Error('Permiso de cámara denegado.');
+    if (!cam.granted) throw new Error('Camera permission denied.');
   } else {
     const lib = await ImagePicker.requestMediaLibraryPermissionsAsync();
-    if (!lib.granted) throw new Error('Permiso de galería denegado.');
+    if (!lib.granted) throw new Error('Photo library permission denied.');
   }
 }
 
 function sizeErrorMessage(source) {
-  if (source === 'library') return `Los vídeos de galería deben ser de ${MAX_VIDEO_UPLOAD_LABEL} o menos.`;
-  if (source === 'camera') return `Los vídeos grabados con la cámara deben ser de ${MAX_VIDEO_UPLOAD_LABEL} o menos.`;
-  return `Los vídeos deben ser de ${MAX_VIDEO_UPLOAD_LABEL} o menos.`;
+  if (source === 'library') return `Gallery videos must be ${MAX_VIDEO_UPLOAD_LABEL} or smaller.`;
+  if (source === 'camera') return `Videos recorded with the camera must be ${MAX_VIDEO_UPLOAD_LABEL} or smaller.`;
+  return `Videos must be ${MAX_VIDEO_UPLOAD_LABEL} or smaller.`;
 }
 
 // The web picker (and, in principle, any future picker) can omit fileSize —
