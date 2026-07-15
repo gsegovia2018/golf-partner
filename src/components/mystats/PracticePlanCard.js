@@ -11,18 +11,32 @@ const ROLE_LABELS = {
 
 const ROLE_ORDER = ['practiceFirst', 'secondaryFocus', 'onCourseCue'];
 
-export default function PracticePlanCard({ plan }) {
+export default function PracticePlanCard({ plan, onInfo }) {
   const { theme } = useTheme();
   const s = useMemo(() => makeStyles(theme), [theme]);
   const items = ROLE_ORDER.map((role) => plan?.find((item) => item.role === role)).filter(Boolean);
 
   return (
-    <SectionCard title="Practice Plan">
+    <SectionCard title="Practice Plan" infoKey="coachPractice" onInfo={onInfo}>
       {items.length ? items.map((item) => (
         <View key={item.id ?? item.role} style={s.item}>
           <Text style={s.role}>{ROLE_LABELS[item.role] ?? 'Practice'}</Text>
           <Text style={s.title}>{item.title}</Text>
-          {item.instruction ? <Text style={s.instruction}>{item.instruction}</Text> : null}
+          {item.drill ? (
+            <View style={s.drillBlock}>
+              <View style={s.drillHead}>
+                <Text style={s.drillTitle}>{item.drill.title}</Text>
+                <Text style={s.drillLocation}>{item.drill.location}</Text>
+              </View>
+              <Text style={s.instruction}>{item.drill.instruction}</Text>
+              <Text style={s.passTarget}>{`Pass: ${item.drill.passTarget}`}</Text>
+            </View>
+          ) : (
+            item.instruction ? <Text style={s.instruction}>{item.instruction}</Text> : null
+          )}
+          {Number.isFinite(item.payoffPointsPerRound) ? (
+            <Text style={s.payoff}>{`worth ≈ ${item.payoffPointsPerRound} pts / round`}</Text>
+          ) : null}
           {item.reason ? <Text style={s.reason}>{item.reason}</Text> : null}
         </View>
       )) : (
@@ -47,6 +61,12 @@ function makeStyles(theme) {
     instruction: { ...theme.typography.body, color: theme.text.primary },
     reason: { ...theme.typography.caption, color: theme.text.secondary },
     empty: { ...theme.typography.body, color: theme.text.secondary, paddingVertical: theme.spacing.sm },
+    drillBlock: { gap: 2, marginTop: 2 },
+    drillHead: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', gap: theme.spacing.sm },
+    drillTitle: { ...theme.typography.body, color: theme.text.primary, fontWeight: '800' },
+    drillLocation: { ...theme.typography.tiny, color: theme.text.muted, textTransform: 'uppercase', fontWeight: '800' },
+    passTarget: { ...theme.typography.caption, color: theme.accent.primary, fontWeight: '700' },
+    payoff: { ...theme.typography.caption, color: theme.text.secondary, fontWeight: '800' },
   });
 }
 
