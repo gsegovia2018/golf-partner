@@ -597,27 +597,36 @@ export function isValidReactionEmoji(str) {
   return /[^\x00-\x7F]/.test(s);
 }
 
-// A Postgres "relation does not exist" surfaces with code 42P01 (or a message
-// mentioning the table). Treat that as "feature not provisioned yet".
+// A Postgres "relation/function does not exist" surfaces with code 42P01
+// (relation) or 42883 (function), or a message mentioning either. Treat that
+// as "feature not provisioned yet" — the migration adding the table/RPC
+// hasn't been applied.
 function isMissingTable(error) {
   if (!error) return false;
   return error.code === '42P01'
+    || error.code === '42883'
     || /feed_reactions/i.test(error.message ?? '')
+    || /feed_comments/i.test(error.message ?? '')
     || /does not exist/i.test(error.message ?? '');
 }
 
 // Reactions for a set of feed item keys, shaped for the screen:
 //   { [itemKey]: { counts: { '🔥': 3, ... }, mine: ['🔥'] } }
-// Returns {} on any failure (offline, table missing) — never throws.
+// Returns {} on any failure (offline, table/RPC missing) — never throws.
+//
+// Bounded to the given key set (the caller passes only the current page's
+// item keys — see FeedScreen), and aggregated server-side via the
+// get_feed_reaction_summary RPC (migrations/20260715000002_feed_aggregate_counts_rpc.sql)
+// rather than a full-row `.in('item_key', keys)` select: only per-item,
+// per-emoji counts (and whether the calling user reacted) cross the wire,
+// never the underlying feed_reactions rows. `mine` is computed server-side
+// from auth.uid() (the RPC is SECURITY INVOKER, so it sees the same identity
+// as the calling PostgREST request) rather than filtered client-side.
 export async function loadReactions(itemKeys) {
   const keys = [...new Set(itemKeys)].filter(Boolean);
   if (keys.length === 0 || !isOnline()) return {};
   try {
-    const me = await currentUserId();
-    const { data, error } = await supabase
-      .from('feed_reactions')
-      .select('item_key, user_id, emoji')
-      .in('item_key', keys);
+    const { data, error } = await supabase.rpc('get_feed_reaction_summary', { p_item_keys: keys });
     if (error) {
       if (isMissingTable(error)) return {};
       throw error;
@@ -626,10 +635,8 @@ export async function loadReactions(itemKeys) {
     for (const row of data ?? []) {
       let bucket = out[row.item_key];
       if (!bucket) { bucket = { counts: {}, mine: [] }; out[row.item_key] = bucket; }
-      bucket.counts[row.emoji] = (bucket.counts[row.emoji] ?? 0) + 1;
-      if (me && row.user_id === me && !bucket.mine.includes(row.emoji)) {
-        bucket.mine.push(row.emoji);
-      }
+      bucket.counts[row.emoji] = Number(row.reaction_count) || 0;
+      if (row.mine) bucket.mine.push(row.emoji);
     }
     return out;
   } catch {
@@ -675,21 +682,24 @@ export async function toggleReaction(itemKey, emoji, currentlyMine) {
 
 // Comment counts for a set of feed item keys: { [itemKey]: number }.
 // Loaded with the feed as a lightweight overlay. Returns {} on any failure.
+//
+// Bounded to the given key set (the caller passes only the current page's
+// item keys — see FeedScreen), and aggregated server-side via the
+// get_feed_comment_counts RPC (migrations/20260715000002_feed_aggregate_counts_rpc.sql)
+// rather than a full-row `.in('item_key', keys)` select: only the per-item
+// count crosses the wire, never every feed_comments row.
 export async function loadCommentCounts(itemKeys) {
   const keys = [...new Set(itemKeys)].filter(Boolean);
   if (keys.length === 0 || !isOnline()) return {};
   try {
-    const { data, error } = await supabase
-      .from('feed_comments')
-      .select('item_key')
-      .in('item_key', keys);
+    const { data, error } = await supabase.rpc('get_feed_comment_counts', { p_item_keys: keys });
     if (error) {
       if (isMissingTable(error)) return {};
       throw error;
     }
     const out = {};
     for (const row of data ?? []) {
-      out[row.item_key] = (out[row.item_key] ?? 0) + 1;
+      out[row.item_key] = Number(row.comment_count) || 0;
     }
     return out;
   } catch {
