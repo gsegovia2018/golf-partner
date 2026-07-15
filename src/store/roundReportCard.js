@@ -48,9 +48,12 @@ function toneFromVerdict(verdict) {
 // early-finished partial round would otherwise pull this average toward its
 // own (smaller-sample) per-hole rate. This restriction is intentionally
 // narrow: it only affects the headline vs-average verdict. The per-hole
-// breakdown cells (pointsPerHoleCells, distributionCells, shotCells) keep
-// using every round in `history`, complete or not — those are honest
-// per-hole/per-round splits already, not round-total averages.
+// breakdown cells (pointsPerHoleCells, shotCells) keep using every round in
+// `history`, complete or not — those are honest per-hole splits already,
+// not round-total averages. distributionCells is the one exception: its
+// baseline is a per-ROUND count (birdies-per-round, etc.), which needs the
+// same complete-rounds-only treatment as this function — see
+// `completeBaseStats` in buildRoundReportCard.
 // Returns null when there is no history or no complete round to anchor on.
 function careerPerHole(history, baseStats) {
   if (!baseStats) return null;
@@ -144,6 +147,10 @@ function shotCell(label, value, baseline, polarity) {
 }
 
 // The distribution cells: birdies-or-better, pars, bogeys, blow-ups.
+// `baseStats` here is scoped to COMPLETE rounds only (see
+// `completeBaseStats` in buildRoundReportCard) — unlike the other baseline
+// callers in this module, these cells' baseline is a per-round count, which
+// a partial round would otherwise dilute.
 function distributionCells(thisStats, baseStats) {
   const d = thisStats.distribution;
   const bd = baseStats ? baseStats.distribution : null;
@@ -206,6 +213,19 @@ export function buildRoundReportCard(myRounds, roundKey) {
   const thisStats = computeMyStats([selected], { baselineOnly: true });
   const baseStats = hasHistory ? computeMyStats(history, { baselineOnly: true }) : null;
 
+  // distributionCells' baseline (birdies-per-round, pars-per-round, …) is a
+  // round-TOTAL rate — same completeness requirement as careerPerHole above.
+  // A short/partial round in `history` would add its holes' counts to the
+  // numerator while still counting as a full 1 in the denominator, deflating
+  // the per-round rate (e.g. a 6-hole round adds ~1/3 a round's birdies but
+  // a full 1 to roundCount) — so a normal full round would falsely read as
+  // "above average". Scope this baseline to COMPLETE rounds only, both
+  // numerator and denominator, by recomputing over the complete-only slice.
+  const completeHistory = history.filter((r) => r.isComplete);
+  const completeBaseStats = completeHistory.length > 0
+    ? computeMyStats(completeHistory, { baselineOnly: true })
+    : null;
+
   const hist = thisStats.history[0] || { points: 0, strokes: 0, holesPlayed: 0 };
   const points = hist.points;
   const holesPlayed = hist.holesPlayed;
@@ -231,7 +251,7 @@ export function buildRoundReportCard(myRounds, roundKey) {
     { key: 'timing', label: 'When in the round',
       cells: pphCells.filter((c) => c.group === 'timing') },
     { key: 'distribution', label: 'Scoring',
-      cells: distributionCells(thisStats, baseStats) },
+      cells: distributionCells(thisStats, completeBaseStats) },
   ];
   if (hasShotData) {
     groups.push({ key: 'shots', label: 'Shot stats',
