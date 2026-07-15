@@ -140,3 +140,25 @@ export function computeHandicapIndex(myRounds, { excludedKeys } = {}) {
     ineligible,
   };
 }
+
+// Evolution of the index over the full history: one point per included
+// eligible round from the 3rd onward, each valued at the index as it stood
+// after that round (the walk re-windows to the last 20 at every step, so
+// old differentials age out exactly as they did in reality).
+export function handicapIndexSeries(myRounds, { excludedKeys } = {}) {
+  const included = (myRounds ?? [])
+    .map(roundDifferential)
+    .filter(Boolean)
+    .filter((d) => !excludedKeys?.has(d.key));
+  const points = [];
+  for (let i = MIN_DIFFERENTIALS - 1; i < included.length; i += 1) {
+    const { index } = indexFromDifferentials(included.slice(0, i + 1));
+    points.push({
+      key: included[i].key,
+      value: index,
+      date: included[i].date,
+      courseName: included[i].courseName,
+    });
+  }
+  return points;
+}

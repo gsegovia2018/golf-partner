@@ -1,4 +1,6 @@
-import { roundDifferential, computeHandicapIndex, roundEligibility } from '../handicapIndex';
+import {
+  roundDifferential, computeHandicapIndex, roundEligibility, handicapIndexSeries,
+} from '../handicapIndex';
 
 // 18 identical holes: par 4, SI = hole number. Total par 72.
 const holes = Array.from({ length: 18 }, (_, i) => ({
@@ -238,5 +240,43 @@ describe('computeHandicapIndex with exclusions', () => {
     expect(res.excluded).toEqual([]);
     expect(res.ineligible).toEqual([]);
     expect(res.excludedCount).toBe(0);
+  });
+});
+
+describe('handicapIndexSeries', () => {
+  it('starts at the 3rd qualifying round and applies small-sample adjustments', () => {
+    // diffs [10, 14, 12, 16, 18]:
+    //   after 3 rounds: lowest (10) − 2 = 8
+    //   after 4 rounds: lowest (10) − 1 = 9
+    //   after 5 rounds: lowest (10)     = 10
+    const series = handicapIndexSeries(makeRounds([10, 14, 12, 16, 18]));
+    expect(series.map((p) => p.value)).toEqual([8, 9, 10]);
+    expect(series.map((p) => p.key)).toEqual(['t:2', 't:3', 't:4']);
+    expect(series[0]).toHaveProperty('date');
+    expect(series[0]).toHaveProperty('courseName');
+  });
+
+  it('reflects exclusions', () => {
+    // Excluding t:0 (diff 10): included [14, 12, 16, 18] →
+    //   after 3: lowest (12) − 2 = 10; after 4: 12 − 1 = 11.
+    const series = handicapIndexSeries(makeRounds([10, 14, 12, 16, 18]), {
+      excludedKeys: new Set(['t:0']),
+    });
+    expect(series.map((p) => p.value)).toEqual([10, 11]);
+  });
+
+  it('windows to the last 20 within the walk', () => {
+    // 21 rounds diffs 1..21. Final point must equal computeHandicapIndex's
+    // index for the same rounds: 5.5.
+    const rounds = makeRounds(Array.from({ length: 21 }, (_, i) => i + 1));
+    const series = handicapIndexSeries(rounds);
+    expect(series).toHaveLength(19); // points from the 3rd round onward
+    expect(series[series.length - 1].value).toBe(computeHandicapIndex(rounds).index);
+  });
+
+  it('returns an empty array below 3 eligible rounds', () => {
+    expect(handicapIndexSeries(makeRounds([10, 12]))).toEqual([]);
+    expect(handicapIndexSeries([])).toEqual([]);
+    expect(handicapIndexSeries(null)).toEqual([]);
   });
 });
