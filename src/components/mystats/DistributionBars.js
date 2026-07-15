@@ -2,7 +2,8 @@ import React, { useMemo } from 'react';
 import { View, Text, StyleSheet } from 'react-native';
 import { useTheme } from '../../theme/ThemeContext';
 
-// bars: [{ label, count, muted? }]  — vertical bars scaled to the largest count.
+// bars: [{ label, count, displayValue?, muted? }] — vertical bars scaled to the
+// largest count; displayValue (e.g. '45%') replaces count as the shown text.
 export default function DistributionBars({ bars = [] }) {
   const { theme } = useTheme();
   const s = useMemo(() => makeStyles(theme), [theme]);
@@ -12,7 +13,7 @@ export default function DistributionBars({ bars = [] }) {
     <View style={s.row}>
       {bars.map((b) => (
         <View key={b.label} style={s.col}>
-          <Text style={s.count}>{b.count}</Text>
+          <Text style={s.count}>{b.displayValue ?? b.count}</Text>
           <View
             style={[
               s.bar,

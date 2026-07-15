@@ -169,17 +169,32 @@ export default function CourseStatsScreen({ navigation, route }) {
         {shots ? (
           <SectionCard title="Shot detail here">
             <View style={s.tileRow}>
-              <StatTile value={shots.putts.holes > 0 ? shots.putts.perRound : '—'} caption="putts / round" />
+              <StatTile
+                value={shots.putts.per18 ?? '—'}
+                caption="putts / 18 holes"
+              />
               <StatTile value={shots.drives.recorded > 0 ? `${shots.drives.fairwayPct}%` : '—'} caption="fairways" />
               <StatTile value={shots.penalties.total} caption="penalties" />
-              <StatTile value={shots.gir.eligible > 0 ? `${shots.gir.pct}%` : '—'} caption="GIR" />
+              <StatTile
+                value={shots.gir.eligible > 0 ? `${shots.gir.pct}%` : '—'}
+                caption={shots.gir.eligible > 0 ? `GIR · ${shots.gir.eligible} holes` : 'GIR'}
+              />
             </View>
             {shots.drives.recorded > 0 ? (
-              <DistributionBars bars={DRIVE_ORDER.map((k) => ({
-                label: DRIVE_BAR_LABELS[k],
-                count: shots.drives.distribution[k] ?? 0,
-                muted: (shots.drives.distribution[k] ?? 0) === 0,
-              }))} />
+              <>
+                <DistributionBars bars={DRIVE_ORDER.map((k) => {
+                  const count = shots.drives.distribution[k] ?? 0;
+                  return {
+                    label: DRIVE_BAR_LABELS[k],
+                    count,
+                    displayValue: `${Math.round((count / shots.drives.recorded) * 100)}%`,
+                    muted: count === 0,
+                  };
+                })} />
+                <Text style={s.metaLine}>
+                  {`${shots.drives.recorded} drive${shots.drives.recorded === 1 ? '' : 's'} logged`}
+                </Text>
+              </>
             ) : null}
           </SectionCard>
         ) : (
