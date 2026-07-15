@@ -114,7 +114,7 @@ export const statExplainers = {
     title: 'Recovery patterns',
     subtitle: 'Bouncing back and scrambling',
     explainer: 'Bounce-back rate is how often you follow a bogey-or-worse with a birdie-or-better. '
-      + 'Scrambling, sand saves, up-and-downs, and bunker visits show how well you limit damage '
+      + 'Scrambling, sand saves, 1-putt saves, and bunker visits show how well you limit damage '
       + 'after missing the ideal route.',
   },
   teeShot: {

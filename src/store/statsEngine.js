@@ -1901,6 +1901,12 @@ export function strokeIndexAccuracy(tournament, { roundIndex = null } = {}) {
 // Of the holes where the green was missed in regulation, the share on which
 // the player still scored par-or-better. Requires per-hole shot detail
 // (putts) to determine GIR. One entry per player who has the data.
+//
+// Note: this matches the standard golf definition of "scrambling %", which
+// counts every missed-GIR hole as an attempt regardless of how the save
+// happened (chip-and-putt, fringe two-putt, long lag putt, etc). Unlike
+// upAndDownRate below, the label "scrambling" doesn't promise a greenside
+// recovery shot, so no gating is needed here.
 export function scramblingStats(tournament) {
   const perPlayer = {};
   tournament.players.forEach(p => { perPlayer[p.id] = { player: p, missedGir: 0, saves: 0, breakdown: [] }; });
@@ -2305,6 +2311,23 @@ export function sandSaveRate(rounds, playerId) {
 
 const UP_AND_DOWN_MIN_ATTEMPTS = 6;
 
+// ── Up-and-down rate (internal name) ──
+// Attempts are every missed-GIR hole with logged shot detail — the same as
+// scramblingStats above — including a two-putt from the fringe or a long
+// 3-putt where no chip/recovery shot was ever played near the green. There
+// is no reliable "played a greenside shot" marker in shot detail:
+// `approachResult` ('green' | 'miss') is optional and frequently unset (see
+// puttDeepDive's comment on the same gap), so it can't safely gate this
+// denominator. `sandShots` is a reliable signal but only covers the sand
+// half of the split (see sandSaveRate above, and the `byLie.sand` bucket
+// below); it says nothing about non-sand misses.
+//
+// Because the denominator can't be honestly restricted to real recovery
+// attempts, this is NOT the classic "up and down" stat (which implies a
+// chip/pitch onto the green followed by one putt) even though the
+// conversion side (`conversions`) does require a clean 0-or-1-putt save.
+// The UI surfaces this as a scrambling-family metric ("Scrambling (1-putt
+// saves)" in BreakdownTab.js) rather than "up and down" — see task-6-brief.
 export function upAndDownRate(rounds, playerId) {
   let attempts = 0, conversions = 0;
   const byLie = {
