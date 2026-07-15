@@ -22,6 +22,7 @@ import { statExplainers } from '../components/mystats/statExplainers';
 import { loadFocus, saveFocus, clearFocus, archiveFocus, makeFocusCommit, focusVerdict } from '../store/coachFocus';
 
 const SELECTION_PREFIX = '@mystats_round_selection:';
+const EXCLUSIONS_PREFIX = '@handicap_round_exclusions:';
 
 // Builds the rows array for StatDetailSheet based on which infoKey is active.
 // Most keys need no rows (explainer-only). strokesGained shows per-round trend.
@@ -77,8 +78,8 @@ export default function MyStatsScreen({ navigation, route }) {
   const [infoKey, setInfoKey] = useState(null);
   const [targetHandicap, setTargetHandicap] = useState(null);
   const [profileHandicap, setProfileHandicap] = useState(null);
-  const [profileGender, setProfileGender] = useState(null);
   const [pickerOpen, setPickerOpen] = useState(false);
+  const [handicapExclusions, setHandicapExclusions] = useState(() => new Set());
   const [coachFocus, setCoachFocus] = useState(null);
 
   useEffect(() => {
@@ -95,6 +96,7 @@ export default function MyStatsScreen({ navigation, route }) {
   // Device-scoped fallback key when signed out, so a signed-out user's
   // selection still persists (and can later be migrated onto their account).
   const storageKey = `${SELECTION_PREFIX}${user?.id ?? 'local'}`;
+  const exclusionsKey = `${EXCLUSIONS_PREFIX}${user?.id ?? 'local'}`;
 
   useEffect(() => {
     setTab(normalizeStatsTab(route?.params?.tab));
@@ -121,7 +123,6 @@ export default function MyStatsScreen({ navigation, route }) {
         if (!cancelled) {
           setTargetHandicap(profile?.targetHandicap ?? null);
           setProfileHandicap(profile?.handicap ?? null);
-          setProfileGender(profile?.gender ?? null);
         }
         const rounds = collectMyRounds(list, user?.id, profile?.displayName);
         let stored = {};
@@ -139,6 +140,21 @@ export default function MyStatsScreen({ navigation, route }) {
           }
           if (raw) stored = JSON.parse(raw) || {};
         } catch (_) { /* ignore corrupt storage */ }
+        let exclusions = new Set();
+        try {
+          let rawEx = await AsyncStorage.getItem(exclusionsKey);
+          if (rawEx == null && user?.id) {
+            // First signed-in load on this device: adopt any signed-out exclusions.
+            const localExKey = `${EXCLUSIONS_PREFIX}local`;
+            const localExRaw = await AsyncStorage.getItem(localExKey);
+            if (localExRaw != null) {
+              rawEx = localExRaw;
+              AsyncStorage.setItem(exclusionsKey, localExRaw).catch(() => {});
+              AsyncStorage.removeItem(localExKey).catch(() => {});
+            }
+          }
+          if (rawEx) exclusions = new Set(JSON.parse(rawEx) || []);
+        } catch (_) { /* ignore corrupt storage */ }
         // Deliberately keep stale keys rather than pruning: resolveSelection
         // only consults overrides for rounds that exist, the map is bounded
         // by rounds ever played, and pruning on load permanently loses
@@ -146,6 +162,7 @@ export default function MyStatsScreen({ navigation, route }) {
         if (!cancelled) {
           setMyRounds(rounds);
           setOverrides(stored);
+          setHandicapExclusions(exclusions);
         }
       } catch (e) {
         console.warn('MyStatsScreen: failed to load tournaments', e);
@@ -153,7 +170,7 @@ export default function MyStatsScreen({ navigation, route }) {
       }
     })();
     return () => { cancelled = true; };
-  }, [user?.id, storageKey, loadNonce]);
+  }, [user?.id, storageKey, exclusionsKey, loadNonce]);
 
   // The target handicap can be edited on the Profile screen while this
   // screen stays mounted in the tab navigator — refresh it on focus so
@@ -165,7 +182,6 @@ export default function MyStatsScreen({ navigation, route }) {
         .then((profile) => {
           setTargetHandicap(profile?.targetHandicap ?? null);
           setProfileHandicap(profile?.handicap ?? null);
-          setProfileGender(profile?.gender ?? null);
         })
         .catch(() => {})
     ));
@@ -186,6 +202,16 @@ export default function MyStatsScreen({ navigation, route }) {
     setOverrides(next);
     AsyncStorage.setItem(storageKey, JSON.stringify(next)).catch(() => {});
   }, [storageKey]);
+
+  const toggleHandicapExclusion = useCallback((key) => {
+    setHandicapExclusions((prev) => {
+      const next = new Set(prev);
+      if (next.has(key)) next.delete(key);
+      else next.add(key);
+      AsyncStorage.setItem(exclusionsKey, JSON.stringify([...next])).catch(() => {});
+      return next;
+    });
+  }, [exclusionsKey]);
 
   const onInfo = useCallback((key) => setInfoKey(key), []);
 
@@ -452,9 +478,10 @@ export default function MyStatsScreen({ navigation, route }) {
           <HandicapTab
             myRounds={myRounds}
             profileHandicap={profileHandicap}
-            gender={profileGender}
             onInfo={onInfo}
             onApplied={setProfileHandicap}
+            excludedKeys={handicapExclusions}
+            onToggleExcluded={toggleHandicapExclusion}
           />
         )}
       </ScrollView>
