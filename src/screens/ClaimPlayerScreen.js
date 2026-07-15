@@ -9,14 +9,13 @@ import { v4 as uuidv4 } from 'uuid';
 import { useTheme } from '../theme/ThemeContext';
 import {
   getTournament, addPlayerRoundPatches, claimTournamentPlayer,
-  refreshTournamentFromRemote, tournamentNoun,
+  refreshTournamentFromRemote, tournamentNoun, rosterCap,
+  addTournamentPlayerIfRoom,
 } from '../store/tournamentStore';
 import { loadProfile } from '../store/profileStore';
 import { mutate } from '../store/mutate';
 import { useAuth } from '../context/AuthContext';
 import { parseHandicapIndex } from '../lib/handicap';
-
-const MAX_PLAYERS = 4;
 
 // Shown right after an editor joins via an invite code. They pick which
 // existing player they are (links their account to that player) or add
@@ -110,6 +109,26 @@ export default function ClaimPlayerScreen({ navigation, route }) {
         handicap: parsedHcp.ok ? parsedHcp.value : 0,
         user_id: profile.userId,
       };
+      // Atomic, server-enforced cap check (Task 9) — two joiners can each
+      // observe a locally-stale players.length under the cap and both reach
+      // here; only the RPC's race-safe recount can actually reject the
+      // loser. Do this BEFORE any local/offline-queued write so a rejected
+      // add never shows up in this device's own roster.
+      try {
+        await addTournamentPlayerIfRoom(tournament.id, player);
+      } catch (err) {
+        if (err?.message === 'ROSTER_FULL') {
+          try {
+            const fresh = await refreshTournamentFromRemote(tournament.id);
+            if (fresh) setTournament(fresh);
+          } catch (_) { /* keep the stale roster; the alert is enough */ }
+          Alert.alert('Roster full',
+            `This ${noun} already has the maximum number of players.`);
+          setSaving(false);
+          return;
+        }
+        throw err;
+      }
       const { patches: roundPatches } = addPlayerRoundPatches(tournament, player);
       const t = await mutate(tournament, {
         type: 'tournament.addPlayer', player, roundPatches,
@@ -123,7 +142,8 @@ export default function ClaimPlayerScreen({ navigation, route }) {
   }
 
   const players = tournament?.players ?? [];
-  const rosterFull = players.length >= MAX_PLAYERS;
+  const maxPlayers = rosterCap(tournament?.kind);
+  const rosterFull = players.length >= maxPlayers;
   const noun = tournamentNoun(tournament);
   // Already linked to me — nothing more to claim.
   const iAmClaimed = players.some((p) => p.user_id && p.user_id === profile?.userId);
@@ -209,7 +229,7 @@ export default function ClaimPlayerScreen({ navigation, route }) {
             <Text style={s.sectionLabel}>Not listed? Add yourself</Text>
             {rosterFull ? (
               <Text style={s.fullNote}>
-                This {noun} already has {MAX_PLAYERS} players — claim one above
+                This {noun} already has {maxPlayers} players — claim one above
                 or skip.
               </Text>
             ) : adding ? (
@@ -234,6 +254,7 @@ export default function ClaimPlayerScreen({ navigation, route }) {
                   keyboardAppearance={theme.isDark ? 'dark' : 'light'}
                 />
                 <TouchableOpacity
+                  testID="claim-add-new-player-confirm"
                   style={[s.addBtn, saving && { opacity: 0.5 }]}
                   onPress={addNewPlayer}
                   disabled={saving}

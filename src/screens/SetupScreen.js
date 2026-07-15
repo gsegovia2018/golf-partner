@@ -9,7 +9,7 @@ import { Feather } from '@expo/vector-icons';
 import { useFocusEffect, CommonActions } from '@react-navigation/native';
 import {
   createTournament, buildTeamsForMode, teamShapeOf, DEFAULT_SETTINGS,
-  deriveRoundPlayingHandicap, generateInviteCode, buildJoinLink,
+  deriveRoundPlayingHandicap, generateInviteCode, buildJoinLink, rosterCap,
 } from '../store/tournamentStore';
 import { defaultHoles, fetchPlayers, fetchMyPlayers } from '../store/libraryStore';
 import { middleTee } from '../store/tees';
@@ -144,7 +144,7 @@ export default function SetupScreen({ navigation, route }) {
         const me = mine.find((p) => p.user_id === user.id);
         if (cancelled || !me) return;
         setPlayers((prev) => {
-          if (prev.length >= 4 || prev.some((p) => p.id === me.id)) return prev;
+          if (prev.length >= rosterCap(kind) || prev.some((p) => p.id === me.id)) return prev;
           return [{
             id: me.id,
             name: me.name,
@@ -157,7 +157,10 @@ export default function SetupScreen({ navigation, route }) {
       } catch (_) { /* offline / no own player row — add players manually */ }
     })();
     return () => { cancelled = true; };
-  }, [user?.id]);
+    // `kind` is derived once from route params and never changes for the
+    // life of this screen instance, but it's included here since the roster
+    // cap check now reads it.
+  }, [user?.id, kind]);
 
   useFocusEffect(useCallback(() => {
     let cancelled = false;
@@ -180,7 +183,7 @@ export default function SetupScreen({ navigation, route }) {
         setPlayers((prev) => {
           const next = [...prev];
           for (const p of fresh) {
-            if (next.length >= 4 || next.find((x) => x.id === p.id)) continue;
+            if (next.length >= rosterCap(kind) || next.find((x) => x.id === p.id)) continue;
             // Carry user_id / avatar_url so the embedded player links back to
             // a real account (feed attribution, friend stats). Guest players
             // added via the picker form simply have these undefined.
@@ -545,12 +548,25 @@ export default function SetupScreen({ navigation, route }) {
   // ---- Step bodies -------------------------------------------------------
 
   const renderPlayersStep = () => {
-    const emptySlots = Math.max(0, 4 - players.length);
+    const cap = rosterCap(kind);
+    const remaining = Math.max(0, cap - players.length);
+    // Render only a small, bounded number of empty "ADD PLAYER" tiles — the
+    // grid is a launcher into the picker, not a per-seat form. A game's cap
+    // of 4 means `remaining` is already small, so show them all (preserves
+    // the original look); a tournament's cap of 24 would otherwise render
+    // ~23 dashed tiles, so cap the visible empties to one. Either way it
+    // drops to 0 once the roster is full. The picker can still add players
+    // right up to `cap` — this only affects how many launcher tiles show.
+    const emptySlots = isGame ? remaining : Math.min(remaining, 1);
     return (
       <>
         <Text style={s.stepOverline}>PLAYERS</Text>
         <Text style={s.stepPrompt}>Who's playing?</Text>
-        <Text style={s.stepSubtitle}>Add 1–4 golfers from your library.</Text>
+        <Text style={s.stepSubtitle}>
+          {isGame
+            ? `Add 1–${cap} golfers from your library.`
+            : `Add 1–${cap} golfers from your library — flights and pairings come later.`}
+        </Text>
         <View style={s.slotGrid}>
           {players.map((p) => (
             <View key={p.id} style={s.slotFilled}>
@@ -577,6 +593,7 @@ export default function SetupScreen({ navigation, route }) {
               activeOpacity={0.7}
               onPress={() => navigation.navigate('PlayerPicker', {
                 alreadySelectedIds: players.map((pl) => pl.id),
+                kind,
               })}
             >
               <View style={s.slotPlus}>

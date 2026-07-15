@@ -26,6 +26,7 @@ import LoadingSplash from './src/components/LoadingSplash';
 import ErrorBoundary from './src/components/ErrorBoundary';
 import { AuthProvider, useAuth } from './src/context/AuthContext';
 import AuthScreen from './src/screens/AuthScreen';
+import SetNewPasswordScreen from './src/screens/SetNewPasswordScreen';
 import JoinTournamentLinkScreen from './src/screens/JoinTournamentLinkScreen';
 
 import FloatingTabBar from './src/navigation/FloatingTabBar';
@@ -126,7 +127,7 @@ function matchesJoinLink(url) {
 
 function AppNavigator() {
   const { theme, mode } = useTheme();
-  const { session, loading } = useAuth();
+  const { session, loading, passwordRecovery } = useAuth();
   // null = "not resolved yet" (native cold-start); avoids a flash of AuthScreen
   // before getInitialURL settles. On web we read it synchronously up front.
   const [isJoinLink, setIsJoinLink] = useState(() => {
@@ -177,6 +178,12 @@ function AppNavigator() {
     );
   }
 
+  // A password-recovery link takes priority over both the signed-out and
+  // signed-in screens — it can arrive on a device that's already logged in
+  // (a different session than the one being reset) as easily as a fresh
+  // cold start. See AuthContext's PASSWORD_RECOVERY / deep-link handling.
+  if (passwordRecovery) return <SetNewPasswordScreen />;
+
   if (!session) {
     // A logged-out scanner of a /join-tournament/<code> link gets the
     // guest/login choice instead of the bare sign-up wall. Once a session
@@ -202,6 +209,7 @@ function AppNavigator() {
         }}
       >
         <Stack.Screen name="Main" component={MainTabs} />
+        <Stack.Screen name="ResetPassword" component={SetNewPasswordScreen} />{/* also short-circuited to directly above AppNavigator's session gate — registered here too so an in-app navigate('ResetPassword') still resolves */}
         <Stack.Screen name="Tournament" component={HomeScreen} initialParams={{ viewMode: 'tournament' }} />
         <Stack.Screen name="Setup" component={SetupScreen} />
         <Stack.Screen name="Scorecard" component={ScorecardScreen} options={{ cardStyleInterpolator: CardStyleInterpolators.forHorizontalIOS }} />
@@ -237,11 +245,19 @@ function AppNavigator() {
 
 // Deep-link config: maps web URL paths to routes so invite links open the
 // right flow directly. `join/:token` → official magic-token redeem;
-// `join-tournament/:code` → casual shared-invite redeem + claim.
+// `join-tournament/:code` → casual shared-invite redeem + claim;
+// `reset-password` → the set-new-password screen (also short-circuited in
+// AppNavigator via the passwordRecovery flag, which is the primary path —
+// this mapping just makes the deep link literally resolvable).
 const linking = {
-  prefixes: [typeof window !== 'undefined' && window.location?.origin
-    ? window.location.origin
-    : 'https://golf-partner.vercel.app'],
+  prefixes: [
+    typeof window !== 'undefined' && window.location?.origin
+      ? window.location.origin
+      : 'https://golf-partner.vercel.app',
+    // Native custom scheme so `golf://reset-password` resolves through the
+    // navigator too, not only the manual recovery routing in AuthContext.
+    'golf://',
+  ],
   config: {
     // Anchor deep-linked screens on top of Main so they always have a screen
     // to return to. Without this, opening /join-tournament/:code builds a
@@ -252,6 +268,7 @@ const linking = {
     screens: {
       JoinOfficial: 'join/:token',
       JoinTournament: 'join-tournament/:code',
+      ResetPassword: 'reset-password',
     },
   },
 };

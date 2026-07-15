@@ -83,6 +83,20 @@ describe('AuthScreen OAuth callbacks', () => {
     );
   });
 
+  test('ignores password-recovery deep links so it does not double-consume the PKCE code', async () => {
+    // AuthContext owns `golf://reset-password?code=` links. If AuthScreen's
+    // OAuth handler also tried to exchange the one-time code, whichever lost
+    // the race would either sign the user in (skipping the reset screen) or
+    // show a bogus error. It must leave recovery URLs alone.
+    Linking.getInitialURL.mockResolvedValue('golf://reset-password?code=recovery-code');
+
+    render(wrap(<AuthScreen />));
+
+    // Give the getInitialURL promise + effects a tick to settle.
+    await waitFor(() => expect(Linking.getInitialURL).toHaveBeenCalled());
+    expect(supabase.auth.exchangeCodeForSession).not.toHaveBeenCalled();
+  });
+
   test('shows Google sign-in without Apple sign-in', () => {
     const { getByText, queryByText } = render(wrap(<AuthScreen />));
 

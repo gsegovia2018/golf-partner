@@ -1,5 +1,6 @@
 import {
   roundScoringMode, tournamentHasMixedModes, teamShapeOf, pairsForNextRound,
+  laterRoundsForFixedTeamsPropagation,
 } from '../scoring';
 
 describe('roundScoringMode', () => {
@@ -109,5 +110,37 @@ describe('pairsForNextRound', () => {
     };
     const pairs = pairsForNextRound(t, t.rounds[1]);
     expect(pairs.map((pr) => pr.map((p) => p.id))).toEqual([['a', 'b'], ['c', 'd', 'e']]);
+  });
+});
+
+describe('laterRoundsForFixedTeamsPropagation', () => {
+  it('includes only later rounds whose effective mode shares the edited round shape', () => {
+    const t = {
+      settings: { scoringMode: 'bestball' },
+      rounds: [
+        { id: 'r0', scoringMode: 'bestball' },
+        { id: 'r1', scoringMode: 'scramble3v1' }, // 3+1 — mismatched, excluded
+        { id: 'r2', scoringMode: 'pairsmatchplay' }, // 2x2 — matches, included
+        { id: 'r3' }, // falls back to tournament default bestball — 2x2, included
+      ],
+    };
+    const later = laterRoundsForFixedTeamsPropagation(t, t.rounds[0]);
+    expect(later.map((r) => r.id)).toEqual(['r2', 'r3']);
+  });
+
+  it('returns an empty list when the edited round is the last round', () => {
+    const t = {
+      settings: { scoringMode: 'bestball' },
+      rounds: [{ id: 'r0', scoringMode: 'bestball' }],
+    };
+    expect(laterRoundsForFixedTeamsPropagation(t, t.rounds[0])).toEqual([]);
+  });
+
+  it('returns an empty list when the edited round is not found in rounds', () => {
+    const t = {
+      settings: { scoringMode: 'bestball' },
+      rounds: [{ id: 'r0', scoringMode: 'bestball' }, { id: 'r1', scoringMode: 'bestball' }],
+    };
+    expect(laterRoundsForFixedTeamsPropagation(t, { id: 'missing' })).toEqual([]);
   });
 });

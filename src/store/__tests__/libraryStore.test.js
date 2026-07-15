@@ -3,7 +3,7 @@ import {
   fetchCourses, getCachedCourses, COURSES_CACHE_KEY,
   fetchClubs, getCachedClubs, CLUBS_CACHE_KEY,
   fetchFavoriteCourseIds, getCachedFavoriteCourseIds, FAVORITE_COURSES_CACHE_KEY,
-  loadCourseLibrary, loadQuickStartCourses,
+  loadCourseLibrary, loadQuickStartCourses, upsertPlayer,
 } from '../libraryStore';
 import { listFriends, getCachedFriends } from '../friendStore';
 import AsyncStorage from '@react-native-async-storage/async-storage';
@@ -61,6 +61,18 @@ jest.mock('../../lib/supabase', () => {
     insert(rows) {
       mockState.calls.insertedRows = rows;
       return Promise.resolve({ error: null });
+    },
+    // upsert()/select()/single() records the row and resolves to it, mirroring
+    // the shape upsertPlayer relies on (supabase.from().upsert().select().single()).
+    upsert(row) {
+      mockState.calls.upsertRow = row;
+      return client;
+    },
+    single() {
+      return Promise.resolve({
+        data: { id: 'new-id', ...mockState.calls.upsertRow },
+        error: mockState.upsertError ?? null,
+      });
     },
     // Makes a filter chain that ends without .order() (e.g. fetchFavoriteCourseIds,
     // which ends at .eq()) awaitable — `await <chain>` resolves to the rows.
@@ -142,6 +154,39 @@ describe('fetchMyGuestPlayers', () => {
     const result = await fetchMyGuestPlayers();
     expect(result).toEqual([]);
     expect(mockState.calls.table).toBeUndefined();
+  });
+});
+
+describe('upsertPlayer handicap handling (task-5-brief)', () => {
+  beforeEach(() => {
+    mockState.calls = {};
+    mockState.upsertError = null;
+  });
+
+  test('accepts a comma-decimal handicap (comma-locale keyboards)', async () => {
+    const result = await upsertPlayer({ name: 'Ana', handicap: '12,5' });
+    expect(mockState.calls.upsertRow).toMatchObject({ name: 'Ana', handicap: 12.5 });
+    expect(result.handicap).toBe(12.5);
+  });
+
+  test('accepts a period-decimal handicap', async () => {
+    await upsertPlayer({ name: 'Ana', handicap: '12.5' });
+    expect(mockState.calls.upsertRow).toMatchObject({ name: 'Ana', handicap: 12.5 });
+  });
+
+  test('an empty handicap keeps the existing "no handicap" -> 0 default', async () => {
+    await upsertPlayer({ name: 'Ana', handicap: '' });
+    expect(mockState.calls.upsertRow).toMatchObject({ name: 'Ana', handicap: 0 });
+  });
+
+  test('throws on a genuinely invalid handicap instead of silently saving 0', async () => {
+    await expect(upsertPlayer({ name: 'Ana', handicap: 'abc' })).rejects.toThrow();
+    expect(mockState.calls.upsertRow).toBeUndefined();
+  });
+
+  test('throws on an out-of-range handicap instead of silently saving 0', async () => {
+    await expect(upsertPlayer({ name: 'Ana', handicap: '99' })).rejects.toThrow();
+    expect(mockState.calls.upsertRow).toBeUndefined();
   });
 });
 

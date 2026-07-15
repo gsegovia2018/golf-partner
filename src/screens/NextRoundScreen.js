@@ -1,7 +1,9 @@
 import React, { useEffect, useRef, useState } from 'react';
 import {
   ActivityIndicator,
+  Alert,
   Animated,
+  Platform,
   StyleSheet,
   Text,
   TouchableOpacity,
@@ -33,6 +35,10 @@ export default function NextRoundScreen({ navigation, route }) {
   const [loadState, setLoadState] = useState('loading');
   // Bumped to re-run the load effect when the user taps Retry.
   const [loadAttempt, setLoadAttempt] = useState(0);
+  // Guards handleConfirm/reshuffle against double-fire while a mutation is
+  // in flight, and is always reset in a finally so a rejected mutation
+  // leaves the button retryable instead of stuck disabled.
+  const [busy, setBusy] = useState(false);
 
   const countdownOpacity = useRef(new Animated.Value(0)).current;
   const countdownScale = useRef(new Animated.Value(1.4)).current;
@@ -256,29 +262,54 @@ export default function NextRoundScreen({ navigation, route }) {
     Animated.sequence(sequence).start();
   }
 
+  // Surfaces a mutation failure to the user (mirrors SetupScreen.handleStart's
+  // Platform-branch alert convention) so a rejected mutation never leaves the
+  // button looking dead with no feedback.
+  function showMutationError(err, fallbackMessage) {
+    const msg = err?.message ?? fallbackMessage;
+    if (Platform.OS === 'web') window.alert(msg);
+    else Alert.alert('Error', msg);
+  }
+
   async function reshuffle() {
+    if (busy) return;
     // Individual / match-play tournaments have nothing to reshuffle — every
     // pair has one player. Re-running buildPairsForRound keeps the structure
     // valid (same solo-pairs) so the button is a no-op rather than a crash.
     const newPairs = buildPairsForRound(tournament);
     setNextPairs(newPairs);
-    if (revealOnly) {
-      await mutate(tournament, {
-        type: 'round.reveal', roundId: tournament.rounds[roundIndex].id, pairs: newPairs,
-      });
+    setBusy(true);
+    try {
+      if (revealOnly) {
+        await mutate(tournament, {
+          type: 'round.reveal', roundId: tournament.rounds[roundIndex].id, pairs: newPairs,
+        });
+      }
+      setPhase('reveal');
+      revealPairs();
+    } catch (err) {
+      showMutationError(err, 'Could not reshuffle teams. Please try again.');
+    } finally {
+      setBusy(false);
     }
-    setPhase('reveal');
-    revealPairs();
   }
 
   async function handleConfirm() {
-    const updated = await mutate(tournament, {
-      type: 'round.reveal', roundId: tournament.rounds[roundIndex].id, pairs: nextPairs,
-    });
-    if (!revealOnly) {
-      await mutate(updated, { type: 'tournament.advanceRound', roundIndex });
+    if (busy) return;
+    setBusy(true);
+    try {
+      const updated = await mutate(tournament, {
+        type: 'round.reveal', roundId: tournament.rounds[roundIndex].id, pairs: nextPairs,
+      });
+      if (!revealOnly) {
+        await mutate(updated, { type: 'tournament.advanceRound', roundIndex });
+      }
+      navigation.replace('Home');
+    } catch (err) {
+      showMutationError(err, 'Could not start the round. Please try again.');
+    } finally {
+      setBusy(false);
     }
-    navigation.replace('Home');
   }
 
   /* ─── Countdown phase ─── */
@@ -368,12 +399,12 @@ export default function NextRoundScreen({ navigation, route }) {
           ]}
         >
           {canReshuffle && (
-            <TouchableOpacity style={s.btnSecondary} onPress={reshuffle}>
+            <TouchableOpacity style={s.btnSecondary} onPress={reshuffle} disabled={busy}>
               <Feather name="shuffle" size={18} color={theme.accent.primary} style={{ marginRight: 8 }} />
               <Text style={s.btnSecondaryText}>Re-shuffle</Text>
             </TouchableOpacity>
           )}
-          <TouchableOpacity style={s.btnPrimary} onPress={handleConfirm}>
+          <TouchableOpacity style={s.btnPrimary} onPress={handleConfirm} disabled={busy}>
             <Feather
               name="play"
               size={18}

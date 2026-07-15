@@ -546,6 +546,22 @@ export function pairsForNextRound(tournament, targetRound) {
   return buildTeamsForMode(mode, players);
 }
 
+// Later rounds that should receive an edited round's fixed-team pairs.
+// Mirrors pairsForNextRound's shape guard: propagation only touches rounds
+// whose effective mode shares the edited round's team shape. A round with a
+// mismatched shape (e.g. a scramble3v1 round after a bestball edit) is left
+// out entirely — its own pairs get rebuilt for its own mode lazily by
+// pairsForNextRound at reveal time, so no eager/incorrect write happens here.
+export function laterRoundsForFixedTeamsPropagation(tournament, editedRound) {
+  const rounds = tournament?.rounds ?? [];
+  const roundIdx = rounds.findIndex((r) => r.id === editedRound?.id);
+  if (roundIdx < 0) return [];
+  const editedShape = teamShapeOf(roundScoringMode(tournament, editedRound));
+  return rounds
+    .slice(roundIdx + 1)
+    .filter((r) => teamShapeOf(roundScoringMode(tournament, r)) === editedShape);
+}
+
 // True when the tournament's rounds do not all share one effective mode.
 // Mixed tournaments rank by the Stableford total board.
 export function tournamentHasMixedModes(tournament) {

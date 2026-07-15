@@ -15,7 +15,7 @@ import {
   loadTournamentMembers, findClaimedSlot,
   removeTournamentMember, generateInviteCode, releaseTournamentPlayer, buildJoinLink,
   addPlayerRoundPatches, removePlayerRoundPatches,
-  getTournament, getTournamentSnapshot,
+  getTournament, getTournamentSnapshot, rosterCap,
 } from '../store/tournamentStore';
 import { supabase } from '../lib/supabase';
 import { mutate } from '../store/mutate';
@@ -93,6 +93,23 @@ export default function PlayersScreen({ navigation, route }) {
   const saveTimeoutRef = useRef(null);
   const skipNextSaveRef = useRef(false);
   const hasLoadedOnceRef = useRef(!!initialTournament);
+  const isMountedRef = useRef(true);
+
+  // The debounced autosave below schedules a setTimeout whose async callback
+  // calls setState/Alert. If the screen unmounts before the timer fires, or
+  // while the callback's awaits are still in flight, those calls would hit
+  // an unmounted component. Clear the pending timer on unmount and gate the
+  // callback's setState/Alert calls behind isMountedRef.
+  useEffect(() => {
+    isMountedRef.current = true;
+    return () => {
+      isMountedRef.current = false;
+      if (saveTimeoutRef.current) {
+        clearTimeout(saveTimeoutRef.current);
+        saveTimeoutRef.current = null;
+      }
+    };
+  }, []);
 
   const load = useCallback(async () => {
     if (!hasLoadedOnceRef.current) setLoading(true);
@@ -121,10 +138,21 @@ export default function PlayersScreen({ navigation, route }) {
     let t = await getTournament(tournamentId);
     if (!t) return;
     let chosenMode = initialChosenMode;
+    const cap = rosterCap(t.kind);
+    const skipped = [];
     for (const p of picked) {
-      if ((t.players ?? []).length >= 4) break;
+      if ((t.players ?? []).length >= cap) break;
       if ((t.players ?? []).some((x) => x.id === p.id)) continue;
       const parsed = parseHandicapIndex(p.handicap);
+      if (!parsed.ok && parsed.reason === 'invalid') {
+        // A library-stored handicap should already be valid (libraryStore /
+        // PlayersLibraryScreen block invalid saves at the source) — this is
+        // a defensive guard, not the primary entry point. Skip adding this
+        // player rather than silently defaulting their handicap to 0, which
+        // would badly skew their net scoring.
+        skipped.push(p.name);
+        continue;
+      }
       // Carry the account link (user_id) + avatar through. Dropping them here
       // saved a friend-with-account as a plain local name, so the participant
       // → member → "added to game" notification path never fired and that
@@ -148,6 +176,11 @@ export default function PlayersScreen({ navigation, route }) {
       chosenMode = undefined;
     }
     await load();
+    if (skipped.length > 0) {
+      const msg = `Could not add ${skipped.join(', ')}: invalid handicap on file. Fix it in the players library first.`;
+      if (Platform.OS === 'web') window.alert(msg);
+      else Alert.alert('Some players not added', msg);
+    }
   }, [load, tournamentId]);
 
   const applyAddPlayers = useCallback(async (picked) => {
@@ -156,8 +189,9 @@ export default function PlayersScreen({ navigation, route }) {
     const currentMode = t.settings?.scoringMode ?? 'stableford';
     const existingIds = new Set((t.players ?? []).map((p) => p.id));
     let simulatedCount = (t.players ?? []).length;
+    const cap = rosterCap(t.kind);
     for (const p of picked) {
-      if (simulatedCount >= 4) break;
+      if (simulatedCount >= cap) break;
       if (existingIds.has(p.id)) continue;
       simulatedCount += 1;
     }
@@ -248,6 +282,21 @@ export default function PlayersScreen({ navigation, route }) {
     if (saveTimeoutRef.current) clearTimeout(saveTimeoutRef.current);
     setSaveState('saving');
     saveTimeoutRef.current = setTimeout(async () => {
+      saveTimeoutRef.current = null;
+      // A genuinely invalid handicap (garbage, out of range) must never be
+      // silently persisted as 0 — that badly skews net scoring. Block the
+      // whole autosave (keeping the last-synced value on the server) until
+      // the field is fixed or cleared; the save pill already renders an
+      // 'error' state for this. parseHandicapIndex normalizes a comma
+      // decimal on its own, so this only fires for real typos.
+      const hasInvalidHandicap = editPlayers.some((p) => {
+        const r = parseHandicapIndex(p.handicap);
+        return !r.ok && r.reason === 'invalid';
+      });
+      if (hasInvalidHandicap) {
+        if (isMountedRef.current) setSaveState('error');
+        return;
+      }
       try {
         const builtPlayers = editPlayers.map((p) => {
           const r = parseHandicapIndex(p.handicap);
@@ -300,12 +349,14 @@ export default function PlayersScreen({ navigation, route }) {
             type: 'round.upsert', roundId: builtRounds[i].id, roundIndex: i, round: builtRounds[i], isNew,
           });
         }
-        setSaveState('saved');
+        if (isMountedRef.current) setSaveState('saved');
       } catch (err) {
-        setSaveState('error');
-        const msg = err?.message ?? 'Could not save changes';
-        if (Platform.OS === 'web') window.alert(msg);
-        else Alert.alert('Save failed', msg);
+        if (isMountedRef.current) {
+          setSaveState('error');
+          const msg = err?.message ?? 'Could not save changes';
+          if (Platform.OS === 'web') window.alert(msg);
+          else Alert.alert('Save failed', msg);
+        }
       }
     }, 400);
   }, [editPlayers, rounds]);
@@ -527,11 +578,12 @@ export default function PlayersScreen({ navigation, route }) {
         <ScrollView style={s.scroll} contentContainerStyle={s.content}>
           <View style={s.topRow}>
             <Text style={s.sectionLabel}>{editPlayers.length} {editPlayers.length === 1 ? 'player' : 'players'}</Text>
-            {!isViewer && editPlayers.length < 4 && (
+            {!isViewer && editPlayers.length < rosterCap(tournament?.kind) && (
               <TouchableOpacity
                 style={s.addBtn}
                 onPress={() => navigation.navigate('PlayerPicker', {
                   alreadySelectedIds: editPlayers.map((p) => p.id),
+                  kind: tournament?.kind,
                 })}
                 activeOpacity={0.7}
               >

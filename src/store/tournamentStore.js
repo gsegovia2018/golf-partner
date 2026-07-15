@@ -1091,6 +1091,20 @@ export const DEFAULT_SETTINGS = {
   manualTeams: false,        // let the user pick teams instead of a random draw
 };
 
+// Roster size cap by kind. Casual games (`kind === 'game'`) stay capped at a
+// foursome — the quick single-round setup assumes a small group. A real
+// tournament (`kind === 'tournament'`, or any other/unknown kind) has no
+// meaningful fixed cap — multi-flight events can run much larger fields —
+// so it gets a generous upper bound instead, purely so the setup wizard and
+// roster UIs never render/admit an unbounded slot grid. Individual
+// Stableford and Stableford-with-Partners scale to any roster size; only
+// team-mode ROUNDS (bestball/scramble*/pairsmatchplay) still require exactly
+// 4, enforced separately by scoringModes.js's isAllowed(count) — this cap is
+// about the roster, not any one round's scoring mode.
+export function rosterCap(kind) {
+  return kind === 'game' ? 4 : 24;
+}
+
 export function createTournament({ name, players, rounds, settings, kind = 'tournament', meId = null }) {
   return {
     id: Date.now().toString(),
@@ -1812,6 +1826,31 @@ export async function claimTournamentPlayer(tournamentId, playerId) {
     throw error;
   }
   return data; // the claimed player id
+}
+
+// Atomic, cap-enforcing player add. Wraps the add_tournament_player_if_room
+// RPC (migration 20260715000001) — the server re-counts game_players under a
+// per-tournament advisory lock and rejects once the roster has reached
+// rosterCap(kind), so two joiners racing addNewPlayer (each seeing room in
+// their own stale local players.length) can't push the roster past the cap.
+// Throws Error('ROSTER_FULL') on rejection; the caller should refresh the
+// roster and tell the joiner it's full, same shape as claimTournamentPlayer's
+// SLOT_TAKEN handling. Call this BEFORE the normal tournament.addPlayer
+// mutation — that mutation's own upsert of the same tournament_id/player_id
+// afterwards is an idempotent no-op overwrite of the row this RPC creates.
+export async function addTournamentPlayerIfRoom(tournamentId, player) {
+  const { data, error } = await supabase
+    .rpc('add_tournament_player_if_room', {
+      p_tournament_id: String(tournamentId),
+      p_player: player,
+    });
+  if (error) {
+    if ((error.message || '').includes('ROSTER_FULL')) {
+      throw new Error('ROSTER_FULL');
+    }
+    throw error;
+  }
+  return data; // the added player id
 }
 
 // Owner-only: clear a player slot's user_id and drop that member, reopening

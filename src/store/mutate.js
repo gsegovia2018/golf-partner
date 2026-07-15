@@ -63,6 +63,7 @@ export function metaPathFor(m) {
         paths.push(`rounds.${patch.roundId}.playerHandicaps.${m.playerId}`);
         paths.push(`rounds.${patch.roundId}.scores.${m.playerId}`);
         paths.push(`rounds.${patch.roundId}.shotDetails.${m.playerId}`);
+        paths.push(`rounds.${patch.roundId}.scoreEntries.${m.playerId}`);
         paths.push(`rounds.${patch.roundId}.scoreResolutions.${m.playerId}`);
         if (patch.pairs) paths.push(`rounds.${patch.roundId}.pairs`);
         if (patch.clearScoringMode) paths.push(`rounds.${patch.roundId}.scoringMode`);
@@ -265,6 +266,20 @@ export function applyToTournament(t, m) {
           ...(round.playerHandicaps ?? {}),
           [m.player.id]: patch.playerHandicap,
         };
+        // Player ids are library-stable and REUSED on re-add (PlayersScreen
+        // passes id: p.id, not a fresh uuid), so a remove→re-add of the same
+        // person must clear the removedPlayerIds tombstone this round may
+        // still carry — otherwise preserveLocalConflictState would keep
+        // pruning the now-legitimate player's fresh scoreEntries, silently
+        // disabling their conflict detection. The roster gate in
+        // pruneRemovedPlayers is the primary guarantee (it also covers the
+        // realtime game_players INSERT re-add path, which never reaches this
+        // apply branch); this clear keeps the tombstone from lingering.
+        if (Array.isArray(round.removedPlayerIds)) {
+          const kept = round.removedPlayerIds.filter((id) => id !== m.player.id);
+          if (kept.length) round.removedPlayerIds = kept;
+          else delete round.removedPlayerIds;
+        }
         if (patch.pairs) round.pairs = patch.pairs;
         // The new roster size invalidated this round's override — it falls
         // back to the tournament's (possibly also new) default mode.
@@ -289,11 +304,29 @@ export function applyToTournament(t, m) {
         const shotDetails = { ...(round.shotDetails ?? {}) };
         delete shotDetails[m.playerId];
         round.shotDetails = shotDetails;
+        // Kills the phantom-conflict bug: without this, the removed
+        // player's per-author scoreEntries survive and preserveLocalConflict
+        // State/unionScoreEntries re-merge them on every reconcile/realtime
+        // patch, so listRoundConflicts/surfaceableConflicts derive a
+        // conflict for a player who no longer exists (subjectName renders
+        // '—' — see scoreEntries.js).
+        if (round.scoreEntries) {
+          const scoreEntries = { ...round.scoreEntries };
+          delete scoreEntries[m.playerId];
+          round.scoreEntries = scoreEntries;
+        }
         if (round.scoreResolutions) {
           const scoreResolutions = { ...round.scoreResolutions };
           delete scoreResolutions[m.playerId];
           round.scoreResolutions = scoreResolutions;
         }
+        // Tombstone (see preserveLocalConflictState) — a monotonic record
+        // that this playerId was removed from this round, so a later merge
+        // against a stale `source` snapshot that still carries their
+        // scoreEntries/scoreResolutions never resurrects them.
+        const removedPlayerIds = new Set(round.removedPlayerIds ?? []);
+        removedPlayerIds.add(m.playerId);
+        round.removedPlayerIds = [...removedPlayerIds];
         if (patch.pairs) round.pairs = patch.pairs;
         // See tournament.addPlayer: the smaller roster invalidated this
         // round's override.
@@ -492,20 +525,69 @@ function unionScoreResolutions(targetResolutions, sourceResolutions) {
   return out;
 }
 
+// round.removedPlayerIds is a monotonic, LOCAL-ONLY tombstone (same class of
+// hot key as scoreEntries/scoreResolutions — see stripRoundHotKeys in
+// tournamentRepo.js, which must also omit it) recording every playerId a
+// tournament.removePlayer apply has ever cleared from THIS round. It only
+// ever grows, so a plain array union (never a target-wins overwrite) is
+// correct and sufficient here — unlike scoreEntries per-cell precedence.
+function unionRemovedPlayerIds(targetIds, sourceIds) {
+  if (!sourceIds && !targetIds) return undefined;
+  return [...new Set([...(sourceIds ?? []), ...(targetIds ?? [])])];
+}
+
+// Drops a tombstoned playerId from a scoreEntries/scoreResolutions map ONLY
+// when that player is ALSO absent from the current roster (`knownPlayerIds`).
+// Two guards, both required:
+//   1. Tombstone (removedPlayerIds): scoped to explicitly-removed players,
+//      not "any playerId missing from the roster" — a roster-only check would
+//      prune a legitimate peer's entry for a brand-new player whose
+//      game_players row hasn't reached this device yet (a narrow but real
+//      cross-table realtime-ordering race), silently dropping a live score.
+//   2. Roster gate (knownPlayerIds): player ids are library-stable and REUSED
+//      on re-add, so a remove→re-add of the same person must NOT keep pruning
+//      their fresh entries. Once they're back on the roster the tombstone is
+//      inert. (mutate.js's addPlayer branch also clears the tombstone, but the
+//      realtime game_players INSERT re-add path never reaches that branch, so
+//      this gate is the load-bearing guarantee for Critical-2.)
+// `knownPlayerIds` null/absent (bare `{ rounds }` fixtures) disables the gate
+// — those callers never set a tombstone, so pruning is a no-op regardless.
+function pruneRemovedPlayers(map, removedPlayerIds, knownPlayerIds) {
+  if (!map || !removedPlayerIds?.length) return map;
+  const removed = new Set(removedPlayerIds);
+  const out = {};
+  for (const [playerId, value] of Object.entries(map)) {
+    const stillRostered = knownPlayerIds?.has(playerId);
+    if (!removed.has(playerId) || stillRostered) out[playerId] = value;
+  }
+  return out;
+}
+
 export function preserveLocalConflictState(target, source) {
   if (!target?.rounds?.length || !source?.rounds?.length) return target;
+  const knownPlayerIds = Array.isArray(target.players)
+    ? new Set(target.players.map((p) => p?.id))
+    : null;
   const byId = new Map(source.rounds.map((r) => [r.id, {
-    scoreEntries: r?.scoreEntries, scoreResolutions: r?.scoreResolutions,
+    scoreEntries: r?.scoreEntries,
+    scoreResolutions: r?.scoreResolutions,
+    removedPlayerIds: r?.removedPlayerIds,
   }]));
   target.rounds = target.rounds.map((r) => {
     const s = byId.get(r.id);
     if (!s) return r;
-    const mergedEntries = unionScoreEntries(r?.scoreEntries, s.scoreEntries);
-    const mergedResolutions = unionScoreResolutions(r?.scoreResolutions, s.scoreResolutions);
+    const removedPlayerIds = unionRemovedPlayerIds(r?.removedPlayerIds, s.removedPlayerIds);
+    const mergedEntries = pruneRemovedPlayers(
+      unionScoreEntries(r?.scoreEntries, s.scoreEntries), removedPlayerIds, knownPlayerIds,
+    );
+    const mergedResolutions = pruneRemovedPlayers(
+      unionScoreResolutions(r?.scoreResolutions, s.scoreResolutions), removedPlayerIds, knownPlayerIds,
+    );
     return {
       ...r,
       ...(mergedEntries ? { scoreEntries: mergedEntries } : {}),
       ...(mergedResolutions ? { scoreResolutions: mergedResolutions } : {}),
+      ...(removedPlayerIds ? { removedPlayerIds } : {}),
     };
   });
   return target;

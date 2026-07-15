@@ -2,7 +2,7 @@ import {
   reTeeRound,
   tournamentNoun, tournamentNounCapitalized, formatRoundLabel,
   isRoundInProgress, propagatePlayerToTournaments, propagateCourseToTournaments, readLocal,
-  roundPairLeaderboard,
+  roundPairLeaderboard, rosterCap,
 } from '../tournamentStore';
 import { mutate } from '../mutate';
 
@@ -481,6 +481,24 @@ describe('propagateCourseToTournaments', () => {
       .map(([, m]) => m)
       .filter((m) => m.type === 'round.upsert');
     expect(roundUpsertCalls.length).toBe(0);
+  });
+});
+
+// Task 3 (audit-tier3): casual games stay capped at a foursome, but a real
+// multi-flight tournament has no meaningful fixed cap — just a sane upper
+// bound so the setup wizard never renders an unbounded slot grid.
+describe('rosterCap', () => {
+  test("kind 'game' caps at 4", () => {
+    expect(rosterCap('game')).toBe(4);
+  });
+
+  test("kind 'tournament' allows a much higher roster than 4", () => {
+    expect(rosterCap('tournament')).toBeGreaterThan(4);
+    expect(rosterCap('tournament')).toBe(24);
+  });
+
+  test('an unknown/undefined kind is treated like a tournament (no low cap)', () => {
+    expect(rosterCap(undefined)).toBeGreaterThan(4);
   });
 });
 

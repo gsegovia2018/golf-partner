@@ -23,6 +23,7 @@ export default function CoursesLibraryScreen({ navigation }) {
 
   const [courses, setCourses] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState(null);
   const [name, setName] = useState('');
   const [saving, setSaving] = useState(false);
   const [query, setQuery] = useState('');
@@ -47,6 +48,7 @@ export default function CoursesLibraryScreen({ navigation }) {
 
   async function load() {
     if (!hasLoadedOnceRef.current) setLoading(true);
+    setLoadError(null);
     try {
       const [list, favs] = await Promise.all([
         fetchCourses(),
@@ -54,6 +56,8 @@ export default function CoursesLibraryScreen({ navigation }) {
       ]);
       setCourses(list);
       setFavorites(favs);
+    } catch (err) {
+      setLoadError(err?.message ?? 'Could not load courses');
     } finally {
       hasLoadedOnceRef.current = true;
       setLoading(false);
@@ -162,7 +166,19 @@ export default function CoursesLibraryScreen({ navigation }) {
 
         {loading
           ? <ActivityIndicator color={theme.accent.primary} style={{ marginTop: 20 }} />
-          : courses.length === 0
+          : loadError
+            ? (
+              <View style={s.errorBox}>
+                <Feather name="wifi-off" size={20} color={theme.destructive} />
+                <Text style={s.errorTitle}>Couldn't load courses</Text>
+                <Text style={s.errorMsg}>{loadError}</Text>
+                <TouchableOpacity style={s.retryBtn} onPress={load} activeOpacity={0.7}>
+                  <Feather name="refresh-cw" size={14} color={theme.accent.primary} style={{ marginRight: 6 }} />
+                  <Text style={s.retryBtnText}>Retry</Text>
+                </TouchableOpacity>
+              </View>
+            )
+            : courses.length === 0
             ? (
               <View style={s.emptyState}>
                 <Feather name="map" size={48} color={theme.text.muted} />
@@ -284,4 +300,24 @@ const makeStyles = (theme) => StyleSheet.create({
   editBtn: { paddingHorizontal: 10, paddingVertical: 6 },
   favBtn: { paddingHorizontal: 10, paddingVertical: 6 },
   deleteBtn: { paddingHorizontal: 8, paddingVertical: 6 },
+  errorBox: {
+    alignItems: 'center', padding: 24, marginTop: 12,
+    backgroundColor: theme.bg.card, borderRadius: 16,
+    borderWidth: 1, borderColor: theme.border.default,
+  },
+  errorTitle: {
+    fontFamily: 'PlusJakartaSans-Bold', color: theme.text.primary,
+    fontSize: 15, marginTop: 10,
+  },
+  errorMsg: {
+    fontFamily: 'PlusJakartaSans-Regular', color: theme.text.muted,
+    fontSize: 13, marginTop: 4, textAlign: 'center',
+  },
+  retryBtn: {
+    flexDirection: 'row', alignItems: 'center',
+    backgroundColor: theme.accent.light, borderRadius: 10,
+    borderWidth: 1, borderColor: theme.accent.primary + '40',
+    paddingHorizontal: 16, paddingVertical: 10, marginTop: 14,
+  },
+  retryBtnText: { fontFamily: 'PlusJakartaSans-Bold', color: theme.accent.primary, fontSize: 14 },
 });

@@ -76,6 +76,11 @@ export default function OfficialCreateScreen({ navigation }) {
   const [officialFormat, setOfficialFormat] = useState('stableford');
   const [rawStep, setStep] = useState(0);
   const [busy, setBusy] = useState(false);
+  // Set once handleCreate succeeds (fully or partially — the tournament row
+  // exists either way). Guards against a second insert if the user goes
+  // Back to Review (e.g. via the hardware back button) and re-taps
+  // "Create Tournament" before the replaced route takes over.
+  const [createdTournamentId, setCreatedTournamentId] = useState(null);
 
   // Add-player sub-form.
   const [rosterName, setRosterName] = useState('');
@@ -148,6 +153,14 @@ export default function OfficialCreateScreen({ navigation }) {
 
   async function handleCreate() {
     if (busy) return;
+    if (createdTournamentId) {
+      // Already created (success or partial-failure) in a prior invocation —
+      // e.g. the user went Back to Review and re-tapped "Create Tournament"
+      // before the replaced route took over. Re-enter the existing
+      // tournament instead of inserting a second one.
+      navigation.replace('OfficialSetup', { tournamentId: createdTournamentId });
+      return;
+    }
     setBusy(true);
     let tournamentId = null;
     try {
@@ -167,14 +180,18 @@ export default function OfficialCreateScreen({ navigation }) {
           format: officialFormat,
         });
       }
-      navigation.navigate('OfficialSetup', { tournamentId });
+      if (mountedRef.current) setCreatedTournamentId(tournamentId);
+      // replace (not navigate/push) so Review is not left in the stack —
+      // Back from OfficialSetup skips straight past this screen.
+      navigation.replace('OfficialSetup', { tournamentId });
     } catch {
       if (tournamentId) {
         // The tournament row exists but roster/rounds setup did not fully
         // finish. Send the admin to the management screen to complete it —
         // never leave them on Review where a retry creates a duplicate.
+        if (mountedRef.current) setCreatedTournamentId(tournamentId);
         showError('Tournament created, but some setup did not finish. Complete it on the next screen.');
-        navigation.navigate('OfficialSetup', { tournamentId });
+        navigation.replace('OfficialSetup', { tournamentId });
       } else {
         showError("Couldn't create the tournament. Please try again.");
       }

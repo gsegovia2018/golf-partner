@@ -27,22 +27,34 @@ export default function CourseLibraryDetailScreen({ navigation, route }) {
   const [province, setProvince] = useState('');
   const [holes, setHoles] = useState(defaultHoles());
   const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState(null);
   const [saving, setSaving] = useState(false);
+  const [reloadKey, setReloadKey] = useState(0);
 
   useEffect(() => {
+    let cancelled = false;
+    setLoading(true);
+    setLoadError(null);
     (async () => {
-      const courses = await fetchCourses();
-      const course = courses.find((c) => c.id === courseId);
-      if (course) {
-        setName(course.name);
-        setTees((course.tees ?? []).map((t) => ({ ...t })));
-        setCity(course.city ?? '');
-        setProvince(course.province ?? '');
-        if (course.holes.length === 18) setHoles(course.holes.map((h) => ({ ...h })));
+      try {
+        const courses = await fetchCourses();
+        if (cancelled) return;
+        const course = courses.find((c) => c.id === courseId);
+        if (course) {
+          setName(course.name);
+          setTees((course.tees ?? []).map((t) => ({ ...t })));
+          setCity(course.city ?? '');
+          setProvince(course.province ?? '');
+          if (course.holes.length === 18) setHoles(course.holes.map((h) => ({ ...h })));
+        }
+      } catch (err) {
+        if (!cancelled) setLoadError(err?.message ?? 'Could not load course');
+      } finally {
+        if (!cancelled) setLoading(false);
       }
-      setLoading(false);
     })();
-  }, [courseId]);
+    return () => { cancelled = true; };
+  }, [courseId, reloadKey]);
 
   useEffect(() => {
     navigation.setOptions({ title: name || initialName || 'Course' });
@@ -95,6 +107,26 @@ export default function CourseLibraryDetailScreen({ navigation, route }) {
       <ScreenContainer style={s.centered} edges={['top', 'bottom']}>
         <View style={{ flex: 1, alignItems: 'center', justifyContent: 'center' }}>
           <ActivityIndicator color={theme.accent.primary} />
+        </View>
+      </ScreenContainer>
+    );
+  }
+
+  if (loadError) {
+    return (
+      <ScreenContainer style={s.centered} edges={['top', 'bottom']}>
+        <View style={s.errorBox}>
+          <Feather name="wifi-off" size={22} color={theme.destructive} />
+          <Text style={s.errorTitle}>Couldn't load course</Text>
+          <Text style={s.errorMsg}>{loadError}</Text>
+          <TouchableOpacity
+            style={s.retryBtn}
+            onPress={() => setReloadKey((k) => k + 1)}
+            activeOpacity={0.7}
+          >
+            <Feather name="refresh-cw" size={14} color={theme.accent.primary} style={{ marginRight: 6 }} />
+            <Text style={s.retryBtnText}>Retry</Text>
+          </TouchableOpacity>
         </View>
       </ScreenContainer>
     );
@@ -278,4 +310,24 @@ const makeStyles = (theme) => StyleSheet.create({
     fontFamily: 'PlusJakartaSans-ExtraBold',
     color: theme.isDark ? theme.accent.primary : theme.text.inverse, fontSize: 16,
   },
+  errorBox: {
+    alignItems: 'center', padding: 24, marginTop: 12,
+    backgroundColor: theme.bg.card, borderRadius: 16,
+    borderWidth: 1, borderColor: theme.border.default,
+  },
+  errorTitle: {
+    fontFamily: 'PlusJakartaSans-Bold', color: theme.text.primary,
+    fontSize: 15, marginTop: 10,
+  },
+  errorMsg: {
+    fontFamily: 'PlusJakartaSans-Regular', color: theme.text.muted,
+    fontSize: 13, marginTop: 4, textAlign: 'center',
+  },
+  retryBtn: {
+    flexDirection: 'row', alignItems: 'center',
+    backgroundColor: theme.accent.light, borderRadius: 10,
+    borderWidth: 1, borderColor: theme.accent.primary + '40',
+    paddingHorizontal: 16, paddingVertical: 10, marginTop: 14,
+  },
+  retryBtnText: { fontFamily: 'PlusJakartaSans-Bold', color: theme.accent.primary, fontSize: 14 },
 });

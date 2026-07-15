@@ -69,6 +69,13 @@ export async function fetchMyGuestPlayers() {
 
 export async function upsertPlayer({ id, name, handicap, gender }) {
   const parsed = parseHandicapIndex(handicap);
+  // A genuinely bad handicap (garbage, out of range — reason 'invalid') must
+  // never be silently coerced to 0; that badly skews net scoring downstream.
+  // An empty field (reason 'required') keeps the existing "no handicap" ->
+  // 0 default, since that's a deliberate blank, not a typo.
+  if (!parsed.ok && parsed.reason === 'invalid') {
+    throw new Error('Handicap must be a number between 0 and 54, with up to one decimal place.');
+  }
   const row = { name, handicap: parsed.ok ? parsed.value : 0 };
   if (gender !== undefined) row.gender = gender === 'female' ? 'female' : 'male';
   if (id) row.id = id;

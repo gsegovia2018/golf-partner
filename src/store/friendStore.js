@@ -146,38 +146,62 @@ export async function listPendingRequests() {
   };
 }
 
-// Send a friend request. If the target already sent the current user a
-// pending request, accept that instead of creating a mirror row.
-export async function sendRequest(targetUserId) {
-  const me = await currentUserId();
-  if (!me) throw new Error('Not signed in');
-  if (targetUserId === me) throw new Error('You cannot add yourself');
-
-  const { data: existing, error: exErr } = await supabase
+// Raw existing row (either ordering) for a pair, or null.
+async function existingFriendshipRow(me, targetUserId) {
+  const { data, error } = await supabase
     .from('friendships')
     .select('id, requester_id, addressee_id, status')
     .or(
       `and(requester_id.eq.${me},addressee_id.eq.${targetUserId}),` +
       `and(requester_id.eq.${targetUserId},addressee_id.eq.${me})`,
     );
-  if (exErr) throw exErr;
+  if (error) throw error;
+  return (data ?? [])[0] ?? null;
+}
 
-  const row = (existing ?? [])[0];
-  if (row) {
-    if (row.status === 'accepted') return { status: 'accepted' };
-    // They already requested us → accept their row.
-    if (row.requester_id === targetUserId) {
-      await acceptRequest(row.id);
-      return { status: 'accepted' };
-    }
-    return { status: 'pending' }; // our own request already out
+// A row already exists for this pair — resolve it instead of inserting a
+// mirror: already-accepted stays accepted; a row the target sent us gets
+// accepted (turns mutual instead of sitting as two pending rows); otherwise
+// it's our own request already out.
+async function resolveExistingRow(row, targetUserId) {
+  if (row.status === 'accepted') return { status: 'accepted' };
+  if (row.requester_id === targetUserId) {
+    await acceptRequest(row.id);
+    return { status: 'accepted' };
   }
+  return { status: 'pending' };
+}
+
+// Send a friend request. If the target already sent the current user a
+// pending request, accept that instead of creating a mirror row.
+//
+// The check-then-insert below has a race window: two simultaneous "Add"
+// taps (ours twice, or ours and the target's own concurrent request) can
+// both pass the existence check before either insert lands. The DB closes
+// that gap — friendships_unordered_pair_uq (migration 20260715000000) is a
+// UNIQUE index on the unordered pair, so the loser's insert fails with a
+// 23505. That is expected and handled here, not a real error: we re-read
+// whichever row won and resolve it exactly like the pre-insert check would
+// have, so the loser never sees a duplicate row or a thrown error.
+export async function sendRequest(targetUserId) {
+  const me = await currentUserId();
+  if (!me) throw new Error('Not signed in');
+  if (targetUserId === me) throw new Error('You cannot add yourself');
+
+  const existingRow = await existingFriendshipRow(me, targetUserId);
+  if (existingRow) return resolveExistingRow(existingRow, targetUserId);
 
   const { error } = await supabase
     .from('friendships')
     .insert({ requester_id: me, addressee_id: targetUserId, status: 'pending' });
-  if (error) throw error;
-  return { status: 'pending' };
+  if (!error) return { status: 'pending' };
+
+  if (error.code === '23505') {
+    const row = await existingFriendshipRow(me, targetUserId);
+    if (row) return resolveExistingRow(row, targetUserId);
+    return { status: 'pending' }; // shouldn't happen, but fail soft
+  }
+  throw error;
 }
 
 export async function acceptRequest(friendshipId) {
