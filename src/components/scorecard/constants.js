@@ -6,6 +6,8 @@
 export const DEFAULT_SHOT = {
   putts: null,
   drive: null,
+  driveLie: null,               // 'fairway' | 'rough' | 'sand' | 'trouble' | null (derived from drive when null)
+  driveDistBucket: null,        // '0-150' | '150-180' | '180-210' | '210-240' | '240+' | null (metres)
   teePenalties: 0,
   otherPenalties: 0,
   sandShots: 0,
@@ -13,6 +15,7 @@ export const DEFAULT_SHOT = {
   firstPuttBucket: null,        // '0-1' | '1-2' | '2-3' | '3-6' | '6+' | null
   approachBucket: null,         // '0-50' | '50-100' | '100-150' | '150-200' | '200+' | null
   approachResult: null,         // 'green' | 'miss' | null
+  approachLie: null,            // 'fairway' | 'rough' | 'sand' | null (null = fairway)
 };
 
 // Driver direction, in display order: miss-left, fairway (on target),
@@ -38,6 +41,20 @@ export const APPROACH_LABELS = {
   '0-50': '0-50', '50-100': '50-100', '100-150': '100-150',
   '150-200': '150-200', '200+': '200+',
 };
+
+export const DRIVE_DIST_BUCKETS = ['0-150', '150-180', '180-210', '210-240', '240+'];
+export const DRIVE_DIST_LABELS = {
+  '0-150': '<150', '150-180': '150-180', '180-210': '180-210',
+  '210-240': '210-240', '240+': '240+',
+};
+
+// Where a missed drive finished. Fairway hits need no lie — the direction
+// chip already says fairway; the engine derives rough for unset misses.
+export const DRIVE_MISS_LIES = ['rough', 'sand', 'trouble'];
+export const DRIVE_MISS_LIE_LABELS = { rough: 'Rough', sand: 'Sand', trouble: 'Trouble' };
+
+export const APPROACH_LIES = ['fairway', 'rough', 'sand'];
+export const APPROACH_LIE_LABELS = { fairway: 'Fairway', rough: 'Rough', sand: 'Sand' };
 
 export const CELEBRATION_TIERS = {
   BIRDIE: {

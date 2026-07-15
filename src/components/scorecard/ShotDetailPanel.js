@@ -9,6 +9,9 @@ import {
   DEFAULT_SHOT, DRIVE_ORDER, DRIVE_META,
   FIRST_PUTT_BUCKETS, FIRST_PUTT_LABELS,
   APPROACH_BUCKETS, APPROACH_LABELS,
+  DRIVE_DIST_BUCKETS, DRIVE_DIST_LABELS,
+  DRIVE_MISS_LIES, DRIVE_MISS_LIE_LABELS,
+  APPROACH_LIES, APPROACH_LIE_LABELS,
 } from './constants';
 
 // One "label … − value +" counter row used for putts, penalties, sand shots.
@@ -84,6 +87,40 @@ function BucketSegment({ label, value, buckets, labels, onSelect, theme, s, expl
   );
 }
 
+// A labelled row of mutually-exclusive chips. `effectiveValue` drives the
+// selected state so a derived default (e.g. approach lie = fairway) can show
+// as selected without being stored.
+function LieChipRow({ label, a11yPrefix, options, labels, effectiveValue, onSelect, theme, s, explainer, isLast = false }) {
+  return (
+    <View style={[s.shotRow, isLast && s.shotRowLast]}>
+      <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+        <Text style={s.shotRowLabel}>{label}</Text>
+        {explainer}
+      </View>
+      <View style={s.driveBtns}>
+        {options.map((key) => {
+          const active = effectiveValue === key;
+          return (
+            <TouchableOpacity
+              key={key}
+              style={[s.outcomeChip, active && s.outcomeChipActive]}
+              onPress={() => onSelect(key, active)}
+              activeOpacity={0.7}
+              accessibilityRole="button"
+              accessibilityLabel={`${a11yPrefix} ${labels[key]}`}
+              accessibilityState={{ selected: active }}
+            >
+              <Text style={[s.outcomeChipLabel, active && { color: theme.text.inverse }]}>
+                {labels[key]}
+              </Text>
+            </TouchableOpacity>
+          );
+        })}
+      </View>
+    </View>
+  );
+}
+
 function ApproachResultRow({ value, onChange, theme, s, isLast = false }) {
   const options = [
     { key: 'green', label: 'On green' },
@@ -134,6 +171,7 @@ export function ShotDetailPanel({ hole, detail, onChange, strokes, theme: themeP
   const s = sProp ?? sOwn;
   const d = { ...DEFAULT_SHOT, ...(detail ?? {}) };
   const isPar3 = hole.par === 3;
+  const driveMissed = d.drive === 'left' || d.drive === 'right' || d.drive === 'short';
   const approachDistanceLabel = isPar3 ? 'Hole distance' : 'Approach';
   const approachShotHint = 'metres';
   const gir = isGIR({ strokes, putts: d.putts, par: hole.par });
@@ -218,7 +256,7 @@ export function ShotDetailPanel({ hole, detail, onChange, strokes, theme: themeP
                 <TouchableOpacity
                   key={key}
                   style={[s.driveCircle, active && s.driveCircleActive]}
-                  onPress={() => onChange({ drive: active ? null : key })}
+                  onPress={() => onChange({ drive: active ? null : key, driveLie: null })}
                   activeOpacity={0.7}
                   accessibilityLabel={`Driver ${meta.label}`}
                 >
@@ -233,6 +271,44 @@ export function ShotDetailPanel({ hole, detail, onChange, strokes, theme: themeP
           </View>
         </View>
       )}
+      {!isPar3 && driveMissed && (
+        <LieChipRow
+          label="Drive finished in"
+          a11yPrefix="Drive lie"
+          options={DRIVE_MISS_LIES}
+          labels={DRIVE_MISS_LIE_LABELS}
+          effectiveValue={d.driveLie ?? 'rough'}
+          onSelect={(key) => onChange({ driveLie: key })}
+          theme={theme}
+          s={s}
+          explainer={
+            <ShotDetailExplainer
+              rowKey="driveLie"
+              title="Drive lie"
+              body="Where the tee shot finished. Rough is assumed for a miss unless you say otherwise; Trouble means trees, deep stuff, or anywhere you could only chip out."
+            />
+          }
+        />
+      )}
+      {!isPar3 && (
+        <BucketSegment
+          label="Drive distance"
+          value={d.driveDistBucket}
+          buckets={DRIVE_DIST_BUCKETS}
+          labels={DRIVE_DIST_LABELS}
+          onSelect={(key) => onChange({ driveDistBucket: key })}
+          theme={theme}
+          s={s}
+          hint="metres"
+          explainer={
+            <ShotDetailExplainer
+              rowKey="driveDistBucket"
+              title="Drive distance"
+              body="Roughly how far the tee shot went. Powers the off-the-tee strokes gained category — no course measurements needed."
+            />
+          }
+        />
+      )}
       <BucketSegment
         label={approachDistanceLabel}
         value={d.approachBucket}
@@ -240,7 +316,7 @@ export function ShotDetailPanel({ hole, detail, onChange, strokes, theme: themeP
         labels={APPROACH_LABELS}
         onSelect={(key) => onChange({
           approachBucket: key,
-          ...(key == null ? { approachResult: null } : {}),
+          ...(key == null ? { approachResult: null, approachLie: null } : {}),
         })}
         theme={theme}
         s={s}
@@ -262,7 +338,26 @@ export function ShotDetailPanel({ hole, detail, onChange, strokes, theme: themeP
           onChange={onChange}
           theme={theme}
           s={s}
+        />
+      )}
+      {!isPar3 && d.approachBucket && (
+        <LieChipRow
+          label="Approach lie"
+          a11yPrefix="Approach lie"
+          options={APPROACH_LIES}
+          labels={APPROACH_LIE_LABELS}
+          effectiveValue={d.approachLie ?? 'fairway'}
+          onSelect={(key) => onChange({ approachLie: key === 'fairway' ? null : key })}
+          theme={theme}
+          s={s}
           isLast={(d.putts ?? 0) < 1 && !missedGIR}
+          explainer={
+            <ShotDetailExplainer
+              rowKey="approachLie"
+              title="Approach lie"
+              body="Where you played the shot aimed at the green from. Fairway is assumed — only change it when you attacked the green from rough or sand."
+            />
+          }
         />
       )}
       {(d.putts ?? 0) >= 1 && (

@@ -82,7 +82,7 @@ describe('ShotDetailPanel — approach capture', () => {
   });
 
   test('labels approach distance as Approach and only shows the metres hint', () => {
-    const { getByLabelText, getByText, queryByText, unmount } = render(wrap(
+    const { getByLabelText, getByText, getAllByText, queryByText, unmount } = render(wrap(
       <ShotDetailPanel
         hole={par4}
         strokes={4}
@@ -95,7 +95,8 @@ describe('ShotDetailPanel — approach capture', () => {
     expect(queryByText('Approach shot distance')).toBeNull();
     expect(getByLabelText('Open Approach info')).toBeTruthy();
     expect(getByLabelText('Open Sand shots info')).toBeTruthy();
-    expect(getByText('metres')).toBeTruthy();
+    // Drive distance also uses a "metres" hint, so both rows match.
+    expect(getAllByText('metres').length).toBeGreaterThan(0);
     expect(queryByText('2nd shot · metres')).toBeNull();
 
     unmount();
@@ -110,7 +111,7 @@ describe('ShotDetailPanel — approach capture', () => {
     ));
     expect(par5Render.getByText('Approach')).toBeTruthy();
     expect(par5Render.queryByText('Approach shot distance')).toBeNull();
-    expect(par5Render.getByText('metres')).toBeTruthy();
+    expect(par5Render.getAllByText('metres').length).toBeGreaterThan(0);
     expect(par5Render.queryByText('3rd shot · metres')).toBeNull();
   });
 
@@ -178,7 +179,7 @@ describe('ShotDetailPanel — approach capture', () => {
     ));
 
     fireEvent.press(getByLabelText('Approach 100-150'));
-    expect(onChange).toHaveBeenCalledWith({ approachBucket: null, approachResult: null });
+    expect(onChange).toHaveBeenCalledWith({ approachBucket: null, approachResult: null, approachLie: null });
   });
 });
 
