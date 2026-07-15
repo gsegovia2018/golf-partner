@@ -1,3 +1,5 @@
+import { drillsForInsight } from './coachDrills';
+
 const EMPTY_BOARD = {
   fixFirst: [],
   keepDoing: [],
@@ -138,6 +140,7 @@ function makeInsight({
   confidence,
   tone,
   priority = 0,
+  pointsPerRound,
 }) {
   const normalizedArea = normalizeArea(area);
   return {
@@ -151,6 +154,7 @@ function makeInsight({
     ...(Number.isFinite(impact) ? { impact: round2(impact) } : {}),
     ...(Number.isFinite(sample) ? { sample } : {}),
     ...(basis ? { basis } : {}),
+    ...(Number.isFinite(pointsPerRound) ? { pointsPerRound: round2(pointsPerRound) } : {}),
     confidence: confidence || confidenceForSample(sample),
     tone,
     priority,
@@ -165,6 +169,7 @@ function actionItemInsight(item, group, tone) {
   const reason = tone === 'good'
     ? `${item.label} is gaining ${metric} ${samplePhrase(sample, item.unit, item.sampleUnit)}.`
     : `${item.label} is costing ${metric.replace('-', '')} ${samplePhrase(sample, item.unit, item.sampleUnit)}.`;
+  const isSgPerRound = String(item.unit || '') === 'SG / round';
   return makeInsight({
     group,
     area: actionItemArea(item),
@@ -176,6 +181,7 @@ function actionItemInsight(item, group, tone) {
     basis: actionItemBasis(item),
     confidence,
     tone,
+    ...(isSgPerRound ? { pointsPerRound: item.score } : {}),
   });
 }
 
@@ -258,6 +264,7 @@ function strokesGainedCategoryInsights(stats) {
       confidence: confidenceForSample(sample),
       tone,
       priority: 1,
+      pointsPerRound: value,
     });
     // Penalties are almost always non-positive and tracked on nearly every
     // round, so they are almost always "high confidence". Left unguarded,
@@ -407,6 +414,20 @@ function practiceReason(insight, fallback) {
   return insight?.reason || fallback;
 }
 
+// The drill and points payoff attached to a practice item, when its source
+// insight exists. Payoff is absolute: "worth ≈ X pts / round" copy is
+// direction-free.
+function practiceExtras(insight) {
+  if (!insight) return {};
+  const drill = drillsForInsight(insight)[0];
+  return {
+    ...(drill ? { drill } : {}),
+    ...(Number.isFinite(insight.pointsPerRound)
+      ? { payoffPointsPerRound: Math.abs(round2(insight.pointsPerRound)) }
+      : {}),
+  };
+}
+
 function buildPracticePlan(board) {
   const first = board.fixFirst[0] || board.nextGains[0] || board.gettingWorse[0] || null;
   const primaryFixes = board.fixFirst.filter((insight) => (insight.priority ?? 0) === 0);
@@ -438,6 +459,7 @@ function buildPracticePlan(board) {
         : 'Log one complete round with scores and shot details.',
       reason: practiceReason(first, 'More complete scoring data will make the next coach view sharper.'),
       ...(first ? { sourceInsightId: first.id } : {}),
+      ...practiceExtras(first),
     },
     {
       id: 'secondary-focus',
@@ -448,6 +470,7 @@ function buildPracticePlan(board) {
         : 'Review the strongest recent form trend and keep the same pre-shot routine.',
       reason: practiceReason(secondary, 'Balancing practice keeps the plan from overfitting one category.'),
       ...(secondary ? { sourceInsightId: secondary.id } : {}),
+      ...practiceExtras(secondary),
     },
     {
       id: 'on-course-cue',
@@ -458,6 +481,7 @@ function buildPracticePlan(board) {
         : 'Capture fairways, greens, putts, and basic shot outcomes during the next round.',
       reason: practiceReason(cue, 'The selector needs shot data to separate real leaks from noise.'),
       ...(cue ? { sourceInsightId: cue.id } : {}),
+      ...practiceExtras(cue),
     },
   ];
 }

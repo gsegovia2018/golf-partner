@@ -186,6 +186,24 @@ export const statExplainers = {
       + 'target-handicap benchmark. Distance putting rows compare your average putts and '
       + '3-putt rate from each first-putt distance bucket with the target expectation.',
   },
+  coachPractice: {
+    title: 'Practice Plan',
+    subtitle: 'Drills matched to your biggest leaks',
+    explainer: 'Each block pairs your biggest measured leak with a specific drill and a pass '
+      + 'target, so a practice session is objectively passed or failed. The "worth" line uses '
+      + 'the approximation that 1 stroke gained ≈ 1 Stableford point per round.\n\n'
+      + 'The order comes from the Coach board: fix-first leaks get the first block, a second '
+      + 'area keeps practice balanced, and the on-course cue needs no range time at all.',
+  },
+  playSmarter: {
+    title: 'Play Smarter',
+    subtitle: 'Course decisions worth points without practice',
+    explainer: 'These tips come from fixed rules over your own tracked shots — laying up when '
+      + 'a distance band leaks, clubbing down when drives find trouble, lagging long putts, '
+      + 'guarding a one-sided miss, and avoiding short-side bunkers. A tip only appears once '
+      + 'there is enough data behind it, and each shows its payoff using the approximation '
+      + 'that 1 stroke gained ≈ 1 Stableford point per round.',
+  },
   strokesGained: strokesGainedExplainer,
   courseMastery: {
     title: 'Course Mastery',

@@ -1,4 +1,4 @@
-import { teeShotImpact, lagPuttingQuality, sandSaveRate, upAndDownRate, bunkerVisits, sgPutting, sgAroundGreen, sgApproach, sgPenalties, sgOffTheTee, sgTotal, sgSeason, sgReconciliation, driveScoreImpact, puttDeepDive, approachScoreImpact, puttingTargetGaps, approachTargetGaps, pairPerformance, shotStats, playersWithShotData, tournamentHighlights, withoutScrambleScores, playerAvgStableford, pickupChampion, hallOfShame, chaosHoles, skinsLeaderboard, playerStreaks, bounceBackRate, strokeIndexAccuracy, bestWorstHoles, holeDifficultyMap, collectiveExtremes, pairConfigMatrix, matchPlayResults, pairHoleWins, anchor, par3Heartbreak, playingToHandicap, hotStretch, nemesisEncore, pairCoverage, girByDriveResult, courseDNA, warmupVsClosing, driveLieFromDetail } from '../statsEngine';
+import { teeShotImpact, lagPuttingQuality, sandSaveRate, upAndDownRate, bunkerVisits, sgPutting, sgAroundGreen, sgApproach, sgPenalties, sgOffTheTee, sgTotal, sgSeason, sgReconciliation, driveScoreImpact, puttDeepDive, approachScoreImpact, puttingTargetGaps, approachTargetGaps, pairPerformance, shotStats, playersWithShotData, tournamentHighlights, withoutScrambleScores, playerAvgStableford, pickupChampion, hallOfShame, chaosHoles, skinsLeaderboard, playerStreaks, bounceBackRate, strokeIndexAccuracy, bestWorstHoles, holeDifficultyMap, collectiveExtremes, pairConfigMatrix, matchPlayResults, pairHoleWins, anchor, par3Heartbreak, playingToHandicap, hotStretch, nemesisEncore, pairCoverage, girByDriveResult, courseDNA, warmupVsClosing, driveLieFromDetail, driveLieBreakdown } from '../statsEngine';
 import { mixedModeTournament, buildTournament } from './statsFixtures';
 
 // 18 par-4 holes, strokeIndex = hole number.
@@ -2652,6 +2652,35 @@ describe('driveLieFromDetail', () => {
   test('null without any drive info', () => {
     expect(driveLieFromDetail({})).toBeNull();
     expect(driveLieFromDetail(null)).toBeNull();
+  });
+});
+
+describe('driveLieBreakdown', () => {
+  test('counts lies (explicit + derived) and computes troubleRate', () => {
+    const round = makeRound(
+      [
+        { par: 4, strokes: 4 }, { par: 4, strokes: 5 }, { par: 5, strokes: 6 },
+        { par: 4, strokes: 5 }, { par: 3, strokes: 3 }, { par: 4, strokes: 4 },
+      ],
+      [
+        { drive: 'fairway' },                          // fairway (derived)
+        { drive: 'left' },                             // rough (derived default)
+        { drive: 'right', driveLie: 'sand' },          // sand (explicit)
+        { drive: 'left', driveLie: 'trouble' },        // trouble (explicit)
+        { drive: 'fairway' },                          // par 3 — excluded (no drive category)
+        {},                                            // no drive info → excluded
+      ],
+    );
+    const r = driveLieBreakdown([round], 'me');
+    expect(r.drives).toBe(4);
+    expect(r.byLie).toEqual({ fairway: 1, rough: 1, sand: 1, trouble: 1 });
+    expect(r.troubleRate).toBeCloseTo(0.5, 10);
+  });
+  test('null troubleRate with no drive data', () => {
+    const round = makeRound([{ par: 4, strokes: 4 }], [{}]);
+    const r = driveLieBreakdown([round], 'me');
+    expect(r.drives).toBe(0);
+    expect(r.troubleRate).toBeNull();
   });
 });
 

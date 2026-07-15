@@ -2556,6 +2556,29 @@ export function driveLieFromDetail(detail) {
   return null;
 }
 
+// Distribution of drive lies across rounds — feeds the coach's club-down
+// strategy rule. Par 3s are excluded (no drive category), matching sgOffTheTee.
+export function driveLieBreakdown(rounds, playerId) {
+  const byLie = { fairway: 0, rough: 0, sand: 0, trouble: 0 };
+  let drives = 0;
+  (rounds ?? []).forEach((round) => {
+    const byHole = round?.shotDetails?.[playerId];
+    if (!byHole) return;
+    (round.holes ?? []).forEach((hole) => {
+      if (hole.par < 4) return;
+      const lie = driveLieFromDetail(byHole[hole.number]);
+      if (lie == null) return;
+      byLie[lie] += 1;
+      drives += 1;
+    });
+  });
+  return {
+    drives,
+    byLie,
+    troubleRate: drives > 0 ? (byLie.sand + byLie.trouble) / drives : null,
+  };
+}
+
 // ── Strokes Gained: Approach ──
 
 const APPROACH_LIES = new Set(['fairway', 'rough', 'sand']);

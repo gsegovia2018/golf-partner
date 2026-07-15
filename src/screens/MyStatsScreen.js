@@ -18,6 +18,7 @@ import FormTab from '../components/mystats/tabs/FormTab';
 import BreakdownTab from '../components/mystats/tabs/BreakdownTab';
 import ShotsTab from '../components/mystats/tabs/ShotsTab';
 import { statExplainers } from '../components/mystats/statExplainers';
+import { loadFocus, saveFocus, clearFocus, archiveFocus, makeFocusCommit, focusVerdict } from '../store/coachFocus';
 
 const SELECTION_PREFIX = '@mystats_round_selection:';
 
@@ -74,6 +75,13 @@ export default function MyStatsScreen({ navigation, route }) {
   const [infoKey, setInfoKey] = useState(null);
   const [targetHandicap, setTargetHandicap] = useState(null);
   const [pickerOpen, setPickerOpen] = useState(false);
+  const [coachFocus, setCoachFocus] = useState(null);
+
+  useEffect(() => {
+    let cancelled = false;
+    loadFocus(user?.id).then((focus) => { if (!cancelled) setCoachFocus(focus); }).catch(() => {});
+    return () => { cancelled = true; };
+  }, [user?.id]);
   const isTabPresentation = route?.params?.presentation === 'tab';
   const tabScrollRef = useRef(null);
   const tabLayoutsRef = useRef({});
@@ -207,6 +215,26 @@ export default function MyStatsScreen({ navigation, route }) {
     () => (selected.length ? computeMyStats(selected, { n, targetHandicap: targetHandicap ?? 0 }) : null),
     [selected, n, targetHandicap],
   );
+
+  const coachFocusVerdict = useMemo(
+    () => (coachFocus && stats ? focusVerdict(coachFocus, stats) : null),
+    [coachFocus, stats],
+  );
+
+  const onCommitFocus = useCallback((insight) => {
+    const focus = makeFocusCommit(insight, stats);
+    if (!focus) return;
+    setCoachFocus(focus);
+    saveFocus(user?.id, focus).catch(() => {});
+  }, [stats, user?.id]);
+
+  const onEndFocus = useCallback(() => {
+    if (!coachFocus) return;
+    const ended = coachFocus;
+    const verdict = coachFocusVerdict;
+    setCoachFocus(null);
+    archiveFocus(user?.id, ended, verdict).catch(() => clearFocus(user?.id).catch(() => {}));
+  }, [coachFocus, coachFocusVerdict, user?.id]);
 
   const reportCard = useMemo(
     () => (myRounds && reportRoundKey
@@ -387,7 +415,18 @@ export default function MyStatsScreen({ navigation, route }) {
             onOpenRound={openReportRound}
           />
         )}
-        {tab === 'coach' && <CoachTab stats={stats} onInfo={onInfo} targetHandicap={targetHandicap} onChangeTarget={() => setPickerOpen(true)} />}
+        {tab === 'coach' && (
+          <CoachTab
+            stats={stats}
+            onInfo={onInfo}
+            targetHandicap={targetHandicap}
+            onChangeTarget={() => setPickerOpen(true)}
+            focus={coachFocus}
+            focusVerdict={coachFocusVerdict}
+            onCommitFocus={onCommitFocus}
+            onEndFocus={onEndFocus}
+          />
+        )}
         {tab === 'form' && <FormTab stats={stats} n={n} onChangeN={setN} onInfo={onInfo} />}
         {tab === 'breakdown' && <BreakdownTab stats={stats} onInfo={onInfo} onSelectCourse={openCourseStats} />}
         {tab === 'shots' && <ShotsTab stats={stats} onInfo={onInfo} targetHandicap={targetHandicap} onChangeTarget={() => setPickerOpen(true)} />}

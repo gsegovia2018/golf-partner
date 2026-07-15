@@ -15,8 +15,10 @@ import {
   lagPuttingQuality, sandSaveRate, upAndDownRate, bunkerVisits,
   sgSeason, sgReconciliation, driveScoreImpact, approachScoreImpact, puttDeepDive,
   puttingTargetGaps, approachTargetGaps, courseDNA, playerStreaks,
+  driveLieBreakdown,
 } from './statsEngine';
 import { buildCoachInsights } from './coachInsights';
+import { buildStrategyTips } from './coachStrategy';
 import { shotBenchmarkForHandicap } from './shotBenchmarks';
 
 // Canonical player id used inside the synthetic tournament.
@@ -755,6 +757,11 @@ export function computeMyStats(selectedRounds, { n = 5, targetHandicap = 0, base
     strokesGained,
     courseMastery: courseMastery(synthetic),
     careerMilestones: careerMilestones(synthetic),
+    driveLies: driveLieBreakdown(synthetic.rounds, CANON_ID),
   };
-  return { ...baseStats, coach: buildCoachInsights(baseStats) };
+  return {
+    ...baseStats,
+    coach: buildCoachInsights(baseStats),
+    coachStrategy: buildStrategyTips(baseStats),
+  };
 }

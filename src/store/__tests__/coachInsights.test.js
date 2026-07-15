@@ -435,3 +435,57 @@ describe('offTheTee category insights', () => {
     expect(insight.area).toBe('driving');
   });
 });
+
+describe('pointsPerRound framing', () => {
+  test('SG-per-round category insights carry pointsPerRound ≈ impact', () => {
+    const stats = {
+      strokesGained: {
+        byCategory: { offTheTee: 0, approach: -1.4, aroundGreen: 0, putting: 0, penalties: 0 },
+        sampleHolesByCategory: { offTheTee: 30, approach: 30, aroundGreen: 30, putting: 30, penalties: 30 },
+        sampleHoles: 30,
+      },
+    };
+    const { board } = buildCoachInsights(stats);
+    const approach = [...board.fixFirst, ...board.nextGains].find((i) => i.title === 'Approach');
+    expect(approach.pointsPerRound).toBeCloseTo(-1.4, 2);
+  });
+  test('per-shot and pts-based insights never get pointsPerRound', () => {
+    const stats = {
+      actionPlan: {
+        improvements: [
+          { label: '150-200 m approaches', area: 'Approach', score: -0.31, sample: 14, unit: 'SG / shot', basis: 'vs target hcp' },
+          { label: 'Left misses', area: 'Driving', score: -0.5, sample: 12, unit: 'pts / hole', basis: 'vs your avg' },
+        ],
+      },
+    };
+    const { board } = buildCoachInsights(stats);
+    const all = [...board.fixFirst, ...board.nextGains, ...board.watch];
+    all.forEach((insight) => {
+      expect(insight.pointsPerRound).toBeUndefined();
+    });
+  });
+});
+
+describe('practice plan drills', () => {
+  test('plan items carry a matched drill and payoff for SG leaks', () => {
+    const stats = {
+      strokesGained: {
+        byCategory: { offTheTee: 0, approach: 0, aroundGreen: 0, putting: -1.8, penalties: 0 },
+        sampleHolesByCategory: { offTheTee: 30, approach: 30, aroundGreen: 30, putting: 30, penalties: 30 },
+        sampleHoles: 30,
+      },
+    };
+    const { practicePlan } = buildCoachInsights(stats);
+    const first = practicePlan.find((p) => p.role === 'practiceFirst');
+    expect(first.drill).toBeDefined();
+    expect(first.drill.passTarget.length).toBeGreaterThan(5);
+    expect(first.payoffPointsPerRound).toBeCloseTo(1.8, 2);
+  });
+  test('empty stats plan items have no drill', () => {
+    const { practicePlan } = buildCoachInsights({});
+    practicePlan.forEach((item) => {
+      expect(item.drill).toBeUndefined();
+      expect(item.payoffPointsPerRound).toBeUndefined();
+    });
+  });
+});
