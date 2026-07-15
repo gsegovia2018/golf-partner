@@ -2,11 +2,14 @@ import React, { useMemo, useState } from 'react';
 import { View, Text, StyleSheet } from 'react-native';
 import Svg, { Polyline, Circle, Line, Text as SvgText } from 'react-native-svg';
 import { useTheme } from '../../theme/ThemeContext';
-import { scalePoints, toSegments } from './chartGeometry';
+import { scalePoints, toSegments, dropGaps as dropGapEntries } from './chartGeometry';
 
 // series: [{ label, value }]  — value may be null for a gap.
 // variant: 'full' (default) | 'compact'.
 // formatValue: (number) => string  — used for the on-dot labels.
+// dropGaps: remove null points entirely so the line connects — for
+// round-total metrics where a skipped round isn't meaningful. Leave off for
+// shot metrics, where a gap means "not tracked that round".
 //
 // The chart measures its own width (onLayout) and draws at a 1:1 viewBox, so
 // it fills the card edge-to-edge with no letterboxing and the dots stay
@@ -18,6 +21,7 @@ export default function TrendLineChart({
   variant = 'full',
   formatValue = (v) => `${v}`,
   caption,
+  dropGaps = false,
 }) {
   const { theme } = useTheme();
   const s = useMemo(() => makeStyles(theme), [theme]);
@@ -33,11 +37,12 @@ export default function TrendLineChart({
   const dotR = compact ? 3.6 : 4.2;
   const fontSize = compact ? 10 : 11;
 
+  const data = dropGaps ? dropGapEntries(series) : series;
   const points = useMemo(
     () => (width > 0
-      ? scalePoints(series.map((p) => p.value), { width, height, padX, padTop, padBottom })
+      ? scalePoints(data.map((p) => p.value), { width, height, padX, padTop, padBottom })
       : []),
-    [series, width, height, padTop, padBottom],
+    [data, width, height, padTop, padBottom],
   );
   const drawn = points.filter((p) => p.y != null);
   const segments = useMemo(() => toSegments(points), [points]);
@@ -55,7 +60,7 @@ export default function TrendLineChart({
   return (
     <View>
       {caption ? <Text style={s.caption}>{caption}</Text> : null}
-      <View onLayout={(e) => setWidth(e.nativeEvent.layout.width)}>
+      <View testID="trend-chart-canvas" onLayout={(e) => setWidth(e.nativeEvent.layout.width)}>
         {width > 0 && (
           <Svg width={width} height={height} viewBox={`0 0 ${width} ${height}`}>
             {!compact && (

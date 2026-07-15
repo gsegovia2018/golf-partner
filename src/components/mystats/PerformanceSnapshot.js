@@ -81,7 +81,7 @@ export default function PerformanceSnapshot({
         </View>
       </View>
 
-      <TrendLineChart series={pointsSeries} color={theme.accent.primary} labelColor={theme.text.secondary} />
+      <TrendLineChart series={pointsSeries} color={theme.accent.primary} labelColor={theme.text.secondary} dropGaps />
 
       <View style={s.metricRail}>
         <MetricCell label="Rounds" value={`${metrics.rounds ?? 0}`} s={s} />

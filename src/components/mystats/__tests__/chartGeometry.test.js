@@ -1,4 +1,4 @@
-import { scalePoints, toSegments } from '../chartGeometry';
+import { scalePoints, toSegments, dropGaps } from '../chartGeometry';
 
 const BOX = { width: 100, height: 100, padX: 0, padTop: 0, padBottom: 0 };
 
@@ -61,5 +61,29 @@ describe('toSegments', () => {
 
   test('returns no segments when every point is null', () => {
     expect(toSegments([{ x: 0, y: null }, { x: 1, y: null }])).toEqual([]);
+  });
+});
+
+describe('dropGaps', () => {
+  test('removes null-valued entries so remaining points connect', () => {
+    const series = [
+      { label: 'A', value: 10 },
+      { label: 'B', value: null },
+      { label: 'C', value: 20 },
+    ];
+    expect(dropGaps(series)).toEqual([
+      { label: 'A', value: 10 },
+      { label: 'C', value: 20 },
+    ]);
+  });
+
+  test('leaves a gapless series untouched', () => {
+    const series = [{ label: 'A', value: 1 }, { label: 'B', value: 2 }];
+    expect(dropGaps(series)).toEqual(series);
+  });
+
+  test('handles empty and missing input', () => {
+    expect(dropGaps([])).toEqual([]);
+    expect(dropGaps(null)).toEqual([]);
   });
 });

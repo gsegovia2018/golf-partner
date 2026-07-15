@@ -52,6 +52,7 @@ export default function FormTab({ stats, n, onChangeN, onInfo }) {
         <TrendLineChart
           series={formSeries.metrics.avgPoints}
           color={theme.accent.primary}
+          dropGaps
           caption="Higher is better · oldest → newest"
         />
       </SectionCard>
@@ -60,6 +61,7 @@ export default function FormTab({ stats, n, onChangeN, onInfo }) {
         <TrendLineChart
           series={formSeries.metrics.avgVsPar}
           color={GOLD}
+          dropGaps
           formatValue={fmtVsPar}
           caption="Lower is better · oldest → newest"
         />

@@ -23,6 +23,14 @@ export function scalePoints(values, { width, height, padX = 0, padTop = 0, padBo
   });
 }
 
+// Removes null-valued entries from a [{ label, value }] series so the
+// remaining points draw as one connected line — used for round-total charts
+// where a skipped round shouldn't leave a gap. Shot-metric charts keep their
+// gaps (a gap there means "not tracked that round").
+export function dropGaps(series) {
+  return (series || []).filter((p) => p.value != null);
+}
+
 // Splits scaled points into contiguous runs that have a non-null y, so a
 // polyline can skip gaps instead of drawing a line through them.
 export function toSegments(points) {

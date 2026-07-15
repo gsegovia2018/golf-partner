@@ -93,6 +93,7 @@ function FormTrendCard({ form = {}, formSeries = {}, metrics = {} }) {
         color={color}
         labelColor={theme.text.secondary}
         variant="compact"
+        dropGaps
         caption="Points per round"
       />
     </SectionCard>
