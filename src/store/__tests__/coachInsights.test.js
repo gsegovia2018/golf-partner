@@ -465,3 +465,27 @@ describe('pointsPerRound framing', () => {
     });
   });
 });
+
+describe('practice plan drills', () => {
+  test('plan items carry a matched drill and payoff for SG leaks', () => {
+    const stats = {
+      strokesGained: {
+        byCategory: { offTheTee: 0, approach: 0, aroundGreen: 0, putting: -1.8, penalties: 0 },
+        sampleHolesByCategory: { offTheTee: 30, approach: 30, aroundGreen: 30, putting: 30, penalties: 30 },
+        sampleHoles: 30,
+      },
+    };
+    const { practicePlan } = buildCoachInsights(stats);
+    const first = practicePlan.find((p) => p.role === 'practiceFirst');
+    expect(first.drill).toBeDefined();
+    expect(first.drill.passTarget.length).toBeGreaterThan(5);
+    expect(first.payoffPointsPerRound).toBeCloseTo(1.8, 2);
+  });
+  test('empty stats plan items have no drill', () => {
+    const { practicePlan } = buildCoachInsights({});
+    practicePlan.forEach((item) => {
+      expect(item.drill).toBeUndefined();
+      expect(item.payoffPointsPerRound).toBeUndefined();
+    });
+  });
+});
