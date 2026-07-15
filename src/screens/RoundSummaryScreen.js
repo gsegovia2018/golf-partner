@@ -18,6 +18,7 @@ import {
 import { fetchTournament as fetchTournamentRemote } from '../store/tournamentRepo';
 import { ensureRealtimeForTournament } from '../store/realtimeSync';
 import { loadRoundMedia } from '../store/mediaStore';
+import useMediaAttachFlow from '../hooks/useMediaAttachFlow';
 import RoundRecapPanel from '../components/roundSummary/RoundRecapPanel';
 import RoundSummaryTabs from '../components/roundSummary/RoundSummaryTabs';
 import PullToRefresh from '../components/PullToRefresh';
@@ -93,6 +94,14 @@ export default function RoundSummaryScreen({ navigation, route }) {
   const roundIndex = tournament?.rounds?.findIndex((r) => r.id === roundId) ?? -1;
   const players = tournament?.players ?? [];
   const iAmPlaying = players.some((p) => p.user_id && p.user_id === me);
+
+  // Add-photo flow for the Photos tab — pre-targeted at this round; a saved
+  // photo re-runs load() so the grid picks it up.
+  const { openCaptureMenu, sheets: attachSheets } = useMediaAttachFlow({
+    tournament,
+    defaultRoundIndex: Math.max(0, roundIndex),
+    onAttached: load,
+  });
 
   const { unit, entries: ranked } = round
     ? roundLeaderboard(tournament, round)
@@ -263,6 +272,17 @@ export default function RoundSummaryScreen({ navigation, route }) {
           )}
         </PullToRefresh>
       )}
+      {!loading && round && iAmPlaying && activeTab === 'photos' ? (
+        <TouchableOpacity
+          style={s.fab}
+          onPress={openCaptureMenu}
+          accessibilityLabel="Add photo"
+          activeOpacity={0.85}
+        >
+          <Feather name="plus" size={26} color={theme.text.inverse} />
+        </TouchableOpacity>
+      ) : null}
+      {attachSheets}
     </ScreenContainer>
   );
 }
@@ -330,6 +350,15 @@ function makeStyles(theme) {
     },
     openBtnText: {
       fontFamily: 'PlusJakartaSans-ExtraBold', color: theme.text.inverse, fontSize: 15,
+    },
+    fab: {
+      position: 'absolute',
+      right: 20, bottom: 28,
+      width: 56, height: 56, borderRadius: 28,
+      backgroundColor: theme.accent.primary,
+      alignItems: 'center', justifyContent: 'center',
+      shadowColor: '#000', shadowOpacity: 0.25, shadowRadius: 8, shadowOffset: { width: 0, height: 3 },
+      elevation: 6,
     },
 
     // Glowing red "LIVE" badge in the header while the round is in progress.
