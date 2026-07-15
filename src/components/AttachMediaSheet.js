@@ -28,13 +28,19 @@ export default function AttachMediaSheet({
 
   useEffect(() => {
     if (!visible) return;
-    setRoundIndex(clampRoundIndex(defaultRoundIndex, rounds));
+    // Set the raw index here (not clamped against `rounds`) so this effect
+    // doesn't depend on `rounds` — ScorecardScreen replaces the tournament
+    // object (and `rounds` identity) on background realtime syncs, and we
+    // don't want that to reset the sheet mid-edit. `rounds` is instead
+    // clamped at use-site via `safeRoundIndex` below.
+    setRoundIndex(defaultRoundIndex ?? 0);
     setHoleWheelIndex((defaultHoleIndex ?? -1) + 1);
     setCaption('');
     AsyncStorage.getItem(UPLOADER_KEY).then((v) => setUploader(v ?? ''));
-  }, [visible, defaultRoundIndex, defaultHoleIndex, rounds]);
+  }, [visible, defaultRoundIndex, defaultHoleIndex]);
 
-  const round = rounds?.[roundIndex];
+  const safeRoundIndex = clampRoundIndex(roundIndex, rounds);
+  const round = rounds?.[safeRoundIndex];
   const holes = round?.holes ?? [];
 
   const roundItems = useMemo(() => (rounds ?? []).map((r, i) => ({
@@ -64,7 +70,7 @@ export default function AttachMediaSheet({
   const submit = async () => {
     if (uploader) await AsyncStorage.setItem(UPLOADER_KEY, uploader);
     onConfirm({
-      roundIndex,
+      roundIndex: safeRoundIndex,
       roundId: round?.id ?? null,
       holeIndex: holeWheelIndex === 0 ? null : holeWheelIndex - 1,
       caption: caption.trim() || null,
@@ -93,7 +99,7 @@ export default function AttachMediaSheet({
           <WheelPicker
             testID="attach-round-wheel"
             items={roundItems}
-            selectedIndex={roundIndex}
+            selectedIndex={safeRoundIndex}
             onChange={onRoundChange}
           />
         ) : null}
