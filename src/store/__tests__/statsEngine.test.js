@@ -1,4 +1,4 @@
-import { teeShotImpact, lagPuttingQuality, sandSaveRate, upAndDownRate, bunkerVisits, sgPutting, sgAroundGreen, sgApproach, sgPenalties, sgOffTheTee, sgTotal, sgSeason, driveScoreImpact, puttDeepDive, approachScoreImpact, puttingTargetGaps, approachTargetGaps, pairPerformance, shotStats, playersWithShotData, tournamentHighlights, withoutScrambleScores, playerAvgStableford, pickupChampion, hallOfShame, chaosHoles, skinsLeaderboard, playerStreaks, bounceBackRate, strokeIndexAccuracy, bestWorstHoles, holeDifficultyMap, collectiveExtremes, pairConfigMatrix, matchPlayResults, pairHoleWins, anchor, par3Heartbreak, playingToHandicap, hotStretch, nemesisEncore, pairCoverage, girByDriveResult, courseDNA, warmupVsClosing, driveLieFromDetail } from '../statsEngine';
+import { teeShotImpact, lagPuttingQuality, sandSaveRate, upAndDownRate, bunkerVisits, sgPutting, sgAroundGreen, sgApproach, sgPenalties, sgOffTheTee, sgTotal, sgSeason, sgReconciliation, driveScoreImpact, puttDeepDive, approachScoreImpact, puttingTargetGaps, approachTargetGaps, pairPerformance, shotStats, playersWithShotData, tournamentHighlights, withoutScrambleScores, playerAvgStableford, pickupChampion, hallOfShame, chaosHoles, skinsLeaderboard, playerStreaks, bounceBackRate, strokeIndexAccuracy, bestWorstHoles, holeDifficultyMap, collectiveExtremes, pairConfigMatrix, matchPlayResults, pairHoleWins, anchor, par3Heartbreak, playingToHandicap, hotStretch, nemesisEncore, pairCoverage, girByDriveResult, courseDNA, warmupVsClosing, driveLieFromDetail } from '../statsEngine';
 import { mixedModeTournament, buildTournament } from './statsFixtures';
 
 // 18 par-4 holes, strokeIndex = hole number.
@@ -1188,6 +1188,42 @@ describe('sgSeason', () => {
     // not all 5) — only the headline total changes to a single shared
     // denominator.
     expect(r.byCategory.putting).toBeCloseTo(sgPutting(puttingRound, 'me').total, 5);
+  });
+});
+
+describe('sgReconciliation', () => {
+  const detail = {
+    drive: 'fairway', driveDistBucket: '210-240',
+    putts: 2, approachBucket: '100-150', approachResult: 'green', firstPuttBucket: '3-6',
+  };
+
+  test('expected = par + hcp·(holes/18); residual makes categories sum exactly', () => {
+    const round = { ...makeRound([{ par: 4, strokes: 5 }], [{ ...detail }]), isComplete: true };
+    const r = sgReconciliation([round], 'me', 0);
+    expect(r.rounds).toBe(1);
+    expect(r.perRound[0].expected).toBeCloseTo(4, 10);
+    expect(r.perRound[0].actual).toBe(5);
+    expect(r.perRound[0].gap).toBeCloseTo(-1, 10);
+    const catSum = Object.values(r.perRound[0].byCategory).reduce((a, x) => a + x, 0);
+    expect(r.perRound[0].residual).toBeCloseTo(r.perRound[0].gap - catSum, 10);
+    expect(r.gapAvg).toBeCloseTo(
+      Object.values(r.byCategoryAvg).reduce((a, x) => a + x, 0) + r.residualAvg, 10,
+    );
+  });
+  test('target handicap scales with holes played', () => {
+    const round = { ...makeRound([{ par: 4, strokes: 4 }], [{ ...detail }]), isComplete: true };
+    const r = sgReconciliation([round], 'me', 18);
+    // 1 hole of 18 → expected = 4 + 18·(1/18) = 5
+    expect(r.perRound[0].expected).toBeCloseTo(5, 10);
+    expect(r.perRound[0].gap).toBeCloseTo(1, 10);
+  });
+  test('skips incomplete rounds and rounds without any SG sample', () => {
+    const incomplete = { ...makeRound([{ par: 4, strokes: 5 }], [{ ...detail }]), isComplete: false };
+    const noDetail = { ...makeRound([{ par: 4, strokes: 5 }], []), isComplete: true };
+    const r = sgReconciliation([incomplete, noDetail], 'me', 0);
+    expect(r.rounds).toBe(0);
+    expect(r.gapAvg).toBeNull();
+    expect(r.byCategoryAvg).toBeNull();
   });
 });
 

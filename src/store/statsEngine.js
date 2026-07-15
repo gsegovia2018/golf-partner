@@ -2779,6 +2779,62 @@ export function sgSeason(rounds, playerId, targetHandicap = 0) {
   };
 }
 
+// ── SG Reconciliation ──
+// "Where the strokes go": ties SG categories back to real scores. Expected
+// score = par + targetHandicap (scaled by holes played) — the plain meaning
+// of playing to a handicap; needs no course data. The residual absorbs
+// everything the categories don't measure (lay-ups, punch-outs, holes with
+// partial detail), so the panel always sums exactly instead of pretending
+// full attribution.
+export function sgReconciliation(rounds, playerId, targetHandicap = 0) {
+  const perRound = [];
+  (rounds ?? []).forEach((round, index) => {
+    if (!round?.isComplete) return;
+    const r = sgTotal(round, playerId, targetHandicap);
+    if (r.sampleHoles === 0) return;
+    let parPlayed = 0;
+    let actual = 0;
+    let holesPlayed = 0;
+    (round.holes ?? []).forEach((hole) => {
+      const sc = round.scores?.[playerId]?.[hole.number];
+      if (sc == null) return;
+      parPlayed += hole.par;
+      actual += sc;
+      holesPlayed += 1;
+    });
+    if (holesPlayed === 0) return;
+    const expected = parPlayed + targetHandicap * (holesPlayed / 18);
+    const gap = expected - actual;
+    const explained = SG_CATEGORIES.reduce((sum, c) => sum + r.byCategory[c], 0);
+    perRound.push({
+      index, expected, actual, gap,
+      byCategory: r.byCategory,
+      residual: gap - explained,
+    });
+  });
+  const n = perRound.length;
+  if (n === 0) {
+    return {
+      rounds: 0, perRound,
+      expectedAvg: null, actualAvg: null, gapAvg: null,
+      byCategoryAvg: null, residualAvg: null,
+    };
+  }
+  const avg = (pick) => perRound.reduce((sum, r) => sum + pick(r), 0) / n;
+  const byCategoryAvg = Object.fromEntries(
+    SG_CATEGORIES.map((c) => [c, avg((r) => r.byCategory[c])]),
+  );
+  return {
+    rounds: n,
+    perRound,
+    expectedAvg: avg((r) => r.expected),
+    actualAvg: avg((r) => r.actual),
+    gapAvg: avg((r) => r.gap),
+    byCategoryAvg,
+    residualAvg: avg((r) => r.residual),
+  };
+}
+
 // ── Overview: Playing to Handicap ──
 
 // A golfer playing exactly to their handicap nets 2 Stableford points on
