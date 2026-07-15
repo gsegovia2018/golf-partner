@@ -10,6 +10,7 @@ import { Feather } from '@expo/vector-icons';
 import { useTheme } from '../theme/ThemeContext';
 import {
   buildFeed, loadReactions, toggleReaction, isValidReactionEmoji, loadCommentCounts,
+  invalidateFeedCache,
 } from '../store/feedStore';
 import { notifyFeedActivity } from '../store/notificationStore';
 import { subscribeTournamentChanges, formatRoundLabel } from '../store/tournamentStore';
@@ -21,6 +22,18 @@ import FeedRoundCard from '../components/feed/FeedRoundCard';
 
 const EMPTY_REACTION_COUNTS = {};
 const EMPTY_REACTION_MINE = [];
+
+// Infinite-scroll page size — matches the cache-base build's existing
+// `limit: 30` so the first paint and the first remote page show the same
+// count of cards.
+const FEED_PAGE_SIZE = 30;
+// Trailing debounce window for subscribeTournamentChanges: a burst of rapid
+// local score edits (each one fires a change event) collapses into a single
+// rebuild instead of one full remote build per edit.
+const TOURNAMENT_CHANGE_DEBOUNCE_MS = 700;
+// Feed stories rail only ever shows this many — matches ROUND_STORY_LIMIT in
+// feedStore.js's buildRoundStories.
+const ROUND_STORY_RAIL_LIMIT = 12;
 
 // Compact relative time: "just now", "3h", "2d", "5w". Pure function of a
 // timestamp and a "now" — `now` is passed in so the value can re-render live.
@@ -206,11 +219,26 @@ export default function FeedScreen({ navigation }) {
   const [commentCounts, setCommentCounts] = useState({});
   const [openCommentsItem, setOpenCommentsItem] = useState(null);
   const [openStoryKey, setOpenStoryKey] = useState(null);
+  // Infinite-scroll pagination state: whether the remote build says there's
+  // another page beyond what's loaded, and whether a page fetch is in flight
+  // (guards duplicate onEndReached fetches while one is already running).
+  const [hasMore, setHasMore] = useState(false);
+  const [loadingMore, setLoadingMore] = useState(false);
   // True once the first load has settled, so later focus-driven reloads keep
   // the current screen visible instead of showing the full spinner.
   const loadedOnceRef = useRef(false);
   const hasVisibleFeedRef = useRef(false);
   const overlayLoadSeqRef = useRef(0);
+  const loadingMoreRef = useRef(false);
+  // The server's notion of where the next page starts (buildFeed's returned
+  // `nextOffset`) — used instead of the rendered item count so client-side
+  // dedup dropping an item never makes the next page skip/gap a server row.
+  const nextOffsetRef = useRef(0);
+  // Request-generation guard: every fresh full rebuild (`load`) bumps this,
+  // and an in-flight `loadMore` discards its result if the epoch changed
+  // while it was awaiting — so a slow page fetch can't clobber `items`/
+  // `hasMore` with stale data after a concurrent rebuild superseded it.
+  const loadEpochRef = useRef(0);
 
   const applyFeedResult = useCallback((result) => {
     const feedItems = result.items ?? [];
@@ -227,6 +255,7 @@ export default function FeedScreen({ navigation }) {
         setReactions({});
         setCommentCounts({});
         setStatus('error');
+        setHasMore(false);
       }
       loadedOnceRef.current = true;
       return;
@@ -235,6 +264,10 @@ export default function FeedScreen({ navigation }) {
     setItems(feedItems);
     setRoundStories(stories);
     setStatus(result.partial ? 'partial' : 'ok');
+    setHasMore(!!result.hasMore);
+    // Where the next page starts, straight from the server's slice math —
+    // never re-derived from the (possibly deduped) rendered item count.
+    nextOffsetRef.current = result.nextOffset ?? feedItems.length;
     loadedOnceRef.current = true;
     hasVisibleFeedRef.current = hasResultFeed;
     // Reactions + comment counts are best-effort overlays — never block
@@ -254,16 +287,62 @@ export default function FeedScreen({ navigation }) {
       .catch(() => {});
   }, []);
 
+  // Appends a paginated (`onEndReached`) page to the existing list instead of
+  // replacing it. De-dupes by `key` (stable — see feedStore's `round:<t>:<r>`
+  // keying) so an item that shifted between pages (e.g. new activity landed
+  // between fetches) never renders twice. Round stories from the new page are
+  // merged the same way, then re-capped to the rail's usual limit.
+  const appendFeedPage = useCallback((result) => {
+    const newItems = result.items ?? [];
+    setItems((prev) => {
+      if (newItems.length === 0) return prev;
+      const seen = new Set(prev.map((it) => it.key));
+      const additions = newItems.filter((it) => !seen.has(it.key));
+      return additions.length > 0 ? [...prev, ...additions] : prev;
+    });
+    if ((result.roundStories?.length ?? 0) > 0) {
+      setRoundStories((prev) => {
+        const byKey = new Map(prev.map((story) => [story.key, story]));
+        for (const story of result.roundStories) {
+          if (!byKey.has(story.key)) byKey.set(story.key, story);
+        }
+        return [...byKey.values()]
+          .sort((a, b) => (b.latestTs ?? 0) - (a.latestTs ?? 0))
+          .slice(0, ROUND_STORY_RAIL_LIMIT);
+      });
+    }
+    setHasMore(!!result.hasMore);
+    if (typeof result.nextOffset === 'number') nextOffsetRef.current = result.nextOffset;
+    if (newItems.length > 0) {
+      const keys = newItems.map((it) => it.key);
+      loadReactions(keys)
+        .then((next) => setReactions((prev) => ({ ...prev, ...next })))
+        .catch(() => {});
+      loadCommentCounts(keys)
+        .then((next) => setCommentCounts((prev) => ({ ...prev, ...next })))
+        .catch(() => {});
+    }
+  }, []);
+
   const load = useCallback(async (isRefresh) => {
+    // A fresh full rebuild supersedes any in-flight paginated page fetch:
+    // bump the epoch so a slow loadMore that resolves after this rebuild
+    // discards its (now stale) result instead of clobbering the list.
+    loadEpochRef.current += 1;
+    // Captured before any state mutation below — distinguishes "first ever
+    // load" (must be a fully fresh fetch) from "refocusing a screen that's
+    // already shown a feed" (safe to reuse the last build's ingredients when
+    // nothing has invalidated them).
+    const isRefocus = loadedOnceRef.current;
     if (isRefresh) setRefreshing(true);
     try {
-      if (!isRefresh && !loadedOnceRef.current) {
+      if (!isRefresh && !isRefocus) {
         const cachedStart = Date.now();
         const cachedResult = await buildFeed({
           userId,
           source: 'cache',
           includeMedia: false,
-          limit: 30,
+          limit: FEED_PAGE_SIZE,
         });
         feedMark('cache base', cachedStart);
         const hasCachedFeed = (cachedResult.items?.length ?? 0) > 0
@@ -279,6 +358,13 @@ export default function FeedScreen({ navigation }) {
         userId,
         source: 'remote',
         includeMedia: true,
+        limit: FEED_PAGE_SIZE,
+        // A plain refocus (no pull-to-refresh, not the first load) reuses the
+        // last remote build's fetched friends/tournaments/activity instead of
+        // re-running every RPC — a tournament-change event invalidates that
+        // cache first (see the debounced subscription below), so this never
+        // serves stale data after a real edit.
+        useCache: !isRefresh && isRefocus,
       });
       feedMark('remote full', remoteStart);
       applyFeedResult(result);
@@ -294,14 +380,62 @@ export default function FeedScreen({ navigation }) {
     }
   }, [applyFeedResult, userId]);
 
+  const loadMore = useCallback(async () => {
+    if (!hasMore || loadingMoreRef.current || loading) return;
+    loadingMoreRef.current = true;
+    // Snapshot the epoch: if a full rebuild (`load`) runs while this page
+    // fetch is awaiting, the epoch changes and the result below is discarded
+    // rather than appended on top of the rebuilt list.
+    const epoch = loadEpochRef.current;
+    setLoadingMore(true);
+    try {
+      const result = await buildFeed({
+        userId,
+        source: 'remote',
+        includeMedia: true,
+        limit: FEED_PAGE_SIZE,
+        // Continue from where the server sliced the previous page, not the
+        // rendered length (dedup may have dropped a row).
+        offset: nextOffsetRef.current,
+        useCache: true,
+      });
+      if (loadEpochRef.current !== epoch) return; // superseded by a rebuild
+      appendFeedPage(result);
+    } catch {
+      // Best-effort — leave `hasMore` as-is so the user can just scroll/retry.
+    } finally {
+      loadingMoreRef.current = false;
+      setLoadingMore(false);
+    }
+  }, [hasMore, loading, userId, appendFeedPage]);
+
   useFocusEffect(useCallback(() => {
     let cancelled = false;
+    let debounceTimer = null;
     // Only show the full spinner on the very first load; later focus-driven
     // reloads keep the current list visible.
     if (!loadedOnceRef.current) setLoading(true);
     load(false);
-    const unsub = subscribeTournamentChanges(() => { if (!cancelled) load(false); });
-    return () => { cancelled = true; unsub(); };
+    // Rapid local score edits each fire a tournament-change event; a trailing
+    // debounce coalesces a burst into a single rebuild instead of one full
+    // remote build per edit. The rebuild is a real data change, so the
+    // build-pipeline cache is invalidated first — `load`'s `useCache` reuse
+    // only ever applies to a no-op refocus, never here.
+    const unsub = subscribeTournamentChanges(() => {
+      if (cancelled) return;
+      if (debounceTimer) clearTimeout(debounceTimer);
+      debounceTimer = setTimeout(() => {
+        debounceTimer = null;
+        if (cancelled) return;
+        invalidateFeedCache();
+        load(false);
+      }, TOURNAMENT_CHANGE_DEBOUNCE_MS);
+    });
+    return () => {
+      cancelled = true;
+      if (debounceTimer) clearTimeout(debounceTimer);
+      unsub();
+    };
   }, [load]));
 
   // Apply an optimistic reaction change to local state.
@@ -476,6 +610,7 @@ export default function FeedScreen({ navigation }) {
         </ScrollView>
       ) : (
         <FlatList
+          testID="feed-list"
           data={items}
           keyExtractor={(it) => it.key}
           renderItem={({ item }) => renderRound(item)}
@@ -488,6 +623,13 @@ export default function FeedScreen({ navigation }) {
             />
           )}
           ListEmptyComponent={renderEmpty()}
+          onEndReached={loadMore}
+          onEndReachedThreshold={0.4}
+          ListFooterComponent={loadingMore ? (
+            <View style={s.loadingMoreRow}>
+              <Text style={s.loadingMoreText}>Loading more…</Text>
+            </View>
+          ) : null}
         />
       )}
 
@@ -536,6 +678,12 @@ function makeStyles(theme) {
     },
     partialText: {
       fontFamily: 'PlusJakartaSans-Medium', fontSize: 11, color: theme.text.muted,
+    },
+    loadingMoreRow: {
+      paddingVertical: 16, alignItems: 'center', justifyContent: 'center',
+    },
+    loadingMoreText: {
+      fontFamily: 'PlusJakartaSans-Medium', fontSize: 12, color: theme.text.muted,
     },
     card: {
       backgroundColor: theme.bg.card, borderRadius: 18,

@@ -5,6 +5,7 @@ import { File as FsFile } from 'expo-file-system';
 import { supabase } from './supabase';
 import { insertMediaRow } from '../store/mediaStore';
 import { generateVideoThumbWeb } from './videoThumbWeb';
+import { MAX_VIDEO_UPLOAD_BYTES, MAX_VIDEO_UPLOAD_LABEL } from './mediaLimits';
 
 const BUCKET = 'tournament-media';
 
@@ -18,11 +19,22 @@ const BUCKET = 'tournament-media';
 // Samsung/Pixel motion photos silently upload 0 bytes or time out. Reading
 // the file into an ArrayBuffer via expo-file-system skips that path: the
 // raw bytes are sent as the request body directly (no FormData wrapping).
-async function uriToBody(uri) {
+//
+// The size cap is normally enforced up-front in mediaCapture.js before an
+// item is ever enqueued, but that guard can't see every path an item might
+// take to get here (e.g. a queued retry from before this check existed).
+// Re-checking the Blob's actual byte size here — the only reliable size on
+// web, since picker-reported fileSize can be missing — is a last line of
+// defense against loading a huge file into memory for upload.
+async function uriToBody(uri, { kind } = {}) {
   if (Platform.OS === 'web') {
     const res = await fetch(uri);
     if (!res.ok) throw new Error(`Failed to read media (${res.status})`);
-    return res.blob();
+    const blob = await res.blob();
+    if (kind === 'video' && blob.size > MAX_VIDEO_UPLOAD_BYTES) {
+      throw new Error(`Los vídeos deben ser de ${MAX_VIDEO_UPLOAD_LABEL} o menos.`);
+    }
+    return blob;
   }
   return new FsFile(uri).arrayBuffer();
 }
@@ -94,8 +106,8 @@ async function makeThumbnail(uri, kind) {
   return resized.uri;
 }
 
-async function uploadFile(path, uri, contentType) {
-  const body = await uriToBody(uri);
+async function uploadFile(path, uri, contentType, { kind } = {}) {
+  const body = await uriToBody(uri, { kind });
   const { error } = await supabase.storage
     .from(BUCKET)
     .upload(path, body, { contentType, upsert: true });
@@ -131,26 +143,40 @@ export async function processUpload(entry) {
     thumbUri = null;
   }
 
-  await uploadFile(storagePath, finalUri, contentType);
+  // generateVideoThumbWeb hands back a blob: URL it created via
+  // canvas.toBlob(); once nothing downstream needs it any more it must be
+  // revoked or every web video attach leaks that blob permanently. This
+  // wraps the *entire* rest of the upload (not just the thumb's own upload
+  // call) so the blob is still released even if e.g. the original video's
+  // upload fails after the thumbnail step already succeeded. Native
+  // thumbUris are file:// paths (or a data URI for photos) — nothing to
+  // revoke there.
+  try {
+    await uploadFile(storagePath, finalUri, contentType, { kind });
 
-  // tournament_media.thumb_path is NOT NULL, and consumers render thumbUrl
-  // directly with no original-url fallback (e.g. MemoryCard). When the
-  // thumbnail failed, point thumb_path at the original we just uploaded:
-  // this satisfies the constraint and shows the full image instead of a
-  // broken one, rather than passing null (which would 23502 on insert and
-  // lose the media through retries — the very bug this fix prevents).
-  let finalThumbPath;
-  if (thumbUri) {
-    await uploadFile(thumbPath, thumbUri, 'image/jpeg');
-    finalThumbPath = thumbPath;
-  } else {
-    finalThumbPath = storagePath;
+    // tournament_media.thumb_path is NOT NULL, and consumers render thumbUrl
+    // directly with no original-url fallback (e.g. MemoryCard). When the
+    // thumbnail failed, point thumb_path at the original we just uploaded:
+    // this satisfies the constraint and shows the full image instead of a
+    // broken one, rather than passing null (which would 23502 on insert and
+    // lose the media through retries — the very bug this fix prevents).
+    let finalThumbPath;
+    if (thumbUri) {
+      await uploadFile(thumbPath, thumbUri, 'image/jpeg');
+      finalThumbPath = thumbPath;
+    } else {
+      finalThumbPath = storagePath;
+    }
+
+    await insertMediaRow({
+      id, tournamentId, roundId, holeIndex, kind,
+      storagePath, thumbPath: finalThumbPath, durationS, caption, uploaderLabel,
+    });
+
+    return { storagePath, thumbPath: finalThumbPath };
+  } finally {
+    if (Platform.OS === 'web' && kind === 'video' && thumbUri) {
+      URL.revokeObjectURL(thumbUri);
+    }
   }
-
-  await insertMediaRow({
-    id, tournamentId, roundId, holeIndex, kind,
-    storagePath, thumbPath: finalThumbPath, durationS, caption, uploaderLabel,
-  });
-
-  return { storagePath, thumbPath: finalThumbPath };
 }

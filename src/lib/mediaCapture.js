@@ -1,3 +1,4 @@
+import { Platform } from 'react-native';
 import * as ImagePicker from 'expo-image-picker';
 import { enqueueMedia } from '../store/mediaQueue';
 import { kickUploadWorker } from './uploadWorker';
@@ -27,10 +28,36 @@ async function ensurePermissions(source) {
   }
 }
 
-function assertGalleryVideoSize(asset, source) {
-  if (source !== 'library' || asset?.type !== 'video') return;
-  if (typeof asset.fileSize !== 'number' || asset.fileSize <= MAX_VIDEO_UPLOAD_BYTES) return;
-  throw new Error(`Los vídeos de galería deben ser de ${MAX_VIDEO_UPLOAD_LABEL} o menos.`);
+function sizeErrorMessage(source) {
+  if (source === 'library') return `Los vídeos de galería deben ser de ${MAX_VIDEO_UPLOAD_LABEL} o menos.`;
+  if (source === 'camera') return `Los vídeos grabados con la cámara deben ser de ${MAX_VIDEO_UPLOAD_LABEL} o menos.`;
+  return `Los vídeos deben ser de ${MAX_VIDEO_UPLOAD_LABEL} o menos.`;
+}
+
+// The web picker (and, in principle, any future picker) can omit fileSize —
+// derive it from the actual Blob so oversized web videos don't slip past
+// the cap and get loaded whole into memory by the upload path.
+async function deriveWebVideoSize(uri) {
+  try {
+    const res = await fetch(uri);
+    const blob = await res.blob();
+    return blob.size;
+  } catch {
+    return null;
+  }
+}
+
+// Applies to every source — library, camera, and web — not just gallery
+// picks. Camera-recorded clips and web picks were previously never
+// size-checked (fileSize is frequently absent from the web picker).
+async function assertVideoSize(asset, source) {
+  if (asset?.type !== 'video') return;
+  let size = typeof asset.fileSize === 'number' ? asset.fileSize : null;
+  if (size == null && Platform.OS === 'web' && typeof asset.uri === 'string') {
+    size = await deriveWebVideoSize(asset.uri);
+  }
+  if (size == null || size <= MAX_VIDEO_UPLOAD_BYTES) return;
+  throw new Error(sizeErrorMessage(source));
 }
 
 export async function pickMedia({ source, mediaTypes, multi = false, selectionLimit = 20 }) {
@@ -61,7 +88,11 @@ export async function pickMedia({ source, mediaTypes, multi = false, selectionLi
 
   if (result.canceled || !result.assets?.length) return multi ? [] : null;
 
-  result.assets.forEach((asset) => assertGalleryVideoSize(asset, source));
+  // Each asset must be validated before any are enqueued; the sequential
+  // await keeps failure order deterministic and readable.
+  for (const asset of result.assets) {
+    await assertVideoSize(asset, source);
+  }
 
   const mapped = result.assets.map((asset) => ({
     localUri: asset.uri,

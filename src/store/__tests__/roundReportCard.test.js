@@ -1,4 +1,5 @@
 import { buildRoundReportCard } from '../roundReportCard';
+import * as personalStats from '../personalStats';
 
 // ── Fixture helpers ───────────────────────────────────────────────
 // 18 holes, par 4, strokeIndex = hole number.
@@ -355,5 +356,61 @@ describe('buildRoundReportCard — breakdown groups', () => {
       expect(c.baseline).toBeNull();
       expect(c.deltaVsAvg).toBeNull();
     });
+  });
+});
+
+describe('buildRoundReportCard — baseline-only compute path', () => {
+  test('computes thisStats and baseStats via computeMyStats({ baselineOnly: true })', () => {
+    const spy = jest.spyOn(personalStats, 'computeMyStats');
+    const h = mkHoles();
+    const rounds = [
+      mkMyRound({ key: 'h1', holes: h, scores: evenScores(h, 4) }),
+      mkMyRound({ key: 'target', holes: h, scores: evenScores(h, 3) }),
+    ];
+    buildRoundReportCard(rounds, 'target');
+    expect(spy).toHaveBeenCalledTimes(2);
+    spy.mock.calls.forEach((call) => {
+      expect(call[1]).toMatchObject({ baselineOnly: true });
+    });
+    spy.mockRestore();
+  });
+
+  test('the report card output is unchanged for a rich fixture (shot data + history)', () => {
+    // A fixture that exercises every code path roundReportCard reads off
+    // computeMyStats: history (career per-hole baseline), parType,
+    // difficulty, warmupClosing, frontBack (18 holes → Front/Back 9),
+    // distribution (blow-ups), and shots (putts/fairways/GIR). Locking this
+    // down in a snapshot means any regression in the baselineOnly path —
+    // wrong field, stale value, wrong synthetic — shows up as a diff here.
+    const holes = Array.from({ length: 18 }, (_, i) => ({
+      number: i + 1, par: i < 3 ? 3 : i < 15 ? 4 : 5, strokeIndex: i + 1,
+    }));
+    const shotDetail = {};
+    holes.forEach((hole) => {
+      shotDetail[hole.number] = {
+        putts: 2, drive: hole.strokeIndex <= 9 ? 'fairway' : 'right', teePenalties: 0, otherPenalties: 0,
+      };
+    });
+    const flatScores = () => {
+      const o = {};
+      holes.forEach((h) => { o[h.number] = h.par; });
+      return o;
+    };
+    const targetScores = flatScores();
+    targetScores[1] = holes[0].par - 1; // birdie a par 3
+    targetScores[16] = holes[15].par + 3; // blow-up a par 5
+
+    const rounds = [
+      mkMyRound({ key: 'h1', holes, scores: flatScores(), tournamentDate: '2026-04-01' }),
+      mkMyRound({
+        key: 'h2', holes, scores: flatScores(), shotDetails: shotDetail, tournamentDate: '2026-04-08',
+      }),
+      mkMyRound({
+        key: 'target', holes, scores: targetScores, shotDetails: shotDetail, tournamentDate: '2026-04-15',
+      }),
+    ];
+
+    const card = buildRoundReportCard(rounds, 'target');
+    expect(card).toMatchSnapshot();
   });
 });

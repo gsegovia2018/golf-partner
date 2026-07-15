@@ -442,15 +442,28 @@ function SectionAnchor({ anchorKey, anchors, children }) {
 function OverviewTab({ tournament, metric, hasMulti, anyTeams, allScramble, roundScope, scrollRef, theme, s }) {
   // Round scope is now screen-level; treat the prop as the source of truth.
   const roundIndex = roundScope;
-  const highlights = tournamentHighlights(tournament, { metric, roundIndex });
-  const momentum = tournamentMomentum(tournament);
-  const clutch = clutchOnHardest(tournament, { topN: 3 });
-  const consistency = playerConsistency(tournament);
-  const dna = courseDNA(tournament);
-  const skins = skinsLeaderboard(tournament, { metric });
-  const pth = playingToHandicap(tournament);
-  const hotStretchList = hotStretch(tournament);
-  const siAccuracy = strokeIndexAccuracy(tournament, { roundIndex });
+  // Each of these is an O(players×rounds×holes) pass (tournamentHighlights
+  // fans out further per player). The tab holds local `sheet` state below,
+  // so without memoization tapping a highlight card to open its detail
+  // sheet would re-run every one of these on the JS thread. Deps are keyed
+  // on exactly the scope vars each function reads — `sheet` must never be a
+  // dep, or opening a sheet would defeat the memo entirely. Mirrors the
+  // useMemo pattern in ShotsTab (~line 2893).
+  const highlights = useMemo(
+    () => tournamentHighlights(tournament, { metric, roundIndex }),
+    [tournament, metric, roundIndex],
+  );
+  const momentum = useMemo(() => tournamentMomentum(tournament), [tournament]);
+  const clutch = useMemo(() => clutchOnHardest(tournament, { topN: 3 }), [tournament]);
+  const consistency = useMemo(() => playerConsistency(tournament), [tournament]);
+  const dna = useMemo(() => courseDNA(tournament), [tournament]);
+  const skins = useMemo(() => skinsLeaderboard(tournament, { metric }), [tournament, metric]);
+  const pth = useMemo(() => playingToHandicap(tournament), [tournament]);
+  const hotStretchList = useMemo(() => hotStretch(tournament), [tournament]);
+  const siAccuracy = useMemo(
+    () => strokeIndexAccuracy(tournament, { roundIndex }),
+    [tournament, roundIndex],
+  );
   const isStrokes = metric === 'strokes';
   const modeLabel = isStrokes ? 'strokes (gross)' : 'points (net Stableford)';
   const [sheet, setSheet] = useState(null);
@@ -1251,7 +1264,6 @@ function PlayersTab({ tournament, players, selectedPlayer, setSelectedPlayer, me
   const player = players[selectedPlayer];
   const [sheet, setSheet] = useState(null);
   const anchors = useRef({});
-  if (!player) return null;
 
   const isStrokes = metric === 'strokes';
   // Distribution and streaks are the only two engine functions here that
@@ -1259,16 +1271,57 @@ function PlayersTab({ tournament, players, selectedPlayer, setSelectedPlayer, me
   // tournament, so those sections read `roundScope` and the rest are
   // explicitly labeled "All rounds" (via scopeLabel below) rather than
   // silently ignoring the round-scope chip.
-  const dist = playerScoreDistribution(tournament, player.id, { metric, roundIndex: roundScope });
-  const streaks = playerStreaks(tournament, player.id, { metric, roundIndex: roundScope });
-  const history = playerRoundHistory(tournament, player.id);
-  const avg = playerAvgStableford(tournament, player.id);
-  const parSplit = parTypeSplit(tournament, player.id);
-  const difficulty = holeDifficultySplit(tournament, player.id);
-  const wc = warmupVsClosing(tournament, player.id);
-  const roi = handicapROI(tournament, player.id);
-  const bounceBack = bounceBackRate(tournament).find(r => r.player.id === player.id) || null;
-  const frontBack = frontBackSplit(tournament).find(r => r.player.id === player.id) || null;
+  //
+  // Each of these does a pass over the tournament for the selected player.
+  // The tab holds local `sheet` state for its detail sheets below, so
+  // without memoization opening one would re-run every aggregate here.
+  // Deps are keyed on exactly the scope vars each function reads — `sheet`
+  // must never be a dep. The hooks must run unconditionally (before the
+  // `!player` early return further down), so each is guarded on `player`
+  // internally rather than skipped — mirrors ShotsTab's `selected`-guarded
+  // useMemo pattern (~line 2893).
+  const dist = useMemo(
+    () => (player ? playerScoreDistribution(tournament, player.id, { metric, roundIndex: roundScope }) : null),
+    [tournament, player, metric, roundScope],
+  );
+  const streaks = useMemo(
+    () => (player ? playerStreaks(tournament, player.id, { metric, roundIndex: roundScope }) : null),
+    [tournament, player, metric, roundScope],
+  );
+  const history = useMemo(
+    () => (player ? playerRoundHistory(tournament, player.id) : null),
+    [tournament, player],
+  );
+  const avg = useMemo(
+    () => (player ? playerAvgStableford(tournament, player.id) : null),
+    [tournament, player],
+  );
+  const parSplit = useMemo(
+    () => (player ? parTypeSplit(tournament, player.id) : null),
+    [tournament, player],
+  );
+  const difficulty = useMemo(
+    () => (player ? holeDifficultySplit(tournament, player.id) : null),
+    [tournament, player],
+  );
+  const wc = useMemo(
+    () => (player ? warmupVsClosing(tournament, player.id) : null),
+    [tournament, player],
+  );
+  const roi = useMemo(
+    () => (player ? handicapROI(tournament, player.id) : null),
+    [tournament, player],
+  );
+  const bounceBack = useMemo(
+    () => (player ? bounceBackRate(tournament).find(r => r.player.id === player.id) || null : null),
+    [tournament, player],
+  );
+  const frontBack = useMemo(
+    () => (player ? frontBackSplit(tournament).find(r => r.player.id === player.id) || null : null),
+    [tournament, player],
+  );
+  if (!player) return null;
+
   const modeLabel = isStrokes ? 'strokes (gross)' : 'points (net Stableford)';
   // Same scope-label convention Pairs uses: null reads as "All rounds"
   // instead of silently substituting the first completed round.
@@ -1730,13 +1783,22 @@ function HolesTab({ tournament, completedRounds, hasMulti, metric, effectiveRoun
   // Best/worst honors the screen's round scope directly (null = Total,
   // aggregated across every round) rather than falling back to a single
   // round the way the heatmap does below.
-  const bw = bestWorstHoles(tournament, { metric, roundIndex: roundScope });
+  //
+  // bw/nemesisCrushed/chaos/extremes each do a tournament-wide pass. The
+  // tab holds local `sheet` state for its detail sheets, so without
+  // memoization opening one would re-run every aggregate here. Deps are
+  // keyed on exactly the scope vars each function reads — `sheet` must
+  // never be a dep. Mirrors ShotsTab's useMemo pattern (~line 2893).
+  const bw = useMemo(
+    () => bestWorstHoles(tournament, { metric, roundIndex: roundScope }),
+    [tournament, metric, roundScope],
+  );
   // The heatmap is inherently per-round — it reads the unified screen scope.
   const heatRound = effectiveRound != null ? effectiveRound : 0;
   const heatmap = holeDifficultyMap(tournament, heatRound);
-  const nemesisCrushed = playerNemesisAndCrushed(tournament);
-  const chaos = chaosHoles(tournament);
-  const extremes = collectiveExtremes(tournament);
+  const nemesisCrushed = useMemo(() => playerNemesisAndCrushed(tournament), [tournament]);
+  const chaos = useMemo(() => chaosHoles(tournament), [tournament]);
+  const extremes = useMemo(() => collectiveExtremes(tournament), [tournament]);
   const [sheet, setSheet] = useState(null);
 
   const renderAvg = (h) => isStrokes
@@ -3249,12 +3311,18 @@ function ShotsTab({ tournament, theme, s }) {
 }
 
 function ShameTab({ tournament, hasMulti, usesTeams, metric, theme, s }) {
-  const shame = hallOfShame(tournament, { metric });
-  const par3 = par3Heartbreak(tournament);
-  const pickup = pickupChampion(tournament);
-  const anchorStat = anchor(tournament);
-  const zero = zeroHero(tournament);
-  const encore = nemesisEncore(tournament);
+  // Each of these is a full tournament-wide pass (anchor runs the whole
+  // pairHoleWins computation internally). The tab holds local `sheet` state
+  // for its detail sheets, so without memoization tapping any highlight
+  // card to open one would re-run every one of these on the JS thread.
+  // Deps are keyed on exactly the scope vars each function reads — `sheet`
+  // must never be a dep. Mirrors ShotsTab's useMemo pattern (~line 2893).
+  const shame = useMemo(() => hallOfShame(tournament, { metric }), [tournament, metric]);
+  const par3 = useMemo(() => par3Heartbreak(tournament), [tournament]);
+  const pickup = useMemo(() => pickupChampion(tournament), [tournament]);
+  const anchorStat = useMemo(() => anchor(tournament), [tournament]);
+  const zero = useMemo(() => zeroHero(tournament), [tournament]);
+  const encore = useMemo(() => nemesisEncore(tournament), [tournament]);
   const [sheet, setSheet] = useState(null);
   const modeLabel = metric === 'strokes' ? 'strokes (gross)' : 'points (net Stableford)';
 

@@ -4,7 +4,9 @@ import {
 } from '@testing-library/react-native';
 import { ThemeProvider } from '../../theme/ThemeContext';
 import FeedScreen from '../FeedScreen';
-import { buildFeed, loadCommentCounts, loadReactions } from '../../store/feedStore';
+import {
+  buildFeed, loadCommentCounts, loadReactions, invalidateFeedCache,
+} from '../../store/feedStore';
 import { notifyFeedActivity } from '../../store/notificationStore';
 
 jest.mock('@react-navigation/native', () => ({
@@ -51,8 +53,17 @@ jest.mock('../../components/MemoriesStoriesViewer', () => function MockMemoriesS
   ) : null;
 });
 
+// Captures the handler FeedScreen registers with subscribeTournamentChanges
+// so tests can simulate rapid tournament-change events (score edits) and
+// assert the debounce behavior. Prefixed `mock` so babel-plugin-jest-hoist
+// allows referencing it from inside the (hoisted) jest.mock factory below.
+let mockTournamentChangeHandler = null;
+
 jest.mock('../../store/tournamentStore', () => ({
-  subscribeTournamentChanges: jest.fn(() => () => {}),
+  subscribeTournamentChanges: jest.fn((fn) => {
+    mockTournamentChangeHandler = fn;
+    return () => { mockTournamentChangeHandler = null; };
+  }),
   formatRoundLabel: jest.fn(({ courseName, roundIndex }) => courseName || `Round ${roundIndex + 1}`),
 }));
 
@@ -61,6 +72,7 @@ jest.mock('../../store/feedStore', () => ({
   loadReactions: jest.fn(() => Promise.resolve({})),
   loadCommentCounts: jest.fn(() => Promise.resolve({})),
   toggleReaction: jest.fn(() => Promise.resolve(true)),
+  invalidateFeedCache: jest.fn(),
   FEED_REACTION_EMOJI: [],
   isValidReactionEmoji: jest.fn((value) => typeof value === 'string' && value.trim().length > 0),
 }));
@@ -141,6 +153,7 @@ const result = {
 describe('FeedScreen', () => {
   beforeEach(() => {
     jest.clearAllMocks();
+    mockTournamentChangeHandler = null;
     buildFeed.mockResolvedValue(result);
   });
 
@@ -191,12 +204,18 @@ describe('FeedScreen', () => {
       includeMedia: false,
       limit: 30,
     }));
+    // Task 4 (audit-tier4-perf): the remote build now passes a real page
+    // limit (30) instead of loading the entire history unbounded — this is
+    // the pagination fix, so the old "no limit" assertion is gone.
     expect(buildFeed).toHaveBeenNthCalledWith(2, expect.objectContaining({
       userId: 'u1',
       source: 'remote',
       includeMedia: true,
+      limit: 30,
     }));
-    expect(buildFeed.mock.calls[1][0]).not.toHaveProperty('limit');
+    // The very first build of a fresh screen mount must never reuse a cache
+    // — it needs to be a genuinely fresh fetch.
+    expect(buildFeed.mock.calls[1][0].useCache).not.toBe(true);
   });
 
   test('keeps remote overlay results when slower cached overlays finish later', async () => {
@@ -460,5 +479,171 @@ describe('FeedScreen', () => {
       itemKey: 'round:t1:r1',
       commentBody: 'Great round',
     }));
+  });
+
+  test('onEndReached fetches the next page and appends items without duplicates or key collisions', async () => {
+    const page2Item = {
+      ...result.items[0],
+      key: 'round:t2:r2',
+      tournamentId: 't2',
+      roundId: 'r2',
+      tournamentName: 'Second Match',
+    };
+
+    buildFeed
+      .mockResolvedValueOnce({ ...result, roundStories: [] }) // cache base
+      .mockResolvedValueOnce({ ...result, hasMore: true }) // remote page 1
+      .mockResolvedValueOnce({
+        ...result, items: [page2Item], roundStories: [], hasMore: false,
+      }); // page 2 (onEndReached)
+
+    const { findByText, getByTestId, queryAllByText } = render(wrap(
+      <FeedScreen navigation={navigation} />
+    ));
+
+    expect(await findByText('Weekend Match')).toBeTruthy();
+
+    const list = getByTestId('feed-list');
+    await act(async () => {
+      list.props.onEndReached();
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+
+    expect(await findByText('Second Match')).toBeTruthy();
+    // The page fetch requests the next slice (offset = items already loaded)
+    // at the same page size, reusing the build cache.
+    expect(buildFeed).toHaveBeenNthCalledWith(3, expect.objectContaining({
+      source: 'remote',
+      limit: 30,
+      offset: 1,
+      useCache: true,
+    }));
+    // The first-page item is still rendered exactly once — no duplicate from
+    // the appended page.
+    expect(queryAllByText('Weekend Match')).toHaveLength(1);
+
+    // A second onEndReached with no more pages left is a no-op (hasMore is
+    // now false) — no extra buildFeed call.
+    buildFeed.mockClear();
+    await act(async () => {
+      list.props.onEndReached();
+      await Promise.resolve();
+    });
+    expect(buildFeed).not.toHaveBeenCalled();
+  });
+
+  test('debounces rapid tournament-change events into a single rebuild', async () => {
+    jest.useFakeTimers();
+    try {
+      render(wrap(<FeedScreen navigation={navigation} />));
+      await act(async () => {
+        await Promise.resolve();
+        await Promise.resolve();
+      });
+
+      expect(typeof mockTournamentChangeHandler).toBe('function');
+      buildFeed.mockClear();
+      invalidateFeedCache.mockClear();
+
+      // A burst of rapid local score edits — each one fires a change event.
+      act(() => {
+        mockTournamentChangeHandler();
+        mockTournamentChangeHandler();
+        mockTournamentChangeHandler();
+      });
+
+      // Still inside the debounce window — no rebuild yet.
+      expect(buildFeed).not.toHaveBeenCalled();
+
+      await act(async () => {
+        jest.advanceTimersByTime(1000);
+        await Promise.resolve();
+        await Promise.resolve();
+      });
+
+      // The whole burst coalesced into exactly one rebuild, and the cache was
+      // invalidated first so it isn't served stale data.
+      expect(invalidateFeedCache).toHaveBeenCalledTimes(1);
+      expect(buildFeed).toHaveBeenCalledTimes(1);
+    } finally {
+      jest.useRealTimers();
+    }
+  });
+
+  test('discards a loadMore result that resolves after a concurrent rebuild (epoch guard)', async () => {
+    jest.useFakeTimers();
+    try {
+      const page1Result = {
+        ...result,
+        items: [{ ...result.items[0], key: 'round:t1:r1', tournamentName: 'Weekend Match' }],
+        roundStories: [],
+        hasMore: true,
+        nextOffset: 1,
+      };
+      const rebuildResult = {
+        ...result,
+        items: [{
+          ...result.items[0], key: 'round:reb:r1', tournamentId: 'reb', tournamentName: 'Rebuilt Match',
+        }],
+        roundStories: [],
+        hasMore: false,
+        nextOffset: 1,
+      };
+      const stalePage2 = {
+        ...result,
+        items: [{
+          ...result.items[0], key: 'round:stale:r2', tournamentId: 'stale', tournamentName: 'Stale Page2',
+        }],
+        roundStories: [],
+        hasMore: true,
+        nextOffset: 2,
+      };
+      let resolvePage2;
+      const page2Promise = new Promise((res) => { resolvePage2 = () => res(stalePage2); });
+
+      buildFeed
+        .mockResolvedValueOnce({ ...page1Result, roundStories: [] }) // cache base
+        .mockResolvedValueOnce(page1Result) // remote page 1
+        .mockReturnValueOnce(page2Promise) // loadMore — stays pending across the rebuild
+        .mockResolvedValueOnce(rebuildResult); // debounced full rebuild
+
+      const { findByText, getByTestId, queryByText } = render(wrap(
+        <FeedScreen navigation={navigation} />
+      ));
+
+      await act(async () => { await Promise.resolve(); await Promise.resolve(); });
+      expect(await findByText('Weekend Match')).toBeTruthy();
+
+      // Start a page fetch that will still be in flight when the rebuild lands.
+      const list = getByTestId('feed-list');
+      act(() => { list.props.onEndReached(); });
+
+      // A tournament-change event triggers a debounced full rebuild while the
+      // page fetch is still pending.
+      act(() => { mockTournamentChangeHandler(); });
+      await act(async () => {
+        jest.advanceTimersByTime(1000);
+        await Promise.resolve();
+        await Promise.resolve();
+      });
+      expect(await findByText('Rebuilt Match')).toBeTruthy();
+
+      // The stale page finally resolves — its result must be discarded, not
+      // appended on top of the rebuilt list.
+      await act(async () => {
+        resolvePage2();
+        await Promise.resolve();
+        await Promise.resolve();
+      });
+
+      expect(queryByText('Stale Page2')).toBeNull();
+      expect(queryByText('Rebuilt Match')).toBeTruthy();
+      // The rebuild fully replaced the list, so the pre-rebuild page-1 item
+      // is gone (and was never duplicated by the discarded page).
+      expect(queryByText('Weekend Match')).toBeNull();
+    } finally {
+      jest.useRealTimers();
+    }
   });
 });
