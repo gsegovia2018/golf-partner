@@ -18,7 +18,10 @@ export default function DistributionBars({ bars = [] }) {
             style={[
               s.bar,
               {
-                height: `${Math.max(3, Math.round((b.count / max) * 100))}%`,
+                // Cap at 75% of the column so the value label above the
+                // tallest bar stays inside the chart instead of overflowing
+                // into the content above it.
+                height: `${Math.max(3, Math.round((b.count / max) * 75))}%`,
                 backgroundColor: b.muted ? theme.border.default : theme.accent.primary,
               },
             ]}

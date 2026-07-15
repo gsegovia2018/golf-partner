@@ -273,7 +273,7 @@ function makeStyles(theme) {
     tileRow: { flexDirection: 'row', gap: theme.spacing.sm },
     // The bar chart's value labels sit at its very top edge — without extra
     // margin they visually collide with the stat tiles above.
-    drivesBlock: { marginTop: theme.spacing.md, gap: theme.spacing.sm },
+    drivesBlock: { marginTop: theme.spacing.lg, gap: theme.spacing.sm },
     metaLine: { ...theme.typography.caption, color: theme.text.secondary },
     highlightRow: { flexDirection: 'row', alignItems: 'center', gap: theme.spacing.sm, paddingVertical: 4 },
     highlightIcon: {
