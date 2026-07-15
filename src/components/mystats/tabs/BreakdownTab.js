@@ -40,7 +40,7 @@ const EMPTY_WARMUP = {
 const OWN_AVG_BASIS = 'vs your avg';
 const SAMPLE_BASIS = 'tracked sample';
 
-export default function BreakdownTab({ stats, onInfo }) {
+export default function BreakdownTab({ stats, onInfo, onSelectCourse }) {
   const { theme } = useTheme();
   const s = useMemo(() => makeStyles(theme), [theme]);
   const {
@@ -77,7 +77,7 @@ export default function BreakdownTab({ stats, onInfo }) {
 
   return (
     <View style={s.wrap}>
-      <CourseMasteryCard courses={courseMastery} onInfo={onInfo} />
+      <CourseMasteryCard courses={courseMastery} onInfo={onInfo} onSelectCourse={onSelectCourse} />
 
       {careerMilestones ? (
         <CareerMilestonesCard milestones={careerMilestones} onInfo={onInfo} />

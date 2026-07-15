@@ -1,5 +1,5 @@
 import React, { useMemo } from 'react';
-import { View, Text, StyleSheet } from 'react-native';
+import { View, Text, StyleSheet, TouchableOpacity } from 'react-native';
 import { Feather } from '@expo/vector-icons';
 import { useTheme } from '../../theme/ThemeContext';
 import SectionCard from './SectionCard';
@@ -8,7 +8,7 @@ import { toneColor, toneFill } from './metricTone';
 // Per-course rounds/avgPoints/bestPoints/trend — see
 // `courseMastery` in personalStats.js. Renders nothing when there is no
 // complete round at any course yet.
-export default function CourseMasteryCard({ courses, onInfo }) {
+export default function CourseMasteryCard({ courses, onInfo, onSelectCourse }) {
   const { theme } = useTheme();
   const s = useMemo(() => makeStyles(theme), [theme]);
   const rows = courses ?? [];
@@ -18,14 +18,22 @@ export default function CourseMasteryCard({ courses, onInfo }) {
     <SectionCard title="Course Mastery" infoKey="courseMastery" onInfo={onInfo}>
       <View style={s.rows}>
         {rows.map((course) => (
-          <CourseRow key={course.courseName} course={course} s={s} theme={theme} />
+          <CourseRow
+            key={course.courseKey ?? course.courseName}
+            course={course}
+            s={s}
+            theme={theme}
+            onPress={course.courseKey != null && onSelectCourse
+              ? () => onSelectCourse(course)
+              : null}
+          />
         ))}
       </View>
     </SectionCard>
   );
 }
 
-function CourseRow({ course, s, theme }) {
+function CourseRow({ course, s, theme, onPress }) {
   // trend null = only one complete round here — there is no trend claim to
   // make, so no icon at all (a minus would read as "flat", i.e. two equal
   // rounds). trend 0 IS a claim (two genuinely equal consecutive rounds)
@@ -34,8 +42,8 @@ function CourseRow({ course, s, theme }) {
   const tone = course.trend > 0 ? 'good' : course.trend < 0 ? 'bad' : 'neutral';
   const icon = course.trend > 0 ? 'trending-up' : course.trend < 0 ? 'trending-down' : 'minus';
   const color = toneColor(theme, tone);
-  return (
-    <View style={s.row}>
+  const body = (
+    <>
       <View style={s.copy}>
         <Text style={s.courseName} numberOfLines={1}>{course.courseName}</Text>
         <Text style={s.meta}>
@@ -55,8 +63,21 @@ function CourseRow({ course, s, theme }) {
         ) : (
           <View style={s.trendPill} />
         )}
+        {onPress ? <Feather name="chevron-right" size={16} color={theme.text.muted} /> : null}
       </View>
-    </View>
+    </>
+  );
+  if (!onPress) return <View style={s.row}>{body}</View>;
+  return (
+    <TouchableOpacity
+      style={s.row}
+      onPress={onPress}
+      activeOpacity={0.7}
+      accessibilityRole="button"
+      accessibilityLabel={`Open ${course.courseName} stats`}
+    >
+      {body}
+    </TouchableOpacity>
   );
 }
 
