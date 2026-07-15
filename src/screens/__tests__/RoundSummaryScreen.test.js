@@ -97,6 +97,16 @@ jest.mock('../../store/tournamentStore', () => {
   };
 });
 
+const mockOpenCaptureMenu = jest.fn();
+let lastAttachFlowArgs = null;
+jest.mock('../../hooks/useMediaAttachFlow', () => ({
+  __esModule: true,
+  default: jest.fn((args) => {
+    lastAttachFlowArgs = args;
+    return { openCaptureMenu: mockOpenCaptureMenu, sheets: null };
+  }),
+}));
+
 const navigation = { goBack: jest.fn(), navigate: jest.fn() };
 const route = { params: { tournamentId: 't1', roundId: 'r1' } };
 const wrap = (ui) => <ThemeProvider>{ui}</ThemeProvider>;
@@ -239,5 +249,38 @@ describe('RoundSummaryScreen', () => {
 
     fireEvent.press(await findByLabelText('Comments'));
     expect(await findByText('Live update from the RPC.')).toBeTruthy();
+  });
+
+  describe('Photos tab add-photo FAB', () => {
+    test('FAB shows on the Photos tab for a player and opens the capture menu', async () => {
+      const { findByText, findByLabelText, queryByLabelText } = render(wrap(
+        <RoundSummaryScreen navigation={navigation} route={route} />,
+      ));
+      await findByText('Winner: Marcos');
+
+      // Not on the default (scorecard) tab.
+      expect(queryByLabelText('Add photo')).toBeNull();
+
+      fireEvent.press(await findByLabelText('Photos'));
+      const fab = await findByLabelText('Add photo');
+      fireEvent.press(fab);
+      expect(mockOpenCaptureMenu).toHaveBeenCalled();
+      // The hook is wired at this round.
+      expect(lastAttachFlowArgs.defaultRoundIndex).toBe(0);
+      expect(lastAttachFlowArgs.tournament?.id).toBe('t1');
+    });
+
+    test('FAB is hidden for a viewer who did not play in the round', async () => {
+      const { supabase } = require('../../lib/supabase');
+      supabase.auth.getUser.mockResolvedValueOnce({ data: { user: { id: 'u3' } } });
+
+      const { findByText, findByLabelText, queryByLabelText } = render(wrap(
+        <RoundSummaryScreen navigation={navigation} route={route} />,
+      ));
+      await findByText('Winner: Marcos');
+
+      fireEvent.press(await findByLabelText('Photos'));
+      expect(queryByLabelText('Add photo')).toBeNull();
+    });
   });
 });
