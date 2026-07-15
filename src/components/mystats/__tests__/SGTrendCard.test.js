@@ -2,6 +2,15 @@ import React from 'react';
 import { render, fireEvent } from '@testing-library/react-native';
 import SGTrendCard from '../SGTrendCard';
 
+const trendChartProps = [];
+jest.mock('../TrendLineChart', () => {
+  const mockReact = require('react');
+  return function MockTrendLineChart(props) {
+    trendChartProps.push(props);
+    return mockReact.createElement(require('react-native').View, { testID: 'trend-chart' });
+  };
+});
+
 jest.mock('../../../theme/ThemeContext', () => ({
   useTheme: () => ({
     theme: {
@@ -45,6 +54,10 @@ const perRound = [
 ];
 
 describe('SGTrendCard', () => {
+  beforeEach(() => {
+    trendChartProps.length = 0;
+  });
+
   test('renders a chip per category plus Total and defaults to Total', () => {
     const r = render(<SGTrendCard strokesGained={{ perRound }} />);
     expect(r.getByText('Total')).toBeTruthy();
@@ -54,8 +67,18 @@ describe('SGTrendCard', () => {
   });
   test('switching chips switches the plotted series', () => {
     const r = render(<SGTrendCard strokesGained={{ perRound }} />);
+    expect(trendChartProps[trendChartProps.length - 1].series).toEqual([
+      { label: 'R1', value: -2.1 },
+      { label: 'R2', value: 0.4 },
+    ]);
+
     fireEvent.press(r.getByLabelText('SG trend Putting'));
+
     expect(r.getByLabelText('SG trend Putting').props.accessibilityState.selected).toBe(true);
+    expect(trendChartProps[trendChartProps.length - 1].series).toEqual([
+      { label: 'R1', value: -0.6 },
+      { label: 'R2', value: 0.1 },
+    ]);
   });
   test('renders nothing with fewer than 2 sampled rounds', () => {
     const r = render(<SGTrendCard strokesGained={{ perRound: [perRound[0]] }} />);
