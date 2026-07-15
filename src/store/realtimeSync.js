@@ -210,6 +210,21 @@ export function applyPlayerRow(t, row, eventType) {
   if (isDeleteEvent(eventType)) {
     if (existingIdx !== -1) players.splice(existingIdx, 1);
     next.players = players;
+    // Stamp the removedPlayerIds tombstone (see mutate.js's
+    // preserveLocalConflictState) on every round: this device may not be
+    // the one that ran removePlayer — the actor's own local apply already
+    // stripped scoreEntries/scoreResolutions for this player on ITS device,
+    // but this device's local cache can still carry a stale copy that a
+    // later union-merge would otherwise resurrect once the corresponding
+    // game_score_entries DELETE rows are processed out of order (or not at
+    // all, e.g. this device was offline for part of the removal window).
+    if (Array.isArray(next.rounds)) {
+      next.rounds = next.rounds.map((round) => {
+        const removedPlayerIds = new Set(round.removedPlayerIds ?? []);
+        removedPlayerIds.add(row.player_id);
+        return { ...round, removedPlayerIds: [...removedPlayerIds] };
+      });
+    }
     return next;
   }
 

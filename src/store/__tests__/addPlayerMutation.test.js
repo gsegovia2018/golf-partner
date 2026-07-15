@@ -214,4 +214,23 @@ describe('tournament.removePlayer mutation', () => {
     expect(t.rounds[0].scoreResolutions.d).toBeUndefined();
     expect(t.rounds[0].scoreResolutions.a).toBeDefined();
   });
+
+  // Task 8: without this, the removed player's per-author scoreEntries
+  // survive forever and preserveLocalConflictState/unionScoreEntries
+  // re-merge them on every reconcile, so listRoundConflicts derives a
+  // phantom, unresolvable conflict for a player who no longer exists.
+  test('drops the removed player from scoreEntries', () => {
+    const t = fourPlayerTournament();
+    t.rounds[0].scoreEntries = {
+      d: { 1: { a: { value: 3, ts: 1 }, b: { value: 4, ts: 2 } } },
+      a: { 2: { a: { value: 4, ts: 1 } } },
+    };
+    applyToTournament(t, {
+      type: 'tournament.removePlayer',
+      playerId: 'd',
+      roundPatches: [{ roundId: 'r1', pairs: [] }],
+    });
+    expect(t.rounds[0].scoreEntries.d).toBeUndefined();
+    expect(t.rounds[0].scoreEntries.a).toBeDefined();
+  });
 });

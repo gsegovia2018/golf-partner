@@ -361,7 +361,7 @@ describe('deletePlayer', () => {
 });
 
 describe('clearPlayerRound', () => {
-  test('deletes both game_scores and game_shot_details rows for the player, tournament-scoped', async () => {
+  test('deletes game_scores, game_shot_details, and game_score_entries rows for the player, tournament-scoped', async () => {
     const { clearPlayerRound } = require('../tournamentRepo');
 
     await clearPlayerRound('t1', 'r0', 'p1');
@@ -371,6 +371,14 @@ describe('clearPlayerRound', () => {
 
     const shotDetailsCall = lastFromCall('game_shot_details');
     expect(shotDetailsCall.ops[1].obj).toEqual({ tournament_id: 't1', round_id: 'r0', player_id: 'p1' });
+
+    // Task 8: game_score_entries has no FK cascade off game_players, so a
+    // removed player's per-author entries would otherwise survive on the
+    // server forever and resurrect the phantom-conflict bug via a later
+    // realtime INSERT/reconcile fetch.
+    const scoreEntriesCall = lastFromCall('game_score_entries');
+    expect(scoreEntriesCall.ops.map((o) => o.method)).toEqual(['delete', 'match']);
+    expect(scoreEntriesCall.ops[1].obj).toEqual({ tournament_id: 't1', round_id: 'r0', player_id: 'p1' });
   });
 });
 

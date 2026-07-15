@@ -63,6 +63,7 @@ export function metaPathFor(m) {
         paths.push(`rounds.${patch.roundId}.playerHandicaps.${m.playerId}`);
         paths.push(`rounds.${patch.roundId}.scores.${m.playerId}`);
         paths.push(`rounds.${patch.roundId}.shotDetails.${m.playerId}`);
+        paths.push(`rounds.${patch.roundId}.scoreEntries.${m.playerId}`);
         paths.push(`rounds.${patch.roundId}.scoreResolutions.${m.playerId}`);
         if (patch.pairs) paths.push(`rounds.${patch.roundId}.pairs`);
         if (patch.clearScoringMode) paths.push(`rounds.${patch.roundId}.scoringMode`);
@@ -289,11 +290,29 @@ export function applyToTournament(t, m) {
         const shotDetails = { ...(round.shotDetails ?? {}) };
         delete shotDetails[m.playerId];
         round.shotDetails = shotDetails;
+        // Kills the phantom-conflict bug: without this, the removed
+        // player's per-author scoreEntries survive and preserveLocalConflict
+        // State/unionScoreEntries re-merge them on every reconcile/realtime
+        // patch, so listRoundConflicts/surfaceableConflicts derive a
+        // conflict for a player who no longer exists (subjectName renders
+        // '—' — see scoreEntries.js).
+        if (round.scoreEntries) {
+          const scoreEntries = { ...round.scoreEntries };
+          delete scoreEntries[m.playerId];
+          round.scoreEntries = scoreEntries;
+        }
         if (round.scoreResolutions) {
           const scoreResolutions = { ...round.scoreResolutions };
           delete scoreResolutions[m.playerId];
           round.scoreResolutions = scoreResolutions;
         }
+        // Tombstone (see preserveLocalConflictState) — a monotonic record
+        // that this playerId was removed from this round, so a later merge
+        // against a stale `source` snapshot that still carries their
+        // scoreEntries/scoreResolutions never resurrects them.
+        const removedPlayerIds = new Set(round.removedPlayerIds ?? []);
+        removedPlayerIds.add(m.playerId);
+        round.removedPlayerIds = [...removedPlayerIds];
         if (patch.pairs) round.pairs = patch.pairs;
         // See tournament.addPlayer: the smaller roster invalidated this
         // round's override.
@@ -492,20 +511,61 @@ function unionScoreResolutions(targetResolutions, sourceResolutions) {
   return out;
 }
 
+// round.removedPlayerIds is a monotonic, LOCAL-ONLY tombstone (same class of
+// hot key as scoreEntries/scoreResolutions — see stripRoundHotKeys in
+// tournamentRepo.js, which must also omit it) recording every playerId a
+// tournament.removePlayer apply has ever cleared from THIS round. It only
+// ever grows, so a plain array union (never a target-wins overwrite) is
+// correct and sufficient here — unlike scoreEntries per-cell precedence.
+function unionRemovedPlayerIds(targetIds, sourceIds) {
+  if (!sourceIds && !targetIds) return undefined;
+  return [...new Set([...(sourceIds ?? []), ...(targetIds ?? [])])];
+}
+
+// Drops every tombstoned playerId from a scoreEntries/scoreResolutions map.
+// Guards against resurrection: `source` here is often a STALE cache snapshot
+// (the pre-row cache in realtimeSync, or local's pre-drain state in
+// syncWorker) taken before a queued/just-applied tournament.removePlayer
+// stripped that player's entries — the plain union above would otherwise
+// re-add them from `source` on every reconcile/realtime patch forever (the
+// phantom-conflict bug this guards). Scoped to the explicit tombstone
+// (not "any playerId missing from the current roster") deliberately — a
+// roster-membership check would also prune a legitimate peer's entry for a
+// brand-new player whose game_players row hasn't reached this device's
+// local players array yet (a real, if narrow, cross-table realtime-ordering
+// race), silently dropping a live score.
+function pruneRemovedPlayers(map, removedPlayerIds) {
+  if (!map || !removedPlayerIds?.length) return map;
+  const removed = new Set(removedPlayerIds);
+  const out = {};
+  for (const [playerId, value] of Object.entries(map)) {
+    if (!removed.has(playerId)) out[playerId] = value;
+  }
+  return out;
+}
+
 export function preserveLocalConflictState(target, source) {
   if (!target?.rounds?.length || !source?.rounds?.length) return target;
   const byId = new Map(source.rounds.map((r) => [r.id, {
-    scoreEntries: r?.scoreEntries, scoreResolutions: r?.scoreResolutions,
+    scoreEntries: r?.scoreEntries,
+    scoreResolutions: r?.scoreResolutions,
+    removedPlayerIds: r?.removedPlayerIds,
   }]));
   target.rounds = target.rounds.map((r) => {
     const s = byId.get(r.id);
     if (!s) return r;
-    const mergedEntries = unionScoreEntries(r?.scoreEntries, s.scoreEntries);
-    const mergedResolutions = unionScoreResolutions(r?.scoreResolutions, s.scoreResolutions);
+    const removedPlayerIds = unionRemovedPlayerIds(r?.removedPlayerIds, s.removedPlayerIds);
+    const mergedEntries = pruneRemovedPlayers(
+      unionScoreEntries(r?.scoreEntries, s.scoreEntries), removedPlayerIds,
+    );
+    const mergedResolutions = pruneRemovedPlayers(
+      unionScoreResolutions(r?.scoreResolutions, s.scoreResolutions), removedPlayerIds,
+    );
     return {
       ...r,
       ...(mergedEntries ? { scoreEntries: mergedEntries } : {}),
       ...(mergedResolutions ? { scoreResolutions: mergedResolutions } : {}),
+      ...(removedPlayerIds ? { removedPlayerIds } : {}),
     };
   });
   return target;

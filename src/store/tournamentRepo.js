@@ -22,7 +22,7 @@ async function getCurrentUserId() {
 // backfill script), so a stale local computed field never lands in body.
 function stripRoundHotKeys(round) {
   const {
-    scores, shotDetails, notes, scoreEntries, scoreResolutions, ...body
+    scores, shotDetails, notes, scoreEntries, scoreResolutions, removedPlayerIds, ...body
   } = round;
   return body;
 }
@@ -179,6 +179,14 @@ export async function deletePlayer(tournamentId, playerId) {
 
 // -- Deletions ----------------------------------------------------------------
 
+// Drops every server row that mirrors a removed player's per-round state.
+// game_score_entries (the per-author submission layer added in
+// 20260713000000_score_entries.sql) has no FK cascade off game_players, so
+// without an explicit delete here a removed player's rows survive on the
+// server and a later realtime INSERT/reconcile fetch can re-patch them into
+// a device's local cache, resurrecting the phantom-conflict bug that
+// mutate.js's removePlayer branch + preserveLocalConflictState's
+// pruneToKnownPlayers guard otherwise kill locally.
 export async function clearPlayerRound(tournamentId, roundId, playerId) {
   const { error: scoresError } = await supabase.from('game_scores')
     .delete()
@@ -189,6 +197,11 @@ export async function clearPlayerRound(tournamentId, roundId, playerId) {
     .delete()
     .match({ tournament_id: tournamentId, round_id: roundId, player_id: playerId });
   if (shotDetailsError) throw shotDetailsError;
+
+  const { error: scoreEntriesError } = await supabase.from('game_score_entries')
+    .delete()
+    .match({ tournament_id: tournamentId, round_id: roundId, player_id: playerId });
+  if (scoreEntriesError) throw scoreEntriesError;
 }
 
 // Cascades to game_scores/game_shot_details/game_round_notes via the FK ON

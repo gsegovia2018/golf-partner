@@ -291,6 +291,30 @@ describe('applyPlayerRow', () => {
     const out = applyPlayerRow(t, { tournament_id: 't1', player_id: 'p0' }, 'DELETE');
     expect(out.players.map((p) => p.id)).toEqual(['p1']);
   });
+
+  // Task 8: a peer device's removePlayer already stripped scoreEntries on
+  // ITS side, but THIS device's local cache may still carry a stale copy —
+  // stamping the tombstone here guards preserveLocalConflictState's later
+  // union-merge from resurrecting it (see mutate.js).
+  test('DELETE stamps removedPlayerIds onto every round as a resurrection-guard tombstone', () => {
+    const t = {
+      id: 't1',
+      players: [{ id: 'p0' }],
+      rounds: [
+        { id: 'r1', scoreEntries: { p0: { 3: { a: { value: 4, ts: 1 } } } } },
+        { id: 'r2', removedPlayerIds: ['pOther'] },
+      ],
+    };
+    const out = applyPlayerRow(t, { tournament_id: 't1', player_id: 'p0' }, 'DELETE');
+    expect(out.rounds[0].removedPlayerIds).toEqual(['p0']);
+    expect(out.rounds[1].removedPlayerIds).toEqual(['pOther', 'p0']);
+  });
+
+  test('DELETE on a tournament with no rounds array does not add one', () => {
+    const t = { id: 't1', players: [{ id: 'p0' }] };
+    const out = applyPlayerRow(t, { tournament_id: 't1', player_id: 'p0' }, 'DELETE');
+    expect(out.rounds).toBeUndefined();
+  });
 });
 
 describe('applyTournamentRow', () => {
