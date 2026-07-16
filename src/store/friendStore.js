@@ -40,6 +40,10 @@ async function fetchProfiles(userIds) {
 // Username prefix search. Excludes the current user. 2-char minimum keeps
 // the result set sane and avoids a full-table scan on every keystroke.
 //
+// Goes through the search_profiles RPC (SECURITY DEFINER) rather than a
+// direct profiles select: profiles_select RLS only exposes friends and
+// shared-tournament members, which would make strangers unsearchable.
+//
 // `options.signal` accepts an AbortController signal so the caller can cancel
 // a stale in-flight search. When the signal aborts, this rejects with a
 // DOMException-like error whose `name` is 'AbortError' — callers should
@@ -49,15 +53,7 @@ export async function searchUsers(query, options = {}) {
   const q = (query ?? '').trim().toLowerCase();
   if (q.length < 2) return [];
   if (signal?.aborted) throw abortError();
-  const me = await currentUserId();
-  if (signal?.aborted) throw abortError();
-  let request = supabase
-    .from('profiles')
-    .select('user_id, username, display_name, handicap, avatar_url, avatar_color')
-    .ilike('username', `${q}%`)
-    .not('username', 'is', null)
-    .order('username')
-    .limit(20);
+  let request = supabase.rpc('search_profiles', { p_query: q });
   // supabase-js requests are abortable via .abortSignal().
   if (signal && typeof request.abortSignal === 'function') {
     request = request.abortSignal(signal);
@@ -70,7 +66,7 @@ export async function searchUsers(query, options = {}) {
     }
     throw error;
   }
-  return (data ?? []).filter((r) => r.user_id !== me).map(rowToPerson);
+  return (data ?? []).map(rowToPerson);
 }
 
 function abortError() {
