@@ -45,6 +45,16 @@ describe('mergeShotDetails', () => {
     const merged = mergeShotDetails(blob, local, new Set(['me:5']));
     expect(merged.me[5]).toEqual({ putts: 2, drive: 'fairway' });
   });
+
+  test('a locally-deleted dirty shot cell stays deleted despite a stale blob copy', () => {
+    // Hold-to-clear removed hole 5's detail locally; a reload that raced the
+    // save still carries the old detail. The deletion must win — not be
+    // resurrected, and not linger as an explicit `undefined` key either.
+    const blob = { me: { 5: { putts: 2, drive: 'fairway' } } };
+    const local = { me: {} };
+    const merged = mergeShotDetails(blob, local, new Set(['me:5']));
+    expect('5' in merged.me).toBe(false);
+  });
 });
 
 describe('clampEnteredScore (screen-level score entry clamp)', () => {

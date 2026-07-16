@@ -154,7 +154,10 @@ export function mergeShotDetails(blobShotDetails, localShotDetails, dirtyKeys) {
       const blobVal = blobByHole[h];
       const localVal = localByHole[h];
       if (dirtyKeys.has(key) && !sameShotDetail(blobVal, localVal)) {
-        merged[h] = localVal;
+        // A dirty cell with no local value is a local deletion whose save
+        // hasn't round-tripped — keep it deleted rather than resurrecting
+        // the blob's stale copy.
+        if (localVal !== undefined) merged[h] = localVal;
       } else if (blobVal !== undefined) {
         merged[h] = blobVal;
       }
@@ -720,13 +723,24 @@ export default function ScorecardScreen({ navigation, route }) {
   }, [saveShot, viewOnly]);
 
   // When the me-player's strokes change, trim that hole's shot detail so the
-  // logged putts/penalties/sand shots never exceed the new stroke total.
+  // logged putts/penalties/sand shots never exceed the new stroke total. A
+  // cleared score (hold-to-clear / pickup un-toggle) deletes the detail
+  // outright — it described strokes that no longer exist.
   // No-op for other players, holes with no detail, or already-valid detail.
   const reconcileMeShot = useCallback((playerId, holeNumber, newStrokes) => {
     if (playerId !== (tournamentRef.current?.meId ?? null)) return;
     setShotDetails((prev) => {
       const current = prev[playerId]?.[holeNumber];
       if (!current) return prev;
+      if (newStrokes == null) {
+        const byHole = { ...prev[playerId] };
+        delete byHole[holeNumber];
+        const next = { ...prev, [playerId]: byHole };
+        shotDetailsRef.current = next;
+        dirtyShotKeysRef.current.add(`${playerId}:${holeNumber}`);
+        saveShot(playerId, holeNumber, null);
+        return next;
+      }
       const reconciled = reconcileShotDetail(current, newStrokes);
       if (reconciled === current) return prev;
       const next = {
