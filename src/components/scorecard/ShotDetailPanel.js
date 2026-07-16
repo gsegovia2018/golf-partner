@@ -90,14 +90,14 @@ function BucketSegment({ label, value, buckets, labels, onSelect, theme, s, expl
 // A labelled row of mutually-exclusive chips. `effectiveValue` drives the
 // selected state so a derived default (e.g. approach lie = fairway) can show
 // as selected without being stored.
-function LieChipRow({ label, a11yPrefix, options, labels, effectiveValue, onSelect, theme, s, explainer, isLast = false }) {
+function LieChipRow({ label, a11yPrefix, options, labels, effectiveValue, onSelect, theme, s, explainer, isLast = false, stacked = false }) {
   return (
-    <View style={[s.shotRow, isLast && s.shotRowLast]}>
+    <View style={[s.shotRow, stacked && s.shotRowStacked, isLast && s.shotRowLast]}>
       <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
         <Text style={s.shotRowLabel}>{label}</Text>
         {explainer}
       </View>
-      <View style={s.driveBtns}>
+      <View style={[s.driveBtns, stacked && s.driveBtnsStacked]}>
         {options.map((key) => {
           const active = effectiveValue === key;
           return (
@@ -127,7 +127,7 @@ function ApproachResultRow({ value, onChange, theme, s, isLast = false }) {
     { key: 'miss', label: 'Missed green' },
   ];
   return (
-    <View style={[s.shotRow, isLast && s.shotRowLast]}>
+    <View style={[s.shotRow, s.shotRowStacked, isLast && s.shotRowLast]}>
       <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
         <Text style={s.shotRowLabel}>Where did it finish?</Text>
         <ShotDetailExplainer
@@ -136,7 +136,7 @@ function ApproachResultRow({ value, onChange, theme, s, isLast = false }) {
           body="Whether the regulation approach finished on the green or missed it. This keeps approach shots separate from short-game recovery shots."
         />
       </View>
-      <View style={s.driveBtns}>
+      <View style={[s.driveBtns, s.driveBtnsStacked]}>
         {options.map(({ key, label }) => {
           const active = value === key;
           return (
@@ -350,6 +350,7 @@ export function ShotDetailPanel({ hole, detail, onChange, strokes, theme: themeP
           onSelect={(key) => onChange({ approachLie: key === 'fairway' ? null : key })}
           theme={theme}
           s={s}
+          stacked
           isLast={(d.putts ?? 0) < 1 && !missedGIR}
           explainer={
             <ShotDetailExplainer

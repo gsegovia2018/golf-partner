@@ -872,6 +872,9 @@ export function makeScorecardStyles(theme) {
       textAlign: 'center',
     },
     driveBtns: { flexDirection: 'row', gap: 8, flex: 1, flexWrap: 'wrap', justifyContent: 'flex-end' },
+    // Stacked variant: label on its own line, chips below hugging the right edge.
+    shotRowStacked: { flexDirection: 'column', alignItems: 'stretch', gap: 8 },
+    driveBtnsStacked: { flex: 0 },
     driveCircle: {
       width: 38,
       height: 38,
