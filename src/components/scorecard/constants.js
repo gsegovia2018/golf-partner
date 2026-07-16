@@ -88,9 +88,16 @@ export const CELEBRATION_TIERS = {
     glow: 'rgba(255,215,0,0.65)',
     icon: 'target',
   },
+  NOELADA: {
+    eyebrow: 'WHAT A NOELADA!',
+    accent: '#e74c3c', // shame red
+    glow: 'rgba(231,76,60,0.35)',
+    icon: 'frown',
+  },
 };
 
 // Celebration label for a hole result, or null when it isn't notable.
+// Double bogey or worse gets the NOELADA anti-celebration.
 export function celebrationFor(par, strokes) {
   if (!par || !strokes) return null;
   if (strokes === 1 && par > 1) return 'HOLE IN ONE';
@@ -98,6 +105,7 @@ export function celebrationFor(par, strokes) {
   if (diff >= 3) return 'ALBATROSS';
   if (diff === 2) return 'EAGLE';
   if (diff === 1) return 'BIRDIE';
+  if (diff <= -2) return 'NOELADA';
   return null;
 }
 
