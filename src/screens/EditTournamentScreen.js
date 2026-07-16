@@ -9,7 +9,7 @@ import { Feather } from '@expo/vector-icons';
 import { useTheme } from '../theme/ThemeContext';
 import {
   loadTournament, subscribeTournamentChanges, DEFAULT_SETTINGS, buildTeamsForMode,
-  normalizeRoundHandicaps, isRoundComplete,
+  normalizeRoundHandicaps, isRoundComplete, tournamentNounCapitalized,
   getActiveTournamentSnapshot, getTournamentSnapshot, getTournament,
 } from '../store/tournamentStore';
 import { mutate } from '../store/mutate';
@@ -101,6 +101,7 @@ export default function EditTournamentScreen({ navigation, route }) {
   const [players, setPlayers] = useState(() => editablePlayersFromTournament(initialTournament));
   const [rounds, setRounds] = useState(() => editableRoundsFromTournament(initialTournament));
   const [settings, setSettings] = useState(() => editableSettingsFromTournament(initialTournament));
+  const [name, setName] = useState(() => initialTournament?.name ?? '');
   // 'idle' | 'saving' | 'saved' | 'error' — drives the small status pill.
   const [saveState, setSaveState] = useState('idle');
   const tournamentRef = useRef(null);
@@ -109,6 +110,10 @@ export default function EditTournamentScreen({ navigation, route }) {
   // Last note text emitted (or seeded from a load) per round id — the dedup
   // baseline for note.set. See emittedNotesSeed above.
   const lastEmittedNotesRef = useRef(emittedNotesSeed(initialTournament));
+  // Last tournament name EMITTED (or seeded from a load) — same dedup policy
+  // as lastEmittedNotesRef above, so unrelated edits don't re-push an
+  // unchanged name on every autosave.
+  const lastEmittedNameRef = useRef(initialTournament?.name ?? '');
   // Set when a subscription-driven reload pushes fresh display-only data
   // into local state so the debounced save effect doesn't echo it back.
   const skipNextSaveRef = useRef(false);
@@ -125,10 +130,12 @@ export default function EditTournamentScreen({ navigation, route }) {
       // BEFORE the load-triggered autosave runs (debounced 400ms later), so
       // that save doesn't spuriously re-emit an unchanged note.
       lastEmittedNotesRef.current = emittedNotesSeed(t);
+      lastEmittedNameRef.current = t?.name ?? '';
       setTournament(t);
       setPlayers(editablePlayersFromTournament(t));
       setSettings(editableSettingsFromTournament(t));
       setRounds(editableRoundsFromTournament(t));
+      setName(t?.name ?? '');
     }
 
     // On subscription-driven reloads we only refresh display-only fields
@@ -145,6 +152,7 @@ export default function EditTournamentScreen({ navigation, route }) {
       // the reseeded baseline the next autosave still emits it — conservative
       // (may re-emit, never suppresses a needed write).
       lastEmittedNotesRef.current = emittedNotesSeed(t);
+      lastEmittedNameRef.current = t?.name ?? '';
       setTournament(t);
       setPlayers((prev) => {
         let changed = false;
@@ -240,9 +248,17 @@ export default function EditTournamentScreen({ navigation, route }) {
             });
           }
         }
+        // The tournament name rides the same updateProfile patch, but only
+        // when the trimmed value is non-empty (name is never-clearable:
+        // mutate.js and the server both skip a null, and an empty string
+        // would be written verbatim) AND differs from the last
+        // emitted/seeded value.
+        const trimmedName = name.trim();
+        const includeName = !!trimmedName && trimmedName !== lastEmittedNameRef.current;
         await mutate(current, {
           type: 'tournament.updateProfile',
           patch: {
+            ...(includeName ? { name: trimmedName } : {}),
             settings: {
               ...settings,
               bestBallValue: parseInt(settings.bestBallValue, 10) || 1,
@@ -250,6 +266,7 @@ export default function EditTournamentScreen({ navigation, route }) {
             },
           },
         });
+        if (includeName) lastEmittedNameRef.current = trimmedName;
         setSaveState('saved');
       } catch (err) {
         setSaveState('error');
@@ -258,7 +275,7 @@ export default function EditTournamentScreen({ navigation, route }) {
         else Alert.alert('Save failed', msg);
       }
     }, 400);
-  }, [rounds, settings]);
+  }, [rounds, settings, name]);
 
   // Keep the scoring mode valid for the current player count. An existing
   // tournament loaded with e.g. bestball but only 3 players gets nudged back
@@ -410,6 +427,22 @@ export default function EditTournamentScreen({ navigation, route }) {
       </View>
 
       <ScrollView style={s.container} contentContainerStyle={s.content} automaticallyAdjustKeyboardInsets>
+        {/* Tournament / game name — editable at any time, including finished. */}
+        <View style={s.roundHeader}>
+          <Text style={s.sectionTitle}>{`${tournamentNounCapitalized(tournament)} Name`}</Text>
+        </View>
+        <View style={s.roundCard}>
+          <TextInput
+            style={s.input}
+            placeholder={`${tournamentNounCapitalized(tournament)} name`}
+            placeholderTextColor={theme.text.muted}
+            keyboardAppearance={theme.isDark ? 'dark' : 'light'}
+            selectionColor={theme.accent.primary}
+            value={name}
+            onChangeText={setName}
+          />
+        </View>
+
         {/* Per-round playing handicaps */}
         {rounds.map((r, ri) => {
           // Finished rounds are score-edit locked, but can still be removed
