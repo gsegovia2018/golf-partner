@@ -204,14 +204,16 @@ export default function CoursePickerScreen({ navigation, route }) {
       }
     };
 
-    const doDelete = async () => {
-      const confirmed = Platform.OS === 'web'
+    // skipConfirm: the web manage flow below already asked this exact
+    // question to pick the action — asking again would double-confirm.
+    const doDelete = async (skipConfirm = false) => {
+      const confirmed = skipConfirm || (Platform.OS === 'web'
         ? window.confirm(`Delete "${course.name}" from the library?`)
         : await new Promise((resolve) => Alert.alert(
             'Delete course', `Delete "${course.name}" from the library?`,
             [{ text: 'Cancel', style: 'cancel', onPress: () => resolve(false) },
              { text: 'Delete', style: 'destructive', onPress: () => resolve(true) }],
-          ));
+          )));
       if (!confirmed) return;
       try {
         await deleteCourse(course.id);
@@ -226,7 +228,7 @@ export default function CoursePickerScreen({ navigation, route }) {
       if (window.confirm(`Edit "${course.name}"?\n\nOK = Rename, Cancel = more options`)) {
         doRename();
       } else if (window.confirm(`Delete "${course.name}" from the library?`)) {
-        doDelete();
+        doDelete(true);
       }
       return;
     }
