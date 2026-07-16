@@ -6,6 +6,8 @@
 export const DEFAULT_SHOT = {
   putts: null,
   drive: null,
+  teeClub: null,                // 'driver' | 'wood' | 'hybrid' | 'iron' | null (null = driver)
+
   driveLie: null,               // 'fairway' | 'rough' | 'sand' | 'trouble' | null (derived from drive when null)
   driveDistBucket: null,        // '0-150' | '150-180' | '180-210' | '210-240' | '240+' | null (metres)
   teePenalties: 0,
@@ -17,6 +19,11 @@ export const DEFAULT_SHOT = {
   approachResult: null,         // 'green' | 'miss' | null
   approachLie: null,            // 'fairway' | 'rough' | 'sand' | null (null = fairway)
 };
+
+// Club hit off the tee. Driver is the default and stays unstored (null);
+// the off-the-tee SG benchmark scales down for shorter clubs.
+export const TEE_CLUBS = ['driver', 'wood', 'hybrid', 'iron'];
+export const TEE_CLUB_LABELS = { driver: 'Driver', wood: 'Wood', hybrid: 'Hybrid', iron: 'Iron' };
 
 // Driver direction, in display order: miss-left, fairway (on target),
 // miss-right, short, then `super` for a stand-out tee shot.

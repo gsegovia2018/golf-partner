@@ -454,7 +454,7 @@ function makeDrivingTargetRows(shots, shotBenchmark, driveDistance) {
     },
     driveDistance?.drives > 0 ? {
       key: 'driveDistance',
-      label: 'Drive distance',
+      label: 'Driver distance',
       value: `~${driveDistance.avgDistance} m`,
       secondary: targetSecondary([
         sampleText(driveDistance.drives, 'drives'),
@@ -471,7 +471,7 @@ function makeDrivingTargetRows(shots, shotBenchmark, driveDistance) {
       dim: false,
     } : {
       key: 'driveDistance',
-      label: 'Drive distance',
+      label: 'Driver distance',
       value: '—',
       secondary: targetSecondary([
         `target ~${Math.round(shotBenchmark.driverDistance * YD_TO_M)} m`,

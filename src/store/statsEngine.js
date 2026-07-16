@@ -2,7 +2,7 @@ import { calcStablefordPoints, calcExtraShots, roundPairLeaderboard, getPlayingH
 import { isGIR, recoveryOutcomeFromState, roundScoringMode, isScrambleMode, isPickupScore } from './scoring';
 import {
   expectedFromBucket, expectedStrokes, BUCKETS,
-  PAR_ANCHOR_DISTANCE, benchmarkDriveDistance, expectedPenaltiesPerRound,
+  PAR_ANCHOR_DISTANCE, benchmarkTeeShotDistance, expectedPenaltiesPerRound,
 } from './strokesGainedBaseline';
 
 // Scramble rounds store ONE team ball under the team's captain (pair[0]),
@@ -2582,7 +2582,8 @@ export function driveLieBreakdown(rounds, playerId) {
 }
 
 // Average logged drive distance (bucket midpoints, metres) on par 4+ holes.
-// Surfaces the driveDistBucket data the scorecard collects for off-the-tee SG.
+// Driver only (teeClub null = driver): the stat is compared against the
+// benchmark DRIVER distance, so club-down tee shots would drag it down.
 export function driveDistanceAverage(rounds, playerId) {
   let sum = 0;
   let drives = 0;
@@ -2591,7 +2592,9 @@ export function driveDistanceAverage(rounds, playerId) {
     if (!byHole) return;
     (round.holes ?? []).forEach((hole) => {
       if (hole.par < 4) return;
-      const mid = BUCKETS.driveDist[byHole[hole.number]?.driveDistBucket];
+      const d = byHole[hole.number];
+      if (d?.teeClub && d.teeClub !== 'driver') return;
+      const mid = BUCKETS.driveDist[d?.driveDistBucket];
       if (mid == null) return;
       sum += mid;
       drives += 1;
@@ -2630,9 +2633,11 @@ export function sgOffTheTee(round, playerId, targetHandicap = 0) {
     const lie = driveLieFromDetail(d);
     const dist = BUCKETS.driveDist[d?.driveDistBucket];
     if (lie == null || dist == null) return null;
+    // Benchmark against the same tee club: a deliberate club-down is judged
+    // vs that club's typical shot, not scored as a short drive.
     const bench = expectedStrokes(
       'fairway',
-      Math.max(MIN_REMAINING_DISTANCE, anchor - benchmarkDriveDistance(targetHandicap)),
+      Math.max(MIN_REMAINING_DISTANCE, anchor - benchmarkTeeShotDistance(targetHandicap, d?.teeClub ?? 'driver')),
       targetHandicap,
     );
     const actual = expectedStrokes(

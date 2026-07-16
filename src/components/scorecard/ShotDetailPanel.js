@@ -12,6 +12,7 @@ import {
   DRIVE_DIST_BUCKETS, DRIVE_DIST_LABELS,
   DRIVE_MISS_LIES, DRIVE_MISS_LIE_LABELS,
   APPROACH_LIES, APPROACH_LIE_LABELS,
+  TEE_CLUBS, TEE_CLUB_LABELS,
 } from './constants';
 
 // One "label … − value +" counter row used for putts, penalties, sand shots.
@@ -172,6 +173,7 @@ export function ShotDetailPanel({ hole, detail, onChange, strokes, theme: themeP
   const d = { ...DEFAULT_SHOT, ...(detail ?? {}) };
   const isPar3 = hole.par === 3;
   const driveMissed = d.drive === 'left' || d.drive === 'right' || d.drive === 'short';
+  const teeClub = d.teeClub ?? 'driver';
   const approachDistanceLabel = isPar3 ? 'Hole distance' : 'Approach';
   const approachShotHint = 'metres';
   const gir = isGIR({ strokes, putts: d.putts, par: hole.par });
@@ -246,8 +248,28 @@ export function ShotDetailPanel({ hole, detail, onChange, strokes, theme: themeP
       />
 
       {!isPar3 && (
+        <LieChipRow
+          label="Tee club"
+          a11yPrefix="Tee club"
+          options={TEE_CLUBS}
+          labels={TEE_CLUB_LABELS}
+          effectiveValue={teeClub}
+          onSelect={(key) => onChange({ teeClub: key === 'driver' ? null : key })}
+          theme={theme}
+          s={s}
+          stacked
+          explainer={
+            <ShotDetailExplainer
+              rowKey="teeClub"
+              title="Tee club"
+              body="The club you hit off the tee. Driver is assumed — change it when you club down. Off-the-tee strokes gained compares your tee shot against a typical shot with the same club, so laying up isn't scored as a short drive."
+            />
+          }
+        />
+      )}
+      {!isPar3 && (
         <View style={s.shotRow}>
-          <Text style={s.shotRowLabel}>Driver</Text>
+          <Text style={s.shotRowLabel}>{TEE_CLUB_LABELS[teeClub]}</Text>
           <View style={s.driveBtns}>
             {DRIVE_ORDER.map((key) => {
               const meta = DRIVE_META[key];
@@ -258,7 +280,7 @@ export function ShotDetailPanel({ hole, detail, onChange, strokes, theme: themeP
                   style={[s.driveCircle, active && s.driveCircleActive]}
                   onPress={() => onChange({ drive: active ? null : key, driveLie: null })}
                   activeOpacity={0.7}
-                  accessibilityLabel={`Driver ${meta.label}`}
+                  accessibilityLabel={`${TEE_CLUB_LABELS[teeClub]} ${meta.label}`}
                 >
                   <Feather
                     name={meta.icon}

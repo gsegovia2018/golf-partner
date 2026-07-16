@@ -206,6 +206,18 @@ export function benchmarkDriveDistance(targetHandicap = 0) {
   return SCRATCH_DRIVE_DISTANCE + t * (AMATEUR_DRIVE_DISTANCE - SCRATCH_DRIVE_DISTANCE);
 }
 
+// How far each tee club carries relative to the driver, so a deliberate
+// club-down is benchmarked against that club's typical shot rather than
+// scored as a short drive. Ratios follow typical amateur gapping.
+export const TEE_CLUB_FACTOR = { driver: 1, wood: 0.92, hybrid: 0.85, iron: 0.78 };
+
+// Benchmark tee-shot distance for a target handicap with a given club.
+// Unknown / null club means driver.
+export function benchmarkTeeShotDistance(targetHandicap = 0, teeClub = 'driver') {
+  const factor = TEE_CLUB_FACTOR[teeClub] ?? 1;
+  return benchmarkDriveDistance(targetHandicap) * factor;
+}
+
 // Typical penalty strokes per round for a target handicap. Anchored at 0
 // for scratch — so "vs scratch" stays the raw count the app always showed —
 // and 1.0/round at the 14-hcp anchor, same linear blend as the tables
