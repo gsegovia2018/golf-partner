@@ -160,23 +160,26 @@ function AppNavigator() {
     if (session) registerPushToken();
   }, [session]);
 
-  // First-run gate: block the app until the profile has a username and a
-  // gender (username powers friend search; gender picks the tee rating the
-  // handicap uses). null = still checking, false = clear, a profile object =
-  // onboarding needed. Keyed on the user id, not the session object, so
-  // token refreshes don't re-trigger the check. A failed load (offline cold
-  // start) skips the gate rather than locking the user out — ProfileScreen
-  // still enforces gender on save.
+  // First-run gate for FRESH SIGN-UPS only: the signup trigger creates the
+  // profile row with just display_name, so a missing username means the
+  // account never went through onboarding. Legacy accounts all had usernames
+  // backfilled (20260419120005), so they sign in straight through even if
+  // gender is unset — ProfileScreen still enforces gender on save. Anonymous
+  // guests (join links) never onboard. null = still checking, false = clear,
+  // a profile object = onboarding needed. Keyed on the user id, not the
+  // session object, so token refreshes don't re-trigger the check. A failed
+  // load (offline cold start) skips the gate rather than locking the user out.
   const userId = session?.user?.id ?? null;
+  const isAnonUser = !!session?.user?.is_anonymous;
   const [onboarding, setOnboarding] = useState(null);
   useEffect(() => {
-    if (!userId) { setOnboarding(null); return undefined; }
+    if (!userId || isAnonUser) { setOnboarding(userId ? false : null); return undefined; }
     let cancelled = false;
     loadProfile()
-      .then((p) => { if (!cancelled) setOnboarding(p?.username && p?.gender ? false : (p ?? {})); })
+      .then((p) => { if (!cancelled) setOnboarding(p?.username ? false : (p ?? {})); })
       .catch(() => { if (!cancelled) setOnboarding(false); });
     return () => { cancelled = true; };
-  }, [userId]);
+  }, [userId, isAnonUser]);
 
   useEffect(() => {
     const sub = Notifications.addNotificationResponseReceivedListener((response) => {

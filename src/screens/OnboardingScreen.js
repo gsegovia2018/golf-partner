@@ -9,10 +9,10 @@ import { Feather } from '@expo/vector-icons';
 import { useTheme } from '../theme/ThemeContext';
 import { upsertProfile, isUsernameAvailable } from '../store/profileStore';
 
-// Blocking first-run step: the app stays behind this screen until the user
-// picks a username and gender (AppNavigator gates on both). Username powers
-// friend search / @-handles; gender decides which tee rating (men's or
-// women's) the player's handicap uses, so neither can stay unset.
+// Blocking first-run step for fresh sign-ups (AppNavigator gates on a
+// missing username; existing accounts sign in straight through). Username
+// powers friend search / @-handles; gender decides which tee rating (men's
+// or women's) the player's handicap uses, so neither can stay unset here.
 //
 // `profile` is the freshly loaded profile row; `onDone` tells the navigator
 // the gate can drop.
