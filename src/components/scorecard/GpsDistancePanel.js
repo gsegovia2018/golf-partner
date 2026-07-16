@@ -9,9 +9,11 @@ function fmt(meters) {
 }
 
 // Compact live-GPS strip: distances (meters) to front/center/back of the
-// current hole's green. Renders nothing when the course has no geometry data
-// or location is denied. `kind: 'nearest'` marks courses without per-hole
-// numbering, where the target is the nearest mapped green.
+// current hole's green, plus a second row for the nearest bunker/water ahead
+// (reach–carry range) when the hole has hazard geometry. Renders nothing when
+// the course has no geometry data or location is denied. `kind: 'nearest'`
+// marks courses without per-hole numbering, where the target is the nearest
+// mapped green.
 export function GpsDistancePanel({ courseName, holeNumber }) {
   const { theme } = useTheme();
   const { available, distances, accuracy } = useGpsDistances(courseName, holeNumber);
@@ -23,28 +25,56 @@ export function GpsDistancePanel({ courseName, holeNumber }) {
   // a 6-digit meter count would just look frozen/broken.
   const offCourse = distances && distances.center > 3000;
   const poorFix = accuracy != null && accuracy > 25;
+  // One entry per hazard kind — the nearest ahead is the one in play.
+  const bunker = distances?.hazards?.find((h) => h.kind === 'bunker');
+  const water = distances?.hazards?.find((h) => h.kind === 'water');
   return (
-    <View style={s.strip}>
-      <Feather name="navigation" size={13} color={theme.accent.primary} />
-      {offCourse ? (
-        <Text style={s.label}>
-          {`Off course — ${(distances.center / 1000).toFixed(1)} km from green`}
-        </Text>
-      ) : distances ? (
-        <>
+    <View style={s.panel}>
+      <View style={s.strip}>
+        <Feather name="navigation" size={13} color={theme.accent.primary} />
+        {offCourse ? (
           <Text style={s.label}>
-            {distances.kind === 'nearest' ? 'Nearest green' : 'Green'}
+            {`Off course — ${(distances.center / 1000).toFixed(1)} km from green`}
           </Text>
-          <View style={s.values}>
-            <Text style={s.value}><Text style={s.tag}>F </Text>{fmt(distances.front)}</Text>
-            <Text style={s.value}><Text style={s.tag}>C </Text>{fmt(distances.center)}</Text>
-            <Text style={s.value}><Text style={s.tag}>B </Text>{fmt(distances.back)}</Text>
-            <Text style={s.unit}>m</Text>
-          </View>
-          {poorFix && <Text style={s.accuracy}>±{Math.round(accuracy)}m</Text>}
-        </>
-      ) : (
-        <Text style={s.label}>Getting GPS fix…</Text>
+        ) : distances ? (
+          <>
+            <Text style={s.label}>
+              {distances.kind === 'nearest' ? 'Nearest green' : 'Green'}
+            </Text>
+            <View style={s.values}>
+              <Text style={s.value}><Text style={s.tag}>F </Text>{fmt(distances.front)}</Text>
+              <Text style={s.value}><Text style={s.tag}>C </Text>{fmt(distances.center)}</Text>
+              <Text style={s.value}><Text style={s.tag}>B </Text>{fmt(distances.back)}</Text>
+              <Text style={s.unit}>m</Text>
+            </View>
+            {poorFix && <Text style={s.accuracy}>±{Math.round(accuracy)}m</Text>}
+          </>
+        ) : (
+          <Text style={s.label}>Getting GPS fix…</Text>
+        )}
+      </View>
+      {!offCourse && (bunker || water) && (
+        <View style={s.hazardRow}>
+          {bunker && (
+            <View style={s.hazard}>
+              <Feather name="circle" size={11} color={theme.text.muted} />
+              <Text style={s.hazardText}>
+                <Text style={s.tag}>Bunker </Text>
+                {fmt(bunker.reach)}–{fmt(bunker.carry)}
+              </Text>
+            </View>
+          )}
+          {water && (
+            <View style={s.hazard}>
+              <Feather name="droplet" size={11} color={theme.accent.primary} />
+              <Text style={s.hazardText}>
+                <Text style={s.tag}>Water </Text>
+                {fmt(water.reach)}–{fmt(water.carry)}
+              </Text>
+            </View>
+          )}
+          <Text style={s.unit}>m</Text>
+        </View>
       )}
     </View>
   );
@@ -52,18 +82,40 @@ export function GpsDistancePanel({ courseName, holeNumber }) {
 
 function makeStyles(theme) {
   return StyleSheet.create({
+    panel: {
+      marginHorizontal: 12,
+      marginTop: 6,
+      borderRadius: 18,
+      borderWidth: 1,
+      borderColor: theme.accent.primary + '30',
+      backgroundColor: theme.isDark ? theme.accent.primary + '18' : theme.bg.card,
+    },
     strip: {
       flexDirection: 'row',
       alignItems: 'center',
       gap: 8,
       paddingHorizontal: 14,
       paddingVertical: 7,
-      marginHorizontal: 12,
-      marginTop: 6,
-      borderRadius: 999,
-      borderWidth: 1,
-      borderColor: theme.accent.primary + '30',
-      backgroundColor: theme.isDark ? theme.accent.primary + '18' : theme.bg.card,
+    },
+    hazardRow: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: 14,
+      paddingHorizontal: 14,
+      paddingVertical: 6,
+      borderTopWidth: StyleSheet.hairlineWidth,
+      borderTopColor: theme.accent.primary + '30',
+    },
+    hazard: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: 5,
+    },
+    hazardText: {
+      fontSize: 13,
+      fontWeight: '700',
+      color: theme.text.primary,
+      fontVariant: ['tabular-nums'],
     },
     label: {
       fontSize: 12,
