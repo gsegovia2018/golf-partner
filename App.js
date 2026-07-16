@@ -26,6 +26,8 @@ import LoadingSplash from './src/components/LoadingSplash';
 import ErrorBoundary from './src/components/ErrorBoundary';
 import { AuthProvider, useAuth } from './src/context/AuthContext';
 import AuthScreen from './src/screens/AuthScreen';
+import OnboardingScreen from './src/screens/OnboardingScreen';
+import { loadProfile } from './src/store/profileStore';
 import SetNewPasswordScreen from './src/screens/SetNewPasswordScreen';
 import JoinTournamentLinkScreen from './src/screens/JoinTournamentLinkScreen';
 
@@ -158,6 +160,24 @@ function AppNavigator() {
     if (session) registerPushToken();
   }, [session]);
 
+  // First-run gate: block the app until the profile has a username and a
+  // gender (username powers friend search; gender picks the tee rating the
+  // handicap uses). null = still checking, false = clear, a profile object =
+  // onboarding needed. Keyed on the user id, not the session object, so
+  // token refreshes don't re-trigger the check. A failed load (offline cold
+  // start) skips the gate rather than locking the user out — ProfileScreen
+  // still enforces gender on save.
+  const userId = session?.user?.id ?? null;
+  const [onboarding, setOnboarding] = useState(null);
+  useEffect(() => {
+    if (!userId) { setOnboarding(null); return undefined; }
+    let cancelled = false;
+    loadProfile()
+      .then((p) => { if (!cancelled) setOnboarding(p?.username && p?.gender ? false : (p ?? {})); })
+      .catch(() => { if (!cancelled) setOnboarding(false); });
+    return () => { cancelled = true; };
+  }, [userId]);
+
   useEffect(() => {
     const sub = Notifications.addNotificationResponseReceivedListener((response) => {
       const data = response?.notification?.request?.content?.data;
@@ -192,6 +212,22 @@ function AppNavigator() {
     // linking config routes the same URL to the JoinTournament screen.
     if (isJoinLink) return <JoinTournamentLinkScreen />;
     return <AuthScreen />;
+  }
+
+  if (onboarding === null) {
+    return (
+      <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: '#006747' }}>
+        <ActivityIndicator size="large" color="#ffd700" />
+      </View>
+    );
+  }
+  if (onboarding) {
+    return (
+      <OnboardingScreen
+        profile={onboarding}
+        onDone={() => setOnboarding(false)}
+      />
+    );
   }
 
   return (
