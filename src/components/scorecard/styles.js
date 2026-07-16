@@ -873,8 +873,14 @@ export function makeScorecardStyles(theme) {
     },
     driveBtns: { flexDirection: 'row', gap: 8, flex: 1, flexWrap: 'wrap', justifyContent: 'flex-end' },
     // Stacked variant: label on its own line, chips below hugging the right edge.
-    shotRowStacked: { flexDirection: 'column', alignItems: 'stretch', gap: 8 },
-    driveBtnsStacked: { flex: 0 },
+    shotRowStacked: {
+      flexDirection: 'column',
+      alignItems: 'stretch',
+      justifyContent: 'flex-start',
+      gap: 8,
+    },
+    // flex: 0 collapses to basis 0% on react-native-web; size by content instead.
+    driveBtnsStacked: { flexGrow: 0, flexShrink: 0, flexBasis: 'auto' },
     driveCircle: {
       width: 38,
       height: 38,
