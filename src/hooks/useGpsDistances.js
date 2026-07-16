@@ -12,38 +12,52 @@ export function useGpsDistances(courseName, holeNumber) {
   const geometry = useMemo(() => findCourseGeometry(courseName), [courseName]);
   const [denied, setDenied] = useState(false);
   const [fix, setFix] = useState(null); // { pos: [lat, lng], accuracy }
-  const subRef = useRef(null);
+  const lastFixAt = useRef(0);
 
   useEffect(() => {
     if (!geometry) return undefined;
     let cancelled = false;
+    let sub = null;
+    let poll = null;
+    const apply = (loc) => {
+      if (cancelled || !loc) return;
+      lastFixAt.current = Date.now();
+      setFix({
+        pos: [loc.coords.latitude, loc.coords.longitude],
+        accuracy: loc.coords.accuracy ?? null,
+      });
+    };
     (async () => {
       try {
         const { status } = await Location.requestForegroundPermissionsAsync();
         if (cancelled) return;
         if (status !== 'granted') { setDenied(true); return; }
-        subRef.current = await Location.watchPositionAsync(
+        // Fast first fix — the watch below can take several seconds to emit.
+        Location.getCurrentPositionAsync({ accuracy: Location.Accuracy.BestForNavigation })
+          .then(apply).catch(() => {});
+        sub = await Location.watchPositionAsync(
           {
             accuracy: Location.Accuracy.BestForNavigation,
-            distanceInterval: 2,
-            timeInterval: 2000,
+            distanceInterval: 1,
+            timeInterval: 1000,
           },
-          (loc) => {
-            if (cancelled) return;
-            setFix({
-              pos: [loc.coords.latitude, loc.coords.longitude],
-              accuracy: loc.coords.accuracy ?? null,
-            });
-          },
+          apply,
         );
+        // Desktop browsers and some Android vendors deliver one fix and then
+        // go silent — poll whenever the watch has been quiet for 6s.
+        poll = setInterval(() => {
+          if (cancelled || Date.now() - lastFixAt.current < 6000) return;
+          Location.getCurrentPositionAsync({ accuracy: Location.Accuracy.BestForNavigation })
+            .then(apply).catch(() => {});
+        }, 5000);
       } catch {
         if (!cancelled) setDenied(true);
       }
     })();
     return () => {
       cancelled = true;
-      subRef.current?.remove?.();
-      subRef.current = null;
+      sub?.remove?.();
+      if (poll) clearInterval(poll);
     };
   }, [geometry]);
 

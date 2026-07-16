@@ -19,11 +19,18 @@ export function GpsDistancePanel({ courseName, holeNumber }) {
 
   if (!available) return null;
 
+  // More than 3km from the target green: the player isn't on the course —
+  // a 6-digit meter count would just look frozen/broken.
+  const offCourse = distances && distances.center > 3000;
   const poorFix = accuracy != null && accuracy > 25;
   return (
     <View style={s.strip}>
       <Feather name="navigation" size={13} color={theme.accent.primary} />
-      {distances ? (
+      {offCourse ? (
+        <Text style={s.label}>
+          {`Off course — ${(distances.center / 1000).toFixed(1)} km from green`}
+        </Text>
+      ) : distances ? (
         <>
           <Text style={s.label}>
             {distances.kind === 'nearest' ? 'Nearest green' : 'Green'}
@@ -37,7 +44,7 @@ export function GpsDistancePanel({ courseName, holeNumber }) {
           {poorFix && <Text style={s.accuracy}>±{Math.round(accuracy)}m</Text>}
         </>
       ) : (
-        <Text style={s.label}>Buscando GPS…</Text>
+        <Text style={s.label}>Getting GPS fix…</Text>
       )}
     </View>
   );
