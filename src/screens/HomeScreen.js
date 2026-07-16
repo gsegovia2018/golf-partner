@@ -804,8 +804,13 @@ export default function HomeScreen({ navigation, route }) {
       setListStale(listResult.stale);
       setOpenableIds(listResult.openableIds);
       setTournament(null);
-      if (viewMode === 'tournament' && navigation.canGoBack()) {
-        navigation.goBack();
+      // Leave the pushed Tournament screen after deleting. viewMode can be
+      // 'auto' here (post-create resets push { name: 'Tournament' } without
+      // params), so key off the route name — an 'auto' route left in place
+      // would render the home list without the tab bar.
+      if (route?.name === 'Tournament') {
+        if (navigation.canGoBack()) navigation.goBack();
+        else navigation.navigate('Main', { screen: 'Home', params: { viewMode: 'list' } });
       }
     } catch (err) {
       if (Platform.OS === 'web') window.alert(err.message ?? `Could not delete ${tournamentNoun(t)}`);
