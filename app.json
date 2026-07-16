@@ -54,7 +54,13 @@
       ],
       "expo-video",
       "expo-web-browser",
-      "expo-notifications"
+      "expo-notifications",
+      [
+        "expo-location",
+        {
+          "locationWhenInUsePermission": "Necesitamos tu ubicación para mostrar distancias a green durante la ronda."
+        }
+      ]
     ],
     "extra": {
       "eas": {

@@ -7,6 +7,7 @@ import { Feather } from '@expo/vector-icons';
 import { useTheme } from '../../theme/ThemeContext';
 import { makeScorecardStyles } from './styles';
 import { HolePage, MePicker } from './HolePage';
+import { GpsDistancePanel } from './GpsDistancePanel';
 import { RoundSummary } from './RoundSummary';
 import { roundTotals } from './scoreModel';
 import { CELEBRATION_TIERS } from './constants';
@@ -163,6 +164,10 @@ export function HoleView({ round, roundIndex, players, scores, shotDetails, meId
           s={s}
         />
       )}
+
+      {/* Live GPS distances to the current hole's green. Renders nothing on
+          courses without geometry data (src/data/courseGeometry.json). */}
+      <GpsDistancePanel courseName={round.courseName} holeNumber={currentHole} />
 
       {/* Horizontal pager: flex:1, one page per hole (swipe to change hole) */}
       <View
