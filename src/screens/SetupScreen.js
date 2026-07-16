@@ -81,7 +81,7 @@ export default function SetupScreen({ navigation, route }) {
   const initialSteps = wizardSteps(kind, prefilledPlayers.length);
 
   const [tournamentName, setTournamentName] = useState(() =>
-    isGame ? buildGameName('') : 'Weekend Golf',
+    isGame ? buildGameName('') : '',
   );
   const [nameTouched, setNameTouched] = useState(false);
   const [players, setPlayers] = useState(() => prefilledPlayers);
@@ -616,6 +616,20 @@ export default function SetupScreen({ navigation, route }) {
           ? 'Pick a course, then fine-tune the holes if needed.'
           : 'Add each round and pick its course.'}
       </Text>
+      {!isGame && (
+        <View style={s.nameGroup}>
+          <Text style={s.nameLabel}>Tournament name</Text>
+          <TextInput
+            style={s.nameInput}
+            value={tournamentName}
+            onChangeText={(v) => { setTournamentName(v); setNameTouched(true); }}
+            placeholder="Weekend Golf"
+            placeholderTextColor={theme.text.muted}
+            keyboardAppearance={theme.isDark ? 'dark' : 'light'}
+            selectionColor={theme.accent.primary}
+          />
+        </View>
+      )}
       {rounds.map((r, i) => {
         const totalPar = r.holes.reduce((sum, h) => sum + h.par, 0);
         const hasCourse = !!r.courseName.trim();
@@ -1098,6 +1112,27 @@ function makeStyles(theme) {
       color: theme.accent.primary,
       fontSize: 11,
       letterSpacing: 0.8,
+    },
+
+    /* Tournament name (rounds step) */
+    nameGroup: { marginBottom: 18 },
+    nameLabel: {
+      fontFamily: 'PlusJakartaSans-SemiBold',
+      color: theme.text.secondary,
+      fontSize: 13,
+      letterSpacing: 0.5,
+      marginBottom: 8,
+    },
+    nameInput: {
+      backgroundColor: theme.bg.card,
+      color: theme.text.primary,
+      borderRadius: 12,
+      borderWidth: 1,
+      borderColor: theme.isDark ? theme.glass?.border : theme.border.default,
+      padding: 13,
+      fontSize: 15,
+      fontFamily: 'PlusJakartaSans-Bold',
+      ...(theme.isDark ? {} : theme.shadow.card),
     },
 
     /* Rounds */
