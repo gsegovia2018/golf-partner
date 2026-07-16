@@ -871,7 +871,7 @@ export function makeScorecardStyles(theme) {
       minWidth: 20,
       textAlign: 'center',
     },
-    driveBtns: { flexDirection: 'row', gap: 8 },
+    driveBtns: { flexDirection: 'row', gap: 8, flex: 1, flexWrap: 'wrap', justifyContent: 'flex-end' },
     driveCircle: {
       width: 38,
       height: 38,
