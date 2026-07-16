@@ -11,7 +11,7 @@ import * as ImageManipulator from 'expo-image-manipulator';
 
 import { useTheme } from '../theme/ThemeContext';
 import { supabase } from '../lib/supabase';
-import { loadProfile, upsertProfile, uploadAvatar } from '../store/profileStore';
+import { loadProfile, upsertProfile, uploadAvatar, isUsernameAvailable } from '../store/profileStore';
 import { getShowRunningScore, setShowRunningScore } from '../lib/prefs';
 import { parseHandicapIndex, normalizeHandicapInput } from '../lib/handicap';
 
@@ -130,6 +130,15 @@ export default function ProfileScreen({ navigation, route }) {
 
     setSaving(true);
     try {
+      // Friendly pre-check when the username actually changed. The unique
+      // index still backstops the race where someone claims it mid-save.
+      if (trimmedUsername && trimmedUsername !== (profile?.username ?? '')) {
+        const available = await isUsernameAvailable(trimmedUsername);
+        if (!available) {
+          Alert.alert('Username taken', 'That username is already taken. Pick another one.');
+          return;
+        }
+      }
       await upsertProfile({
         username: trimmedUsername,
         displayName,
@@ -213,11 +222,30 @@ export default function ProfileScreen({ navigation, route }) {
 
   const initials = (profile?.displayName || profile?.email || '?').slice(0, 2).toUpperCase();
 
+  // Header Save: appears only with unsaved edits. Lives in the left slot when
+  // the screen is a tab (slot is free) and in the right slot when pushed,
+  // where the back chevron owns the left.
+  const headerSave = dirty ? (
+    <TouchableOpacity
+      accessibilityLabel="Save profile"
+      onPress={save}
+      disabled={saving}
+      style={s.headerSaveBtn}
+      activeOpacity={0.7}
+    >
+      {saving
+        ? <ActivityIndicator size="small" color={theme.accent.primary} />
+        : <Text style={s.headerSaveText}>Save</Text>}
+    </TouchableOpacity>
+  ) : (
+    <View style={s.backBtn} />
+  );
+
   return (
     <ScreenContainer style={s.screen} edges={['top', 'bottom']}>
       <View style={s.header}>
         {isTabPresentation ? (
-          <View style={s.backBtn} />
+          headerSave
         ) : (
           <TouchableOpacity
             accessibilityLabel="Back"
@@ -229,7 +257,7 @@ export default function ProfileScreen({ navigation, route }) {
           </TouchableOpacity>
         )}
         <Text style={s.headerTitle}>Profile</Text>
-        <View style={s.backBtn} />
+        {isTabPresentation ? <View style={s.backBtn} /> : headerSave}
       </View>
 
       {loading ? (
@@ -413,17 +441,6 @@ export default function ProfileScreen({ navigation, route }) {
           </TouchableOpacity>
 
           <TouchableOpacity
-            style={[s.saveBtn, (!dirty || saving) && { opacity: 0.5 }]}
-            onPress={save}
-            disabled={!dirty || saving}
-            activeOpacity={0.8}
-          >
-            {saving
-              ? <ActivityIndicator color={theme.isDark ? theme.accent.primary : theme.text.inverse} />
-              : <Text style={s.saveBtnText}>Save changes</Text>}
-          </TouchableOpacity>
-
-          <TouchableOpacity
             style={s.signOutBtn}
             onPress={signOut}
             activeOpacity={0.7}
@@ -508,15 +525,13 @@ const makeStyles = (theme) => StyleSheet.create({
   genderPillText: { fontFamily: 'PlusJakartaSans-SemiBold', color: theme.text.secondary, fontSize: 13 },
   genderPillTextActive: { fontFamily: 'PlusJakartaSans-Bold', color: theme.accent.primary, fontSize: 13 },
 
-  saveBtn: {
-    backgroundColor: theme.isDark ? theme.accent.light : theme.accent.primary,
-    borderRadius: 14, padding: 14, alignItems: 'center', marginTop: 22,
-    borderWidth: theme.isDark ? 1 : 0,
-    borderColor: theme.isDark ? theme.accent.primary + '33' : 'transparent',
+  headerSaveBtn: {
+    minWidth: 40, height: 40, paddingHorizontal: 4,
+    alignItems: 'center', justifyContent: 'center',
   },
-  saveBtnText: {
+  headerSaveText: {
     fontFamily: 'PlusJakartaSans-ExtraBold',
-    color: theme.isDark ? theme.accent.primary : theme.text.inverse,
+    color: theme.accent.primary,
     fontSize: 15,
   },
 

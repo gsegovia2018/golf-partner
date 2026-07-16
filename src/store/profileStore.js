@@ -37,6 +37,17 @@ export async function loadProfile() {
   };
 }
 
+// True when nobody else holds `username` (case-insensitive). Goes through
+// the username_available RPC because profiles_select RLS hides strangers —
+// a direct select would miss their rows and report taken names as free.
+export async function isUsernameAvailable(username) {
+  const { data, error } = await supabase.rpc('username_available', {
+    p_username: String(username ?? '').trim().toLowerCase(),
+  });
+  if (error) throw error;
+  return data === true;
+}
+
 // Only sends the columns that were explicitly provided. Supabase `.upsert`
 // would otherwise set every missing column to NULL on conflict and clobber
 // the rest of the profile. The `avatarUrl` path from ProfileScreen passes

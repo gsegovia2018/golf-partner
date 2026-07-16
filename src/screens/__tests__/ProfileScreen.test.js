@@ -39,6 +39,7 @@ jest.mock('../../store/profileStore', () => ({
   loadProfile: jest.fn(() => new Promise(() => {})),
   upsertProfile: jest.fn(() => Promise.resolve()),
   uploadAvatar: jest.fn(() => Promise.resolve('https://example.com/avatar.jpg')),
+  isUsernameAvailable: jest.fn(() => Promise.resolve(true)),
 }));
 
 jest.mock('../../lib/prefs', () => ({
@@ -119,11 +120,11 @@ describe('ProfileScreen form', () => {
       gender: 'male',
     });
 
-    const { findByDisplayValue, getByText } = renderScreen({ params: { presentation: 'tab' } });
+    const { findByDisplayValue, getByLabelText } = renderScreen({ params: { presentation: 'tab' } });
 
     const handicapInput = await findByDisplayValue('12.5');
     fireEvent.changeText(handicapInput, '13,4');
-    fireEvent.press(getByText('Save changes'));
+    fireEvent.press(getByLabelText('Save profile'));
 
     await waitFor(() => {
       expect(upsertProfile).toHaveBeenCalledWith(expect.objectContaining({
@@ -147,12 +148,12 @@ describe('ProfileScreen gender', () => {
       gender: null,
     });
 
-    const { findByDisplayValue, getByLabelText, getByText } = renderScreen({ params: { presentation: 'tab' } });
+    const { findByDisplayValue, getByLabelText } = renderScreen({ params: { presentation: 'tab' } });
 
     const handicapInput = await findByDisplayValue('12.5');
     fireEvent.changeText(handicapInput, '13.4');
     upsertProfile.mockClear();
-    fireEvent.press(getByText('Save changes'));
+    fireEvent.press(getByLabelText('Save profile'));
 
     await waitFor(() => {
       expect(alertSpy).toHaveBeenCalledWith('Select gender', expect.any(String));
@@ -160,7 +161,7 @@ describe('ProfileScreen gender', () => {
     expect(upsertProfile).not.toHaveBeenCalled();
 
     fireEvent.press(getByLabelText('Female'));
-    fireEvent.press(getByText('Save changes'));
+    fireEvent.press(getByLabelText('Save profile'));
 
     await waitFor(() => {
       expect(upsertProfile).toHaveBeenCalledWith(expect.objectContaining({ gender: 'female' }));
