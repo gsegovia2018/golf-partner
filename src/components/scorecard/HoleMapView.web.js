@@ -14,7 +14,7 @@ export function HoleMapView({ data, player, activeField, onPoint, style }) {
   useEffect(() => {
     const h = (e) => {
       let m; try { m = JSON.parse(e.data); } catch { return; }
-      if (m.type === 'point') onPoint?.(m.field, m.pos);
+      if (m.type === 'point') onPoint?.(m.field, m.pos, m.drag);
     };
     window.addEventListener('message', h);
     return () => window.removeEventListener('message', h);

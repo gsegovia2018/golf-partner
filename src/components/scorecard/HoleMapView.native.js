@@ -28,7 +28,7 @@ export function HoleMapView({ data, player, activeField, onPoint, style }) {
       javaScriptEnabled
       onMessage={(e) => {
         let m; try { m = JSON.parse(e.nativeEvent.data); } catch { return; }
-        if (m.type === 'point') onPoint?.(m.field, m.pos);
+        if (m.type === 'point') onPoint?.(m.field, m.pos, m.drag);
       }}
     />
   );

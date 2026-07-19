@@ -53,9 +53,11 @@ export function HoleGeoEditor({ courseName, holeNumber, visible, onClose, onSave
 
   if (!visible) return null;
 
-  const onPoint = (field, pos) => {
+  const onPoint = (field, pos, isDrag) => {
     setPts((p) => ({ ...p, [field]: pos }));
-    setActive((a) => Math.min(a + 1, FIELDS.length - 1));
+    // Tap-to-place advances to the next field; dragging an existing marker just
+    // repositions it and keeps the active field where it is.
+    if (!isDrag) setActive((a) => Math.min(a + 1, FIELDS.length - 1));
   };
 
   const save = async () => {

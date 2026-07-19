@@ -90,7 +90,10 @@ export function HoleView({ round, roundIndex, players, scores, shotDetails, meId
   const onLastHole = currentHole >= holeCount;
   const gps = useGpsDistances(round.courseName, currentHole);
   const { user } = useAuth();
-  const isAdmin = isAdminUser(user?.id);
+  // Admin allowlist gates the geometry editor. On the local dev server (__DEV__)
+  // allow it without sign-in so geometry can be corrected during development;
+  // installed/production builds still require an admin account.
+  const isAdmin = isAdminUser(user?.id) || __DEV__;
   const [flyoverOpen, setFlyoverOpen] = useState(false);
   const [editorOpen, setEditorOpen] = useState(false);
   const [pagerSize, setPagerSize] = useState({ width: 0, height: 0 });

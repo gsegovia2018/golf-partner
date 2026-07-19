@@ -55,7 +55,11 @@ function bearing(a, b){
   const x = Math.cos(a[0]*r)*Math.sin(b[0]*r) - Math.sin(a[0]*r)*Math.cos(b[0]*r)*Math.cos((b[1]-a[1])*r);
   return (Math.atan2(y, x)/r + 360) % 360;
 }
-const map = L.map('map', { zoomControl: true, attributionControl: false, rotate: true, touchRotate: false, bearing: 0 });
+// Seed a center/zoom at creation. leaflet-rotate's fitBounds path reads the
+// map's pixel origin, which throws "Set map center and zoom first" if the map
+// has no view yet — so initView's fitBounds crashed before any tiles/markers
+// drew. A default view makes the map "loaded" so fitBounds works.
+const map = L.map('map', { zoomControl: true, attributionControl: false, rotate: true, touchRotate: false, bearing: 0, center: [40.45, -3.75], zoom: 15 });
 L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}', { maxZoom: 20, maxNativeZoom: 19 }).addTo(map);
 
 let hole = DATA;
@@ -85,15 +89,16 @@ let target = null; // draggable aim / measure marker latlng
 function draw() {
   clear();
   const g = fcb();
-  // green shape / points
+  // green shape / hazards drawn as context in both modes
   if (hole.green && !(hole.greenFront || hole.greenBack)) add(L.polygon(hole.green, { color:'#eafff0', weight:2, fillColor:'#57ae5b', fillOpacity:.25 }));
   (hole.hazards||[]).forEach(h => add(L.polygon(h.poly, { color: h.kind==='water'?'#4a9fe0':'#c7b581', weight:1, fillColor: h.kind==='water'?'#4a9fe0':'#e6d7a8', fillOpacity:.35 })));
+
+  if (hole.mode === 'edit') { drawEdit(); return; }
+
   if (g.f) add(L.circleMarker(g.f, { radius:6, color:'#fff', weight:2, fillColor:'#ffd166', fillOpacity:1 }));
   if (g.b) add(L.circleMarker(g.b, { radius:6, color:'#fff', weight:2, fillColor:'#ef8a5b', fillOpacity:1 }));
   if (g.c) add(L.circleMarker(g.c, { radius:5, color:'#3f8f43', weight:2, fillColor:'#fff', fillOpacity:1 }));
   if (hole.tee) add(L.circleMarker(hole.tee, { radius:6, color:'#fff', weight:2, fillColor:'#2f6bff', fillOpacity:1 }));
-
-  if (hole.mode === 'edit') { drawEdit(g); return; }
 
   const from = onCourse() ? player : null;
   const cc = valid(g.c) ? g.c : [map.getCenter().lat, map.getCenter().lng];
@@ -138,8 +143,26 @@ function hud(from, g){
       : '<div class="hint">Drag the ring to measure</div>');
 }
 
-function drawEdit(g){
-  document.getElementById('hud').innerHTML = '<div class="hint">Tap to place: '+activeField.toUpperCase()+'</div>';
+function editIcon(color, label){
+  return L.divIcon({ className:'', iconSize:[28,28], iconAnchor:[14,14],
+    html:'<div style="width:28px;height:28px;border-radius:50%;border:3px solid #fff;background:'+color+';box-shadow:0 0 0 1px rgba(0,0,0,.5);display:flex;align-items:center;justify-content:center;color:#0a0d10;font-weight:800;font-size:12px">'+label+'</div>' });
+}
+// Edit mode: draggable markers for each placed field (tap the map to place the
+// active field, or drag an existing marker to nudge it). dragend posts the new
+// position with drag:true so the host doesn't auto-advance the active field.
+function drawEdit(){
+  const fields = [
+    { k:'front',  pt: hole.greenFront,  c:'#ffd166', t:'F' },
+    { k:'center', pt: hole.greenCenter, c:'#57ae5b', t:'C' },
+    { k:'back',   pt: hole.greenBack,   c:'#ef8a5b', t:'B' },
+    { k:'tee',    pt: hole.tee,         c:'#2f6bff', t:'T' },
+  ];
+  fields.forEach((f) => {
+    if (!valid(f.pt)) return;
+    const mk = add(L.marker(f.pt, { draggable:true, icon: editIcon(f.c, f.t) }));
+    mk.on('dragend', (e) => { const ll = e.target.getLatLng(); post({ type:'point', field:f.k, pos:[ll.lat, ll.lng], drag:true }); });
+  });
+  document.getElementById('hud').innerHTML = '<div class="hint">Tap to set '+activeField.toUpperCase()+' · drag any marker to nudge</div>';
   map.off('click');
   map.on('click', (e) => { post({ type:'point', field: activeField, pos:[e.latlng.lat, e.latlng.lng] }); });
 }
