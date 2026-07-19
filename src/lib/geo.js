@@ -92,12 +92,20 @@ export function greenDistances(pos, greenPolygon, greenCenter) {
 export function findCourseGeometry(courseName) {
   const n = normalizeText(courseName);
   if (!n) return null;
+  // Most-specific match wins: the matching token group with the most tokens
+  // beats a looser one. Otherwise CCVM's single-token color groups (["amarillo"],
+  // ["negro"]) would steal a "Lomas Bosque Amarillo" round from Lomas-Bosque's
+  // two-token ["lomas","bosque"] group. First course wins ties (array order).
+  let best = null, bestScore = 0;
   for (const course of COURSES) {
     for (const tokens of course.matchTokens) {
-      if (tokens.every((t) => n.includes(t))) return course;
+      if (tokens.every((t) => n.includes(t)) && tokens.length > bestScore) {
+        best = course;
+        bestScore = tokens.length;
+      }
     }
   }
-  return null;
+  return best;
 }
 
 // Distances for a specific hole of a 'holes'-mode course. Returns

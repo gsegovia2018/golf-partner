@@ -5,6 +5,13 @@
 
 const DEFAULT_SOURCE = 'OpenStreetMap (ODbL)';
 
+// A coord point is only usable when both entries are finite numbers. jsonb
+// columns often hold [null, null] (a truthy array) rather than SQL NULL —
+// letting that through poisons distance math (haversine → NaN). Normalize any
+// non-finite point to undefined so callers fall back to the green polygon.
+const pt = (v) => (Array.isArray(v) && v.length === 2
+  && Number.isFinite(v[0]) && Number.isFinite(v[1]) ? v : undefined);
+
 // Nested course object -> { course, holes, hazards, greens } row arrays for
 // upsert into golf_course / golf_hole / golf_hazard / golf_green.
 export function flattenCourse(course) {
@@ -77,12 +84,12 @@ export function assembleCourses({ courses, holes = [], hazards = [], greens = []
           number: h.number,
           par: h.par ?? undefined,
           green: h.green ?? undefined,
-          greenCenter: h.green_center ?? undefined,
-          greenFront: h.green_front ?? undefined,
-          greenBack: h.green_back ?? undefined,
-          pin: h.pin ?? undefined,
+          greenCenter: pt(h.green_center),
+          greenFront: pt(h.green_front),
+          greenBack: pt(h.green_back),
+          pin: pt(h.pin),
           tees: h.tees ?? undefined,
-          start: h.start_pt ?? undefined,
+          start: pt(h.start_pt),
           hazards: (hazMap.get(h.number) ?? [])
             .slice()
             .sort((a, b) => a.ordinal - b.ordinal)

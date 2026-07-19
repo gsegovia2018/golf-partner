@@ -11,7 +11,9 @@ import { assembleCourses } from '../lib/courseGeometryShape';
 //   3) Supabase fetch — authoritative, requires network
 // GPS distances keep working at every stage; each step just upgrades the data.
 
-const CACHE_KEY = 'courseGeometry.v1';
+// v2: v1 cached the assembled blob with [null,null] point coords passed through
+// (pre-sanitize); bumping discards that poisoned cache so the sanitized fetch wins.
+const CACHE_KEY = 'courseGeometry.v2';
 
 async function fetchGeometry() {
   const [courses, holes, hazards, greens] = await Promise.all([
