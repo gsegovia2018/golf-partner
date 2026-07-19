@@ -1,8 +1,42 @@
 // Pure geo helpers for GPS distances to course features. No I/O, no React.
 // Coordinates are [lat, lng] pairs (matches src/data/courseGeometry.json).
 
-import courseGeometry from '../data/courseGeometry.json';
+import seedGeometry from '../data/courseGeometry.json';
 import { normalizeText } from './courseLibrary';
+
+// Active geometry set. Seeded from the bundled JSON so GPS works offline and
+// before the first Supabase fetch; courseGeometryStore.hydrate() swaps in the
+// live table data via setCourseGeometry(). Same nested shape either way:
+// { key, name, matchTokens, mode, holes[] | greens[] }.
+let COURSES = seedGeometry.courses;
+
+// Subscription so React re-renders when hydration swaps the geometry in — the
+// bundled seed renders first, then Supabase data replaces it. Without this,
+// screens keep the seed (e.g. the old greens-mode CCVM) and never show the
+// live per-hole courses. Shaped for useSyncExternalStore.
+let version = 0;
+const listeners = new Set();
+
+// Replace the active geometry (called by courseGeometryStore after a fetch).
+// Falls back to the bundled seed when handed an empty/invalid set.
+export function setCourseGeometry(courses) {
+  COURSES = Array.isArray(courses) && courses.length ? courses : seedGeometry.courses;
+  version += 1;
+  listeners.forEach((l) => l());
+}
+
+export function getCourseGeometry() {
+  return COURSES;
+}
+
+export function subscribeCourseGeometry(cb) {
+  listeners.add(cb);
+  return () => listeners.delete(cb);
+}
+
+export function getCourseGeometryVersion() {
+  return version;
+}
 
 const EARTH_RADIUS_M = 6371000;
 const RAD = Math.PI / 180;
@@ -58,7 +92,7 @@ export function greenDistances(pos, greenPolygon, greenCenter) {
 export function findCourseGeometry(courseName) {
   const n = normalizeText(courseName);
   if (!n) return null;
-  for (const course of courseGeometry.courses) {
+  for (const course of COURSES) {
     for (const tokens of course.matchTokens) {
       if (tokens.every((t) => n.includes(t))) return course;
     }
@@ -71,7 +105,18 @@ export function findCourseGeometry(courseName) {
 export function holeTargetDistances(pos, geometryCourse, holeNumber) {
   const hole = geometryCourse.holes?.find((h) => h.number === holeNumber);
   if (!hole) return null;
-  const d = greenDistances(pos, hole.green, hole.greenCenter);
+  // Admin-set front/center/back points win over the traced polygon: they're
+  // intentional edges along the line of play, not just nearest/farthest vertex.
+  let d;
+  if (hole.greenFront || hole.greenBack || (hole.greenCenter && !hole.green)) {
+    d = {
+      front: hole.greenFront ? haversineMeters(pos, hole.greenFront) : null,
+      center: hole.greenCenter ? haversineMeters(pos, hole.greenCenter) : null,
+      back: hole.greenBack ? haversineMeters(pos, hole.greenBack) : null,
+    };
+  } else {
+    d = greenDistances(pos, hole.green, hole.greenCenter);
+  }
   if (!d) return null;
   return {
     ...d,
@@ -115,10 +160,36 @@ export function holeHazardDistances(pos, geometryCourse, holeNumber) {
 export function nearestGreenDistances(pos, geometryCourse) {
   let best = null;
   for (const green of geometryCourse.greens ?? []) {
-    const d = greenDistances(pos, green, null);
+    // A green is either an outline polygon ([[lat,lng],...]) or just a hand-
+    // traced center point ([lat,lng]); the latter yields center distance only.
+    const isCenterPoint = typeof green[0] === 'number';
+    const d = isCenterPoint
+      ? greenDistances(pos, null, green)
+      : greenDistances(pos, green, null);
     if (d && (!best || d.center < best.center)) best = d;
   }
   return best ? { ...best, pin: null, kind: 'nearest' } : null;
+}
+
+// Raw polygons/points for one hole, for drawing the hole map. Returns
+// { green, greenCenter, pin, tees, start, hazards } or null. Only 'holes'-mode
+// courses carry per-hole geometry; 'greens'-mode returns null (no layout).
+export function holeFeatures(courseName, holeNumber) {
+  const course = findCourseGeometry(courseName);
+  if (!course || course.mode !== 'holes') return null;
+  const hole = course.holes?.find((h) => h.number === holeNumber);
+  if (!hole?.green && !hole?.greenCenter) return null;
+  const green = hole.green ?? null;
+  return {
+    green,
+    greenCenter: hole.greenCenter ?? (green ? polygonCentroid(green) : null),
+    greenFront: hole.greenFront ?? null,
+    greenBack: hole.greenBack ?? null,
+    pin: hole.pin ?? null,
+    tees: hole.tees ?? null,
+    start: hole.start ?? null,
+    hazards: hole.hazards ?? [],
+  };
 }
 
 // One entry point for the UI: distances from `pos` for `holeNumber` on the

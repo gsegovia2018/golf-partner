@@ -14,7 +14,8 @@
       "backgroundColor": "#006747"
     },
     "ios": {
-      "supportsTablet": true
+      "supportsTablet": true,
+      "bundleIdentifier": "com.golfpartner.app"
     },
     "android": {
       "package": "com.golfpartner.app",

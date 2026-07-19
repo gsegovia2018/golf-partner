@@ -8,6 +8,11 @@ import { useTheme } from '../../theme/ThemeContext';
 import { makeScorecardStyles } from './styles';
 import { HolePage, MePicker } from './HolePage';
 import { GpsDistancePanel } from './GpsDistancePanel';
+import { HoleFlyover } from './HoleFlyover';
+import { HoleGeoEditor } from './HoleGeoEditor';
+import { useGpsDistances } from '../../hooks/useGpsDistances';
+import { useAuth } from '../../context/AuthContext';
+import { isAdminUser } from '../../lib/admin';
 import { RoundSummary } from './RoundSummary';
 import { roundTotals } from './scoreModel';
 import { CELEBRATION_TIERS } from './constants';
@@ -83,6 +88,11 @@ export function HoleView({ round, roundIndex, players, scores, shotDetails, meId
   }, [focusConflict, onGoToHole, onFocusConflictHandled]);
 
   const onLastHole = currentHole >= holeCount;
+  const gps = useGpsDistances(round.courseName, currentHole);
+  const { user } = useAuth();
+  const isAdmin = isAdminUser(user?.id);
+  const [flyoverOpen, setFlyoverOpen] = useState(false);
+  const [editorOpen, setEditorOpen] = useState(false);
   const [pagerSize, setPagerSize] = useState({ width: 0, height: 0 });
   const pagerRef = useRef(null);
   const holeScrollOffset = useRef(0);
@@ -165,9 +175,25 @@ export function HoleView({ round, roundIndex, players, scores, shotDetails, meId
         />
       )}
 
-      {/* Live GPS distances to the current hole's green. Renders nothing on
-          courses without geometry data (src/data/courseGeometry.json). */}
-      <GpsDistancePanel courseName={round.courseName} holeNumber={currentHole} />
+      {/* Live GPS front/center/back to the green — tap to open the aerial
+          flyover. Renders nothing on courses without geometry data. */}
+      <GpsDistancePanel gps={gps} onPress={() => setFlyoverOpen(true)} />
+      <HoleFlyover
+        visible={flyoverOpen}
+        courseName={round.courseName}
+        holeNumber={currentHole}
+        position={gps.position}
+        onClose={() => setFlyoverOpen(false)}
+        onEdit={isAdmin ? () => { setFlyoverOpen(false); setEditorOpen(true); } : undefined}
+      />
+      {isAdmin && (
+        <HoleGeoEditor
+          visible={editorOpen}
+          courseName={round.courseName}
+          holeNumber={currentHole}
+          onClose={() => setEditorOpen(false)}
+        />
+      )}
 
       {/* Horizontal pager: flex:1, one page per hole (swipe to change hole) */}
       <View

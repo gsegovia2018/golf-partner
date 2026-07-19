@@ -66,6 +66,7 @@ import PlayersScreen from './src/screens/PlayersScreen';
 import FinishedScreen from './src/screens/FinishedScreen';
 import { startUploadWorker } from './src/lib/uploadWorker';
 import { initDeviceAuthorId } from './src/store/deviceId';
+import { hydrateCourseGeometry } from './src/store/courseGeometryStore';
 import * as ScreenOrientation from 'expo-screen-orientation';
 import * as Notifications from 'expo-notifications';
 import { registerPushToken, configureNotificationHandler } from './src/lib/pushNotifications';
@@ -324,6 +325,9 @@ export default function App() {
   useEffect(() => {
     let cancelled = false;
     initDeviceAuthorId().finally(() => { if (!cancelled) setDeviceIdReady(true); });
+    // Non-blocking: GPS geometry starts from the bundled seed and upgrades to
+    // live table data whenever this resolves. Not part of the render gate.
+    hydrateCourseGeometry();
     return () => { cancelled = true; };
   }, []);
 

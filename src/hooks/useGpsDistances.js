@@ -1,6 +1,9 @@
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState, useSyncExternalStore } from 'react';
 import * as Location from 'expo-location';
-import { findCourseGeometry, courseTargetDistances } from '../lib/geo';
+import {
+  findCourseGeometry, courseTargetDistances,
+  subscribeCourseGeometry, getCourseGeometryVersion,
+} from '../lib/geo';
 
 // Live GPS distances to the current hole's green. Only asks for location
 // permission when the round's course actually has geometry data; returns
@@ -9,7 +12,10 @@ import { findCourseGeometry, courseTargetDistances } from '../lib/geo';
 // `available` is false when there is no geometry, permission was denied, or
 // location is unsupported — callers render nothing in that case.
 export function useGpsDistances(courseName, holeNumber) {
-  const geometry = useMemo(() => findCourseGeometry(courseName), [courseName]);
+  const geomVersion = useSyncExternalStore(subscribeCourseGeometry, getCourseGeometryVersion);
+  // geomVersion bumps when hydration swaps in live geometry — recompute then.
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  const geometry = useMemo(() => findCourseGeometry(courseName), [courseName, geomVersion]);
   const [denied, setDenied] = useState(false);
   const [fix, setFix] = useState(null); // { pos: [lat, lng], accuracy }
   const lastFixAt = useRef(0);
@@ -33,11 +39,11 @@ export function useGpsDistances(courseName, holeNumber) {
         if (cancelled) return;
         if (status !== 'granted') { setDenied(true); return; }
         // Fast first fix — the watch below can take several seconds to emit.
-        Location.getCurrentPositionAsync({ accuracy: Location.Accuracy.BestForNavigation })
+        Location.getCurrentPositionAsync({ accuracy: Location.Accuracy.High })
           .then(apply).catch(() => {});
         sub = await Location.watchPositionAsync(
           {
-            accuracy: Location.Accuracy.BestForNavigation,
+            accuracy: Location.Accuracy.High,
             distanceInterval: 1,
             timeInterval: 1000,
           },
@@ -47,7 +53,7 @@ export function useGpsDistances(courseName, holeNumber) {
         // go silent — poll whenever the watch has been quiet for 6s.
         poll = setInterval(() => {
           if (cancelled || Date.now() - lastFixAt.current < 6000) return;
-          Location.getCurrentPositionAsync({ accuracy: Location.Accuracy.BestForNavigation })
+          Location.getCurrentPositionAsync({ accuracy: Location.Accuracy.High })
             .then(apply).catch(() => {});
         }, 5000);
       } catch {
@@ -70,5 +76,6 @@ export function useGpsDistances(courseName, holeNumber) {
     available: !!geometry && !denied,
     distances,
     accuracy: fix?.accuracy ?? null,
+    position: fix?.pos ?? null, // [lat, lng] — shared with the hole map
   };
 }

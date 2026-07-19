@@ -1,8 +1,7 @@
 import React, { useMemo } from 'react';
-import { View, Text, StyleSheet } from 'react-native';
+import { View, Text, StyleSheet, Pressable } from 'react-native';
 import { Feather } from '@expo/vector-icons';
 import { useTheme } from '../../theme/ThemeContext';
-import { useGpsDistances } from '../../hooks/useGpsDistances';
 
 function fmt(meters) {
   return meters == null ? '—' : `${Math.round(meters)}`;
@@ -14,12 +13,13 @@ function fmt(meters) {
 // the course has no geometry data or location is denied. `kind: 'nearest'`
 // marks courses without per-hole numbering, where the target is the nearest
 // mapped green.
-export function GpsDistancePanel({ courseName, holeNumber }) {
+export function GpsDistancePanel({ gps, onPress }) {
   const { theme } = useTheme();
-  const { available, distances, accuracy } = useGpsDistances(courseName, holeNumber);
+  const { available, distances, accuracy } = gps;
   const s = useMemo(() => makeStyles(theme), [theme]);
 
   if (!available) return null;
+  const Container = onPress ? Pressable : View;
 
   // More than 3km from the target green: the player isn't on the course —
   // a 6-digit meter count would just look frozen/broken.
@@ -29,7 +29,7 @@ export function GpsDistancePanel({ courseName, holeNumber }) {
   const bunker = distances?.hazards?.find((h) => h.kind === 'bunker');
   const water = distances?.hazards?.find((h) => h.kind === 'water');
   return (
-    <View style={s.panel}>
+    <Container style={s.panel} onPress={onPress}>
       <View style={s.strip}>
         <Feather name="navigation" size={13} color={theme.accent.primary} />
         {offCourse ? (
@@ -52,6 +52,7 @@ export function GpsDistancePanel({ courseName, holeNumber }) {
         ) : (
           <Text style={s.label}>Getting GPS fix…</Text>
         )}
+        {onPress && <Feather name="map" size={15} color={theme.accent.primary} style={{ marginLeft: distances && !offCourse ? 6 : 'auto' }} />}
       </View>
       {!offCourse && (bunker || water) && (
         <View style={s.hazardRow}>
@@ -76,7 +77,7 @@ export function GpsDistancePanel({ courseName, holeNumber }) {
           <Text style={s.unit}>m</Text>
         </View>
       )}
-    </View>
+    </Container>
   );
 }
 
