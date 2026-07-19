@@ -19,9 +19,14 @@ export function useGpsDistances(courseName, holeNumber) {
   const [denied, setDenied] = useState(false);
   const [fix, setFix] = useState(null); // { pos: [lat, lng], accuracy }
   const lastFixAt = useRef(0);
+  // Only whether the course HAS geometry gates the location watch — not the
+  // geometry object's identity. Hydration (e.g. saving the geometry editor)
+  // bumps geomVersion and returns a fresh object; keying the effect on that
+  // would tear down and rebuild the watch on every save.
+  const hasGeometry = !!geometry;
 
   useEffect(() => {
-    if (!geometry) return undefined;
+    if (!hasGeometry) return undefined;
     let cancelled = false;
     let sub = null;
     let poll = null;
@@ -62,10 +67,14 @@ export function useGpsDistances(courseName, holeNumber) {
     })();
     return () => {
       cancelled = true;
-      sub?.remove?.();
+      // expo-location's web subscription.remove() calls
+      // LocationEventEmitter.removeSubscription, which doesn't exist on
+      // react-native-web — it throws and takes down the tree via the error
+      // boundary. Swallow it; the watch is being discarded anyway.
+      try { sub?.remove?.(); } catch { /* web removeSubscription missing */ }
       if (poll) clearInterval(poll);
     };
-  }, [geometry]);
+  }, [hasGeometry]);
 
   const distances = useMemo(() => {
     if (!geometry || !fix) return null;
