@@ -164,8 +164,6 @@ function hud(from, g){
   const h = document.getElementById('hud');
   const src = from || target;
   const d = (p) => valid(p) && valid(src) ? dist(src, p) : null;
-  const fromTee = anchor && anchor.source === 'tee';
-  const km = anchor && anchor.playerDistance != null ? (anchor.playerDistance/1000).toFixed(1) : null;
   h.innerHTML =
     '<div class="tri">'+
       '<div class="row"><span class="lbl">Back</span><span class="sm">'+round(d(g.b))+'</span></div>'+
@@ -173,9 +171,7 @@ function hud(from, g){
       '<div class="row"><span class="lbl">Front</span><span class="sm">'+round(d(g.f))+'</span></div>'+
     '</div>'+
     (from
-      ? (fromTee
-        ? '<div class="hint">📍 '+(km ? km+' km away' : 'No GPS')+' — measuring from the tee</div>'
-        : '<div class="hint">Drag the ring or tap anywhere</div>')
+      ? '<div class="hint">Drag the ring or tap anywhere</div>'
       : '<div class="hint">Drag the ring to measure</div>');
 }
 
@@ -206,7 +202,7 @@ function drawEdit(){
 // Initial view: tee at the bottom, green at the top, hole filling the
 // viewport. fitBounds misframes under leaflet-rotate, so compute the view
 // directly: rotate to the tee->green bearing, center the midpoint, zoom from
-// hole length vs viewport height (~45% padding).
+// hole length vs viewport height (~20% padding).
 function initView(){
   const g = fcb();
   const c = valid(g.c) ? g.c : null;
@@ -215,7 +211,7 @@ function initView(){
     const mid = [(hole.tee[0]+c[0])/2, (hole.tee[1]+c[1])/2];
     const len = Math.max(dist(hole.tee, c), 60);
     const hPx = Math.max(document.getElementById('map').clientHeight, 320);
-    const mpp = (len * 1.45) / hPx;
+    const mpp = (len * 1.2) / hPx;
     const zoom = Math.min(Math.log2(156543.03392 * Math.cos(mid[0]*Math.PI/180) / mpp), 19.5);
     // leaflet-rotate rotates content clockwise by the given degrees, so screen-up = -bearing; negate to point tee→green up.
     if (map.setBearing) map.setBearing(-bearing(hole.tee, c));
