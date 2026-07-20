@@ -279,7 +279,7 @@ export function makeScorecardStyles(theme) {
       lineHeight: 48,
       letterSpacing: -1,
     },
-    holeHeaderRight: { flexDirection: 'row', gap: 20 },
+    holeMetaInline: { flexDirection: 'row', gap: 16, marginLeft: 14, alignSelf: 'flex-end', paddingBottom: 6 },
     holeMetaItem: { alignItems: 'center', gap: 4 },
     holeMetaLabel: {
       color: theme.text.muted,

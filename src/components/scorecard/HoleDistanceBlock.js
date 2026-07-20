@@ -9,7 +9,7 @@ function fmt(meters) {
 
 // Right-hand side of the hole header: live GPS distances to the green, and
 // the tap target that opens the hole map sheet. Replaces the old standalone
-// GpsDistancePanel strip. Renders nothing when the course has no geometry or
+// distance strip. Renders nothing when the course has no geometry or
 // location is denied — the header then looks exactly like the pre-GPS layout.
 export function HoleDistanceBlock({ gps, onPress }) {
   const { theme } = useTheme();
