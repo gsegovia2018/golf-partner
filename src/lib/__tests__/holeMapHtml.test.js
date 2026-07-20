@@ -36,4 +36,15 @@ describe('buildHoleMapHtml', () => {
     expect(html).not.toContain('server.arcgisonline.com');
     expect(html).toContain("type:'tile'");
   });
+  it('inline map script parses as valid JavaScript', () => {
+    const html = buildHoleMapHtml(base);
+    const scripts = [...html.matchAll(/<script>([\s\S]*?)<\/script>/g)];
+    const inline = scripts[scripts.length - 1][1];
+    expect(() => new Function(inline)).not.toThrow();
+  });
+  it('tracks aim circles as an array with a chain renderer', () => {
+    const html = buildHoleMapHtml(base);
+    expect(html).toContain('let targets = []');
+    expect(html).toContain('function drawTargets');
+  });
 });

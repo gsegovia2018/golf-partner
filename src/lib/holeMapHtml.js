@@ -105,7 +105,7 @@ const add = (l) => { layers.push(l.addTo(map)); return l; };
 function fcb() {
   const c = hole.greenCenter || (hole.green ? centroid(hole.green) : null);
   let f = hole.greenFront || null, b = hole.greenBack || null;
-  const src = (anchor && valid(anchor.pos)) ? anchor.pos : (valid(target) ? target : null);
+  const src = (anchor && valid(anchor.pos)) ? anchor.pos : (valid(targets[0]) ? targets[0] : null);
   if ((!f || !b) && hole.green && src) {
     let nf = null, nb = null, best = 1e18, worst = -1;
     for (const v of hole.green) { const d = dist(src, v); if (d < best){best=d; nf=v;} if (d > worst){worst=d; nb=v;} }
@@ -117,7 +117,8 @@ function centroid(poly){let a=0,b=0;for(const p of poly){a+=p[0];b+=p[1];}return
 
 const onCourse = () => anchor && anchor.source === 'gps';
 
-let target = null; // draggable aim / measure marker latlng
+let targets = []; // draggable aim circles (1-2), each [lat,lng]
+let targetLayers = [];
 
 function draw() {
   clear();
@@ -135,14 +136,29 @@ function draw() {
 
   const from = valid(anchor.pos) ? anchor.pos : null;
   const cc = valid(g.c) ? g.c : [map.getCenter().lat, map.getCenter().lng];
-  if (!valid(target)) target = from ? [(from[0]+cc[0])/2,(from[1]+cc[1])/2] : cc;
+  if (!targets.length) targets = [from ? [(from[0]+cc[0])/2,(from[1]+cc[1])/2] : cc.slice()];
   if (onCourse()) add(L.circleMarker(from, { radius:8, color:'#fff', weight:3, fillColor:'#2f6bff', fillOpacity:1 }));
-  const aim = add(L.marker(target, { draggable:true, icon: ringIcon(), zIndexOffset:1000 }));
-  aim.on('drag', e => { target = [e.latlng.lat, e.latlng.lng]; redrawLines(from, g, cc); });
   map.off('click');
-  map.on('click', (e) => { target = [e.latlng.lat, e.latlng.lng]; aim.setLatLng(e.latlng); redrawLines(from, g, cc); });
-  redrawLines(from, g, cc);
+  map.on('click', (e) => {
+    const p = [e.latlng.lat, e.latlng.lng];
+    const i = (targets.length > 1 && dist(p, targets[1]) < dist(p, targets[0])) ? 1 : 0;
+    targets[i] = p;
+    drawTargets(from, g, cc);
+  });
+  drawTargets(from, g, cc);
   hud(from, g);
+}
+
+// Aim circles: recreated wholesale on any structural change (add/remove/tap);
+// drag only updates the line layers underneath.
+function drawTargets(from, g, cc){
+  targetLayers.forEach(l=>map.removeLayer(l)); targetLayers=[];
+  targets.forEach((p, i) => {
+    const mk = L.marker(p, { draggable:true, icon: ringIcon(), zIndexOffset:1000 }).addTo(map);
+    targetLayers.push(mk);
+    mk.on('drag', e => { targets[i] = [e.latlng.lat, e.latlng.lng]; redrawLines(from, g, cc); });
+  });
+  redrawLines(from, g, cc);
 }
 
 let lineLayers = [];
@@ -153,13 +169,21 @@ function chipMk(a, b, d){
 function redrawLines(from, g, cc){
   lineLayers.forEach(l=>map.removeLayer(l)); lineLayers=[];
   const mk=(l)=>{lineLayers.push(l.addTo(map));};
-  if (from){
-    mk(L.polyline([from,target],{color:'#fff',weight:4}));
-    mk(chipMk(from, target, dist(from, target)));
-    if(valid(cc)){ mk(L.polyline([target,cc],{color:'#fff',weight:3,dashArray:'3 8'})); mk(chipMk(target, cc, dist(target, cc))); }
-  } else if (valid(cc)) {
-    mk(L.polyline([target,cc],{color:'#fff',weight:3,dashArray:'3 8'}));
-    mk(chipMk(target, cc, dist(target, cc)));
+  // Chain anchor -> circles -> green, circles ordered by distance from the
+  // anchor (or, with no anchor, farthest-from-green first) so drop/drag
+  // order never crosses the path.
+  const pts = targets.filter(valid).slice();
+  if (from) pts.sort((a,b)=>dist(from,a)-dist(from,b));
+  else if (valid(cc)) pts.sort((a,b)=>dist(cc,b)-dist(cc,a));
+  const chain = from ? [from].concat(pts) : pts;
+  for (let i=1;i<chain.length;i++){
+    mk(L.polyline([chain[i-1],chain[i]],{color:'#fff',weight:4}));
+    mk(chipMk(chain[i-1], chain[i], dist(chain[i-1],chain[i])));
+  }
+  if (valid(cc) && chain.length){
+    const last = chain[chain.length-1];
+    mk(L.polyline([last,cc],{color:'#fff',weight:3,dashArray:'3 8'}));
+    mk(chipMk(last, cc, dist(last, cc)));
   }
   if (!from) hud(from, g);   // no anchor: HUD measures from the ring — keep it live
 }
@@ -167,7 +191,7 @@ function ringIcon(){ return L.divIcon({ className:'', html:'<div style="width:34
 
 function hud(from, g){
   const h = document.getElementById('hud');
-  const src = from || target;
+  const src = from || targets[0];
   const d = (p) => valid(p) && valid(src) ? dist(src, p) : null;
   h.innerHTML =
     '<div class="tri">'+
