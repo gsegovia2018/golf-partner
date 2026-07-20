@@ -47,4 +47,14 @@ describe('buildHoleMapHtml', () => {
     expect(html).toContain('let targets = []');
     expect(html).toContain('function drawTargets');
   });
+  it('adds a second circle on long-press with a two-circle cap', () => {
+    const html = buildHoleMapHtml(base);
+    expect(html).toContain("map.on('contextmenu'");
+    expect(html).toContain('targets.length >= 2');
+  });
+  it('removes a circle on long-press but never the last one', () => {
+    const html = buildHoleMapHtml(base);
+    expect(html).toContain('targets.splice(i, 1)');
+    expect(html).toContain('targets.length < 2');
+  });
 });

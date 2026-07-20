@@ -138,11 +138,16 @@ function draw() {
   const cc = valid(g.c) ? g.c : [map.getCenter().lat, map.getCenter().lng];
   if (!targets.length) targets = [from ? [(from[0]+cc[0])/2,(from[1]+cc[1])/2] : cc.slice()];
   if (onCourse()) add(L.circleMarker(from, { radius:8, color:'#fff', weight:3, fillColor:'#2f6bff', fillOpacity:1 }));
-  map.off('click');
+  map.off('click contextmenu');
   map.on('click', (e) => {
     const p = [e.latlng.lat, e.latlng.lng];
     const i = (targets.length > 1 && dist(p, targets[1]) < dist(p, targets[0])) ? 1 : 0;
     targets[i] = p;
+    drawTargets(from, g, cc);
+  });
+  map.on('contextmenu', (e) => {
+    if (targets.length >= 2) return; // two planned shots max
+    targets.push([e.latlng.lat, e.latlng.lng]);
     drawTargets(from, g, cc);
   });
   drawTargets(from, g, cc);
@@ -157,6 +162,11 @@ function drawTargets(from, g, cc){
     const mk = L.marker(p, { draggable:true, icon: ringIcon(), zIndexOffset:1000 }).addTo(map);
     targetLayers.push(mk);
     mk.on('drag', e => { targets[i] = [e.latlng.lat, e.latlng.lng]; redrawLines(from, g, cc); });
+    mk.on('contextmenu', () => {
+      if (targets.length < 2) return; // keep at least one circle
+      targets.splice(i, 1);
+      drawTargets(from, g, cc);
+    });
   });
   redrawLines(from, g, cc);
 }
