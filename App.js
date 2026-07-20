@@ -62,6 +62,7 @@ import GalleryScreen from './src/screens/GalleryScreen';
 import JoinTournamentScreen from './src/screens/JoinTournamentScreen';
 import ClaimPlayerScreen from './src/screens/ClaimPlayerScreen';
 import ProfileScreen from './src/screens/ProfileScreen';
+import SettingsScreen from './src/screens/SettingsScreen';
 import PlayersScreen from './src/screens/PlayersScreen';
 import FinishedScreen from './src/screens/FinishedScreen';
 import { startUploadWorker } from './src/lib/uploadWorker';
@@ -279,6 +280,7 @@ function AppNavigator() {
         <Stack.Screen name="JoinTournament" component={JoinTournamentScreen} />
         <Stack.Screen name="ClaimPlayer" component={ClaimPlayerScreen} />
         <Stack.Screen name="Profile" component={ProfileScreen} />
+        <Stack.Screen name="Settings" component={SettingsScreen} />
         <Stack.Screen name="Players" component={PlayersScreen} />
         <Stack.Screen name="Finished" component={FinishedScreen} />
         <Stack.Screen name="Friends" component={FriendsScreen} />

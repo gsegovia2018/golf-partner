@@ -42,11 +42,6 @@ jest.mock('../../store/profileStore', () => ({
   isUsernameAvailable: jest.fn(() => Promise.resolve(true)),
 }));
 
-jest.mock('../../lib/prefs', () => ({
-  getShowRunningScore: jest.fn(() => Promise.resolve(true)),
-  setShowRunningScore: jest.fn(() => Promise.resolve()),
-}));
-
 jest.mock('../../lib/supabase', () => ({
   supabase: { auth: { signOut: jest.fn(() => Promise.resolve()) } },
 }));

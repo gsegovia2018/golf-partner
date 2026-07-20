@@ -1,7 +1,7 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import {
   View, Text, TextInput, TouchableOpacity, StyleSheet, ScrollView,
-  ActivityIndicator, Alert, Platform, Switch, Image,
+  ActivityIndicator, Alert, Platform, Image,
 } from 'react-native';
 import ScreenContainer from '../components/ScreenContainer';
 import { useFocusEffect } from '@react-navigation/native';
@@ -12,11 +12,10 @@ import * as ImageManipulator from 'expo-image-manipulator';
 import { useTheme } from '../theme/ThemeContext';
 import { supabase } from '../lib/supabase';
 import { loadProfile, upsertProfile, uploadAvatar, isUsernameAvailable } from '../store/profileStore';
-import { getShowRunningScore, setShowRunningScore } from '../lib/prefs';
 import { parseHandicapIndex, normalizeHandicapInput } from '../lib/handicap';
 
 export default function ProfileScreen({ navigation, route }) {
-  const { theme, mode, toggle } = useTheme();
+  const { theme } = useTheme();
   const s = makeStyles(theme);
   const isTabPresentation = route?.params?.presentation === 'tab';
 
@@ -32,13 +31,12 @@ export default function ProfileScreen({ navigation, route }) {
   const [uploadingAvatar, setUploadingAvatar] = useState(false);
   const [gender, setGender] = useState(null);
   const [dirty, setDirty] = useState(false);
-  const [showRunning, setShowRunning] = useState(true);
   const hasLoadedOnceRef = useRef(false);
 
   const load = useCallback(async () => {
     if (!hasLoadedOnceRef.current) setLoading(true);
     try {
-      const [p, running] = await Promise.all([loadProfile(), getShowRunningScore()]);
+      const p = await loadProfile();
       setProfile(p);
       setUsername(p?.username ?? '');
       setDisplayName(p?.displayName ?? '');
@@ -46,7 +44,6 @@ export default function ProfileScreen({ navigation, route }) {
       setTargetHandicap(p?.targetHandicap != null ? String(p.targetHandicap) : '');
       setAvatarUrl(p?.avatarUrl ?? null);
       setGender(p?.gender ?? null);
-      setShowRunning(running);
       setDirty(false);
     } catch (err) {
       Alert.alert('Error', err.message ?? 'Could not load profile');
@@ -54,13 +51,6 @@ export default function ProfileScreen({ navigation, route }) {
       hasLoadedOnceRef.current = true;
       setLoading(false);
     }
-  }, []);
-
-  const toggleShowRunning = useCallback((next) => {
-    setShowRunning(next);
-    setShowRunningScore(next).catch((err) => {
-      Alert.alert('Error', err.message ?? 'Could not save preference');
-    });
   }, []);
 
   useFocusEffect(useCallback(() => { load(); }, [load]));
@@ -383,50 +373,17 @@ export default function ProfileScreen({ navigation, route }) {
             </Text>
           </View>
 
-          <Text style={s.sectionLabel}>APPEARANCE</Text>
+          <Text style={s.sectionLabel}>APP</Text>
 
-          <View style={s.appearanceRow}>
-            {[
-              { value: 'light', label: 'Light', icon: 'sun' },
-              { value: 'dark', label: 'Dark', icon: 'moon' },
-            ].map((opt) => {
-              const active = mode === opt.value;
-              return (
-                <TouchableOpacity
-                  key={opt.value}
-                  style={[s.appearanceTile, active && s.appearanceTileActive]}
-                  onPress={() => { if (!active) toggle(); }}
-                  activeOpacity={0.7}
-                >
-                  <Feather
-                    name={opt.icon}
-                    size={18}
-                    color={active ? theme.accent.primary : theme.text.muted}
-                  />
-                  <Text style={[s.appearanceLabel, active && s.appearanceLabelActive]}>
-                    {opt.label}
-                  </Text>
-                </TouchableOpacity>
-              );
-            })}
-          </View>
-
-          <Text style={s.sectionLabel}>PREFERENCES</Text>
-
-          <View style={s.prefRow}>
-            <View style={{ flex: 1 }}>
-              <Text style={s.prefLabel}>Show running points on scorecard</Text>
-              <Text style={s.fieldHint}>
-                Displays total Stableford points under every scorecard name.
-              </Text>
-            </View>
-            <Switch
-              value={showRunning}
-              onValueChange={toggleShowRunning}
-              trackColor={{ false: theme.border.default, true: theme.accent.primary }}
-              thumbColor={Platform.OS === 'android' ? theme.bg.card : undefined}
-            />
-          </View>
+          <TouchableOpacity
+            style={s.linkRow}
+            onPress={() => navigation.navigate('Settings')}
+            activeOpacity={0.7}
+          >
+            <Feather name="settings" size={18} color={theme.accent.primary} />
+            <Text style={s.linkRowText}>Settings</Text>
+            <Feather name="chevron-right" size={18} color={theme.text.muted} />
+          </TouchableOpacity>
 
           <Text style={s.sectionLabel}>SOCIAL</Text>
 
@@ -533,36 +490,6 @@ const makeStyles = (theme) => StyleSheet.create({
     fontFamily: 'PlusJakartaSans-ExtraBold',
     color: theme.accent.primary,
     fontSize: 15,
-  },
-
-  prefRow: {
-    flexDirection: 'row', alignItems: 'center', gap: 12,
-    backgroundColor: theme.bg.card, borderRadius: 14, borderWidth: 1,
-    borderColor: theme.border.default, padding: 14,
-    ...(theme.isDark ? {} : theme.shadow.card),
-  },
-  prefLabel: {
-    fontFamily: 'PlusJakartaSans-SemiBold', color: theme.text.primary, fontSize: 14,
-  },
-
-  appearanceRow: { flexDirection: 'row', gap: 10 },
-  appearanceTile: {
-    flex: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8,
-    backgroundColor: theme.bg.card,
-    borderRadius: 14, borderWidth: 1, borderColor: theme.border.default,
-    paddingVertical: 14,
-    ...(theme.isDark ? {} : theme.shadow.card),
-  },
-  appearanceTileActive: {
-    borderColor: theme.accent.primary,
-    backgroundColor: theme.isDark ? theme.accent.light : theme.accent.light,
-  },
-  appearanceLabel: {
-    fontFamily: 'PlusJakartaSans-SemiBold', color: theme.text.muted, fontSize: 14,
-  },
-  appearanceLabelActive: {
-    color: theme.accent.primary,
-    fontFamily: 'PlusJakartaSans-Bold',
   },
 
   linkRow: {
