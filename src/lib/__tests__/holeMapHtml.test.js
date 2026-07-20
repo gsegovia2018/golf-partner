@@ -26,4 +26,9 @@ describe('buildHoleMapHtml', () => {
     const html = buildHoleMapHtml(base);
     expect(html).not.toContain('unpkg.com');
   });
+  it('uses the bridged tile layer, not a direct Esri tileLayer', () => {
+    const html = buildHoleMapHtml(base);
+    expect(html).not.toContain('server.arcgisonline.com');
+    expect(html).toContain("type:'tile'");
+  });
 });

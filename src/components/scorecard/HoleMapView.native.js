@@ -1,6 +1,7 @@
 import React, { useEffect, useMemo, useRef } from 'react';
 import { WebView } from 'react-native-webview';
 import { buildHoleMapHtml } from '../../lib/holeMapHtml';
+import { getTileDataUrl } from '../../store/tileCache';
 
 // Native host: renders the Leaflet map page in a WebView. Same contract as the
 // web host — rebuilds only on hole/mode identity change; live updates are
@@ -29,6 +30,10 @@ export function HoleMapView({ data, player, anchor, activeField, onPoint, style 
       onMessage={(e) => {
         let m; try { m = JSON.parse(e.nativeEvent.data); } catch { return; }
         if (m.type === 'point') onPoint?.(m.field, m.pos, m.drag);
+        if (m.type === 'tile') {
+          getTileDataUrl({ z: m.z, x: m.x, y: m.y, bucket: data.courseKey || '_browse' })
+            .then((dataUrl) => send({ type: 'tile-data', id: m.id, dataUrl }));
+        }
       }}
     />
   );

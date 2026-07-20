@@ -6,6 +6,8 @@
 //                  { type:'activeField', field:'front'|'center'|'back'|'tee' }
 //   page -> host:  { type:'point', field, pos:[lat,lng] }   (edit taps)
 //                  { type:'ready' }
+//                  { type:'tile', z, x, y, id }               (tile request)
+//   host -> page:  { type:'tile-data', id, dataUrl|null }     (tile answer)
 //
 // data: { mode:'view'|'edit', holeLabel, green, greenFront, greenCenter,
 //         greenBack, tee, hazards:[{kind,poly}], player, activeField }
@@ -61,7 +63,26 @@ function bearing(a, b){
 // has no view yet — so initView's fitBounds crashed before any tiles/markers
 // drew. A default view makes the map "loaded" so fitBounds works.
 const map = L.map('map', { zoomControl: true, zoomSnap: 0.25, attributionControl: false, rotate: true, touchRotate: false, bearing: 0, center: [40.45, -3.75], zoom: 15 });
-L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}', { maxZoom: 20, maxNativeZoom: 19 }).addTo(map);
+// Tiles come from the host (cache-first, offline-aware) over postMessage.
+// A tile with no answer stays transparent — the vector layer shows through.
+let tileSeq = 0;
+const pendingTiles = {};
+const BridgedTiles = L.GridLayer.extend({
+  createTile: function (coords, done) {
+    const img = document.createElement('img');
+    img.alt = '';
+    img.style.width = '100%';
+    img.style.height = '100%';
+    const id = 't' + (tileSeq++);
+    pendingTiles[id] = (dataUrl) => {
+      if (dataUrl) { img.onload = () => done(null, img); img.onerror = () => done(null, img); img.src = dataUrl; }
+      else done(null, img);
+    };
+    post({ type:'tile', z: coords.z, x: coords.x, y: coords.y, id });
+    return img;
+  },
+});
+new BridgedTiles({ maxZoom: 20, maxNativeZoom: 19 }).addTo(map);
 
 let hole = DATA;
 let player = DATA.player || null;
@@ -208,6 +229,11 @@ window.addEventListener('message', (ev) => {
   if (m.type === 'player') { player = m.pos; if (m.anchor) anchor = m.anchor; draw(); }
   if (m.type === 'activeField') { activeField = m.field; if (hole.mode==='edit') drawEdit(fcb()); }
   if (m.type === 'hole') { hole = m.hole; draw(); } // redraw markers, keep current pan/zoom
+  if (m.type === 'tile-data') {
+    const cb = pendingTiles[m.id];
+    delete pendingTiles[m.id];
+    if (cb) cb(m.dataUrl || null);
+  }
 });
 
 initView();

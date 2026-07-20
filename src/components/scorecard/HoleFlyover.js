@@ -5,6 +5,7 @@ import {
   holeFeatures, subscribeCourseGeometry, getCourseGeometryVersion,
 } from '../../lib/geo';
 import { anchorFor } from '../../lib/flyoverModel';
+import { courseKeyFor } from '../../store/tileCache';
 import { HoleMapView } from './HoleMapView';
 
 // Full-screen interactive satellite flyover of one hole (Leaflet + Esri tiles,
@@ -27,6 +28,7 @@ export function HoleFlyover({ courseName, holeNumber, position, visible, onClose
     mode: 'view',
     holeKey: `${courseName}#${holeNumber}#view`,
     holeLabel: `Hole ${holeNumber}`,
+    courseKey: courseKeyFor(courseName),
     green: feat.green || null,
     greenFront: feat.greenFront || null,
     greenCenter: feat.greenCenter || null,
