@@ -11,7 +11,11 @@ import * as Haptics from 'expo-haptics';
 import { Feather } from '@expo/vector-icons';
 import * as ScreenOrientation from 'expo-screen-orientation';
 
-import { getShowRunningScore, setShowRunningScore } from '../lib/prefs';
+import { activateKeepAwakeAsync, deactivateKeepAwake } from 'expo-keep-awake';
+
+import { holeComplete } from '../lib/autoAdvance';
+import { getAppSettings, updateAppSettings } from '../store/settingsStore';
+import { useAppSettings } from '../hooks/useAppSettings';
 import {
   loadTournament, subscribeTournamentChanges,
   calcBestWorstBall, DEFAULT_SETTINGS,
@@ -62,6 +66,7 @@ import FinishConflictSheet from '../components/scorecard/FinishConflictSheet';
 
 const haptic = (style = 'light') => {
   if (Platform.OS === 'web') return;
+  if (getAppSettings().haptics === false) return;
   if (style === 'light') Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
   else if (style === 'medium') Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
   else if (style === 'success') Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
@@ -264,6 +269,14 @@ export default function ScorecardScreen({ navigation, route }) {
   const [notesOpen, setNotesOpen] = useState(false);
   const [view, setView] = useState('hole'); // 'grid' | 'hole'
   const [currentHole, setCurrentHole] = useState(1);
+  const currentHoleRef = useRef(1);
+  useEffect(() => { currentHoleRef.current = currentHole; }, [currentHole]);
+  const autoAdvanceTimer = useRef(null);
+  useEffect(() => () => { if (autoAdvanceTimer.current) clearTimeout(autoAdvanceTimer.current); }, []);
+  // goToNextHole is declared later (it needs state defined further down) but
+  // setScore/stepScore — declared earlier — must schedule against it. A ref
+  // sidesteps the ordering conflict instead of hoisting goToNextHole up.
+  const goToNextHoleRef = useRef(() => {});
   const [refreshing, setRefreshing] = useState(false);
   const [saveError, setSaveError] = useState(false);
   // 'loading' until the first loadTournament resolves; 'error' if it returned
@@ -1077,6 +1090,20 @@ export default function ScorecardScreen({ navigation, route }) {
     });
   }, [tournament, roundIndex, authorName]);
 
+  // Schedule after each score write; a follow-up tap on the same hole resets
+  // the timer so quick +/- adjustments land before the page flips.
+  const maybeAutoAdvance = useCallback((nextScores, holeNumber) => {
+    if (autoAdvanceTimer.current) { clearTimeout(autoAdvanceTimer.current); autoAdvanceTimer.current = null; }
+    if (!getAppSettings().autoAdvanceHole) return;
+    if (holeNumber !== currentHoleRef.current) return;
+    const maxHole = round?.holes?.length ?? 18;
+    if (holeNumber >= maxHole) return;
+    if (!holeComplete(nextScores, players, holeNumber)) return;
+    autoAdvanceTimer.current = setTimeout(() => {
+      if (currentHoleRef.current === holeNumber) goToNextHoleRef.current();
+    }, 1200);
+  }, [round, players]);
+
   const setScore = useCallback((playerId, holeNumber, value) => {
     if (!official && viewOnly) return;
     const rawParsed = value === '' ? undefined : parseInt(value, 10) || undefined;
@@ -1109,7 +1136,8 @@ export default function ScorecardScreen({ navigation, route }) {
       const label = celebrationFor(holePar, parsed);
       if (label) triggerCelebration(playerId, holeNumber, label);
     }
-  }, [round, players, autoSave, triggerCelebration, official, officialWrite, reconcileMeShot, viewOnly]);
+    maybeAutoAdvance(next, holeNumber);
+  }, [round, players, autoSave, triggerCelebration, official, officialWrite, reconcileMeShot, viewOnly, maybeAutoAdvance]);
 
   const stepScore = useCallback((playerId, holeNumber, delta) => {
     if (!official && viewOnly) return;
@@ -1144,23 +1172,20 @@ export default function ScorecardScreen({ navigation, route }) {
       const label = celebrationFor(holePar, newStrokes);
       if (label) triggerCelebration(playerId, holeNumber, label);
     }
-  }, [round, players, autoSave, triggerCelebration, getScoreAnim, official, officialWrite, reconcileMeShot, viewOnly]);
+    maybeAutoAdvance(next, holeNumber);
+  }, [round, players, autoSave, triggerCelebration, getScoreAnim, official, officialWrite, reconcileMeShot, viewOnly, maybeAutoAdvance]);
 
-  const [showRunning, setShowRunning] = useState(true);
-  useEffect(() => {
-    let cancelled = false;
-    getShowRunningScore().then((v) => {
-      if (!cancelled) setShowRunning(v);
-    }).catch(() => {});
-    return () => { cancelled = true; };
-  }, []);
+  const appSettings = useAppSettings();
+  const showRunning = appSettings.showRunningScore && !appSettings.noSpoilers;
   const toggleRunning = useCallback(() => {
-    setShowRunning((v) => {
-      const next = !v;
-      setShowRunningScore(next).catch(() => {});
-      return next;
-    });
+    updateAppSettings({ showRunningScore: !getAppSettings().showRunningScore }).catch(() => {});
   }, []);
+
+  useEffect(() => {
+    if (!appSettings.keepAwake) return undefined;
+    activateKeepAwakeAsync('scorecard').catch(() => {});
+    return () => { try { deactivateKeepAwake('scorecard'); } catch { /* not held */ } };
+  }, [appSettings.keepAwake]);
 
   const lastClinchedPairRef = useRef(null);
   const clinchInitRoundIdRef = useRef(null);
@@ -1180,6 +1205,9 @@ export default function ScorecardScreen({ navigation, route }) {
 
   const goToNextHole = useCallback(() => {
     haptic('medium');
+    // A manual tap here (or the auto-advance timer itself firing) should
+    // cancel any other pending auto-advance — no double-hops.
+    if (autoAdvanceTimer.current) { clearTimeout(autoAdvanceTimer.current); autoAdvanceTimer.current = null; }
     const maxHole = round?.holes?.length ?? 18;
     setCurrentHole((h) => Math.min(maxHole, h + 1));
     if (!round || !tournament) return;
@@ -1194,9 +1222,11 @@ export default function ScorecardScreen({ navigation, route }) {
     }
     lastClinchedPairRef.current = clinched;
   }, [round, tournament, players, scores, settings]);
+  useEffect(() => { goToNextHoleRef.current = goToNextHole; }, [goToNextHole]);
 
   const goToHole = useCallback((h) => {
     haptic('light');
+    if (autoAdvanceTimer.current) { clearTimeout(autoAdvanceTimer.current); autoAdvanceTimer.current = null; }
     setCurrentHole(h);
   }, []);
 
@@ -1540,14 +1570,16 @@ export default function ScorecardScreen({ navigation, route }) {
           >
             <Feather name={viewSwitchIcon} size={17} color={theme.accent.primary} />
           </TouchableOpacity>
-          <TouchableOpacity
-            onPress={toggleRunning}
-            style={s.cameraBtn}
-            accessibilityLabel={showRunning ? 'Hide running score' : 'Show running score'}
-          >
-            <Feather name={showRunning ? 'eye-off' : 'eye'} size={18} color={theme.accent.primary} />
-          </TouchableOpacity>
-          {official && (
+          {!appSettings.noSpoilers && (
+            <TouchableOpacity
+              onPress={toggleRunning}
+              style={s.cameraBtn}
+              accessibilityLabel={showRunning ? 'Hide running score' : 'Show running score'}
+            >
+              <Feather name={showRunning ? 'eye-off' : 'eye'} size={18} color={theme.accent.primary} />
+            </TouchableOpacity>
+          )}
+          {official && !appSettings.noSpoilers && (
             <TouchableOpacity
               onPress={() => setOfficialLeaderboardOpen(true)}
               style={s.cameraBtn}
