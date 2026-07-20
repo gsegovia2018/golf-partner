@@ -20,6 +20,16 @@ export const DEFAULT_SHOT = {
   approachLie: null,            // 'fairway' | 'rough' | 'sand' | null (null = fairway)
 };
 
+// Which DEFAULT_SHOT fields belong to each configurable tracking group
+// (Settings → Stats tracking). Hiding a group hides exactly these inputs.
+export const STAT_GROUP_FIELDS = {
+  putting: ['putts', 'firstPuttBucket'],
+  teeShot: ['teeClub', 'drive', 'driveLie', 'driveDistBucket'],
+  approach: ['approachBucket', 'approachResult', 'approachLie'],
+  shortGame: ['sandShots', 'recoveryOutcome'],
+  penalties: ['teePenalties', 'otherPenalties'],
+};
+
 // Club hit off the tee. Driver is the default and stays unstored (null);
 // the off-the-tee SG benchmark scales down for shorter clubs.
 export const TEE_CLUBS = ['driver', 'wood', 'hybrid', 'iron'];

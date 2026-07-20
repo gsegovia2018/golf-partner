@@ -17,10 +17,10 @@ import {
 
 // One "label … − value +" counter row used for putts, penalties, sand shots.
 // `canInc` is false once the hole's stroke budget is fully assigned.
-function ShotCounterRow({ label, value, onStep, canInc = true, theme, s, explainer }) {
+function ShotCounterRow({ label, value, onStep, canInc = true, theme, s, explainer, isLast = false }) {
   const canDec = value != null && value > 0;
   return (
-    <View style={s.shotRow}>
+    <View style={[s.shotRow, isLast && s.shotRowLast]}>
       <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
         <Text style={s.shotRowLabel}>{label}</Text>
         {explainer}
@@ -165,12 +165,16 @@ function ApproachResultRow({ value, onChange, theme, s, isLast = false }) {
 // Per-hole shot detail for the "me" player, laid out after the Hole19
 // scorecard: stat rows with a stepper, plus a row of round direction
 // buttons for the drive. The drive row is hidden on par 3s.
-export function ShotDetailPanel({ hole, detail, onChange, strokes, theme: themeProp, s: sProp }) {
+export function ShotDetailPanel({ hole, detail, onChange, strokes, statGroups, theme: themeProp, s: sProp }) {
   const { theme: themeCtx } = useTheme();
   const theme = themeProp ?? themeCtx;
   const sOwn = useMemo(() => makeScorecardStyles(theme), [theme]);
   const s = sProp ?? sOwn;
   const d = { ...DEFAULT_SHOT, ...(detail ?? {}) };
+  const g = {
+    putting: true, teeShot: true, approach: true, shortGame: true, penalties: true,
+    ...(statGroups ?? {}),
+  };
   const isPar3 = hole.par === 3;
   const driveMissed = d.drive === 'left' || d.drive === 'right' || d.drive === 'short';
   const teeClub = d.teeClub ?? 'driver';
@@ -203,51 +207,85 @@ export function ShotDetailPanel({ hole, detail, onChange, strokes, theme: themeP
     onChange({ [field]: Math.max(0, Math.min(15, cur + delta)) });
   };
 
+  // Row visibility, in on-screen order. Stat-group toggles and the existing
+  // par-3 / data-driven guards can hide any row, so the "last visible row"
+  // (whose bottom border must be dropped) shifts around — compute it here
+  // instead of hardcoding which row is normally last.
+  const showApproachExtras = g.approach && !isPar3 && d.approachBucket;
+  const rowVisibility = [
+    ['putts', g.putting],
+    ['teePenalties', g.penalties],
+    ['otherPenalties', g.penalties],
+    ['sandShots', g.shortGame],
+    ['teeClub', g.teeShot && !isPar3],
+    ['driveCircles', g.teeShot && !isPar3],
+    ['driveLie', g.teeShot && !isPar3 && driveMissed],
+    ['driveDistBucket', g.teeShot && !isPar3],
+    ['approachBucket', g.approach],
+    ['approachResult', showApproachExtras],
+    ['approachLie', showApproachExtras],
+    ['firstPutt', g.putting && (d.putts ?? 0) >= 1],
+    ['outcome', g.shortGame && missedGIR],
+  ];
+  let lastVisibleRow = null;
+  for (const [key, visible] of rowVisibility) if (visible) lastVisibleRow = key;
+
   return (
     <View style={s.shotPanel}>
       {budgetCaption && <Text style={s.shotBudgetCaption}>{budgetCaption}</Text>}
 
-      <ShotCounterRow
-        label="Putts"
-        value={d.putts}
-        onStep={(delta) => step('putts', delta)}
-        canInc={!atBudget}
-        theme={theme}
-        s={s}
-      />
-      <ShotCounterRow
-        label="Tee penalties"
-        value={d.teePenalties}
-        onStep={(delta) => step('teePenalties', delta)}
-        canInc={!atBudget}
-        theme={theme}
-        s={s}
-      />
-      <ShotCounterRow
-        label="Other penalties"
-        value={d.otherPenalties}
-        onStep={(delta) => step('otherPenalties', delta)}
-        canInc={!atBudget}
-        theme={theme}
-        s={s}
-      />
-      <ShotCounterRow
-        label="Sand shots"
-        value={d.sandShots}
-        onStep={(delta) => step('sandShots', delta)}
-        canInc={!atBudget}
-        theme={theme}
-        s={s}
-        explainer={
-          <ShotDetailExplainer
-            rowKey="sandShots"
-            title="Sand shots"
-            body="Total bunker shots you played on this hole — even from a fairway bunker. Used for sand saves and bunker visits per round."
-          />
-        }
-      />
+      {g.putting && (
+        <ShotCounterRow
+          label="Putts"
+          value={d.putts}
+          onStep={(delta) => step('putts', delta)}
+          canInc={!atBudget}
+          theme={theme}
+          s={s}
+          isLast={lastVisibleRow === 'putts'}
+        />
+      )}
+      {g.penalties && (
+        <ShotCounterRow
+          label="Tee penalties"
+          value={d.teePenalties}
+          onStep={(delta) => step('teePenalties', delta)}
+          canInc={!atBudget}
+          theme={theme}
+          s={s}
+        />
+      )}
+      {g.penalties && (
+        <ShotCounterRow
+          label="Other penalties"
+          value={d.otherPenalties}
+          onStep={(delta) => step('otherPenalties', delta)}
+          canInc={!atBudget}
+          theme={theme}
+          s={s}
+          isLast={lastVisibleRow === 'otherPenalties'}
+        />
+      )}
+      {g.shortGame && (
+        <ShotCounterRow
+          label="Sand shots"
+          value={d.sandShots}
+          onStep={(delta) => step('sandShots', delta)}
+          canInc={!atBudget}
+          theme={theme}
+          s={s}
+          isLast={lastVisibleRow === 'sandShots'}
+          explainer={
+            <ShotDetailExplainer
+              rowKey="sandShots"
+              title="Sand shots"
+              body="Total bunker shots you played on this hole — even from a fairway bunker. Used for sand saves and bunker visits per round."
+            />
+          }
+        />
+      )}
 
-      {!isPar3 && (
+      {g.teeShot && !isPar3 && (
         <LieChipRow
           label="Tee club"
           a11yPrefix="Tee club"
@@ -267,7 +305,7 @@ export function ShotDetailPanel({ hole, detail, onChange, strokes, theme: themeP
           }
         />
       )}
-      {!isPar3 && (
+      {g.teeShot && !isPar3 && (
         <View style={s.shotRow}>
           <Text style={s.shotRowLabel}>{TEE_CLUB_LABELS[teeClub]}</Text>
           <View style={s.driveBtns}>
@@ -293,7 +331,7 @@ export function ShotDetailPanel({ hole, detail, onChange, strokes, theme: themeP
           </View>
         </View>
       )}
-      {!isPar3 && driveMissed && (
+      {g.teeShot && !isPar3 && driveMissed && (
         <LieChipRow
           label="Drive finished in"
           a11yPrefix="Drive lie"
@@ -312,7 +350,7 @@ export function ShotDetailPanel({ hole, detail, onChange, strokes, theme: themeP
           }
         />
       )}
-      {!isPar3 && (
+      {g.teeShot && !isPar3 && (
         <BucketSegment
           label="Drive distance"
           value={d.driveDistBucket}
@@ -322,6 +360,7 @@ export function ShotDetailPanel({ hole, detail, onChange, strokes, theme: themeP
           theme={theme}
           s={s}
           hint="metres"
+          isLast={lastVisibleRow === 'driveDistBucket'}
           explainer={
             <ShotDetailExplainer
               rowKey="driveDistBucket"
@@ -331,30 +370,32 @@ export function ShotDetailPanel({ hole, detail, onChange, strokes, theme: themeP
           }
         />
       )}
-      <BucketSegment
-        label={approachDistanceLabel}
-        value={d.approachBucket}
-        buckets={APPROACH_BUCKETS}
-        labels={APPROACH_LABELS}
-        onSelect={(key) => onChange({
-          approachBucket: key,
-          ...(key == null ? { approachResult: null, approachLie: null } : {}),
-        })}
-        theme={theme}
-        s={s}
-        hint={approachShotHint}
-        isLast={false}
-        explainer={
-          <ShotDetailExplainer
-            rowKey="approachBucket"
-            title={approachDistanceLabel}
-            body={isPar3
-              ? 'Use the hole distance bucket for this par 3. It is stored with approach distance so par-3 strokes gained can use the same bucketed model.'
-              : 'Log the shot you intended to hit into the green. Usually this is your 2nd shot on a par 4 or your 3rd shot on a par 5. After a punch-out, lay-up, or penalty, use the later shot that was actually aimed at the green.'}
-          />
-        }
-      />
-      {!isPar3 && d.approachBucket && (
+      {g.approach && (
+        <BucketSegment
+          label={approachDistanceLabel}
+          value={d.approachBucket}
+          buckets={APPROACH_BUCKETS}
+          labels={APPROACH_LABELS}
+          onSelect={(key) => onChange({
+            approachBucket: key,
+            ...(key == null ? { approachResult: null, approachLie: null } : {}),
+          })}
+          theme={theme}
+          s={s}
+          hint={approachShotHint}
+          isLast={lastVisibleRow === 'approachBucket'}
+          explainer={
+            <ShotDetailExplainer
+              rowKey="approachBucket"
+              title={approachDistanceLabel}
+              body={isPar3
+                ? 'Use the hole distance bucket for this par 3. It is stored with approach distance so par-3 strokes gained can use the same bucketed model.'
+                : 'Log the shot you intended to hit into the green. Usually this is your 2nd shot on a par 4 or your 3rd shot on a par 5. After a punch-out, lay-up, or penalty, use the later shot that was actually aimed at the green.'}
+            />
+          }
+        />
+      )}
+      {g.approach && !isPar3 && d.approachBucket && (
         <ApproachResultRow
           value={d.approachResult}
           onChange={onChange}
@@ -362,7 +403,7 @@ export function ShotDetailPanel({ hole, detail, onChange, strokes, theme: themeP
           s={s}
         />
       )}
-      {!isPar3 && d.approachBucket && (
+      {g.approach && !isPar3 && d.approachBucket && (
         <LieChipRow
           label="Approach lie"
           a11yPrefix="Approach lie"
@@ -373,7 +414,7 @@ export function ShotDetailPanel({ hole, detail, onChange, strokes, theme: themeP
           theme={theme}
           s={s}
           stacked
-          isLast={(d.putts ?? 0) < 1 && !missedGIR}
+          isLast={lastVisibleRow === 'approachLie'}
           explainer={
             <ShotDetailExplainer
               rowKey="approachLie"
@@ -383,7 +424,7 @@ export function ShotDetailPanel({ hole, detail, onChange, strokes, theme: themeP
           }
         />
       )}
-      {(d.putts ?? 0) >= 1 && (
+      {g.putting && (d.putts ?? 0) >= 1 && (
         <BucketSegment
           label="First putt"
           value={d.firstPuttBucket}
@@ -393,7 +434,7 @@ export function ShotDetailPanel({ hole, detail, onChange, strokes, theme: themeP
           theme={theme}
           s={s}
           hint="metres"
-          isLast={!missedGIR}
+          isLast={lastVisibleRow === 'firstPutt'}
           explainer={
             <ShotDetailExplainer
               rowKey="firstPuttBucket"
@@ -403,7 +444,7 @@ export function ShotDetailPanel({ hole, detail, onChange, strokes, theme: themeP
           }
         />
       )}
-      {missedGIR && (
+      {g.shortGame && missedGIR && (
         <View style={[s.shotRow, s.shotRowLast]}>
           <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
             <Text style={s.shotRowLabel}>Outcome</Text>

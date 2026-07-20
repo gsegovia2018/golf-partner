@@ -1,6 +1,13 @@
 import React from 'react';
 import { render, fireEvent } from '@testing-library/react-native';
 import { ShotDetailPanel } from '../ShotDetailPanel';
+import { ShotDetailSection } from '../ShotDetailSection';
+import { updateAppSettings, __resetAppSettingsForTests } from '../../../store/settingsStore';
+
+jest.mock('../../../store/profileStore', () => ({
+  loadProfile: jest.fn(),
+  upsertProfile: jest.fn(),
+}));
 
 jest.mock('../../../theme/ThemeContext', () => ({
   useTheme: () => {
@@ -90,5 +97,57 @@ describe('ShotDetailPanel drive + approach lie inputs', () => {
     );
     fireEvent.press(r.getByLabelText('Approach 100-150'));
     expect(onChange).toHaveBeenCalledWith({ approachBucket: null, approachResult: null, approachLie: null });
+  });
+});
+
+describe('stat group toggles', () => {
+  const hole = { number: 1, par: 4 };
+
+  it('hides putting rows when putting is off', () => {
+    const r = render(<ShotDetailPanel hole={hole} detail={{ putts: 2 }} onChange={jest.fn()} strokes={5}
+      statGroups={{ putting: false }} />);
+    expect(r.queryByText('Putts')).toBeNull();
+    expect(r.queryByText('First putt')).toBeNull();
+    expect(r.getByText('Tee penalties')).toBeTruthy(); // others untouched
+  });
+
+  it('hides tee-shot rows when teeShot is off', () => {
+    const r = render(<ShotDetailPanel hole={hole} detail={{}} onChange={jest.fn()} strokes={5}
+      statGroups={{ teeShot: false }} />);
+    expect(r.queryByText('Tee club')).toBeNull();
+    expect(r.queryByText('Drive distance')).toBeNull();
+  });
+
+  it('hides approach rows when approach is off', () => {
+    const r = render(<ShotDetailPanel hole={hole} detail={{ approachBucket: '50-100' }} onChange={jest.fn()} strokes={5}
+      statGroups={{ approach: false }} />);
+    expect(r.queryByText('Approach')).toBeNull();
+    expect(r.queryByText('Where did it finish?')).toBeNull();
+  });
+
+  it('hides short-game and penalties rows per group', () => {
+    const r = render(<ShotDetailPanel hole={hole} detail={{}} onChange={jest.fn()} strokes={5}
+      statGroups={{ shortGame: false, penalties: false }} />);
+    expect(r.queryByText('Sand shots')).toBeNull();
+    expect(r.queryByText('Tee penalties')).toBeNull();
+    expect(r.queryByText('Other penalties')).toBeNull();
+  });
+});
+
+describe('ShotDetailSection stat group gating', () => {
+  beforeEach(() => {
+    jest.clearAllMocks();
+    __resetAppSettingsForTests();
+  });
+
+  it('renders nothing when every stat group is off', async () => {
+    await updateAppSettings({ statGroups: {
+      putting: false, teeShot: false, approach: false, shortGame: false, penalties: false,
+    } });
+    const { toJSON } = render(
+      <ShotDetailSection hole={{ number: 1, par: 4 }} detail={{}} onChange={jest.fn()}
+        strokes={4} collapsed={false} onToggle={jest.fn()} />,
+    );
+    expect(toJSON()).toBeNull();
   });
 });
