@@ -12,8 +12,8 @@
 
 ## Global Constraints
 
-- **Work in the flyover worktree:** `/Users/marcospecker/golf-partner-worktrees/feat-flyover-distance-offline` (branch `feat/flyover-distance-offline`). This branch owns `HoleFlyover`; do NOT implement on master.
-- Run tests from the worktree root: `npx jest <path>` (full suite: `npx jest`). Two pre-existing failures exist in the baseline — compare against baseline, don't chase them.
+- **Work in the feature worktree:** `/Users/marcospecker/golf-partner-worktrees/feat-scorecard-map-entry` (branch `feat/scorecard-map-entry`, cut from master after the flyover branch merged). Do NOT implement in the main checkout.
+- Run tests from the worktree root: `npx jest <path>` (full suite: `npx jest`). Baseline (recorded 2026-07-20): 2080/2081 pass; pre-existing failures are `src/components/mystats/tabs/__tests__/StatsTabs.test.js` (1 test) and `src/screens/__tests__/scorecardScores.test.js` (suite parse error) — compare against this baseline, don't chase them.
 - Domain logic stays in `src/store` / `src/lib`; these are UI-only changes.
 - Theme access via `useTheme()`; fonts are `PlusJakartaSans-*` / `PlayfairDisplay-*`; distances always meters, `Math.round`, `fontVariant: ['tabular-nums']`.
 - `useGpsDistances` returns `{ available, distances, accuracy, position }` where `distances` is `{ front, center, back, pin, kind, hazards[] }|null` and each hazard is `{ kind: 'bunker'|'water', reach, carry }`. Do not modify the hook.
@@ -649,7 +649,7 @@ Expected: clean (CI-blocking).
 - [ ] **Step 2: Launch the app from the worktree**
 
 ```bash
-cd /Users/marcospecker/golf-partner-worktrees/feat-flyover-distance-offline
+cd /Users/marcospecker/golf-partner-worktrees/feat-scorecard-map-entry
 [ -f .env ] || cp /Users/marcospecker/Documents/golf-partner/.env .
 npx expo start --web --port 8091 > /tmp/expo-flyover.log 2>&1 &
 ```
