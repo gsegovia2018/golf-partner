@@ -2,11 +2,11 @@
 // src/ transforms) and React Native module mapping.
 module.exports = {
   preset: 'jest-expo',
-  // react-native-worklets ships platform-suffixed native modules; this
-  // resolver strips the `.native` extension when resolving worklets so
-  // Jest picks up the non-native (test-safe) implementation instead of
-  // trying to touch the real native module.
-  resolver: 'react-native-worklets/jest/resolver',
+  // This `resolver` key REPLACES the preset's own resolver rather than
+  // merging with it, so we can't point it straight at the worklets
+  // resolver — that would silently drop react-native's RFC0894 deep-import
+  // shim. jest.resolver.js composes both; see that file for details.
+  resolver: '<rootDir>/jest.resolver.js',
   testMatch: ['**/__tests__/**/*.test.js'],
   collectCoverageFrom: [
     'src/store/scoring.js',
