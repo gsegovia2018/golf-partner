@@ -2,6 +2,11 @@
 // src/ transforms) and React Native module mapping.
 module.exports = {
   preset: 'jest-expo',
+  // react-native-worklets ships platform-suffixed native modules; this
+  // resolver strips the `.native` extension when resolving worklets so
+  // Jest picks up the non-native (test-safe) implementation instead of
+  // trying to touch the real native module.
+  resolver: 'react-native-worklets/jest/resolver',
   testMatch: ['**/__tests__/**/*.test.js'],
   collectCoverageFrom: [
     'src/store/scoring.js',
@@ -11,7 +16,7 @@ module.exports = {
   modulePathIgnorePatterns: ['<rootDir>/.worktrees/'],
   // Transform ESM packages from node_modules that Jest can't parse as-is.
   transformIgnorePatterns: [
-    'node_modules/(?!((jest-)?react-native|@react-native(-community)?|expo(-.*)?|@expo(-.*)?|@unimodules|unimodules|sentry-expo|native-base|react-native-svg|react-native-url-polyfill|uuid)/)',
+    'node_modules/(?!((jest-)?react-native|@react-native(-community)?|expo(-.*)?|@expo(-.*)?|@unimodules|unimodules|sentry-expo|native-base|react-native-svg|react-native-url-polyfill|react-native-reanimated|react-native-worklets|uuid)/)',
   ],
   moduleNameMapper: {
     '@react-native-async-storage/async-storage':

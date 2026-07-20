@@ -18,6 +18,7 @@ import PullToRefresh from '../components/PullToRefresh';
 import LoadingSplash from '../components/LoadingSplash';
 import BottomSheet from '../components/BottomSheet';
 import LiveRoundCard from '../components/LiveRoundCard';
+import PressableScale from '../components/ui/PressableScale';
 import {
   loadTournament, loadAllTournaments, loadAllTournamentsWithFallback,
   setActiveTournament,
@@ -1191,10 +1192,10 @@ export default function HomeScreen({ navigation, route }) {
         <LiveRoundCard onOpen={() => navigation.navigate('Scorecard')} />
         <Text style={s.startHeading}>Start playing</Text>
         <View style={s.startTilesRow}>
-          <TouchableOpacity
+          <PressableScale
             style={[s.startTile, s.startTileFeatured]}
             onPress={() => navigation.navigate('Setup', { kind: 'game' })}
-            activeOpacity={0.88}
+            activeScale={0.97}
           >
             <View style={[s.startTileIconWrap, s.startTileIconWrapFeatured]}>
               <Feather name="flag" size={24} color={theme.text.inverse} />
@@ -1207,11 +1208,11 @@ export default function HomeScreen({ navigation, route }) {
               <Feather name="plus" size={16} color={theme.text.inverse} />
               <Text style={[s.startTileCtaText, { color: theme.text.inverse }]}>New game</Text>
             </View>
-          </TouchableOpacity>
-          <TouchableOpacity
+          </PressableScale>
+          <PressableScale
             style={s.startTile}
             onPress={() => setShowTournamentKindChoice(true)}
-            activeOpacity={0.88}
+            activeScale={0.97}
           >
             <View style={s.startTileIconWrap}>
               <Feather name="award" size={24} color={theme.accent.primary} />
@@ -1224,7 +1225,7 @@ export default function HomeScreen({ navigation, route }) {
               <Feather name="plus" size={16} color={theme.accent.primary} />
               <Text style={s.startTileCtaText}>New tournament</Text>
             </View>
-          </TouchableOpacity>
+          </PressableScale>
         </View>
 
         <TouchableOpacity

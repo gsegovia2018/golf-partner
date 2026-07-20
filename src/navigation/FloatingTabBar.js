@@ -1,5 +1,5 @@
 import React from 'react';
-import { View, Text, TouchableOpacity, StyleSheet } from 'react-native';
+import { View, Text, StyleSheet } from 'react-native';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
@@ -8,6 +8,7 @@ import { CONTENT_MAX_WIDTH } from '../theme/responsive';
 import { loadTournament, isRoundInProgress, subscribeTournamentChanges } from '../store/tournamentStore';
 import { shouldHandleStoreChange } from '../lib/navigationFocus';
 import { getTabBarItem, isCenterTab } from './tabBarModel';
+import PressableScale from '../components/ui/PressableScale';
 
 export default function FloatingTabBar({ state, navigation }) {
   const { theme } = useTheme();
@@ -70,13 +71,13 @@ export default function FloatingTabBar({ state, navigation }) {
               : theme.text.secondary;
 
           return (
-            <TouchableOpacity
+            <PressableScale
               key={route.key}
               accessibilityRole="button"
               accessibilityState={selected ? { selected: true } : {}}
               accessibilityLabel={item.label}
               onPress={onPress}
-              activeOpacity={0.82}
+              activeScale={0.97}
               style={[styles.tab, center && styles.centerTab]}
             >
               <View
@@ -90,7 +91,7 @@ export default function FloatingTabBar({ state, navigation }) {
                 {center && <Text style={styles.centerLabel}>{item.label}</Text>}
                 {secondaryFocused && <Text style={styles.secondaryLabel}>{item.label}</Text>}
               </View>
-            </TouchableOpacity>
+            </PressableScale>
           );
         })}
       </View>
