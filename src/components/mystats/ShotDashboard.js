@@ -66,7 +66,7 @@ export default function ShotDashboard({ stats, targetHandicap, onChangeTarget, o
 
   return (
     <SectionCard
-      title="Strokes Gained Dashboard"
+      title={`Strokes gained · vs ${targetLabel(targetHandicap)}`}
       infoKey="strokesGained"
       onInfo={onInfo}
       right={
@@ -164,6 +164,12 @@ function badWash(theme) {
 function targetTitle(targetHandicap) {
   if (targetHandicap == null || targetHandicap === 0) return 'Strokes gained vs scratch';
   return `Strokes gained vs ${targetHandicap}-handicap target`;
+}
+
+// Short form for the card header, e.g. "12-hcp target" / "scratch target".
+function targetLabel(targetHandicap) {
+  if (targetHandicap == null || targetHandicap === 0) return 'scratch target';
+  return `${targetHandicap}-hcp target`;
 }
 
 function trackedSample(stats) {

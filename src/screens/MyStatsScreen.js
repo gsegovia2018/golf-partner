@@ -525,7 +525,10 @@ function makeStyles(theme) {
       justifyContent: 'center',
       padding: theme.spacing.xs,
     },
-    headerTitle: { ...theme.typography.heading, color: theme.text.primary, flex: 1, marginLeft: theme.spacing.sm },
+    headerTitle: {
+      fontFamily: 'PlayfairDisplay-Bold', fontSize: 24, color: theme.text.primary,
+      flex: 1, marginLeft: theme.spacing.sm,
+    },
     roundsBtn: {
       flexDirection: 'row', alignItems: 'center', gap: 4,
       paddingHorizontal: theme.spacing.md, paddingVertical: 6,
@@ -553,7 +556,7 @@ function makeStyles(theme) {
     },
     tab: {
       paddingVertical: 6, paddingHorizontal: 14,
-      borderRadius: theme.radius.pill, backgroundColor: theme.bg.secondary,
+      borderRadius: theme.radius.pill, backgroundColor: theme.bg.card,
       borderWidth: 1, borderColor: theme.border.default,
       flexShrink: 0,
     },
