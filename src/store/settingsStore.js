@@ -34,12 +34,16 @@ export function mergeAppSettings(base, patch) {
 
 let current = DEFAULT_APP_SETTINGS;
 const listeners = new Set();
+// Bumped by every updateAppSettings call so hydrateAppSettings can detect a
+// concurrent local write racing its in-flight loadProfile() and avoid
+// clobbering it with a stale server copy.
+let mutationSeq = 0;
 
 export function getAppSettings() { return current; }
 export function subscribeAppSettings(cb) { listeners.add(cb); return () => listeners.delete(cb); }
 function set(next) { current = next; listeners.forEach((cb) => cb()); }
 
-export function __resetAppSettingsForTests() { current = DEFAULT_APP_SETTINGS; listeners.clear(); }
+export function __resetAppSettingsForTests() { current = DEFAULT_APP_SETTINGS; listeners.clear(); mutationSeq = 0; }
 
 async function pushToServer() {
   try {
@@ -53,6 +57,7 @@ async function pushToServer() {
 // Write-through: UI state and the local mirror update immediately; the
 // server write is best-effort with a dirty flag replayed on next hydrate.
 export async function updateAppSettings(patch) {
+  mutationSeq += 1;
   set(mergeAppSettings(current, patch));
   await AsyncStorage.setItem(SETTINGS_KEY, JSON.stringify(current));
   await pushToServer();
@@ -62,6 +67,10 @@ export async function updateAppSettings(patch) {
 // first (instant), then reconcile with the server: dirty or first-ever blob
 // pushes local up, otherwise the server copy wins.
 export async function hydrateAppSettings() {
+  // Captured synchronously, before any awaits below, so a concurrent
+  // updateAppSettings() anywhere during this hydrate — including while the
+  // local-mirror read above is still pending — is reliably detected.
+  const seqBefore = mutationSeq;
   try {
     const raw = await AsyncStorage.getItem(SETTINGS_KEY);
     if (raw != null) {
@@ -79,7 +88,12 @@ export async function hydrateAppSettings() {
     if (!profile) return;
     const server = profile.settings ?? {};
     const dirty = await AsyncStorage.getItem(SETTINGS_DIRTY_KEY);
-    if (dirty === '1' || Object.keys(server).length === 0) {
+    // A concurrent updateAppSettings() while loadProfile() was in flight
+    // means the server copy we just fetched is now stale — treat it like
+    // the dirty path and push the newer local state up instead of adopting.
+    const staleServer = mutationSeq !== seqBefore;
+    if (dirty === '1' || Object.keys(server).length === 0 || staleServer) {
+      await AsyncStorage.setItem(SETTINGS_KEY, JSON.stringify(current));
       await pushToServer();
     } else {
       set(mergeAppSettings(DEFAULT_APP_SETTINGS, server));

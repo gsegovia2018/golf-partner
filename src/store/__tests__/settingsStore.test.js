@@ -71,3 +71,28 @@ test('hydrate survives signed-out (loadProfile null) and network errors', async 
   profileStore.loadProfile.mockRejectedValueOnce(new Error('net'));
   await expect(hydrateAppSettings()).resolves.toBeUndefined();
 });
+
+test('hydrate push-branch persists the local mirror', async () => {
+  await AsyncStorage.setItem('@scorecard_show_running_score', '0'); // legacy key
+  profileStore.loadProfile.mockResolvedValue({ userId: 'u1', settings: {} });
+  profileStore.upsertProfile.mockResolvedValue();
+  await hydrateAppSettings();
+  const mirrored = JSON.parse(await AsyncStorage.getItem(SETTINGS_KEY));
+  expect(mirrored.showRunningScore).toBe(false);
+});
+
+test('concurrent update during hydrate is not clobbered', async () => {
+  let resolveProfile;
+  profileStore.loadProfile.mockReturnValue(new Promise((resolve) => { resolveProfile = resolve; }));
+  profileStore.upsertProfile.mockResolvedValue();
+
+  const h = hydrateAppSettings();
+  await updateAppSettings({ haptics: false });
+  resolveProfile({ userId: 'u1', settings: { haptics: true, units: 'yards' } });
+  await h;
+
+  expect(getAppSettings().haptics).toBe(false);
+  expect(profileStore.upsertProfile).toHaveBeenLastCalledWith({
+    settings: expect.objectContaining({ haptics: false }),
+  });
+});
