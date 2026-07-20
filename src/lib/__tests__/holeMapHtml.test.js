@@ -26,6 +26,11 @@ describe('buildHoleMapHtml', () => {
     const html = buildHoleMapHtml(base);
     expect(html).not.toContain('unpkg.com');
   });
+  it('ships the recenter control that flies back to the initial framing', () => {
+    const html = buildHoleMapHtml(base);
+    expect(html).toContain('id="recenter"');
+    expect(html).toContain('flyTo(homeView.center');
+  });
   it('uses the bridged tile layer, not a direct Esri tileLayer', () => {
     const html = buildHoleMapHtml(base);
     expect(html).not.toContain('server.arcgisonline.com');

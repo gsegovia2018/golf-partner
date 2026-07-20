@@ -36,11 +36,16 @@ export function buildHoleMapHtml(data) {
   .tri .lbl{font-size:9px;font-weight:700;letter-spacing:.08em;color:#9fb0a4;text-transform:uppercase;width:34px;text-align:left}
   .hint{position:absolute;bottom:16px;left:50%;transform:translateX(-50%);background:rgba(14,22,28,.85);color:#fff;font-weight:600;font-size:13px;padding:7px 14px;border-radius:999px}
   .dchip{background:rgba(14,22,28,.88);color:#fff;font-weight:800;font-size:13px;padding:4px 11px;border-radius:999px;font-variant-numeric:tabular-nums;white-space:nowrap;border:1px solid rgba(255,255,255,.25);transform:translate(-50%,-50%);display:inline-block}
+  #recenter{position:absolute;right:12px;bottom:14px;width:40px;height:40px;border-radius:999px;background:rgba(14,22,28,.85);border:1px solid rgba(255,255,255,.25);color:#fff;display:flex;align-items:center;justify-content:center;padding:0;cursor:pointer;z-index:600;opacity:0;pointer-events:none;transform:scale(.9);transition:opacity .15s,transform .15s}
+  #recenter.show{opacity:1;pointer-events:auto;transform:scale(1)}
+  #recenter:active{background:rgba(14,22,28,.95)}
+  @media (prefers-reduced-motion: reduce){#recenter{transition:none}}
   .leaflet-container{background:#0a0d10}
 </style></head>
 <body>
 <div id="map"></div>
 <div class="hud" id="hud"></div>
+<button id="recenter" aria-label="Recenter hole"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M8 3H5a2 2 0 0 0-2 2v3m18 0V5a2 2 0 0 0-2-2h-3m0 18h3a2 2 0 0 0 2-2v-3M3 16v3a2 2 0 0 0 2 2h3"/></svg></button>
 <script>
 const DATA = ${json};
 const post = (m) => {
@@ -213,15 +218,34 @@ function initView(){
     const zoom = Math.min(Math.log2(156543.03392 * Math.cos(mid[0]*Math.PI/180) / mpp), 19.5);
     // leaflet-rotate rotates content clockwise by the given degrees, so screen-up = -bearing; negate to point tee→green up.
     if (map.setBearing) map.setBearing(-bearing(hole.tee, c));
-    map.setView(mid, zoom);
+    map.setView(mid, zoom, { animate:false });
   } else if (onCourse() && c && valid(player)) {
-    map.fitBounds(L.latLngBounds([player, c]).pad(0.3));
+    map.fitBounds(L.latLngBounds([player, c]).pad(0.3), { animate:false });
   } else if (c) {
-    map.setView(c, 16);
+    map.setView(c, 16, { animate:false });
   } else {
-    map.setView([40.45, -3.75], 15);
+    map.setView([40.45, -3.75], 15, { animate:false });
   }
+  // animate:false above makes the view synchronous, so this captures the real framing.
+  homeView = { center: map.getCenter(), zoom: map.getZoom() };
+  updateRecenter();
 }
+
+// Recenter control: hidden until the view diverges from initView's framing
+// (bearing can't change — no touch rotate, no rotate control), tap flies home.
+let homeView = null;
+function viewDiverged(){
+  if (!homeView) return false;
+  return Math.abs(map.getZoom() - homeView.zoom) > 0.2
+    || map.getCenter().distanceTo(homeView.center) > 15;
+}
+function updateRecenter(){
+  document.getElementById('recenter').classList.toggle('show', hole.mode !== 'edit' && viewDiverged());
+}
+map.on('moveend zoomend', updateRecenter);
+document.getElementById('recenter').addEventListener('click', () => {
+  if (homeView) map.flyTo(homeView.center, homeView.zoom, { duration: 0.5 });
+});
 
 window.addEventListener('message', (ev) => {
   let m; try { m = JSON.parse(ev.data); } catch { return; }
