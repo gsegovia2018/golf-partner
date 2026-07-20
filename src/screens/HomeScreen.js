@@ -40,7 +40,8 @@ import { mutate } from '../store/mutate';
 import { roundScoringMode, tournamentHasMixedModes, tournamentStablefordLeaderboard, buildTeamsForMode, roundBestBallValues } from '../store/scoring';
 import { assignPlacements, comparatorForBoardMode } from '../store/leaderboardPlacement';
 import { subscribeConnectivity } from '../lib/connectivity';
-import { getShowRunningScore, setShowRunningScore } from '../lib/prefs';
+import { getAppSettings, updateAppSettings } from '../store/settingsStore';
+import { useAppSettings } from '../hooks/useAppSettings';
 import { unreadCount } from '../store/notificationStore';
 import { shouldHandleStoreChange } from '../lib/navigationFocus';
 import { useAuth } from '../context/AuthContext';
@@ -233,20 +234,13 @@ export default function HomeScreen({ navigation, route }) {
     setConfirmState(null);
     if (resolver) resolver(result);
   }, []);
-  // Shares the same persisted preference as ScorecardScreen so that hiding
-  // running totals follows the user across screens.
-  const [showRunning, setShowRunningState] = useState(true);
-  useEffect(() => {
-    let cancelled = false;
-    getShowRunningScore().then((v) => { if (!cancelled) setShowRunningState(v); }).catch(() => {});
-    return () => { cancelled = true; };
-  }, []);
+  // Shares the same synced setting as ScorecardScreen so that hiding
+  // running totals follows the user across screens. No-spoilers mode
+  // overrides it, same as on the scorecard.
+  const appSettings = useAppSettings();
+  const showRunning = appSettings.showRunningScore && !appSettings.noSpoilers;
   const toggleRunning = useCallback(() => {
-    setShowRunningState((v) => {
-      const next = !v;
-      setShowRunningScore(next).catch(() => {});
-      return next;
-    });
+    updateAppSettings({ showRunningScore: !getAppSettings().showRunningScore }).catch(() => {});
   }, []);
 
   // Coalesce reload calls: `focus` and store-change emits can arrive in
@@ -1581,14 +1575,16 @@ export default function HomeScreen({ navigation, route }) {
           >
             <Feather name="image" size={18} color={theme.accent.primary} />
           </TouchableOpacity>
-          <TouchableOpacity
-            style={s.iconBtn}
-            onPress={toggleRunning}
-            activeOpacity={0.7}
-            accessibilityLabel={showRunning ? 'Hide running scores' : 'Show running scores'}
-          >
-            <Feather name={showRunning ? 'eye-off' : 'eye'} size={18} color={theme.accent.primary} />
-          </TouchableOpacity>
+          {!appSettings.noSpoilers && (
+            <TouchableOpacity
+              style={s.iconBtn}
+              onPress={toggleRunning}
+              activeOpacity={0.7}
+              accessibilityLabel={showRunning ? 'Hide running scores' : 'Show running scores'}
+            >
+              <Feather name={showRunning ? 'eye-off' : 'eye'} size={18} color={theme.accent.primary} />
+            </TouchableOpacity>
+          )}
           <TouchableOpacity
             style={s.iconBtn}
             onPress={() => setShowSettings(true)}
