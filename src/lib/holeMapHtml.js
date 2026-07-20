@@ -182,7 +182,7 @@ function redrawLines(from, g, cc){
   // Chain anchor -> circles -> green, circles ordered by distance from the
   // anchor (or, with no anchor, farthest-from-green first) so drop/drag
   // order never crosses the path.
-  const pts = targets.filter(valid).slice();
+  const pts = targets.filter(valid);
   if (from) pts.sort((a,b)=>dist(from,a)-dist(from,b));
   else if (valid(cc)) pts.sort((a,b)=>dist(cc,b)-dist(cc,a));
   const chain = from ? [from].concat(pts) : pts;
@@ -232,7 +232,7 @@ function drawEdit(){
     mk.on('dragend', (e) => { const ll = e.target.getLatLng(); post({ type:'point', field:f.k, pos:[ll.lat, ll.lng], drag:true }); });
   });
   document.getElementById('hud').innerHTML = '<div class="hint">Tap to set '+activeField.toUpperCase()+' · drag any marker to nudge</div>';
-  map.off('click');
+  map.off('click contextmenu');
   map.on('click', (e) => { post({ type:'point', field: activeField, pos:[e.latlng.lat, e.latlng.lng] }); });
 }
 
