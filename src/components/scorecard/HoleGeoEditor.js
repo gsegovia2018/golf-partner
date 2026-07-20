@@ -30,14 +30,27 @@ export function HoleGeoEditor({ courseName, holeNumber, visible, onClose, onSave
   // eslint-disable-next-line react-hooks/exhaustive-deps
   const courseId = useMemo(() => findCourseGeometry(courseName)?.key ?? null, [courseName, geomVersion]);
 
-  const [pts, setPts] = useState(() => ({
+  const seedPts = () => ({
     front: feat?.greenFront ?? null,
     center: feat?.greenCenter ?? null,
     back: feat?.greenBack ?? null,
     tee: feat?.start ?? null,
-  }));
+  });
+  const [pts, setPts] = useState(seedPts);
   const [active, setActive] = useState(1); // default: Center
   const [saving, setSaving] = useState(false);
+
+  // The editor stays mounted while hidden (HoleView toggles `visible` as the
+  // pager moves between holes), so state must re-seed from the current hole's
+  // geometry on every open — not just on first mount.
+  const [wasVisible, setWasVisible] = useState(visible);
+  if (visible !== wasVisible) {
+    setWasVisible(visible);
+    if (visible) {
+      setPts(seedPts());
+      setActive(1);
+    }
+  }
 
   const data = useMemo(() => (feat ? {
     mode: 'edit',
