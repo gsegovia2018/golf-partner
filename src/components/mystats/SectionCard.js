@@ -6,16 +6,21 @@ import { useTheme } from '../../theme/ThemeContext';
 // Card shell with a title and an optional (i) button. The button does not own
 // any sheet — it just calls onInfo(infoKey). `right` renders extra header
 // content (e.g. period chips). `tone='hero'` gives the filled green variant.
-export default function SectionCard({ title, infoKey, onInfo, right, tone = 'default', children, style }) {
+// `titleVariant='overline'` renders the title as a small uppercase label
+// (Clubhouse stat-card pattern) instead of the default heading style.
+export default function SectionCard({
+  title, infoKey, onInfo, right, tone = 'default', titleVariant = 'default', children, style,
+}) {
   const { theme } = useTheme();
   const s = useMemo(() => makeStyles(theme), [theme]);
   const hero = tone === 'hero';
+  const overline = titleVariant === 'overline';
 
   return (
     <View style={[s.card, hero && s.cardHero, style]}>
       <View style={s.head}>
         <View style={s.titleWrap}>
-          <Text style={[s.title, hero && s.titleHero]}>{title}</Text>
+          <Text style={overline ? s.titleOverline : [s.title, hero && s.titleHero]}>{title}</Text>
           {infoKey && onInfo ? (
             <TouchableOpacity
               onPress={() => onInfo(infoKey)}
@@ -46,5 +51,12 @@ function makeStyles(theme) {
     titleWrap: { flexDirection: 'row', alignItems: 'center', gap: 6 },
     title: { ...theme.typography.heading, color: theme.text.primary },
     titleHero: { color: theme.text.inverse },
+    titleOverline: {
+      fontSize: 10,
+      fontFamily: 'PlusJakartaSans-Bold',
+      letterSpacing: 1.4,
+      textTransform: 'uppercase',
+      color: theme.text.muted,
+    },
   });
 }

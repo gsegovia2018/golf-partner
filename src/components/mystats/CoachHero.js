@@ -14,11 +14,18 @@ const GROUP_LABELS = {
   watch: 'Watch',
 };
 
+// Clubhouse hero surface — cream-on-green, matches LiveRoundCard.js. Tone no
+// longer drives the whole card; it only accents the small `area` label.
+const GREEN = '#0f3d2c';
+const CREAM = '#f3efe6';
+const CREAM_70 = 'rgba(243,239,230,0.7)';
+const CREAM_85 = 'rgba(243,239,230,0.85)';
+
 export default function CoachHero({ insight, onCommitFocus, focusActive = false }) {
   const { theme } = useTheme();
   const s = useMemo(() => makeStyles(theme), [theme]);
   const proofs = [insight?.basis, formatSample(insight?.sample), formatConfidence(insight?.confidence)].filter(Boolean);
-  const tone = toneStyles(theme, insight?.tone);
+  const areaColor = areaAccentColor(theme, insight?.tone);
 
   if (!insight) {
     return (
@@ -31,27 +38,27 @@ export default function CoachHero({ insight, onCommitFocus, focusActive = false 
   }
 
   return (
-    <View style={[s.card, { backgroundColor: tone.backgroundColor, borderColor: tone.borderColor }]}>
+    <View style={s.card}>
       <View style={s.topRow}>
-        <Text style={[s.kicker, { color: tone.color }]}>{GROUP_LABELS[insight.group] ?? 'Coach'}</Text>
-        <Text style={[s.area, { color: tone.metaColor }]}>{insight.areaLabel ?? insight.area}</Text>
+        <Text style={s.kicker}>{GROUP_LABELS[insight.group] ?? 'Coach'}</Text>
+        <Text style={[s.area, { color: areaColor }]}>{insight.areaLabel ?? insight.area}</Text>
       </View>
       <Text style={s.title}>{insight.title}</Text>
       {insight.reason ? <Text style={s.reason}>{insight.reason}</Text> : null}
       <View style={s.bottomRow}>
         {insight.metric ? (
           <View style={{ flexShrink: 1 }}>
-            <Text style={[s.metric, { color: tone.color }]}>{insight.metric}</Text>
+            <Text style={s.metric}>{insight.metric}</Text>
             {Number.isFinite(insight.pointsPerRound) ? (
-              <Text style={[s.pointsCaption, { color: tone.metaColor }]}>{formatPointsPerRound(insight.pointsPerRound)}</Text>
+              <Text style={s.pointsCaption}>{formatPointsPerRound(insight.pointsPerRound)}</Text>
             ) : null}
           </View>
         ) : null}
         <View style={s.chips}>
           {proofs.map((proof) => (
-            <View key={proof} style={[s.chip, { backgroundColor: tone.chipColor }]}>
-              <Feather name="check-circle" size={12} color={tone.color} />
-              <Text style={[s.chipText, { color: tone.metaColor }]}>{proof}</Text>
+            <View key={proof} style={s.chip}>
+              <Feather name="check-circle" size={12} color={CREAM_85} />
+              <Text style={s.chipText}>{proof}</Text>
             </View>
           ))}
         </View>
@@ -61,63 +68,46 @@ export default function CoachHero({ insight, onCommitFocus, focusActive = false 
           onPress={() => onCommitFocus(insight)}
           accessibilityRole="button"
           accessibilityLabel="Make this my focus"
-          style={[s.focusBtn, { borderColor: tone.borderColor }]}
+          style={s.focusBtn}
           activeOpacity={0.7}
         >
-          <Feather name="target" size={14} color={tone.color} />
-          <Text style={[s.focusBtnText, { color: tone.color }]}>Make this my focus</Text>
+          <Feather name="target" size={14} color={GREEN} />
+          <Text style={s.focusBtnText}>Make this my focus</Text>
         </TouchableOpacity>
       ) : null}
     </View>
   );
 }
 
-function toneStyles(theme, tone) {
-  if (tone === 'bad') {
-    return {
-      color: theme.destructive,
-      metaColor: theme.isDark ? 'rgba(248,113,113,0.82)' : '#991b1b',
-      backgroundColor: theme.isDark ? 'rgba(248,113,113,0.11)' : '#fff1f2',
-      borderColor: theme.isDark ? 'rgba(248,113,113,0.28)' : '#fecdd3',
-      chipColor: theme.isDark ? 'rgba(248,113,113,0.13)' : '#fee2e2',
-    };
-  }
-  if (tone === 'good') {
-    return {
-      color: theme.scoreColor('good'),
-      metaColor: theme.accent.primary,
-      backgroundColor: theme.accent.light,
-      borderColor: theme.isDark ? 'rgba(79,174,138,0.28)' : '#c7ddd3',
-      chipColor: theme.isDark ? 'rgba(79,174,138,0.16)' : '#dbece4',
-    };
-  }
-  return {
-    color: theme.text.secondary,
-    metaColor: theme.text.secondary,
-    backgroundColor: theme.bg.secondary,
-    borderColor: theme.border.default,
-    chipColor: theme.bg.card,
-  };
+function areaAccentColor(theme, tone) {
+  if (tone === 'bad') return theme.destructive;
+  if (tone === 'good') return theme.mode === 'light' ? theme.semantic.winner.light : theme.semantic.winner.dark;
+  return CREAM_70;
 }
 
 function makeStyles(theme) {
+  const kicker = {
+    color: CREAM_70,
+    fontSize: 10,
+    fontFamily: 'PlusJakartaSans-Bold',
+    letterSpacing: 1.4,
+    textTransform: 'uppercase',
+  };
   return StyleSheet.create({
     card: {
-      backgroundColor: theme.bg.secondary,
-      borderRadius: theme.radius.lg,
+      backgroundColor: GREEN,
+      borderRadius: 16,
       padding: theme.spacing.lg,
       gap: theme.spacing.sm,
-      borderWidth: StyleSheet.hairlineWidth,
-      borderColor: theme.border.default,
     },
     topRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: theme.spacing.md },
-    kicker: { ...theme.typography.overline },
-    area: { ...theme.typography.caption, fontWeight: '700' },
-    title: { ...theme.typography.heading, color: theme.text.primary },
-    reason: { ...theme.typography.body, color: theme.text.secondary },
+    kicker,
+    area: kicker,
+    title: { fontFamily: 'PlayfairDisplay-Bold', fontSize: 20, color: CREAM },
+    reason: { fontSize: 12.5, fontFamily: 'PlusJakartaSans-SemiBold', color: CREAM_85 },
     bottomRow: { flexDirection: 'row', alignItems: 'flex-end', justifyContent: 'space-between', gap: theme.spacing.md },
-    metric: { ...theme.typography.title, flexShrink: 1 },
-    pointsCaption: { ...theme.typography.tiny, fontWeight: '700' },
+    metric: { fontSize: 13, fontFamily: 'PlusJakartaSans-ExtraBold', color: CREAM, flexShrink: 1 },
+    pointsCaption: { fontSize: 10, fontFamily: 'PlusJakartaSans-SemiBold', color: CREAM_70 },
     chips: { flexDirection: 'row', justifyContent: 'flex-end', flexWrap: 'wrap', gap: theme.spacing.xs, flex: 1 },
     chip: {
       flexDirection: 'row',
@@ -125,17 +115,22 @@ function makeStyles(theme) {
       gap: 4,
       paddingHorizontal: theme.spacing.sm,
       paddingVertical: 5,
-      borderRadius: theme.radius.pill,
+      borderRadius: 999,
+      backgroundColor: 'rgba(243,239,230,0.12)',
     },
-    chipText: { ...theme.typography.tiny, fontWeight: '800' },
+    chipText: { fontSize: 10, fontFamily: 'PlusJakartaSans-Bold', color: CREAM_85 },
     focusBtn: {
-      flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 6,
+      backgroundColor: CREAM,
+      borderRadius: 999,
+      paddingVertical: 9,
+      paddingHorizontal: 14,
+      alignSelf: 'flex-start',
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: 6,
       marginTop: theme.spacing.xs,
-      paddingVertical: theme.spacing.sm,
-      borderRadius: theme.radius.sm,
-      borderWidth: StyleSheet.hairlineWidth,
     },
-    focusBtnText: { ...theme.typography.caption, fontWeight: '800' },
+    focusBtnText: { fontSize: 12.5, fontFamily: 'PlusJakartaSans-ExtraBold', color: GREEN },
   });
 }
 

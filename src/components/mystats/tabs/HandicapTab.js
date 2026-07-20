@@ -74,7 +74,7 @@ export default function HandicapTab({
   };
 
   const listCard = rows.length > 0 ? (
-    <SectionCard title="Score differentials" infoKey="handicapIndex" onInfo={onInfo}>
+    <SectionCard title="Score differentials" infoKey="handicapIndex" onInfo={onInfo} titleVariant="overline">
       <Text style={s.caption}>{`Newest first · grey rounds don't count`}</Text>
       {rows.map((d) => (
         <View key={d.key} style={[s.row, d.type === 'included' && d.counting && s.rowCounting]}>
@@ -131,7 +131,7 @@ export default function HandicapTab({
     const missing = Math.max(0, MIN_DIFFERENTIALS - result.windowCount);
     return (
       <View style={s.wrap}>
-        <SectionCard title="Handicap Index" infoKey="handicapIndex" onInfo={onInfo}>
+        <SectionCard title="Handicap Index" infoKey="handicapIndex" onInfo={onInfo} titleVariant="overline">
           <Text style={s.emptyTitle}>Not enough qualifying rounds yet</Text>
           <Text style={s.note}>
             {`You need ${MIN_DIFFERENTIALS} qualifying rounds to calculate an index — ${missing} more to go. `}
@@ -149,7 +149,7 @@ export default function HandicapTab({
   }
 
   const evolutionCard = chartSeries.length >= 2 ? (
-    <SectionCard title="Index evolution" infoKey="handicapIndex" onInfo={onInfo}>
+    <SectionCard title="Index evolution" infoKey="handicapIndex" onInfo={onInfo} titleVariant="overline">
       <TrendLineChart
         series={chartSeries}
         color={theme.accent.primary}
@@ -161,7 +161,7 @@ export default function HandicapTab({
 
   return (
     <View style={s.wrap}>
-      <SectionCard title="Handicap Index" infoKey="handicapIndex" onInfo={onInfo}>
+      <SectionCard title="Handicap Index" infoKey="handicapIndex" onInfo={onInfo} titleVariant="overline">
         <Text style={s.hero}>{fmt1(result.index)}</Text>
         <Text style={s.heroSub}>
           {`Best ${result.usedCount} of last ${result.windowCount} differentials${result.excludedCount > 0 ? ` · ${result.excludedCount} excluded` : ''}`}
@@ -198,8 +198,8 @@ export default function HandicapTab({
 function makeStyles(theme) {
   return StyleSheet.create({
     wrap: { gap: theme.spacing.lg },
-    hero: { fontSize: 30, lineHeight: 38, color: theme.text.primary, textAlign: 'center', fontFamily: 'PlayfairDisplay-Black' },
-    heroSub: { ...theme.typography.caption, color: theme.text.muted, textAlign: 'center' },
+    hero: { fontSize: 38, lineHeight: 44, fontFamily: 'PlayfairDisplay-Black', color: theme.accent.primary, textAlign: 'left' },
+    heroSub: { ...theme.typography.caption, color: theme.text.muted, textAlign: 'left' },
     note: { ...theme.typography.caption, color: theme.text.muted, marginTop: theme.spacing.sm },
     emptyTitle: { ...theme.typography.subhead, color: theme.text.primary },
     caption: { ...theme.typography.tiny, color: theme.text.muted, fontWeight: '700', marginBottom: theme.spacing.xs },
