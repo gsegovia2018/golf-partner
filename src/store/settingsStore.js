@@ -45,9 +45,9 @@ function set(next) { current = next; listeners.forEach((cb) => cb()); }
 
 export function __resetAppSettingsForTests() { current = DEFAULT_APP_SETTINGS; listeners.clear(); mutationSeq = 0; }
 
-async function pushToServer() {
+async function pushToServer(snapshot) {
   try {
-    await upsertProfile({ settings: current });
+    await upsertProfile({ settings: snapshot });
     await AsyncStorage.removeItem(SETTINGS_DIRTY_KEY);
   } catch {
     await AsyncStorage.setItem(SETTINGS_DIRTY_KEY, '1');
@@ -59,8 +59,9 @@ async function pushToServer() {
 export async function updateAppSettings(patch) {
   mutationSeq += 1;
   set(mergeAppSettings(current, patch));
-  await AsyncStorage.setItem(SETTINGS_KEY, JSON.stringify(current));
-  await pushToServer();
+  const snapshot = current;
+  await AsyncStorage.setItem(SETTINGS_KEY, JSON.stringify(snapshot));
+  await pushToServer(snapshot);
 }
 
 // Call at app start and whenever the auth session appears. Local mirror
@@ -69,17 +70,24 @@ export async function updateAppSettings(patch) {
 export async function hydrateAppSettings() {
   // Captured synchronously, before any awaits below, so a concurrent
   // updateAppSettings() anywhere during this hydrate — including while the
-  // local-mirror read above is still pending — is reliably detected.
+  // local-mirror read (AsyncStorage.getItem below) or the loadProfile()
+  // network call further down is still pending — is reliably detected. In
+  // both windows, a local write that lands mid-await is fresher than
+  // anything hydrate read and must not be clobbered by it.
   const seqBefore = mutationSeq;
   try {
     const raw = await AsyncStorage.getItem(SETTINGS_KEY);
-    if (raw != null) {
-      set(mergeAppSettings(DEFAULT_APP_SETTINGS, JSON.parse(raw)));
-    } else {
-      // First run of the settings system on this device: import the one
-      // legacy pref that predates it.
-      const legacy = await AsyncStorage.getItem(LEGACY_RUNNING_SCORE_KEY);
-      if (legacy != null) set(mergeAppSettings(current, { showRunningScore: legacy === '1' }));
+    if (mutationSeq === seqBefore) {
+      if (raw != null) {
+        set(mergeAppSettings(DEFAULT_APP_SETTINGS, JSON.parse(raw)));
+      } else {
+        // First run of the settings system on this device: import the one
+        // legacy pref that predates it.
+        const legacy = await AsyncStorage.getItem(LEGACY_RUNNING_SCORE_KEY);
+        if (mutationSeq === seqBefore && legacy != null) {
+          set(mergeAppSettings(current, { showRunningScore: legacy === '1' }));
+        }
+      }
     }
   } catch { /* corrupted mirror — stay on defaults */ }
 
@@ -93,8 +101,9 @@ export async function hydrateAppSettings() {
     // the dirty path and push the newer local state up instead of adopting.
     const staleServer = mutationSeq !== seqBefore;
     if (dirty === '1' || Object.keys(server).length === 0 || staleServer) {
-      await AsyncStorage.setItem(SETTINGS_KEY, JSON.stringify(current));
-      await pushToServer();
+      const snapshot = current;
+      await AsyncStorage.setItem(SETTINGS_KEY, JSON.stringify(snapshot));
+      await pushToServer(snapshot);
     } else {
       set(mergeAppSettings(DEFAULT_APP_SETTINGS, server));
       await AsyncStorage.setItem(SETTINGS_KEY, JSON.stringify(current));

@@ -96,3 +96,40 @@ test('concurrent update during hydrate is not clobbered', async () => {
     settings: expect.objectContaining({ haptics: false }),
   });
 });
+
+test('concurrent update during mirror load is not clobbered', async () => {
+  await AsyncStorage.setItem(SETTINGS_KEY, JSON.stringify({ haptics: true }));
+  profileStore.loadProfile.mockResolvedValue({ userId: 'u1', settings: {} });
+  profileStore.upsertProfile.mockResolvedValue();
+
+  let resolveDeferred;
+  const deferred = new Promise((resolve) => { resolveDeferred = resolve; });
+  // AsyncStorage.getItem is already a jest.fn (from the async-storage mock),
+  // so jest.spyOn reuses that same mock object rather than wrapping it.
+  // Capturing the original via getMockImplementation() (a plain function)
+  // avoids recursing back into our own mockImplementation below.
+  const originalImpl = AsyncStorage.getItem.getMockImplementation();
+  const spy = jest.spyOn(AsyncStorage, 'getItem').mockImplementation(async (key) => {
+    // Read the value now (capturing the pre-write snapshot), but delay
+    // *returning* it — this simulates a read that was already in flight
+    // when the concurrent write landed, which is the actual race being
+    // guarded against (not a read that starts after the write).
+    const value = await originalImpl(key);
+    if (key === SETTINGS_KEY) await deferred;
+    return value;
+  });
+
+  try {
+    const h = hydrateAppSettings();
+    await updateAppSettings({ haptics: false });
+    resolveDeferred();
+    await h;
+
+    expect(getAppSettings().haptics).toBe(false);
+    expect(profileStore.upsertProfile).toHaveBeenLastCalledWith({
+      settings: expect.objectContaining({ haptics: false }),
+    });
+  } finally {
+    spy.mockRestore();
+  }
+});
