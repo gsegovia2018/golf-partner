@@ -70,6 +70,18 @@ const RENDERERS: Record<string, (d: Record<string, unknown>) => Rendered> = {
   }),
 };
 
+// Notification category per type — matches the three Settings toggles
+// (profiles.settings.notifications.{scores,invites,media}). Absent key or
+// absent settings = deliver (defaults are ON client-side too).
+const CATEGORY_BY_TYPE: Record<string, 'scores' | 'invites' | 'media'> = {
+  friend_request: 'invites',
+  friend_accepted: 'invites',
+  added_to_game: 'invites',
+  round_finished: 'scores',
+  feed_reaction: 'media',
+  feed_comment: 'media',
+};
+
 Deno.serve(async (req) => {
   try {
     // Require a shared secret matching PUSH_WEBHOOK_SECRET before doing
@@ -88,12 +100,25 @@ Deno.serve(async (req) => {
 
     const render = RENDERERS[note.type];
     if (!render) return new Response('ignored type', { status: 200 });
-    const { title, body, deepLink } = render(note.data ?? {});
 
     const supabase = createClient(
       Deno.env.get('SUPABASE_URL')!,
       Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!,
     );
+
+    const { title, body, deepLink } = render(note.data ?? {});
+
+    const category = CATEGORY_BY_TYPE[note.type];
+    if (category) {
+      const { data: prof } = await supabase
+        .from('profiles')
+        .select('settings')
+        .eq('user_id', note.user_id)
+        .maybeSingle();
+      const muted = (prof?.settings as Record<string, Record<string, boolean>> | null)
+        ?.notifications?.[category] === false;
+      if (muted) return new Response('muted', { status: 200 });
+    }
 
     const { data: tokens } = await supabase
       .from('push_tokens')

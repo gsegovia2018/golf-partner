@@ -219,11 +219,6 @@ jest.mock('../../lib/connectivity', () => ({
   subscribeConnectivity: jest.fn(() => jest.fn()),
 }));
 
-jest.mock('../../lib/prefs', () => ({
-  getShowRunningScore: jest.fn(() => Promise.resolve(true)),
-  setShowRunningScore: jest.fn(() => Promise.resolve()),
-}));
-
 jest.mock('../../store/notificationStore', () => ({
   unreadCount: jest.fn(() => Promise.resolve(0)),
 }));

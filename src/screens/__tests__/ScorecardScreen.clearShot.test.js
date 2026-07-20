@@ -101,11 +101,6 @@ jest.mock('../../context/AuthContext', () => ({
   useAuth: () => ({ user: null }),
 }));
 
-jest.mock('../../lib/prefs', () => ({
-  getShowRunningScore: jest.fn(() => Promise.resolve(true)),
-  setShowRunningScore: jest.fn(() => Promise.resolve()),
-}));
-
 jest.mock('../../store/tournamentStore', () => ({
   loadTournament: jest.fn(() => Promise.resolve(mockTournament)),
   subscribeTournamentChanges: jest.fn(() => jest.fn()),
