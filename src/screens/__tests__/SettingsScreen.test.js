@@ -2,7 +2,7 @@ import React from 'react';
 import { render, screen, fireEvent, waitFor } from '@testing-library/react-native';
 import { ThemeProvider } from '../../theme/ThemeContext';
 import SettingsScreen from '../SettingsScreen';
-import { getAppSettings, __resetAppSettingsForTests } from '../../store/settingsStore';
+import { getAppSettings, updateAppSettings, __resetAppSettingsForTests } from '../../store/settingsStore';
 
 jest.mock('../../store/profileStore', () => ({
   loadProfile: jest.fn().mockResolvedValue(null),
@@ -43,4 +43,13 @@ test('units segment switches to yards', async () => {
   renderScreen();
   fireEvent.press(await screen.findByText('Yards'));
   await waitFor(() => expect(getAppSettings().units).toBe('yards'));
+});
+
+test('no-spoilers mode disables the running-score switch and forces it off', async () => {
+  await updateAppSettings({ noSpoilers: true });
+  renderScreen();
+  const sw = await screen.findByTestId('setting-showRunningScore');
+  expect(sw.props.disabled).toBe(true);
+  expect(sw.props.accessibilityState?.disabled ?? sw.props.disabled).toBe(true);
+  expect(sw.props.value).toBe(false);
 });

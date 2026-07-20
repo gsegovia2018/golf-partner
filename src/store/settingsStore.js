@@ -8,6 +8,7 @@ import { loadProfile, upsertProfile } from './profileStore';
 
 export const SETTINGS_KEY = '@golf_settings';
 export const SETTINGS_DIRTY_KEY = '@golf_settings_dirty';
+export const SETTINGS_USER_KEY = '@golf_settings_user';
 const LEGACY_RUNNING_SCORE_KEY = '@scorecard_show_running_score';
 
 export const DEFAULT_APP_SETTINGS = {
@@ -93,8 +94,37 @@ export async function hydrateAppSettings() {
 
   try {
     const profile = await loadProfile();
-    if (!profile) return;
+    if (!profile) {
+      // Signed out: the app is auth-gated, so a signed-out device should
+      // not carry the previous user's synced prefs around.
+      set(DEFAULT_APP_SETTINGS);
+      await AsyncStorage.removeItem(SETTINGS_KEY);
+      await AsyncStorage.removeItem(SETTINGS_DIRTY_KEY);
+      await AsyncStorage.removeItem(SETTINGS_USER_KEY);
+      return;
+    }
+
+    const storedOwner = await AsyncStorage.getItem(SETTINGS_USER_KEY);
     const server = profile.settings ?? {};
+
+    // A different user just signed in on this shared device — whatever is
+    // in memory (and mirrored) belongs to whoever was here before. Never
+    // treat it as this user's dirty local state or push it into their
+    // profile; only adopt what the server already has for them.
+    if (storedOwner != null && storedOwner !== profile.userId) {
+      set(DEFAULT_APP_SETTINGS);
+      await AsyncStorage.removeItem(SETTINGS_KEY);
+      await AsyncStorage.removeItem(SETTINGS_DIRTY_KEY);
+      if (Object.keys(server).length > 0) {
+        set(mergeAppSettings(DEFAULT_APP_SETTINGS, server));
+        await AsyncStorage.setItem(SETTINGS_KEY, JSON.stringify(current));
+      }
+      // Empty server blob: stay on defaults without pushing anything up —
+      // the caller (fix scenario) must never push a foreign/default blob.
+      await AsyncStorage.setItem(SETTINGS_USER_KEY, profile.userId);
+      return;
+    }
+
     const dirty = await AsyncStorage.getItem(SETTINGS_DIRTY_KEY);
     // A concurrent updateAppSettings() while loadProfile() was in flight
     // means the server copy we just fetched is now stale — treat it like
@@ -108,5 +138,6 @@ export async function hydrateAppSettings() {
       set(mergeAppSettings(DEFAULT_APP_SETTINGS, server));
       await AsyncStorage.setItem(SETTINGS_KEY, JSON.stringify(current));
     }
+    await AsyncStorage.setItem(SETTINGS_USER_KEY, profile.userId);
   } catch { /* offline — local copy stands */ }
 }

@@ -129,5 +129,12 @@ describe('HoleDistanceBlock', () => {
       getByText('164'); // 150m * 1.09361 rounded
       getByText('yd');
     });
+
+    it('shows the accuracy caption converted to yards, not raw meters', async () => {
+      await updateAppSettings({ units: 'yards' });
+      const { getByText, queryByText } = render(<HoleDistanceBlock gps={gpsBase({ accuracy: 31 })} onPress={() => {}} />);
+      getByText('±34yd'); // 31m * 1.09361 rounded
+      expect(queryByText('±31m')).toBeNull();
+    });
   });
 });

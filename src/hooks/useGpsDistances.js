@@ -52,6 +52,7 @@ export function useGpsDistances(courseName, holeNumber) {
         const { status } = await Location.requestForegroundPermissionsAsync();
         if (cancelled) return;
         if (status !== 'granted') { setDenied(true); return; }
+        setDenied(false);
         // Fast first fix — the watch below can take several seconds to emit.
         Location.getCurrentPositionAsync({ accuracy: Location.Accuracy.High })
           .then(apply).catch(() => {});

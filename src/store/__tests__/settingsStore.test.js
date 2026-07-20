@@ -2,7 +2,7 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import {
   DEFAULT_APP_SETTINGS, getAppSettings, updateAppSettings,
   hydrateAppSettings, subscribeAppSettings, __resetAppSettingsForTests,
-  SETTINGS_KEY, SETTINGS_DIRTY_KEY,
+  SETTINGS_KEY, SETTINGS_DIRTY_KEY, SETTINGS_USER_KEY,
 } from '../settingsStore';
 import * as profileStore from '../profileStore';
 
@@ -95,6 +95,60 @@ test('concurrent update during hydrate is not clobbered', async () => {
   expect(profileStore.upsertProfile).toHaveBeenLastCalledWith({
     settings: expect.objectContaining({ haptics: false }),
   });
+});
+
+test('user switch discards foreign mirror and never pushes it', async () => {
+  await AsyncStorage.setItem(SETTINGS_KEY, JSON.stringify({ haptics: false }));
+  await AsyncStorage.setItem(SETTINGS_USER_KEY, 'user-A');
+  profileStore.loadProfile.mockResolvedValue({ userId: 'user-B', settings: {} });
+
+  await hydrateAppSettings();
+
+  expect(getAppSettings()).toEqual(DEFAULT_APP_SETTINGS);
+  expect(profileStore.upsertProfile).not.toHaveBeenCalled();
+  const mirrored = JSON.parse(await AsyncStorage.getItem(SETTINGS_KEY));
+  expect(mirrored?.haptics).not.toBe(false);
+  expect(await AsyncStorage.getItem(SETTINGS_USER_KEY)).toBe('user-B');
+});
+
+test("user switch adopts new user's server settings", async () => {
+  await AsyncStorage.setItem(SETTINGS_KEY, JSON.stringify({ haptics: false }));
+  await AsyncStorage.setItem(SETTINGS_USER_KEY, 'user-A');
+  profileStore.loadProfile.mockResolvedValue({ userId: 'user-B', settings: { units: 'yards' } });
+
+  await hydrateAppSettings();
+
+  expect(getAppSettings().units).toBe('yards');
+  const mirrored = JSON.parse(await AsyncStorage.getItem(SETTINGS_KEY));
+  expect(mirrored.units).toBe('yards');
+  expect(await AsyncStorage.getItem(SETTINGS_USER_KEY)).toBe('user-B');
+});
+
+test('sign-out clears mirror and resets defaults', async () => {
+  await AsyncStorage.setItem(SETTINGS_KEY, JSON.stringify({ haptics: false }));
+  await AsyncStorage.setItem(SETTINGS_USER_KEY, 'user-A');
+  await AsyncStorage.setItem(SETTINGS_DIRTY_KEY, '1');
+  profileStore.loadProfile.mockResolvedValue(null);
+
+  await hydrateAppSettings();
+
+  expect(getAppSettings()).toEqual(DEFAULT_APP_SETTINGS);
+  expect(await AsyncStorage.getItem(SETTINGS_KEY)).toBeNull();
+  expect(await AsyncStorage.getItem(SETTINGS_USER_KEY)).toBeNull();
+  expect(await AsyncStorage.getItem(SETTINGS_DIRTY_KEY)).toBeNull();
+});
+
+test('offline hydrate leaves everything intact', async () => {
+  await AsyncStorage.setItem(SETTINGS_KEY, JSON.stringify({ haptics: false }));
+  await AsyncStorage.setItem(SETTINGS_USER_KEY, 'user-A');
+  profileStore.loadProfile.mockRejectedValue(new Error('net'));
+
+  await hydrateAppSettings();
+
+  expect(getAppSettings().haptics).toBe(false);
+  const mirrored = JSON.parse(await AsyncStorage.getItem(SETTINGS_KEY));
+  expect(mirrored.haptics).toBe(false);
+  expect(await AsyncStorage.getItem(SETTINGS_USER_KEY)).toBe('user-A');
 });
 
 test('concurrent update during mirror load is not clobbered', async () => {

@@ -29,6 +29,7 @@ function SwitchRow({ testID, label, hint, value, onChange, disabled, theme, s })
       </View>
       <Switch
         testID={testID}
+        accessibilityLabel={label}
         value={value}
         onValueChange={onChange}
         disabled={disabled}
@@ -43,7 +44,7 @@ export default function SettingsScreen({ navigation }) {
   const { theme, themePref, setThemeMode } = useTheme();
   const s = makeStyles(theme);
   const appSettings = useAppSettings();
-  const setKey = useCallback((patch) => { updateAppSettings(patch); }, []);
+  const setKey = useCallback((patch) => { updateAppSettings(patch).catch(() => {}); }, []);
 
   function handleBack() {
     navigation.goBack();

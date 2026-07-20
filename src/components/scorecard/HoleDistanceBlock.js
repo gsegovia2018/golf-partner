@@ -59,7 +59,7 @@ export function HoleDistanceBlock({ gps, onPress }) {
             <Feather name="chevron-right" size={14} color={theme.text.muted} />
           </View>
           <Text style={s.fb}>{`F ${fmt(distances.front)}  B ${fmt(distances.back)}`}</Text>
-          {poorFix && <Text style={s.caption}>{`±${Math.round(accuracy)}m`}</Text>}
+          {poorFix && <Text style={s.caption}>{`±${fmt(accuracy)}${unitSuffix(units)}`}</Text>}
           {!!hazardLine && <Text style={s.hzd}>{hazardLine}</Text>}
         </>
       ) : (

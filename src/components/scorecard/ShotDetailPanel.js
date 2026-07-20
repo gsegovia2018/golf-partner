@@ -401,7 +401,7 @@ export function ShotDetailPanel({ hole, detail, onChange, strokes, statGroups, t
           }
         />
       )}
-      {g.approach && !isPar3 && d.approachBucket && (
+      {showApproachExtras && (
         <ApproachResultRow
           value={d.approachResult}
           onChange={onChange}
@@ -409,7 +409,7 @@ export function ShotDetailPanel({ hole, detail, onChange, strokes, statGroups, t
           s={s}
         />
       )}
-      {g.approach && !isPar3 && d.approachBucket && (
+      {showApproachExtras && (
         <LieChipRow
           label="Approach lie"
           a11yPrefix="Approach lie"
