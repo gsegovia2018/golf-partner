@@ -1,16 +1,19 @@
 import { useEffect, useMemo, useRef, useState, useSyncExternalStore } from 'react';
 import * as Location from 'expo-location';
 import {
-  findCourseGeometry, courseTargetDistances,
+  findCourseGeometry,
   subscribeCourseGeometry, getCourseGeometryVersion,
 } from '../lib/geo';
+import { resolveScorecardDistances } from '../lib/flyoverModel';
 
-// Live GPS distances to the current hole's green. Only asks for location
-// permission when the round's course actually has geometry data; returns
-// { available, distances, accuracy } where `distances` is
-// { front, center, back, pin, kind } in meters, or null until a fix arrives.
-// `available` is false when there is no geometry, permission was denied, or
-// location is unsupported — callers render nothing in that case.
+// Live GPS distances to the current hole's green, falling back to distances
+// measured from the tee whenever a usable fix isn't in play (player >1 km
+// from the hole, permission denied, or no fix yet) — same anchorFor rule as
+// the flyover map. Returns { available, distances, accuracy, position,
+// source } where `distances` is { front, center, back, pin, kind, hazards }
+// in meters or null, and `source` is 'gps' | 'tee'. `available` is false
+// when there is no geometry, or when location was denied and the hole has no
+// tee to fall back to — callers render nothing in that case.
 export function useGpsDistances(courseName, holeNumber) {
   const geomVersion = useSyncExternalStore(subscribeCourseGeometry, getCourseGeometryVersion);
   // geomVersion bumps when hydration swaps in live geometry — recompute then.
@@ -76,14 +79,17 @@ export function useGpsDistances(courseName, holeNumber) {
     };
   }, [hasGeometry]);
 
-  const distances = useMemo(() => {
-    if (!geometry || !fix) return null;
-    return courseTargetDistances(fix.pos, courseName, holeNumber);
+  const resolved = useMemo(() => {
+    if (!geometry) return { distances: null, source: 'gps' };
+    return resolveScorecardDistances({ courseName, holeNumber, fix: fix?.pos ?? null });
   }, [geometry, fix, courseName, holeNumber]);
 
   return {
-    available: !!geometry && !denied,
-    distances,
+    // Denied + no tee fallback would leave the header stuck on the fix
+    // spinner — hide it, exactly like the pre-tee-fallback behavior.
+    available: !!geometry && (!denied || resolved.source === 'tee'),
+    distances: resolved.distances,
+    source: resolved.source, // 'gps' | 'tee' — the header renders FROM TEE for 'tee'
     accuracy: fix?.accuracy ?? null,
     position: fix?.pos ?? null, // [lat, lng] — shared with the hole map
   };
