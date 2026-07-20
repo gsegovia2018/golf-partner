@@ -34,7 +34,6 @@ export function buildHoleMapHtml(data) {
   .tri .bign{font-size:40px;font-weight:800;line-height:1.05;font-variant-numeric:tabular-nums}
   .tri .u{font-size:13px;font-weight:600;color:#9fb0a4}
   .tri .lbl{font-size:9px;font-weight:700;letter-spacing:.08em;color:#9fb0a4;text-transform:uppercase;width:34px;text-align:left}
-  .tri .foot{font-size:9px;font-weight:700;letter-spacing:.1em;color:#cfe;text-transform:uppercase;margin-top:2px}
   .hint{position:absolute;bottom:16px;left:50%;transform:translateX(-50%);background:rgba(14,22,28,.85);color:#fff;font-weight:600;font-size:13px;padding:7px 14px;border-radius:999px}
   .dchip{background:rgba(14,22,28,.88);color:#fff;font-weight:800;font-size:13px;padding:4px 11px;border-radius:999px;font-variant-numeric:tabular-nums;white-space:nowrap;border:1px solid rgba(255,255,255,.25);transform:translate(-50%,-50%);display:inline-block}
   .leaflet-container{background:#0a0d10}
@@ -64,7 +63,7 @@ function bearing(a, b){
 // map's pixel origin, which throws "Set map center and zoom first" if the map
 // has no view yet — so initView's fitBounds crashed before any tiles/markers
 // drew. A default view makes the map "loaded" so fitBounds works.
-const map = L.map('map', { zoomControl: true, zoomSnap: 0.25, attributionControl: false, rotate: true, touchRotate: false, bearing: 0, center: [40.45, -3.75], zoom: 15 });
+const map = L.map('map', { zoomControl: false, rotateControl: false, zoomSnap: 0.25, attributionControl: false, rotate: true, touchRotate: false, bearing: 0, center: [40.45, -3.75], zoom: 15 });
 // Tiles come from the host (cache-first, offline-aware) over postMessage.
 // A tile with no answer stays transparent — the vector layer shows through.
 let tileSeq = 0;
@@ -172,7 +171,6 @@ function hud(from, g){
       '<div class="row"><span class="lbl">Back</span><span class="sm">'+round(d(g.b))+'</span></div>'+
       '<div class="row"><span class="lbl"></span><span class="bign">'+round(d(g.c))+'</span><span class="u">m</span></div>'+
       '<div class="row"><span class="lbl">Front</span><span class="sm">'+round(d(g.f))+'</span></div>'+
-      '<div class="foot">to green'+(fromTee ? ' · from tee' : '')+'</div>'+
     '</div>'+
     (from
       ? (fromTee

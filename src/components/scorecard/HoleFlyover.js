@@ -16,7 +16,7 @@ import { HoleMapView } from './HoleMapView';
 // rendered inside the map page. Off-course (GPS far from the green) it switches
 // to a drag-to-measure marker. Admins get an Edit button.
 export function HoleFlyover({
-  courseName, holeNumber, par, strokeIndex, centerDistance,
+  courseName, holeNumber, par, strokeIndex,
   position, visible, onClose, onEdit,
 }) {
   const geomVersion = useSyncExternalStore(subscribeCourseGeometry, getCourseGeometryVersion);
@@ -80,9 +80,6 @@ export function HoleFlyover({
                 )}
               </View>
               <View style={s.hbtns}>
-                {centerDistance != null && (
-                  <Text style={s.distance}>{`${Math.round(centerDistance)} m`}</Text>
-                )}
                 {onEdit && feat && (
                   <Pressable onPress={onEdit} style={s.editBtn} hitSlop={8}>
                     <Feather name="edit-2" size={15} color="#0a0d10" />
@@ -128,7 +125,6 @@ const s = StyleSheet.create({
   title: { color: '#fff', fontSize: 17, fontWeight: '800' },
   subtitle: { color: '#9fb0a4', fontSize: 12, fontWeight: '600' },
   hbtns: { flexDirection: 'row', alignItems: 'center', gap: 10 },
-  distance: { color: '#57ae5b', fontSize: 15, fontWeight: '800', fontVariant: ['tabular-nums'] },
   editBtn: { flexDirection: 'row', alignItems: 'center', gap: 5, backgroundColor: '#57ae5b', paddingHorizontal: 12, paddingVertical: 7, borderRadius: 999 },
   editTxt: { color: '#0a0d10', fontWeight: '700', fontSize: 13 },
   closeBtn: { padding: 4 },

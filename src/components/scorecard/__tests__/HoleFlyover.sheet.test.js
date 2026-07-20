@@ -16,16 +16,16 @@ jest.mock('../../../lib/geo', () => ({
 
 const props = {
   courseName: 'Villaitana Levante', holeNumber: 7, par: 4, strokeIndex: 5,
-  centerDistance: 326.4, position: [38.5577, -0.1491],
+  position: [38.5577, -0.1491],
   visible: true, onClose: jest.fn(),
 };
 
 describe('HoleFlyover sheet chrome', () => {
-  it('shows hole meta and live centre distance in the sheet header', () => {
-    const { getByText } = render(<HoleFlyover {...props} />);
+  it('shows hole meta in the sheet header without a distance readout', () => {
+    const { getByText, queryByText } = render(<HoleFlyover {...props} />);
     getByText('Hole 7');
     getByText('Par 4 · SI 5');
-    getByText('326 m');
+    expect(queryByText(/\d+ m$/)).toBeNull();
   });
 
   it('renders a grabber and fires onClose from the close button', () => {
@@ -37,10 +37,9 @@ describe('HoleFlyover sheet chrome', () => {
 
   it('omits meta it was not given', () => {
     const { queryByText, getByText } = render(
-      <HoleFlyover {...props} par={undefined} strokeIndex={undefined} centerDistance={null} />,
+      <HoleFlyover {...props} par={undefined} strokeIndex={undefined} />,
     );
     getByText('Hole 7');
     expect(queryByText(/Par/)).toBeNull();
-    expect(queryByText(/ m$/)).toBeNull();
   });
 });
