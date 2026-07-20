@@ -202,6 +202,9 @@ export function HoleView({ round, roundIndex, players, scores, shotDetails, meId
         visible={flyoverOpen}
         courseName={round.courseName}
         holeNumber={currentHole}
+        par={round.holes[currentHole - 1]?.par}
+        strokeIndex={round.holes[currentHole - 1]?.strokeIndex}
+        centerDistance={gps.distances?.center ?? null}
         position={gps.position}
         onClose={() => setFlyoverOpen(false)}
         onEdit={isAdmin ? () => { setFlyoverOpen(false); setEditorOpen(true); } : undefined}
