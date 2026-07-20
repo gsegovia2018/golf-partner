@@ -73,7 +73,10 @@ const BridgedTiles = L.GridLayer.extend({
     img.alt = '';
     img.style.width = '100%';
     img.style.height = '100%';
-    const id = 't' + (tileSeq++);
+    // Namespaced by holeKey so a stale tile-data answer from a prior page
+    // instance (if one ever outlived a holeKey change) can't collide with an
+    // id reused by this page — the pendingTiles lookup miss is a safe no-op.
+    const id = DATA.holeKey + '#t' + (tileSeq++);
     pendingTiles[id] = (dataUrl) => {
       if (dataUrl) { img.onload = () => done(null, img); img.onerror = () => done(null, img); img.src = dataUrl; }
       else done(null, img);
