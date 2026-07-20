@@ -229,3 +229,52 @@ describe('computePersonalStats — scramble win credit', () => {
     expect(stats.wins).toBe(0);
   });
 });
+
+describe('profileStore — settings blob', () => {
+  beforeEach(() => {
+    const chain = getChain();
+    // Reset call history but keep return-value wiring intact.
+    Object.values(chain).forEach((fn) => fn.mockReset());
+    // Re-wire chainable returns after mockReset clears them.
+    chain.from.mockReturnValue(chain);
+    chain.select.mockReturnValue(chain);
+    chain.eq.mockReturnValue(chain);
+    chain.update.mockReturnValue(chain);
+    chain.insert.mockResolvedValue({ error: null });
+
+    supabase.auth.getUser.mockResolvedValue({ data: { user: { id: 'u1', email: 'a@b.c' } } });
+  });
+
+  it('loadProfile returns settings, defaulting to {}', async () => {
+    const chain = getChain();
+    chain.maybeSingle.mockResolvedValue({ data: { user_id: 'u1', settings: null }, error: null });
+    const p = await loadProfile();
+    expect(p.settings).toEqual({});
+    // the select must actually request the column
+    expect(chain.select).toHaveBeenCalledWith(expect.stringContaining('settings'));
+  });
+
+  it('upsertProfile writes settings when provided', async () => {
+    const chain = getChain();
+    chain.maybeSingle.mockResolvedValueOnce({ data: { user_id: 'u1' }, error: null });
+    chain.eq
+      .mockReturnValueOnce(chain)
+      .mockResolvedValueOnce({ error: null });
+    await upsertProfile({ settings: { gpsEnabled: false } });
+    expect(chain.update).toHaveBeenCalledWith(
+      expect.objectContaining({ settings: { gpsEnabled: false } }),
+    );
+  });
+
+  it('upsertProfile does not touch settings when key omitted', async () => {
+    const chain = getChain();
+    chain.maybeSingle.mockResolvedValueOnce({ data: { user_id: 'u1' }, error: null });
+    chain.eq
+      .mockReturnValueOnce(chain)
+      .mockResolvedValueOnce({ error: null });
+    await upsertProfile({ displayName: 'X' });
+    expect(chain.update).toHaveBeenCalledWith(
+      expect.not.objectContaining({ settings: expect.anything() }),
+    );
+  });
+});

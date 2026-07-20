@@ -19,7 +19,7 @@ export async function loadProfile() {
   if (!user) return null;
   const { data, error } = await supabase
     .from('profiles')
-    .select('user_id, username, display_name, handicap, target_handicap, avatar_color, avatar_url, gender, updated_at')
+    .select('user_id, username, display_name, handicap, target_handicap, avatar_color, avatar_url, gender, settings, updated_at')
     .eq('user_id', user.id)
     .maybeSingle();
   if (error) throw error;
@@ -33,6 +33,7 @@ export async function loadProfile() {
     avatarColor: data?.avatar_color ?? null,
     avatarUrl: data?.avatar_url ?? null,
     gender: data?.gender ?? null,
+    settings: data?.settings ?? {},
     updatedAt: data?.updated_at ?? null,
   };
 }
@@ -86,6 +87,11 @@ export async function upsertProfile(fields) {
   // unique(lower(username)) index can't fail silently.
   if (fields.username !== undefined && fields.username !== null && fields.username !== '') {
     row.username = String(fields.username).trim().toLowerCase();
+  }
+  // Whole-blob write: settingsStore always sends the full merged object, so
+  // replacing (not merging) the column is correct.
+  if (fields.settings !== undefined) {
+    row.settings = fields.settings ?? {};
   }
 
   // Does this row already exist? If yes, surgical UPDATE (only touches the
