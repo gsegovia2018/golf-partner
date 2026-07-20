@@ -3,6 +3,8 @@ import { View, Text, StyleSheet, TouchableOpacity } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { Feather } from '@expo/vector-icons';
 import { useTheme } from '../../../theme/ThemeContext';
+import { useAppSettings } from '../../../hooks/useAppSettings';
+import { formatDistance, unitSuffix } from '../../../lib/units';
 import { shotBenchmarkForHandicap } from '../../../store/shotBenchmarks';
 import SectionCard from '../SectionCard';
 import ShotDashboard from '../ShotDashboard';
@@ -22,6 +24,7 @@ const YD_TO_M = 0.9144;
 
 export default function ShotsTab({ stats, onInfo, targetHandicap, onChangeTarget }) {
   const { theme } = useTheme();
+  const { units } = useAppSettings();
   const s = useMemo(() => makeStyles(theme), [theme]);
   const shotBenchmark = useMemo(
     () => shotBenchmarkForHandicap(targetHandicap),
@@ -47,7 +50,7 @@ export default function ShotsTab({ stats, onInfo, targetHandicap, onChangeTarget
   }
 
   const scoringRows = makeScoringRows(stats, shotBenchmark);
-  const drivingTargetRows = makeDrivingTargetRows(shots, shotBenchmark, stats.driveDistance);
+  const drivingTargetRows = makeDrivingTargetRows(shots, shotBenchmark, stats.driveDistance, units);
   const approachTargetRows = approachTarget?.hasData ? makeApproachTargetRows(approachTarget) : [];
   const puttingVolumeRows = shots.hasData ? makePuttingVolumeRows(shots, shotBenchmark) : [];
   const puttingTargetRows = puttingTarget?.hasData ? makePuttingTargetRows(puttingTarget) : [];
@@ -369,7 +372,7 @@ function makeScoringSummary(scoringRows) {
   return summary;
 }
 
-function makeDrivingTargetRows(shots, shotBenchmark, driveDistance) {
+function makeDrivingTargetRows(shots, shotBenchmark, driveDistance, units) {
   const recorded = shots?.drives?.recorded ?? 0;
   const distribution = shots?.drives?.distribution ?? {};
   const leftPct = percentage(distribution.left ?? 0, recorded);
@@ -455,10 +458,10 @@ function makeDrivingTargetRows(shots, shotBenchmark, driveDistance) {
     driveDistance?.drives > 0 ? {
       key: 'driveDistance',
       label: 'Driver distance',
-      value: `~${driveDistance.avgDistance} m`,
+      value: `~${formatDistance(driveDistance.avgDistance, units)} ${unitSuffix(units)}`,
       secondary: targetSecondary([
         sampleText(driveDistance.drives, 'drives'),
-        `target ~${Math.round(shotBenchmark.driverDistance * YD_TO_M)} m`,
+        `target ~${formatDistance(Math.round(shotBenchmark.driverDistance * YD_TO_M), units)} ${unitSuffix(units)}`,
       ], driveDistance.drives, 6),
       tone: toneFromComparison({
         value: driveDistance.avgDistance,
@@ -474,7 +477,7 @@ function makeDrivingTargetRows(shots, shotBenchmark, driveDistance) {
       label: 'Driver distance',
       value: '—',
       secondary: targetSecondary([
-        `target ~${Math.round(shotBenchmark.driverDistance * YD_TO_M)} m`,
+        `target ~${formatDistance(Math.round(shotBenchmark.driverDistance * YD_TO_M), units)} ${unitSuffix(units)}`,
         'log drive distance on the scorecard to track this',
       ], 0, 6),
       tone: 'neutral',

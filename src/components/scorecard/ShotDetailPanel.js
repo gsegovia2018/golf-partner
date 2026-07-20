@@ -5,11 +5,13 @@ import { useTheme } from '../../theme/ThemeContext';
 import { makeScorecardStyles } from './styles';
 import { ShotDetailExplainer } from '../ShotDetailExplainer';
 import { isGIR, recoveryOutcomeFromState, shotDetailStrokeCount } from '../../store/scoring';
+import { useAppSettings } from '../../hooks/useAppSettings';
+import { unitWord } from '../../lib/units';
 import {
   DEFAULT_SHOT, DRIVE_ORDER, DRIVE_META,
-  FIRST_PUTT_BUCKETS, FIRST_PUTT_LABELS,
-  APPROACH_BUCKETS, APPROACH_LABELS,
-  DRIVE_DIST_BUCKETS, DRIVE_DIST_LABELS,
+  FIRST_PUTT_BUCKETS, FIRST_PUTT_LABELS, FIRST_PUTT_LABELS_YD,
+  APPROACH_BUCKETS, APPROACH_LABELS, APPROACH_LABELS_YD,
+  DRIVE_DIST_BUCKETS, DRIVE_DIST_LABELS, DRIVE_DIST_LABELS_YD,
   DRIVE_MISS_LIES, DRIVE_MISS_LIE_LABELS,
   APPROACH_LIES, APPROACH_LIE_LABELS,
   TEE_CLUBS, TEE_CLUB_LABELS,
@@ -168,6 +170,7 @@ function ApproachResultRow({ value, onChange, theme, s, isLast = false }) {
 export function ShotDetailPanel({ hole, detail, onChange, strokes, statGroups, theme: themeProp, s: sProp }) {
   const { theme: themeCtx } = useTheme();
   const theme = themeProp ?? themeCtx;
+  const { units } = useAppSettings();
   const sOwn = useMemo(() => makeScorecardStyles(theme), [theme]);
   const s = sProp ?? sOwn;
   const d = { ...DEFAULT_SHOT, ...(detail ?? {}) };
@@ -179,7 +182,10 @@ export function ShotDetailPanel({ hole, detail, onChange, strokes, statGroups, t
   const driveMissed = d.drive === 'left' || d.drive === 'right' || d.drive === 'short';
   const teeClub = d.teeClub ?? 'driver';
   const approachDistanceLabel = isPar3 ? 'Hole distance' : 'Approach';
-  const approachShotHint = 'metres';
+  const approachShotHint = unitWord(units);
+  const driveDistLabels = units === 'yards' ? DRIVE_DIST_LABELS_YD : DRIVE_DIST_LABELS;
+  const approachLabels = units === 'yards' ? APPROACH_LABELS_YD : APPROACH_LABELS;
+  const firstPuttLabels = units === 'yards' ? FIRST_PUTT_LABELS_YD : FIRST_PUTT_LABELS;
   const gir = isGIR({ strokes, putts: d.putts, par: hole.par });
   const missedGIR = gir === false;
   const autoOutcome = recoveryOutcomeFromState({
@@ -355,11 +361,11 @@ export function ShotDetailPanel({ hole, detail, onChange, strokes, statGroups, t
           label="Drive distance"
           value={d.driveDistBucket}
           buckets={DRIVE_DIST_BUCKETS}
-          labels={DRIVE_DIST_LABELS}
+          labels={driveDistLabels}
           onSelect={(key) => onChange({ driveDistBucket: key })}
           theme={theme}
           s={s}
-          hint="metres"
+          hint={unitWord(units)}
           isLast={lastVisibleRow === 'driveDistBucket'}
           explainer={
             <ShotDetailExplainer
@@ -375,7 +381,7 @@ export function ShotDetailPanel({ hole, detail, onChange, strokes, statGroups, t
           label={approachDistanceLabel}
           value={d.approachBucket}
           buckets={APPROACH_BUCKETS}
-          labels={APPROACH_LABELS}
+          labels={approachLabels}
           onSelect={(key) => onChange({
             approachBucket: key,
             ...(key == null ? { approachResult: null, approachLie: null } : {}),
@@ -429,11 +435,11 @@ export function ShotDetailPanel({ hole, detail, onChange, strokes, statGroups, t
           label="First putt"
           value={d.firstPuttBucket}
           buckets={FIRST_PUTT_BUCKETS}
-          labels={FIRST_PUTT_LABELS}
+          labels={firstPuttLabels}
           onSelect={(key) => onChange({ firstPuttBucket: key })}
           theme={theme}
           s={s}
-          hint="metres"
+          hint={unitWord(units)}
           isLast={lastVisibleRow === 'firstPutt'}
           explainer={
             <ShotDetailExplainer

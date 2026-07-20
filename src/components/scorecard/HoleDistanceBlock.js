@@ -2,10 +2,8 @@ import React, { useMemo } from 'react';
 import { View, Text, StyleSheet, Pressable } from 'react-native';
 import { Feather } from '@expo/vector-icons';
 import { useTheme } from '../../theme/ThemeContext';
-
-function fmt(meters) {
-  return meters == null ? '—' : `${Math.round(meters)}`;
-}
+import { useAppSettings } from '../../hooks/useAppSettings';
+import { formatDistance, unitSuffix } from '../../lib/units';
 
 // Right-hand side of the hole header: live GPS distances to the green, or —
 // when the player isn't on the hole (or has no fix) — the same distances
@@ -14,9 +12,11 @@ function fmt(meters) {
 // denied and there's no tee to fall back to.
 export function HoleDistanceBlock({ gps, onPress }) {
   const { theme } = useTheme();
+  const { units } = useAppSettings();
   const s = useMemo(() => makeStyles(theme), [theme]);
   if (!gps?.available) return null;
 
+  const fmt = (meters) => formatDistance(meters, units);
   const { distances, accuracy, source } = gps;
   // Same thresholds as the old strip: >3km = not on the course; >25m = the
   // fix is too loose to trust to the meter.
@@ -36,7 +36,7 @@ export function HoleDistanceBlock({ gps, onPress }) {
         <Text style={s.overline}>FROM TEE</Text>
         <View style={s.heroRow}>
           <Text style={s.hero}>{fmt(distances.center)}</Text>
-          <Text style={s.unit}>m</Text>
+          <Text style={s.unit}>{unitSuffix(units)}</Text>
           <Feather name="chevron-right" size={14} color={theme.text.muted} />
         </View>
         <Text style={s.fb}>{`F ${fmt(distances.front)}  B ${fmt(distances.back)}`}</Text>
@@ -55,7 +55,7 @@ export function HoleDistanceBlock({ gps, onPress }) {
           <View style={s.heroRow}>
             <Feather name="navigation" size={13} color={theme.accent.primary} />
             <Text style={s.hero}>{fmt(distances.center)}</Text>
-            <Text style={s.unit}>m</Text>
+            <Text style={s.unit}>{unitSuffix(units)}</Text>
             <Feather name="chevron-right" size={14} color={theme.text.muted} />
           </View>
           <Text style={s.fb}>{`F ${fmt(distances.front)}  B ${fmt(distances.back)}`}</Text>

@@ -56,6 +56,9 @@ const post = (m) => {
 const LL = (p) => L.latLng(p[0], p[1]);
 const dist = (a, b) => LL(a).distanceTo(LL(b)); // metres
 const round = (x) => (x == null || isNaN(x) ? '—' : Math.round(x));
+const M2YD = 1.09361;
+const U = DATA.units === 'yards' ? 'yd' : 'm';
+const disp = (x) => round(x == null ? x : (DATA.units === 'yards' ? x * M2YD : x));
 
 const valid = (p) => Array.isArray(p) && isFinite(p[0]) && isFinite(p[1]);
 // compass bearing a->b in degrees (0=N, 90=E), for map rotation.
@@ -174,7 +177,7 @@ function drawTargets(from, g, cc){
 let lineLayers = [];
 function chipMk(a, b, d){
   const mid = [(a[0]+b[0])/2, (a[1]+b[1])/2];
-  return L.marker(mid, { interactive:false, icon: L.divIcon({ className:'', html:'<div class="dchip">'+round(d)+' m</div>', iconSize:[0,0] }) });
+  return L.marker(mid, { interactive:false, icon: L.divIcon({ className:'', html:'<div class="dchip">'+disp(d)+' '+U+'</div>', iconSize:[0,0] }) });
 }
 function redrawLines(from, g, cc){
   lineLayers.forEach(l=>map.removeLayer(l)); lineLayers=[];
@@ -205,9 +208,9 @@ function hud(from, g){
   const d = (p) => valid(p) && valid(src) ? dist(src, p) : null;
   h.innerHTML =
     '<div class="tri">'+
-      '<div class="row"><span class="lbl">Back</span><span class="sm">'+round(d(g.b))+'</span></div>'+
-      '<div class="row"><span class="lbl"></span><span class="bign">'+round(d(g.c))+'</span><span class="u">m</span></div>'+
-      '<div class="row"><span class="lbl">Front</span><span class="sm">'+round(d(g.f))+'</span></div>'+
+      '<div class="row"><span class="lbl">Back</span><span class="sm">'+disp(d(g.b))+'</span></div>'+
+      '<div class="row"><span class="lbl"></span><span class="bign">'+disp(d(g.c))+'</span><span class="u">'+U+'</span></div>'+
+      '<div class="row"><span class="lbl">Front</span><span class="sm">'+disp(d(g.f))+'</span></div>'+
     '</div>'+
     (from ? '' : '<div class="hint">Drag the ring to measure</div>');
 }

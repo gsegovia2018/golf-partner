@@ -65,6 +65,20 @@ export const DRIVE_DIST_LABELS = {
   '210-240': '210-240', '240+': '240+',
 };
 
+// Yard-equivalent display labels for the meter-defined buckets (storage keys
+// never change). Rounded to friendly 5s.
+export const DRIVE_DIST_LABELS_YD = {
+  '0-150': '<165', '150-180': '165-195', '180-210': '195-230',
+  '210-240': '230-260', '240+': '260+',
+};
+export const APPROACH_LABELS_YD = {
+  '0-50': '0-55', '50-100': '55-110', '100-150': '110-165',
+  '150-200': '165-220', '200+': '220+',
+};
+export const FIRST_PUTT_LABELS_YD = {
+  '0-1': '0-1', '1-2': '1-2', '2-3': '2-3', '3-6': '3-7', '6+': '7+',
+};
+
 // Where a missed drive finished. Fairway hits need no lie — the direction
 // chip already says fairway; the engine derives rough for unset misses.
 export const DRIVE_MISS_LIES = ['rough', 'sand', 'trouble'];

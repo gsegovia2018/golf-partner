@@ -8,6 +8,7 @@ import {
 } from '../../lib/geo';
 import { anchorFor } from '../../lib/flyoverModel';
 import { courseKeyFor } from '../../store/tileCache';
+import { getAppSettings } from '../../store/settingsStore';
 import { HoleMapView } from './HoleMapView';
 
 // Full-screen interactive satellite flyover of one hole (Leaflet + Esri tiles,
@@ -42,6 +43,7 @@ export function HoleFlyover({
     hazards: feat.hazards || [],
     player: position || null,
     anchor: anchorInfo,
+    units: getAppSettings().units,
   } : null), [feat, courseName, holeNumber, position, anchorInfo]);
 
   // Swipe-down on the grabber/header dismisses; the map owns its own gestures.
