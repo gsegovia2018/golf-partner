@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useState, useSyncExternalStore } from 'react';
 import {
   ActivityIndicator, Alert, ScrollView, StyleSheet,
   Text, TextInput, TouchableOpacity, View,
@@ -11,6 +11,12 @@ import { fetchCourses, updateCourseFromEditor, upsertCourse } from '../store/lib
 import { propagateCourseToTournaments } from '../store/tournamentStore';
 import TeesEditor from '../components/TeesEditor';
 import { canSaveCourse } from '../lib/courseLibrary';
+import {
+  prefetchCourseTiles, getPrefetchState, subscribePrefetch,
+  deleteBucket, courseKeyFor, estimateTileBytes, PREFETCH_ZOOMS,
+} from '../store/tileCache';
+import { findCourseGeometry } from '../lib/geo';
+import { holeBbox, tilesForBbox } from '../lib/tileMath';
 
 function defaultHoles() {
   return Array.from({ length: 18 }, (_, i) => ({ number: i + 1, par: 4, strokeIndex: i + 1 }));
@@ -59,6 +65,38 @@ export default function CourseLibraryDetailScreen({ navigation, route }) {
   useEffect(() => {
     navigation.setOptions({ title: name || initialName || 'Course' });
   }, [navigation, name, initialName]);
+
+  // Offline map: visible only for courses with per-hole ('holes'-mode) mapped
+  // geometry — the satellite tile prefetch needs a bbox per hole.
+  const prefetch = useSyncExternalStore(subscribePrefetch, getPrefetchState);
+  const geometry = findCourseGeometry(name);
+  const tileCount = useMemo(() => {
+    if (!geometry?.holes?.length) return 0;
+    const seen = new Set();
+    for (const h of geometry.holes) {
+      const b = holeBbox({ tee: h.start, greenCenter: h.greenCenter, green: h.green, hazards: h.hazards });
+      if (b) tilesForBbox(b, PREFETCH_ZOOMS).forEach((t) => seen.add(`${t.z}/${t.x}/${t.y}`));
+    }
+    return seen.size;
+  }, [geometry]);
+  const sizeMb = (estimateTileBytes(tileCount) / (1024 * 1024)).toFixed(0);
+  const courseKey = courseKeyFor(name);
+  const mine = prefetch?.courseKey === courseKey;
+  const busy = mine && prefetch.running;
+  // A run only counts as "downloaded" once every tile in it actually
+  // succeeded — a finished-but-partial run (offline mid-download) stays
+  // retryable rather than pretending success.
+  const downloaded = mine && !prefetch.running && prefetch.total > 0 && prefetch.ok === prefetch.total;
+  const finishedIncomplete = mine && !prefetch.running && prefetch.total > 0 && prefetch.ok < prefetch.total;
+  const downloadLabel = busy
+    ? `Downloading ${prefetch.done}/${prefetch.total}`
+    : finishedIncomplete ? 'Retry' : 'Download';
+  const onDownloadTiles = useCallback(() => {
+    prefetchCourseTiles(name, { force: true }).catch(() => {});
+  }, [name]);
+  const onDeleteTiles = useCallback(() => {
+    deleteBucket(courseKey).catch(() => {});
+  }, [courseKey]);
 
   async function handleSave() {
     if (!name.trim()) return;
@@ -217,6 +255,43 @@ export default function CourseLibraryDetailScreen({ navigation, route }) {
           </View>
         </View>
 
+        {!!geometry?.holes?.length && (
+          <>
+            <Text style={s.sectionTitle}>Offline map</Text>
+            <View style={[s.tableCard, s.offlineMapCard]}>
+              <View style={s.offlineMapInfo}>
+                <Text style={s.offlineMapSubtitle}>~{sizeMb} MB satellite imagery</Text>
+                {downloaded && <Text style={s.offlineMapStatus}>Downloaded</Text>}
+                {finishedIncomplete && (
+                  <Text style={s.offlineMapStatusWarn}>
+                    Incomplete — {prefetch.ok}/{prefetch.total} tiles
+                  </Text>
+                )}
+              </View>
+              <View style={s.offlineMapActions}>
+                <TouchableOpacity
+                  style={[s.offlineMapDownloadBtn, busy && s.saveBtnDisabled]}
+                  onPress={onDownloadTiles}
+                  disabled={busy}
+                  activeOpacity={0.7}
+                  accessibilityLabel="Download offline map"
+                >
+                  <Feather name="download" size={13} color={theme.isDark ? theme.accent.primary : theme.text.inverse} style={{ marginRight: 6 }} />
+                  <Text style={s.offlineMapDownloadBtnText}>{downloadLabel}</Text>
+                </TouchableOpacity>
+                <TouchableOpacity
+                  onPress={onDeleteTiles}
+                  activeOpacity={0.7}
+                  style={s.offlineMapDeleteBtn}
+                  accessibilityLabel="Delete offline map"
+                >
+                  <Text style={s.offlineMapDeleteBtnText}>Delete</Text>
+                </TouchableOpacity>
+              </View>
+            </View>
+          </>
+        )}
+
         <TouchableOpacity
           style={[s.saveBtn, (saving || !canSave) && s.saveBtnDisabled]}
           onPress={handleSave}
@@ -299,6 +374,31 @@ const makeStyles = (theme) => StyleSheet.create({
     borderColor: theme.border.default, textAlign: 'center', fontSize: 15,
     fontFamily: 'PlusJakartaSans-SemiBold', padding: 6,
   },
+  offlineMapCard: {
+    padding: 14, marginTop: 4,
+    flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: 12,
+  },
+  offlineMapInfo: { flex: 1 },
+  offlineMapSubtitle: { fontFamily: 'PlusJakartaSans-Medium', color: theme.text.secondary, fontSize: 13 },
+  offlineMapStatus: {
+    fontFamily: 'PlusJakartaSans-SemiBold', color: theme.accent.primary, fontSize: 12, marginTop: 4,
+  },
+  offlineMapStatusWarn: {
+    fontFamily: 'PlusJakartaSans-SemiBold', color: theme.destructive, fontSize: 12, marginTop: 4,
+  },
+  offlineMapActions: { flexDirection: 'row', alignItems: 'center', gap: 10 },
+  offlineMapDownloadBtn: {
+    flexDirection: 'row', alignItems: 'center',
+    backgroundColor: theme.isDark ? theme.accent.light : theme.accent.primary,
+    borderRadius: 10, paddingVertical: 9, paddingHorizontal: 14,
+    borderWidth: theme.isDark ? 1 : 0, borderColor: theme.isDark ? theme.accent.primary + '33' : 'transparent',
+  },
+  offlineMapDownloadBtnText: {
+    fontFamily: 'PlusJakartaSans-Bold',
+    color: theme.isDark ? theme.accent.primary : theme.text.inverse, fontSize: 13,
+  },
+  offlineMapDeleteBtn: { paddingVertical: 9, paddingHorizontal: 6 },
+  offlineMapDeleteBtnText: { fontFamily: 'PlusJakartaSans-SemiBold', color: theme.destructive, fontSize: 13 },
   saveBtn: {
     backgroundColor: theme.isDark ? theme.accent.light : theme.accent.primary,
     borderRadius: 14, padding: 17, alignItems: 'center', marginTop: 24,

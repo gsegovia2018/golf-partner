@@ -3,6 +3,7 @@ import {
   View, Text, TouchableOpacity,
   ScrollView, Modal, Pressable, Platform, Animated,
 } from 'react-native';
+import NetInfo from '@react-native-community/netinfo';
 import { Feather } from '@expo/vector-icons';
 import { useTheme } from '../../theme/ThemeContext';
 import { makeScorecardStyles } from './styles';
@@ -22,6 +23,7 @@ import DiscrepancySheet from '../DiscrepancySheet';
 import ScoreConflictSheet from '../ScoreConflictSheet';
 import { deriveCell } from '../../store/scoreEntries';
 import { getShotDetailCollapsed, setShotDetailCollapsed } from '../../lib/prefs';
+import { prefetchCourseTiles } from '../../store/tileCache';
 
 // Web-only CSS scroll-snap. On native, `pagingEnabled` is handled by the
 // platform. On web, react-native-web 0.21's `pagingEnabled` only sets
@@ -89,6 +91,18 @@ export function HoleView({ round, roundIndex, players, scores, shotDetails, meId
 
   const onLastHole = currentHole >= holeCount;
   const gps = useGpsDistances(round.courseName, currentHole);
+  // Best-effort offline prep: when this round's course has geometry, prefetch
+  // its satellite tiles once per course per session — Wi-Fi only. Failures are
+  // silent; the flyover falls back to vectors.
+  useEffect(() => {
+    if (!gps.available) return undefined;
+    let cancelled = false;
+    NetInfo.fetch().then((state) => {
+      if (cancelled || state.type !== 'wifi') return;
+      prefetchCourseTiles(round.courseName).catch(() => {});
+    });
+    return () => { cancelled = true; };
+  }, [gps.available, round.courseName]);
   const { user } = useAuth();
   // Admin allowlist gates the geometry editor. On the local dev server (__DEV__)
   // allow it without sign-in so geometry can be corrected during development;
