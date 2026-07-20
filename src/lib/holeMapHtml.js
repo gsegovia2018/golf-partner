@@ -28,7 +28,7 @@ export function buildHoleMapHtml(data) {
   html,body{margin:0;height:100%;background:#0a0d10;font-family:ui-sans-serif,-apple-system,"Segoe UI",Roboto,sans-serif}
   #map{position:absolute;inset:0}
   .hud{position:absolute;inset:0;pointer-events:none;z-index:500}
-  .tri{position:absolute;top:12px;right:12px;text-align:right;color:#fff;background:rgba(14,22,28,.72);border-radius:14px;padding:8px 13px 7px}
+  .tri{position:absolute;top:56px;right:12px;text-align:right;color:#fff;background:rgba(14,22,28,.72);border-radius:14px;padding:8px 13px 7px}
   .tri .row{display:flex;align-items:baseline;justify-content:flex-end;gap:6px}
   .tri .sm{font-size:16px;font-weight:800;font-variant-numeric:tabular-nums;color:#e8eef2}
   .tri .bign{font-size:40px;font-weight:800;line-height:1.05;font-variant-numeric:tabular-nums}
@@ -132,8 +132,8 @@ function draw() {
 
   if (hole.mode === 'edit') { drawEdit(); return; }
 
-  if (g.f) add(L.circleMarker(g.f, { radius:6, color:'#fff', weight:2, fillColor:'#ffd166', fillOpacity:1 }));
-  if (g.b) add(L.circleMarker(g.b, { radius:6, color:'#fff', weight:2, fillColor:'#ef8a5b', fillOpacity:1 }));
+  if (g.f) add(L.circleMarker(g.f, { radius:3.5, color:'#fff', weight:1.5, fillColor:'#ffd166', fillOpacity:1 }));
+  if (g.b) add(L.circleMarker(g.b, { radius:3.5, color:'#fff', weight:1.5, fillColor:'#ef8a5b', fillOpacity:1 }));
   if (g.c) add(L.circleMarker(g.c, { radius:5, color:'#3f8f43', weight:2, fillColor:'#fff', fillOpacity:1 }));
   if (hole.tee) add(L.circleMarker(hole.tee, { radius:6, color:'#fff', weight:2, fillColor:'#2f6bff', fillOpacity:1 }));
 
