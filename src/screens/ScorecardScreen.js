@@ -13,7 +13,7 @@ import * as ScreenOrientation from 'expo-screen-orientation';
 
 import { activateKeepAwakeAsync, deactivateKeepAwake } from 'expo-keep-awake';
 
-import { holeComplete } from '../lib/autoAdvance';
+import { autoAdvanceAction } from '../lib/autoAdvance';
 import { getAppSettings, updateAppSettings } from '../store/settingsStore';
 import { useAppSettings } from '../hooks/useAppSettings';
 import {
@@ -60,7 +60,7 @@ import { surfaceableConflicts, deriveCell } from '../store/scoreEntries';
 import { getDeviceAuthorId } from '../store/deviceId';
 import { makeScorecardStyles } from '../components/scorecard/styles';
 import { HoleView } from '../components/scorecard/HoleView';
-import { GridView } from '../components/scorecard/GridView';
+import { GridView, resolveScorecardRows } from '../components/scorecard/GridView';
 import FinishConflictSheet from '../components/scorecard/FinishConflictSheet';
 
 
@@ -1091,18 +1091,32 @@ export default function ScorecardScreen({ navigation, route }) {
   }, [tournament, roundIndex, authorName]);
 
   // Schedule after each score write; a follow-up tap on the same hole resets
-  // the timer so quick +/- adjustments land before the page flips.
+  // the timer so quick +/- adjustments land before the page flips. A write
+  // for a hole other than the one on screen (a Grid-view edit elsewhere, or
+  // a synced remote write) must NOT touch a countdown already pending for
+  // the viewed hole — see autoAdvanceAction's 'ignore' case.
   const maybeAutoAdvance = useCallback((nextScores, holeNumber) => {
+    // Scramble modes store scores under the team captain only; rowPlayers
+    // collapses to those captain-keyed team units so holeComplete checks the
+    // rows that actually hold scores (plain `players` would never be "every
+    // player scored" in a scramble round, leaving auto-advance permanently
+    // inert there).
+    const { rowPlayers } = resolveScorecardRows({ round, settings, players, meId });
+    const action = autoAdvanceAction({
+      enabled: getAppSettings().autoAdvanceHole,
+      holeNumber,
+      currentHole: currentHoleRef.current,
+      maxHole: round?.holes?.length ?? 18,
+      scores: nextScores,
+      players: rowPlayers,
+    });
+    if (action === 'ignore') return;
     if (autoAdvanceTimer.current) { clearTimeout(autoAdvanceTimer.current); autoAdvanceTimer.current = null; }
-    if (!getAppSettings().autoAdvanceHole) return;
-    if (holeNumber !== currentHoleRef.current) return;
-    const maxHole = round?.holes?.length ?? 18;
-    if (holeNumber >= maxHole) return;
-    if (!holeComplete(nextScores, players, holeNumber)) return;
+    if (action === 'cancel') return;
     autoAdvanceTimer.current = setTimeout(() => {
       if (currentHoleRef.current === holeNumber) goToNextHoleRef.current();
     }, 1200);
-  }, [round, players]);
+  }, [round, players, settings, meId]);
 
   const setScore = useCallback((playerId, holeNumber, value) => {
     if (!official && viewOnly) return;

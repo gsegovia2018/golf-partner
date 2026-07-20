@@ -72,7 +72,10 @@ jest.mock('expo-screen-orientation', () => ({
 }));
 
 jest.mock('../../components/scorecard/HoleView', () => ({ HoleView: () => null }));
-jest.mock('../../components/scorecard/GridView', () => ({ GridView: () => null }));
+jest.mock('../../components/scorecard/GridView', () => ({
+  ...jest.requireActual('../../components/scorecard/GridView'),
+  GridView: () => null,
+}));
 jest.mock('../../components/MediaLightbox', () => () => null);
 jest.mock('../../components/AttachMediaSheet', () => () => null);
 jest.mock('../../components/CaptureMenuSheet', () => () => null);

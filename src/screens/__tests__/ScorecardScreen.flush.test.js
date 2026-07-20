@@ -88,6 +88,7 @@ jest.mock('../../components/scorecard/HoleView', () => {
 });
 
 jest.mock('../../components/scorecard/GridView', () => ({
+  ...jest.requireActual('../../components/scorecard/GridView'),
   GridView: () => null,
 }));
 
