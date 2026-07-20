@@ -7,19 +7,19 @@ const at = (metersNorth) => [GREEN[0] + metersNorth / 111320, GREEN[1]];
 const TEE = at(400);
 
 describe('anchorFor', () => {
-  it('uses the player when within 700 m of the green', () => {
+  it('uses the player when within 1 km of the green', () => {
     const r = anchorFor({ player: at(250), tee: TEE, greenCenter: GREEN });
     expect(r.source).toBe('gps');
     expect(r.anchor).toEqual(at(250));
     expect(r.playerDistance).toBeCloseTo(250, 0);
   });
 
-  it('700 m exactly still counts as on-course (inclusive)', () => {
+  it('1 km exactly still counts as on-course (inclusive)', () => {
     const r = anchorFor({ player: at(ANCHOR_MAX_GPS_METERS), tee: TEE, greenCenter: GREEN });
     expect(r.source).toBe('gps');
   });
 
-  it('falls back to the tee beyond 700 m', () => {
+  it('falls back to the tee beyond 1 km', () => {
     const r = anchorFor({ player: at(1200), tee: TEE, greenCenter: GREEN });
     expect(r.source).toBe('tee');
     expect(r.anchor).toEqual(TEE);

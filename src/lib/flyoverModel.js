@@ -1,6 +1,6 @@
 import { haversineMeters } from './geo';
 
-export const ANCHOR_MAX_GPS_METERS = 700;
+export const ANCHOR_MAX_GPS_METERS = 1000;
 
 const valid = (p) => Array.isArray(p) && Number.isFinite(p[0]) && Number.isFinite(p[1]);
 
