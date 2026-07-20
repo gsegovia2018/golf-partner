@@ -7,6 +7,7 @@ import { supabase } from '../lib/supabase';
 import { validateNewPassword } from '../lib/passwordReset';
 import { useAuth } from '../context/AuthContext';
 import { useTheme } from '../theme/ThemeContext';
+import { semantic } from '../theme/tokens';
 
 // Shown when AuthContext detects a password-recovery link (web query params
 // or the native `golf://reset-password` deep link) — see AuthContext's
@@ -129,7 +130,7 @@ const makeStyles = (theme) => StyleSheet.create({
   inner: { paddingHorizontal: 24, width: '100%', maxWidth: 460, alignSelf: 'center' },
   logo: {
     fontFamily: 'PlayfairDisplay-Black',
-    fontSize: 42, color: '#ffd700',
+    fontSize: 42, color: semantic.winner.dark,
     letterSpacing: -1, textAlign: 'center', marginBottom: 4,
   },
   tagline: {

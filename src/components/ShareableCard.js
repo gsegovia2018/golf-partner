@@ -3,6 +3,7 @@ import { View, Text, StyleSheet, Platform, Alert } from 'react-native';
 import { captureRef } from 'react-native-view-shot';
 import * as Sharing from 'expo-sharing';
 import { useTheme } from '../theme/ThemeContext';
+import { semantic } from '../theme/tokens';
 
 // Cross-platform themed alert. On web there is no Alert UI, so fall back to
 // window.alert; native uses the OS dialog.
@@ -31,7 +32,7 @@ function cardPalette(theme) {
     sub: 'rgba(255,255,255,0.5)',
     muted: 'rgba(255,255,255,0.5)',
     border: isDark ? 'rgba(79,174,138,0.45)' : 'rgba(255,215,0,0.4)',
-    accent: isDark ? '#4fae8a' : '#ffd700',
+    accent: isDark ? '#4fae8a' : semantic.winner.dark,
   };
 }
 

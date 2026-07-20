@@ -3,6 +3,7 @@ import { View, Text, TouchableOpacity, StyleSheet, ScrollView, Switch } from 're
 import ScreenContainer from '../components/ScreenContainer';
 import { Feather } from '@expo/vector-icons';
 import { useTheme } from '../theme/ThemeContext';
+import { semantic } from '../theme/tokens';
 import { useAuth } from '../context/AuthContext';
 import {
   loadTournament, getTournament, getPlayingHandicap, calcStablefordPoints,
@@ -1244,7 +1245,7 @@ const shareCardStyles = StyleSheet.create({
     borderWidth: 1, borderColor: 'rgba(255,215,0,0.4)', padding: 28,
   },
   brand: {
-    fontFamily: 'PlusJakartaSans-SemiBold', color: '#ffd700',
+    fontFamily: 'PlusJakartaSans-SemiBold', color: semantic.winner.dark,
     fontSize: 11, letterSpacing: 2, textTransform: 'uppercase', marginBottom: 16,
   },
   label: {

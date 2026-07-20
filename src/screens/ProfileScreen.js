@@ -10,6 +10,7 @@ import * as ImagePicker from 'expo-image-picker';
 import * as ImageManipulator from 'expo-image-manipulator';
 
 import { useTheme } from '../theme/ThemeContext';
+import { semantic } from '../theme/tokens';
 import { supabase } from '../lib/supabase';
 import { loadProfile, upsertProfile, uploadAvatar, isUsernameAvailable } from '../store/profileStore';
 import { parseHandicapIndex, normalizeHandicapInput } from '../lib/handicap';
@@ -433,7 +434,7 @@ const makeStyles = (theme) => StyleSheet.create({
     width: 84, height: 84, borderRadius: 42,
     alignItems: 'center', justifyContent: 'center', marginBottom: 10,
   },
-  avatarText: { fontFamily: 'PlusJakartaSans-ExtraBold', fontSize: 26, color: '#ffd700' },
+  avatarText: { fontFamily: 'PlusJakartaSans-ExtraBold', fontSize: 26, color: semantic.winner.dark },
   avatarEditBadge: {
     position: 'absolute', right: -2, bottom: -2,
     width: 26, height: 26, borderRadius: 13,

@@ -18,6 +18,7 @@ import {
 import { mutate } from '../store/mutate';
 import { scoringModeUsesTeams, needsManualTeamSetup } from '../components/scoringModes';
 import { useTheme } from '../theme/ThemeContext';
+import { semantic } from '../theme/tokens';
 import { shouldHandleStoreChange } from '../lib/navigationFocus';
 
 export default function NextRoundScreen({ navigation, route }) {
@@ -560,7 +561,7 @@ function makeStyles(theme) {
     countdownNum: {
       fontSize: 140,
       fontFamily: 'PlayfairDisplay-Black',
-      color: '#ffd700',
+      color: theme.isDark ? semantic.winner.dark : semantic.winner.light,
     },
     countdownTapTarget: {
       alignItems: 'center',

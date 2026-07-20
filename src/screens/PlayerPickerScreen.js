@@ -10,6 +10,7 @@ import { Feather } from '@expo/vector-icons';
 import { v4 as uuidv4 } from 'uuid';
 
 import { useTheme } from '../theme/ThemeContext';
+import { semantic } from '../theme/tokens';
 import { fetchMyPlayers } from '../store/libraryStore';
 import { loadAllTournaments, rosterCap } from '../store/tournamentStore';
 import { setPendingPlayers } from '../lib/selectionBridge';
@@ -379,7 +380,7 @@ const makeStyles = (theme) => StyleSheet.create({
   },
   pickerAvatarImg: { width: '100%', height: '100%' },
   pickerAvatarText: {
-    fontFamily: 'PlusJakartaSans-ExtraBold', color: '#ffd700', fontSize: 13,
+    fontFamily: 'PlusJakartaSans-ExtraBold', color: semantic.winner.dark, fontSize: 13,
   },
   playerName: {
     color: theme.text.primary,

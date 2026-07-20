@@ -1,6 +1,7 @@
 import React, { useMemo } from 'react';
 import { StyleSheet, Text, View } from 'react-native';
 import { useTheme } from '../theme/ThemeContext';
+import { semantic } from '../theme/tokens';
 import { roundTotals } from '../store/tournamentStore';
 import { isScrambleMode, scrambleRoundTally } from '../store/scoring';
 import { playersMeFirst } from '../lib/playerOrder';
@@ -170,7 +171,7 @@ const makeStyles = (t) => StyleSheet.create({
   },
   gamePlayerCardLeader: {
     backgroundColor: t.isDark ? 'rgba(255,215,0,0.06)' : '#fffaeb',
-    borderColor: '#ffd700' + '66',
+    borderColor: semantic.winner.dark + '66',
   },
   gamePlayerHeader: {
     flexDirection: 'row',

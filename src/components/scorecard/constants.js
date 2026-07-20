@@ -1,6 +1,8 @@
 // Shared constants for the scorecard module: shot-detail schema, driver and
 // distance-bucket option sets, and birdie/eagle celebration tiers.
 
+import { semantic } from '../../theme/tokens';
+
 // One per-hole shot-detail record. Distance buckets use the metre ranges in
 // FIRST_PUTT_BUCKETS / APPROACH_BUCKETS.
 export const DEFAULT_SHOT = {
@@ -96,7 +98,7 @@ export const CELEBRATION_TIERS = {
   },
   EAGLE: {
     eyebrow: 'AN EAGLE',
-    accent: '#ffd700', // Augusta gold
+    accent: semantic.winner.dark, // Augusta gold
     glow: 'rgba(255,215,0,0.45)',
     icon: 'award',
   },
@@ -108,7 +110,7 @@ export const CELEBRATION_TIERS = {
   },
   'HOLE IN ONE': {
     eyebrow: 'A HOLE IN ONE',
-    accent: '#ffd700',
+    accent: semantic.winner.dark,
     glow: 'rgba(255,215,0,0.65)',
     icon: 'target',
   },

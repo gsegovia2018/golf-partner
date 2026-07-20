@@ -1,4 +1,5 @@
 import { StyleSheet } from 'react-native';
+import { semantic } from '../../theme/tokens';
 
 // Shared StyleSheet for the scorecard screen and the scorecard/* components.
 export function makeScorecardStyles(theme) {
@@ -426,7 +427,7 @@ export function makeScorecardStyles(theme) {
       marginBottom: 8,
     },
     winnerBadgeText: {
-      color: theme.isDark ? '#ffd700' : '#8a6d00',
+      color: theme.isDark ? semantic.winner.dark : '#8a6d00',
       fontSize: 10,
       letterSpacing: 1.5,
       fontFamily: 'PlusJakartaSans-ExtraBold',

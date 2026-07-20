@@ -4,6 +4,7 @@ import {
 } from 'react-native';
 import { Feather } from '@expo/vector-icons';
 import { useTheme } from '../../theme/ThemeContext';
+import { semantic } from '../../theme/tokens';
 import { getScoringMode } from '../scoringModes';
 
 function Avatar({ item, theme }) {
@@ -344,7 +345,7 @@ const styles = StyleSheet.create({
   avatarImage: { width: '100%', height: '100%' },
   avatarText: {
     fontFamily: 'PlusJakartaSans-ExtraBold',
-    color: '#ffd700',
+    color: semantic.winner.dark,
     fontSize: 14,
   },
 });
