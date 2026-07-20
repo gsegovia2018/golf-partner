@@ -12,6 +12,7 @@ jest.mock('../../../theme/ThemeContext', () => ({
 const gpsBase = (over = {}, dist = {}) => ({
   available: true,
   accuracy: 8,
+  source: 'gps',
   position: [38.5577, -0.1491],
   distances: {
     front: 312.4, center: 326.2, back: 339.1, pin: null, kind: 'hole',
@@ -77,6 +78,35 @@ describe('HoleDistanceBlock', () => {
   it('fires onPress from every state (block is the map entry)', () => {
     const onPress = jest.fn();
     const { getByLabelText } = render(<HoleDistanceBlock gps={gpsBase()} onPress={onPress} />);
+    fireEvent.press(getByLabelText('Open hole map'));
+    expect(onPress).toHaveBeenCalledTimes(1);
+  });
+
+  it('renders a FROM TEE block when the source is the tee', () => {
+    const gps = gpsBase({ source: 'tee', accuracy: null, position: null });
+    const { getByText, queryByText } = render(<HoleDistanceBlock gps={gps} onPress={() => {}} />);
+    getByText('FROM TEE');
+    getByText('326');
+    getByText(/F 312\s+B 339/);
+    expect(queryByText(/±/)).toBeNull();
+    expect(queryByText('Getting GPS fix')).toBeNull();
+  });
+
+  it('FROM TEE shows hazards but never the off-course line', () => {
+    const gps = gpsBase(
+      { source: 'tee', accuracy: null, position: null },
+      { center: 4620, hazards: [{ kind: 'water', reach: 180.2, carry: 210.6 }] },
+    );
+    const { getByText, queryByText } = render(<HoleDistanceBlock gps={gps} onPress={() => {}} />);
+    getByText('Water 180–211');
+    getByText('4620');
+    expect(queryByText(/Off course/)).toBeNull();
+  });
+
+  it('FROM TEE block is still the map entry point', () => {
+    const onPress = jest.fn();
+    const gps = gpsBase({ source: 'tee', accuracy: null, position: null });
+    const { getByLabelText } = render(<HoleDistanceBlock gps={gps} onPress={onPress} />);
     fireEvent.press(getByLabelText('Open hole map'));
     expect(onPress).toHaveBeenCalledTimes(1);
   });

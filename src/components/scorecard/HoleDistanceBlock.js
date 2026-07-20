@@ -7,19 +7,20 @@ function fmt(meters) {
   return meters == null ? '—' : `${Math.round(meters)}`;
 }
 
-// Right-hand side of the hole header: live GPS distances to the green, and
-// the tap target that opens the hole map sheet. Replaces the old standalone
-// distance strip. Renders nothing when the course has no geometry or
-// location is denied — the header then looks exactly like the pre-GPS layout.
+// Right-hand side of the hole header: live GPS distances to the green, or —
+// when the player isn't on the hole (or has no fix) — the same distances
+// measured from the tee, and the tap target that opens the hole map sheet.
+// Renders nothing when the course has no geometry, or when location is
+// denied and there's no tee to fall back to.
 export function HoleDistanceBlock({ gps, onPress }) {
   const { theme } = useTheme();
   const s = useMemo(() => makeStyles(theme), [theme]);
   if (!gps?.available) return null;
 
-  const { distances, accuracy } = gps;
+  const { distances, accuracy, source } = gps;
   // Same thresholds as the old strip: >3km = not on the course; >25m = the
   // fix is too loose to trust to the meter.
-  const offCourse = distances && distances.center > 3000;
+  const offCourse = source !== 'tee' && distances && distances.center > 3000;
   const poorFix = accuracy != null && accuracy > 25;
   // One entry per hazard kind — the nearest ahead is the one in play.
   const bunker = distances?.hazards?.find((h) => h.kind === 'bunker');
@@ -28,6 +29,21 @@ export function HoleDistanceBlock({ gps, onPress }) {
     bunker && `Bunker ${fmt(bunker.reach)}–${fmt(bunker.carry)}`,
     water && `Water ${fmt(water.reach)}–${fmt(water.carry)}`,
   ].filter(Boolean).join(' · ');
+
+  if (source === 'tee' && distances) {
+    return (
+      <Pressable onPress={onPress} hitSlop={10} style={s.block} accessibilityRole="button" accessibilityLabel="Open hole map">
+        <Text style={s.overline}>FROM TEE</Text>
+        <View style={s.heroRow}>
+          <Text style={s.hero}>{fmt(distances.center)}</Text>
+          <Text style={s.unit}>m</Text>
+          <Feather name="chevron-right" size={14} color={theme.text.muted} />
+        </View>
+        <Text style={s.fb}>{`F ${fmt(distances.front)}  B ${fmt(distances.back)}`}</Text>
+        {!!hazardLine && <Text style={s.hzd}>{hazardLine}</Text>}
+      </Pressable>
+    );
+  }
 
   return (
     <Pressable onPress={onPress} hitSlop={10} style={s.block} accessibilityRole="button" accessibilityLabel="Open hole map">
