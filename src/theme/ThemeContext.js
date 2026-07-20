@@ -1,4 +1,5 @@
 import React, { createContext, useContext, useState, useEffect } from 'react';
+import { useColorScheme } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { light, dark, semantic, typography, fonts, spacing, radius } from './tokens';
 
@@ -7,21 +8,26 @@ const STORAGE_KEY = '@golf_theme_mode';
 const ThemeContext = createContext();
 
 export function ThemeProvider({ children }) {
-  const [mode, setMode] = useState('light');
+  const [pref, setPref] = useState('system'); // 'light' | 'dark' | 'system'
   const [ready, setReady] = useState(false);
+  const systemScheme = useColorScheme();
 
   useEffect(() => {
     AsyncStorage.getItem(STORAGE_KEY).then(saved => {
-      if (saved === 'light' || saved === 'dark') setMode(saved);
+      if (saved === 'light' || saved === 'dark' || saved === 'system') setPref(saved);
       setReady(true);
     });
   }, []);
 
-  const toggle = () => {
-    const next = mode === 'light' ? 'dark' : 'light';
-    setMode(next);
+  const mode = pref === 'system' ? (systemScheme === 'dark' ? 'dark' : 'light') : pref;
+
+  const setThemeMode = (next) => {
+    if (next !== 'light' && next !== 'dark' && next !== 'system') return;
+    setPref(next);
     AsyncStorage.setItem(STORAGE_KEY, next);
   };
+
+  const toggle = () => setThemeMode(mode === 'light' ? 'dark' : 'light');
 
   const colors = mode === 'light' ? light : dark;
   const destructive = mode === 'light' ? semantic.destructive.light : semantic.destructive.dark;
@@ -48,7 +54,7 @@ export function ThemeProvider({ children }) {
   };
 
   return (
-    <ThemeContext.Provider value={{ theme, mode, toggle, ready }}>
+    <ThemeContext.Provider value={{ theme, mode, themePref: pref, setThemeMode, toggle, ready }}>
       {children}
     </ThemeContext.Provider>
   );
