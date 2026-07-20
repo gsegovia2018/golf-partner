@@ -59,7 +59,7 @@ function bearing(a, b){
 // map's pixel origin, which throws "Set map center and zoom first" if the map
 // has no view yet — so initView's fitBounds crashed before any tiles/markers
 // drew. A default view makes the map "loaded" so fitBounds works.
-const map = L.map('map', { zoomControl: true, attributionControl: false, rotate: true, touchRotate: false, bearing: 0, center: [40.45, -3.75], zoom: 15 });
+const map = L.map('map', { zoomControl: true, zoomSnap: 0.25, attributionControl: false, rotate: true, touchRotate: false, bearing: 0, center: [40.45, -3.75], zoom: 15 });
 L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}', { maxZoom: 20, maxNativeZoom: 19 }).addTo(map);
 
 let hole = DATA;
@@ -172,16 +172,22 @@ function drawEdit(){
   map.on('click', (e) => { post({ type:'point', field: activeField, pos:[e.latlng.lat, e.latlng.lng] }); });
 }
 
-// Initial view: fit to hole features (+ player if on-course), else zoom green.
+// Initial view: tee at the bottom, green at the top, hole filling the
+// viewport. fitBounds misframes under leaflet-rotate, so compute the view
+// directly: rotate to the tee->green bearing, center the midpoint, zoom from
+// hole length vs viewport height (~45% padding).
 function initView(){
   const g = fcb();
   const c = valid(g.c) ? g.c : null;
-  // Tee set → rotate so the hole is vertical (tee bottom, green top) and frame
-  // tee→green. Else on-course → frame you→green. Else centre on the green.
   if (map.setBearing) map.setBearing(0);
   if (valid(hole.tee) && c) {
+    const mid = [(hole.tee[0]+c[0])/2, (hole.tee[1]+c[1])/2];
+    const len = Math.max(dist(hole.tee, c), 60);
+    const hPx = Math.max(document.getElementById('map').clientHeight, 320);
+    const mpp = (len * 1.45) / hPx;
+    const zoom = Math.min(Math.log2(156543.03392 * Math.cos(mid[0]*Math.PI/180) / mpp), 19.5);
     if (map.setBearing) map.setBearing(bearing(hole.tee, c));
-    map.fitBounds(L.latLngBounds([hole.tee, c]).pad(0.22));
+    map.setView(mid, zoom);
   } else if (onCourse() && c && valid(player)) {
     map.fitBounds(L.latLngBounds([player, c]).pad(0.3));
   } else if (c) {
