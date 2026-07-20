@@ -162,7 +162,7 @@ const base = {
 describe('buildHoleMapHtml', () => {
   it('embeds the anchor in the page data', () => {
     const html = buildHoleMapHtml(base);
-    expect(html).toContain('"source": "tee"');
+    expect(html).toContain('"source":"tee"'); // JSON.stringify is compact — no space
   });
   it('has the on-line distance chip machinery and no legacy layup chip', () => {
     const html = buildHoleMapHtml(base);
