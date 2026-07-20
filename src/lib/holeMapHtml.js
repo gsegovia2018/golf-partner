@@ -15,7 +15,9 @@
 import { LEAFLET_CSS, LEAFLET_JS, LEAFLET_ROTATE_JS } from './vendor/leafletBundle';
 
 export function buildHoleMapHtml(data) {
-  const json = JSON.stringify(data);
+  // Escape '<' so a course name containing "</script>" can't terminate the inline
+  // script block (same-origin iframe on web); '<' inside a JSON string round-trips fine.
+  const json = JSON.stringify(data).replace(/</g, '\\u003c');
   return `<!doctype html><html><head>
 <meta charset="utf-8"/>
 <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no"/>
@@ -155,6 +157,7 @@ function redrawLines(from, g, cc){
     mk(L.polyline([target,cc],{color:'#fff',weight:3,dashArray:'3 8'}));
     mk(chipMk(target, cc, dist(target, cc)));
   }
+  if (!from) hud(from, g);   // no anchor: HUD measures from the ring — keep it live
 }
 function ringIcon(){ return L.divIcon({ className:'', html:'<div style="width:34px;height:34px;border:4px solid #fff;border-radius:50%;box-shadow:0 0 0 1px rgba(0,0,0,.4)"></div>', iconSize:[34,34], iconAnchor:[17,17] }); }
 
