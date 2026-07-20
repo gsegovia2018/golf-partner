@@ -1495,7 +1495,7 @@ export default function ScorecardScreen({ navigation, route }) {
     return (
       <ScreenContainer style={s.container} edges={['top', 'bottom']}>
         <View style={s.header}>
-          <TouchableOpacity onPress={goBack} style={s.backBtn}>
+          <TouchableOpacity onPress={goBack} style={s.headerBtn}>
             <Feather name="chevron-left" size={22} color={theme.accent.primary} />
           </TouchableOpacity>
           <Text style={s.headerTitle}>Scorecard</Text>
@@ -1521,7 +1521,7 @@ export default function ScorecardScreen({ navigation, route }) {
     return (
       <ScreenContainer style={s.container} edges={['top', 'bottom']}>
         <View style={s.header}>
-          <TouchableOpacity onPress={goBack} style={s.backBtn}>
+          <TouchableOpacity onPress={goBack} style={s.headerBtn}>
             <Feather name="chevron-left" size={22} color={theme.accent.primary} />
           </TouchableOpacity>
           <Text style={s.headerTitle}>Scorecard</Text>
@@ -1552,13 +1552,14 @@ export default function ScorecardScreen({ navigation, route }) {
     <ScreenContainer style={s.container} edges={['top', 'bottom']}>
       {/* Header with compact scorecard view switch. */}
       <View style={s.header}>
-        <TouchableOpacity onPress={goBack} style={s.backBtn}>
+        <TouchableOpacity onPress={goBack} style={s.headerBtn}>
           <Feather name="chevron-left" size={22} color={theme.accent.primary} />
         </TouchableOpacity>
         <Text style={s.headerTitle}>Scorecard</Text>
         <View style={s.headerRight}>
           <Pressable
             onPress={() => setSyncSheetOpen(true)}
+            style={s.headerBtn}
             hitSlop={8}
             accessibilityRole="button"
             accessibilityLabel="Sync status"
@@ -1578,7 +1579,7 @@ export default function ScorecardScreen({ navigation, route }) {
           )}
           <TouchableOpacity
             onPress={() => setView(nextView)}
-            style={s.viewSwitchBtn}
+            style={s.headerBtn}
             accessibilityRole="button"
             accessibilityLabel={viewSwitchLabel}
           >
@@ -1587,7 +1588,7 @@ export default function ScorecardScreen({ navigation, route }) {
           {!appSettings.noSpoilers && (
             <TouchableOpacity
               onPress={toggleRunning}
-              style={s.cameraBtn}
+              style={s.headerBtn}
               accessibilityLabel={showRunning ? 'Hide running score' : 'Show running score'}
             >
               <Feather name={showRunning ? 'eye-off' : 'eye'} size={18} color={theme.accent.primary} />
@@ -1596,7 +1597,7 @@ export default function ScorecardScreen({ navigation, route }) {
           {official && !appSettings.noSpoilers && (
             <TouchableOpacity
               onPress={() => setOfficialLeaderboardOpen(true)}
-              style={s.cameraBtn}
+              style={s.headerBtn}
               accessibilityLabel="View official leaderboard"
             >
               <Feather name="award" size={20} color={theme.accent.primary} />
@@ -1605,7 +1606,7 @@ export default function ScorecardScreen({ navigation, route }) {
           {showNotesControls && (
             <TouchableOpacity
               onPress={() => setNotesOpen(true)}
-              style={s.notesHeaderBtn}
+              style={s.headerBtn}
               accessibilityRole="button"
               accessibilityLabel={hasCurrentNotes ? 'Open notes' : 'Add notes'}
             >
@@ -1615,7 +1616,7 @@ export default function ScorecardScreen({ navigation, route }) {
           )}
           <TouchableOpacity
             onPress={openCapturePicker}
-            style={s.cameraBtn}
+            style={s.headerBtn}
             accessibilityLabel="Attach a memory"
           >
             <Feather name="camera" size={20} color={theme.accent.primary} />

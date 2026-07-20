@@ -37,9 +37,9 @@ export function HoleDistanceBlock({ gps, onPress }) {
         <View style={s.heroRow}>
           <Text style={s.hero}>{fmt(distances.center)}</Text>
           <Text style={s.unit}>{unitSuffix(units)}</Text>
-          <Feather name="chevron-right" size={14} color={theme.text.muted} />
         </View>
         <Text style={s.fb}>{`F ${fmt(distances.front)}  B ${fmt(distances.back)}`}</Text>
+        <Text style={s.mapHint}>TAP FOR MAP</Text>
         {!!hazardLine && <Text style={s.hzd}>{hazardLine}</Text>}
       </Pressable>
     );
@@ -56,9 +56,9 @@ export function HoleDistanceBlock({ gps, onPress }) {
             <Feather name="navigation" size={13} color={theme.accent.primary} />
             <Text style={s.hero}>{fmt(distances.center)}</Text>
             <Text style={s.unit}>{unitSuffix(units)}</Text>
-            <Feather name="chevron-right" size={14} color={theme.text.muted} />
           </View>
           <Text style={s.fb}>{`F ${fmt(distances.front)}  B ${fmt(distances.back)}`}</Text>
+          <Text style={s.mapHint}>TAP FOR MAP</Text>
           {poorFix && <Text style={s.caption}>{`±${fmt(accuracy)}${unitSuffix(units)}`}</Text>}
           {!!hazardLine && <Text style={s.hzd}>{hazardLine}</Text>}
         </>
@@ -77,12 +77,29 @@ export function HoleDistanceBlock({ gps, onPress }) {
 
 function makeStyles(theme) {
   return StyleSheet.create({
-    block: { alignItems: 'flex-end', gap: 1 },
+    block: {
+      alignItems: 'center',
+      gap: 2,
+      backgroundColor: theme.bg.card,
+      borderWidth: 1,
+      borderColor: theme.isDark ? theme.glass?.border ?? theme.border.default : theme.border.default,
+      borderRadius: 12,
+      paddingVertical: 10,
+      paddingHorizontal: 14,
+      minWidth: 128,
+    },
     overline: {
       color: theme.text.muted,
       fontSize: 9,
       fontFamily: 'PlusJakartaSans-Bold',
       letterSpacing: 1.2,
+    },
+    mapHint: {
+      color: theme.text.muted,
+      fontSize: 9,
+      fontFamily: 'PlusJakartaSans-Bold',
+      letterSpacing: 1.2,
+      marginTop: 2,
     },
     heroRow: { flexDirection: 'row', alignItems: 'center', gap: 3 },
     hero: {
