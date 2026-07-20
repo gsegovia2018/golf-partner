@@ -278,7 +278,6 @@ export function makeScorecardStyles(theme) {
       fontSize: 44,
       fontFamily: 'PlayfairDisplay-Black',
       lineHeight: 48,
-      letterSpacing: -1,
     },
     holeMetaInline: { flexDirection: 'row', gap: 16, marginLeft: 14, alignSelf: 'flex-end', paddingBottom: 6 },
     holeMetaItem: { alignItems: 'center', gap: 4 },

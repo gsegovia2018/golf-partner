@@ -198,7 +198,7 @@ export default function HandicapTab({
 function makeStyles(theme) {
   return StyleSheet.create({
     wrap: { gap: theme.spacing.lg },
-    hero: { ...theme.typography.display, color: theme.text.primary, textAlign: 'center' },
+    hero: { fontSize: 30, lineHeight: 38, color: theme.text.primary, textAlign: 'center', fontFamily: 'PlayfairDisplay-Black' },
     heroSub: { ...theme.typography.caption, color: theme.text.muted, textAlign: 'center' },
     note: { ...theme.typography.caption, color: theme.text.muted, marginTop: theme.spacing.sm },
     emptyTitle: { ...theme.typography.subhead, color: theme.text.primary },
