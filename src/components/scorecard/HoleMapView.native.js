@@ -5,7 +5,7 @@ import { buildHoleMapHtml } from '../../lib/holeMapHtml';
 // Native host: renders the Leaflet map page in a WebView. Same contract as the
 // web host — rebuilds only on hole/mode identity change; live updates are
 // injected as postMessage into the page so it never reloads.
-export function HoleMapView({ data, player, activeField, onPoint, style }) {
+export function HoleMapView({ data, player, anchor, activeField, onPoint, style }) {
   const ref = useRef(null);
   // eslint-disable-next-line react-hooks/exhaustive-deps
   const html = useMemo(() => buildHoleMapHtml(data), [data.holeKey]);
@@ -15,7 +15,7 @@ export function HoleMapView({ data, player, activeField, onPoint, style }) {
     ref.current?.injectJavaScript(`window.postMessage(${str}, '*'); true;`);
   };
 
-  useEffect(() => { send({ type: 'player', pos: player || null }); }, [player]);
+  useEffect(() => { send({ type: 'player', pos: player || null, anchor: anchor ?? null }); }, [player, anchor]);
   useEffect(() => { if (activeField) send({ type: 'activeField', field: activeField }); }, [activeField]);
   useEffect(() => { if (data.updateHole) send({ type: 'hole', hole: data }); }, [data]);
 

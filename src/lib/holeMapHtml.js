@@ -30,8 +30,8 @@ export function buildHoleMapHtml(data) {
   .card .n{font-size:22px;font-weight:800;font-variant-numeric:tabular-nums}
   .card .u{font-size:11px;color:#9fb0a4;font-weight:600}
   .front{top:42%}.back{top:55%}
-  .chip{position:absolute;bottom:16px;left:50%;transform:translateX(-50%);background:rgba(232,196,0,.94);color:#3a2e00;font-weight:800;font-size:14px;padding:7px 15px;border-radius:999px;font-variant-numeric:tabular-nums;white-space:nowrap}
   .hint{position:absolute;bottom:16px;left:50%;transform:translateX(-50%);background:rgba(14,22,28,.85);color:#fff;font-weight:600;font-size:13px;padding:7px 14px;border-radius:999px}
+  .dchip{background:rgba(14,22,28,.88);color:#fff;font-weight:800;font-size:13px;padding:4px 11px;border-radius:999px;font-variant-numeric:tabular-nums;white-space:nowrap;border:1px solid rgba(255,255,255,.25);transform:translate(-50%,-50%);display:inline-block}
   .leaflet-container{background:#0a0d10}
 </style></head>
 <body>
@@ -64,6 +64,7 @@ L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/
 
 let hole = DATA;
 let player = DATA.player || null;
+let anchor = DATA.anchor || { pos: null, source: null, playerDistance: null };
 let activeField = DATA.activeField || 'center';
 const layers = [];
 const clear = () => { layers.forEach(l => map.removeLayer(l)); layers.length = 0; };
@@ -73,16 +74,17 @@ const add = (l) => { layers.push(l.addTo(map)); return l; };
 function fcb() {
   const c = hole.greenCenter || (hole.green ? centroid(hole.green) : null);
   let f = hole.greenFront || null, b = hole.greenBack || null;
-  if ((!f || !b) && hole.green && player) {
+  const src = (anchor && valid(anchor.pos)) ? anchor.pos : (valid(target) ? target : null);
+  if ((!f || !b) && hole.green && src) {
     let nf = null, nb = null, best = 1e18, worst = -1;
-    for (const v of hole.green) { const d = dist(player, v); if (d < best){best=d; nf=v;} if (d > worst){worst=d; nb=v;} }
+    for (const v of hole.green) { const d = dist(src, v); if (d < best){best=d; nf=v;} if (d > worst){worst=d; nb=v;} }
     f = f || nf; b = b || nb;
   }
   return { f, c, b };
 }
 function centroid(poly){let a=0,b=0;for(const p of poly){a+=p[0];b+=p[1];}return [a/poly.length,b/poly.length];}
 
-const onCourse = () => { const {c}=fcb(); return valid(player) && valid(c) && dist(player,c) < 2000; };
+const onCourse = () => anchor && anchor.source === 'gps';
 
 let target = null; // draggable aim / measure marker latlng
 
@@ -100,31 +102,34 @@ function draw() {
   if (g.c) add(L.circleMarker(g.c, { radius:5, color:'#3f8f43', weight:2, fillColor:'#fff', fillOpacity:1 }));
   if (hole.tee) add(L.circleMarker(hole.tee, { radius:6, color:'#fff', weight:2, fillColor:'#2f6bff', fillOpacity:1 }));
 
-  const from = onCourse() ? player : null;
+  const from = valid(anchor.pos) ? anchor.pos : null;
   const cc = valid(g.c) ? g.c : [map.getCenter().lat, map.getCenter().lng];
   if (!valid(target)) target = from ? [(from[0]+cc[0])/2,(from[1]+cc[1])/2] : cc;
-  // lines
-  if (from) {
-    add(L.polyline([from, target], { color:'#fff', weight:4 }));
-    if (valid(cc)) add(L.polyline([target, cc], { color:'#fff', weight:3, dashArray:'3 8' }));
-    add(L.circleMarker(from, { radius:8, color:'#fff', weight:3, fillColor:'#2f6bff', fillOpacity:1 }));
-  } else if (valid(cc)) {
-    add(L.polyline([target, cc], { color:'#fff', weight:3, dashArray:'3 8' }));
-  }
-  // draggable aim/measure marker
-  const aim = add(L.marker(target, { draggable:true, icon: ringIcon() }));
+  if (onCourse()) add(L.circleMarker(from, { radius:8, color:'#fff', weight:3, fillColor:'#2f6bff', fillOpacity:1 }));
+  const aim = add(L.marker(target, { draggable:true, icon: ringIcon(), zIndexOffset:1000 }));
   aim.on('drag', e => { target = [e.latlng.lat, e.latlng.lng]; redrawLines(from, g, cc); });
-  aim.on('dragend', () => hud(from, g));
+  map.off('click');
+  map.on('click', (e) => { target = [e.latlng.lat, e.latlng.lng]; aim.setLatLng(e.latlng); redrawLines(from, g, cc); });
+  redrawLines(from, g, cc);
   hud(from, g);
 }
 
 let lineLayers = [];
+function chipMk(a, b, d){
+  const mid = [(a[0]+b[0])/2, (a[1]+b[1])/2];
+  return L.marker(mid, { interactive:false, icon: L.divIcon({ className:'', html:'<div class="dchip">'+round(d)+' m</div>', iconSize:[0,0] }) });
+}
 function redrawLines(from, g, cc){
   lineLayers.forEach(l=>map.removeLayer(l)); lineLayers=[];
   const mk=(l)=>{lineLayers.push(l.addTo(map));};
-  if (from){ mk(L.polyline([from,target],{color:'#fff',weight:4})); if(valid(cc)) mk(L.polyline([target,cc],{color:'#fff',weight:3,dashArray:'3 8'})); }
-  else if (valid(cc)){ mk(L.polyline([target,cc],{color:'#fff',weight:3,dashArray:'3 8'})); }
-  hud(from,g);
+  if (from){
+    mk(L.polyline([from,target],{color:'#fff',weight:4}));
+    mk(chipMk(from, target, dist(from, target)));
+    if(valid(cc)){ mk(L.polyline([target,cc],{color:'#fff',weight:3,dashArray:'3 8'})); mk(chipMk(target, cc, dist(target, cc))); }
+  } else if (valid(cc)) {
+    mk(L.polyline([target,cc],{color:'#fff',weight:3,dashArray:'3 8'}));
+    mk(chipMk(target, cc, dist(target, cc)));
+  }
 }
 function ringIcon(){ return L.divIcon({ className:'', html:'<div style="width:34px;height:34px;border:4px solid #fff;border-radius:50%;box-shadow:0 0 0 1px rgba(0,0,0,.4)"></div>', iconSize:[34,34], iconAnchor:[17,17] }); }
 
@@ -139,7 +144,7 @@ function hud(from, g){
     '<div class="card front"><span class="n">'+round(d(g.f))+'</span><span class="u">front</span></div>'+
     '<div class="card back"><span class="n">'+round(d(g.b))+'</span><span class="u">back</span></div>'+
     (from
-      ? '<div class="chip">🎯 '+round(layup)+' + '+round(carry)+' m</div>'
+      ? '<div class="hint">Drag the ring or tap anywhere</div>'
       : '<div class="hint">Drag the ring to measure</div>');
 }
 
@@ -188,7 +193,7 @@ function initView(){
 
 window.addEventListener('message', (ev) => {
   let m; try { m = JSON.parse(ev.data); } catch { return; }
-  if (m.type === 'player') { player = m.pos; draw(); }
+  if (m.type === 'player') { player = m.pos; if (m.anchor) anchor = m.anchor; draw(); }
   if (m.type === 'activeField') { activeField = m.field; if (hole.mode==='edit') drawEdit(fcb()); }
   if (m.type === 'hole') { hole = m.hole; draw(); } // redraw markers, keep current pan/zoom
 });
