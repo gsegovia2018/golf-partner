@@ -39,12 +39,22 @@ const listeners = new Set();
 // concurrent local write racing its in-flight loadProfile() and avoid
 // clobbering it with a stale server copy.
 let mutationSeq = 0;
+// The userId hydrateAppSettings last stamped SETTINGS_USER_KEY with (or null
+// if no hydrate has stamped one yet, or the last hydrate signed out). Lets
+// updateAppSettings re-stamp the owner on every write, so a mirror written
+// after hydrate is always owned even if something else clears the key.
+let hydratedUserId = null;
 
 export function getAppSettings() { return current; }
 export function subscribeAppSettings(cb) { listeners.add(cb); return () => listeners.delete(cb); }
 function set(next) { current = next; listeners.forEach((cb) => cb()); }
 
-export function __resetAppSettingsForTests() { current = DEFAULT_APP_SETTINGS; listeners.clear(); mutationSeq = 0; }
+export function __resetAppSettingsForTests() {
+  current = DEFAULT_APP_SETTINGS;
+  listeners.clear();
+  mutationSeq = 0;
+  hydratedUserId = null;
+}
 
 async function pushToServer(snapshot) {
   try {
@@ -62,6 +72,11 @@ export async function updateAppSettings(patch) {
   set(mergeAppSettings(current, patch));
   const snapshot = current;
   await AsyncStorage.setItem(SETTINGS_KEY, JSON.stringify(snapshot));
+  // Cheap idempotent re-stamp: if hydrate has ever established an owner for
+  // this mirror, keep it owned on every write, even if the key was somehow
+  // cleared — an unowned mirror can't be detected as foreign on a later
+  // user-switch hydrate.
+  if (hydratedUserId) await AsyncStorage.setItem(SETTINGS_USER_KEY, hydratedUserId);
   await pushToServer(snapshot);
 }
 
@@ -101,6 +116,7 @@ export async function hydrateAppSettings() {
       await AsyncStorage.removeItem(SETTINGS_KEY);
       await AsyncStorage.removeItem(SETTINGS_DIRTY_KEY);
       await AsyncStorage.removeItem(SETTINGS_USER_KEY);
+      hydratedUserId = null;
       return;
     }
 
@@ -112,15 +128,28 @@ export async function hydrateAppSettings() {
     // treat it as this user's dirty local state or push it into their
     // profile; only adopt what the server already has for them.
     if (storedOwner != null && storedOwner !== profile.userId) {
-      set(DEFAULT_APP_SETTINGS);
+      // Same staleness guard as the same-user branch below: a concurrent
+      // updateAppSettings() that landed while loadProfile() was in flight is
+      // by definition the new user's own action (nothing else could have
+      // written between the switch starting and hydrate finishing) — it
+      // wins over both the reset-to-default and the server adopt.
+      const staleWrite = mutationSeq !== seqBefore;
       await AsyncStorage.removeItem(SETTINGS_KEY);
       await AsyncStorage.removeItem(SETTINGS_DIRTY_KEY);
-      if (Object.keys(server).length > 0) {
-        set(mergeAppSettings(DEFAULT_APP_SETTINGS, server));
+      if (staleWrite) {
+        // The old mirror we just cleared held the winning write's snapshot
+        // too — re-persist `current` (untouched above) so it isn't lost.
         await AsyncStorage.setItem(SETTINGS_KEY, JSON.stringify(current));
+      } else {
+        set(DEFAULT_APP_SETTINGS);
+        if (Object.keys(server).length > 0) {
+          set(mergeAppSettings(DEFAULT_APP_SETTINGS, server));
+          await AsyncStorage.setItem(SETTINGS_KEY, JSON.stringify(current));
+        }
       }
       // Empty server blob: stay on defaults without pushing anything up —
       // the caller (fix scenario) must never push a foreign/default blob.
+      hydratedUserId = profile.userId;
       await AsyncStorage.setItem(SETTINGS_USER_KEY, profile.userId);
       return;
     }
@@ -138,6 +167,7 @@ export async function hydrateAppSettings() {
       set(mergeAppSettings(DEFAULT_APP_SETTINGS, server));
       await AsyncStorage.setItem(SETTINGS_KEY, JSON.stringify(current));
     }
+    hydratedUserId = profile.userId;
     await AsyncStorage.setItem(SETTINGS_USER_KEY, profile.userId);
   } catch { /* offline — local copy stands */ }
 }

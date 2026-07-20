@@ -151,6 +151,36 @@ test('offline hydrate leaves everything intact', async () => {
   expect(await AsyncStorage.getItem(SETTINGS_USER_KEY)).toBe('user-A');
 });
 
+test('updateAppSettings stamps the owner once known', async () => {
+  profileStore.loadProfile.mockResolvedValue({ userId: 'user-A', settings: { units: 'yards' } });
+  profileStore.upsertProfile.mockResolvedValue();
+  await hydrateAppSettings();
+  expect(await AsyncStorage.getItem(SETTINGS_USER_KEY)).toBe('user-A');
+
+  await AsyncStorage.removeItem(SETTINGS_USER_KEY);
+  expect(await AsyncStorage.getItem(SETTINGS_USER_KEY)).toBeNull();
+
+  await updateAppSettings({ haptics: false });
+
+  expect(await AsyncStorage.getItem(SETTINGS_USER_KEY)).toBe('user-A');
+});
+
+test('concurrent update during user-switch hydrate wins', async () => {
+  await AsyncStorage.setItem(SETTINGS_KEY, JSON.stringify({ haptics: true }));
+  await AsyncStorage.setItem(SETTINGS_USER_KEY, 'user-A');
+
+  let resolveProfile;
+  profileStore.loadProfile.mockReturnValue(new Promise((resolve) => { resolveProfile = resolve; }));
+  profileStore.upsertProfile.mockResolvedValue();
+
+  const h = hydrateAppSettings();
+  await updateAppSettings({ haptics: false });
+  resolveProfile({ userId: 'user-B', settings: { units: 'yards' } });
+  await h;
+
+  expect(getAppSettings().haptics).toBe(false);
+});
+
 test('concurrent update during mirror load is not clobbered', async () => {
   await AsyncStorage.setItem(SETTINGS_KEY, JSON.stringify({ haptics: true }));
   profileStore.loadProfile.mockResolvedValue({ userId: 'u1', settings: {} });
