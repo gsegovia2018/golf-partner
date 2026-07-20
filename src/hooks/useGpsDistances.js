@@ -5,20 +5,26 @@ import {
   subscribeCourseGeometry, getCourseGeometryVersion,
 } from '../lib/geo';
 import { resolveScorecardDistances } from '../lib/flyoverModel';
+import { subscribeAppSettings, getAppSettings } from '../store/settingsStore';
 
 // Live GPS distances to the current hole's green, falling back to distances
-// measured from the tee whenever a usable fix isn't in play (player >1 km
-// from the hole, permission denied, or no fix yet) — same anchorFor rule as
-// the flyover map. Returns { available, distances, accuracy, position,
-// source } where `distances` is { front, center, back, pin, kind, hazards }
-// in meters or null, and `source` is 'gps' | 'tee'. `available` is false
-// when there is no geometry, or when location was denied and the hole has no
-// tee to fall back to — callers render nothing in that case.
+// measured from the tee whenever a usable fix isn't in play. Resolution
+// order: (1) the gpsEnabled setting is off — never request permission or
+// start a watch, always resolve as if there were no fix; (2) permission
+// denied — tee, if the hole has one; (3) fix is >1 km from the hole — tee
+// (same anchorFor rule as the flyover map); (4) otherwise — gps. Returns
+// { available, distances, accuracy, position, source } where `distances` is
+// { front, center, back, pin, kind, hazards } in meters or null, and
+// `source` is 'gps' | 'tee'. `available` is false when there is no
+// geometry, or when location was denied/disabled and the hole has no tee to
+// fall back to — callers render nothing in that case.
 export function useGpsDistances(courseName, holeNumber) {
   const geomVersion = useSyncExternalStore(subscribeCourseGeometry, getCourseGeometryVersion);
   // geomVersion bumps when hydration swaps in live geometry — recompute then.
   // eslint-disable-next-line react-hooks/exhaustive-deps
   const geometry = useMemo(() => findCourseGeometry(courseName), [courseName, geomVersion]);
+  const appSettings = useSyncExternalStore(subscribeAppSettings, getAppSettings, getAppSettings);
+  const gpsEnabled = appSettings.gpsEnabled !== false;
   const [denied, setDenied] = useState(false);
   const [fix, setFix] = useState(null); // { pos: [lat, lng], accuracy }
   const lastFixAt = useRef(0);
@@ -29,7 +35,7 @@ export function useGpsDistances(courseName, holeNumber) {
   const hasGeometry = !!geometry;
 
   useEffect(() => {
-    if (!hasGeometry) return undefined;
+    if (!hasGeometry || !gpsEnabled) return undefined;
     let cancelled = false;
     let sub = null;
     let poll = null;
@@ -77,20 +83,25 @@ export function useGpsDistances(courseName, holeNumber) {
       try { sub?.remove?.(); } catch { /* web removeSubscription missing */ }
       if (poll) clearInterval(poll);
     };
-  }, [hasGeometry]);
+  }, [hasGeometry, gpsEnabled]);
 
   const resolved = useMemo(() => {
     if (!geometry) return { distances: null, source: 'gps' };
-    return resolveScorecardDistances({ courseName, holeNumber, fix: fix?.pos ?? null });
-  }, [geometry, fix, courseName, holeNumber]);
+    return resolveScorecardDistances({
+      courseName,
+      holeNumber,
+      fix: gpsEnabled ? (fix?.pos ?? null) : null, // disabled = pretend no fix → tee path
+    });
+  }, [geometry, fix, courseName, holeNumber, gpsEnabled]);
 
   return {
     // Denied + no tee fallback would leave the header stuck on the fix
     // spinner — hide it, exactly like the pre-tee-fallback behavior.
-    available: !!geometry && (!denied || resolved.source === 'tee'),
+    available: !!geometry
+      && (gpsEnabled ? (!denied || resolved.source === 'tee') : resolved.source === 'tee'),
     distances: resolved.distances,
     source: resolved.source, // 'gps' | 'tee' — the header renders FROM TEE for 'tee'
-    accuracy: fix?.accuracy ?? null,
-    position: fix?.pos ?? null, // [lat, lng] — shared with the hole map
+    accuracy: gpsEnabled ? (fix?.accuracy ?? null) : null,
+    position: gpsEnabled ? (fix?.pos ?? null) : null, // [lat, lng] — shared with the hole map
   };
 }
