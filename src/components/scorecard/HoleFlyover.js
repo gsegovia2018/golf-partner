@@ -4,6 +4,8 @@ import { Feather } from '@expo/vector-icons';
 import {
   holeFeatures, subscribeCourseGeometry, getCourseGeometryVersion,
 } from '../../lib/geo';
+import { anchorFor } from '../../lib/flyoverModel';
+import { courseKeyFor } from '../../store/tileCache';
 import { HoleMapView } from './HoleMapView';
 
 // Full-screen interactive satellite flyover of one hole (Leaflet + Esri tiles,
@@ -16,10 +18,17 @@ export function HoleFlyover({ courseName, holeNumber, position, visible, onClose
   // eslint-disable-next-line react-hooks/exhaustive-deps
   const feat = useMemo(() => holeFeatures(courseName, holeNumber), [courseName, holeNumber, geomVersion]);
 
+  const anchorInfo = useMemo(() => {
+    if (!feat) return null;
+    const r = anchorFor({ player: position, tee: feat.start, greenCenter: feat.greenCenter });
+    return { pos: r.anchor, source: r.source, playerDistance: r.playerDistance };
+  }, [feat, position]);
+
   const data = useMemo(() => (feat ? {
     mode: 'view',
     holeKey: `${courseName}#${holeNumber}#view`,
     holeLabel: `Hole ${holeNumber}`,
+    courseKey: courseKeyFor(courseName),
     green: feat.green || null,
     greenFront: feat.greenFront || null,
     greenCenter: feat.greenCenter || null,
@@ -27,7 +36,8 @@ export function HoleFlyover({ courseName, holeNumber, position, visible, onClose
     tee: feat.start || null,
     hazards: feat.hazards || [],
     player: position || null,
-  } : null), [feat, courseName, holeNumber, position]);
+    anchor: anchorInfo,
+  } : null), [feat, courseName, holeNumber, position, anchorInfo]);
 
   if (!visible) return null;
 
@@ -49,7 +59,7 @@ export function HoleFlyover({ courseName, holeNumber, position, visible, onClose
           </View>
         </View>
         {data ? (
-          <HoleMapView data={data} player={position} style={s.map} />
+          <HoleMapView data={data} player={position} anchor={anchorInfo} style={s.map} />
         ) : (
           <View style={s.center}><Text style={s.muted}>This course has no green geometry yet.</Text></View>
         )}

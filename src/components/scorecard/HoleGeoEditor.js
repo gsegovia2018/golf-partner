@@ -9,6 +9,7 @@ import {
 } from '../../lib/geo';
 import { supabase } from '../../lib/supabase';
 import { hydrateCourseGeometry } from '../../store/courseGeometryStore';
+import { courseKeyFor } from '../../store/tileCache';
 import { HoleMapView } from './HoleMapView';
 
 const FIELDS = [
@@ -41,6 +42,7 @@ export function HoleGeoEditor({ courseName, holeNumber, visible, onClose, onSave
   const data = useMemo(() => (feat ? {
     mode: 'edit',
     holeKey: `${courseName}#${holeNumber}#edit`,
+    courseKey: courseKeyFor(courseName),
     green: feat.green || null,
     greenFront: pts.front,
     greenCenter: pts.center,

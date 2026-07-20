@@ -11,6 +11,7 @@
     "test": "jest",
     "test:watch": "jest --watch",
     "lint": "eslint .",
+    "build:vendor": "node scripts/build-leaflet-vendor.js",
     "postinstall": "patch-package"
   },
   "dependencies": {
@@ -64,6 +65,8 @@
     "eslint-config-expo": "^55.0.1",
     "jest": "^29.7.0",
     "jest-expo": "^55.0.17",
+    "leaflet": "1.9.4",
+    "leaflet-rotate": "0.2.8",
     "patch-package": "^8.0.1",
     "react-test-renderer": "^19.1.0"
   }
