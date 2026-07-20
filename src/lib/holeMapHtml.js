@@ -216,7 +216,8 @@ function initView(){
     const hPx = Math.max(document.getElementById('map').clientHeight, 320);
     const mpp = (len * 1.45) / hPx;
     const zoom = Math.min(Math.log2(156543.03392 * Math.cos(mid[0]*Math.PI/180) / mpp), 19.5);
-    if (map.setBearing) map.setBearing(bearing(hole.tee, c));
+    // leaflet-rotate rotates content clockwise by the given degrees, so screen-up = -bearing; negate to point tee→green up.
+    if (map.setBearing) map.setBearing(-bearing(hole.tee, c));
     map.setView(mid, zoom);
   } else if (onCourse() && c && valid(player)) {
     map.fitBounds(L.latLngBounds([player, c]).pad(0.3));
