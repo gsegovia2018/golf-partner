@@ -4,6 +4,8 @@
 // null and the flyover's vector layer covers for missing imagery.
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { Platform } from 'react-native';
+import { findCourseGeometry } from '../lib/geo';
+import { holeBbox, tilesForBbox } from '../lib/tileMath';
 
 export const TILE_URL = (z, x, y) =>
   `https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/${z}/${y}/${x}`;
@@ -159,6 +161,60 @@ export async function deleteBucket(bucket) {
   await saveIndex();
 }
 
+// ---------- prefetch ----------
+export const PREFETCH_ZOOMS = [15, 16, 17, 18, 19];
+export function estimateTileBytes(count) { return count * 20 * 1024; }
+
+let prefetchState = null; // { courseKey, total, done, running }
+const prefetchListeners = new Set();
+export function getPrefetchState() { return prefetchState; }
+export function subscribePrefetch(cb) { prefetchListeners.add(cb); return () => prefetchListeners.delete(cb); }
+function emitPrefetch(next) {
+  prefetchState = next;
+  prefetchListeners.forEach((cb) => { try { cb(); } catch { /* listener error */ } });
+}
+
+const prefetchedThisSession = new Set(); // courseKey — auto trigger fires once
+
+// Download every tile covering the course's mapped holes (zooms 15–19,
+// deduped, 4 at a time). Resumable: cached tiles resolve instantly.
+export async function prefetchCourseTiles(courseName, { force = false } = {}) {
+  const geometry = findCourseGeometry(courseName);
+  if (!geometry?.holes?.length) return null;
+  const courseKey = courseKeyFor(courseName);
+  if (!force && prefetchedThisSession.has(courseKey)) return null;
+  if (prefetchState?.running) return null; // one prefetch at a time
+  prefetchedThisSession.add(courseKey);
+
+  const tiles = [];
+  const seen = new Set();
+  for (const hole of geometry.holes) {
+    const bbox = holeBbox({ tee: hole.start, greenCenter: hole.greenCenter, green: hole.green, hazards: hole.hazards });
+    if (!bbox) continue;
+    for (const t of tilesForBbox(bbox, PREFETCH_ZOOMS)) {
+      const k = `${t.z}/${t.x}/${t.y}`;
+      if (!seen.has(k)) { seen.add(k); tiles.push(t); }
+    }
+  }
+  if (!tiles.length) return null;
+
+  let done = 0;
+  emitPrefetch({ courseKey, total: tiles.length, done, running: true });
+  const queue = tiles.slice();
+  const worker = async () => {
+    for (;;) {
+      const t = queue.shift();
+      if (!t) return;
+      await ensureTile({ z: t.z, x: t.x, y: t.y, bucket: courseKey });
+      done += 1;
+      emitPrefetch({ courseKey, total: tiles.length, done, running: true });
+    }
+  };
+  await Promise.all([worker(), worker(), worker(), worker()]);
+  emitPrefetch({ courseKey, total: tiles.length, done, running: false });
+  return { total: tiles.length, done };
+}
+
 // ---------- test seams ----------
 export function _setAdapterForTests(a) { adapter = a; }
 export function _resetForTests() {
@@ -166,4 +222,6 @@ export function _resetForTests() {
   indexCache = null;
   failedThisSession.clear();
   inFlight.clear();
+  prefetchedThisSession.clear();
+  prefetchState = null;
 }

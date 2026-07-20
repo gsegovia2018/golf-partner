@@ -1,7 +1,9 @@
 import {
   getTileDataUrl, deleteBucket, courseKeyFor,
   _setAdapterForTests, _resetForTests,
+  prefetchCourseTiles, getPrefetchState, subscribePrefetch,
 } from '../tileCache';
+import * as geo from '../../lib/geo';
 
 export function fakeAdapter() {
   const store = new Map(); // 'bucket|z/x/y' -> dataUrl
@@ -63,5 +65,49 @@ describe('tileCache', () => {
     ]);
     expect(global.fetch).toHaveBeenCalledTimes(1);
     expect(a).toBe(b);
+  });
+});
+
+describe('prefetchCourseTiles', () => {
+  beforeEach(() => {
+    _resetForTests();
+    _setAdapterForTests(fakeAdapter());
+    global.fetch = jest.fn(async () => ({ ok: true, arrayBuffer: async () => new Uint8Array([1]).buffer }));
+  });
+  afterEach(() => jest.restoreAllMocks());
+
+  it('returns null for a course without geometry', async () => {
+    jest.spyOn(geo, 'findCourseGeometry').mockReturnValue(null);
+    expect(await prefetchCourseTiles('Nowhere')).toBeNull();
+  });
+
+  it('downloads deduped tiles for every mapped hole and reports progress', async () => {
+    jest.spyOn(geo, 'findCourseGeometry').mockReturnValue({
+      name: 'Tiny', mode: 'holes',
+      holes: [
+        { number: 1, greenCenter: [38.56, -0.139], start: [38.5634, -0.1439], green: null, hazards: [] },
+        { number: 2, greenCenter: [38.56, -0.139], start: [38.5634, -0.1439], green: null, hazards: [] }, // same bbox → dedupe
+      ],
+    });
+    const seen = [];
+    const unsub = subscribePrefetch(() => seen.push({ ...getPrefetchState() }));
+    const r = await prefetchCourseTiles('Tiny');
+    unsub();
+    expect(r.total).toBeGreaterThan(0);
+    expect(r.done).toBe(r.total);
+    expect(global.fetch).toHaveBeenCalledTimes(r.total); // dedupe: identical holes add nothing
+    expect(seen[seen.length - 1].running).toBe(false);
+  });
+
+  it('skips already-cached tiles instantly (resumable)', async () => {
+    jest.spyOn(geo, 'findCourseGeometry').mockReturnValue({
+      name: 'Tiny', mode: 'holes',
+      holes: [{ number: 1, greenCenter: [38.56, -0.139], start: [38.5634, -0.1439], green: null, hazards: [] }],
+    });
+    const first = await prefetchCourseTiles('Tiny');
+    global.fetch.mockClear();
+    const second = await prefetchCourseTiles('Tiny', { force: true });
+    expect(second.total).toBe(first.total);
+    expect(global.fetch).not.toHaveBeenCalled();
   });
 });
