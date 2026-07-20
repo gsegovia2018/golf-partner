@@ -8,7 +8,7 @@ import {
 } from '../../lib/geo';
 import { anchorFor } from '../../lib/flyoverModel';
 import { courseKeyFor } from '../../store/tileCache';
-import { getAppSettings } from '../../store/settingsStore';
+import { useAppSettings } from '../../hooks/useAppSettings';
 import { HoleMapView } from './HoleMapView';
 
 // Full-screen interactive satellite flyover of one hole (Leaflet + Esri tiles,
@@ -21,6 +21,7 @@ export function HoleFlyover({
   position, visible, onClose, onEdit,
 }) {
   const geomVersion = useSyncExternalStore(subscribeCourseGeometry, getCourseGeometryVersion);
+  const { units } = useAppSettings();
   // eslint-disable-next-line react-hooks/exhaustive-deps
   const feat = useMemo(() => holeFeatures(courseName, holeNumber), [courseName, holeNumber, geomVersion]);
 
@@ -43,8 +44,8 @@ export function HoleFlyover({
     hazards: feat.hazards || [],
     player: position || null,
     anchor: anchorInfo,
-    units: getAppSettings().units,
-  } : null), [feat, courseName, holeNumber, position, anchorInfo]);
+    units,
+  } : null), [feat, courseName, holeNumber, position, anchorInfo, units]);
 
   // Swipe-down on the grabber/header dismisses; the map owns its own gestures.
   const dragY = useRef(new Animated.Value(0)).current;

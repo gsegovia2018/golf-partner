@@ -134,6 +134,20 @@ describe('stat group toggles', () => {
   });
 });
 
+describe('yards mode', () => {
+  afterEach(() => {
+    __resetAppSettingsForTests();
+  });
+
+  test('drive distance hint and bucket labels switch to yards', async () => {
+    await updateAppSettings({ units: 'yards' });
+    const r = render(<ShotDetailPanel hole={par4} detail={{}} onChange={jest.fn()} strokes={null} />);
+    expect(r.getAllByText('yards').length).toBeGreaterThan(0);
+    expect(r.getByText('165-195')).toBeTruthy();
+    expect(r.queryByText('150-180')).toBeNull();
+  });
+});
+
 describe('ShotDetailSection stat group gating', () => {
   beforeEach(() => {
     jest.clearAllMocks();

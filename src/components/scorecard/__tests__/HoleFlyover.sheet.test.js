@@ -1,9 +1,17 @@
 import React from 'react';
 import { render, fireEvent } from '@testing-library/react-native';
 import { HoleFlyover } from '../HoleFlyover';
+import { updateAppSettings, __resetAppSettingsForTests } from '../../../store/settingsStore';
 
-// The map itself is a WebView/iframe — out of scope for this test.
-jest.mock('../HoleMapView', () => ({ HoleMapView: () => null }));
+jest.mock('../../../store/profileStore', () => ({
+  loadProfile: jest.fn(),
+  upsertProfile: jest.fn(),
+}));
+
+// The map itself is a WebView/iframe — out of scope for this test. Captured
+// as a jest.fn so tests can inspect the `data` prop it was called with.
+const mockHoleMapView = jest.fn(() => null);
+jest.mock('../HoleMapView', () => ({ HoleMapView: (props) => mockHoleMapView(props) }));
 jest.mock('../../../lib/geo', () => ({
   ...jest.requireActual('../../../lib/geo'),
   holeFeatures: () => ({
@@ -41,5 +49,19 @@ describe('HoleFlyover sheet chrome', () => {
     );
     getByText('Hole 7');
     expect(queryByText(/Par/)).toBeNull();
+  });
+
+  describe('yards mode', () => {
+    afterEach(() => {
+      __resetAppSettingsForTests();
+    });
+
+    it('passes units: yards through to the map data after seeding the setting', async () => {
+      await updateAppSettings({ units: 'yards' });
+      mockHoleMapView.mockClear();
+      render(<HoleFlyover {...props} />);
+      const lastCall = mockHoleMapView.mock.calls[mockHoleMapView.mock.calls.length - 1][0];
+      expect(lastCall.data.units).toBe('yards');
+    });
   });
 });

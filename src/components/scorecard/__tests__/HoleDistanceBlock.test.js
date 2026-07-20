@@ -1,12 +1,18 @@
 import React from 'react';
 import { render, fireEvent } from '@testing-library/react-native';
 import { HoleDistanceBlock } from '../HoleDistanceBlock';
+import { updateAppSettings, __resetAppSettingsForTests } from '../../../store/settingsStore';
 
 jest.mock('../../../theme/ThemeContext', () => ({
   useTheme: () => {
     const { light, typography, fonts, spacing, radius } = jest.requireActual('../../../theme/tokens');
     return { theme: { ...light, typography, fonts, spacing, radius, mode: 'light', isDark: false } };
   },
+}));
+
+jest.mock('../../../store/profileStore', () => ({
+  loadProfile: jest.fn(),
+  upsertProfile: jest.fn(),
 }));
 
 const gpsBase = (over = {}, dist = {}) => ({
@@ -109,5 +115,19 @@ describe('HoleDistanceBlock', () => {
     const { getByLabelText } = render(<HoleDistanceBlock gps={gps} onPress={onPress} />);
     fireEvent.press(getByLabelText('Open hole map'));
     expect(onPress).toHaveBeenCalledTimes(1);
+  });
+
+  describe('yards mode', () => {
+    afterEach(() => {
+      __resetAppSettingsForTests();
+    });
+
+    it('renders the hero distance and unit in yards when the setting is yards', async () => {
+      await updateAppSettings({ units: 'yards' });
+      const gps = gpsBase({}, { center: 150 });
+      const { getByText } = render(<HoleDistanceBlock gps={gps} onPress={() => {}} />);
+      getByText('164'); // 150m * 1.09361 rounded
+      getByText('yd');
+    });
   });
 });

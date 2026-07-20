@@ -57,4 +57,10 @@ describe('buildHoleMapHtml', () => {
     expect(html).toContain('targets.splice(i, 1)');
     expect(html).toContain('targets.length < 2');
   });
+  it('embeds yards units and ships the yd conversion machinery', () => {
+    const html = buildHoleMapHtml({ ...base, units: 'yards' });
+    expect(html).toContain('"units":"yards"');
+    expect(html).toContain('const M2YD = 1.09361;');
+    expect(html).toContain("const U = DATA.units === 'yards' ? 'yd' : 'm';");
+  });
 });
