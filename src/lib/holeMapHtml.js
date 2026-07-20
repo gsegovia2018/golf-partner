@@ -170,9 +170,7 @@ function hud(from, g){
       '<div class="row"><span class="lbl"></span><span class="bign">'+round(d(g.c))+'</span><span class="u">m</span></div>'+
       '<div class="row"><span class="lbl">Front</span><span class="sm">'+round(d(g.f))+'</span></div>'+
     '</div>'+
-    (from
-      ? '<div class="hint">Drag the ring or tap anywhere</div>'
-      : '<div class="hint">Drag the ring to measure</div>');
+    (from ? '' : '<div class="hint">Drag the ring to measure</div>');
 }
 
 function editIcon(color, label){
