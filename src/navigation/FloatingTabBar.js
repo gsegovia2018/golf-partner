@@ -1,6 +1,6 @@
 import React from 'react';
 import { View, Text, StyleSheet } from 'react-native';
-import { MaterialCommunityIcons } from '@expo/vector-icons';
+import { Feather } from '@expo/vector-icons';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { useTheme } from '../theme/ThemeContext';
@@ -87,7 +87,7 @@ export default function FloatingTabBar({ state, navigation }) {
                   secondaryFocused && styles.secondaryButtonActive,
                 ]}
               >
-                <MaterialCommunityIcons name={item.icon} size={center ? 25 : secondaryFocused ? 20 : 22} color={iconColor} />
+                <Feather name={item.icon} size={center ? 25 : secondaryFocused ? 20 : 22} color={iconColor} />
                 {center && <Text style={styles.centerLabel}>{item.label}</Text>}
                 {secondaryFocused && <Text style={styles.secondaryLabel}>{item.label}</Text>}
               </View>
