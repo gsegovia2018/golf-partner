@@ -49,6 +49,7 @@ export function HoleFlyover({
   const onCloseRef = useRef(onClose);
   onCloseRef.current = onClose;
   const pan = useRef(PanResponder.create({
+    onStartShouldSetPanResponder: () => true,
     onMoveShouldSetPanResponder: (_, g) => g.dy > 8 && Math.abs(g.dy) > Math.abs(g.dx),
     onPanResponderMove: (_, g) => { if (g.dy > 0) dragY.setValue(g.dy); },
     onPanResponderRelease: (_, g) => {
