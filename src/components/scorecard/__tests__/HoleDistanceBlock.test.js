@@ -1,0 +1,83 @@
+import React from 'react';
+import { render, fireEvent } from '@testing-library/react-native';
+import { HoleDistanceBlock } from '../HoleDistanceBlock';
+
+jest.mock('../../../theme/ThemeContext', () => ({
+  useTheme: () => {
+    const { light, typography, fonts, spacing, radius } = jest.requireActual('../../../theme/tokens');
+    return { theme: { ...light, typography, fonts, spacing, radius, mode: 'light', isDark: false } };
+  },
+}));
+
+const gpsBase = (over = {}, dist = {}) => ({
+  available: true,
+  accuracy: 8,
+  position: [38.5577, -0.1491],
+  distances: {
+    front: 312.4, center: 326.2, back: 339.1, pin: null, kind: 'hole',
+    hazards: [],
+    ...dist,
+  },
+  ...over,
+});
+
+describe('HoleDistanceBlock', () => {
+  it('renders nothing when gps is unavailable', () => {
+    const { toJSON } = render(<HoleDistanceBlock gps={{ available: false, distances: null, accuracy: null, position: null }} onPress={() => {}} />);
+    expect(toJSON()).toBeNull();
+  });
+
+  it('shows centre hero plus front/back line', () => {
+    const { getByText } = render(<HoleDistanceBlock gps={gpsBase()} onPress={() => {}} />);
+    getByText('326');
+    getByText(/F 312\s+B 339/);
+  });
+
+  it('shows one joined hazard line when both kinds are ahead', () => {
+    const gps = gpsBase({}, { hazards: [
+      { kind: 'bunker', reach: 96.2, carry: 118.4 },
+      { kind: 'water', reach: 120.7, carry: 139.2 },
+    ] });
+    const { getByText } = render(<HoleDistanceBlock gps={gps} onPress={() => {}} />);
+    getByText('Bunker 96–118 · Water 121–139');
+  });
+
+  it('shows only the nearest hazard of each kind', () => {
+    const gps = gpsBase({}, { hazards: [{ kind: 'bunker', reach: 96, carry: 118 }, { kind: 'bunker', reach: 140, carry: 160 }] });
+    const { getByText, queryByText } = render(<HoleDistanceBlock gps={gps} onPress={() => {}} />);
+    getByText('Bunker 96–118');
+    expect(queryByText(/140/)).toBeNull();
+  });
+
+  it('shows the NEAREST GREEN overline for nearest-mode courses', () => {
+    const { getByText } = render(<HoleDistanceBlock gps={gpsBase({}, { kind: 'nearest' })} onPress={() => {}} />);
+    getByText('NEAREST GREEN');
+  });
+
+  it('shows accuracy caption on a poor fix', () => {
+    const { getByText } = render(<HoleDistanceBlock gps={gpsBase({ accuracy: 31 })} onPress={() => {}} />);
+    getByText('±31m');
+  });
+
+  it('collapses to an off-course line beyond 3km', () => {
+    const { getByText, queryByText } = render(
+      <HoleDistanceBlock gps={gpsBase({}, { center: 4620 })} onPress={() => {}} />,
+    );
+    getByText('Off course · 4.6 km');
+    expect(queryByText('4620')).toBeNull();
+  });
+
+  it('shows a getting-fix state before the first fix', () => {
+    const { getByText } = render(
+      <HoleDistanceBlock gps={{ available: true, distances: null, accuracy: null, position: null }} onPress={() => {}} />,
+    );
+    getByText('Getting GPS fix');
+  });
+
+  it('fires onPress from every state (block is the map entry)', () => {
+    const onPress = jest.fn();
+    const { getByLabelText } = render(<HoleDistanceBlock gps={gpsBase()} onPress={onPress} />);
+    fireEvent.press(getByLabelText('Open hole map'));
+    expect(onPress).toHaveBeenCalledTimes(1);
+  });
+});

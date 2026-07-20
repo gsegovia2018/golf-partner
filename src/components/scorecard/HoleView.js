@@ -8,7 +8,6 @@ import { Feather } from '@expo/vector-icons';
 import { useTheme } from '../../theme/ThemeContext';
 import { makeScorecardStyles } from './styles';
 import { HolePage, MePicker } from './HolePage';
-import { GpsDistancePanel } from './GpsDistancePanel';
 import { HoleFlyover } from './HoleFlyover';
 import { HoleGeoEditor } from './HoleGeoEditor';
 import { useGpsDistances } from '../../hooks/useGpsDistances';
@@ -109,6 +108,10 @@ export function HoleView({ round, roundIndex, players, scores, shotDetails, meId
   // installed/production builds still require an admin account.
   const isAdmin = isAdminUser(user?.id) || __DEV__;
   const [flyoverOpen, setFlyoverOpen] = useState(false);
+  // Stable identity so passing it down doesn't defeat HolePage's memo
+  // comparator (see holePagePropsEqual) — an inline arrow here would
+  // re-render all 18 pages every time HoleView re-renders.
+  const openFlyover = useCallback(() => setFlyoverOpen(true), []);
   const [editorOpen, setEditorOpen] = useState(false);
   const [pagerSize, setPagerSize] = useState({ width: 0, height: 0 });
   const pagerRef = useRef(null);
@@ -192,13 +195,16 @@ export function HoleView({ round, roundIndex, players, scores, shotDetails, meId
         />
       )}
 
-      {/* Live GPS front/center/back to the green — tap to open the aerial
-          flyover. Renders nothing on courses without geometry data. */}
-      <GpsDistancePanel gps={gps} onPress={() => setFlyoverOpen(true)} />
+      {/* Live GPS front/center/back to the green now render in the hole
+          header (HoleDistanceBlock, via HolePage) — it's also the map entry
+          point. This flyover is the aerial sheet it opens. */}
       <HoleFlyover
         visible={flyoverOpen}
         courseName={round.courseName}
         holeNumber={currentHole}
+        par={round.holes[currentHole - 1]?.par}
+        strokeIndex={round.holes[currentHole - 1]?.strokeIndex}
+        centerDistance={gps.distances?.center ?? null}
         position={gps.position}
         onClose={() => setFlyoverOpen(false)}
         onEdit={isAdmin ? () => { setFlyoverOpen(false); setEditorOpen(true); } : undefined}
@@ -308,6 +314,8 @@ export function HoleView({ round, roundIndex, players, scores, shotDetails, meId
                 onToggleShotDetail={toggleShotDetail}
                 totalsMap={scorecardTotals}
                 conflictHoles={conflictHoles}
+                gps={gps}
+                onOpenFlyover={openFlyover}
               />
             ))}
           </ScrollView>

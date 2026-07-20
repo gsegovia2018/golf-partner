@@ -8,6 +8,7 @@ import {
 import { scoreCellState } from '../../store/officialScoring';
 import { deriveCell } from '../../store/scoreEntries';
 import { isScrambleMode } from '../scoringModes';
+import { HoleDistanceBlock } from './HoleDistanceBlock';
 import { PlayerCard } from './PlayerCard';
 import { holePoints } from './scoreModel';
 import { teamsByPlayer } from './teamModel';
@@ -67,9 +68,14 @@ export function holePagePropsEqual(prev, next) {
     || prev.shotCollapsed !== next.shotCollapsed
     || prev.onToggleShotDetail !== next.onToggleShotDetail
     || prev.conflictHoles !== next.conflictHoles
+    || prev.onOpenFlyover !== next.onOpenFlyover
   ) {
     return false;
   }
+  // GPS distances tick every second; only the visible page pays for them.
+  // isActive flipping already forces a re-render on swipe, so a page that
+  // becomes active immediately catches up to the latest fix.
+  if ((prev.isActive || next.isActive) && prev.gps !== next.gps) return false;
   const hole = next.pageHole.number;
   return samePerHoleSlice(prev.scores, next.scores, hole)
     && samePerHoleSlice(prev.shotDetails, next.shotDetails, hole);
@@ -93,6 +99,7 @@ export const HolePage = React.memo(function HolePage({
   shotCollapsed, onToggleShotDetail,
   totalsMap,
   conflictHoles = new Set(),
+  gps, onOpenFlyover,
 }) {
   // Every game mode now renders the unified PlayerCard. Scramble modes score
   // one ball per team under the captain — swap the roster for synthetic team
@@ -132,24 +139,28 @@ export const HolePage = React.memo(function HolePage({
       style={[{ width, height }, PAGER_PAGE_SNAP_STYLE]}
       dataSet={Platform.OS === 'web' ? { pagerpage: '1' } : undefined}
     >
-      {/* Hole header */}
+      {/* Hole header — PAR/SI ride with the hole number; the right side is
+          the live GPS distance block, which is also the map entry point. */}
       <View style={s.holeHeaderCard}>
         <View style={s.holeHeaderLeft}>
           <Text style={s.holeHeaderRound}>{courseName} -- Round {roundIndex + 1}</Text>
           <View style={s.holeNumberRow}>
             <Text style={s.holeNumberLabel}>HOLE</Text>
             <Text style={s.holeNumber}>{pageHole.number}</Text>
+            <View style={s.holeMetaInline}>
+              <View style={s.holeMetaItem}>
+                <Text style={s.holeMetaLabel}>PAR</Text>
+                <Text style={s.holeMetaValue}>{pageHole.par}</Text>
+              </View>
+              <View style={s.holeMetaItem}>
+                <Text style={s.holeMetaLabel}>SI</Text>
+                <Text style={s.holeMetaValue}>{pageHole.strokeIndex}</Text>
+              </View>
+            </View>
           </View>
         </View>
-        <View style={[s.holeHeaderRight, s.holeHeaderRightWrap]}>
-          <View style={s.holeMetaItem}>
-            <Text style={s.holeMetaLabel}>PAR</Text>
-            <Text style={s.holeMetaValue}>{pageHole.par}</Text>
-          </View>
-          <View style={s.holeMetaItem}>
-            <Text style={s.holeMetaLabel}>SI</Text>
-            <Text style={s.holeMetaValue}>{pageHole.strokeIndex}</Text>
-          </View>
+        <View style={s.holeHeaderRightWrap}>
+          <HoleDistanceBlock gps={gps} onPress={onOpenFlyover} />
         </View>
       </View>
 

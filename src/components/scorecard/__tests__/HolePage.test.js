@@ -1,6 +1,6 @@
 import React from 'react';
 import { Animated } from 'react-native';
-import { render } from '@testing-library/react-native';
+import { render, fireEvent } from '@testing-library/react-native';
 import { holePagePropsEqual, HolePage } from '../HolePage';
 
 jest.mock('../../../theme/ThemeContext', () => ({
@@ -335,5 +335,47 @@ describe('holePagePropsEqual', () => {
     const prev = { ...baseProps(), conflictHoles };
     const next = { ...prev, conflictHoles };
     expect(holePagePropsEqual(prev, next)).toBe(true);
+  });
+});
+
+describe('header distance block wiring', () => {
+  const gps = (center) => ({
+    available: true, accuracy: 5, position: [1, 2],
+    distances: { front: center - 14, center, back: center + 13, pin: null, kind: 'hole', hazards: [] },
+  });
+
+  it('propsEqual re-renders the ACTIVE page when gps changes', () => {
+    const prev = { ...baseProps(), isActive: true, gps: gps(326), onOpenFlyover: () => {} };
+    const next = { ...prev, gps: gps(320) };
+    expect(holePagePropsEqual(prev, next)).toBe(false);
+  });
+
+  it('propsEqual skips INACTIVE pages on gps churn', () => {
+    const prev = { ...baseProps(), isActive: false, gps: gps(326), onOpenFlyover: () => {} };
+    const next = { ...prev, gps: gps(320) };
+    expect(holePagePropsEqual(prev, next)).toBe(true);
+  });
+
+  it('propsEqual re-renders when onOpenFlyover identity changes', () => {
+    const prev = { ...baseProps(), gps: gps(326), onOpenFlyover: () => {} };
+    const next = { ...prev, onOpenFlyover: () => {} };
+    expect(holePagePropsEqual(prev, next)).toBe(false);
+  });
+
+  it('renders PAR and SI beside the hole number and the distance block on the right', () => {
+    const props = { ...baseProps(), isActive: true, gps: gps(326), onOpenFlyover: jest.fn() };
+    const { getByText, getByLabelText } = render(<HolePage {...props} />);
+    getByText('PAR');
+    getByText('SI');
+    getByText('326');
+    fireEvent.press(getByLabelText('Open hole map'));
+    expect(props.onOpenFlyover).toHaveBeenCalledTimes(1);
+  });
+
+  it('renders the plain header when gps is unavailable', () => {
+    const props = { ...baseProps(), gps: { available: false, distances: null, accuracy: null, position: null }, onOpenFlyover: () => {} };
+    const { getByText, queryByLabelText } = render(<HolePage {...props} />);
+    getByText('PAR');
+    expect(queryByLabelText('Open hole map')).toBeNull();
   });
 });
