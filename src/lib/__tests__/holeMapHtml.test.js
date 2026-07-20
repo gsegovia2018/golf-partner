@@ -22,4 +22,8 @@ describe('buildHoleMapHtml', () => {
     expect(html).toContain('class="tri"');
     expect(html).not.toContain('class="card front"');
   });
+  it('inlines Leaflet — no CDN dependency', () => {
+    const html = buildHoleMapHtml(base);
+    expect(html).not.toContain('unpkg.com');
+  });
 });

@@ -12,6 +12,8 @@ export default [
       '.expo/*',
       '.worktrees/**',
       'coverage/*',
+      // Generated vendor bundle — inlined third-party dist files, not our code.
+      'src/lib/vendor/**',
       // Deno runtime — not part of the React Native lint scope.
       'supabase/functions/*',
     ],

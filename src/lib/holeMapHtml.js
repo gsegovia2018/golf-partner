@@ -10,14 +10,16 @@
 // data: { mode:'view'|'edit', holeLabel, green, greenFront, greenCenter,
 //         greenBack, tee, hazards:[{kind,poly}], player, activeField }
 
+import { LEAFLET_CSS, LEAFLET_JS, LEAFLET_ROTATE_JS } from './vendor/leafletBundle';
+
 export function buildHoleMapHtml(data) {
   const json = JSON.stringify(data);
   return `<!doctype html><html><head>
 <meta charset="utf-8"/>
 <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no"/>
-<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"/>
-<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
-<script src="https://unpkg.com/leaflet-rotate@0.2.8/dist/leaflet-rotate-src.js"></script>
+<style>${LEAFLET_CSS}</style>
+<script>${LEAFLET_JS}</script>
+<script>${LEAFLET_ROTATE_JS}</script>
 <style>
   html,body{margin:0;height:100%;background:#0a0d10;font-family:ui-sans-serif,-apple-system,"Segoe UI",Roboto,sans-serif}
   #map{position:absolute;inset:0}
