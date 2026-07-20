@@ -93,11 +93,12 @@ function makeStyles(theme) {
       fontFamily: 'PlusJakartaSans-SemiBold',
       fontVariant: ['tabular-nums'],
     },
-    caption: { color: theme.text.muted, fontSize: 10 },
+    caption: { color: theme.text.muted, fontSize: 10, fontVariant: ['tabular-nums'] },
     off: {
       color: theme.text.muted,
       fontSize: 12,
       fontFamily: 'PlusJakartaSans-SemiBold',
+      fontVariant: ['tabular-nums'],
     },
   });
 }
