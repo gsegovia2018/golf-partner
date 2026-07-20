@@ -177,14 +177,16 @@ function emitPrefetch(next) {
 const prefetchedThisSession = new Set(); // courseKey — auto trigger fires once
 
 // Download every tile covering the course's mapped holes (zooms 15–19,
-// deduped, 4 at a time). Resumable: cached tiles resolve instantly.
+// deduped, 4 at a time). Resumable: cached tiles resolve instantly. A run is
+// only session-marked once every tile actually succeeds — a fully/partially
+// failed (offline) run stays retryable.
 export async function prefetchCourseTiles(courseName, { force = false } = {}) {
   const geometry = findCourseGeometry(courseName);
   if (!geometry?.holes?.length) return null;
   const courseKey = courseKeyFor(courseName);
   if (!force && prefetchedThisSession.has(courseKey)) return null;
   if (prefetchState?.running) return null; // one prefetch at a time
-  prefetchedThisSession.add(courseKey);
+  if (force) failedThisSession.clear(); // manual retry should re-attempt negative-cached tiles
 
   const tiles = [];
   const seen = new Set();
@@ -199,20 +201,23 @@ export async function prefetchCourseTiles(courseName, { force = false } = {}) {
   if (!tiles.length) return null;
 
   let done = 0;
-  emitPrefetch({ courseKey, total: tiles.length, done, running: true });
+  let ok = 0;
+  emitPrefetch({ courseKey, total: tiles.length, done, ok, running: true });
   const queue = tiles.slice();
   const worker = async () => {
     for (;;) {
       const t = queue.shift();
       if (!t) return;
-      await ensureTile({ z: t.z, x: t.x, y: t.y, bucket: courseKey });
+      const okFlag = await ensureTile({ z: t.z, x: t.x, y: t.y, bucket: courseKey });
+      if (okFlag) ok += 1;
       done += 1;
-      emitPrefetch({ courseKey, total: tiles.length, done, running: true });
+      emitPrefetch({ courseKey, total: tiles.length, done, ok, running: true });
     }
   };
   await Promise.all([worker(), worker(), worker(), worker()]);
-  emitPrefetch({ courseKey, total: tiles.length, done, running: false });
-  return { total: tiles.length, done };
+  if (ok === tiles.length) prefetchedThisSession.add(courseKey);
+  emitPrefetch({ courseKey, total: tiles.length, done, ok, running: false });
+  return { total: tiles.length, done, ok };
 }
 
 // ---------- test seams ----------

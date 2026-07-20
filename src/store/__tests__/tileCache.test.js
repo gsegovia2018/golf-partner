@@ -110,4 +110,29 @@ describe('prefetchCourseTiles', () => {
     expect(second.total).toBe(first.total);
     expect(global.fetch).not.toHaveBeenCalled();
   });
+
+  it('does not session-mark a fully-failed prefetch, so a later call retries', async () => {
+    jest.spyOn(geo, 'findCourseGeometry').mockReturnValue({
+      name: 'Tiny', mode: 'holes',
+      holes: [{ number: 1, greenCenter: [38.56, -0.139], start: [38.5634, -0.1439], green: null, hazards: [] }],
+    });
+    global.fetch = jest.fn(async () => { throw new Error('offline'); });
+    const r1 = await prefetchCourseTiles('Tiny');
+    expect(r1.ok).toBe(0);
+    expect(r1.done).toBe(r1.total);
+    global.fetch = jest.fn(async () => ({ ok: true, arrayBuffer: async () => new Uint8Array([1]).buffer }));
+    const r2 = await prefetchCourseTiles('Tiny', { force: true }); // force also clears the negative cache
+    expect(r2.ok).toBe(r2.total);
+  });
+
+  it('second non-force call still runs when the first never fully succeeded', async () => {
+    jest.spyOn(geo, 'findCourseGeometry').mockReturnValue({
+      name: 'Tiny', mode: 'holes',
+      holes: [{ number: 1, greenCenter: [38.56, -0.139], start: [38.5634, -0.1439], green: null, hazards: [] }],
+    });
+    global.fetch = jest.fn(async () => { throw new Error('offline'); });
+    await prefetchCourseTiles('Tiny');
+    const r = await prefetchCourseTiles('Tiny'); // not session-marked → runs again
+    expect(r).not.toBeNull();
+  });
 });
