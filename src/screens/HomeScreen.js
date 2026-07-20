@@ -17,6 +17,7 @@ import { ScoringModeSheet, TeamsSettingsFields, BestBallValueFields } from '../c
 import PullToRefresh from '../components/PullToRefresh';
 import LoadingSplash from '../components/LoadingSplash';
 import BottomSheet from '../components/BottomSheet';
+import LiveRoundCard from '../components/LiveRoundCard';
 import {
   loadTournament, loadAllTournaments, loadAllTournamentsWithFallback,
   setActiveTournament,
@@ -1187,6 +1188,7 @@ export default function HomeScreen({ navigation, route }) {
             <Feather name="chevron-right" size={16} color={theme.accent.primary} />
           </TouchableOpacity>
         )}
+        <LiveRoundCard onOpen={() => navigation.navigate('Scorecard')} />
         <Text style={s.startHeading}>Start playing</Text>
         <View style={s.startTilesRow}>
           <TouchableOpacity
