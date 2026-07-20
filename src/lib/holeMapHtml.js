@@ -246,15 +246,16 @@ function drawEdit(){
 function initView(){
   const g = fcb();
   const c = valid(g.c) ? g.c : null;
+  const top = valid(g.b) ? g.b : c; // frame to the back of the green so the whole green fits
   if (map.setBearing) map.setBearing(0);
-  if (valid(hole.tee) && c) {
-    const mid = [(hole.tee[0]+c[0])/2, (hole.tee[1]+c[1])/2];
-    const len = Math.max(dist(hole.tee, c), 60);
+  if (valid(hole.tee) && top) {
+    const mid = [(hole.tee[0]+top[0])/2, (hole.tee[1]+top[1])/2];
+    const len = Math.max(dist(hole.tee, top), 60);
     const hPx = Math.max(document.getElementById('map').clientHeight, 320);
     const mpp = (len * 1.2) / hPx;
     const zoom = Math.min(Math.log2(156543.03392 * Math.cos(mid[0]*Math.PI/180) / mpp), 19.5);
     // leaflet-rotate rotates content clockwise by the given degrees, so screen-up = -bearing; negate to point tee→green up.
-    if (map.setBearing) map.setBearing(-bearing(hole.tee, c));
+    if (map.setBearing) map.setBearing(-bearing(hole.tee, top));
     map.setView(mid, zoom, { animate:false });
   } else if (onCourse() && c && valid(player)) {
     map.fitBounds(L.latLngBounds([player, c]).pad(0.3), { animate:false });
