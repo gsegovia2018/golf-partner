@@ -67,6 +67,7 @@ import FinishedScreen from './src/screens/FinishedScreen';
 import { startUploadWorker } from './src/lib/uploadWorker';
 import { initDeviceAuthorId } from './src/store/deviceId';
 import { hydrateCourseGeometry } from './src/store/courseGeometryStore';
+import { hydrateAppSettings } from './src/store/settingsStore';
 import * as ScreenOrientation from 'expo-screen-orientation';
 import * as Notifications from 'expo-notifications';
 import { registerPushToken, configureNotificationHandler } from './src/lib/pushNotifications';
@@ -158,6 +159,9 @@ function AppNavigator() {
   }, []);
 
   useEffect(() => {
+    // Local mirror loads even signed-out; server reconcile happens once a
+    // session exists (hydrateAppSettings no-ops server-side without a user).
+    hydrateAppSettings();
     if (session) registerPushToken();
   }, [session]);
 
