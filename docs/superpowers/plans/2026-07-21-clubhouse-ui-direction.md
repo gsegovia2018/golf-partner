@@ -562,3 +562,71 @@ git add -A && git commit -m "fix(clubhouse): verification pass fixes"
 ```
 
 (Skip the commit if there are no changes.)
+
+---
+
+# Phase 2 — Mockup chrome the token swap couldn't deliver
+
+User-approved additions after reviewing phase 1: scorecard header/hole chrome, distance-block card, My Stats serif header + pill selectors, SG bar card, coach hero surface, handicap-style stat cards, tab-bar icon/border treatment. Same Global Constraints as phase 1. Phase-1 facts that bind here: `semantic.winner` exists; light hairline is `theme.border.default` (`#e7e2d5`); the Clubhouse hero surface is `#0f3d2c` with cream ink `#f3efe6` (see `src/components/LiveRoundCard.js` for the established pattern).
+
+### Task 7: Scorecard chrome — header buttons, de-carded hole header, distance card
+
+**Files:**
+- Modify: `src/components/scorecard/styles.js` (header + hole header styles, lines ~165-294)
+- Modify: `src/screens/ScorecardScreen.js` (header buttons pick up the unified style, lines ~1554-1624)
+- Modify: `src/components/scorecard/HoleDistanceBlock.js` (own makeStyles, lines ~78-120)
+
+**Spec:**
+1. **Unified header icon buttons.** Add one style `headerBtn`: `{ width: 36, height: 36, borderRadius: 12, alignItems: 'center', justifyContent: 'center', backgroundColor: isDark ? theme.bg.elevated : theme.bg.secondary, borderWidth: 1, borderColor: isDark ? theme.glass.border : theme.border.default }`. Apply it to ALL header action touchables in ScorecardScreen (`backBtn`, sync indicator's touchable, `viewSwitchBtn`, the eye toggle, award, notes, camera — today a mix of bare 32px and bordered). Keep every icon, handler, dot, and conditional exactly as is; `notesHeaderDot` stays absolute-positioned. `headerTitle` stays PlusJakartaSans-Bold 17 −0.3.
+2. **De-card the hole header.** `holeHeaderCard`: remove `backgroundColor`, remove the light-mode `theme.shadow.card` spread, remove `borderBottomWidth`/`borderBottomColor` — the hole info sits directly on `bg.primary`. Keep the row layout and paddings (bump paddingVertical to 16 for breathing room).
+3. **Distance block becomes a card** (`HoleDistanceBlock.js` `block` style): `{ alignItems: 'center', gap: 2, backgroundColor: theme.bg.card, borderWidth: 1, borderColor: isDark ? theme.glass?.border ?? theme.border.default : theme.border.default, borderRadius: 12, paddingVertical: 10, paddingHorizontal: 14, minWidth: 128 }` (center-aligned now, not flex-end). Under the F/B line add a permanent hint `<Text style={s.mapHint}>TAP FOR MAP</Text>` with `{ color: theme.text.muted, fontSize: 9, fontFamily: 'PlusJakartaSans-Bold', letterSpacing: 1.2, marginTop: 2 }`; REMOVE the trailing `chevron-right` from heroRow (the hint replaces it). The hint renders in the GPS branch and the FROM TEE branch; keep it out of the off-course/null branches. All variants (NEAREST GREEN, FROM TEE, off-course, poor fix, hazard line) keep working — only container/alignment/hint change. `hero` stays 24 ExtraBold accent.
+
+**Tests:** run `npx jest src/components/scorecard --silent` (must stay green; update snapshots only if the diff is purely these styles). Full suite + lint before commit. Commit: `feat(scorecard): Clubhouse chrome — unified header buttons, open hole header, distance card`.
+
+### Task 8: My Stats chrome + strokes-gained card
+
+**Files:**
+- Modify: `src/screens/MyStatsScreen.js` (headerTitle, tab styles, lines ~513-572)
+- Modify: `src/components/mystats/ShotDashboard.js` (SectionCard title)
+- Modify: `src/components/mystats/SGBars.js` (bar row styling)
+
+**Spec:**
+1. **Serif header:** `headerTitle` → `{ fontFamily: 'PlayfairDisplay-Bold', fontSize: 24, color: theme.text.primary, flex: 1, marginLeft: theme.spacing.sm }` (drop the `typography.heading` spread — no fontWeight with static families).
+2. **Tab pills:** `tab` bg → `theme.bg.card` (white on cream) keeping hairline border; `tabActive` stays solid `accent.primary`. `tabText` fontSize 12 fontWeight 700 stays.
+3. **SG dashboard title:** SectionCard title becomes dynamic: `` `Strokes gained · vs ${targetLabel}` `` where `targetLabel` is the existing target-handicap value formatted like `12-hcp target` (ShotDashboard already knows the target for its "Target gap" panel — reuse that source; scratch handicap 0 renders `scratch target`). Keep infoKey and the pencil `right` node.
+4. **SG bar rows** (`SGBars.js`): track gets a rounded chip look — wrap the SVG in the existing `track` view styled `{ flex: 1, minWidth: 80, maxWidth: 200, height: 14, borderRadius: 999, backgroundColor: theme.bg.secondary, overflow: 'hidden' }`; bar `<Rect>` rx → 4; center line keeps `theme.border.default`. `label` → fontSize 11.5, fontFamily 'PlusJakartaSans-Bold', color `theme.text.muted`. `value` → fontSize 12, fontFamily 'PlusJakartaSans-ExtraBold', tabular-nums, colored `scoreColor('good')`/`scoreColor('poor')` by sign (today text.primary).
+
+**Tests:** `npx jest src/components/mystats src/screens --silent` green; full suite + lint. Commit: `feat(mystats): serif header, card tab pills, Clubhouse strokes-gained card`.
+
+### Task 9: Coach hero surface + stat-card overline pattern
+
+**Files:**
+- Modify: `src/components/mystats/CoachHero.js`
+- Modify: `src/components/mystats/SectionCard.js` (new `titleVariant` prop)
+- Modify: `src/components/mystats/tabs/HandicapTab.js` (hero number + adopt overline titles)
+- Modify: `src/components/mystats/CareerMilestonesCard.js` (adopt overline title)
+
+**Spec:**
+1. **CoachHero → Clubhouse hero surface** (match LiveRoundCard's pattern): container `{ backgroundColor: '#0f3d2c', borderRadius: 16, padding: theme.spacing.lg, gap: theme.spacing.sm }` in BOTH themes (drop tone backgroundColor/borderColor on the container; no border). Kicker: keep the group label text but style `{ color: 'rgba(243,239,230,0.7)', fontSize: 10, fontFamily: 'PlusJakartaSans-Bold', letterSpacing: 1.4, textTransform: 'uppercase' }`; `area` label same but right-aligned as today. Title → `{ fontFamily: 'PlayfairDisplay-Bold', fontSize: 20, color: '#f3efe6' }`. Reason → `{ fontSize: 12.5, fontFamily: 'PlusJakartaSans-SemiBold', color: 'rgba(243,239,230,0.85)' }`. Metric → `{ fontSize: 13, fontFamily: 'PlusJakartaSans-ExtraBold', color: '#f3efe6' }`; pointsCaption cream 70%. Proof chips: `{ backgroundColor: 'rgba(243,239,230,0.12)', borderRadius: 999 }` with cream 85% text/icon. CTA `focusBtn` → filled cream pill: `{ backgroundColor: '#f3efe6', borderRadius: 999, paddingVertical: 9, paddingHorizontal: 14, alignSelf: 'flex-start', flexDirection: 'row', alignItems: 'center', gap: 6 }`, text/icon `#0f3d2c`, text `{ fontSize: 12.5, fontFamily: 'PlusJakartaSans-ExtraBold' }`. Tone still colors the kicker's leading group word if desired — simplest faithful move: tone only affects the small `area` label color accent; all surfaces cream-on-green. Empty-state variant gets the same surface.
+2. **SectionCard `titleVariant="overline"`:** new optional prop; when set, title style becomes `{ fontSize: 10, fontFamily: 'PlusJakartaSans-Bold', letterSpacing: 1.4, textTransform: 'uppercase', color: theme.text.muted }` (info button unchanged). Default variant untouched.
+3. **HandicapTab:** both SectionCards ("Handicap Index", "Index evolution", "Score differentials") pass `titleVariant="overline"`. Hero number style → `{ fontSize: 38, lineHeight: 44, fontFamily: 'PlayfairDisplay-Black', color: theme.accent.primary, textAlign: 'left' }`; `heroSub` left-aligned `{ textAlign: 'left' }`, stays caption muted. Apply button unchanged.
+4. **CareerMilestonesCard:** its SectionCard gets `titleVariant="overline"`.
+
+**Tests:** `npx jest src/components/mystats --silent` green; full suite + lint. Commit: `feat(mystats): Clubhouse coach hero + overline stat-card pattern`.
+
+### Task 10: Floating tab bar — Feather icons + hairline
+
+**Files:**
+- Modify: `src/navigation/tabBarModel.js` (icon names)
+- Modify: `src/navigation/FloatingTabBar.js` (icon component + bar border)
+
+**Spec:**
+1. Swap MaterialCommunityIcons → Feather (the icon set every other screen uses). New mapping in `tabBarModel.js`: Feed `file-text`, MyStats `bar-chart-2`, Home `flag` (live: `clipboard`), History `clock`, Profile `user`. Update `getTabBarItem`'s live-icon branch accordingly.
+2. `FloatingTabBar.js`: import `Feather` from `@expo/vector-icons` and render it instead of MaterialCommunityIcons (same sizes); bar style gains `borderWidth: 1, borderColor: isDark ? theme.glass.border : theme.border.default`.
+3. Update `src/navigation/__tests__` expectations if any assert icon names (check first: `grep -rn "newspaper-variant\|chart-bar\|flag-variant\|scoreboard-outline" src`).
+
+**Tests:** `npx jest src/navigation --silent` green; full suite + lint. Commit: `feat(nav): Feather tab icons + hairline floating bar`.
+
+### Task 11: Phase-2 verification + final whole-branch review
+
+Same as phase-1 Task 6: full suite + lint + grep guards, runtime verify (Expo web, light theme) of: scorecard header buttons/open hole header/distance card with TAP FOR MAP, My Stats serif header + pills + SG card + coach hero + handicap cards, Feather tab bar; dark theme sanity (unchanged feel, glass borders intact). Then the whole-branch final review.
