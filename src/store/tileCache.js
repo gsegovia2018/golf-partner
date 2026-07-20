@@ -120,19 +120,31 @@ async function fetchTileDataUrl(z, x, y) {
 }
 
 // ---------- public API ----------
+const inFlight = new Map(); // '${bucket}|${z}/${x}/${y}' -> Promise<string|null>
 export async function getTileDataUrl({ z, x, y, bucket = '_browse' }) {
   const key = `${z}/${x}/${y}`;
   const hit = await getAdapter().get(bucket, key);
   if (hit) { touchBucket(bucket, 0); return hit; }
   if (failedThisSession.has(key)) return null;
+  const flightKey = `${bucket}|${key}`;
+  const existing = inFlight.get(flightKey);
+  if (existing) return existing;
+  const promise = (async () => {
+    try {
+      const dataUrl = await fetchTileDataUrl(z, x, y);
+      const bytes = await getAdapter().put(bucket, key, dataUrl);
+      await touchBucket(bucket, bytes);
+      return dataUrl;
+    } catch {
+      failedThisSession.add(key);
+      return null;
+    }
+  })();
+  inFlight.set(flightKey, promise);
   try {
-    const dataUrl = await fetchTileDataUrl(z, x, y);
-    const bytes = await getAdapter().put(bucket, key, dataUrl);
-    await touchBucket(bucket, bytes);
-    return dataUrl;
-  } catch {
-    failedThisSession.add(key);
-    return null;
+    return await promise;
+  } finally {
+    inFlight.delete(flightKey);
   }
 }
 
@@ -153,4 +165,5 @@ export function _resetForTests() {
   adapter = null;
   indexCache = null;
   failedThisSession.clear();
+  inFlight.clear();
 }

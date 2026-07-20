@@ -55,4 +55,13 @@ describe('tileCache', () => {
     expect(await adapter.get('c1', '15/1/2')).toBeNull();
     expect(await adapter.get('c2', '15/1/2')).toBe('data:b');
   });
+
+  it('dedupes concurrent requests for the same tile', async () => {
+    const [a, b] = await Promise.all([
+      getTileDataUrl({ z: 15, x: 1, y: 2, bucket: 'c1' }),
+      getTileDataUrl({ z: 15, x: 1, y: 2, bucket: 'c1' }),
+    ]);
+    expect(global.fetch).toHaveBeenCalledTimes(1);
+    expect(a).toBe(b);
+  });
 });
