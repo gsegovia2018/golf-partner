@@ -22,14 +22,13 @@ export function buildHoleMapHtml(data) {
   html,body{margin:0;height:100%;background:#0a0d10;font-family:ui-sans-serif,-apple-system,"Segoe UI",Roboto,sans-serif}
   #map{position:absolute;inset:0}
   .hud{position:absolute;inset:0;pointer-events:none;z-index:500}
-  .big{position:absolute;top:12px;right:14px;text-align:right;color:#fff;text-shadow:0 1px 6px rgba(0,0,0,.8)}
-  .big .n{font-size:40px;font-weight:800;line-height:.9;font-variant-numeric:tabular-nums}
-  .big .u{font-size:13px;font-weight:600}
-  .big .l{font-size:10px;font-weight:700;letter-spacing:.1em;color:#cfe;text-transform:uppercase}
-  .card{position:absolute;left:0;display:flex;align-items:baseline;gap:4px;background:rgba(14,22,28,.85);color:#fff;padding:6px 13px;border-top-right-radius:11px;border-bottom-right-radius:11px}
-  .card .n{font-size:22px;font-weight:800;font-variant-numeric:tabular-nums}
-  .card .u{font-size:11px;color:#9fb0a4;font-weight:600}
-  .front{top:42%}.back{top:55%}
+  .tri{position:absolute;top:12px;right:12px;text-align:right;color:#fff;background:rgba(14,22,28,.72);border-radius:14px;padding:8px 13px 7px}
+  .tri .row{display:flex;align-items:baseline;justify-content:flex-end;gap:6px}
+  .tri .sm{font-size:16px;font-weight:800;font-variant-numeric:tabular-nums;color:#e8eef2}
+  .tri .bign{font-size:40px;font-weight:800;line-height:1.05;font-variant-numeric:tabular-nums}
+  .tri .u{font-size:13px;font-weight:600;color:#9fb0a4}
+  .tri .lbl{font-size:9px;font-weight:700;letter-spacing:.08em;color:#9fb0a4;text-transform:uppercase;width:34px;text-align:left}
+  .tri .foot{font-size:9px;font-weight:700;letter-spacing:.1em;color:#cfe;text-transform:uppercase;margin-top:2px}
   .hint{position:absolute;bottom:16px;left:50%;transform:translateX(-50%);background:rgba(14,22,28,.85);color:#fff;font-weight:600;font-size:13px;padding:7px 14px;border-radius:999px}
   .dchip{background:rgba(14,22,28,.88);color:#fff;font-weight:800;font-size:13px;padding:4px 11px;border-radius:999px;font-variant-numeric:tabular-nums;white-space:nowrap;border:1px solid rgba(255,255,255,.25);transform:translate(-50%,-50%);display:inline-block}
   .leaflet-container{background:#0a0d10}
@@ -137,14 +136,19 @@ function hud(from, g){
   const h = document.getElementById('hud');
   const src = from || target;
   const d = (p) => valid(p) && valid(src) ? dist(src, p) : null;
-  const carry = valid(g.c) && valid(target) ? dist(target, g.c) : null;
-  const layup = from && valid(target) ? dist(from, target) : null;
+  const fromTee = anchor && anchor.source === 'tee';
+  const km = anchor && anchor.playerDistance != null ? (anchor.playerDistance/1000).toFixed(1) : null;
   h.innerHTML =
-    '<div class="big"><span class="n">'+round(d(g.c))+'</span><span class="u"> m</span><div class="l">to green</div></div>'+
-    '<div class="card front"><span class="n">'+round(d(g.f))+'</span><span class="u">front</span></div>'+
-    '<div class="card back"><span class="n">'+round(d(g.b))+'</span><span class="u">back</span></div>'+
+    '<div class="tri">'+
+      '<div class="row"><span class="lbl">Back</span><span class="sm">'+round(d(g.b))+'</span></div>'+
+      '<div class="row"><span class="lbl"></span><span class="bign">'+round(d(g.c))+'</span><span class="u">m</span></div>'+
+      '<div class="row"><span class="lbl">Front</span><span class="sm">'+round(d(g.f))+'</span></div>'+
+      '<div class="foot">to green'+(fromTee ? ' · from tee' : '')+'</div>'+
+    '</div>'+
     (from
-      ? '<div class="hint">Drag the ring or tap anywhere</div>'
+      ? (fromTee
+        ? '<div class="hint">📍 '+(km ? km+' km away' : 'No GPS')+' — measuring from the tee</div>'
+        : '<div class="hint">Drag the ring or tap anywhere</div>')
       : '<div class="hint">Drag the ring to measure</div>');
 }
 

@@ -17,4 +17,9 @@ describe('buildHoleMapHtml', () => {
     expect(html).toContain('dchip');
     expect(html).not.toContain('🎯');
   });
+  it('renders the unified tri cluster instead of the old cards', () => {
+    const html = buildHoleMapHtml(base);
+    expect(html).toContain('class="tri"');
+    expect(html).not.toContain('class="card front"');
+  });
 });
