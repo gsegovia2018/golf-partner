@@ -2,21 +2,25 @@ import React, { useEffect, useRef } from 'react';
 import { Animated, Easing, StyleSheet, View } from 'react-native';
 import { semantic } from '../theme/tokens';
 
+// One shared cycle keeps the breath and the ring cadence in sync; rings run
+// on a seamless 1/3-cycle stagger so the pulse never goes still.
+const CYCLE = 2800;
+const RING_EASE = Easing.bezier(0.23, 1, 0.32, 1);
+
 function Ring({ delay }) {
   const v = useRef(new Animated.Value(0)).current;
   useEffect(() => {
-    const run = Animated.loop(
-      Animated.sequence([
-        Animated.delay(delay),
+    const run = Animated.sequence([
+      Animated.delay(delay),
+      Animated.loop(
         Animated.timing(v, {
           toValue: 1,
-          duration: 1800,
+          duration: CYCLE,
           useNativeDriver: true,
-          easing: Easing.out(Easing.cubic),
+          easing: RING_EASE,
         }),
-        Animated.timing(v, { toValue: 0, duration: 0, useNativeDriver: true }),
-      ]),
-    );
+      ),
+    ]);
     run.start();
     return () => run.stop();
   }, [delay, v]);
@@ -26,8 +30,8 @@ function Ring({ delay }) {
       style={[
         styles.ring,
         {
-          transform: [{ scale: v.interpolate({ inputRange: [0, 1], outputRange: [1, 2.2] }) }],
-          opacity: v.interpolate({ inputRange: [0, 0.08, 1], outputRange: [0, 0.55, 0] }),
+          transform: [{ scale: v.interpolate({ inputRange: [0, 1], outputRange: [0.92, 2.35] }) }],
+          opacity: v.interpolate({ inputRange: [0, 0.14, 1], outputRange: [0, 0.5, 0] }),
         },
       ]}
     />
@@ -42,11 +46,11 @@ export default function LoadingSplash() {
     const breatheLoop = Animated.loop(
       Animated.sequence([
         Animated.timing(breathe, {
-          toValue: 1, duration: 1400, useNativeDriver: true,
+          toValue: 1, duration: CYCLE / 2, useNativeDriver: true,
           easing: Easing.inOut(Easing.sin),
         }),
         Animated.timing(breathe, {
-          toValue: 0, duration: 1400, useNativeDriver: true,
+          toValue: 0, duration: CYCLE / 2, useNativeDriver: true,
           easing: Easing.inOut(Easing.sin),
         }),
       ]),
@@ -54,24 +58,29 @@ export default function LoadingSplash() {
     breatheLoop.start();
     Animated.timing(wordmark, {
       toValue: 1, duration: 800, delay: 200, useNativeDriver: true,
+      easing: RING_EASE,
     }).start();
     return () => breatheLoop.stop();
   }, [breathe, wordmark]);
 
-  const ballScale = breathe.interpolate({ inputRange: [0, 1], outputRange: [0.97, 1.03] });
+  const ballScale = breathe.interpolate({ inputRange: [0, 1], outputRange: [0.96, 1.04] });
+  const wordmarkRise = wordmark.interpolate({ inputRange: [0, 1], outputRange: [8, 0] });
 
   return (
     <View style={styles.container}>
       <View style={styles.stack}>
         <Ring delay={0} />
-        <Ring delay={900} />
+        <Ring delay={CYCLE / 3} />
+        <Ring delay={(CYCLE / 3) * 2} />
         <Animated.View style={[styles.ball, { transform: [{ scale: ballScale }] }]}>
           <View style={[styles.dimple, styles.d1]} />
           <View style={[styles.dimple, styles.d2]} />
           <View style={[styles.dimple, styles.d3]} />
         </Animated.View>
       </View>
-      <Animated.Text style={[styles.wordmark, { opacity: wordmark }]}>
+      <Animated.Text
+        style={[styles.wordmark, { opacity: wordmark, transform: [{ translateY: wordmarkRise }] }]}
+      >
         GOLF PARTNER
       </Animated.Text>
     </View>
@@ -83,10 +92,10 @@ const styles = StyleSheet.create({
     flex: 1,
     alignItems: 'center',
     justifyContent: 'center',
-    backgroundColor: '#006747',
+    backgroundColor: '#0f3d2c',
   },
   stack: {
-    width: 120, height: 120,
+    width: 130, height: 130,
     alignItems: 'center', justifyContent: 'center',
   },
   ring: {
