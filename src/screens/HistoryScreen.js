@@ -7,6 +7,7 @@ import ScreenContainer from '../components/ScreenContainer';
 import HistoryRow from '../components/HistoryRow';
 import PressableScale from '../components/ui/PressableScale';
 import Reveal from '../components/ui/Reveal';
+import SwipeToDelete from '../components/ui/SwipeToDelete';
 import { useFocusEffect } from '@react-navigation/native';
 import { Feather } from '@expo/vector-icons';
 
@@ -192,11 +193,17 @@ export default function HistoryScreen({ navigation }) {
                       duration={250}
                       style={s.rowWrap}
                     >
-                      <HistoryRow
-                        model={model}
-                        onPress={() => openTournament(model.id)}
-                        onLongPress={model.isOwner && t ? () => confirmDelete(t) : undefined}
-                      />
+                      <SwipeToDelete
+                        enabled={!!(model.isOwner && t)}
+                        onDelete={() => confirmDelete(t)}
+                        accessibilityLabel={`Delete ${model.title}`}
+                      >
+                        <HistoryRow
+                          model={model}
+                          onPress={() => openTournament(model.id)}
+                          onLongPress={model.isOwner && t ? () => confirmDelete(t) : undefined}
+                        />
+                      </SwipeToDelete>
                     </Reveal>
                   );
                 })}

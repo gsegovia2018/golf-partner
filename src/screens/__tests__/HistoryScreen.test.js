@@ -142,6 +142,25 @@ describe('HistoryScreen', () => {
     await waitFor(() => expect(deleteTournament).toHaveBeenCalledWith('1780001519615'));
   });
 
+  test('swipe delete action on an owned row confirms then deletes', async () => {
+    const { findByLabelText, findByText } = render(wrap(
+      <HistoryScreen navigation={{ navigate: jest.fn() }} />,
+    ));
+    const action = await findByLabelText('Delete 28 May game');
+    fireEvent.press(action);
+    const confirmBtn = await findByText('Delete');
+    fireEvent.press(confirmBtn);
+    await waitFor(() => expect(deleteTournament).toHaveBeenCalledWith('1780001519615'));
+  });
+
+  test('non-owned rows have no swipe delete action', async () => {
+    const { findByText, queryByLabelText } = render(wrap(
+      <HistoryScreen navigation={{ navigate: jest.fn() }} />,
+    ));
+    await findByText('June Cup');
+    expect(queryByLabelText('Delete June Cup')).toBeNull();
+  });
+
   test('long-press on a non-owned row does nothing', async () => {
     const { findByLabelText, queryByText } = render(wrap(
       <HistoryScreen navigation={{ navigate: jest.fn() }} />,
