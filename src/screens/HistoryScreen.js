@@ -4,9 +4,9 @@ import {
   Alert, Modal, Pressable,
 } from 'react-native';
 import ScreenContainer from '../components/ScreenContainer';
-import CardGrid from '../components/CardGrid';
-import IconButton from '../components/ui/IconButton';
-import { useResponsive } from '../theme/responsive';
+import HistoryRow from '../components/HistoryRow';
+import PressableScale from '../components/ui/PressableScale';
+import Reveal from '../components/ui/Reveal';
 import { useFocusEffect } from '@react-navigation/native';
 import { Feather } from '@expo/vector-icons';
 
@@ -16,17 +16,27 @@ import {
   subscribeTournamentChanges, deleteTournament, tournamentNounCapitalized,
 } from '../store/tournamentStore';
 import { loadProfile, computePersonalStats } from '../store/profileStore';
+import { buildHistorySections } from '../store/historyModel';
+import { semantic } from '../theme/tokens';
 
-// History tab: a snapshot of the user's all-time stats followed by their
-// archive of finished games and tournaments.
+const FILTERS = [
+  { key: 'all', label: 'All' },
+  { key: 'tournament', label: 'Tournaments' },
+  { key: 'game', label: 'Games' },
+];
+
+// History tab: a condensed record strip, filter chips, and the archive of
+// finished games and tournaments as one month-grouped timeline.
 export default function HistoryScreen({ navigation }) {
   const { theme } = useTheme();
-  const { gridColumns } = useResponsive();
-  const s = useMemo(() => makeStyles(theme, gridColumns), [theme, gridColumns]);
+  const gold = theme.isDark ? semantic.winner.dark : semantic.winner.light;
+  const s = useMemo(() => makeStyles(theme, gold), [theme, gold]);
 
   const [finished, setFinished] = useState([]);
+  const [identity, setIdentity] = useState({});
   const [stats, setStats] = useState(null);
   const [loading, setLoading] = useState(true);
+  const [filter, setFilter] = useState('all');
   const [confirmState, setConfirmState] = useState(null);
   const confirmResolverRef = useRef(null);
   const confirm = useCallback(({ title, message, confirmLabel = 'Confirm', destructive = false }) => (
@@ -45,16 +55,13 @@ export default function HistoryScreen({ navigation }) {
   const reload = useCallback(async () => {
     try {
       const { list } = await loadAllTournamentsWithFallback();
-      setFinished(
-        list.filter((t) => isTournamentFinished(t)).sort((a, b) => b.id - a.id),
-      );
+      setFinished(list.filter((t) => isTournamentFinished(t)));
       try {
         const profile = await loadProfile();
         if (profile?.userId || profile?.displayName) {
-          setStats(await computePersonalStats({
-            userId: profile?.userId,
-            displayName: profile?.displayName,
-          }));
+          const id = { userId: profile?.userId, displayName: profile?.displayName };
+          setIdentity(id);
+          setStats(await computePersonalStats(id));
         }
       } catch { /* stats are best-effort */ }
     } finally {
@@ -90,61 +97,29 @@ export default function HistoryScreen({ navigation }) {
     }
   }
 
-  const renderCard = (t) => {
-    const players = t.players ?? [];
-    const rounds = t.rounds ?? [];
-    const isGameKind = t.kind === 'game';
-    const metaText = players.length > 0
-      ? players.map((p) => p.name.split(' ')[0]).join(' · ')
-      : '';
-    return (
-      <View key={t.id} style={s.cardWrapper}>
-        <TouchableOpacity
-          style={[s.card, t._role === 'owner' && s.cardWithDelete]}
-          onPress={() => openTournament(t.id)}
-          activeOpacity={0.7}
-        >
-          <View style={{ flex: 1 }}>
-            <Text style={s.cardName}>{t.name}</Text>
-            {metaText ? <Text style={s.cardMeta}>{metaText}</Text> : null}
-            <Text style={s.cardRound}>
-              {isGameKind
-                ? (rounds[0]?.courseName || 'Single round')
-                : `${rounds.length} rounds`}
-            </Text>
-          </View>
-          <Feather name="chevron-right" size={18} color={theme.text.muted} />
-        </TouchableOpacity>
-        {t._role === 'owner' && (
-          <IconButton
-            icon="trash-2"
-            color={theme.destructive}
-            style={s.deleteBtn}
-            onPress={() => confirmDelete(t)}
-            accessibilityLabel={`Delete ${t.name}`}
-          />
-        )}
-      </View>
-    );
-  };
+  const filtered = useMemo(() => (
+    filter === 'all'
+      ? finished
+      : finished.filter((t) => (filter === 'game' ? t.kind === 'game' : t.kind !== 'game'))
+  ), [finished, filter]);
 
-  const games = finished.filter((t) => t.kind === 'game');
-  const tournaments = finished.filter((t) => t.kind !== 'game');
+  const sections = useMemo(
+    () => buildHistorySections(filtered, identity),
+    [filtered, identity],
+  );
+  const byId = useMemo(
+    () => Object.fromEntries(finished.map((t) => [t.id, t])),
+    [finished],
+  );
 
-  const statCells = stats ? [
-    { label: 'Tournaments', value: stats.tournamentsPlayed },
-    { label: 'Rounds', value: stats.roundsPlayed },
-    { label: 'Wins', value: stats.wins },
-    {
-      label: 'Avg / round',
-      value: stats.roundsPlayed > 0 ? stats.avgPointsPerRound.toFixed(1) : '—',
-    },
-    { label: 'Total pts', value: stats.totalPoints },
-    {
-      label: 'Best round',
-      value: stats.bestRound ? `${stats.bestRound.points}` : '—',
-    },
+  const recordCells = stats ? [
+    { label: 'Rounds', value: String(stats.roundsPlayed) },
+    { label: 'Wins', value: String(stats.wins), gold: true },
+    { label: 'Avg pts', value: stats.roundsPlayed > 0 ? stats.avgPointsPerRound.toFixed(1) : '—' },
+    { label: 'Best', value: stats.bestRound ? String(stats.bestRound.points) : '—' },
   ] : [];
+
+  let rowIndex = -1;
 
   return (
     <ScreenContainer style={s.container} edges={['top']}>
@@ -157,42 +132,76 @@ export default function HistoryScreen({ navigation }) {
       ) : (
         <ScrollView contentContainerStyle={s.content}>
           {stats && stats.roundsPlayed > 0 && (
-            <>
-              <Text style={s.sectionLabel}>YOUR RECORD</Text>
-              <View style={s.statsGrid}>
-                {statCells.map((c) => (
-                  <View key={c.label} style={s.statCell}>
-                    <Text style={s.statValue}>{c.value}</Text>
-                    <Text style={s.statLabel}>{c.label}</Text>
+            <PressableScale
+              style={s.recordStrip}
+              activeScale={0.98}
+              onPress={() => navigation.navigate('MyStats')}
+              accessibilityRole="button"
+              accessibilityLabel="Your record. Opens My Stats."
+            >
+              {recordCells.map((c, i) => (
+                <React.Fragment key={c.label}>
+                  {i > 0 && <View style={s.recordDivider} />}
+                  <View style={s.recordCell}>
+                    <Text style={[s.recordValue, c.gold && s.recordValueGold]}>{c.value}</Text>
+                    <Text style={s.recordLabel}>{c.label}</Text>
                   </View>
-                ))}
-              </View>
-            </>
+                </React.Fragment>
+              ))}
+              <Feather name="chevron-right" size={16} color={theme.text.muted} />
+            </PressableScale>
           )}
 
-          {finished.length === 0 ? (
+          <View style={s.chips}>
+            {FILTERS.map((f) => (
+              <TouchableOpacity
+                key={f.key}
+                style={[s.chip, filter === f.key && s.chipOn]}
+                onPress={() => setFilter(f.key)}
+                activeOpacity={0.8}
+                accessibilityRole="button"
+                accessibilityState={{ selected: filter === f.key }}
+              >
+                <Text style={[s.chipText, filter === f.key && s.chipTextOn]}>{f.label}</Text>
+              </TouchableOpacity>
+            ))}
+          </View>
+
+          {sections.length === 0 ? (
             <View style={s.emptyState}>
               <Feather name="clock" size={44} color={theme.text.muted} />
               <Text style={s.emptyTitle}>No history yet</Text>
               <Text style={s.emptySub}>
-                Finished games and tournaments will be archived here.
+                {finished.length === 0
+                  ? 'Finished games and tournaments will be archived here.'
+                  : 'Nothing in this filter yet.'}
               </Text>
             </View>
           ) : (
-            <>
-              {tournaments.length > 0 && (
-                <>
-                  <Text style={s.sectionLabel}>TOURNAMENTS</Text>
-                  <CardGrid>{tournaments.map(renderCard)}</CardGrid>
-                </>
-              )}
-              {games.length > 0 && (
-                <>
-                  <Text style={s.sectionLabel}>GAMES</Text>
-                  <CardGrid>{games.map(renderCard)}</CardGrid>
-                </>
-              )}
-            </>
+            sections.map((section) => (
+              <View key={section.key}>
+                <Text style={s.sectionLabel}>{section.label.toUpperCase()}</Text>
+                {section.items.map((model) => {
+                  rowIndex += 1;
+                  const t = byId[model.id];
+                  return (
+                    <Reveal
+                      key={model.id}
+                      delay={Math.min(rowIndex * 30, 300)}
+                      dy={8}
+                      duration={250}
+                      style={s.rowWrap}
+                    >
+                      <HistoryRow
+                        model={model}
+                        onPress={() => openTournament(model.id)}
+                        onLongPress={model.isOwner && t ? () => confirmDelete(t) : undefined}
+                      />
+                    </Reveal>
+                  );
+                })}
+              </View>
+            ))
           )}
         </ScrollView>
       )}
@@ -240,7 +249,7 @@ function ConfirmModal({ state, onResult, s }) {
   );
 }
 
-function makeStyles(theme, statColumns) {
+function makeStyles(theme, gold) {
   return StyleSheet.create({
     container: { flex: 1, backgroundColor: theme.bg.primary },
     header: { paddingHorizontal: 20, paddingTop: 14, paddingBottom: 10 },
@@ -253,39 +262,33 @@ function makeStyles(theme, statColumns) {
       fontFamily: 'PlusJakartaSans-SemiBold', color: theme.text.muted, fontSize: 10,
       letterSpacing: 1.5, marginTop: 18, marginBottom: 12, textTransform: 'uppercase',
     },
-    statsGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: 10 },
-    statCell: {
-      flexGrow: 1, flexBasis: statColumns >= 3 ? '30%' : '46%',
-      backgroundColor: theme.bg.card, borderRadius: 14, borderWidth: 1,
-      borderColor: theme.border.default,
-      paddingVertical: 14, paddingHorizontal: 12, alignItems: 'center',
+    recordStrip: {
+      marginTop: 6, marginBottom: 4, paddingVertical: 13, paddingHorizontal: 16,
+      backgroundColor: theme.bg.card, borderRadius: 16,
+      borderWidth: 1, borderColor: theme.border.default,
+      flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
+      gap: 8,
       ...(theme.isDark ? {} : theme.shadow.card),
     },
-    statValue: { fontFamily: 'PlayfairDisplay-Bold', fontSize: 22, color: theme.text.primary },
-    statLabel: {
-      fontFamily: 'PlusJakartaSans-SemiBold', fontSize: 9, color: theme.text.muted,
-      marginTop: 4, letterSpacing: 0.8, textTransform: 'uppercase',
+    recordCell: { alignItems: 'center', flex: 1 },
+    recordValue: { fontFamily: 'PlayfairDisplay-Bold', fontSize: 19, color: theme.text.primary },
+    recordValueGold: { color: gold },
+    recordLabel: {
+      fontFamily: 'PlusJakartaSans-SemiBold', fontSize: 8.5, letterSpacing: 0.8,
+      color: theme.text.muted, marginTop: 2, textTransform: 'uppercase',
     },
-    cardWrapper: { position: 'relative' },
-    card: {
-      backgroundColor: theme.bg.card, borderRadius: 18,
-      borderWidth: theme.isDark ? 1 : 0,
-      borderColor: theme.isDark ? theme.glass?.border || theme.border.default : theme.border.default,
-      padding: 16, flexDirection: 'row', alignItems: 'center',
-      ...(theme.isDark ? {} : theme.shadow.card),
+    recordDivider: { width: 1, height: 26, backgroundColor: theme.border.default },
+    chips: { flexDirection: 'row', gap: 8, paddingTop: 14, paddingBottom: 2 },
+    chip: {
+      paddingHorizontal: 14, paddingVertical: 7, borderRadius: 999,
+      borderWidth: 1, borderColor: theme.border.default, backgroundColor: theme.bg.card,
     },
-    cardWithDelete: { paddingRight: 56 },
-    cardName: { fontFamily: 'PlayfairDisplay-Bold', color: theme.text.primary, fontSize: 16 },
-    cardMeta: {
-      fontFamily: 'PlusJakartaSans-Medium', color: theme.text.secondary,
-      fontSize: 12, marginTop: 4,
+    chipOn: { backgroundColor: theme.accent.primary, borderColor: theme.accent.primary },
+    chipText: {
+      fontFamily: 'PlusJakartaSans-Bold', fontSize: 12, color: theme.text.secondary,
     },
-    cardRound: {
-      fontFamily: 'PlusJakartaSans-Medium', color: theme.text.muted, fontSize: 11, marginTop: 2,
-    },
-    deleteBtn: {
-      position: 'absolute', right: 10, top: 10,
-    },
+    chipTextOn: { color: theme.text.inverse },
+    rowWrap: { marginBottom: 10 },
     emptyState: { alignItems: 'center', paddingVertical: 80, gap: 12 },
     emptyTitle: { fontFamily: 'PlayfairDisplay-Bold', fontSize: 18, color: theme.text.primary },
     emptySub: {
