@@ -7,6 +7,7 @@ import ScreenContainer from '../components/ScreenContainer';
 import { useFocusEffect } from '@react-navigation/native';
 import { Feather } from '@expo/vector-icons';
 import PressableScale from '../components/ui/PressableScale';
+import IconButton from '../components/ui/IconButton';
 
 import { useTheme } from '../theme/ThemeContext';
 import {
@@ -636,13 +637,12 @@ export default function FeedScreen({ navigation }) {
     <ScreenContainer style={s.container} edges={['top']}>
       <View style={s.header}>
         <Text style={s.headerTitle}>Feed</Text>
-        <TouchableOpacity
-          style={s.headerBtn}
+        <IconButton
+          icon="users"
+          size={18}
+          color={theme.accent.primary}
           onPress={() => navigation.navigate('Friends')}
-          activeOpacity={0.7}
-        >
-          <Feather name="users" size={18} color={theme.accent.primary} />
-        </TouchableOpacity>
+        />
       </View>
 
       {!loading ? (
@@ -722,12 +722,6 @@ function makeStyles(theme) {
     },
     headerTitle: {
       fontFamily: 'PlayfairDisplay-Black', fontSize: 26, color: theme.text.primary,
-    },
-    headerBtn: {
-      width: 38, height: 38, borderRadius: 12,
-      backgroundColor: theme.isDark ? theme.bg.secondary : theme.bg.card,
-      borderWidth: 1, borderColor: theme.border.default,
-      alignItems: 'center', justifyContent: 'center',
     },
     center: { flex: 1, alignItems: 'center', justifyContent: 'center' },
     list: { padding: 16, paddingBottom: 30, flexGrow: 1 },

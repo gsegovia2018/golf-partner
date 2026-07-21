@@ -2,6 +2,7 @@ import React, { useEffect, useState, useCallback, useRef, useMemo, startTransiti
 import { View, Text, TouchableOpacity, StyleSheet, ScrollView, Switch, Alert, FlatList, Platform, Modal, Pressable, ActivityIndicator, Share, Animated, Easing } from 'react-native';
 import { useReducedMotion } from 'react-native-reanimated';
 import ScreenContainer from '../components/ScreenContainer';
+import IconButton from '../components/ui/IconButton';
 import RoundScoreboard from '../components/RoundScoreboard';
 import { Feather } from '@expo/vector-icons';
 import QRCode from 'react-native-qrcode-svg';
@@ -1234,23 +1235,22 @@ export default function HomeScreen({ navigation, route }) {
             <Text style={s.title}>Golf Partner</Text>
           </View>
           <View style={s.headerActions}>
-            <TouchableOpacity
-              style={s.iconBtn}
+            <IconButton
+              icon="menu"
+              size={18}
+              color={theme.accent.primary}
               onPress={() => setShowListMenu(true)}
-              activeOpacity={0.7}
               accessibilityLabel="Menu"
-            >
-              <Feather name="menu" size={18} color={theme.accent.primary} />
-            </TouchableOpacity>
-            <TouchableOpacity
-              style={s.iconBtn}
+            />
+            <IconButton
+              icon="bell"
+              size={18}
+              color={theme.accent.primary}
               onPress={() => navigation.navigate('Notifications')}
-              activeOpacity={0.7}
+              dot={unreadNotifs > 0}
+              dotColor={theme.accent.danger ?? '#e5484d'}
               accessibilityLabel={unreadNotifs > 0 ? `Notifications, ${unreadNotifs} unread` : 'Notifications'}
-            >
-              <Feather name="bell" size={18} color={theme.accent.primary} />
-              {unreadNotifs > 0 && <View style={s.notifDot} />}
-            </TouchableOpacity>
+            />
           </View>
         </View>
 
@@ -1642,9 +1642,7 @@ export default function HomeScreen({ navigation, route }) {
     <ScreenContainer style={s.screen} edges={['top', 'bottom']}>
       <View style={s.header}>
         <View style={s.headerLeft}>
-          <TouchableOpacity onPress={goToList} style={s.backBtn} activeOpacity={0.7}>
-            <Feather name="chevron-left" size={20} color={theme.accent.primary} />
-          </TouchableOpacity>
+          <IconButton icon="chevron-left" size={20} color={theme.accent.primary} onPress={goToList} />
           <Text
             style={[s.headerTitle, tournament.name.length > 22 && s.headerTitleLong]}
             numberOfLines={2}
@@ -1655,36 +1653,31 @@ export default function HomeScreen({ navigation, route }) {
         </View>
         <View style={s.headerActions}>
           {!isViewer && (
-            <TouchableOpacity style={s.iconBtn} onPress={handleInvite} activeOpacity={0.7}>
-              <Feather name="share-2" size={18} color={theme.accent.primary} />
-            </TouchableOpacity>
+            <IconButton icon="share-2" size={18} color={theme.accent.primary} onPress={handleInvite} />
           )}
-          <TouchableOpacity
-            style={s.iconBtn}
+          <IconButton
+            icon="image"
+            size={18}
+            color={theme.accent.primary}
             onPress={() => navigation.navigate('Gallery', { tournamentId: tournament.id })}
-            activeOpacity={0.7}
             accessibilityLabel="Memories"
-          >
-            <Feather name="image" size={18} color={theme.accent.primary} />
-          </TouchableOpacity>
+          />
           {!appSettings.noSpoilers && (
-            <TouchableOpacity
-              style={s.iconBtn}
+            <IconButton
+              icon={showRunning ? 'eye-off' : 'eye'}
+              size={18}
+              color={theme.accent.primary}
               onPress={toggleRunning}
-              activeOpacity={0.7}
               accessibilityLabel={showRunning ? 'Hide running scores' : 'Show running scores'}
-            >
-              <Feather name={showRunning ? 'eye-off' : 'eye'} size={18} color={theme.accent.primary} />
-            </TouchableOpacity>
+            />
           )}
-          <TouchableOpacity
-            style={s.iconBtn}
+          <IconButton
+            icon="settings"
+            size={18}
+            color={theme.accent.primary}
             onPress={() => setShowSettings(true)}
-            activeOpacity={0.7}
             accessibilityLabel="Tournament settings"
-          >
-            <Feather name="settings" size={18} color={theme.accent.primary} />
-          </TouchableOpacity>
+          />
         </View>
       </View>
 
@@ -2471,16 +2464,8 @@ const makeStyles = (t) => StyleSheet.create({
   headerLeft: { flexDirection: 'row', alignItems: 'center', flex: 1, minWidth: 0, paddingRight: 8 },
   headerActions: { flexDirection: 'row', gap: 8, flexShrink: 0 },
   title: { fontFamily: 'PlayfairDisplay-Black', fontSize: 30, color: t.text.primary, letterSpacing: -0.5 },
-  backBtn: { flexDirection: 'row', alignItems: 'center', flexShrink: 0 },
   headerTitle: { fontFamily: 'PlayfairDisplay-Bold', fontSize: 20, color: t.text.primary, flexShrink: 1, lineHeight: 24 },
   headerTitleLong: { fontSize: 16, lineHeight: 20 },
-  iconBtn: {
-    width: 36, height: 36, borderRadius: 10,
-    backgroundColor: t.isDark ? t.bg.secondary : t.bg.card,
-    borderWidth: 1, borderColor: t.isDark ? t.glass?.border || t.border.default : t.border.default,
-    alignItems: 'center', justifyContent: 'center',
-    ...(t.isDark ? {} : t.shadow.card),
-  },
 
   // Buttons
   primaryBtn: {
@@ -2965,17 +2950,6 @@ const makeStyles = (t) => StyleSheet.create({
     color: t.text.primary, fontSize: 14,
   },
   menuItemDestructive: { borderBottomWidth: 0 },
-  notifDot: {
-    position: 'absolute',
-    top: 6,
-    right: 6,
-    width: 9,
-    height: 9,
-    borderRadius: 5,
-    backgroundColor: t.accent.danger ?? '#e5484d',
-    borderWidth: 1.5,
-    borderColor: t.bg.card,
-  },
 
   // Viewer badge
   viewerBadge: {

@@ -5,6 +5,7 @@ import {
 } from 'react-native';
 import ScreenContainer from '../components/ScreenContainer';
 import CardGrid from '../components/CardGrid';
+import IconButton from '../components/ui/IconButton';
 import { useResponsive } from '../theme/responsive';
 import { useFocusEffect } from '@react-navigation/native';
 import { Feather } from '@expo/vector-icons';
@@ -115,15 +116,14 @@ export default function HistoryScreen({ navigation }) {
           <Feather name="chevron-right" size={18} color={theme.text.muted} />
         </TouchableOpacity>
         {t._role === 'owner' && (
-          <TouchableOpacity
+          <IconButton
+            icon="trash-2"
+            size={14}
+            color={theme.destructive}
             style={s.deleteBtn}
             onPress={() => confirmDelete(t)}
-            accessibilityRole="button"
             accessibilityLabel={`Delete ${t.name}`}
-            hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
-          >
-            <Feather name="trash-2" size={14} color={theme.destructive} />
-          </TouchableOpacity>
+          />
         )}
       </View>
     );
@@ -286,10 +286,6 @@ function makeStyles(theme, statColumns) {
     },
     deleteBtn: {
       position: 'absolute', right: 10, top: 10,
-      width: 30, height: 30, borderRadius: 10,
-      backgroundColor: theme.bg.secondary,
-      borderWidth: 1, borderColor: theme.border.default,
-      alignItems: 'center', justifyContent: 'center',
     },
     emptyState: { alignItems: 'center', paddingVertical: 80, gap: 12 },
     emptyTitle: { fontFamily: 'PlayfairDisplay-Bold', fontSize: 18, color: theme.text.primary },

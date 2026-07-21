@@ -4,6 +4,7 @@ import {
   ActivityIndicator, Alert, Platform, Image,
 } from 'react-native';
 import ScreenContainer from '../components/ScreenContainer';
+import IconButton from '../components/ui/IconButton';
 import { useFocusEffect } from '@react-navigation/native';
 import { Feather } from '@expo/vector-icons';
 import * as ImagePicker from 'expo-image-picker';
@@ -238,14 +239,13 @@ export default function ProfileScreen({ navigation, route }) {
         {isTabPresentation ? (
           headerSave
         ) : (
-          <TouchableOpacity
+          <IconButton
+            icon="chevron-left"
+            size={22}
+            color={theme.accent.primary}
             accessibilityLabel="Back"
             onPress={handleBack}
-            style={s.backBtn}
-            activeOpacity={0.7}
-          >
-            <Feather name="chevron-left" size={22} color={theme.accent.primary} />
-          </TouchableOpacity>
+          />
         )}
         <Text style={s.headerTitle}>Profile</Text>
         {isTabPresentation ? <View style={s.backBtn} /> : headerSave}

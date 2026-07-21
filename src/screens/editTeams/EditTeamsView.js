@@ -2,6 +2,7 @@ import React from 'react';
 import { View, Text, TouchableOpacity, ScrollView, StyleSheet } from 'react-native';
 import { Feather } from '@expo/vector-icons';
 import ScreenContainer from '../../components/ScreenContainer';
+import IconButton from '../../components/ui/IconButton';
 import { useTheme } from '../../theme/ThemeContext';
 import { semantic } from '../../theme/tokens';
 import { pairsMatchDuels } from '../../store/scoring';
@@ -189,9 +190,7 @@ export default function EditTeamsView({
   return (
     <ScreenContainer style={s.screen} edges={['top', 'bottom']}>
       <View style={s.header}>
-        <TouchableOpacity onPress={onBack} style={s.backBtn} activeOpacity={0.7}>
-          <Feather name="chevron-left" size={22} color={theme.accent.primary} />
-        </TouchableOpacity>
+        <IconButton icon="chevron-left" size={22} color={theme.accent.primary} onPress={onBack} />
         <Text style={s.headerTitle}>Edit Teams</Text>
         <View style={{ width: 36 }} />
       </View>
@@ -284,12 +283,6 @@ function makeStyles(t) {
     header: {
       flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
       paddingHorizontal: 20, paddingTop: 16, paddingBottom: 12,
-    },
-    backBtn: {
-      width: 36, height: 36, borderRadius: 12,
-      alignItems: 'center', justifyContent: 'center',
-      backgroundColor: t.isDark ? t.bg.secondary : t.bg.card,
-      borderWidth: 1, borderColor: t.isDark ? t.glass?.border || t.border.default : t.border.default,
     },
     headerTitle: { fontFamily: 'PlusJakartaSans-Bold', fontSize: 17, color: t.text.primary },
 

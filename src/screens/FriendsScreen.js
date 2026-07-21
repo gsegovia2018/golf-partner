@@ -5,6 +5,7 @@ import {
 } from 'react-native';
 import ScreenContainer from '../components/ScreenContainer';
 import BottomSheet from '../components/BottomSheet';
+import IconButton from '../components/ui/IconButton';
 import { useFocusEffect } from '@react-navigation/native';
 import { Feather } from '@expo/vector-icons';
 
@@ -231,9 +232,7 @@ export default function FriendsScreen({ navigation }) {
   return (
     <ScreenContainer style={s.container} edges={['top', 'bottom']}>
       <View style={s.header}>
-        <TouchableOpacity onPress={() => navigation.goBack()} style={s.backBtn}>
-          <Feather name="chevron-left" size={22} color={theme.accent.primary} />
-        </TouchableOpacity>
+        <IconButton icon="chevron-left" size={22} color={theme.accent.primary} onPress={() => navigation.goBack()} />
         <Text style={s.headerTitle}>Friends</Text>
         <View style={{ width: 22 }} />
       </View>
@@ -392,9 +391,7 @@ function FriendProfileModal({ friend, theme, onClose }) {
                   : ''}
               </Text>
             </View>
-            <TouchableOpacity onPress={onClose} hitSlop={12} style={s.modalClose}>
-              <Feather name="x" size={20} color={theme.text.muted} />
-            </TouchableOpacity>
+            <IconButton icon="x" size={20} color={theme.text.muted} onPress={onClose} />
           </View>
 
           {loading ? (
@@ -453,7 +450,6 @@ function makeStyles(theme) {
       flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
       paddingHorizontal: 20, paddingTop: 16, paddingBottom: 12,
     },
-    backBtn: {},
     headerTitle: {
       fontFamily: 'PlayfairDisplay-Bold', fontSize: 18, color: theme.text.primary,
     },
@@ -532,10 +528,6 @@ function makeStyles(theme) {
     },
     modalHead: {
       flexDirection: 'row', alignItems: 'center', gap: 12, marginBottom: 4,
-    },
-    modalClose: {
-      width: 32, height: 32, borderRadius: 16, alignItems: 'center', justifyContent: 'center',
-      backgroundColor: theme.bg.secondary,
     },
     h2hRow: { flexDirection: 'row', gap: 8 },
     h2hCell: {

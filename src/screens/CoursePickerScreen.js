@@ -4,6 +4,7 @@ import {
   Text, TextInput, TouchableOpacity, View,
 } from 'react-native';
 import ScreenContainer from '../components/ScreenContainer';
+import IconButton from '../components/ui/IconButton';
 import { useFocusEffect } from '@react-navigation/native';
 import { Feather, FontAwesome } from '@expo/vector-icons';
 
@@ -304,9 +305,7 @@ export default function CoursePickerScreen({ navigation, route }) {
   return (
     <ScreenContainer style={s.container} edges={['top', 'bottom']}>
       <View style={s.header}>
-        <TouchableOpacity onPress={() => navigation.goBack()} style={s.backBtn}>
-          <Feather name="chevron-left" size={22} color={theme.accent.primary} />
-        </TouchableOpacity>
+        <IconButton icon="chevron-left" size={22} color={theme.accent.primary} onPress={() => navigation.goBack()} />
         <Text style={s.headerTitle}>Select Courses</Text>
         <View style={{ width: 22 }} />
       </View>
@@ -415,7 +414,6 @@ const makeStyles = (theme) => StyleSheet.create({
     paddingBottom: 12,
     backgroundColor: theme.bg.primary,
   },
-  backBtn: {},
   headerTitle: {
     fontFamily: 'PlusJakartaSans-Bold',
     fontSize: 17,

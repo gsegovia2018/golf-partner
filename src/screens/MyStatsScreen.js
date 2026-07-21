@@ -1,7 +1,8 @@
 import React, { useEffect, useState, useMemo, useCallback, useRef } from 'react';
-import { View, Text, TouchableOpacity, StyleSheet, ScrollView, ActivityIndicator } from 'react-native';
+import { View, Text, StyleSheet, ScrollView, ActivityIndicator } from 'react-native';
 import ScreenContainer from '../components/ScreenContainer';
 import PressableScale from '../components/ui/PressableScale';
+import IconButton from '../components/ui/IconButton';
 import Reveal from '../components/ui/Reveal';
 import { Feather } from '@expo/vector-icons';
 import AsyncStorage from '@react-native-async-storage/async-storage';
@@ -318,13 +319,13 @@ export default function MyStatsScreen({ navigation, route }) {
   const Header = (
     <View style={s.header}>
       {!isTabPresentation && (
-        <TouchableOpacity
+        <IconButton
+          icon="chevron-left"
+          size={22}
+          color={theme.accent.primary}
           accessibilityLabel="Back"
           onPress={() => navigation.goBack()}
-          style={s.backBtn}
-        >
-          <Feather name="chevron-left" size={22} color={theme.accent.primary} />
-        </TouchableOpacity>
+        />
       )}
       <Text style={s.headerTitle}>My Stats</Text>
       <PressableScale
@@ -524,14 +525,6 @@ function makeStyles(theme) {
     header: {
       flexDirection: 'row', alignItems: 'center',
       paddingHorizontal: 20, paddingTop: 14, paddingBottom: 10,
-    },
-    backBtn: {
-      width: 38,
-      height: 38,
-      alignItems: 'center',
-      justifyContent: 'center',
-      padding: theme.spacing.xs,
-      marginLeft: -theme.spacing.sm,
     },
     headerTitle: {
       flex: 1, fontFamily: 'PlayfairDisplay-Black', fontSize: 26, color: theme.text.primary,

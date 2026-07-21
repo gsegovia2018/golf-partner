@@ -3,6 +3,7 @@ import { View, Text, StyleSheet, ScrollView, ActivityIndicator } from 'react-nat
 import { Feather } from '@expo/vector-icons';
 import ScreenContainer from '../components/ScreenContainer';
 import PressableScale from '../components/ui/PressableScale';
+import IconButton from '../components/ui/IconButton';
 import { useTheme } from '../theme/ThemeContext';
 import { useAuth } from '../context/AuthContext';
 import { loadAllTournamentsWithFallback } from '../store/tournamentStore';
@@ -63,14 +64,13 @@ export default function CourseStatsScreen({ navigation, route }) {
 
   const Header = (
     <View style={s.header}>
-      <PressableScale
-        accessibilityRole="button"
+      <IconButton
+        icon="chevron-left"
+        size={22}
+        color={theme.accent.primary}
         accessibilityLabel="Back"
         onPress={() => navigation.goBack()}
-        style={s.backBtn}
-      >
-        <Feather name="chevron-left" size={22} color={theme.accent.primary} />
-      </PressableScale>
+      />
       <Text style={s.headerTitle} numberOfLines={1}>
         {breakdown?.courseName ?? fallbackName}
       </Text>

@@ -4,6 +4,7 @@ import {
   StyleSheet, KeyboardAvoidingView, Platform, Alert, ActivityIndicator,
 } from 'react-native';
 import { Feather } from '@expo/vector-icons';
+import IconButton from '../components/ui/IconButton';
 import { useTheme } from '../theme/ThemeContext';
 import {
   joinTournamentByCode, setActiveTournament, getTournament, findClaimedSlot,
@@ -67,9 +68,7 @@ export default function JoinTournamentScreen({ navigation, route }) {
   return (
     <KeyboardAvoidingView style={s.screen} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
       <View style={s.header}>
-        <TouchableOpacity onPress={() => navigation.goBack()} style={s.backBtn} activeOpacity={0.7}>
-          <Feather name="chevron-left" size={22} color={theme.accent.primary} />
-        </TouchableOpacity>
+        <IconButton icon="chevron-left" size={22} color={theme.accent.primary} onPress={() => navigation.goBack()} />
         <Text style={s.headerTitle}>Join</Text>
         <View style={{ width: 22 }} />
       </View>
@@ -129,7 +128,6 @@ const makeStyles = (theme) => StyleSheet.create({
     paddingHorizontal: 20, paddingTop: 16, paddingBottom: 12,
     width: '100%', maxWidth: 460, alignSelf: 'center',
   },
-  backBtn: {},
   headerTitle: { fontFamily: 'PlusJakartaSans-Bold', fontSize: 17, color: theme.text.primary },
   content: { flex: 1, padding: 24, alignItems: 'center', justifyContent: 'center', width: '100%', maxWidth: 460, alignSelf: 'center' },
   icon: {

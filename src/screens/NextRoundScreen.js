@@ -10,6 +10,7 @@ import {
   View,
 } from 'react-native';
 import ScreenContainer from '../components/ScreenContainer';
+import IconButton from '../components/ui/IconButton';
 import { Feather } from '@expo/vector-icons';
 import {
   loadTournament, subscribeTournamentChanges,
@@ -127,9 +128,7 @@ export default function NextRoundScreen({ navigation, route }) {
     return (
       <ScreenContainer style={s.container} edges={['top', 'bottom']}>
         <View style={s.header}>
-          <TouchableOpacity onPress={() => navigation.goBack()} style={s.backBtn}>
-            <Feather name="chevron-left" size={22} color={theme.accent.primary} />
-          </TouchableOpacity>
+          <IconButton icon="chevron-left" size={22} color={theme.accent.primary} onPress={() => navigation.goBack()} />
           <Text style={s.headerTitle}>Next Round</Text>
           <View style={{ width: 22 }} />
         </View>
@@ -151,9 +150,7 @@ export default function NextRoundScreen({ navigation, route }) {
     return (
       <ScreenContainer style={s.container} edges={['top', 'bottom']}>
         <View style={s.header}>
-          <TouchableOpacity onPress={() => navigation.goBack()} style={s.backBtn}>
-            <Feather name="chevron-left" size={22} color={theme.accent.primary} />
-          </TouchableOpacity>
+          <IconButton icon="chevron-left" size={22} color={theme.accent.primary} onPress={() => navigation.goBack()} />
           <Text style={s.headerTitle}>Next Round</Text>
           <View style={{ width: 22 }} />
         </View>
@@ -425,9 +422,7 @@ export default function NextRoundScreen({ navigation, route }) {
   return (
     <ScreenContainer style={s.container} edges={['top', 'bottom']}>
       <View style={s.header}>
-        <TouchableOpacity onPress={() => navigation.goBack()} style={s.backBtn}>
-          <Feather name="chevron-left" size={22} color={theme.accent.primary} />
-        </TouchableOpacity>
+        <IconButton icon="chevron-left" size={22} color={theme.accent.primary} onPress={() => navigation.goBack()} />
         <Text style={s.headerTitle}>Next Round</Text>
         <View style={{ width: 22 }} />
       </View>
@@ -498,16 +493,6 @@ function makeStyles(theme) {
       paddingHorizontal: 16,
       paddingTop: 56,
       paddingBottom: 12,
-    },
-    backBtn: {
-      width: 36,
-      height: 36,
-      borderRadius: 18,
-      alignItems: 'center',
-      justifyContent: 'center',
-      backgroundColor: theme.isDark ? theme.bg.secondary : theme.bg.card,
-      borderWidth: 1,
-      borderColor: theme.isDark ? theme.glass?.border : theme.border.default,
     },
     headerTitle: {
       fontSize: 18,

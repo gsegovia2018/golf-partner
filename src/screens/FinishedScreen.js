@@ -3,6 +3,7 @@ import {
   View, Text, TouchableOpacity, StyleSheet, ScrollView, Alert, Platform,
 } from 'react-native';
 import ScreenContainer from '../components/ScreenContainer';
+import IconButton from '../components/ui/IconButton';
 import { Feather } from '@expo/vector-icons';
 import { useFocusEffect } from '@react-navigation/native';
 
@@ -152,9 +153,7 @@ export default function FinishedScreen({ navigation }) {
   return (
     <ScreenContainer style={s.container} edges={['top', 'bottom']}>
       <View style={s.header}>
-        <TouchableOpacity onPress={() => navigation.goBack()} style={s.backBtn}>
-          <Feather name="chevron-left" size={22} color={theme.accent.primary} />
-        </TouchableOpacity>
+        <IconButton icon="chevron-left" size={22} color={theme.accent.primary} onPress={() => navigation.goBack()} />
         <Text style={s.headerTitle}>Finished</Text>
         <View style={{ width: 36 }} />
       </View>
@@ -190,13 +189,6 @@ function makeStyles(theme) {
     header: {
       flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
       paddingHorizontal: 20, paddingTop: 16, paddingBottom: 12,
-    },
-    backBtn: {
-      width: 36, height: 36, borderRadius: 10,
-      backgroundColor: theme.isDark ? theme.bg.secondary : theme.bg.card,
-      borderWidth: 1,
-      borderColor: theme.isDark ? theme.glass?.border : theme.border.default,
-      alignItems: 'center', justifyContent: 'center',
     },
     headerTitle: {
       fontFamily: 'PlayfairDisplay-Bold', fontSize: 18, color: theme.text.primary,

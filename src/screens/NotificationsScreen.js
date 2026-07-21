@@ -5,6 +5,7 @@ import {
 import { useFocusEffect } from '@react-navigation/native';
 import { Feather } from '@expo/vector-icons';
 import ScreenContainer from '../components/ScreenContainer';
+import IconButton from '../components/ui/IconButton';
 import { useTheme } from '../theme/ThemeContext';
 import { listNotifications, markAllRead } from '../store/notificationStore';
 import { renderNotification, notificationLink } from '../lib/notificationContent';
@@ -57,13 +58,13 @@ export default function NotificationsScreen({ navigation }) {
   return (
     <ScreenContainer style={s.screen} edges={['top', 'bottom']}>
       <View style={s.header}>
-        <TouchableOpacity
+        <IconButton
+          icon="chevron-left"
+          size={24}
+          color={theme.text.primary}
           onPress={() => navigation.goBack()}
           accessibilityLabel="Back"
-          activeOpacity={0.7}
-        >
-          <Feather name="chevron-left" size={24} color={theme.text.primary} />
-        </TouchableOpacity>
+        />
         <Text style={s.title}>Notifications</Text>
         <View style={{ width: 24 }} />
       </View>

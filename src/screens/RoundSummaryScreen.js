@@ -6,6 +6,7 @@ import {
   ActivityIndicator, Image,
 } from 'react-native';
 import ScreenContainer from '../components/ScreenContainer';
+import IconButton from '../components/ui/IconButton';
 import { useFocusEffect } from '@react-navigation/native';
 import { Feather } from '@expo/vector-icons';
 
@@ -150,9 +151,7 @@ export default function RoundSummaryScreen({ navigation, route }) {
   return (
     <ScreenContainer style={s.container} edges={['top', 'bottom']}>
       <View style={s.header}>
-        <TouchableOpacity onPress={() => navigation.goBack()} style={s.backBtn}>
-          <Feather name="chevron-left" size={22} color={theme.accent.primary} />
-        </TouchableOpacity>
+        <IconButton icon="chevron-left" size={22} color={theme.accent.primary} onPress={() => navigation.goBack()} />
         <Text style={s.headerTitle} numberOfLines={1}>{roundLabel}</Text>
         {live ? (
           <View style={s.liveBadge} accessibilityLabel="Live round in progress">
@@ -293,10 +292,6 @@ function makeStyles(theme) {
     header: {
       flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
       paddingHorizontal: 14, paddingTop: 12, paddingBottom: 8,
-    },
-    backBtn: {
-      width: 36, height: 36, borderRadius: 10,
-      alignItems: 'center', justifyContent: 'center',
     },
     headerTitle: {
       fontFamily: 'PlusJakartaSans-ExtraBold', fontSize: 16, color: theme.text.primary,

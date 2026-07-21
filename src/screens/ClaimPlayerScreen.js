@@ -4,6 +4,7 @@ import {
   StyleSheet, Alert, ActivityIndicator,
 } from 'react-native';
 import ScreenContainer from '../components/ScreenContainer';
+import IconButton from '../components/ui/IconButton';
 import { Feather } from '@expo/vector-icons';
 import { v4 as uuidv4 } from 'uuid';
 import { useTheme } from '../theme/ThemeContext';
@@ -156,9 +157,7 @@ export default function ClaimPlayerScreen({ navigation, route }) {
   return (
     <ScreenContainer style={s.screen} edges={['top', 'bottom']}>
       <View style={s.header}>
-        <TouchableOpacity onPress={done} style={s.backBtn} activeOpacity={0.7}>
-          <Feather name="chevron-left" size={22} color={theme.accent.primary} />
-        </TouchableOpacity>
+        <IconButton icon="chevron-left" size={22} color={theme.accent.primary} onPress={done} />
         <Text style={s.headerTitle}>Which player are you?</Text>
         <TouchableOpacity onPress={done} activeOpacity={0.7}>
           <Text style={s.skipText}>Skip</Text>
@@ -303,7 +302,6 @@ const makeStyles = (theme) => StyleSheet.create({
     flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
     paddingHorizontal: 20, paddingTop: 16, paddingBottom: 12,
   },
-  backBtn: {},
   headerTitle: { fontFamily: 'PlusJakartaSans-Bold', fontSize: 17, color: theme.text.primary },
   skipText: { fontFamily: 'PlusJakartaSans-SemiBold', fontSize: 15, color: theme.accent.primary },
   center: { flex: 1, alignItems: 'center', justifyContent: 'center' },
