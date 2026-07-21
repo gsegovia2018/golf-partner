@@ -1,5 +1,4 @@
 import React, { useEffect, useState } from 'react';
-import { View, ActivityIndicator } from 'react-native';
 import { NavigationContainer, createNavigationContainerRef } from '@react-navigation/native';
 import { createStackNavigator, CardStyleInterpolators } from '@react-navigation/stack';
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
@@ -201,11 +200,7 @@ function AppNavigator() {
   }, []);
 
   if (loading || isJoinLink === null) {
-    return (
-      <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: '#006747' }}>
-        <ActivityIndicator size="large" color="#ffd700" />
-      </View>
-    );
+    return <LoadingSplash />;
   }
 
   // A password-recovery link takes priority over both the signed-out and
@@ -224,11 +219,7 @@ function AppNavigator() {
   }
 
   if (onboarding === null) {
-    return (
-      <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: '#006747' }}>
-        <ActivityIndicator size="large" color="#ffd700" />
-      </View>
-    );
+    return <LoadingSplash />;
   }
   if (onboarding) {
     return (
