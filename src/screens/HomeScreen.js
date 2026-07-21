@@ -2,6 +2,7 @@ import React, { useEffect, useState, useCallback, useRef, useMemo, startTransiti
 import { View, Text, TouchableOpacity, StyleSheet, ScrollView, Switch, Alert, FlatList, Platform, Modal, Pressable, ActivityIndicator, Share, Animated, Easing } from 'react-native';
 import { useReducedMotion } from 'react-native-reanimated';
 import ScreenContainer from '../components/ScreenContainer';
+import { markBootReady } from '../store/bootReveal';
 import IconButton from '../components/ui/IconButton';
 import RoundScoreboard from '../components/RoundScoreboard';
 import { Feather } from '@expo/vector-icons';
@@ -240,6 +241,11 @@ export default function HomeScreen({ navigation, route }) {
   const [listStale, setListStale] = useState(false);
   const [openableIds, setOpenableIds] = useState(null); // null = all openable
   const [loading, setLoading] = useState(() => !initialTournament);
+  // Drop the boot splash overlay (App.js) once this screen has real content
+  // to stand behind it — the first render where nothing is loading.
+  useEffect(() => {
+    if (!loading) markBootReady();
+  }, [loading]);
   const [selectedRound, setSelectedRound] = useState(0);
   const [roundPagerWidth, setRoundPagerWidth] = useState(0);
   const roundPagerRef = useRef(null);

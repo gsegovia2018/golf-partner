@@ -1,4 +1,5 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
+import { Animated, Easing, StyleSheet } from 'react-native';
 import { NavigationContainer, createNavigationContainerRef } from '@react-navigation/native';
 import { createStackNavigator, CardStyleInterpolators } from '@react-navigation/stack';
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
@@ -27,6 +28,7 @@ import { AuthProvider, useAuth } from './src/context/AuthContext';
 import AuthScreen from './src/screens/AuthScreen';
 import OnboardingScreen from './src/screens/OnboardingScreen';
 import { loadProfile } from './src/store/profileStore';
+import { isBootRevealed, subscribeBootReveal, markBootReady } from './src/store/bootReveal';
 import SetNewPasswordScreen from './src/screens/SetNewPasswordScreen';
 import JoinTournamentLinkScreen from './src/screens/JoinTournamentLinkScreen';
 
@@ -278,7 +280,44 @@ function AppNavigator() {
         <Stack.Screen name="Notifications" component={NotificationsScreen} />
         <Stack.Screen name="RoundSummary" component={RoundSummaryScreen} />
       </Stack.Navigator>
+      <BootSplashOverlay />
     </>
+  );
+}
+
+// Keeps the boot splash covering the freshly-mounted app shell (tab bar
+// included) until the first meaningful screen has content, then fades it out
+// once. Without this the splash drops the moment the navigator mounts, and
+// cold start reads as splash → empty shell → content. HomeScreen fires
+// markBootReady() when its initial load lands; the failsafe guarantees the
+// splash can never strand the user on a green screen.
+function BootSplashOverlay() {
+  const [visible, setVisible] = useState(() => !isBootRevealed());
+  const [interactive, setInteractive] = useState(true);
+  const opacity = useRef(new Animated.Value(1)).current;
+
+  useEffect(() => {
+    if (!visible) return undefined;
+    const reveal = () => {
+      setInteractive(false);
+      Animated.timing(opacity, {
+        toValue: 0, duration: 250, useNativeDriver: true,
+        easing: Easing.bezier(0.23, 1, 0.32, 1),
+      }).start(() => setVisible(false));
+    };
+    const unsubscribe = subscribeBootReveal(reveal);
+    const failsafe = setTimeout(markBootReady, 6000);
+    return () => { unsubscribe(); clearTimeout(failsafe); };
+  }, [visible, opacity]);
+
+  if (!visible) return null;
+  return (
+    <Animated.View
+      style={[StyleSheet.absoluteFill, { opacity, zIndex: 999, elevation: 999 }]}
+      pointerEvents={interactive ? 'auto' : 'none'}
+    >
+      <LoadingSplash />
+    </Animated.View>
   );
 }
 
