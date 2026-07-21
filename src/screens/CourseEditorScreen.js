@@ -4,6 +4,7 @@ import {
   StyleSheet, ScrollView, Alert,
 } from 'react-native';
 import ScreenContainer from '../components/ScreenContainer';
+import IconButton from '../components/ui/IconButton';
 import { Feather } from '@expo/vector-icons';
 
 import { useTheme } from '../theme/ThemeContext';
@@ -83,9 +84,7 @@ export default function CourseEditorScreen({ navigation, route }) {
     <ScreenContainer style={s.screen} edges={['top', 'bottom']}>
       {/* Header */}
       <View style={s.header}>
-        <TouchableOpacity onPress={() => navigation.goBack()} style={s.backBtn}>
-          <Feather name="chevron-left" size={22} color={theme.accent.primary} />
-        </TouchableOpacity>
+        <IconButton icon="chevron-left" onPress={() => navigation.goBack()} />
         <Text style={s.headerTitle}>Course Editor</Text>
         <View style={{ width: 22 }} />
       </View>
@@ -118,7 +117,7 @@ export default function CourseEditorScreen({ navigation, route }) {
           <View style={s.toolRow}>
             <Text style={s.toolLabel}>Stroke index</Text>
             <TouchableOpacity style={s.toolBtn} onPress={autoNumberSI} activeOpacity={0.7}>
-              <Feather name="hash" size={12} color={theme.accent.primary} style={{ marginRight: 4 }} />
+              <Feather name="hash" size={14} color={theme.accent.primary} style={{ marginRight: 4 }} />
               <Text style={s.toolBtnText}>Auto-number 1–18</Text>
             </TouchableOpacity>
           </View>
@@ -200,7 +199,7 @@ export default function CourseEditorScreen({ navigation, route }) {
               navigation.goBack();
             }}
           >
-            <Feather name="check" size={18} color={theme.isDark ? theme.accent.primary : theme.text.inverse} style={{ marginRight: 8 }} />
+            <Feather name="check" size={14} color={theme.isDark ? theme.accent.primary : theme.text.inverse} style={{ marginRight: 8 }} />
             <Text style={s.btnText}>Done</Text>
           </TouchableOpacity>
         </View>
@@ -215,7 +214,6 @@ const makeStyles = (theme) => StyleSheet.create({
     flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
     paddingHorizontal: 20, paddingTop: 16, paddingBottom: 12, backgroundColor: theme.bg.primary,
   },
-  backBtn: {},
   headerTitle: { fontFamily: 'PlusJakartaSans-Bold', fontSize: 17, color: theme.text.primary },
   container: { flex: 1 },
   content: { padding: 20, paddingTop: 4, paddingBottom: 40 },

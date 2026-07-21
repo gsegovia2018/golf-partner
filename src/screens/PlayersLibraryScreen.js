@@ -4,6 +4,7 @@ import {
   Text, TextInput, TouchableOpacity, View,
 } from 'react-native';
 import ScreenContainer from '../components/ScreenContainer';
+import IconButton from '../components/ui/IconButton';
 import { useFocusEffect, useNavigation } from '@react-navigation/native';
 import { Feather } from '@expo/vector-icons';
 
@@ -126,9 +127,7 @@ export default function PlayersLibraryScreen() {
   return (
     <ScreenContainer style={s.container} edges={['top', 'bottom']}>
       <View style={s.header}>
-        <TouchableOpacity onPress={() => navigation.goBack()} style={s.backBtn}>
-          <Feather name="chevron-left" size={22} color={theme.accent.primary} />
-        </TouchableOpacity>
+        <IconButton icon="chevron-left" onPress={() => navigation.goBack()} />
         <Text style={s.headerTitle}>Players</Text>
         <View style={{ width: 22 }} />
       </View>
@@ -192,7 +191,7 @@ export default function PlayersLibraryScreen() {
           : loadError
             ? (
               <View style={s.errorBox}>
-                <Feather name="wifi-off" size={20} color={theme.destructive} />
+                <Feather name="wifi-off" size={44} color={theme.destructive} />
                 <Text style={s.errorTitle}>Couldn't load players</Text>
                 <Text style={s.errorMsg}>{loadError}</Text>
                 <TouchableOpacity style={s.retryBtn} onPress={load} activeOpacity={0.7}>
@@ -204,7 +203,7 @@ export default function PlayersLibraryScreen() {
             : players.length === 0
             ? (
               <View style={s.emptyState}>
-                <Feather name="users" size={48} color={theme.text.muted} />
+                <Feather name="users" size={44} color={theme.text.muted} />
                 <Text style={s.emptyTitle}>No players yet</Text>
                 <Text style={s.emptySubtitle}>Add players to use in your tournaments</Text>
               </View>
@@ -236,7 +235,6 @@ const makeStyles = (theme) => StyleSheet.create({
     flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
     paddingHorizontal: 20, paddingTop: 16, paddingBottom: 12, backgroundColor: theme.bg.primary,
   },
-  backBtn: {},
   headerTitle: { fontFamily: 'PlusJakartaSans-Bold', fontSize: 17, color: theme.text.primary },
   scroll: { flex: 1 },
   content: { padding: 20, paddingTop: 4, paddingBottom: 40 },

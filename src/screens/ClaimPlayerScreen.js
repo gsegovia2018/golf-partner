@@ -4,6 +4,7 @@ import {
   StyleSheet, Alert, ActivityIndicator,
 } from 'react-native';
 import ScreenContainer from '../components/ScreenContainer';
+import IconButton from '../components/ui/IconButton';
 import { Feather } from '@expo/vector-icons';
 import { v4 as uuidv4 } from 'uuid';
 import { useTheme } from '../theme/ThemeContext';
@@ -156,9 +157,7 @@ export default function ClaimPlayerScreen({ navigation, route }) {
   return (
     <ScreenContainer style={s.screen} edges={['top', 'bottom']}>
       <View style={s.header}>
-        <TouchableOpacity onPress={done} style={s.backBtn} activeOpacity={0.7}>
-          <Feather name="chevron-left" size={22} color={theme.accent.primary} />
-        </TouchableOpacity>
+        <IconButton icon="chevron-left" onPress={done} />
         <Text style={s.headerTitle}>Which player are you?</Text>
         <TouchableOpacity onPress={done} activeOpacity={0.7}>
           <Text style={s.skipText}>Skip</Text>
@@ -214,7 +213,7 @@ export default function ClaimPlayerScreen({ navigation, route }) {
               })}
               {allTaken && (
                 <View style={s.noticeBox}>
-                  <Feather name="info" size={15} color={theme.accent.primary} style={{ marginRight: 8, marginTop: 1 }} />
+                  <Feather name="info" size={14} color={theme.accent.primary} style={{ marginRight: 8, marginTop: 1 }} />
                   <Text style={s.noticeText}>
                     {rosterFull
                       ? `Every player is already linked to another account and this ${noun} is full. You can still follow along — tap Skip to continue as a viewer.`
@@ -262,7 +261,7 @@ export default function ClaimPlayerScreen({ navigation, route }) {
                 >
                   {saving
                     ? <ActivityIndicator color={theme.isDark ? theme.accent.primary : theme.text.inverse} />
-                    : <Feather name="check" size={18} color={theme.isDark ? theme.accent.primary : theme.text.inverse} />}
+                    : <Feather name="check" size={14} color={theme.isDark ? theme.accent.primary : theme.text.inverse} />}
                 </TouchableOpacity>
               </View>
             ) : (
@@ -272,7 +271,7 @@ export default function ClaimPlayerScreen({ navigation, route }) {
                 disabled={saving}
                 activeOpacity={0.7}
               >
-                <Feather name="user-plus" size={18} color={theme.accent.primary} />
+                <Feather name="user-plus" size={14} color={theme.accent.primary} />
                 <Text style={s.addRowText}>I'm not listed — add me</Text>
               </TouchableOpacity>
             )}
@@ -284,7 +283,7 @@ export default function ClaimPlayerScreen({ navigation, route }) {
               onPress={() => navigation.navigate('Profile')}
               activeOpacity={0.8}
             >
-              <Feather name="bookmark" size={16} color={theme.accent.primary} style={{ marginRight: 10 }} />
+              <Feather name="bookmark" size={16} color={theme.text.muted} style={{ marginRight: 10 }} />
               <Text style={s.saveAccountText}>
                 You're playing as a guest. Add an email in your profile so you
                 keep this {noun} if you switch devices.
@@ -303,7 +302,6 @@ const makeStyles = (theme) => StyleSheet.create({
     flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
     paddingHorizontal: 20, paddingTop: 16, paddingBottom: 12,
   },
-  backBtn: {},
   headerTitle: { fontFamily: 'PlusJakartaSans-Bold', fontSize: 17, color: theme.text.primary },
   skipText: { fontFamily: 'PlusJakartaSans-SemiBold', fontSize: 15, color: theme.accent.primary },
   center: { flex: 1, alignItems: 'center', justifyContent: 'center' },

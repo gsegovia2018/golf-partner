@@ -4,6 +4,7 @@ import { Feather } from '@expo/vector-icons';
 import { useTheme } from '../theme/ThemeContext';
 import { MAX_VIDEO_UPLOAD_LABEL } from '../lib/mediaLimits';
 import BottomSheet from './BottomSheet';
+import IconButton from './ui/IconButton';
 
 export default function CaptureMenuSheet({ visible, onSelect, onClose, extraActions = [] }) {
   const { theme } = useTheme();
@@ -26,9 +27,7 @@ export default function CaptureMenuSheet({ visible, onSelect, onClose, extraActi
     <BottomSheet visible={visible} onClose={onClose} sheetStyle={s.sheet}>
       <View style={s.header}>
         <Text style={s.title}>Add a memory</Text>
-        <TouchableOpacity onPress={onClose} accessibilityLabel="Cancel">
-          <Feather name="x" size={22} color={theme.text.muted} />
-        </TouchableOpacity>
+        <IconButton icon="x" onPress={onClose} accessibilityLabel="Cancel" />
       </View>
 
       {options.map((o) => (

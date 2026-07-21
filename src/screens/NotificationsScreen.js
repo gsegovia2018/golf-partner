@@ -5,6 +5,7 @@ import {
 import { useFocusEffect } from '@react-navigation/native';
 import { Feather } from '@expo/vector-icons';
 import ScreenContainer from '../components/ScreenContainer';
+import IconButton from '../components/ui/IconButton';
 import { useTheme } from '../theme/ThemeContext';
 import { listNotifications, markAllRead } from '../store/notificationStore';
 import { renderNotification, notificationLink } from '../lib/notificationContent';
@@ -57,13 +58,11 @@ export default function NotificationsScreen({ navigation }) {
   return (
     <ScreenContainer style={s.screen} edges={['top', 'bottom']}>
       <View style={s.header}>
-        <TouchableOpacity
+        <IconButton
+          icon="chevron-left"
           onPress={() => navigation.goBack()}
           accessibilityLabel="Back"
-          activeOpacity={0.7}
-        >
-          <Feather name="chevron-left" size={24} color={theme.text.primary} />
-        </TouchableOpacity>
+        />
         <Text style={s.title}>Notifications</Text>
         <View style={{ width: 24 }} />
       </View>
@@ -74,7 +73,7 @@ export default function NotificationsScreen({ navigation }) {
         </View>
       ) : items.length === 0 ? (
         <View style={s.center}>
-          <Feather name="bell" size={32} color={theme.text.muted} />
+          <Feather name="bell" size={44} color={theme.text.muted} />
           <Text style={s.emptyText}>No notifications yet</Text>
         </View>
       ) : (
@@ -90,7 +89,7 @@ export default function NotificationsScreen({ navigation }) {
                 activeOpacity={0.7}
               >
                 <View style={s.iconWrap}>
-                  <Feather name={icon} size={18} color={theme.accent.primary} />
+                  <Feather name={icon} size={14} color={theme.text.primary} />
                 </View>
                 <View style={s.rowBody}>
                   <Text style={s.rowTitle}>{title}</Text>

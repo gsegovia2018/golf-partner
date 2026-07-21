@@ -5,6 +5,7 @@ import {
 } from 'react-native';
 import ScreenContainer from '../components/ScreenContainer';
 import BottomSheet from '../components/BottomSheet';
+import IconButton from '../components/ui/IconButton';
 import { useFocusEffect } from '@react-navigation/native';
 import { Feather } from '@expo/vector-icons';
 
@@ -207,7 +208,7 @@ export default function FriendsScreen({ navigation }) {
     const busy = busyId === person.userId;
     if (busy) return <ActivityIndicator color={theme.accent.primary} />;
     if (rel === 'friends') {
-      return <Feather name="check-circle" size={20} color={theme.accent.primary} />;
+      return <Feather name="check-circle" size={14} color={theme.accent.primary} />;
     }
     if (rel === 'outgoing') return <Text style={s.pendingTag}>Requested</Text>;
     if (rel === 'incoming') {
@@ -231,9 +232,7 @@ export default function FriendsScreen({ navigation }) {
   return (
     <ScreenContainer style={s.container} edges={['top', 'bottom']}>
       <View style={s.header}>
-        <TouchableOpacity onPress={() => navigation.goBack()} style={s.backBtn}>
-          <Feather name="chevron-left" size={22} color={theme.accent.primary} />
-        </TouchableOpacity>
+        <IconButton icon="chevron-left" onPress={() => navigation.goBack()} />
         <Text style={s.headerTitle}>Friends</Text>
         <View style={{ width: 22 }} />
       </View>
@@ -258,9 +257,7 @@ export default function FriendsScreen({ navigation }) {
             autoCorrect={false}
           />
           {query ? (
-            <TouchableOpacity onPress={() => onChangeQuery('')}>
-              <Feather name="x" size={16} color={theme.text.muted} />
-            </TouchableOpacity>
+            <IconButton icon="x" onPress={() => onChangeQuery('')} />
           ) : null}
         </View>
 
@@ -292,9 +289,7 @@ export default function FriendsScreen({ navigation }) {
                       <TouchableOpacity style={s.primaryBtn} onPress={() => onAccept(req)}>
                         <Text style={s.primaryBtnText}>Accept</Text>
                       </TouchableOpacity>
-                      <TouchableOpacity style={s.ghostBtn} onPress={() => onDecline(req)}>
-                        <Feather name="x" size={16} color={theme.text.muted} />
-                      </TouchableOpacity>
+                      <IconButton icon="x" style={s.ghostBtn} onPress={() => onDecline(req)} />
                     </View>
                   )
                 )))}
@@ -321,7 +316,7 @@ export default function FriendsScreen({ navigation }) {
             </Text>
             {friends.length === 0 ? (
               <View style={s.emptyState}>
-                <Feather name="users" size={42} color={theme.text.muted} />
+                <Feather name="users" size={44} color={theme.text.muted} />
                 <Text style={s.emptyTitle}>No friends yet</Text>
                 <Text style={s.emptySub}>
                   Search for golfers above to send a friend request.
@@ -333,9 +328,7 @@ export default function FriendsScreen({ navigation }) {
                 (busyId === p.userId ? (
                   <ActivityIndicator color={theme.accent.primary} />
                 ) : (
-                  <TouchableOpacity style={s.ghostBtn} onPress={() => onRemove(p)}>
-                    <Feather name="user-minus" size={16} color={theme.destructive} />
-                  </TouchableOpacity>
+                  <IconButton icon="user-minus" color={theme.destructive} style={s.ghostBtn} onPress={() => onRemove(p)} />
                 )),
                 () => setProfileFriend(p),
               ))
@@ -392,9 +385,7 @@ function FriendProfileModal({ friend, theme, onClose }) {
                   : ''}
               </Text>
             </View>
-            <TouchableOpacity onPress={onClose} hitSlop={12} style={s.modalClose}>
-              <Feather name="x" size={20} color={theme.text.muted} />
-            </TouchableOpacity>
+            <IconButton icon="x" onPress={onClose} />
           </View>
 
           {loading ? (
@@ -453,7 +444,6 @@ function makeStyles(theme) {
       flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
       paddingHorizontal: 20, paddingTop: 16, paddingBottom: 12,
     },
-    backBtn: {},
     headerTitle: {
       fontFamily: 'PlayfairDisplay-Bold', fontSize: 18, color: theme.text.primary,
     },
@@ -532,10 +522,6 @@ function makeStyles(theme) {
     },
     modalHead: {
       flexDirection: 'row', alignItems: 'center', gap: 12, marginBottom: 4,
-    },
-    modalClose: {
-      width: 32, height: 32, borderRadius: 16, alignItems: 'center', justifyContent: 'center',
-      backgroundColor: theme.bg.secondary,
     },
     h2hRow: { flexDirection: 'row', gap: 8 },
     h2hCell: {

@@ -20,7 +20,7 @@ export default function MetricRow({ label, value, secondary, infoKey, onInfo, di
             accessibilityRole="button"
             accessibilityLabel={`What is ${label}`}
           >
-            <Feather name="info" size={13} color={theme.text.muted} />
+            <Feather name="info" size={14} color={theme.text.muted} />
           </TouchableOpacity>
         ) : null}
       </View>

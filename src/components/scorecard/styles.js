@@ -173,34 +173,10 @@ export function makeScorecardStyles(theme) {
       borderBottomWidth: 1,
       borderBottomColor: theme.isDark ? theme.glass?.border : theme.border.default,
     },
-    // Unified 36px header icon button — backs, sync, view switch, eye,
-    // award, notes, camera all share this so the header reads as one row
-    // of consistent chrome instead of a mix of bare/bordered sizes.
-    headerBtn: {
-      width: 36,
-      height: 36,
-      borderRadius: 12,
-      alignItems: 'center',
-      justifyContent: 'center',
-      backgroundColor: theme.isDark ? theme.bg.elevated : theme.bg.secondary,
-      borderWidth: 1,
-      borderColor: theme.isDark ? theme.glass?.border : theme.border.default,
-    },
     headerRight: {
       flexDirection: 'row',
       alignItems: 'center',
       gap: 8,
-    },
-    notesHeaderDot: {
-      position: 'absolute',
-      top: 5,
-      right: 5,
-      width: 7,
-      height: 7,
-      borderRadius: 999,
-      backgroundColor: theme.accent.primary,
-      borderWidth: 1,
-      borderColor: theme.bg.primary,
     },
     headerTitle: {
       fontFamily: 'PlusJakartaSans-Bold',
@@ -528,11 +504,6 @@ export function makeScorecardStyles(theme) {
       fontFamily: 'PlusJakartaSans-Bold',
       color: theme.text.primary,
       fontSize: 16,
-    },
-    notesCloseBtn: {
-      width: 32, height: 32, borderRadius: 16,
-      alignItems: 'center', justifyContent: 'center',
-      backgroundColor: theme.isDark ? theme.bg.elevated : theme.bg.secondary,
     },
     // Official leaderboard sheet (Task 17).
     officialLbList: { maxHeight: 360 },

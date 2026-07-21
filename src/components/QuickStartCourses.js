@@ -312,7 +312,7 @@ export default function QuickStartCourses({
                         </Text>
                       ) : null}
                     </View>
-                    <Feather name="plus" size={18} color={theme.accent.primary} />
+                    <Feather name="plus" size={14} color={theme.text.muted} />
                   </TouchableOpacity>
                 )) : (
                   <View style={s.stateBox}>

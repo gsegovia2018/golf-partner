@@ -706,3 +706,84 @@ Mount inside FloatingTabBar's `slot` View as the first child (absolute, above th
 ### Task 15: Phase-3 verification + final review
 
 Full suite + lint; runtime verify (Expo web, light + dark): PAR/SI stacked under numeral, tab-bar fade visible on Feed/Home/Stats over scrolled content, sheet feel, LiveRoundCard entrance, snackbar animation (trigger a round reset undo if feasible — else code-inspect), reduced-motion spot check via emulation if available. Then whole-branch final review of the phase-3 diff, then merge + push per standing preference.
+
+---
+
+# Phase 4 — Icon system: Option C "Bare editorial"
+
+User picked Option C from the icon-treatment options page: NO chip backgrounds or borders anywhere — quiet ink glyphs with press-scale as the only affordance. Same Global Constraints as prior phases.
+
+**The C spec (binding):**
+- One shared `IconButton`: 36×36 transparent container, centered Feather icon **size 21**, color `theme.text.primary` (resting), built on `PressableScale` (activeScale 0.94 — slightly deeper than chips since scale is the only feedback), `hitSlop` 4 on every side (36+8 = 44px effective touch target), optional `dot` prop (7px, semantic color, positioned top-right, 1.5px `bg.primary` ring).
+- Color rule: resting ink; `accent.primary` ONLY for an active/toggled-on state; `destructive` only for error states; status glyphs inside indicators keep their semantic colors.
+- Size scale app-wide: header/action icons 21 (via IconButton) · inline & status glyphs 14 · empty-state art 44.
+- Dark theme: same component — `text.primary` resolves near-white; no other change.
+
+### Task 16: IconButton primitive + header adoption app-wide
+
+**Files:**
+- Create: `src/components/ui/IconButton.js`
+- Test: `src/components/ui/__tests__/IconButton.test.js`
+- Modify: `src/screens/ScorecardScreen.js` + `src/components/scorecard/styles.js` (replace phase-2 `headerBtn` chips — delete the chip style), `src/screens/HomeScreen.js` (Home header menu/bell + Tournament header share/image/eye/gear + back chevrons), `src/screens/FeedScreen.js` (users), `src/screens/MyStatsScreen.js` (back), plus every other screen header icon button found by `grep -rln "TouchableOpacity" src/screens | xargs grep -ln 'Feather'` triage — adopt where the touchable is a bare/chipped icon-only header or card-header action (History, Profile, Friends, Players, Gallery, CourseLibrary…). Labeled pills (Edit round, Manage, rounds-selector) are NOT icon buttons — leave them.
+
+**IconButton implementation:**
+
+```js
+import React from 'react';
+import { View, StyleSheet } from 'react-native';
+import { Feather } from '@expo/vector-icons';
+import PressableScale from './PressableScale';
+import { useTheme } from '../../theme/ThemeContext';
+
+export default function IconButton({
+  icon, onPress, color, size = 21, dot = false, dotColor, disabled, style, children, ...rest
+}) {
+  const { theme } = useTheme();
+  const s = styles(theme);
+  return (
+    <PressableScale
+      {...rest}
+      onPress={onPress}
+      disabled={disabled}
+      activeScale={0.94}
+      hitSlop={{ top: 4, bottom: 4, left: 4, right: 4 }}
+      accessibilityRole={rest.accessibilityRole ?? 'button'}
+      style={[s.btn, style]}
+    >
+      {children ?? <Feather name={icon} size={size} color={color ?? theme.text.primary} />}
+      {dot ? <View style={[s.dot, { backgroundColor: dotColor ?? theme.accent.primary }]} /> : null}
+    </PressableScale>
+  );
+}
+
+const styles = (t) => StyleSheet.create({
+  btn: { width: 36, height: 36, alignItems: 'center', justifyContent: 'center' },
+  dot: {
+    position: 'absolute', top: 5, right: 5, width: 7, height: 7,
+    borderRadius: 999, borderWidth: 1.5, borderColor: t.bg.primary,
+  },
+});
+```
+
+`children` escape hatch exists for the scorecard's SyncIndicator (a composite status glyph) — wrap it: `<IconButton onPress={...}><SyncIndicator .../></IconButton>`.
+
+**Test (TDD):** render with icon+onPress → fires onPress via accessibility role/label; renders dot when `dot`; children override renders instead of the Feather glyph.
+
+**Adoption rules:** preserve every existing prop (accessibilityLabel, testID, handlers, conditional rendering, dots). Scorecard: delete `headerBtn` from styles.js once no consumer remains; the notes-dot and sync-status coloring move to IconButton's `dot`/children. Keep status colors inside SyncIndicator as-is.
+
+**Tests:** affected suites + full suite + lint. Commit: `feat(icons): bare-editorial IconButton adopted across headers`.
+
+### Task 17: Icon size & color sweep
+
+**Files:** every production `Feather` usage outside the headers converted in Task 16.
+
+**Spec:** enforce the scale — inline/status glyphs 14, empty-state art 44, header/action 21 (IconButton). Rules:
+1. `grep -rnE 'Feather name="[a-z0-9-]+" size=\{?(12|13|15|16|17|18|19|20|22)' src --include='*.js'` — for each hit decide: icon-only tappable → should already be IconButton (convert if missed); inline decorative/status glyph → size 14; part of a labeled pill/button → 14 (pills' text leads); list-row chevrons → 16 is the app's established list affordance — leave chevron-right 16 alone (do NOT churn 23 sites for 2px); empty-state/hero art (26/32/44/48) → 44 where it's a true empty-state, else leave intentional large art.
+2. Colors: any icon hardcoding a hex that duplicates a theme token → token. Icons colored `accent.primary` at REST (not active, not status) → `text.primary` or `text.muted` per surrounding text. Semantic status colors stay.
+3. Record every changed site in the report (file:line, old → new, rule applied). When in doubt, leave it and log it — this sweep must not change meaning.
+
+**Tests:** full suite + lint. Commit: `refactor(icons): enforce 21/14/44 size scale and resting-ink color rule`.
+
+### Task 18: Verification + final review + ship
+
+Full suite + lint; runtime verify (Expo web, light + dark): scorecard/Home/Tournament/Feed/My Stats headers all bare-ink icons, dots intact, sync indicator working, press targets fine; grep guard `grep -rn "headerBtn" src | wc -l` → 0. Final whole-branch review, then merge + push per standing preference (integrate any further concurrent master movement first).

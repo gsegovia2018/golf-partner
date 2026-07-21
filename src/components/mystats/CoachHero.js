@@ -67,7 +67,7 @@ export default function CoachHero({ insight, onCommitFocus, focusActive = false 
         <View style={s.chips}>
           {proofs.map((proof) => (
             <View key={proof} style={s.chip}>
-              <Feather name="check-circle" size={12} color={CREAM_85} />
+              <Feather name="check-circle" size={14} color={CREAM_85} />
               <Text style={s.chipText}>{proof}</Text>
             </View>
           ))}

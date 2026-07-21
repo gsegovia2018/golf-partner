@@ -4,6 +4,7 @@ import {
   Text, TextInput, TouchableOpacity, View,
 } from 'react-native';
 import ScreenContainer from '../components/ScreenContainer';
+import IconButton from '../components/ui/IconButton';
 import { Feather } from '@expo/vector-icons';
 
 import { useTheme } from '../theme/ThemeContext';
@@ -154,7 +155,7 @@ export default function CourseLibraryDetailScreen({ navigation, route }) {
     return (
       <ScreenContainer style={s.centered} edges={['top', 'bottom']}>
         <View style={s.errorBox}>
-          <Feather name="wifi-off" size={22} color={theme.destructive} />
+          <Feather name="wifi-off" size={44} color={theme.destructive} />
           <Text style={s.errorTitle}>Couldn't load course</Text>
           <Text style={s.errorMsg}>{loadError}</Text>
           <TouchableOpacity
@@ -173,9 +174,7 @@ export default function CourseLibraryDetailScreen({ navigation, route }) {
   return (
     <ScreenContainer style={s.container} edges={['top', 'bottom']}>
       <View style={s.header}>
-        <TouchableOpacity onPress={() => navigation.goBack()} style={s.backBtn}>
-          <Feather name="chevron-left" size={22} color={theme.accent.primary} />
-        </TouchableOpacity>
+        <IconButton icon="chevron-left" onPress={() => navigation.goBack()} />
         <Text style={s.headerTitle}>Course Details</Text>
         <View style={{ width: 22 }} />
       </View>
@@ -276,7 +275,7 @@ export default function CourseLibraryDetailScreen({ navigation, route }) {
                   activeOpacity={0.7}
                   accessibilityLabel="Download offline map"
                 >
-                  <Feather name="download" size={13} color={theme.isDark ? theme.accent.primary : theme.text.inverse} style={{ marginRight: 6 }} />
+                  <Feather name="download" size={14} color={theme.isDark ? theme.accent.primary : theme.text.inverse} style={{ marginRight: 6 }} />
                   <Text style={s.offlineMapDownloadBtnText}>{downloadLabel}</Text>
                 </TouchableOpacity>
                 <TouchableOpacity
@@ -298,7 +297,7 @@ export default function CourseLibraryDetailScreen({ navigation, route }) {
           disabled={saving || !canSave}
           activeOpacity={0.7}
         >
-          <Feather name="check" size={18} color={theme.isDark ? theme.accent.primary : theme.text.inverse} style={{ marginRight: 8 }} />
+          <Feather name="check" size={14} color={theme.isDark ? theme.accent.primary : theme.text.inverse} style={{ marginRight: 8 }} />
           <Text style={s.saveBtnText}>{saving ? 'Saving...' : 'Save course'}</Text>
         </TouchableOpacity>
       </ScrollView>
@@ -313,7 +312,6 @@ const makeStyles = (theme) => StyleSheet.create({
     flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
     paddingHorizontal: 20, paddingTop: 16, paddingBottom: 12, backgroundColor: theme.bg.primary,
   },
-  backBtn: {},
   headerTitle: { fontFamily: 'PlusJakartaSans-Bold', fontSize: 17, color: theme.text.primary },
   scroll: { flex: 1 },
   content: { padding: 20, paddingTop: 4, paddingBottom: 40 },

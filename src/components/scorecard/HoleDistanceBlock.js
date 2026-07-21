@@ -53,7 +53,7 @@ export function HoleDistanceBlock({ gps, onPress }) {
       ) : distances ? (
         <>
           <View style={s.heroRow}>
-            <Feather name="navigation" size={13} color={theme.accent.primary} />
+            <Feather name="navigation" size={14} color={theme.accent.primary} />
             <Text style={s.hero}>{fmt(distances.center)}</Text>
             <Text style={s.unit}>{unitSuffix(units)}</Text>
           </View>
@@ -65,7 +65,7 @@ export function HoleDistanceBlock({ gps, onPress }) {
       ) : (
         <>
           <View style={s.heroRow}>
-            <Feather name="navigation" size={13} color={theme.accent.primary} />
+            <Feather name="navigation" size={14} color={theme.accent.primary} />
             <Text style={s.hero}>…</Text>
           </View>
           <Text style={s.caption}>Getting GPS fix</Text>

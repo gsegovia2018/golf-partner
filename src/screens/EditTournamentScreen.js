@@ -4,6 +4,7 @@ import {
   StyleSheet, ScrollView, Alert, Platform,
 } from 'react-native';
 import ScreenContainer from '../components/ScreenContainer';
+import IconButton from '../components/ui/IconButton';
 import { Feather } from '@expo/vector-icons';
 
 import { useTheme } from '../theme/ThemeContext';
@@ -401,9 +402,7 @@ export default function EditTournamentScreen({ navigation, route }) {
     <ScreenContainer style={s.screen} edges={['top', 'bottom']}>
       {/* Header */}
       <View style={s.header}>
-        <TouchableOpacity onPress={() => navigation.goBack()} style={s.backBtn}>
-          <Feather name="chevron-left" size={22} color={theme.accent.primary} />
-        </TouchableOpacity>
+        <IconButton icon="chevron-left" onPress={() => navigation.goBack()} />
         <Text style={s.headerTitle}>Edit Tournament</Text>
         {saveState === 'idle' ? (
           <View style={{ width: 64 }} />
@@ -531,7 +530,6 @@ const makeStyles = (theme) => StyleSheet.create({
     flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
     paddingHorizontal: 20, paddingTop: 16, paddingBottom: 12, backgroundColor: theme.bg.primary,
   },
-  backBtn: {},
   headerTitle: { fontFamily: 'PlusJakartaSans-Bold', fontSize: 17, color: theme.text.primary },
   savePill: {
     flexDirection: 'row', alignItems: 'center',

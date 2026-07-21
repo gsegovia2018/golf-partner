@@ -89,7 +89,7 @@ export default function ScoreConflictSheet({
                 >
                   {isPicked && (
                     <View style={s.tick}>
-                      <Feather name="check" size={12} color={theme?.text?.inverse} />
+                      <Feather name="check" size={14} color={theme?.text?.inverse} />
                     </View>
                   )}
                   <Text style={s.cardLabel}>
@@ -114,7 +114,7 @@ export default function ScoreConflictSheet({
                 onPress={() => stepManual(-1)}
                 accessibilityLabel={subjectName ? `Decrease ${subjectName}'s score` : 'Decrease score'}
               >
-                <Feather name="minus" size={18} color={theme?.text?.primary} />
+                <Feather name="minus" size={14} color={theme?.text?.primary} />
               </TouchableOpacity>
               <Text style={s.manualValue}>{manual}</Text>
               <TouchableOpacity
@@ -122,7 +122,7 @@ export default function ScoreConflictSheet({
                 onPress={() => stepManual(1)}
                 accessibilityLabel={subjectName ? `Increase ${subjectName}'s score` : 'Increase score'}
               >
-                <Feather name="plus" size={18} color={theme?.text?.primary} />
+                <Feather name="plus" size={14} color={theme?.text?.primary} />
               </TouchableOpacity>
             </View>
           </View>

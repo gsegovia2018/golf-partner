@@ -2,6 +2,7 @@ import React from 'react';
 import { View, Text, TouchableOpacity, ScrollView, StyleSheet } from 'react-native';
 import { Feather } from '@expo/vector-icons';
 import ScreenContainer from '../../components/ScreenContainer';
+import IconButton from '../../components/ui/IconButton';
 import { useTheme } from '../../theme/ThemeContext';
 import { semantic } from '../../theme/tokens';
 import { pairsMatchDuels } from '../../store/scoring';
@@ -123,10 +124,10 @@ export default function EditTeamsView({
               theme={theme}
               trailing={
                 armed
-                  ? <Feather name="move" size={18} color={theme.accent.primary} />
+                  ? <Feather name="move" size={14} color={theme.accent.primary} />
                   : otherArmed
-                    ? <View style={s.swapHere}><Feather name="repeat" size={13} color={theme.accent.primary} /></View>
-                    : <Feather name="repeat" size={16} color={theme.text.muted} style={{ opacity: 0.45 }} />
+                    ? <View style={s.swapHere}><Feather name="repeat" size={14} color={theme.accent.primary} /></View>
+                    : <Feather name="repeat" size={14} color={theme.text.muted} style={{ opacity: 0.45 }} />
               }
             />
           );
@@ -176,7 +177,7 @@ export default function EditTeamsView({
               trailing={
                 <View style={s.sendSolo}>
                   <Text style={s.sendSoloText}>Solo</Text>
-                  <Feather name="arrow-up-right" size={13} color={theme.text.muted} />
+                  <Feather name="arrow-up-right" size={14} color={theme.text.muted} />
                 </View>
               }
             />
@@ -189,9 +190,7 @@ export default function EditTeamsView({
   return (
     <ScreenContainer style={s.screen} edges={['top', 'bottom']}>
       <View style={s.header}>
-        <TouchableOpacity onPress={onBack} style={s.backBtn} activeOpacity={0.7}>
-          <Feather name="chevron-left" size={22} color={theme.accent.primary} />
-        </TouchableOpacity>
+        <IconButton icon="chevron-left" onPress={onBack} />
         <Text style={s.headerTitle}>Edit Teams</Text>
         <View style={{ width: 36 }} />
       </View>
@@ -225,7 +224,7 @@ export default function EditTeamsView({
         )}
 
         <TouchableOpacity style={s.shuffleBtn} onPress={onShuffle} activeOpacity={0.7}>
-          <Feather name="shuffle" size={15} color={theme.accent.primary} />
+          <Feather name="shuffle" size={14} color={theme.accent.primary} />
           <Text style={s.shuffleBtnText}>
             {isThreeVsOne ? 'Shuffle — pick a random solo' : 'Shuffle teams'}
           </Text>
@@ -270,7 +269,7 @@ export default function EditTeamsView({
           disabled={saving}
           activeOpacity={0.8}
         >
-          <Feather name="check" size={18} color={theme.isDark ? theme.accent.primary : theme.text.inverse} />
+          <Feather name="check" size={14} color={theme.isDark ? theme.accent.primary : theme.text.inverse} />
           <Text style={s.saveBtnText}>{saving ? 'Saving…' : 'Save Teams'}</Text>
         </TouchableOpacity>
       </View>
@@ -284,12 +283,6 @@ function makeStyles(t) {
     header: {
       flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
       paddingHorizontal: 20, paddingTop: 16, paddingBottom: 12,
-    },
-    backBtn: {
-      width: 36, height: 36, borderRadius: 12,
-      alignItems: 'center', justifyContent: 'center',
-      backgroundColor: t.isDark ? t.bg.secondary : t.bg.card,
-      borderWidth: 1, borderColor: t.isDark ? t.glass?.border || t.border.default : t.border.default,
     },
     headerTitle: { fontFamily: 'PlusJakartaSans-Bold', fontSize: 17, color: t.text.primary },
 

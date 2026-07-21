@@ -85,7 +85,7 @@ export function HoleFlyover({
               <View style={s.hbtns}>
                 {onEdit && feat && (
                   <Pressable onPress={onEdit} style={s.editBtn} hitSlop={8}>
-                    <Feather name="edit-2" size={15} color="#0a0d10" />
+                    <Feather name="edit-2" size={14} color="#0a0d10" />
                     <Text style={s.editTxt}>Edit</Text>
                   </Pressable>
                 )}

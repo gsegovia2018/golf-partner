@@ -5,6 +5,7 @@ import {
 } from 'react-native';
 import QRCode from 'react-native-qrcode-svg';
 import ScreenContainer from '../components/ScreenContainer';
+import IconButton from '../components/ui/IconButton';
 import { Feather } from '@expo/vector-icons';
 
 import { useTheme } from '../theme/ThemeContext';
@@ -235,9 +236,7 @@ export default function OfficialSetupScreen({ navigation, route }) {
   return (
     <ScreenContainer style={s.screen} edges={['top', 'bottom']}>
       <View style={s.header}>
-        <TouchableOpacity onPress={() => navigation.goBack()} style={s.backBtn}>
-          <Feather name="chevron-left" size={22} color={theme.accent.primary} />
-        </TouchableOpacity>
+        <IconButton icon="chevron-left" onPress={() => navigation.goBack()} />
         <Text style={s.headerTitle}>Official Tournament</Text>
         <View style={{ width: 64 }} />
       </View>
@@ -305,7 +304,7 @@ export default function OfficialSetupScreen({ navigation, route }) {
               </View>
               <View style={s.actionRow}>
                 <TouchableOpacity style={s.actionBtn} onPress={() => handleShowLink(row)}>
-                  <Feather name="link" size={13} color={theme.accent.primary} style={{ marginRight: 4 }} />
+                  <Feather name="link" size={14} color={theme.accent.primary} style={{ marginRight: 4 }} />
                   <Text style={s.actionBtnText}>
                     {openLinkId === row.id ? 'Hide link' : 'Show link'}
                   </Text>
@@ -315,7 +314,7 @@ export default function OfficialSetupScreen({ navigation, route }) {
                   onPress={() => handleRegenerate(row.id)}
                   disabled={pendingRowId === row.id}
                 >
-                  <Feather name="refresh-cw" size={13} color={theme.accent.primary} style={{ marginRight: 4 }} />
+                  <Feather name="refresh-cw" size={14} color={theme.accent.primary} style={{ marginRight: 4 }} />
                   <Text style={s.actionBtnText}>Regenerate</Text>
                 </TouchableOpacity>
                 <TouchableOpacity
@@ -401,7 +400,7 @@ export default function OfficialSetupScreen({ navigation, route }) {
                   {(round.format ?? 'stableford')}  •  {(round.status ?? 'setup')}
                 </Text>
               </View>
-              <Feather name="chevron-right" size={18} color={theme.accent.primary} />
+              <Feather name="chevron-right" size={18} color={theme.text.muted} />
             </TouchableOpacity>
           ))}
           <TouchableOpacity
@@ -430,7 +429,6 @@ const makeStyles = (theme) => StyleSheet.create({
     flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
     paddingHorizontal: 20, paddingTop: 16, paddingBottom: 12, backgroundColor: theme.bg.primary,
   },
-  backBtn: {},
   headerTitle: { fontFamily: 'PlusJakartaSans-Bold', fontSize: 17, color: theme.text.primary },
   container: { flex: 1 },
   content: { padding: 20, paddingTop: 4, paddingBottom: 40 },

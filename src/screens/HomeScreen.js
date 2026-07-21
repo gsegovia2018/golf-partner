@@ -2,6 +2,7 @@ import React, { useEffect, useState, useCallback, useRef, useMemo, startTransiti
 import { View, Text, TouchableOpacity, StyleSheet, ScrollView, Switch, Alert, FlatList, Platform, Modal, Pressable, ActivityIndicator, Share, Animated, Easing } from 'react-native';
 import { useReducedMotion } from 'react-native-reanimated';
 import ScreenContainer from '../components/ScreenContainer';
+import IconButton from '../components/ui/IconButton';
 import RoundScoreboard from '../components/RoundScoreboard';
 import { Feather } from '@expo/vector-icons';
 import QRCode from 'react-native-qrcode-svg';
@@ -202,7 +203,7 @@ function UndoSnackbar({ data, onUndo, theme, s }) {
 
   return (
     <Animated.View style={[s.undoSnack, { opacity, transform: [{ translateY }] }]}>
-      <Feather name="rotate-ccw" size={16} color={theme.accent.primary} />
+      <Feather name="rotate-ccw" size={14} color="#fff" />
       <Text style={s.undoSnackText}>Round {(shown?.roundIndex ?? 0) + 1} reset</Text>
       <TouchableOpacity onPress={onUndo} style={s.undoSnackBtn} activeOpacity={0.7}>
         <Text style={s.undoSnackBtnText}>UNDO</Text>
@@ -1133,7 +1134,7 @@ export default function HomeScreen({ navigation, route }) {
         onPress={() => { onClose(); navigation.navigate('EditTeams', { roundIndex: selectedRound, tournamentId: tournament.id }); }}
         activeOpacity={0.7}
       >
-        <Feather name="users" size={18} color={theme.accent.primary} />
+        <Feather name="users" size={14} color={theme.text.primary} />
         <Text style={s.menuItemText}>Edit Teams</Text>
         <Feather name="chevron-right" size={16} color={theme.text.muted} />
       </TouchableOpacity>
@@ -1143,7 +1144,7 @@ export default function HomeScreen({ navigation, route }) {
         onPress={() => { onClose(); navigation.navigate('NextRound', { revealOnly: true, roundIndex: selectedRound }); }}
         activeOpacity={0.7}
       >
-        <Feather name="eye" size={18} color={theme.accent.primary} />
+        <Feather name="eye" size={14} color={theme.text.primary} />
         <Text style={s.menuItemText}>Reveal Teams</Text>
         <Feather name="chevron-right" size={16} color={theme.text.muted} />
       </TouchableOpacity>
@@ -1169,7 +1170,7 @@ export default function HomeScreen({ navigation, route }) {
         }}
         activeOpacity={0.7}
       >
-        <Feather name="hash" size={18} color={theme.accent.primary} />
+        <Feather name="hash" size={14} color={theme.text.primary} />
         <View style={{ flex: 1 }}>
           <Text style={s.menuItemText}>Point Values</Text>
           <Text style={s.modalSubtle}>{`Best ${vals.bestBallValue} · Worst ${vals.worstBallValue} pts / hole`}</Text>
@@ -1192,7 +1193,7 @@ export default function HomeScreen({ navigation, route }) {
             onPress={() => { onClose(); setShowResetHistory(true); }}
             activeOpacity={0.7}
           >
-            <Feather name="rotate-cw" size={18} color={theme.accent.primary} />
+            <Feather name="rotate-cw" size={14} color={theme.text.primary} />
             <Text style={s.menuItemText}>Restore previous scores ({historyCount})</Text>
             <Feather name="chevron-right" size={16} color={theme.text.muted} />
           </TouchableOpacity>
@@ -1202,7 +1203,7 @@ export default function HomeScreen({ navigation, route }) {
           onPress={() => { onClose(); resetCurrentRound(); }}
           activeOpacity={0.7}
         >
-          <Feather name="rotate-ccw" size={18} color={theme.destructive} />
+          <Feather name="rotate-ccw" size={14} color={theme.destructive} />
           <Text style={[s.menuItemText, { color: theme.destructive }]}>Reset Round</Text>
         </TouchableOpacity>
       </>
@@ -1234,23 +1235,18 @@ export default function HomeScreen({ navigation, route }) {
             <Text style={s.title}>Golf Partner</Text>
           </View>
           <View style={s.headerActions}>
-            <TouchableOpacity
-              style={s.iconBtn}
+            <IconButton
+              icon="menu"
               onPress={() => setShowListMenu(true)}
-              activeOpacity={0.7}
               accessibilityLabel="Menu"
-            >
-              <Feather name="menu" size={18} color={theme.accent.primary} />
-            </TouchableOpacity>
-            <TouchableOpacity
-              style={s.iconBtn}
+            />
+            <IconButton
+              icon="bell"
               onPress={() => navigation.navigate('Notifications')}
-              activeOpacity={0.7}
+              dot={unreadNotifs > 0}
+              dotColor={theme.accent.danger ?? '#e5484d'}
               accessibilityLabel={unreadNotifs > 0 ? `Notifications, ${unreadNotifs} unread` : 'Notifications'}
-            >
-              <Feather name="bell" size={18} color={theme.accent.primary} />
-              {unreadNotifs > 0 && <View style={s.notifDot} />}
-            </TouchableOpacity>
+            />
           </View>
         </View>
 
@@ -1293,7 +1289,7 @@ export default function HomeScreen({ navigation, route }) {
               <Text style={[s.startTileSub, s.startTileSubFeatured]}>Single round</Text>
             </View>
             <View style={[s.startTileCta, s.startTileCtaFeatured]}>
-              <Feather name="plus" size={16} color={theme.text.inverse} />
+              <Feather name="plus" size={14} color={theme.text.inverse} />
               <Text style={[s.startTileCtaText, { color: theme.text.inverse }]}>New game</Text>
             </View>
           </PressableScale>
@@ -1310,7 +1306,7 @@ export default function HomeScreen({ navigation, route }) {
               <Text style={s.startTileSub}>Multi-day event</Text>
             </View>
             <View style={s.startTileCta}>
-              <Feather name="plus" size={16} color={theme.accent.primary} />
+              <Feather name="plus" size={14} color={theme.accent.primary} />
               <Text style={s.startTileCtaText}>New tournament</Text>
             </View>
           </PressableScale>
@@ -1347,13 +1343,13 @@ export default function HomeScreen({ navigation, route }) {
 
         {reloadError && (
           <View style={s.errorCard}>
-            <Feather name="alert-triangle" size={18} color={theme.destructive} />
+            <Feather name="alert-triangle" size={14} color={theme.destructive} />
             <View style={{ flex: 1 }}>
               <Text style={s.errorCardTitle}>Couldn't load</Text>
               <Text style={s.errorCardText}>{reloadError}</Text>
             </View>
             <TouchableOpacity style={s.errorRetryBtn} onPress={reload} activeOpacity={0.8}>
-              <Feather name="refresh-cw" size={13} color={theme.accent.primary} />
+              <Feather name="refresh-cw" size={14} color={theme.accent.primary} />
               <Text style={s.errorRetryText}>Retry</Text>
             </TouchableOpacity>
           </View>
@@ -1424,7 +1420,7 @@ export default function HomeScreen({ navigation, route }) {
                   <View style={s.tournamentCardRight}>
                     {!openable ? (
                       <View style={s.offlineBadge}>
-                        <Feather name="cloud-off" size={12} color="#c77a0a" />
+                        <Feather name="cloud-off" size={14} color="#c77a0a" />
                         <Text style={s.offlineBadgeText}>Connection required</Text>
                       </View>
                     ) : (
@@ -1433,9 +1429,13 @@ export default function HomeScreen({ navigation, route }) {
                   </View>
                 </TouchableOpacity>
                 {openable && t._role === 'owner' && (
-                  <TouchableOpacity style={s.deleteCardBtn} onPress={() => confirmDelete(t)} hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}>
-                    <Feather name="trash-2" size={14} color={theme.destructive} />
-                  </TouchableOpacity>
+                  <IconButton
+                    icon="trash-2"
+                    color={theme.destructive}
+                    onPress={() => confirmDelete(t)}
+                    accessibilityLabel="Delete"
+                    style={s.deleteCardBtn}
+                  />
                 )}
               </View>
             );
@@ -1456,14 +1456,14 @@ export default function HomeScreen({ navigation, route }) {
             if (listStale) {
               return (
                 <View style={s.staleEmpty}>
-                  <Feather name="cloud-off" size={32} color={theme.text.muted} />
+                  <Feather name="cloud-off" size={44} color={theme.text.muted} />
                   <Text style={s.staleEmptyText}>Offline · no saved tournaments yet</Text>
                 </View>
               );
             }
             return (
               <View style={s.emptyState}>
-                <Feather name="flag" size={48} color={theme.text.muted} />
+                <Feather name="flag" size={44} color={theme.text.muted} />
                 <Text style={s.emptyTitle}>Nothing here yet</Text>
                 <Text style={s.emptySubtitle}>Create your first game or tournament to start playing</Text>
               </View>
@@ -1472,7 +1472,7 @@ export default function HomeScreen({ navigation, route }) {
           if (active.length === 0) {
             return (
               <View style={s.emptyState}>
-                <Feather name="check-circle" size={48} color={theme.text.muted} />
+                <Feather name="check-circle" size={44} color={theme.text.muted} />
                 <Text style={s.emptyTitle}>All caught up</Text>
                 <Text style={s.emptySubtitle}>Every game and tournament is finished. Start a new one above.</Text>
               </View>
@@ -1506,7 +1506,7 @@ export default function HomeScreen({ navigation, route }) {
             onPress={() => { setShowListMenu(false); navigation.navigate('CoursesLibrary'); }}
             activeOpacity={0.7}
           >
-            <Feather name="map" size={18} color={theme.accent.primary} />
+            <Feather name="map" size={14} color={theme.text.primary} />
             <Text style={s.menuItemText}>Courses</Text>
             <Feather name="chevron-right" size={16} color={theme.text.muted} />
           </TouchableOpacity>
@@ -1516,7 +1516,7 @@ export default function HomeScreen({ navigation, route }) {
             onPress={() => { setShowListMenu(false); navigation.navigate('PlayersLibrary'); }}
             activeOpacity={0.7}
           >
-            <Feather name="user" size={18} color={theme.accent.primary} />
+            <Feather name="user" size={14} color={theme.text.primary} />
             <Text style={s.menuItemText}>Players</Text>
             <Feather name="chevron-right" size={16} color={theme.text.muted} />
           </TouchableOpacity>
@@ -1531,7 +1531,7 @@ export default function HomeScreen({ navigation, route }) {
             onPress={() => { setShowTournamentKindChoice(false); navigation.navigate('Setup', { kind: 'tournament' }); }}
             activeOpacity={0.7}
           >
-            <Feather name="users" size={18} color={theme.accent.primary} />
+            <Feather name="users" size={14} color={theme.text.primary} />
             <View style={{ flex: 1 }}>
               <Text style={s.menuItemText}>Casual tournament</Text>
               <Text style={s.modalSubtle}>Friends scoring a round together</Text>
@@ -1544,7 +1544,7 @@ export default function HomeScreen({ navigation, route }) {
             onPress={() => { setShowTournamentKindChoice(false); navigation.navigate('OfficialCreate'); }}
             activeOpacity={0.7}
           >
-            <Feather name="award" size={18} color={theme.accent.primary} />
+            <Feather name="award" size={14} color={theme.text.primary} />
             <View style={{ flex: 1 }}>
               <Text style={s.menuItemText}>Official tournament</Text>
               <Text style={s.modalSubtle}>Invite players by link; double-entered, verified scoring</Text>
@@ -1571,7 +1571,7 @@ export default function HomeScreen({ navigation, route }) {
     return (
       <ScreenContainer style={[s.screen, { alignItems: 'center', justifyContent: 'center', padding: 24 }]} edges={['top', 'bottom']}>
         <View style={{ flex: 1, alignItems: 'center', justifyContent: 'center' }}>
-          <Feather name="flag" size={48} color={theme.text.muted} />
+          <Feather name="flag" size={44} color={theme.text.muted} />
           <Text style={[s.emptyTitle, { marginTop: 16 }]}>No active tournament</Text>
           <Text style={[s.emptySubtitle, { marginTop: 6, marginBottom: 8 }]}>
             Start a game or tournament to begin playing.
@@ -1581,7 +1581,7 @@ export default function HomeScreen({ navigation, route }) {
             onPress={() => navigation.navigate('Setup', { kind: 'game' })}
             activeOpacity={0.8}
           >
-            <Feather name="flag" size={16} color={theme.isDark ? theme.accent.primary : theme.text.inverse} />
+            <Feather name="flag" size={14} color={theme.isDark ? theme.accent.primary : theme.text.inverse} />
             <Text style={s.primaryBtnText}>Start a Game</Text>
           </TouchableOpacity>
           <TouchableOpacity
@@ -1589,7 +1589,7 @@ export default function HomeScreen({ navigation, route }) {
             onPress={() => setShowTournamentKindChoice(true)}
             activeOpacity={0.8}
           >
-            <Feather name="award" size={16} color={theme.accent.primary} />
+            <Feather name="award" size={14} color={theme.accent.primary} />
             <Text style={s.secondaryBtnText}>Start a Tournament</Text>
           </TouchableOpacity>
           <TouchableOpacity
@@ -1597,7 +1597,7 @@ export default function HomeScreen({ navigation, route }) {
             onPress={goToList}
             activeOpacity={0.8}
           >
-            <Feather name="home" size={16} color={theme.accent.primary} />
+            <Feather name="home" size={14} color={theme.accent.primary} />
             <Text style={s.secondaryBtnText}>Go to Home</Text>
           </TouchableOpacity>
         </View>
@@ -1611,7 +1611,7 @@ export default function HomeScreen({ navigation, route }) {
             onPress={() => { setShowTournamentKindChoice(false); navigation.navigate('Setup', { kind: 'tournament' }); }}
             activeOpacity={0.7}
           >
-            <Feather name="users" size={18} color={theme.accent.primary} />
+            <Feather name="users" size={14} color={theme.text.primary} />
             <View style={{ flex: 1 }}>
               <Text style={s.menuItemText}>Casual tournament</Text>
               <Text style={s.modalSubtle}>Friends scoring a round together</Text>
@@ -1624,7 +1624,7 @@ export default function HomeScreen({ navigation, route }) {
             onPress={() => { setShowTournamentKindChoice(false); navigation.navigate('OfficialCreate'); }}
             activeOpacity={0.7}
           >
-            <Feather name="award" size={18} color={theme.accent.primary} />
+            <Feather name="award" size={14} color={theme.text.primary} />
             <View style={{ flex: 1 }}>
               <Text style={s.menuItemText}>Official tournament</Text>
               <Text style={s.modalSubtle}>Invite players by link; double-entered, verified scoring</Text>
@@ -1642,9 +1642,7 @@ export default function HomeScreen({ navigation, route }) {
     <ScreenContainer style={s.screen} edges={['top', 'bottom']}>
       <View style={s.header}>
         <View style={s.headerLeft}>
-          <TouchableOpacity onPress={goToList} style={s.backBtn} activeOpacity={0.7}>
-            <Feather name="chevron-left" size={20} color={theme.accent.primary} />
-          </TouchableOpacity>
+          <IconButton icon="chevron-left" onPress={goToList} />
           <Text
             style={[s.headerTitle, tournament.name.length > 22 && s.headerTitleLong]}
             numberOfLines={2}
@@ -1655,36 +1653,25 @@ export default function HomeScreen({ navigation, route }) {
         </View>
         <View style={s.headerActions}>
           {!isViewer && (
-            <TouchableOpacity style={s.iconBtn} onPress={handleInvite} activeOpacity={0.7}>
-              <Feather name="share-2" size={18} color={theme.accent.primary} />
-            </TouchableOpacity>
+            <IconButton icon="share-2" onPress={handleInvite} />
           )}
-          <TouchableOpacity
-            style={s.iconBtn}
+          <IconButton
+            icon="image"
             onPress={() => navigation.navigate('Gallery', { tournamentId: tournament.id })}
-            activeOpacity={0.7}
             accessibilityLabel="Memories"
-          >
-            <Feather name="image" size={18} color={theme.accent.primary} />
-          </TouchableOpacity>
+          />
           {!appSettings.noSpoilers && (
-            <TouchableOpacity
-              style={s.iconBtn}
+            <IconButton
+              icon={showRunning ? 'eye-off' : 'eye'}
               onPress={toggleRunning}
-              activeOpacity={0.7}
               accessibilityLabel={showRunning ? 'Hide running scores' : 'Show running scores'}
-            >
-              <Feather name={showRunning ? 'eye-off' : 'eye'} size={18} color={theme.accent.primary} />
-            </TouchableOpacity>
+            />
           )}
-          <TouchableOpacity
-            style={s.iconBtn}
+          <IconButton
+            icon="settings"
             onPress={() => setShowSettings(true)}
-            activeOpacity={0.7}
             accessibilityLabel="Tournament settings"
-          >
-            <Feather name="settings" size={18} color={theme.accent.primary} />
-          </TouchableOpacity>
+          />
         </View>
       </View>
 
@@ -1765,7 +1752,7 @@ export default function HomeScreen({ navigation, route }) {
                     {entry.player.name}
                   </Text>
                   {showRunning && entry.player.id === tournamentClinchedId && (
-                    <Feather name="award" size={12} color={semantic.winner.dark} />
+                    <Feather name="award" size={14} color={semantic.winner.dark} />
                   )}
                 </View>
               </View>
@@ -1962,7 +1949,7 @@ export default function HomeScreen({ navigation, route }) {
             onPress={() => navigation.navigate('Scorecard', { roundIndex: selectedRound, tournamentId: tournament.id })}
             activeOpacity={0.8}
           >
-            <Feather name="edit-2" size={16} color={theme.isDark ? theme.accent.primary : theme.text.inverse} />
+            <Feather name="edit-2" size={14} color={theme.isDark ? theme.accent.primary : theme.text.inverse} />
             <Text style={s.primaryBtnText}>{isCurrentRound ? 'Scorecard' : 'Edit Scores'}</Text>
           </TouchableOpacity>
           {canShowNext && (
@@ -1972,7 +1959,7 @@ export default function HomeScreen({ navigation, route }) {
                 onPress={() => navigation.navigate('NextRound', { revealOnly: true, roundIndex: tournament.currentRound + 1 })}
                 activeOpacity={0.7}
               >
-                <Feather name="eye" size={16} color={theme.accent.primary} />
+                <Feather name="eye" size={14} color={theme.accent.primary} />
                 <Text style={s.secondaryBtnText}>Next Round</Text>
               </TouchableOpacity>
             ) : (
@@ -1981,7 +1968,7 @@ export default function HomeScreen({ navigation, route }) {
                 onPress={() => navigation.navigate('NextRound')}
                 activeOpacity={0.8}
               >
-                <Feather name="play" size={16} color={theme.isDark ? theme.accent.primary : theme.text.inverse} />
+                <Feather name="play" size={14} color={theme.isDark ? theme.accent.primary : theme.text.inverse} />
                 <Text style={s.primaryBtnText}>Start Next Round</Text>
               </TouchableOpacity>
             )
@@ -2067,7 +2054,7 @@ export default function HomeScreen({ navigation, route }) {
             activeOpacity={0.7}
             disabled={!inviteCode}
           >
-            <Feather name="share-2" size={18} color={theme.accent.primary} />
+            <Feather name="share-2" size={14} color={theme.text.primary} />
             <Text style={s.menuItemText}>Share link</Text>
             <Feather name="chevron-right" size={16} color={theme.text.muted} />
           </TouchableOpacity>
@@ -2091,7 +2078,7 @@ export default function HomeScreen({ navigation, route }) {
             onPress={() => setShowRoundModeSheet(true)}
             activeOpacity={0.7}
           >
-            <Feather name="flag" size={18} color={theme.accent.primary} />
+            <Feather name="flag" size={14} color={theme.text.primary} />
             <View style={{ flex: 1 }}>
               <Text style={s.menuItemText}>Scoring Mode</Text>
               <Text style={s.modalSubtle}>
@@ -2143,7 +2130,7 @@ export default function HomeScreen({ navigation, route }) {
                   onPress={() => restoreFromHistory(idx)}
                   activeOpacity={0.7}
                 >
-                  <Feather name="clock" size={18} color={theme.accent.primary} />
+                  <Feather name="clock" size={14} color={theme.text.primary} />
                   <View style={{ flex: 1 }}>
                     <Text style={s.menuItemText}>{when}</Text>
                     <Text style={s.modalSubtle}>{playerCount} players · up to hole {holeCount}</Text>
@@ -2172,7 +2159,7 @@ export default function HomeScreen({ navigation, route }) {
               onPress={() => { setShowSettings(false); shareLeaderboard({ tournamentName: tournament.name, leaderboard: displayedBoard.entries, theme, viewRef: leaderboardRef }); }}
               activeOpacity={0.7}
             >
-              <Feather name="share-2" size={18} color={theme.accent.primary} />
+              <Feather name="share-2" size={14} color={theme.text.primary} />
               <Text style={s.menuItemText}>Share Leaderboard</Text>
               <Feather name="chevron-right" size={16} color={theme.text.muted} />
             </TouchableOpacity>
@@ -2183,7 +2170,7 @@ export default function HomeScreen({ navigation, route }) {
             onPress={() => { setShowSettings(false); navigation.navigate('Stats', { tournamentId: tournament.id }); }}
             activeOpacity={0.7}
           >
-            <Feather name="bar-chart-2" size={18} color={theme.accent.primary} />
+            <Feather name="bar-chart-2" size={14} color={theme.text.primary} />
             <Text style={s.menuItemText}>Statistics</Text>
             <Feather name="chevron-right" size={16} color={theme.text.muted} />
           </TouchableOpacity>
@@ -2199,7 +2186,7 @@ export default function HomeScreen({ navigation, route }) {
             }}
             activeOpacity={0.7}
           >
-            <Feather name="users" size={18} color={theme.accent.primary} />
+            <Feather name="users" size={14} color={theme.text.primary} />
             <Text style={s.menuItemText}>Players</Text>
             <Feather name="chevron-right" size={16} color={theme.text.muted} />
           </TouchableOpacity>
@@ -2213,7 +2200,7 @@ export default function HomeScreen({ navigation, route }) {
               onPress={() => { setShowSettings(false); setShowRoundModeSheet(true); }}
               activeOpacity={0.7}
             >
-              <Feather name="flag" size={18} color={theme.accent.primary} />
+              <Feather name="flag" size={14} color={theme.text.primary} />
               <View style={{ flex: 1 }}>
                 <Text style={s.menuItemText}>Scoring Mode</Text>
                 <Text style={s.modalSubtle}>
@@ -2232,7 +2219,7 @@ export default function HomeScreen({ navigation, route }) {
               onPress={() => { setShowSettings(false); setShowTeamSettings(true); }}
               activeOpacity={0.7}
             >
-              <Feather name="users" size={18} color={theme.accent.primary} />
+              <Feather name="users" size={14} color={theme.text.primary} />
               <Text style={s.menuItemText}>Team Settings</Text>
               <Feather name="chevron-right" size={16} color={theme.text.muted} />
             </TouchableOpacity>
@@ -2250,7 +2237,7 @@ export default function HomeScreen({ navigation, route }) {
               }}
               activeOpacity={0.7}
             >
-              <Feather name="edit-3" size={18} color={theme.accent.primary} />
+              <Feather name="edit-3" size={14} color={theme.text.primary} />
               <Text style={s.menuItemText}>{tournament.rounds.length === 1 ? 'Edit Round' : 'Edit Tournament'}</Text>
               <Feather name="chevron-right" size={16} color={theme.text.muted} />
             </TouchableOpacity>
@@ -2270,7 +2257,7 @@ export default function HomeScreen({ navigation, route }) {
                   onPress={() => { setShowSettings(false); setTournamentFinished(tournament, false); }}
                   activeOpacity={0.7}
                 >
-                  <Feather name="rotate-ccw" size={18} color={theme.accent.primary} />
+                  <Feather name="rotate-ccw" size={14} color={theme.text.primary} />
                   <Text style={s.menuItemText}>Reopen {kindLabel}</Text>
                   <Feather name="chevron-right" size={16} color={theme.text.muted} />
                 </TouchableOpacity>
@@ -2282,7 +2269,7 @@ export default function HomeScreen({ navigation, route }) {
                 onPress={() => { setShowSettings(false); setTournamentFinished(tournament, true); }}
                 activeOpacity={0.7}
               >
-                <Feather name="flag" size={18} color={theme.accent.primary} />
+                <Feather name="flag" size={14} color={theme.text.primary} />
                 <Text style={s.menuItemText}>Finish {kindLabel}</Text>
                 <Feather name="chevron-right" size={16} color={theme.text.muted} />
               </TouchableOpacity>
@@ -2295,7 +2282,7 @@ export default function HomeScreen({ navigation, route }) {
               onPress={() => { setShowSettings(false); confirmDelete(tournament); }}
               activeOpacity={0.7}
             >
-              <Feather name="trash-2" size={18} color={theme.destructive} />
+              <Feather name="trash-2" size={14} color={theme.destructive} />
               <Text style={[s.menuItemText, { color: theme.destructive }]}>{`Delete ${tournamentNounCapitalized(tournament)}`}</Text>
             </TouchableOpacity>
           )}
@@ -2319,7 +2306,7 @@ export default function HomeScreen({ navigation, route }) {
               onPress={() => { setShowTeamSettings(false); navigation.navigate('EditTeams', { roundIndex: 0, tournamentId: tournament.id }); }}
               activeOpacity={0.7}
             >
-              <Feather name="edit-2" size={18} color={theme.accent.primary} />
+              <Feather name="edit-2" size={14} color={theme.text.primary} />
               <View style={{ flex: 1 }}>
                 <Text style={s.menuItemText}>Edit Pairs</Text>
                 <Text style={s.modalSubtle}>{pairsPreviewText(tournament)}</Text>
@@ -2340,7 +2327,7 @@ export default function HomeScreen({ navigation, route }) {
                 onPress={savePointValues}
                 activeOpacity={0.7}
               >
-                <Feather name="check" size={18} color={theme.accent.primary} />
+                <Feather name="check" size={14} color={theme.text.primary} />
                 <Text style={s.menuItemText}>Save</Text>
               </TouchableOpacity>
             </>
@@ -2471,16 +2458,8 @@ const makeStyles = (t) => StyleSheet.create({
   headerLeft: { flexDirection: 'row', alignItems: 'center', flex: 1, minWidth: 0, paddingRight: 8 },
   headerActions: { flexDirection: 'row', gap: 8, flexShrink: 0 },
   title: { fontFamily: 'PlayfairDisplay-Black', fontSize: 30, color: t.text.primary, letterSpacing: -0.5 },
-  backBtn: { flexDirection: 'row', alignItems: 'center', flexShrink: 0 },
   headerTitle: { fontFamily: 'PlayfairDisplay-Bold', fontSize: 20, color: t.text.primary, flexShrink: 1, lineHeight: 24 },
   headerTitleLong: { fontSize: 16, lineHeight: 20 },
-  iconBtn: {
-    width: 36, height: 36, borderRadius: 10,
-    backgroundColor: t.isDark ? t.bg.secondary : t.bg.card,
-    borderWidth: 1, borderColor: t.isDark ? t.glass?.border || t.border.default : t.border.default,
-    alignItems: 'center', justifyContent: 'center',
-    ...(t.isDark ? {} : t.shadow.card),
-  },
 
   // Buttons
   primaryBtn: {
@@ -2965,17 +2944,6 @@ const makeStyles = (t) => StyleSheet.create({
     color: t.text.primary, fontSize: 14,
   },
   menuItemDestructive: { borderBottomWidth: 0 },
-  notifDot: {
-    position: 'absolute',
-    top: 6,
-    right: 6,
-    width: 9,
-    height: 9,
-    borderRadius: 5,
-    backgroundColor: t.accent.danger ?? '#e5484d',
-    borderWidth: 1.5,
-    borderColor: t.bg.card,
-  },
 
   // Viewer badge
   viewerBadge: {

@@ -2,10 +2,11 @@ import React, { useEffect, useRef, useState, useCallback, useMemo } from 'react'
 import { useFocusEffect } from '@react-navigation/native';
 import {
   View, Text, TextInput, TouchableOpacity,
-  ScrollView, Pressable, Platform, Animated,
+  ScrollView, Platform, Animated,
   ActivityIndicator, Alert, AppState,
 } from 'react-native';
 import ScreenContainer from '../components/ScreenContainer';
+import IconButton from '../components/ui/IconButton';
 import * as Haptics from 'expo-haptics';
 
 import { Feather } from '@expo/vector-icons';
@@ -1495,9 +1496,7 @@ export default function ScorecardScreen({ navigation, route }) {
     return (
       <ScreenContainer style={s.container} edges={['top', 'bottom']}>
         <View style={s.header}>
-          <TouchableOpacity onPress={goBack} style={s.headerBtn}>
-            <Feather name="chevron-left" size={22} color={theme.accent.primary} />
-          </TouchableOpacity>
+          <IconButton icon="chevron-left" onPress={goBack} />
           <Text style={s.headerTitle}>Scorecard</Text>
           <View style={{ width: 36 }} />
         </View>
@@ -1508,7 +1507,7 @@ export default function ScorecardScreen({ navigation, route }) {
             Check your connection and try again.
           </Text>
           <TouchableOpacity style={s.statusRetryBtn} onPress={retryLoad} activeOpacity={0.8}>
-            <Feather name="rotate-ccw" size={15} color={theme.text.inverse} />
+            <Feather name="rotate-ccw" size={14} color={theme.text.inverse} />
             <Text style={s.statusRetryText}>Retry</Text>
           </TouchableOpacity>
         </View>
@@ -1521,9 +1520,7 @@ export default function ScorecardScreen({ navigation, route }) {
     return (
       <ScreenContainer style={s.container} edges={['top', 'bottom']}>
         <View style={s.header}>
-          <TouchableOpacity onPress={goBack} style={s.headerBtn}>
-            <Feather name="chevron-left" size={22} color={theme.accent.primary} />
-          </TouchableOpacity>
+          <IconButton icon="chevron-left" onPress={goBack} />
           <Text style={s.headerTitle}>Scorecard</Text>
           <View style={{ width: 36 }} />
         </View>
@@ -1552,20 +1549,15 @@ export default function ScorecardScreen({ navigation, route }) {
     <ScreenContainer style={s.container} edges={['top', 'bottom']}>
       {/* Header with compact scorecard view switch. */}
       <View style={s.header}>
-        <TouchableOpacity onPress={goBack} style={s.headerBtn}>
-          <Feather name="chevron-left" size={22} color={theme.accent.primary} />
-        </TouchableOpacity>
+        <IconButton icon="chevron-left" onPress={goBack} />
         <Text style={s.headerTitle}>Scorecard</Text>
         <View style={s.headerRight}>
-          <Pressable
+          <IconButton
             onPress={() => setSyncSheetOpen(true)}
-            style={s.headerBtn}
-            hitSlop={8}
-            accessibilityRole="button"
             accessibilityLabel="Sync status"
           >
             <SyncIndicator status={syncStatus} saveError={saveError} theme={theme} s={s} />
-          </Pressable>
+          </IconButton>
           {!official && viewOnly && (
             <TouchableOpacity
               onPress={() => setViewOnly(false)}
@@ -1573,54 +1565,42 @@ export default function ScorecardScreen({ navigation, route }) {
               accessibilityRole="button"
               accessibilityLabel="Edit round"
             >
-              <Feather name="edit-2" size={12} color={theme.accent.primary} style={{ marginRight: 4 }} />
+              <Feather name="edit-2" size={14} color={theme.accent.primary} style={{ marginRight: 4 }} />
               <Text style={s.editRoundBtnText}>Edit round</Text>
             </TouchableOpacity>
           )}
-          <TouchableOpacity
+          <IconButton
+            icon={viewSwitchIcon}
             onPress={() => setView(nextView)}
-            style={s.headerBtn}
-            accessibilityRole="button"
             accessibilityLabel={viewSwitchLabel}
-          >
-            <Feather name={viewSwitchIcon} size={17} color={theme.accent.primary} />
-          </TouchableOpacity>
+          />
           {!appSettings.noSpoilers && (
-            <TouchableOpacity
+            <IconButton
+              icon={showRunning ? 'eye-off' : 'eye'}
               onPress={toggleRunning}
-              style={s.headerBtn}
               accessibilityLabel={showRunning ? 'Hide running score' : 'Show running score'}
-            >
-              <Feather name={showRunning ? 'eye-off' : 'eye'} size={18} color={theme.accent.primary} />
-            </TouchableOpacity>
+            />
           )}
           {official && !appSettings.noSpoilers && (
-            <TouchableOpacity
+            <IconButton
+              icon="award"
               onPress={() => setOfficialLeaderboardOpen(true)}
-              style={s.headerBtn}
               accessibilityLabel="View official leaderboard"
-            >
-              <Feather name="award" size={20} color={theme.accent.primary} />
-            </TouchableOpacity>
+            />
           )}
           {showNotesControls && (
-            <TouchableOpacity
+            <IconButton
+              icon={hasCurrentNotes ? 'edit-3' : 'edit-2'}
               onPress={() => setNotesOpen(true)}
-              style={s.headerBtn}
-              accessibilityRole="button"
+              dot={hasCurrentNotes}
               accessibilityLabel={hasCurrentNotes ? 'Open notes' : 'Add notes'}
-            >
-              <Feather name={hasCurrentNotes ? 'edit-3' : 'edit-2'} size={18} color={theme.accent.primary} />
-              {hasCurrentNotes && <View style={s.notesHeaderDot} />}
-            </TouchableOpacity>
+            />
           )}
-          <TouchableOpacity
+          <IconButton
+            icon="camera"
             onPress={openCapturePicker}
-            style={s.headerBtn}
             accessibilityLabel="Attach a memory"
-          >
-            <Feather name="camera" size={20} color={theme.accent.primary} />
-          </TouchableOpacity>
+          />
         </View>
       </View>
 
@@ -1764,9 +1744,7 @@ export default function ScorecardScreen({ navigation, route }) {
           <View style={s.notesHandle} />
           <View style={s.notesHeader}>
             <Text style={s.notesTitle}>Notes</Text>
-            <TouchableOpacity onPress={() => setNotesOpen(false)} style={s.notesCloseBtn}>
-              <Feather name="x" size={18} color={theme.text.secondary} />
-            </TouchableOpacity>
+            <IconButton icon="x" onPress={() => setNotesOpen(false)} />
           </View>
           <Text style={s.notesFieldLabel}>{`Hole ${currentHole}`}</Text>
           <TextInput
@@ -1841,13 +1819,11 @@ export default function ScorecardScreen({ navigation, route }) {
           <View style={s.notesHandle} />
           <View style={s.notesHeader}>
             <Text style={s.notesTitle}>Leaderboard</Text>
-            <TouchableOpacity
+            <IconButton
+              icon="x"
               onPress={() => setOfficialLeaderboardOpen(false)}
-              style={s.notesCloseBtn}
               accessibilityLabel="Close leaderboard"
-            >
-              <Feather name="x" size={18} color={theme.text.secondary} />
-            </TouchableOpacity>
+            />
           </View>
           {officialLeaderboard.length === 0 ? (
             <Text style={s.statusSubtitle}>No scores yet.</Text>

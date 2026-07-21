@@ -6,6 +6,7 @@ import { Feather } from '@expo/vector-icons';
 import { useReducedMotion } from 'react-native-reanimated';
 import ScreenContainer from '../components/ScreenContainer';
 import PressableScale from '../components/ui/PressableScale';
+import IconButton from '../components/ui/IconButton';
 import Reveal from '../components/ui/Reveal';
 import { useTheme } from '../theme/ThemeContext';
 import { semantic } from '../theme/tokens';
@@ -95,14 +96,11 @@ export default function CourseStatsScreen({ navigation, route }) {
 
   const Header = (
     <View style={s.header}>
-      <PressableScale
-        accessibilityRole="button"
+      <IconButton
+        icon="chevron-left"
         accessibilityLabel="Back"
         onPress={() => navigation.goBack()}
-        style={s.backBtn}
-      >
-        <Feather name="chevron-left" size={22} color={theme.accent.primary} />
-      </PressableScale>
+      />
       <Text style={s.headerTitle} numberOfLines={1}>
         {breakdown?.courseName ?? fallbackName}
       </Text>
@@ -123,7 +121,7 @@ export default function CourseStatsScreen({ navigation, route }) {
       <ScreenContainer style={s.container} edges={['top', 'bottom']}>
         {Header}
         <View style={s.center}>
-          <Feather name="wifi-off" size={32} color={theme.text.muted} />
+          <Feather name="wifi-off" size={44} color={theme.text.muted} />
           <Text style={s.emptyText}>Could not load course stats.</Text>
           <PressableScale
             accessibilityRole="button"
@@ -142,7 +140,7 @@ export default function CourseStatsScreen({ navigation, route }) {
       <ScreenContainer style={s.container} edges={['top', 'bottom']}>
         {Header}
         <View style={s.center}>
-          <Feather name="map" size={32} color={theme.text.muted} />
+          <Feather name="map" size={44} color={theme.text.muted} />
           <Text style={s.emptyText}>No rounds at this course yet.</Text>
         </View>
       </ScreenContainer>

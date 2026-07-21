@@ -4,6 +4,7 @@ import {
   StyleSheet, ScrollView, ActivityIndicator,
 } from 'react-native';
 import ScreenContainer from '../components/ScreenContainer';
+import IconButton from '../components/ui/IconButton';
 import { Feather } from '@expo/vector-icons';
 
 import { useTheme } from '../theme/ThemeContext';
@@ -127,15 +128,13 @@ export default function JoinOfficialScreen({ navigation, route }) {
     return (
       <ScreenContainer style={s.screen} edges={['top', 'bottom']}>
         <View style={s.header}>
-          <TouchableOpacity onPress={() => navigation.goBack()} style={s.backBtn}>
-            <Feather name="chevron-left" size={22} color={theme.accent.primary} />
-          </TouchableOpacity>
+          <IconButton icon="chevron-left" onPress={() => navigation.goBack()} />
           <Text style={s.headerTitle}>Join Tournament</Text>
           <View style={{ width: 64 }} />
         </View>
         <ScrollView style={s.container} contentContainerStyle={s.content}>
           <View style={s.card}>
-            <Feather name="alert-circle" size={28} color={theme.destructive} style={{ marginBottom: 10 }} />
+            <Feather name="alert-circle" size={44} color={theme.destructive} style={{ marginBottom: 10 }} />
             <Text style={s.errorTitle}>This invite link is not valid.</Text>
             <Text style={s.hint}>
               Paste your invite link or token below and try again.
@@ -168,23 +167,21 @@ export default function JoinOfficialScreen({ navigation, route }) {
   return (
     <ScreenContainer style={s.screen} edges={['top', 'bottom']}>
       <View style={s.header}>
-        <TouchableOpacity onPress={() => navigation.goBack()} style={s.backBtn}>
-          <Feather name="chevron-left" size={22} color={theme.accent.primary} />
-        </TouchableOpacity>
+        <IconButton icon="chevron-left" onPress={() => navigation.goBack()} />
         <Text style={s.headerTitle}>Join Tournament</Text>
         <View style={{ width: 64 }} />
       </View>
 
       <ScrollView style={s.container} contentContainerStyle={s.content}>
         <View style={s.card}>
-          <Feather name="check-circle" size={28} color={theme.accent.primary} style={{ marginBottom: 10 }} />
+          <Feather name="check-circle" size={44} color={theme.accent.primary} style={{ marginBottom: 10 }} />
           <Text style={s.confirmTitle}>You're in as {player.display_name}</Text>
           {!!tournamentName && (
             <Text style={s.confirmSub}>{tournamentName}</Text>
           )}
           {player.withdrawn && (
             <View style={s.withdrawnNote}>
-              <Feather name="user-x" size={13} color={theme.destructive} style={{ marginRight: 6 }} />
+              <Feather name="user-x" size={14} color={theme.destructive} style={{ marginRight: 6 }} />
               <Text style={s.withdrawnText}>
                 You have been withdrawn from this tournament by the admin.
               </Text>
@@ -253,7 +250,6 @@ const makeStyles = (theme) => StyleSheet.create({
     flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
     paddingHorizontal: 20, paddingTop: 16, paddingBottom: 12, backgroundColor: theme.bg.primary,
   },
-  backBtn: {},
   headerTitle: { fontFamily: 'PlusJakartaSans-Bold', fontSize: 17, color: theme.text.primary },
   container: { flex: 1 },
   content: { padding: 20, paddingTop: 4, paddingBottom: 40 },

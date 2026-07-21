@@ -4,6 +4,7 @@ import {
   ActivityIndicator,
 } from 'react-native';
 import ScreenContainer from '../components/ScreenContainer';
+import IconButton from '../components/ui/IconButton';
 import { Feather } from '@expo/vector-icons';
 import { useTheme } from '../theme/ThemeContext';
 import { useTournamentMedia } from '../hooks/useTournamentMedia';
@@ -135,7 +136,7 @@ export default function GalleryScreen({ route, navigation }) {
     if (loadState === 'error') {
       return (
         <View style={s.stateBox}>
-          <Feather name="alert-triangle" size={32} color={theme.text.muted} />
+          <Feather name="alert-triangle" size={44} color={theme.text.muted} />
           <Text style={s.stateText}>Couldn't load this gallery.</Text>
           <TouchableOpacity style={s.retryBtn} onPress={loadTournament} activeOpacity={0.85}>
             <Feather name="refresh-cw" size={14} color={theme.text.inverse} />
@@ -170,7 +171,7 @@ export default function GalleryScreen({ route, navigation }) {
 
         {isFirstMemory ? (
           <View style={s.empty}>
-            <Feather name="camera" size={34} color={theme.text.muted} />
+            <Feather name="camera" size={44} color={theme.text.muted} />
             <Text style={s.emptyTitle}>No memories yet</Text>
             <Text style={s.emptyText}>
               Tap the + button below to add your first photo or video.
@@ -184,7 +185,7 @@ export default function GalleryScreen({ route, navigation }) {
           </View>
         ) : filtered.length === 0 ? (
           <View style={s.empty}>
-            <Feather name="image" size={32} color={theme.text.muted} />
+            <Feather name="image" size={44} color={theme.text.muted} />
             <Text style={s.emptyText}>No memories for this filter.</Text>
           </View>
         ) : (
@@ -218,9 +219,7 @@ export default function GalleryScreen({ route, navigation }) {
   return (
     <ScreenContainer style={s.container} edges={['top', 'bottom']}>
       <View style={s.header}>
-        <TouchableOpacity onPress={() => navigation.goBack()} style={s.backBtn}>
-          <Feather name="chevron-left" size={22} color={theme.accent.primary} />
-        </TouchableOpacity>
+        <IconButton icon="chevron-left" onPress={() => navigation.goBack()} />
         <Text style={s.title}>Memories</Text>
         <View style={{ width: 22 }} />
       </View>
@@ -257,7 +256,6 @@ const makeStyles = (theme) => StyleSheet.create({
     flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
     paddingHorizontal: 16, paddingVertical: 10,
   },
-  backBtn: { padding: 4 },
   title: { fontFamily: 'PlayfairDisplay-Bold', fontSize: 20, color: theme.text.primary },
   scroll: { paddingTop: 8, paddingBottom: 32, gap: 10 },
   mosaic: { flexDirection: 'row', paddingHorizontal: 12, gap: 6 },

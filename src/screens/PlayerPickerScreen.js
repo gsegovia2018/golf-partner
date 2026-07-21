@@ -4,6 +4,7 @@ import {
   Text, TextInput, TouchableOpacity, View, Alert, Image, Platform,
 } from 'react-native';
 import ScreenContainer from '../components/ScreenContainer';
+import IconButton from '../components/ui/IconButton';
 import { useFocusEffect } from '@react-navigation/native';
 import { Feather } from '@expo/vector-icons';
 
@@ -143,9 +144,7 @@ export default function PlayerPickerScreen({ navigation, route }) {
   return (
     <ScreenContainer style={s.container} edges={['top', 'bottom']}>
       <View style={s.header}>
-        <TouchableOpacity onPress={() => navigation.goBack()} style={s.backBtn}>
-          <Feather name="chevron-left" size={22} color={theme.accent.primary} />
-        </TouchableOpacity>
+        <IconButton icon="chevron-left" onPress={() => navigation.goBack()} />
         <Text style={s.headerTitle}>Select Players</Text>
         <View style={{ width: 22 }} />
       </View>
@@ -165,9 +164,7 @@ export default function PlayerPickerScreen({ navigation, route }) {
             autoCapitalize="none"
           />
           {query ? (
-            <TouchableOpacity onPress={() => setQuery('')} style={s.searchClear} activeOpacity={0.7}>
-              <Feather name="x" size={16} color={theme.text.muted} />
-            </TouchableOpacity>
+            <IconButton icon="x" onPress={() => setQuery('')} style={s.searchClear} />
           ) : null}
         </View>
 
@@ -193,7 +190,7 @@ export default function PlayerPickerScreen({ navigation, route }) {
             onChangeText={setNewHcp}
           />
           <TouchableOpacity style={s.addBtn} onPress={() => addAndSelect()} disabled={saving || !newName.trim()}>
-            <Feather name="plus" size={18} color={theme.isDark ? theme.accent.primary : theme.text.inverse} />
+            <Feather name="plus" size={14} color={theme.isDark ? theme.accent.primary : theme.text.inverse} />
             <Text style={s.addBtnText}>Add</Text>
           </TouchableOpacity>
         </View>
@@ -202,7 +199,7 @@ export default function PlayerPickerScreen({ navigation, route }) {
           <ActivityIndicator color={theme.accent.primary} style={{ marginTop: 20 }} />
         ) : loadError ? (
           <View style={s.errorBox}>
-            <Feather name="wifi-off" size={20} color={theme.destructive} />
+            <Feather name="wifi-off" size={44} color={theme.destructive} />
             <Text style={s.errorTitle}>Couldn't load players</Text>
             <Text style={s.errorMsg}>{loadError}</Text>
             <TouchableOpacity
@@ -301,7 +298,6 @@ const makeStyles = (theme) => StyleSheet.create({
     paddingBottom: 12,
     backgroundColor: theme.bg.primary,
   },
-  backBtn: {},
   headerTitle: {
     fontFamily: 'PlusJakartaSans-Bold',
     fontSize: 17,

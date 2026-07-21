@@ -5,6 +5,7 @@ import { Feather } from '@expo/vector-icons';
 import { useTheme } from '../theme/ThemeContext';
 import BottomSheet from './BottomSheet';
 import WheelPicker from './WheelPicker';
+import IconButton from './ui/IconButton';
 
 const UPLOADER_KEY = '@golf_uploader_label';
 
@@ -104,9 +105,7 @@ export default function BatchAttachSheet({
     <BottomSheet visible={visible} onClose={onCancel} sheetStyle={s.sheet}>
       <View style={s.header}>
             <Text style={s.title}>Attach {assets.length} {assets.length === 1 ? 'memory' : 'memories'}</Text>
-            <TouchableOpacity onPress={onCancel} accessibilityLabel="Cancel">
-              <Feather name="x" size={22} color={theme.text.muted} />
-            </TouchableOpacity>
+            <IconButton icon="x" onPress={onCancel} accessibilityLabel="Cancel" />
           </View>
 
           <ScrollView contentContainerStyle={{ paddingBottom: 8 }}>
@@ -151,7 +150,7 @@ export default function BatchAttachSheet({
               <View key={i} style={s.itemRow}>
                 <Image source={{ uri: e.asset.localUri }} style={s.itemThumb} />
                 {e.asset.kind === 'video' && (
-                  <View style={s.videoBadge}><Feather name="play" size={10} color="#fff" /></View>
+                  <View style={s.videoBadge}><Feather name="play" size={14} color="#fff" /></View>
                 )}
                 <View style={s.itemMain}>
                   <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={s.chipsRow}>
@@ -167,7 +166,7 @@ export default function BatchAttachSheet({
                     />
                     {e.holeOverridden && (
                       <TouchableOpacity style={s.resetBtn} onPress={() => clearItemHole(i)}>
-                        <Feather name="rotate-ccw" size={12} color={theme.text.muted} />
+                        <Feather name="rotate-ccw" size={14} color={theme.text.muted} />
                       </TouchableOpacity>
                     )}
                   </ScrollView>

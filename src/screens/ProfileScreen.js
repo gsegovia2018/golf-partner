@@ -4,6 +4,7 @@ import {
   ActivityIndicator, Alert, Platform, Image,
 } from 'react-native';
 import ScreenContainer from '../components/ScreenContainer';
+import IconButton from '../components/ui/IconButton';
 import { useFocusEffect } from '@react-navigation/native';
 import { Feather } from '@expo/vector-icons';
 import * as ImagePicker from 'expo-image-picker';
@@ -238,14 +239,11 @@ export default function ProfileScreen({ navigation, route }) {
         {isTabPresentation ? (
           headerSave
         ) : (
-          <TouchableOpacity
+          <IconButton
+            icon="chevron-left"
             accessibilityLabel="Back"
             onPress={handleBack}
-            style={s.backBtn}
-            activeOpacity={0.7}
-          >
-            <Feather name="chevron-left" size={22} color={theme.accent.primary} />
-          </TouchableOpacity>
+          />
         )}
         <Text style={s.headerTitle}>Profile</Text>
         {isTabPresentation ? <View style={s.backBtn} /> : headerSave}
@@ -274,7 +272,7 @@ export default function ProfileScreen({ navigation, route }) {
               )}
               {!uploadingAvatar && (
                 <View style={s.avatarEditBadge}>
-                  <Feather name="camera" size={12} color="#fff" />
+                  <Feather name="camera" size={14} color="#fff" />
                 </View>
               )}
             </TouchableOpacity>
@@ -381,7 +379,7 @@ export default function ProfileScreen({ navigation, route }) {
             onPress={() => navigation.navigate('Settings')}
             activeOpacity={0.7}
           >
-            <Feather name="settings" size={18} color={theme.accent.primary} />
+            <Feather name="settings" size={14} color={theme.text.muted} />
             <Text style={s.linkRowText}>Settings</Text>
             <Feather name="chevron-right" size={18} color={theme.text.muted} />
           </TouchableOpacity>
@@ -393,7 +391,7 @@ export default function ProfileScreen({ navigation, route }) {
             onPress={() => navigation.navigate('Friends')}
             activeOpacity={0.7}
           >
-            <Feather name="users" size={18} color={theme.accent.primary} />
+            <Feather name="users" size={14} color={theme.text.muted} />
             <Text style={s.linkRowText}>Friends</Text>
             <Feather name="chevron-right" size={18} color={theme.text.muted} />
           </TouchableOpacity>

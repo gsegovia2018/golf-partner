@@ -73,7 +73,7 @@ export default function LiveRoundCard({ onOpen }) {
         {summary.thru > 0 ? ` · ${summary.myPoints} pts thru ${summary.thru}` : ''}
       </Text>
       <TouchableOpacity style={s.cta} onPress={onOpen} accessibilityRole="button" accessibilityLabel="Open scorecard">
-        <Feather name="clipboard" size={15} color="#0f3d2c" />
+        <Feather name="clipboard" size={14} color="#0f3d2c" />
         <Text style={s.ctaText}>Open scorecard</Text>
       </TouchableOpacity>
     </Animated.View>

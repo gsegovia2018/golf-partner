@@ -2,6 +2,7 @@ import React, { useCallback } from 'react';
 import { View, Text, TouchableOpacity, StyleSheet, ScrollView, Switch, Platform } from 'react-native';
 import { Feather } from '@expo/vector-icons';
 import ScreenContainer from '../components/ScreenContainer';
+import IconButton from '../components/ui/IconButton';
 import { useTheme } from '../theme/ThemeContext';
 import { useAppSettings } from '../hooks/useAppSettings';
 import { updateAppSettings } from '../store/settingsStore';
@@ -53,14 +54,11 @@ export default function SettingsScreen({ navigation }) {
   return (
     <ScreenContainer style={s.screen} edges={['top', 'bottom']}>
       <View style={s.header}>
-        <TouchableOpacity
+        <IconButton
+          icon="chevron-left"
           accessibilityLabel="Back"
           onPress={handleBack}
-          style={s.backBtn}
-          activeOpacity={0.7}
-        >
-          <Feather name="chevron-left" size={22} color={theme.accent.primary} />
-        </TouchableOpacity>
+        />
         <Text style={s.headerTitle}>Settings</Text>
         <View style={s.backBtn} />
       </View>

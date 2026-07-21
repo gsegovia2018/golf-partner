@@ -1,7 +1,8 @@
 import React, { useEffect, useState, useMemo, useCallback, useRef } from 'react';
-import { View, Text, TouchableOpacity, StyleSheet, ScrollView, ActivityIndicator } from 'react-native';
+import { View, Text, StyleSheet, ScrollView, ActivityIndicator } from 'react-native';
 import ScreenContainer from '../components/ScreenContainer';
 import PressableScale from '../components/ui/PressableScale';
+import IconButton from '../components/ui/IconButton';
 import Reveal from '../components/ui/Reveal';
 import { Feather } from '@expo/vector-icons';
 import AsyncStorage from '@react-native-async-storage/async-storage';
@@ -318,13 +319,11 @@ export default function MyStatsScreen({ navigation, route }) {
   const Header = (
     <View style={s.header}>
       {!isTabPresentation && (
-        <TouchableOpacity
+        <IconButton
+          icon="chevron-left"
           accessibilityLabel="Back"
           onPress={() => navigation.goBack()}
-          style={s.backBtn}
-        >
-          <Feather name="chevron-left" size={22} color={theme.accent.primary} />
-        </TouchableOpacity>
+        />
       )}
       <Text style={s.headerTitle}>My Stats</Text>
       <PressableScale
@@ -397,7 +396,7 @@ export default function MyStatsScreen({ navigation, route }) {
       <ScreenContainer style={s.container} edges={['top', 'bottom']}>
         {Header}
         <View style={s.center}>
-          <Feather name="wifi-off" size={32} color={theme.text.muted} />
+          <Feather name="wifi-off" size={44} color={theme.text.muted} />
           <Text style={s.emptyText}>Could not load your stats.</Text>
           <PressableScale
             style={s.retryBtn}
@@ -416,7 +415,7 @@ export default function MyStatsScreen({ navigation, route }) {
       <ScreenContainer style={s.container} edges={['top', 'bottom']}>
         {Header}
         <View style={s.center}>
-          <Feather name="bar-chart-2" size={32} color={theme.text.muted} />
+          <Feather name="bar-chart-2" size={44} color={theme.text.muted} />
           <Text style={s.emptyText}>Play and score a round to see your stats.</Text>
         </View>
       </ScreenContainer>
@@ -440,7 +439,7 @@ export default function MyStatsScreen({ navigation, route }) {
         {Header}
         {TabBar}
         <View style={s.center}>
-          <Feather name="filter" size={32} color={theme.text.muted} />
+          <Feather name="filter" size={44} color={theme.text.muted} />
           <Text style={s.emptyText}>No rounds selected.</Text>
           <PressableScale style={s.retryBtn} onPress={() => setSelectorOpen(true)}>
             <Text style={s.retryText}>Choose rounds</Text>
@@ -524,14 +523,6 @@ function makeStyles(theme) {
     header: {
       flexDirection: 'row', alignItems: 'center',
       paddingHorizontal: 20, paddingTop: 14, paddingBottom: 10,
-    },
-    backBtn: {
-      width: 38,
-      height: 38,
-      alignItems: 'center',
-      justifyContent: 'center',
-      padding: theme.spacing.xs,
-      marginLeft: -theme.spacing.sm,
     },
     headerTitle: {
       flex: 1, fontFamily: 'PlayfairDisplay-Black', fontSize: 26, color: theme.text.primary,

@@ -4,6 +4,7 @@ import {
   StyleSheet, ScrollView, ActivityIndicator, Alert, Platform,
 } from 'react-native';
 import ScreenContainer from '../components/ScreenContainer';
+import IconButton from '../components/ui/IconButton';
 import { Feather } from '@expo/vector-icons';
 
 import { useTheme } from '../theme/ThemeContext';
@@ -241,17 +242,16 @@ export default function OfficialAdminScreen({ route, navigation }) {
   return (
     <ScreenContainer style={s.screen} edges={['top', 'bottom']}>
       <View style={s.header}>
-        <TouchableOpacity onPress={() => navigation.goBack()} style={s.backBtn}>
-          <Feather name="chevron-left" size={22} color={theme.accent.primary} />
-        </TouchableOpacity>
+        <IconButton icon="chevron-left" onPress={() => navigation.goBack()} />
         <Text style={s.headerTitle}>Admin Monitor</Text>
-        <TouchableOpacity
-          onPress={() => !busy && load()}
-          style={s.refreshBtn}
-          disabled={busy || loading}
-        >
-          <Feather name="refresh-cw" size={18} color={theme.accent.primary} />
-        </TouchableOpacity>
+        <View style={s.refreshBtn}>
+          <IconButton
+            icon="refresh-cw"
+            onPress={() => !busy && load()}
+            disabled={busy || loading}
+            accessibilityLabel="Refresh"
+          />
+        </View>
       </View>
 
       {loading ? (
@@ -321,7 +321,7 @@ export default function OfficialAdminScreen({ route, navigation }) {
                               onPress={() => handleWithdraw(party, member)}
                               disabled={busy}
                             >
-                              <Feather name="user-x" size={12} color={theme.destructive} />
+                              <Feather name="user-x" size={14} color={theme.destructive} />
                               <Text style={s.miniBtnTextDanger}>Withdraw</Text>
                             </TouchableOpacity>
                           )}
@@ -390,7 +390,7 @@ export default function OfficialAdminScreen({ route, navigation }) {
                       onPress={() => handleForceFinalize(party)}
                       disabled={busy}
                     >
-                      <Feather name="lock" size={13} color={theme.accent.primary} style={{ marginRight: 6 }} />
+                      <Feather name="lock" size={14} color={theme.accent.primary} style={{ marginRight: 6 }} />
                       <Text style={s.finalizeBtnText}>Force finalize party</Text>
                     </TouchableOpacity>
                   )}
@@ -426,7 +426,6 @@ const makeStyles = (theme) => StyleSheet.create({
     flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
     paddingHorizontal: 20, paddingTop: 16, paddingBottom: 12, backgroundColor: theme.bg.primary,
   },
-  backBtn: { width: 64 },
   refreshBtn: { width: 64, alignItems: 'flex-end' },
   headerTitle: { fontFamily: 'PlusJakartaSans-Bold', fontSize: 17, color: theme.text.primary },
   container: { flex: 1 },
