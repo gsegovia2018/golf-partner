@@ -30,6 +30,9 @@ function GrowRow({ style, children }) {
 // ONE horizontal stacked bar showing the share of holes ending birdie+ /
 // par / bogey / double+, fed by the same `stats.distribution` counts the
 // scoring-pattern rows use — this component never recomputes stats.
+// buildCourseBreakdown()'s `summary.scoreMix` carries the same
+// {eagles,birdies,pars,bogeys,doubles,worse} keys (plus an ignored `total`),
+// so CourseStatsScreen passes it straight in as `distribution`.
 export default function ScoreMixBar({ distribution }) {
   const { theme } = useTheme();
   const s = useMemo(() => makeStyles(theme), [theme]);

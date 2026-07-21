@@ -65,6 +65,21 @@ describe('ScoreMixBar', () => {
     expect(missing.toJSON()).toBeNull();
   });
 
+  test("accepts buildCourseBreakdown's summary.scoreMix counts (extra total key ignored)", () => {
+    // Course-summary shape: same bucket keys plus `total` — CourseStatsScreen
+    // passes it straight in as `distribution`.
+    const scoreMix = { eagles: 0, birdies: 4, pars: 20, bogeys: 31, doubles: 12, worse: 8, total: 75 };
+    const { getByText, getByTestId } = render(wrap(
+      <ScoreMixBar distribution={scoreMix} />
+    ));
+
+    expect(getByTestId('scoremix-segment-birdie')).toBeTruthy();
+    expect(getByText('Birdie+ 4')).toBeTruthy();
+    expect(getByText('Par 20')).toBeTruthy();
+    expect(getByText('Bogey 31')).toBeTruthy();
+    expect(getByText('Double+ 20')).toBeTruthy(); // 12 doubles + 8 worse
+  });
+
   test('reduced motion still renders the full static bar and legend', () => {
     mockReducedMotion = true;
     const { getByTestId, getByText } = render(wrap(
