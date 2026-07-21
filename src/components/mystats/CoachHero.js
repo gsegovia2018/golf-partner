@@ -17,21 +17,29 @@ const GROUP_LABELS = {
 };
 
 // Clubhouse hero surface — cream-on-green, matches LiveRoundCard.js. Tone no
-// longer drives the whole card; it only accents the small `area` label.
+// longer drives the whole card; the insight group picks the surface (problem
+// groups go burgundy) and tone only accents the small `area` label.
 const GREEN = '#0f3d2c';
+// Deep Clubhouse burgundy — same value range as GREEN so cream text keeps
+// identical contrast on the "fix first" / "getting worse" surface.
+const BURGUNDY = '#4a1d1d';
 const CREAM = '#f3efe6';
 const CREAM_70 = 'rgba(243,239,230,0.7)';
 const CREAM_85 = 'rgba(243,239,230,0.85)';
+
+const RED_SURFACE_GROUPS = new Set(['fixFirst', 'gettingWorse']);
 
 export default function CoachHero({ insight, onCommitFocus, focusActive = false }) {
   const { theme } = useTheme();
   const s = useMemo(() => makeStyles(theme), [theme]);
   const proofs = [insight?.basis, formatSample(insight?.sample), formatConfidence(insight?.confidence)].filter(Boolean);
-  const areaColor = areaAccentColor(insight?.tone);
+  const isRedSurface = Boolean(insight && RED_SURFACE_GROUPS.has(insight.group));
+  const surfaceColor = isRedSurface ? BURGUNDY : GREEN;
+  const areaColor = areaAccentColor(insight?.tone, isRedSurface);
 
   if (!insight) {
     return (
-      <View style={s.card}>
+      <View style={s.card} testID="coach-hero-surface">
         <Text style={s.kicker}>Coach</Text>
         <Text style={s.title}>No coach insight yet</Text>
         <Text style={s.reason}>Play more scored rounds to unlock a useful practice priority.</Text>
@@ -40,7 +48,7 @@ export default function CoachHero({ insight, onCommitFocus, focusActive = false 
   }
 
   return (
-    <View style={s.card}>
+    <View style={[s.card, isRedSurface && { backgroundColor: BURGUNDY }]} testID="coach-hero-surface">
       <View style={s.topRow}>
         <Text style={s.kicker}>{GROUP_LABELS[insight.group] ?? 'Coach'}</Text>
         <Text style={[s.area, { color: areaColor }]}>{insight.areaLabel ?? insight.area}</Text>
@@ -72,18 +80,20 @@ export default function CoachHero({ insight, onCommitFocus, focusActive = false 
           accessibilityLabel="Make this my focus"
           style={s.focusBtn}
         >
-          <Feather name="target" size={14} color={GREEN} />
-          <Text style={s.focusBtnText}>Make this my focus</Text>
+          <Feather name="target" size={14} color={surfaceColor} />
+          <Text style={[s.focusBtnText, { color: surfaceColor }]}>Make this my focus</Text>
         </PressableScale>
       ) : null}
     </View>
   );
 }
 
-// Hero surface is a fixed dark green in both themes, so tone accents always
-// use the dark-surface variants regardless of the active app theme.
-function areaAccentColor(tone) {
-  if (tone === 'bad') return semantic.destructive.dark;
+// Hero surface is a fixed dark color in both themes, so tone accents always
+// use the dark-surface variants regardless of the active app theme. On the
+// burgundy surface the light destructive red would vanish, so a 'bad' area
+// label renders in winner gold there instead.
+function areaAccentColor(tone, isRedSurface) {
+  if (tone === 'bad') return isRedSurface ? semantic.winner.dark : semantic.destructive.dark;
   if (tone === 'good') return semantic.winner.dark;
   return CREAM_70;
 }
