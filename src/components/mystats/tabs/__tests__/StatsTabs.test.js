@@ -1,5 +1,5 @@
 import React from 'react';
-import { render, fireEvent } from '@testing-library/react-native';
+import { render, fireEvent, waitFor } from '@testing-library/react-native';
 import { ThemeProvider } from '../../../../theme/ThemeContext';
 import BreakdownTab from '../BreakdownTab';
 import CoachTab from '../CoachTab';
@@ -416,7 +416,7 @@ describe('My Stats tabs', () => {
   });
 
   test('BreakdownTab shows Course Mastery rows and Career Milestones tiles', async () => {
-    const { findByText, findAllByText, getByLabelText, queryByLabelText } = render(wrap(
+    const { findByText, getAllByText, getByLabelText, queryByLabelText } = render(wrap(
       <BreakdownTab stats={baseStats()} onInfo={() => {}} />
     ));
 
@@ -434,17 +434,19 @@ describe('My Stats tabs', () => {
     expect(getByLabelText('Elm trend neutral')).toBeTruthy();
     expect(queryByLabelText(/Oak trend/)).toBeNull();
 
-    // Career Milestones: birdies/eagles/streak counts plus best nine/round.
-    // birdies and longestParStreak are both 18 in this fixture — two tiles
-    // legitimately share the value.
-    expect((await findAllByText('18')).length).toBe(2);
+    // Career Milestones (honours board): birdies/eagles/streak counts plus
+    // best nine/round. birdies and longestParStreak are both 18 in this
+    // fixture — two cells legitimately share the value. The numbers count up
+    // on mount, so wait until BOTH staggered count-ups have landed on 18
+    // (findAllByText would resolve as soon as the first one finished).
     expect(await findByText('Birdies')).toBeTruthy();
     expect(await findByText('Eagles')).toBeTruthy();
     expect(await findByText('Best par streak')).toBeTruthy();
+    await waitFor(() => expect(getAllByText('18')).toHaveLength(2), { timeout: 3000 });
     expect(await findByText('27')).toBeTruthy();
-    expect(await findByText('Best nine (pts)')).toBeTruthy();
+    expect(await findByText('Best nine')).toBeTruthy();
     expect(await findByText('54')).toBeTruthy();
-    expect(await findByText('Best round (pts)')).toBeTruthy();
+    expect(await findByText('Best round')).toBeTruthy();
     // The counts are NET (handicap-adjusted) — ShotsTab's birdie benchmark
     // is gross, so the card must disclose the basis.
     expect(await findByText(/net \(handicap-adjusted\)/i)).toBeTruthy();

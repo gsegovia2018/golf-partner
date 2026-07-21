@@ -138,11 +138,29 @@ export default function BreakdownTab({ stats, onInfo, onSelectCourse }) {
   );
 }
 
+// Renders one section's rows with magnitude bars. Each row's numeric
+// `magnitude` (raw value behind the formatted string — pts for pts rows,
+// percentage for % rows) is normalized against the section max so the bar
+// shows "how much" relative to siblings. Rows without a comparable
+// magnitude (mixed units in one section) get no bar rather than a fake
+// comparison. `rowIndex` staggers the fill sweep within the section.
 function PatternRows({ rows }) {
+  const max = rows.reduce((acc, row) => (
+    isNumber(row.magnitude) ? Math.max(acc, Math.abs(row.magnitude)) : acc
+  ), 0);
   return (
     <View>
-      {rows.map(({ key, ...row }, index) => (
-        <BreakdownRow key={key} {...row} first={index === 0} />
+      {rows.map(({ key, magnitude, ...row }, index) => (
+        <BreakdownRow
+          key={key}
+          {...row}
+          first={index === 0}
+          rowIndex={index}
+          testID={`breakdown-bar-${key}`}
+          barRatio={isNumber(magnitude)
+            ? (max > 0 ? Math.abs(magnitude) / max : 0)
+            : undefined}
+        />
       ))}
     </View>
   );
@@ -207,6 +225,7 @@ function countPatternRow({
     key,
     label,
     value: formatNumber(perRound),
+    magnitude: isNumber(perRound) ? perRound : null,
     secondary: comparisonMeta('your score mix', [
       `${count} total`,
       sampleText(total, 'holes'),
@@ -249,6 +268,7 @@ function timingNineRow(key, label, value, holesCount, baseline) {
     key,
     label,
     value: `${formatNumber(value)} pts/hole`,
+    magnitude: isNumber(value) ? value : 0,
     secondary: holesCount > 0
       ? comparisonSecondary(holesCount, baseline, delta)
       : 'No sample yet',
@@ -269,6 +289,8 @@ function makeTeePatternRows(teeShot, baseline) {
   ];
 
   if ((teeShot.teePenalty?.holes ?? 0) > 0) {
+    // Penalty drag is points LOST (a delta), not an avg-pts-per-hole level
+    // like the outcome rows above — no `magnitude`, so no bar for it.
     rows.push({
       key: 'penaltyDrag',
       label: 'Penalty drag',
@@ -297,6 +319,7 @@ function makeDrivePatternRows(driveImpact, baseline) {
       key: bucket,
       label: DRIVE_LABELS[bucket],
       value: `${formatNumber(row.avgPoints)} pts`,
+      magnitude: isNumber(row.avgPoints) ? row.avgPoints : 0,
       secondary: `${signed(row.avgVsPar)} vs par · ${formatPercent(row.penaltyRate)} pen · ${comparisonSecondary(row.holes, baseline, delta)}`,
       tone: toneFromDelta(delta, { sample: row.holes, minSample: 6 }),
     };
@@ -313,12 +336,16 @@ function makeApproachPatternRows(approachImpact, baseline) {
       key: bucket,
       label: `${bucket} m approaches`,
       value: `${formatNumber(row.avgPoints)} pts`,
+      magnitude: isNumber(row.avgPoints) ? row.avgPoints : 0,
       secondary: `${signed(row.avgVsPar)} vs par · ${formatPercent(row.girRate)} GIR · ${comparisonSecondary(row.holes, baseline, delta)}`,
       tone: toneFromDelta(delta, { sample: row.holes, minSample: 6 }),
     };
   }).filter(Boolean);
 }
 
+// Putting mixes units (putts/round, raw counts, averages, percentages), so
+// only the two %-rows carry a `magnitude` — they're the only pair whose bars
+// would be an honest comparison. The rest render label + value without a bar.
 function makePuttingPatternRows({ shots, puttDive }) {
   const rows = [];
   if (shots?.hasData) {
@@ -381,6 +408,7 @@ function makePuttingPatternRows({ shots, puttDive }) {
         key: 'twoPuttRate',
         label: '2-putt rate',
         value: `${puttDive.twoPuttPct}%`,
+        magnitude: isNumber(puttDive.twoPuttPct) ? puttDive.twoPuttPct : null,
         secondary: sampleSecondary([sampleText(puttDive.holes, 'holes')], puttDive.holes, 9),
         tone: toneFromComparison({
           value: puttDive.twoPuttPct,
@@ -423,6 +451,7 @@ function makePuttingPatternRows({ shots, puttDive }) {
         key: 'onePuttSave',
         label: '1-putt save',
         value: `${puttDive.onePuttSave?.pct ?? 0}%`,
+        magnitude: puttDive.onePuttSave?.pct ?? 0,
         secondary: sampleSecondary([
           sampleText(puttDive.onePuttSave?.attempts ?? 0, 'chances'),
         ], puttDive.onePuttSave?.attempts ?? 0, 6),
@@ -441,6 +470,8 @@ function makePuttingPatternRows({ shots, puttDive }) {
   return rows;
 }
 
+// Recovery bars compare the four rate rows (all percentages). Bunker visits
+// is a per-round count — different unit, so it carries no `magnitude`.
 function makeRecoveryRows({
   bounceBack, scrambling, sandSaves, upAndDown, bunkerVisits,
 }) {
@@ -449,6 +480,7 @@ function makeRecoveryRows({
       key: 'bounceBack',
       label: 'Bounce-back rate',
       value: `${bounceBack.rate}%`,
+      magnitude: isNumber(bounceBack.rate) ? bounceBack.rate : null,
       secondary: sampleSecondary([`${bounceBack.opportunities} chances`], bounceBack.opportunities, 6),
       tone: toneFromComparison({
         value: bounceBack.rate,
@@ -463,6 +495,7 @@ function makeRecoveryRows({
       key: 'scrambling',
       label: 'Scrambling',
       value: `${scrambling.pct}%`,
+      magnitude: isNumber(scrambling.pct) ? scrambling.pct : null,
       secondary: sampleSecondary([`${scrambling.missedGir} missed GIR`], scrambling.missedGir, 6),
       tone: toneFromComparison({
         value: scrambling.pct,
@@ -477,6 +510,7 @@ function makeRecoveryRows({
       key: 'sandSaves',
       label: 'Sand-save rate',
       value: rateValue(sandSaves.saves, sandSaves.attempts, sandSaves.rate),
+      magnitude: isNumber(sandSaves.rate) ? sandSaves.rate * 100 : null,
       secondary: sampleSecondary([sampleText(sandSaves.attempts, 'tries')], sandSaves.attempts, 6),
       tone: toneFromRate(sandSaves.rate, 0.4, { sample: sandSaves.attempts, minSample: 6 }),
       dim: sandSaves.rate == null,
@@ -492,6 +526,7 @@ function makeRecoveryRows({
       // than the classic "up and down" (see statsEngine.js upAndDownRate).
       label: 'Scrambling (1-putt saves)',
       value: rateValue(upAndDown.conversions, upAndDown.attempts, upAndDown.rate),
+      magnitude: isNumber(upAndDown.rate) ? upAndDown.rate * 100 : null,
       secondary: sampleSecondary([sampleText(upAndDown.attempts, 'tries')], upAndDown.attempts, 6),
       tone: toneFromRate(upAndDown.rate, 0.45, { sample: upAndDown.attempts, minSample: 6 }),
       dim: upAndDown.rate == null,
@@ -524,6 +559,7 @@ function pointPatternRow(key, label, row, baseline) {
     key,
     label,
     value: `${formatNumber(avgPoints ?? 0)} pts`,
+    magnitude: isNumber(avgPoints) ? avgPoints : 0,
     secondary: holesCount > 0
       ? comparisonSecondary(holesCount, baseline, delta)
       : 'No sample yet',
