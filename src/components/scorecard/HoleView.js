@@ -396,7 +396,7 @@ export function HoleView({ round, roundIndex, players, scores, shotDetails, meId
             }
             const primaryDisabled = onLastHole && finishBusy;
             return (
-              <View ref={holeNavRef} collapsable={false}>
+              <View ref={holeNavRef} collapsable={false} style={s.flex}>
                 <TouchableOpacity
                   style={[s.saveBtn, primaryDisabled && s.saveBtnDisabled]}
                   onPress={onLastHole ? onFinish : onNext}
