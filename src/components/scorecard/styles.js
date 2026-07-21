@@ -170,8 +170,6 @@ export function makeScorecardStyles(theme) {
       paddingTop: 12,
       paddingBottom: 10,
       backgroundColor: theme.bg.primary,
-      borderBottomWidth: 1,
-      borderBottomColor: theme.isDark ? theme.glass?.border : theme.border.default,
     },
     headerRight: {
       flexDirection: 'row',

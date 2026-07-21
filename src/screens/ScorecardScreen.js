@@ -15,7 +15,7 @@ import * as ScreenOrientation from 'expo-screen-orientation';
 import { activateKeepAwakeAsync, deactivateKeepAwake } from 'expo-keep-awake';
 
 import { autoAdvanceAction } from '../lib/autoAdvance';
-import { getAppSettings, updateAppSettings } from '../store/settingsStore';
+import { getAppSettings } from '../store/settingsStore';
 import { useAppSettings } from '../hooks/useAppSettings';
 import {
   loadTournament, subscribeTournamentChanges,
@@ -1192,9 +1192,6 @@ export default function ScorecardScreen({ navigation, route }) {
 
   const appSettings = useAppSettings();
   const showRunning = appSettings.showRunningScore && !appSettings.noSpoilers;
-  const toggleRunning = useCallback(() => {
-    updateAppSettings({ showRunningScore: !getAppSettings().showRunningScore }).catch(() => {});
-  }, []);
 
   useEffect(() => {
     if (!appSettings.keepAwake) return undefined;
@@ -1574,13 +1571,6 @@ export default function ScorecardScreen({ navigation, route }) {
             onPress={() => setView(nextView)}
             accessibilityLabel={viewSwitchLabel}
           />
-          {!appSettings.noSpoilers && (
-            <IconButton
-              icon={showRunning ? 'eye-off' : 'eye'}
-              onPress={toggleRunning}
-              accessibilityLabel={showRunning ? 'Hide running score' : 'Show running score'}
-            />
-          )}
           {official && !appSettings.noSpoilers && (
             <IconButton
               icon="award"
