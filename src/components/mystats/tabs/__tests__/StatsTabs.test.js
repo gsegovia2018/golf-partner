@@ -1,5 +1,6 @@
 import React from 'react';
-import { render, fireEvent, waitFor } from '@testing-library/react-native';
+import { render, fireEvent, waitFor, within } from '@testing-library/react-native';
+import { Text as SvgText } from 'react-native-svg';
 import { ThemeProvider } from '../../../../theme/ThemeContext';
 import BreakdownTab from '../BreakdownTab';
 import CoachTab from '../CoachTab';
@@ -361,6 +362,53 @@ describe('My Stats tabs', () => {
     expect(onInfo).toHaveBeenCalledWith('strokesVsPar');
     fireEvent.press(getByLabelText('What is Putts / round'));
     expect(onInfo).toHaveBeenCalledWith('putts');
+  });
+
+  test('FormTab instrument rows expand one at a time (accordion) with per-round values', async () => {
+    const view = render(wrap(
+      <FormTab stats={formStats()} n={5} onChangeN={() => {}} onInfo={() => {}} />
+    ));
+
+    // Expand GIR: the full chart mounts under the row with the metric's own
+    // formatter — every selected round's value, oldest → newest.
+    fireEvent.press(await view.findByTestId('sparkline-press-girPct'));
+    const girExpanded = view.getByTestId('sparkline-expanded-girPct');
+    fireEvent(within(girExpanded).getByTestId('trend-chart-canvas'), 'layout', {
+      nativeEvent: { layout: { width: 300 } },
+    });
+    expect(view.UNSAFE_getAllByType(SvgText).map((t) => t.props.children))
+      .toEqual(['45%', '40%', '40%']);
+    expect(view.getByText('oldest → newest')).toBeTruthy();
+    expect(view.getByTestId('sparkline-press-girPct').props.accessibilityLabel)
+      .toBe('Greens in reg %: 40%. Hide round-by-round values.');
+
+    // Expanding a sibling collapses GIR — only one row open at a time.
+    fireEvent.press(view.getByTestId('sparkline-press-fairwayPct'));
+    expect(view.getByTestId('sparkline-expanded-fairwayPct')).toBeTruthy();
+    expect(view.queryByTestId('sparkline-expanded-girPct')).toBeNull();
+    expect(view.getByTestId('sparkline-press-fairwayPct').props.accessibilityState)
+      .toEqual({ expanded: true });
+    expect(view.getByTestId('sparkline-press-girPct').props.accessibilityState)
+      .toEqual({ expanded: false });
+
+    // Tapping the open row again closes it — nothing left expanded.
+    fireEvent.press(view.getByTestId('sparkline-press-fairwayPct'));
+    expect(view.queryByTestId('sparkline-expanded-fairwayPct')).toBeNull();
+    expect(view.queryByTestId('sparkline-expanded-girPct')).toBeNull();
+  });
+
+  test('FormTab info buttons still fire while a row is expanded', async () => {
+    const onInfo = jest.fn();
+    const view = render(wrap(
+      <FormTab stats={formStats()} n={5} onChangeN={() => {}} onInfo={onInfo} />
+    ));
+
+    fireEvent.press(await view.findByTestId('sparkline-press-girPct'));
+    expect(view.getByTestId('sparkline-expanded-girPct')).toBeTruthy();
+    fireEvent.press(view.getByLabelText('What is Greens in reg %'));
+    expect(onInfo).toHaveBeenCalledWith('greensInReg');
+    // The info tap did not collapse (or re-toggle) the row.
+    expect(view.getByTestId('sparkline-expanded-girPct')).toBeTruthy();
   });
 
   test('CoachTab renders form trend first, fix-first priority, board, and practice plan', async () => {

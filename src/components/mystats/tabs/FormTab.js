@@ -1,4 +1,4 @@
-import React, { useMemo } from 'react';
+import React, { useMemo, useState } from 'react';
 import { View, Text, StyleSheet } from 'react-native';
 import { useTheme } from '../../../theme/ThemeContext';
 import PressableScale from '../../ui/PressableScale';
@@ -31,6 +31,9 @@ const META = {
 export default function FormTab({ stats, n, onChangeN, onInfo }) {
   const { theme } = useTheme();
   const s = useMemo(() => makeStyles(theme), [theme]);
+  // Accordion for the Instruments rows: at most one row shows its full
+  // per-round chart at a time; tapping the open row again collapses it.
+  const [expandedKey, setExpandedKey] = useState(null);
   const { form, formSeries } = stats;
   const GOLD = '#caa53d';
   const colorFor = (token) => (token === 'gold' ? GOLD : token === 'red' ? theme.destructive : theme.accent.primary);
@@ -74,6 +77,8 @@ export default function FormTab({ stats, n, onChangeN, onInfo }) {
               onInfo={onInfo}
               index={i}
               dropGaps={Boolean(meta.drop)}
+              expanded={expandedKey === m.key}
+              onToggle={() => setExpandedKey((k) => (k === m.key ? null : m.key))}
             />
           );
         })}
