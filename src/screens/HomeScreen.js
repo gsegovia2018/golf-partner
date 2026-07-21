@@ -171,7 +171,10 @@ function UndoSnackbar({ data, onUndo, theme, s }) {
       return undefined;
     }
     if (!mounted) return undefined;
-    const finish = () => { if (isMountedRef.current) setMounted(false); };
+    // finished === false → exit tween interrupted by a new snackbar; keep mounted.
+    const finish = ({ finished } = {}) => {
+      if (finished !== false && isMountedRef.current) setMounted(false);
+    };
     const animations = [
       Animated.timing(opacity, {
         toValue: 0, duration: SNACK_EXIT_DURATION, easing: SNACK_EASING, useNativeDriver: true,

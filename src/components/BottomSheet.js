@@ -72,7 +72,11 @@ export default function BottomSheet({
       return undefined;
     }
     if (!mounted) return undefined;
-    const finish = () => { if (isMountedRef.current) setMounted(false); };
+    // finished === false means the exit tween was interrupted (e.g. reopened
+    // mid-exit) — unmounting then would wedge the sheet at mounted=false.
+    const finish = ({ finished } = {}) => {
+      if (finished !== false && isMountedRef.current) setMounted(false);
+    };
     Animated.timing(progress, {
       toValue: 0,
       duration: EXIT_DURATION,
