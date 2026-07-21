@@ -6,6 +6,7 @@ import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { ThemeProvider } from '../../theme/ThemeContext';
 import FloatingTabBar from '../FloatingTabBar';
 import { light } from '../../theme/tokens';
+import { __getRegisteredTourKeysForTests, __resetTourTargetsForTests } from '../../components/tour/tourTargets';
 
 jest.mock('react-native-safe-area-context', () => {
   const React = require('react');
@@ -127,5 +128,16 @@ describe('FloatingTabBar', () => {
 
     expect(surface.backgroundColor).toBe(light.accent.primary);
     expect(icon.props.color).toBe(light.text.inverse);
+  });
+});
+
+describe('tour target registration', () => {
+  beforeEach(() => __resetTourTargetsForTests());
+
+  it('registers spotlight targets for play, stats, feed and profile — not history', () => {
+    renderTabBar();
+    const keys = __getRegisteredTourKeysForTests();
+    expect(keys).toEqual(expect.arrayContaining(['tab-play', 'tab-stats', 'tab-feed', 'tab-profile']));
+    expect(keys).not.toContain('tab-history');
   });
 });

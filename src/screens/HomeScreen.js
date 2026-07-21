@@ -15,6 +15,8 @@ import { loadProfile } from '../store/profileStore';
 import { ShareableLeaderboard, shareLeaderboard } from '../components/ShareableCard';
 import QuickStartCourses from '../components/QuickStartCourses';
 import PostCreateInviteModal from '../components/PostCreateInviteModal';
+import TourOverlay from '../components/tour/TourOverlay';
+import { HOME_TOUR_STEPS } from '../components/tour/tourSteps';
 import { scoringModeUsesTeams, leaderboardToggleLabels, getScoringMode, isScrambleMode } from '../components/scoringModes';
 import { ScoringModeSheet, TeamsSettingsFields, BestBallValueFields } from '../components/ScoringModePicker';
 import PullToRefresh from '../components/PullToRefresh';
@@ -1576,6 +1578,8 @@ export default function HomeScreen({ navigation, route }) {
         />
 
         <ConfirmModal state={confirmState} onResult={resolveConfirm} theme={theme} s={s} />
+
+        <TourOverlay chapter="home" steps={HOME_TOUR_STEPS} />
       </ScreenContainer>
     );
   }
@@ -1645,6 +1649,8 @@ export default function HomeScreen({ navigation, route }) {
             <Feather name="chevron-right" size={16} color={theme.text.muted} />
           </TouchableOpacity>
         </BottomSheet>
+
+        <TourOverlay chapter="home" steps={HOME_TOUR_STEPS} />
       </ScreenContainer>
     );
   }
@@ -2357,6 +2363,8 @@ export default function HomeScreen({ navigation, route }) {
     />
 
     <ConfirmModal state={confirmState} onResult={resolveConfirm} theme={theme} s={s} />
+
+    <TourOverlay chapter="home" steps={HOME_TOUR_STEPS} />
 
     </ScreenContainer>
   );

@@ -10,6 +10,12 @@ import { getTabBarItem, isCenterTab } from './tabBarModel';
 import PressableScale from '../components/ui/PressableScale';
 import TabBarFade from './TabBarFade';
 import { haptic } from '../lib/haptics';
+import { useTourTarget } from '../components/tour/tourTargets';
+
+// Route name → tour target key; History deliberately has no stop.
+const TOUR_TARGET_KEYS = {
+  Home: 'tab-play', MyStats: 'tab-stats', Feed: 'tab-feed', Profile: 'tab-profile',
+};
 
 // Springs the tab surface from slightly-shrunk to full size whenever the tab
 // becomes the selected one, so switching tabs visibly "pops" the destination.
@@ -36,6 +42,7 @@ function usePopOnFocus(focused) {
 
 function TabItem({ route, item, center, focused, onPress, theme, styles }) {
   const scale = usePopOnFocus(focused);
+  const tourRef = useTourTarget(TOUR_TARGET_KEYS[route.name] ?? null);
   const iconColor = center
     ? theme.text.inverse
     : focused
@@ -52,6 +59,7 @@ function TabItem({ route, item, center, focused, onPress, theme, styles }) {
       style={[styles.tab, center && styles.centerTab]}
     >
       <Animated.View
+        ref={tourRef}
         testID={`${route.name}-tab-surface`}
         style={[
           center ? styles.centerButton : styles.secondaryButton,

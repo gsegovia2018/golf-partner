@@ -10,6 +10,10 @@ const targets = new Map();
 
 export function __resetTourTargetsForTests() { targets.clear(); }
 
+// Test-only visibility into what is currently registered — jsdom nodes lack
+// measureInWindow, so registration itself is what tests assert on.
+export function __getRegisteredTourKeysForTests() { return [...targets.keys()]; }
+
 export function registerTourTarget(key, node) {
   if (!key) return;
   if (node) targets.set(key, node);
