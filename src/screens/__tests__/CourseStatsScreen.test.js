@@ -1,6 +1,6 @@
 import React from 'react';
 import { StyleSheet } from 'react-native';
-import { render, waitFor } from '@testing-library/react-native';
+import { render, waitFor, within } from '@testing-library/react-native';
 import { ThemeProvider } from '../../theme/ThemeContext';
 import { semantic } from '../../theme/tokens';
 import CourseStatsScreen from '../CourseStatsScreen';
@@ -135,13 +135,23 @@ describe('CourseStatsScreen (Clubhouse redesign)', () => {
     expect(getByText('Double+ 20')).toBeTruthy(); // doubles + worse merged
   });
 
-  test('hole table gets highlights: nemesis and best holes carry dots', async () => {
+  test('hole grid gets highlights: nemesis and best cells carry dots', async () => {
     const { getByTestId } = render(wrap(
       <CourseStatsScreen navigation={navigation} route={route} />
     ));
 
     await waitFor(() => expect(getByTestId('hole-dot-nemesis')).toBeTruthy());
     expect(getByTestId('hole-dot-best')).toBeTruthy();
+  });
+
+  test('hole grid defaults its detail panel to the nemesis hole', async () => {
+    const { getByTestId, queryByTestId } = render(wrap(
+      <CourseStatsScreen navigation={navigation} route={route} />
+    ));
+
+    await waitFor(() => expect(getByTestId('hole-panel-3')).toBeTruthy());
+    expect(queryByTestId('hole-panel-7')).toBeNull();
+    expect(getByTestId('hole-cell-7')).toBeTruthy();
   });
 
   test('null summary values render an em dash instead of a count-up', async () => {
@@ -154,13 +164,69 @@ describe('CourseStatsScreen (Clubhouse redesign)', () => {
       },
       highlights: null,
     });
-    const { getByTestId, getAllByText, getByText } = render(wrap(
+    const { getByTestId, getByText } = render(wrap(
       <CourseStatsScreen navigation={navigation} route={route} />
     ));
 
     await waitFor(() => expect(getByTestId('course-record-board')).toBeTruthy());
-    expect(getAllByText('—')).toHaveLength(3);
+    // Scoped to the board — the hole grid's detail panel can add its own
+    // em-dash for a hole without putt data.
+    expect(within(getByTestId('course-record-board')).getAllByText('—')).toHaveLength(3);
     expect(getByText(/No complete round here yet/)).toBeTruthy();
+  });
+
+  test('shot detail renders the four rings and the fairway fan from shots data', async () => {
+    buildCourseBreakdown.mockReturnValue({
+      ...breakdown,
+      shots: {
+        hasData: true,
+        putts: { per18: 32.4, threePuttPer18: 1.2 },
+        penalties: { per18: 0.9 },
+        gir: { pct: 44, eligible: 30 },
+        drives: {
+          recorded: 20,
+          distribution: { fairway: 10, left: 4, right: 3, super: 2, short: 1 },
+        },
+      },
+    });
+    const { getByTestId, getByText } = render(wrap(
+      <CourseStatsScreen navigation={navigation} route={route} />
+    ));
+
+    await waitFor(() => expect(getByTestId('ring-putts')).toBeTruthy());
+    expect(getByTestId('ring-three-putts')).toBeTruthy();
+    expect(getByTestId('ring-gir')).toBeTruthy();
+    expect(getByTestId('ring-penalties')).toBeTruthy();
+    // Decimal ring values render statically; the GIR integer keeps its %.
+    expect(getByText('32.4')).toBeTruthy();
+    expect(getByText('44')).toBeTruthy();
+    // The fan block replaces the old drive bars.
+    expect(getByText('Off the tee')).toBeTruthy();
+    expect(getByTestId('fairway-fan')).toBeTruthy();
+    expect(getByTestId('fan-wedge-fairway')).toBeTruthy();
+    expect(getByText('20 drives logged')).toBeTruthy();
+  });
+
+  test('no recorded drives ⇒ rings stay but the fan block is omitted', async () => {
+    buildCourseBreakdown.mockReturnValue({
+      ...breakdown,
+      shots: {
+        hasData: true,
+        putts: { per18: 30, threePuttPer18: 0 },
+        penalties: { per18: 0 },
+        gir: { pct: 0, eligible: 0 },
+        drives: { recorded: 0, distribution: {} },
+      },
+    });
+    const { getByTestId, queryByTestId, queryByText } = render(wrap(
+      <CourseStatsScreen navigation={navigation} route={route} />
+    ));
+
+    await waitFor(() => expect(getByTestId('ring-putts')).toBeTruthy());
+    expect(queryByTestId('fairway-fan')).toBeNull();
+    expect(queryByText('Off the tee')).toBeNull();
+    // GIR with no eligible holes renders the em-dash ring.
+    expect(queryByTestId('ring-gir-progress')).toBeNull();
   });
 
   test('shows the empty state when the course has no rounds', async () => {

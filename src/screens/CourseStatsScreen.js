@@ -15,10 +15,10 @@ import { loadProfile } from '../store/profileStore';
 import { collectMyRounds } from '../store/personalStats';
 import { filterRoundsToCourse, buildCourseBreakdown } from '../store/courseBreakdown';
 import SectionCard from '../components/mystats/SectionCard';
-import StatTile from '../components/mystats/StatTile';
-import DistributionBars from '../components/mystats/DistributionBars';
+import RingStat from '../components/mystats/RingStat';
+import FairwayFan from '../components/mystats/FairwayFan';
 import ScoreMixBar from '../components/mystats/ScoreMixBar';
-import HoleBreakdownTable from '../components/mystats/HoleBreakdownTable';
+import HoleGrid from '../components/mystats/HoleGrid';
 import CountUpText from '../components/mystats/CountUpText';
 import { toneColor, toneFill } from '../components/mystats/metricTone';
 import { statExplainers } from '../components/mystats/statExplainers';
@@ -37,14 +37,16 @@ const HAIRLINE = 'rgba(243,239,230,0.14)';
 const STAGGER_MS = 60;
 const COUNT_MS = 500;
 
-// Spatial display order for the drive bars (miss-short, miss-left, fairway,
-// super, miss-right) — deliberately NOT shotMetrics' canonical DRIVE_ORDER.
-const DRIVE_BAR_ORDER = ['short', 'left', 'fairway', 'super', 'right'];
-
-// Short bar labels — the long DRIVE_LABELS copy doesn't fit under a bar.
-const DRIVE_BAR_LABELS = {
-  super: 'Super', fairway: 'Fairway', left: 'Left', right: 'Right', short: 'Short',
-};
+// Visual scales for the shot-detail progress rings. The ring is a gauge, not
+// the number — the tile's CENTER always shows the real value; these only set
+// how much of the ring that value fills (clamped at a full ring).
+// - Putts: 36 = the 2-putt-per-hole benchmark; at/below it the ring is green,
+//   over it the stroke flips to destructive.
+const PUTTS_RING_BENCHMARK = 36;
+// - 3-putts: 6 per 18 fills the ring — any 3-putt shows destructive.
+const THREE_PUTT_RING_SCALE = 6;
+// - Penalties: 9 per 18 fills the ring (a penalty every other hole).
+const PENALTY_RING_SCALE = 9;
 
 // The gold "Best pts" cell mirrors the honours-board convention (best value
 // lands in semantic.winner.dark on the green surface).
@@ -191,29 +193,47 @@ export default function CourseStatsScreen({ navigation, route }) {
 
   addCard('shot-detail', shots ? (
     <SectionCard title="Shot detail" infoKey="courseShotDetail" onInfo={setInfoKey}>
-      <View style={s.tileRow}>
-        <StatTile
-          value={shots.putts.per18 ?? '—'}
-          caption="putts / 18 holes"
+      <View style={s.ringRow}>
+        <RingStat
+          index={0}
+          testID="ring-putts"
+          label="Putts / 18"
+          value={shots.putts.per18}
+          fill={shots.putts.per18 != null ? shots.putts.per18 / PUTTS_RING_BENCHMARK : null}
+          color={shots.putts.per18 != null && shots.putts.per18 > PUTTS_RING_BENCHMARK
+            ? theme.destructive : theme.accent.primary}
         />
-        <StatTile value={shots.putts.threePuttPer18 ?? '—'} caption="3-putts / 18" />
-        <StatTile value={shots.penalties.per18 ?? '—'} caption="penalties / 18" />
-        <StatTile
-          value={shots.gir.eligible > 0 ? `${shots.gir.pct}%` : '—'}
-          caption={shots.gir.eligible > 0 ? `GIR · ${shots.gir.eligible} holes` : 'GIR'}
+        <RingStat
+          index={1}
+          testID="ring-three-putts"
+          label="3-putts / 18"
+          value={shots.putts.threePuttPer18}
+          fill={shots.putts.threePuttPer18 != null
+            ? shots.putts.threePuttPer18 / THREE_PUTT_RING_SCALE : null}
+          color={shots.putts.threePuttPer18 > 0 ? theme.destructive : theme.accent.primary}
+        />
+        <RingStat
+          index={2}
+          testID="ring-gir"
+          label="GIR"
+          value={shots.gir.eligible > 0 ? shots.gir.pct : null}
+          suffix="%"
+          fill={shots.gir.eligible > 0 ? shots.gir.pct / 100 : null}
+          color={theme.accent.primary}
+        />
+        <RingStat
+          index={3}
+          testID="ring-penalties"
+          label="Penalties / 18"
+          value={shots.penalties.per18}
+          fill={shots.penalties.per18 != null ? shots.penalties.per18 / PENALTY_RING_SCALE : null}
+          color={theme.destructive}
         />
       </View>
       {shots.drives.recorded > 0 ? (
         <View style={s.drivesBlock}>
-          <DistributionBars bars={DRIVE_BAR_ORDER.map((k) => {
-            const count = shots.drives.distribution[k] ?? 0;
-            return {
-              label: DRIVE_BAR_LABELS[k],
-              count,
-              displayValue: `${Math.round((count / shots.drives.recorded) * 100)}%`,
-              muted: count === 0,
-            };
-          })} />
+          <Text style={s.panelHeading}>Off the tee</Text>
+          <FairwayFan drives={shots.drives} />
           <Text style={s.metaLine}>
             {`${shots.drives.recorded} drive${shots.drives.recorded === 1 ? '' : 's'} logged`}
           </Text>
@@ -229,7 +249,7 @@ export default function CourseStatsScreen({ navigation, route }) {
   if (holes.length > 0) {
     addCard('holes', (
       <SectionCard title="Hole by hole" infoKey="courseHoleByHole" onInfo={setInfoKey}>
-        <HoleBreakdownTable holes={holes} highlights={highlights} />
+        <HoleGrid holes={holes} highlights={highlights} />
       </SectionCard>
     ));
   }
@@ -360,10 +380,16 @@ function makeStyles(theme) {
     },
     retryText: { ...theme.typography.subhead, color: theme.text.inverse },
     scroll: { padding: theme.spacing.md, gap: theme.spacing.lg, paddingBottom: theme.spacing.lg * 2 },
-    tileRow: { flexDirection: 'row', gap: theme.spacing.sm },
-    // The bar chart's value labels sit at its very top edge — without extra
-    // margin they visually collide with the stat tiles above.
+    ringRow: { flexDirection: 'row', gap: theme.spacing.sm },
     drivesBlock: { marginTop: theme.spacing.lg, gap: theme.spacing.sm },
+    // "OFF THE TEE" panel heading over the fairway fan.
+    panelHeading: {
+      fontSize: 9.5,
+      fontFamily: 'PlusJakartaSans-Bold',
+      letterSpacing: 1.2,
+      textTransform: 'uppercase',
+      color: theme.accent.primary,
+    },
     metaLine: { ...theme.typography.caption, color: theme.text.secondary },
     // Course-record honours board.
     board: {
