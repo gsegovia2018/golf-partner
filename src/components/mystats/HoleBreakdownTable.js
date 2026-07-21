@@ -130,6 +130,7 @@ function makeStyles(theme) {
     },
     dot: { width: 6, height: 6, borderRadius: 3 },
     holeMeta: { fontSize: 11, fontFamily: 'PlusJakartaSans-Medium', lineHeight: 15, color: theme.text.muted },
+    numCol: { width: 52, alignItems: 'center', gap: 1 },
     num: {
       fontSize: 14, lineHeight: 20,
       fontFamily: 'PlusJakartaSans-Bold',
