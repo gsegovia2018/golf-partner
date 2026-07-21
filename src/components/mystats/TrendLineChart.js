@@ -11,6 +11,10 @@ let gradientSeq = 0;
 // series: [{ label, value }]  — value may be null for a gap.
 // variant: 'full' (default) | 'compact'.
 // formatValue: (number) => string  — used for the on-dot labels.
+// ringColor: stroke of the last-dot emphasis ring — defaults to the card
+// background so the ring "punches through" on light cards; dark hero
+// surfaces pass their own surface color instead.
+// lastDotColor: fill of the emphasized last dot — defaults to the line color.
 // dropGaps: remove null points entirely so the line connects — for
 // round-total metrics where a skipped round isn't meaningful. Leave off for
 // shot metrics, where a gap means "not tracked that round".
@@ -26,6 +30,8 @@ export default function TrendLineChart({
   formatValue = (v) => `${v}`,
   caption,
   dropGaps = false,
+  ringColor,
+  lastDotColor,
 }) {
   const { theme } = useTheme();
   const s = useMemo(() => makeStyles(theme), [theme]);
@@ -106,7 +112,7 @@ export default function TrendLineChart({
               return (
                 <React.Fragment key={`pt-${i}`}>
                   {isLast ? (
-                    <Circle cx={p.x} cy={p.y} r={dotR + 1.5} fill={stroke} stroke={theme.bg.card} strokeWidth={2} />
+                    <Circle cx={p.x} cy={p.y} r={dotR + 1.5} fill={lastDotColor || stroke} stroke={ringColor || theme.bg.card} strokeWidth={2} />
                   ) : (
                     <Circle cx={p.x} cy={p.y} r={dotR} fill={stroke} />
                   )}

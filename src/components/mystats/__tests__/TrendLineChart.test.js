@@ -94,4 +94,26 @@ describe('TrendLineChart last-point emphasis', () => {
     expect(last.props.strokeWidth).toBe(2);
     expect(typeof last.props.stroke).toBe('string');
   });
+
+  test('by default the last dot fills with the line color', () => {
+    const view = render(wrap(<TrendLineChart series={gapped} color="#123456" />));
+    layOut(view);
+
+    const circles = view.UNSAFE_getAllByType(Circle);
+    expect(circles[circles.length - 1].props.fill).toBe('#123456');
+  });
+
+  test('ringColor and lastDotColor override the emphasis ring and end-dot fill', () => {
+    const view = render(wrap(
+      <TrendLineChart series={gapped} color="#f3efe6" ringColor="#0f3d2c" lastDotColor="#ffd700" />,
+    ));
+    layOut(view);
+
+    const circles = view.UNSAFE_getAllByType(Circle);
+    const last = circles[circles.length - 1];
+    expect(last.props.stroke).toBe('#0f3d2c');
+    expect(last.props.fill).toBe('#ffd700');
+    // Earlier dots keep the plain line color.
+    expect(circles[0].props.fill).toBe('#f3efe6');
+  });
 });
