@@ -31,7 +31,8 @@ function BarFill({ style, delay, testID }) {
 }
 
 // Magnitude is "how much", tone is "is it good" — the fill length shows the
-// row's share of its section's biggest value, while color stays on tone duty.
+// row's magnitude on its group's scale (section max for pts/count rows,
+// absolute 0-100 for percentages), while color stays on tone duty.
 function barFillStyle(theme, tone) {
   if (tone === 'good') return { backgroundColor: theme.accent.primary };
   if (tone === 'bad') return { backgroundColor: theme.destructive, opacity: 0.75 };
@@ -39,10 +40,10 @@ function barFillStyle(theme, tone) {
 }
 
 // Magnitude-bar row: fixed label column (with muted secondary/sample line),
-// a thin bar track whose fill length is the row's magnitude normalized
-// against the section max (`barRatio` 0..1), and a right-aligned
-// tone-colored value. `barRatio` undefined ⇒ no track at all (rows whose
-// units aren't comparable within the section); zero/dim ⇒ empty track.
+// a thin bar track whose fill length is the pre-normalized `barRatio`
+// (0..1, scaling decided by the section in BreakdownTab), and a
+// right-aligned tone-colored value. `barRatio` undefined ⇒ no track at all
+// (rows with no numeric value behind them); zero/dim ⇒ empty track.
 // `first` drops the hairline separator; `rowIndex` staggers the fill sweep.
 export default function BreakdownRow({
   label, value, secondary, tone = 'neutral', dim = false, first = false,

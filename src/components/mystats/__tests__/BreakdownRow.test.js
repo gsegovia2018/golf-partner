@@ -47,12 +47,12 @@ describe('BreakdownRow', () => {
     expect(StyleSheet.flatten(fill.props.style).width).toBe('75%');
   });
 
-  test('renders no track at all without a barRatio (mixed-unit rows)', () => {
+  test('renders no track at all without a barRatio (no numeric value)', () => {
     const { queryByTestId, getByText } = render(wrap(
-      <BreakdownRow label="Penalty drag" value="1.1" testID="bar" first />
+      <BreakdownRow label="Sand-save rate" value="-" testID="bar" first />
     ));
 
-    expect(getByText('Penalty drag')).toBeTruthy();
+    expect(getByText('Sand-save rate')).toBeTruthy();
     expect(queryByTestId('bar')).toBeNull();
     expect(queryByTestId('bar-fill')).toBeNull();
   });

@@ -452,13 +452,15 @@ describe('My Stats tabs', () => {
     expect(await findByText(/net \(handicap-adjusted\)/i)).toBeTruthy();
   });
 
-  test('BreakdownTab tells the story in order: mix → patterns → mastery → milestones finale', async () => {
+  test('BreakdownTab tells the story in order: milestones → mastery → mix → patterns', async () => {
     const view = render(wrap(
       <BreakdownTab stats={shotStats()} onInfo={() => {}} />
     ));
     expect(await view.findByText('Course Mastery')).toBeTruthy();
 
     const titles = [
+      'Career Milestones',
+      'Course Mastery',
       'Score mix',
       'Scoring patterns',
       'Course scoring patterns',
@@ -468,8 +470,6 @@ describe('My Stats tabs', () => {
       'Approach distance patterns',
       'Putting patterns',
       'Recovery patterns',
-      'Course Mastery',
-      'Career Milestones',
     ];
     const rendered = JSON.stringify(view.toJSON());
     const positions = titles.map((title) => rendered.indexOf(`"${title}"`));
