@@ -15,7 +15,7 @@ export default function IconButton({
       onPress={onPress}
       disabled={disabled}
       activeScale={0.94}
-      hitSlop={{ top: 4, bottom: 4, left: 4, right: 4 }}
+      hitSlop={rest.hitSlop ?? { top: 4, bottom: 4, left: 4, right: 4 }}
       accessibilityRole={rest.accessibilityRole ?? 'button'}
       style={[s.btn, style]}
     >
