@@ -317,9 +317,7 @@ export default function MyStatsScreen({ navigation, route }) {
 
   const Header = (
     <View style={s.header}>
-      {isTabPresentation ? (
-        <View style={s.backBtn} />
-      ) : (
+      {!isTabPresentation && (
         <TouchableOpacity
           accessibilityLabel="Back"
           onPress={() => navigation.goBack()}
@@ -328,10 +326,7 @@ export default function MyStatsScreen({ navigation, route }) {
           <Feather name="chevron-left" size={22} color={theme.accent.primary} />
         </TouchableOpacity>
       )}
-      <View style={s.headerTitleWrap}>
-        <Text style={s.headerKicker}>CLUBHOUSE · MEMBER RECORD</Text>
-        <Text style={s.headerTitle}>My Stats</Text>
-      </View>
+      <Text style={s.headerTitle}>My Stats</Text>
       <PressableScale
         onPress={() => setSelectorOpen(true)}
         style={s.roundsBtn}
@@ -528,8 +523,7 @@ function makeStyles(theme) {
     container: { flex: 1, backgroundColor: theme.bg.primary },
     header: {
       flexDirection: 'row', alignItems: 'center',
-      paddingHorizontal: theme.spacing.md, paddingVertical: theme.spacing.sm,
-      borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: theme.border.default,
+      paddingHorizontal: 20, paddingTop: 14, paddingBottom: 10,
     },
     backBtn: {
       width: 38,
@@ -537,18 +531,10 @@ function makeStyles(theme) {
       alignItems: 'center',
       justifyContent: 'center',
       padding: theme.spacing.xs,
-    },
-    headerTitleWrap: {
-      flex: 1, marginLeft: theme.spacing.sm,
-      flexDirection: 'column', justifyContent: 'center',
-    },
-    headerKicker: {
-      fontFamily: 'PlusJakartaSans-Bold', fontSize: 10,
-      letterSpacing: 1.4, textTransform: 'uppercase',
-      color: theme.text.muted, marginBottom: 1,
+      marginLeft: -theme.spacing.sm,
     },
     headerTitle: {
-      fontFamily: 'PlayfairDisplay-Bold', fontSize: 24, color: theme.text.primary,
+      flex: 1, fontFamily: 'PlayfairDisplay-Black', fontSize: 26, color: theme.text.primary,
     },
     roundsBtn: {
       flexDirection: 'row', alignItems: 'center', gap: 4,
@@ -563,8 +549,6 @@ function makeStyles(theme) {
       maxWidth: '100%',
       alignSelf: 'stretch',
       minHeight: 48,
-      borderBottomWidth: StyleSheet.hairlineWidth,
-      borderBottomColor: theme.border.default,
       backgroundColor: theme.bg.primary,
     },
     tabBar: {
