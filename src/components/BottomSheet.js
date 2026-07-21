@@ -16,11 +16,19 @@
 //   sheetStyle  - style(s) applied to the sliding sheet container (bg, radius,
 //                 padding). Defaults to a rounded card on theme.bg.primary.
 //   backdropOpacity - max scrim opacity (default 0.5)
-import React, { useEffect, useRef } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import {
-  Modal, Animated, Pressable, StyleSheet, KeyboardAvoidingView, Platform,
+  Modal, Animated, Easing, Pressable, StyleSheet, KeyboardAvoidingView, Platform,
 } from 'react-native';
+import { useReducedMotion } from 'react-native-reanimated';
 import { useTheme } from '../theme/ThemeContext';
+
+// Drawer-style curves: a slower, more deliberate ease-out on the way in, a
+// quicker snap back on the way out — "exits faster than enters".
+const ENTER_DURATION = 320;
+const ENTER_EASING = Easing.bezier(0.32, 0.72, 0, 1);
+const EXIT_DURATION = 200;
+const EXIT_EASING = Easing.bezier(0.23, 1, 0.32, 1);
 
 export default function BottomSheet({
   visible,
@@ -33,29 +41,58 @@ export default function BottomSheet({
   // one) — fall back to no explicit background, matching the app's other
   // theme-defensive components.
   const { theme } = useTheme() || {};
+  const reduced = useReducedMotion();
   const progress = useRef(new Animated.Value(0)).current;
   // Measured sheet height drives the slide distance so any sheet size slides
   // fully off-screen; a generous default covers the first frame before layout.
   const sheetH = useRef(new Animated.Value(600)).current;
   const sheetHValue = useRef(600);
+  // Mirrors `visible` but stays true through the exit animation, so the sheet
+  // can slide/fade out before unmounting instead of vanishing instantly.
+  const [mounted, setMounted] = useState(visible);
+  const exitTimerRef = useRef(null);
+  // Guards the exit animation's completion callback (and its fallback timer)
+  // against firing setState after the component itself has really unmounted
+  // — both run on a real timer, well after a test's synchronous assertions
+  // (or a fast prop flip elsewhere) may have already torn the tree down.
+  const isMountedRef = useRef(true);
+  useEffect(() => () => { isMountedRef.current = false; }, []);
 
-  // Only the ENTRANCE animates (scrim appears at once, sheet slides up). Close
-  // is immediate: gating unmount on an exit animation is fragile — the
-  // native-driver completion callback doesn't fire in every environment (test
-  // renderers, reduced motion), and a sheet that never unmounts leaves an
-  // invisible full-screen pressable swallowing taps.
   useEffect(() => {
-    if (!visible) return;
-    progress.setValue(0);
+    if (exitTimerRef.current) { clearTimeout(exitTimerRef.current); exitTimerRef.current = null; }
+    if (visible) {
+      setMounted(true);
+      progress.setValue(0);
+      Animated.timing(progress, {
+        toValue: 1,
+        duration: ENTER_DURATION,
+        easing: ENTER_EASING,
+        useNativeDriver: true,
+      }).start();
+      return undefined;
+    }
+    if (!mounted) return undefined;
+    const finish = () => { if (isMountedRef.current) setMounted(false); };
     Animated.timing(progress, {
-      toValue: 1,
-      duration: 240,
+      toValue: 0,
+      duration: EXIT_DURATION,
+      easing: EXIT_EASING,
       useNativeDriver: true,
-    }).start();
+    }).start(finish);
+    // Safety net: the native-driver completion callback doesn't fire in
+    // every environment (test renderers, some reduced-motion paths) — a
+    // fallback timer guarantees the sheet still unmounts and stops
+    // swallowing taps even if the animation callback above never runs.
+    exitTimerRef.current = setTimeout(finish, EXIT_DURATION + 50);
+    return undefined;
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [visible]);
 
-  if (!visible) return null;
+  useEffect(() => () => {
+    if (exitTimerRef.current) clearTimeout(exitTimerRef.current);
+  }, []);
+
+  if (!mounted) return null;
 
   const backdropStyle = {
     opacity: progress.interpolate({
@@ -65,8 +102,9 @@ export default function BottomSheet({
   };
   // translateY = sheetHeight × (1 − progress): fully off-screen when closed,
   // 0 when open. Driven off the Animated height so a post-layout measurement
-  // reactively corrects the slide distance.
-  const translateY = Animated.multiply(sheetH, Animated.subtract(1, progress));
+  // reactively corrects the slide distance. Reduced motion suppresses the
+  // slide (pinned at rest) while the backdrop's opacity fade still plays.
+  const translateY = reduced ? 0 : Animated.multiply(sheetH, Animated.subtract(1, progress));
 
   return (
     <Modal
@@ -103,7 +141,10 @@ export default function BottomSheet({
             }
           }}
         >
-          {children}
+          {/* Content drops immediately on close (matches every consumer's
+              existing "closed means gone" expectations); only the empty
+              shell — backdrop + sheet chrome — rides out the exit tween. */}
+          {visible ? children : null}
         </Animated.View>
       </KeyboardAvoidingView>
     </Modal>

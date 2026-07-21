@@ -1,5 +1,6 @@
 import React, { useEffect, useState, useCallback, useRef, useMemo, startTransition } from 'react';
-import { View, Text, TouchableOpacity, StyleSheet, ScrollView, Switch, Alert, FlatList, Platform, Modal, Pressable, ActivityIndicator, Share } from 'react-native';
+import { View, Text, TouchableOpacity, StyleSheet, ScrollView, Switch, Alert, FlatList, Platform, Modal, Pressable, ActivityIndicator, Share, Animated, Easing } from 'react-native';
+import { useReducedMotion } from 'react-native-reanimated';
 import ScreenContainer from '../components/ScreenContainer';
 import RoundScoreboard from '../components/RoundScoreboard';
 import { Feather } from '@expo/vector-icons';
@@ -121,6 +122,85 @@ if (Platform.OS === 'web' && typeof document !== 'undefined') {
     styleEl.textContent = '[data-pagerpage="1"]{scroll-snap-align:start !important;scroll-snap-stop:always !important;}';
     document.head.appendChild(styleEl);
   }
+}
+
+const SNACK_ENTER_DURATION = 200;
+const SNACK_EXIT_DURATION = 160;
+const SNACK_EASING = Easing.out(Easing.ease);
+const SNACK_OFFSET = 60;
+
+// Wraps the undo snackbar's data-driven visibility (`data` is null when
+// hidden) so it can animate in *and* out without touching the timeout logic
+// that owns `undoSnack` state — this component just watches `data` flip
+// between an object and null and plays the matching transition. Keeps
+// rendering its last known data through the exit animation since `data`
+// is already null by the time that plays.
+function UndoSnackbar({ data, onUndo, theme, s }) {
+  const reduced = useReducedMotion();
+  const [mounted, setMounted] = useState(!!data);
+  const lastDataRef = useRef(data);
+  const opacity = useRef(new Animated.Value(0)).current;
+  const translateY = useRef(new Animated.Value(SNACK_OFFSET)).current;
+  const exitTimerRef = useRef(null);
+
+  useEffect(() => {
+    if (exitTimerRef.current) { clearTimeout(exitTimerRef.current); exitTimerRef.current = null; }
+    if (data) {
+      lastDataRef.current = data;
+      setMounted(true);
+      opacity.setValue(0);
+      const animations = [
+        Animated.timing(opacity, {
+          toValue: 1, duration: SNACK_ENTER_DURATION, easing: SNACK_EASING, useNativeDriver: true,
+        }),
+      ];
+      if (reduced) {
+        translateY.setValue(0);
+      } else {
+        translateY.setValue(SNACK_OFFSET);
+        animations.push(Animated.timing(translateY, {
+          toValue: 0, duration: SNACK_ENTER_DURATION, easing: SNACK_EASING, useNativeDriver: true,
+        }));
+      }
+      Animated.parallel(animations).start();
+      return undefined;
+    }
+    if (!mounted) return undefined;
+    const finish = () => setMounted(false);
+    const animations = [
+      Animated.timing(opacity, {
+        toValue: 0, duration: SNACK_EXIT_DURATION, easing: SNACK_EASING, useNativeDriver: true,
+      }),
+    ];
+    if (!reduced) {
+      animations.push(Animated.timing(translateY, {
+        toValue: SNACK_OFFSET, duration: SNACK_EXIT_DURATION, easing: SNACK_EASING, useNativeDriver: true,
+      }));
+    }
+    Animated.parallel(animations).start(finish);
+    // Safety net matching BottomSheet's: guarantees unmount even if the
+    // native-driver completion callback never fires.
+    exitTimerRef.current = setTimeout(finish, SNACK_EXIT_DURATION + 50);
+    return undefined;
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [data]);
+
+  useEffect(() => () => {
+    if (exitTimerRef.current) clearTimeout(exitTimerRef.current);
+  }, []);
+
+  if (!mounted) return null;
+  const shown = data ?? lastDataRef.current;
+
+  return (
+    <Animated.View style={[s.undoSnack, { opacity, transform: [{ translateY }] }]}>
+      <Feather name="rotate-ccw" size={16} color={theme.accent.primary} />
+      <Text style={s.undoSnackText}>Round {(shown?.roundIndex ?? 0) + 1} reset</Text>
+      <TouchableOpacity onPress={onUndo} style={s.undoSnackBtn} activeOpacity={0.7}>
+        <Text style={s.undoSnackBtnText}>UNDO</Text>
+      </TouchableOpacity>
+    </Animated.View>
+  );
 }
 
 export default function HomeScreen({ navigation, route }) {
@@ -1859,15 +1939,7 @@ export default function HomeScreen({ navigation, route }) {
       </View>
     </PullToRefresh>
 
-    {undoSnack && (
-      <View style={s.undoSnack}>
-        <Feather name="rotate-ccw" size={16} color={theme.accent.primary} />
-        <Text style={s.undoSnackText}>Round {undoSnack.roundIndex + 1} reset</Text>
-        <TouchableOpacity onPress={performUndoReset} style={s.undoSnackBtn} activeOpacity={0.7}>
-          <Text style={s.undoSnackBtnText}>UNDO</Text>
-        </TouchableOpacity>
-      </View>
-    )}
+    <UndoSnackbar data={undoSnack} onUndo={performUndoReset} theme={theme} s={s} />
 
     {tournament.rounds.length > 0 && (() => {
       const isCurrentRound = selectedRound === tournament.currentRound;
