@@ -16,26 +16,30 @@ const GROUP_LABELS = {
   watch: 'Watch',
 };
 
-// Clubhouse hero surface — cream-on-green, matches LiveRoundCard.js. Tone no
-// longer drives the whole card; the insight group picks the surface (problem
-// groups go Masters red) and tone only accents the small `area` label.
+// Clubhouse hero surface — cream-on-green, matches LiveRoundCard.js. The
+// standing green card is the default for every group: "Fix first" always
+// exists, so it must not wear alarm red. Masters red is reserved for the one
+// group that reports a change for the worse (gettingWorse) — red is earned,
+// never permanent. Fix first is marked as "the work" by a gold badge instead.
 const GREEN = '#0f3d2c';
 // Masters red — the app's one light-surface red. Cream #f3efe6 on it is ~5:1
 // (AA); gold #ffd700 is ~4.2:1 (AA-large, fine for the big area label).
 const RED = semantic.masters.red;
+const GOLD = semantic.winner.dark;
 const CREAM = '#f3efe6';
 const CREAM_70 = 'rgba(243,239,230,0.7)';
 const CREAM_85 = 'rgba(243,239,230,0.85)';
 
-const RED_SURFACE_GROUPS = new Set(['fixFirst', 'gettingWorse']);
+const RED_SURFACE_GROUPS = new Set(['gettingWorse']);
 
 export default function CoachHero({ insight, onCommitFocus, focusActive = false }) {
   const { theme } = useTheme();
   const s = useMemo(() => makeStyles(theme), [theme]);
   const proofs = [insight?.basis, formatSample(insight?.sample), formatConfidence(insight?.confidence)].filter(Boolean);
   const isRedSurface = Boolean(insight && RED_SURFACE_GROUPS.has(insight.group));
+  const isFixFirst = insight?.group === 'fixFirst';
   const surfaceColor = isRedSurface ? RED : GREEN;
-  const areaColor = areaAccentColor(insight?.tone, isRedSurface);
+  const areaColor = areaAccentColor(insight?.tone, isRedSurface, isFixFirst);
 
   if (!insight) {
     return (
@@ -50,7 +54,14 @@ export default function CoachHero({ insight, onCommitFocus, focusActive = false 
   return (
     <View style={[s.card, isRedSurface && { backgroundColor: RED }]} testID="coach-hero-surface">
       <View style={s.topRow}>
-        <Text style={s.kicker}>{GROUP_LABELS[insight.group] ?? 'Coach'}</Text>
+        {isFixFirst ? (
+          <View style={s.fixFirstBadge} testID="fix-first-badge">
+            <Feather name="target" size={10} color={GOLD} />
+            <Text style={s.fixFirstBadgeText}>{GROUP_LABELS.fixFirst}</Text>
+          </View>
+        ) : (
+          <Text style={s.kicker}>{GROUP_LABELS[insight.group] ?? 'Coach'}</Text>
+        )}
         <Text style={[s.area, { color: areaColor }]}>{insight.areaLabel ?? insight.area}</Text>
       </View>
       <Text style={s.title}>{insight.title}</Text>
@@ -91,8 +102,10 @@ export default function CoachHero({ insight, onCommitFocus, focusActive = false 
 // Hero surface is a fixed dark color in both themes, so tone accents always
 // use the dark-surface variants regardless of the active app theme. On the
 // Masters-red surface a red area label would vanish, so a 'bad' area label
-// renders in winner gold there instead.
-function areaAccentColor(tone, isRedSurface) {
+// renders in winner gold there instead. Fix first always carries a bad tone,
+// so its area label stays neutral cream — the gold badge already marks it.
+function areaAccentColor(tone, isRedSurface, isFixFirst) {
+  if (isFixFirst) return CREAM_70;
   if (tone === 'bad') return isRedSurface ? semantic.winner.dark : semantic.destructive.dark;
   if (tone === 'good') return semantic.winner.dark;
   return CREAM_70;
@@ -115,6 +128,22 @@ function makeStyles(theme) {
     },
     topRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: theme.spacing.md },
     kicker,
+    fixFirstBadge: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: 4,
+      backgroundColor: 'rgba(255,215,0,0.16)',
+      borderRadius: 999,
+      paddingHorizontal: 9,
+      paddingVertical: 4,
+    },
+    fixFirstBadgeText: {
+      fontSize: 10,
+      fontFamily: 'PlusJakartaSans-Bold',
+      letterSpacing: 1.4,
+      textTransform: 'uppercase',
+      color: GOLD,
+    },
     area: kicker,
     title: { fontFamily: 'PlayfairDisplay-Bold', fontSize: 20, color: CREAM },
     reason: { fontSize: 12.5, fontFamily: 'PlusJakartaSans-SemiBold', color: CREAM_85 },
