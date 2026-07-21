@@ -28,7 +28,7 @@ jest.mock('../../../theme/ThemeContext', () => ({
   },
 }));
 
-const PANEL = '#ece8e1'; // theme.bg.secondary, light
+const PANEL = '#ffffff'; // theme.bg.card, light — white inset panel
 
 const baseSG = {
   total: -1.2,
@@ -55,15 +55,15 @@ const heroColor = (r) =>
   StyleSheet.flatten(r.getByTestId('sg-hero-surface').props.style).backgroundColor;
 
 describe('ShotDashboard target-gap hero surface', () => {
-  test('stays a neutral panel when the SG total is negative — the gap is standing work, not an alarm', () => {
+  test('stays a white inset panel when the SG total is negative — the gap is standing work, not an alarm', () => {
     const r = renderDash({ ...baseSG, total: -1.2 });
     expect(heroColor(r)).toBe(PANEL);
   });
-  test('stays a neutral panel when the SG total is positive', () => {
+  test('stays a white inset panel when the SG total is positive', () => {
     const r = renderDash({ ...baseSG, total: 0.8 });
     expect(heroColor(r)).toBe(PANEL);
   });
-  test('stays a neutral panel at exactly zero and without data', () => {
+  test('stays a white inset panel at exactly zero and without data', () => {
     expect(heroColor(renderDash({ ...baseSG, total: 0 }))).toBe(PANEL);
     expect(heroColor(renderDash({ ...baseSG, total: null }))).toBe(PANEL);
   });

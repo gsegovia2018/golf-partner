@@ -50,7 +50,8 @@ function makeStyles(theme) {
     row: { flexDirection: 'row', gap: 8 },
     tile: { flex: 1, borderRadius: theme.radius.lg, paddingVertical: 11, paddingHorizontal: 12 },
     tileGood: { backgroundColor: theme.accent.light },
-    tileBad: { backgroundColor: theme.bg.secondary },
+    // Mirrors tileGood: green wash = went well, red wash = cost you.
+    tileBad: { backgroundColor: theme.isDark ? 'rgba(248,113,113,0.10)' : 'rgba(200,16,46,0.07)' },
     spacer: { flex: 1 },
     kicker: { fontSize: 9, fontFamily: 'PlusJakartaSans-Bold', letterSpacing: 1 },
     label: { fontSize: 13, fontFamily: 'PlusJakartaSans-ExtraBold', color: theme.text.primary, marginTop: 3 },

@@ -2,21 +2,19 @@ import React, { useMemo } from 'react';
 import { View, Text, StyleSheet } from 'react-native';
 import { useTheme } from '../../theme/ThemeContext';
 
-// One large value + caption. tone: 'default' | 'up' | 'down'.
-// surface: 'card' (default, secondary-tinted tile on a white card) | 'hero'
-// (card-colored tile on a secondary-tinted inset panel, e.g. the SG hero).
-export default function StatTile({ value, caption, tone = 'default', surface = 'card' }) {
+// One large value + caption. tone: 'default' | 'up' | 'down'. Renders a
+// secondary-tinted tile that sits on white cards and white inset panels.
+export default function StatTile({ value, caption, tone = 'default' }) {
   const { theme } = useTheme();
   const s = useMemo(() => makeStyles(theme), [theme]);
-  const hero = surface === 'hero';
   const valueColor = tone === 'up' ? theme.accent.primary
     : tone === 'down' ? theme.destructive
       : theme.text.primary;
 
   return (
-    <View style={[s.tile, hero && s.tileHero]}>
+    <View style={s.tile}>
       <Text style={[s.value, { color: valueColor }]}>{value}</Text>
-      <Text style={[s.caption, hero && s.captionHero]}>{caption}</Text>
+      <Text style={s.caption}>{caption}</Text>
     </View>
   );
 }
@@ -27,7 +25,6 @@ function makeStyles(theme) {
       flex: 1, backgroundColor: theme.bg.secondary, borderRadius: theme.radius.lg,
       padding: theme.spacing.md, borderWidth: StyleSheet.hairlineWidth, borderColor: theme.border.default,
     },
-    tileHero: { backgroundColor: theme.bg.card, borderColor: 'transparent' },
     value: {
       fontSize: 22,
       fontFamily: 'PlusJakartaSans-ExtraBold',
@@ -42,6 +39,5 @@ function makeStyles(theme) {
       color: theme.text.muted,
       marginTop: 2,
     },
-    captionHero: { color: theme.text.muted },
   });
 }

@@ -216,7 +216,7 @@ export default function ShotDashboard({ stats, targetHandicap, onChangeTarget, o
         </Text>
         <Text style={s.heroMeta}>{hasStrokesGained ? targetCopy : 'Log putt distance and regulation approach shots.'}</Text>
         <View style={s.heroGrid}>
-          <StatTile surface="hero" value={sample ?? 'Tracked data'} caption="Evidence" />
+          <StatTile value={sample ?? 'Tracked data'} caption="Evidence" />
         </View>
         <Text style={s.heroFootnote}>{evidenceMeta(strokesGained)}</Text>
       </View>
@@ -353,11 +353,15 @@ const styles = {
 
 function makeStyles(theme) {
   return StyleSheet.create({
+    // White inset panel — gray is chrome (tracks, chips), never a surface.
     hero: {
-      backgroundColor: theme.bg.secondary,
+      backgroundColor: theme.isDark ? theme.bg.elevated : theme.bg.card,
+      borderWidth: 1,
+      borderColor: theme.border.subtle,
       borderRadius: 16,
       padding: theme.spacing.lg,
       gap: theme.spacing.xs,
+      ...(theme.isDark ? {} : { shadowColor: '#00553c', shadowOpacity: 0.06, shadowOffset: { width: 0, height: 1 }, shadowRadius: 3, elevation: 1 }),
     },
     heroKicker: {
       color: theme.text.muted,

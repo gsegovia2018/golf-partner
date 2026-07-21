@@ -49,12 +49,13 @@ export default function PracticePlanCard({ plan, onInfo }) {
 function makeStyles(theme) {
   return StyleSheet.create({
     item: {
-      backgroundColor: theme.bg.secondary,
+      backgroundColor: theme.isDark ? theme.bg.elevated : theme.bg.card,
       borderRadius: theme.radius.sm,
       padding: theme.spacing.md,
       gap: 2,
-      borderWidth: StyleSheet.hairlineWidth,
+      borderWidth: 1,
       borderColor: theme.border.subtle,
+      ...(theme.isDark ? {} : { shadowColor: '#00553c', shadowOpacity: 0.06, shadowOffset: { width: 0, height: 1 }, shadowRadius: 3, elevation: 1 }),
     },
     role: { ...theme.typography.overline, color: theme.accent.primary },
     title: { ...theme.typography.subhead, color: theme.text.primary },
