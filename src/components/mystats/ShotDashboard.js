@@ -391,7 +391,14 @@ function makeStyles(theme) {
     name: { fontSize: 12.5, fontFamily: 'PlusJakartaSans-Bold', color: theme.text.primary },
     sample: { fontSize: 10.5, fontFamily: 'PlusJakartaSans-SemiBold', color: theme.text.muted },
     lockNote: { fontSize: 10.5, fontFamily: 'PlusJakartaSans-SemiBold', color: theme.text.muted },
-    boardTrack: { maxWidth: undefined, height: 10 },
+    // The base track style is built for a row layout (flex: 1, maxWidth 200).
+    // In the board's column layout flex-basis must be auto or the height
+    // collapses to 0 on web, and maxWidth needs an explicit full-width value
+    // (undefined in a style array does not override an earlier value).
+    boardTrack: {
+      flexGrow: 0, flexShrink: 0, flexBasis: 'auto',
+      height: 10, maxWidth: '100%',
+    },
     footnote: { fontSize: 10.5, fontFamily: 'PlusJakartaSans-SemiBold', color: theme.text.muted },
     boardRight: { alignItems: 'flex-end', gap: 4, minWidth: 46 },
     value: {
