@@ -82,8 +82,14 @@ function FormTrendCard({ form = {}, formSeries = {}, metrics = {} }) {
     ? `Recent ${form.recentCount ?? 0} vs previous ${form.historyCount ?? 0} rounds`
     : 'Select more rounds to compare recent form.';
 
+  const wash = toneWash(theme, tone);
+
   return (
-    <SectionCard title="Current form">
+    <SectionCard
+      title="Current form"
+      testID="current-form-card"
+      style={wash ? { backgroundColor: wash, borderColor: 'transparent' } : null}
+    >
       <View style={s.formHead}>
         <View style={s.formCopy}>
           <Text style={[s.formTitle, { color }]}>{title}</Text>
@@ -111,10 +117,19 @@ function toneColor(theme, tone) {
   return theme.text.muted;
 }
 
-function toneFill(theme, tone) {
+// Surface tint for the whole card: the first thing the Coach tab says should
+// be readable from the card color alone. Neutral stays on the plain card.
+function toneWash(theme, tone) {
   if (tone === 'good') return theme.accent.light;
-  if (tone === 'bad') return theme.isDark ? 'rgba(248,113,113,0.14)' : '#fee2e2';
-  return theme.bg.secondary;
+  if (tone === 'bad') return theme.isDark ? 'rgba(248,113,113,0.10)' : '#fbeaec';
+  return null;
+}
+
+// Pill fill sits on top of the wash, so toned pills use the plain card color
+// (translucent white in dark mode) to stay visible against the tinted surface.
+function toneFill(theme, tone) {
+  if (tone === 'neutral') return theme.bg.secondary;
+  return theme.isDark ? 'rgba(255,255,255,0.08)' : theme.bg.card;
 }
 
 function makeStyles(theme) {

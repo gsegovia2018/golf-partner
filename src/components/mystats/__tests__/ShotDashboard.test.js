@@ -28,7 +28,6 @@ jest.mock('../../../theme/ThemeContext', () => ({
 }));
 
 const GREEN = '#0f3d2c';
-const RED = semantic.masters.red; // '#c8102e'
 
 const baseSG = {
   total: -1.2,
@@ -55,9 +54,9 @@ const heroColor = (r) =>
   StyleSheet.flatten(r.getByTestId('sg-hero-surface').props.style).backgroundColor;
 
 describe('ShotDashboard target-gap hero surface', () => {
-  test('goes Masters red when the SG total is negative', () => {
+  test('stays clubhouse green when the SG total is negative — the gap is standing work, not an alarm', () => {
     const r = renderDash({ ...baseSG, total: -1.2 });
-    expect(heroColor(r)).toBe(RED);
+    expect(heroColor(r)).toBe(GREEN);
   });
   test('stays green when the SG total is positive', () => {
     const r = renderDash({ ...baseSG, total: 0.8 });
@@ -67,7 +66,7 @@ describe('ShotDashboard target-gap hero surface', () => {
     expect(heroColor(renderDash({ ...baseSG, total: 0 }))).toBe(GREEN);
     expect(heroColor(renderDash({ ...baseSG, total: null }))).toBe(GREEN);
   });
-  test('headline number is winner gold on both surfaces', () => {
+  test('headline number is winner gold on both signs', () => {
     const losing = renderDash({ ...baseSG, total: -1.2 });
     expect(StyleSheet.flatten(losing.getByText('-1.20 / round').props.style).color)
       .toBe(semantic.winner.dark);

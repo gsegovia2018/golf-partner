@@ -20,9 +20,11 @@ import {
 } from './shotMetrics';
 
 // Clubhouse hero surfaces — same constants as CoachHero.js. The target-gap
-// hero goes Masters red when the headline SG total is negative.
+// hero is always green: a negative SG total vs the target is the standing
+// state for most players, and a permanent red stops meaning anything. Red
+// survives only as small-scale accents in the category board (negative
+// values and down-deltas), never as a full card surface.
 const GREEN = '#0f3d2c';
-const RED = semantic.masters.red;
 const CREAM = '#f3efe6';
 const CREAM_70 = 'rgba(243,239,230,0.7)';
 const CREAM_85 = 'rgba(243,239,230,0.85)';
@@ -187,7 +189,6 @@ export default function ShotDashboard({ stats, targetHandicap, onChangeTarget, o
   const s = useMemo(() => makeStyles(theme), [theme]);
   const strokesGained = stats?.strokesGained;
   const hasStrokesGained = strokesGained?.total != null;
-  const losing = hasStrokesGained && strokesGained.total < 0;
   const signals = useMemo(() => buildShotSignals(stats), [stats]);
   const board = useMemo(() => mapSignalsToBoard(signals), [signals]);
   const targetCopy = targetTitle(targetHandicap);
@@ -211,7 +212,7 @@ export default function ShotDashboard({ stats, targetHandicap, onChangeTarget, o
         ) : null
       }
     >
-      <View style={[s.hero, losing && { backgroundColor: RED }]} testID="sg-hero-surface">
+      <View style={s.hero} testID="sg-hero-surface">
         <Text style={s.heroKicker}>Target gap</Text>
         <Text style={[s.heroValue, hasStrokesGained && { color: semantic.winner.dark }]}>
           {hasStrokesGained ? `${formatSignedFixed(strokesGained.total)} / round` : '-'}

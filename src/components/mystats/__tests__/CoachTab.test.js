@@ -1,5 +1,6 @@
 import React from 'react';
 import { render, fireEvent } from '@testing-library/react-native';
+import { StyleSheet } from 'react-native';
 import CoachTab from '../tabs/CoachTab';
 
 jest.mock('../../../theme/ThemeContext', () => ({
@@ -75,5 +76,38 @@ describe('CoachTab focus + strategy wiring', () => {
     const r = render(<CoachTab stats={stats} focus={null} focusVerdict={null} onCommitFocus={jest.fn()} onEndFocus={jest.fn()} />);
     expect(r.getByText('Play smarter')).toBeTruthy();
     expect(r.getByText('Lag first from 6+ m')).toBeTruthy();
+  });
+});
+
+const formStats = (direction, delta) => ({
+  ...stats,
+  form: {
+    hasHistory: true,
+    recentCount: 5,
+    historyCount: 12,
+    metrics: [{ key: 'avgPoints', direction, delta }],
+  },
+});
+
+const formCardBg = (r) =>
+  StyleSheet.flatten(r.getByTestId('current-form-card').props.style).backgroundColor;
+
+describe('FormTrendCard status surface', () => {
+  test('improving form tints the card with the green wash', () => {
+    const r = render(<CoachTab stats={formStats('up', 2.1)} focus={null} focusVerdict={null} onCommitFocus={jest.fn()} onEndFocus={jest.fn()} />);
+    expect(r.getByText('Improving lately')).toBeTruthy();
+    expect(formCardBg(r)).toBe('#e6f0eb');
+  });
+
+  test('declining form tints the card with the red wash', () => {
+    const r = render(<CoachTab stats={formStats('down', -1.8)} focus={null} focusVerdict={null} onCommitFocus={jest.fn()} onEndFocus={jest.fn()} />);
+    expect(r.getByText('Trending down lately')).toBeTruthy();
+    expect(formCardBg(r)).toBe('#fbeaec');
+  });
+
+  test('steady form keeps the plain card surface', () => {
+    const r = render(<CoachTab stats={formStats('flat', null)} focus={null} focusVerdict={null} onCommitFocus={jest.fn()} onEndFocus={jest.fn()} />);
+    expect(r.getByText('Holding steady')).toBeTruthy();
+    expect(formCardBg(r)).toBe('#ffffff');
   });
 });

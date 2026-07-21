@@ -9,7 +9,7 @@ import { useTheme } from '../../theme/ThemeContext';
 // Titles default to the small uppercase overline label (Clubhouse stat-card
 // pattern); pass `titleVariant='heading'` to opt back into the heading style.
 export default function SectionCard({
-  title, infoKey, onInfo, right, tone = 'default', titleVariant = 'overline', children, style,
+  title, infoKey, onInfo, right, tone = 'default', titleVariant = 'overline', children, style, testID,
 }) {
   const { theme } = useTheme();
   const s = useMemo(() => makeStyles(theme), [theme]);
@@ -17,7 +17,7 @@ export default function SectionCard({
   const overline = titleVariant !== 'heading';
 
   return (
-    <View style={[s.card, hero && s.cardHero, style]}>
+    <View style={[s.card, hero && s.cardHero, style]} testID={testID}>
       <View style={s.head}>
         <View style={s.titleWrap}>
           <Text style={overline ? [s.titleOverline, hero && s.titleOverlineHero] : [s.title, hero && s.titleHero]}>{title}</Text>
