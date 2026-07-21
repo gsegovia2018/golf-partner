@@ -1,7 +1,6 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { View, Text, StyleSheet } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import { Feather } from '@expo/vector-icons';
 import { useTheme } from '../../../theme/ThemeContext';
 import PressableScale from '../../ui/PressableScale';
 import { useAppSettings } from '../../../hooks/useAppSettings';
@@ -13,10 +12,9 @@ import SGTrendCard from '../SGTrendCard';
 import SGReconciliationCard from '../SGReconciliationCard';
 import BreakdownRow from '../BreakdownRow';
 import ScoreMixBar from '../ScoreMixBar';
+import TargetMeterRow from '../TargetMeterRow';
 import {
   comparisonMeta,
-  toneColor,
-  toneFill,
   toneFromComparison,
   toneFromSigned,
 } from '../metricTone';
@@ -53,6 +51,7 @@ export default function ShotsTab({ stats, onInfo, targetHandicap, onChangeTarget
   }
 
   const scoringRows = makeScoringRows(stats, shotBenchmark);
+  const scoringSummary = makeScoringSummary(scoringRows);
   const drivingTargetRows = makeDrivingTargetRows(shots, shotBenchmark, stats.driveDistance, units);
   const approachTargetRows = approachTarget?.hasData ? makeApproachTargetRows(approachTarget) : [];
   const puttingVolumeRows = shots.hasData ? makePuttingVolumeRows(shots, shotBenchmark) : [];
@@ -84,12 +83,28 @@ export default function ShotsTab({ stats, onInfo, targetHandicap, onChangeTarget
 
       {scoringRows.length ? (
         <SectionCard title="Scoring" infoKey="sgScoring" onInfo={onInfo}>
-          <ShotSummary
-            title="Scoring vs target"
-            items={makeScoringSummary(scoringRows)}
-            s={s}
-            theme={theme}
-          />
+          {scoringSummary.length ? (
+            <View style={s.targetBlock}>
+              <Text style={s.targetOverline}>Scoring vs target</Text>
+              <View>
+                {scoringSummary.map((item, index) => (
+                  <TargetMeterRow
+                    key={item.key}
+                    label={item.label}
+                    meta={item.meta}
+                    value={item.value}
+                    numericValue={item.numericValue}
+                    target={item.target}
+                    targetDisplay={item.targetDisplay}
+                    tone={item.tone}
+                    rowIndex={index}
+                    first={index === 0}
+                    testID={`scoring-meter-${item.key}`}
+                  />
+                ))}
+              </View>
+            </View>
+          ) : null}
           {grossMixTotal > 0 ? (
             <View style={s.detailBlock}>
               <Text style={s.mixOverline}>Score mix · gross</Text>
@@ -149,39 +164,6 @@ export default function ShotsTab({ stats, onInfo, targetHandicap, onChangeTarget
   );
 }
 
-function ShotSummary({ title, items, s, theme }) {
-  return (
-    <View style={s.summaryWrap}>
-      <View style={s.summaryHead}>
-        <Feather name="sliders" size={14} color={theme.text.secondary} />
-        <Text style={s.summaryTitle}>{title}</Text>
-      </View>
-      <View style={s.summaryCells}>
-        {items.map((item) => (
-          <SummaryCell key={item.label} {...item} s={s} theme={theme} />
-        ))}
-      </View>
-    </View>
-  );
-}
-
-function SummaryCell({ label, value, meta, tone = 'neutral', s, theme }) {
-  const color = toneColor(theme, tone);
-  const icon = tone === 'good' ? 'trending-up' : tone === 'bad' ? 'alert-triangle' : 'activity';
-  return (
-    <View style={s.summaryCell}>
-      <View style={[s.summaryIcon, { backgroundColor: toneFill(theme, tone) }]}>
-        <Feather name={icon} size={14} color={color} />
-      </View>
-      <View style={s.summaryCoachCopy}>
-        <Text style={s.summaryLabel} numberOfLines={1}>{label}</Text>
-        <Text style={[s.summaryValue, { color }]} numberOfLines={2}>{value}</Text>
-        {meta ? <Text style={s.summaryMeta} numberOfLines={2}>{meta}</Text> : null}
-      </View>
-    </View>
-  );
-}
-
 // Cap for a row whose relative bar group has no comparable sibling: a
 // deliberate two-thirds bar, never a misleading full one (mirrors
 // BreakdownTab's SOLO_COUNT_RATIO).
@@ -216,7 +198,7 @@ function ShotRowsBlock({ title, rows, s, first = false }) {
       </View>
       <View>
         {rows.map(({
-          key, magnitude, barGroup, raw, sample, bucket, greenRate, threePuttRate, ...row
+          key, magnitude, barGroup, target, raw, sample, bucket, greenRate, threePuttRate, ...row
         }, index) => (
           <BreakdownRow
             key={key}
@@ -269,6 +251,7 @@ function makeScoringRows(stats, shotBenchmark) {
       label,
       value: formatBenchmarkNumber(row.avgStrokes),
       magnitude: row.avgStrokes,
+      target,
       barGroup: 'avg',
       secondary: targetSecondary([
         sampleText(row.holes, 'holes'),
@@ -334,6 +317,7 @@ function scoringCountRow({
     label,
     value: formatBenchmarkNumber(value),
     magnitude: isNumber(value) ? value : null,
+    target,
     barGroup: 'count',
     secondary: targetSecondary([
       `${count} total`,
@@ -363,7 +347,7 @@ function makeScoringSummary(scoringRows) {
     .map(([key, label]) => {
       const row = byKey.get(key);
       if (!row) return null;
-      return summaryMetric(label, row.value, row.secondary, row.tone);
+      return summaryMetric(label, row);
     })
     .filter(Boolean);
 
@@ -372,7 +356,7 @@ function makeScoringSummary(scoringRows) {
   scoringRows.forEach((row) => {
     if (summary.length >= 3) return;
     if (priority.some(([key]) => key === row.key)) return;
-    summary.push(summaryMetric(row.label, row.value, row.secondary, row.tone));
+    summary.push(summaryMetric(row.label, row));
   });
 
   return summary;
@@ -633,13 +617,29 @@ function makePuttingTargetRows(puttingTarget) {
   }).filter(Boolean);
 }
 
-function summaryMetric(label, value, meta, tone) {
+// Meter item for the Scoring-vs-target block: the row's display strings
+// plus the numeric value/target pair TargetMeterRow scales its track from.
+// The meta keeps only the sample portion of the row's secondary (e.g.
+// "24 holes") — the meter and its "target n" line already say the rest.
+function summaryMetric(label, row) {
   return {
+    key: row.key,
     label,
-    value: value ?? '-',
-    meta: meta ?? 'No sample yet',
-    tone,
+    value: row.value ?? '-',
+    meta: meterMeta(row.secondary),
+    tone: row.tone,
+    numericValue: isNumber(row.magnitude) ? row.magnitude : null,
+    target: isNumber(row.target) ? row.target : null,
+    targetDisplay: isNumber(row.target) ? formatBenchmarkNumber(row.target) : null,
   };
+}
+
+function meterMeta(secondary) {
+  if (!secondary) return 'No sample yet';
+  const parts = secondary
+    .split(' · ')
+    .filter((part) => part !== TARGET_BASIS && !part.startsWith('target '));
+  return parts.join(' · ') || null;
 }
 
 function targetSecondary(parts, sample, minSample) {
@@ -686,75 +686,18 @@ function makeStyles(theme) {
   return StyleSheet.create({
     wrap: { gap: theme.spacing.lg },
     note: { ...theme.typography.caption, color: theme.text.muted, fontStyle: 'italic' },
-    summaryWrap: {
-      paddingTop: theme.spacing.md,
-      paddingBottom: theme.spacing.md,
-      paddingHorizontal: theme.spacing.md,
-      borderRadius: theme.radius.lg,
-      backgroundColor: theme.bg.secondary,
-      borderWidth: StyleSheet.hairlineWidth,
-      borderColor: theme.border.default,
-      gap: theme.spacing.md,
+    targetBlock: {
+      paddingTop: theme.spacing.xs,
     },
-    summaryHead: {
-      flexDirection: 'row',
-      alignItems: 'center',
-      gap: 6,
-    },
-    summaryTitle: {
-      ...theme.typography.subhead,
-      color: theme.text.primary,
-      fontWeight: '800',
-    },
-    summaryCells: {
-      flexDirection: 'row',
-      flexWrap: 'wrap',
-      gap: theme.spacing.sm,
-    },
-    summaryCell: {
-      flexGrow: 1,
-      flexBasis: 250,
-      minWidth: 178,
-      padding: theme.spacing.md,
-      minHeight: 92,
-      borderRadius: theme.radius.md,
-      backgroundColor: theme.bg.card,
-      borderWidth: StyleSheet.hairlineWidth,
-      borderColor: theme.border.default,
-      flexDirection: 'row',
-      alignItems: 'center',
-      justifyContent: 'flex-start',
-      gap: 2,
-    },
-    summaryIcon: {
-      width: 34,
-      height: 34,
-      borderRadius: 17,
-      alignItems: 'center',
-      justifyContent: 'center',
-      marginRight: theme.spacing.sm,
-      flexShrink: 0,
-    },
-    summaryCoachCopy: {
-      flex: 1,
-      minWidth: 0,
-      gap: 1,
-    },
-    summaryLabel: {
-      ...theme.typography.caption,
-      color: theme.text.secondary,
-      fontWeight: '700',
-      textAlign: 'left',
-    },
-    summaryValue: {
-      ...theme.typography.heading,
-      fontWeight: '900',
-      textAlign: 'left',
-    },
-    summaryMeta: {
-      ...theme.typography.tiny,
-      color: theme.text.secondary,
-      textAlign: 'left',
+    // Overline heading for the target-meter block (Clubhouse token, accent
+    // ink — sibling of mixOverline below).
+    targetOverline: {
+      fontSize: 9.5,
+      fontFamily: 'PlusJakartaSans-Bold',
+      letterSpacing: 1.2,
+      textTransform: 'uppercase',
+      color: theme.accent.primary,
+      marginBottom: 2,
     },
     detailBlock: {
       paddingTop: theme.spacing.md,
