@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   View, Text, TextInput, TouchableOpacity, StyleSheet, ScrollView,
   ActivityIndicator, Alert,
@@ -28,11 +28,36 @@ export default function OnboardingScreen({ profile, onDone }) {
     ),
   );
   const [gender, setGender] = useState(profile?.gender ?? null);
+  const [displayName, setDisplayName] = useState(profile?.displayName ?? '');
+  // 'idle' | 'checking' | 'available' | 'taken' | 'unknown' (unknown = probe
+  // failed, e.g. offline — never blocks Continue, save-time check stands).
+  const [availability, setAvailability] = useState('idle');
   const [saving, setSaving] = useState(false);
 
   const trimmedUsername = username.trim().toLowerCase();
   const usernameValid = /^[a-z0-9_]{3,20}$/.test(trimmedUsername);
-  const canContinue = usernameValid && (gender === 'male' || gender === 'female') && !saving;
+
+  useEffect(() => {
+    if (!usernameValid) { setAvailability('idle'); return undefined; }
+    setAvailability('checking');
+    let cancelled = false;
+    const timer = setTimeout(async () => {
+      try {
+        const ok = await isUsernameAvailable(trimmedUsername);
+        if (!cancelled) setAvailability(ok ? 'available' : 'taken');
+      } catch {
+        if (!cancelled) setAvailability('unknown');
+      }
+    }, 400);
+    return () => { cancelled = true; clearTimeout(timer); };
+  }, [trimmedUsername, usernameValid]);
+
+  const trimmedDisplayName = displayName.trim();
+  const canContinue = usernameValid
+    && availability !== 'taken'
+    && trimmedDisplayName.length > 0 && trimmedDisplayName.length <= 40
+    && (gender === 'male' || gender === 'female')
+    && !saving;
 
   async function submit() {
     if (!canContinue) return;
@@ -43,7 +68,7 @@ export default function OnboardingScreen({ profile, onDone }) {
         Alert.alert('Username taken', 'That username is already taken. Pick another one.');
         return;
       }
-      await upsertProfile({ username: trimmedUsername, gender });
+      await upsertProfile({ username: trimmedUsername, displayName: trimmedDisplayName, gender });
       onDone();
     } catch (err) {
       const msg = err?.message ?? 'Could not save profile';
@@ -66,13 +91,14 @@ export default function OnboardingScreen({ profile, onDone }) {
             <Feather name="flag" size={26} color={theme.accent.primary} />
           </View>
           <Text style={s.title}>Welcome to Golf Partner</Text>
-          <Text style={s.subtitle}>Two quick things before you tee off.</Text>
+          <Text style={s.subtitle}>Three quick things before you tee off.</Text>
         </View>
 
         <View style={s.fieldGroup}>
           <Text style={s.fieldLabel}>Username</Text>
           <TextInput
             style={s.input}
+            accessibilityLabel="Username"
             placeholder="shorthandle"
             placeholderTextColor={theme.text.muted}
             keyboardAppearance={theme.isDark ? 'dark' : 'light'}
@@ -83,11 +109,35 @@ export default function OnboardingScreen({ profile, onDone }) {
             autoCorrect={false}
             maxLength={20}
           />
-          <Text style={s.fieldHint}>
+          <Text style={[
+            s.fieldHint,
+            availability === 'available' && { color: theme.accent.primary, fontFamily: 'PlusJakartaSans-SemiBold' },
+            availability === 'taken' && { color: theme.destructive ?? '#c8102e' },
+          ]}>
             {username.length > 0 && !usernameValid
               ? 'Must be 3–20 characters: lowercase letters, digits or underscores.'
-              : 'Unique handle friends use to find you. You can change it later.'}
+              : availability === 'taken'
+                ? 'That username is already taken. Pick another one.'
+                : availability === 'available'
+                  ? `✓ Available — friends find you as @${trimmedUsername}`
+                  : 'Unique handle friends use to find you. You can change it later.'}
           </Text>
+        </View>
+
+        <View style={s.fieldGroup}>
+          <Text style={s.fieldLabel}>Display name</Text>
+          <TextInput
+            style={s.input}
+            accessibilityLabel="Display name"
+            placeholder="Your name"
+            placeholderTextColor={theme.text.muted}
+            keyboardAppearance={theme.isDark ? 'dark' : 'light'}
+            selectionColor={theme.accent.primary}
+            value={displayName}
+            onChangeText={setDisplayName}
+            maxLength={40}
+          />
+          <Text style={s.fieldHint}>How you appear on scorecards and leaderboards.</Text>
         </View>
 
         <View style={s.fieldGroup}>
