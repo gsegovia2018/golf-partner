@@ -9,13 +9,6 @@ import TrendLineChart from '../TrendLineChart';
 import { computeHandicapIndex, handicapIndexSeries, MIN_DIFFERENTIALS } from '../../../store/handicapIndex';
 import { upsertProfile } from '../../../store/profileStore';
 
-// Clubhouse hero surface — same constants as the SG hero in ShotDashboard.js.
-const GREEN = '#00553c';
-const CREAM = '#f3efe6';
-const CREAM_70 = 'rgba(243,239,230,0.7)';
-const CREAM_85 = 'rgba(243,239,230,0.85)';
-const ERROR_ON_GREEN = '#fca5a5';
-
 // "12 May" — short date for a differential row.
 function fmtDate(iso) {
   if (!iso) return '';
@@ -155,7 +148,7 @@ export default function HandicapTab({
           accessibilityRole="button"
           accessibilityLabel="What is Handicap Index"
         >
-          <Feather name="info" size={14} color={CREAM_70} />
+          <Feather name="info" size={14} color={theme.text.muted} />
         </TouchableOpacity>
       ) : null}
     </View>
@@ -252,14 +245,16 @@ function makeStyles(theme) {
   return StyleSheet.create({
     wrap: { gap: theme.spacing.lg },
     hero: {
-      backgroundColor: GREEN,
+      backgroundColor: theme.bg.card,
+      borderWidth: 1,
+      borderColor: theme.border.default,
       borderRadius: 16,
       padding: theme.spacing.lg,
       gap: theme.spacing.xs,
     },
     heroHead: { flexDirection: 'row', alignItems: 'center', gap: 6 },
     heroKicker: {
-      color: CREAM_70,
+      color: theme.text.muted,
       fontSize: 10,
       fontFamily: 'PlusJakartaSans-Bold',
       letterSpacing: 1.4,
@@ -269,20 +264,20 @@ function makeStyles(theme) {
       fontFamily: 'PlayfairDisplay-Black',
       fontSize: 44,
       lineHeight: 50,
-      color: CREAM,
+      color: theme.text.primary,
     },
-    heroMeta: { fontSize: 12.5, fontFamily: 'PlusJakartaSans-SemiBold', color: CREAM_85 },
-    heroNote: { fontSize: 12, lineHeight: 17, fontFamily: 'PlusJakartaSans-Medium', color: CREAM_70, marginTop: theme.spacing.xs },
-    heroEmptyTitle: { fontSize: 15, fontFamily: 'PlusJakartaSans-Bold', color: CREAM, marginTop: theme.spacing.xs },
+    heroMeta: { fontSize: 12.5, fontFamily: 'PlusJakartaSans-SemiBold', color: theme.text.secondary },
+    heroNote: { fontSize: 12, lineHeight: 17, fontFamily: 'PlusJakartaSans-Medium', color: theme.text.muted, marginTop: theme.spacing.xs },
+    heroEmptyTitle: { fontSize: 15, fontFamily: 'PlusJakartaSans-Bold', color: theme.text.primary, marginTop: theme.spacing.xs },
     applyBtn: {
       marginTop: theme.spacing.md, paddingVertical: theme.spacing.sm + 2,
-      borderRadius: theme.radius.pill, backgroundColor: CREAM,
+      borderRadius: theme.radius.pill, backgroundColor: theme.accent.primary,
       alignItems: 'center',
     },
     applyBtnDisabled: { opacity: 0.6 },
-    applyText: { fontSize: 14, fontFamily: 'PlusJakartaSans-Bold', color: GREEN },
-    errorText: { fontSize: 12, fontFamily: 'PlusJakartaSans-SemiBold', color: ERROR_ON_GREEN, textAlign: 'center', marginTop: theme.spacing.xs },
-    profileNote: { fontSize: 10.5, fontFamily: 'PlusJakartaSans-SemiBold', color: CREAM_70, textAlign: 'center', marginTop: theme.spacing.sm },
+    applyText: { fontSize: 14, fontFamily: 'PlusJakartaSans-Bold', color: theme.text.inverse },
+    errorText: { fontSize: 12, fontFamily: 'PlusJakartaSans-SemiBold', color: theme.destructive, textAlign: 'center', marginTop: theme.spacing.xs },
+    profileNote: { fontSize: 10.5, fontFamily: 'PlusJakartaSans-SemiBold', color: theme.text.muted, textAlign: 'center', marginTop: theme.spacing.sm },
     caption: { ...theme.typography.tiny, color: theme.text.muted, fontWeight: '700', marginBottom: theme.spacing.xs },
     row: {
       flexDirection: 'row', alignItems: 'center', gap: theme.spacing.sm,

@@ -113,7 +113,7 @@ function areaAccentColor(tone, isRedSurface, isFixFirst, theme) {
 
 function makeStyles(theme) {
   const kicker = {
-    color: theme.info,
+    color: theme.text.muted,
     fontSize: 10,
     fontFamily: 'PlusJakartaSans-Bold',
     letterSpacing: 1.4,

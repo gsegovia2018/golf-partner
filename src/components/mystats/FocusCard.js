@@ -77,7 +77,7 @@ function makeStyles(theme) {
   return StyleSheet.create({
     head: { flexDirection: 'row', alignItems: 'flex-start', justifyContent: 'space-between', gap: theme.spacing.md },
     copy: { flex: 1, minWidth: 0, gap: 2 },
-    area: { ...theme.typography.overline, color: theme.info },
+    area: { ...theme.typography.overline, color: theme.text.muted },
     title: { ...theme.typography.heading, color: theme.text.primary },
     endBtn: {
       paddingHorizontal: theme.spacing.sm,

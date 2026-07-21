@@ -95,7 +95,7 @@ function makeStyles(theme) {
       fontFamily: 'PlusJakartaSans-Bold',
       letterSpacing: 1.4,
       textTransform: 'uppercase',
-      color: theme.info,
+      color: theme.text.muted,
     },
     grid: {
       flexDirection: 'row',
