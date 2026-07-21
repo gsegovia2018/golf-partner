@@ -3,9 +3,9 @@ import { View, Text, StyleSheet } from 'react-native';
 import { useTheme } from '../../../theme/ThemeContext';
 import PressableScale from '../../ui/PressableScale';
 import SectionCard from '../SectionCard';
-import TrendLineChart from '../TrendLineChart';
-import ScoreMixArea from '../ScoreMixArea';
-import FormMetricBlock from '../FormMetricBlock';
+import FormHero from '../FormHero';
+import SparklineRow from '../SparklineRow';
+import ScoreMixColumns from '../ScoreMixColumns';
 
 // vs-par values print with an explicit sign.
 const fmtVsPar = (v) => (v > 0 ? `+${v}` : `${v}`);
@@ -14,16 +14,20 @@ const fmtNum = (v) => `${v}`;
 // Shot metrics are null for an untracked slice — print a dash, not "null%".
 const orDash = (fmt) => (v) => (v == null ? '—' : fmt(v));
 
-// Per-metric formatting + explainer key + chart colour token, keyed by FORM_METRICS key.
+// Per-metric formatting + explainer key + chart colour token for the
+// Instruments rows, keyed by FORM_METRICS key. avgPoints lives in the hero.
+// `drop` connects the sparkline over null rounds (round-total metrics);
+// shot metrics keep their gaps — a gap there means "not tracked that round".
 const META = {
-  avgPoints:          { colorToken: 'accent', format: fmtNum,   info: 'pointsPerRound' },
-  avgVsPar:           { colorToken: 'gold',   format: fmtVsPar, info: 'strokesVsPar' },
+  avgVsPar:           { colorToken: 'gold',   format: fmtVsPar, info: 'strokesVsPar', drop: true },
   fairwayPct:         { colorToken: 'accent', format: fmtPct,   info: 'fairwaysHit' },
   girPct:             { colorToken: 'accent', format: fmtPct,   info: 'greensInReg' },
   puttsPerRound:      { colorToken: 'red',    format: fmtNum,   info: 'putts' },
   threePuttsPerRound: { colorToken: 'red',    format: fmtNum,   info: 'threePutts' },
 };
 
+// Form tab: exactly three cards — the current-form hero, the Instruments
+// panel of metric sparklines, and the per-round score-mix columns.
 export default function FormTab({ stats, n, onChangeN, onInfo }) {
   const { theme } = useTheme();
   const s = useMemo(() => makeStyles(theme), [theme]);
@@ -47,42 +51,20 @@ export default function FormTab({ stats, n, onChangeN, onInfo }) {
     </View>
   );
 
+  const instrumentMetrics = form.metrics.filter((m) => META[m.key] && !(m.shot && !formSeries.hasShotData));
+
   return (
     <View style={s.wrap}>
-      <SectionCard title="Points per round" infoKey="pointsPerRound" onInfo={onInfo}>
-        <TrendLineChart
-          series={formSeries.metrics.avgPoints}
-          color={theme.accent.primary}
-          dropGaps
-          caption="Higher is better · oldest → newest"
-        />
-      </SectionCard>
+      <FormHero form={form} formSeries={formSeries} metrics={stats.metrics} n={n} onInfo={onInfo} />
 
-      <SectionCard title="Strokes vs par" infoKey="strokesVsPar" onInfo={onInfo}>
-        <TrendLineChart
-          series={formSeries.metrics.avgVsPar}
-          color={GOLD}
-          dropGaps
-          formatValue={fmtVsPar}
-          caption="Lower is better · oldest → newest"
-        />
-      </SectionCard>
-
-      <SectionCard title="Score mix" infoKey="scoreMix" onInfo={onInfo}>
-        <Text style={s.caption}>Share of holes per round · birdie+ → bogey+</Text>
-        <ScoreMixArea rounds={formSeries.scoreMix} />
-      </SectionCard>
-
-      <SectionCard title="Recent vs History" infoKey="recentVsHistory" onInfo={onInfo} right={periodChips}>
+      <SectionCard title="Instruments" infoKey="recentVsHistory" onInfo={onInfo} right={periodChips}>
         {!form.hasHistory && (
           <Text style={s.note}>{`Not enough history yet — select more than ${n} rounds to compare.`}</Text>
         )}
-        {form.metrics.map((m) => {
+        {instrumentMetrics.map((m, i) => {
           const meta = META[m.key];
-          // Shot metrics with no logged data have an all-null series — skip them.
-          if (m.shot && !formSeries.hasShotData) return null;
           return (
-            <FormMetricBlock
+            <SparklineRow
               key={m.key}
               metric={m}
               series={formSeries.metrics[m.key]}
@@ -90,12 +72,19 @@ export default function FormTab({ stats, n, onChangeN, onInfo }) {
               formatValue={orDash(meta.format)}
               infoKey={meta.info}
               onInfo={onInfo}
+              index={i}
+              dropGaps={Boolean(meta.drop)}
             />
           );
         })}
         {!formSeries.hasShotData && (
           <Text style={s.note}>Log putts and drives during a round to unlock fairway, green and putting trends.</Text>
         )}
+      </SectionCard>
+
+      <SectionCard title="Score mix" infoKey="scoreMix" onInfo={onInfo}>
+        <Text style={s.caption}>One column per round · share of holes, birdie+ → bogey+</Text>
+        <ScoreMixColumns rounds={formSeries.scoreMix} />
       </SectionCard>
     </View>
   );
@@ -109,9 +98,10 @@ function makeStyles(theme) {
     chips: { flexDirection: 'row', gap: 4 },
     chip: {
       paddingHorizontal: theme.spacing.sm, paddingVertical: 4,
-      borderRadius: theme.radius.pill, backgroundColor: theme.bg.secondary,
+      borderRadius: theme.radius.pill, backgroundColor: theme.bg.card,
+      borderWidth: 1, borderColor: theme.border.default,
     },
-    chipOn: { backgroundColor: theme.accent.primary },
+    chipOn: { backgroundColor: theme.accent.primary, borderColor: theme.accent.primary },
     chipText: { ...theme.typography.tiny, color: theme.text.muted, fontWeight: '700' },
     chipTextOn: { color: theme.text.inverse },
   });

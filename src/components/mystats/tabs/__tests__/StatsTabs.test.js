@@ -3,6 +3,7 @@ import { render, fireEvent, waitFor } from '@testing-library/react-native';
 import { ThemeProvider } from '../../../../theme/ThemeContext';
 import BreakdownTab from '../BreakdownTab';
 import CoachTab from '../CoachTab';
+import FormTab from '../FormTab';
 import ShotsTab from '../ShotsTab';
 
 const wrap = (ui) => <ThemeProvider>{ui}</ThemeProvider>;
@@ -239,7 +240,129 @@ function shotStats() {
   };
 }
 
+// Full form/formSeries slice for the Form-tab suite — every FORM_METRICS
+// entry plus per-round series and score mix, the shape personalStats builds.
+function formStats() {
+  const mk = (values) => values.map((value, i) => ({ label: `R${i + 1}`, value }));
+  return {
+    ...baseStats(),
+    form: {
+      hasHistory: true,
+      recentCount: 3,
+      historyCount: 5,
+      metrics: [
+        { key: 'avgPoints', label: 'Points / round', polarity: 'higher', shot: false, recent: 33, history: 30, delta: 3, direction: 'up' },
+        { key: 'avgVsPar', label: 'Strokes vs par', polarity: 'lower', shot: false, recent: 10, history: 13, delta: -3, direction: 'up' },
+        { key: 'fairwayPct', label: 'Fairways hit %', polarity: 'higher', shot: true, recent: 60, history: 50, delta: 10, direction: 'up' },
+        { key: 'girPct', label: 'Greens in reg %', polarity: 'higher', shot: true, recent: 40, history: 45, delta: -5, direction: 'down' },
+        { key: 'puttsPerRound', label: 'Putts / round', polarity: 'lower', shot: true, recent: 30, history: 33, delta: -3, direction: 'up' },
+        { key: 'threePuttsPerRound', label: '3-putts / round', polarity: 'lower', shot: true, recent: 2, history: 2, delta: 0, direction: 'flat' },
+      ],
+    },
+    formSeries: {
+      hasShotData: true,
+      metrics: {
+        avgPoints: mk([27, 30, 33]),
+        avgVsPar: mk([13, 12, 10]),
+        fairwayPct: mk([50, 55, 60]),
+        girPct: mk([45, 40, 40]),
+        puttsPerRound: mk([33, 31, 30]),
+        threePuttsPerRound: mk([2, 2, 2]),
+      },
+      scoreMix: [
+        { label: 'R1', birdie: 2, par: 10, bogey: 6 },
+        { label: 'R2', birdie: 4, par: 9, bogey: 5 },
+        { label: 'R3', birdie: 1, par: 11, bogey: 6 },
+      ],
+    },
+  };
+}
+
 describe('My Stats tabs', () => {
+  test('FormTab renders exactly three cards: hero, instruments, score mix', async () => {
+    const { findByText, getByTestId, queryByText, getByText } = render(wrap(
+      <FormTab stats={formStats()} n={5} onChangeN={() => {}} onInfo={() => {}} />
+    ));
+
+    // Hero: kicker + verdict from stats.form + gold pts number + chart.
+    expect(await findByText('Current form · Last 5')).toBeTruthy();
+    expect(getByText('Improving lately')).toBeTruthy();
+    expect(getByTestId('form-hero-pts')).toBeTruthy();
+    expect(getByTestId('form-hero-surface')).toBeTruthy();
+    expect(getByTestId('trend-chart-canvas')).toBeTruthy();
+
+    // Instruments: one sparkline row per remaining metric (avgPoints lives
+    // in the hero, not the instruments panel).
+    expect(getByText('Instruments')).toBeTruthy();
+    ['avgVsPar', 'fairwayPct', 'girPct', 'puttsPerRound', 'threePuttsPerRound'].forEach((key) => {
+      expect(getByTestId(`sparkline-row-${key}`)).toBeTruthy();
+    });
+    expect(queryByText('Points / round')).toBeNull();
+
+    // Score mix: per-round columns.
+    expect(getByText('Score mix')).toBeTruthy();
+    expect(getByTestId('scoremix-col-0')).toBeTruthy();
+    expect(getByTestId('scoremix-col-2')).toBeTruthy();
+
+    // The old four-card layout is gone.
+    expect(queryByText('Points per round')).toBeNull();
+    expect(queryByText('Recent vs History')).toBeNull();
+  });
+
+  test('FormTab period chips select the window and call onChangeN', async () => {
+    const onChangeN = jest.fn();
+    const { findByText, getByText } = render(wrap(
+      <FormTab stats={formStats()} n={5} onChangeN={onChangeN} onInfo={() => {}} />
+    ));
+
+    expect(await findByText('Last 3')).toBeTruthy();
+    expect(getByText('Last 10')).toBeTruthy();
+    fireEvent.press(getByText('Last 3'));
+    expect(onChangeN).toHaveBeenCalledWith(3);
+  });
+
+  test('FormTab hides shot-metric rows and explains when no shot data is logged', async () => {
+    const stats = formStats();
+    stats.formSeries.hasShotData = false;
+    const { findByTestId, queryByTestId, getByText } = render(wrap(
+      <FormTab stats={stats} n={5} onChangeN={() => {}} onInfo={() => {}} />
+    ));
+
+    expect(await findByTestId('sparkline-row-avgVsPar')).toBeTruthy();
+    ['fairwayPct', 'girPct', 'puttsPerRound', 'threePuttsPerRound'].forEach((key) => {
+      expect(queryByTestId(`sparkline-row-${key}`)).toBeNull();
+    });
+    expect(getByText('Log putts and drives during a round to unlock fairway, green and putting trends.')).toBeTruthy();
+  });
+
+  test('FormTab surfaces the not-enough-history note from stats.form', async () => {
+    const stats = formStats();
+    stats.form.hasHistory = false;
+    const { findByText } = render(wrap(
+      <FormTab stats={stats} n={10} onChangeN={() => {}} onInfo={() => {}} />
+    ));
+
+    expect(await findByText('Not enough history yet — select more than 10 rounds to compare.')).toBeTruthy();
+  });
+
+  test('FormTab keeps every infoKey wired', async () => {
+    const onInfo = jest.fn();
+    const { findByLabelText, getByLabelText } = render(wrap(
+      <FormTab stats={formStats()} n={5} onChangeN={() => {}} onInfo={onInfo} />
+    ));
+
+    fireEvent.press(await findByLabelText('What is Points per round'));
+    expect(onInfo).toHaveBeenCalledWith('pointsPerRound');
+    fireEvent.press(getByLabelText('What is Instruments'));
+    expect(onInfo).toHaveBeenCalledWith('recentVsHistory');
+    fireEvent.press(getByLabelText('What is Score mix'));
+    expect(onInfo).toHaveBeenCalledWith('scoreMix');
+    fireEvent.press(getByLabelText('What is Strokes vs par'));
+    expect(onInfo).toHaveBeenCalledWith('strokesVsPar');
+    fireEvent.press(getByLabelText('What is Putts / round'));
+    expect(onInfo).toHaveBeenCalledWith('putts');
+  });
+
   test('CoachTab renders form trend first, fix-first priority, board, and practice plan', async () => {
     const { findByText, findAllByText, queryByText } = render(wrap(
       <CoachTab stats={baseStats()} onInfo={() => {}} targetHandicap={14} onChangeTarget={() => {}} />
