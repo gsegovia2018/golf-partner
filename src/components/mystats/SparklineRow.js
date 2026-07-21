@@ -6,6 +6,9 @@ import Animated, {
 import Svg, { Polyline, Circle } from 'react-native-svg';
 import { Feather } from '@expo/vector-icons';
 import { useTheme } from '../../theme/ThemeContext';
+import PressableScale from '../ui/PressableScale';
+import Reveal from '../ui/Reveal';
+import TrendLineChart from './TrendLineChart';
 import { scalePoints, toSegments, dropGaps as dropGapEntries } from './chartGeometry';
 
 const EASE_OUT = Easing.bezier(0.23, 1, 0.32, 1);
@@ -56,6 +59,30 @@ function ChipFade({ delay, children }) {
   return <Animated.View style={animatedStyle}>{children}</Animated.View>;
 }
 
+// Disclosure chevron: a single chevron-down that rotates a half turn to read
+// as chevron-up while the row is expanded. Reduced motion ⇒ instant flip.
+function ChevronFlip({ expanded, color }) {
+  const reduced = useReducedMotion();
+  const rotation = useSharedValue(expanded ? 180 : 0);
+
+  useEffect(() => {
+    const target = expanded ? 180 : 0;
+    rotation.value = reduced
+      ? target
+      : withTiming(target, { duration: 200, easing: EASE_OUT });
+  }, [expanded, reduced, rotation]);
+
+  const animatedStyle = useAnimatedStyle(() => ({
+    transform: [{ rotate: `${rotation.value}deg` }],
+  }));
+
+  return (
+    <Animated.View style={animatedStyle}>
+      <Feather name="chevron-down" size={14} color={color} />
+    </Animated.View>
+  );
+}
+
 // One Instruments-card metric row: label + muted comparison sub, a compact
 // sparkline, and the latest value over a polarity-aware delta chip.
 //   metric: { key, label, recent, history, delta, direction } (stats.form.metrics
@@ -63,13 +90,19 @@ function ChipFade({ delay, children }) {
 //   series: [{ label, value }] (stats.formSeries.metrics[key]).
 //   dropGaps: connect over null rounds (round-total metrics); shot metrics
 //           keep their gaps — a gap there means "not tracked that round".
+//   expanded/onToggle: controlled progressive disclosure — when `onToggle`
+//           is provided the row becomes a button with a chevron, and while
+//           `expanded` it shows the full per-round TrendLineChart under the
+//           row. The accordion (one row open at a time) lives in the parent.
 export default function SparklineRow({
   metric, series = [], color, formatValue, infoKey, onInfo, index = 0, dropGaps = false,
+  expanded = false, onToggle,
 }) {
   const { theme } = useTheme();
   const s = useMemo(() => makeStyles(theme), [theme]);
   const [width, setWidth] = useState(0);
   const fmt = formatValue || ((v) => `${v}`);
+  const toggleable = typeof onToggle === 'function';
 
   const data = dropGaps ? dropGapEntries(series) : series;
   const points = useMemo(
@@ -108,8 +141,10 @@ export default function SparklineRow({
 
   const delay = index * STAGGER_MS;
 
-  return (
-    <View style={[s.row, index > 0 && s.rowDivider]} testID={`sparkline-row-${metric.key}`}>
+  const rowLabel = `${metric.label}: ${latestText}. ${expanded ? 'Hide' : 'Show'} round-by-round values.`;
+
+  const rowContent = (
+    <>
       <View style={s.copy}>
         <View style={s.nameWrap}>
           <Text style={s.label} numberOfLines={2}>{metric.label}</Text>
@@ -173,6 +208,41 @@ export default function SparklineRow({
           </ChipFade>
         ) : null}
       </View>
+      {toggleable ? <ChevronFlip expanded={expanded} color={theme.text.muted} /> : null}
+    </>
+  );
+
+  return (
+    <View style={index > 0 ? s.rowDivider : null} testID={`sparkline-row-${metric.key}`}>
+      {toggleable ? (
+        <PressableScale
+          activeScale={0.98}
+          onPress={onToggle}
+          style={s.row}
+          testID={`sparkline-press-${metric.key}`}
+          accessibilityRole="button"
+          accessibilityState={{ expanded }}
+          accessibilityLabel={rowLabel}
+        >
+          {rowContent}
+        </PressableScale>
+      ) : (
+        <View style={s.row}>{rowContent}</View>
+      )}
+      {expanded ? (
+        <View style={s.expand} testID={`sparkline-expanded-${metric.key}`}>
+          <Reveal key={`expand-${metric.key}`} dy={4} duration={200}>
+            <TrendLineChart
+              series={series}
+              color={color}
+              variant="compact"
+              formatValue={fmt}
+              dropGaps={dropGaps}
+              caption="oldest → newest"
+            />
+          </Reveal>
+        </View>
+      ) : null}
     </View>
   );
 }
@@ -222,5 +292,6 @@ function makeStyles(theme) {
       fontFamily: 'PlusJakartaSans-Bold',
       fontVariant: ['tabular-nums'],
     },
+    expand: { paddingBottom: theme.spacing.sm },
   });
 }

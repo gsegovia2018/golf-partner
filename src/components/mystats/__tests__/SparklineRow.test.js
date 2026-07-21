@@ -1,6 +1,6 @@
 import React from 'react';
 import { render, fireEvent } from '@testing-library/react-native';
-import { Polyline, Circle } from 'react-native-svg';
+import { Polyline, Circle, Text as SvgText } from 'react-native-svg';
 import { Feather } from '@expo/vector-icons';
 import { ThemeProvider } from '../../../theme/ThemeContext';
 import SparklineRow from '../SparklineRow';
@@ -45,6 +45,19 @@ const layOut = (view, key) => {
     nativeEvent: { layout: { width: 200 } },
   });
 };
+
+// Stateful harness mirroring how FormTab drives the disclosure: the row is
+// controlled via expanded/onToggle rather than owning its own state.
+function Expandable(props) {
+  const [expanded, setExpanded] = React.useState(false);
+  return (
+    <SparklineRow
+      {...props}
+      expanded={expanded}
+      onToggle={() => setExpanded((e) => !e)}
+    />
+  );
+}
 
 describe('SparklineRow', () => {
   test('renders label, comparison sub, and the latest formatted value', () => {
@@ -145,6 +158,114 @@ describe('SparklineRow', () => {
 
     fireEvent.press(getByLabelText('What is Putts / round'));
     expect(onInfo).toHaveBeenCalledWith('putts');
+  });
+
+  test('tapping the row expands the full per-round chart with every value labelled', () => {
+    const view = render(wrap(
+      <Expandable metric={puttsMetric} series={series} color="#f00" formatValue={(v) => `${v}p`} />
+    ));
+
+    // Collapsed: announced as a closed disclosure button, no chart mounted.
+    let press = view.getByTestId('sparkline-press-puttsPerRound');
+    expect(press.props.accessibilityRole).toBe('button');
+    expect(press.props.accessibilityState).toEqual({ expanded: false });
+    expect(press.props.accessibilityLabel).toBe('Putts / round: 30p. Show round-by-round values.');
+    expect(view.queryByTestId('sparkline-expanded-puttsPerRound')).toBeNull();
+
+    fireEvent.press(press);
+    press = view.getByTestId('sparkline-press-puttsPerRound');
+    expect(press.props.accessibilityState).toEqual({ expanded: true });
+    expect(press.props.accessibilityLabel).toBe('Putts / round: 30p. Hide round-by-round values.');
+    expect(view.getByTestId('sparkline-expanded-puttsPerRound')).toBeTruthy();
+    expect(view.getByText('oldest → newest')).toBeTruthy();
+
+    // Lay out the full chart: EVERY round's value prints on its dot, in the
+    // row's formatter — this is the disclosure's whole point.
+    fireEvent(view.getByTestId('trend-chart-canvas'), 'layout', {
+      nativeEvent: { layout: { width: 300 } },
+    });
+    const labels = view.UNSAFE_getAllByType(SvgText).map((t) => t.props.children);
+    expect(labels).toEqual(['36p', '33p', '30p']);
+
+    // Second tap collapses again.
+    fireEvent.press(view.getByTestId('sparkline-press-puttsPerRound'));
+    expect(view.queryByTestId('sparkline-expanded-puttsPerRound')).toBeNull();
+    expect(view.getByTestId('sparkline-press-puttsPerRound').props.accessibilityState)
+      .toEqual({ expanded: false });
+  });
+
+  test('the expanded chart honours the row dropGaps behaviour', () => {
+    const gapped = [
+      { label: 'R1', value: 10 },
+      { label: 'R2', value: null },
+      { label: 'R3', value: 20 },
+    ];
+    const view = render(wrap(
+      <Expandable metric={puttsMetric} series={gapped} color="#f00" dropGaps />
+    ));
+
+    fireEvent.press(view.getByTestId('sparkline-press-puttsPerRound'));
+    fireEvent(view.getByTestId('trend-chart-canvas'), 'layout', {
+      nativeEvent: { layout: { width: 300 } },
+    });
+
+    // dropGaps ⇒ the null round is removed and the line connects (one
+    // polyline through both real points).
+    const polylines = view.UNSAFE_getAllByType(Polyline);
+    expect(polylines).toHaveLength(1);
+    expect(polylines[0].props.points.split(' ')).toHaveLength(2);
+  });
+
+  test('a toggleable row shows the disclosure chevron; a plain row does not', () => {
+    const view = render(wrap(
+      <Expandable metric={puttsMetric} series={series} color="#f00" />
+    ));
+    const chevron = view.UNSAFE_getAllByType(Feather).find((i) => i.props.name === 'chevron-down');
+    expect(chevron).toBeTruthy();
+    expect(chevron.props.size).toBe(14);
+
+    const plain = render(wrap(
+      <SparklineRow metric={puttsMetric} series={series} color="#f00" />
+    ));
+    expect(plain.queryByTestId('sparkline-press-puttsPerRound')).toBeNull();
+    expect(plain.UNSAFE_getAllByType(Feather).find((i) => i.props.name === 'chevron-down'))
+      .toBeUndefined();
+  });
+
+  test('the info button stays independently tappable, collapsed and expanded', () => {
+    const onInfo = jest.fn();
+    const view = render(wrap(
+      <Expandable metric={puttsMetric} series={series} color="#f00" infoKey="putts" onInfo={onInfo} />
+    ));
+
+    // Collapsed: info fires without toggling the row open.
+    fireEvent.press(view.getByLabelText('What is Putts / round'));
+    expect(onInfo).toHaveBeenCalledWith('putts');
+    expect(view.queryByTestId('sparkline-expanded-puttsPerRound')).toBeNull();
+
+    // Expanded: info still fires, and the row stays open.
+    fireEvent.press(view.getByTestId('sparkline-press-puttsPerRound'));
+    expect(view.getByTestId('sparkline-expanded-puttsPerRound')).toBeTruthy();
+    fireEvent.press(view.getByLabelText('What is Putts / round'));
+    expect(onInfo).toHaveBeenCalledTimes(2);
+    expect(view.getByTestId('sparkline-expanded-puttsPerRound')).toBeTruthy();
+  });
+
+  test('reduced motion renders the expanded chart and chevron statically', () => {
+    mockReducedMotion = true;
+    const view = render(wrap(
+      <Expandable metric={puttsMetric} series={series} color="#f00" />
+    ));
+
+    fireEvent.press(view.getByTestId('sparkline-press-puttsPerRound'));
+    expect(view.getByTestId('sparkline-expanded-puttsPerRound')).toBeTruthy();
+    fireEvent(view.getByTestId('trend-chart-canvas'), 'layout', {
+      nativeEvent: { layout: { width: 300 } },
+    });
+    expect(view.UNSAFE_getAllByType(SvgText).length).toBe(3);
+    expect(
+      view.UNSAFE_getAllByType(Feather).find((i) => i.props.name === 'chevron-down'),
+    ).toBeTruthy();
   });
 
   test('reduced motion still renders the sparkline and chip statically', () => {
