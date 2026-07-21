@@ -55,11 +55,12 @@ function TickFade({ style, delay, testID }) {
   return <Animated.View testID={testID} style={[style, animatedStyle]} />;
 }
 
-// Length is "how much", color stays on tone duty (mirrors BreakdownRow).
+// Length is "how much", color stays on tone duty (mirrors BreakdownRow):
+// green good, red bad, info blue for neither.
 function fillToneStyle(theme, tone) {
   if (tone === 'good') return { backgroundColor: theme.accent.primary };
   if (tone === 'bad') return { backgroundColor: theme.destructive, opacity: 0.8 };
-  return { backgroundColor: '#7fb59f' };
+  return { backgroundColor: theme.info, opacity: 0.8 };
 }
 
 function isNumber(value) {

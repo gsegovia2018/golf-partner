@@ -31,6 +31,7 @@ export function ThemeProvider({ children }) {
 
   const colors = mode === 'light' ? light : dark;
   const destructive = mode === 'light' ? semantic.destructive.light : semantic.destructive.dark;
+  const info = mode === 'light' ? semantic.info.light : semantic.info.dark;
   const pairA = mode === 'light' ? semantic.pair.a.light : semantic.pair.a.dark;
   const pairB = mode === 'light' ? semantic.pair.b.light : semantic.pair.b.dark;
 
@@ -42,6 +43,7 @@ export function ThemeProvider({ children }) {
     semantic,
     masters: semantic.masters,
     destructive,
+    info,
     pairA,
     pairB,
     scoreColor,

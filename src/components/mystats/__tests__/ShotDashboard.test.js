@@ -13,6 +13,7 @@ jest.mock('../../../theme/ThemeContext', () => ({
         semantic,
         masters: semantic.masters,
         destructive: semantic.destructive.light,
+        info: semantic.info.light,
         pairA: semantic.pair.a.light,
         pairB: semantic.pair.b.light,
         scoreColor: (level) => semantic.score[level].light,
@@ -86,7 +87,7 @@ describe('ShotDashboard category board', () => {
     const fill = r.getByTestId('sg-lock-fill');
     // 4 of 10 holes sampled
     expect(StyleSheet.flatten(fill.props.style).width).toBe('40%');
-    expect(StyleSheet.flatten(fill.props.style).backgroundColor).toBe('#7fb59f');
+    expect(StyleSheet.flatten(fill.props.style).backgroundColor).toBe('#3e638f');
   });
   test('locked rows show no SG value', () => {
     const r = renderDash();

@@ -88,6 +88,13 @@ const semantic = {
     light: MASTERS_RED,
     dark:  '#f87171',
   },
+  // Informational — for stats that are neither good nor bad (counts,
+  // magnitudes, progress-to-unlock). Green means good, red means bad;
+  // this slate blue means "just a fact".
+  info: {
+    light: '#3e638f',
+    dark:  '#8fb0d6',
+  },
   pair: {
     a: { light: '#006747', dark: '#4fae8a' },
     b: { light: '#c47c3a', dark: '#f59e0b' },

@@ -30,7 +30,6 @@ const CREAM_70 = 'rgba(243,239,230,0.7)';
 const CREAM_85 = 'rgba(243,239,230,0.85)';
 
 const EASE_OUT = Easing.bezier(0.23, 1, 0.32, 1);
-const LOCK_FILL = '#7fb59f';
 
 const CATEGORY_ICONS = {
   offTheTee: 'flag',
@@ -63,7 +62,8 @@ function LockProgress({ pct, index }) {
         testID="sg-lock-fill"
         style={[
           styles.lockFill,
-          { width: `${pct}%`, backgroundColor: LOCK_FILL, transformOrigin: 'left center' },
+          // Unlock progress is information, not performance — info blue.
+          { width: `${pct}%`, backgroundColor: theme.info, transformOrigin: 'left center' },
           animatedStyle,
         ]}
       />
