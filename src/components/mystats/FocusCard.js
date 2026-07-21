@@ -77,7 +77,7 @@ function makeStyles(theme) {
   return StyleSheet.create({
     head: { flexDirection: 'row', alignItems: 'flex-start', justifyContent: 'space-between', gap: theme.spacing.md },
     copy: { flex: 1, minWidth: 0, gap: 2 },
-    area: { ...theme.typography.overline, color: theme.accent.primary },
+    area: { ...theme.typography.overline, color: theme.info },
     title: { ...theme.typography.heading, color: theme.text.primary },
     endBtn: {
       paddingHorizontal: theme.spacing.sm,
@@ -102,6 +102,6 @@ function makeStyles(theme) {
     drillTitle: { ...theme.typography.body, color: theme.text.primary, fontWeight: '800' },
     drillLocation: { ...theme.typography.tiny, color: theme.text.muted, textTransform: 'uppercase', fontWeight: '800' },
     drillInstruction: { ...theme.typography.body, color: theme.text.primary },
-    passTarget: { ...theme.typography.caption, color: theme.accent.primary, fontWeight: '700' },
+    passTarget: { ...theme.typography.caption, color: theme.info, fontWeight: '700' },
   });
 }

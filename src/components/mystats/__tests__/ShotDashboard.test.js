@@ -28,7 +28,7 @@ jest.mock('../../../theme/ThemeContext', () => ({
   },
 }));
 
-const GREEN = '#00553c';
+const NAVY = '#2b4766';
 
 const baseSG = {
   total: -1.2,
@@ -55,17 +55,17 @@ const heroColor = (r) =>
   StyleSheet.flatten(r.getByTestId('sg-hero-surface').props.style).backgroundColor;
 
 describe('ShotDashboard target-gap hero surface', () => {
-  test('stays clubhouse green when the SG total is negative — the gap is standing work, not an alarm', () => {
+  test('stays navy when the SG total is negative — the gap is standing work, not an alarm', () => {
     const r = renderDash({ ...baseSG, total: -1.2 });
-    expect(heroColor(r)).toBe(GREEN);
+    expect(heroColor(r)).toBe(NAVY);
   });
-  test('stays green when the SG total is positive', () => {
+  test('stays navy when the SG total is positive', () => {
     const r = renderDash({ ...baseSG, total: 0.8 });
-    expect(heroColor(r)).toBe(GREEN);
+    expect(heroColor(r)).toBe(NAVY);
   });
-  test('stays green at exactly zero and without data', () => {
-    expect(heroColor(renderDash({ ...baseSG, total: 0 }))).toBe(GREEN);
-    expect(heroColor(renderDash({ ...baseSG, total: null }))).toBe(GREEN);
+  test('stays navy at exactly zero and without data', () => {
+    expect(heroColor(renderDash({ ...baseSG, total: 0 }))).toBe(NAVY);
+    expect(heroColor(renderDash({ ...baseSG, total: null }))).toBe(NAVY);
   });
   test('headline number is winner gold on both signs', () => {
     const losing = renderDash({ ...baseSG, total: -1.2 });

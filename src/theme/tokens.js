@@ -3,11 +3,13 @@
 // mix two different reds. Dark surfaces keep the lighter #f87171.
 const MASTERS_RED = '#c8102e';
 
-// The one dark-green surface: the accent one stop darker ("fairway shadow").
-// Hero cards (LiveRoundCard, My Stats heroes) and the tournament leaderboard
-// all use this so the app has exactly one surface green; #006747 stays the
-// interactive accent (buttons, chips, active states). Same value both themes.
+// Dark hero surfaces — "green plays, navy thinks". DEEP_GREEN carries
+// play & results (LiveRoundCard, leaderboard, FormHero, CourseStats);
+// DEEP_INFO carries analysis & records (ShotDashboard, CoachHero,
+// CareerMilestones — the dark surface of semantic.info). #006747 stays the
+// interactive accent (buttons, chips, active states). Same values both themes.
 const DEEP_GREEN = '#00553c';
+const DEEP_INFO = '#2b4766';
 
 const light = {
   bg: {
@@ -16,6 +18,7 @@ const light = {
     secondary: '#ece8e1',
     elevated:  '#ffffff',
     deep:      DEEP_GREEN,
+    deepInfo:  DEEP_INFO,
   },
   accent: {
     primary:   '#006747',
@@ -47,6 +50,7 @@ const dark = {
     secondary: 'rgba(255,255,255,0.04)',
     elevated:  'rgba(255,255,255,0.06)',
     deep:      DEEP_GREEN,
+    deepInfo:  DEEP_INFO,
   },
   accent: {
     primary:   '#4fae8a',

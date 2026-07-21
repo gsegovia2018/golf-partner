@@ -6,7 +6,7 @@ import { useTheme } from '../../theme/ThemeContext';
 import { semantic } from '../../theme/tokens';
 import CountUpText from './CountUpText';
 
-// Career-wide feats as an "honours board" — the Clubhouse dark-green hero
+// Career-wide feats as an "honours board" — the navy analysis/records hero
 // surface IS the card (same constants as CoachHero.js / ShotDashboard.js,
 // copied locally by convention rather than imported). See `careerMilestones`
 // in personalStats.js. bestNine/bestRound show '-' when there is no complete
@@ -15,7 +15,7 @@ import CountUpText from './CountUpText';
 // here is NET (handicap-adjusted) — the Strokes Gained tab's scoring-mix
 // benchmark counts gross — so the footnote discloses the basis rather than
 // silently disagreeing with that tab.
-const GREEN = '#00553c';
+const NAVY = '#2b4766';
 const CREAM = '#f3efe6';
 const CREAM_85 = 'rgba(243,239,230,0.85)';
 const CREAM_70 = 'rgba(243,239,230,0.7)';
@@ -91,7 +91,7 @@ export default function CareerMilestonesCard({ milestones, onInfo }) {
 function makeStyles(theme) {
   return StyleSheet.create({
     board: {
-      backgroundColor: GREEN,
+      backgroundColor: NAVY,
       borderRadius: 16,
       padding: theme.spacing.lg,
       gap: theme.spacing.sm,

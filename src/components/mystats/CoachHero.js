@@ -16,12 +16,12 @@ const GROUP_LABELS = {
   watch: 'Watch',
 };
 
-// Clubhouse hero surface — cream-on-green, matches LiveRoundCard.js. The
-// standing green card is the default for every group: "Fix first" always
+// Analysis hero surface — cream-on-navy ("green plays, navy thinks"). The
+// standing navy card is the default for every group: "Fix first" always
 // exists, so it must not wear alarm red. Masters red is reserved for the one
 // group that reports a change for the worse (gettingWorse) — red is earned,
 // never permanent. Fix first is marked as "the work" by a gold badge instead.
-const GREEN = '#00553c';
+const NAVY = '#2b4766';
 // Masters red — the app's one light-surface red. Cream #f3efe6 on it is ~5:1
 // (AA); gold #ffd700 is ~4.2:1 (AA-large, fine for the big area label).
 const RED = semantic.masters.red;
@@ -38,7 +38,7 @@ export default function CoachHero({ insight, onCommitFocus, focusActive = false 
   const proofs = [insight?.basis, formatSample(insight?.sample), formatConfidence(insight?.confidence)].filter(Boolean);
   const isRedSurface = Boolean(insight && RED_SURFACE_GROUPS.has(insight.group));
   const isFixFirst = insight?.group === 'fixFirst';
-  const surfaceColor = isRedSurface ? RED : GREEN;
+  const surfaceColor = isRedSurface ? RED : NAVY;
   const areaColor = areaAccentColor(insight?.tone, isRedSurface, isFixFirst);
 
   if (!insight) {
@@ -121,7 +121,7 @@ function makeStyles(theme) {
   };
   return StyleSheet.create({
     card: {
-      backgroundColor: GREEN,
+      backgroundColor: NAVY,
       borderRadius: 16,
       padding: theme.spacing.lg,
       gap: theme.spacing.sm,
@@ -172,7 +172,7 @@ function makeStyles(theme) {
       gap: 6,
       marginTop: theme.spacing.xs,
     },
-    focusBtnText: { fontSize: 12.5, fontFamily: 'PlusJakartaSans-ExtraBold', color: GREEN },
+    focusBtnText: { fontSize: 12.5, fontFamily: 'PlusJakartaSans-ExtraBold', color: NAVY },
   });
 }
 

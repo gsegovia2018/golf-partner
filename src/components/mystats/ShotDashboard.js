@@ -19,12 +19,12 @@ import {
   sampleText,
 } from './shotMetrics';
 
-// Clubhouse hero surfaces — same constants as CoachHero.js. The target-gap
-// hero is always green: a negative SG total vs the target is the standing
+// Navy analysis surface — same constant as CoachHero.js ("green plays, navy
+// thinks"). The hero never turns red: a negative SG total vs the target is the standing
 // state for most players, and a permanent red stops meaning anything. Red
 // survives only as small-scale accents in the category board (negative
 // values and down-deltas), never as a full card surface.
-const GREEN = '#00553c';
+const NAVY = '#2b4766';
 const CREAM = '#f3efe6';
 const CREAM_70 = 'rgba(243,239,230,0.7)';
 const CREAM_85 = 'rgba(243,239,230,0.85)';
@@ -357,7 +357,7 @@ const styles = {
 function makeStyles(theme) {
   return StyleSheet.create({
     hero: {
-      backgroundColor: GREEN,
+      backgroundColor: NAVY,
       borderRadius: 16,
       padding: theme.spacing.lg,
       gap: theme.spacing.xs,
