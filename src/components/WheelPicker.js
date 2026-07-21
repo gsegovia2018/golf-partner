@@ -1,6 +1,7 @@
 import React, { useEffect, useRef } from 'react';
 import { View, Text, Pressable, ScrollView, StyleSheet } from 'react-native';
 import { useTheme } from '../theme/ThemeContext';
+import { haptic } from '../lib/haptics';
 
 export const WHEEL_ROW_HEIGHT = 36;
 // Odd count → exactly one row sits in the center selection band.
@@ -30,7 +31,7 @@ export default function WheelPicker({ items, selectedIndex, onChange, testID }) 
 
   const settle = (e) => {
     const idx = snapIndex(e.nativeEvent?.contentOffset?.y ?? 0, items.length);
-    if (idx !== selectedIndex) onChange(idx);
+    if (idx !== selectedIndex) { haptic('selection'); onChange(idx); }
   };
 
   return (
@@ -51,7 +52,7 @@ export default function WheelPicker({ items, selectedIndex, onChange, testID }) 
           <Pressable
             key={item.key}
             style={s.row}
-            onPress={() => onChange(i)}
+            onPress={() => { if (i !== selectedIndex) haptic('selection'); onChange(i); }}
             accessibilityRole="button"
             accessibilityLabel={item.sublabel ? `${item.label}, ${item.sublabel}` : item.label}
           >

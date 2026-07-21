@@ -9,6 +9,7 @@ import { CONTENT_MAX_WIDTH } from '../theme/responsive';
 import { getTabBarItem, isCenterTab } from './tabBarModel';
 import PressableScale from '../components/ui/PressableScale';
 import TabBarFade from './TabBarFade';
+import { haptic } from '../lib/haptics';
 
 // Springs the tab surface from slightly-shrunk to full size whenever the tab
 // becomes the selected one, so switching tabs visibly "pops" the destination.
@@ -101,6 +102,7 @@ export default function FloatingTabBar({ state, navigation }) {
               canPreventDefault: true,
             });
             if (!event.defaultPrevented && !focused) {
+              haptic('selection');
               navigation.navigate(item.targetRouteName);
             }
           };

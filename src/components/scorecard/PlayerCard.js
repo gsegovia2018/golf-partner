@@ -1,20 +1,14 @@
 import React, { useMemo } from 'react';
 import {
-  View, Text, TouchableOpacity, Pressable, Animated, Platform,
+  View, Text, TouchableOpacity, Pressable, Animated,
 } from 'react-native';
 import { Feather } from '@expo/vector-icons';
-import * as Haptics from 'expo-haptics';
 import { useTheme } from '../../theme/ThemeContext';
 import { makeScorecardStyles } from './styles';
 import { teamColor } from './teamModel';
 import { ShotDetailSection } from './ShotDetailSection';
 import PressableScale from '../ui/PressableScale';
-
-// Long-press-to-clear haptic — mirrors the helper in ScorecardScreen.
-function haptic(style = 'medium') {
-  if (Platform.OS === 'web') return;
-  if (style === 'medium') Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
-}
+import { haptic } from '../../lib/haptics';
 
 // Unified per-player score card. Every game mode renders this exact card —
 // solo, Stableford, Match Play, Sindicato and Best Ball. It is the former

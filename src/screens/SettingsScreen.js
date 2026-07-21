@@ -1,6 +1,7 @@
-import React, { useCallback } from 'react';
-import { View, Text, StyleSheet, ScrollView, Switch, Platform } from 'react-native';
+import React, { useCallback, useEffect, useState } from 'react';
+import { View, Text, StyleSheet, ScrollView, Switch, Platform, Linking } from 'react-native';
 import { Feather } from '@expo/vector-icons';
+import Constants from 'expo-constants';
 import ScreenContainer from '../components/ScreenContainer';
 import IconButton from '../components/ui/IconButton';
 import PressableScale from '../components/ui/PressableScale';
@@ -8,6 +9,7 @@ import Reveal from '../components/ui/Reveal';
 import { useTheme } from '../theme/ThemeContext';
 import { useAppSettings } from '../hooks/useAppSettings';
 import { updateAppSettings } from '../store/settingsStore';
+import { haptic } from '../lib/haptics';
 
 const STAT_GROUP_ROWS = [
   { key: 'putting', label: 'Putting', loss: 'Off: no putting stats, no GIR, no strokes gained putting' },
@@ -60,7 +62,26 @@ export default function SettingsScreen({ navigation }) {
   const { theme, themePref, setThemeMode } = useTheme();
   const s = makeStyles(theme);
   const appSettings = useAppSettings();
-  const setKey = useCallback((patch) => { updateAppSettings(patch).catch(() => {}); }, []);
+  const setKey = useCallback((patch) => {
+    haptic('selection');
+    updateAppSettings(patch).catch(() => {});
+  }, []);
+
+  // OS-level notification permission: when it's denied, the toggles below
+  // silently do nothing — surface that with a link to system settings.
+  const [pushBlocked, setPushBlocked] = useState(false);
+  useEffect(() => {
+    if (Platform.OS === 'web') return undefined;
+    let mounted = true;
+    (async () => {
+      try {
+        const Notifications = require('expo-notifications');
+        const { status } = await Notifications.getPermissionsAsync();
+        if (mounted && status === 'denied') setPushBlocked(true);
+      } catch { /* best-effort — assume granted */ }
+    })();
+    return () => { mounted = false; };
+  }, []);
 
   function handleBack() {
     navigation.goBack();
@@ -125,6 +146,9 @@ export default function SettingsScreen({ navigation }) {
               </PressableScale>
             ))}
           </View>
+          <Text style={s.unitsHint}>
+            {appSettings.units === 'yards' ? 'e.g. 148 yds ≈ 135 m' : 'e.g. 135 m ≈ 148 yds'}
+          </Text>
           <View style={s.appearanceRow}>
             {THEME_OPTIONS.map((opt) => {
               const active = themePref === opt.value;
@@ -132,7 +156,7 @@ export default function SettingsScreen({ navigation }) {
                 <PressableScale
                   key={opt.value}
                   style={[s.appearanceTile, active && s.appearanceTileActive]}
-                  onPress={() => setThemeMode(opt.value)}
+                  onPress={() => { haptic('selection'); setThemeMode(opt.value); }}
                   accessibilityRole="button"
                   accessibilityState={{ selected: active }}
                 >
@@ -151,7 +175,22 @@ export default function SettingsScreen({ navigation }) {
         </Reveal>
 
         <Section title="NOTIFICATIONS" delay={REVEAL_STEP * 4} s={s}>
-          <SwitchRow testID="setting-notifications.scores" label="Score updates" first
+          {pushBlocked ? (
+            <PressableScale
+              style={s.prefRow}
+              onPress={() => { Linking.openSettings().catch(() => {}); }}
+              accessibilityRole="button"
+              accessibilityLabel="Notifications are blocked — open system settings"
+            >
+              <Feather name="alert-triangle" size={16} color={theme.destructive} />
+              <View style={{ flex: 1 }}>
+                <Text style={[s.prefLabel, { color: theme.destructive }]}>Notifications are blocked</Text>
+                <Text style={s.fieldHint}>The system is blocking this app&apos;s notifications, so the toggles below have no effect. Tap to open system settings.</Text>
+              </View>
+              <Feather name="chevron-right" size={18} color={theme.text.muted} />
+            </PressableScale>
+          ) : null}
+          <SwitchRow testID="setting-notifications.scores" label="Score updates" first={!pushBlocked}
             hint="When a friend finishes a round."
             value={appSettings.notifications.scores}
             onChange={(v) => setKey({ notifications: { scores: v } })} theme={theme} s={s} />
@@ -164,6 +203,13 @@ export default function SettingsScreen({ navigation }) {
             value={appSettings.notifications.media}
             onChange={(v) => setKey({ notifications: { media: v } })} theme={theme} s={s} />
         </Section>
+
+        <Reveal delay={REVEAL_STEP * 5}>
+          <Text style={s.aboutText}>
+            Golf Partner v{Constants?.expoConfig?.version ?? '?'}
+            {Platform.OS !== 'web' && Constants?.nativeBuildVersion ? ` (${Constants.nativeBuildVersion})` : ''}
+          </Text>
+        </Reveal>
       </ScrollView>
     </ScreenContainer>
   );
@@ -214,7 +260,15 @@ const makeStyles = (theme) => StyleSheet.create({
   },
 
   segmentRow: {
-    flexDirection: 'row', gap: 10, marginBottom: 10,
+    flexDirection: 'row', gap: 10, marginBottom: 6,
+  },
+  unitsHint: {
+    fontFamily: 'PlusJakartaSans-Regular', color: theme.text.muted,
+    fontSize: 11, marginBottom: 10, textAlign: 'center',
+  },
+  aboutText: {
+    fontFamily: 'PlusJakartaSans-Medium', color: theme.text.muted,
+    fontSize: 11, textAlign: 'center', marginTop: 28,
   },
   segment: {
     flex: 1, alignItems: 'center', justifyContent: 'center',

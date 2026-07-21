@@ -17,6 +17,7 @@ import { semantic } from '../theme/tokens';
 import { supabase } from '../lib/supabase';
 import { loadProfile, upsertProfile, uploadAvatar, isUsernameAvailable } from '../store/profileStore';
 import { parseHandicapIndex, normalizeHandicapInput } from '../lib/handicap';
+import { haptic } from '../lib/haptics';
 
 // Stagger step between section reveals on mount.
 const REVEAL_STEP = 40;
@@ -407,7 +408,7 @@ export default function ProfileScreen({ navigation, route }) {
                   {[['male', 'Male'], ['female', 'Female']].map(([value, label]) => (
                     <PressableScale
                       key={value}
-                      onPress={() => { setGender(value); setDirty(true); }}
+                      onPress={() => { haptic('selection'); setGender(value); setDirty(true); }}
                       style={[s.genderPill, gender === value && s.genderPillActive]}
                       accessibilityRole="button"
                       accessibilityLabel={label}

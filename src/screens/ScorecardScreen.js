@@ -7,7 +7,7 @@ import {
 } from 'react-native';
 import ScreenContainer from '../components/ScreenContainer';
 import IconButton from '../components/ui/IconButton';
-import * as Haptics from 'expo-haptics';
+import { haptic } from '../lib/haptics';
 
 import { Feather } from '@expo/vector-icons';
 import * as ScreenOrientation from 'expo-screen-orientation';
@@ -65,13 +65,6 @@ import { GridView, resolveScorecardRows } from '../components/scorecard/GridView
 import FinishConflictSheet from '../components/scorecard/FinishConflictSheet';
 
 
-const haptic = (style = 'light') => {
-  if (Platform.OS === 'web') return;
-  if (getAppSettings().haptics === false) return;
-  if (style === 'light') Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-  else if (style === 'medium') Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
-  else if (style === 'success') Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
-};
 
 
 function usePrevious(value) {
