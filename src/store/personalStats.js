@@ -642,6 +642,10 @@ export function courseMastery(synthetic) {
       avgPoints: c.roundPoints,
       bestPoints,
       trend,
+      // Chronological per-round point totals at this course — feeds the
+      // Course Mastery card's sparkline. Same complete-rounds-only slice
+      // and courseDNA keying as everything above.
+      recentPoints: totals.map((e) => e.points),
     };
   }).sort((a, b) => b.avgPoints - a.avgPoints);
 }

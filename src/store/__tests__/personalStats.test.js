@@ -1233,9 +1233,20 @@ describe('courseMastery', () => {
     // Pine: 2 complete rounds (36, then 18) — avg 27, best 36, trend down
     // (latest 18 < previous 36 → -1).
     expect(mastery).toEqual([
-      { courseKey: 'Oak', courseName: 'Oak', rounds: 1, avgPoints: 54, bestPoints: 54, trend: null },
-      { courseKey: 'Pine', courseName: 'Pine', rounds: 2, avgPoints: 27, bestPoints: 36, trend: -1 },
+      { courseKey: 'Oak', courseName: 'Oak', rounds: 1, avgPoints: 54, bestPoints: 54, trend: null, recentPoints: [54] },
+      { courseKey: 'Pine', courseName: 'Pine', rounds: 2, avgPoints: 27, bestPoints: 36, trend: -1, recentPoints: [36, 18] },
     ]);
+  });
+
+  test('recentPoints lists complete-round totals in chronological order, not sorted by points', () => {
+    // Pine was played 36 then 18 — the sparkline series must preserve that
+    // played order (a declining line), and Oak's excluded incomplete round
+    // must not appear.
+    const myRounds = collectMyRounds(twoCourseTournament(), 'u1');
+    const mastery = courseMastery(buildSyntheticTournament(myRounds));
+    const byName = Object.fromEntries(mastery.map((c) => [c.courseName, c.recentPoints]));
+    expect(byName.Pine).toEqual([36, 18]);
+    expect(byName.Oak).toEqual([54]);
   });
 
   test('a complete round with an empty courseName keeps its real bestPoints under the R{n} identity', () => {
@@ -1249,7 +1260,7 @@ describe('courseMastery', () => {
     }];
     const mastery = courseMastery(buildSyntheticTournament(collectMyRounds(tournaments, 'u1')));
     expect(mastery).toEqual([
-      { courseKey: null, courseName: 'R1', rounds: 1, avgPoints: 36, bestPoints: 36, trend: null },
+      { courseKey: null, courseName: 'R1', rounds: 1, avgPoints: 36, bestPoints: 36, trend: null, recentPoints: [36] },
     ]);
   });
 
@@ -1269,7 +1280,7 @@ describe('courseMastery', () => {
     }];
     const mastery = courseMastery(buildSyntheticTournament(collectMyRounds(tournaments, 'u1')));
     expect(mastery).toEqual([
-      { courseKey: 'c9', courseName: 'Pine GC (renamed)', rounds: 2, avgPoints: 27, bestPoints: 36, trend: -1 },
+      { courseKey: 'c9', courseName: 'Pine GC (renamed)', rounds: 2, avgPoints: 27, bestPoints: 36, trend: -1, recentPoints: [36, 18] },
     ]);
   });
 
@@ -1282,7 +1293,7 @@ describe('courseMastery', () => {
     }];
     const mastery = courseMastery(buildSyntheticTournament(collectMyRounds(tournaments, 'u1')));
     expect(mastery).toEqual([
-      { courseKey: 'Elm', courseName: 'Elm', rounds: 2, avgPoints: 36, bestPoints: 36, trend: 0 },
+      { courseKey: 'Elm', courseName: 'Elm', rounds: 2, avgPoints: 36, bestPoints: 36, trend: 0, recentPoints: [36, 36] },
     ]);
   });
 
@@ -1303,7 +1314,7 @@ describe('courseMastery', () => {
     }];
     const mastery = courseMastery(buildSyntheticTournament(collectMyRounds(tournaments, 'u1')));
     expect(mastery).toEqual([
-      { courseKey: 'Birch', courseName: 'Birch', rounds: 2, avgPoints: 35.5, bestPoints: 36, trend: 0 },
+      { courseKey: 'Birch', courseName: 'Birch', rounds: 2, avgPoints: 35.5, bestPoints: 36, trend: 0, recentPoints: [36, 35] },
     ]);
   });
 
@@ -1317,7 +1328,7 @@ describe('courseMastery', () => {
     }];
     const mastery = courseMastery(buildSyntheticTournament(collectMyRounds(tournaments, 'u1')));
     expect(mastery).toEqual([
-      { courseKey: 'Cedar', courseName: 'Cedar', rounds: 2, avgPoints: 27, bestPoints: 36, trend: -1 },
+      { courseKey: 'Cedar', courseName: 'Cedar', rounds: 2, avgPoints: 27, bestPoints: 36, trend: -1, recentPoints: [36, 18] },
     ]);
   });
 
