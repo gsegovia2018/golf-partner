@@ -18,24 +18,44 @@ export default function CoachMarks({ steps, onDone, onSkip }) {
   const alive = useRef(true);
   useEffect(() => () => { alive.current = false; }, []);
 
+  // Latest props live in refs so the advancing logic never closes over a
+  // stale (or a parent's freshly re-created inline) steps/onDone/onSkip —
+  // a new prop identity must not restart or re-run the tour.
+  const stepsRef = useRef(steps);
+  stepsRef.current = steps;
+  const onDoneRef = useRef(onDone);
+  onDoneRef.current = onDone;
+  const onSkipRef = useRef(onSkip);
+  onSkipRef.current = onSkip;
+
+  // Bumped on every showFrom() call so a stale in-flight async loop (from a
+  // superseded run) can detect it's no longer current and bail out before
+  // touching state or calling onDone.
+  const runId = useRef(0);
+
   const showFrom = useCallback(async (startIndex) => {
-    for (let i = startIndex; i < steps.length; i += 1) {
-      // eslint-disable-next-line no-await-in-loop
-      const rect = await measureTourTarget(steps[i].key);
-      if (!alive.current) return;
+    const myRun = (runId.current += 1);
+    const isStale = () => !alive.current || runId.current !== myRun;
+    const currentSteps = stepsRef.current;
+    for (let i = startIndex; i < currentSteps.length; i += 1) {
+      const rect = await measureTourTarget(currentSteps[i].key);
+      if (isStale()) return;
       if (rect) { setCurrent({ index: i, rect }); return; }
     }
+    if (isStale()) return;
     setCurrent(null);
-    onDone();
-  }, [steps, onDone]);
+    onDoneRef.current();
+  }, []);
 
-  useEffect(() => { showFrom(0); }, [showFrom]);
+  // Mount-only: start the tour once. Re-renders that pass new inline
+  // steps/onDone identities must not restart it from step 1.
+  useEffect(() => { showFrom(0); }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   if (!current) return null;
   const { index, rect } = current;
   const isLast = index >= steps.length - 1;
   const step = steps[index];
-  const next = () => { if (isLast) onDone(); else showFrom(index + 1); };
+  const next = () => { if (isLast) onDoneRef.current(); else showFrom(index + 1); };
 
   const ring = {
     left: rect.x - RING_PAD,
@@ -52,11 +72,13 @@ export default function CoachMarks({ steps, onDone, onSkip }) {
 
   return (
     <View style={StyleSheet.absoluteFill} pointerEvents="box-none" testID="coachmarks-overlay">
-      {/* Scrim as four panels around the target — RN can't punch holes. */}
-      <View pointerEvents="none" style={[s.scrim, { left: 0, top: 0, right: 0, height: Math.max(ring.top, 0) }]} />
-      <View pointerEvents="none" style={[s.scrim, { left: 0, top: ring.top + ring.height, right: 0, bottom: 0 }]} />
-      <View pointerEvents="none" style={[s.scrim, { left: 0, top: ring.top, width: Math.max(ring.left, 0), height: ring.height }]} />
-      <View pointerEvents="none" style={[s.scrim, { left: ring.left + ring.width, top: ring.top, width: Math.max(winW - ring.left - ring.width, 0), height: ring.height }]} />
+      {/* Scrim as four panels around the target — RN can't punch holes.
+          Each panel swallows taps (no-op) so the dimmed area can't be used
+          to reach real UI underneath; only the spotlighted target advances. */}
+      <Pressable testID="coachmarks-scrim-top" onPress={() => {}} accessible={false} style={[s.scrim, { left: 0, top: 0, right: 0, height: Math.max(ring.top, 0) }]} />
+      <Pressable testID="coachmarks-scrim-bottom" onPress={() => {}} accessible={false} style={[s.scrim, { left: 0, top: ring.top + ring.height, right: 0, bottom: 0 }]} />
+      <Pressable testID="coachmarks-scrim-left" onPress={() => {}} accessible={false} style={[s.scrim, { left: 0, top: ring.top, width: Math.max(ring.left, 0), height: ring.height }]} />
+      <Pressable testID="coachmarks-scrim-right" onPress={() => {}} accessible={false} style={[s.scrim, { left: ring.left + ring.width, top: ring.top, width: Math.max(winW - ring.left - ring.width, 0), height: ring.height }]} />
       <View pointerEvents="none" style={[s.ring, ring]} />
       <Pressable
         testID="coachmarks-target-press"
@@ -70,7 +92,7 @@ export default function CoachMarks({ steps, onDone, onSkip }) {
         <Text style={s.title}>{step.title}</Text>
         <Text style={s.body}>{step.body}</Text>
         <View style={s.row}>
-          <Pressable accessibilityRole="button" onPress={onSkip} hitSlop={10} style={s.skipBtn}>
+          <Pressable accessibilityRole="button" onPress={() => onSkipRef.current()} hitSlop={10} style={s.skipBtn}>
             <Text style={s.skip}>Skip tour</Text>
           </Pressable>
           <Pressable accessibilityRole="button" onPress={next} style={s.nextBtn}>

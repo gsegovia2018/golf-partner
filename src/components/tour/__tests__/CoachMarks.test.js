@@ -78,3 +78,41 @@ it('Skip tour calls onSkip', async () => {
   fireEvent.press(getByText('Skip tour'));
   expect(onSkip).toHaveBeenCalledTimes(1);
 });
+
+it('does not restart the tour when the parent re-renders with new inline callback/prop identities', async () => {
+  measureTourTarget.mockResolvedValue(RECT);
+  const onDoneFirst = jest.fn();
+  const { findByText, getByText, rerender, queryByText } = render(wrap(
+    <CoachMarks steps={steps} onDone={onDoneFirst} onSkip={jest.fn()} />,
+  ));
+  await findByText('Alpha title');
+  fireEvent.press(getByText('Next'));
+  await findByText('Beta title');
+
+  // Parent re-renders with brand-new inline onDone/steps/onSkip identities —
+  // this must not restart the tour back at step 1.
+  const onDoneLatest = jest.fn();
+  rerender(wrap(
+    <CoachMarks steps={[...steps]} onDone={onDoneLatest} onSkip={() => {}} />,
+  ));
+  expect(getByText('Beta title')).toBeTruthy();
+  expect(queryByText('Alpha title')).toBeNull();
+
+  fireEvent.press(getByText('Done'));
+  await waitFor(() => expect(onDoneLatest).toHaveBeenCalledTimes(1));
+  expect(onDoneFirst).not.toHaveBeenCalled();
+});
+
+it('scrim panels consume presses as a no-op instead of passing through', async () => {
+  measureTourTarget.mockResolvedValue(RECT);
+  const { findByText, getByTestId, getByText } = render(wrap(
+    <CoachMarks steps={steps} onDone={jest.fn()} onSkip={jest.fn()} />,
+  ));
+  await findByText('Alpha title');
+  expect(() => fireEvent.press(getByTestId('coachmarks-scrim-top'))).not.toThrow();
+  expect(() => fireEvent.press(getByTestId('coachmarks-scrim-bottom'))).not.toThrow();
+  expect(() => fireEvent.press(getByTestId('coachmarks-scrim-left'))).not.toThrow();
+  expect(() => fireEvent.press(getByTestId('coachmarks-scrim-right'))).not.toThrow();
+  // Still on step 1 — pressing the dimmed area did not advance the tour.
+  expect(getByText('Alpha title')).toBeTruthy();
+});
