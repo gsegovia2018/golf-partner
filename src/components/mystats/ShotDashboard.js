@@ -22,7 +22,8 @@ import {
 // Clubhouse hero surfaces — same constants as CoachHero.js. The target-gap
 // hero is always green: a negative SG total vs the target is the standing
 // state for most players, and a permanent red stops meaning anything. Red
-// in this screen is reserved for per-category "getting worse" deltas.
+// survives only as small-scale accents in the category board (negative
+// values and down-deltas), never as a full card surface.
 const GREEN = '#0f3d2c';
 const CREAM = '#f3efe6';
 const CREAM_70 = 'rgba(243,239,230,0.7)';
