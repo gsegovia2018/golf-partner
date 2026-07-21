@@ -142,6 +142,11 @@ function UndoSnackbar({ data, onUndo, theme, s }) {
   const opacity = useRef(new Animated.Value(0)).current;
   const translateY = useRef(new Animated.Value(SNACK_OFFSET)).current;
   const exitTimerRef = useRef(null);
+  // Guards the exit animation's completion callback (and its fallback timer)
+  // against firing setState after the component itself has really unmounted
+  // — mirrors BottomSheet's isMountedRef pattern.
+  const isMountedRef = useRef(true);
+  useEffect(() => () => { isMountedRef.current = false; }, []);
 
   useEffect(() => {
     if (exitTimerRef.current) { clearTimeout(exitTimerRef.current); exitTimerRef.current = null; }
@@ -166,7 +171,7 @@ function UndoSnackbar({ data, onUndo, theme, s }) {
       return undefined;
     }
     if (!mounted) return undefined;
-    const finish = () => setMounted(false);
+    const finish = () => { if (isMountedRef.current) setMounted(false); };
     const animations = [
       Animated.timing(opacity, {
         toValue: 0, duration: SNACK_EXIT_DURATION, easing: SNACK_EASING, useNativeDriver: true,

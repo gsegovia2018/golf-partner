@@ -141,10 +141,11 @@ export default function BottomSheet({
             }
           }}
         >
-          {/* Content drops immediately on close (matches every consumer's
-              existing "closed means gone" expectations); only the empty
-              shell — backdrop + sheet chrome — rides out the exit tween. */}
-          {visible ? children : null}
+          {/* Content stays mounted through the exit tween — tied to the same
+              `mounted` state as the sheet itself — so the sheet visually
+              carries its content down instead of leaving an empty shell to
+              animate out on its own. */}
+          {mounted ? children : null}
         </Animated.View>
       </KeyboardAvoidingView>
     </Modal>
