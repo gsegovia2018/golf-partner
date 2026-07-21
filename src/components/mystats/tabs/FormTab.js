@@ -27,7 +27,8 @@ const META = {
 };
 
 // Form tab: exactly three cards — the current-form hero, the Instruments
-// panel of metric sparklines, and the per-round score-mix columns.
+// panel of metric sparklines, and the Score mix damage report (latest-round
+// damage headline, five-band per-round columns, steady-holes trend).
 export default function FormTab({ stats, n, onChangeN, onInfo }) {
   const { theme } = useTheme();
   const s = useMemo(() => makeStyles(theme), [theme]);
@@ -88,8 +89,12 @@ export default function FormTab({ stats, n, onChangeN, onInfo }) {
       </SectionCard>
 
       <SectionCard title="Score mix" infoKey="scoreMix" onInfo={onInfo}>
-        <Text style={s.caption}>One column per round · share of holes, birdie+ → bogey+</Text>
-        <ScoreMixColumns rounds={formSeries.scoreMix} />
+        <ScoreMixColumns
+          rounds={formSeries.scoreMix}
+          damage={formSeries.damage}
+          steadyPct={formSeries.steadyPct}
+          onInfo={onInfo}
+        />
       </SectionCard>
     </View>
   );
@@ -98,7 +103,6 @@ export default function FormTab({ stats, n, onChangeN, onInfo }) {
 function makeStyles(theme) {
   return StyleSheet.create({
     wrap: { gap: theme.spacing.lg },
-    caption: { ...theme.typography.tiny, color: theme.text.muted, fontWeight: '700' },
     note: { ...theme.typography.caption, color: theme.text.muted, fontStyle: 'italic' },
     chips: { flexDirection: 'row', gap: 4 },
     chip: {

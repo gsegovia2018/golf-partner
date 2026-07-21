@@ -60,9 +60,30 @@ export const statExplainers = {
   },
   scoreMix: {
     title: 'Score mix',
-    subtitle: 'Birdies, pars and bogeys over time',
-    explainer: 'For each round, the share of holes that were birdie-or-better, par, or '
-      + 'bogey-or-worse. A growing green band means more good holes.',
+    subtitle: 'What kind of holes make up each round',
+    explainer: 'One column per round, split into five bands: birdie-or-better, par, bogey, '
+      + 'double bogey, and worse — all net (handicap-adjusted), so a band means the same '
+      + 'thing whatever your handicap. A growing green band means more good holes; red '
+      + 'creeping in from the bottom means blow-up holes are deciding the round.',
+  },
+  damage: {
+    title: 'Damage',
+    subtitle: 'Strokes lost past bogey',
+    explainer: 'Adds up every stroke beyond a net bogey: a double bogey costs 1, a triple '
+      + 'costs 2, and so on — pars and bogeys cost nothing. A triple costs 2 because the '
+      + 'first stroke over par is survivable and the bogey itself still scores a point; '
+      + 'everything past that is pure loss.\n\n'
+      + 'This is the number that separates scores: golfers at the same level make a similar '
+      + 'number of pars, but the rounds that get away are the ones with blow-up holes. The '
+      + 'headline shows your latest round next to the average of the other selected rounds — '
+      + 'green means you kept the card cleaner than usual.',
+  },
+  steadyHoles: {
+    title: 'Steady holes',
+    subtitle: 'Share of holes at bogey or better',
+    explainer: 'The percentage of your scored holes each round that finished at net bogey '
+      + 'or better — the holes that keep a scorecard alive. It is the flip side of Damage: '
+      + 'a steadier round has fewer holes leaking strokes past bogey. Higher is better.',
   },
   recentVsHistory: {
     title: 'Recent vs History',

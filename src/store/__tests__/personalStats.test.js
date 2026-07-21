@@ -718,16 +718,94 @@ describe('computeFormSeries', () => {
     expect(metrics.threePuttsPerRound[0].value).toBeNull();
   });
 
-  test('builds a birdie/par/bogey score-mix entry per round', () => {
-    const h = holes18();
+  // myRound with an explicit per-hole scores object (and optional handicap),
+  // for the five-band / damage / steady fixtures below.
+  function myRoundScores(courseName, holes, scores, handicap = 0) {
+    return {
+      key: `${courseName}:0`,
+      round: mkRound({ courseName, holes, scores: { p1: scores }, playerHandicaps: { p1: handicap } }),
+      courseName,
+      roundIndex: 0,
+      playerId: 'p1',
+      player: { id: 'p1', name: 'Me', handicap, user_id: 'u1' },
+      completed: true,
+      isComplete: true,
+      holesPlayed: Object.keys(scores).length,
+    };
+  }
+
+  test('builds a five-band score-mix entry per round', () => {
+    const h = holes18(); // all par 4, SI = hole number
     const { scoreMix } = computeFormSeries([myRound('Pine', h, 4)]);
-    expect(scoreMix[0]).toEqual({ label: 'Pine', birdie: 0, par: 18, bogey: 0 });
+    expect(scoreMix[0]).toEqual({
+      label: 'Pine', birdiePlus: 0, par: 18, bogey: 0, double: 0, worse: 0,
+    });
+  });
+
+  test('five-band split, damage, and steadyPct from a hand-built mixed round', () => {
+    const h = holes18();
+    // Par-4s throughout: 2=eagle, 3=birdie, 4=par, 5=bogey, 6=double, 7/8=worse.
+    const scores = {
+      1: 3, 2: 2, // birdie+ ×2
+      3: 4, 4: 4, 5: 4, 6: 4, 7: 4, 8: 4, 18: 4, // par ×7
+      9: 5, 10: 5, 11: 5, 12: 5, // bogey ×4
+      13: 6, 14: 6, 15: 6, // double ×3 → damage 1 each
+      16: 7, 17: 8, // worse ×2 → damage 2 + 3
+    };
+    const { scoreMix, damage, steadyPct } = computeFormSeries([myRoundScores('Pine', h, scores)]);
+    expect(scoreMix[0]).toEqual({
+      label: 'Pine', birdiePlus: 2, par: 7, bogey: 4, double: 3, worse: 2,
+    });
+    expect(damage[0]).toEqual({ label: 'Pine', value: 8 }); // 3×1 + 2 + 3
+    expect(steadyPct[0]).toEqual({ label: 'Pine', value: 72 }); // 13/18 → 72.2 → 72
+  });
+
+  test('damage is 0 and steadyPct 100 for a clean round', () => {
+    const h = holes18();
+    const { damage, steadyPct } = computeFormSeries([myRound('Pine', h, 4)]);
+    expect(damage[0].value).toBe(0);
+    expect(steadyPct[0].value).toBe(100);
+  });
+
+  test('damage and steadyPct count only scored holes on a partial round', () => {
+    const h = holes18();
+    // 9 scored holes: 6 pars + 3 triples; holes 10-18 unscored.
+    const scores = { 1: 4, 2: 4, 3: 4, 4: 4, 5: 4, 6: 4, 7: 7, 8: 7, 9: 7 };
+    const { scoreMix, damage, steadyPct } = computeFormSeries([myRoundScores('Pine', h, scores)]);
+    expect(scoreMix[0]).toEqual({
+      label: 'Pine', birdiePlus: 0, par: 6, bogey: 0, double: 0, worse: 3,
+    });
+    expect(damage[0].value).toBe(6); // 3 triples × 2 strokes past bogey
+    expect(steadyPct[0].value).toBe(67); // 6/9 → 66.7 → 67
+  });
+
+  test('damage and steadyPct are net (handicap-adjusted), matching the score-mix basis', () => {
+    const h = holes18();
+    // 18-handicapper gets one extra shot per hole: a gross 6 on a par 4 is a
+    // net bogey — no damage, fully steady.
+    const { scoreMix, damage, steadyPct } = computeFormSeries([
+      myRoundScores('Pine', h, evenScores(h, 6), 18),
+    ]);
+    expect(scoreMix[0]).toEqual({
+      label: 'Pine', birdiePlus: 0, par: 0, bogey: 18, double: 0, worse: 0,
+    });
+    expect(damage[0].value).toBe(0);
+    expect(steadyPct[0].value).toBe(100);
+  });
+
+  test('a round with no scored holes yields null damage and steadyPct (chart gap)', () => {
+    const h = holes18();
+    const { damage, steadyPct } = computeFormSeries([myRoundScores('Pine', h, {})]);
+    expect(damage[0]).toEqual({ label: 'Pine', value: null });
+    expect(steadyPct[0]).toEqual({ label: 'Pine', value: null });
   });
 
   test('empty selection returns empty series', () => {
     const r = computeFormSeries([]);
     expect(r.metrics.avgPoints).toEqual([]);
     expect(r.scoreMix).toEqual([]);
+    expect(r.damage).toEqual([]);
+    expect(r.steadyPct).toEqual([]);
     expect(r.hasShotData).toBe(false);
   });
 
