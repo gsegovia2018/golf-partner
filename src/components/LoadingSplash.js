@@ -7,6 +7,11 @@ import { semantic } from '../theme/tokens';
 const CYCLE = 2800;
 const RING_EASE = Easing.bezier(0.23, 1, 0.32, 1);
 
+// Boot passes through several gates that each mount this splash back to back
+// (fonts/device → auth → onboarding). The wordmark entrance should read once
+// per cold start, not replay at every hand-off.
+let wordmarkPlayed = false;
+
 function Ring({ delay }) {
   const v = useRef(new Animated.Value(0)).current;
   useEffect(() => {
@@ -40,7 +45,7 @@ function Ring({ delay }) {
 
 export default function LoadingSplash() {
   const breathe = useRef(new Animated.Value(0)).current;
-  const wordmark = useRef(new Animated.Value(0)).current;
+  const wordmark = useRef(new Animated.Value(wordmarkPlayed ? 1 : 0)).current;
 
   useEffect(() => {
     const breatheLoop = Animated.loop(
@@ -56,10 +61,13 @@ export default function LoadingSplash() {
       ]),
     );
     breatheLoop.start();
-    Animated.timing(wordmark, {
-      toValue: 1, duration: 800, delay: 200, useNativeDriver: true,
-      easing: RING_EASE,
-    }).start();
+    if (!wordmarkPlayed) {
+      wordmarkPlayed = true;
+      Animated.timing(wordmark, {
+        toValue: 1, duration: 800, delay: 200, useNativeDriver: true,
+        easing: RING_EASE,
+      }).start();
+    }
     return () => breatheLoop.stop();
   }, [breathe, wordmark]);
 

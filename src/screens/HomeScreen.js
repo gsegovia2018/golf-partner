@@ -17,7 +17,6 @@ import PostCreateInviteModal from '../components/PostCreateInviteModal';
 import { scoringModeUsesTeams, leaderboardToggleLabels, getScoringMode, isScrambleMode } from '../components/scoringModes';
 import { ScoringModeSheet, TeamsSettingsFields, BestBallValueFields } from '../components/ScoringModePicker';
 import PullToRefresh from '../components/PullToRefresh';
-import LoadingSplash from '../components/LoadingSplash';
 import BottomSheet from '../components/BottomSheet';
 import LiveRoundCard from '../components/LiveRoundCard';
 import PressableScale from '../components/ui/PressableScale';
@@ -1215,16 +1214,24 @@ export default function HomeScreen({ navigation, route }) {
   const isViewer = tournament?._role === 'viewer';
   const isOwner = tournament?._role === 'owner';
 
-  // Show the green splash whenever a reload is in flight AND there's no
-  // data to render yet — covers initial mount (cold open) and re-focus
-  // cases where the cached state would otherwise flash an empty page
-  // (e.g. after deletion). When data IS already present, skip the splash
-  // so quick navigations don't blink the green panel.
+  // Quiet themed hold while a reload is in flight AND there's no data to
+  // render yet — covers initial mount (cold open) and re-focus cases where
+  // the cached state would otherwise flash an empty page (e.g. after
+  // deletion). Deliberately NOT the green LoadingSplash: by the time this
+  // screen mounts the tab bar is already visible, and replaying the brand
+  // splash inside the app shell reads as a second boot. When data IS
+  // already present, skip the hold so quick navigations don't blink.
   const wouldRenderEmpty =
     (showTournament && !tournament) ||
     (showList && allTournaments.length === 0);
   if (loading && wouldRenderEmpty) {
-    return <LoadingSplash />;
+    return (
+      <ScreenContainer style={s.screen} edges={['top', 'bottom']}>
+        <View style={{ flex: 1, alignItems: 'center', justifyContent: 'center' }}>
+          <ActivityIndicator color={theme.accent.primary} />
+        </View>
+      </ScreenContainer>
+    );
   }
 
   if (showList) {
