@@ -337,6 +337,34 @@ describe('My Stats tabs', () => {
     expect((await findAllByText('vs target hcp · 4 holes · target 3.9 · low sample')).length).toBeGreaterThan(0);
   });
 
+  test('ShotsTab renders the scoring summary as target meters with gold ticks', async () => {
+    const { findByText, getByText, getAllByText, getByTestId, getByLabelText } = render(wrap(
+      <ShotsTab stats={shotStats()} onInfo={() => {}} targetHandicap={14} onChangeTarget={() => {}} />
+    ));
+
+    // Overline heading + one meter row per summary item, each with a fill
+    // (your value) and a gold tick (the benchmark target) on the track.
+    expect(await findByText('Scoring vs target')).toBeTruthy();
+    expect(getByText('Par 3s')).toBeTruthy();
+    expect(getByText('Par 4s')).toBeTruthy();
+    expect(getByText('Par 5s')).toBeTruthy();
+    expect(getByText('Damage control')).toBeTruthy();
+    expect(getByTestId('scoring-meter-par3AvgScore')).toBeTruthy();
+    expect(getByTestId('scoring-meter-par3AvgScore-fill')).toBeTruthy();
+    expect(getByTestId('scoring-meter-par3AvgScore-tick')).toBeTruthy();
+    expect(getByTestId('scoring-meter-doublesOrWorsePerRound-tick')).toBeTruthy();
+
+    // The meta keeps only the sample portion of the row secondary (incl.
+    // any low-sample flag), and the target moves to its own line under the
+    // value (hcp-14 interpolated).
+    expect(getAllByText('4 holes · low sample').length).toBe(2); // par 3s + par 5s
+    expect(getByText('10 holes')).toBeTruthy();
+    expect(getByText('3 total · 18 holes')).toBeTruthy();
+    expect(getByText('target 3.9')).toBeTruthy();
+    expect(getByText('target 4.3')).toBeTruthy();
+    expect(getByLabelText('Par 3s: 4, target 3.9')).toBeTruthy();
+  });
+
   test('ShotsTab renders the gross score mix bar and magnitude bars on detail rows', async () => {
     const { findByText, getByTestId, queryByTestId } = render(wrap(
       <ShotsTab stats={shotStats()} onInfo={() => {}} targetHandicap={14} onChangeTarget={() => {}} />
