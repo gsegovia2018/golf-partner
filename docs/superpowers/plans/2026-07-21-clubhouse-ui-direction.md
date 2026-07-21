@@ -630,3 +630,79 @@ User-approved additions after reviewing phase 1: scorecard header/hole chrome, d
 ### Task 11: Phase-2 verification + final whole-branch review
 
 Same as phase-1 Task 6: full suite + lint + grep guards, runtime verify (Expo web, light theme) of: scorecard header buttons/open hole header/distance card with TAP FOR MAP, My Stats serif header + pills + SG card + coach hero + handicap cards, Feather tab bar; dark theme sanity (unchanged feel, glass borders intact). Then the whole-branch final review.
+
+---
+
+# Phase 3 — Layout fixes + restrained motion pass
+
+User-requested continuation: PAR/SI stacked under the hole numeral (per mockup), feed bottom fade, and the gated animation opportunities from the find-animation-opportunities survey. Same Global Constraints. Motion vocabulary: strong ease-out `Easing.bezier(0.23, 1, 0.32, 1)` (PressableScale's EASE_OUT), iOS drawer curve `Easing.bezier(0.32, 0.72, 0, 1)`. All new motion respects reduced motion (opacity-only fallback, no translation).
+
+### Task 12: Hole header layout — PAR/SI under the numeral
+
+**Files:**
+- Modify: `src/components/scorecard/HolePage.js` (hole header JSX, ~lines 144-165)
+- Modify: `src/components/scorecard/styles.js` (holeMetaInline → holeMetaRow)
+
+**Spec:** Restructure the left column to match the mockup: overline (course · round) → `HOLE {n}` row (label + big numeral, unchanged) → NEW row below the numeral with `PAR {par}` and `SI {si}` as label/value pairs side by side. Concretely: move `holeMetaInline` out of `holeNumberRow`; render it as a sibling row after `holeNumberRow`. Restyle: `holeMetaRow: { flexDirection: 'row', gap: 16, marginTop: 2 }`; each item stays `holeMetaItem` but horizontal: `{ flexDirection: 'row', alignItems: 'baseline', gap: 5 }` with existing `holeMetaLabel` (10 Bold ls1.5 muted) and `holeMetaValue` — value drops to fontSize 15 ExtraBold (was 22, sized for sitting beside the 44px numeral). Remove the now-unused `alignSelf`/`marginLeft`/`paddingBottom` from the old inline style. Distance block column unchanged.
+
+**Tests:** `npx jest src/components/scorecard --silent` green; full suite + lint. Commit: `feat(scorecard): stack PAR/SI under hole numeral per Clubhouse mockup`.
+
+### Task 13: Bottom content fade under the floating tab bar
+
+**Files:**
+- Create: `src/navigation/TabBarFade.js`
+- Modify: `src/navigation/FloatingTabBar.js` (render the fade in the slot, behind the bar)
+
+**Spec:** A pointer-transparent gradient that fades screen content out beneath the floating bar (mockup's `.fadeout`), on every tab screen at once. Implement with react-native-svg (already a dep; expo-linear-gradient is NOT installed — do not add it):
+
+```js
+// src/navigation/TabBarFade.js
+import React from 'react';
+import { StyleSheet, View } from 'react-native';
+import Svg, { Defs, LinearGradient, Rect, Stop } from 'react-native-svg';
+import { useTheme } from '../theme/ThemeContext';
+
+export default function TabBarFade({ height = 72 }) {
+  const { theme } = useTheme();
+  return (
+    <View pointerEvents="none" style={[StyleSheet.absoluteFill, { top: -height, height }]}>
+      <Svg width="100%" height="100%" preserveAspectRatio="none">
+        <Defs>
+          <LinearGradient id="tbfade" x1="0" y1="0" x2="0" y2="1">
+            <Stop offset="0" stopColor={theme.bg.primary} stopOpacity="0" />
+            <Stop offset="0.85" stopColor={theme.bg.primary} stopOpacity="1" />
+            <Stop offset="1" stopColor={theme.bg.primary} stopOpacity="1" />
+          </LinearGradient>
+        </Defs>
+        <Rect x="0" y="0" width="100%" height="100%" fill="url(#tbfade)" />
+      </Svg>
+    </View>
+  );
+}
+```
+
+Mount inside FloatingTabBar's `slot` View as the first child (absolute, above the content, behind the bar): the slot is already absolutely positioned at the bottom; give the slot `pointerEvents="box-none"` if not already so content behind stays interactive, and verify the fade sits above screen content but below the bar (render order: fade first, then bar). Adjust `top:-height` anchoring as needed so the gradient spans the area immediately above the slot. Both themes work automatically via `theme.bg.primary` (dark: `#0c1a14`).
+
+**Tests:** `npx jest src/navigation --silent` green; full suite + lint. Runtime check in Task 15. Commit: `feat(nav): content fade under floating tab bar`.
+
+### Task 14: Restrained motion pass (gated survey items 1-5)
+
+**Files:**
+- Modify: `src/components/BottomSheet.js`
+- Modify: `src/components/LiveRoundCard.js`
+- Modify: `src/screens/HomeScreen.js` (undo snackbar)
+- Modify: `src/screens/FeedScreen.js` (first-load crossfade)
+- Modify: `src/components/feed/FeedRoundCard.js` (reaction chips → PressableScale)
+
+**Spec (all RN `Animated`, `useNativeDriver: true`, and every translate suppressed under reduced motion via `AccessibilityInfo.isReduceMotionEnabled` — follow PressableScale's precedent of a tiny hook or check; a shared `useReducedMotion` from `react-native-reanimated` is already in the tree and fine to reuse):**
+1. **BottomSheet:** enter `Animated.timing(progress, { toValue: 1, duration: 320, easing: Easing.bezier(0.32, 0.72, 0, 1) })`; exit `{ toValue: 0, duration: 200, easing: Easing.bezier(0.23, 1, 0.32, 1) }` (import `Easing` from 'react-native'). Keep backdrop opacity tied to the same progress.
+2. **LiveRoundCard:** on first render with a non-null summary, animate container opacity 0→1 and translateY 8→0, 250ms, `Easing.bezier(0.23, 1, 0.32, 1)`; reduced motion → opacity only. Run once (not on every store refresh — key off "had no summary before").
+3. **Undo snackbar (HomeScreen):** wrap in Animated.View; enter translateY 100%→0 (use measured height or a 60px constant) + opacity, 200ms ease-out; exit 160ms same path. If the snackbar's show/hide is a bare conditional, keep mounted during exit via a brief local state (or animate opacity/translate on a persistent wrapper keyed by visibility).
+4. **Feed first-load:** when the first page of feed data replaces the skeletons, fade the list container opacity 0→1 over 200ms (skip when data was cached/instant — only when skeletons were actually shown).
+5. **Reaction chips (FeedRoundCard):** replace the reaction/React/comment/Add-photo chip `TouchableOpacity`s with `PressableScale` (activeScale 0.97), preserving all props; drop `activeOpacity`.
+
+**Tests:** affected suites + full suite + lint. Existing BottomSheet/HomeScreen/Feed tests must stay green (timing changes are behavior-neutral to tests unless they assert durations — adjust only if so). Commit: `feat(motion): drawer-curve sheets, hero/snackbar/feed entrances, reaction press feedback`.
+
+### Task 15: Phase-3 verification + final review
+
+Full suite + lint; runtime verify (Expo web, light + dark): PAR/SI stacked under numeral, tab-bar fade visible on Feed/Home/Stats over scrolled content, sheet feel, LiveRoundCard entrance, snackbar animation (trigger a round reset undo if feasible — else code-inspect), reduced-motion spot check via emulation if available. Then whole-branch final review of the phase-3 diff, then merge + push per standing preference.

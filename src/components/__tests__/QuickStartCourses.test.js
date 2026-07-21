@@ -151,7 +151,7 @@ describe('QuickStartCourses interactions', () => {
     expect(onStart).not.toHaveBeenCalled();
   });
 
-  test('calls onStart with selected course and players', () => {
+  test('calls onStart with selected course and players', async () => {
     const onStart = jest.fn();
     const { getByLabelText, getByText, queryByText } = renderQuickStart({ onStart });
 
@@ -159,10 +159,17 @@ describe('QuickStartCourses interactions', () => {
     fireEvent.press(getByLabelText('Start quick start round'));
 
     expect(onStart).toHaveBeenCalledWith({ course: courses[0], players: [players[1]] });
-    expect(queryByText('Tees are auto-assigned. Use Edit details to change them.')).toBeNull();
+    // The sheet's content rides its exit animation out with the chrome
+    // (BottomSheet keeps children mounted until the close tween finishes),
+    // so the sheet closing is only observable once that animation settles.
+    // Generous timeout: real timers under a loaded test run can lag well
+    // past the sheet's own 250ms exit + fallback window.
+    await waitFor(() => {
+      expect(queryByText('Tees are auto-assigned. Use Edit details to change them.')).toBeNull();
+    }, { timeout: 3000 });
   });
 
-  test('calls onEditDetails with selected course and players', () => {
+  test('calls onEditDetails with selected course and players', async () => {
     const onEditDetails = jest.fn();
     const { getAllByLabelText, getByLabelText, getByText, queryByText } = renderQuickStart({ onEditDetails });
 
@@ -172,7 +179,11 @@ describe('QuickStartCourses interactions', () => {
     fireEvent.press(getByLabelText('Edit quick start details'));
 
     expect(onEditDetails).toHaveBeenCalledWith({ course: courses[0], players: [players[1], players[0]] });
-    expect(queryByText('Tees are auto-assigned. Use Edit details to change them.')).toBeNull();
+    // Same exit-animation carry-through as the Start case above — wait for
+    // the sheet to actually finish closing before asserting its content gone.
+    await waitFor(() => {
+      expect(queryByText('Tees are auto-assigned. Use Edit details to change them.')).toBeNull();
+    }, { timeout: 3000 });
   });
 
   test('shows loading and error states with retry', () => {

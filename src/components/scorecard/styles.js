@@ -255,8 +255,8 @@ export function makeScorecardStyles(theme) {
       fontFamily: 'PlayfairDisplay-Black',
       lineHeight: 48,
     },
-    holeMetaInline: { flexDirection: 'row', gap: 16, marginLeft: 14, alignSelf: 'flex-end', paddingBottom: 6 },
-    holeMetaItem: { alignItems: 'center', gap: 4 },
+    holeMetaRow: { flexDirection: 'row', gap: 16, marginTop: 2 },
+    holeMetaItem: { flexDirection: 'row', alignItems: 'baseline', gap: 5 },
     holeMetaLabel: {
       color: theme.text.muted,
       fontSize: 10,
@@ -265,7 +265,7 @@ export function makeScorecardStyles(theme) {
     },
     holeMetaValue: {
       color: theme.text.primary,
-      fontSize: 22,
+      fontSize: 15,
       fontFamily: 'PlusJakartaSans-ExtraBold',
     },
 

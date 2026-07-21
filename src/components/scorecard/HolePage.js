@@ -147,15 +147,15 @@ export const HolePage = React.memo(function HolePage({
           <View style={s.holeNumberRow}>
             <Text style={s.holeNumberLabel}>HOLE</Text>
             <Text style={s.holeNumber}>{pageHole.number}</Text>
-            <View style={s.holeMetaInline}>
-              <View style={s.holeMetaItem}>
-                <Text style={s.holeMetaLabel}>PAR</Text>
-                <Text style={s.holeMetaValue}>{pageHole.par}</Text>
-              </View>
-              <View style={s.holeMetaItem}>
-                <Text style={s.holeMetaLabel}>SI</Text>
-                <Text style={s.holeMetaValue}>{pageHole.strokeIndex}</Text>
-              </View>
+          </View>
+          <View style={s.holeMetaRow}>
+            <View style={s.holeMetaItem}>
+              <Text style={s.holeMetaLabel}>PAR</Text>
+              <Text style={s.holeMetaValue}>{pageHole.par}</Text>
+            </View>
+            <View style={s.holeMetaItem}>
+              <Text style={s.holeMetaLabel}>SI</Text>
+              <Text style={s.holeMetaValue}>{pageHole.strokeIndex}</Text>
             </View>
           </View>
         </View>

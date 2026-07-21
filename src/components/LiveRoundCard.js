@@ -1,16 +1,27 @@
 import React from 'react';
-import { View, Text, TouchableOpacity, StyleSheet } from 'react-native';
+import { View, Text, TouchableOpacity, StyleSheet, Animated, Easing } from 'react-native';
 import { Feather } from '@expo/vector-icons';
+import { useReducedMotion } from 'react-native-reanimated';
 
 import { useTheme } from '../theme/ThemeContext';
 import { loadTournament, subscribeTournamentChanges } from '../store/tournamentStore';
 import { liveRoundSummary } from '../lib/liveRoundSummary';
 
+const ENTRANCE_DURATION = 250;
+const ENTRANCE_EASING = Easing.bezier(0.23, 1, 0.32, 1);
+
 // Home "jump back in" hero — renders nothing unless there's a live round to
 // resume. Subscription pattern mirrors FloatingTabBar.js:18-39.
 export default function LiveRoundCard({ onOpen }) {
   const { theme } = useTheme();
+  const reduced = useReducedMotion();
   const [summary, setSummary] = React.useState(null);
+  // Entrance should only play the first time a summary appears (null → some
+  // round), never on the subscription's later refreshes of an already-shown
+  // card — this tracks whether the *previous* render had one.
+  const hadSummaryRef = React.useRef(false);
+  const opacity = React.useRef(new Animated.Value(0)).current;
+  const translateY = React.useRef(new Animated.Value(0)).current;
 
   React.useEffect(() => {
     let cancelled = false;
@@ -24,11 +35,34 @@ export default function LiveRoundCard({ onOpen }) {
     return () => { cancelled = true; unsub(); };
   }, []);
 
+  React.useEffect(() => {
+    if (summary && !hadSummaryRef.current) {
+      hadSummaryRef.current = true;
+      opacity.setValue(0);
+      const animations = [
+        Animated.timing(opacity, {
+          toValue: 1, duration: ENTRANCE_DURATION, easing: ENTRANCE_EASING, useNativeDriver: true,
+        }),
+      ];
+      if (reduced) {
+        translateY.setValue(0);
+      } else {
+        translateY.setValue(8);
+        animations.push(Animated.timing(translateY, {
+          toValue: 0, duration: ENTRANCE_DURATION, easing: ENTRANCE_EASING, useNativeDriver: true,
+        }));
+      }
+      Animated.parallel(animations).start();
+    } else if (!summary) {
+      hadSummaryRef.current = false;
+    }
+  }, [summary, reduced, opacity, translateY]);
+
   if (!summary) return null;
   const s = styles(theme);
 
   return (
-    <View style={s.card}>
+    <Animated.View style={[s.card, { opacity, transform: [{ translateY }] }]}>
       <View style={s.row}>
         <View style={s.livePill}><View style={s.liveDot} /><Text style={s.liveText}>LIVE</Text></View>
         <Text style={s.overline}>{summary.roundLabel.toUpperCase()}</Text>
@@ -42,7 +76,7 @@ export default function LiveRoundCard({ onOpen }) {
         <Feather name="clipboard" size={15} color="#0f3d2c" />
         <Text style={s.ctaText}>Open scorecard</Text>
       </TouchableOpacity>
-    </View>
+    </Animated.View>
   );
 }
 

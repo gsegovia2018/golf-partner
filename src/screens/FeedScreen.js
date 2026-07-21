@@ -1,11 +1,12 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   View, Text, TouchableOpacity, StyleSheet, FlatList, ScrollView,
-  RefreshControl, TextInput, Alert,
+  RefreshControl, TextInput, Alert, Animated, Easing,
 } from 'react-native';
 import ScreenContainer from '../components/ScreenContainer';
 import { useFocusEffect } from '@react-navigation/native';
 import { Feather } from '@expo/vector-icons';
+import PressableScale from '../components/ui/PressableScale';
 
 import { useTheme } from '../theme/ThemeContext';
 import {
@@ -112,11 +113,11 @@ function ReactionBar({
         const count = counts[emoji] ?? 0;
         const isMine = mine.includes(emoji);
         return (
-          <TouchableOpacity
+          <PressableScale
             key={emoji}
             style={[s.reactionChip, isMine && s.reactionChipActive]}
             onPress={() => onTap(emoji)}
-            activeOpacity={0.7}
+            activeScale={0.97}
           >
             <Text style={s.reactionEmoji}>{emoji}</Text>
             {count > 0 ? (
@@ -124,42 +125,42 @@ function ReactionBar({
                 {count}
               </Text>
             ) : null}
-          </TouchableOpacity>
+          </PressableScale>
         );
       })}
-      <TouchableOpacity
+      <PressableScale
         style={[s.reactionChip, pickerOpen && s.reactionChipActive]}
         onPress={() => {
           setPickerOpen((open) => !open);
           setTimeout(() => emojiInputRef.current?.focus?.(), 0);
         }}
-        activeOpacity={0.7}
+        activeScale={0.97}
         accessibilityLabel="React with any emoji"
       >
         <Feather name="smile" size={14} color={theme.text.muted} />
         <Text style={s.reactionActionText}>React</Text>
-      </TouchableOpacity>
-      <TouchableOpacity
+      </PressableScale>
+      <PressableScale
         style={s.reactionChip}
         onPress={() => onOpenComments?.(itemKey)}
-        activeOpacity={0.7}
+        activeScale={0.97}
         accessibilityLabel="Comments"
       >
         <Feather name="message-circle" size={13} color={theme.text.muted} />
         {commentCount > 0 ? (
           <Text style={s.reactionCount}>{commentCount}</Text>
         ) : null}
-      </TouchableOpacity>
+      </PressableScale>
       {onAddPhoto ? (
-        <TouchableOpacity
+        <PressableScale
           style={s.reactionChip}
           onPress={onAddPhoto}
-          activeOpacity={0.7}
+          activeScale={0.97}
           accessibilityLabel="Add photo"
         >
           <Feather name="camera" size={13} color={theme.text.muted} />
           <Text style={s.reactionActionText}>Add photo</Text>
-        </TouchableOpacity>
+        </PressableScale>
       ) : null}
       {pickerOpen ? (
         <View style={s.emojiInputWrap}>
@@ -223,6 +224,12 @@ export default function FeedScreen({ navigation }) {
   const [roundStories, setRoundStories] = useState([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
+  // Crossfades the list container in the first time skeletons give way to
+  // real content. `skeletonShownRef` only latches true while `loading` was
+  // actually true, so a later refocus/pull-to-refresh (which never sets
+  // `loading` again after the first load) never replays it.
+  const listOpacity = useRef(new Animated.Value(1)).current;
+  const skeletonShownRef = useRef(false);
   // 'ok' | 'error' | 'partial' — distinguishes a genuine empty feed from a
   // failed build.
   const [status, setStatus] = useState('ok');
@@ -252,6 +259,19 @@ export default function FeedScreen({ navigation }) {
   // while it was awaiting — so a slow page fetch can't clobber `items`/
   // `hasMore` with stale data after a concurrent rebuild superseded it.
   const loadEpochRef = useRef(0);
+
+  useEffect(() => {
+    if (loading) {
+      skeletonShownRef.current = true;
+      return;
+    }
+    if (!skeletonShownRef.current) return;
+    skeletonShownRef.current = false;
+    listOpacity.setValue(0);
+    Animated.timing(listOpacity, {
+      toValue: 1, duration: 200, easing: Easing.out(Easing.ease), useNativeDriver: true,
+    }).start();
+  }, [loading, listOpacity]);
 
   const applyFeedResult = useCallback((result) => {
     const feedItems = result.items ?? [];
@@ -646,28 +666,30 @@ export default function FeedScreen({ navigation }) {
           {[0, 1, 2].map((i) => <SkeletonCard key={i} s={s} />)}
         </ScrollView>
       ) : (
-        <FlatList
-          testID="feed-list"
-          data={items}
-          keyExtractor={(it) => it.key}
-          renderItem={({ item }) => renderRound(item)}
-          contentContainerStyle={s.list}
-          refreshControl={(
-            <RefreshControl
-              refreshing={refreshing}
-              onRefresh={() => load(true)}
-              tintColor={theme.accent.primary}
-            />
-          )}
-          ListEmptyComponent={renderEmpty()}
-          onEndReached={loadMore}
-          onEndReachedThreshold={0.4}
-          ListFooterComponent={loadingMore ? (
-            <View style={s.loadingMoreRow}>
-              <Text style={s.loadingMoreText}>Loading more…</Text>
-            </View>
-          ) : null}
-        />
+        <Animated.View style={{ flex: 1, opacity: listOpacity }}>
+          <FlatList
+            testID="feed-list"
+            data={items}
+            keyExtractor={(it) => it.key}
+            renderItem={({ item }) => renderRound(item)}
+            contentContainerStyle={s.list}
+            refreshControl={(
+              <RefreshControl
+                refreshing={refreshing}
+                onRefresh={() => load(true)}
+                tintColor={theme.accent.primary}
+              />
+            )}
+            ListEmptyComponent={renderEmpty()}
+            onEndReached={loadMore}
+            onEndReachedThreshold={0.4}
+            ListFooterComponent={loadingMore ? (
+              <View style={s.loadingMoreRow}>
+                <Text style={s.loadingMoreText}>Loading more…</Text>
+              </View>
+            ) : null}
+          />
+        </Animated.View>
       )}
 
       <CommentsSheet
