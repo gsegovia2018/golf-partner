@@ -1,7 +1,8 @@
 import React, { useMemo } from 'react';
-import { View, Text, StyleSheet, TouchableOpacity } from 'react-native';
+import { View, Text, StyleSheet } from 'react-native';
 import { Feather } from '@expo/vector-icons';
 import { useTheme } from '../../theme/ThemeContext';
+import PressableScale from '../ui/PressableScale';
 import { semantic } from '../../theme/tokens';
 import { formatConfidence, formatSample, formatPointsPerRound } from './CoachInsightRow';
 
@@ -65,16 +66,15 @@ export default function CoachHero({ insight, onCommitFocus, focusActive = false 
         </View>
       </View>
       {onCommitFocus && insight && !focusActive ? (
-        <TouchableOpacity
+        <PressableScale
           onPress={() => onCommitFocus(insight)}
           accessibilityRole="button"
           accessibilityLabel="Make this my focus"
           style={s.focusBtn}
-          activeOpacity={0.7}
         >
           <Feather name="target" size={14} color={GREEN} />
           <Text style={s.focusBtnText}>Make this my focus</Text>
-        </TouchableOpacity>
+        </PressableScale>
       ) : null}
     </View>
   );

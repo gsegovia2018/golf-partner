@@ -162,6 +162,13 @@ describe('MyStatsScreen navigation chrome', () => {
 
     expect(queryByLabelText('Back')).toBeNull();
   });
+
+  test('shows the Clubhouse kicker above the title', () => {
+    const { getByText } = renderScreen();
+
+    expect(getByText('CLUBHOUSE · MEMBER RECORD')).toBeTruthy();
+    expect(getByText('My Stats')).toBeTruthy();
+  });
 });
 
 describe('MyStatsScreen target handicap', () => {

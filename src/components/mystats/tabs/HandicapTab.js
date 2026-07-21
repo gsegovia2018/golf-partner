@@ -1,7 +1,8 @@
 import React, { useMemo, useState } from 'react';
-import { View, Text, TouchableOpacity, StyleSheet } from 'react-native';
+import { View, Text, StyleSheet } from 'react-native';
 import { Feather } from '@expo/vector-icons';
 import { useTheme } from '../../../theme/ThemeContext';
+import PressableScale from '../../ui/PressableScale';
 import SectionCard from '../SectionCard';
 import TrendLineChart from '../TrendLineChart';
 import { computeHandicapIndex, handicapIndexSeries, MIN_DIFFERENTIALS } from '../../../store/handicapIndex';
@@ -74,7 +75,7 @@ export default function HandicapTab({
   };
 
   const listCard = rows.length > 0 ? (
-    <SectionCard title="Score differentials" infoKey="handicapIndex" onInfo={onInfo} titleVariant="overline">
+    <SectionCard title="Score differentials" infoKey="handicapIndex" onInfo={onInfo}>
       <Text style={s.caption}>{`Newest first · grey rounds don't count`}</Text>
       {rows.map((d) => (
         <View key={d.key} style={[s.row, d.type === 'included' && d.counting && s.rowCounting]}>
@@ -105,7 +106,7 @@ export default function HandicapTab({
                 {fmt1(d.differential)}
               </Text>
               {onToggleExcluded && (
-                <TouchableOpacity
+                <PressableScale
                   onPress={() => onToggleExcluded(d.key)}
                   accessibilityRole="button"
                   accessibilityLabel={d.type === 'excluded'
@@ -118,7 +119,7 @@ export default function HandicapTab({
                     size={18}
                     color={d.type === 'excluded' ? theme.accent.primary : theme.text.muted}
                   />
-                </TouchableOpacity>
+                </PressableScale>
               )}
             </>
           )}
@@ -131,7 +132,7 @@ export default function HandicapTab({
     const missing = Math.max(0, MIN_DIFFERENTIALS - result.windowCount);
     return (
       <View style={s.wrap}>
-        <SectionCard title="Handicap Index" infoKey="handicapIndex" onInfo={onInfo} titleVariant="overline">
+        <SectionCard title="Handicap Index" infoKey="handicapIndex" onInfo={onInfo}>
           <Text style={s.emptyTitle}>Not enough qualifying rounds yet</Text>
           <Text style={s.note}>
             {`You need ${MIN_DIFFERENTIALS} qualifying rounds to calculate an index — ${missing} more to go. `}
@@ -149,7 +150,7 @@ export default function HandicapTab({
   }
 
   const evolutionCard = chartSeries.length >= 2 ? (
-    <SectionCard title="Index evolution" infoKey="handicapIndex" onInfo={onInfo} titleVariant="overline">
+    <SectionCard title="Index evolution" infoKey="handicapIndex" onInfo={onInfo}>
       <TrendLineChart
         series={chartSeries}
         color={theme.accent.primary}
@@ -161,7 +162,7 @@ export default function HandicapTab({
 
   return (
     <View style={s.wrap}>
-      <SectionCard title="Handicap Index" infoKey="handicapIndex" onInfo={onInfo} titleVariant="overline">
+      <SectionCard title="Handicap Index" infoKey="handicapIndex" onInfo={onInfo}>
         <Text style={s.hero}>{fmt1(result.index)}</Text>
         <Text style={s.heroSub}>
           {`Best ${result.usedCount} of last ${result.windowCount} differentials${result.excludedCount > 0 ? ` · ${result.excludedCount} excluded` : ''}`}
@@ -169,7 +170,7 @@ export default function HandicapTab({
         {isPlus && (
           <Text style={s.note}>A negative index means you play better than scratch.</Text>
         )}
-        <TouchableOpacity
+        <PressableScale
           style={[s.applyBtn, applyState === 'saving' && s.applyBtnDisabled]}
           onPress={onApply}
           disabled={applyState === 'saving'}
@@ -178,7 +179,7 @@ export default function HandicapTab({
           <Text style={s.applyText}>
             {applyState === 'done' ? 'Saved to profile ✓' : `Set as my handicap${isPlus ? ' (0.0)' : ''}`}
           </Text>
-        </TouchableOpacity>
+        </PressableScale>
         {applyState === 'error' && (
           <Text style={s.errorText}>Could not save — try again.</Text>
         )}

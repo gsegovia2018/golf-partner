@@ -27,8 +27,20 @@ function makeStyles(theme) {
       padding: theme.spacing.md, borderWidth: StyleSheet.hairlineWidth, borderColor: theme.border.default,
     },
     tileHero: { backgroundColor: 'rgba(255,255,255,0.12)', borderColor: 'transparent' },
-    value: { ...theme.typography.title, color: theme.text.primary },
-    caption: { ...theme.typography.tiny, color: theme.text.muted, fontWeight: '700', marginTop: 1 },
+    value: {
+      fontSize: 22,
+      fontFamily: 'PlusJakartaSans-ExtraBold',
+      fontVariant: ['tabular-nums'],
+      color: theme.text.primary,
+    },
+    caption: {
+      fontSize: 9.5,
+      fontFamily: 'PlusJakartaSans-Bold',
+      letterSpacing: 1.2,
+      textTransform: 'uppercase',
+      color: theme.text.muted,
+      marginTop: 2,
+    },
     captionHero: { color: 'rgba(255,255,255,0.75)' },
   });
 }

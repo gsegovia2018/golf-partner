@@ -34,4 +34,18 @@ describe('DistributionBars', () => {
     expect(getByText('12')).toBeTruthy();
     expect(getByText('7')).toBeTruthy();
   });
+
+  test('handles empty bars and all-zero counts without crashing', () => {
+    const empty = render(wrap(<DistributionBars bars={[]} />));
+    expect(empty.toJSON()).toBeTruthy();
+
+    const zeros = render(wrap(
+      <DistributionBars bars={[
+        { label: 'Eagle', count: 0 },
+        { label: 'Birdie', count: 0 },
+      ]} />
+    ));
+    expect(zeros.getByText('Eagle')).toBeTruthy();
+    expect(zeros.getByText('Birdie')).toBeTruthy();
+  });
 });

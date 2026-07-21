@@ -1,7 +1,8 @@
 import React, { useEffect, useState, useMemo } from 'react';
-import { View, Text, TouchableOpacity, StyleSheet, ScrollView, ActivityIndicator } from 'react-native';
+import { View, Text, StyleSheet, ScrollView, ActivityIndicator } from 'react-native';
 import { Feather } from '@expo/vector-icons';
 import ScreenContainer from '../components/ScreenContainer';
+import PressableScale from '../components/ui/PressableScale';
 import { useTheme } from '../theme/ThemeContext';
 import { useAuth } from '../context/AuthContext';
 import { loadAllTournamentsWithFallback } from '../store/tournamentStore';
@@ -62,13 +63,14 @@ export default function CourseStatsScreen({ navigation, route }) {
 
   const Header = (
     <View style={s.header}>
-      <TouchableOpacity
+      <PressableScale
+        accessibilityRole="button"
         accessibilityLabel="Back"
         onPress={() => navigation.goBack()}
         style={s.backBtn}
       >
         <Feather name="chevron-left" size={22} color={theme.accent.primary} />
-      </TouchableOpacity>
+      </PressableScale>
       <Text style={s.headerTitle} numberOfLines={1}>
         {breakdown?.courseName ?? fallbackName}
       </Text>
@@ -92,12 +94,13 @@ export default function CourseStatsScreen({ navigation, route }) {
         <View style={s.center}>
           <Feather name="wifi-off" size={32} color={theme.text.muted} />
           <Text style={s.emptyText}>Could not load course stats.</Text>
-          <TouchableOpacity
+          <PressableScale
+            accessibilityRole="button"
             style={s.retryBtn}
             onPress={() => { setBreakdown(undefined); setError(false); setLoadNonce((v) => v + 1); }}
           >
             <Text style={s.retryText}>Retry</Text>
-          </TouchableOpacity>
+          </PressableScale>
         </View>
       </ScreenContainer>
     );

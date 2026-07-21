@@ -1,6 +1,7 @@
 import React, { useMemo } from 'react';
-import { View, Text, TouchableOpacity, StyleSheet } from 'react-native';
+import { View, Text, StyleSheet } from 'react-native';
 import { useTheme } from '../../../theme/ThemeContext';
+import PressableScale from '../../ui/PressableScale';
 import SectionCard from '../SectionCard';
 import TrendLineChart from '../TrendLineChart';
 import ScoreMixArea from '../ScoreMixArea';
@@ -33,7 +34,7 @@ export default function FormTab({ stats, n, onChangeN, onInfo }) {
   const periodChips = (
     <View style={s.chips}>
       {[3, 5, 10].map((opt) => (
-        <TouchableOpacity
+        <PressableScale
           key={opt}
           onPress={() => onChangeN(opt)}
           style={[s.chip, n === opt && s.chipOn]}
@@ -41,7 +42,7 @@ export default function FormTab({ stats, n, onChangeN, onInfo }) {
           accessibilityState={{ selected: n === opt }}
         >
           <Text style={[s.chipText, n === opt && s.chipTextOn]}>{`Last ${opt}`}</Text>
-        </TouchableOpacity>
+        </PressableScale>
       ))}
     </View>
   );
