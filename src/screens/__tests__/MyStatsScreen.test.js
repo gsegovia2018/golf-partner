@@ -163,11 +163,11 @@ describe('MyStatsScreen navigation chrome', () => {
     expect(queryByLabelText('Back')).toBeNull();
   });
 
-  test('shows the Clubhouse kicker above the title', () => {
-    const { getByText } = renderScreen();
+  test('header shows only the My Stats title, no kicker', () => {
+    const { getByText, queryByText } = renderScreen();
 
-    expect(getByText('CLUBHOUSE · MEMBER RECORD')).toBeTruthy();
     expect(getByText('My Stats')).toBeTruthy();
+    expect(queryByText('CLUBHOUSE · MEMBER RECORD')).toBeNull();
   });
 });
 

@@ -1,13 +1,14 @@
 import React, { useMemo } from 'react';
-import { View, Text, StyleSheet } from 'react-native';
+import { View, StyleSheet } from 'react-native';
 import { useTheme } from '../../../theme/ThemeContext';
+import Reveal from '../../ui/Reveal';
 import SectionCard from '../SectionCard';
 import CourseMasteryCard from '../CourseMasteryCard';
 import CareerMilestonesCard from '../CareerMilestonesCard';
+import BreakdownRow from '../BreakdownRow';
+import ScoreMixBar from '../ScoreMixBar';
 import {
   comparisonMeta,
-  toneColor,
-  toneFill,
   toneFromComparison,
   toneFromDelta,
   toneFromRate,
@@ -75,99 +76,74 @@ export default function BreakdownTab({ stats, onInfo, onSelectCourse }) {
     bounceBack, scrambling, sandSaves, upAndDown, bunkerVisits,
   });
 
+  // Every card that will actually render, in order — so the mount stagger
+  // below skips empty sections instead of leaving gaps in the cascade.
+  const cards = [];
+  if ((distribution.total ?? 0) > 0) {
+    cards.push({
+      key: 'scoreMix',
+      node: (
+        <SectionCard title="Score mix" infoKey="scoreDistribution" onInfo={onInfo}>
+          <ScoreMixBar distribution={distribution} />
+        </SectionCard>
+      ),
+    });
+  }
+  if ((courseMastery ?? []).length > 0) {
+    cards.push({
+      key: 'courseMastery',
+      node: (
+        <CourseMasteryCard courses={courseMastery} onInfo={onInfo} onSelectCourse={onSelectCourse} />
+      ),
+    });
+  }
+  if (careerMilestones) {
+    cards.push({
+      key: 'careerMilestones',
+      node: <CareerMilestonesCard milestones={careerMilestones} onInfo={onInfo} />,
+    });
+  }
+  const patternCards = [
+    { key: 'scoring', title: 'Scoring patterns', infoKey: 'scoreDistribution', rows: scoringRows },
+    { key: 'course', title: 'Course scoring patterns', infoKey: 'parType', rows: courseRows },
+    { key: 'timing', title: 'Round timing patterns', infoKey: 'roundShape', rows: timingRows },
+    { key: 'tee', title: 'Tee result patterns', infoKey: 'teeShot', rows: teePatternRows },
+    { key: 'drive', title: 'Drive bucket patterns', infoKey: 'driveBuckets', rows: drivePatternRows },
+    { key: 'approach', title: 'Approach distance patterns', infoKey: 'approachDistance', rows: approachPatternRows },
+    { key: 'putting', title: 'Putting patterns', infoKey: 'puttingDriving', rows: puttingPatternRows },
+    { key: 'recovery', title: 'Recovery patterns', infoKey: 'recovery', rows: recoveryRows },
+  ];
+  patternCards.forEach(({ key, title, infoKey, rows }) => {
+    if (!rows.length) return;
+    cards.push({
+      key,
+      node: (
+        <SectionCard title={title} infoKey={infoKey} onInfo={onInfo}>
+          <PatternRows rows={rows} />
+        </SectionCard>
+      ),
+    });
+  });
+
   return (
     <View style={s.wrap}>
-      <CourseMasteryCard courses={courseMastery} onInfo={onInfo} onSelectCourse={onSelectCourse} />
-
-      {careerMilestones ? (
-        <CareerMilestonesCard milestones={careerMilestones} onInfo={onInfo} />
-      ) : null}
-
-      {scoringRows.length ? (
-        <SectionCard title="Scoring patterns" infoKey="scoreDistribution" onInfo={onInfo}>
-          <PatternRows rows={scoringRows} s={s} theme={theme} />
-        </SectionCard>
-      ) : null}
-
-      {courseRows.length ? (
-        <SectionCard title="Course scoring patterns" infoKey="parType" onInfo={onInfo}>
-          <PatternRows rows={courseRows} s={s} theme={theme} />
-        </SectionCard>
-      ) : null}
-
-      {timingRows.length ? (
-        <SectionCard title="Round timing patterns" infoKey="roundShape" onInfo={onInfo}>
-          <PatternRows rows={timingRows} s={s} theme={theme} />
-        </SectionCard>
-      ) : null}
-
-      {teePatternRows.length ? (
-        <SectionCard title="Tee result patterns" infoKey="teeShot" onInfo={onInfo}>
-          <PatternRows rows={teePatternRows} s={s} theme={theme} />
-        </SectionCard>
-      ) : null}
-
-      {drivePatternRows.length ? (
-        <SectionCard title="Drive bucket patterns" infoKey="driveBuckets" onInfo={onInfo}>
-          <PatternRows rows={drivePatternRows} s={s} theme={theme} />
-        </SectionCard>
-      ) : null}
-
-      {approachPatternRows.length ? (
-        <SectionCard title="Approach distance patterns" infoKey="approachDistance" onInfo={onInfo}>
-          <PatternRows rows={approachPatternRows} s={s} theme={theme} />
-        </SectionCard>
-      ) : null}
-
-      {puttingPatternRows.length ? (
-        <SectionCard title="Putting patterns" infoKey="puttingDriving" onInfo={onInfo}>
-          <PatternRows rows={puttingPatternRows} s={s} theme={theme} />
-        </SectionCard>
-      ) : null}
-
-      {recoveryRows.length ? (
-        <SectionCard title="Recovery patterns" infoKey="recovery" onInfo={onInfo}>
-          <PatternRows rows={recoveryRows} s={s} theme={theme} />
-        </SectionCard>
-      ) : null}
+      {cards.map(({ key, node }, index) => (
+        // Cascade the cards in; cards beyond index 6 share the last delay so
+        // the total added wait stays ≤ 240ms. Reveal respects reduced motion.
+        <Reveal key={key} delay={Math.min(index, 6) * 40}>
+          {node}
+        </Reveal>
+      ))}
     </View>
   );
 }
 
-function PatternRows({ rows, s, theme }) {
+function PatternRows({ rows }) {
   return (
-    <View style={s.patternRows}>
-      {rows.map(({ key, ...row }) => <PatternRow key={key} {...row} s={s} theme={theme} />)}
-    </View>
-  );
-}
-
-function PatternRow({
-  label, value, secondary, tone = 'neutral', dim = false, s, theme,
-}) {
-  const color = dim ? theme.text.muted : toneColor(theme, tone);
-  return (
-    <View style={[
-      s.patternRow,
-      tone === 'good' && s.patternRowGood,
-      tone === 'bad' && s.patternRowBad,
-      dim && s.patternRowDim,
-    ]}>
-      <View style={s.patternCopy}>
-        <Text style={[s.patternLabel, dim && s.dimText]} numberOfLines={2}>
-          {label}
-        </Text>
-        {secondary ? (
-          <Text style={[s.patternSecondary, dim && s.dimText]} numberOfLines={3}>
-            {secondary}
-          </Text>
-        ) : null}
-      </View>
-      <View style={[s.patternValuePill, { backgroundColor: toneFill(theme, tone) }]}>
-        <Text style={[s.patternValue, { color }]} numberOfLines={2}>
-          {dim ? '-' : value}
-        </Text>
-      </View>
+    <View>
+      {rows.map(({ key, ...row }, index) => (
+        <BreakdownRow key={key} {...row} first={index === 0} />
+      ))}
     </View>
   );
 }
@@ -607,72 +583,7 @@ function isNumber(value) {
 }
 
 function makeStyles(theme) {
-  const badWash = theme.isDark ? 'rgba(248,113,113,0.14)' : '#fff1f2';
-  const goodBorder = theme.isDark ? 'rgba(79,174,138,0.28)' : '#c7ddd3';
-  const badBorder = theme.isDark ? 'rgba(248,113,113,0.24)' : '#f3c7cf';
-
   return StyleSheet.create({
     wrap: { gap: theme.spacing.lg },
-    patternRows: {
-      gap: 6,
-    },
-    patternRow: {
-      minHeight: 54,
-      flexDirection: 'row',
-      alignItems: 'center',
-      justifyContent: 'space-between',
-      gap: theme.spacing.md,
-      paddingVertical: theme.spacing.sm,
-      paddingHorizontal: theme.spacing.sm,
-      borderWidth: StyleSheet.hairlineWidth,
-      borderColor: theme.border.default,
-      borderRadius: theme.radius.md,
-      backgroundColor: theme.bg.card,
-    },
-    patternRowGood: {
-      backgroundColor: theme.accent.light,
-      borderColor: goodBorder,
-    },
-    patternRowBad: {
-      backgroundColor: badWash,
-      borderColor: badBorder,
-    },
-    patternRowDim: {
-      opacity: 0.72,
-    },
-    patternCopy: {
-      flex: 1,
-      minWidth: 0,
-      gap: 2,
-    },
-    patternLabel: {
-      ...theme.typography.body,
-      color: theme.text.primary,
-      fontWeight: '700',
-    },
-    patternSecondary: {
-      ...theme.typography.caption,
-      color: theme.text.secondary,
-    },
-    patternValuePill: {
-      flexShrink: 0,
-      minWidth: 56,
-      maxWidth: 116,
-      alignItems: 'center',
-      justifyContent: 'center',
-      paddingHorizontal: theme.spacing.sm,
-      paddingVertical: 4,
-      borderRadius: theme.radius.pill,
-    },
-    patternValue: {
-      ...theme.typography.body,
-      flexShrink: 0,
-      maxWidth: 112,
-      textAlign: 'right',
-      fontWeight: '900',
-    },
-    dimText: {
-      color: theme.text.muted,
-    },
   });
 }
