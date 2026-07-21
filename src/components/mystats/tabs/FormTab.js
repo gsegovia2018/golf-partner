@@ -5,7 +5,8 @@ import PressableScale from '../../ui/PressableScale';
 import SectionCard from '../SectionCard';
 import FormHero from '../FormHero';
 import SparklineRow from '../SparklineRow';
-import ScoreMixColumns from '../ScoreMixColumns';
+import ScoreMixColumns, { DamageHeader } from '../ScoreMixColumns';
+import TrendLineChart from '../TrendLineChart';
 
 // vs-par values print with an explicit sign.
 const fmtVsPar = (v) => (v > 0 ? `+${v}` : `${v}`);
@@ -26,9 +27,10 @@ const META = {
   threePuttsPerRound: { colorToken: 'red',    format: fmtNum,   info: 'threePutts' },
 };
 
-// Form tab: exactly three cards — the current-form hero, the Instruments
-// panel of metric sparklines, and the Score mix damage report (latest-round
-// damage headline, five-band per-round columns, steady-holes trend).
+// Form tab: exactly four cards — the current-form hero, the Instruments
+// panel of metric sparklines, the Score mix damage report (latest-round
+// damage headline in the card header, five-band per-round columns), and the
+// Steady holes trend. Mix/damage/steady are GROSS — see computeFormSeries.
 export default function FormTab({ stats, n, onChangeN, onInfo }) {
   const { theme } = useTheme();
   const s = useMemo(() => makeStyles(theme), [theme]);
@@ -88,13 +90,26 @@ export default function FormTab({ stats, n, onChangeN, onInfo }) {
         )}
       </SectionCard>
 
-      <SectionCard title="Score mix" infoKey="scoreMix" onInfo={onInfo}>
-        <ScoreMixColumns
-          rounds={formSeries.scoreMix}
-          damage={formSeries.damage}
-          steadyPct={formSeries.steadyPct}
-          onInfo={onInfo}
+      <SectionCard
+        title="Score mix"
+        infoKey="scoreMix"
+        onInfo={onInfo}
+        right={formSeries.scoreMix.length >= 2
+          ? <DamageHeader damage={formSeries.damage} onInfo={onInfo} />
+          : null}
+      >
+        <ScoreMixColumns rounds={formSeries.scoreMix} damage={formSeries.damage} />
+      </SectionCard>
+
+      <SectionCard title="Steady holes" infoKey="steadyHoles" onInfo={onInfo}>
+        <TrendLineChart
+          series={formSeries.steadyPct}
+          color={theme.accent.primary}
+          variant="compact"
+          formatValue={(v) => `${v}%`}
+          dropGaps
         />
+        <Text style={s.steadyCaption}>Holes at bogey or better · oldest → newest</Text>
       </SectionCard>
     </View>
   );
@@ -104,6 +119,7 @@ function makeStyles(theme) {
   return StyleSheet.create({
     wrap: { gap: theme.spacing.lg },
     note: { ...theme.typography.caption, color: theme.text.muted, fontStyle: 'italic' },
+    steadyCaption: { ...theme.typography.tiny, color: theme.text.muted },
     chips: { flexDirection: 'row', gap: 4 },
     chip: {
       paddingHorizontal: theme.spacing.sm, paddingVertical: 4,

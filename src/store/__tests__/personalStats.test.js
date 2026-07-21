@@ -779,18 +779,35 @@ describe('computeFormSeries', () => {
     expect(steadyPct[0].value).toBe(67); // 6/9 → 66.7 → 67
   });
 
-  test('damage and steadyPct are net (handicap-adjusted), matching the score-mix basis', () => {
+  test('scoreMix, damage and steadyPct are GROSS — handicap strokes do not erase a double', () => {
     const h = holes18();
-    // 18-handicapper gets one extra shot per hole: a gross 6 on a par 4 is a
-    // net bogey — no damage, fully steady.
+    // 18-handicapper scoring a gross 6 on every par 4: net bogeys, but a
+    // gross double is a double regardless of handicap — every hole lands in
+    // the double band, damage counts 1 per hole, and no hole is steady.
     const { scoreMix, damage, steadyPct } = computeFormSeries([
       myRoundScores('Pine', h, evenScores(h, 6), 18),
     ]);
     expect(scoreMix[0]).toEqual({
-      label: 'Pine', birdiePlus: 0, par: 0, bogey: 18, double: 0, worse: 0,
+      label: 'Pine', birdiePlus: 0, par: 0, bogey: 0, double: 18, worse: 0,
     });
-    expect(damage[0].value).toBe(0);
-    expect(steadyPct[0].value).toBe(100);
+    expect(damage[0].value).toBe(18);
+    expect(steadyPct[0].value).toBe(0);
+  });
+
+  test('a gross double on a stroke hole still counts as damage for a handicap player', () => {
+    const h = holes18();
+    // 9-handicapper: extra shot on SI 1-9 (holes 1-9 here). A gross 6 on
+    // hole 1 (par 4, SI 1) is only a net bogey — the gross basis counts it
+    // as a double and 1 stroke of damage anyway.
+    const scores = { ...evenScores(h, 4), 1: 6 };
+    const { scoreMix, damage, steadyPct } = computeFormSeries([
+      myRoundScores('Pine', h, scores, 9),
+    ]);
+    expect(scoreMix[0]).toEqual({
+      label: 'Pine', birdiePlus: 0, par: 17, bogey: 0, double: 1, worse: 0,
+    });
+    expect(damage[0].value).toBe(1);
+    expect(steadyPct[0].value).toBe(94); // 17/18 → 94.4 → 94
   });
 
   test('a round with no scored holes yields null damage and steadyPct (chart gap)', () => {
@@ -1122,8 +1139,9 @@ describe('computeMyStats', () => {
     // par (4) nets out as a net birdie under the points metric — comparing
     // that inflated net-birdie count against a gross benchmark table would
     // always read as green, so the ShotsTab benchmark reads the separate
-    // gross field. The shared `distribution` must STAY net: BreakdownTab,
-    // roundReportCard and formSeries.scoreMix all report net and must agree.
+    // gross field. The shared `distribution` must STAY net: BreakdownTab and
+    // roundReportCard both report net and must agree. (formSeries' Form-card
+    // series are gross — pinned in the computeFormSeries suite.)
     const h = holes18();
     const myRound = {
       key: 'gross:0',

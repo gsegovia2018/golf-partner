@@ -596,10 +596,12 @@ export function computeFormSeries(selectedRounds) {
     metrics.puttsPerRound.push({ label, value: shots.putts.holes > 0 ? shots.putts.total : null });
     metrics.threePuttsPerRound.push({ label, value: shots.putts.holes > 0 ? shots.putts.threePuttPlus : null });
 
-    // Net (Stableford-adjusted) five-band split — same playerScoreDistribution
-    // basis the old birdie/par/bogey triple used, so the Form-tab card keeps
-    // agreeing with BreakdownTab and roundReportCard (see computeMyStats).
-    const d = playerScoreDistribution(synthetic, CANON_ID);
+    // GROSS five-band split — actual strokes vs par, no handicap adjustment:
+    // a triple is a triple regardless of handicap. The Breakdown tab's mix
+    // stays net (Stableford-adjusted) and the SG tab's mix is already
+    // gross-labeled — per-card labeled bases are the app's existing pattern,
+    // so these Form-card series no longer track BreakdownTab's net basis.
+    const d = playerScoreDistribution(synthetic, CANON_ID, { metric: 'strokes' });
     scoreMix.push({
       label,
       birdiePlus: d.eagles + d.birdies,
@@ -609,16 +611,16 @@ export function computeFormSeries(selectedRounds) {
       worse: d.worse,
     });
 
-    // Damage: strokes lost beyond (net) bogey — a net double costs 1, a net
-    // triple 2, and so on. dist entries carry net vsPar, so this is
-    // Σ max(0, vsPar − 1) over the worse-than-bogey holes. A round with no
+    // Damage: strokes lost beyond (gross) bogey — a gross double costs 1, a
+    // gross triple 2, and so on. dist entries carry gross vsPar here, so this
+    // is Σ max(0, vsPar − 1) over the worse-than-bogey holes. A round with no
     // scored holes has no honest figure — null renders as a chart gap.
     const scoredHoles = d.total;
     const damageStrokes = [...d.doubleHoles, ...d.worseHoles]
       .reduce((sum, e) => sum + (e.vsPar - 1), 0);
     damage.push({ label, value: scoredHoles > 0 ? damageStrokes : null });
 
-    // Steady holes: share of scored holes at (net) bogey or better.
+    // Steady holes: share of scored holes at (gross) bogey or better.
     steadyPct.push({
       label,
       value: scoredHoles > 0
@@ -731,8 +733,9 @@ export function computeMyStats(selectedRounds, { n = 5, targetHandicap = 0, base
     difficulty: holeDifficultySplit(synthetic, CANON_ID),
     frontBack: frontBackSplit(synthetic)[0] ?? null,
     warmupClosing: warmupVsClosing(synthetic, CANON_ID),
-    // Net (Stableford-adjusted) — BreakdownTab, roundReportCard and
-    // formSeries.scoreMix all report net and must agree with each other.
+    // Net (Stableford-adjusted) — BreakdownTab and roundReportCard both
+    // report net and must agree with each other. (The Form tab's
+    // formSeries mix/damage/steady series are GROSS — see computeFormSeries.)
     distribution: playerScoreDistribution(synthetic, CANON_ID),
     shots: shotStats(synthetic, CANON_ID),
     history: playerRoundHistory(synthetic, CANON_ID),

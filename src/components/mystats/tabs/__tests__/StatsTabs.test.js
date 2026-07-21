@@ -282,7 +282,7 @@ function formStats() {
 }
 
 describe('My Stats tabs', () => {
-  test('FormTab renders exactly three cards: hero, instruments, score mix', async () => {
+  test('FormTab renders exactly four cards: hero, instruments, score mix, steady holes', async () => {
     const { findByText, getByTestId, getAllByTestId, queryByText, getByText } = render(wrap(
       <FormTab stats={formStats()} n={5} onChangeN={() => {}} onInfo={() => {}} />
     ));
@@ -303,17 +303,35 @@ describe('My Stats tabs', () => {
     });
     expect(queryByText('Points / round')).toBeNull();
 
-    // Score mix damage report: headline, per-round columns, steady trend.
+    // Score mix card: the damage headline sits in the card HEADER (right
+    // slot), the body is the per-round columns — the old inner overline and
+    // caption are gone.
     expect(getByText('Score mix')).toBeTruthy();
-    expect(getByText('Damage · strokes lost past bogey')).toBeTruthy();
     expect(getByTestId('scoremix-damage-value')).toBeTruthy();
     expect(getByTestId('scoremix-col-0')).toBeTruthy();
     expect(getByTestId('scoremix-col-2')).toBeTruthy();
-    expect(getByText('Steady holes · bogey or better')).toBeTruthy();
+    expect(queryByText('Damage · strokes lost past bogey')).toBeNull();
+    expect(queryByText(/One column per round/)).toBeNull();
+
+    // Steady holes is its own card now: title + compact trend + caption.
+    expect(getByText('Steady holes')).toBeTruthy();
+    expect(getByText('Holes at bogey or better · oldest → newest')).toBeTruthy();
+    expect(queryByText('Steady holes · bogey or better')).toBeNull();
 
     // The old four-card layout is gone.
     expect(queryByText('Points per round')).toBeNull();
     expect(queryByText('Recent vs History')).toBeNull();
+  });
+
+  test('FormTab columns are tappable: detail line appears and the damage header stays', async () => {
+    const view = render(wrap(
+      <FormTab stats={formStats()} n={5} onChangeN={() => {}} onInfo={() => {}} />
+    ));
+
+    fireEvent.press(await view.findByTestId('scoremix-col-press-0'));
+    expect(view.getByText('R1 — 1 double · 1 worse · damage 5')).toBeTruthy();
+    fireEvent.press(view.getByTestId('scoremix-col-press-0'));
+    expect(view.queryByTestId('scoremix-detail')).toBeNull();
   });
 
   test('FormTab period chips select the window and call onChangeN', async () => {
