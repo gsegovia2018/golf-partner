@@ -1433,9 +1433,14 @@ export default function HomeScreen({ navigation, route }) {
                   </View>
                 </TouchableOpacity>
                 {openable && t._role === 'owner' && (
-                  <TouchableOpacity style={s.deleteCardBtn} onPress={() => confirmDelete(t)} hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}>
-                    <Feather name="trash-2" size={14} color={theme.destructive} />
-                  </TouchableOpacity>
+                  <IconButton
+                    icon="trash-2"
+                    size={14}
+                    color={theme.destructive}
+                    onPress={() => confirmDelete(t)}
+                    accessibilityLabel="Delete"
+                    style={s.deleteCardBtn}
+                  />
                 )}
               </View>
             );

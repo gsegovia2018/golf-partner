@@ -50,18 +50,16 @@ describe('IconButton', () => {
 
   it('renders a notification dot when dot is true', () => {
     const { getByTestId } = render(
-      <IconButton icon="bell" onPress={() => {}} dot dotColor="#ff0000" testID="dot" />
+      <IconButton icon="bell" onPress={() => {}} dot dotColor="#ff0000" />
     );
-    expect(getByTestId('dot')).toBeTruthy();
+    expect(getByTestId('icon-button-dot')).toBeTruthy();
   });
 
   it('does not render a dot when dot is false/omitted', () => {
     const { queryByTestId } = render(
-      <IconButton icon="bell" onPress={() => {}} testID="no-dot" />
+      <IconButton icon="bell" onPress={() => {}} />
     );
-    // The dot has no testID of its own; assert no extra View beyond icon renders by
-    // checking the tree only contains the icon glyph as content.
-    expect(queryByTestId('no-dot')).toBeTruthy();
+    expect(queryByTestId('icon-button-dot')).toBeNull();
   });
 
   it('renders children instead of the Feather glyph when children is provided', () => {

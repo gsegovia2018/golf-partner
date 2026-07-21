@@ -126,21 +126,21 @@ export default function FinishedScreen({ navigation }) {
           <Feather name="chevron-right" size={18} color={theme.text.muted} />
         </TouchableOpacity>
         <View style={s.cardActions}>
-          <TouchableOpacity
-            style={s.actionBtn}
+          <IconButton
+            icon="rotate-ccw"
+            size={14}
+            color={theme.accent.primary}
             onPress={() => reopen(t)}
-            hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
-          >
-            <Feather name="rotate-ccw" size={14} color={theme.accent.primary} />
-          </TouchableOpacity>
+            accessibilityLabel="Reopen"
+          />
           {t._role === 'owner' && (
-            <TouchableOpacity
-              style={s.actionBtn}
+            <IconButton
+              icon="trash-2"
+              size={14}
+              color={theme.destructive}
               onPress={() => confirmDelete(t)}
-              hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
-            >
-              <Feather name="trash-2" size={14} color={theme.destructive} />
-            </TouchableOpacity>
+              accessibilityLabel="Delete"
+            />
           )}
         </View>
       </View>
@@ -223,12 +223,6 @@ function makeStyles(theme) {
     },
     cardActions: {
       position: 'absolute', right: 14, bottom: -8, flexDirection: 'row', gap: 6,
-    },
-    actionBtn: {
-      width: 30, height: 30, borderRadius: 10,
-      backgroundColor: theme.bg.secondary,
-      borderWidth: 1, borderColor: theme.border.default,
-      alignItems: 'center', justifyContent: 'center',
     },
     emptyState: { alignItems: 'center', paddingVertical: 80, gap: 12 },
     emptyTitle: { fontFamily: 'PlayfairDisplay-Bold', fontSize: 18, color: theme.text.primary },

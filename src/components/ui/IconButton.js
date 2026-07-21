@@ -20,7 +20,9 @@ export default function IconButton({
       style={[s.btn, style]}
     >
       {children ?? <Feather name={icon} size={size} color={color ?? theme.text.primary} />}
-      {dot ? <View style={[s.dot, { backgroundColor: dotColor ?? theme.accent.primary }]} /> : null}
+      {dot ? (
+        <View testID="icon-button-dot" style={[s.dot, { backgroundColor: dotColor ?? theme.accent.primary }]} />
+      ) : null}
     </PressableScale>
   );
 }
