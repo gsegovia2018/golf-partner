@@ -13,7 +13,7 @@ jest.mock('@react-native-async-storage/async-storage', () => ({
 const wrap = (ui) => <ThemeProvider>{ui}</ThemeProvider>;
 
 const GREEN = '#0f3d2c';
-const BURGUNDY = '#4a1d1d';
+const RED = semantic.masters.red; // '#c8102e'
 
 const insight = {
   id: 'putting:6-m-putts',
@@ -32,14 +32,14 @@ const surfaceColor = (view) =>
   StyleSheet.flatten(view.getByTestId('coach-hero-surface').props.style).backgroundColor;
 
 describe('CoachHero surface color', () => {
-  test('fixFirst insight renders the burgundy surface', () => {
+  test('fixFirst insight renders the Masters-red surface', () => {
     const view = render(wrap(<CoachHero insight={insight} />));
-    expect(surfaceColor(view)).toBe(BURGUNDY);
+    expect(surfaceColor(view)).toBe(RED);
   });
 
-  test('gettingWorse insight renders the burgundy surface', () => {
+  test('gettingWorse insight renders the Masters-red surface', () => {
     const view = render(wrap(<CoachHero insight={{ ...insight, group: 'gettingWorse' }} />));
-    expect(surfaceColor(view)).toBe(BURGUNDY);
+    expect(surfaceColor(view)).toBe(RED);
   });
 
   test('keepDoing insight renders the green surface', () => {
@@ -52,7 +52,7 @@ describe('CoachHero surface color', () => {
     expect(surfaceColor(view)).toBe(GREEN);
   });
 
-  test('bad-tone area label uses winner gold on the burgundy surface', () => {
+  test('bad-tone area label uses winner gold on the Masters-red surface', () => {
     const view = render(wrap(<CoachHero insight={insight} />));
     const area = view.getByText('Putting');
     expect(StyleSheet.flatten(area.props.style).color).toBe(semantic.winner.dark);
@@ -68,7 +68,7 @@ describe('CoachHero surface color', () => {
     const onCommitFocus = jest.fn();
     const red = render(wrap(<CoachHero insight={insight} onCommitFocus={onCommitFocus} />));
     const redLabel = red.getByText('Make this my focus');
-    expect(StyleSheet.flatten(redLabel.props.style).color).toBe(BURGUNDY);
+    expect(StyleSheet.flatten(redLabel.props.style).color).toBe(RED);
 
     const green = render(
       wrap(<CoachHero insight={{ ...insight, group: 'keepDoing', tone: 'good' }} onCommitFocus={onCommitFocus} />)

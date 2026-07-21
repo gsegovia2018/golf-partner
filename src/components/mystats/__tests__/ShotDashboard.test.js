@@ -1,6 +1,8 @@
 import React from 'react';
+import { StyleSheet } from 'react-native';
 import { render } from '@testing-library/react-native';
 import ShotDashboard, { buildShotSignals } from '../ShotDashboard';
+import { semantic } from '../../../theme/tokens';
 
 jest.mock('../../../theme/ThemeContext', () => ({
   useTheme: () => {
@@ -25,6 +27,9 @@ jest.mock('../../../theme/ThemeContext', () => ({
   },
 }));
 
+const GREEN = '#0f3d2c';
+const RED = semantic.masters.red; // '#c8102e'
+
 const baseSG = {
   total: -1.2,
   sampleHoles: 36,
@@ -42,14 +47,61 @@ const baseSG = {
   perRound: [],
 };
 
-function renderDash(sg = baseSG) {
-  return render(<ShotDashboard stats={{ strokesGained: sg }} targetHandicap={0} onInfo={jest.fn()} />);
+function renderDash(sg = baseSG, extraStats = {}) {
+  return render(<ShotDashboard stats={{ strokesGained: sg, ...extraStats }} targetHandicap={0} onInfo={jest.fn()} />);
 }
 
-describe('ShotDashboard category gating and deltas', () => {
-  test('under-sampled category renders needs-more-holes instead of a bar', () => {
+const heroColor = (r) =>
+  StyleSheet.flatten(r.getByTestId('sg-hero-surface').props.style).backgroundColor;
+
+describe('ShotDashboard target-gap hero surface', () => {
+  test('goes Masters red when the SG total is negative', () => {
+    const r = renderDash({ ...baseSG, total: -1.2 });
+    expect(heroColor(r)).toBe(RED);
+  });
+  test('stays green when the SG total is positive', () => {
+    const r = renderDash({ ...baseSG, total: 0.8 });
+    expect(heroColor(r)).toBe(GREEN);
+  });
+  test('stays green at exactly zero and without data', () => {
+    expect(heroColor(renderDash({ ...baseSG, total: 0 }))).toBe(GREEN);
+    expect(heroColor(renderDash({ ...baseSG, total: null }))).toBe(GREEN);
+  });
+  test('headline number is winner gold on both surfaces', () => {
+    const losing = renderDash({ ...baseSG, total: -1.2 });
+    expect(StyleSheet.flatten(losing.getByText('-1.20 / round').props.style).color)
+      .toBe(semantic.winner.dark);
+    const winning = renderDash({ ...baseSG, total: 0.8 });
+    expect(StyleSheet.flatten(winning.getByText('+0.80 / round').props.style).color)
+      .toBe(semantic.winner.dark);
+  });
+});
+
+describe('ShotDashboard category board', () => {
+  test('under-sampled category renders a locked row with unlock progress', () => {
     const r = renderDash();
-    expect(r.getAllByText('Off the tee: needs 6 more holes').length).toBeGreaterThan(0);
+    expect(r.getByText('Off the tee')).toBeTruthy();
+    // Locked note appears in the row; the hero evidence footnote repeats
+    // the weakest-category call-out with its label prefix.
+    expect(r.getAllByText('needs 6 more holes').length).toBe(1);
+    const fill = r.getByTestId('sg-lock-fill');
+    // 4 of 10 holes sampled
+    expect(StyleSheet.flatten(fill.props.style).width).toBe('40%');
+    expect(StyleSheet.flatten(fill.props.style).backgroundColor).toBe('#7fb59f');
+  });
+  test('locked rows show no SG value', () => {
+    const r = renderDash();
+    // offTheTee (-0.4) is locked; putting (-0.4) renders the only -0.40
+    expect(r.getAllByText('-0.40').length).toBe(1);
+  });
+  test('well-sampled categories render a board row with bar, sample and value', () => {
+    const r = renderDash();
+    expect(r.getByText('Approach')).toBeTruthy();
+    expect(r.getAllByText('30 holes').length).toBe(2); // approach + putting samples
+    expect(r.getByText('-0.50')).toBeTruthy();
+    expect(r.getByText('+0.10')).toBeTruthy();
+    // 4 unlocked rows each render an SGBarTrack
+    expect(r.getAllByTestId('sg-bar-track').length).toBe(4);
   });
   test('well-sampled categories show a compact delta chip when history exists', () => {
     const r = renderDash();
@@ -60,6 +112,20 @@ describe('ShotDashboard category gating and deltas', () => {
     const r = renderDash({ ...baseSG, personalDelta: null });
     expect(r.queryByText('+0.6')).toBeNull();
     expect(r.queryByLabelText(/strokes gained vs your previous rounds/)).toBeNull();
+  });
+  test('bucket signals surface as one-line footnotes on their category row', () => {
+    const r = renderDash(baseSG, {
+      puttingTarget: {
+        buckets: { '6+': { attempts: 16, sgPerPutt: -0.2, avgPutts: 2.4, expectedPutts: 2.1 } },
+      },
+    });
+    // -0.2 · 16 / 2 rounds = -1.60 per round
+    expect(r.getByText('6+ m putts: -1.60 SG/rnd')).toBeTruthy();
+  });
+  test('the standalone signal lists are gone', () => {
+    const r = renderDash();
+    expect(r.queryByText('What is working')).toBeNull();
+    expect(r.queryByText('What is costing shots')).toBeNull();
   });
 });
 

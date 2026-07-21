@@ -10,7 +10,11 @@ const MAX_WIDTH = 200;
 const MAX_ABS = 1.5; // ±1.5 SG/round visual cap
 const EASE_OUT = Easing.bezier(0.23, 1, 0.32, 1);
 
-export function SGBar({ label, value }) {
+// Bare diverging track — zero line in the middle, bar growing out of it.
+// No label/value columns, so it can sit inside a board row (ShotDashboard)
+// as well as the standalone SGBar. `style` lets callers override the track
+// shell (height, maxWidth, ...).
+export function SGBarTrack({ value, style }) {
   const { theme } = useTheme();
   const reduced = useReducedMotion();
   // Reduced motion ⇒ render at full width with no animation.
@@ -26,6 +30,35 @@ export function SGBar({ label, value }) {
     transform: [{ scaleX: scale.value }],
   }));
 
+  const clamped = Math.max(-MAX_ABS, Math.min(MAX_ABS, value));
+  const positive = clamped >= 0;
+  const widthPct = (Math.abs(clamped) / MAX_ABS) * 50;
+  // theme.scoreColor is a function: scoreColor('good') / scoreColor('poor')
+  const fill = positive ? theme.scoreColor('good') : theme.scoreColor('poor');
+
+  return (
+    <View testID="sg-bar-track" style={[styles.track, { backgroundColor: theme.bg.secondary }, style]}>
+      <View style={[styles.zeroLine, { backgroundColor: theme.border.default }]} />
+      <Animated.View
+        style={[
+          styles.bar,
+          positive ? styles.barPositive : styles.barNegative,
+          {
+            width: `${widthPct}%`,
+            backgroundColor: fill,
+            // Grow out of the zero line: anchor scaleX at the center edge.
+            transformOrigin: positive ? 'left center' : 'right center',
+          },
+          animatedStyle,
+        ]}
+      />
+    </View>
+  );
+}
+
+export function SGBar({ label, value }) {
+  const { theme } = useTheme();
+
   if (value == null) {
     return (
       <View testID="sg-bar-row" style={styles.row}>
@@ -35,31 +68,12 @@ export function SGBar({ label, value }) {
     );
   }
 
-  const clamped = Math.max(-MAX_ABS, Math.min(MAX_ABS, value));
-  const positive = clamped >= 0;
-  const widthPct = (Math.abs(clamped) / MAX_ABS) * 50;
-  // theme.scoreColor is a function: scoreColor('good') / scoreColor('poor')
-  const fill = positive ? theme.scoreColor('good') : theme.scoreColor('poor');
+  const fill = value >= 0 ? theme.scoreColor('good') : theme.scoreColor('poor');
 
   return (
     <View testID="sg-bar-row" style={styles.row}>
       <Text style={[styles.label, { color: theme.text.muted }]} numberOfLines={1}>{label}</Text>
-      <View testID="sg-bar-track" style={[styles.track, { backgroundColor: theme.bg.secondary }]}>
-        <View style={[styles.zeroLine, { backgroundColor: theme.border.default }]} />
-        <Animated.View
-          style={[
-            styles.bar,
-            positive ? styles.barPositive : styles.barNegative,
-            {
-              width: `${widthPct}%`,
-              backgroundColor: fill,
-              // Grow out of the zero line: anchor scaleX at the center edge.
-              transformOrigin: positive ? 'left center' : 'right center',
-            },
-            animatedStyle,
-          ]}
-        />
-      </View>
+      <SGBarTrack value={value} />
       <Text
         testID="sg-bar-value"
         style={[styles.value, { color: fill }]}
@@ -103,7 +117,7 @@ const styles = {
   bar: {
     position: 'absolute',
     top: 2,
-    height: HEIGHT - 4,
+    bottom: 2, // inset instead of fixed height so track-height overrides work
     borderRadius: 4,
   },
   barPositive: {

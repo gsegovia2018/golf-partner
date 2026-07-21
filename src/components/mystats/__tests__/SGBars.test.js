@@ -1,7 +1,7 @@
 import React from 'react';
 import { StyleSheet } from 'react-native';
 import { render } from '@testing-library/react-native';
-import { SGBar } from '../SGBars';
+import { SGBar, SGBarTrack } from '../SGBars';
 
 jest.mock('../../../theme/ThemeContext', () => ({
   useTheme: () => {
@@ -82,5 +82,30 @@ describe('SGBar', () => {
     expect(getByText('—')).toBeTruthy();
     expect(queryByTestId('sg-bar-track')).toBeNull();
     expect(queryByTestId('sg-bar-value')).toBeNull();
+  });
+});
+
+describe('SGBarTrack (bare in-board track)', () => {
+  it('renders only the track — no label or value columns', () => {
+    const { getByTestId, queryByTestId } = render(<SGBarTrack value={-0.6} />);
+    expect(getByTestId('sg-bar-track')).toBeTruthy();
+    expect(queryByTestId('sg-bar-row')).toBeNull();
+    expect(queryByTestId('sg-bar-value')).toBeNull();
+  });
+
+  it('keeps the diverging bar geometry and tone color', () => {
+    const { getByTestId } = render(<SGBarTrack value={-0.75} />);
+    const style = barStyle(getByTestId);
+    expect(style.right).toBe('50%');
+    expect(style.width).toBe('25%');
+    expect(style.backgroundColor).toBe(POOR);
+    expect(style.transformOrigin).toBe('right center');
+  });
+
+  it('accepts style overrides on the track shell', () => {
+    const { getByTestId } = render(<SGBarTrack value={0.5} style={{ height: 10, maxWidth: undefined }} />);
+    const track = StyleSheet.flatten(getByTestId('sg-bar-track').props.style);
+    expect(track.height).toBe(10);
+    expect(track.maxWidth).toBeUndefined();
   });
 });

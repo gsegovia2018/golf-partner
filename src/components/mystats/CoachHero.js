@@ -18,11 +18,11 @@ const GROUP_LABELS = {
 
 // Clubhouse hero surface — cream-on-green, matches LiveRoundCard.js. Tone no
 // longer drives the whole card; the insight group picks the surface (problem
-// groups go burgundy) and tone only accents the small `area` label.
+// groups go Masters red) and tone only accents the small `area` label.
 const GREEN = '#0f3d2c';
-// Deep Clubhouse burgundy — same value range as GREEN so cream text keeps
-// identical contrast on the "fix first" / "getting worse" surface.
-const BURGUNDY = '#4a1d1d';
+// Masters red — the app's one light-surface red. Cream #f3efe6 on it is ~5:1
+// (AA); gold #ffd700 is ~4.2:1 (AA-large, fine for the big area label).
+const RED = semantic.masters.red;
 const CREAM = '#f3efe6';
 const CREAM_70 = 'rgba(243,239,230,0.7)';
 const CREAM_85 = 'rgba(243,239,230,0.85)';
@@ -34,7 +34,7 @@ export default function CoachHero({ insight, onCommitFocus, focusActive = false 
   const s = useMemo(() => makeStyles(theme), [theme]);
   const proofs = [insight?.basis, formatSample(insight?.sample), formatConfidence(insight?.confidence)].filter(Boolean);
   const isRedSurface = Boolean(insight && RED_SURFACE_GROUPS.has(insight.group));
-  const surfaceColor = isRedSurface ? BURGUNDY : GREEN;
+  const surfaceColor = isRedSurface ? RED : GREEN;
   const areaColor = areaAccentColor(insight?.tone, isRedSurface);
 
   if (!insight) {
@@ -48,7 +48,7 @@ export default function CoachHero({ insight, onCommitFocus, focusActive = false 
   }
 
   return (
-    <View style={[s.card, isRedSurface && { backgroundColor: BURGUNDY }]} testID="coach-hero-surface">
+    <View style={[s.card, isRedSurface && { backgroundColor: RED }]} testID="coach-hero-surface">
       <View style={s.topRow}>
         <Text style={s.kicker}>{GROUP_LABELS[insight.group] ?? 'Coach'}</Text>
         <Text style={[s.area, { color: areaColor }]}>{insight.areaLabel ?? insight.area}</Text>
@@ -90,8 +90,8 @@ export default function CoachHero({ insight, onCommitFocus, focusActive = false 
 
 // Hero surface is a fixed dark color in both themes, so tone accents always
 // use the dark-surface variants regardless of the active app theme. On the
-// burgundy surface the light destructive red would vanish, so a 'bad' area
-// label renders in winner gold there instead.
+// Masters-red surface a red area label would vanish, so a 'bad' area label
+// renders in winner gold there instead.
 function areaAccentColor(tone, isRedSurface) {
   if (tone === 'bad') return isRedSurface ? semantic.winner.dark : semantic.destructive.dark;
   if (tone === 'good') return semantic.winner.dark;
