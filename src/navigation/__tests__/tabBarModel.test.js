@@ -21,7 +21,7 @@ describe('tabBarModel', () => {
       routeName: 'Feed',
       targetRouteName: 'Feed',
       label: 'Feed',
-      icon: 'file-text',
+      icon: 'rss',
       center: false,
     });
     expect(getTabBarItem('MyStats')).toMatchObject({

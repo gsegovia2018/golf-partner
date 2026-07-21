@@ -11,7 +11,7 @@ export const TAB_ROUTE_NAMES = [
 const TAB_BAR_ITEMS = {
   Feed: {
     label: 'Feed',
-    icon: 'file-text',
+    icon: 'rss',
   },
   MyStats: {
     label: 'Stats',
