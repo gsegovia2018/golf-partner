@@ -1,6 +1,6 @@
 import React from 'react';
 import { render, fireEvent } from '@testing-library/react-native';
-import { Polyline, Circle } from 'react-native-svg';
+import { Polyline, Circle, Path, LinearGradient } from 'react-native-svg';
 import { ThemeProvider } from '../../../theme/ThemeContext';
 import TrendLineChart from '../TrendLineChart';
 
@@ -50,5 +50,48 @@ describe('TrendLineChart gaps', () => {
     ));
 
     expect(view.getByText('Not enough rounds yet.')).toBeTruthy();
+  });
+});
+
+describe('TrendLineChart area fill', () => {
+  test('draws one gradient-filled area path per segment', () => {
+    const view = render(wrap(<TrendLineChart series={gapped} />));
+    layOut(view);
+
+    const areas = view.UNSAFE_getAllByType(Path)
+      .filter((p) => typeof p.props.fill === 'string' && p.props.fill.startsWith('url(#'));
+    expect(areas).toHaveLength(2);
+    areas.forEach((a) => expect(a.props.d.endsWith('Z')).toBe(true));
+  });
+
+  test('each chart instance uses its own gradient id', () => {
+    const view = render(wrap(
+      <>
+        <TrendLineChart series={gapped} dropGaps />
+        <TrendLineChart series={gapped} dropGaps />
+      </>,
+    ));
+    const canvases = view.getAllByTestId('trend-chart-canvas');
+    canvases.forEach((c) => fireEvent(c, 'layout', { nativeEvent: { layout: { width: 300 } } }));
+
+    const ids = view.UNSAFE_getAllByType(LinearGradient).map((g) => g.props.id);
+    expect(ids).toHaveLength(2);
+    expect(ids[0]).not.toBe(ids[1]);
+  });
+});
+
+describe('TrendLineChart last-point emphasis', () => {
+  test('the final drawn dot is larger and ringed; earlier dots are not', () => {
+    const view = render(wrap(<TrendLineChart series={gapped} />));
+    layOut(view);
+
+    const circles = view.UNSAFE_getAllByType(Circle);
+    expect(circles).toHaveLength(2);
+    const [first, last] = circles;
+    expect(first.props.r).toBe(3);
+    expect(first.props.stroke).toBeUndefined();
+    expect(last.props.r).toBe(4.5);
+    expect(last.props.strokeWidth).toBe(2);
+    expect(typeof last.props.stroke).toBe('string');
   });
 });

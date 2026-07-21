@@ -1,8 +1,11 @@
 import React, { useMemo } from 'react';
-import { View, Text, StyleSheet, TouchableOpacity } from 'react-native';
+import { View, Text, StyleSheet } from 'react-native';
 import { Feather } from '@expo/vector-icons';
 import { useTheme } from '../../theme/ThemeContext';
+import { semantic } from '../../theme/tokens';
+import PressableScale from '../ui/PressableScale';
 import SectionCard from './SectionCard';
+import StatTile from './StatTile';
 import { SGBar } from './SGBars';
 import {
   APPROACH_BUCKETS,
@@ -12,6 +15,12 @@ import {
   formatSignedFixed,
   sampleText,
 } from './shotMetrics';
+
+// Clubhouse hero surface — same constants as CoachHero.js.
+const GREEN = '#0f3d2c';
+const CREAM = '#f3efe6';
+const CREAM_70 = 'rgba(243,239,230,0.7)';
+const CREAM_85 = 'rgba(243,239,230,0.85)';
 
 function CategoryRow({ category, strokesGained }) {
   const { theme } = useTheme();
@@ -71,37 +80,34 @@ export default function ShotDashboard({ stats, targetHandicap, onChangeTarget, o
       onInfo={onInfo}
       right={
         onChangeTarget ? (
-          <TouchableOpacity
+          <PressableScale
             onPress={onChangeTarget}
             hitSlop={8}
             accessibilityRole="button"
             accessibilityLabel="Change target handicap"
           >
             <Feather name="edit-2" size={14} color={theme.text.secondary} />
-          </TouchableOpacity>
+          </PressableScale>
         ) : null
       }
     >
-      <View style={s.summaryGrid}>
-        <View style={s.summaryPanel}>
-          <Text style={s.panelLabel}>Target gap</Text>
-          <Text
-            style={[
-              s.panelValue,
-              hasStrokesGained && {
-                color: strokesGained.total >= 0 ? theme.scoreColor('good') : theme.destructive,
-              },
-            ]}
-          >
-            {hasStrokesGained ? `${formatSignedFixed(strokesGained.total)} / round` : '-'}
-          </Text>
-          <Text style={s.panelMeta}>{hasStrokesGained ? targetCopy : 'Log putt distance and regulation approach shots.'}</Text>
+      <View style={s.hero}>
+        <Text style={s.heroKicker}>Target gap</Text>
+        <Text
+          style={[
+            s.heroValue,
+            hasStrokesGained && {
+              color: strokesGained.total >= 0 ? semantic.winner.dark : semantic.destructive.dark,
+            },
+          ]}
+        >
+          {hasStrokesGained ? `${formatSignedFixed(strokesGained.total)} / round` : '-'}
+        </Text>
+        <Text style={s.heroMeta}>{hasStrokesGained ? targetCopy : 'Log putt distance and regulation approach shots.'}</Text>
+        <View style={s.heroGrid}>
+          <StatTile surface="hero" value={sample ?? 'Tracked data'} caption="Evidence" />
         </View>
-        <View style={s.summaryPanel}>
-          <Text style={s.panelLabel}>Evidence</Text>
-          <Text style={s.panelValue}>{sample ?? 'Tracked data'}</Text>
-          <Text style={s.panelMeta}>{evidenceMeta(strokesGained)}</Text>
-        </View>
+        <Text style={s.heroFootnote}>{evidenceMeta(strokesGained)}</Text>
       </View>
 
       {strokesGained?.byCategory ? (
@@ -239,18 +245,28 @@ function buildShotSignals(stats) {
 function makeStyles(theme) {
   return StyleSheet.create({
     note: { ...theme.typography.caption, color: theme.text.muted, fontStyle: 'italic' },
-    summaryGrid: { flexDirection: 'row', gap: theme.spacing.md },
-    summaryPanel: {
-      flex: 1,
-      minWidth: 0,
-      gap: 3,
-      paddingBottom: theme.spacing.md,
-      borderBottomWidth: StyleSheet.hairlineWidth,
-      borderBottomColor: theme.border.default,
+    hero: {
+      backgroundColor: GREEN,
+      borderRadius: 16,
+      padding: theme.spacing.lg,
+      gap: theme.spacing.xs,
     },
-    panelLabel: { ...theme.typography.caption, color: theme.text.secondary, fontWeight: '800' },
-    panelValue: { ...theme.typography.heading, color: theme.text.primary, fontWeight: '800' },
-    panelMeta: { ...theme.typography.caption, color: theme.text.secondary, flexShrink: 1 },
+    heroKicker: {
+      color: CREAM_70,
+      fontSize: 10,
+      fontFamily: 'PlusJakartaSans-Bold',
+      letterSpacing: 1.4,
+      textTransform: 'uppercase',
+    },
+    heroValue: {
+      fontFamily: 'PlayfairDisplay-Black',
+      fontSize: 34,
+      lineHeight: 40,
+      color: CREAM,
+    },
+    heroMeta: { fontSize: 12.5, fontFamily: 'PlusJakartaSans-SemiBold', color: CREAM_85 },
+    heroGrid: { flexDirection: 'row', gap: theme.spacing.sm, marginTop: theme.spacing.xs },
+    heroFootnote: { fontSize: 10.5, fontFamily: 'PlusJakartaSans-SemiBold', color: CREAM_70 },
     sgBlock: { gap: 1, paddingTop: theme.spacing.sm },
     categoryRow: { gap: 2, paddingVertical: 2 },
     categoryMeta: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },

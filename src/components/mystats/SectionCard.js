@@ -6,21 +6,21 @@ import { useTheme } from '../../theme/ThemeContext';
 // Card shell with a title and an optional (i) button. The button does not own
 // any sheet — it just calls onInfo(infoKey). `right` renders extra header
 // content (e.g. period chips). `tone='hero'` gives the filled green variant.
-// `titleVariant='overline'` renders the title as a small uppercase label
-// (Clubhouse stat-card pattern) instead of the default heading style.
+// Titles default to the small uppercase overline label (Clubhouse stat-card
+// pattern); pass `titleVariant='heading'` to opt back into the heading style.
 export default function SectionCard({
-  title, infoKey, onInfo, right, tone = 'default', titleVariant = 'default', children, style,
+  title, infoKey, onInfo, right, tone = 'default', titleVariant = 'overline', children, style,
 }) {
   const { theme } = useTheme();
   const s = useMemo(() => makeStyles(theme), [theme]);
   const hero = tone === 'hero';
-  const overline = titleVariant === 'overline';
+  const overline = titleVariant !== 'heading';
 
   return (
     <View style={[s.card, hero && s.cardHero, style]}>
       <View style={s.head}>
         <View style={s.titleWrap}>
-          <Text style={overline ? s.titleOverline : [s.title, hero && s.titleHero]}>{title}</Text>
+          <Text style={overline ? [s.titleOverline, hero && s.titleOverlineHero] : [s.title, hero && s.titleHero]}>{title}</Text>
           {infoKey && onInfo ? (
             <TouchableOpacity
               onPress={() => onInfo(infoKey)}
@@ -28,7 +28,7 @@ export default function SectionCard({
               accessibilityRole="button"
               accessibilityLabel={`What is ${title}`}
             >
-              <Feather name="info" size={15} color={hero ? 'rgba(255,255,255,0.85)' : theme.text.muted} />
+              <Feather name="info" size={14} color={hero ? 'rgba(255,255,255,0.85)' : theme.text.muted} />
             </TouchableOpacity>
           ) : null}
         </View>
@@ -58,5 +58,6 @@ function makeStyles(theme) {
       textTransform: 'uppercase',
       color: theme.text.muted,
     },
+    titleOverlineHero: { color: 'rgba(255,255,255,0.85)' },
   });
 }

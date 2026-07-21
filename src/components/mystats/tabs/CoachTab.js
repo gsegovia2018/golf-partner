@@ -1,7 +1,8 @@
 import React, { useMemo } from 'react';
-import { View, StyleSheet, Text, TouchableOpacity } from 'react-native';
+import { View, StyleSheet, Text } from 'react-native';
 import { Feather } from '@expo/vector-icons';
 import { useTheme } from '../../../theme/ThemeContext';
+import PressableScale from '../../ui/PressableScale';
 import CoachHero from '../CoachHero';
 import CoachBoard from '../CoachBoard';
 import FocusCard from '../FocusCard';
@@ -49,14 +50,14 @@ function TargetBenchmarkRow({ targetHandicap, onChangeTarget }) {
       <Feather name="crosshair" size={13} color={theme.text.secondary} />
       <Text style={s.targetText}>{targetBenchmarkCopy(targetHandicap)}</Text>
       {onChangeTarget ? (
-        <TouchableOpacity
+        <PressableScale
           onPress={onChangeTarget}
           hitSlop={8}
           accessibilityRole="button"
           accessibilityLabel="Change target handicap"
         >
           <Feather name="edit-2" size={13} color={theme.text.secondary} />
-        </TouchableOpacity>
+        </PressableScale>
       ) : null}
     </View>
   );

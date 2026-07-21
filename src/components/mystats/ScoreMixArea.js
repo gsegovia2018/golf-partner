@@ -37,13 +37,19 @@ export default function ScoreMixArea({ rounds = [] }) {
     const bot = cols.map((c) => `${c.x},${botFn(c)}`).reverse();
     return `M${top.join(' L')} L${bot.join(' L')} Z`;
   };
+  // Open path along a band's top boundary — stroked at full opacity so each
+  // band keeps a crisp edge over the slightly translucent fills.
+  const topEdge = (topFn) => `M${cols.map((c) => `${c.x},${topFn(c)}`).join(' L')}`;
 
   return (
     <View>
       <Svg width="100%" height={height} viewBox={`0 0 ${width} ${height}`}>
-        <Path d={band(() => 0, (c) => c.b1)} fill={C.birdie} />
-        <Path d={band((c) => c.b1, (c) => c.b2)} fill={C.par} />
-        <Path d={band((c) => c.b2, () => height)} fill={C.bogey} />
+        <Path d={band(() => 0, (c) => c.b1)} fill={C.birdie} fillOpacity={0.85} />
+        <Path d={band((c) => c.b1, (c) => c.b2)} fill={C.par} fillOpacity={0.85} />
+        <Path d={band((c) => c.b2, () => height)} fill={C.bogey} fillOpacity={0.85} />
+        <Path d={topEdge(() => 0)} fill="none" stroke={C.birdie} strokeWidth={2} strokeLinejoin="round" strokeLinecap="round" />
+        <Path d={topEdge((c) => c.b1)} fill="none" stroke={C.par} strokeWidth={2} strokeLinejoin="round" strokeLinecap="round" />
+        <Path d={topEdge((c) => c.b2)} fill="none" stroke={C.bogey} strokeWidth={2} strokeLinejoin="round" strokeLinecap="round" />
       </Svg>
       <View style={s.legend}>
         {[['Birdie+', C.birdie], ['Par', C.par], ['Bogey+', C.bogey]].map(([label, color]) => (

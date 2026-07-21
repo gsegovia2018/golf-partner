@@ -1,7 +1,8 @@
 import React, { useMemo } from 'react';
-import { View, Text, StyleSheet, TouchableOpacity } from 'react-native';
+import { View, Text, StyleSheet } from 'react-native';
 import { Feather } from '@expo/vector-icons';
 import { useTheme } from '../../theme/ThemeContext';
+import PressableScale from '../ui/PressableScale';
 import SectionCard from './SectionCard';
 import { drillsForInsight } from '../../store/coachDrills';
 
@@ -37,7 +38,7 @@ export default function FocusCard({ focus, verdict, onEndFocus }) {
           <Text style={s.area}>{focus.areaLabel ?? focus.area}</Text>
           <Text style={s.title}>{focus.title}</Text>
         </View>
-        <TouchableOpacity
+        <PressableScale
           onPress={onEndFocus}
           hitSlop={8}
           accessibilityRole="button"
@@ -45,7 +46,7 @@ export default function FocusCard({ focus, verdict, onEndFocus }) {
           style={s.endBtn}
         >
           <Text style={s.endBtnText}>End focus</Text>
-        </TouchableOpacity>
+        </PressableScale>
       </View>
       {copy ? (
         <View style={s.verdictRow}>
