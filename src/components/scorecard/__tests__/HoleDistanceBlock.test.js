@@ -88,10 +88,10 @@ describe('HoleDistanceBlock', () => {
     expect(onPress).toHaveBeenCalledTimes(1);
   });
 
-  it('renders a FROM TEE block when the source is the tee', () => {
+  it('renders a tee-sourced block when the source is the tee (no FROM TEE overline)', () => {
     const gps = gpsBase({ source: 'tee', accuracy: null, position: null });
     const { getByText, queryByText } = render(<HoleDistanceBlock gps={gps} onPress={() => {}} />);
-    getByText('FROM TEE');
+    expect(queryByText('FROM TEE')).toBeNull();
     getByText('326');
     getByText(/F 312\s+B 339/);
     expect(queryByText(/±/)).toBeNull();

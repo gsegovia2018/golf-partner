@@ -1640,11 +1640,11 @@ export default function HomeScreen({ navigation, route }) {
 
   return (
     <ScreenContainer style={s.screen} edges={['top', 'bottom']}>
-      <View style={s.header}>
+      <View style={s.tournamentHeader}>
         <View style={s.headerLeft}>
           <IconButton icon="chevron-left" onPress={goToList} />
           <Text
-            style={[s.headerTitle, tournament.name.length > 22 && s.headerTitleLong]}
+            style={s.headerTitle}
             numberOfLines={2}
             ellipsizeMode="tail"
           >
@@ -2453,13 +2453,16 @@ const makeStyles = (t) => StyleSheet.create({
   scrollView: { flex: 1 },
   content: { padding: 20, paddingTop: 16, paddingBottom: 100 },
 
-  // Header
+  // Header — list header (serif "Golf Partner" title).
   header: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingHorizontal: 20, paddingTop: 16, paddingBottom: 12, backgroundColor: t.bg.primary },
-  headerLeft: { flexDirection: 'row', alignItems: 'center', flex: 1, minWidth: 0, paddingRight: 8 },
   headerActions: { flexDirection: 'row', gap: 8, flexShrink: 0 },
   title: { fontFamily: 'PlayfairDisplay-Black', fontSize: 30, color: t.text.primary, letterSpacing: -0.5 },
-  headerTitle: { fontFamily: 'PlayfairDisplay-Bold', fontSize: 20, color: t.text.primary, flexShrink: 1, lineHeight: 24 },
-  headerTitleLong: { fontSize: 16, lineHeight: 20 },
+
+  // Tournament-detail header — matches the scorecard header exactly (same
+  // paddings, same PlusJakartaSans-Bold 17 title).
+  tournamentHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingHorizontal: 16, paddingTop: 12, paddingBottom: 10, backgroundColor: t.bg.primary },
+  headerLeft: { flexDirection: 'row', alignItems: 'center', flex: 1, minWidth: 0, paddingRight: 8 },
+  headerTitle: { fontFamily: 'PlusJakartaSans-Bold', fontSize: 17, color: t.text.primary, letterSpacing: -0.3, flexShrink: 1 },
 
   // Buttons
   primaryBtn: {

@@ -33,7 +33,6 @@ export function HoleDistanceBlock({ gps, onPress }) {
   if (source === 'tee' && distances) {
     return (
       <Pressable onPress={onPress} hitSlop={10} style={s.block} accessibilityRole="button" accessibilityLabel="Open hole map">
-        <Text style={s.overline}>FROM TEE</Text>
         <View style={s.heroRow}>
           <Text style={s.hero}>{fmt(distances.center)}</Text>
           <Text style={s.unit}>{unitSuffix(units)}</Text>
