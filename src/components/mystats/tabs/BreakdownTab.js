@@ -76,8 +76,11 @@ export default function BreakdownTab({ stats, onInfo, onSelectCourse }) {
     bounceBack, scrambling, sandSaves, upAndDown, bunkerVisits,
   });
 
-  // Every card that will actually render, in order — so the mount stagger
-  // below skips empty sections instead of leaving gaps in the cascade.
+  // Every card that will actually render, in STORY order — the score mix at
+  // a glance, then the pattern tables (what/where/when/how), then Course
+  // Mastery, closing on the Career Milestones honours board as the finale.
+  // Built in order so the mount stagger below skips empty sections instead
+  // of leaving gaps in the cascade.
   const cards = [];
   if ((distribution.total ?? 0) > 0) {
     cards.push({
@@ -87,20 +90,6 @@ export default function BreakdownTab({ stats, onInfo, onSelectCourse }) {
           <ScoreMixBar distribution={distribution} />
         </SectionCard>
       ),
-    });
-  }
-  if ((courseMastery ?? []).length > 0) {
-    cards.push({
-      key: 'courseMastery',
-      node: (
-        <CourseMasteryCard courses={courseMastery} onInfo={onInfo} onSelectCourse={onSelectCourse} />
-      ),
-    });
-  }
-  if (careerMilestones) {
-    cards.push({
-      key: 'careerMilestones',
-      node: <CareerMilestonesCard milestones={careerMilestones} onInfo={onInfo} />,
     });
   }
   const patternCards = [
@@ -124,6 +113,20 @@ export default function BreakdownTab({ stats, onInfo, onSelectCourse }) {
       ),
     });
   });
+  if ((courseMastery ?? []).length > 0) {
+    cards.push({
+      key: 'courseMastery',
+      node: (
+        <CourseMasteryCard courses={courseMastery} onInfo={onInfo} onSelectCourse={onSelectCourse} />
+      ),
+    });
+  }
+  if (careerMilestones) {
+    cards.push({
+      key: 'careerMilestones',
+      node: <CareerMilestonesCard milestones={careerMilestones} onInfo={onInfo} />,
+    });
+  }
 
   return (
     <View style={s.wrap}>

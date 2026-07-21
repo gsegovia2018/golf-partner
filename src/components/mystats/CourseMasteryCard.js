@@ -1,14 +1,25 @@
-import React, { useMemo } from 'react';
+import React, { useEffect, useMemo } from 'react';
 import { View, Text, StyleSheet } from 'react-native';
+import Svg, { Polyline, Circle } from 'react-native-svg';
+import Animated, {
+  useSharedValue, useAnimatedStyle, withTiming, Easing, useReducedMotion,
+} from 'react-native-reanimated';
 import { Feather } from '@expo/vector-icons';
 import { useTheme } from '../../theme/ThemeContext';
 import PressableScale from '../ui/PressableScale';
 import SectionCard from './SectionCard';
-import { toneColor, toneFill } from './metricTone';
+import { scalePoints } from './chartGeometry';
 
-// Per-course rounds/avgPoints/bestPoints/trend — see
-// `courseMastery` in personalStats.js. Renders nothing when there is no
-// complete round at any course yet.
+const EASE_OUT = Easing.bezier(0.23, 1, 0.32, 1);
+
+const SPARK_W = 84;
+const SPARK_H = 26;
+const SPARK_PAD = 4;
+
+// Per-course rounds/avgPoints/bestPoints/recentPoints — see `courseMastery`
+// in personalStats.js. Each course renders as a card: big serif average on
+// the left, name + meta in the middle, a per-round points sparkline on the
+// right. Renders nothing when there is no complete round at any course yet.
 export default function CourseMasteryCard({ courses, onInfo, onSelectCourse }) {
   const { theme } = useTheme();
   const s = useMemo(() => makeStyles(theme), [theme]);
@@ -19,7 +30,7 @@ export default function CourseMasteryCard({ courses, onInfo, onSelectCourse }) {
     <SectionCard title="Course Mastery" infoKey="courseMastery" onInfo={onInfo}>
       <View style={s.rows}>
         {rows.map((course) => (
-          <CourseRow
+          <CourseCard
             key={course.courseKey ?? course.courseName}
             course={course}
             s={s}
@@ -34,45 +45,29 @@ export default function CourseMasteryCard({ courses, onInfo, onSelectCourse }) {
   );
 }
 
-function CourseRow({ course, s, theme, onPress }) {
-  // trend null = only one complete round here — there is no trend claim to
-  // make, so no icon at all (a minus would read as "flat", i.e. two equal
-  // rounds). trend 0 IS a claim (two genuinely equal consecutive rounds)
-  // and keeps the minus.
-  const hasTrend = course.trend != null;
-  const tone = course.trend > 0 ? 'good' : course.trend < 0 ? 'bad' : 'neutral';
-  const icon = course.trend > 0 ? 'trending-up' : course.trend < 0 ? 'trending-down' : 'minus';
-  const color = toneColor(theme, tone);
+function CourseCard({ course, s, theme, onPress }) {
   const body = (
     <>
+      <View style={s.avgBlock}>
+        <Text style={s.avg}>{course.avgPoints}</Text>
+        <Text style={s.avgLabel}>AVG PTS</Text>
+      </View>
       <View style={s.copy}>
         <Text style={s.courseName} numberOfLines={1}>{course.courseName}</Text>
         <Text style={s.meta}>
           {`${course.rounds} round${course.rounds === 1 ? '' : 's'} · best ${course.bestPoints} pts`}
         </Text>
       </View>
-      <View style={s.right}>
-        <Text style={s.avg}>{`${course.avgPoints} pts avg`}</Text>
-        {hasTrend ? (
-          <View
-            style={[s.trendPill, { backgroundColor: toneFill(theme, tone) }]}
-            accessible
-            accessibilityLabel={`${course.courseName} trend ${tone}`}
-          >
-            <Feather name={icon} size={13} color={color} />
-          </View>
-        ) : (
-          <View style={s.trendPill} />
-        )}
-        {onPress ? <Feather name="chevron-right" size={16} color={theme.text.muted} /> : null}
-      </View>
+      <Sparkline points={course.recentPoints} theme={theme} s={s} />
+      {onPress ? <Feather name="chevron-right" size={16} color={theme.text.muted} /> : null}
     </>
   );
-  if (!onPress) return <View style={s.row}>{body}</View>;
+  if (!onPress) return <View style={s.card}>{body}</View>;
   return (
     <PressableScale
-      style={s.row}
+      style={s.card}
       onPress={onPress}
+      activeScale={0.97}
       accessibilityRole="button"
       accessibilityLabel={`Open ${course.courseName} stats`}
     >
@@ -81,29 +76,92 @@ function CourseRow({ course, s, theme, onPress }) {
   );
 }
 
+// Compact per-round points line. One complete round has no shape to draw —
+// fewer than 2 points renders nothing, and the row simply closes up.
+function Sparkline({ points, theme, s }) {
+  const values = points ?? [];
+  if (values.length < 2) return null;
+  const scaled = scalePoints(values, {
+    width: SPARK_W, height: SPARK_H, padX: SPARK_PAD, padTop: SPARK_PAD, padBottom: SPARK_PAD,
+  });
+  const last = scaled[scaled.length - 1];
+  return (
+    <SparkReveal style={s.spark} innerStyle={s.sparkInner}>
+      <Svg width={SPARK_W} height={SPARK_H} viewBox={`0 0 ${SPARK_W} ${SPARK_H}`}>
+        <Polyline
+          points={scaled.map((p) => `${p.x},${p.y}`).join(' ')}
+          fill="none"
+          stroke={theme.accent.primary}
+          strokeWidth={2}
+          strokeLinecap="round"
+          strokeLinejoin="round"
+        />
+        <Circle cx={last.x} cy={last.y} r={3} fill={theme.accent.primary} />
+      </Svg>
+    </SparkReveal>
+  );
+}
+
+// The sparkline sweeps in from the left on mount (scaleX 0→1, origin left)
+// inside an overflow-hidden window — same convention as ScoreMixBar's
+// GrowRow. Reduced motion ⇒ static full line.
+function SparkReveal({ style, innerStyle, children }) {
+  const reduced = useReducedMotion();
+  const scaleX = useSharedValue(reduced ? 1 : 0);
+
+  useEffect(() => {
+    if (!reduced) {
+      scaleX.value = withTiming(1, { duration: 300, easing: EASE_OUT });
+    }
+  }, [reduced, scaleX]);
+
+  const animatedStyle = useAnimatedStyle(() => ({
+    transform: [{ scaleX: scaleX.value }],
+  }));
+
+  return (
+    <View style={style}>
+      <Animated.View style={[innerStyle, animatedStyle]}>{children}</Animated.View>
+    </View>
+  );
+}
+
 function makeStyles(theme) {
   return StyleSheet.create({
-    rows: { gap: 6 },
-    row: {
+    rows: { gap: 8 },
+    card: {
       flexDirection: 'row',
       alignItems: 'center',
-      justifyContent: 'space-between',
       gap: theme.spacing.md,
-      paddingVertical: theme.spacing.sm,
-      paddingHorizontal: theme.spacing.sm,
-      borderWidth: StyleSheet.hairlineWidth,
-      borderColor: theme.border.default,
-      borderRadius: theme.radius.md,
-      backgroundColor: theme.bg.card,
+      padding: 14,
+      borderWidth: 1,
+      borderColor: theme.border.subtle,
+      borderRadius: 14,
+      backgroundColor: theme.bg.primary,
+    },
+    avgBlock: { minWidth: 56, alignItems: 'center', gap: 1 },
+    avg: {
+      fontFamily: 'PlayfairDisplay-Black',
+      fontSize: 32,
+      lineHeight: 36,
+      color: theme.text.primary,
+      fontVariant: ['tabular-nums'],
+    },
+    avgLabel: {
+      fontSize: 8.5,
+      fontFamily: 'PlusJakartaSans-Bold',
+      letterSpacing: 1.1,
+      textTransform: 'uppercase',
+      color: theme.text.muted,
     },
     copy: { flex: 1, minWidth: 0, gap: 2 },
-    courseName: { ...theme.typography.body, color: theme.text.primary, fontWeight: '700' },
-    meta: { ...theme.typography.caption, color: theme.text.secondary },
-    right: { flexDirection: 'row', alignItems: 'center', gap: theme.spacing.sm, flexShrink: 0 },
-    avg: { ...theme.typography.body, color: theme.text.primary, fontWeight: '800' },
-    trendPill: {
-      width: 26, height: 26, borderRadius: theme.radius.pill,
-      alignItems: 'center', justifyContent: 'center',
+    courseName: {
+      fontSize: 14.5,
+      fontFamily: 'PlusJakartaSans-Bold',
+      color: theme.text.primary,
     },
+    meta: { fontSize: 11, fontFamily: 'PlusJakartaSans-Medium', color: theme.text.muted },
+    spark: { width: SPARK_W, height: SPARK_H, overflow: 'hidden' },
+    sparkInner: { transformOrigin: 'left center' },
   });
 }
