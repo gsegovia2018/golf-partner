@@ -76,17 +76,16 @@ export default function BreakdownTab({ stats, onInfo, onSelectCourse }) {
     bounceBack, scrambling, sandSaves, upAndDown, bunkerVisits,
   });
 
-  // Every card that will actually render, in order — so the mount stagger
-  // below skips empty sections instead of leaving gaps in the cascade.
+  // Every card that will actually render, in STORY order — open on the
+  // Career Milestones honours board, then Course Mastery, then the score mix
+  // at a glance, then the pattern tables (what/where/when/how). Built in
+  // order so the mount stagger below skips empty sections instead of
+  // leaving gaps in the cascade.
   const cards = [];
-  if ((distribution.total ?? 0) > 0) {
+  if (careerMilestones) {
     cards.push({
-      key: 'scoreMix',
-      node: (
-        <SectionCard title="Score mix" infoKey="scoreDistribution" onInfo={onInfo}>
-          <ScoreMixBar distribution={distribution} />
-        </SectionCard>
-      ),
+      key: 'careerMilestones',
+      node: <CareerMilestonesCard milestones={careerMilestones} onInfo={onInfo} />,
     });
   }
   if ((courseMastery ?? []).length > 0) {
@@ -97,10 +96,14 @@ export default function BreakdownTab({ stats, onInfo, onSelectCourse }) {
       ),
     });
   }
-  if (careerMilestones) {
+  if ((distribution.total ?? 0) > 0) {
     cards.push({
-      key: 'careerMilestones',
-      node: <CareerMilestonesCard milestones={careerMilestones} onInfo={onInfo} />,
+      key: 'scoreMix',
+      node: (
+        <SectionCard title="Score mix" infoKey="scoreDistribution" onInfo={onInfo}>
+          <ScoreMixBar distribution={distribution} />
+        </SectionCard>
+      ),
     });
   }
   const patternCards = [
@@ -138,14 +141,69 @@ export default function BreakdownTab({ stats, onInfo, onSelectCourse }) {
   );
 }
 
+// Absolute ceiling for the penalty-drag bar: 5 pts/round lost fills the
+// track, so a 1-pt drag reads ~20% instead of faking a comparison against
+// the avg-pts tee-outcome rows it sits beside.
+export const PENALTY_DRAG_SCALE = 5;
+
+// Cap for a count row with no comparable sibling in its section: value /
+// (value * 1.5) — a deliberate two-thirds bar, never a misleading full one.
+const SOLO_COUNT_RATIO = 2 / 3;
+
+// Renders one section's rows with magnitude bars. Each row's numeric
+// `magnitude` (raw value behind the formatted string) is scaled per its
+// `barGroup` tag:
+// - 'pct'   — absolute: width = value / 100, comparable across the whole tab.
+// - 'pts'   — relative: normalized against the section max among fellow
+//             'pts' rows (the default tag).
+// - 'count' / 'avg' — relative like 'pts', except a genuinely solo row caps
+//             at SOLO_COUNT_RATIO so a group of one never fills the track.
+// - 'drag'  — absolute against PENALTY_DRAG_SCALE, clamped.
+// Dim (no-data) rows keep an empty track — no data isn't zero — and don't
+// count toward a group's max or solo-ness. Only rows with no numeric
+// magnitude at all skip the track entirely. `rowIndex` staggers the fill
+// sweep within the section.
 function PatternRows({ rows }) {
+  const groups = {};
+  rows.forEach((row) => {
+    if (row.dim || !isNumber(row.magnitude)) return;
+    const tag = row.barGroup ?? 'pts';
+    if (tag === 'pct' || tag === 'drag') return; // absolute scales
+    const entry = groups[tag] ?? { max: 0, size: 0 };
+    entry.max = Math.max(entry.max, Math.abs(row.magnitude));
+    entry.size += 1;
+    groups[tag] = entry;
+  });
   return (
     <View>
-      {rows.map(({ key, ...row }, index) => (
-        <BreakdownRow key={key} {...row} first={index === 0} />
+      {rows.map(({ key, magnitude, barGroup, ...row }, index) => (
+        <BreakdownRow
+          key={key}
+          {...row}
+          first={index === 0}
+          rowIndex={index}
+          testID={`breakdown-bar-${key}`}
+          barRatio={barRatioFor({ magnitude, barGroup, dim: row.dim }, groups)}
+        />
       ))}
     </View>
   );
+}
+
+function barRatioFor({ magnitude, barGroup, dim }, groups) {
+  if (!isNumber(magnitude)) return undefined;
+  const tag = barGroup ?? 'pts';
+  const size = Math.abs(magnitude);
+  if (tag === 'pct') return clamp01(size / 100);
+  if (tag === 'drag') return clamp01(size / PENALTY_DRAG_SCALE);
+  const entry = groups[tag];
+  if (!entry || entry.max <= 0) return 0;
+  if (tag !== 'pts' && entry.size === 1 && !dim) return SOLO_COUNT_RATIO;
+  return clamp01(size / entry.max);
+}
+
+function clamp01(value) {
+  return Math.min(1, Math.max(0, value));
 }
 
 function stablefordBaseline(stats) {
@@ -207,6 +265,8 @@ function countPatternRow({
     key,
     label,
     value: formatNumber(perRound),
+    magnitude: isNumber(perRound) ? perRound : null,
+    barGroup: 'count',
     secondary: comparisonMeta('your score mix', [
       `${count} total`,
       sampleText(total, 'holes'),
@@ -249,6 +309,7 @@ function timingNineRow(key, label, value, holesCount, baseline) {
     key,
     label,
     value: `${formatNumber(value)} pts/hole`,
+    magnitude: isNumber(value) ? value : 0,
     secondary: holesCount > 0
       ? comparisonSecondary(holesCount, baseline, delta)
       : 'No sample yet',
@@ -269,10 +330,15 @@ function makeTeePatternRows(teeShot, baseline) {
   ];
 
   if ((teeShot.teePenalty?.holes ?? 0) > 0) {
+    // Penalty drag is points LOST (a delta), not an avg-pts-per-hole level
+    // like the outcome rows above — its bar runs on the fixed
+    // PENALTY_DRAG_SCALE instead of the section's pts max.
     rows.push({
       key: 'penaltyDrag',
       label: 'Penalty drag',
       value: formatNumber(teeShot.penaltyDrag),
+      magnitude: isNumber(teeShot.penaltyDrag) ? teeShot.penaltyDrag : null,
+      barGroup: 'drag',
       secondary: `${sampleText(teeShot.teePenalty.holes, 'holes')} · points lost after tee penalties`,
       tone: toneFromComparison({
         value: teeShot.penaltyDrag,
@@ -297,6 +363,7 @@ function makeDrivePatternRows(driveImpact, baseline) {
       key: bucket,
       label: DRIVE_LABELS[bucket],
       value: `${formatNumber(row.avgPoints)} pts`,
+      magnitude: isNumber(row.avgPoints) ? row.avgPoints : 0,
       secondary: `${signed(row.avgVsPar)} vs par · ${formatPercent(row.penaltyRate)} pen · ${comparisonSecondary(row.holes, baseline, delta)}`,
       tone: toneFromDelta(delta, { sample: row.holes, minSample: 6 }),
     };
@@ -313,12 +380,17 @@ function makeApproachPatternRows(approachImpact, baseline) {
       key: bucket,
       label: `${bucket} m approaches`,
       value: `${formatNumber(row.avgPoints)} pts`,
+      magnitude: isNumber(row.avgPoints) ? row.avgPoints : 0,
       secondary: `${signed(row.avgVsPar)} vs par · ${formatPercent(row.girRate)} GIR · ${comparisonSecondary(row.holes, baseline, delta)}`,
       tone: toneFromDelta(delta, { sample: row.holes, minSample: 6 }),
     };
   }).filter(Boolean);
 }
 
+// Putting mixes units, so rows are tagged into honest bar groups: the
+// %-rows share the absolute pct scale, the count rows (putts/round,
+// 1-putts, 3-putts/round) normalize against each other, and the two
+// putts-per-hole averages (on/off GIR) form their own 'avg' pair.
 function makePuttingPatternRows({ shots, puttDive }) {
   const rows = [];
   if (shots?.hasData) {
@@ -333,6 +405,8 @@ function makePuttingPatternRows({ shots, puttDive }) {
         key: 'puttsPerRound',
         label: 'Putts / round',
         value: formatNumber(shots.putts.perRound),
+        magnitude: isNumber(shots.putts.perRound) ? shots.putts.perRound : null,
+        barGroup: 'count',
         secondary: sampleSecondary([
           sampleText(shots.putts.holes, 'holes'),
           puttsTotal != null ? `${puttsTotal} total` : null,
@@ -344,6 +418,8 @@ function makePuttingPatternRows({ shots, puttDive }) {
         key: 'onePutts',
         label: '1-putts',
         value: formatNumber(shots.putts.onePutts),
+        magnitude: isNumber(shots.putts.onePutts) ? shots.putts.onePutts : null,
+        barGroup: 'count',
         secondary: sampleSecondary([sampleText(shots.putts.holes, 'holes')], shots.putts.holes, 9),
         tone: toneFromComparison({
           value: shots.putts.onePutts,
@@ -358,6 +434,8 @@ function makePuttingPatternRows({ shots, puttDive }) {
         key: 'threePutts',
         label: '3-putts / round',
         value: formatNumber(threePuttsPerRound),
+        magnitude: isNumber(threePuttsPerRound) ? threePuttsPerRound : null,
+        barGroup: 'count',
         secondary: sampleSecondary([
           `${shots.putts.threePuttPlus} total`,
           sampleText(shots.roundsWithPuttData, 'rounds'),
@@ -381,6 +459,8 @@ function makePuttingPatternRows({ shots, puttDive }) {
         key: 'twoPuttRate',
         label: '2-putt rate',
         value: `${puttDive.twoPuttPct}%`,
+        magnitude: isNumber(puttDive.twoPuttPct) ? puttDive.twoPuttPct : null,
+        barGroup: 'pct',
         secondary: sampleSecondary([sampleText(puttDive.holes, 'holes')], puttDive.holes, 9),
         tone: toneFromComparison({
           value: puttDive.twoPuttPct,
@@ -395,6 +475,8 @@ function makePuttingPatternRows({ shots, puttDive }) {
         key: 'girPutts',
         label: 'Putts on GIR',
         value: formatNumber(puttDive.girPuttsAvg),
+        magnitude: isNumber(puttDive.girPuttsAvg) ? puttDive.girPuttsAvg : null,
+        barGroup: 'avg',
         secondary: sampleSecondary([sampleText(puttDive.girHoles, 'holes')], puttDive.girHoles, 6),
         tone: toneFromComparison({
           value: puttDive.girPuttsAvg,
@@ -409,6 +491,8 @@ function makePuttingPatternRows({ shots, puttDive }) {
         key: 'nonGirPutts',
         label: 'Putts off GIR',
         value: formatNumber(puttDive.nonGirPuttsAvg),
+        magnitude: isNumber(puttDive.nonGirPuttsAvg) ? puttDive.nonGirPuttsAvg : null,
+        barGroup: 'avg',
         secondary: sampleSecondary([sampleText(puttDive.nonGirHoles, 'holes')], puttDive.nonGirHoles, 6),
         tone: toneFromComparison({
           value: puttDive.nonGirPuttsAvg,
@@ -423,6 +507,8 @@ function makePuttingPatternRows({ shots, puttDive }) {
         key: 'onePuttSave',
         label: '1-putt save',
         value: `${puttDive.onePuttSave?.pct ?? 0}%`,
+        magnitude: puttDive.onePuttSave?.pct ?? 0,
+        barGroup: 'pct',
         secondary: sampleSecondary([
           sampleText(puttDive.onePuttSave?.attempts ?? 0, 'chances'),
         ], puttDive.onePuttSave?.attempts ?? 0, 6),
@@ -441,6 +527,9 @@ function makePuttingPatternRows({ shots, puttDive }) {
   return rows;
 }
 
+// Recovery's four rate rows share the absolute pct scale. Bunker visits is
+// a per-round count with no comparable sibling here, so its 'count' bar
+// falls back to the solo two-thirds cap.
 function makeRecoveryRows({
   bounceBack, scrambling, sandSaves, upAndDown, bunkerVisits,
 }) {
@@ -449,6 +538,8 @@ function makeRecoveryRows({
       key: 'bounceBack',
       label: 'Bounce-back rate',
       value: `${bounceBack.rate}%`,
+      magnitude: isNumber(bounceBack.rate) ? bounceBack.rate : null,
+      barGroup: 'pct',
       secondary: sampleSecondary([`${bounceBack.opportunities} chances`], bounceBack.opportunities, 6),
       tone: toneFromComparison({
         value: bounceBack.rate,
@@ -463,6 +554,8 @@ function makeRecoveryRows({
       key: 'scrambling',
       label: 'Scrambling',
       value: `${scrambling.pct}%`,
+      magnitude: isNumber(scrambling.pct) ? scrambling.pct : null,
+      barGroup: 'pct',
       secondary: sampleSecondary([`${scrambling.missedGir} missed GIR`], scrambling.missedGir, 6),
       tone: toneFromComparison({
         value: scrambling.pct,
@@ -477,6 +570,8 @@ function makeRecoveryRows({
       key: 'sandSaves',
       label: 'Sand-save rate',
       value: rateValue(sandSaves.saves, sandSaves.attempts, sandSaves.rate),
+      magnitude: isNumber(sandSaves.rate) ? sandSaves.rate * 100 : null,
+      barGroup: 'pct',
       secondary: sampleSecondary([sampleText(sandSaves.attempts, 'tries')], sandSaves.attempts, 6),
       tone: toneFromRate(sandSaves.rate, 0.4, { sample: sandSaves.attempts, minSample: 6 }),
       dim: sandSaves.rate == null,
@@ -492,6 +587,8 @@ function makeRecoveryRows({
       // than the classic "up and down" (see statsEngine.js upAndDownRate).
       label: 'Scrambling (1-putt saves)',
       value: rateValue(upAndDown.conversions, upAndDown.attempts, upAndDown.rate),
+      magnitude: isNumber(upAndDown.rate) ? upAndDown.rate * 100 : null,
+      barGroup: 'pct',
       secondary: sampleSecondary([sampleText(upAndDown.attempts, 'tries')], upAndDown.attempts, 6),
       tone: toneFromRate(upAndDown.rate, 0.45, { sample: upAndDown.attempts, minSample: 6 }),
       dim: upAndDown.rate == null,
@@ -500,6 +597,8 @@ function makeRecoveryRows({
       key: 'bunkerVisits',
       label: 'Bunker visits',
       value: bunkerVisits.avgPerRound > 0 ? `${bunkerVisits.avgPerRound.toFixed(1)} / round` : '-',
+      magnitude: isNumber(bunkerVisits.avgPerRound) ? bunkerVisits.avgPerRound : null,
+      barGroup: 'count',
       secondary: bunkerVisits.holesWithSand != null
         ? sampleSecondary([`${bunkerVisits.holesWithSand} holes`], bunkerVisits.holesWithSand, 6)
         : undefined,
@@ -524,6 +623,7 @@ function pointPatternRow(key, label, row, baseline) {
     key,
     label,
     value: `${formatNumber(avgPoints ?? 0)} pts`,
+    magnitude: isNumber(avgPoints) ? avgPoints : 0,
     secondary: holesCount > 0
       ? comparisonSecondary(holesCount, baseline, delta)
       : 'No sample yet',

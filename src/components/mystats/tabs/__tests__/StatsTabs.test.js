@@ -1,5 +1,5 @@
 import React from 'react';
-import { render, fireEvent } from '@testing-library/react-native';
+import { render, fireEvent, waitFor } from '@testing-library/react-native';
 import { ThemeProvider } from '../../../../theme/ThemeContext';
 import BreakdownTab from '../BreakdownTab';
 import CoachTab from '../CoachTab';
@@ -60,9 +60,9 @@ function baseStats() {
       ],
     },
     courseMastery: [
-      { courseName: 'Oak', rounds: 1, avgPoints: 54, bestPoints: 54, trend: null },
-      { courseName: 'Elm', rounds: 2, avgPoints: 30, bestPoints: 30, trend: 0 },
-      { courseName: 'Pine', rounds: 2, avgPoints: 27, bestPoints: 36, trend: -1 },
+      { courseName: 'Oak', rounds: 1, avgPoints: 54, bestPoints: 54, trend: null, recentPoints: [54] },
+      { courseName: 'Elm', rounds: 2, avgPoints: 30, bestPoints: 30, trend: 0, recentPoints: [30, 30] },
+      { courseName: 'Pine', rounds: 2, avgPoints: 27, bestPoints: 36, trend: -1, recentPoints: [36, 18] },
     ],
     careerMilestones: {
       birdies: 18, eagles: 0, longestParStreak: 18, bestNine: 27, bestRound: 54,
@@ -415,39 +415,68 @@ describe('My Stats tabs', () => {
     expect(queryByText(/up & down/i)).toBeNull();
   });
 
-  test('BreakdownTab shows Course Mastery rows and Career Milestones tiles', async () => {
-    const { findByText, findAllByText, getByLabelText, queryByLabelText } = render(wrap(
+  test('BreakdownTab shows Course Mastery cards and Career Milestones tiles', async () => {
+    const { findByText, getAllByText, queryByLabelText } = render(wrap(
       <BreakdownTab stats={baseStats()} onInfo={() => {}} />
     ));
 
     // Course Mastery: sorted best-avg-first (Oak 54 before Pine 27), each
-    // row showing rounds/best/avg, and a trend icon per course.
+    // course card showing the big average with its AVG PTS label plus the
+    // rounds/best meta. The old trend pill is gone — the sparkline carries
+    // the shape of recent rounds instead.
     expect(await findByText('Oak')).toBeTruthy();
     expect(await findByText('Pine')).toBeTruthy();
     expect(await findByText('1 round · best 54 pts')).toBeTruthy();
     expect(await findByText('2 rounds · best 36 pts')).toBeTruthy();
-    expect(await findByText('54 pts avg')).toBeTruthy();
-    expect(await findByText('27 pts avg')).toBeTruthy();
-    expect(getByLabelText('Pine trend bad')).toBeTruthy();
-    // trend 0 = two genuinely equal rounds → minus icon; trend null = only
-    // one complete round → no trend claim rendered at all.
-    expect(getByLabelText('Elm trend neutral')).toBeTruthy();
-    expect(queryByLabelText(/Oak trend/)).toBeNull();
+    expect(getAllByText('AVG PTS')).toHaveLength(3);
+    expect(await findByText('30')).toBeTruthy(); // Elm avg
+    expect(queryByLabelText(/trend/)).toBeNull();
 
-    // Career Milestones: birdies/eagles/streak counts plus best nine/round.
-    // birdies and longestParStreak are both 18 in this fixture — two tiles
-    // legitimately share the value.
-    expect((await findAllByText('18')).length).toBe(2);
+    // Career Milestones (honours board): birdies/eagles/streak counts plus
+    // best nine/round. birdies and longestParStreak are both 18 in this
+    // fixture — two cells legitimately share the value. The numbers count up
+    // on mount, so wait until BOTH staggered count-ups have landed on 18
+    // (findAllByText would resolve as soon as the first one finished).
     expect(await findByText('Birdies')).toBeTruthy();
     expect(await findByText('Eagles')).toBeTruthy();
     expect(await findByText('Best par streak')).toBeTruthy();
-    expect(await findByText('27')).toBeTruthy();
-    expect(await findByText('Best nine (pts)')).toBeTruthy();
-    expect(await findByText('54')).toBeTruthy();
-    expect(await findByText('Best round (pts)')).toBeTruthy();
+    await waitFor(() => expect(getAllByText('18')).toHaveLength(2), { timeout: 3000 });
+    // '27' and '54' each appear twice once the count-ups land: a mastery
+    // card average (Pine 27 / Oak 54) plus the best-nine / best-round tile.
+    await waitFor(() => expect(getAllByText('27')).toHaveLength(2), { timeout: 3000 });
+    expect(await findByText('Best nine')).toBeTruthy();
+    await waitFor(() => expect(getAllByText('54')).toHaveLength(2), { timeout: 3000 });
+    expect(await findByText('Best round')).toBeTruthy();
     // The counts are NET (handicap-adjusted) — ShotsTab's birdie benchmark
     // is gross, so the card must disclose the basis.
     expect(await findByText(/net \(handicap-adjusted\)/i)).toBeTruthy();
+  });
+
+  test('BreakdownTab tells the story in order: milestones → mastery → mix → patterns', async () => {
+    const view = render(wrap(
+      <BreakdownTab stats={shotStats()} onInfo={() => {}} />
+    ));
+    expect(await view.findByText('Course Mastery')).toBeTruthy();
+
+    const titles = [
+      'Career Milestones',
+      'Course Mastery',
+      'Score mix',
+      'Scoring patterns',
+      'Course scoring patterns',
+      'Round timing patterns',
+      'Tee result patterns',
+      'Drive bucket patterns',
+      'Approach distance patterns',
+      'Putting patterns',
+      'Recovery patterns',
+    ];
+    const rendered = JSON.stringify(view.toJSON());
+    const positions = titles.map((title) => rendered.indexOf(`"${title}"`));
+    positions.forEach((pos, i) => {
+      expect(pos).toBeGreaterThan(-1);
+      if (i > 0) expect(pos).toBeGreaterThan(positions[i - 1]);
+    });
   });
 
   test('BreakdownTab hides Course Mastery when there is no complete round at any course', async () => {
