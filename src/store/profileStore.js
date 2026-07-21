@@ -10,6 +10,7 @@ import {
 } from './tournamentStore';
 import { isRoundPlayed } from './scoring';
 import { parseHandicapIndex } from '../lib/handicap';
+import { findPlayerForIdentity } from './historyModel';
 
 // One row per auth.users.id — created by a trigger on signup, edited from
 // ProfileScreen. `username` is a unique lowercase handle; `display_name`
@@ -141,21 +142,6 @@ export async function uploadAvatar(localUri) {
   return pub.publicUrl;
 }
 
-// Resolve "me" inside a tournament: prefer the embedded player with
-// user_id === current user. Fall back to name match for legacy data
-// written before user_id was stamped onto embedded players.
-function findMyPlayer(tournament, userId, displayName) {
-  if (userId) {
-    const byId = tournament.players.find((p) => p.user_id === userId);
-    if (byId) return byId;
-  }
-  if (displayName) {
-    const target = displayName.trim().toLowerCase();
-    return tournament.players.find((p) => p.name.trim().toLowerCase() === target) ?? null;
-  }
-  return null;
-}
-
 // isRoundPlayed is imported from ./scoring (shared with tournamentStore).
 
 // Aggregates: per-user stats computed client-side from tournaments the
@@ -180,7 +166,7 @@ export async function computePersonalStats({ userId, displayName }) {
   let wins = 0;
 
   for (const t of tournaments) {
-    const me = findMyPlayer(t, userId, displayName);
+    const me = findPlayerForIdentity(t.players, { userId, displayName });
     if (!me) continue;
     // Personal record reflects completed play only — consistent with the
     // History archive (which lists `isTournamentFinished` events) and with
