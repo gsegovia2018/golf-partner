@@ -1,6 +1,8 @@
 import React, { useEffect, useState, useMemo, useCallback, useRef } from 'react';
 import { View, Text, TouchableOpacity, StyleSheet, ScrollView, ActivityIndicator } from 'react-native';
 import ScreenContainer from '../components/ScreenContainer';
+import PressableScale from '../components/ui/PressableScale';
+import Reveal from '../components/ui/Reveal';
 import { Feather } from '@expo/vector-icons';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useTheme } from '../theme/ThemeContext';
@@ -88,6 +90,7 @@ export default function MyStatsScreen({ navigation, route }) {
     return () => { cancelled = true; };
   }, [user?.id]);
   const isTabPresentation = route?.params?.presentation === 'tab';
+  const contentScrollRef = useRef(null);
   const tabScrollRef = useRef(null);
   const tabLayoutsRef = useRef({});
   const tabViewportWidthRef = useRef(0);
@@ -251,6 +254,12 @@ export default function MyStatsScreen({ navigation, route }) {
     return () => cancelAnimationFrame(frame);
   }, [scrollTabIntoView, tab]);
 
+  // New tab content starts at the top — jump there without animating so the
+  // Reveal transition is the only motion on a tab switch.
+  useEffect(() => {
+    contentScrollRef.current?.scrollTo({ y: 0, animated: false });
+  }, [tab]);
+
   const selected = useMemo(
     () => (myRounds ? resolveSelection(myRounds, overrides) : []),
     [myRounds, overrides],
@@ -319,8 +328,11 @@ export default function MyStatsScreen({ navigation, route }) {
           <Feather name="chevron-left" size={22} color={theme.accent.primary} />
         </TouchableOpacity>
       )}
-      <Text style={s.headerTitle}>My Stats</Text>
-      <TouchableOpacity
+      <View style={s.headerTitleWrap}>
+        <Text style={s.headerKicker}>CLUBHOUSE · MEMBER RECORD</Text>
+        <Text style={s.headerTitle}>My Stats</Text>
+      </View>
+      <PressableScale
         onPress={() => setSelectorOpen(true)}
         style={s.roundsBtn}
         disabled={!myRounds}
@@ -329,7 +341,7 @@ export default function MyStatsScreen({ navigation, route }) {
         <Text style={s.roundsBtnText}>
           {myRounds ? `${selected.length} of ${myRounds.length}` : '—'}
         </Text>
-      </TouchableOpacity>
+      </PressableScale>
     </View>
   );
 
@@ -354,7 +366,7 @@ export default function MyStatsScreen({ navigation, route }) {
       }}
     >
       {ALL_TABS.map((t) => (
-        <TouchableOpacity
+        <PressableScale
           key={t.key}
           style={[s.tab, tab === t.key && s.tabActive]}
           onPress={() => setTab(t.key)}
@@ -362,13 +374,12 @@ export default function MyStatsScreen({ navigation, route }) {
             tabLayoutsRef.current[t.key] = event.nativeEvent.layout;
             if (tab === t.key) scrollTabIntoView(t.key, false);
           }}
-          activeOpacity={0.7}
           accessibilityRole="tab"
           accessibilityState={{ selected: tab === t.key }}
           accessibilityLabel={t.label}
         >
           <Text style={[s.tabText, tab === t.key && s.tabTextActive]}>{t.label}</Text>
-        </TouchableOpacity>
+        </PressableScale>
       ))}
     </ScrollView>
   );
@@ -393,12 +404,12 @@ export default function MyStatsScreen({ navigation, route }) {
         <View style={s.center}>
           <Feather name="wifi-off" size={32} color={theme.text.muted} />
           <Text style={s.emptyText}>Could not load your stats.</Text>
-          <TouchableOpacity
+          <PressableScale
             style={s.retryBtn}
             onPress={() => { setMyRounds(null); setError(false); setLoadNonce((v) => v + 1); }}
           >
             <Text style={s.retryText}>Retry</Text>
-          </TouchableOpacity>
+          </PressableScale>
         </View>
       </ScreenContainer>
     );
@@ -436,9 +447,9 @@ export default function MyStatsScreen({ navigation, route }) {
         <View style={s.center}>
           <Feather name="filter" size={32} color={theme.text.muted} />
           <Text style={s.emptyText}>No rounds selected.</Text>
-          <TouchableOpacity style={s.retryBtn} onPress={() => setSelectorOpen(true)}>
+          <PressableScale style={s.retryBtn} onPress={() => setSelectorOpen(true)}>
             <Text style={s.retryText}>Choose rounds</Text>
-          </TouchableOpacity>
+          </PressableScale>
         </View>
         {Selector}
       </ScreenContainer>
@@ -449,41 +460,43 @@ export default function MyStatsScreen({ navigation, route }) {
     <ScreenContainer style={s.container} edges={['top', 'bottom']}>
       {Header}
       {TabBar}
-      <ScrollView contentContainerStyle={s.scroll}>
-        {tab === 'reportCard' && (
-          <RoundReportCard
-            card={reportCard}
-            rounds={myRounds}
-            selectedKey={reportRoundKey}
-            onSelect={setReportRoundKey}
-            onOpenRound={openReportRound}
-          />
-        )}
-        {tab === 'coach' && (
-          <CoachTab
-            stats={stats}
-            onInfo={onInfo}
-            targetHandicap={targetHandicap}
-            onChangeTarget={() => setPickerOpen(true)}
-            focus={coachFocus}
-            focusVerdict={coachFocusVerdict}
-            onCommitFocus={onCommitFocus}
-            onEndFocus={onEndFocus}
-          />
-        )}
-        {tab === 'form' && <FormTab stats={stats} n={n} onChangeN={setN} onInfo={onInfo} />}
-        {tab === 'breakdown' && <BreakdownTab stats={stats} onInfo={onInfo} onSelectCourse={openCourseStats} />}
-        {tab === 'shots' && <ShotsTab stats={stats} onInfo={onInfo} targetHandicap={targetHandicap} onChangeTarget={() => setPickerOpen(true)} />}
-        {tab === 'handicap' && (
-          <HandicapTab
-            myRounds={myRounds}
-            profileHandicap={profileHandicap}
-            onInfo={onInfo}
-            onApplied={setProfileHandicap}
-            excludedKeys={handicapExclusions}
-            onToggleExcluded={toggleHandicapExclusion}
-          />
-        )}
+      <ScrollView ref={contentScrollRef} contentContainerStyle={s.scroll}>
+        <Reveal key={tab} style={s.revealWrap}>
+          {tab === 'reportCard' && (
+            <RoundReportCard
+              card={reportCard}
+              rounds={myRounds}
+              selectedKey={reportRoundKey}
+              onSelect={setReportRoundKey}
+              onOpenRound={openReportRound}
+            />
+          )}
+          {tab === 'coach' && (
+            <CoachTab
+              stats={stats}
+              onInfo={onInfo}
+              targetHandicap={targetHandicap}
+              onChangeTarget={() => setPickerOpen(true)}
+              focus={coachFocus}
+              focusVerdict={coachFocusVerdict}
+              onCommitFocus={onCommitFocus}
+              onEndFocus={onEndFocus}
+            />
+          )}
+          {tab === 'form' && <FormTab stats={stats} n={n} onChangeN={setN} onInfo={onInfo} />}
+          {tab === 'breakdown' && <BreakdownTab stats={stats} onInfo={onInfo} onSelectCourse={openCourseStats} />}
+          {tab === 'shots' && <ShotsTab stats={stats} onInfo={onInfo} targetHandicap={targetHandicap} onChangeTarget={() => setPickerOpen(true)} />}
+          {tab === 'handicap' && (
+            <HandicapTab
+              myRounds={myRounds}
+              profileHandicap={profileHandicap}
+              onInfo={onInfo}
+              onApplied={setProfileHandicap}
+              excludedKeys={handicapExclusions}
+              onToggleExcluded={toggleHandicapExclusion}
+            />
+          )}
+        </Reveal>
       </ScrollView>
       <StatDetailSheet
         visible={!!infoKey}
@@ -525,9 +538,17 @@ function makeStyles(theme) {
       justifyContent: 'center',
       padding: theme.spacing.xs,
     },
+    headerTitleWrap: {
+      flex: 1, marginLeft: theme.spacing.sm,
+      flexDirection: 'column', justifyContent: 'center',
+    },
+    headerKicker: {
+      fontFamily: 'PlusJakartaSans-Bold', fontSize: 10,
+      letterSpacing: 1.4, textTransform: 'uppercase',
+      color: theme.text.muted, marginBottom: 1,
+    },
     headerTitle: {
       fontFamily: 'PlayfairDisplay-Bold', fontSize: 24, color: theme.text.primary,
-      flex: 1, marginLeft: theme.spacing.sm,
     },
     roundsBtn: {
       flexDirection: 'row', alignItems: 'center', gap: 4,
@@ -571,6 +592,7 @@ function makeStyles(theme) {
     },
     retryText: { ...theme.typography.subhead, color: theme.text.inverse },
     scroll: { padding: theme.spacing.lg, gap: theme.spacing.lg },
+    revealWrap: { gap: theme.spacing.lg },
   });
 }
 
