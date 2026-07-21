@@ -12,6 +12,7 @@ import { HoleDistanceBlock } from './HoleDistanceBlock';
 import { PlayerCard } from './PlayerCard';
 import { holePoints } from './scoreModel';
 import { teamsByPlayer } from './teamModel';
+import { useTourTarget } from '../tour/tourTargets';
 
 // Web-only CSS scroll-snap for each pager page (the page-level snap rules).
 // The pager container's scroll-snap-type is set inline in HoleView.
@@ -106,6 +107,7 @@ export const HolePage = React.memo(function HolePage({
   // "players" so score entry, points, and handicaps all key off the captain's
   // id. Players are then ordered "me first" so the signed-in player's card
   // (or their team's card, for scramble) is on top.
+  const scoreEntryRef = useTourTarget('score-entry');
   const isScramble = isScrambleMode(mode);
   const scoringPlayers = isScramble ? scrambleUnits(round, players) : players;
   const effectiveMeId = isScramble
@@ -171,7 +173,7 @@ export const HolePage = React.memo(function HolePage({
         contentContainerStyle={s.playerCardsContent}
         keyboardShouldPersistTaps="handled"
       >
-        {orderedPlayers.map((player) => {
+        {orderedPlayers.map((player, i) => {
           // Relative (or team, for scramble) handicap — drives the
           // extra-shot dots only; that's the handicap the duel actually
           // plays off.
@@ -227,9 +229,9 @@ export const HolePage = React.memo(function HolePage({
           const conflict = deriveCell(round, player.id, pageHole.number).status === 'conflict'
             && conflictHoles.has(pageHole.number);
 
-          return (
+          const card = (
             <PlayerCard
-              key={player.id}
+              key={i === 0 ? undefined : player.id}
               player={player}
               hole={pageHole}
               strokes={strokes}
@@ -259,6 +261,11 @@ export const HolePage = React.memo(function HolePage({
               onOpenConflict={onOpenConflict}
             />
           );
+          return i === 0 ? (
+            <View key={player.id} ref={scoreEntryRef} collapsable={false}>
+              {card}
+            </View>
+          ) : card;
         })}
       </ScrollView>
     </View>

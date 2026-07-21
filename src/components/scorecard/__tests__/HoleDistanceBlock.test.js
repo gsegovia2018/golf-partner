@@ -2,6 +2,7 @@ import React from 'react';
 import { render, fireEvent } from '@testing-library/react-native';
 import { HoleDistanceBlock } from '../HoleDistanceBlock';
 import { updateAppSettings, __resetAppSettingsForTests } from '../../../store/settingsStore';
+import { __getRegisteredTourKeysForTests, __resetTourTargetsForTests } from '../../tour/tourTargets';
 
 jest.mock('../../../theme/ThemeContext', () => ({
   useTheme: () => {
@@ -32,6 +33,12 @@ describe('HoleDistanceBlock', () => {
   it('renders nothing when gps is unavailable', () => {
     const { toJSON } = render(<HoleDistanceBlock gps={{ available: false, distances: null, accuracy: null, position: null }} onPress={() => {}} />);
     expect(toJSON()).toBeNull();
+  });
+
+  it('registers itself as the hole-distances tour target', () => {
+    __resetTourTargetsForTests();
+    render(<HoleDistanceBlock gps={gpsBase()} onPress={() => {}} />);
+    expect(__getRegisteredTourKeysForTests()).toContain('hole-distances');
   });
 
   it('shows centre hero plus front/back line', () => {

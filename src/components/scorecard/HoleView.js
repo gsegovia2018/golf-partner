@@ -23,6 +23,7 @@ import ScoreConflictSheet from '../ScoreConflictSheet';
 import { deriveCell } from '../../store/scoreEntries';
 import { getShotDetailCollapsed, setShotDetailCollapsed } from '../../lib/prefs';
 import { prefetchCourseTiles } from '../../store/tileCache';
+import { useTourTarget } from '../tour/tourTargets';
 
 // Web-only CSS scroll-snap. On native, `pagingEnabled` is handled by the
 // platform. On web, react-native-web 0.21's `pagingEnabled` only sets
@@ -89,6 +90,7 @@ export function HoleView({ round, roundIndex, players, scores, shotDetails, meId
   }, [focusConflict, onGoToHole, onFocusConflictHandled]);
 
   const onLastHole = currentHole >= holeCount;
+  const holeNavRef = useTourTarget('hole-nav');
   const gps = useGpsDistances(round.courseName, currentHole);
   // Best-effort offline prep: when this round's course has geometry, prefetch
   // its satellite tiles once per course per session — Wi-Fi only. Failures are
@@ -394,21 +396,23 @@ export function HoleView({ round, roundIndex, players, scores, shotDetails, meId
             }
             const primaryDisabled = onLastHole && finishBusy;
             return (
-              <TouchableOpacity
-                style={[s.saveBtn, primaryDisabled && s.saveBtnDisabled]}
-                onPress={onLastHole ? onFinish : onNext}
-                disabled={primaryDisabled}
-                activeOpacity={0.8}
-              >
-                <Text style={s.saveBtnText}>
-                  {primaryDisabled ? 'Finishing' : onLastHole ? 'Finish' : `Hole ${currentHole + 1}`}
-                </Text>
-                <Feather
-                  name={onLastHole ? 'flag' : 'chevron-right'}
-                  size={18}
-                  color={theme.text.inverse}
-                />
-              </TouchableOpacity>
+              <View ref={holeNavRef} collapsable={false}>
+                <TouchableOpacity
+                  style={[s.saveBtn, primaryDisabled && s.saveBtnDisabled]}
+                  onPress={onLastHole ? onFinish : onNext}
+                  disabled={primaryDisabled}
+                  activeOpacity={0.8}
+                >
+                  <Text style={s.saveBtnText}>
+                    {primaryDisabled ? 'Finishing' : onLastHole ? 'Finish' : `Hole ${currentHole + 1}`}
+                  </Text>
+                  <Feather
+                    name={onLastHole ? 'flag' : 'chevron-right'}
+                    size={18}
+                    color={theme.text.inverse}
+                  />
+                </TouchableOpacity>
+              </View>
             );
           })()}
         </View>

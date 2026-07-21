@@ -63,6 +63,8 @@ import { makeScorecardStyles } from '../components/scorecard/styles';
 import { HoleView } from '../components/scorecard/HoleView';
 import { GridView, resolveScorecardRows } from '../components/scorecard/GridView';
 import FinishConflictSheet from '../components/scorecard/FinishConflictSheet';
+import TourOverlay from '../components/tour/TourOverlay';
+import { SCORECARD_TOUR_STEPS } from '../components/tour/tourSteps';
 
 
 
@@ -1719,6 +1721,10 @@ export default function ScorecardScreen({ navigation, route }) {
           onRefresh={onRefresh}
           meId={meId}
         />
+      )}
+
+      {view === 'hole' && (
+        <TourOverlay chapter="scorecard" steps={SCORECARD_TOUR_STEPS} />
       )}
 
       {/* Notes modal — per-hole note + shared round note */}

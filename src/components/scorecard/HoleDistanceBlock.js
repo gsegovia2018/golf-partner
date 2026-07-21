@@ -4,6 +4,7 @@ import { Feather } from '@expo/vector-icons';
 import { useTheme } from '../../theme/ThemeContext';
 import { useAppSettings } from '../../hooks/useAppSettings';
 import { formatDistance, unitSuffix } from '../../lib/units';
+import { useTourTarget } from '../tour/tourTargets';
 
 // Right-hand side of the hole header: live GPS distances to the green, or —
 // when the player isn't on the hole (or has no fix) — the same distances
@@ -14,6 +15,7 @@ export function HoleDistanceBlock({ gps, onPress }) {
   const { theme } = useTheme();
   const { units } = useAppSettings();
   const s = useMemo(() => makeStyles(theme), [theme]);
+  const tourRef = useTourTarget('hole-distances');
   if (!gps?.available) return null;
 
   const fmt = (meters) => formatDistance(meters, units);
@@ -32,7 +34,7 @@ export function HoleDistanceBlock({ gps, onPress }) {
 
   if (source === 'tee' && distances) {
     return (
-      <Pressable onPress={onPress} hitSlop={10} style={s.block} accessibilityRole="button" accessibilityLabel="Open hole map">
+      <Pressable ref={tourRef} onPress={onPress} hitSlop={10} style={s.block} accessibilityRole="button" accessibilityLabel="Open hole map">
         <View style={s.heroRow}>
           <Text style={s.hero}>{fmt(distances.center)}</Text>
           <Text style={s.unit}>{unitSuffix(units)}</Text>
@@ -45,7 +47,7 @@ export function HoleDistanceBlock({ gps, onPress }) {
   }
 
   return (
-    <Pressable onPress={onPress} hitSlop={10} style={s.block} accessibilityRole="button" accessibilityLabel="Open hole map">
+    <Pressable ref={tourRef} onPress={onPress} hitSlop={10} style={s.block} accessibilityRole="button" accessibilityLabel="Open hole map">
       {distances?.kind === 'nearest' && <Text style={s.overline}>NEAREST GREEN</Text>}
       {offCourse ? (
         <Text style={s.off}>{`Off course · ${(distances.center / 1000).toFixed(1)} km`}</Text>
