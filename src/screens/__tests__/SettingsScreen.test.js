@@ -16,9 +16,10 @@ const renderScreen = () => render(
 
 beforeEach(() => __resetAppSettingsForTests());
 
-test('renders the four sections', async () => {
+test('renders the five sections', async () => {
   renderScreen();
-  await waitFor(() => screen.getByText('ROUND & GPS'));
+  await waitFor(() => screen.getByText('ON THE COURSE'));
+  expect(screen.getByText('SCORE VISIBILITY')).toBeTruthy();
   expect(screen.getByText('STATS TRACKING')).toBeTruthy();
   expect(screen.getByText('DISPLAY')).toBeTruthy();
   expect(screen.getByText('NOTIFICATIONS')).toBeTruthy();

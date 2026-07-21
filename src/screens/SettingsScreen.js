@@ -1,8 +1,10 @@
 import React, { useCallback } from 'react';
-import { View, Text, TouchableOpacity, StyleSheet, ScrollView, Switch, Platform } from 'react-native';
+import { View, Text, StyleSheet, ScrollView, Switch, Platform } from 'react-native';
 import { Feather } from '@expo/vector-icons';
 import ScreenContainer from '../components/ScreenContainer';
 import IconButton from '../components/ui/IconButton';
+import PressableScale from '../components/ui/PressableScale';
+import Reveal from '../components/ui/Reveal';
 import { useTheme } from '../theme/ThemeContext';
 import { useAppSettings } from '../hooks/useAppSettings';
 import { updateAppSettings } from '../store/settingsStore';
@@ -21,9 +23,12 @@ const THEME_OPTIONS = [
   { value: 'system', label: 'System', icon: 'smartphone' },
 ];
 
-function SwitchRow({ testID, label, hint, value, onChange, disabled, theme, s }) {
+// Stagger step between section reveals on mount.
+const REVEAL_STEP = 40;
+
+function SwitchRow({ testID, label, hint, value, onChange, disabled, first, theme, s }) {
   return (
-    <View style={s.prefRow}>
+    <View style={[s.prefRow, !first && s.prefRowDivider]}>
       <View style={{ flex: 1 }}>
         <Text style={[s.prefLabel, disabled && { color: theme.text.muted }]}>{label}</Text>
         {hint ? <Text style={s.fieldHint}>{hint}</Text> : null}
@@ -38,6 +43,16 @@ function SwitchRow({ testID, label, hint, value, onChange, disabled, theme, s })
         thumbColor={Platform.OS === 'android' ? theme.bg.card : undefined}
       />
     </View>
+  );
+}
+
+function Section({ title, hint, delay, s, children }) {
+  return (
+    <Reveal delay={delay}>
+      <Text style={s.sectionLabel}>{title}</Text>
+      {hint ? <Text style={s.sectionHint}>{hint}</Text> : null}
+      <View style={s.groupCard}>{children}</View>
+    </Reveal>
   );
 }
 
@@ -63,85 +78,92 @@ export default function SettingsScreen({ navigation }) {
         <View style={s.backBtn} />
       </View>
       <ScrollView contentContainerStyle={{ paddingHorizontal: 20, paddingBottom: 40 }}>
-        <Text style={s.sectionLabel}>ROUND & GPS</Text>
-        <SwitchRow testID="setting-gpsEnabled" label="GPS distances"
-          hint="Live distances from your position. Off: distances measure from the tee and the app never asks for your location."
-          value={appSettings.gpsEnabled} onChange={(v) => setKey({ gpsEnabled: v })} theme={theme} s={s} />
-        <SwitchRow testID="setting-keepAwake" label="Keep screen awake"
-          hint="Stops the screen sleeping while the scorecard is open."
-          value={appSettings.keepAwake} onChange={(v) => setKey({ keepAwake: v })} theme={theme} s={s} />
-        <SwitchRow testID="setting-autoAdvanceHole" label="Auto-advance hole"
-          hint="Flip to the next hole once every player has a score."
-          value={appSettings.autoAdvanceHole} onChange={(v) => setKey({ autoAdvanceHole: v })} theme={theme} s={s} />
-        <SwitchRow testID="setting-haptics" label="Haptic feedback"
-          hint="Vibrate on score entry."
-          value={appSettings.haptics} onChange={(v) => setKey({ haptics: v })} theme={theme} s={s} />
-        <SwitchRow testID="setting-noSpoilers" label="No-spoilers mode"
-          hint="Hide running points and leaderboards until the round is finished."
-          value={appSettings.noSpoilers} onChange={(v) => setKey({ noSpoilers: v })} theme={theme} s={s} />
-        <SwitchRow testID="setting-showRunningScore" label="Show running points"
-          hint={appSettings.noSpoilers ? 'Off while no-spoilers mode is on.' : 'Total Stableford points under every scorecard name.'}
-          value={appSettings.showRunningScore && !appSettings.noSpoilers}
-          disabled={appSettings.noSpoilers}
-          onChange={(v) => setKey({ showRunningScore: v })} theme={theme} s={s} />
+        <Section title="ON THE COURSE" delay={0} s={s}>
+          <SwitchRow testID="setting-gpsEnabled" label="GPS distances" first
+            hint="Live distances from your position. Off: distances measure from the tee and the app never asks for your location."
+            value={appSettings.gpsEnabled} onChange={(v) => setKey({ gpsEnabled: v })} theme={theme} s={s} />
+          <SwitchRow testID="setting-keepAwake" label="Keep screen awake"
+            hint="Stops the screen sleeping while the scorecard is open."
+            value={appSettings.keepAwake} onChange={(v) => setKey({ keepAwake: v })} theme={theme} s={s} />
+          <SwitchRow testID="setting-autoAdvanceHole" label="Auto-advance hole"
+            hint="Flip to the next hole once every player has a score."
+            value={appSettings.autoAdvanceHole} onChange={(v) => setKey({ autoAdvanceHole: v })} theme={theme} s={s} />
+          <SwitchRow testID="setting-haptics" label="Haptic feedback"
+            hint="Vibrate on score entry."
+            value={appSettings.haptics} onChange={(v) => setKey({ haptics: v })} theme={theme} s={s} />
+        </Section>
 
-        <Text style={s.sectionLabel}>STATS TRACKING</Text>
-        <Text style={s.fieldHint}>Turn off what you don&apos;t want to log — the scorecard hides those inputs.</Text>
-        {STAT_GROUP_ROWS.map(({ key, label, loss }) => (
-          <SwitchRow key={key} testID={`setting-statGroups.${key}`} label={label} hint={loss}
-            value={appSettings.statGroups[key]}
-            onChange={(v) => setKey({ statGroups: { [key]: v } })} theme={theme} s={s} />
-        ))}
+        <Section title="SCORE VISIBILITY" delay={REVEAL_STEP} s={s}>
+          <SwitchRow testID="setting-noSpoilers" label="No-spoilers mode" first
+            hint="Hide running points and leaderboards until the round is finished."
+            value={appSettings.noSpoilers} onChange={(v) => setKey({ noSpoilers: v })} theme={theme} s={s} />
+          <SwitchRow testID="setting-showRunningScore" label="Show running points"
+            hint={appSettings.noSpoilers ? 'Off while no-spoilers mode is on.' : 'Total Stableford points under every scorecard name.'}
+            value={appSettings.showRunningScore && !appSettings.noSpoilers}
+            disabled={appSettings.noSpoilers}
+            onChange={(v) => setKey({ showRunningScore: v })} theme={theme} s={s} />
+        </Section>
 
-        <Text style={s.sectionLabel}>DISPLAY</Text>
-        <View style={s.segmentRow}>
-          {[['meters', 'Meters'], ['yards', 'Yards']].map(([value, label]) => (
-            <TouchableOpacity key={value}
-              style={[s.segment, appSettings.units === value && s.segmentActive]}
-              onPress={() => setKey({ units: value })}
-              accessibilityRole="button" accessibilityState={{ selected: appSettings.units === value }}>
-              <Text style={[s.segmentText, appSettings.units === value && s.segmentTextActive]}>{label}</Text>
-            </TouchableOpacity>
+        <Section title="STATS TRACKING" delay={REVEAL_STEP * 2}
+          hint="Turn off what you don't want to log — the scorecard hides those inputs." s={s}>
+          {STAT_GROUP_ROWS.map(({ key, label, loss }, i) => (
+            <SwitchRow key={key} testID={`setting-statGroups.${key}`} label={label} hint={loss} first={i === 0}
+              value={appSettings.statGroups[key]}
+              onChange={(v) => setKey({ statGroups: { [key]: v } })} theme={theme} s={s} />
           ))}
-        </View>
-        <View style={s.appearanceRow}>
-          {THEME_OPTIONS.map((opt) => {
-            const active = themePref === opt.value;
-            return (
-              <TouchableOpacity
-                key={opt.value}
-                style={[s.appearanceTile, active && s.appearanceTileActive]}
-                onPress={() => setThemeMode(opt.value)}
-                accessibilityRole="button"
-                accessibilityState={{ selected: active }}
-                activeOpacity={0.7}
-              >
-                <Feather
-                  name={opt.icon}
-                  size={18}
-                  color={active ? theme.accent.primary : theme.text.muted}
-                />
-                <Text style={[s.appearanceLabel, active && s.appearanceLabelActive]}>
-                  {opt.label}
-                </Text>
-              </TouchableOpacity>
-            );
-          })}
-        </View>
+        </Section>
 
-        <Text style={s.sectionLabel}>NOTIFICATIONS</Text>
-        <SwitchRow testID="setting-notifications.scores" label="Score updates"
-          hint="When a friend finishes a round."
-          value={appSettings.notifications.scores}
-          onChange={(v) => setKey({ notifications: { scores: v } })} theme={theme} s={s} />
-        <SwitchRow testID="setting-notifications.invites" label="Invites & friends"
-          hint="Friend requests and being added to games."
-          value={appSettings.notifications.invites}
-          onChange={(v) => setKey({ notifications: { invites: v } })} theme={theme} s={s} />
-        <SwitchRow testID="setting-notifications.media" label="Photos & reactions"
-          hint="Comments and reactions on rounds."
-          value={appSettings.notifications.media}
-          onChange={(v) => setKey({ notifications: { media: v } })} theme={theme} s={s} />
+        <Reveal delay={REVEAL_STEP * 3}>
+          <Text style={s.sectionLabel}>DISPLAY</Text>
+          <View style={s.segmentRow}>
+            {[['meters', 'Meters'], ['yards', 'Yards']].map(([value, label]) => (
+              <PressableScale key={value}
+                style={[s.segment, appSettings.units === value && s.segmentActive]}
+                onPress={() => setKey({ units: value })}
+                accessibilityRole="button" accessibilityState={{ selected: appSettings.units === value }}>
+                <Text style={[s.segmentText, appSettings.units === value && s.segmentTextActive]}>{label}</Text>
+              </PressableScale>
+            ))}
+          </View>
+          <View style={s.appearanceRow}>
+            {THEME_OPTIONS.map((opt) => {
+              const active = themePref === opt.value;
+              return (
+                <PressableScale
+                  key={opt.value}
+                  style={[s.appearanceTile, active && s.appearanceTileActive]}
+                  onPress={() => setThemeMode(opt.value)}
+                  accessibilityRole="button"
+                  accessibilityState={{ selected: active }}
+                >
+                  <Feather
+                    name={opt.icon}
+                    size={18}
+                    color={active ? theme.accent.primary : theme.text.muted}
+                  />
+                  <Text style={[s.appearanceLabel, active && s.appearanceLabelActive]}>
+                    {opt.label}
+                  </Text>
+                </PressableScale>
+              );
+            })}
+          </View>
+        </Reveal>
+
+        <Section title="NOTIFICATIONS" delay={REVEAL_STEP * 4} s={s}>
+          <SwitchRow testID="setting-notifications.scores" label="Score updates" first
+            hint="When a friend finishes a round."
+            value={appSettings.notifications.scores}
+            onChange={(v) => setKey({ notifications: { scores: v } })} theme={theme} s={s} />
+          <SwitchRow testID="setting-notifications.invites" label="Invites & friends"
+            hint="Friend requests and being added to games."
+            value={appSettings.notifications.invites}
+            onChange={(v) => setKey({ notifications: { invites: v } })} theme={theme} s={s} />
+          <SwitchRow testID="setting-notifications.media" label="Photos & reactions"
+            hint="Comments and reactions on rounds."
+            value={appSettings.notifications.media}
+            onChange={(v) => setKey({ notifications: { media: v } })} theme={theme} s={s} />
+        </Section>
       </ScrollView>
     </ScreenContainer>
   );
@@ -162,20 +184,30 @@ const makeStyles = (theme) => StyleSheet.create({
   headerTitle: { fontFamily: 'PlusJakartaSans-Bold', fontSize: 17, color: theme.text.primary },
 
   sectionLabel: {
-    fontFamily: 'PlusJakartaSans-SemiBold', color: theme.text.muted, fontSize: 11,
-    marginBottom: 12, marginTop: 16, letterSpacing: 1.8, textTransform: 'uppercase',
+    fontFamily: 'PlusJakartaSans-Bold', color: theme.text.muted, fontSize: 10,
+    letterSpacing: 1.4, textTransform: 'uppercase',
+    marginTop: 20, marginBottom: 10,
+  },
+  sectionHint: {
+    fontFamily: 'PlusJakartaSans-Regular', color: theme.text.muted,
+    fontSize: 11, marginTop: -4, marginBottom: 10,
   },
   fieldHint: {
     fontFamily: 'PlusJakartaSans-Regular', color: theme.text.muted,
-    fontSize: 11, marginTop: 6,
+    fontSize: 11, marginTop: 4,
   },
 
+  groupCard: {
+    backgroundColor: theme.bg.card, borderRadius: theme.radius.lg,
+    borderWidth: StyleSheet.hairlineWidth, borderColor: theme.border.default,
+    paddingHorizontal: 14,
+  },
   prefRow: {
     flexDirection: 'row', alignItems: 'center', gap: 12,
-    backgroundColor: theme.bg.card, borderRadius: 14, borderWidth: 1,
-    borderColor: theme.border.default, padding: 14,
-    ...(theme.isDark ? {} : theme.shadow.card),
-    marginBottom: 10,
+    paddingVertical: 13,
+  },
+  prefRowDivider: {
+    borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: theme.border.subtle,
   },
   prefLabel: {
     fontFamily: 'PlusJakartaSans-SemiBold', color: theme.text.primary, fontSize: 14,
@@ -187,6 +219,7 @@ const makeStyles = (theme) => StyleSheet.create({
   segment: {
     flex: 1, alignItems: 'center', justifyContent: 'center',
     borderRadius: 10, borderWidth: 1.5, borderColor: theme.border.default,
+    backgroundColor: theme.bg.card,
     paddingHorizontal: 14, paddingVertical: 10,
   },
   segmentActive: { borderColor: theme.accent.primary, backgroundColor: theme.accent.light },
@@ -199,11 +232,10 @@ const makeStyles = (theme) => StyleSheet.create({
     backgroundColor: theme.bg.card,
     borderRadius: 14, borderWidth: 1, borderColor: theme.border.default,
     paddingVertical: 14,
-    ...(theme.isDark ? {} : theme.shadow.card),
   },
   appearanceTileActive: {
     borderColor: theme.accent.primary,
-    backgroundColor: theme.isDark ? theme.accent.light : theme.accent.light,
+    backgroundColor: theme.accent.light,
   },
   appearanceLabel: {
     fontFamily: 'PlusJakartaSans-SemiBold', color: theme.text.muted, fontSize: 14,
