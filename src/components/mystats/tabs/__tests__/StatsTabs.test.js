@@ -271,26 +271,29 @@ function formStats() {
         threePuttsPerRound: mk([2, 2, 2]),
       },
       scoreMix: [
-        { label: 'R1', birdie: 2, par: 10, bogey: 6 },
-        { label: 'R2', birdie: 4, par: 9, bogey: 5 },
-        { label: 'R3', birdie: 1, par: 11, bogey: 6 },
+        { label: 'R1', birdiePlus: 2, par: 10, bogey: 4, double: 1, worse: 1 },
+        { label: 'R2', birdiePlus: 4, par: 9, bogey: 4, double: 1, worse: 0 },
+        { label: 'R3', birdiePlus: 1, par: 11, bogey: 6, double: 0, worse: 0 },
       ],
+      damage: mk([5, 3, 0]),
+      steadyPct: mk([89, 94, 100]),
     },
   };
 }
 
 describe('My Stats tabs', () => {
   test('FormTab renders exactly three cards: hero, instruments, score mix', async () => {
-    const { findByText, getByTestId, queryByText, getByText } = render(wrap(
+    const { findByText, getByTestId, getAllByTestId, queryByText, getByText } = render(wrap(
       <FormTab stats={formStats()} n={5} onChangeN={() => {}} onInfo={() => {}} />
     ));
 
-    // Hero: kicker + verdict from stats.form + gold pts number + chart.
+    // Hero: kicker + verdict from stats.form + gold pts number + chart. (Two
+    // trend canvases render on the tab: the hero's and the steady-holes one.)
     expect(await findByText('Current form · Last 5')).toBeTruthy();
     expect(getByText('Improving lately')).toBeTruthy();
     expect(getByTestId('form-hero-pts')).toBeTruthy();
     expect(getByTestId('form-hero-surface')).toBeTruthy();
-    expect(getByTestId('trend-chart-canvas')).toBeTruthy();
+    expect(getAllByTestId('trend-chart-canvas')).toHaveLength(2);
 
     // Instruments: one sparkline row per remaining metric (avgPoints lives
     // in the hero, not the instruments panel).
@@ -300,10 +303,13 @@ describe('My Stats tabs', () => {
     });
     expect(queryByText('Points / round')).toBeNull();
 
-    // Score mix: per-round columns.
+    // Score mix damage report: headline, per-round columns, steady trend.
     expect(getByText('Score mix')).toBeTruthy();
+    expect(getByText('Damage · strokes lost past bogey')).toBeTruthy();
+    expect(getByTestId('scoremix-damage-value')).toBeTruthy();
     expect(getByTestId('scoremix-col-0')).toBeTruthy();
     expect(getByTestId('scoremix-col-2')).toBeTruthy();
+    expect(getByText('Steady holes · bogey or better')).toBeTruthy();
 
     // The old four-card layout is gone.
     expect(queryByText('Points per round')).toBeNull();
@@ -358,6 +364,10 @@ describe('My Stats tabs', () => {
     expect(onInfo).toHaveBeenCalledWith('recentVsHistory');
     fireEvent.press(getByLabelText('What is Score mix'));
     expect(onInfo).toHaveBeenCalledWith('scoreMix');
+    fireEvent.press(getByLabelText('What is Damage'));
+    expect(onInfo).toHaveBeenCalledWith('damage');
+    fireEvent.press(getByLabelText('What is Steady holes'));
+    expect(onInfo).toHaveBeenCalledWith('steadyHoles');
     fireEvent.press(getByLabelText('What is Strokes vs par'));
     expect(onInfo).toHaveBeenCalledWith('strokesVsPar');
     fireEvent.press(getByLabelText('What is Putts / round'));

@@ -566,6 +566,8 @@ export function computeFormSeries(selectedRounds) {
     girPct: [], puttsPerRound: [], threePuttsPerRound: [],
   };
   const scoreMix = [];
+  const damage = [];
+  const steadyPct = [];
   let hasShotData = false;
 
   rounds.forEach((mr, i) => {
@@ -594,16 +596,38 @@ export function computeFormSeries(selectedRounds) {
     metrics.puttsPerRound.push({ label, value: shots.putts.holes > 0 ? shots.putts.total : null });
     metrics.threePuttsPerRound.push({ label, value: shots.putts.holes > 0 ? shots.putts.threePuttPlus : null });
 
+    // Net (Stableford-adjusted) five-band split — same playerScoreDistribution
+    // basis the old birdie/par/bogey triple used, so the Form-tab card keeps
+    // agreeing with BreakdownTab and roundReportCard (see computeMyStats).
     const d = playerScoreDistribution(synthetic, CANON_ID);
     scoreMix.push({
       label,
-      birdie: d.eagles + d.birdies,
+      birdiePlus: d.eagles + d.birdies,
       par: d.pars,
-      bogey: d.bogeys + d.doubles + d.worse,
+      bogey: d.bogeys,
+      double: d.doubles,
+      worse: d.worse,
+    });
+
+    // Damage: strokes lost beyond (net) bogey — a net double costs 1, a net
+    // triple 2, and so on. dist entries carry net vsPar, so this is
+    // Σ max(0, vsPar − 1) over the worse-than-bogey holes. A round with no
+    // scored holes has no honest figure — null renders as a chart gap.
+    const scoredHoles = d.total;
+    const damageStrokes = [...d.doubleHoles, ...d.worseHoles]
+      .reduce((sum, e) => sum + (e.vsPar - 1), 0);
+    damage.push({ label, value: scoredHoles > 0 ? damageStrokes : null });
+
+    // Steady holes: share of scored holes at (net) bogey or better.
+    steadyPct.push({
+      label,
+      value: scoredHoles > 0
+        ? Math.round(((scoredHoles - d.doubles - d.worse) / scoredHoles) * 100)
+        : null,
     });
   });
 
-  return { metrics, scoreMix, hasShotData };
+  return { metrics, scoreMix, damage, steadyPct, hasShotData };
 }
 
 // ── courseMastery ──
