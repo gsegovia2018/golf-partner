@@ -9,6 +9,7 @@ import { loadTournament, isRoundInProgress, subscribeTournamentChanges } from '.
 import { shouldHandleStoreChange } from '../lib/navigationFocus';
 import { getTabBarItem, isCenterTab } from './tabBarModel';
 import PressableScale from '../components/ui/PressableScale';
+import TabBarFade from './TabBarFade';
 
 export default function FloatingTabBar({ state, navigation }) {
   const { theme } = useTheme();
@@ -40,7 +41,11 @@ export default function FloatingTabBar({ state, navigation }) {
   }, [navigation]);
 
   return (
-    <View style={[styles.slot, { paddingBottom: Math.max(insets.bottom, 12) }]}>
+    <View
+      pointerEvents="box-none"
+      style={[styles.slot, { paddingBottom: Math.max(insets.bottom, 12) }]}
+    >
+      <TabBarFade />
       <View style={styles.bar}>
         {state.routes.map((route, index) => {
           const focused = state.index === index;
