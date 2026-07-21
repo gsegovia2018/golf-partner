@@ -1,5 +1,6 @@
 import React, { useEffect, useRef } from 'react';
 import { Animated, Easing, StyleSheet, View } from 'react-native';
+import { semantic } from '../theme/tokens';
 
 function Ring({ delay }) {
   const v = useRef(new Animated.Value(0)).current;
@@ -91,12 +92,12 @@ const styles = StyleSheet.create({
   ring: {
     position: 'absolute',
     width: 52, height: 52, borderRadius: 26,
-    borderWidth: 1.5, borderColor: '#ffd700',
+    borderWidth: 1.5, borderColor: semantic.winner.dark,
   },
   ball: {
     width: 44, height: 44, borderRadius: 22,
     backgroundColor: '#fefefe',
-    shadowColor: '#ffd700',
+    shadowColor: semantic.winner.dark,
     shadowOpacity: 0.4,
     shadowRadius: 12,
     shadowOffset: { width: 0, height: 0 },
@@ -112,7 +113,7 @@ const styles = StyleSheet.create({
   d3: { bottom: 11, left: 18 },
   wordmark: {
     marginTop: 36,
-    color: '#ffd700',
+    color: semantic.winner.dark,
     fontSize: 12,
     letterSpacing: 5,
     fontWeight: '700',

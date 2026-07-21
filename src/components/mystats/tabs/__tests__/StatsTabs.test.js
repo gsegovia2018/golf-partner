@@ -283,7 +283,7 @@ describe('My Stats tabs', () => {
       <ShotsTab stats={shotStats()} onInfo={() => {}} targetHandicap={14} onChangeTarget={() => {}} />
     ));
 
-    expect(await findByText('Strokes Gained Dashboard')).toBeTruthy();
+    expect(await findByText('Strokes gained · vs 14-hcp target')).toBeTruthy();
     expect(await findByText('What is working')).toBeTruthy();
     expect(await findByText('What is costing shots')).toBeTruthy();
     expect(await findByText('Scoring')).toBeTruthy();

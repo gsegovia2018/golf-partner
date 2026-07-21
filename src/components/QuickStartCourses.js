@@ -639,7 +639,7 @@ const makeStyles = (t) => StyleSheet.create({
   },
   slotAvatarText: {
     fontFamily: 'PlusJakartaSans-ExtraBold',
-    color: '#ffd700',
+    color: semantic.winner.dark,
     fontSize: 15,
   },
   slotName: {

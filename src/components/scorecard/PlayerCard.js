@@ -8,6 +8,7 @@ import { useTheme } from '../../theme/ThemeContext';
 import { makeScorecardStyles } from './styles';
 import { teamColor } from './teamModel';
 import { ShotDetailSection } from './ShotDetailSection';
+import PressableScale from '../ui/PressableScale';
 
 // Long-press-to-clear haptic — mirrors the helper in ScorecardScreen.
 function haptic(style = 'medium') {
@@ -167,13 +168,14 @@ export const PlayerCard = React.memo(function PlayerCard({
             (official mode: not self / not markee) shows the score with no
             +/- and no long-press-to-clear. */}
         {showScoreControls && (
-          <TouchableOpacity
+          <PressableScale
             style={s.soloStepBtn}
             onPress={() => onStep(player.id, hole.number, -1)}
+            activeScale={0.97}
             accessibilityLabel={`Decrease strokes on hole ${hole.number}`}
           >
             <Feather name="minus" size={24} color={theme.text.primary} />
-          </TouchableOpacity>
+          </PressableScale>
         )}
         <Pressable
           onLongPress={() => {
@@ -201,13 +203,14 @@ export const PlayerCard = React.memo(function PlayerCard({
           </Animated.View>
         </Pressable>
         {showScoreControls && (
-          <TouchableOpacity
+          <PressableScale
             style={s.soloStepBtn}
             onPress={() => onStep(player.id, hole.number, 1)}
+            activeScale={0.97}
             accessibilityLabel={`Increase strokes on hole ${hole.number}`}
           >
             <Feather name="plus" size={24} color={theme.text.primary} />
-          </TouchableOpacity>
+          </PressableScale>
         )}
       </View>
 

@@ -13,7 +13,7 @@ export function SGBar({ label, value }) {
   if (value == null) {
     return (
       <View testID="sg-bar-row" style={styles.row}>
-        <Text style={[styles.label, { color: theme.text.secondary }]} numberOfLines={1}>{label}</Text>
+        <Text style={[styles.label, { color: theme.text.muted }]} numberOfLines={1}>{label}</Text>
         <Text style={{ color: theme.text.muted }}>—</Text>
       </View>
     );
@@ -29,16 +29,16 @@ export function SGBar({ label, value }) {
 
   return (
     <View testID="sg-bar-row" style={styles.row}>
-      <Text style={[styles.label, { color: theme.text.secondary }]} numberOfLines={1}>{label}</Text>
-      <View testID="sg-bar-track" style={styles.track}>
+      <Text style={[styles.label, { color: theme.text.muted }]} numberOfLines={1}>{label}</Text>
+      <View testID="sg-bar-track" style={[styles.track, { backgroundColor: theme.bg.secondary }]}>
         <Svg width="100%" height={HEIGHT} viewBox={`0 0 ${WIDTH} ${HEIGHT}`}>
           <Line x1={center} y1={0} x2={center} y2={HEIGHT} stroke={theme.border.default} />
-          <Rect x={barX} y={2} width={barW} height={HEIGHT - 4} fill={fill} rx={2} />
+          <Rect x={barX} y={2} width={barW} height={HEIGHT - 4} fill={fill} rx={4} />
         </Svg>
       </View>
       <Text
         testID="sg-bar-value"
-        style={[styles.value, { color: theme.text.primary }]}
+        style={[styles.value, { color: fill }]}
       >
         {value >= 0 ? '+' : ''}{value.toFixed(2)}
       </Text>
@@ -57,19 +57,23 @@ const styles = {
   label: {
     width: 92,
     flexShrink: 0,
-    fontSize: 13,
+    fontSize: 11.5,
+    fontFamily: 'PlusJakartaSans-Bold',
   },
   track: {
     flex: 1,
     minWidth: 80,
     maxWidth: WIDTH,
     height: HEIGHT,
+    borderRadius: 999,
+    overflow: 'hidden',
   },
   value: {
     width: 46,
     flexShrink: 0,
     textAlign: 'right',
-    fontSize: 13,
-    fontWeight: '600',
+    fontSize: 12,
+    fontFamily: 'PlusJakartaSans-ExtraBold',
+    fontVariant: ['tabular-nums'],
   },
 };

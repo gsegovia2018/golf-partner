@@ -17,33 +17,33 @@ describe('tabBarModel', () => {
     ]);
   });
 
-  test('maps secondary routes to modern MaterialCommunityIcons metadata', () => {
+  test('maps secondary routes to modern Feather icon metadata', () => {
     expect(getTabBarItem('Feed')).toMatchObject({
       routeName: 'Feed',
       targetRouteName: 'Feed',
       label: 'Feed',
-      icon: 'newspaper-variant-outline',
+      icon: 'file-text',
       center: false,
     });
     expect(getTabBarItem('MyStats')).toMatchObject({
       routeName: 'MyStats',
       targetRouteName: 'MyStats',
       label: 'Stats',
-      icon: 'chart-bar',
+      icon: 'bar-chart-2',
       center: false,
     });
     expect(getTabBarItem('History')).toMatchObject({
       routeName: 'History',
       targetRouteName: 'History',
       label: 'History',
-      icon: 'history',
+      icon: 'clock',
       center: false,
     });
     expect(getTabBarItem('Profile')).toMatchObject({
       routeName: 'Profile',
       targetRouteName: 'Profile',
       label: 'Profile',
-      icon: 'account-circle-outline',
+      icon: 'user',
       center: false,
     });
   });
@@ -59,7 +59,7 @@ describe('tabBarModel', () => {
       routeName: 'Home',
       targetRouteName: CENTER_ROUTE_NAME,
       label: 'Play',
-      icon: 'flag-variant',
+      icon: 'flag',
       center: true,
       live: false,
     });
@@ -71,7 +71,7 @@ describe('tabBarModel', () => {
       routeName: 'Home',
       targetRouteName: SCORECARD_ROUTE_NAME,
       label: 'Score',
-      icon: 'scoreboard-outline',
+      icon: 'clipboard',
       center: true,
       live: true,
     });

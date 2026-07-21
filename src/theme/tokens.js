@@ -17,12 +17,12 @@ const light = {
     inverse:   '#ffffff',
   },
   border: {
-    default:   '#ece8e1',
+    default:   '#e7e2d5',
     subtle:    '#f0ede8',
   },
   shadow: {
-    card:     { shadowColor: '#000', shadowOpacity: 0.04, shadowOffset: { width: 0, height: 1 }, shadowRadius: 6, elevation: 2 },
-    elevated: { shadowColor: '#000', shadowOpacity: 0.08, shadowOffset: { width: 0, height: 2 }, shadowRadius: 12, elevation: 4 },
+    card:     { shadowColor: '#000', shadowOpacity: 0, shadowOffset: { width: 0, height: 0 }, shadowRadius: 0, elevation: 0 },
+    elevated: { shadowColor: '#0f3d2c', shadowOpacity: 0.10, shadowOffset: { width: 0, height: 4 }, shadowRadius: 14, elevation: 4 },
     accent:   { shadowColor: '#006747', shadowOpacity: 0.2, shadowOffset: { width: 0, height: 2 }, shadowRadius: 8, elevation: 3 },
   },
   glass: null,
@@ -66,6 +66,10 @@ const semantic = {
     gold:   '#d4af37',
     silver: '#94a3b8',
     bronze: '#c47c3a',
+  },
+  winner: {
+    light: '#a9821e',
+    dark:  '#ffd700',
   },
   destructive: {
     light: '#ef4444',

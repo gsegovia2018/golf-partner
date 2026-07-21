@@ -12,23 +12,23 @@ export const TAB_ROUTE_NAMES = [
 const TAB_BAR_ITEMS = {
   Feed: {
     label: 'Feed',
-    icon: 'newspaper-variant-outline',
+    icon: 'file-text',
   },
   MyStats: {
     label: 'Stats',
-    icon: 'chart-bar',
+    icon: 'bar-chart-2',
   },
   Home: {
     label: 'Play',
-    icon: 'flag-variant',
+    icon: 'flag',
   },
   History: {
     label: 'History',
-    icon: 'history',
+    icon: 'clock',
   },
   Profile: {
     label: 'Profile',
-    icon: 'account-circle-outline',
+    icon: 'user',
   },
 };
 
@@ -58,7 +58,7 @@ export function getTabBarItem(routeName, { roundLive = false } = {}) {
     routeName,
     targetRouteName: live ? SCORECARD_ROUTE_NAME : CENTER_ROUTE_NAME,
     label: live ? 'Score' : 'Play',
-    icon: live ? 'scoreboard-outline' : 'flag-variant',
+    icon: live ? 'clipboard' : 'flag',
     center: true,
     live,
   };

@@ -1,4 +1,5 @@
 import { StyleSheet } from 'react-native';
+import { semantic } from '../../theme/tokens';
 
 // Shared StyleSheet for the scorecard screen and the scorecard/* components.
 export function makeScorecardStyles(theme) {
@@ -172,31 +173,23 @@ export function makeScorecardStyles(theme) {
       borderBottomWidth: 1,
       borderBottomColor: theme.isDark ? theme.glass?.border : theme.border.default,
     },
-    backBtn: {
+    // Unified 36px header icon button — backs, sync, view switch, eye,
+    // award, notes, camera all share this so the header reads as one row
+    // of consistent chrome instead of a mix of bare/bordered sizes.
+    headerBtn: {
       width: 36,
       height: 36,
-      borderRadius: 10,
-      backgroundColor: theme.isDark ? theme.bg.elevated : theme.bg.secondary,
+      borderRadius: 12,
       alignItems: 'center',
       justifyContent: 'center',
+      backgroundColor: theme.isDark ? theme.bg.elevated : theme.bg.secondary,
+      borderWidth: 1,
+      borderColor: theme.isDark ? theme.glass?.border : theme.border.default,
     },
     headerRight: {
       flexDirection: 'row',
       alignItems: 'center',
       gap: 8,
-    },
-    cameraBtn: {
-      width: 32,
-      height: 32,
-      alignItems: 'center',
-      justifyContent: 'center',
-    },
-    notesHeaderBtn: {
-      width: 32,
-      height: 32,
-      alignItems: 'center',
-      justifyContent: 'center',
-      position: 'relative',
     },
     notesHeaderDot: {
       position: 'absolute',
@@ -216,18 +209,6 @@ export function makeScorecardStyles(theme) {
       letterSpacing: -0.3,
     },
 
-    // Compact scorecard view switcher.
-    viewSwitchBtn: {
-      width: 32,
-      height: 32,
-      alignItems: 'center',
-      justifyContent: 'center',
-      borderRadius: 10,
-      backgroundColor: theme.isDark ? theme.bg.elevated : theme.bg.secondary,
-      borderWidth: 1,
-      borderColor: theme.isDark ? theme.glass?.border : theme.border.default,
-    },
-
     // "Edit round" pill — header affordance that unlocks a finished round.
     editRoundBtn: {
       flexDirection: 'row',
@@ -245,17 +226,13 @@ export function makeScorecardStyles(theme) {
       fontSize: 12,
     },
 
-    // Hole view header card
+    // Hole view header — sits directly on bg.primary, no card chrome.
     holeHeaderCard: {
       flexDirection: 'row',
       justifyContent: 'space-between',
       alignItems: 'center',
-      backgroundColor: theme.bg.card,
-      borderBottomWidth: 1,
-      borderBottomColor: theme.isDark ? theme.glass?.border : theme.border.default,
       paddingHorizontal: 20,
-      paddingVertical: 14,
-      ...(theme.isDark ? {} : theme.shadow.card),
+      paddingVertical: 16,
     },
     holeHeaderLeft: { gap: 2, flex: 1, minWidth: 0 },
     holeHeaderRightWrap: { flexShrink: 0 },
@@ -277,7 +254,6 @@ export function makeScorecardStyles(theme) {
       fontSize: 44,
       fontFamily: 'PlayfairDisplay-Black',
       lineHeight: 48,
-      letterSpacing: -1,
     },
     holeMetaInline: { flexDirection: 'row', gap: 16, marginLeft: 14, alignSelf: 'flex-end', paddingBottom: 6 },
     holeMetaItem: { alignItems: 'center', gap: 4 },
@@ -426,7 +402,7 @@ export function makeScorecardStyles(theme) {
       marginBottom: 8,
     },
     winnerBadgeText: {
-      color: theme.isDark ? '#ffd700' : '#8a6d00',
+      color: theme.isDark ? semantic.winner.dark : '#8a6d00',
       fontSize: 10,
       letterSpacing: 1.5,
       fontFamily: 'PlusJakartaSans-ExtraBold',

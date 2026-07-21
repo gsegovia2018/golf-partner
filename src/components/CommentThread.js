@@ -6,6 +6,7 @@ import {
 import { Feather } from '@expo/vector-icons';
 
 import { useTheme } from '../theme/ThemeContext';
+import { semantic } from '../theme/tokens';
 import { loadComments, addComment, deleteComment } from '../store/feedStore';
 
 const MAX_BODY = 500;
@@ -237,7 +238,7 @@ const makeStyles = (theme) => StyleSheet.create({
     alignItems: 'center', justifyContent: 'center', overflow: 'hidden',
   },
   avatarImg: { width: '100%', height: '100%' },
-  avatarText: { fontFamily: 'PlusJakartaSans-ExtraBold', color: '#ffd700', fontSize: 13 },
+  avatarText: { fontFamily: 'PlusJakartaSans-ExtraBold', color: semantic.winner.dark, fontSize: 13 },
   rowHead: { flexDirection: 'row', alignItems: 'center', gap: 8 },
   rowName: {
     fontFamily: 'PlusJakartaSans-Bold', fontSize: 13, color: theme.text.primary,

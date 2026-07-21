@@ -8,6 +8,7 @@ import { useFocusEffect } from '@react-navigation/native';
 import { Feather } from '@expo/vector-icons';
 
 import { useTheme } from '../theme/ThemeContext';
+import { semantic } from '../theme/tokens';
 import { useAuth } from '../context/AuthContext';
 import {
   subscribeTournamentChanges,
@@ -866,7 +867,7 @@ const makeStyles = (theme) => StyleSheet.create({
     alignItems: 'center', justifyContent: 'center', overflow: 'hidden',
   },
   avatarImg: { width: '100%', height: '100%' },
-  avatarText: { fontFamily: 'PlusJakartaSans-ExtraBold', color: '#ffd700', fontSize: 15 },
+  avatarText: { fontFamily: 'PlusJakartaSans-ExtraBold', color: semantic.winner.dark, fontSize: 15 },
   info: { flex: 1 },
   name: { fontFamily: 'PlusJakartaSans-Bold', fontSize: 15, color: theme.text.primary },
   metaRow: { flexDirection: 'row', alignItems: 'center', gap: 10, marginTop: 4, flexWrap: 'wrap' },
@@ -913,7 +914,7 @@ const makeStyles = (theme) => StyleSheet.create({
     alignItems: 'center', justifyContent: 'center',
   },
   linkFriendAvatarImg: { width: '100%', height: '100%' },
-  linkFriendAvatarText: { fontFamily: 'PlusJakartaSans-ExtraBold', color: '#ffd700', fontSize: 13 },
+  linkFriendAvatarText: { fontFamily: 'PlusJakartaSans-ExtraBold', color: semantic.winner.dark, fontSize: 13 },
   linkFriendName: { fontFamily: 'PlusJakartaSans-SemiBold', fontSize: 15, color: theme.text.primary },
   linkFriendMeta: { fontFamily: 'PlusJakartaSans-Regular', fontSize: 12, color: theme.text.muted, marginTop: 1 },
   linkFriendUsed: { fontFamily: 'PlusJakartaSans-SemiBold', fontSize: 11, color: theme.accent.primary },

@@ -7,6 +7,7 @@ import QRCode from 'react-native-qrcode-svg';
 import { CommonActions } from '@react-navigation/native';
 
 import { useTheme } from '../theme/ThemeContext';
+import { semantic } from '../theme/tokens';
 import { loadProfile } from '../store/profileStore';
 import { ShareableLeaderboard, shareLeaderboard } from '../components/ShareableCard';
 import QuickStartCourses from '../components/QuickStartCourses';
@@ -16,6 +17,8 @@ import { ScoringModeSheet, TeamsSettingsFields, BestBallValueFields } from '../c
 import PullToRefresh from '../components/PullToRefresh';
 import LoadingSplash from '../components/LoadingSplash';
 import BottomSheet from '../components/BottomSheet';
+import LiveRoundCard from '../components/LiveRoundCard';
+import PressableScale from '../components/ui/PressableScale';
 import {
   loadTournament, loadAllTournaments, loadAllTournamentsWithFallback,
   setActiveTournament,
@@ -1186,12 +1189,13 @@ export default function HomeScreen({ navigation, route }) {
             <Feather name="chevron-right" size={16} color={theme.accent.primary} />
           </TouchableOpacity>
         )}
+        <LiveRoundCard onOpen={() => navigation.navigate('Scorecard')} />
         <Text style={s.startHeading}>Start playing</Text>
         <View style={s.startTilesRow}>
-          <TouchableOpacity
+          <PressableScale
             style={[s.startTile, s.startTileFeatured]}
             onPress={() => navigation.navigate('Setup', { kind: 'game' })}
-            activeOpacity={0.88}
+            activeScale={0.97}
           >
             <View style={[s.startTileIconWrap, s.startTileIconWrapFeatured]}>
               <Feather name="flag" size={24} color={theme.text.inverse} />
@@ -1204,11 +1208,11 @@ export default function HomeScreen({ navigation, route }) {
               <Feather name="plus" size={16} color={theme.text.inverse} />
               <Text style={[s.startTileCtaText, { color: theme.text.inverse }]}>New game</Text>
             </View>
-          </TouchableOpacity>
-          <TouchableOpacity
+          </PressableScale>
+          <PressableScale
             style={s.startTile}
             onPress={() => setShowTournamentKindChoice(true)}
-            activeOpacity={0.88}
+            activeScale={0.97}
           >
             <View style={s.startTileIconWrap}>
               <Feather name="award" size={24} color={theme.accent.primary} />
@@ -1221,7 +1225,7 @@ export default function HomeScreen({ navigation, route }) {
               <Feather name="plus" size={16} color={theme.accent.primary} />
               <Text style={s.startTileCtaText}>New tournament</Text>
             </View>
-          </TouchableOpacity>
+          </PressableScale>
         </View>
 
         <TouchableOpacity
@@ -1656,7 +1660,7 @@ export default function HomeScreen({ navigation, route }) {
           </ScrollView>
         )}
         {rankedLeaderboardEntries.map((entry, i) => {
-          const rankColors = ['#ffd700', '#c0c8d4', '#daa06d'];
+          const rankColors = [semantic.winner.dark, '#c0c8d4', '#daa06d'];
           const placeIdx = entry.place - 1;
           const isFirstPlace = entry.place === 1;
           const rankColor = rankColors[placeIdx] || 'rgba(255,255,255,0.4)';
@@ -1673,7 +1677,7 @@ export default function HomeScreen({ navigation, route }) {
                     {entry.player.name}
                   </Text>
                   {showRunning && entry.player.id === tournamentClinchedId && (
-                    <Feather name="award" size={12} color="#ffd700" />
+                    <Feather name="award" size={12} color={semantic.winner.dark} />
                   )}
                 </View>
               </View>
@@ -2693,7 +2697,7 @@ const makeStyles = (t) => StyleSheet.create({
     flexDirection: 'row', alignItems: 'center', paddingVertical: 10,
     borderBottomWidth: 1, borderBottomColor: 'rgba(255,255,255,0.12)',
   },
-  mastersRowFirst: { borderLeftWidth: 3, borderLeftColor: '#ffd700', paddingLeft: 8, marginLeft: -8 },
+  mastersRowFirst: { borderLeftWidth: 3, borderLeftColor: semantic.winner.dark, paddingLeft: 8, marginLeft: -8 },
   mastersRankBadge: { width: 28, height: 28, borderRadius: 14, alignItems: 'center', justifyContent: 'center', marginRight: 10 },
   mastersRankText: { fontFamily: 'PlusJakartaSans-ExtraBold', fontSize: 12 },
   mastersNameCol: { flex: 1, minWidth: 0, marginRight: 8 },
@@ -2705,7 +2709,7 @@ const makeStyles = (t) => StyleSheet.create({
     letterSpacing: 0.5,
     marginTop: 2,
   },
-  mastersPoints: { fontFamily: 'PlusJakartaSans-ExtraBold', color: '#ffd700', fontSize: 16, marginRight: 8 },
+  mastersPoints: { fontFamily: 'PlusJakartaSans-ExtraBold', color: semantic.winner.dark, fontSize: 16, marginRight: 8 },
   mastersSub: { fontFamily: 'PlusJakartaSans-Medium', color: 'rgba(255,255,255,0.45)', fontSize: 11, width: 60, textAlign: 'right' },
   mastersMatchStatus: {
     fontFamily: 'PlusJakartaSans-SemiBold', color: 'rgba(255,255,255,0.85)',

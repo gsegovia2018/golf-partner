@@ -2,6 +2,11 @@
 // src/ transforms) and React Native module mapping.
 module.exports = {
   preset: 'jest-expo',
+  // This `resolver` key REPLACES the preset's own resolver rather than
+  // merging with it, so we can't point it straight at the worklets
+  // resolver — that would silently drop react-native's RFC0894 deep-import
+  // shim. jest.resolver.js composes both; see that file for details.
+  resolver: '<rootDir>/jest.resolver.js',
   testMatch: ['**/__tests__/**/*.test.js'],
   collectCoverageFrom: [
     'src/store/scoring.js',
@@ -11,7 +16,7 @@ module.exports = {
   modulePathIgnorePatterns: ['<rootDir>/.worktrees/'],
   // Transform ESM packages from node_modules that Jest can't parse as-is.
   transformIgnorePatterns: [
-    'node_modules/(?!((jest-)?react-native|@react-native(-community)?|expo(-.*)?|@expo(-.*)?|@unimodules|unimodules|sentry-expo|native-base|react-native-svg|react-native-url-polyfill|uuid)/)',
+    'node_modules/(?!((jest-)?react-native|@react-native(-community)?|expo(-.*)?|@expo(-.*)?|@unimodules|unimodules|sentry-expo|native-base|react-native-svg|react-native-url-polyfill|react-native-reanimated|react-native-worklets|uuid)/)',
   ],
   moduleNameMapper: {
     '@react-native-async-storage/async-storage':

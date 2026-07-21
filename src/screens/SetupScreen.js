@@ -18,6 +18,7 @@ import { consumePendingPlayers, consumePendingCourses } from '../lib/selectionBr
 import { applyCoursePick, applyLayoutChoice } from '../lib/roundCourse';
 import RoundLayoutSelect from '../components/RoundLayoutSelect';
 import { useTheme } from '../theme/ThemeContext';
+import { semantic } from '../theme/tokens';
 import { useAuth } from '../context/AuthContext';
 import ScoringModePicker, { isScoringModeAllowed, fallbackScoringMode, TeamsSettingsFields } from '../components/ScoringModePicker';
 import RoundTeeAssignments from '../components/RoundTeeAssignments';
@@ -1069,7 +1070,7 @@ function makeStyles(theme) {
     slotAvatarImg: { width: '100%', height: '100%' },
     slotAvatarText: {
       fontFamily: 'PlusJakartaSans-ExtraBold',
-      color: '#ffd700',
+      color: semantic.winner.dark,
       fontSize: 15,
     },
     slotName: {

@@ -17,7 +17,7 @@ jest.mock('react-native-safe-area-context', () => {
 });
 
 jest.mock('@expo/vector-icons', () => ({
-  MaterialCommunityIcons: 'MaterialCommunityIcons',
+  Feather: 'Feather',
 }));
 
 const mockLoadTournament = jest.fn();
@@ -90,7 +90,7 @@ describe('FloatingTabBar', () => {
   test('uses secondary text color for inactive secondary icons', () => {
     const { UNSAFE_getAllByType } = renderTabBar({ index: 2 });
 
-    const icons = UNSAFE_getAllByType('MaterialCommunityIcons');
+    const icons = UNSAFE_getAllByType('Feather');
     expect(icons[0].props.color).toBe(light.text.secondary);
   });
 
@@ -150,8 +150,8 @@ describe('FloatingTabBar', () => {
   test('uses the same center colors for Play and Score', async () => {
     const play = renderTabBar({ index: 0 });
     const playSurface = StyleSheet.flatten(play.getByTestId('Home-tab-surface').props.style);
-    const playIcon = play.UNSAFE_getAllByType('MaterialCommunityIcons')
-      .find((icon) => icon.props.name === 'flag-variant');
+    const playIcon = play.UNSAFE_getAllByType('Feather')
+      .find((icon) => icon.props.name === 'flag');
     const playLabel = StyleSheet.flatten(play.getByText('Play').props.style);
 
     expect(playSurface.backgroundColor).toBe(light.accent.primary);
@@ -165,8 +165,8 @@ describe('FloatingTabBar', () => {
 
     await waitFor(() => expect(score.getByLabelText('Score')).toBeTruthy());
     const scoreSurface = StyleSheet.flatten(score.getByTestId('Home-tab-surface').props.style);
-    const scoreIcon = score.UNSAFE_getAllByType('MaterialCommunityIcons')
-      .find((icon) => icon.props.name === 'scoreboard-outline');
+    const scoreIcon = score.UNSAFE_getAllByType('Feather')
+      .find((icon) => icon.props.name === 'clipboard');
     const scoreLabel = StyleSheet.flatten(score.getByText('Score').props.style);
 
     expect(scoreSurface.backgroundColor).toBe(light.accent.primary);

@@ -5,6 +5,7 @@ import { captureRef } from 'react-native-view-shot';
 import * as Sharing from 'expo-sharing';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useTheme } from '../theme/ThemeContext';
+import { semantic } from '../theme/tokens';
 import BottomSheet from './BottomSheet';
 
 // Captures a branded off-screen card and opens the native share sheet (or
@@ -225,7 +226,7 @@ const shareStyles = StyleSheet.create({
     borderWidth: 1, borderColor: 'rgba(255,215,0,0.4)', padding: 24,
   },
   brand: {
-    fontFamily: 'PlusJakartaSans-SemiBold', color: '#ffd700',
+    fontFamily: 'PlusJakartaSans-SemiBold', color: semantic.winner.dark,
     fontSize: 11, letterSpacing: 2, textTransform: 'uppercase', marginBottom: 8,
   },
   title: { fontFamily: 'PlusJakartaSans-ExtraBold', color: '#ffffff', fontSize: 22, lineHeight: 28 },
@@ -236,7 +237,7 @@ const shareStyles = StyleSheet.create({
     paddingVertical: 7,
   },
   rowPrimary: { flex: 1, fontFamily: 'PlusJakartaSans-SemiBold', color: '#ffffff', fontSize: 13, paddingRight: 10 },
-  rowValue: { fontFamily: 'PlusJakartaSans-Bold', color: '#ffd700', fontSize: 14 },
+  rowValue: { fontFamily: 'PlusJakartaSans-Bold', color: semantic.winner.dark, fontSize: 14 },
   footer: {
     fontFamily: 'PlusJakartaSans-SemiBold', color: 'rgba(255,255,255,0.45)',
     fontSize: 10, letterSpacing: 1, textAlign: 'center', marginTop: 16,

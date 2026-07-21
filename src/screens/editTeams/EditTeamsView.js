@@ -3,6 +3,7 @@ import { View, Text, TouchableOpacity, ScrollView, StyleSheet } from 'react-nati
 import { Feather } from '@expo/vector-icons';
 import ScreenContainer from '../../components/ScreenContainer';
 import { useTheme } from '../../theme/ThemeContext';
+import { semantic } from '../../theme/tokens';
 import { pairsMatchDuels } from '../../store/scoring';
 
 const firstName = (p) => (p?.name ?? '').split(' ')[0];
@@ -369,7 +370,7 @@ function makeStyles(t) {
       backgroundColor: t.isDark ? t.bg.card : '#006747',
       alignItems: 'center', justifyContent: 'center', overflow: 'hidden',
     },
-    avatarText: { fontFamily: 'PlusJakartaSans-ExtraBold', color: '#ffd700' },
+    avatarText: { fontFamily: 'PlusJakartaSans-ExtraBold', color: semantic.winner.dark },
     avatarTextArmed: { color: t.isDark ? t.accent.primary : t.text.inverse },
 
     vsRow: { flexDirection: 'row', alignItems: 'center', gap: 12, marginVertical: 14 },

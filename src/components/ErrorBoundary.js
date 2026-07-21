@@ -1,6 +1,7 @@
 import React from 'react';
 import { View, Text, TouchableOpacity, StyleSheet } from 'react-native';
 import { captureException } from '../lib/errorReporting';
+import { semantic } from '../theme/tokens';
 
 // App-wide error boundary. Without it, any uncaught render error unmounts the
 // whole React tree and the user is left staring at a blank screen with no way
@@ -72,7 +73,7 @@ const styles = StyleSheet.create({
     lineHeight: 21,
   },
   button: {
-    backgroundColor: '#ffd700',
+    backgroundColor: semantic.winner.dark,
     paddingHorizontal: 28,
     paddingVertical: 13,
     borderRadius: 12,
