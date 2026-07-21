@@ -65,13 +65,13 @@ export default function HistoryRow({ model, onPress, onLongPress }) {
                 <Feather name="award" size={10} color={gold} />
                 <Text style={s.wonBadgeText}>WON</Text>
               </View>
-              <Text style={s.resultCaption}>{`${result.points} pts`}</Text>
+              <Text style={s.resultCaption}>{`${result.points} ${result.unit ?? 'pts'}`}</Text>
             </>
           )}
           {result.kind === 'placement' && (
             <>
               <Text style={s.resultBig}>{result.label}</Text>
-              <Text style={s.resultCaption}>{`${result.points} pts`}</Text>
+              <Text style={s.resultCaption}>{`${result.points} ${result.unit ?? 'pts'}`}</Text>
             </>
           )}
           {result.kind === 'points' && (

@@ -77,7 +77,7 @@ function gameResult(tournament, me) {
 function tournamentStanding(tournament, me) {
   const board = tournamentLeaderboardResolved(tournament);
   const entries = board?.entries ?? [];
-  if (entries.length === 0) return { champion: null, myPlacement: null };
+  if (entries.length === 0) return { champion: null, myPlacement: null, unit: board?.unit };
   const placed = assignPlacements(entries, comparatorForBoardMode(board.mode));
   const top = placed[0];
   const champion = (top?.points ?? 0) > 0 && top?.player?.name
@@ -99,7 +99,7 @@ function tournamentStanding(tournament, me) {
       podium: myRow.place <= 3,
     }
     : null;
-  return { champion, myPlacement };
+  return { champion, myPlacement, unit: board.unit };
 }
 
 export function historyEntryModel(tournament, identity = {}) {
@@ -133,16 +133,17 @@ export function historyEntryModel(tournament, identity = {}) {
     };
   }
 
-  const { champion, myPlacement } = tournamentStanding(tournament, me);
+  const { champion, myPlacement, unit } = tournamentStanding(tournament, me);
   let result = { kind: 'none' };
   if (myPlacement) {
     result = myPlacement.won
-      ? { kind: 'won', points: myPlacement.points }
+      ? { kind: 'won', points: myPlacement.points, unit }
       : {
         kind: 'placement',
         place: myPlacement.place,
         label: myPlacement.label,
         points: myPlacement.points,
+        unit,
       };
   }
   return {

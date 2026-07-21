@@ -149,14 +149,16 @@ describe('historyEntryModel — tournament', () => {
     expect(m.kind).toBe('tournament');
     expect(m.dateBox).toEqual({ top: '2', bottom: 'ROUNDS' });
     expect(m.subtitle).toBe('2 courses');
-    expect(m.result).toEqual({ kind: 'won', points: 6 });
+    expect(m.result).toEqual({ kind: 'won', points: 6, unit: 'pts' });
     expect(m.champion).toEqual({ name: 'Marcos', isMe: true, points: 6, unit: 'pts' });
     expect(m.myPlacement).toMatchObject({ place: 1, label: '1st', fieldSize: 2, won: true });
   });
 
   test('lost: placement result, champion is the other player', () => {
     const m = historyEntryModel(lostTournament, identity);
-    expect(m.result).toEqual({ kind: 'placement', place: 2, label: '2nd', points: 4 });
+    expect(m.result).toEqual({
+      kind: 'placement', place: 2, label: '2nd', points: 4, unit: 'pts',
+    });
     expect(m.champion).toEqual({ name: 'Noel', isMe: false, points: 6, unit: 'pts' });
     expect(m.myPlacement).toMatchObject({ place: 2, won: false, podium: true });
   });
@@ -170,6 +172,33 @@ describe('historyEntryModel — tournament', () => {
     expect(historyEntryModel(oneRound, identity).subtitle).toBe('Aloha');
     const single = { ...wonTournament, id: '1780000000006', rounds: [wonTournament.rounds[0]] };
     expect(historyEntryModel(single, identity).dateBox).toEqual({ top: '1', bottom: 'ROUND' });
+  });
+
+  test('all-matchplay tournament reports result/champion in holes, not pts', () => {
+    // Single-hole 1v1 match play: I win the hole (3 vs 4), so I'm 1-up with
+    // no holes left — tournamentMatchPlayStandings' unit is 'holes'.
+    const matchplayTournament = {
+      id: '1780000000007',
+      kind: 'tournament',
+      name: 'Head to Head',
+      createdAt: '2026-05-01T09:00:00.000Z',
+      finishedAt: '2026-05-01T18:00:00.000Z',
+      _role: 'owner',
+      settings: { scoringMode: 'matchplay' },
+      players: [P('me', 'Marcos', { user_id: 'u1' }), P('b', 'Noel')],
+      rounds: [{
+        id: 'r0',
+        courseName: 'Aloha',
+        scoringMode: 'matchplay',
+        holes: [HOLE],
+        pairs: [[P('me', 'Marcos')], [P('b', 'Noel')]],
+        playerHandicaps: {},
+        scores: { me: { 1: 3 }, b: { 1: 4 } }, // me wins the hole
+      }],
+    };
+    const m = historyEntryModel(matchplayTournament, identity);
+    expect(m.result).toEqual({ kind: 'won', points: 1, unit: 'holes' });
+    expect(m.champion).toEqual({ name: 'Marcos', isMe: true, points: 1, unit: 'holes' });
   });
 });
 
