@@ -36,15 +36,22 @@ function CategoryRow({ category, strokesGained }) {
   const delta = strokesGained?.personalDelta?.[category.key];
   const showDelta = delta?.delta != null && delta.delta !== 0;
   const up = delta?.direction === 'up';
+  const deltaColor = up ? theme.scoreColor('good') : theme.destructive;
   return (
     <View style={s.categoryRow}>
       <SGBar label={category.label} value={strokesGained.byCategory?.[category.key]} />
       <View style={s.categoryMeta}>
         {showDelta ? (
-          <Text style={[s.deltaBadge, { color: up ? theme.scoreColor('good') : theme.destructive }]}>
-            {`${up ? '▲' : '▼'} ${delta.delta > 0 ? '+' : ''}${delta.delta} vs your last stretch`}
-          </Text>
-        ) : <View />}
+          <View
+            style={[s.deltaChip, { backgroundColor: withAlpha(deltaColor, 0.1) }]}
+            accessibilityLabel={`${up ? 'Up' : 'Down'} ${Math.abs(delta.delta)} strokes gained vs your previous rounds`}
+          >
+            <Feather name={up ? 'trending-up' : 'trending-down'} size={11} color={deltaColor} />
+            <Text style={[s.deltaChipText, { color: deltaColor }]}>
+              {`${delta.delta > 0 ? '+' : ''}${delta.delta}`}
+            </Text>
+          </View>
+        ) : null}
         <Text style={s.sampleChip}>{sampleText(sample, 'holes')}</Text>
       </View>
     </View>
@@ -167,6 +174,14 @@ function badWash(theme) {
   return theme.isDark ? 'rgba(248,113,113,0.14)' : '#fee2e2';
 }
 
+// ~10% wash of a 6-digit hex theme color, for the delta chip background.
+function withAlpha(hex, alpha) {
+  const m = /^#([a-f\d]{6})$/i.exec(hex ?? '');
+  if (!m) return 'transparent';
+  const n = parseInt(m[1], 16);
+  return `rgba(${(n >> 16) & 255},${(n >> 8) & 255},${n & 255},${alpha})`;
+}
+
 function targetTitle(targetHandicap) {
   if (targetHandicap == null || targetHandicap === 0) return 'Strokes gained vs scratch';
   return `Strokes gained vs ${targetHandicap}-handicap target`;
@@ -269,8 +284,16 @@ function makeStyles(theme) {
     heroFootnote: { fontSize: 10.5, fontFamily: 'PlusJakartaSans-SemiBold', color: CREAM_70 },
     sgBlock: { gap: 1, paddingTop: theme.spacing.sm },
     categoryRow: { gap: 2, paddingVertical: 2 },
-    categoryMeta: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
-    deltaBadge: { ...theme.typography.tiny, fontWeight: '800' },
+    categoryMeta: { flexDirection: 'row', justifyContent: 'flex-end', alignItems: 'center', gap: 6 },
+    deltaChip: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: 3,
+      borderRadius: 999,
+      paddingHorizontal: 7,
+      paddingVertical: 2,
+    },
+    deltaChipText: { fontSize: 10, fontFamily: 'PlusJakartaSans-Bold', fontVariant: ['tabular-nums'] },
     sampleChip: { ...theme.typography.tiny, color: theme.text.muted },
     gatedRow: { ...theme.typography.caption, color: theme.text.muted, fontStyle: 'italic', paddingVertical: 6 },
     signalList: {

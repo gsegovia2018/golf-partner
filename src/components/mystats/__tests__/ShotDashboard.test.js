@@ -51,13 +51,15 @@ describe('ShotDashboard category gating and deltas', () => {
     const r = renderDash();
     expect(r.getAllByText('Off the tee: needs 6 more holes').length).toBeGreaterThan(0);
   });
-  test('well-sampled categories show a delta badge when history exists', () => {
+  test('well-sampled categories show a compact delta chip when history exists', () => {
     const r = renderDash();
-    expect(r.getByText('▲ +0.6 vs your last stretch')).toBeTruthy();
+    expect(r.getByText('+0.6')).toBeTruthy();
+    expect(r.getByLabelText('Up 0.6 strokes gained vs your previous rounds')).toBeTruthy();
   });
-  test('no delta badge without personalDelta', () => {
+  test('no delta chip without personalDelta', () => {
     const r = renderDash({ ...baseSG, personalDelta: null });
-    expect(r.queryByText(/vs your last stretch/)).toBeNull();
+    expect(r.queryByText('+0.6')).toBeNull();
+    expect(r.queryByLabelText(/strokes gained vs your previous rounds/)).toBeNull();
   });
 });
 
