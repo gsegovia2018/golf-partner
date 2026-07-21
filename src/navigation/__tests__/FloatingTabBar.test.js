@@ -1,5 +1,5 @@
 import React from 'react';
-import { fireEvent, render, waitFor } from '@testing-library/react-native';
+import { fireEvent, render } from '@testing-library/react-native';
 import { StyleSheet } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
@@ -18,16 +18,6 @@ jest.mock('react-native-safe-area-context', () => {
 
 jest.mock('@expo/vector-icons', () => ({
   Feather: 'Feather',
-}));
-
-const mockLoadTournament = jest.fn();
-const mockIsRoundInProgress = jest.fn();
-const mockSubscribeTournamentChanges = jest.fn(() => jest.fn());
-
-jest.mock('../../store/tournamentStore', () => ({
-  loadTournament: (...args) => mockLoadTournament(...args),
-  isRoundInProgress: (...args) => mockIsRoundInProgress(...args),
-  subscribeTournamentChanges: (...args) => mockSubscribeTournamentChanges(...args),
 }));
 
 function makeState(index = 2) {
@@ -62,8 +52,6 @@ function renderTabBar({ index = 2, navigation = makeNavigation() } = {}) {
 beforeEach(() => {
   jest.clearAllMocks();
   AsyncStorage.getItem.mockReturnValue(new Promise(() => {}));
-  mockLoadTournament.mockResolvedValue({});
-  mockIsRoundInProgress.mockReturnValue(false);
 });
 
 describe('FloatingTabBar', () => {
@@ -106,6 +94,15 @@ describe('FloatingTabBar', () => {
     expect(inactiveLabel.color).toBe(light.text.muted);
   });
 
+  test('marks the selected secondary tab with a filled icon bubble', () => {
+    const { getByTestId } = renderTabBar({ index: 1 });
+
+    const activeWrap = StyleSheet.flatten(getByTestId('MyStats-tab-icon-wrap').props.style);
+    const inactiveWrap = StyleSheet.flatten(getByTestId('Feed-tab-icon-wrap').props.style);
+    expect(activeWrap.backgroundColor).toBe(light.accent.light);
+    expect(inactiveWrap.backgroundColor).toBeUndefined();
+  });
+
   test('renders the center action as a circular icon-only button', () => {
     const { getByTestId, queryByText } = renderTabBar({ index: 0 });
     const surface = StyleSheet.flatten(getByTestId('Home-tab-surface').props.style);
@@ -115,7 +112,7 @@ describe('FloatingTabBar', () => {
     expect(surface.width).toBe(surface.height);
   });
 
-  test('routes the center action to Home when no round is live', () => {
+  test('always routes the center action to Home, even while a round is live', () => {
     const { getByLabelText, navigation } = renderTabBar({ index: 0 });
 
     fireEvent.press(getByLabelText('Play'));
@@ -123,61 +120,12 @@ describe('FloatingTabBar', () => {
     expect(navigation.navigate).toHaveBeenCalledWith('Home');
   });
 
-  test('changes the center action to Score and routes to Scorecard with round summary as its back target when a round is live', async () => {
-    mockLoadTournament.mockResolvedValue({ id: 'tournament-1' });
-    mockIsRoundInProgress.mockReturnValue(true);
-    const { getByLabelText, navigation } = renderTabBar({ index: 0 });
+  test('uses accent colors on the center button', () => {
+    const { getByTestId, UNSAFE_getAllByType } = renderTabBar({ index: 0 });
+    const surface = StyleSheet.flatten(getByTestId('Home-tab-surface').props.style);
+    const icon = UNSAFE_getAllByType('Feather').find((i) => i.props.name === 'flag');
 
-    await waitFor(() => expect(getByLabelText('Score')).toBeTruthy());
-    fireEvent.press(getByLabelText('Score'));
-
-    expect(navigation.navigate).toHaveBeenCalledWith('Scorecard', { backTarget: 'tournament' });
-  });
-
-  test('refreshes the Score action when Play regains focus after being mounted under round summary', async () => {
-    let focused = false;
-    let focusHandler = null;
-    const navigation = makeNavigation();
-    navigation.isFocused.mockImplementation(() => focused);
-    navigation.addListener.mockImplementation((event, handler) => {
-      if (event === 'focus') focusHandler = handler;
-      return jest.fn();
-    });
-    mockLoadTournament.mockResolvedValue({ id: 'tournament-1' });
-    mockIsRoundInProgress.mockReturnValue(true);
-
-    const { getByLabelText, queryByLabelText } = renderTabBar({ index: 2, navigation });
-
-    expect(getByLabelText('Play')).toBeTruthy();
-    expect(queryByLabelText('Score')).toBeNull();
-    expect(mockLoadTournament).not.toHaveBeenCalled();
-
-    focused = true;
-    focusHandler();
-
-    await waitFor(() => expect(getByLabelText('Score')).toBeTruthy());
-  });
-
-  test('uses the same center colors for Play and Score', async () => {
-    const play = renderTabBar({ index: 0 });
-    const playSurface = StyleSheet.flatten(play.getByTestId('Home-tab-surface').props.style);
-    const playIcon = play.UNSAFE_getAllByType('Feather')
-      .find((icon) => icon.props.name === 'flag');
-
-    expect(playSurface.backgroundColor).toBe(light.accent.primary);
-    expect(playIcon.props.color).toBe(light.text.inverse);
-    play.unmount();
-
-    mockLoadTournament.mockResolvedValue({ id: 'tournament-1' });
-    mockIsRoundInProgress.mockReturnValue(true);
-    const score = renderTabBar({ index: 0 });
-
-    await waitFor(() => expect(score.getByLabelText('Score')).toBeTruthy());
-    const scoreSurface = StyleSheet.flatten(score.getByTestId('Home-tab-surface').props.style);
-    const scoreIcon = score.UNSAFE_getAllByType('Feather')
-      .find((icon) => icon.props.name === 'clipboard');
-
-    expect(scoreSurface.backgroundColor).toBe(light.accent.primary);
-    expect(scoreIcon.props.color).toBe(light.text.inverse);
+    expect(surface.backgroundColor).toBe(light.accent.primary);
+    expect(icon.props.color).toBe(light.text.inverse);
   });
 });

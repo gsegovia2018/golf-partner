@@ -1,44 +1,86 @@
 import React from 'react';
-import { View, Text, StyleSheet } from 'react-native';
+import { View, Text, StyleSheet, Animated } from 'react-native';
 import { Feather } from '@expo/vector-icons';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { useReducedMotion } from 'react-native-reanimated';
 
 import { useTheme } from '../theme/ThemeContext';
 import { CONTENT_MAX_WIDTH } from '../theme/responsive';
-import { loadTournament, isRoundInProgress, subscribeTournamentChanges } from '../store/tournamentStore';
-import { shouldHandleStoreChange } from '../lib/navigationFocus';
 import { getTabBarItem, isCenterTab } from './tabBarModel';
 import PressableScale from '../components/ui/PressableScale';
 import TabBarFade from './TabBarFade';
+
+// Springs the tab surface from slightly-shrunk to full size whenever the tab
+// becomes the selected one, so switching tabs visibly "pops" the destination.
+function usePopOnFocus(focused) {
+  const reduced = useReducedMotion();
+  const scale = React.useRef(new Animated.Value(1)).current;
+  const wasFocused = React.useRef(focused);
+
+  React.useEffect(() => {
+    if (focused && !wasFocused.current && !reduced) {
+      scale.setValue(0.8);
+      Animated.spring(scale, {
+        toValue: 1,
+        speed: 22,
+        bounciness: 9,
+        useNativeDriver: true,
+      }).start();
+    }
+    wasFocused.current = focused;
+  }, [focused, reduced, scale]);
+
+  return scale;
+}
+
+function TabItem({ route, item, center, focused, onPress, theme, styles }) {
+  const scale = usePopOnFocus(focused);
+  const iconColor = center
+    ? theme.text.inverse
+    : focused
+      ? theme.accent.primary
+      : theme.text.muted;
+
+  return (
+    <PressableScale
+      accessibilityRole="button"
+      accessibilityState={focused ? { selected: true } : {}}
+      accessibilityLabel={item.label}
+      onPress={onPress}
+      activeScale={0.97}
+      style={[styles.tab, center && styles.centerTab]}
+    >
+      <Animated.View
+        testID={`${route.name}-tab-surface`}
+        style={[
+          center ? styles.centerButton : styles.secondaryButton,
+          { transform: [{ scale }] },
+        ]}
+      >
+        {center ? (
+          <Feather name={item.icon} size={24} color={iconColor} />
+        ) : (
+          <>
+            <View
+              testID={`${route.name}-tab-icon-wrap`}
+              style={[styles.iconWrap, focused && styles.iconWrapActive]}
+            >
+              <Feather name={item.icon} size={21} color={iconColor} />
+            </View>
+            <Text style={[styles.secondaryLabel, focused && styles.secondaryLabelActive]}>
+              {item.label}
+            </Text>
+          </>
+        )}
+      </Animated.View>
+    </PressableScale>
+  );
+}
 
 export default function FloatingTabBar({ state, navigation }) {
   const { theme } = useTheme();
   const insets = useSafeAreaInsets();
   const styles = React.useMemo(() => tabBarStyles(theme), [theme]);
-  const [roundLive, setRoundLive] = React.useState(false);
-
-  React.useEffect(() => {
-    let cancelled = false;
-    const check = () => {
-      if (!shouldHandleStoreChange(navigation)) return;
-      loadTournament({ refreshRemote: false, resolveIdentity: false })
-        .then((t) => {
-          if (!cancelled) setRoundLive(isRoundInProgress(t));
-        })
-        .catch(() => {});
-    };
-
-    check();
-    const unsub = subscribeTournamentChanges(check);
-    const unsubFocus = typeof navigation.addListener === 'function'
-      ? navigation.addListener('focus', check)
-      : () => {};
-    return () => {
-      cancelled = true;
-      unsub();
-      unsubFocus();
-    };
-  }, [navigation]);
 
   return (
     <View
@@ -49,9 +91,8 @@ export default function FloatingTabBar({ state, navigation }) {
       <View style={styles.bar}>
         {state.routes.map((route, index) => {
           const focused = state.index === index;
-          const item = getTabBarItem(route.name, { roundLive });
+          const item = getTabBarItem(route.name);
           const center = isCenterTab(route.name);
-          const selected = focused && (!center || !item.live);
 
           const onPress = () => {
             const event = navigation.emit({
@@ -59,43 +100,22 @@ export default function FloatingTabBar({ state, navigation }) {
               target: route.key,
               canPreventDefault: true,
             });
-            if (!event.defaultPrevented && (!focused || item.targetRouteName !== route.name)) {
-              if (item.live && item.targetRouteName === 'Scorecard') {
-                navigation.navigate(item.targetRouteName, { backTarget: 'tournament' });
-                return;
-              }
+            if (!event.defaultPrevented && !focused) {
               navigation.navigate(item.targetRouteName);
             }
           };
 
-          const iconColor = center
-            ? theme.text.inverse
-            : focused
-              ? theme.accent.primary
-              : theme.text.muted;
-
           return (
-            <PressableScale
+            <TabItem
               key={route.key}
-              accessibilityRole="button"
-              accessibilityState={selected ? { selected: true } : {}}
-              accessibilityLabel={item.label}
+              route={route}
+              item={item}
+              center={center}
+              focused={focused}
               onPress={onPress}
-              activeScale={0.97}
-              style={[styles.tab, center && styles.centerTab]}
-            >
-              <View
-                testID={`${route.name}-tab-surface`}
-                style={center ? styles.centerButton : styles.secondaryButton}
-              >
-                <Feather name={item.icon} size={center ? 24 : 21} color={iconColor} />
-                {!center && (
-                  <Text style={[styles.secondaryLabel, focused && styles.secondaryLabelActive]}>
-                    {item.label}
-                  </Text>
-                )}
-              </View>
-            </PressableScale>
+              theme={theme}
+              styles={styles}
+            />
           );
         })}
       </View>
@@ -145,8 +165,17 @@ function tabBarStyles(theme) {
     secondaryButton: {
       alignItems: 'center',
       justifyContent: 'center',
-      gap: 3,
-      paddingVertical: 2,
+      gap: 2,
+    },
+    iconWrap: {
+      width: 34,
+      height: 34,
+      borderRadius: 999,
+      alignItems: 'center',
+      justifyContent: 'center',
+    },
+    iconWrapActive: {
+      backgroundColor: theme.accent.light,
     },
     centerButton: {
       width: 62,

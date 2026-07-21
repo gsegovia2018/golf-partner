@@ -1,5 +1,4 @@
 export const CENTER_ROUTE_NAME = 'Home';
-export const SCORECARD_ROUTE_NAME = 'Scorecard';
 
 export const TAB_ROUTE_NAMES = [
   'Feed',
@@ -36,30 +35,17 @@ export function isCenterTab(routeName) {
   return routeName === CENTER_ROUTE_NAME;
 }
 
-export function getTabBarItem(routeName, { roundLive = false } = {}) {
+// The center action always lands on Home — Home's live-round banner is the
+// way back into a scorecard, so the tab bar no longer redirects mid-round.
+export function getTabBarItem(routeName) {
   const base = TAB_BAR_ITEMS[routeName] ?? {
     label: routeName,
     icon: 'circle-outline',
   };
-  const center = isCenterTab(routeName);
-
-  if (!center) {
-    return {
-      ...base,
-      routeName,
-      targetRouteName: routeName,
-      center: false,
-    };
-  }
-
-  const live = Boolean(roundLive);
   return {
     ...base,
     routeName,
-    targetRouteName: live ? SCORECARD_ROUTE_NAME : CENTER_ROUTE_NAME,
-    label: live ? 'Score' : 'Play',
-    icon: live ? 'clipboard' : 'flag',
-    center: true,
-    live,
+    targetRouteName: routeName,
+    center: isCenterTab(routeName),
   };
 }

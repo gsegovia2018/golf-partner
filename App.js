@@ -90,10 +90,10 @@ const TAB_SCREENS = {
   Profile: { component: ProfileScreen, initialParams: { presentation: 'tab' } },
 };
 
-// Primary navigation: Feed, personal Stats, the raised Play/Score action,
-// History, and Profile. The center route keeps the name "Home" so existing
-// navigate('Home') targets still resolve; the custom tab bar redirects it to
-// Scorecard while a round is live.
+// Primary navigation: Feed, personal Stats, the raised Play action, History,
+// and Profile. The center route keeps the name "Home" so existing
+// navigate('Home') targets still resolve; it always lands on Home — the
+// live-round banner there is the way back into an in-progress scorecard.
 function MainTabs() {
   return (
     <Tab.Navigator

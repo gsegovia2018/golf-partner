@@ -1,6 +1,5 @@
 import {
   CENTER_ROUTE_NAME,
-  SCORECARD_ROUTE_NAME,
   TAB_ROUTE_NAMES,
   getTabBarItem,
   isCenterTab,
@@ -54,26 +53,13 @@ describe('tabBarModel', () => {
     expect(isCenterTab('Feed')).toBe(false);
   });
 
-  test('center action opens Home as Play when no round is live', () => {
-    expect(getTabBarItem('Home', { roundLive: false })).toMatchObject({
+  test('center action always opens Home as Play — the Home live banner covers resuming a round', () => {
+    expect(getTabBarItem('Home')).toMatchObject({
       routeName: 'Home',
       targetRouteName: CENTER_ROUTE_NAME,
       label: 'Play',
       icon: 'flag',
       center: true,
-      live: false,
-    });
-  });
-
-  test('center action opens Scorecard as Score when a round is live', () => {
-    expect(SCORECARD_ROUTE_NAME).toBe('Scorecard');
-    expect(getTabBarItem('Home', { roundLive: true })).toMatchObject({
-      routeName: 'Home',
-      targetRouteName: SCORECARD_ROUTE_NAME,
-      label: 'Score',
-      icon: 'clipboard',
-      center: true,
-      live: true,
     });
   });
 });
