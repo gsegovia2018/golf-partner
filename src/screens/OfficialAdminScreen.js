@@ -242,13 +242,11 @@ export default function OfficialAdminScreen({ route, navigation }) {
   return (
     <ScreenContainer style={s.screen} edges={['top', 'bottom']}>
       <View style={s.header}>
-        <IconButton icon="chevron-left" size={22} color={theme.accent.primary} onPress={() => navigation.goBack()} />
+        <IconButton icon="chevron-left" onPress={() => navigation.goBack()} />
         <Text style={s.headerTitle}>Admin Monitor</Text>
         <View style={s.refreshBtn}>
           <IconButton
             icon="refresh-cw"
-            size={18}
-            color={theme.accent.primary}
             onPress={() => !busy && load()}
             disabled={busy || loading}
             accessibilityLabel="Refresh"

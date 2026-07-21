@@ -639,8 +639,6 @@ export default function FeedScreen({ navigation }) {
         <Text style={s.headerTitle}>Feed</Text>
         <IconButton
           icon="users"
-          size={18}
-          color={theme.accent.primary}
           onPress={() => navigation.navigate('Friends')}
         />
       </View>

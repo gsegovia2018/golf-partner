@@ -241,8 +241,6 @@ export default function ProfileScreen({ navigation, route }) {
         ) : (
           <IconButton
             icon="chevron-left"
-            size={22}
-            color={theme.accent.primary}
             accessibilityLabel="Back"
             onPress={handleBack}
           />

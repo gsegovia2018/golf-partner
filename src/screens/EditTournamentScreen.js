@@ -402,7 +402,7 @@ export default function EditTournamentScreen({ navigation, route }) {
     <ScreenContainer style={s.screen} edges={['top', 'bottom']}>
       {/* Header */}
       <View style={s.header}>
-        <IconButton icon="chevron-left" size={22} color={theme.accent.primary} onPress={() => navigation.goBack()} />
+        <IconButton icon="chevron-left" onPress={() => navigation.goBack()} />
         <Text style={s.headerTitle}>Edit Tournament</Text>
         {saveState === 'idle' ? (
           <View style={{ width: 64 }} />

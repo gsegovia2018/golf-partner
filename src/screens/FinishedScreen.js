@@ -128,15 +128,12 @@ export default function FinishedScreen({ navigation }) {
         <View style={s.cardActions}>
           <IconButton
             icon="rotate-ccw"
-            size={14}
-            color={theme.accent.primary}
             onPress={() => reopen(t)}
             accessibilityLabel="Reopen"
           />
           {t._role === 'owner' && (
             <IconButton
               icon="trash-2"
-              size={14}
               color={theme.destructive}
               onPress={() => confirmDelete(t)}
               accessibilityLabel="Delete"
@@ -153,7 +150,7 @@ export default function FinishedScreen({ navigation }) {
   return (
     <ScreenContainer style={s.container} edges={['top', 'bottom']}>
       <View style={s.header}>
-        <IconButton icon="chevron-left" size={22} color={theme.accent.primary} onPress={() => navigation.goBack()} />
+        <IconButton icon="chevron-left" onPress={() => navigation.goBack()} />
         <Text style={s.headerTitle}>Finished</Text>
         <View style={{ width: 36 }} />
       </View>

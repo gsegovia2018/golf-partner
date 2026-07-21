@@ -98,8 +98,6 @@ export default function CourseStatsScreen({ navigation, route }) {
     <View style={s.header}>
       <IconButton
         icon="chevron-left"
-        size={22}
-        color={theme.accent.primary}
         accessibilityLabel="Back"
         onPress={() => navigation.goBack()}
       />

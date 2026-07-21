@@ -1496,7 +1496,7 @@ export default function ScorecardScreen({ navigation, route }) {
     return (
       <ScreenContainer style={s.container} edges={['top', 'bottom']}>
         <View style={s.header}>
-          <IconButton icon="chevron-left" size={22} color={theme.accent.primary} onPress={goBack} />
+          <IconButton icon="chevron-left" onPress={goBack} />
           <Text style={s.headerTitle}>Scorecard</Text>
           <View style={{ width: 36 }} />
         </View>
@@ -1520,7 +1520,7 @@ export default function ScorecardScreen({ navigation, route }) {
     return (
       <ScreenContainer style={s.container} edges={['top', 'bottom']}>
         <View style={s.header}>
-          <IconButton icon="chevron-left" size={22} color={theme.accent.primary} onPress={goBack} />
+          <IconButton icon="chevron-left" onPress={goBack} />
           <Text style={s.headerTitle}>Scorecard</Text>
           <View style={{ width: 36 }} />
         </View>
@@ -1549,7 +1549,7 @@ export default function ScorecardScreen({ navigation, route }) {
     <ScreenContainer style={s.container} edges={['top', 'bottom']}>
       {/* Header with compact scorecard view switch. */}
       <View style={s.header}>
-        <IconButton icon="chevron-left" size={22} color={theme.accent.primary} onPress={goBack} />
+        <IconButton icon="chevron-left" onPress={goBack} />
         <Text style={s.headerTitle}>Scorecard</Text>
         <View style={s.headerRight}>
           <IconButton
@@ -1571,16 +1571,12 @@ export default function ScorecardScreen({ navigation, route }) {
           )}
           <IconButton
             icon={viewSwitchIcon}
-            size={17}
-            color={theme.accent.primary}
             onPress={() => setView(nextView)}
             accessibilityLabel={viewSwitchLabel}
           />
           {!appSettings.noSpoilers && (
             <IconButton
               icon={showRunning ? 'eye-off' : 'eye'}
-              size={18}
-              color={theme.accent.primary}
               onPress={toggleRunning}
               accessibilityLabel={showRunning ? 'Hide running score' : 'Show running score'}
             />
@@ -1588,8 +1584,6 @@ export default function ScorecardScreen({ navigation, route }) {
           {official && !appSettings.noSpoilers && (
             <IconButton
               icon="award"
-              size={20}
-              color={theme.accent.primary}
               onPress={() => setOfficialLeaderboardOpen(true)}
               accessibilityLabel="View official leaderboard"
             />
@@ -1597,8 +1591,6 @@ export default function ScorecardScreen({ navigation, route }) {
           {showNotesControls && (
             <IconButton
               icon={hasCurrentNotes ? 'edit-3' : 'edit-2'}
-              size={18}
-              color={theme.accent.primary}
               onPress={() => setNotesOpen(true)}
               dot={hasCurrentNotes}
               accessibilityLabel={hasCurrentNotes ? 'Open notes' : 'Add notes'}
@@ -1606,8 +1598,6 @@ export default function ScorecardScreen({ navigation, route }) {
           )}
           <IconButton
             icon="camera"
-            size={20}
-            color={theme.accent.primary}
             onPress={openCapturePicker}
             accessibilityLabel="Attach a memory"
           />
@@ -1754,7 +1744,7 @@ export default function ScorecardScreen({ navigation, route }) {
           <View style={s.notesHandle} />
           <View style={s.notesHeader}>
             <Text style={s.notesTitle}>Notes</Text>
-            <IconButton icon="x" size={18} color={theme.text.secondary} onPress={() => setNotesOpen(false)} />
+            <IconButton icon="x" onPress={() => setNotesOpen(false)} />
           </View>
           <Text style={s.notesFieldLabel}>{`Hole ${currentHole}`}</Text>
           <TextInput
@@ -1831,8 +1821,6 @@ export default function ScorecardScreen({ navigation, route }) {
             <Text style={s.notesTitle}>Leaderboard</Text>
             <IconButton
               icon="x"
-              size={18}
-              color={theme.text.secondary}
               onPress={() => setOfficialLeaderboardOpen(false)}
               accessibilityLabel="Close leaderboard"
             />

@@ -60,8 +60,6 @@ export default function NotificationsScreen({ navigation }) {
       <View style={s.header}>
         <IconButton
           icon="chevron-left"
-          size={24}
-          color={theme.text.primary}
           onPress={() => navigation.goBack()}
           accessibilityLabel="Back"
         />

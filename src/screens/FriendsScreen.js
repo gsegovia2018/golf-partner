@@ -232,7 +232,7 @@ export default function FriendsScreen({ navigation }) {
   return (
     <ScreenContainer style={s.container} edges={['top', 'bottom']}>
       <View style={s.header}>
-        <IconButton icon="chevron-left" size={22} color={theme.accent.primary} onPress={() => navigation.goBack()} />
+        <IconButton icon="chevron-left" onPress={() => navigation.goBack()} />
         <Text style={s.headerTitle}>Friends</Text>
         <View style={{ width: 22 }} />
       </View>
@@ -385,7 +385,7 @@ function FriendProfileModal({ friend, theme, onClose }) {
                   : ''}
               </Text>
             </View>
-            <IconButton icon="x" size={20} color={theme.text.muted} onPress={onClose} />
+            <IconButton icon="x" onPress={onClose} />
           </View>
 
           {loading ? (

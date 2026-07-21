@@ -118,7 +118,6 @@ export default function HistoryScreen({ navigation }) {
         {t._role === 'owner' && (
           <IconButton
             icon="trash-2"
-            size={14}
             color={theme.destructive}
             style={s.deleteBtn}
             onPress={() => confirmDelete(t)}

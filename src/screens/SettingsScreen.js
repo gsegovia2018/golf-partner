@@ -56,8 +56,6 @@ export default function SettingsScreen({ navigation }) {
       <View style={s.header}>
         <IconButton
           icon="chevron-left"
-          size={22}
-          color={theme.accent.primary}
           accessibilityLabel="Back"
           onPress={handleBack}
         />

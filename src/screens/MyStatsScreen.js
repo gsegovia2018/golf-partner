@@ -321,8 +321,6 @@ export default function MyStatsScreen({ navigation, route }) {
       {!isTabPresentation && (
         <IconButton
           icon="chevron-left"
-          size={22}
-          color={theme.accent.primary}
           accessibilityLabel="Back"
           onPress={() => navigation.goBack()}
         />

@@ -1237,15 +1237,11 @@ export default function HomeScreen({ navigation, route }) {
           <View style={s.headerActions}>
             <IconButton
               icon="menu"
-              size={18}
-              color={theme.accent.primary}
               onPress={() => setShowListMenu(true)}
               accessibilityLabel="Menu"
             />
             <IconButton
               icon="bell"
-              size={18}
-              color={theme.accent.primary}
               onPress={() => navigation.navigate('Notifications')}
               dot={unreadNotifs > 0}
               dotColor={theme.accent.danger ?? '#e5484d'}
@@ -1435,7 +1431,6 @@ export default function HomeScreen({ navigation, route }) {
                 {openable && t._role === 'owner' && (
                   <IconButton
                     icon="trash-2"
-                    size={14}
                     color={theme.destructive}
                     onPress={() => confirmDelete(t)}
                     accessibilityLabel="Delete"
@@ -1647,7 +1642,7 @@ export default function HomeScreen({ navigation, route }) {
     <ScreenContainer style={s.screen} edges={['top', 'bottom']}>
       <View style={s.header}>
         <View style={s.headerLeft}>
-          <IconButton icon="chevron-left" size={20} color={theme.accent.primary} onPress={goToList} />
+          <IconButton icon="chevron-left" onPress={goToList} />
           <Text
             style={[s.headerTitle, tournament.name.length > 22 && s.headerTitleLong]}
             numberOfLines={2}
@@ -1658,28 +1653,22 @@ export default function HomeScreen({ navigation, route }) {
         </View>
         <View style={s.headerActions}>
           {!isViewer && (
-            <IconButton icon="share-2" size={18} color={theme.accent.primary} onPress={handleInvite} />
+            <IconButton icon="share-2" onPress={handleInvite} />
           )}
           <IconButton
             icon="image"
-            size={18}
-            color={theme.accent.primary}
             onPress={() => navigation.navigate('Gallery', { tournamentId: tournament.id })}
             accessibilityLabel="Memories"
           />
           {!appSettings.noSpoilers && (
             <IconButton
               icon={showRunning ? 'eye-off' : 'eye'}
-              size={18}
-              color={theme.accent.primary}
               onPress={toggleRunning}
               accessibilityLabel={showRunning ? 'Hide running scores' : 'Show running scores'}
             />
           )}
           <IconButton
             icon="settings"
-            size={18}
-            color={theme.accent.primary}
             onPress={() => setShowSettings(true)}
             accessibilityLabel="Tournament settings"
           />

@@ -157,7 +157,7 @@ export default function ClaimPlayerScreen({ navigation, route }) {
   return (
     <ScreenContainer style={s.screen} edges={['top', 'bottom']}>
       <View style={s.header}>
-        <IconButton icon="chevron-left" size={22} color={theme.accent.primary} onPress={done} />
+        <IconButton icon="chevron-left" onPress={done} />
         <Text style={s.headerTitle}>Which player are you?</Text>
         <TouchableOpacity onPress={done} activeOpacity={0.7}>
           <Text style={s.skipText}>Skip</Text>
