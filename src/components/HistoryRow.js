@@ -1,5 +1,5 @@
 import React, { useMemo } from 'react';
-import { View, Text, StyleSheet } from 'react-native';
+import { View, Text, Image, StyleSheet } from 'react-native';
 import { Feather } from '@expo/vector-icons';
 import PressableScale from './ui/PressableScale';
 import { useTheme } from '../theme/ThemeContext';
@@ -44,9 +44,21 @@ export default function HistoryRow({ model, onPress, onLongPress }) {
               {model.avatars.map((a, i) => (
                 <View
                   key={`${a.initials}-${i}`}
-                  style={[s.avatar, i > 0 && s.avatarOverlap, a.isMe && s.avatarMe]}
+                  style={[
+                    s.avatar,
+                    i > 0 && s.avatarOverlap,
+                    a.isMe && (a.avatarUrl ? s.avatarMeRing : s.avatarMe),
+                  ]}
                 >
-                  <Text style={[s.avatarText, a.isMe && s.avatarTextMe]}>{a.initials}</Text>
+                  {a.avatarUrl ? (
+                    <Image
+                      source={{ uri: a.avatarUrl }}
+                      style={s.avatarImg}
+                      testID="history-avatar-image"
+                    />
+                  ) : (
+                    <Text style={[s.avatarText, a.isMe && s.avatarTextMe]}>{a.initials}</Text>
+                  )}
                 </View>
               ))}
               {model.extraPlayers > 0 && (
@@ -172,6 +184,8 @@ function makeStyles(theme, gold, goldBg) {
     },
     avatarOverlap: { marginLeft: -5 },
     avatarMe: { backgroundColor: theme.accent.primary },
+    avatarMeRing: { borderColor: theme.accent.primary },
+    avatarImg: { width: '100%', height: '100%', borderRadius: 10 },
     avatarText: {
       fontFamily: 'PlusJakartaSans-ExtraBold', fontSize: 7.5, color: theme.text.secondary,
     },

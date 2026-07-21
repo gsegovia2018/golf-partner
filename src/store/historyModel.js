@@ -117,6 +117,7 @@ export function historyEntryModel(tournament, identity = {}) {
     avatars: players.slice(0, MAX_AVATARS).map((p) => ({
       initials: playerInitials(p.name),
       isMe: !!me && p.id === me.id,
+      avatarUrl: p.avatar_url ?? null,
     })),
     extraPlayers: Math.max(0, players.length - MAX_AVATARS),
     isOwner: tournament._role === 'owner',

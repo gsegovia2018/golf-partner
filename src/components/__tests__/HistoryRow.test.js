@@ -155,4 +155,20 @@ describe('HistoryRow', () => {
     getByText('Nicolas');
     expect(queryByText('You')).toBeNull();
   });
+
+  test('avatar circles render a photo when avatarUrl is set, initials otherwise', () => {
+    const model = {
+      ...gameModel,
+      avatars: [
+        { initials: 'MA', isMe: true, avatarUrl: 'https://cdn.example/avatars/me.jpg' },
+        { initials: 'NO', isMe: false, avatarUrl: null },
+      ],
+    };
+    const { getAllByTestId, getByText, queryByText } = render(wrap(
+      <HistoryRow model={model} onPress={() => {}} />,
+    ));
+    expect(getAllByTestId('history-avatar-image')).toHaveLength(1);
+    expect(queryByText('MA')).toBeNull(); // photo replaces the initials
+    getByText('NO'); // no photo → initials fallback
+  });
 });

@@ -15,7 +15,10 @@ const game = {
   finishedAt: '2026-06-07T15:00:00.000Z',
   _role: 'owner',
   settings: { scoringMode: 'stableford' },
-  players: [P('me', 'Marcos', { user_id: 'u1' }), P('b', 'Noel')],
+  players: [
+    P('me', 'Marcos', { user_id: 'u1' }),
+    P('b', 'Noel', { avatar_url: 'https://cdn.example/avatars/noel.jpg' }),
+  ],
   rounds: [{
     id: 'r0',
     courseName: 'CCVM Negro',
@@ -116,8 +119,8 @@ describe('historyEntryModel — game', () => {
     expect(m.champion).toBeNull();
     expect(m.isOwner).toBe(true);
     expect(m.avatars).toEqual([
-      { initials: 'MA', isMe: true },
-      { initials: 'NO', isMe: false },
+      { initials: 'MA', isMe: true, avatarUrl: null },
+      { initials: 'NO', isMe: false, avatarUrl: 'https://cdn.example/avatars/noel.jpg' },
     ]);
     expect(m.extraPlayers).toBe(0);
   });
