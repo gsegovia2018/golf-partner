@@ -43,7 +43,7 @@ is missing; anonymous invite-link guests skip it). Changes to
 
 - Dimmed scrim over the real screen; the target element is highlighted by a
   gold ring (`semantic.winner`) cut out of the scrim.
-- An explainer card sits near the target: overline "TOUR · N OF 4", bold title,
+- An explainer card sits near the target: overline "TOUR · N OF M", bold title,
   one sentence of body copy, footer row with **Skip tour** (left, muted) and
   **Next** (right, accent button; "Done" on the last stop).
 - Tapping **the spotlighted element itself** also advances (and performs
@@ -71,12 +71,15 @@ History tab intentionally omitted.
 Fires once, the first time a live scorecard is shown (own round or one a friend
 added the user to). Same pattern, own skip, own flag.
 
-| # | Target (in `ScorecardScreen`) | Copy (title / body) |
+*(Amended 2026-07-22: the header distance block IS the map/flyover entry —
+`HoleDistanceBlock` is one Pressable that opens the flyover — so the planned
+"distances" and "map" stops collapse into a single stop. Chapter 2 has three.)*
+
+| # | Target (in scorecard components) | Copy (title / body) |
 |---|-------------------------------|---------------------|
-| 1 | Score entry controls | **Score the hole** / Tap your strokes — points are worked out for you, extra handicap shots included. |
-| 2 | Header distance block | **Distances, live** / GPS distances to front, middle and back of the green — tee distances when GPS is off. |
-| 3 | Map / flyover control | **See the hole** / Swipe up for the flyover map and plan the shot. |
-| 4 | Hole navigation | **Move through the round** / Swipe or tap to change holes; the running points strip keeps the match in view. |
+| 1 | Score entry (first player card) | **Score the hole** / Tap your strokes — points are worked out for you, extra handicap shots included. |
+| 2 | Header distance block (map entry) | **Distances & the map** / Live GPS distances to front, middle and back — tap them any time to fly over the hole. |
+| 3 | Next-hole button | **Move through the round** / This button carries you to the next hole; the running points keep the match in view. |
 
 Copy stays operational — no scoring theory.
 
