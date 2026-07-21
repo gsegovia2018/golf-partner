@@ -16,7 +16,7 @@ export default function CareerMilestonesCard({ milestones, onInfo }) {
   const m = milestones ?? {};
 
   return (
-    <SectionCard title="Career Milestones" infoKey="careerMilestones" onInfo={onInfo} titleVariant="overline">
+    <SectionCard title="Career Milestones" infoKey="careerMilestones" onInfo={onInfo}>
       <Text style={s.basis}>
         Net (handicap-adjusted) results — the Strokes Gained tab counts gross.
       </Text>

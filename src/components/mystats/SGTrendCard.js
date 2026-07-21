@@ -1,6 +1,7 @@
 import React, { useMemo, useState } from 'react';
-import { View, Text, StyleSheet, TouchableOpacity } from 'react-native';
+import { View, Text, StyleSheet } from 'react-native';
 import { useTheme } from '../../theme/ThemeContext';
+import PressableScale from '../ui/PressableScale';
 import SectionCard from './SectionCard';
 import TrendLineChart from './TrendLineChart';
 import { SG_CATEGORIES } from './shotMetrics';
@@ -29,17 +30,16 @@ export default function SGTrendCard({ strokesGained }) {
         {CHIPS.map((chip) => {
           const selected = chip.key === active;
           return (
-            <TouchableOpacity
+            <PressableScale
               key={chip.key}
               style={[s.chip, selected && s.chipActive]}
               onPress={() => setActive(chip.key)}
-              activeOpacity={0.7}
               accessibilityRole="button"
               accessibilityLabel={`SG trend ${chip.label}`}
               accessibilityState={{ selected }}
             >
               <Text style={[s.chipText, selected && s.chipTextActive]}>{chip.label}</Text>
-            </TouchableOpacity>
+            </PressableScale>
           );
         })}
       </View>

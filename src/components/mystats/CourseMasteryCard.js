@@ -1,7 +1,8 @@
 import React, { useMemo } from 'react';
-import { View, Text, StyleSheet, TouchableOpacity } from 'react-native';
+import { View, Text, StyleSheet } from 'react-native';
 import { Feather } from '@expo/vector-icons';
 import { useTheme } from '../../theme/ThemeContext';
+import PressableScale from '../ui/PressableScale';
 import SectionCard from './SectionCard';
 import { toneColor, toneFill } from './metricTone';
 
@@ -69,15 +70,14 @@ function CourseRow({ course, s, theme, onPress }) {
   );
   if (!onPress) return <View style={s.row}>{body}</View>;
   return (
-    <TouchableOpacity
+    <PressableScale
       style={s.row}
       onPress={onPress}
-      activeOpacity={0.7}
       accessibilityRole="button"
       accessibilityLabel={`Open ${course.courseName} stats`}
     >
       {body}
-    </TouchableOpacity>
+    </PressableScale>
   );
 }
 

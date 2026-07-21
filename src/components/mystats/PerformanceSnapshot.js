@@ -1,7 +1,8 @@
 import React, { useMemo } from 'react';
-import { View, Text, StyleSheet, TouchableOpacity } from 'react-native';
+import { View, Text, StyleSheet } from 'react-native';
 import { Feather } from '@expo/vector-icons';
 import { useTheme } from '../../theme/ThemeContext';
+import PressableScale from '../ui/PressableScale';
 import SectionCard from './SectionCard';
 import TrendLineChart from './TrendLineChart';
 import { SGBar } from './SGBars';
@@ -68,14 +69,14 @@ export default function PerformanceSnapshot({
           <View style={s.targetRow}>
             <Text style={s.panelMeta}>{hasStrokesGained ? sgTitle(targetHandicap) : 'No target data yet'}</Text>
             {onChangeTarget ? (
-              <TouchableOpacity
+              <PressableScale
                 onPress={onChangeTarget}
                 hitSlop={8}
                 accessibilityRole="button"
                 accessibilityLabel="Change target handicap"
               >
                 <Feather name="edit-2" size={14} color={theme.text.secondary} />
-              </TouchableOpacity>
+              </PressableScale>
             ) : null}
           </View>
         </View>

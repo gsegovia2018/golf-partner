@@ -1,8 +1,9 @@
 import React, { useEffect, useMemo, useState } from 'react';
-import { View, Text, StyleSheet, TouchableOpacity } from 'react-native';
+import { View, Text, StyleSheet } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { Feather } from '@expo/vector-icons';
 import { useTheme } from '../../../theme/ThemeContext';
+import PressableScale from '../../ui/PressableScale';
 import { useAppSettings } from '../../../hooks/useAppSettings';
 import { formatDistance, unitSuffix } from '../../../lib/units';
 import { shotBenchmarkForHandicap } from '../../../store/shotBenchmarks';
@@ -838,12 +839,12 @@ function SGTargetNudge({ onTap }) {
       flexDirection: 'row', alignItems: 'center', marginTop: 12, padding: 10,
       backgroundColor: theme.bg.subtle ?? theme.bg.card, borderRadius: 8,
     }}>
-      <TouchableOpacity onPress={onTap} style={{ flex: 1 }}>
+      <PressableScale onPress={onTap} style={{ flex: 1 }}>
         <Text style={{ color: theme.text.primary, fontSize: 13 }}>
           ⓘ Tip: set a target handicap to see where you would improve most.
         </Text>
-      </TouchableOpacity>
-      <TouchableOpacity
+      </PressableScale>
+      <PressableScale
         onPress={async () => {
           await AsyncStorage.setItem(NUDGE_KEY, '1');
           setDismissed(true);
@@ -852,7 +853,7 @@ function SGTargetNudge({ onTap }) {
         style={{ paddingHorizontal: 8 }}
       >
         <Text style={{ color: theme.text.secondary, fontSize: 16 }}>×</Text>
-      </TouchableOpacity>
+      </PressableScale>
     </View>
   );
 }

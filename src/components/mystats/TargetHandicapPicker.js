@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from 'react';
-import { Modal, View, Text, TextInput, TouchableOpacity, Pressable } from 'react-native';
+import { Modal, View, Text, TextInput, Pressable } from 'react-native';
 import { useTheme } from '../../theme/ThemeContext';
+import PressableScale from '../ui/PressableScale';
 
 export function TargetHandicapPicker({
   visible,
@@ -68,27 +69,27 @@ export function TargetHandicapPicker({
           </Text>
 
           {currentHandicap != null && (
-            <TouchableOpacity
+            <PressableScale
               onPress={() => setText(String(currentHandicap))}
               style={{ marginTop: 12 }}
             >
               <Text style={{ color: theme.accent.primary, fontSize: 13 }}>
                 ⓘ Use my current handicap ({currentHandicap})
               </Text>
-            </TouchableOpacity>
+            </PressableScale>
           )}
 
           <View style={{ flexDirection: 'row', justifyContent: 'flex-end', marginTop: 20, gap: 12 }}>
-            <TouchableOpacity onPress={onCancel}>
+            <PressableScale onPress={onCancel}>
               <Text style={{ color: theme.text.secondary, fontSize: 14, fontWeight: '600', padding: 8 }}>
                 Cancel
               </Text>
-            </TouchableOpacity>
-            <TouchableOpacity onPress={handleSave}>
+            </PressableScale>
+            <PressableScale onPress={handleSave}>
               <Text style={{ color: theme.accent.primary, fontSize: 14, fontWeight: '600', padding: 8 }}>
                 Save
               </Text>
-            </TouchableOpacity>
+            </PressableScale>
           </View>
         </Pressable>
       </Pressable>
