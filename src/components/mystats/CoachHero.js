@@ -2,6 +2,7 @@ import React, { useMemo } from 'react';
 import { View, Text, StyleSheet, TouchableOpacity } from 'react-native';
 import { Feather } from '@expo/vector-icons';
 import { useTheme } from '../../theme/ThemeContext';
+import { semantic } from '../../theme/tokens';
 import { formatConfidence, formatSample, formatPointsPerRound } from './CoachInsightRow';
 
 const GROUP_LABELS = {
@@ -25,7 +26,7 @@ export default function CoachHero({ insight, onCommitFocus, focusActive = false 
   const { theme } = useTheme();
   const s = useMemo(() => makeStyles(theme), [theme]);
   const proofs = [insight?.basis, formatSample(insight?.sample), formatConfidence(insight?.confidence)].filter(Boolean);
-  const areaColor = areaAccentColor(theme, insight?.tone);
+  const areaColor = areaAccentColor(insight?.tone);
 
   if (!insight) {
     return (
@@ -79,9 +80,11 @@ export default function CoachHero({ insight, onCommitFocus, focusActive = false 
   );
 }
 
-function areaAccentColor(theme, tone) {
-  if (tone === 'bad') return theme.destructive;
-  if (tone === 'good') return theme.mode === 'light' ? theme.semantic.winner.light : theme.semantic.winner.dark;
+// Hero surface is a fixed dark green in both themes, so tone accents always
+// use the dark-surface variants regardless of the active app theme.
+function areaAccentColor(tone) {
+  if (tone === 'bad') return semantic.destructive.dark;
+  if (tone === 'good') return semantic.winner.dark;
   return CREAM_70;
 }
 

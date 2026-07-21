@@ -1660,7 +1660,7 @@ export default function HomeScreen({ navigation, route }) {
           </ScrollView>
         )}
         {rankedLeaderboardEntries.map((entry, i) => {
-          const rankColors = [theme.isDark ? semantic.winner.dark : semantic.winner.light, '#c0c8d4', '#daa06d'];
+          const rankColors = [semantic.winner.dark, '#c0c8d4', '#daa06d'];
           const placeIdx = entry.place - 1;
           const isFirstPlace = entry.place === 1;
           const rankColor = rankColors[placeIdx] || 'rgba(255,255,255,0.4)';
@@ -1677,7 +1677,7 @@ export default function HomeScreen({ navigation, route }) {
                     {entry.player.name}
                   </Text>
                   {showRunning && entry.player.id === tournamentClinchedId && (
-                    <Feather name="award" size={12} color={theme.isDark ? semantic.winner.dark : semantic.winner.light} />
+                    <Feather name="award" size={12} color={semantic.winner.dark} />
                   )}
                 </View>
               </View>
