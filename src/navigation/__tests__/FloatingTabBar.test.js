@@ -87,21 +87,32 @@ describe('FloatingTabBar', () => {
     expect(navigation.navigate).toHaveBeenCalledWith('Profile');
   });
 
-  test('uses secondary text color for inactive secondary icons', () => {
+  test('uses muted text color for inactive secondary icons', () => {
     const { UNSAFE_getAllByType } = renderTabBar({ index: 2 });
 
     const icons = UNSAFE_getAllByType('Feather');
-    expect(icons[0].props.color).toBe(light.text.secondary);
+    expect(icons[0].props.color).toBe(light.text.muted);
   });
 
-  test('reveals a compact label for the selected secondary tab', () => {
-    const { getByTestId, getByText, queryByText } = renderTabBar({ index: 1 });
-    const activeSurface = StyleSheet.flatten(getByTestId('MyStats-tab-surface').props.style);
+  test('always shows labels under every secondary tab, tinting the selected one', () => {
+    const { getByText } = renderTabBar({ index: 1 });
 
-    expect(getByText('Stats')).toBeTruthy();
-    expect(queryByText('Feed')).toBeNull();
-    expect(activeSurface.transform).toEqual([{ translateY: -8 }]);
-    expect(activeSurface.height).toBeGreaterThan(46);
+    expect(getByText('Feed')).toBeTruthy();
+    expect(getByText('History')).toBeTruthy();
+    expect(getByText('Profile')).toBeTruthy();
+    const activeLabel = StyleSheet.flatten(getByText('Stats').props.style);
+    const inactiveLabel = StyleSheet.flatten(getByText('Feed').props.style);
+    expect(activeLabel.color).toBe(light.accent.primary);
+    expect(inactiveLabel.color).toBe(light.text.muted);
+  });
+
+  test('renders the center action as a circular icon-only button', () => {
+    const { getByTestId, queryByText } = renderTabBar({ index: 0 });
+    const surface = StyleSheet.flatten(getByTestId('Home-tab-surface').props.style);
+
+    expect(queryByText('Play')).toBeNull();
+    expect(surface.borderRadius).toBe(999);
+    expect(surface.width).toBe(surface.height);
   });
 
   test('routes the center action to Home when no round is live', () => {
@@ -152,11 +163,9 @@ describe('FloatingTabBar', () => {
     const playSurface = StyleSheet.flatten(play.getByTestId('Home-tab-surface').props.style);
     const playIcon = play.UNSAFE_getAllByType('Feather')
       .find((icon) => icon.props.name === 'flag');
-    const playLabel = StyleSheet.flatten(play.getByText('Play').props.style);
 
     expect(playSurface.backgroundColor).toBe(light.accent.primary);
     expect(playIcon.props.color).toBe(light.text.inverse);
-    expect(playLabel.color).toBe(light.text.inverse);
     play.unmount();
 
     mockLoadTournament.mockResolvedValue({ id: 'tournament-1' });
@@ -167,10 +176,8 @@ describe('FloatingTabBar', () => {
     const scoreSurface = StyleSheet.flatten(score.getByTestId('Home-tab-surface').props.style);
     const scoreIcon = score.UNSAFE_getAllByType('Feather')
       .find((icon) => icon.props.name === 'clipboard');
-    const scoreLabel = StyleSheet.flatten(score.getByText('Score').props.style);
 
     expect(scoreSurface.backgroundColor).toBe(light.accent.primary);
     expect(scoreIcon.props.color).toBe(light.text.inverse);
-    expect(scoreLabel.color).toBe(light.text.inverse);
   });
 });

@@ -51,7 +51,6 @@ export default function FloatingTabBar({ state, navigation }) {
           const focused = state.index === index;
           const item = getTabBarItem(route.name, { roundLive });
           const center = isCenterTab(route.name);
-          const secondaryFocused = !center && focused;
           const selected = focused && (!center || !item.live);
 
           const onPress = () => {
@@ -73,7 +72,7 @@ export default function FloatingTabBar({ state, navigation }) {
             ? theme.text.inverse
             : focused
               ? theme.accent.primary
-              : theme.text.secondary;
+              : theme.text.muted;
 
           return (
             <PressableScale
@@ -87,14 +86,14 @@ export default function FloatingTabBar({ state, navigation }) {
             >
               <View
                 testID={`${route.name}-tab-surface`}
-                style={[
-                  center ? styles.centerButton : styles.secondaryButton,
-                  secondaryFocused && styles.secondaryButtonActive,
-                ]}
+                style={center ? styles.centerButton : styles.secondaryButton}
               >
-                <Feather name={item.icon} size={center ? 25 : secondaryFocused ? 20 : 22} color={iconColor} />
-                {center && <Text style={styles.centerLabel}>{item.label}</Text>}
-                {secondaryFocused && <Text style={styles.secondaryLabel}>{item.label}</Text>}
+                <Feather name={item.icon} size={center ? 24 : 21} color={iconColor} />
+                {!center && (
+                  <Text style={[styles.secondaryLabel, focused && styles.secondaryLabelActive]}>
+                    {item.label}
+                  </Text>
+                )}
               </View>
             </PressableScale>
           );
@@ -118,9 +117,10 @@ function tabBarStyles(theme) {
       alignSelf: 'center',
       alignItems: 'center',
       justifyContent: 'space-around',
-      minHeight: 68,
-      paddingHorizontal: 8,
-      borderRadius: 22,
+      minHeight: 64,
+      paddingHorizontal: 10,
+      paddingVertical: 8,
+      borderRadius: 999,
       backgroundColor: theme.isDark ? theme.bg.elevated : 'rgba(255,255,255,0.96)',
       borderWidth: 1,
       borderColor: theme.isDark
@@ -135,62 +135,42 @@ function tabBarStyles(theme) {
     },
     tab: {
       flex: 1,
-      minHeight: 56,
+      minHeight: 48,
       alignItems: 'center',
       justifyContent: 'center',
     },
     centerTab: {
-      minHeight: 76,
+      minHeight: 60,
     },
     secondaryButton: {
-      width: 46,
-      height: 46,
-      borderRadius: 16,
       alignItems: 'center',
       justifyContent: 'center',
-    },
-    secondaryButtonActive: {
-      width: 58,
-      height: 52,
-      borderRadius: 18,
-      gap: 1,
-      backgroundColor: theme.accent.light,
-      borderWidth: 1,
-      borderColor: theme.isDark ? theme.glass?.border ?? theme.border.default : 'rgba(0,103,71,0.14)',
-      shadowColor: theme.accent.primary,
-      shadowOpacity: theme.isDark ? 0.14 : 0.16,
-      shadowRadius: 8,
-      shadowOffset: { width: 0, height: 4 },
-      elevation: 6,
-      transform: [{ translateY: -8 }],
+      gap: 3,
+      paddingVertical: 2,
     },
     centerButton: {
-      width: 68,
-      height: 68,
-      marginTop: -26,
-      borderRadius: 24,
+      width: 62,
+      height: 62,
+      marginTop: -34,
+      borderRadius: 999,
       alignItems: 'center',
       justifyContent: 'center',
-      gap: 2,
       backgroundColor: theme.accent.primary,
-      borderWidth: 3,
+      borderWidth: 4,
       borderColor: theme.bg.primary,
       shadowColor: theme.accent.primary,
-      shadowOpacity: theme.isDark ? 0.25 : 0.3,
-      shadowRadius: 16,
-      shadowOffset: { width: 0, height: 8 },
+      shadowOpacity: theme.isDark ? 0.25 : 0.35,
+      shadowRadius: 14,
+      shadowOffset: { width: 0, height: 7 },
       elevation: 16,
-    },
-    centerLabel: {
-      fontFamily: 'PlusJakartaSans-ExtraBold',
-      fontSize: 10,
-      lineHeight: 12,
-      color: theme.text.inverse,
     },
     secondaryLabel: {
       fontFamily: 'PlusJakartaSans-ExtraBold',
-      fontSize: 10,
-      lineHeight: 12,
+      fontSize: 9,
+      lineHeight: 11,
+      color: theme.text.muted,
+    },
+    secondaryLabelActive: {
       color: theme.accent.primary,
     },
   });
