@@ -1,5 +1,5 @@
 import React, { useEffect } from 'react';
-import { View, Text } from 'react-native';
+import { View, Text, StyleSheet } from 'react-native';
 import Animated, {
   useSharedValue, useAnimatedStyle, withTiming, Easing, useReducedMotion,
 } from 'react-native-reanimated';
@@ -84,7 +84,10 @@ export function SGBar({ label, value }) {
   );
 }
 
-const styles = {
+// StyleSheet.create (not a plain object) so react-native-web emits atomic
+// classes instead of inline styles — inline styles would defeat the style-array
+// overrides consumers like ShotDashboard's boardTrack rely on.
+const styles = StyleSheet.create({
   row: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -134,4 +137,4 @@ const styles = {
     fontFamily: 'PlusJakartaSans-ExtraBold',
     fontVariant: ['tabular-nums'],
   },
-};
+});
