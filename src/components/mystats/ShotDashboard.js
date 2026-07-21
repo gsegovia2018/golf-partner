@@ -1,12 +1,15 @@
-import React, { useMemo } from 'react';
+import React, { useEffect, useMemo } from 'react';
 import { View, Text, StyleSheet } from 'react-native';
+import Animated, {
+  useSharedValue, useAnimatedStyle, withTiming, withDelay, Easing, useReducedMotion,
+} from 'react-native-reanimated';
 import { Feather } from '@expo/vector-icons';
 import { useTheme } from '../../theme/ThemeContext';
 import { semantic } from '../../theme/tokens';
 import PressableScale from '../ui/PressableScale';
 import SectionCard from './SectionCard';
 import StatTile from './StatTile';
-import { SGBar } from './SGBars';
+import { SGBarTrack } from './SGBars';
 import {
   APPROACH_BUCKETS,
   MIN_SG_CATEGORY_SAMPLE,
@@ -16,31 +19,114 @@ import {
   sampleText,
 } from './shotMetrics';
 
-// Clubhouse hero surface — same constants as CoachHero.js.
+// Clubhouse hero surfaces — same constants as CoachHero.js. The target-gap
+// hero goes Masters red when the headline SG total is negative.
 const GREEN = '#0f3d2c';
+const RED = semantic.masters.red;
 const CREAM = '#f3efe6';
 const CREAM_70 = 'rgba(243,239,230,0.7)';
 const CREAM_85 = 'rgba(243,239,230,0.85)';
 
-function CategoryRow({ category, strokesGained }) {
+const EASE_OUT = Easing.bezier(0.23, 1, 0.32, 1);
+const LOCK_FILL = '#7fb59f';
+
+const CATEGORY_ICONS = {
+  offTheTee: 'flag',
+  approach: 'crosshair',
+  aroundGreen: 'target',
+  putting: 'circle',
+  penalties: 'alert-triangle',
+};
+
+// 4px progress-to-unlock bar for locked categories. Fills via scaleX from the
+// left, 400ms ease-out, staggered 40ms per board row; reduced motion ⇒ static.
+function LockProgress({ pct, index }) {
+  const { theme } = useTheme();
+  const reduced = useReducedMotion();
+  const scale = useSharedValue(reduced ? 1 : 0);
+
+  useEffect(() => {
+    if (!reduced) {
+      scale.value = withDelay(index * 40, withTiming(1, { duration: 400, easing: EASE_OUT }));
+    }
+  }, [reduced, scale, index]);
+
+  const animatedStyle = useAnimatedStyle(() => ({
+    transform: [{ scaleX: scale.value }],
+  }));
+
+  return (
+    <View testID="sg-lock-track" style={[styles.lockTrack, { backgroundColor: theme.bg.secondary }]}>
+      <Animated.View
+        testID="sg-lock-fill"
+        style={[
+          styles.lockFill,
+          { width: `${pct}%`, backgroundColor: LOCK_FILL, transformOrigin: 'left center' },
+          animatedStyle,
+        ]}
+      />
+    </View>
+  );
+}
+
+function CategoryIconDisc({ tone, icon }) {
+  const { theme } = useTheme();
+  const tint = tone === 'good' ? withAlpha(theme.accent.primary, 0.14)
+    : tone === 'bad' ? withAlpha(theme.destructive, 0.12)
+      : theme.bg.secondary;
+  const color = tone === 'good' ? theme.accent.primary
+    : tone === 'bad' ? theme.destructive
+      : theme.text.muted;
+  return (
+    <View style={[styles.disc, { backgroundColor: tint }]}>
+      <Feather name={icon} size={13} color={color} />
+    </View>
+  );
+}
+
+function BoardRow({ category, strokesGained, footnote, index }) {
   const { theme } = useTheme();
   const s = useMemo(() => makeStyles(theme), [theme]);
   const sample = strokesGained?.sampleHolesByCategory?.[category.key] ?? 0;
+
   if (sample < MIN_SG_CATEGORY_SAMPLE) {
     return (
-      <Text style={s.gatedRow}>
-        {`${category.label}: needs ${MIN_SG_CATEGORY_SAMPLE - sample} more holes`}
-      </Text>
+      <View style={s.boardRow} testID={`sg-board-row-${category.key}`}>
+        <CategoryIconDisc tone="locked" icon="lock" />
+        <View style={s.boardBody}>
+          <View style={s.nameLine}>
+            <Text style={s.name}>{category.label}</Text>
+            <Text style={s.lockNote}>{`needs ${MIN_SG_CATEGORY_SAMPLE - sample} more holes`}</Text>
+          </View>
+          <LockProgress pct={(sample / MIN_SG_CATEGORY_SAMPLE) * 100} index={index} />
+        </View>
+      </View>
     );
   }
+
+  const value = strokesGained?.byCategory?.[category.key];
+  const tone = value > 0 ? 'good' : value < 0 ? 'bad' : 'neutral';
+  const valueColor = tone === 'good' ? theme.scoreColor('good')
+    : tone === 'bad' ? theme.destructive
+      : theme.text.muted;
   const delta = strokesGained?.personalDelta?.[category.key];
   const showDelta = delta?.delta != null && delta.delta !== 0;
   const up = delta?.direction === 'up';
   const deltaColor = up ? theme.scoreColor('good') : theme.destructive;
+
   return (
-    <View style={s.categoryRow}>
-      <SGBar label={category.label} value={strokesGained.byCategory?.[category.key]} />
-      <View style={s.categoryMeta}>
+    <View style={s.boardRow} testID={`sg-board-row-${category.key}`}>
+      <CategoryIconDisc tone={tone} icon={CATEGORY_ICONS[category.key] ?? 'circle'} />
+      <View style={s.boardBody}>
+        <View style={s.nameLine}>
+          <Text style={s.name}>{category.label}</Text>
+          <Text style={s.sample}>{sampleText(sample, 'holes')}</Text>
+        </View>
+        <SGBarTrack value={value ?? 0} style={s.boardTrack} />
+        {footnote ? <Text style={s.footnote} numberOfLines={1}>{footnote}</Text> : null}
+      </View>
+      <View style={s.boardRight}>
+        <Text style={[s.value, { color: valueColor }]}>{formatSignedFixed(value)}</Text>
         {showDelta ? (
           <View
             accessible
@@ -53,7 +139,6 @@ function CategoryRow({ category, strokesGained }) {
             </Text>
           </View>
         ) : null}
-        <Text style={s.sampleChip}>{sampleText(sample, 'holes')}</Text>
       </View>
     </View>
   );
@@ -72,12 +157,39 @@ function evidenceMeta(strokesGained) {
   return `${gated[0].label}: needs ${MIN_SG_CATEGORY_SAMPLE - gated[0].sample} more holes`;
 }
 
+// Fold buildShotSignals output into the board: each category keeps its single
+// strongest bucket-level signal as a row footnote (the `sg-` self-signals are
+// skipped — the row already shows that number); anything that maps to no
+// category surfaces as a compact footer line under the board (max 2).
+function mapSignalsToBoard(signals) {
+  const byCategory = {};
+  const extras = [];
+  [...signals.good, ...signals.bad].forEach((sig) => {
+    if (sig.id.startsWith('sg-')) return;
+    const cat = SG_CATEGORIES.find((c) => c.area === sig.area);
+    if (!cat) {
+      extras.push(sig);
+      return;
+    }
+    const current = byCategory[cat.key];
+    if (!current || Math.abs(sig.score) > Math.abs(current.score)) byCategory[cat.key] = sig;
+  });
+  return {
+    footnotes: Object.fromEntries(
+      Object.entries(byCategory).map(([key, sig]) => [key, `${sig.title}: ${sig.metric}`])
+    ),
+    extras: extras.slice(0, 2).map((sig) => `${sig.area} · ${sig.title}: ${sig.metric}`),
+  };
+}
+
 export default function ShotDashboard({ stats, targetHandicap, onChangeTarget, onInfo, TargetNudge }) {
   const { theme } = useTheme();
   const s = useMemo(() => makeStyles(theme), [theme]);
   const strokesGained = stats?.strokesGained;
   const hasStrokesGained = strokesGained?.total != null;
+  const losing = hasStrokesGained && strokesGained.total < 0;
   const signals = useMemo(() => buildShotSignals(stats), [stats]);
+  const board = useMemo(() => mapSignalsToBoard(signals), [signals]);
   const targetCopy = targetTitle(targetHandicap);
   const sample = sampleText(strokesGained?.sampleHoles, 'holes') ?? trackedSample(stats);
 
@@ -99,16 +211,9 @@ export default function ShotDashboard({ stats, targetHandicap, onChangeTarget, o
         ) : null
       }
     >
-      <View style={s.hero}>
+      <View style={[s.hero, losing && { backgroundColor: RED }]} testID="sg-hero-surface">
         <Text style={s.heroKicker}>Target gap</Text>
-        <Text
-          style={[
-            s.heroValue,
-            hasStrokesGained && {
-              color: strokesGained.total >= 0 ? semantic.winner.dark : semantic.destructive.dark,
-            },
-          ]}
-        >
+        <Text style={[s.heroValue, hasStrokesGained && { color: semantic.winner.dark }]}>
           {hasStrokesGained ? `${formatSignedFixed(strokesGained.total)} / round` : '-'}
         </Text>
         <Text style={s.heroMeta}>{hasStrokesGained ? targetCopy : 'Log putt distance and regulation approach shots.'}</Text>
@@ -119,63 +224,29 @@ export default function ShotDashboard({ stats, targetHandicap, onChangeTarget, o
       </View>
 
       {strokesGained?.byCategory ? (
-        <View style={s.sgBlock}>
-          {SG_CATEGORIES.map((category) => (
-            <CategoryRow key={category.key} category={category} strokesGained={strokesGained} />
+        <View style={s.board}>
+          {SG_CATEGORIES.map((category, index) => (
+            <BoardRow
+              key={category.key}
+              category={category}
+              strokesGained={strokesGained}
+              footnote={board.footnotes[category.key]}
+              index={index}
+            />
+          ))}
+          {board.extras.map((line) => (
+            <Text key={line} style={s.extraLine} numberOfLines={1}>{line}</Text>
           ))}
           {TargetNudge && strokesGained.sampleHoles >= 18
             && (targetHandicap == null || targetHandicap === 0)
             && <TargetNudge onTap={onChangeTarget} />}
         </View>
       ) : null}
-
-      <SignalList title="What is working" signals={signals.good} tone="good" />
-      <SignalList title="What is costing shots" signals={signals.bad} tone="bad" />
     </SectionCard>
   );
 }
 
-function SignalList({ title, signals, tone }) {
-  const { theme } = useTheme();
-  const s = useMemo(() => makeStyles(theme), [theme]);
-  return (
-    <View style={s.signalList}>
-      <Text style={s.signalTitle}>{title}</Text>
-      {signals.length ? signals.slice(0, 3).map((signal) => (
-        <ShotSignalRow key={`${tone}-${signal.id}`} signal={signal} tone={tone} />
-      )) : (
-        <Text style={s.note}>{tone === 'good' ? 'Nothing positive stands out yet.' : 'No clear leak yet.'}</Text>
-      )}
-    </View>
-  );
-}
-
-function ShotSignalRow({ signal, tone }) {
-  const { theme } = useTheme();
-  const s = useMemo(() => makeStyles(theme), [theme]);
-  const good = tone === 'good';
-  const color = good ? theme.scoreColor('good') : theme.destructive;
-  const icon = good ? 'trending-up' : 'alert-triangle';
-  return (
-    <View style={s.signalRow}>
-      <View style={[s.signalIcon, { backgroundColor: good ? theme.accent.light : badWash(theme) }]}>
-        <Feather name={icon} size={15} color={color} />
-      </View>
-      <View style={s.signalCopy}>
-        <Text style={s.signalArea}>{signal.area}</Text>
-        <Text style={s.signalName}>{signal.title}</Text>
-        <Text style={s.signalDetail}>{signal.detail}</Text>
-      </View>
-      <Text style={[s.signalMetric, { color }]}>{signal.metric}</Text>
-    </View>
-  );
-}
-
-function badWash(theme) {
-  return theme.isDark ? 'rgba(248,113,113,0.14)' : '#fee2e2';
-}
-
-// ~10% wash of a 6-digit hex theme color, for the delta chip background.
+// ~10% wash of a 6-digit hex theme color, for icon discs and delta chips.
 function withAlpha(hex, alpha) {
   const m = /^#([a-f\d]{6})$/i.exec(hex ?? '');
   if (!m) return 'transparent';
@@ -258,9 +329,32 @@ function buildShotSignals(stats) {
   return { good, bad };
 }
 
+// Static (theme-independent) pieces of the board rows.
+const styles = {
+  disc: {
+    width: 26,
+    height: 26,
+    borderRadius: 13,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  lockTrack: {
+    height: 4,
+    borderRadius: 2,
+    overflow: 'hidden',
+    marginTop: 6,
+  },
+  lockFill: {
+    position: 'absolute',
+    left: 0,
+    top: 0,
+    bottom: 0,
+    borderRadius: 2,
+  },
+};
+
 function makeStyles(theme) {
   return StyleSheet.create({
-    note: { ...theme.typography.caption, color: theme.text.muted, fontStyle: 'italic' },
     hero: {
       backgroundColor: GREEN,
       borderRadius: 16,
@@ -283,9 +377,35 @@ function makeStyles(theme) {
     heroMeta: { fontSize: 12.5, fontFamily: 'PlusJakartaSans-SemiBold', color: CREAM_85 },
     heroGrid: { flexDirection: 'row', gap: theme.spacing.sm, marginTop: theme.spacing.xs },
     heroFootnote: { fontSize: 10.5, fontFamily: 'PlusJakartaSans-SemiBold', color: CREAM_70 },
-    sgBlock: { gap: 1, paddingTop: theme.spacing.sm },
-    categoryRow: { gap: 2, paddingVertical: 2 },
-    categoryMeta: { flexDirection: 'row', justifyContent: 'flex-end', alignItems: 'center', gap: 6 },
+    board: { paddingTop: theme.spacing.sm },
+    boardRow: {
+      flexDirection: 'row',
+      alignItems: 'flex-start',
+      gap: theme.spacing.sm,
+      paddingVertical: theme.spacing.sm,
+      borderTopWidth: StyleSheet.hairlineWidth,
+      borderTopColor: theme.border.subtle,
+    },
+    boardBody: { flex: 1, gap: 3 },
+    nameLine: { flexDirection: 'row', alignItems: 'baseline', justifyContent: 'space-between', gap: theme.spacing.sm },
+    name: { fontSize: 12.5, fontFamily: 'PlusJakartaSans-Bold', color: theme.text.primary },
+    sample: { fontSize: 10.5, fontFamily: 'PlusJakartaSans-SemiBold', color: theme.text.muted },
+    lockNote: { fontSize: 10.5, fontFamily: 'PlusJakartaSans-SemiBold', color: theme.text.muted },
+    // The base track style is built for a row layout (flex: 1, maxWidth 200).
+    // In the board's column layout flex-basis must be auto or the height
+    // collapses to 0 on web, and maxWidth needs an explicit full-width value
+    // (undefined in a style array does not override an earlier value).
+    boardTrack: {
+      flexGrow: 0, flexShrink: 0, flexBasis: 'auto',
+      height: 10, maxWidth: '100%',
+    },
+    footnote: { fontSize: 10.5, fontFamily: 'PlusJakartaSans-SemiBold', color: theme.text.muted },
+    boardRight: { alignItems: 'flex-end', gap: 4, minWidth: 46 },
+    value: {
+      fontSize: 12.5,
+      fontFamily: 'PlusJakartaSans-ExtraBold',
+      fontVariant: ['tabular-nums'],
+    },
     deltaChip: {
       flexDirection: 'row',
       alignItems: 'center',
@@ -295,36 +415,14 @@ function makeStyles(theme) {
       paddingVertical: 2,
     },
     deltaChipText: { fontSize: 10, fontFamily: 'PlusJakartaSans-Bold', fontVariant: ['tabular-nums'] },
-    sampleChip: { ...theme.typography.tiny, color: theme.text.muted },
-    gatedRow: { ...theme.typography.caption, color: theme.text.muted, fontStyle: 'italic', paddingVertical: 6 },
-    signalList: {
-      gap: 0,
-      paddingTop: theme.spacing.md,
-      marginTop: theme.spacing.sm,
-      borderTopWidth: StyleSheet.hairlineWidth,
-      borderTopColor: theme.border.default,
-    },
-    signalTitle: { ...theme.typography.subhead, color: theme.text.primary, fontWeight: '800', marginBottom: theme.spacing.xs },
-    signalRow: {
-      flexDirection: 'row',
-      alignItems: 'flex-start',
-      gap: theme.spacing.sm,
-      paddingVertical: theme.spacing.sm,
+    extraLine: {
+      fontSize: 10.5,
+      fontFamily: 'PlusJakartaSans-SemiBold',
+      color: theme.text.muted,
+      paddingTop: theme.spacing.sm,
       borderTopWidth: StyleSheet.hairlineWidth,
       borderTopColor: theme.border.subtle,
     },
-    signalIcon: {
-      width: 30,
-      height: 30,
-      borderRadius: theme.radius.sm,
-      alignItems: 'center',
-      justifyContent: 'center',
-    },
-    signalCopy: { flex: 1, gap: 1 },
-    signalArea: { ...theme.typography.tiny, color: theme.text.muted, fontWeight: '800', textTransform: 'uppercase' },
-    signalName: { ...theme.typography.body, color: theme.text.primary, fontWeight: '700' },
-    signalDetail: { ...theme.typography.caption, color: theme.text.secondary },
-    signalMetric: { ...theme.typography.caption, fontWeight: '800', maxWidth: 72, textAlign: 'right' },
   });
 }
 

@@ -1,3 +1,8 @@
+// The one light-theme red: Masters red. Referenced by semantic.masters.red,
+// light destructive, and the light "poor" score tone so light surfaces never
+// mix two different reds. Dark surfaces keep the lighter #f87171.
+const MASTERS_RED = '#c8102e';
+
 const light = {
   bg: {
     primary:   '#f6f3ee',
@@ -72,7 +77,7 @@ const semantic = {
     dark:  '#ffd700',
   },
   destructive: {
-    light: '#ef4444',
+    light: MASTERS_RED,
     dark:  '#f87171',
   },
   pair: {
@@ -83,11 +88,11 @@ const semantic = {
     excellent: { light: '#006747', dark: '#4fae8a' },
     good:      { light: '#2a7d56', dark: '#6ee7b7' },
     neutral:   { light: '#8a8a7a', dark: '#5a6577' },
-    poor:      { light: '#ef4444', dark: '#f87171' },
+    poor:      { light: MASTERS_RED, dark: '#f87171' },
   },
   masters: {
     yellow: '#ffd700',
-    red:    '#c8102e',
+    red:    MASTERS_RED,
     pink:   '#d4729b',
   },
 };

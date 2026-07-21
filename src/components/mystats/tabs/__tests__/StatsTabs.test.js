@@ -284,8 +284,10 @@ describe('My Stats tabs', () => {
     ));
 
     expect(await findByText('Strokes gained · vs 14-hcp target')).toBeTruthy();
-    expect(await findByText('What is working')).toBeTruthy();
-    expect(await findByText('What is costing shots')).toBeTruthy();
+    // Category board replaced the What-is-working / What-is-costing lists.
+    expect(await findByText('Target gap')).toBeTruthy();
+    expect(queryByText('What is working')).toBeNull();
+    expect(queryByText('What is costing shots')).toBeNull();
     expect(await findByText('Scoring')).toBeTruthy();
     expect(queryByText('Score vs par')).toBeNull();
     expect(await findByText('Par 3 avg score')).toBeTruthy();
