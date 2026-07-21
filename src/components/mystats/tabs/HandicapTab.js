@@ -10,7 +10,7 @@ import { computeHandicapIndex, handicapIndexSeries, MIN_DIFFERENTIALS } from '..
 import { upsertProfile } from '../../../store/profileStore';
 
 // Clubhouse hero surface — same constants as the SG hero in ShotDashboard.js.
-const GREEN = '#0f3d2c';
+const GREEN = '#00553c';
 const CREAM = '#f3efe6';
 const CREAM_70 = 'rgba(243,239,230,0.7)';
 const CREAM_85 = 'rgba(243,239,230,0.85)';

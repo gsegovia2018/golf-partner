@@ -73,7 +73,7 @@ export default function LiveRoundCard({ onOpen }) {
         {summary.thru > 0 ? ` · ${summary.myPoints} pts thru ${summary.thru}` : ''}
       </Text>
       <TouchableOpacity style={s.cta} onPress={onOpen} accessibilityRole="button" accessibilityLabel="Open scorecard">
-        <Feather name="clipboard" size={14} color="#0f3d2c" />
+        <Feather name="clipboard" size={14} color="#00553c" />
         <Text style={s.ctaText}>Open scorecard</Text>
       </TouchableOpacity>
     </Animated.View>
@@ -82,7 +82,7 @@ export default function LiveRoundCard({ onOpen }) {
 
 const styles = (t) => StyleSheet.create({
   card: {
-    backgroundColor: '#0f3d2c', borderRadius: 16, padding: 16, marginBottom: 16,
+    backgroundColor: '#00553c', borderRadius: 16, padding: 16, marginBottom: 16,
     ...(t.isDark ? {} : t.shadow.elevated),
   },
   row: { flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: 8 },
@@ -99,5 +99,5 @@ const styles = (t) => StyleSheet.create({
     flexDirection: 'row', alignItems: 'center', gap: 7, alignSelf: 'flex-start',
     backgroundColor: '#f3efe6', borderRadius: 999, paddingHorizontal: 14, paddingVertical: 9, marginTop: 12,
   },
-  ctaText: { color: '#0f3d2c', fontFamily: 'PlusJakartaSans-ExtraBold', fontSize: 13 },
+  ctaText: { color: '#00553c', fontFamily: 'PlusJakartaSans-ExtraBold', fontSize: 13 },
 });

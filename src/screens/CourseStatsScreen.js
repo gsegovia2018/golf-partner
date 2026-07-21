@@ -28,7 +28,7 @@ import StatDetailSheet from '../components/StatDetailSheet';
 // Clubhouse dark-green hero surface — same constants as CoachHero.js /
 // ShotDashboard.js / CareerMilestonesCard.js, copied locally by convention
 // rather than imported.
-const GREEN = '#0f3d2c';
+const GREEN = '#00553c';
 const CREAM = '#f3efe6';
 const CREAM_85 = 'rgba(243,239,230,0.85)';
 const CREAM_65 = 'rgba(243,239,230,0.65)';

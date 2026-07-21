@@ -21,7 +21,7 @@ const GROUP_LABELS = {
 // exists, so it must not wear alarm red. Masters red is reserved for the one
 // group that reports a change for the worse (gettingWorse) — red is earned,
 // never permanent. Fix first is marked as "the work" by a gold badge instead.
-const GREEN = '#0f3d2c';
+const GREEN = '#00553c';
 // Masters red — the app's one light-surface red. Cream #f3efe6 on it is ~5:1
 // (AA); gold #ffd700 is ~4.2:1 (AA-large, fine for the big area label).
 const RED = semantic.masters.red;

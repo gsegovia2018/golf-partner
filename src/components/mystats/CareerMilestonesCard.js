@@ -15,7 +15,7 @@ import CountUpText from './CountUpText';
 // here is NET (handicap-adjusted) — the Strokes Gained tab's scoring-mix
 // benchmark counts gross — so the footnote discloses the basis rather than
 // silently disagreeing with that tab.
-const GREEN = '#0f3d2c';
+const GREEN = '#00553c';
 const CREAM = '#f3efe6';
 const CREAM_85 = 'rgba(243,239,230,0.85)';
 const CREAM_70 = 'rgba(243,239,230,0.7)';

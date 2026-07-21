@@ -6,7 +6,7 @@ import { semantic } from '../../theme/tokens';
 import TrendLineChart from './TrendLineChart';
 
 // Clubhouse hero surface — cream-on-green, matches CoachHero/LiveRoundCard.
-const GREEN = '#0f3d2c';
+const GREEN = '#00553c';
 const CREAM = '#f3efe6';
 const CREAM_70 = 'rgba(243,239,230,0.7)';
 const CREAM_80 = 'rgba(243,239,230,0.8)';

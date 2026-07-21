@@ -27,7 +27,7 @@ jest.mock('../../../theme/ThemeContext', () => ({
   },
 }));
 
-const GREEN = '#0f3d2c';
+const GREEN = '#00553c';
 
 const baseSG = {
   total: -1.2,

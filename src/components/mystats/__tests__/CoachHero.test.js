@@ -12,7 +12,7 @@ jest.mock('@react-native-async-storage/async-storage', () => ({
 
 const wrap = (ui) => <ThemeProvider>{ui}</ThemeProvider>;
 
-const GREEN = '#0f3d2c';
+const GREEN = '#00553c';
 const RED = semantic.masters.red; // '#c8102e'
 
 const insight = {

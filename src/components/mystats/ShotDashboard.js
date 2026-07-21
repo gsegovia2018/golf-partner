@@ -24,7 +24,7 @@ import {
 // state for most players, and a permanent red stops meaning anything. Red
 // survives only as small-scale accents in the category board (negative
 // values and down-deltas), never as a full card surface.
-const GREEN = '#0f3d2c';
+const GREEN = '#00553c';
 const CREAM = '#f3efe6';
 const CREAM_70 = 'rgba(243,239,230,0.7)';
 const CREAM_85 = 'rgba(243,239,230,0.85)';

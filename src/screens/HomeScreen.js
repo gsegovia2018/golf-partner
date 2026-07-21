@@ -2735,7 +2735,7 @@ const makeStyles = (t) => StyleSheet.create({
 
   // Masters leaderboard
   mastersCard: {
-    backgroundColor: '#006747',
+    backgroundColor: t.bg.deep,
     borderRadius: 20, padding: 16, marginBottom: 16,
     ...(t.isDark ? {} : { shadowColor: '#004030', shadowOpacity: 0.3, shadowOffset: { width: 0, height: 4 }, shadowRadius: 12, elevation: 6 }),
   },
@@ -2754,7 +2754,7 @@ const makeStyles = (t) => StyleSheet.create({
   },
   mastersChipActive: { backgroundColor: 'rgba(255,255,255,0.9)' },
   mastersChipText: { fontFamily: 'PlusJakartaSans-SemiBold', color: 'rgba(255,255,255,0.6)', fontSize: 12 },
-  mastersChipTextActive: { color: '#006747' },
+  mastersChipTextActive: { color: t.bg.deep },
   mastersRow: {
     flexDirection: 'row', alignItems: 'center', paddingVertical: 10,
     borderBottomWidth: 1, borderBottomColor: 'rgba(255,255,255,0.12)',

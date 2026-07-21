@@ -3,12 +3,19 @@
 // mix two different reds. Dark surfaces keep the lighter #f87171.
 const MASTERS_RED = '#c8102e';
 
+// The one dark-green surface: the accent one stop darker ("fairway shadow").
+// Hero cards (LiveRoundCard, My Stats heroes) and the tournament leaderboard
+// all use this so the app has exactly one surface green; #006747 stays the
+// interactive accent (buttons, chips, active states). Same value both themes.
+const DEEP_GREEN = '#00553c';
+
 const light = {
   bg: {
     primary:   '#f6f3ee',
     card:      '#ffffff',
     secondary: '#ece8e1',
     elevated:  '#ffffff',
+    deep:      DEEP_GREEN,
   },
   accent: {
     primary:   '#006747',
@@ -27,7 +34,7 @@ const light = {
   },
   shadow: {
     card:     { shadowColor: '#000', shadowOpacity: 0, shadowOffset: { width: 0, height: 0 }, shadowRadius: 0, elevation: 0 },
-    elevated: { shadowColor: '#0f3d2c', shadowOpacity: 0.10, shadowOffset: { width: 0, height: 4 }, shadowRadius: 14, elevation: 4 },
+    elevated: { shadowColor: DEEP_GREEN, shadowOpacity: 0.10, shadowOffset: { width: 0, height: 4 }, shadowRadius: 14, elevation: 4 },
     accent:   { shadowColor: '#006747', shadowOpacity: 0.2, shadowOffset: { width: 0, height: 2 }, shadowRadius: 8, elevation: 3 },
   },
   glass: null,
@@ -39,6 +46,7 @@ const dark = {
     card:      'rgba(6,103,71,0.08)',
     secondary: 'rgba(255,255,255,0.04)',
     elevated:  'rgba(255,255,255,0.06)',
+    deep:      DEEP_GREEN,
   },
   accent: {
     primary:   '#4fae8a',

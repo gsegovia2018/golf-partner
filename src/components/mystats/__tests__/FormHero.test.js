@@ -60,7 +60,7 @@ describe('FormHero', () => {
     fireEvent(canvas, 'layout', { nativeEvent: { layout: { width: 300 } } });
     const circles = view.UNSAFE_getAllByType(Circle);
     const last = circles[circles.length - 1];
-    expect(last.props.stroke).toBe('#0f3d2c'); // hero green ring, not white card bg
+    expect(last.props.stroke).toBe('#00553c'); // hero green ring, not white card bg
     expect(last.props.fill).toBe('#ffd700'); // gold end dot
   });
 
