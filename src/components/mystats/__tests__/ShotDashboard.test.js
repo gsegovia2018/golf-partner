@@ -28,7 +28,7 @@ jest.mock('../../../theme/ThemeContext', () => ({
   },
 }));
 
-const NAVY = '#2b4766';
+const PANEL = '#ece8e1'; // theme.bg.secondary, light
 
 const baseSG = {
   total: -1.2,
@@ -55,25 +55,25 @@ const heroColor = (r) =>
   StyleSheet.flatten(r.getByTestId('sg-hero-surface').props.style).backgroundColor;
 
 describe('ShotDashboard target-gap hero surface', () => {
-  test('stays navy when the SG total is negative — the gap is standing work, not an alarm', () => {
+  test('stays a neutral panel when the SG total is negative — the gap is standing work, not an alarm', () => {
     const r = renderDash({ ...baseSG, total: -1.2 });
-    expect(heroColor(r)).toBe(NAVY);
+    expect(heroColor(r)).toBe(PANEL);
   });
-  test('stays navy when the SG total is positive', () => {
+  test('stays a neutral panel when the SG total is positive', () => {
     const r = renderDash({ ...baseSG, total: 0.8 });
-    expect(heroColor(r)).toBe(NAVY);
+    expect(heroColor(r)).toBe(PANEL);
   });
-  test('stays navy at exactly zero and without data', () => {
-    expect(heroColor(renderDash({ ...baseSG, total: 0 }))).toBe(NAVY);
-    expect(heroColor(renderDash({ ...baseSG, total: null }))).toBe(NAVY);
+  test('stays a neutral panel at exactly zero and without data', () => {
+    expect(heroColor(renderDash({ ...baseSG, total: 0 }))).toBe(PANEL);
+    expect(heroColor(renderDash({ ...baseSG, total: null }))).toBe(PANEL);
   });
   test('headline number is winner gold on both signs', () => {
     const losing = renderDash({ ...baseSG, total: -1.2 });
     expect(StyleSheet.flatten(losing.getByText('-1.20 / round').props.style).color)
-      .toBe(semantic.winner.dark);
+      .toBe(semantic.winner.light);
     const winning = renderDash({ ...baseSG, total: 0.8 });
     expect(StyleSheet.flatten(winning.getByText('+0.80 / round').props.style).color)
-      .toBe(semantic.winner.dark);
+      .toBe(semantic.winner.light);
   });
 });
 

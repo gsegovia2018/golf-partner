@@ -12,7 +12,7 @@ jest.mock('@react-native-async-storage/async-storage', () => ({
 
 const wrap = (ui) => <ThemeProvider>{ui}</ThemeProvider>;
 
-const NAVY = '#2b4766';
+const WHITE = '#ffffff'; // theme.bg.card, light
 const RED = semantic.masters.red; // '#c8102e'
 
 const insight = {
@@ -32,13 +32,13 @@ const surfaceColor = (view) =>
   StyleSheet.flatten(view.getByTestId('coach-hero-surface').props.style).backgroundColor;
 
 describe('CoachHero surface color', () => {
-  test('fixFirst insight renders the navy surface with a gold badge', () => {
+  test('fixFirst insight renders the white card with a gold badge', () => {
     const view = render(wrap(<CoachHero insight={insight} />));
-    expect(surfaceColor(view)).toBe(NAVY);
+    expect(surfaceColor(view)).toBe(WHITE);
     const badge = view.getByTestId('fix-first-badge');
-    expect(StyleSheet.flatten(badge.props.style).backgroundColor).toBe('rgba(255,215,0,0.16)');
+    expect(StyleSheet.flatten(badge.props.style).backgroundColor).toBe('rgba(169,130,30,0.12)');
     const badgeLabel = view.getByText('Fix first');
-    expect(StyleSheet.flatten(badgeLabel.props.style).color).toBe(semantic.winner.dark);
+    expect(StyleSheet.flatten(badgeLabel.props.style).color).toBe(semantic.winner.light);
   });
 
   test('gettingWorse insight renders the Masters-red surface with no badge', () => {
@@ -47,14 +47,14 @@ describe('CoachHero surface color', () => {
     expect(view.queryByTestId('fix-first-badge')).toBeNull();
   });
 
-  test('keepDoing insight renders the navy surface', () => {
+  test('keepDoing insight renders the white card', () => {
     const view = render(wrap(<CoachHero insight={{ ...insight, group: 'keepDoing', tone: 'good' }} />));
-    expect(surfaceColor(view)).toBe(NAVY);
+    expect(surfaceColor(view)).toBe(WHITE);
   });
 
-  test('empty state renders the navy surface', () => {
+  test('empty state renders the white card', () => {
     const view = render(wrap(<CoachHero insight={null} />));
-    expect(surfaceColor(view)).toBe(NAVY);
+    expect(surfaceColor(view)).toBe(WHITE);
   });
 
   test('bad-tone area label uses winner gold on the Masters-red surface', () => {
@@ -63,22 +63,22 @@ describe('CoachHero surface color', () => {
     expect(StyleSheet.flatten(area.props.style).color).toBe(semantic.winner.dark);
   });
 
-  test('fixFirst area label stays neutral cream — never red on the standing card', () => {
+  test('fixFirst area label stays neutral muted — never red on the standing card', () => {
     const view = render(wrap(<CoachHero insight={insight} />));
     const area = view.getByText('Putting');
-    expect(StyleSheet.flatten(area.props.style).color).toBe('rgba(243,239,230,0.7)');
+    expect(StyleSheet.flatten(area.props.style).color).toBe('#8a8a7a');
   });
 
-  test('bad-tone area label keeps destructive red on the navy surface', () => {
+  test('bad-tone area label keeps destructive red on the white card', () => {
     const view = render(wrap(<CoachHero insight={{ ...insight, group: 'watch' }} />));
     const area = view.getByText('Putting');
-    expect(StyleSheet.flatten(area.props.style).color).toBe(semantic.destructive.dark);
+    expect(StyleSheet.flatten(area.props.style).color).toBe(semantic.destructive.light);
   });
 
-  test('focus button text matches the active surface color', () => {
+  test('focus button is accent-filled on the white card, cream-on-red on the alarm card', () => {
     const onCommitFocus = jest.fn();
     const fixFirst = render(wrap(<CoachHero insight={insight} onCommitFocus={onCommitFocus} />));
-    expect(StyleSheet.flatten(fixFirst.getByText('Make this my focus').props.style).color).toBe(NAVY);
+    expect(StyleSheet.flatten(fixFirst.getByText('Make this my focus').props.style).color).toBe(WHITE);
 
     const worse = render(
       wrap(<CoachHero insight={{ ...insight, group: 'gettingWorse' }} onCommitFocus={onCommitFocus} />)

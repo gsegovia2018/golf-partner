@@ -66,17 +66,17 @@ describe('CareerMilestonesCard', () => {
     await waitFor(() => expect(getByText('38')).toBeTruthy(), { timeout: 3000 });
   });
 
-  test('best round renders gold; other numbers render cream', () => {
+  test('best round renders gold; other numbers render primary ink', () => {
     mockReducedMotion = true;
     const { getByTestId } = render(wrap(
       <CareerMilestonesCard milestones={milestones} onInfo={() => {}} />
     ));
 
     const gold = StyleSheet.flatten(getByTestId('milestone-best-round-value').props.style);
-    expect(gold.color).toBe(semantic.winner.dark);
-    expect(gold.color).toBe('#ffd700');
-    const cream = StyleSheet.flatten(getByTestId('milestone-birdies-value').props.style);
-    expect(cream.color).toBe('#f3efe6');
+    expect(gold.color).toBe(semantic.winner.light);
+    expect(gold.color).toBe('#a9821e');
+    const ink = StyleSheet.flatten(getByTestId('milestone-birdies-value').props.style);
+    expect(ink.color).toBe('#1a1a1a');
   });
 
   test('zero values render dimmed at 55% opacity, non-zero cells do not', () => {

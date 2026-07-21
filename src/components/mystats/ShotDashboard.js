@@ -19,15 +19,12 @@ import {
   sampleText,
 } from './shotMetrics';
 
-// Navy analysis surface — same constant as CoachHero.js ("green plays, navy
-// thinks"). The hero never turns red: a negative SG total vs the target is the standing
+// The target-gap hero is a quiet inset panel on the white card — analysis
+// is information, so it wears info-blue chrome rather than a hero surface.
+// It never turns red: a negative SG total vs the target is the standing
 // state for most players, and a permanent red stops meaning anything. Red
 // survives only as small-scale accents in the category board (negative
 // values and down-deltas), never as a full card surface.
-const NAVY = '#2b4766';
-const CREAM = '#f3efe6';
-const CREAM_70 = 'rgba(243,239,230,0.7)';
-const CREAM_85 = 'rgba(243,239,230,0.85)';
 
 const EASE_OUT = Easing.bezier(0.23, 1, 0.32, 1);
 
@@ -214,7 +211,7 @@ export default function ShotDashboard({ stats, targetHandicap, onChangeTarget, o
     >
       <View style={s.hero} testID="sg-hero-surface">
         <Text style={s.heroKicker}>Target gap</Text>
-        <Text style={[s.heroValue, hasStrokesGained && { color: semantic.winner.dark }]}>
+        <Text style={[s.heroValue, hasStrokesGained && { color: theme.isDark ? semantic.winner.dark : semantic.winner.light }]}>
           {hasStrokesGained ? `${formatSignedFixed(strokesGained.total)} / round` : '-'}
         </Text>
         <Text style={s.heroMeta}>{hasStrokesGained ? targetCopy : 'Log putt distance and regulation approach shots.'}</Text>
@@ -357,13 +354,13 @@ const styles = {
 function makeStyles(theme) {
   return StyleSheet.create({
     hero: {
-      backgroundColor: NAVY,
+      backgroundColor: theme.bg.secondary,
       borderRadius: 16,
       padding: theme.spacing.lg,
       gap: theme.spacing.xs,
     },
     heroKicker: {
-      color: CREAM_70,
+      color: theme.info,
       fontSize: 10,
       fontFamily: 'PlusJakartaSans-Bold',
       letterSpacing: 1.4,
@@ -373,11 +370,11 @@ function makeStyles(theme) {
       fontFamily: 'PlayfairDisplay-Black',
       fontSize: 34,
       lineHeight: 40,
-      color: CREAM,
+      color: theme.text.primary,
     },
-    heroMeta: { fontSize: 12.5, fontFamily: 'PlusJakartaSans-SemiBold', color: CREAM_85 },
+    heroMeta: { fontSize: 12.5, fontFamily: 'PlusJakartaSans-SemiBold', color: theme.text.secondary },
     heroGrid: { flexDirection: 'row', gap: theme.spacing.sm, marginTop: theme.spacing.xs },
-    heroFootnote: { fontSize: 10.5, fontFamily: 'PlusJakartaSans-SemiBold', color: CREAM_70 },
+    heroFootnote: { fontSize: 10.5, fontFamily: 'PlusJakartaSans-SemiBold', color: theme.text.muted },
     board: { paddingTop: theme.spacing.sm },
     boardRow: {
       flexDirection: 'row',

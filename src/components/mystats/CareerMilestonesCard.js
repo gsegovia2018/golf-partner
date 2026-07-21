@@ -6,23 +6,14 @@ import { useTheme } from '../../theme/ThemeContext';
 import { semantic } from '../../theme/tokens';
 import CountUpText from './CountUpText';
 
-// Career-wide feats as an "honours board" — the navy analysis/records hero
-// surface IS the card (same constants as CoachHero.js / ShotDashboard.js,
-// copied locally by convention rather than imported). See `careerMilestones`
-// in personalStats.js. bestNine/bestRound show '-' when there is no complete
-// round yet; birdies/eagles/longestParStreak are always a count (0 is a real
-// value, not "no data" — it renders dimmed, waiting to be earned). Everything
-// here is NET (handicap-adjusted) — the Strokes Gained tab's scoring-mix
-// benchmark counts gross — so the footnote discloses the basis rather than
-// silently disagreeing with that tab.
-const NAVY = '#2b4766';
-const CREAM = '#f3efe6';
-const CREAM_85 = 'rgba(243,239,230,0.85)';
-const CREAM_70 = 'rgba(243,239,230,0.7)';
-const CREAM_65 = 'rgba(243,239,230,0.65)';
-const CREAM_60 = 'rgba(243,239,230,0.6)';
-const CREAM_55 = 'rgba(243,239,230,0.55)';
-const HAIRLINE = 'rgba(243,239,230,0.14)';
+// Career-wide feats as an "honours board" — a plain white card with
+// info-blue chrome: records are information, not performance. See
+// `careerMilestones` in personalStats.js. bestNine/bestRound show '-' when
+// there is no complete round yet; birdies/eagles/longestParStreak are always
+// a count (0 is a real value, not "no data" — it renders dimmed, waiting to
+// be earned). Everything here is NET (handicap-adjusted) — the Strokes
+// Gained tab's scoring-mix benchmark counts gross — so the footnote
+// discloses the basis rather than silently disagreeing with that tab.
 
 const STAGGER_MS = 60;
 const COUNT_MS = 500;
@@ -54,7 +45,7 @@ export default function CareerMilestonesCard({ milestones, onInfo }) {
             accessibilityRole="button"
             accessibilityLabel="What is Career Milestones"
           >
-            <Feather name="info" size={14} color={CREAM_85} />
+            <Feather name="info" size={14} color={theme.text.muted} />
           </TouchableOpacity>
         ) : null}
       </View>
@@ -91,7 +82,9 @@ export default function CareerMilestonesCard({ milestones, onInfo }) {
 function makeStyles(theme) {
   return StyleSheet.create({
     board: {
-      backgroundColor: NAVY,
+      backgroundColor: theme.bg.card,
+      borderWidth: 1,
+      borderColor: theme.border.default,
       borderRadius: 16,
       padding: theme.spacing.lg,
       gap: theme.spacing.sm,
@@ -102,7 +95,7 @@ function makeStyles(theme) {
       fontFamily: 'PlusJakartaSans-Bold',
       letterSpacing: 1.4,
       textTransform: 'uppercase',
-      color: CREAM_70,
+      color: theme.info,
     },
     grid: {
       flexDirection: 'row',
@@ -118,23 +111,23 @@ function makeStyles(theme) {
       fontFamily: 'PlayfairDisplay-Black',
       fontSize: 30,
       lineHeight: 36,
-      color: CREAM,
+      color: theme.text.primary,
     },
-    numberGold: { color: semantic.winner.dark },
-    suffix: { fontSize: 13, fontFamily: 'PlusJakartaSans-SemiBold', color: CREAM_60 },
+    numberGold: { color: theme.isDark ? semantic.winner.dark : semantic.winner.light },
+    suffix: { fontSize: 13, fontFamily: 'PlusJakartaSans-SemiBold', color: theme.text.muted },
     label: {
       fontSize: 9,
       fontFamily: 'PlusJakartaSans-Bold',
       letterSpacing: 1.1,
       textTransform: 'uppercase',
-      color: CREAM_65,
+      color: theme.text.muted,
     },
     footnote: {
       fontSize: 10.5,
       fontFamily: 'PlusJakartaSans-SemiBold',
-      color: CREAM_55,
+      color: theme.text.muted,
       borderTopWidth: StyleSheet.hairlineWidth,
-      borderTopColor: HAIRLINE,
+      borderTopColor: theme.border.subtle,
       paddingTop: 10,
       marginTop: theme.spacing.xs,
     },

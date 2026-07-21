@@ -3,14 +3,15 @@ import { View, Text, StyleSheet } from 'react-native';
 import { useTheme } from '../../theme/ThemeContext';
 
 // One large value + caption. tone: 'default' | 'up' | 'down'.
-// surface: 'card' (default, on a light card) | 'hero' (on the green hero).
+// surface: 'card' (default, secondary-tinted tile on a white card) | 'hero'
+// (card-colored tile on a secondary-tinted inset panel, e.g. the SG hero).
 export default function StatTile({ value, caption, tone = 'default', surface = 'card' }) {
   const { theme } = useTheme();
   const s = useMemo(() => makeStyles(theme), [theme]);
   const hero = surface === 'hero';
-  const valueColor = tone === 'up' ? (hero ? theme.text.inverse : theme.accent.primary)
+  const valueColor = tone === 'up' ? theme.accent.primary
     : tone === 'down' ? theme.destructive
-      : (hero ? theme.text.inverse : theme.text.primary);
+      : theme.text.primary;
 
   return (
     <View style={[s.tile, hero && s.tileHero]}>
@@ -26,7 +27,7 @@ function makeStyles(theme) {
       flex: 1, backgroundColor: theme.bg.secondary, borderRadius: theme.radius.lg,
       padding: theme.spacing.md, borderWidth: StyleSheet.hairlineWidth, borderColor: theme.border.default,
     },
-    tileHero: { backgroundColor: 'rgba(255,255,255,0.12)', borderColor: 'transparent' },
+    tileHero: { backgroundColor: theme.bg.card, borderColor: 'transparent' },
     value: {
       fontSize: 22,
       fontFamily: 'PlusJakartaSans-ExtraBold',
@@ -41,6 +42,6 @@ function makeStyles(theme) {
       color: theme.text.muted,
       marginTop: 2,
     },
-    captionHero: { color: 'rgba(255,255,255,0.75)' },
+    captionHero: { color: theme.text.muted },
   });
 }
