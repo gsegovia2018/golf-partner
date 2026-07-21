@@ -43,6 +43,7 @@ function CategoryRow({ category, strokesGained }) {
       <View style={s.categoryMeta}>
         {showDelta ? (
           <View
+            accessible
             style={[s.deltaChip, { backgroundColor: withAlpha(deltaColor, 0.1) }]}
             accessibilityLabel={`${up ? 'Up' : 'Down'} ${Math.abs(delta.delta)} strokes gained vs your previous rounds`}
           >
