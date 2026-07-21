@@ -56,17 +56,19 @@ export default function SGTrendCard({ strokesGained }) {
 
 function makeStyles(theme) {
   return StyleSheet.create({
-    chipRow: { flexDirection: 'row', flexWrap: 'wrap', gap: theme.spacing.xs, marginBottom: theme.spacing.sm },
+    // Tab-pill pattern (mirrors the MyStatsScreen tab bar): bordered card
+    // pill at rest, filled accent pill when selected.
+    chipRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 6, marginBottom: theme.spacing.sm },
     chip: {
-      paddingHorizontal: theme.spacing.sm,
-      paddingVertical: 5,
+      paddingHorizontal: theme.spacing.md,
+      paddingVertical: 6,
       borderRadius: theme.radius.pill,
-      borderWidth: StyleSheet.hairlineWidth,
+      borderWidth: 1,
       borderColor: theme.border.default,
-      backgroundColor: theme.bg.secondary,
+      backgroundColor: theme.bg.card,
     },
     chipActive: { backgroundColor: theme.accent.primary, borderColor: theme.accent.primary },
-    chipText: { ...theme.typography.caption, color: theme.text.secondary, fontWeight: '700' },
+    chipText: { ...theme.typography.caption, color: theme.text.muted, fontWeight: '700' },
     chipTextActive: { color: theme.text.inverse },
   });
 }

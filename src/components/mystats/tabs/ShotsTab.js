@@ -11,6 +11,8 @@ import SectionCard from '../SectionCard';
 import ShotDashboard from '../ShotDashboard';
 import SGTrendCard from '../SGTrendCard';
 import SGReconciliationCard from '../SGReconciliationCard';
+import BreakdownRow from '../BreakdownRow';
+import ScoreMixBar from '../ScoreMixBar';
 import {
   comparisonMeta,
   toneColor,
@@ -55,6 +57,15 @@ export default function ShotsTab({ stats, onInfo, targetHandicap, onChangeTarget
   const approachTargetRows = approachTarget?.hasData ? makeApproachTargetRows(approachTarget) : [];
   const puttingVolumeRows = shots.hasData ? makePuttingVolumeRows(shots, shotBenchmark) : [];
   const puttingTargetRows = puttingTarget?.hasData ? makePuttingTargetRows(puttingTarget) : [];
+  const girRows = shots.hasData ? makeGirRows(shots, shotBenchmark) : [];
+  // The gross vs-par mix feeds the ScoreMixBar — same
+  // {eagles,birdies,pars,bogeys,doubles,worse} counts shape the bar already
+  // accepts, and gross is the honest basis next to gross benchmark rows.
+  const grossMix = stats?.distributionGross ?? null;
+  const grossMixTotal = grossMix
+    ? ['eagles', 'birdies', 'pars', 'bogeys', 'doubles', 'worse']
+      .reduce((sum, key) => sum + (grossMix[key] ?? 0), 0)
+    : 0;
 
   return (
     <View style={s.wrap}>
@@ -79,60 +90,40 @@ export default function ShotsTab({ stats, onInfo, targetHandicap, onChangeTarget
             s={s}
             theme={theme}
           />
-          <ShotDataBlock title="Scoring mix" s={s} first>
-            {scoringRows.map(({ key, ...row }) => (
-              <ShotDataRow key={key} {...row} s={s} theme={theme} />
-            ))}
-          </ShotDataBlock>
+          {grossMixTotal > 0 ? (
+            <View style={s.detailBlock}>
+              <Text style={s.mixOverline}>Score mix · gross</Text>
+              <ScoreMixBar distribution={grossMix} />
+            </View>
+          ) : null}
+          <ShotRowsBlock
+            title="Scoring detail"
+            rows={scoringRows}
+            s={s}
+            first={grossMixTotal === 0}
+          />
         </SectionCard>
       ) : null}
 
       {drivingTargetRows.length ? (
         <SectionCard title="Driving vs target" infoKey="sgDriving" onInfo={onInfo}>
-          <ShotDataBlock title="Driver accuracy" s={s} first>
-            {drivingTargetRows.map(({ key, ...row }) => (
-              <ShotDataRow key={key} {...row} s={s} theme={theme} />
-            ))}
-          </ShotDataBlock>
+          <ShotRowsBlock title="Driver accuracy" rows={drivingTargetRows} s={s} first />
         </SectionCard>
       ) : null}
 
       {(approachTargetRows.length || shots.hasData) ? (
         <SectionCard title="Approach vs target" infoKey="sgApproach" onInfo={onInfo}>
           {approachTargetRows.length ? (
-            <ShotDataBlock title="Approach distance SG" s={s} first>
-              {approachTargetRows.map(({ key, ...row }) => (
-                <ShotDataRow key={key} {...row} s={s} theme={theme} />
-              ))}
-            </ShotDataBlock>
+            <ShotRowsBlock title="Approach distance SG" rows={approachTargetRows} s={s} first />
           ) : null}
 
-          {shots.hasData ? (
-            <ShotDataBlock
+          {girRows.length ? (
+            <ShotRowsBlock
               title="GIR volume"
+              rows={girRows}
               s={s}
               first={!approachTargetRows.length}
-            >
-              <ShotDataRow
-                label="Greens in reg %"
-                value={`${shots.gir.pct}%`}
-                secondary={targetSecondary([
-                  sampleText(shots.gir.eligible, 'holes'),
-                  `target ${formatBenchmarkPercent(shotBenchmark.girPct)}`,
-                ], shots.gir.eligible, 6)}
-                tone={toneFromComparison({
-                  value: shots.gir.pct,
-                  target: shotBenchmark.girPct,
-                  polarity: 'higher',
-                  tolerance: 2,
-                  sample: shots.gir.eligible,
-                  minSample: 6,
-                })}
-                dim={shots.gir.eligible === 0}
-                s={s}
-                theme={theme}
-              />
-            </ShotDataBlock>
+            />
           ) : null}
         </SectionCard>
       ) : null}
@@ -140,19 +131,16 @@ export default function ShotsTab({ stats, onInfo, targetHandicap, onChangeTarget
       {(shots.hasData || puttingTargetRows.length) ? (
         <SectionCard title="Putting vs target" infoKey="sgPutting" onInfo={onInfo}>
           {shots.hasData ? (
-            <ShotDataBlock title="Aggregate putting" s={s} first>
-              {puttingVolumeRows.map(({ key, ...row }) => (
-                <ShotDataRow key={key} {...row} s={s} theme={theme} />
-              ))}
-            </ShotDataBlock>
+            <ShotRowsBlock title="Aggregate putting" rows={puttingVolumeRows} s={s} first />
           ) : null}
 
           {puttingTargetRows.length ? (
-            <ShotDataBlock title="Distance putting SG" s={s} first={!shots.hasData}>
-              {puttingTargetRows.map(({ key, ...row }) => (
-                <ShotDataRow key={key} {...row} s={s} theme={theme} />
-              ))}
-            </ShotDataBlock>
+            <ShotRowsBlock
+              title="Distance putting SG"
+              rows={puttingTargetRows}
+              s={s}
+              first={!shots.hasData}
+            />
           ) : null}
         </SectionCard>
       ) : null}
@@ -194,55 +182,68 @@ function SummaryCell({ label, value, meta, tone = 'neutral', s, theme }) {
   );
 }
 
-function ShotDataBlock({ title, children, s, first = false }) {
+// Cap for a row whose relative bar group has no comparable sibling: a
+// deliberate two-thirds bar, never a misleading full one (mirrors
+// BreakdownTab's SOLO_COUNT_RATIO).
+const SOLO_BAR_RATIO = 2 / 3;
+
+// One detail block rendered as magnitude rows (BreakdownRow). Bars scale per
+// each row's `barGroup` tag, computed within THIS block only:
+// - 'pct' — absolute: width = value / 100, comparable across the whole tab.
+// - anything else ('avg' / 'count' / 'sg' / 'dist') — relative to the
+//   block's max |magnitude| among same-tagged rows; a genuinely solo row
+//   caps at SOLO_BAR_RATIO.
+// Dim (no-data) rows keep the em-dash + an empty track — no data isn't
+// zero — and don't count toward a group's max or solo-ness. Rows without a
+// numeric magnitude render without a track entirely. `rowIndex` staggers
+// the fill sweep within the block (BreakdownRow's Emil-rule motion).
+function ShotRowsBlock({ title, rows, s, first = false }) {
+  const groups = {};
+  rows.forEach((row) => {
+    if (row.dim || !isNumber(row.magnitude)) return;
+    const tag = row.barGroup;
+    if (!tag || tag === 'pct') return; // absolute scale
+    const entry = groups[tag] ?? { max: 0, size: 0 };
+    entry.max = Math.max(entry.max, Math.abs(row.magnitude));
+    entry.size += 1;
+    groups[tag] = entry;
+  });
   return (
     <View style={[s.detailBlock, first && s.detailBlockFirst]}>
       <View style={s.detailHead}>
         <View style={s.detailDot} />
         <Text style={s.detailTitle}>{title}</Text>
       </View>
-      <View style={s.dataRows}>
-        {children}
+      <View>
+        {rows.map(({
+          key, magnitude, barGroup, raw, sample, bucket, greenRate, threePuttRate, ...row
+        }, index) => (
+          <BreakdownRow
+            key={key}
+            {...row}
+            first={index === 0}
+            rowIndex={index}
+            testID={`shots-bar-${key}`}
+            barRatio={shotBarRatio({ magnitude, barGroup, dim: row.dim }, groups)}
+          />
+        ))}
       </View>
     </View>
   );
 }
 
-function ShotDataRow({
-  label, value, secondary, tone = 'neutral', dim = false, s, theme,
-}) {
-  const color = dim ? theme.text.muted : toneColor(theme, tone);
-  const icon = dim ? 'minus' : tone === 'good' ? 'check' : tone === 'bad' ? 'alert-circle' : 'circle';
-  return (
-    <View style={[
-      s.dataRow,
-      tone === 'good' && s.dataRowGood,
-      tone === 'bad' && s.dataRowBad,
-      tone === 'neutral' && s.dataRowNeutral,
-      dim && s.dataRowDim,
-    ]}>
-      <View style={s.dataLead}>
-        <View style={[s.dataMarker, { backgroundColor: toneFill(theme, tone) }]}>
-          <Feather name={icon} size={12} color={color} />
-        </View>
-        <View style={s.dataCopy}>
-          <Text style={[s.dataLabel, dim && s.dimText]} numberOfLines={2}>
-            {label}
-          </Text>
-          {secondary ? (
-            <Text style={[s.dataSecondary, dim && s.dimText]} numberOfLines={3}>
-              {secondary}
-            </Text>
-          ) : null}
-        </View>
-      </View>
-      <View style={[s.dataValuePill, { backgroundColor: toneFill(theme, tone) }]}>
-        <Text style={[s.dataValue, { color }]} numberOfLines={2}>
-          {dim ? '-' : value}
-        </Text>
-      </View>
-    </View>
-  );
+function shotBarRatio({ magnitude, barGroup, dim }, groups) {
+  if (!isNumber(magnitude)) return undefined;
+  const size = Math.abs(magnitude);
+  if (barGroup === 'pct') return clamp01(size / 100);
+  const entry = groups[barGroup];
+  if (!entry || entry.max <= 0) return 0;
+  if (entry.size === 1 && !dim) return SOLO_BAR_RATIO;
+  return clamp01(size / entry.max);
+}
+
+function clamp01(value) {
+  return Math.min(1, Math.max(0, value));
 }
 
 function makeScoringRows(stats, shotBenchmark) {
@@ -267,6 +268,8 @@ function makeScoringRows(stats, shotBenchmark) {
       key,
       label,
       value: formatBenchmarkNumber(row.avgStrokes),
+      magnitude: row.avgStrokes,
+      barGroup: 'avg',
       secondary: targetSecondary([
         sampleText(row.holes, 'holes'),
         `target ${formatBenchmarkNumber(target)}`,
@@ -330,6 +333,8 @@ function scoringCountRow({
     key,
     label,
     value: formatBenchmarkNumber(value),
+    magnitude: isNumber(value) ? value : null,
+    barGroup: 'count',
     secondary: targetSecondary([
       `${count} total`,
       sampleText(total, 'holes'),
@@ -388,6 +393,8 @@ function makeDrivingTargetRows(shots, shotBenchmark, driveDistance, units) {
       key: 'fairways',
       label: 'Fairways hit',
       value: `${shots?.drives?.fairwayPct ?? 0}%`,
+      magnitude: shots?.drives?.fairwayPct ?? 0,
+      barGroup: 'pct',
       secondary: targetSecondary([
         sampleText(recorded, 'drives'),
         `target ${formatBenchmarkPercent(shotBenchmark.fairwayPct)}`,
@@ -406,6 +413,8 @@ function makeDrivingTargetRows(shots, shotBenchmark, driveDistance, units) {
       key: 'leftMissPct',
       label: 'Left miss %',
       value: `${leftPct}%`,
+      magnitude: leftPct,
+      barGroup: 'pct',
       secondary: targetSecondary([
         `${distribution.left ?? 0} drives`,
         `target ${formatBenchmarkPercent(shotBenchmark.leftMissPct)}`,
@@ -424,6 +433,8 @@ function makeDrivingTargetRows(shots, shotBenchmark, driveDistance, units) {
       key: 'rightMissPct',
       label: 'Right miss %',
       value: `${rightPct}%`,
+      magnitude: rightPct,
+      barGroup: 'pct',
       secondary: targetSecondary([
         `${distribution.right ?? 0} drives`,
         `target ${formatBenchmarkPercent(shotBenchmark.rightMissPct)}`,
@@ -442,6 +453,8 @@ function makeDrivingTargetRows(shots, shotBenchmark, driveDistance, units) {
       key: 'teePenaltyPct',
       label: 'Tee penalty %',
       value: `${teePenaltyPct}%`,
+      magnitude: teePenaltyPct,
+      barGroup: 'pct',
       secondary: targetSecondary([
         `${shots?.penalties?.teeOnDriveHoles ?? 0} penalties`,
         `target ${formatBenchmarkPercent(shotBenchmark.teePenaltyPct)}`,
@@ -460,6 +473,8 @@ function makeDrivingTargetRows(shots, shotBenchmark, driveDistance, units) {
       key: 'driveDistance',
       label: 'Driver distance',
       value: `~${formatDistance(driveDistance.avgDistance, units)} ${unitSuffix(units)}`,
+      magnitude: driveDistance.avgDistance,
+      barGroup: 'dist',
       secondary: targetSecondary([
         sampleText(driveDistance.drives, 'drives'),
         `target ~${formatDistance(Math.round(shotBenchmark.driverDistance * YD_TO_M), units)} ${unitSuffix(units)}`,
@@ -477,6 +492,8 @@ function makeDrivingTargetRows(shots, shotBenchmark, driveDistance, units) {
       key: 'driveDistance',
       label: 'Driver distance',
       value: '—',
+      magnitude: 0,
+      barGroup: 'dist',
       secondary: targetSecondary([
         `target ~${formatDistance(Math.round(shotBenchmark.driverDistance * YD_TO_M), units)} ${unitSuffix(units)}`,
         'log drive distance on the scorecard to track this',
@@ -497,6 +514,10 @@ function makeApproachTargetRows(approachTarget) {
       label: `${bucket} m approaches`,
       value: row.yourStrokes != null ? `you ≈ ${row.yourStrokes}` : signed(row.avgSg),
       raw: row.avgSg,
+      // Bars normalize within the bucket group by |SG| max; the tone
+      // (positive good/green, negative bad/red) colors the fill.
+      magnitude: isNumber(row.avgSg) ? row.avgSg : null,
+      barGroup: 'sg',
       secondary: targetSecondary([
         row.targetStrokes != null ? `target ≈ ${row.targetStrokes}` : null,
         `${formatPercent(row.greenRate ?? row.girRate)} green`,
@@ -507,6 +528,31 @@ function makeApproachTargetRows(approachTarget) {
       tone: toneFromSigned(row.avgSg, { sample: row.holes, minSample: 6 }),
     };
   }).filter(Boolean);
+}
+
+function makeGirRows(shots, shotBenchmark) {
+  return [
+    {
+      key: 'gir',
+      label: 'Greens in reg %',
+      value: `${shots.gir.pct}%`,
+      magnitude: shots.gir.pct,
+      barGroup: 'pct',
+      secondary: targetSecondary([
+        sampleText(shots.gir.eligible, 'holes'),
+        `target ${formatBenchmarkPercent(shotBenchmark.girPct)}`,
+      ], shots.gir.eligible, 6),
+      tone: toneFromComparison({
+        value: shots.gir.pct,
+        target: shotBenchmark.girPct,
+        polarity: 'higher',
+        tolerance: 2,
+        sample: shots.gir.eligible,
+        minSample: 6,
+      }),
+      dim: shots.gir.eligible === 0,
+    },
+  ];
 }
 
 function makePuttingVolumeRows(shots, shotBenchmark) {
@@ -520,6 +566,8 @@ function makePuttingVolumeRows(shots, shotBenchmark) {
       key: 'puttsPerRound',
       label: 'Putts / round',
       value: puttsPer18,
+      magnitude: puttsPer18,
+      barGroup: 'count',
       secondary: targetSecondary([
         sampleText(shots.putts.holes, 'holes'),
         `target ${formatBenchmarkNumber(shotBenchmark.puttsPerRound)} / 18 holes`,
@@ -538,6 +586,8 @@ function makePuttingVolumeRows(shots, shotBenchmark) {
       key: 'threePutts',
       label: '3-putts / round',
       value: threePuttsPer18,
+      magnitude: threePuttsPer18,
+      barGroup: 'count',
       secondary: targetSecondary([
         `${shots.putts.threePuttPlus} total`,
         // The value is normalized off logged holes to an 18-hole rate, so
@@ -568,6 +618,9 @@ function makePuttingTargetRows(puttingTarget) {
       label: `${bucket} m putts`,
       value: signed(row.sgPerPutt),
       raw: row.sgPerPutt,
+      // Same bucket-group |SG| normalization as the approach buckets.
+      magnitude: isNumber(row.sgPerPutt) ? row.sgPerPutt : null,
+      barGroup: 'sg',
       secondary: targetSecondary([
         `${formatNumber(row.avgPutts)} avg vs ${formatNumber(row.expectedPutts)} target`,
         `${formatPercent(row.threePuttRate)} 3-putt`,
@@ -630,12 +683,6 @@ function isNumber(value) {
 }
 
 function makeStyles(theme) {
-  const goodWash = theme.accent.light;
-  const badWash = theme.isDark ? 'rgba(248,113,113,0.14)' : '#fff1f2';
-  const goodBorder = theme.isDark ? 'rgba(79,174,138,0.28)' : '#c7ddd3';
-  const badBorder = theme.isDark ? 'rgba(248,113,113,0.24)' : '#f3c7cf';
-  const markerSize = 26;
-
   return StyleSheet.create({
     wrap: { gap: theme.spacing.lg },
     note: { ...theme.typography.caption, color: theme.text.muted, fontStyle: 'italic' },
@@ -738,85 +785,15 @@ function makeStyles(theme) {
       color: theme.text.primary,
       fontWeight: '800',
     },
-    dataRows: {
-      gap: 6,
-    },
-    dataRow: {
-      minHeight: 54,
-      flexDirection: 'row',
-      alignItems: 'center',
-      justifyContent: 'space-between',
-      gap: theme.spacing.md,
-      paddingVertical: theme.spacing.sm,
-      paddingHorizontal: theme.spacing.sm,
-      borderWidth: StyleSheet.hairlineWidth,
-      borderColor: theme.border.default,
-      borderRadius: theme.radius.md,
-      backgroundColor: theme.bg.card,
-    },
-    dataRowGood: {
-      backgroundColor: goodWash,
-      borderColor: goodBorder,
-    },
-    dataRowBad: {
-      backgroundColor: badWash,
-      borderColor: badBorder,
-    },
-    dataRowNeutral: {
-      backgroundColor: theme.bg.card,
-      borderColor: theme.border.default,
-    },
-    dataValuePill: {
-      flexShrink: 0,
-      minWidth: 58,
-      maxWidth: 136,
-      alignItems: 'center',
-      justifyContent: 'center',
-      paddingHorizontal: theme.spacing.sm,
-      paddingVertical: 4,
-      borderRadius: theme.radius.pill,
-    },
-    dataRowDim: {
-      opacity: 0.75,
-    },
-    dataLead: {
-      flex: 1,
-      minWidth: 0,
-      flexDirection: 'row',
-      alignItems: 'center',
-      gap: theme.spacing.sm,
-    },
-    dataMarker: {
-      width: markerSize,
-      height: markerSize,
-      borderRadius: markerSize / 2,
-      flexShrink: 0,
-      alignItems: 'center',
-      justifyContent: 'center',
-    },
-    dataCopy: {
-      flex: 1,
-      minWidth: 0,
-      gap: 2,
-    },
-    dataLabel: {
-      ...theme.typography.body,
-      color: theme.text.primary,
-      fontWeight: '700',
-    },
-    dataSecondary: {
-      ...theme.typography.caption,
-      color: theme.text.secondary,
-    },
-    dataValue: {
-      ...theme.typography.body,
-      flexShrink: 0,
-      maxWidth: 132,
-      textAlign: 'right',
-      fontWeight: '900',
-    },
-    dimText: {
+    // Small overline heading for the score-mix block (Clubhouse token:
+    // 9.5-10px, letterSpacing 1.2+, uppercase, muted).
+    mixOverline: {
+      fontSize: 10,
+      fontFamily: 'PlusJakartaSans-Bold',
+      letterSpacing: 1.2,
+      textTransform: 'uppercase',
       color: theme.text.muted,
+      marginBottom: 2,
     },
   });
 }

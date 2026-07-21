@@ -29,10 +29,12 @@ jest.mock('../../../theme/ThemeContext', () => ({
       bg: {
         primary: '#FFFFFF',
         secondary: '#F5F5F5',
+        card: '#FFFFFF',
       },
       text: {
         primary: '#000000',
         secondary: '#666666',
+        muted: '#888888',
         inverse: '#FFFFFF',
       },
       accent: {
@@ -80,6 +82,19 @@ describe('SGTrendCard', () => {
       { label: 'R2', value: 0.1 },
     ]);
   });
+  test('chips use the tab-pill pattern: filled accent when active, bordered card pill when not', () => {
+    const { StyleSheet } = require('react-native');
+    const r = render(<SGTrendCard strokesGained={{ perRound }} />);
+    const active = StyleSheet.flatten(r.getByLabelText('SG trend Total').props.style);
+    const idle = StyleSheet.flatten(r.getByLabelText('SG trend Putting').props.style);
+    expect(active.backgroundColor).toBe('#007AFF');
+    expect(active.borderColor).toBe('#007AFF');
+    expect(idle.backgroundColor).toBe('#FFFFFF');
+    expect(idle.borderColor).toBe('#E0E0E0');
+    expect(idle.borderWidth).toBe(1);
+    expect(idle.borderRadius).toBe(20);
+  });
+
   test('renders nothing with fewer than 2 sampled rounds', () => {
     const r = render(<SGTrendCard strokesGained={{ perRound: [perRound[0]] }} />);
     expect(r.toJSON()).toBeNull();

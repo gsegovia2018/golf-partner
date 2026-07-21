@@ -337,6 +337,34 @@ describe('My Stats tabs', () => {
     expect((await findAllByText('vs target hcp · 4 holes · target 3.9 · low sample')).length).toBeGreaterThan(0);
   });
 
+  test('ShotsTab renders the gross score mix bar and magnitude bars on detail rows', async () => {
+    const { findByText, getByTestId, queryByTestId } = render(wrap(
+      <ShotsTab stats={shotStats()} onInfo={() => {}} targetHandicap={14} onChangeTarget={() => {}} />
+    ));
+
+    // The Scoring card's mix is the horizontal ScoreMixBar fed by the GROSS
+    // distribution, under a small overline heading.
+    expect(await findByText('Score mix · gross')).toBeTruthy();
+    expect(getByTestId('scoremix-segment-birdie')).toBeTruthy();
+    expect(getByTestId('scoremix-segment-par')).toBeTruthy();
+    expect(getByTestId('scoremix-segment-double')).toBeTruthy();
+
+    // Detail rows are BreakdownRow magnitude bars: % rows on the absolute
+    // scale, counts per-block, bucket SG rows normalized within the bucket
+    // group. Fills sweep in for rows with real magnitude.
+    expect(getByTestId('shots-bar-fairways')).toBeTruthy();
+    expect(getByTestId('shots-bar-fairways-fill')).toBeTruthy();
+    expect(getByTestId('shots-bar-gir')).toBeTruthy();
+    expect(getByTestId('shots-bar-puttsPerRound')).toBeTruthy();
+    expect(getByTestId('shots-bar-par3AvgScore')).toBeTruthy();
+    expect(getByTestId('shots-bar-100-150')).toBeTruthy(); // approach bucket
+    expect(getByTestId('shots-bar-6+')).toBeTruthy(); // putting bucket
+
+    // No drive distance logged → dim row keeps the em-dash + EMPTY track.
+    expect(getByTestId('shots-bar-driveDistance')).toBeTruthy();
+    expect(queryByTestId('shots-bar-driveDistance-fill')).toBeNull();
+  });
+
   test('ShotsTab leaves scoring patterns out of the target-handicap view', async () => {
     const { queryByText } = render(wrap(
       <ShotsTab stats={shotStats()} onInfo={() => {}} targetHandicap={14} onChangeTarget={() => {}} />
