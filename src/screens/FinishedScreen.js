@@ -161,7 +161,7 @@ export default function FinishedScreen({ navigation }) {
       <ScrollView style={s.scroll} contentContainerStyle={s.content}>
         {!loading && finished.length === 0 && (
           <View style={s.emptyState}>
-            <Feather name="archive" size={48} color={theme.text.muted} />
+            <Feather name="archive" size={44} color={theme.text.muted} />
             <Text style={s.emptyTitle}>Nothing finished yet</Text>
             <Text style={s.emptySubtitle}>Completed games and tournaments will show up here.</Text>
           </View>

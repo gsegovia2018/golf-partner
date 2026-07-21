@@ -92,7 +92,7 @@ export default function CourseStatsScreen({ navigation, route }) {
       <ScreenContainer style={s.container} edges={['top', 'bottom']}>
         {Header}
         <View style={s.center}>
-          <Feather name="wifi-off" size={32} color={theme.text.muted} />
+          <Feather name="wifi-off" size={44} color={theme.text.muted} />
           <Text style={s.emptyText}>Could not load course stats.</Text>
           <PressableScale
             accessibilityRole="button"
@@ -111,7 +111,7 @@ export default function CourseStatsScreen({ navigation, route }) {
       <ScreenContainer style={s.container} edges={['top', 'bottom']}>
         {Header}
         <View style={s.center}>
-          <Feather name="map" size={32} color={theme.text.muted} />
+          <Feather name="map" size={44} color={theme.text.muted} />
           <Text style={s.emptyText}>No rounds at this course yet.</Text>
         </View>
       </ScreenContainer>

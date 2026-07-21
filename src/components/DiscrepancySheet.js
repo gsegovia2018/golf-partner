@@ -67,7 +67,7 @@ export default function DiscrepancySheet({
             onPress={() => step(strokes, -1)}
             accessibilityLabel={`Decrease ${label} strokes`}
           >
-            <Feather name="minus" size={20} color={theme.text.primary} />
+            <Feather name="minus" size={14} color={theme.text.primary} />
           </TouchableOpacity>
           <Text style={s.entryValue}>{value}</Text>
           <TouchableOpacity
@@ -75,7 +75,7 @@ export default function DiscrepancySheet({
             onPress={() => step(strokes, 1)}
             accessibilityLabel={`Increase ${label} strokes`}
           >
-            <Feather name="plus" size={20} color={theme.text.primary} />
+            <Feather name="plus" size={14} color={theme.text.primary} />
           </TouchableOpacity>
         </View>
       ) : (

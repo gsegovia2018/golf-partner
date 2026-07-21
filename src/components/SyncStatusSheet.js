@@ -1,8 +1,8 @@
 import React, { useEffect, useState, useCallback } from 'react';
 import { View, Text, TouchableOpacity, ScrollView, StyleSheet } from 'react-native';
-import { Feather } from '@expo/vector-icons';
 import { useTheme } from '../theme/ThemeContext';
 import BottomSheet from './BottomSheet';
+import IconButton from './ui/IconButton';
 import {
   subscribeSyncStatus,
   subscribeConflicts,
@@ -68,9 +68,7 @@ export default function SyncStatusSheet({ visible, onClose }) {
       <View style={s.handle} />
         <View style={s.header}>
           <Text style={s.title}>Sincronización</Text>
-          <TouchableOpacity onPress={onClose} hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}>
-            <Feather name="x" size={22} color={theme.text.muted} />
-          </TouchableOpacity>
+          <IconButton icon="x" onPress={onClose} hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }} />
         </View>
         <ScrollView style={s.scroll} contentContainerStyle={s.scrollContent}>
           <Text style={s.sectionTitle}>Estado</Text>

@@ -1507,7 +1507,7 @@ export default function ScorecardScreen({ navigation, route }) {
             Check your connection and try again.
           </Text>
           <TouchableOpacity style={s.statusRetryBtn} onPress={retryLoad} activeOpacity={0.8}>
-            <Feather name="rotate-ccw" size={15} color={theme.text.inverse} />
+            <Feather name="rotate-ccw" size={14} color={theme.text.inverse} />
             <Text style={s.statusRetryText}>Retry</Text>
           </TouchableOpacity>
         </View>
@@ -1565,7 +1565,7 @@ export default function ScorecardScreen({ navigation, route }) {
               accessibilityRole="button"
               accessibilityLabel="Edit round"
             >
-              <Feather name="edit-2" size={12} color={theme.accent.primary} style={{ marginRight: 4 }} />
+              <Feather name="edit-2" size={14} color={theme.accent.primary} style={{ marginRight: 4 }} />
               <Text style={s.editRoundBtnText}>Edit round</Text>
             </TouchableOpacity>
           )}

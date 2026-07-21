@@ -117,7 +117,7 @@ export default function CourseEditorScreen({ navigation, route }) {
           <View style={s.toolRow}>
             <Text style={s.toolLabel}>Stroke index</Text>
             <TouchableOpacity style={s.toolBtn} onPress={autoNumberSI} activeOpacity={0.7}>
-              <Feather name="hash" size={12} color={theme.accent.primary} style={{ marginRight: 4 }} />
+              <Feather name="hash" size={14} color={theme.accent.primary} style={{ marginRight: 4 }} />
               <Text style={s.toolBtnText}>Auto-number 1–18</Text>
             </TouchableOpacity>
           </View>
@@ -199,7 +199,7 @@ export default function CourseEditorScreen({ navigation, route }) {
               navigation.goBack();
             }}
           >
-            <Feather name="check" size={18} color={theme.isDark ? theme.accent.primary : theme.text.inverse} style={{ marginRight: 8 }} />
+            <Feather name="check" size={14} color={theme.isDark ? theme.accent.primary : theme.text.inverse} style={{ marginRight: 8 }} />
             <Text style={s.btnText}>Done</Text>
           </TouchableOpacity>
         </View>

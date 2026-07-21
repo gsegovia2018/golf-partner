@@ -126,7 +126,7 @@ export default function CoursesLibraryScreen({ navigation }) {
         </Text>
 
         <View style={s.searchRow}>
-          <Feather name="search" size={16} color={theme.text.muted} style={s.searchIcon} />
+          <Feather name="search" size={14} color={theme.text.muted} style={s.searchIcon} />
           <TextInput
             style={s.searchInput}
             placeholder="Search name, city or region"
@@ -139,9 +139,7 @@ export default function CoursesLibraryScreen({ navigation }) {
             autoCapitalize="none"
           />
           {query ? (
-            <TouchableOpacity onPress={() => setQuery('')} style={s.searchClear} activeOpacity={0.7}>
-              <Feather name="x" size={16} color={theme.text.muted} />
-            </TouchableOpacity>
+            <IconButton icon="x" onPress={() => setQuery('')} style={s.searchClear} accessibilityLabel="Clear search" />
           ) : null}
         </View>
 
@@ -168,7 +166,7 @@ export default function CoursesLibraryScreen({ navigation }) {
           : loadError
             ? (
               <View style={s.errorBox}>
-                <Feather name="wifi-off" size={20} color={theme.destructive} />
+                <Feather name="wifi-off" size={44} color={theme.destructive} />
                 <Text style={s.errorTitle}>Couldn't load courses</Text>
                 <Text style={s.errorMsg}>{loadError}</Text>
                 <TouchableOpacity style={s.retryBtn} onPress={load} activeOpacity={0.7}>
@@ -180,7 +178,7 @@ export default function CoursesLibraryScreen({ navigation }) {
             : courses.length === 0
             ? (
               <View style={s.emptyState}>
-                <Feather name="map" size={48} color={theme.text.muted} />
+                <Feather name="map" size={44} color={theme.text.muted} />
                 <Text style={s.emptyTitle}>No courses yet</Text>
                 <Text style={s.emptySubtitle}>Add golf courses to set up your rounds</Text>
               </View>
@@ -188,7 +186,7 @@ export default function CoursesLibraryScreen({ navigation }) {
             : filteredCourses.length === 0
             ? (
               <View style={s.emptyState}>
-                <Feather name="search" size={48} color={theme.text.muted} />
+                <Feather name="search" size={44} color={theme.text.muted} />
                 <Text style={s.emptyTitle}>No matches</Text>
                 <Text style={s.emptySubtitle}>No courses match "{query}"</Text>
               </View>

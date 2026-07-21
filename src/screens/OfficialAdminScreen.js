@@ -323,7 +323,7 @@ export default function OfficialAdminScreen({ route, navigation }) {
                               onPress={() => handleWithdraw(party, member)}
                               disabled={busy}
                             >
-                              <Feather name="user-x" size={12} color={theme.destructive} />
+                              <Feather name="user-x" size={14} color={theme.destructive} />
                               <Text style={s.miniBtnTextDanger}>Withdraw</Text>
                             </TouchableOpacity>
                           )}
@@ -392,7 +392,7 @@ export default function OfficialAdminScreen({ route, navigation }) {
                       onPress={() => handleForceFinalize(party)}
                       disabled={busy}
                     >
-                      <Feather name="lock" size={13} color={theme.accent.primary} style={{ marginRight: 6 }} />
+                      <Feather name="lock" size={14} color={theme.accent.primary} style={{ marginRight: 6 }} />
                       <Text style={s.finalizeBtnText}>Force finalize party</Text>
                     </TouchableOpacity>
                   )}

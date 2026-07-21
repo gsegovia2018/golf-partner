@@ -15,7 +15,7 @@ export default function RoundLayoutSelect({ club, layouts, value, onChange, onCh
   return (
     <View>
       <View style={s.clubRow}>
-        <Feather name="map-pin" size={15} color={theme.accent.primary} />
+        <Feather name="map-pin" size={14} color={theme.text.primary} />
         <Text style={s.clubName} numberOfLines={1}>{club.name}</Text>
         <TouchableOpacity onPress={onChangeClub} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
           <Text style={s.change}>Change</Text>

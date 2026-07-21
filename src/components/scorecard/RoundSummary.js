@@ -79,7 +79,7 @@ export const RoundSummary = React.memo(function RoundSummary({
                   {chip.name.split(' ')[0]}
                 </Text>
                 {chip.isWinner && (
-                  <Feather name="award" size={12} color={GOLD} />
+                  <Feather name="award" size={14} color={GOLD} />
                 )}
               </View>
               <Text style={s.summaryChipValue}>{chip.points}</Text>

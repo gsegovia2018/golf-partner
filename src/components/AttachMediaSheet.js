@@ -1,11 +1,11 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { View, Text, TouchableOpacity, TextInput, Image, StyleSheet } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import { Feather } from '@expo/vector-icons';
 import { VideoView, useVideoPlayer } from 'expo-video';
 import { useTheme } from '../theme/ThemeContext';
 import BottomSheet from './BottomSheet';
 import WheelPicker from './WheelPicker';
+import IconButton from './ui/IconButton';
 
 const UPLOADER_KEY = '@golf_uploader_label';
 
@@ -82,9 +82,7 @@ export default function AttachMediaSheet({
     <BottomSheet visible={visible} onClose={onCancel} sheetStyle={s.sheet}>
       <View style={s.header}>
         <Text style={s.title}>Add photo</Text>
-        <TouchableOpacity onPress={onCancel} accessibilityLabel="Cancel">
-          <Feather name="x" size={22} color={theme.text.muted} />
-        </TouchableOpacity>
+        <IconButton icon="x" onPress={onCancel} accessibilityLabel="Cancel" />
       </View>
 
       {asset.kind === 'photo' ? (

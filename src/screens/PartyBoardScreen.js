@@ -381,7 +381,7 @@ export default function PartyBoardScreen({ route, navigation }) {
                     onPress={() => setOpenMoveMenu(openMoveMenu === r.id ? null : r.id)}
                     disabled={busy}
                   >
-                    <Feather name="corner-up-right" size={13} color={theme.accent.primary} />
+                    <Feather name="corner-up-right" size={14} color={theme.accent.primary} />
                     <Text style={s.miniBtnText}>Move</Text>
                   </TouchableOpacity>
                 </View>
@@ -450,7 +450,7 @@ export default function PartyBoardScreen({ route, navigation }) {
                           }}
                           disabled={busy}
                         >
-                          <Feather name="edit-2" size={12} color={theme.accent.primary} />
+                          <Feather name="edit-2" size={14} color={theme.accent.primary} />
                           <Text style={s.miniBtnText}>Marker</Text>
                         </TouchableOpacity>
                         <TouchableOpacity
@@ -461,7 +461,7 @@ export default function PartyBoardScreen({ route, navigation }) {
                           }}
                           disabled={busy}
                         >
-                          <Feather name="corner-up-right" size={12} color={theme.accent.primary} />
+                          <Feather name="corner-up-right" size={14} color={theme.accent.primary} />
                           <Text style={s.miniBtnText}>Move</Text>
                         </TouchableOpacity>
                       </View>

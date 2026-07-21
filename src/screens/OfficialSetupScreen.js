@@ -304,7 +304,7 @@ export default function OfficialSetupScreen({ navigation, route }) {
               </View>
               <View style={s.actionRow}>
                 <TouchableOpacity style={s.actionBtn} onPress={() => handleShowLink(row)}>
-                  <Feather name="link" size={13} color={theme.accent.primary} style={{ marginRight: 4 }} />
+                  <Feather name="link" size={14} color={theme.accent.primary} style={{ marginRight: 4 }} />
                   <Text style={s.actionBtnText}>
                     {openLinkId === row.id ? 'Hide link' : 'Show link'}
                   </Text>
@@ -314,7 +314,7 @@ export default function OfficialSetupScreen({ navigation, route }) {
                   onPress={() => handleRegenerate(row.id)}
                   disabled={pendingRowId === row.id}
                 >
-                  <Feather name="refresh-cw" size={13} color={theme.accent.primary} style={{ marginRight: 4 }} />
+                  <Feather name="refresh-cw" size={14} color={theme.accent.primary} style={{ marginRight: 4 }} />
                   <Text style={s.actionBtnText}>Regenerate</Text>
                 </TouchableOpacity>
                 <TouchableOpacity
@@ -400,7 +400,7 @@ export default function OfficialSetupScreen({ navigation, route }) {
                   {(round.format ?? 'stableford')}  •  {(round.status ?? 'setup')}
                 </Text>
               </View>
-              <Feather name="chevron-right" size={18} color={theme.accent.primary} />
+              <Feather name="chevron-right" size={18} color={theme.text.muted} />
             </TouchableOpacity>
           ))}
           <TouchableOpacity

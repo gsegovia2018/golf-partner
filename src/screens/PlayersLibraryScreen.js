@@ -191,7 +191,7 @@ export default function PlayersLibraryScreen() {
           : loadError
             ? (
               <View style={s.errorBox}>
-                <Feather name="wifi-off" size={20} color={theme.destructive} />
+                <Feather name="wifi-off" size={44} color={theme.destructive} />
                 <Text style={s.errorTitle}>Couldn't load players</Text>
                 <Text style={s.errorMsg}>{loadError}</Text>
                 <TouchableOpacity style={s.retryBtn} onPress={load} activeOpacity={0.7}>
@@ -203,7 +203,7 @@ export default function PlayersLibraryScreen() {
             : players.length === 0
             ? (
               <View style={s.emptyState}>
-                <Feather name="users" size={48} color={theme.text.muted} />
+                <Feather name="users" size={44} color={theme.text.muted} />
                 <Text style={s.emptyTitle}>No players yet</Text>
                 <Text style={s.emptySubtitle}>Add players to use in your tournaments</Text>
               </View>

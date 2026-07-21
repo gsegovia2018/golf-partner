@@ -136,7 +136,7 @@ export default function GalleryScreen({ route, navigation }) {
     if (loadState === 'error') {
       return (
         <View style={s.stateBox}>
-          <Feather name="alert-triangle" size={32} color={theme.text.muted} />
+          <Feather name="alert-triangle" size={44} color={theme.text.muted} />
           <Text style={s.stateText}>Couldn't load this gallery.</Text>
           <TouchableOpacity style={s.retryBtn} onPress={loadTournament} activeOpacity={0.85}>
             <Feather name="refresh-cw" size={14} color={theme.text.inverse} />
@@ -171,7 +171,7 @@ export default function GalleryScreen({ route, navigation }) {
 
         {isFirstMemory ? (
           <View style={s.empty}>
-            <Feather name="camera" size={34} color={theme.text.muted} />
+            <Feather name="camera" size={44} color={theme.text.muted} />
             <Text style={s.emptyTitle}>No memories yet</Text>
             <Text style={s.emptyText}>
               Tap the + button below to add your first photo or video.
@@ -185,7 +185,7 @@ export default function GalleryScreen({ route, navigation }) {
           </View>
         ) : filtered.length === 0 ? (
           <View style={s.empty}>
-            <Feather name="image" size={32} color={theme.text.muted} />
+            <Feather name="image" size={44} color={theme.text.muted} />
             <Text style={s.emptyText}>No memories for this filter.</Text>
           </View>
         ) : (

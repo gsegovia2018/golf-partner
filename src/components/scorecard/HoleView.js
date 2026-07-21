@@ -349,7 +349,7 @@ export function HoleView({ round, roundIndex, players, scores, shotDetails, meId
               accessibilityRole="button"
               accessibilityLabel="Finish game"
             >
-              <Feather name="flag" size={15} color={theme.text.inverse} />
+              <Feather name="flag" size={14} color={theme.text.inverse} />
               <Text style={s.quickFinishBtnText}>
                 {finishBusy ? 'Finishing' : 'Finish'}
               </Text>

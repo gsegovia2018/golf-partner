@@ -30,7 +30,7 @@ export default function FormMetricBlock({ metric, series, color, formatValue, in
               accessibilityRole="button"
               accessibilityLabel={`What is ${metric.label}`}
             >
-              <Feather name="info" size={13} color={theme.text.muted} />
+              <Feather name="info" size={14} color={theme.text.muted} />
             </TouchableOpacity>
           ) : null}
         </View>

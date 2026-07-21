@@ -398,7 +398,7 @@ export default function MyStatsScreen({ navigation, route }) {
       <ScreenContainer style={s.container} edges={['top', 'bottom']}>
         {Header}
         <View style={s.center}>
-          <Feather name="wifi-off" size={32} color={theme.text.muted} />
+          <Feather name="wifi-off" size={44} color={theme.text.muted} />
           <Text style={s.emptyText}>Could not load your stats.</Text>
           <PressableScale
             style={s.retryBtn}
@@ -417,7 +417,7 @@ export default function MyStatsScreen({ navigation, route }) {
       <ScreenContainer style={s.container} edges={['top', 'bottom']}>
         {Header}
         <View style={s.center}>
-          <Feather name="bar-chart-2" size={32} color={theme.text.muted} />
+          <Feather name="bar-chart-2" size={44} color={theme.text.muted} />
           <Text style={s.emptyText}>Play and score a round to see your stats.</Text>
         </View>
       </ScreenContainer>
@@ -441,7 +441,7 @@ export default function MyStatsScreen({ navigation, route }) {
         {Header}
         {TabBar}
         <View style={s.center}>
-          <Feather name="filter" size={32} color={theme.text.muted} />
+          <Feather name="filter" size={44} color={theme.text.muted} />
           <Text style={s.emptyText}>No rounds selected.</Text>
           <PressableScale style={s.retryBtn} onPress={() => setSelectorOpen(true)}>
             <Text style={s.retryText}>Choose rounds</Text>

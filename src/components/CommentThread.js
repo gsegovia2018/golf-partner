@@ -62,7 +62,7 @@ function CommentRow({ comment, theme, s, onDelete }) {
           hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
           accessibilityLabel="Delete comment"
         >
-          <Feather name="trash-2" size={15} color={theme.text.muted} />
+          <Feather name="trash-2" size={14} color={theme.text.muted} />
         </TouchableOpacity>
       ) : null}
     </View>
@@ -152,7 +152,7 @@ export default function CommentThread({
         </View>
       ) : state === 'error' ? (
         <View style={s.centerBox}>
-          <Feather name="wifi-off" size={22} color={theme.text.muted} />
+          <Feather name="wifi-off" size={44} color={theme.text.muted} />
           <Text style={s.emptyText}>Couldn't load comments.</Text>
           <TouchableOpacity style={s.retryBtn} onPress={load} activeOpacity={0.7}>
             <Text style={s.retryBtnText}>Retry</Text>
@@ -160,7 +160,7 @@ export default function CommentThread({
         </View>
       ) : comments.length === 0 ? (
         <View style={s.centerBox}>
-          <Feather name="message-circle" size={22} color={theme.text.muted} />
+          <Feather name="message-circle" size={44} color={theme.text.muted} />
           <Text style={s.emptyText}>No comments yet — be the first.</Text>
         </View>
       ) : (

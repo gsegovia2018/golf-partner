@@ -245,7 +245,7 @@ export default function OfficialCreateScreen({ navigation }) {
 
       {roster.length === 0 && (
         <View style={s.emptyHint}>
-          <Feather name="users" size={16} color={theme.text.muted} style={{ marginRight: 8 }} />
+          <Feather name="users" size={14} color={theme.text.muted} style={{ marginRight: 8 }} />
           <Text style={s.emptyHintText}>Add at least 1 player to continue.</Text>
         </View>
       )}
@@ -283,7 +283,7 @@ export default function OfficialCreateScreen({ navigation }) {
         />
       </View>
       <TouchableOpacity style={s.pickBtn} onPress={handleAddRosterEntry}>
-        <Feather name="plus" size={16} color={theme.accent.primary} style={{ marginRight: 6 }} />
+        <Feather name="plus" size={14} color={theme.accent.primary} style={{ marginRight: 6 }} />
         <Text style={s.pickBtnText}>Add Player</Text>
       </TouchableOpacity>
     </>
@@ -340,7 +340,7 @@ export default function OfficialCreateScreen({ navigation }) {
         );
       })}
       <TouchableOpacity style={s.addRoundBtn} onPress={addRound}>
-        <Feather name="plus-circle" size={16} color={theme.accent.primary} style={{ marginRight: 6 }} />
+        <Feather name="plus-circle" size={14} color={theme.accent.primary} style={{ marginRight: 6 }} />
         <Text style={s.addRoundBtnText}>Add Round</Text>
       </TouchableOpacity>
     </>
@@ -362,7 +362,7 @@ export default function OfficialCreateScreen({ navigation }) {
             <Text style={[s.formatRowText, selected && s.formatRowTextSelected]}>
               {opt.label}
             </Text>
-            {selected && <Feather name="check" size={18} color={theme.accent.primary} />}
+            {selected && <Feather name="check" size={14} color={theme.accent.primary} />}
           </TouchableOpacity>
         );
       })}
@@ -403,37 +403,37 @@ export default function OfficialCreateScreen({ navigation }) {
             style={[s.reviewRow, s.reviewRowDivider]}
             onPress={() => goToStep('roster')}
           >
-            <Feather name="users" size={16} color={theme.accent.primary} style={s.reviewRowIcon} />
+            <Feather name="users" size={14} color={theme.text.primary} style={s.reviewRowIcon} />
             <View style={{ flex: 1 }}>
               <Text style={s.reviewRowTitle}>Players</Text>
               <Text style={s.reviewRowSub}>
                 {roster.length} golfer{roster.length === 1 ? '' : 's'}
               </Text>
             </View>
-            <Feather name="chevron-right" size={18} color={theme.accent.primary} />
+            <Feather name="chevron-right" size={18} color={theme.text.muted} />
           </TouchableOpacity>
 
           <TouchableOpacity
             style={[s.reviewRow, s.reviewRowDivider]}
             onPress={() => goToStep('rounds')}
           >
-            <Feather name="map-pin" size={16} color={theme.accent.primary} style={s.reviewRowIcon} />
+            <Feather name="map-pin" size={14} color={theme.text.primary} style={s.reviewRowIcon} />
             <View style={{ flex: 1 }}>
               <Text style={s.reviewRowTitle}>Rounds</Text>
               <Text style={s.reviewRowSub}>
                 {rounds.length} round{rounds.length === 1 ? '' : 's'}
               </Text>
             </View>
-            <Feather name="chevron-right" size={18} color={theme.accent.primary} />
+            <Feather name="chevron-right" size={18} color={theme.text.muted} />
           </TouchableOpacity>
 
           <TouchableOpacity style={s.reviewRow} onPress={() => goToStep('format')}>
-            <Feather name="target" size={16} color={theme.accent.primary} style={s.reviewRowIcon} />
+            <Feather name="target" size={14} color={theme.text.primary} style={s.reviewRowIcon} />
             <View style={{ flex: 1 }}>
               <Text style={s.reviewRowTitle}>Format</Text>
               <Text style={s.reviewRowSub}>{formatLabel}</Text>
             </View>
-            <Feather name="chevron-right" size={18} color={theme.accent.primary} />
+            <Feather name="chevron-right" size={18} color={theme.text.muted} />
           </TouchableOpacity>
         </View>
 

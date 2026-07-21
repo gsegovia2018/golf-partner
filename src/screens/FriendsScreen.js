@@ -208,7 +208,7 @@ export default function FriendsScreen({ navigation }) {
     const busy = busyId === person.userId;
     if (busy) return <ActivityIndicator color={theme.accent.primary} />;
     if (rel === 'friends') {
-      return <Feather name="check-circle" size={20} color={theme.accent.primary} />;
+      return <Feather name="check-circle" size={14} color={theme.accent.primary} />;
     }
     if (rel === 'outgoing') return <Text style={s.pendingTag}>Requested</Text>;
     if (rel === 'incoming') {
@@ -257,9 +257,7 @@ export default function FriendsScreen({ navigation }) {
             autoCorrect={false}
           />
           {query ? (
-            <TouchableOpacity onPress={() => onChangeQuery('')}>
-              <Feather name="x" size={16} color={theme.text.muted} />
-            </TouchableOpacity>
+            <IconButton icon="x" onPress={() => onChangeQuery('')} />
           ) : null}
         </View>
 
@@ -291,9 +289,7 @@ export default function FriendsScreen({ navigation }) {
                       <TouchableOpacity style={s.primaryBtn} onPress={() => onAccept(req)}>
                         <Text style={s.primaryBtnText}>Accept</Text>
                       </TouchableOpacity>
-                      <TouchableOpacity style={s.ghostBtn} onPress={() => onDecline(req)}>
-                        <Feather name="x" size={16} color={theme.text.muted} />
-                      </TouchableOpacity>
+                      <IconButton icon="x" style={s.ghostBtn} onPress={() => onDecline(req)} />
                     </View>
                   )
                 )))}
@@ -320,7 +316,7 @@ export default function FriendsScreen({ navigation }) {
             </Text>
             {friends.length === 0 ? (
               <View style={s.emptyState}>
-                <Feather name="users" size={42} color={theme.text.muted} />
+                <Feather name="users" size={44} color={theme.text.muted} />
                 <Text style={s.emptyTitle}>No friends yet</Text>
                 <Text style={s.emptySub}>
                   Search for golfers above to send a friend request.
@@ -332,9 +328,7 @@ export default function FriendsScreen({ navigation }) {
                 (busyId === p.userId ? (
                   <ActivityIndicator color={theme.accent.primary} />
                 ) : (
-                  <TouchableOpacity style={s.ghostBtn} onPress={() => onRemove(p)}>
-                    <Feather name="user-minus" size={16} color={theme.destructive} />
-                  </TouchableOpacity>
+                  <IconButton icon="user-minus" color={theme.destructive} style={s.ghostBtn} onPress={() => onRemove(p)} />
                 )),
                 () => setProfileFriend(p),
               ))

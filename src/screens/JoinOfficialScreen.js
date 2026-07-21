@@ -134,7 +134,7 @@ export default function JoinOfficialScreen({ navigation, route }) {
         </View>
         <ScrollView style={s.container} contentContainerStyle={s.content}>
           <View style={s.card}>
-            <Feather name="alert-circle" size={28} color={theme.destructive} style={{ marginBottom: 10 }} />
+            <Feather name="alert-circle" size={44} color={theme.destructive} style={{ marginBottom: 10 }} />
             <Text style={s.errorTitle}>This invite link is not valid.</Text>
             <Text style={s.hint}>
               Paste your invite link or token below and try again.
@@ -174,14 +174,14 @@ export default function JoinOfficialScreen({ navigation, route }) {
 
       <ScrollView style={s.container} contentContainerStyle={s.content}>
         <View style={s.card}>
-          <Feather name="check-circle" size={28} color={theme.accent.primary} style={{ marginBottom: 10 }} />
+          <Feather name="check-circle" size={44} color={theme.accent.primary} style={{ marginBottom: 10 }} />
           <Text style={s.confirmTitle}>You're in as {player.display_name}</Text>
           {!!tournamentName && (
             <Text style={s.confirmSub}>{tournamentName}</Text>
           )}
           {player.withdrawn && (
             <View style={s.withdrawnNote}>
-              <Feather name="user-x" size={13} color={theme.destructive} style={{ marginRight: 6 }} />
+              <Feather name="user-x" size={14} color={theme.destructive} style={{ marginRight: 6 }} />
               <Text style={s.withdrawnText}>
                 You have been withdrawn from this tournament by the admin.
               </Text>

@@ -144,7 +144,7 @@ export default function CoursePickerScreen({ navigation, route }) {
           {isFavorite ? (
             <FontAwesome name="star" size={18} color={theme.accent.primary} />
           ) : (
-            <Feather name="star" size={18} color={theme.text.muted} />
+            <Feather name="star" size={14} color={theme.text.muted} />
           )}
         </TouchableOpacity>
         {picked
@@ -325,9 +325,7 @@ export default function CoursePickerScreen({ navigation, route }) {
             autoCapitalize="none"
           />
           {query ? (
-            <TouchableOpacity onPress={() => setQuery('')} style={s.searchClear} activeOpacity={0.7}>
-              <Feather name="x" size={16} color={theme.text.muted} />
-            </TouchableOpacity>
+            <IconButton icon="x" onPress={() => setQuery('')} style={s.searchClear} />
           ) : null}
         </View>
 
@@ -343,7 +341,7 @@ export default function CoursePickerScreen({ navigation, route }) {
             onChangeText={setNewName}
           />
           <TouchableOpacity style={s.addBtn} onPress={() => addAndSelect()} disabled={saving || !newName.trim() || usingCachedData}>
-            <Feather name="plus" size={18} color={theme.isDark ? theme.accent.primary : theme.text.inverse} />
+            <Feather name="plus" size={14} color={theme.isDark ? theme.accent.primary : theme.text.inverse} />
             <Text style={s.addBtnText}>Add</Text>
           </TouchableOpacity>
         </View>
@@ -353,7 +351,7 @@ export default function CoursePickerScreen({ navigation, route }) {
           <ActivityIndicator color={theme.accent.primary} style={{ marginTop: 20 }} />
         ) : loadError ? (
           <View style={s.errorBox}>
-            <Feather name="wifi-off" size={20} color={theme.destructive} />
+            <Feather name="wifi-off" size={44} color={theme.destructive} />
             <Text style={s.errorTitle}>Couldn't load courses</Text>
             <Text style={s.errorMsg}>{loadError}</Text>
             <TouchableOpacity

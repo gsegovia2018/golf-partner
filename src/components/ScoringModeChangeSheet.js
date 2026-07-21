@@ -52,7 +52,7 @@ export default function ScoringModeChangeSheet({
                 <Text style={s.rowSubtitle}>{mode.subtitle}</Text>
               </View>
               {isSelected ? (
-                <Feather name="check" size={20} color={theme.accent.primary} />
+                <Feather name="check" size={14} color={theme.accent.primary} />
               ) : null}
             </TouchableOpacity>
           );

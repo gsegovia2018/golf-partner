@@ -75,7 +75,7 @@ export default function NotificationsScreen({ navigation }) {
         </View>
       ) : items.length === 0 ? (
         <View style={s.center}>
-          <Feather name="bell" size={32} color={theme.text.muted} />
+          <Feather name="bell" size={44} color={theme.text.muted} />
           <Text style={s.emptyText}>No notifications yet</Text>
         </View>
       ) : (
@@ -91,7 +91,7 @@ export default function NotificationsScreen({ navigation }) {
                 activeOpacity={0.7}
               >
                 <View style={s.iconWrap}>
-                  <Feather name={icon} size={18} color={theme.accent.primary} />
+                  <Feather name={icon} size={14} color={theme.text.primary} />
                 </View>
                 <View style={s.rowBody}>
                   <Text style={s.rowTitle}>{title}</Text>

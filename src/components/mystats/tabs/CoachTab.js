@@ -47,7 +47,7 @@ function TargetBenchmarkRow({ targetHandicap, onChangeTarget }) {
 
   return (
     <View style={s.targetRow}>
-      <Feather name="crosshair" size={13} color={theme.text.secondary} />
+      <Feather name="crosshair" size={14} color={theme.text.secondary} />
       <Text style={s.targetText}>{targetBenchmarkCopy(targetHandicap)}</Text>
       {onChangeTarget ? (
         <PressableScale
@@ -56,7 +56,7 @@ function TargetBenchmarkRow({ targetHandicap, onChangeTarget }) {
           accessibilityRole="button"
           accessibilityLabel="Change target handicap"
         >
-          <Feather name="edit-2" size={13} color={theme.text.secondary} />
+          <Feather name="edit-2" size={14} color={theme.text.secondary} />
         </PressableScale>
       ) : null}
     </View>

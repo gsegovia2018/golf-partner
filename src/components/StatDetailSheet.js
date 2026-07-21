@@ -1,5 +1,5 @@
 import React, { useRef, useState } from 'react';
-import { View, Text, TouchableOpacity, ScrollView, StyleSheet, Platform, useWindowDimensions } from 'react-native';
+import { View, Text, ScrollView, StyleSheet, Platform, useWindowDimensions } from 'react-native';
 import { Feather } from '@expo/vector-icons';
 import { captureRef } from 'react-native-view-shot';
 import * as Sharing from 'expo-sharing';
@@ -7,6 +7,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useTheme } from '../theme/ThemeContext';
 import { semantic } from '../theme/tokens';
 import BottomSheet from './BottomSheet';
+import IconButton from './ui/IconButton';
 
 // Captures a branded off-screen card and opens the native share sheet (or
 // triggers a download on web). Reused by the highlight cards too — see
@@ -107,18 +108,15 @@ export default function StatDetailSheet({ visible, onClose, title, subtitle, exp
           {subtitle ? <Text style={s.subtitle}>{subtitle}</Text> : null}
         </View>
         {canShare ? (
-          <TouchableOpacity
+          <IconButton
+            icon="share-2"
             onPress={onShare}
             disabled={sharing}
             hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
             style={[s.shareBtn, sharing && { opacity: 0.4 }]}
-          >
-            <Feather name="share-2" size={18} color={theme.accent.primary} />
-          </TouchableOpacity>
+          />
         ) : null}
-        <TouchableOpacity onPress={onClose} hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}>
-          <Feather name="x" size={22} color={theme.text.muted} />
-        </TouchableOpacity>
+        <IconButton icon="x" onPress={onClose} hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }} />
       </View>
       <ScrollView style={s.scroll} contentContainerStyle={s.scrollContent}>
         {explainer ? (

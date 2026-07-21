@@ -15,7 +15,7 @@ export default function PlaySmarterCard({ tips, onInfo }) {
       {tips.map((tip, index) => (
         <View key={tip.id} style={[s.row, index === 0 && s.rowFirst]}>
           <View style={s.iconWrap}>
-            <Feather name="map" size={15} color={theme.accent.primary} />
+            <Feather name="map" size={14} color={theme.accent.primary} />
           </View>
           <View style={s.copy}>
             <Text style={s.title}>{tip.title}</Text>

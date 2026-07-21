@@ -754,7 +754,7 @@ export default function SetupScreen({ navigation, route }) {
       })}
       {!isGame && (
         <TouchableOpacity style={s.addRoundBtn} onPress={addRound}>
-          <Feather name="plus-circle" size={16} color={theme.accent.primary} style={{ marginRight: 6 }} />
+          <Feather name="plus-circle" size={14} color={theme.accent.primary} style={{ marginRight: 6 }} />
           <Text style={s.addRoundBtnText}>Add Round</Text>
         </TouchableOpacity>
       )}
@@ -885,24 +885,24 @@ export default function SetupScreen({ navigation, route }) {
             style={[s.reviewRow, s.reviewRowDivider]}
             onPress={() => goToStep('players')}
           >
-            <Feather name="users" size={16} color={theme.accent.primary} style={s.reviewRowIcon} />
+            <Feather name="users" size={14} color={theme.text.primary} style={s.reviewRowIcon} />
             <View style={{ flex: 1 }}>
               <Text style={s.reviewRowTitle}>Players</Text>
               <Text style={s.reviewRowSub}>{playerSummary}</Text>
             </View>
-            <Feather name="chevron-right" size={18} color={theme.accent.primary} />
+            <Feather name="chevron-right" size={18} color={theme.text.muted} />
           </TouchableOpacity>
 
           <TouchableOpacity
             style={[s.reviewRow, s.reviewRowDivider]}
             onPress={() => goToStep(isGame ? 'course' : 'rounds')}
           >
-            <Feather name="map-pin" size={16} color={theme.accent.primary} style={s.reviewRowIcon} />
+            <Feather name="map-pin" size={14} color={theme.text.primary} style={s.reviewRowIcon} />
             <View style={{ flex: 1 }}>
               <Text style={s.reviewRowTitle}>{isGame ? 'Course' : 'Rounds'}</Text>
               <Text style={s.reviewRowSub}>{courseSummary}</Text>
             </View>
-            <Feather name="chevron-right" size={18} color={theme.accent.primary} />
+            <Feather name="chevron-right" size={18} color={theme.text.muted} />
           </TouchableOpacity>
 
           <TouchableOpacity
@@ -910,13 +910,13 @@ export default function SetupScreen({ navigation, route }) {
             onPress={() => goToStep('scoring')}
             disabled={!hasScoringStep}
           >
-            <Feather name="target" size={16} color={theme.accent.primary} style={s.reviewRowIcon} />
+            <Feather name="target" size={14} color={theme.text.primary} style={s.reviewRowIcon} />
             <View style={{ flex: 1 }}>
               <Text style={s.reviewRowTitle}>Scoring</Text>
               <Text style={s.reviewRowSub}>{scoringLabel}</Text>
             </View>
             {hasScoringStep && (
-              <Feather name="chevron-right" size={18} color={theme.accent.primary} />
+              <Feather name="chevron-right" size={18} color={theme.text.muted} />
             )}
           </TouchableOpacity>
 
@@ -925,14 +925,14 @@ export default function SetupScreen({ navigation, route }) {
               style={s.reviewRow}
               onPress={() => goToStep('teams')}
             >
-              <Feather name="users" size={16} color={theme.accent.primary} style={s.reviewRowIcon} />
+              <Feather name="users" size={14} color={theme.text.primary} style={s.reviewRowIcon} />
               <View style={{ flex: 1 }}>
                 <Text style={s.reviewRowTitle}>Teams</Text>
                 <Text style={s.reviewRowSub}>
                   {settings.fixedTeams ? 'Same teams every round' : 'Random each round'}
                 </Text>
               </View>
-              <Feather name="chevron-right" size={18} color={theme.accent.primary} />
+              <Feather name="chevron-right" size={18} color={theme.text.muted} />
             </TouchableOpacity>
           )}
         </View>

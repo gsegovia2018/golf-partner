@@ -167,7 +167,7 @@ export default function RoundSummaryScreen({ navigation, route }) {
         <View style={s.center}><ActivityIndicator color={theme.accent.primary} /></View>
       ) : !round ? (
         <View style={s.center}>
-          <Feather name="alert-circle" size={40} color={theme.text.muted} />
+          <Feather name="alert-circle" size={44} color={theme.text.muted} />
           <Text style={s.missingText}>This round is no longer available.</Text>
         </View>
       ) : (
@@ -265,7 +265,7 @@ export default function RoundSummaryScreen({ navigation, route }) {
               onPress={openInScorecard}
               activeOpacity={0.85}
             >
-              <Feather name="edit-3" size={15} color={theme.text.inverse} />
+              <Feather name="edit-3" size={14} color={theme.text.inverse} />
               <Text style={s.openBtnText}>Open in scorecard</Text>
             </TouchableOpacity>
           )}

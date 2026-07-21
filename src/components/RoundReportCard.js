@@ -59,7 +59,7 @@ export default function RoundReportCard({ card, rounds, selectedKey, onSelect, o
   if (!card) {
     return (
       <View style={s.empty}>
-        <Feather name="clipboard" size={28} color={theme.text.muted} />
+        <Feather name="clipboard" size={44} color={theme.text.muted} />
         <Text style={s.emptyText}>No round selected.</Text>
       </View>
     );

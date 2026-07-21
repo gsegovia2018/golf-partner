@@ -110,7 +110,7 @@ export default function JoinTournamentScreen({ navigation, route }) {
               ? <ActivityIndicator color={theme.isDark ? theme.accent.primary : theme.text.inverse} />
               : (
                 <>
-                  <Feather name="log-in" size={18} color={theme.isDark ? theme.accent.primary : theme.text.inverse} />
+                  <Feather name="log-in" size={14} color={theme.isDark ? theme.accent.primary : theme.text.inverse} />
                   <Text style={s.btnText}>Join</Text>
                 </>
               )}

@@ -36,7 +36,7 @@ function ShotCounterRow({ label, value, onStep, canInc = true, theme, s, explain
           accessibilityLabel={`Decrease ${label}`}
           accessibilityState={{ disabled: !canDec }}
         >
-          <Feather name="minus" size={18} color={canDec ? theme.text.primary : theme.text.muted} />
+          <Feather name="minus" size={14} color={canDec ? theme.text.primary : theme.text.muted} />
         </TouchableOpacity>
         <Text style={s.shotCounterValue}>{value == null ? '–' : value}</Text>
         <TouchableOpacity
@@ -47,7 +47,7 @@ function ShotCounterRow({ label, value, onStep, canInc = true, theme, s, explain
           accessibilityLabel={`Increase ${label}`}
           accessibilityState={{ disabled: !canInc }}
         >
-          <Feather name="plus" size={18} color={canInc ? theme.text.primary : theme.text.muted} />
+          <Feather name="plus" size={14} color={canInc ? theme.text.primary : theme.text.muted} />
         </TouchableOpacity>
       </View>
     </View>

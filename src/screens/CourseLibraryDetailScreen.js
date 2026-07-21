@@ -155,7 +155,7 @@ export default function CourseLibraryDetailScreen({ navigation, route }) {
     return (
       <ScreenContainer style={s.centered} edges={['top', 'bottom']}>
         <View style={s.errorBox}>
-          <Feather name="wifi-off" size={22} color={theme.destructive} />
+          <Feather name="wifi-off" size={44} color={theme.destructive} />
           <Text style={s.errorTitle}>Couldn't load course</Text>
           <Text style={s.errorMsg}>{loadError}</Text>
           <TouchableOpacity
@@ -275,7 +275,7 @@ export default function CourseLibraryDetailScreen({ navigation, route }) {
                   activeOpacity={0.7}
                   accessibilityLabel="Download offline map"
                 >
-                  <Feather name="download" size={13} color={theme.isDark ? theme.accent.primary : theme.text.inverse} style={{ marginRight: 6 }} />
+                  <Feather name="download" size={14} color={theme.isDark ? theme.accent.primary : theme.text.inverse} style={{ marginRight: 6 }} />
                   <Text style={s.offlineMapDownloadBtnText}>{downloadLabel}</Text>
                 </TouchableOpacity>
                 <TouchableOpacity
@@ -297,7 +297,7 @@ export default function CourseLibraryDetailScreen({ navigation, route }) {
           disabled={saving || !canSave}
           activeOpacity={0.7}
         >
-          <Feather name="check" size={18} color={theme.isDark ? theme.accent.primary : theme.text.inverse} style={{ marginRight: 8 }} />
+          <Feather name="check" size={14} color={theme.isDark ? theme.accent.primary : theme.text.inverse} style={{ marginRight: 8 }} />
           <Text style={s.saveBtnText}>{saving ? 'Saving...' : 'Save course'}</Text>
         </TouchableOpacity>
       </ScrollView>

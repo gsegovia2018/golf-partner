@@ -566,7 +566,7 @@ export default function PlayersScreen({ navigation, route }) {
         <View style={s.loadingWrap}><ActivityIndicator color={theme.accent.primary} /></View>
       ) : loadError ? (
         <View style={s.errorBox}>
-          <Feather name="wifi-off" size={22} color={theme.destructive} />
+          <Feather name="wifi-off" size={44} color={theme.destructive} />
           <Text style={s.errorTitle}>Couldn't load players</Text>
           <Text style={s.errorMsg}>{loadError}</Text>
           <TouchableOpacity style={s.retryBtn} onPress={load} activeOpacity={0.7}>
@@ -720,7 +720,7 @@ export default function PlayersScreen({ navigation, route }) {
             <TouchableOpacity style={s.inviteBtn} onPress={handleInvite} disabled={inviting} activeOpacity={0.7}>
               {inviting
                 ? <ActivityIndicator size="small" color={theme.accent.primary} />
-                : <Feather name="user-plus" size={16} color={theme.accent.primary} />}
+                : <Feather name="user-plus" size={14} color={theme.accent.primary} />}
               <Text style={s.inviteBtnText}>Invite people</Text>
             </TouchableOpacity>
           )}
@@ -750,7 +750,7 @@ export default function PlayersScreen({ navigation, route }) {
             <TouchableOpacity style={s.leaveBtn} onPress={leaveTournament} disabled={leaving} activeOpacity={0.7}>
               {leaving
                 ? <ActivityIndicator size="small" color={theme.destructive} />
-                : <Feather name="log-out" size={16} color={theme.destructive} />}
+                : <Feather name="log-out" size={14} color={theme.destructive} />}
               <Text style={s.leaveBtnText}>Leave tournament</Text>
             </TouchableOpacity>
           )}

@@ -290,7 +290,7 @@ export default function RoundTeeAssignments({ round, players = [], onChange, the
       {anyManual && (
         <TouchableOpacity style={s.resetBtn} onPress={resetAllToAuto} activeOpacity={0.7}
           accessibilityRole="button" accessibilityLabel="Reset all handicaps to auto">
-          <Feather name="refresh-cw" size={13} color={theme.accent.primary} style={{ marginRight: 6 }} />
+          <Feather name="refresh-cw" size={14} color={theme.accent.primary} style={{ marginRight: 6 }} />
           <Text style={s.resetBtnText}>Reset all to auto</Text>
         </TouchableOpacity>
       )}
@@ -423,7 +423,7 @@ export default function RoundTeeAssignments({ round, players = [], onChange, the
                     accessibilityRole="button"
                     accessibilityLabel={`Decrease ${p.name} handicap`}
                   >
-                    <Feather name="minus" size={18} color={theme.accent.primary} />
+                    <Feather name="minus" size={14} color={theme.accent.primary} />
                   </TouchableOpacity>
                   {editing ? (
                     <TextInput
@@ -448,7 +448,7 @@ export default function RoundTeeAssignments({ round, players = [], onChange, the
                       accessibilityLabel={`Edit ${p.name} handicap, currently ${valueStr || '0'}`}
                     >
                       <Text style={s.stepValue}>{valueStr || '0'}</Text>
-                      <Feather name="edit-2" size={12} color={theme.text.muted} style={{ marginLeft: 6 }} />
+                      <Feather name="edit-2" size={14} color={theme.text.muted} style={{ marginLeft: 6 }} />
                     </TouchableOpacity>
                   )}
                   <TouchableOpacity
@@ -458,7 +458,7 @@ export default function RoundTeeAssignments({ round, players = [], onChange, the
                     accessibilityRole="button"
                     accessibilityLabel={`Increase ${p.name} handicap`}
                   >
-                    <Feather name="plus" size={18} color={theme.accent.primary} />
+                    <Feather name="plus" size={14} color={theme.accent.primary} />
                   </TouchableOpacity>
                 </View>
               </View>

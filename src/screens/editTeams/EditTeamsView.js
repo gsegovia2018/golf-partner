@@ -124,10 +124,10 @@ export default function EditTeamsView({
               theme={theme}
               trailing={
                 armed
-                  ? <Feather name="move" size={18} color={theme.accent.primary} />
+                  ? <Feather name="move" size={14} color={theme.accent.primary} />
                   : otherArmed
-                    ? <View style={s.swapHere}><Feather name="repeat" size={13} color={theme.accent.primary} /></View>
-                    : <Feather name="repeat" size={16} color={theme.text.muted} style={{ opacity: 0.45 }} />
+                    ? <View style={s.swapHere}><Feather name="repeat" size={14} color={theme.accent.primary} /></View>
+                    : <Feather name="repeat" size={14} color={theme.text.muted} style={{ opacity: 0.45 }} />
               }
             />
           );
@@ -177,7 +177,7 @@ export default function EditTeamsView({
               trailing={
                 <View style={s.sendSolo}>
                   <Text style={s.sendSoloText}>Solo</Text>
-                  <Feather name="arrow-up-right" size={13} color={theme.text.muted} />
+                  <Feather name="arrow-up-right" size={14} color={theme.text.muted} />
                 </View>
               }
             />
@@ -224,7 +224,7 @@ export default function EditTeamsView({
         )}
 
         <TouchableOpacity style={s.shuffleBtn} onPress={onShuffle} activeOpacity={0.7}>
-          <Feather name="shuffle" size={15} color={theme.accent.primary} />
+          <Feather name="shuffle" size={14} color={theme.accent.primary} />
           <Text style={s.shuffleBtnText}>
             {isThreeVsOne ? 'Shuffle — pick a random solo' : 'Shuffle teams'}
           </Text>
@@ -269,7 +269,7 @@ export default function EditTeamsView({
           disabled={saving}
           activeOpacity={0.8}
         >
-          <Feather name="check" size={18} color={theme.isDark ? theme.accent.primary : theme.text.inverse} />
+          <Feather name="check" size={14} color={theme.isDark ? theme.accent.primary : theme.text.inverse} />
           <Text style={s.saveBtnText}>{saving ? 'Saving…' : 'Save Teams'}</Text>
         </TouchableOpacity>
       </View>

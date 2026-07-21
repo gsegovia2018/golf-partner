@@ -274,7 +274,7 @@ export default function ProfileScreen({ navigation, route }) {
               )}
               {!uploadingAvatar && (
                 <View style={s.avatarEditBadge}>
-                  <Feather name="camera" size={12} color="#fff" />
+                  <Feather name="camera" size={14} color="#fff" />
                 </View>
               )}
             </TouchableOpacity>
@@ -381,7 +381,7 @@ export default function ProfileScreen({ navigation, route }) {
             onPress={() => navigation.navigate('Settings')}
             activeOpacity={0.7}
           >
-            <Feather name="settings" size={18} color={theme.accent.primary} />
+            <Feather name="settings" size={14} color={theme.text.muted} />
             <Text style={s.linkRowText}>Settings</Text>
             <Feather name="chevron-right" size={18} color={theme.text.muted} />
           </TouchableOpacity>
@@ -393,7 +393,7 @@ export default function ProfileScreen({ navigation, route }) {
             onPress={() => navigation.navigate('Friends')}
             activeOpacity={0.7}
           >
-            <Feather name="users" size={18} color={theme.accent.primary} />
+            <Feather name="users" size={14} color={theme.text.muted} />
             <Text style={s.linkRowText}>Friends</Text>
             <Feather name="chevron-right" size={18} color={theme.text.muted} />
           </TouchableOpacity>

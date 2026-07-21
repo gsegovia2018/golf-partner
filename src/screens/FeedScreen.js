@@ -147,7 +147,7 @@ function ReactionBar({
         activeScale={0.97}
         accessibilityLabel="Comments"
       >
-        <Feather name="message-circle" size={13} color={theme.text.muted} />
+        <Feather name="message-circle" size={14} color={theme.text.muted} />
         {commentCount > 0 ? (
           <Text style={s.reactionCount}>{commentCount}</Text>
         ) : null}
@@ -159,7 +159,7 @@ function ReactionBar({
           activeScale={0.97}
           accessibilityLabel="Add photo"
         >
-          <Feather name="camera" size={13} color={theme.text.muted} />
+          <Feather name="camera" size={14} color={theme.text.muted} />
           <Text style={s.reactionActionText}>Add photo</Text>
         </PressableScale>
       ) : null}
@@ -184,7 +184,7 @@ function ReactionBar({
             onPress={submitEmoji}
             accessibilityLabel="Send reaction"
           >
-            <Feather name="send" size={13} color={theme.text.inverse} />
+            <Feather name="send" size={14} color={theme.text.inverse} />
           </TouchableOpacity>
         </View>
       ) : null}
@@ -603,13 +603,13 @@ export default function FeedScreen({ navigation }) {
     if (status === 'error') {
       return (
         <View style={s.emptyState}>
-          <Feather name="cloud-off" size={46} color={theme.text.muted} />
+          <Feather name="cloud-off" size={44} color={theme.text.muted} />
           <Text style={s.emptyTitle}>Could not load your feed</Text>
           <Text style={s.emptySub}>
             Check your connection and try again.
           </Text>
           <TouchableOpacity style={s.emptyBtn} onPress={() => load(true)}>
-            <Feather name="refresh-cw" size={15} color={theme.text.inverse} />
+            <Feather name="refresh-cw" size={14} color={theme.text.inverse} />
             <Text style={s.emptyBtnText}>Retry</Text>
           </TouchableOpacity>
         </View>
@@ -617,7 +617,7 @@ export default function FeedScreen({ navigation }) {
     }
     return (
       <View style={s.emptyState}>
-        <Feather name="rss" size={46} color={theme.text.muted} />
+        <Feather name="rss" size={44} color={theme.text.muted} />
         <Text style={s.emptyTitle}>Your feed is quiet</Text>
         <Text style={s.emptySub}>
           Play a round or add friends to see their golf here.
@@ -626,7 +626,7 @@ export default function FeedScreen({ navigation }) {
           style={s.emptyBtn}
           onPress={() => navigation.navigate('Friends')}
         >
-          <Feather name="user-plus" size={15} color={theme.text.inverse} />
+          <Feather name="user-plus" size={14} color={theme.text.inverse} />
           <Text style={s.emptyBtnText}>Add friends</Text>
         </TouchableOpacity>
       </View>
@@ -655,7 +655,7 @@ export default function FeedScreen({ navigation }) {
       {/* Partial-load banner: some data reached us, some didn't. */}
       {status === 'partial' && items.length > 0 ? (
         <TouchableOpacity style={s.partialBanner} onPress={() => load(true)} activeOpacity={0.8}>
-          <Feather name="alert-circle" size={13} color={theme.text.muted} />
+          <Feather name="alert-circle" size={14} color={theme.text.muted} />
           <Text style={s.partialText}>Feed may be incomplete · Tap to retry</Text>
         </TouchableOpacity>
       ) : null}

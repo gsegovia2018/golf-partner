@@ -213,7 +213,7 @@ export default function ClaimPlayerScreen({ navigation, route }) {
               })}
               {allTaken && (
                 <View style={s.noticeBox}>
-                  <Feather name="info" size={15} color={theme.accent.primary} style={{ marginRight: 8, marginTop: 1 }} />
+                  <Feather name="info" size={14} color={theme.accent.primary} style={{ marginRight: 8, marginTop: 1 }} />
                   <Text style={s.noticeText}>
                     {rosterFull
                       ? `Every player is already linked to another account and this ${noun} is full. You can still follow along — tap Skip to continue as a viewer.`
@@ -261,7 +261,7 @@ export default function ClaimPlayerScreen({ navigation, route }) {
                 >
                   {saving
                     ? <ActivityIndicator color={theme.isDark ? theme.accent.primary : theme.text.inverse} />
-                    : <Feather name="check" size={18} color={theme.isDark ? theme.accent.primary : theme.text.inverse} />}
+                    : <Feather name="check" size={14} color={theme.isDark ? theme.accent.primary : theme.text.inverse} />}
                 </TouchableOpacity>
               </View>
             ) : (
@@ -271,7 +271,7 @@ export default function ClaimPlayerScreen({ navigation, route }) {
                 disabled={saving}
                 activeOpacity={0.7}
               >
-                <Feather name="user-plus" size={18} color={theme.accent.primary} />
+                <Feather name="user-plus" size={14} color={theme.accent.primary} />
                 <Text style={s.addRowText}>I'm not listed — add me</Text>
               </TouchableOpacity>
             )}
@@ -283,7 +283,7 @@ export default function ClaimPlayerScreen({ navigation, route }) {
               onPress={() => navigation.navigate('Profile')}
               activeOpacity={0.8}
             >
-              <Feather name="bookmark" size={16} color={theme.accent.primary} style={{ marginRight: 10 }} />
+              <Feather name="bookmark" size={16} color={theme.text.muted} style={{ marginRight: 10 }} />
               <Text style={s.saveAccountText}>
                 You're playing as a guest. Add an email in your profile so you
                 keep this {noun} if you switch devices.

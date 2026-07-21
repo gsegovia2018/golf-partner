@@ -173,7 +173,7 @@ export default function HistoryScreen({ navigation }) {
 
           {finished.length === 0 ? (
             <View style={s.emptyState}>
-              <Feather name="clock" size={46} color={theme.text.muted} />
+              <Feather name="clock" size={44} color={theme.text.muted} />
               <Text style={s.emptyTitle}>No history yet</Text>
               <Text style={s.emptySub}>
                 Finished games and tournaments will be archived here.

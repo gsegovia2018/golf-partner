@@ -137,7 +137,7 @@ export default function NextRoundScreen({ navigation, route }) {
           <Text style={s.errorTitle}>Couldn't load the next round</Text>
           <Text style={s.loadingText}>Check your connection and try again.</Text>
           <TouchableOpacity style={s.retryBtn} onPress={retryLoad} activeOpacity={0.8}>
-            <Feather name="rotate-ccw" size={15} color={theme.text.inverse} />
+            <Feather name="rotate-ccw" size={14} color={theme.text.inverse} />
             <Text style={s.retryBtnText}>Retry</Text>
           </TouchableOpacity>
         </View>
@@ -398,7 +398,7 @@ export default function NextRoundScreen({ navigation, route }) {
         >
           {canReshuffle && (
             <TouchableOpacity style={s.btnSecondary} onPress={reshuffle} disabled={busy}>
-              <Feather name="shuffle" size={18} color={theme.accent.primary} style={{ marginRight: 8 }} />
+              <Feather name="shuffle" size={14} color={theme.accent.primary} style={{ marginRight: 8 }} />
               <Text style={s.btnSecondaryText}>Re-shuffle</Text>
             </TouchableOpacity>
           )}

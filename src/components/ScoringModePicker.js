@@ -7,6 +7,7 @@ import { Feather } from '@expo/vector-icons';
 
 import { useTheme } from '../theme/ThemeContext';
 import BottomSheet from './BottomSheet';
+import IconButton from './ui/IconButton';
 import {
   SCORING_MODES,
   isScoringModeAllowed,
@@ -37,9 +38,7 @@ export function ScoringModeSheet({ visible, value, playerCount, onSelect, onClos
     <BottomSheet visible={visible} onClose={onClose} sheetStyle={s.sheet}>
       <View style={s.sheetHeader}>
             <Text style={s.sheetTitle}>Choose scoring mode</Text>
-            <TouchableOpacity onPress={onClose} accessibilityLabel="Close" accessibilityRole="button">
-              <Feather name="x" size={22} color={theme.text.muted} />
-            </TouchableOpacity>
+            <IconButton icon="x" onPress={onClose} accessibilityLabel="Close" />
           </View>
 
           <ScrollView style={{ maxHeight: sheetMaxHeight }} showsVerticalScrollIndicator={false}>
@@ -75,7 +74,7 @@ export function ScoringModeSheet({ visible, value, playerCount, onSelect, onClos
                         )}
                       </View>
                       {active && (
-                        <Feather name="check" size={20} color={theme.accent.primary} />
+                        <Feather name="check" size={14} color={theme.accent.primary} />
                       )}
                     </TouchableOpacity>
                   );
