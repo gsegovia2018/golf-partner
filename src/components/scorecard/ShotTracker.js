@@ -1,4 +1,4 @@
-import React, { useMemo, useState, useSyncExternalStore } from 'react';
+import React, { useEffect, useMemo, useState, useSyncExternalStore } from 'react';
 import { View, Text, StyleSheet, ScrollView } from 'react-native';
 import { Feather } from '@expo/vector-icons';
 import PressableScale from '../ui/PressableScale';
@@ -13,13 +13,20 @@ import { swingClubs, clubLabel } from '../../lib/clubs';
 import { formatDistance, unitSuffix } from '../../lib/units';
 import { haptic } from '../../lib/haptics';
 
-// Shot log overlaid on the hole map (HoleFlyover). Lives INSIDE the map — no
-// map, no tracking — because a shot is only meaningful as a point you can see
-// against the green. "Mark ball" captures the current fix (capture where you
-// stand, before walking on); you then tag the club. Carry = straight-line
-// distance to the next marked shot, so club-on-shot-N + carry(N→N+1) feeds
-// your bag averages. Dark-styled: the flyover is always a dark sheet.
-export function ShotTracker({ roundId, roundIndex, holeNumber, pos, targetMeters }) {
+// Shot log overlaid on the hole map (HoleFlyover). Ball spots are placed by
+// TAPPING the map where the ball landed — GPS is optional (a "drop at me"
+// shortcut when there's a fix). The first spot on a hole is the tee (seeded
+// from the hole geometry when available); every later spot is tagged with the
+// club that GOT the ball there, so its carry = distance from the previous spot.
+// Distances come straight from the map geometry — no GPS required.
+//
+// Placement is driven by the parent: `placing` toggles map-tap mode, and a
+// tapped point arrives as `pendingPoint` for us to log.
+export function ShotTracker({
+  roundId, roundIndex, holeNumber,
+  pos, teePos, targetMeters,
+  placing, onTogglePlacing, pendingPoint, onConsumePoint,
+}) {
   const appSettings = useAppSettings();
   const { units } = appSettings;
   const bag = useMemo(() => swingClubs(appSettings.bag), [appSettings.bag]);
@@ -29,34 +36,57 @@ export function ShotTracker({ roundId, roundIndex, holeNumber, pos, targetMeters
   const shots = useMemo(() => shotsForHole(roundId, roundIndex, holeNumber), [roundId, roundIndex, holeNumber, shotsVersion]);
 
   const [pickFor, setPickFor] = useState(null); // shot id whose club chooser is open
+
+  // "Club to hit" hint for the next shot, from distance to the green.
   const suggestion = useMemo(
     () => recommendClub(targetMeters, appSettings.bag, getShots()),
     // eslint-disable-next-line react-hooks/exhaustive-deps
     [targetMeters, appSettings.bag, shotsVersion],
   );
 
-  if (!roundId) return null;
-
-  const carryOf = (i) => (i < shots.length - 1
-    ? haversineMeters([shots[i].lat, shots[i].lng], [shots[i + 1].lat, shots[i + 1].lng])
-    : null);
-
-  const mark = async () => {
-    if (!pos) return;
-    haptic('light');
-    const shot = await logShot({ roundId, roundIndex, holeNumber, pos, club: suggestion?.club ?? null });
+  // Add a ball spot at `spot` ([lat,lng]). Seeds the tee as the origin on an
+  // empty hole, appends the landing, and opens the club chooser on it —
+  // pre-guessing the club from the just-measured carry.
+  const addSpot = async (spot) => {
+    const hole = shotsForHole(roundId, roundIndex, holeNumber);
+    let prev = hole[hole.length - 1] ?? null;
+    if (hole.length === 0 && teePos) {
+      await logShot({ roundId, roundIndex, holeNumber, pos: teePos, club: null });
+      prev = { lat: teePos[0], lng: teePos[1] };
+    }
+    const carry = prev ? haversineMeters([prev.lat, prev.lng], spot) : null;
+    const guess = carry ? recommendClub(carry, appSettings.bag, getShots())?.club ?? null : null;
+    const shot = await logShot({ roundId, roundIndex, holeNumber, pos: spot, club: guess });
     setPickFor(shot.id);
   };
+
+  // A map tap handed down from the parent.
+  useEffect(() => {
+    if (!pendingPoint) return;
+    haptic('light');
+    addSpot(pendingPoint).finally(() => onConsumePoint?.());
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [pendingPoint]);
+
+  if (!roundId) return null;
+
+  // Incoming carry for spot i (distance from the previous spot). Origin = null.
+  const carryOf = (i) => (i > 0
+    ? haversineMeters([shots[i - 1].lat, shots[i - 1].lng], [shots[i].lat, shots[i].lng])
+    : null);
+  const isOrigin = (i, shot) => i === 0 && !shot.club;
+
   const chooseClub = async (club) => {
     if (pickFor) await setShotClub(pickFor, club);
     setPickFor(null);
   };
+  const dropAtMe = () => { if (pos) addSpot(pos); };
 
   return (
     <View style={s.wrap} pointerEvents="box-none">
       {pickFor && (
         <View style={s.picker}>
-          <Text style={s.pickerTitle}>Which club?</Text>
+          <Text style={s.pickerTitle}>Club that got it there?</Text>
           <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={s.pickerRow}>
             {bag.map((club) => (
               <PressableScale key={club} onPress={() => chooseClub(club)} style={s.pickerChip}>
@@ -71,10 +101,18 @@ export function ShotTracker({ roundId, roundIndex, holeNumber, pos, targetMeters
         {shots.length > 0 && (
           <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={s.shotRow} style={s.shotScroll}>
             {shots.map((shot, i) => {
+              if (isOrigin(i, shot)) {
+                return (
+                  <View key={shot.id} style={[s.shotPill, s.teePill]}>
+                    <Feather name="flag" size={12} color="#9fb0a4" />
+                    <Text style={s.teeText}>Tee</Text>
+                  </View>
+                );
+              }
               const carry = carryOf(i);
               return (
                 <PressableScale key={shot.id} onPress={() => setPickFor(shot.id)} style={s.shotPill}>
-                  <Text style={s.shotSeq}>{i + 1}</Text>
+                  <Text style={s.shotSeq}>{i}</Text>
                   <Text style={[s.shotClub, !shot.club && s.shotClubEmpty]}>
                     {shot.club ? clubLabel(shot.club) : 'club?'}
                   </Text>
@@ -91,23 +129,25 @@ export function ShotTracker({ roundId, roundIndex, holeNumber, pos, targetMeters
           {shots.length > 0 && (
             <PressableScale
               onPress={() => { haptic('selection'); undoLastShot(roundId, roundIndex, holeNumber); }}
-              style={s.undo}
+              style={s.iconBtn}
               accessibilityLabel="Undo last shot"
             >
               <Feather name="corner-up-left" size={16} color="#cfe3d5" />
             </PressableScale>
           )}
+          {pos && (
+            <PressableScale onPress={dropAtMe} style={s.iconBtn} accessibilityLabel="Drop shot at my location">
+              <Feather name="navigation" size={15} color="#cfe3d5" />
+            </PressableScale>
+          )}
           <PressableScale
-            onPress={mark}
-            disabled={!pos}
-            style={[s.mark, !pos && s.markDisabled]}
-            accessibilityLabel="Mark ball at current position"
+            onPress={onTogglePlacing}
+            style={[s.mark, placing && s.markActive]}
+            accessibilityLabel={placing ? 'Cancel placing' : 'Add a shot by tapping the map'}
           >
-            <Feather name="map-pin" size={15} color={pos ? '#0a0d10' : '#6d7d72'} />
-            <Text style={[s.markText, !pos && s.markTextDisabled]}>
-              {pos ? 'Mark ball' : 'No GPS'}
-            </Text>
-            {pos && suggestion && <Text style={s.suggest}>{`≈ ${clubLabel(suggestion.club)}`}</Text>}
+            <Feather name={placing ? 'x' : 'plus'} size={16} color="#0a0d10" />
+            <Text style={s.markText}>{placing ? 'Tap the map' : 'Add shot'}</Text>
+            {!placing && suggestion && <Text style={s.suggest}>{`≈ ${clubLabel(suggestion.club)}`}</Text>}
           </PressableScale>
         </View>
       </View>
@@ -146,6 +186,8 @@ const s = StyleSheet.create({
     backgroundColor: 'rgba(255,255,255,0.07)', borderRadius: 999,
     paddingHorizontal: 10, paddingVertical: 6,
   },
+  teePill: { backgroundColor: 'rgba(255,255,255,0.04)' },
+  teeText: { color: '#9fb0a4', fontFamily: 'PlusJakartaSans-Bold', fontSize: 12 },
   shotSeq: {
     color: '#9fb0a4', fontFamily: 'PlusJakartaSans-Bold', fontSize: 11,
     fontVariant: ['tabular-nums'],
@@ -158,7 +200,7 @@ const s = StyleSheet.create({
   },
 
   actions: { flexDirection: 'row', alignItems: 'center', gap: 8 },
-  undo: {
+  iconBtn: {
     width: 42, height: 42, borderRadius: 12, alignItems: 'center', justifyContent: 'center',
     backgroundColor: 'rgba(255,255,255,0.08)',
   },
@@ -166,9 +208,8 @@ const s = StyleSheet.create({
     flex: 1, flexDirection: 'row', alignItems: 'center', gap: 8,
     backgroundColor: '#57ae5b', borderRadius: 12, paddingVertical: 12, paddingHorizontal: 14,
   },
-  markDisabled: { backgroundColor: 'rgba(255,255,255,0.10)' },
+  markActive: { backgroundColor: '#f4c04a' },
   markText: { color: '#0a0d10', fontFamily: 'PlusJakartaSans-Bold', fontSize: 15 },
-  markTextDisabled: { color: '#6d7d72' },
   suggest: {
     marginLeft: 'auto',
     color: 'rgba(10,13,16,0.75)', fontFamily: 'PlusJakartaSans-Bold', fontSize: 13,

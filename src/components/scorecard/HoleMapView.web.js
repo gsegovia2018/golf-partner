@@ -5,7 +5,7 @@ import { getTileDataUrl } from '../../store/tileCache';
 // Web host: renders the Leaflet map page in an <iframe>. Rebuilds the page only
 // when the hole/mode identity changes (data.holeKey); live player / activeField
 // / marker updates go through postMessage so the map never reloads.
-export function HoleMapView({ data, player, anchor, activeField, shots, onPoint, style }) {
+export function HoleMapView({ data, player, anchor, activeField, shots, placing, onShotPoint, onPoint, style }) {
   const ref = useRef(null);
   // eslint-disable-next-line react-hooks/exhaustive-deps
   const html = useMemo(() => buildHoleMapHtml(data), [data.holeKey]);
@@ -17,6 +17,7 @@ export function HoleMapView({ data, player, anchor, activeField, shots, onPoint,
     const h = (e) => {
       let m; try { m = JSON.parse(e.data); } catch { return; }
       if (m.type === 'point') onPoint?.(m.field, m.pos, m.drag);
+      if (m.type === 'shot-point') onShotPoint?.(m.pos);
       if (m.type === 'tile') {
         getTileDataUrl({ z: m.z, x: m.x, y: m.y, bucket })
           .then((dataUrl) => send({ type: 'tile-data', id: m.id, dataUrl }));
@@ -24,10 +25,11 @@ export function HoleMapView({ data, player, anchor, activeField, shots, onPoint,
     };
     window.addEventListener('message', h);
     return () => window.removeEventListener('message', h);
-  }, [onPoint, bucket]);
+  }, [onPoint, onShotPoint, bucket]);
 
   useEffect(() => { send({ type: 'player', pos: player || null, anchor: anchor ?? null }); }, [player, anchor]);
   useEffect(() => { send({ type: 'shots', shots: shots || [] }); }, [shots]);
+  useEffect(() => { send({ type: 'placing', on: !!placing }); }, [placing]);
   useEffect(() => { if (activeField) send({ type: 'activeField', field: activeField }); }, [activeField]);
   useEffect(() => { if (data.updateHole) send({ type: 'hole', hole: data }); }, [data]);
 

@@ -1,4 +1,4 @@
-import React, { useMemo, useRef, useSyncExternalStore } from 'react';
+import React, { useMemo, useRef, useState, useSyncExternalStore } from 'react';
 import {
   View, Text, StyleSheet, Modal, Pressable, Animated, PanResponder,
 } from 'react-native';
@@ -57,6 +57,11 @@ export function HoleFlyover({
     shots: shotPins, // initial paint; live marks arrive via the shots prop below
   } : null), [feat, courseName, holeNumber, position, anchorInfo, units, shotPins]);
 
+  // Shot placement: `placing` puts the map in tap-to-drop mode; a tapped point
+  // arrives here as `pendingPoint` and is handed to ShotTracker to log.
+  const [placing, setPlacing] = useState(false);
+  const [pendingPoint, setPendingPoint] = useState(null);
+
   // Swipe-down on the grabber/header dismisses; the map owns its own gestures.
   const dragY = useRef(new Animated.Value(0)).current;
   const onCloseRef = useRef(onClose);
@@ -107,15 +112,28 @@ export function HoleFlyover({
           </View>
           {data ? (
             <View style={s.map}>
-              <HoleMapView data={data} player={position} anchor={anchorInfo} shots={shotPins} style={s.map} />
+              <HoleMapView
+                data={data}
+                player={position}
+                anchor={anchorInfo}
+                shots={shotPins}
+                placing={placing}
+                onShotPoint={(p) => { setPendingPoint(p); setPlacing(false); }}
+                style={s.map}
+              />
               {roundId != null && (
                 <ShotTracker
                   roundId={roundId}
                   roundIndex={roundIndex}
                   holeNumber={holeNumber}
                   pos={position ?? null}
+                  teePos={feat?.start ?? null}
                   targetMeters={feat?.greenCenter && position
                     ? haversineMeters(position, feat.greenCenter) : null}
+                  placing={placing}
+                  onTogglePlacing={() => setPlacing((v) => !v)}
+                  pendingPoint={pendingPoint}
+                  onConsumePoint={() => setPendingPoint(null)}
                 />
               )}
             </View>

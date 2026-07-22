@@ -35,6 +35,8 @@ export function buildHoleMapHtml(data) {
   .tri .u{font-size:13px;font-weight:600;color:#9fb0a4}
   .tri .lbl{font-size:9px;font-weight:700;letter-spacing:.08em;color:#9fb0a4;text-transform:uppercase;width:34px;text-align:left}
   .hint{position:absolute;bottom:16px;left:50%;transform:translateX(-50%);background:rgba(14,22,28,.85);color:#fff;font-weight:600;font-size:13px;padding:7px 14px;border-radius:999px}
+  #placehint{position:absolute;top:14px;left:50%;transform:translateX(-50%);background:#f4c04a;color:#0a0d10;font-weight:800;font-size:13px;padding:8px 16px;border-radius:999px;z-index:650;box-shadow:0 2px 8px rgba(0,0,0,.4);display:none}
+  #map.placing{cursor:crosshair}
   .dchip{background:rgba(14,22,28,.88);color:#fff;font-weight:800;font-size:13px;padding:4px 11px;border-radius:999px;font-variant-numeric:tabular-nums;white-space:nowrap;border:1px solid rgba(255,255,255,.25);transform:translate(-50%,-50%);display:inline-block}
   .shotpin{width:22px;height:22px;border-radius:50%;background:#f4c04a;border:2px solid #0a0d10;color:#0a0d10;font-weight:800;font-size:12px;display:flex;align-items:center;justify-content:center;box-shadow:0 1px 3px rgba(0,0,0,.5);font-variant-numeric:tabular-nums}
   #recenter{position:absolute;right:12px;bottom:14px;width:40px;height:40px;border-radius:999px;background:rgba(14,22,28,.85);border:1px solid rgba(255,255,255,.25);color:#fff;display:flex;align-items:center;justify-content:center;padding:0;cursor:pointer;z-index:600;opacity:0;pointer-events:none;transform:scale(.9);transition:opacity .15s,transform .15s}
@@ -45,6 +47,7 @@ export function buildHoleMapHtml(data) {
 </style></head>
 <body>
 <div id="map"></div>
+<div id="placehint">Tap where the ball landed</div>
 <div class="hud" id="hud"></div>
 <button id="recenter" aria-label="Recenter hole"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M8 3H5a2 2 0 0 0-2 2v3m18 0V5a2 2 0 0 0-2-2h-3m0 18h3a2 2 0 0 0 2-2v-3M3 16v3a2 2 0 0 0 2 2h3"/></svg></button>
 <script>
@@ -102,6 +105,7 @@ let player = DATA.player || null;
 let anchor = DATA.anchor || { pos: null, source: null, playerDistance: null };
 let activeField = DATA.activeField || 'center';
 let shots = DATA.shots || []; // logged shots for this hole: [{lat,lng,club}]
+let placing = false; // true while the ShotTracker overlay is in "tap to drop a shot" mode
 const layers = [];
 const clear = () => { layers.forEach(l => map.removeLayer(l)); layers.length = 0; };
 const add = (l) => { layers.push(l.addTo(map)); return l; };
@@ -147,6 +151,9 @@ function draw() {
   map.off('click contextmenu');
   map.on('click', (e) => {
     const p = [e.latlng.lat, e.latlng.lng];
+    // In placing mode a tap drops a shot where the ball landed (no GPS needed)
+    // and hands it back to the host; it does not move the aim ring.
+    if (placing) { post({ type:'shot-point', pos:p }); return; }
     const i = (targets.length > 1 && dist(p, targets[1]) < dist(p, targets[0])) ? 1 : 0;
     targets[i] = p;
     drawTargets(from, g, cc);
@@ -313,6 +320,11 @@ window.addEventListener('message', (ev) => {
   if (m.type === 'activeField') { activeField = m.field; if (hole.mode==='edit') drawEdit(fcb()); }
   if (m.type === 'hole') { hole = m.hole; draw(); } // redraw markers, keep current pan/zoom
   if (m.type === 'shots') { shots = m.shots || []; draw(); }
+  if (m.type === 'placing') {
+    placing = !!m.on;
+    const el = document.getElementById('placehint'); if (el) el.style.display = placing ? 'block' : 'none';
+    const mp = document.getElementById('map'); if (mp) mp.classList.toggle('placing', placing);
+  }
   if (m.type === 'tile-data') {
     const cb = pendingTiles[m.id];
     delete pendingTiles[m.id];

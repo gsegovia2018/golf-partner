@@ -10,20 +10,19 @@ function shot(holeNumber, seq, club, meters, roundId = 'g1') {
 }
 
 describe('carriesByClub', () => {
-  it('attributes each carry to the FROM shot club, skips the last shot', () => {
+  it('credits each spot club with the carry FROM the previous spot; origin has none', () => {
     const shots = [
-      shot(1, 1, 'driver', 200),
-      shot(1, 2, '7i', 200), // carry 1->2 = 200m credited to driver
-      shot(1, 3, 'pw', 200),  // carry 2->3 = 200m credited to 7i
+      shot(1, 1, null, 200),   // origin (tee), no club
+      shot(1, 2, 'driver', 200), // carry 1->2 = 200m credited to driver (got it here)
+      shot(1, 3, '7i', 200),   // carry 2->3 = 200m credited to 7i
     ];
     const m = carriesByClub(shots);
     expect(m.get('driver')[0]).toBeCloseTo(200, 0);
     expect(m.get('7i')[0]).toBeCloseTo(200, 0);
-    expect(m.has('pw')).toBe(false); // last shot has no successor
   });
 
   it('does not carry across holes', () => {
-    const shots = [shot(1, 1, 'driver', 200), shot(2, 1, '7i', 200)];
+    const shots = [shot(1, 1, null, 200), shot(2, 1, '7i', 200)];
     expect(carriesByClub(shots).size).toBe(0);
   });
 });
@@ -31,9 +30,9 @@ describe('carriesByClub', () => {
 describe('clubDistances', () => {
   it('averages multiple carries per club, sorted longest-first', () => {
     const shots = [
-      shot(1, 1, '7i', 140), shot(1, 2, 'pw', 140),
-      shot(2, 1, '7i', 150), shot(2, 2, 'pw', 150),
-      shot(3, 1, 'driver', 230), shot(3, 2, 'pw', 230),
+      shot(1, 1, null, 140), shot(1, 2, '7i', 140),
+      shot(2, 1, null, 150), shot(2, 2, '7i', 150),
+      shot(3, 1, null, 230), shot(3, 2, 'driver', 230),
     ];
     const rows = clubDistances(shots);
     expect(rows[0].club).toBe('driver'); // catalog order: driver before 7i
@@ -48,8 +47,8 @@ describe('recommendClub', () => {
 
   it('prefers personal data closest to the target', () => {
     const shots = [
-      shot(1, 1, '7i', 145), shot(1, 2, 'pw', 145),
-      shot(2, 1, '8i', 133), shot(2, 2, 'pw', 133),
+      shot(1, 1, null, 145), shot(1, 2, '7i', 145), // 7i carry 145
+      shot(2, 1, null, 133), shot(2, 2, '8i', 133), // 8i carry 133
     ];
     const r = recommendClub(140, bag, shots);
     expect(r.club).toBe('7i');

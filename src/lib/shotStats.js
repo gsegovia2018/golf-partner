@@ -5,9 +5,9 @@ import { haversineMeters } from './geo';
 import { CLUB_CATALOG, clubLabel, clubNominal, clubOrder, sanitizeBag } from './clubs';
 
 // A shot: { roundId, roundIndex, holeNumber, seq, lat, lng, club, holed }.
-// Carry of a shot = straight-line distance to the NEXT shot on the same hole.
-// The last shot of a hole has no successor (we don't know the exact pin), so
-// it contributes no carry — fine, it's usually a putt or short pitch.
+// Spots are ball positions in order; the FIRST spot is the origin (the tee),
+// carrying no club. Each later spot's `club` is the club that got the ball
+// THERE, so its carry is the straight-line distance from the PREVIOUS spot.
 function holeKey(s) { return `${s.roundId}|${s.roundIndex}|${s.holeNumber}`; }
 
 // -> Map<club, number[]> of carries (metres) attributed to the club hit.
@@ -22,14 +22,14 @@ export function carriesByClub(shots) {
   const out = new Map();
   for (const holeShots of byHole.values()) {
     holeShots.sort((a, b) => a.seq - b.seq);
-    for (let i = 0; i < holeShots.length - 1; i += 1) {
-      const from = holeShots[i];
-      const to = holeShots[i + 1];
-      if (!from.club) continue;
-      const d = haversineMeters([from.lat, from.lng], [to.lat, to.lng]);
+    for (let i = 1; i < holeShots.length; i += 1) {
+      const prev = holeShots[i - 1];
+      const cur = holeShots[i];
+      if (!cur.club) continue; // spot not yet tagged with the club that reached it
+      const d = haversineMeters([prev.lat, prev.lng], [cur.lat, cur.lng]);
       if (!Number.isFinite(d) || d <= 0) continue;
-      if (!out.has(from.club)) out.set(from.club, []);
-      out.get(from.club).push(d);
+      if (!out.has(cur.club)) out.set(cur.club, []);
+      out.get(cur.club).push(d);
     }
   }
   return out;
