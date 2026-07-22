@@ -39,11 +39,12 @@ export function ShotTracker({
   const [wheelId, setWheelId] = useState(null); // shot id whose club wheel is open
   const [moveId, setMoveId] = useState(null); // shot id being repositioned by the next tap
 
+  const overrides = appSettings.clubDistances;
   // "Club to hit" hint for the next shot, from distance to the green.
   const suggestion = useMemo(
-    () => recommendClub(targetMeters, appSettings.bag, getShots()),
+    () => recommendClub(targetMeters, appSettings.bag, getShots(), overrides),
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [targetMeters, appSettings.bag, shotsVersion],
+    [targetMeters, appSettings.bag, overrides, shotsVersion],
   );
 
   // Add a ball spot at `spot` ([lat,lng]). Seeds the tee as the origin on an
@@ -57,7 +58,7 @@ export function ShotTracker({
       prev = { lat: teePos[0], lng: teePos[1] };
     }
     const carry = prev ? haversineMeters([prev.lat, prev.lng], spot) : null;
-    const guess = carry ? recommendClub(carry, appSettings.bag, getShots())?.club ?? null : null;
+    const guess = carry ? recommendClub(carry, appSettings.bag, getShots(), overrides)?.club ?? null : null;
     const shot = await logShot({ roundId, roundIndex, holeNumber, pos: spot, club: guess });
     setWheelId(shot.id);
   };
@@ -89,16 +90,18 @@ export function ShotTracker({
 
   // ── Wheel state derived from the shot being edited ───────────────────────
   const averages = clubAverages(getShots());
-  const wheelClubs = bag.map((k) => ({
-    key: k, label: clubLabel(k), distance: averages.get(k) ?? clubNominal(k),
-  }));
+  const effDist = (k) => {
+    const o = overrides?.[k];
+    return (Number.isFinite(o) && o > 0) ? o : (averages.get(k) ?? clubNominal(k));
+  };
+  const wheelClubs = bag.map((k) => ({ key: k, label: clubLabel(k), distance: effDist(k) }));
   const editIndex = wheelId ? shots.findIndex((sh) => sh.id === wheelId) : -1;
   const editShot = editIndex >= 0 ? shots[editIndex] : null;
   const editCarry = editIndex > 0 ? carryOf(editIndex) : null;
   const editToPin = editShot && targetPos
     ? haversineMeters([editShot.lat, editShot.lng], targetPos) : null;
   const editValue = editShot
-    ? (editShot.club ?? recommendClub(editCarry, appSettings.bag, getShots())?.club ?? null)
+    ? (editShot.club ?? recommendClub(editCarry, appSettings.bag, getShots(), overrides)?.club ?? null)
     : null;
 
   const closeWheel = () => setWheelId(null);

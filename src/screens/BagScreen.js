@@ -19,7 +19,7 @@ import { describeConditions } from '../lib/playConditions';
 import {
   CLUB_CATALOG, DEFAULT_BAG, isClubKey, clubNominal, clubOrder,
 } from '../lib/clubs';
-import { formatDistance, unitSuffix } from '../lib/units';
+import { formatDistance, unitSuffix, M_TO_YD } from '../lib/units';
 import { haptic } from '../lib/haptics';
 
 const REVEAL_STEP = 40;
@@ -36,7 +36,9 @@ export default function BagScreen({ navigation }) {
   const { theme } = useTheme();
   const s = makeStyles(theme);
   const appSettings = useAppSettings();
-  const { units, conditionsEnabled, courseAltitudes } = appSettings;
+  const {
+    units, conditionsEnabled, courseAltitudes, clubDistances,
+  } = appSettings;
 
   const shotsVersion = useSyncExternalStore(subscribeShots, getShotsVersion, getShotsVersion);
   // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -67,22 +69,46 @@ export default function BagScreen({ navigation }) {
     updateAppSettings({ bag: [...next].sort((a, b) => clubOrder(a) - clubOrder(b)) }).catch(() => {});
   };
 
-  // Distance rows for the swing clubs currently in the bag.
+  // Distance rows for the swing clubs currently in the bag. Effective distance
+  // is the manual override if set, else the measured average, else nominal.
   const rows = useMemo(() => (
     [...bagSet]
       .filter((k) => k !== 'putter')
       .sort((a, b) => clubOrder(a) - clubOrder(b))
       .map((club) => {
-        const measured = averages.get(club);
+        const measuredMeters = averages.get(club);
+        const measured = measuredMeters != null;
+        const ov = clubDistances?.[club];
+        const hasOverride = Number.isFinite(ov) && ov > 0;
         const cat = CLUB_CATALOG.find((c) => c.key === club);
         return {
           club,
           label: cat?.label ?? club,
-          distance: measured ?? clubNominal(club),
-          measured: measured != null,
+          distance: hasOverride ? ov : (measured ? measuredMeters : clubNominal(club)),
+          measuredMeters,
+          measured,
+          hasOverride,
+          tag: hasOverride ? 'SET' : (measured ? 'MEASURED' : 'EST'),
         };
       })
-  ), [bagSet, averages]);
+  ), [bagSet, averages, clubDistances]);
+  const anyMeasured = rows.some((r) => r.measured);
+
+  // Save a manual distance (entered in display units) → metres; 0/empty clears.
+  const setClubDistance = (club, text) => {
+    const val = parseFloat(String(text || '').replace(',', '.'));
+    const meters = Number.isFinite(val) && val > 0
+      ? Math.round(units === 'yards' ? val / M_TO_YD : val) : 0;
+    updateAppSettings({ clubDistances: { [club]: meters } }).catch(() => {});
+  };
+
+  // Seed every measured club's override from its logged average.
+  const setAllToAverage = () => {
+    haptic('selection');
+    const map = {};
+    for (const r of rows) if (r.measured) map[r.club] = Math.round(r.measuredMeters);
+    if (Object.keys(map).length) updateAppSettings({ clubDistances: map }).catch(() => {});
+  };
 
   return (
     <ScreenContainer style={s.screen} edges={['top', 'bottom']}>
@@ -117,31 +143,56 @@ export default function BagScreen({ navigation }) {
         </Reveal>
 
         <Reveal delay={REVEAL_STEP}>
-          <Text style={s.sectionLabel}>CLUB DISTANCES</Text>
-          <Text style={s.sectionHint}>
-            Average carry from your logged shots. Tap a club for its full breakdown.
-          </Text>
+          <View style={s.condHead}>
+            <View style={s.condHeadText}>
+              <Text style={s.sectionLabel}>CLUB DISTANCES</Text>
+              <Text style={s.sectionHint}>
+                Carry used for club recommendations. Edit any value directly; tap
+                a club for its full breakdown. Manual values override the average.
+              </Text>
+            </View>
+            {anyMeasured && (
+              <PressableScale
+                onPress={setAllToAverage}
+                style={s.avgBtn}
+                accessibilityLabel="Set all club distances to their measured average"
+              >
+                <Feather name="download" size={13} color={theme.accent.primary} />
+                <Text style={s.avgBtnText}>Use averages</Text>
+              </PressableScale>
+            )}
+          </View>
           <View style={s.groupCard}>
             {rows.length === 0 ? (
               <Text style={s.empty}>No swing clubs in your bag yet.</Text>
             ) : rows.map((r, i) => (
-              <PressableScale
-                key={r.club}
-                onPress={() => navigation.navigate('ClubStat', { club: r.club })}
-                style={[s.distRow, i > 0 && s.distRowDivider]}
-                accessibilityLabel={`${r.label} stats`}
-              >
+              <View key={r.club} style={[s.distRow, i > 0 && s.distRowDivider]}>
                 <Text style={s.distClub}>{r.label}</Text>
                 <View style={s.distRight}>
-                  <Text style={s.distValue}>
-                    {r.distance ? `${formatDistance(r.distance, units)} ${unitSuffix(units)}` : '—'}
+                  <TextInput
+                    key={`${r.club}-${Math.round(r.distance)}`}
+                    style={s.distInput}
+                    keyboardType="number-pad"
+                    defaultValue={r.distance ? String(formatDistance(r.distance, units)) : ''}
+                    placeholder="—"
+                    placeholderTextColor={theme.text.muted}
+                    onEndEditing={(e) => setClubDistance(r.club, e.nativeEvent.text)}
+                    returnKeyType="done"
+                    accessibilityLabel={`${r.label} carry in ${unitSuffix(units)}`}
+                  />
+                  <Text style={s.distInputUnit}>{unitSuffix(units)}</Text>
+                  <Text style={[s.distTag, r.hasOverride ? s.distTagSet : r.measured ? s.distTagReal : s.distTagEst]}>
+                    {r.tag}
                   </Text>
-                  <Text style={[s.distTag, r.measured ? s.distTagReal : s.distTagEst]}>
-                    {r.measured ? 'MEASURED' : 'EST'}
-                  </Text>
-                  <Feather name="chevron-right" size={16} color={theme.text.muted} />
+                  <PressableScale
+                    onPress={() => navigation.navigate('ClubStat', { club: r.club })}
+                    hitSlop={8}
+                    accessibilityLabel={`${r.label} stats`}
+                  >
+                    <Feather name="chevron-right" size={16} color={theme.text.muted} />
+                  </PressableScale>
                 </View>
-              </PressableScale>
+              </View>
             ))}
           </View>
         </Reveal>
@@ -254,7 +305,22 @@ const makeStyles = (theme) => StyleSheet.create({
     paddingHorizontal: 6, paddingVertical: 3, borderRadius: 5, overflow: 'hidden',
   },
   distTagReal: { color: theme.accent.primary, backgroundColor: theme.accent.light },
+  distTagSet: { color: theme.accent.primary, backgroundColor: theme.accent.light },
   distTagEst: { color: theme.text.muted, backgroundColor: theme.border.subtle },
+  distInput: {
+    minWidth: 48, textAlign: 'right',
+    fontFamily: 'PlusJakartaSans-Bold', color: theme.text.primary, fontSize: 15,
+    fontVariant: ['tabular-nums'],
+    borderBottomWidth: 1.5, borderBottomColor: theme.border.default,
+    paddingVertical: 2, paddingHorizontal: 2,
+  },
+  distInputUnit: { fontFamily: 'PlusJakartaSans-SemiBold', color: theme.text.muted, fontSize: 13 },
+  avgBtn: {
+    flexDirection: 'row', alignItems: 'center', gap: 5, alignSelf: 'flex-start',
+    marginTop: 20, backgroundColor: theme.accent.light,
+    paddingHorizontal: 12, paddingVertical: 8, borderRadius: 999,
+  },
+  avgBtnText: { fontFamily: 'PlusJakartaSans-Bold', color: theme.accent.primary, fontSize: 12 },
 
   condHead: { flexDirection: 'row', alignItems: 'flex-start', gap: 12 },
   condHeadText: { flex: 1 },

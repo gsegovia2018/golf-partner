@@ -87,6 +87,23 @@ describe('recommendClub', () => {
     expect(r.club).toBe('pw'); // nominal 105
   });
 
+  it('does not return the only-measured club for a distance it does not fit', () => {
+    // Only the 7i has data (avg 170). A 123m target should NOT pick the 7i just
+    // because it is the sole measured club — the pw's nominal is far closer.
+    const shots = [shot(1, 1, null, 170), shot(1, 2, '7i', 170)];
+    const r = recommendClub(123, bag, shots);
+    expect(r.club).not.toBe('7i');
+    expect(r.club).toBe('8i'); // nominal 130, closest to 123
+  });
+
+  it('honors a manual override over the measured average', () => {
+    const shots = [shot(1, 1, null, 170), shot(1, 2, '7i', 170)];
+    // Override the 7i down to 120 — now 123m should land on it.
+    const r = recommendClub(123, bag, shots, { '7i': 120 });
+    expect(r.club).toBe('7i');
+    expect(r.source).toBe('manual');
+  });
+
   it('never recommends the putter and ignores unbagged clubs', () => {
     const r = recommendClub(2, bag, []);
     expect(r.club).not.toBe('putter');

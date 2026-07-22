@@ -30,6 +30,11 @@ export const DEFAULT_APP_SETTINGS = {
   // (set once per course); merges key-wise so editing one keeps the rest.
   conditionsEnabled: false,
   courseAltitudes: {},
+  // Manual per-club carry overrides (club key → metres). Editable in the Bag
+  // screen and used by club recommendations when set, taking precedence over
+  // the logged average (useful before any shots are logged). Merges key-wise
+  // so editing one club keeps the rest; a 0/empty value clears the override.
+  clubDistances: {},
   // Coach-marks tour: ISO timestamp when a chapter was completed/skipped,
   // null (or missing — same thing) means the chapter hasn't run yet.
   tour: { home: null, scorecard: null },

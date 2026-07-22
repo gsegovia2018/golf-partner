@@ -73,7 +73,7 @@ export function HoleDistanceBlock({
   const baseTarget = shotDist?.center ?? gps?.distances?.center ?? null;
   const playTarget = baseTarget != null ? cond.plays(baseTarget) : null;
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  const suggestion = useMemo(() => recommendClub(playTarget, appSettings.bag, getShots()), [playTarget, appSettings.bag, shotsVersion]);
+  const suggestion = useMemo(() => recommendClub(playTarget, appSettings.bag, getShots(), appSettings.clubDistances), [playTarget, appSettings.bag, appSettings.clubDistances, shotsVersion]);
 
   // On the green: drop yardage + club entirely, just say putting.
   if (onGreen) {

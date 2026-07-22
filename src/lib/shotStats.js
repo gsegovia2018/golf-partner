@@ -87,31 +87,39 @@ export function clubAverages(shots) {
   return m;
 }
 
-// Recommend the club for `targetMeters`, restricted to `bag`. Prefers a club
-// with real logged data whose average is closest to the target; if no bagged
-// club has data yet, falls back to the closest nominal carry. Returns
-// { club, label, distance, source: 'personal' | 'nominal', delta } or null
-// (no target, or an empty bag). `delta` is signed target − club distance:
-// positive means the club is a touch short, negative means a touch long.
-export function recommendClub(targetMeters, bag, shots = []) {
+// Recommend the club for `targetMeters`, restricted to `bag`. EVERY bagged club
+// gets an effective distance so the pick is the club genuinely closest to the
+// target — not merely the closest among clubs that happen to have logged data
+// (which used to hand back your only-measured club for any distance). Priority
+// per club: a manual `overrides` yardage, else the logged average, else the
+// catalog nominal. `overrides` is an optional Map|object of club → metres.
+// Returns { club, label, distance, source: 'manual'|'personal'|'nominal', delta }
+// or null (no target, or an empty bag). `delta` is signed target − distance.
+export function recommendClub(targetMeters, bag, shots = [], overrides = null) {
   if (!Number.isFinite(targetMeters) || targetMeters <= 0) return null;
   const clubs = sanitizeBag(bag).filter((k) => k !== 'putter');
   if (!clubs.length) return null;
   const averages = clubAverages(shots);
-
-  const pick = (distFor, source) => {
-    let best = null;
-    for (const club of clubs) {
-      const d = distFor(club);
-      if (!Number.isFinite(d) || d <= 0) continue;
-      const gap = Math.abs(targetMeters - d);
-      if (!best || gap < best.gap) best = { club, distance: d, gap };
-    }
-    return best && { club: best.club, label: clubLabel(best.club), distance: best.distance, source, delta: targetMeters - best.distance };
+  const overrideFor = (c) => {
+    const v = overrides ? (overrides.get ? overrides.get(c) : overrides[c]) : null;
+    return Number.isFinite(v) && v > 0 ? v : null;
   };
 
-  return pick((c) => averages.get(c), 'personal')
-    ?? pick((c) => clubNominal(c), 'nominal');
+  let best = null;
+  for (const club of clubs) {
+    const manual = overrideFor(club);
+    const measured = averages.get(club);
+    const hasMeasured = Number.isFinite(measured) && measured > 0;
+    const d = manual ?? (hasMeasured ? measured : clubNominal(club));
+    if (!Number.isFinite(d) || d <= 0) continue;
+    const source = manual != null ? 'manual' : (hasMeasured ? 'personal' : 'nominal');
+    const gap = Math.abs(targetMeters - d);
+    if (!best || gap < best.gap) best = { club, distance: d, gap, source };
+  }
+  return best && {
+    club: best.club, label: clubLabel(best.club), distance: best.distance,
+    source: best.source, delta: targetMeters - best.distance,
+  };
 }
 
 // Deep stats for ONE club, for the per-club detail screen. Returns null when
