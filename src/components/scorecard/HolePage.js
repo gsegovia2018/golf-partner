@@ -167,7 +167,14 @@ export const HolePage = React.memo(function HolePage({
           </View>
         </View>
         <View style={s.holeHeaderRightWrap}>
-          <HoleDistanceBlock gps={gps} courseName={courseName} onPress={onOpenFlyover} />
+          <HoleDistanceBlock
+            gps={gps}
+            courseName={courseName}
+            holeNumber={pageHole.number}
+            roundId={round.id}
+            roundIndex={roundIndex}
+            onPress={onOpenFlyover}
+          />
         </View>
       </View>
 

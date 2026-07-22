@@ -4,7 +4,11 @@ import { Feather } from '@expo/vector-icons';
 import { useTheme } from '../../theme/ThemeContext';
 import { useAppSettings } from '../../hooks/useAppSettings';
 import { formatDistance, unitSuffix } from '../../lib/units';
-import { subscribeShots, getShotsVersion, getShots } from '../../store/shotStore';
+import { subscribeShots, getShotsVersion, getShots, shotsForHole } from '../../store/shotStore';
+import {
+  holeFeatures, haversineMeters,
+  subscribeCourseGeometry, getCourseGeometryVersion,
+} from '../../lib/geo';
 import { recommendClub } from '../../lib/shotStats';
 import { clubLabel } from '../../lib/clubs';
 import { usePlayConditions } from '../../hooks/usePlayConditions';
@@ -15,7 +19,9 @@ import { useTourTarget } from '../tour/tourTargets';
 // measured from the tee, and the tap target that opens the hole map sheet.
 // Renders nothing when the course has no geometry, or when location is
 // denied and there's no tee to fall back to.
-export function HoleDistanceBlock({ gps, courseName, onPress }) {
+export function HoleDistanceBlock({
+  gps, courseName, holeNumber, roundId, roundIndex, onPress,
+}) {
   const { theme } = useTheme();
   const appSettings = useAppSettings();
   const { units } = appSettings;
@@ -27,12 +33,27 @@ export function HoleDistanceBlock({ gps, courseName, onPress }) {
   // Hooks stay above the early return.
   const cond = usePlayConditions(courseName);
   const shotsVersion = useSyncExternalStore(subscribeShots, getShotsVersion, getShotsVersion);
+  // Subscribe so a new shot / edited geometry re-renders this block.
+  useSyncExternalStore(subscribeCourseGeometry, getCourseGeometryVersion);
   const center = gps?.distances?.center ?? null;
-  const playTarget = center != null ? cond.plays(center) : null;
+
+  // Distance the recommendation plays FROM. Once a ball is marked on this hole,
+  // measure the last spot → green (200m drive on a 300m par 4 leaves ~100m, so
+  // the club drops to a wedge). No shots yet → the live GPS-to-green number.
+  const lastShot = roundId != null
+    ? shotsForHole(roundId, roundIndex, holeNumber).at(-1) : null;
+  const green = lastShot ? holeFeatures(courseName, holeNumber)?.greenCenter : null;
+  const remaining = green ? haversineMeters([lastShot.lat, lastShot.lng], green) : null;
+
+  const baseTarget = remaining ?? center;
+  const playTarget = baseTarget != null ? cond.plays(baseTarget) : null;
   // eslint-disable-next-line react-hooks/exhaustive-deps
   const suggestion = useMemo(() => recommendClub(playTarget, appSettings.bag, getShots()), [playTarget, appSettings.bag, shotsVersion]);
-  const playsNote = cond.enabled && center != null && Math.round(playTarget) !== Math.round(center)
-    ? `plays ${formatDistance(playTarget, units)}${unitSuffix(units)}` : null;
+  // "Xm left" once measuring from a marked shot; else the conditions "plays" note.
+  const leftNote = remaining != null
+    ? `${formatDistance(playTarget, units)}${unitSuffix(units)} left`
+    : (cond.enabled && center != null && Math.round(playTarget) !== Math.round(center)
+      ? `plays ${formatDistance(playTarget, units)}${unitSuffix(units)}` : null);
   if (!gps?.available) return null;
 
   const fmt = (meters) => formatDistance(meters, units);
@@ -58,7 +79,7 @@ export function HoleDistanceBlock({ gps, courseName, onPress }) {
         </View>
         <Text style={s.fb}>{`F ${fmt(distances.front)}  B ${fmt(distances.back)}`}</Text>
         {suggestion && <Text style={s.club}>{`≈ ${clubLabel(suggestion.club)}`}</Text>}
-        {playsNote && <Text style={s.plays}>{playsNote}</Text>}
+        {leftNote && <Text style={s.plays}>{leftNote}</Text>}
         <Text style={s.mapHint}>TAP FOR MAP</Text>
         {!!hazardLine && <Text style={s.hzd}>{hazardLine}</Text>}
       </Pressable>
@@ -79,6 +100,7 @@ export function HoleDistanceBlock({ gps, courseName, onPress }) {
           </View>
           <Text style={s.fb}>{`F ${fmt(distances.front)}  B ${fmt(distances.back)}`}</Text>
           {suggestion && <Text style={s.club}>{`≈ ${clubLabel(suggestion.club)}`}</Text>}
+          {leftNote && <Text style={s.plays}>{leftNote}</Text>}
           <Text style={s.mapHint}>TAP FOR MAP</Text>
           {poorFix && <Text style={s.caption}>{`±${fmt(accuracy)}${unitSuffix(units)}`}</Text>}
           {!!hazardLine && <Text style={s.hzd}>{hazardLine}</Text>}
