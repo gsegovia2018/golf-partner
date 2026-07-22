@@ -149,6 +149,34 @@ export async function setShotClub(id, club) {
   } catch { /* stays pending */ }
 }
 
+// Move an already-logged shot to a new [lat, lng] (drag/re-place the spot).
+export async function setShotPos(id, pos) {
+  const shot = SHOTS.find((s) => s.id === id);
+  if (!shot || !pos) return;
+  [shot.lat, shot.lng] = pos;
+  shot.pending = true;
+  emit();
+  await persistCache();
+  try {
+    if (userId) {
+      const { error } = await supabase.from('golf_shot').upsert(shotToRow(shot));
+      if (!error) { delete shot.pending; await persistCache(); emit(); }
+    }
+  } catch { /* stays pending */ }
+}
+
+// Remove any one shot by id.
+export async function deleteShot(id) {
+  const shot = SHOTS.find((s) => s.id === id);
+  if (!shot) return;
+  SHOTS = SHOTS.filter((s) => s.id !== id);
+  emit();
+  await persistCache();
+  try {
+    if (userId && !shot.pending) await supabase.from('golf_shot').delete().eq('id', id);
+  } catch { /* server row lingers; harmless, re-hydrate reconciles */ }
+}
+
 // Remove the last shot on a hole (undo mis-taps).
 export async function undoLastShot(roundId, roundIndex, holeNumber) {
   const hole = shotsForHole(roundId, roundIndex, holeNumber);

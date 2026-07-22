@@ -5,26 +5,27 @@ import PressableScale from '../ui/PressableScale';
 import { useAppSettings } from '../../hooks/useAppSettings';
 import {
   subscribeShots, getShotsVersion, getShots,
-  shotsForHole, logShot, setShotClub, undoLastShot,
+  shotsForHole, logShot, setShotClub, setShotPos, deleteShot, undoLastShot,
 } from '../../store/shotStore';
 import { haversineMeters } from '../../lib/geo';
-import { recommendClub } from '../../lib/shotStats';
-import { swingClubs, clubLabel } from '../../lib/clubs';
+import { recommendClub, clubAverages } from '../../lib/shotStats';
+import { swingClubs, clubLabel, clubNominal } from '../../lib/clubs';
 import { formatDistance, unitSuffix } from '../../lib/units';
 import { haptic } from '../../lib/haptics';
+import { ClubWheel } from './ClubWheel';
 
 // Shot log overlaid on the hole map (HoleFlyover). Ball spots are placed by
 // TAPPING the map where the ball landed — GPS is optional (a "drop at me"
 // shortcut when there's a fix). The first spot on a hole is the tee (seeded
 // from the hole geometry when available); every later spot is tagged with the
 // club that GOT the ball there, so its carry = distance from the previous spot.
-// Distances come straight from the map geometry — no GPS required.
 //
-// Placement is driven by the parent: `placing` toggles map-tap mode, and a
-// tapped point arrives as `pendingPoint` for us to log.
+// Placing a spot opens a WHEEL dialog (ClubWheel) to pick the club, framed by
+// the carry just made and the distance left to the pin. Tapping an existing
+// spot re-opens that wheel to change the club, move the spot, or delete it.
 export function ShotTracker({
   roundId, roundIndex, holeNumber,
-  pos, teePos, targetMeters,
+  pos, teePos, targetPos, targetMeters,
   placing, onTogglePlacing, pendingPoint, onConsumePoint,
 }) {
   const appSettings = useAppSettings();
@@ -35,7 +36,8 @@ export function ShotTracker({
   // eslint-disable-next-line react-hooks/exhaustive-deps
   const shots = useMemo(() => shotsForHole(roundId, roundIndex, holeNumber), [roundId, roundIndex, holeNumber, shotsVersion]);
 
-  const [pickFor, setPickFor] = useState(null); // shot id whose club chooser is open
+  const [wheelId, setWheelId] = useState(null); // shot id whose club wheel is open
+  const [moveId, setMoveId] = useState(null); // shot id being repositioned by the next tap
 
   // "Club to hit" hint for the next shot, from distance to the green.
   const suggestion = useMemo(
@@ -45,8 +47,8 @@ export function ShotTracker({
   );
 
   // Add a ball spot at `spot` ([lat,lng]). Seeds the tee as the origin on an
-  // empty hole, appends the landing, and opens the club chooser on it —
-  // pre-guessing the club from the just-measured carry.
+  // empty hole, appends the landing, and opens the club wheel on it —
+  // pre-focused on the club whose carry matches the just-measured distance.
   const addSpot = async (spot) => {
     const hole = shotsForHole(roundId, roundIndex, holeNumber);
     let prev = hole[hole.length - 1] ?? null;
@@ -57,14 +59,17 @@ export function ShotTracker({
     const carry = prev ? haversineMeters([prev.lat, prev.lng], spot) : null;
     const guess = carry ? recommendClub(carry, appSettings.bag, getShots())?.club ?? null : null;
     const shot = await logShot({ roundId, roundIndex, holeNumber, pos: spot, club: guess });
-    setPickFor(shot.id);
+    setWheelId(shot.id);
   };
 
-  // A map tap handed down from the parent.
+  // A map tap handed down from the parent: reposition a spot mid-edit, or add.
   useEffect(() => {
     if (!pendingPoint) return;
     haptic('light');
-    addSpot(pendingPoint).finally(() => onConsumePoint?.());
+    (async () => {
+      if (moveId) { await setShotPos(moveId, pendingPoint); setMoveId(null); }
+      else await addSpot(pendingPoint);
+    })().finally(() => onConsumePoint?.());
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [pendingPoint]);
 
@@ -76,27 +81,36 @@ export function ShotTracker({
     : null);
   const isOrigin = (i, shot) => i === 0 && !shot.club;
 
-  const chooseClub = async (club) => {
-    if (pickFor) await setShotClub(pickFor, club);
-    setPickFor(null);
-  };
   const dropAtMe = () => { if (pos) addSpot(pos); };
+
+  // ── Wheel state derived from the shot being edited ───────────────────────
+  const averages = clubAverages(getShots());
+  const wheelClubs = bag.map((k) => ({
+    key: k, label: clubLabel(k), distance: averages.get(k) ?? clubNominal(k),
+  }));
+  const editIndex = wheelId ? shots.findIndex((sh) => sh.id === wheelId) : -1;
+  const editShot = editIndex >= 0 ? shots[editIndex] : null;
+  const editCarry = editIndex > 0 ? carryOf(editIndex) : null;
+  const editToPin = editShot && targetPos
+    ? haversineMeters([editShot.lat, editShot.lng], targetPos) : null;
+  const editValue = editShot
+    ? (editShot.club ?? recommendClub(editCarry, appSettings.bag, getShots())?.club ?? null)
+    : null;
+
+  const closeWheel = () => setWheelId(null);
+  const chooseClub = (club) => { if (wheelId && club) setShotClub(wheelId, club); closeWheel(); };
+  const moveShot = () => {
+    setMoveId(wheelId);
+    closeWheel();
+    if (!placing) onTogglePlacing?.();
+    haptic('selection');
+  };
+  const removeShot = () => { if (wheelId) deleteShot(wheelId); closeWheel(); };
+
+  const primaryLabel = moveId ? 'Tap the new spot' : (placing ? 'Tap the map' : 'Add shot');
 
   return (
     <View style={s.wrap} pointerEvents="box-none">
-      {pickFor && (
-        <View style={s.picker}>
-          <Text style={s.pickerTitle}>Club that got it there?</Text>
-          <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={s.pickerRow}>
-            {bag.map((club) => (
-              <PressableScale key={club} onPress={() => chooseClub(club)} style={s.pickerChip}>
-                <Text style={s.pickerChipText}>{clubLabel(club)}</Text>
-              </PressableScale>
-            ))}
-          </ScrollView>
-        </View>
-      )}
-
       <View style={s.bar}>
         {shots.length > 0 && (
           <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={s.shotRow} style={s.shotScroll}>
@@ -111,7 +125,7 @@ export function ShotTracker({
               }
               const carry = carryOf(i);
               return (
-                <PressableScale key={shot.id} onPress={() => setPickFor(shot.id)} style={s.shotPill}>
+                <PressableScale key={shot.id} onPress={() => setWheelId(shot.id)} style={s.shotPill}>
                   <Text style={s.shotSeq}>{i}</Text>
                   <Text style={[s.shotClub, !shot.club && s.shotClubEmpty]}>
                     {shot.club ? clubLabel(shot.club) : 'club?'}
@@ -141,38 +155,36 @@ export function ShotTracker({
             </PressableScale>
           )}
           <PressableScale
-            onPress={onTogglePlacing}
-            style={[s.mark, placing && s.markActive]}
+            onPress={() => { if (moveId) setMoveId(null); onTogglePlacing(); }}
+            style={[s.mark, (placing || moveId) && s.markActive]}
             accessibilityLabel={placing ? 'Cancel placing' : 'Add a shot by tapping the map'}
           >
-            <Feather name={placing ? 'x' : 'plus'} size={16} color="#0a0d10" />
-            <Text style={s.markText}>{placing ? 'Tap the map' : 'Add shot'}</Text>
-            {!placing && suggestion && <Text style={s.suggest}>{`≈ ${clubLabel(suggestion.club)}`}</Text>}
+            <Feather name={(placing || moveId) ? 'x' : 'plus'} size={16} color="#0a0d10" />
+            <Text style={s.markText}>{primaryLabel}</Text>
+            {!placing && !moveId && suggestion && <Text style={s.suggest}>{`≈ ${clubLabel(suggestion.club)}`}</Text>}
           </PressableScale>
         </View>
       </View>
+
+      <ClubWheel
+        visible={!!editShot}
+        clubs={wheelClubs}
+        value={editValue}
+        units={units}
+        seqLabel={editIndex >= 0 ? `Shot ${editIndex}` : 'Club'}
+        carryMeters={editCarry}
+        toPinMeters={editToPin}
+        onSelect={chooseClub}
+        onMove={moveShot}
+        onDelete={removeShot}
+        onClose={closeWheel}
+      />
     </View>
   );
 }
 
 const s = StyleSheet.create({
   wrap: { position: 'absolute', left: 10, right: 10, bottom: 14, gap: 8 },
-
-  picker: {
-    backgroundColor: 'rgba(10,13,16,0.94)',
-    borderWidth: StyleSheet.hairlineWidth, borderColor: 'rgba(255,255,255,0.14)',
-    borderRadius: 14, paddingVertical: 10, paddingHorizontal: 12,
-  },
-  pickerTitle: {
-    color: '#9fb0a4', fontFamily: 'PlusJakartaSans-Bold', fontSize: 10,
-    letterSpacing: 1.2, marginBottom: 8,
-  },
-  pickerRow: { gap: 8, paddingRight: 4 },
-  pickerChip: {
-    borderRadius: 999, borderWidth: 1.5, borderColor: 'rgba(255,255,255,0.18)',
-    backgroundColor: 'rgba(255,255,255,0.06)', paddingHorizontal: 14, paddingVertical: 9,
-  },
-  pickerChipText: { color: '#fff', fontFamily: 'PlusJakartaSans-Bold', fontSize: 13 },
 
   bar: {
     backgroundColor: 'rgba(10,13,16,0.92)',

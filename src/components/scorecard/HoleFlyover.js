@@ -130,6 +130,7 @@ export function HoleFlyover({
                   holeNumber={holeNumber}
                   pos={position ?? null}
                   teePos={feat?.start ?? null}
+                  targetPos={feat?.greenCenter ?? null}
                   targetMeters={feat?.greenCenter && position
                     ? cond.plays(haversineMeters(position, feat.greenCenter)) : null}
                   placing={placing}
