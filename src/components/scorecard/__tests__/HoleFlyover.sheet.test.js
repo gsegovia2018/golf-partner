@@ -51,6 +51,13 @@ describe('HoleFlyover sheet chrome', () => {
     expect(queryByText(/Par/)).toBeNull();
   });
 
+  it('gives the map an onShotTap handler when a round is active', () => {
+    mockHoleMapView.mockClear();
+    render(<HoleFlyover {...props} roundId="r1" roundIndex={0} />);
+    const last = mockHoleMapView.mock.calls[mockHoleMapView.mock.calls.length - 1][0];
+    expect(typeof last.onShotTap).toBe('function');
+  });
+
   describe('yards mode', () => {
     afterEach(() => {
       __resetAppSettingsForTests();

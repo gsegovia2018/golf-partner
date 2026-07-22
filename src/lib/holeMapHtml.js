@@ -168,20 +168,31 @@ function draw() {
 
 // Logged shots: numbered gold pins linked by a dashed trail, with the carry
 // (straight-line distance) chipped at each segment's midpoint. Drawn inside
-// draw() so they survive player/hole redraws. Non-interactive — the ShotTracker
-// overlay owns editing.
+// draw() so they survive player/hole redraws. Landing pins are tappable and
+// post a shot-tap to the host; the tee/origin pin is not.
 function shotIcon(n){ return L.divIcon({ className:'', iconSize:[22,22], iconAnchor:[11,11], html:'<div class="shotpin">'+n+'</div>' }); }
 function drawShots(){
-  const pts = (shots||[]).map(sh => [sh.lat, sh.lng]).filter(valid);
-  if (!pts.length) return;
-  if (pts.length > 1) add(L.polyline(pts, { color:'#f4c04a', weight:2, opacity:.9, dashArray:'2 7' }));
-  for (let i=0;i<pts.length;i++){
-    add(L.marker(pts[i], { icon: shotIcon(i+1), interactive:false, zIndexOffset:500 }));
-    if (i>0){
-      const d = dist(pts[i-1], pts[i]);
-      const mid = [(pts[i-1][0]+pts[i][0])/2, (pts[i-1][1]+pts[i][1])/2];
-      add(L.marker(mid, { interactive:false, icon: L.divIcon({ className:'', html:'<div class="dchip">'+disp(d)+' '+U+'</div>', iconSize:[0,0] }) }));
-    }
+  const list = shots || [];
+  const pts = list.map(sh => [sh.lat, sh.lng]);
+  const validPts = pts.filter(valid);
+  if (!validPts.length) return;
+  if (validPts.length > 1) add(L.polyline(validPts, { color:'#f4c04a', weight:2, opacity:.9, dashArray:'2 7' }));
+  for (let i=0;i<list.length;i++){
+    if (!valid(pts[i])) continue;
+    const origin = i === 0 && !list[i].club; // the seeded tee carries no club
+    const mk = L.marker(pts[i], { icon: shotIcon(i+1), interactive: !origin, zIndexOffset:500 });
+    if (!origin) mk.on('click', (e) => {
+      if (placing) return;                // placing mode owns taps (repositioning)
+      L.DomEvent.stopPropagation(e);      // don't let the tap move the aim ring
+      post({ type:'shot-tap', index:i });
+    });
+    add(mk);
+  }
+  for (let i=1;i<list.length;i++){
+    if (!valid(pts[i-1]) || !valid(pts[i])) continue;
+    const d = dist(pts[i-1], pts[i]);
+    const mid = [(pts[i-1][0]+pts[i][0])/2, (pts[i-1][1]+pts[i][1])/2];
+    add(L.marker(mid, { interactive:false, icon: L.divIcon({ className:'', html:'<div class="dchip">'+disp(d)+' '+U+'</div>', iconSize:[0,0] }) }));
   }
 }
 

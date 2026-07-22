@@ -6,7 +6,7 @@ import { getTileDataUrl } from '../../store/tileCache';
 // Native host: renders the Leaflet map page in a WebView. Same contract as the
 // web host — rebuilds only on hole/mode identity change; live updates are
 // injected as postMessage into the page so it never reloads.
-export function HoleMapView({ data, player, anchor, activeField, shots, placing, onShotPoint, onAim, onPoint, style }) {
+export function HoleMapView({ data, player, anchor, activeField, shots, placing, onShotPoint, onAim, onShotTap, onPoint, style }) {
   const ref = useRef(null);
   // eslint-disable-next-line react-hooks/exhaustive-deps
   const html = useMemo(() => buildHoleMapHtml(data), [data.holeKey]);
@@ -34,6 +34,7 @@ export function HoleMapView({ data, player, anchor, activeField, shots, placing,
         if (m.type === 'point') onPoint?.(m.field, m.pos, m.drag);
         if (m.type === 'shot-point') onShotPoint?.(m.pos);
         if (m.type === 'aim') onAim?.(m.pos);
+        if (m.type === 'shot-tap') onShotTap?.(m.index);
         if (m.type === 'tile') {
           getTileDataUrl({ z: m.z, x: m.x, y: m.y, bucket: data.courseKey || '_browse' })
             .then((dataUrl) => send({ type: 'tile-data', id: m.id, dataUrl }));
