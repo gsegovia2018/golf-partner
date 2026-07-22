@@ -36,6 +36,7 @@ export function buildHoleMapHtml(data) {
   .tri .lbl{font-size:9px;font-weight:700;letter-spacing:.08em;color:#9fb0a4;text-transform:uppercase;width:34px;text-align:left}
   .hint{position:absolute;bottom:16px;left:50%;transform:translateX(-50%);background:rgba(14,22,28,.85);color:#fff;font-weight:600;font-size:13px;padding:7px 14px;border-radius:999px}
   .dchip{background:rgba(14,22,28,.88);color:#fff;font-weight:800;font-size:13px;padding:4px 11px;border-radius:999px;font-variant-numeric:tabular-nums;white-space:nowrap;border:1px solid rgba(255,255,255,.25);transform:translate(-50%,-50%);display:inline-block}
+  .shotpin{width:22px;height:22px;border-radius:50%;background:#f4c04a;border:2px solid #0a0d10;color:#0a0d10;font-weight:800;font-size:12px;display:flex;align-items:center;justify-content:center;box-shadow:0 1px 3px rgba(0,0,0,.5);font-variant-numeric:tabular-nums}
   #recenter{position:absolute;right:12px;bottom:14px;width:40px;height:40px;border-radius:999px;background:rgba(14,22,28,.85);border:1px solid rgba(255,255,255,.25);color:#fff;display:flex;align-items:center;justify-content:center;padding:0;cursor:pointer;z-index:600;opacity:0;pointer-events:none;transform:scale(.9);transition:opacity .15s,transform .15s}
   #recenter.show{opacity:1;pointer-events:auto;transform:scale(1)}
   #recenter:active{background:rgba(14,22,28,.95)}
@@ -100,6 +101,7 @@ let hole = DATA;
 let player = DATA.player || null;
 let anchor = DATA.anchor || { pos: null, source: null, playerDistance: null };
 let activeField = DATA.activeField || 'center';
+let shots = DATA.shots || []; // logged shots for this hole: [{lat,lng,club}]
 const layers = [];
 const clear = () => { layers.forEach(l => map.removeLayer(l)); layers.length = 0; };
 const add = (l) => { layers.push(l.addTo(map)); return l; };
@@ -136,6 +138,7 @@ function draw() {
   if (g.b) add(L.circleMarker(g.b, { radius:3.5, color:'#fff', weight:1.5, fillColor:'#ef8a5b', fillOpacity:1 }));
   if (g.c) add(L.circleMarker(g.c, { radius:5, color:'#3f8f43', weight:2, fillColor:'#fff', fillOpacity:1 }));
   if (hole.tee) add(L.circleMarker(hole.tee, { radius:6, color:'#fff', weight:2, fillColor:'#2f6bff', fillOpacity:1 }));
+  drawShots();
 
   const from = valid(anchor.pos) ? anchor.pos : null;
   const cc = valid(g.c) ? g.c : [map.getCenter().lat, map.getCenter().lng];
@@ -155,6 +158,25 @@ function draw() {
   });
   drawTargets(from, g, cc);
   hud(from, g);
+}
+
+// Logged shots: numbered gold pins linked by a dashed trail, with the carry
+// (straight-line distance) chipped at each segment's midpoint. Drawn inside
+// draw() so they survive player/hole redraws. Non-interactive — the ShotTracker
+// overlay owns editing.
+function shotIcon(n){ return L.divIcon({ className:'', iconSize:[22,22], iconAnchor:[11,11], html:'<div class="shotpin">'+n+'</div>' }); }
+function drawShots(){
+  const pts = (shots||[]).map(sh => [sh.lat, sh.lng]).filter(valid);
+  if (!pts.length) return;
+  if (pts.length > 1) add(L.polyline(pts, { color:'#f4c04a', weight:2, opacity:.9, dashArray:'2 7' }));
+  for (let i=0;i<pts.length;i++){
+    add(L.marker(pts[i], { icon: shotIcon(i+1), interactive:false, zIndexOffset:500 }));
+    if (i>0){
+      const d = dist(pts[i-1], pts[i]);
+      const mid = [(pts[i-1][0]+pts[i][0])/2, (pts[i-1][1]+pts[i][1])/2];
+      add(L.marker(mid, { interactive:false, icon: L.divIcon({ className:'', html:'<div class="dchip">'+disp(d)+' '+U+'</div>', iconSize:[0,0] }) }));
+    }
+  }
 }
 
 // Aim circles: recreated wholesale on any structural change (add/remove/tap);
@@ -290,6 +312,7 @@ window.addEventListener('message', (ev) => {
   if (m.type === 'player') { player = m.pos; if (m.anchor) anchor = m.anchor; draw(); }
   if (m.type === 'activeField') { activeField = m.field; if (hole.mode==='edit') drawEdit(fcb()); }
   if (m.type === 'hole') { hole = m.hole; draw(); } // redraw markers, keep current pan/zoom
+  if (m.type === 'shots') { shots = m.shots || []; draw(); }
   if (m.type === 'tile-data') {
     const cb = pendingTiles[m.id];
     delete pendingTiles[m.id];

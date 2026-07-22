@@ -1,9 +1,7 @@
 import React, { useMemo, useState, useSyncExternalStore } from 'react';
 import { View, Text, StyleSheet, ScrollView } from 'react-native';
 import { Feather } from '@expo/vector-icons';
-import BottomSheet from '../BottomSheet';
 import PressableScale from '../ui/PressableScale';
-import { useTheme } from '../../theme/ThemeContext';
 import { useAppSettings } from '../../hooks/useAppSettings';
 import {
   subscribeShots, getShotsVersion, getShots,
@@ -15,28 +13,22 @@ import { swingClubs, clubLabel } from '../../lib/clubs';
 import { formatDistance, unitSuffix } from '../../lib/units';
 import { haptic } from '../../lib/haptics';
 
-// Per-hole GPS shot log on the "me" card. "Mark ball" captures the current
-// fix (position matters — capture where you stand, before walking on), then
-// you tag which club you hit from there. Carry = straight-line distance to the
-// next marked shot, so club-on-shot-N + carry(N→N+1) feeds your bag averages.
-// `gps` is the useGpsDistances result; its distances.center drives the club
-// suggestion. Renders nothing off the active page unless the hole already has
-// shots (so paging back still shows them).
-export function ShotTracker({ roundId, roundIndex, holeNumber, gps, isActive }) {
-  const { theme } = useTheme();
-  const s = useMemo(() => makeStyles(theme), [theme]);
+// Shot log overlaid on the hole map (HoleFlyover). Lives INSIDE the map — no
+// map, no tracking — because a shot is only meaningful as a point you can see
+// against the green. "Mark ball" captures the current fix (capture where you
+// stand, before walking on); you then tag the club. Carry = straight-line
+// distance to the next marked shot, so club-on-shot-N + carry(N→N+1) feeds
+// your bag averages. Dark-styled: the flyover is always a dark sheet.
+export function ShotTracker({ roundId, roundIndex, holeNumber, pos, targetMeters }) {
   const appSettings = useAppSettings();
   const { units } = appSettings;
   const bag = useMemo(() => swingClubs(appSettings.bag), [appSettings.bag]);
 
   const shotsVersion = useSyncExternalStore(subscribeShots, getShotsVersion, getShotsVersion);
-  // shotsVersion bumps when the shot store mutates — recompute the slice then.
   // eslint-disable-next-line react-hooks/exhaustive-deps
   const shots = useMemo(() => shotsForHole(roundId, roundIndex, holeNumber), [roundId, roundIndex, holeNumber, shotsVersion]);
 
-  const [pickFor, setPickFor] = useState(null); // shot id whose club sheet is open
-  const pos = gps?.position ?? null;
-  const targetMeters = gps?.distances?.center ?? null;
+  const [pickFor, setPickFor] = useState(null); // shot id whose club chooser is open
   const suggestion = useMemo(
     () => recommendClub(targetMeters, appSettings.bag, getShots()),
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -44,7 +36,6 @@ export function ShotTracker({ roundId, roundIndex, holeNumber, gps, isActive }) 
   );
 
   if (!roundId) return null;
-  if (!isActive && shots.length === 0) return null;
 
   const carryOf = (i) => (i < shots.length - 1
     ? haversineMeters([shots[i].lat, shots[i].lng], [shots[i + 1].lat, shots[i + 1].lng])
@@ -54,151 +45,132 @@ export function ShotTracker({ roundId, roundIndex, holeNumber, gps, isActive }) 
     if (!pos) return;
     haptic('light');
     const shot = await logShot({ roundId, roundIndex, holeNumber, pos, club: suggestion?.club ?? null });
-    setPickFor(shot.id); // let them confirm/change the club right away
+    setPickFor(shot.id);
   };
-
   const chooseClub = async (club) => {
     if (pickFor) await setShotClub(pickFor, club);
     setPickFor(null);
   };
 
   return (
-    <View style={s.card}>
-      <View style={s.headerRow}>
-        <Text style={s.title}>SHOTS</Text>
-        {shots.length > 0 && (
-          <PressableScale
-            onPress={() => { haptic('selection'); undoLastShot(roundId, roundIndex, holeNumber); }}
-            style={s.undo}
-            accessibilityRole="button"
-            accessibilityLabel="Undo last shot"
-          >
-            <Feather name="corner-up-left" size={13} color={theme.text.muted} />
-            <Text style={s.undoText}>Undo</Text>
-          </PressableScale>
-        )}
-      </View>
-
-      {shots.map((shot, i) => {
-        const carry = carryOf(i);
-        return (
-          <View key={shot.id} style={s.shotRow}>
-            <Text style={s.seq}>{i + 1}</Text>
-            <PressableScale
-              onPress={() => setPickFor(shot.id)}
-              style={[s.clubPill, !shot.club && s.clubPillEmpty]}
-              accessibilityRole="button"
-              accessibilityLabel={shot.club ? `Club ${clubLabel(shot.club)}` : 'Set club'}
-            >
-              <Text style={[s.clubText, !shot.club && s.clubTextEmpty]}>
-                {shot.club ? clubLabel(shot.club) : 'Set club'}
-              </Text>
-            </PressableScale>
-            <Text style={s.carry}>
-              {carry != null ? `${formatDistance(carry, units)} ${unitSuffix(units)}` : 'in play'}
-            </Text>
-          </View>
-        );
-      })}
-
-      {isActive && (
-        <PressableScale
-          onPress={mark}
-          disabled={!pos}
-          style={[s.markBtn, !pos && s.markBtnDisabled]}
-          accessibilityRole="button"
-          accessibilityLabel="Mark ball at current position"
-        >
-          <Feather name="map-pin" size={15} color={pos ? theme.accent.primary : theme.text.muted} />
-          <Text style={[s.markText, !pos && s.markTextDisabled]}>
-            {pos ? 'Mark ball' : 'Waiting for GPS…'}
-          </Text>
-          {pos && suggestion && (
-            <Text style={s.suggest}>
-              {`≈ ${clubLabel(suggestion.club)}`}
-            </Text>
-          )}
-        </PressableScale>
-      )}
-
-      <BottomSheet visible={!!pickFor} onClose={() => setPickFor(null)}>
-        <Text style={s.sheetTitle}>Which club?</Text>
-        <ScrollView style={s.sheetScroll}>
-          <View style={s.sheetGrid}>
+    <View style={s.wrap} pointerEvents="box-none">
+      {pickFor && (
+        <View style={s.picker}>
+          <Text style={s.pickerTitle}>Which club?</Text>
+          <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={s.pickerRow}>
             {bag.map((club) => (
-              <PressableScale
-                key={club}
-                onPress={() => chooseClub(club)}
-                style={s.sheetChip}
-                accessibilityRole="button"
-                accessibilityLabel={clubLabel(club)}
-              >
-                <Text style={s.sheetChipText}>{clubLabel(club)}</Text>
+              <PressableScale key={club} onPress={() => chooseClub(club)} style={s.pickerChip}>
+                <Text style={s.pickerChipText}>{clubLabel(club)}</Text>
               </PressableScale>
             ))}
-          </View>
-        </ScrollView>
-      </BottomSheet>
+          </ScrollView>
+        </View>
+      )}
+
+      <View style={s.bar}>
+        {shots.length > 0 && (
+          <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={s.shotRow} style={s.shotScroll}>
+            {shots.map((shot, i) => {
+              const carry = carryOf(i);
+              return (
+                <PressableScale key={shot.id} onPress={() => setPickFor(shot.id)} style={s.shotPill}>
+                  <Text style={s.shotSeq}>{i + 1}</Text>
+                  <Text style={[s.shotClub, !shot.club && s.shotClubEmpty]}>
+                    {shot.club ? clubLabel(shot.club) : 'club?'}
+                  </Text>
+                  {carry != null && (
+                    <Text style={s.shotCarry}>{`${formatDistance(carry, units)}${unitSuffix(units)}`}</Text>
+                  )}
+                </PressableScale>
+              );
+            })}
+          </ScrollView>
+        )}
+
+        <View style={s.actions}>
+          {shots.length > 0 && (
+            <PressableScale
+              onPress={() => { haptic('selection'); undoLastShot(roundId, roundIndex, holeNumber); }}
+              style={s.undo}
+              accessibilityLabel="Undo last shot"
+            >
+              <Feather name="corner-up-left" size={16} color="#cfe3d5" />
+            </PressableScale>
+          )}
+          <PressableScale
+            onPress={mark}
+            disabled={!pos}
+            style={[s.mark, !pos && s.markDisabled]}
+            accessibilityLabel="Mark ball at current position"
+          >
+            <Feather name="map-pin" size={15} color={pos ? '#0a0d10' : '#6d7d72'} />
+            <Text style={[s.markText, !pos && s.markTextDisabled]}>
+              {pos ? 'Mark ball' : 'No GPS'}
+            </Text>
+            {pos && suggestion && <Text style={s.suggest}>{`≈ ${clubLabel(suggestion.club)}`}</Text>}
+          </PressableScale>
+        </View>
+      </View>
     </View>
   );
 }
 
-const makeStyles = (theme) => StyleSheet.create({
-  card: {
-    marginTop: 10,
-    backgroundColor: theme.bg.card,
-    borderRadius: theme.radius.lg,
-    borderWidth: StyleSheet.hairlineWidth, borderColor: theme.border.default,
-    paddingHorizontal: 14, paddingVertical: 12,
-  },
-  headerRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
-  title: {
-    fontFamily: 'PlusJakartaSans-Bold', color: theme.text.muted, fontSize: 10,
-    letterSpacing: 1.4,
-  },
-  undo: { flexDirection: 'row', alignItems: 'center', gap: 5 },
-  undoText: { fontFamily: 'PlusJakartaSans-SemiBold', color: theme.text.muted, fontSize: 12 },
+const s = StyleSheet.create({
+  wrap: { position: 'absolute', left: 10, right: 10, bottom: 14, gap: 8 },
 
-  shotRow: { flexDirection: 'row', alignItems: 'center', gap: 12, marginTop: 10 },
-  seq: {
-    fontFamily: 'PlusJakartaSans-Bold', color: theme.text.muted, fontSize: 13,
-    width: 16, textAlign: 'center', fontVariant: ['tabular-nums'],
+  picker: {
+    backgroundColor: 'rgba(10,13,16,0.94)',
+    borderWidth: StyleSheet.hairlineWidth, borderColor: 'rgba(255,255,255,0.14)',
+    borderRadius: 14, paddingVertical: 10, paddingHorizontal: 12,
   },
-  clubPill: {
-    borderRadius: 999, borderWidth: 1.5, borderColor: theme.accent.primary,
-    backgroundColor: theme.accent.light, paddingHorizontal: 12, paddingVertical: 6,
+  pickerTitle: {
+    color: '#9fb0a4', fontFamily: 'PlusJakartaSans-Bold', fontSize: 10,
+    letterSpacing: 1.2, marginBottom: 8,
   },
-  clubPillEmpty: { borderColor: theme.border.default, backgroundColor: theme.bg.card },
-  clubText: { fontFamily: 'PlusJakartaSans-Bold', color: theme.accent.primary, fontSize: 13 },
-  clubTextEmpty: { color: theme.text.muted, fontFamily: 'PlusJakartaSans-SemiBold' },
-  carry: {
-    marginLeft: 'auto',
-    fontFamily: 'PlusJakartaSans-Bold', color: theme.text.primary, fontSize: 14,
+  pickerRow: { gap: 8, paddingRight: 4 },
+  pickerChip: {
+    borderRadius: 999, borderWidth: 1.5, borderColor: 'rgba(255,255,255,0.18)',
+    backgroundColor: 'rgba(255,255,255,0.06)', paddingHorizontal: 14, paddingVertical: 9,
+  },
+  pickerChipText: { color: '#fff', fontFamily: 'PlusJakartaSans-Bold', fontSize: 13 },
+
+  bar: {
+    backgroundColor: 'rgba(10,13,16,0.92)',
+    borderWidth: StyleSheet.hairlineWidth, borderColor: 'rgba(255,255,255,0.14)',
+    borderRadius: 16, padding: 8, gap: 8,
+  },
+  shotScroll: { maxHeight: 40 },
+  shotRow: { gap: 6, alignItems: 'center' },
+  shotPill: {
+    flexDirection: 'row', alignItems: 'center', gap: 6,
+    backgroundColor: 'rgba(255,255,255,0.07)', borderRadius: 999,
+    paddingHorizontal: 10, paddingVertical: 6,
+  },
+  shotSeq: {
+    color: '#9fb0a4', fontFamily: 'PlusJakartaSans-Bold', fontSize: 11,
+    fontVariant: ['tabular-nums'],
+  },
+  shotClub: { color: '#fff', fontFamily: 'PlusJakartaSans-Bold', fontSize: 12 },
+  shotClubEmpty: { color: '#e0a23a' },
+  shotCarry: {
+    color: '#cfe3d5', fontFamily: 'PlusJakartaSans-SemiBold', fontSize: 12,
     fontVariant: ['tabular-nums'],
   },
 
-  markBtn: {
-    flexDirection: 'row', alignItems: 'center', gap: 8, marginTop: 12,
-    borderRadius: 12, borderWidth: 1.5, borderColor: theme.accent.primary,
-    backgroundColor: theme.accent.light, paddingVertical: 11, paddingHorizontal: 14,
+  actions: { flexDirection: 'row', alignItems: 'center', gap: 8 },
+  undo: {
+    width: 42, height: 42, borderRadius: 12, alignItems: 'center', justifyContent: 'center',
+    backgroundColor: 'rgba(255,255,255,0.08)',
   },
-  markBtnDisabled: { borderColor: theme.border.default, backgroundColor: theme.bg.card },
-  markText: { fontFamily: 'PlusJakartaSans-Bold', color: theme.accent.primary, fontSize: 14 },
-  markTextDisabled: { color: theme.text.muted },
+  mark: {
+    flex: 1, flexDirection: 'row', alignItems: 'center', gap: 8,
+    backgroundColor: '#57ae5b', borderRadius: 12, paddingVertical: 12, paddingHorizontal: 14,
+  },
+  markDisabled: { backgroundColor: 'rgba(255,255,255,0.10)' },
+  markText: { color: '#0a0d10', fontFamily: 'PlusJakartaSans-Bold', fontSize: 15 },
+  markTextDisabled: { color: '#6d7d72' },
   suggest: {
     marginLeft: 'auto',
-    fontFamily: 'PlusJakartaSans-SemiBold', color: theme.text.secondary, fontSize: 13,
+    color: 'rgba(10,13,16,0.75)', fontFamily: 'PlusJakartaSans-Bold', fontSize: 13,
   },
-
-  sheetTitle: {
-    fontFamily: 'PlusJakartaSans-Bold', color: theme.text.primary, fontSize: 16,
-    marginBottom: 14,
-  },
-  sheetScroll: { maxHeight: 320 },
-  sheetGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: 10 },
-  sheetChip: {
-    borderRadius: 12, borderWidth: 1.5, borderColor: theme.border.default,
-    backgroundColor: theme.bg.card, paddingHorizontal: 16, paddingVertical: 12,
-  },
-  sheetChipText: { fontFamily: 'PlusJakartaSans-SemiBold', color: theme.text.primary, fontSize: 14 },
 });

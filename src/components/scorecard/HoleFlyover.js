@@ -4,12 +4,14 @@ import {
 } from 'react-native';
 import { Feather } from '@expo/vector-icons';
 import {
-  holeFeatures, subscribeCourseGeometry, getCourseGeometryVersion,
+  holeFeatures, subscribeCourseGeometry, getCourseGeometryVersion, haversineMeters,
 } from '../../lib/geo';
 import { anchorFor } from '../../lib/flyoverModel';
 import { courseKeyFor } from '../../store/tileCache';
 import { useAppSettings } from '../../hooks/useAppSettings';
+import { subscribeShots, getShotsVersion, shotsForHole } from '../../store/shotStore';
 import { HoleMapView } from './HoleMapView';
+import { ShotTracker } from './ShotTracker';
 
 // Full-screen interactive satellite flyover of one hole (Leaflet + Esri tiles,
 // pan/zoom). Green markers/outline, your live position, a draggable aim ring
@@ -19,11 +21,18 @@ import { HoleMapView } from './HoleMapView';
 export function HoleFlyover({
   courseName, holeNumber, par, strokeIndex,
   position, visible, onClose, onEdit,
+  roundId, roundIndex,
 }) {
   const geomVersion = useSyncExternalStore(subscribeCourseGeometry, getCourseGeometryVersion);
   const { units } = useAppSettings();
   // eslint-disable-next-line react-hooks/exhaustive-deps
   const feat = useMemo(() => holeFeatures(courseName, holeNumber), [courseName, holeNumber, geomVersion]);
+
+  // Logged shots for this hole, as plain {lat,lng,club} for the map layer.
+  const shotsVersion = useSyncExternalStore(subscribeShots, getShotsVersion, getShotsVersion);
+  const shotPinsRaw = roundId != null ? shotsForHole(roundId, roundIndex, holeNumber) : [];
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  const shotPins = useMemo(() => shotPinsRaw.map((sh) => ({ lat: sh.lat, lng: sh.lng, club: sh.club })), [roundId, roundIndex, holeNumber, shotsVersion]);
 
   const anchorInfo = useMemo(() => {
     if (!feat) return null;
@@ -45,7 +54,8 @@ export function HoleFlyover({
     player: position || null,
     anchor: anchorInfo,
     units,
-  } : null), [feat, courseName, holeNumber, position, anchorInfo, units]);
+    shots: shotPins, // initial paint; live marks arrive via the shots prop below
+  } : null), [feat, courseName, holeNumber, position, anchorInfo, units, shotPins]);
 
   // Swipe-down on the grabber/header dismisses; the map owns its own gestures.
   const dragY = useRef(new Animated.Value(0)).current;
@@ -96,7 +106,19 @@ export function HoleFlyover({
             </View>
           </View>
           {data ? (
-            <HoleMapView data={data} player={position} anchor={anchorInfo} style={s.map} />
+            <View style={s.map}>
+              <HoleMapView data={data} player={position} anchor={anchorInfo} shots={shotPins} style={s.map} />
+              {roundId != null && (
+                <ShotTracker
+                  roundId={roundId}
+                  roundIndex={roundIndex}
+                  holeNumber={holeNumber}
+                  pos={position ?? null}
+                  targetMeters={feat?.greenCenter && position
+                    ? haversineMeters(position, feat.greenCenter) : null}
+                />
+              )}
+            </View>
           ) : (
             <View style={s.center}><Text style={s.muted}>This course has no green geometry yet.</Text></View>
           )}
