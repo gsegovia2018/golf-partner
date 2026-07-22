@@ -4,6 +4,7 @@ import TourOverlay from '../TourOverlay';
 
 const mockCoach = jest.fn(() => null);
 jest.mock('../CoachMarks', () => (props) => { mockCoach(props); return null; });
+jest.mock('@react-navigation/native', () => ({ useIsFocused: jest.fn(() => true) }));
 jest.mock('../../../context/AuthContext', () => ({ useAuth: jest.fn() }));
 jest.mock('../../../store/tourStore', () => ({
   shouldShowTour: jest.fn(), completeTour: jest.fn().mockResolvedValue(undefined),
@@ -13,6 +14,7 @@ jest.mock('../../../store/settingsStore', () => ({
   isSettingsHydrated: jest.fn(), subscribeSettingsHydration: jest.fn(() => () => {}),
 }));
 const { useAuth } = require('../../../context/AuthContext');
+const { useIsFocused } = require('@react-navigation/native');
 const { shouldShowTour, completeTour } = require('../../../store/tourStore');
 const { isSettingsHydrated } = require('../../../store/settingsStore');
 
@@ -23,6 +25,7 @@ beforeEach(() => {
   useAuth.mockReturnValue({ user: { id: 'u1', is_anonymous: false } });
   shouldShowTour.mockReturnValue(true);
   isSettingsHydrated.mockReturnValue(true);
+  useIsFocused.mockReturnValue(true);
 });
 
 it('renders CoachMarks when hydrated, signed-in, and flag unset', () => {
@@ -35,6 +38,7 @@ it.each([
   ['flag already stamped', () => shouldShowTour.mockReturnValue(false)],
   ['anonymous guest', () => useAuth.mockReturnValue({ user: { id: 'g', is_anonymous: true } })],
   ['signed out', () => useAuth.mockReturnValue({ user: null })],
+  ['screen not focused', () => useIsFocused.mockReturnValue(false)],
 ])('renders nothing when %s', (_label, arrange) => {
   arrange();
   render(<TourOverlay chapter="home" steps={steps} />);

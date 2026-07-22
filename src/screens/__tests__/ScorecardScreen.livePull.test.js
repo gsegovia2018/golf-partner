@@ -56,6 +56,7 @@ jest.mock('@react-navigation/native', () => ({
     const ReactModule = require('react');
     ReactModule.useEffect(() => cb(), [cb]);
   },
+  useIsFocused: () => true,
 }));
 
 jest.mock('../../lib/connectivity', () => ({

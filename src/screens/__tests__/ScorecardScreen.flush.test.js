@@ -13,6 +13,7 @@ jest.mock('@react-navigation/native', () => ({
     const ReactModule = require('react');
     ReactModule.useEffect(() => cb(), [cb]);
   },
+  useIsFocused: () => true,
 }));
 
 let mockOfficialRoundState;

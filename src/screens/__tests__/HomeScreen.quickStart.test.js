@@ -62,6 +62,7 @@ jest.mock('@react-navigation/native', () => ({
   CommonActions: {
     reset: jest.fn((payload) => ({ type: 'RESET', payload })),
   },
+  useIsFocused: jest.fn(() => true),
 }));
 
 jest.mock('../../theme/ThemeContext', () => ({

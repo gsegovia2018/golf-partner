@@ -1,5 +1,5 @@
 import React, { useEffect, useState, useCallback, useRef } from 'react';
-import { View, Text, Pressable, StyleSheet, useWindowDimensions } from 'react-native';
+import { View, Text, Pressable, StyleSheet, useWindowDimensions, Modal } from 'react-native';
 import { useTheme } from '../../theme/ThemeContext';
 import { semantic } from '../../theme/tokens';
 import { measureTourTarget } from './tourTargets';
@@ -71,36 +71,45 @@ export default function CoachMarks({ steps, onDone, onSkip }) {
   const s = styles(theme);
 
   return (
-    <View style={StyleSheet.absoluteFill} pointerEvents="box-none" testID="coachmarks-overlay">
-      {/* Scrim as four panels around the target — RN can't punch holes.
-          Each panel swallows taps (no-op) so the dimmed area can't be used
-          to reach real UI underneath; only the spotlighted target advances. */}
-      <Pressable testID="coachmarks-scrim-top" onPress={() => {}} accessible={false} style={[s.scrim, { left: 0, top: 0, right: 0, height: Math.max(ring.top, 0) }]} />
-      <Pressable testID="coachmarks-scrim-bottom" onPress={() => {}} accessible={false} style={[s.scrim, { left: 0, top: ring.top + ring.height, right: 0, bottom: 0 }]} />
-      <Pressable testID="coachmarks-scrim-left" onPress={() => {}} accessible={false} style={[s.scrim, { left: 0, top: ring.top, width: Math.max(ring.left, 0), height: ring.height }]} />
-      <Pressable testID="coachmarks-scrim-right" onPress={() => {}} accessible={false} style={[s.scrim, { left: ring.left + ring.width, top: ring.top, width: Math.max(winW - ring.left - ring.width, 0), height: ring.height }]} />
-      <View pointerEvents="none" style={[s.ring, ring]} />
-      <Pressable
-        testID="coachmarks-target-press"
-        accessibilityRole="button"
-        accessibilityLabel={`${step.title} — next tour stop`}
-        onPress={next}
-        style={[s.targetPress, ring]}
-      />
-      <View style={[s.card, cardPos]}>
-        <Text style={s.overline}>{`TOUR · ${index + 1} OF ${steps.length}`}</Text>
-        <Text style={s.title}>{step.title}</Text>
-        <Text style={s.body}>{step.body}</Text>
-        <View style={s.row}>
-          <Pressable accessibilityRole="button" onPress={() => onSkipRef.current()} hitSlop={10} style={s.skipBtn}>
-            <Text style={s.skip}>Skip tour</Text>
-          </Pressable>
-          <Pressable accessibilityRole="button" onPress={next} style={s.nextBtn}>
-            <Text style={s.nextText}>{isLast ? 'Done' : 'Next'}</Text>
-          </Pressable>
+    <Modal
+      transparent
+      visible
+      animationType="none"
+      statusBarTranslucent
+      onRequestClose={() => onSkipRef.current()}
+      hardwareAccelerated
+    >
+      <View style={StyleSheet.absoluteFill} pointerEvents="box-none" testID="coachmarks-overlay">
+        {/* Scrim as four panels around the target — RN can't punch holes.
+            Each panel swallows taps (no-op) so the dimmed area can't be used
+            to reach real UI underneath; only the spotlighted target advances. */}
+        <Pressable testID="coachmarks-scrim-top" onPress={() => {}} accessible={false} style={[s.scrim, { left: 0, top: 0, right: 0, height: Math.max(ring.top, 0) }]} />
+        <Pressable testID="coachmarks-scrim-bottom" onPress={() => {}} accessible={false} style={[s.scrim, { left: 0, top: ring.top + ring.height, right: 0, bottom: 0 }]} />
+        <Pressable testID="coachmarks-scrim-left" onPress={() => {}} accessible={false} style={[s.scrim, { left: 0, top: ring.top, width: Math.max(ring.left, 0), height: ring.height }]} />
+        <Pressable testID="coachmarks-scrim-right" onPress={() => {}} accessible={false} style={[s.scrim, { left: ring.left + ring.width, top: ring.top, width: Math.max(winW - ring.left - ring.width, 0), height: ring.height }]} />
+        <View pointerEvents="none" style={[s.ring, ring]} />
+        <Pressable
+          testID="coachmarks-target-press"
+          accessibilityRole="button"
+          accessibilityLabel={`${step.title} — next tour stop`}
+          onPress={next}
+          style={[s.targetPress, ring]}
+        />
+        <View style={[s.card, cardPos]}>
+          <Text style={s.overline}>{`TOUR · ${index + 1} OF ${steps.length}`}</Text>
+          <Text style={s.title}>{step.title}</Text>
+          <Text style={s.body}>{step.body}</Text>
+          <View style={s.row}>
+            <Pressable accessibilityRole="button" onPress={() => onSkipRef.current()} hitSlop={10} style={s.skipBtn}>
+              <Text style={s.skip}>Skip tour</Text>
+            </Pressable>
+            <Pressable accessibilityRole="button" onPress={next} style={s.nextBtn}>
+              <Text style={s.nextText}>{isLast ? 'Done' : 'Next'}</Text>
+            </Pressable>
+          </View>
         </View>
       </View>
-    </View>
+    </Modal>
   );
 }
 
