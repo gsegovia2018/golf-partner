@@ -66,6 +66,9 @@ export function HoleFlyover({
   // Latest aim-ring position reported by the map, so "Add shot" drops the ball
   // right where the white ring sits (no tap-to-place needed to add).
   const [aimPos, setAimPos] = useState(null);
+  // Index of a shot pin tapped on the map, relayed to ShotTracker to open its
+  // club wheel for that shot.
+  const [tappedShot, setTappedShot] = useState(null);
 
   // Swipe-down on the grabber/header dismisses; the map owns its own gestures.
   const dragY = useRef(new Animated.Value(0)).current;
@@ -125,6 +128,7 @@ export function HoleFlyover({
                 placing={placing}
                 onShotPoint={(p) => { setPendingPoint(p); }}
                 onAim={setAimPos}
+                onShotTap={setTappedShot}
                 style={s.map}
               />
               {roundId != null && (
@@ -142,6 +146,8 @@ export function HoleFlyover({
                   onTogglePlacing={() => setPlacing((v) => !v)}
                   pendingPoint={pendingPoint}
                   onConsumePoint={() => setPendingPoint(null)}
+                  tappedShotIndex={tappedShot}
+                  onConsumeShotTap={() => setTappedShot(null)}
                 />
               )}
             </View>
