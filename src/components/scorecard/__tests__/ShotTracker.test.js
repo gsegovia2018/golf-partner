@@ -1,6 +1,5 @@
 import React from 'react';
-import { render, fireEvent } from '@testing-library/react-native';
-import { Text } from 'react-native';
+import { render, fireEvent, act } from '@testing-library/react-native';
 import { ShotTracker } from '../ShotTracker';
 
 // Controllable shot list for shotsForHole / getShots.
@@ -50,21 +49,31 @@ describe('ShotTracker FAB', () => {
     getByLabelText('Add a shot at the aim ring');
   });
 
-  it('adds a shot at the aim ring on press', () => {
-    const { getByLabelText } = render(<ShotTracker {...base} aimPos={[38.554, -0.142]} />);
-    fireEvent.press(getByLabelText('Add a shot at the aim ring'));
-    expect(logShot).toHaveBeenCalled();
+  it('adds a shot at the aim ring on press', async () => {
+    const { getByLabelText } = render(
+      <ShotTracker {...base} aimPos={[38.5541, -0.1421]} pos={[38.5531, -0.1411]} />
+    );
+    await act(async () => {
+      fireEvent.press(getByLabelText('Add a shot at the aim ring'));
+    });
+    expect(logShot).toHaveBeenCalledWith(expect.objectContaining({ pos: [38.5541, -0.1421] }));
   });
 
-  it('adds a shot at GPS on long-press', () => {
-    const { getByLabelText } = render(<ShotTracker {...base} pos={[38.553, -0.141]} />);
-    fireEvent(getByLabelText('Add a shot at the aim ring'), 'longPress');
-    expect(logShot).toHaveBeenCalled();
+  it('adds a shot at GPS on long-press', async () => {
+    const { getByLabelText } = render(
+      <ShotTracker {...base} aimPos={[38.5541, -0.1421]} pos={[38.5531, -0.1411]} />
+    );
+    await act(async () => {
+      fireEvent(getByLabelText('Add a shot at the aim ring'), 'longPress');
+    });
+    expect(logShot).toHaveBeenCalledWith(expect.objectContaining({ pos: [38.5531, -0.1411] }));
   });
 
-  it('does nothing when there is no aim ring and no GPS', () => {
+  it('does nothing when there is no aim ring and no GPS', async () => {
     const { getByLabelText } = render(<ShotTracker {...base} />);
-    fireEvent.press(getByLabelText('Add a shot at the aim ring'));
+    await act(async () => {
+      fireEvent.press(getByLabelText('Add a shot at the aim ring'));
+    });
     expect(logShot).not.toHaveBeenCalled();
   });
 
