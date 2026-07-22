@@ -65,6 +65,7 @@ import ClaimPlayerScreen from './src/screens/ClaimPlayerScreen';
 import ProfileScreen from './src/screens/ProfileScreen';
 import SettingsScreen from './src/screens/SettingsScreen';
 import BagScreen from './src/screens/BagScreen';
+import ClubStatScreen from './src/screens/ClubStatScreen';
 import PlayersScreen from './src/screens/PlayersScreen';
 import FinishedScreen from './src/screens/FinishedScreen';
 import { startUploadWorker } from './src/lib/uploadWorker';
@@ -277,6 +278,7 @@ function AppNavigator() {
         <Stack.Screen name="Profile" component={ProfileScreen} />
         <Stack.Screen name="Settings" component={SettingsScreen} />
         <Stack.Screen name="Bag" component={BagScreen} />
+        <Stack.Screen name="ClubStat" component={ClubStatScreen} />
         <Stack.Screen name="Players" component={PlayersScreen} />
         <Stack.Screen name="Finished" component={FinishedScreen} />
         <Stack.Screen name="Friends" component={FriendsScreen} />

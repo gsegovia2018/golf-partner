@@ -10,8 +10,12 @@ import { CLUB_CATALOG, clubLabel, clubNominal, clubOrder, sanitizeBag } from './
 // THERE, so its carry is the straight-line distance from the PREVIOUS spot.
 function holeKey(s) { return `${s.roundId}|${s.roundIndex}|${s.holeNumber}`; }
 
-// -> Map<club, number[]> of carries (metres) attributed to the club hit.
-export function carriesByClub(shots) {
+// -> flat list of measured carries, one per tagged landing spot:
+// { club, meters, roundId, roundIndex, holeNumber, seq }. The straight-line
+// distance from the previous spot on the same hole, credited to the club that
+// got the ball THERE. This is the shared primitive every aggregation below
+// builds on. Encounter order of holes/rounds is preserved.
+export function shotCarries(shots) {
   const byHole = new Map();
   for (const s of shots) {
     if (!Number.isFinite(s?.lat) || !Number.isFinite(s?.lng)) continue;
@@ -19,7 +23,7 @@ export function carriesByClub(shots) {
     if (!byHole.has(k)) byHole.set(k, []);
     byHole.get(k).push(s);
   }
-  const out = new Map();
+  const out = [];
   for (const holeShots of byHole.values()) {
     holeShots.sort((a, b) => a.seq - b.seq);
     for (let i = 1; i < holeShots.length; i += 1) {
@@ -28,14 +32,35 @@ export function carriesByClub(shots) {
       if (!cur.club) continue; // spot not yet tagged with the club that reached it
       const d = haversineMeters([prev.lat, prev.lng], [cur.lat, cur.lng]);
       if (!Number.isFinite(d) || d <= 0) continue;
-      if (!out.has(cur.club)) out.set(cur.club, []);
-      out.get(cur.club).push(d);
+      out.push({
+        club: cur.club,
+        meters: d,
+        roundId: cur.roundId,
+        roundIndex: cur.roundIndex,
+        holeNumber: cur.holeNumber,
+        seq: cur.seq,
+      });
     }
   }
   return out;
 }
 
+// -> Map<club, number[]> of carries (metres) attributed to the club hit.
+export function carriesByClub(shots) {
+  const out = new Map();
+  for (const c of shotCarries(shots)) {
+    if (!out.has(c.club)) out.set(c.club, []);
+    out.get(c.club).push(c.meters);
+  }
+  return out;
+}
+
 const avg = (xs) => xs.reduce((a, b) => a + b, 0) / xs.length;
+const stdev = (xs) => {
+  if (xs.length < 2) return 0;
+  const m = avg(xs);
+  return Math.sqrt(xs.reduce((a, b) => a + (b - m) ** 2, 0) / xs.length);
+};
 
 // Per-club summary rows, longest-club first (catalog order). One row per club
 // that has at least one measured carry: { club, label, count, avg, min, max }.
@@ -87,6 +112,42 @@ export function recommendClub(targetMeters, bag, shots = []) {
 
   return pick((c) => averages.get(c), 'personal')
     ?? pick((c) => clubNominal(c), 'nominal');
+}
+
+// Deep stats for ONE club, for the per-club detail screen. Returns null when
+// the club has no measured carries. `std` is the carry standard deviation
+// (consistency — smaller is tighter). `byRound` is the average carry per round
+// in encounter order (for a trend sparkline); `recent` is the last `recentN`
+// individual carries, newest last.
+export function clubDetail(shots, club, recentN = 12) {
+  const mine = shotCarries(shots).filter((c) => c.club === club);
+  if (!mine.length) return null;
+  const carries = mine.map((c) => c.meters);
+
+  const roundOrder = [];
+  const roundBuckets = new Map();
+  for (const c of mine) {
+    const rk = `${c.roundId}|${c.roundIndex}`;
+    if (!roundBuckets.has(rk)) { roundBuckets.set(rk, []); roundOrder.push(rk); }
+    roundBuckets.get(rk).push(c.meters);
+  }
+  const byRound = roundOrder.map((rk) => {
+    const xs = roundBuckets.get(rk);
+    return { key: rk, avg: avg(xs), count: xs.length };
+  });
+
+  return {
+    club,
+    label: clubLabel(club),
+    nominal: clubNominal(club),
+    count: carries.length,
+    avg: avg(carries),
+    std: stdev(carries),
+    min: Math.min(...carries),
+    max: Math.max(...carries),
+    byRound,
+    recent: carries.slice(-recentN),
+  };
 }
 
 // Re-exported so callers can render a full-bag reference table (nominal for

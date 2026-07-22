@@ -1,4 +1,6 @@
-import { carriesByClub, clubDistances, recommendClub } from '../shotStats';
+import {
+  carriesByClub, clubDistances, recommendClub, clubDetail,
+} from '../shotStats';
 
 // Two points ~140m apart (lat delta 0.001259 ≈ 140m) for deterministic carries.
 const A = { lat: 40.0, lng: -4.0 };
@@ -39,6 +41,29 @@ describe('clubDistances', () => {
     const seven = rows.find((r) => r.club === '7i');
     expect(seven.count).toBe(2);
     expect(seven.avg).toBeCloseTo(145, 0);
+  });
+});
+
+describe('clubDetail', () => {
+  it('returns null for a club with no carries', () => {
+    expect(clubDetail([], '7i')).toBeNull();
+  });
+
+  it('aggregates count, avg, spread and per-round trend', () => {
+    const shots = [
+      shot(1, 1, null, 140, 'g1'), shot(1, 2, '7i', 140, 'g1'),
+      shot(2, 1, null, 150, 'g1'), shot(2, 2, '7i', 150, 'g1'),
+      shot(1, 1, null, 130, 'g2'), shot(1, 2, '7i', 130, 'g2'),
+    ];
+    const d = clubDetail(shots, '7i');
+    expect(d.count).toBe(3);
+    expect(d.min).toBeCloseTo(130, 0);
+    expect(d.max).toBeCloseTo(150, 0);
+    expect(d.std).toBeGreaterThan(0);
+    expect(d.byRound).toHaveLength(2); // g1 (two shots) then g2
+    expect(d.byRound[0].count).toBe(2);
+    expect(d.byRound[0].avg).toBeCloseTo(145, 0);
+    expect(d.recent[d.recent.length - 1]).toBeCloseTo(130, 0);
   });
 });
 

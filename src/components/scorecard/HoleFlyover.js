@@ -9,6 +9,7 @@ import {
 import { anchorFor } from '../../lib/flyoverModel';
 import { courseKeyFor } from '../../store/tileCache';
 import { useAppSettings } from '../../hooks/useAppSettings';
+import { usePlayConditions } from '../../hooks/usePlayConditions';
 import { subscribeShots, getShotsVersion, shotsForHole } from '../../store/shotStore';
 import { HoleMapView } from './HoleMapView';
 import { ShotTracker } from './ShotTracker';
@@ -25,6 +26,7 @@ export function HoleFlyover({
 }) {
   const geomVersion = useSyncExternalStore(subscribeCourseGeometry, getCourseGeometryVersion);
   const { units } = useAppSettings();
+  const cond = usePlayConditions(courseName);
   // eslint-disable-next-line react-hooks/exhaustive-deps
   const feat = useMemo(() => holeFeatures(courseName, holeNumber), [courseName, holeNumber, geomVersion]);
 
@@ -129,7 +131,7 @@ export function HoleFlyover({
                   pos={position ?? null}
                   teePos={feat?.start ?? null}
                   targetMeters={feat?.greenCenter && position
-                    ? haversineMeters(position, feat.greenCenter) : null}
+                    ? cond.plays(haversineMeters(position, feat.greenCenter)) : null}
                   placing={placing}
                   onTogglePlacing={() => setPlacing((v) => !v)}
                   pendingPoint={pendingPoint}

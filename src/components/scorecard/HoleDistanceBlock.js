@@ -7,6 +7,7 @@ import { formatDistance, unitSuffix } from '../../lib/units';
 import { subscribeShots, getShotsVersion, getShots } from '../../store/shotStore';
 import { recommendClub } from '../../lib/shotStats';
 import { clubLabel } from '../../lib/clubs';
+import { usePlayConditions } from '../../hooks/usePlayConditions';
 import { useTourTarget } from '../tour/tourTargets';
 
 // Right-hand side of the hole header: live GPS distances to the green, or —
@@ -14,18 +15,24 @@ import { useTourTarget } from '../tour/tourTargets';
 // measured from the tee, and the tap target that opens the hole map sheet.
 // Renders nothing when the course has no geometry, or when location is
 // denied and there's no tee to fall back to.
-export function HoleDistanceBlock({ gps, onPress }) {
+export function HoleDistanceBlock({ gps, courseName, onPress }) {
   const { theme } = useTheme();
   const appSettings = useAppSettings();
   const { units } = appSettings;
   const s = useMemo(() => makeStyles(theme), [theme]);
   const tourRef = useTourTarget('hole-distances');
   // Club to play for the distance to the green, from the player's own carry
-  // averages (nominal fallback). Hooks stay above the early return.
+  // averages (nominal fallback). Under the conditions toggle the target is the
+  // "plays like" distance (temp + elevation), so the club matches today's air.
+  // Hooks stay above the early return.
+  const cond = usePlayConditions(courseName);
   const shotsVersion = useSyncExternalStore(subscribeShots, getShotsVersion, getShotsVersion);
   const center = gps?.distances?.center ?? null;
+  const playTarget = center != null ? cond.plays(center) : null;
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  const suggestion = useMemo(() => recommendClub(center, appSettings.bag, getShots()), [center, appSettings.bag, shotsVersion]);
+  const suggestion = useMemo(() => recommendClub(playTarget, appSettings.bag, getShots()), [playTarget, appSettings.bag, shotsVersion]);
+  const playsNote = cond.enabled && center != null && Math.round(playTarget) !== Math.round(center)
+    ? `plays ${formatDistance(playTarget, units)}${unitSuffix(units)}` : null;
   if (!gps?.available) return null;
 
   const fmt = (meters) => formatDistance(meters, units);
@@ -51,6 +58,7 @@ export function HoleDistanceBlock({ gps, onPress }) {
         </View>
         <Text style={s.fb}>{`F ${fmt(distances.front)}  B ${fmt(distances.back)}`}</Text>
         {suggestion && <Text style={s.club}>{`≈ ${clubLabel(suggestion.club)}`}</Text>}
+        {playsNote && <Text style={s.plays}>{playsNote}</Text>}
         <Text style={s.mapHint}>TAP FOR MAP</Text>
         {!!hazardLine && <Text style={s.hzd}>{hazardLine}</Text>}
       </Pressable>
@@ -139,6 +147,12 @@ function makeStyles(theme) {
       fontFamily: 'PlusJakartaSans-Bold',
       letterSpacing: 0.2,
       marginTop: 1,
+    },
+    plays: {
+      color: theme.text.muted,
+      fontSize: 10,
+      fontFamily: 'PlusJakartaSans-Bold',
+      fontVariant: ['tabular-nums'],
     },
     hzd: {
       color: theme.text.muted,
