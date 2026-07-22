@@ -30,26 +30,44 @@ if (!matchTokens.length) matchTokens.push(name.toLowerCase().split(/\s+/));
 const gj = JSON.parse(readFileSync(resolve(process.cwd(), inFile), 'utf8'));
 const feats = gj.type === 'FeatureCollection' ? gj.features : [gj];
 
-// Parse each green feature to { center|poly, hole } — a Point gives a center,
-// a Polygon gives an outline (with its own centroid for per-hole mode).
+// Parse each feature to { center|poly, hole, kind } — a Point gives a center,
+// a Polygon gives an outline (with its own centroid). `kind` comes from
+// properties.type ('green' | 'tee'); untyped Point/Polygon default to 'green'
+// (backward compat with earlier greens-only exports). Tees feed hole.start.
 const parsed = [];
+const tees = []; // { pt: [lat,lng], hole }
+// When ANY feature carries a `type`, treat this as a typed export: untyped
+// features (stray markers, boundary lines) are ignored rather than counted as
+// greens. Legacy greens-only exports (no types anywhere) keep the old default.
+const typedExport = feats.some((f) => f.properties?.type);
 for (const f of feats) {
   const g = f.geometry;
   if (!g) continue;
   if (filter && String(f.properties?.course ?? '').trim().toLowerCase() !== filter.toLowerCase()) continue;
+  if (typedExport && !f.properties?.type) continue;
   const hole = Number.isFinite(+f.properties?.hole) ? +f.properties.hole : null;
+  const kind = String(f.properties?.type ?? 'green').trim().toLowerCase();
+  let center = null, poly = null;
   if (g.type === 'Point') {
     const [lng, lat] = g.coordinates;
-    parsed.push({ center: [lat, lng], poly: null, hole });
+    center = [lat, lng];
   } else if (g.type === 'Polygon') {
     const ring = g.coordinates[0].map(([lng, lat]) => [lat, lng]);
     if (ring.length > 1 && ring[0][0] === ring[ring.length - 1][0] && ring[0][1] === ring[ring.length - 1][1]) ring.pop();
-    const c = ring.reduce((a, p) => [a[0] + p[0] / ring.length, a[1] + p[1] / ring.length], [0, 0]);
-    parsed.push({ center: c, poly: ring, hole });
+    center = ring.reduce((a, p) => [a[0] + p[0] / ring.length, a[1] + p[1] / ring.length], [0, 0]);
+    poly = ring;
+  } else {
+    continue; // LineString / MultiLineString (boundary, fairways) skipped.
   }
-  // LineString / MultiLineString (boundary, fairways) intentionally skipped.
+  if (kind === 'tee') {
+    // First tee per hole wins (dedupe point+polygon for the same hole).
+    if (hole != null && !tees.some((t) => t.hole === hole)) tees.push({ pt: center, hole });
+  } else {
+    parsed.push({ center, poly, hole });
+  }
 }
-if (!parsed.length) { console.error('No Point/Polygon green features found in', inFile); process.exit(1); }
+if (!parsed.length) { console.error('No green features found in', inFile); process.exit(1); }
+const teeByHole = new Map(tees.map((t) => [t.hole, t.pt]));
 
 mkdirSync(resolve(__dirname, 'data'), { recursive: true });
 const out = resolve(__dirname, 'data', `geometry-${id}.json`);
@@ -63,10 +81,14 @@ if (numbered.length === parsed.length) {
   if (dupes.length) { console.error('Duplicate hole numbers:', [...new Set(dupes)].join(',')); process.exit(1); }
   const holes = numbered
     .sort((a, b) => a.hole - b.hole)
-    .map((p) => ({ number: p.hole, par: null, green: p.poly, greenCenter: p.center, pin: null, tees: null, start: null, hazards: [] }));
+    .map((p) => ({ number: p.hole, par: null, green: p.poly, greenCenter: p.center, pin: null, tees: null, start: teeByHole.get(p.hole) ?? null, hazards: [] }));
   course = { key: id, name, matchTokens, mode: 'holes', source: 'Hand-traced (satellite imagery)', holes };
   writeFileSync(out, JSON.stringify(course, null, 2));
-  console.log(`${id}: PER-HOLE — ${holes.length} greens numbered ${Math.min(...nums)}–${Math.max(...nums)}\nwrote ${out}`);
+  const teedHoles = holes.filter((h) => h.start).length;
+  const greenSet = new Set(nums);
+  const teeOnly = [...teeByHole.keys()].filter((h) => !greenSet.has(h)).sort((a, b) => a - b);
+  console.log(`${id}: PER-HOLE — ${holes.length} greens numbered ${Math.min(...nums)}–${Math.max(...nums)}, ${teedHoles} with tee\nwrote ${out}`);
+  if (teeOnly.length) console.warn(`WARN: tee but NO green (no distances) for hole(s): ${teeOnly.join(',')}`);
 } else {
   // Nearest-green mode: some/all greens unnumbered.
   if (numbered.length) console.warn(`WARN: ${numbered.length}/${parsed.length} numbered — falling back to nearest-green (number ALL to get per-hole).`);
