@@ -19,6 +19,7 @@ const steps = [
 const wrap = (ui) => <ThemeProvider>{ui}</ThemeProvider>;
 
 beforeEach(() => jest.clearAllMocks());
+afterEach(() => jest.useRealTimers());
 
 it('step copy matches the spec', () => {
   expect(HOME_TOUR_STEPS).toHaveLength(4);
@@ -53,21 +54,46 @@ it('tapping the spotlighted area advances', async () => {
   await findByText('Beta title');
 });
 
+it('retries a step whose target measures null before succeeding', async () => {
+  jest.useFakeTimers();
+  let callsForA = 0;
+  measureTourTarget.mockImplementation((key) => {
+    if (key !== 'a') return Promise.resolve(RECT);
+    callsForA += 1;
+    return Promise.resolve(callsForA <= 2 ? null : RECT);
+  });
+  const { findByText } = render(wrap(
+    <CoachMarks steps={steps} onDone={jest.fn()} onSkip={jest.fn()} />,
+  ));
+  await findByText('Alpha title');
+  // Two null measurements (with retry delays in between), then the rect on
+  // the third attempt — the stop still renders instead of being skipped.
+  expect(callsForA).toBe(3);
+});
+
 it('skips unmeasurable steps silently', async () => {
+  jest.useFakeTimers();
   measureTourTarget.mockImplementation((key) => Promise.resolve(key === 'a' ? null : RECT));
   const { findByText, queryByText } = render(wrap(
     <CoachMarks steps={steps} onDone={jest.fn()} onSkip={jest.fn()} />,
   ));
   await findByText('Beta title');
   expect(queryByText('Alpha title')).toBeNull();
+  // Exhausted every retry attempt for the unmeasurable step before skipping.
+  expect(measureTourTarget.mock.calls.filter(([key]) => key === 'a')).toHaveLength(5);
 });
 
 it('auto-completes without rendering when nothing is measurable', async () => {
+  jest.useFakeTimers();
   measureTourTarget.mockResolvedValue(null);
   const onDone = jest.fn();
   const { queryByText } = render(wrap(<CoachMarks steps={steps} onDone={onDone} onSkip={jest.fn()} />));
   await waitFor(() => expect(onDone).toHaveBeenCalledTimes(1));
   expect(queryByText('Alpha title')).toBeNull();
+  // Every step exhausted its retries (5 attempts each) rather than being
+  // skipped on the first null measurement.
+  expect(measureTourTarget.mock.calls.filter(([key]) => key === 'a')).toHaveLength(5);
+  expect(measureTourTarget.mock.calls.filter(([key]) => key === 'b')).toHaveLength(5);
 });
 
 it('Skip tour calls onSkip', async () => {

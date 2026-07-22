@@ -7,10 +7,20 @@ import { measureTourTarget } from './tourTargets';
 const SCRIM = 'rgba(10, 20, 15, 0.62)';
 const RING_PAD = 6;
 
+// A step's target can legitimately measure zero-size for a few frames after
+// mount — e.g. the scorecard hole pager sizes its pages from onLayout, so
+// the active hole's card isn't measurable yet when the overlay first shows.
+// Retry a null measurement a few times before giving up on the step.
+export const MEASURE_RETRIES = 5;
+export const MEASURE_RETRY_DELAY_MS = 100;
+
+const delay = (ms) => new Promise((resolve) => { setTimeout(resolve, ms); });
+
 // Presentational spotlight overlay. Measures each step's registered target
-// at show time; a step whose target can't be measured is skipped silently,
-// and a run where nothing measures calls onDone() without rendering — the
-// tour must never point at the wrong place or trap the user.
+// at show time (retrying a null measurement a few times before giving up);
+// a step whose target still can't be measured is skipped silently, and a
+// run where nothing measures calls onDone() without rendering — the tour
+// must never point at the wrong place or trap the user.
 export default function CoachMarks({ steps, onDone, onSkip }) {
   const { theme } = useTheme();
   const { width: winW, height: winH } = useWindowDimensions();
@@ -38,8 +48,16 @@ export default function CoachMarks({ steps, onDone, onSkip }) {
     const isStale = () => !alive.current || runId.current !== myRun;
     const currentSteps = stepsRef.current;
     for (let i = startIndex; i < currentSteps.length; i += 1) {
-      const rect = await measureTourTarget(currentSteps[i].key);
-      if (isStale()) return;
+      let rect = null;
+      for (let attempt = 1; attempt <= MEASURE_RETRIES; attempt += 1) {
+        rect = await measureTourTarget(currentSteps[i].key);
+        if (isStale()) return;
+        if (rect) break;
+        if (attempt < MEASURE_RETRIES) {
+          await delay(MEASURE_RETRY_DELAY_MS);
+          if (isStale()) return;
+        }
+      }
       if (rect) { setCurrent({ index: i, rect }); return; }
     }
     if (isStale()) return;
