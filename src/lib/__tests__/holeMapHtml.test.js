@@ -63,4 +63,13 @@ describe('buildHoleMapHtml', () => {
     expect(html).toContain('const M2YD = 1.09361;');
     expect(html).toContain("const U = DATA.units === 'yards' ? 'yd' : 'm';");
   });
+  it('makes non-origin shot pins interactive and posts a shot-tap with the index', () => {
+    const html = buildHoleMapHtml(base);
+    expect(html).toContain("type:'shot-tap'");
+    expect(html).toContain('interactive: !origin');
+  });
+  it('keeps the tee/origin pin (index 0, no club) non-interactive', () => {
+    const html = buildHoleMapHtml(base);
+    expect(html).toContain('const origin = i === 0 && !list[i].club');
+  });
 });
