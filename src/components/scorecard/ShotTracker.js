@@ -1,32 +1,32 @@
 import React, { useEffect, useMemo, useState, useSyncExternalStore } from 'react';
-import { View, Text, StyleSheet, ScrollView } from 'react-native';
+import { View, Text, StyleSheet } from 'react-native';
 import { Feather } from '@expo/vector-icons';
 import PressableScale from '../ui/PressableScale';
 import { useAppSettings } from '../../hooks/useAppSettings';
 import {
   subscribeShots, getShotsVersion, getShots,
-  shotsForHole, logShot, setShotClub, setShotPos, deleteShot, undoLastShot,
+  shotsForHole, logShot, setShotClub, setShotPos, deleteShot,
 } from '../../store/shotStore';
 import { haversineMeters } from '../../lib/geo';
 import { recommendClub, clubAverages } from '../../lib/shotStats';
 import { swingClubs, clubLabel, clubNominal } from '../../lib/clubs';
-import { formatDistance, unitSuffix } from '../../lib/units';
 import { haptic } from '../../lib/haptics';
 import { ClubWheel } from './ClubWheel';
+import { ClubIcon } from './ClubIcon';
 
-// Shot log overlaid on the hole map (HoleFlyover). Ball spots are placed by
-// TAPPING the map where the ball landed — GPS is optional (a "drop at me"
-// shortcut when there's a fix). The first spot on a hole is the tee (seeded
-// from the hole geometry when available); every later spot is tagged with the
-// club that GOT the ball there, so its carry = distance from the previous spot.
-//
-// Placing a spot opens a WHEEL dialog (ClubWheel) to pick the club, framed by
-// the carry just made and the distance left to the pin. Tapping an existing
-// spot re-opens that wheel to change the club, move the spot, or delete it.
+// Shot log overlaid on the hole map (HoleFlyover), reduced to a single club
+// FAB in the bottom-right corner. Ball spots live on the map as numbered pins:
+//   - Tap the FAB to drop a spot at the white aim ring (GPS fallback); the
+//     club wheel opens on it to pick the club that got the ball there.
+//   - Long-press the FAB to drop the spot at your exact live GPS instead.
+//   - Tap a pin on the map (relayed here as `tappedShotIndex`) to re-open the
+//     wheel and change the club, move the spot, or delete it.
+// The first spot on a hole is the tee, seeded from the hole geometry.
 export function ShotTracker({
   roundId, roundIndex, holeNumber,
   pos, teePos, aimPos, targetPos, targetMeters,
   placing, onTogglePlacing, pendingPoint, onConsumePoint,
+  tappedShotIndex, onConsumeShotTap,
 }) {
   const appSettings = useAppSettings();
   const { units } = appSettings;
@@ -63,9 +63,8 @@ export function ShotTracker({
     setWheelId(shot.id);
   };
 
-  // A map tap handed down from the parent. Only fires while moving a spot
-  // (placing mode) — each tap repositions the shot; the move stays live until
-  // the player hits Confirm. Adds come from the aim ring, not taps.
+  // A map tap handed down from the parent, only while moving a spot: each tap
+  // repositions the shot; the move stays live until the player hits Confirm.
   useEffect(() => {
     if (!pendingPoint) return;
     haptic('light');
@@ -75,8 +74,18 @@ export function ShotTracker({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [pendingPoint]);
 
-  // Add a shot wherever the white aim ring currently sits (GPS as a fallback).
+  // A pin tapped on the map opens the wheel for that shot.
+  useEffect(() => {
+    if (tappedShotIndex == null) return;
+    const sh = shots[tappedShotIndex];
+    if (sh) setWheelId(sh.id);
+    onConsumeShotTap?.();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [tappedShotIndex]);
+
+  // Add a shot at the white aim ring (GPS as a fallback), or at exact GPS.
   const addAtAim = () => { const p = aimPos || pos; if (p) addSpot(p); };
+  const dropAtMe = () => { if (pos) addSpot(pos); };
 
   if (!roundId) return null;
 
@@ -84,9 +93,6 @@ export function ShotTracker({
   const carryOf = (i) => (i > 0
     ? haversineMeters([shots[i - 1].lat, shots[i - 1].lng], [shots[i].lat, shots[i].lng])
     : null);
-  const isOrigin = (i, shot) => i === 0 && !shot.club;
-
-  const dropAtMe = () => { if (pos) addSpot(pos); };
 
   // ── Wheel state derived from the shot being edited ───────────────────────
   const averages = clubAverages(getShots());
@@ -119,76 +125,35 @@ export function ShotTracker({
   };
   const removeShot = () => { if (wheelId) deleteShot(wheelId); closeWheel(); };
 
+  const canAdd = !!(aimPos || pos);
+
   return (
     <View style={s.wrap} pointerEvents="box-none">
-      <View style={s.bar}>
-        {shots.length > 0 && (
-          <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={s.shotRow} style={s.shotScroll}>
-            {shots.map((shot, i) => {
-              if (isOrigin(i, shot)) {
-                return (
-                  <View key={shot.id} style={[s.shotPill, s.teePill]}>
-                    <Feather name="flag" size={12} color="#9fb0a4" />
-                    <Text style={s.teeText}>Tee</Text>
-                  </View>
-                );
-              }
-              const carry = carryOf(i);
-              return (
-                <PressableScale key={shot.id} onPress={() => setWheelId(shot.id)} style={s.shotPill}>
-                  <Text style={s.shotSeq}>{i}</Text>
-                  <Text style={[s.shotClub, !shot.club && s.shotClubEmpty]}>
-                    {shot.club ? clubLabel(shot.club) : 'club?'}
-                  </Text>
-                  {carry != null && (
-                    <Text style={s.shotCarry}>{`${formatDistance(carry, units)}${unitSuffix(units)}`}</Text>
-                  )}
-                </PressableScale>
-              );
-            })}
-          </ScrollView>
-        )}
-
-        {moveId && <Text style={s.moveHint}>Tap the map to move the shot — every tap repositions it</Text>}
-
-        <View style={s.actions}>
-          {shots.length > 0 && !moveId && (
-            <PressableScale
-              onPress={() => { haptic('selection'); undoLastShot(roundId, roundIndex, holeNumber); }}
-              style={s.iconBtn}
-              accessibilityLabel="Undo last shot"
-            >
-              <Feather name="corner-up-left" size={16} color="#cfe3d5" />
-            </PressableScale>
-          )}
-          {pos && !moveId && (
-            <PressableScale onPress={dropAtMe} style={s.iconBtn} accessibilityLabel="Drop shot at my location">
-              <Feather name="navigation" size={15} color="#cfe3d5" />
-            </PressableScale>
-          )}
-          {moveId ? (
-            <PressableScale
-              onPress={confirmMove}
-              style={[s.mark, s.markActive]}
-              accessibilityLabel="Confirm the shot's new spot"
-            >
-              <Feather name="check" size={16} color="#0a0d10" />
-              <Text style={s.markText}>Confirm spot</Text>
-            </PressableScale>
-          ) : (
-            <PressableScale
-              onPress={addAtAim}
-              disabled={!aimPos && !pos}
-              style={[s.mark, (!aimPos && !pos) && s.markDisabled]}
-              accessibilityLabel="Add a shot at the aim ring"
-            >
-              <Feather name="plus" size={16} color="#0a0d10" />
-              <Text style={s.markText}>Add shot</Text>
-              {suggestion && <Text style={s.suggest}>{`≈ ${clubLabel(suggestion.club)}`}</Text>}
-            </PressableScale>
-          )}
+      {moveId ? (
+        <View style={s.moveCol}>
+          <Text style={s.moveHint}>Tap the map to move the shot</Text>
+          <PressableScale
+            onPress={confirmMove}
+            style={[s.fab, s.fabConfirm]}
+            accessibilityLabel="Confirm the shot's new spot"
+          >
+            <Feather name="check" size={24} color="#0a0d10" />
+          </PressableScale>
         </View>
-      </View>
+      ) : (
+        <View style={s.fabCol}>
+          {suggestion && <Text style={s.badge}>{`≈ ${clubLabel(suggestion.club)}`}</Text>}
+          <PressableScale
+            onPress={addAtAim}
+            onLongPress={dropAtMe}
+            disabled={!canAdd}
+            style={[s.fab, !canAdd && s.fabDisabled]}
+            accessibilityLabel="Add a shot at the aim ring"
+          >
+            <ClubIcon size={26} color="#0a0d10" />
+          </PressableScale>
+        </View>
+      )}
 
       <ClubWheel
         visible={!!editShot}
@@ -208,51 +173,30 @@ export function ShotTracker({
 }
 
 const s = StyleSheet.create({
-  wrap: { position: 'absolute', left: 10, right: 10, bottom: 14, gap: 8 },
-
-  bar: {
-    backgroundColor: 'rgba(10,13,16,0.92)',
-    borderWidth: StyleSheet.hairlineWidth, borderColor: 'rgba(255,255,255,0.14)',
-    borderRadius: 16, padding: 8, gap: 8,
+  wrap: {
+    position: 'absolute', right: 16, bottom: 20, alignItems: 'flex-end', gap: 8,
   },
-  shotScroll: { maxHeight: 40 },
-  shotRow: { gap: 6, alignItems: 'center' },
-  shotPill: {
-    flexDirection: 'row', alignItems: 'center', gap: 6,
-    backgroundColor: 'rgba(255,255,255,0.07)', borderRadius: 999,
-    paddingHorizontal: 10, paddingVertical: 6,
-  },
-  teePill: { backgroundColor: 'rgba(255,255,255,0.04)' },
-  teeText: { color: '#9fb0a4', fontFamily: 'PlusJakartaSans-Bold', fontSize: 12 },
-  shotSeq: {
-    color: '#9fb0a4', fontFamily: 'PlusJakartaSans-Bold', fontSize: 11,
+  fabCol: { alignItems: 'center', gap: 6 },
+  moveCol: { alignItems: 'center', gap: 8 },
+  badge: {
+    backgroundColor: 'rgba(10,13,16,0.82)',
+    borderWidth: StyleSheet.hairlineWidth, borderColor: 'rgba(255,255,255,0.16)',
+    color: '#cfe3d5', fontFamily: 'PlusJakartaSans-Bold', fontSize: 12,
+    paddingHorizontal: 9, paddingVertical: 2, borderRadius: 999,
     fontVariant: ['tabular-nums'],
   },
-  shotClub: { color: '#fff', fontFamily: 'PlusJakartaSans-Bold', fontSize: 12 },
-  shotClubEmpty: { color: '#e0a23a' },
-  shotCarry: {
-    color: '#cfe3d5', fontFamily: 'PlusJakartaSans-SemiBold', fontSize: 12,
-    fontVariant: ['tabular-nums'],
+  fab: {
+    width: 52, height: 52, borderRadius: 26,
+    alignItems: 'center', justifyContent: 'center',
+    backgroundColor: '#57ae5b',
+    shadowColor: '#000', shadowOpacity: 0.4, shadowRadius: 10,
+    shadowOffset: { width: 0, height: 6 }, elevation: 6,
   },
-
-  actions: { flexDirection: 'row', alignItems: 'center', gap: 8 },
-  iconBtn: {
-    width: 42, height: 42, borderRadius: 12, alignItems: 'center', justifyContent: 'center',
-    backgroundColor: 'rgba(255,255,255,0.08)',
-  },
-  mark: {
-    flex: 1, flexDirection: 'row', alignItems: 'center', gap: 8,
-    backgroundColor: '#57ae5b', borderRadius: 12, paddingVertical: 12, paddingHorizontal: 14,
-  },
-  markActive: { backgroundColor: '#f4c04a' },
-  markDisabled: { opacity: 0.5 },
+  fabConfirm: { backgroundColor: '#f4c04a' },
+  fabDisabled: { opacity: 0.5 },
   moveHint: {
-    color: '#f4c04a', fontFamily: 'PlusJakartaSans-SemiBold', fontSize: 12,
-    textAlign: 'center', paddingHorizontal: 4,
-  },
-  markText: { color: '#0a0d10', fontFamily: 'PlusJakartaSans-Bold', fontSize: 15 },
-  suggest: {
-    marginLeft: 'auto',
-    color: 'rgba(10,13,16,0.75)', fontFamily: 'PlusJakartaSans-Bold', fontSize: 13,
+    color: '#0a0d10', backgroundColor: '#f4c04a',
+    fontFamily: 'PlusJakartaSans-Bold', fontSize: 12,
+    paddingHorizontal: 12, paddingVertical: 6, borderRadius: 999, overflow: 'hidden',
   },
 });
