@@ -94,5 +94,17 @@ describe('ShotTracker FAB', () => {
     const { getByText } = render(<ShotTracker {...base} tappedShotIndex={1} />);
     fireEvent.press(getByText('wheel:Shot 1'));
     expect(deleteShot).toHaveBeenCalledWith('s2');
+    expect(deleteShot).toHaveBeenCalledWith('t');
+  });
+
+  it('also removes the orphaned club-less tee when the last landing is deleted', () => {
+    mockShots = [
+      { id: 't', lat: 38.55, lng: -0.14, club: null },
+      { id: 's2', lat: 38.554, lng: -0.142, club: '7i' },
+    ];
+    const { getByText } = render(<ShotTracker {...base} tappedShotIndex={1} />);
+    fireEvent.press(getByText('wheel:Shot 1'));
+    expect(deleteShot).toHaveBeenCalledWith('s2');
+    expect(deleteShot).toHaveBeenCalledWith('t');
   });
 });

@@ -123,7 +123,17 @@ export function ShotTracker({
     if (placing) onTogglePlacing?.();
     haptic('selection');
   };
-  const removeShot = () => { if (wheelId) deleteShot(wheelId); closeWheel(); };
+  const removeShot = () => {
+    if (wheelId) {
+      // Deleting the last landing can strand the seeded, club-less tee (index
+      // 0, no club) — a non-interactive origin pin with no Undo button to
+      // clear it. Drop it too so the hole resets cleanly.
+      const remaining = shots.filter((sh) => sh.id !== wheelId);
+      deleteShot(wheelId);
+      if (remaining.length === 1 && !remaining[0].club) deleteShot(remaining[0].id);
+    }
+    closeWheel();
+  };
 
   const canAdd = !!(aimPos || pos);
 
