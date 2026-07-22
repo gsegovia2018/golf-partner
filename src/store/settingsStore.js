@@ -21,6 +21,9 @@ export const DEFAULT_APP_SETTINGS = {
   statGroups: { putting: true, teeShot: true, approach: true, shortGame: true, penalties: true },
   units: 'meters', // 'meters' | 'yards' — display-only, storage is always meters
   notifications: { scores: true, invites: true, media: true },
+  // "Your bag": club keys (see src/lib/clubs.js) the player carries. Gates
+  // the club picker when logging shots. null/missing → clubs.js DEFAULT_BAG.
+  bag: null,
   // Coach-marks tour: ISO timestamp when a chapter was completed/skipped,
   // null (or missing — same thing) means the chapter hasn't run yet.
   tour: { home: null, scorecard: null },

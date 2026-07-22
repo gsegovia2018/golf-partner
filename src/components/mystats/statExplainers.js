@@ -32,6 +32,16 @@ const strokesGainedExplainer = (targetHandicap) => {
 };
 
 export const statExplainers = {
+  clubDistances: {
+    title: 'Club distances',
+    subtitle: 'Your real carry per club',
+    explainer: 'Every time you tap "Mark ball" on the scorecard and tag the club you hit, the app '
+      + 'measures the straight-line distance to your next marked shot — that\'s the carry credited to '
+      + 'that club.\n\n'
+      + 'Average, shortest and longest are computed per club from those carries; the shot count tells '
+      + 'you how much data is behind each number. Only clubs in Your Bag are shown. On the scorecard '
+      + 'the green readout suggests the club whose average is closest to the distance to the centre.',
+  },
   recentForm: {
     title: 'Recent Form',
     subtitle: 'Are you trending up or down?',

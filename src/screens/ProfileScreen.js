@@ -327,6 +327,18 @@ export default function ProfileScreen({ navigation, route }) {
               </PressableScale>
               <PressableScale
                 style={[s.linkRow, s.linkRowDivider]}
+                onPress={() => navigation.navigate('Bag')}
+                accessibilityRole="button"
+                accessibilityLabel="Your bag"
+              >
+                <View style={s.linkIconDisc}>
+                  <Feather name="briefcase" size={15} color={theme.accent.primary} />
+                </View>
+                <Text style={s.linkRowText}>Your Bag</Text>
+                <Feather name="chevron-right" size={18} color={theme.text.muted} />
+              </PressableScale>
+              <PressableScale
+                style={[s.linkRow, s.linkRowDivider]}
                 onPress={() => navigation.navigate('Settings')}
                 accessibilityRole="button"
                 accessibilityLabel="Settings"

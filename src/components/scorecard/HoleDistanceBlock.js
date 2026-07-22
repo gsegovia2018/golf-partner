@@ -1,9 +1,12 @@
-import React, { useMemo } from 'react';
+import React, { useMemo, useSyncExternalStore } from 'react';
 import { View, Text, StyleSheet, Pressable } from 'react-native';
 import { Feather } from '@expo/vector-icons';
 import { useTheme } from '../../theme/ThemeContext';
 import { useAppSettings } from '../../hooks/useAppSettings';
 import { formatDistance, unitSuffix } from '../../lib/units';
+import { subscribeShots, getShotsVersion, getShots } from '../../store/shotStore';
+import { recommendClub } from '../../lib/shotStats';
+import { clubLabel } from '../../lib/clubs';
 import { useTourTarget } from '../tour/tourTargets';
 
 // Right-hand side of the hole header: live GPS distances to the green, or —
@@ -13,9 +16,16 @@ import { useTourTarget } from '../tour/tourTargets';
 // denied and there's no tee to fall back to.
 export function HoleDistanceBlock({ gps, onPress }) {
   const { theme } = useTheme();
-  const { units } = useAppSettings();
+  const appSettings = useAppSettings();
+  const { units } = appSettings;
   const s = useMemo(() => makeStyles(theme), [theme]);
   const tourRef = useTourTarget('hole-distances');
+  // Club to play for the distance to the green, from the player's own carry
+  // averages (nominal fallback). Hooks stay above the early return.
+  const shotsVersion = useSyncExternalStore(subscribeShots, getShotsVersion, getShotsVersion);
+  const center = gps?.distances?.center ?? null;
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  const suggestion = useMemo(() => recommendClub(center, appSettings.bag, getShots()), [center, appSettings.bag, shotsVersion]);
   if (!gps?.available) return null;
 
   const fmt = (meters) => formatDistance(meters, units);
@@ -40,6 +50,7 @@ export function HoleDistanceBlock({ gps, onPress }) {
           <Text style={s.unit}>{unitSuffix(units)}</Text>
         </View>
         <Text style={s.fb}>{`F ${fmt(distances.front)}  B ${fmt(distances.back)}`}</Text>
+        {suggestion && <Text style={s.club}>{`≈ ${clubLabel(suggestion.club)}`}</Text>}
         <Text style={s.mapHint}>TAP FOR MAP</Text>
         {!!hazardLine && <Text style={s.hzd}>{hazardLine}</Text>}
       </Pressable>
@@ -59,6 +70,7 @@ export function HoleDistanceBlock({ gps, onPress }) {
             <Text style={s.unit}>{unitSuffix(units)}</Text>
           </View>
           <Text style={s.fb}>{`F ${fmt(distances.front)}  B ${fmt(distances.back)}`}</Text>
+          {suggestion && <Text style={s.club}>{`≈ ${clubLabel(suggestion.club)}`}</Text>}
           <Text style={s.mapHint}>TAP FOR MAP</Text>
           {poorFix && <Text style={s.caption}>{`±${fmt(accuracy)}${unitSuffix(units)}`}</Text>}
           {!!hazardLine && <Text style={s.hzd}>{hazardLine}</Text>}
@@ -120,6 +132,13 @@ function makeStyles(theme) {
       fontSize: 11,
       fontFamily: 'PlusJakartaSans-Bold',
       fontVariant: ['tabular-nums'],
+    },
+    club: {
+      color: theme.accent.primary,
+      fontSize: 12,
+      fontFamily: 'PlusJakartaSans-Bold',
+      letterSpacing: 0.2,
+      marginTop: 1,
     },
     hzd: {
       color: theme.text.muted,

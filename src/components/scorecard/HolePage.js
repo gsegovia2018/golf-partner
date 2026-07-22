@@ -9,6 +9,7 @@ import { scoreCellState } from '../../store/officialScoring';
 import { deriveCell } from '../../store/scoreEntries';
 import { isScrambleMode } from '../scoringModes';
 import { HoleDistanceBlock } from './HoleDistanceBlock';
+import { ShotTracker } from './ShotTracker';
 import { PlayerCard } from './PlayerCard';
 import { holePoints } from './scoreModel';
 import { teamsByPlayer } from './teamModel';
@@ -266,11 +267,26 @@ export const HolePage = React.memo(function HolePage({
               onOpenConflict={onOpenConflict}
             />
           );
+          // Personal GPS shot log sits under the "me" card, only when the
+          // course has geometry (same gate as the distance readout). Scramble
+          // hides it (see showShotDetail) — no honest per-member store.
+          const withTracker = (showShotDetail && gps?.available) ? (
+            <React.Fragment key={player.id}>
+              {card}
+              <ShotTracker
+                roundId={round.id}
+                roundIndex={roundIndex}
+                holeNumber={pageHole.number}
+                gps={gps}
+                isActive={isActive}
+              />
+            </React.Fragment>
+          ) : card;
           return i === 0 ? (
             <View key={player.id} ref={scoreEntryRef} collapsable={false}>
-              {card}
+              {withTracker}
             </View>
-          ) : card;
+          ) : withTracker;
         })}
       </ScrollView>
     </View>

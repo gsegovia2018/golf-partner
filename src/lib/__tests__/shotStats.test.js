@@ -1,0 +1,74 @@
+import { carriesByClub, clubDistances, recommendClub } from '../shotStats';
+
+// Two points ~140m apart (lat delta 0.001259 ≈ 140m) for deterministic carries.
+const A = { lat: 40.0, lng: -4.0 };
+const step = (m) => m / 111320; // deg latitude per metre
+
+function shot(holeNumber, seq, club, meters, roundId = 'g1') {
+  return { roundId, roundIndex: 0, holeNumber, seq, club, holed: false,
+    lat: A.lat + step((seq - 1) * meters), lng: A.lng };
+}
+
+describe('carriesByClub', () => {
+  it('attributes each carry to the FROM shot club, skips the last shot', () => {
+    const shots = [
+      shot(1, 1, 'driver', 200),
+      shot(1, 2, '7i', 200), // carry 1->2 = 200m credited to driver
+      shot(1, 3, 'pw', 200),  // carry 2->3 = 200m credited to 7i
+    ];
+    const m = carriesByClub(shots);
+    expect(m.get('driver')[0]).toBeCloseTo(200, 0);
+    expect(m.get('7i')[0]).toBeCloseTo(200, 0);
+    expect(m.has('pw')).toBe(false); // last shot has no successor
+  });
+
+  it('does not carry across holes', () => {
+    const shots = [shot(1, 1, 'driver', 200), shot(2, 1, '7i', 200)];
+    expect(carriesByClub(shots).size).toBe(0);
+  });
+});
+
+describe('clubDistances', () => {
+  it('averages multiple carries per club, sorted longest-first', () => {
+    const shots = [
+      shot(1, 1, '7i', 140), shot(1, 2, 'pw', 140),
+      shot(2, 1, '7i', 150), shot(2, 2, 'pw', 150),
+      shot(3, 1, 'driver', 230), shot(3, 2, 'pw', 230),
+    ];
+    const rows = clubDistances(shots);
+    expect(rows[0].club).toBe('driver'); // catalog order: driver before 7i
+    const seven = rows.find((r) => r.club === '7i');
+    expect(seven.count).toBe(2);
+    expect(seven.avg).toBeCloseTo(145, 0);
+  });
+});
+
+describe('recommendClub', () => {
+  const bag = ['driver', '7i', '8i', 'pw', 'putter'];
+
+  it('prefers personal data closest to the target', () => {
+    const shots = [
+      shot(1, 1, '7i', 145), shot(1, 2, 'pw', 145),
+      shot(2, 1, '8i', 133), shot(2, 2, 'pw', 133),
+    ];
+    const r = recommendClub(140, bag, shots);
+    expect(r.club).toBe('7i');
+    expect(r.source).toBe('personal');
+    expect(r.delta).toBeCloseTo(-5, 0); // 140 - 145
+  });
+
+  it('falls back to nominal when no bagged club has data', () => {
+    const r = recommendClub(105, bag, []);
+    expect(r.source).toBe('nominal');
+    expect(r.club).toBe('pw'); // nominal 105
+  });
+
+  it('never recommends the putter and ignores unbagged clubs', () => {
+    const r = recommendClub(2, bag, []);
+    expect(r.club).not.toBe('putter');
+  });
+
+  it('returns null for a non-positive target', () => {
+    expect(recommendClub(0, bag, [])).toBeNull();
+  });
+});

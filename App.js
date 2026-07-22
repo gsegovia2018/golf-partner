@@ -64,11 +64,13 @@ import JoinTournamentScreen from './src/screens/JoinTournamentScreen';
 import ClaimPlayerScreen from './src/screens/ClaimPlayerScreen';
 import ProfileScreen from './src/screens/ProfileScreen';
 import SettingsScreen from './src/screens/SettingsScreen';
+import BagScreen from './src/screens/BagScreen';
 import PlayersScreen from './src/screens/PlayersScreen';
 import FinishedScreen from './src/screens/FinishedScreen';
 import { startUploadWorker } from './src/lib/uploadWorker';
 import { initDeviceAuthorId } from './src/store/deviceId';
 import { hydrateCourseGeometry } from './src/store/courseGeometryStore';
+import { hydrateShots } from './src/store/shotStore';
 import { hydrateAppSettings } from './src/store/settingsStore';
 import * as ScreenOrientation from 'expo-screen-orientation';
 import * as Notifications from 'expo-notifications';
@@ -274,6 +276,7 @@ function AppNavigator() {
         <Stack.Screen name="ClaimPlayer" component={ClaimPlayerScreen} />
         <Stack.Screen name="Profile" component={ProfileScreen} />
         <Stack.Screen name="Settings" component={SettingsScreen} />
+        <Stack.Screen name="Bag" component={BagScreen} />
         <Stack.Screen name="Players" component={PlayersScreen} />
         <Stack.Screen name="Finished" component={FinishedScreen} />
         <Stack.Screen name="Friends" component={FriendsScreen} />
@@ -364,6 +367,8 @@ export default function App() {
     // Non-blocking: GPS geometry starts from the bundled seed and upgrades to
     // live table data whenever this resolves. Not part of the render gate.
     hydrateCourseGeometry();
+    // Personal GPS shot log — cache-first, upgrades to Supabase. Non-blocking.
+    hydrateShots();
     return () => { cancelled = true; };
   }, []);
 
