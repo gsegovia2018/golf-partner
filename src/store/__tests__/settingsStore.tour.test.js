@@ -63,4 +63,40 @@ describe('hydration signal', () => {
     const mirrored = JSON.parse(await AsyncStorage.getItem('@golf_settings'));
     expect(mirrored.tour.home).toBe('2026-07-22T10:00:00.000Z');
   });
+
+  it('a sign-out after a signed-in hydrate un-latches the gate until the next hydrate', async () => {
+    // Veteran user A signs in — hydrate completes, gate opens.
+    profileStore.loadProfile.mockResolvedValue({ userId: 'user-A', settings: { tour: { home: '2026-07-01T00:00:00.000Z', scorecard: '2026-07-01T00:00:00.000Z' } } });
+    await hydrateAppSettings();
+    expect(isSettingsHydrated()).toBe(true);
+
+    // User A signs out on the shared device — settings reset to defaults
+    // (tour flags null again), and the gate must close: a mounted
+    // TourOverlay must not be able to observe "hydrated=true + flags=null"
+    // as if that were a real, adopted state for whoever signs in next.
+    profileStore.loadProfile.mockResolvedValue(null);
+    await hydrateAppSettings();
+    expect(isSettingsHydrated()).toBe(false);
+    expect(getAppSettings().tour).toEqual({ home: null, scorecard: null });
+
+    // Veteran user B signs in — once their hydrate resolves, the gate
+    // re-opens and reflects B's real (completed) tour state.
+    profileStore.loadProfile.mockResolvedValue({ userId: 'user-B', settings: { tour: { home: '2026-06-01T00:00:00.000Z', scorecard: '2026-06-01T00:00:00.000Z' } } });
+    await hydrateAppSettings();
+    expect(isSettingsHydrated()).toBe(true);
+    expect(getAppSettings().tour).toEqual({ home: '2026-06-01T00:00:00.000Z', scorecard: '2026-06-01T00:00:00.000Z' });
+  });
+
+  it('notifies a subscriber on the true-to-false gate transition (sign-out after a real session)', async () => {
+    profileStore.loadProfile.mockResolvedValue({ userId: 'user-A', settings: {} });
+    await hydrateAppSettings();
+    const cb = jest.fn();
+    subscribeSettingsHydration(cb);
+
+    profileStore.loadProfile.mockResolvedValue(null);
+    await hydrateAppSettings();
+
+    expect(isSettingsHydrated()).toBe(false);
+    expect(cb).toHaveBeenCalledTimes(1);
+  });
 });

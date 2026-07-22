@@ -48,9 +48,13 @@ let mutationSeq = 0;
 // after hydrate is always owned even if something else clears the key.
 let hydratedUserId = null;
 
-// True once hydrateAppSettings has completed at least once this app run
-// (any outcome — server, signed-out reset, or offline fallback). Consumers
-// that must not act on pre-hydration defaults (the tour) wait on this.
+// True once hydrateAppSettings has completed at least once this app run with
+// a *trustworthy* outcome (server-adopted, first-ever signed-out reset, or
+// offline fallback) — false again in the window between a signed-out reset
+// that invalidates a real prior session and the next hydrate resolving.
+// Consumers that must not act on stale-or-mid-transition state (the tour)
+// wait on this. See the `if (!profile)` branch of hydrateAppSettings for why
+// a signed-out reset can close the gate instead of opening it.
 let settingsHydrated = false;
 const hydrationListeners = new Set();
 export function isSettingsHydrated() { return settingsHydrated; }
@@ -58,9 +62,9 @@ export function subscribeSettingsHydration(cb) {
   hydrationListeners.add(cb);
   return () => hydrationListeners.delete(cb);
 }
-function markSettingsHydrated() {
-  if (settingsHydrated) return;
-  settingsHydrated = true;
+function setSettingsHydrated(value) {
+  if (settingsHydrated === value) return;
+  settingsHydrated = value;
   hydrationListeners.forEach((cb) => cb());
 }
 
@@ -111,6 +115,10 @@ export async function hydrateAppSettings() {
   // network call further down is still pending — is reliably detected. In
   // both windows, a local write that lands mid-await is fresher than
   // anything hydrate read and must not be clobbered by it.
+  // Every exit path ends the gate open (hydrated=true) *except* a signed-out
+  // reset that invalidates a previously-hydrated real session — see the
+  // `if (!profile)` branch below for why that one closes it instead.
+  let gateOpensOnExit = true;
   try {
     const seqBefore = mutationSeq;
     try {
@@ -134,11 +142,24 @@ export async function hydrateAppSettings() {
       if (!profile) {
         // Signed out: the app is auth-gated, so a signed-out device should
         // not carry the previous user's synced prefs around.
+        //
+        // Whether this reset should *open* the hydration gate depends on
+        // what it's resetting away from. If a real user was hydrated before
+        // (hydratedUserId set), these defaults — tour flags included — are
+        // not that fact a mounted consumer (TourOverlay) can safely see:
+        // signing out just made "flags=null" true only because we wiped
+        // them, not because whoever signs in next has never run the tour.
+        // Close the gate so it stays hidden until the next hydrate (that
+        // user's sign-in) actually resolves and re-opens it with real data.
+        // If nobody was ever signed in (fresh install, gate never opened),
+        // this reset *is* the real, final state — leave the gate open.
+        const wasSignedIn = hydratedUserId != null;
         set(DEFAULT_APP_SETTINGS);
         await AsyncStorage.removeItem(SETTINGS_KEY);
         await AsyncStorage.removeItem(SETTINGS_DIRTY_KEY);
         await AsyncStorage.removeItem(SETTINGS_USER_KEY);
         hydratedUserId = null;
+        gateOpensOnExit = !wasSignedIn;
         return;
       }
 
@@ -192,5 +213,5 @@ export async function hydrateAppSettings() {
       hydratedUserId = profile.userId;
       await AsyncStorage.setItem(SETTINGS_USER_KEY, profile.userId);
     } catch { /* offline — local copy stands */ }
-  } finally { markSettingsHydrated(); }
+  } finally { setSettingsHydrated(gateOpensOnExit); }
 }
