@@ -2,6 +2,7 @@ import React from 'react';
 import { Animated } from 'react-native';
 import { render, fireEvent } from '@testing-library/react-native';
 import { holePagePropsEqual, HolePage } from '../HolePage';
+import { __resetTourTargetsForTests, __getRegisteredTourKeysForTests } from '../../tour/tourTargets';
 
 jest.mock('../../../theme/ThemeContext', () => ({
   useTheme: () => {
@@ -110,6 +111,24 @@ function renderMatchPlayHole(overrides = {}) {
 
   return render(<HolePage {...props} />);
 }
+
+// All 18 HolePage instances mount at once in the pager and would otherwise
+// all call useTourTarget('score-entry') — last-write-wins would let an
+// off-screen page's unmeasurable card win the registry. Only the active
+// hole may claim the key.
+describe('HolePage tour target: score-entry registers only when active', () => {
+  beforeEach(() => __resetTourTargetsForTests());
+
+  test('isActive=false does not register score-entry', () => {
+    renderMatchPlayHole({ isActive: false });
+    expect(__getRegisteredTourKeysForTests()).not.toContain('score-entry');
+  });
+
+  test('isActive=true registers score-entry', () => {
+    renderMatchPlayHole({ isActive: true });
+    expect(__getRegisteredTourKeysForTests()).toContain('score-entry');
+  });
+});
 
 describe('HolePage match play: full vs relative handicap', () => {
   test('HCP label shows the FULL handicap for both players, not the relative one', () => {

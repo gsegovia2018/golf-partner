@@ -88,6 +88,7 @@ export function holePagePropsEqual(prev, next) {
 // `holePagePropsEqual` comparator extends this to score/shot edits: a tap
 // on the active hole no longer re-renders the other 17 pages.
 export const HolePage = React.memo(function HolePage({
+  isActive,
   pageHole, width, height, courseName, roundIndex,
   round, players, scores,
   shotDetails, meId, onSetShot,
@@ -107,7 +108,11 @@ export const HolePage = React.memo(function HolePage({
   // "players" so score entry, points, and handicaps all key off the captain's
   // id. Players are then ordered "me first" so the signed-in player's card
   // (or their team's card, for scramble) is on top.
-  const scoreEntryRef = useTourTarget('score-entry');
+  // Only the active hole's card may claim the 'score-entry' tour target —
+  // all 18 HolePage instances mount at once in the pager, and an
+  // unconditional key here would let last-write-wins hand the registry an
+  // off-screen (unmeasurable) node, silently skipping the tour stop.
+  const scoreEntryRef = useTourTarget(isActive ? 'score-entry' : null);
   const isScramble = isScrambleMode(mode);
   const scoringPlayers = isScramble ? scrambleUnits(round, players) : players;
   const effectiveMeId = isScramble
