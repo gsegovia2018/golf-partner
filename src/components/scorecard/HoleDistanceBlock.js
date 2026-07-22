@@ -6,7 +6,7 @@ import { useAppSettings } from '../../hooks/useAppSettings';
 import { formatDistance, unitSuffix } from '../../lib/units';
 import { subscribeShots, getShotsVersion, getShots, shotsForHole } from '../../store/shotStore';
 import {
-  holeFeatures, haversineMeters,
+  holeFeatures, haversineMeters, greenDistances,
   subscribeCourseGeometry, getCourseGeometryVersion,
 } from '../../lib/geo';
 import { recommendClub } from '../../lib/shotStats';
@@ -44,11 +44,25 @@ export function HoleDistanceBlock({
   const feat = lastShot ? holeFeatures(courseName, holeNumber) : null;
   const from = lastShot ? [lastShot.lat, lastShot.lng] : null;
   const to = (pt) => (pt ? haversineMeters(from, pt) : null);
-  const shotDist = feat?.greenCenter ? {
-    center: to(feat.greenCenter),
-    front: to(feat.greenFront) ?? to(feat.greenCenter),
-    back: to(feat.greenBack) ?? to(feat.greenCenter),
-  } : null;
+  // Front/back split the same way the live GPS strip does: nearest / farthest
+  // green-polygon vertex from the ball. Admin front/back points win when set;
+  // otherwise fall back to the polygon so F ≠ C ≠ B (not all the centre).
+  let shotDist = null;
+  if (feat?.greenCenter) {
+    const raw = (feat.greenFront || feat.greenBack)
+      ? {
+        center: to(feat.greenCenter),
+        front: to(feat.greenFront),
+        back: to(feat.greenBack),
+      }
+      : greenDistances(from, feat.green, feat.greenCenter);
+    // Center is the fallback when a hole has no polygon / no front-back points.
+    shotDist = raw ? {
+      center: raw.center,
+      front: raw.front ?? raw.center,
+      back: raw.back ?? raw.center,
+    } : null;
+  }
 
   const baseTarget = shotDist?.center ?? gps?.distances?.center ?? null;
   const playTarget = baseTarget != null ? cond.plays(baseTarget) : null;

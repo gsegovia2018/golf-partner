@@ -164,7 +164,6 @@ function draw() {
     drawTargets(from, g, cc);
   });
   drawTargets(from, g, cc);
-  hud(from, g);
 }
 
 // Logged shots: numbered gold pins linked by a dashed trail, with the carry
@@ -227,21 +226,25 @@ function redrawLines(from, g, cc){
     mk(L.polyline([last,cc],{color:'#fff',weight:3,dashArray:'3 8'}));
     mk(chipMk(last, cc, dist(last, cc)));
   }
-  if (!from) hud(from, g);   // no anchor: HUD measures from the ring — keep it live
+  // HUD always measures from the aim ring nearest the green — refresh live.
+  hud(pts.length ? pts[pts.length-1] : from, g);
 }
 function ringIcon(){ return L.divIcon({ className:'', html:'<div style="width:34px;height:34px;border:4px solid #fff;border-radius:50%;box-shadow:0 0 0 1px rgba(0,0,0,.4)"></div>', iconSize:[34,34], iconAnchor:[17,17] }); }
 
-function hud(from, g){
+// Top-right F/C/B box. Measures from the aim ring nearest the green (src),
+// so dragging the white ring live-updates the numbers. Falls back to the
+// anchor/GPS only when no ring exists.
+function hud(src, g){
   const h = document.getElementById('hud');
-  const src = from || targets[0];
-  const d = (p) => valid(p) && valid(src) ? dist(src, p) : null;
+  const from = valid(src) ? src : (targets[targets.length-1] || anchor.pos);
+  const d = (p) => valid(p) && valid(from) ? dist(from, p) : null;
   h.innerHTML =
     '<div class="tri">'+
       '<div class="row"><span class="lbl">Back</span><span class="sm">'+disp(d(g.b))+'</span></div>'+
       '<div class="row"><span class="lbl"></span><span class="bign">'+disp(d(g.c))+'</span><span class="u">'+U+'</span></div>'+
       '<div class="row"><span class="lbl">Front</span><span class="sm">'+disp(d(g.f))+'</span></div>'+
     '</div>'+
-    (from ? '' : '<div class="hint">Drag the ring to measure</div>');
+    '<div class="hint">Drag the ring to measure</div>';
 }
 
 function editIcon(color, label){
