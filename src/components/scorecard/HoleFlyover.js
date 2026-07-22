@@ -63,6 +63,9 @@ export function HoleFlyover({
   // arrives here as `pendingPoint` and is handed to ShotTracker to log.
   const [placing, setPlacing] = useState(false);
   const [pendingPoint, setPendingPoint] = useState(null);
+  // Latest aim-ring position reported by the map, so "Add shot" drops the ball
+  // right where the white ring sits (no tap-to-place needed to add).
+  const [aimPos, setAimPos] = useState(null);
 
   // Swipe-down on the grabber/header dismisses; the map owns its own gestures.
   const dragY = useRef(new Animated.Value(0)).current;
@@ -120,7 +123,8 @@ export function HoleFlyover({
                 anchor={anchorInfo}
                 shots={shotPins}
                 placing={placing}
-                onShotPoint={(p) => { setPendingPoint(p); setPlacing(false); }}
+                onShotPoint={(p) => { setPendingPoint(p); }}
+                onAim={setAimPos}
                 style={s.map}
               />
               {roundId != null && (
@@ -130,6 +134,7 @@ export function HoleFlyover({
                   holeNumber={holeNumber}
                   pos={position ?? null}
                   teePos={feat?.start ?? null}
+                  aimPos={aimPos}
                   targetPos={feat?.greenCenter ?? null}
                   targetMeters={feat?.greenCenter && position
                     ? cond.plays(haversineMeters(position, feat.greenCenter)) : null}

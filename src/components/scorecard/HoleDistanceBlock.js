@@ -6,7 +6,7 @@ import { useAppSettings } from '../../hooks/useAppSettings';
 import { formatDistance, unitSuffix } from '../../lib/units';
 import { subscribeShots, getShotsVersion, getShots, shotsForHole } from '../../store/shotStore';
 import {
-  holeFeatures, haversineMeters, greenDistances,
+  holeFeatures, haversineMeters, greenDistances, pointInPolygon,
   subscribeCourseGeometry, getCourseGeometryVersion,
 } from '../../lib/geo';
 import { recommendClub } from '../../lib/shotStats';
@@ -44,6 +44,12 @@ export function HoleDistanceBlock({
   const feat = lastShot ? holeFeatures(courseName, holeNumber) : null;
   const from = lastShot ? [lastShot.lat, lastShot.lng] : null;
   const to = (pt) => (pt ? haversineMeters(from, pt) : null);
+  // Ball finished on the green → putting. Polygon test, or within ~5m of the
+  // centre when the hole only has a centre point. No yardage / club then.
+  const onGreen = !!feat && (
+    (feat.green && pointInPolygon(from, feat.green))
+    || (!feat.green && feat.greenCenter && to(feat.greenCenter) <= 5)
+  );
   // Front/back split the same way the live GPS strip does: nearest / farthest
   // green-polygon vertex from the ball. Admin front/back points win when set;
   // otherwise fall back to the polygon so F ≠ C ≠ B (not all the centre).
@@ -68,6 +74,17 @@ export function HoleDistanceBlock({
   const playTarget = baseTarget != null ? cond.plays(baseTarget) : null;
   // eslint-disable-next-line react-hooks/exhaustive-deps
   const suggestion = useMemo(() => recommendClub(playTarget, appSettings.bag, getShots()), [playTarget, appSettings.bag, shotsVersion]);
+
+  // On the green: drop yardage + club entirely, just say putting.
+  if (onGreen) {
+    return (
+      <Pressable ref={tourRef} onPress={onPress} hitSlop={10} style={s.block} accessibilityRole="button" accessibilityLabel="Open hole map">
+        <Feather name="flag" size={18} color={theme.accent.primary} />
+        <Text style={s.putt}>Putting</Text>
+        <Text style={s.mapHint}>TAP FOR MAP</Text>
+      </Pressable>
+    );
+  }
   if (!gps?.available) return null;
 
   const fmt = (meters) => formatDistance(meters, units);
@@ -183,6 +200,13 @@ function makeStyles(theme) {
       fontFamily: 'PlusJakartaSans-Bold',
       letterSpacing: 0.2,
       marginTop: 1,
+    },
+    putt: {
+      color: theme.accent.primary,
+      fontSize: 18,
+      fontFamily: 'PlusJakartaSans-ExtraBold',
+      letterSpacing: -0.3,
+      marginTop: 2,
     },
     plays: {
       color: theme.text.muted,

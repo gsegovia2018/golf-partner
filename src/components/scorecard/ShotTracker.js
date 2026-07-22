@@ -25,7 +25,7 @@ import { ClubWheel } from './ClubWheel';
 // spot re-opens that wheel to change the club, move the spot, or delete it.
 export function ShotTracker({
   roundId, roundIndex, holeNumber,
-  pos, teePos, targetPos, targetMeters,
+  pos, teePos, aimPos, targetPos, targetMeters,
   placing, onTogglePlacing, pendingPoint, onConsumePoint,
 }) {
   const appSettings = useAppSettings();
@@ -62,16 +62,20 @@ export function ShotTracker({
     setWheelId(shot.id);
   };
 
-  // A map tap handed down from the parent: reposition a spot mid-edit, or add.
+  // A map tap handed down from the parent. Only fires while moving a spot
+  // (placing mode) — each tap repositions the shot; the move stays live until
+  // the player hits Confirm. Adds come from the aim ring, not taps.
   useEffect(() => {
     if (!pendingPoint) return;
     haptic('light');
     (async () => {
-      if (moveId) { await setShotPos(moveId, pendingPoint); setMoveId(null); }
-      else await addSpot(pendingPoint);
+      if (moveId) await setShotPos(moveId, pendingPoint);
     })().finally(() => onConsumePoint?.());
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [pendingPoint]);
+
+  // Add a shot wherever the white aim ring currently sits (GPS as a fallback).
+  const addAtAim = () => { const p = aimPos || pos; if (p) addSpot(p); };
 
   if (!roundId) return null;
 
@@ -105,9 +109,12 @@ export function ShotTracker({
     if (!placing) onTogglePlacing?.();
     haptic('selection');
   };
+  const confirmMove = () => {
+    setMoveId(null);
+    if (placing) onTogglePlacing?.();
+    haptic('selection');
+  };
   const removeShot = () => { if (wheelId) deleteShot(wheelId); closeWheel(); };
-
-  const primaryLabel = moveId ? 'Tap the new spot' : (placing ? 'Tap the map' : 'Add shot');
 
   return (
     <View style={s.wrap} pointerEvents="box-none">
@@ -139,8 +146,10 @@ export function ShotTracker({
           </ScrollView>
         )}
 
+        {moveId && <Text style={s.moveHint}>Tap the map to move the shot — every tap repositions it</Text>}
+
         <View style={s.actions}>
-          {shots.length > 0 && (
+          {shots.length > 0 && !moveId && (
             <PressableScale
               onPress={() => { haptic('selection'); undoLastShot(roundId, roundIndex, holeNumber); }}
               style={s.iconBtn}
@@ -149,20 +158,32 @@ export function ShotTracker({
               <Feather name="corner-up-left" size={16} color="#cfe3d5" />
             </PressableScale>
           )}
-          {pos && (
+          {pos && !moveId && (
             <PressableScale onPress={dropAtMe} style={s.iconBtn} accessibilityLabel="Drop shot at my location">
               <Feather name="navigation" size={15} color="#cfe3d5" />
             </PressableScale>
           )}
-          <PressableScale
-            onPress={() => { if (moveId) setMoveId(null); onTogglePlacing(); }}
-            style={[s.mark, (placing || moveId) && s.markActive]}
-            accessibilityLabel={placing ? 'Cancel placing' : 'Add a shot by tapping the map'}
-          >
-            <Feather name={(placing || moveId) ? 'x' : 'plus'} size={16} color="#0a0d10" />
-            <Text style={s.markText}>{primaryLabel}</Text>
-            {!placing && !moveId && suggestion && <Text style={s.suggest}>{`≈ ${clubLabel(suggestion.club)}`}</Text>}
-          </PressableScale>
+          {moveId ? (
+            <PressableScale
+              onPress={confirmMove}
+              style={[s.mark, s.markActive]}
+              accessibilityLabel="Confirm the shot's new spot"
+            >
+              <Feather name="check" size={16} color="#0a0d10" />
+              <Text style={s.markText}>Confirm spot</Text>
+            </PressableScale>
+          ) : (
+            <PressableScale
+              onPress={addAtAim}
+              disabled={!aimPos && !pos}
+              style={[s.mark, (!aimPos && !pos) && s.markDisabled]}
+              accessibilityLabel="Add a shot at the aim ring"
+            >
+              <Feather name="plus" size={16} color="#0a0d10" />
+              <Text style={s.markText}>Add shot</Text>
+              {suggestion && <Text style={s.suggest}>{`≈ ${clubLabel(suggestion.club)}`}</Text>}
+            </PressableScale>
+          )}
         </View>
       </View>
 
@@ -221,6 +242,11 @@ const s = StyleSheet.create({
     backgroundColor: '#57ae5b', borderRadius: 12, paddingVertical: 12, paddingHorizontal: 14,
   },
   markActive: { backgroundColor: '#f4c04a' },
+  markDisabled: { opacity: 0.5 },
+  moveHint: {
+    color: '#f4c04a', fontFamily: 'PlusJakartaSans-SemiBold', fontSize: 12,
+    textAlign: 'center', paddingHorizontal: 4,
+  },
   markText: { color: '#0a0d10', fontFamily: 'PlusJakartaSans-Bold', fontSize: 15 },
   suggest: {
     marginLeft: 'auto',

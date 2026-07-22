@@ -227,7 +227,10 @@ function redrawLines(from, g, cc){
     mk(chipMk(last, cc, dist(last, cc)));
   }
   // HUD always measures from the aim ring nearest the green — refresh live.
-  hud(pts.length ? pts[pts.length-1] : from, g);
+  const aim = pts.length ? pts[pts.length-1] : null;
+  hud(aim || from, g);
+  // Report the ring to the host so "Add shot" can drop the ball right here.
+  if (aim) post({ type:'aim', pos: aim });
 }
 function ringIcon(){ return L.divIcon({ className:'', html:'<div style="width:34px;height:34px;border:4px solid #fff;border-radius:50%;box-shadow:0 0 0 1px rgba(0,0,0,.4)"></div>', iconSize:[34,34], iconAnchor:[17,17] }); }
 

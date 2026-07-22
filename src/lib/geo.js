@@ -65,6 +65,22 @@ function bearingDeg(a, b) {
   return ((Math.atan2(y, x) / RAD) + 360) % 360;
 }
 
+// Ray-casting point-in-polygon. `point` and each polygon vertex are [lat,lng].
+// Used to tell when a ball has finished on the green (→ putting, no yardage).
+export function pointInPolygon(point, polygon) {
+  if (!point || !polygon || polygon.length < 3) return false;
+  const [y, x] = point;
+  let inside = false;
+  for (let i = 0, j = polygon.length - 1; i < polygon.length; j = i, i += 1) {
+    const [yi, xi] = polygon[i];
+    const [yj, xj] = polygon[j];
+    if (((yi > y) !== (yj > y)) && (x < ((xj - xi) * (y - yi)) / (yj - yi) + xi)) {
+      inside = !inside;
+    }
+  }
+  return inside;
+}
+
 // Front/center/back of a green polygon as seen from `pos`: front is the
 // nearest polygon vertex, back the farthest, center the centroid. OSM green
 // outlines are dense enough (~20 vertices) that vertex distance ≈ edge
