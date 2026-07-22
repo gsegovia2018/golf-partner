@@ -8,6 +8,8 @@ jest.mock('../../store/profileStore', () => ({
   loadProfile: jest.fn().mockResolvedValue(null),
   upsertProfile: jest.fn().mockResolvedValue(),
 }));
+jest.mock('../../store/tourStore', () => ({ resetTour: jest.fn().mockResolvedValue(undefined) }));
+const { resetTour } = require('../../store/tourStore');
 
 const navigation = { goBack: jest.fn(), navigate: jest.fn() };
 const renderScreen = () => render(
@@ -53,4 +55,11 @@ test('no-spoilers mode disables the running-score switch and forces it off', asy
   expect(sw.props.disabled).toBe(true);
   expect(sw.props.accessibilityState?.disabled ?? sw.props.disabled).toBe(true);
   expect(sw.props.value).toBe(false);
+});
+
+test('replays the app tour from the DISPLAY section', async () => {
+  renderScreen();
+  const row = await screen.findByTestId('setting-replayTour');
+  fireEvent.press(row);
+  await waitFor(() => expect(resetTour).toHaveBeenCalledTimes(1));
 });

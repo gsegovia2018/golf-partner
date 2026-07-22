@@ -9,6 +9,7 @@ import Reveal from '../components/ui/Reveal';
 import { useTheme } from '../theme/ThemeContext';
 import { useAppSettings } from '../hooks/useAppSettings';
 import { updateAppSettings } from '../store/settingsStore';
+import { resetTour } from '../store/tourStore';
 import { haptic } from '../lib/haptics';
 
 const STAT_GROUP_ROWS = [
@@ -172,6 +173,19 @@ export default function SettingsScreen({ navigation }) {
               );
             })}
           </View>
+          <PressableScale
+            testID="setting-replayTour"
+            style={s.replayRow}
+            onPress={async () => { haptic('selection'); await resetTour(); }}
+            accessibilityRole="button"
+            accessibilityLabel="Replay app tour"
+          >
+            <Feather name="refresh-ccw" size={16} color={theme.accent.primary} />
+            <View style={{ flex: 1 }}>
+              <Text style={s.replayLabel}>Replay app tour</Text>
+              <Text style={s.fieldHint}>The spotlights show again on Home and the scorecard.</Text>
+            </View>
+          </PressableScale>
         </Reveal>
 
         <Section title="NOTIFICATIONS" delay={REVEAL_STEP * 4} s={s}>
@@ -297,5 +311,13 @@ const makeStyles = (theme) => StyleSheet.create({
   appearanceLabelActive: {
     color: theme.accent.primary,
     fontFamily: 'PlusJakartaSans-Bold',
+  },
+
+  replayRow: {
+    flexDirection: 'row', alignItems: 'center', gap: 10,
+    marginTop: 14, minHeight: 44,
+  },
+  replayLabel: {
+    fontFamily: 'PlusJakartaSans-SemiBold', fontSize: 14, color: theme.text.primary,
   },
 });
