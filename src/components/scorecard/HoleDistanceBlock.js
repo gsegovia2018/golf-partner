@@ -35,29 +35,31 @@ export function HoleDistanceBlock({
   const shotsVersion = useSyncExternalStore(subscribeShots, getShotsVersion, getShotsVersion);
   // Subscribe so a new shot / edited geometry re-renders this block.
   useSyncExternalStore(subscribeCourseGeometry, getCourseGeometryVersion);
-  const center = gps?.distances?.center ?? null;
-
-  // Distance the recommendation plays FROM. Once a ball is marked on this hole,
-  // measure the last spot → green (200m drive on a 300m par 4 leaves ~100m, so
-  // the club drops to a wedge). No shots yet → the live GPS-to-green number.
+  // Front/center/back all recompute from the last marked shot on this hole,
+  // so once a ball is placed the whole block reads distance-to-green FROM the
+  // ball (200m drive on a 300m par 4 → ~100m, club drops to a wedge). No shot
+  // yet → the live GPS/tee distances from the gps prop.
   const lastShot = roundId != null
     ? shotsForHole(roundId, roundIndex, holeNumber).at(-1) : null;
-  const green = lastShot ? holeFeatures(courseName, holeNumber)?.greenCenter : null;
-  const remaining = green ? haversineMeters([lastShot.lat, lastShot.lng], green) : null;
+  const feat = lastShot ? holeFeatures(courseName, holeNumber) : null;
+  const from = lastShot ? [lastShot.lat, lastShot.lng] : null;
+  const to = (pt) => (pt ? haversineMeters(from, pt) : null);
+  const shotDist = feat?.greenCenter ? {
+    center: to(feat.greenCenter),
+    front: to(feat.greenFront) ?? to(feat.greenCenter),
+    back: to(feat.greenBack) ?? to(feat.greenCenter),
+  } : null;
 
-  const baseTarget = remaining ?? center;
+  const baseTarget = shotDist?.center ?? gps?.distances?.center ?? null;
   const playTarget = baseTarget != null ? cond.plays(baseTarget) : null;
   // eslint-disable-next-line react-hooks/exhaustive-deps
   const suggestion = useMemo(() => recommendClub(playTarget, appSettings.bag, getShots()), [playTarget, appSettings.bag, shotsVersion]);
-  // "Xm left" once measuring from a marked shot; else the conditions "plays" note.
-  const leftNote = remaining != null
-    ? `${formatDistance(playTarget, units)}${unitSuffix(units)} left`
-    : (cond.enabled && center != null && Math.round(playTarget) !== Math.round(center)
-      ? `plays ${formatDistance(playTarget, units)}${unitSuffix(units)}` : null);
   if (!gps?.available) return null;
 
   const fmt = (meters) => formatDistance(meters, units);
-  const { distances, accuracy, source } = gps;
+  const { accuracy, source } = gps;
+  // Distances to render: from the marked shot when present, else the live fix.
+  const distances = shotDist ? { ...gps.distances, ...shotDist } : gps.distances;
   // Same thresholds as the old strip: >3km = not on the course; >25m = the
   // fix is too loose to trust to the meter.
   const offCourse = source !== 'tee' && distances && distances.center > 3000;
@@ -79,7 +81,6 @@ export function HoleDistanceBlock({
         </View>
         <Text style={s.fb}>{`F ${fmt(distances.front)}  B ${fmt(distances.back)}`}</Text>
         {suggestion && <Text style={s.club}>{`≈ ${clubLabel(suggestion.club)}`}</Text>}
-        {leftNote && <Text style={s.plays}>{leftNote}</Text>}
         <Text style={s.mapHint}>TAP FOR MAP</Text>
         {!!hazardLine && <Text style={s.hzd}>{hazardLine}</Text>}
       </Pressable>
@@ -100,7 +101,6 @@ export function HoleDistanceBlock({
           </View>
           <Text style={s.fb}>{`F ${fmt(distances.front)}  B ${fmt(distances.back)}`}</Text>
           {suggestion && <Text style={s.club}>{`≈ ${clubLabel(suggestion.club)}`}</Text>}
-          {leftNote && <Text style={s.plays}>{leftNote}</Text>}
           <Text style={s.mapHint}>TAP FOR MAP</Text>
           {poorFix && <Text style={s.caption}>{`±${fmt(accuracy)}${unitSuffix(units)}`}</Text>}
           {!!hazardLine && <Text style={s.hzd}>{hazardLine}</Text>}

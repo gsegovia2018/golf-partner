@@ -83,11 +83,6 @@ export function ClubWheel({
                     onPress={() => ref.current?.scrollTo({ y: i * ITEM_H, animated: true })}
                   >
                     <Text style={[s.rowClub, active && s.rowClubActive]} numberOfLines={1}>{c.label}</Text>
-                    {c.distance != null && (
-                      <Text style={[s.rowDist, active && s.rowDistActive]}>
-                        {`${formatDistance(c.distance, units)}${suffix}`}
-                      </Text>
-                    )}
                   </Pressable>
                 );
               })}
