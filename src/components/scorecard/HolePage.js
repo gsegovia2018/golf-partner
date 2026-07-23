@@ -310,8 +310,9 @@ export const HolePage = React.memo(function HolePage({
       </Animated.ScrollView>
 
       {/* Slim collapsed bar — pinned; fades/slides in as the header scrolls
-          away. Non-interactive until collapsed so it never blocks the full
-          header's distance tap while expanded. */}
+          away. box-none: the container never intercepts touches (only its
+          compact button does), so it never swallows taps on the cards that
+          scroll beneath it. */}
       <Animated.View
         style={[s.holeSlimBar, { opacity: barOpacity, transform: [{ translateY: barTranslateY }] }]}
         pointerEvents="box-none"
