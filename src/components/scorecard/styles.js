@@ -210,12 +210,6 @@ export function makeScorecardStyles(theme) {
     },
     holeHeaderLeft: { gap: 2, flex: 1, minWidth: 0 },
     holeHeaderRightWrap: { flexShrink: 0 },
-    holeHeaderRound: {
-      color: theme.text.muted,
-      fontSize: 11,
-      fontFamily: 'PlusJakartaSans-SemiBold',
-      letterSpacing: 0.5,
-    },
     holeNumberRow: { flexDirection: 'row', alignItems: 'baseline', gap: 8 },
     holeNumberLabel: {
       color: theme.text.muted,

@@ -539,7 +539,7 @@ export function GridView({ round, roundIndex, players, scores, isBestBall, bbRes
       <View style={s.soloGridHeaderBar}>
         <View style={{ flex: 1 }}>
           <Text style={s.soloGridHeaderTitle} numberOfLines={1}>
-            {round.courseName} · Round {roundIndex + 1}
+            Round {roundIndex + 1}
           </Text>
         </View>
       </View>

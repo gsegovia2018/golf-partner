@@ -182,7 +182,6 @@ export const HolePage = React.memo(function HolePage({
             map entry point. */}
         <View style={s.holeHeaderCard} onLayout={(e) => setHeaderH(e.nativeEvent.layout.height)}>
           <View style={s.holeHeaderLeft}>
-            <Text style={s.holeHeaderRound}>{courseName} -- Round {roundIndex + 1}</Text>
             <View style={s.holeNumberRow}>
               <Text style={s.holeNumberLabel}>HOLE</Text>
               <Text style={s.holeNumber}>{pageHole.number}</Text>
