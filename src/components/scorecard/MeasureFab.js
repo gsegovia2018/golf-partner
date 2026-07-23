@@ -51,7 +51,7 @@ export function MeasureFab({ roundId, roundIndex, holeNumber, fix, targetMeters,
     setSaved(null);
     if (!usable) { onOpenMap?.(); return; }
     haptic('selection');
-    setArmed({ start: pos, club: suggestion?.club ?? null });
+    setArmed({ start: pos, club: suggestion?.club ?? null, holeNumber });
     setConfirmOver(false);
   };
 
@@ -59,10 +59,12 @@ export function MeasureFab({ roundId, roundIndex, holeNumber, fix, targetMeters,
     if (!armed || !pos) return;
     if (dist < MIN_SAVE_M) return;
     if (dist > MAX_PLAIN_M && !confirmOver) { setConfirmOver(true); return; }
-    const { start, club } = armed;
+    const { start, club, holeNumber: armedHoleNumber } = armed;
     setArmed(null);
     setConfirmOver(false);
-    const r = await logMeasuredShot({ roundId, roundIndex, holeNumber, start, end: pos, club });
+    const r = await logMeasuredShot({
+      roundId, roundIndex, holeNumber: armedHoleNumber, start, end: pos, club,
+    });
     haptic('success');
     setSaved({ label: club ? clubLabel(club) : 'Shot', meters: dist, ...r });
   };

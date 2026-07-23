@@ -48,6 +48,14 @@ describe('MeasureFab', () => {
     expect(logMeasuredShot).toHaveBeenCalledWith(expect.objectContaining({ start: START, end: FAR }));
   });
 
+  it('saves to the hole it was armed on, even after the pager swipes away', async () => {
+    const { getByLabelText, rerender } = render(<MeasureFab {...base} holeNumber={7} />);
+    fireEvent.press(getByLabelText('Measure my shot'));
+    rerender(<MeasureFab {...base} holeNumber={8} fix={{ position: FAR, accuracy: 8 }} />);
+    await act(async () => { fireEvent.press(getByLabelText('Ball is here — save the measured shot')); });
+    expect(logMeasuredShot).toHaveBeenCalledWith(expect.objectContaining({ holeNumber: 7 }));
+  });
+
   it('undo deletes both created spots', async () => {
     const { getByLabelText, rerender } = render(<MeasureFab {...base} />);
     fireEvent.press(getByLabelText('Measure my shot'));
