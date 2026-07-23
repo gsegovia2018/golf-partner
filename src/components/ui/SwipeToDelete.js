@@ -65,7 +65,8 @@ export default function SwipeToDelete({
         </Pressable>
       </View>
       <Animated.View
-        style={{ transform: [{ translateX }] }}
+        style={[s.content, { transform: [{ translateX }] }]}
+        testID="swipe-content"
         {...panResponder.panHandlers}
       >
         {children}
@@ -77,6 +78,10 @@ export default function SwipeToDelete({
 function makeStyles(theme, borderRadius) {
   return StyleSheet.create({
     wrap: { position: 'relative' },
+    // Opaque screen-colored backing behind the child: translucent card
+    // backgrounds (dark theme) composite over this instead of the red
+    // underlay, so the delete action only shows once the row is swiped.
+    content: { backgroundColor: theme.bg.primary, borderRadius },
     under: {
       ...StyleSheet.absoluteFillObject,
       backgroundColor: theme.destructive,
