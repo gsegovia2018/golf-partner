@@ -215,16 +215,6 @@ export function HoleView({ round, roundIndex, players, scores, shotDetails, meId
         onClose={() => setFlyoverOpen(false)}
         onEdit={isAdmin ? () => { setFlyoverOpen(false); setEditorOpen(true); } : undefined}
       />
-      {round.id && appSettings.shotMeasuring !== 'off' && (
-        <MeasureFab
-          roundId={round.id}
-          roundIndex={roundIndex}
-          holeNumber={currentHole}
-          fix={{ position: gps.position ?? null, accuracy: gps.accuracy ?? null }}
-          targetMeters={gps.distances?.center ?? null}
-          onOpenMap={openFlyover}
-        />
-      )}
       {isAdmin && (
         <HoleGeoEditor
           visible={editorOpen}
@@ -335,6 +325,16 @@ export function HoleView({ round, roundIndex, players, scores, shotDetails, meId
               />
             ))}
           </ScrollView>
+        )}
+        {round.id && appSettings.shotMeasuring !== 'off' && (
+          <MeasureFab
+            roundId={round.id}
+            roundIndex={roundIndex}
+            holeNumber={currentHole}
+            fix={{ position: gps.position ?? null, accuracy: gps.accuracy ?? null }}
+            targetMeters={gps.distances?.center ?? null}
+            onOpenMap={openFlyover}
+          />
         )}
       </View>
 
