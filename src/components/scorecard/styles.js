@@ -201,15 +201,17 @@ export function makeScorecardStyles(theme) {
     },
 
     // Hole view header — sits directly on bg.primary, no card chrome.
+    // `stretch` + space-between makes the hole info column span the full
+    // height of the distance card beside it.
     holeHeaderCard: {
       flexDirection: 'row',
       justifyContent: 'space-between',
-      alignItems: 'center',
+      alignItems: 'stretch',
       paddingHorizontal: 20,
       paddingVertical: 16,
     },
-    holeHeaderLeft: { gap: 2, flex: 1, minWidth: 0 },
-    holeHeaderRightWrap: { flexShrink: 0 },
+    holeHeaderLeft: { flex: 1, minWidth: 0, justifyContent: 'space-between' },
+    holeHeaderRightWrap: { flexShrink: 0, justifyContent: 'center' },
     holeNumberRow: { flexDirection: 'row', alignItems: 'baseline', gap: 8 },
     holeNumberLabel: {
       color: theme.text.muted,
@@ -219,11 +221,11 @@ export function makeScorecardStyles(theme) {
     },
     holeNumber: {
       color: theme.text.primary,
-      fontSize: 44,
+      fontSize: 52,
       fontFamily: 'PlayfairDisplay-Black',
-      lineHeight: 48,
+      lineHeight: 56,
     },
-    holeMetaRow: { flexDirection: 'row', gap: 16, marginTop: 2 },
+    holeMetaRow: { flexDirection: 'row', gap: 16 },
     holeMetaItem: { flexDirection: 'row', alignItems: 'baseline', gap: 5 },
     holeMetaLabel: {
       color: theme.text.muted,
@@ -233,7 +235,7 @@ export function makeScorecardStyles(theme) {
     },
     holeMetaValue: {
       color: theme.text.primary,
-      fontSize: 15,
+      fontSize: 17,
       fontFamily: 'PlusJakartaSans-ExtraBold',
     },
     holeSlimBar: {
