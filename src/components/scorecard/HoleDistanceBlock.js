@@ -4,11 +4,7 @@ import { Feather } from '@expo/vector-icons';
 import { useTheme } from '../../theme/ThemeContext';
 import { useAppSettings } from '../../hooks/useAppSettings';
 import { formatDistance, unitSuffix } from '../../lib/units';
-import { subscribeShots, getShotsVersion, getShots, shotsForHole } from '../../store/shotStore';
-import {
-  holeFeatures, haversineMeters, greenDistances, pointInPolygon,
-  subscribeCourseGeometry, getCourseGeometryVersion,
-} from '../../lib/geo';
+import { subscribeShots, getShotsVersion, getShots } from '../../store/shotStore';
 import { recommendClub } from '../../lib/shotStats';
 import { clubLabel } from '../../lib/clubs';
 import { usePlayConditions } from '../../hooks/usePlayConditions';
@@ -20,7 +16,7 @@ import { useTourTarget } from '../tour/tourTargets';
 // Renders nothing when the course has no geometry, or when location is
 // denied and there's no tee to fall back to.
 export function HoleDistanceBlock({
-  gps, courseName, holeNumber, roundId, roundIndex, onPress, compact = false,
+  gps, courseName, onPress, compact = false,
 }) {
   const { theme } = useTheme();
   const appSettings = useAppSettings();
@@ -33,81 +29,25 @@ export function HoleDistanceBlock({
   // Hooks stay above the early return.
   const cond = usePlayConditions(courseName);
   const shotsVersion = useSyncExternalStore(subscribeShots, getShotsVersion, getShotsVersion);
-  // Subscribe so a new shot / edited geometry re-renders this block.
-  useSyncExternalStore(subscribeCourseGeometry, getCourseGeometryVersion);
-  // Front/center/back recompute from the last marked shot on this hole, so
-  // once a ball is placed the block reads distance-to-green FROM the ball
-  // (200m drive on a 300m par 4 → ~100m). But ONLY while you're on the hole
-  // (live GPS within 1 km). Off the hole the header shows the hole from the
-  // tee, and a shot logged elsewhere — or a stale/test shot far from the
-  // green — must not hijack the number (the "FROM TEE 43 km" bug).
-  const onHole = gps?.source === 'gps';
-  const lastShot = (onHole && roundId != null)
-    ? shotsForHole(roundId, roundIndex, holeNumber).at(-1) : null;
-  const feat = lastShot ? holeFeatures(courseName, holeNumber) : null;
-  const from = lastShot ? [lastShot.lat, lastShot.lng] : null;
-  const to = (pt) => (pt ? haversineMeters(from, pt) : null);
-  // Ball finished on the green → putting. Polygon test, or within ~5m of the
-  // centre when the hole only has a centre point. No yardage / club then.
-  const onGreen = !!feat && (
-    (feat.green && pointInPolygon(from, feat.green))
-    || (!feat.green && feat.greenCenter && to(feat.greenCenter) <= 5)
-  );
-  // Front/back split the same way the live GPS strip does: nearest / farthest
-  // green-polygon vertex from the ball. Admin front/back points win when set;
-  // otherwise fall back to the polygon so F ≠ C ≠ B (not all the centre).
-  let shotDist = null;
-  if (feat?.greenCenter) {
-    const raw = (feat.greenFront || feat.greenBack)
-      ? {
-        center: to(feat.greenCenter),
-        front: to(feat.greenFront),
-        back: to(feat.greenBack),
-      }
-      : greenDistances(from, feat.green, feat.greenCenter);
-    // Center is the fallback when a hole has no polygon / no front-back points.
-    shotDist = raw ? {
-      center: raw.center,
-      front: raw.front ?? raw.center,
-      back: raw.back ?? raw.center,
-    } : null;
-  }
 
-  const baseTarget = shotDist?.center ?? gps?.distances?.center ?? null;
+  // The card shows exactly ONE thing, decided entirely by the `gps` prop
+  // (useGpsDistances / resolveScorecardDistances):
+  //   - on the hole (live GPS within 1 km): the live distance to this green;
+  //   - otherwise: the hole measured from the tee (source 'tee').
+  // Never a marked-shot distance, never a distance to a far-away location.
+  const baseTarget = gps?.distances?.center ?? null;
   const playTarget = baseTarget != null ? cond.plays(baseTarget) : null;
   // eslint-disable-next-line react-hooks/exhaustive-deps
   const suggestion = useMemo(() => recommendClub(playTarget, appSettings.bag, getShots(), appSettings.clubDistances), [playTarget, appSettings.bag, appSettings.clubDistances, shotsVersion]);
 
-  // On the green: drop yardage + club entirely, just say putting.
-  if (onGreen) {
-    if (compact) {
-      return (
-        <Pressable onPress={onPress} hitSlop={8} style={s.compactRow} accessibilityRole="button" accessibilityLabel="Hole map">
-          <Feather name="flag" size={13} color={theme.accent.primary} />
-          <Text style={s.compactPutt}>Putting</Text>
-          <Feather name="chevron-right" size={16} color={theme.text.muted} />
-        </Pressable>
-      );
-    }
-    return (
-      <Pressable ref={tourRef} onPress={onPress} hitSlop={10} style={s.block} accessibilityRole="button" accessibilityLabel="Open hole map">
-        <Feather name="flag" size={18} color={theme.accent.primary} />
-        <Text style={s.putt}>Putting</Text>
-        <Text style={s.mapHint}>TAP FOR MAP</Text>
-      </Pressable>
-    );
-  }
   if (!gps?.available) return null;
 
   const fmt = (meters) => formatDistance(meters, units);
-  const { accuracy, source } = gps;
-  // Distances to render: from the marked shot when present, else the live fix.
-  const distances = shotDist ? { ...gps.distances, ...shotDist } : gps.distances;
+  const { accuracy, source, distances } = gps;
 
-  // Never show a live GPS distance measured from off the hole (a far fix with
-  // no tee anchor). The hook hides this already; guard here too so a stray far
-  // reading is hidden rather than rendered as a giant number. Tee distances
-  // are exempt — they're the hole length, not a live reading.
+  // Belt-and-suspenders: the hook never yields a live GPS distance beyond 1 km,
+  // so a >3 km non-tee reading would be a bug — hide it rather than render a
+  // giant number. Tee distances (the hole length) are exempt.
   if (source !== 'tee' && distances && distances.center > 3000) return null;
 
   if (compact) {
@@ -235,13 +175,6 @@ function makeStyles(theme) {
       letterSpacing: 0.2,
       marginTop: 1,
     },
-    putt: {
-      color: theme.accent.primary,
-      fontSize: 18,
-      fontFamily: 'PlusJakartaSans-ExtraBold',
-      letterSpacing: -0.3,
-      marginTop: 2,
-    },
     plays: {
       color: theme.text.muted,
       fontSize: 10,
@@ -266,11 +199,6 @@ function makeStyles(theme) {
       color: theme.accent.primary,
       fontSize: 13,
       fontFamily: 'PlusJakartaSans-Bold',
-    },
-    compactPutt: {
-      color: theme.accent.primary,
-      fontSize: 14,
-      fontFamily: 'PlusJakartaSans-ExtraBold',
     },
   });
 }

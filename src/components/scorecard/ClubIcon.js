@@ -1,15 +1,19 @@
 import React from 'react';
 import Svg, { Path } from 'react-native-svg';
 
-// A minimalist golf iron: a diagonal shaft with an angled club head. No
-// bundled icon set (Feather/MCI/Ionicons) ships a golf-club glyph, so this is
-// hand-drawn. `size` is the square box; `color` paints both shaft and head.
+// A golf iron: a grip + shaft angling down into an angled blade club-head with
+// a flat sole. No bundled icon set (Feather/MCI/Ionicons) ships a golf-club
+// glyph, so it's hand-drawn. `size` is the square box; `color` paints the club.
 export function ClubIcon({ size = 24, color = '#0a0d10' }) {
   return (
     <Svg width={size} height={size} viewBox="0 0 24 24" fill="none">
-      <Path d="M17.5 3.2 8.2 15.6" stroke={color} strokeWidth={2.1} strokeLinecap="round" />
+      {/* grip cap */}
+      <Path d="M18.4 3.3 20 4.9" stroke={color} strokeWidth={2.4} strokeLinecap="round" />
+      {/* shaft */}
+      <Path d="M18.8 4.5 11.3 13" stroke={color} strokeWidth={1.9} strokeLinecap="round" />
+      {/* iron head: hosel at the shaft, a blade sweeping to a flat sole */}
       <Path
-        d="M8.6 15.1 6.2 20.4c-.3.7.4 1.4 1.1 1.1l5.1-2.3c.5-.2.6-.9.2-1.3l-2.7-2.9c-.4-.4-1-.3-1.3 0Z"
+        d="M12.5 11.7 6.4 17.3a2 2 0 0 0-0.15 2.75l0.35 0.4a2 2 0 0 0 2.85 0.2l6.2-5.55Z"
         fill={color}
       />
     </Svg>
