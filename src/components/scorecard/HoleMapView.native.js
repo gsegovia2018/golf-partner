@@ -6,7 +6,7 @@ import { getTileDataUrl } from '../../store/tileCache';
 // Native host: renders the Leaflet map page in a WebView. Same contract as the
 // web host — rebuilds only on hole/mode identity change; live updates are
 // injected as postMessage into the page so it never reloads.
-export function HoleMapView({ data, player, anchor, activeField, shots, onShotMove, onAim, onShotTap, onPoint, style }) {
+export function HoleMapView({ data, player, anchor, activeField, shots, targets, onShotMove, onAim, onShotTap, onPoint, style }) {
   const ref = useRef(null);
   // eslint-disable-next-line react-hooks/exhaustive-deps
   const html = useMemo(() => buildHoleMapHtml(data), [data.holeKey]);
@@ -18,6 +18,7 @@ export function HoleMapView({ data, player, anchor, activeField, shots, onShotMo
 
   useEffect(() => { send({ type: 'player', pos: player || null, anchor: anchor ?? null }); }, [player, anchor]);
   useEffect(() => { send({ type: 'shots', shots: shots || [] }); }, [shots]);
+  useEffect(() => { if (targets) send({ type: 'set-targets', targets }); }, [targets]);
   useEffect(() => { if (activeField) send({ type: 'activeField', field: activeField }); }, [activeField]);
   useEffect(() => { if (data.updateHole) send({ type: 'hole', hole: data }); }, [data]);
 
@@ -32,7 +33,7 @@ export function HoleMapView({ data, player, anchor, activeField, shots, onShotMo
         let m; try { m = JSON.parse(e.nativeEvent.data); } catch { return; }
         if (m.type === 'point') onPoint?.(m.field, m.pos, m.drag);
         if (m.type === 'shot-move') onShotMove?.(m.index, m.pos);
-        if (m.type === 'aim') onAim?.(m.pos);
+        if (m.type === 'aim') onAim?.(m.pos, m.rings);
         if (m.type === 'shot-tap') onShotTap?.(m.index);
         if (m.type === 'tile') {
           getTileDataUrl({ z: m.z, x: m.x, y: m.y, bucket: data.courseKey || '_browse' })

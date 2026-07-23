@@ -8,6 +8,8 @@
 //                  { type:'ready' }
 //                  { type:'tile', z, x, y, id }               (tile request)
 //   host -> page:  { type:'tile-data', id, dataUrl|null }     (tile answer)
+//   page -> host:  { type:'aim', pos:[lat,lng], rings:[[lat,lng],...] }
+//   host -> page:  { type:'set-targets', targets:[[lat,lng],...] } (replaces rings)
 //
 // data: { mode:'view'|'edit', holeLabel, green, greenFront, greenCenter,
 //         greenBack, tee, hazards:[{kind,poly}], player, activeField }
@@ -240,8 +242,9 @@ function redrawLines(from, g, cc){
   // HUD always measures from the aim ring nearest the green — refresh live.
   const aim = pts.length ? pts[pts.length-1] : null;
   hud(aim || from, g);
-  // Report the ring to the host so "Add shot" can drop the ball right here.
-  if (aim) post({ type:'aim', pos: aim });
+  // Report the ring(s) to the host so "Add shot" can drop the ball right here,
+  // and a two-ring chain can be logged as a start->end segment.
+  if (aim) post({ type:'aim', pos: aim, rings: pts.map(p => p.slice()) });
 }
 function ringIcon(){ return L.divIcon({ className:'', html:'<div style="width:34px;height:34px;border:4px solid #fff;border-radius:50%;box-shadow:0 0 0 1px rgba(0,0,0,.4)"></div>', iconSize:[34,34], iconAnchor:[17,17] }); }
 
@@ -260,8 +263,7 @@ function hud(src, g){
       '<div class="row"><span class="lbl">Back</span><span class="sm">'+disp(d(g.b))+'</span></div>'+
       '<div class="row"><span class="lbl"></span><span class="bign">'+disp(d(g.c))+'</span><span class="u">'+U+'</span></div>'+
       '<div class="row"><span class="lbl">Front</span><span class="sm">'+disp(d(g.f))+'</span></div>'+
-    '</div>'+
-    '<div class="hint">Drag the ring to measure</div>';
+    '</div>';
 }
 
 function editIcon(color, label){
@@ -340,6 +342,12 @@ window.addEventListener('message', (ev) => {
   if (m.type === 'activeField') { activeField = m.field; if (hole.mode==='edit') drawEdit(fcb()); }
   if (m.type === 'hole') { hole = m.hole; draw(); } // redraw markers, keep current pan/zoom
   if (m.type === 'shots') { shots = m.shots || []; draw(); }
+  // host -> page: { type:'set-targets', targets:[[lat,lng],...] } replaces the
+  // aim rings wholesale (e.g. collapsing to the landing after a shot is logged).
+  if (m.type === 'set-targets') {
+    targets = (m.targets || []).filter(valid);
+    draw();
+  }
   if (m.type === 'tile-data') {
     const cb = pendingTiles[m.id];
     delete pendingTiles[m.id];

@@ -10,6 +10,7 @@ jest.mock('../../../store/shotStore', () => ({
   getShots: () => mockShots,
   shotsForHole: () => mockShots,
   logShot: jest.fn(async () => ({ id: 'new' })),
+  logMeasuredShot: jest.fn(async () => ({ originId: 'o1', shotId: 's9' })),
   setShotClub: jest.fn(),
   setShotPos: jest.fn(),
   deleteShot: jest.fn(),
@@ -30,7 +31,7 @@ jest.mock('../../../hooks/useAppSettings', () => ({
   useAppSettings: () => ({ units: 'meters', bag: undefined, clubDistances: {} }),
 }));
 
-const { logShot, deleteShot } = require('../../../store/shotStore');
+const { logShot, logMeasuredShot, deleteShot } = require('../../../store/shotStore');
 
 const base = {
   roundId: 'r1', roundIndex: 0, holeNumber: 7,
@@ -104,5 +105,18 @@ describe('ShotTracker FAB', () => {
     fireEvent.press(getByText('wheel:Shot 1'));
     expect(deleteShot).toHaveBeenCalledWith('s2');
     expect(deleteShot).toHaveBeenCalledWith('t');
+  });
+
+  it('logs a start→end segment when two rings are set', async () => {
+    const onCollapseTargets = jest.fn();
+    const { getByLabelText } = render(
+      <ShotTracker {...base} aimPos={[38.554, -0.142]}
+        aimRings={[[38.550, -0.140], [38.554, -0.142]]} onCollapseTargets={onCollapseTargets} />,
+    );
+    await act(async () => { fireEvent.press(getByLabelText('Add a shot at the aim ring')); });
+    expect(logMeasuredShot).toHaveBeenCalledWith(expect.objectContaining({
+      start: [38.550, -0.140], end: [38.554, -0.142],
+    }));
+    expect(onCollapseTargets).toHaveBeenCalledWith([[38.554, -0.142]]);
   });
 });

@@ -5,7 +5,7 @@ import PressableScale from '../ui/PressableScale';
 import { useAppSettings } from '../../hooks/useAppSettings';
 import {
   subscribeShots, getShotsVersion, getShots,
-  shotsForHole, logShot, setShotClub, deleteShot,
+  shotsForHole, logShot, logMeasuredShot, setShotClub, deleteShot,
 } from '../../store/shotStore';
 import { haversineMeters } from '../../lib/geo';
 import { recommendClub, clubAverages } from '../../lib/shotStats';
@@ -24,8 +24,8 @@ import { ClubWheel } from './ClubWheel';
 // The first spot on a hole is the tee, seeded from the hole geometry.
 export function ShotTracker({
   roundId, roundIndex, holeNumber,
-  pos, teePos, aimPos, targetPos, targetMeters,
-  tappedShotIndex, onConsumeShotTap,
+  pos, teePos, aimPos, aimRings, targetPos, targetMeters,
+  tappedShotIndex, onConsumeShotTap, onCollapseTargets,
 }) {
   const appSettings = useAppSettings();
   const { units } = appSettings;
@@ -70,8 +70,24 @@ export function ShotTracker({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [tappedShotIndex]);
 
-  // Add a shot at the white aim ring (GPS as a fallback), or at exact GPS.
-  const addAtAim = () => { const p = aimPos || pos; if (p) addSpot(p); };
+  // Add a shot at the white aim ring (GPS as a fallback), or at exact GPS. With
+  // two rings set on the map, logs the start->end segment between them
+  // instead, then collapses the rings down to the landing.
+  const addAtAim = async () => {
+    if (aimRings?.length === 2) {
+      const [start, end] = aimRings;
+      const carry = haversineMeters(start, end);
+      const guess = recommendClub(carry, appSettings.bag, getShots(), overrides)?.club ?? null;
+      const { shotId } = await logMeasuredShot({
+        roundId, roundIndex, holeNumber, start, end, club: guess,
+      });
+      setWheelId(shotId);
+      onCollapseTargets?.([end]);
+      return;
+    }
+    const p = aimPos || pos;
+    if (p) addSpot(p);
+  };
   const dropAtMe = () => { if (pos) addSpot(pos); };
 
   if (!roundId) return null;

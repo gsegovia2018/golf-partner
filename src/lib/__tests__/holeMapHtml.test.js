@@ -82,4 +82,13 @@ describe('buildHoleMapHtml', () => {
     expect(html).not.toContain('placehint');
     expect(html).not.toContain("type:'shot-point'");
   });
+  it('posts the full ring chain with the aim and accepts set-targets', () => {
+    const html = buildHoleMapHtml(base);
+    expect(html).toContain('rings:');
+    expect(html).toContain("type:'set-targets'");
+  });
+  it('drops the drag-to-measure hint', () => {
+    const html = buildHoleMapHtml(base);
+    expect(html).not.toContain('Drag the ring to measure');
+  });
 });

@@ -59,9 +59,13 @@ export function HoleFlyover({
     shots: shotPins, // initial paint; live marks arrive via the shots prop below
   } : null), [feat, courseName, holeNumber, position, anchorInfo, units, shotPins]);
 
-  // Latest aim-ring position reported by the map, so "Add shot" drops the ball
-  // right where the white ring sits (no tap-to-place needed to add).
-  const [aimPos, setAimPos] = useState(null);
+  // Latest aim state reported by the map: { pos, rings } — pos is the ring
+  // nearest the green (for "Add shot" fallback), rings is the full
+  // chain-ordered ring list (1 or 2 entries) for two-ring segment logging.
+  const [aim, setAim] = useState(null);
+  // Pending set-targets command sent down to the map (e.g. to collapse the
+  // rings to the landing after a segment is logged).
+  const [targetsCmd, setTargetsCmd] = useState(null);
   // Index of a shot pin tapped on the map, relayed to ShotTracker to open its
   // club wheel for that shot.
   const [tappedShot, setTappedShot] = useState(null);
@@ -121,11 +125,12 @@ export function HoleFlyover({
                 player={position}
                 anchor={anchorInfo}
                 shots={shotPins}
+                targets={targetsCmd}
                 onShotMove={(i, p) => {
                   const sh = shotsForHole(roundId, roundIndex, holeNumber)[i];
                   if (sh) setShotPos(sh.id, p);
                 }}
-                onAim={setAimPos}
+                onAim={(pos, rings) => setAim({ pos, rings })}
                 onShotTap={setTappedShot}
                 style={s.map}
               />
@@ -136,12 +141,14 @@ export function HoleFlyover({
                   holeNumber={holeNumber}
                   pos={position ?? null}
                   teePos={feat?.start ?? null}
-                  aimPos={aimPos}
+                  aimPos={aim?.pos ?? null}
+                  aimRings={aim?.rings ?? null}
                   targetPos={feat?.greenCenter ?? null}
                   targetMeters={feat?.greenCenter && position
                     ? cond.plays(haversineMeters(position, feat.greenCenter)) : null}
                   tappedShotIndex={tappedShot}
                   onConsumeShotTap={() => setTappedShot(null)}
+                  onCollapseTargets={(t) => setTargetsCmd(t)}
                 />
               )}
             </View>
