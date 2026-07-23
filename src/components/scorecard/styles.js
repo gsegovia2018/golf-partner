@@ -242,6 +242,28 @@ export function makeScorecardStyles(theme) {
       fontSize: 15,
       fontFamily: 'PlusJakartaSans-ExtraBold',
     },
+    holeSlimBar: {
+      position: 'absolute',
+      top: 0,
+      left: 0,
+      right: 0,
+      height: 44,
+      flexDirection: 'row',
+      alignItems: 'center',
+      justifyContent: 'space-between',
+      paddingHorizontal: 16,
+      backgroundColor: theme.bg.primary,
+      borderBottomWidth: 1,
+      borderBottomColor: theme.isDark ? theme.glass?.border ?? theme.border.default : theme.border.default,
+      zIndex: 5,
+    },
+    holeSlimBarInfo: {
+      color: theme.text.primary,
+      fontSize: 13,
+      fontFamily: 'PlusJakartaSans-ExtraBold',
+      letterSpacing: 0.5,
+      flexShrink: 1,
+    },
 
     // Hole navigation
     holeNav: {
