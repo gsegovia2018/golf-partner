@@ -12,6 +12,7 @@ import { loadAllTournamentsWithFallback } from '../store/tournamentStore';
 import { loadProfile, upsertProfile } from '../store/profileStore';
 import { TargetHandicapPicker } from '../components/mystats/TargetHandicapPicker';
 import { collectMyRounds, resolveSelection, computeMyStats } from '../store/personalStats';
+import { pruneShotsToRounds } from '../store/shotStore';
 import { buildRoundReportCard } from '../store/roundReportCard';
 import RoundReportCard from '../components/RoundReportCard';
 import MyStatsRoundSelector from '../components/MyStatsRoundSelector';
@@ -120,13 +121,21 @@ export default function MyStatsScreen({ navigation, route }) {
       try {
         // The profile display name lets collectMyRounds recognise unlinked
         // (guest) player slots — e.g. solo games never claimed to an account.
-        const [{ list }, profile] = await Promise.all([
+        const [{ list, stale }, profile] = await Promise.all([
           loadAllTournamentsWithFallback(),
           loadProfile().catch(() => null),
         ]);
         if (!cancelled) {
           setTargetHandicap(profile?.targetHandicap ?? null);
           setProfileHandicap(profile?.handicap ?? null);
+        }
+        // Drop GPS shots whose round was deleted. Only when the list is
+        // authoritative (fresh server load, not a stale cache) — otherwise a
+        // tournament that simply wasn't loaded offline would look "deleted".
+        if (!stale) {
+          const validRoundIds = new Set();
+          for (const t of list || []) for (const r of t.rounds || []) if (r?.id) validRoundIds.add(r.id);
+          pruneShotsToRounds(validRoundIds, { deleteRemote: true }).catch(() => {});
         }
         const rounds = collectMyRounds(list, user?.id, profile?.displayName);
         let stored = {};

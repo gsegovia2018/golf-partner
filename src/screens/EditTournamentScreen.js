@@ -14,6 +14,7 @@ import {
   getActiveTournamentSnapshot, getTournamentSnapshot, getTournament,
 } from '../store/tournamentStore';
 import { mutate } from '../store/mutate';
+import { deleteShotsForRound } from '../store/shotStore';
 import { normalizeRoundNotes, roundNoteText } from '../store/roundNotes';
 import { isScoringModeAllowed, fallbackScoringMode } from '../components/ScoringModePicker';
 import { parseHandicapIndex } from '../lib/handicap';
@@ -382,6 +383,8 @@ export default function EditTournamentScreen({ navigation, route }) {
         // only hit if mutate itself throws, which is rare.
       }
     }
+    // Cascade: a deleted round takes its logged GPS shots with it.
+    if (target?.id) deleteShotsForRound(target.id).catch(() => {});
     setRounds((prev) => prev.filter((_, i) => i !== index));
   }
 

@@ -177,6 +177,41 @@ export async function deleteShot(id) {
   } catch { /* server row lingers; harmless, re-hydrate reconciles */ }
 }
 
+// Remove every shot belonging to a round (cascade when a round is deleted).
+export async function deleteShotsForRound(roundId) {
+  if (roundId == null) return;
+  const before = SHOTS.length;
+  SHOTS = SHOTS.filter((s) => s.roundId !== roundId);
+  if (SHOTS.length === before) return;
+  emit();
+  await persistCache();
+  try {
+    if (userId) await supabase.from('golf_shot').delete().eq('round_id', roundId);
+  } catch { /* server rows linger; harmless, re-hydrate reconciles */ }
+}
+
+// Drop shots whose round no longer exists. `validRoundIds` is the complete set
+// of the user's current round ids — pass `deleteRemote: true` ONLY when that
+// set is authoritative (a fresh server list), so a partial/offline list never
+// deletes live shots. Local prune is always safe to show the right count.
+export async function pruneShotsToRounds(validRoundIds, { deleteRemote = false } = {}) {
+  const valid = validRoundIds instanceof Set ? validRoundIds : new Set(validRoundIds || []);
+  const orphans = SHOTS.filter((s) => !valid.has(s.roundId));
+  if (!orphans.length) return 0;
+  SHOTS = SHOTS.filter((s) => valid.has(s.roundId));
+  emit();
+  await persistCache();
+  if (deleteRemote && userId) {
+    const ids = orphans.filter((s) => !s.pending).map((s) => s.id);
+    try {
+      for (let i = 0; i < ids.length; i += 100) {
+        await supabase.from('golf_shot').delete().in('id', ids.slice(i, i + 100));
+      }
+    } catch { /* server rows linger; pruned again on the next authoritative load */ }
+  }
+  return orphans.length;
+}
+
 // Remove the last shot on a hole (undo mis-taps).
 export async function undoLastShot(roundId, roundIndex, holeNumber) {
   const hole = shotsForHole(roundId, roundIndex, holeNumber);
