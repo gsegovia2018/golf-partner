@@ -101,10 +101,15 @@ export function HoleDistanceBlock({
   // Distances to render: from the marked shot when present, else the live fix.
   const distances = shotDist ? { ...gps.distances, ...shotDist } : gps.distances;
 
+  // Never show a live GPS distance measured from off the hole (a far fix with
+  // no tee anchor). The hook hides this already; guard here too so a stray far
+  // reading is hidden rather than rendered as a giant number. Tee distances
+  // are exempt — they're the hole length, not a live reading.
+  if (source !== 'tee' && distances && distances.center > 3000) return null;
+
   if (compact) {
     const c = distances?.center;
     if (c == null) return null;
-    if (source !== 'tee' && c > 3000) return null;
     return (
       <Pressable onPress={onPress} hitSlop={8} style={s.compactRow} accessibilityRole="button" accessibilityLabel="Hole map">
         {/* Flag (not the live-GPS arrow) when the number is measured from the
@@ -116,9 +121,8 @@ export function HoleDistanceBlock({
       </Pressable>
     );
   }
-  // Same thresholds as the old strip: >3km = not on the course; >25m = the
-  // fix is too loose to trust to the meter.
-  const offCourse = source !== 'tee' && distances && distances.center > 3000;
+  // >25m = the fix is too loose to trust to the meter. (Off-course far GPS is
+  // already hidden above, so there's no "off course" state to render here.)
   const poorFix = accuracy != null && accuracy > 25;
   // One entry per hazard kind — the nearest ahead is the one in play.
   const bunker = distances?.hazards?.find((h) => h.kind === 'bunker');
@@ -150,9 +154,7 @@ export function HoleDistanceBlock({
   return (
     <Pressable ref={tourRef} onPress={onPress} hitSlop={10} style={s.block} accessibilityRole="button" accessibilityLabel="Open hole map">
       {distances?.kind === 'nearest' && <Text style={s.overline}>NEAREST GREEN</Text>}
-      {offCourse ? (
-        <Text style={s.off}>{`Off course · ${(distances.center / 1000).toFixed(1)} km`}</Text>
-      ) : distances ? (
+      {distances ? (
         <>
           <View style={s.heroRow}>
             <Feather name="navigation" size={14} color={theme.accent.primary} />
@@ -250,12 +252,6 @@ function makeStyles(theme) {
       fontVariant: ['tabular-nums'],
     },
     caption: { color: theme.text.muted, fontSize: 10, fontVariant: ['tabular-nums'] },
-    off: {
-      color: theme.text.muted,
-      fontSize: 12,
-      fontFamily: 'PlusJakartaSans-SemiBold',
-      fontVariant: ['tabular-nums'],
-    },
     compactRow: { flexDirection: 'row', alignItems: 'center', gap: 4 },
     compactDist: {
       color: theme.accent.primary,

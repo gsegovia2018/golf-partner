@@ -97,9 +97,13 @@ export function useGpsDistances(courseName, holeNumber) {
 
   return {
     // Denied + no tee fallback would leave the header stuck on the fix
-    // spinner — hide it, exactly like the pre-tee-fallback behavior.
+    // spinner — hide it, exactly like the pre-tee-fallback behavior. Also
+    // hide once we HAVE a fix but there's no distance to show (off the hole,
+    // no tee): resolveScorecardDistances returns null there, and we must not
+    // sit on the "Getting GPS fix" spinner forever.
     available: !!geometry
-      && (gpsEnabled ? (!denied || resolved.source === 'tee') : resolved.source === 'tee'),
+      && (gpsEnabled ? (!denied || resolved.source === 'tee') : resolved.source === 'tee')
+      && !(fix != null && resolved.distances == null),
     distances: resolved.distances,
     source: resolved.source, // 'gps' | 'tee' — the header renders FROM TEE for 'tee'
     accuracy: gpsEnabled ? (fix?.accuracy ?? null) : null,

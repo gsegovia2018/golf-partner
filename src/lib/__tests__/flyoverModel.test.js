@@ -101,17 +101,25 @@ describe('resolveScorecardDistances', () => {
     expect(r.distances.hazards[0].reach).toBeLessThan(300);
   });
 
-  it('keeps GPS behavior when the hole has no tee mapped', () => {
+  it('no tee mapped: live GPS on the hole, nothing off the hole (never a far GPS distance)', () => {
+    // On the hole (within 1 km): live distance to the green.
+    const near = resolveScorecardDistances({ courseName: 'Testville Golf', holeNumber: 2, fix: at(250) });
+    expect(near.source).toBe('gps');
+    expect(near.distances.center).toBeCloseTo(250, 0);
+    // Off the hole with no tee to measure from: show nothing, not the
+    // straight-line distance to the far-away fix.
     const far = resolveScorecardDistances({ courseName: 'Testville Golf', holeNumber: 2, fix: at(1500) });
-    expect(far.source).toBe('gps');
-    expect(far.distances.center).toBeCloseTo(1500, -1);
+    expect(far).toEqual({ distances: null, source: 'gps' });
+    // No fix yet, no tee: nothing.
     const none = resolveScorecardDistances({ courseName: 'Testville Golf', holeNumber: 2, fix: null });
     expect(none).toEqual({ distances: null, source: 'gps' });
   });
 
-  it('keeps GPS behavior on greens-mode courses (no per-hole tees)', () => {
-    const r = resolveScorecardDistances({ courseName: 'Greensville Golf', holeNumber: 1, fix: at(1500) });
-    expect(r.source).toBe('gps');
-    expect(r.distances.kind).toBe('nearest');
+  it('greens-mode course: live GPS on the hole, nothing off the hole', () => {
+    const near = resolveScorecardDistances({ courseName: 'Greensville Golf', holeNumber: 1, fix: at(250) });
+    expect(near.source).toBe('gps');
+    expect(near.distances.kind).toBe('nearest');
+    const far = resolveScorecardDistances({ courseName: 'Greensville Golf', holeNumber: 1, fix: at(1500) });
+    expect(far).toEqual({ distances: null, source: 'gps' });
   });
 });

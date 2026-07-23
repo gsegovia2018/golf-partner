@@ -73,11 +73,11 @@ describe('HoleDistanceBlock', () => {
     getByText('±31m');
   });
 
-  it('collapses to an off-course line beyond 3km', () => {
-    const { getByText, queryByText } = render(
+  it('renders nothing for a far off-course GPS reading (never a giant distance)', () => {
+    const { toJSON, queryByText } = render(
       <HoleDistanceBlock gps={gpsBase({}, { center: 4620 })} onPress={() => {}} />,
     );
-    getByText('Off course · 4.6 km');
+    expect(toJSON()).toBeNull();
     expect(queryByText('4620')).toBeNull();
   });
 
