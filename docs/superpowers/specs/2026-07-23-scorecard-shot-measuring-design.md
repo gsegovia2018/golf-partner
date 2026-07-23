@@ -6,9 +6,14 @@
 ## Goal
 
 Let a player capture their club distances **while playing, from the scorecard**, with
-the fewest possible interactions. Two flows: **GPS** (two taps stamp the shot's start
-and end positions) and **no-GPS / manual** (club + distance dial). Distances feed the
-existing club-recommendation pipeline.
+the fewest possible interactions. Two flows, one data pipeline:
+
+- **GPS flow (new):** two taps stamp the shot's start and end positions.
+- **Manual / no-GPS flow (existing):** place the ball on the hole map by eye — the
+  shipped `ShotTracker` flow (aim ring + club FAB + wheel). Nothing new to build.
+
+Both produce real, positioned shots in `shotStore`, so pins, carries, and club
+averages all flow through the existing pipeline.
 
 ## Entry point: a floating club button on the scorecard
 
@@ -23,6 +28,9 @@ bar. A small badge above it shows the current club suggestion (`≈ 8i`) — the
 - Rendered at the **scorecard screen level** (sibling of the pager, like the GPS
   machinery), NOT inside a `HolePage` — the tracker must survive hole swipes and
   opening the map sheet.
+- **No usable GPS fix** (accuracy > 25 m, denied, or absent): tapping the FAB opens
+  the **hole map sheet** instead — the manual flow's home. One button, one promise
+  ("log your shot"), best available mechanism per context.
 
 ## States (GPS flow)
 
@@ -40,8 +48,6 @@ bar. A small badge above it shows the current club suggestion (`≈ 8i`) — the
    now shows the refreshed suggestion for the next shot.
 
 Guards:
-- Arming requires a usable fix (accuracy ≤ 25 m — the existing scorecard threshold).
-  Without one, tap ① opens the **manual card** instead.
 - Tap ② is disabled until the counter exceeds ~20 m (mis-tap guard); over ~350 m the
   save asks for confirmation (probably rode a cart).
 - `✕` cancels without writing anything. Undo on the toast deletes what was saved.
@@ -58,8 +64,8 @@ Non-blocking overlay (explicit user requirements):
 
 ## What gets saved (GPS flow)
 
-GPS measurements are **real shots** in the existing `shotStore` — not a parallel
-store. On tap ②, for the current `roundId/roundIndex/holeNumber`:
+GPS measurements are **real shots** in the existing `shotStore` — the same records the
+map flow writes. On tap ②, for the current `roundId/roundIndex/holeNumber`:
 
 1. If the hole has no shots yet, or its last spot is **> 30 m** from the start stamp,
    first append the start stamp as an untagged spot (`club: null`) — the origin.
@@ -71,56 +77,50 @@ Consequences, all via existing pipelines: the shot appears as a numbered pin on 
 hole map, the header re-anchors per its existing last-marked-shot behavior, and the
 carry flows into `clubAverages` → future `≈ club` recommendations.
 
-## Manual flow (no GPS)
+## Manual flow (no GPS) — the existing map
 
-Tap ① opens a **manual card** in the same corner instead: a club chip (`⌄` opens the
-wheel; defaults to the suggestion when one exists, else the last club logged), a
-snapping **distance dial** (5 m steps, seeded at the club's current effective
-distance), and one **Save** button.
+No new UI. Without GPS (or whenever preferred), shots are placed on the **hole map**
+exactly as shipped: header block → map sheet → drag the aim ring to where the ball
+lies → club FAB → wheel (or tap a pin to re-club / move / delete). Positions come
+from the player's eyes on the satellite imagery instead of a GPS fix; the saved shot
+is identical in shape and flows through the same pins/carries/averages pipeline.
 
-Manual entries are **calibration samples**, not shots — they have no positions:
+The scorecard FAB routes here automatically when no usable fix exists (see Entry
+point), so the manual flow needs no mode of its own.
 
-```js
-// settings/profile-backed store, shape per sample:
-{ club: '7i', meters: 145, ts: '2026-07-23T14:05:00Z' }
-```
+## Distance priority — unchanged
 
-## Distance priority (one new tier)
-
-Effective distance per club, everywhere (`recommendClub`, BagScreen rows):
-
-**manual bag override → GPS-measured average (logged-shot carries) → manual-sample
-average → catalog nominal**
-
-Manual samples never override GPS-measured carries. BagScreen tags the sample tier
-`LOGGED` (alongside today's `SET` / `MEASURED` / `EST`).
+`recommendClub` keeps its existing ladder: **manual bag override → measured average
+(logged-shot carries, GPS-stamped or map-placed alike) → catalog nominal.** No new
+tier; no calibration-samples store. (A "quick set" bulk seeding flow in Your Bag
+remains a possible follow-up, out of scope here.)
 
 ## Setting
 
-`Settings → GPS` gains **"Shot measuring": Auto · Manual · Off** (default Auto,
-stored as `settings.shotMeasuring: 'auto' | 'manual' | 'off'`).
+`Settings → GPS` gains **"Shot measuring button": On · Off** (default On, stored as
+`settings.shotMeasuring: 'on' | 'off'`).
 
-- **Auto:** GPS card when a usable fix exists, manual card otherwise.
-- **Manual:** always the manual card.
-- **Off:** the FAB is not rendered at all.
+- **On:** the FAB renders during live rounds; tap = GPS tracker with a usable fix,
+  hole map otherwise.
+- **Off:** the FAB is not rendered at all (the map flow stays reachable via the
+  header, as today).
 
-The only "automatic detection" involved is *is GPS usable right now* — reliably
-detectable. Background/no-interaction shot detection was evaluated and cut (phone-only
-GPS cannot attribute clubs and drains battery; fails the "works well" bar).
+Background/no-interaction shot detection was evaluated and cut (phone-only GPS cannot
+attribute clubs and drains battery; fails the "works well" bar).
 
 ## Non-goals
 
 - No changes to the hole map's `ShotTracker`, `ClubWheel` internals, `shotStats`
   carry math, or `HoleDistanceBlock`.
 - No background auto-detection of shots.
-- No bulk "quick set" bag-anchor flow in this spec (possible follow-up in Your Bag).
+- No numeric distance-entry UI; no calibration-samples store.
 
 ## Testing
 
 - Store/logic: arm/finish stamping, the >30 m origin-insert rule, min/max guards,
   undo deletes both inserted spots when the origin was just created.
-- Component: FAB renders only in live rounds with measuring ≠ Off; armed card blocks
-  tap ② under 20 m; `change ⌄` opens the wheel; ✕ cancels cleanly.
-- Priority: `recommendClub`/BagScreen honor the new sample tier ordering.
-- Setting: Auto/Manual/Off gating, manual fallback when accuracy > 25 m.
+- Component: FAB renders only in live rounds with the setting On; armed card blocks
+  tap ② under 20 m; `change ⌄` opens the wheel; ✕ cancels cleanly; FAB opens the
+  hole map when the fix is unusable.
+- Setting: On/Off gating.
 - Full `npm test` and `npm run lint` stay green.
