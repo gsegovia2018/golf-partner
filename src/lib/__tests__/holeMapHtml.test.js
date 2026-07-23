@@ -72,4 +72,14 @@ describe('buildHoleMapHtml', () => {
     const html = buildHoleMapHtml(base);
     expect(html).toContain('const origin = i === 0 && !list[i].club');
   });
+  it('makes landing pins draggable and posts shot-move on dragend', () => {
+    const html = buildHoleMapHtml(base);
+    expect(html).toContain('draggable: !origin');
+    expect(html).toContain("type:'shot-move'");
+  });
+  it('has no placing mode remnants', () => {
+    const html = buildHoleMapHtml(base);
+    expect(html).not.toContain('placehint');
+    expect(html).not.toContain("type:'shot-point'");
+  });
 });

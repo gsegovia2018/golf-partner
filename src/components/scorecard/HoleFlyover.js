@@ -10,7 +10,7 @@ import { anchorFor } from '../../lib/flyoverModel';
 import { courseKeyFor } from '../../store/tileCache';
 import { useAppSettings } from '../../hooks/useAppSettings';
 import { usePlayConditions } from '../../hooks/usePlayConditions';
-import { subscribeShots, getShotsVersion, shotsForHole } from '../../store/shotStore';
+import { subscribeShots, getShotsVersion, shotsForHole, setShotPos } from '../../store/shotStore';
 import { HoleMapView } from './HoleMapView';
 import { ShotTracker } from './ShotTracker';
 
@@ -59,10 +59,6 @@ export function HoleFlyover({
     shots: shotPins, // initial paint; live marks arrive via the shots prop below
   } : null), [feat, courseName, holeNumber, position, anchorInfo, units, shotPins]);
 
-  // Shot placement: `placing` puts the map in tap-to-drop mode; a tapped point
-  // arrives here as `pendingPoint` and is handed to ShotTracker to log.
-  const [placing, setPlacing] = useState(false);
-  const [pendingPoint, setPendingPoint] = useState(null);
   // Latest aim-ring position reported by the map, so "Add shot" drops the ball
   // right where the white ring sits (no tap-to-place needed to add).
   const [aimPos, setAimPos] = useState(null);
@@ -125,8 +121,10 @@ export function HoleFlyover({
                 player={position}
                 anchor={anchorInfo}
                 shots={shotPins}
-                placing={placing}
-                onShotPoint={(p) => { setPendingPoint(p); }}
+                onShotMove={(i, p) => {
+                  const sh = shotsForHole(roundId, roundIndex, holeNumber)[i];
+                  if (sh) setShotPos(sh.id, p);
+                }}
                 onAim={setAimPos}
                 onShotTap={setTappedShot}
                 style={s.map}
@@ -142,10 +140,6 @@ export function HoleFlyover({
                   targetPos={feat?.greenCenter ?? null}
                   targetMeters={feat?.greenCenter && position
                     ? cond.plays(haversineMeters(position, feat.greenCenter)) : null}
-                  placing={placing}
-                  onTogglePlacing={() => setPlacing((v) => !v)}
-                  pendingPoint={pendingPoint}
-                  onConsumePoint={() => setPendingPoint(null)}
                   tappedShotIndex={tappedShot}
                   onConsumeShotTap={() => setTappedShot(null)}
                 />

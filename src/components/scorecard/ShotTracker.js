@@ -5,26 +5,26 @@ import PressableScale from '../ui/PressableScale';
 import { useAppSettings } from '../../hooks/useAppSettings';
 import {
   subscribeShots, getShotsVersion, getShots,
-  shotsForHole, logShot, setShotClub, setShotPos, deleteShot,
+  shotsForHole, logShot, setShotClub, deleteShot,
 } from '../../store/shotStore';
 import { haversineMeters } from '../../lib/geo';
 import { recommendClub, clubAverages } from '../../lib/shotStats';
 import { swingClubs, clubLabel, clubNominal } from '../../lib/clubs';
-import { haptic } from '../../lib/haptics';
 import { ClubWheel } from './ClubWheel';
 
 // Shot log overlaid on the hole map (HoleFlyover), reduced to a single club
-// FAB in the bottom-right corner. Ball spots live on the map as numbered pins:
+// FAB in the bottom-right corner. Ball spots live on the map as numbered,
+// draggable pins:
 //   - Tap the FAB to drop a spot at the white aim ring (GPS fallback); the
 //     club wheel opens on it to pick the club that got the ball there.
 //   - Long-press the FAB to drop the spot at your exact live GPS instead.
-//   - Tap a pin on the map (relayed here as `tappedShotIndex`) to re-open the
-//     wheel and change the club, move the spot, or delete it.
+//   - Drag a pin on the map to reposition it (handled by the map/host, not
+//     here); tap a pin (relayed here as `tappedShotIndex`) to re-open the
+//     wheel and change the club or delete it.
 // The first spot on a hole is the tee, seeded from the hole geometry.
 export function ShotTracker({
   roundId, roundIndex, holeNumber,
   pos, teePos, aimPos, targetPos, targetMeters,
-  placing, onTogglePlacing, pendingPoint, onConsumePoint,
   tappedShotIndex, onConsumeShotTap,
 }) {
   const appSettings = useAppSettings();
@@ -36,7 +36,6 @@ export function ShotTracker({
   const shots = useMemo(() => shotsForHole(roundId, roundIndex, holeNumber), [roundId, roundIndex, holeNumber, shotsVersion]);
 
   const [wheelId, setWheelId] = useState(null); // shot id whose club wheel is open
-  const [moveId, setMoveId] = useState(null); // shot id being repositioned by the next tap
 
   const overrides = appSettings.clubDistances;
   // "Club to hit" hint for the next shot, from distance to the green.
@@ -61,17 +60,6 @@ export function ShotTracker({
     const shot = await logShot({ roundId, roundIndex, holeNumber, pos: spot, club: guess });
     setWheelId(shot.id);
   };
-
-  // A map tap handed down from the parent, only while moving a spot: each tap
-  // repositions the shot; the move stays live until the player hits Confirm.
-  useEffect(() => {
-    if (!pendingPoint) return;
-    haptic('light');
-    (async () => {
-      if (moveId) await setShotPos(moveId, pendingPoint);
-    })().finally(() => onConsumePoint?.());
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [pendingPoint]);
 
   // A pin tapped on the map opens the wheel for that shot.
   useEffect(() => {
@@ -111,17 +99,6 @@ export function ShotTracker({
 
   const closeWheel = () => setWheelId(null);
   const chooseClub = (club) => { if (wheelId && club) setShotClub(wheelId, club); closeWheel(); };
-  const moveShot = () => {
-    setMoveId(wheelId);
-    closeWheel();
-    if (!placing) onTogglePlacing?.();
-    haptic('selection');
-  };
-  const confirmMove = () => {
-    setMoveId(null);
-    if (placing) onTogglePlacing?.();
-    haptic('selection');
-  };
   const removeShot = () => {
     if (wheelId) {
       // Deleting the last landing can strand the seeded, club-less tee (index
@@ -138,32 +115,19 @@ export function ShotTracker({
 
   return (
     <View style={s.wrap} pointerEvents="box-none">
-      {moveId ? (
-        <View style={s.moveCol}>
-          <Text style={s.moveHint}>Tap the map to move the shot</Text>
-          <PressableScale
-            onPress={confirmMove}
-            style={[s.fab, s.fabConfirm]}
-            accessibilityLabel="Confirm the shot's new spot"
-          >
-            <Feather name="check" size={24} color="#0a0d10" />
-          </PressableScale>
-        </View>
-      ) : (
-        <View style={s.fabCol}>
-          {suggestion && <Text style={s.badge}>{`≈ ${clubLabel(suggestion.club)}`}</Text>}
-          <PressableScale
-            onPress={addAtAim}
-            onLongPress={dropAtMe}
-            disabled={!canAdd}
-            style={[s.addBtn, !canAdd && s.fabDisabled]}
-            accessibilityLabel="Add a shot at the aim ring"
-          >
-            <Feather name="plus" size={20} color="#0a0d10" />
-            <Text style={s.addLbl}>Mark shot</Text>
-          </PressableScale>
-        </View>
-      )}
+      <View style={s.fabCol}>
+        {suggestion && <Text style={s.badge}>{`≈ ${clubLabel(suggestion.club)}`}</Text>}
+        <PressableScale
+          onPress={addAtAim}
+          onLongPress={dropAtMe}
+          disabled={!canAdd}
+          style={[s.addBtn, !canAdd && s.fabDisabled]}
+          accessibilityLabel="Add a shot at the aim ring"
+        >
+          <Feather name="plus" size={20} color="#0a0d10" />
+          <Text style={s.addLbl}>Mark shot</Text>
+        </PressableScale>
+      </View>
 
       <ClubWheel
         visible={!!editShot}
@@ -174,7 +138,6 @@ export function ShotTracker({
         carryMeters={editCarry}
         toPinMeters={editToPin}
         onSelect={chooseClub}
-        onMove={moveShot}
         onDelete={removeShot}
         onClose={closeWheel}
       />
@@ -187,7 +150,6 @@ const s = StyleSheet.create({
     position: 'absolute', left: 16, bottom: 20, alignItems: 'flex-start', gap: 8,
   },
   fabCol: { alignItems: 'flex-start', gap: 6 },
-  moveCol: { alignItems: 'flex-start', gap: 8 },
   addBtn: {
     flexDirection: 'row', alignItems: 'center', gap: 6,
     paddingLeft: 12, paddingRight: 16, height: 48, borderRadius: 24,
@@ -203,18 +165,5 @@ const s = StyleSheet.create({
     paddingHorizontal: 9, paddingVertical: 2, borderRadius: 999,
     fontVariant: ['tabular-nums'],
   },
-  fab: {
-    width: 52, height: 52, borderRadius: 26,
-    alignItems: 'center', justifyContent: 'center',
-    backgroundColor: '#57ae5b',
-    shadowColor: '#000', shadowOpacity: 0.4, shadowRadius: 10,
-    shadowOffset: { width: 0, height: 6 }, elevation: 6,
-  },
-  fabConfirm: { backgroundColor: '#f4c04a' },
   fabDisabled: { opacity: 0.5 },
-  moveHint: {
-    color: '#0a0d10', backgroundColor: '#f4c04a',
-    fontFamily: 'PlusJakartaSans-Bold', fontSize: 12,
-    paddingHorizontal: 12, paddingVertical: 6, borderRadius: 999, overflow: 'hidden',
-  },
 });

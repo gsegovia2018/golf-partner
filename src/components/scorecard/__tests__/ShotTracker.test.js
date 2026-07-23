@@ -36,8 +36,6 @@ const base = {
   roundId: 'r1', roundIndex: 0, holeNumber: 7,
   pos: null, teePos: [38.55, -0.14], aimPos: null,
   targetPos: [38.556, -0.147], targetMeters: 150,
-  placing: false, onTogglePlacing: jest.fn(),
-  pendingPoint: null, onConsumePoint: jest.fn(),
   tappedShotIndex: null, onConsumeShotTap: jest.fn(),
 };
 
