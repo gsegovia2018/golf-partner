@@ -26,6 +26,10 @@ test('defaults are complete and getAppSettings starts at defaults', () => {
   expect(DEFAULT_APP_SETTINGS.units).toBe('meters');
 });
 
+test('defaults shotMeasuring to on', () => {
+  expect(DEFAULT_APP_SETTINGS.shotMeasuring).toBe('on');
+});
+
 test('updateAppSettings deep-merges nested groups and notifies subscribers', async () => {
   profileStore.upsertProfile.mockResolvedValue();
   const spy = jest.fn();

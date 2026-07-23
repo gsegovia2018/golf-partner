@@ -13,6 +13,9 @@ const LEGACY_RUNNING_SCORE_KEY = '@scorecard_show_running_score';
 
 export const DEFAULT_APP_SETTINGS = {
   gpsEnabled: true,
+  // Floating shot-measuring button on the scorecard ('on' | 'off'). Tapping
+  // it GPS-tracks a shot; with no usable fix it opens the hole map instead.
+  shotMeasuring: 'on',
   keepAwake: true,
   autoAdvanceHole: false,
   haptics: true,

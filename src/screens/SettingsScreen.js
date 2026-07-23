@@ -104,6 +104,10 @@ export default function SettingsScreen({ navigation }) {
           <SwitchRow testID="setting-gpsEnabled" label="GPS distances" first
             hint="Live distances from your position. Off: distances measure from the tee and the app never asks for your location."
             value={appSettings.gpsEnabled} onChange={(v) => setKey({ gpsEnabled: v })} theme={theme} s={s} />
+          <SwitchRow testID="setting-shotMeasuring" label="Shot measuring button"
+            hint="Floating button on the scorecard to measure your shots"
+            value={appSettings.shotMeasuring !== 'off'}
+            onChange={(v) => setKey({ shotMeasuring: v ? 'on' : 'off' })} theme={theme} s={s} />
           <SwitchRow testID="setting-keepAwake" label="Keep screen awake"
             hint="Stops the screen sleeping while the scorecard is open."
             value={appSettings.keepAwake} onChange={(v) => setKey({ keepAwake: v })} theme={theme} s={s} />
