@@ -47,9 +47,13 @@ describe('buildHoleMapHtml', () => {
     expect(html).toContain('let targets = []');
     expect(html).toContain('function drawTargets');
   });
-  it('adds a second circle on long-press with a two-circle cap', () => {
+  it('adds a second circle on a timed long-press (not the flaky native contextmenu) with a two-circle cap', () => {
     const html = buildHoleMapHtml(base);
-    expect(html).toContain("map.on('contextmenu'");
+    // Manual hold timer on mousedown (fires for touch + held mouse), swallowing
+    // the ending click; contextmenu kept only as a desktop right-click bonus.
+    expect(html).toContain("map.on('mousedown'");
+    expect(html).toContain('lpTimer = setTimeout');
+    expect(html).toContain('lpFired');
     expect(html).toContain('targets.length >= 2');
   });
   it('removes a circle on long-press but never the last one', () => {

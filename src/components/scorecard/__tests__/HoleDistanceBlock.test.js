@@ -135,31 +135,18 @@ describe('HoleDistanceBlock', () => {
     expect(toJSON()).toBeNull();
   });
 
-  it('off the hole, ignores a far marked shot and shows tee->green, not the shot distance', () => {
-    // A shot logged ~40 km from the green (e.g. a test shot armed from far
-    // away). Off the hole (source tee) it must not drive the header.
-    mockShots = [{ id: 's1', lat: 38.9100, lng: -0.1491, club: '7i' }];
-    const gps = gpsBase({ source: 'tee', accuracy: null, position: null });
-    const { getByText, queryByText } = render(
-      <HoleDistanceBlock gps={gps} roundId="r1" roundIndex={0} holeNumber={1} onPress={() => {}} />,
-    );
-    getByText('FROM TEE');
-    getByText('326'); // the tee->green length from gps.distances, not the far shot
-    expect(queryByText(/\b\d{5,}\b/)).toBeNull(); // no 5+ digit (tens-of-km) number
-    mockShots = [];
-  });
-
-  it('labels a tee-sourced block FROM TEE so the number is not read as live GPS', () => {
+  it('renders a tee-sourced block as distance only — no FROM TEE label, no club', () => {
     const gps = gpsBase({ source: 'tee', accuracy: null, position: null });
     const { getByText, queryByText } = render(<HoleDistanceBlock gps={gps} onPress={() => {}} />);
-    getByText('FROM TEE');
     getByText('326');
     getByText(/F 312\s+B 339/);
+    expect(queryByText('FROM TEE')).toBeNull();
+    expect(queryByText(/≈/)).toBeNull(); // no recommended-club line
     expect(queryByText(/±/)).toBeNull();
     expect(queryByText('Getting GPS fix')).toBeNull();
   });
 
-  it('FROM TEE shows hazards but never the off-course line', () => {
+  it('tee-sourced block shows hazards but never an off-course line', () => {
     const gps = gpsBase(
       { source: 'tee', accuracy: null, position: null },
       { center: 4620, hazards: [{ kind: 'water', reach: 180.2, carry: 210.6 }] },

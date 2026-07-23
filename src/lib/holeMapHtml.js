@@ -148,18 +148,33 @@ function draw() {
   const cc = valid(g.c) ? g.c : [map.getCenter().lat, map.getCenter().lng];
   if (!targets.length) targets = [from ? [(from[0]+cc[0])/2,(from[1]+cc[1])/2] : cc.slice()];
   if (onCourse()) add(L.circleMarker(from, { radius:8, color:'#fff', weight:3, fillColor:'#2f6bff', fillOpacity:1 }));
-  map.off('click contextmenu');
+  map.off('click contextmenu mousedown mouseup movestart dragstart zoomstart');
+  const addRing = (ll) => {
+    if (targets.length >= 2) return; // two aim rings max
+    targets.push([ll.lat, ll.lng]);
+    drawTargets(from, g, cc);
+  };
+  // Long-press timing state. A held press that doesn't pan drops a second ring;
+  // the click that ends it is swallowed so it doesn't also move a ring.
+  let lpTimer = null, lpLatLng = null, lpFired = false;
+  const clearLp = () => { if (lpTimer) { clearTimeout(lpTimer); lpTimer = null; } };
   map.on('click', (e) => {
+    if (lpFired) { lpFired = false; return; } // this click ended a long-press
     const p = [e.latlng.lat, e.latlng.lng];
     const i = (targets.length > 1 && dist(p, targets[1]) < dist(p, targets[0])) ? 1 : 0;
     targets[i] = p;
     drawTargets(from, g, cc);
   });
-  map.on('contextmenu', (e) => {
-    if (targets.length >= 2) return; // two planned shots max
-    targets.push([e.latlng.lat, e.latlng.lng]);
-    drawTargets(from, g, cc);
+  // Manual long-press (~450ms hold, no pan) adds the second ring. Leaflet fires
+  // mousedown/up for touch too, and this works with a held mouse button — the
+  // native long-press 'contextmenu' is unreliable inside the iframe/WebView.
+  map.on('mousedown', (e) => {
+    lpFired = false; lpLatLng = e.latlng; clearLp();
+    lpTimer = setTimeout(() => { lpFired = true; addRing(lpLatLng); }, 450);
   });
+  map.on('mouseup', clearLp);
+  map.on('movestart dragstart zoomstart', clearLp);
+  map.on('contextmenu', (e) => { if (e.originalEvent) L.DomEvent.preventDefault(e.originalEvent); addRing(e.latlng); }); // desktop right-click
   drawTargets(from, g, cc);
 }
 
