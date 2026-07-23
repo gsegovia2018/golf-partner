@@ -10,7 +10,9 @@ import { makeScorecardStyles } from './styles';
 import { HolePage, MePicker } from './HolePage';
 import { HoleFlyover } from './HoleFlyover';
 import { HoleGeoEditor } from './HoleGeoEditor';
+import { MeasureFab } from './MeasureFab';
 import { useGpsDistances } from '../../hooks/useGpsDistances';
+import { useAppSettings } from '../../hooks/useAppSettings';
 import { useAuth } from '../../context/AuthContext';
 import { isAdminUser } from '../../lib/admin';
 import { RoundSummary } from './RoundSummary';
@@ -91,6 +93,7 @@ export function HoleView({ round, roundIndex, players, scores, shotDetails, meId
 
   const onLastHole = currentHole >= holeCount;
   const holeNavRef = useTourTarget('hole-nav');
+  const appSettings = useAppSettings();
   const gps = useGpsDistances(round.courseName, currentHole);
   // Best-effort offline prep: when this round's course has geometry, prefetch
   // its satellite tiles once per course per session — Wi-Fi only. Failures are
@@ -212,6 +215,16 @@ export function HoleView({ round, roundIndex, players, scores, shotDetails, meId
         onClose={() => setFlyoverOpen(false)}
         onEdit={isAdmin ? () => { setFlyoverOpen(false); setEditorOpen(true); } : undefined}
       />
+      {round.id && appSettings.shotMeasuring !== 'off' && (
+        <MeasureFab
+          roundId={round.id}
+          roundIndex={roundIndex}
+          holeNumber={currentHole}
+          fix={{ position: gps.position ?? null, accuracy: gps.accuracy ?? null }}
+          targetMeters={gps.distances?.center ?? null}
+          onOpenMap={openFlyover}
+        />
+      )}
       {isAdmin && (
         <HoleGeoEditor
           visible={editorOpen}
