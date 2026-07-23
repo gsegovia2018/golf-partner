@@ -129,7 +129,6 @@ export function MeasureFab({ roundId, roundIndex, holeNumber, fix, targetMeters,
         </Pressable>
       ) : (
         <View style={s.fabCol}>
-          {suggestion && <Text style={s.badge}>{`≈ ${clubLabel(suggestion.club)}`}</Text>}
           <PressableScale onPress={arm} style={s.fab} accessibilityLabel="Measure my shot">
             <ClubIcon size={25} color="#ffffff" />
           </PressableScale>
@@ -154,12 +153,6 @@ export function MeasureFab({ roundId, roundIndex, holeNumber, fix, targetMeters,
 const s = StyleSheet.create({
   wrap: { position: 'absolute', right: 14, bottom: 18, alignItems: 'flex-end', gap: 8, zIndex: 40 },
   fabCol: { alignItems: 'center', gap: 6 },
-  badge: {
-    backgroundColor: '#ffffff', borderWidth: 1, borderColor: '#e7e2d5', color: '#006747',
-    fontFamily: 'PlusJakartaSans-Bold', fontSize: 11, borderRadius: 999,
-    paddingHorizontal: 9, paddingVertical: 3, overflow: 'hidden',
-    fontVariant: ['tabular-nums'],
-  },
   fab: {
     width: 52, height: 52, borderRadius: 26, backgroundColor: '#006747',
     alignItems: 'center', justifyContent: 'center',

@@ -57,6 +57,13 @@ describe('HoleDistanceBlock', () => {
     getByText(/F 312\s+B 339/);
   });
 
+  it('shows a recommended club (label only, no symbol) on the live GPS block', () => {
+    // center 326m with default bag + no logged shots picks the driver by nominal.
+    const { getByText, queryByText } = render(<HoleDistanceBlock gps={gpsBase()} onPress={() => {}} />);
+    getByText('Driver');
+    expect(queryByText(/≈/)).toBeNull();
+  });
+
   it('shows one joined hazard line when both kinds are ahead', () => {
     const gps = gpsBase({}, { hazards: [
       { kind: 'bunker', reach: 96.2, carry: 118.4 },

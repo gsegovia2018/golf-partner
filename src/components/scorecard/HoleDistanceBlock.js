@@ -1,9 +1,11 @@
-import React, { useMemo } from 'react';
+import React, { useMemo, useSyncExternalStore } from 'react';
 import { View, Text, StyleSheet, Pressable } from 'react-native';
 import { Feather } from '@expo/vector-icons';
 import { useTheme } from '../../theme/ThemeContext';
 import { useAppSettings } from '../../hooks/useAppSettings';
 import { formatDistance, unitSuffix } from '../../lib/units';
+import { recommendClub } from '../../lib/shotStats';
+import { getShots, subscribeShots, getShotsVersion } from '../../store/shotStore';
 import { useTourTarget } from '../tour/tourTargets';
 
 // Right-hand side of the hole header: live GPS distances to the green, or —
@@ -16,9 +18,20 @@ export function HoleDistanceBlock({
   gps, onPress, compact = false,
 }) {
   const { theme } = useTheme();
-  const { units } = useAppSettings();
+  const appSettings = useAppSettings();
+  const { units } = appSettings;
   const s = useMemo(() => makeStyles(theme), [theme]);
   const tourRef = useTourTarget(compact ? null : 'hole-distances');
+
+  // Club suggestion for the distance shown in the chip (center to green).
+  // Subscribed to the shot store so it re-picks as the player's carry
+  // averages evolve. Computed before the early return to keep hook order stable.
+  const shotsVersion = useSyncExternalStore(subscribeShots, getShotsVersion, getShotsVersion);
+  const club = useMemo(
+    () => recommendClub(gps?.distances?.center, appSettings.bag, getShots(), appSettings.clubDistances),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [gps?.distances?.center, appSettings.bag, appSettings.clubDistances, shotsVersion],
+  );
 
   if (!gps?.available) return null;
 
@@ -79,6 +92,7 @@ export function HoleDistanceBlock({
             <Text style={s.unit}>{unitSuffix(units)}</Text>
           </View>
           <Text style={s.fb}>{`F ${fmt(distances.front)}  B ${fmt(distances.back)}`}</Text>
+          {!!club && <Text style={s.club}>{club.label}</Text>}
           <Text style={s.mapHint}>TAP FOR MAP</Text>
           {poorFix && <Text style={s.caption}>{`±${fmt(accuracy)}${unitSuffix(units)}`}</Text>}
           {!!hazardLine && <Text style={s.hzd}>{hazardLine}</Text>}
@@ -140,6 +154,13 @@ function makeStyles(theme) {
       fontSize: 11,
       fontFamily: 'PlusJakartaSans-Bold',
       fontVariant: ['tabular-nums'],
+    },
+    club: {
+      color: theme.accent.primary,
+      fontSize: 13,
+      fontFamily: 'PlusJakartaSans-ExtraBold',
+      letterSpacing: 0.3,
+      marginTop: 1,
     },
     hzd: {
       color: theme.text.muted,
