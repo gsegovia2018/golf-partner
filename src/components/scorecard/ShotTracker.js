@@ -12,7 +12,6 @@ import { recommendClub, clubAverages } from '../../lib/shotStats';
 import { swingClubs, clubLabel, clubNominal } from '../../lib/clubs';
 import { haptic } from '../../lib/haptics';
 import { ClubWheel } from './ClubWheel';
-import { ClubIcon } from './ClubIcon';
 
 // Shot log overlaid on the hole map (HoleFlyover), reduced to a single club
 // FAB in the bottom-right corner. Ball spots live on the map as numbered pins:
@@ -157,10 +156,11 @@ export function ShotTracker({
             onPress={addAtAim}
             onLongPress={dropAtMe}
             disabled={!canAdd}
-            style={[s.fab, !canAdd && s.fabDisabled]}
+            style={[s.addBtn, !canAdd && s.fabDisabled]}
             accessibilityLabel="Add a shot at the aim ring"
           >
-            <ClubIcon size={26} color="#0a0d10" />
+            <Feather name="plus" size={20} color="#0a0d10" />
+            <Text style={s.addLbl}>Mark shot</Text>
           </PressableScale>
         </View>
       )}
@@ -184,10 +184,18 @@ export function ShotTracker({
 
 const s = StyleSheet.create({
   wrap: {
-    position: 'absolute', right: 16, bottom: 20, alignItems: 'flex-end', gap: 8,
+    position: 'absolute', left: 16, bottom: 20, alignItems: 'flex-start', gap: 8,
   },
-  fabCol: { alignItems: 'center', gap: 6 },
-  moveCol: { alignItems: 'center', gap: 8 },
+  fabCol: { alignItems: 'flex-start', gap: 6 },
+  moveCol: { alignItems: 'flex-start', gap: 8 },
+  addBtn: {
+    flexDirection: 'row', alignItems: 'center', gap: 6,
+    paddingLeft: 12, paddingRight: 16, height: 48, borderRadius: 24,
+    backgroundColor: '#57ae5b',
+    shadowColor: '#000', shadowOpacity: 0.4, shadowRadius: 10,
+    shadowOffset: { width: 0, height: 6 }, elevation: 6,
+  },
+  addLbl: { color: '#0a0d10', fontFamily: 'PlusJakartaSans-ExtraBold', fontSize: 15 },
   badge: {
     backgroundColor: 'rgba(10,13,16,0.82)',
     borderWidth: StyleSheet.hairlineWidth, borderColor: 'rgba(255,255,255,0.16)',

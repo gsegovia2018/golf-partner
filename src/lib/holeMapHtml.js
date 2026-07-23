@@ -34,6 +34,8 @@ export function buildHoleMapHtml(data) {
   .tri .bign{font-size:40px;font-weight:800;line-height:1.05;font-variant-numeric:tabular-nums}
   .tri .u{font-size:13px;font-weight:600;color:#9fb0a4}
   .tri .lbl{font-size:9px;font-weight:700;letter-spacing:.08em;color:#9fb0a4;text-transform:uppercase;width:34px;text-align:left}
+  .tri .hole{border-bottom:1px solid rgba(255,255,255,.18);padding-bottom:5px;margin-bottom:5px}
+  .tri .hole .lbl{color:#7f8f95}
   .hint{position:absolute;bottom:16px;left:50%;transform:translateX(-50%);background:rgba(14,22,28,.85);color:#fff;font-weight:600;font-size:13px;padding:7px 14px;border-radius:999px}
   #placehint{position:absolute;top:14px;left:50%;transform:translateX(-50%);background:#f4c04a;color:#0a0d10;font-weight:800;font-size:13px;padding:8px 16px;border-radius:999px;z-index:650;box-shadow:0 2px 8px rgba(0,0,0,.4);display:none}
   #map.placing{cursor:crosshair}
@@ -252,8 +254,11 @@ function hud(src, g){
   const h = document.getElementById('hud');
   const from = valid(src) ? src : (targets[targets.length-1] || anchor.pos);
   const d = (p) => valid(p) && valid(from) ? dist(from, p) : null;
+  // Static hole yardage: tee to center of green, independent of the aim ring.
+  const td = valid(hole.tee) && valid(g.c) ? dist(hole.tee, g.c) : null;
   h.innerHTML =
     '<div class="tri">'+
+      '<div class="row hole"><span class="lbl">Tee</span><span class="sm">'+disp(td)+'</span><span class="u">'+U+'</span></div>'+
       '<div class="row"><span class="lbl">Back</span><span class="sm">'+disp(d(g.b))+'</span></div>'+
       '<div class="row"><span class="lbl"></span><span class="bign">'+disp(d(g.c))+'</span><span class="u">'+U+'</span></div>'+
       '<div class="row"><span class="lbl">Front</span><span class="sm">'+disp(d(g.f))+'</span></div>'+
