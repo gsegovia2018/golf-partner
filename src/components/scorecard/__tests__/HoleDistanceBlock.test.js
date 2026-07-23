@@ -16,6 +16,16 @@ jest.mock('../../../store/profileStore', () => ({
   upsertProfile: jest.fn(),
 }));
 
+// Controllable marked-shot list so we can assert the header ignores a far
+// shot while off the hole. Empty by default = same as the real empty store.
+let mockShots = [];
+jest.mock('../../../store/shotStore', () => ({
+  subscribeShots: () => () => {},
+  getShotsVersion: () => 1,
+  getShots: () => [],
+  shotsForHole: () => mockShots,
+}));
+
 const gpsBase = (over = {}, dist = {}) => ({
   available: true,
   accuracy: 8,
@@ -123,6 +133,20 @@ describe('HoleDistanceBlock', () => {
       <HoleDistanceBlock compact gps={{ available: false, distances: null, accuracy: null, position: null }} onPress={() => {}} />,
     );
     expect(toJSON()).toBeNull();
+  });
+
+  it('off the hole, ignores a far marked shot and shows tee->green, not the shot distance', () => {
+    // A shot logged ~40 km from the green (e.g. a test shot armed from far
+    // away). Off the hole (source tee) it must not drive the header.
+    mockShots = [{ id: 's1', lat: 38.9100, lng: -0.1491, club: '7i' }];
+    const gps = gpsBase({ source: 'tee', accuracy: null, position: null });
+    const { getByText, queryByText } = render(
+      <HoleDistanceBlock gps={gps} roundId="r1" roundIndex={0} holeNumber={1} onPress={() => {}} />,
+    );
+    getByText('FROM TEE');
+    getByText('326'); // the tee->green length from gps.distances, not the far shot
+    expect(queryByText(/\b\d{5,}\b/)).toBeNull(); // no 5+ digit (tens-of-km) number
+    mockShots = [];
   });
 
   it('labels a tee-sourced block FROM TEE so the number is not read as live GPS', () => {

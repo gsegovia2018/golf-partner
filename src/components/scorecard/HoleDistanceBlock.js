@@ -35,11 +35,14 @@ export function HoleDistanceBlock({
   const shotsVersion = useSyncExternalStore(subscribeShots, getShotsVersion, getShotsVersion);
   // Subscribe so a new shot / edited geometry re-renders this block.
   useSyncExternalStore(subscribeCourseGeometry, getCourseGeometryVersion);
-  // Front/center/back all recompute from the last marked shot on this hole,
-  // so once a ball is placed the whole block reads distance-to-green FROM the
-  // ball (200m drive on a 300m par 4 → ~100m, club drops to a wedge). No shot
-  // yet → the live GPS/tee distances from the gps prop.
-  const lastShot = roundId != null
+  // Front/center/back recompute from the last marked shot on this hole, so
+  // once a ball is placed the block reads distance-to-green FROM the ball
+  // (200m drive on a 300m par 4 → ~100m). But ONLY while you're on the hole
+  // (live GPS within 1 km). Off the hole the header shows the hole from the
+  // tee, and a shot logged elsewhere — or a stale/test shot far from the
+  // green — must not hijack the number (the "FROM TEE 43 km" bug).
+  const onHole = gps?.source === 'gps';
+  const lastShot = (onHole && roundId != null)
     ? shotsForHole(roundId, roundIndex, holeNumber).at(-1) : null;
   const feat = lastShot ? holeFeatures(courseName, holeNumber) : null;
   const from = lastShot ? [lastShot.lat, lastShot.lng] : null;
