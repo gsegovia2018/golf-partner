@@ -1,5 +1,5 @@
 import React, {
-  useMemo, useRef, useState, useEffect,
+  useMemo, useRef, useState,
 } from 'react';
 import {
   View, Text, TouchableOpacity, Modal, Platform, Animated,
@@ -126,17 +126,7 @@ export const HolePage = React.memo(function HolePage({
   // is per-page and internal, so it never touches holePagePropsEqual.
   const scrollY = useRef(new Animated.Value(0)).current;
   const [headerH, setHeaderH] = useState(120);
-  const [collapsed, setCollapsed] = useState(false);
   const threshold = Math.max(SLIM_BAR_HEIGHT, headerH - SLIM_BAR_HEIGHT);
-  const thresholdRef = useRef(threshold);
-  thresholdRef.current = threshold;
-  useEffect(() => {
-    const id = scrollY.addListener(({ value }) => {
-      const next = value >= thresholdRef.current - 1;
-      setCollapsed((c) => (c === next ? c : next));
-    });
-    return () => scrollY.removeListener(id);
-  }, [scrollY]);
   const appearStart = Math.max(0, threshold - 24);
   const barOpacity = scrollY.interpolate({
     inputRange: [appearStart, threshold], outputRange: [0, 1], extrapolate: 'clamp',
@@ -324,7 +314,7 @@ export const HolePage = React.memo(function HolePage({
           header's distance tap while expanded. */}
       <Animated.View
         style={[s.holeSlimBar, { opacity: barOpacity, transform: [{ translateY: barTranslateY }] }]}
-        pointerEvents={collapsed ? 'auto' : 'box-none'}
+        pointerEvents="box-none"
       >
         <Text style={s.holeSlimBarInfo} numberOfLines={1}>
           {`HOLE ${pageHole.number} · PAR ${pageHole.par} · SI ${pageHole.strokeIndex}`}
