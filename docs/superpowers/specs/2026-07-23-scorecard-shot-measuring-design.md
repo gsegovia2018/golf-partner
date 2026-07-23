@@ -77,16 +77,47 @@ Consequences, all via existing pipelines: the shot appears as a numbered pin on 
 hole map, the header re-anchors per its existing last-marked-shot behavior, and the
 carry flows into `clubAverages` → future `≈ club` recommendations.
 
-## Manual flow (no GPS) — the existing map
+## Manual flow (no GPS) — the hole map
 
-No new UI. Without GPS (or whenever preferred), shots are placed on the **hole map**
-exactly as shipped: header block → map sheet → drag the aim ring to where the ball
-lies → club FAB → wheel (or tap a pin to re-club / move / delete). Positions come
-from the player's eyes on the satellite imagery instead of a GPS fix; the saved shot
-is identical in shape and flows through the same pins/carries/averages pipeline.
+Shots are placed on the **hole map** as shipped: header block → map sheet → position
+the aim ring → club FAB → wheel. Positions come from the player's eyes on the
+satellite imagery instead of a GPS fix; the saved shot is identical in shape and
+flows through the same pins/carries/averages pipeline.
 
 The scorecard FAB routes here automatically when no usable fix exists (see Entry
 point), so the manual flow needs no mode of its own.
+
+### Specifying start AND end (two rings)
+
+Today "Add shot" only places the landing — the start is implicit (previous pin, or
+the auto-seeded tee). That breaks when the implicit start is wrong (e.g. measuring
+only your 3rd shot on a hole with nothing logged). Fix, reusing the existing
+two-ring mechanic:
+
+- **Hold (long-press) on the map adds a second aim ring** — this shipped 2026-07-20
+  and must keep working; verify at runtime and repair if the recent pin-interactivity
+  change broke it.
+- **With two rings placed, "Add shot" logs the segment ring 1 → ring 2**: append the
+  ring closer to the start of the chain as an untagged origin spot (`club: null`,
+  subject to the same > 30 m dedupe rule as the GPS flow), then the far ring as the
+  landing, tagged via the club wheel. Afterwards the rings collapse to one at the
+  landing, ready for the next shot.
+- **With one ring, behavior is unchanged**: landing at the ring, start = previous
+  pin / seeded tee.
+
+### Adjusting shots (GPS- and map-added alike)
+
+Shot pins on the map become **directly draggable** — drag a pin to reposition that
+spot (`setShotPos`), with the trail and carry chips recomputing live. Tapping a pin
+still opens the club wheel (re-club / delete; the wheel's Move mode becomes
+redundant and is removed). GPS-stamped and manually placed shots are identical
+records, so both adjust the same way.
+
+### Hint cleanup
+
+Remove the persistent **"Drag the ring to measure"** pill at the bottom of the map —
+it advertises only one of the ring's abilities and adds clutter. The HUD (F/C/B
+distances) stays.
 
 ## Distance priority — unchanged
 
@@ -110,8 +141,8 @@ attribute clubs and drains battery; fails the "works well" bar).
 
 ## Non-goals
 
-- No changes to the hole map's `ShotTracker`, `ClubWheel` internals, `shotStats`
-  carry math, or `HoleDistanceBlock`.
+- No changes to `ClubWheel` internals (beyond dropping its Move action),
+  `shotStats` carry math, or `HoleDistanceBlock`.
 - No background auto-detection of shots.
 - No numeric distance-entry UI; no calibration-samples store.
 
@@ -122,5 +153,11 @@ attribute clubs and drains battery; fails the "works well" bar).
 - Component: FAB renders only in live rounds with the setting On; armed card blocks
   tap ② under 20 m; `change ⌄` opens the wheel; ✕ cancels cleanly; FAB opens the
   hole map when the fix is unusable.
+- Map page (string-level, per `holeMapHtml.test.js` convention): two-ring add posts
+  both positions; pins are draggable and post a move with the correct index; the
+  "Drag the ring to measure" hint is gone; the long-press second-ring handler is
+  present.
+- Runtime verify: hold-to-add-second-ring works in the live map (suspected broken);
+  pin drag vs tap don't conflict.
 - Setting: On/Off gating.
 - Full `npm test` and `npm run lint` stay green.
