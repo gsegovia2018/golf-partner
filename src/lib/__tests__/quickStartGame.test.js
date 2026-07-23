@@ -239,8 +239,11 @@ describe('buildQuickStartTournamentDraft', () => {
     expect(draft.meId).toBe('p1');
     expect(draft.players).toEqual(players.slice(0, 2));
     expect(draft.rounds).toHaveLength(1);
+    // Round id is scoped to this game (`<tournamentId>-r0`), not the reused
+    // `r0` — so a deleted game's shots can't reappear in a new one.
+    expect(draft.rounds[0].id).toMatch(/^\d+-r0$/);
+    expect(draft.rounds[0].id).toBe(`${draft.id}-r0`);
     expect(draft.rounds[0]).toMatchObject({
-      id: 'r0',
       courseId: 'course-1',
       courseName: 'Sant Cugat',
       playerTees: {

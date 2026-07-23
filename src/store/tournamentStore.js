@@ -1103,8 +1103,9 @@ export function rosterCap(kind) {
 }
 
 export function createTournament({ name, players, rounds, settings, kind = 'tournament', meId = null }) {
+  const id = Date.now().toString();
   return {
-    id: Date.now().toString(),
+    id,
     kind,
     name,
     createdAt: new Date().toISOString(),
@@ -1112,7 +1113,13 @@ export function createTournament({ name, players, rounds, settings, kind = 'tour
     // Which player is the signed-in user. Set at creation so shot tracking
     // is pre-assigned without a library round-trip (works fully offline).
     meId,
-    rounds,
+    // Round ids are GLOBALLY unique — the tournament id prefixes the round
+    // index (`<tid>-r0`). The incoming rounds carry reused `r${i}` ids, which
+    // are NOT unique across games; keying shots (and score/feed data) by them
+    // meant a deleted game's shots reappeared in a new game on the same course
+    // (same `r0`). Prefixing scopes everything to this specific game, and a
+    // deleted game's rounds then fall out of pruneShotsToRounds' valid set.
+    rounds: rounds.map((r, i) => ({ ...r, id: `${id}-r${i}` })),
     currentRound: 0,
     settings: { ...DEFAULT_SETTINGS, ...settings },
   };

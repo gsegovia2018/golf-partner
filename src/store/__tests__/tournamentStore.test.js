@@ -1,5 +1,5 @@
 import {
-  reTeeRound,
+  reTeeRound, createTournament,
   tournamentNoun, tournamentNounCapitalized, formatRoundLabel,
   isRoundInProgress, propagatePlayerToTournaments, propagateCourseToTournaments, readLocal,
   roundPairLeaderboard, rosterCap,
@@ -55,6 +55,20 @@ jest.mock('../../lib/supabase', () => {
       auth: { getUser: () => Promise.resolve({ data: { user: null } }) },
     },
   };
+});
+
+describe('createTournament round ids', () => {
+  it('scopes each round id to the tournament, not the reused r${i}', () => {
+    // Two games on the same course come in with identical `r0`/`r1` ids; the
+    // output must prefix them with the (unique) tournament id so shots keyed
+    // by round id can never carry over between games.
+    const t = createTournament({
+      name: 'G', players: [], settings: {},
+      rounds: [{ id: 'r0', courseName: 'Pinar' }, { id: 'r1', courseName: 'Pinar' }],
+    });
+    expect(t.rounds.map((r) => r.id)).toEqual([`${t.id}-r0`, `${t.id}-r1`]);
+    expect(t.rounds[0].id).not.toBe('r0');
+  });
 });
 
 describe('reTeeRound', () => {
