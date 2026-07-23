@@ -125,10 +125,10 @@ describe('HoleDistanceBlock', () => {
     expect(toJSON()).toBeNull();
   });
 
-  it('renders a tee-sourced block when the source is the tee (no FROM TEE overline)', () => {
+  it('labels a tee-sourced block FROM TEE so the number is not read as live GPS', () => {
     const gps = gpsBase({ source: 'tee', accuracy: null, position: null });
     const { getByText, queryByText } = render(<HoleDistanceBlock gps={gps} onPress={() => {}} />);
-    expect(queryByText('FROM TEE')).toBeNull();
+    getByText('FROM TEE');
     getByText('326');
     getByText(/F 312\s+B 339/);
     expect(queryByText(/±/)).toBeNull();

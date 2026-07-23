@@ -107,7 +107,9 @@ export function HoleDistanceBlock({
     if (source !== 'tee' && c > 3000) return null;
     return (
       <Pressable onPress={onPress} hitSlop={8} style={s.compactRow} accessibilityRole="button" accessibilityLabel="Hole map">
-        <Feather name="navigation" size={13} color={theme.accent.primary} />
+        {/* Flag (not the live-GPS arrow) when the number is measured from the
+            tee, so the slim bar doesn't imply a live-to-pin reading either. */}
+        <Feather name={source === 'tee' ? 'flag' : 'navigation'} size={13} color={theme.accent.primary} />
         <Text style={s.compactDist}>{`${fmt(c)}${unitSuffix(units)}`}</Text>
         {suggestion && <Text style={s.compactClub}>{`· ${clubLabel(suggestion.club)}`}</Text>}
         <Feather name="chevron-right" size={16} color={theme.text.muted} />
@@ -129,6 +131,10 @@ export function HoleDistanceBlock({
   if (source === 'tee' && distances) {
     return (
       <Pressable ref={tourRef} onPress={onPress} hitSlop={10} style={s.block} accessibilityRole="button" accessibilityLabel="Open hole map">
+        {/* You're off the hole (no live fix within 1 km), so this is the hole
+            played from the tee — not a live distance to the pin. Label it so
+            the number isn't mistaken for a GPS reading. */}
+        <Text style={s.overline}>FROM TEE</Text>
         <View style={s.heroRow}>
           <Text style={s.hero}>{fmt(distances.center)}</Text>
           <Text style={s.unit}>{unitSuffix(units)}</Text>
