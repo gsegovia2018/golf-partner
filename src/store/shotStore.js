@@ -1,6 +1,7 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { v4 as uuidv4 } from 'uuid';
 import { supabase } from '../lib/supabase';
+import { haversineMeters } from '../lib/geo';
 
 // Personal GPS shot log (golf_shot table). Shots are private to the author,
 // so this is a single-user store: one in-memory list of every shot the signed
@@ -223,4 +224,19 @@ export async function undoLastShot(roundId, roundIndex, holeNumber) {
   try {
     if (userId && !last.pending) await supabase.from('golf_shot').delete().eq('id', last.id);
   } catch { /* server row lingers; harmless, re-hydrate reconciles */ }
+}
+
+// One GPS-measured shot: `start` is where the player hit from, `end` where the
+// ball finished. Start is stored as an untagged origin spot only when the
+// hole's chain doesn't already end there (empty hole, or last spot > 30 m
+// away) — so the stored carry is exactly start → end.
+export async function logMeasuredShot({ roundId, roundIndex, holeNumber, start, end, club }) {
+  const hole = shotsForHole(roundId, roundIndex, holeNumber);
+  const last = hole[hole.length - 1] ?? null;
+  let origin = null;
+  if (!last || haversineMeters([last.lat, last.lng], start) > 30) {
+    origin = await logShot({ roundId, roundIndex, holeNumber, pos: start, club: null });
+  }
+  const shot = await logShot({ roundId, roundIndex, holeNumber, pos: end, club });
+  return { originId: origin?.id ?? null, shotId: shot.id };
 }
