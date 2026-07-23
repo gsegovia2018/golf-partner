@@ -95,6 +95,36 @@ describe('HoleDistanceBlock', () => {
     expect(onPress).toHaveBeenCalledTimes(1);
   });
 
+  it('compact mode renders a single-line distance and no front/back line', () => {
+    const { getByText, queryByText } = render(
+      <HoleDistanceBlock compact gps={gpsBase()} onPress={() => {}} />,
+    );
+    getByText('326m');
+    expect(queryByText(/F 312/)).toBeNull();
+  });
+
+  it('compact mode fires onPress via the "Hole map" label', () => {
+    const onPress = jest.fn();
+    const { getByLabelText } = render(
+      <HoleDistanceBlock compact gps={gpsBase()} onPress={onPress} />,
+    );
+    fireEvent.press(getByLabelText('Hole map'));
+    expect(onPress).toHaveBeenCalledTimes(1);
+  });
+
+  it('compact mode does NOT register the hole-distances tour target', () => {
+    __resetTourTargetsForTests();
+    render(<HoleDistanceBlock compact gps={gpsBase()} onPress={() => {}} />);
+    expect(__getRegisteredTourKeysForTests()).not.toContain('hole-distances');
+  });
+
+  it('compact mode renders nothing when gps is unavailable', () => {
+    const { toJSON } = render(
+      <HoleDistanceBlock compact gps={{ available: false, distances: null, accuracy: null, position: null }} onPress={() => {}} />,
+    );
+    expect(toJSON()).toBeNull();
+  });
+
   it('renders a tee-sourced block when the source is the tee (no FROM TEE overline)', () => {
     const gps = gpsBase({ source: 'tee', accuracy: null, position: null });
     const { getByText, queryByText } = render(<HoleDistanceBlock gps={gps} onPress={() => {}} />);
