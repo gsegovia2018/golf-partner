@@ -398,3 +398,31 @@ describe('header distance block wiring', () => {
     expect(queryByLabelText('Open hole map')).toBeNull();
   });
 });
+
+describe('HolePage collapsing slim header', () => {
+  const gps = (center) => ({
+    available: true, accuracy: 5, source: 'gps', position: [1, 2],
+    distances: { front: center - 14, center, back: center + 13, pin: null, kind: 'hole', hazards: [] },
+  });
+
+  it('renders the slim bar with combined HOLE · PAR · SI info', () => {
+    const props = { ...baseProps(), isActive: true, gps: gps(326), onOpenFlyover: jest.fn() };
+    const { getByText } = render(<HolePage {...props} />);
+    getByText('HOLE 3 · PAR 4 · SI 6');
+  });
+
+  it('slim bar compact distance opens the flyover on tap ("Hole map")', () => {
+    const props = { ...baseProps(), isActive: true, gps: gps(326), onOpenFlyover: jest.fn() };
+    const { getByLabelText } = render(<HolePage {...props} />);
+    fireEvent.press(getByLabelText('Hole map'));
+    expect(props.onOpenFlyover).toHaveBeenCalledTimes(1);
+  });
+
+  it('still renders the full header block as the primary map entry ("Open hole map")', () => {
+    const props = { ...baseProps(), isActive: true, gps: gps(326), onOpenFlyover: jest.fn() };
+    const { getByText, getByLabelText } = render(<HolePage {...props} />);
+    getByText('326'); // full-block hero number (unit rendered separately)
+    fireEvent.press(getByLabelText('Open hole map'));
+    expect(props.onOpenFlyover).toHaveBeenCalledTimes(1);
+  });
+});

@@ -20,13 +20,13 @@ import { useTourTarget } from '../tour/tourTargets';
 // Renders nothing when the course has no geometry, or when location is
 // denied and there's no tee to fall back to.
 export function HoleDistanceBlock({
-  gps, courseName, holeNumber, roundId, roundIndex, onPress,
+  gps, courseName, holeNumber, roundId, roundIndex, onPress, compact = false,
 }) {
   const { theme } = useTheme();
   const appSettings = useAppSettings();
   const { units } = appSettings;
   const s = useMemo(() => makeStyles(theme), [theme]);
-  const tourRef = useTourTarget('hole-distances');
+  const tourRef = useTourTarget(compact ? null : 'hole-distances');
   // Club to play for the distance to the green, from the player's own carry
   // averages (nominal fallback). Under the conditions toggle the target is the
   // "plays like" distance (temp + elevation), so the club matches today's air.
@@ -77,6 +77,15 @@ export function HoleDistanceBlock({
 
   // On the green: drop yardage + club entirely, just say putting.
   if (onGreen) {
+    if (compact) {
+      return (
+        <Pressable onPress={onPress} hitSlop={8} style={s.compactRow} accessibilityRole="button" accessibilityLabel="Hole map">
+          <Feather name="flag" size={13} color={theme.accent.primary} />
+          <Text style={s.compactPutt}>Putting</Text>
+          <Feather name="chevron-right" size={16} color={theme.text.muted} />
+        </Pressable>
+      );
+    }
     return (
       <Pressable ref={tourRef} onPress={onPress} hitSlop={10} style={s.block} accessibilityRole="button" accessibilityLabel="Open hole map">
         <Feather name="flag" size={18} color={theme.accent.primary} />
@@ -91,6 +100,20 @@ export function HoleDistanceBlock({
   const { accuracy, source } = gps;
   // Distances to render: from the marked shot when present, else the live fix.
   const distances = shotDist ? { ...gps.distances, ...shotDist } : gps.distances;
+
+  if (compact) {
+    const c = distances?.center;
+    if (c == null) return null;
+    if (source !== 'tee' && c > 3000) return null;
+    return (
+      <Pressable onPress={onPress} hitSlop={8} style={s.compactRow} accessibilityRole="button" accessibilityLabel="Hole map">
+        <Feather name="navigation" size={13} color={theme.accent.primary} />
+        <Text style={s.compactDist}>{`${fmt(c)}${unitSuffix(units)}`}</Text>
+        {suggestion && <Text style={s.compactClub}>{`· ${clubLabel(suggestion.club)}`}</Text>}
+        <Feather name="chevron-right" size={16} color={theme.text.muted} />
+      </Pressable>
+    );
+  }
   // Same thresholds as the old strip: >3km = not on the course; >25m = the
   // fix is too loose to trust to the meter.
   const offCourse = source !== 'tee' && distances && distances.center > 3000;
@@ -226,6 +249,23 @@ function makeStyles(theme) {
       fontSize: 12,
       fontFamily: 'PlusJakartaSans-SemiBold',
       fontVariant: ['tabular-nums'],
+    },
+    compactRow: { flexDirection: 'row', alignItems: 'center', gap: 4 },
+    compactDist: {
+      color: theme.accent.primary,
+      fontSize: 15,
+      fontFamily: 'PlusJakartaSans-ExtraBold',
+      fontVariant: ['tabular-nums'],
+    },
+    compactClub: {
+      color: theme.accent.primary,
+      fontSize: 13,
+      fontFamily: 'PlusJakartaSans-Bold',
+    },
+    compactPutt: {
+      color: theme.accent.primary,
+      fontSize: 14,
+      fontFamily: 'PlusJakartaSans-ExtraBold',
     },
   });
 }
