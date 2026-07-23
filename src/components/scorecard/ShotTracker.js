@@ -163,9 +163,9 @@ export function ShotTracker({
 
 const s = StyleSheet.create({
   wrap: {
-    position: 'absolute', left: 16, bottom: 20, alignItems: 'flex-start', gap: 8,
+    position: 'absolute', right: 16, bottom: 20, alignItems: 'flex-end', gap: 8,
   },
-  fabCol: { alignItems: 'flex-start', gap: 6 },
+  fabCol: { alignItems: 'flex-end', gap: 6 },
   addBtn: {
     flexDirection: 'row', alignItems: 'center', gap: 6,
     paddingLeft: 12, paddingRight: 16, height: 48, borderRadius: 24,

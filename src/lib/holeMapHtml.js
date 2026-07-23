@@ -41,7 +41,7 @@ export function buildHoleMapHtml(data) {
   .hint{position:absolute;bottom:16px;left:50%;transform:translateX(-50%);background:rgba(14,22,28,.85);color:#fff;font-weight:600;font-size:13px;padding:7px 14px;border-radius:999px}
   .dchip{background:rgba(14,22,28,.88);color:#fff;font-weight:800;font-size:13px;padding:4px 11px;border-radius:999px;font-variant-numeric:tabular-nums;white-space:nowrap;border:1px solid rgba(255,255,255,.25);transform:translate(-50%,-50%);display:inline-block}
   .shotpin{width:22px;height:22px;border-radius:50%;background:#f4c04a;border:2px solid #0a0d10;color:#0a0d10;font-weight:800;font-size:12px;display:flex;align-items:center;justify-content:center;box-shadow:0 1px 3px rgba(0,0,0,.5);font-variant-numeric:tabular-nums}
-  #recenter{position:absolute;right:12px;bottom:14px;width:40px;height:40px;border-radius:999px;background:rgba(14,22,28,.85);border:1px solid rgba(255,255,255,.25);color:#fff;display:flex;align-items:center;justify-content:center;padding:0;cursor:pointer;z-index:600;opacity:0;pointer-events:none;transform:scale(.9);transition:opacity .15s,transform .15s}
+  #recenter{position:absolute;left:12px;bottom:14px;width:40px;height:40px;border-radius:999px;background:rgba(14,22,28,.85);border:1px solid rgba(255,255,255,.25);color:#fff;display:flex;align-items:center;justify-content:center;padding:0;cursor:pointer;z-index:600;opacity:0;pointer-events:none;transform:scale(.9);transition:opacity .15s,transform .15s}
   #recenter.show{opacity:1;pointer-events:auto;transform:scale(1)}
   #recenter:active{background:rgba(14,22,28,.95)}
   @media (prefers-reduced-motion: reduce){#recenter{transition:none}}
