@@ -125,6 +125,14 @@ export default function MyStatsScreen({ navigation, route }) {
     setTab((prev) => (prev === key ? prev : key));
   }, [pageWidth]);
 
+  const onDragEnd = useCallback((event) => {
+    // Only settle here when there's no fling to follow (web / no-momentum);
+    // otherwise onMomentumScrollEnd settles at the real resting offset.
+    const vx = event.nativeEvent.velocity?.x ?? 0;
+    if (Math.abs(vx) > 0.05) return;
+    onSettle(event);
+  }, [onSettle]);
+
   // Device-scoped fallback key when signed out, so a signed-out user's
   // selection still persists (and can later be migrated onto their account).
   const storageKey = `${SELECTION_PREFIX}${user?.id ?? 'local'}`;
@@ -550,7 +558,7 @@ export default function MyStatsScreen({ navigation, route }) {
         scrollEventThrottle={16}
         onScroll={scrollHandler}
         onMomentumScrollEnd={onSettle}
-        onScrollEndDrag={onSettle}
+        onScrollEndDrag={onDragEnd}
         style={s.pager}
         contentContainerStyle={s.pagerContent}
         testID="my-stats-pager"
@@ -640,7 +648,6 @@ function makeStyles(theme) {
     },
     retryText: { ...theme.typography.subhead, color: theme.text.inverse },
     scroll: { padding: theme.spacing.lg, gap: theme.spacing.lg },
-    revealWrap: { gap: theme.spacing.lg },
     pager: { flex: 1 },
     pagerContent: { alignItems: 'stretch' },
     page: { flex: 1 },
