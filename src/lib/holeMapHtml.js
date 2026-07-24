@@ -40,12 +40,8 @@ export function buildHoleMapHtml(data) {
   .tri .hole .lbl{color:#7f8f95}
   .lastbox{position:absolute;top:56px;left:12px;z-index:600;color:#fff;background:rgba(14,22,28,.72);border-radius:14px;padding:7px 12px 8px;min-width:78px}
   .lastbox.hide{display:none}
-  .lastbox .ll{font-size:9px;font-weight:700;letter-spacing:.08em;color:#9fb0a4;text-transform:uppercase}
-  .lastbox .ld{display:flex;align-items:baseline;gap:4px;margin-top:1px}
-  .lastbox .bn{font-size:26px;font-weight:800;line-height:1.05;font-variant-numeric:tabular-nums}
-  .lastbox .u{font-size:12px;font-weight:600;color:#9fb0a4}
-  .lastbox .rl{font-size:8px;font-weight:800;letter-spacing:.09em;color:#8fa6ad;text-transform:uppercase;margin-top:6px}
-  .lastbox .lc{margin-top:2px;display:inline-flex;align-items:center;gap:5px;background:#57ae5b;color:#0a0d10;font-size:13px;font-weight:800;padding:3px 10px;border-radius:999px}
+  .lastbox .rl{font-size:8px;font-weight:800;letter-spacing:.09em;color:#8fa6ad;text-transform:uppercase}
+  .lastbox .lc{margin-top:3px;display:inline-flex;align-items:center;gap:5px;background:#57ae5b;color:#0a0d10;font-size:14px;font-weight:800;padding:3px 11px;border-radius:999px}
   .lastbox .lc svg{width:13px;height:13px}
   .hint{position:absolute;bottom:16px;left:50%;transform:translateX(-50%);background:rgba(14,22,28,.85);color:#fff;font-weight:600;font-size:13px;padding:7px 14px;border-radius:999px}
   .dchip{background:rgba(14,22,28,.88);color:#fff;font-weight:800;font-size:13px;padding:4px 11px;border-radius:999px;font-variant-numeric:tabular-nums;white-space:nowrap;border:1px solid rgba(255,255,255,.25);transform:translate(-50%,-50%);display:inline-block}
@@ -302,26 +298,17 @@ function renderLast(){
   const list = shots || [];
   const last = list.length ? list[list.length - 1] : null;
   const teeOnly = list.length === 1 && !(last && last.club); // a lone seeded tee doesn't count
-  const g = fcb();
-  const from = last ? [last.lat, last.lng] : null;
-  if (hole.mode === 'edit' || !DATA.showRec || !last || teeOnly || !valid(from) || !valid(g.c)) {
+  const clubName = lastShot && lastShot.club; // host sends null on-green / off-course
+  if (hole.mode === 'edit' || !DATA.showRec || !last || teeOnly || !clubName) {
     el.className = 'lastbox hide';
     return;
   }
-  // Distance is measured live from the last logged shot to the green center.
-  // The club tip comes from the host (null once the ball is on the green).
-  const meters = dist(from, g.c);
-  // Golf-club glyph (shaft + head) + a "Recommended" label so it reads clearly
-  // as a club suggestion, not a marker.
-  const club = lastShot && lastShot.club
-    ? '<div class="rl">Recommended</div>'
-      + '<div class="lc"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M17 4 8 14"/><path d="M8 14c-1.7 1.7-3.6 1.9-5 .9"/></svg>'+lastShot.club+'</div>'
-    : '';
+  // Just the club recommendation for the next shot — a "Recommended" caption
+  // plus the club chip. Golf-club glyph so it reads as a suggestion.
   el.className = 'lastbox';
   el.innerHTML =
-    '<div class="ll">To green</div>'+
-    '<div class="ld"><span class="bn">'+disp(meters)+'</span><span class="u">'+U+'</span></div>'+
-    club;
+    '<div class="rl">Recommended</div>'+
+    '<div class="lc"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M17 4 8 14"/><path d="M8 14c-1.7 1.7-3.6 1.9-5 .9"/></svg>'+clubName+'</div>';
 }
 
 function editIcon(color, label){
