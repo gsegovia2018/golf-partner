@@ -83,8 +83,9 @@ export function HoleFlyover({
     anchor: anchorInfo,
     units,
     shots: shotPins, // initial paint; live marks arrive via the shots prop below
+    showRec: appSettings.showLastShot, // gates the top-left last-shot-to-green card
     lastShot, // initial paint; live updates arrive via the lastShot prop below
-  } : null), [feat, courseName, holeNumber, position, anchorInfo, units, shotPins, lastShot]);
+  } : null), [feat, courseName, holeNumber, position, anchorInfo, units, shotPins, appSettings.showLastShot, lastShot]);
 
   // Latest aim state reported by the map: { pos, rings } — pos is the ring
   // nearest the green (for "Add shot" fallback), rings is the full

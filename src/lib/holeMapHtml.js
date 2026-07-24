@@ -153,6 +153,7 @@ function draw() {
   if (g.c) add(L.circleMarker(g.c, { radius:5, color:'#3f8f43', weight:2, fillColor:'#fff', fillOpacity:1 }));
   if (hole.tee) add(L.circleMarker(hole.tee, { radius:6, color:'#fff', weight:2, fillColor:'#2f6bff', fillOpacity:1 }));
   drawShots();
+  renderLast();
 
   const from = valid(anchor.pos) ? anchor.pos : null;
   const cc = valid(g.c) ? g.c : [map.getCenter().lat, map.getCenter().lng];
@@ -297,14 +298,25 @@ function hud(src, g){
 function renderLast(){
   const el = document.getElementById('lastbox');
   if (!el) return;
-  if (hole.mode === 'edit' || !lastShot || !isFinite(lastShot.meters)) { el.className = 'lastbox hide'; return; }
-  const club = lastShot.club
+  const list = shots || [];
+  const last = list.length ? list[list.length - 1] : null;
+  const teeOnly = list.length === 1 && !(last && last.club); // a lone seeded tee doesn't count
+  const g = fcb();
+  const from = last ? [last.lat, last.lng] : null;
+  if (hole.mode === 'edit' || !DATA.showRec || !last || teeOnly || !valid(from) || !valid(g.c)) {
+    el.className = 'lastbox hide';
+    return;
+  }
+  // Distance is measured live from the last logged shot to the green center.
+  // The club tip comes from the host (null once the ball is on the green).
+  const meters = dist(from, g.c);
+  const club = lastShot && lastShot.club
     ? '<div class="lc"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M6 22V3l12 4-12 4"/></svg>'+lastShot.club+'</div>'
     : '';
   el.className = 'lastbox';
   el.innerHTML =
     '<div class="ll">To green</div>'+
-    '<div class="ld"><span class="bn">'+disp(lastShot.meters)+'</span><span class="u">'+U+'</span></div>'+
+    '<div class="ld"><span class="bn">'+disp(meters)+'</span><span class="u">'+U+'</span></div>'+
     club;
 }
 
