@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useRef, useState, useSyncExternalStore } from 'react';
 import * as Location from 'expo-location';
 import {
-  findCourseGeometry,
+  findCourseGeometry, holeFeatures, haversineMeters,
   subscribeCourseGeometry, getCourseGeometryVersion,
 } from '../lib/geo';
 import { resolveScorecardDistances } from '../lib/flyoverModel';
@@ -13,11 +13,17 @@ import { subscribeAppSettings, getAppSettings } from '../store/settingsStore';
 // start a watch, always resolve as if there were no fix; (2) permission
 // denied — tee, if the hole has one; (3) fix is >1 km from the hole — tee
 // (same anchorFor rule as the flyover map); (4) otherwise — gps. Returns
-// { available, distances, accuracy, position, source } where `distances` is
-// { front, center, back, pin, kind, hazards } in meters or null, and
-// `source` is 'gps' | 'tee'. `available` is false when there is no
-// geometry, or when location was denied/disabled and the hole has no tee to
-// fall back to — callers render nothing in that case.
+// { available, distances, accuracy, position, source, fixState, offTee } where
+// `distances` is { front, center, back, pin, kind, hazards } in meters or null,
+// `source` is 'gps' | 'tee', and `fixState` is the GPS health
+// ('ok' | 'acquiring' | 'denied' | 'disabled') the header's status line reads.
+// `available` is false when there is no geometry, or when location was
+// denied/disabled and the hole has no tee to fall back to — callers render
+// nothing in that case.
+// A live fix farther than this from the hole's mapped tee point means the
+// player is past the tee box — the driver stops being a sensible suggestion.
+const OFF_TEE_METERS = 50;
+
 export function useGpsDistances(courseName, holeNumber) {
   const geomVersion = useSyncExternalStore(subscribeCourseGeometry, getCourseGeometryVersion);
   // geomVersion bumps when hydration swaps in live geometry — recompute then.
@@ -26,6 +32,10 @@ export function useGpsDistances(courseName, holeNumber) {
   const appSettings = useSyncExternalStore(subscribeAppSettings, getAppSettings, getAppSettings);
   const gpsEnabled = appSettings.gpsEnabled !== false;
   const [denied, setDenied] = useState(false);
+  // Bumped when a previously denied permission is observed granted (system or
+  // browser settings changed mid-round) — re-runs the watch effect so the
+  // header recovers without a remount or a settings toggle.
+  const [permRetry, setPermRetry] = useState(0);
   const [fix, setFix] = useState(null); // { pos: [lat, lng], accuracy }
   const lastFixAt = useRef(0);
   // Only whether the course HAS geometry gates the location watch — not the
@@ -51,7 +61,20 @@ export function useGpsDistances(courseName, holeNumber) {
       try {
         const { status } = await Location.requestForegroundPermissionsAsync();
         if (cancelled) return;
-        if (status !== 'granted') { setDenied(true); return; }
+        if (status !== 'granted') {
+          setDenied(true);
+          // Permission can be granted later from system/browser settings.
+          // Poll the non-prompting status check and re-run this effect (via
+          // permRetry) the moment it flips — `denied` is otherwise sticky
+          // until the scorecard remounts.
+          poll = setInterval(async () => {
+            try {
+              const cur = await Location.getForegroundPermissionsAsync();
+              if (!cancelled && cur?.status === 'granted') setPermRetry((n) => n + 1);
+            } catch { /* keep waiting */ }
+          }, 5000);
+          return;
+        }
         setDenied(false);
         // Fast first fix — the watch below can take several seconds to emit.
         Location.getCurrentPositionAsync({ accuracy: Location.Accuracy.High })
@@ -84,7 +107,7 @@ export function useGpsDistances(courseName, holeNumber) {
       try { sub?.remove?.(); } catch { /* web removeSubscription missing */ }
       if (poll) clearInterval(poll);
     };
-  }, [hasGeometry, gpsEnabled]);
+  }, [hasGeometry, gpsEnabled, permRetry]);
 
   const resolved = useMemo(() => {
     if (!geometry) return { distances: null, source: 'gps' };
@@ -94,6 +117,27 @@ export function useGpsDistances(courseName, holeNumber) {
       fix: gpsEnabled ? (fix?.pos ?? null) : null, // disabled = pretend no fix → tee path
     });
   }, [geometry, fix, courseName, holeNumber, gpsEnabled]);
+
+  // True only when a live fix puts the player clearly past this hole's tee —
+  // club recommendations then exclude the driver (a tee-only club). False
+  // whenever we can't tell (no fix, no mapped tee), keeping the recommendation
+  // unrestricted in planning/tee contexts.
+  const offTee = useMemo(() => {
+    const pos = gpsEnabled ? (fix?.pos ?? null) : null;
+    if (!pos || !geometry) return false;
+    const start = holeFeatures(courseName, holeNumber)?.start;
+    return !!start && haversineMeters(pos, start) > OFF_TEE_METERS;
+  }, [geometry, fix, courseName, holeNumber, gpsEnabled]);
+
+  // GPS health, independent of which distance `source` won. Lets the header
+  // tell "working but far away" apart from "no fix / denied / off" — all of
+  // which resolve to a tee distance and would otherwise look identical.
+  // 'disabled' → the setting is off (surface nothing); 'denied' → permission
+  // blocked; 'ok' → a live fix is held; 'acquiring' → granted, still waiting.
+  const fixState = !gpsEnabled ? 'disabled'
+    : denied ? 'denied'
+      : fix ? 'ok'
+        : 'acquiring';
 
   return {
     // Denied + no tee fallback would leave the header stuck on the fix
@@ -106,7 +150,9 @@ export function useGpsDistances(courseName, holeNumber) {
       && !(fix != null && resolved.distances == null),
     distances: resolved.distances,
     source: resolved.source, // 'gps' | 'tee' — the header renders FROM TEE for 'tee'
+    fixState, // 'ok' | 'acquiring' | 'denied' | 'disabled' — GPS health for the status line
     accuracy: gpsEnabled ? (fix?.accuracy ?? null) : null,
     position: gpsEnabled ? (fix?.pos ?? null) : null, // [lat, lng] — shared with the hole map
+    offTee, // past this hole's tee → club recommendations exclude the driver
   };
 }

@@ -333,6 +333,7 @@ export function HoleView({ round, roundIndex, players, scores, shotDetails, meId
             holeNumber={currentHole}
             fix={{ position: gps.position ?? null, accuracy: gps.accuracy ?? null }}
             targetMeters={gps.distances?.center ?? null}
+            offTee={gps.offTee}
             onOpenMap={openFlyover}
           />
         )}

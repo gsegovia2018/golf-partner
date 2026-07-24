@@ -23,16 +23,16 @@ const MAX_ACCURACY_M = 25; // same usable-fix bar as the scorecard header
 // and expands into a live card; tap ② (the whole card) stamps the end and
 // saves via logMeasuredShot. With no usable fix, tap ① opens the hole map —
 // the manual flow. The header distance block never shows this carry.
-export function MeasureFab({ roundId, roundIndex, holeNumber, fix, targetMeters, onOpenMap }) {
+export function MeasureFab({ roundId, roundIndex, holeNumber, fix, targetMeters, offTee = false, onOpenMap }) {
   const appSettings = useAppSettings();
   const { units } = appSettings;
   const bag = useMemo(() => swingClubs(appSettings.bag), [appSettings.bag]);
   const shotsVersion = useSyncExternalStore(subscribeShots, getShotsVersion, getShotsVersion);
   const overrides = appSettings.clubDistances;
   const suggestion = useMemo(
-    () => recommendClub(targetMeters, appSettings.bag, getShots(), overrides),
+    () => recommendClub(targetMeters, appSettings.bag, getShots(), overrides, { excludeDriver: offTee }),
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [targetMeters, appSettings.bag, overrides, shotsVersion],
+    [targetMeters, appSettings.bag, overrides, offTee, shotsVersion],
   );
 
   const [armed, setArmed] = useState(null);   // { start:[lat,lng], club }
@@ -58,7 +58,11 @@ export function MeasureFab({ roundId, roundIndex, holeNumber, fix, targetMeters,
   const finish = async () => {
     if (!armed || !pos) return;
     if (dist < MIN_SAVE_M) return;
-    if (dist > MAX_PLAIN_M && !confirmOver) { setConfirmOver(true); return; }
+    // Confirm tap for anything that would pollute the carry averages: an
+    // implausibly long measure, or a fix that has degraded past the same
+    // accuracy bar that gated arming (tap ① checked it; tap ② must too).
+    const poorAcc = fix?.accuracy != null && fix.accuracy > MAX_ACCURACY_M;
+    if ((dist > MAX_PLAIN_M || poorAcc) && !confirmOver) { setConfirmOver(true); return; }
     const { start, club, holeNumber: armedHoleNumber } = armed;
     setArmed(null);
     setConfirmOver(false);
@@ -121,7 +125,9 @@ export function MeasureFab({ roundId, roundIndex, holeNumber, fix, targetMeters,
             <Text style={s.cardUnit}>{` ${unitSuffix(units)}`}</Text>
           </Text>
           <Text style={s.cardSub}>
-            {confirmOver ? `Over ${formatDistance(MAX_PLAIN_M, units)}${unitSuffix(units)} — tap again to save`
+            {confirmOver ? (dist > MAX_PLAIN_M
+              ? `Over ${formatDistance(MAX_PLAIN_M, units)}${unitSuffix(units)} — tap again to save`
+              : `GPS loose ±${Math.round(fix?.accuracy ?? 0)} m — tap again to save`)
               : dist < MIN_SAVE_M ? 'Start marked — hit, then walk'
               : "Tap when you're at the ball"}
           </Text>

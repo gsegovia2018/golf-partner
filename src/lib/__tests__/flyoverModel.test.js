@@ -62,6 +62,7 @@ describe('resolveScorecardDistances', () => {
     holes: [
       { number: 1, start: TEE, greenCenter: GREEN, hazards: [{ kind: 'bunker', poly: bunkerPoly }] },
       { number: 2, greenCenter: GREEN }, // no tee mapped
+      { number: 3, greenFront: at(-10), greenBack: at(10) }, // admin points, no center
     ],
   };
   const GREENS_COURSE = {
@@ -113,6 +114,15 @@ describe('resolveScorecardDistances', () => {
     // No fix yet, no tee: nothing.
     const none = resolveScorecardDistances({ courseName: 'Testville Golf', holeNumber: 2, fix: null });
     expect(none).toEqual({ distances: null, source: 'gps' });
+  });
+
+  it('no green center (front/back only): never treated as on-the-hole — null <= 1000 must not pass', () => {
+    // Without a center distance the 1 km rule can't be applied; showing a
+    // "live" card here from any distance on earth was the fail-open bug.
+    const far = resolveScorecardDistances({ courseName: 'Testville Golf', holeNumber: 3, fix: at(250000) });
+    expect(far).toEqual({ distances: null, source: 'gps' });
+    const near = resolveScorecardDistances({ courseName: 'Testville Golf', holeNumber: 3, fix: at(250) });
+    expect(near).toEqual({ distances: null, source: 'gps' });
   });
 
   it('greens-mode course: live GPS on the hole, nothing off the hole', () => {

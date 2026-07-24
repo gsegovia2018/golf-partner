@@ -1,5 +1,5 @@
 import React, { useMemo, useSyncExternalStore } from 'react';
-import { View, Text, StyleSheet, Pressable } from 'react-native';
+import { View, Text, StyleSheet, Pressable, Linking } from 'react-native';
 import { Feather } from '@expo/vector-icons';
 import { useTheme } from '../../theme/ThemeContext';
 import { useAppSettings } from '../../hooks/useAppSettings';
@@ -12,8 +12,11 @@ import { useTourTarget } from '../tour/tourTargets';
 // when the player isn't on the hole (or has no fix) — the same distances
 // measured from the tee, and the tap target that opens the hole map sheet.
 // Renders nothing when the course has no geometry, or when location is
-// denied and there's no tee to fall back to. The card shows ONLY the distance
-// (live-to-green on the hole, tee-to-green off it) — no club recommendation.
+// denied and there's no tee to fall back to. The live GPS view also shows the
+// recommended club for the center distance (driver excluded once the fix is
+// past the tee box); the tee-sourced view is distance only — no club — plus a
+// GPS-health status line (working-far / locating / location-off) so a tee
+// number isn't mistaken for a dead GPS. That line is hidden when GPS is off.
 export function HoleDistanceBlock({
   gps, onPress, compact = false,
 }) {
@@ -28,15 +31,27 @@ export function HoleDistanceBlock({
   // averages evolve. Computed before the early return to keep hook order stable.
   const shotsVersion = useSyncExternalStore(subscribeShots, getShotsVersion, getShotsVersion);
   const club = useMemo(
-    () => recommendClub(gps?.distances?.center, appSettings.bag, getShots(), appSettings.clubDistances),
+    () => recommendClub(gps?.distances?.center, appSettings.bag, getShots(), appSettings.clubDistances, { excludeDriver: !!gps?.offTee }),
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [gps?.distances?.center, appSettings.bag, appSettings.clubDistances, shotsVersion],
+    [gps?.distances?.center, gps?.offTee, appSettings.bag, appSettings.clubDistances, shotsVersion],
   );
 
   if (!gps?.available) return null;
 
   const fmt = (meters) => formatDistance(meters, units);
-  const { accuracy, source, distances } = gps;
+  const { accuracy, source, distances, fixState } = gps;
+
+  // GPS health line, shown only on the tee-sourced view (where the number
+  // alone can't say whether GPS is alive). 'disabled' surfaces nothing — the
+  // player turned GPS off, so there's nothing to reassure or fix. 'denied'
+  // is the only actionable state: tapping it opens the OS location settings.
+  const pick = (t) => (t ? t[theme.isDark ? 'dark' : 'light'] : theme.text.muted);
+  const STATUS = {
+    ok:        { color: pick(theme.semantic?.score?.good), label: 'GPS OK · far away' },
+    acquiring: { color: pick(theme.semantic?.warning),     label: 'Locating GPS…' },
+    denied:    { color: pick(theme.semantic?.destructive), label: 'Location off', action: true },
+  };
+  const status = fixState && fixState !== 'disabled' ? STATUS[fixState] : null;
 
   // Belt-and-suspenders: the hook never yields a live GPS distance beyond 1 km,
   // so a >3 km non-tee reading would be a bug — hide it rather than render a
@@ -77,6 +92,25 @@ export function HoleDistanceBlock({
         <Text style={s.fb}>{`F ${fmt(distances.front)}  B ${fmt(distances.back)}`}</Text>
         <Text style={s.mapHint}>TAP FOR MAP</Text>
         {!!hazardLine && <Text style={s.hzd}>{hazardLine}</Text>}
+        {!!status && (
+          status.action ? (
+            <Pressable
+              onPress={() => { try { Linking.openSettings?.(); } catch { /* web / unsupported */ } }}
+              hitSlop={6}
+              style={s.status}
+              accessibilityRole="button"
+              accessibilityLabel="Location off — open settings"
+            >
+              <View style={[s.statusDot, { backgroundColor: status.color }]} />
+              <Text style={[s.statusTxt, { color: status.color }]}>{status.label}</Text>
+            </Pressable>
+          ) : (
+            <View style={s.status}>
+              <View style={[s.statusDot, { backgroundColor: status.color }]} />
+              <Text style={[s.statusTxt, { color: status.color }]}>{status.label}</Text>
+            </View>
+          )
+        )}
       </Pressable>
     );
   }
@@ -169,6 +203,24 @@ function makeStyles(theme) {
       fontVariant: ['tabular-nums'],
     },
     caption: { color: theme.text.muted, fontSize: 10, fontVariant: ['tabular-nums'] },
+    status: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: 5,
+      marginTop: 5,
+      paddingTop: 6,
+      borderTopWidth: 1,
+      borderTopColor: theme.border.default,
+      alignSelf: 'stretch',
+      justifyContent: 'center',
+    },
+    statusDot: { width: 7, height: 7, borderRadius: 4 },
+    statusTxt: {
+      fontSize: 9,
+      fontFamily: 'PlusJakartaSans-Bold',
+      letterSpacing: 0.7,
+      textTransform: 'uppercase',
+    },
     compactRow: { flexDirection: 'row', alignItems: 'center', gap: 4 },
     compactDist: {
       color: theme.accent.primary,

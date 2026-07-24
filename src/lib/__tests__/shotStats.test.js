@@ -112,4 +112,12 @@ describe('recommendClub', () => {
   it('returns null for a non-positive target', () => {
     expect(recommendClub(0, bag, [])).toBeNull();
   });
+
+  it('excludeDriver drops the driver from the candidates', () => {
+    // 300m would nominally pick the driver (230); excluded, the 7i (140,
+    // longest remaining in this bag) wins instead.
+    expect(recommendClub(300, bag, []).club).toBe('driver');
+    const r = recommendClub(300, bag, [], null, { excludeDriver: true });
+    expect(r.club).toBe('7i');
+  });
 });

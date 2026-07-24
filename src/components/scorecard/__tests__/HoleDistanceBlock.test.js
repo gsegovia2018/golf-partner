@@ -1,4 +1,5 @@
 import React from 'react';
+import { Linking } from 'react-native';
 import { render, fireEvent } from '@testing-library/react-native';
 import { HoleDistanceBlock } from '../HoleDistanceBlock';
 import { updateAppSettings, __resetAppSettingsForTests } from '../../../store/settingsStore';
@@ -6,8 +7,8 @@ import { __getRegisteredTourKeysForTests, __resetTourTargetsForTests } from '../
 
 jest.mock('../../../theme/ThemeContext', () => ({
   useTheme: () => {
-    const { light, typography, fonts, spacing, radius } = jest.requireActual('../../../theme/tokens');
-    return { theme: { ...light, typography, fonts, spacing, radius, mode: 'light', isDark: false } };
+    const { light, semantic, typography, fonts, spacing, radius } = jest.requireActual('../../../theme/tokens');
+    return { theme: { ...light, semantic, typography, fonts, spacing, radius, mode: 'light', isDark: false } };
   },
 }));
 
@@ -62,6 +63,16 @@ describe('HoleDistanceBlock', () => {
     const { getByText, queryByText } = render(<HoleDistanceBlock gps={gpsBase()} onPress={() => {}} />);
     getByText('Driver');
     expect(queryByText(/≈/)).toBeNull();
+  });
+
+  it('excludes the driver from the recommendation once the fix is past the tee', () => {
+    // Same 326 m target that picks Driver on the tee: past the tee box the
+    // longest remaining default-bag club (3 Wood) wins instead.
+    const { getByText, queryByText } = render(
+      <HoleDistanceBlock gps={gpsBase({ offTee: true })} onPress={() => {}} />,
+    );
+    getByText('3 Wood');
+    expect(queryByText('Driver')).toBeNull();
   });
 
   it('shows one joined hazard line when both kinds are ahead', () => {
@@ -170,6 +181,47 @@ describe('HoleDistanceBlock', () => {
     const { getByLabelText } = render(<HoleDistanceBlock gps={gps} onPress={onPress} />);
     fireEvent.press(getByLabelText('Open hole map'));
     expect(onPress).toHaveBeenCalledTimes(1);
+  });
+
+  describe('GPS status line', () => {
+    const teeGps = (fixState) => gpsBase({ source: 'tee', accuracy: null, position: null, fixState });
+
+    it('shows "GPS OK · far away" when a fix is held but the player is off the hole', () => {
+      const { getByText } = render(<HoleDistanceBlock gps={teeGps('ok')} onPress={() => {}} />);
+      getByText('GPS OK · far away');
+    });
+
+    it('shows "Locating GPS…" while a fix is still being acquired', () => {
+      const { getByText } = render(<HoleDistanceBlock gps={teeGps('acquiring')} onPress={() => {}} />);
+      getByText('Locating GPS…');
+    });
+
+    it('shows "Location off" when permission is denied', () => {
+      const { getByText } = render(<HoleDistanceBlock gps={teeGps('denied')} onPress={() => {}} />);
+      getByText('Location off');
+    });
+
+    it('shows no status line when GPS is disabled in settings', () => {
+      const { queryByText } = render(<HoleDistanceBlock gps={teeGps('disabled')} onPress={() => {}} />);
+      expect(queryByText('GPS OK · far away')).toBeNull();
+      expect(queryByText('Locating GPS…')).toBeNull();
+      expect(queryByText('Location off')).toBeNull();
+    });
+
+    it('shows no status line on the live on-hole view (the arrow already signals GPS)', () => {
+      const { queryByText } = render(<HoleDistanceBlock gps={gpsBase({ fixState: 'ok' })} onPress={() => {}} />);
+      expect(queryByText('GPS OK · far away')).toBeNull();
+    });
+
+    it('tapping "Location off" opens the OS location settings, not the map', () => {
+      const spy = jest.spyOn(Linking, 'openSettings').mockImplementation(() => Promise.resolve());
+      const onPress = jest.fn();
+      const { getByLabelText } = render(<HoleDistanceBlock gps={teeGps('denied')} onPress={onPress} />);
+      fireEvent.press(getByLabelText('Location off — open settings'));
+      expect(spy).toHaveBeenCalledTimes(1);
+      expect(onPress).not.toHaveBeenCalled();
+      spy.mockRestore();
+    });
   });
 
   describe('yards mode', () => {

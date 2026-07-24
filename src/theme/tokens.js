@@ -99,6 +99,12 @@ const semantic = {
     light: '#3e638f',
     dark:  '#8fb0d6',
   },
+  // In-progress / caution — GPS acquiring a fix, and any "working on it"
+  // state that isn't yet good or bad. Amber reads as transient, not alarming.
+  warning: {
+    light: '#b8791a',
+    dark:  '#e0b24d',
+  },
   pair: {
     a: { light: '#006747', dark: '#4fae8a' },
     b: { light: '#c47c3a', dark: '#f59e0b' },

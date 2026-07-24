@@ -24,7 +24,7 @@ import { ClubWheel } from './ClubWheel';
 // The first spot on a hole is the tee, seeded from the hole geometry.
 export function ShotTracker({
   roundId, roundIndex, holeNumber,
-  pos, teePos, aimPos, aimRings, targetPos, targetMeters,
+  pos, teePos, aimPos, aimRings, targetPos,
   tappedShotIndex, onConsumeShotTap, onCollapseTargets,
 }) {
   const appSettings = useAppSettings();
@@ -38,12 +38,6 @@ export function ShotTracker({
   const [wheelId, setWheelId] = useState(null); // shot id whose club wheel is open
 
   const overrides = appSettings.clubDistances;
-  // "Club to hit" hint for the next shot, from distance to the green.
-  const suggestion = useMemo(
-    () => recommendClub(targetMeters, appSettings.bag, getShots(), overrides),
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-    [targetMeters, appSettings.bag, overrides, shotsVersion],
-  );
 
   // Add a ball spot at `spot` ([lat,lng]). Seeds the tee as the origin on an
   // empty hole, appends the landing, and opens the club wheel on it —
@@ -132,7 +126,6 @@ export function ShotTracker({
   return (
     <View style={s.wrap} pointerEvents="box-none">
       <View style={s.fabCol}>
-        {suggestion && <Text style={s.badge}>{`≈ ${clubLabel(suggestion.club)}`}</Text>}
         <PressableScale
           onPress={addAtAim}
           onLongPress={dropAtMe}
@@ -174,12 +167,5 @@ const s = StyleSheet.create({
     shadowOffset: { width: 0, height: 6 }, elevation: 6,
   },
   addLbl: { color: '#0a0d10', fontFamily: 'PlusJakartaSans-ExtraBold', fontSize: 15 },
-  badge: {
-    backgroundColor: 'rgba(10,13,16,0.82)',
-    borderWidth: StyleSheet.hairlineWidth, borderColor: 'rgba(255,255,255,0.16)',
-    color: '#cfe3d5', fontFamily: 'PlusJakartaSans-Bold', fontSize: 12,
-    paddingHorizontal: 9, paddingVertical: 2, borderRadius: 999,
-    fontVariant: ['tabular-nums'],
-  },
   fabDisabled: { opacity: 0.5 },
 });

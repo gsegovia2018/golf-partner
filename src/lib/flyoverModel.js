@@ -41,7 +41,12 @@ export function resolveScorecardDistances({ courseName, holeNumber, fix }) {
   // beyond = off the hole (show nothing — never a far straight-line GPS line).
   if (fix) {
     const d = courseTargetDistances(fix, courseName, holeNumber);
-    if (d && d.center <= ANCHOR_MAX_GPS_METERS) return { distances: d, source: 'gps' };
+    // Number.isFinite: a hole with only front/back points has center: null,
+    // and `null <= 1000` is true — without a real center there's no way to
+    // apply the on-the-hole rule, so show nothing.
+    if (d && Number.isFinite(d.center) && d.center <= ANCHOR_MAX_GPS_METERS) {
+      return { distances: d, source: 'gps' };
+    }
   }
   return { distances: null, source: 'gps' };
 }

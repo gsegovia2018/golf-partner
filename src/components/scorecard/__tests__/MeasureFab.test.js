@@ -56,6 +56,17 @@ describe('MeasureFab', () => {
     expect(logMeasuredShot).toHaveBeenCalledWith(expect.objectContaining({ holeNumber: 7 }));
   });
 
+  it('requires a confirm tap when the fix degrades past 25 m by save time', async () => {
+    const { getByLabelText, getByText, rerender } = render(<MeasureFab {...base} />);
+    fireEvent.press(getByLabelText('Measure my shot')); // armed at ±8 m
+    rerender(<MeasureFab {...base} fix={{ position: FAR, accuracy: 40 }} />);
+    await act(async () => { fireEvent.press(getByLabelText('Ball is here — save the measured shot')); });
+    expect(logMeasuredShot).not.toHaveBeenCalled();
+    getByText(/GPS loose ±40 m — tap again to save/);
+    await act(async () => { fireEvent.press(getByLabelText('Ball is here — save the measured shot')); });
+    expect(logMeasuredShot).toHaveBeenCalledWith(expect.objectContaining({ start: START, end: FAR }));
+  });
+
   it('undo deletes both created spots', async () => {
     const { getByLabelText, rerender } = render(<MeasureFab {...base} />);
     fireEvent.press(getByLabelText('Measure my shot'));
