@@ -188,8 +188,12 @@ function ShotRowsBlock({ title, rows, s, first = false }) {
     if (row.dim || !isNumber(row.magnitude)) return;
     const tag = row.barGroup;
     if (!tag || tag === 'pct') return; // absolute scale
-    const entry = groups[tag] ?? { max: 0, size: 0 };
-    entry.max = Math.max(entry.max, Math.abs(row.magnitude));
+    const entry = groups[tag] ?? { scale: 0, size: 0 };
+    entry.scale = Math.max(
+      entry.scale,
+      Math.abs(row.magnitude),
+      isNumber(row.target) ? Math.abs(row.target) : 0
+    );
     entry.size += 1;
     groups[tag] = entry;
   });
@@ -209,7 +213,8 @@ function ShotRowsBlock({ title, rows, s, first = false }) {
             first={index === 0}
             rowIndex={index}
             testID={`shots-bar-${key}`}
-            barRatio={shotBarRatio({ magnitude, barGroup, dim: row.dim }, groups)}
+            barRatio={shotBarRatio({ magnitude, barGroup, target, dim: row.dim }, groups)}
+            targetRatio={shotTargetRatio({ magnitude, barGroup, target, dim: row.dim }, groups)}
           />
         ))}
       </View>
@@ -217,14 +222,31 @@ function ShotRowsBlock({ title, rows, s, first = false }) {
   );
 }
 
-function shotBarRatio({ magnitude, barGroup, dim }, groups) {
+function shotBarRatio({
+  magnitude, barGroup, target, dim,
+}, groups) {
   if (!isNumber(magnitude)) return undefined;
   const size = Math.abs(magnitude);
   if (barGroup === 'pct') return clamp01(size / 100);
   const entry = groups[barGroup];
-  if (!entry || entry.max <= 0) return 0;
-  if (entry.size === 1 && !dim) return SOLO_BAR_RATIO;
-  return clamp01(size / entry.max);
+  if (!entry || entry.scale <= 0) return 0;
+  if (entry.size === 1 && !dim && !isNumber(target)) return SOLO_BAR_RATIO;
+  return clamp01(size / entry.scale);
+}
+
+// Tick position on the SAME scale as shotBarRatio. Only benchmark rows with a
+// finite, non-zero target get a tick; 'sg' bucket bars diverge from a zero
+// origin (no useful tick), and dim rows never show one.
+function shotTargetRatio({
+  magnitude, barGroup, target, dim,
+}, groups) {
+  if (dim || barGroup === 'sg') return undefined;
+  if (!isNumber(magnitude) || !isNumber(target) || target === 0) return undefined;
+  const size = Math.abs(target);
+  if (barGroup === 'pct') return clamp01(size / 100);
+  const entry = groups[barGroup];
+  if (!entry || entry.scale <= 0) return undefined;
+  return clamp01(size / entry.scale);
 }
 
 function clamp01(value) {
@@ -381,6 +403,7 @@ function makeDrivingTargetRows(shots, shotBenchmark, driveDistance, units) {
       label: 'Fairways hit',
       value: `${shots?.drives?.fairwayPct ?? 0}%`,
       magnitude: shots?.drives?.fairwayPct ?? 0,
+      target: shotBenchmark.fairwayPct,
       barGroup: 'pct',
       secondary: targetSecondary([
         sampleText(recorded, 'drives'),
@@ -401,6 +424,7 @@ function makeDrivingTargetRows(shots, shotBenchmark, driveDistance, units) {
       label: 'Left miss %',
       value: `${leftPct}%`,
       magnitude: leftPct,
+      target: shotBenchmark.leftMissPct,
       barGroup: 'pct',
       secondary: targetSecondary([
         `${distribution.left ?? 0} drives`,
@@ -421,6 +445,7 @@ function makeDrivingTargetRows(shots, shotBenchmark, driveDistance, units) {
       label: 'Right miss %',
       value: `${rightPct}%`,
       magnitude: rightPct,
+      target: shotBenchmark.rightMissPct,
       barGroup: 'pct',
       secondary: targetSecondary([
         `${distribution.right ?? 0} drives`,
@@ -441,6 +466,7 @@ function makeDrivingTargetRows(shots, shotBenchmark, driveDistance, units) {
       label: 'Tee penalty %',
       value: `${teePenaltyPct}%`,
       magnitude: teePenaltyPct,
+      target: shotBenchmark.teePenaltyPct,
       barGroup: 'pct',
       secondary: targetSecondary([
         `${shots?.penalties?.teeOnDriveHoles ?? 0} penalties`,
@@ -461,6 +487,7 @@ function makeDrivingTargetRows(shots, shotBenchmark, driveDistance, units) {
       label: 'Driver distance',
       value: `~${formatDistance(driveDistance.avgDistance, units)} ${unitSuffix(units)}`,
       magnitude: driveDistance.avgDistance,
+      target: Math.round(shotBenchmark.driverDistance * YD_TO_M),
       barGroup: 'dist',
       secondary: targetSecondary([
         sampleText(driveDistance.drives, 'drives'),
@@ -480,6 +507,7 @@ function makeDrivingTargetRows(shots, shotBenchmark, driveDistance, units) {
       label: 'Driver distance',
       value: '—',
       magnitude: 0,
+      target: Math.round(shotBenchmark.driverDistance * YD_TO_M),
       barGroup: 'dist',
       secondary: targetSecondary([
         `target ~${formatDistance(Math.round(shotBenchmark.driverDistance * YD_TO_M), units)} ${unitSuffix(units)}`,
@@ -524,6 +552,7 @@ function makeGirRows(shots, shotBenchmark) {
       label: 'Greens in reg %',
       value: `${shots.gir.pct}%`,
       magnitude: shots.gir.pct,
+      target: shotBenchmark.girPct,
       barGroup: 'pct',
       secondary: targetSecondary([
         sampleText(shots.gir.eligible, 'holes'),
@@ -554,6 +583,7 @@ function makePuttingVolumeRows(shots, shotBenchmark) {
       label: 'Putts / round',
       value: puttsPer18,
       magnitude: puttsPer18,
+      target: shotBenchmark.puttsPerRound,
       barGroup: 'count',
       secondary: targetSecondary([
         sampleText(shots.putts.holes, 'holes'),
@@ -574,6 +604,7 @@ function makePuttingVolumeRows(shots, shotBenchmark) {
       label: '3-putts / round',
       value: threePuttsPer18,
       magnitude: threePuttsPer18,
+      target: shotBenchmark.threePuttsPerRound,
       barGroup: 'count',
       secondary: targetSecondary([
         `${shots.putts.threePuttPlus} total`,

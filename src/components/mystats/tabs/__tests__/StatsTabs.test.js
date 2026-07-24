@@ -592,6 +592,22 @@ describe('My Stats tabs', () => {
     expect(queryByTestId('shots-bar-driveDistance-fill')).toBeNull();
   });
 
+  test('ShotsTab marks benchmark bars with a target tick but leaves SG buckets tickless', async () => {
+    const { findByTestId, getByTestId, queryByTestId } = render(wrap(
+      <ShotsTab stats={shotStats()} onInfo={() => {}} targetHandicap={14} onChangeTarget={() => {}} />
+    ));
+
+    // Benchmark rows carry a gold target tick.
+    expect(await findByTestId('shots-bar-fairways-tick')).toBeTruthy();
+    expect(getByTestId('shots-bar-gir-tick')).toBeTruthy();
+    expect(getByTestId('shots-bar-puttsPerRound-tick')).toBeTruthy();
+    expect(getByTestId('shots-bar-par3AvgScore-tick')).toBeTruthy();
+
+    // Diverging +/- SG bucket bars have no meaningful target (origin) → no tick.
+    expect(queryByTestId('shots-bar-100-150-tick')).toBeNull();
+    expect(queryByTestId('shots-bar-6+-tick')).toBeNull();
+  });
+
   test('ShotsTab leaves scoring patterns out of the target-handicap view', async () => {
     const { queryByText } = render(wrap(
       <ShotsTab stats={shotStats()} onInfo={() => {}} targetHandicap={14} onChangeTarget={() => {}} />
