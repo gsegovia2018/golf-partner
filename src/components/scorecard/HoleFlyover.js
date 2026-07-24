@@ -49,6 +49,10 @@ export function HoleFlyover({
   // a club tip for the next shot. Skipped when the setting is off, before any
   // real shot is marked (a lone seeded tee doesn't count), or once the ball is
   // on the green — in which case the club tip is dropped but the distance stays.
+  //
+  // Club tip visibility also depends on GPS: with GPS on, it's a live on-course
+  // aid, so it's hidden when you're not actually on the course (anchor isn't a
+  // GPS fix). With GPS off, the map is a planning tool, so the tip always shows.
   const lastShot = useMemo(() => {
     if (!appSettings.showLastShot || !feat?.greenCenter) return null;
     const last = shotPins[shotPins.length - 1];
@@ -59,14 +63,17 @@ export function HoleFlyover({
     const onGreen = feat.green
       ? pointInPolygon(pt, feat.green)
       : meters <= 12;
+    const gpsOn = appSettings.gpsEnabled !== false;
+    const onCourse = anchorInfo?.source === 'gps';
+    const suppressRec = gpsOn && !onCourse; // GPS on but off-course → no club tip
     let club = null;
-    if (!onGreen) {
+    if (!onGreen && !suppressRec) {
       const rec = recommendClub(cond.plays(meters), appSettings.bag, getShots(), appSettings.clubDistances);
       club = rec ? clubLabel(rec.club) : null;
     }
     return { meters, club };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [feat, shotPins, appSettings.showLastShot, appSettings.bag, appSettings.clubDistances, cond, shotsVersion]);
+  }, [feat, shotPins, appSettings.showLastShot, appSettings.gpsEnabled, appSettings.bag, appSettings.clubDistances, anchorInfo, cond, shotsVersion]);
 
   const data = useMemo(() => (feat ? {
     mode: 'view',
