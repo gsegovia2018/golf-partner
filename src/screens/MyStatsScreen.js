@@ -108,6 +108,36 @@ export default function MyStatsScreen({ navigation, route }) {
   const reduced = useReducedMotion();
   const [pageWidth, setPageWidth] = useState(() => Dimensions.get('window').width);
   const scrollX = useSharedValue(0);
+  const tabLayoutsSV = useSharedValue({ xs: [], ws: [] });
+  const pageWidthSV = useSharedValue(pageWidth);
+  const [pillBox, setPillBox] = useState({ y: 0, height: 0 });
+
+  const syncTabLayoutsSV = useCallback(() => {
+    const xs = [];
+    const ws = [];
+    for (const t of ALL_TABS) {
+      const l = tabLayoutsRef.current[t.key];
+      if (!l) return; // wait until every pill is measured
+      xs.push(l.x);
+      ws.push(l.width);
+    }
+    tabLayoutsSV.value = { xs, ws };
+    const first = tabLayoutsRef.current[ALL_TABS[0].key];
+    setPillBox((prev) => (
+      prev.height === first.height && prev.y === first.y ? prev : { y: first.y, height: first.height }
+    ));
+  }, [tabLayoutsSV]);
+
+  const indicatorStyle = useAnimatedStyle(() => {
+    const { xs, ws } = tabLayoutsSV.value;
+    if (!xs || xs.length < 2) return { opacity: 0, width: 0 };
+    const w = pageWidthSV.value > 0 ? pageWidthSV.value : 1;
+    const frac = scrollX.value / w; // 0 .. count-1
+    const input = xs.map((_, i) => i);
+    const x = interpolate(frac, input, xs, Extrapolation.CLAMP);
+    const width = interpolate(frac, input, ws, Extrapolation.CLAMP);
+    return { opacity: 1, width, transform: [{ translateX: x }] };
+  });
 
   const activeIndex = useMemo(
     () => Math.max(0, ALL_TABS.findIndex((t) => t.key === tab)),
@@ -428,6 +458,10 @@ export default function MyStatsScreen({ navigation, route }) {
         scrollTabIntoView(tab, false);
       }}
     >
+      <Animated.View
+        pointerEvents="none"
+        style={[s.tabIndicator, { top: pillBox.y, height: pillBox.height }, indicatorStyle]}
+      />
       {ALL_TABS.map((t) => (
         <PressableScale
           key={t.key}
@@ -436,6 +470,7 @@ export default function MyStatsScreen({ navigation, route }) {
           onLayout={(event) => {
             tabLayoutsRef.current[t.key] = event.nativeEvent.layout;
             if (tab === t.key) scrollTabIntoView(t.key, false);
+            syncTabLayoutsSV();
           }}
           accessibilityRole="tab"
           accessibilityState={{ selected: tab === t.key }}
@@ -585,7 +620,7 @@ export default function MyStatsScreen({ navigation, route }) {
         testID="my-stats-pager"
         onLayout={(event) => {
           const w = event.nativeEvent.layout.width;
-          if (w && Math.abs(w - pageWidth) > 1) setPageWidth(w);
+          if (w && Math.abs(w - pageWidth) > 1) { setPageWidth(w); pageWidthSV.value = w; }
         }}
       >
         {ALL_TABS.map((t, i) => (
@@ -654,13 +689,20 @@ function makeStyles(theme) {
     },
     tab: {
       paddingVertical: 6, paddingHorizontal: 14,
-      borderRadius: theme.radius.pill, backgroundColor: theme.bg.card,
-      borderWidth: 1, borderColor: theme.border.default,
+      borderRadius: theme.radius.pill,
+      backgroundColor: 'transparent',
+      borderWidth: 1, borderColor: 'transparent',
       flexShrink: 0,
     },
-    tabActive: { backgroundColor: theme.accent.primary, borderColor: theme.accent.primary },
+    tabActive: {}, // fill now provided by the animated indicator
     tabText: { ...theme.typography.caption, color: theme.text.muted, fontWeight: '700' },
     tabTextActive: { color: theme.text.inverse },
+    tabIndicator: {
+      position: 'absolute',
+      left: 0,
+      borderRadius: theme.radius.pill,
+      backgroundColor: theme.accent.primary,
+    },
     center: { flex: 1, alignItems: 'center', justifyContent: 'center', gap: theme.spacing.md, padding: theme.spacing.xl },
     emptyText: { ...theme.typography.body, color: theme.text.muted, textAlign: 'center' },
     retryBtn: {
