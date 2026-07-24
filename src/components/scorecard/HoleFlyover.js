@@ -50,9 +50,11 @@ export function HoleFlyover({
   // real shot is marked (a lone seeded tee doesn't count), or once the ball is
   // on the green — in which case the club tip is dropped but the distance stays.
   //
-  // Club tip visibility also depends on GPS: with GPS on, it's a live on-course
-  // aid, so it's hidden when you're not actually on the course (anchor isn't a
-  // GPS fix). With GPS off, the map is a planning tool, so the tip always shows.
+  // Club tip visibility also depends on GPS. It's suppressed only when GPS is
+  // giving us a real fix that places us OFF the course (physically not here) —
+  // that's when a "club to hit next" tip would be misleading. With GPS off, or
+  // GPS on but no usable fix (e.g. a desktop with no geolocation), the map is a
+  // planning tool and the tip always shows. Distance to the green is unaffected.
   const lastShot = useMemo(() => {
     if (!appSettings.showLastShot || !feat?.greenCenter) return null;
     const last = shotPins[shotPins.length - 1];
@@ -64,8 +66,9 @@ export function HoleFlyover({
       ? pointInPolygon(pt, feat.green)
       : meters <= 12;
     const gpsOn = appSettings.gpsEnabled !== false;
-    const onCourse = anchorInfo?.source === 'gps';
-    const suppressRec = gpsOn && !onCourse; // GPS on but off-course → no club tip
+    const haveFix = anchorInfo?.playerDistance != null; // a real player position exists
+    const offCourse = anchorInfo?.source !== 'gps';
+    const suppressRec = gpsOn && haveFix && offCourse; // real fix, but not on the course
     let club = null;
     if (!onGreen && !suppressRec) {
       const rec = recommendClub(cond.plays(meters), appSettings.bag, getShots(), appSettings.clubDistances);
