@@ -1,9 +1,16 @@
 import React, { useEffect, useState, useMemo, useCallback, useRef } from 'react';
-import { View, Text, StyleSheet, ScrollView, ActivityIndicator } from 'react-native';
+import { View, Text, StyleSheet, ScrollView, ActivityIndicator, Dimensions } from 'react-native';
+import Animated, {
+  useSharedValue,
+  useAnimatedScrollHandler,
+  useAnimatedStyle,
+  interpolate,
+  Extrapolation,
+  useReducedMotion,
+} from 'react-native-reanimated';
 import ScreenContainer from '../components/ScreenContainer';
 import PressableScale from '../components/ui/PressableScale';
 import IconButton from '../components/ui/IconButton';
-import Reveal from '../components/ui/Reveal';
 import { Feather } from '@expo/vector-icons';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useTheme } from '../theme/ThemeContext';
@@ -92,11 +99,31 @@ export default function MyStatsScreen({ navigation, route }) {
     return () => { cancelled = true; };
   }, [user?.id]);
   const isTabPresentation = route?.params?.presentation === 'tab';
-  const contentScrollRef = useRef(null);
   const tabScrollRef = useRef(null);
   const tabLayoutsRef = useRef({});
   const tabViewportWidthRef = useRef(0);
   const tabScrollXRef = useRef(0);
+  const pagerRef = useRef(null);
+  const currentOffsetRef = useRef(0);
+  const reduced = useReducedMotion();
+  const [pageWidth, setPageWidth] = useState(() => Dimensions.get('window').width);
+  const scrollX = useSharedValue(0);
+
+  const activeIndex = useMemo(
+    () => Math.max(0, ALL_TABS.findIndex((t) => t.key === tab)),
+    [tab],
+  );
+
+  const scrollHandler = useAnimatedScrollHandler({
+    onScroll: (event) => { scrollX.value = event.contentOffset.x; },
+  });
+
+  const onSettle = useCallback((event) => {
+    const x = event.nativeEvent.contentOffset?.x ?? 0;
+    currentOffsetRef.current = x;
+    const key = ALL_TABS[indexFromOffset(x, pageWidth || 1, ALL_TABS.length)].key;
+    setTab((prev) => (prev === key ? prev : key));
+  }, [pageWidth]);
 
   // Device-scoped fallback key when signed out, so a signed-out user's
   // selection still persists (and can later be migrated onto their account).
@@ -106,6 +133,16 @@ export default function MyStatsScreen({ navigation, route }) {
   useEffect(() => {
     setTab(normalizeStatsTab(route?.params?.tab));
   }, [route?.params?.tab]);
+
+  // Keep the pager aligned with the active tab. Skip when the pager is already
+  // at that offset (i.e. the change came from a finger swipe, whose onSettle
+  // updated currentOffsetRef first) so we never fight the native scroll.
+  useEffect(() => {
+    const targetX = activeIndex * pageWidth;
+    if (Math.abs(currentOffsetRef.current - targetX) < 2) return;
+    currentOffsetRef.current = targetX;
+    pagerRef.current?.scrollTo?.({ x: targetX, animated: !reduced });
+  }, [activeIndex, pageWidth, reduced]);
 
   useEffect(() => {
     if (route?.params?.roundKey) {
@@ -263,12 +300,6 @@ export default function MyStatsScreen({ navigation, route }) {
     const frame = requestAnimationFrame(() => scrollTabIntoView(tab));
     return () => cancelAnimationFrame(frame);
   }, [scrollTabIntoView, tab]);
-
-  // New tab content starts at the top — jump there without animating so the
-  // Reveal transition is the only motion on a tab switch.
-  useEffect(() => {
-    contentScrollRef.current?.scrollTo({ y: 0, animated: false });
-  }, [tab]);
 
   const selected = useMemo(
     () => (myRounds ? resolveSelection(myRounds, overrides) : []),
@@ -441,66 +472,99 @@ export default function MyStatsScreen({ navigation, route }) {
     />
   );
 
-  // ── Empty: every round deselected ──
-  if (selected.length === 0 && tab !== 'reportCard' && tab !== 'handicap') {
-    return (
-      <ScreenContainer style={s.container} edges={['top', 'bottom']}>
-        {Header}
-        {TabBar}
-        <View style={s.center}>
+  const renderPage = (key) => {
+    const needsRounds = key === 'coach' || key === 'shots' || key === 'form' || key === 'breakdown';
+    if (needsRounds && selected.length === 0) {
+      return (
+        <View style={[s.page, { width: pageWidth }, s.pageEmpty]}>
           <Feather name="filter" size={44} color={theme.text.muted} />
           <Text style={s.emptyText}>No rounds selected.</Text>
           <PressableScale style={s.retryBtn} onPress={() => setSelectorOpen(true)}>
             <Text style={s.retryText}>Choose rounds</Text>
           </PressableScale>
         </View>
-        {Selector}
-      </ScreenContainer>
+      );
+    }
+    let body = null;
+    if (key === 'reportCard') {
+      body = (
+        <RoundReportCard
+          card={reportCard}
+          rounds={myRounds}
+          selectedKey={reportRoundKey}
+          onSelect={setReportRoundKey}
+          onOpenRound={openReportRound}
+        />
+      );
+    } else if (key === 'coach') {
+      body = (
+        <CoachTab
+          stats={stats}
+          onInfo={onInfo}
+          targetHandicap={targetHandicap}
+          onChangeTarget={() => setPickerOpen(true)}
+          focus={coachFocus}
+          focusVerdict={coachFocusVerdict}
+          onCommitFocus={onCommitFocus}
+          onEndFocus={onEndFocus}
+        />
+      );
+    } else if (key === 'form') {
+      body = <FormTab stats={stats} n={n} onChangeN={setN} onInfo={onInfo} />;
+    } else if (key === 'breakdown') {
+      body = <BreakdownTab stats={stats} onInfo={onInfo} onSelectCourse={openCourseStats} />;
+    } else if (key === 'shots') {
+      body = <ShotsTab stats={stats} onInfo={onInfo} targetHandicap={targetHandicap} onChangeTarget={() => setPickerOpen(true)} />;
+    } else if (key === 'handicap') {
+      body = (
+        <HandicapTab
+          myRounds={myRounds}
+          profileHandicap={profileHandicap}
+          onInfo={onInfo}
+          onApplied={setProfileHandicap}
+          excludedKeys={handicapExclusions}
+          onToggleExcluded={toggleHandicapExclusion}
+        />
+      );
+    }
+    return (
+      <ScrollView
+        style={[s.page, { width: pageWidth }]}
+        contentContainerStyle={s.scroll}
+        showsVerticalScrollIndicator={false}
+      >
+        {body}
+      </ScrollView>
     );
-  }
+  };
 
   return (
     <ScreenContainer style={s.container} edges={['top', 'bottom']}>
       {Header}
       {TabBar}
-      <ScrollView ref={contentScrollRef} contentContainerStyle={s.scroll}>
-        <Reveal key={tab} style={s.revealWrap}>
-          {tab === 'reportCard' && (
-            <RoundReportCard
-              card={reportCard}
-              rounds={myRounds}
-              selectedKey={reportRoundKey}
-              onSelect={setReportRoundKey}
-              onOpenRound={openReportRound}
-            />
-          )}
-          {tab === 'coach' && (
-            <CoachTab
-              stats={stats}
-              onInfo={onInfo}
-              targetHandicap={targetHandicap}
-              onChangeTarget={() => setPickerOpen(true)}
-              focus={coachFocus}
-              focusVerdict={coachFocusVerdict}
-              onCommitFocus={onCommitFocus}
-              onEndFocus={onEndFocus}
-            />
-          )}
-          {tab === 'form' && <FormTab stats={stats} n={n} onChangeN={setN} onInfo={onInfo} />}
-          {tab === 'breakdown' && <BreakdownTab stats={stats} onInfo={onInfo} onSelectCourse={openCourseStats} />}
-          {tab === 'shots' && <ShotsTab stats={stats} onInfo={onInfo} targetHandicap={targetHandicap} onChangeTarget={() => setPickerOpen(true)} />}
-          {tab === 'handicap' && (
-            <HandicapTab
-              myRounds={myRounds}
-              profileHandicap={profileHandicap}
-              onInfo={onInfo}
-              onApplied={setProfileHandicap}
-              excludedKeys={handicapExclusions}
-              onToggleExcluded={toggleHandicapExclusion}
-            />
-          )}
-        </Reveal>
-      </ScrollView>
+      <Animated.ScrollView
+        ref={pagerRef}
+        horizontal
+        pagingEnabled
+        showsHorizontalScrollIndicator={false}
+        scrollEventThrottle={16}
+        onScroll={scrollHandler}
+        onMomentumScrollEnd={onSettle}
+        onScrollEndDrag={onSettle}
+        style={s.pager}
+        contentContainerStyle={s.pagerContent}
+        testID="my-stats-pager"
+        onLayout={(event) => {
+          const w = event.nativeEvent.layout.width;
+          if (w && Math.abs(w - pageWidth) > 1) setPageWidth(w);
+        }}
+      >
+        {ALL_TABS.map((t) => (
+          <View key={t.key} style={{ width: pageWidth }}>
+            {renderPage(t.key)}
+          </View>
+        ))}
+      </Animated.ScrollView>
       <StatDetailSheet
         visible={!!infoKey}
         onClose={() => setInfoKey(null)}
@@ -577,6 +641,10 @@ function makeStyles(theme) {
     retryText: { ...theme.typography.subhead, color: theme.text.inverse },
     scroll: { padding: theme.spacing.lg, gap: theme.spacing.lg },
     revealWrap: { gap: theme.spacing.lg },
+    pager: { flex: 1 },
+    pagerContent: { alignItems: 'stretch' },
+    page: { flex: 1 },
+    pageEmpty: { alignItems: 'center', justifyContent: 'center', gap: theme.spacing.md, padding: theme.spacing.xl },
   });
 }
 

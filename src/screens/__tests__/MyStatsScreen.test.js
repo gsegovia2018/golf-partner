@@ -304,6 +304,22 @@ describe('MyStatsScreen tab strip', () => {
     })).toBe(0);
   });
 
+  test('shows the empty state inside a stats page when no rounds are selected', async () => {
+    const { resolveSelection } = require('../../store/personalStats');
+    resolveSelection.mockReturnValue([]); // every round deselected
+    const { findAllByText, queryByText } = renderScreen({ params: { tab: 'coach' } });
+
+    // All six pages mount at once (lazy mounting is a later task), so every
+    // rounds-dependent tab (coach/shots/form/breakdown) shows its own empty
+    // state — assert at least one is present rather than a single instance.
+    try {
+      expect(await findAllByText('No rounds selected.')).not.toHaveLength(0);
+      expect(queryByText('Coach content')).toBeNull();
+    } finally {
+      resolveSelection.mockImplementation((rounds) => rounds); // reset for other tests
+    }
+  });
+
   describe('indexFromOffset', () => {
     test('rounds the offset to the nearest page index', () => {
       expect(indexFromOffset(0, 390, 6)).toBe(0);
