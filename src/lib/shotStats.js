@@ -95,9 +95,12 @@ export function clubAverages(shots) {
 // catalog nominal. `overrides` is an optional Map|object of club → metres.
 // Returns { club, label, distance, source: 'manual'|'personal'|'nominal', delta }
 // or null (no target, or an empty bag). `delta` is signed target − distance.
-export function recommendClub(targetMeters, bag, shots = [], overrides = null) {
+// `opts.excludeDriver` drops the driver from the candidates — the driver is a
+// tee-only club, so it's never recommended for a shot from the fairway.
+export function recommendClub(targetMeters, bag, shots = [], overrides = null, opts = {}) {
   if (!Number.isFinite(targetMeters) || targetMeters <= 0) return null;
-  const clubs = sanitizeBag(bag).filter((k) => k !== 'putter');
+  let clubs = sanitizeBag(bag).filter((k) => k !== 'putter');
+  if (opts.excludeDriver) clubs = clubs.filter((k) => k !== 'driver');
   if (!clubs.length) return null;
   const averages = clubAverages(shots);
   const overrideFor = (c) => {

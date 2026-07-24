@@ -71,7 +71,7 @@ export function HoleFlyover({
     const suppressRec = gpsOn && haveFix && offCourse; // real fix, but not on the course
     let club = null;
     if (!onGreen && !suppressRec) {
-      const rec = recommendClub(cond.plays(meters), appSettings.bag, getShots(), appSettings.clubDistances);
+      const rec = recommendClub(cond.plays(meters), appSettings.bag, getShots(), appSettings.clubDistances, { excludeDriver: true });
       club = rec ? clubLabel(rec.club) : null;
     }
     return { meters, club };

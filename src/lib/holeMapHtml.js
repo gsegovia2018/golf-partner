@@ -152,7 +152,12 @@ function draw() {
   drawShots();
   renderLast();
 
-  const from = valid(anchor.pos) ? anchor.pos : null;
+  // Measuring line starts at the live GPS fix while on the course. Off GPS
+  // (planning mode) it starts at the last logged shot — where the ball actually
+  // is — falling back to the tee only when nothing's been played yet.
+  const lastPt = (shots && shots.length) ? [shots[shots.length-1].lat, shots[shots.length-1].lng] : null;
+  const from = onCourse() && valid(anchor.pos) ? anchor.pos
+    : (valid(lastPt) ? lastPt : (valid(anchor.pos) ? anchor.pos : null));
   const cc = valid(g.c) ? g.c : [map.getCenter().lat, map.getCenter().lng];
   if (!targets.length) targets = [from ? [(from[0]+cc[0])/2,(from[1]+cc[1])/2] : cc.slice()];
   if (onCourse()) add(L.circleMarker(from, { radius:8, color:'#fff', weight:3, fillColor:'#2f6bff', fillOpacity:1 }));
@@ -243,6 +248,20 @@ function chipMk(a, b, d){
   const mid = [(a[0]+b[0])/2, (a[1]+b[1])/2];
   return L.marker(mid, { interactive:false, icon: L.divIcon({ className:'', html:'<div class="dchip">'+disp(d)+' '+U+'</div>', iconSize:[0,0] }) });
 }
+// A line touching an aim ring stops at its perimeter (aimed at the center)
+// rather than running to the center dot. Returns the point RING_R px out from
+// the center toward the far point, in latlng; center-to-center dists unchanged.
+const RING_R = 17; // aim-ring radius in px
+function edgePt(center, toward){
+  const c = map.latLngToLayerPoint(LL(center));
+  const t = map.latLngToLayerPoint(LL(toward));
+  const dx = t.x - c.x, dy = t.y - c.y;
+  const len = Math.hypot(dx, dy);
+  if (len <= RING_R) return center; // rings overlapping; don't invert the segment
+  const p = c.add(L.point(dx/len*RING_R, dy/len*RING_R));
+  const ll = map.layerPointToLatLng(p);
+  return [ll.lat, ll.lng];
+}
 function redrawLines(from, g, cc){
   lineLayers.forEach(l=>map.removeLayer(l)); lineLayers=[];
   const mk=(l)=>{lineLayers.push(l.addTo(map));};
@@ -253,13 +272,17 @@ function redrawLines(from, g, cc){
   if (from) pts.sort((a,b)=>dist(from,a)-dist(from,b));
   else if (valid(cc)) pts.sort((a,b)=>dist(cc,b)-dist(cc,a));
   const chain = from ? [from].concat(pts) : pts;
+  const isRing = (i) => from ? i > 0 : true; // chain[0] is the anchor when from exists
   for (let i=1;i<chain.length;i++){
-    mk(L.polyline([chain[i-1],chain[i]],{color:'#fff',weight:4}));
+    const a = isRing(i-1) ? edgePt(chain[i-1], chain[i]) : chain[i-1];
+    const b = isRing(i)   ? edgePt(chain[i], chain[i-1]) : chain[i];
+    mk(L.polyline([a,b],{color:'#fff',weight:4}));
     mk(chipMk(chain[i-1], chain[i], dist(chain[i-1],chain[i])));
   }
   if (valid(cc) && chain.length){
     const last = chain[chain.length-1];
-    mk(L.polyline([last,cc],{color:'#fff',weight:3,dashArray:'3 8'}));
+    const a = isRing(chain.length-1) ? edgePt(last, cc) : last;
+    mk(L.polyline([a,cc],{color:'#fff',weight:3,dashArray:'3 8'}));
     mk(chipMk(last, cc, dist(last, cc)));
   }
   // HUD always measures from the aim ring nearest the green — refresh live.
@@ -269,7 +292,8 @@ function redrawLines(from, g, cc){
   // and a two-ring chain can be logged as a start->end segment.
   if (aim) post({ type:'aim', pos: aim, rings: pts.map(p => p.slice()) });
 }
-function ringIcon(){ return L.divIcon({ className:'', html:'<div style="width:34px;height:34px;border:4px solid #fff;border-radius:50%;box-shadow:0 0 0 1px rgba(0,0,0,.4)"></div>', iconSize:[34,34], iconAnchor:[17,17] }); }
+// Big white ring is the grab target; the small center dot marks the exact spot.
+function ringIcon(){ return L.divIcon({ className:'', html:'<div style="position:relative;width:34px;height:34px;border:3px solid #fff;border-radius:50%;box-shadow:0 0 0 1px rgba(0,0,0,.4)"><div style="position:absolute;top:50%;left:50%;width:6px;height:6px;margin:-3px 0 0 -3px;border-radius:50%;background:#fff;box-shadow:0 0 0 1px rgba(0,0,0,.5)"></div></div>', iconSize:[34,34], iconAnchor:[17,17] }); }
 
 // Top-right F/C/B box. Measures from the aim ring nearest the green (src),
 // so dragging the white ring live-updates the numbers. Falls back to the
@@ -278,11 +302,18 @@ function hud(src, g){
   const h = document.getElementById('hud');
   const from = valid(src) ? src : (targets[targets.length-1] || anchor.pos);
   const d = (p) => valid(p) && valid(from) ? dist(from, p) : null;
-  // Static hole yardage: tee to center of green, independent of the aim ring.
-  const td = valid(hole.tee) && valid(g.c) ? dist(hole.tee, g.c) : null;
+  // Top row: hole yardage to the green center, independent of the aim ring.
+  // From the tee normally; in planning mode (no live GPS) once a shot's been
+  // played, from the last shot instead.
+  const list = shots || [];
+  const lastPt = list.length ? [list[list.length-1].lat, list[list.length-1].lng] : null;
+  const teeOnly = list.length === 1 && !list[0].club; // a lone seeded tee doesn't count
+  const fromLast = !onCourse() && valid(lastPt) && !teeOnly;
+  const topFrom = fromLast ? lastPt : hole.tee;
+  const td = valid(topFrom) && valid(g.c) ? dist(topFrom, g.c) : null;
   h.innerHTML =
     '<div class="tri">'+
-      '<div class="row hole"><span class="lbl">Tee</span><span class="sm">'+disp(td)+'</span><span class="u">'+U+'</span></div>'+
+      '<div class="row hole"><span class="lbl">'+(fromLast ? 'Last' : 'Tee')+'</span><span class="sm">'+disp(td)+'</span><span class="u">'+U+'</span></div>'+
       '<div class="row"><span class="lbl">Back</span><span class="sm">'+disp(d(g.b))+'</span></div>'+
       '<div class="row"><span class="lbl"></span><span class="bign">'+disp(d(g.c))+'</span><span class="u">'+U+'</span></div>'+
       '<div class="row"><span class="lbl">Front</span><span class="sm">'+disp(d(g.f))+'</span></div>'+
