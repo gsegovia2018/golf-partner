@@ -8,6 +8,8 @@ import { toneColor } from './metricTone';
 
 const EASE_OUT = Easing.bezier(0.23, 1, 0.32, 1);
 const STAGGER_MS = 40;
+const FILL_MS = 400;
+const TICK_MS = 150;
 
 // The bar fill sweeps in from the left on mount (scaleX 0→1, origin left),
 // staggered by row position within its section. Reduced motion ⇒ static
@@ -19,12 +21,32 @@ function BarFill({ style, delay, testID }) {
 
   useEffect(() => {
     if (!reduced) {
-      scaleX.value = withDelay(delay, withTiming(1, { duration: 400, easing: EASE_OUT }));
+      scaleX.value = withDelay(delay, withTiming(1, { duration: FILL_MS, easing: EASE_OUT }));
     }
   }, [reduced, scaleX, delay]);
 
   const animatedStyle = useAnimatedStyle(() => ({
     transform: [{ scaleX: scaleX.value }],
+  }));
+
+  return <Animated.View testID={testID} style={[style, animatedStyle]} />;
+}
+
+// The gold target tick fades in only after its row's fill has landed
+// (delay = row stagger + fill duration). Mirrors TargetMeterRow's TickFade.
+// Own component so the hooks stay out of the "has a tick" conditional.
+function TickFade({ style, delay, testID }) {
+  const reduced = useReducedMotion();
+  const opacity = useSharedValue(reduced ? 1 : 0);
+
+  useEffect(() => {
+    if (!reduced) {
+      opacity.value = withDelay(delay, withTiming(1, { duration: TICK_MS }));
+    }
+  }, [reduced, opacity, delay]);
+
+  const animatedStyle = useAnimatedStyle(() => ({
+    opacity: opacity.value,
   }));
 
   return <Animated.View testID={testID} style={[style, animatedStyle]} />;
@@ -48,13 +70,17 @@ function barFillStyle(theme, tone) {
 // `first` drops the hairline separator; `rowIndex` staggers the fill sweep.
 export default function BreakdownRow({
   label, value, secondary, tone = 'neutral', dim = false, first = false,
-  barRatio, rowIndex = 0, testID,
+  barRatio, targetRatio, rowIndex = 0, testID,
 }) {
   const { theme } = useTheme();
   const s = useMemo(() => makeStyles(theme), [theme]);
   const valueColor = dim ? theme.text.muted : toneColor(theme, tone);
   const hasTrack = typeof barRatio === 'number' && Number.isFinite(barRatio);
   const fillPct = hasTrack && !dim ? Math.min(1, Math.max(0, barRatio)) * 100 : 0;
+  const showTick = hasTrack && !dim
+    && typeof targetRatio === 'number' && Number.isFinite(targetRatio);
+  const tickPct = showTick ? Math.min(1, Math.max(0, targetRatio)) * 100 : 0;
+  const tickColor = theme.isDark ? theme.semantic.winner.dark : theme.semantic.winner.light;
 
   return (
     <View style={[s.row, !first && s.rowDivider, dim && s.rowDim]}>
@@ -70,15 +96,24 @@ export default function BreakdownRow({
       </View>
       <View style={s.barSlot}>
         {hasTrack ? (
-          <View style={s.track} testID={testID}>
-            {fillPct > 0 ? (
-              <BarFill
-                testID={testID ? `${testID}-fill` : undefined}
-                delay={rowIndex * STAGGER_MS}
-                style={[s.fill, { width: `${fillPct}%` }, barFillStyle(theme, tone)]}
+          <>
+            <View style={s.track} testID={testID}>
+              {fillPct > 0 ? (
+                <BarFill
+                  testID={testID ? `${testID}-fill` : undefined}
+                  delay={rowIndex * STAGGER_MS}
+                  style={[s.fill, { width: `${fillPct}%` }, barFillStyle(theme, tone)]}
+                />
+              ) : null}
+            </View>
+            {showTick ? (
+              <TickFade
+                testID={testID ? `${testID}-tick` : undefined}
+                delay={rowIndex * STAGGER_MS + FILL_MS}
+                style={[s.tick, { left: `${tickPct}%`, backgroundColor: tickColor }]}
               />
             ) : null}
-          </View>
+          </>
         ) : null}
       </View>
       <Text style={[s.value, { color: valueColor }]} numberOfLines={2}>
@@ -121,12 +156,23 @@ function makeStyles(theme) {
     barSlot: {
       flex: 1,
       minWidth: 0,
+      height: 14,
+      justifyContent: 'center',
     },
     track: {
       height: 8,
+      flexBasis: 'auto',
       borderRadius: 999,
       overflow: 'hidden',
       backgroundColor: theme.bg.secondary,
+    },
+    tick: {
+      position: 'absolute',
+      top: 0,
+      width: 2.5,
+      height: 14,
+      borderRadius: 1.25,
+      marginLeft: -1.25,
     },
     fill: {
       height: '100%',

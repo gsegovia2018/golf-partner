@@ -21,6 +21,7 @@ jest.mock('react-native-reanimated', () => {
 });
 
 const wrap = (ui) => <ThemeProvider>{ui}</ThemeProvider>;
+const pct = (styleValue) => parseFloat(styleValue);
 
 beforeEach(() => {
   mockReducedMotion = false;
@@ -102,5 +103,65 @@ describe('BreakdownRow', () => {
     ));
 
     expect(StyleSheet.flatten(getByTestId('bar-fill').props.style).width).toBe('100%');
+  });
+
+  test('renders a gold target tick at the normalized position', () => {
+    const { getByTestId } = render(wrap(
+      <BreakdownRow label="Par 4s" value="1.6 pts" barRatio={0.75} targetRatio={0.5} testID="bar" first />
+    ));
+
+    const tick = StyleSheet.flatten(getByTestId('bar-tick').props.style);
+    expect(pct(tick.left)).toBeCloseTo(50, 5);
+  });
+
+  test('draws no tick without a targetRatio', () => {
+    const { queryByTestId } = render(wrap(
+      <BreakdownRow label="Par 4s" value="1.6 pts" barRatio={0.75} testID="bar" first />
+    ));
+
+    expect(queryByTestId('bar-tick')).toBeNull();
+  });
+
+  test('keeps the tick when the fill clamps to empty', () => {
+    const { getByTestId, queryByTestId } = render(wrap(
+      <BreakdownRow label="SG" value="-0.2" barRatio={0} targetRatio={0.4} testID="bar" first />
+    ));
+
+    expect(queryByTestId('bar-fill')).toBeNull();
+    const tick = StyleSheet.flatten(getByTestId('bar-tick').props.style);
+    expect(pct(tick.left)).toBeCloseTo(40, 5);
+  });
+
+  test('draws no tick on a dim row even with a targetRatio', () => {
+    const { queryByTestId } = render(wrap(
+      <BreakdownRow label="Miss left" value="1.2" barRatio={0.6} targetRatio={0.5} dim testID="bar" first />
+    ));
+
+    expect(queryByTestId('bar-tick')).toBeNull();
+  });
+
+  test('draws no tick when there is no track', () => {
+    const { queryByTestId } = render(wrap(
+      <BreakdownRow label="Sand-save rate" value="-" targetRatio={0.5} testID="bar" first />
+    ));
+
+    expect(queryByTestId('bar-tick')).toBeNull();
+  });
+
+  test('clamps an out-of-range targetRatio into 0..1', () => {
+    const { getByTestId } = render(wrap(
+      <BreakdownRow label="Pars" value="9" barRatio={0.5} targetRatio={1.4} testID="bar" first />
+    ));
+
+    expect(pct(StyleSheet.flatten(getByTestId('bar-tick').props.style).left)).toBeCloseTo(100, 5);
+  });
+
+  test('renders the tick statically under reduced motion', () => {
+    mockReducedMotion = true;
+    const { getByTestId } = render(wrap(
+      <BreakdownRow label="Par 5s" value="2 pts" barRatio={1} targetRatio={0.5} testID="bar" first />
+    ));
+
+    expect(StyleSheet.flatten(getByTestId('bar-tick').props.style).opacity).toBe(1);
   });
 });
