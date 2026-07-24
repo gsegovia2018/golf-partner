@@ -303,7 +303,7 @@ function renderLast(){
     : '';
   el.className = 'lastbox';
   el.innerHTML =
-    '<div class="ll">Last shot &rarr; green</div>'+
+    '<div class="ll">To green</div>'+
     '<div class="ld"><span class="bn">'+disp(lastShot.meters)+'</span><span class="u">'+U+'</span></div>'+
     club;
 }
