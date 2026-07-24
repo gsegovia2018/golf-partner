@@ -42,6 +42,7 @@ function statsFixture() {
 }
 
 const width = (el) => StyleSheet.flatten(el.props.style).width;
+const pct = (styleValue) => parseFloat(styleValue);
 
 describe('BreakdownTab magnitude bars', () => {
   test('normalizes fill widths against the section max', async () => {
@@ -93,19 +94,22 @@ describe('BreakdownTab magnitude bars', () => {
     expect(width(getByTestId('breakdown-bar-bounceBack-fill'))).toBe('25%');
   });
 
-  test('a solo count row caps at two-thirds instead of a misleading full bar', async () => {
+  test('a solo count row scales against its own target and shows a tick', async () => {
     const stats = {
       ...statsFixture(),
       bounceBack: { rate: 25, opportunities: 8 },
       bunkerVisits: { avgPerRound: 1.2, holesWithSand: 8 },
     };
-    const { findByTestId } = render(wrap(
+    const { findByTestId, getByTestId } = render(wrap(
       <BreakdownTab stats={stats} onInfo={() => {}} />
     ));
 
-    // Bunker visits is the only count row among recovery's rates — with no
-    // comparable sibling its bar caps at value / (value * 1.5).
-    expect(width(await findByTestId('breakdown-bar-bunkerVisits-fill'))).toBe(`${(2 / 3) * 100}%`);
+    // Bunker visits is the only count row among recovery's rates, but it now
+    // has a target (1.5) to scale against: 1.2 / max(1.2, 1.5) = 80%, with the
+    // target tick pinned at the scale max.
+    expect(width(await findByTestId('breakdown-bar-bunkerVisits-fill'))).toBe('80%');
+    expect(pct(StyleSheet.flatten(getByTestId('breakdown-bar-bunkerVisits-tick').props.style).left))
+      .toBeCloseTo(100, 5);
   });
 
   test('count and average putting rows normalize within their own groups', async () => {
@@ -153,5 +157,28 @@ describe('BreakdownTab magnitude bars', () => {
     // 0 tries is "no data", not a 0% rate — no magnitude, so no bar.
     expect(await findByText('Sand-save rate')).toBeTruthy();
     expect(queryByTestId('breakdown-bar-sandSaves-fill')).toBeNull();
+  });
+
+  test('vs-your-avg rows share one baseline reference tick across the group', async () => {
+    const { findByTestId, getByTestId } = render(wrap(
+      <BreakdownTab stats={statsFixture()} onInfo={() => {}} />
+    ));
+
+    // Baseline = 60 pts / 36 holes = 1.667; course group scale = par5 (2).
+    // Every course row ticks at the same 1.667 / 2 = 83.33%.
+    const par3 = pct(StyleSheet.flatten((await findByTestId('breakdown-bar-par3-tick')).props.style).left);
+    const par5 = pct(StyleSheet.flatten(getByTestId('breakdown-bar-par5-tick').props.style).left);
+    expect(par3).toBeCloseTo(83.33, 1);
+    expect(par5).toBeCloseTo(83.33, 1);
+    expect(par3).toBe(par5);
+  });
+
+  test('penalty drag has no target tick (target is the zero origin)', async () => {
+    const { findByTestId, queryByTestId } = render(wrap(
+      <BreakdownTab stats={statsFixture()} onInfo={() => {}} />
+    ));
+
+    expect(await findByTestId('breakdown-bar-penaltyDrag-fill')).toBeTruthy();
+    expect(queryByTestId('breakdown-bar-penaltyDrag-tick')).toBeNull();
   });
 });

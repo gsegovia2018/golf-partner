@@ -169,37 +169,56 @@ function PatternRows({ rows }) {
     if (row.dim || !isNumber(row.magnitude)) return;
     const tag = row.barGroup ?? 'pts';
     if (tag === 'pct' || tag === 'drag') return; // absolute scales
-    const entry = groups[tag] ?? { max: 0, size: 0 };
-    entry.max = Math.max(entry.max, Math.abs(row.magnitude));
+    const entry = groups[tag] ?? { scale: 0, size: 0 };
+    entry.scale = Math.max(
+      entry.scale,
+      Math.abs(row.magnitude),
+      isNumber(row.target) ? Math.abs(row.target) : 0
+    );
     entry.size += 1;
     groups[tag] = entry;
   });
   return (
     <View>
-      {rows.map(({ key, magnitude, barGroup, ...row }, index) => (
+      {rows.map(({ key, magnitude, barGroup, target, ...row }, index) => (
         <BreakdownRow
           key={key}
           {...row}
           first={index === 0}
           rowIndex={index}
           testID={`breakdown-bar-${key}`}
-          barRatio={barRatioFor({ magnitude, barGroup, dim: row.dim }, groups)}
+          barRatio={barRatioFor({ magnitude, barGroup, target, dim: row.dim }, groups)}
+          targetRatio={targetRatioFor({ magnitude, barGroup, target, dim: row.dim }, groups)}
         />
       ))}
     </View>
   );
 }
 
-function barRatioFor({ magnitude, barGroup, dim }, groups) {
+function barRatioFor({ magnitude, barGroup, target, dim }, groups) {
   if (!isNumber(magnitude)) return undefined;
   const tag = barGroup ?? 'pts';
   const size = Math.abs(magnitude);
   if (tag === 'pct') return clamp01(size / 100);
   if (tag === 'drag') return clamp01(size / PENALTY_DRAG_SCALE);
   const entry = groups[tag];
-  if (!entry || entry.max <= 0) return 0;
-  if (tag !== 'pts' && entry.size === 1 && !dim) return SOLO_COUNT_RATIO;
-  return clamp01(size / entry.max);
+  if (!entry || entry.scale <= 0) return 0;
+  if (tag !== 'pts' && entry.size === 1 && !dim && !isNumber(target)) return SOLO_COUNT_RATIO;
+  return clamp01(size / entry.scale);
+}
+
+// Tick position on the SAME scale as barRatioFor. Only rows with a finite,
+// non-zero reference target get a tick; 'drag' rows compare against a zero
+// origin (no useful tick) and dim rows never show one.
+function targetRatioFor({ magnitude, barGroup, target, dim }, groups) {
+  if (dim || !isNumber(magnitude) || !isNumber(target) || target === 0) return undefined;
+  const tag = barGroup ?? 'pts';
+  if (tag === 'drag') return undefined;
+  const size = Math.abs(target);
+  if (tag === 'pct') return clamp01(size / 100);
+  const entry = groups[tag];
+  if (!entry || entry.scale <= 0) return undefined;
+  return clamp01(size / entry.scale);
 }
 
 function clamp01(value) {
@@ -315,6 +334,7 @@ function timingNineRow(key, label, value, holesCount, baseline) {
       : 'No sample yet',
     tone: toneFromDelta(delta, { sample: holesCount, minSample: 6 }),
     dim: holesCount === 0,
+    target: isNumber(baseline) ? baseline : undefined,
   };
 }
 
@@ -366,6 +386,7 @@ function makeDrivePatternRows(driveImpact, baseline) {
       magnitude: isNumber(row.avgPoints) ? row.avgPoints : 0,
       secondary: `${signed(row.avgVsPar)} vs par · ${formatPercent(row.penaltyRate)} pen · ${comparisonSecondary(row.holes, baseline, delta)}`,
       tone: toneFromDelta(delta, { sample: row.holes, minSample: 6 }),
+      target: isNumber(baseline) ? baseline : undefined,
     };
   }).filter(Boolean);
 }
@@ -383,6 +404,7 @@ function makeApproachPatternRows(approachImpact, baseline) {
       magnitude: isNumber(row.avgPoints) ? row.avgPoints : 0,
       secondary: `${signed(row.avgVsPar)} vs par · ${formatPercent(row.girRate)} GIR · ${comparisonSecondary(row.holes, baseline, delta)}`,
       tone: toneFromDelta(delta, { sample: row.holes, minSample: 6 }),
+      target: isNumber(baseline) ? baseline : undefined,
     };
   }).filter(Boolean);
 }
@@ -449,6 +471,7 @@ function makePuttingPatternRows({ shots, puttDive }) {
           minSample: 9,
         }),
         dim: shots.putts.holes === 0,
+        target: 2,
       }
     );
   }
@@ -470,6 +493,7 @@ function makePuttingPatternRows({ shots, puttDive }) {
           minSample: 9,
         }),
         dim: !isNumber(puttDive.twoPuttPct),
+        target: 60,
       },
       {
         key: 'girPutts',
@@ -486,6 +510,7 @@ function makePuttingPatternRows({ shots, puttDive }) {
           minSample: 6,
         }),
         dim: puttDive.girPuttsAvg == null,
+        target: 2,
       },
       {
         key: 'nonGirPutts',
@@ -502,6 +527,7 @@ function makePuttingPatternRows({ shots, puttDive }) {
           minSample: 6,
         }),
         dim: puttDive.nonGirPuttsAvg == null,
+        target: 2,
       },
       {
         key: 'onePuttSave',
@@ -520,6 +546,7 @@ function makePuttingPatternRows({ shots, puttDive }) {
           minSample: 6,
         }),
         dim: (puttDive.onePuttSave?.attempts ?? 0) === 0,
+        target: 30,
       }
     );
   }
@@ -549,6 +576,7 @@ function makeRecoveryRows({
         minSample: 6,
       }),
       dim: bounceBack.opportunities === 0,
+      target: 30,
     } : null,
     scrambling ? {
       key: 'scrambling',
@@ -565,6 +593,7 @@ function makeRecoveryRows({
         minSample: 6,
       }),
       dim: scrambling.missedGir === 0,
+      target: 35,
     } : null,
     sandSaves ? {
       key: 'sandSaves',
@@ -575,6 +604,7 @@ function makeRecoveryRows({
       secondary: sampleSecondary([sampleText(sandSaves.attempts, 'tries')], sandSaves.attempts, 6),
       tone: toneFromRate(sandSaves.rate, 0.4, { sample: sandSaves.attempts, minSample: 6 }),
       dim: sandSaves.rate == null,
+      target: 40,
     } : null,
     upAndDown ? {
       key: 'upAndDown',
@@ -592,6 +622,7 @@ function makeRecoveryRows({
       secondary: sampleSecondary([sampleText(upAndDown.attempts, 'tries')], upAndDown.attempts, 6),
       tone: toneFromRate(upAndDown.rate, 0.45, { sample: upAndDown.attempts, minSample: 6 }),
       dim: upAndDown.rate == null,
+      target: 45,
     } : null,
     bunkerVisits ? {
       key: 'bunkerVisits',
@@ -611,6 +642,7 @@ function makeRecoveryRows({
         minSample: 6,
       }),
       dim: bunkerVisits.avgPerRound === 0,
+      target: 1.5,
     } : null,
   ].filter(Boolean);
 }
@@ -629,6 +661,7 @@ function pointPatternRow(key, label, row, baseline) {
       : 'No sample yet',
     tone: toneFromDelta(delta, { sample: holesCount, minSample: 6 }),
     dim: holesCount === 0,
+    target: isNumber(baseline) ? baseline : undefined,
   };
 }
 
