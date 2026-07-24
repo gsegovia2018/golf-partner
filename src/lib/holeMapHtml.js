@@ -44,8 +44,9 @@ export function buildHoleMapHtml(data) {
   .lastbox .ld{display:flex;align-items:baseline;gap:4px;margin-top:1px}
   .lastbox .bn{font-size:26px;font-weight:800;line-height:1.05;font-variant-numeric:tabular-nums}
   .lastbox .u{font-size:12px;font-weight:600;color:#9fb0a4}
-  .lastbox .lc{margin-top:5px;display:inline-flex;align-items:center;gap:5px;background:#57ae5b;color:#0a0d10;font-size:12px;font-weight:800;padding:2px 9px;border-radius:999px}
-  .lastbox .lc svg{width:11px;height:11px}
+  .lastbox .rl{font-size:8px;font-weight:800;letter-spacing:.09em;color:#8fa6ad;text-transform:uppercase;margin-top:6px}
+  .lastbox .lc{margin-top:2px;display:inline-flex;align-items:center;gap:5px;background:#57ae5b;color:#0a0d10;font-size:13px;font-weight:800;padding:3px 10px;border-radius:999px}
+  .lastbox .lc svg{width:13px;height:13px}
   .hint{position:absolute;bottom:16px;left:50%;transform:translateX(-50%);background:rgba(14,22,28,.85);color:#fff;font-weight:600;font-size:13px;padding:7px 14px;border-radius:999px}
   .dchip{background:rgba(14,22,28,.88);color:#fff;font-weight:800;font-size:13px;padding:4px 11px;border-radius:999px;font-variant-numeric:tabular-nums;white-space:nowrap;border:1px solid rgba(255,255,255,.25);transform:translate(-50%,-50%);display:inline-block}
   .shotpin{width:22px;height:22px;border-radius:50%;background:#f4c04a;border:2px solid #0a0d10;color:#0a0d10;font-weight:800;font-size:12px;display:flex;align-items:center;justify-content:center;box-shadow:0 1px 3px rgba(0,0,0,.5);font-variant-numeric:tabular-nums}
@@ -310,8 +311,11 @@ function renderLast(){
   // Distance is measured live from the last logged shot to the green center.
   // The club tip comes from the host (null once the ball is on the green).
   const meters = dist(from, g.c);
+  // Golf-club glyph (shaft + head) + a "Recommended" label so it reads clearly
+  // as a club suggestion, not a marker.
   const club = lastShot && lastShot.club
-    ? '<div class="lc"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M6 22V3l12 4-12 4"/></svg>'+lastShot.club+'</div>'
+    ? '<div class="rl">Recommended</div>'
+      + '<div class="lc"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M17 4 8 14"/><path d="M8 14c-1.7 1.7-3.6 1.9-5 .9"/></svg>'+lastShot.club+'</div>'
     : '';
   el.className = 'lastbox';
   el.innerHTML =
