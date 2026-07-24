@@ -599,4 +599,10 @@ function getTabScrollTarget({
   return null;
 }
 
-export { getTabScrollTarget };
+function indexFromOffset(offsetX, width, count) {
+  if (!Number.isFinite(width) || width <= 0) return 0;
+  const raw = Math.round(offsetX / width);
+  return Math.max(0, Math.min(count - 1, raw));
+}
+
+export { getTabScrollTarget, indexFromOffset };

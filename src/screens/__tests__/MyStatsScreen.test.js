@@ -4,7 +4,7 @@ import { StyleSheet } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { ThemeProvider } from '../../theme/ThemeContext';
-import MyStatsScreen, { getTabScrollTarget } from '../MyStatsScreen';
+import MyStatsScreen, { getTabScrollTarget, indexFromOffset } from '../MyStatsScreen';
 
 jest.mock('react-native-safe-area-context', () => {
   const React = require('react');
@@ -302,6 +302,24 @@ describe('MyStatsScreen tab strip', () => {
       currentX: 120,
       edgePadding: 16,
     })).toBe(0);
+  });
+
+  describe('indexFromOffset', () => {
+    test('rounds the offset to the nearest page index', () => {
+      expect(indexFromOffset(0, 390, 6)).toBe(0);
+      expect(indexFromOffset(200, 390, 6)).toBe(1); // past halfway → next page
+      expect(indexFromOffset(780, 390, 6)).toBe(2);
+    });
+
+    test('clamps to the valid range at both ends', () => {
+      expect(indexFromOffset(-50, 390, 6)).toBe(0);
+      expect(indexFromOffset(999999, 390, 6)).toBe(5);
+    });
+
+    test('returns 0 for a non-positive width', () => {
+      expect(indexFromOffset(300, 0, 6)).toBe(0);
+      expect(indexFromOffset(300, NaN, 6)).toBe(0);
+    });
   });
 });
 
