@@ -30,6 +30,38 @@ test('defaults shotMeasuring to on', () => {
   expect(DEFAULT_APP_SETTINGS.shotMeasuring).toBe('on');
 });
 
+test('defaults handicapExcludedRounds to an empty array', () => {
+  expect(DEFAULT_APP_SETTINGS.handicapExcludedRounds).toEqual([]);
+});
+
+test('updateAppSettings replaces handicapExcludedRounds wholesale (no key-wise merge)', async () => {
+  profileStore.upsertProfile.mockResolvedValue();
+  await updateAppSettings({ handicapExcludedRounds: ['t-1:0', 't-1:1'] });
+  expect(getAppSettings().handicapExcludedRounds).toEqual(['t-1:0', 't-1:1']);
+  await updateAppSettings({ handicapExcludedRounds: ['t-2:3'] });
+  // Replaced, not merged with the previous array's entries.
+  expect(getAppSettings().handicapExcludedRounds).toEqual(['t-2:3']);
+});
+
+test('handicapExcludedRounds sanitizes non-array/non-string values', async () => {
+  profileStore.upsertProfile.mockResolvedValue();
+  await updateAppSettings({ handicapExcludedRounds: ['t-1:0', 42, null, { bad: true }, 't-1:1'] });
+  expect(getAppSettings().handicapExcludedRounds).toEqual(['t-1:0', 't-1:1']);
+
+  await updateAppSettings({ handicapExcludedRounds: 'not-an-array' });
+  // Falls back to the current (last valid) array rather than crashing consumers.
+  expect(getAppSettings().handicapExcludedRounds).toEqual(['t-1:0', 't-1:1']);
+});
+
+test('hydrate adopts a server-provided handicapExcludedRounds', async () => {
+  profileStore.loadProfile.mockResolvedValue({
+    userId: 'u1',
+    settings: { handicapExcludedRounds: ['t-9:2'] },
+  });
+  await hydrateAppSettings();
+  expect(getAppSettings().handicapExcludedRounds).toEqual(['t-9:2']);
+});
+
 test('updateAppSettings deep-merges nested groups and notifies subscribers', async () => {
   profileStore.upsertProfile.mockResolvedValue();
   const spy = jest.fn();

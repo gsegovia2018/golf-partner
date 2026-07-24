@@ -5,6 +5,7 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { ThemeProvider } from '../../theme/ThemeContext';
 import MyStatsScreen, { getTabScrollTarget, indexFromOffset } from '../MyStatsScreen';
+import { getAppSettings, updateAppSettings, __resetAppSettingsForTests } from '../../store/settingsStore';
 
 jest.mock('react-native-safe-area-context', () => {
   const React = require('react');
@@ -131,6 +132,7 @@ jest.mock('../../components/mystats/tabs/HandicapTab', () => function MockHandic
 beforeEach(() => {
   mockUser = { id: 'user-1' };
   AsyncStorage.getItem.mockResolvedValue(null);
+  __resetAppSettingsForTests();
 });
 
 function screenElement(route = {}, navigation = { goBack: jest.fn() }) {
@@ -426,32 +428,80 @@ describe('round selection persistence', () => {
 });
 
 describe('handicap exclusion persistence', () => {
+  // Persisted via the app settings store (handicapExcludedRounds), not a
+  // one-off AsyncStorage key — so it survives unmount/app restart the same
+  // way every other per-user setting does.
+  it('toggling an exclusion updates app settings and stays excluded', async () => {
+    const view = renderScreen();
+    const tabs = await view.findAllByText('Handicap');
+    fireEvent.press(tabs[0]);
+    fireEvent.press(await view.findByText('Toggle exclusion'));
+    await waitFor(() => {
+      expect(getAppSettings().handicapExcludedRounds).toEqual(['t-1:0']);
+    });
+    expect(await view.findByText('Excluded count: 1')).toBeTruthy();
+  });
+
+  it('toggling the same round again re-includes it', async () => {
+    await updateAppSettings({ handicapExcludedRounds: ['t-1:0'] });
+    const view = renderScreen();
+    const tabs = await view.findAllByText('Handicap');
+    fireEvent.press(tabs[0]);
+    expect(await view.findByText('Excluded count: 1')).toBeTruthy();
+    fireEvent.press(await view.findByText('Toggle exclusion'));
+    await waitFor(() => {
+      expect(getAppSettings().handicapExcludedRounds).toEqual([]);
+    });
+    expect(await view.findByText('Excluded count: 0')).toBeTruthy();
+  });
+
+  it('restores a stored exclusion on initial render', async () => {
+    await updateAppSettings({ handicapExcludedRounds: ['t-1:0'] });
+    const view = renderScreen();
+    const tabs = await view.findAllByText('Handicap');
+    fireEvent.press(tabs[0]);
+    expect(await view.findByText('Excluded count: 1')).toBeTruthy();
+  });
+});
+
+describe('handicap exclusion legacy migration', () => {
+  // Exclusions used to live in a per-device AsyncStorage key
+  // (@handicap_round_exclusions:<userId>) before they moved into the synced
+  // app settings store. These tests exercise the real AsyncStorage
+  // round-trip, so restore the mock's real per-key read against its
+  // in-memory backing store (the file-level beforeEach forces getItem to
+  // resolve null).
   beforeEach(async () => {
     await AsyncStorage.clear();
-    // These tests are about storage round-trips, so restore the real
-    // per-key read against the mock's in-memory backing store (the
-    // file-level beforeEach forces getItem to resolve null).
     AsyncStorage.getItem.mockImplementation((key) => (
       Promise.resolve(AsyncStorage.__INTERNAL_MOCK_STORAGE__[key] ?? null)
     ));
   });
 
-  it('persists a toggled exclusion under the user-scoped key', async () => {
-    const view = renderScreen();
-    const tabs = await view.findAllByText('Handicap');
-    fireEvent.press(tabs[0]);
-    fireEvent.press(await view.findByText('Toggle exclusion'));
-    await waitFor(async () => {
-      const raw = await AsyncStorage.getItem('@handicap_round_exclusions:user-1');
-      expect(JSON.parse(raw)).toEqual(['t-1:0']);
-    });
-  });
-
-  it('restores stored exclusions on load', async () => {
+  it('adopts a legacy exclusion into settings and deletes the legacy key', async () => {
     await AsyncStorage.setItem('@handicap_round_exclusions:user-1', JSON.stringify(['t-1:0']));
     const view = renderScreen();
     const tabs = await view.findAllByText('Handicap');
     fireEvent.press(tabs[0]);
+    await waitFor(() => {
+      expect(getAppSettings().handicapExcludedRounds).toEqual(['t-1:0']);
+    });
+    expect(await view.findByText('Excluded count: 1')).toBeTruthy();
+    await waitFor(async () => {
+      expect(await AsyncStorage.getItem('@handicap_round_exclusions:user-1')).toBeNull();
+    });
+  });
+
+  it('keeps existing settings exclusions and discards the legacy key without adopting', async () => {
+    await updateAppSettings({ handicapExcludedRounds: ['t-9:9'] });
+    await AsyncStorage.setItem('@handicap_round_exclusions:user-1', JSON.stringify(['t-1:0']));
+    const view = renderScreen();
+    const tabs = await view.findAllByText('Handicap');
+    fireEvent.press(tabs[0]);
+    await waitFor(async () => {
+      expect(await AsyncStorage.getItem('@handicap_round_exclusions:user-1')).toBeNull();
+    });
+    expect(getAppSettings().handicapExcludedRounds).toEqual(['t-9:9']);
     expect(await view.findByText('Excluded count: 1')).toBeTruthy();
   });
 });

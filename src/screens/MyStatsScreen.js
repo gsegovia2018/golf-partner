@@ -17,6 +17,8 @@ import { useTheme } from '../theme/ThemeContext';
 import { useAuth } from '../context/AuthContext';
 import { loadAllTournamentsWithFallback } from '../store/tournamentStore';
 import { loadProfile, upsertProfile } from '../store/profileStore';
+import { getAppSettings, updateAppSettings } from '../store/settingsStore';
+import { useAppSettings } from '../hooks/useAppSettings';
 import { TargetHandicapPicker } from '../components/mystats/TargetHandicapPicker';
 import { collectMyRounds, resolveSelection, computeMyStats } from '../store/personalStats';
 import { pruneShotsToRounds } from '../store/shotStore';
@@ -33,7 +35,11 @@ import { statExplainers } from '../components/mystats/statExplainers';
 import { loadFocus, saveFocus, clearFocus, archiveFocus, makeFocusCommit, focusVerdict } from '../store/coachFocus';
 
 const SELECTION_PREFIX = '@mystats_round_selection:';
-const EXCLUSIONS_PREFIX = '@handicap_round_exclusions:';
+// Legacy per-device key handicap exclusions used before they moved into the
+// synced app settings store (handicapExcludedRounds). Kept only so the load
+// effect can migrate any exclusions still sitting in it — see the migration
+// block below — then delete it.
+const LEGACY_EXCLUSIONS_PREFIX = '@handicap_round_exclusions:';
 
 // Builds the rows array for StatDetailSheet based on which infoKey is active.
 // Most keys need no rows (explainer-only). strokesGained shows per-round trend.
@@ -90,7 +96,15 @@ export default function MyStatsScreen({ navigation, route }) {
   const [targetHandicap, setTargetHandicap] = useState(null);
   const [profileHandicap, setProfileHandicap] = useState(null);
   const [pickerOpen, setPickerOpen] = useState(false);
-  const [handicapExclusions, setHandicapExclusions] = useState(() => new Set());
+  const appSettings = useAppSettings();
+  // Persisted in app settings (handicapExcludedRounds), not local state — an
+  // excluded round must stay excluded across unmount/app restart until the
+  // user re-includes it. computeHandicapIndex/handicapIndexSeries call
+  // .has() on this, so keep it a Set even though the stored form is an array.
+  const handicapExclusions = useMemo(
+    () => new Set(appSettings.handicapExcludedRounds ?? []),
+    [appSettings.handicapExcludedRounds],
+  );
   const [coachFocus, setCoachFocus] = useState(null);
 
   useEffect(() => {
@@ -187,7 +201,6 @@ export default function MyStatsScreen({ navigation, route }) {
   // Device-scoped fallback key when signed out, so a signed-out user's
   // selection still persists (and can later be migrated onto their account).
   const storageKey = `${SELECTION_PREFIX}${user?.id ?? 'local'}`;
-  const exclusionsKey = `${EXCLUSIONS_PREFIX}${user?.id ?? 'local'}`;
 
   useEffect(() => {
     setTab(normalizeStatsTab(route?.params?.tab));
@@ -249,21 +262,41 @@ export default function MyStatsScreen({ navigation, route }) {
           }
           if (raw) stored = JSON.parse(raw) || {};
         } catch (_) { /* ignore corrupt storage */ }
-        let exclusions = new Set();
+        // One-time migration: exclusions used to live in a per-device
+        // AsyncStorage key before they moved into the synced app settings
+        // store. Adopt any legacy entries once, then delete the legacy
+        // key(s) — once removed, later loads find nothing and this is a
+        // no-op, so it naturally runs at most once per device.
         try {
-          let rawEx = await AsyncStorage.getItem(exclusionsKey);
-          if (rawEx == null && user?.id) {
-            // First signed-in load on this device: adopt any signed-out exclusions.
-            const localExKey = `${EXCLUSIONS_PREFIX}local`;
-            const localExRaw = await AsyncStorage.getItem(localExKey);
-            if (localExRaw != null) {
-              rawEx = localExRaw;
-              AsyncStorage.setItem(exclusionsKey, localExRaw).catch(() => {});
-              AsyncStorage.removeItem(localExKey).catch(() => {});
+          const legacyKey = `${LEGACY_EXCLUSIONS_PREFIX}${user?.id ?? 'local'}`;
+          const legacyKeysToRemove = [];
+          let legacyRaw = await AsyncStorage.getItem(legacyKey);
+          if (legacyRaw != null) legacyKeysToRemove.push(legacyKey);
+          if (user?.id) {
+            // Also fold in (and clean up) a signed-out device's exclusions,
+            // same as the round-selection migration above.
+            const localLegacyKey = `${LEGACY_EXCLUSIONS_PREFIX}local`;
+            const localLegacyRaw = await AsyncStorage.getItem(localLegacyKey);
+            if (localLegacyRaw != null) {
+              legacyKeysToRemove.push(localLegacyKey);
+              if (legacyRaw == null) legacyRaw = localLegacyRaw;
             }
           }
-          if (rawEx) exclusions = new Set(JSON.parse(rawEx) || []);
-        } catch (_) { /* ignore corrupt storage */ }
+          if (legacyRaw != null) {
+            let legacyExclusions = [];
+            try { legacyExclusions = JSON.parse(legacyRaw) || []; } catch (_) { legacyExclusions = []; }
+            if (Array.isArray(legacyExclusions) && legacyExclusions.length > 0 && !cancelled) {
+              // Settings win: only adopt into an empty settings array, and
+              // re-check right before writing so a toggle that raced this
+              // migration (settings already non-empty) is never clobbered.
+              const currentExclusions = getAppSettings().handicapExcludedRounds ?? [];
+              if (currentExclusions.length === 0) {
+                await updateAppSettings({ handicapExcludedRounds: legacyExclusions });
+              }
+            }
+            await Promise.all(legacyKeysToRemove.map((k) => AsyncStorage.removeItem(k).catch(() => {})));
+          }
+        } catch (_) { /* ignore corrupt legacy storage */ }
         // Deliberately keep stale keys rather than pruning: resolveSelection
         // only consults overrides for rounds that exist, the map is bounded
         // by rounds ever played, and pruning on load permanently loses
@@ -271,7 +304,6 @@ export default function MyStatsScreen({ navigation, route }) {
         if (!cancelled) {
           setMyRounds(rounds);
           setOverrides(stored);
-          setHandicapExclusions(exclusions);
         }
       } catch (e) {
         console.warn('MyStatsScreen: failed to load tournaments', e);
@@ -279,7 +311,7 @@ export default function MyStatsScreen({ navigation, route }) {
       }
     })();
     return () => { cancelled = true; };
-  }, [user?.id, storageKey, exclusionsKey, loadNonce]);
+  }, [user?.id, storageKey, loadNonce]);
 
   // The target handicap can be edited on the Profile screen while this
   // screen stays mounted in the tab navigator — refresh it on focus so
@@ -313,14 +345,11 @@ export default function MyStatsScreen({ navigation, route }) {
   }, [storageKey]);
 
   const toggleHandicapExclusion = useCallback((key) => {
-    setHandicapExclusions((prev) => {
-      const next = new Set(prev);
-      if (next.has(key)) next.delete(key);
-      else next.add(key);
-      AsyncStorage.setItem(exclusionsKey, JSON.stringify([...next])).catch(() => {});
-      return next;
-    });
-  }, [exclusionsKey]);
+    const next = new Set(getAppSettings().handicapExcludedRounds ?? []);
+    if (next.has(key)) next.delete(key);
+    else next.add(key);
+    updateAppSettings({ handicapExcludedRounds: [...next] }).catch(() => {});
+  }, []);
 
   const onInfo = useCallback((key) => setInfoKey(key), []);
 

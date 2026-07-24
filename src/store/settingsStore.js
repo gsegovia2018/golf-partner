@@ -44,16 +44,34 @@ export const DEFAULT_APP_SETTINGS = {
   // Coach-marks tour: ISO timestamp when a chapter was completed/skipped,
   // null (or missing — same thing) means the chapter hasn't run yet.
   tour: { home: null, scorecard: null },
+  // Rounds excluded from the My Stats Handicap tab's index calculation, by
+  // MyRound `key` (e.g. "t-1:0"). Stays excluded until the user re-includes
+  // it — an explicit choice, so it must survive unmount/app restart. Array
+  // (not a Set — must be JSON-serializable); replaces wholesale on patch,
+  // same as `bag`.
+  handicapExcludedRounds: [],
 };
 
 // One level deep: object-valued keys (statGroups, notifications) merge
-// key-wise; everything else replaces.
+// key-wise; everything else replaces. Arrays always replace wholesale, but
+// handicapExcludedRounds is sanitized to an array of strings first — guards
+// against a corrupted local mirror or a foreign server blob handing a
+// non-array/non-string value to consumers that build a Set straight from it.
 export function mergeAppSettings(base, patch) {
   const out = { ...base };
   for (const [k, v] of Object.entries(patch ?? {})) {
+    if (k === 'handicapExcludedRounds') {
+      out[k] = sanitizeHandicapExcludedRounds(v, base[k]);
+      continue;
+    }
     out[k] = v && typeof v === 'object' && !Array.isArray(v) ? { ...base[k], ...v } : v;
   }
   return out;
+}
+
+function sanitizeHandicapExcludedRounds(value, fallback) {
+  if (!Array.isArray(value)) return Array.isArray(fallback) ? fallback : [];
+  return value.filter((k) => typeof k === 'string');
 }
 
 let current = DEFAULT_APP_SETTINGS;
