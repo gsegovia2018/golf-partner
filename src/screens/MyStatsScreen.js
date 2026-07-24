@@ -114,6 +114,27 @@ export default function MyStatsScreen({ navigation, route }) {
     [tab],
   );
 
+  const [activated, setActivated] = useState(
+    () => windowAround(
+      Math.max(0, ALL_TABS.findIndex((t) => t.key === normalizeStatsTab(route?.params?.tab))),
+      ALL_TABS.length,
+    ),
+  );
+
+  // Grow the mounted window to include the active page's neighbours; once a
+  // page has been visited it stays mounted (no re-mount cost on return).
+  useEffect(() => {
+    setActivated((prev) => {
+      const next = windowAround(activeIndex, ALL_TABS.length);
+      let grew = false;
+      next.forEach((j) => { if (!prev.has(j)) grew = true; });
+      if (!grew) return prev;
+      const merged = new Set(prev);
+      next.forEach((j) => merged.add(j));
+      return merged;
+    });
+  }, [activeIndex]);
+
   const scrollHandler = useAnimatedScrollHandler({
     onScroll: (event) => { scrollX.value = event.contentOffset.x; },
   });
@@ -567,9 +588,9 @@ export default function MyStatsScreen({ navigation, route }) {
           if (w && Math.abs(w - pageWidth) > 1) setPageWidth(w);
         }}
       >
-        {ALL_TABS.map((t) => (
+        {ALL_TABS.map((t, i) => (
           <View key={t.key} style={{ width: pageWidth }}>
-            {renderPage(t.key)}
+            {activated.has(i) ? renderPage(t.key) : null}
           </View>
         ))}
       </Animated.ScrollView>
@@ -678,6 +699,14 @@ function indexFromOffset(offsetX, width, count) {
   if (!Number.isFinite(width) || width <= 0) return 0;
   const raw = Math.round(offsetX / width);
   return Math.max(0, Math.min(count - 1, raw));
+}
+
+function windowAround(index, count) {
+  const set = new Set();
+  for (let j = index - 1; j <= index + 1; j += 1) {
+    if (j >= 0 && j < count) set.add(j);
+  }
+  return set;
 }
 
 export { getTabScrollTarget, indexFromOffset };
