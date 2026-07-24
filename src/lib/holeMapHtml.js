@@ -38,6 +38,14 @@ export function buildHoleMapHtml(data) {
   .tri .lbl{font-size:9px;font-weight:700;letter-spacing:.08em;color:#9fb0a4;text-transform:uppercase;width:34px;text-align:left}
   .tri .hole{border-bottom:1px solid rgba(255,255,255,.18);padding-bottom:5px;margin-bottom:5px}
   .tri .hole .lbl{color:#7f8f95}
+  .lastbox{position:absolute;top:56px;left:12px;color:#fff;background:rgba(14,22,28,.72);border-radius:14px;padding:7px 12px 8px;min-width:78px}
+  .lastbox.hide{display:none}
+  .lastbox .ll{font-size:9px;font-weight:700;letter-spacing:.08em;color:#9fb0a4;text-transform:uppercase}
+  .lastbox .ld{display:flex;align-items:baseline;gap:4px;margin-top:1px}
+  .lastbox .bn{font-size:26px;font-weight:800;line-height:1.05;font-variant-numeric:tabular-nums}
+  .lastbox .u{font-size:12px;font-weight:600;color:#9fb0a4}
+  .lastbox .lc{margin-top:5px;display:inline-flex;align-items:center;gap:5px;background:#57ae5b;color:#0a0d10;font-size:12px;font-weight:800;padding:2px 9px;border-radius:999px}
+  .lastbox .lc svg{width:11px;height:11px}
   .hint{position:absolute;bottom:16px;left:50%;transform:translateX(-50%);background:rgba(14,22,28,.85);color:#fff;font-weight:600;font-size:13px;padding:7px 14px;border-radius:999px}
   .dchip{background:rgba(14,22,28,.88);color:#fff;font-weight:800;font-size:13px;padding:4px 11px;border-radius:999px;font-variant-numeric:tabular-nums;white-space:nowrap;border:1px solid rgba(255,255,255,.25);transform:translate(-50%,-50%);display:inline-block}
   .shotpin{width:22px;height:22px;border-radius:50%;background:#f4c04a;border:2px solid #0a0d10;color:#0a0d10;font-weight:800;font-size:12px;display:flex;align-items:center;justify-content:center;box-shadow:0 1px 3px rgba(0,0,0,.5);font-variant-numeric:tabular-nums}
@@ -50,6 +58,7 @@ export function buildHoleMapHtml(data) {
 <body>
 <div id="map"></div>
 <div class="hud" id="hud"></div>
+<div class="lastbox hide" id="lastbox"></div>
 <button id="recenter" aria-label="Recenter hole"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M8 3H5a2 2 0 0 0-2 2v3m18 0V5a2 2 0 0 0-2-2h-3m0 18h3a2 2 0 0 0 2-2v-3M3 16v3a2 2 0 0 0 2 2h3"/></svg></button>
 <script>
 const DATA = ${json};
@@ -106,6 +115,7 @@ let player = DATA.player || null;
 let anchor = DATA.anchor || { pos: null, source: null, playerDistance: null };
 let activeField = DATA.activeField || 'center';
 let shots = DATA.shots || []; // logged shots for this hole: [{lat,lng,club}]
+let lastShot = DATA.lastShot || null; // { meters, club } for the top-left card, or null to hide
 const layers = [];
 const clear = () => { layers.forEach(l => map.removeLayer(l)); layers.length = 0; };
 const add = (l) => { layers.push(l.addTo(map)); return l; };
@@ -281,6 +291,23 @@ function hud(src, g){
     '</div>';
 }
 
+// Top-left card: distance from the last logged shot to the green, plus a club
+// tip (dropped once the ball is on the green). Fed by the host via 'last-shot';
+// null hides it. Kept out of hud()'s innerHTML rewrite so it's independent.
+function renderLast(){
+  const el = document.getElementById('lastbox');
+  if (!el) return;
+  if (hole.mode === 'edit' || !lastShot || !isFinite(lastShot.meters)) { el.className = 'lastbox hide'; return; }
+  const club = lastShot.club
+    ? '<div class="lc"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M6 22V3l12 4-12 4"/></svg>'+lastShot.club+'</div>'
+    : '';
+  el.className = 'lastbox';
+  el.innerHTML =
+    '<div class="ll">Last shot &rarr; green</div>'+
+    '<div class="ld"><span class="bn">'+disp(lastShot.meters)+'</span><span class="u">'+U+'</span></div>'+
+    club;
+}
+
 function editIcon(color, label){
   return L.divIcon({ className:'', iconSize:[28,28], iconAnchor:[14,14],
     html:'<div style="width:28px;height:28px;border-radius:50%;border:3px solid #fff;background:'+color+';box-shadow:0 0 0 1px rgba(0,0,0,.5);display:flex;align-items:center;justify-content:center;color:#0a0d10;font-weight:800;font-size:12px">'+label+'</div>' });
@@ -357,6 +384,7 @@ window.addEventListener('message', (ev) => {
   if (m.type === 'activeField') { activeField = m.field; if (hole.mode==='edit') drawEdit(fcb()); }
   if (m.type === 'hole') { hole = m.hole; draw(); } // redraw markers, keep current pan/zoom
   if (m.type === 'shots') { shots = m.shots || []; draw(); }
+  if (m.type === 'last-shot') { lastShot = m.lastShot || null; renderLast(); }
   // host -> page: { type:'set-targets', targets:[[lat,lng],...] } replaces the
   // aim rings wholesale (e.g. collapsing to the landing after a shot is logged).
   if (m.type === 'set-targets') {
@@ -372,6 +400,7 @@ window.addEventListener('message', (ev) => {
 
 initView();
 draw();
+renderLast();
 post({ type:'ready' });
 </script>
 </body></html>`;

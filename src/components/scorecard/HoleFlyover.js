@@ -4,13 +4,15 @@ import {
 } from 'react-native';
 import { Feather } from '@expo/vector-icons';
 import {
-  holeFeatures, subscribeCourseGeometry, getCourseGeometryVersion, haversineMeters,
+  holeFeatures, subscribeCourseGeometry, getCourseGeometryVersion, haversineMeters, pointInPolygon,
 } from '../../lib/geo';
 import { anchorFor } from '../../lib/flyoverModel';
 import { courseKeyFor } from '../../store/tileCache';
 import { useAppSettings } from '../../hooks/useAppSettings';
 import { usePlayConditions } from '../../hooks/usePlayConditions';
-import { subscribeShots, getShotsVersion, shotsForHole, setShotPos } from '../../store/shotStore';
+import { subscribeShots, getShotsVersion, shotsForHole, setShotPos, getShots } from '../../store/shotStore';
+import { recommendClub } from '../../lib/shotStats';
+import { clubLabel } from '../../lib/clubs';
 import { HoleMapView } from './HoleMapView';
 import { ShotTracker } from './ShotTracker';
 
@@ -25,7 +27,8 @@ export function HoleFlyover({
   roundId, roundIndex,
 }) {
   const geomVersion = useSyncExternalStore(subscribeCourseGeometry, getCourseGeometryVersion);
-  const { units } = useAppSettings();
+  const appSettings = useAppSettings();
+  const { units } = appSettings;
   const cond = usePlayConditions(courseName);
   // eslint-disable-next-line react-hooks/exhaustive-deps
   const feat = useMemo(() => holeFeatures(courseName, holeNumber), [courseName, holeNumber, geomVersion]);
@@ -42,6 +45,29 @@ export function HoleFlyover({
     return { pos: r.anchor, source: r.source, playerDistance: r.playerDistance };
   }, [feat, position]);
 
+  // Top-left card: distance from the last logged shot to the green center, plus
+  // a club tip for the next shot. Skipped when the setting is off, before any
+  // real shot is marked (a lone seeded tee doesn't count), or once the ball is
+  // on the green — in which case the club tip is dropped but the distance stays.
+  const lastShot = useMemo(() => {
+    if (!appSettings.showLastShot || !feat?.greenCenter) return null;
+    const last = shotPins[shotPins.length - 1];
+    const seededTeeOnly = shotPins.length === 1 && !last?.club;
+    if (!last || seededTeeOnly) return null;
+    const pt = [last.lat, last.lng];
+    const meters = haversineMeters(pt, feat.greenCenter);
+    const onGreen = feat.green
+      ? pointInPolygon(pt, feat.green)
+      : meters <= 12;
+    let club = null;
+    if (!onGreen) {
+      const rec = recommendClub(cond.plays(meters), appSettings.bag, getShots(), appSettings.clubDistances);
+      club = rec ? clubLabel(rec.club) : null;
+    }
+    return { meters, club };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [feat, shotPins, appSettings.showLastShot, appSettings.bag, appSettings.clubDistances, cond, shotsVersion]);
+
   const data = useMemo(() => (feat ? {
     mode: 'view',
     holeKey: `${courseName}#${holeNumber}#view`,
@@ -57,7 +83,8 @@ export function HoleFlyover({
     anchor: anchorInfo,
     units,
     shots: shotPins, // initial paint; live marks arrive via the shots prop below
-  } : null), [feat, courseName, holeNumber, position, anchorInfo, units, shotPins]);
+    lastShot, // initial paint; live updates arrive via the lastShot prop below
+  } : null), [feat, courseName, holeNumber, position, anchorInfo, units, shotPins, lastShot]);
 
   // Latest aim state reported by the map: { pos, rings } — pos is the ring
   // nearest the green (for "Add shot" fallback), rings is the full
@@ -125,6 +152,7 @@ export function HoleFlyover({
                 player={position}
                 anchor={anchorInfo}
                 shots={shotPins}
+                lastShot={lastShot}
                 targets={targetsCmd}
                 onShotMove={(i, p) => {
                   const sh = shotsForHole(roundId, roundIndex, holeNumber)[i];

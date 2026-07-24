@@ -108,6 +108,9 @@ export default function SettingsScreen({ navigation }) {
             hint="Floating button on the scorecard to measure your shots"
             value={appSettings.shotMeasuring !== 'off'}
             onChange={(v) => setKey({ shotMeasuring: v ? 'on' : 'off' })} theme={theme} s={s} />
+          <SwitchRow testID="setting-showLastShot" label="Last-shot distance on map"
+            hint="Card on the hole map: distance from your last shot to the green, with a club tip."
+            value={appSettings.showLastShot} onChange={(v) => setKey({ showLastShot: v })} theme={theme} s={s} />
           <SwitchRow testID="setting-keepAwake" label="Keep screen awake"
             hint="Stops the screen sleeping while the scorecard is open."
             value={appSettings.keepAwake} onChange={(v) => setKey({ keepAwake: v })} theme={theme} s={s} />

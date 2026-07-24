@@ -16,6 +16,9 @@ export const DEFAULT_APP_SETTINGS = {
   // Floating shot-measuring button on the scorecard ('on' | 'off'). Tapping
   // it GPS-tracks a shot; with no usable fix it opens the hole map instead.
   shotMeasuring: 'on',
+  // Top-left card on the hole map: distance from your last shot to the green
+  // plus a club recommendation (hidden once the ball is on the green).
+  showLastShot: true,
   keepAwake: true,
   autoAdvanceHole: false,
   haptics: true,
