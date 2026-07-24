@@ -38,7 +38,7 @@ export function buildHoleMapHtml(data) {
   .tri .lbl{font-size:9px;font-weight:700;letter-spacing:.08em;color:#9fb0a4;text-transform:uppercase;width:34px;text-align:left}
   .tri .hole{border-bottom:1px solid rgba(255,255,255,.18);padding-bottom:5px;margin-bottom:5px}
   .tri .hole .lbl{color:#7f8f95}
-  .lastbox{position:absolute;top:56px;left:12px;color:#fff;background:rgba(14,22,28,.72);border-radius:14px;padding:7px 12px 8px;min-width:78px}
+  .lastbox{position:absolute;top:56px;left:12px;z-index:600;color:#fff;background:rgba(14,22,28,.72);border-radius:14px;padding:7px 12px 8px;min-width:78px}
   .lastbox.hide{display:none}
   .lastbox .ll{font-size:9px;font-weight:700;letter-spacing:.08em;color:#9fb0a4;text-transform:uppercase}
   .lastbox .ld{display:flex;align-items:baseline;gap:4px;margin-top:1px}
