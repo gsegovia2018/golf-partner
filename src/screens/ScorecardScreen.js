@@ -105,6 +105,12 @@ export function mergeScores(blobScores, localScores, dirtyKeys) {
   return out;
 }
 
+// How long a burst of score taps is allowed to settle before it is written to
+// disk. Long enough to absorb a run up the stepper (4 → 8), short enough that
+// a tap-then-pocket-the-phone is persisted almost immediately. Every exit from
+// the hole flushes early, so this is a batching window, not a risk window.
+const SCORE_SAVE_DEBOUNCE_MS = 300;
+
 // Clamp a raw entered stroke count for one hole to the recordable range
 // [1, pickup], per the silent-clamp product decision. Shared by both entry
 // paths (setScore text field + stepScore +/-) so they can never diverge, and
@@ -616,6 +622,54 @@ export default function ScorecardScreen({ navigation, route }) {
   const notesRef = useRef(notes);
   useEffect(() => { notesRef.current = notes; }, [notes]);
 
+  // --- Debounced score persistence -------------------------------------------
+  // Every score save runs mutate() → saveLocal() → syncQueue.enqueue(), which
+  // deep-clones, re-serialises and rewrites the WHOLE tournament blob plus the
+  // whole pending queue. Firing that per tap made the +/- steppers stutter:
+  // stepping 4 → 8 ran the chain four times, and the serial save chain made
+  // each tap wait on the previous one's storage writes.
+  //
+  // Collapsing a burst into one save is lossless because autoSave diffs the
+  // FULL scores map against the committed blob rather than applying a delta —
+  // the last map already contains every intervening edit. scoresRef is that
+  // map, kept current synchronously by setScore/stepScore before they schedule.
+  //
+  // The window must never swallow an edit, so every exit from the hole (hole
+  // change, background, unmount, finish) flushes first — see flushScoreSync
+  // and handleFinish. Holding saveTimeoutRef also latches pendingSaveRef
+  // across the window (enqueueSave's drain guard reads it), so a
+  // subscription-driven reload can't clobber taps that aren't written yet.
+  const autoSaveRef = useRef(autoSave);
+  useEffect(() => { autoSaveRef.current = autoSave; }, [autoSave]);
+
+  // Disarms the pending debounce. Returns whether one was actually armed, so
+  // callers can tell "flushed something" from "nothing to do".
+  const cancelScheduledSave = useCallback(() => {
+    if (!saveTimeoutRef.current) return false;
+    clearTimeout(saveTimeoutRef.current);
+    saveTimeoutRef.current = null;
+    return true;
+  }, []);
+
+  const scheduleAutoSave = useCallback(() => {
+    cancelScheduledSave();
+    pendingSaveRef.current = true;
+    saveTimeoutRef.current = setTimeout(() => {
+      saveTimeoutRef.current = null;
+      autoSaveRef.current(scoresRef.current);
+    }, SCORE_SAVE_DEBOUNCE_MS);
+  }, [cancelScheduledSave]);
+
+  // Runs a pending debounced save NOW. Returns the save promise so a caller
+  // that must not race it can await, or null when nothing was pending. Reads
+  // autoSave through a ref so this stays referentially stable — the
+  // unmount-flush effect depends on it, and a changing identity there would
+  // turn that cleanup into a spurious mid-round flush.
+  const flushPendingScoreSave = useCallback(
+    () => (cancelScheduledSave() ? autoSaveRef.current(scoresRef.current) : null),
+    [cancelScheduledSave],
+  );
+
   // Debounced note save shared by round-level and per-hole notes. `key`
   // identifies the debounce timer ('round' or `h<n>`); `mutation` carries the
   // scope-specific `note.set` fields.
@@ -646,12 +700,15 @@ export default function ScorecardScreen({ navigation, route }) {
   // Re-attempt the last save after a permanent failure. Re-pushes the full
   // current scores + round note through the same diff-based save path.
   const retrySave = useCallback(() => {
+    // Manual retry after a failed save — go now, and drop any armed debounce
+    // so it can't fire a redundant second write straight afterwards.
+    cancelScheduledSave();
     autoSave(scoresRef.current);
     const roundNote = notesRef.current?.round;
     if (roundNote != null) {
       scheduleNoteSave('round', { scope: 'round', text: roundNote });
     }
-  }, [autoSave, scheduleNoteSave]);
+  }, [autoSave, scheduleNoteSave, cancelScheduledSave]);
 
   const saveRoundNote = useCallback((value) => {
     if (viewOnly || official) return;
@@ -1139,15 +1196,16 @@ export default function ScorecardScreen({ navigation, route }) {
     reconcileMeShot(playerId, holeNumber, parsed);
 
     // Official mode routes the write through the RPC layer; casual mode
-    // diffs and persists through the tournament-blob `mutate` chain.
+    // diffs and persists through the tournament-blob `mutate` chain, batched
+    // so a burst of edits costs one blob rewrite instead of one per tap.
     if (official) officialWrite(playerId, holeNumber, parsed);
-    else autoSave(next);
+    else scheduleAutoSave();
     if (parsed != null && parsed !== current) {
       const label = celebrationFor(holePar, parsed);
       if (label) triggerCelebration(playerId, holeNumber, label);
     }
     maybeAutoAdvance(next, holeNumber);
-  }, [round, players, autoSave, triggerCelebration, official, officialWrite, reconcileMeShot, viewOnly, maybeAutoAdvance]);
+  }, [round, players, scheduleAutoSave, triggerCelebration, official, officialWrite, reconcileMeShot, viewOnly, maybeAutoAdvance]);
 
   const stepScore = useCallback((playerId, holeNumber, delta) => {
     if (!official && viewOnly) return;
@@ -1177,13 +1235,13 @@ export default function ScorecardScreen({ navigation, route }) {
     reconcileMeShot(playerId, holeNumber, newStrokes);
 
     if (official) officialWrite(playerId, holeNumber, newStrokes);
-    else autoSave(next);
+    else scheduleAutoSave();
     if (newStrokes !== current) {
       const label = celebrationFor(holePar, newStrokes);
       if (label) triggerCelebration(playerId, holeNumber, label);
     }
     maybeAutoAdvance(next, holeNumber);
-  }, [round, players, autoSave, triggerCelebration, getScoreAnim, official, officialWrite, reconcileMeShot, viewOnly, maybeAutoAdvance]);
+  }, [round, players, scheduleAutoSave, triggerCelebration, getScoreAnim, official, officialWrite, reconcileMeShot, viewOnly, maybeAutoAdvance]);
 
   const appSettings = useAppSettings();
   const showRunning = appSettings.showRunningScore && !appSettings.noSpoilers;
@@ -1239,11 +1297,22 @@ export default function ScorecardScreen({ navigation, route }) {
 
   // Batched score pushes: taps only enqueue (deferSync above); the queue is
   // drained when the user moves between holes, leaves the scorecard, or
-  // backgrounds the app — never mid-entry on a hole.
+  // backgrounds the app — never mid-entry on a hole. A debounced local save
+  // may still be armed at any of those moments, and syncing before it has
+  // written would drain an empty queue and leave the edit stranded until the
+  // next flush — so write first, then push.
   const flushScoreSync = useCallback(() => {
     if (official) return; // official rounds push via RPC per entry
-    syncNow();
-  }, [official]);
+    const pending = flushPendingScoreSave();
+    // Nothing armed: kick the sync synchronously, exactly as before the
+    // debounce existed. Deferring here would delay every hole change and
+    // unmount for no reason.
+    if (!pending) { syncNow(); return; }
+    // enqueueSave's promise rejects on a failed local write (surfaced by the
+    // save-error banner); swallow it here so it can't become an unhandled
+    // rejection, and sync regardless — the queue may hold earlier entries.
+    pending.catch(() => {}).then(() => syncNow());
+  }, [official, flushPendingScoreSave]);
 
   useEffect(() => {
     flushScoreSync();
@@ -1320,6 +1389,10 @@ export default function ScorecardScreen({ navigation, route }) {
     let freshRound = r;
     try {
       if (!official) {
+        // Drop any armed debounce first: the explicit full-map save below
+        // supersedes it (autoSave diffs the whole map, so nothing is lost),
+        // and letting the timer fire afterwards would write again post-finish.
+        cancelScheduledSave();
         await autoSave(scoresRef.current);
         await syncSettled();
         const fresh = await readLocal(t.id).catch(() => null);
@@ -1443,7 +1516,7 @@ export default function ScorecardScreen({ navigation, route }) {
       if (Platform.OS === 'web') window.alert(message);
       else Alert.alert('Finish failed', message);
     }
-  }, [roundIndex, navigation, goBack, official, finishBusy, autoSave, enqueueSave]);
+  }, [roundIndex, navigation, goBack, official, finishBusy, autoSave, enqueueSave, cancelScheduledSave]);
 
   // Official mode (Task 16): attest the token holder's own card. Replaces the
   // casual "finish" affordance for official rounds. Disabled while the holder
