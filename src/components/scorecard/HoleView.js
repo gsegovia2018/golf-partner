@@ -9,6 +9,8 @@ import { useTheme } from '../../theme/ThemeContext';
 import { makeScorecardStyles } from './styles';
 import { HolePage, HolePagePlaceholder, MePicker } from './HolePage';
 import { CelebrationOverlay } from './CelebrationOverlay';
+import { CelebrationToast } from './CelebrationToast';
+import { CELEBRATION_TIERS } from './constants';
 import { HoleFlyover } from './HoleFlyover';
 import { HoleGeoEditor } from './HoleGeoEditor';
 import { MeasureFab } from './MeasureFab';
@@ -581,7 +583,14 @@ export function HoleView({ round, roundIndex, players, scores, shotDetails, meId
         );
       })()}
 
-      <CelebrationOverlay celebration={celebration} celebrationAnim={celebrationAnim} players={players} />
+      {/* Presentation escalates by rarity — the tier decides, not this file.
+          Common results (birdie, noelada) get the non-blocking toast so score
+          entry continues; rare ones keep the full-screen takeover. */}
+      {CELEBRATION_TIERS[celebration?.label]?.presentation === 'toast' ? (
+        <CelebrationToast celebration={celebration} celebrationAnim={celebrationAnim} players={players} />
+      ) : (
+        <CelebrationOverlay celebration={celebration} celebrationAnim={celebrationAnim} players={players} />
+      )}
     </View>
   );
 }
