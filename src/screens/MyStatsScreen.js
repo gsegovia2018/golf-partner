@@ -653,7 +653,16 @@ export default function MyStatsScreen({ navigation, route }) {
         }}
       >
         {ALL_TABS.map((t, i) => (
-          <View key={t.key} style={{ width: pageWidth }}>
+          // s.pageSlot's height is load-bearing, not cosmetic. Each page's body
+          // is a vertical ScrollView, which can only scroll when its height is
+          // BOUNDED by the pager. Width alone left this wrapper at
+          // `flex: 0 0 auto` with no height, so it grew to its content's full
+          // height (~2500px); the ScrollView grew with it, scrollHeight ===
+          // clientHeight, and vertical scrolling died — the overflow was just
+          // clipped by the pager. On web, react-native-web's `pagingEnabled`
+          // inserts its own stretched wrapper around this one, which masked the
+          // missing constraint from the layout above.
+          <View key={t.key} style={[s.pageSlot, { width: pageWidth }]}>
             {activated.has(i) ? renderPage(t.key) : null}
           </View>
         ))}
@@ -742,6 +751,9 @@ function makeStyles(theme) {
     scroll: { padding: theme.spacing.lg, gap: theme.spacing.lg },
     pager: { flex: 1 },
     pagerContent: { alignItems: 'stretch' },
+    // Bounds each page to the pager's height so the page's ScrollView has
+    // something to scroll within. See the comment at the pager's map().
+    pageSlot: { height: '100%' },
     page: { flex: 1 },
     pageEmpty: { alignItems: 'center', justifyContent: 'center', gap: theme.spacing.md, padding: theme.spacing.xl },
   });
