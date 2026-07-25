@@ -1,7 +1,7 @@
 import React, { useEffect, useRef, useState, useCallback, useMemo, startTransition } from 'react';
 import {
   View, Text, TouchableOpacity,
-  ScrollView, Modal, Pressable, Platform, Animated,
+  ScrollView, Modal, Pressable, Platform,
 } from 'react-native';
 import NetInfo from '@react-native-community/netinfo';
 import { Feather } from '@expo/vector-icons';
