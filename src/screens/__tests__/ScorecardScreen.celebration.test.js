@@ -31,6 +31,13 @@ const mockTournament = {
   }],
 };
 
+// The strokes each button enters, shared by the HoleView mock below and by the
+// delta assertions, so the expected numbers are derived from the fixture in one
+// place rather than restated as literals.
+const mockBirdieStrokes = 2;
+const mockNoeladaStrokes = 5;
+const mockHoleOnePar = mockTournament.rounds[0].holes[0].par;
+
 jest.mock('@expo/vector-icons', () => ({ Feather: 'Feather' }));
 jest.mock('expo-screen-orientation', () => ({
   lockAsync: jest.fn(() => Promise.resolve()),
@@ -42,19 +49,30 @@ jest.mock('../../components/scorecard/HoleView', () => {
   const React = require('react');
   const { Text, TouchableOpacity, View } = require('react-native');
   return {
-    HoleView: ({ onSetScore }) => (
+    // `celebration` is passed straight through by ScorecardScreen; surfacing
+    // its delta here is what lets the tests pin the number the toast would
+    // render, which is otherwise invisible with the real HoleView mocked out.
+    HoleView: ({ onSetScore, onStep, celebration }) => (
       <View>
+        <Text testID="celebration-delta">{String(celebration?.delta)}</Text>
+        <TouchableOpacity
+          accessibilityRole="button"
+          accessibilityLabel="Step up"
+          onPress={() => onStep('p1', 1, 1)}
+        >
+          <Text>Step up</Text>
+        </TouchableOpacity>
         <TouchableOpacity
           accessibilityRole="button"
           accessibilityLabel="Set birdie"
-          onPress={() => onSetScore('p1', 1, '2')}
+          onPress={() => onSetScore('p1', 1, String(mockBirdieStrokes))}
         >
           <Text>Set birdie</Text>
         </TouchableOpacity>
         <TouchableOpacity
           accessibilityRole="button"
           accessibilityLabel="Set noelada"
-          onPress={() => onSetScore('p1', 1, '5')}
+          onPress={() => onSetScore('p1', 1, String(mockNoeladaStrokes))}
         >
           <Text>Set noelada</Text>
         </TouchableOpacity>
@@ -145,7 +163,7 @@ describe('ScorecardScreen celebration haptics', () => {
   });
 
   it('a birdie fires the light haptic, not success', async () => {
-    const { findByLabelText } = render(wrap(
+    const { findByLabelText, getByTestId } = render(wrap(
       <ScorecardScreen navigation={navigation} route={route} />
     ));
     fireEvent.press(await findByLabelText('Set birdie'));
@@ -153,13 +171,16 @@ describe('ScorecardScreen celebration haptics', () => {
       expect(haptic).toHaveBeenCalledWith('light');
     });
     expect(haptic).not.toHaveBeenCalledWith('success');
+    // Strokes relative to par, the number the toast renders: 2 on a par 3 is -1.
+    expect(getByTestId('celebration-delta').props.children)
+      .toBe(String(mockBirdieStrokes - mockHoleOnePar));
     await flushCelebration();
   });
 
   // Regression: NOELADA used to fire haptic('success') — the same celebratory
   // buzz as an albatross — for a double bogey.
   it('a noelada never fires the success haptic', async () => {
-    const { findByLabelText } = render(wrap(
+    const { findByLabelText, getByTestId } = render(wrap(
       <ScorecardScreen navigation={navigation} route={route} />
     ));
     fireEvent.press(await findByLabelText('Set noelada'));
@@ -167,6 +188,31 @@ describe('ScorecardScreen celebration haptics', () => {
       expect(haptic).toHaveBeenCalledWith('selection');
     });
     expect(haptic).not.toHaveBeenCalledWith('success');
+    // 5 on a par 3 is +2 — and never the ±1 stepper increment.
+    expect(getByTestId('celebration-delta').props.children)
+      .toBe(String(mockNoeladaStrokes - mockHoleOnePar));
+    await flushCelebration();
+  });
+
+  // The delta must be strokes-to-par, never the stepper increment. stepScore
+  // has its own `delta` parameter (±1) in scope at the call site, so this is
+  // the one path where the two can be confused. Stepping up to a noelada
+  // discriminates between them: strokes-to-par is +2 while the increment that
+  // got there is +1. A birdie would not — both are -1.
+  it('a noelada reached with the stepper reports strokes to par, not the increment', async () => {
+    const { findByLabelText, getByTestId } = render(wrap(
+      <ScorecardScreen navigation={navigation} route={route} />
+    ));
+    const stepUp = await findByLabelText('Step up');
+    // Un-scored hole: the first + lands on par, then each + adds a stroke.
+    fireEvent.press(stepUp); // par 3
+    fireEvent.press(stepUp); // 4, bogey — no tier
+    fireEvent.press(stepUp); // 5, noelada
+    await waitFor(() => {
+      expect(haptic).toHaveBeenCalledWith('selection');
+    });
+    expect(getByTestId('celebration-delta').props.children)
+      .toBe(String(mockNoeladaStrokes - mockHoleOnePar));
     await flushCelebration();
   });
 });

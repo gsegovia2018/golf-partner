@@ -1028,12 +1028,15 @@ export default function ScorecardScreen({ navigation, route }) {
   // chain ended in `else 1800 // HOLE IN ONE`, which silently gave NOELADA the
   // longest hold of any tier, and it fired haptic('success') for every result
   // including a double bogey.
-  const triggerCelebration = useCallback((playerId, holeNumber, label, delta) => {
+  // `toPar`, not `delta`: `stepScore` already has a `delta` in scope that means
+  // the stepper increment (±1), and the two must never be confused. The state
+  // field stays `delta` because CelebrationToast reads it under that name.
+  const triggerCelebration = useCallback((playerId, holeNumber, label, toPar) => {
     const tier = CELEBRATION_TIERS[label] ?? CELEBRATION_TIERS.BIRDIE;
     haptic(tier.haptic);
     celebrationAnim.stopAnimation();
     celebrationAnim.setValue(0);
-    setCelebration({ playerId, holeNumber, label, delta });
+    setCelebration({ playerId, holeNumber, label, delta: toPar });
     Animated.sequence([
       Animated.spring(celebrationAnim, {
         toValue: 1, friction: 6, tension: 80, useNativeDriver: true,
