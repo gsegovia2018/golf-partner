@@ -41,7 +41,8 @@ const EMPTY_WARMUP = {
 const OWN_AVG_BASIS = 'vs your avg';
 const SAMPLE_BASIS = 'tracked sample';
 
-export default function BreakdownTab({ stats, onInfo, onSelectCourse }) {
+// Memoised — see the note in CoachTab.
+function BreakdownTab({ stats, onInfo, onSelectCourse }) {
   const { theme } = useTheme();
   const s = useMemo(() => makeStyles(theme), [theme]);
   const {
@@ -720,3 +721,5 @@ function makeStyles(theme) {
     wrap: { gap: theme.spacing.lg },
   });
 }
+
+export default React.memo(BreakdownTab);

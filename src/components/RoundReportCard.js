@@ -15,7 +15,8 @@ const CHAPTER_ICONS = {
   shots: 'crosshair',
 };
 
-export default function RoundReportCard({ card, rounds, selectedKey, onSelect, onOpenRound }) {
+// Memoised — see the note in CoachTab.
+function RoundReportCard({ card, rounds, selectedKey, onSelect, onOpenRound }) {
   const { theme } = useTheme();
   const s = useMemo(() => makeStyles(theme), [theme]);
   const [pickerOpen, setPickerOpen] = useState(false);
@@ -134,3 +135,5 @@ function makeStyles(theme) {
     pickSub: { fontFamily: 'PlusJakartaSans-Medium', fontSize: 11, color: theme.text.muted, marginTop: 1 },
   });
 }
+
+export default React.memo(RoundReportCard);

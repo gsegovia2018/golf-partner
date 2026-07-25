@@ -31,7 +31,8 @@ const META = {
 // panel of metric sparklines, the Score mix damage report (latest-round
 // damage headline in the card header, five-band per-round columns), and the
 // Steady holes trend. Mix/damage/steady are GROSS — see computeFormSeries.
-export default function FormTab({ stats, n, onChangeN, onInfo }) {
+// Memoised — see the note in CoachTab.
+function FormTab({ stats, n, onChangeN, onInfo }) {
   const { theme } = useTheme();
   const s = useMemo(() => makeStyles(theme), [theme]);
   // Accordion for the Instruments rows: at most one row shows its full
@@ -131,3 +132,5 @@ function makeStyles(theme) {
     chipTextOn: { color: theme.text.inverse },
   });
 }
+
+export default React.memo(FormTab);

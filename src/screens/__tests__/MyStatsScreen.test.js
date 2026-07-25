@@ -306,6 +306,51 @@ describe('MyStatsScreen tab strip', () => {
     })).toBe(0);
   });
 
+  // The pager must commit the reached page from the scroll stream itself.
+  // react-native-web's ScrollView wires only onScroll to the DOM — it never
+  // emits onScrollEndDrag or onMomentumScrollEnd — so settling on either of
+  // those left web swipes dead: the pill never followed the indicator and
+  // pages outside the initial window never mounted (blank page).
+  test('a swipe selects the page it lands on', async () => {
+    const { findByTestId, findByText, getByLabelText } = renderScreen({ params: {} });
+    expect(await findByText('Report card content')).toBeTruthy();
+    const pager = await findByTestId('my-stats-pager');
+
+    act(() => {
+      fireEvent(pager, 'layout', { nativeEvent: { layout: { width: 400 } } });
+    });
+    act(() => {
+      fireEvent.scroll(pager, { nativeEvent: { contentOffset: { x: 800 } } });
+    });
+
+    await waitFor(() => {
+      expect(getByLabelText('Strokes Gained').props.accessibilityState?.selected).toBe(true);
+    });
+  });
+
+  test('a swipe past the halfway point commits before the finger lifts', async () => {
+    const { findByTestId, findByText, getByLabelText } = renderScreen({ params: {} });
+    expect(await findByText('Report card content')).toBeTruthy();
+    const pager = await findByTestId('my-stats-pager');
+
+    act(() => {
+      fireEvent(pager, 'layout', { nativeEvent: { layout: { width: 400 } } });
+    });
+    // Dragged 40% across — still page 0, nothing should change yet.
+    act(() => {
+      fireEvent.scroll(pager, { nativeEvent: { contentOffset: { x: 160 } } });
+    });
+    expect(getByLabelText('Report Card').props.accessibilityState?.selected).toBe(true);
+
+    // Past halfway — the label must flip with the indicator, not after it.
+    act(() => {
+      fireEvent.scroll(pager, { nativeEvent: { contentOffset: { x: 240 } } });
+    });
+    await waitFor(() => {
+      expect(getByLabelText('Coach').props.accessibilityState?.selected).toBe(true);
+    });
+  });
+
   test('shows the empty state inside a stats page when no rounds are selected', async () => {
     const { resolveSelection } = require('../../store/personalStats');
     resolveSelection.mockReturnValue([]); // every round deselected
