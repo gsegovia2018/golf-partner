@@ -51,6 +51,7 @@ import { notifyRoundFinished } from '../store/notificationStore';
 import { normalizeRoundNotes } from '../store/roundNotes';
 import {
   DEFAULT_SHOT,
+  CELEBRATION_TIERS,
   celebrationFor,
 } from '../components/scorecard/constants';
 import {
@@ -333,7 +334,9 @@ export default function ScorecardScreen({ navigation, route }) {
   const skippedReloadRef = useRef(false);
   const scoreAnims = useRef({});
   const hasAutoJumpedRef = useRef(false);
-  const [celebration, setCelebration] = useState({ playerId: null, holeNumber: null, label: null });
+  const [celebration, setCelebration] = useState({
+    playerId: null, holeNumber: null, label: null, delta: null,
+  });
   const celebrationAnim = useRef(new Animated.Value(0)).current;
   const [lightboxItems, setLightboxItems] = useState([]);
   const [lightboxIndex, setLightboxIndex] = useState(0);
@@ -1021,24 +1024,27 @@ export default function ScorecardScreen({ navigation, route }) {
       .catch(() => {});
   }, [tournament, user, pickMe]);
 
-  const triggerCelebration = useCallback((playerId, holeNumber, label) => {
-    const holdMs =
-      label === 'BIRDIE' ? 900 :
-      label === 'EAGLE' ? 1200 :
-      label === 'ALBATROSS' ? 1500 :
-      1800; // HOLE IN ONE
-    haptic('success');
+  // Hold time and haptic come from the tier, not from a chain here. The old
+  // chain ended in `else 1800 // HOLE IN ONE`, which silently gave NOELADA the
+  // longest hold of any tier, and it fired haptic('success') for every result
+  // including a double bogey.
+  // `toPar`, not `delta`: `stepScore` already has a `delta` in scope that means
+  // the stepper increment (±1), and the two must never be confused. The state
+  // field stays `delta` because CelebrationToast reads it under that name.
+  const triggerCelebration = useCallback((playerId, holeNumber, label, toPar) => {
+    const tier = CELEBRATION_TIERS[label] ?? CELEBRATION_TIERS.BIRDIE;
+    haptic(tier.haptic);
     celebrationAnim.stopAnimation();
     celebrationAnim.setValue(0);
-    setCelebration({ playerId, holeNumber, label });
+    setCelebration({ playerId, holeNumber, label, delta: toPar });
     Animated.sequence([
       Animated.spring(celebrationAnim, {
         toValue: 1, friction: 6, tension: 80, useNativeDriver: true,
       }),
-      Animated.delay(holdMs),
+      Animated.delay(tier.holdMs),
       Animated.timing(celebrationAnim, { toValue: 0, duration: 420, useNativeDriver: true }),
     ]).start(({ finished }) => {
-      if (finished) setCelebration({ playerId: null, holeNumber: null, label: null });
+      if (finished) setCelebration({ playerId: null, holeNumber: null, label: null, delta: null });
     });
   }, [celebrationAnim]);
 
@@ -1202,7 +1208,7 @@ export default function ScorecardScreen({ navigation, route }) {
     else scheduleAutoSave();
     if (parsed != null && parsed !== current) {
       const label = celebrationFor(holePar, parsed);
-      if (label) triggerCelebration(playerId, holeNumber, label);
+      if (label) triggerCelebration(playerId, holeNumber, label, parsed - holePar);
     }
     maybeAutoAdvance(next, holeNumber);
   }, [round, players, scheduleAutoSave, triggerCelebration, official, officialWrite, reconcileMeShot, viewOnly, maybeAutoAdvance]);
@@ -1238,7 +1244,7 @@ export default function ScorecardScreen({ navigation, route }) {
     else scheduleAutoSave();
     if (newStrokes !== current) {
       const label = celebrationFor(holePar, newStrokes);
-      if (label) triggerCelebration(playerId, holeNumber, label);
+      if (label) triggerCelebration(playerId, holeNumber, label, newStrokes - holePar);
     }
     maybeAutoAdvance(next, holeNumber);
   }, [round, players, scheduleAutoSave, triggerCelebration, getScoreAnim, official, officialWrite, reconcileMeShot, viewOnly, maybeAutoAdvance]);
