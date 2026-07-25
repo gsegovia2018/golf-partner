@@ -34,6 +34,8 @@ export function CelebrationToast({ celebration, celebrationAnim, players }) {
   return (
     <Animated.View
       pointerEvents="none"
+      accessibilityLiveRegion="polite"
+      accessibilityRole="alert"
       style={[s.root, { opacity: celebrationAnim, transform: [{ translateY }] }]}
     >
       <View style={[s.toast, { borderColor: tier.accent, borderLeftColor: tier.accent }]}>
@@ -41,9 +43,9 @@ export function CelebrationToast({ celebration, celebrationAnim, players }) {
           <Feather name={tier.icon} size={13} color={tier.accent} />
         </View>
         <View style={s.textWrap}>
-          <Text style={s.label}>{celebration.label}</Text>
+          <Text style={s.label} numberOfLines={1}>{celebration.label}</Text>
           {!!firstName && (
-            <Text style={s.subtitle}>{`${firstName} · Hole ${celebration.holeNumber}`}</Text>
+            <Text style={s.subtitle} numberOfLines={1}>{`${firstName} · Hole ${celebration.holeNumber}`}</Text>
           )}
         </View>
         {!!deltaLabel && (
@@ -69,8 +71,9 @@ function makeStyles(theme) {
       alignItems: 'center',
       gap: 10,
       // bg.deep is the theme's surface for play & results (LiveRoundCard,
-      // leaderboard). The old takeover card hardcoded #003d27, which is in no
-      // palette — a leftover from before the light theme.
+      // leaderboard, and the takeover card). A hardcoded #003d27 here would
+      // have been a pre-light-theme leftover in no palette; both surfaces
+      // now use bg.deep instead.
       backgroundColor: theme.bg.deep,
       borderRadius: 12,
       borderWidth: 1,
@@ -81,6 +84,7 @@ function makeStyles(theme) {
       shadowOpacity: 0.18,
       shadowRadius: 12,
       shadowOffset: { width: 0, height: 6 },
+      elevation: 8,
     },
     iconWrap: {
       width: 26,

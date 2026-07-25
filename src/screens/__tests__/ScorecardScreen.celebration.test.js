@@ -157,7 +157,11 @@ describe('ScorecardScreen celebration haptics', () => {
     Object.defineProperty(Platform, 'OS', { configurable: true, get: () => 'android' });
   });
 
-  afterEach(() => {
+  afterEach(async () => {
+    // Drain any pending celebration animation before switching timers, so a
+    // test that fails its assertion before reaching flushCelebration() can't
+    // leave one dangling. Safe to run when nothing is pending.
+    await flushCelebration();
     jest.useRealTimers();
     Object.defineProperty(Platform, 'OS', { configurable: true, get: () => originalPlatformOS });
   });
@@ -174,7 +178,6 @@ describe('ScorecardScreen celebration haptics', () => {
     // Strokes relative to par, the number the toast renders: 2 on a par 3 is -1.
     expect(getByTestId('celebration-delta').props.children)
       .toBe(String(mockBirdieStrokes - mockHoleOnePar));
-    await flushCelebration();
   });
 
   // Regression: NOELADA used to fire haptic('success') — the same celebratory
@@ -191,7 +194,6 @@ describe('ScorecardScreen celebration haptics', () => {
     // 5 on a par 3 is +2 — and never the ±1 stepper increment.
     expect(getByTestId('celebration-delta').props.children)
       .toBe(String(mockNoeladaStrokes - mockHoleOnePar));
-    await flushCelebration();
   });
 
   // The delta must be strokes-to-par, never the stepper increment. stepScore
@@ -213,6 +215,5 @@ describe('ScorecardScreen celebration haptics', () => {
     });
     expect(getByTestId('celebration-delta').props.children)
       .toBe(String(mockNoeladaStrokes - mockHoleOnePar));
-    await flushCelebration();
   });
 });

@@ -328,7 +328,7 @@ export function makeScorecardStyles(theme) {
       paddingHorizontal: 28,
       borderRadius: 22,
       borderWidth: 1.5,
-      backgroundColor: '#003d27', // Augusta deep green
+      backgroundColor: theme.bg.deep,
       alignItems: 'center',
       shadowOpacity: 0.55,
       shadowRadius: 28,
