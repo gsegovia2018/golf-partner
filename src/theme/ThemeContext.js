@@ -1,4 +1,6 @@
-import React, { createContext, useContext, useState, useEffect } from 'react';
+import React, {
+  createContext, useContext, useState, useEffect, useMemo, useCallback,
+} from 'react';
 import { useColorScheme } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { light, dark, semantic, typography, fonts, spacing, radius } from './tokens';
@@ -21,42 +23,56 @@ export function ThemeProvider({ children }) {
 
   const mode = pref === 'system' ? (systemScheme === 'dark' ? 'dark' : 'light') : pref;
 
-  const setThemeMode = (next) => {
+  const setThemeMode = useCallback((next) => {
     if (next !== 'light' && next !== 'dark' && next !== 'system') return;
     setPref(next);
     AsyncStorage.setItem(STORAGE_KEY, next);
-  };
+  }, []);
 
-  const toggle = () => setThemeMode(mode === 'light' ? 'dark' : 'light');
+  const toggle = useCallback(
+    () => setThemeMode(mode === 'light' ? 'dark' : 'light'),
+    [mode, setThemeMode],
+  );
 
-  const colors = mode === 'light' ? light : dark;
-  const destructive = mode === 'light' ? semantic.destructive.light : semantic.destructive.dark;
-  const info = mode === 'light' ? semantic.info.light : semantic.info.dark;
-  const pairA = mode === 'light' ? semantic.pair.a.light : semantic.pair.a.dark;
-  const pairB = mode === 'light' ? semantic.pair.b.light : semantic.pair.b.dark;
+  // The theme is derived purely from `mode`, so it is rebuilt only when the
+  // mode actually flips — never merely because the provider re-rendered.
+  // Identity matters far beyond tidiness here: ~215 modules consume this, and
+  // the expensive ones memoize entire StyleSheets on `theme` (the scorecard
+  // alone builds 111 of them). Handing out a fresh object on every render
+  // rebuilt all of those and broke React.memo everywhere downstream.
+  // `scoreColor` is built inside the same memo so it inherits that stability
+  // instead of silently invalidating the object that carries it.
+  const theme = useMemo(() => {
+    const colors = mode === 'light' ? light : dark;
+    return {
+      ...colors,
+      semantic,
+      masters: semantic.masters,
+      destructive: mode === 'light' ? semantic.destructive.light : semantic.destructive.dark,
+      info: mode === 'light' ? semantic.info.light : semantic.info.dark,
+      pairA: mode === 'light' ? semantic.pair.a.light : semantic.pair.a.dark,
+      pairB: mode === 'light' ? semantic.pair.b.light : semantic.pair.b.dark,
+      scoreColor: (level) => (
+        mode === 'light' ? semantic.score[level].light : semantic.score[level].dark
+      ),
+      typography,
+      fonts,
+      spacing,
+      radius,
+      mode,
+      isDark: mode === 'dark',
+    };
+  }, [mode]);
 
-  const scoreColor = (level) =>
-    mode === 'light' ? semantic.score[level].light : semantic.score[level].dark;
-
-  const theme = {
-    ...colors,
-    semantic,
-    masters: semantic.masters,
-    destructive,
-    info,
-    pairA,
-    pairB,
-    scoreColor,
-    typography,
-    fonts,
-    spacing,
-    radius,
-    mode,
-    isDark: mode === 'dark',
-  };
+  // Memoized for the same reason: an unstable context value re-renders every
+  // consumer regardless of how stable `theme` itself is.
+  const value = useMemo(
+    () => ({ theme, mode, themePref: pref, setThemeMode, toggle, ready }),
+    [theme, mode, pref, setThemeMode, toggle, ready],
+  );
 
   return (
-    <ThemeContext.Provider value={{ theme, mode, themePref: pref, setThemeMode, toggle, ready }}>
+    <ThemeContext.Provider value={value}>
       {children}
     </ThemeContext.Provider>
   );
