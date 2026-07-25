@@ -50,8 +50,13 @@ export default function OfficialAdminScreen({ route, navigation }) {
   const mountedRef = useRef(true);
   useEffect(() => { mountedRef.current = true; return () => { mountedRef.current = false; }; }, []);
 
-  // Initial-load state.
+  // Initial-load state. `loading` gates a full-screen spinner, so it must only
+  // ever be true BEFORE this screen has shown content — `load()` also runs
+  // after every admin action (see runMutation) and from the header Refresh
+  // button, and blanking a populated board back to a spinner on each one reads
+  // as the screen reloading itself. Later loads swap the data in silently.
   const [loading, setLoading] = useState(true);
+  const hasLoadedOnceRef = useRef(false);
   const [loadError, setLoadError] = useState(false);
 
   // Loaded round + derived data.
@@ -70,7 +75,7 @@ export default function OfficialAdminScreen({ route, navigation }) {
 
   const load = useCallback(async () => {
     if (!tournamentId) { setLoading(false); setLoadError(true); return; }
-    setLoading(true);
+    if (!hasLoadedOnceRef.current) setLoading(true);
     setLoadError(false);
     try {
       // Find the round to monitor: prefer the live one, else the most recent.
@@ -133,6 +138,9 @@ export default function OfficialAdminScreen({ route, navigation }) {
       console.warn('OfficialAdminScreen: failed to load', e);
       setLoadError(true);
     } finally {
+      // Latched on the first completed attempt — including a failed one, whose
+      // error state is itself content the next load must not blank.
+      hasLoadedOnceRef.current = true;
       if (mountedRef.current) setLoading(false);
     }
   }, [tournamentId]);
