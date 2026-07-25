@@ -89,36 +89,63 @@ export const DRIVE_MISS_LIE_LABELS = { rough: 'Rough', sand: 'Sand', trouble: 'T
 export const APPROACH_LIES = ['fairway', 'rough', 'sand'];
 export const APPROACH_LIE_LABELS = { fairway: 'Fairway', rough: 'Rough', sand: 'Sand' };
 
+// Presentation policy per tier, not just colour. `presentation` decides whether
+// a result gets the non-blocking top toast (common results, where a takeover
+// would interrupt score entry) or the full-screen takeover (rare enough to
+// earn it). `holdMs` and `haptic` live here too: they used to be a label chain
+// in ScorecardScreen whose final `else` was commented "HOLE IN ONE", so
+// NOELADA silently inherited the longest hold of any tier plus a celebratory
+// buzz. Declaring all five fields on every tier makes that class of bug
+// impossible rather than merely fixed.
 export const CELEBRATION_TIERS = {
   BIRDIE: {
     eyebrow: 'A BIRDIE',
-    accent: '#f0c419', // soft gold
-    glow: 'rgba(240,196,25,0.35)',
+    accent: semantic.rank.gold,
+    glow: 'rgba(212,175,55,0.35)',
     icon: 'star',
+    presentation: 'toast',
+    holdMs: 900,
+    haptic: 'light',
   },
   EAGLE: {
     eyebrow: 'AN EAGLE',
     accent: semantic.winner.dark, // Augusta gold
     glow: 'rgba(255,215,0,0.45)',
     icon: 'award',
+    presentation: 'takeover',
+    holdMs: 1200,
+    haptic: 'success',
   },
   ALBATROSS: {
     eyebrow: 'AN ALBATROSS',
     accent: '#ffffff',
     glow: 'rgba(255,255,255,0.55)',
     icon: 'star',
+    presentation: 'takeover',
+    holdMs: 1500,
+    haptic: 'success',
   },
   'HOLE IN ONE': {
     eyebrow: 'A HOLE IN ONE',
     accent: semantic.winner.dark,
     glow: 'rgba(255,215,0,0.65)',
     icon: 'target',
+    presentation: 'takeover',
+    holdMs: 1800,
+    haptic: 'success',
   },
   NOELADA: {
+    // Muted clay, not red — red is reserved for things the player must act on.
+    // A double bogey among friends is a dry aside, not a red alert.
+    // The eyebrow is deliberately left as-is: the toast does not render one, so
+    // changing the copy would be churn on a string only the fallback path sees.
     eyebrow: 'WHAT A NOELADA!',
-    accent: '#e74c3c', // shame red
-    glow: 'rgba(231,76,60,0.35)',
+    accent: '#c9a08f',
+    glow: 'rgba(201,160,143,0.22)',
     icon: 'frown',
+    presentation: 'toast',
+    holdMs: 600,
+    haptic: 'selection',
   },
 };
 
