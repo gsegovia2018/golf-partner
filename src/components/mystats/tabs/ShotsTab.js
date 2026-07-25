@@ -24,7 +24,8 @@ import { APPROACH_BUCKETS, PUTT_BUCKETS, sampleText, signed } from '../shotMetri
 const TARGET_BASIS = 'vs target hcp';
 const YD_TO_M = 0.9144;
 
-export default function ShotsTab({ stats, onInfo, targetHandicap, onChangeTarget }) {
+// Memoised — see the note in CoachTab.
+function ShotsTab({ stats, onInfo, targetHandicap, onChangeTarget }) {
   const { theme } = useTheme();
   const { units } = useAppSettings();
   const s = useMemo(() => makeStyles(theme), [theme]);
@@ -811,3 +812,5 @@ function SGTargetNudge({ onTap }) {
     </View>
   );
 }
+
+export default React.memo(ShotsTab);

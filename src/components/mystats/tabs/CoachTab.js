@@ -11,7 +11,9 @@ import PracticePlanCard from '../PracticePlanCard';
 import SectionCard from '../SectionCard';
 import TrendLineChart from '../TrendLineChart';
 
-export default function CoachTab({ stats, onInfo, targetHandicap, onChangeTarget, focus, focusVerdict, onCommitFocus, onEndFocus }) {
+// Memoised: the six stats tabs all stay mounted behind the pager, so without
+// this every tab commit re-renders all of them and blocks the swipe.
+function CoachTab({ stats, onInfo, targetHandicap, onChangeTarget, focus, focusVerdict, onCommitFocus, onEndFocus }) {
   const { theme } = useTheme();
   const s = useMemo(() => makeStyles(theme), [theme]);
   const { metrics = {}, form = {}, formSeries = {}, coach = {} } = stats ?? {};
@@ -163,3 +165,5 @@ function makeStyles(theme) {
     formPillText: { ...theme.typography.caption, fontWeight: '900', textAlign: 'right' },
   });
 }
+
+export default React.memo(CoachTab);

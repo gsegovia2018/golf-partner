@@ -25,7 +25,8 @@ const reasonLabel = (row) => (
       : 'no slope/rating'
 );
 
-export default function HandicapTab({
+// Memoised — see the note in CoachTab.
+function HandicapTab({
   myRounds, profileHandicap, onInfo, onApplied, excludedKeys, onToggleExcluded,
 }) {
   const { theme } = useTheme();
@@ -299,3 +300,5 @@ function makeStyles(theme) {
     reason: { ...theme.typography.tiny, color: theme.text.muted },
   });
 }
+
+export default React.memo(HandicapTab);
