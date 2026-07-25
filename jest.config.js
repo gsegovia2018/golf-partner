@@ -12,8 +12,12 @@ module.exports = {
     'src/store/scoring.js',
     'src/store/merge.js',
   ],
-  testPathIgnorePatterns: ['/node_modules/', '/\\.worktrees/'],
-  modulePathIgnorePatterns: ['<rootDir>/.worktrees/'],
+  // Nested worktrees carry their own copy of `__mocks__/`, and jest-haste-map
+  // resolves duplicate manual mocks by name — so a stale worktree copy can win
+  // over the real one at <rootDir> and silently mock the wrong thing. Keep both
+  // worktree locations out of the scan.
+  testPathIgnorePatterns: ['/node_modules/', '/\\.worktrees/', '/\\.claude/worktrees/'],
+  modulePathIgnorePatterns: ['<rootDir>/.worktrees/', '<rootDir>/.claude/worktrees/'],
   // Transform ESM packages from node_modules that Jest can't parse as-is.
   transformIgnorePatterns: [
     'node_modules/(?!((jest-)?react-native|@react-native(-community)?|expo(-.*)?|@expo(-.*)?|@unimodules|unimodules|sentry-expo|native-base|react-native-svg|react-native-url-polyfill|react-native-reanimated|react-native-worklets|uuid)/)',
