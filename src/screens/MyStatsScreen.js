@@ -1,12 +1,14 @@
 import React, { useEffect, useState, useMemo, useCallback, useRef } from 'react';
-import { View, Text, StyleSheet, ScrollView, ActivityIndicator, Dimensions } from 'react-native';
+import { View, Text, StyleSheet, ScrollView, ActivityIndicator, Dimensions, InteractionManager } from 'react-native';
 import Animated, {
   useSharedValue,
   useAnimatedScrollHandler,
   useAnimatedStyle,
   interpolate,
+  interpolateColor,
   Extrapolation,
   useReducedMotion,
+  runOnJS,
 } from 'react-native-reanimated';
 import ScreenContainer from '../components/ScreenContainer';
 import PressableScale from '../components/ui/PressableScale';
@@ -73,6 +75,39 @@ const ALL_TABS = [
   { key: 'handicap', label: 'Handicap' },
 ];
 
+// Captured by the pager's scroll worklet, which must not reach into the
+// ALL_TABS array from the UI thread.
+const TAB_COUNT = ALL_TABS.length;
+
+// The label colour rides the pager offset on the UI thread rather than
+// flipping when `tab` state commits. Committing the tab re-renders the screen,
+// and that render is long enough to be seen: the indicator (UI thread) kept
+// gliding while the label waited on the JS thread, which read as the colour
+// lagging the pill. Interpolating here keeps the two exactly in step.
+function TabPill({ index, item, active, scrollX, pageWidthSV, theme, s, onPress, onLayout }) {
+  const textStyle = useAnimatedStyle(() => {
+    const w = pageWidthSV.value > 0 ? pageWidthSV.value : 1;
+    // How many pages away the pager currently sits from this pill.
+    const distance = Math.min(1, Math.abs(scrollX.value / w - index));
+    return {
+      color: interpolateColor(distance, [0, 1], [theme.text.inverse, theme.text.muted]),
+    };
+  });
+
+  return (
+    <PressableScale
+      style={s.tab}
+      onPress={onPress}
+      onLayout={onLayout}
+      accessibilityRole="tab"
+      accessibilityState={{ selected: active }}
+      accessibilityLabel={item.label}
+    >
+      <Animated.Text style={[s.tabText, textStyle]}>{item.label}</Animated.Text>
+    </PressableScale>
+  );
+}
+
 function normalizeStatsTab(value) {
   if (value === 'overview') return 'coach';
   if (!ALL_TABS.some((t) => t.key === value)) return 'reportCard';
@@ -122,6 +157,10 @@ export default function MyStatsScreen({ navigation, route }) {
   const reduced = useReducedMotion();
   const [pageWidth, setPageWidth] = useState(() => Dimensions.get('window').width);
   const scrollX = useSharedValue(0);
+  // Last page index the scroll stream committed. Lives on the UI thread so the
+  // handler can tell a genuine page change from the ~60 events/s that don't
+  // cross a boundary, and only bridge to JS on the former.
+  const settledIndexSV = useSharedValue(0);
   const tabLayoutsSV = useSharedValue({ xs: [], ws: [] });
   const pageWidthSV = useSharedValue(pageWidth);
   const [pillBox, setPillBox] = useState({ y: 0, height: 0 });
@@ -167,36 +206,54 @@ export default function MyStatsScreen({ navigation, route }) {
 
   // Grow the mounted window to include the active page's neighbours; once a
   // page has been visited it stays mounted (no re-mount cost on return).
+  // The active page mounts straight away, but the neighbours wait for the
+  // gesture to finish: they are off-screen, and mounting a chart-heavy tab
+  // inside the swipe is what made the slide stutter as it snapped.
   useEffect(() => {
-    setActivated((prev) => {
-      const next = windowAround(activeIndex, ALL_TABS.length);
-      let grew = false;
-      next.forEach((j) => { if (!prev.has(j)) grew = true; });
-      if (!grew) return prev;
-      const merged = new Set(prev);
-      next.forEach((j) => merged.add(j));
-      return merged;
+    setActivated((prev) => (prev.has(activeIndex) ? prev : new Set(prev).add(activeIndex)));
+    const handle = InteractionManager.runAfterInteractions(() => {
+      setActivated((prev) => {
+        const next = windowAround(activeIndex, ALL_TABS.length);
+        let grew = false;
+        next.forEach((j) => { if (!prev.has(j)) grew = true; });
+        if (!grew) return prev;
+        const merged = new Set(prev);
+        next.forEach((j) => merged.add(j));
+        return merged;
+      });
     });
+    return () => handle.cancel();
   }, [activeIndex]);
 
-  const scrollHandler = useAnimatedScrollHandler({
-    onScroll: (event) => { scrollX.value = event.contentOffset.x; },
-  });
-
-  const onSettle = useCallback((event) => {
-    const x = event.nativeEvent.contentOffset?.x ?? 0;
-    currentOffsetRef.current = x;
-    const key = ALL_TABS[indexFromOffset(x, pageWidth || 1, ALL_TABS.length)].key;
+  const commitIndex = useCallback((index, width) => {
+    const key = ALL_TABS[index]?.key;
+    if (!key) return;
+    // The swipe itself moved the pager, so record where it is heading. The
+    // alignment effect below reads this and stays out of the way instead of
+    // firing a scrollTo that fights the platform's own page snap.
+    currentOffsetRef.current = index * width;
     setTab((prev) => (prev === key ? prev : key));
-  }, [pageWidth]);
+  }, []);
 
-  const onDragEnd = useCallback((event) => {
-    // Only settle here when there's no fling to follow (web / no-momentum);
-    // otherwise onMomentumScrollEnd settles at the real resting offset.
-    const vx = event.nativeEvent.velocity?.x ?? 0;
-    if (Math.abs(vx) > 0.05) return;
-    onSettle(event);
-  }, [onSettle]);
+  // Settle from the scroll stream, not from onScrollEndDrag/onMomentumScrollEnd.
+  // react-native-web's ScrollView wires only onScroll to the DOM and never
+  // emits either end event, so settling on those left web swipes inert: the
+  // pill label never followed the indicator and pages outside the initial
+  // window never mounted, leaving a blank page under the finger. Committing at
+  // the halfway point also lands the header change with the indicator rather
+  // than a beat behind it.
+  const scrollHandler = useAnimatedScrollHandler({
+    onScroll: (event) => {
+      const x = event.contentOffset.x;
+      scrollX.value = x;
+      const w = pageWidthSV.value;
+      if (w <= 0) return;
+      const index = indexFromOffset(x, w, TAB_COUNT);
+      if (index === settledIndexSV.value) return;
+      settledIndexSV.value = index;
+      runOnJS(commitIndex)(index, w);
+    },
+  });
 
   // Device-scoped fallback key when signed out, so a signed-out user's
   // selection still persists (and can later be migrated onto their account).
@@ -207,14 +264,21 @@ export default function MyStatsScreen({ navigation, route }) {
   }, [route?.params?.tab]);
 
   // Keep the pager aligned with the active tab. Skip when the pager is already
-  // at that offset (i.e. the change came from a finger swipe, whose onSettle
+  // at that offset (i.e. the change came from a finger swipe, whose commitIndex
   // updated currentOffsetRef first) so we never fight the native scroll.
   useEffect(() => {
     const targetX = activeIndex * pageWidth;
-    if (Math.abs(currentOffsetRef.current - targetX) < 2) return;
+    const delta = Math.abs(currentOffsetRef.current - targetX);
+    if (delta < 2) return;
+    // Animate one-page hops only. Animating a multi-page jump (tapping a far
+    // pill) drags the viewport across pages that aren't mounted yet, so the
+    // user watches a blank sweep, and the scroll stream crosses — and commits
+    // — every index on the way.
+    const adjacent = delta <= pageWidth + 2;
     currentOffsetRef.current = targetX;
-    pagerRef.current?.scrollTo?.({ x: targetX, animated: !reduced });
-  }, [activeIndex, pageWidth, reduced]);
+    settledIndexSV.value = activeIndex;
+    pagerRef.current?.scrollTo?.({ x: targetX, animated: !reduced && adjacent });
+  }, [activeIndex, pageWidth, reduced, settledIndexSV]);
 
   useEffect(() => {
     if (route?.params?.roundKey) {
@@ -352,6 +416,9 @@ export default function MyStatsScreen({ navigation, route }) {
   }, []);
 
   const onInfo = useCallback((key) => setInfoKey(key), []);
+  // Stable so the memoised Coach/Shots tabs aren't re-rendered by a new arrow
+  // on every commit — the whole point of memoising them.
+  const openTargetPicker = useCallback(() => setPickerOpen(true), []);
 
   const openCourseStats = useCallback((course) => {
     if (!course?.courseKey) return;
@@ -491,22 +558,23 @@ export default function MyStatsScreen({ navigation, route }) {
         pointerEvents="none"
         style={[s.tabIndicator, { top: pillBox.y, height: pillBox.height }, indicatorStyle]}
       />
-      {ALL_TABS.map((t) => (
-        <PressableScale
+      {ALL_TABS.map((t, i) => (
+        <TabPill
           key={t.key}
-          style={[s.tab, tab === t.key && s.tabActive]}
+          index={i}
+          item={t}
+          active={tab === t.key}
+          scrollX={scrollX}
+          pageWidthSV={pageWidthSV}
+          theme={theme}
+          s={s}
           onPress={() => setTab(t.key)}
           onLayout={(event) => {
             tabLayoutsRef.current[t.key] = event.nativeEvent.layout;
             if (tab === t.key) scrollTabIntoView(t.key, false);
             syncTabLayoutsSV();
           }}
-          accessibilityRole="tab"
-          accessibilityState={{ selected: tab === t.key }}
-          accessibilityLabel={t.label}
-        >
-          <Text style={[s.tabText, tab === t.key && s.tabTextActive]}>{t.label}</Text>
-        </PressableScale>
+        />
       ))}
     </ScrollView>
   );
@@ -595,7 +663,7 @@ export default function MyStatsScreen({ navigation, route }) {
           stats={stats}
           onInfo={onInfo}
           targetHandicap={targetHandicap}
-          onChangeTarget={() => setPickerOpen(true)}
+          onChangeTarget={openTargetPicker}
           focus={coachFocus}
           focusVerdict={coachFocusVerdict}
           onCommitFocus={onCommitFocus}
@@ -607,7 +675,7 @@ export default function MyStatsScreen({ navigation, route }) {
     } else if (key === 'breakdown') {
       body = <BreakdownTab stats={stats} onInfo={onInfo} onSelectCourse={openCourseStats} />;
     } else if (key === 'shots') {
-      body = <ShotsTab stats={stats} onInfo={onInfo} targetHandicap={targetHandicap} onChangeTarget={() => setPickerOpen(true)} />;
+      body = <ShotsTab stats={stats} onInfo={onInfo} targetHandicap={targetHandicap} onChangeTarget={openTargetPicker} />;
     } else if (key === 'handicap') {
       body = (
         <HandicapTab
@@ -642,8 +710,6 @@ export default function MyStatsScreen({ navigation, route }) {
         showsHorizontalScrollIndicator={false}
         scrollEventThrottle={16}
         onScroll={scrollHandler}
-        onMomentumScrollEnd={onSettle}
-        onScrollEndDrag={onDragEnd}
         style={s.pager}
         contentContainerStyle={s.pagerContent}
         testID="my-stats-pager"
@@ -732,9 +798,8 @@ function makeStyles(theme) {
       borderWidth: 1, borderColor: 'transparent',
       flexShrink: 0,
     },
-    tabActive: {}, // fill now provided by the animated indicator
+    // Fill comes from the animated indicator, colour from TabPill's worklet.
     tabText: { ...theme.typography.caption, color: theme.text.muted, fontWeight: '700' },
-    tabTextActive: { color: theme.text.inverse },
     tabIndicator: {
       position: 'absolute',
       left: 0,
@@ -779,6 +844,7 @@ function getTabScrollTarget({
 }
 
 function indexFromOffset(offsetX, width, count) {
+  'worklet'; // also called from the pager's scroll handler on the UI thread
   if (!Number.isFinite(width) || width <= 0) return 0;
   const raw = Math.round(offsetX / width);
   return Math.max(0, Math.min(count - 1, raw));
