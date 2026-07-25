@@ -375,6 +375,39 @@ describe('header distance block wiring', () => {
     expect(holePagePropsEqual(prev, next)).toBe(true);
   });
 
+  // A fix lands up to once a second for the whole round, and its raw position
+  // jitters even when the player is standing still. The page renders GPS only
+  // through HoleDistanceBlock, which never reads `position` and shows whole
+  // units — so a fix that doesn't move the displayed number must not re-render
+  // the page's ~300 views.
+  it('propsEqual skips the ACTIVE page when only the raw position jittered', () => {
+    const prev = { ...baseProps(), isActive: true, gps: gps(326), onOpenFlyover: () => {} };
+    const next = { ...prev, gps: { ...gps(326), position: [1.000004, 2.000004] } };
+    expect(holePagePropsEqual(prev, next)).toBe(true);
+  });
+
+  it('propsEqual skips the ACTIVE page for sub-unit distance jitter', () => {
+    const prev = { ...baseProps(), isActive: true, gps: gps(326), onOpenFlyover: () => {} };
+    // 326.4 renders identically to 326 — front/center/back all round the same.
+    const next = { ...prev, gps: gps(326.4) };
+    expect(holePagePropsEqual(prev, next)).toBe(true);
+  });
+
+  it('propsEqual re-renders the ACTIVE page when the displayed distance changes', () => {
+    const prev = { ...baseProps(), isActive: true, gps: gps(326), onOpenFlyover: () => {} };
+    const next = { ...prev, gps: gps(325) };
+    expect(holePagePropsEqual(prev, next)).toBe(false);
+  });
+
+  it('propsEqual re-renders the ACTIVE page when GPS health changes', () => {
+    const prev = {
+      ...baseProps(), isActive: true, onOpenFlyover: () => {},
+      gps: { ...gps(326), fixState: 'acquiring' },
+    };
+    const next = { ...prev, gps: { ...gps(326), fixState: 'ok' } };
+    expect(holePagePropsEqual(prev, next)).toBe(false);
+  });
+
   it('propsEqual re-renders when onOpenFlyover identity changes', () => {
     const prev = { ...baseProps(), gps: gps(326), onOpenFlyover: () => {} };
     const next = { ...prev, onOpenFlyover: () => {} };

@@ -7,7 +7,7 @@ import NetInfo from '@react-native-community/netinfo';
 import { Feather } from '@expo/vector-icons';
 import { useTheme } from '../../theme/ThemeContext';
 import { makeScorecardStyles } from './styles';
-import { HolePage, MePicker } from './HolePage';
+import { HolePage, HolePagePlaceholder, MePicker } from './HolePage';
 import { HoleFlyover } from './HoleFlyover';
 import { HoleGeoEditor } from './HoleGeoEditor';
 import { MeasureFab } from './MeasureFab';
@@ -34,6 +34,15 @@ import { useTourTarget } from '../tour/tourTargets';
 // We disable the auto-wrapper on web (pagingEnabled={false}) and apply
 // the snap properties directly on the ScrollView + each page.
 const PAGER_SNAP_TYPE_STYLE = Platform.OS === 'web' ? { scrollSnapType: 'x mandatory', overflowX: 'auto' } : null;
+
+// How many holes either side of the current one keep their content mounted.
+// One is enough: both `pagingEnabled` (native) and `scroll-snap-stop: always`
+// (web) limit a single gesture to one page, so the page a swipe can reach is
+// always already mounted. Mounting all 18 instead cost ~5,300 native views for
+// the ~300 actually on screen — re-laid-out on every commit, and the dominant
+// cost of opening a round. Off-window holes keep a same-size placeholder so
+// page positions are unchanged (see HolePagePlaceholder).
+const PAGER_WINDOW = 1;
 
 // Belt-and-braces: inject the snap rules via a real <style> tag so they
 // apply even if RNW's atomic-CSS pipeline ever filters an unknown CSS
@@ -285,45 +294,58 @@ export function HoleView({ round, roundIndex, players, scores, shotDetails, meId
             }}
             contentOffset={{ x: (currentHole - 1) * pagerSize.width, y: 0 }}
           >
-            {round.holes.map((pageHole) => (
-              <HolePage
-                key={pageHole.number}
-                pageHole={pageHole}
-                isActive={pageHole.number === currentHole}
-                width={pagerSize.width}
-                height={pagerSize.height}
-                courseName={round.courseName}
-                roundIndex={roundIndex}
-                round={round}
-                players={players}
-                scores={scores}
-                shotDetails={shotDetails}
-                meId={meId}
-                onSetShot={onSetShot}
-                theme={theme}
-                s={s}
-                onStep={onStep}
-                onSetScore={onSetScore}
-                editable={editable}
-                getScoreAnim={getScoreAnim}
-                showRunning={showRunning}
-                mode={rawMode === 'matchplay' ? 'matchplay'
-                  : rawMode === 'sindicato' ? 'sindicato'
-                  : rawMode === 'pairsmatchplay' ? 'pairsmatchplay'
-                  : isScrambleMode(rawMode) ? rawMode
-                  : isBestBall ? 'bestball' : 'stableford'}
-                official={official}
-                officialDiscrepancy={officialDiscrepancy}
-                onOpenDiscrepancy={openDiscrepancy}
-                onOpenConflict={openConflict}
-                shotCollapsed={shotCollapsed}
-                onToggleShotDetail={toggleShotDetail}
-                totalsMap={scorecardTotals}
-                conflictHoles={conflictHoles}
-                gps={gps}
-                onOpenFlyover={openFlyover}
-              />
-            ))}
+            {round.holes.map((pageHole) => {
+              // Off-window holes keep their slot but not their contents — see
+              // PAGER_WINDOW above.
+              if (Math.abs(pageHole.number - currentHole) > PAGER_WINDOW) {
+                return (
+                  <HolePagePlaceholder
+                    key={pageHole.number}
+                    width={pagerSize.width}
+                    height={pagerSize.height}
+                  />
+                );
+              }
+              return (
+                <HolePage
+                  key={pageHole.number}
+                  pageHole={pageHole}
+                  isActive={pageHole.number === currentHole}
+                  width={pagerSize.width}
+                  height={pagerSize.height}
+                  courseName={round.courseName}
+                  roundIndex={roundIndex}
+                  round={round}
+                  players={players}
+                  scores={scores}
+                  shotDetails={shotDetails}
+                  meId={meId}
+                  onSetShot={onSetShot}
+                  theme={theme}
+                  s={s}
+                  onStep={onStep}
+                  onSetScore={onSetScore}
+                  editable={editable}
+                  getScoreAnim={getScoreAnim}
+                  showRunning={showRunning}
+                  mode={rawMode === 'matchplay' ? 'matchplay'
+                    : rawMode === 'sindicato' ? 'sindicato'
+                    : rawMode === 'pairsmatchplay' ? 'pairsmatchplay'
+                    : isScrambleMode(rawMode) ? rawMode
+                    : isBestBall ? 'bestball' : 'stableford'}
+                  official={official}
+                  officialDiscrepancy={officialDiscrepancy}
+                  onOpenDiscrepancy={openDiscrepancy}
+                  onOpenConflict={openConflict}
+                  shotCollapsed={shotCollapsed}
+                  onToggleShotDetail={toggleShotDetail}
+                  totalsMap={scorecardTotals}
+                  conflictHoles={conflictHoles}
+                  gps={gps}
+                  onOpenFlyover={openFlyover}
+                />
+              );
+            })}
           </ScrollView>
         )}
         {round.id && appSettings.shotMeasuring !== 'off' && (

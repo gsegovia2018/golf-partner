@@ -27,6 +27,35 @@ const PAGER_PAGE_SNAP_STYLE = Platform.OS === 'web'
 // Height of the collapsed slim header bar; the full header collapses into it.
 const SLIM_BAR_HEIGHT = 44;
 
+// Everything a page actually shows from a GPS fix. HoleDistanceBlock is the
+// only consumer and reads distances, source, fixState, accuracy and offTee —
+// never `position` — printing all of them at whole-unit resolution.
+//
+// This matters because a fix lands up to once a second for the entire round,
+// and its raw position jitters by fractions of a metre even when the player is
+// standing perfectly still. Comparing the gps OBJECT therefore re-rendered the
+// active page's ~300 views every second to redraw a number that had not
+// changed. Comparing the rendered values instead leaves the header exactly as
+// live — any real movement crosses a whole unit and re-renders immediately —
+// while dropping the churn that came from GPS noise alone.
+const roundOrBlank = (v) => (v == null ? '' : Math.round(v));
+
+function gpsDisplaySignature(gps) {
+  if (!gps) return '';
+  const d = gps.distances;
+  const hazards = d?.hazards
+    ?.map((h) => `${h.kind}:${roundOrBlank(h.reach)}:${roundOrBlank(h.carry)}`)
+    .join(',') ?? '';
+  return [
+    gps.available,
+    gps.source,
+    gps.fixState,
+    gps.offTee,
+    roundOrBlank(gps.accuracy),
+    d ? `${roundOrBlank(d.front)}|${roundOrBlank(d.center)}|${roundOrBlank(d.back)}|${roundOrBlank(d.pin)}|${d.kind}|${hazards}` : '',
+  ].join('~');
+}
+
 // True when two `{ [playerId]: { [hole]: value } }` maps hold identical
 // values for `holeNumber` across every player present in either map.
 function samePerHoleSlice(prevMap, nextMap, holeNumber) {
@@ -80,10 +109,16 @@ export function holePagePropsEqual(prev, next) {
   ) {
     return false;
   }
-  // GPS distances tick every second; only the visible page pays for them.
-  // isActive flipping already forces a re-render on swipe, so a page that
-  // becomes active immediately catches up to the latest fix.
-  if ((prev.isActive || next.isActive) && prev.gps !== next.gps) return false;
+  // GPS distances tick every second; only the visible page pays for them, and
+  // then only when the fix actually moves something on screen (see
+  // gpsDisplaySignature). isActive flipping already forces a re-render on
+  // swipe, so a page that becomes active immediately catches up to the latest
+  // fix. The identity check runs first as a cheap bail-out.
+  if (
+    (prev.isActive || next.isActive)
+    && prev.gps !== next.gps
+    && gpsDisplaySignature(prev.gps) !== gpsDisplaySignature(next.gps)
+  ) return false;
   const hole = next.pageHole.number;
   return samePerHoleSlice(prev.scores, next.scores, hole)
     && samePerHoleSlice(prev.shotDetails, next.shotDetails, hole);
@@ -332,6 +367,24 @@ export const HolePage = React.memo(function HolePage({
     </View>
   );
 }, holePagePropsEqual);
+
+// Fixed-size stand-in for a hole that is outside the pager's mount window.
+//
+// The pager addresses pages arithmetically — scrollTo({ x: (hole - 1) * width })
+// and contentOffset both assume every hole occupies exactly one page-width slot
+// in order. So off-window holes cannot simply be dropped: that would slide every
+// later hole left and send "go to hole 12" to the wrong page. They render this
+// empty view instead, which costs one native view rather than ~300 while
+// preserving the layout that maths depends on. It carries the same web
+// scroll-snap style and data attribute as a real page so snapping is unaffected.
+export function HolePagePlaceholder({ width, height }) {
+  return (
+    <View
+      style={[{ width, height }, PAGER_PAGE_SNAP_STYLE]}
+      dataSet={Platform.OS === 'web' ? { pagerpage: '1' } : undefined}
+    />
+  );
+}
 
 // Prompt shown on the scorecard when shot-detail tracking can't tell which
 // player is "me" (a game you joined — the app can't infer your roster slot).
