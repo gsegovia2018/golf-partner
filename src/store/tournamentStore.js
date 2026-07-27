@@ -3,6 +3,7 @@ import { supabase } from '../lib/supabase';
 import { tournamentsIndex } from './tournamentsIndex';
 import { fetchTournament as repoFetchTournament, fetchMyTournaments } from './tournamentRepo';
 import { syncQueue } from './syncQueue';
+import { runExclusiveForTournament } from './tournamentMutex';
 import { isOnline } from '../lib/connectivity';
 import { teeByLabel, resolveTeeForPlayer } from './tees';
 // Pure scoring & handicap math lives in ./scoring. Imported here for this
@@ -154,9 +155,22 @@ async function resolveMeIdForTournament(t, options = {}) {
   return next;
 }
 
+// Subscribers receive the id of the tournament that changed, so a screen
+// showing one tournament (the scorecard) can ignore everything else. The emit
+// used to be global: a Home list refresh touching ANY tournament forced the
+// live scorecard to re-read and re-render mid-round. Existing zero-argument
+// callbacks keep working unchanged.
+//
+// CONTRACT: an ABSENT id means "unspecified — every subscriber should
+// refresh". The hot per-tournament paths (saveLocal, and the active-id clear
+// it drives) name their tournament; the rare whole-set operations
+// (setActiveTournament / clearActiveTournament / deleteTournament / the bulk
+// index updaters below) deliberately broadcast instead, because they change
+// which tournament is active or touch several at once. A filtering subscriber
+// MUST therefore treat undefined as "reload", never as "not mine".
 const _subs = new Set();
-function _emitChange() {
-  _subs.forEach((fn) => { try { fn(); } catch (_) {} });
+function _emitChange(id) {
+  _subs.forEach((fn) => { try { fn(id); } catch (_) {} });
 }
 export function subscribeTournamentChanges(fn) {
   _subs.add(fn);
@@ -211,6 +225,12 @@ async function _pendingEntriesFor(id) {
 // save again. Bounded to 3 passes — on hitting the bound, stop WITHOUT a
 // further stale save (local wins; the still-queued mutations drain and
 // re-reconcile on the next worker pass anyway).
+//
+// Callers must hold the per-tournament lock (tournamentMutex.js) across the
+// FETCH as well as this overlay — see _fetchAndOverlay. `remote` is a snapshot
+// of server state at fetch time, and this function replaces players/rounds
+// with it wholesale; a snapshot taken before a realtime row was applied would
+// otherwise land after that row and silently revert it.
 async function _overlayAndSave(id, remote, { makeActive = true } = {}) {
   const local = await readLocal(id);
   let snapshot = await _pendingEntriesFor(id);
@@ -242,9 +262,21 @@ export async function loadAllTournaments() {
 
   // Same race-guarded overlay as the single-tournament refresh paths: a list
   // refresh racing a score tap must not compute (and persist) an entry from
-  // a queue snapshot that missed the tap's enqueue.
+  // a queue snapshot that missed the tap's enqueue. Each overlay also takes
+  // its own tournament's lock so it can't interleave with a realtime row
+  // handler — per-id, so the whole list still overlays concurrently.
+  //
+  // Unlike _fetchAndOverlay this cannot hold the lock across the fetch: the
+  // fetch is one batched RPC for the entire list, and holding every
+  // tournament's lock for its duration would stall live scoring. A list
+  // snapshot can therefore still be slightly behind a realtime row for the
+  // tournament being played. Accepted: this path feeds the Home list, and the
+  // scorecard's own refreshes (which DO hold across the fetch) reconcile it.
   const result = await Promise.all(
-    list.map((t) => _overlayAndSave(t.id, t, { makeActive: false })),
+    list.map((t) => runExclusiveForTournament(
+      t.id,
+      () => _overlayAndSave(t.id, t, { makeActive: false }),
+    )),
   );
 
   const sorted = result.sort(byCreatedAtDesc);
@@ -326,6 +358,20 @@ async function fetchRemoteTournament(id) {
   return repoFetchTournament(id);
 }
 
+// Fetch + overlay + save for ONE tournament, all inside that tournament's
+// lock. Every refresh path goes through here so a fetch can never interleave
+// with a realtime row handler (realtimeSync.makeHandler takes the same lock).
+// Holding across the network round-trip is deliberate: locking only the save
+// still lets a pre-row snapshot land after the row and revert it. Returns the
+// merged tournament, or null when the fetch came back empty.
+async function _fetchAndOverlay(id, { makeActive = true } = {}) {
+  return runExclusiveForTournament(id, async () => {
+    const remote = await fetchRemoteTournament(id);
+    if (!remote) return null;
+    return _overlayAndSave(id, remote, { makeActive });
+  });
+}
+
 export async function loadTournament(options = {}) {
   const { refreshRemote = true, resolveIdentity = true, includeFinished = false } = options ?? {};
   const finalize = (t) => (resolveIdentity ? resolveMeIdForTournament(t) : t);
@@ -346,11 +392,9 @@ export async function loadTournament(options = {}) {
     // was erasing scores the moment they were entered. Skip when offline to
     // avoid stacking failed round-trips behind every focus.
     if (refreshRemote && isOnline()) {
-      fetchRemoteTournament(activeId)
-        .then(async (remote) => {
-          if (!remote) return;
-          const merged = await _overlayAndSave(activeId, remote);
-          if (resolveIdentity) await resolveMeIdForTournament(merged);
+      _fetchAndOverlay(activeId)
+        .then(async (merged) => {
+          if (merged && resolveIdentity) await resolveMeIdForTournament(merged);
         })
         .catch(() => {});
     }
@@ -372,16 +416,25 @@ export async function loadTournament(options = {}) {
 // loadTournament() this does NOT depend on which tournament is "active", so
 // screens reached from the feed (Gallery, RoundSummary) show the tournament
 // they were opened for rather than whatever was last opened.
-export async function getTournament(id) {
+// `refreshRemote: false` serves the cache with NO background fetch. Callers
+// that re-read in response to a subscribeTournamentChanges event must pass it:
+// the default fetch writes through saveLocal, which emits another change,
+// which re-enters this function and fetches again — a self-sustaining loop
+// that only settles when the fetched blob is byte-identical to the last write.
+// During a live round with several devices scoring it rarely is, so every peer
+// keystroke cost several full get_game_tournament round-trips and whole-screen
+// re-renders on every other device. Freshness for those callers already comes
+// from realtimeSync plus the screen's own poll. Mirrors loadTournament's
+// option of the same name.
+export async function getTournament(id, options = {}) {
+  const { refreshRemote = true } = options ?? {};
   if (!id) return null;
   const cached = await readLocal(id);
   if (cached) {
-    if (isOnline()) {
-      fetchRemoteTournament(id)
-        .then(async (remote) => {
-          if (!remote) return;
-          const merged = await _overlayAndSave(id, remote, { makeActive: false });
-          await resolveMeIdForTournament(merged, { makeActive: false });
+    if (refreshRemote && isOnline()) {
+      _fetchAndOverlay(id, { makeActive: false })
+        .then(async (merged) => {
+          if (merged) await resolveMeIdForTournament(merged, { makeActive: false });
         })
         .catch(() => {});
     }
@@ -403,9 +456,8 @@ export async function getTournament(id) {
 // the claim_tournament_player RPC) needs the fresh state synchronously.
 export async function refreshTournamentFromRemote(id) {
   if (!id) return null;
-  const remote = await fetchRemoteTournament(id);
-  if (!remote) return resolveMeIdForTournament(await readLocal(id));
-  const merged = await _overlayAndSave(id, remote);
+  const merged = await _fetchAndOverlay(id);
+  if (!merged) return resolveMeIdForTournament(await readLocal(id));
   return resolveMeIdForTournament(merged);
 }
 
@@ -433,7 +485,7 @@ async function clearActiveTournamentIfMatches(id, { emit = true } = {}) {
   if (activeId !== id && _activeTournamentId !== id) return false;
   if (activeId === id) await AsyncStorage.removeItem(ACTIVE_ID_KEY);
   if (_activeTournamentId === id) _activeTournamentId = null;
-  if (emit) _emitChange();
+  if (emit) _emitChange(id);
   return true;
 }
 
@@ -487,7 +539,7 @@ export async function saveLocal(tournament, options = {}) {
   if (shouldWriteActive) writes.push([ACTIVE_ID_KEY, tournament.id]);
   if (blobChanged) writes.push([ACTIVE_TOURNAMENT_KEY + tournament.id, json]);
   if (writes.length > 0) await AsyncStorage.multiSet(writes);
-  _emitChange();
+  _emitChange(tournament.id);
 }
 
 export async function readLocal(id) {
