@@ -364,14 +364,27 @@ export default function ScorecardScreen({ navigation, route }) {
     ScreenOrientation.lockAsync(ScreenOrientation.OrientationLock.PORTRAIT_UP).catch(() => {});
   }, []);
 
-  const reload = useCallback(async ({ preserveLocalEdits = false } = {}) => {
+  // `refreshRemote: false` re-reads the local cache WITHOUT kicking a remote
+  // fetch. Every reload driven by a store change event must use it: the fetch
+  // saves, the save emits another change event, and that event reloads and
+  // fetches again. With several devices scoring, each peer keystroke spun that
+  // loop through several full get_game_tournament round-trips and full
+  // re-renders of the pager. Freshness on this screen already comes from
+  // realtimeSync's row events plus the 20s focus poll below — neither needs
+  // the reload path to fetch anything of its own.
+  const reload = useCallback(async ({
+    preserveLocalEdits = false,
+    refreshRemote = true,
+  } = {}) => {
     // Official mode does not use the casual tournament blob — its data
     // comes from useOfficialRound (Supabase RPC). The casual load path is
     // skipped entirely; the official-derived tournament is wired in below.
     if (official) return;
     let t;
     try {
-      t = routeTournamentId ? await getTournament(routeTournamentId) : await loadTournament();
+      t = routeTournamentId
+        ? await getTournament(routeTournamentId, { refreshRemote })
+        : await loadTournament({ refreshRemote });
     } catch (e) {
       console.warn('ScorecardScreen: tournament load failed', e);
       t = null;
@@ -444,19 +457,24 @@ export default function ScorecardScreen({ navigation, route }) {
 
   useEffect(() => {
     reload();
-    const unsub = subscribeTournamentChanges(() => {
+    const unsub = subscribeTournamentChanges((changedId) => {
       // A change event that fires while THIS screen has a save in flight is
       // the echo of our own saveLocal(). Re-reading the blob from disk and
       // setTournament()-ing a fresh object would churn tournament/round
       // identity on every +/- tap — re-rendering the whole pager and doing a
-      // redundant disk read + remote fetch each time. Our own scores state
-      // is already authoritative; skip the self-echo. A genuine remote change
-      // is picked up by the next event once the save chain drains.
+      // redundant disk read each time. Our own scores state is already
+      // authoritative; skip the self-echo. A genuine remote change is picked
+      // up by the next event once the save chain drains.
       if (pendingSaveRef.current) return;
-      reload();
+      // Ignore other tournaments entirely — a Home list refresh used to
+      // re-render the live scorecard. An ABSENT id is the store's "unspecified"
+      // broadcast (active-tournament switch, delete): always reload on those.
+      const myId = routeTournamentId ?? tournamentRef.current?.id;
+      if (changedId && myId && changedId !== myId) return;
+      reload({ refreshRemote: false });
     });
     return unsub;
-  }, [reload]);
+  }, [reload, routeTournamentId]);
 
   // Cross-device live pull (Fix 4). Without this, a device that is only
   // watching never re-fetches peers' scores: the sync worker only pulls when
@@ -546,7 +564,9 @@ export default function ScorecardScreen({ navigation, route }) {
           pendingSaveRef.current = false;
           if (skippedReloadRef.current) {
             skippedReloadRef.current = false;
-            reload();
+            // The deferred replay of a change-event reload — same no-fetch
+            // rule as the subscription itself.
+            reload({ refreshRemote: false });
           }
         }
       });
