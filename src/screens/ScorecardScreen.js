@@ -24,6 +24,9 @@ import {
   isRoundComplete, isTournamentFinished,
   subscribeSyncStatus,
   getActiveTournamentSnapshot, getTournament, getTournamentSnapshot,
+  deriveMeIdFromAuth,
+} from '../store/tournamentStore';
+import {
   readLocal, refreshTournamentFromRemote,
 } from '../store/tournamentStore';
 import { isOnline } from '../lib/connectivity';
@@ -578,7 +581,24 @@ export default function ScorecardScreen({ navigation, route }) {
   // because those useCallbacks list `authorId` in their dependency arrays,
   // which React evaluates at render time — declaring it further down would be a
   // temporal-dead-zone ReferenceError that crashes the scorecard on mount.
-  const meId = tournament?.meId ?? null;
+  // Row order puts "me" first (playersMeFirst), so meId decides where every
+  // card sits. It MUST be known on the very first paint: the async fallbacks
+  // below (pickMe from the roster match, and the legacy path that only settles
+  // after a fetchPlayers() round-trip) used to land AFTER the rows had already
+  // rendered in roster order, visibly reshuffling the cards mid-round —
+  // "jumping between players" while someone else was scoring.
+  //
+  // deriveMeIdFromAuth is pure and needs only the roster's embedded user_id
+  // plus the signed-in account, both available synchronously here, so derive
+  // it at render time instead of waiting on a round-trip. The async paths
+  // still run (they persist meId and cover legacy rounds whose players predate
+  // user_id), but in the normal case they now agree with what is already on
+  // screen instead of moving it.
+  const meId = useMemo(() => {
+    if (tournament?.meId) return tournament.meId;
+    if (!tournament || !user?.id) return null;
+    return deriveMeIdFromAuth(tournament, user.id)?.meId ?? null;
+  }, [tournament, user?.id]);
   const authorId = meId ?? getDeviceAuthorId();
   const authorName = useCallback((aId) => {
     if (aId === 'legacy') return 'Earlier entry';
