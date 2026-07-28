@@ -36,8 +36,7 @@ export function buildHoleMapHtml(data) {
   .tri .bign{font-size:40px;font-weight:800;line-height:1.05;font-variant-numeric:tabular-nums}
   .tri .u{font-size:13px;font-weight:600;color:#9fb0a4}
   .tri .lbl{font-size:9px;font-weight:700;letter-spacing:.08em;color:#9fb0a4;text-transform:uppercase;width:34px;text-align:left}
-  .tri .hole{border-bottom:1px solid rgba(255,255,255,.18);padding-bottom:5px;margin-bottom:5px}
-  .tri .hole .lbl{color:#7f8f95}
+  .tri .src{font-size:9px;font-weight:800;letter-spacing:.09em;color:#7f8f95;text-transform:uppercase;border-bottom:1px solid rgba(255,255,255,.18);padding-bottom:5px;margin-bottom:5px}
   .lastbox{position:absolute;top:56px;left:12px;z-index:600;color:#fff;background:rgba(14,22,28,.72);border-radius:14px;padding:7px 12px 8px;min-width:78px}
   .lastbox.hide{display:none}
   .lastbox .rl{font-size:8px;font-weight:800;letter-spacing:.09em;color:#8fa6ad;text-transform:uppercase}
@@ -285,9 +284,10 @@ function redrawLines(from, g, cc){
     mk(L.polyline([a,cc],{color:'#fff',weight:3,dashArray:'3 8'}));
     mk(chipMk(last, cc, dist(last, cc)));
   }
-  // HUD always measures from the aim ring nearest the green — refresh live.
+  // The HUD is anchored to the player, not the ring; it's refreshed here so the
+  // no-anchor fallback (measuring from the ring) still tracks a drag.
   const aim = pts.length ? pts[pts.length-1] : null;
-  hud(aim || from, g);
+  hud(aim, g);
   // Report the ring(s) to the host so "Add shot" can drop the ball right here,
   // and a two-ring chain can be logged as a start->end segment.
   if (aim) post({ type:'aim', pos: aim, rings: pts.map(p => p.slice()) });
@@ -295,25 +295,27 @@ function redrawLines(from, g, cc){
 // Big white ring is the grab target; the small center dot marks the exact spot.
 function ringIcon(){ return L.divIcon({ className:'', html:'<div style="position:relative;width:34px;height:34px;border:3px solid #fff;border-radius:50%;box-shadow:0 0 0 1px rgba(0,0,0,.4)"><div style="position:absolute;top:50%;left:50%;width:6px;height:6px;margin:-3px 0 0 -3px;border-radius:50%;background:#fff;box-shadow:0 0 0 1px rgba(0,0,0,.5)"></div></div>', iconSize:[34,34], iconAnchor:[17,17] }); }
 
-// Top-right F/C/B box. Measures from the aim ring nearest the green (src),
-// so dragging the white ring live-updates the numbers. Falls back to the
-// anchor/GPS only when no ring exists.
-function hud(src, g){
+// Where the F/C/B numbers are measured from, and what to call that point.
+// The live GPS fix while the player is on the hole — the host has already
+// applied anchorFor's 1 km rule and tells us via anchor.source — otherwise the
+// tee. The aim ring is a last resort, for a hole with neither a fix nor a tee,
+// so the card still says something rather than three dashes.
+function hudSource(aim){
+  if (valid(anchor.pos) && anchor.source === 'gps') return { from: anchor.pos, label: 'You' };
+  if (valid(anchor.pos) && anchor.source === 'tee') return { from: anchor.pos, label: 'From tee' };
+  return { from: valid(aim) ? aim : null, label: 'Aim' };
+}
+
+// Top-right F/C/B box: how far the player is from the green, front and back.
+// Anchored per hudSource, so dragging an aim ring no longer moves these — ring
+// distances live on the chips along the measuring line instead.
+function hud(aim, g){
   const h = document.getElementById('hud');
-  const from = valid(src) ? src : (targets[targets.length-1] || anchor.pos);
+  const { from, label } = hudSource(aim);
   const d = (p) => valid(p) && valid(from) ? dist(from, p) : null;
-  // Top row: hole yardage to the green center, independent of the aim ring.
-  // From the tee normally; in planning mode (no live GPS) once a shot's been
-  // played, from the last shot instead.
-  const list = shots || [];
-  const lastPt = list.length ? [list[list.length-1].lat, list[list.length-1].lng] : null;
-  const teeOnly = list.length === 1 && !list[0].club; // a lone seeded tee doesn't count
-  const fromLast = !onCourse() && valid(lastPt) && !teeOnly;
-  const topFrom = fromLast ? lastPt : hole.tee;
-  const td = valid(topFrom) && valid(g.c) ? dist(topFrom, g.c) : null;
   h.innerHTML =
     '<div class="tri">'+
-      '<div class="row hole"><span class="lbl">'+(fromLast ? 'Last' : 'Tee')+'</span><span class="sm">'+disp(td)+'</span><span class="u">'+U+'</span></div>'+
+      '<div class="src">'+label+'</div>'+
       '<div class="row"><span class="lbl">Back</span><span class="sm">'+disp(d(g.b))+'</span></div>'+
       '<div class="row"><span class="lbl"></span><span class="bign">'+disp(d(g.c))+'</span><span class="u">'+U+'</span></div>'+
       '<div class="row"><span class="lbl">Front</span><span class="sm">'+disp(d(g.f))+'</span></div>'+
