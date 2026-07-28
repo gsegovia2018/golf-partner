@@ -136,7 +136,25 @@ const onCourse = () => anchor && anchor.source === 'gps';
 let targets = []; // draggable aim circles (1-2), each [lat,lng]
 let targetLayers = [];
 
+// draw() rebuilds every layer, so a redraw landing mid-drag removes the marker
+// under the finger — Leaflet detaches its Draggable with the layer and the
+// gesture dies silently. Android's 1s GPS watch posts a 'player' message every
+// second, which is why a drag stopped after about a second. Hold redraws until
+// the drag ends, then run the last one.
+let dragging = false, pendingDraw = false;
 function draw() {
+  if (dragging) { pendingDraw = true; return; }
+  drawNow();
+}
+function endDrag() {
+  dragging = false;
+  if (pendingDraw) { pendingDraw = false; draw(); }
+}
+// Leaflet fires no 'dragend' when the OS cancels the touch, which would leave
+// redraws held forever — clear the hold on cancel too.
+document.addEventListener('touchcancel', endDrag);
+
+function drawNow() {
   clear();
   const g = fcb();
   // green shape / hazards drawn as context in both modes
@@ -211,8 +229,10 @@ function drawShots(){
         L.DomEvent.stopPropagation(e);      // don't let the tap move the aim ring
         post({ type:'shot-tap', index:i });
       });
+      mk.on('dragstart', () => { dragging = true; });
       mk.on('dragend', (e) => {
         const ll = e.target.getLatLng();
+        endDrag();
         post({ type:'shot-move', index:i, pos:[ll.lat, ll.lng] });
       });
     }
@@ -233,7 +253,9 @@ function drawTargets(from, g, cc){
   targets.forEach((p, i) => {
     const mk = L.marker(p, { draggable:true, icon: ringIcon(), zIndexOffset:1000 }).addTo(map);
     targetLayers.push(mk);
+    mk.on('dragstart', () => { dragging = true; });
     mk.on('drag', e => { targets[i] = [e.latlng.lat, e.latlng.lng]; redrawLines(from, g, cc); });
+    mk.on('dragend', endDrag);
     mk.on('contextmenu', () => {
       if (targets.length < 2) return; // keep at least one circle
       targets.splice(i, 1);
