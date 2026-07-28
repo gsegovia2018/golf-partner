@@ -586,9 +586,23 @@ export async function clearActiveTournament() {
   _emitChange();
 }
 
+// Removing a game hides it; it does NOT destroy it.
+//
+// This used to be a hard DELETE, and every history table cascades off
+// tournaments — game_players, game_rounds, and through those the scores,
+// per-author entries, resolutions, shot details and notes. One tap from
+// History permanently destroyed a round, with no undo and no export. It now
+// writes the `deleted_at` tombstone (migration 20260728000004): the server
+// keeps every row, get_my_game_tournaments filters the game out of the list,
+// and a restore is one update away (restoreTournament below). The local
+// cleanup that follows is unchanged, so the game disappears from this device
+// exactly as it did before.
 export async function deleteTournament(id) {
   const activeId = await AsyncStorage.getItem(ACTIVE_ID_KEY);
-  const { error } = await supabase.from('tournaments').delete().eq('id', id);
+  const { error } = await supabase
+    .from('tournaments')
+    .update({ deleted_at: new Date().toISOString() })
+    .eq('id', id);
   if (error) throw error;
   if (activeId === id) await AsyncStorage.removeItem(ACTIVE_ID_KEY);
   if (_activeTournamentId === id) _activeTournamentId = null;
@@ -607,6 +621,37 @@ export async function deleteTournament(id) {
     })));
   } catch (_) { /* index cleanup is best-effort */ }
   _emitChange();
+}
+
+// Undo a deleteTournament. Clears the tombstone and pulls the game back into
+// the local cache, so it reappears in the list with its full history — every
+// score, entry and shot detail was still on the server the whole time.
+//
+// Not wired to a screen yet: it exists so a deletion is recoverable from the
+// app rather than only by hand in SQL, and so the "restore" path is covered by
+// the same code the UI will use when it grows an Undo affordance.
+export async function restoreTournament(id) {
+  if (!id) return null;
+  const { error } = await supabase
+    .from('tournaments')
+    .update({ deleted_at: null })
+    .eq('id', id);
+  if (error) throw error;
+  const restored = await refreshTournamentFromRemote(id);
+  _emitChange(id);
+  return restored;
+}
+
+// Games this account has deleted, newest first, with how much history each
+// still holds. Reads the tombstoned rows the list RPC hides.
+export async function listDeletedTournaments() {
+  const { data, error } = await supabase
+    .from('tournaments')
+    .select('id, name, created_at, deleted_at')
+    .not('deleted_at', 'is', null)
+    .order('deleted_at', { ascending: false });
+  if (error) throw error;
+  return data ?? [];
 }
 
 // Re-export the pure scoring/handicap math (defined in ./scoring) so existing
