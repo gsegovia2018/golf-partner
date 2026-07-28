@@ -233,6 +233,18 @@ async function _pendingEntriesFor(id) {
 // with it wholesale; a snapshot taken before a realtime row was applied would
 // otherwise land after that row and silently revert it.
 async function _overlayAndSave(id, remote, { makeActive = true } = {}) {
+  // A tombstoned tournament must not be cached, and above all must not stay
+  // the ACTIVE one. get_game_tournament deliberately keeps serving a deleted
+  // game (restore and direct links need it), so this is the only point where a
+  // device that did not run the delete can learn about it: deleteTournament
+  // clears the pointer and blob locally, but that never propagated. The
+  // symptom was Home's "LIVE" hero advertising a round for a game deleted on
+  // another device, while the list — which does filter tombstones — showed
+  // nothing.
+  if (remote?.deletedAt) {
+    await _purgeLocalTournament(id);
+    return null;
+  }
   const local = await readLocal(id);
   // A tournament can never legitimately have zero rounds: createTournament
   // always writes at least one, and canDeleteRound refuses to remove the last.
@@ -291,7 +303,10 @@ export async function loadAllTournaments() {
     )),
   );
 
-  const sorted = result.sort(byCreatedAtDesc);
+  // _overlayAndSave returns null for a tombstoned tournament (it purges it
+  // instead of caching it). The list RPC already filters those out, so this is
+  // belt-and-braces — but a null would break the comparator below.
+  const sorted = result.filter(Boolean).sort(byCreatedAtDesc);
   // Fire-and-forget: keep the offline index in sync with the latest list.
   tournamentsIndex.writeIndex(sorted).catch(() => {});
   return sorted;
@@ -393,6 +408,12 @@ export async function loadTournament(options = {}) {
 
   const cached = await readLocal(activeId);
   if (cached) {
+    // Cached before the tombstone was known (or written by an older build):
+    // never serve a deleted game as the active one.
+    if (cached.deletedAt) {
+      await _purgeLocalTournament(activeId);
+      return null;
+    }
     if (!includeFinished && isTournamentFinished(cached)) {
       await clearActiveTournamentIfMatches(activeId);
       return null;
@@ -597,6 +618,29 @@ export async function clearActiveTournament() {
   _emitChange();
 }
 
+// Drop every local trace of one tournament: the blob, the in-memory caches,
+// the tournaments index row, and — critically — the ACTIVE pointer if it aimed
+// here. Shared by deleteTournament (this device deleted it) and _overlayAndSave
+// (some other device did, and the server told us via the deletedAt tombstone).
+// Nothing here touches the server: the rows stay, and restoreTournament pulls
+// them back.
+async function _purgeLocalTournament(id, { activeId } = {}) {
+  const active = activeId ?? await AsyncStorage.getItem(ACTIVE_ID_KEY);
+  if (active === id) await AsyncStorage.removeItem(ACTIVE_ID_KEY);
+  if (_activeTournamentId === id) _activeTournamentId = null;
+  await AsyncStorage.removeItem(ACTIVE_TOURNAMENT_KEY + id);
+  _localTournamentCache.delete(id);
+  _lastWrittenJson.delete(id);
+  try {
+    const current = await tournamentsIndex.readIndex();
+    const next = current.filter((row) => row.id !== id);
+    await tournamentsIndex.writeIndex(next.map((row) => ({
+      id: row.id, name: row.name, createdAt: row.createdAt,
+      _role: row.role, updatedAt: row.updatedAt,
+    })));
+  } catch (_) { /* index cleanup is best-effort */ }
+}
+
 // Removing a game hides it; it does NOT destroy it.
 //
 // This used to be a hard DELETE, and every history table cascades off
@@ -615,22 +659,7 @@ export async function deleteTournament(id) {
     .update({ deleted_at: new Date().toISOString() })
     .eq('id', id);
   if (error) throw error;
-  if (activeId === id) await AsyncStorage.removeItem(ACTIVE_ID_KEY);
-  if (_activeTournamentId === id) _activeTournamentId = null;
-  // Mirror the delete into the offline layer: drop the blob cache and
-  // remove the id from the tournaments index so Home doesn't show a
-  // phantom card after next cold start.
-  await AsyncStorage.removeItem(ACTIVE_TOURNAMENT_KEY + id);
-  _localTournamentCache.delete(id);
-  _lastWrittenJson.delete(id);
-  try {
-    const current = await tournamentsIndex.readIndex();
-    const next = current.filter((row) => row.id !== id);
-    await tournamentsIndex.writeIndex(next.map((row) => ({
-      id: row.id, name: row.name, createdAt: row.createdAt,
-      _role: row.role, updatedAt: row.updatedAt,
-    })));
-  } catch (_) { /* index cleanup is best-effort */ }
+  await _purgeLocalTournament(id, { activeId });
   _emitChange();
 }
 

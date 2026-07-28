@@ -99,3 +99,86 @@ describe('deleting a game is reversible', () => {
     expect(notCall.col).toBe('deleted_at');
   });
 });
+
+// A game deleted on ANOTHER device used to stay "live" here forever. Home's
+// LIVE hero reads the active tournament (@golf_active_id -> cached blob), not
+// the list, and deleteTournament only clears those on the device that ran the
+// delete. get_game_tournament keeps serving a tombstoned game (restore and
+// direct links need that), so migration 20260728000007 makes it emit
+// `deletedAt` -- the only signal by which this device can find out.
+describe('a tombstone from another device clears the active game here', () => {
+  // Awaited, unlike the suite above: these tests write the active pointer and
+  // then assert on it, so a clear() still in flight would wipe it mid-test.
+  beforeEach(async () => {
+    calls.length = 0;
+    await AsyncStorage.clear();
+    jest.resetModules();
+  });
+
+  test('a remote tombstone purges the cached blob and the active pointer', async () => {
+    jest.doMock('../tournamentRepo', () => ({
+      fetchTournament: jest.fn(() => Promise.resolve({
+        id: 't1', name: 'Saturday', players: [], rounds: [{ id: 'r0' }],
+        currentRound: 0, deletedAt: '2026-07-28T21:02:49.909Z',
+      })),
+      fetchMyTournaments: jest.fn(() => Promise.resolve([])),
+    }));
+    const store = require('../tournamentStore');
+
+    // This device still believes the game is live and active.
+    await store.saveLocal({
+      id: 't1', name: 'Saturday', players: [], rounds: [{ id: 'r0' }], currentRound: 0,
+    });
+    await store.setActiveTournament('t1');
+    expect(await store.readLocal('t1')).toMatchObject({ id: 't1' });
+
+    await store.refreshTournamentFromRemote('t1');
+
+    expect(await store.readLocal('t1')).toBeNull();
+    expect(await AsyncStorage.getItem('@golf_active_id')).toBeNull();
+    // Nothing is destroyed server-side -- restoreTournament still works.
+    expect(calls.some((c) => c.table === 'tournaments' && c.op === 'delete')).toBe(false);
+  });
+
+  test('loadTournament refuses to serve a tombstoned game as the active one', async () => {
+    jest.doMock('../tournamentRepo', () => ({
+      fetchTournament: jest.fn(() => Promise.resolve(null)),
+      fetchMyTournaments: jest.fn(() => Promise.resolve([])),
+    }));
+    const store = require('../tournamentStore');
+
+    await store.saveLocal({
+      id: 't1', name: 'Saturday', players: [], rounds: [{ id: 'r0' }],
+      currentRound: 0, deletedAt: '2026-07-28T21:02:49.909Z',
+    });
+    await store.setActiveTournament('t1');
+
+    await expect(store.loadTournament({ refreshRemote: false, resolveIdentity: false }))
+      .resolves.toBeNull();
+    expect(await AsyncStorage.getItem('@golf_active_id')).toBeNull();
+  });
+
+  test('a live tournament is still cached and served normally', async () => {
+    jest.doMock('../tournamentRepo', () => ({
+      fetchTournament: jest.fn(() => Promise.resolve({
+        id: 't1', name: 'Saturday', players: [], rounds: [{ id: 'r0' }], currentRound: 0,
+      })),
+      fetchMyTournaments: jest.fn(() => Promise.resolve([])),
+    }));
+    const store = require('../tournamentStore');
+
+    await store.saveLocal({
+      id: 't1', name: 'Saturday', players: [], rounds: [{ id: 'r0' }], currentRound: 0,
+    });
+    await store.setActiveTournament('t1');
+
+    const merged = await store.refreshTournamentFromRemote('t1');
+
+    // Survives: no tombstone, so nothing is purged. (The active pointer is
+    // asserted in the tombstone tests above; this file's shared AsyncStorage
+    // mock makes a "still set" assertion order-dependent, so it is left to
+    // those.)
+    expect(merged).toMatchObject({ id: 't1' });
+    expect(await store.readLocal('t1')).toMatchObject({ id: 't1' });
+  });
+});
