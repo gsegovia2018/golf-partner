@@ -1,4 +1,4 @@
-import React, { useMemo, useState, useSyncExternalStore } from 'react';
+import React, { useEffect, useMemo, useState, useSyncExternalStore } from 'react';
 import { View, Text, StyleSheet, Pressable } from 'react-native';
 import { Feather } from '@expo/vector-icons';
 import PressableScale from '../ui/PressableScale';
@@ -14,6 +14,7 @@ import { haptic } from '../../lib/haptics';
 import { ClubIcon } from './ClubIcon';
 import { ClubWheel } from './ClubWheel';
 
+const SAVED_TOAST_MS = 8000; // how long the "saved · Undo" confirmation stays up
 const MIN_SAVE_M = 20;   // under this, tap ② is a no-op (mis-tap guard)
 const MAX_PLAIN_M = 350; // over this, require a second confirming tap
 const MAX_ACCURACY_M = 25; // same usable-fix bar as the scorecard header
@@ -39,6 +40,15 @@ export function MeasureFab({ roundId, roundIndex, holeNumber, fix, targetMeters,
   const [saved, setSaved] = useState(null);   // { label, meters, originId, shotId }
   const [confirmOver, setConfirmOver] = useState(false);
   const [wheelOpen, setWheelOpen] = useState(false);
+
+  // The confirmation is a toast, not a status line: without this it would sit
+  // on the scorecard for the rest of the round, since the only other things
+  // that clear it are arming the next measure and Undo itself.
+  useEffect(() => {
+    if (!saved) return undefined;
+    const id = setTimeout(() => setSaved(null), SAVED_TOAST_MS);
+    return () => clearTimeout(id);
+  }, [saved]);
 
   if (!roundId) return null;
 

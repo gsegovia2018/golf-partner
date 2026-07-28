@@ -67,6 +67,21 @@ describe('MeasureFab', () => {
     expect(logMeasuredShot).toHaveBeenCalledWith(expect.objectContaining({ start: START, end: FAR }));
   });
 
+  it('clears the saved toast on its own instead of sitting there all round', async () => {
+    jest.useFakeTimers();
+    try {
+      const { getByLabelText, queryByLabelText, rerender } = render(<MeasureFab {...base} />);
+      fireEvent.press(getByLabelText('Measure my shot'));
+      rerender(<MeasureFab {...base} fix={{ position: FAR, accuracy: 8 }} />);
+      await act(async () => { fireEvent.press(getByLabelText('Ball is here — save the measured shot')); });
+      getByLabelText('Undo measured shot');
+      act(() => { jest.advanceTimersByTime(8000); });
+      expect(queryByLabelText('Undo measured shot')).toBeNull();
+    } finally {
+      jest.useRealTimers();
+    }
+  });
+
   it('undo deletes both created spots', async () => {
     const { getByLabelText, rerender } = render(<MeasureFab {...base} />);
     fireEvent.press(getByLabelText('Measure my shot'));
