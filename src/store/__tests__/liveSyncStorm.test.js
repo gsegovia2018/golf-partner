@@ -209,6 +209,22 @@ describe('applyPlayerRow anchors identity on the row primary key', () => {
     ]);
   });
 
+  // Server-side counterpart: migration 20260728000000 adds
+  // CHECK (body->>'id' = player_id) and makes get_game_tournament project the
+  // id from the column, so a disagreeing body can be neither stored nor
+  // served. This pins the client's half of that contract.
+  test('a body whose id disagrees with the row key does not win', () => {
+    const { applyPlayerRow } = require('../realtimeSync');
+
+    const t = { id: 't1', players: [{ id: 'p1', name: 'Yeyen' }], rounds: [] };
+    const out = applyPlayerRow(t, {
+      tournament_id: 't1', player_id: 'p2', pos: 1,
+      body: { id: 'WRONG', name: 'Labarga' },
+    }, 'INSERT');
+
+    expect(out.players.map((p) => p.id)).toEqual(['p1', 'p2']);
+  });
+
   test('a second event for the same player updates rather than duplicates', () => {
     const { applyPlayerRow } = require('../realtimeSync');
 

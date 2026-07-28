@@ -16,7 +16,8 @@
 - Domain logic lives in `src/store/`, not in screens (`CLAUDE.md`).
 - Every commit ends with: `Co-Authored-By: Claude Opus 5 (1M context) <noreply@anthropic.com>`
 - Work in a git worktree **outside** the repo (e.g. `~/.config/superpowers/worktrees/golf-partner/<branch>`), symlink `node_modules`, copy `.env`. Nested worktrees under the repo get picked up by Jest and ESLint.
-- **Backward compatibility with installed Android builds is required.** There is no OTA; the four users run whatever APK they last installed. Every change here either keeps the emitted `get_game_tournament` shape byte-identical (Task 1) or removes fields that every consumer already reads through a roster lookup (Task 2). Verified 2026-07-28 — do not weaken this without re-checking.
+- **Backward compatibility with installed Android builds is required.** There is no OTA; the four users run whatever APK they last installed. Every change here is either semantically invisible to the client (Task 1 — see its measured delta) or removes fields that every consumer already reads through a roster lookup (Task 2). Verified 2026-07-28 — do not weaken this without re-checking.
+- **"Unchanged shape" claims must be measured, not assumed.** Task 1 was written asserting a byte-identical `get_game_tournament` output; that turned out to be false for 14 of 48 tournaments. Hash every tournament's emitted blob before and after any change to that function, and account for every diff.
 
 ---
 
@@ -39,7 +40,9 @@
 
 `game_players` stores `player_id` and `user_id` both as columns **and** inside `body`. That duplication is why `claim_tournament_player` has to `jsonb_set` the body and update the column in one statement, and why an id-less body was representable at all (the column is `NOT NULL DEFAULT '{}'` and there is no CHECK — verified 2026-07-28: only a PK and an FK exist on the table).
 
-Fix: `get_game_tournament` projects identity **out of the columns** into each emitted player, so `body` becomes pure payload. The emitted shape stays byte-identical — `user_id` is added only when non-null, matching what bodies carry today.
+Fix: `get_game_tournament` projects identity **out of the columns** into each emitted player, so `body` becomes pure payload.
+
+**Measured delta (prod, 2026-07-28):** 27 players across 14 of 48 tournaments had `body.user_id` present but set to JSON `null` (an artifact of the old release path) while the column was NULL. Those go from `"user_id": null` to the key being absent. That is the *entire* diff — re-emitting under the old rule reproduces byte-identical output for all 48. It is invisible to clients: every `user_id` read in `src/` is truthiness or equality against a real uuid, and nothing does a key-presence check.
 
 **Files:**
 - Create: `supabase/migrations/20260728000000_player_identity_from_columns.sql`
