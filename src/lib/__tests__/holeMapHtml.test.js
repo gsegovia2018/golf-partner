@@ -149,4 +149,48 @@ describe('buildHoleMapHtml', () => {
     const html = buildHoleMapHtml(base);
     expect(html).not.toContain('Drag the ring to measure');
   });
+
+  // The top-right F/C/B card is anchored to where the player is, not to the
+  // draggable aim ring. hudSource() owns that choice, so lift it out of the
+  // inline script and exercise it directly rather than asserting on markup.
+  describe('hudSource — what the F/C/B card measures from', () => {
+    const run = (anchor, aim) => {
+      const html = buildHoleMapHtml(base);
+      const src = html.match(/function hudSource\(aim\)\{[\s\S]*?\n\}/)[0];
+      const valid = (p) => Array.isArray(p) && isFinite(p[0]) && isFinite(p[1]);
+      // hudSource closes over `anchor`/`valid`; supplying them as parameters of
+      // the wrapper puts them in its enclosing scope.
+      return new Function('anchor', 'valid', 'aim', `${src}; return hudSource(aim);`)(anchor, valid, aim);
+    };
+    const GPS = [38.5601, -0.1401];
+    const TEE = [38.5634, -0.1439];
+    const RING = [38.5620, -0.1420];
+
+    it('measures from the live GPS fix when the host says the player is on the hole', () => {
+      expect(run({ pos: GPS, source: 'gps' }, RING)).toEqual({ from: GPS, label: 'You' });
+    });
+    it('falls back to the tee when GPS is off or out of range', () => {
+      expect(run({ pos: TEE, source: 'tee' }, RING)).toEqual({ from: TEE, label: 'From tee' });
+    });
+    it('falls back to the aim ring only when the hole has neither a fix nor a tee', () => {
+      expect(run({ pos: null, source: null }, RING)).toEqual({ from: RING, label: 'Aim' });
+    });
+    it('never measures from the aim ring while an anchor exists', () => {
+      expect(run({ pos: GPS, source: 'gps' }, RING).from).not.toBe(RING);
+      expect(run({ pos: TEE, source: 'tee' }, RING).from).not.toBe(RING);
+    });
+    it('yields no origin when there is no anchor and no ring', () => {
+      expect(run({ pos: null, source: null }, null).from).toBeNull();
+    });
+    it('ignores a source that carries no usable position', () => {
+      expect(run({ pos: null, source: 'gps' }, RING)).toEqual({ from: RING, label: 'Aim' });
+    });
+  });
+
+  it('drops the tee/last-shot row the anchored card replaces', () => {
+    const html = buildHoleMapHtml(base);
+    expect(html).toContain('class="src"');
+    expect(html).not.toContain('class="row hole"');
+    expect(html).not.toContain('.tri .hole');
+  });
 });
