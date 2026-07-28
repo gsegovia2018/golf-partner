@@ -12,6 +12,7 @@ import { makeScorecardStyles } from './styles';
 import { holePoints, roundTotals } from './scoreModel';
 import { classifyHoleResult } from './constants';
 import { isScrambleMode } from '../scoringModes';
+import { resolvePairs } from '../../store/scoring';
 
 // Fixed-size score-result chip drawn behind a stroke digit. The wrapper fills
 // the cell and centres the chip so alignment never shifts. Nothing renders for
@@ -63,9 +64,12 @@ function ScoreShape({ result, theme, s }) {
   );
 }
 
-// Join a pair's member first names with ' & '.
-function pairLabel(pair) {
-  return pair.map((p) => p.name.split(' ')[0]).join(' & ');
+// Join a pair's member first names with ' & '. Pairs persist ids only (see
+// store/scoring.js thinPairs), so members resolve against the roster.
+function pairLabel(pair, players) {
+  return resolvePairs([pair], players)[0]
+    .map((p) => p?.name?.split(' ')[0] ?? '—')
+    .join(' & ');
 }
 
 // A team's total best/worst-ball points for the round.
@@ -555,20 +559,20 @@ export function GridView({ round, roundIndex, players, scores, isBestBall, bbRes
         handicapsOverride={rowHandicaps}
       />
 
-      {isBestBall && bbResult && <LiveMatchStrip bbResult={bbResult} settings={settings} />}
+      {isBestBall && bbResult && <LiveMatchStrip bbResult={bbResult} settings={settings} players={players} />}
     </PullToRefresh>
   );
 }
 
-function LiveMatchStrip({ bbResult, settings }) {
+function LiveMatchStrip({ bbResult, settings, players }) {
   const { theme } = useTheme();
   const s = useMemo(() => makeScorecardStyles(theme), [theme]);
 
   if (!bbResult) return null;
   const { pair1, pair2 } = bbResult;
   const { bestBallValue: bbVal = 1, worstBallValue: wbVal = 1 } = settings ?? {};
-  const p1Name = pairLabel(pair1);
-  const p2Name = pairLabel(pair2);
+  const p1Name = pairLabel(pair1, players);
+  const p2Name = pairLabel(pair2, players);
   const p1Round = roundTeamPts(bbResult, 1, bbVal, wbVal);
   const p2Round = roundTeamPts(bbResult, 2, bbVal, wbVal);
   const roundWinner = p1Round > p2Round ? 1 : p2Round > p1Round ? 2 : 0;

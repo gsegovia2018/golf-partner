@@ -2,6 +2,7 @@ import React from 'react';
 import { render } from '@testing-library/react-native';
 import { ThemeProvider } from '../../../theme/ThemeContext';
 import { GridView, ScorecardTable } from '../GridView';
+import { calcBestWorstBall } from '../../../store/tournamentStore';
 
 // Regression test for a bug where NineBlock never received `round`, so its
 // holePoints() call omitted round — for pairsmatchplay (which needs
@@ -146,6 +147,49 @@ describe('ScorecardTable showTotalsCard', () => {
       </ThemeProvider>,
     );
     expect(queryByText('STABLEFORD')).toBeNull();
+  });
+});
+
+// Regression test for a crash reviewing a past best-ball round in table mode:
+// round.pairs persists ids only (store/scoring.js thinPairs), so the match
+// strip's `p.name.split(' ')` threw "Cannot read properties of undefined".
+describe('GridView best-ball match strip with thin pairs', () => {
+  test('names the pairs from the roster instead of crashing', () => {
+    const players = [
+      { id: 'p1', name: 'Ann Lee', handicap: 0 },
+      { id: 'p2', name: 'Bob Ray', handicap: 0 },
+      { id: 'p3', name: 'Cam Fox', handicap: 0 },
+      { id: 'p4', name: 'Dan Oak', handicap: 0 },
+    ];
+    const round = {
+      holes: [{ number: 1, par: 4, strokeIndex: 1 }],
+      pairs: [[{ id: 'p1' }, { id: 'p2' }], [{ id: 'p3' }, { id: 'p4' }]],
+      playerHandicaps: {},
+    };
+    const scores = { p1: { 1: 4 }, p2: { 1: 5 }, p3: { 1: 4 }, p4: { 1: 4 } };
+    const bbResult = calcBestWorstBall({ ...round, scores }, players);
+
+    const { getByText } = render(
+      <ThemeProvider>
+        <GridView
+          round={round}
+          roundIndex={0}
+          players={players}
+          scores={scores}
+          isBestBall
+          bbResult={bbResult}
+          settings={{ scoringMode: 'bestball' }}
+          onSetScore={() => {}}
+          editable={() => false}
+          refreshing={false}
+          onRefresh={() => {}}
+          meId="p1"
+        />
+      </ThemeProvider>,
+    );
+
+    expect(getByText('Ann & Bob')).toBeTruthy();
+    expect(getByText('Cam & Dan')).toBeTruthy();
   });
 });
 

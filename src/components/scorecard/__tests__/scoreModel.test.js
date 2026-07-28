@@ -190,6 +190,29 @@ describe('summaryState', () => {
     expect(s.pairs[0].holePts).toBe(2);
   });
 
+  test('pairs variant — thin pairs still name each side from the roster', () => {
+    // round.pairs persists ids only (store/scoring.js thinPairs): the names
+    // have to come from `players`, or every side renders as '—'.
+    const pairsPlayers = [
+      { id: 'p1', name: 'Ann Lee', handicap: 0 },
+      { id: 'p2', name: 'Bob Ray', handicap: 0 },
+      { id: 'p3', name: 'Cam Fox', handicap: 0 },
+      { id: 'p4', name: 'Dan Oak', handicap: 0 },
+    ];
+    const round = {
+      holes: [{ number: 1, par: 4, strokeIndex: 1 }],
+      pairs: [[{ id: 'p1' }, { id: 'p2' }], [{ id: 'p3' }, { id: 'p4' }]],
+    };
+    const s = summaryState({
+      mode: 'bestball', round, players: pairsPlayers,
+      scores: { p1: { 1: 3 }, p2: { 1: 5 }, p3: { 1: 4 }, p4: { 1: 6 } },
+      settings: { bestBallValue: 1, worstBallValue: 1 },
+      currentHole: 1, meId: 'p1',
+    });
+    expect(s.pairs[0].name).toBe('Ann & Bob');
+    expect(s.pairs[1].name).toBe('Cam & Dan');
+  });
+
   test('stableford hasTwoPairs: 4 players, 2 pairs, pair-aware status and chips', () => {
     // Two par-4 holes (SI 1 and SI 2), all handicap 0.
     // Pairs: [p1,p2] and [p3,p4].

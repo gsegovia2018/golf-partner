@@ -51,7 +51,9 @@ const ALL_TABS = [
 const DRIVE_KEYS = ['fairway', 'left', 'right', 'short', 'super'];
 const DRIVE_LABELS = { fairway: 'Fairway', left: 'Left', right: 'Right', short: 'Short', super: 'Super' };
 
-const firstName = (p) => p.name.split(' ')[0];
+// Pair members resolve against the roster (scoring.js resolvePairs), but a
+// player dropped from it stays thin — render a dash rather than throwing.
+const firstName = (p) => p?.name?.split(' ')[0] ?? '—';
 // How many players in this roster share each first name. joinNames uses it
 // to fold duplicate names into a single "Name ×N" token; the Players tab
 // chip selector (Task 20) reuses the same tally to tell two same-first-name
@@ -2738,8 +2740,8 @@ function PairDifferenceChart({ data, metric, onHolePress, theme, s }) {
   const HALF = CHART_HEIGHT / 2;
   const PADDING = 10;
   const unit = metric === 'strokes' ? 'str' : 'pts';
-  const pair1Label = data.pair1.map(p => p.name.split(' ')[0]).join(' & ');
-  const pair2Label = data.pair2.map(p => p.name.split(' ')[0]).join(' & ');
+  const pair1Label = data.pair1.map(firstName).join(' & ');
+  const pair2Label = data.pair2.map(firstName).join(' & ');
   const scale = data.maxAbs > 0 ? (HALF - PADDING) / data.maxAbs : 0;
 
   const maxLeadHole = data.holes.reduce((best, h) => {

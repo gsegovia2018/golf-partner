@@ -1,5 +1,5 @@
 import { calcStablefordPoints, calcExtraShots, roundPairLeaderboard, getPlayingHandicap } from './tournamentStore';
-import { isGIR, recoveryOutcomeFromState, roundScoringMode, isScrambleMode, isPickupScore } from './scoring';
+import { isGIR, recoveryOutcomeFromState, roundScoringMode, isScrambleMode, isPickupScore, resolvePairs } from './scoring';
 import {
   expectedFromBucket, expectedStrokes, BUCKETS,
   PAR_ANCHOR_DISTANCE, benchmarkTeeShotDistance, expectedPenaltiesPerRound,
@@ -301,7 +301,9 @@ export function pairPerformance(tournament) {
       if (!pairHasScore) return;
       const key = [pair[0].id, pair[1].id].sort().join('-');
       if (!pairMap[key]) {
-        pairMap[key] = { players: [pair[0], pair[1]], rounds: 0, totalPoints: 0, roundList: [] };
+        // Roster players, not the thin pair members (thinPairs) — `players`
+        // is rendered by name.
+        pairMap[key] = { players: resolvePairs([pair], tournament.players)[0].slice(0, 2), rounds: 0, totalPoints: 0, roundList: [] };
       }
       const results = roundPairLeaderboard(round, tournament.players);
       const match = results.find(r => r.members.some(m => m.player.id === pair[0].id));
@@ -534,7 +536,9 @@ export function pairHoleWins(tournament, { metric = 'points', roundIndex = null 
 export function pairDifferenceByHole(tournament, roundIndex, { metric = 'points' } = {}) {
   const round = tournament.rounds?.[roundIndex];
   if (!round || !round.scores || !round.pairs || round.pairs.length < 2) return null;
-  const [pair1, pair2] = round.pairs;
+  // Pairs persist ids only (scoring.js thinPairs) — resolve before returning
+  // them, since callers render member names.
+  const [pair1, pair2] = resolvePairs(round.pairs, tournament.players);
   if (!pair1 || !pair2 || pair1.length < 2 || pair2.length < 2) return null;
   const isStrokes = metric === 'strokes';
 
@@ -1145,7 +1149,9 @@ export function pairSynergy(tournament) {
     round.pairs.forEach(pair => {
       if (pair.length < 2) return;
       const key = [pair[0].id, pair[1].id].sort().join('|');
-      if (!pairMap[key]) pairMap[key] = { members: [pair[0], pair[1]], combined: 0, expected: 0, rounds: 0, holesPlayed: 0, roundList: [] };
+      // Snapshot the ROSTER players: pairs persist ids only (thinPairs), and
+      // `members` is rendered by name.
+      if (!pairMap[key]) pairMap[key] = { members: resolvePairs([pair], tournament.players)[0].slice(0, 2), combined: 0, expected: 0, rounds: 0, holesPlayed: 0, roundList: [] };
       let combined = 0, expected = 0, holes = 0;
       round.holes.forEach(hole => {
         const s1 = round.scores[pair[0].id]?.[hole.number];
@@ -1237,7 +1243,9 @@ export function pairCarryRatio(tournament) {
     round.pairs.forEach(pair => {
       if (pair.length < 2) return;
       const key = [pair[0].id, pair[1].id].sort().join('|');
-      if (!pairMap[key]) pairMap[key] = { members: [pair[0], pair[1]], points: { [pair[0].id]: 0, [pair[1].id]: 0 }, holesPlayed: 0 };
+      // Roster players, not the thin pair members — `members`/`shares.player`
+      // are rendered by name.
+      if (!pairMap[key]) pairMap[key] = { members: resolvePairs([pair], tournament.players)[0].slice(0, 2), points: { [pair[0].id]: 0, [pair[1].id]: 0 }, holesPlayed: 0 };
       round.holes.forEach(hole => {
         const s1 = round.scores[pair[0].id]?.[hole.number];
         const s2 = round.scores[pair[1].id]?.[hole.number];
@@ -1506,7 +1514,9 @@ export function matchPlayResults(tournament, { metric = 'points' } = {}) {
     if (!round.scores || Object.keys(round.scores).length === 0 || !round.pairs || round.pairs.length < 2) {
       return { roundIndex, courseName: round.courseName, available: false };
     }
-    const [pair1, pair2] = round.pairs;
+    // Pairs persist ids only (scoring.js thinPairs); the scoreline labels
+    // read member names off what this returns.
+    const [pair1, pair2] = resolvePairs(round.pairs, tournament.players);
     if (pair1.length < 2 || pair2.length < 2) {
       return { roundIndex, courseName: round.courseName, available: false };
     }
@@ -1569,7 +1579,9 @@ export function pairConfigMatrix(tournament) {
   const configs = {};
   tournament.rounds.forEach((round, roundIndex) => {
     if (!round.scores || Object.keys(round.scores).length === 0 || !round.pairs || round.pairs.length < 2) return;
-    const [rawPair1, rawPair2] = round.pairs;
+    // Pairs persist ids only (scoring.js thinPairs); sideA/sideB are rendered
+    // as names by the caller.
+    const [rawPair1, rawPair2] = resolvePairs(round.pairs, tournament.players);
     if (rawPair1.length < 2 || rawPair2.length < 2) return;
     const sideAKey = [rawPair1[0].id, rawPair1[1].id].sort().join('+');
     const sideBKey = [rawPair2[0].id, rawPair2[1].id].sort().join('+');

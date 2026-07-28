@@ -16,6 +16,7 @@ import {
   pairsMatchRoundTally,
 } from '../../store/tournamentStore';
 import { playersMeFirst } from '../../lib/playerOrder';
+import { resolvePairs } from '../../store/scoring';
 
 // Points for every player on one hole. Returns { [playerId]: number|null };
 // null means the player has not scored the hole yet.
@@ -72,9 +73,11 @@ function firstName(player) {
   return player?.name?.split(' ')[0] ?? '—';
 }
 
-// Join a pair's member first names with ' & ' — ports `pairLabel`.
-function pairLabel(pair) {
-  return pair.map((p) => firstName(p)).join(' & ');
+// Join a pair's member first names with ' & ' — ports `pairLabel`. Pairs
+// persist ids only (store/scoring.js thinPairs), so members are resolved
+// against the roster before their names are read.
+function pairLabel(pair, players) {
+  return resolvePairs([pair], players)[0].map((p) => firstName(p)).join(' & ');
 }
 
 // Ports `holeTeamPts`: best/worst-ball points a team scored on one hole.
@@ -191,7 +194,7 @@ export function summaryState({ mode, round, players, scores, settings, currentHo
       const holePts = curHole
         ? pairsMatchHolePts(curHole, round?.pairs, scores, round?.playerHandicaps ?? {})
         : null;
-      const names = (round?.pairs ?? []).map((pair) => pairLabel(pair));
+      const names = (round?.pairs ?? []).map((pair) => pairLabel(pair, playerList));
       const decided = tally.clinched
         || (tally.holesLeft === 0 && tally.team1 !== tally.team2);
       const winnerIdx = tally.team1 > tally.team2 ? 0 : tally.team2 > tally.team1 ? 1 : null;
@@ -287,8 +290,8 @@ export function summaryState({ mode, round, players, scores, settings, currentHo
     const maxCatchup = holesRemaining * (bbVal + wbVal);
     if (!decided) decided = roundWinner !== 0 && lead > maxCatchup;
 
-    const p1Name = pairLabel(pair1);
-    const p2Name = pairLabel(pair2);
+    const p1Name = pairLabel(pair1, playerList);
+    const p2Name = pairLabel(pair2, playerList);
     const winnerName = roundWinner === 1 ? p1Name : roundWinner === 2 ? p2Name : null;
 
     let status;

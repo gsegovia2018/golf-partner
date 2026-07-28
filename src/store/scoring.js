@@ -107,7 +107,7 @@ export function normalizeRoundHandicaps(round, players) {
 // from the player's base index × round slope when the round has no stored
 // entry (e.g. legacy data).
 export function getPlayingHandicap(round, player) {
-  const stored = round.playerHandicaps?.[player.id];
+  const stored = round?.playerHandicaps?.[player.id];
   if (stored != null) return Number(stored);
   return deriveRoundPlayingHandicap(roundPlayerIndex(round, player), round, player.id);
 }
@@ -154,7 +154,7 @@ export function roundTotals(round, players) {
     const handicap = getPlayingHandicap(round, player);
     let totalPoints = 0;
     let totalStrokes = 0;
-    round.holes.forEach((hole) => {
+    (round?.holes ?? []).forEach((hole) => {
       const strokes = round.scores?.[player.id]?.[hole.number];
       if (strokes) {
         totalStrokes += strokes;
@@ -516,6 +516,19 @@ export function thinPairs(pairs) {
   if (!Array.isArray(pairs)) return pairs;
   return pairs.map((team) => (
     Array.isArray(team) ? team.map((p) => ({ id: p?.id })) : team
+  ));
+}
+
+// The read-side counterpart of thinPairs: swap each `{ id }` member for its
+// roster player so consumers can read `name`/`handicap` off a pair again. A
+// member with no roster match is left as-is (same `byId[m.id] ?? m` fallback
+// scrambleUnits uses), so a player dropped from the roster degrades instead
+// of crashing the render.
+export function resolvePairs(pairs, players) {
+  if (!Array.isArray(pairs)) return pairs;
+  const byId = Object.fromEntries((players ?? []).map((p) => [p.id, p]));
+  return pairs.map((team) => (
+    Array.isArray(team) ? team.map((m) => byId[m?.id] ?? m) : team
   ));
 }
 
