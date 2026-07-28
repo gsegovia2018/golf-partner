@@ -1742,8 +1742,33 @@ export async function generateInviteCode(tournamentId) {
       created_by: userId,
       role,
     }));
-    const { data: inserted, error: insErr } = await supabase
-      .from('tournament_invites').insert(rows).select('code, role');
+    // invites_insert_owner (RLS) requires the tournaments row to already
+    // exist and be owned by us. But a game created seconds ago is still in
+    // the offline mutation queue at this point — mutate() saves locally and
+    // ENQUEUES, returning before the server write drains — so the insert
+    // raced the row's arrival and failed with
+    //   42501 "new row violates row-level security policy".
+    // The user saw "Game created, but the invite link could not be created";
+    // measured on prod 2026-07-28, only 19 of 49 games ever got a code.
+    //
+    // Drain and retry once, rather than pre-emptively awaiting the queue on
+    // every call: an invite for an already-synced tournament (the common
+    // case, from the game menu) pays nothing, and a brand-new game
+    // self-heals. Offline, syncSettled resolves immediately and the retry
+    // fails the same way — correct, since there is no row to own yet, and
+    // the caller offers "invite players later".
+    let inserted;
+    let insErr;
+    ({ data: inserted, error: insErr } = await supabase
+      .from('tournament_invites').insert(rows).select('code, role'));
+    if (insErr) {
+      // Lazy require: syncWorker imports this module, so a static import
+      // would form a cycle — same pattern as _applyPendingMutations above.
+      const { syncSettled } = require('./syncWorker');
+      await syncSettled();
+      ({ data: inserted, error: insErr } = await supabase
+        .from('tournament_invites').insert(rows).select('code, role'));
+    }
     if (insErr) throw insErr;
     for (const row of inserted ?? []) byRole[row.role ?? 'editor'] = row.code;
   }
