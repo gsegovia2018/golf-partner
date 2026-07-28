@@ -256,21 +256,16 @@ export async function createTournament(t) {
   // official mode, else 'casual'; keep the true domain kind in props.
   const props = { ...rest, kind };
 
-  // tournaments.data is a legacy NOT NULL jsonb column (the pre-sync-v2 blob).
-  // The normalized read path (get_game_tournament) ignores it, and claim/release
-  // now source the roster from game_players — but the column is still NOT NULL,
-  // so a new tournament must write a device-agnostic snapshot here. Omitting it
-  // makes the upsert fail with 23502, which the drain drops as permanent and
-  // no new game ever reaches the server. meId is device-local and _meta is the
-  // retired LWW map, so neither belongs in the shared blob.
-  const data = { id, name, kind, createdAt, currentRound, players, rounds, ...rest };
-
+  // The legacy tournaments.data blob is gone (migration 20260728000002). It
+  // was written here only because the column was NOT NULL — omitting it raised
+  // 23502, which the drain dropped as permanent, so no new game reached the
+  // server. Nothing read it as a source of truth after sync-v2: the roster and
+  // rounds are written to game_players/game_rounds below.
   const tournamentRow = {
     id,
     name,
     kind: kind === 'official' ? 'official' : 'casual',
     created_at: createdAt,
-    data,
     props,
     current_round: currentRound ?? null,
   };
