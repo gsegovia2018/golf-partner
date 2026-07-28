@@ -271,9 +271,6 @@ export async function createTournament(t) {
   };
   if (userId) tournamentRow.created_by = userId;
 
-  const { error: tError } = await supabase.from('tournaments').upsert(tournamentRow);
-  if (tError) throw tError;
-
   const playerRows = (players ?? []).map((player, pos) => ({
     tournament_id: id,
     player_id: player.id,
@@ -282,11 +279,6 @@ export async function createTournament(t) {
     body: player,
     updated_at: now,
   }));
-  if (playerRows.length) {
-    const { error } = await supabase.from('game_players')
-      .upsert(playerRows, { onConflict: 'tournament_id,player_id' });
-    if (error) throw error;
-  }
 
   const roundRows = [];
   const scoreRows = [];
@@ -334,24 +326,26 @@ export async function createTournament(t) {
     });
   });
 
-  if (roundRows.length) {
-    const { error } = await supabase.from('game_rounds')
-      .upsert(roundRows, { onConflict: 'tournament_id,id' });
-    if (error) throw error;
-  }
-  if (scoreRows.length) {
-    const { error } = await supabase.from('game_scores')
-      .upsert(scoreRows, { onConflict: 'tournament_id,round_id,player_id,hole' });
-    if (error) throw error;
-  }
-  if (shotDetailRows.length) {
-    const { error } = await supabase.from('game_shot_details')
-      .upsert(shotDetailRows, { onConflict: 'tournament_id,round_id,player_id,hole' });
-    if (error) throw error;
-  }
-  if (noteRows.length) {
-    const { error } = await supabase.from('game_round_notes')
-      .upsert(noteRows, { onConflict: 'tournament_id,round_id,hole_key' });
-    if (error) throw error;
-  }
+  // One transactional RPC (migration 20260728000006), NOT six upserts.
+  // Writing the tournaments row, then players, then rounds as separate
+  // statements left a window in which the server held a tournament with no
+  // rounds. A fetch landing there returned a round-less game, which
+  // _overlayAndSave then wrote over the local copy, and the render blew up on
+  // `rounds[selectedRound]` being undefined. The function body is a single
+  // transaction, so a game is now visible complete or not at all.
+  //
+  // The rows are still shaped here: keeping props/kind mapping and
+  // stripRoundHotKeys client-side means the payload cannot drift from what
+  // get_game_tournament expects to reassemble.
+  const { error } = await supabase.rpc('create_game_tournament', {
+    p_payload: {
+      tournament: tournamentRow,
+      players: playerRows,
+      rounds: roundRows,
+      scores: scoreRows,
+      shot_details: shotDetailRows,
+      notes: noteRows,
+    },
+  });
+  if (error) throw error;
 }

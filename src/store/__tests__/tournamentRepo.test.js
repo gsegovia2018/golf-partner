@@ -429,6 +429,36 @@ describe('upsertRound', () => {
 });
 
 describe('createTournament', () => {
+  // createTournament now issues ONE transactional RPC (migration
+  // 20260728000006) instead of six sequential upserts, so these assert the
+  // payload it hands that function. The row SHAPES are unchanged -- the client
+  // still owns props/kind mapping and stripRoundHotKeys -- so every assertion
+  // below is the same one that used to run against the per-table upserts.
+  // The onConflict targets moved into the SQL and are pinned there.
+  function createPayload() {
+    const call = [...mockState.rpcCalls].reverse().find((c) => c.name === 'create_game_tournament');
+    return call?.args?.p_payload;
+  }
+
+  test('writes the whole game in a single RPC, never table by table', async () => {
+    // The point of the change: six statements left a window where the
+    // tournaments row existed without its rounds, and a fetch landing there
+    // returned a round-less game.
+    mockState.userId = 'u1';
+    const { createTournament } = require('../tournamentRepo');
+
+    await createTournament({
+      id: 't1', name: 'Cup', kind: 'game', createdAt: '2026-07-10T00:00:00Z',
+      currentRound: 0,
+      players: [{ id: 'p1', name: 'Ann' }],
+      rounds: [{ id: 'r0', scores: { p1: { 1: 4 } } }],
+    });
+
+    const creates = mockState.rpcCalls.filter((c) => c.name === 'create_game_tournament');
+    expect(creates).toHaveLength(1);
+    expect(mockState.fromCalls).toHaveLength(0);
+  });
+
   test('maps domain kind onto the casual/official column and keeps it in props', async () => {
     // The tournaments.kind COLUMN has a CHECK constraint (casual/official
     // only), so a domain kind of 'game'/'tournament' must land as 'casual'
@@ -445,9 +475,7 @@ describe('createTournament', () => {
 
     await createTournament(t);
 
-    const call = lastFromCall('tournaments');
-    expect(call.ops[0].method).toBe('upsert');
-    expect(call.ops[0].rows).toEqual({
+    expect(createPayload().tournament).toEqual({
       id: 't1', name: 'Cup', kind: 'casual', created_at: '2026-07-10T00:00:00Z',
       created_by: 'u1',
       props: { settings: { fixedTeams: true }, kind: 'tournament' },
@@ -470,7 +498,7 @@ describe('createTournament', () => {
       rounds: [], meId: 'p1', _meta: { foo: 1 }, settings: { a: 1 },
     });
 
-    const row = lastFromCall('tournaments').ops[0].rows;
+    const row = createPayload().tournament;
     expect(row).not.toHaveProperty('data');
     // Device-local / retired keys never reach the server at all.
     expect(row).not.toHaveProperty('meId');
@@ -489,7 +517,7 @@ describe('createTournament', () => {
       currentRound: 0, players: [], rounds: [],
     });
 
-    const row = lastFromCall('tournaments').ops[0].rows;
+    const row = createPayload().tournament;
     expect(row.kind).toBe('casual');
     expect(row.props.kind).toBe('game');
   });
@@ -503,12 +531,14 @@ describe('createTournament', () => {
       currentRound: 0, players: [], rounds: [],
     });
 
-    const row = lastFromCall('tournaments').ops[0].rows;
+    const row = createPayload().tournament;
     expect(row.kind).toBe('official');
     expect(row.props.kind).toBe('official');
   });
 
   test('omits created_by when there is no signed-in user (matches persistRemote)', async () => {
+    // The RPC defaults it to auth.uid() server-side; the client still omits it
+    // rather than sending null, so it can never mis-own a row.
     mockState.userId = null;
     const { createTournament } = require('../tournamentRepo');
 
@@ -517,9 +547,8 @@ describe('createTournament', () => {
       currentRound: null, players: [], rounds: [],
     });
 
-    const call = lastFromCall('tournaments');
-    expect(call.ops[0].rows.created_by).toBeUndefined();
-    expect(call.ops[0].rows.current_round).toBeNull();
+    expect(createPayload().tournament.created_by).toBeUndefined();
+    expect(createPayload().tournament.current_round).toBeNull();
   });
 
   test('inserts game_players rows with pos = array index and body = player', async () => {
@@ -532,12 +561,10 @@ describe('createTournament', () => {
       currentRound: 0, players, rounds: [],
     });
 
-    const call = lastFromCall('game_players');
-    expect(call.ops[0].rows).toEqual([
+    expect(createPayload().players).toEqual([
       { tournament_id: 't1', player_id: 'p1', user_id: null, pos: 0, body: players[0], updated_at: expect.any(String) },
       { tournament_id: 't1', player_id: 'p2', user_id: 'u2', pos: 1, body: players[1], updated_at: expect.any(String) },
     ]);
-    expect(call.ops[0].opts).toEqual({ onConflict: 'tournament_id,player_id' });
   });
 
   test('inserts game_rounds rows with body = round minus scores/shotDetails/notes', async () => {
@@ -553,13 +580,11 @@ describe('createTournament', () => {
       currentRound: 0, players: [], rounds,
     });
 
-    const call = lastFromCall('game_rounds');
-    expect(call.ops[0].rows).toEqual([{
+    expect(createPayload().rounds).toEqual([{
       id: 'r0', tournament_id: 't1', round_index: 0,
       body: { id: 'r0', holes: [{ number: 1, par: 4, strokeIndex: 1 }] },
       updated_at: expect.any(String),
     }]);
-    expect(call.ops[0].opts).toEqual({ onConflict: 'tournament_id,id' });
   });
 
   test('fans scores/shotDetails/notes out into their own row sets when present (offline-created tournament)', async () => {
@@ -577,36 +602,33 @@ describe('createTournament', () => {
       currentRound: 0, players: [], rounds,
     });
 
-    const scoresCall = lastFromCall('game_scores');
-    expect(scoresCall.ops[0].rows).toEqual(expect.arrayContaining([
+    const payload = createPayload();
+    expect(payload.scores).toEqual(expect.arrayContaining([
       { round_id: 'r0', tournament_id: 't1', player_id: 'p1', hole: 1, strokes: 4, updated_at: expect.any(String) },
       { round_id: 'r0', tournament_id: 't1', player_id: 'p1', hole: 2, strokes: 5, updated_at: expect.any(String) },
     ]));
-    expect(scoresCall.ops[0].rows).toHaveLength(2);
+    expect(payload.scores).toHaveLength(2);
     // The drain may retry createTournament; the UPDATE arm of an upsert does
     // not fire the column default, so every retried row needs an explicit
-    // updated_at stamp — asserted above per row and pinned to ISO here.
-    expect(scoresCall.ops[0].rows.every(
+    // updated_at stamp -- asserted above per row and pinned to ISO here.
+    expect(payload.scores.every(
       (r) => !Number.isNaN(Date.parse(r.updated_at)),
     )).toBe(true);
-    expect(scoresCall.ops[0].opts).toEqual({ onConflict: 'tournament_id,round_id,player_id,hole' });
 
-    const shotDetailsCall = lastFromCall('game_shot_details');
-    expect(shotDetailsCall.ops[0].rows).toEqual([
+    expect(payload.shot_details).toEqual([
       { round_id: 'r0', tournament_id: 't1', player_id: 'p1', hole: 1, detail: { club: 'driver' }, updated_at: expect.any(String) },
     ]);
-    expect(shotDetailsCall.ops[0].opts).toEqual({ onConflict: 'tournament_id,round_id,player_id,hole' });
 
-    const notesCall = lastFromCall('game_round_notes');
-    expect(notesCall.ops[0].rows).toEqual(expect.arrayContaining([
+    expect(payload.notes).toEqual(expect.arrayContaining([
       { round_id: 'r0', tournament_id: 't1', hole_key: 'round', note: 'sunny', updated_at: expect.any(String) },
       { round_id: 'r0', tournament_id: 't1', hole_key: '3', note: 'wet', updated_at: expect.any(String) },
     ]));
-    expect(notesCall.ops[0].rows).toHaveLength(2);
-    expect(notesCall.ops[0].opts).toEqual({ onConflict: 'tournament_id,round_id,hole_key' });
+    expect(payload.notes).toHaveLength(2);
   });
 
-  test('skips game_scores/game_shot_details/game_round_notes upserts when a round has none', async () => {
+  test('sends empty row sets when a round has no scores/shotDetails/notes', async () => {
+    // The SQL COALESCEs each list to '[]', so an empty array is a no-op insert
+    // rather than a skipped statement.
     mockState.userId = 'u1';
     const { createTournament } = require('../tournamentRepo');
 
@@ -615,9 +637,10 @@ describe('createTournament', () => {
       currentRound: 0, players: [], rounds: [{ id: 'r0' }],
     });
 
-    expect(mockState.fromCalls.some((c) => c.table === 'game_scores')).toBe(false);
-    expect(mockState.fromCalls.some((c) => c.table === 'game_shot_details')).toBe(false);
-    expect(mockState.fromCalls.some((c) => c.table === 'game_round_notes')).toBe(false);
+    const payload = createPayload();
+    expect(payload.scores).toEqual([]);
+    expect(payload.shot_details).toEqual([]);
+    expect(payload.notes).toEqual([]);
   });
 
   test('handles a realistic single-round fixture end to end without throwing', async () => {
@@ -626,33 +649,25 @@ describe('createTournament', () => {
 
     await expect(createTournament(fixtureSingleRound)).resolves.toBeUndefined();
 
-    const tournamentsCall = lastFromCall('tournaments');
-    expect(tournamentsCall.ops[0].rows.id).toBe('1783716675062');
-    expect(tournamentsCall.ops[0].rows.props.meId).toBeUndefined();
-    expect(tournamentsCall.ops[0].rows.props._meta).toBeUndefined();
-    expect(tournamentsCall.ops[0].rows.props.players).toBeUndefined();
-    expect(tournamentsCall.ops[0].rows.props.rounds).toBeUndefined();
+    const payload = createPayload();
+    expect(payload.tournament.id).toBe('1783716675062');
+    expect(payload.tournament.props.meId).toBeUndefined();
+    expect(payload.tournament.props._meta).toBeUndefined();
+    expect(payload.tournament.props.players).toBeUndefined();
+    expect(payload.tournament.props.rounds).toBeUndefined();
 
-    const playersCall = lastFromCall('game_players');
-    expect(playersCall.ops[0].rows).toHaveLength(4);
-
-    const scoresCall = lastFromCall('game_scores');
+    expect(payload.players).toHaveLength(4);
     // 17 holes for p1 + 16 for p2/p3 + 17 for p4 = 66 cells (see fixture).
-    expect(scoresCall.ops[0].rows.length).toBeGreaterThan(0);
+    expect(payload.scores.length).toBeGreaterThan(0);
   });
 
-  test('throws when the tournaments upsert errors, without inserting players/rounds', async () => {
-    mockState.rpcResult = { data: null, error: null };
+  test('throws when the create RPC errors', async () => {
     jest.resetModules();
     mockState.userId = null;
     jest.doMock('../../lib/supabase', () => ({
       supabase: {
-        rpc: () => Promise.resolve({ data: null, error: null }),
-        from: (table) => ({
-          upsert: () => Promise.resolve(
-            table === 'tournaments' ? { data: null, error: { message: 'boom' } } : { data: null, error: null },
-          ),
-        }),
+        rpc: () => Promise.resolve({ data: null, error: { message: 'boom' } }),
+        from: () => { throw new Error('createTournament must not write tables directly'); },
         auth: { getUser: () => Promise.resolve({ data: { user: null } }) },
       },
     }));
