@@ -15,6 +15,7 @@ import { supabase } from '../lib/supabase';
 import { readLocal, saveLocal } from './tournamentStore';
 import { applyPendingMutations, preserveLocalConflictState } from './mutate';
 import { syncQueue } from './syncQueue';
+import { runExclusiveForTournament } from './tournamentMutex';
 
 function deepClone(x) {
   return x == null ? x : JSON.parse(JSON.stringify(x));
@@ -239,7 +240,15 @@ export function applyPlayerRow(t, row, eventType) {
   }
 
   if (existingIdx !== -1) players.splice(existingIdx, 1);
-  const assembled = { ...(row.body ?? {}) };
+  // Anchor identity on the row PRIMARY KEY, never on body alone — the same
+  // rule applyRoundRow uses for `id`. body is written by four independent
+  // paths (createTournament, upsertPlayer, add_tournament_player_if_room,
+  // claim_tournament_player) and the column defaults to '{}', so a body
+  // without an id is representable. Spreading it bare produced a player with
+  // no id: nameless in every roster row, and — because the findIndex above
+  // could never match it again — DUPLICATED by the next event for that same
+  // player rather than updated.
+  const assembled = { ...(row.body ?? {}), id: row.player_id };
   const idx = clampIndex(row.pos, players.length);
   players.splice(idx, 0, assembled);
   next.players = players;
@@ -342,30 +351,14 @@ async function pendingEntriesFor(id) {
   return all.filter((e) => e.tournamentId === id);
 }
 
-// Per-tournament promise-chain mutex for the row-handler read-modify-write.
-// Two row events for the SAME tournament can arrive close together; each
-// handler's readLocal→patch→saveLocal is a read-modify-write over the whole
-// cached blob, so without serialization the second handler clones the same
-// pre-patch base and its saveLocal clobbers the first handler's patch (lost
-// update). Keying by tournament id (rather than a single global chain) keeps
-// unrelated tournaments' handlers from queuing behind each other. Modeled on
-// syncQueue.js's runExclusive: the chain promise itself must never reject (a
-// rejection would break the chain for every subsequent queued op for this
-// id), so failures are swallowed on the chain but still propagate to the
-// caller via the returned promise. Entries are pruned once their chain empties
-// so this map never grows unbounded across a long session's tournaments.
-const _handlerMutex = new Map();
-function runExclusiveForTournament(id, fn) {
-  const prev = _handlerMutex.get(id) ?? Promise.resolve();
-  const result = prev.then(fn, fn);
-  const settled = result.then(() => undefined, () => undefined);
-  _handlerMutex.set(id, settled);
-  settled.then(() => {
-    if (_handlerMutex.get(id) === settled) _handlerMutex.delete(id);
-  });
-  return result;
-}
-
+// The row-handler read-modify-write runs under the SHARED per-tournament
+// mutex (tournamentMutex.js), not a private one. Two row events for the same
+// tournament can arrive close together, and each handler's
+// readLocal→patch→saveLocal is a read-modify-write over the whole cached blob
+// — but so is tournamentStore's fetch-and-overlay refresh. Serializing the
+// handlers only against each other left the refresh free to land a snapshot
+// taken before a row was applied, reverting it; see tournamentMutex.js.
+//
 // Shared handler tail for every table: reads the current local cache, patches
 // it with the row, re-applies this tournament's still-undrained pending
 // mutations on top (a realtime row is SERVER state — replaying pending
