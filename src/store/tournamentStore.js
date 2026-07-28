@@ -1655,6 +1655,13 @@ export function tournamentLeaderboard(tournament) {
 export function roundLeaderboard(tournament, round) {
   const players = tournament?.players ?? [];
   const mode = roundScoringMode(tournament, round);
+  // The round can legitimately be absent for a frame: HomeScreen derives it as
+  // `tournament?.rounds?.[selectedRound] ?? null`, and a just-created game's
+  // rounds hydrate after the tournament object itself. Every branch below needs
+  // a round, so return an empty board rather than letting roundTotals throw —
+  // that throw reached the app-wide ErrorBoundary as "something went wrong" on
+  // a game that had in fact been saved.
+  if (!round) return { mode, unit: mode === 'matchplay' ? 'holes' : 'pts', entries: [] };
   const totals = roundTotals(round, players); // { player, handicap, totalPoints, totalStrokes }
   const strokesOf = (pid) => totals.find((t) => t.player.id === pid)?.totalStrokes ?? 0;
 

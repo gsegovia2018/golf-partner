@@ -143,3 +143,19 @@ test('bestball: points = bestWon*bestBallValue + worstWon*worstBallValue per pla
   expect(byId.b2).toBe(0);
   entries.forEach((e) => expect(e).toMatchObject({ player: expect.any(Object), points: expect.any(Number) }));
 });
+
+// Regression: HomeScreen computes `tournament?.rounds?.[selectedRound] ?? null`
+// and feeds it straight to roundLeaderboard in a useMemo. Right after a game is
+// created the tournament object can exist for a frame before its rounds have
+// hydrated, so that expression is null. roundTotals then read
+// `round.playerHandicaps` per player and threw, which the app-wide
+// ErrorBoundary caught as "Algo salió mal" — the game itself was already saved.
+test('null round yields an empty board instead of throwing', () => {
+  const t = {
+    players: [P('a'), P('b'), P('c'), P('d')],
+    settings: { scoringMode: 'randompartners' },
+    rounds: [],
+  };
+  expect(() => roundLeaderboard(t, null)).not.toThrow();
+  expect(roundLeaderboard(t, null).entries).toEqual([]);
+});
