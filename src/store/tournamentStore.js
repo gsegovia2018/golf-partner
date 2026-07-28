@@ -234,10 +234,21 @@ async function _pendingEntriesFor(id) {
 // otherwise land after that row and silently revert it.
 async function _overlayAndSave(id, remote, { makeActive = true } = {}) {
   const local = await readLocal(id);
+  // A tournament can never legitimately have zero rounds: createTournament
+  // always writes at least one, and canDeleteRound refuses to remove the last.
+  // But createTournament upserts the `tournaments` row BEFORE its game_rounds
+  // rows (three statements, no transaction), so a fetch landing in that window
+  // returns a round-less snapshot. Replacing rounds wholesale with it erased a
+  // just-created game's rounds locally, and the render then read
+  // rounds[selectedRound] as undefined. Treat it as the partial write it is
+  // and keep what we already have.
+  const safeRemote = (local?.rounds?.length && !remote?.rounds?.length)
+    ? { ...remote, rounds: local.rounds }
+    : remote;
   let snapshot = await _pendingEntriesFor(id);
-  let merged = remote;
+  let merged = safeRemote;
   for (let pass = 0; pass < 3; pass++) {
-    merged = _applyPendingMutations(remote, snapshot);
+    merged = _applyPendingMutations(safeRemote, snapshot);
     // meId is device-local — never trusted from the server (see
     // merge.js:203-206, the LWW path this overlay replaces). Local wins,
     // including an explicit null.
