@@ -91,6 +91,60 @@ describe('buildHoleMapHtml', () => {
     expect(html).toContain('rings:');
     expect(html).toContain("type:'set-targets'");
   });
+  // A redraw removes and recreates the marker layers, which detaches Leaflet's
+  // Draggable mid-gesture. Android's 1s GPS watch posts a 'player' message that
+  // second, so the ring stopped following the finger about a second into a drag.
+  // draw()/endDrag() own the hold, so lift them out and exercise them directly.
+  describe('draw() — holding redraws for the duration of a drag', () => {
+    const run = () => {
+      const html = buildHoleMapHtml(base);
+      const src = html.match(/let dragging = false[\s\S]*?function endDrag\(\)\s*\{[\s\S]*?\n\}/)[0];
+      const drawn = [];
+      const api = new Function(
+        'drawNow', 'document',
+        `${src}; return { draw, endDrag, startDrag: () => { dragging = true; } };`,
+      )(() => drawn.push(1), { addEventListener() {} });
+      return { ...api, count: () => drawn.length };
+    };
+
+    it('redraws immediately when no drag is in flight', () => {
+      const m = run();
+      m.draw();
+      expect(m.count()).toBe(1);
+    });
+    it('holds redraws that arrive mid-drag', () => {
+      const m = run();
+      m.startDrag();
+      m.draw(); // a GPS tick lands while the finger is down
+      expect(m.count()).toBe(0);
+    });
+    it('runs one held redraw when the drag ends, however many arrived', () => {
+      const m = run();
+      m.startDrag();
+      m.draw(); m.draw(); m.draw();
+      m.endDrag();
+      expect(m.count()).toBe(1);
+    });
+    it('does not redraw on a drag that no update interrupted', () => {
+      const m = run();
+      m.startDrag();
+      m.endDrag();
+      expect(m.count()).toBe(0);
+    });
+    it('is back to drawing immediately after the drag', () => {
+      const m = run();
+      m.startDrag();
+      m.endDrag();
+      m.draw();
+      expect(m.count()).toBe(1);
+    });
+  });
+  it('hands the drag lifecycle to the aim rings, the shot pins and touch cancel', () => {
+    const html = buildHoleMapHtml(base);
+    expect(html).toContain("mk.on('dragstart'");
+    expect(html).toContain("mk.on('dragend', endDrag)");
+    expect(html).toContain("addEventListener('touchcancel', endDrag)");
+  });
   it('drops the drag-to-measure hint', () => {
     const html = buildHoleMapHtml(base);
     expect(html).not.toContain('Drag the ring to measure');
