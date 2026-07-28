@@ -16,10 +16,12 @@ const root = resolve(__dirname, '..');
 const DRY = process.argv.includes('--dry-run');
 const extraFiles = process.argv.slice(2).filter((a) => a !== '--dry-run');
 
+// Service-role key, not anon: since 20260728000007 the golf_* tables have RLS
+// on with no insert/delete policy, so only the service role can seed them.
 const url = process.env.EXPO_PUBLIC_SUPABASE_URL;
-const key = process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY;
+const key = process.env.SUPABASE_SERVICE_ROLE_KEY;
 if (!DRY && (!url || !key)) {
-  console.error('Missing EXPO_PUBLIC_SUPABASE_URL / EXPO_PUBLIC_SUPABASE_ANON_KEY in .env');
+  console.error('Missing EXPO_PUBLIC_SUPABASE_URL / SUPABASE_SERVICE_ROLE_KEY in .env');
   process.exit(1);
 }
 const supabase = DRY ? null : createClient(url, key);
