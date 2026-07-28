@@ -184,6 +184,71 @@ describe('a stale background refresh cannot clobber a newer realtime patch', () 
   });
 });
 
+// One submit_game_score writes game_score_entries AND game_scores, so a single
+// peer stroke arrives as two realtime events. Applied separately that is two
+// saves and two whole-screen re-renders for one fact -- measured at ~32 ms per
+// HoleView commit. They must collapse into one read-modify-write.
+describe('sibling rows from one score collapse into a single save', () => {
+  beforeEach(() => {
+    jest.resetModules();
+    AsyncStorage.clear();
+  });
+
+  test('the entries row and the scores row produce one saveLocal', async () => {
+    const saveLocal = jest.fn(() => Promise.resolve());
+    const cached = tournamentFixture();
+    jest.doMock('../tournamentStore', () => ({
+      readLocal: jest.fn(() => Promise.resolve(JSON.parse(JSON.stringify(cached)))),
+      saveLocal,
+    }));
+    jest.doMock('../mutate', () => ({
+      applyPendingMutations: jest.fn((t) => t),
+      preserveLocalConflictState: jest.fn((target) => target),
+    }));
+    jest.doMock('../syncQueue', () => ({
+      syncQueue: { all: jest.fn(() => Promise.resolve([])) },
+    }));
+    const channel = {
+      on: jest.fn(function on() { return this; }),
+      subscribe: jest.fn(function subscribe() { return this; }),
+      track: jest.fn(),
+      presenceState: jest.fn(() => ({})),
+    };
+    jest.doMock('../../lib/supabase', () => ({
+      supabase: { channel: jest.fn(() => channel), removeChannel: jest.fn() },
+    }));
+
+    const { ensureRealtimeForTournament } = require('../realtimeSync');
+    await ensureRealtimeForTournament('t1');
+
+    const handlerFor = (table) => channel.on.mock.calls
+      .find(([, cfg]) => cfg.table === table)[2];
+
+    // Both rows of one score, back to back, exactly as the server emits them.
+    const a = handlerFor('game_score_entries')({
+      eventType: 'INSERT',
+      new: {
+        round_id: 'r1', tournament_id: 't1', player_id: 'p2', hole: 4,
+        author_id: 'peer', strokes: 5, updated_at: '2026-07-28T10:00:00.000Z',
+      },
+    });
+    const b = handlerFor('game_scores')({
+      eventType: 'UPDATE',
+      new: {
+        round_id: 'r1', tournament_id: 't1', player_id: 'p2', hole: 4, strokes: 5,
+      },
+    });
+    await Promise.all([a, b]);
+
+    expect(saveLocal).toHaveBeenCalledTimes(1);
+    // ...and the single save carries BOTH patches, not just the last one.
+    const [saved] = saveLocal.mock.calls[0];
+    const round = saved.rounds.find((r) => r.id === 'r1');
+    expect(round.scores.p2['4']).toBe(5);
+    expect(round.scoreEntries.p2[4].peer.value).toBe(5);
+  });
+});
+
 describe('applyPlayerRow anchors identity on the row primary key', () => {
   beforeEach(() => {
     jest.resetModules();

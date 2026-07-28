@@ -382,22 +382,40 @@ async function pendingEntriesFor(id) {
 // Bounded to 3 passes — on hitting the bound, stop WITHOUT a further stale save
 // (local wins; the still-queued mutations drain and re-reconcile on the next
 // worker pass / poll anyway).
-function makeHandler(id, applyFn) {
-  return (payload) => runExclusiveForTournament(id, async () => {
-    const eventType = payload?.eventType;
-    // A DELETE delivers only `old` (the PK); INSERT/UPDATE deliver `new`. The
-    // patchers key off eventType to decide remove-vs-upsert, so a DELETE must
-    // route through `old` (which for these tables is the primary key alone).
-    const row = eventType === 'DELETE' ? payload?.old : (payload?.new ?? payload?.old);
-    if (!row) return;
-    // readLocal happens INSIDE the exclusive region (not before it's
-    // acquired) so a queued second handler observes the first handler's
-    // saveLocal, not the entry-time snapshot — otherwise both handlers would
-    // clone the same pre-patch base and the second saveLocal would clobber
-    // the first handler's patch.
+// Row events arrive one WebSocket message at a time, but they come in RELATED
+// GROUPS: one submit_game_score writes game_score_entries AND game_scores, so
+// a single peer stroke lands as two events milliseconds apart. Handled
+// individually that is two read-modify-writes, two saveLocal calls, two change
+// events and two full re-render passes on every other device — for one fact.
+//
+// Measured 2026-07-28 (React Profiler, web build): 8 peer scores produced 14
+// HoleView commits at ~32 ms each, and a HolePage costs ~14 ms to render. Half
+// of that work was this duplication.
+//
+// So rows are collected per tournament for one short window and applied as a
+// batch: one read, all patches, one save, one re-render. The window only has
+// to span the gap between sibling rows of the same commit, so it costs a peer
+// score less than a frame of extra latency.
+const BATCH_WINDOW_MS = 20;
+
+// id -> { rows: [{ applyFn, row, eventType }], timer, done, resolve }
+const _batches = new Map();
+
+function flushBatch(id) {
+  const batch = _batches.get(id);
+  if (!batch) return;
+  _batches.delete(id);
+  runExclusiveForTournament(id, async () => {
+    // readLocal happens INSIDE the exclusive region (not before it is
+    // acquired) so a queued second batch observes the first batch's
+    // saveLocal, not the entry-time snapshot — otherwise both would clone the
+    // same pre-patch base and the second save would clobber the first.
     const cached = await readLocal(id);
     if (!cached) return;
-    const patched = applyFn(cached, row, eventType);
+    let patched = cached;
+    for (const { applyFn, row, eventType } of batch.rows) {
+      patched = applyFn(patched, row, eventType);
+    }
     let snapshot = await pendingEntriesFor(id);
     for (let pass = 0; pass < 3; pass++) {
       let merged = applyPendingMutations(patched, snapshot);
@@ -410,7 +428,43 @@ function makeHandler(id, applyFn) {
       if (stable) break;
       snapshot = latest;
     }
-  });
+  }).then(batch.resolve, batch.resolve);
+}
+
+function makeHandler(id, applyFn) {
+  return (payload) => {
+    const eventType = payload?.eventType;
+    // A DELETE delivers only `old` (the PK); INSERT/UPDATE deliver `new`. The
+    // patchers key off eventType to decide remove-vs-upsert, so a DELETE must
+    // route through `old` (which for these tables is the primary key alone).
+    const row = eventType === 'DELETE' ? payload?.old : (payload?.new ?? payload?.old);
+    if (!row) return Promise.resolve();
+
+    let batch = _batches.get(id);
+    if (!batch) {
+      batch = {
+        rows: [], timer: null, done: null, resolve: null,
+      };
+      batch.done = new Promise((res) => { batch.resolve = res; });
+      batch.timer = setTimeout(() => flushBatch(id), BATCH_WINDOW_MS);
+      _batches.set(id, batch);
+    }
+    batch.rows.push({ applyFn, row, eventType });
+    // Returning the batch promise keeps `await handler(...)` meaning "this row
+    // has been applied and saved", which the tests and the reconnect path rely
+    // on. Rows in one batch resolve together.
+    return batch.done;
+  };
+}
+
+// A tournament switch or teardown must not leave a scheduled batch pointing at
+// a channel that no longer exists: flush what is already queued (those rows are
+// real server state and the cache should still get them), then drop the entry.
+function flushPendingBatches() {
+  for (const [id, batch] of [..._batches]) {
+    clearTimeout(batch.timer);
+    flushBatch(id);
+  }
 }
 
 // Builds and subscribes a channel for `id`, wiring the same bindings every
@@ -474,6 +528,9 @@ function scheduleRejoin(id) {
 }
 
 export function stopRealtime() {
+  // Rows already queued describe committed server state — apply them before
+  // the channel goes away rather than dropping them on the floor.
+  flushPendingBatches();
   if (_reconnectTimer) {
     clearTimeout(_reconnectTimer);
     _reconnectTimer = null;
