@@ -85,3 +85,44 @@ describe('deriveMeIdFromAuth', () => {
     expect(deriveMeIdFromAuth(t, 'u-charlie')).toBe(t);
   });
 });
+
+// Migration 20260728000000 made get_game_tournament project user_id from the
+// game_players COLUMN, so an unclaimed slot now arrives with the key ABSENT
+// where it used to arrive as an explicit null (measured on prod: 27 players
+// across 14 of 48 tournaments carried a null-valued key). That is only safe
+// because nothing can tell the two apart — every read in src/ is truthiness or
+// equality against a real uuid, and no consumer does a key-presence check.
+// These pin the equivalence: if someone later writes a read that distinguishes
+// them, this fails rather than the roster quietly mis-identifying a player.
+describe('an absent user_id behaves exactly like a null one', () => {
+  const pair = (first) => ({
+    meId: null,
+    players: [first, { id: 'p2', name: 'Bob', user_id: 'u-bob' }],
+  });
+
+  it('an unclaimed slot resolves identically whether null or absent', () => {
+    // Compare the DECISION, not the objects: the inputs differ by exactly the
+    // key under test, so a deep-equal would always fail and prove nothing.
+    const fromNull = deriveMeIdFromAuth(pair({ id: 'p1', name: 'Guest', user_id: null }), 'u-charlie');
+    const fromAbsent = deriveMeIdFromAuth(pair({ id: 'p1', name: 'Guest' }), 'u-charlie');
+    expect(fromNull.meId).toBe(fromAbsent.meId);
+    expect(fromAbsent.meId).toBeNull();
+  });
+
+  it('still matches a genuinely claimed slot alongside an absent one', () => {
+    expect(deriveMeIdFromAuth(pair({ id: 'p1', name: 'Guest' }), 'u-bob').meId).toBe('p2');
+  });
+
+  it('clears a stale meId identically whether the other slot is null or absent', () => {
+    const withNull = {
+      meId: 'p2',
+      players: [{ id: 'p1', user_id: null }, { id: 'p2', user_id: 'u-bob' }],
+    };
+    const withAbsent = {
+      meId: 'p2',
+      players: [{ id: 'p1' }, { id: 'p2', user_id: 'u-bob' }],
+    };
+    expect(deriveMeIdFromAuth(withNull, 'u-charlie').meId).toBeNull();
+    expect(deriveMeIdFromAuth(withAbsent, 'u-charlie').meId).toBeNull();
+  });
+});

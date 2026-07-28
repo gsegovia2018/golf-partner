@@ -30,6 +30,11 @@ const B = { id: 'b', name: 'B', handicap: 12 };
 const C = { id: 'c', name: 'C', handicap: 8 };
 const D = { id: 'd', name: 'D', handicap: 4 };
 
+// Pairs persist ids only (scoring.js thinPairs): the patch builders still
+// construct teams from whole player objects, but what they EMIT is bare ids.
+// `thin` expresses an expected team in that persisted form.
+const thin = (...ps) => ps.map((p) => ({ id: p.id }));
+
 describe('setScoringModeRoundPatches', () => {
   test('switching INTO Best Ball from individual builds two pairs of two', () => {
     const t = makeTournament({
@@ -54,7 +59,7 @@ describe('setScoringModeRoundPatches', () => {
       rounds: [makeRound({ pairs: [[A, B], [C, D]] })],
     });
     const { patches } = setScoringModeRoundPatches(t, 'individual');
-    expect(patches[0].pairs).toEqual([[A], [B], [C], [D]]);
+    expect(patches[0].pairs).toEqual([thin(A), thin(B), thin(C), thin(D)]);
   });
 
   test('team-to-team change with revealed pairs keeps the existing partnerships', () => {
@@ -64,7 +69,7 @@ describe('setScoringModeRoundPatches', () => {
       rounds: [makeRound({ revealed: true, pairs: [[A, B], [C, D]] })],
     });
     const { patches } = setScoringModeRoundPatches(t, 'bestball');
-    expect(patches[0].pairs).toEqual([[A, B], [C, D]]);
+    expect(patches[0].pairs).toEqual([thin(A, B), thin(C, D)]);
   });
 
   test('already-played earlier rounds are left untouched', () => {
