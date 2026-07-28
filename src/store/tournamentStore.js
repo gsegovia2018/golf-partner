@@ -16,6 +16,7 @@ import {
   calcStablefordPoints,
   tournamentSindicatoClinched,
   buildTeamsForMode,
+  thinPairs,
   insertIntoPartnerTeams,
   removeFromPartnerTeams,
   isRoundPlayed,
@@ -631,6 +632,7 @@ export {
   isPickupScore,
   randomPairs,
   buildTeamsForMode,
+  thinPairs,
   scrambleUnits,
   scrambleRoundTally,
   tournamentScrambleLeaderboard,
@@ -660,10 +662,12 @@ export {
 // currentRound alone isn't enough since it never advances past the last
 // round, so a finished tournament's final round and a scored single-round
 // game both need the scores check), which keep their frozen
-// playerHandicaps; the cosmetic pairs snapshot (name/handicap index/gender)
-// still refreshes on those rounds too. `gender` is only stamped onto the
-// embedded players when explicitly provided (not `undefined`), so callers
-// that don't track gender can omit it without wiping the existing value.
+// playerHandicaps. The cosmetic pairs snapshot this used to refresh is gone —
+// pairs persist ids only (scoring.js thinPairs), so a rename or handicap
+// change reaches the teams display by roster lookup instead of by copying.
+// `gender` is only stamped onto the embedded players when explicitly provided
+// (not `undefined`), so callers that don't track gender can omit it without
+// wiping the existing value.
 //
 // sync-v2 design note: this is a maintenance sweep across POSSIBLY MANY
 // tournaments (every tournament that ever rostered this library player), not
@@ -674,7 +678,7 @@ export {
 // and best-effort: saveLocal happens first (offline-safe, the UI reflects
 // the rename immediately), then tournament.updatePlayer (→ repo.upsertPlayer)
 // plus one round.upsert per round (→ repo.upsertRound, carrying the
-// re-derived pairs snapshot + recomputed playerHandicaps together — a plain
+// recomputed playerHandicaps — a plain
 // handicap.set mutation was considered and rejected here because its
 // applyToTournament ALSO stamps manualHandicaps[playerId] = true, which
 // would incorrectly convert this auto-recompute into a manual override).
@@ -699,12 +703,11 @@ export async function propagatePlayerToTournaments(playerId, { name, handicap, g
       p.id === playerId ? { ...p, name, handicap: parsedIndex, ...genderPatch } : p,
     );
     const nextRounds = t.rounds.map((round, idx) => {
-      const nextPairs = round.pairs?.map((pair) =>
-        pair.map((pp) =>
-          pp.id === playerId ? { ...pp, name, handicap: parsedIndex, ...genderPatch } : pp,
-        ),
-      );
-      const patched = { ...round, pairs: nextPairs ?? round.pairs };
+      // No pairs snapshot to refresh any more: pairs persist ids only (see
+      // scoring.js thinPairs), so a rename/handicap/gender change is picked up
+      // by resolving the member against `players` at read time. Thinning here
+      // also normalises any round still carrying a rich legacy snapshot.
+      const patched = { ...round, pairs: thinPairs(round.pairs) };
       const isPlayed = Object.keys(round.scores ?? {}).length > 0 || idx < currentRound;
       if (isPlayed) return patched; // already-played round: playing handicaps frozen
       return recomputeRoundPlayingHandicaps(patched, nextPlayers);
@@ -723,12 +726,11 @@ export async function propagatePlayerToTournaments(playerId, { name, handicap, g
         // from the server (loadAllTournaments), never a brand-new one.
         // mutationWrites.js's round.upsert branch then patches only the
         // fields this sweep owns (courseName/courseId/holes/tees/notes/
-        // playerTees); the pairs-snapshot + playerHandicaps refresh this
-        // function computes stays local-only post-fix, since both are owned
-        // by their own dedicated mutations (pairs.set / handicap.set) and
-        // sending them here would risk clobbering a concurrent device's
-        // write to those same fields — the exact regression this guards
-        // against.
+        // playerTees); the playerHandicaps refresh this function computes
+        // stays local-only post-fix, since it is owned by its own dedicated
+        // mutation (handicap.set) and sending it here would risk clobbering a
+        // concurrent device's write to that same field — the exact regression
+        // this guards against.
         current = await mutate(current, {
           type: 'round.upsert', roundId: current.rounds[i].id, roundIndex: i, round: current.rounds[i], isNew: false,
         });
@@ -955,7 +957,9 @@ export function addPlayerRoundPatches(tournament, player, { mode } = {}) {
         revealed: Boolean(round.revealed),
       });
     }
-    const patch = { roundId: round.id, playerHandicap, pairs };
+    // Both branches above build pairs from whole player objects; they persist
+    // as ids only (see scoring.js thinPairs).
+    const patch = { roundId: round.id, playerHandicap, pairs: thinPairs(pairs) };
     if (!roundModeValid && round.scoringMode) patch.clearScoringMode = true;
     patches.push(patch);
   });
@@ -1053,7 +1057,7 @@ export function removePlayerRoundPatches(tournament, playerId, { mode } = {}) {
         revealed: Boolean(round.revealed),
       });
     }
-    const patch = { roundId: round.id, pairs };
+    const patch = { roundId: round.id, pairs: thinPairs(pairs) };
     if (!roundModeValid && round.scoringMode) patch.clearScoringMode = true;
     patches.push(patch);
   });
@@ -1119,7 +1123,7 @@ export function setScoringModeRoundPatches(tournament, newMode) {
         revealed: Boolean(round.revealed),
       });
     }
-    patches.push({ roundId: round.id, pairs });
+    patches.push({ roundId: round.id, pairs: thinPairs(pairs) });
   });
   return { patches };
 }

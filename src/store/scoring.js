@@ -501,6 +501,24 @@ export function buildTeamsForMode(mode, players) {
   return randomPairs(players);
 }
 
+// Pairs persist ids ONLY. They used to embed whole player objects, which went
+// stale the moment a player was claimed, renamed, or re-handicapped (measured
+// on prod 2026-07-28: 14 of 143 embedded copies carried a user_id that
+// disagreed with game_players). Every consumer already resolves members
+// through the roster — scrambleUnits' `byId[m.id] ?? m` below, EditTeamsView's
+// `nameFor` — so dropping the extra fields only removes the dead fallback, and
+// an older installed build still renders names correctly.
+//
+// The team BUILDERS above still take and return whole player objects (they
+// shuffle real rosters and compare by identity); thinning happens where pairs
+// are assigned to a round, so pair construction is unaffected.
+export function thinPairs(pairs) {
+  if (!Array.isArray(pairs)) return pairs;
+  return pairs.map((team) => (
+    Array.isArray(team) ? team.map((p) => ({ id: p?.id })) : team
+  ));
+}
+
 // ── Per-round scoring modes ─────────────────────────────────────────────────
 // A round may override the tournament's default mode. This helper is the
 // single source of truth for a round's effective mode — every round-scoped

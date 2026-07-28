@@ -29,6 +29,11 @@ const A = { id: 'a', name: 'A', handicap: 10 };
 const B = { id: 'b', name: 'B', handicap: 12 };
 const C = { id: 'c', name: 'C', handicap: 8 };
 
+// Pairs persist ids only (scoring.js thinPairs): the patch builders still
+// construct teams from whole player objects, but what they EMIT is bare ids.
+// `thin` expresses an expected team in that persisted form.
+const thin = (...ps) => ps.map((p) => ({ id: p.id }));
+
 describe('addPlayerRoundPatches mode resolution', () => {
   test('matchplay 2→3 with no override falls back to stableford', () => {
     const t = makeTournament({
@@ -107,7 +112,7 @@ describe('addPlayerRoundPatches pair construction', () => {
       rounds: [makeRound({ revealed: true, pairs: [[A], [B]] })],
     });
     const { patches } = addPlayerRoundPatches(t, C, { mode: 'individual' });
-    expect(patches[0].pairs).toEqual([[A], [B], [C]]);
+    expect(patches[0].pairs).toEqual([thin(A), thin(B), thin(C)]);
   });
 
   test('matchplay 2→3 with sindicato override produces solo pairs', () => {
@@ -117,7 +122,7 @@ describe('addPlayerRoundPatches pair construction', () => {
       rounds: [makeRound({ revealed: true, pairs: [[A], [B]] })],
     });
     const { patches } = addPlayerRoundPatches(t, C, { mode: 'sindicato' });
-    expect(patches[0].pairs).toEqual([[A], [B], [C]]);
+    expect(patches[0].pairs).toEqual([thin(A), thin(B), thin(C)]);
   });
 
   test('team→team with a revealed 3-player round (3 -> 4): the triple splits, new player pairs with the odd one out (no singleton)', () => {
@@ -131,7 +136,7 @@ describe('addPlayerRoundPatches pair construction', () => {
       rounds: [makeRound({ revealed: true, pairs: [[A, B, C]] })],
     });
     const { patches } = addPlayerRoundPatches(t, D);
-    expect(patches[0].pairs).toEqual([[A, B], [C, D]]);
+    expect(patches[0].pairs).toEqual([thin(A, B), thin(C, D)]);
     expect(patches[0].pairs.some((pr) => pr.length === 1)).toBe(false);
   });
 
@@ -163,7 +168,7 @@ describe('addPlayerRoundPatches pair construction', () => {
       rounds: [makeRound({ revealed: true, pairs: [[A, B], [C, D]] })],
     });
     const { patches } = addPlayerRoundPatches(t, E);
-    expect(patches[0].pairs).toEqual([[A, B], [C, D, E]]);
+    expect(patches[0].pairs).toEqual([thin(A, B), thin(C, D, E)]);
     expect(patches[0].pairs.some((pr) => pr.length === 1)).toBe(false);
     expect(patches[0].pairs.every((pr) => pr.length <= 3)).toBe(true);
   });
@@ -178,7 +183,7 @@ describe('addPlayerRoundPatches pair construction', () => {
       rounds: [makeRound({ revealed: true, pairs: [[A, B], [C, D, E]] })],
     });
     const { patches } = addPlayerRoundPatches(t, F);
-    expect(patches[0].pairs).toEqual([[A, B], [C, D], [E, F]]);
+    expect(patches[0].pairs).toEqual([thin(A, B), thin(C, D), thin(E, F)]);
     expect(patches[0].pairs.some((pr) => pr.length === 1)).toBe(false);
     expect(patches[0].pairs.every((pr) => pr.length <= 3)).toBe(true);
   });
@@ -353,7 +358,7 @@ describe('addPlayerRoundPatches fixedTeams', () => {
       rounds: [makeRound({ id: 'r0', revealed: true, pairs: [[A, B, C]] })],
     });
     const { patches } = addPlayerRoundPatches(t, D);
-    expect(patches[0].pairs).toEqual([[A, B], [C, D]]);
+    expect(patches[0].pairs).toEqual([thin(A, B), thin(C, D)]);
   });
 });
 
@@ -372,7 +377,7 @@ describe('addPlayerRoundPatches per-round mode overrides', () => {
     const r0 = patches.find((p) => p.roundId === 'r0');
     const r1 = patches.find((p) => p.roundId === 'r1');
     // r0 has no override: falls back to nextScoringMode (individual → solo groups).
-    expect(r0.pairs).toEqual([[A], [B], [C], [D]]);
+    expect(r0.pairs).toEqual([thin(A), thin(B), thin(C), thin(D)]);
     expect(r0.clearScoringMode).toBeUndefined();
     // scramble3v1 stays valid at 4 players → 3+1 shape, no clear.
     expect(r1.pairs.map((pr) => pr.length).sort()).toEqual([1, 3]);
@@ -415,7 +420,7 @@ describe('addPlayerRoundPatches per-round mode overrides', () => {
       r0.pairs.map((pr) => pr.map((p) => p.id).sort()),
     );
     // Different shape (solo) → not the fixed-team pairs.
-    expect(r2.pairs).toEqual([[A], [B], [C], [D]]);
+    expect(r2.pairs).toEqual([thin(A), thin(B), thin(C), thin(D)]);
   });
 
   test('revealed round with a still-valid team override on a non-team default keeps its partnerships', () => {
@@ -435,7 +440,7 @@ describe('addPlayerRoundPatches per-round mode overrides', () => {
     // with the newcomer (Task 14: no singleton) — NOT a fresh reshuffle. The
     // round's pre-mutation mode is its override (stableford), not the
     // tournament default (individual).
-    expect(r0.pairs).toEqual([[A, B], [C, D]]);
+    expect(r0.pairs).toEqual([thin(A, B), thin(C, D)]);
     expect(r0.clearScoringMode).toBeUndefined();
   });
 });

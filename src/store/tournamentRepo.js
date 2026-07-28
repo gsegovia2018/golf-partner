@@ -24,7 +24,13 @@ function stripRoundHotKeys(round) {
   const {
     scores, shotDetails, notes, scoreEntries, scoreResolutions, removedPlayerIds, ...body
   } = round;
-  return body;
+  // Defense in depth: pairs persist ids only (see scoring.js thinPairs). The
+  // patch builders in tournamentStore already thin, so in practice this is a
+  // no-op; it catches any future caller that assembles a round body without
+  // going through them. Lazy require matches this module's existing style for
+  // breaking the scoring <-> store cycle.
+  const { thinPairs } = require('./scoring');
+  return 'pairs' in body ? { ...body, pairs: thinPairs(body.pairs) } : body;
 }
 
 // -- Reads --------------------------------------------------------------

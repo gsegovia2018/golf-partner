@@ -216,7 +216,11 @@ describe('propagatePlayerToTournaments', () => {
     jest.clearAllMocks();
   });
 
-  test('stamps the provided gender onto the embedded player and its round.pairs snapshot', async () => {
+  // pairs no longer carry a cosmetic copy of the player (see scoring.js
+  // thinPairs) -- the roster is the only place gender/name/handicap live, and
+  // the teams display resolves members against it. So these assert the roster
+  // is stamped AND that pairs are reduced to bare ids.
+  test('stamps the provided gender onto the roster and leaves pairs as ids', async () => {
     mockState.tournamentsRow = {
       id: 't1', name: 'Cup', kind: 'casual', created_at: '2026-05-18T09:00:00Z',
       data: tournamentWith('female'),
@@ -226,12 +230,12 @@ describe('propagatePlayerToTournaments', () => {
 
     const saved = await readLocal('t1');
     expect(saved.players.find((p) => p.id === 'p1').gender).toBe('male');
-    expect(saved.rounds[0].pairs[0][0].gender).toBe('male');
+    expect(saved.rounds[0].pairs[0][0]).toEqual({ id: 'p1' });
     // The other player (not the one being patched) is untouched.
     expect(saved.players.find((p) => p.id === 'p2').gender).toBe('male');
   });
 
-  test('leaves the embedded gender untouched when the patch omits it', async () => {
+  test('leaves the roster gender untouched when the patch omits it', async () => {
     mockState.tournamentsRow = {
       id: 't1', name: 'Cup', kind: 'casual', created_at: '2026-05-18T09:00:00Z',
       data: tournamentWith('female'),
@@ -241,7 +245,7 @@ describe('propagatePlayerToTournaments', () => {
 
     const saved = await readLocal('t1');
     expect(saved.players.find((p) => p.id === 'p1').gender).toBe('female');
-    expect(saved.rounds[0].pairs[0][0].gender).toBe('female');
+    expect(saved.rounds[0].pairs[0][0]).toEqual({ id: 'p1' });
   });
 
   // Regression fix follow-up: this sweep's round.upsert loop iterates
@@ -309,9 +313,9 @@ describe('propagatePlayerToTournaments', () => {
     expect(saved.rounds[0].playerHandicaps).toEqual({ p1: 99, p2: 99 });
     // Future round: re-derived from the new index.
     expect(saved.rounds[1].playerHandicaps.p1).toBe(20);
-    // Cosmetic pair-name/index-snapshot refresh still applies to the played round.
-    expect(saved.rounds[0].pairs[0][0].name).toBe('Ann');
-    expect(saved.rounds[0].pairs[0][0].handicap).toBe(20);
+    // Pairs are ids only now -- there is no cosmetic snapshot to refresh, and
+    // the played round's pairs are normalised the same as any other.
+    expect(saved.rounds[0].pairs[0][0]).toEqual({ id: 'p1' });
   });
 
   test('single-round game: currentRound stays 0 after the only round is scored, so it must still be protected', async () => {
