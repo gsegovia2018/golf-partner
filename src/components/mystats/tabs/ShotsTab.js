@@ -7,7 +7,6 @@ import { useAppSettings } from '../../../hooks/useAppSettings';
 import { formatDistance, unitSuffix } from '../../../lib/units';
 import { shotBenchmarkForHandicap } from '../../../store/shotBenchmarks';
 import SectionCard from '../SectionCard';
-import ClubDistancesCard from '../ClubDistancesCard';
 import ShotDashboard from '../ShotDashboard';
 import SGTrendCard from '../SGTrendCard';
 import SGReconciliationCard from '../SGReconciliationCard';
@@ -43,7 +42,6 @@ function ShotsTab({ stats, onInfo, targetHandicap, onChangeTarget }) {
   if (!hasAnyShotData) {
     return (
       <View style={s.wrap}>
-        <ClubDistancesCard onInfo={onInfo} />
         <SectionCard title="Strokes Gained">
           <Text style={s.note}>
             Log putts and drives during a round to unlock tee-shot, putting and driving stats.
@@ -71,7 +69,6 @@ function ShotsTab({ stats, onInfo, targetHandicap, onChangeTarget }) {
 
   return (
     <View style={s.wrap}>
-      <ClubDistancesCard onInfo={onInfo} />
       <ShotDashboard
         stats={stats}
         targetHandicap={targetHandicap}
