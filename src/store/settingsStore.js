@@ -117,15 +117,36 @@ export function __resetAppSettingsForTests() {
   hydratedUserId = null;
   settingsHydrated = false;
   hydrationListeners.clear();
+  pushChain = Promise.resolve();
+  pushesSettled = 0;
 }
 
-async function pushToServer(snapshot) {
-  try {
-    await upsertProfile({ settings: snapshot });
-    await AsyncStorage.removeItem(SETTINGS_DIRTY_KEY);
-  } catch {
-    await AsyncStorage.setItem(SETTINGS_DIRTY_KEY, '1');
-  }
+// Pushes are chained so server writes land in write order — two quick edits
+// racing each other could otherwise commit out of order and leave the server
+// holding the older blob (which a later hydrate would then adopt, silently
+// undoing the newer edit). The inner catch swallows, so the chain never
+// rejects.
+let pushChain = Promise.resolve();
+// Bumped when a push finishes (either way). hydrateAppSettings compares it
+// across its own run: a push settling mid-hydrate may have cleared the dirty
+// flag after hydrate's loadProfile() already read a pre-push server blob —
+// adopting that blob would undo the pushed write.
+let pushesSettled = 0;
+function pushToServer(snapshot) {
+  const run = pushChain.then(async () => {
+    try {
+      await upsertProfile({ settings: snapshot });
+      // Only the push whose snapshot is still the latest clears the dirty
+      // flag — a newer local write is still awaiting its own (queued) push.
+      if (snapshot === current) await AsyncStorage.removeItem(SETTINGS_DIRTY_KEY);
+    } catch {
+      await AsyncStorage.setItem(SETTINGS_DIRTY_KEY, '1');
+    } finally {
+      pushesSettled += 1;
+    }
+  });
+  pushChain = run;
+  return run;
 }
 
 // Write-through: UI state and the local mirror update immediately; the
@@ -135,6 +156,13 @@ export async function updateAppSettings(patch) {
   set(mergeAppSettings(current, patch));
   const snapshot = current;
   await AsyncStorage.setItem(SETTINGS_KEY, JSON.stringify(snapshot));
+  // Dirty from the moment of the local write, not only after a *failed* push:
+  // while the push is in flight the server copy is stale, and a hydrate that
+  // runs in that window (auth token refresh, tab refocus) — or a push killed
+  // outright by a reload/app kill — would otherwise see a clean flag and
+  // adopt the stale server blob over this write. pushToServer clears it once
+  // the latest snapshot has actually landed.
+  await AsyncStorage.setItem(SETTINGS_DIRTY_KEY, '1');
   // Cheap idempotent re-stamp: if hydrate has ever established an owner for
   // this mirror, keep it owned on every write, even if the key was somehow
   // cleared — an unowned mirror can't be detected as foreign on a later
@@ -159,6 +187,7 @@ export async function hydrateAppSettings() {
   let gateOpensOnExit = true;
   try {
     const seqBefore = mutationSeq;
+    const pushesSettledBefore = pushesSettled;
     try {
       const raw = await AsyncStorage.getItem(SETTINGS_KEY);
       if (mutationSeq === seqBefore) {
@@ -239,7 +268,9 @@ export async function hydrateAppSettings() {
       // A concurrent updateAppSettings() while loadProfile() was in flight
       // means the server copy we just fetched is now stale — treat it like
       // the dirty path and push the newer local state up instead of adopting.
-      const staleServer = mutationSeq !== seqBefore;
+      // Same for a push that settled mid-hydrate: it cleared the dirty flag
+      // for a write our loadProfile() read may well predate.
+      const staleServer = mutationSeq !== seqBefore || pushesSettled !== pushesSettledBefore;
       if (dirty === '1' || Object.keys(server).length === 0 || staleServer) {
         const snapshot = current;
         await AsyncStorage.setItem(SETTINGS_KEY, JSON.stringify(snapshot));

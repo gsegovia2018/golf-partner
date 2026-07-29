@@ -84,6 +84,57 @@ test('failed server write sets dirty flag; hydrate re-pushes it', async () => {
   expect(await AsyncStorage.getItem(SETTINGS_DIRTY_KEY)).toBeNull();
 });
 
+test('a write is dirty while its push is in flight; hydrate keeps it over the stale server', async () => {
+  // The push is still on the wire when hydrate runs (token refresh, tab
+  // refocus): the server copy hydrate fetches predates the write. The dirty
+  // flag — set at write time, not on push failure — must make hydrate keep
+  // the local value instead of adopting the stale blob.
+  let resolvePush;
+  profileStore.upsertProfile
+    .mockReturnValueOnce(new Promise((resolve) => { resolvePush = resolve; }))
+    .mockResolvedValue();
+  profileStore.loadProfile.mockResolvedValue({ userId: 'u1', settings: { clubDistances: {} } });
+
+  const u = updateAppSettings({ clubDistances: { seven_iron: 137 } });
+  await new Promise((resolve) => setImmediate(resolve)); // let the mirror + dirty writes land
+  expect(await AsyncStorage.getItem(SETTINGS_DIRTY_KEY)).toBe('1');
+
+  const h = hydrateAppSettings();
+  resolvePush();
+  await Promise.all([u, h]);
+
+  expect(getAppSettings().clubDistances).toEqual({ seven_iron: 137 });
+  expect(profileStore.upsertProfile).toHaveBeenLastCalledWith({
+    settings: expect.objectContaining({ clubDistances: { seven_iron: 137 } }),
+  });
+  expect(await AsyncStorage.getItem(SETTINGS_DIRTY_KEY)).toBeNull();
+});
+
+test('server pushes are serialized in write order', async () => {
+  // Two quick edits: the second push must not start (and possibly commit
+  // first, leaving the server with the older blob) while the first is in
+  // flight.
+  let resolveFirst;
+  profileStore.upsertProfile
+    .mockReturnValueOnce(new Promise((resolve) => { resolveFirst = resolve; }))
+    .mockResolvedValue();
+
+  const a = updateAppSettings({ haptics: false });
+  await new Promise((resolve) => setImmediate(resolve));
+  const b = updateAppSettings({ units: 'yards' });
+  await new Promise((resolve) => setImmediate(resolve));
+
+  expect(profileStore.upsertProfile).toHaveBeenCalledTimes(1);
+  resolveFirst();
+  await Promise.all([a, b]);
+
+  expect(profileStore.upsertProfile).toHaveBeenCalledTimes(2);
+  expect(profileStore.upsertProfile).toHaveBeenLastCalledWith({
+    settings: expect.objectContaining({ haptics: false, units: 'yards' }),
+  });
+  expect(await AsyncStorage.getItem(SETTINGS_DIRTY_KEY)).toBeNull();
+});
+
 test('hydrate adopts server settings over local mirror when not dirty', async () => {
   await AsyncStorage.setItem(SETTINGS_KEY, JSON.stringify({ haptics: false }));
   profileStore.loadProfile.mockResolvedValue({ userId: 'u1', settings: { haptics: true, units: 'yards' } });
