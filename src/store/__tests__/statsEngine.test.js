@@ -2779,6 +2779,25 @@ describe('sgApproach with approachLie', () => {
     const without = sgApproach(makeRound(p3, [{ ...base }]), 'me');
     expect(withLie.perHole[0]).toBeCloseTo(without.perHole[0], 10);
   });
+  test('par 4 null approachLie inherits the drive lie (missed drive → rough)', () => {
+    const derived = sgApproach(makeRound(holes, [{ ...base, drive: 'left' }]), 'me');
+    const explicit = sgApproach(makeRound(holes, [{ ...base, approachLie: 'rough' }]), 'me');
+    expect(derived.perHole[0]).toBeCloseTo(explicit.perHole[0], 10);
+  });
+  test('explicit approachLie beats the drive-derived default', () => {
+    const r = sgApproach(makeRound(holes, [{ ...base, drive: 'left', approachLie: 'fairway' }]), 'me');
+    expect(r.perHole[0]).toBeCloseTo(0.06, 2);
+  });
+  test('a drive in trouble leaves the approach default at fairway (punch-out first)', () => {
+    const r = sgApproach(makeRound(holes, [{ ...base, drive: 'left', driveLie: 'trouble' }]), 'me');
+    expect(r.perHole[0]).toBeCloseTo(0.06, 2);
+  });
+  test('par 5 keeps the fairway default even after a missed drive', () => {
+    const p5 = [{ par: 5, strokes: 5 }];
+    const derived = sgApproach(makeRound(p5, [{ ...base, drive: 'left' }]), 'me');
+    const fairway = sgApproach(makeRound(p5, [{ ...base, approachLie: 'fairway' }]), 'me');
+    expect(derived.perHole[0]).toBeCloseTo(fairway.perHole[0], 10);
+  });
 });
 
 describe('sgPenalties vs target handicap', () => {

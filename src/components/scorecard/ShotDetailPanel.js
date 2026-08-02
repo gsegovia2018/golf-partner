@@ -5,6 +5,7 @@ import { useTheme } from '../../theme/ThemeContext';
 import { makeScorecardStyles } from './styles';
 import { ShotDetailExplainer } from '../ShotDetailExplainer';
 import { isGIR, recoveryOutcomeFromState, shotDetailStrokeCount } from '../../store/scoring';
+import { defaultApproachLie } from '../../store/statsEngine';
 import { useAppSettings } from '../../hooks/useAppSettings';
 import { unitWord } from '../../lib/units';
 import {
@@ -354,11 +355,12 @@ export function ShotDetailPanel({ hole, detail, onChange, strokes, statGroups, t
           onSelect={(key) => onChange({ driveLie: key })}
           theme={theme}
           s={s}
+          stacked
           explainer={
             <ShotDetailExplainer
               rowKey="driveLie"
               title="Drive lie"
-              body="Where the tee shot finished. Rough is assumed for a miss unless you say otherwise; Trouble means trees, deep stuff, or anywhere you could only chip out."
+              body="Where the tee shot finished. Rough is assumed for a miss unless you say otherwise; pick Fairway when the miss still found a fairway (yours or another hole's); Trouble means trees, deep stuff, or anywhere you could only chip out."
             />
           }
         />
@@ -422,8 +424,8 @@ export function ShotDetailPanel({ hole, detail, onChange, strokes, statGroups, t
           a11yPrefix="Approach lie"
           options={APPROACH_LIES}
           labels={APPROACH_LIE_LABELS}
-          effectiveValue={d.approachLie ?? 'fairway'}
-          onSelect={(key) => onChange({ approachLie: key === 'fairway' ? null : key })}
+          effectiveValue={d.approachLie ?? defaultApproachLie(d, hole.par)}
+          onSelect={(key) => onChange({ approachLie: key })}
           theme={theme}
           s={s}
           stacked
@@ -432,7 +434,7 @@ export function ShotDetailPanel({ hole, detail, onChange, strokes, statGroups, t
             <ShotDetailExplainer
               rowKey="approachLie"
               title="Approach lie"
-              body="Where you played the shot aimed at the green from. Fairway is assumed — only change it when you attacked the green from rough or sand."
+              body="Where you played the shot aimed at the green from. On par 4s the drive's terrain is assumed — change it when a recovery or penalty moved the ball somewhere else."
             />
           }
         />

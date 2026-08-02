@@ -60,6 +60,14 @@ describe('ShotDetailPanel drive + approach lie inputs', () => {
     fireEvent.press(miss.getByLabelText('Driver Fairway'));
     expect(onChange).toHaveBeenCalledWith({ drive: 'fairway', driveLie: null });
   });
+  test('a missed drive can still be marked as finishing on a fairway', () => {
+    const onChange = jest.fn();
+    const miss = render(
+      <ShotDetailPanel hole={par4} detail={{ drive: 'right' }} onChange={onChange} strokes={null} />,
+    );
+    fireEvent.press(miss.getByLabelText('Drive lie Fairway'));
+    expect(onChange).toHaveBeenCalledWith({ driveLie: 'fairway' });
+  });
   test('approach lie chips show once a bucket is picked; default reads fairway', () => {
     const noBucket = render(
       <ShotDetailPanel hole={par4} detail={{}} onChange={jest.fn()} strokes={null} />,
@@ -78,6 +86,42 @@ describe('ShotDetailPanel drive + approach lie inputs', () => {
     expect(withBucket.getByLabelText('Approach lie Fairway').props.accessibilityState.selected).toBe(true);
     fireEvent.press(withBucket.getByLabelText('Approach lie Rough'));
     expect(onChange).toHaveBeenCalledWith({ approachLie: 'rough' });
+  });
+  test('par-4 approach lie defaults to the drive terrain; tapping stores explicitly', () => {
+    const onChange = jest.fn();
+    const missedDrive = render(
+      <ShotDetailPanel
+        hole={par4}
+        detail={{ approachBucket: '100-150', drive: 'left' }}
+        onChange={onChange}
+        strokes={null}
+      />,
+    );
+    expect(missedDrive.getByLabelText('Approach lie Rough').props.accessibilityState.selected).toBe(true);
+    fireEvent.press(missedDrive.getByLabelText('Approach lie Fairway'));
+    expect(onChange).toHaveBeenCalledWith({ approachLie: 'fairway' });
+
+    const sandDrive = render(
+      <ShotDetailPanel
+        hole={par4}
+        detail={{ approachBucket: '100-150', drive: 'left', driveLie: 'sand' }}
+        onChange={jest.fn()}
+        strokes={null}
+      />,
+    );
+    expect(sandDrive.getByLabelText('Approach lie Sand').props.accessibilityState.selected).toBe(true);
+  });
+  test('par-5 approach lie keeps the fairway default after a missed drive', () => {
+    const par5 = { number: 3, par: 5, strokeIndex: 1 };
+    const r = render(
+      <ShotDetailPanel
+        hole={par5}
+        detail={{ approachBucket: '100-150', drive: 'left' }}
+        onChange={jest.fn()}
+        strokes={null}
+      />,
+    );
+    expect(r.getByLabelText('Approach lie Fairway').props.accessibilityState.selected).toBe(true);
   });
   test('approach lie hidden on par 3s', () => {
     const p3 = render(

@@ -2504,11 +2504,10 @@ export function sgApproach(round, playerId, targetHandicap = 0) {
   const perHole = (round?.holes ?? []).map((hole) => {
     const d = byHole?.[hole.number];
     if (!d) return null;
-    const isPar3 = hole.par === 3;
     if (!d.approachBucket) return null;
     const startDist = BUCKETS.approach[d.approachBucket];
     if (startDist == null) return null;
-    const startLie = approachStartLie(d, isPar3);
+    const startLie = approachStartLie(d, hole.par);
     const start = expectedStrokes(startLie, startDist, targetHandicap);
     if (start == null) return null;
     const strokes = round?.scores?.[playerId]?.[hole.number];
@@ -2619,12 +2618,21 @@ export function driveDistanceAverage(rounds, playerId) {
 
 const APPROACH_LIES = new Set(['fairway', 'rough', 'sand']);
 
-// The approach's own start lie — the logged shot aimed at the green may be
-// played from anywhere (the drive's lie says nothing about it after a
-// punch-out or lay-up). Null means fairway: the legacy assumption.
-function approachStartLie(d, isPar3) {
-  if (isPar3) return 'tee';
-  return APPROACH_LIES.has(d?.approachLie) ? d.approachLie : 'fairway';
+// Default approach lie when none was logged. On a par 4 the approach is the
+// very next shot after the drive, so it inherits the drive's terrain. A drive
+// in trouble implies a punch-out first, so the later approach falls back to
+// fairway — as do par 5s and holes without drive info (the legacy assumption).
+export function defaultApproachLie(d, par) {
+  if (par !== 4) return 'fairway';
+  const driveLie = driveLieFromDetail(d);
+  return APPROACH_LIES.has(driveLie) ? driveLie : 'fairway';
+}
+
+// The approach's own start lie — an explicit approachLie always wins (a
+// recovery shot may have moved the ball off the drive's terrain).
+function approachStartLie(d, par) {
+  if (par === 3) return 'tee';
+  return APPROACH_LIES.has(d?.approachLie) ? d.approachLie : defaultApproachLie(d, par);
 }
 
 // Never let "remaining to the green" collapse below a normal wedge — a 240+
@@ -2721,7 +2729,7 @@ export function approachTargetGaps(rounds, playerId, targetHandicap = 0) {
       if (startDist == null) return;
       const strokes = round?.scores?.[playerId]?.[hole.number];
       const gir = isGIR({ strokes, putts: d.putts, par: hole.par });
-      const startLie = approachStartLie(d, hole.par === 3);
+      const startLie = approachStartLie(d, hole.par);
       const start = expectedStrokes(startLie, startDist, targetHandicap);
       const endState = approachEndState(d, { strokes, par: hole.par, targetHandicap });
       if (!endState) return;

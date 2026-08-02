@@ -19,7 +19,7 @@ export const DEFAULT_SHOT = {
   firstPuttBucket: null,        // '0-1' | '1-2' | '2-3' | '3-6' | '6+' | null
   approachBucket: null,         // '0-50' | '50-100' | '100-150' | '150-200' | '200+' | null
   approachResult: null,         // 'green' | 'miss' | null
-  approachLie: null,            // 'fairway' | 'rough' | 'sand' | null (null = fairway)
+  approachLie: null,            // 'fairway' | 'rough' | 'sand' | null (null = drive's lie on par 4s, else fairway)
 };
 
 // Which DEFAULT_SHOT fields belong to each configurable tracking group
@@ -81,10 +81,10 @@ export const FIRST_PUTT_LABELS_YD = {
   '0-1': '0-1', '1-2': '1-2', '2-3': '2-3', '3-6': '3-7', '6+': '7+',
 };
 
-// Where a missed drive finished. Fairway hits need no lie — the direction
-// chip already says fairway; the engine derives rough for unset misses.
-export const DRIVE_MISS_LIES = ['rough', 'sand', 'trouble'];
-export const DRIVE_MISS_LIE_LABELS = { rough: 'Rough', sand: 'Sand', trouble: 'Trouble' };
+// Where a missed drive finished. Rough is the assumed miss; Fairway covers a
+// drive that missed its line but found another hole's fairway.
+export const DRIVE_MISS_LIES = ['fairway', 'rough', 'sand', 'trouble'];
+export const DRIVE_MISS_LIE_LABELS = { fairway: 'Fairway', rough: 'Rough', sand: 'Sand', trouble: 'Trouble' };
 
 export const APPROACH_LIES = ['fairway', 'rough', 'sand'];
 export const APPROACH_LIE_LABELS = { fairway: 'Fairway', rough: 'Rough', sand: 'Sand' };

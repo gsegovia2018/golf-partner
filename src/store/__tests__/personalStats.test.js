@@ -931,8 +931,11 @@ describe('computeMyStats', () => {
         };
       } else {
         scores[hole.number] = 6;
+        // approachLie pinned to fairway: with it unset, par-4 approaches would
+        // inherit the missed drive's rough lie and reshuffle the action plan
+        // rankings this test asserts on.
         shotDetails.p1[hole.number] = {
-          drive: 'right', approachBucket: '200+',
+          drive: 'right', approachBucket: '200+', approachLie: 'fairway',
           putts: 3, firstPuttBucket: '6+', sandShots: 0,
         };
       }
