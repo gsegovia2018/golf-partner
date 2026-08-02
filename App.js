@@ -178,7 +178,10 @@ function AppNavigator() {
   // guests (join links) never onboard. null = still checking, false = clear,
   // a profile object = onboarding needed. Keyed on the user id, not the
   // session object, so token refreshes don't re-trigger the check. A failed
-  // load (offline cold start) skips the gate rather than locking the user out.
+  // load (offline cold start) skips the gate rather than locking the user out;
+  // so does a null profile — loadProfile() returns null when the auth client
+  // can't produce a user, never for a real account, so treating it as
+  // "needs onboarding" would show the username screen to established users.
   const userId = session?.user?.id ?? null;
   const isAnonUser = !!session?.user?.is_anonymous;
   const [onboarding, setOnboarding] = useState(null);
@@ -186,7 +189,7 @@ function AppNavigator() {
     if (!userId || isAnonUser) { setOnboarding(userId ? false : null); return undefined; }
     let cancelled = false;
     loadProfile()
-      .then((p) => { if (!cancelled) setOnboarding(p?.username ? false : (p ?? {})); })
+      .then((p) => { if (!cancelled) setOnboarding(p && !p.username ? p : false); })
       .catch(() => { if (!cancelled) setOnboarding(false); });
     return () => { cancelled = true; };
   }, [userId, isAnonUser]);

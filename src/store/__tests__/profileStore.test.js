@@ -67,6 +67,25 @@ describe('profileStore — target_handicap', () => {
     expect(profile.targetHandicap).toBe(12.5);
   });
 
+  test('loadProfile throws when getUser fails with a network error instead of returning null', async () => {
+    // supabase-js returns { user: null, error } (no throw) when the auth
+    // server is unreachable — a null return here used to send established
+    // users back to the onboarding screen mid-round.
+    const netError = Object.assign(new Error('Network request failed'), {
+      name: 'AuthRetryableFetchError',
+    });
+    supabase.auth.getUser.mockResolvedValueOnce({ data: { user: null }, error: netError });
+    await expect(loadProfile()).rejects.toThrow('Network request failed');
+  });
+
+  test('loadProfile returns null when genuinely signed out (AuthSessionMissingError)', async () => {
+    const missing = Object.assign(new Error('Auth session missing!'), {
+      name: 'AuthSessionMissingError',
+    });
+    supabase.auth.getUser.mockResolvedValueOnce({ data: { user: null }, error: missing });
+    await expect(loadProfile()).resolves.toBeNull();
+  });
+
   test('loadProfile returns targetHandicap=null when not set', async () => {
     const chain = getChain();
     chain.maybeSingle.mockResolvedValueOnce({

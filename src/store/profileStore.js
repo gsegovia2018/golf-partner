@@ -16,8 +16,19 @@ import { findPlayerForIdentity } from './historyModel';
 // ProfileScreen. `username` is a unique lowercase handle; `display_name`
 // is the free-text name shown in UIs.
 export async function loadProfile() {
-  const { data: { user } } = await supabase.auth.getUser();
-  if (!user) return null;
+  const { data: { user }, error: userError } = await supabase.auth.getUser();
+  if (!user) {
+    // getUser() swallows network failures (AuthRetryableFetchError) into a
+    // null user instead of throwing. Returning null here for anything other
+    // than a real signed-out state made App.js's onboarding gate misread
+    // "auth server unreachable" as "account has no username" and drop a
+    // logged-in user onto the onboarding screen mid-round. Only signed-out
+    // (AuthSessionMissingError — auth-js's own marker, matched by name the
+    // same way its isAuthSessionMissingError helper does) may return null;
+    // everything else must throw so callers hit their offline paths.
+    if (userError && userError.name !== 'AuthSessionMissingError') throw userError;
+    return null;
+  }
   const { data, error } = await supabase
     .from('profiles')
     .select('user_id, username, display_name, handicap, target_handicap, avatar_color, avatar_url, gender, settings, updated_at')
