@@ -1457,7 +1457,6 @@ export function makeScorecardStyles(theme) {
       fontSize: 9,
       fontFamily: 'PlusJakartaSans-Bold',
       letterSpacing: 1.2,
-      flex: 1,
     },
     multiTotalHeader: {
       flexDirection: 'row',

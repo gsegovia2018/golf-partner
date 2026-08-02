@@ -499,7 +499,7 @@ export function ScorecardTable({ round, players, scores, onSetScore, editable, m
             }</Text>
           </View>
           <View style={s.multiTotalColHeader}>
-            <Text style={s.multiTotalColHeaderLabel} />
+            <Text style={[s.multiTotalColHeaderLabel, { flex: 1 }]} />
             <Text style={[s.multiTotalColHeaderLabel, { width: 48, textAlign: 'right' }]}>STR</Text>
             <Text style={[s.multiTotalColHeaderLabel, { width: 40, textAlign: 'right' }]}>vs PAR</Text>
             <Text style={[s.multiTotalColHeaderLabel, { width: 46, textAlign: 'right' }]}>PTS</Text>
