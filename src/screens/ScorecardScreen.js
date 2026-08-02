@@ -5,6 +5,7 @@ import {
   ScrollView, Platform, Animated,
   ActivityIndicator, Alert, AppState,
 } from 'react-native';
+import { useReducedMotion } from 'react-native-reanimated';
 import ScreenContainer from '../components/ScreenContainer';
 import IconButton from '../components/ui/IconButton';
 import { haptic } from '../lib/haptics';
@@ -341,6 +342,7 @@ export default function ScorecardScreen({ navigation, route }) {
     playerId: null, holeNumber: null, label: null, delta: null,
   });
   const celebrationAnim = useRef(new Animated.Value(0)).current;
+  const reducedMotion = useReducedMotion();
   const [lightboxItems, setLightboxItems] = useState([]);
   const [lightboxIndex, setLightboxIndex] = useState(0);
   const [lightboxVisible, setLightboxVisible] = useState(false);
@@ -1077,16 +1079,23 @@ export default function ScorecardScreen({ navigation, route }) {
     celebrationAnim.stopAnimation();
     celebrationAnim.setValue(0);
     setCelebration({ playerId, holeNumber, label, delta: toPar });
+    // Reduced motion: cut to shown, hold, cut away — the spring/scale/ring
+    // ride on this value, so zero-duration steps suppress all of them while
+    // the overlay (and its live-region announcement) still happens.
     Animated.sequence([
-      Animated.spring(celebrationAnim, {
-        toValue: 1, friction: 6, tension: 80, useNativeDriver: true,
-      }),
+      reducedMotion
+        ? Animated.timing(celebrationAnim, { toValue: 1, duration: 0, useNativeDriver: true })
+        : Animated.spring(celebrationAnim, {
+          toValue: 1, friction: 6, tension: 80, useNativeDriver: true,
+        }),
       Animated.delay(tier.holdMs),
-      Animated.timing(celebrationAnim, { toValue: 0, duration: 420, useNativeDriver: true }),
+      Animated.timing(celebrationAnim, {
+        toValue: 0, duration: reducedMotion ? 0 : 420, useNativeDriver: true,
+      }),
     ]).start(({ finished }) => {
       if (finished) setCelebration({ playerId: null, holeNumber: null, label: null, delta: null });
     });
-  }, [celebrationAnim]);
+  }, [celebrationAnim, reducedMotion]);
 
   const getScoreAnim = useCallback((playerId) => {
     if (!scoreAnims.current[playerId]) scoreAnims.current[playerId] = new Animated.Value(1);
@@ -1607,7 +1616,7 @@ export default function ScorecardScreen({ navigation, route }) {
     return (
       <ScreenContainer style={s.container} edges={['top', 'bottom']}>
         <View style={s.header}>
-          <IconButton icon="chevron-left" onPress={goBack} />
+          <IconButton icon="chevron-left" onPress={goBack} accessibilityLabel="Back" />
           <Text style={s.headerTitle}>Scorecard</Text>
           <View style={{ width: 36 }} />
         </View>
@@ -1631,7 +1640,7 @@ export default function ScorecardScreen({ navigation, route }) {
     return (
       <ScreenContainer style={s.container} edges={['top', 'bottom']}>
         <View style={s.header}>
-          <IconButton icon="chevron-left" onPress={goBack} />
+          <IconButton icon="chevron-left" onPress={goBack} accessibilityLabel="Back" />
           <Text style={s.headerTitle}>Scorecard</Text>
           <View style={{ width: 36 }} />
         </View>
@@ -1660,7 +1669,7 @@ export default function ScorecardScreen({ navigation, route }) {
     <ScreenContainer style={s.container} edges={['top', 'bottom']}>
       {/* Header with compact scorecard view switch. */}
       <View style={s.header}>
-        <IconButton icon="chevron-left" onPress={goBack} />
+        <IconButton icon="chevron-left" onPress={goBack} accessibilityLabel="Back" />
         <Text style={s.headerTitle}>Scorecard</Text>
         <View style={s.headerRight}>
           <IconButton
@@ -1902,7 +1911,12 @@ export default function ScorecardScreen({ navigation, route }) {
       />
 
       {roundCompleteVisible && (
-        <View pointerEvents="none" style={s.roundCompleteRoot}>
+        <View
+          pointerEvents="none"
+          accessibilityLiveRegion="polite"
+          accessibilityRole="alert"
+          style={s.roundCompleteRoot}
+        >
           <View style={s.roundCompleteScrim} />
           <View style={s.roundCompleteCard}>
             <View style={s.roundCompleteIconWrap}>

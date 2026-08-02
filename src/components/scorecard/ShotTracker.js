@@ -2,6 +2,7 @@ import React, { useEffect, useMemo, useState, useSyncExternalStore } from 'react
 import { View, Text, StyleSheet } from 'react-native';
 import { Feather } from '@expo/vector-icons';
 import PressableScale from '../ui/PressableScale';
+import { hud } from '../../theme/tokens';
 import { useAppSettings } from '../../hooks/useAppSettings';
 import {
   subscribeShots, getShotsVersion, getShots,
@@ -133,7 +134,7 @@ export function ShotTracker({
           style={[s.addBtn, !canAdd && s.fabDisabled]}
           accessibilityLabel="Add a shot at the aim ring"
         >
-          <Feather name="plus" size={20} color="#0a0d10" />
+          <Feather name="plus" size={20} color={hud.onAccent} />
           <Text style={s.addLbl}>Mark shot</Text>
         </PressableScale>
       </View>
@@ -162,10 +163,10 @@ const s = StyleSheet.create({
   addBtn: {
     flexDirection: 'row', alignItems: 'center', gap: 6,
     paddingLeft: 12, paddingRight: 16, height: 48, borderRadius: 24,
-    backgroundColor: '#57ae5b',
+    backgroundColor: hud.accent,
     shadowColor: '#000', shadowOpacity: 0.4, shadowRadius: 10,
     shadowOffset: { width: 0, height: 6 }, elevation: 6,
   },
-  addLbl: { color: '#0a0d10', fontFamily: 'PlusJakartaSans-ExtraBold', fontSize: 15 },
+  addLbl: { color: hud.onAccent, fontFamily: 'PlusJakartaSans-ExtraBold', fontSize: 15 },
   fabDisabled: { opacity: 0.5 },
 });

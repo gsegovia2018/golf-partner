@@ -74,7 +74,7 @@ describe('CareerMilestonesCard', () => {
 
     const gold = StyleSheet.flatten(getByTestId('milestone-best-round-value').props.style);
     expect(gold.color).toBe(semantic.winner.light);
-    expect(gold.color).toBe('#a9821e');
+    expect(gold.color).toBe('#8a6d00');
     const ink = StyleSheet.flatten(getByTestId('milestone-birdies-value').props.style);
     expect(ink.color).toBe('#1a1a1a');
   });

@@ -230,6 +230,7 @@ function NineBlock({
                   <TextInput
                     ref={(el) => { cellRefs.current[cellKey(player.id, h.number)] = el; }}
                     style={[s.soloNineStrokeInput, rawScore == null && s.soloNineStrokeInputEmpty, digitOnSolid]}
+                    accessibilityLabel={`Strokes for ${player.name} on hole ${h.number}`}
                     keyboardType="numeric"
                     keyboardAppearance={theme.isDark ? 'dark' : 'light'}
                     selectionColor={theme.accent.primary}

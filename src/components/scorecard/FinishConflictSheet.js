@@ -5,8 +5,9 @@ import {
 import { Feather } from '@expo/vector-icons';
 import BottomSheet from '../BottomSheet';
 import { useTheme } from '../../theme/ThemeContext';
+import { semantic } from '../../theme/tokens';
 
-const CONFLICT = '#c77a0a';
+const CONFLICT = semantic.conflict.base;
 
 // Finish-time conflict summary. Lists every hole/player whose score has two
 // competing values and lets the finisher settle each one with a tap. Rows are

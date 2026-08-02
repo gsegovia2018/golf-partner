@@ -84,9 +84,22 @@ const semantic = {
     silver: '#94a3b8',
     bronze: '#c47c3a',
   },
+  // Winner gold, three duties: `light` is a deep ledger gold that reads on
+  // light cards (bright golds wash out on white), `dark` is the full Masters
+  // gold for dark/tinted surfaces, `soft` is the muted gold the round summary
+  // uses in dark mode where #ffd700 would shout.
   winner: {
-    light: '#a9821e',
+    light: '#8a6d00',
     dark:  '#ffd700',
+    soft:  '#e8c45f',
+  },
+  // Score-conflict amber — two devices recorded different scores for the
+  // same cell. Same value in both themes (it always sits on its own tinted
+  // chip/card). `ink` is for text/icons ON the amber chip: white fails AA
+  // there (~3.4:1), this warm near-black clears 5:1.
+  conflict: {
+    base: '#c77a0a',
+    ink:  '#231303',
   },
   destructive: {
     light: MASTERS_RED,
@@ -122,6 +135,30 @@ const semantic = {
   },
 };
 
+// Fixed dark chrome for the GPS/map overlays — hole flyover sheet, shot
+// tracker, club wheel, geo editor. They float over satellite imagery, where
+// themed (possibly white) surfaces would glare outdoors and wash out against
+// the map, so this palette is deliberately theme-independent, like a camera
+// viewfinder. The accent is the dark theme's brand green so map chrome
+// speaks the same green as the rest of the app.
+const hud = {
+  bg:        '#0a0d10',            // full-screen sheet surface
+  card:      '#12171c',            // floating cards & dialogs
+  inset:     '#131c17',            // inactive segmented buttons
+  border:    '#23332a',            // hairlines on inset surfaces
+  line:      'rgba(255,255,255,0.12)', // card outlines
+  fill:      'rgba(255,255,255,0.06)', // subtle button fills
+  accent:    '#4fae8a',            // actions & active states
+  accentPressed: '#3d9a75',
+  onAccent:  '#0a0d10',            // text/icons on accent fills
+  text:      '#ffffff',
+  textDim:   'rgba(255,255,255,0.55)', // de-emphasised wheel rows
+  textSoft:  '#cfe3d5',            // secondary labels
+  textMuted: '#9fb0a4',            // hints & metadata
+  danger:    '#e8a0a0',            // destructive labels on dark chrome
+  scrim:     'rgba(4,6,8,0.6)',    // modal backdrop
+};
+
 const typography = {
   display:  { fontSize: 30, fontWeight: '900', letterSpacing: -0.5, lineHeight: 38 },
   title:    { fontSize: 24, fontWeight: '700', letterSpacing: -0.3, lineHeight: 30 },
@@ -141,4 +178,4 @@ const fonts = {
 const spacing = { xs: 4, sm: 8, md: 12, lg: 16, xl: 20, xxl: 24, xxxl: 32 };
 const radius  = { sm: 8, md: 10, lg: 14, xl: 20, pill: 20, full: 9999 };
 
-export { light, dark, semantic, typography, fonts, spacing, radius };
+export { light, dark, semantic, hud, typography, fonts, spacing, radius };

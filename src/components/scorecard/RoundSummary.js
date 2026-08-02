@@ -6,11 +6,10 @@ import React, { useMemo } from 'react';
 import { View, Text } from 'react-native';
 import { Feather } from '@expo/vector-icons';
 import { useTheme } from '../../theme/ThemeContext';
+import { semantic } from '../../theme/tokens';
 import { makeScorecardStyles } from './styles';
 import { teamColor } from './teamModel';
 import { summaryState } from './scoreModel';
-
-const GOLD = '#e8c45f';
 
 export const RoundSummary = React.memo(function RoundSummary({
   mode,
@@ -23,6 +22,8 @@ export const RoundSummary = React.memo(function RoundSummary({
 }) {
   const { theme } = useTheme();
   const s = useMemo(() => makeScorecardStyles(theme), [theme]);
+  // Soft gold washes out on the light theme's white summary card.
+  const gold = theme.isDark ? semantic.winner.soft : semantic.winner.light;
   const state = useMemo(
     () => summaryState({ mode, round, players, scores, settings, currentHole, meId }),
     [mode, round, players, scores, settings, currentHole, meId],
@@ -52,7 +53,7 @@ export const RoundSummary = React.memo(function RoundSummary({
                   {pair.name}
                 </Text>
                 {pair.isWinner && (
-                  <Feather name="award" size={14} color={GOLD} />
+                  <Feather name="award" size={14} color={gold} />
                 )}
               </View>
               <Text style={s.summaryCol}>{pair.holePts ?? '-'}</Text>
@@ -79,7 +80,7 @@ export const RoundSummary = React.memo(function RoundSummary({
                   {chip.name.split(' ')[0]}
                 </Text>
                 {chip.isWinner && (
-                  <Feather name="award" size={14} color={GOLD} />
+                  <Feather name="award" size={14} color={gold} />
                 )}
               </View>
               <Text style={s.summaryChipValue}>{chip.points}</Text>

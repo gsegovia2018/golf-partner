@@ -14,11 +14,22 @@ colors:
   night-green: "#0c1a14"
   night-accent: "#4fae8a"
   gold-marker: "#ffd700"
+  winner-deep: "#8a6d00"
+  winner-soft: "#e8c45f"
   rank-silver: "#94a3b8"
   bronze-marker: "#c47c3a"
   score-good: "#2a7d56"
+  conflict-amber: "#c77a0a"
+  conflict-ink: "#231303"
   error: "#ef4444"
   error-dark: "#f87171"
+  hud-charcoal: "#0a0d10"
+  hud-card: "#12171c"
+  hud-inset: "#131c17"
+  hud-border: "#23332a"
+  hud-mist: "#cfe3d5"
+  hud-sage: "#9fb0a4"
+  hud-rose: "#e8a0a0"
 typography:
   display:
     fontFamily: "PlayfairDisplay-Black, Playfair Display, Georgia, serif"
@@ -56,6 +67,24 @@ typography:
     fontWeight: 600
     lineHeight: "14px"
     letterSpacing: "1.5px"
+  serif-title:
+    fontFamily: "PlayfairDisplay-Bold, Playfair Display, Georgia, serif"
+    fontSize: "24px"
+    fontWeight: 700
+    lineHeight: "30px"
+    letterSpacing: "0"
+  stat:
+    fontFamily: "PlusJakartaSans-ExtraBold, Plus Jakarta Sans, system-ui, sans-serif"
+    fontSize: "17px"
+    fontWeight: 800
+    lineHeight: "22px"
+    letterSpacing: "0"
+  subtle:
+    fontFamily: "PlusJakartaSans-Regular, Plus Jakarta Sans, system-ui, sans-serif"
+    fontSize: "13px"
+    fontWeight: 400
+    lineHeight: "18px"
+    letterSpacing: "0"
 rounded:
   sm: "8px"
   md: "10px"
@@ -133,7 +162,10 @@ The palette is a restrained clubhouse green system over warm neutral surfaces, w
 ### Secondary
 
 - **Bronze Marker**: The pair B and bronze-rank color. It creates friendly contrast with green without making the app read as a full orange palette.
-- **Gold Marker**: The ceremonial marker used for the splash, rank gold, and special scorecard highlights. Never use it for routine controls.
+- **Gold Marker**: The ceremonial marker used for the splash, rank gold, and special scorecard highlights on dark or tinted surfaces. Never use it for routine controls.
+- **Winner Deep** (#8a6d00): The winner gold for light cards — bright golds wash out on white. Winner badges, milestone values, and summary winner text use it in light mode.
+- **Winner Soft** (#e8c45f): The muted gold the round summary uses on dark surfaces, where full Gold Marker would shout.
+- **Conflict Amber** (#c77a0a): Marks a score two devices disagree on — conflict card borders, hint chips, and the hole-picker conflict dot. Text on the amber chip uses Conflict Ink (#231303), never white.
 
 ### Neutral
 
@@ -144,7 +176,11 @@ The palette is a restrained clubhouse green system over warm neutral surfaces, w
 - **Slate**: Secondary metadata text.
 - **Olive Muted**: Muted text and neutral score state. Use carefully; it is lower contrast than Slate.
 - **Night Green**: Dark-mode background.
-- **Night Accent**: Dark-mode green for actions, selected states, and positive scores.
+- **Night Accent**: Dark-mode green for actions, selected states, and positive scores. Also the accent of the map HUD chrome below.
+
+### Map HUD
+
+The GPS overlays (hole flyover sheet, shot tracker, club wheel, geo editor) float over satellite imagery and keep a fixed dark "viewfinder" chrome in both app themes: HUD Charcoal (#0a0d10) sheets, HUD Card (#12171c) dialogs, HUD Inset (#131c17) segmented controls with HUD Border (#23332a) hairlines, Night Accent actions with charcoal on-accent text, HUD Mist (#cfe3d5) and HUD Sage (#9fb0a4) secondary text, and HUD Rose (#e8a0a0) for destructive labels. These map to the `hud` token block in `src/theme/tokens.js`.
 
 ### Named Rules
 
@@ -153,6 +189,10 @@ The palette is a restrained clubhouse green system over warm neutral surfaces, w
 **The Gold Is Ceremony Rule.** Gold belongs to splash, rank, and special score moments. It is prohibited for normal buttons, tabs, or helper text.
 
 **The Neutral Must Read Rule.** Muted text must stay legible outdoors. If a label competes with sunlight or a tinted background, move it from Olive Muted to Slate or Ink.
+
+**The Viewfinder Rule.** Map overlays never use themed surfaces. Over satellite imagery, chrome comes from the fixed HUD palette — light cards would glare outdoors and wash out against the map.
+
+**The Amber Means Conflict Rule.** Conflict Amber marks disagreeing scores and nothing else. It is not a warning color (that is the semantic warning amber) and never carries white text.
 
 ## 3. Typography
 
@@ -170,6 +210,9 @@ The palette is a restrained clubhouse green system over warm neutral surfaces, w
 - **Body** (500, 14px, 20px): Operational copy, metadata, descriptions, and form helper text. Keep longer explanatory copy under 75 characters per line when possible.
 - **Label** (600, 12px, 16px): Chips, counters, field labels, badges, and compact controls.
 - **Overline** (600, 10px, 14px, 1.5px letter spacing, uppercase): Rare section labels only. It is not a default heading style.
+- **Serif Title** (700, 18–24px): PlayfairDisplay-Bold — the serif's workhorse weight for sheet and modal titles and mid-size scorecard numerals; Black stays reserved for Display moments.
+- **Stat** (800, 14–17px): PlusJakartaSans-ExtraBold for stat values, running totals, and primary button labels.
+- **Subtle** (400, 13px): PlusJakartaSans-Regular for quiet helper text, empty states, and status subtitles.
 
 ### Named Rules
 

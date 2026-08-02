@@ -2,6 +2,8 @@ import React, { useEffect, useMemo, useState, useSyncExternalStore } from 'react
 import { View, Text, StyleSheet, Pressable } from 'react-native';
 import { Feather } from '@expo/vector-icons';
 import PressableScale from '../ui/PressableScale';
+import { useTheme } from '../../theme/ThemeContext';
+import { light as lightTokens } from '../../theme/tokens';
 import { useAppSettings } from '../../hooks/useAppSettings';
 import {
   logMeasuredShot, deleteShot, getShots, subscribeShots, getShotsVersion,
@@ -25,6 +27,10 @@ const MAX_ACCURACY_M = 25; // same usable-fix bar as the scorecard header
 // saves via logMeasuredShot. With no usable fix, tap ① opens the hole map —
 // the manual flow. The header distance block never shows this carry.
 export function MeasureFab({ roundId, roundIndex, holeNumber, fix, targetMeters, offTee = false, onOpenMap }) {
+  // Tolerate a missing ThemeProvider (render tests mount this bare) — fall
+  // back to the light tokens, matching BottomSheet's theme-defensiveness.
+  const theme = useTheme()?.theme ?? lightTokens;
+  const s = useMemo(() => makeStyles(theme), [theme]);
   const appSettings = useAppSettings();
   const { units } = appSettings;
   const bag = useMemo(() => swingClubs(appSettings.bag), [appSettings.bag]);
@@ -102,7 +108,7 @@ export function MeasureFab({ roundId, roundIndex, holeNumber, fix, targetMeters,
     <View style={s.wrap} pointerEvents="box-none">
       {saved && (
         <View style={s.toast}>
-          <Feather name="check" size={14} color="#006747" />
+          <Feather name="check" size={14} color={theme.accent.primary} />
           <Text style={s.toastText}>{`${saved.label} · ${fmt(saved.meters)} saved`}</Text>
           <Pressable onPress={undo} hitSlop={8} accessibilityLabel="Undo measured shot">
             <Text style={s.toastUndo}>Undo</Text>
@@ -146,7 +152,7 @@ export function MeasureFab({ roundId, roundIndex, holeNumber, fix, targetMeters,
       ) : (
         <View style={s.fabCol}>
           <PressableScale onPress={arm} style={s.fab} accessibilityLabel="Measure my shot">
-            <ClubIcon size={25} color="#ffffff" />
+            <ClubIcon size={25} color={theme.text.inverse} />
           </PressableScale>
         </View>
       )}
@@ -166,45 +172,51 @@ export function MeasureFab({ roundId, roundIndex, holeNumber, fix, targetMeters,
   );
 }
 
-const s = StyleSheet.create({
-  wrap: { position: 'absolute', right: 14, bottom: 18, alignItems: 'flex-end', gap: 8, zIndex: 40 },
-  fabCol: { alignItems: 'center', gap: 6 },
-  fab: {
-    width: 52, height: 52, borderRadius: 26, backgroundColor: '#006747',
-    alignItems: 'center', justifyContent: 'center',
-    shadowColor: '#006747', shadowOpacity: 0.4, shadowRadius: 10,
-    shadowOffset: { width: 0, height: 6 }, elevation: 6,
-  },
-  card: {
-    width: 212, backgroundColor: '#00553c', borderRadius: 18, padding: 14,
-    shadowColor: '#00553c', shadowOpacity: 0.45, shadowRadius: 14,
-    shadowOffset: { width: 0, height: 8 }, elevation: 8,
-  },
-  cardDim: { opacity: 0.92 },
-  cardTop: { flexDirection: 'row', alignItems: 'center' },
-  cardClub: { color: '#fff', fontFamily: 'PlusJakartaSans-Bold', fontSize: 12, letterSpacing: 0.4 },
-  cardChg: { color: 'rgba(255,255,255,0.6)', fontSize: 11 },
-  cardX: { marginLeft: 'auto' },
-  cardNum: {
-    color: '#fff', fontFamily: 'PlusJakartaSans-ExtraBold', fontSize: 34,
-    letterSpacing: -1, marginTop: 4, fontVariant: ['tabular-nums'],
-  },
-  cardUnit: { fontSize: 14, color: 'rgba(255,255,255,0.65)', letterSpacing: 0 },
-  cardSub: {
-    color: 'rgba(255,255,255,0.7)', fontFamily: 'PlusJakartaSans-Bold',
-    fontSize: 10, letterSpacing: 0.4, marginTop: 3, textTransform: 'uppercase',
-  },
-  cardAcc: {
-    color: 'rgba(255,255,255,0.55)', fontFamily: 'PlusJakartaSans-SemiBold',
-    fontSize: 9.5, marginTop: 5, fontVariant: ['tabular-nums'],
-  },
-  toast: {
-    flexDirection: 'row', alignItems: 'center', gap: 7, width: 212,
-    backgroundColor: '#ffffff', borderWidth: 1, borderColor: '#e7e2d5',
-    borderRadius: 12, paddingHorizontal: 12, paddingVertical: 9,
-    shadowColor: '#000', shadowOpacity: 0.15, shadowRadius: 10,
-    shadowOffset: { width: 0, height: 5 }, elevation: 5,
-  },
-  toastText: { color: '#006747', fontFamily: 'PlusJakartaSans-Bold', fontSize: 12, fontVariant: ['tabular-nums'] },
-  toastUndo: { marginLeft: 'auto', color: '#6b7280', fontFamily: 'PlusJakartaSans-Bold', fontSize: 11, textDecorationLine: 'underline' },
-});
+// Theme-aware: the FAB floats over the themed scorecard (unlike the map
+// overlays, which use the fixed `hud` chrome). The measuring card sits on
+// bg.deep — the same value in both themes — so its white-alpha text stays
+// static.
+function makeStyles(theme) {
+  return StyleSheet.create({
+    wrap: { position: 'absolute', right: 14, bottom: 18, alignItems: 'flex-end', gap: 8, zIndex: 40 },
+    fabCol: { alignItems: 'center', gap: 6 },
+    fab: {
+      width: 52, height: 52, borderRadius: 26, backgroundColor: theme.accent.primary,
+      alignItems: 'center', justifyContent: 'center',
+      shadowColor: theme.accent.primary, shadowOpacity: 0.4, shadowRadius: 10,
+      shadowOffset: { width: 0, height: 6 }, elevation: 6,
+    },
+    card: {
+      width: 212, backgroundColor: theme.bg.deep, borderRadius: 18, padding: 14,
+      shadowColor: theme.bg.deep, shadowOpacity: 0.45, shadowRadius: 14,
+      shadowOffset: { width: 0, height: 8 }, elevation: 8,
+    },
+    cardDim: { opacity: 0.92 },
+    cardTop: { flexDirection: 'row', alignItems: 'center' },
+    cardClub: { color: '#fff', fontFamily: 'PlusJakartaSans-Bold', fontSize: 12, letterSpacing: 0.4 },
+    cardChg: { color: 'rgba(255,255,255,0.6)', fontSize: 11 },
+    cardX: { marginLeft: 'auto' },
+    cardNum: {
+      color: '#fff', fontFamily: 'PlusJakartaSans-ExtraBold', fontSize: 34,
+      letterSpacing: -1, marginTop: 4, fontVariant: ['tabular-nums'],
+    },
+    cardUnit: { fontSize: 14, color: 'rgba(255,255,255,0.65)', letterSpacing: 0 },
+    cardSub: {
+      color: 'rgba(255,255,255,0.8)', fontFamily: 'PlusJakartaSans-Bold',
+      fontSize: 10, letterSpacing: 0.4, marginTop: 3, textTransform: 'uppercase',
+    },
+    cardAcc: {
+      color: 'rgba(255,255,255,0.75)', fontFamily: 'PlusJakartaSans-SemiBold',
+      fontSize: 9.5, marginTop: 5, fontVariant: ['tabular-nums'],
+    },
+    toast: {
+      flexDirection: 'row', alignItems: 'center', gap: 7, width: 212,
+      backgroundColor: theme.bg.elevated, borderWidth: 1, borderColor: theme.border.default,
+      borderRadius: 12, paddingHorizontal: 12, paddingVertical: 9,
+      shadowColor: '#000', shadowOpacity: 0.15, shadowRadius: 10,
+      shadowOffset: { width: 0, height: 5 }, elevation: 5,
+    },
+    toastText: { color: theme.accent.primary, fontFamily: 'PlusJakartaSans-Bold', fontSize: 12, fontVariant: ['tabular-nums'] },
+    toastUndo: { marginLeft: 'auto', color: theme.text.secondary, fontFamily: 'PlusJakartaSans-Bold', fontSize: 11, textDecorationLine: 'underline' },
+  });
+}

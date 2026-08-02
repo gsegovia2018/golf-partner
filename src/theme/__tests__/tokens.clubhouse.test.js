@@ -8,7 +8,7 @@ describe('Clubhouse tokens', () => {
   });
 
   it('exposes a mode-aware winner gold', () => {
-    expect(semantic.winner).toEqual({ light: '#a9821e', dark: '#ffd700' });
+    expect(semantic.winner).toEqual({ light: '#8a6d00', dark: '#ffd700', soft: '#e8c45f' });
   });
 
   it('keeps the dark theme untouched', () => {

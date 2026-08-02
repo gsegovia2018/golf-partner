@@ -7,6 +7,7 @@ import {
   holeFeatures, subscribeCourseGeometry, getCourseGeometryVersion, haversineMeters, pointInPolygon,
 } from '../../lib/geo';
 import { anchorFor } from '../../lib/flyoverModel';
+import { hud } from '../../theme/tokens';
 import { courseKeyFor } from '../../store/tileCache';
 import { useAppSettings } from '../../hooks/useAppSettings';
 import { usePlayConditions } from '../../hooks/usePlayConditions';
@@ -132,7 +133,12 @@ export function HoleFlyover({
   return (
     <Modal visible transparent animationType="slide" onRequestClose={onClose}>
       <View style={s.backdrop}>
-        <Pressable style={s.backdropTouch} onPress={onClose} accessibilityLabel="Close hole map" />
+        <Pressable
+          style={s.backdropTouch}
+          onPress={onClose}
+          accessibilityRole="button"
+          accessibilityLabel="Close hole map"
+        />
         <Animated.View style={[s.sheet, { transform: [{ translateY: dragY }] }]}>
           <View {...pan.panHandlers}>
             <View style={s.grabber} testID="flyover-grabber" />
@@ -146,12 +152,19 @@ export function HoleFlyover({
               <View style={s.hbtns}>
                 {onEdit && feat && (
                   <Pressable onPress={onEdit} style={s.editBtn} hitSlop={8}>
-                    <Feather name="edit-2" size={14} color="#0a0d10" />
+                    <Feather name="edit-2" size={14} color={hud.onAccent} />
                     <Text style={s.editTxt}>Edit</Text>
                   </Pressable>
                 )}
-                <Pressable onPress={onClose} style={s.closeBtn} hitSlop={8} testID="flyover-close">
-                  <Feather name="x" size={22} color="#fff" />
+                <Pressable
+                  onPress={onClose}
+                  style={s.closeBtn}
+                  hitSlop={10}
+                  testID="flyover-close"
+                  accessibilityRole="button"
+                  accessibilityLabel="Close hole map"
+                >
+                  <Feather name="x" size={22} color={hud.text} />
                 </Pressable>
               </View>
             </View>
@@ -202,10 +215,12 @@ export function HoleFlyover({
 
 const s = StyleSheet.create({
   backdrop: { flex: 1, backgroundColor: 'rgba(12,26,20,0.38)', justifyContent: 'flex-end' },
-  backdropTouch: { position: 'absolute', top: 0, left: 0, right: 0, height: 28 },
+  // 48dp dismiss band (Android touch-target minimum). The sheet renders
+  // after it, so any overlap on short screens stays owned by the sheet.
+  backdropTouch: { position: 'absolute', top: 0, left: 0, right: 0, height: 48 },
   sheet: {
     height: '96%',
-    backgroundColor: '#0a0d10',
+    backgroundColor: hud.bg,
     borderTopLeftRadius: 20,
     borderTopRightRadius: 20,
     overflow: 'hidden',
@@ -219,13 +234,13 @@ const s = StyleSheet.create({
     paddingHorizontal: 14, paddingTop: 8, paddingBottom: 10,
   },
   titleWrap: { flex: 1, gap: 1 },
-  title: { color: '#fff', fontSize: 17, fontWeight: '800' },
-  subtitle: { color: '#9fb0a4', fontSize: 12, fontWeight: '600' },
+  title: { color: hud.text, fontSize: 17, fontWeight: '800' },
+  subtitle: { color: hud.textMuted, fontSize: 12, fontWeight: '600' },
   hbtns: { flexDirection: 'row', alignItems: 'center', gap: 10 },
-  editBtn: { flexDirection: 'row', alignItems: 'center', gap: 5, backgroundColor: '#57ae5b', paddingHorizontal: 12, paddingVertical: 7, borderRadius: 999 },
-  editTxt: { color: '#0a0d10', fontWeight: '700', fontSize: 13 },
+  editBtn: { flexDirection: 'row', alignItems: 'center', gap: 5, backgroundColor: hud.accent, paddingHorizontal: 12, paddingVertical: 7, borderRadius: 999 },
+  editTxt: { color: hud.onAccent, fontWeight: '700', fontSize: 13 },
   closeBtn: { padding: 4 },
   map: { flex: 1 },
   center: { flex: 1, alignItems: 'center', justifyContent: 'center' },
-  muted: { color: '#9fb0a4', fontSize: 15 },
+  muted: { color: hud.textMuted, fontSize: 15 },
 });

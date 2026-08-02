@@ -1,6 +1,6 @@
 {
   "schemaVersion": 2,
-  "generatedAt": "2026-05-29T09:37:50Z",
+  "generatedAt": "2026-08-02T19:07:00Z",
   "title": "Design System: Golf Partner",
   "extensions": {
     "colorMeta": {
@@ -108,6 +108,171 @@
           "oklch(89% 0.05 25)",
           "oklch(96% 0.025 25)"
         ]
+      },
+      "winner-deep": {
+        "role": "secondary",
+        "displayName": "Winner Deep",
+        "canonical": "#8a6d00",
+        "tonalRamp": [
+          "oklch(15% 0.061 95)",
+          "oklch(26% 0.088 95)",
+          "oklch(37% 0.11 95)",
+          "oklch(48% 0.11 95)",
+          "oklch(59% 0.11 95)",
+          "oklch(70% 0.11 95)",
+          "oklch(83% 0.088 95)",
+          "oklch(95% 0.061 95)"
+        ]
+      },
+      "winner-soft": {
+        "role": "secondary",
+        "displayName": "Winner Soft",
+        "canonical": "#e8c45f",
+        "tonalRamp": [
+          "oklch(15% 0.055 90)",
+          "oklch(26% 0.08 90)",
+          "oklch(37% 0.1 90)",
+          "oklch(48% 0.1 90)",
+          "oklch(59% 0.1 90)",
+          "oklch(70% 0.1 90)",
+          "oklch(83% 0.08 90)",
+          "oklch(95% 0.055 90)"
+        ]
+      },
+      "conflict-amber": {
+        "role": "semantic",
+        "displayName": "Conflict Amber",
+        "canonical": "#c77a0a",
+        "tonalRamp": [
+          "oklch(15% 0.077 70)",
+          "oklch(26% 0.112 70)",
+          "oklch(37% 0.14 70)",
+          "oklch(48% 0.14 70)",
+          "oklch(59% 0.14 70)",
+          "oklch(70% 0.14 70)",
+          "oklch(83% 0.112 70)",
+          "oklch(95% 0.077 70)"
+        ]
+      },
+      "conflict-ink": {
+        "role": "semantic",
+        "displayName": "Conflict Ink",
+        "canonical": "#231303",
+        "tonalRamp": [
+          "oklch(15% 0.033 80)",
+          "oklch(26% 0.048 80)",
+          "oklch(37% 0.06 80)",
+          "oklch(48% 0.06 80)",
+          "oklch(59% 0.06 80)",
+          "oklch(70% 0.06 80)",
+          "oklch(83% 0.048 80)",
+          "oklch(95% 0.033 80)"
+        ]
+      },
+      "hud-charcoal": {
+        "role": "neutral",
+        "displayName": "HUD Charcoal",
+        "canonical": "#0a0d10",
+        "tonalRamp": [
+          "oklch(15% 0.008 250)",
+          "oklch(26% 0.012 250)",
+          "oklch(37% 0.015 250)",
+          "oklch(48% 0.015 250)",
+          "oklch(59% 0.015 250)",
+          "oklch(70% 0.015 250)",
+          "oklch(83% 0.012 250)",
+          "oklch(95% 0.008 250)"
+        ]
+      },
+      "hud-card": {
+        "role": "neutral",
+        "displayName": "HUD Card",
+        "canonical": "#12171c",
+        "tonalRamp": [
+          "oklch(15% 0.011 250)",
+          "oklch(26% 0.016 250)",
+          "oklch(37% 0.02 250)",
+          "oklch(48% 0.02 250)",
+          "oklch(59% 0.02 250)",
+          "oklch(70% 0.02 250)",
+          "oklch(83% 0.016 250)",
+          "oklch(95% 0.011 250)"
+        ]
+      },
+      "hud-inset": {
+        "role": "neutral",
+        "displayName": "HUD Inset",
+        "canonical": "#131c17",
+        "tonalRamp": [
+          "oklch(15% 0.011 160)",
+          "oklch(26% 0.016 160)",
+          "oklch(37% 0.02 160)",
+          "oklch(48% 0.02 160)",
+          "oklch(59% 0.02 160)",
+          "oklch(70% 0.02 160)",
+          "oklch(83% 0.016 160)",
+          "oklch(95% 0.011 160)"
+        ]
+      },
+      "hud-border": {
+        "role": "neutral",
+        "displayName": "HUD Border",
+        "canonical": "#23332a",
+        "tonalRamp": [
+          "oklch(15% 0.017 160)",
+          "oklch(26% 0.024 160)",
+          "oklch(37% 0.03 160)",
+          "oklch(48% 0.03 160)",
+          "oklch(59% 0.03 160)",
+          "oklch(70% 0.03 160)",
+          "oklch(83% 0.024 160)",
+          "oklch(95% 0.017 160)"
+        ]
+      },
+      "hud-mist": {
+        "role": "neutral",
+        "displayName": "HUD Mist",
+        "canonical": "#cfe3d5",
+        "tonalRamp": [
+          "oklch(15% 0.017 160)",
+          "oklch(26% 0.024 160)",
+          "oklch(37% 0.03 160)",
+          "oklch(48% 0.03 160)",
+          "oklch(59% 0.03 160)",
+          "oklch(70% 0.03 160)",
+          "oklch(83% 0.024 160)",
+          "oklch(95% 0.017 160)"
+        ]
+      },
+      "hud-sage": {
+        "role": "neutral",
+        "displayName": "HUD Sage",
+        "canonical": "#9fb0a4",
+        "tonalRamp": [
+          "oklch(15% 0.017 160)",
+          "oklch(26% 0.024 160)",
+          "oklch(37% 0.03 160)",
+          "oklch(48% 0.03 160)",
+          "oklch(59% 0.03 160)",
+          "oklch(70% 0.03 160)",
+          "oklch(83% 0.024 160)",
+          "oklch(95% 0.017 160)"
+        ]
+      },
+      "hud-rose": {
+        "role": "semantic",
+        "displayName": "HUD Rose",
+        "canonical": "#e8a0a0",
+        "tonalRamp": [
+          "oklch(15% 0.039 20)",
+          "oklch(26% 0.056 20)",
+          "oklch(37% 0.07 20)",
+          "oklch(48% 0.07 20)",
+          "oklch(59% 0.07 20)",
+          "oklch(70% 0.07 20)",
+          "oklch(83% 0.056 20)",
+          "oklch(95% 0.039 20)"
+        ]
       }
     },
     "typographyMeta": {
@@ -130,6 +295,18 @@
       "label": {
         "displayName": "Label",
         "purpose": "Chips, counters, badges, and compact controls."
+      },
+      "serif-title": {
+        "displayName": "Serif Title",
+        "purpose": "PlayfairDisplay-Bold for sheet/modal titles and mid-size scorecard numerals; Black stays reserved for Display."
+      },
+      "stat": {
+        "displayName": "Stat",
+        "purpose": "PlusJakartaSans-ExtraBold for stat values, running totals, and primary button labels."
+      },
+      "subtle": {
+        "displayName": "Subtle",
+        "purpose": "PlusJakartaSans-Regular for quiet helper text, empty states, and status subtitles."
       }
     },
     "shadows": [
@@ -301,6 +478,16 @@
         "name": "The Dark Mode Layer Rule",
         "body": "In dark mode, use tonal layers and borders first. Heavy black shadows on already-dark surfaces are prohibited.",
         "section": "elevation"
+      },
+      {
+        "name": "The Viewfinder Rule",
+        "body": "Map overlays never use themed surfaces. Over satellite imagery, chrome comes from the fixed HUD palette — light cards would glare outdoors and wash out against the map.",
+        "section": "colors"
+      },
+      {
+        "name": "The Amber Means Conflict Rule",
+        "body": "Conflict Amber marks disagreeing scores and nothing else. It is not a warning color (that is the semantic warning amber) and never carries white text.",
+        "section": "colors"
       }
     ],
     "dos": [

@@ -33,6 +33,8 @@ function ShotCounterRow({ label, value, onStep, canInc = true, theme, s, explain
           onPress={() => onStep(-1)}
           disabled={!canDec}
           activeOpacity={0.7}
+          hitSlop={4}
+          accessibilityRole="button"
           accessibilityLabel={`Decrease ${label}`}
           accessibilityState={{ disabled: !canDec }}
         >
@@ -44,6 +46,8 @@ function ShotCounterRow({ label, value, onStep, canInc = true, theme, s, explain
           onPress={() => onStep(1)}
           disabled={!canInc}
           activeOpacity={0.7}
+          hitSlop={4}
+          accessibilityRole="button"
           accessibilityLabel={`Increase ${label}`}
           accessibilityState={{ disabled: !canInc }}
         >
@@ -324,6 +328,9 @@ export function ShotDetailPanel({ hole, detail, onChange, strokes, statGroups, t
                   style={[s.driveCircle, active && s.driveCircleActive]}
                   onPress={() => onChange({ drive: active ? null : key, driveLie: null })}
                   activeOpacity={0.7}
+                  hitSlop={5}
+                  accessibilityRole="button"
+                  accessibilityState={{ selected: active }}
                   accessibilityLabel={`${TEE_CLUB_LABELS[teeClub]} ${meta.label}`}
                 >
                   <Feather

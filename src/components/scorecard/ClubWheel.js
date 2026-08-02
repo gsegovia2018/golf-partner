@@ -6,10 +6,11 @@ import {
 } from 'react-native';
 import { Feather } from '@expo/vector-icons';
 import PressableScale from '../ui/PressableScale';
+import { hud } from '../../theme/tokens';
 import { formatDistance, unitSuffix } from '../../lib/units';
 import { haptic } from '../../lib/haptics';
 
-const ITEM_H = 46;
+const ITEM_H = 48;
 const VISIBLE = 5; // odd, so one row sits dead-centre
 const WHEEL_H = ITEM_H * VISIBLE;
 const PAD = (WHEEL_H - ITEM_H) / 2;
@@ -97,13 +98,13 @@ export function ClubWheel({
             <View style={s.editRow}>
               {onMove && (
                 <PressableScale style={s.editBtn} onPress={onMove} accessibilityLabel="Move this shot">
-                  <Feather name="move" size={15} color="#cfe3d5" />
+                  <Feather name="move" size={15} color={hud.textSoft} />
                   <Text style={s.editText}>Move</Text>
                 </PressableScale>
               )}
               {onDelete && (
                 <PressableScale style={s.editBtn} onPress={onDelete} accessibilityLabel="Delete this shot">
-                  <Feather name="trash-2" size={15} color="#e8a0a0" />
+                  <Feather name="trash-2" size={15} color={hud.danger} />
                   <Text style={[s.editText, s.editTextDanger]}>Delete</Text>
                 </PressableScale>
               )}
@@ -117,29 +118,29 @@ export function ClubWheel({
 
 const s = StyleSheet.create({
   backdrop: {
-    flex: 1, backgroundColor: 'rgba(4,6,8,0.6)',
+    flex: 1, backgroundColor: hud.scrim,
     alignItems: 'center', justifyContent: 'center', padding: 24,
   },
   card: {
     width: '100%', maxWidth: 340,
-    backgroundColor: '#12171c', borderRadius: 20,
-    borderWidth: StyleSheet.hairlineWidth, borderColor: 'rgba(255,255,255,0.12)',
+    backgroundColor: hud.card, borderRadius: 20,
+    borderWidth: StyleSheet.hairlineWidth, borderColor: hud.line,
     padding: 18,
   },
   title: {
-    color: '#fff', fontFamily: 'PlusJakartaSans-Bold', fontSize: 16, textAlign: 'center',
+    color: hud.text, fontFamily: 'PlusJakartaSans-Bold', fontSize: 16, textAlign: 'center',
   },
   sub: {
-    color: '#9fb0a4', fontFamily: 'PlusJakartaSans-SemiBold', fontSize: 12,
+    color: hud.textMuted, fontFamily: 'PlusJakartaSans-SemiBold', fontSize: 12,
     textAlign: 'center', marginTop: 2, fontVariant: ['tabular-nums'],
   },
 
   wheelWrap: { height: WHEEL_H, marginTop: 14, marginBottom: 4, justifyContent: 'center' },
   selBand: {
     position: 'absolute', left: 0, right: 0, top: PAD, height: ITEM_H,
-    borderRadius: 12, backgroundColor: 'rgba(87,174,91,0.14)',
+    borderRadius: 12, backgroundColor: hud.accent + '24',
     borderTopWidth: StyleSheet.hairlineWidth, borderBottomWidth: StyleSheet.hairlineWidth,
-    borderColor: 'rgba(87,174,91,0.4)',
+    borderColor: hud.accent + '66',
   },
   wheel: { flexGrow: 0 },
   row: {
@@ -147,26 +148,26 @@ const s = StyleSheet.create({
     paddingHorizontal: 16,
   },
   rowClub: {
-    color: 'rgba(255,255,255,0.4)', fontFamily: 'PlusJakartaSans-SemiBold', fontSize: 16,
+    color: hud.textDim, fontFamily: 'PlusJakartaSans-SemiBold', fontSize: 16,
   },
-  rowClubActive: { color: '#fff', fontFamily: 'PlusJakartaSans-Bold', fontSize: 18 },
+  rowClubActive: { color: hud.text, fontFamily: 'PlusJakartaSans-Bold', fontSize: 18 },
   rowDist: {
-    color: 'rgba(159,176,164,0.5)', fontFamily: 'PlusJakartaSans-SemiBold', fontSize: 13,
+    color: hud.textMuted, fontFamily: 'PlusJakartaSans-SemiBold', fontSize: 13,
     fontVariant: ['tabular-nums'],
   },
-  rowDistActive: { color: '#57ae5b', fontFamily: 'PlusJakartaSans-Bold', fontSize: 14 },
+  rowDistActive: { color: hud.accent, fontFamily: 'PlusJakartaSans-Bold', fontSize: 14 },
 
   confirm: {
-    marginTop: 12, backgroundColor: '#57ae5b', borderRadius: 12,
+    marginTop: 12, backgroundColor: hud.accent, borderRadius: 12,
     paddingVertical: 13, alignItems: 'center',
   },
-  confirmText: { color: '#0a0d10', fontFamily: 'PlusJakartaSans-Bold', fontSize: 15 },
+  confirmText: { color: hud.onAccent, fontFamily: 'PlusJakartaSans-Bold', fontSize: 15 },
 
   editRow: { flexDirection: 'row', gap: 10, marginTop: 10 },
   editBtn: {
     flex: 1, flexDirection: 'row', gap: 6, alignItems: 'center', justifyContent: 'center',
-    paddingVertical: 11, borderRadius: 12, backgroundColor: 'rgba(255,255,255,0.06)',
+    paddingVertical: 11, borderRadius: 12, backgroundColor: hud.fill,
   },
-  editText: { color: '#cfe3d5', fontFamily: 'PlusJakartaSans-Bold', fontSize: 13 },
-  editTextDanger: { color: '#e8a0a0' },
+  editText: { color: hud.textSoft, fontFamily: 'PlusJakartaSans-Bold', fontSize: 13 },
+  editTextDanger: { color: hud.danger },
 });

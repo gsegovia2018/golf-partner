@@ -1,11 +1,12 @@
 import React from 'react';
 import Svg, { Path } from 'react-native-svg';
+import { hud } from '../../theme/tokens';
 
 // Solid golf-club silhouette. Glyph from the MIT-licensed @icons set
 // (github.com/Voxybuns/at-icons, "golf-club"). No bundled icon font ships a
 // golf club, so it's embedded here. `size` is the square box; `color` fills
 // the club. Rendered white on the green measure FAB.
-export function ClubIcon({ size = 24, color = '#0a0d10' }) {
+export function ClubIcon({ size = 24, color = hud.onAccent }) {
   return (
     <Svg width={size} height={size} viewBox="0 0 16 16" fill="none">
       <Path

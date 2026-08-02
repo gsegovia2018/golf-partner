@@ -35,7 +35,12 @@ export function CelebrationOverlay({ celebration, celebrationAnim, players }) {
   });
 
   return (
-    <View pointerEvents="none" style={s.celebrationRoot}>
+    <View
+      pointerEvents="none"
+      accessibilityLiveRegion="polite"
+      accessibilityRole="alert"
+      style={s.celebrationRoot}
+    >
       <Animated.View style={[s.celebrationScrim, { opacity: scrimOpacity }]} />
       <Animated.View
         style={[

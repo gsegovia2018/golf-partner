@@ -1,4 +1,4 @@
-import { StyleSheet } from 'react-native';
+import { Platform, StyleSheet } from 'react-native';
 import { semantic } from '../../theme/tokens';
 
 // Shared StyleSheet for the scorecard screen and the scorecard/* components.
@@ -223,7 +223,12 @@ export function makeScorecardStyles(theme) {
       color: theme.text.primary,
       fontSize: 52,
       fontFamily: 'PlayfairDisplay-Black',
-      lineHeight: 56,
+      // Android clips glyphs to the forced line box, and Playfair's
+      // old-style figures overflow it (3/4/5/7/9 descend below the
+      // baseline) — on native, let the font size the line instead.
+      ...(Platform.OS === 'web'
+        ? { lineHeight: 56 }
+        : { includeFontPadding: false }),
     },
     holeMetaRow: { flexDirection: 'row', gap: 16 },
     holeMetaItem: { flexDirection: 'row', alignItems: 'baseline', gap: 5 },
@@ -388,13 +393,13 @@ export function makeScorecardStyles(theme) {
       paddingHorizontal: 10,
       paddingVertical: 4,
       borderRadius: 999,
-      backgroundColor: theme.isDark ? 'rgba(255,215,0,0.14)' : 'rgba(255,215,0,0.18)',
+      backgroundColor: semantic.winner.dark + (theme.isDark ? '24' : '2e'),
       borderWidth: 1,
-      borderColor: 'rgba(255,215,0,0.45)',
+      borderColor: semantic.winner.dark + '73',
       marginBottom: 8,
     },
     winnerBadgeText: {
-      color: theme.isDark ? semantic.winner.dark : '#8a6d00',
+      color: theme.isDark ? semantic.winner.dark : semantic.winner.light,
       fontSize: 10,
       letterSpacing: 1.5,
       fontFamily: 'PlusJakartaSans-ExtraBold',
@@ -491,7 +496,10 @@ export function makeScorecardStyles(theme) {
       backgroundColor: theme.semantic.masters.red,
     },
     quickFinishBtnText: {
-      color: theme.text.inverse,
+      // The button surface is masters.red in BOTH themes, so the text must
+      // be static white too — text.inverse flips near-black in dark mode
+      // and lands at ~3:1 on the red.
+      color: '#ffffff',
       fontSize: 12,
       fontFamily: 'PlusJakartaSans-Bold',
     },
@@ -686,22 +694,23 @@ export function makeScorecardStyles(theme) {
     },
     // Amber treatment for a hero card whose score is in conflict.
     soloHeroCardConflict: {
-      borderColor: '#c77a0a',
+      borderColor: semantic.conflict.base,
       borderWidth: 1.5,
-      backgroundColor: 'rgba(199,122,10,0.10)',
+      backgroundColor: semantic.conflict.base + '1a',
     },
     soloConflictHint: {
       alignSelf: 'center',
       flexDirection: 'row',
       alignItems: 'center',
       gap: 6,
-      backgroundColor: '#c77a0a',
+      backgroundColor: semantic.conflict.base,
       paddingHorizontal: 16,
       paddingVertical: 9,
       borderRadius: 999,
     },
     soloConflictHintText: {
-      color: '#ffffff',
+      // Dark ink on the amber chip — white fails AA here (~3.4:1).
+      color: semantic.conflict.ink,
       fontFamily: 'PlusJakartaSans-Bold',
       fontSize: 13,
     },
@@ -925,7 +934,10 @@ export function makeScorecardStyles(theme) {
       color: theme.text.primary,
       fontSize: 64,
       fontFamily: 'PlayfairDisplay-Bold',
-      lineHeight: 70,
+      // Same Android line-box clipping as holeNumber above.
+      ...(Platform.OS === 'web'
+        ? { lineHeight: 70 }
+        : { includeFontPadding: false }),
       letterSpacing: -1,
     },
     soloScoreLabel: {
@@ -1156,7 +1168,9 @@ export function makeScorecardStyles(theme) {
     soloNineHeaderText: {
       fontFamily: 'PlusJakartaSans-Bold',
       fontSize: 11,
-      color: 'rgba(255,255,255,0.95)',
+      // Sits on accent.primary, which is mint in dark mode — inverse tracks
+      // it (white on green, near-black on mint); fixed white fails ~2.6:1.
+      color: theme.text.inverse,
       letterSpacing: 0.3,
       textAlign: 'center',
     },
@@ -1628,7 +1642,7 @@ export function makeScorecardStyles(theme) {
       borderRadius: 8,
     },
     summaryRowWinner: {
-      backgroundColor: 'rgba(232,196,95,0.12)',
+      backgroundColor: semantic.winner.soft + '1f',
     },
     summaryNameWrap: {
       flex: 1,
@@ -1721,7 +1735,9 @@ export function makeScorecardStyles(theme) {
       marginTop: 7,
     },
     summaryStatusWinner: {
-      color: '#e8c45f',
+      // Soft gold washes out on the light theme's white card — use the deep
+      // ledger gold there.
+      color: theme.isDark ? semantic.winner.soft : semantic.winner.light,
     },
   });
 }

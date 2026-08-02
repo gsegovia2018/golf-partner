@@ -4,6 +4,7 @@ import {
 } from 'react-native';
 import { Feather } from '@expo/vector-icons';
 import { useTheme } from '../../theme/ThemeContext';
+import { semantic } from '../../theme/tokens';
 import { makeScorecardStyles } from './styles';
 import { teamColor } from './teamModel';
 import { ShotDetailSection } from './ShotDetailSection';
@@ -133,7 +134,7 @@ export const PlayerCard = React.memo(function PlayerCard({
               <Feather name="alert-circle" size={14} color={theme.destructive} />
             )}
             {conflicted && (
-              <Feather name="alert-circle" size={14} color="#c77a0a" />
+              <Feather name="alert-circle" size={14} color={semantic.conflict.base} />
             )}
           </View>
           <Text style={s.soloHeroHcp}>
@@ -146,6 +147,9 @@ export const PlayerCard = React.memo(function PlayerCard({
             style={[s.pickupBtn, isPickup && s.pickupBtnActive]}
             onPress={() => onSetScore(player.id, hole.number, isPickup ? null : pickup)}
             activeOpacity={0.7}
+            hitSlop={9}
+            accessibilityRole="button"
+            accessibilityState={{ selected: isPickup }}
             accessibilityLabel={isPickup ? `Picked up at ${pickup} strokes — tap to clear` : `Pickup at ${pickup} strokes`}
           >
             <Feather
@@ -185,11 +189,11 @@ export const PlayerCard = React.memo(function PlayerCard({
             <Text style={[
               s.soloScoreNum,
               strokes == null && s.scoreDisplayNumEmpty,
-              conflicted && { color: '#c77a0a' },
+              conflicted && { color: semantic.conflict.base },
             ]}>
               {strokes ?? '—'}
             </Text>
-            <Text style={[s.soloScoreLabel, conflicted && { color: '#c77a0a' }]}>
+            <Text style={[s.soloScoreLabel, conflicted && { color: semantic.conflict.base }]}>
               {conflicted
                 ? 'TAP TO RESOLVE'
                 : strokes == null ? 'STROKES' : canEdit ? 'HOLD TO CLEAR' : 'STROKES'}
@@ -218,7 +222,7 @@ export const PlayerCard = React.memo(function PlayerCard({
 
       {conflicted && (
         <View style={s.soloConflictHint}>
-          <Feather name="alert-circle" size={14} color="#ffffff" />
+          <Feather name="alert-circle" size={14} color={semantic.conflict.ink} />
           <Text style={s.soloConflictHintText}>Tap to resolve</Text>
         </View>
       )}

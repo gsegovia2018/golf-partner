@@ -6,6 +6,7 @@ import {
 import NetInfo from '@react-native-community/netinfo';
 import { Feather } from '@expo/vector-icons';
 import { useTheme } from '../../theme/ThemeContext';
+import { semantic } from '../../theme/tokens';
 import { makeScorecardStyles } from './styles';
 import { HolePage, HolePagePlaceholder, MePicker } from './HolePage';
 import { CelebrationOverlay } from './CelebrationOverlay';
@@ -508,7 +509,7 @@ export function HoleView({ round, roundIndex, players, scores, shotDetails, meId
                       />
                     ) : hasConflict ? (
                       <View
-                        style={[s.holePickerNoteDot, { backgroundColor: '#c77a0a' }]}
+                        style={[s.holePickerNoteDot, { backgroundColor: semantic.conflict.base }]}
                       />
                     ) : hasNote ? (
                       <View

@@ -8,6 +8,7 @@ import {
   subscribeCourseGeometry, getCourseGeometryVersion,
 } from '../../lib/geo';
 import { supabase } from '../../lib/supabase';
+import { hud } from '../../theme/tokens';
 import { hydrateCourseGeometry } from '../../store/courseGeometryStore';
 import { courseKeyFor } from '../../store/tileCache';
 import { HoleMapView } from './HoleMapView';
@@ -98,7 +99,7 @@ export function HoleGeoEditor({ courseName, holeNumber, visible, onClose, onSave
       <View style={s.root}>
         <View style={s.header}>
           <Text style={s.title}>Edit Hole {holeNumber}</Text>
-          <Pressable onPress={onClose} hitSlop={8}><Feather name="x" size={22} color="#fff" /></Pressable>
+          <Pressable onPress={onClose} hitSlop={8}><Feather name="x" size={22} color={hud.text} /></Pressable>
         </View>
 
         {!feat ? (
@@ -110,13 +111,13 @@ export function HoleGeoEditor({ courseName, holeNumber, visible, onClose, onSave
                 <Pressable key={f.key} onPress={() => setActive(i)} style={[s.segBtn, i === active && s.segOn]}>
                   <View style={[s.dot, { backgroundColor: f.color }]} />
                   <Text style={[s.segTxt, i === active && s.segTxtOn]}>{f.label}</Text>
-                  <Feather name={pts[f.key] ? 'check' : 'plus'} size={13} color={i === active ? '#0a0d10' : (pts[f.key] ? '#57ae5b' : '#9fb0a4')} />
+                  <Feather name={pts[f.key] ? 'check' : 'plus'} size={13} color={i === active ? hud.onAccent : (pts[f.key] ? hud.accent : hud.textMuted)} />
                 </Pressable>
               ))}
             </View>
             <HoleMapView data={data} activeField={FIELDS[active].key} onPoint={onPoint} style={s.map} />
             <Pressable style={[s.save, saving && s.saveOff]} onPress={save} disabled={saving}>
-              {saving ? <ActivityIndicator color="#0a0d10" /> : <Text style={s.saveTxt}>Save hole {holeNumber}</Text>}
+              {saving ? <ActivityIndicator color={hud.onAccent} /> : <Text style={s.saveTxt}>Save hole {holeNumber}</Text>}
             </Pressable>
           </>
         )}
@@ -126,19 +127,19 @@ export function HoleGeoEditor({ courseName, holeNumber, visible, onClose, onSave
 }
 
 const s = StyleSheet.create({
-  root: { flex: 1, backgroundColor: '#0a0d10' },
+  root: { flex: 1, backgroundColor: hud.bg },
   header: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 14, paddingTop: 52, paddingBottom: 10 },
-  title: { color: '#fff', fontSize: 17, fontWeight: '800' },
+  title: { color: hud.text, fontSize: 17, fontWeight: '800' },
   center: { flex: 1, alignItems: 'center', justifyContent: 'center' },
-  muted: { color: '#9fb0a4', fontSize: 15 },
+  muted: { color: hud.textMuted, fontSize: 15 },
   seg: { flexDirection: 'row', gap: 6, paddingHorizontal: 12, paddingBottom: 8 },
-  segBtn: { flex: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 5, paddingVertical: 9, borderRadius: 11, borderWidth: 1, borderColor: '#23332a', backgroundColor: '#131c17' },
-  segOn: { backgroundColor: '#57ae5b', borderColor: '#3f8f43' },
+  segBtn: { flex: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 5, paddingVertical: 9, borderRadius: 11, borderWidth: 1, borderColor: hud.border, backgroundColor: hud.inset },
+  segOn: { backgroundColor: hud.accent, borderColor: hud.accentPressed },
   dot: { width: 9, height: 9, borderRadius: 5 },
-  segTxt: { color: '#fff', fontSize: 13, fontWeight: '700' },
-  segTxtOn: { color: '#0a0d10' },
+  segTxt: { color: hud.text, fontSize: 13, fontWeight: '700' },
+  segTxtOn: { color: hud.onAccent },
   map: { flex: 1 },
-  save: { margin: 14, backgroundColor: '#57ae5b', borderRadius: 14, paddingVertical: 15, alignItems: 'center' },
+  save: { margin: 14, backgroundColor: hud.accent, borderRadius: 14, paddingVertical: 15, alignItems: 'center' },
   saveOff: { opacity: 0.6 },
-  saveTxt: { color: '#0a0d10', fontWeight: '800', fontSize: 15 },
+  saveTxt: { color: hud.onAccent, fontWeight: '800', fontSize: 15 },
 });
