@@ -297,8 +297,12 @@ describe('applyPlayerRow anchors identity on the row primary key', () => {
     const once = applyPlayerRow(t, {
       tournament_id: 't1', player_id: 'p2', pos: 1, body: { name: 'Labarga' },
     }, 'INSERT');
+    // user_id rides the COLUMN (the body copy is ignored since the
+    // player-identity-from-columns fix) — mirror repo.upsertPlayer, which
+    // writes both.
     const twice = applyPlayerRow(once, {
-      tournament_id: 't1', player_id: 'p2', pos: 1, body: { name: 'Labarga', user_id: 'u2' },
+      tournament_id: 't1', player_id: 'p2', pos: 1, user_id: 'u2',
+      body: { name: 'Labarga', user_id: 'u2' },
     }, 'UPDATE');
 
     expect(twice.players).toHaveLength(2);

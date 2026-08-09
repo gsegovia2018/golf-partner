@@ -198,8 +198,10 @@ export function applyRoundRow(t, row, eventType) {
 }
 
 // game_players row: { tournament_id, player_id, user_id, pos, body }. body IS
-// the whole player object (see tournamentRepo.upsertPlayer) — upsert it at
-// `pos`, reordering the same way applyRoundRow does for round_index.
+// the whole player object (see tournamentRepo.upsertPlayer) EXCEPT identity:
+// id and user_id are projected from the columns, same as get_game_tournament.
+// Upsert it at `pos`, reordering the same way applyRoundRow does for
+// round_index.
 export function applyPlayerRow(t, row, eventType) {
   const next = deepClone(t);
   const players = (next.players ?? []).slice();
@@ -249,6 +251,13 @@ export function applyPlayerRow(t, row, eventType) {
   // could never match it again — DUPLICATED by the next event for that same
   // player rather than updated.
   const assembled = { ...(row.body ?? {}), id: row.player_id };
+  // user_id also comes from the COLUMN, mirroring get_game_tournament's
+  // projection (20260728000000_player_identity_from_columns.sql): the
+  // claim/release RPCs write only the column and leave body untouched, so
+  // body's copy is ABSENT after a claim and STALE after a release. Column
+  // null → key absent, exactly like the read path's CASE.
+  delete assembled.user_id;
+  if (row.user_id != null) assembled.user_id = row.user_id;
   const idx = clampIndex(row.pos, players.length);
   players.splice(idx, 0, assembled);
   next.players = players;

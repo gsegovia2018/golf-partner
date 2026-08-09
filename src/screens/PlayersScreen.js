@@ -337,8 +337,28 @@ export default function PlayersScreen({ navigation, route }) {
         // table and would be silently invisible to reads otherwise). Round
         // fields (playerTees from handleRoundTeesChange, plus the
         // handicaps/indexes already stamped above) go through round.upsert.
+        //
+        // Patch ONLY the fields this screen owns, and only when they differ
+        // from the freshly-read local copy — the same owned-fields rule
+        // mutationWrites.js applies to round.upsert. Pushing the whole
+        // editPlayers row here re-asserted a stale snapshot of every OTHER
+        // field (a rename from another device, a claim's user_id) on every
+        // debounced save, reverting concurrent edits roster-wide.
         for (const p of builtPlayers) {
-          t = await mutate(t, { type: 'tournament.updatePlayer', playerId: p.id, patch: p });
+          const fresh = (t.players ?? []).find((x) => x.id === p.id);
+          if (!fresh) continue;
+          const patch = {};
+          if (p.handicap !== fresh.handicap) patch.handicap = p.handicap;
+          // Friend-link: pickFriendForSlot only ever SETS user_id (unlinking
+          // goes through the release RPC, never this autosave), so a missing
+          // user_id here is just a stale view of a claim made elsewhere and
+          // must not be written back as a clear.
+          if (p.user_id && p.user_id !== fresh.user_id) {
+            patch.user_id = p.user_id;
+            patch.avatar_url = p.avatar_url ?? null;
+          }
+          if (Object.keys(patch).length === 0) continue;
+          t = await mutate(t, { type: 'tournament.updatePlayer', playerId: p.id, patch });
         }
         // isNew tells mutationWrites.js whether this round already exists on
         // the server — see EditTournamentScreen's matching comment. This

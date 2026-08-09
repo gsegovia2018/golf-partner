@@ -280,6 +280,34 @@ describe('applyPlayerRow', () => {
     expect(out.players.map((p) => p.id)).toEqual(['p0', 'p5']);
   });
 
+  // user_id is projected from the COLUMN, mirroring get_game_tournament
+  // (20260728000000): the claim/release RPCs write only the column and never
+  // touch body, so body's copy is absent after a claim and stale after a
+  // release. Trusting body alone made claims invisible to realtime peers and
+  // let releases resurrect the departed account locally.
+  test('a claim (column set, body untouched) links the player from the column', () => {
+    const t = { id: 't1', players: [{ id: 'p0', name: 'A' }] };
+    const out = applyPlayerRow(t, { player_id: 'p0', pos: 0, user_id: 'u1', body: { id: 'p0', name: 'A' } });
+    expect(out.players[0]).toEqual({ id: 'p0', name: 'A', user_id: 'u1' });
+  });
+
+  test('a release (column null) drops user_id even when the stale body still carries it', () => {
+    const t = { id: 't1', players: [{ id: 'p0', name: 'A', user_id: 'u1' }] };
+    const out = applyPlayerRow(t, {
+      player_id: 'p0', pos: 0, user_id: null, body: { id: 'p0', name: 'A', user_id: 'u1' },
+    });
+    expect(out.players[0]).toEqual({ id: 'p0', name: 'A' });
+    expect('user_id' in out.players[0]).toBe(false);
+  });
+
+  test('the column wins over a conflicting user_id inside body', () => {
+    const t = { id: 't1', players: [] };
+    const out = applyPlayerRow(t, {
+      player_id: 'p0', pos: 0, user_id: 'u2', body: { id: 'p0', name: 'A', user_id: 'u1' },
+    });
+    expect(out.players[0].user_id).toBe('u2');
+  });
+
   test('DELETE (PK-only old record, no body) removes the player by player_id', () => {
     const t = { id: 't1', players: [{ id: 'p0' }, { id: 'p1' }] };
     const out = applyPlayerRow(t, { tournament_id: 't1', player_id: 'p0' }, 'DELETE');
