@@ -1097,6 +1097,10 @@ export function makeScorecardStyles(theme) {
       color: theme.text.inverse,
       fontFamily: 'PlusJakartaSans-ExtraBold',
       fontSize: 16,
+      // Same Android line-box clipping as holeNumber above — the default
+      // font padding pushes the digits down and cuts them off ("Hole 2"
+      // loses the bottom of the 2).
+      ...(Platform.OS === 'web' ? {} : { includeFontPadding: false }),
     },
     // Official-mode attest button when blocked (discrepancies / in flight).
     saveBtnDisabled: { opacity: 0.4 },
