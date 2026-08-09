@@ -50,6 +50,58 @@ export function deriveCell(round, playerId, hole) {
   return { status: 'conflict', effective: mostRecent.value, candidates, blankAuthors };
 }
 
+// The card as ONE author has marked it: only cells that author wrote (per
+// scoreEntries), overlaid with still-dirty local optimistic edits — which are
+// by definition the local author's, since remote values only arrive via
+// reload. Peers' entries never appear here; the hole entry view shows this so
+// every marker records every player's score themselves, and the leave-hole
+// verification compares the resulting cards.
+export function authorScores(round, authorId, localScores = {}, dirtyKeys = new Set()) {
+  const out = {};
+  const byPlayer = round?.scoreEntries ?? {};
+  for (const [playerId, byHole] of Object.entries(byPlayer)) {
+    if (!byHole || typeof byHole !== 'object') continue;
+    for (const [holeKey, byAuthor] of Object.entries(byHole)) {
+      const mine = byAuthor?.[authorId];
+      if (mine?.value != null) {
+        if (!out[playerId]) out[playerId] = {};
+        out[playerId][holeKey] = mine.value;
+      }
+    }
+  }
+  for (const key of dirtyKeys) {
+    const [playerId, holeKey] = key.split(':');
+    const v = localScores?.[playerId]?.[holeKey];
+    if (v != null) {
+      if (!out[playerId]) out[playerId] = {};
+      out[playerId][holeKey] = v;
+    } else if (out[playerId]) {
+      // A local clear whose save has not round-tripped — keep it cleared.
+      delete out[playerId][holeKey];
+    }
+  }
+  return out;
+}
+
+// Disagreements between one author's entries for a hole and every other
+// author's, for the leave-hole verification prompt. A cell this author left
+// blank never mismatches (they did not mark that player), a blank from a peer
+// never mismatches, and a cell with a valid explicit resolution is settled.
+// Returns [{ playerId, mine, others: [{ authorId, value }] }].
+export function holeEntryMismatches(round, hole, authorId, myScores) {
+  const out = [];
+  for (const playerId of Object.keys(myScores ?? {})) {
+    const mine = myScores[playerId]?.[hole];
+    if (mine == null) continue;
+    if (deriveCell(round, playerId, hole).status === 'resolved') continue;
+    const others = Object.entries(cellEntries(round, playerId, hole))
+      .filter(([a, e]) => a !== authorId && e?.value != null && e.value !== mine)
+      .map(([a, e]) => ({ authorId: a, value: e.value }));
+    if (others.length) out.push({ playerId, mine, others });
+  }
+  return out;
+}
+
 export function activeAuthors(round) {
   const out = new Set();
   const byPlayer = round?.scoreEntries;

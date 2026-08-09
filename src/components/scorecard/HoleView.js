@@ -60,7 +60,7 @@ if (Platform.OS === 'web' && typeof document !== 'undefined') {
   }
 }
 
-export function HoleView({ round, roundIndex, players, scores, shotDetails, meId, onSetShot, onPickMe, notes, currentHole, hole, isBestBall, bbResult, settings, onStep, onSetScore, editable, onNext, onGoToHole, onFinish, holeCount, showQuickFinish, finishBusy, showRunning, getScoreAnim, celebration, celebrationAnim, refreshing, onRefresh, official, officialDiscrepancy, officialEditableSource, officialSetScore, officialHasAttested, officialAttestBusy, officialAttestError, onAttest, onResolveConflict, focusConflict, onFocusConflictHandled, conflictHoles = new Set(), authorName }) {
+export function HoleView({ round, roundIndex, players, scores, myScores = null, verifiedUpTo = 0, shotDetails, meId, onSetShot, onPickMe, notes, currentHole, hole, isBestBall, bbResult, settings, onStep, onSetScore, editable, onNext, onGoToHole, onFinish, holeCount, showQuickFinish, finishBusy, showRunning, getScoreAnim, celebration, celebrationAnim, refreshing, onRefresh, official, officialDiscrepancy, officialEditableSource, officialSetScore, officialHasAttested, officialAttestBusy, officialAttestError, onAttest, onResolveConflict, focusConflict, onFocusConflictHandled, conflictHoles = new Set(), authorName }) {
   const { theme } = useTheme();
   const s = useMemo(() => makeScorecardStyles(theme), [theme]);
   const [holePickerOpen, setHolePickerOpen] = useState(false);
@@ -320,7 +320,10 @@ export function HoleView({ round, roundIndex, players, scores, shotDetails, meId
                   roundIndex={roundIndex}
                   round={round}
                   players={players}
-                  scores={scores}
+                  // Unverified holes show only this scorer's own entries
+                  // (authorScores) — peers' synced values must not pre-fill a
+                  // hole that hasn't been walked off and verified yet.
+                  scores={myScores && pageHole.number > verifiedUpTo ? myScores : scores}
                   shotDetails={shotDetails}
                   meId={meId}
                   onSetShot={onSetShot}

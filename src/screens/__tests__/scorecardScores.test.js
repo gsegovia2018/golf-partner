@@ -7,6 +7,7 @@ import {
   shouldMarkTournamentFinishedFromScorecard,
   shouldApplyReloadSnapshot,
   clampEnteredScore,
+  buildHoleMismatchWarning,
 } from '../ScorecardScreen';
 
 // ScorecardScreen imports useFocusEffect from @react-navigation/native, whose
@@ -203,5 +204,35 @@ describe('shouldApplyReloadSnapshot', () => {
       pendingSave: true,
       hasTournament: false,
     })).toBe(true);
+  });
+});
+
+describe('buildHoleMismatchWarning', () => {
+  const players = [{ id: 'p1', name: 'Pedro' }, { id: 'p2', name: 'Luis' }];
+  const authorName = (a) => ({ me: 'Me', juan: 'Juan', ana: 'Ana' }[a] ?? a);
+
+  test('one line per disagreeing player, named per author', () => {
+    const { title, message } = buildHoleMismatchWarning({
+      hole: 7,
+      players,
+      authorName,
+      mismatches: [
+        { playerId: 'p1', mine: 5, others: [{ authorId: 'juan', value: 6 }] },
+        { playerId: 'p2', mine: 3, others: [{ authorId: 'juan', value: 4 }, { authorId: 'ana', value: 5 }] },
+      ],
+    });
+    expect(title).toBe("Scores don't match on hole 7");
+    expect(message).toContain('Pedro — you: 5, Juan: 6');
+    expect(message).toContain('Luis — you: 3, Juan: 4, Ana: 5');
+  });
+
+  test('unknown player falls back to a generic label', () => {
+    const { message } = buildHoleMismatchWarning({
+      hole: 1,
+      players,
+      authorName,
+      mismatches: [{ playerId: 'ghost', mine: 4, others: [{ authorId: 'juan', value: 5 }] }],
+    });
+    expect(message).toContain('Player — you: 4, Juan: 5');
   });
 });

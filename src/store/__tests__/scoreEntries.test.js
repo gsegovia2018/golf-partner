@@ -2,6 +2,7 @@ import { cellEntries, deriveCell } from '../scoreEntries';
 import {
   activeAuthors, listRoundConflicts, roundHasConflicts,
   authorProgress, isCellSurfaceable, surfaceableConflicts,
+  authorScores, holeEntryMismatches,
 } from '../scoreEntries';
 
 const round = (scoreEntries = {}, scoreResolutions = {}) => ({
@@ -104,5 +105,85 @@ describe('conflict listing + gate', () => {
     expect(isCellSurfaceable(r, 3, { a: 5, b: 4 })).toBe(true);
     expect(surfaceableConflicts(r, { a: 5, b: 3 })).toEqual([]);
     expect(surfaceableConflicts(r, { a: 5, b: 4 })).toEqual([{ playerId: 'p1', hole: 3 }]);
+  });
+});
+
+describe('authorScores', () => {
+  const entries = () => round({
+    p1: {
+      3: { me: { value: 4, ts: 10 }, peer: { value: 5, ts: 12 } },
+      4: { peer: { value: 6, ts: 20 } },
+    },
+    p2: { 3: { me: { value: null, ts: 15 }, peer: { value: 3, ts: 9 } } },
+  });
+
+  test('returns only the given author\'s non-blank entries, never peers\'', () => {
+    expect(authorScores(entries(), 'me')).toEqual({ p1: { 3: 4 } });
+  });
+
+  test('a blank entry from the author stays blank even when a peer scored it', () => {
+    expect(authorScores(entries(), 'me').p2).toBeUndefined();
+  });
+
+  test('overlays still-dirty local edits on top of authored entries', () => {
+    const local = { p1: { 3: 7 }, p2: { 4: 5 } };
+    const out = authorScores(entries(), 'me', local, new Set(['p1:3', 'p2:4']));
+    expect(out.p1[3]).toBe(7);       // in-flight edit wins over round-tripped entry
+    expect(out.p2[4]).toBe(5);       // brand-new local cell appears
+  });
+
+  test('a dirty local clear removes the authored value', () => {
+    const out = authorScores(entries(), 'me', { p1: {} }, new Set(['p1:3']));
+    expect(out.p1?.[3]).toBeUndefined();
+  });
+
+  test('empty round -> empty map', () => {
+    expect(authorScores(round(), 'me')).toEqual({});
+  });
+});
+
+describe('holeEntryMismatches', () => {
+  test('flags a cell where my value disagrees with another author', () => {
+    const r = round({ p1: { 3: { me: { value: 4, ts: 10 }, peer: { value: 5, ts: 12 } } } });
+    const mine = authorScores(r, 'me');
+    expect(holeEntryMismatches(r, 3, 'me', mine)).toEqual([
+      { playerId: 'p1', mine: 4, others: [{ authorId: 'peer', value: 5 }] },
+    ]);
+  });
+
+  test('no mismatch when I have not entered a score for that player', () => {
+    const r = round({ p1: { 3: { peer: { value: 5, ts: 12 } } } });
+    expect(holeEntryMismatches(r, 3, 'me', authorScores(r, 'me'))).toEqual([]);
+  });
+
+  test('no mismatch when authors agree, or when the peer entry is blank', () => {
+    const agreed = round({ p1: { 3: { me: { value: 4, ts: 10 }, peer: { value: 4, ts: 12 } } } });
+    expect(holeEntryMismatches(agreed, 3, 'me', authorScores(agreed, 'me'))).toEqual([]);
+    const peerBlank = round({ p1: { 3: { me: { value: 4, ts: 10 }, peer: { value: null, ts: 12 } } } });
+    expect(holeEntryMismatches(peerBlank, 3, 'me', authorScores(peerBlank, 'me'))).toEqual([]);
+  });
+
+  test('a validly resolved cell never mismatches', () => {
+    const r = round(
+      { p1: { 3: { me: { value: 4, ts: 10 }, peer: { value: 5, ts: 12 } } } },
+      { p1: { 3: { value: 5, by: 'peer', ts: 20 } } },
+    );
+    expect(holeEntryMismatches(r, 3, 'me', authorScores(r, 'me'))).toEqual([]);
+  });
+
+  test('a dirty local edit is compared, not the stale authored value', () => {
+    const r = round({ p1: { 3: { me: { value: 5, ts: 10 }, peer: { value: 5, ts: 12 } } } });
+    const mine = authorScores(r, 'me', { p1: { 3: 6 } }, new Set(['p1:3']));
+    expect(holeEntryMismatches(r, 3, 'me', mine)).toEqual([
+      { playerId: 'p1', mine: 6, others: [{ authorId: 'peer', value: 5 }] },
+    ]);
+  });
+
+  test('only checks the requested hole', () => {
+    const r = round({ p1: {
+      3: { me: { value: 4, ts: 10 }, peer: { value: 5, ts: 12 } },
+      4: { me: { value: 4, ts: 10 }, peer: { value: 4, ts: 12 } },
+    } });
+    expect(holeEntryMismatches(r, 4, 'me', authorScores(r, 'me'))).toEqual([]);
   });
 });

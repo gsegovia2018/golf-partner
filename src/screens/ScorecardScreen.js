@@ -62,7 +62,9 @@ import {
   reconcileShotDetail, listRoundConflicts, roundScoringMode, roundBestBallValues,
   clampScoreInput, resolvePlayerHandicap,
 } from '../store/scoring';
-import { surfaceableConflicts, deriveCell } from '../store/scoreEntries';
+import {
+  surfaceableConflicts, deriveCell, authorScores, holeEntryMismatches,
+} from '../store/scoreEntries';
 import { getDeviceAuthorId } from '../store/deviceId';
 import { makeScorecardStyles } from '../components/scorecard/styles';
 import { HoleView } from '../components/scorecard/HoleView';
@@ -222,6 +224,20 @@ export function canShowQuickFinish({ tournament, official, viewOnly }) {
   return !official && !viewOnly && tournament?.kind === 'game';
 }
 
+// Builds the leave-hole verification warning from holeEntryMismatches output.
+// One line per disagreeing player: "Pedro — you: 5, Juan: 6".
+export function buildHoleMismatchWarning({ mismatches, hole, players, authorName }) {
+  const lines = mismatches.map((mm) => {
+    const name = (players ?? []).find((p) => p.id === mm.playerId)?.name ?? 'Player';
+    const theirs = mm.others.map((o) => `${authorName(o.authorId)}: ${o.value}`).join(', ');
+    return `${name} — you: ${mm.mine}, ${theirs}`;
+  });
+  return {
+    title: `Scores don't match on hole ${hole}`,
+    message: `${lines.join('\n')}\n\nCheck with the other scorer and fix it before moving on.`,
+  };
+}
+
 export function roundDecisionNoticeForPair(pair) {
   const namedPlayers = Array.isArray(pair)
     ? pair.map((p) => p?.name).filter(Boolean)
@@ -278,6 +294,11 @@ export default function ScorecardScreen({ navigation, route }) {
   const [currentHole, setCurrentHole] = useState(1);
   const currentHoleRef = useRef(1);
   useEffect(() => { currentHoleRef.current = currentHole; }, [currentHole]);
+  // Highest hole this device has advanced past — verification ran on the way
+  // out. Hole-view pages ABOVE this watermark render the "my card" view
+  // (authorScores): peers' synced entries stay hidden there so each scorer
+  // marks every player themselves, then the cards are compared on "next hole".
+  const [verifiedUpTo, setVerifiedUpTo] = useState(0);
   const autoAdvanceTimer = useRef(null);
   useEffect(() => () => { if (autoAdvanceTimer.current) clearTimeout(autoAdvanceTimer.current); }, []);
   // goToNextHole is declared later (it needs state defined further down) but
@@ -455,8 +476,12 @@ export default function ScorecardScreen({ navigation, route }) {
       const firstEmpty = round.holes.find((h) =>
         t.players.every((p) => roundScores[p.id]?.[h.number] == null)
       );
+      const lastHole = round.holes[round.holes.length - 1].number;
       if (firstEmpty) setCurrentHole(firstEmpty.number);
-      else setCurrentHole(round.holes[round.holes.length - 1].number);
+      else setCurrentHole(lastHole);
+      // Holes below the resume point were played (and verified) in an earlier
+      // session — show them merged; the watermark restarts there.
+      setVerifiedUpTo(firstEmpty ? firstEmpty.number - 1 : lastHole);
     }
   }, [paramRoundIndex, official, routeTournamentId]);
 
@@ -1215,7 +1240,10 @@ export default function ScorecardScreen({ navigation, route }) {
       holeNumber,
       currentHole: currentHoleRef.current,
       maxHole: round?.holes?.length ?? 18,
-      scores: nextScores,
+      // Casual mode judges "hole complete" on the my-card view: a peer's
+      // synced entries must not complete the hole for a scorer who hasn't
+      // marked everyone yet (they'd be advanced past their own blank cells).
+      scores: official ? nextScores : authorScores(round, authorId, nextScores, dirtyCellsRef.current),
       players: rowPlayers,
     });
     if (action === 'ignore') return;
@@ -1224,7 +1252,7 @@ export default function ScorecardScreen({ navigation, route }) {
     autoAdvanceTimer.current = setTimeout(() => {
       if (currentHoleRef.current === holeNumber) goToNextHoleRef.current();
     }, 1200);
-  }, [round, players, settings, meId]);
+  }, [round, players, settings, meId, official, authorId]);
 
   const setScore = useCallback((playerId, holeNumber, value) => {
     if (!official && viewOnly) return;
@@ -1323,12 +1351,14 @@ export default function ScorecardScreen({ navigation, route }) {
     lastClinchedPairRef.current = roundPairClinched(liveRound, players, settings, mode);
   }, [round, tournament, players, scores, settings]);
 
-  const goToNextHole = useCallback(() => {
+  const advanceHole = useCallback(() => {
     haptic('medium');
     // A manual tap here (or the auto-advance timer itself firing) should
     // cancel any other pending auto-advance — no double-hops.
     if (autoAdvanceTimer.current) { clearTimeout(autoAdvanceTimer.current); autoAdvanceTimer.current = null; }
     const maxHole = round?.holes?.length ?? 18;
+    // The hole being left is now verified — merged peer entries may show there.
+    setVerifiedUpTo((v) => Math.max(v, currentHoleRef.current));
     setCurrentHole((h) => Math.min(maxHole, h + 1));
     if (!round || !tournament) return;
     const mode = roundScoringMode(tournament, round) === 'bestball' ? 'bestball' : 'stableford';
@@ -1342,6 +1372,29 @@ export default function ScorecardScreen({ navigation, route }) {
     }
     lastClinchedPairRef.current = clinched;
   }, [round, tournament, players, scores, settings]);
+
+  // Leaving a hole is when the scorers' cards get compared. If any score I
+  // entered disagrees with what another scorer entered for the same player,
+  // warn before moving on — a cell I left blank never blocks (I didn't mark
+  // that player, so their scorer's entry simply stands).
+  const goToNextHole = useCallback(() => {
+    if (official || viewOnly || !round) { advanceHole(); return; }
+    const mine = authorScores(round, authorId, scoresRef.current, dirtyCellsRef.current);
+    const mismatches = holeEntryMismatches(round, currentHoleRef.current, authorId, mine);
+    if (!mismatches.length) { advanceHole(); return; }
+    haptic('medium');
+    const { title, message } = buildHoleMismatchWarning({
+      mismatches, hole: currentHoleRef.current, players, authorName,
+    });
+    if (Platform.OS === 'web') {
+      if (window.confirm(`${title}\n\n${message}\n\nContinue anyway?`)) advanceHole();
+    } else {
+      Alert.alert(title, message, [
+        { text: 'Fix scores', style: 'cancel' },
+        { text: 'Continue anyway', onPress: advanceHole },
+      ]);
+    }
+  }, [official, viewOnly, round, authorId, players, authorName, advanceHole]);
   useEffect(() => { goToNextHoleRef.current = goToNextHole; }, [goToNextHole]);
 
   const goToHole = useCallback((h) => {
@@ -1398,6 +1451,16 @@ export default function ScorecardScreen({ navigation, route }) {
     () => new Set(surfaceableConflicts(round, presenceProgress).map((c) => c.hole)),
     [round, presenceProgress],
   );
+
+  // The card as I've marked it. Hole-view pages above the verified watermark
+  // render this instead of the merged scores, so a peer's synced entries can't
+  // pre-fill a hole I'm still scoring. Official and view-only modes keep the
+  // merged view (official has its own self/marker model; a viewer wants live
+  // data).
+  const myScores = useMemo(() => {
+    if (official || viewOnly) return null;
+    return authorScores(round, authorId, scores, dirtyCellsRef.current);
+  }, [official, viewOnly, round, authorId, scores]);
 
   // Back from the scorecard. The live center-tab action requests Tournament so
   // the user lands on the active round summary while a round is live. Other
@@ -1795,6 +1858,8 @@ export default function ScorecardScreen({ navigation, route }) {
           roundIndex={roundIndex}
           players={players}
           scores={scores}
+          myScores={myScores}
+          verifiedUpTo={verifiedUpTo}
           shotDetails={shotDetails}
           meId={meId}
           onSetShot={setShot}
