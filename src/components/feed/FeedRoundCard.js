@@ -106,8 +106,10 @@ export default function FeedRoundCard({
   const resultCount = item.playerCount ?? allResults.length;
   // Players counted in the round but with no card of their own (e.g. guests
   // filtered out of `results`). Rendered friends all get a scrollable tile;
-  // this only notes the remainder we have no per-player data for.
-  const hiddenCount = Math.max(0, resultCount - results.length);
+  // this only notes the remainder we have no per-player data for. Team
+  // rounds pre-compute it (a team tile covers several players, so the
+  // playerCount − tiles math over-counts there).
+  const hiddenCount = item.hiddenPlayerCount ?? Math.max(0, resultCount - results.length);
   const leader = results[0] ?? null;
   const second = results[1] ?? null;
   const scrollScores = results.length > 3;
@@ -293,6 +295,14 @@ export default function FeedRoundCard({
               <Feather name="users" size={11} color={theme.text.muted} />
               <Text style={s.infoChipText}>{playerCountLabel(resultCount)}</Text>
             </View>
+            {item.teamsLabel ? (
+              <View style={[s.infoChip, s.teamsChip]}>
+                <Feather name="shuffle" size={11} color={theme.text.muted} />
+                <Text style={[s.infoChipText, s.teamsChipText]} numberOfLines={1}>
+                  {item.teamsLabel}
+                </Text>
+              </View>
+            ) : null}
             {mediaLabel && !item.mediaCoverUrl ? (
               <View style={s.infoChip}>
                 <Feather name={item.mediaHasVideo ? 'film' : 'camera'} size={11} color={theme.text.muted} />
@@ -533,6 +543,15 @@ function makeStyles(theme) {
       fontFamily: 'PlusJakartaSans-SemiBold',
       color: theme.text.secondary,
       fontSize: 10,
+    },
+    // The pairings chip can carry a long "A + B vs C + D" label — let it
+    // shrink and truncate instead of pushing the row wide.
+    teamsChip: {
+      flexShrink: 1,
+      minWidth: 0,
+    },
+    teamsChipText: {
+      flexShrink: 1,
     },
     scorePreview: {
       marginTop: 12,

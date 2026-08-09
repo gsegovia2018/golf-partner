@@ -11,7 +11,9 @@ import {
   fetchTournament as fetchTournamentRemote,
   fetchRoundActivity,
 } from './tournamentRepo';
-import { roundScoringMode, calcExtraShots } from './scoring';
+import {
+  roundScoringMode, calcExtraShots, isScrambleMode, scrambleRoundTally, resolvePairs,
+} from './scoring';
 import { loadMediaForTournaments } from './mediaStore';
 import { listFriends, getCachedFriends } from './friendStore';
 
@@ -410,40 +412,92 @@ export async function buildFeed(options = {}) {
 
     (t.rounds ?? []).forEach((round, roundIndex) => {
       if (!round || round._deleted || !round.scores) return;
-      const totals = roundTotals(round, players);
       const ts = roundActivityTs(t, round.id, roundIndex, activityTsByKey);
+      const mode = roundScoringMode(t, round);
 
-      // A 4-player round produces up to 4 per-player entries. Collect them
-      // all into ONE feed card for the round-event so the feed shows a
-      // single card with every player's result.
       const results = [];
       let scoredPlayerCount = 0;
-      for (const entry of totals) {
-        const player = entry.player;
-        if (!player || entry.totalStrokes === 0) continue;
-        scoredPlayerCount += 1;
-        const uid = player.user_id ?? null;
-        const isMe = !!uid && uid === me;
-        const isFriend = !!uid && friendSet.has(uid);
-        if (!isMe && !isFriend) continue; // skip guests / strangers
+      let hiddenPlayerCount = null;
+      let teamsLabel = null;
 
-        const friendInfo = isFriend ? friendById.get(uid) : null;
-        const pace = vsParThrough(round, player.id, entry.handicap);
-        results.push({
-          playerId: player.id,
-          userId: uid,
-          isMine: isMe,
-          isFriend,
-          name: isMe ? 'You' : (friendInfo?.displayName ?? player.name),
-          avatarUrl: friendInfo?.avatarUrl ?? player.avatar_url ?? null,
-          avatarColor: friendInfo?.avatarColor ?? null,
-          points: entry.totalPoints,
-          strokes: entry.totalStrokes,
-          holes: holesPlayed(round, player.id),
-          handicap: Number.isFinite(entry.handicap) ? entry.handicap : null,
-          vsPar: pace.vsPar,
-          vsParAllowed: pace.allowed,
-        });
+      if (isScrambleMode(mode)) {
+        // One tile per TEAM. Scramble scores live under the captain with a
+        // TEAM handicap, so per-player totals would surface only the captains
+        // (pointed off their personal handicap) and hide their teammates.
+        let hiddenMembers = 0;
+        for (const row of scrambleRoundTally(round, players)?.totals ?? []) {
+          const { unit } = row;
+          if (row.strokes === 0) continue;
+          scoredPlayerCount += unit.members.length;
+          const uids = unit.members.map((m) => m.user_id).filter(Boolean);
+          const mine = uids.includes(me);
+          const friendUid = uids.find((uid) => friendSet.has(uid)) ?? null;
+          if (!mine && !friendUid) { // team of guests / strangers
+            hiddenMembers += unit.members.length;
+            continue;
+          }
+          const friendInfo = friendUid ? friendById.get(friendUid) : null;
+          const pace = vsParThrough(round, unit.id, unit.handicap);
+          results.push({
+            playerId: unit.id,
+            userId: mine ? me : friendUid,
+            isMine: mine,
+            isFriend: !!friendUid,
+            name: unit.name,
+            avatarUrl: unit.members[0]?.avatar_url ?? friendInfo?.avatarUrl ?? null,
+            avatarColor: friendInfo?.avatarColor ?? null,
+            points: row.points,
+            strokes: row.strokes,
+            holes: holesPlayed(round, unit.id),
+            handicap: unit.handicap,
+            vsPar: pace.vsPar,
+            vsParAllowed: pace.allowed,
+          });
+        }
+        hiddenPlayerCount = hiddenMembers;
+      } else {
+        // A 4-player round produces up to 4 per-player entries. Collect them
+        // all into ONE feed card for the round-event so the feed shows a
+        // single card with every player's result.
+        const scored = roundTotals(round, players)
+          .filter((entry) => entry.player && entry.totalStrokes > 0);
+        scoredPlayerCount = scored.length;
+        // With nobody to disambiguate against, a solo round's tile carries
+        // the player's real name — "You" would hide who actually played.
+        const solo = scored.length === 1;
+        for (const entry of scored) {
+          const player = entry.player;
+          const uid = player.user_id ?? null;
+          const isMe = !!uid && uid === me;
+          const isFriend = !!uid && friendSet.has(uid);
+          if (!isMe && !isFriend) continue; // skip guests / strangers
+
+          const friendInfo = isFriend ? friendById.get(uid) : null;
+          const pace = vsParThrough(round, player.id, entry.handicap);
+          results.push({
+            playerId: player.id,
+            userId: uid,
+            isMine: isMe,
+            isFriend,
+            name: isMe && !solo ? 'You' : (friendInfo?.displayName ?? player.name),
+            avatarUrl: friendInfo?.avatarUrl ?? player.avatar_url ?? null,
+            avatarColor: friendInfo?.avatarColor ?? null,
+            points: entry.totalPoints,
+            strokes: entry.totalStrokes,
+            holes: holesPlayed(round, player.id),
+            handicap: Number.isFinite(entry.handicap) ? entry.handicap : null,
+            vsPar: pace.vsPar,
+            vsParAllowed: pace.allowed,
+          });
+        }
+        // "Marcos + Noé vs Guille + Alex" — surface the round's pairings on
+        // the card. Scramble rounds skip this: their tiles ARE the teams.
+        const pairs = resolvePairs(round.pairs, players) ?? [];
+        if (pairs.length === 2 && pairs.every((pr) => Array.isArray(pr) && pr.length > 0)) {
+          teamsLabel = pairs
+            .map((pr) => pr.map((m) => (m?.name ?? '').split(' ')[0] || '?').join(' + '))
+            .join(' vs ');
+        }
       }
       if (results.length === 0) return;
 
@@ -483,11 +537,18 @@ export async function buildFeed(options = {}) {
         // Every player's result for the grouped card.
         results,
         playerCount: scoredPlayerCount,
+        // Scramble rounds: players in scored teams with no rendered tile
+        // (teams of guests/strangers). The card can't derive this from
+        // playerCount − results.length because a team tile covers several
+        // players. Null on non-scramble rounds (card falls back to its math).
+        hiddenPlayerCount,
+        // "Marcos + Noé vs Guille + Alex" (null when the round has no pairs).
+        teamsLabel,
         finished,
         // Live-round + mode metadata for the feed card.
         live,
         totalHoles,
-        scoringMode: roundScoringMode(t, round),
+        scoringMode: mode,
         // A friend's round the current user did not play in.
         withMe: iAmIn || anyMine,
       });
