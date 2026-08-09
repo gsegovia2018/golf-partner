@@ -14,7 +14,7 @@ import { deriveCell } from '../../store/scoreEntries';
 import { isScrambleMode } from '../scoringModes';
 import { HoleDistanceBlock } from './HoleDistanceBlock';
 import { PlayerCard } from './PlayerCard';
-import { holePoints } from './scoreModel';
+import { holePoints, holeEdgeShots } from './scoreModel';
 import { teamsByPlayer } from './teamModel';
 import { useTourTarget } from '../tour/tourTargets';
 
@@ -198,6 +198,16 @@ export const HolePage = React.memo(function HolePage({
   const holePts = holePoints({ mode, hole: pageHole, players: scoringPlayers, scores, handicaps, round });
   const teams = useMemo(() => teamsByPlayer(round), [round]);
 
+  // Who plays this hole with shots the rest don't get (SI shots minus the
+  // field minimum) — surfaced in the header so nobody has to scroll the
+  // cards to learn it. Empty on holes where the field is level.
+  const edgeShots = holeEdgeShots({
+    players: orderedPlayers, handicaps, strokeIndex: pageHole.strokeIndex,
+  });
+  const edgeSummary = edgeShots
+    .map((e) => `${(e.name || '?')[0].toUpperCase()}+${e.edge}`)
+    .join(' ');
+
   return (
     <View
       style={[{ width, height }, PAGER_PAGE_SNAP_STYLE]}
@@ -231,6 +241,23 @@ export const HolePage = React.memo(function HolePage({
                 <Text style={s.holeMetaValue}>{pageHole.strokeIndex}</Text>
               </View>
             </View>
+            {/* Edge line — who gets shots here that the rest don't, one dot
+                per extra shot. Absent entirely when the field plays level. */}
+            {edgeShots.length > 0 && (
+              <View style={s.holeEdgeRow}>
+                {edgeShots.map((e, idx) => (
+                  <React.Fragment key={e.id}>
+                    {idx > 0 && <Text style={s.holeEdgeSep}>·</Text>}
+                    <View style={s.holeEdgeItem}>
+                      <Text style={s.holeEdgeName} numberOfLines={1}>{e.name}</Text>
+                      {Array.from({ length: e.edge }, (_, i) => (
+                        <View key={i} style={s.holeEdgeDot} />
+                      ))}
+                    </View>
+                  </React.Fragment>
+                ))}
+              </View>
+            )}
           </View>
           <View style={s.holeHeaderRightWrap}>
             <HoleDistanceBlock
@@ -353,6 +380,9 @@ export const HolePage = React.memo(function HolePage({
       >
         <Text style={s.holeSlimBarInfo} numberOfLines={1}>
           {`HOLE ${pageHole.number} · PAR ${pageHole.par} · SI ${pageHole.strokeIndex}`}
+          {edgeShots.length > 0 && (
+            <Text style={s.holeSlimBarEdge}>{` · ${edgeSummary}`}</Text>
+          )}
         </Text>
         <HoleDistanceBlock
           compact

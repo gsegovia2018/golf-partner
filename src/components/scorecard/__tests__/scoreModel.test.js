@@ -1,4 +1,4 @@
-import { holePoints, roundTotals, summaryState } from '../scoreModel';
+import { holePoints, holeEdgeShots, roundTotals, summaryState } from '../scoreModel';
 
 const holes = [
   { number: 1, par: 4, strokeIndex: 5 },
@@ -393,5 +393,59 @@ describe('scramble', () => {
     expect(s.solo.pts).toBe(3);
     expect(s.solo.str).toBe(3);
     expect(s.solo.vsParLabel).toBe('-1');
+  });
+});
+
+describe('holeEdgeShots', () => {
+  const field = [
+    { id: 'm', name: 'Marcos', handicap: 12 },
+    { id: 'j', name: 'Juan', handicap: 8 },
+    { id: 'p', name: 'Pedro', handicap: 15 },
+    { id: 'a', name: 'Ana', handicap: 32 },
+  ];
+  const hcaps = { m: 12, j: 8, p: 15, a: 32 };
+
+  test('only players with shots above the field minimum appear, in players order', () => {
+    // SI 14: Marcos/Juan 0 shots, Pedro 1, Ana 2 (32 = 18 base + 14 ≥ SI 14).
+    expect(holeEdgeShots({ players: field, handicaps: hcaps, strokeIndex: 14 }))
+      .toEqual([
+        { id: 'p', name: 'Pedro', edge: 1 },
+        { id: 'a', name: 'Ana', edge: 2 },
+      ]);
+  });
+
+  test('shots the whole field shares cancel out', () => {
+    // SI 1: everyone gets at least 1; only Ana (2) has an edge over the rest.
+    expect(holeEdgeShots({ players: field, handicaps: hcaps, strokeIndex: 1 }))
+      .toEqual([{ id: 'a', name: 'Ana', edge: 1 }]);
+  });
+
+  test('level field yields no edge', () => {
+    const level = field.slice(0, 2); // Marcos 12, Juan 8
+    // SI 18: neither gets a shot.
+    expect(holeEdgeShots({ players: level, handicaps: { m: 12, j: 8 }, strokeIndex: 18 }))
+      .toEqual([]);
+  });
+
+  test('falls back to player.handicap when the handicaps map has no entry', () => {
+    // Pedro (1 shot) is the field minimum in this two-player roster, so only
+    // Ana's second shot counts as an edge.
+    expect(holeEdgeShots({ players: field.slice(2), handicaps: {}, strokeIndex: 14 }))
+      .toEqual([{ id: 'a', name: 'Ana', edge: 1 }]);
+  });
+
+  test('plus-handicap player raises the edge of the rest', () => {
+    // SI 18: plus player gives a shot back (−1), scratch player stays 0 —
+    // relative to the field minimum the scratch player has the edge.
+    const duo = [
+      { id: 'x', name: 'Xavi', handicap: -2 },
+      { id: 's', name: 'Sara', handicap: 0 },
+    ];
+    expect(holeEdgeShots({ players: duo, handicaps: { x: -2, s: 0 }, strokeIndex: 18 }))
+      .toEqual([{ id: 's', name: 'Sara', edge: 1 }]);
+  });
+
+  test('empty roster yields no edge', () => {
+    expect(holeEdgeShots({ players: [], handicaps: {}, strokeIndex: 5 })).toEqual([]);
   });
 });

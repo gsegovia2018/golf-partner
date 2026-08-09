@@ -1,6 +1,7 @@
 // Pure per-mode scoring for the scorecard. Wraps the scoring engines in
 // store/tournamentStore.js so components never branch on mode themselves.
 import {
+  calcExtraShots,
   calcStablefordPoints,
   matchPlayHolePts,
   matchPlayRoundTally,
@@ -42,6 +43,23 @@ export function holePoints({ mode, hole, players, scores, handicaps, round }) {
     }
   }
   return result;
+}
+
+// Who has extra shots on this hole that the rest of the group doesn't.
+// Shots the whole field shares cancel out (everyone +1 → no edge), so the
+// result is each player's stroke-index shots minus the field minimum —
+// empty when nobody has an edge. Order follows `players`.
+export function holeEdgeShots({ players, handicaps, strokeIndex }) {
+  if (!players?.length) return [];
+  const extras = players.map((p) => ({
+    id: p.id,
+    name: p.name,
+    extra: calcExtraShots(handicaps?.[p.id] ?? p.handicap ?? 0, strokeIndex),
+  }));
+  const min = Math.min(...extras.map((e) => e.extra));
+  return extras
+    .filter((e) => e.extra > min)
+    .map(({ id, name, extra }) => ({ id, name, edge: extra - min }));
 }
 
 // Per-player round totals. Returns Map<playerId, { pts, str, parPlayed }>.

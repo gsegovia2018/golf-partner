@@ -201,8 +201,9 @@ export function makeScorecardStyles(theme) {
     },
 
     // Hole view header — sits directly on bg.primary, no card chrome.
-    // `stretch` + space-between makes the hole info column span the full
-    // height of the distance card beside it.
+    // The info column stacks from the top (PAR/SI tucked under the hole
+    // number, edge line beneath) rather than spreading to the distance
+    // card's height — the edge line needs the slot under the SI.
     holeHeaderCard: {
       flexDirection: 'row',
       justifyContent: 'space-between',
@@ -210,7 +211,7 @@ export function makeScorecardStyles(theme) {
       paddingHorizontal: 20,
       paddingVertical: 16,
     },
-    holeHeaderLeft: { flex: 1, minWidth: 0, justifyContent: 'space-between' },
+    holeHeaderLeft: { flex: 1, minWidth: 0, justifyContent: 'flex-start', gap: 7 },
     holeHeaderRightWrap: { flexShrink: 0, justifyContent: 'center' },
     holeNumberRow: { flexDirection: 'row', alignItems: 'baseline', gap: 8 },
     holeNumberLabel: {
@@ -243,6 +244,37 @@ export function makeScorecardStyles(theme) {
       fontSize: 17,
       fontFamily: 'PlusJakartaSans-ExtraBold',
     },
+    // Edge line under PAR/SI — players with stroke-index shots the rest of
+    // the field doesn't get, one dot per extra shot.
+    holeEdgeRow: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: 7,
+      minWidth: 0,
+    },
+    holeEdgeItem: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: 4,
+      flexShrink: 1,
+    },
+    holeEdgeName: {
+      color: theme.accent.primary,
+      fontSize: 12,
+      fontFamily: 'PlusJakartaSans-Bold',
+      flexShrink: 1,
+    },
+    holeEdgeDot: {
+      width: 5,
+      height: 5,
+      borderRadius: 999,
+      backgroundColor: theme.accent.primary,
+    },
+    holeEdgeSep: {
+      color: theme.text.muted,
+      fontSize: 12,
+      fontFamily: 'PlusJakartaSans-Regular',
+    },
     holeSlimBar: {
       position: 'absolute',
       top: 0,
@@ -264,6 +296,11 @@ export function makeScorecardStyles(theme) {
       fontFamily: 'PlusJakartaSans-ExtraBold',
       letterSpacing: 0.5,
       flexShrink: 1,
+    },
+    // Accent suffix on the slim bar ("P+1 A+2") — the edge line's compact
+    // form, kept visible after the full header scrolls away.
+    holeSlimBarEdge: {
+      color: theme.accent.primary,
     },
 
     // Hole navigation
