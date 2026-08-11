@@ -1,5 +1,5 @@
 import 'react-native-url-polyfill/auto';
-import { Platform } from 'react-native';
+import { AppState, Platform } from 'react-native';
 import { createClient } from '@supabase/supabase-js';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 
@@ -23,3 +23,17 @@ export const supabase = createClient(
     },
   },
 );
+
+// Documented Supabase React Native pattern: drive the token auto-refresh
+// ticker from AppState. Native has no visibilitychange, so without this the
+// ticker keeps running against frozen JS timers while backgrounded and —
+// more importantly — nothing proactively refreshes on resume; refreshing the
+// moment the app is foregrounded (while there is usually still coverage)
+// keeps the access token from being expired at the next cold start, which is
+// the state the offline fallback in AuthContext exists to survive.
+if (!isWeb) {
+  AppState.addEventListener('change', (state) => {
+    if (state === 'active') supabase.auth.startAutoRefresh();
+    else supabase.auth.stopAutoRefresh();
+  });
+}

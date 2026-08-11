@@ -5,6 +5,22 @@ import { parseHandicapIndex } from '../lib/handicap';
 
 // ── Players ──────────────────────────────────────────────────────────────────
 
+// Offline cache, same write-through pattern as the courses caches below.
+// Identity depends on these reads: game creation embeds each roster player's
+// user_id and derives meId from it (SetupScreen pre-add-me, quick start), so
+// before this cache existed a game created offline was born with NO account
+// links and the scorecard could only ask "who are you?". The my-players cache
+// stores { userId, players } so one account's list is never served to another.
+export const PLAYERS_CACHE_KEY = '@golf_players_cache';
+export const MY_PLAYERS_CACHE_KEY = '@golf_my_players_cache';
+
+async function readCache(key) {
+  try {
+    const raw = await AsyncStorage.getItem(key);
+    return raw ? JSON.parse(raw) : null;
+  } catch (_) { return null; }
+}
+
 export async function fetchPlayers() {
   // `*` already includes avatar_url + user_id (added by later migrations);
   // kept explicit to signal downstream consumers what to rely on.
@@ -12,7 +28,12 @@ export async function fetchPlayers() {
     .from('players')
     .select('id, name, handicap, user_id, avatar_url, created_at, gender')
     .order('name');
-  if (error) throw error;
+  if (error) {
+    const cached = await readCache(PLAYERS_CACHE_KEY);
+    if (cached) return cached;
+    throw error;
+  }
+  AsyncStorage.setItem(PLAYERS_CACHE_KEY, JSON.stringify(data)).catch(() => {});
   return data;
 }
 
@@ -36,7 +57,11 @@ async function myFriendIds() {
 // row. Including the current user themselves is intentional — the picker
 // lets you add yourself to a game. Signed-out → [].
 export async function fetchMyPlayers() {
-  const { data: { user } } = await supabase.auth.getUser();
+  // getSession (local), not getUser (network): this read gates whether game
+  // creation can pre-add the signed-in user's linked player at all, so it
+  // must resolve the account id offline.
+  const { data: { session } } = await supabase.auth.getSession();
+  const user = session?.user;
   if (!user) return [];
   const friendIds = await myFriendIds();
   const userIds = [user.id, ...friendIds].filter(Boolean);
@@ -48,7 +73,14 @@ export async function fetchMyPlayers() {
     .select(PLAYER_COLUMNS)
     .or(`created_by.eq.${user.id},user_id.in.(${userIds.join(',')})`)
     .order('name');
-  if (error) throw error;
+  if (error) {
+    const cached = await readCache(MY_PLAYERS_CACHE_KEY);
+    if (cached && cached.userId === user.id) return cached.players;
+    throw error;
+  }
+  AsyncStorage.setItem(
+    MY_PLAYERS_CACHE_KEY, JSON.stringify({ userId: user.id, players: data }),
+  ).catch(() => {});
   return data;
 }
 

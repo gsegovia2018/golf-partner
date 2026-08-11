@@ -165,10 +165,18 @@ export async function advanceRound(id, roundIndex) {
 // -- Players ----------------------------------------------------------------
 
 export async function upsertPlayer(tournamentId, player, pos) {
+  // user_id is included ONLY when the local copy carries a claim. The column
+  // is the source of truth (20260728000000) and get_game_tournament projects
+  // identity from it — but this device's blob can be STALE about claims made
+  // elsewhere (or stripped by a fetch that raced one). PostgREST builds the
+  // conflict-update SET list from the payload keys, so omitting the key
+  // leaves the server's claim untouched, while an explicit `user_id: null`
+  // here would erase it. Un-claiming is exclusively
+  // release_tournament_player's job; no client write path unlinks.
   const { error } = await supabase.from('game_players').upsert({
     tournament_id: tournamentId,
     player_id: player.id,
-    user_id: player.user_id ?? null,
+    ...(player.user_id ? { user_id: player.user_id } : {}),
     pos,
     body: player,
     updated_at: new Date().toISOString(),

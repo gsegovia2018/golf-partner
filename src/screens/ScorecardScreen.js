@@ -896,16 +896,23 @@ export default function ScorecardScreen({ navigation, route }) {
     });
   }, [saveShot]);
 
-  // Persist which player is "me" (drives shot-detail tracking).
-  const pickMe = useCallback(async (playerId) => {
-    if (!tournamentRef.current) return;
+  // Persist which player is "me" (drives shot-detail tracking). Routed
+  // through the serial save chain like every other whole-blob writer: an
+  // in-flight score-save unit clones and re-persists the tournament it
+  // captured at execution time, so a pick running OUTSIDE the chain could
+  // land between that capture and its saveLocal and be overwritten by the
+  // pre-pick meId. Inside the chain, the pick commits tournamentRef first
+  // and the next unit diffs from the post-pick state.
+  const pickMe = useCallback((playerId) => enqueueSave(async () => {
+    if (!tournamentRef.current) return null;
     const t = await mutate(tournamentRef.current, {
       type: 'tournament.setMe',
       meId: playerId,
     });
     tournamentRef.current = t;
     setTournament(t);
-  }, []);
+    return t;
+  }), [enqueueSave]);
 
   // --- Official mode: map RPC round state into the casual render shapes ---
   // The official data layer returns flat `members` / `scores` lists. The

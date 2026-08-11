@@ -1,5 +1,5 @@
 import { syncQueue } from './syncQueue';
-import { saveLocal, _setSyncStatus } from './tournamentStore';
+import { saveLocal, readLocal, _setSyncStatus } from './tournamentStore';
 import { isOnline } from '../lib/connectivity';
 import { normalizeRoundNotes } from './roundNotes';
 import { clampScoreInput, resolvePlayerHandicap } from './scoring';
@@ -629,11 +629,23 @@ export async function mutate(tournamentBefore, mutation, opts = {}) {
   // tournament.setMe is per-device identity ("which player is me on this
   // phone"). Apply and persist locally, but skip enqueue/sync entirely so
   // a joiner's setMe never overwrites another device's meId.
+  //
+  // Under the per-tournament mutex, applied to the FRESHEST local blob, not
+  // the caller's snapshot: the overlay paths (_overlayAndSave, realtime
+  // flushBatch) read local inside this same lock and restore its meId over
+  // their merged result, so an unserialized whole-blob write from a stale
+  // screen ref here would (a) race those restores — a pick landing between
+  // an overlay's read and save was erased by the old null being written
+  // back — and (b) revert every field the snapshot was stale about.
   if (m.type === 'tournament.setMe') {
-    const t = JSON.parse(JSON.stringify(tournamentBefore));
-    applyToTournament(t, m);
-    await saveLocal(t);
-    return t;
+    const { runExclusiveForTournament } = require('./tournamentMutex');
+    return runExclusiveForTournament(tournamentBefore.id, async () => {
+      const base = (await readLocal(tournamentBefore.id)) ?? tournamentBefore;
+      const t = JSON.parse(JSON.stringify(base));
+      applyToTournament(t, m);
+      await saveLocal(t);
+      return t;
+    });
   }
 
   // 1. Clone + apply. `path` no longer stamps anything on the blob (sync is

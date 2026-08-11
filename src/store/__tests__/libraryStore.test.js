@@ -1,5 +1,6 @@
 import {
   fetchMyPlayers, fetchMyGuestPlayers, normalizeCourse, saveCourseTees,
+  fetchPlayers,
   fetchCourses, getCachedCourses, COURSES_CACHE_KEY,
   fetchClubs, getCachedClubs, CLUBS_CACHE_KEY,
   fetchFavoriteCourseIds, getCachedFavoriteCourseIds, FAVORITE_COURSES_CACHE_KEY,
@@ -82,6 +83,11 @@ jest.mock('../../lib/supabase', () => {
     },
     auth: {
       getUser: () => Promise.resolve({ data: { user: mockState.user } }),
+      // fetchMyPlayers resolves identity from the LOCAL session (offline-safe)
+      // rather than the network getUser round-trip.
+      getSession: () => Promise.resolve({
+        data: { session: mockState.user ? { user: mockState.user } : null },
+      }),
     },
   };
   return { supabase: client };
@@ -259,6 +265,53 @@ describe('saveCourseTees', () => {
       { course_id: 'c1', label: 'White', rating: 71.8, slope: 132, rating_women: null, slope_women: null, sort_order: 0, yardages: null },
       { course_id: 'c1', label: 'Yellow', rating: 69, slope: 125, rating_women: null, slope_women: null, sort_order: 1, yardages: null },
     ]);
+  });
+});
+
+describe('players offline cache', () => {
+  beforeEach(async () => {
+    await AsyncStorage.clear();
+    mockState.user = { id: 'u1' };
+    mockState.rows = [];
+    mockState.rowsByTable = null;
+    mockState.calls = {};
+    mockState.orderError = null;
+    listFriends.mockReset();
+    getCachedFriends.mockReset();
+    listFriends.mockResolvedValue([]);
+  });
+
+  // Later describes reset rows/calls but predate orderError — clear it so a
+  // failure simulated here can't leak into their fetches.
+  afterEach(() => { mockState.orderError = null; });
+
+  test('fetchPlayers writes through and serves the cache when the read fails', async () => {
+    // Game creation embeds each roster player's user_id from these reads and
+    // derives meId from it — without the cache an offline-created game had no
+    // account links and the scorecard could only ask "who are you?".
+    mockState.rows = [{ id: 'p1', name: 'Ann', user_id: 'u1' }];
+    await fetchPlayers();
+
+    mockState.orderError = new Error('offline');
+    const result = await fetchPlayers();
+    expect(result).toEqual([{ id: 'p1', name: 'Ann', user_id: 'u1' }]);
+  });
+
+  test('fetchPlayers rethrows when the read fails and nothing is cached', async () => {
+    mockState.orderError = new Error('offline');
+    await expect(fetchPlayers()).rejects.toThrow('offline');
+  });
+
+  test('fetchMyPlayers serves the cache offline, but never another account\'s', async () => {
+    mockState.rows = [{ id: 'p1', name: 'Ann', user_id: 'u1' }];
+    await fetchMyPlayers();
+
+    mockState.orderError = new Error('offline');
+    expect(await fetchMyPlayers()).toEqual([{ id: 'p1', name: 'Ann', user_id: 'u1' }]);
+
+    // Another signed-in account must not see u1's cached list.
+    mockState.user = { id: 'u2' };
+    await expect(fetchMyPlayers()).rejects.toThrow('offline');
   });
 });
 

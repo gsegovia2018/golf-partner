@@ -300,6 +300,40 @@ describe('drainTournament', () => {
     await expect(drainTournament('t1', [e1])).resolves.toBeUndefined();
     expect(saveLocal).not.toHaveBeenCalled();
   });
+
+  test('the reconcile save re-stamps the device-local meId the server never returns', async () => {
+    // Regression: the reconcile saved `fresh` (which has no meId — the RPC
+    // never emits it) without restoring local's, so every drained score batch
+    // erased identity for any player whose slot lacks a user_id link, and
+    // the scorecard fell back to the "who are you?" picker mid-round.
+    fetchTournament.mockResolvedValue({ id: 't1', rounds: [] });
+    readLocal.mockResolvedValue({ ...localBlob, meId: 'p2' });
+
+    await drainTournament('t1', [{ id: 'e1', tournamentId: 't1', mutation: { type: 'score.set' } }]);
+
+    expect(saveLocal).toHaveBeenCalledTimes(1);
+    expect(saveLocal.mock.calls[0][0].meId).toBe('p2');
+  });
+
+  test('reconcile preserves an explicit local meId null and survives a missing local blob', async () => {
+    // Local wins INCLUDING an explicit null (same contract as
+    // _overlayAndSave): a user who deliberately has no pick must not have one
+    // resurrected. And a null readLocal (fresh device) must not crash or
+    // fabricate the key.
+    fetchTournament.mockResolvedValue({ id: 't1', rounds: [] });
+    readLocal.mockResolvedValue({ ...localBlob, meId: null });
+    await drainTournament('t1', [{ id: 'e1', tournamentId: 't1', mutation: { type: 'score.set' } }]);
+    expect(saveLocal.mock.calls[0][0].meId).toBeNull();
+
+    jest.clearAllMocks();
+    applyPendingMutations.mockImplementation((t) => t);
+    executeMutation.mockResolvedValue({ conflict: null });
+    syncQueue.all.mockResolvedValue([]);
+    fetchTournament.mockResolvedValue({ id: 't1', rounds: [] });
+    readLocal.mockResolvedValue(null);
+    await drainTournament('t1', [{ id: 'e1', tournamentId: 't1', mutation: { type: 'score.set' } }]);
+    expect('meId' in saveLocal.mock.calls[0][0]).toBe(false);
+  });
 });
 
 describe('isPermanentSyncError', () => {

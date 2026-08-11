@@ -107,8 +107,14 @@ async function ensureMigrated() {
 }
 
 async function getCurrentUserId() {
-  const { data: { user } } = await supabase.auth.getUser();
-  return user?.id ?? null;
+  // getSession (local storage read), NOT getUser (a network round-trip that
+  // fails offline): the whole point of resolveMeIdForTournament is deriving
+  // "which player is me" with no connection, and a network-bound read here
+  // silently disabled it exactly when it was needed. The session's user id
+  // is good enough — identity derivation only compares ids, it never needs
+  // a server-verified user object.
+  const { data: { session } } = await supabase.auth.getSession();
+  return session?.user?.id ?? null;
 }
 
 // Derive the device-local meId from the signed-in auth user: if any player

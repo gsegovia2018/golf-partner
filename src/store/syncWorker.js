@@ -8,6 +8,7 @@ import { executeMutation } from './mutationWrites';
 import { applyPendingMutations, preserveLocalConflictState } from './mutate';
 import { upsertPlayer } from './libraryStore';
 import { isOnline, subscribeConnectivity } from '../lib/connectivity';
+import { runExclusiveForTournament } from './tournamentMutex';
 import { captureException, captureMessage } from '../lib/errorReporting';
 
 const BACKOFF_MS = [1000, 2000, 4000, 8000, 16000, 32000, 60000];
@@ -240,33 +241,50 @@ export async function drainTournament(tournamentId, entries) {
   // re-reconcile anyway). This shrinks the exposure window from a full
   // network round-trip to a couple of JS ticks.
   try {
-    const fresh = await fetchTournament(tournamentId);
-    if (fresh) {
-      // Snapshot local's CURRENT scoreEntries/scoreResolutions once, before
-      // the settle loop below — conflict state is derived from these synced
-      // entries elsewhere, not raised by this drain, and any resolve already
-      // cleared its winning value from local directly (mutate()
-      // saves locally before it ever reaches this drain). `fresh` and
-      // applyPendingMutations' replay never carry scoreEntries/
-      // scoreResolutions (see preserveLocalConflictState) so every pass below
-      // must re-stamp them back onto the freshly computed state or the
-      // reconcile save wipes them.
-      const localForConflicts = await readLocal(tournamentId);
-      const queuedForTournament = async () => (await syncQueue.all())
-        .filter((e) => e.tournamentId === tournamentId);
-      let snapshot = await queuedForTournament();
-      for (let pass = 0; pass < 3; pass++) {
-        const merged = preserveLocalConflictState(
-          applyPendingMutations(fresh, snapshot), localForConflicts,
-        );
-        await saveLocal(merged);
-        const latest = await queuedForTournament();
-        const stable = latest.length === snapshot.length
-          && latest.every((e, i) => e.id === snapshot[i].id);
-        if (stable) break;
-        snapshot = latest;
+    // Per-tournament lock across the FETCH as well as the saves — the same
+    // contract _fetchAndOverlay documents (tournamentStore.js): `fresh` is a
+    // snapshot of server state at fetch time and the loop below replaces
+    // local wholesale with it; unlocked, a snapshot taken before a realtime
+    // row (or a setMe pick, which also holds this lock now) would land after
+    // it and silently revert it.
+    await runExclusiveForTournament(tournamentId, async () => {
+      const fresh = await fetchTournament(tournamentId);
+      if (fresh) {
+        // Snapshot local's CURRENT scoreEntries/scoreResolutions once, before
+        // the settle loop below — conflict state is derived from these synced
+        // entries elsewhere, not raised by this drain, and any resolve already
+        // cleared its winning value from local directly (mutate()
+        // saves locally before it ever reaches this drain). `fresh` and
+        // applyPendingMutations' replay never carry scoreEntries/
+        // scoreResolutions (see preserveLocalConflictState) so every pass below
+        // must re-stamp them back onto the freshly computed state or the
+        // reconcile save wipes them.
+        const localForConflicts = await readLocal(tournamentId);
+        const queuedForTournament = async () => (await syncQueue.all())
+          .filter((e) => e.tournamentId === tournamentId);
+        let snapshot = await queuedForTournament();
+        for (let pass = 0; pass < 3; pass++) {
+          const merged = preserveLocalConflictState(
+            applyPendingMutations(fresh, snapshot), localForConflicts,
+          );
+          // meId is device-local and the server never returns it — without this
+          // re-stamp every reconcile saved a blob with the key ABSENT, wiping
+          // identity after each drained score batch for any player whose roster
+          // slot has no user_id link to re-derive it from ("Who are you?" mid
+          // round). Same rule as _overlayAndSave (tournamentStore.js): local
+          // wins, including an explicit null.
+          if (localForConflicts && 'meId' in localForConflicts) {
+            merged.meId = localForConflicts.meId;
+          }
+          await saveLocal(merged);
+          const latest = await queuedForTournament();
+          const stable = latest.length === snapshot.length
+            && latest.every((e, i) => e.id === snapshot[i].id);
+          if (stable) break;
+          snapshot = latest;
+        }
       }
-    }
+    });
   } catch (error) {
     // Swallow — worker retries next drain. Recorded (not silently dropped) so a
     // reconcile that never succeeds is visible rather than invisible.

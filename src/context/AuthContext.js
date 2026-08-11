@@ -1,7 +1,9 @@
 import React, { createContext, useCallback, useContext, useEffect, useRef, useState } from 'react';
-import { Platform } from 'react-native';
+import { AppState, Platform } from 'react-native';
 import * as Linking from 'expo-linking';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import { supabase } from '../lib/supabase';
+import { subscribeConnectivity } from '../lib/connectivity';
 import { parseRecoveryUrl, isResetPasswordUrl, isRecoveryRedirectType } from '../lib/passwordReset';
 import { stripRecoveryMarker } from '../lib/oauth';
 
@@ -18,9 +20,42 @@ export function AuthProvider({ children }) {
   // existed on this device.
   const [passwordRecovery, setPasswordRecovery] = useState(false);
 
+  // Session restore that survives being OFFLINE with an expired access
+  // token. In this auth-js version, getSession() on an expired token
+  // attempts a network refresh and, when that fails, resolves
+  // `{ session: null, error: AuthRetryableFetchError }` — even though
+  // _recoverAndRefresh deliberately KEPT the session (with its still-valid
+  // refresh token) in AsyncStorage precisely because the failure was
+  // retryable. Discarding that error treated "no signal" as "signed out"
+  // and bounced a signed-in user to the auth wall — on a golf course
+  // (backgrounded > 1h, token expired, no coverage) this was the NORMAL
+  // resume case, and downstream every roster-identity derivation lost
+  // `user.id` ("Who are you?"). On a retryable error, fall back to the
+  // stored session auth-js left on disk; a genuinely revoked session is
+  // REMOVED from storage by auth-js, so the fallback then correctly finds
+  // nothing and resolves to signed out.
+  const restoreSession = useCallback(async () => {
+    const { data: { session: s }, error } = await supabase.auth.getSession();
+    if (s || !error) { setSession(s ?? null); return; }
+    try {
+      const raw = await AsyncStorage.getItem(supabase.auth.storageKey);
+      const stored = raw ? JSON.parse(raw) : null;
+      // Functional update: never clobber a real session that a concurrent
+      // auth event (sign-in, refresh) established while we read storage.
+      setSession((prev) => prev ?? (stored?.user ? stored : null));
+    } catch (_) {
+      setSession((prev) => prev ?? null);
+    }
+  }, []);
+
   useEffect(() => {
-    supabase.auth.getSession().then(({ data: { session: s } }) => setSession(s ?? null));
+    restoreSession();
     const { data: { subscription } } = supabase.auth.onAuthStateChange((event, s) => {
+      // INITIAL_SESSION runs the same failable load as getSession(): offline
+      // with an expired token it reports null despite the session surviving
+      // on disk. restoreSession owns that case — only real events (SIGNED_IN,
+      // SIGNED_OUT, TOKEN_REFRESHED, ...) may drop the session to null.
+      if (event === 'INITIAL_SESSION' && !s) return;
       setSession(s ?? null);
       // Documented Supabase event for a completed recovery-link exchange.
       // Kept as a defensive/secondary signal alongside the URL-based
@@ -29,7 +64,22 @@ export function AuthProvider({ children }) {
       if (event === 'PASSWORD_RECOVERY') setPasswordRecovery(true);
     });
     return () => subscription.unsubscribe();
-  }, []);
+  }, [restoreSession]);
+
+  // The fallback above can leave a stale (expired-token) session in state,
+  // and auth-js on native never re-runs recovery on its own after a failed
+  // start (the visibility-driven re-recovery is browser-only). Re-drive
+  // getSession() — which refreshes when it can — whenever the app returns
+  // to the foreground or connectivity comes back.
+  useEffect(() => {
+    const sub = AppState.addEventListener('change', (state) => {
+      if (state === 'active') restoreSession();
+    });
+    const unsubscribe = subscribeConnectivity((online) => {
+      if (online) restoreSession();
+    });
+    return () => { sub.remove(); unsubscribe(); };
+  }, [restoreSession]);
 
   // Guards so a recovery `code` is exchanged at most once — `getInitialURL`
   // and the `url` event can both deliver the same cold-start deep link.

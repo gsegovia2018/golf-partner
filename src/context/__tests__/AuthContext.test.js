@@ -2,6 +2,7 @@ import React from 'react';
 import { render, waitFor, act } from '@testing-library/react-native';
 import { Text } from 'react-native';
 import * as Linking from 'expo-linking';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import { AuthProvider, useAuth } from '../AuthContext';
 import { supabase } from '../../lib/supabase';
 
@@ -15,6 +16,9 @@ jest.mock('../../lib/supabase', () => ({
       getSession: jest.fn(),
       onAuthStateChange: jest.fn(),
       exchangeCodeForSession: jest.fn(),
+      // The real client's persisted-session storage key — the offline
+      // fallback reads it directly from AsyncStorage.
+      storageKey: 'sb-test-auth-token',
     },
   },
 }));
@@ -128,5 +132,76 @@ describe('AuthProvider password recovery', () => {
     act(() => { getByText('clear').props.onPress(); });
 
     await waitFor(() => expect(getByText('no-recovery')).toBeTruthy());
+  });
+});
+
+// Renders the signed-in state so tests can observe the offline fallback.
+function SessionProbe() {
+  const { user, loading } = useAuth();
+  return <Text>{loading ? 'loading' : (user ? `user:${user.id}` : 'signed-out')}</Text>;
+}
+
+describe('AuthProvider offline session restore', () => {
+  let authStateCallback;
+
+  beforeEach(async () => {
+    jest.clearAllMocks();
+    await AsyncStorage.clear();
+    supabase.auth.onAuthStateChange.mockImplementation((cb) => {
+      authStateCallback = cb;
+      return { data: { subscription: { unsubscribe: jest.fn() } } };
+    });
+    Linking.getInitialURL.mockResolvedValue(null);
+  });
+
+  test('a retryable getSession failure falls back to the session auth-js kept on disk', async () => {
+    // Offline cold start with an expired access token: getSession() resolves
+    // { session: null, error: AuthRetryableFetchError } while the session —
+    // with its still-valid refresh token — stays in AsyncStorage. Treating
+    // that as signed-out bounced a signed-in user to the auth wall on the tee.
+    supabase.auth.getSession.mockResolvedValue({
+      data: { session: null }, error: new Error('network failure'),
+    });
+    await AsyncStorage.setItem(
+      'sb-test-auth-token', JSON.stringify({ user: { id: 'u7' }, access_token: 'stale' }),
+    );
+
+    const { getByText } = render(<AuthProvider><SessionProbe /></AuthProvider>);
+    await waitFor(() => expect(getByText('user:u7')).toBeTruthy());
+  });
+
+  test('a null session with NO error is a genuine signed-out — no fallback', async () => {
+    supabase.auth.getSession.mockResolvedValue({ data: { session: null } });
+    // Even with a (stale) blob on disk, no-error means auth-js resolved the
+    // state authoritatively; a revoked session is removed from storage by
+    // auth-js itself, so trusting the verdict here is what keeps sign-out real.
+    await AsyncStorage.setItem(
+      'sb-test-auth-token', JSON.stringify({ user: { id: 'u7' } }),
+    );
+
+    const { getByText } = render(<AuthProvider><SessionProbe /></AuthProvider>);
+    await waitFor(() => expect(getByText('signed-out')).toBeTruthy());
+  });
+
+  test('INITIAL_SESSION with a null session does not clobber the fallback', async () => {
+    // _emitInitialSession runs the same failable load as getSession(), so
+    // offline it reports null despite the on-disk session. Only real events
+    // may drop the session.
+    supabase.auth.getSession.mockResolvedValue({
+      data: { session: null }, error: new Error('network failure'),
+    });
+    await AsyncStorage.setItem(
+      'sb-test-auth-token', JSON.stringify({ user: { id: 'u7' } }),
+    );
+
+    const { getByText } = render(<AuthProvider><SessionProbe /></AuthProvider>);
+    await waitFor(() => expect(getByText('user:u7')).toBeTruthy());
+
+    act(() => { authStateCallback('INITIAL_SESSION', null); });
+    await waitFor(() => expect(getByText('user:u7')).toBeTruthy());
+
+    // A real SIGNED_OUT still signs out.
+    act(() => { authStateCallback('SIGNED_OUT', null); });
+    await waitFor(() => expect(getByText('signed-out')).toBeTruthy());
   });
 });

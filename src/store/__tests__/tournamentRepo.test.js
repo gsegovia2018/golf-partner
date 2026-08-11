@@ -337,14 +337,18 @@ describe('upsertPlayer', () => {
     expect(call.ops[0].opts).toEqual({ onConflict: 'tournament_id,player_id' });
   });
 
-  test('a player with no user_id upserts user_id as null', async () => {
+  test('a player with no user_id OMITS the column so a stale blob cannot erase a server claim', async () => {
     const { upsertPlayer } = require('../tournamentRepo');
     const player = { id: 'p1', name: 'Ann' };
 
     await upsertPlayer('t1', player, 0);
 
+    // PostgREST builds the conflict-update SET list from the payload keys:
+    // an absent key leaves game_players.user_id untouched, while an explicit
+    // null would erase a claim written by claim_tournament_player after this
+    // device last fetched. Un-claiming is only release_tournament_player's job.
     const call = lastFromCall('game_players');
-    expect(call.ops[0].rows.user_id).toBeNull();
+    expect('user_id' in call.ops[0].rows).toBe(false);
   });
 });
 
