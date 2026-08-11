@@ -33,7 +33,7 @@ function ShotsTab({ stats, onInfo, targetHandicap, onChangeTarget }) {
     [targetHandicap]
   );
   const {
-    shots, puttingTarget, approachTarget,
+    shots, puttingTarget, approachTarget, approachTendency,
   } = stats;
 
   const hasAnyShotData = shots.hasData || puttingTarget?.hasData || approachTarget?.hasData
@@ -55,6 +55,7 @@ function ShotsTab({ stats, onInfo, targetHandicap, onChangeTarget }) {
   const scoringSummary = makeScoringSummary(scoringRows);
   const drivingTargetRows = makeDrivingTargetRows(shots, shotBenchmark, stats.driveDistance, units);
   const approachTargetRows = approachTarget?.hasData ? makeApproachTargetRows(approachTarget) : [];
+  const approachTendencyRows = approachTendency?.hasData ? makeApproachTendencyRows(approachTendency) : [];
   const puttingVolumeRows = shots.hasData ? makePuttingVolumeRows(shots, shotBenchmark) : [];
   const puttingTargetRows = puttingTarget?.hasData ? makePuttingTargetRows(puttingTarget) : [];
   const girRows = shots.hasData ? makeGirRows(shots, shotBenchmark) : [];
@@ -127,7 +128,7 @@ function ShotsTab({ stats, onInfo, targetHandicap, onChangeTarget }) {
         </SectionCard>
       ) : null}
 
-      {(approachTargetRows.length || shots.hasData) ? (
+      {(approachTargetRows.length || approachTendencyRows.length || shots.hasData) ? (
         <SectionCard title="Approach vs target" infoKey="sgApproach" onInfo={onInfo}>
           {approachTargetRows.length ? (
             <ShotRowsBlock title="Approach distance SG" rows={approachTargetRows} s={s} first />
@@ -139,6 +140,15 @@ function ShotsTab({ stats, onInfo, targetHandicap, onChangeTarget }) {
               rows={girRows}
               s={s}
               first={!approachTargetRows.length}
+            />
+          ) : null}
+
+          {approachTendencyRows.length ? (
+            <ShotRowsBlock
+              title="Miss tendency"
+              rows={approachTendencyRows}
+              s={s}
+              first={!approachTargetRows.length && !girRows.length}
             />
           ) : null}
         </SectionCard>
@@ -541,6 +551,50 @@ function makeApproachTargetRows(approachTarget) {
       tone: toneFromSigned(row.avgSg, { sample: row.holes, minSample: 6 }),
     };
   }).filter(Boolean);
+}
+
+// Miss-tendency rows: green-hit rate, the short/long/left/right split among
+// directional misses, and the greenside-bunker rate. Descriptive (no
+// benchmark target) — bars use the absolute 'pct' scale and stay neutral in
+// tone, since a miss direction is a pattern to learn from, not good/bad.
+function makeApproachTendencyRows(t) {
+  const rows = [];
+  const pctRow = (key, label, value, secondary) => ({
+    key,
+    label,
+    value: value == null ? '—' : `${value}%`,
+    magnitude: isNumber(value) ? value : null,
+    barGroup: 'pct',
+    secondary,
+    tone: 'neutral',
+    dim: value == null,
+  });
+
+  rows.push(pctRow(
+    'greensHit', 'Greens hit', t.greenRate,
+    `${t.greens}/${t.attempts} approaches`,
+  ));
+
+  if (t.directionKnown > 0) {
+    const dir = t.byDirection;
+    [
+      ['missShort', 'Missed short', t.shortRate, dir.short],
+      ['missLong', 'Missed long', t.longRate, dir.long],
+      ['missLeft', 'Missed left', t.leftRate, dir.left],
+      ['missRight', 'Missed right', t.rightRate, dir.right],
+    ].forEach(([key, label, value, count]) => {
+      rows.push(pctRow(key, label, value, `${count} of ${t.directionKnown} directional misses`));
+    });
+  }
+
+  if (t.misses > 0) {
+    rows.push(pctRow(
+      'missBunker', 'Into a bunker', t.bunkerRate,
+      `${t.bunker} of ${t.misses} misses`,
+    ));
+  }
+
+  return rows;
 }
 
 function makeGirRows(shots, shotBenchmark) {

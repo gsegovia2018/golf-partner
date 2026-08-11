@@ -1,6 +1,6 @@
 import React, { useMemo } from 'react';
 import { View, Text, TouchableOpacity } from 'react-native';
-import { Feather } from '@expo/vector-icons';
+import { Feather, MaterialCommunityIcons } from '@expo/vector-icons';
 import { useTheme } from '../../theme/ThemeContext';
 import { makeScorecardStyles } from './styles';
 import { ShotDetailExplainer } from '../ShotDetailExplainer';
@@ -15,6 +15,7 @@ import {
   DRIVE_DIST_BUCKETS, DRIVE_DIST_LABELS, DRIVE_DIST_LABELS_YD,
   DRIVE_MISS_LIES, DRIVE_MISS_LIE_LABELS,
   APPROACH_LIES, APPROACH_LIE_LABELS,
+  APPROACH_FINISH_ORDER, APPROACH_FINISH_META,
   TEE_CLUBS, TEE_CLUB_LABELS,
 } from './constants';
 
@@ -129,11 +130,43 @@ function LieChipRow({ label, a11yPrefix, options, labels, effectiveValue, onSele
   );
 }
 
-function ApproachResultRow({ value, onChange, theme, s, isLast = false }) {
-  const options = [
-    { key: 'green', label: 'On green' },
-    { key: 'miss', label: 'Missed green' },
-  ];
+// Icon row (mirrors the drive row) for where a regulation approach finished:
+// the green center, one of four miss directions, or a greenside bunker.
+// Selection rules: `green` is exclusive (clears direction + bunker); the four
+// directions are single-select among themselves; `bunker` toggles on top of a
+// direction or stands alone. `approachResult` is kept in sync ('green' vs
+// 'miss' vs null) so the stats engine and downstream rows read it unchanged.
+function ApproachFinishRow({ detail, onChange, theme, s, isLast = false }) {
+  const dir = detail.approachMiss ?? null;
+  const bunker = !!detail.approachBunker;
+  const onGreen = detail.approachResult === 'green';
+
+  const activeFor = (key) => (key === 'green'
+    ? onGreen
+    : key === 'bunker'
+      ? bunker
+      : dir === key && !onGreen);
+
+  // A miss is anything with a direction or a bunker; otherwise the cell clears.
+  const missResult = (nextDir, nextBunker) => (nextDir || nextBunker ? 'miss' : null);
+
+  const select = (key) => {
+    if (key === 'green') {
+      onChange(onGreen
+        ? { approachResult: null, approachMiss: null, approachBunker: false }
+        : { approachResult: 'green', approachMiss: null, approachBunker: false });
+      return;
+    }
+    if (key === 'bunker') {
+      const nextBunker = !bunker;
+      onChange({ approachBunker: nextBunker, approachResult: missResult(dir, nextBunker) });
+      return;
+    }
+    // A direction: single-select, and it clears an on-green selection.
+    const nextDir = dir === key && !onGreen ? null : key;
+    onChange({ approachMiss: nextDir, approachResult: missResult(nextDir, bunker) });
+  };
+
   return (
     <View style={[s.shotRow, s.shotRowStacked, isLast && s.shotRowLast]}>
       <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
@@ -141,26 +174,30 @@ function ApproachResultRow({ value, onChange, theme, s, isLast = false }) {
         <ShotDetailExplainer
           rowKey="approachResult"
           title="Approach result"
-          body="Whether the regulation approach finished on the green or missed it. This keeps approach shots separate from short-game recovery shots."
+          body="Where the regulation approach finished: on the green, or which way it missed. Pick a direction and add Bunker if it caught sand. This keeps approach shots separate from short-game recovery shots and builds your miss tendency."
         />
       </View>
-      <View style={[s.driveBtns, s.driveBtnsStacked]}>
-        {options.map(({ key, label }) => {
-          const active = value === key;
+      <View style={[s.driveBtns, s.driveBtnsStacked, s.approachFinishBtns]}>
+        {APPROACH_FINISH_ORDER.map((key) => {
+          const meta = APPROACH_FINISH_META[key];
+          const active = activeFor(key);
+          const color = active ? theme.text.inverse : theme.text.secondary;
           return (
             <TouchableOpacity
               key={key}
-              style={[s.outcomeChip, active && s.outcomeChipActive]}
-              onPress={() => onChange({ approachResult: active ? null : key })}
+              style={[s.driveCircle, active && s.driveCircleActive]}
+              onPress={() => select(key)}
               activeOpacity={0.7}
+              hitSlop={5}
               accessibilityRole="button"
-              accessibilityLabel={`Approach result ${label}`}
               accessibilityState={{ selected: active }}
+              accessibilityLabel={`Approach finish ${meta.label}`}
             >
-              <Text style={[
-                s.outcomeChipLabel,
-                active && { color: theme.text.inverse },
-              ]}>{label}</Text>
+              {meta.set === 'material-community' ? (
+                <MaterialCommunityIcons name={meta.icon} size={18} color={color} />
+              ) : (
+                <Feather name={meta.icon} size={18} color={color} />
+              )}
             </TouchableOpacity>
           );
         })}
@@ -393,7 +430,9 @@ export function ShotDetailPanel({ hole, detail, onChange, strokes, statGroups, t
           labels={approachLabels}
           onSelect={(key) => onChange({
             approachBucket: key,
-            ...(key == null ? { approachResult: null, approachLie: null } : {}),
+            ...(key == null ? {
+              approachResult: null, approachMiss: null, approachBunker: false, approachLie: null,
+            } : {}),
           })}
           theme={theme}
           s={s}
@@ -411,8 +450,8 @@ export function ShotDetailPanel({ hole, detail, onChange, strokes, statGroups, t
         />
       )}
       {showApproachExtras && (
-        <ApproachResultRow
-          value={d.approachResult}
+        <ApproachFinishRow
+          detail={d}
           onChange={onChange}
           theme={theme}
           s={s}

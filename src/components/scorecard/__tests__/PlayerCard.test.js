@@ -68,7 +68,7 @@ describe('PlayerCard layout', () => {
     const scorePressable = getByLabelText('Strokes on hole 1');
     const scoreRowStyle = findStyledAncestor(
       scorePressable,
-      (style) => style.flexDirection === 'row' && style.gap === 16
+      (style) => style.flexDirection === 'row' && style.gap === 12
     );
 
     expect(scoreRowStyle.justifyContent).toBe('center');

@@ -148,6 +148,10 @@ export function useGpsDistances(courseName, holeNumber) {
     available: !!geometry
       && (gpsEnabled ? (!denied || resolved.source === 'tee') : resolved.source === 'tee')
       && !(fix != null && resolved.distances == null),
+    // True whenever the course has mapped geometry at all — independent of the
+    // live fix/permission state that gates `available`. Shot-marking UI keys
+    // off this: with no map there is nowhere to place a shot.
+    hasMap: hasGeometry,
     distances: resolved.distances,
     source: resolved.source, // 'gps' | 'tee' — the header renders FROM TEE for 'tee'
     fixState, // 'ok' | 'acquiring' | 'denied' | 'disabled' — GPS health for the status line

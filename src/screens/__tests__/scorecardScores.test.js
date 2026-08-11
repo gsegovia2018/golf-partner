@@ -59,14 +59,19 @@ describe('mergeShotDetails', () => {
 });
 
 describe('clampEnteredScore (screen-level score entry clamp)', () => {
-  // Par-4, SI-1 hole. Scratch pickup ceiling = par + 2 + 0 extra = 6.
+  // Par-4, SI-1 hole. Scratch pickup = par + 2 + 0 extra = 6; ceiling = pickup
+  // + 6 headroom = 12.
   const round = (playerHandicaps = {}) => ({
     holes: [{ number: 3, par: 4, strokeIndex: 1 }],
     playerHandicaps,
   });
 
-  test('clamps an over-entered score (44) down to the pickup max', () => {
-    expect(clampEnteredScore(round(), [{ id: 'p1', handicap: 0 }], 'p1', 3, 44)).toBe(6);
+  test('clamps an over-entered score (44) down to pickup + headroom', () => {
+    expect(clampEnteredScore(round(), [{ id: 'p1', handicap: 0 }], 'p1', 3, 44)).toBe(12);
+  });
+
+  test('records a blow-up score above the pickup ball number', () => {
+    expect(clampEnteredScore(round(), [{ id: 'p1', handicap: 0 }], 'p1', 3, 9)).toBe(9);
   });
 
   test('leaves a normal in-range score unchanged', () => {
@@ -85,19 +90,19 @@ describe('clampEnteredScore (screen-level score entry clamp)', () => {
   // player (legacy / pre-normalization round, or official members whose
   // handicap lives only on the player object), the clamp must resolve the
   // handicap from players[].handicap — NOT default to scratch (0). A base
-  // handicap of 18 gives +1 extra shot on SI 1, so the pickup ceiling is 7,
-  // and a legitimately high "44" must clamp to 7, not be over-clamped to 6.
+  // handicap of 18 gives +1 extra shot on SI 1, so pickup is 7 and the ceiling
+  // is 7 + 6 = 13 — a "44" must clamp to 13, not the scratch ceiling of 12.
   test('uses the player-level handicap fallback when the round map has no entry', () => {
-    expect(clampEnteredScore(round({}), [{ id: 'p1', handicap: 18 }], 'p1', 3, 44)).toBe(7);
+    expect(clampEnteredScore(round({}), [{ id: 'p1', handicap: 18 }], 'p1', 3, 44)).toBe(13);
   });
 
   test('does not over-clamp to the scratch ceiling when the round map is empty', () => {
-    expect(clampEnteredScore(round({}), [{ id: 'p1', handicap: 18 }], 'p1', 3, 44)).not.toBe(6);
+    expect(clampEnteredScore(round({}), [{ id: 'p1', handicap: 18 }], 'p1', 3, 44)).not.toBe(12);
   });
 
   test('prefers the round per-player handicap over the player base when present', () => {
-    // Round override 0 (scratch) even though base is 18 → scratch ceiling 6.
-    expect(clampEnteredScore(round({ p1: 0 }), [{ id: 'p1', handicap: 18 }], 'p1', 3, 44)).toBe(6);
+    // Round override 0 (scratch) even though base is 18 → scratch ceiling 12.
+    expect(clampEnteredScore(round({ p1: 0 }), [{ id: 'p1', handicap: 18 }], 'p1', 3, 44)).toBe(12);
   });
 });
 

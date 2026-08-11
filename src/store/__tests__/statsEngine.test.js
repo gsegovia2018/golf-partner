@@ -1,4 +1,4 @@
-import { teeShotImpact, lagPuttingQuality, sandSaveRate, upAndDownRate, bunkerVisits, sgPutting, sgAroundGreen, sgApproach, sgPenalties, sgOffTheTee, sgTotal, sgSeason, sgReconciliation, driveScoreImpact, puttDeepDive, approachScoreImpact, puttingTargetGaps, approachTargetGaps, pairPerformance, shotStats, playersWithShotData, tournamentHighlights, withoutScrambleScores, playerAvgStableford, pickupChampion, hallOfShame, chaosHoles, skinsLeaderboard, playerStreaks, bounceBackRate, strokeIndexAccuracy, bestWorstHoles, holeDifficultyMap, collectiveExtremes, pairConfigMatrix, matchPlayResults, pairHoleWins, anchor, par3Heartbreak, playingToHandicap, hotStretch, nemesisEncore, pairCoverage, girByDriveResult, courseDNA, warmupVsClosing, driveLieFromDetail, driveLieBreakdown, driveDistanceAverage } from '../statsEngine';
+import { teeShotImpact, lagPuttingQuality, sandSaveRate, upAndDownRate, bunkerVisits, sgPutting, sgAroundGreen, sgApproach, sgPenalties, sgOffTheTee, sgTotal, sgSeason, sgReconciliation, driveScoreImpact, puttDeepDive, approachScoreImpact, puttingTargetGaps, approachTargetGaps, pairPerformance, shotStats, playersWithShotData, tournamentHighlights, withoutScrambleScores, playerAvgStableford, pickupChampion, hallOfShame, chaosHoles, skinsLeaderboard, playerStreaks, bounceBackRate, strokeIndexAccuracy, bestWorstHoles, holeDifficultyMap, collectiveExtremes, pairConfigMatrix, matchPlayResults, pairHoleWins, anchor, par3Heartbreak, playingToHandicap, hotStretch, nemesisEncore, pairCoverage, girByDriveResult, courseDNA, warmupVsClosing, driveLieFromDetail, driveLieBreakdown, driveDistanceAverage, approachMissTendency } from '../statsEngine';
 import { mixedModeTournament, buildTournament } from './statsFixtures';
 
 // 18 par-4 holes, strokeIndex = hole number.
@@ -800,6 +800,59 @@ describe('sgApproach', () => {
       [{ putts: 2, sandShots: 0, approachBucket: '100-150', approachResult: 'miss', firstPuttBucket: '2-3' }],
     );
     expect(sgApproach(round, 'me').perHole[0]).toBeCloseTo(-0.52, 1);
+  });
+  test('a greenside-bunker miss is scored from the sand node — harsher than a grass miss', () => {
+    const grass = makeRound(
+      [{ par: 4, strokes: 5 }],
+      [{ putts: 2, sandShots: 0, approachBucket: '100-150', approachResult: 'miss', firstPuttBucket: '2-3' }],
+    );
+    const bunker = makeRound(
+      [{ par: 4, strokes: 5 }],
+      [{ putts: 2, sandShots: 0, approachBucket: '100-150', approachResult: 'miss', approachBunker: true, firstPuttBucket: '2-3' }],
+    );
+    // Sand end-node expects more strokes than greenside, so SG (start - end - 1)
+    // is lower for the bunker miss even without a logged sand shot.
+    expect(sgApproach(bunker, 'me').perHole[0])
+      .toBeLessThan(sgApproach(grass, 'me').perHole[0]);
+  });
+});
+
+describe('approachMissTendency', () => {
+  test('splits greens, miss directions and bunker rate over eligible approaches', () => {
+    const t = {
+      rounds: [makeRound(
+        [
+          { par: 4, strokes: 4 },
+          { par: 4, strokes: 5 },
+          { par: 4, strokes: 6 },
+          { par: 3, strokes: 4 },   // par 3 → ignored
+          { par: 4, strokes: 5 },   // no bucket → ignored
+        ],
+        [
+          { approachBucket: '100-150', approachResult: 'green' },
+          { approachBucket: '100-150', approachResult: 'miss', approachMiss: 'left' },
+          { approachBucket: '100-150', approachResult: 'miss', approachMiss: 'short', approachBunker: true },
+          { approachBucket: '100-150', approachResult: 'miss', approachMiss: 'long' },
+          { approachResult: 'miss', approachMiss: 'right' },
+        ],
+      )],
+    };
+    const r = approachMissTendency(t, 'me');
+    expect(r.hasData).toBe(true);
+    expect(r.attempts).toBe(3);
+    expect(r.greens).toBe(1);
+    expect(r.greenRate).toBe(33);
+    expect(r.misses).toBe(2);
+    expect(r.byDirection).toEqual({ long: 0, short: 1, left: 1, right: 0 });
+    expect(r.directionKnown).toBe(2);
+    expect(r.shortRate).toBe(50);
+    expect(r.leftRate).toBe(50);
+    expect(r.bunker).toBe(1);
+    expect(r.bunkerRate).toBe(50);
+  });
+  test('no eligible approaches → hasData false', () => {
+    const t = { rounds: [makeRound([{ par: 3, strokes: 3 }], [{ approachBucket: '100-150', approachResult: 'miss' }])] };
+    expect(approachMissTendency(t, 'me').hasData).toBe(false);
   });
 });
 

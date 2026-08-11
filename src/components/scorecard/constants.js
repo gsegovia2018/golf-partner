@@ -18,7 +18,9 @@ export const DEFAULT_SHOT = {
   recoveryOutcome: null,        // 'up-and-down' | 'sand-save' | 'none' | null
   firstPuttBucket: null,        // '0-1' | '1-2' | '2-3' | '3-6' | '6+' | null
   approachBucket: null,         // '0-50' | '50-100' | '100-150' | '150-200' | '200+' | null
-  approachResult: null,         // 'green' | 'miss' | null
+  approachResult: null,         // 'green' | 'miss' | null (derived from the finish grid: green center = 'green', any dir/bunker = 'miss')
+  approachMiss: null,           // 'long' | 'short' | 'left' | 'right' | null — direction a missed green finished (single-select)
+  approachBunker: false,        // true when the miss finished in a greenside bunker (combines with a direction, or stands alone)
   approachLie: null,            // 'fairway' | 'rough' | 'sand' | null (null = drive's lie on par 4s, else fairway)
 };
 
@@ -27,7 +29,7 @@ export const DEFAULT_SHOT = {
 export const STAT_GROUP_FIELDS = {
   putting: ['putts', 'firstPuttBucket'],
   teeShot: ['teeClub', 'drive', 'driveLie', 'driveDistBucket'],
-  approach: ['approachBucket', 'approachResult', 'approachLie'],
+  approach: ['approachBucket', 'approachResult', 'approachMiss', 'approachBunker', 'approachLie'],
   shortGame: ['sandShots', 'recoveryOutcome'],
   penalties: ['teePenalties', 'otherPenalties'],
 };
@@ -46,6 +48,22 @@ export const DRIVE_META = {
   right: { label: 'Right', icon: 'arrow-up-right' },
   short: { label: 'Short', icon: 'arrow-down' },
   super: { label: 'Super', icon: 'star' },
+};
+
+// Where a regulation approach finished, as an icon row mirroring the drive
+// row. `green` (center) is the on-green hit and is mutually exclusive with
+// everything else. The four directions are single-select among themselves;
+// `bunker` is a separate toggle that combines with a direction (or stands
+// alone). Icons come from Feather except `bunker`, which uses
+// MaterialCommunityIcons — see ShotDetailPanel's APPROACH_FINISH_ICON_SET.
+export const APPROACH_FINISH_ORDER = ['left', 'long', 'green', 'short', 'right', 'bunker'];
+export const APPROACH_FINISH_META = {
+  green: { label: 'On green', icon: 'disc', set: 'feather' },
+  long: { label: 'Long', icon: 'arrow-up', set: 'feather' },
+  short: { label: 'Short', icon: 'arrow-down', set: 'feather' },
+  left: { label: 'Left', icon: 'arrow-left', set: 'feather' },
+  right: { label: 'Right', icon: 'arrow-right', set: 'feather' },
+  bunker: { label: 'Bunker', icon: 'beach', set: 'material-community' },
 };
 
 // Labels omit the unit; the section's "metres" hint already states it.

@@ -335,10 +335,15 @@ describe('clampScoreInput', () => {
     expect(clampScoreInput(4, 4, 0, 1)).toBe(4);
   });
 
-  it('clamps an over-entered score (44 meant 4) down to the pickup max', () => {
-    // pickupStrokes(4, 0, 1) === 6 (par 4 + 2, no extra shots).
-    expect(clampScoreInput(44, 4, 0, 1)).toBe(pickupStrokes(4, 0, 1));
-    expect(clampScoreInput(44, 4, 0, 1)).toBe(6);
+  it('clamps an over-entered score (44 meant 4) down to pickup + headroom', () => {
+    // pickupStrokes(4, 0, 1) === 6 (par 4 + 2, no extra shots); +6 headroom => 12.
+    expect(clampScoreInput(44, 4, 0, 1)).toBe(pickupStrokes(4, 0, 1) + 6);
+    expect(clampScoreInput(44, 4, 0, 1)).toBe(12);
+  });
+
+  it('allows recording strokes above the pickup ball number', () => {
+    // pickup is 6; a 9 (blow-up hole) is preserved, not clamped to pickup.
+    expect(clampScoreInput(9, 4, 0, 1)).toBe(9);
   });
 
   it('clamps a negative entry up to 1', () => {
@@ -354,12 +359,9 @@ describe('clampScoreInput', () => {
     expect(clampScoreInput(undefined, 4, 0, 1)).toBeUndefined();
   });
 
-  it('raises the pickup ceiling when the player has extra shots on this hole', () => {
-    // pickupStrokes(4, 18, 1) === 7 (par 4 + 2 + 1 extra shot on SI 1).
-    expect(clampScoreInput(44, 4, 18, 1)).toBe(7);
-    // A value between the no-extra ceiling (6) and the with-extra ceiling (7)
-    // is preserved rather than clamped down further.
-    expect(clampScoreInput(7, 4, 18, 1)).toBe(7);
+  it('raises the ceiling when the player has extra shots on this hole', () => {
+    // pickupStrokes(4, 18, 1) === 7 (par 4 + 2 + 1 extra shot on SI 1); +6 => 13.
+    expect(clampScoreInput(44, 4, 18, 1)).toBe(13);
   });
 });
 

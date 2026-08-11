@@ -202,7 +202,7 @@ describe('ScorecardScreen debounced score saves', () => {
     const plus = await findByLabelText('Score plus');
 
     // Five taps well inside the debounce window: 4 (par) → 5 → 6 → 7 → 8,
-    // clamped to the pickup ceiling.
+    // within the recordable ceiling (pickup + headroom).
     for (let i = 0; i < 5; i++) fireEvent.press(plus);
 
     await settle(600);

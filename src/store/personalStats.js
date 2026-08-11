@@ -15,7 +15,7 @@ import {
   lagPuttingQuality, sandSaveRate, upAndDownRate, bunkerVisits,
   sgSeason, sgReconciliation, driveScoreImpact, approachScoreImpact, puttDeepDive,
   puttingTargetGaps, approachTargetGaps, courseDNA, playerStreaks,
-  driveLieBreakdown, driveDistanceAverage,
+  driveLieBreakdown, driveDistanceAverage, approachMissTendency,
 } from './statsEngine';
 import { buildCoachInsights } from './coachInsights';
 import { buildStrategyTips } from './coachStrategy';
@@ -771,6 +771,7 @@ export function computeMyStats(selectedRounds, { n = 5, targetHandicap = 0, base
     teeShot: teeShotImpact(synthetic, CANON_ID),
     driveImpact,
     approachImpact,
+    approachTendency: approachMissTendency(synthetic, CANON_ID),
     puttDive,
     puttingTarget,
     approachTarget,

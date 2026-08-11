@@ -2200,6 +2200,53 @@ export function approachScoreImpact(tournament, playerId) {
   return { hasData: totalHoles > 0, totalHoles, buckets: out };
 }
 
+// ── Approach miss tendency (dispersion) ──
+// Over holes where the player logged an approach finish (non-par-3, with an
+// approachBucket and an explicit green/miss result), how the ball dispersed:
+// the green-hit rate, and among misses the short/long/left/right split plus
+// the greenside-bunker rate. Powers the miss-tendency readout — a coaching
+// cue for aim and club selection, independent of strokes gained.
+export function approachMissTendency(tournament, playerId) {
+  let attempts = 0;
+  let greens = 0;
+  let misses = 0;
+  let bunker = 0;
+  const dir = { long: 0, short: 0, left: 0, right: 0 };
+  (tournament.rounds || []).forEach((round) => {
+    const byHole = round.shotDetails?.[playerId];
+    if (!byHole || !round.scores?.[playerId]) return;
+    (round.holes || []).forEach((hole) => {
+      if (hole.par === 3) return;
+      const d = byHole[hole.number];
+      if (!d || !d.approachBucket) return;
+      if (d.approachResult !== 'green' && d.approachResult !== 'miss') return;
+      attempts += 1;
+      if (d.approachResult === 'green') { greens += 1; return; }
+      misses += 1;
+      if (d.approachBunker) bunker += 1;
+      if (dir[d.approachMiss] != null) dir[d.approachMiss] += 1;
+    });
+  });
+  const pct = (num, den) => (den > 0 ? Math.round((num / den) * 100) : null);
+  const directionKnown = dir.long + dir.short + dir.left + dir.right;
+  return {
+    hasData: attempts > 0,
+    attempts,
+    greens,
+    greenRate: pct(greens, attempts),
+    misses,
+    bunker,
+    bunkerRate: pct(bunker, misses),
+    byDirection: dir,
+    directionKnown,
+    // Split among misses with a known direction — the coaching signal.
+    shortRate: pct(dir.short, directionKnown),
+    longRate: pct(dir.long, directionKnown),
+    leftRate: pct(dir.left, directionKnown),
+    rightRate: pct(dir.right, directionKnown),
+  };
+}
+
 // ── Putt deep-dive ──
 // Finer-grained putting metrics for one player: 2-putt rate, avg putts on
 // GIR vs non-GIR holes, avg putts by par 3 / 4 / 5, and the 1-putt save
@@ -2434,6 +2481,14 @@ export function bunkerVisits(rounds, playerId) {
 // and non-sand lies.
 const AROUND_GREEN_START_DISTANCE = 20;
 
+// Recovery lie after a missed green. A greenside bunker (either flagged
+// directly via the approach-finish grid, or implied by a logged sand shot)
+// starts from the harder `sand` baseline; everything else is a normal
+// greenside chip/pitch.
+function missRecoveryLie(d) {
+  return (d.approachBunker || (d.sandShots ?? 0) >= 1) ? 'sand' : 'greenside';
+}
+
 function approachEndState(d, { strokes, par, targetHandicap }) {
   if (d.approachResult === 'green') {
     if (d.putts === 0) return { end: 0, green: true };
@@ -2443,8 +2498,7 @@ function approachEndState(d, { strokes, par, targetHandicap }) {
   }
 
   if (d.approachResult === 'miss') {
-    const lie = (d.sandShots ?? 0) >= 1 ? 'sand' : 'greenside';
-    const end = expectedStrokes(lie, AROUND_GREEN_START_DISTANCE, targetHandicap);
+    const end = expectedStrokes(missRecoveryLie(d), AROUND_GREEN_START_DISTANCE, targetHandicap);
     return end == null ? null : { end, green: false };
   }
 
@@ -2457,8 +2511,7 @@ function approachEndState(d, { strokes, par, targetHandicap }) {
     return end == null ? null : { end, green: true };
   }
   if (gir === false) {
-    const lie = (d.sandShots ?? 0) >= 1 ? 'sand' : 'greenside';
-    const end = expectedStrokes(lie, AROUND_GREEN_START_DISTANCE, targetHandicap);
+    const end = expectedStrokes(missRecoveryLie(d), AROUND_GREEN_START_DISTANCE, targetHandicap);
     return end == null ? null : { end, green: false };
   }
   return null;
@@ -2479,7 +2532,7 @@ export function sgAroundGreen(round, playerId, targetHandicap = 0) {
       const gir = isGIR({ strokes, putts: d.putts, par: hole.par });
       if (gir !== false) return null;
     }
-    const lie = (d.sandShots ?? 0) >= 1 ? 'sand' : 'greenside';
+    const lie = missRecoveryLie(d);
     const start = expectedStrokes(lie, AROUND_GREEN_START_DISTANCE, targetHandicap);
     let end;
     if (d.putts === 0) {

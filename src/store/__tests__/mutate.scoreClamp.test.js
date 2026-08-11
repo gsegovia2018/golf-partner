@@ -33,12 +33,20 @@ const tournamentWithHole = (playerHandicaps = {}) => ({
 
 beforeEach(() => jest.clearAllMocks());
 
-describe('score.set clamps to [1, pickup] in the store', () => {
-  it('clamps an over-entered score (44 meant 4) down to the pickup max', async () => {
+describe('score.set clamps to [1, pickup + headroom] in the store', () => {
+  it('clamps an over-entered score (44 meant 4) down to pickup + headroom', async () => {
     const t = await mutate(tournamentWithHole(), {
       type: 'score.set', roundId: 'r1', playerId: 'p1', hole: 3, value: 44, authorId: 'p1',
     });
-    expect(t.rounds[0].scores.p1[3]).toBe(6);
+    // pickup 6 + 6 headroom = 12.
+    expect(t.rounds[0].scores.p1[3]).toBe(12);
+  });
+
+  it('records a blow-up score above the pickup ball number', async () => {
+    const t = await mutate(tournamentWithHole(), {
+      type: 'score.set', roundId: 'r1', playerId: 'p1', hole: 3, value: 9, authorId: 'p1',
+    });
+    expect(t.rounds[0].scores.p1[3]).toBe(9);
   });
 
   it('clamps a negative entry up to 1', async () => {
@@ -76,25 +84,26 @@ describe('score.set clamps to [1, pickup] in the store', () => {
     expect(t.rounds[0].scores.p1?.[3]).toBeUndefined();
   });
 
-  it('raises the pickup ceiling when the player has extra shots on this hole', async () => {
-    // handicap 18 on SI 1 => +1 extra shot => pickup = 4 + 2 + 1 = 7.
+  it('raises the ceiling when the player has extra shots on this hole', async () => {
+    // handicap 18 on SI 1 => +1 extra shot => pickup = 4 + 2 + 1 = 7; +6 => 13.
     const t = await mutate(tournamentWithHole({ p1: 18 }), {
       type: 'score.set', roundId: 'r1', playerId: 'p1', hole: 3, value: 44, authorId: 'p1',
     });
-    expect(t.rounds[0].scores.p1[3]).toBe(7);
+    expect(t.rounds[0].scores.p1[3]).toBe(13);
   });
 
   it('uses the player-level handicap fallback when the round map has no entry (legacy round)', async () => {
     // round.playerHandicaps is EMPTY (pre-normalization round), but the player
-    // carries a base handicap of 18 => +1 extra shot on SI 1 => pickup ceiling
-    // is 7, NOT the handicap-0 ceiling of 6. A "44" must clamp to 7, proving
-    // the resolvePlayerHandicap fallback is used rather than defaulting to 0.
+    // carries a base handicap of 18 => +1 extra shot on SI 1 => pickup 7,
+    // +6 headroom => ceiling 13, NOT the handicap-0 ceiling of 12. A "44" must
+    // clamp to 13, proving the resolvePlayerHandicap fallback is used rather
+    // than defaulting to 0.
     const base = tournamentWithHole({}); // no per-round handicaps
     base.players = [{ id: 'p1', handicap: 18 }];
     const t = await mutate(base, {
       type: 'score.set', roundId: 'r1', playerId: 'p1', hole: 3, value: 44, authorId: 'p1',
     });
-    expect(t.rounds[0].scores.p1[3]).toBe(7);
+    expect(t.rounds[0].scores.p1[3]).toBe(13);
   });
 
   it('passes through unclamped when the hole cannot be found (defensive fallback)', async () => {
@@ -110,6 +119,6 @@ describe('score.set clamps to [1, pickup] in the store', () => {
     });
     expect(syncQueue.enqueue).toHaveBeenCalledTimes(1);
     const enqueued = syncQueue.enqueue.mock.calls[0][0];
-    expect(enqueued.mutation.value).toBe(6);
+    expect(enqueued.mutation.value).toBe(12);
   });
 });

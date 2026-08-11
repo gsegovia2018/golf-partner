@@ -149,9 +149,9 @@ describe('ShotDetailPanel — approach capture', () => {
     expect(onChange).toHaveBeenCalledWith({ approachBucket: '100-150' });
   });
 
-  test('captures whether the logged approach hit or missed the green', () => {
+  test('captures where the logged approach finished via the icon grid', () => {
     const onChange = jest.fn();
-    const { getByText } = render(wrap(
+    const { getByLabelText } = render(wrap(
       <ShotDetailPanel
         hole={par5}
         strokes={5}
@@ -160,11 +160,11 @@ describe('ShotDetailPanel — approach capture', () => {
       />
     ));
 
-    fireEvent.press(getByText('On green'));
-    expect(onChange).toHaveBeenCalledWith({ approachResult: 'green' });
+    fireEvent.press(getByLabelText('Approach finish On green'));
+    expect(onChange).toHaveBeenCalledWith({ approachResult: 'green', approachMiss: null, approachBunker: false });
 
-    fireEvent.press(getByText('Missed green'));
-    expect(onChange).toHaveBeenCalledWith({ approachResult: 'miss' });
+    fireEvent.press(getByLabelText('Approach finish Right'));
+    expect(onChange).toHaveBeenCalledWith({ approachMiss: 'right', approachResult: 'miss' });
   });
 
   test('clearing approach distance also clears approach result', () => {
@@ -179,7 +179,9 @@ describe('ShotDetailPanel — approach capture', () => {
     ));
 
     fireEvent.press(getByLabelText('Approach 100-150'));
-    expect(onChange).toHaveBeenCalledWith({ approachBucket: null, approachResult: null, approachLie: null });
+    expect(onChange).toHaveBeenCalledWith({
+      approachBucket: null, approachResult: null, approachMiss: null, approachBunker: false, approachLie: null,
+    });
   });
 });
 

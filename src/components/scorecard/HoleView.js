@@ -354,7 +354,7 @@ export function HoleView({ round, roundIndex, players, scores, myScores = null, 
             })}
           </ScrollView>
         )}
-        {round.id && appSettings.shotMeasuring !== 'off' && (
+        {round.id && appSettings.shotMeasuring !== 'off' && gps.hasMap && (
           <MeasureFab
             roundId={round.id}
             roundIndex={roundIndex}

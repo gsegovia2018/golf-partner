@@ -307,15 +307,23 @@ export function resolvePlayerHandicap(round, players, playerId) {
     ?? 0;
 }
 
-// Clamps a raw entered stroke count to the recordable range [1, pickup] —
-// per-product-decision, an out-of-range entry (a fat-fingered "44" meaning
-// "4", or a stray "-1"/"0") is silently clamped rather than rejected. Reuses
-// pickupStrokes for the ceiling so the clamp and the pickup threshold can
-// never drift apart. `strokes == null` means "no score" (a cleared cell) and
-// passes through untouched — clearing a score must never become a 1.
+// Strokes recordable ABOVE the pickup ball number. Pickup is the lowest score
+// that already yields 0 Stableford points, but the gross count still matters
+// for stats/handicap, so a player can keep counting past it — up to this much —
+// to log a real blow-up hole. The headroom also keeps a fat-finger guard: an
+// out-of-range "44" still can't run to an arbitrarily large gross.
+const PICKUP_HEADROOM = 6;
+
+// Clamps a raw entered stroke count to the recordable range
+// [1, pickup + PICKUP_HEADROOM] — per-product-decision, an out-of-range entry
+// (a fat-fingered "44" meaning "4", or a stray "-1"/"0") is silently clamped
+// rather than rejected. The ceiling is derived from pickupStrokes so it tracks
+// each player's per-hole pickup number. `strokes == null` means "no score" (a
+// cleared cell) and passes through untouched — clearing a score must never
+// become a 1.
 export function clampScoreInput(strokes, par, playerHandicap, holeStrokeIndex) {
   if (strokes == null) return strokes;
-  const max = pickupStrokes(par, playerHandicap, holeStrokeIndex);
+  const max = pickupStrokes(par, playerHandicap, holeStrokeIndex) + PICKUP_HEADROOM;
   if (strokes < 1) return 1;
   if (strokes > max) return max;
   return strokes;

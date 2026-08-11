@@ -140,7 +140,69 @@ describe('ShotDetailPanel drive + approach lie inputs', () => {
       />,
     );
     fireEvent.press(r.getByLabelText('Approach 100-150'));
-    expect(onChange).toHaveBeenCalledWith({ approachBucket: null, approachResult: null, approachLie: null });
+    expect(onChange).toHaveBeenCalledWith({
+      approachBucket: null, approachResult: null, approachMiss: null, approachBunker: false, approachLie: null,
+    });
+  });
+});
+
+describe('ShotDetailPanel approach finish grid', () => {
+  const par4 = { number: 1, par: 4 };
+  const withBucket = (extra = {}) => ({ approachBucket: '100-150', ...extra });
+
+  test('on-green tap records a green result and clears any miss', () => {
+    const onChange = jest.fn();
+    const r = render(
+      <ShotDetailPanel hole={par4} detail={withBucket()} onChange={onChange} strokes={null} />,
+    );
+    fireEvent.press(r.getByLabelText('Approach finish On green'));
+    expect(onChange).toHaveBeenCalledWith({
+      approachResult: 'green', approachMiss: null, approachBunker: false,
+    });
+  });
+
+  test('a direction records a miss with that direction', () => {
+    const onChange = jest.fn();
+    const r = render(
+      <ShotDetailPanel hole={par4} detail={withBucket()} onChange={onChange} strokes={null} />,
+    );
+    fireEvent.press(r.getByLabelText('Approach finish Left'));
+    expect(onChange).toHaveBeenCalledWith({ approachMiss: 'left', approachResult: 'miss' });
+  });
+
+  test('bunker combines with an existing direction, staying a miss', () => {
+    const onChange = jest.fn();
+    const r = render(
+      <ShotDetailPanel
+        hole={par4}
+        detail={withBucket({ approachMiss: 'long', approachResult: 'miss' })}
+        onChange={onChange}
+        strokes={null}
+      />,
+    );
+    fireEvent.press(r.getByLabelText('Approach finish Bunker'));
+    expect(onChange).toHaveBeenCalledWith({ approachBunker: true, approachResult: 'miss' });
+  });
+
+  test('picking a direction while on green flips the result to a miss', () => {
+    const onChange = jest.fn();
+    const r = render(
+      <ShotDetailPanel
+        hole={par4}
+        detail={withBucket({ approachResult: 'green' })}
+        onChange={onChange}
+        strokes={null}
+      />,
+    );
+    fireEvent.press(r.getByLabelText('Approach finish Right'));
+    expect(onChange).toHaveBeenCalledWith({ approachMiss: 'right', approachResult: 'miss' });
+  });
+
+  test('finish grid hidden on par 3s', () => {
+    const r = render(
+      <ShotDetailPanel hole={{ number: 2, par: 3 }} detail={withBucket()} onChange={jest.fn()} strokes={null} />,
+    );
+    expect(r.queryByText('Where did it finish?')).toBeNull();
   });
 });
 

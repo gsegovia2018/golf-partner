@@ -209,9 +209,9 @@ export function makeScorecardStyles(theme) {
       justifyContent: 'space-between',
       alignItems: 'stretch',
       paddingHorizontal: 20,
-      paddingVertical: 16,
+      paddingVertical: 10,
     },
-    holeHeaderLeft: { flex: 1, minWidth: 0, justifyContent: 'flex-start', gap: 7 },
+    holeHeaderLeft: { flex: 1, minWidth: 0, justifyContent: 'flex-start', gap: 4 },
     holeHeaderRightWrap: { flexShrink: 0, justifyContent: 'center' },
     holeNumberRow: { flexDirection: 'row', alignItems: 'baseline', gap: 8 },
     holeNumberLabel: {
@@ -222,13 +222,13 @@ export function makeScorecardStyles(theme) {
     },
     holeNumber: {
       color: theme.text.primary,
-      fontSize: 52,
+      fontSize: 40,
       fontFamily: 'PlayfairDisplay-Black',
       // Android clips glyphs to the forced line box, and Playfair's
       // old-style figures overflow it (3/4/5/7/9 descend below the
       // baseline) — on native, let the font size the line instead.
       ...(Platform.OS === 'web'
-        ? { lineHeight: 56 }
+        ? { lineHeight: 44 }
         : { includeFontPadding: false }),
     },
     holeMetaRow: { flexDirection: 'row', gap: 16 },
@@ -332,7 +332,7 @@ export function makeScorecardStyles(theme) {
     holeNavBtnTextDisabled: { color: theme.text.muted },
 
     // Player cards (must fit 4 + 2 pair labels with no inner scroll)
-    playerCardsContent: { paddingHorizontal: 14, paddingTop: 10, paddingBottom: 10, gap: 10 },
+    playerCardsContent: { paddingHorizontal: 14, paddingTop: 8, paddingBottom: 8, gap: 8 },
     pairLabel: {
       fontSize: 10,
       fontFamily: 'PlusJakartaSans-Bold',
@@ -721,8 +721,8 @@ export function makeScorecardStyles(theme) {
       borderRadius: 20,
       borderWidth: 1,
       borderColor: theme.isDark ? theme.glass?.border : theme.border.default,
-      padding: 20,
-      gap: 18,
+      padding: 14,
+      gap: 10,
       shadowColor: '#000',
       shadowOpacity: theme.isDark ? 0.3 : 0.06,
       shadowRadius: 12,
@@ -845,13 +845,13 @@ export function makeScorecardStyles(theme) {
       fontFamily: 'PlusJakartaSans-SemiBold',
       color: theme.text.muted,
       fontSize: 11,
-      marginBottom: 8,
+      marginBottom: 5,
     },
     shotRow: {
       flexDirection: 'row',
       alignItems: 'center',
       justifyContent: 'space-between',
-      paddingVertical: 10,
+      paddingVertical: 7,
       borderBottomWidth: 1,
       borderBottomColor: theme.border.subtle ?? theme.border.default,
     },
@@ -859,13 +859,13 @@ export function makeScorecardStyles(theme) {
     shotRowLabel: {
       fontFamily: 'PlusJakartaSans-Bold',
       color: theme.text.primary,
-      fontSize: 16,
+      fontSize: 15,
     },
-    shotCounter: { flexDirection: 'row', alignItems: 'center', gap: 14 },
+    shotCounter: { flexDirection: 'row', alignItems: 'center', gap: 10 },
     shotCounterBtn: {
-      width: 40,
-      height: 40,
-      borderRadius: 12,
+      width: 34,
+      height: 34,
+      borderRadius: 10,
       backgroundColor: theme.isDark ? theme.bg.elevated : theme.bg.secondary,
       borderWidth: 1,
       borderColor: theme.border.default,
@@ -886,14 +886,17 @@ export function makeScorecardStyles(theme) {
       flexDirection: 'column',
       alignItems: 'stretch',
       justifyContent: 'flex-start',
-      gap: 8,
+      gap: 6,
     },
     // flex: 0 collapses to basis 0% on react-native-web; size by content instead.
     driveBtnsStacked: { flexGrow: 0, flexShrink: 0, flexBasis: 'auto' },
+    // Approach-finish icon row: full-width under its label, buttons reading
+    // left-to-right (not hugging the right edge like the inline drive row).
+    approachFinishBtns: { justifyContent: 'flex-start' },
     driveCircle: {
-      width: 38,
-      height: 38,
-      borderRadius: 19,
+      width: 34,
+      height: 34,
+      borderRadius: 17,
       backgroundColor: theme.bg.secondary,
       alignItems: 'center',
       justifyContent: 'center',
@@ -950,13 +953,13 @@ export function makeScorecardStyles(theme) {
       flexDirection: 'row',
       alignItems: 'center',
       justifyContent: 'space-between',
-      gap: 16,
+      gap: 12,
     },
     soloScoreRowReadOnly: {
       justifyContent: 'center',
     },
     soloStepBtn: {
-      width: 56, height: 56, borderRadius: 28,
+      width: 48, height: 48, borderRadius: 24,
       alignItems: 'center', justifyContent: 'center',
       backgroundColor: theme.isDark ? theme.bg.elevated : theme.bg.secondary,
       borderWidth: 1,
@@ -969,11 +972,11 @@ export function makeScorecardStyles(theme) {
     },
     soloScoreNum: {
       color: theme.text.primary,
-      fontSize: 64,
+      fontSize: 48,
       fontFamily: 'PlayfairDisplay-Bold',
       // Same Android line-box clipping as holeNumber above.
       ...(Platform.OS === 'web'
-        ? { lineHeight: 70 }
+        ? { lineHeight: 52 }
         : { includeFontPadding: false }),
       letterSpacing: -1,
     },
@@ -982,12 +985,12 @@ export function makeScorecardStyles(theme) {
       fontSize: 10,
       fontFamily: 'PlusJakartaSans-Bold',
       letterSpacing: 1.5,
-      marginTop: 4,
+      marginTop: 2,
     },
     soloPtsBadge: {
       alignSelf: 'center',
       paddingHorizontal: 18,
-      paddingVertical: 8,
+      paddingVertical: 6,
       borderRadius: 999,
       borderWidth: 1.5,
     },
@@ -1002,7 +1005,7 @@ export function makeScorecardStyles(theme) {
       justifyContent: 'space-around',
       borderTopWidth: 1,
       borderTopColor: theme.isDark ? theme.glass?.border : theme.border.default,
-      paddingTop: 14,
+      paddingTop: 10,
     },
     soloStatItem: {
       flex: 1,
@@ -1625,18 +1628,18 @@ export function makeScorecardStyles(theme) {
     },
 
     // Segmented-control distance-bucket picker (BucketSegment)
-    bucketSegBlock: { paddingVertical: 10, borderBottomWidth: 1, borderBottomColor: theme.border.subtle ?? theme.border.default },
-    bucketSegLabelRow: { flexDirection: 'row', alignItems: 'center', gap: 6, marginBottom: 8 },
+    bucketSegBlock: { paddingVertical: 7, borderBottomWidth: 1, borderBottomColor: theme.border.subtle ?? theme.border.default },
+    bucketSegLabelRow: { flexDirection: 'row', alignItems: 'center', gap: 6, marginBottom: 5 },
     bucketSegHint: { marginLeft: 'auto', color: theme.text.muted, fontSize: 11, fontFamily: 'PlusJakartaSans-SemiBold' },
     bucketSegTrack: { flexDirection: 'row', backgroundColor: theme.bg.secondary, borderRadius: 10, padding: 3 },
-    bucketSegCell: { flex: 1, paddingVertical: 8, alignItems: 'center', borderRadius: 8 },
+    bucketSegCell: { flex: 1, paddingVertical: 6, alignItems: 'center', borderRadius: 8 },
     bucketSegCellActive: { backgroundColor: theme.accent.primary },
     bucketSegCellText: { color: theme.text.secondary, fontSize: 12, fontFamily: 'PlusJakartaSans-Bold' },
     bucketSegCellTextActive: { color: theme.text.inverse },
 
     // ShotDetailSection — collapsible wrapper around ShotDetailPanel
-    shotSection: { marginTop: 10, borderTopWidth: 1, borderTopColor: theme.border.subtle ?? theme.border.default },
-    shotSectionHeader: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingVertical: 10 },
+    shotSection: { marginTop: 6, borderTopWidth: 1, borderTopColor: theme.border.subtle ?? theme.border.default },
+    shotSectionHeader: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingVertical: 8 },
     shotSectionTitle: { color: theme.text.secondary, fontSize: 13, fontFamily: 'PlusJakartaSans-Bold' },
 
     // Unified round summary panel (RoundSummary) — one card replaces the four
