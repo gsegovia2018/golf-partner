@@ -4,6 +4,7 @@ import {
   expectedFromBucket, expectedStrokes, BUCKETS,
   PAR_ANCHOR_DISTANCE, benchmarkTeeShotDistance, expectedPenaltiesPerRound,
 } from './strokesGainedBaseline';
+import { clubDistances } from '../lib/shotStats';
 
 // Scramble rounds store ONE team ball under the team's captain (pair[0]),
 // scored off a team handicap — there are no real personal scores, shot
@@ -2245,6 +2246,293 @@ export function approachMissTendency(tournament, playerId) {
     leftRate: pct(dir.left, directionKnown),
     rightRate: pct(dir.right, directionKnown),
   };
+}
+
+const meanOf = (xs) => (xs.length ? xs.reduce((a, b) => a + b, 0) / xs.length : null);
+const round2 = (v) => (v == null ? null : Math.round((v + Number.EPSILON) * 100) / 100);
+const rate100 = (num, den) => (den > 0 ? Math.round((num / den) * 100) : null);
+
+// ── Approach miss COST ──
+// Not just how often each finish happens (approachMissTendency) but what it
+// costs: average strokes over/under par and average Stableford points when the
+// approach finished on the green vs each miss direction vs a greenside bunker.
+// A bunker miss counts in both its direction bucket and the bunker bucket, so
+// the buckets are per-finish views, not a partition. Turns tendency into the
+// consequence that guides aim/club choice.
+export function approachMissCost(tournament, playerId) {
+  const player = (tournament.players || []).find((p) => p.id === playerId);
+  const KEYS = ['green', 'short', 'long', 'left', 'right', 'bunker'];
+  const bucket = {};
+  KEYS.forEach((k) => { bucket[k] = { vsPar: [], points: [] }; });
+  (tournament.rounds || []).forEach((round) => {
+    if (!round.scores?.[playerId] || !player) return;
+    const handicap = getPlayingHandicap(round, player);
+    const byHole = round.shotDetails?.[playerId] || {};
+    (round.holes || []).forEach((hole) => {
+      if (hole.par === 3) return;
+      const d = byHole[hole.number];
+      if (!d || !d.approachBucket) return;
+      if (d.approachResult !== 'green' && d.approachResult !== 'miss') return;
+      const sc = round.scores[playerId]?.[hole.number];
+      if (sc == null) return;
+      const vsPar = sc - hole.par;
+      const points = calcStablefordPoints(hole.par, sc, handicap, hole.strokeIndex);
+      const add = (k) => { bucket[k].vsPar.push(vsPar); bucket[k].points.push(points); };
+      if (d.approachResult === 'green') { add('green'); return; }
+      if (bucket[d.approachMiss]) add(d.approachMiss);
+      if (d.approachBunker) add('bunker');
+    });
+  });
+  const byFinish = {};
+  let total = 0;
+  KEYS.forEach((k) => {
+    const holes = bucket[k].vsPar.length;
+    total += holes;
+    byFinish[k] = {
+      holes,
+      avgVsPar: round2(meanOf(bucket[k].vsPar)),
+      avgPoints: round2(meanOf(bucket[k].points)),
+    };
+  });
+  return { hasData: total > 0, byFinish };
+}
+
+// ── Scrambling by miss type ──
+// Of missed-green approaches, the save rate (up-and-down / sand save) split by
+// where the ball finished. Uses the same recovery-outcome derivation as
+// sandSaveRate / upAndDownRate. Only holes with an explicit approach miss are
+// counted (that's the only signal that names the miss location); a bunker miss
+// counts in both its direction and the bunker bucket.
+export function scramblingByMissType(rounds, playerId) {
+  const KEYS = ['short', 'long', 'left', 'right', 'bunker'];
+  const b = {};
+  KEYS.forEach((k) => { b[k] = { attempts: 0, saves: 0 }; });
+  (rounds || []).forEach((round) => {
+    const byHole = round?.shotDetails?.[playerId];
+    if (!byHole) return;
+    (round.holes ?? []).forEach((hole) => {
+      if (hole.par === 3) return;
+      const d = byHole[hole.number];
+      if (!d || d.approachResult !== 'miss') return;
+      const strokes = round?.scores?.[playerId]?.[hole.number];
+      const outcome = d.recoveryOutcome ?? recoveryOutcomeFromState({
+        strokes, putts: d.putts, sandShots: d.sandShots ?? 0, par: hole.par,
+      });
+      const saved = outcome === 'up-and-down' || outcome === 'sand-save';
+      const record = (k) => { b[k].attempts += 1; if (saved) b[k].saves += 1; };
+      if (b[d.approachMiss]) record(d.approachMiss);
+      if (d.approachBunker) record('bunker');
+    });
+  });
+  const byType = {};
+  let total = 0;
+  KEYS.forEach((k) => {
+    total += b[k].attempts;
+    byType[k] = { attempts: b[k].attempts, saves: b[k].saves, rate: rate100(b[k].saves, b[k].attempts) };
+  });
+  return { hasData: total > 0, byType };
+}
+
+// ── Tee-club accuracy ──
+// For each club hit off the tee (driver is the unstored default), how it plays
+// on non-par-3 holes where a drive was logged: fairway rate, tee-penalty rate,
+// and average points / strokes vs par. Answers "should I hit less driver?".
+const TEE_CLUB_KEYS = ['driver', 'wood', 'hybrid', 'iron'];
+export function teeClubAccuracy(tournament, playerId) {
+  const player = (tournament.players || []).find((p) => p.id === playerId);
+  const b = {};
+  TEE_CLUB_KEYS.forEach((c) => { b[c] = { holes: 0, fairways: 0, penalties: 0, vsPar: [], points: [] }; });
+  (tournament.rounds || []).forEach((round) => {
+    if (!round.scores?.[playerId] || !player) return;
+    const handicap = getPlayingHandicap(round, player);
+    const byHole = round.shotDetails?.[playerId] || {};
+    (round.holes || []).forEach((hole) => {
+      if (hole.par === 3) return;
+      const d = byHole[hole.number];
+      if (!d || d.drive == null) return; // a drive direction was logged
+      const club = d.teeClub ?? 'driver';
+      if (!b[club]) return;
+      const e = b[club];
+      e.holes += 1;
+      if (d.drive === 'fairway' || d.drive === 'super') e.fairways += 1;
+      if ((d.teePenalties ?? 0) > 0) e.penalties += 1;
+      const sc = round.scores[playerId]?.[hole.number];
+      if (sc != null) {
+        e.vsPar.push(sc - hole.par);
+        e.points.push(calcStablefordPoints(hole.par, sc, handicap, hole.strokeIndex));
+      }
+    });
+  });
+  const byClub = {};
+  let total = 0;
+  TEE_CLUB_KEYS.forEach((c) => {
+    const e = b[c];
+    total += e.holes;
+    byClub[c] = {
+      holes: e.holes,
+      fairwayPct: rate100(e.fairways, e.holes),
+      penaltyPct: rate100(e.penalties, e.holes),
+      avgVsPar: round2(meanOf(e.vsPar)),
+      avgPoints: round2(meanOf(e.points)),
+    };
+  });
+  return { hasData: total > 0, byClub, order: TEE_CLUB_KEYS };
+}
+
+// ── Approach miss tendency, by distance ──
+// The same green/miss + direction + bunker split as approachMissTendency, but
+// broken out per approach-distance bucket, so you can see whether long
+// approaches leak short (the classic under-club) or a wedge misses direction.
+export function approachMissByDistance(tournament, playerId) {
+  const buckets = {};
+  APPROACH_BUCKETS.forEach((bk) => {
+    buckets[bk] = { attempts: 0, misses: 0, dir: { long: 0, short: 0, left: 0, right: 0 }, bunker: 0 };
+  });
+  (tournament.rounds || []).forEach((round) => {
+    const byHole = round.shotDetails?.[playerId];
+    if (!byHole || !round.scores?.[playerId]) return;
+    (round.holes || []).forEach((hole) => {
+      if (hole.par === 3) return;
+      const d = byHole[hole.number];
+      if (!d || !buckets[d.approachBucket]) return;
+      if (d.approachResult !== 'green' && d.approachResult !== 'miss') return;
+      const e = buckets[d.approachBucket];
+      e.attempts += 1;
+      if (d.approachResult === 'miss') {
+        e.misses += 1;
+        if (e.dir[d.approachMiss] != null) e.dir[d.approachMiss] += 1;
+        if (d.approachBunker) e.bunker += 1;
+      }
+    });
+  });
+  const out = {};
+  let total = 0;
+  APPROACH_BUCKETS.forEach((bk) => {
+    const e = buckets[bk];
+    total += e.attempts;
+    const known = e.dir.long + e.dir.short + e.dir.left + e.dir.right;
+    out[bk] = {
+      attempts: e.attempts,
+      greenRate: rate100(e.attempts - e.misses, e.attempts),
+      missRate: rate100(e.misses, e.attempts),
+      shortRate: rate100(e.dir.short, known),
+      longRate: rate100(e.dir.long, known),
+      leftRate: rate100(e.dir.left, known),
+      rightRate: rate100(e.dir.right, known),
+      bunkerRate: rate100(e.bunker, e.misses),
+    };
+  });
+  return { hasData: total > 0, buckets: out };
+}
+
+// ── Par-5 performance ──
+// How the player scores the reachable holes: eagle+/birdie/par/bogey+ counts,
+// average strokes vs par, birdie-or-better rate, and the green-in-regulation
+// (on in 3) rate where putts were logged. True "went for it in two" needs a
+// dedicated flag we don't capture yet — this is the honest score-based view.
+export function par5Performance(tournament, playerId) {
+  let holes = 0;
+  let eaglesPlus = 0;
+  let birdies = 0;
+  let pars = 0;
+  let bogeysPlus = 0;
+  const vsParArr = [];
+  let girEligible = 0;
+  let girHits = 0;
+  (tournament.rounds || []).forEach((round) => {
+    if (!round.scores?.[playerId]) return;
+    const byHole = round.shotDetails?.[playerId] || {};
+    (round.holes || []).forEach((hole) => {
+      if (hole.par !== 5) return;
+      const sc = round.scores[playerId]?.[hole.number];
+      if (sc == null) return;
+      holes += 1;
+      const vsPar = sc - hole.par;
+      vsParArr.push(vsPar);
+      if (vsPar <= -2) eaglesPlus += 1;
+      else if (vsPar === -1) birdies += 1;
+      else if (vsPar === 0) pars += 1;
+      else bogeysPlus += 1;
+      const d = byHole[hole.number];
+      if (d && d.putts != null) {
+        girEligible += 1;
+        if ((sc - d.putts) <= (hole.par - 2)) girHits += 1;
+      }
+    });
+  });
+  return {
+    hasData: holes > 0,
+    holes,
+    eaglesPlus,
+    birdies,
+    pars,
+    bogeysPlus,
+    avgVsPar: round2(meanOf(vsParArr)),
+    birdieRate: rate100(eaglesPlus + birdies, holes),
+    girRate: rate100(girHits, girEligible),
+  };
+}
+
+// ── Strokes gained vs the group ──
+// Uses the shared multi-player rounds (every scorer logs their own shot
+// detail) to measure the player's SG per category against the average of the
+// OTHER scorers in the same round — the group-relative view unique to a
+// friends' tournament. `pairs` is [{ round, myId }] where `round` still holds
+// every player's scores/shotDetails (the un-rekeyed round). Each round
+// contributes a category only when the player AND at least one other scorer
+// have an SG sample for it, so the comparison is always like-for-like.
+export function sgVsGroup(pairs, targetHandicap = 0) {
+  const CATS = ['offTheTee', 'approach', 'aroundGreen', 'putting', 'penalties'];
+  const acc = { total: { mine: [], group: [] } };
+  CATS.forEach((c) => { acc[c] = { mine: [], group: [] }; });
+  (pairs || []).forEach(({ round, myId }) => {
+    if (!round || !myId || !round.shotDetails?.[myId]) return;
+    const others = Object.keys(round.scores || {})
+      .filter((id) => id !== myId && round.shotDetails?.[id]);
+    if (others.length === 0) return;
+    const mine = sgTotal(round, myId, targetHandicap);
+    if (mine.sampleHoles === 0) return;
+    const otherSg = others
+      .map((id) => sgTotal(round, id, targetHandicap))
+      .filter((r) => r.sampleHoles > 0);
+    if (otherSg.length === 0) return;
+    acc.total.mine.push(mine.total);
+    acc.total.group.push(meanOf(otherSg.map((r) => r.total)));
+    CATS.forEach((c) => {
+      if ((mine.sampleHolesByCategory?.[c] ?? 0) <= 0) return;
+      const os = otherSg.filter((r) => (r.sampleHolesByCategory?.[c] ?? 0) > 0);
+      if (os.length === 0) return;
+      acc[c].mine.push(mine.byCategory[c]);
+      acc[c].group.push(meanOf(os.map((r) => r.byCategory[c])));
+    });
+  });
+  const categories = {};
+  ['total', ...CATS].forEach((c) => {
+    const you = meanOf(acc[c].mine);
+    const group = meanOf(acc[c].group);
+    categories[c] = {
+      rounds: acc[c].mine.length,
+      you: round2(you),
+      group: round2(group),
+      delta: (you == null || group == null) ? null : round2(you - group),
+    };
+  });
+  return { hasData: (categories.total.rounds ?? 0) > 0, categories };
+}
+
+// ── Real club distances (GPS) ──
+// Surfaces the GPS-measured carry averages already computed for club
+// recommendations (lib/shotStats.clubDistances), scoped to the selected rounds
+// when `roundIds` is given. Gives a true driver distance and a per-club table
+// straight from marked shots — no bucket estimates.
+export function realClubDistances(shots, roundIds = null) {
+  const set = roundIds ? new Set(roundIds) : null;
+  const filtered = set ? (shots || []).filter((s) => set.has(s.roundId)) : (shots || []);
+  const rows = clubDistances(filtered).map((r) => ({
+    club: r.club, label: r.label, count: r.count, avg: Math.round(r.avg),
+  }));
+  const driver = rows.find((r) => r.club === 'driver') || null;
+  return { hasData: rows.length > 0, driverAvg: driver ? driver.avg : null, rows };
 }
 
 // ── Putt deep-dive ──

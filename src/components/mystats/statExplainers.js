@@ -211,6 +211,35 @@ export const statExplainers = {
       + 'target-handicap benchmark. Distance putting rows compare your average putts and '
       + '3-putt rate from each first-putt distance bucket with the target expectation.',
   },
+  sgVsGroup: {
+    title: 'Vs the group',
+    subtitle: 'Strokes gained against your playing partners',
+    explainer: 'For each round, your strokes gained per category is compared with the average '
+      + 'of the other scorers who logged shot detail in the same round. A positive number means '
+      + 'you gained strokes on the group; negative means they gained on you. A category only '
+      + 'counts in a round when you and at least one partner both have data for it.',
+  },
+  teeClubAccuracy: {
+    title: 'Off the tee — by club',
+    subtitle: 'Fairway rate per tee club, and real GPS carry',
+    explainer: 'Splits your non-par-3 tee shots by the club you hit: fairway rate, tee-penalty '
+      + 'rate, and average score vs par. Real carry distance comes from shots you marked on the '
+      + 'hole map (GPS), measured spot-to-spot — no bucket estimate.',
+  },
+  scramblingByMiss: {
+    title: 'Short game — scrambling',
+    subtitle: 'Save rate by where the approach missed',
+    explainer: 'Of greens you missed, how often you still got up and down — split by where the '
+      + 'approach finished (short, long, left, right, or a greenside bunker). A save is a par or '
+      + 'better after missing the green.',
+  },
+  par5: {
+    title: 'Par 5s',
+    subtitle: 'Scoring on the reachable holes',
+    explainer: 'Birdie-or-better rate, average score vs par, and how often you were on in '
+      + 'regulation (on the green in three) across your par 5s. Reaching in three needs putts '
+      + 'logged for the hole.',
+  },
   coachPractice: {
     title: 'Practice Plan',
     subtitle: 'Drills matched to your biggest leaks',

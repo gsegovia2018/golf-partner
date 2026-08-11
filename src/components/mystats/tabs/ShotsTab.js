@@ -34,6 +34,8 @@ function ShotsTab({ stats, onInfo, targetHandicap, onChangeTarget }) {
   );
   const {
     shots, puttingTarget, approachTarget, approachTendency,
+    sgVsGroup, approachMissCost, approachMissByDistance,
+    scramblingByMiss, teeClubAccuracy, par5, realClubDistances,
   } = stats;
 
   const hasAnyShotData = shots.hasData || puttingTarget?.hasData || approachTarget?.hasData
@@ -56,6 +58,13 @@ function ShotsTab({ stats, onInfo, targetHandicap, onChangeTarget }) {
   const drivingTargetRows = makeDrivingTargetRows(shots, shotBenchmark, stats.driveDistance, units);
   const approachTargetRows = approachTarget?.hasData ? makeApproachTargetRows(approachTarget) : [];
   const approachTendencyRows = approachTendency?.hasData ? makeApproachTendencyRows(approachTendency) : [];
+  const approachCostRows = approachMissCost?.hasData ? makeApproachCostRows(approachMissCost) : [];
+  const approachByDistRows = approachMissByDistance?.hasData ? makeApproachByDistanceRows(approachMissByDistance) : [];
+  const groupRows = sgVsGroup?.hasData ? makeGroupRows(sgVsGroup) : [];
+  const teeClubRows = teeClubAccuracy?.hasData ? makeTeeClubRows(teeClubAccuracy) : [];
+  const realDistRows = realClubDistances?.hasData ? makeRealDistanceRows(realClubDistances, units) : [];
+  const scramblingRows = scramblingByMiss?.hasData ? makeScramblingRows(scramblingByMiss) : [];
+  const par5Rows = par5?.hasData ? makePar5Rows(par5) : [];
   const puttingVolumeRows = shots.hasData ? makePuttingVolumeRows(shots, shotBenchmark) : [];
   const puttingTargetRows = puttingTarget?.hasData ? makePuttingTargetRows(puttingTarget) : [];
   const girRows = shots.hasData ? makeGirRows(shots, shotBenchmark) : [];
@@ -82,6 +91,12 @@ function ShotsTab({ stats, onInfo, targetHandicap, onChangeTarget }) {
         reconciliation={stats.strokesGained?.reconciliation}
         targetHandicap={targetHandicap}
       />
+
+      {groupRows.length ? (
+        <SectionCard title="Vs the group" infoKey="sgVsGroup" onInfo={onInfo}>
+          <ShotRowsBlock title="Strokes gained vs playing partners" rows={groupRows} s={s} first />
+        </SectionCard>
+      ) : null}
 
       {scoringRows.length ? (
         <SectionCard title="Scoring" infoKey="sgScoring" onInfo={onInfo}>
@@ -128,6 +143,22 @@ function ShotsTab({ stats, onInfo, targetHandicap, onChangeTarget }) {
         </SectionCard>
       ) : null}
 
+      {(teeClubRows.length || realDistRows.length) ? (
+        <SectionCard title="Off the tee — by club" infoKey="teeClubAccuracy" onInfo={onInfo}>
+          {teeClubRows.length ? (
+            <ShotRowsBlock title="Fairways by tee club" rows={teeClubRows} s={s} first />
+          ) : null}
+          {realDistRows.length ? (
+            <ShotRowsBlock
+              title="Real carry distance · GPS"
+              rows={realDistRows}
+              s={s}
+              first={!teeClubRows.length}
+            />
+          ) : null}
+        </SectionCard>
+      ) : null}
+
       {(approachTargetRows.length || approachTendencyRows.length || shots.hasData) ? (
         <SectionCard title="Approach vs target" infoKey="sgApproach" onInfo={onInfo}>
           {approachTargetRows.length ? (
@@ -151,6 +182,26 @@ function ShotsTab({ stats, onInfo, targetHandicap, onChangeTarget }) {
               first={!approachTargetRows.length && !girRows.length}
             />
           ) : null}
+
+          {approachCostRows.length ? (
+            <ShotRowsBlock title="What each finish costs" rows={approachCostRows} s={s} />
+          ) : null}
+
+          {approachByDistRows.length ? (
+            <ShotRowsBlock title="Miss pattern by distance" rows={approachByDistRows} s={s} />
+          ) : null}
+        </SectionCard>
+      ) : null}
+
+      {scramblingRows.length ? (
+        <SectionCard title="Short game — scrambling" infoKey="scramblingByMiss" onInfo={onInfo}>
+          <ShotRowsBlock title="Save rate by miss" rows={scramblingRows} s={s} first />
+        </SectionCard>
+      ) : null}
+
+      {par5Rows.length ? (
+        <SectionCard title="Par 5s" infoKey="par5" onInfo={onInfo}>
+          <ShotRowsBlock title="Reachable-hole scoring" rows={par5Rows} s={s} first />
         </SectionCard>
       ) : null}
 
@@ -595,6 +646,169 @@ function makeApproachTendencyRows(t) {
   }
 
   return rows;
+}
+
+// Strokes gained vs the average of the other scorers in the same rounds.
+// Descriptive delta (signed SG); tone greens a positive gap, reds a negative.
+function makeGroupRows(sg) {
+  const CATS = [
+    ['total', 'Total'],
+    ['offTheTee', 'Off the tee'],
+    ['approach', 'Approach'],
+    ['aroundGreen', 'Around green'],
+    ['putting', 'Putting'],
+  ];
+  return CATS.map(([key, label]) => {
+    const c = sg.categories?.[key];
+    if (!c || c.rounds === 0 || !isNumber(c.delta)) return null;
+    return {
+      key: `grp-${key}`,
+      label,
+      value: signed(c.delta),
+      raw: c.delta,
+      magnitude: c.delta,
+      barGroup: 'sg',
+      secondary: `you ${signed(c.you)} · group ${signed(c.group)} · ${sampleText(c.rounds, 'rounds')}`,
+      sample: c.rounds,
+      tone: toneFromSigned(c.delta, { sample: c.rounds, minSample: 3 }),
+    };
+  }).filter(Boolean);
+}
+
+// What each approach finish actually costs — avg Stableford points, with the
+// strokes-vs-par in the subtext. Neutral tone (it's a diagnostic, not a grade).
+function makeApproachCostRows(cost) {
+  const FIN = [
+    ['green', 'On green'], ['short', 'Short'], ['long', 'Long'],
+    ['left', 'Left'], ['right', 'Right'], ['bunker', 'Bunker'],
+  ];
+  return FIN.map(([key, label]) => {
+    const e = cost.byFinish?.[key];
+    if (!e || e.holes === 0) return null;
+    return {
+      key: `cost-${key}`,
+      label,
+      value: e.avgPoints == null ? '—' : `${e.avgPoints} pts`,
+      magnitude: isNumber(e.avgPoints) ? e.avgPoints : null,
+      barGroup: 'avg',
+      secondary: `${signed(e.avgVsPar)} vs par · ${sampleText(e.holes, 'holes')}`,
+      tone: 'neutral',
+      dim: e.avgPoints == null,
+    };
+  }).filter(Boolean);
+}
+
+// Miss pattern split by approach distance — surfaces the classic "long
+// approaches leak short" under-club tell.
+function makeApproachByDistanceRows(abd) {
+  return APPROACH_BUCKETS.map((bucket) => {
+    const e = abd.buckets?.[bucket];
+    if (!e || e.attempts === 0) return null;
+    const parts = [];
+    if (isNumber(e.shortRate)) parts.push(`short ${e.shortRate}%`);
+    if (isNumber(e.longRate)) parts.push(`long ${e.longRate}%`);
+    if (isNumber(e.bunkerRate)) parts.push(`bunker ${e.bunkerRate}%`);
+    return {
+      key: `abd-${bucket}`,
+      label: `${bucket} m`,
+      value: e.missRate == null ? '—' : `${e.missRate}% miss`,
+      magnitude: isNumber(e.missRate) ? e.missRate : null,
+      barGroup: 'pct',
+      secondary: [sampleText(e.attempts, 'approaches'), ...parts].filter(Boolean).join(' · '),
+      tone: 'neutral',
+      dim: e.missRate == null,
+    };
+  }).filter(Boolean);
+}
+
+// Fairway rate per club hit off the tee — the "less driver?" diagnostic.
+const TEE_CLUB_LABEL = { driver: 'Driver', wood: 'Wood', hybrid: 'Hybrid', iron: 'Iron' };
+function makeTeeClubRows(acc) {
+  return (acc.order || []).map((club) => {
+    const e = acc.byClub?.[club];
+    if (!e || e.holes === 0) return null;
+    return {
+      key: `tc-${club}`,
+      label: TEE_CLUB_LABEL[club] ?? club,
+      value: e.fairwayPct == null ? '—' : `${e.fairwayPct}%`,
+      magnitude: isNumber(e.fairwayPct) ? e.fairwayPct : null,
+      barGroup: 'pct',
+      secondary: `${e.penaltyPct ?? 0}% penalty · ${signed(e.avgVsPar)} vs par · ${sampleText(e.holes, 'drives')}`,
+      tone: 'neutral',
+      dim: e.fairwayPct == null,
+    };
+  }).filter(Boolean);
+}
+
+// GPS-measured carry per club (longest first) — real distance, no bucket guess.
+function makeRealDistanceRows(rcd, units) {
+  return (rcd.rows || []).map((r) => ({
+    key: `rcd-${r.club}`,
+    label: r.label,
+    value: `~${formatDistance(r.avg, units)} ${unitSuffix(units)}`,
+    magnitude: r.avg,
+    barGroup: 'dist',
+    secondary: sampleText(r.count, 'shots'),
+    tone: 'neutral',
+  }));
+}
+
+// Save rate on missed greens, split by where the approach finished.
+function makeScramblingRows(scr) {
+  const TYPES = [
+    ['short', 'Short'], ['long', 'Long'], ['left', 'Left'],
+    ['right', 'Right'], ['bunker', 'Bunker'],
+  ];
+  return TYPES.map(([key, label]) => {
+    const e = scr.byType?.[key];
+    if (!e || e.attempts === 0) return null;
+    return {
+      key: `scr-${key}`,
+      label,
+      value: e.rate == null ? '—' : `${e.rate}%`,
+      magnitude: isNumber(e.rate) ? e.rate : null,
+      barGroup: 'pct',
+      secondary: `${e.saves}/${e.attempts} saved`,
+      tone: 'neutral',
+      dim: e.rate == null,
+    };
+  }).filter(Boolean);
+}
+
+// Reachable-hole scoring: birdie-or-better rate, avg vs par, on-in-reg (in 3).
+function makePar5Rows(p5) {
+  return [
+    {
+      key: 'p5-birdie',
+      label: 'Birdie or better',
+      value: p5.birdieRate == null ? '—' : `${p5.birdieRate}%`,
+      magnitude: isNumber(p5.birdieRate) ? p5.birdieRate : null,
+      barGroup: 'pct',
+      secondary: `${p5.eaglesPlus + p5.birdies} of ${sampleText(p5.holes, 'par 5s')}`,
+      tone: 'neutral',
+      dim: p5.birdieRate == null,
+    },
+    {
+      key: 'p5-vspar',
+      label: 'Avg vs par',
+      value: signed(p5.avgVsPar),
+      magnitude: isNumber(p5.avgVsPar) ? p5.avgVsPar : null,
+      barGroup: 'avg',
+      secondary: sampleText(p5.holes, 'par 5s'),
+      tone: 'neutral',
+      dim: p5.avgVsPar == null,
+    },
+    {
+      key: 'p5-gir',
+      label: 'On in regulation',
+      value: p5.girRate == null ? '—' : `${p5.girRate}%`,
+      magnitude: isNumber(p5.girRate) ? p5.girRate : null,
+      barGroup: 'pct',
+      secondary: 'reached in 3 · needs putts logged',
+      tone: 'neutral',
+      dim: p5.girRate == null,
+    },
+  ];
 }
 
 function makeGirRows(shots, shotBenchmark) {

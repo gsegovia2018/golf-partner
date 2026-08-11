@@ -1,4 +1,4 @@
-import { teeShotImpact, lagPuttingQuality, sandSaveRate, upAndDownRate, bunkerVisits, sgPutting, sgAroundGreen, sgApproach, sgPenalties, sgOffTheTee, sgTotal, sgSeason, sgReconciliation, driveScoreImpact, puttDeepDive, approachScoreImpact, puttingTargetGaps, approachTargetGaps, pairPerformance, shotStats, playersWithShotData, tournamentHighlights, withoutScrambleScores, playerAvgStableford, pickupChampion, hallOfShame, chaosHoles, skinsLeaderboard, playerStreaks, bounceBackRate, strokeIndexAccuracy, bestWorstHoles, holeDifficultyMap, collectiveExtremes, pairConfigMatrix, matchPlayResults, pairHoleWins, anchor, par3Heartbreak, playingToHandicap, hotStretch, nemesisEncore, pairCoverage, girByDriveResult, courseDNA, warmupVsClosing, driveLieFromDetail, driveLieBreakdown, driveDistanceAverage, approachMissTendency } from '../statsEngine';
+import { teeShotImpact, lagPuttingQuality, sandSaveRate, upAndDownRate, bunkerVisits, sgPutting, sgAroundGreen, sgApproach, sgPenalties, sgOffTheTee, sgTotal, sgSeason, sgReconciliation, driveScoreImpact, puttDeepDive, approachScoreImpact, puttingTargetGaps, approachTargetGaps, pairPerformance, shotStats, playersWithShotData, tournamentHighlights, withoutScrambleScores, playerAvgStableford, pickupChampion, hallOfShame, chaosHoles, skinsLeaderboard, playerStreaks, bounceBackRate, strokeIndexAccuracy, bestWorstHoles, holeDifficultyMap, collectiveExtremes, pairConfigMatrix, matchPlayResults, pairHoleWins, anchor, par3Heartbreak, playingToHandicap, hotStretch, nemesisEncore, pairCoverage, girByDriveResult, courseDNA, warmupVsClosing, driveLieFromDetail, driveLieBreakdown, driveDistanceAverage, approachMissTendency, approachMissCost, scramblingByMissType, teeClubAccuracy, approachMissByDistance, par5Performance, sgVsGroup, realClubDistances } from '../statsEngine';
 import { mixedModeTournament, buildTournament } from './statsFixtures';
 
 // 18 par-4 holes, strokeIndex = hole number.
@@ -853,6 +853,156 @@ describe('approachMissTendency', () => {
   test('no eligible approaches → hasData false', () => {
     const t = { rounds: [makeRound([{ par: 3, strokes: 3 }], [{ approachBucket: '100-150', approachResult: 'miss' }])] };
     expect(approachMissTendency(t, 'me').hasData).toBe(false);
+  });
+});
+
+describe('approachMissCost', () => {
+  test('averages points and vs-par per finish; bunker overlaps its direction', () => {
+    const t = {
+      players: [{ id: 'me', handicap: 0 }],
+      rounds: [makeRound(
+        [{ par: 4, strokes: 4 }, { par: 4, strokes: 6 }, { par: 4, strokes: 5 }],
+        [
+          { approachBucket: '100-150', approachResult: 'green' },
+          { approachBucket: '100-150', approachResult: 'miss', approachMiss: 'short', approachBunker: true },
+          { approachBucket: '100-150', approachResult: 'miss', approachMiss: 'left' },
+        ],
+      )],
+    };
+    const r = approachMissCost(t, 'me');
+    expect(r.hasData).toBe(true);
+    expect(r.byFinish.green.holes).toBe(1);
+    expect(r.byFinish.green.avgVsPar).toBe(0);
+    expect(r.byFinish.green.avgPoints).toBe(2);
+    expect(r.byFinish.short.avgVsPar).toBe(2);
+    expect(r.byFinish.bunker.holes).toBe(1); // the short miss was also a bunker
+    expect(r.byFinish.left.avgVsPar).toBe(1);
+  });
+});
+
+describe('scramblingByMissType', () => {
+  test('counts save attempts per miss finish, bunker overlapping direction', () => {
+    const rounds = [makeRound(
+      [{ par: 4, strokes: 4 }, { par: 4, strokes: 5 }],
+      [
+        { approachResult: 'miss', approachMiss: 'left', putts: 1 },
+        { approachResult: 'miss', approachMiss: 'right', approachBunker: true, putts: 2, sandShots: 1 },
+      ],
+    )];
+    const r = scramblingByMissType(rounds, 'me');
+    expect(r.hasData).toBe(true);
+    expect(r.byType.left.attempts).toBe(1);
+    expect(r.byType.right.attempts).toBe(1);
+    expect(r.byType.bunker.attempts).toBe(1); // the right miss was in a bunker
+    expect(r.byType.left.saves).toBe(1);       // par with a single putt = up-and-down
+    expect(r.byType.right.saves).toBe(0);      // bogey = no save
+  });
+});
+
+describe('teeClubAccuracy', () => {
+  test('fairway and penalty rates per tee club; par 3s ignored', () => {
+    const t = {
+      players: [{ id: 'me', handicap: 0 }],
+      rounds: [makeRound(
+        [{ par: 4, strokes: 4 }, { par: 4, strokes: 6 }, { par: 3, strokes: 3 }],
+        [
+          { drive: 'fairway' },
+          { drive: 'left', teeClub: 'iron', teePenalties: 1 },
+          { drive: 'fairway' },
+        ],
+      )],
+    };
+    const r = teeClubAccuracy(t, 'me');
+    expect(r.byClub.driver.holes).toBe(1);
+    expect(r.byClub.driver.fairwayPct).toBe(100);
+    expect(r.byClub.iron.holes).toBe(1);
+    expect(r.byClub.iron.fairwayPct).toBe(0);
+    expect(r.byClub.iron.penaltyPct).toBe(100);
+  });
+});
+
+describe('approachMissByDistance', () => {
+  test('splits miss rate and direction per distance bucket', () => {
+    const t = {
+      players: [{ id: 'me', handicap: 0 }],
+      rounds: [makeRound(
+        [{ par: 4, strokes: 4 }, { par: 4, strokes: 5 }, { par: 4, strokes: 5 }],
+        [
+          { approachBucket: '150-200', approachResult: 'miss', approachMiss: 'short' },
+          { approachBucket: '150-200', approachResult: 'green' },
+          { approachBucket: '0-50', approachResult: 'miss', approachMiss: 'left' },
+        ],
+      )],
+    };
+    const r = approachMissByDistance(t, 'me');
+    expect(r.buckets['150-200'].attempts).toBe(2);
+    expect(r.buckets['150-200'].missRate).toBe(50);
+    expect(r.buckets['150-200'].shortRate).toBe(100);
+    expect(r.buckets['0-50'].attempts).toBe(1);
+  });
+});
+
+describe('par5Performance', () => {
+  test('classifies par-5 scoring and on-in-regulation rate', () => {
+    const t = {
+      players: [{ id: 'me', handicap: 0 }],
+      rounds: [makeRound(
+        [{ par: 5, strokes: 4 }, { par: 5, strokes: 6 }, { par: 4, strokes: 4 }],
+        [{ putts: 1 }, { putts: 2 }, {}],
+      )],
+    };
+    const r = par5Performance(t, 'me');
+    expect(r.holes).toBe(2);
+    expect(r.birdies).toBe(1);
+    expect(r.bogeysPlus).toBe(1);
+    expect(r.birdieRate).toBe(50);
+    expect(r.girRate).toBe(50); // 4-1=3 ≤ 3 reaches; 6-2=4 does not
+  });
+});
+
+describe('sgVsGroup', () => {
+  test('measures SG delta against the other scorers in the round', () => {
+    const round = {
+      id: 'r1',
+      holes: [{ number: 1, par: 4, strokeIndex: 1 }],
+      scores: { me: { 1: 4 }, you: { 1: 4 } },
+      shotDetails: {
+        me: { 1: { putts: 1, firstPuttBucket: '3-6' } },
+        you: { 1: { putts: 2, firstPuttBucket: '3-6' } },
+      },
+    };
+    const r = sgVsGroup([{ round, myId: 'me' }], 0);
+    expect(r.hasData).toBe(true);
+    expect(r.categories.putting.rounds).toBe(1);
+    expect(r.categories.putting.delta).toBeGreaterThan(0);
+  });
+  test('no other scorer with shot detail → hasData false', () => {
+    const round = {
+      id: 'r1',
+      holes: [{ number: 1, par: 4, strokeIndex: 1 }],
+      scores: { me: { 1: 4 } },
+      shotDetails: { me: { 1: { putts: 1, firstPuttBucket: '3-6' } } },
+    };
+    expect(sgVsGroup([{ round, myId: 'me' }], 0).hasData).toBe(false);
+  });
+});
+
+describe('realClubDistances', () => {
+  test('summarises GPS carries per club, scoped to the given round ids', () => {
+    const shots = [
+      { roundId: 'r1', roundIndex: 0, holeNumber: 1, seq: 0, lat: 0, lng: 0, club: null },
+      { roundId: 'r1', roundIndex: 0, holeNumber: 1, seq: 1, lat: 0, lng: 0.001, club: 'driver' },
+      { roundId: 'r2', roundIndex: 0, holeNumber: 1, seq: 0, lat: 0, lng: 0, club: null },
+      { roundId: 'r2', roundIndex: 0, holeNumber: 1, seq: 1, lat: 0, lng: 0.002, club: 'driver' },
+    ];
+    const scoped = realClubDistances(shots, ['r1']);
+    expect(scoped.hasData).toBe(true);
+    expect(scoped.driverAvg).toBeGreaterThan(0);
+    // Including r2's longer drive raises the average.
+    expect(realClubDistances(shots, null).driverAvg).toBeGreaterThan(scoped.driverAvg);
+  });
+  test('no shots → hasData false', () => {
+    expect(realClubDistances([], ['r1']).hasData).toBe(false);
   });
 });
 

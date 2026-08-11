@@ -16,6 +16,8 @@ import {
   sgSeason, sgReconciliation, driveScoreImpact, approachScoreImpact, puttDeepDive,
   puttingTargetGaps, approachTargetGaps, courseDNA, playerStreaks,
   driveLieBreakdown, driveDistanceAverage, approachMissTendency,
+  approachMissCost, scramblingByMissType, teeClubAccuracy, approachMissByDistance,
+  par5Performance, sgVsGroup, realClubDistances,
 } from './statsEngine';
 import { buildCoachInsights } from './coachInsights';
 import { buildStrategyTips } from './coachStrategy';
@@ -722,10 +724,17 @@ export function careerMilestones(synthetic) {
 // work. The baseline fields returned here are computed identically (same
 // functions, same args) to the full path, so they are value-identical for
 // any selection.
-export function computeMyStats(selectedRounds, { n = 5, targetHandicap = 0, baselineOnly = false } = {}) {
+export function computeMyStats(selectedRounds, {
+  n = 5, targetHandicap = 0, baselineOnly = false, shots = null,
+} = {}) {
   const rounds = selectedRounds || [];
   const synthetic = buildSyntheticTournament(rounds);
   const shotBenchmark = shotBenchmarkForHandicap(targetHandicap);
+  // Group-relative SG needs the un-rekeyed rounds (all scorers' shot detail),
+  // paired with which player id is "me" in each. GPS club distances are scoped
+  // to just the selected rounds.
+  const groupPairs = rounds.map((mr) => ({ round: mr.round, myId: mr.playerId }));
+  const selectedRoundIds = rounds.map((mr) => mr.round?.id).filter(Boolean);
 
   const baseline = {
     roundCount: rounds.length,
@@ -772,6 +781,13 @@ export function computeMyStats(selectedRounds, { n = 5, targetHandicap = 0, base
     driveImpact,
     approachImpact,
     approachTendency: approachMissTendency(synthetic, CANON_ID),
+    approachMissCost: approachMissCost(synthetic, CANON_ID),
+    approachMissByDistance: approachMissByDistance(synthetic, CANON_ID),
+    scramblingByMiss: scramblingByMissType(synthetic.rounds, CANON_ID),
+    teeClubAccuracy: teeClubAccuracy(synthetic, CANON_ID),
+    par5: par5Performance(synthetic, CANON_ID),
+    sgVsGroup: sgVsGroup(groupPairs, targetHandicap),
+    realClubDistances: realClubDistances(shots, selectedRoundIds),
     puttDive,
     puttingTarget,
     approachTarget,

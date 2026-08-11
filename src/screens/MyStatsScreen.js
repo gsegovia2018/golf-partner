@@ -1,4 +1,4 @@
-import React, { useEffect, useState, useMemo, useCallback, useRef } from 'react';
+import React, { useEffect, useState, useMemo, useCallback, useRef, useSyncExternalStore } from 'react';
 import { View, Text, StyleSheet, ScrollView, ActivityIndicator, Dimensions, InteractionManager } from 'react-native';
 import Animated, {
   useSharedValue,
@@ -23,7 +23,7 @@ import { getAppSettings, updateAppSettings } from '../store/settingsStore';
 import { useAppSettings } from '../hooks/useAppSettings';
 import { TargetHandicapPicker } from '../components/mystats/TargetHandicapPicker';
 import { collectMyRounds, resolveSelection, computeMyStats } from '../store/personalStats';
-import { pruneShotsToRounds } from '../store/shotStore';
+import { pruneShotsToRounds, getShots, subscribeShots, getShotsVersion } from '../store/shotStore';
 import { buildRoundReportCard } from '../store/roundReportCard';
 import RoundReportCard from '../components/RoundReportCard';
 import MyStatsRoundSelector from '../components/MyStatsRoundSelector';
@@ -460,9 +460,15 @@ export default function MyStatsScreen({ navigation, route }) {
     () => (myRounds ? resolveSelection(myRounds, overrides) : []),
     [myRounds, overrides],
   );
+  // GPS shot log feeds the real club-distance stat; subscribe so it refreshes
+  // as shots sync in without a manual reload.
+  const shotsVersion = useSyncExternalStore(subscribeShots, getShotsVersion, getShotsVersion);
   const stats = useMemo(
-    () => (selected.length ? computeMyStats(selected, { n, targetHandicap: targetHandicap ?? 0 }) : null),
-    [selected, n, targetHandicap],
+    () => (selected.length
+      ? computeMyStats(selected, { n, targetHandicap: targetHandicap ?? 0, shots: getShots() })
+      : null),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [selected, n, targetHandicap, shotsVersion],
   );
 
   const coachFocusVerdict = useMemo(
