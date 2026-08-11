@@ -70,6 +70,7 @@ import { makeScorecardStyles } from '../components/scorecard/styles';
 import { HoleView } from '../components/scorecard/HoleView';
 import { GridView, resolveScorecardRows } from '../components/scorecard/GridView';
 import FinishConflictSheet from '../components/scorecard/FinishConflictSheet';
+import HoleConflictSheet from '../components/scorecard/HoleConflictSheet';
 import TourOverlay from '../components/tour/TourOverlay';
 import { SCORECARD_TOUR_STEPS } from '../components/tour/tourSteps';
 
@@ -224,18 +225,20 @@ export function canShowQuickFinish({ tournament, official, viewOnly }) {
   return !official && !viewOnly && tournament?.kind === 'game';
 }
 
-// Builds the leave-hole verification warning from holeEntryMismatches output.
-// One line per disagreeing player: "Pedro — you: 5, Juan: 6".
-export function buildHoleMismatchWarning({ mismatches, hole, players, authorName }) {
-  const lines = mismatches.map((mm) => {
-    const name = (players ?? []).find((p) => p.id === mm.playerId)?.name ?? 'Player';
-    const theirs = mm.others.map((o) => `${authorName(o.authorId)}: ${o.value}`).join(', ');
-    return `${name} — you: ${mm.mine}, ${theirs}`;
-  });
-  return {
-    title: `Scores don't match on hole ${hole}`,
-    message: `${lines.join('\n')}\n\nCheck with the other scorer and fix it before moving on.`,
-  };
+// Rows for the mid-round conflict sheet, from holeEntryMismatches output.
+// Mine-first so the local value reads as "You" next to the peers' entries.
+export function buildHoleMismatchRows({ mismatches, hole, players, authorName, authorId }) {
+  return mismatches.map((mm) => ({
+    playerId: mm.playerId,
+    hole,
+    playerName: (players ?? []).find((p) => p.id === mm.playerId)?.name ?? 'Player',
+    currentValue: mm.mine,
+    candidates: [
+      { value: mm.mine, ts: 0, authorId, authorName: 'You' },
+      ...mm.others.map((o) => ({ value: o.value, ts: 0, authorId: o.authorId, authorName: authorName(o.authorId) })),
+    ],
+    blankAuthors: [],
+  }));
 }
 
 export function roundDecisionNoticeForPair(pair) {
@@ -322,6 +325,9 @@ export default function ScorecardScreen({ navigation, route }) {
   // Finish-time conflict summary sheet (Task 5) — open while handleFinish is
   // blocked on unresolved score conflicts after the final flush.
   const [finishConflictsOpen, setFinishConflictsOpen] = useState(false);
+  // Mid-round conflict prompt: 'leave' = leave-hole verification for one hole,
+  // 'peer' = a synced conflict that surfaced from another scorer's entries.
+  const [holeConflictPrompt, setHoleConflictPrompt] = useState(null); // { source, hole? }
   // Official mode (Task 16): attest-my-card request in flight, and the last
   // attest error message (RPC can reject with "resolve discrepancies first").
   const [attestBusy, setAttestBusy] = useState(false);
@@ -1373,9 +1379,14 @@ export default function ScorecardScreen({ navigation, route }) {
     lastClinchedPairRef.current = clinched;
   }, [round, tournament, players, scores, settings]);
 
+  // Conflicts already prompted this session (playerId:hole). Declared here so
+  // goToNextHole (below) can seed it before the mid-round sheet opens; the
+  // auto-surface effect that reads/writes it lives near conflictHoles.
+  const seenConflictKeysRef = useRef(new Set());
+
   // Leaving a hole is when the scorers' cards get compared. If any score I
   // entered disagrees with what another scorer entered for the same player,
-  // warn before moving on — a cell I left blank never blocks (I didn't mark
+  // prompt before moving on — a cell I left blank never blocks (I didn't mark
   // that player, so their scorer's entry simply stands).
   const goToNextHole = useCallback(() => {
     if (official || viewOnly || !round) { advanceHole(); return; }
@@ -1383,18 +1394,9 @@ export default function ScorecardScreen({ navigation, route }) {
     const mismatches = holeEntryMismatches(round, currentHoleRef.current, authorId, mine);
     if (!mismatches.length) { advanceHole(); return; }
     haptic('medium');
-    const { title, message } = buildHoleMismatchWarning({
-      mismatches, hole: currentHoleRef.current, players, authorName,
-    });
-    if (Platform.OS === 'web') {
-      if (window.confirm(`${title}\n\n${message}\n\nContinue anyway?`)) advanceHole();
-    } else {
-      Alert.alert(title, message, [
-        { text: 'Fix scores', style: 'cancel' },
-        { text: 'Continue anyway', onPress: advanceHole },
-      ]);
-    }
-  }, [official, viewOnly, round, authorId, players, authorName, advanceHole]);
+    for (const mm of mismatches) seenConflictKeysRef.current.add(`${mm.playerId}:${currentHoleRef.current}`);
+    setHoleConflictPrompt({ source: 'leave', hole: currentHoleRef.current });
+  }, [official, viewOnly, round, authorId, advanceHole]);
   useEffect(() => { goToNextHoleRef.current = goToNextHole; }, [goToNextHole]);
 
   const goToHole = useCallback((h) => {
@@ -1452,6 +1454,26 @@ export default function ScorecardScreen({ navigation, route }) {
     [round, presenceProgress],
   );
 
+  // Auto-pop each synced conflict once this session; after a dismissal the
+  // dots and the finish gate still cover it.
+  useEffect(() => {
+    if (official || viewOnly || !round) return;
+    const fresh = surfaceableConflicts(round, presenceProgress)
+      .filter(({ playerId, hole }) => !seenConflictKeysRef.current.has(`${playerId}:${hole}`));
+    if (!fresh.length) return;
+    // Never steal the screen from a prompt that is already up; the peer sheet
+    // derives its rows live, so anything new folds into it on its own.
+    if (finishConflictsOpen) return;
+    if (holeConflictPrompt) {
+      if (holeConflictPrompt.source === 'peer') {
+        for (const { playerId, hole } of fresh) seenConflictKeysRef.current.add(`${playerId}:${hole}`);
+      }
+      return;
+    }
+    for (const { playerId, hole } of fresh) seenConflictKeysRef.current.add(`${playerId}:${hole}`);
+    setHoleConflictPrompt({ source: 'peer' });
+  }, [round, presenceProgress, official, viewOnly, finishConflictsOpen, holeConflictPrompt]);
+
   // The card as I've marked it. Hole-view pages above the verified watermark
   // render this instead of the merged scores, so a peer's synced entries can't
   // pre-fill a hole I'm still scoring. Official and view-only modes keep the
@@ -1461,6 +1483,34 @@ export default function ScorecardScreen({ navigation, route }) {
     if (official || viewOnly) return null;
     return authorScores(round, authorId, scores, dirtyCellsRef.current);
   }, [official, viewOnly, round, authorId, scores]);
+
+  // Rows for the mid-round conflict sheet, derived live so a resolution from
+  // either phone removes its row on the next render. 'leave' compares my card
+  // (dirty edits included) against the peers' entries for the hole being left;
+  // 'peer' lists every synced conflict that is currently surfaceable.
+  const holeConflictRows = useMemo(() => {
+    if (!holeConflictPrompt || !round) return [];
+    if (holeConflictPrompt.source === 'leave') {
+      const mine = authorScores(round, authorId, scores, dirtyCellsRef.current);
+      const mismatches = holeEntryMismatches(round, holeConflictPrompt.hole, authorId, mine);
+      return buildHoleMismatchRows({
+        mismatches, hole: holeConflictPrompt.hole, players, authorName, authorId,
+      });
+    }
+    return surfaceableConflicts(round, presenceProgress).map(({ playerId, hole }) => {
+      const d = deriveCell(round, playerId, hole);
+      return {
+        playerId,
+        hole,
+        playerName: (players ?? []).find((p) => p.id === playerId)?.name ?? 'Player',
+        currentValue: d.effective,
+        candidates: d.candidates.map((c) => ({
+          value: c.value, ts: c.ts, authorId: c.authorId, authorName: authorName(c.authorId),
+        })),
+        blankAuthors: d.blankAuthors.map((a) => authorName(a)),
+      };
+    });
+  }, [holeConflictPrompt, round, scores, authorId, players, authorName, presenceProgress]);
 
   // Back from the scorecard. The live center-tab action requests Tournament so
   // the user lands on the active round summary while a round is live. Other
@@ -1974,6 +2024,32 @@ export default function ScorecardScreen({ navigation, route }) {
           handleFinish();
         }}
       />
+      {holeConflictPrompt && (() => {
+        const pending = holeConflictRows.length > 0;
+        const leave = holeConflictPrompt.source === 'leave';
+        const close = () => setHoleConflictPrompt(null);
+        return (
+          <HoleConflictSheet
+            visible
+            onClose={close}
+            title={pending
+              ? (leave ? `Scores don't match on hole ${holeConflictPrompt.hole}` : "Scores don't match")
+              : 'All scores agreed'}
+            subtitle={pending
+              ? (leave
+                ? 'You and another scorer recorded different scores for this hole. Tap the correct one, or check before moving on.'
+                : 'Another phone recorded a different score on an earlier hole. Tap the correct one.')
+              : 'Every score has one agreed value.'}
+            rows={holeConflictRows}
+            localAuthorId={authorId}
+            onPick={(playerId, hole, value) => resolveConflict(playerId, hole, value)}
+            primaryLabel={leave ? (pending ? 'Continue anyway' : 'Continue') : (pending ? 'Not now' : 'Done')}
+            onPrimary={() => { close(); if (leave) advanceHole(); }}
+            secondaryLabel={leave && pending ? 'Fix scores' : undefined}
+            onSecondary={leave && pending ? close : undefined}
+          />
+        );
+      })()}
 
       {roundCompleteVisible && (
         <View

@@ -7,7 +7,7 @@ import {
   shouldMarkTournamentFinishedFromScorecard,
   shouldApplyReloadSnapshot,
   clampEnteredScore,
-  buildHoleMismatchWarning,
+  buildHoleMismatchRows,
 } from '../ScorecardScreen';
 
 // ScorecardScreen imports useFocusEffect from @react-navigation/native, whose
@@ -207,32 +207,56 @@ describe('shouldApplyReloadSnapshot', () => {
   });
 });
 
-describe('buildHoleMismatchWarning', () => {
+describe('buildHoleMismatchRows', () => {
   const players = [{ id: 'p1', name: 'Pedro' }, { id: 'p2', name: 'Luis' }];
   const authorName = (a) => ({ me: 'Me', juan: 'Juan', ana: 'Ana' }[a] ?? a);
 
-  test('one line per disagreeing player, named per author', () => {
-    const { title, message } = buildHoleMismatchWarning({
+  test('mine-first candidate list, named per author, playerName resolved', () => {
+    const rows = buildHoleMismatchRows({
       hole: 7,
       players,
       authorName,
+      authorId: 'me',
       mismatches: [
         { playerId: 'p1', mine: 5, others: [{ authorId: 'juan', value: 6 }] },
         { playerId: 'p2', mine: 3, others: [{ authorId: 'juan', value: 4 }, { authorId: 'ana', value: 5 }] },
       ],
     });
-    expect(title).toBe("Scores don't match on hole 7");
-    expect(message).toContain('Pedro — you: 5, Juan: 6');
-    expect(message).toContain('Luis — you: 3, Juan: 4, Ana: 5');
+    expect(rows).toEqual([
+      {
+        playerId: 'p1',
+        hole: 7,
+        playerName: 'Pedro',
+        currentValue: 5,
+        candidates: [
+          { value: 5, ts: 0, authorId: 'me', authorName: 'You' },
+          { value: 6, ts: 0, authorId: 'juan', authorName: 'Juan' },
+        ],
+        blankAuthors: [],
+      },
+      {
+        playerId: 'p2',
+        hole: 7,
+        playerName: 'Luis',
+        currentValue: 3,
+        candidates: [
+          { value: 3, ts: 0, authorId: 'me', authorName: 'You' },
+          { value: 4, ts: 0, authorId: 'juan', authorName: 'Juan' },
+          { value: 5, ts: 0, authorId: 'ana', authorName: 'Ana' },
+        ],
+        blankAuthors: [],
+      },
+    ]);
   });
 
   test('unknown player falls back to a generic label', () => {
-    const { message } = buildHoleMismatchWarning({
+    const rows = buildHoleMismatchRows({
       hole: 1,
       players,
       authorName,
+      authorId: 'me',
       mismatches: [{ playerId: 'ghost', mine: 4, others: [{ authorId: 'juan', value: 5 }] }],
     });
-    expect(message).toContain('Player — you: 4, Juan: 5');
+    expect(rows[0].playerName).toBe('Player');
   });
 });
