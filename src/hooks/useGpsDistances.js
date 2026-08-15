@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useRef, useState, useSyncExternalStore } from 'react';
+import { Platform } from 'react-native';
 import * as Location from 'expo-location';
 import {
   findCourseGeometry, holeFeatures, haversineMeters,
@@ -24,6 +25,14 @@ import { subscribeAppSettings, getAppSettings } from '../store/settingsStore';
 // player is past the tee box — the driver stops being a sensible suggestion.
 const OFF_TEE_METERS = 50;
 
+// Browser geolocation options. expo-location's web wrappers are unusable for a
+// live watch: getCurrentPositionAsync hardcodes maximumAge: Infinity (every
+// call returns the cached fix), and watchPositionAsync forwards expo's own
+// options object raw, so enableHighAccuracy is never set and the browser sits
+// on coarse network location that rarely updates. On web we drive
+// navigator.geolocation directly with these instead.
+const WEB_GEO_OPTIONS = { enableHighAccuracy: true, maximumAge: 0, timeout: 15000 };
+
 export function useGpsDistances(courseName, holeNumber) {
   const geomVersion = useSyncExternalStore(subscribeCourseGeometry, getCourseGeometryVersion);
   // geomVersion bumps when hydration swaps in live geometry — recompute then.
@@ -48,6 +57,7 @@ export function useGpsDistances(courseName, holeNumber) {
     if (!hasGeometry || !gpsEnabled) return undefined;
     let cancelled = false;
     let sub = null;
+    let webWatchId = null;
     let poll = null;
     const apply = (loc) => {
       if (cancelled || !loc) return;
@@ -76,6 +86,20 @@ export function useGpsDistances(courseName, holeNumber) {
           return;
         }
         setDenied(false);
+        if (Platform.OS === 'web' && typeof navigator !== 'undefined' && navigator.geolocation) {
+          // See WEB_GEO_OPTIONS — the expo-location web path only ever yields
+          // one coarse cached fix. GeolocationPosition has the same
+          // { coords: { latitude, longitude, accuracy } } shape apply() reads.
+          navigator.geolocation.getCurrentPosition(apply, () => {}, WEB_GEO_OPTIONS);
+          webWatchId = navigator.geolocation.watchPosition(apply, () => {}, WEB_GEO_OPTIONS);
+          // Safety net for browsers whose watch goes silent (backgrounded tab,
+          // some mobile vendors) — force a fresh read after 6s of quiet.
+          poll = setInterval(() => {
+            if (cancelled || Date.now() - lastFixAt.current < 6000) return;
+            navigator.geolocation.getCurrentPosition(apply, () => {}, WEB_GEO_OPTIONS);
+          }, 5000);
+          return;
+        }
         // Fast first fix — the watch below can take several seconds to emit.
         Location.getCurrentPositionAsync({ accuracy: Location.Accuracy.High })
           .then(apply).catch(() => {});
@@ -105,6 +129,7 @@ export function useGpsDistances(courseName, holeNumber) {
       // react-native-web — it throws and takes down the tree via the error
       // boundary. Swallow it; the watch is being discarded anyway.
       try { sub?.remove?.(); } catch { /* web removeSubscription missing */ }
+      if (webWatchId != null) navigator.geolocation.clearWatch(webWatchId);
       if (poll) clearInterval(poll);
     };
   }, [hasGeometry, gpsEnabled, permRetry]);

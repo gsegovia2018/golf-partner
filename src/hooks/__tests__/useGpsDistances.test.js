@@ -138,6 +138,39 @@ test('denied recovers automatically once permission is granted in system setting
   }
 });
 
+test('web drives navigator.geolocation directly with high-accuracy uncached options', async () => {
+  // expo-location's web wrappers cache fixes (maximumAge: Infinity) and never
+  // set enableHighAccuracy on the watch — the hook must bypass them on web.
+  const { Platform } = require('react-native');
+  const osDesc = Object.getOwnPropertyDescriptor(Platform, 'OS');
+  Object.defineProperty(Platform, 'OS', { configurable: true, get: () => 'web' });
+  const geolocation = {
+    getCurrentPosition: jest.fn((onOk) => onOk({ coords: { latitude: 38.5, longitude: -0.15, accuracy: 5 }, timestamp: 0 })),
+    watchPosition: jest.fn(() => 7),
+    clearWatch: jest.fn(),
+  };
+  const navDesc = Object.getOwnPropertyDescriptor(global, 'navigator');
+  Object.defineProperty(global, 'navigator', { configurable: true, value: { geolocation } });
+  try {
+    const view = render(<Probe />);
+    await waitFor(() => expect(geolocation.watchPosition).toHaveBeenCalled());
+    const expectedOpts = { enableHighAccuracy: true, maximumAge: 0, timeout: 15000 };
+    expect(geolocation.watchPosition.mock.calls[0][2]).toEqual(expectedOpts);
+    expect(geolocation.getCurrentPosition.mock.calls[0][2]).toEqual(expectedOpts);
+    expect(Location.watchPositionAsync).not.toHaveBeenCalled();
+    expect(Location.getCurrentPositionAsync).not.toHaveBeenCalled();
+    await waitFor(() => {
+      expect(JSON.parse(screen.getByTestId('out').props.children).f).toBe('ok');
+    });
+    view.unmount();
+    expect(geolocation.clearWatch).toHaveBeenCalledWith(7);
+  } finally {
+    Object.defineProperty(Platform, 'OS', osDesc);
+    if (navDesc) Object.defineProperty(global, 'navigator', navDesc);
+    else delete global.navigator;
+  }
+});
+
 test('offTee flips true once a live fix is >50 m from the mapped tee', async () => {
   const geo = require('../../lib/geo');
   geo.holeFeatures.mockReturnValue({ start: [38.55, -0.14] });
