@@ -987,6 +987,21 @@ export function makeScorecardStyles(theme) {
       letterSpacing: 1.5,
       marginTop: 2,
     },
+    // Read-only "ghost" preview of a peer's entry on a cell this scorer
+    // hasn't marked themselves (unverified holes only). Muted + italic so it
+    // never reads as this scorer's own verified value.
+    ghostScoreNum: {
+      color: theme.text.muted,
+      fontStyle: 'italic',
+      opacity: 0.7,
+    },
+    ghostAttribution: {
+      color: theme.text.muted,
+      fontSize: 10,
+      fontFamily: 'PlusJakartaSans-SemiBold',
+      fontStyle: 'italic',
+      marginTop: 2,
+    },
     soloPtsBadge: {
       alignSelf: 'center',
       paddingHorizontal: 18,

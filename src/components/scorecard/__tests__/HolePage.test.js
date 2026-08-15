@@ -285,6 +285,92 @@ describe('HolePage hero-card conflict flag: gated by presence (conflictHoles)', 
   });
 });
 
+// Casual, unverified holes: when this scorer has no own entry for a cell but
+// a peer's synced value exists in the merged card, HolePage should render it
+// as a read-only "ghost" with attribution — but only when the caller signals
+// this page is on the own-entries-only view (ghostEnabled), which mirrors
+// HoleView's `myScores && pageHole.number > verifiedUpTo` gate.
+describe('HolePage ghost preview wiring', () => {
+  const players = [{ id: 'a', name: 'Alice', handicap: 10 }];
+  const round = {
+    id: 'r1',
+    holes: [],
+    playerHandicaps: { a: 10 },
+    scoreEntries: { a: { 1: { m1: { value: 4, ts: 1 } } } },
+  };
+
+  function renderGhostHole(overrides = {}) {
+    const props = {
+      // par/strokeIndex/handicap are chosen distinct from the score values
+      // used below (4, 5) so getByText on a strokes value can't collide
+      // with the header's PAR/SI or the HCP line.
+      pageHole: { number: 1, par: 6, strokeIndex: 9 },
+      width: 360,
+      height: 600,
+      courseName: 'Pebble',
+      roundIndex: 0,
+      round,
+      players,
+      scores: { a: {} }, // viewer's own-entries card — no entry for hole 1
+      peerScores: { a: { 1: 4 } }, // merged card — a peer already entered 4
+      ghostEnabled: true,
+      authorName: (id) => (id === 'm1' ? 'Marker' : 'Someone'),
+      shotDetails: {},
+      meId: 'a',
+      onSetShot: () => {},
+      theme: { name: 'light' },
+      s: {},
+      onStep: () => {},
+      onSetScore: () => {},
+      editable: null,
+      getScoreAnim: () => new Animated.Value(1),
+      showRunning: false,
+      mode: 'stableford',
+      official: false,
+      officialDiscrepancy: null,
+      onOpenDiscrepancy: () => {},
+      onOpenConflict: () => {},
+      shotCollapsed: false,
+      onToggleShotDetail: () => {},
+      totalsMap: new Map(),
+      conflictHoles: new Set(),
+      ...overrides,
+    };
+    return render(<HolePage {...props} />);
+  }
+
+  test('peer-entered value + no own entry + ghostEnabled → ghost visible with attribution', () => {
+    const { getByText, getByLabelText } = renderGhostHole();
+    expect(getByText('4')).toBeTruthy();
+    expect(getByText('by Marker')).toBeTruthy();
+    expect(getByLabelText('Hole 1, Alice: 4 entered by Marker, not verified by you')).toBeTruthy();
+  });
+
+  test('own entry present → no ghost even though the merged card also has a peer value', () => {
+    const { getByText, queryByText } = renderGhostHole({ scores: { a: { 1: 5 } } });
+    expect(getByText('5')).toBeTruthy();
+    expect(queryByText('by Marker')).toBeNull();
+  });
+
+  test('no data at all → empty state unchanged', () => {
+    const { getByText, queryByText } = renderGhostHole({ peerScores: { a: {} } });
+    expect(getByText('—')).toBeTruthy();
+    expect(queryByText(/^by /)).toBeNull();
+  });
+
+  test('below-watermark page (ghostEnabled false) → merged rendering unchanged, no ghost treatment', () => {
+    // Below the watermark HoleView passes the merged card as `scores` itself,
+    // so the cell already reads 4 directly — this only pins that ghostEnabled
+    // false suppresses the ghost overlay even when a "peer value" is present.
+    const { getByText, queryByText } = renderGhostHole({
+      ghostEnabled: false,
+      scores: { a: { 1: 4 } },
+    });
+    expect(getByText('4')).toBeTruthy();
+    expect(queryByText('by Marker')).toBeNull();
+  });
+});
+
 describe('holePagePropsEqual', () => {
   test('identical props → skip re-render', () => {
     const prev = baseProps();

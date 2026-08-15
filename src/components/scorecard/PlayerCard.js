@@ -32,6 +32,13 @@ import { haptic } from '../../lib/haptics';
 //     `isMe` is true.
 //   officialState, canResolveHere, onOpenDiscrepancy — official mode
 //   conflict, onOpenConflict — casual-mode score conflict (amber flag + resolve sheet)
+//   ghost — { value, authorName } | null. Casual, unverified holes only:
+//     when this scorer hasn't marked a cell themselves but a peer's synced
+//     entry exists, the caller passes the peer's value here (with `strokes`
+//     left null) so the card shows it as a muted, read-only preview with
+//     attribution instead of a blank dash. Display only — it never changes
+//     `strokes`, so steppers / tap-to-set still start from the same empty
+//     baseline as any other unmarked cell.
 export const PlayerCard = React.memo(function PlayerCard({
   player, hole, strokes, points,
   handicap, extraShots, pickup, isPickup, teeLabel,
@@ -42,6 +49,7 @@ export const PlayerCard = React.memo(function PlayerCard({
   shotDetail, onSetShot, shotCollapsed, onToggleShotDetail, showShotDetail,
   officialState, canResolveHere, onOpenDiscrepancy,
   conflict, onOpenConflict,
+  ghost,
 }) {
   const { theme } = useTheme();
   const s = useMemo(() => makeScorecardStyles(theme), [theme]);
@@ -83,6 +91,12 @@ export const PlayerCard = React.memo(function PlayerCard({
   // passes `showShotDetail={false}` while `isMe` is still true.
   const shouldShowShotDetail = showShotDetail ?? isMe;
   const conflicted = !!conflict;
+  // Conflict styling takes priority over the ghost preview (they're not
+  // expected to co-occur in practice, but conflict already owns the hero
+  // card's tap target and colour when it does). Guarded on `strokes == null`
+  // defensively too — the ghost must never show alongside a real entry, even
+  // if a caller ever passed both.
+  const ghostVisible = !!ghost && strokes == null && !conflicted;
   const officialTappable = officialState === 'discrepancy' && canResolveHere;
   const heroTappable = conflicted || officialTappable;
   const showScoreControls = canEdit && !conflicted;
@@ -183,21 +197,31 @@ export const PlayerCard = React.memo(function PlayerCard({
             }
           }}
           delayLongPress={350}
-          accessibilityLabel={`Strokes on hole ${hole.number}${canEdit && !conflicted && strokes != null ? ' — long-press to clear' : ''}`}
+          accessibilityLabel={
+            ghostVisible
+              ? `Hole ${hole.number}, ${player.name}: ${ghost.value} entered by ${ghost.authorName}, not verified by you`
+              : `Strokes on hole ${hole.number}${canEdit && !conflicted && strokes != null ? ' — long-press to clear' : ''}`
+          }
         >
           <Animated.View style={[s.soloScoreDisplay, { transform: [{ scale: getScoreAnim(player.id) }] }]}>
             <Text style={[
               s.soloScoreNum,
               strokes == null && s.scoreDisplayNumEmpty,
+              ghostVisible && s.ghostScoreNum,
               conflicted && { color: semantic.conflict.base },
             ]}>
-              {strokes ?? '—'}
+              {strokes ?? (ghostVisible ? ghost.value : '—')}
             </Text>
             <Text style={[s.soloScoreLabel, conflicted && { color: semantic.conflict.base }]}>
               {conflicted
                 ? 'TAP TO RESOLVE'
-                : strokes == null ? 'STROKES' : canEdit ? 'HOLD TO CLEAR' : 'STROKES'}
+                : strokes == null ? (ghostVisible ? 'NOT VERIFIED' : 'STROKES') : canEdit ? 'HOLD TO CLEAR' : 'STROKES'}
             </Text>
+            {/* Attribution for the ghost preview — who entered this value,
+                so it reads as theirs, not the viewer's own verified entry. */}
+            {ghostVisible && (
+              <Text style={s.ghostAttribution} numberOfLines={1}>{`by ${ghost.authorName}`}</Text>
+            )}
           </Animated.View>
         </Pressable>
         {showScoreControls && (

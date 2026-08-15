@@ -75,6 +75,51 @@ describe('PlayerCard layout', () => {
   });
 });
 
+describe('PlayerCard ghost preview', () => {
+  test('peer-entered value with no own entry renders as a ghost with attribution', () => {
+    const { getByText, getByLabelText, queryByText } = renderPlayerCard({
+      strokes: null,
+      points: null,
+      canEdit: true,
+      ghost: { value: 4, authorName: 'Alice' },
+    });
+
+    expect(getByText('4')).toBeTruthy();
+    expect(getByText('by Alice')).toBeTruthy();
+    expect(getByLabelText('Hole 1, Marco: 4 entered by Alice, not verified by you')).toBeTruthy();
+    // No points badge for a ghost — it isn't this scorer's verified entry.
+    expect(queryByText(/point/)).toBeNull();
+  });
+
+  test('own entry present → normal rendering, no ghost even if a ghost value is passed', () => {
+    const { getByText, queryByText, getByLabelText } = renderPlayerCard({
+      strokes: 5,
+      points: 2,
+      canEdit: true,
+      ghost: { value: 4, authorName: 'Alice' },
+    });
+
+    expect(getByText('5')).toBeTruthy();
+    expect(queryByText('by Alice')).toBeNull();
+    expect(queryByText('4')).toBeNull();
+    expect(getByLabelText('Strokes on hole 1 — long-press to clear')).toBeTruthy();
+  });
+
+  test('no data at all → empty state unchanged', () => {
+    const { getByText, queryByText, getByLabelText } = renderPlayerCard({
+      strokes: null,
+      points: null,
+      canEdit: true,
+      ghost: null,
+    });
+
+    expect(getByText('—')).toBeTruthy();
+    expect(getByText('STROKES')).toBeTruthy();
+    expect(queryByText(/^by /)).toBeNull();
+    expect(getByLabelText('Strokes on hole 1')).toBeTruthy();
+  });
+});
+
 describe('PlayerCard pickup toggle', () => {
   test('toggling pickup off clears the hole instead of recording a par', () => {
     const onSetScore = jest.fn();

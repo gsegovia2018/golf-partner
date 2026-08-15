@@ -1,5 +1,5 @@
 import { applyToTournament, preserveLocalConflictState } from '../mutate';
-import { listRoundConflicts } from '../scoreEntries';
+import { deriveCell, listRoundConflicts } from '../scoreEntries';
 
 const base = () => ({ id: 't', rounds: [{ id: 'r0', scores: {}, scoreEntries: {}, scoreResolutions: {} }] });
 
@@ -35,11 +35,59 @@ test('preserveLocalConflictState unions scoreEntries per authorId (target has b,
   });
 });
 
-test('preserveLocalConflictState prefers target when both sides have the same authorId for a scoreEntries cell', () => {
+test('preserveLocalConflictState prefers the newer target entry when both sides have the same authorId for a scoreEntries cell', () => {
   const target = { rounds: [{ id: 'r0', scoreEntries: { p1: { 3: { a: { value: 9, ts: 30 } } } } }] };
   const source = { rounds: [{ id: 'r0', scoreEntries: { p1: { 3: { a: { value: 4, ts: 10 } } } } }] };
   const out = preserveLocalConflictState(target, source);
   expect(out.rounds[0].scoreEntries.p1[3]).toEqual({ a: { value: 9, ts: 30 } });
+});
+
+// A fetched `target` now carries the SERVER's copy of my own author entry
+// (20260815000000_fetch_score_entries.sql). Mid-drain that copy can be older
+// than the edit sitting in local state, so precedence is by ts, not by side.
+test('preserveLocalConflictState keeps the newer LOCAL entry when the fetched one is stale', () => {
+  const target = { rounds: [{ id: 'r0', scoreEntries: { p1: { 1: { a: { value: 5, ts: 1000 } } } } }] };
+  const source = { rounds: [{ id: 'r0', scoreEntries: { p1: { 1: { a: { value: 6, ts: 2000 } } } } }] };
+  const out = preserveLocalConflictState(target, source);
+  expect(out.rounds[0].scoreEntries.p1[1].a).toEqual({ value: 6, ts: 2000 });
+});
+
+test('preserveLocalConflictState takes the fetched entry when it is newer than the local one', () => {
+  const target = { rounds: [{ id: 'r0', scoreEntries: { p1: { 1: { a: { value: 7, ts: 3000 } } } } }] };
+  const source = { rounds: [{ id: 'r0', scoreEntries: { p1: { 1: { a: { value: 6, ts: 2000 } } } } }] };
+  const out = preserveLocalConflictState(target, source);
+  expect(out.rounds[0].scoreEntries.p1[1].a).toEqual({ value: 7, ts: 3000 });
+});
+
+// Equal (or missing) ts keeps target — the pre-ts behavior, so nothing
+// changes for the realtime path where target is cached-plus-the-new-row.
+test('preserveLocalConflictState keeps target on a scoreEntries ts tie or a ts-less entry', () => {
+  const target = {
+    rounds: [{ id: 'r0', scoreEntries: { p1: { 1: { a: { value: 7, ts: 2000 } }, 2: { a: { value: 3 } } } } }],
+  };
+  const source = {
+    rounds: [{ id: 'r0', scoreEntries: { p1: { 1: { a: { value: 6, ts: 2000 } }, 2: { a: { value: 4 } } } } }],
+  };
+  const out = preserveLocalConflictState(target, source);
+  expect(out.rounds[0].scoreEntries.p1[1].a).toEqual({ value: 7, ts: 2000 });
+  expect(out.rounds[0].scoreEntries.p1[2].a).toEqual({ value: 3 });
+});
+
+// The offline-recovery case this whole change exists for: this device was
+// offline while peer B's entry broadcast, so local only ever saw A's. The
+// fetch now carries BOTH, and the merge must surface the conflict.
+test('preserveLocalConflictState recovers a peer entry that only the fetch carries (offline recovery)', () => {
+  const fetched = {
+    rounds: [{
+      id: 'r0',
+      scoreEntries: { p1: { 1: { a: { value: 4, ts: 1000 }, b: { value: 6, ts: 1500 } } } },
+    }],
+  };
+  const local = { rounds: [{ id: 'r0', scoreEntries: { p1: { 1: { a: { value: 4, ts: 1000 } } } } }] };
+  const out = preserveLocalConflictState(fetched, local);
+  const cell = deriveCell(out.rounds[0], 'p1', 1);
+  expect(cell.status).toBe('conflict');
+  expect(cell.candidates.map((c) => c.value).sort()).toEqual([4, 6]);
 });
 
 test('preserveLocalConflictState returns source scoreEntries unchanged when target has none', () => {
@@ -59,11 +107,27 @@ test('preserveLocalConflictState unions scoreResolutions per cell (target has ho
   });
 });
 
-test('preserveLocalConflictState prefers target when both sides have a resolution for the same cell', () => {
+test('preserveLocalConflictState prefers the newer target resolution when both sides have one for the same cell', () => {
   const target = { rounds: [{ id: 'r0', scoreResolutions: { p1: { 3: { value: 9, by: 'b', ts: 99 } } } }] };
   const source = { rounds: [{ id: 'r0', scoreResolutions: { p1: { 3: { value: 4, by: 'a', ts: 2 } } } }] };
   const out = preserveLocalConflictState(target, source);
   expect(out.rounds[0].scoreResolutions.p1[3]).toEqual({ value: 9, by: 'b', ts: 99 });
+});
+
+// Resolutions merge by the same ts rule as entries: a stale fetched stamp
+// must not undo a resolution made locally after it.
+test('preserveLocalConflictState keeps the newer LOCAL resolution when the fetched one is stale', () => {
+  const target = { rounds: [{ id: 'r0', scoreResolutions: { p1: { 3: { value: 4, by: 'a', ts: 1000 } } } }] };
+  const source = { rounds: [{ id: 'r0', scoreResolutions: { p1: { 3: { value: 6, by: 'b', ts: 2000 } } } }] };
+  const out = preserveLocalConflictState(target, source);
+  expect(out.rounds[0].scoreResolutions.p1[3]).toEqual({ value: 6, by: 'b', ts: 2000 });
+});
+
+test('preserveLocalConflictState takes the fetched resolution when it is newer than the local one', () => {
+  const target = { rounds: [{ id: 'r0', scoreResolutions: { p1: { 3: { value: 7, by: 'c', ts: 3000 } } } }] };
+  const source = { rounds: [{ id: 'r0', scoreResolutions: { p1: { 3: { value: 6, by: 'b', ts: 2000 } } } }] };
+  const out = preserveLocalConflictState(target, source);
+  expect(out.rounds[0].scoreResolutions.p1[3]).toEqual({ value: 7, by: 'c', ts: 3000 });
 });
 
 // Task 8: removePlayer deletes round.scoreEntries[playerId] locally (see

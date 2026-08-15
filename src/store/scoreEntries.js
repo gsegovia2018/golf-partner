@@ -154,8 +154,28 @@ export function authorProgress(round, presence = {}) {
   return progress;
 }
 
+// Authors who wrote at least one entry (any player, any value including a
+// blank) on this specific hole.
+function authorsOnHole(round, hole) {
+  const out = new Set();
+  const byPlayer = round?.scoreEntries;
+  if (!byPlayer || typeof byPlayer !== 'object') return out;
+  for (const byHole of Object.values(byPlayer)) {
+    const byAuthor = byHole?.[hole];
+    if (byAuthor && typeof byAuthor === 'object') {
+      for (const a of Object.keys(byAuthor)) out.add(a);
+    }
+  }
+  return out;
+}
+
+// Gated per hole, not round-wide: a hole lights up once every author who
+// wrote to THAT hole has moved past it. An author who never touched this
+// hole doesn't gate it (they can only ever add a new entry, which folds
+// into the conflict when it arrives). An author still on the hole — who may
+// be mid-correction — keeps suppressing it, which is the anti-flash guard.
 export function isCellSurfaceable(round, hole, progress) {
-  const authors = [...activeAuthors(round)];
+  const authors = [...authorsOnHole(round, hole)];
   if (authors.length === 0) return false;
   return authors.every((a) => (progress?.[a] ?? 0) > hole);
 }

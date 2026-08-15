@@ -254,11 +254,12 @@ export async function drainTournament(tournamentId, entries) {
         // the settle loop below — conflict state is derived from these synced
         // entries elsewhere, not raised by this drain, and any resolve already
         // cleared its winning value from local directly (mutate()
-        // saves locally before it ever reaches this drain). `fresh` and
-        // applyPendingMutations' replay never carry scoreEntries/
-        // scoreResolutions (see preserveLocalConflictState) so every pass below
-        // must re-stamp them back onto the freshly computed state or the
-        // reconcile save wipes them.
+        // saves locally before it ever reaches this drain). `fresh` now DOES
+        // carry the server's scoreEntries/scoreResolutions (see
+        // preserveLocalConflictState), but not the ones still queued here, so
+        // every pass below must merge local's back onto the freshly computed
+        // state — ts-aware, so a stale server copy of an entry we have already
+        // re-edited locally never wins — or the reconcile save loses them.
         const localForConflicts = await readLocal(tournamentId);
         const queuedForTournament = async () => (await syncQueue.all())
           .filter((e) => e.tournamentId === tournamentId);

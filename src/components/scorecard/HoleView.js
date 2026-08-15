@@ -324,6 +324,14 @@ export function HoleView({ round, roundIndex, players, scores, myScores = null, 
                   // (authorScores) — peers' synced values must not pre-fill a
                   // hole that hasn't been walked off and verified yet.
                   scores={myScores && pageHole.number > verifiedUpTo ? myScores : scores}
+                  // The merged/effective card, plus whether this page is
+                  // showing the own-entries-only view above. HolePage uses
+                  // both to render a read-only "ghost" of a peer's entry when
+                  // this scorer hasn't marked that cell themselves — display
+                  // only, never fed back into scores/onStep/onSetScore.
+                  peerScores={scores}
+                  ghostEnabled={!!myScores && pageHole.number > verifiedUpTo}
+                  authorName={authorName}
                   shotDetails={shotDetails}
                   meId={meId}
                   onSetShot={onSetShot}

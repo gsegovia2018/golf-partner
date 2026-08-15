@@ -234,3 +234,67 @@ describe('background refresh overlays undrained pending mutations onto fresh rem
     expect(queueReads).toBeGreaterThanOrEqual(2);
   });
 });
+
+// get_game_tournament now assembles scoreEntries/scoreResolutions from
+// game_score_entries/game_score_resolutions (see
+// supabase/migrations/20260815000000_fetch_score_entries.sql), so a fetch is a
+// recovery path for a peer entry whose realtime broadcast this device missed
+// while offline — and the merge in _overlayAndSave must let it through.
+describe('background refresh recovers score entries the fetch now carries', () => {
+  const withEntries = (scoreEntries, scoreResolutions) => {
+    const t = blob({ scores: { p1: { 1: 4 } }, currentRound: 0 });
+    t.rounds[0].scoreEntries = scoreEntries;
+    if (scoreResolutions) t.rounds[0].scoreResolutions = scoreResolutions;
+    return t;
+  };
+
+  test('a peer entry present only on the server surfaces as a conflict after the refresh', async () => {
+    installMocks({ online: true });
+    mockState.userId = 'u1';
+    // Server holds both authors; this device only ever saw its own (author a).
+    mockState.remote = withEntries({ p1: { 1: { a: { value: 4, ts: 1000 }, b: { value: 6, ts: 1500 } } } });
+
+    const store = require('../tournamentStore');
+    await store.saveLocal(withEntries({ p1: { 1: { a: { value: 4, ts: 1000 } } } }));
+
+    const result = await store.refreshTournamentFromRemote('t1');
+    const { deriveCell } = require('../scoreEntries');
+    const cell = deriveCell(result.rounds[0], 'p1', 1);
+    expect(cell.status).toBe('conflict');
+    expect(cell.candidates.map((c) => c.value).sort()).toEqual([4, 6]);
+
+    // …and it is persisted, not just returned.
+    const persisted = await store.readLocal('t1');
+    expect(deriveCell(persisted.rounds[0], 'p1', 1).status).toBe('conflict');
+  });
+
+  test('a stale server copy of my own entry does not beat the newer local one', async () => {
+    installMocks({ online: true });
+    mockState.userId = 'u1';
+    mockState.remote = withEntries({ p1: { 1: { a: { value: 5, ts: 1000 } } } });
+
+    const store = require('../tournamentStore');
+    await store.saveLocal(withEntries({ p1: { 1: { a: { value: 6, ts: 2000 } } } }));
+
+    const result = await store.refreshTournamentFromRemote('t1');
+    expect(result.rounds[0].scoreEntries.p1[1].a).toEqual({ value: 6, ts: 2000 });
+  });
+
+  test('a newer server resolution replaces the local one; a stale one does not', async () => {
+    installMocks({ online: true });
+    mockState.userId = 'u1';
+    mockState.remote = withEntries(
+      { p1: { 1: { a: { value: 4, ts: 1000 }, b: { value: 6, ts: 1500 } } } },
+      { p1: { 1: { value: 6, by: 'b', ts: 3000 } } },
+    );
+
+    const store = require('../tournamentStore');
+    await store.saveLocal(withEntries(
+      { p1: { 1: { a: { value: 4, ts: 1000 } } } },
+      { p1: { 1: { value: 4, by: 'a', ts: 2000 } } },
+    ));
+
+    const result = await store.refreshTournamentFromRemote('t1');
+    expect(result.rounds[0].scoreResolutions.p1[1]).toEqual({ value: 6, by: 'b', ts: 3000 });
+  });
+});

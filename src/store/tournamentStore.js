@@ -198,11 +198,13 @@ function _applyPendingMutations(tournament, entries) {
   return applyPendingMutations(tournament, entries);
 }
 
-// scoreEntries/scoreResolutions are LOCAL-ONLY hot keys (see mutate.js's
-// preserveLocalConflictState) — a repo-fetched `remote` never carries them,
-// so every background refresh through this module must carry `source`'s
-// forward or an unresolved conflict the user hasn't seen yet silently
-// disappears the next time any screen focuses.
+// A repo-fetched `remote` now carries scoreEntries/scoreResolutions (see
+// mutate.js's preserveLocalConflictState and
+// supabase/migrations/20260815000000_fetch_score_entries.sql), but only what
+// the SERVER has — a queued offline entry of ours is absent from it, so every
+// background refresh through this module still merges `source`'s forward
+// (ts-aware per author/cell) or an unresolved conflict the user hasn't seen
+// yet silently disappears the next time any screen focuses.
 function _preserveScoreConflicts(target, source) {
   const { preserveLocalConflictState } = require('./mutate');
   return preserveLocalConflictState(target, source);

@@ -460,35 +460,53 @@ export function applyPendingMutations(tournament, entries) {
   return t;
 }
 
+function entryTs(entry) {
+  const ts = entry?.ts;
+  return Number.isFinite(ts) ? ts : 0;
+}
+
+// Per-cell precedence for the two unions below: newest `ts` wins, target wins
+// a tie (so `>` on the source side, not `>=`).
+function pickNewer(targetEntry, sourceEntry) {
+  if (targetEntry === undefined) return sourceEntry;
+  if (sourceEntry === undefined) return targetEntry;
+  return entryTs(sourceEntry) > entryTs(targetEntry) ? sourceEntry : targetEntry;
+}
+
 // scoreEntries (per-author submissions) and scoreResolutions (explicit
-// resolution stamps) are LOCAL-ONLY hot keys: tournamentRepo.js strips them
-// from every round body before it ever reaches the server
-// (stripRoundHotKeys), and get_game_tournament never reassembles them — so a
-// freshly fetched `target` (repo read, or applyPendingMutations(fresh, ...)
-// replay) NEVER carries them. Both reconcile paths that recompute local
-// state from a fresh fetch (syncWorker's drainTournament post-drain
-// reconcile, and tournamentStore's _overlayAndSave) must carry `source`'s
-// (the previous local blob's) round.scoreEntries/scoreResolutions forward,
-// or a conflict the user hasn't seen yet silently vanishes the moment
-// ANYTHING else for that tournament syncs or the screen pulls a background
-// refresh.
+// resolution stamps) never travel in game_rounds.body — tournamentRepo.js
+// strips them from every round body before it reaches the server
+// (stripRoundHotKeys) — but they are NO LONGER local-only: since
+// supabase/migrations/20260815000000_fetch_score_entries.sql,
+// get_game_tournament reassembles both from game_score_entries /
+// game_score_resolutions, in exactly the shapes realtimeSync's row patchers
+// produce. So a fetch is now a RECOVERY path: a device that was offline while
+// a peer's entry broadcast finally learns about it on the next pull, instead
+// of the conflict staying one-sided forever.
 //
-// But `target` is NOT always entries-less: realtimeSync's makeHandler calls
-// this with `target` = cached-plus-just-applied-row (a fresh
-// game_score_entries/game_score_resolutions row legitimately carries a new
-// peer's entry) and `source` = the pre-row cache. A wholesale replace with
-// `source` there would discard that peer's entry before deriveCell ever sees
-// two authors — the conflict feature would never fire cross-device. So this
-// is a deep UNION per round, with `target` winning per cell/author:
-//   scoreEntries[playerId][hole]: union of authorIds from both sides;
-//     target's entry wins when an authorId appears on both.
-//   scoreResolutions[playerId][hole]: union of cells from both sides; target
-//     wins per cell (a resolution is one atomic stamp, not per-author).
-// This is correct for both callers: on the realtime path `target` already
-// contains everything `source` (cached) had plus the new row, so the union
-// with target-precedence reduces to `target`, entry intact. On the
-// fetch/overlay path `target` has no entries at all, so the union reduces to
-// `source`, restoring what the fetch stripped. Mutates and returns `target`.
+// A fetched `target` may therefore carry entries this device has never seen,
+// while `source` (the previous local blob) may carry entries the server has
+// never seen (queued offline edits). Neither side can be dropped, so this is
+// a deep UNION per round, resolved by `ts`:
+//   scoreEntries[playerId][hole]: union of authorIds from both sides; when an
+//     authorId is on both, the HIGHER-ts entry wins (missing/invalid ts = 0;
+//     a tie keeps `target`). Blind target-precedence would let a stale server
+//     copy of MY OWN author entry — fetched mid-drain, before my newer edit
+//     lands — beat the newer local one.
+//   scoreResolutions[playerId][hole]: same ts-aware rule per cell (a
+//     resolution is one atomic stamp, not per-author).
+// Correct for every caller: on the realtime path `target` is
+// cached-plus-just-applied-row, so the union reduces to `target` with the new
+// row intact; on the fetch/overlay path (syncWorker's post-drain reconcile,
+// tournamentStore's _overlayAndSave) server entries and still-local ones both
+// survive, newest per author.
+//
+// KNOWN CONSERVATIVE BEHAVIOR: a union never removes. A server-side entry
+// DELETE therefore does not propagate through a fetch — only realtime DELETE
+// events (applyScoreEntryRow) and the removedPlayerIds tombstone below prune
+// anything. Accepted: entries are effectively append/overwrite-only in normal
+// play, and keeping a stale candidate visible is far cheaper than silently
+// dropping a live one. Mutates and returns `target`.
 function unionScoreEntries(targetEntries, sourceEntries) {
   if (!sourceEntries && !targetEntries) return undefined;
   const playerIds = new Set([
@@ -502,7 +520,13 @@ function unionScoreEntries(targetEntries, sourceEntries) {
     const holes = new Set([...Object.keys(sHoles), ...Object.keys(tHoles)]);
     const byHole = {};
     for (const hole of holes) {
-      byHole[hole] = { ...(sHoles[hole] ?? {}), ...(tHoles[hole] ?? {}) };
+      const sAuthors = sHoles[hole] ?? {};
+      const tAuthors = tHoles[hole] ?? {};
+      const byAuthor = {};
+      for (const authorId of new Set([...Object.keys(sAuthors), ...Object.keys(tAuthors)])) {
+        byAuthor[authorId] = pickNewer(tAuthors[authorId], sAuthors[authorId]);
+      }
+      byHole[hole] = byAuthor;
     }
     out[playerId] = byHole;
   }
@@ -519,17 +543,22 @@ function unionScoreResolutions(targetResolutions, sourceResolutions) {
   for (const playerId of playerIds) {
     const sHoles = sourceResolutions?.[playerId] ?? {};
     const tHoles = targetResolutions?.[playerId] ?? {};
-    out[playerId] = { ...sHoles, ...tHoles };
+    const byHole = {};
+    for (const hole of new Set([...Object.keys(sHoles), ...Object.keys(tHoles)])) {
+      byHole[hole] = pickNewer(tHoles[hole], sHoles[hole]);
+    }
+    out[playerId] = byHole;
   }
   return out;
 }
 
-// round.removedPlayerIds is a monotonic, LOCAL-ONLY tombstone (same class of
-// hot key as scoreEntries/scoreResolutions — see stripRoundHotKeys in
-// tournamentRepo.js, which must also omit it) recording every playerId a
+// round.removedPlayerIds is a monotonic, LOCAL-ONLY tombstone — stripped from
+// round bodies like scoreEntries/scoreResolutions (see stripRoundHotKeys in
+// tournamentRepo.js, which must also omit it) but, unlike them, never
+// reassembled by any fetch — recording every playerId a
 // tournament.removePlayer apply has ever cleared from THIS round. It only
 // ever grows, so a plain array union (never a target-wins overwrite) is
-// correct and sufficient here — unlike scoreEntries per-cell precedence.
+// correct and sufficient here — unlike scoreEntries' ts-aware per-cell rule.
 function unionRemovedPlayerIds(targetIds, sourceIds) {
   if (!sourceIds && !targetIds) return undefined;
   return [...new Set([...(sourceIds ?? []), ...(targetIds ?? [])])];

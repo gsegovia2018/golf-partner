@@ -98,13 +98,39 @@ describe('conflict listing + gate', () => {
     expect(authorProgress(r, { a: 9 })).toEqual({ a: 9 });   // presence wins
   });
 
-  test('a conflict is not surfaceable until every active author is past the hole', () => {
+  test('a conflict is not surfaceable until every author who wrote on that hole is past it', () => {
     const r = conflicted();
     // author b is still on hole 3 (progress 3, not > 3)
     expect(isCellSurfaceable(r, 3, { a: 5, b: 3 })).toBe(false);
     expect(isCellSurfaceable(r, 3, { a: 5, b: 4 })).toBe(true);
     expect(surfaceableConflicts(r, { a: 5, b: 3 })).toEqual([]);
     expect(surfaceableConflicts(r, { a: 5, b: 4 })).toEqual([{ playerId: 'p1', hole: 3 }]);
+  });
+
+  test('gating is per-hole: a stalled author who never wrote to this hole does not suppress it', () => {
+    // c wrote only on holes 1-5 and then stopped; a and b conflict on hole 8
+    // and have both moved past it. c's stale progress must not gate hole 8.
+    const r = round({
+      p1: {
+        1: { c: { value: 4, ts: 1 } },
+        5: { c: { value: 4, ts: 5 } },
+        8: { a: { value: 4, ts: 10 }, b: { value: 5, ts: 20 } },
+      },
+    });
+    expect(isCellSurfaceable(r, 8, { a: 9, b: 9, c: 5 })).toBe(true);
+  });
+
+  test('an author still on the hole (mid-correction) keeps suppressing it (anti-flash guard)', () => {
+    const r = round({
+      p1: { 8: { a: { value: 4, ts: 10 }, b: { value: 5, ts: 20 } } },
+    });
+    // b's progress is exactly 8 (not > 8): still on the hole.
+    expect(isCellSurfaceable(r, 8, { a: 9, b: 8 })).toBe(false);
+  });
+
+  test('no author wrote anything on this hole -> not surfaceable', () => {
+    const r = round({ p1: { 3: { a: { value: 4, ts: 10 } } } });
+    expect(isCellSurfaceable(r, 8, { a: 9 })).toBe(false);
   });
 });
 

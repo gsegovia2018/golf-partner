@@ -20,6 +20,10 @@ async function getCurrentUserId() {
 // Keys split off `round` before it becomes game_rounds.body — mirrors the
 // server's own strip contract (get_game_tournament's reassembly / the
 // backfill script), so a stale local computed field never lands in body.
+// scoreEntries/scoreResolutions stay on this list even though fetches now
+// carry them back (20260815000000_fetch_score_entries.sql): the RPC rebuilds
+// them from game_score_entries/game_score_resolutions, so a copy in body
+// would only be a stale duplicate the reassembly overwrites anyway.
 function stripRoundHotKeys(round) {
   const {
     scores, shotDetails, notes, scoreEntries, scoreResolutions, removedPlayerIds, ...body

@@ -106,6 +106,8 @@ export function holePagePropsEqual(prev, next) {
     || prev.onToggleShotDetail !== next.onToggleShotDetail
     || prev.conflictHoles !== next.conflictHoles
     || prev.onOpenFlyover !== next.onOpenFlyover
+    || prev.ghostEnabled !== next.ghostEnabled
+    || prev.authorName !== next.authorName
   ) {
     return false;
   }
@@ -121,7 +123,8 @@ export function holePagePropsEqual(prev, next) {
   ) return false;
   const hole = next.pageHole.number;
   return samePerHoleSlice(prev.scores, next.scores, hole)
-    && samePerHoleSlice(prev.shotDetails, next.shotDetails, hole);
+    && samePerHoleSlice(prev.shotDetails, next.shotDetails, hole)
+    && samePerHoleSlice(prev.peerScores, next.peerScores, hole);
 }
 
 // Memoized per-hole page. Extracted so a swipe that only changes the
@@ -144,6 +147,12 @@ export const HolePage = React.memo(function HolePage({
   totalsMap,
   conflictHoles = new Set(),
   gps, onOpenFlyover,
+  // Read-only "ghost" of a peer's entry for a cell this scorer hasn't
+  // marked themselves — see HoleView's wiring comment. `peerScores` is the
+  // merged/effective card; `ghostEnabled` is true only on the casual,
+  // non-official, non-view-only "own entries" pages above the watermark
+  // (where `scores` above is myScores, not the merged card).
+  peerScores, ghostEnabled, authorName,
 }) {
   // Every game mode now renders the unified PlayerCard. Scramble modes score
   // one ball per team under the captain — swap the roster for synthetic team
@@ -329,6 +338,27 @@ export const HolePage = React.memo(function HolePage({
             const conflict = deriveCell(round, player.id, pageHole.number).status === 'conflict'
               && conflictHoles.has(pageHole.number);
 
+            // Read-only ghost of a peer's entry: only when this page is
+            // showing the viewer's own-entries-only card (ghostEnabled),
+            // this player's cell is unmarked BY THE VIEWER (`strokes` above
+            // already reads from that own-entries card in that case), and
+            // the merged card has an effective value someone else entered.
+            // Purely a display overlay — `strokes` stays null, so onStep /
+            // onSetScore start from the same empty baseline as any blank
+            // cell today.
+            let ghost = null;
+            if (ghostEnabled && strokes == null) {
+              const peerValue = peerScores?.[player.id]?.[pageHole.number];
+              if (peerValue != null) {
+                const candidates = deriveCell(round, player.id, pageHole.number).candidates;
+                const mostRecent = candidates.length ? candidates[candidates.length - 1] : null;
+                ghost = {
+                  value: peerValue,
+                  authorName: mostRecent ? (authorName?.(mostRecent.authorId) ?? 'Someone') : 'Someone',
+                };
+              }
+            }
+
             const card = (
               <PlayerCard
                 key={i === 0 ? undefined : player.id}
@@ -359,6 +389,7 @@ export const HolePage = React.memo(function HolePage({
                 onOpenDiscrepancy={onOpenDiscrepancy}
                 conflict={conflict}
                 onOpenConflict={onOpenConflict}
+                ghost={ghost}
               />
             );
             return i === 0 ? (
