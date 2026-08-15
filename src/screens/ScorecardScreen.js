@@ -69,8 +69,7 @@ import { getDeviceAuthorId } from '../store/deviceId';
 import { makeScorecardStyles } from '../components/scorecard/styles';
 import { HoleView } from '../components/scorecard/HoleView';
 import { GridView, resolveScorecardRows } from '../components/scorecard/GridView';
-import FinishConflictSheet from '../components/scorecard/FinishConflictSheet';
-import HoleConflictSheet from '../components/scorecard/HoleConflictSheet';
+import ConflictWizardSheet from '../components/scorecard/ConflictWizardSheet';
 import TourOverlay from '../components/tour/TourOverlay';
 import { SCORECARD_TOUR_STEPS } from '../components/tour/tourSteps';
 
@@ -227,10 +226,11 @@ export function canShowQuickFinish({ tournament, official, viewOnly }) {
 
 // Rows for the mid-round conflict sheet, from holeEntryMismatches output.
 // Mine-first so the local value reads as "You" next to the peers' entries.
-export function buildHoleMismatchRows({ mismatches, hole, players, authorName, authorId }) {
+export function buildHoleMismatchRows({ mismatches, hole, par = null, players, authorName, authorId }) {
   return mismatches.map((mm) => ({
     playerId: mm.playerId,
     hole,
+    par,
     playerName: (players ?? []).find((p) => p.id === mm.playerId)?.name ?? 'Player',
     currentValue: mm.mine,
     candidates: [
@@ -636,8 +636,14 @@ export default function ScorecardScreen({ navigation, route }) {
   const authorName = useCallback((aId) => {
     if (aId === 'legacy') return 'Earlier entry';
     const p = (tournament?.players ?? []).find((pl) => pl.id === aId);
-    return p?.name ?? 'Someone';
+    return p?.name ?? 'Another phone';
   }, [tournament]);
+  // Every id this phone may have stamped on a write: the roster id once we know
+  // it, plus the device id used before/without one. The conflict wizard renders
+  // any of them as "You" — a device-stamped entry is still mine, and reading
+  // "Another phone wrote 5" next to my own entry is what made conflicts
+  // confusing.
+  const localAuthorIds = useMemo(() => [meId, getDeviceAuthorId()].filter(Boolean), [meId]);
 
   const autoSave = useCallback((newScores) => {
     if (!tournamentRef.current) return Promise.resolve(null);
@@ -1226,6 +1232,7 @@ export default function ScorecardScreen({ navigation, route }) {
       return {
         playerId,
         hole,
+        par: r.holes?.[hole - 1]?.par ?? null,
         playerName: (t.players ?? []).find((p) => p.id === playerId)?.name ?? 'Player',
         currentValue: d.effective,
         candidates: d.candidates.map((c) => ({
@@ -1501,7 +1508,12 @@ export default function ScorecardScreen({ navigation, route }) {
       const mine = authorScores(round, authorId, scores, dirtyCellsRef.current);
       const mismatches = holeEntryMismatches(round, holeConflictPrompt.hole, authorId, mine);
       return buildHoleMismatchRows({
-        mismatches, hole: holeConflictPrompt.hole, players, authorName, authorId,
+        mismatches,
+        hole: holeConflictPrompt.hole,
+        par: round.holes?.[holeConflictPrompt.hole - 1]?.par ?? null,
+        players,
+        authorName,
+        authorId,
       });
     }
     return surfaceableConflicts(round, presenceProgress).map(({ playerId, hole }) => {
@@ -1509,6 +1521,7 @@ export default function ScorecardScreen({ navigation, route }) {
       return {
         playerId,
         hole,
+        par: round.holes?.[hole - 1]?.par ?? null,
         playerName: (players ?? []).find((p) => p.id === playerId)?.name ?? 'Player',
         currentValue: d.effective,
         candidates: d.candidates.map((c) => ({
@@ -1955,6 +1968,7 @@ export default function ScorecardScreen({ navigation, route }) {
           onFocusConflictHandled={clearConflictFocus}
           conflictHoles={conflictHoles}
           authorName={authorName}
+          localAuthorIds={localAuthorIds}
         />
       ) : (
         <GridView
@@ -2021,39 +2035,36 @@ export default function ScorecardScreen({ navigation, route }) {
         visible={syncSheetOpen}
         onClose={() => setSyncSheetOpen(false)}
       />
-      <FinishConflictSheet
+      <ConflictWizardSheet
         visible={finishConflictsOpen}
         onClose={() => setFinishConflictsOpen(false)}
         rows={finishConflictRows}
+        localAuthorIds={localAuthorIds}
         onPick={(playerId, hole, value) => resolveConflict(playerId, hole, value)}
-        onFinish={() => {
+        primaryLabel="Finish round"
+        onPrimary={() => {
           setFinishConflictsOpen(false);
           handleFinish();
         }}
+        doneSubtitle="Every hole has one agreed score. You can finish the round."
       />
       {holeConflictPrompt && (() => {
         const pending = holeConflictRows.length > 0;
         const leave = holeConflictPrompt.source === 'leave';
         const close = () => setHoleConflictPrompt(null);
         return (
-          <HoleConflictSheet
+          <ConflictWizardSheet
             visible
             onClose={close}
-            title={pending
-              ? (leave ? `Scores don't match on hole ${holeConflictPrompt.hole}` : "Scores don't match")
-              : 'All scores agreed'}
-            subtitle={pending
-              ? (leave
-                ? 'You and another scorer recorded different scores for this hole. Tap the correct one, or check before moving on.'
-                : 'Another phone recorded a different score on an earlier hole. Tap the correct one.')
-              : 'Every score has one agreed value.'}
             rows={holeConflictRows}
-            localAuthorId={authorId}
+            localAuthorIds={localAuthorIds}
             onPick={(playerId, hole, value) => resolveConflict(playerId, hole, value)}
-            primaryLabel={leave ? (pending ? 'Continue anyway' : 'Continue') : (pending ? 'Not now' : 'Done')}
+            // Leaving a hole must never trap the scorer: the primary stays
+            // available while conflicts remain and still advances. The peer
+            // prompt has nowhere to go, so it only offers Done once settled.
+            allowPrimaryWhilePending={leave}
+            primaryLabel={leave ? (pending ? 'Continue anyway' : 'Continue') : 'Done'}
             onPrimary={() => { close(); if (leave) advanceHole(); }}
-            secondaryLabel={leave && pending ? 'Fix scores' : undefined}
-            onSecondary={leave && pending ? close : undefined}
           />
         );
       })()}

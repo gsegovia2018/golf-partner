@@ -24,7 +24,7 @@ import { roundTotals } from './scoreModel';
 import { isScrambleMode } from '../scoringModes';
 import { scrambleUnits } from '../../store/tournamentStore';
 import DiscrepancySheet from '../DiscrepancySheet';
-import ScoreConflictSheet from '../ScoreConflictSheet';
+import ConflictWizardSheet from './ConflictWizardSheet';
 import { deriveCell } from '../../store/scoreEntries';
 import { getShotDetailCollapsed, setShotDetailCollapsed } from '../../lib/prefs';
 import { prefetchCourseTiles } from '../../store/tileCache';
@@ -60,7 +60,7 @@ if (Platform.OS === 'web' && typeof document !== 'undefined') {
   }
 }
 
-export function HoleView({ round, roundIndex, players, scores, myScores = null, verifiedUpTo = 0, shotDetails, meId, onSetShot, onPickMe, notes, currentHole, hole, isBestBall, bbResult, settings, onStep, onSetScore, editable, onNext, onGoToHole, onFinish, holeCount, showQuickFinish, finishBusy, showRunning, getScoreAnim, celebration, celebrationAnim, refreshing, onRefresh, official, officialDiscrepancy, officialEditableSource, officialSetScore, officialHasAttested, officialAttestBusy, officialAttestError, onAttest, onResolveConflict, focusConflict, onFocusConflictHandled, conflictHoles = new Set(), authorName }) {
+export function HoleView({ round, roundIndex, players, scores, myScores = null, verifiedUpTo = 0, shotDetails, meId, onSetShot, onPickMe, notes, currentHole, hole, isBestBall, bbResult, settings, onStep, onSetScore, editable, onNext, onGoToHole, onFinish, holeCount, showQuickFinish, finishBusy, showRunning, getScoreAnim, celebration, celebrationAnim, refreshing, onRefresh, official, officialDiscrepancy, officialEditableSource, officialSetScore, officialHasAttested, officialAttestBusy, officialAttestError, onAttest, onResolveConflict, focusConflict, onFocusConflictHandled, conflictHoles = new Set(), authorName, localAuthorIds }) {
   const { theme } = useTheme();
   const s = useMemo(() => makeScorecardStyles(theme), [theme]);
   const [holePickerOpen, setHolePickerOpen] = useState(false);
@@ -576,21 +576,30 @@ export function HoleView({ round, roundIndex, players, scores, myScores = null, 
       {conflictTarget && (() => {
         const { hole: cHole, playerId } = conflictTarget;
         const d = deriveCell(round, playerId, cHole);
-        if (d.status !== 'conflict') return null;
         const subject = players.find((p) => p.id === playerId);
+        // Once resolved the cell stops being a conflict, but the sheet stays
+        // mounted on an empty row list so the wizard can show its "all agreed"
+        // confirmation instead of vanishing mid-tap.
+        const rows = d.status === 'conflict' ? [{
+          playerId,
+          hole: cHole,
+          par: round.holes?.[cHole - 1]?.par ?? null,
+          playerName: subject?.name ?? 'Player',
+          currentValue: d.effective,
+          candidates: d.candidates.map((c) => ({
+            value: c.value, ts: c.ts, authorId: c.authorId, authorName: authorName?.(c.authorId) ?? 'Another phone',
+          })),
+          blankAuthors: d.blankAuthors.map((a) => authorName?.(a) ?? 'Another phone'),
+        }] : [];
         return (
-          <ScoreConflictSheet
+          <ConflictWizardSheet
             visible
             onClose={() => setConflictTarget(null)}
-            hole={cHole}
-            subjectName={subject?.name ?? 'Player'}
-            candidates={d.candidates.map((c) => ({ value: c.value, ts: c.ts, authorId: c.authorId, authorName: authorName?.(c.authorId) ?? 'Someone' }))}
-            blankAuthors={d.blankAuthors.map((a) => authorName?.(a) ?? 'Someone')}
-            currentValue={d.effective}
-            onResolve={(value) => {
-              onResolveConflict?.(playerId, cHole, value);
-              setConflictTarget(null);
-            }}
+            rows={rows}
+            localAuthorIds={localAuthorIds}
+            onPick={(pid, h, value) => onResolveConflict?.(pid, h, value)}
+            primaryLabel="Done"
+            onPrimary={() => setConflictTarget(null)}
           />
         );
       })()}

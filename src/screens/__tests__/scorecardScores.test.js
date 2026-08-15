@@ -219,6 +219,7 @@ describe('buildHoleMismatchRows', () => {
   test('mine-first candidate list, named per author, playerName resolved', () => {
     const rows = buildHoleMismatchRows({
       hole: 7,
+      par: 4,
       players,
       authorName,
       authorId: 'me',
@@ -231,6 +232,7 @@ describe('buildHoleMismatchRows', () => {
       {
         playerId: 'p1',
         hole: 7,
+        par: 4,
         playerName: 'Pedro',
         currentValue: 5,
         candidates: [
@@ -242,6 +244,7 @@ describe('buildHoleMismatchRows', () => {
       {
         playerId: 'p2',
         hole: 7,
+        par: 4,
         playerName: 'Luis',
         currentValue: 3,
         candidates: [

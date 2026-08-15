@@ -2099,7 +2099,7 @@ export function isRoundInProgress(tournament) {
 // NOTE: this used to also track a FIFO log of overwritten-value conflicts
 // (`_conflictLog` / `_appendConflicts`), surfaced in SyncStatusSheet as
 // "Cambios sobrescritos". Sync v2 replaced blob-merge overwrites with
-// per-author derived conflicts (ScoreConflictSheet / DiscrepancySheet), so
+// per-author derived conflicts (ConflictWizardSheet / DiscrepancySheet), so
 // nothing ever wrote to that log — it was removed. `unread`/`lastSyncAt`
 // below remain live (last-sync timestamp shown in SyncStatusSheet).
 
