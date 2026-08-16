@@ -56,8 +56,9 @@ function polygonCentroid(pts) {
   return [lat / pts.length, lng / pts.length];
 }
 
-// Initial bearing in degrees (0–360) from a to b.
-function bearingDeg(a, b) {
+// Initial bearing in degrees (0–360) from a to b. Used internally and by the
+// flag finder to aim the camera at the flag or green.
+export function bearingDeg(a, b) {
   const dLng = (b[1] - a[1]) * RAD;
   const y = Math.sin(dLng) * Math.cos(b[0] * RAD);
   const x = Math.cos(a[0] * RAD) * Math.sin(b[0] * RAD)
@@ -214,6 +215,21 @@ export function holeFeatures(courseName, holeNumber) {
     start: hole.start ?? null,
     hazards: hole.hazards ?? [],
   };
+}
+
+// Coordinate the flag finder aims at: the pin if set, otherwise the green center.
+// Returns [lat, lng] or null when the course has no geometry or the hole doesn't exist.
+export function holeTargetPoint(courseName, holeNumber) {
+  const features = holeFeatures(courseName, holeNumber);
+  if (!features) return null;
+  return features.pin ?? features.greenCenter;
+}
+
+// Normalize an angle difference (deg) into the range [−180, 180). Used by the
+// flag finder to calculate the shortest angular turn to the target.
+// Formula: ((deg + 180) % 360 + 360) % 360 - 180
+export function normalizeDeltaDeg(deg) {
+  return ((deg + 180) % 360 + 360) % 360 - 180;
 }
 
 // One entry point for the UI: distances from `pos` for `holeNumber` on the

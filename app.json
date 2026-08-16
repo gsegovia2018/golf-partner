@@ -61,6 +61,12 @@
         {
           "locationWhenInUsePermission": "Necesitamos tu ubicación para mostrar distancias a green durante la ronda."
         }
+      ],
+      [
+        "expo-camera",
+        {
+          "cameraPermission": "Necesitamos acceder a la cámara para mostrarte la dirección de la bandera."
+        }
       ]
     ],
     "extra": {

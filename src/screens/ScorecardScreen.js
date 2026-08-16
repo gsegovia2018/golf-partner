@@ -1,4 +1,6 @@
-import React, { useEffect, useRef, useState, useCallback, useMemo } from 'react';
+import React, {
+  useEffect, useRef, useState, useCallback, useMemo, useSyncExternalStore,
+} from 'react';
 import { useFocusEffect } from '@react-navigation/native';
 import {
   View, Text, TextInput, TouchableOpacity,
@@ -70,8 +72,13 @@ import { makeScorecardStyles } from '../components/scorecard/styles';
 import { HoleView } from '../components/scorecard/HoleView';
 import { GridView, resolveScorecardRows } from '../components/scorecard/GridView';
 import ConflictWizardSheet from '../components/scorecard/ConflictWizardSheet';
+import { FlagFinderView } from '../components/scorecard/FlagFinderView';
 import TourOverlay from '../components/tour/TourOverlay';
 import { SCORECARD_TOUR_STEPS } from '../components/tour/tourSteps';
+import {
+  findCourseGeometry, subscribeCourseGeometry, getCourseGeometryVersion,
+} from '../lib/geo';
+import { compassLikelyAvailable } from '../hooks/useCompassHeading';
 
 
 
@@ -293,6 +300,7 @@ export default function ScorecardScreen({ navigation, route }) {
     return normalizeRoundNotes(initialRound?.notes);
   });
   const [notesOpen, setNotesOpen] = useState(false);
+  const [flagFinderOpen, setFlagFinderOpen] = useState(false);
   const [view, setView] = useState('hole'); // 'grid' | 'hole'
   const [currentHole, setCurrentHole] = useState(1);
   const currentHoleRef = useRef(1);
@@ -1037,6 +1045,19 @@ export default function ScorecardScreen({ navigation, route }) {
   // stays stable while the tournament loads.
   const round = tournament?.rounds?.[roundIndex] ?? null;
   const players = tournament?.players ?? [];
+
+  // Flag finder header icon: shown only when the round's course has mapped
+  // geometry (holes/pins) and the device has a compass worth trying. Geometry
+  // hydrates asynchronously from Supabase, so subscribe the same way
+  // useGpsDistances does — the bundled seed resolves first, live data swaps
+  // in via geomVersion.
+  const geomVersion = useSyncExternalStore(subscribeCourseGeometry, getCourseGeometryVersion);
+  const hasCourseGeometry = useMemo(
+    () => !!findCourseGeometry(round?.courseName),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [round?.courseName, geomVersion],
+  );
+  const showFlagFinder = hasCourseGeometry && compassLikelyAvailable();
 
   // Lock a freshly opened finished round to view-only. "Finished" means
   // either this specific round has every player scored on every hole, OR the
@@ -1857,6 +1878,13 @@ export default function ScorecardScreen({ navigation, route }) {
               accessibilityLabel={hasCurrentNotes ? 'Open notes' : 'Add notes'}
             />
           )}
+          {showFlagFinder && (
+            <IconButton
+              icon="flag"
+              onPress={() => setFlagFinderOpen(true)}
+              accessibilityLabel="Find the flag"
+            />
+          )}
           <IconButton
             icon="camera"
             onPress={openCapturePicker}
@@ -2049,6 +2077,12 @@ export default function ScorecardScreen({ navigation, route }) {
       <SyncStatusSheet
         visible={syncSheetOpen}
         onClose={() => setSyncSheetOpen(false)}
+      />
+      <FlagFinderView
+        visible={flagFinderOpen}
+        courseName={round.courseName}
+        holeNumber={currentHole}
+        onClose={() => setFlagFinderOpen(false)}
       />
       <ConflictWizardSheet
         visible={finishConflictsOpen}
