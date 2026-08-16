@@ -591,7 +591,52 @@ function pruneRemovedPlayers(map, removedPlayerIds, knownPlayerIds) {
   return out;
 }
 
-export function preserveLocalConflictState(target, source) {
+// A cached-local score entry the reconciled target knows nothing about —
+// absent from the fresh server state AND not re-created by a still-queued
+// mutation (syncWorker applies those onto the target before merging) — can
+// never reach the server again: its write was dropped by the drain
+// (permanent error / poison cap) or died with the process before it was
+// ever enqueued. Left alone it survives every union-merge as a phantom
+// author that later "conflicts" with real entries (the 2026-08-16 solo
+// "Someone" conflicts). Once such an entry is older than the caller's
+// cutoff, drop it. The grace keeps mutate()'s save-before-enqueue window
+// and the reconcile settle-loop races safely out of reach — a live write
+// is always either younger than the cutoff or represented in the queue.
+function dropOrphanEntries(merged, targetEntries, cutoff) {
+  if (!merged) return merged;
+  for (const [playerId, byHole] of Object.entries(merged)) {
+    for (const [hole, byAuthor] of Object.entries(byHole ?? {})) {
+      for (const [authorId, entry] of Object.entries(byAuthor ?? {})) {
+        const known = targetEntries?.[playerId]?.[hole]?.[authorId] !== undefined;
+        if (!known && (entry?.ts ?? 0) < cutoff) delete byAuthor[authorId];
+      }
+      if (Object.keys(byAuthor ?? {}).length === 0) delete byHole[hole];
+    }
+    if (Object.keys(byHole ?? {}).length === 0) delete merged[playerId];
+  }
+  return Object.keys(merged).length === 0 ? undefined : merged;
+}
+
+// Same rule for resolutions (one per player+hole, no author level).
+function dropOrphanResolutions(merged, targetResolutions, cutoff) {
+  if (!merged) return merged;
+  for (const [playerId, byHole] of Object.entries(merged)) {
+    for (const [hole, res] of Object.entries(byHole ?? {})) {
+      const known = targetResolutions?.[playerId]?.[hole] !== undefined;
+      if (!known && (res?.ts ?? 0) < cutoff) delete byHole[hole];
+    }
+    if (Object.keys(byHole ?? {}).length === 0) delete merged[playerId];
+  }
+  return Object.keys(merged).length === 0 ? undefined : merged;
+}
+
+// `opts.pruneOrphansBefore` (epoch ms): only the post-drain reconcile passes
+// it — the one caller whose target is fresh server state WITH the pending
+// queue already applied, so "unknown to target" provably means "will never
+// sync". The realtime/fetch merge paths must NOT prune: their targets don't
+// carry still-queued mutations, and a queued-but-undrained entry would look
+// orphaned there.
+export function preserveLocalConflictState(target, source, opts = {}) {
   if (!target?.rounds?.length || !source?.rounds?.length) return target;
   const knownPlayerIds = Array.isArray(target.players)
     ? new Set(target.players.map((p) => p?.id))
@@ -605,12 +650,16 @@ export function preserveLocalConflictState(target, source) {
     const s = byId.get(r.id);
     if (!s) return r;
     const removedPlayerIds = unionRemovedPlayerIds(r?.removedPlayerIds, s.removedPlayerIds);
-    const mergedEntries = pruneRemovedPlayers(
+    let mergedEntries = pruneRemovedPlayers(
       unionScoreEntries(r?.scoreEntries, s.scoreEntries), removedPlayerIds, knownPlayerIds,
     );
-    const mergedResolutions = pruneRemovedPlayers(
+    let mergedResolutions = pruneRemovedPlayers(
       unionScoreResolutions(r?.scoreResolutions, s.scoreResolutions), removedPlayerIds, knownPlayerIds,
     );
+    if (opts.pruneOrphansBefore) {
+      mergedEntries = dropOrphanEntries(mergedEntries, r?.scoreEntries, opts.pruneOrphansBefore);
+      mergedResolutions = dropOrphanResolutions(mergedResolutions, r?.scoreResolutions, opts.pruneOrphansBefore);
+    }
     return {
       ...r,
       ...(mergedEntries ? { scoreEntries: mergedEntries } : {}),

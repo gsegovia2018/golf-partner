@@ -21,6 +21,15 @@ let _running = false;
 // alone can't be trusted to mean "give up now").
 const RECOVERABLE_ATTEMPT_CAP = 8;
 
+// Grace before the post-drain reconcile prunes a local-cache score entry /
+// resolution that neither the fresh server state nor the pending queue
+// knows about (its write was dropped by the drain or died before enqueue —
+// it can never sync, and kept around it becomes a phantom conflict author).
+// Generous on purpose: the races it guards (mutate's save-before-enqueue
+// gap, the reconcile settle loop) are millisecond-scale, and both cutoff
+// and entry ts come from this device's clock, so no skew is involved.
+const ORPHAN_ENTRY_GRACE_MS = 10 * 60 * 1000;
+
 // Classifies a write failure as PERMANENT (retrying can never succeed, so
 // drop the mutation now) vs RECOVERABLE (the write may succeed on a later
 // attempt, so keep it queued).
@@ -267,6 +276,11 @@ export async function drainTournament(tournamentId, entries) {
         for (let pass = 0; pass < 3; pass++) {
           const merged = preserveLocalConflictState(
             applyPendingMutations(fresh, snapshot), localForConflicts,
+            // The one caller allowed to prune orphans: `fresh` is server
+            // truth and applyPendingMutations just re-created everything the
+            // queue still holds, so an entry unknown to the target here can
+            // never sync — see dropOrphanEntries (mutate.js).
+            { pruneOrphansBefore: Date.now() - ORPHAN_ENTRY_GRACE_MS },
           );
           // meId is device-local and the server never returns it — without this
           // re-stamp every reconcile saved a blob with the key ABSENT, wiping
