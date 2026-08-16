@@ -355,6 +355,7 @@ export function HoleView({ round, roundIndex, players, scores, myScores = null, 
                   onToggleShotDetail={toggleShotDetail}
                   totalsMap={scorecardTotals}
                   conflictHoles={conflictHoles}
+                  localAuthorIds={localAuthorIds}
                   gps={gps}
                   onOpenFlyover={openFlyover}
                 />
@@ -575,7 +576,7 @@ export function HoleView({ round, roundIndex, players, scores, myScores = null, 
           card flagged with a conflict marker. */}
       {conflictTarget && (() => {
         const { hole: cHole, playerId } = conflictTarget;
-        const d = deriveCell(round, playerId, cHole);
+        const d = deriveCell(round, playerId, cHole, localAuthorIds);
         const subject = players.find((p) => p.id === playerId);
         // Once resolved the cell stops being a conflict, but the sheet stays
         // mounted on an empty row list so the wizard can show its "all agreed"

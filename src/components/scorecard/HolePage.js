@@ -108,6 +108,7 @@ export function holePagePropsEqual(prev, next) {
     || prev.onOpenFlyover !== next.onOpenFlyover
     || prev.ghostEnabled !== next.ghostEnabled
     || prev.authorName !== next.authorName
+    || prev.localAuthorIds !== next.localAuthorIds
   ) {
     return false;
   }
@@ -152,7 +153,7 @@ export const HolePage = React.memo(function HolePage({
   // merged/effective card; `ghostEnabled` is true only on the casual,
   // non-official, non-view-only "own entries" pages above the watermark
   // (where `scores` above is myScores, not the merged card).
-  peerScores, ghostEnabled, authorName,
+  peerScores, ghostEnabled, authorName, localAuthorIds,
 }) {
   // Every game mode now renders the unified PlayerCard. Scramble modes score
   // one ball per team under the captain — swap the roster for synthetic team
@@ -335,7 +336,7 @@ export const HolePage = React.memo(function HolePage({
             // hole you're actively playing — before every scorer has even left
             // it — is the premature-surfacing problem the overhaul removes
             // elsewhere; gating here keeps the hero card consistent with that.
-            const conflict = deriveCell(round, player.id, pageHole.number).status === 'conflict'
+            const conflict = deriveCell(round, player.id, pageHole.number, localAuthorIds).status === 'conflict'
               && conflictHoles.has(pageHole.number);
 
             // Read-only ghost of a peer's entry: only when this page is
@@ -350,7 +351,7 @@ export const HolePage = React.memo(function HolePage({
             if (ghostEnabled && strokes == null) {
               const peerValue = peerScores?.[player.id]?.[pageHole.number];
               if (peerValue != null) {
-                const candidates = deriveCell(round, player.id, pageHole.number).candidates;
+                const candidates = deriveCell(round, player.id, pageHole.number, localAuthorIds).candidates;
                 const mostRecent = candidates.length ? candidates[candidates.length - 1] : null;
                 ghost = {
                   value: peerValue,

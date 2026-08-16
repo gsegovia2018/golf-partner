@@ -10,14 +10,42 @@ export function cellEntries(round, playerId, hole) {
   return byAuthor && typeof byAuthor === 'object' ? byAuthor : {};
 }
 
+// One physical phone can stamp entries under more than one author id: the
+// roster meId once identity is known, and the persisted device author id
+// before/without one (ScorecardScreen's `meId ?? getDeviceAuthorId()`
+// fallback). Those are the same person — they must never be able to
+// disagree with themselves. `localAuthorIds` (ordered, meId first) names
+// every id THIS phone may have written; when a cell holds entries from two
+// or more of them, only the newest survives (ties keep the earlier-listed
+// id, i.e. meId). Entries from ids not in the list — genuinely other
+// phones — pass through untouched.
+function foldLocalEntries(byAuthor, localAuthorIds) {
+  const ids = Array.isArray(localAuthorIds)
+    ? localAuthorIds.filter(Boolean)
+    : localAuthorIds ? [localAuthorIds] : [];
+  const mine = ids.filter((a) => byAuthor[a] !== undefined);
+  if (mine.length < 2) return byAuthor;
+  let keep = mine[0];
+  for (const a of mine) {
+    if ((byAuthor[a]?.ts ?? 0) > (byAuthor[keep]?.ts ?? 0)) keep = a;
+  }
+  const out = {};
+  for (const [a, e] of Object.entries(byAuthor)) {
+    if (a === keep || !mine.includes(a)) out[a] = e;
+  }
+  return out;
+}
+
 function cellResolution(round, playerId, hole) {
   const res = round?.scoreResolutions?.[playerId]?.[hole];
   return res && typeof res === 'object' && 'value' in res ? res : null;
 }
 
 // { status, effective, candidates, blankAuthors }
-export function deriveCell(round, playerId, hole) {
-  const byAuthor = cellEntries(round, playerId, hole);
+// `localAuthorIds` (optional) folds this phone's identities into one author
+// before deriving — see foldLocalEntries. Omitting it keeps the raw view.
+export function deriveCell(round, playerId, hole, localAuthorIds = null) {
+  const byAuthor = foldLocalEntries(cellEntries(round, playerId, hole), localAuthorIds);
   const authorIds = Object.keys(byAuthor);
 
   const nonBlank = authorIds
@@ -56,13 +84,21 @@ export function deriveCell(round, playerId, hole) {
 // reload. Peers' entries never appear here; the hole entry view shows this so
 // every marker records every player's score themselves, and the leave-hole
 // verification compares the resulting cards.
+// `authorId` may be a single id or the ordered localAuthorIds array — every
+// id this phone has stamped counts as "mine", with the newest entry winning
+// a cell (a device-id entry from before identity resolved is still my mark).
 export function authorScores(round, authorId, localScores = {}, dirtyKeys = new Set()) {
+  const ids = (Array.isArray(authorId) ? authorId : [authorId]).filter(Boolean);
   const out = {};
   const byPlayer = round?.scoreEntries ?? {};
   for (const [playerId, byHole] of Object.entries(byPlayer)) {
     if (!byHole || typeof byHole !== 'object') continue;
     for (const [holeKey, byAuthor] of Object.entries(byHole)) {
-      const mine = byAuthor?.[authorId];
+      let mine = null;
+      for (const a of ids) {
+        const e = byAuthor?.[a];
+        if (e && (mine == null || (e.ts ?? 0) > (mine.ts ?? 0))) mine = e;
+      }
       if (mine?.value != null) {
         if (!out[playerId]) out[playerId] = {};
         out[playerId][holeKey] = mine.value;
@@ -88,14 +124,17 @@ export function authorScores(round, authorId, localScores = {}, dirtyKeys = new 
 // blank never mismatches (they did not mark that player), a blank from a peer
 // never mismatches, and a cell with a valid explicit resolution is settled.
 // Returns [{ playerId, mine, others: [{ authorId, value }] }].
+// `authorId` may be a single id or the ordered localAuthorIds array — an
+// entry under ANY of this phone's ids is mine, never an "other".
 export function holeEntryMismatches(round, hole, authorId, myScores) {
+  const ids = (Array.isArray(authorId) ? authorId : [authorId]).filter(Boolean);
   const out = [];
   for (const playerId of Object.keys(myScores ?? {})) {
     const mine = myScores[playerId]?.[hole];
     if (mine == null) continue;
-    if (deriveCell(round, playerId, hole).status === 'resolved') continue;
+    if (deriveCell(round, playerId, hole, ids).status === 'resolved') continue;
     const others = Object.entries(cellEntries(round, playerId, hole))
-      .filter(([a, e]) => a !== authorId && e?.value != null && e.value !== mine)
+      .filter(([a, e]) => !ids.includes(a) && e?.value != null && e.value !== mine)
       .map(([a, e]) => ({ authorId: a, value: e.value }));
     if (others.length) out.push({ playerId, mine, others });
   }
@@ -117,7 +156,7 @@ export function activeAuthors(round) {
   return out;
 }
 
-export function listRoundConflicts(round) {
+export function listRoundConflicts(round, localAuthorIds = null) {
   const byPlayer = round?.scoreEntries;
   if (!byPlayer || typeof byPlayer !== 'object') return [];
   const out = [];
@@ -125,14 +164,14 @@ export function listRoundConflicts(round) {
     if (!byHole || typeof byHole !== 'object') continue;
     for (const holeKey of Object.keys(byHole)) {
       const hole = Number(holeKey);
-      if (deriveCell(round, playerId, hole).status === 'conflict') out.push({ playerId, hole });
+      if (deriveCell(round, playerId, hole, localAuthorIds).status === 'conflict') out.push({ playerId, hole });
     }
   }
   return out.sort((a, b) => a.hole - b.hole);
 }
 
-export function roundHasConflicts(round) {
-  return listRoundConflicts(round).length > 0;
+export function roundHasConflicts(round, localAuthorIds = null) {
+  return listRoundConflicts(round, localAuthorIds).length > 0;
 }
 
 export function authorProgress(round, presence = {}) {
@@ -180,7 +219,7 @@ export function isCellSurfaceable(round, hole, progress) {
   return authors.every((a) => (progress?.[a] ?? 0) > hole);
 }
 
-export function surfaceableConflicts(round, presence = {}) {
+export function surfaceableConflicts(round, presence = {}, localAuthorIds = null) {
   const progress = authorProgress(round, presence);
-  return listRoundConflicts(round).filter((c) => isCellSurfaceable(round, c.hole, progress));
+  return listRoundConflicts(round, localAuthorIds).filter((c) => isCellSurfaceable(round, c.hole, progress));
 }

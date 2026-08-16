@@ -632,7 +632,15 @@ export default function ScorecardScreen({ navigation, route }) {
     if (!tournament || !user?.id) return null;
     return deriveMeIdFromAuth(tournament, user.id)?.meId ?? null;
   }, [tournament, user?.id]);
-  const authorId = meId ?? getDeviceAuthorId();
+  // Latch the last known meId so a transient identity blip mid-round (a
+  // fetch-derived blob that lost meId while the auth session is offline)
+  // can't flip score stamping back to the device id — the same physical
+  // round must never write under two author ids. Render-time ref write is
+  // deliberate: an effect would lag one render, and a tap during that
+  // render would stamp the device id.
+  const lastMeIdRef = useRef(null);
+  if (meId) lastMeIdRef.current = meId;
+  const authorId = meId ?? lastMeIdRef.current ?? getDeviceAuthorId();
   const authorName = useCallback((aId) => {
     if (aId === 'legacy') return 'Earlier entry';
     const p = (tournament?.players ?? []).find((pl) => pl.id === aId);
@@ -643,7 +651,14 @@ export default function ScorecardScreen({ navigation, route }) {
   // any of them as "You" — a device-stamped entry is still mine, and reading
   // "Another phone wrote 5" next to my own entry is what made conflicts
   // confusing.
-  const localAuthorIds = useMemo(() => [meId, getDeviceAuthorId()].filter(Boolean), [meId]);
+  // Ordered: meId first (fold ties resolve toward it), then the device id.
+  // Passed into every conflict derivation so entries this phone stamped
+  // under different ids fold into one author — a phone can never conflict
+  // with itself (see foldLocalEntries in store/scoreEntries.js).
+  const localAuthorIds = useMemo(
+    () => [meId ?? lastMeIdRef.current, getDeviceAuthorId()].filter(Boolean),
+    [meId],
+  );
 
   const autoSave = useCallback((newScores) => {
     if (!tournamentRef.current) return Promise.resolve(null);
@@ -1227,8 +1242,8 @@ export default function ScorecardScreen({ navigation, route }) {
     const t = tournament;
     const r = t?.rounds?.[roundIndex];
     if (!r) return [];
-    return listRoundConflicts(r).map(({ playerId, hole }) => {
-      const d = deriveCell(r, playerId, hole);
+    return listRoundConflicts(r, localAuthorIds).map(({ playerId, hole }) => {
+      const d = deriveCell(r, playerId, hole, localAuthorIds);
       return {
         playerId,
         hole,
@@ -1241,7 +1256,7 @@ export default function ScorecardScreen({ navigation, route }) {
         blankAuthors: d.blankAuthors.map((a) => authorName(a)),
       };
     });
-  }, [tournament, roundIndex, authorName]);
+  }, [tournament, roundIndex, authorName, localAuthorIds]);
 
   // Schedule after each score write; a follow-up tap on the same hole resets
   // the timer so quick +/- adjustments land before the page flips. A write
@@ -1263,7 +1278,7 @@ export default function ScorecardScreen({ navigation, route }) {
       // Casual mode judges "hole complete" on the my-card view: a peer's
       // synced entries must not complete the hole for a scorer who hasn't
       // marked everyone yet (they'd be advanced past their own blank cells).
-      scores: official ? nextScores : authorScores(round, authorId, nextScores, dirtyCellsRef.current),
+      scores: official ? nextScores : authorScores(round, localAuthorIds, nextScores, dirtyCellsRef.current),
       players: rowPlayers,
     });
     if (action === 'ignore') return;
@@ -1272,7 +1287,7 @@ export default function ScorecardScreen({ navigation, route }) {
     autoAdvanceTimer.current = setTimeout(() => {
       if (currentHoleRef.current === holeNumber) goToNextHoleRef.current();
     }, 1200);
-  }, [round, players, settings, meId, official, authorId]);
+  }, [round, players, settings, meId, official, localAuthorIds]);
 
   const setScore = useCallback((playerId, holeNumber, value) => {
     if (!official && viewOnly) return;
@@ -1404,13 +1419,13 @@ export default function ScorecardScreen({ navigation, route }) {
   // that player, so their scorer's entry simply stands).
   const goToNextHole = useCallback(() => {
     if (official || viewOnly || !round) { advanceHole(); return; }
-    const mine = authorScores(round, authorId, scoresRef.current, dirtyCellsRef.current);
-    const mismatches = holeEntryMismatches(round, currentHoleRef.current, authorId, mine);
+    const mine = authorScores(round, localAuthorIds, scoresRef.current, dirtyCellsRef.current);
+    const mismatches = holeEntryMismatches(round, currentHoleRef.current, localAuthorIds, mine);
     if (!mismatches.length) { advanceHole(); return; }
     haptic('medium');
     for (const mm of mismatches) seenConflictKeysRef.current.add(`${mm.playerId}:${currentHoleRef.current}`);
     setHoleConflictPrompt({ source: 'leave', hole: currentHoleRef.current });
-  }, [official, viewOnly, round, authorId, advanceHole]);
+  }, [official, viewOnly, round, localAuthorIds, advanceHole]);
   useEffect(() => { goToNextHoleRef.current = goToNextHole; }, [goToNextHole]);
 
   const goToHole = useCallback((h) => {
@@ -1464,15 +1479,15 @@ export default function ScorecardScreen({ navigation, route }) {
   // every author who wrote to it has moved past it (avoids flashing a
   // conflict for a value someone is still actively re-typing).
   const conflictHoles = useMemo(
-    () => new Set(surfaceableConflicts(round, presenceProgress).map((c) => c.hole)),
-    [round, presenceProgress],
+    () => new Set(surfaceableConflicts(round, presenceProgress, localAuthorIds).map((c) => c.hole)),
+    [round, presenceProgress, localAuthorIds],
   );
 
   // Auto-pop each synced conflict once this session; after a dismissal the
   // dots and the finish gate still cover it.
   useEffect(() => {
     if (official || viewOnly || !round) return;
-    const fresh = surfaceableConflicts(round, presenceProgress)
+    const fresh = surfaceableConflicts(round, presenceProgress, localAuthorIds)
       .filter(({ playerId, hole }) => !seenConflictKeysRef.current.has(`${playerId}:${hole}`));
     if (!fresh.length) return;
     // Never steal the screen from a prompt that is already up; the peer sheet
@@ -1486,7 +1501,7 @@ export default function ScorecardScreen({ navigation, route }) {
     }
     for (const { playerId, hole } of fresh) seenConflictKeysRef.current.add(`${playerId}:${hole}`);
     setHoleConflictPrompt({ source: 'peer' });
-  }, [round, presenceProgress, official, viewOnly, finishConflictsOpen, holeConflictPrompt]);
+  }, [round, presenceProgress, official, viewOnly, finishConflictsOpen, holeConflictPrompt, localAuthorIds]);
 
   // The card as I've marked it. Hole-view pages above the verified watermark
   // render this instead of the merged scores, so a peer's synced entries can't
@@ -1495,8 +1510,8 @@ export default function ScorecardScreen({ navigation, route }) {
   // data).
   const myScores = useMemo(() => {
     if (official || viewOnly) return null;
-    return authorScores(round, authorId, scores, dirtyCellsRef.current);
-  }, [official, viewOnly, round, authorId, scores]);
+    return authorScores(round, localAuthorIds, scores, dirtyCellsRef.current);
+  }, [official, viewOnly, round, localAuthorIds, scores]);
 
   // Rows for the mid-round conflict sheet, derived live so a resolution from
   // either phone removes its row on the next render. 'leave' compares my card
@@ -1505,8 +1520,8 @@ export default function ScorecardScreen({ navigation, route }) {
   const holeConflictRows = useMemo(() => {
     if (!holeConflictPrompt || !round) return [];
     if (holeConflictPrompt.source === 'leave') {
-      const mine = authorScores(round, authorId, scores, dirtyCellsRef.current);
-      const mismatches = holeEntryMismatches(round, holeConflictPrompt.hole, authorId, mine);
+      const mine = authorScores(round, localAuthorIds, scores, dirtyCellsRef.current);
+      const mismatches = holeEntryMismatches(round, holeConflictPrompt.hole, localAuthorIds, mine);
       return buildHoleMismatchRows({
         mismatches,
         hole: holeConflictPrompt.hole,
@@ -1516,8 +1531,8 @@ export default function ScorecardScreen({ navigation, route }) {
         authorId,
       });
     }
-    return surfaceableConflicts(round, presenceProgress).map(({ playerId, hole }) => {
-      const d = deriveCell(round, playerId, hole);
+    return surfaceableConflicts(round, presenceProgress, localAuthorIds).map(({ playerId, hole }) => {
+      const d = deriveCell(round, playerId, hole, localAuthorIds);
       return {
         playerId,
         hole,
@@ -1530,7 +1545,7 @@ export default function ScorecardScreen({ navigation, route }) {
         blankAuthors: d.blankAuthors.map((a) => authorName(a)),
       };
     });
-  }, [holeConflictPrompt, round, scores, authorId, players, authorName, presenceProgress]);
+  }, [holeConflictPrompt, round, scores, authorId, players, authorName, presenceProgress, localAuthorIds]);
 
   // Back from the scorecard. The live center-tab action requests Tournament so
   // the user lands on the active round summary while a round is live. Other
@@ -1606,7 +1621,7 @@ export default function ScorecardScreen({ navigation, route }) {
     // A round cannot finish while a hole still has an unresolved score
     // conflict — every hole must end on one agreed value. The summary sheet
     // lists them all and re-triggers handleFinish once they're settled.
-    if (listRoundConflicts(freshRound).length > 0) {
+    if (listRoundConflicts(freshRound, localAuthorIds).length > 0) {
       setFinishConflictsOpen(true);
       return;
     }
@@ -1704,7 +1719,7 @@ export default function ScorecardScreen({ navigation, route }) {
       if (Platform.OS === 'web') window.alert(message);
       else Alert.alert('Finish failed', message);
     }
-  }, [roundIndex, navigation, goBack, official, finishBusy, autoSave, enqueueSave, cancelScheduledSave]);
+  }, [roundIndex, navigation, goBack, official, finishBusy, autoSave, enqueueSave, cancelScheduledSave, localAuthorIds]);
 
   // Official mode (Task 16): attest the token holder's own card. Replaces the
   // casual "finish" affordance for official rounds. Disabled while the holder
