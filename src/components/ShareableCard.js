@@ -156,6 +156,104 @@ function truncate(ctx, str, maxWidth) {
   return s + '…';
 }
 
+// ---------------------------------------------------------------------------
+// Web: render the round summary directly to a 2D canvas. Same rationale as
+// drawLeaderboardCanvas above — no html2canvas, no off-screen DOM.
+// ---------------------------------------------------------------------------
+function drawRoundCanvas({
+  tournamentName, roundLabel, courseName, recap, ranked, unit, theme,
+}) {
+  const W = 1200;
+  const H = 800;
+  const canvas = document.createElement('canvas');
+  canvas.width = W;
+  canvas.height = H;
+  const ctx = canvas.getContext('2d');
+
+  const { bg, card, text, sub, muted, border, accent } = cardPalette(theme);
+  const unitLabel = unit === 'holes' ? 'holes' : 'pts';
+
+  ctx.fillStyle = bg;
+  ctx.fillRect(0, 0, W, H);
+
+  // Header
+  ctx.fillStyle = accent;
+  ctx.font = '600 18px system-ui, -apple-system, "Segoe UI", Roboto, sans-serif';
+  ctx.textBaseline = 'alphabetic';
+  ctx.fillText('ROUND SUMMARY', 40, 56);
+
+  ctx.fillStyle = text;
+  ctx.font = '800 40px system-ui, -apple-system, "Segoe UI", Roboto, sans-serif';
+  ctx.fillText(truncate(ctx, tournamentName ?? 'Golf Partner', W - 80), 40, 104);
+
+  ctx.fillStyle = sub;
+  ctx.font = '600 20px system-ui, -apple-system, "Segoe UI", Roboto, sans-serif';
+  ctx.fillText(truncate(ctx, roundLabel ?? '', W - 80), 40, 134);
+
+  // Divider
+  ctx.fillStyle = border;
+  ctx.fillRect(40, 156, W - 80, 1);
+
+  // Winner hero
+  ctx.fillStyle = muted;
+  ctx.font = '700 16px system-ui, -apple-system, "Segoe UI", Roboto, sans-serif';
+  ctx.fillText('WINNER', 40, 196);
+
+  ctx.fillStyle = text;
+  ctx.font = '800 64px system-ui, -apple-system, "Segoe UI", Roboto, sans-serif';
+  ctx.fillText(truncate(ctx, recap?.winnerName || 'No winner yet', 700), 40, 264);
+
+  ctx.fillStyle = accent;
+  ctx.font = '800 48px system-ui, -apple-system, "Segoe UI", Roboto, sans-serif';
+  ctx.textAlign = 'right';
+  ctx.fillText(`${recap?.winnerPoints ?? '-'} ${unitLabel}`, W - 40, 264);
+  ctx.textAlign = 'left';
+
+  // Podium — top 3
+  const podium = (ranked ?? []).slice(0, 3);
+  const PODIUM_Y = 330;
+  const PODIUM_H = 140;
+  const COL_GAP = 16;
+  const COL_W = (W - 80 - COL_GAP * 2) / 3;
+  const MEDALS = ['🥇', '🥈', '🥉'];
+
+  podium.forEach((entry, i) => {
+    const x = 40 + i * (COL_W + COL_GAP);
+    ctx.fillStyle = card;
+    roundRect(ctx, x, PODIUM_Y, COL_W, PODIUM_H, 16);
+    ctx.fill();
+    ctx.strokeStyle = border;
+    ctx.lineWidth = 1;
+    ctx.stroke();
+
+    ctx.fillStyle = text;
+    ctx.font = '700 32px system-ui, -apple-system, "Segoe UI", Roboto, sans-serif';
+    ctx.fillText(MEDALS[i] ?? `${i + 1}.`, x + 20, PODIUM_Y + 48);
+
+    ctx.font = '700 24px system-ui, -apple-system, "Segoe UI", Roboto, sans-serif';
+    ctx.fillText(truncate(ctx, entry.player?.name ?? 'Unknown', COL_W - 40), x + 20, PODIUM_Y + 88);
+
+    ctx.fillStyle = accent;
+    ctx.font = '800 26px system-ui, -apple-system, "Segoe UI", Roboto, sans-serif';
+    ctx.fillText(`${entry.points ?? '-'} ${unitLabel}`, x + 20, PODIUM_Y + 122);
+  });
+
+  // Footer: course + date, and branding
+  ctx.fillStyle = muted;
+  ctx.font = '600 18px system-ui, -apple-system, "Segoe UI", Roboto, sans-serif';
+  const dateStr = new Date().toLocaleDateString();
+  const footerLeft = [courseName, dateStr].filter(Boolean).join(' · ');
+  ctx.fillText(truncate(ctx, footerLeft, W / 2 - 40), 40, H - 36);
+
+  ctx.fillStyle = accent;
+  ctx.font = '700 16px system-ui, -apple-system, "Segoe UI", Roboto, sans-serif';
+  ctx.textAlign = 'right';
+  ctx.fillText('GOLF PARTNER 🏌️', W - 40, H - 36);
+  ctx.textAlign = 'left';
+
+  return canvas;
+}
+
 function leaderboardToText(tournamentName, leaderboard) {
   const lines = [`🏌️ ${tournamentName} — Leaderboard`, ''];
   (leaderboard ?? []).slice(0, 4).forEach((entry, i) => {
@@ -165,6 +263,27 @@ function leaderboardToText(tournamentName, leaderboard) {
     const strokes = entry.strokes;
     lines.push(`${medal} ${name} — ${pts} pts${strokes != null ? ` · ${strokes} strk` : ''}`);
   });
+  return lines.join('\n');
+}
+
+// Text fallback for a round summary share, à la leaderboardToText above.
+// Exported so its content (winner, podium, boardUrl placement) can be unit
+// tested without going through the canvas/native capture paths.
+export function roundSummaryToText({
+  tournamentName, roundLabel, ranked, unit, boardUrl,
+} = {}) {
+  const unitLabel = unit === 'holes' ? 'holes' : 'pts';
+  const title = roundLabel || tournamentName || 'Round';
+  const lines = [`🏌️ ${title} — Round Summary`, ''];
+  (ranked ?? []).slice(0, 4).forEach((entry, i) => {
+    const medal = ['🥇', '🥈', '🥉'][i] ?? `${i + 1}.`;
+    const name = entry.player?.name ?? 'Unknown';
+    const pts = entry.points ?? '-';
+    lines.push(`${medal} ${name} — ${pts} ${unitLabel}`);
+  });
+  // Blank line before the URL keeps WhatsApp from wrapping the text into the
+  // middle of the link and breaking the tap target — see HomeScreen.js.
+  if (boardUrl) lines.push('', boardUrl);
   return lines.join('\n');
 }
 
@@ -257,6 +376,64 @@ export async function shareLeaderboard({
 // they get a degraded experience that uses captureRef. Prefer shareLeaderboard.
 export async function shareView(viewRef, fileName = 'leaderboard.png') {
   return shareLeaderboard({ viewRef, fileName });
+}
+
+// ---------------------------------------------------------------------------
+// Public API: share a round summary as a PNG. Cloned from shareLeaderboard —
+// same web (Canvas 2D → shareBlobOrDownload, so navigator.share({files})
+// offers WhatsApp) vs. native (captureRef → Sharing.shareAsync) split, same
+// busy/cancel/notify handling.
+//
+// `boardUrl`, when given, is appended to the web text fallback after a blank
+// line (see roundSummaryToText). Native sharing shares the image only, same
+// as shareLeaderboard.
+// ---------------------------------------------------------------------------
+export async function shareRoundSummary({
+  recap, ranked, unit, courseName, roundLabel, tournamentName, boardUrl, theme, viewRef,
+  fileName = 'round-summary.png', onBusy,
+}) {
+  onBusy?.(true);
+
+  if (Platform.OS === 'web') {
+    try {
+      const canvas = drawRoundCanvas({
+        tournamentName, roundLabel, courseName, recap, ranked, unit, theme,
+      });
+      const blob = await new Promise((resolve, reject) => {
+        canvas.toBlob((b) => (b ? resolve(b) : reject(new Error('toBlob returned null'))), 'image/png');
+      });
+      const fallbackText = roundSummaryToText({
+        tournamentName, roundLabel, ranked, unit, boardUrl,
+      });
+      await shareBlobOrDownload(blob, fileName, roundLabel ?? tournamentName ?? 'Round Summary', fallbackText);
+      return true;
+    } catch (e) {
+      console.warn('Web share failed:', e);
+      notify('Could not share', `Sharing failed: ${e?.message ?? e}`);
+      return false;
+    } finally {
+      onBusy?.(false);
+    }
+  }
+
+  try {
+    if (!viewRef?.current) throw new Error('Nothing to capture');
+    const uri = await captureRef(viewRef, { format: 'png', quality: 1 });
+    if (!(await Sharing.isAvailableAsync())) {
+      notify('Sharing unavailable', 'Sharing is not available on this device.');
+      return false;
+    }
+    await Sharing.shareAsync(uri);
+    return true;
+  } catch (e) {
+    // A user-cancelled share sheet is not an error worth surfacing.
+    if (e?.message && /cancel/i.test(e.message)) return false;
+    console.warn('Share failed:', e);
+    notify('Could not share', `Sharing failed: ${e?.message ?? e}`);
+    return false;
+  } finally {
+    onBusy?.(false);
+  }
 }
 
 // ---------------------------------------------------------------------------
@@ -440,6 +617,158 @@ export const ShareableLeaderboard = React.forwardRef(
 ShareableLeaderboard.displayName = 'ShareableLeaderboard';
 
 // ---------------------------------------------------------------------------
+// ShareableRoundCard
+// ---------------------------------------------------------------------------
+export const ShareableRoundCard = React.forwardRef(
+  ({
+    tournamentName, roundLabel, courseName, recap, ranked = [], unit = 'pts',
+  }, ref) => {
+    const { theme } = useTheme();
+    const pal = cardPalette(theme);
+    const podium = ranked.slice(0, 3);
+    const unitLabel = unit === 'holes' ? 'holes' : 'pts';
+    const dateStr = new Date().toLocaleDateString();
+
+    return (
+      <View
+        ref={ref}
+        collapsable={false}
+        style={[
+          roundStyles.card,
+          {
+            backgroundColor: pal.bg,
+            borderColor: pal.border,
+          },
+        ]}
+      >
+        {/* ---- Header ---- */}
+        <View>
+          <Text
+            style={[
+              roundStyles.eyebrow,
+              { color: pal.accent, fontFamily: 'PlusJakartaSans-SemiBold' },
+            ]}
+          >
+            ROUND SUMMARY
+          </Text>
+          {tournamentName ? (
+            <Text
+              style={[
+                roundStyles.tournamentName,
+                { color: pal.text, fontFamily: 'PlusJakartaSans-ExtraBold' },
+              ]}
+              numberOfLines={1}
+            >
+              {tournamentName}
+            </Text>
+          ) : null}
+          {roundLabel ? (
+            <Text
+              style={[
+                roundStyles.roundLabel,
+                { color: pal.sub, fontFamily: 'PlusJakartaSans-Medium' },
+              ]}
+              numberOfLines={1}
+            >
+              {roundLabel}
+            </Text>
+          ) : null}
+        </View>
+
+        {/* ---- Divider ---- */}
+        <View style={[roundStyles.divider, { backgroundColor: pal.border }]} />
+
+        {/* ---- Winner hero ---- */}
+        <View style={roundStyles.winnerRow}>
+          <View style={roundStyles.winnerNameCol}>
+            <Text
+              style={[
+                roundStyles.winnerLabel,
+                { color: pal.muted, fontFamily: 'PlusJakartaSans-SemiBold' },
+              ]}
+            >
+              WINNER
+            </Text>
+            <Text
+              style={[
+                roundStyles.winnerName,
+                { color: pal.text, fontFamily: 'PlusJakartaSans-ExtraBold' },
+              ]}
+              numberOfLines={1}
+            >
+              {recap?.winnerName || 'No winner yet'}
+            </Text>
+          </View>
+          <Text
+            style={[
+              roundStyles.winnerPoints,
+              { color: pal.accent, fontFamily: 'PlusJakartaSans-ExtraBold' },
+            ]}
+          >
+            {`${recap?.winnerPoints ?? '-'} ${unitLabel}`}
+          </Text>
+        </View>
+
+        {/* ---- Podium ---- */}
+        <View style={roundStyles.podiumRow}>
+          {podium.map((entry, idx) => (
+            <View
+              key={idx}
+              style={[
+                roundStyles.podiumCell,
+                { backgroundColor: pal.card, borderColor: pal.border },
+              ]}
+            >
+              <Text style={roundStyles.medal}>{['🥇', '🥈', '🥉'][idx]}</Text>
+              <Text
+                style={[
+                  roundStyles.podiumName,
+                  { color: pal.text, fontFamily: 'PlusJakartaSans-SemiBold' },
+                ]}
+                numberOfLines={1}
+              >
+                {entry.player?.name ?? 'Unknown'}
+              </Text>
+              <Text
+                style={[
+                  roundStyles.podiumPoints,
+                  { color: pal.accent, fontFamily: 'PlusJakartaSans-Bold' },
+                ]}
+              >
+                {`${entry.points ?? '-'} ${unitLabel}`}
+              </Text>
+            </View>
+          ))}
+        </View>
+
+        {/* ---- Footer ---- */}
+        <View style={roundStyles.footer}>
+          <Text
+            style={[
+              roundStyles.footerMeta,
+              { color: pal.muted, fontFamily: 'PlusJakartaSans-Medium' },
+            ]}
+            numberOfLines={1}
+          >
+            {[courseName, dateStr].filter(Boolean).join(' · ')}
+          </Text>
+          <Text
+            style={[
+              roundStyles.brandText,
+              { color: pal.accent, fontFamily: 'PlusJakartaSans-SemiBold' },
+            ]}
+          >
+            Golf Partner 🏌️
+          </Text>
+        </View>
+      </View>
+    );
+  },
+);
+
+ShareableRoundCard.displayName = 'ShareableRoundCard';
+
+// ---------------------------------------------------------------------------
 // Styles
 // ---------------------------------------------------------------------------
 const styles = StyleSheet.create({
@@ -536,5 +865,111 @@ const styles = StyleSheet.create({
     letterSpacing: 1.5,
     textTransform: 'uppercase',
     lineHeight: 14,
+  },
+});
+
+// ---------------------------------------------------------------------------
+// Styles: ShareableRoundCard
+// ---------------------------------------------------------------------------
+const roundStyles = StyleSheet.create({
+  card: {
+    minWidth: 320,
+    aspectRatio: 16 / 9,
+    borderRadius: 20,
+    borderWidth: 1,
+    padding: 24,
+    justifyContent: 'space-between',
+  },
+
+  /* Header */
+  eyebrow: {
+    fontSize: 11,
+    letterSpacing: 1.5,
+    textTransform: 'uppercase',
+  },
+  tournamentName: {
+    fontSize: 24,
+    letterSpacing: -0.4,
+    lineHeight: 30,
+    marginTop: 4,
+  },
+  roundLabel: {
+    fontSize: 13,
+    lineHeight: 18,
+    marginTop: 2,
+  },
+
+  /* Divider */
+  divider: {
+    height: StyleSheet.hairlineWidth,
+    marginVertical: 8,
+  },
+
+  /* Winner hero */
+  winnerRow: {
+    flexDirection: 'row',
+    alignItems: 'flex-end',
+    justifyContent: 'space-between',
+    gap: 10,
+  },
+  winnerNameCol: {
+    flex: 1,
+    minWidth: 0,
+  },
+  winnerLabel: {
+    fontSize: 10,
+    letterSpacing: 1.5,
+    textTransform: 'uppercase',
+    marginBottom: 2,
+  },
+  winnerName: {
+    fontSize: 26,
+    lineHeight: 32,
+  },
+  winnerPoints: {
+    fontSize: 22,
+  },
+
+  /* Podium */
+  podiumRow: {
+    flexDirection: 'row',
+    gap: 8,
+    marginTop: 8,
+  },
+  podiumCell: {
+    flex: 1,
+    borderRadius: 14,
+    borderWidth: 1,
+    padding: 10,
+    alignItems: 'flex-start',
+  },
+  medal: {
+    fontSize: 20,
+    marginBottom: 4,
+  },
+  podiumName: {
+    fontSize: 13,
+    width: '100%',
+  },
+  podiumPoints: {
+    fontSize: 13,
+    marginTop: 2,
+  },
+
+  /* Footer */
+  footer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    gap: 8,
+    marginTop: 8,
+  },
+  footerMeta: {
+    fontSize: 11,
+    flexShrink: 1,
+  },
+  brandText: {
+    fontSize: 11,
+    letterSpacing: 0.5,
   },
 });

@@ -14,7 +14,7 @@ import { useTheme } from '../theme/ThemeContext';
 import { supabase } from '../lib/supabase';
 import {
   readLocal, roundLeaderboard, formatRoundLabel,
-  getTournamentSnapshot, isTournamentFinished,
+  getTournamentSnapshot, isTournamentFinished, buildBoardLink,
 } from '../store/tournamentStore';
 import { fetchTournament as fetchTournamentRemote } from '../store/tournamentRepo';
 import { ensureRealtimeForTournament } from '../store/realtimeSync';
@@ -28,6 +28,7 @@ import CommentThread from '../components/CommentThread';
 import { ScorecardTable, resolveScorecardRows } from '../components/scorecard/GridView';
 import { buildRoundRecap } from './roundSummaryModel';
 import { normalizeRoundNotes } from '../store/roundNotes';
+import { ShareableRoundCard, shareRoundSummary } from '../components/ShareableCard';
 
 // Read-only summary of a single round — the feed's drill-in target. Works
 // for the current user's own rounds and for friends' rounds (read access
@@ -64,6 +65,8 @@ export default function RoundSummaryScreen({ navigation, route }) {
   const [refreshing, setRefreshing] = useState(false);
   const hasLoadedOnceRef = useRef(!!initialTournament);
   const [activeTab, setActiveTab] = useState('scorecard');
+  const [sharingRound, setSharingRound] = useState(false);
+  const roundCardRef = useRef();
 
   const load = useCallback(async () => {
     if (!hasLoadedOnceRef.current) setLoading(true);
@@ -114,6 +117,13 @@ export default function RoundSummaryScreen({ navigation, route }) {
     roundIndex,
   });
   const recap = round ? buildRoundRecap({ round, ranked }) : null;
+  const courseName = round?.courseName ?? round?.course?.name;
+  // shareToken is written by a parallel work stream (owner share action) and
+  // may not exist on any tournament yet — buildBoardLink returns null for a
+  // falsy token, which the share flow treats as "no link to append".
+  const boardUrl = tournament?.shareToken
+    ? buildBoardLink(typeof window !== 'undefined' ? window.location?.origin : '', tournament.shareToken)
+    : null;
   const totalHoles = round?.holes?.length ?? 18;
   // Round is live when the tournament is still open and play has started but
   // not everyone has finished — mirrors the feed's `live` flag.
@@ -148,19 +158,46 @@ export default function RoundSummaryScreen({ navigation, route }) {
     .sort(([a], [b]) => Number(a) - Number(b));
   const hasNotes = Boolean(roundNote) || holeNotes.length > 0;
 
+  const handleShareRound = useCallback(() => {
+    shareRoundSummary({
+      recap,
+      ranked,
+      unit,
+      courseName,
+      roundLabel,
+      tournamentName: tournament?.name,
+      boardUrl,
+      theme,
+      viewRef: roundCardRef,
+      onBusy: setSharingRound,
+    });
+  }, [recap, ranked, unit, courseName, roundLabel, tournament?.name, boardUrl, theme]);
+
   return (
     <ScreenContainer style={s.container} edges={['top', 'bottom']}>
       <View style={s.header}>
         <IconButton icon="chevron-left" onPress={() => navigation.goBack()} />
         <Text style={s.headerTitle} numberOfLines={1}>{roundLabel}</Text>
-        {live ? (
-          <View style={s.liveBadge} accessibilityLabel="Live round in progress">
-            <View style={s.liveDot} />
-            <Text style={s.liveBadgeText}>LIVE</Text>
-          </View>
-        ) : (
-          <View style={{ width: 22 }} />
-        )}
+        <View style={s.headerRight}>
+          {round ? (
+            sharingRound ? (
+              <ActivityIndicator size="small" color={theme.accent.primary} />
+            ) : (
+              <IconButton
+                icon="share-2"
+                onPress={handleShareRound}
+                accessibilityLabel="Share round summary"
+              />
+            )
+          ) : null}
+          {live ? (
+            <View style={s.liveBadge} accessibilityLabel="Live round in progress">
+              <View style={s.liveDot} />
+              <Text style={s.liveBadgeText}>LIVE</Text>
+            </View>
+          ) : null}
+          {!round ? <View style={{ width: 22 }} /> : null}
+        </View>
       </View>
 
       {loading ? (
@@ -282,6 +319,19 @@ export default function RoundSummaryScreen({ navigation, route }) {
         </TouchableOpacity>
       ) : null}
       {attachSheets}
+      {round ? (
+        <View style={{ position: 'absolute', left: -9999 }}>
+          <ShareableRoundCard
+            ref={roundCardRef}
+            tournamentName={tournament?.name}
+            roundLabel={roundLabel}
+            courseName={courseName}
+            recap={recap}
+            ranked={ranked}
+            unit={unit}
+          />
+        </View>
+      ) : null}
     </ScreenContainer>
   );
 }
@@ -297,6 +347,7 @@ function makeStyles(theme) {
       fontFamily: 'PlusJakartaSans-ExtraBold', fontSize: 16, color: theme.text.primary,
       flex: 1, textAlign: 'center',
     },
+    headerRight: { flexDirection: 'row', alignItems: 'center', gap: 4 },
     center: { flex: 1, alignItems: 'center', justifyContent: 'center', gap: 12 },
     missingText: { fontFamily: 'PlusJakartaSans-Medium', color: theme.text.muted, fontSize: 14 },
     content: {

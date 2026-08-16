@@ -1,4 +1,5 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import { v4 as uuidv4 } from 'uuid';
 import { supabase } from '../lib/supabase';
 import { tournamentsIndex } from './tournamentsIndex';
 import { fetchTournament as repoFetchTournament, fetchMyTournaments } from './tournamentRepo';
@@ -1961,6 +1962,82 @@ export async function joinTournamentByCode(code) {
 export function buildJoinLink(origin, code) {
   const base = (origin || 'https://golf-partner.vercel.app').replace(/\/+$/, '');
   return `${base}/join-tournament/${String(code ?? '').toUpperCase()}`;
+}
+
+// Build the shareable web URL for a tournament's public live board. Unlike
+// buildJoinLink's invite code, the token is an opaque uuid — case matters,
+// so it is not upper-cased.
+export function buildBoardLink(origin, token) {
+  if (!token) return null;
+  const base = (origin || 'https://golf-partner.vercel.app').replace(/\/+$/, '');
+  return `${base}/board/${token}`;
+}
+
+// ── Board sharing (owner-only) ──────────────────────────────────────────────
+// Enable/rotate/revoke wrap the owner-guarded set_share_token RPC (see
+// supabase/migrations/20260816000000_shared_board.sql) — SECURITY DEFINER,
+// RAISEs 42501 for a non-owner. Online-only and NOT queued through
+// syncQueue: publishing/revoking the board is a deliberate, terminal action,
+// same precedent as officialStore.js's attestCard.
+
+// Patch the locally cached tournament with the current share token (or its
+// absence) and notify subscribers, via the same readLocal/saveLocal path
+// every other local mutation in this module uses (e.g. _overlayAndSave).
+// A no-op when the tournament isn't cached locally yet — nothing to patch
+// until it is; the callers that read tournament.shareToken (HomeScreen,
+// RoundSummaryScreen) do so off an already-loaded record.
+async function _patchLocalShareToken(tournamentId, token) {
+  const local = await readLocal(tournamentId);
+  if (!local) return;
+  await saveLocal({ ...local, shareToken: token || null }, { makeActive: false });
+}
+
+// Current share token for a tournament, or null if sharing is off or the
+// caller isn't the owner (RLS makes a non-owner's select return zero rows,
+// not an error — maybeSingle turns that into null rather than throwing).
+export async function fetchShareToken(tournamentId) {
+  const { data, error } = await supabase
+    .from('tournaments')
+    .select('share_token')
+    .eq('id', tournamentId)
+    .maybeSingle();
+  if (error) throw error;
+  return data?.share_token ?? null;
+}
+
+// Turn sharing on. Idempotent: if a token already exists, return it
+// unchanged rather than rotating — rotating on every "share" tap would
+// silently break a link someone already has open.
+export async function enableBoardSharing(tournamentId) {
+  const existing = await fetchShareToken(tournamentId);
+  if (existing) return existing;
+  const token = uuidv4();
+  const { error } = await supabase.rpc('set_share_token', {
+    p_id: tournamentId, p_token: token,
+  });
+  if (error) throw error;
+  await _patchLocalShareToken(tournamentId, token);
+  return token;
+}
+
+// Rotate to a fresh token, invalidating every previously shared link.
+export async function rotateBoardToken(tournamentId) {
+  const token = uuidv4();
+  const { error } = await supabase.rpc('set_share_token', {
+    p_id: tournamentId, p_token: token,
+  });
+  if (error) throw error;
+  await _patchLocalShareToken(tournamentId, token);
+  return token;
+}
+
+// Turn sharing off. Every previously shared link 404s immediately.
+export async function disableBoardSharing(tournamentId) {
+  const { error } = await supabase.rpc('set_share_token', {
+    p_id: tournamentId, p_token: null,
+  });
+  if (error) throw error;
+  await _patchLocalShareToken(tournamentId, null);
 }
 
 // Find the player slot already bound to a given user id, if any. Used to

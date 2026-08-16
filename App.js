@@ -31,6 +31,7 @@ import { loadProfile } from './src/store/profileStore';
 import { isBootRevealed, subscribeBootReveal, markBootReady } from './src/store/bootReveal';
 import SetNewPasswordScreen from './src/screens/SetNewPasswordScreen';
 import JoinTournamentLinkScreen from './src/screens/JoinTournamentLinkScreen';
+import SharedBoardScreen from './src/screens/SharedBoardScreen';
 
 import FloatingTabBar from './src/navigation/FloatingTabBar';
 import { TAB_ROUTE_NAMES } from './src/navigation/tabBarModel';
@@ -120,18 +121,48 @@ function MainTabs() {
   );
 }
 
-// Matches both the App Link URL (https://golf-partner.vercel.app/join-tournament/CODE)
-// and the custom-scheme deep link (golf://join-tournament/CODE) used when the app
-// catches an invite. Web reads it sync from window.location; native reads it
-// async from Linking.getInitialURL so the auth gate can route logged-out
-// scanners to the guest/login choice instead of the bare sign-up wall.
+// The two invite shapes that must be catchable while signed OUT: the casual
+// shared invite (/join-tournament/CODE) and the official magic-token invite
+// (/join/TOKEN) — both as App Link URLs (https://golf-partner.vercel.app/…)
+// and as custom-scheme deep links (golf://…) when the app catches them.
+// The alternatives are disjoint: `/join-tournament/x` can never satisfy the
+// `join/` branch, because the character after `join` must be a slash.
+const JOIN_PATH_RE = /^\/(?:join-tournament|join)\/[^/]+/;
+const JOIN_SCHEME_RE = /^golf:\/\/(?:join-tournament|join)\/[^/?#]+/i;
+
+// Web reads it sync from window.location; native reads it async from
+// Linking.getInitialURL so the auth gate can route logged-out scanners to the
+// guest/login choice instead of the bare sign-up wall. Official invites go
+// through the same gate: their redeem RPCs are granted to anon, so a guest
+// session is enough — without this, the token was dropped on the floor.
 function matchesJoinLink(url) {
   if (!url) return false;
-  if (/^golf:\/\/join-tournament\/[^/?#]+/i.test(url)) return true;
+  if (JOIN_SCHEME_RE.test(url)) return true;
   try {
-    return /^\/join-tournament\/[^/]+/.test(new URL(url).pathname);
+    return JOIN_PATH_RE.test(new URL(url).pathname);
   } catch {
     return false;
+  }
+}
+
+// Public shared-board link (/board/TOKEN). Unlike the join matchers this one
+// returns the token, because the signed-out render is bare — outside any
+// navigator — so SharedBoardScreen can only get the token as a prop.
+// Returns the token string, or null when the URL is not a board link.
+function boardTokenFromPath(pathname) {
+  const m = /^\/board\/([^/]+)/.exec(pathname || '');
+  if (!m) return null;
+  try { return decodeURIComponent(m[1]); } catch { return m[1]; }
+}
+
+function boardTokenFromUrl(url) {
+  if (!url) return null;
+  const scheme = /^golf:\/\/board\/([^/?#]+)/i.exec(url);
+  if (scheme) return boardTokenFromPath(`/board/${scheme[1]}`);
+  try {
+    return boardTokenFromPath(new URL(url).pathname);
+  } catch {
+    return null;
   }
 }
 
@@ -142,23 +173,40 @@ function AppNavigator() {
   // before getInitialURL settles. On web we read it synchronously up front.
   const [isJoinLink, setIsJoinLink] = useState(() => {
     if (typeof window !== 'undefined' && window.location) {
-      return /^\/join-tournament\/[^/]+/.test(window.location.pathname);
+      return JOIN_PATH_RE.test(window.location.pathname);
     }
     return null;
   });
+  // Same resolution dance for the public board link, one sentinel over:
+  // undefined = "not resolved yet", null = not a board link, string = token.
+  // (null can't be the unresolved sentinel here — it's a real answer.)
+  const [boardToken, setBoardToken] = useState(() => {
+    if (typeof window !== 'undefined' && window.location) {
+      return boardTokenFromPath(window.location.pathname);
+    }
+    return undefined;
+  });
 
   useEffect(() => {
-    if (isJoinLink !== null) return;
+    if (isJoinLink !== null && boardToken !== undefined) return undefined;
     let cancelled = false;
     Linking.getInitialURL().then((url) => {
-      if (!cancelled) setIsJoinLink(matchesJoinLink(url));
-    }).catch(() => { if (!cancelled) setIsJoinLink(false); });
+      if (cancelled) return;
+      setIsJoinLink(matchesJoinLink(url));
+      setBoardToken(boardTokenFromUrl(url));
+    }).catch(() => {
+      if (cancelled) return;
+      setIsJoinLink(false);
+      setBoardToken(null);
+    });
     return () => { cancelled = true; };
-  }, [isJoinLink]);
+  }, [isJoinLink, boardToken]);
 
   useEffect(() => {
     const sub = Linking.addEventListener('url', ({ url }) => {
       if (matchesJoinLink(url)) setIsJoinLink(true);
+      const token = boardTokenFromUrl(url);
+      if (token) setBoardToken(token);
     });
     return () => sub.remove();
   }, []);
@@ -207,7 +255,7 @@ function AppNavigator() {
     return () => sub.remove();
   }, []);
 
-  if (loading || isJoinLink === null) {
+  if (loading || isJoinLink === null || boardToken === undefined) {
     return <LoadingSplash />;
   }
 
@@ -218,11 +266,17 @@ function AppNavigator() {
   if (passwordRecovery) return <SetNewPasswordScreen />;
 
   if (!session) {
-    // A logged-out scanner of a /join-tournament/<code> link gets the
-    // guest/login choice instead of the bare sign-up wall. Once a session
-    // (anonymous or otherwise) is established, the Stack mounts and the
-    // linking config routes the same URL to the JoinTournament screen.
+    // A logged-out scanner of a /join-tournament/<code> or /join/<token> link
+    // gets the guest/login choice instead of the bare sign-up wall. Once a
+    // session (anonymous or otherwise) is established, the Stack mounts and
+    // the linking config routes the same URL to JoinTournament / JoinOfficial.
+    // Checked before the board so a freshly-arrived invite always wins over a
+    // board link the device happened to open earlier.
     if (isJoinLink) return <JoinTournamentLinkScreen />;
+    // The public board is readable with no account at all — no auth UI here.
+    // Signed-in visitors get the routed SharedBoard screen instead (below),
+    // so they keep a back button into the app.
+    if (boardToken) return <SharedBoardScreen token={boardToken} />;
     return <AuthScreen />;
   }
 
@@ -287,6 +341,7 @@ function AppNavigator() {
         <Stack.Screen name="Friends" component={FriendsScreen} />
         <Stack.Screen name="Notifications" component={NotificationsScreen} />
         <Stack.Screen name="RoundSummary" component={RoundSummaryScreen} />
+        <Stack.Screen name="SharedBoard" component={SharedBoardScreen} />{/* public board opened by an already-signed-in visitor — same screen the signed-out branch renders bare, here with a back stack */}
       </Stack.Navigator>
       <BootSplashOverlay />
     </>
@@ -332,6 +387,8 @@ function BootSplashOverlay() {
 // Deep-link config: maps web URL paths to routes so invite links open the
 // right flow directly. `join/:token` → official magic-token redeem;
 // `join-tournament/:code` → casual shared-invite redeem + claim;
+// `board/:token` → the public read-only leaderboard (signed-out visitors are
+// short-circuited to it above, outside the navigator);
 // `reset-password` → the set-new-password screen (also short-circuited in
 // AppNavigator via the passwordRecovery flag, which is the primary path —
 // this mapping just makes the deep link literally resolvable).
@@ -354,6 +411,7 @@ const linking = {
     screens: {
       JoinOfficial: 'join/:token',
       JoinTournament: 'join-tournament/:code',
+      SharedBoard: 'board/:token',
       ResetPassword: 'reset-password',
     },
   },

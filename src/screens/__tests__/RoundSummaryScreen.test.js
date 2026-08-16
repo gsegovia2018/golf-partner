@@ -14,6 +14,15 @@ jest.mock('@expo/vector-icons', () => ({
   Feather: 'Feather',
 }));
 
+// ShareableCard.js imports react-native-view-shot, which ships untransformed
+// ESM (not in jest.config.js's transformIgnorePatterns allow-list) — mock
+// the whole module, same approach as HomeScreen.quickStart.test.js.
+const mockShareRoundSummary = jest.fn();
+jest.mock('../../components/ShareableCard', () => ({
+  ShareableRoundCard: () => null,
+  shareRoundSummary: (...args) => mockShareRoundSummary(...args),
+}));
+
 // The screen no longer reads the legacy tournaments.data blob column directly
 // (frozen since Task 11) — it reads via tournamentRepo.fetchTournament, which
 // calls the get_game_tournament RPC. Default the mock to "no remote row" so
@@ -249,6 +258,24 @@ describe('RoundSummaryScreen', () => {
 
     fireEvent.press(await findByLabelText('Comments'));
     expect(await findByText('Live update from the RPC.')).toBeTruthy();
+  });
+
+  test('share icon triggers shareRoundSummary with the recap/board data (no shareToken yet)', async () => {
+    const { findByText, findByLabelText } = render(wrap(
+      <RoundSummaryScreen navigation={navigation} route={route} />,
+    ));
+    await findByText('Winner: Marcos');
+
+    fireEvent.press(await findByLabelText('Share round summary'));
+
+    expect(mockShareRoundSummary).toHaveBeenCalledTimes(1);
+    const call = mockShareRoundSummary.mock.calls[0][0];
+    expect(call.recap.winnerName).toBe('Marcos');
+    expect(call.roundLabel).toBe('La Moraleja');
+    expect(call.courseName).toBe('La Moraleja');
+    expect(call.tournamentName).toBe('Weekend Match');
+    // No tournament.shareToken on the fixture yet — must omit the link, not throw.
+    expect(call.boardUrl).toBeNull();
   });
 
   describe('Photos tab add-photo FAB', () => {

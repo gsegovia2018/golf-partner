@@ -32,6 +32,7 @@ import {
   tournamentMatchPlayStandings,
   roundLeaderboard, tournamentLeaderboardResolved,
   DEFAULT_SETTINGS, generateInviteCode, buildJoinLink,
+  buildBoardLink, enableBoardSharing, rotateBoardToken, disableBoardSharing,
   tournamentNoun, tournamentNounCapitalized,
   getActiveTournamentSnapshot, getTournament, getTournamentSnapshot,
   lastTeeForPlayerOnCourse,
@@ -46,7 +47,7 @@ import {
 import { mutate } from '../store/mutate';
 import { roundScoringMode, tournamentHasMixedModes, tournamentStablefordLeaderboard, buildTeamsForMode, roundBestBallValues } from '../store/scoring';
 import { assignPlacements, comparatorForBoardMode } from '../store/leaderboardPlacement';
-import { subscribeConnectivity } from '../lib/connectivity';
+import { subscribeConnectivity, isOnline } from '../lib/connectivity';
 import { getAppSettings, updateAppSettings } from '../store/settingsStore';
 import { useAppSettings } from '../hooks/useAppSettings';
 import { unreadCount } from '../store/notificationStore';
@@ -276,6 +277,7 @@ export default function HomeScreen({ navigation, route }) {
   const userPickedRoundRef = useRef(false);
   const lastLoadedTournamentIdRef = useRef(initialTournament?.id ?? null);
   const [showSettings, setShowSettings] = useState(false);
+  const [boardShareBusy, setBoardShareBusy] = useState(false);
   const [showTeamSettings, setShowTeamSettings] = useState(false);
   const [showPointValues, setShowPointValues] = useState(false);
   // Strings — BestBallValueFields edits through TextInputs.
@@ -737,7 +739,10 @@ export default function HomeScreen({ navigation, route }) {
     return me ? [me] : [];
   }
 
-  const navigateToCreatedGame = useCallback(() => {
+  // Push Tournament + Scorecard together so backing out of the scorecard
+  // lands on the tournament view, not Home. Omitting scorecardParams lets
+  // ScorecardScreen default to the tournament's current round.
+  const pushTournamentScorecard = useCallback((scorecardParams) => {
     const targetNavigation = navigation.getState?.().routeNames?.includes('Tournament')
       ? navigation
       : navigation.getParent?.() ?? navigation;
@@ -747,11 +752,15 @@ export default function HomeScreen({ navigation, route }) {
       const routes = [
         ...baseRoutes,
         { name: 'Tournament' },
-        { name: 'Scorecard', params: { roundIndex: 0 } },
+        scorecardParams ? { name: 'Scorecard', params: scorecardParams } : { name: 'Scorecard' },
       ];
       return CommonActions.reset({ ...state, routes, index: routes.length - 1 });
     });
   }, [navigation]);
+
+  const navigateToCreatedGame = useCallback(() => {
+    pushTournamentScorecard({ roundIndex: 0 });
+  }, [pushTournamentScorecard]);
 
   function closePostCreateInvite() {
     const created = postCreateInvite.tournament;
@@ -908,6 +917,86 @@ export default function HomeScreen({ navigation, route }) {
     } catch (err) {
       if (Platform.OS === 'web') window.alert(err.message ?? `Could not delete ${tournamentNoun(t)}`);
       else Alert.alert('Error', err.message ?? `Could not delete ${tournamentNoun(t)}`);
+    }
+  }
+
+  // Owner-only live board sharing: enable/rotate/disable all wrap the
+  // set_share_token RPC (tournamentStore.js) — online-only, not queued. A
+  // pre-flight isOnline() check gives a friendly message instead of letting
+  // the RPC fail with a raw network error; a non-owner never sees these
+  // actions (gated on isOwner in the settings sheet), so the 42501 branch
+  // below is just a defensive plain-language fallback.
+  function boardSharingErrorMessage(err) {
+    if (!isOnline()) return 'You need to be online to change board sharing.';
+    const msg = err?.message ?? '';
+    if (msg.includes('not authorized') || err?.code === '42501') {
+      return 'Only the tournament owner can change board sharing.';
+    }
+    return msg || 'Could not update board sharing.';
+  }
+
+  function shareBoardLink(token) {
+    const url = buildBoardLink(currentOrigin(), token);
+    // Blank line before the URL keeps WhatsApp from wrapping the text into
+    // the middle of the link and breaking the tap target — same format as
+    // the invite-link share above.
+    Share.share({ message: `Watch our live leaderboard 🏌️\n\n${url}` });
+  }
+
+  async function handleShareBoard() {
+    if (!tournament || boardShareBusy) return;
+    if (!isOnline()) { showError(boardSharingErrorMessage()); return; }
+    setBoardShareBusy(true);
+    try {
+      const token = await enableBoardSharing(tournament.id);
+      setShowSettings(false);
+      shareBoardLink(token);
+    } catch (err) {
+      showError(boardSharingErrorMessage(err));
+    } finally {
+      setBoardShareBusy(false);
+    }
+  }
+
+  async function handleRotateBoardLink() {
+    if (!tournament || boardShareBusy) return;
+    const confirmed = await confirm({
+      title: 'New link',
+      message: 'The old board link stops working immediately. Anyone still using it loses access.',
+      confirmLabel: 'New link',
+    });
+    if (!confirmed) return;
+    if (!isOnline()) { showError(boardSharingErrorMessage()); return; }
+    setBoardShareBusy(true);
+    try {
+      const token = await rotateBoardToken(tournament.id);
+      setShowSettings(false);
+      shareBoardLink(token);
+    } catch (err) {
+      showError(boardSharingErrorMessage(err));
+    } finally {
+      setBoardShareBusy(false);
+    }
+  }
+
+  async function handleStopSharingBoard() {
+    if (!tournament || boardShareBusy) return;
+    const confirmed = await confirm({
+      title: 'Stop sharing',
+      message: 'The board link stops working immediately.',
+      confirmLabel: 'Stop sharing',
+      destructive: true,
+    });
+    if (!confirmed) return;
+    if (!isOnline()) { showError(boardSharingErrorMessage()); return; }
+    setBoardShareBusy(true);
+    try {
+      await disableBoardSharing(tournament.id);
+      setShowSettings(false);
+    } catch (err) {
+      showError(boardSharingErrorMessage(err));
+    } finally {
+      setBoardShareBusy(false);
     }
   }
 
@@ -1288,7 +1377,7 @@ export default function HomeScreen({ navigation, route }) {
             <Feather name="chevron-right" size={16} color={theme.accent.primary} />
           </TouchableOpacity>
         )}
-        <LiveRoundCard onOpen={() => navigation.navigate('Scorecard')} />
+        <LiveRoundCard onOpen={() => pushTournamentScorecard()} />
         <Text style={s.startHeading}>Start playing</Text>
         <View style={s.startTilesRow}>
           <PressableScale
@@ -2181,6 +2270,49 @@ export default function HomeScreen({ navigation, route }) {
               <Feather name="share-2" size={14} color={theme.text.primary} />
               <Text style={s.menuItemText}>Share Leaderboard</Text>
               <Feather name="chevron-right" size={16} color={theme.text.muted} />
+            </TouchableOpacity>
+          )}
+
+          {isOwner && (
+            <TouchableOpacity
+              style={s.menuItem}
+              onPress={handleShareBoard}
+              activeOpacity={0.7}
+              disabled={boardShareBusy}
+            >
+              <Feather name="radio" size={14} color={theme.text.primary} />
+              <View style={{ flex: 1 }}>
+                <Text style={s.menuItemText}>Share live board</Text>
+                <Text style={s.modalSubtle}>Anyone with the link can watch</Text>
+              </View>
+              {boardShareBusy
+                ? <ActivityIndicator size="small" color={theme.text.muted} />
+                : <Feather name="chevron-right" size={16} color={theme.text.muted} />}
+            </TouchableOpacity>
+          )}
+
+          {isOwner && !!tournament.shareToken && (
+            <TouchableOpacity
+              style={s.menuItem}
+              onPress={handleRotateBoardLink}
+              activeOpacity={0.7}
+              disabled={boardShareBusy}
+            >
+              <Feather name="refresh-cw" size={14} color={theme.text.primary} />
+              <Text style={s.menuItemText}>New link</Text>
+              <Feather name="chevron-right" size={16} color={theme.text.muted} />
+            </TouchableOpacity>
+          )}
+
+          {isOwner && !!tournament.shareToken && (
+            <TouchableOpacity
+              style={[s.menuItem, s.menuItemDestructive]}
+              onPress={handleStopSharingBoard}
+              activeOpacity={0.7}
+              disabled={boardShareBusy}
+            >
+              <Feather name="x-circle" size={14} color={theme.destructive} />
+              <Text style={[s.menuItemText, { color: theme.destructive }]}>Stop sharing</Text>
             </TouchableOpacity>
           )}
 

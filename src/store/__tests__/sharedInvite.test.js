@@ -1,4 +1,4 @@
-import { buildJoinLink, findClaimedSlot } from '../tournamentStore';
+import { buildJoinLink, buildBoardLink, findClaimedSlot } from '../tournamentStore';
 
 describe('buildJoinLink', () => {
   test('builds a path URL from an origin and code', () => {
@@ -19,6 +19,34 @@ describe('buildJoinLink', () => {
   test('upper-cases the code', () => {
     expect(buildJoinLink('https://golf-partner.vercel.app', 'abc123'))
       .toBe('https://golf-partner.vercel.app/join-tournament/ABC123');
+  });
+});
+
+describe('buildBoardLink', () => {
+  test('builds a board URL from an origin and token', () => {
+    expect(buildBoardLink('https://golf.example.com', 'tok-123'))
+      .toBe('https://golf.example.com/board/tok-123');
+  });
+
+  test('strips a trailing slash from the origin', () => {
+    expect(buildBoardLink('https://golf.example.com/', 'tok-123'))
+      .toBe('https://golf.example.com/board/tok-123');
+  });
+
+  test('falls back to the production origin when none is given', () => {
+    expect(buildBoardLink('', 'tok-123'))
+      .toBe('https://golf-partner.vercel.app/board/tok-123');
+  });
+
+  test('does not upper-case the token (it is an opaque uuid, not an invite code)', () => {
+    expect(buildBoardLink('https://golf-partner.vercel.app', 'abc-DEF-123'))
+      .toBe('https://golf-partner.vercel.app/board/abc-DEF-123');
+  });
+
+  test('returns null for a falsy token', () => {
+    expect(buildBoardLink('https://golf.example.com', null)).toBeNull();
+    expect(buildBoardLink('https://golf.example.com', '')).toBeNull();
+    expect(buildBoardLink('https://golf.example.com', undefined)).toBeNull();
   });
 });
 
