@@ -122,13 +122,17 @@ describe('round exclusion toggles', () => {
     expect(await findByText(/1 excluded/)).toBeTruthy();
   });
 
-  it('shows ineligible rounds with the reason and no toggle', async () => {
-    const { findByText, queryAllByLabelText } = renderTab({
-      myRounds: [myRound('a', 10), myRound('b', 14), myRound('c', 12), partialRound('p', 14)],
+  it('hides unfinished partial rounds but keeps other ineligible reasons visible', async () => {
+    const nineHole = myRound('n', 10);
+    nineHole.round = { ...nineHole.round, holes: holes.slice(0, 9) };
+    const { findByText, queryByText, queryAllByLabelText } = renderTab({
+      myRounds: [myRound('a', 10), myRound('b', 14), myRound('c', 12), partialRound('p', 14), nineHole],
       onToggleExcluded: jest.fn(),
     });
-    expect(await findByText(/partial · 14 holes/)).toBeTruthy();
-    // 3 included rows have exclude buttons; the partial row has none.
+    expect(await findByText('9-hole round')).toBeTruthy();
+    expect(queryByText(/partial · 14 holes/)).toBeNull();
+    expect(queryByText('Course p')).toBeNull();
+    // 3 included rows have exclude buttons; ineligible rows have none.
     expect(queryAllByLabelText(/^Exclude Course .+ from handicap$/)).toHaveLength(3);
   });
 

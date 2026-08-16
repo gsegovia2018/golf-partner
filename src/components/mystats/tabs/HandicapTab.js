@@ -20,9 +20,7 @@ function fmtDate(iso) {
 const fmt1 = (n) => n.toFixed(1);
 
 const reasonLabel = (row) => (
-  row.reason === 'partial' ? `partial · ${row.holesPlayed} holes`
-    : row.reason === 'nine-holes' ? '9-hole round'
-      : 'no slope/rating'
+  row.reason === 'nine-holes' ? '9-hole round' : 'no slope/rating'
 );
 
 // Memoised — see the note in CoachTab.
@@ -45,12 +43,15 @@ function HandicapTab({
   );
   // Newest-first merged list: the included last-20 window, every excluded
   // round (so it can be re-added), and every ineligible round (so the
-  // eligible/total counts are self-explanatory).
+  // eligible/total counts are self-explanatory) — except unfinished partials,
+  // which will never qualify and only add noise here.
   const rows = useMemo(() => {
     const merged = [
       ...result.differentials.map((d) => ({ ...d, type: 'included' })),
       ...result.excluded.map((d) => ({ ...d, type: 'excluded' })),
-      ...result.ineligible.map((d) => ({ ...d, type: 'ineligible' })),
+      ...result.ineligible
+        .filter((d) => d.reason !== 'partial')
+        .map((d) => ({ ...d, type: 'ineligible' })),
     ];
     return merged.sort((a, b) => (
       String(b.date ?? '').localeCompare(String(a.date ?? ''))
