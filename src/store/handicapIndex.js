@@ -141,6 +141,158 @@ export function computeHandicapIndex(myRounds, { excludedKeys } = {}) {
   };
 }
 
+// Index after hypothetically posting one more differential `d` on top of the
+// current included list. `d` is passed in tenths to keep the search grid exact.
+function simulateNext(included, tenths) {
+  return indexFromDifferentials(
+    [...included, { key: '__next__', differential: tenths / 10 }],
+  ).index;
+}
+
+// The simulated index is monotone non-decreasing in the posted differential,
+// so both thresholds are binary searches over the 0.1 grid in [-10.0, 60.0].
+const GRID_LO = -100;
+const GRID_HI = 600;
+
+// Largest differential (to 0.1) whose simulated index lands BELOW `target`,
+// or null when even a -10.0 day can't get there.
+function largestDiffBelow(included, target) {
+  if (simulateNext(included, GRID_LO) >= target) return null;
+  let lo = GRID_LO;
+  let hi = GRID_HI;
+  while (lo < hi) {
+    const mid = Math.ceil((lo + hi) / 2);
+    if (simulateNext(included, mid) < target) lo = mid; else hi = mid - 1;
+  }
+  return lo / 10;
+}
+
+// Smallest differential (to 0.1) whose simulated index lands ABOVE `target`,
+// or null when no round can push it there.
+function smallestDiffAbove(included, target) {
+  if (simulateNext(included, GRID_HI) <= target) return null;
+  let lo = GRID_LO;
+  let hi = GRID_HI;
+  while (lo < hi) {
+    const mid = Math.floor((lo + hi) / 2);
+    if (simulateNext(included, mid) > target) hi = mid; else lo = mid + 1;
+  }
+  return lo / 10;
+}
+
+// What the next qualifying round can do to the index — every number is an
+// exact simulation of the WHS window (eviction, counting table and
+// small-sample adjustments included, so it is honest even at 3-5 rounds
+// where a good round can still raise the index).
+//   dropThreshold    beat this differential and the index drops
+//   dropGross/Course the same target as adjusted gross strokes at the most
+//                    played course in the window (null without course data)
+//   low/lowDate      personal-low index over the whole walk (first time set)
+//   newLowThreshold  differential that would set a new personal low
+//   newLowIndex      the index that round would produce
+//   newLowReachable  true when the target is no harder than the best
+//                    differential already in the window
+//   canRise/riseAt   whether (and from which differential) a bad round
+//                    raises the index; worstCase is the ceiling
+//   leaving          the differential aging out of a full window (+ whether
+//                    it currently counts) — null while under 20 rounds
+export function nextRoundOutlook(myRounds, { excludedKeys } = {}) {
+  const included = (myRounds ?? [])
+    .map(roundDifferential)
+    .filter(Boolean)
+    .filter((d) => !excludedKeys?.has(d.key));
+  const { index, window, countingKeys } = indexFromDifferentials(included);
+  if (index == null) return null;
+
+  let low = Infinity;
+  let lowDate = null;
+  for (let i = MIN_DIFFERENTIALS - 1; i < included.length; i += 1) {
+    const v = indexFromDifferentials(included.slice(0, i + 1)).index;
+    if (v < low) { low = v; lowDate = included[i].date; }
+  }
+
+  const dropThreshold = largestDiffBelow(included, index);
+  let dropGross = null;
+  let dropCourse = null;
+  if (dropThreshold != null) {
+    const counts = new Map();
+    window.forEach((d) => counts.set(d.courseName, (counts.get(d.courseName) ?? 0) + 1));
+    let top = null;
+    counts.forEach((n, name) => { if (name && (!top || n > top.n)) top = { name, n }; });
+    const latest = top && [...window].reverse().find((d) => d.courseName === top.name);
+    if (latest && latest.slope > 0 && Number.isFinite(latest.rating)) {
+      dropGross = Math.floor(latest.rating + (dropThreshold * latest.slope) / STANDARD_SLOPE);
+      dropCourse = top.name;
+    }
+  }
+
+  let newLowThreshold = null;
+  let newLowIndex = null;
+  let newLowReachable = false;
+  if (index > low) {
+    newLowThreshold = largestDiffBelow(included, low);
+    if (newLowThreshold != null) {
+      newLowIndex = simulateNext(included, Math.round(newLowThreshold * 10));
+      const bestInWindow = Math.min(...window.map((d) => d.differential));
+      newLowReachable = newLowThreshold >= bestInWindow;
+    }
+  }
+
+  const worstCase = simulateNext(included, GRID_HI);
+  const canRise = worstCase > index;
+  const riseAt = canRise ? smallestDiffAbove(included, index) : null;
+
+  const leavingDiff = included.length >= 20 ? window[0] : null;
+  const leaving = leavingDiff ? {
+    differential: leavingDiff.differential,
+    courseName: leavingDiff.courseName,
+    counting: countingKeys.has(leavingDiff.key),
+  } : null;
+
+  return {
+    index,
+    low,
+    lowDate,
+    dropThreshold,
+    dropGross,
+    dropCourse,
+    newLowThreshold,
+    newLowIndex,
+    newLowReachable,
+    canRise,
+    riseAt,
+    worstCase,
+    leaving,
+  };
+}
+
+// Month-by-month view of an index walk (handicapIndexSeries output): one
+// entry per calendar month from the first point to the last, carrying the
+// index flat through months without a qualifying round (played: false) so
+// idle stretches stay visible instead of being compressed away.
+export function monthlyIndexSeries(seriesPoints) {
+  const pts = (seriesPoints ?? []).filter((p) => p.value != null && p.date);
+  if (pts.length === 0) return [];
+  const ym = (iso) => String(iso).slice(0, 7);
+  const lastInMonth = new Map(); // chronological input → last write wins
+  pts.forEach((p) => lastInMonth.set(ym(p.date), p.value));
+  const [y0, m0] = ym(pts[0].date).split('-').map(Number);
+  const [y1, m1] = ym(pts[pts.length - 1].date).split('-').map(Number);
+  if (!y0 || !m0 || !y1 || !m1) return [];
+  const out = [];
+  for (let y = y0, m = m0; y < y1 || (y === y1 && m <= m1); m += 1) {
+    if (m > 12) { m = 1; y += 1; }
+    const key = `${y}-${String(m).padStart(2, '0')}`;
+    const played = lastInMonth.has(key);
+    out.push({
+      ym: key,
+      value: played ? lastInMonth.get(key) : out[out.length - 1].value,
+      played,
+    });
+  }
+  return out;
+}
+
 // Evolution of the index over the full history: one point per included
 // eligible round from the 3rd onward, each valued at the index as it stood
 // after that round (the walk re-windows to the last 20 at every step, so

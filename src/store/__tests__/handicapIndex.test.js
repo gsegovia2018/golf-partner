@@ -1,5 +1,6 @@
 import {
   roundDifferential, computeHandicapIndex, roundEligibility, handicapIndexSeries,
+  nextRoundOutlook, monthlyIndexSeries,
 } from '../handicapIndex';
 
 // 18 identical holes: par 4, SI = hole number. Total par 72.
@@ -278,5 +279,109 @@ describe('handicapIndexSeries', () => {
     expect(handicapIndexSeries(makeRounds([10, 12]))).toEqual([]);
     expect(handicapIndexSeries([])).toEqual([]);
     expect(handicapIndexSeries(null)).toEqual([]);
+  });
+});
+
+describe('nextRoundOutlook', () => {
+  it('returns null without an index', () => {
+    expect(nextRoundOutlook(makeRounds([10, 12]))).toBeNull();
+    expect(nextRoundOutlook([])).toBeNull();
+    expect(nextRoundOutlook(null)).toBeNull();
+  });
+
+  it('computes thresholds, gross target and personal low at 8 rounds', () => {
+    // diffs [10, 14, 12, 16, 18, 20, 22, 24] → index avg(10,12) = 11.
+    // Posting a 9th round moves to the best-3 table:
+    //   drop:   (22+d)/3 < 11  → largest tenth is 10.8 (→ 10.9)
+    //   rise:   (22+d)/3 > 11  → smallest tenth is 11.2 (→ 11.1... no, index 11.1)
+    //   worst:  avg(10,12,14) = 12
+    //   new low (walk low is 8, from the 3-round stage): (22+d)/3 < 8 → 1.8
+    const rounds = makeRounds([10, 14, 12, 16, 18, 20, 22, 24]);
+    const o = nextRoundOutlook(rounds);
+    expect(o.index).toBe(11);
+    expect(o.low).toBe(8);
+    expect(o.lowDate).toBe('2026-07-01T00:00:00Z');
+    expect(o.dropThreshold).toBe(10.8);
+    // slope 113, rating 72 → gross target = floor(72 + 10.8) = 82
+    expect(o.dropGross).toBe(82);
+    expect(o.dropCourse).toBe('Test Course');
+    expect(o.canRise).toBe(true);
+    expect(o.riseAt).toBe(11.2);
+    expect(o.worstCase).toBe(12);
+    expect(o.leaving).toBeNull(); // window not full yet
+    expect(o.newLowThreshold).toBe(1.8);
+    expect(o.newLowIndex).toBe(7.9);
+    expect(o.newLowReachable).toBe(false); // best window diff is 10
+  });
+
+  it('reports the no-downside case when a bad round cannot raise the index', () => {
+    // diffs [10, 14, 12, 16, 18] → index 10 (lowest of 5). A 6th round uses
+    // best-2 minus 1: even a blow-up gives avg(10,12) − 1 = 10 — no rise.
+    const o = nextRoundOutlook(makeRounds([10, 14, 12, 16, 18]));
+    expect(o.index).toBe(10);
+    expect(o.canRise).toBe(false);
+    expect(o.riseAt).toBeNull();
+    expect(o.worstCase).toBe(10);
+  });
+
+  it('flags the counting differential aging out of a full window', () => {
+    // 21 rounds, diffs 1..21: window 2..21, counting 2..9, index 5.5.
+    // The next round evicts diff 2 — a counting one — so the index can rise:
+    // worst case is avg(3..10) = 6.5.
+    const rounds = makeRounds(Array.from({ length: 21 }, (_, i) => i + 1));
+    const o = nextRoundOutlook(rounds);
+    expect(o.index).toBe(5.5);
+    expect(o.leaving).toEqual({ differential: 2, courseName: 'Test Course', counting: true });
+    expect(o.canRise).toBe(true);
+    expect(o.worstCase).toBe(6.5);
+    // exact tenths sit on a .05 rounding boundary — assert the bracket
+    expect(o.dropThreshold).toBeGreaterThanOrEqual(1.5);
+    expect(o.dropThreshold).toBeLessThanOrEqual(1.6);
+    expect(o.riseAt).toBeGreaterThanOrEqual(2.4);
+    expect(o.riseAt).toBeLessThanOrEqual(2.5);
+    // walk low is −1.0 (3-round stage: 1 − 2); no postable round reaches it
+    expect(o.low).toBe(-1);
+    expect(o.newLowThreshold).toBeNull();
+    expect(o.newLowReachable).toBe(false);
+  });
+
+  it('respects exclusions', () => {
+    // Excluding the 10 leaves [14, 12, 16, 18] → 4-round rule: 12 − 1 = 11.
+    const o = nextRoundOutlook(makeRounds([10, 14, 12, 16, 18]), {
+      excludedKeys: new Set(['t:0']),
+    });
+    expect(o.index).toBe(11);
+  });
+});
+
+describe('monthlyIndexSeries', () => {
+  it('carries the index flat through months without a round', () => {
+    expect(monthlyIndexSeries([
+      { value: 10, date: '2026-01-10' },
+      { value: 9, date: '2026-01-20' },
+      { value: 8.5, date: '2026-03-05' },
+    ])).toEqual([
+      { ym: '2026-01', value: 9, played: true },
+      { ym: '2026-02', value: 9, played: false },
+      { ym: '2026-03', value: 8.5, played: true },
+    ]);
+  });
+
+  it('spans a year rollover', () => {
+    expect(monthlyIndexSeries([
+      { value: 5, date: '2025-11-02T00:00:00Z' },
+      { value: 4, date: '2026-02-10T00:00:00Z' },
+    ])).toEqual([
+      { ym: '2025-11', value: 5, played: true },
+      { ym: '2025-12', value: 5, played: false },
+      { ym: '2026-01', value: 5, played: false },
+      { ym: '2026-02', value: 4, played: true },
+    ]);
+  });
+
+  it('handles empty input and points without dates', () => {
+    expect(monthlyIndexSeries([])).toEqual([]);
+    expect(monthlyIndexSeries(null)).toEqual([]);
+    expect(monthlyIndexSeries([{ value: 5, date: null }])).toEqual([]);
   });
 });

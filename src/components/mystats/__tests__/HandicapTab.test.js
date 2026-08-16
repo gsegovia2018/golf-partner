@@ -60,22 +60,32 @@ const renderTab = (props = {}) => render(
 
 describe('HandicapTab', () => {
   it('shows the calculated index and the counting basis', async () => {
-    const { findByText } = renderTab();
-    // 3 differentials → lowest (10.0) − 2 = 8.0
-    expect(await findByText('8.0')).toBeTruthy();
-    expect(await findByText(/Best 1 of last 3/i)).toBeTruthy();
+    const { findAllByText, findByText } = renderTab();
+    // 3 differentials → lowest (10.0) − 2 = 8.0 (also echoed in the ledger's
+    // "→ index" column, hence findAll)
+    expect((await findAllByText('8.0')).length).toBeGreaterThan(0);
+    expect(await findByText(/best 1 of last 3/i)).toBeTruthy();
+    expect(await findByText('Season Ledger')).toBeTruthy();
   });
 
-  it('lists differentials with course names', async () => {
-    const { findByText } = renderTab();
-    expect(await findByText(/Course a/)).toBeTruthy();
+  it('lists differentials with course names in the ledger', async () => {
+    const { findAllByText, findByText } = renderTab();
+    // the course name also appears in the next-round gross target line
+    expect((await findAllByText(/Course a/)).length).toBeGreaterThan(0);
     expect(await findByText('10.0')).toBeTruthy();
+  });
+
+  it('shows the personal low fact', async () => {
+    const { findByText } = renderTab();
+    expect(await findByText('Personal low')).toBeTruthy();
+    // With 3 rounds the walk has one point, so the low is the current index.
+    expect(await findByText(/8\.0 · now/)).toBeTruthy();
   });
 
   it('applies the index to the profile on tap', async () => {
     const onApplied = jest.fn();
     const { findByText } = renderTab({ onApplied });
-    fireEvent.press(await findByText(/Set as my handicap/i));
+    fireEvent.press(await findByText(/Set 8\.0 as my handicap/));
     await waitFor(() => expect(upsertProfile).toHaveBeenCalledWith({ handicap: 8 }));
     expect(onApplied).toHaveBeenCalledWith(8);
   });
@@ -86,19 +96,52 @@ describe('HandicapTab', () => {
   });
 });
 
-describe('index evolution chart', () => {
-  it('renders the evolution card once there are 2+ points (4+ rounds)', async () => {
+describe('your next round card', () => {
+  it('states the drop target with a gross translation', async () => {
+    const { findByText } = renderTab();
+    expect(await findByText('Your next round')).toBeTruthy();
+    expect(await findByText(/and your index drops/)).toBeTruthy();
+    expect(await findByText(/gross/)).toBeTruthy();
+  });
+});
+
+describe('index history chart', () => {
+  it('appears with 2+ points (4+ rounds) and defaults to the by-round view', async () => {
     const { findByText } = renderTab({
       myRounds: [myRound('a', 10), myRound('b', 14), myRound('c', 12), myRound('d', 16)],
     });
-    expect(await findByText('Index evolution')).toBeTruthy();
-    expect(await findByText(/After each qualifying round/)).toBeTruthy();
+    expect(await findByText('Index history')).toBeTruthy();
+    expect(await findByText(/Recomputed after every qualifying round/)).toBeTruthy();
+  });
+
+  it('switches to the monthly view on toggle', async () => {
+    const { findByText } = renderTab({
+      myRounds: [myRound('a', 10), myRound('b', 14), myRound('c', 12), myRound('d', 16)],
+    });
+    fireEvent.press(await findByText('By month'));
+    expect(await findByText(/End-of-month index/)).toBeTruthy();
+  });
+
+  it('shows a tooltip naming the round when a point is pressed', async () => {
+    const { findByTestId, findAllByLabelText, findByText, queryByText } = renderTab({
+      myRounds: [myRound('a', 10), myRound('b', 14), myRound('c', 12), myRound('d', 16)],
+    });
+    const chart = await findByTestId('index-history-chart');
+    fireEvent(chart, 'layout', { nativeEvent: { layout: { width: 340, height: 150 } } });
+    expect(queryByText('Course c · 1 Jul')).toBeNull();
+    // hit strips carry "value — detail" labels; press the first point (round c)
+    const strips = await findAllByLabelText(/8\.0 — Course c · 1 Jul/);
+    fireEvent.press(strips[0]);
+    expect(await findByText('Course c · 1 Jul')).toBeTruthy();
+    // pressing the same point again dismisses the tooltip
+    fireEvent.press(strips[0]);
+    expect(queryByText('Course c · 1 Jul')).toBeNull();
   });
 
   it('is absent with only one point (3 rounds)', async () => {
     const { findByText, queryByText } = renderTab();
-    await findByText('8.0'); // wait for the hero so the tab is fully rendered
-    expect(queryByText('Index evolution')).toBeNull();
+    await findByText('Season Ledger'); // wait for the plate to render
+    expect(queryByText('Index history')).toBeNull();
   });
 });
 
@@ -111,15 +154,14 @@ describe('round exclusion toggles', () => {
     expect(onToggleExcluded).toHaveBeenCalledWith(expect.stringMatching(/^(a|b|c)$/));
   });
 
-  it('renders excluded rounds greyed with an include button and updates the hero', async () => {
+  it('renders excluded rounds struck-through with a Re-add control', async () => {
     const { findByText, findAllByLabelText } = renderTab({
       myRounds: [myRound('a', 10), myRound('b', 14), myRound('c', 12), myRound('d', 16)],
       excludedKeys: new Set(['b']),
       onToggleExcluded: jest.fn(),
     });
-    expect(await findByText('Excluded')).toBeTruthy();
+    expect(await findByText('Re-add')).toBeTruthy();
     expect(await findAllByLabelText(/^Include Course .+ in handicap$/)).toHaveLength(1);
-    expect(await findByText(/1 excluded/)).toBeTruthy();
   });
 
   it('hides unfinished partial rounds but keeps other ineligible reasons visible', async () => {
@@ -129,7 +171,7 @@ describe('round exclusion toggles', () => {
       myRounds: [myRound('a', 10), myRound('b', 14), myRound('c', 12), partialRound('p', 14), nineHole],
       onToggleExcluded: jest.fn(),
     });
-    expect(await findByText('9-hole round')).toBeTruthy();
+    expect(await findByText(/9-hole round/)).toBeTruthy();
     expect(queryByText(/partial · 14 holes/)).toBeNull();
     expect(queryByText('Course p')).toBeNull();
     // 3 included rows have exclude buttons; ineligible rows have none.
@@ -142,7 +184,7 @@ describe('round exclusion toggles', () => {
       onToggleExcluded: jest.fn(),
     });
     expect(await findByText(/Not enough qualifying rounds yet/)).toBeTruthy();
-    expect(await findByText('Excluded')).toBeTruthy();
+    expect(await findByText('Re-add')).toBeTruthy();
     expect(await findAllByLabelText(/^Include Course .+ in handicap$/)).toHaveLength(1);
   });
 });
