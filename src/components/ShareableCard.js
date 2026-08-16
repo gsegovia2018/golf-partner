@@ -439,7 +439,7 @@ export async function shareRoundSummary({
 // ---------------------------------------------------------------------------
 // Rank badge helpers
 // ---------------------------------------------------------------------------
-const RANK_COLORS = ['#d4af37', '#94a3b8', '#c47c3a']; // gold, silver, bronze
+const RANK_COLORS = [semantic.rank.gold, semantic.rank.silver, semantic.rank.bronze];
 const RANK_LABELS = ['1st', '2nd', '3rd'];
 
 function RankBadge({ index, theme }) {

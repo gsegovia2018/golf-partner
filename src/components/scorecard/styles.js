@@ -543,7 +543,7 @@ export function makeScorecardStyles(theme) {
 
     // Notes modal (bottom sheet)
     notesModalKav: { flex: 1, justifyContent: 'flex-end' },
-    notesBackdrop: { flex: 1, backgroundColor: 'rgba(0,0,0,0.5)', justifyContent: 'flex-end' },
+    notesBackdrop: { flex: 1, backgroundColor: semantic.scrim, justifyContent: 'flex-end' },
     notesSheet: {
       backgroundColor: theme.bg.primary,
       borderTopLeftRadius: 24,

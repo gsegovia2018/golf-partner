@@ -79,6 +79,10 @@ const dark = {
 };
 
 const semantic = {
+  // Modal backdrop scrim — every bottom-sheet / dialog backdrop. Same value
+  // in both themes: it dims whatever sits behind it. (hud.scrim is the darker
+  // scrim reserved for HUD chrome.)
+  scrim: 'rgba(0,0,0,0.5)',
   rank: {
     gold:   '#d4af37',
     silver: '#94a3b8',

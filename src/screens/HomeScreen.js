@@ -2767,9 +2767,9 @@ const makeStyles = (t) => StyleSheet.create({
   tournamentCardRight: { paddingLeft: 12 },
   statusBadge: {
     paddingHorizontal: 8, paddingVertical: 2, borderRadius: 20,
-    backgroundColor: 'rgba(212,175,55,0.15)',
+    backgroundColor: semantic.rank.gold + '26',
   },
-  statusBadgeText: { fontFamily: 'PlusJakartaSans-SemiBold', color: '#d4af37', fontSize: 9, letterSpacing: 0.5 },
+  statusBadgeText: { fontFamily: 'PlusJakartaSans-SemiBold', color: semantic.rank.gold, fontSize: 9, letterSpacing: 0.5 },
   statusBadgeFinished: { backgroundColor: t.bg.secondary },
   statusBadgeTextFinished: { color: t.text.muted },
 
@@ -3032,7 +3032,7 @@ const makeStyles = (t) => StyleSheet.create({
 
   // Settings modal (bottom sheet)
   modalBackdrop: {
-    flex: 1, backgroundColor: 'rgba(0,0,0,0.5)', justifyContent: 'flex-end',
+    flex: 1, backgroundColor: semantic.scrim, justifyContent: 'flex-end',
   },
   modalSheet: {
     backgroundColor: t.bg.primary,
@@ -3155,7 +3155,7 @@ const makeStyles = (t) => StyleSheet.create({
 
   // Themed confirmation modal
   confirmBackdrop: {
-    flex: 1, backgroundColor: 'rgba(0,0,0,0.5)',
+    flex: 1, backgroundColor: semantic.scrim,
     alignItems: 'center', justifyContent: 'center', padding: 32,
   },
   confirmCard: {

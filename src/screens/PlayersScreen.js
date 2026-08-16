@@ -891,9 +891,9 @@ const makeStyles = (theme) => StyleSheet.create({
   metaRow: { flexDirection: 'row', alignItems: 'center', gap: 10, marginTop: 4, flexWrap: 'wrap' },
   metaText: { fontFamily: 'PlusJakartaSans-Medium', fontSize: 11, color: theme.text.muted },
   roleBadge: { paddingHorizontal: 8, paddingVertical: 2, borderRadius: 8, backgroundColor: theme.bg.secondary },
-  roleBadgeOwner: { backgroundColor: 'rgba(212,175,55,0.15)' },
+  roleBadgeOwner: { backgroundColor: theme.semantic.rank.gold + '26' },
   roleText: { fontFamily: 'PlusJakartaSans-SemiBold', fontSize: 9, color: theme.text.muted, letterSpacing: 0.8 },
-  roleTextOwner: { color: '#d4af37' },
+  roleTextOwner: { color: theme.semantic.rank.gold },
   // --- linked account vs local badge ---
   linkedBadge: {
     flexDirection: 'row', alignItems: 'center', gap: 3,

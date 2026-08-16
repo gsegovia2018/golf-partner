@@ -303,7 +303,7 @@ function makeStyles(theme, gold) {
       textAlign: 'center', paddingHorizontal: 40,
     },
     confirmBackdrop: {
-      flex: 1, backgroundColor: 'rgba(0,0,0,0.5)',
+      flex: 1, backgroundColor: semantic.scrim,
       alignItems: 'center', justifyContent: 'center', padding: 32,
     },
     confirmCard: {

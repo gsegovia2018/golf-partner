@@ -14,6 +14,7 @@ colors:
   night-green: "#0c1a14"
   night-accent: "#4fae8a"
   gold-marker: "#ffd700"
+  rank-gold: "#d4af37"
   winner-deep: "#8a6d00"
   winner-soft: "#e8c45f"
   rank-silver: "#94a3b8"
@@ -30,6 +31,7 @@ colors:
   hud-mist: "#cfe3d5"
   hud-sage: "#9fb0a4"
   hud-rose: "#e8a0a0"
+  scrim: "rgba(0,0,0,0.5)"
 typography:
   display:
     fontFamily: "PlayfairDisplay-Black, Playfair Display, Georgia, serif"
@@ -162,7 +164,8 @@ The palette is a restrained clubhouse green system over warm neutral surfaces, w
 ### Secondary
 
 - **Bronze Marker**: The pair B and bronze-rank color. It creates friendly contrast with green without making the app read as a full orange palette.
-- **Gold Marker**: The ceremonial marker used for the splash, rank gold, and special scorecard highlights on dark or tinted surfaces. Never use it for routine controls.
+- **Gold Marker**: The ceremonial marker used for the splash and special scorecard highlights on dark or tinted surfaces. Never use it for routine controls.
+- **Rank Gold** (#d4af37): The everyday podium gold — leader ranks, owner/status badges (usually as a 15% tint background with full-strength text), and share-card medals, alongside Rank Silver (#94a3b8) and Bronze Marker. Maps to `semantic.rank` in `src/theme/tokens.js`.
 - **Winner Deep** (#8a6d00): The winner gold for light cards — bright golds wash out on white. Winner badges, milestone values, and summary winner text use it in light mode.
 - **Winner Soft** (#e8c45f): The muted gold the round summary uses on dark surfaces, where full Gold Marker would shout.
 - **Conflict Amber** (#c77a0a): Marks a score two devices disagree on — conflict card borders, hint chips, and the hole-picker conflict dot. Text on the amber chip uses Conflict Ink (#231303), never white.
@@ -177,6 +180,7 @@ The palette is a restrained clubhouse green system over warm neutral surfaces, w
 - **Olive Muted**: Muted text and neutral score state. Use carefully; it is lower contrast than Slate.
 - **Night Green**: Dark-mode background.
 - **Night Accent**: Dark-mode green for actions, selected states, and positive scores. Also the accent of the map HUD chrome below.
+- **Scrim** (rgba(0,0,0,0.5)): The modal and bottom-sheet backdrop dim, identical in both themes. Maps to `semantic.scrim` in `src/theme/tokens.js`; the darker HUD chrome keeps its own `hud.scrim`.
 
 ### Map HUD
 
