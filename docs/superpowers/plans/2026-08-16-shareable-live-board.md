@@ -164,6 +164,42 @@ Ship order: 1 → 2 → 3 → 4 (the board is demoable end-to-end), then 5, 6 in
 parallel, 7 and 8 anytime. Everything is OTA/web-deployable — no native
 module, no EAS build required.
 
+## Phase 1.5 — feed-style live board (added 2026-08-16 after user feedback)
+
+The v1 board shipped functional but visually generic and thin. Rebuild the
+same `/board/<token>` page as an on-brand live game feed: scores per player,
+current hole, and photos.
+
+Key facts from investigation:
+- `tournament-media` bucket is PUBLIC with an unrestricted storage read
+  policy — `getPublicUrl()` works logged-out. Anonymous viewers only lack
+  *discovery* (`tournament_media` table RLS is authenticated-only). One anon
+  RPC fixes that. Caveat: token rotation hides discovery, not already-copied
+  CDN URLs.
+- `buildFeed` is friends-scoped by construction — NOT reusable. But
+  `FeedRoundCard`, `RoundStoriesRail`, `MemoryCard`, `MemoriesStoriesViewer`
+  are pure props+theme and reusable on an unauthenticated screen.
+- Per-player current hole = count of scored holes + 1 (FeedRoundCard's
+  `onHoleFor`); derivable from the board payload's existing `scores`.
+
+Build items:
+1. **Media RPC** — [Opus] `get_shared_board_media(p_token)` SECURITY
+   DEFINER, anon-granted, keyed on the same share_token: whitelist
+   `{id, round_id, hole_index, kind, storage_path, thumb_path, duration_s,
+   created_at}`. Deliberately EXCLUDES `uploader_id`, `uploader_label`, and
+   `caption` (free text / identity stay private). Cap + order newest-first.
+2. **Model** — [Sonnet] extend `src/store/sharedBoard.js`: emit
+   FeedRoundCard-shaped `item`s per round (results[] with points, strokes,
+   holes, vsPar, onHole; no avatars — stripped server-side), plus a media
+   model (public URLs via `getPublicUrl`, grouped per round, stories list).
+3. **Screen** — [Sonnet] rebuild SharedBoardScreen presentation: DEEP_GREEN
+   hero per DESIGN.md ("green plays" — same surface as LiveRoundCard/
+   leaderboard), Playfair title, gold/silver/bronze rank ceremony, reuse
+   FeedRoundCard + RoundStoriesRail + MemoryCard strip + read-only
+   MemoriesStoriesViewer. Media fetched once on load + manual refresh
+   (separate RPC), board keeps its 30s poll.
+4. Runtime verify on Expo web logged-out; ship.
+
 ## Phase 2 (separate plan when wanted)
 
 - **Official tournaments**: `get_official_board(p_share_token)` aggregating

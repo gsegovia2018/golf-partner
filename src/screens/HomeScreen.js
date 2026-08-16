@@ -924,8 +924,8 @@ export default function HomeScreen({ navigation, route }) {
   // set_share_token RPC (tournamentStore.js) — online-only, not queued. A
   // pre-flight isOnline() check gives a friendly message instead of letting
   // the RPC fail with a raw network error; a non-owner never sees these
-  // actions (gated on isOwner in the settings sheet), so the 42501 branch
-  // below is just a defensive plain-language fallback.
+  // actions (gated on isOwner in the Share sheet's Viewer mode), so the
+  // 42501 branch below is just a defensive plain-language fallback.
   function boardSharingErrorMessage(err) {
     if (!isOnline()) return 'You need to be online to change board sharing.';
     const msg = err?.message ?? '';
@@ -943,14 +943,21 @@ export default function HomeScreen({ navigation, route }) {
     Share.share({ message: `Watch our live leaderboard 🏌️\n\n${url}` });
   }
 
+  // Auto-enable path: triggered by changeInviteRole when the owner switches
+  // the Share sheet into Viewer mode with no board token yet. Unlike the old
+  // "Share live board" settings row this does not open the OS share sheet —
+  // it just turns the link on; the sheet's own "Share link" row does that
+  // once the QR/link section renders. reload() pulls the freshly patched
+  // tournament.shareToken back into this screen's state so the sheet swaps
+  // out of the busy spinner without waiting on the background store-change
+  // subscription.
   async function handleShareBoard() {
     if (!tournament || boardShareBusy) return;
     if (!isOnline()) { showError(boardSharingErrorMessage()); return; }
     setBoardShareBusy(true);
     try {
-      const token = await enableBoardSharing(tournament.id);
-      setShowSettings(false);
-      shareBoardLink(token);
+      await enableBoardSharing(tournament.id);
+      await reload();
     } catch (err) {
       showError(boardSharingErrorMessage(err));
     } finally {
@@ -970,7 +977,7 @@ export default function HomeScreen({ navigation, route }) {
     setBoardShareBusy(true);
     try {
       const token = await rotateBoardToken(tournament.id);
-      setShowSettings(false);
+      await reload();
       shareBoardLink(token);
     } catch (err) {
       showError(boardSharingErrorMessage(err));
@@ -992,7 +999,7 @@ export default function HomeScreen({ navigation, route }) {
     setBoardShareBusy(true);
     try {
       await disableBoardSharing(tournament.id);
-      setShowSettings(false);
+      await reload();
     } catch (err) {
       showError(boardSharingErrorMessage(err));
     } finally {
@@ -1101,10 +1108,16 @@ export default function HomeScreen({ navigation, route }) {
     }
   }
 
-  // The editor and viewer codes are distinct and fixed; switching role just
-  // shows the matching code — no server round-trip, nothing to mutate.
+  // The editor and viewer codes are distinct and fixed; switching to Editor
+  // just shows its code — no server round-trip. Switching to Viewer now
+  // shows the public live board instead of the old viewer join-code flow:
+  // if the owner hasn't shared a board link yet, turn one on automatically
+  // (moved-and-adapted from the old settings-sheet "Share live board" row).
   function changeInviteRole(next) {
     setInviteRoleState(next);
+    if (next === 'viewer' && isOwner && !tournament?.shareToken) {
+      handleShareBoard();
+    }
   }
   const inviteCode = inviteCodes[inviteRoleState] ?? '';
 
@@ -1761,7 +1774,7 @@ export default function HomeScreen({ navigation, route }) {
         </View>
         <View style={s.headerActions}>
           {!isViewer && (
-            <IconButton icon="share-2" onPress={handleInvite} />
+            <IconButton icon="share-2" onPress={handleInvite} testID="share-hub-button" />
           )}
           <IconButton
             icon="image"
@@ -2087,45 +2100,74 @@ export default function HomeScreen({ navigation, route }) {
 
     <BottomSheet visible={showInvite} onClose={() => setShowInvite(false)} sheetStyle={s.modalSheet}>
           <View style={s.modalHandle} />
-          <Text style={s.modalTitle}>Invite</Text>
+          <Text style={s.modalTitle}>Share</Text>
           <Text style={s.inviteSubtitle}>
             {(() => {
               const noun = tournamentNoun(tournament);
-              return inviteRoleState === 'editor'
-                ? `Anyone with this code can enter scores for this ${noun}.`
-                : `Anyone with this code can view this ${noun} (read-only).`;
+              if (inviteRoleState === 'editor') {
+                return `Anyone with this code can enter scores for this ${noun}.`;
+              }
+              // Viewer mode: the public live board when the owner has shared
+              // one, otherwise the legacy viewer join-code flow.
+              if (tournament.shareToken) {
+                return 'Anyone with this link can watch the live board — no account needed.';
+              }
+              if (isOwner && boardShareBusy) {
+                return 'Turning on the live board…';
+              }
+              return `Anyone with this code can view this ${noun} (read-only).`;
             })()}
           </Text>
-          {inviteLoading
-            ? <ActivityIndicator color={theme.accent.primary} style={{ marginVertical: 24 }} />
-            : (
-              <>
-                <View style={s.inviteCodeBox}>
-                  <Text style={s.inviteCode}>{inviteCode}</Text>
-                </View>
-                {!!inviteCode && (() => {
-                  // QR encodes the same payload as "Share link": the
-                  // path-based join-tournament link.
-                  const origin = Platform.OS === 'web' && typeof window !== 'undefined'
-                    ? window.location.origin
-                    : '';
-                  const qrValue = buildJoinLink(origin, inviteCode);
-                  return (
-                    <View style={s.inviteQrBox}>
-                      <View style={s.inviteQrInner}>
-                        <QRCode
-                          value={qrValue}
-                          size={148}
-                          backgroundColor="#ffffff"
-                          color="#000000"
-                        />
-                      </View>
-                      <Text style={s.inviteQrHint}>Scan to join</Text>
+
+          {inviteRoleState === 'viewer' && tournament.shareToken ? (
+            <View style={s.inviteQrBox}>
+              <View style={s.inviteQrInner}>
+                <QRCode
+                  value={buildBoardLink(currentOrigin(), tournament.shareToken)}
+                  size={148}
+                  backgroundColor="#ffffff"
+                  color="#000000"
+                />
+              </View>
+              <Text style={s.inviteQrHint}>Scan to watch</Text>
+            </View>
+          ) : inviteRoleState === 'viewer' && isOwner && boardShareBusy ? (
+            <ActivityIndicator color={theme.accent.primary} style={{ marginVertical: 24 }} />
+          ) : (
+            <>
+              {inviteLoading
+                ? <ActivityIndicator color={theme.accent.primary} style={{ marginVertical: 24 }} />
+                : (
+                  <>
+                    <View style={s.inviteCodeBox}>
+                      <Text style={s.inviteCode}>{inviteCode}</Text>
                     </View>
-                  );
-                })()}
-              </>
-            )}
+                    {!!inviteCode && (() => {
+                      // QR encodes the same payload as "Share link": the
+                      // path-based join-tournament link.
+                      const qrValue = buildJoinLink(currentOrigin(), inviteCode);
+                      return (
+                        <View style={s.inviteQrBox}>
+                          <View style={s.inviteQrInner}>
+                            <QRCode
+                              value={qrValue}
+                              size={148}
+                              backgroundColor="#ffffff"
+                              color="#000000"
+                            />
+                          </View>
+                          <Text style={s.inviteQrHint}>Scan to join</Text>
+                        </View>
+                      );
+                    })()}
+                  </>
+                )}
+              {inviteRoleState === 'viewer' && !isOwner && (
+                <Text style={s.modalSubtle}>The owner can turn on a no-login live board link.</Text>
+              )}
+            </>
+          )}
+
           <View style={s.inviteRoleRow}>
             <TouchableOpacity
               style={[s.inviteRoleBtn, inviteRoleState === 'editor' && s.inviteRoleBtnActive]}
@@ -2148,24 +2190,68 @@ export default function HomeScreen({ navigation, route }) {
               </Text>
             </TouchableOpacity>
           </View>
+
           <TouchableOpacity
-            style={[s.menuItem, { borderBottomWidth: 0 }]}
+            style={s.menuItem}
             onPress={() => {
-              const origin = Platform.OS === 'web' && typeof window !== 'undefined'
-                ? window.location.origin
-                : '';
+              if (inviteRoleState === 'viewer' && tournament.shareToken) {
+                shareBoardLink(tournament.shareToken);
+                return;
+              }
               // Blank line before the URL keeps WhatsApp from wrapping the
               // text into the middle of the link and breaking the tap target.
-              const message = `Join my golf tournament 🏌️\n\n${buildJoinLink(origin, inviteCode)}`;
+              const message = `Join my golf tournament 🏌️\n\n${buildJoinLink(currentOrigin(), inviteCode)}`;
               Share.share({ message });
             }}
             activeOpacity={0.7}
-            disabled={!inviteCode}
+            disabled={inviteRoleState === 'viewer' && tournament.shareToken ? false : !inviteCode}
           >
             <Feather name="share-2" size={14} color={theme.text.primary} />
             <Text style={s.menuItemText}>Share link</Text>
             <Feather name="chevron-right" size={16} color={theme.text.muted} />
           </TouchableOpacity>
+
+          {inviteRoleState === 'viewer' && isOwner && !!tournament.shareToken && (
+            <>
+              <TouchableOpacity
+                style={s.menuItem}
+                onPress={handleRotateBoardLink}
+                activeOpacity={0.7}
+                disabled={boardShareBusy}
+              >
+                <Feather name="refresh-cw" size={14} color={theme.text.primary} />
+                <View style={{ flex: 1 }}>
+                  <Text style={s.menuItemText}>New link</Text>
+                  <Text style={s.modalSubtle}>Rotating breaks the old link — share the new one.</Text>
+                </View>
+                {boardShareBusy
+                  ? <ActivityIndicator size="small" color={theme.text.muted} />
+                  : <Feather name="chevron-right" size={16} color={theme.text.muted} />}
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={s.menuItem}
+                onPress={handleStopSharingBoard}
+                activeOpacity={0.7}
+                disabled={boardShareBusy}
+              >
+                <Feather name="x-circle" size={14} color={theme.destructive} />
+                <Text style={[s.menuItemText, { color: theme.destructive }]}>Stop sharing</Text>
+                {boardShareBusy && <ActivityIndicator size="small" color={theme.text.muted} />}
+              </TouchableOpacity>
+            </>
+          )}
+
+          {tournament.players.length > 1 && (
+            <TouchableOpacity
+              style={[s.menuItem, { borderBottomWidth: 0 }]}
+              onPress={() => { setShowInvite(false); shareLeaderboard({ tournamentName: tournament.name, leaderboard: displayedBoard.entries, theme, viewRef: leaderboardRef }); }}
+              activeOpacity={0.7}
+            >
+              <Feather name="share-2" size={14} color={theme.text.primary} />
+              <Text style={s.menuItemText}>Share leaderboard image</Text>
+              <Feather name="chevron-right" size={16} color={theme.text.muted} />
+            </TouchableOpacity>
+          )}
     </BottomSheet>
 
     <Modal statusBarTranslucent hardwareAccelerated
@@ -2260,61 +2346,6 @@ export default function HomeScreen({ navigation, route }) {
               the per-round (•••) sheet instead. */}
           {!isViewer && tournament.rounds.length === 1
             && renderTeamsMenuItem(() => setShowSettings(false))}
-
-          {tournament.players.length > 1 && (
-            <TouchableOpacity
-              style={s.menuItem}
-              onPress={() => { setShowSettings(false); shareLeaderboard({ tournamentName: tournament.name, leaderboard: displayedBoard.entries, theme, viewRef: leaderboardRef }); }}
-              activeOpacity={0.7}
-            >
-              <Feather name="share-2" size={14} color={theme.text.primary} />
-              <Text style={s.menuItemText}>Share Leaderboard</Text>
-              <Feather name="chevron-right" size={16} color={theme.text.muted} />
-            </TouchableOpacity>
-          )}
-
-          {isOwner && (
-            <TouchableOpacity
-              style={s.menuItem}
-              onPress={handleShareBoard}
-              activeOpacity={0.7}
-              disabled={boardShareBusy}
-            >
-              <Feather name="radio" size={14} color={theme.text.primary} />
-              <View style={{ flex: 1 }}>
-                <Text style={s.menuItemText}>Share live board</Text>
-                <Text style={s.modalSubtle}>Anyone with the link can watch</Text>
-              </View>
-              {boardShareBusy
-                ? <ActivityIndicator size="small" color={theme.text.muted} />
-                : <Feather name="chevron-right" size={16} color={theme.text.muted} />}
-            </TouchableOpacity>
-          )}
-
-          {isOwner && !!tournament.shareToken && (
-            <TouchableOpacity
-              style={s.menuItem}
-              onPress={handleRotateBoardLink}
-              activeOpacity={0.7}
-              disabled={boardShareBusy}
-            >
-              <Feather name="refresh-cw" size={14} color={theme.text.primary} />
-              <Text style={s.menuItemText}>New link</Text>
-              <Feather name="chevron-right" size={16} color={theme.text.muted} />
-            </TouchableOpacity>
-          )}
-
-          {isOwner && !!tournament.shareToken && (
-            <TouchableOpacity
-              style={[s.menuItem, s.menuItemDestructive]}
-              onPress={handleStopSharingBoard}
-              activeOpacity={0.7}
-              disabled={boardShareBusy}
-            >
-              <Feather name="x-circle" size={14} color={theme.destructive} />
-              <Text style={[s.menuItemText, { color: theme.destructive }]}>Stop sharing</Text>
-            </TouchableOpacity>
-          )}
 
           <TouchableOpacity
             style={s.menuItem}
