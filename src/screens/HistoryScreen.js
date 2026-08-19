@@ -20,6 +20,20 @@ import { loadProfile, computePersonalStats } from '../store/profileStore';
 import { buildHistorySections } from '../store/historyModel';
 import { semantic } from '../theme/tokens';
 
+// The era a net points record belongs to. Stableford points are net of the
+// handicap the round was played off, so a career best is not comparable with
+// a round played off a different one — the label is what makes that legible.
+// Prefers the handicap INDEX (the number golfers think in) where the round
+// carries a snapshot of it; older rounds have none and fall back to the
+// playing handicap, labelled "shots" so it is never misread as an index.
+// Mirrors the same helper in CareerMilestonesCard — kept local, like this
+// screen's other small formatters, rather than shared for four lines.
+function handicapEra({ index, handicap }) {
+  if (index != null) return `off ${index}`;
+  if (handicap != null) return `off ${handicap} shots`;
+  return null;
+}
+
 const FILTERS = [
   { key: 'all', label: 'All' },
   { key: 'tournament', label: 'Tournaments' },
@@ -117,7 +131,11 @@ export default function HistoryScreen({ navigation }) {
     { label: 'Rounds', value: String(stats.roundsPlayed) },
     { label: 'Wins', value: String(stats.wins), gold: true },
     { label: 'Avg pts', value: stats.roundsPlayed > 0 ? stats.avgPointsPerRound.toFixed(1) : '—' },
-    { label: 'Best', value: stats.bestRound ? String(stats.bestRound.points) : '—' },
+    {
+      label: 'Best',
+      value: stats.bestRound ? String(stats.bestRound.points) : '—',
+      note: stats.bestRound ? handicapEra(stats.bestRound) : null,
+    },
   ] : [];
 
   let rowIndex = -1;
@@ -146,6 +164,7 @@ export default function HistoryScreen({ navigation }) {
                   <View style={s.recordCell}>
                     <Text style={[s.recordValue, c.gold && s.recordValueGold]}>{c.value}</Text>
                     <Text style={s.recordLabel}>{c.label}</Text>
+                    {c.note ? <Text style={s.recordNote}>{c.note}</Text> : null}
                   </View>
                 </React.Fragment>
               ))}
@@ -283,6 +302,10 @@ function makeStyles(theme, gold) {
     recordLabel: {
       fontFamily: 'PlusJakartaSans-SemiBold', fontSize: 8.5, letterSpacing: 0.8,
       color: theme.text.muted, marginTop: 2, textTransform: 'uppercase',
+    },
+    recordNote: {
+      fontFamily: 'PlusJakartaSans-SemiBold', fontSize: 8.5,
+      color: theme.text.muted, marginTop: 1,
     },
     recordDivider: { width: 1, height: 26, backgroundColor: theme.border.default },
     chips: { flexDirection: 'row', gap: 8, paddingTop: 14, paddingBottom: 2 },

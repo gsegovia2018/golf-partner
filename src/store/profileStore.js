@@ -197,6 +197,20 @@ export async function computePersonalStats({ userId, displayName }) {
       roundsPlayed += 1;
       totalPoints += mine.totalPoints;
       if (!bestRound || mine.totalPoints > bestRound.points) {
+        // Stableford points are net of the handicap the round was played
+        // off, so a career-best total belongs to whichever era the handicap
+        // was highest and quietly invites comparison with rounds played off
+        // a different one. Carry the era with it: `handicap` is the frozen
+        // playing handicap (shots received, always present), `index` the
+        // handicap index where the round has its own snapshot — older
+        // rounds have none, because players[].handicap used to be
+        // overwritten in place on every edit (see
+        // propagatePlayerToTournaments, which now freezes it).
+        //
+        // NB: `index` is this forEach's ROUND index — the index snapshot
+        // needs its own name or roundIndex silently picks it up instead.
+        const snapshot = round.playerIndexes?.[me.id];
+        const playedIndex = snapshot == null || snapshot === '' ? null : parseFloat(snapshot);
         bestRound = {
           tournamentId: t.id,
           tournamentName: t.name,
@@ -204,6 +218,8 @@ export async function computePersonalStats({ userId, displayName }) {
           courseName: round.courseName ?? null,
           points: mine.totalPoints,
           strokes: mine.totalStrokes,
+          handicap: mine.handicap ?? null,
+          index: Number.isFinite(playedIndex) ? playedIndex : null,
         };
       }
     });

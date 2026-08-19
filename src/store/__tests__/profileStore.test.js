@@ -249,6 +249,67 @@ describe('computePersonalStats — scramble win credit', () => {
   });
 });
 
+// A career-best point total is net of the handicap the round was played off,
+// so it belongs to a specific era and must say so.
+describe('computePersonalStats — the career best carries its era', () => {
+  const holes = Array.from({ length: 18 }, (_, i) => ({ number: i + 1, par: 4, strokeIndex: i + 1 }));
+  const me = { id: 'p1', name: 'Ann', handicap: 13, user_id: 'u-p1' };
+  const evenScores = (strokes) => Object.fromEntries(holes.map((h) => [h.number, strokes]));
+
+  function tournamentWith(roundExtras = {}) {
+    return {
+      id: 't1',
+      kind: 'game',
+      name: 'Cup',
+      players: [me],
+      currentRound: 0,
+      finishedAt: '2026-07-01T00:00:00Z',
+      rounds: [{
+        id: 'r0', holes, pairs: [[me]], scores: { p1: evenScores(4) },
+        playerHandicaps: { p1: 20 }, ...roundExtras,
+      }],
+    };
+  }
+
+  beforeEach(() => {
+    tournamentStore.loadAllTournaments.mockReset();
+  });
+
+  test('carries the frozen playing handicap the round was scored off', async () => {
+    tournamentStore.loadAllTournaments.mockResolvedValue([tournamentWith()]);
+    const stats = await computePersonalStats({ userId: 'u-p1', displayName: 'Ann' });
+
+    // Off a playing handicap of 20 over 18 holes: a shot on every hole plus a
+    // second on SI 1-2. Par on all of them = 3 pts x 16 + 4 pts x 2 = 56.
+    expect(stats.bestRound.points).toBe(56);
+    expect(stats.bestRound.handicap).toBe(20);
+    // No snapshot on this round, and today's index (13) must not stand in for
+    // the one the round was actually played off.
+    expect(stats.bestRound.index).toBeNull();
+  });
+
+  test('prefers the round\'s own index snapshot when it has one', async () => {
+    tournamentStore.loadAllTournaments.mockResolvedValue([
+      tournamentWith({ playerIndexes: { p1: 18.2 } }),
+    ]);
+    const stats = await computePersonalStats({ userId: 'u-p1', displayName: 'Ann' });
+
+    expect(stats.bestRound.index).toBe(18.2);
+    expect(stats.bestRound.handicap).toBe(20);
+  });
+
+  // The index snapshot is read inside the same forEach whose parameter is the
+  // ROUND index — naming them both `index` silently rewrote roundIndex.
+  test('roundIndex stays the round position, not the handicap index', async () => {
+    tournamentStore.loadAllTournaments.mockResolvedValue([
+      tournamentWith({ playerIndexes: { p1: 18.2 } }),
+    ]);
+    const stats = await computePersonalStats({ userId: 'u-p1', displayName: 'Ann' });
+
+    expect(stats.bestRound.roundIndex).toBe(0);
+  });
+});
+
 describe('profileStore — settings blob', () => {
   beforeEach(() => {
     const chain = getChain();

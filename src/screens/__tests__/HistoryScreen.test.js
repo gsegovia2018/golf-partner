@@ -78,11 +78,14 @@ jest.mock('../../store/profileStore', () => ({
   loadProfile: jest.fn(() => Promise.resolve({ userId: 'u1', displayName: 'Marcos' })),
   computePersonalStats: jest.fn(() => Promise.resolve({
     tournamentsPlayed: 3, roundsPlayed: 12, totalPoints: 360,
-    avgPointsPerRound: 30, bestRound: { points: 41 }, wins: 2,
+    avgPointsPerRound: 30,
+    bestRound: { points: 41, handicap: 20, index: 18.2 },
+    wins: 2,
   })),
 }));
 
 const { loadAllTournamentsWithFallback } = require('../../store/tournamentStore');
+const { computePersonalStats } = require('../../store/profileStore');
 
 describe('HistoryScreen', () => {
   const wrap = (ui) => <ThemeProvider>{ui}</ThemeProvider>;
@@ -116,6 +119,32 @@ describe('HistoryScreen', () => {
     const strip = await findByLabelText('Your record. Opens My Stats.');
     fireEvent.press(strip);
     expect(navigation.navigate).toHaveBeenCalledWith('MyStats');
+  });
+
+  // A career-best point total is net of the handicap it was scored off, so it
+  // is not comparable with a round played off a different one. The strip says
+  // which era it belongs to rather than leaving 41 to look absolute.
+  test('the career best carries the handicap it was scored off', async () => {
+    const { findByText } = render(wrap(
+      <HistoryScreen navigation={{ navigate: jest.fn() }} />,
+    ));
+    await findByText('41');
+    expect(await findByText('off 18.2')).toBeTruthy();
+  });
+
+  test('a best round with no index snapshot falls back to shots, never a bare number', async () => {
+    computePersonalStats.mockResolvedValueOnce({
+      tournamentsPlayed: 3, roundsPlayed: 12, totalPoints: 360,
+      avgPointsPerRound: 30,
+      bestRound: { points: 41, handicap: 20, index: null },
+      wins: 2,
+    });
+    const { findByText } = render(wrap(
+      <HistoryScreen navigation={{ navigate: jest.fn() }} />,
+    ));
+    await findByText('41');
+    // "off 20 shots" — the playing handicap must never read as an index.
+    expect(await findByText('off 20 shots')).toBeTruthy();
   });
 
   test('filter chips narrow the timeline', async () => {
