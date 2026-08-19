@@ -17,12 +17,24 @@ import CountUpText from './CountUpText';
 // mix: a net birdie was only ever a birdie because of the shot the stroke
 // index handed over, so the count fell as the player improved. Best nine and
 // best round stay NET point totals — they are the rounds that actually won a
-// day — and carry the handicap they were scored off, so the number is read
-// in its own era rather than against today's. Best differential is the
+// day — and each carries the handicap it was scored off, so the number is
+// read in its own era rather than against today's. Best differential is the
 // handicap-free record beside them.
 
 const STAGGER_MS = 60;
 const COUNT_MS = 500;
+
+// The era a net points record belongs to. The handicap INDEX is the number
+// golfers think in, so it wins when the round carries its own frozen
+// snapshot; older rounds have no recoverable index (players[].handicap was
+// overwritten in place before tournamentStore started freezing it), and fall
+// back to the playing handicap — labelled "shots" so it is never misread as
+// an index.
+const era = (index, handicap) => {
+  if (index != null) return `off ${index}`;
+  if (handicap != null) return `off ${handicap} shots`;
+  return null;
+};
 
 // Order matters: the gold "Best round" cell is last so its count-up lands
 // last in the stagger.
@@ -30,7 +42,13 @@ const CELLS = [
   { key: 'birdies', label: 'Birdies', get: (m) => m.birdies ?? 0 },
   { key: 'eagles', label: 'Eagles', get: (m) => m.eagles ?? 0 },
   { key: 'par-streak', label: 'Best par streak', get: (m) => m.longestParStreak ?? 0 },
-  { key: 'best-nine', label: 'Best nine', get: (m) => m.bestNine, suffix: ' pts' },
+  {
+    key: 'best-nine',
+    label: 'Best nine',
+    get: (m) => m.bestNine,
+    suffix: ' pts',
+    note: (m) => era(m.bestNineIndex, m.bestNineHandicap),
+  },
   // The only non-integer cell — differentials are reported to one decimal,
   // so it counts up in tenths rather than flashing a rounded whole number.
   { key: 'best-diff', label: 'Best differential', get: (m) => m.bestDifferential, decimals: 1 },
@@ -43,7 +61,7 @@ const CELLS = [
     // The handicap that round was scored off — without it a career-best
     // point total silently invites comparison with rounds played off a
     // different handicap.
-    note: (m) => (m.bestRoundHandicap == null ? null : `off ${m.bestRoundHandicap}`),
+    note: (m) => era(m.bestRoundIndex, m.bestRoundHandicap),
   },
 ];
 
@@ -109,7 +127,9 @@ export default function CareerMilestonesCard({ milestones, onInfo }) {
       </View>
       <Text style={s.footnote}>
         Birdies, eagles and streaks are gross — real strokes against par, no handicap shots.
-        Best nine and best round are net points, shown with the handicap they were scored off.
+        Best nine and best round are net points, each shown with the handicap it was scored
+        off. Rounds played before the app started recording your index show the shots you
+        received instead.
       </Text>
     </View>
   );

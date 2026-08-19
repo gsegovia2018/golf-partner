@@ -15,9 +15,12 @@ import * as coachInsights from '../coachInsights';
 // round's differential is simply (net-double-bogey-capped gross - 72).
 function mkRound({
   courseName = 'Course', holes, scores = {}, shotDetails = {}, playerHandicaps = {},
-  playerTees = null, slope = 113, courseRating = 72,
+  playerTees = null, playerIndexes = null, slope = 113, courseRating = 72,
 }) {
-  return { courseName, holes, scores, shotDetails, playerHandicaps, playerTees, slope, courseRating };
+  return {
+    courseName, holes, scores, shotDetails, playerHandicaps, playerTees, slope, courseRating,
+    ...(playerIndexes ? { playerIndexes } : {}),
+  };
 }
 // 18 holes, par 4, strokeIndex = hole number.
 function holes18() {
@@ -1577,8 +1580,49 @@ describe('careerMilestones', () => {
     // The frozen per-round playing handicap, so the 54 can be read in its
     // own era rather than against today's index.
     expect(milestones.bestRoundHandicap).toBe(18);
+    // Best nine gets the same treatment — half the round, same era problem.
+    expect(milestones.bestNine).toBe(27);
+    expect(milestones.bestNineHandicap).toBe(18);
     // Gross 72 on a course rated 72 off slope 113.
     expect(milestones.bestDifferential).toBe(0);
+  });
+
+  test('the index comes from the round\'s own snapshot, never the current one', () => {
+    const h = holes18();
+    // The player's index reads 13 TODAY; the round was played off 18.2 and
+    // says so itself (tournamentStore freezes this when the index changes).
+    const tournaments = [{
+      id: 1, name: 'T', players: [{ id: 'p1', handicap: 13, user_id: 'u1' }],
+      rounds: [mkRound({
+        holes: h,
+        scores: { p1: evenScores(h, 4) },
+        playerHandicaps: { p1: 18 },
+        playerIndexes: { p1: 18.2 },
+      })],
+    }];
+    const synthetic = buildSyntheticTournament(collectMyRounds(tournaments, 'u1'));
+    const milestones = careerMilestones(synthetic);
+
+    expect(milestones.bestRoundIndex).toBe(18.2);
+    expect(milestones.bestNineIndex).toBe(18.2);
+    expect(milestones.bestRoundHandicap).toBe(18);
+  });
+
+  test('no index snapshot means null, not the current index', () => {
+    const h = holes18();
+    const tournaments = [{
+      id: 1, name: 'T', players: [{ id: 'p1', handicap: 13, user_id: 'u1' }],
+      rounds: [mkRound({ holes: h, scores: { p1: evenScores(h, 4) }, playerHandicaps: { p1: 18 } })],
+    }];
+    const synthetic = buildSyntheticTournament(collectMyRounds(tournaments, 'u1'));
+    const milestones = careerMilestones(synthetic);
+
+    // Older history: players[].handicap was overwritten in place, so the
+    // index that round was played off is genuinely gone. Reporting today's 13
+    // would be a fabrication.
+    expect(milestones.bestRoundIndex).toBeNull();
+    expect(milestones.bestNineIndex).toBeNull();
+    expect(milestones.bestRoundHandicap).toBe(18);
   });
 
   test('bestNine/bestRound are null (not 0) with no complete rounds, but per-hole feats still count', () => {
@@ -1603,8 +1647,10 @@ describe('careerMilestones', () => {
   test('returns zeros and nulls with no rounds at all', () => {
     const milestones = careerMilestones(buildSyntheticTournament([]));
     expect(milestones).toEqual({
-      birdies: 0, eagles: 0, longestParStreak: 0, bestNine: null, bestRound: null,
-      bestRoundHandicap: null, bestRoundCourse: null, bestRoundDate: null,
+      birdies: 0, eagles: 0, longestParStreak: 0,
+      bestNine: null, bestNineHandicap: null, bestNineIndex: null,
+      bestRound: null, bestRoundHandicap: null, bestRoundIndex: null,
+      bestRoundCourse: null, bestRoundDate: null,
       bestDifferential: null, bestDifferentialCourse: null, bestDifferentialDate: null,
     });
   });

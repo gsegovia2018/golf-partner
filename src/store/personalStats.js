@@ -856,28 +856,53 @@ export function courseMastery(synthetic) {
 // both what a golfer means by "birdie" and stable across an index change.
 // The counts are much smaller as a result — that is the honest number.
 //
-// bestRound stays a NET point total (it is the round that actually won a
-// day), but carries the playing handicap it was scored off and its date so
+// bestNine and bestRound stay NET point totals (they are the rounds that
+// actually won a day), but each carries the handicap it was scored off so
 // the card can show the era instead of implying the number is comparable
-// with today's. That handicap comes from round.playerHandicaps — the frozen
-// per-round snapshot — not from the player's current index, which
-// propagatePlayerToTournaments rewrites everywhere on every handicap edit.
+// with today's. Two figures, because two are available:
+//   handicap — the playing handicap (shots received), from
+//              round.playerHandicaps. Always present, exact, and the number
+//              that literally generated the points.
+//   index    — the handicap INDEX, from the round's own playerIndexes
+//              snapshot. Only present for rounds played (or propagated)
+//              after tournamentStore started freezing it; null for older
+//              history, where the index is genuinely unrecoverable because
+//              players[].handicap was overwritten in place.
+// Deliberately NOT read through roundPlayerIndex: its fallback is
+// player.handicap, which on a synthetic tournament is the user's CURRENT
+// index — exactly the wrong number to label a historic round with.
 // bestDifferential is the handicap-neutral companion: the best round of the
 // career on a basis that CAN be compared across eras.
 export function careerMilestones(synthetic) {
   const dist = playerScoreDistribution(synthetic, CANON_ID, { metric: 'strokes' });
   const streaks = playerStreaks(synthetic, CANON_ID, { metric: 'strokes' });
+  const player = (synthetic.players || [])[0] ?? null;
+  // The era a round was played in: shots received, plus the index behind them
+  // when the round carries its own frozen snapshot.
+  const eraOf = (round) => {
+    const snapshot = round?.playerIndexes?.[CANON_ID];
+    const index = snapshot == null || snapshot === '' ? null : parseFloat(snapshot);
+    return {
+      handicap: player && round ? getPlayingHandicap(round, player) : null,
+      index: Number.isFinite(index) ? index : null,
+    };
+  };
+
   const completeRounds = (synthetic.rounds || []).filter(countsForRoundTotals);
   const completeSynthetic = { ...synthetic, rounds: completeRounds };
   // frontBackSplit already only ever pushes a round whose front AND back
   // nine are both fully scored (fc>=9 && bc>=9 on an 18-hole round), so
   // pre-filtering to isComplete here is belt-and-braces, not load-bearing.
   const fb = frontBackSplit(completeSynthetic)[0] ?? null;
-  const bestNine = fb
-    ? fb.rounds.reduce((m, r) => Math.max(m, r.front, r.back), -Infinity)
-    : null;
+  // frontBackSplit's roundIndex indexes completeRounds (what it was handed),
+  // not synthetic.rounds — so the era lookup has to go through the same list.
+  let bestNine = null;
+  (fb?.rounds ?? []).forEach((r) => {
+    const points = Math.max(r.front, r.back);
+    if (bestNine && points <= bestNine.points) return;
+    bestNine = { points, ...eraOf(completeRounds[r.roundIndex]) };
+  });
 
-  const player = (synthetic.players || [])[0] ?? null;
   const history = playerRoundHistory(synthetic, CANON_ID);
   let best = null;
   history.forEach((h) => {
@@ -886,7 +911,7 @@ export function careerMilestones(synthetic) {
     if (best && h.points <= best.points) return;
     best = {
       points: h.points,
-      handicap: player ? getPlayingHandicap(round, player) : null,
+      ...eraOf(round),
       courseName: round.courseName ?? null,
       date: round.tournamentDate ?? null,
     };
@@ -909,9 +934,12 @@ export function careerMilestones(synthetic) {
     birdies: dist.birdies,
     eagles: dist.eagles,
     longestParStreak: streaks.bestParStreak,
-    bestNine: bestNine === -Infinity ? null : bestNine,
+    bestNine: bestNine ? bestNine.points : null,
+    bestNineHandicap: bestNine ? bestNine.handicap : null,
+    bestNineIndex: bestNine ? bestNine.index : null,
     bestRound: best ? best.points : null,
     bestRoundHandicap: best ? best.handicap : null,
+    bestRoundIndex: best ? best.index : null,
     bestRoundCourse: best ? best.courseName : null,
     bestRoundDate: best ? best.date : null,
     bestDifferential: bestDiff ? bestDiff.differential : null,

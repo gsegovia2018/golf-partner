@@ -352,6 +352,84 @@ describe('propagatePlayerToTournaments', () => {
     // Played round: playing handicaps must stay frozen even though idx === currentRound.
     expect(saved.rounds[0].playerHandicaps).toEqual({ p1: 99 });
   });
+
+  // players[].handicap is the ONLY place a played round's handicap INDEX
+  // lives, and this sweep overwrites it everywhere. Without freezing it onto
+  // the round first, the index a round was played off is lost the moment the
+  // player's index changes.
+  describe('freezes the outgoing index onto already-played rounds', () => {
+    function playedAndFuture({ playerIndexes } = {}) {
+      const p1 = { id: 'p1', name: 'Ann', handicap: 18.2 };
+      return {
+        id: 't1',
+        name: 'Cup',
+        kind: 'casual',
+        createdAt: '2026-05-18T09:00:00Z',
+        currentRound: 1,
+        players: [p1],
+        rounds: [
+          {
+            id: 'r1', holes: [], scores: { p1: { 1: 4 } }, pairs: [[{ ...p1 }]],
+            playerHandicaps: { p1: 20 }, ...(playerIndexes ? { playerIndexes } : {}),
+          },
+          { id: 'r2', holes: [], scores: {}, pairs: [[{ ...p1 }]], playerHandicaps: { p1: 20 } },
+        ],
+      };
+    }
+
+    function seed(tournament) {
+      mockState.tournamentsRow = {
+        id: 't1', name: 'Cup', kind: 'casual', created_at: '2026-05-18T09:00:00Z',
+        data: tournament,
+      };
+    }
+
+    test('a played round keeps the index it was played off; a future round does not', async () => {
+      seed(playedAndFuture());
+
+      await propagatePlayerToTournaments('p1', { name: 'Ann', handicap: 13 });
+
+      const saved = await readLocal('t1');
+      expect(saved.rounds[0].playerIndexes.p1).toBe(18.2);
+      // The future round plays off the new index, so it needs no snapshot.
+      expect(saved.rounds[1].playerIndexes?.p1).toBeUndefined();
+      // Playing handicaps stay frozen exactly as before.
+      expect(saved.rounds[0].playerHandicaps).toEqual({ p1: 20 });
+    });
+
+    test('the freeze is persisted through index.set, which owns playerIndexes', async () => {
+      seed(playedAndFuture());
+
+      await propagatePlayerToTournaments('p1', { name: 'Ann', handicap: 13 });
+
+      // round.upsert's field allowlist excludes playerIndexes, so without its
+      // own mutation the freeze would never leave this device.
+      const indexSets = mutate.mock.calls.map(([, m]) => m).filter((m) => m.type === 'index.set');
+      expect(indexSets).toEqual([
+        expect.objectContaining({ roundId: 'r1', playerId: 'p1', index: 18.2 }),
+      ]);
+    });
+
+    test('a deliberate per-round override is never overwritten', async () => {
+      seed(playedAndFuture({ playerIndexes: { p1: 15 } }));
+
+      await propagatePlayerToTournaments('p1', { name: 'Ann', handicap: 13 });
+
+      const saved = await readLocal('t1');
+      expect(saved.rounds[0].playerIndexes.p1).toBe(15);
+      expect(mutate.mock.calls.map(([, m]) => m).filter((m) => m.type === 'index.set')).toEqual([]);
+    });
+
+    test('a name-only edit stamps nothing — the index is not changing', async () => {
+      seed(playedAndFuture());
+
+      await propagatePlayerToTournaments('p1', { name: 'Annie', handicap: 18.2 });
+
+      const saved = await readLocal('t1');
+      expect(saved.rounds[0].playerIndexes?.p1).toBeUndefined();
+      expect(mutate.mock.calls.map(([, m]) => m).filter((m) => m.type === 'index.set')).toEqual([]);
+    });
+  });
 });
 
 describe('propagateCourseToTournaments', () => {

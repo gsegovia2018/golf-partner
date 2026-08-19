@@ -294,9 +294,12 @@ export const statExplainers = {
       + 'improved, so the total tracked your handicap instead of your golf. Gross counts are much '
       + 'smaller, and they hold their meaning for life. They see every scored hole, including '
       + 'holes from an early-finished round. Best nine and best round are net Stableford totals '
-      + 'from fully-scored rounds only, shown with the handicap they were scored off — a partial '
-      + 'game can never claim a personal best. Best differential is the handicap-free version of '
-      + 'best round, and the one that compares fairly across the years.',
+      + 'from fully-scored rounds only, each shown with the handicap it was scored off — a '
+      + 'partial game can never claim a personal best. That label is your handicap index where '
+      + 'the round recorded one; rounds played before the app started freezing your index show '
+      + 'the shots you received that day instead, because the index behind them is no longer '
+      + 'recoverable. Best differential is the handicap-free version of best round, and the one '
+      + 'that compares fairly across the years.',
   },
 
   // ── Course drill-down screen (CourseStatsScreen) ──

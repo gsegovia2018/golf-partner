@@ -27,8 +27,10 @@ const wrap = (ui) => <ThemeProvider>{ui}</ThemeProvider>;
 // small. bestRoundHandicap is the frozen playing handicap that round was
 // scored off — it labels the era the 38 belongs to.
 const milestones = {
-  birdies: 6, eagles: 0, longestParStreak: 3, bestNine: 21, bestRound: 38,
-  bestRoundHandicap: 20, bestDifferential: 14.2,
+  birdies: 6, eagles: 0, longestParStreak: 3,
+  bestNine: 21, bestNineHandicap: 20, bestNineIndex: 18.2,
+  bestRound: 38, bestRoundHandicap: 20, bestRoundIndex: 18.2,
+  bestDifferential: 14.2,
 };
 
 beforeEach(() => {
@@ -58,21 +60,39 @@ describe('CareerMilestonesCard', () => {
     expect(getByText(/birdies, eagles and streaks are gross/i)).toBeTruthy();
   });
 
-  test('best round carries the handicap it was scored off, so its era is legible', () => {
+  test('best round and best nine each carry the era they were scored in', () => {
     mockReducedMotion = true;
     const { getByTestId, getByLabelText } = render(wrap(
       <CareerMilestonesCard milestones={milestones} onInfo={() => {}} />
     ));
 
-    expect(getByTestId('milestone-best-round-note').props.children).toBe('off 20');
-    expect(getByLabelText('Best round: 38 pts off 20')).toBeTruthy();
+    // The INDEX wins when the round carries its own frozen snapshot.
+    expect(getByTestId('milestone-best-round-note').props.children).toBe('off 18.2');
+    expect(getByTestId('milestone-best-nine-note').props.children).toBe('off 18.2');
+    expect(getByLabelText('Best round: 38 pts off 18.2')).toBeTruthy();
+    expect(getByLabelText('Best nine: 21 pts off 18.2')).toBeTruthy();
   });
 
-  test('no note when the best round has no recorded handicap', () => {
+  test('without an index snapshot the note falls back to shots, never a bare number', () => {
+    mockReducedMotion = true;
+    const { getByTestId } = render(wrap(
+      <CareerMilestonesCard
+        milestones={{ ...milestones, bestRoundIndex: null, bestNineIndex: null }}
+        onInfo={() => {}}
+      />
+    ));
+
+    // "off 20 shots", not "off 20" — the playing handicap must never be
+    // misread as an index.
+    expect(getByTestId('milestone-best-round-note').props.children).toBe('off 20 shots');
+    expect(getByTestId('milestone-best-nine-note').props.children).toBe('off 20 shots');
+  });
+
+  test('no note at all when neither figure is recorded', () => {
     mockReducedMotion = true;
     const { queryByTestId, getByLabelText } = render(wrap(
       <CareerMilestonesCard
-        milestones={{ ...milestones, bestRoundHandicap: null }}
+        milestones={{ ...milestones, bestRoundIndex: null, bestRoundHandicap: null }}
         onInfo={() => {}}
       />
     ));
@@ -89,7 +109,7 @@ describe('CareerMilestonesCard', () => {
     // Labels never animate, so screen readers get the real number even
     // while the visible text is still counting.
     expect(getByLabelText('Birdies: 6')).toBeTruthy();
-    expect(getByLabelText('Best round: 38 pts off 20')).toBeTruthy();
+    expect(getByLabelText('Best round: 38 pts off 18.2')).toBeTruthy();
 
     await waitFor(() => expect(getByText('6')).toBeTruthy(), { timeout: 3000 });
     await waitFor(() => expect(getByText('38')).toBeTruthy(), { timeout: 3000 });
@@ -126,6 +146,7 @@ describe('CareerMilestonesCard', () => {
           birdies: 3, eagles: 0, longestParStreak: 2,
           bestNine: null, bestRound: null, bestDifferential: null,
         }}
+
         onInfo={() => {}}
       />
     ));

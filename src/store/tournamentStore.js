@@ -797,6 +797,17 @@ export async function propagatePlayerToTournaments(playerId, { name, handicap, g
     const nextPlayers = t.players.map((p) =>
       p.id === playerId ? { ...p, name, handicap: parsedIndex, ...genderPatch } : p,
     );
+    // The index this player carried BEFORE this edit. players[].handicap is
+    // the only place a played round's index lives, and this sweep is about to
+    // overwrite it everywhere — so an already-played round that has no index
+    // of its own gets stamped with it first. Without that, the index a round
+    // was played off is gone the moment the player's index changes, and My
+    // Stats can only ever label a historic round with the playing handicap
+    // (shots received) rather than the index behind it. Playing handicaps are
+    // already frozen this way; this closes the same hole for the index.
+    const prevIndex = t.players.find((p) => p.id === playerId)?.handicap;
+    const indexChanging = Number.isFinite(prevIndex) && prevIndex !== parsedIndex;
+    const stampedRoundIds = [];
     const nextRounds = t.rounds.map((round, idx) => {
       // No pairs snapshot to refresh any more: pairs persist ids only (see
       // scoring.js thinPairs), so a rename/handicap/gender change is picked up
@@ -804,8 +815,18 @@ export async function propagatePlayerToTournaments(playerId, { name, handicap, g
       // also normalises any round still carrying a rich legacy snapshot.
       const patched = { ...round, pairs: thinPairs(round.pairs) };
       const isPlayed = Object.keys(round.scores ?? {}).length > 0 || idx < currentRound;
-      if (isPlayed) return patched; // already-played round: playing handicaps frozen
-      return recomputeRoundPlayingHandicaps(patched, nextPlayers);
+      if (!isPlayed) return recomputeRoundPlayingHandicaps(patched, nextPlayers);
+      // Already-played round: playing handicaps stay frozen. Stamp the
+      // outgoing index only when it is actually changing AND the round has no
+      // index of its own — a deliberate per-round override (index.set from
+      // the tee-assignment editor) is never overwritten, and a name- or
+      // gender-only edit stamps nothing.
+      if (!indexChanging || round.playerIndexes?.[playerId] != null) return patched;
+      stampedRoundIds.push(round.id);
+      return {
+        ...patched,
+        playerIndexes: { ...(round.playerIndexes ?? {}), [playerId]: prevIndex },
+      };
     });
 
     let current = { ...t, players: nextPlayers, rounds: nextRounds };
@@ -828,6 +849,14 @@ export async function propagatePlayerToTournaments(playerId, { name, handicap, g
         // this guards against.
         current = await mutate(current, {
           type: 'round.upsert', roundId: current.rounds[i].id, roundIndex: i, round: current.rounds[i], isNew: false,
+        });
+      }
+      // playerIndexes is owned by index.set, not by round.upsert's field
+      // allowlist, so the freeze above has to be persisted through its own
+      // mutation or it stays local to this device.
+      for (const roundId of stampedRoundIds) {
+        current = await mutate(current, {
+          type: 'index.set', roundId, playerId, index: prevIndex,
         });
       }
     } catch (_) {
