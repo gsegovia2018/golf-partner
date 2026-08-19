@@ -55,7 +55,14 @@ function CourseCard({ course, s, theme, onPress }) {
       <View style={s.copy}>
         <Text style={s.courseName} numberOfLines={1}>{course.courseName}</Text>
         <Text style={s.meta}>
-          {`${course.rounds} round${course.rounds === 1 ? '' : 's'} · best ${course.bestPoints} pts`}
+          {`${course.rounds} round${course.rounds === 1 ? '' : 's'}`}
+          {/* Points are a round TOTAL, so a nine's ~18 avg would read as the
+              worst course on the list without saying it was half the golf.
+              Only non-18 lengths are called out — 18 is the assumption. */}
+          {course.holeCount != null && course.holeCount !== 18
+            ? ` · ${course.holeCount} holes`
+            : ''}
+          {` · best ${course.bestPoints} pts`}
         </Text>
       </View>
       <Sparkline points={course.recentPoints} theme={theme} s={s} />

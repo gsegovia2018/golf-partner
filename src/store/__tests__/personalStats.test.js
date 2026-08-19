@@ -1332,8 +1332,8 @@ describe('courseMastery', () => {
     // Pine: 2 complete rounds (36, then 18) — avg 27, best 36, trend down
     // (latest 18 < previous 36 → -1).
     expect(mastery).toEqual([
-      { courseKey: 'Oak', courseName: 'Oak', rounds: 1, avgPoints: 54, bestPoints: 54, trend: null, recentPoints: [54] },
-      { courseKey: 'Pine', courseName: 'Pine', rounds: 2, avgPoints: 27, bestPoints: 36, trend: -1, recentPoints: [36, 18] },
+      { courseKey: 'Oak', courseName: 'Oak', rounds: 1, avgPoints: 54, avgPointsPerHole: 3, holeCount: 18, bestPoints: 54, trend: null, recentPoints: [54] },
+      { courseKey: 'Pine', courseName: 'Pine', rounds: 2, avgPoints: 27, avgPointsPerHole: 1.5, holeCount: 18, bestPoints: 36, trend: -1, recentPoints: [36, 18] },
     ]);
   });
 
@@ -1359,7 +1359,7 @@ describe('courseMastery', () => {
     }];
     const mastery = courseMastery(buildSyntheticTournament(collectMyRounds(tournaments, 'u1')));
     expect(mastery).toEqual([
-      { courseKey: null, courseName: 'R1', rounds: 1, avgPoints: 36, bestPoints: 36, trend: null, recentPoints: [36] },
+      { courseKey: null, courseName: 'R1', rounds: 1, avgPoints: 36, avgPointsPerHole: 2, holeCount: 18, bestPoints: 36, trend: null, recentPoints: [36] },
     ]);
   });
 
@@ -1379,7 +1379,7 @@ describe('courseMastery', () => {
     }];
     const mastery = courseMastery(buildSyntheticTournament(collectMyRounds(tournaments, 'u1')));
     expect(mastery).toEqual([
-      { courseKey: 'c9', courseName: 'Pine GC (renamed)', rounds: 2, avgPoints: 27, bestPoints: 36, trend: -1, recentPoints: [36, 18] },
+      { courseKey: 'c9', courseName: 'Pine GC (renamed)', rounds: 2, avgPoints: 27, avgPointsPerHole: 1.5, holeCount: 18, bestPoints: 36, trend: -1, recentPoints: [36, 18] },
     ]);
   });
 
@@ -1392,7 +1392,7 @@ describe('courseMastery', () => {
     }];
     const mastery = courseMastery(buildSyntheticTournament(collectMyRounds(tournaments, 'u1')));
     expect(mastery).toEqual([
-      { courseKey: 'Elm', courseName: 'Elm', rounds: 2, avgPoints: 36, bestPoints: 36, trend: 0, recentPoints: [36, 36] },
+      { courseKey: 'Elm', courseName: 'Elm', rounds: 2, avgPoints: 36, avgPointsPerHole: 2, holeCount: 18, bestPoints: 36, trend: 0, recentPoints: [36, 36] },
     ]);
   });
 
@@ -1413,7 +1413,7 @@ describe('courseMastery', () => {
     }];
     const mastery = courseMastery(buildSyntheticTournament(collectMyRounds(tournaments, 'u1')));
     expect(mastery).toEqual([
-      { courseKey: 'Birch', courseName: 'Birch', rounds: 2, avgPoints: 35.5, bestPoints: 36, trend: 0, recentPoints: [36, 35] },
+      { courseKey: 'Birch', courseName: 'Birch', rounds: 2, avgPoints: 35.5, avgPointsPerHole: 1.97, holeCount: 18, bestPoints: 36, trend: 0, recentPoints: [36, 35] },
     ]);
   });
 
@@ -1427,7 +1427,7 @@ describe('courseMastery', () => {
     }];
     const mastery = courseMastery(buildSyntheticTournament(collectMyRounds(tournaments, 'u1')));
     expect(mastery).toEqual([
-      { courseKey: 'Cedar', courseName: 'Cedar', rounds: 2, avgPoints: 27, bestPoints: 36, trend: -1, recentPoints: [36, 18] },
+      { courseKey: 'Cedar', courseName: 'Cedar', rounds: 2, avgPoints: 27, avgPointsPerHole: 1.5, holeCount: 18, bestPoints: 36, trend: -1, recentPoints: [36, 18] },
     ]);
   });
 

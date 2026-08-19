@@ -27,6 +27,41 @@ import { shotBenchmarkForHandicap } from './shotBenchmarks';
 // Canonical player id used inside the synthetic tournament.
 export const CANON_ID = 'me';
 
+// ── Round-total eligibility ──
+// Round-TOTAL figures (points in the round, strokes vs par, putts in the
+// round, damage) scale with how many holes were played, so they are only
+// ever comparable between rounds of the same length. A 9-hole round's ~18
+// points sitting in the same series as 18-hole rounds reads as a collapse
+// in form when it was a perfectly normal nine — the Form chart's points
+// line, the recent-vs-history deltas, course mastery and the career best
+// all inherit that lie. Nine-hole rounds are therefore left out of every
+// round-total aggregate, the same treatment handicapIndex ('nine-holes'
+// ineligible) and frontBackSplit (holes.length < 18 skipped) already give
+// them. PER-HOLE metrics (points/hole, fairway %, GIR %, score mix,
+// distribution, streaks, difficulty bands) are hole-count-neutral and keep
+// seeing every round, nine-hole ones included.
+export function isFullLengthRound(round) {
+  return (round?.holes?.length ?? 0) === 18;
+}
+
+// A round counts towards a round-total aggregate only when it is both
+// full-length AND fully scored — the two ways a partial total sneaks into a
+// whole-round average (see computeMetrics).
+export function countsForRoundTotals(round) {
+  return isFullLengthRound(round) && !!round?.isComplete;
+}
+
+// Strokes-gained is reported PER ROUND (SG/round, expected vs actual strokes
+// per round), so it is a round-total aggregate too and a nine's half-size SG
+// must not be averaged in as a whole round. sgSeason/sgReconciliation both
+// already skip any round with no SG sample, so a nine is blanked rather than
+// dropped: filtering the array outright would renumber every later round and
+// the SG trend chart labels its points by array index (SGTrendCard's
+// `R{index + 1}`), which must keep matching the user's round selection.
+function withoutNineHoleSgSample(rounds) {
+  return (rounds || []).map((r) => (isFullLengthRound(r) ? r : { ...r, shotDetails: {} }));
+}
+
 // ── buildSyntheticTournament ──
 // Produces { id, name, players: [me], rounds } where every round's scores,
 // shotDetails, playerHandicaps, manualHandicaps, playerTees and playerIndexes
@@ -133,9 +168,10 @@ export function holeDifficultySplit(tournament, playerId) {
 // "rounds played"). avgPoints/avgVsPar/bestRoundPoints are ROUND-TOTAL
 // aggregates: averaging a round's whole-round total alongside full rounds
 // gives an early-finished 6-hole game the same weight as an 18-hole round,
-// silently dragging the average down. They only ever look at rounds where
-// every hole was scored (`isComplete`); per-hole metrics elsewhere in this
-// file are unaffected and keep seeing every round.
+// silently dragging the average down — and a 9-hole round does the same
+// thing at full length. They only ever look at rounds that pass
+// `countsForRoundTotals` (18 holes, every one of them scored); per-hole
+// metrics elsewhere in this file are unaffected and keep seeing every round.
 //
 // When NO selected round is complete, those three are null, not 0 — the
 // same convention as the shot metrics below: consumers print '-' for null
@@ -146,11 +182,13 @@ export function holeDifficultySplit(tournament, playerId) {
 export function computeMetrics(synthetic) {
   const history = playerRoundHistory(synthetic, CANON_ID);
   const rounds = history.length;
-  const completeHistory = history.filter((h) => synthetic.rounds[h.roundIndex]?.isComplete);
+  const completeHistory = history.filter(
+    (h) => countsForRoundTotals(synthetic.rounds[h.roundIndex]),
+  );
   let vsParSum = 0;
   let vsParRounds = 0;
   (synthetic.rounds || []).forEach((round, ri) => {
-    if (!round.isComplete) return;
+    if (!countsForRoundTotals(round)) return;
     const h = history.find((x) => x.roundIndex === ri);
     if (!h) return;
     let parPlayed = 0;
@@ -161,6 +199,15 @@ export function computeMetrics(synthetic) {
     vsParRounds += 1;
   });
   const shots = shotStats(synthetic, CANON_ID);
+  // Putts/round and 3-putts/round are round TOTALS, so they only divide the
+  // full-length rounds — a nine's half-size putt total against a full-round
+  // denominator reads as a putting breakthrough that never happened. The
+  // rate-based shot metrics below (fairway %, GIR %) are hole-count-neutral
+  // and keep using `shots`, which sees every round.
+  const roundTotalShots = shotStats(
+    { ...synthetic, rounds: (synthetic.rounds || []).filter(isFullLengthRound) },
+    CANON_ID,
+  );
   const div = (a, b) => (b > 0 ? +(a / b).toFixed(2) : 0);
   const totalPoints = completeHistory.reduce((s, h) => s + h.points, 0);
   return {
@@ -176,10 +223,12 @@ export function computeMetrics(synthetic) {
     // Shot metrics are null (not 0) when the slice has no sample for them, so
     // recent-vs-history never shows a fake delta against an untracked slice.
     fairwayPct: shots.drives.recorded > 0 ? shots.drives.fairwayPct : null,
-    puttsPerRound: shots.roundsWithPuttData > 0 ? shots.putts.perRound : null,
+    puttsPerRound: roundTotalShots.roundsWithPuttData > 0
+      ? roundTotalShots.putts.perRound
+      : null,
     girPct: shots.gir.eligible > 0 ? shots.gir.pct : null,
-    threePuttsPerRound: shots.roundsWithPuttData > 0
-      ? div(shots.putts.threePuttPlus, shots.roundsWithPuttData)
+    threePuttsPerRound: roundTotalShots.roundsWithPuttData > 0
+      ? div(roundTotalShots.putts.threePuttPlus, roundTotalShots.roundsWithPuttData)
       : null,
   };
 }
@@ -522,6 +571,12 @@ export function computeRecentVsHistory(myRounds, n = 5) {
 // MIN_FORM_HISTORY_ROUNDS guard) as computeRecentVsHistory, but over
 // sgSeason. A side without enough SG sample (sgSeason returns byCategory:
 // null under 18 holes) yields null deltas rather than fabricated ones.
+//
+// sgSeason reports strokes gained PER ROUND, so — like every other
+// round-total aggregate here — it only sees full-length rounds. The
+// recent/previous split still counts nines when deciding which rounds are
+// "recent" (they are rounds the user played); they simply contribute no SG
+// figure, exactly as a round with no shot detail already doesn't.
 const SG_DELTA_CATEGORIES = ['offTheTee', 'approach', 'aroundGreen', 'putting', 'penalties'];
 
 export function computeSgFormDelta(myRounds, { n = 5, targetHandicap = 0 } = {}) {
@@ -529,8 +584,9 @@ export function computeSgFormDelta(myRounds, { n = 5, targetHandicap = 0 } = {})
   const recentRounds = all.slice(-n);
   const historyRounds = all.slice(0, Math.max(0, all.length - n));
   if (historyRounds.length < MIN_FORM_HISTORY_ROUNDS) return null;
-  const recent = sgSeason(buildSyntheticTournament(recentRounds).rounds, CANON_ID, targetHandicap);
-  const previous = sgSeason(buildSyntheticTournament(historyRounds).rounds, CANON_ID, targetHandicap);
+  const sgSlice = (mrs) => withoutNineHoleSgSample(buildSyntheticTournament(mrs).rounds);
+  const recent = sgSeason(sgSlice(recentRounds), CANON_ID, targetHandicap);
+  const previous = sgSeason(sgSlice(historyRounds), CANON_ID, targetHandicap);
   return Object.fromEntries(SG_DELTA_CATEGORIES.map((category) => {
     const recentVal = recent.byCategory?.[category] ?? null;
     const previousVal = previous.byCategory?.[category] ?? null;
@@ -588,16 +644,22 @@ export function computeFormSeries(selectedRounds) {
     if (shots.hasData) hasShotData = true;
 
     // avgPoints/avgVsPar are round-total figures — an incomplete round's
-    // partial total isn't a meaningful "points this round" point, so it
-    // renders as a gap rather than a misleadingly low value.
-    const roundTotal = round.isComplete && hist;
+    // partial total isn't a meaningful "points this round" point, and neither
+    // is a 9-hole round's total on a line drawn against 18-hole rounds
+    // (countsForRoundTotals). Both render as a gap rather than a
+    // misleadingly low value. fairwayPct/girPct are rates, so every round
+    // plots.
+    const fullLength = isFullLengthRound(round);
+    const roundTotal = countsForRoundTotals(round) && hist;
     metrics.avgPoints.push({ label, value: roundTotal ? hist.points : null });
     metrics.avgVsPar.push({ label, value: roundTotal ? hist.strokes - parPlayed : null });
     metrics.fairwayPct.push({ label, value: shots.drives.recorded > 0 ? shots.drives.fairwayPct : null });
     metrics.girPct.push({ label, value: shots.gir.eligible > 0 ? shots.gir.pct : null });
-    // `total` equals per-round here because shotStats runs on a one-round synthetic slice.
-    metrics.puttsPerRound.push({ label, value: shots.putts.holes > 0 ? shots.putts.total : null });
-    metrics.threePuttsPerRound.push({ label, value: shots.putts.holes > 0 ? shots.putts.threePuttPlus : null });
+    // `total` equals per-round here because shotStats runs on a one-round
+    // synthetic slice — a round total, so nines gap out like the two above.
+    const puttable = fullLength && shots.putts.holes > 0;
+    metrics.puttsPerRound.push({ label, value: puttable ? shots.putts.total : null });
+    metrics.threePuttsPerRound.push({ label, value: puttable ? shots.putts.threePuttPlus : null });
 
     // GROSS five-band split — actual strokes vs par, no handicap adjustment:
     // a triple is a triple regardless of handicap. The Breakdown tab's mix
@@ -617,11 +679,13 @@ export function computeFormSeries(selectedRounds) {
     // Damage: strokes lost beyond (gross) bogey — a gross double costs 1, a
     // gross triple 2, and so on. dist entries carry gross vsPar here, so this
     // is Σ max(0, vsPar − 1) over the worse-than-bogey holes. A round with no
-    // scored holes has no honest figure — null renders as a chart gap.
+    // scored holes has no honest figure — null renders as a chart gap. It is
+    // a whole-round count, so a nine gaps out too: half the holes means about
+    // half the damage, which would plot as the cleanest round of the season.
     const scoredHoles = d.total;
     const damageStrokes = [...d.doubleHoles, ...d.worseHoles]
       .reduce((sum, e) => sum + (e.vsPar - 1), 0);
-    damage.push({ label, value: scoredHoles > 0 ? damageStrokes : null });
+    damage.push({ label, value: (fullLength && scoredHoles > 0) ? damageStrokes : null });
 
     // Steady holes: share of scored holes at (gross) bogey or better.
     steadyPct.push({
@@ -640,6 +704,16 @@ export function computeFormSeries(selectedRounds) {
 // complete-rounds-only slice of the synthetic tournament (Task 15's
 // isComplete) — an early-finished round's partial total would otherwise
 // drag a course's average down, inflate/deflate its best, and fake a trend.
+//
+// Nine-hole courses stay in the list, unlike every other round-total
+// aggregate here: a row only ever compares one course's rounds with each
+// other, and those all share that course's layout, so its avgPoints/
+// bestPoints/trend/sparkline are internally honest. (Dropping them would
+// also strand CourseStatsScreen, which is only reachable by tapping a row.)
+// What is NOT comparable is one course's round total against another's, so
+// the list ranks on points per HOLE and each row carries the `holeCount` it
+// was scored over for the card to label — a nine's 18-point average must
+// not read as the worst course of the season.
 // avgPoints/bestPoints are ROUND-TOTAL figures (same scale as
 // computeMetrics.avgPoints/bestRoundPoints), not per-hole averages.
 // bestPoints/trend come from courseDNA's own chronological `roundTotals`,
@@ -659,6 +733,11 @@ export function courseMastery(synthetic) {
   return dna.courses.map((c) => {
     const totals = c.roundTotals;
     const bestPoints = totals.reduce((m, e) => Math.max(m, e.points), 0);
+    // Every counted round here is complete, so holesPlayed IS the layout's
+    // hole count. null when a course's rounds disagree (a course edited from
+    // 18 holes down to 9, say) — then there is no one length to label.
+    const lengths = new Set(totals.map((e) => e.holesPlayed));
+    const holeCount = lengths.size === 1 ? [...lengths][0] : null;
     let trend = null;
     if (totals.length >= 2) {
       const diff = totals[totals.length - 1].points - totals[totals.length - 2].points;
@@ -669,6 +748,9 @@ export function courseMastery(synthetic) {
       courseName: c.courseName,
       rounds: c.rounds,
       avgPoints: c.roundPoints,
+      // Points per hole — the hole-count-neutral figure the list ranks on.
+      avgPointsPerHole: c.avgPoints,
+      holeCount,
       bestPoints,
       trend,
       // Chronological per-round point totals at this course — feeds the
@@ -676,7 +758,7 @@ export function courseMastery(synthetic) {
       // and courseDNA keying as everything above.
       recentPoints: totals.map((e) => e.points),
     };
-  }).sort((a, b) => b.avgPoints - a.avgPoints);
+  }).sort((a, b) => b.avgPointsPerHole - a.avgPointsPerHole);
 }
 
 // ── careerMilestones ──
@@ -687,12 +769,13 @@ export function courseMastery(synthetic) {
 // played. longestParStreak reuses playerStreaks' adjacency-aware run
 // (Task 5): a streak never crosses a round boundary or an unscored hole.
 // bestNine/bestRound are ROUND-TOTAL metrics and only look at complete
-// rounds (Task 15), returning null — not a fabricated 0 — when none
-// qualify, matching computeMetrics' convention.
+// full-length rounds (countsForRoundTotals), returning null — not a
+// fabricated 0 — when none qualify, matching computeMetrics' convention.
+// "Best round" must not be won or lost on a nine.
 export function careerMilestones(synthetic) {
   const dist = playerScoreDistribution(synthetic, CANON_ID);
   const streaks = playerStreaks(synthetic, CANON_ID);
-  const completeRounds = (synthetic.rounds || []).filter((r) => r.isComplete);
+  const completeRounds = (synthetic.rounds || []).filter(countsForRoundTotals);
   const completeSynthetic = { ...synthetic, rounds: completeRounds };
   // frontBackSplit already only ever pushes a round whose front AND back
   // nine are both fully scored (fc>=9 && bc>=9 on an 18-hole round), so
@@ -763,10 +846,17 @@ export function computeMyStats(selectedRounds, {
   const puttDive = puttDeepDive(synthetic, CANON_ID);
   const puttingTarget = puttingTargetGaps(synthetic.rounds, CANON_ID, targetHandicap);
   const approachTarget = approachTargetGaps(synthetic.rounds, CANON_ID, targetHandicap);
+  // Both sgSeason and sgReconciliation report per-ROUND averages (SG/round,
+  // expected vs actual strokes per round), so they take the full-length
+  // slice — a nine's half-size SG and half-size expected/actual totals would
+  // otherwise be averaged in as if they were whole rounds. Per-hole and
+  // per-shot analysis (puttDive, drive/approach impact, target gaps) runs on
+  // every selected round, nines included.
+  const sgRounds = withoutNineHoleSgSample(synthetic.rounds);
   const strokesGained = {
-    ...sgSeason(synthetic.rounds, CANON_ID, targetHandicap),
+    ...sgSeason(sgRounds, CANON_ID, targetHandicap),
     personalDelta: computeSgFormDelta(rounds, { n, targetHandicap }),
-    reconciliation: sgReconciliation(synthetic.rounds, CANON_ID, targetHandicap),
+    reconciliation: sgReconciliation(sgRounds, CANON_ID, targetHandicap),
   };
   const baseStats = {
     ...baseline,
