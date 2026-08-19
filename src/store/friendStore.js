@@ -82,8 +82,12 @@ export function isAbortError(err) {
 }
 
 // Raw accepted/pending rows touching the current user.
-async function loadFriendshipRows() {
-  const me = await currentUserId();
+// `userId` lets a caller that already knows who is signed in (the Feed —
+// it has the id from AuthContext) skip the `auth.getUser()` round trip to
+// /auth/v1/user, which otherwise sits at the head of the feed's serial
+// fetch chain. Omit it and we resolve the id ourselves, as before.
+async function loadFriendshipRows(userId) {
+  const me = userId ?? await currentUserId();
   if (!me) return { me: null, rows: [] };
   const { data, error } = await supabase
     .from('friendships')
@@ -94,8 +98,8 @@ async function loadFriendshipRows() {
 }
 
 // Accepted friends, as Person objects. Caches the result for offline reads.
-export async function listFriends() {
-  const { me, rows } = await loadFriendshipRows();
+export async function listFriends(userId) {
+  const { me, rows } = await loadFriendshipRows(userId);
   if (!me) return [];
   const friendIds = rows
     .filter((r) => r.status === 'accepted')

@@ -1,3 +1,4 @@
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import { supabase } from '../lib/supabase';
 import { isOnline } from '../lib/connectivity';
 import {
@@ -290,12 +291,89 @@ export function invalidateFeedCache() {
   feedBuildCache = null;
 }
 
-async function loadFeedFriends(source) {
+// ---------------------------------------------------------------------------
+// Cold-start snapshot. feedBuildCache above lives in module memory, so it dies
+// with the JS context: every app relaunch re-pays the whole serial fan-out
+// (friends → tournaments → friend tournaments → activity → media) before a
+// single fresh card or photo can appear, and the only thing on disk to paint
+// in the meantime is the raw tournament blobs — no photos (the cache-source
+// build passes includeMedia:false) and nothing synced since the last session.
+// That is the 2-second "empty-ish feed" every cold open shows.
+//
+// So the finished page-0 build is also written to disk, and the next cold open
+// paints THAT: complete, photos included, in one AsyncStorage read. It is a
+// placeholder — the remote build still runs and replaces it — which is why the
+// TTL is generous (it is strictly fresher than the blob paint it supersedes)
+// and why invalidateFeedCache does NOT clear it: a change event fires on every
+// local score edit, and dropping the snapshot each time would erase the
+// cold-start win for exactly the people who use the app most. The next
+// successful build overwrites it instead.
+const FEED_SNAPSHOT_KEY = '@golf_feed_snapshot_v1';
+const FEED_SNAPSHOT_TTL_MS = 7 * 24 * 60 * 60 * 1000;
+// Belt-and-braces: a pathological history (a round with hundreds of photos)
+// should not push a multi-MB blob through AsyncStorage on every build.
+const FEED_SNAPSHOT_MAX_BYTES = 1024 * 1024;
+
+// Persist a finished first page so the next cold start has something complete
+// to paint. Fire-and-forget: never blocks or fails a build.
+async function saveFeedSnapshot(userId, result) {
+  try {
+    const payload = JSON.stringify({
+      v: 1,
+      userId: userId ?? null,
+      ts: Date.now(),
+      items: result.items ?? [],
+      roundStories: result.roundStories ?? [],
+      hasMore: !!result.hasMore,
+      nextOffset: result.nextOffset ?? (result.items?.length ?? 0),
+    });
+    if (payload.length > FEED_SNAPSHOT_MAX_BYTES) return;
+    await AsyncStorage.setItem(FEED_SNAPSHOT_KEY, payload);
+  } catch { /* snapshot is an optimisation — never surface a failure */ }
+}
+
+// The last good first page, shaped exactly like a buildFeed result so the
+// screen can apply it through the same path. Null when absent, expired,
+// written by another user, or unreadable.
+export async function loadFeedSnapshot(userId) {
+  try {
+    const raw = await AsyncStorage.getItem(FEED_SNAPSHOT_KEY);
+    if (!raw) return null;
+    const snap = JSON.parse(raw);
+    if (snap?.v !== 1) return null;
+    if ((snap.userId ?? null) !== (userId ?? null)) return null;
+    if (!Number.isFinite(snap.ts) || (Date.now() - snap.ts) > FEED_SNAPSHOT_TTL_MS) return null;
+    const items = Array.isArray(snap.items) ? snap.items : [];
+    const roundStories = Array.isArray(snap.roundStories) ? snap.roundStories : [];
+    if (items.length === 0 && roundStories.length === 0) return null;
+    return {
+      me: userId ?? null,
+      friends: [],
+      items,
+      roundStories,
+      partial: false,
+      error: false,
+      hasMore: !!snap.hasMore,
+      nextOffset: snap.nextOffset ?? items.length,
+      ts: snap.ts,
+    };
+  } catch {
+    return null;
+  }
+}
+
+export async function clearFeedSnapshot() {
+  try { await AsyncStorage.removeItem(FEED_SNAPSHOT_KEY); } catch { /* best effort */ }
+}
+
+// `me` (when already known) is threaded into listFriends so it can skip its
+// own auth.getUser() round trip — see loadFriendshipRows in friendStore.
+async function loadFeedFriends(source, me) {
   if (source === 'cache') {
     return { friends: await getCachedFriends(), partial: false };
   }
   try {
-    return { friends: await listFriends(), partial: false };
+    return { friends: await listFriends(me ?? undefined), partial: false };
   } catch {
     return { friends: await getCachedFriends(), partial: true };
   }
@@ -342,6 +420,9 @@ export async function buildFeed(options = {}) {
   let friendById;
   let all;
   let activityTsByKey;
+  // Set when the media read is kicked off early to overlap the activity RPC
+  // (see below); the media block awaits it instead of issuing its own fetch.
+  let mediaPromise = null;
 
   if (canReuseCache) {
     ({
@@ -351,30 +432,36 @@ export async function buildFeed(options = {}) {
   } else {
     let basePartial = false;
 
+    // The friends chain (auth-free now, but still friendships + profiles) and
+    // the tournament list are independent — `haveIds` is not needed until
+    // fetchFriendTournaments below. Running them concurrently takes two
+    // round-trip legs off the critical path instead of queueing one behind
+    // the other. allSettled (not all) so each keeps its own failure
+    // semantics: friends degrade to the cached list, tournaments hard-fail.
+    const [friendsSettled, tournamentsSettled] = await Promise.allSettled([
+      loadFeedFriends(source, me),
+      loadFeedTournaments(source),
+    ]);
+
     friends = [];
-    try {
-      const friendResult = await loadFeedFriends(source);
-      friends = friendResult.friends;
-      basePartial = basePartial || !!friendResult.partial;
-    } catch {
+    if (friendsSettled.status === 'fulfilled') {
+      friends = friendsSettled.value.friends;
+      basePartial = basePartial || !!friendsSettled.value.partial;
+    } else {
       basePartial = true;
-      friends = [];
     }
     const friendIds = friends.map((f) => f.userId);
     friendSet = new Set(friendIds);
     friendById = new Map(friends.map((f) => [f.userId, f]));
 
-    let myTournaments = [];
-    let tournamentResult = null;
-    try {
-      tournamentResult = await loadFeedTournaments(source);
-      ({ list: myTournaments } = tournamentResult);
-      basePartial = basePartial || !!tournamentResult?.stale;
-    } catch {
+    if (tournamentsSettled.status !== 'fulfilled') {
       // The only hard-fail path: with no tournaments at all there is nothing
       // to build a feed from. Leave any existing cache untouched.
       return { me, friends, items: [], roundStories: [], partial: false, error: true };
     }
+    const tournamentResult = tournamentsSettled.value;
+    const myTournaments = tournamentResult?.list ?? [];
+    basePartial = basePartial || !!tournamentResult?.stale;
     const haveIds = new Set(myTournaments.map((t) => t.id));
     const friendTournaments = source === 'cache'
       ? []
@@ -387,13 +474,31 @@ export async function buildFeed(options = {}) {
     }
     all = [...byId.values()];
 
+    const allIds = [...new Set(all.map((t) => t.id))];
+
+    // Photos only need the tournament-id set, which is settled here — so the
+    // media read is STARTED now and awaited further below, overlapping the
+    // round-activity RPC instead of queueing behind it. Only for the
+    // rail-owning first page (offset 0), whose media set is every tournament
+    // in `all` anyway; paginated pages keep their narrower late fetch (see
+    // the media block) so scrolling doesn't re-pay the full-history read.
+    // Settled into a tagged result rather than left raw: an await sits
+    // between here and the consumer, and a bare rejection in that window
+    // would surface as an unhandled promise rejection.
+    if (includeMedia && offset === 0 && source !== 'cache') {
+      mediaPromise = loadMediaForTournaments(allIds).then(
+        (rows) => ({ ok: true, rows }),
+        () => ({ ok: false, rows: [] }),
+      );
+    }
+
     // Real per-round recency for ordering (see roundActivityTs above). Skipped
     // for a cache-only build — same as fetchFriendTournaments above, there's no
     // network to query and every round falls back to the deterministic (not
     // recency-based) ordering instead.
     activityTsByKey = source === 'cache'
       ? new Map()
-      : await fetchRoundActivityTimestamps([...new Set(all.map((t) => t.id))]);
+      : await fetchRoundActivityTimestamps(allIds);
 
     partial = partial || basePartial;
 
@@ -593,9 +698,18 @@ export async function buildFeed(options = {}) {
     // to the case-folded uploader_label only for legacy media uploaded before
     // the id column existed.
     let media = [];
-    try {
-      media = await loadMediaForTournaments(mediaTournamentIds);
-    } catch { partial = true; /* offline — feed still shows rounds */ }
+    if (mediaPromise) {
+      // Started before the activity RPC so the two overlap. Fetched for every
+      // tournament in `all`, a superset of mediaTournamentIds — the extra rows
+      // are dropped by the storyRoundKeys filter below.
+      const settled = await mediaPromise;
+      media = settled.rows;
+      if (!settled.ok) partial = true; /* offline — feed still shows rounds */
+    } else {
+      try {
+        media = await loadMediaForTournaments(mediaTournamentIds);
+      } catch { partial = true; /* offline — feed still shows rounds */ }
+    }
 
     const storyMedia = media.filter((item) => (
       storyRoundKeys.has(`${item.tournamentId}:${item.roundId ?? 'none'}`)
@@ -624,7 +738,7 @@ export async function buildFeed(options = {}) {
     }
   }
 
-  return {
+  const result = {
     me,
     friends,
     items: limitedItems,
@@ -634,6 +748,15 @@ export async function buildFeed(options = {}) {
     hasMore,
     nextOffset: offset + limitedItems.length,
   };
+
+  // Only a complete first page is worth painting on the next cold start: a
+  // partial build would persist exactly the half-loaded state the snapshot
+  // exists to avoid, and pages past the first are not what a cold start shows.
+  if (source === 'remote' && offset === 0 && includeMedia && !partial) {
+    saveFeedSnapshot(me, result).catch(() => {});
+  }
+
+  return result;
 }
 
 // ---------------------------------------------------------------------------

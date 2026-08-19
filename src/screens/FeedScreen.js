@@ -12,7 +12,7 @@ import IconButton from '../components/ui/IconButton';
 import { useTheme } from '../theme/ThemeContext';
 import {
   buildFeed, loadReactions, toggleReaction, isValidReactionEmoji, loadCommentCounts,
-  invalidateFeedCache,
+  invalidateFeedCache, loadFeedSnapshot,
 } from '../store/feedStore';
 import { notifyFeedActivity } from '../store/notificationStore';
 import { subscribeTournamentChanges, formatRoundLabel, getTournament } from '../store/tournamentStore';
@@ -274,7 +274,14 @@ export default function FeedScreen({ navigation }) {
     }).start();
   }, [loading, listOpacity]);
 
-  const applyFeedResult = useCallback((result) => {
+  // `hydrating` marks the instant placeholder paint (disk snapshot, or the
+  // cached-blob build) that precedes the remote build on a cold start. Such a
+  // result is incomplete BY DESIGN — the cache source is hardcoded stale, so
+  // buildFeed always flags it `partial` — and mapping that to the "Feed may be
+  // incomplete · Tap to retry" banner told users to retry a load that was
+  // already in flight and about to fix itself. The remote build sets the real
+  // status a moment later; until then, stay quiet.
+  const applyFeedResult = useCallback((result, { hydrating = false } = {}) => {
     const feedItems = result.items ?? [];
     const stories = result.roundStories ?? [];
     const hasResultFeed = feedItems.length > 0 || stories.length > 0;
@@ -297,7 +304,7 @@ export default function FeedScreen({ navigation }) {
 
     setItems(feedItems);
     setRoundStories(stories);
-    setStatus(result.partial ? 'partial' : 'ok');
+    setStatus(hydrating || !result.partial ? 'ok' : 'partial');
     setHasMore(!!result.hasMore);
     // Where the next page starts, straight from the server's slice math —
     // never re-derived from the (possibly deduped) rendered item count.
@@ -371,19 +378,33 @@ export default function FeedScreen({ navigation }) {
     if (isRefresh) setRefreshing(true);
     try {
       if (!isRefresh && !isRefocus) {
-        const cachedStart = Date.now();
-        const cachedResult = await buildFeed({
-          userId,
-          source: 'cache',
-          includeMedia: false,
-          limit: FEED_PAGE_SIZE,
-        });
-        feedMark('cache base', cachedStart);
-        const hasCachedFeed = (cachedResult.items?.length ?? 0) > 0
-          || (cachedResult.roundStories?.length ?? 0) > 0;
-        if (hasCachedFeed) {
-          applyFeedResult(cachedResult);
+        // Prefer the last completed build persisted to disk: one AsyncStorage
+        // read paints the full page WITH photos, instead of the blob-derived
+        // build below which is limited to whatever tournaments were already
+        // synced and deliberately skips media. Falls through to that build
+        // when there is no usable snapshot (first ever run, other user,
+        // expired).
+        const snapshotStart = Date.now();
+        const snapshot = await loadFeedSnapshot(userId);
+        feedMark('snapshot', snapshotStart);
+        if (snapshot) {
+          applyFeedResult(snapshot, { hydrating: true });
           setLoading(false);
+        } else {
+          const cachedStart = Date.now();
+          const cachedResult = await buildFeed({
+            userId,
+            source: 'cache',
+            includeMedia: false,
+            limit: FEED_PAGE_SIZE,
+          });
+          feedMark('cache base', cachedStart);
+          const hasCachedFeed = (cachedResult.items?.length ?? 0) > 0
+            || (cachedResult.roundStories?.length ?? 0) > 0;
+          if (hasCachedFeed) {
+            applyFeedResult(cachedResult, { hydrating: true });
+            setLoading(false);
+          }
         }
       }
 

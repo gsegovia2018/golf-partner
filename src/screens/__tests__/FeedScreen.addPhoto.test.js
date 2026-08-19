@@ -27,6 +27,7 @@ jest.mock('../../store/feedStore', () => ({
   loadCommentCounts: jest.fn(() => Promise.resolve({})),
   toggleReaction: jest.fn(() => Promise.resolve(true)),
   invalidateFeedCache: jest.fn(),
+  loadFeedSnapshot: jest.fn(() => Promise.resolve(null)),
   isValidReactionEmoji: jest.fn(() => false),
 }));
 

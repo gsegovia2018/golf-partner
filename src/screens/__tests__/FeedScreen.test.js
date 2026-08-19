@@ -5,7 +5,7 @@ import {
 import { ThemeProvider } from '../../theme/ThemeContext';
 import FeedScreen from '../FeedScreen';
 import {
-  buildFeed, loadCommentCounts, loadReactions, invalidateFeedCache,
+  buildFeed, loadCommentCounts, loadReactions, invalidateFeedCache, loadFeedSnapshot,
 } from '../../store/feedStore';
 import { notifyFeedActivity } from '../../store/notificationStore';
 
@@ -74,6 +74,7 @@ jest.mock('../../store/feedStore', () => ({
   loadCommentCounts: jest.fn(() => Promise.resolve({})),
   toggleReaction: jest.fn(() => Promise.resolve(true)),
   invalidateFeedCache: jest.fn(),
+  loadFeedSnapshot: jest.fn(() => Promise.resolve(null)),
   FEED_REACTION_EMOJI: [],
   isValidReactionEmoji: jest.fn((value) => typeof value === 'string' && value.trim().length > 0),
 }));
@@ -151,11 +152,98 @@ const result = {
   }],
 };
 
+const PARTIAL_BANNER = 'Feed may be incomplete · Tap to retry';
+
 describe('FeedScreen', () => {
   beforeEach(() => {
     jest.clearAllMocks();
     mockTournamentChangeHandler = null;
     buildFeed.mockResolvedValue(result);
+    loadFeedSnapshot.mockResolvedValue(null);
+  });
+
+  test('the placeholder paint does not claim the feed is incomplete', async () => {
+    // The cache-source build is hardcoded stale, so it is ALWAYS flagged
+    // partial — mapping that to the banner told every user on every cold open
+    // to retry a load that was already in flight.
+    let resolveRemote;
+    const cachedResult = {
+      ...result,
+      partial: true,
+      roundStories: [],
+      items: [{
+        ...result.items[0],
+        key: 'round:cached-t1:r1',
+        tournamentId: 'cached-t1',
+        tournamentName: 'Cached Match',
+      }],
+    };
+
+    buildFeed
+      .mockResolvedValueOnce(cachedResult)
+      .mockReturnValueOnce(new Promise((resolve) => {
+        resolveRemote = () => resolve(result);
+      }));
+
+    const { findByText, queryByText } = render(wrap(
+      <FeedScreen navigation={navigation} />
+    ));
+
+    expect(await findByText('Cached Match')).toBeTruthy();
+    expect(queryByText(PARTIAL_BANNER)).toBeNull();
+
+    resolveRemote();
+    expect(await findByText('Weekend Match')).toBeTruthy();
+    expect(queryByText(PARTIAL_BANNER)).toBeNull();
+  });
+
+  test('a genuinely partial remote build still raises the banner', async () => {
+    buildFeed
+      .mockResolvedValueOnce({ ...result, partial: true, roundStories: [] })
+      .mockResolvedValueOnce({ ...result, partial: true });
+
+    const { findByText } = render(wrap(
+      <FeedScreen navigation={navigation} />
+    ));
+
+    expect(await findByText(PARTIAL_BANNER)).toBeTruthy();
+  });
+
+  test('a disk snapshot paints the first page and skips the cache build', async () => {
+    let resolveRemote;
+    loadFeedSnapshot.mockResolvedValue({
+      me: 'u1',
+      friends: [],
+      partial: false,
+      error: false,
+      hasMore: false,
+      nextOffset: 1,
+      roundStories: result.roundStories,
+      items: [{
+        ...result.items[0],
+        key: 'round:snap-t1:r1',
+        tournamentId: 'snap-t1',
+        tournamentName: 'Snapshot Match',
+      }],
+    });
+    buildFeed.mockReturnValueOnce(new Promise((resolve) => {
+      resolveRemote = () => resolve(result);
+    }));
+
+    const { findByText, queryByText } = render(wrap(
+      <FeedScreen navigation={navigation} />
+    ));
+
+    // Painted from disk — complete, photos included, no banner.
+    expect(await findByText('Snapshot Match')).toBeTruthy();
+    expect(queryByText(PARTIAL_BANNER)).toBeNull();
+    // The blob-derived cache build is skipped entirely: the only build is the
+    // remote one.
+    expect(buildFeed).toHaveBeenCalledTimes(1);
+    expect(buildFeed).toHaveBeenCalledWith(expect.objectContaining({ source: 'remote' }));
+
+    resolveRemote();
+    expect(await findByText('Weekend Match')).toBeTruthy();
   });
 
   test('renders cached base feed before remote media hydration completes', async () => {

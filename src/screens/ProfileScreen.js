@@ -16,6 +16,7 @@ import { useTheme } from '../theme/ThemeContext';
 import { semantic } from '../theme/tokens';
 import { supabase } from '../lib/supabase';
 import { loadProfile, upsertProfile, uploadAvatar, isUsernameAvailable } from '../store/profileStore';
+import { clearFeedSnapshot } from '../store/feedStore';
 import { parseHandicapIndex, normalizeHandicapInput } from '../lib/handicap';
 import { haptic } from '../lib/haptics';
 
@@ -226,6 +227,10 @@ export default function ProfileScreen({ navigation, route }) {
            { text: 'Sign out', style: 'destructive', onPress: () => resolve(true) }],
         ));
     if (!confirmed) return;
+    // The feed's cold-start snapshot is this user's content sitting on disk.
+    // loadFeedSnapshot already refuses to serve it to anyone else, but there
+    // is no reason to keep it around once they sign out.
+    await clearFeedSnapshot();
     await supabase.auth.signOut();
   }
 
