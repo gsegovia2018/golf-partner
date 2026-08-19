@@ -49,13 +49,18 @@ const THREE_PUTT_RING_SCALE = 6;
 // - Penalties: 9 per 18 fills the ring (a penalty every other hole).
 const PENALTY_RING_SCALE = 9;
 
-// The gold "Best pts" cell mirrors the honours-board convention (best value
-// lands in semantic.winner.dark on the green surface).
+// The gold cell mirrors the honours-board convention (best value lands in
+// semantic.winner.dark on the green surface). It holds the GROSS record —
+// fewest strokes round here — not the best points total: points are net of
+// the handicap the round was played off, so a points record belongs to
+// whichever era the handicap was highest and can be unbeatable at a lower
+// one. A strokes record is the course record for life. Avg pts stays as the
+// familiar figure, no longer as a record.
 const HERO_CELLS = [
   { key: 'rounds', label: 'Rounds', get: (sum) => sum.rounds },
-  { key: 'avg-pts', label: 'Avg pts', get: (sum) => sum.avgPoints },
-  { key: 'best-pts', label: 'Best pts', get: (sum) => sum.bestPoints, gold: true },
   { key: 'avg-strokes', label: 'Avg strokes', get: (sum) => sum.avgStrokes },
+  { key: 'best-strokes', label: 'Best strokes', get: (sum) => sum.bestStrokes, gold: true },
+  { key: 'avg-pts', label: 'Avg pts', get: (sum) => sum.avgPoints },
 ];
 
 // Per-course drill-down: personal stats on one course, down to hole level.
@@ -279,7 +284,7 @@ function CourseRecordBoard({ summary, onInfo, s }) {
   const reduced = useReducedMotion();
 
   const footnote = summary.frontBack
-    ? `Front ${summary.frontBack.frontAvg} · back ${summary.frontBack.backAvg} pts/hole across ${summary.frontBack.rounds} round${summary.frontBack.rounds === 1 ? '' : 's'}`
+    ? `Front ${signed(summary.frontBack.frontVsPar)} · back ${signed(summary.frontBack.backVsPar)} vs par across ${summary.frontBack.rounds} round${summary.frontBack.rounds === 1 ? '' : 's'}`
     : summary.rounds === 0
       ? 'No complete round here yet — hole stats below still count every scored hole.'
       : null;

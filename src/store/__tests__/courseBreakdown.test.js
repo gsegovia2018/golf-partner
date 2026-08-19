@@ -13,8 +13,11 @@ function evenScores(holes, strokes) {
   holes.forEach((h) => { o[h.number] = strokes; });
   return o;
 }
-function mkRound({ courseId, courseName = 'Pine', holes = mkHoles(18), scores, shotDetails = {} }) {
-  return { courseId, courseName, holes, scores, shotDetails, playerHandicaps: {} };
+function mkRound({
+  courseId, courseName = 'Pine', holes = mkHoles(18), scores, shotDetails = {},
+  playerHandicaps = {},
+}) {
+  return { courseId, courseName, holes, scores, shotDetails, playerHandicaps };
 }
 function myRoundsFor(rounds) {
   const t = {
@@ -66,8 +69,10 @@ describe('buildCourseBreakdown summary', () => {
     expect(b.summary.rounds).toBe(2);
     expect(b.summary.avgPoints).toBe(27);      // (18+36)/2, courseMastery's roundPoints
     expect(b.summary.bestPoints).toBe(36);
-    expect(b.summary.trend).toBe(1);           // 36 vs 18, above the ±2 noise band
+    expect(b.summary.trend).toBe(1);           // 72 vs 90 strokes, above the ±2 noise band
     expect(b.summary.avgStrokes).toBe(81);     // (90+72)/2
+    // The course record proper: fewest gross strokes, not most points.
+    expect(b.summary.bestStrokes).toBe(72);
     expect(b.summary.holesPlayed).toBe(36);
   });
 
@@ -108,7 +113,34 @@ describe('buildCourseBreakdown summary', () => {
     const b = buildCourseBreakdown(filterRoundsToCourse(rounds, 'c-1'));
     expect(b.courseName).toBe('Pine Valley GC');
     expect(b.summary.scoreMix).toMatchObject({ pars: 18, bogeys: 18, total: 36 });
-    expect(b.summary.frontBack).toMatchObject({ frontAvg: 1.5, backAvg: 1.5, rounds: 2 });
+    // Gross strokes vs par per nine, not points per hole: round 1 is level
+    // par (0 on each nine), round 2 is bogey golf (+9 on each), averaging
+    // +4.5 either side with no front/back bias.
+    expect(b.summary.frontBack).toMatchObject({
+      frontVsPar: 4.5, backVsPar: 4.5, delta: 0, rounds: 2,
+    });
+  });
+
+  // Points hide a handicap change UNEVENLY across the two nines, which is why
+  // this figure is gross. A course handicap of 18 hands a shot to every hole —
+  // nine per nine, balanced. A handicap of 9 hands them to SI 1-9 only, and
+  // with SI = hole number those all fall on the front nine. So on identical
+  // gross golf a points-based front/back split swings by a full shot per hole
+  // on one side and nothing on the other: a fabricated "stronger finisher".
+  test('the front/back split survives a handicap change on identical gross golf', () => {
+    const h = mkHoles(18);
+    const identicalGolf = { p1: evenScores(h, 5) };
+    const rounds = myRoundsFor([
+      mkRound({ courseId: 'c-1', scores: identicalGolf, playerHandicaps: { p1: 18 } }),
+      mkRound({ courseId: 'c-1', scores: identicalGolf, playerHandicaps: { p1: 9 } }),
+    ]);
+    const b = buildCourseBreakdown(filterRoundsToCourse(rounds, 'c-1'));
+
+    // Bogey golf both times: +9 on each nine, in both eras. No bias either
+    // way, and no drift between the rounds.
+    expect(b.summary.frontBack).toMatchObject({
+      frontVsPar: 9, backVsPar: 9, delta: 0, rounds: 2,
+    });
   });
 
   test('frontBack is null for a 9-hole course', () => {
@@ -151,6 +183,7 @@ describe('buildCourseBreakdown summary', () => {
     expect(b.summary.avgPoints).toBeNull();
     expect(b.summary.bestPoints).toBeNull();
     expect(b.summary.avgStrokes).toBeNull();
+    expect(b.summary.bestStrokes).toBeNull();
     expect(b.summary.holesPlayed).toBe(17);
     expect(b.holes).toHaveLength(17);
     expect(b.highlights).toBeNull();
@@ -180,8 +213,10 @@ describe('buildCourseBreakdown holes', () => {
       avgVsPar: 0,          // (+1 + -1) / 2
       bestStrokes: 4,
     });
-    // hole 2 (par 4 both rounds): 5 then 4 → avgVsPar +0.5, points (1+2)/2
-    expect(holes[1]).toMatchObject({ avgVsPar: 0.5, avgPoints: 1.5, bestStrokes: 4 });
+    // hole 2 (par 4 both rounds): 5 then 4 → avgVsPar +0.5. Hole rows are
+    // entirely gross now — the net points-per-hole average is gone.
+    expect(holes[1]).toMatchObject({ avgVsPar: 0.5, bestStrokes: 4 });
+    expect(holes[1].avgPoints).toBeUndefined();
   });
 
   test('partial rounds contribute only their scored holes', () => {

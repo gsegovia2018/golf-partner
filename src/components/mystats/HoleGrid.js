@@ -114,11 +114,14 @@ function HoleCell({
   );
 }
 
-// Detail columns under the grid for the selected hole.
+// Detail columns under the grid for the selected hole. All gross: the column
+// here used to be net points per hole, which pooled rounds played off
+// different handicaps into an average belonging to no era. vs-par is the
+// exact same judgement of the hole, and it is what colours the grid above.
 const PANEL_COLS = [
   { key: 'avg', label: 'Avg', get: (h) => h.avgStrokes },
   { key: 'best', label: 'Best', get: (h) => h.bestStrokes },
-  { key: 'pts', label: 'Pts', get: (h) => h.avgPoints },
+  { key: 'vspar', label: 'vs par', get: (h) => h.avgVsPar, signed: true },
   { key: 'putts', label: 'Putts avg', get: (h) => h.avgPutts },
   { key: 'pen', label: 'Pen', get: (h) => h.penalties },
 ];
@@ -187,7 +190,7 @@ export default function HoleGrid({ holes, highlights }) {
               return (
                 <View key={col.key} style={s.panelCol}>
                   <Text style={s.panelValue} testID={`hole-panel-${col.key}`}>
-                    {value == null ? '—' : `${value}`}
+                    {value == null ? '—' : `${col.signed && value > 0 ? '+' : ''}${value}`}
                   </Text>
                   <Text style={s.panelLabel}>{col.label}</Text>
                 </View>

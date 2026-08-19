@@ -306,13 +306,18 @@ export const statExplainers = {
   courseRecord: {
     title: 'Course record',
     subtitle: 'Your rounds at this course',
-    explainer: 'Rounds, average points, and best points count only fully-scored rounds '
-      + 'here — a game called early never drags the average down. Points are net '
-      + '(handicap-adjusted) Stableford totals per round; average strokes is your gross '
-      + 'strokes per complete round. The trend arrow compares your latest complete round '
-      + 'with the one before it — a swing under 2 points reads as flat. The front/back '
-      + 'line is average points per hole on holes 1–9 vs 10–18, counting only rounds '
-      + 'where both nines were fully scored.',
+    explainer: 'Every figure counts only fully-scored rounds here — a game called early '
+      + 'never drags an average down. Best strokes is the real course record: your lowest '
+      + 'gross round. It is deliberately not a points record, because points are net of the '
+      + 'handicap you played off that day, so a points best belongs to whichever era your '
+      + 'handicap was highest and can become unbeatable once it falls. Average strokes is '
+      + 'gross too; average points is shown as the familiar figure, but it pools rounds '
+      + 'played off different handicaps, so read it loosely. The trend arrow compares your '
+      + 'latest complete round with the one before it on gross strokes — a swing under 2 '
+      + 'reads as flat. The front/back line is average gross strokes vs par on holes 1–9 vs '
+      + '10–18, counting only rounds where both nines were fully scored; it uses strokes '
+      + 'rather than points because a handicap hands its shots out by stroke index, and '
+      + 'those are not split evenly between the two nines.',
   },
   courseScoreMix: {
     title: 'Score mix',

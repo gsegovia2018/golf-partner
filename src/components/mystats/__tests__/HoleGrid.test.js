@@ -26,7 +26,6 @@ const hole = (holeNumber, avgVsPar, extra = {}) => ({
   timesPlayed: 6,
   avgStrokes: 4 + avgVsPar,
   avgVsPar,
-  avgPoints: 2,
   bestStrokes: 4,
   avgPutts: 1.8,
   penalties: 0,
@@ -133,6 +132,27 @@ describe('HoleGrid', () => {
     expect(queryByTestId('hole-panel-2')).toBeNull();
     // Hole 3 never logged putts — the putts column shows an em-dash.
     expect(getByTestId('hole-panel-putts').props.children).toBe('—');
+  });
+
+  // The panel's third column used to be net points per hole, which pooled
+  // rounds played off different handicaps. vs-par says the same thing about
+  // the hole and survives a handicap change.
+  test('the vs-par column signs an over-par average and needs no sign under par', () => {
+    const { getByTestId } = render(wrap(
+      <HoleGrid holes={holes} highlights={highlights} />
+    ));
+
+    // Defaults to the nemesis hole (2), which averages +1.8.
+    expect(getByTestId('hole-panel-vspar').props.children).toBe('+1.8');
+    fireEvent.press(getByTestId('hole-cell-3'));
+    expect(getByTestId('hole-panel-vspar').props.children).toBe('-0.2');
+  });
+
+  test('there is no net points column left in the panel', () => {
+    const { queryByTestId } = render(wrap(
+      <HoleGrid holes={holes} highlights={highlights} />
+    ));
+    expect(queryByTestId('hole-panel-pts')).toBeNull();
   });
 
   test('selected cell gets the ink outline, others stay transparent', () => {

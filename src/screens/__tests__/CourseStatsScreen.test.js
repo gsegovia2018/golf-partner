@@ -68,19 +68,20 @@ const breakdown = {
     avgPoints: 28.5,
     bestPoints: 34,
     avgStrokes: 100.5,
+    bestStrokes: 92,
     scoreMix: { eagles: 0, birdies: 4, pars: 20, bogeys: 31, doubles: 12, worse: 8, total: 75 },
-    frontBack: { frontAvg: 1.6, backAvg: 1.4, delta: 0.2, rounds: 6 },
+    frontBack: { frontVsPar: 6.2, backVsPar: 4.4, delta: 1.8, rounds: 6 },
   },
   shots: null,
   holes: [
     {
       holeNumber: 3, par: 4, strokeIndex: 1, timesPlayed: 6,
-      avgStrokes: 5.8, avgVsPar: 1.8, avgPoints: 0.5, bestStrokes: 4,
+      avgStrokes: 5.8, avgVsPar: 1.8, bestStrokes: 4,
       avgPutts: null, penalties: 0,
     },
     {
       holeNumber: 7, par: 3, strokeIndex: 17, timesPlayed: 6,
-      avgStrokes: 2.6, avgVsPar: -0.4, avgPoints: 2.7, bestStrokes: 2,
+      avgStrokes: 2.6, avgVsPar: -0.4, bestStrokes: 2,
       avgPutts: null, penalties: 0,
     },
   ],
@@ -106,20 +107,20 @@ describe('CourseStatsScreen (Clubhouse redesign)', () => {
     expect(getByText('Valle Verde')).toBeTruthy();
     expect(getByText('Course Record')).toBeTruthy();
     expect(getByText('6')).toBeTruthy();       // rounds (integer → CountUpText, reduced ⇒ final)
-    expect(getByText('34')).toBeTruthy();      // best pts
+    expect(getByText('92')).toBeTruthy();      // best strokes — the gross course record
     expect(getByText('28.5')).toBeTruthy();    // avg pts renders the decimal, not a rounded count-up
     expect(getByText('100.5')).toBeTruthy();   // avg strokes decimal
-    // Front/back meta became the hairline footnote.
-    expect(getByText(/Front 1\.6 · back 1\.4 pts\/hole across 6 rounds/)).toBeTruthy();
+    // Front/back meta became the hairline footnote, in gross strokes vs par.
+    expect(getByText(/Front \+6\.2 · back \+4\.4 vs par across 6 rounds/)).toBeTruthy();
   });
 
-  test('best pts renders gold on the cream board; other values cream', async () => {
+  test('best strokes renders gold on the cream board; other values cream', async () => {
     const { getByTestId } = render(wrap(
       <CourseStatsScreen navigation={navigation} route={route} />
     ));
     await waitFor(() => expect(getByTestId('course-record-board')).toBeTruthy());
 
-    const gold = StyleSheet.flatten(getByTestId('course-record-best-pts-value').props.style);
+    const gold = StyleSheet.flatten(getByTestId('course-record-best-strokes-value').props.style);
     expect(gold.color).toBe(semantic.winner.dark);
     const cream = StyleSheet.flatten(getByTestId('course-record-rounds-value').props.style);
     expect(cream.color).toBe('#f3efe6');
@@ -159,7 +160,7 @@ describe('CourseStatsScreen (Clubhouse redesign)', () => {
       ...breakdown,
       summary: {
         ...breakdown.summary,
-        rounds: 0, avgPoints: null, bestPoints: null, avgStrokes: null,
+        rounds: 0, avgPoints: null, bestPoints: null, avgStrokes: null, bestStrokes: null,
         frontBack: null,
       },
       highlights: null,

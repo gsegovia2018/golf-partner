@@ -9,12 +9,8 @@ import {
   buildSyntheticTournament, courseMastery, CANON_ID,
 } from './personalStats';
 import {
-  shotStats, playerScoreDistribution, frontBackSplit, courseDNA,
+  shotStats, playerScoreDistribution, courseDNA,
 } from './statsEngine';
-import {
-  getPlayingHandicap, calcStablefordPoints,
-} from './tournamentStore';
-import { holeCountOf } from './scoring';
 
 // Navigable identity of a collectMyRounds entry — courseId when the round has
 // one, else the raw (non-empty) courseName, else null. Must match the
@@ -48,7 +44,6 @@ export function buildCourseBreakdown(courseRounds) {
   // did I actually shoot on this course", so handicap shots must not
   // upgrade a bogey to a par.
   const dist = playerScoreDistribution(synthetic, CANON_ID, { metric: 'strokes' });
-  const fb = frontBackSplit(synthetic)[0] ?? null;
   const shots = shotStats(synthetic, CANON_ID);
   const holes = buildHoleRows(synthetic);
 
@@ -61,15 +56,19 @@ export function buildCourseBreakdown(courseRounds) {
       bestPoints: mastery?.bestPoints ?? null,
       trend: mastery?.trend ?? null,
       avgStrokes: dnaCourse?.roundStrokes ?? null,
+      // The course record proper: fewest gross strokes in a complete round
+      // here. Gross, so unlike bestPoints it holds its meaning across a
+      // handicap change — the same round stays the best round for life.
+      bestStrokes: dnaCourse?.roundTotals?.length
+        ? dnaCourse.roundTotals.reduce((m, e) => Math.min(m, e.strokes), Infinity)
+        : null,
       holesPlayed: courseRounds.reduce((s, r) => s + (r.holesPlayed ?? 0), 0),
       scoreMix: {
         eagles: dist.eagles, birdies: dist.birdies, pars: dist.pars,
         bogeys: dist.bogeys, doubles: dist.doubles, worse: dist.worse,
         total: dist.total,
       },
-      frontBack: fb
-        ? { frontAvg: fb.frontAvg, backAvg: fb.backAvg, delta: fb.delta, rounds: fb.rounds.length }
-        : null,
+      frontBack: grossFrontBack(synthetic),
     },
     shots: shots.hasData ? shots : null,
     holes,
@@ -80,18 +79,68 @@ export function buildCourseBreakdown(courseRounds) {
 const round2 = (n) => Math.round(n * 100) / 100;
 const round1 = (n) => Math.round(n * 10) / 10;
 
+// Gross strokes vs par on each nine, averaged over the rounds where BOTH
+// nines were fully scored (statsEngine.frontBackSplit's rule, which this
+// replaces here).
+//
+// It used to report Stableford points per hole, and that was the most badly
+// contaminated figure on the screen. Points hide a handicap change unevenly
+// across the two nines: a course handicap of 18 hands a shot to every hole —
+// nine on each nine, perfectly balanced — while a handicap of 9 hands them to
+// stroke indexes 1-9 only, and those are not evenly split between the front
+// and the back. So a falling handicap skewed the front-vs-back DELTA itself,
+// not merely both levels together, and the card could report a "stronger
+// finish" that was purely an artefact of the stroke-index layout.
+//
+// delta is frontVsPar - backVsPar: positive means the back nine is played in
+// fewer strokes over par, i.e. a stronger finisher — the same polarity
+// frontBackSplit's points delta had.
+function grossFrontBack(synthetic) {
+  let front = 0;
+  let back = 0;
+  let rounds = 0;
+  (synthetic.rounds ?? []).forEach((round) => {
+    const scores = round.scores?.[CANON_ID];
+    if (!scores || (round.holes?.length ?? 0) < 18) return;
+    let f = 0;
+    let b = 0;
+    let fc = 0;
+    let bc = 0;
+    round.holes.forEach((hole) => {
+      const sc = scores[hole.number];
+      if (sc == null) return;
+      if (hole.number <= 9) { f += sc - hole.par; fc += 1; } else { b += sc - hole.par; bc += 1; }
+    });
+    if (fc < 9 || bc < 9) return;
+    front += f;
+    back += b;
+    rounds += 1;
+  });
+  if (rounds === 0) return null;
+  return {
+    frontVsPar: round1(front / rounds),
+    backVsPar: round1(back / rounds),
+    delta: round1((front - back) / rounds),
+    rounds,
+  };
+}
+
 // One row per physical hole, pooled by hole number across every round that
 // scored it (courseDNA's partial-rounds-count-their-holes rule). Chronological
 // iteration makes par/SI metadata and row order latest-wins.
+//
+// Every figure here is GROSS. A net points-per-hole average used to sit
+// alongside them, but pooling net points across rounds played off different
+// handicaps averages together holes that were worth different amounts for the
+// same score — and avgVsPar, which already colours the grid, says the same
+// thing exactly.
 function buildHoleRows(synthetic) {
-  const me = synthetic.players[0];
   const byNumber = new Map();
   let latestOrder = [];
 
   synthetic.rounds.forEach((round) => {
     const scores = round.scores?.[CANON_ID];
     if (!scores) return;
-    const handicap = getPlayingHandicap(round, me);
     (round.holes ?? []).forEach((hole) => {
       const sc = scores[hole.number];
       if (sc == null) return;
@@ -99,7 +148,7 @@ function buildHoleRows(synthetic) {
       if (!e) {
         e = {
           holeNumber: hole.number, timesPlayed: 0, strokesSum: 0, vsParSum: 0,
-          pointsSum: 0, bestStrokes: Infinity, puttsSum: 0, puttsCount: 0, penalties: 0,
+          bestStrokes: Infinity, puttsSum: 0, puttsCount: 0, penalties: 0,
         };
         byNumber.set(hole.number, e);
       }
@@ -108,7 +157,6 @@ function buildHoleRows(synthetic) {
       e.timesPlayed += 1;
       e.strokesSum += sc;
       e.vsParSum += sc - hole.par;
-      e.pointsSum += calcStablefordPoints(hole.par, sc, handicap, hole.strokeIndex, holeCountOf(round));
       if (sc < e.bestStrokes) e.bestStrokes = sc;
       const d = round.shotDetails?.[CANON_ID]?.[hole.number];
       if (d?.putts != null) { e.puttsSum += d.putts; e.puttsCount += 1; }
@@ -135,7 +183,6 @@ function buildHoleRows(synthetic) {
     timesPlayed: e.timesPlayed,
     avgStrokes: round2(e.strokesSum / e.timesPlayed),
     avgVsPar: round2(e.vsParSum / e.timesPlayed),
-    avgPoints: round2(e.pointsSum / e.timesPlayed),
     bestStrokes: e.bestStrokes,
     avgPutts: e.puttsCount > 0 ? round1(e.puttsSum / e.puttsCount) : null,
     penalties: e.penalties,
