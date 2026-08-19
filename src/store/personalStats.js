@@ -780,10 +780,12 @@ export function computeFormSeries(selectedRounds) {
 // other, and those all share that course's layout, so its avgPoints/
 // bestPoints/trend/sparkline are internally honest. (Dropping them would
 // also strand CourseStatsScreen, which is only reachable by tapping a row.)
-// What is NOT comparable is one course's round total against another's, so
-// the list ranks on points per HOLE and each row carries the `holeCount` it
-// was scored over for the card to label — a nine's 18-point average must
-// not read as the worst course of the season.
+// The list ranks on rounds PLAYED — the courses you know best sit at the
+// top, which is what "mastery" is asking. Ties break on points per HOLE,
+// never on the round total: one course's round total is not comparable
+// with another's, and a nine's 18-point average must not read as the
+// worst course of the season. Each row carries the `holeCount` it was
+// scored over for the card to label.
 // avgPoints/bestPoints are ROUND-TOTAL figures (same scale as
 // computeMetrics.avgPoints/bestRoundPoints), not per-hole averages.
 // bestPoints/trend come from courseDNA's own chronological `roundTotals`,
@@ -833,7 +835,7 @@ export function courseMastery(synthetic) {
       // and courseDNA keying as everything above.
       recentPoints: totals.map((e) => e.points),
     };
-  }).sort((a, b) => b.avgPointsPerHole - a.avgPointsPerHole);
+  }).sort((a, b) => b.rounds - a.rounds || b.avgPointsPerHole - a.avgPointsPerHole);
 }
 
 // ── careerMilestones ──

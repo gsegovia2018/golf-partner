@@ -219,11 +219,13 @@ describe('9-hole rounds and round-total personal stats', () => {
     expect(careerMilestones(synthetic).birdies).toBe(9);
   });
 
-  it('keeps 9-hole courses in course mastery and ranks them per hole', () => {
+  it('keeps 9-hole courses in course mastery and breaks ties per hole', () => {
     // Course Mastery is the exception: each row compares one course's rounds
     // with each other, all on that course's own layout. The nine must stay
-    // (its Course Stats drill-down is only reachable from this row) and must
-    // not sort last just for being half the golf — 3 pts/hole beats 2.
+    // (its Course Stats drill-down is only reachable from this row). Both
+    // courses have one round, so the rounds-played ranking ties and the
+    // per-hole tiebreak decides — the nine must not lose it just for being
+    // half the golf: 3 pts/hole beats 2.
     const hot = mkTournament(4, 'Waldkirch Grün', GRUEN_NINE, -1);
     const rounds = collectMyRounds([hot, mkTournament(1, 'Pine', holes18(), 0)], 'u1', 'Me');
     const mastery = courseMastery(buildSyntheticTournament(rounds));

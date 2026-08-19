@@ -1337,14 +1337,15 @@ describe('courseMastery', () => {
     const synthetic = buildSyntheticTournament(myRounds);
     const mastery = courseMastery(synthetic);
 
+    // Pine: 2 complete rounds (36, then 18) — avg 27, best 36, trend down
+    // (latest 18 < previous 36 → -1). It leads on rounds played even though
+    // Oak scored better: the list ranks on how much golf you've played there.
     // Oak: 1 complete round (54 pts) — the 6-hole round is excluded, so
     // rounds=1 and trend has nothing to compare against (null, NOT 0 —
     // 0 is a claim about two equal rounds, not a missing comparison).
-    // Pine: 2 complete rounds (36, then 18) — avg 27, best 36, trend down
-    // (latest 18 < previous 36 → -1).
     expect(mastery).toEqual([
-      { courseKey: 'Oak', courseName: 'Oak', rounds: 1, avgPoints: 54, avgPointsPerHole: 3, holeCount: 18, bestPoints: 54, trend: null, recentPoints: [54] },
       { courseKey: 'Pine', courseName: 'Pine', rounds: 2, avgPoints: 27, avgPointsPerHole: 1.5, holeCount: 18, bestPoints: 36, trend: -1, recentPoints: [36, 18] },
+      { courseKey: 'Oak', courseName: 'Oak', rounds: 1, avgPoints: 54, avgPointsPerHole: 3, holeCount: 18, bestPoints: 54, trend: null, recentPoints: [54] },
     ]);
   });
 
