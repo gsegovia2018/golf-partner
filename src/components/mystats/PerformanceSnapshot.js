@@ -7,9 +7,15 @@ import SectionCard from './SectionCard';
 import TrendLineChart from './TrendLineChart';
 import { SGBar } from './SGBars';
 
+// The headline form metric: score differential, which — unlike points per
+// round — does not move when the handicap does. `direction` is already
+// polarity-aware ('up' means improving even though a lower differential is
+// the better one).
+const formMetric = (form) => form?.metrics?.find((m) => m.key === 'avgDifferential');
+
 function verdict(form) {
   if (!form?.hasHistory) return 'Not enough history';
-  const direction = form.metrics?.[0]?.direction;
+  const direction = formMetric(form)?.direction;
   if (direction === 'up') return 'Improving';
   if (direction === 'down') return 'Declining';
   return 'Holding steady';
@@ -25,11 +31,11 @@ function sgTitle(targetHandicap) {
   return `Strokes gained vs handicap ${targetHandicap}`;
 }
 
-function pointsTrendCopy(form) {
+function formTrendCopy(form) {
   if (!form?.hasHistory) return 'Play more rounds to see a trend.';
-  const delta = form.metrics?.[0]?.delta;
+  const delta = formMetric(form)?.delta;
   if (delta == null) return 'Not enough scored rounds for a trend.';
-  return `${delta > 0 ? '+' : ''}${delta} pts / round vs earlier rounds`;
+  return `${delta > 0 ? '+' : ''}${delta} differential vs earlier rounds`;
 }
 
 export default function PerformanceSnapshot({
@@ -43,7 +49,8 @@ export default function PerformanceSnapshot({
 }) {
   const { theme } = useTheme();
   const s = useMemo(() => makeStyles(theme), [theme]);
-  const pointsSeries = formSeries.metrics?.avgPoints ?? [];
+  // Matches the metric the verdict above the chart is drawn from.
+  const diffSeries = formSeries.metrics?.avgDifferential ?? [];
   const hasStrokesGained = strokesGained?.total != null;
 
   return (
@@ -52,7 +59,7 @@ export default function PerformanceSnapshot({
         <View style={s.summaryPanel}>
           <Text style={s.panelLabel}>Current form</Text>
           <Text style={s.panelValue}>{verdict(form)}</Text>
-          <Text style={s.panelMeta}>{pointsTrendCopy(form)}</Text>
+          <Text style={s.panelMeta}>{formTrendCopy(form)}</Text>
         </View>
         <View style={s.summaryPanel}>
           <Text style={s.panelLabel}>Target gap</Text>
@@ -82,7 +89,7 @@ export default function PerformanceSnapshot({
         </View>
       </View>
 
-      <TrendLineChart series={pointsSeries} color={theme.accent.primary} labelColor={theme.text.secondary} dropGaps />
+      <TrendLineChart series={diffSeries} color={theme.accent.primary} labelColor={theme.text.secondary} dropGaps />
 
       <View style={s.metricRail}>
         <MetricCell label="Rounds" value={`${metrics.rounds ?? 0}`} s={s} />

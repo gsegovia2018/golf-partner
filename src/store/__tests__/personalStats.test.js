@@ -10,8 +10,14 @@ import * as coachInsights from '../coachInsights';
 
 // ── Fixture helpers ───────────────────────────────────────────────
 // hcp default 0; SI defaults to hole number; par defaults to 4.
-function mkRound({ courseName = 'Course', holes, scores = {}, shotDetails = {}, playerHandicaps = {}, playerTees = null }) {
-  return { courseName, holes, scores, shotDetails, playerHandicaps, playerTees };
+// slope/courseRating default to the standard tee (113 / par 72) so score
+// differentials are computable: with holes18() every round is par 72, so a
+// round's differential is simply (net-double-bogey-capped gross - 72).
+function mkRound({
+  courseName = 'Course', holes, scores = {}, shotDetails = {}, playerHandicaps = {},
+  playerTees = null, slope = 113, courseRating = 72,
+}) {
+  return { courseName, holes, scores, shotDetails, playerHandicaps, playerTees, slope, courseRating };
 }
 // 18 holes, par 4, strokeIndex = hole number.
 function holes18() {
@@ -515,10 +521,12 @@ describe('computeRecentVsHistory', () => {
     expect(r.recentCount).toBe(5);
     expect(r.historyCount).toBe(3);
     expect(r.hasHistory).toBe(true);
-    const points = r.metrics.find((m) => m.key === 'avgPoints');
-    expect(points.recent).toBeGreaterThan(points.history); // recent rounds lower strokes → more points
-    expect(points.delta).not.toBeNull();
-    expect(points.direction).toBe('up');
+    // Score differential, not points: lower is better, so the recent slice
+    // (mostly 5s) must sit BELOW the history slice (all 6s).
+    const diff = r.metrics.find((m) => m.key === 'avgDifferential');
+    expect(diff.recent).toBeLessThan(diff.history);
+    expect(diff.delta).not.toBeNull();
+    expect(diff.direction).toBe('up'); // 'up' = improving, per polarity 'lower'
   });
 
   // Below MIN_HISTORY_ROUNDS (3), one noisy early round drove a confident
@@ -534,11 +542,11 @@ describe('computeRecentVsHistory', () => {
     expect(r.recentCount).toBe(5);
     expect(r.historyCount).toBe(1);
     expect(r.hasHistory).toBe(true); // there IS a history round — just not enough of one
-    const points = r.metrics.find((m) => m.key === 'avgPoints');
-    expect(points.recent).not.toBeNull();
-    expect(points.history).not.toBeNull(); // raw values still surface — only the verdict is suppressed
-    expect(points.delta).toBeNull();
-    expect(points.direction).toBe('flat');
+    const diff = r.metrics.find((m) => m.key === 'avgDifferential');
+    expect(diff.recent).not.toBeNull();
+    expect(diff.history).not.toBeNull(); // raw values still surface — only the verdict is suppressed
+    expect(diff.delta).toBeNull();
+    expect(diff.direction).toBe('flat');
   });
 
   test('marks no history when total rounds <= N', () => {
@@ -546,9 +554,9 @@ describe('computeRecentVsHistory', () => {
     const r = computeRecentVsHistory(my, 5);
     expect(r.hasHistory).toBe(false);
     expect(r.recentCount).toBe(3);
-    const points = r.metrics.find((m) => m.key === 'avgPoints');
-    expect(points.history).toBeNull();
-    expect(points.delta).toBeNull();
+    const diff = r.metrics.find((m) => m.key === 'avgDifferential');
+    expect(diff.history).toBeNull();
+    expect(diff.delta).toBeNull();
   });
 
   test('shot metrics show no delta when only recent rounds have shot detail', () => {
@@ -575,8 +583,8 @@ describe('computeRecentVsHistory', () => {
 
   test('an all-incomplete recent window yields null deltas and a flat direction, not a false decline', () => {
     // 7 rounds, N=5: the last 5 are early-finished 6-hole games (partial,
-    // low round totals). If they fed avgPoints, "recent" would read ~12 pts
-    // vs a 36-pt history — a fabricated "Declining" verdict.
+    // low round totals). If they fed the round-total metrics, "recent" would
+    // read ~12 pts vs a 36-pt history — a fabricated "Declining" verdict.
     const tournaments = roundsTournament([4, 4, 4, 4, 4, 4, 4]);
     tournaments[0].finishedAt = '2026-05-22T18:00:00.000Z';
     const h = holes18();
@@ -587,7 +595,7 @@ describe('computeRecentVsHistory', () => {
     const my = collectMyRounds(tournaments, 'u1');
     const r = computeRecentVsHistory(my, 5);
     expect(r.hasHistory).toBe(true);
-    ['avgPoints', 'avgVsPar'].forEach((key) => {
+    ['avgDifferential', 'avgVsPar'].forEach((key) => {
       const m = r.metrics.find((x) => x.key === key);
       expect(m.recent).toBeNull();
       expect(m.delta).toBeNull();
@@ -1449,6 +1457,72 @@ describe('courseMastery', () => {
   });
 });
 
+// ── Handicap changes must not fake a trend ──
+// The bug: Stableford points are net of the playing handicap the round was
+// scored off, and that handicap is frozen per round. So identical gross golf
+// is worth fewer points once the player's handicap falls, and every
+// points-based comparison read an improving player as a declining one.
+describe('a falling handicap does not fake a decline', () => {
+  // Six rounds of IDENTICAL gross golf (5 on every par-4 hole = gross 90),
+  // the first three played off a course handicap of 18 and the last three
+  // off 8.
+  function twoEraTournament() {
+    const h = holes18();
+    const era = (handicap) => mkRound({
+      holes: h, scores: { p1: evenScores(h, 5) }, playerHandicaps: { p1: handicap },
+    });
+    return [{
+      id: 1, name: 'T', players: [{ id: 'p1', handicap: 8, user_id: 'u1' }],
+      rounds: [era(18), era(18), era(18), era(8), era(8), era(8)],
+    }];
+  }
+
+  test('points DO drop across the handicap change — this is the contamination', () => {
+    const my = collectMyRounds(twoEraTournament(), 'u1');
+    const early = computeMetrics(buildSyntheticTournament(my.slice(0, 3)));
+    const late = computeMetrics(buildSyntheticTournament(my.slice(3)));
+
+    // Off 18 every hole gets a shot: 2 + 4 - 5 + 1 = 2 pts x 18 = 36.
+    expect(early.avgPoints).toBe(36);
+    // Off 8 only SI 1-8 do: (2 x 8) + (1 x 10) = 26. Same golf, 10 fewer pts.
+    expect(late.avgPoints).toBe(26);
+  });
+
+  test('the score differential is unmoved by the same handicap change', () => {
+    const my = collectMyRounds(twoEraTournament(), 'u1');
+    const early = computeMetrics(buildSyntheticTournament(my.slice(0, 3)));
+    const late = computeMetrics(buildSyntheticTournament(my.slice(3)));
+
+    // (113/113) x (gross 90 - CR 72) = 18.0, in both eras.
+    expect(early.avgDifferential).toBe(18);
+    expect(late.avgDifferential).toBe(18);
+  });
+
+  test('computeRecentVsHistory reports flat, not a decline', () => {
+    const my = collectMyRounds(twoEraTournament(), 'u1');
+    const r = computeRecentVsHistory(my, 3);
+
+    const diff = r.metrics.find((m) => m.key === 'avgDifferential');
+    expect(diff.recent).toBe(18);
+    expect(diff.history).toBe(18);
+    expect(diff.delta).toBe(0);
+    expect(diff.direction).toBe('flat');
+    // Points per round is no longer a form metric at all — it cannot carry
+    // a verdict across a handicap change.
+    expect(r.metrics.find((m) => m.key === 'avgPoints')).toBeUndefined();
+  });
+
+  test('courseMastery trend is flat too — it compares gross strokes', () => {
+    const my = collectMyRounds(twoEraTournament(), 'u1');
+    const [course] = courseMastery(buildSyntheticTournament(my));
+
+    // Every round is gross 90 at the same course, so there is no trend —
+    // on points the last two rounds (26) vs the ones before would have been
+    // read as a collapse from 36.
+    expect(course.trend).toBe(0);
+  });
+});
+
 describe('careerMilestones', () => {
   test('birdies/eagles/streak see every scored hole; bestNine/bestRound use complete rounds only', () => {
     const myRounds = collectMyRounds(twoCourseTournament(), 'u1');
@@ -1470,6 +1544,41 @@ describe('careerMilestones', () => {
     // Best round: highest round-total points among complete rounds — Oak C
     // at 54, ahead of Pine's 36 and 18.
     expect(milestones.bestRound).toBe(54);
+  });
+
+  test('birdies are GROSS — a net birdie off a high handicap is not counted', () => {
+    // 18 pars off a course handicap of 18: every hole receives a shot, so
+    // NET each hole is a birdie. Gross, they are exactly what they look
+    // like — pars.
+    const h = holes18();
+    const tournaments = [{
+      id: 1, name: 'T', players: [{ id: 'p1', handicap: 18, user_id: 'u1' }],
+      rounds: [mkRound({ holes: h, scores: { p1: evenScores(h, 4) }, playerHandicaps: { p1: 18 } })],
+    }];
+    const synthetic = buildSyntheticTournament(collectMyRounds(tournaments, 'u1'));
+    const milestones = careerMilestones(synthetic);
+
+    expect(milestones.birdies).toBe(0);
+    expect(milestones.eagles).toBe(0);
+    expect(milestones.longestParStreak).toBe(18); // 18 gross pars in a row
+  });
+
+  test('best round carries the handicap it was scored off, and a handicap-free twin', () => {
+    const h = holes18();
+    const tournaments = [{
+      id: 1, name: 'T', players: [{ id: 'p1', handicap: 18, user_id: 'u1' }],
+      rounds: [mkRound({ holes: h, scores: { p1: evenScores(h, 4) }, playerHandicaps: { p1: 18 } })],
+    }];
+    const synthetic = buildSyntheticTournament(collectMyRounds(tournaments, 'u1'));
+    const milestones = careerMilestones(synthetic);
+
+    // 2 + 4 - 4 + 1 = 3 pts x 18 holes.
+    expect(milestones.bestRound).toBe(54);
+    // The frozen per-round playing handicap, so the 54 can be read in its
+    // own era rather than against today's index.
+    expect(milestones.bestRoundHandicap).toBe(18);
+    // Gross 72 on a course rated 72 off slope 113.
+    expect(milestones.bestDifferential).toBe(0);
   });
 
   test('bestNine/bestRound are null (not 0) with no complete rounds, but per-hole feats still count', () => {
@@ -1495,6 +1604,8 @@ describe('careerMilestones', () => {
     const milestones = careerMilestones(buildSyntheticTournament([]));
     expect(milestones).toEqual({
       birdies: 0, eagles: 0, longestParStreak: 0, bestNine: null, bestRound: null,
+      bestRoundHandicap: null, bestRoundCourse: null, bestRoundDate: null,
+      bestDifferential: null, bestDifferentialCourse: null, bestDifferentialDate: null,
     });
   });
 });

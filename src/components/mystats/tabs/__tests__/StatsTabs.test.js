@@ -45,9 +45,14 @@ function baseStats() {
     scrambling: { pct: 40, missedGir: 5 },
     form: {
       hasHistory: true,
-      metrics: [{ key: 'avgPoints', direction: 'up', delta: 3 }],
+      metrics: [{ key: 'avgDifferential', direction: 'up', delta: -3 }],
     },
-    formSeries: { metrics: { avgPoints: [{ label: 'R1', value: 27 }, { label: 'R2', value: 33 }] } },
+    formSeries: {
+      metrics: {
+        avgPoints: [{ label: 'R1', value: 27 }, { label: 'R2', value: 33 }],
+        avgDifferential: [{ label: 'R1', value: 19 }, { label: 'R2', value: 16 }],
+      },
+    },
     ranking: {
       baseline: 1.6,
       strengths: [
@@ -252,7 +257,7 @@ function formStats() {
       recentCount: 3,
       historyCount: 5,
       metrics: [
-        { key: 'avgPoints', label: 'Points / round', polarity: 'higher', shot: false, recent: 33, history: 30, delta: 3, direction: 'up' },
+        { key: 'avgDifferential', label: 'Score differential', polarity: 'lower', shot: false, recent: 14.2, history: 17.2, delta: -3, direction: 'up' },
         { key: 'avgVsPar', label: 'Strokes vs par', polarity: 'lower', shot: false, recent: 10, history: 13, delta: -3, direction: 'up' },
         { key: 'fairwayPct', label: 'Fairways hit %', polarity: 'higher', shot: true, recent: 60, history: 50, delta: 10, direction: 'up' },
         { key: 'girPct', label: 'Greens in reg %', polarity: 'higher', shot: true, recent: 40, history: 45, delta: -5, direction: 'down' },
@@ -264,6 +269,7 @@ function formStats() {
       hasShotData: true,
       metrics: {
         avgPoints: mk([27, 30, 33]),
+        avgDifferential: mk([19, 17, 14.2]),
         avgVsPar: mk([13, 12, 10]),
         fairwayPct: mk([50, 55, 60]),
         girPct: mk([45, 40, 40]),
@@ -283,25 +289,26 @@ function formStats() {
 
 describe('My Stats tabs', () => {
   test('FormTab renders exactly four cards: hero, instruments, score mix, steady holes', async () => {
-    const { findByText, getByTestId, getAllByTestId, queryByText, getByText } = render(wrap(
+    const { findByText, getByTestId, getAllByTestId, queryByTestId, queryByText, getByText } = render(wrap(
       <FormTab stats={formStats()} n={5} onChangeN={() => {}} onInfo={() => {}} />
     ));
 
-    // Hero: kicker + verdict from stats.form + gold pts number + chart. (Two
-    // trend canvases render on the tab: the hero's and the steady-holes one.)
+    // Hero: kicker + verdict from stats.form + gold differential number +
+    // chart. (Two trend canvases render on the tab: the hero's and the
+    // steady-holes one.)
     expect(await findByText('Current form · Last 5')).toBeTruthy();
     expect(getByText('Improving lately')).toBeTruthy();
     expect(getByTestId('form-hero-pts')).toBeTruthy();
     expect(getByTestId('form-hero-surface')).toBeTruthy();
     expect(getAllByTestId('trend-chart-canvas')).toHaveLength(2);
 
-    // Instruments: one sparkline row per remaining metric (avgPoints lives
-    // in the hero, not the instruments panel).
+    // Instruments: one sparkline row per remaining metric (avgDifferential
+    // lives in the hero, not the instruments panel).
     expect(getByText('Instruments')).toBeTruthy();
     ['avgVsPar', 'fairwayPct', 'girPct', 'puttsPerRound', 'threePuttsPerRound'].forEach((key) => {
       expect(getByTestId(`sparkline-row-${key}`)).toBeTruthy();
     });
-    expect(queryByText('Points / round')).toBeNull();
+    expect(queryByTestId('sparkline-row-avgDifferential')).toBeNull();
 
     // Score mix card: the damage headline sits in the card HEADER (right
     // slot), the body is the per-round columns — the old inner overline and
@@ -376,8 +383,8 @@ describe('My Stats tabs', () => {
       <FormTab stats={formStats()} n={5} onChangeN={() => {}} onInfo={onInfo} />
     ));
 
-    fireEvent.press(await findByLabelText('What is Points per round'));
-    expect(onInfo).toHaveBeenCalledWith('pointsPerRound');
+    fireEvent.press(await findByLabelText('What is Score differential'));
+    expect(onInfo).toHaveBeenCalledWith('scoreDifferential');
     fireEvent.press(getByLabelText('What is Instruments'));
     expect(onInfo).toHaveBeenCalledWith('recentVsHistory');
     fireEvent.press(getByLabelText('What is Score mix'));
@@ -722,7 +729,7 @@ describe('My Stats tabs', () => {
     expect(await findByText('Best round')).toBeTruthy();
     // The counts are NET (handicap-adjusted) — ShotsTab's birdie benchmark
     // is gross, so the card must disclose the basis.
-    expect(await findByText(/net \(handicap-adjusted\)/i)).toBeTruthy();
+    expect(await findByText(/birdies, eagles and streaks are gross/i)).toBeTruthy();
   });
 
   test('BreakdownTab tells the story in order: milestones → mastery → mix → patterns', async () => {

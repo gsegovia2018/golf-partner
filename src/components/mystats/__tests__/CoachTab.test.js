@@ -33,9 +33,9 @@ const heroInsight = {
 };
 
 const stats = {
-  metrics: { avgPoints: 30 },
+  metrics: { avgPoints: 30, avgDifferential: 16.4 },
   form: { metrics: [], hasHistory: false },
-  formSeries: { metrics: { avgPoints: [] } },
+  formSeries: { metrics: { avgPoints: [], avgDifferential: [] } },
   coach: {
     hero: heroInsight,
     board: { fixFirst: [heroInsight], keepDoing: [], gettingBetter: [], gettingWorse: [], nextGains: [], watch: [] },
@@ -85,7 +85,9 @@ const formStats = (direction, delta) => ({
     hasHistory: true,
     recentCount: 5,
     historyCount: 12,
-    metrics: [{ key: 'avgPoints', direction, delta }],
+    // The form card reads avgDifferential — points can't carry a trend
+    // across a handicap change. `direction` is already polarity-aware.
+    metrics: [{ key: 'avgDifferential', direction, delta }],
   },
 });
 
@@ -94,13 +96,13 @@ const formCardBg = (r) =>
 
 describe('FormTrendCard status surface', () => {
   test('improving form tints the card with the green wash', () => {
-    const r = render(<CoachTab stats={formStats('up', 2.1)} focus={null} focusVerdict={null} onCommitFocus={jest.fn()} onEndFocus={jest.fn()} />);
+    const r = render(<CoachTab stats={formStats('up', -2.1)} focus={null} focusVerdict={null} onCommitFocus={jest.fn()} onEndFocus={jest.fn()} />);
     expect(r.getByText('Improving lately')).toBeTruthy();
     expect(formCardBg(r)).toBe('#e6f0eb');
   });
 
   test('declining form tints the card with the red wash', () => {
-    const r = render(<CoachTab stats={formStats('down', -1.8)} focus={null} focusVerdict={null} onCommitFocus={jest.fn()} onEndFocus={jest.fn()} />);
+    const r = render(<CoachTab stats={formStats('down', 1.8)} focus={null} focusVerdict={null} onCommitFocus={jest.fn()} onEndFocus={jest.fn()} />);
     expect(r.getByText('Trending down lately')).toBeTruthy();
     expect(formCardBg(r)).toBe('#fbeaec');
   });

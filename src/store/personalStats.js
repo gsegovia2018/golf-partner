@@ -23,6 +23,7 @@ import {
 import { buildCoachInsights } from './coachInsights';
 import { buildStrategyTips } from './coachStrategy';
 import { shotBenchmarkForHandicap } from './shotBenchmarks';
+import { roundDifferential } from './handicapIndex';
 
 // Canonical player id used inside the synthetic tournament.
 export const CANON_ID = 'me';
@@ -49,6 +50,57 @@ export function isFullLengthRound(round) {
 // whole-round average (see computeMetrics).
 export function countsForRoundTotals(round) {
   return isFullLengthRound(round) && !!round?.isComplete;
+}
+
+// ── Handicap-neutral comparison ──
+// Stableford points are NET of the playing handicap the round was scored
+// off, and that handicap is frozen per round (tournamentStore skips played
+// rounds when propagating an index change). That makes a point total an
+// honest record of the day, but a dishonest basis for comparing two days
+// played off different handicaps: the same gross 90 on a par-72 course is
+// 36 points off a course handicap of 18 and 31 points off 13. A player whose
+// index falls from 18 to 13 therefore looks like they are getting WORSE on
+// every points-based trend, and their career-best points total is stuck in
+// whichever era their handicap was highest.
+//
+// Note that "points minus 36" does NOT fix this — expected points is 36 at
+// every handicap, so subtracting it is a constant offset that leaves the
+// delta between two rounds exactly as contaminated as before. Only GROSS
+// measures survive an index change. The WHS score differential is the one
+// used here: it is gross, capped at net double bogey, and normalised by
+// slope and course rating, so it also removes the second confound of
+// comparing rounds played on courses of different difficulty. Lower is
+// better. `avgVsPar` (already in FORM_METRICS) is the cruder gross twin and
+// stays as-is.
+//
+// roundDifferential takes a MyRound; a synthetic round carries everything it
+// needs (holes, scores/playerTees/playerHandicaps rekeyed to CANON_ID,
+// isComplete), so this adapts one to the other. Returns null for any round
+// that does not qualify — incomplete, nine-hole, or missing slope/rating.
+export function syntheticDifferential(syntheticRound, player) {
+  if (!syntheticRound) return null;
+  return roundDifferential({
+    key: syntheticRound.myRoundKey ?? syntheticRound.id ?? null,
+    round: syntheticRound,
+    player,
+    playerId: CANON_ID,
+    isComplete: !!syntheticRound.isComplete,
+    courseName: syntheticRound.courseName,
+    tournamentDate: syntheticRound.tournamentDate ?? null,
+  });
+}
+
+// Mean score differential over every qualifying round of a synthetic
+// tournament, to one decimal — null when no round qualifies (so a slice with
+// no rated 18-hole round shows a gap rather than a fabricated 0).
+export function avgDifferentialOf(synthetic) {
+  const player = (synthetic?.players ?? [])[0];
+  if (!player) return null;
+  const diffs = (synthetic.rounds ?? [])
+    .map((r) => syntheticDifferential(r, player))
+    .filter(Boolean);
+  if (diffs.length === 0) return null;
+  return +(diffs.reduce((s, d) => s + d.differential, 0) / diffs.length).toFixed(2);
 }
 
 // Strokes-gained is reported PER ROUND (SG/round, expected vs actual strokes
@@ -103,6 +155,11 @@ export function buildSyntheticTournament(myRounds) {
       // computeFormSeries) can restrict themselves to fully-scored rounds.
       isComplete: !!mr.isComplete,
       holesPlayed: mr.holesPlayed ?? 0,
+      // Carried through so handicap-neutral aggregates (syntheticDifferential)
+      // and the career board can identify and date a round without needing the
+      // original MyRound alongside the synthetic one.
+      myRoundKey: mr.key ?? null,
+      tournamentDate: mr.tournamentDate ?? null,
     };
   });
   return { id: 'mystats', name: 'My Stats', players: [player], rounds };
@@ -212,10 +269,16 @@ export function computeMetrics(synthetic) {
   const totalPoints = completeHistory.reduce((s, h) => s + h.points, 0);
   return {
     rounds,
+    // avgPoints/bestRoundPoints are NET and so are only comparable between
+    // rounds played off the same handicap — see the handicap-neutral note
+    // above syntheticDifferential. They stay as as-played facts (the Overview
+    // tiles read them) but no longer carry a cross-era trend; avgDifferential
+    // is the metric FORM_METRICS compares on.
     avgPoints: completeHistory.length > 0
       ? div(totalPoints, completeHistory.length)
       : null,
     avgVsPar: vsParRounds > 0 ? div(vsParSum, vsParRounds) : null,
+    avgDifferential: avgDifferentialOf(synthetic),
     bestRoundPoints: completeHistory.length > 0
       ? completeHistory.reduce((m, h) => Math.max(m, h.points), 0)
       : null,
@@ -237,7 +300,10 @@ export function computeMetrics(synthetic) {
 // Each carries a polarity so the UI colors the trend arrow correctly.
 // `shot: true` metrics need shot-tracking data to be meaningful.
 export const FORM_METRICS = [
-  { key: 'avgPoints',          label: 'Points / round',   polarity: 'higher', shot: false },
+  // Points / round used to head this list. It was replaced by the score
+  // differential because a points delta across an index change measures the
+  // index change, not the golf — see the note above syntheticDifferential.
+  { key: 'avgDifferential',    label: 'Score differential', polarity: 'lower', shot: false },
   { key: 'avgVsPar',           label: 'Strokes vs par',   polarity: 'lower',  shot: false },
   { key: 'fairwayPct',         label: 'Fairways hit %',   polarity: 'higher', shot: true },
   { key: 'girPct',             label: 'Greens in reg %',  polarity: 'higher', shot: true },
@@ -621,7 +687,7 @@ function shortDate(iso) {
 export function computeFormSeries(selectedRounds) {
   const rounds = selectedRounds || [];
   const metrics = {
-    avgPoints: [], avgVsPar: [], fairwayPct: [],
+    avgPoints: [], avgDifferential: [], avgVsPar: [], fairwayPct: [],
     girPct: [], puttsPerRound: [], threePuttsPerRound: [],
   };
   const scoreMix = [];
@@ -652,6 +718,10 @@ export function computeFormSeries(selectedRounds) {
     const fullLength = isFullLengthRound(round);
     const roundTotal = countsForRoundTotals(round) && hist;
     metrics.avgPoints.push({ label, value: roundTotal ? hist.points : null });
+    // Gaps out on its own terms rather than on roundTotal's: a differential
+    // needs a complete, rated 18-hole round, which is stricter still.
+    const diff = syntheticDifferential(round, synthetic.players[0]);
+    metrics.avgDifferential.push({ label, value: diff ? diff.differential : null });
     metrics.avgVsPar.push({ label, value: roundTotal ? hist.strokes - parPlayed : null });
     metrics.fairwayPct.push({ label, value: shots.drives.recorded > 0 ? shots.drives.fairwayPct : null });
     metrics.girPct.push({ label, value: shots.gir.eligible > 0 ? shots.gir.pct : null });
@@ -721,8 +791,8 @@ export function computeFormSeries(selectedRounds) {
 // `R{n}` fallback for unnamed rounds) — no second grouping that can
 // silently miss (e.g. courseName '' vs the 'R{n}' display key).
 // trend is the sign of the latest complete round here vs the one before
-// it, and null — not a fake "flat" 0 — when there is no previous round
-// to compare against. A swing smaller than COURSE_TREND_BAND (a single
+// it — on GROSS strokes, so it survives a handicap change — and null, not
+// a fake "flat" 0, when there is no previous round to compare against. A swing smaller than COURSE_TREND_BAND (a single
 // stray stroke on one hole) reads as noise, not a real trend, so it's
 // clamped to 0 ("flat") rather than painting a confident arrow.
 const COURSE_TREND_BAND = 2;
@@ -738,10 +808,15 @@ export function courseMastery(synthetic) {
     // 18 holes down to 9, say) — then there is no one length to label.
     const lengths = new Set(totals.map((e) => e.holesPlayed));
     const holeCount = lengths.size === 1 ? [...lengths][0] : null;
+    // Trend is GROSS strokes, not points: every round in this row is on the
+    // same course, so the par is identical and strokes compare directly —
+    // while a points delta between two rounds played off different handicaps
+    // is mostly the handicap change (see syntheticDifferential). Fewer
+    // strokes is better, hence the negated sign.
     let trend = null;
     if (totals.length >= 2) {
-      const diff = totals[totals.length - 1].points - totals[totals.length - 2].points;
-      trend = Math.abs(diff) < COURSE_TREND_BAND ? 0 : Math.sign(diff);
+      const diff = totals[totals.length - 1].strokes - totals[totals.length - 2].strokes;
+      trend = Math.abs(diff) < COURSE_TREND_BAND ? 0 : -Math.sign(diff);
     }
     return {
       courseKey: c.courseKey,
@@ -772,9 +847,26 @@ export function courseMastery(synthetic) {
 // full-length rounds (countsForRoundTotals), returning null — not a
 // fabricated 0 — when none qualify, matching computeMetrics' convention.
 // "Best round" must not be won or lost on a nine.
+//
+// The per-hole feats are counted GROSS (metric: 'strokes' — no handicap
+// adjustment). Counted net, a "birdie" was any hole where the stroke index
+// handed over a shot, so an SI-1 gross par read as a birdie off an 18
+// handicap and stopped doing so off 13: the career total measured the
+// handicap rather than the golf, and fell as the player improved. Gross is
+// both what a golfer means by "birdie" and stable across an index change.
+// The counts are much smaller as a result — that is the honest number.
+//
+// bestRound stays a NET point total (it is the round that actually won a
+// day), but carries the playing handicap it was scored off and its date so
+// the card can show the era instead of implying the number is comparable
+// with today's. That handicap comes from round.playerHandicaps — the frozen
+// per-round snapshot — not from the player's current index, which
+// propagatePlayerToTournaments rewrites everywhere on every handicap edit.
+// bestDifferential is the handicap-neutral companion: the best round of the
+// career on a basis that CAN be compared across eras.
 export function careerMilestones(synthetic) {
-  const dist = playerScoreDistribution(synthetic, CANON_ID);
-  const streaks = playerStreaks(synthetic, CANON_ID);
+  const dist = playerScoreDistribution(synthetic, CANON_ID, { metric: 'strokes' });
+  const streaks = playerStreaks(synthetic, CANON_ID, { metric: 'strokes' });
   const completeRounds = (synthetic.rounds || []).filter(countsForRoundTotals);
   const completeSynthetic = { ...synthetic, rounds: completeRounds };
   // frontBackSplit already only ever pushes a round whose front AND back
@@ -784,12 +876,47 @@ export function careerMilestones(synthetic) {
   const bestNine = fb
     ? fb.rounds.reduce((m, r) => Math.max(m, r.front, r.back), -Infinity)
     : null;
+
+  const player = (synthetic.players || [])[0] ?? null;
+  const history = playerRoundHistory(synthetic, CANON_ID);
+  let best = null;
+  history.forEach((h) => {
+    const round = synthetic.rounds[h.roundIndex];
+    if (!countsForRoundTotals(round)) return;
+    if (best && h.points <= best.points) return;
+    best = {
+      points: h.points,
+      handicap: player ? getPlayingHandicap(round, player) : null,
+      courseName: round.courseName ?? null,
+      date: round.tournamentDate ?? null,
+    };
+  });
+
+  let bestDiff = null;
+  (synthetic.rounds || []).forEach((round) => {
+    const d = player ? syntheticDifferential(round, player) : null;
+    if (!d) return;
+    if (!bestDiff || d.differential < bestDiff.differential) {
+      bestDiff = {
+        differential: d.differential,
+        courseName: d.courseName ?? null,
+        date: d.date ?? null,
+      };
+    }
+  });
+
   return {
     birdies: dist.birdies,
     eagles: dist.eagles,
     longestParStreak: streaks.bestParStreak,
     bestNine: bestNine === -Infinity ? null : bestNine,
-    bestRound: computeMetrics(synthetic).bestRoundPoints,
+    bestRound: best ? best.points : null,
+    bestRoundHandicap: best ? best.handicap : null,
+    bestRoundCourse: best ? best.courseName : null,
+    bestRoundDate: best ? best.date : null,
+    bestDifferential: bestDiff ? bestDiff.differential : null,
+    bestDifferentialCourse: bestDiff ? bestDiff.courseName : null,
+    bestDifferentialDate: bestDiff ? bestDiff.date : null,
   };
 }
 

@@ -16,7 +16,8 @@ const fmtNum = (v) => `${v}`;
 const orDash = (fmt) => (v) => (v == null ? '—' : fmt(v));
 
 // Per-metric formatting + explainer key + chart colour token for the
-// Instruments rows, keyed by FORM_METRICS key. avgPoints lives in the hero.
+// Instruments rows, keyed by FORM_METRICS key. avgDifferential lives in the
+// hero, so it has no entry here.
 // `drop` connects the sparkline over null rounds (round-total metrics);
 // shot metrics keep their gaps — a gap there means "not tracked that round".
 const META = {

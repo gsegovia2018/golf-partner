@@ -68,18 +68,21 @@ function TargetBenchmarkRow({ targetHandicap, onChangeTarget }) {
 function FormTrendCard({ form = {}, formSeries = {}, metrics = {} }) {
   const { theme } = useTheme();
   const s = useMemo(() => makeStyles(theme), [theme]);
-  const pointsMetric = form.metrics?.find((metric) => metric.key === 'avgPoints');
-  const direction = pointsMetric?.direction ?? 'flat';
+  // Score differential, not points per round: points are net of the handicap
+  // each round was played off, so a falling index makes identical golf read
+  // as a decline. See the note above syntheticDifferential in personalStats.
+  const diffMetric = form.metrics?.find((metric) => metric.key === 'avgDifferential');
+  const direction = diffMetric?.direction ?? 'flat';
   const tone = direction === 'up' ? 'good' : direction === 'down' ? 'bad' : 'neutral';
   const color = toneColor(theme, tone);
-  const series = formSeries.metrics?.avgPoints ?? [];
-  const delta = pointsMetric?.delta;
+  const series = formSeries.metrics?.avgDifferential ?? [];
+  const delta = diffMetric?.delta;
   const title = direction === 'up' ? 'Improving lately'
     : direction === 'down' ? 'Trending down lately'
       : 'Holding steady';
   const value = delta == null
-    ? `${metrics.avgPoints ?? '-'} pts / round`
-    : `${delta > 0 ? '+' : ''}${delta} pts / round`;
+    ? `${metrics.avgDifferential ?? '-'} diff`
+    : `${delta > 0 ? '+' : ''}${delta} diff`;
   const meta = form.hasHistory
     ? `Recent ${form.recentCount ?? 0} vs previous ${form.historyCount ?? 0} rounds`
     : 'Select more rounds to compare recent form.';
@@ -107,7 +110,7 @@ function FormTrendCard({ form = {}, formSeries = {}, metrics = {} }) {
         labelColor={theme.text.secondary}
         variant="compact"
         dropGaps
-        caption="Points per round"
+        caption="Score differential"
       />
     </SectionCard>
   );

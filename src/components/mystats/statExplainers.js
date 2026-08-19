@@ -50,7 +50,21 @@ export const statExplainers = {
   pointsPerRound: {
     title: 'Points per round',
     subtitle: 'Total Stableford points each round',
-    explainer: 'Net Stableford points for every selected round, oldest to newest. Higher is better.',
+    explainer: 'Net Stableford points for every selected round, oldest to newest. Higher is better. '
+      + 'Points are net of the handicap you played off that day, so they record what you scored '
+      + 'but are not comparable between rounds played off different handicaps — the same golf is '
+      + 'worth fewer points as your handicap falls. Score differential is the figure to compare on.',
+  },
+  scoreDifferential: {
+    title: 'Score differential',
+    subtitle: 'How each round rates, independent of your handicap',
+    explainer: 'The World Handicap System measure of a round: your gross score (each hole capped '
+      + 'at net double bogey), adjusted for the slope and course rating of the tee you played. '
+      + 'Lower is better. Because it is gross, it does not move when your handicap does — so it '
+      + 'is the one figure here that compares a round today with a round from two years ago. It '
+      + 'also levels out course difficulty, so a good day on a hard course is not punished. '
+      + 'Rounds without a slope and course rating, and nine-hole rounds, have no differential and '
+      + 'leave a gap.',
   },
   strokesVsPar: {
     title: 'Strokes vs par',
@@ -266,17 +280,23 @@ export const statExplainers = {
       + 'played — only fully-scored rounds count, so an early-finished game never drags '
       + 'a course average down. Rounds are grouped by the course itself, so renaming a '
       + 'course label keeps its history together. Trend compares your latest complete '
-      + 'round there with the one before it; a course you\'ve only completed once shows '
+      + 'round there with the one before it on GROSS strokes — every round in a row is on '
+      + 'the same course, so strokes compare directly and the arrow does not flip just '
+      + 'because your handicap changed. A course you\'ve only completed once shows '
       + 'no trend yet.',
   },
   careerMilestones: {
     title: 'Career Milestones',
     subtitle: 'Your best feats across every selected round',
-    explainer: 'All counts are net (handicap-adjusted) Stableford results — the Strokes '
-      + 'Gained tab\'s scoring mix counts gross, so the two can legitimately differ. '
-      + 'Birdies, eagles, and your longest streak of par-or-better holes count every '
-      + 'scored hole, including holes from an early-finished round. Best nine and best round '
-      + 'only look at fully-scored rounds, so a partial game can never claim a personal best.',
+    explainer: 'Birdies, eagles, and your longest streak of par-or-better holes are GROSS — real '
+      + 'strokes against par, with no handicap shots added. Counted net, an ordinary par on a '
+      + 'stroke-index-1 hole would be a "birdie" off a high handicap and stop being one as you '
+      + 'improved, so the total tracked your handicap instead of your golf. Gross counts are much '
+      + 'smaller, and they hold their meaning for life. They see every scored hole, including '
+      + 'holes from an early-finished round. Best nine and best round are net Stableford totals '
+      + 'from fully-scored rounds only, shown with the handicap they were scored off — a partial '
+      + 'game can never claim a personal best. Best differential is the handicap-free version of '
+      + 'best round, and the one that compares fairly across the years.',
   },
 
   // ── Course drill-down screen (CourseStatsScreen) ──

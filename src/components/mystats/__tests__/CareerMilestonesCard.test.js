@@ -23,8 +23,12 @@ jest.mock('react-native-reanimated', () => {
 
 const wrap = (ui) => <ThemeProvider>{ui}</ThemeProvider>;
 
+// birdies/eagles/streak are GROSS counts now, so the realistic figures are
+// small. bestRoundHandicap is the frozen playing handicap that round was
+// scored off — it labels the era the 38 belongs to.
 const milestones = {
-  birdies: 12, eagles: 0, longestParStreak: 7, bestNine: 21, bestRound: 38,
+  birdies: 6, eagles: 0, longestParStreak: 3, bestNine: 21, bestRound: 38,
+  bestRoundHandicap: 20, bestDifferential: 14.2,
 };
 
 beforeEach(() => {
@@ -38,18 +42,43 @@ describe('CareerMilestonesCard', () => {
       <CareerMilestonesCard milestones={milestones} onInfo={() => {}} />
     ));
 
-    expect(getByText('12')).toBeTruthy();
+    expect(getByText('6')).toBeTruthy();
     expect(getByText('0')).toBeTruthy();
-    expect(getByText('7')).toBeTruthy();
+    expect(getByText('3')).toBeTruthy();
     expect(getByText('21')).toBeTruthy();
+    expect(getByText('14.2')).toBeTruthy();
     expect(getByText('38')).toBeTruthy();
     expect(getByText('Birdies')).toBeTruthy();
     expect(getByText('Eagles')).toBeTruthy();
     expect(getByText('Best par streak')).toBeTruthy();
     expect(getByText('Best nine')).toBeTruthy();
+    expect(getByText('Best differential')).toBeTruthy();
     expect(getByText('Best round')).toBeTruthy();
-    // Net/gross basis disclosure lives on the board as a footnote.
-    expect(getByText(/net \(handicap-adjusted\)/i)).toBeTruthy();
+    // Gross/net basis disclosure lives on the board as a footnote.
+    expect(getByText(/birdies, eagles and streaks are gross/i)).toBeTruthy();
+  });
+
+  test('best round carries the handicap it was scored off, so its era is legible', () => {
+    mockReducedMotion = true;
+    const { getByTestId, getByLabelText } = render(wrap(
+      <CareerMilestonesCard milestones={milestones} onInfo={() => {}} />
+    ));
+
+    expect(getByTestId('milestone-best-round-note').props.children).toBe('off 20');
+    expect(getByLabelText('Best round: 38 pts off 20')).toBeTruthy();
+  });
+
+  test('no note when the best round has no recorded handicap', () => {
+    mockReducedMotion = true;
+    const { queryByTestId, getByLabelText } = render(wrap(
+      <CareerMilestonesCard
+        milestones={{ ...milestones, bestRoundHandicap: null }}
+        onInfo={() => {}}
+      />
+    ));
+
+    expect(queryByTestId('milestone-best-round-note')).toBeNull();
+    expect(getByLabelText('Best round: 38 pts')).toBeTruthy();
   });
 
   test('count-up reaches final values; accessibility labels carry them from the start', async () => {
@@ -59,10 +88,10 @@ describe('CareerMilestonesCard', () => {
 
     // Labels never animate, so screen readers get the real number even
     // while the visible text is still counting.
-    expect(getByLabelText('Birdies: 12')).toBeTruthy();
-    expect(getByLabelText('Best round: 38 pts')).toBeTruthy();
+    expect(getByLabelText('Birdies: 6')).toBeTruthy();
+    expect(getByLabelText('Best round: 38 pts off 20')).toBeTruthy();
 
-    await waitFor(() => expect(getByText('12')).toBeTruthy(), { timeout: 3000 });
+    await waitFor(() => expect(getByText('6')).toBeTruthy(), { timeout: 3000 });
     await waitFor(() => expect(getByText('38')).toBeTruthy(), { timeout: 3000 });
   });
 
@@ -93,13 +122,18 @@ describe('CareerMilestonesCard', () => {
     mockReducedMotion = true;
     const { getAllByText, getByLabelText } = render(wrap(
       <CareerMilestonesCard
-        milestones={{ birdies: 3, eagles: 0, longestParStreak: 2, bestNine: null, bestRound: null }}
+        milestones={{
+          birdies: 3, eagles: 0, longestParStreak: 2,
+          bestNine: null, bestRound: null, bestDifferential: null,
+        }}
         onInfo={() => {}}
       />
     ));
 
-    expect(getAllByText('-')).toHaveLength(2);
+    // Best nine, best differential and best round all dash out together.
+    expect(getAllByText('-')).toHaveLength(3);
     expect(getByLabelText('Best nine: no complete round yet')).toBeTruthy();
+    expect(getByLabelText('Best differential: no complete round yet')).toBeTruthy();
     expect(getByLabelText('Best round: no complete round yet')).toBeTruthy();
   });
 
