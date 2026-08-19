@@ -1,0 +1,2169 @@
+{
+ "club": {
+  "name": "Golfpark Waldkirch",
+  "city": "Waldkirch",
+  "province": "St. Gallen"
+ },
+ "courses": [
+  {
+   "name": "Golfpark Waldkirch — Schwarz",
+   "layoutName": "Schwarz",
+   "holeCount": 18,
+   "holes": [
+    {
+     "number": 1,
+     "par": 4,
+     "strokeIndex": 7
+    },
+    {
+     "number": 2,
+     "par": 4,
+     "strokeIndex": 9
+    },
+    {
+     "number": 3,
+     "par": 3,
+     "strokeIndex": 11
+    },
+    {
+     "number": 4,
+     "par": 5,
+     "strokeIndex": 3
+    },
+    {
+     "number": 5,
+     "par": 3,
+     "strokeIndex": 15
+    },
+    {
+     "number": 6,
+     "par": 4,
+     "strokeIndex": 5
+    },
+    {
+     "number": 7,
+     "par": 5,
+     "strokeIndex": 13
+    },
+    {
+     "number": 8,
+     "par": 4,
+     "strokeIndex": 1
+    },
+    {
+     "number": 9,
+     "par": 3,
+     "strokeIndex": 17
+    },
+    {
+     "number": 10,
+     "par": 4,
+     "strokeIndex": 2
+    },
+    {
+     "number": 11,
+     "par": 3,
+     "strokeIndex": 18
+    },
+    {
+     "number": 12,
+     "par": 5,
+     "strokeIndex": 8
+    },
+    {
+     "number": 13,
+     "par": 5,
+     "strokeIndex": 6
+    },
+    {
+     "number": 14,
+     "par": 3,
+     "strokeIndex": 16
+    },
+    {
+     "number": 15,
+     "par": 4,
+     "strokeIndex": 4
+    },
+    {
+     "number": 16,
+     "par": 4,
+     "strokeIndex": 14
+    },
+    {
+     "number": 17,
+     "par": 3,
+     "strokeIndex": 10
+    },
+    {
+     "number": 18,
+     "par": 4,
+     "strokeIndex": 12
+    }
+   ],
+   "tees": [
+    {
+     "label": "56",
+     "rating": 70.4,
+     "slope": 135,
+     "ratingWomen": 76.5,
+     "slopeWomen": 136,
+     "yardages": {
+      "1": 358,
+      "2": 327,
+      "3": 182,
+      "4": 443,
+      "5": 173,
+      "6": 367,
+      "7": 462,
+      "8": 340,
+      "9": 140,
+      "10": 343,
+      "11": 126,
+      "12": 461,
+      "13": 451,
+      "14": 192,
+      "15": 372,
+      "16": 350,
+      "17": 169,
+      "18": 348
+     }
+    },
+    {
+     "label": "53",
+     "rating": 69.5,
+     "slope": 131,
+     "ratingWomen": 74.9,
+     "slopeWomen": 133,
+     "yardages": {
+      "1": 338,
+      "2": 327,
+      "3": 161,
+      "4": 424,
+      "5": 153,
+      "6": 351,
+      "7": 422,
+      "8": 330,
+      "9": 140,
+      "10": 334,
+      "11": 126,
+      "12": 439,
+      "13": 414,
+      "14": 164,
+      "15": 357,
+      "16": 350,
+      "17": 159,
+      "18": 334
+     }
+    },
+    {
+     "label": "49",
+     "rating": 67.5,
+     "slope": 127,
+     "ratingWomen": 72.5,
+     "slopeWomen": 130,
+     "yardages": {
+      "1": 315,
+      "2": 307,
+      "3": 141,
+      "4": 372,
+      "5": 140,
+      "6": 321,
+      "7": 407,
+      "8": 308,
+      "9": 120,
+      "10": 303,
+      "11": 113,
+      "12": 419,
+      "13": 385,
+      "14": 143,
+      "15": 341,
+      "16": 340,
+      "17": 139,
+      "18": 305
+     }
+    },
+    {
+     "label": "47",
+     "rating": 66.5,
+     "slope": 129,
+     "ratingWomen": 70.7,
+     "slopeWomen": 127,
+     "yardages": {
+      "1": 296,
+      "2": 307,
+      "3": 131,
+      "4": 364,
+      "5": 127,
+      "6": 312,
+      "7": 383,
+      "8": 298,
+      "9": 120,
+      "10": 282,
+      "11": 113,
+      "12": 385,
+      "13": 365,
+      "14": 131,
+      "15": 323,
+      "16": 340,
+      "17": 134,
+      "18": 295
+     }
+    }
+   ]
+  },
+  {
+   "name": "Golfpark Waldkirch — Orange",
+   "layoutName": "Orange",
+   "holeCount": 18,
+   "holes": [
+    {
+     "number": 1,
+     "par": 4,
+     "strokeIndex": 9
+    },
+    {
+     "number": 2,
+     "par": 5,
+     "strokeIndex": 7
+    },
+    {
+     "number": 3,
+     "par": 5,
+     "strokeIndex": 15
+    },
+    {
+     "number": 4,
+     "par": 4,
+     "strokeIndex": 13
+    },
+    {
+     "number": 5,
+     "par": 4,
+     "strokeIndex": 3
+    },
+    {
+     "number": 6,
+     "par": 3,
+     "strokeIndex": 11
+    },
+    {
+     "number": 7,
+     "par": 5,
+     "strokeIndex": 5
+    },
+    {
+     "number": 8,
+     "par": 3,
+     "strokeIndex": 17
+    },
+    {
+     "number": 9,
+     "par": 4,
+     "strokeIndex": 1
+    },
+    {
+     "number": 10,
+     "par": 4,
+     "strokeIndex": 6
+    },
+    {
+     "number": 11,
+     "par": 4,
+     "strokeIndex": 4
+    },
+    {
+     "number": 12,
+     "par": 4,
+     "strokeIndex": 10
+    },
+    {
+     "number": 13,
+     "par": 4,
+     "strokeIndex": 14
+    },
+    {
+     "number": 14,
+     "par": 3,
+     "strokeIndex": 16
+    },
+    {
+     "number": 15,
+     "par": 4,
+     "strokeIndex": 2
+    },
+    {
+     "number": 16,
+     "par": 3,
+     "strokeIndex": 8
+    },
+    {
+     "number": 17,
+     "par": 5,
+     "strokeIndex": 12
+    },
+    {
+     "number": 18,
+     "par": 3,
+     "strokeIndex": 18
+    }
+   ],
+   "tees": [
+    {
+     "label": "58",
+     "rating": 71.1,
+     "slope": 128,
+     "ratingWomen": 77.1,
+     "slopeWomen": 138,
+     "yardages": {
+      "1": 335,
+      "2": 494,
+      "3": 448,
+      "4": 342,
+      "5": 393,
+      "6": 173,
+      "7": 513,
+      "8": 152,
+      "9": 358,
+      "10": 338,
+      "11": 311,
+      "12": 321,
+      "13": 310,
+      "14": 182,
+      "15": 365,
+      "16": 180,
+      "17": 481,
+      "18": 139
+     }
+    },
+    {
+     "label": "56",
+     "rating": 70.0,
+     "slope": 128,
+     "ratingWomen": 75.6,
+     "slopeWomen": 134,
+     "yardages": {
+      "1": 315,
+      "2": 478,
+      "3": 431,
+      "4": 330,
+      "5": 381,
+      "6": 162,
+      "7": 501,
+      "8": 152,
+      "9": 338,
+      "10": 327,
+      "11": 302,
+      "12": 311,
+      "13": 305,
+      "14": 162,
+      "15": 347,
+      "16": 152,
+      "17": 450,
+      "18": 139
+     }
+    },
+    {
+     "label": "52",
+     "rating": 67.8,
+     "slope": 125,
+     "ratingWomen": 73.1,
+     "slopeWomen": 129,
+     "yardages": {
+      "1": 295,
+      "2": 450,
+      "3": 405,
+      "4": 304,
+      "5": 348,
+      "6": 145,
+      "7": 458,
+      "8": 136,
+      "9": 327,
+      "10": 298,
+      "11": 282,
+      "12": 293,
+      "13": 292,
+      "14": 142,
+      "15": 327,
+      "16": 137,
+      "17": 424,
+      "18": 120
+     }
+    },
+    {
+     "label": "50",
+     "rating": 66.7,
+     "slope": 123,
+     "ratingWomen": 71.8,
+     "slopeWomen": 127,
+     "yardages": {
+      "1": 285,
+      "2": 429,
+      "3": 393,
+      "4": 292,
+      "5": 336,
+      "6": 135,
+      "7": 446,
+      "8": 136,
+      "9": 304,
+      "10": 286,
+      "11": 272,
+      "12": 286,
+      "13": 287,
+      "14": 122,
+      "15": 307,
+      "16": 137,
+      "17": 384,
+      "18": 120
+     }
+    }
+   ]
+  },
+  {
+   "name": "Golfpark Waldkirch — Blau-Rot",
+   "layoutName": "Blau-Rot",
+   "holeCount": 18,
+   "holes": [
+    {
+     "number": 1,
+     "par": 5,
+     "strokeIndex": 5
+    },
+    {
+     "number": 2,
+     "par": 3,
+     "strokeIndex": 15
+    },
+    {
+     "number": 3,
+     "par": 4,
+     "strokeIndex": 3
+    },
+    {
+     "number": 4,
+     "par": 4,
+     "strokeIndex": 13
+    },
+    {
+     "number": 5,
+     "par": 3,
+     "strokeIndex": 9
+    },
+    {
+     "number": 6,
+     "par": 4,
+     "strokeIndex": 11
+    },
+    {
+     "number": 7,
+     "par": 4,
+     "strokeIndex": 1
+    },
+    {
+     "number": 8,
+     "par": 3,
+     "strokeIndex": 17
+    },
+    {
+     "number": 9,
+     "par": 5,
+     "strokeIndex": 7
+    },
+    {
+     "number": 10,
+     "par": 4,
+     "strokeIndex": 6
+    },
+    {
+     "number": 11,
+     "par": 5,
+     "strokeIndex": 4
+    },
+    {
+     "number": 12,
+     "par": 4,
+     "strokeIndex": 10
+    },
+    {
+     "number": 13,
+     "par": 4,
+     "strokeIndex": 14
+    },
+    {
+     "number": 14,
+     "par": 3,
+     "strokeIndex": 16
+    },
+    {
+     "number": 15,
+     "par": 4,
+     "strokeIndex": 2
+    },
+    {
+     "number": 16,
+     "par": 3,
+     "strokeIndex": 8
+    },
+    {
+     "number": 17,
+     "par": 5,
+     "strokeIndex": 12
+    },
+    {
+     "number": 18,
+     "par": 3,
+     "strokeIndex": 18
+    }
+   ],
+   "tees": [
+    {
+     "label": "B28-R28",
+     "rating": 70.3,
+     "slope": 129,
+     "ratingWomen": 76.2,
+     "slopeWomen": 139,
+     "yardages": {
+      "1": 451,
+      "2": 192,
+      "3": 372,
+      "4": 350,
+      "5": 169,
+      "6": 348,
+      "7": 343,
+      "8": 126,
+      "9": 461,
+      "10": 335,
+      "11": 494,
+      "12": 321,
+      "13": 310,
+      "14": 182,
+      "15": 365,
+      "16": 180,
+      "17": 481,
+      "18": 139
+     }
+    },
+    {
+     "label": "B27-R27",
+     "rating": 68.6,
+     "slope": 127,
+     "ratingWomen": 74.4,
+     "slopeWomen": 135,
+     "yardages": {
+      "1": 414,
+      "2": 164,
+      "3": 357,
+      "4": 350,
+      "5": 159,
+      "6": 334,
+      "7": 334,
+      "8": 126,
+      "9": 439,
+      "10": 315,
+      "11": 478,
+      "12": 311,
+      "13": 305,
+      "14": 162,
+      "15": 347,
+      "16": 152,
+      "17": 450,
+      "18": 139
+     }
+    },
+    {
+     "label": "B25-R25",
+     "rating": 66.7,
+     "slope": 125,
+     "ratingWomen": 72.2,
+     "slopeWomen": 130,
+     "yardages": {
+      "1": 385,
+      "2": 143,
+      "3": 341,
+      "4": 340,
+      "5": 139,
+      "6": 305,
+      "7": 303,
+      "8": 113,
+      "9": 419,
+      "10": 295,
+      "11": 450,
+      "12": 293,
+      "13": 292,
+      "14": 142,
+      "15": 327,
+      "16": 137,
+      "17": 424,
+      "18": 120
+     }
+    },
+    {
+     "label": "B24-R24",
+     "rating": 65.6,
+     "slope": 122,
+     "ratingWomen": 71.2,
+     "slopeWomen": 129,
+     "yardages": {
+      "1": 365,
+      "2": 131,
+      "3": 323,
+      "4": 340,
+      "5": 134,
+      "6": 295,
+      "7": 282,
+      "8": 113,
+      "9": 385,
+      "10": 285,
+      "11": 429,
+      "12": 286,
+      "13": 287,
+      "14": 122,
+      "15": 307,
+      "16": 137,
+      "17": 384,
+      "18": 120
+     }
+    }
+   ]
+  },
+  {
+   "name": "Golfpark Waldkirch — Blau-Grün",
+   "layoutName": "Blau-Grün",
+   "holeCount": 18,
+   "holes": [
+    {
+     "number": 1,
+     "par": 4,
+     "strokeIndex": 5
+    },
+    {
+     "number": 2,
+     "par": 5,
+     "strokeIndex": 3
+    },
+    {
+     "number": 3,
+     "par": 4,
+     "strokeIndex": 9
+    },
+    {
+     "number": 4,
+     "par": 4,
+     "strokeIndex": 13
+    },
+    {
+     "number": 5,
+     "par": 3,
+     "strokeIndex": 15
+    },
+    {
+     "number": 6,
+     "par": 4,
+     "strokeIndex": 1
+    },
+    {
+     "number": 7,
+     "par": 3,
+     "strokeIndex": 7
+    },
+    {
+     "number": 8,
+     "par": 5,
+     "strokeIndex": 11
+    },
+    {
+     "number": 9,
+     "par": 3,
+     "strokeIndex": 17
+    },
+    {
+     "number": 10,
+     "par": 4,
+     "strokeIndex": 8
+    },
+    {
+     "number": 11,
+     "par": 4,
+     "strokeIndex": 10
+    },
+    {
+     "number": 12,
+     "par": 3,
+     "strokeIndex": 12
+    },
+    {
+     "number": 13,
+     "par": 5,
+     "strokeIndex": 4
+    },
+    {
+     "number": 14,
+     "par": 3,
+     "strokeIndex": 16
+    },
+    {
+     "number": 15,
+     "par": 4,
+     "strokeIndex": 6
+    },
+    {
+     "number": 16,
+     "par": 5,
+     "strokeIndex": 14
+    },
+    {
+     "number": 17,
+     "par": 4,
+     "strokeIndex": 2
+    },
+    {
+     "number": 18,
+     "par": 3,
+     "strokeIndex": 18
+    }
+   ],
+   "tees": [
+    {
+     "label": "B28-Gr28",
+     "rating": 70.4,
+     "slope": 130,
+     "ratingWomen": 76.5,
+     "slopeWomen": 137,
+     "yardages": {
+      "1": 335,
+      "2": 494,
+      "3": 321,
+      "4": 310,
+      "5": 182,
+      "6": 365,
+      "7": 180,
+      "8": 481,
+      "9": 139,
+      "10": 358,
+      "11": 327,
+      "12": 182,
+      "13": 443,
+      "14": 173,
+      "15": 367,
+      "16": 462,
+      "17": 340,
+      "18": 140
+     }
+    },
+    {
+     "label": "B27-Gr26",
+     "rating": 69.2,
+     "slope": 125,
+     "ratingWomen": 74.8,
+     "slopeWomen": 133,
+     "yardages": {
+      "1": 315,
+      "2": 478,
+      "3": 311,
+      "4": 305,
+      "5": 162,
+      "6": 347,
+      "7": 152,
+      "8": 450,
+      "9": 139,
+      "10": 338,
+      "11": 327,
+      "12": 161,
+      "13": 424,
+      "14": 153,
+      "15": 351,
+      "16": 422,
+      "17": 330,
+      "18": 140
+     }
+    },
+    {
+     "label": "B25-Gr24",
+     "rating": 67.2,
+     "slope": 122,
+     "ratingWomen": 72.4,
+     "slopeWomen": 129,
+     "yardages": {
+      "1": 295,
+      "2": 450,
+      "3": 293,
+      "4": 292,
+      "5": 142,
+      "6": 327,
+      "7": 137,
+      "8": 424,
+      "9": 120,
+      "10": 315,
+      "11": 307,
+      "12": 141,
+      "13": 372,
+      "14": 140,
+      "15": 321,
+      "16": 407,
+      "17": 308,
+      "18": 120
+     }
+    },
+    {
+     "label": "B24-Gr23",
+     "rating": 66.1,
+     "slope": 120,
+     "ratingWomen": 70.3,
+     "slopeWomen": 124,
+     "yardages": {
+      "1": 285,
+      "2": 429,
+      "3": 286,
+      "4": 287,
+      "5": 122,
+      "6": 307,
+      "7": 137,
+      "8": 384,
+      "9": 120,
+      "10": 296,
+      "11": 307,
+      "12": 131,
+      "13": 364,
+      "14": 127,
+      "15": 312,
+      "16": 383,
+      "17": 298,
+      "18": 120
+     }
+    }
+   ]
+  },
+  {
+   "name": "Golfpark Waldkirch — Blau-Gelb",
+   "layoutName": "Blau-Gelb",
+   "holeCount": 18,
+   "holes": [
+    {
+     "number": 1,
+     "par": 4,
+     "strokeIndex": 13
+    },
+    {
+     "number": 2,
+     "par": 4,
+     "strokeIndex": 3
+    },
+    {
+     "number": 3,
+     "par": 3,
+     "strokeIndex": 11
+    },
+    {
+     "number": 4,
+     "par": 5,
+     "strokeIndex": 5
+    },
+    {
+     "number": 5,
+     "par": 3,
+     "strokeIndex": 17
+    },
+    {
+     "number": 6,
+     "par": 4,
+     "strokeIndex": 1
+    },
+    {
+     "number": 7,
+     "par": 4,
+     "strokeIndex": 9
+    },
+    {
+     "number": 8,
+     "par": 4,
+     "strokeIndex": 7
+    },
+    {
+     "number": 9,
+     "par": 5,
+     "strokeIndex": 15
+    },
+    {
+     "number": 10,
+     "par": 4,
+     "strokeIndex": 6
+    },
+    {
+     "number": 11,
+     "par": 5,
+     "strokeIndex": 4
+    },
+    {
+     "number": 12,
+     "par": 4,
+     "strokeIndex": 10
+    },
+    {
+     "number": 13,
+     "par": 4,
+     "strokeIndex": 14
+    },
+    {
+     "number": 14,
+     "par": 3,
+     "strokeIndex": 16
+    },
+    {
+     "number": 15,
+     "par": 4,
+     "strokeIndex": 2
+    },
+    {
+     "number": 16,
+     "par": 3,
+     "strokeIndex": 8
+    },
+    {
+     "number": 17,
+     "par": 5,
+     "strokeIndex": 12
+    },
+    {
+     "number": 18,
+     "par": 3,
+     "strokeIndex": 18
+    }
+   ],
+   "tees": [
+    {
+     "label": "B28-G30",
+     "rating": 71.1,
+     "slope": 128,
+     "ratingWomen": 77.1,
+     "slopeWomen": 138,
+     "yardages": {
+      "1": 342,
+      "2": 393,
+      "3": 173,
+      "4": 513,
+      "5": 152,
+      "6": 358,
+      "7": 338,
+      "8": 311,
+      "9": 448,
+      "10": 335,
+      "11": 494,
+      "12": 321,
+      "13": 310,
+      "14": 182,
+      "15": 365,
+      "16": 180,
+      "17": 481,
+      "18": 139
+     }
+    },
+    {
+     "label": "B27-G29",
+     "rating": 70.0,
+     "slope": 128,
+     "ratingWomen": 75.6,
+     "slopeWomen": 135,
+     "yardages": {
+      "1": 330,
+      "2": 381,
+      "3": 162,
+      "4": 501,
+      "5": 152,
+      "6": 338,
+      "7": 327,
+      "8": 302,
+      "9": 431,
+      "10": 315,
+      "11": 478,
+      "12": 311,
+      "13": 305,
+      "14": 162,
+      "15": 347,
+      "16": 152,
+      "17": 450,
+      "18": 139
+     }
+    },
+    {
+     "label": "B25-G27",
+     "rating": 67.8,
+     "slope": 124,
+     "ratingWomen": 73.1,
+     "slopeWomen": 129,
+     "yardages": {
+      "1": 304,
+      "2": 348,
+      "3": 145,
+      "4": 458,
+      "5": 136,
+      "6": 327,
+      "7": 298,
+      "8": 282,
+      "9": 405,
+      "10": 295,
+      "11": 450,
+      "12": 293,
+      "13": 292,
+      "14": 142,
+      "15": 327,
+      "16": 137,
+      "17": 424,
+      "18": 120
+     }
+    },
+    {
+     "label": "B24-G26",
+     "rating": 66.7,
+     "slope": 122,
+     "ratingWomen": 71.8,
+     "slopeWomen": 127,
+     "yardages": {
+      "1": 292,
+      "2": 336,
+      "3": 135,
+      "4": 446,
+      "5": 136,
+      "6": 304,
+      "7": 286,
+      "8": 272,
+      "9": 393,
+      "10": 285,
+      "11": 429,
+      "12": 286,
+      "13": 287,
+      "14": 122,
+      "15": 307,
+      "16": 137,
+      "17": 384,
+      "18": 120
+     }
+    }
+   ]
+  },
+  {
+   "name": "Golfpark Waldkirch — Rot-Grün",
+   "layoutName": "Rot-Grün",
+   "holeCount": 18,
+   "holes": [
+    {
+     "number": 1,
+     "par": 5,
+     "strokeIndex": 5
+    },
+    {
+     "number": 2,
+     "par": 3,
+     "strokeIndex": 15
+    },
+    {
+     "number": 3,
+     "par": 4,
+     "strokeIndex": 3
+    },
+    {
+     "number": 4,
+     "par": 4,
+     "strokeIndex": 13
+    },
+    {
+     "number": 5,
+     "par": 3,
+     "strokeIndex": 9
+    },
+    {
+     "number": 6,
+     "par": 4,
+     "strokeIndex": 11
+    },
+    {
+     "number": 7,
+     "par": 4,
+     "strokeIndex": 1
+    },
+    {
+     "number": 8,
+     "par": 3,
+     "strokeIndex": 17
+    },
+    {
+     "number": 9,
+     "par": 5,
+     "strokeIndex": 7
+    },
+    {
+     "number": 10,
+     "par": 4,
+     "strokeIndex": 8
+    },
+    {
+     "number": 11,
+     "par": 4,
+     "strokeIndex": 10
+    },
+    {
+     "number": 12,
+     "par": 3,
+     "strokeIndex": 12
+    },
+    {
+     "number": 13,
+     "par": 5,
+     "strokeIndex": 4
+    },
+    {
+     "number": 14,
+     "par": 3,
+     "strokeIndex": 16
+    },
+    {
+     "number": 15,
+     "par": 4,
+     "strokeIndex": 6
+    },
+    {
+     "number": 16,
+     "par": 5,
+     "strokeIndex": 14
+    },
+    {
+     "number": 17,
+     "par": 4,
+     "strokeIndex": 2
+    },
+    {
+     "number": 18,
+     "par": 3,
+     "strokeIndex": 18
+    }
+   ],
+   "tees": [
+    {
+     "label": "R28-Gr28",
+     "rating": 70.5,
+     "slope": 132,
+     "ratingWomen": 76.7,
+     "slopeWomen": 139,
+     "yardages": {
+      "1": 451,
+      "2": 192,
+      "3": 372,
+      "4": 350,
+      "5": 169,
+      "6": 348,
+      "7": 343,
+      "8": 126,
+      "9": 461,
+      "10": 358,
+      "11": 327,
+      "12": 182,
+      "13": 443,
+      "14": 173,
+      "15": 367,
+      "16": 462,
+      "17": 340,
+      "18": 140
+     }
+    },
+    {
+     "label": "R27-Gr26",
+     "rating": 69.2,
+     "slope": 129,
+     "ratingWomen": 75.0,
+     "slopeWomen": 135,
+     "yardages": {
+      "1": 414,
+      "2": 164,
+      "3": 357,
+      "4": 350,
+      "5": 159,
+      "6": 334,
+      "7": 334,
+      "8": 126,
+      "9": 439,
+      "10": 338,
+      "11": 327,
+      "12": 161,
+      "13": 424,
+      "14": 153,
+      "15": 351,
+      "16": 422,
+      "17": 330,
+      "18": 140
+     }
+    },
+    {
+     "label": "R25-Gr24",
+     "rating": 67.3,
+     "slope": 126,
+     "ratingWomen": 72.6,
+     "slopeWomen": 131,
+     "yardages": {
+      "1": 385,
+      "2": 143,
+      "3": 341,
+      "4": 340,
+      "5": 139,
+      "6": 305,
+      "7": 303,
+      "8": 113,
+      "9": 419,
+      "10": 315,
+      "11": 307,
+      "12": 141,
+      "13": 372,
+      "14": 140,
+      "15": 321,
+      "16": 407,
+      "17": 308,
+      "18": 120
+     }
+    },
+    {
+     "label": "R24-Gr23",
+     "rating": 66.3,
+     "slope": 124,
+     "ratingWomen": 71.3,
+     "slopeWomen": 126,
+     "yardages": {
+      "1": 365,
+      "2": 131,
+      "3": 323,
+      "4": 340,
+      "5": 134,
+      "6": 295,
+      "7": 282,
+      "8": 113,
+      "9": 385,
+      "10": 296,
+      "11": 307,
+      "12": 131,
+      "13": 364,
+      "14": 127,
+      "15": 312,
+      "16": 383,
+      "17": 298,
+      "18": 120
+     }
+    }
+   ]
+  },
+  {
+   "name": "Golfpark Waldkirch — Rot-Gelb",
+   "layoutName": "Rot-Gelb",
+   "holeCount": 18,
+   "holes": [
+    {
+     "number": 1,
+     "par": 5,
+     "strokeIndex": 5
+    },
+    {
+     "number": 2,
+     "par": 3,
+     "strokeIndex": 15
+    },
+    {
+     "number": 3,
+     "par": 4,
+     "strokeIndex": 3
+    },
+    {
+     "number": 4,
+     "par": 4,
+     "strokeIndex": 13
+    },
+    {
+     "number": 5,
+     "par": 3,
+     "strokeIndex": 9
+    },
+    {
+     "number": 6,
+     "par": 4,
+     "strokeIndex": 11
+    },
+    {
+     "number": 7,
+     "par": 4,
+     "strokeIndex": 1
+    },
+    {
+     "number": 8,
+     "par": 3,
+     "strokeIndex": 17
+    },
+    {
+     "number": 9,
+     "par": 5,
+     "strokeIndex": 7
+    },
+    {
+     "number": 10,
+     "par": 4,
+     "strokeIndex": 14
+    },
+    {
+     "number": 11,
+     "par": 4,
+     "strokeIndex": 4
+    },
+    {
+     "number": 12,
+     "par": 3,
+     "strokeIndex": 12
+    },
+    {
+     "number": 13,
+     "par": 5,
+     "strokeIndex": 6
+    },
+    {
+     "number": 14,
+     "par": 3,
+     "strokeIndex": 18
+    },
+    {
+     "number": 15,
+     "par": 4,
+     "strokeIndex": 2
+    },
+    {
+     "number": 16,
+     "par": 4,
+     "strokeIndex": 10
+    },
+    {
+     "number": 17,
+     "par": 4,
+     "strokeIndex": 8
+    },
+    {
+     "number": 18,
+     "par": 5,
+     "strokeIndex": 16
+    }
+   ],
+   "tees": [
+    {
+     "label": "R28-G30",
+     "rating": 71.2,
+     "slope": 130,
+     "ratingWomen": 77.3,
+     "slopeWomen": 140,
+     "yardages": {
+      "1": 451,
+      "2": 192,
+      "3": 372,
+      "4": 350,
+      "5": 169,
+      "6": 348,
+      "7": 343,
+      "8": 126,
+      "9": 461,
+      "10": 342,
+      "11": 393,
+      "12": 173,
+      "13": 513,
+      "14": 152,
+      "15": 358,
+      "16": 338,
+      "17": 311,
+      "18": 448
+     }
+    },
+    {
+     "label": "R27-G29",
+     "rating": 70.0,
+     "slope": 132,
+     "ratingWomen": 75.8,
+     "slopeWomen": 137,
+     "yardages": {
+      "1": 414,
+      "2": 164,
+      "3": 357,
+      "4": 350,
+      "5": 159,
+      "6": 334,
+      "7": 334,
+      "8": 126,
+      "9": 439,
+      "10": 330,
+      "11": 381,
+      "12": 162,
+      "13": 501,
+      "14": 152,
+      "15": 338,
+      "16": 327,
+      "17": 302,
+      "18": 431
+     }
+    },
+    {
+     "label": "R25-G27",
+     "rating": 67.9,
+     "slope": 128,
+     "ratingWomen": 73.3,
+     "slopeWomen": 131,
+     "yardages": {
+      "1": 385,
+      "2": 143,
+      "3": 341,
+      "4": 340,
+      "5": 139,
+      "6": 305,
+      "7": 303,
+      "8": 113,
+      "9": 419,
+      "10": 304,
+      "11": 348,
+      "12": 145,
+      "13": 458,
+      "14": 136,
+      "15": 327,
+      "16": 298,
+      "17": 282,
+      "18": 405
+     }
+    },
+    {
+     "label": "R24-G26",
+     "rating": 66.9,
+     "slope": 126,
+     "ratingWomen": 72.8,
+     "slopeWomen": 129,
+     "yardages": {
+      "1": 365,
+      "2": 131,
+      "3": 323,
+      "4": 340,
+      "5": 134,
+      "6": 295,
+      "7": 282,
+      "8": 113,
+      "9": 385,
+      "10": 292,
+      "11": 336,
+      "12": 135,
+      "13": 446,
+      "14": 136,
+      "15": 304,
+      "16": 286,
+      "17": 272,
+      "18": 393
+     }
+    }
+   ]
+  },
+  {
+   "name": "Golfpark Waldkirch — Grün-Gelb",
+   "layoutName": "Grün-Gelb",
+   "holeCount": 18,
+   "holes": [
+    {
+     "number": 1,
+     "par": 4,
+     "strokeIndex": 13
+    },
+    {
+     "number": 2,
+     "par": 4,
+     "strokeIndex": 3
+    },
+    {
+     "number": 3,
+     "par": 3,
+     "strokeIndex": 11
+    },
+    {
+     "number": 4,
+     "par": 5,
+     "strokeIndex": 5
+    },
+    {
+     "number": 5,
+     "par": 3,
+     "strokeIndex": 17
+    },
+    {
+     "number": 6,
+     "par": 4,
+     "strokeIndex": 1
+    },
+    {
+     "number": 7,
+     "par": 4,
+     "strokeIndex": 9
+    },
+    {
+     "number": 8,
+     "par": 4,
+     "strokeIndex": 7
+    },
+    {
+     "number": 9,
+     "par": 5,
+     "strokeIndex": 15
+    },
+    {
+     "number": 10,
+     "par": 4,
+     "strokeIndex": 8
+    },
+    {
+     "number": 11,
+     "par": 4,
+     "strokeIndex": 10
+    },
+    {
+     "number": 12,
+     "par": 3,
+     "strokeIndex": 12
+    },
+    {
+     "number": 13,
+     "par": 5,
+     "strokeIndex": 4
+    },
+    {
+     "number": 14,
+     "par": 3,
+     "strokeIndex": 16
+    },
+    {
+     "number": 15,
+     "par": 4,
+     "strokeIndex": 6
+    },
+    {
+     "number": 16,
+     "par": 5,
+     "strokeIndex": 14
+    },
+    {
+     "number": 17,
+     "par": 4,
+     "strokeIndex": 2
+    },
+    {
+     "number": 18,
+     "par": 3,
+     "strokeIndex": 18
+    }
+   ],
+   "tees": [
+    {
+     "label": "Gr28-G30",
+     "rating": 71.3,
+     "slope": 131,
+     "ratingWomen": 77.6,
+     "slopeWomen": 138,
+     "yardages": {
+      "1": 342,
+      "2": 393,
+      "3": 173,
+      "4": 513,
+      "5": 152,
+      "6": 358,
+      "7": 338,
+      "8": 311,
+      "9": 448,
+      "10": 358,
+      "11": 327,
+      "12": 182,
+      "13": 443,
+      "14": 173,
+      "15": 367,
+      "16": 462,
+      "17": 340,
+      "18": 140
+     }
+    },
+    {
+     "label": "Gr26-G29",
+     "rating": 70.6,
+     "slope": 130,
+     "ratingWomen": 76.2,
+     "slopeWomen": 135,
+     "yardages": {
+      "1": 330,
+      "2": 381,
+      "3": 162,
+      "4": 501,
+      "5": 152,
+      "6": 338,
+      "7": 327,
+      "8": 302,
+      "9": 431,
+      "10": 338,
+      "11": 327,
+      "12": 161,
+      "13": 424,
+      "14": 153,
+      "15": 351,
+      "16": 422,
+      "17": 330,
+      "18": 140
+     }
+    },
+    {
+     "label": "Gr24-G27",
+     "rating": 68.4,
+     "slope": 125,
+     "ratingWomen": 73.5,
+     "slopeWomen": 130,
+     "yardages": {
+      "1": 304,
+      "2": 348,
+      "3": 145,
+      "4": 458,
+      "5": 136,
+      "6": 327,
+      "7": 298,
+      "8": 282,
+      "9": 405,
+      "10": 315,
+      "11": 307,
+      "12": 141,
+      "13": 372,
+      "14": 140,
+      "15": 321,
+      "16": 407,
+      "17": 308,
+      "18": 120
+     }
+    },
+    {
+     "label": "Gr23-G26",
+     "rating": 67.4,
+     "slope": 124,
+     "ratingWomen": 71.9,
+     "slopeWomen": 124,
+     "yardages": {
+      "1": 292,
+      "2": 336,
+      "3": 135,
+      "4": 446,
+      "5": 136,
+      "6": 304,
+      "7": 286,
+      "8": 272,
+      "9": 393,
+      "10": 296,
+      "11": 307,
+      "12": 131,
+      "13": 364,
+      "14": 127,
+      "15": 312,
+      "16": 383,
+      "17": 298,
+      "18": 120
+     }
+    }
+   ]
+  },
+  {
+   "name": "Golfpark Waldkirch — Blau (9)",
+   "layoutName": "Blau (9)",
+   "holeCount": 9,
+   "holes": [
+    {
+     "number": 1,
+     "par": 4,
+     "strokeIndex": 3
+    },
+    {
+     "number": 2,
+     "par": 5,
+     "strokeIndex": 2
+    },
+    {
+     "number": 3,
+     "par": 4,
+     "strokeIndex": 5
+    },
+    {
+     "number": 4,
+     "par": 4,
+     "strokeIndex": 7
+    },
+    {
+     "number": 5,
+     "par": 3,
+     "strokeIndex": 8
+    },
+    {
+     "number": 6,
+     "par": 4,
+     "strokeIndex": 1
+    },
+    {
+     "number": 7,
+     "par": 3,
+     "strokeIndex": 4
+    },
+    {
+     "number": 8,
+     "par": 5,
+     "strokeIndex": 6
+    },
+    {
+     "number": 9,
+     "par": 3,
+     "strokeIndex": 9
+    }
+   ],
+   "tees": [
+    {
+     "label": "B28",
+     "rating": 35.1,
+     "slope": 127,
+     "ratingWomen": 38.0,
+     "slopeWomen": 137,
+     "yardages": {
+      "1": 335,
+      "2": 494,
+      "3": 321,
+      "4": 310,
+      "5": 182,
+      "6": 365,
+      "7": 180,
+      "8": 481,
+      "9": 139
+     }
+    },
+    {
+     "label": "B27",
+     "rating": 34.3,
+     "slope": 123,
+     "ratingWomen": 37.1,
+     "slopeWomen": 133,
+     "yardages": {
+      "1": 315,
+      "2": 478,
+      "3": 311,
+      "4": 305,
+      "5": 162,
+      "6": 347,
+      "7": 152,
+      "8": 450,
+      "9": 139
+     }
+    },
+    {
+     "label": "B25",
+     "rating": 33.3,
+     "slope": 121,
+     "ratingWomen": 36.0,
+     "slopeWomen": 128,
+     "yardages": {
+      "1": 295,
+      "2": 450,
+      "3": 293,
+      "4": 292,
+      "5": 142,
+      "6": 327,
+      "7": 137,
+      "8": 424,
+      "9": 120
+     }
+    },
+    {
+     "label": "B24",
+     "rating": 32.7,
+     "slope": 118,
+     "ratingWomen": 35.1,
+     "slopeWomen": 127,
+     "yardages": {
+      "1": 285,
+      "2": 429,
+      "3": 286,
+      "4": 287,
+      "5": 122,
+      "6": 307,
+      "7": 137,
+      "8": 384,
+      "9": 120
+     }
+    }
+   ]
+  },
+  {
+   "name": "Golfpark Waldkirch — Gelb (9)",
+   "layoutName": "Gelb (9)",
+   "holeCount": 9,
+   "holes": [
+    {
+     "number": 1,
+     "par": 4,
+     "strokeIndex": 7
+    },
+    {
+     "number": 2,
+     "par": 4,
+     "strokeIndex": 2
+    },
+    {
+     "number": 3,
+     "par": 3,
+     "strokeIndex": 6
+    },
+    {
+     "number": 4,
+     "par": 5,
+     "strokeIndex": 3
+    },
+    {
+     "number": 5,
+     "par": 3,
+     "strokeIndex": 9
+    },
+    {
+     "number": 6,
+     "par": 4,
+     "strokeIndex": 1
+    },
+    {
+     "number": 7,
+     "par": 4,
+     "strokeIndex": 5
+    },
+    {
+     "number": 8,
+     "par": 4,
+     "strokeIndex": 4
+    },
+    {
+     "number": 9,
+     "par": 5,
+     "strokeIndex": 8
+    }
+   ],
+   "tees": [
+    {
+     "label": "G30",
+     "rating": 36.0,
+     "slope": 129,
+     "ratingWomen": 39.1,
+     "slopeWomen": 139,
+     "yardages": {
+      "1": 342,
+      "2": 393,
+      "3": 173,
+      "4": 513,
+      "5": 152,
+      "6": 358,
+      "7": 338,
+      "8": 311,
+      "9": 448
+     }
+    },
+    {
+     "label": "G29",
+     "rating": 35.7,
+     "slope": 132,
+     "ratingWomen": 38.5,
+     "slopeWomen": 137,
+     "yardages": {
+      "1": 330,
+      "2": 381,
+      "3": 162,
+      "4": 501,
+      "5": 152,
+      "6": 338,
+      "7": 327,
+      "8": 302,
+      "9": 431
+     }
+    },
+    {
+     "label": "G27",
+     "rating": 34.5,
+     "slope": 127,
+     "ratingWomen": 37.1,
+     "slopeWomen": 130,
+     "yardages": {
+      "1": 304,
+      "2": 348,
+      "3": 145,
+      "4": 458,
+      "5": 136,
+      "6": 327,
+      "7": 298,
+      "8": 282,
+      "9": 405
+     }
+    },
+    {
+     "label": "G26",
+     "rating": 34.0,
+     "slope": 126,
+     "ratingWomen": 36.7,
+     "slopeWomen": 127,
+     "yardages": {
+      "1": 292,
+      "2": 336,
+      "3": 135,
+      "4": 446,
+      "5": 136,
+      "6": 304,
+      "7": 286,
+      "8": 272,
+      "9": 393
+     }
+    }
+   ]
+  },
+  {
+   "name": "Golfpark Waldkirch — Grün (9)",
+   "layoutName": "Grün (9)",
+   "holeCount": 9,
+   "holes": [
+    {
+     "number": 1,
+     "par": 4,
+     "strokeIndex": 4
+    },
+    {
+     "number": 2,
+     "par": 4,
+     "strokeIndex": 5
+    },
+    {
+     "number": 3,
+     "par": 3,
+     "strokeIndex": 6
+    },
+    {
+     "number": 4,
+     "par": 5,
+     "strokeIndex": 2
+    },
+    {
+     "number": 5,
+     "par": 3,
+     "strokeIndex": 8
+    },
+    {
+     "number": 6,
+     "par": 4,
+     "strokeIndex": 3
+    },
+    {
+     "number": 7,
+     "par": 5,
+     "strokeIndex": 7
+    },
+    {
+     "number": 8,
+     "par": 4,
+     "strokeIndex": 1
+    },
+    {
+     "number": 9,
+     "par": 3,
+     "strokeIndex": 9
+    }
+   ],
+   "tees": [
+    {
+     "label": "Gr28",
+     "rating": 35.3,
+     "slope": 132,
+     "ratingWomen": 38.5,
+     "slopeWomen": 137,
+     "yardages": {
+      "1": 358,
+      "2": 327,
+      "3": 182,
+      "4": 443,
+      "5": 173,
+      "6": 367,
+      "7": 462,
+      "8": 340,
+      "9": 140
+     }
+    },
+    {
+     "label": "Gr26",
+     "rating": 34.9,
+     "slope": 127,
+     "ratingWomen": 37.7,
+     "slopeWomen": 133,
+     "yardages": {
+      "1": 338,
+      "2": 327,
+      "3": 161,
+      "4": 424,
+      "5": 153,
+      "6": 351,
+      "7": 422,
+      "8": 330,
+      "9": 140
+     }
+    },
+    {
+     "label": "Gr24",
+     "rating": 33.9,
+     "slope": 123,
+     "ratingWomen": 36.4,
+     "slopeWomen": 129,
+     "yardages": {
+      "1": 315,
+      "2": 307,
+      "3": 141,
+      "4": 372,
+      "5": 140,
+      "6": 321,
+      "7": 407,
+      "8": 308,
+      "9": 120
+     }
+    },
+    {
+     "label": "Gr23",
+     "rating": 33.4,
+     "slope": 122,
+     "ratingWomen": 35.2,
+     "slopeWomen": 121,
+     "yardages": {
+      "1": 296,
+      "2": 307,
+      "3": 131,
+      "4": 364,
+      "5": 127,
+      "6": 312,
+      "7": 383,
+      "8": 298,
+      "9": 120
+     }
+    }
+   ]
+  },
+  {
+   "name": "Golfpark Waldkirch — Rot (9)",
+   "layoutName": "Rot (9)",
+   "holeCount": 9,
+   "holes": [
+    {
+     "number": 1,
+     "par": 5,
+     "strokeIndex": 3
+    },
+    {
+     "number": 2,
+     "par": 3,
+     "strokeIndex": 8
+    },
+    {
+     "number": 3,
+     "par": 4,
+     "strokeIndex": 2
+    },
+    {
+     "number": 4,
+     "par": 4,
+     "strokeIndex": 7
+    },
+    {
+     "number": 5,
+     "par": 3,
+     "strokeIndex": 5
+    },
+    {
+     "number": 6,
+     "par": 4,
+     "strokeIndex": 6
+    },
+    {
+     "number": 7,
+     "par": 4,
+     "strokeIndex": 1
+    },
+    {
+     "number": 8,
+     "par": 3,
+     "strokeIndex": 9
+    },
+    {
+     "number": 9,
+     "par": 5,
+     "strokeIndex": 4
+    }
+   ],
+   "tees": [
+    {
+     "label": "R28",
+     "rating": 35.2,
+     "slope": 131,
+     "ratingWomen": 38.2,
+     "slopeWomen": 140,
+     "yardages": {
+      "1": 451,
+      "2": 192,
+      "3": 372,
+      "4": 350,
+      "5": 169,
+      "6": 348,
+      "7": 343,
+      "8": 126,
+      "9": 461
+     }
+    },
+    {
+     "label": "R27",
+     "rating": 34.3,
+     "slope": 131,
+     "ratingWomen": 37.3,
+     "slopeWomen": 137,
+     "yardages": {
+      "1": 414,
+      "2": 164,
+      "3": 357,
+      "4": 350,
+      "5": 159,
+      "6": 334,
+      "7": 334,
+      "8": 126,
+      "9": 439
+     }
+    },
+    {
+     "label": "R25",
+     "rating": 33.4,
+     "slope": 128,
+     "ratingWomen": 36.2,
+     "slopeWomen": 132,
+     "yardages": {
+      "1": 385,
+      "2": 143,
+      "3": 341,
+      "4": 340,
+      "5": 139,
+      "6": 305,
+      "7": 303,
+      "8": 113,
+      "9": 419
+     }
+    },
+    {
+     "label": "R24",
+     "rating": 32.9,
+     "slope": 125,
+     "ratingWomen": 36.1,
+     "slopeWomen": 131,
+     "yardages": {
+      "1": 365,
+      "2": 131,
+      "3": 323,
+      "4": 340,
+      "5": 134,
+      "6": 295,
+      "7": 282,
+      "8": 113,
+      "9": 385
+     }
+    }
+   ]
+  }
+ ]
+}
