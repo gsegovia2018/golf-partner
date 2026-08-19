@@ -14,6 +14,7 @@ import {
 import {
   getPlayingHandicap, calcStablefordPoints,
 } from './tournamentStore';
+import { holeCountOf } from './scoring';
 
 // Navigable identity of a collectMyRounds entry — courseId when the round has
 // one, else the raw (non-empty) courseName, else null. Must match the
@@ -107,7 +108,7 @@ function buildHoleRows(synthetic) {
       e.timesPlayed += 1;
       e.strokesSum += sc;
       e.vsParSum += sc - hole.par;
-      e.pointsSum += calcStablefordPoints(hole.par, sc, handicap, hole.strokeIndex);
+      e.pointsSum += calcStablefordPoints(hole.par, sc, handicap, hole.strokeIndex, holeCountOf(round));
       if (sc < e.bestStrokes) e.bestStrokes = sc;
       const d = round.shotDetails?.[CANON_ID]?.[hole.number];
       if (d?.putts != null) { e.puttsSum += d.putts; e.puttsCount += 1; }

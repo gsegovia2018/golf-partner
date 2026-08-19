@@ -1,5 +1,5 @@
 import { calcStablefordPoints, calcExtraShots, roundPairLeaderboard, getPlayingHandicap } from './tournamentStore';
-import { isGIR, recoveryOutcomeFromState, roundScoringMode, isScrambleMode, isPickupScore, resolvePairs } from './scoring';
+import { isGIR, recoveryOutcomeFromState, roundScoringMode, isScrambleMode, isPickupScore, resolvePairs, holeCountOf } from './scoring';
 import {
   expectedFromBucket, expectedStrokes, BUCKETS,
   PAR_ANCHOR_DISTANCE, benchmarkTeeShotDistance, expectedPenaltiesPerRound,
@@ -39,7 +39,7 @@ export function playerRoundHistory(tournament, playerId) {
         const sc = round.scores[playerId]?.[hole.number];
         if (sc) {
           strokes += sc;
-          points += calcStablefordPoints(hole.par, sc, handicap, hole.strokeIndex);
+          points += calcStablefordPoints(hole.par, sc, handicap, hole.strokeIndex, holeCountOf(round));
           holesPlayed++;
         }
       });
@@ -69,9 +69,9 @@ export function playerScoreDistribution(tournament, playerId, { metric = 'points
     round.holes.forEach(hole => {
       const sc = round.scores[playerId]?.[hole.number];
       if (!sc) return;
-      const extra = useNet ? calcExtraShots(handicap, hole.strokeIndex) : 0;
+      const extra = useNet ? calcExtraShots(handicap, hole.strokeIndex, holeCountOf(round)) : 0;
       const vsPar = sc - extra - hole.par;
-      const points = calcStablefordPoints(hole.par, sc, useNet ? handicap : 0, hole.strokeIndex);
+      const points = calcStablefordPoints(hole.par, sc, useNet ? handicap : 0, hole.strokeIndex, holeCountOf(round));
       const entry = {
         roundIndex: ri, courseName: round.courseName,
         holeNumber: hole.number, par: hole.par, strokes: sc, points, vsPar,
@@ -131,9 +131,9 @@ export function playerStreaks(tournament, playerId, { metric = 'points', roundIn
     round.holes.forEach(hole => {
       const sc = round.scores[playerId]?.[hole.number];
       if (!sc) return;
-      const extra = useNet ? calcExtraShots(handicap, hole.strokeIndex) : 0;
+      const extra = useNet ? calcExtraShots(handicap, hole.strokeIndex, holeCountOf(round)) : 0;
       const vsPar = sc - extra - hole.par;
-      const points = calcStablefordPoints(hole.par, sc, useNet ? handicap : 0, hole.strokeIndex);
+      const points = calcStablefordPoints(hole.par, sc, useNet ? handicap : 0, hole.strokeIndex, holeCountOf(round));
       entries.push({
         roundIndex: ri, courseName: round.courseName,
         holeNumber: hole.number, par: hole.par, strokes: sc, points, vsPar,
@@ -184,7 +184,7 @@ export function bestWorstHoles(tournament, { metric = 'points', roundIndex = nul
         const sc = round.scores[p.id]?.[hole.number];
         if (!sc) return;
         const handicap = getPlayingHandicap(round, p);
-        const pts = calcStablefordPoints(hole.par, sc, handicap, hole.strokeIndex);
+        const pts = calcStablefordPoints(hole.par, sc, handicap, hole.strokeIndex, holeCountOf(round));
         totalPts += pts;
         totalStrokes += sc;
         totalVsPar += (sc - hole.par);
@@ -230,7 +230,7 @@ export function holeDifficultyMap(tournament, roundIndex) {
       const sc = round.scores[p.id]?.[hole.number];
       if (!sc) return null;
       const handicap = getPlayingHandicap(round, p);
-      return { playerId: p.id, playerName: p.name, points: calcStablefordPoints(hole.par, sc, handicap, hole.strokeIndex), strokes: sc };
+      return { playerId: p.id, playerName: p.name, points: calcStablefordPoints(hole.par, sc, handicap, hole.strokeIndex, holeCountOf(round)), strokes: sc };
     }).filter(Boolean);
     const avgPts = playerScores.length > 0 ? +(playerScores.reduce((s, x) => s + x.points, 0) / playerScores.length).toFixed(2) : null;
     const avgStr = playerScores.length > 0 ? +(playerScores.reduce((s, x) => s + x.strokes, 0) / playerScores.length).toFixed(2) : null;
@@ -260,8 +260,8 @@ export function headToHead(tournament, p1Id, p2Id, { roundIndex = null } = {}) {
       const s1 = round.scores[p1Id]?.[hole.number];
       const s2 = round.scores[p2Id]?.[hole.number];
       if (!s1 || !s2) return;
-      const pts1 = calcStablefordPoints(hole.par, s1, h1, hole.strokeIndex);
-      const pts2 = calcStablefordPoints(hole.par, s2, h2, hole.strokeIndex);
+      const pts1 = calcStablefordPoints(hole.par, s1, h1, hole.strokeIndex, holeCountOf(round));
+      const pts2 = calcStablefordPoints(hole.par, s2, h2, hole.strokeIndex, holeCountOf(round));
       if (pts1 > pts2) { points.p1Wins++; rp.points.p1Wins++; }
       else if (pts2 > pts1) { points.p2Wins++; rp.points.p2Wins++; }
       else { points.ties++; rp.points.ties++; }
@@ -360,7 +360,7 @@ export function tournamentHighlights(tournament, { metric = 'points', roundIndex
           return {
             roundIndex: r.roundIndex, courseName: round.courseName,
             holeNumber: h.number, par: h.par, strokes: sc,
-            points: calcStablefordPoints(h.par, sc, handicap, h.strokeIndex),
+            points: calcStablefordPoints(h.par, sc, handicap, h.strokeIndex, holeCountOf(round)),
           };
         })
         .filter(Boolean);
@@ -411,8 +411,8 @@ function pickMBTiebreak(aPlayer, bPlayer, round, holeOrderIndex, isStrokes) {
     if (isStrokes) {
       if (aSc !== bSc) return aSc < bSc ? aPlayer.id : bPlayer.id;
     } else {
-      const aPts = calcStablefordPoints(prev.par, aSc, aHcp, prev.strokeIndex);
-      const bPts = calcStablefordPoints(prev.par, bSc, bHcp, prev.strokeIndex);
+      const aPts = calcStablefordPoints(prev.par, aSc, aHcp, prev.strokeIndex, holeCountOf(round));
+      const bPts = calcStablefordPoints(prev.par, bSc, bHcp, prev.strokeIndex, holeCountOf(round));
       if (aPts !== bPts) return aPts > bPts ? aPlayer.id : bPlayer.id;
     }
   }
@@ -461,7 +461,7 @@ export function pairHoleWins(tournament, { metric = 'points', roundIndex = null 
       if (!sc) return null;
       if (isStrokes) return sc;
       const handicap = getPlayingHandicap(round, player);
-      return calcStablefordPoints(hole.par, sc, handicap, hole.strokeIndex);
+      return calcStablefordPoints(hole.par, sc, handicap, hole.strokeIndex, holeCountOf(round));
     };
 
     const better = (a, b) => isStrokes ? a < b : a > b;
@@ -551,7 +551,7 @@ export function pairDifferenceByHole(tournament, roundIndex, { metric = 'points'
       const sc = round.scores[player.id]?.[hole.number];
       if (!sc) return null;
       if (isStrokes) total += sc;
-      else total += calcStablefordPoints(hole.par, sc, getPlayingHandicap(round, player), hole.strokeIndex);
+      else total += calcStablefordPoints(hole.par, sc, getPlayingHandicap(round, player), hole.strokeIndex, holeCountOf(round));
     }
     return total;
   };
@@ -605,15 +605,15 @@ export function hallOfShame(tournament, { metric = 'points' } = {}) {
       round.holes.forEach(hole => {
         const sc = round.scores[p.id]?.[hole.number];
         if (!sc) return;
-        const extra = useNet ? calcExtraShots(handicap, hole.strokeIndex) : 0;
+        const extra = useNet ? calcExtraShots(handicap, hole.strokeIndex, holeCountOf(round)) : 0;
         const vsPar = sc - extra - hole.par;
-        const points = calcStablefordPoints(hole.par, sc, useNet ? handicap : 0, hole.strokeIndex);
+        const points = calcStablefordPoints(hole.par, sc, useNet ? handicap : 0, hole.strokeIndex, holeCountOf(round));
         perPlayerEntries[p.id].push({
           roundIndex, courseName: round.courseName,
           holeNumber: hole.number, par: hole.par, si: hole.strokeIndex,
           strokes: sc, vsPar, points,
           grossVsPar: sc - hole.par,
-          isPickup: isPickupScore(sc, hole.par, handicap, hole.strokeIndex),
+          isPickup: isPickupScore(sc, hole.par, handicap, hole.strokeIndex, holeCountOf(round)),
         });
       });
     });
@@ -670,8 +670,8 @@ export function hallOfShame(tournament, { metric = 'points' } = {}) {
         const sc = round.scores[p.id]?.[hole.number];
         if (!sc) return null;
         const handicap = getPlayingHandicap(round, p);
-        const extra = useNet ? calcExtraShots(handicap, hole.strokeIndex) : 0;
-        const points = calcStablefordPoints(hole.par, sc, useNet ? handicap : 0, hole.strokeIndex);
+        const extra = useNet ? calcExtraShots(handicap, hole.strokeIndex, holeCountOf(round)) : 0;
+        const points = calcStablefordPoints(hole.par, sc, useNet ? handicap : 0, hole.strokeIndex, holeCountOf(round));
         return { player: p, strokes: sc, points, netVsPar: sc - extra - hole.par };
       }).filter(Boolean);
       if (scores.length < 3) return;
@@ -713,7 +713,7 @@ export function hallOfShame(tournament, { metric = 'points' } = {}) {
       round.holes.forEach(hole => {
         const sc = round.scores[p.id]?.[hole.number];
         if (!sc) return;
-        const points = calcStablefordPoints(hole.par, sc, useNet ? handicap : 0, hole.strokeIndex);
+        const points = calcStablefordPoints(hole.par, sc, useNet ? handicap : 0, hole.strokeIndex, holeCountOf(round));
         if (hole.number <= 9) { front += points; frontComplete++; } else { back += points; backComplete++; }
         holeEntries.push({
           roundIndex, courseName: round.courseName,
@@ -767,7 +767,7 @@ function forEachHole(tournament, fn) {
       round.holes.forEach(hole => {
         const strokes = round.scores[player.id]?.[hole.number];
         if (!strokes) return;
-        const points = calcStablefordPoints(hole.par, strokes, handicap, hole.strokeIndex);
+        const points = calcStablefordPoints(hole.par, strokes, handicap, hole.strokeIndex, holeCountOf(round));
         fn({ player, round, roundIndex, hole, strokes, points, handicap });
       });
     });
@@ -787,7 +787,7 @@ export function tournamentMomentum(tournament) {
         const sc = round.scores[player.id]?.[hole.number];
         if (!sc) return;
         strokes += sc;
-        points += calcStablefordPoints(hole.par, sc, handicap, hole.strokeIndex);
+        points += calcStablefordPoints(hole.par, sc, handicap, hole.strokeIndex, holeCountOf(round));
         holesPlayed++;
       });
       return { roundIndex, courseName: round.courseName, points: holesPlayed ? points : null, strokes: holesPlayed ? strokes : null, holesPlayed };
@@ -818,7 +818,7 @@ export function clutchOnHardest(tournament, { topN = 3 } = {}) {
         if (!hardestNumbers.has(hole.number)) return;
         const sc = round.scores[player.id]?.[hole.number];
         if (!sc) return;
-        const pts = calcStablefordPoints(hole.par, sc, handicap, hole.strokeIndex);
+        const pts = calcStablefordPoints(hole.par, sc, handicap, hole.strokeIndex, holeCountOf(round));
         const rec = perPlayer[player.id];
         rec.points += pts;
         rec.strokes += sc;
@@ -893,7 +893,7 @@ export function courseDNA(tournament) {
         const sc = round.scores[player.id]?.[hole.number];
         if (!sc) return;
         strokes += sc;
-        points += calcStablefordPoints(hole.par, sc, handicap, hole.strokeIndex);
+        points += calcStablefordPoints(hole.par, sc, handicap, hole.strokeIndex, holeCountOf(round));
         holesPlayed++;
       });
       if (holesPlayed === 0) return;
@@ -978,7 +978,7 @@ export function warmupVsClosing(tournament, playerId) {
     holes.forEach((hole, idx) => {
       const sc = round.scores[playerId]?.[hole.number];
       if (!sc) return;
-      const points = calcStablefordPoints(hole.par, sc, handicap, hole.strokeIndex);
+      const points = calcStablefordPoints(hole.par, sc, handicap, hole.strokeIndex, holeCountOf(round));
       // roundIndex on each entry — without it, two rounds on the same course
       // produce breakdown rows that read as identical ("Course A · H1" twice)
       // even though they're from different days.
@@ -1010,7 +1010,7 @@ export function handicapROI(tournament, playerId) {
     round.holes.forEach(hole => {
       const sc = round.scores[playerId]?.[hole.number];
       if (!sc) return;
-      rp += calcStablefordPoints(hole.par, sc, handicap, hole.strokeIndex);
+      rp += calcStablefordPoints(hole.par, sc, handicap, hole.strokeIndex, holeCountOf(round));
       rh++;
     });
     if (rh > 0) {
@@ -1070,8 +1070,8 @@ export function chaosHoles(tournament) {
         const sc = round.scores[player.id]?.[hole.number];
         if (sc) {
           const handicap = getPlayingHandicap(round, player);
-          const points = calcStablefordPoints(hole.par, sc, handicap, hole.strokeIndex);
-          const isPickup = isPickupScore(sc, hole.par, handicap, hole.strokeIndex);
+          const points = calcStablefordPoints(hole.par, sc, handicap, hole.strokeIndex, holeCountOf(round));
+          const isPickup = isPickupScore(sc, hole.par, handicap, hole.strokeIndex, holeCountOf(round));
           scores.push({ playerId: player.id, playerName: player.name, strokes: sc, points, isPickup });
         }
       });
@@ -1113,7 +1113,7 @@ export function collectiveExtremes(tournament) {
         const sc = round.scores[player.id]?.[hole.number];
         if (!sc) return;
         const handicap = getPlayingHandicap(round, player);
-        const pts = calcStablefordPoints(hole.par, sc, handicap, hole.strokeIndex);
+        const pts = calcStablefordPoints(hole.par, sc, handicap, hole.strokeIndex, holeCountOf(round));
         scores.push({ playerId: player.id, playerName: player.name, strokes: sc, points: pts });
       });
       if (scores.length < participants.length) return;
@@ -1160,8 +1160,8 @@ export function pairSynergy(tournament) {
         if (!s1 || !s2) return;
         const h1 = getPlayingHandicap(round, tournament.players.find(p => p.id === pair[0].id));
         const h2 = getPlayingHandicap(round, tournament.players.find(p => p.id === pair[1].id));
-        combined += calcStablefordPoints(hole.par, s1, h1, hole.strokeIndex);
-        combined += calcStablefordPoints(hole.par, s2, h2, hole.strokeIndex);
+        combined += calcStablefordPoints(hole.par, s1, h1, hole.strokeIndex, holeCountOf(round));
+        combined += calcStablefordPoints(hole.par, s2, h2, hole.strokeIndex, holeCountOf(round));
         expected += playerAvg[pair[0].id] + playerAvg[pair[1].id];
         holes++;
       });
@@ -1215,8 +1215,8 @@ export function pairCoverage(tournament) {
         const s1 = round.scores[pair[0].id]?.[hole.number];
         const s2 = round.scores[pair[1].id]?.[hole.number];
         if (!s1 || !s2) return;
-        const p1 = calcStablefordPoints(hole.par, s1, h1, hole.strokeIndex);
-        const p2 = calcStablefordPoints(hole.par, s2, h2, hole.strokeIndex);
+        const p1 = calcStablefordPoints(hole.par, s1, h1, hole.strokeIndex, holeCountOf(round));
+        const p2 = calcStablefordPoints(hole.par, s2, h2, hole.strokeIndex, holeCountOf(round));
         pairMap[key].holes += 1;
         if (p1 >= 2 || p2 >= 2) pairMap[key].covered += 1;
         else pairMap[key].bothBlanked += 1;
@@ -1253,8 +1253,8 @@ export function pairCarryRatio(tournament) {
         if (!s1 || !s2) return;
         const h1 = getPlayingHandicap(round, tournament.players.find(p => p.id === pair[0].id));
         const h2 = getPlayingHandicap(round, tournament.players.find(p => p.id === pair[1].id));
-        pairMap[key].points[pair[0].id] += calcStablefordPoints(hole.par, s1, h1, hole.strokeIndex);
-        pairMap[key].points[pair[1].id] += calcStablefordPoints(hole.par, s2, h2, hole.strokeIndex);
+        pairMap[key].points[pair[0].id] += calcStablefordPoints(hole.par, s1, h1, hole.strokeIndex, holeCountOf(round));
+        pairMap[key].points[pair[1].id] += calcStablefordPoints(hole.par, s2, h2, hole.strokeIndex, holeCountOf(round));
         pairMap[key].holesPlayed++;
       });
     });
@@ -1350,7 +1350,7 @@ export function pickupChampion(tournament) {
   const perPlayer = {};
   tournament.players.forEach(p => { perPlayer[p.id] = { player: p, pickups: 0, breakdown: [] }; });
   forEachHole(tournament, ({ player, round, roundIndex, hole, strokes, handicap }) => {
-    if (isPickupScore(strokes, hole.par, handicap, hole.strokeIndex) && strokes > hole.par + 1) {
+    if (isPickupScore(strokes, hole.par, handicap, hole.strokeIndex, holeCountOf(round)) && strokes > hole.par + 1) {
       const rec = perPlayer[player.id];
       rec.pickups++;
       rec.breakdown.push({ roundIndex, courseName: round.courseName, holeNumber: hole.number, par: hole.par, si: hole.strokeIndex, strokes, points: 0 });
@@ -1399,7 +1399,7 @@ export function zeroHero(tournament) {
       round.holes.forEach(hole => {
         const sc = round.scores[player.id]?.[hole.number];
         if (!sc) return;
-        const pts = calcStablefordPoints(hole.par, sc, handicap, hole.strokeIndex);
+        const pts = calcStablefordPoints(hole.par, sc, handicap, hole.strokeIndex, holeCountOf(round));
         if (pts === 0) zeroHoles.push({ roundIndex, courseName: round.courseName, holeNumber: hole.number, par: hole.par, si: hole.strokeIndex, strokes: sc, points: 0 });
       });
       if (zeroHoles.length >= 3) {
@@ -1463,8 +1463,8 @@ export function skinsLeaderboard(tournament, { metric = 'points' } = {}) {
         const sc = round.scores[player.id]?.[hole.number];
         if (!sc) return;
         const handicap = getPlayingHandicap(round, player);
-        const points = calcStablefordPoints(hole.par, sc, handicap, hole.strokeIndex);
-        const isPickup = isPickupScore(sc, hole.par, handicap, hole.strokeIndex);
+        const points = calcStablefordPoints(hole.par, sc, handicap, hole.strokeIndex, holeCountOf(round));
+        const isPickup = isPickupScore(sc, hole.par, handicap, hole.strokeIndex, holeCountOf(round));
         candidates.push({ player, strokes: sc, points, isPickup });
       });
       if (candidates.length < 2) return;
@@ -1528,7 +1528,7 @@ export function matchPlayResults(tournament, { metric = 'points' } = {}) {
         const sc = round.scores[player?.id]?.[hole.number];
         if (!sc || !player) return null;
         if (isStrokes) total += sc;
-        else total += calcStablefordPoints(hole.par, sc, getPlayingHandicap(round, player), hole.strokeIndex);
+        else total += calcStablefordPoints(hole.par, sc, getPlayingHandicap(round, player), hole.strokeIndex, holeCountOf(round));
       }
       return total;
     };
@@ -1606,14 +1606,14 @@ export function pairConfigMatrix(tournament) {
         const player = tournament.players.find(p => p.id === member.id);
         const sc = round.scores[player?.id]?.[hole.number];
         if (!sc || !player) { complete = false; break; }
-        aPts += calcStablefordPoints(hole.par, sc, getPlayingHandicap(round, player), hole.strokeIndex);
+        aPts += calcStablefordPoints(hole.par, sc, getPlayingHandicap(round, player), hole.strokeIndex, holeCountOf(round));
       }
       if (!complete) return;
       for (const member of pair2) {
         const player = tournament.players.find(p => p.id === member.id);
         const sc = round.scores[player?.id]?.[hole.number];
         if (!sc || !player) { complete = false; break; }
-        bPts += calcStablefordPoints(hole.par, sc, getPlayingHandicap(round, player), hole.strokeIndex);
+        bPts += calcStablefordPoints(hole.par, sc, getPlayingHandicap(round, player), hole.strokeIndex, holeCountOf(round));
       }
       if (!complete) return;
       roundPtsA += aPts; roundPtsB += bPts;
@@ -1777,7 +1777,7 @@ export function bounceBackRate(tournament) {
         seq.push({
           roundIndex, holeNumber: hole.number, par: hole.par, si: hole.strokeIndex,
           strokes: sc, vsPar: sc - hole.par,
-          points: calcStablefordPoints(hole.par, sc, handicap, hole.strokeIndex),
+          points: calcStablefordPoints(hole.par, sc, handicap, hole.strokeIndex, holeCountOf(round)),
         });
       });
       for (let i = 1; i < seq.length; i++) {
@@ -1822,7 +1822,7 @@ export function frontBackSplit(tournament) {
       round.holes.forEach(hole => {
         const sc = round.scores[player.id]?.[hole.number];
         if (!sc) return;
-        const pts = calcStablefordPoints(hole.par, sc, handicap, hole.strokeIndex);
+        const pts = calcStablefordPoints(hole.par, sc, handicap, hole.strokeIndex, holeCountOf(round));
         if (hole.number <= 9) { front += pts; fc++; } else { back += pts; bc++; }
       });
       if (fc < 9 || bc < 9) return;
@@ -1996,7 +1996,7 @@ export function teeShotImpact(tournament, playerId) {
       if (!sc) return;
       const d = details[hole.number];
       if (!d) return;
-      const points = calcStablefordPoints(hole.par, sc, handicap, hole.strokeIndex);
+      const points = calcStablefordPoints(hole.par, sc, handicap, hole.strokeIndex, holeCountOf(round));
       const entry = {
         roundIndex, courseName: round.courseName,
         holeNumber: hole.number, par: hole.par, strokes: sc, points,
@@ -2063,7 +2063,7 @@ export function driveScoreImpact(tournament, playerId) {
       if (sc == null) return;
       const d = details[hole.number];
       if (!d || d.drive == null || !buckets[d.drive]) return;
-      const points = calcStablefordPoints(hole.par, sc, handicap, hole.strokeIndex);
+      const points = calcStablefordPoints(hole.par, sc, handicap, hole.strokeIndex, holeCountOf(round));
       const teePen = d.teePenalties ?? 0;
       buckets[d.drive].push({
         roundIndex, courseName: round.courseName,
@@ -2167,7 +2167,7 @@ export function approachScoreImpact(tournament, playerId) {
       if (sc == null) return;
       const d = details[hole.number];
       if (!d || !d.approachBucket || !buckets[d.approachBucket]) return;
-      const points = calcStablefordPoints(hole.par, sc, handicap, hole.strokeIndex);
+      const points = calcStablefordPoints(hole.par, sc, handicap, hole.strokeIndex, holeCountOf(round));
       const gir = d.putts != null ? ((sc - d.putts) <= (hole.par - 2)) : null;
       buckets[d.approachBucket].push({
         roundIndex, courseName: round.courseName,
@@ -2276,7 +2276,7 @@ export function approachMissCost(tournament, playerId) {
       const sc = round.scores[playerId]?.[hole.number];
       if (sc == null) return;
       const vsPar = sc - hole.par;
-      const points = calcStablefordPoints(hole.par, sc, handicap, hole.strokeIndex);
+      const points = calcStablefordPoints(hole.par, sc, handicap, hole.strokeIndex, holeCountOf(round));
       const add = (k) => { bucket[k].vsPar.push(vsPar); bucket[k].points.push(points); };
       if (d.approachResult === 'green') { add('green'); return; }
       if (bucket[d.approachMiss]) add(d.approachMiss);
@@ -2359,7 +2359,7 @@ export function teeClubAccuracy(tournament, playerId) {
       const sc = round.scores[playerId]?.[hole.number];
       if (sc != null) {
         e.vsPar.push(sc - hole.par);
-        e.points.push(calcStablefordPoints(hole.par, sc, handicap, hole.strokeIndex));
+        e.points.push(calcStablefordPoints(hole.par, sc, handicap, hole.strokeIndex, holeCountOf(round)));
       }
     });
   });
@@ -3288,7 +3288,7 @@ export function playingToHandicap(tournament) {
       round.holes.forEach((hole) => {
         const sc = round.scores[p.id]?.[hole.number];
         if (!sc) return;
-        roundPoints += calcStablefordPoints(hole.par, sc, handicap, hole.strokeIndex);
+        roundPoints += calcStablefordPoints(hole.par, sc, handicap, hole.strokeIndex, holeCountOf(round));
         roundHoles++;
       });
       if (roundHoles === 0) return;
@@ -3330,7 +3330,7 @@ export function hotStretch(tournament, { windowSize = 6 } = {}) {
         entries.push({
           roundIndex, courseName: round.courseName, holeNumber: hole.number,
           par: hole.par, strokes: sc,
-          points: calcStablefordPoints(hole.par, sc, handicap, hole.strokeIndex),
+          points: calcStablefordPoints(hole.par, sc, handicap, hole.strokeIndex, holeCountOf(round)),
         });
       });
     });

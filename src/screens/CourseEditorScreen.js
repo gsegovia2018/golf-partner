@@ -31,8 +31,12 @@ export default function CourseEditorScreen({ navigation, route }) {
     onSave,
   } = route.params;
 
+  // A card is kept as-is when it is a full 18 or a full 9 (Waldkirch-style
+  // nine-hole layouts); anything else falls back to a blank 18.
   const [holes, setHoles] = useState(
-    initialHoles?.length === 18 ? initialHoles.map((h) => ({ ...h })) : defaultHoles(),
+    initialHoles?.length === 18 || initialHoles?.length === 9
+      ? initialHoles.map((h) => ({ ...h }))
+      : defaultHoles(),
   );
   const [tees, setTees] = useState(
     () => (initialTees ?? []).map((t) => ({ ...t })),

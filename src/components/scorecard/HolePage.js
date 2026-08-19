@@ -9,6 +9,7 @@ import { playersMeFirst } from '../../lib/playerOrder';
 import {
   pickupStrokes, isPickupScore, scrambleUnits, matchPlayEffectiveHandicaps, calcExtraShots,
 } from '../../store/tournamentStore';
+import { holeCountOf } from '../../store/scoring';
 import { scoreCellState } from '../../store/officialScoring';
 import { deriveCell } from '../../store/scoreEntries';
 import { isScrambleMode } from '../scoringModes';
@@ -181,6 +182,7 @@ export const HolePage = React.memo(function HolePage({
   });
 
   const isScramble = isScrambleMode(mode);
+  const holeCount = holeCountOf(round);
   const scoringPlayers = isScramble ? scrambleUnits(round, players) : players;
   const effectiveMeId = isScramble
     ? (scoringPlayers.find((u) => u.members?.some((m) => m.id === meId))?.id ?? meId)
@@ -212,7 +214,7 @@ export const HolePage = React.memo(function HolePage({
   // field minimum) — surfaced in the header so nobody has to scroll the
   // cards to learn it. Empty on holes where the field is level.
   const edgeShots = holeEdgeShots({
-    players: orderedPlayers, handicaps, strokeIndex: pageHole.strokeIndex,
+    players: orderedPlayers, handicaps, strokeIndex: pageHole.strokeIndex, holeCount,
   });
   const edgeSummary = edgeShots
     .map((e) => `${(e.name || '?')[0].toUpperCase()}+${e.edge}`)
@@ -297,10 +299,12 @@ export const HolePage = React.memo(function HolePage({
             const strokes = scores[player.id]?.[pageHole.number];
             const points = holePts[player.id] ?? null;
 
-            const extraShots = calcExtraShots(handicap, pageHole.strokeIndex);
+            const extraShots = calcExtraShots(handicap, pageHole.strokeIndex, holeCount);
 
-            const pickup = pickupStrokes(pageHole.par, fullHandicap, pageHole.strokeIndex);
-            const isPickup = isPickupScore(strokes, pageHole.par, fullHandicap, pageHole.strokeIndex);
+            const pickup = pickupStrokes(pageHole.par, fullHandicap, pageHole.strokeIndex, holeCount);
+            const isPickup = isPickupScore(
+              strokes, pageHole.par, fullHandicap, pageHole.strokeIndex, holeCount,
+            );
             // Per-card write permission. Casual mode passes no `editable` prop
             // (or one that returns true). In official mode a read-only card
             // renders the score without +/- steppers or the pickup toggle.

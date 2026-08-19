@@ -32,12 +32,25 @@ export function totalParFromHoles(holes) {
   return holes.reduce((sum, h) => sum + (parseInt(h?.par, 10) || 0), 0);
 }
 
+// How many holes a round is played over — 9 or 18. Every piece of handicap
+// maths below is relative to this: the WHS course handicap halves the index
+// for a 9-hole round, and strokes are allocated over stroke indices 1..N.
+// Anything that is not a 9-hole hole list is treated as 18, so rounds with a
+// partial/missing hole list keep their historic behaviour.
+export function holeCountOf(holesOrRound) {
+  const holes = Array.isArray(holesOrRound) ? holesOrRound : holesOrRound?.holes;
+  return holes?.length === 9 ? 9 : 18;
+}
+
 // WHS course handicap: HI × (slope/113) + (CR − par), rounded.
 // No slope → raw index (can't compute either term meaningfully).
 // Missing CR or par → slope-only fallback.
-export function calcPlayingHandicap(index, slope, rating, par) {
+// On a 9-hole round the index is halved first and the slope/CR/par terms are
+// the tee's 9-hole values, per WHS 9-hole course handicap.
+export function calcPlayingHandicap(index, slope, rating, par, holeCount = 18) {
   const parsed = parseFloat(index);
-  const idx = Number.isFinite(parsed) ? parsed : 0;
+  const full = Number.isFinite(parsed) ? parsed : 0;
+  const idx = holeCount === 9 ? full / 2 : full;
   const sv = parseInt(slope, 10) || 0;
   if (sv <= 0) return Math.round(idx) || 0; // No slope → round to integer course handicap (matches WHS).
   const slopeAdj = idx * (sv / STANDARD_SLOPE);
@@ -79,6 +92,7 @@ export function deriveRoundPlayingHandicap(handicap, round, playerId) {
     slope,
     rating,
     totalParFromHoles(round?.holes),
+    holeCountOf(round),
   );
 }
 
@@ -124,32 +138,35 @@ export function recomputeRoundPlayingHandicaps(round, players) {
   return { ...round, playerHandicaps };
 }
 
-// Strokes received on a hole: floor(handicap/18) on every hole, plus one more
-// on holes whose stroke index is within the handicap's remainder. Plus
-// handicaps (negative) give strokes back starting from the easiest hole
-// (highest stroke index) instead.
-export function calcExtraShots(playerHandicap, holeStrokeIndex) {
+// Strokes received on a hole: floor(handicap/N) on every hole, plus one more
+// on holes whose stroke index is within the handicap's remainder, where N is
+// the round's hole count (18, or 9 on a 9-hole course whose stroke indices
+// run 1-9). Plus handicaps (negative) give strokes back starting from the
+// easiest hole (highest stroke index) instead.
+export function calcExtraShots(playerHandicap, holeStrokeIndex, holeCount = 18) {
+  const n = holeCount === 9 ? 9 : 18;
   if (playerHandicap < 0) {
     const given = -playerHandicap;
-    const base = Math.floor(given / 18);
-    const remainder = given % 18;
-    return (holeStrokeIndex > 18 - remainder ? -1 : 0) - base;
+    const base = Math.floor(given / n);
+    const remainder = given % n;
+    return (holeStrokeIndex > n - remainder ? -1 : 0) - base;
   }
-  const base = Math.floor(playerHandicap / 18);
-  const remainder = playerHandicap % 18;
+  const base = Math.floor(playerHandicap / n);
+  const remainder = playerHandicap % n;
   return base + (holeStrokeIndex <= remainder ? 1 : 0);
 }
 
 // Stableford points = 2 + par − net strokes (handicap-adjusted), floored at 0.
-export function calcStablefordPoints(par, strokes, playerHandicap, holeStrokeIndex) {
+export function calcStablefordPoints(par, strokes, playerHandicap, holeStrokeIndex, holeCount = 18) {
   if (!strokes || strokes <= 0) return 0;
-  const extra = calcExtraShots(playerHandicap, holeStrokeIndex);
+  const extra = calcExtraShots(playerHandicap, holeStrokeIndex, holeCount);
   const points = 2 + par - strokes + extra;
   return Math.max(0, points);
 }
 
 // scores shape: { [playerId]: { [holeNumber]: strokes } }
 export function roundTotals(round, players) {
+  const holeCount = holeCountOf(round);
   return players.map((player) => {
     const handicap = getPlayingHandicap(round, player);
     let totalPoints = 0;
@@ -158,7 +175,7 @@ export function roundTotals(round, players) {
       const strokes = round.scores?.[player.id]?.[hole.number];
       if (strokes) {
         totalStrokes += strokes;
-        totalPoints += calcStablefordPoints(hole.par, strokes, handicap, hole.strokeIndex);
+        totalPoints += calcStablefordPoints(hole.par, strokes, handicap, hole.strokeIndex, holeCount);
       }
     });
     return { player, handicap, totalPoints, totalStrokes };
@@ -170,7 +187,7 @@ export function roundTotals(round, players) {
 // scored yet. Caller can derive halved holes by checking that both sides
 // returned 0 for the same hole. Nets are computed off the RELATIVE handicap
 // (best player off 0, opponent gets the difference).
-export function matchPlayHolePts(hole, playerId, players, scores, playerHandicapsByPlayerId) {
+export function matchPlayHolePts(hole, playerId, players, scores, playerHandicapsByPlayerId, holeCount = 18) {
   if (!players || players.length !== 2) return null;
   const [a, b] = players;
   const strA = scores?.[a.id]?.[hole.number];
@@ -180,8 +197,8 @@ export function matchPlayHolePts(hole, playerId, players, scores, playerHandicap
   const hB = playerHandicapsByPlayerId?.[b.id] ?? b.handicap ?? 0;
   // Match play is scored off the handicap DIFFERENCE (best player off 0).
   const [rA, rB] = duelRelative(hA, hB);
-  const netA = strA - calcExtraShots(rA, hole.strokeIndex);
-  const netB = strB - calcExtraShots(rB, hole.strokeIndex);
+  const netA = strA - calcExtraShots(rA, hole.strokeIndex, holeCount);
+  const netB = strB - calcExtraShots(rB, hole.strokeIndex, holeCount);
   if (netA === netB) return 0;
   const winnerId = netA < netB ? a.id : b.id;
   return playerId === winnerId ? 1 : 0;
@@ -195,18 +212,19 @@ export function matchPlayRoundTally(round, players) {
   const scores = round?.scores ?? {};
   const playerHandicaps = round?.playerHandicaps ?? {};
   const holes = round?.holes ?? [];
+  const holeCount = holeCountOf(holes);
   let aWins = 0;
   let bWins = 0;
   let halved = 0;
   let played = 0;
   for (const hole of holes) {
-    const pts = matchPlayHolePts(hole, a.id, players, scores, playerHandicaps);
+    const pts = matchPlayHolePts(hole, a.id, players, scores, playerHandicaps, holeCount);
     if (pts == null) continue;
     played++;
     if (pts === 1) aWins++;
     else {
       // a didn't win — either b did or it was halved
-      const bPts = matchPlayHolePts(hole, b.id, players, scores, playerHandicaps);
+      const bPts = matchPlayHolePts(hole, b.id, players, scores, playerHandicaps, holeCount);
       if (bPts === 1) bWins++;
       else halved++;
     }
@@ -226,14 +244,14 @@ export function matchPlayRoundTally(round, players) {
 //   three distinct           → 4 / 2 / 0
 // Returns { [playerId]: points }, or null when there are not exactly 3 players
 // or any of them has not scored the hole yet.
-export function sindicatoHolePoints(hole, players, scores, playerHandicapsByPlayerId) {
+export function sindicatoHolePoints(hole, players, scores, playerHandicapsByPlayerId, holeCount = 18) {
   if (!players || players.length !== 3) return null;
   const nets = [];
   for (const p of players) {
     const strokes = scores?.[p.id]?.[hole.number];
     if (strokes == null) return null;
     const h = playerHandicapsByPlayerId?.[p.id] ?? p.handicap ?? 0;
-    nets.push({ id: p.id, net: strokes - calcExtraShots(h, hole.strokeIndex) });
+    nets.push({ id: p.id, net: strokes - calcExtraShots(h, hole.strokeIndex, holeCount) });
   }
   const [lo, mid, hi] = [...nets].sort((a, b) => a.net - b.net);
   if (lo.net === mid.net && mid.net === hi.net) {
@@ -258,10 +276,11 @@ export function sindicatoRoundTally(round, players) {
   const scores = round?.scores ?? {};
   const playerHandicaps = round?.playerHandicaps ?? {};
   const holes = round?.holes ?? [];
+  const holeCount = holeCountOf(holes);
   const pointsById = Object.fromEntries(players.map((p) => [p.id, 0]));
   let played = 0;
   for (const hole of holes) {
-    const hp = sindicatoHolePoints(hole, players, scores, playerHandicaps);
+    const hp = sindicatoHolePoints(hole, players, scores, playerHandicaps, holeCount);
     if (!hp) continue;
     played++;
     for (const p of players) pointsById[p.id] += hp[p.id];
@@ -278,8 +297,8 @@ export function sindicatoRoundTally(round, players) {
 
 // Lowest stroke count that still yields 0 Stableford points on this hole for
 // this player. Use as the recorded score when a player picks up the ball.
-export function pickupStrokes(par, playerHandicap, holeStrokeIndex) {
-  const extra = calcExtraShots(playerHandicap, holeStrokeIndex);
+export function pickupStrokes(par, playerHandicap, holeStrokeIndex, holeCount = 18) {
+  const extra = calcExtraShots(playerHandicap, holeStrokeIndex, holeCount);
   return par + 2 + extra;
 }
 
@@ -289,8 +308,8 @@ export function pickupStrokes(par, playerHandicap, holeStrokeIndex) {
 // lets a player record anything from that point up. Uses `>=` (not `===`)
 // so an over-pickup entry (e.g. a stale synthetic value from before a
 // handicap edit) still reads as picked up.
-export function isPickupScore(strokes, par, playerHandicap, holeStrokeIndex) {
-  return strokes != null && strokes >= pickupStrokes(par, playerHandicap, holeStrokeIndex);
+export function isPickupScore(strokes, par, playerHandicap, holeStrokeIndex, holeCount = 18) {
+  return strokes != null && strokes >= pickupStrokes(par, playerHandicap, holeStrokeIndex, holeCount);
 }
 
 // The playing handicap to use for a player on a round: the round's
@@ -321,9 +340,9 @@ const PICKUP_HEADROOM = 6;
 // each player's per-hole pickup number. `strokes == null` means "no score" (a
 // cleared cell) and passes through untouched — clearing a score must never
 // become a 1.
-export function clampScoreInput(strokes, par, playerHandicap, holeStrokeIndex) {
+export function clampScoreInput(strokes, par, playerHandicap, holeStrokeIndex, holeCount = 18) {
   if (strokes == null) return strokes;
-  const max = pickupStrokes(par, playerHandicap, holeStrokeIndex) + PICKUP_HEADROOM;
+  const max = pickupStrokes(par, playerHandicap, holeStrokeIndex, holeCount) + PICKUP_HEADROOM;
   if (strokes < 1) return 1;
   if (strokes > max) return max;
   return strokes;
@@ -751,6 +770,7 @@ export function scrambleRoundTally(round, players) {
   const units = scrambleUnits(round, players);
   if (units.length === 0) return null;
   const holes = round?.holes ?? [];
+  const holeCount = holeCountOf(holes);
   const scores = round?.scores ?? {};
 
   const rows = units.map((unit) => {
@@ -762,12 +782,12 @@ export function scrambleRoundTally(round, players) {
       if (str == null) continue;
       scored++;
       strokes += str;
-      points += calcStablefordPoints(hole.par, str, unit.handicap, hole.strokeIndex);
+      points += calcStablefordPoints(hole.par, str, unit.handicap, hole.strokeIndex, holeCount);
     }
     let maxRemaining = 0;
     for (const hole of holes) {
       if (scores?.[unit.id]?.[hole.number] != null) continue;
-      maxRemaining += calcStablefordPoints(hole.par, 1, unit.handicap, hole.strokeIndex);
+      maxRemaining += calcStablefordPoints(hole.par, 1, unit.handicap, hole.strokeIndex, holeCount);
     }
     return { unit, points, strokes, scored, maxRemaining };
   });
@@ -835,7 +855,7 @@ export function matchPlayEffectiveHandicaps(mode, round, players) {
 }
 
 // 1 = first player wins, 2 = second, 0 = halved, null = not fully scored.
-function duelNetWinner(hole, a, b, scores, playerHandicaps) {
+function duelNetWinner(hole, a, b, scores, playerHandicaps, holeCount = 18) {
   const strA = scores?.[a.id]?.[hole.number];
   const strB = scores?.[b.id]?.[hole.number];
   if (strA == null || strB == null) return null;
@@ -843,20 +863,20 @@ function duelNetWinner(hole, a, b, scores, playerHandicaps) {
   const hB = playerHandicaps?.[b.id] ?? b.handicap ?? 0;
   // Each duel is its own match: nets use the within-duel difference.
   const [rA, rB] = duelRelative(hA, hB);
-  const netA = strA - calcExtraShots(rA, hole.strokeIndex);
-  const netB = strB - calcExtraShots(rB, hole.strokeIndex);
+  const netA = strA - calcExtraShots(rA, hole.strokeIndex, holeCount);
+  const netB = strB - calcExtraShots(rB, hole.strokeIndex, holeCount);
   if (netA === netB) return 0;
   return netA < netB ? 1 : 2;
 }
 
-export function pairsMatchHolePts(hole, pairs, scores, playerHandicaps) {
+export function pairsMatchHolePts(hole, pairs, scores, playerHandicaps, holeCount = 18) {
   const duels = pairsMatchDuels(pairs);
   if (!duels) return null;
   let team1 = 0;
   let team2 = 0;
   let decidedDuels = 0;
   for (const [a, b] of duels) {
-    const w = duelNetWinner(hole, a, b, scores, playerHandicaps);
+    const w = duelNetWinner(hole, a, b, scores, playerHandicaps, holeCount);
     if (w == null) continue;
     decidedDuels++;
     if (w === 1) team1 += 1;
@@ -868,13 +888,13 @@ export function pairsMatchHolePts(hole, pairs, scores, playerHandicaps) {
 
 // The player's own duel result on one hole: 1 / 0.5 / 0, or null while the
 // duel is not fully scored (mirrors matchPlayHolePts semantics).
-export function pairsMatchDuelPts(hole, playerId, pairs, scores, playerHandicaps) {
+export function pairsMatchDuelPts(hole, playerId, pairs, scores, playerHandicaps, holeCount = 18) {
   const duels = pairsMatchDuels(pairs);
   if (!duels) return null;
   const duel = duels.find(([a, b]) => a.id === playerId || b.id === playerId);
   if (!duel) return null;
   const [a, b] = duel;
-  const w = duelNetWinner(hole, a, b, scores, playerHandicaps);
+  const w = duelNetWinner(hole, a, b, scores, playerHandicaps, holeCount);
   if (w == null) return null;
   if (w === 0) return 0.5;
   const winnerId = w === 1 ? a.id : b.id;
@@ -885,6 +905,7 @@ export function pairsMatchRoundTally(round, _players) {
   const duels = pairsMatchDuels(round?.pairs);
   if (!duels) return null;
   const holes = round?.holes ?? [];
+  const holeCount = holeCountOf(holes);
   const scores = round?.scores ?? {};
   const playerHandicaps = round?.playerHandicaps ?? {};
 
@@ -898,7 +919,7 @@ export function pairsMatchRoundTally(round, _players) {
   for (const hole of holes) {
     let decided = 0;
     duels.forEach(([a, b], i) => {
-      const w = duelNetWinner(hole, a, b, scores, playerHandicaps);
+      const w = duelNetWinner(hole, a, b, scores, playerHandicaps, holeCount);
       if (w == null) {
         team1Remaining += 1;
         team2Remaining += 1;

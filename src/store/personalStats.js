@@ -7,6 +7,7 @@
 // a synthetic single-player "tournament", and reuse the per-player functions
 // in statsEngine.js. See docs/superpowers/specs/2026-05-17-my-stats-personal-view-design.md
 import { getPlayingHandicap, calcStablefordPoints, roundScoringMode } from './tournamentStore';
+import { holeCountOf } from './scoring';
 import { isScrambleMode } from '../components/scoringModes';
 import {
   parTypeSplit, warmupVsClosing, frontBackSplit, playerScoreDistribution,
@@ -100,7 +101,7 @@ export function holeDifficultySplit(tournament, playerId) {
       holes.forEach((hole) => {
         const sc = round.scores[playerId]?.[hole.number];
         if (!sc) return;
-        const points = calcStablefordPoints(hole.par, sc, handicap, hole.strokeIndex);
+        const points = calcStablefordPoints(hole.par, sc, handicap, hole.strokeIndex, holeCountOf(round));
         const band = difficultyBand(hole.strokeIndex, maxSI);
         bands[band].push({
           roundIndex, courseName: round.courseName,
@@ -252,7 +253,7 @@ export function collectMyRounds(tournaments, userId, displayName) {
       holes.forEach((h) => {
         const sc = myScores[h.number];
         if (sc != null) {
-          points += calcStablefordPoints(h.par, sc, handicap, h.strokeIndex);
+          points += calcStablefordPoints(h.par, sc, handicap, h.strokeIndex, holeCountOf(round));
           holesPlayed += 1;
         }
       });

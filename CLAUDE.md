@@ -40,7 +40,10 @@ Core features:
 - **Tournament:** A multi-round event across different courses. Each round
   may override the tournament's default scoring mode (`round.scoringMode`);
   mixed-mode tournaments rank by Stableford totals.
-- **Round:** One 18-hole game on a course with assigned partners.
+- **Round:** One game on a course with assigned partners — 18 holes, or 9 on
+  a nine-hole layout. Hole count drives the handicap maths (`holeCountOf`):
+  a 9-hole round halves the index for its course handicap and allocates
+  strokes over SI 1-9. 9-hole rounds do not feed the handicap index.
 - **Official tournament:** A managed tournament with admin controls, a
   shared leaderboard, and invite tokens — see the `official*` store modules.
 - **Handicap:** Each player has a handicap index; each hole has a stroke

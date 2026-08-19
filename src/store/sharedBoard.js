@@ -44,6 +44,7 @@ import {
   scrambleRoundTally,
   resolvePairs,
   calcExtraShots,
+  holeCountOf,
 } from './scoring';
 import { supabase } from '../lib/supabase';
 
@@ -172,7 +173,7 @@ function vsParThrough(round, unitId, handicap) {
       strokes += s;
       par += hole.par ?? 0;
       played += 1;
-      if (Number.isFinite(handicap)) allowed += calcExtraShots(handicap, hole.strokeIndex);
+      if (Number.isFinite(handicap)) allowed += calcExtraShots(handicap, hole.strokeIndex, holeCountOf(round));
     }
   }
   if (played === 0) return { vsPar: null, allowed: null };

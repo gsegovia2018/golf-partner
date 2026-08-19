@@ -52,7 +52,9 @@ export default function CourseLibraryDetailScreen({ navigation, route }) {
           setTees((course.tees ?? []).map((t) => ({ ...t })));
           setCity(course.city ?? '');
           setProvince(course.province ?? '');
-          if (course.holes.length === 18) setHoles(course.holes.map((h) => ({ ...h })));
+          if (course.holes.length === 18 || course.holes.length === 9) {
+            setHoles(course.holes.map((h) => ({ ...h })));
+          }
         }
       } catch (err) {
         if (!cancelled) setLoadError(err?.message ?? 'Could not load course');

@@ -113,15 +113,19 @@ export function filterCourseLibraryItems(items, query) {
 // rather than merely warn.
 // ---------------------------------------------------------------------------
 
-// Validate the stroke-index set: every hole must use a unique SI from 1-18.
-// Returns a human-readable list of problems (empty when valid).
+// Validate the stroke-index set: every hole must use a unique SI from 1-N,
+// where N is the card's own length — 9 on a nine-hole course (whose SIs run
+// 1-9 and whose strokes are allocated over nine holes, see
+// store/scoring.js#calcExtraShots), 18 otherwise. Returns a human-readable
+// list of problems (empty when valid).
 export function computeSiIssues(holes) {
   const issues = [];
   const seen = new Map();
+  const max = holes?.length === 9 ? 9 : 18;
   (holes ?? []).forEach((h) => {
     const si = h.strokeIndex;
-    if (!si || si < 1 || si > 18) {
-      issues.push(`Hole ${h.number}: SI must be 1–18`);
+    if (!si || si < 1 || si > max) {
+      issues.push(`Hole ${h.number}: SI must be 1–${max}`);
     }
     if (si) seen.set(si, (seen.get(si) ?? 0) + 1);
   });
@@ -130,8 +134,8 @@ export function computeSiIssues(holes) {
     issues.push(`Duplicate SI: ${dupeSI.sort((a, b) => a - b).join(', ')}`);
   }
   const missing = [];
-  for (let i = 1; i <= 18; i += 1) if (!seen.has(i)) missing.push(i);
-  if (missing.length > 0 && missing.length < 18) {
+  for (let i = 1; i <= max; i += 1) if (!seen.has(i)) missing.push(i);
+  if (missing.length > 0 && missing.length < max) {
     issues.push(`Missing SI: ${missing.join(', ')}`);
   }
   return issues;

@@ -7,6 +7,7 @@ import { View, Text, TextInput, Pressable, useWindowDimensions } from 'react-nat
 import { useTheme } from '../../theme/ThemeContext';
 import { playersMeFirst } from '../../lib/playerOrder';
 import { calcExtraShots, scrambleUnits, matchPlayEffectiveHandicaps } from '../../store/tournamentStore';
+import { holeCountOf } from '../../store/scoring';
 import PullToRefresh from '../PullToRefresh';
 import { makeScorecardStyles } from './styles';
 import { holePoints, roundTotals } from './scoreModel';
@@ -113,6 +114,9 @@ function NineBlock({
   currentHoleByPlayer,
 }) {
   const { labelW, aggW, holeW, labelFontSize } = columns;
+  // The block renders one nine, but strokes are allocated over the ROUND's
+  // holes — never `holes.length`, which is 9 for the front block of an 18.
+  const holeCount = holeCountOf(round);
   const labelFont = { fontSize: labelFontSize };
   const isSolo = players.length === 1;
   const displayPlayers = playersMeFirst(players, meId);
@@ -181,7 +185,7 @@ function NineBlock({
           </Text>
           {holes.map((h) => {
             const pts = ptsFor(h, player);
-            const extra = calcExtraShots(handicap, h.strokeIndex);
+            const extra = calcExtraShots(handicap, h.strokeIndex, holeCount);
             const isCurrent = currentHoleByPlayer?.[player.id] === h.number;
             return (
               <View key={h.number} style={[s.soloNineCell, holeCell]}>
@@ -209,7 +213,7 @@ function NineBlock({
           {rowLabel}
         </Text>
         {holes.map((h) => {
-          const extra = calcExtraShots(handicap, h.strokeIndex);
+          const extra = calcExtraShots(handicap, h.strokeIndex, holeCount);
           const cellEditable = editable ? editable(player.id) !== false : true;
           const rawScore = scores[player.id]?.[h.number];
           const cellValue = rawScore != null ? String(rawScore) : '';

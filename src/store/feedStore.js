@@ -13,6 +13,7 @@ import {
 } from './tournamentRepo';
 import {
   roundScoringMode, calcExtraShots, isScrambleMode, scrambleRoundTally, resolvePairs,
+  holeCountOf,
 } from './scoring';
 import { loadMediaForTournaments } from './mediaStore';
 import { listFriends, getCachedFriends } from './friendStore';
@@ -126,7 +127,7 @@ function vsParThrough(round, playerId, handicap) {
       strokes += s;
       par += hole.par ?? 0;
       played++;
-      if (Number.isFinite(handicap)) allowed += calcExtraShots(handicap, hole.strokeIndex);
+      if (Number.isFinite(handicap)) allowed += calcExtraShots(handicap, hole.strokeIndex, holeCountOf(round));
     }
   }
   if (played === 0) return { vsPar: null, allowed: null };

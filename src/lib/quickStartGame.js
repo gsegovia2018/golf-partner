@@ -30,24 +30,26 @@ function numericValue(value) {
   return Number(trimmed);
 }
 
-function isHoleComplete(hole) {
+function isHoleComplete(hole, holeCount) {
   const number = numericValue(hole?.number);
   const par = numericValue(hole?.par);
   const strokeIndex = numericValue(hole?.strokeIndex);
   return Number.isInteger(number)
     && number >= 1
-    && number <= 18
+    && number <= holeCount
     && Number.isFinite(par)
     && par > 0
     && Number.isInteger(strokeIndex)
     && strokeIndex >= 1
-    && strokeIndex <= 18;
+    && strokeIndex <= holeCount;
 }
 
+// A course is quick-startable when it carries a full 18- or 9-hole card.
+// Anything else (a half-entered course) falls back to defaultHoles().
 function hasCompleteHoles(holes) {
   return Array.isArray(holes)
-    && holes.length === 18
-    && holes.every(isHoleComplete);
+    && (holes.length === 18 || holes.length === 9)
+    && holes.every((h) => isHoleComplete(h, holes.length));
 }
 
 function namedTees(tees) {

@@ -15,6 +15,7 @@ import {
   getPlayingHandicap,
   recomputeRoundPlayingHandicaps,
   calcStablefordPoints,
+  holeCountOf,
   tournamentSindicatoClinched,
   buildTeamsForMode,
   thinPairs,
@@ -1310,7 +1311,7 @@ export function calcBestWorstBall(round, players) {
     const handicap = getPlayingHandicap(round, player);
     const strokes = round.scores?.[playerId]?.[hole.number];
     if (!strokes) return null;
-    return calcStablefordPoints(hole.par, strokes, handicap, hole.strokeIndex);
+    return calcStablefordPoints(hole.par, strokes, handicap, hole.strokeIndex, holeCountOf(round));
   };
 
   const bestBall = { pair1: 0, pair2: 0, halved: 0 };
@@ -1389,7 +1390,7 @@ export function assignBestWorstRoles(round, players) {
         points[p.id][hole.number] = null;
       } else {
         const hcp = getPlayingHandicap(round, p);
-        points[p.id][hole.number] = calcStablefordPoints(hole.par, strokes, hcp, hole.strokeIndex);
+        points[p.id][hole.number] = calcStablefordPoints(hole.par, strokes, hcp, hole.strokeIndex, holeCountOf(round));
       }
     });
   });
@@ -1500,7 +1501,7 @@ export function roundMaxRemainingStableford(round, player) {
   let max = 0;
   round.holes.forEach((hole) => {
     if (round.scores?.[player.id]?.[hole.number] != null) return;
-    max += calcStablefordPoints(hole.par, 1, handicap, hole.strokeIndex);
+    max += calcStablefordPoints(hole.par, 1, handicap, hole.strokeIndex, holeCountOf(round));
   });
   return max;
 }
@@ -1600,7 +1601,7 @@ export function tournamentPlayerClinched(tournament, mode) {
       players.forEach((p) => {
         const handicap = getPlayingHandicap(round, p);
         let max = 0;
-        round.holes.forEach((h) => { max += calcStablefordPoints(h.par, 1, handicap, h.strokeIndex); });
+        round.holes.forEach((h) => { max += calcStablefordPoints(h.par, 1, handicap, h.strokeIndex, holeCountOf(round)); });
         remainingPerPlayer.set(p.id, remainingPerPlayer.get(p.id) + max);
       });
       return;

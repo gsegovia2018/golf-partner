@@ -11,6 +11,7 @@ import {
   playerPartnerSplits, getActiveTournamentSnapshot, getTournamentSnapshot,
   roundScoringMode,
 } from '../store/tournamentStore';
+import { holeCountOf } from '../store/scoring';
 import {
   playerRoundHistory, playerAvgStableford, playerScoreDistribution,
   playerStreaks, bestWorstHoles, holeDifficultyMap,
@@ -1447,7 +1448,7 @@ function PlayersTab({ tournament, players, selectedPlayer, setSelectedPlayer, me
     const rows = round.holes.map(h => {
       const sc = round.scores?.[player.id]?.[h.number];
       if (!sc) return null;
-      const pts = calcStablefordPoints(h.par, sc, handicap, h.strokeIndex);
+      const pts = calcStablefordPoints(h.par, sc, handicap, h.strokeIndex, holeCountOf(round));
       return {
         key: `${h.number}`,
         primary: `Hole ${h.number}`,
@@ -2329,7 +2330,7 @@ function PairsTab({ tournament, players, h2hP1, setH2hP1, h2hP2, setH2hP2, selec
           memberRows.push({ key: `${pairLabel}-${player.id}`, primary: player.name, secondary: 'no score', rightPrimary: '—' });
           return;
         }
-        const pts = calcStablefordPoints(hole.par, sc, getPlayingHandicap(round, player), hole.strokeIndex);
+        const pts = calcStablefordPoints(hole.par, sc, getPlayingHandicap(round, player), hole.strokeIndex, holeCountOf(round));
         memberRows.push({
           key: `${pairLabel}-${player.id}`,
           primary: player.name,

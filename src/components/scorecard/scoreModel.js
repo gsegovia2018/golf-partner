@@ -17,29 +17,30 @@ import {
   pairsMatchRoundTally,
 } from '../../store/tournamentStore';
 import { playersMeFirst } from '../../lib/playerOrder';
-import { resolvePairs } from '../../store/scoring';
+import { resolvePairs, holeCountOf } from '../../store/scoring';
 
 // Points for every player on one hole. Returns { [playerId]: number|null };
 // null means the player has not scored the hole yet.
 export function holePoints({ mode, hole, players, scores, handicaps, round }) {
+  const holeCount = holeCountOf(round);
   const result = {};
   for (const p of players) {
     const str = scores?.[p.id]?.[hole.number];
     if (mode === 'pairsmatchplay') {
       // Duel result is defined by the duel being fully scored, not by p
       // having scored — mirror matchPlayHolePts null semantics.
-      result[p.id] = pairsMatchDuelPts(hole, p.id, round?.pairs, scores, handicaps);
+      result[p.id] = pairsMatchDuelPts(hole, p.id, round?.pairs, scores, handicaps, holeCount);
       continue;
     }
     if (str == null) { result[p.id] = null; continue; }
     if (mode === 'matchplay') {
       // matchPlayHolePts returns null when either player (not just p) has not scored yet.
-      result[p.id] = matchPlayHolePts(hole, p.id, players, scores, handicaps);
+      result[p.id] = matchPlayHolePts(hole, p.id, players, scores, handicaps, holeCount);
     } else if (mode === 'sindicato') {
-      result[p.id] = sindicatoHolePoints(hole, players, scores, handicaps)?.[p.id] ?? null;
+      result[p.id] = sindicatoHolePoints(hole, players, scores, handicaps, holeCount)?.[p.id] ?? null;
     } else {
       const hcp = handicaps?.[p.id] ?? p.handicap ?? 0;
-      result[p.id] = calcStablefordPoints(hole.par, str, hcp, hole.strokeIndex);
+      result[p.id] = calcStablefordPoints(hole.par, str, hcp, hole.strokeIndex, holeCount);
     }
   }
   return result;
@@ -49,12 +50,12 @@ export function holePoints({ mode, hole, players, scores, handicaps, round }) {
 // Shots the whole field shares cancel out (everyone +1 → no edge), so the
 // result is each player's stroke-index shots minus the field minimum —
 // empty when nobody has an edge. Order follows `players`.
-export function holeEdgeShots({ players, handicaps, strokeIndex }) {
+export function holeEdgeShots({ players, handicaps, strokeIndex, holeCount = 18 }) {
   if (!players?.length) return [];
   const extras = players.map((p) => ({
     id: p.id,
     name: p.name,
-    extra: calcExtraShots(handicaps?.[p.id] ?? p.handicap ?? 0, strokeIndex),
+    extra: calcExtraShots(handicaps?.[p.id] ?? p.handicap ?? 0, strokeIndex, holeCount),
   }));
   const min = Math.min(...extras.map((e) => e.extra));
   return extras

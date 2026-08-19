@@ -2,6 +2,7 @@ import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { View, Text, TextInput, TouchableOpacity, StyleSheet } from 'react-native';
 import { Feather } from '@expo/vector-icons';
 import { calcPlayingHandicap, lastTeeForPlayerOnCourse } from '../store/tournamentStore';
+import { holeCountOf } from '../store/scoring';
 import { middleTee, resolveTeeForPlayer } from '../store/tees';
 
 // Common golf tee colours, matched against the tee label by keyword —
@@ -78,6 +79,7 @@ export default function RoundTeeAssignments({ round, players = [], onChange, the
   const holes = round?.holes ?? [];
   const courseId = round?.courseId ?? null;
   const totalPar = holes.reduce((sum, h) => sum + (h.par || 0), 0);
+  const holeCount = holeCountOf(holes);
 
   // A legacy course carries one synthetic tee with no label, purely to hold a
   // rating/slope. Only tees with a real label are a genuine tee *choice* worth
@@ -163,7 +165,7 @@ export default function RoundTeeAssignments({ round, players = [], onChange, the
         players.forEach((p) => {
           if (manualHandicaps[p.id]) return;
           const tee = resolved[p.id];
-          const auto = String(calcPlayingHandicap(effIndex(p), tee?.slope, tee?.rating, totalPar));
+          const auto = String(calcPlayingHandicap(effIndex(p), tee?.slope, tee?.rating, totalPar, holeCount));
           if (next[p.id] !== auto) { next[p.id] = auto; changed = true; }
         });
         return changed ? next : prev;
@@ -198,7 +200,7 @@ export default function RoundTeeAssignments({ round, players = [], onChange, the
       players.forEach((p) => {
         if (manual[p.id]) return;
         const tee = nextPlayerTees[p.id];
-        next[p.id] = String(calcPlayingHandicap(effIndex(p), tee?.slope, tee?.rating, totalPar));
+        next[p.id] = String(calcPlayingHandicap(effIndex(p), tee?.slope, tee?.rating, totalPar, holeCount));
       });
       return next;
     });
@@ -221,7 +223,7 @@ export default function RoundTeeAssignments({ round, players = [], onChange, the
       const next = {};
       players.forEach((p) => {
         const tee = playerTees[p.id];
-        next[p.id] = String(calcPlayingHandicap(effIndex(p), tee?.slope, tee?.rating, totalPar));
+        next[p.id] = String(calcPlayingHandicap(effIndex(p), tee?.slope, tee?.rating, totalPar, holeCount));
       });
       return next;
     });
@@ -239,7 +241,7 @@ export default function RoundTeeAssignments({ round, players = [], onChange, the
     const tee = playerTees[playerId];
     setPlayerHandicaps((prev) => ({
       ...prev,
-      [playerId]: String(calcPlayingHandicap(idx, tee?.slope, tee?.rating, totalPar)),
+      [playerId]: String(calcPlayingHandicap(idx, tee?.slope, tee?.rating, totalPar, holeCount)),
     }));
   }
 

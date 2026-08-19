@@ -62,7 +62,7 @@ import {
 } from '../components/scorecard/constants';
 import {
   reconcileShotDetail, listRoundConflicts, roundScoringMode, roundBestBallValues,
-  clampScoreInput, resolvePlayerHandicap,
+  clampScoreInput, resolvePlayerHandicap, holeCountOf,
 } from '../store/scoring';
 import {
   surfaceableConflicts, deriveCell, authorScores, holeEntryMismatches,
@@ -141,6 +141,7 @@ export function clampEnteredScore(round, players, playerId, holeNumber, rawValue
   if (!hole) return rawValue;
   return clampScoreInput(
     rawValue, hole.par, resolvePlayerHandicap(round, players, playerId), hole.strokeIndex,
+    holeCountOf(round),
   );
 }
 

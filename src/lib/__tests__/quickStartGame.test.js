@@ -60,8 +60,14 @@ describe('courseToQuickStartRound', () => {
     expect(round.tees[0]).not.toBe(tees[0]);
   });
 
-  test('falls back to default 18 holes when course hole data is incomplete', () => {
-    const round = courseToQuickStartRound({ ...course, holes: holes.slice(0, 9) });
+  test('keeps a complete nine-hole card as its own nine-hole round', () => {
+    const nine = holes.slice(0, 9);
+    const round = courseToQuickStartRound({ ...course, holes: nine });
+    expect(round.holes).toEqual(nine);
+  });
+
+  test('falls back to default 18 holes when the card is neither a full 18 nor 9', () => {
+    const round = courseToQuickStartRound({ ...course, holes: holes.slice(0, 12) });
     expect(round.holes).toHaveLength(18);
     expect(round.holes[0]).toEqual({ number: 1, par: 4, strokeIndex: 1 });
   });

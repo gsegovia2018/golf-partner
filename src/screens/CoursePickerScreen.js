@@ -255,7 +255,10 @@ export default function CoursePickerScreen({ navigation, route }) {
         kind: 'course',
         course: {
           id: course.id, name: course.name, slope: course.slope, rating: course.rating,
-          holes: course.holes.length === 18 ? course.holes : defaultHoles(),
+          // Full 18 or full 9 (nine-hole layouts) are used as stored; a
+          // half-entered card falls back to a blank 18.
+          holes: course.holes.length === 18 || course.holes.length === 9
+            ? course.holes : defaultHoles(),
           tees: course.tees ?? [],
         },
       };

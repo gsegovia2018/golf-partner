@@ -2,7 +2,7 @@ import { syncQueue } from './syncQueue';
 import { saveLocal, readLocal, _setSyncStatus } from './tournamentStore';
 import { isOnline } from '../lib/connectivity';
 import { normalizeRoundNotes } from './roundNotes';
-import { clampScoreInput, resolvePlayerHandicap } from './scoring';
+import { clampScoreInput, resolvePlayerHandicap, holeCountOf } from './scoring';
 
 // Maps a mutation to a stable dotted path identifying what it touches.
 // Asserted on directly by tests/legacy call sites — it is NOT a queue
@@ -691,7 +691,9 @@ export async function mutate(tournamentBefore, mutation, opts = {}) {
     const hole = round?.holes?.find((h) => h.number === m.hole);
     if (hole) {
       const playerHandicap = resolvePlayerHandicap(round, tournamentBefore?.players, m.playerId);
-      m.value = clampScoreInput(m.value, hole.par, playerHandicap, hole.strokeIndex);
+      m.value = clampScoreInput(
+        m.value, hole.par, playerHandicap, hole.strokeIndex, holeCountOf(round),
+      );
     }
   }
 

@@ -1,5 +1,5 @@
 import { scoreCellState, defaultOfficialHoles } from './officialScoring';
-import { calcStablefordPoints, stablefordComparator } from './scoring';
+import { calcStablefordPoints, stablefordComparator, holeCountOf } from './scoring';
 
 // One resolved stroke value per (subject, hole), plus which holes are still
 // stuck in an unresolved self/marker discrepancy.
@@ -40,11 +40,11 @@ function resolvedByPlayer(scores) {
 // Net Stableford points for one player's resolved holes — the canonical
 // handicap-aware math from scoring.js (calcStablefordPoints/calcExtraShots),
 // never reimplemented here.
-function netStablefordPoints(handicap, holesMap, holesByNumber) {
+function netStablefordPoints(handicap, holesMap, holesByNumber, holeCount = 18) {
   let points = 0;
   for (const [holeNumber, strokes] of holesMap) {
     const hole = holesByNumber.get(holeNumber) ?? { par: 4, strokeIndex: holeNumber };
-    points += calcStablefordPoints(hole.par, strokes, handicap, hole.strokeIndex);
+    points += calcStablefordPoints(hole.par, strokes, handicap, hole.strokeIndex, holeCount);
   }
   return points;
 }
@@ -63,9 +63,9 @@ function netStablefordPoints(handicap, holesMap, holesByNumber) {
 // strokeIndex }[]); a flat par-4 fallback is used only if the caller
 // doesn't have course data yet (e.g. round not hydrated).
 export function buildLeaderboard({ members, scores, holes, format = 'net_stableford' }) {
-  const holesByNumber = new Map(
-    (holes && holes.length ? holes : defaultOfficialHoles()).map((h) => [h.number, h]),
-  );
+  const courseHoles = holes && holes.length ? holes : defaultOfficialHoles();
+  const holesByNumber = new Map(courseHoles.map((h) => [h.number, h]));
+  const holeCount = holeCountOf(courseHoles);
   const resolved = resolvedByPlayer(scores);
 
   const rows = members.map((m) => {
@@ -76,7 +76,7 @@ export function buildLeaderboard({ members, scores, holes, format = 'net_stablef
     switch (format) {
       case 'net_stableford':
       default:
-        points = netStablefordPoints(m.handicap ?? 0, holesMap, holesByNumber);
+        points = netStablefordPoints(m.handicap ?? 0, holesMap, holesByNumber, holeCount);
     }
     return {
       rosterId: m.roster_id,

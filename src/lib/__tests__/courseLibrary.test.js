@@ -136,6 +136,18 @@ describe('computeSiIssues', () => {
     const issues = computeSiIssues(holes);
     expect(issues.some((i) => i.includes('Hole 1'))).toBe(true);
   });
+
+  test('a nine-hole card is validated against 1..9, not 1..18', () => {
+    const nine = cleanHoles().slice(0, 9).map((h, i) => ({ ...h, strokeIndex: i + 1 }));
+    expect(computeSiIssues(nine)).toEqual([]);
+  });
+
+  test('a nine-hole card with an out-of-range SI is flagged', () => {
+    const nine = cleanHoles().slice(0, 9).map((h, i) => ({ ...h, strokeIndex: i + 1 }));
+    nine[0] = { ...nine[0], strokeIndex: 12 };
+    const issues = computeSiIssues(nine);
+    expect(issues.some((i) => i.includes('SI must be 1–9'))).toBe(true);
+  });
 });
 
 describe('computeDupeTeeLabels', () => {
