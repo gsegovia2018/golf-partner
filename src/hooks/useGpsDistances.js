@@ -45,6 +45,12 @@ export function useGpsDistances(courseName, holeNumber) {
   // browser settings changed mid-round) — re-runs the watch effect so the
   // header recovers without a remount or a settings toggle.
   const [permRetry, setPermRetry] = useState(0);
+  // Bumped whenever the page comes back to the foreground. Browsers suspend a
+  // geolocation watch while the page is hidden (screen off, tab or app switch)
+  // and mobile ones frequently never resume it — the watch stays registered
+  // but silent, which is why the fix froze until a reload. Restarting the
+  // whole effect is what a reload did, minus the reload.
+  const [wakeEpoch, setWakeEpoch] = useState(0);
   const [fix, setFix] = useState(null); // { pos: [lat, lng], accuracy }
   const lastFixAt = useRef(0);
   // Only whether the course HAS geometry gates the location watch — not the
@@ -52,6 +58,20 @@ export function useGpsDistances(courseName, holeNumber) {
   // bumps geomVersion and returns a fresh object; keying the effect on that
   // would tear down and rebuild the watch on every save.
   const hasGeometry = !!geometry;
+
+  useEffect(() => {
+    if (typeof document === 'undefined') return undefined;
+    const wake = () => {
+      if (document.visibilityState === 'visible') setWakeEpoch((n) => n + 1);
+    };
+    document.addEventListener('visibilitychange', wake);
+    // Safari restores from the back/forward cache without a visibilitychange.
+    window.addEventListener('pageshow', wake);
+    return () => {
+      document.removeEventListener('visibilitychange', wake);
+      window.removeEventListener('pageshow', wake);
+    };
+  }, []);
 
   useEffect(() => {
     if (!hasGeometry || !gpsEnabled) return undefined;
@@ -132,7 +152,7 @@ export function useGpsDistances(courseName, holeNumber) {
       if (webWatchId != null) navigator.geolocation.clearWatch(webWatchId);
       if (poll) clearInterval(poll);
     };
-  }, [hasGeometry, gpsEnabled, permRetry]);
+  }, [hasGeometry, gpsEnabled, permRetry, wakeEpoch]);
 
   const resolved = useMemo(() => {
     if (!geometry) return { distances: null, source: 'gps' };
