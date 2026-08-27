@@ -8,7 +8,7 @@ import {
   tournamentStablefordLeaderboard,
   isTournamentFinished,
 } from './tournamentStore';
-import { isRoundPlayed } from './scoring';
+import { isRoundPlayed, isFullLengthRound, isRoundFullyScoredBy } from './scoring';
 import { parseHandicapIndex } from '../lib/handicap';
 import { findPlayerForIdentity } from './historyModel';
 
@@ -163,6 +163,7 @@ export async function computePersonalStats({ userId, displayName }) {
     return {
       tournamentsPlayed: 0,
       roundsPlayed: 0,
+      fullRounds: 0,
       totalPoints: 0,
       avgPointsPerRound: 0,
       bestRound: null,
@@ -172,6 +173,9 @@ export async function computePersonalStats({ userId, displayName }) {
   const tournaments = await loadAllTournaments();
   let tournamentsPlayed = 0;
   let roundsPlayed = 0;
+  // Denominator for Avg pts: the subset of roundsPlayed whose totals are
+  // actually comparable with each other (see the forEach below).
+  let fullRounds = 0;
   let totalPoints = 0;
   let bestRound = null;
   let wins = 0;
@@ -194,7 +198,17 @@ export async function computePersonalStats({ userId, displayName }) {
       const totals = roundTotals(round, t.players);
       const mine = totals.find((e) => e.player.id === me.id);
       if (!mine || mine.totalStrokes === 0) return;
+      // A round is a round whatever its length, so the count takes every one.
       roundsPlayed += 1;
+      // Avg pts and Best are whole-round TOTALS, though, and those only
+      // compare between rounds of the same length — the rule the My Stats
+      // career panel already follows. A nine scores about half an eighteen and
+      // a round walked off after six holes about a third, so averaging either
+      // in dragged this strip below the figure the stats screens report for
+      // the same career. Completeness is per-player here: these are raw
+      // rounds, which carry no isComplete flag.
+      if (!isFullLengthRound(round) || !isRoundFullyScoredBy(round, me.id)) return;
+      fullRounds += 1;
       totalPoints += mine.totalPoints;
       if (!bestRound || mine.totalPoints > bestRound.points) {
         // Stableford points are net of the handicap the round was played
@@ -232,11 +246,12 @@ export async function computePersonalStats({ userId, displayName }) {
     }
   }
 
-  const avgPointsPerRound = roundsPlayed > 0 ? totalPoints / roundsPlayed : 0;
+  const avgPointsPerRound = fullRounds > 0 ? totalPoints / fullRounds : 0;
 
   return {
     tournamentsPlayed,
     roundsPlayed,
+    fullRounds,
     totalPoints,
     avgPointsPerRound,
     bestRound,

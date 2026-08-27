@@ -7,7 +7,7 @@
 // a synthetic single-player "tournament", and reuse the per-player functions
 // in statsEngine.js. See docs/superpowers/specs/2026-05-17-my-stats-personal-view-design.md
 import { getPlayingHandicap, calcStablefordPoints, roundScoringMode } from './tournamentStore';
-import { holeCountOf } from './scoring';
+import { holeCountOf, isFullLengthRound, countsForRoundTotals } from './scoring';
 import { isScrambleMode } from '../components/scoringModes';
 import {
   parTypeSplit, warmupVsClosing, frontBackSplit, playerScoreDistribution,
@@ -30,27 +30,15 @@ export const CANON_ID = 'me';
 
 // ── Round-total eligibility ──
 // Round-TOTAL figures (points in the round, strokes vs par, putts in the
-// round, damage) scale with how many holes were played, so they are only
-// ever comparable between rounds of the same length. A 9-hole round's ~18
-// points sitting in the same series as 18-hole rounds reads as a collapse
-// in form when it was a perfectly normal nine — the Form chart's points
-// line, the recent-vs-history deltas, course mastery and the career best
-// all inherit that lie. Nine-hole rounds are therefore left out of every
-// round-total aggregate, the same treatment handicapIndex ('nine-holes'
-// ineligible) and frontBackSplit (holes.length < 18 skipped) already give
-// them. PER-HOLE metrics (points/hole, fairway %, GIR %, score mix,
-// distribution, streaks, difficulty bands) are hole-count-neutral and keep
-// seeing every round, nine-hole ones included.
-export function isFullLengthRound(round) {
-  return (round?.holes?.length ?? 0) === 18;
-}
-
-// A round counts towards a round-total aggregate only when it is both
-// full-length AND fully scored — the two ways a partial total sneaks into a
-// whole-round average (see computeMetrics).
-export function countsForRoundTotals(round) {
-  return isFullLengthRound(round) && !!round?.isComplete;
-}
+// round, damage) scale with how many holes were played, so they are only ever
+// comparable between rounds of the same length: the Form chart's points line,
+// the recent-vs-history deltas and the career best all inherit the lie if a
+// nine sits among them. The rule itself lives in ./scoring beside holeCountOf
+// so that profileStore's History record strip applies the same one; re-exported
+// here because this is where callers look for it. PER-HOLE metrics (points/hole,
+// fairway %, GIR %, score mix, distribution, streaks, difficulty bands) are
+// hole-count-neutral and keep seeing every round, nine-hole ones included.
+export { isFullLengthRound, countsForRoundTotals };
 
 // ── Handicap-neutral comparison ──
 // Stableford points are NET of the playing handicap the round was scored

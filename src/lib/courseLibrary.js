@@ -5,6 +5,7 @@
 // An "item" is one of:
 //   { kind: 'course', course }                 — standalone or single-layout
 //   { kind: 'club', club, layouts: course[] }   — a club with 2+ layouts
+import { holeCountOf } from '../store/scoring';
 
 // Lowercase + strip diacritics, for accent-insensitive search/sort.
 export function normalizeText(value) {
@@ -121,7 +122,7 @@ export function filterCourseLibraryItems(items, query) {
 export function computeSiIssues(holes) {
   const issues = [];
   const seen = new Map();
-  const max = holes?.length === 9 ? 9 : 18;
+  const max = holeCountOf(holes);
   (holes ?? []).forEach((h) => {
     const si = h.strokeIndex;
     if (!si || si < 1 || si > max) {

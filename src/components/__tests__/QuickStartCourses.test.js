@@ -160,14 +160,17 @@ describe('QuickStartCourses interactions', () => {
 
     expect(onStart).toHaveBeenCalledWith({ course: courses[0], players: [players[1]] });
     // The sheet's content rides its exit animation out with the chrome
-    // (BottomSheet keeps children mounted until the close tween finishes),
-    // so the sheet closing is only observable once that animation settles.
-    // Generous timeout: real timers under a loaded test run can lag well
-    // past the sheet's own 250ms exit + fallback window.
+    // (BottomSheet keeps children mounted until the close tween finishes), so
+    // the sheet closing is only observable once that animation settles. Both
+    // timeouts are generous because the tween runs on real timers: in a full
+    // parallel run the event loop starves it well past the sheet's own 250ms
+    // exit + fallback window, which is what made this pass alone and fail in
+    // the suite. The waitFor limit has to clear that lag, and the test's own
+    // limit has to clear the waitFor.
     await waitFor(() => {
       expect(queryByText('Tees are auto-assigned. Use Edit details to change them.')).toBeNull();
-    }, { timeout: 3000 });
-  });
+    }, { timeout: 10000 });
+  }, 15000);
 
   test('calls onEditDetails with selected course and players', async () => {
     const onEditDetails = jest.fn();
@@ -180,11 +183,12 @@ describe('QuickStartCourses interactions', () => {
 
     expect(onEditDetails).toHaveBeenCalledWith({ course: courses[0], players: [players[1], players[0]] });
     // Same exit-animation carry-through as the Start case above — wait for
-    // the sheet to actually finish closing before asserting its content gone.
+    // the sheet to actually finish closing before asserting its content gone,
+    // and with the same per-test headroom over Jest's 5s default.
     await waitFor(() => {
       expect(queryByText('Tees are auto-assigned. Use Edit details to change them.')).toBeNull();
-    }, { timeout: 3000 });
-  });
+    }, { timeout: 10000 });
+  }, 15000);
 
   test('shows loading and error states with retry', () => {
     const onRetryPlayers = jest.fn();

@@ -6,6 +6,7 @@ import {
   buildTeamsForMode,
 } from '../store/tournamentStore';
 import { middleTee, teeByLabel, resolveTeeForPlayer } from '../store/tees';
+import { isStandardHoleCard } from '../store/scoring';
 import {
   fallbackScoringMode,
   isScoringModeAllowed,
@@ -47,8 +48,7 @@ function isHoleComplete(hole, holeCount) {
 // A course is quick-startable when it carries a full 18- or 9-hole card.
 // Anything else (a half-entered course) falls back to defaultHoles().
 function hasCompleteHoles(holes) {
-  return Array.isArray(holes)
-    && (holes.length === 18 || holes.length === 9)
+  return isStandardHoleCard(holes)
     && holes.every((h) => isHoleComplete(h, holes.length));
 }
 
