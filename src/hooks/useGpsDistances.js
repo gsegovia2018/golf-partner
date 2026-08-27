@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState, useSyncExternalStore } from 'react';
-import { Platform } from 'react-native';
+import { Platform, AppState } from 'react-native';
 import * as Location from 'expo-location';
 import {
   findCourseGeometry, holeFeatures, haversineMeters,
@@ -45,11 +45,11 @@ export function useGpsDistances(courseName, holeNumber) {
   // browser settings changed mid-round) — re-runs the watch effect so the
   // header recovers without a remount or a settings toggle.
   const [permRetry, setPermRetry] = useState(0);
-  // Bumped whenever the page comes back to the foreground. Browsers suspend a
-  // geolocation watch while the page is hidden (screen off, tab or app switch)
-  // and mobile ones frequently never resume it — the watch stays registered
-  // but silent, which is why the fix froze until a reload. Restarting the
-  // whole effect is what a reload did, minus the reload.
+  // Bumped whenever the app comes back to the foreground. Both platforms
+  // suspend a location watch while hidden (screen off, tab or app switch) and
+  // frequently never resume it — the watch stays registered but silent, which
+  // is why the fix froze until a reload. Restarting the whole effect is what a
+  // reload did, minus the reload.
   const [wakeEpoch, setWakeEpoch] = useState(0);
   const [fix, setFix] = useState(null); // { pos: [lat, lng], accuracy }
   const lastFixAt = useRef(0);
@@ -60,16 +60,28 @@ export function useGpsDistances(courseName, holeNumber) {
   const hasGeometry = !!geometry;
 
   useEffect(() => {
-    if (typeof document === 'undefined') return undefined;
-    const wake = () => {
-      if (document.visibilityState === 'visible') setWakeEpoch((n) => n + 1);
+    const wake = () => setWakeEpoch((n) => n + 1);
+    // Native: a locked screen or an app switch suspends the expo-location
+    // watch the same way a hidden tab suspends the browser one, and pocketing
+    // the phone between shots is the single most common thing that happens
+    // during a round. ScorecardScreen and lib/supabase already resume off this
+    // same event. Web is handled below with DOM listeners rather than AppState
+    // because pageshow — Safari's back/forward cache, which restores without a
+    // visibilitychange — has no AppState equivalent.
+    if (typeof document === 'undefined') {
+      const sub = AppState.addEventListener('change', (state) => {
+        if (state === 'active') wake();
+      });
+      return () => sub.remove();
+    }
+    const onWake = () => {
+      if (document.visibilityState === 'visible') wake();
     };
-    document.addEventListener('visibilitychange', wake);
-    // Safari restores from the back/forward cache without a visibilitychange.
-    window.addEventListener('pageshow', wake);
+    document.addEventListener('visibilitychange', onWake);
+    window.addEventListener('pageshow', onWake);
     return () => {
-      document.removeEventListener('visibilitychange', wake);
-      window.removeEventListener('pageshow', wake);
+      document.removeEventListener('visibilitychange', onWake);
+      window.removeEventListener('pageshow', onWake);
     };
   }, []);
 
