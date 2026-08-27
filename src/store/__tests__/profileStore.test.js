@@ -310,6 +310,95 @@ describe('computePersonalStats — the career best carries its era', () => {
   });
 });
 
+// The History record strip reports whole-round totals, so it takes the same
+// eligibility rule the My Stats career panel got in 5be20fb — a nine or a
+// walked-off round scores a fraction of a full eighteen and used to drag the
+// strip's average below the figure the stats screens showed for the career.
+describe('computePersonalStats — only whole rounds reach the record strip', () => {
+  const holes = Array.from({ length: 18 }, (_, i) => ({ number: i + 1, par: 4, strokeIndex: i + 1 }));
+  const nineHoles = holes.slice(0, 9);
+  const me = { id: 'p1', name: 'Ann', handicap: 13, user_id: 'u-p1' };
+  const scoresFor = (hs, strokes) => Object.fromEntries(hs.map((h) => [h.number, strokes]));
+
+  // Two rounds in one finished game: a full eighteen, plus whatever `extras`
+  // describes. Only the eighteen should ever reach the totals.
+  function gameWith(extraRound) {
+    return {
+      id: 't1',
+      kind: 'game',
+      name: 'Cup',
+      players: [me],
+      currentRound: 1,
+      finishedAt: '2026-07-01T00:00:00Z',
+      rounds: [
+        {
+          id: 'r0', holes, pairs: [[me]], scores: { p1: scoresFor(holes, 4) },
+          playerHandicaps: { p1: 20 },
+        },
+        extraRound,
+      ],
+    };
+  }
+
+  beforeEach(() => {
+    tournamentStore.loadAllTournaments.mockReset();
+  });
+
+  test('a complete nine is left out of rounds, average and best', async () => {
+    tournamentStore.loadAllTournaments.mockResolvedValue([gameWith({
+      id: 'r1', holes: nineHoles, pairs: [[me]], scores: { p1: scoresFor(nineHoles, 4) },
+      playerHandicaps: { p1: 20 },
+    })]);
+    const stats = await computePersonalStats({ userId: 'u-p1', displayName: 'Ann' });
+
+    // Both rounds are golf the player turned up for, so both are counted...
+    expect(stats.roundsPlayed).toBe(2);
+    // ...but only the eighteen has a comparable total, so the average is that
+    // round's own rather than being dragged halfway down by the nine.
+    expect(stats.fullRounds).toBe(1);
+    expect(stats.avgPointsPerRound).toBe(56);
+    expect(stats.bestRound.points).toBe(56);
+  });
+
+  test('a round walked off part-way is left out too', async () => {
+    const sixHolesIn = holes.slice(0, 6);
+    tournamentStore.loadAllTournaments.mockResolvedValue([gameWith({
+      id: 'r1', holes, pairs: [[me]], scores: { p1: scoresFor(sixHolesIn, 4) },
+      playerHandicaps: { p1: 20 },
+    })]);
+    const stats = await computePersonalStats({ userId: 'u-p1', displayName: 'Ann' });
+
+    expect(stats.roundsPlayed).toBe(2);
+    expect(stats.fullRounds).toBe(1);
+    expect(stats.avgPointsPerRound).toBe(56);
+  });
+
+  test('wins still count on a nine — a win is a win at any length', async () => {
+    tournamentStore.loadAllTournaments.mockResolvedValue([{
+      id: 't2',
+      kind: 'game',
+      name: 'Short one',
+      players: [me],
+      currentRound: 0,
+      finishedAt: '2026-07-02T00:00:00Z',
+      rounds: [{
+        id: 'r0', holes: nineHoles, pairs: [[me]], scores: { p1: scoresFor(nineHoles, 4) },
+        playerHandicaps: { p1: 20 },
+      }],
+    }]);
+    const stats = await computePersonalStats({ userId: 'u-p1', displayName: 'Ann' });
+
+    // A career of nines still shows the golf played and the wins taken; only
+    // the comparable-total figures stand down, so History reports "—" for the
+    // average rather than a 0.0 computed from nothing.
+    expect(stats.roundsPlayed).toBe(1);
+    expect(stats.wins).toBe(1);
+    expect(stats.fullRounds).toBe(0);
+    expect(stats.avgPointsPerRound).toBe(0);
+    expect(stats.bestRound).toBeNull();
+  });
+});
+
 describe('profileStore — settings blob', () => {
   beforeEach(() => {
     const chain = getChain();

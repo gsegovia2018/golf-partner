@@ -130,7 +130,9 @@ export default function HistoryScreen({ navigation }) {
   const recordCells = stats ? [
     { label: 'Rounds', value: String(stats.roundsPlayed) },
     { label: 'Wins', value: String(stats.wins), gold: true },
-    { label: 'Avg pts', value: stats.roundsPlayed > 0 ? stats.avgPointsPerRound.toFixed(1) : '—' },
+    // Averaged over full rounds only, so it is those — not every round played
+    // — that decide whether there is an average to show at all.
+    { label: 'Avg pts', value: stats.fullRounds > 0 ? stats.avgPointsPerRound.toFixed(1) : '—' },
     {
       label: 'Best',
       value: stats.bestRound ? String(stats.bestRound.points) : '—',

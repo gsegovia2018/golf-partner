@@ -77,7 +77,7 @@ jest.mock('../../store/tournamentStore', () => {
 jest.mock('../../store/profileStore', () => ({
   loadProfile: jest.fn(() => Promise.resolve({ userId: 'u1', displayName: 'Marcos' })),
   computePersonalStats: jest.fn(() => Promise.resolve({
-    tournamentsPlayed: 3, roundsPlayed: 12, totalPoints: 360,
+    tournamentsPlayed: 3, roundsPlayed: 12, fullRounds: 12, totalPoints: 360,
     avgPointsPerRound: 30,
     bestRound: { points: 41, handicap: 20, index: 18.2 },
     wins: 2,
@@ -134,7 +134,7 @@ describe('HistoryScreen', () => {
 
   test('a best round with no index snapshot falls back to shots, never a bare number', async () => {
     computePersonalStats.mockResolvedValueOnce({
-      tournamentsPlayed: 3, roundsPlayed: 12, totalPoints: 360,
+      tournamentsPlayed: 3, roundsPlayed: 12, fullRounds: 12, totalPoints: 360,
       avgPointsPerRound: 30,
       bestRound: { points: 41, handicap: 20, index: null },
       wins: 2,
