@@ -990,10 +990,10 @@ describe('sgVsGroup', () => {
 describe('realClubDistances', () => {
   test('summarises GPS carries per club, scoped to the given round ids', () => {
     const shots = [
-      { roundId: 'r1', roundIndex: 0, holeNumber: 1, seq: 0, lat: 0, lng: 0, club: null },
-      { roundId: 'r1', roundIndex: 0, holeNumber: 1, seq: 1, lat: 0, lng: 0.001, club: 'driver' },
-      { roundId: 'r2', roundIndex: 0, holeNumber: 1, seq: 0, lat: 0, lng: 0, club: null },
-      { roundId: 'r2', roundIndex: 0, holeNumber: 1, seq: 1, lat: 0, lng: 0.002, club: 'driver' },
+      { roundId: 'r1', roundIndex: 0, holeNumber: 1, seq: 0, lat: 0, lng: 0, club: 'driver' },
+      { roundId: 'r1', roundIndex: 0, holeNumber: 1, seq: 1, lat: 0, lng: 0.001, club: null },
+      { roundId: 'r2', roundIndex: 0, holeNumber: 1, seq: 0, lat: 0, lng: 0, club: 'driver' },
+      { roundId: 'r2', roundIndex: 0, holeNumber: 1, seq: 1, lat: 0, lng: 0.002, club: null },
     ];
     const scoped = realClubDistances(shots, ['r1']);
     expect(scoped.hasData).toBe(true);

@@ -209,9 +209,11 @@ function drawNow() {
 }
 
 // Logged shots: numbered gold pins linked by a dashed trail, with the carry
-// (straight-line distance) chipped at each segment's midpoint. Drawn inside
-// draw() so they survive player/hole redraws. Landing pins are tappable and
-// post a shot-tap to the host; the tee/origin pin is not.
+// (straight-line distance) chipped at each segment's midpoint. Pin N is where
+// shot N was played from, so a segment's chip is the carry of the club tagged
+// on the pin it leaves. Drawn inside draw() so they survive player/hole
+// redraws. Pins are tappable and post a shot-tap to the host; an untagged
+// leading origin (older logs, seeded from the tee) is not.
 function shotIcon(n){ return L.divIcon({ className:'', iconSize:[22,22], iconAnchor:[11,11], html:'<div class="shotpin">'+n+'</div>' }); }
 function drawShots(){
   const list = shots || [];

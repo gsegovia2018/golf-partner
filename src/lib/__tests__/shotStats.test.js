@@ -12,11 +12,11 @@ function shot(holeNumber, seq, club, meters, roundId = 'g1') {
 }
 
 describe('carriesByClub', () => {
-  it('credits each spot club with the carry FROM the previous spot; origin has none', () => {
+  it('credits each spot club with the carry TO the next spot; the resting spot has none', () => {
     const shots = [
-      shot(1, 1, null, 200),   // origin (tee), no club
-      shot(1, 2, 'driver', 200), // carry 1->2 = 200m credited to driver (got it here)
-      shot(1, 3, '7i', 200),   // carry 2->3 = 200m credited to 7i
+      shot(1, 1, 'driver', 200), // tee: driver played from here, carry 1->2 = 200m
+      shot(1, 2, '7i', 200),     // ball: 7i played from here, carry 2->3 = 200m
+      shot(1, 3, null, 200),     // where it came to rest, nothing played from it
     ];
     const m = carriesByClub(shots);
     expect(m.get('driver')[0]).toBeCloseTo(200, 0);
@@ -24,7 +24,7 @@ describe('carriesByClub', () => {
   });
 
   it('does not carry across holes', () => {
-    const shots = [shot(1, 1, null, 200), shot(2, 1, '7i', 200)];
+    const shots = [shot(1, 1, '7i', 200), shot(2, 1, '7i', 200)];
     expect(carriesByClub(shots).size).toBe(0);
   });
 });
@@ -32,9 +32,9 @@ describe('carriesByClub', () => {
 describe('clubDistances', () => {
   it('averages multiple carries per club, sorted longest-first', () => {
     const shots = [
-      shot(1, 1, null, 140), shot(1, 2, '7i', 140),
-      shot(2, 1, null, 150), shot(2, 2, '7i', 150),
-      shot(3, 1, null, 230), shot(3, 2, 'driver', 230),
+      shot(1, 1, '7i', 140), shot(1, 2, null, 140),
+      shot(2, 1, '7i', 150), shot(2, 2, null, 150),
+      shot(3, 1, 'driver', 230), shot(3, 2, null, 230),
     ];
     const rows = clubDistances(shots);
     expect(rows[0].club).toBe('driver'); // catalog order: driver before 7i
@@ -51,9 +51,9 @@ describe('clubDetail', () => {
 
   it('aggregates count, avg, spread and per-round trend', () => {
     const shots = [
-      shot(1, 1, null, 140, 'g1'), shot(1, 2, '7i', 140, 'g1'),
-      shot(2, 1, null, 150, 'g1'), shot(2, 2, '7i', 150, 'g1'),
-      shot(1, 1, null, 130, 'g2'), shot(1, 2, '7i', 130, 'g2'),
+      shot(1, 1, '7i', 140, 'g1'), shot(1, 2, null, 140, 'g1'),
+      shot(2, 1, '7i', 150, 'g1'), shot(2, 2, null, 150, 'g1'),
+      shot(1, 1, '7i', 130, 'g2'), shot(1, 2, null, 130, 'g2'),
     ];
     const d = clubDetail(shots, '7i');
     expect(d.count).toBe(3);
@@ -72,8 +72,8 @@ describe('recommendClub', () => {
 
   it('prefers personal data closest to the target', () => {
     const shots = [
-      shot(1, 1, null, 145), shot(1, 2, '7i', 145), // 7i carry 145
-      shot(2, 1, null, 133), shot(2, 2, '8i', 133), // 8i carry 133
+      shot(1, 1, '7i', 145), shot(1, 2, null, 145), // 7i carry 145
+      shot(2, 1, '8i', 133), shot(2, 2, null, 133), // 8i carry 133
     ];
     const r = recommendClub(140, bag, shots);
     expect(r.club).toBe('7i');
@@ -90,14 +90,14 @@ describe('recommendClub', () => {
   it('does not return the only-measured club for a distance it does not fit', () => {
     // Only the 7i has data (avg 170). A 123m target should NOT pick the 7i just
     // because it is the sole measured club — the pw's nominal is far closer.
-    const shots = [shot(1, 1, null, 170), shot(1, 2, '7i', 170)];
+    const shots = [shot(1, 1, '7i', 170), shot(1, 2, null, 170)];
     const r = recommendClub(123, bag, shots);
     expect(r.club).not.toBe('7i');
     expect(r.club).toBe('8i'); // nominal 130, closest to 123
   });
 
   it('honors a manual override over the measured average', () => {
-    const shots = [shot(1, 1, null, 170), shot(1, 2, '7i', 170)];
+    const shots = [shot(1, 1, '7i', 170), shot(1, 2, null, 170)];
     // Override the 7i down to 120 — now 123m should land on it.
     const r = recommendClub(123, bag, shots, { '7i': 120 });
     expect(r.club).toBe('7i');

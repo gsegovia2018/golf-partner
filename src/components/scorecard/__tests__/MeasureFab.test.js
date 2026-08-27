@@ -3,7 +3,7 @@ import { render, fireEvent, act } from '@testing-library/react-native';
 import { MeasureFab } from '../MeasureFab';
 
 jest.mock('../../../store/shotStore', () => ({
-  logMeasuredShot: jest.fn(async () => ({ originId: 'o1', shotId: 's1' })),
+  logMeasuredShot: jest.fn(async () => ({ originId: 'o1', originCreated: true, shotId: 's1' })),
   deleteShot: jest.fn(),
   getShots: () => [],
   subscribeShots: () => () => {},

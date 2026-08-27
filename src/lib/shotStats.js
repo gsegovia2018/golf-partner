@@ -5,16 +5,16 @@ import { haversineMeters } from './geo';
 import { CLUB_CATALOG, clubLabel, clubNominal, clubOrder, sanitizeBag } from './clubs';
 
 // A shot: { roundId, roundIndex, holeNumber, seq, lat, lng, club, holed }.
-// Spots are ball positions in order; the FIRST spot is the origin (the tee),
-// carrying no club. Each later spot's `club` is the club that got the ball
-// THERE, so its carry is the straight-line distance from the PREVIOUS spot.
+// Spots are ball positions in order; each spot's `club` is the club played
+// FROM there, so its carry is the straight-line distance to the NEXT spot.
+// The last spot on a hole is where the ball came to rest and earns no carry.
 function holeKey(s) { return `${s.roundId}|${s.roundIndex}|${s.holeNumber}`; }
 
-// -> flat list of measured carries, one per tagged landing spot:
+// -> flat list of measured carries, one per tagged spot that has a next spot:
 // { club, meters, roundId, roundIndex, holeNumber, seq }. The straight-line
-// distance from the previous spot on the same hole, credited to the club that
-// got the ball THERE. This is the shared primitive every aggregation below
-// builds on. Encounter order of holes/rounds is preserved.
+// distance to the next spot on the same hole, credited to the club played
+// FROM this one. This is the shared primitive every aggregation below builds
+// on. Encounter order of holes/rounds is preserved.
 export function shotCarries(shots) {
   const byHole = new Map();
   for (const s of shots) {
@@ -26,11 +26,11 @@ export function shotCarries(shots) {
   const out = [];
   for (const holeShots of byHole.values()) {
     holeShots.sort((a, b) => a.seq - b.seq);
-    for (let i = 1; i < holeShots.length; i += 1) {
-      const prev = holeShots[i - 1];
+    for (let i = 0; i < holeShots.length - 1; i += 1) {
       const cur = holeShots[i];
-      if (!cur.club) continue; // spot not yet tagged with the club that reached it
-      const d = haversineMeters([prev.lat, prev.lng], [cur.lat, cur.lng]);
+      const next = holeShots[i + 1];
+      if (!cur.club) continue; // spot not yet tagged with the club played from it
+      const d = haversineMeters([cur.lat, cur.lng], [next.lat, next.lng]);
       if (!Number.isFinite(d) || d <= 0) continue;
       out.push({
         club: cur.club,

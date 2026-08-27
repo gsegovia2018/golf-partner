@@ -227,16 +227,23 @@ export async function undoLastShot(roundId, roundIndex, holeNumber) {
 }
 
 // One GPS-measured shot: `start` is where the player hit from, `end` where the
-// ball finished. Start is stored as an untagged origin spot only when the
-// hole's chain doesn't already end there (empty hole, or last spot > 30 m
-// away) — so the stored carry is exactly start → end.
+// ball finished. The club rides on the START spot — a spot records the shot
+// played FROM it — so the carry it earns is exactly start → end. When the
+// hole's chain already ends at `start` (within 30 m, i.e. you marked standing
+// over the ball) that spot is tagged instead of stacking a duplicate;
+// `originCreated` says whether a new origin spot was actually added, so an
+// undo only deletes one it created.
 export async function logMeasuredShot({ roundId, roundIndex, holeNumber, start, end, club }) {
   const hole = shotsForHole(roundId, roundIndex, holeNumber);
   const last = hole[hole.length - 1] ?? null;
-  let origin = null;
-  if (!last || haversineMeters([last.lat, last.lng], start) > 30) {
-    origin = await logShot({ roundId, roundIndex, holeNumber, pos: start, club: null });
+  const reuse = !!last && haversineMeters([last.lat, last.lng], start) <= 30;
+  let originId;
+  if (reuse) {
+    await setShotClub(last.id, club);
+    originId = last.id;
+  } else {
+    originId = (await logShot({ roundId, roundIndex, holeNumber, pos: start, club })).id;
   }
-  const shot = await logShot({ roundId, roundIndex, holeNumber, pos: end, club });
-  return { originId: origin?.id ?? null, shotId: shot.id };
+  const shot = await logShot({ roundId, roundIndex, holeNumber, pos: end, club: null });
+  return { originId, originCreated: !reuse, shotId: shot.id };
 }

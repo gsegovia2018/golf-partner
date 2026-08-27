@@ -192,7 +192,6 @@ export function HoleFlyover({
                   roundIndex={roundIndex}
                   holeNumber={holeNumber}
                   pos={position ?? null}
-                  teePos={feat?.start ?? null}
                   aimPos={aim?.pos ?? null}
                   aimRings={aim?.rings ?? null}
                   targetPos={feat?.greenCenter ?? null}

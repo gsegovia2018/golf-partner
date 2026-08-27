@@ -14,18 +14,25 @@ import { swingClubs, clubLabel, clubNominal } from '../../lib/clubs';
 import { ClubWheel } from './ClubWheel';
 
 // Shot log overlaid on the hole map (HoleFlyover), reduced to a single club
-// FAB in the bottom-right corner. Ball spots live on the map as numbered,
-// draggable pins:
-//   - Tap the FAB to drop a spot at the white aim ring (GPS fallback); the
-//     club wheel opens on it to pick the club that got the ball there.
-//   - Long-press the FAB to drop the spot at your exact live GPS instead.
+// FAB in the bottom-right corner.
+//
+// A mark records the shot you are ABOUT TO PLAY, from where you're standing:
+// spot N is where shot N was struck and carries the club you hit with it. So
+// the tee mark is shot 1 (driver), the next mark is made at your ball and is
+// shot 2, and so on. A club's carry is therefore the distance from its own
+// spot to the NEXT one, which is only known once you mark that next shot.
+//
+// Spots live on the map as numbered, draggable pins:
+//   - Tap the FAB to drop a spot at your live GPS (the aim ring is only a
+//     fallback when there's no fix); the club wheel opens on it, pre-focused
+//     on the club for the distance left to the green.
+//   - Long-press the FAB to drop the spot at the white aim ring instead.
 //   - Drag a pin on the map to reposition it (handled by the map/host, not
 //     here); tap a pin (relayed here as `tappedShotIndex`) to re-open the
 //     wheel and change the club or delete it.
-// The first spot on a hole is the tee, seeded from the hole geometry.
 export function ShotTracker({
   roundId, roundIndex, holeNumber,
-  pos, teePos, aimPos, aimRings, targetPos,
+  pos, aimPos, aimRings, targetPos,
   tappedShotIndex, onConsumeShotTap, onCollapseTargets,
 }) {
   const appSettings = useAppSettings();
@@ -40,18 +47,17 @@ export function ShotTracker({
 
   const overrides = appSettings.clubDistances;
 
-  // Add a ball spot at `spot` ([lat,lng]). Seeds the tee as the origin on an
-  // empty hole, appends the landing, and opens the club wheel on it —
-  // pre-focused on the club whose carry matches the just-measured distance.
+  // Add a ball spot at `spot` ([lat,lng]): the shot you're about to play from
+  // there. Opens the club wheel on it, pre-focused on the club that covers
+  // what's left to the green — the driver is only a candidate off the tee
+  // (the hole's first mark).
   const addSpot = async (spot) => {
     const hole = shotsForHole(roundId, roundIndex, holeNumber);
-    let prev = hole[hole.length - 1] ?? null;
-    if (hole.length === 0 && teePos) {
-      await logShot({ roundId, roundIndex, holeNumber, pos: teePos, club: null });
-      prev = { lat: teePos[0], lng: teePos[1] };
-    }
-    const carry = prev ? haversineMeters([prev.lat, prev.lng], spot) : null;
-    const guess = carry ? recommendClub(carry, appSettings.bag, getShots(), overrides)?.club ?? null : null;
+    const toGreen = targetPos ? haversineMeters(spot, targetPos) : null;
+    const guess = toGreen
+      ? recommendClub(toGreen, appSettings.bag, getShots(), overrides,
+        { excludeDriver: hole.length > 0 })?.club ?? null
+      : null;
     const shot = await logShot({ roundId, roundIndex, holeNumber, pos: spot, club: guess });
     setWheelId(shot.id);
   };
@@ -65,31 +71,34 @@ export function ShotTracker({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [tappedShotIndex]);
 
-  // Add a shot at the white aim ring (GPS as a fallback), or at exact GPS. With
-  // two rings set on the map, logs the start->end segment between them
-  // instead, then collapses the rings down to the landing.
-  const addAtAim = async () => {
+  // Add a shot at your live GPS (the aim ring as a fallback when there's no
+  // fix), or at the aim ring on a long-press. With two rings set on the map,
+  // logs the start->end segment between them instead — the club lands on the
+  // start spot, since that's where the shot was played from — then collapses
+  // the rings down to the landing.
+  const markShot = async () => {
     if (aimRings?.length === 2) {
       const [start, end] = aimRings;
       const carry = haversineMeters(start, end);
       const guess = recommendClub(carry, appSettings.bag, getShots(), overrides)?.club ?? null;
-      const { shotId } = await logMeasuredShot({
+      const { originId } = await logMeasuredShot({
         roundId, roundIndex, holeNumber, start, end, club: guess,
       });
-      setWheelId(shotId);
+      setWheelId(originId);
       onCollapseTargets?.([end]);
       return;
     }
-    const p = aimPos || pos;
+    const p = pos || aimPos;
     if (p) addSpot(p);
   };
-  const dropAtMe = () => { if (pos) addSpot(pos); };
+  const dropAtAim = () => { const p = aimPos || pos; if (p) addSpot(p); };
 
   if (!roundId) return null;
 
-  // Incoming carry for spot i (distance from the previous spot). Origin = null.
-  const carryOf = (i) => (i > 0
-    ? haversineMeters([shots[i - 1].lat, shots[i - 1].lng], [shots[i].lat, shots[i].lng])
+  // Carry of the shot played FROM spot i: the distance to the next spot. Null
+  // for the last spot — that shot's landing hasn't been marked yet.
+  const carryOf = (i) => (i < shots.length - 1
+    ? haversineMeters([shots[i].lat, shots[i].lng], [shots[i + 1].lat, shots[i + 1].lng])
     : null);
 
   // ── Wheel state derived from the shot being edited ───────────────────────
@@ -101,7 +110,7 @@ export function ShotTracker({
   const wheelClubs = bag.map((k) => ({ key: k, label: clubLabel(k), distance: effDist(k) }));
   const editIndex = wheelId ? shots.findIndex((sh) => sh.id === wheelId) : -1;
   const editShot = editIndex >= 0 ? shots[editIndex] : null;
-  const editCarry = editIndex > 0 ? carryOf(editIndex) : null;
+  const editCarry = editIndex >= 0 ? carryOf(editIndex) : null;
   const editToPin = editShot && targetPos
     ? haversineMeters([editShot.lat, editShot.lng], targetPos) : null;
   const editValue = editShot
@@ -111,14 +120,7 @@ export function ShotTracker({
   const closeWheel = () => setWheelId(null);
   const chooseClub = (club) => { if (wheelId && club) setShotClub(wheelId, club); closeWheel(); };
   const removeShot = () => {
-    if (wheelId) {
-      // Deleting the last landing can strand the seeded, club-less tee (index
-      // 0, no club) — a non-interactive origin pin with no Undo button to
-      // clear it. Drop it too so the hole resets cleanly.
-      const remaining = shots.filter((sh) => sh.id !== wheelId);
-      deleteShot(wheelId);
-      if (remaining.length === 1 && !remaining[0].club) deleteShot(remaining[0].id);
-    }
+    if (wheelId) deleteShot(wheelId);
     closeWheel();
   };
 
@@ -128,11 +130,11 @@ export function ShotTracker({
     <View style={s.wrap} pointerEvents="box-none">
       <View style={s.fabCol}>
         <PressableScale
-          onPress={addAtAim}
-          onLongPress={dropAtMe}
+          onPress={markShot}
+          onLongPress={dropAtAim}
           disabled={!canAdd}
           style={[s.addBtn, !canAdd && s.fabDisabled]}
-          accessibilityLabel="Add a shot at the aim ring"
+          accessibilityLabel="Mark a shot at your location"
         >
           <Feather name="plus" size={20} color={hud.onAccent} />
           <Text style={s.addLbl}>Mark shot</Text>
@@ -144,7 +146,7 @@ export function ShotTracker({
         clubs={wheelClubs}
         value={editValue}
         units={units}
-        seqLabel={editIndex >= 0 ? `Shot ${editIndex}` : 'Club'}
+        seqLabel={editIndex >= 0 ? `Shot ${editIndex + 1}` : 'Club'}
         carryMeters={editCarry}
         toPinMeters={editToPin}
         onSelect={chooseClub}

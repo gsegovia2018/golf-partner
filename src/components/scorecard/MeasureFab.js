@@ -43,7 +43,7 @@ export function MeasureFab({ roundId, roundIndex, holeNumber, fix, targetMeters,
   );
 
   const [armed, setArmed] = useState(null);   // { start:[lat,lng], club }
-  const [saved, setSaved] = useState(null);   // { label, meters, originId, shotId }
+  const [saved, setSaved] = useState(null);   // { label, meters, originId, originCreated, shotId }
   const [confirmOver, setConfirmOver] = useState(false);
   const [wheelOpen, setWheelOpen] = useState(false);
 
@@ -92,7 +92,9 @@ export function MeasureFab({ roundId, roundIndex, holeNumber, fix, targetMeters,
   const undo = () => {
     if (!saved) return;
     deleteShot(saved.shotId);
-    if (saved.originId) deleteShot(saved.originId);
+    // Only drop the origin when the measure created it — a reused spot was
+    // already on the hole before this measure and has to stay.
+    if (saved.originCreated) deleteShot(saved.originId);
     haptic('selection');
     setSaved(null);
   };
