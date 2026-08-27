@@ -42,6 +42,52 @@ export function holeCountOf(holesOrRound) {
   return holes?.length === 9 ? 9 : 18;
 }
 
+// Whether a hole list is a full card at one of the two lengths the app plays.
+// The counterpart to holeCountOf: that one ANSWERS "9 or 18?" for a round
+// already under way (defaulting a partial list to 18 so historic rounds keep
+// their maths), this one ASKS whether the card is complete enough to start
+// from at all. Course screens use it to decide between an editable card and a
+// blank defaultHoles(); keeping the rule here means a third length only ever
+// has to be admitted once.
+export function isStandardHoleCard(holes) {
+  return Array.isArray(holes) && (holes.length === 18 || holes.length === 9);
+}
+
+// ── Round eligibility for whole-round aggregates ──
+// A nine's point total is roughly half an eighteen's, so a nine sitting in the
+// same series as 18-hole rounds reads as a collapse in form when it was a
+// perfectly normal nine — form charts, recent-vs-history deltas and career
+// bests all inherit that lie. Nine-hole rounds are therefore left out of every
+// round-total aggregate, the same treatment handicapIndex ('nine-holes'
+// ineligible) and frontBackSplit (holes.length < 18 skipped) already give
+// them. PER-HOLE metrics (points/hole, fairway %, GIR %, score mix,
+// distribution, streaks, difficulty bands) are hole-count-neutral and keep
+// seeing every round, nine-hole ones included.
+export function isFullLengthRound(round) {
+  return (round?.holes?.length ?? 0) === 18;
+}
+
+// A round counts towards a round-total aggregate only when it is both
+// full-length AND fully scored — the two ways a partial total sneaks into a
+// whole-round average. Takes a MyRound (personalStats' synthetic shape), where
+// completeness has already been resolved into an isComplete flag.
+export function countsForRoundTotals(round) {
+  return isFullLengthRound(round) && !!round?.isComplete;
+}
+
+// The same completeness question asked of a RAW tournament round, which
+// carries no isComplete flag — it is derived per player, since a round is only
+// whole for someone who has a score on every hole of it (personalStats does
+// exactly this when building its synthetic rounds). Callers holding a raw
+// round pair this with isFullLengthRound to get countsForRoundTotals' rule.
+export function isRoundFullyScoredBy(round, playerId) {
+  const holes = round?.holes;
+  if (!Array.isArray(holes) || holes.length === 0) return false;
+  const mine = round?.scores?.[playerId];
+  if (!mine) return false;
+  return holes.every((h) => mine[h.number] != null);
+}
+
 // WHS course handicap: HI × (slope/113) + (CR − par), rounded.
 // No slope → raw index (can't compute either term meaningfully).
 // Missing CR or par → slope-only fallback.

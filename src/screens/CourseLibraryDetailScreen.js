@@ -12,6 +12,7 @@ import { fetchCourses, updateCourseFromEditor, upsertCourse } from '../store/lib
 import { propagateCourseToTournaments } from '../store/tournamentStore';
 import TeesEditor from '../components/TeesEditor';
 import { canSaveCourse } from '../lib/courseLibrary';
+import { isStandardHoleCard } from '../store/scoring';
 import {
   prefetchCourseTiles, getPrefetchState, subscribePrefetch,
   deleteBucket, courseKeyFor, estimateTileBytes, PREFETCH_ZOOMS,
@@ -52,7 +53,7 @@ export default function CourseLibraryDetailScreen({ navigation, route }) {
           setTees((course.tees ?? []).map((t) => ({ ...t })));
           setCity(course.city ?? '');
           setProvince(course.province ?? '');
-          if (course.holes.length === 18 || course.holes.length === 9) {
+          if (isStandardHoleCard(course.holes)) {
             setHoles(course.holes.map((h) => ({ ...h })));
           }
         }

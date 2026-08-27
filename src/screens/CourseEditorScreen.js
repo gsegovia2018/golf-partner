@@ -11,6 +11,7 @@ import { useTheme } from '../theme/ThemeContext';
 import { updateCourseFromEditor } from '../store/libraryStore';
 import TeesEditor from '../components/TeesEditor';
 import { canSaveCourse } from '../lib/courseLibrary';
+import { isStandardHoleCard } from '../store/scoring';
 
 function defaultHoles() {
   return Array.from({ length: 18 }, (_, i) => ({
@@ -34,7 +35,7 @@ export default function CourseEditorScreen({ navigation, route }) {
   // A card is kept as-is when it is a full 18 or a full 9 (Waldkirch-style
   // nine-hole layouts); anything else falls back to a blank 18.
   const [holes, setHoles] = useState(
-    initialHoles?.length === 18 || initialHoles?.length === 9
+    isStandardHoleCard(initialHoles)
       ? initialHoles.map((h) => ({ ...h }))
       : defaultHoles(),
   );
