@@ -129,6 +129,9 @@ function grossFrontBack(synthetic) {
 // scored it (courseDNA's partial-rounds-count-their-holes rule). Chronological
 // iteration makes par/SI metadata and row order latest-wins.
 //
+// `birdies`/`eagles` count how many times the hole was played under par, so
+// the grid can filter down to "where do I actually make birdies here".
+//
 // Every figure here is GROSS. A net points-per-hole average used to sit
 // alongside them, but pooling net points across rounds played off different
 // handicaps averages together holes that were worth different amounts for the
@@ -149,6 +152,7 @@ function buildHoleRows(synthetic) {
         e = {
           holeNumber: hole.number, timesPlayed: 0, strokesSum: 0, vsParSum: 0,
           bestStrokes: Infinity, puttsSum: 0, puttsCount: 0, penalties: 0,
+          birdies: 0, eagles: 0,
         };
         byNumber.set(hole.number, e);
       }
@@ -157,6 +161,10 @@ function buildHoleRows(synthetic) {
       e.timesPlayed += 1;
       e.strokesSum += sc;
       e.vsParSum += sc - hole.par;
+      // Gross vs par, same cut points as playerScoreDistribution's strokes
+      // metric — an albatross counts as an eagle here, not its own tier.
+      if (sc - hole.par <= -2) e.eagles += 1;
+      else if (sc - hole.par === -1) e.birdies += 1;
       if (sc < e.bestStrokes) e.bestStrokes = sc;
       const d = round.shotDetails?.[CANON_ID]?.[hole.number];
       if (d?.putts != null) { e.puttsSum += d.putts; e.puttsCount += 1; }
@@ -186,6 +194,8 @@ function buildHoleRows(synthetic) {
     bestStrokes: e.bestStrokes,
     avgPutts: e.puttsCount > 0 ? round1(e.puttsSum / e.puttsCount) : null,
     penalties: e.penalties,
+    birdies: e.birdies,
+    eagles: e.eagles,
   }));
 }
 

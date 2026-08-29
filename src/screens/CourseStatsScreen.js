@@ -1,4 +1,4 @@
-import React, { useEffect, useState, useMemo } from 'react';
+import React, { useEffect, useState, useMemo, useSyncExternalStore } from 'react';
 import {
   View, Text, StyleSheet, ScrollView, ActivityIndicator, TouchableOpacity,
 } from 'react-native';
@@ -15,6 +15,10 @@ import { loadAllTournamentsWithFallback } from '../store/tournamentStore';
 import { loadProfile } from '../store/profileStore';
 import { collectMyRounds } from '../store/personalStats';
 import { filterRoundsToCourse, buildCourseBreakdown } from '../store/courseBreakdown';
+import { subscribeShots, getShotsVersion, getShots } from '../store/shotStore';
+import { shotRoundKey } from '../store/shotRounds';
+import { longestCarryByHole } from '../lib/shotStats';
+import { ShotReplaySheet } from '../components/scorecard/ShotReplaySheet';
 import SectionCard from '../components/mystats/SectionCard';
 import RingStat from '../components/mystats/RingStat';
 import FairwayFan from '../components/mystats/FairwayFan';
@@ -74,10 +78,23 @@ export default function CourseStatsScreen({ navigation, route }) {
   const fallbackName = route?.params?.courseName ?? 'Course';
 
   const [breakdown, setBreakdown] = useState(undefined); // undefined = loading, null = no rounds
+  // `${roundId}|${roundIndex}` for every round of THIS course — the filter that
+  // keeps the shot log's hole 4 from another course out of this drill-down.
+  const [roundKeys, setRoundKeys] = useState(null);
   const [error, setError] = useState(false);
   const [loadNonce, setLoadNonce] = useState(0);
   const [infoKey, setInfoKey] = useState(null);
+  const [replay, setReplay] = useState(null); // { hole, carry } being shown on the map
   const activeExplainer = infoKey ? statExplainers[infoKey] : null;
+
+  // Longest TEE carry per hole here, straight from the marked-shot log.
+  const shotsVersion = useSyncExternalStore(subscribeShots, getShotsVersion, getShotsVersion);
+  const drives = useMemo(
+    () => (roundKeys ? longestCarryByHole(getShots(), { roundKeys, teeOnly: true }) : null),
+    // getShots() reads mutable store state; shotsVersion is its change signal.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [roundKeys, shotsVersion],
+  );
 
   useEffect(() => {
     let cancelled = false;
@@ -90,7 +107,11 @@ export default function CourseStatsScreen({ navigation, route }) {
         ]);
         const myRounds = collectMyRounds(list, user?.id, profile?.displayName);
         const courseRounds = filterRoundsToCourse(myRounds, courseKey);
-        if (!cancelled) setBreakdown(buildCourseBreakdown(courseRounds));
+        if (cancelled) return;
+        setRoundKeys(new Set(courseRounds
+          .filter((mr) => mr.round?.id != null)
+          .map((mr) => shotRoundKey(mr.round.id, mr.roundIndex))));
+        setBreakdown(buildCourseBreakdown(courseRounds));
       } catch (e) {
         console.warn('CourseStatsScreen: failed to load', e);
         if (!cancelled) setError(true);
@@ -252,7 +273,12 @@ export default function CourseStatsScreen({ navigation, route }) {
   if (holes.length > 0) {
     addCard('holes', (
       <SectionCard title="Hole by hole" infoKey="courseHoleByHole" onInfo={setInfoKey}>
-        <HoleGrid holes={holes} highlights={highlights} />
+        <HoleGrid
+          holes={holes}
+          highlights={highlights}
+          drives={drives}
+          onViewDrive={(hole, carry) => setReplay({ hole, carry })}
+        />
       </SectionCard>
     ));
   }
@@ -263,6 +289,19 @@ export default function CourseStatsScreen({ navigation, route }) {
       <ScrollView contentContainerStyle={s.scroll} showsVerticalScrollIndicator={false}>
         {cards}
       </ScrollView>
+      {replay ? (
+        <ShotReplaySheet
+          visible
+          onClose={() => setReplay(null)}
+          courseName={breakdown.courseName}
+          holeNumber={replay.hole.holeNumber}
+          par={replay.hole.par}
+          strokeIndex={replay.hole.strokeIndex}
+          roundId={replay.carry.roundId}
+          roundIndex={replay.carry.roundIndex}
+          caption={`Longest drive · hole ${replay.hole.holeNumber} · ${breakdown.courseName}`}
+        />
+      ) : null}
       <StatDetailSheet
         visible={!!infoKey}
         onClose={() => setInfoKey(null)}

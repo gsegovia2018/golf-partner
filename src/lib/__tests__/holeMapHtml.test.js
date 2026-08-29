@@ -70,7 +70,8 @@ describe('buildHoleMapHtml', () => {
   it('makes non-origin shot pins interactive and posts a shot-tap with the index', () => {
     const html = buildHoleMapHtml(base);
     expect(html).toContain("type:'shot-tap'");
-    expect(html).toContain('interactive: !origin');
+    expect(html).toContain('interactive: live');
+    expect(html).toContain("const live = !origin && hole.mode !== 'replay'");
   });
   it('keeps the tee/origin pin (index 0, no club) non-interactive', () => {
     const html = buildHoleMapHtml(base);
@@ -78,8 +79,15 @@ describe('buildHoleMapHtml', () => {
   });
   it('makes landing pins draggable and posts shot-move on dragend', () => {
     const html = buildHoleMapHtml(base);
-    expect(html).toContain('draggable: !origin');
+    expect(html).toContain('draggable: live');
     expect(html).toContain("type:'shot-move'");
+  });
+  it('stops replay mode before the aim rings and map handlers', () => {
+    const html = buildHoleMapHtml({ ...base, mode: 'replay' });
+    expect(html).toContain("if (hole.mode === 'replay') return;");
+    // the early return sits after the shot pins, so a replay still draws them
+    expect(html.indexOf('drawShots();')).toBeLessThan(html.indexOf("if (hole.mode === 'replay') return;"));
+    expect(html).toContain('"mode":"replay"');
   });
   it('has no placing mode remnants', () => {
     const html = buildHoleMapHtml(base);

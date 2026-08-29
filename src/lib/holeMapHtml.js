@@ -11,7 +11,7 @@
 //   page -> host:  { type:'aim', pos:[lat,lng], rings:[[lat,lng],...] }
 //   host -> page:  { type:'set-targets', targets:[[lat,lng],...] } (replaces rings)
 //
-// data: { mode:'view'|'edit', holeLabel, green, greenFront, greenCenter,
+// data: { mode:'view'|'edit'|'replay', holeLabel, green, greenFront, greenCenter,
 //         greenBack, tee, hazards:[{kind,poly}], player, activeField }
 
 import { LEAFLET_CSS, LEAFLET_JS, LEAFLET_ROTATE_JS } from './vendor/leafletBundle';
@@ -168,6 +168,9 @@ function drawNow() {
   if (hole.tee) add(L.circleMarker(hole.tee, { radius:6, color:'#fff', weight:2, fillColor:'#2f6bff', fillOpacity:1 }));
   drawShots();
   renderLast();
+  // Replay: a finished hole read back from the shot log. Pins and the trail
+  // only — no aim rings, no measuring line, no map click handlers.
+  if (hole.mode === 'replay') return;
 
   // Measuring line starts at the live GPS fix while on the course. Off GPS
   // (planning mode) it starts at the last logged shot — where the ball actually
@@ -224,8 +227,9 @@ function drawShots(){
   for (let i=0;i<list.length;i++){
     if (!valid(pts[i])) continue;
     const origin = i === 0 && !list[i].club; // the seeded tee carries no club
-    const mk = L.marker(pts[i], { icon: shotIcon(i+1), interactive: !origin, draggable: !origin, zIndexOffset:500 });
-    if (!origin) {
+    const live = !origin && hole.mode !== 'replay'; // replay pins are inert
+    const mk = L.marker(pts[i], { icon: shotIcon(i+1), interactive: live, draggable: live, zIndexOffset:500 });
+    if (live) {
       mk.on('click', (e) => {
         L.DomEvent.stopPropagation(e);      // don't let the tap move the aim ring
         post({ type:'shot-tap', index:i });

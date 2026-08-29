@@ -219,6 +219,20 @@ describe('buildCourseBreakdown holes', () => {
     expect(holes[1].avgPoints).toBeUndefined();
   });
 
+  test('counts birdies and eagles per hole, gross vs par', () => {
+    const h = mkHoles(18);
+    // Three visits to hole 1: par 4 played in 3 (birdie), 2 (eagle) and 4 (par).
+    const r = (n) => { const o = evenScores(h, 5); o[1] = n; return o; };
+    const rounds = myRoundsFor([
+      mkRound({ courseId: 'c-1', scores: { p1: r(3) } }),
+      mkRound({ courseId: 'c-1', scores: { p1: r(2) } }),
+      mkRound({ courseId: 'c-1', scores: { p1: r(4) } }),
+    ]);
+    const { holes } = buildCourseBreakdown(filterRoundsToCourse(rounds, 'c-1'));
+    expect(holes[0]).toMatchObject({ birdies: 1, eagles: 1 });
+    expect(holes[1]).toMatchObject({ birdies: 0, eagles: 0 }); // bogeys every time
+  });
+
   test('partial rounds contribute only their scored holes', () => {
     const h = mkHoles(18);
     const partial = evenScores(h, 6);

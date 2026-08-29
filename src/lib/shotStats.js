@@ -87,6 +87,35 @@ export function clubAverages(shots) {
   return m;
 }
 
+// Longest carry per hole number: Map<holeNumber, carry> where a carry is a
+// shotCarries entry ({ club, meters, roundId, roundIndex, holeNumber, seq }) —
+// enough to reopen the hole map on the exact round the shot was played.
+// `roundKeys` (a Set of `${roundId}|${roundIndex}`) restricts the pool to
+// specific rounds, so a per-course view never picks up another course's hole 4.
+// `teeOnly` keeps only the first carry marked on each hole — the drive.
+export function longestCarryByHole(shots, { roundKeys = null, teeOnly = false } = {}) {
+  const key = (c) => `${c.roundId}|${c.roundIndex}`;
+  const carries = shotCarries(shots)
+    .filter((c) => !roundKeys || roundKeys.has(key(c)));
+
+  const firstSeq = new Map(); // `round|hole` -> lowest seq that earned a carry
+  if (teeOnly) {
+    for (const c of carries) {
+      const k = `${key(c)}|${c.holeNumber}`;
+      const cur = firstSeq.get(k);
+      if (cur == null || c.seq < cur) firstSeq.set(k, c.seq);
+    }
+  }
+
+  const out = new Map();
+  for (const c of carries) {
+    if (teeOnly && firstSeq.get(`${key(c)}|${c.holeNumber}`) !== c.seq) continue;
+    const best = out.get(c.holeNumber);
+    if (!best || c.meters > best.meters) out.set(c.holeNumber, c);
+  }
+  return out;
+}
+
 // Recommend the club for `targetMeters`, restricted to `bag`. EVERY bagged club
 // gets an effective distance so the pick is the club genuinely closest to the
 // target — not merely the closest among clubs that happen to have logged data
@@ -129,7 +158,8 @@ export function recommendClub(targetMeters, bag, shots = [], overrides = null, o
 // the club has no measured carries. `std` is the carry standard deviation
 // (consistency — smaller is tighter). `byRound` is the average carry per round
 // in encounter order (for a trend sparkline); `recent` is the last `recentN`
-// individual carries, newest last.
+// individual carries, newest last. `longest` is the single best carry with the
+// round/hole it was struck on, so the screen can open that hole's map.
 export function clubDetail(shots, club, recentN = 12) {
   const mine = shotCarries(shots).filter((c) => c.club === club);
   if (!mine.length) return null;
@@ -156,6 +186,7 @@ export function clubDetail(shots, club, recentN = 12) {
     std: stdev(carries),
     min: Math.min(...carries),
     max: Math.max(...carries),
+    longest: mine.reduce((m, c) => (c.meters > m.meters ? c : m)),
     byRound,
     recent: carries.slice(-recentN),
   };

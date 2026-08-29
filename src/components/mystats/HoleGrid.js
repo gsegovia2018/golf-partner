@@ -3,8 +3,11 @@ import { View, Text, StyleSheet } from 'react-native';
 import Animated, {
   useSharedValue, useAnimatedStyle, withDelay, withTiming, Easing, useReducedMotion,
 } from 'react-native-reanimated';
+import { Feather } from '@expo/vector-icons';
 import { useTheme } from '../../theme/ThemeContext';
 import { semantic } from '../../theme/tokens';
+import { useAppSettings } from '../../hooks/useAppSettings';
+import { formatDistance, unitSuffix } from '../../lib/units';
 import PressableScale from '../ui/PressableScale';
 import Reveal from '../ui/Reveal';
 
@@ -55,6 +58,15 @@ export function holeA11yLabel(hole, { isNemesis, isBest } = {}) {
 
 const signed = (n) => (n > 0 ? `+${n}` : `${n}`);
 
+// Under-par filters for the grid. `count` reads the hole row's tally so the
+// chip label, the cell badge and the "does this hole qualify" test all agree.
+const FILTERS = [
+  { key: 'all', label: 'All holes', count: () => 0 },
+  { key: 'birdies', label: 'Birdies', count: (h) => h.birdies ?? 0 },
+  { key: 'eagles', label: 'Eagles', count: (h) => h.eagles ?? 0 },
+];
+const filterDef = (key) => FILTERS.find((f) => f.key === key) ?? FILTERS[0];
+
 function chunk(arr, size) {
   const rows = [];
   for (let i = 0; i < arr.length; i += size) rows.push(arr.slice(i, i + size));
@@ -63,6 +75,7 @@ function chunk(arr, size) {
 
 function HoleCell({
   hole, index, selected, isNemesis, isBest, onPress, theme, s,
+  filterKey, hits,
 }) {
   const reduced = useReducedMotion();
   const { bg, fg } = holeCellColors(theme, hole.avgVsPar);
@@ -91,7 +104,8 @@ function HoleCell({
         onPress={onPress}
         accessibilityRole="button"
         accessibilityState={{ selected }}
-        accessibilityLabel={holeA11yLabel(hole, { isNemesis, isBest })}
+        accessibilityLabel={holeA11yLabel(hole, { isNemesis, isBest })
+          + (filterKey === 'all' ? '' : `, ${hits} ${filterDef(filterKey).label.toLowerCase()}`)}
         testID={`hole-cell-${hole.holeNumber}`}
         style={[
           s.cell,
@@ -99,10 +113,15 @@ function HoleCell({
           // Constant borderWidth (transparent when unselected) so selecting
           // a cell never shifts layout.
           { borderColor: selected ? theme.text.primary : 'transparent' },
+          // Under a filter, holes with none of that score fade back so the
+          // ones that do have it read as the answer at a glance.
+          filterKey !== 'all' && hits === 0 && s.cellMuted,
         ]}
       >
         <Text style={[s.cellNum, { color: fg }]}>{hole.holeNumber}</Text>
-        <Text style={[s.cellVs, { color: fg }]}>{signed(hole.avgVsPar)}</Text>
+        <Text style={[s.cellVs, { color: fg }]}>
+          {filterKey === 'all' ? signed(hole.avgVsPar) : `×${hits}`}
+        </Text>
         {isNemesis ? (
           <View testID="hole-dot-nemesis" style={[s.cellDot, { backgroundColor: theme.destructive }]} />
         ) : null}
@@ -130,9 +149,10 @@ const PANEL_COLS = [
 // avg-vs-par, nemesis/best corner dots, and a tap-to-inspect detail panel
 // below (defaults to the nemesis hole, else the first). Renders nothing
 // without holes.
-export default function HoleGrid({ holes, highlights }) {
+export default function HoleGrid({ holes, highlights, drives, onViewDrive }) {
   const { theme } = useTheme();
   const s = useMemo(() => makeStyles(theme), [theme]);
+  const { units } = useAppSettings();
 
   const nemesisHole = highlights?.nemesis?.holeNumber ?? null;
   const bestHole = highlights?.best?.holeNumber ?? null;
@@ -140,14 +160,55 @@ export default function HoleGrid({ holes, highlights }) {
   const [selected, setSelected] = useState(
     () => nemesisHole ?? holes?.[0]?.holeNumber ?? null,
   );
+  const [filter, setFilter] = useState('all');
+
+  // Grand totals drive the chip labels; a filter with nothing to show is not
+  // offered at all.
+  const totals = useMemo(() => ({
+    birdies: (holes ?? []).reduce((n, h) => n + (h.birdies ?? 0), 0),
+    eagles: (holes ?? []).reduce((n, h) => n + (h.eagles ?? 0), 0),
+  }), [holes]);
+
+  // Switching filter jumps the panel to the first hole that qualifies —
+  // otherwise the detail below could describe a hole the grid just faded out.
+  const pickFilter = (key) => {
+    setFilter(key);
+    if (key === 'all') return;
+    const first = (holes ?? []).find((h) => filterDef(key).count(h) > 0);
+    if (first) setSelected(first.holeNumber);
+  };
 
   if (!holes || holes.length === 0) return null;
 
   const selectedHole = holes.find((h) => h.holeNumber === selected) ?? holes[0];
   const rows = chunk(holes, HOLES_PER_ROW);
+  const hitsFor = (hole) => filterDef(filter).count(hole);
+  const chips = FILTERS.filter((f) => f.key === 'all' || totals[f.key] > 0);
+  const drive = drives?.get?.(selectedHole.holeNumber) ?? null;
 
   return (
     <View style={s.wrap}>
+      {chips.length > 1 ? (
+        <View style={s.filterRow}>
+          {chips.map((f) => {
+            const on = filter === f.key;
+            return (
+              <PressableScale
+                key={f.key}
+                onPress={() => pickFilter(f.key)}
+                style={[s.filterChip, on && s.filterChipOn]}
+                accessibilityRole="button"
+                accessibilityState={{ selected: on }}
+                testID={`hole-filter-${f.key}`}
+              >
+                <Text style={[s.filterText, on && s.filterTextOn]}>
+                  {f.key === 'all' ? f.label : `${f.label} · ${totals[f.key]}`}
+                </Text>
+              </PressableScale>
+            );
+          })}
+        </View>
+      ) : null}
       <View style={s.grid}>
         {rows.map((row, rowIndex) => (
           <View key={rowIndex} style={s.row}>
@@ -162,6 +223,8 @@ export default function HoleGrid({ holes, highlights }) {
                 onPress={() => setSelected(hole.holeNumber)}
                 theme={theme}
                 s={s}
+                filterKey={filter}
+                hits={hitsFor(hole)}
               />
             ))}
             {/* Pad remainder rows with spacers so their cells keep the same
@@ -197,6 +260,35 @@ export default function HoleGrid({ holes, highlights }) {
               );
             })}
           </View>
+          {(selectedHole.birdies > 0 || selectedHole.eagles > 0) ? (
+            <View style={s.tagRow}>
+              {selectedHole.eagles > 0 ? (
+                <Text style={[s.tag, s.tagEagle]} testID="hole-panel-eagles">
+                  {`${selectedHole.eagles} eagle${selectedHole.eagles === 1 ? '' : 's'}`}
+                </Text>
+              ) : null}
+              {selectedHole.birdies > 0 ? (
+                <Text style={[s.tag, s.tagBirdie]} testID="hole-panel-birdies">
+                  {`${selectedHole.birdies} birdie${selectedHole.birdies === 1 ? '' : 's'}`}
+                </Text>
+              ) : null}
+            </View>
+          ) : null}
+          {drive && onViewDrive ? (
+            <PressableScale
+              onPress={() => onViewDrive(selectedHole, drive)}
+              style={s.driveBtn}
+              accessibilityRole="button"
+              accessibilityLabel={`Show the map of your longest drive on hole ${selectedHole.holeNumber}`}
+              testID="hole-panel-drive"
+            >
+              <Feather name="map" size={13} color={theme.accent.primary} />
+              <Text style={s.driveText}>
+                {`Longest drive · ${formatDistance(drive.meters, units)}${unitSuffix(units)}`}
+              </Text>
+              <Feather name="chevron-right" size={14} color={theme.accent.primary} />
+            </PressableScale>
+          ) : null}
         </View>
       </Reveal>
     </View>
@@ -227,6 +319,20 @@ function makeStyles(theme) {
       fontFamily: 'PlusJakartaSans-Bold',
       fontVariant: ['tabular-nums'],
     },
+    cellMuted: { opacity: 0.28 },
+    filterRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 6 },
+    filterChip: {
+      borderRadius: theme.radius.pill,
+      borderWidth: StyleSheet.hairlineWidth,
+      borderColor: theme.border.default,
+      paddingHorizontal: 10,
+      paddingVertical: 5,
+    },
+    filterChipOn: { backgroundColor: theme.accent.light, borderColor: theme.accent.primary },
+    filterText: {
+      fontSize: 10.5, fontFamily: 'PlusJakartaSans-Bold', color: theme.text.secondary,
+    },
+    filterTextOn: { color: theme.accent.primary },
     cellDot: {
       position: 'absolute',
       top: 3,
@@ -270,6 +376,26 @@ function makeStyles(theme) {
       letterSpacing: 1,
       textTransform: 'uppercase',
       color: theme.text.muted,
+    },
+    tagRow: { flexDirection: 'row', gap: 6 },
+    tag: {
+      fontSize: 10, fontFamily: 'PlusJakartaSans-Bold',
+      paddingHorizontal: 8, paddingVertical: 3,
+      borderRadius: theme.radius.pill, overflow: 'hidden',
+    },
+    tagBirdie: { color: theme.accent.primary, backgroundColor: theme.accent.light },
+    tagEagle: {
+      color: theme.isDark ? semantic.winner.dark : semantic.winner.light,
+      backgroundColor: theme.isDark ? 'rgba(255,215,0,0.14)' : 'rgba(169,130,30,0.12)',
+    },
+    driveBtn: {
+      flexDirection: 'row', alignItems: 'center', gap: 6, alignSelf: 'flex-start',
+      backgroundColor: theme.accent.light,
+      paddingHorizontal: 10, paddingVertical: 7,
+      borderRadius: theme.radius.pill,
+    },
+    driveText: {
+      fontSize: 11.5, fontFamily: 'PlusJakartaSans-Bold', color: theme.accent.primary,
     },
   });
 }

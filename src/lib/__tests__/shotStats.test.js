@@ -1,5 +1,5 @@
 import {
-  carriesByClub, clubDistances, recommendClub, clubDetail,
+  carriesByClub, clubDistances, recommendClub, clubDetail, longestCarryByHole,
 } from '../shotStats';
 
 // Two points ~140m apart (lat delta 0.001259 ≈ 140m) for deterministic carries.
@@ -64,6 +64,51 @@ describe('clubDetail', () => {
     expect(d.byRound[0].count).toBe(2);
     expect(d.byRound[0].avg).toBeCloseTo(145, 0);
     expect(d.recent[d.recent.length - 1]).toBeCloseTo(130, 0);
+  });
+
+  it('locates the longest carry so the screen can reopen that hole', () => {
+    const shots = [
+      shot(1, 1, '7i', 140, 'g1'), shot(1, 2, null, 140, 'g1'),
+      shot(4, 1, '7i', 150, 'g2'), shot(4, 2, null, 150, 'g2'),
+    ];
+    const d = clubDetail(shots, '7i');
+    expect(d.longest.meters).toBeCloseTo(150, 0);
+    expect(d.longest.roundId).toBe('g2');
+    expect(d.longest.holeNumber).toBe(4);
+  });
+});
+
+describe('longestCarryByHole', () => {
+  it('keeps the longest carry per hole across rounds', () => {
+    const shots = [
+      shot(1, 1, 'driver', 200, 'g1'), shot(1, 2, null, 200, 'g1'),
+      shot(1, 1, 'driver', 230, 'g2'), shot(1, 2, null, 230, 'g2'),
+    ];
+    const m = longestCarryByHole(shots);
+    expect(m.get(1).meters).toBeCloseTo(230, 0);
+    expect(m.get(1).roundId).toBe('g2');
+  });
+
+  it('teeOnly ignores every carry after the first spot on the hole', () => {
+    // 180m drive off the tee, then a 200m second shot — the drive still wins.
+    const shots = [
+      { roundId: 'g1', roundIndex: 0, holeNumber: 1, seq: 1, club: 'driver', lat: A.lat, lng: A.lng },
+      { roundId: 'g1', roundIndex: 0, holeNumber: 1, seq: 2, club: '3w', lat: A.lat + step(180), lng: A.lng },
+      { roundId: 'g1', roundIndex: 0, holeNumber: 1, seq: 3, club: null, lat: A.lat + step(380), lng: A.lng },
+    ];
+    expect(longestCarryByHole(shots).get(1).meters).toBeCloseTo(200, 0);
+    const tee = longestCarryByHole(shots, { teeOnly: true }).get(1);
+    expect(tee.meters).toBeCloseTo(180, 0);
+    expect(tee.club).toBe('driver');
+  });
+
+  it('roundKeys restricts the pool to the given rounds', () => {
+    const shots = [
+      shot(1, 1, 'driver', 200, 'g1'), shot(1, 2, null, 200, 'g1'),
+      shot(1, 1, 'driver', 240, 'g2'), shot(1, 2, null, 240, 'g2'),
+    ];
+    const m = longestCarryByHole(shots, { roundKeys: new Set(['g1|0']) });
+    expect(m.get(1).meters).toBeCloseTo(200, 0);
   });
 });
 

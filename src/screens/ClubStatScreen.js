@@ -1,12 +1,16 @@
-import React, { useMemo, useSyncExternalStore } from 'react';
+import React, { useEffect, useMemo, useState, useSyncExternalStore } from 'react';
 import { View, Text, StyleSheet, ScrollView } from 'react-native';
+import { Feather } from '@expo/vector-icons';
 import ScreenContainer from '../components/ScreenContainer';
 import IconButton from '../components/ui/IconButton';
+import PressableScale from '../components/ui/PressableScale';
 import Reveal from '../components/ui/Reveal';
 import TrendLineChart from '../components/mystats/TrendLineChart';
+import { ShotReplaySheet } from '../components/scorecard/ShotReplaySheet';
 import { useTheme } from '../theme/ThemeContext';
 import { useAppSettings } from '../hooks/useAppSettings';
 import { subscribeShots, getShotsVersion, getShots } from '../store/shotStore';
+import { loadShotRoundIndex, shotRoundContext } from '../store/shotRounds';
 import { clubDetail } from '../lib/shotStats';
 import { clubLabel } from '../lib/clubs';
 import { formatDistance, unitSuffix, M_TO_YD } from '../lib/units';
@@ -25,6 +29,22 @@ export default function ClubStatScreen({ route, navigation }) {
   const detail = useMemo(() => clubDetail(getShots(), club), [club, shotsVersion]);
 
   const suffix = unitSuffix(units);
+
+  // Where the longest carry was struck, so the LONGEST tile can open that
+  // hole's map. Loads lazily — the rest of the screen never waits on it.
+  const [roundIndexMap, setRoundIndexMap] = useState(null);
+  useEffect(() => {
+    let cancelled = false;
+    loadShotRoundIndex()
+      .then((m) => { if (!cancelled) setRoundIndexMap(m); })
+      .catch(() => {});
+    return () => { cancelled = true; };
+  }, []);
+  const longestAt = useMemo(
+    () => shotRoundContext(roundIndexMap, detail?.longest),
+    [roundIndexMap, detail],
+  );
+  const [replayOpen, setReplayOpen] = useState(false);
 
   const trend = useMemo(() => (detail?.byRound || []).map((r, i) => ({
     label: `R${i + 1}`,
@@ -72,10 +92,25 @@ export default function ClubStatScreen({ route, navigation }) {
                 <Text style={s.tileValue}>{`${formatDistance(detail.min, units)}–${formatDistance(detail.max, units)}`}</Text>
                 <Text style={s.tileLabel}>RANGE ({suffix})</Text>
               </View>
-              <View style={s.tile}>
+              <PressableScale
+                style={[s.tile, longestAt && s.tileTappable]}
+                disabled={!longestAt}
+                onPress={() => setReplayOpen(true)}
+                accessibilityRole={longestAt ? 'button' : undefined}
+                accessibilityLabel={longestAt
+                  ? `Longest carry ${formatDistance(detail.max, units)} ${suffix}, hole ${longestAt.holeNumber} at ${longestAt.courseName}. Open the hole map.`
+                  : undefined}
+                testID="club-longest-tile"
+              >
                 <Text style={s.tileValue}>{`${formatDistance(detail.max, units)}`}</Text>
                 <Text style={s.tileLabel}>LONGEST ({suffix})</Text>
-              </View>
+                {longestAt ? (
+                  <View style={s.tileLink}>
+                    <Feather name="map-pin" size={9} color={theme.accent.primary} />
+                    <Text style={s.tileLinkText} numberOfLines={1}>{`Hole ${longestAt.holeNumber}`}</Text>
+                  </View>
+                ) : null}
+              </PressableScale>
             </View>
           </Reveal>
 
@@ -107,6 +142,19 @@ export default function ClubStatScreen({ route, navigation }) {
           )}
         </ScrollView>
       )}
+      {longestAt ? (
+        <ShotReplaySheet
+          visible={replayOpen}
+          onClose={() => setReplayOpen(false)}
+          courseName={longestAt.courseName}
+          holeNumber={longestAt.holeNumber}
+          par={longestAt.par}
+          strokeIndex={longestAt.strokeIndex}
+          roundId={detail.longest.roundId}
+          roundIndex={detail.longest.roundIndex}
+          caption={`Longest ${clubLabel(club)} · ${formatDistance(detail.max, units)}${suffix} · ${longestAt.courseName}`}
+        />
+      ) : null}
     </ScreenContainer>
   );
 }
@@ -150,6 +198,11 @@ const makeStyles = (theme) => StyleSheet.create({
   tileLabel: {
     fontFamily: 'PlusJakartaSans-Bold', fontSize: 8, letterSpacing: 1,
     color: theme.text.muted, textAlign: 'center',
+  },
+  tileTappable: { borderColor: theme.accent.primary },
+  tileLink: { flexDirection: 'row', alignItems: 'center', gap: 3 },
+  tileLinkText: {
+    fontFamily: 'PlusJakartaSans-Bold', fontSize: 9, color: theme.accent.primary,
   },
 
   sectionLabel: {
