@@ -1,6 +1,6 @@
 import React, { useMemo, useSyncExternalStore } from 'react';
 import {
-  View, Text, StyleSheet, ScrollView, Switch, TextInput,
+  View, Text, StyleSheet, ScrollView, Switch, TextInput, Alert,
 } from 'react-native';
 import { Feather } from '@expo/vector-icons';
 import ScreenContainer from '../components/ScreenContainer';
@@ -93,6 +93,7 @@ export default function BagScreen({ navigation }) {
       })
   ), [bagSet, averages, clubDistances]);
   const anyMeasured = rows.some((r) => r.measured);
+  const anyOverride = rows.some((r) => r.hasOverride);
 
   // Save a manual distance (entered in display units) → metres; 0/empty clears.
   const setClubDistance = (club, text) => {
@@ -108,6 +109,31 @@ export default function BagScreen({ navigation }) {
     const map = {};
     for (const r of rows) if (r.measured) map[r.club] = Math.round(r.measuredMeters);
     if (Object.keys(map).length) updateAppSettings({ clubDistances: map }).catch(() => {});
+  };
+
+  // Drop every manual override so each club falls back to its measured
+  // average (or nominal). Settings merge object keys, so clearing means
+  // writing 0 for each set club rather than an empty map.
+  const resetDistances = () => {
+    const set = Object.keys(clubDistances || {});
+    if (!set.length) return;
+    Alert.alert(
+      'Reset club distances?',
+      'Your manual carry values are cleared. Each club falls back to its measured average.',
+      [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'Reset',
+          style: 'destructive',
+          onPress: () => {
+            haptic('selection');
+            updateAppSettings({
+              clubDistances: Object.fromEntries(set.map((k) => [k, 0])),
+            }).catch(() => {});
+          },
+        },
+      ],
+    );
   };
 
   return (
@@ -151,16 +177,28 @@ export default function BagScreen({ navigation }) {
                 a club for its full breakdown. Manual values override the average.
               </Text>
             </View>
-            {anyMeasured && (
-              <PressableScale
-                onPress={setAllToAverage}
-                style={s.avgBtn}
-                accessibilityLabel="Set all club distances to their measured average"
-              >
-                <Feather name="download" size={13} color={theme.accent.primary} />
-                <Text style={s.avgBtnText}>Use averages</Text>
-              </PressableScale>
-            )}
+            <View style={s.distActions}>
+              {anyMeasured && (
+                <PressableScale
+                  onPress={setAllToAverage}
+                  style={s.avgBtn}
+                  accessibilityLabel="Set all club distances to their measured average"
+                >
+                  <Feather name="download" size={13} color={theme.accent.primary} />
+                  <Text style={s.avgBtnText}>Use averages</Text>
+                </PressableScale>
+              )}
+              {anyOverride && (
+                <PressableScale
+                  onPress={resetDistances}
+                  style={s.resetBtn}
+                  accessibilityLabel="Reset all manual club distances"
+                >
+                  <Feather name="rotate-ccw" size={13} color={theme.text.secondary} />
+                  <Text style={s.resetBtnText}>Reset</Text>
+                </PressableScale>
+              )}
+            </View>
           </View>
           <View style={s.groupCard}>
             {rows.length === 0 ? (
@@ -315,12 +353,19 @@ const makeStyles = (theme) => StyleSheet.create({
     paddingVertical: 2, paddingHorizontal: 2,
   },
   distInputUnit: { fontFamily: 'PlusJakartaSans-SemiBold', color: theme.text.muted, fontSize: 13 },
+  distActions: { alignItems: 'flex-end', gap: 8, marginTop: 20 },
   avgBtn: {
     flexDirection: 'row', alignItems: 'center', gap: 5, alignSelf: 'flex-start',
-    marginTop: 20, backgroundColor: theme.accent.light,
+    backgroundColor: theme.accent.light,
     paddingHorizontal: 12, paddingVertical: 8, borderRadius: 999,
   },
   avgBtnText: { fontFamily: 'PlusJakartaSans-Bold', color: theme.accent.primary, fontSize: 12 },
+  resetBtn: {
+    flexDirection: 'row', alignItems: 'center', gap: 5, alignSelf: 'flex-start',
+    borderWidth: StyleSheet.hairlineWidth, borderColor: theme.border.default,
+    paddingHorizontal: 12, paddingVertical: 8, borderRadius: 999,
+  },
+  resetBtnText: { fontFamily: 'PlusJakartaSans-Bold', color: theme.text.secondary, fontSize: 12 },
 
   condHead: { flexDirection: 'row', alignItems: 'flex-start', gap: 12 },
   condHeadText: { flex: 1 },
