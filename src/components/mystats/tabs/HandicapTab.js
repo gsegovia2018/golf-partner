@@ -48,7 +48,7 @@ const LEDGER_VISIBLE = 12;
 
 // Memoised — see the note in CoachTab.
 function HandicapTab({
-  myRounds, profileHandicap, onInfo, onApplied, excludedKeys, onToggleExcluded,
+  myRounds, profileHandicap, onInfo, onApplied, excludedKeys, onToggleExcluded, readOnly = false,
 }) {
   const { theme } = useTheme();
   const s = useMemo(() => makeStyles(theme), [theme]);
@@ -455,26 +455,30 @@ function HandicapTab({
         </>
       )}
 
-      <PressableScale
-        style={[s.applyBtn, applyState === 'saving' && s.applyBtnDisabled]}
-        onPress={onApply}
-        disabled={applyState === 'saving'}
-        accessibilityRole="button"
-      >
-        <Text style={s.applyText}>
-          {applyState === 'done'
-            ? 'Saved to profile ✓'
-            : `Set ${fmt1(applyValue)} as my handicap`}
-        </Text>
-      </PressableScale>
-      {applyState === 'error' && (
-        <Text style={s.errorText}>{'Could not save — try again.'}</Text>
+      {!readOnly && (
+        <>
+          <PressableScale
+            style={[s.applyBtn, applyState === 'saving' && s.applyBtnDisabled]}
+            onPress={onApply}
+            disabled={applyState === 'saving'}
+            accessibilityRole="button"
+          >
+            <Text style={s.applyText}>
+              {applyState === 'done'
+                ? 'Saved to profile ✓'
+                : `Set ${fmt1(applyValue)} as my handicap`}
+            </Text>
+          </PressableScale>
+          {applyState === 'error' && (
+            <Text style={s.errorText}>{'Could not save — try again.'}</Text>
+          )}
+          <Text style={s.profileNote}>
+            {profileHandicap != null
+              ? `Profile today: ${profileHandicap} — saving updates it to ${fmt1(applyValue)}`
+              : 'No handicap on your profile yet.'}
+          </Text>
+        </>
       )}
-      <Text style={s.profileNote}>
-        {profileHandicap != null
-          ? `Profile today: ${profileHandicap} — saving updates it to ${fmt1(applyValue)}`
-          : 'No handicap on your profile yet.'}
-      </Text>
     </View>
   );
 
@@ -550,7 +554,7 @@ function HandicapTab({
     });
   }
 
-  const nextCard = nextFacts.length > 0 ? (
+  const nextCard = nextFacts.length > 0 && !readOnly ? (
     <SectionCard title="Your next round" titleVariant="heading">
       {nextFacts.map((f) => (
         <View key={f.key} style={s.fact}>

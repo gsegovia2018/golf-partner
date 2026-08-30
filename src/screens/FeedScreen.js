@@ -565,6 +565,22 @@ export default function FeedScreen({ navigation }) {
 
   const openStoryIndex = openStoryKey ? storyStartIndexByKey.get(openStoryKey) : null;
 
+  // Tapping a player on a card: yourself → My Stats, a friend → their
+  // Player Stats. The feed only carries the identity it has (name, avatar,
+  // user id); PlayerStatsScreen fills in username/gender from the friends
+  // cache.
+  const openPlayer = (result) => {
+    if (result.isMine) { navigation.navigate('MyStats'); return; }
+    if (!result.isFriend || !result.userId) return;
+    navigation.navigate('PlayerStats', {
+      friend: {
+        userId: result.userId,
+        displayName: result.name,
+        avatarUrl: result.avatarUrl ?? null,
+        avatarColor: result.avatarColor ?? null,
+      },
+    });
+  };
   const openRound = (item) => navigation.navigate('RoundSummary', {
     tournamentId: item.tournamentId,
     roundId: item.roundId,
@@ -602,6 +618,7 @@ export default function FeedScreen({ navigation }) {
         timestamp={timeAgo(item.ts, now)}
         onPress={() => openRound(item)}
         onPressMedia={item.mediaCoverUrl ? (media) => openRoundMedia(item, media) : undefined}
+        onPressPlayer={openPlayer}
       >
         <ReactionBar
           itemKey={item.key}

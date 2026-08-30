@@ -96,6 +96,7 @@ export default function FeedRoundCard({
   timestamp,
   onPress,
   onPressMedia,
+  onPressPlayer,
   children,
 }) {
   const { theme } = useTheme();
@@ -129,6 +130,11 @@ export default function FeedRoundCard({
   const totalHoles = item.totalHoles ?? 18;
   const modeLabel = modeBadgeLabel(item.scoringMode);
 
+  // A player is openable when the viewer can see their stats: themselves
+  // (My Stats) or an accepted friend (Player Stats). Unlinked guests and
+  // friends-of-friends stay plain text.
+  const canOpen = (result) => !!onPressPlayer && !!result && (result.isMine || (result.isFriend && !!result.userId));
+
   const renderScoreTile = (result, index, scroll) => {
     const onHole = onHoleFor(result, live, totalHoles);
     const vp = vsParText(result.vsPar);
@@ -153,7 +159,18 @@ export default function FeedRoundCard({
             <Text style={s.hcpText}>HCP {result.handicap}</Text>
           ) : null}
         </View>
-        <Text style={s.resultName} numberOfLines={1}>{result.name || 'Player'}</Text>
+        {canOpen(result) ? (
+          <TouchableOpacity
+            onPress={() => onPressPlayer(result)}
+            hitSlop={{ top: 6, bottom: 6, left: 6, right: 6 }}
+            accessibilityRole="button"
+            accessibilityLabel={`Open ${result.name || 'player'}'s stats`}
+          >
+            <Text style={[s.resultName, s.resultNameLink]} numberOfLines={1}>{result.name || 'Player'}</Text>
+          </TouchableOpacity>
+        ) : (
+          <Text style={s.resultName} numberOfLines={1}>{result.name || 'Player'}</Text>
+        )}
         <View style={s.pointsLine}>
           <Text style={s.statValue}>{statValue(result.points)}</Text>
           <Text style={s.statLabel}>pts</Text>
@@ -287,7 +304,17 @@ export default function FeedRoundCard({
       ) : null}
 
       <View style={s.recapRow}>
-        <Avatar item={{ ...item, actorName: leader?.name || item.actorName }} theme={theme} />
+        {canOpen(leader) ? (
+          <TouchableOpacity
+            onPress={() => onPressPlayer(leader)}
+            accessibilityRole="button"
+            accessibilityLabel={`Open ${leader.name || 'player'}'s stats`}
+          >
+            <Avatar item={{ ...item, actorName: leader?.name || item.actorName }} theme={theme} />
+          </TouchableOpacity>
+        ) : (
+          <Avatar item={{ ...item, actorName: leader?.name || item.actorName }} theme={theme} />
+        )}
         <View style={s.recapTextWrap}>
           <Text style={s.recapText} numberOfLines={2}>{leaderSummary(leader, second)}</Text>
           <View style={s.chipRow}>
@@ -353,6 +380,7 @@ const styles = StyleSheet.create({
     overflow: 'hidden',
   },
   avatarImage: { width: '100%', height: '100%' },
+  resultNameLink: { textDecorationLine: 'underline' },
   avatarText: {
     fontFamily: 'PlusJakartaSans-ExtraBold',
     color: semantic.winner.dark,

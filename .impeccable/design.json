@@ -1,6 +1,6 @@
 {
   "schemaVersion": 2,
-  "generatedAt": "2026-08-02T19:07:00Z",
+  "generatedAt": "2026-08-30T17:35:18Z",
   "title": "Design System: Golf Partner",
   "extensions": {
     "colorMeta": {
@@ -77,6 +77,21 @@
           "oklch(80% 0.13 92)",
           "oklch(89% 0.08 92)",
           "oklch(96% 0.035 92)"
+        ]
+      },
+      "rank-gold": {
+        "role": "rank",
+        "displayName": "Rank Gold",
+        "canonical": "#d4af37",
+        "tonalRamp": [
+          "oklch(20% 0.05 90)",
+          "oklch(32% 0.08 90)",
+          "oklch(44% 0.1 90)",
+          "oklch(56% 0.12 90)",
+          "oklch(67% 0.13 90)",
+          "oklch(77% 0.12 90)",
+          "oklch(87% 0.08 90)",
+          "oklch(95% 0.035 90)"
         ]
       },
       "bronze-marker": {
@@ -273,6 +288,12 @@
           "oklch(83% 0.056 20)",
           "oklch(95% 0.039 20)"
         ]
+      },
+      "scrim": {
+        "role": "overlay",
+        "displayName": "Scrim",
+        "canonical": "rgba(0,0,0,0.5)",
+        "note": "Modal and bottom-sheet backdrop dim, identical in both themes. Maps to semantic.scrim; the map HUD keeps its own hud.scrim."
       }
     },
     "typographyMeta": {

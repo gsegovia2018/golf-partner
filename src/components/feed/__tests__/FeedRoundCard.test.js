@@ -1,6 +1,6 @@
 import React from 'react';
 import { Image } from 'react-native';
-import { render, waitFor } from '@testing-library/react-native';
+import { render, waitFor, fireEvent } from '@testing-library/react-native';
 import { ThemeProvider } from '../../../theme/ThemeContext';
 import FeedRoundCard from '../FeedRoundCard';
 
@@ -84,5 +84,25 @@ describe('FeedRoundCard', () => {
     expect(getByText('Luis')).toBeTruthy();
     expect(getByText('Javi')).toBeTruthy();
     expect(queryByText(/more player/)).toBeNull();
+  });
+
+  test('opens a friend or yourself from the score tile, never an unlinked guest', () => {
+    const photo = { id: 'photo-1', kind: 'photo', url: 'https://example.com/a.jpg', thumbUrl: 'https://example.com/a.jpg' };
+    const item = makeRoundItem(photo);
+    item.results = [
+      { playerId: 'p1', name: 'You', points: 38, isMine: true, userId: 'me' },
+      { playerId: 'p2', name: 'Noé', points: 33, isFriend: true, userId: 'friend-1' },
+      { playerId: 'p3', name: 'Guest', points: 30 },
+    ];
+    const onPressPlayer = jest.fn();
+    const { getByLabelText, getAllByLabelText, queryByLabelText } = render(wrap(
+      <FeedRoundCard item={item} timestamp="Today" onPress={() => {}} onPressPlayer={onPressPlayer} />
+    ));
+
+    fireEvent.press(getByLabelText("Open Noé's stats"));
+    expect(onPressPlayer).toHaveBeenLastCalledWith(expect.objectContaining({ userId: 'friend-1' }));
+    // The leader's avatar and their tile both open the same player.
+    expect(getAllByLabelText("Open You's stats")).toHaveLength(2);
+    expect(queryByLabelText("Open Guest's stats")).toBeNull();
   });
 });

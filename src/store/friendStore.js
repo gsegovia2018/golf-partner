@@ -23,6 +23,7 @@ function rowToPerson(row) {
     handicap: row.handicap ?? null,
     avatarUrl: row.avatar_url ?? null,
     avatarColor: row.avatar_color ?? null,
+    gender: row.gender ?? null,
   };
 }
 
@@ -31,7 +32,7 @@ async function fetchProfiles(userIds) {
   if (ids.length === 0) return [];
   const { data, error } = await supabase
     .from('profiles')
-    .select('user_id, username, display_name, handicap, avatar_url, avatar_color')
+    .select('user_id, username, display_name, handicap, avatar_url, avatar_color, gender')
     .in('user_id', ids);
   if (error) throw error;
   return (data ?? []).map(rowToPerson);
@@ -244,64 +245,37 @@ export async function removeFriend(friendUserId) {
   if (error) throw error;
 }
 
-// Profile view-model for a friend: recent rounds, handicap, and a
-// head-to-head record vs the current user. Derived from the shared feed
-// (buildFeed already unions the current user's + friends' tournaments and
-// flattens every round), so this needs no extra server schema.
+// Everything the Player Stats screen needs for a friend, from one feed build:
+// the friend's MyRound history and the current user's, over the same
+// tournament set (buildFeed already unions the user's own tournaments with
+// their friends' — see fetchFriendTournaments — so no extra server schema is
+// needed).
 //
-// Returns { handicap, recentRounds: [...], headToHead: { wins, losses, ties } }.
-// Never throws — degrades to empty data when offline.
-export async function getFriendProfile(friend) {
-  const empty = {
-    handicap: friend?.handicap ?? null,
-    recentRounds: [],
-    headToHead: { wins: 0, losses: 0, ties: 0 },
+// Both collections resolve STRICTLY by user_id. The name / lone-player-of-a-
+// solo-game fallbacks in resolveMyPlayer exist for the signed-in user's own
+// unlinked guest slots; applied to a friend they match the current user's
+// solo games instead, inventing rounds the friend never played.
+//
+// Returns { me, myRounds, friendRounds, tournaments }. Throws whatever
+// buildFeed throws — the screen owns the error state.
+export async function loadFriendStatsData(friend) {
+  if (!friend?.userId) return { me: null, myRounds: [], friendRounds: [], tournaments: [] };
+  // Lazily required to avoid a static import cycle (feedStore imports
+  // friendStore).
+  const { buildFeed } = require('./feedStore');
+  const { collectMyRounds } = require('./personalStats');
+  const { me, tournaments: unsorted } = await buildFeed({ useCache: true, includeMedia: false });
+  // buildFeed returns my tournaments followed by the friend-fetched ones in
+  // arrival order; collectMyRounds assumes newest-first (it reverses to get
+  // chronological order, and every chart/ledger downstream relies on that).
+  const tournaments = [...unsorted].sort(
+    (a, b) => new Date(b?.createdAt ?? 0) - new Date(a?.createdAt ?? 0),
+  );
+  const strict = { strictUserId: true };
+  return {
+    me,
+    myRounds: collectMyRounds(tournaments, me, null, strict),
+    friendRounds: collectMyRounds(tournaments, friend.userId, null, strict),
+    tournaments,
   };
-  if (!friend?.userId) return empty;
-  try {
-    // Lazily required to avoid a static import cycle (feedStore imports
-    // friendStore).
-    const { buildFeed } = require('./feedStore');
-    const { me, items } = await buildFeed();
-
-    const recentRounds = [];
-    let wins = 0; let losses = 0; let ties = 0;
-
-    for (const item of items) {
-      if (item.type !== 'round' || !Array.isArray(item.results)) continue;
-      const theirs = item.results.find((r) => r.userId === friend.userId);
-      if (!theirs) continue;
-
-      recentRounds.push({
-        key: item.key,
-        tournamentId: item.tournamentId,
-        roundId: item.roundId,
-        tournamentName: item.tournamentName,
-        roundIndex: item.roundIndex,
-        courseName: item.courseName,
-        points: theirs.points,
-        strokes: theirs.strokes,
-        holes: theirs.holes,
-        ts: item.ts,
-      });
-
-      // Head-to-head: only rounds where both the friend and the current
-      // user have a result count.
-      const mine = me ? item.results.find((r) => r.userId === me) : null;
-      if (mine) {
-        if (mine.points > theirs.points) wins += 1;
-        else if (mine.points < theirs.points) losses += 1;
-        else ties += 1;
-      }
-    }
-
-    recentRounds.sort((a, b) => b.ts - a.ts);
-    return {
-      handicap: friend.handicap ?? null,
-      recentRounds: recentRounds.slice(0, 10),
-      headToHead: { wins, losses, ties },
-    };
-  } catch {
-    return empty;
-  }
 }

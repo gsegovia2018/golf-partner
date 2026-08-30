@@ -307,12 +307,19 @@ export const FORM_METRICS = [
 // fall back to a case-insensitive display-name match, then to the lone
 // player of a single-player game. Both fallbacks are safe here: collectMyRounds
 // only ever sees the current user's own visible tournaments.
-function resolveMyPlayer(tournament, userId, displayName) {
+//
+// `strictUserId` turns both fallbacks off. Required when resolving SOMEONE
+// ELSE (a friend, see friendStats): the tournaments on this device are the
+// current user's own visible set, so the lone player of a single-player game
+// is the current user, not the friend — and a display-name match can collide
+// with a guest slot. For a friend only the linked account is trustworthy.
+function resolveMyPlayer(tournament, userId, displayName, { strictUserId = false } = {}) {
   const players = tournament.players || [];
   if (userId) {
     const byId = players.find((p) => p.user_id === userId);
     if (byId) return byId;
   }
+  if (strictUserId) return null;
   const name = displayName?.trim().toLowerCase();
   if (name) {
     const byName = players.find((p) => (p.name || '').trim().toLowerCase() === name);
@@ -327,12 +334,13 @@ function resolveMyPlayer(tournament, userId, displayName) {
 // `tournaments` arrive newest-first (id desc) from the loaders, so we reverse
 // to get chronological (oldest-first) order. `displayName` is the optional
 // profile name used to recognise unlinked (guest) player slots — see
-// resolveMyPlayer.
-export function collectMyRounds(tournaments, userId, displayName) {
+// resolveMyPlayer. `opts.strictUserId` restricts resolution to the linked
+// account — see resolveMyPlayer.
+export function collectMyRounds(tournaments, userId, displayName, opts = {}) {
   const result = [];
   const chrono = [...(tournaments || [])].reverse();
   chrono.forEach((t) => {
-    const me = resolveMyPlayer(t, userId, displayName);
+    const me = resolveMyPlayer(t, userId, displayName, opts);
     if (!me) return;
     (t.rounds || []).forEach((round, roundIndex) => {
       // Scramble rounds carry a team ball under the captain, not an
