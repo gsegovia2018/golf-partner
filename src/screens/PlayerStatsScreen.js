@@ -7,7 +7,7 @@ import PressableScale from '../components/ui/PressableScale';
 import PersonAvatar from '../components/ui/PersonAvatar';
 import StatDetailSheet from '../components/StatDetailSheet';
 import { useTheme } from '../theme/ThemeContext';
-import { loadFriendStatsData } from '../store/friendStore';
+import { loadFriendStatsData, getCachedFriends } from '../store/friendStore';
 import {
   sharedRounds, headToHead, buildFriendSummary, friendVerdict,
 } from '../store/friendStats';
@@ -33,7 +33,24 @@ const TABS = [
 export default function PlayerStatsScreen({ navigation, route }) {
   const { theme } = useTheme();
   const s = useMemo(() => makeStyles(theme), [theme]);
-  const friend = route?.params?.friend;
+  const paramFriend = route?.params?.friend;
+  // Callers that only know a player's id/name/avatar (the feed) pass a
+  // partial person; fill username, gender and handicap from the friends
+  // cache so the header and verdict pronouns read the same as from Friends.
+  const [cachedFriend, setCachedFriend] = useState(null);
+  useEffect(() => {
+    if (!paramFriend?.userId || paramFriend.username) return undefined;
+    let cancelled = false;
+    getCachedFriends().then((list) => {
+      const hit = (list || []).find((f) => f.userId === paramFriend.userId);
+      if (!cancelled && hit) setCachedFriend(hit);
+    }).catch(() => {});
+    return () => { cancelled = true; };
+  }, [paramFriend]);
+  const friend = useMemo(
+    () => (paramFriend ? { ...(cachedFriend ?? {}), ...paramFriend } : paramFriend),
+    [paramFriend, cachedFriend],
+  );
 
   const [data, setData] = useState(null); // { me, myRounds, friendRounds, tournaments }
   const [error, setError] = useState(false);
@@ -81,7 +98,7 @@ export default function PlayerStatsScreen({ navigation, route }) {
         <Text style={s.headerTitle} numberOfLines={1}>{friend?.displayName ?? 'Player'}</Text>
         {friend ? (
           <Text style={s.headerSub} numberOfLines={1}>
-            {`@${friend.username}`}
+            {friend.username ? `@${friend.username}` : ''}
             {summary?.index?.value != null ? ` · HCP ${summary.index.value.toFixed(1)}` : ''}
           </Text>
         ) : null}
