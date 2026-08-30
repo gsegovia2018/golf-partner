@@ -136,3 +136,35 @@ describe('sendRequest race handling (Task 9)', () => {
     await expect(sendRequest('target-1')).rejects.toBeTruthy();
   });
 });
+
+describe('loadFriendStatsData', () => {
+  const t = (id, createdAt, userId) => ({
+    id, createdAt, kind: 'game',
+    players: [{ id: `p-${id}`, name: 'X', user_id: userId, handicap: 10 }],
+    rounds: [{
+      courseName: `Course ${id}`,
+      holes: [{ number: 1, par: 4, strokeIndex: 1 }],
+      scores: { [`p-${id}`]: { 1: 4 } },
+    }],
+  });
+
+  it('orders the friend rounds chronologically regardless of feed arrival order', async () => {
+    jest.resetModules();
+    jest.doMock('../feedStore', () => ({
+      buildFeed: jest.fn().mockResolvedValue({
+        me: 'user-1',
+        // My tournament first, then friend-fetched ones in arrival order —
+        // deliberately NOT newest-first.
+        tournaments: [
+          t('mine', '2026-06-01T00:00:00Z', 'user-1'),
+          t('old', '2026-04-01T00:00:00Z', 'friend-1'),
+          t('new', '2026-08-01T00:00:00Z', 'friend-1'),
+          t('mid', '2026-05-01T00:00:00Z', 'friend-1'),
+        ],
+      }),
+    }));
+    const { loadFriendStatsData } = require('../friendStore');
+    const { friendRounds } = await loadFriendStatsData({ userId: 'friend-1' });
+    expect(friendRounds.map((r) => r.tournamentId)).toEqual(['old', 'mid', 'new']);
+  });
+});

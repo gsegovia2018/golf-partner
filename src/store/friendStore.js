@@ -264,7 +264,13 @@ export async function loadFriendStatsData(friend) {
   // friendStore).
   const { buildFeed } = require('./feedStore');
   const { collectMyRounds } = require('./personalStats');
-  const { me, tournaments } = await buildFeed({ useCache: true, includeMedia: false });
+  const { me, tournaments: unsorted } = await buildFeed({ useCache: true, includeMedia: false });
+  // buildFeed returns my tournaments followed by the friend-fetched ones in
+  // arrival order; collectMyRounds assumes newest-first (it reverses to get
+  // chronological order, and every chart/ledger downstream relies on that).
+  const tournaments = [...unsorted].sort(
+    (a, b) => new Date(b?.createdAt ?? 0) - new Date(a?.createdAt ?? 0),
+  );
   const strict = { strictUserId: true };
   return {
     me,
