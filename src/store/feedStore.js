@@ -387,7 +387,8 @@ async function loadFeedTournaments(source) {
 }
 
 // Build the full, time-sorted feed. Never throws — degrades to whatever
-// data is reachable. Returns { me, friends, items, roundStories, partial, error }.
+// data is reachable. Returns { me, friends, items, roundStories, tournaments,
+// partial, error }.
 //   - error:   true when the feed could not be built at all (no items).
 //   - partial: true when some — but not all — data sources failed, so the
 //              feed is incomplete (e.g. friends loaded but media did not).
@@ -457,7 +458,9 @@ export async function buildFeed(options = {}) {
     if (tournamentsSettled.status !== 'fulfilled') {
       // The only hard-fail path: with no tournaments at all there is nothing
       // to build a feed from. Leave any existing cache untouched.
-      return { me, friends, items: [], roundStories: [], partial: false, error: true };
+      return {
+        me, friends, items: [], roundStories: [], tournaments: [], partial: false, error: true,
+      };
     }
     const tournamentResult = tournamentsSettled.value;
     const myTournaments = tournamentResult?.list ?? [];
@@ -743,6 +746,11 @@ export async function buildFeed(options = {}) {
     friends,
     items: limitedItems,
     roundStories,
+    // The full de-duped tournament docs (mine + friends'), un-paginated —
+    // the source personalStats/friendStats run over. Feed rendering itself
+    // doesn't use it; it is here so a caller that needs whole tournaments
+    // doesn't re-pay the fan-out.
+    tournaments: all,
     partial,
     error: false,
     hasMore,

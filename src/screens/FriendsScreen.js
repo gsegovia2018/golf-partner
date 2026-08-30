@@ -1,21 +1,20 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import {
-  View, Text, TextInput, TouchableOpacity, StyleSheet, ScrollView,
-  ActivityIndicator, Alert, Platform, Image,
+  View, Text, TextInput, TouchableOpacity, StyleSheet,
+  ActivityIndicator, Alert, Platform,
 } from 'react-native';
 import ScreenContainer from '../components/ScreenContainer';
-import BottomSheet from '../components/BottomSheet';
 import IconButton from '../components/ui/IconButton';
+import PersonAvatar from '../components/ui/PersonAvatar';
 import { useFocusEffect } from '@react-navigation/native';
 import { Feather } from '@expo/vector-icons';
 
 import { useTheme } from '../theme/ThemeContext';
-import { semantic } from '../theme/tokens';
 import PullToRefresh from '../components/PullToRefresh';
 import {
   searchUsers, listFriends, listPendingRequests,
   sendRequest, acceptRequest, declineRequest, removeFriend,
-  getFriendProfile, isAbortError,
+  isAbortError,
 } from '../store/friendStore';
 
 const alert = (title, msg) => {
@@ -24,31 +23,6 @@ const alert = (title, msg) => {
 };
 
 const SEARCH_DEBOUNCE_MS = 300;
-
-function PersonAvatar({ person, theme, size }) {
-  const initials = (person.displayName || person.username || '?')
-    .slice(0, 2).toUpperCase();
-  const dim = size ?? 42;
-  return (
-    <View style={[
-      styles_avatar.wrap,
-      { width: dim, height: dim, borderRadius: dim / 2 },
-      { backgroundColor: person.avatarColor || theme.accent.primary },
-    ]}>
-      {person.avatarUrl
-        ? <Image source={{ uri: person.avatarUrl }} style={styles_avatar.img} />
-        : <Text style={styles_avatar.text}>{initials}</Text>}
-    </View>
-  );
-}
-
-const styles_avatar = StyleSheet.create({
-  wrap: {
-    alignItems: 'center', justifyContent: 'center', overflow: 'hidden',
-  },
-  img: { width: '100%', height: '100%' },
-  text: { fontFamily: 'PlusJakartaSans-ExtraBold', color: semantic.winner.dark, fontSize: 14 },
-});
 
 export default function FriendsScreen({ navigation }) {
   const { theme } = useTheme();
@@ -63,7 +37,6 @@ export default function FriendsScreen({ navigation }) {
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [busyId, setBusyId] = useState(null);
-  const [profileFriend, setProfileFriend] = useState(null);
 
   // Search request sequencing. Each keystroke bumps the sequence id; only the
   // newest in-flight request is allowed to write results, and an
@@ -330,110 +303,13 @@ export default function FriendsScreen({ navigation }) {
                 ) : (
                   <IconButton icon="user-minus" color={theme.destructive} style={s.ghostBtn} onPress={() => onRemove(p)} />
                 )),
-                () => setProfileFriend(p),
+                () => navigation.navigate('PlayerStats', { friend: p }),
               ))
             )}
           </>
         )}
       </PullToRefresh>
-
-      <FriendProfileModal
-        friend={profileFriend}
-        theme={theme}
-        onClose={() => setProfileFriend(null)}
-      />
     </ScreenContainer>
-  );
-}
-
-// ---------------------------------------------------------------------------
-// Friend profile sheet — recent rounds, handicap, and head-to-head record
-// against the current user. Data comes from getFriendProfile (derived from
-// the shared feed), so no extra navigation route is needed.
-// ---------------------------------------------------------------------------
-function FriendProfileModal({ friend, theme, onClose }) {
-  const s = makeStyles(theme);
-  const [loading, setLoading] = useState(false);
-  const [data, setData] = useState(null);
-
-  useEffect(() => {
-    if (!friend) { setData(null); return; }
-    let cancelled = false;
-    setLoading(true);
-    getFriendProfile(friend)
-      .then((d) => { if (!cancelled) setData(d); })
-      .finally(() => { if (!cancelled) setLoading(false); });
-    return () => { cancelled = true; };
-  }, [friend]);
-
-  if (!friend) return null;
-
-  const h2h = data?.headToHead ?? { wins: 0, losses: 0, ties: 0 };
-  const rounds = data?.recentRounds ?? [];
-
-  return (
-    <BottomSheet visible onClose={onClose} sheetStyle={s.modalSheet}>
-          <View style={s.modalHandle} />
-          <View style={s.modalHead}>
-            <PersonAvatar person={friend} theme={theme} size={52} />
-            <View style={{ flex: 1 }}>
-              <Text style={s.name}>{friend.displayName}</Text>
-              <Text style={s.sub}>
-                @{friend.username}
-                {(data?.handicap ?? friend.handicap) != null
-                  ? ` · HCP ${data?.handicap ?? friend.handicap}`
-                  : ''}
-              </Text>
-            </View>
-            <IconButton icon="x" onPress={onClose} />
-          </View>
-
-          {loading ? (
-            <ActivityIndicator color={theme.accent.primary} style={{ marginTop: 30 }} />
-          ) : (
-            <ScrollView contentContainerStyle={{ paddingBottom: 12 }}>
-              <Text style={s.sectionLabel}>HEAD-TO-HEAD</Text>
-              <View style={s.h2hRow}>
-                <View style={s.h2hCell}>
-                  <Text style={s.h2hValue}>{h2h.wins}</Text>
-                  <Text style={s.h2hLabel}>YOUR WINS</Text>
-                </View>
-                <View style={s.h2hCell}>
-                  <Text style={s.h2hValue}>{h2h.ties}</Text>
-                  <Text style={s.h2hLabel}>TIES</Text>
-                </View>
-                <View style={s.h2hCell}>
-                  <Text style={s.h2hValue}>{h2h.losses}</Text>
-                  <Text style={s.h2hLabel}>THEIR WINS</Text>
-                </View>
-              </View>
-
-              <Text style={s.sectionLabel}>RECENT ROUNDS</Text>
-              {rounds.length === 0 ? (
-                <Text style={s.empty}>No shared rounds yet.</Text>
-              ) : (
-                rounds.map((r) => (
-                  <View key={r.key} style={s.miniRow}>
-                    <View style={{ flex: 1 }}>
-                      <Text style={s.miniTitle} numberOfLines={1}>
-                        {r.courseName || `Round ${r.roundIndex + 1}`}
-                      </Text>
-                      <Text style={s.miniSub} numberOfLines={1}>{r.tournamentName}</Text>
-                    </View>
-                    <View style={s.miniStat}>
-                      <Text style={s.miniStatValue}>{r.points}</Text>
-                      <Text style={s.miniStatLabel}>PTS</Text>
-                    </View>
-                    <View style={s.miniStat}>
-                      <Text style={s.miniStatValue}>{r.strokes}</Text>
-                      <Text style={s.miniStatLabel}>STRK</Text>
-                    </View>
-                  </View>
-                ))
-              )}
-            </ScrollView>
-          )}
-    </BottomSheet>
   );
 }
 
@@ -504,57 +380,6 @@ function makeStyles(theme) {
     emptySub: {
       fontFamily: 'PlusJakartaSans-Regular', fontSize: 13, color: theme.text.muted,
       textAlign: 'center', paddingHorizontal: 30,
-    },
-
-    /* Friend profile modal */
-    modalBackdrop: {
-      flex: 1, backgroundColor: 'rgba(0,0,0,0.45)', justifyContent: 'flex-end',
-    },
-    modalSheet: {
-      backgroundColor: theme.bg.primary,
-      borderTopLeftRadius: 22, borderTopRightRadius: 22,
-      paddingHorizontal: 20, paddingTop: 10, paddingBottom: 24,
-      maxHeight: '82%',
-    },
-    modalHandle: {
-      alignSelf: 'center', width: 38, height: 4, borderRadius: 2,
-      backgroundColor: theme.border.default, marginBottom: 12,
-    },
-    modalHead: {
-      flexDirection: 'row', alignItems: 'center', gap: 12, marginBottom: 4,
-    },
-    h2hRow: { flexDirection: 'row', gap: 8 },
-    h2hCell: {
-      flex: 1, backgroundColor: theme.bg.card, borderRadius: 14,
-      borderWidth: theme.isDark ? 1 : 0,
-      borderColor: theme.isDark ? theme.glass?.border : theme.border.default,
-      paddingVertical: 14, alignItems: 'center',
-      ...(theme.isDark ? {} : theme.shadow.card),
-    },
-    h2hValue: { fontFamily: 'PlayfairDisplay-Bold', fontSize: 22, color: theme.text.primary },
-    h2hLabel: {
-      fontFamily: 'PlusJakartaSans-Bold', fontSize: 8, letterSpacing: 1,
-      color: theme.text.muted, marginTop: 3,
-    },
-    miniRow: {
-      flexDirection: 'row', alignItems: 'center', gap: 10,
-      backgroundColor: theme.bg.card, borderRadius: 14, borderWidth: 1,
-      borderColor: theme.isDark ? theme.glass?.border : theme.border.default,
-      padding: 12, marginBottom: 8,
-      ...(theme.isDark ? {} : theme.shadow.card),
-    },
-    miniTitle: { fontFamily: 'PlusJakartaSans-Bold', fontSize: 13, color: theme.text.primary },
-    miniSub: {
-      fontFamily: 'PlusJakartaSans-Medium', fontSize: 11,
-      color: theme.text.muted, marginTop: 2,
-    },
-    miniStat: { alignItems: 'center', minWidth: 44 },
-    miniStatValue: {
-      fontFamily: 'PlayfairDisplay-Bold', fontSize: 16, color: theme.text.primary,
-    },
-    miniStatLabel: {
-      fontFamily: 'PlusJakartaSans-Bold', fontSize: 8, letterSpacing: 1,
-      color: theme.text.muted, marginTop: 2,
     },
   });
 }
