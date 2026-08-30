@@ -1,0 +1,9 @@
+{
+  "detector": {
+    "ignoreRules": [],
+    "ignoreFiles": [
+      "/private/tmp/claude-501/**"
+    ],
+    "ignoreValues": []
+  }
+}
