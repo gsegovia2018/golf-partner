@@ -103,6 +103,37 @@ function roundActivityTs(t, roundId, roundIndex, activityTsByKey) {
   return (Date.parse(t.createdAt) || Number(t.id) || 0) + roundIndex;
 }
 
+// `finishedAt` is written as an ISO string, but the legacy tournament-level
+// stamp also exists as an ms epoch number in older rows (see FinishedScreen).
+function parseFinishedAt(value) {
+  if (typeof value === 'number') return Number.isFinite(value) ? value : null;
+  const ms = Date.parse(value ?? '');
+  return Number.isFinite(ms) ? ms : null;
+}
+
+// The timestamp the feed SORTS on: when the round was finished, frozen at
+// that instant. A later edit by anyone (a score fix, a note, a handicap
+// change) bumps the round's activity timestamp but must NOT move the card —
+// the feed is a record of when rounds were played, not of when their rows
+// were last touched.
+//
+// Order of preference:
+//   1. round.finishedAt — stamped once by the Scorecard's finish action
+//      (mutation `round.setFinished`, first-write-wins).
+//   2. tournament.finishedAt + roundIndex — the pre-existing archive stamp,
+//      covering rounds finished before (1) existed. Every round of an
+//      archived tournament shares it, so roundIndex keeps them in play order.
+//   3. roundActivityTs — a round still in progress (no finish stamp yet, and
+//      correctly recency-ordered while it's live), or one whose tournament
+//      was never archived.
+function roundFeedTs(t, round, roundIndex, activityTsByKey) {
+  const roundFinished = parseFinishedAt(round?.finishedAt);
+  if (roundFinished != null) return roundFinished;
+  const tournamentFinished = parseFinishedAt(t?.finishedAt);
+  if (tournamentFinished != null) return tournamentFinished + roundIndex;
+  return roundActivityTs(t, round.id, roundIndex, activityTsByKey);
+}
+
 function holesPlayed(round, playerId) {
   const scores = round?.scores?.[playerId];
   if (!scores) return 0;
@@ -521,7 +552,7 @@ export async function buildFeed(options = {}) {
 
     (t.rounds ?? []).forEach((round, roundIndex) => {
       if (!round || round._deleted || !round.scores) return;
-      const ts = roundActivityTs(t, round.id, roundIndex, activityTsByKey);
+      const ts = roundFeedTs(t, round, roundIndex, activityTsByKey);
       const mode = roundScoringMode(t, round);
 
       const results = [];

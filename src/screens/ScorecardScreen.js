@@ -1671,6 +1671,26 @@ export default function ScorecardScreen({ navigation, route }) {
 
     setFinishBusy(true);
     try {
+      // Stamp WHEN this round was finished. The feed orders on it, so it is
+      // written once — a later edit by anyone (score fix, note, handicap)
+      // must not resurface the round at the top of the feed. Official rounds
+      // finish through attestation, not here.
+      if (!official && freshT.kind !== 'official' && !liveRound.finishedAt) {
+        const roundFinishedAt = new Date().toISOString();
+        await enqueueSave(async () => {
+          const base = tournamentRef.current ?? liveTournament;
+          if (!base) return null;
+          const updated = await mutate(base, {
+            type: 'round.setFinished',
+            roundId: liveRound.id,
+            finishedAt: roundFinishedAt,
+          });
+          tournamentRef.current = updated;
+          setTournament(updated);
+          return updated;
+        });
+      }
+
       if (shouldMarkFinished && !freshT.finishedAt) {
         const finishedAt = new Date().toISOString();
         await enqueueSave(async () => {

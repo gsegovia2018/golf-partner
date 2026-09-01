@@ -107,6 +107,9 @@ export function metaPathFor(m) {
     // Reveals a round's pairs (post-randomize reveal moment). Optionally
     // carries the pairs themselves when reveal and pairing happen together.
     case 'round.reveal': return `rounds.${m.roundId}.revealed`;
+    // When the round was finished. Stamped once, on the finish action, and
+    // never re-stamped by a later edit — the feed orders on it.
+    case 'round.setFinished': return `rounds.${m.roundId}.finishedAt`;
     // Tournament profile edit (name/kind/settings/etc.) — mirrors
     // patch_game_tournament's one-level-deep merge. Single LWW path: the
     // whole patch lands together.
@@ -379,6 +382,14 @@ export function applyToTournament(t, m) {
       if (!round) return;
       round.revealed = true;
       if (m.pairs) round.pairs = m.pairs;
+      break;
+    }
+    case 'round.setFinished': {
+      const round = t.rounds?.find((r) => r.id === m.roundId);
+      if (!round) return;
+      // First write wins: re-finishing a round (or replaying a queued
+      // mutation) must not move the timestamp the feed sorts on.
+      if (!round.finishedAt) round.finishedAt = m.finishedAt;
       break;
     }
     case 'tournament.updateProfile': {
