@@ -1,6 +1,6 @@
 import {
   logShot, getShots, shotsForHole,
-  deleteShotsForRound, pruneShotsToRounds,
+  deleteShotsForRound, pruneShotsToRounds, clearAllShots,
 } from '../shotStore';
 
 // No signed-in user → the store stays local-only (no Supabase round-trips),
@@ -39,6 +39,18 @@ describe('shotStore round cleanup', () => {
     expect(left).toHaveLength(1);
     expect(left[0].roundId).toBe('r2');
     expect(shotsForHole('r1', 0, 1)).toHaveLength(0);
+  });
+
+  it('clearAllShots wipes every round and reports how many went', async () => {
+    await at('r1', 1, 1);
+    await at('r2', 4, 1);
+    expect(await clearAllShots()).toBe(2);
+    expect(getShots()).toHaveLength(0);
+    expect(shotsForHole('r1', 0, 1)).toHaveLength(0);
+  });
+
+  it('clearAllShots on an empty log is a no-op', async () => {
+    expect(await clearAllShots()).toBe(0);
   });
 
   it('pruneShotsToRounds drops shots for unknown rounds', async () => {

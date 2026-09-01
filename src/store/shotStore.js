@@ -191,6 +191,23 @@ export async function deleteShotsForRound(roundId) {
   } catch { /* server rows linger; harmless, re-hydrate reconciles */ }
 }
 
+// Wipe the entire shot log — every marked shot, every round. Irreversible:
+// the measured carries behind club averages, the per-hole longest-drive maps
+// and the shot-detail stats all come from these rows. Reached only from the
+// Bag screen's "Reset distances", behind a confirmation.
+export async function clearAllShots() {
+  if (!SHOTS.length) return 0;
+  const removed = SHOTS.length;
+  const hadServerRows = SHOTS.some((s) => !s.pending);
+  SHOTS = [];
+  emit();
+  await persistCache();
+  try {
+    if (userId && hadServerRows) await supabase.from('golf_shot').delete().eq('user_id', userId);
+  } catch { /* server rows linger; harmless, re-hydrate reconciles */ }
+  return removed;
+}
+
 // Drop shots whose round no longer exists. `validRoundIds` is the complete set
 // of the user's current round ids — pass `deleteRemote: true` ONLY when that
 // set is authoritative (a fresh server list), so a partial/offline list never

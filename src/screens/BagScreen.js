@@ -10,7 +10,9 @@ import Reveal from '../components/ui/Reveal';
 import { useTheme } from '../theme/ThemeContext';
 import { useAppSettings } from '../hooks/useAppSettings';
 import { updateAppSettings } from '../store/settingsStore';
-import { subscribeShots, getShotsVersion, getShots } from '../store/shotStore';
+import {
+  subscribeShots, getShotsVersion, getShots, clearAllShots,
+} from '../store/shotStore';
 import {
   subscribeCourseGeometry, getCourseGeometryVersion, getCourseGeometry,
 } from '../lib/geo';
@@ -93,7 +95,9 @@ export default function BagScreen({ navigation }) {
       })
   ), [bagSet, averages, clubDistances]);
   const anyMeasured = rows.some((r) => r.measured);
-  const anyOverride = rows.some((r) => r.hasOverride);
+  // Reset is offered whenever there is anything to clear — a manual override
+  // on any club (bagged or not) or a single marked shot.
+  const canReset = Object.keys(clubDistances || {}).length > 0 || getShots().length > 0;
 
   // Save a manual distance (entered in display units) → metres; 0/empty clears.
   const setClubDistance = (club, text) => {
@@ -111,25 +115,38 @@ export default function BagScreen({ navigation }) {
     if (Object.keys(map).length) updateAppSettings({ clubDistances: map }).catch(() => {});
   };
 
-  // Drop every manual override so each club falls back to its measured
-  // average (or nominal). Settings merge object keys, so clearing means
-  // writing 0 for each set club rather than an empty map.
+  // Full reset: drop every manual override AND wipe the marked-shot log the
+  // measured averages are derived from, so each club really does go back to
+  // its catalog estimate rather than snapping to the average it already had.
+  //
+  // Settings merge object keys, so clearing overrides means writing 0 for each
+  // set club rather than an empty map. Deleting the shots is irreversible and
+  // reaches further than this screen — the shot-detail stats, the per-hole
+  // longest-drive maps and every club recommendation read the same rows — so
+  // the confirmation spells out what goes.
   const resetDistances = () => {
-    const set = Object.keys(clubDistances || {});
-    if (!set.length) return;
+    const overrides = Object.keys(clubDistances || {});
+    const shotCount = getShots().length;
+    if (!overrides.length && !shotCount) return;
+    const body = shotCount
+      ? `This deletes all ${shotCount} marked shot${shotCount === 1 ? '' : 's'} and clears your manual carries. Club distances, shot stats and hole maps go back to estimates. This cannot be undone.`
+      : 'Your manual carry values are cleared. Each club falls back to its catalog estimate.';
     Alert.alert(
       'Reset club distances?',
-      'Your manual carry values are cleared. Each club falls back to its measured average.',
+      body,
       [
         { text: 'Cancel', style: 'cancel' },
         {
-          text: 'Reset',
+          text: shotCount ? 'Delete and reset' : 'Reset',
           style: 'destructive',
           onPress: () => {
             haptic('selection');
-            updateAppSettings({
-              clubDistances: Object.fromEntries(set.map((k) => [k, 0])),
-            }).catch(() => {});
+            if (overrides.length) {
+              updateAppSettings({
+                clubDistances: Object.fromEntries(overrides.map((k) => [k, 0])),
+              }).catch(() => {});
+            }
+            clearAllShots().catch(() => {});
           },
         },
       ],
@@ -188,11 +205,12 @@ export default function BagScreen({ navigation }) {
                   <Text style={s.avgBtnText}>Use averages</Text>
                 </PressableScale>
               )}
-              {anyOverride && (
+              {canReset && (
                 <PressableScale
                   onPress={resetDistances}
                   style={s.resetBtn}
-                  accessibilityLabel="Reset all manual club distances"
+                  accessibilityLabel="Delete every marked shot and reset all club distances"
+                  testID="bag-reset-distances"
                 >
                   <Feather name="rotate-ccw" size={13} color={theme.text.secondary} />
                   <Text style={s.resetBtnText}>Reset</Text>
