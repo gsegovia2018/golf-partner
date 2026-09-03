@@ -1,5 +1,5 @@
 import React, {
-  useCallback, useRef, useState,
+  useCallback, useEffect, useMemo, useRef, useState,
 } from 'react';
 import {
   View, Text, TouchableOpacity, StyleSheet,
@@ -15,12 +15,14 @@ import { supabase } from '../lib/supabase';
 import {
   readLocal, roundLeaderboard, formatRoundLabel,
   getTournamentSnapshot, isTournamentFinished, buildBoardLink,
+  loadAllTournamentsWithFallback,
 } from '../store/tournamentStore';
 import { fetchTournament as fetchTournamentRemote } from '../store/tournamentRepo';
 import { ensureRealtimeForTournament } from '../store/realtimeSync';
 import { loadRoundMedia } from '../store/mediaStore';
 import useMediaAttachFlow from '../hooks/useMediaAttachFlow';
 import RoundRecapPanel from '../components/roundSummary/RoundRecapPanel';
+import AchievementStrip from '../components/roundSummary/AchievementStrip';
 import RoundSummaryTabs from '../components/roundSummary/RoundSummaryTabs';
 import PullToRefresh from '../components/PullToRefresh';
 import RoundLeaderboard from '../components/roundSummary/RoundLeaderboard';
@@ -29,6 +31,9 @@ import { ScorecardTable, resolveScorecardRows } from '../components/scorecard/Gr
 import { useRoundRoster } from '../hooks/useRoundRoster';
 import { buildRoundRecap } from './roundSummaryModel';
 import { normalizeRoundNotes } from '../store/roundNotes';
+import { buildRoundAchievements } from '../store/roundAchievements';
+import { collectMyRounds } from '../store/personalStats';
+import { loadProfile } from '../store/profileStore';
 import { ShareableRoundCard, shareRoundSummary } from '../components/ShareableCard';
 
 // Stable empty roster so the useRoundRoster memo below does not see a new
@@ -71,6 +76,9 @@ export default function RoundSummaryScreen({ navigation, route }) {
   const hasLoadedOnceRef = useRef(!!initialTournament);
   const [activeTab, setActiveTab] = useState('scorecard');
   const [sharingRound, setSharingRound] = useState(false);
+  // The viewer's career rounds, loaded lazily for the personal-record half of
+  // the highlights strip. null until (and unless) that load runs.
+  const [myRounds, setMyRounds] = useState(null);
   const roundCardRef = useRef();
 
   const load = useCallback(async () => {
@@ -155,6 +163,40 @@ export default function RoundSummaryScreen({ navigation, route }) {
     round, settings: tournament?.settings, players, meId: myPlayerId,
   });
 
+  // Highlights are for a round that is over: mid-round, a "best ever" claim
+  // would be premature and would flip as later holes come in. The career
+  // history behind the personal records is only worth loading once the round
+  // has settled AND the viewer actually played it — a friend's round has no
+  // records of yours to beat.
+  const wantsRecords = !!round && !live && iAmPlaying;
+  useEffect(() => {
+    if (!wantsRecords || myRounds) return;
+    let cancelled = false;
+    (async () => {
+      try {
+        const [{ list }, profile] = await Promise.all([
+          loadAllTournamentsWithFallback(),
+          loadProfile().catch(() => null),
+        ]);
+        if (cancelled) return;
+        setMyRounds(collectMyRounds(list, me, profile?.displayName));
+      } catch {
+        // Best-effort: the round-local half of the strip stands on its own.
+      }
+    })();
+    return () => { cancelled = true; };
+  }, [wantsRecords, myRounds, me]);
+
+  const achievements = useMemo(() => {
+    if (!tournament || roundIndex < 0 || live) return [];
+    return buildRoundAchievements({
+      tournament,
+      roundIndex,
+      myRounds: wantsRecords ? myRounds : null,
+      roundKey: `${tournament.id}:${roundIndex}`,
+    });
+  }, [tournament, roundIndex, live, wantsRecords, myRounds]);
+
   const normalizedNotes = normalizeRoundNotes(round?.notes);
   const roundNote = typeof normalizedNotes.round === 'string'
     ? normalizedNotes.round.trim()
@@ -232,6 +274,7 @@ export default function RoundSummaryScreen({ navigation, route }) {
                 live={live}
                 totalHoles={totalHoles}
               />
+              <AchievementStrip items={achievements} />
               <RoundLeaderboard entries={ranked} unit={unit} round={round} live={live} />
               <ScorecardTable
                 round={round}
