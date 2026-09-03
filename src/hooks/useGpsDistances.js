@@ -33,6 +33,20 @@ const OFF_TEE_METERS = 50;
 // navigator.geolocation directly with these instead.
 const WEB_GEO_OPTIONS = { enableHighAccuracy: true, maximumAge: 0, timeout: 15000 };
 
+// How long a wake gets to prove the location provider is still answering
+// before we pay for a full watch restart. Long enough for a warm fix to come
+// back, short enough that a genuinely suspended watch recovers promptly.
+const WAKE_PROBE_MS = 3000;
+// The wake probe only asks "does the provider still answer?", so unlike
+// WEB_GEO_OPTIONS it accepts a few seconds of cache — a pristine fix is the
+// watch's job, and forcing maximumAge: 0 here would make a live provider look
+// suspended for exactly as long as a cold re-lock takes.
+const WEB_PROBE_OPTIONS = { enableHighAccuracy: true, maximumAge: 5000, timeout: WAKE_PROBE_MS };
+// One return to the foreground can fire two wake signals (visibilitychange and
+// pageshow); collapse them so they can't restart the watch twice, the second
+// killing the acquisition the first just started.
+const WAKE_COALESCE_MS = 1000;
+
 export function useGpsDistances(courseName, holeNumber) {
   const geomVersion = useSyncExternalStore(subscribeCourseGeometry, getCourseGeometryVersion);
   // geomVersion bumps when hydration swaps in live geometry — recompute then.
@@ -45,14 +59,24 @@ export function useGpsDistances(courseName, holeNumber) {
   // browser settings changed mid-round) — re-runs the watch effect so the
   // header recovers without a remount or a settings toggle.
   const [permRetry, setPermRetry] = useState(0);
-  // Bumped whenever the app comes back to the foreground. Both platforms
-  // suspend a location watch while hidden (screen off, tab or app switch) and
-  // frequently never resume it — the watch stays registered but silent, which
-  // is why the fix froze until a reload. Restarting the whole effect is what a
-  // reload did, minus the reload.
+  // Bumped when a wake finds the location provider unresponsive. Both
+  // platforms suspend a location watch while hidden (screen off, tab or app
+  // switch) and frequently never resume it — the watch stays registered but
+  // silent, which is why the fix froze until a reload. Restarting the whole
+  // effect is what a reload did, minus the reload; the wake effect below is
+  // what decides a restart is actually warranted.
   const [wakeEpoch, setWakeEpoch] = useState(0);
   const [fix, setFix] = useState(null); // { pos: [lat, lng], accuracy }
   const lastFixAt = useRef(0);
+  // Set by the watch effect to a one-shot "is the provider still answering?"
+  // request, and null whenever no watch is running. The wake handler below
+  // fires it instead of restarting on faith.
+  const probeFix = useRef(null);
+  const lastWakeAt = useRef(0);
+  // Counts fixes actually delivered by the provider. The wake probe compares
+  // this rather than lastFixAt, which the watch also stamps on (re)start and
+  // which two events inside one millisecond can't tell apart.
+  const fixSeq = useRef(0);
   // Only whether the course HAS geometry gates the location watch — not the
   // geometry object's identity. Hydration (e.g. saving the geometry editor)
   // bumps geomVersion and returns a fresh object; keying the effect on that
@@ -60,7 +84,27 @@ export function useGpsDistances(courseName, holeNumber) {
   const hasGeometry = !!geometry;
 
   useEffect(() => {
-    const wake = () => setWakeEpoch((n) => n + 1);
+    let probeTimer = null;
+    // A restart is expensive: it drops a watch that may be perfectly healthy
+    // and forces a cold high-accuracy re-lock (WEB_GEO_OPTIONS pins
+    // maximumAge: 0), which is seconds of stale distance every time the phone
+    // comes out of a pocket. So a wake doesn't restart on faith — it pokes the
+    // provider and restarts only if nothing answers within WAKE_PROBE_MS,
+    // which is the suspended-watch case this wake-up exists for. Any fix in
+    // that window (probe or watch) means the provider is alive; a live-but-
+    // quiet watch is what the 6s poll below has always covered.
+    const wake = () => {
+      const now = Date.now();
+      if (now - lastWakeAt.current < WAKE_COALESCE_MS) return;
+      lastWakeAt.current = now;
+      const before = fixSeq.current;
+      probeFix.current?.();
+      if (probeTimer) clearTimeout(probeTimer);
+      probeTimer = setTimeout(() => {
+        probeTimer = null;
+        if (fixSeq.current === before) setWakeEpoch((n) => n + 1);
+      }, WAKE_PROBE_MS);
+    };
     // Native: a locked screen or an app switch suspends the expo-location
     // watch the same way a hidden tab suspends the browser one, and pocketing
     // the phone between shots is the single most common thing that happens
@@ -72,16 +116,27 @@ export function useGpsDistances(courseName, holeNumber) {
       const sub = AppState.addEventListener('change', (state) => {
         if (state === 'active') wake();
       });
-      return () => sub.remove();
+      return () => {
+        sub.remove();
+        if (probeTimer) clearTimeout(probeTimer);
+      };
     }
-    const onWake = () => {
+    const onVisible = () => {
       if (document.visibilityState === 'visible') wake();
     };
-    document.addEventListener('visibilitychange', onWake);
-    window.addEventListener('pageshow', onWake);
+    // pageshow fires on every normal page load too, not only on the bfcache
+    // restore it is here for — and the listener is attached before `load`, so
+    // without this guard a cold start wakes itself and restarts the watch it
+    // is still acquiring. `persisted` is true only for the bfcache case.
+    const onPageShow = (e) => {
+      if (e.persisted) onVisible();
+    };
+    document.addEventListener('visibilitychange', onVisible);
+    window.addEventListener('pageshow', onPageShow);
     return () => {
-      document.removeEventListener('visibilitychange', onWake);
-      window.removeEventListener('pageshow', onWake);
+      document.removeEventListener('visibilitychange', onVisible);
+      window.removeEventListener('pageshow', onPageShow);
+      if (probeTimer) clearTimeout(probeTimer);
     };
   }, []);
 
@@ -94,6 +149,7 @@ export function useGpsDistances(courseName, holeNumber) {
     const apply = (loc) => {
       if (cancelled || !loc) return;
       lastFixAt.current = Date.now();
+      fixSeq.current += 1;
       setFix({
         pos: [loc.coords.latitude, loc.coords.longitude],
         accuracy: loc.coords.accuracy ?? null,
@@ -118,12 +174,20 @@ export function useGpsDistances(courseName, holeNumber) {
           return;
         }
         setDenied(false);
+        // The quiet-watch polls below measure their 6s from here. A restart
+        // would otherwise inherit a timestamp from before the phone went into
+        // a pocket, and stack a redundant high-accuracy request on top of the
+        // acquisition this run has already started.
+        lastFixAt.current = Date.now();
         if (Platform.OS === 'web' && typeof navigator !== 'undefined' && navigator.geolocation) {
           // See WEB_GEO_OPTIONS — the expo-location web path only ever yields
           // one coarse cached fix. GeolocationPosition has the same
           // { coords: { latitude, longitude, accuracy } } shape apply() reads.
           navigator.geolocation.getCurrentPosition(apply, () => {}, WEB_GEO_OPTIONS);
           webWatchId = navigator.geolocation.watchPosition(apply, () => {}, WEB_GEO_OPTIONS);
+          probeFix.current = () => {
+            navigator.geolocation.getCurrentPosition(apply, () => {}, WEB_PROBE_OPTIONS);
+          };
           // Safety net for browsers whose watch goes silent (backgrounded tab,
           // some mobile vendors) — force a fresh read after 6s of quiet.
           poll = setInterval(() => {
@@ -135,6 +199,10 @@ export function useGpsDistances(courseName, holeNumber) {
         // Fast first fix — the watch below can take several seconds to emit.
         Location.getCurrentPositionAsync({ accuracy: Location.Accuracy.High })
           .then(apply).catch(() => {});
+        probeFix.current = () => {
+          Location.getCurrentPositionAsync({ accuracy: Location.Accuracy.High })
+            .then(apply).catch(() => {});
+        };
         sub = await Location.watchPositionAsync(
           {
             accuracy: Location.Accuracy.High,
@@ -156,6 +224,7 @@ export function useGpsDistances(courseName, holeNumber) {
     })();
     return () => {
       cancelled = true;
+      probeFix.current = null;
       // expo-location's web subscription.remove() calls
       // LocationEventEmitter.removeSubscription, which doesn't exist on
       // react-native-web — it throws and takes down the tree via the error

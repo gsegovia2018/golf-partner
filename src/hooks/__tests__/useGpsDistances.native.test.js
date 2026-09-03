@@ -3,7 +3,7 @@
  */
 import React from 'react';
 import { Text, AppState } from 'react-native';
-import { render, waitFor, act } from '@testing-library/react-native';
+import { render, act } from '@testing-library/react-native';
 import { useGpsDistances } from '../useGpsDistances';
 
 jest.mock('expo-location', () => ({
@@ -35,30 +35,98 @@ function Probe() {
   return <Text testID="out">{JSON.stringify(gps.position)}</Text>;
 }
 
+// Two tests share the expo-location mock; only the call counts need resetting
+// between them (clearAllMocks leaves the factory's implementations in place).
+beforeEach(() => { jest.clearAllMocks(); });
+
+// The hook's WAKE_PROBE_MS — a wake gives the provider this long to answer
+// before the watch is restarted.
+const PROBE_MS = 3000;
+
+// The RNTL wait helper drives its own clock, which fights the fake timers
+// these tests need to step over the wake probe. The pending work is a short
+// promise chain, so draining microtasks is enough to settle it.
+const flush = async (rounds = 5) => {
+  for (let i = 0; i < rounds; i += 1) {
+    // eslint-disable-next-line no-await-in-loop
+    await act(async () => { await Promise.resolve(); });
+  }
+};
+
+// Take over AppState so a test can drive the foreground transition itself.
+function captureAppState() {
+  const handlers = [];
+  const spy = jest.spyOn(AppState, 'addEventListener').mockImplementation((event, handler) => {
+    if (event === 'change') handlers.push(handler);
+    return { remove: jest.fn() };
+  });
+  return {
+    send: (state) => handlers.forEach((h) => h(state)),
+    restore: () => spy.mockRestore(),
+  };
+}
+
 // The native counterpart of the web wake test: Android suspends the
 // expo-location watch when the screen locks or the user switches app — which
 // is what pocketing the phone between shots does — and does not reliably
-// resume it. Returning to the foreground has to start a fresh watch, and
-// there is no `document` out here to hang a visibilitychange listener on.
-test('native restarts the watch when the app returns to the foreground', async () => {
+// resume it. Returning to a provider that has gone quiet has to start a fresh
+// watch, and there is no `document` out here to hang a visibilitychange
+// listener on.
+test('native restarts the watch when a wake finds the provider silent', async () => {
   const Location = require('expo-location');
-  let onAppState;
-  const remove = jest.fn();
-  const sub = jest.spyOn(AppState, 'addEventListener').mockImplementation((event, handler) => {
-    if (event === 'change') onAppState = handler;
-    return { remove };
-  });
+  Location.getCurrentPositionAsync.mockResolvedValue(null); // never yields a fix
+  jest.useFakeTimers();
+  const appState = captureAppState();
 
   try {
     render(<Probe />);
-    await waitFor(() => expect(Location.watchPositionAsync).toHaveBeenCalledTimes(1));
+    await flush();
+    expect(Location.watchPositionAsync).toHaveBeenCalledTimes(1);
 
-    await act(async () => { onAppState('background'); });
+    await act(async () => { appState.send('background'); });
     expect(Location.watchPositionAsync).toHaveBeenCalledTimes(1); // backgrounded: nothing to do
 
-    await act(async () => { onAppState('active'); });
-    await waitFor(() => expect(Location.watchPositionAsync).toHaveBeenCalledTimes(2));
+    await act(async () => { appState.send('active'); });
+    // The probe is out and unanswered — the watch is not dropped until it
+    // times out.
+    expect(Location.watchPositionAsync).toHaveBeenCalledTimes(1);
+
+    await act(async () => { jest.advanceTimersByTime(PROBE_MS + 10); });
+    await flush();
+    expect(Location.watchPositionAsync).toHaveBeenCalledTimes(2);
   } finally {
-    sub.mockRestore();
+    appState.restore();
+    jest.useRealTimers();
+  }
+});
+
+// The regression this guards: restarting on every 'active' dropped a healthy
+// watch and forced a cold high-accuracy re-lock, so the distance sat on its
+// old value for seconds every time the phone came out of a pocket. Android
+// also reaches 'active' for things that never suspended the watch at all —
+// a permission dialog, the notification shade, an unlock.
+test('native leaves a live watch alone when a wake is answered', async () => {
+  const Location = require('expo-location');
+  Location.getCurrentPositionAsync.mockResolvedValue({
+    coords: { latitude: 40.1, longitude: -3.7, accuracy: 5 },
+  });
+  jest.useFakeTimers();
+  const appState = captureAppState();
+
+  try {
+    render(<Probe />);
+    await flush();
+    expect(Location.watchPositionAsync).toHaveBeenCalledTimes(1);
+
+    await act(async () => { appState.send('background'); });
+    await act(async () => { appState.send('active'); });
+    await flush(); // the probe answers
+    await act(async () => { jest.advanceTimersByTime(PROBE_MS + 10); });
+    await flush();
+
+    expect(Location.watchPositionAsync).toHaveBeenCalledTimes(1);
+  } finally {
+    appState.restore();
+    jest.useRealTimers();
   }
 });
