@@ -188,9 +188,19 @@ export async function upsertPlayer(tournamentId, player, pos) {
   if (error) throw error;
 }
 
+// SOFT delete (20260903000000): stamps deleted_at rather than removing the
+// row. get_game_tournament still omits the player from `players`, but now also
+// reports the id in `deletedPlayerIds` — which is what lets the read path tell
+// "removed on another device" apart from "this device's add never landed", and
+// so keep the second one instead of erasing it (see unionLocalRoster in
+// mutate.js). A hard delete makes those two cases indistinguishable.
+//
+// Re-adding the same person clears the tombstone via
+// add_tournament_player_if_room; upsertPlayer above deliberately does not
+// touch deleted_at, so a routine field write can never resurrect them.
 export async function deletePlayer(tournamentId, playerId) {
   const { error } = await supabase.from('game_players')
-    .delete()
+    .update({ deleted_at: new Date().toISOString() })
     .match({ tournament_id: tournamentId, player_id: playerId });
   if (error) throw error;
 }

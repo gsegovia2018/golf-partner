@@ -33,6 +33,10 @@ function installMocks() {
           record.ops.push({ method: 'delete' });
           return builder;
         },
+        update: (rows) => {
+          record.ops.push({ method: 'update', rows });
+          return builder;
+        },
         match: (obj) => {
           record.ops.push({ method: 'match', obj });
           return Promise.resolve({ data: null, error: null });
@@ -353,13 +357,17 @@ describe('upsertPlayer', () => {
 });
 
 describe('deletePlayer', () => {
-  test('deletes the game_players row matched by tournament_id+player_id', async () => {
+  // SOFT delete (20260903000000). A hard delete made "removed on another
+  // device" indistinguishable from "this device's add never landed", which is
+  // what forced the read path to erase the second case — see unionLocalRoster.
+  test('stamps deleted_at on the game_players row matched by tournament_id+player_id', async () => {
     const { deletePlayer } = require('../tournamentRepo');
 
     await deletePlayer('t1', 'p1');
 
     const call = lastFromCall('game_players');
-    expect(call.ops.map((o) => o.method)).toEqual(['delete', 'match']);
+    expect(call.ops.map((o) => o.method)).toEqual(['update', 'match']);
+    expect(typeof call.ops[0].rows.deleted_at).toBe('string');
     expect(call.ops[1].obj).toEqual({ tournament_id: 't1', player_id: 'p1' });
   });
 });

@@ -207,10 +207,14 @@ export function applyPlayerRow(t, row, eventType) {
   const players = (next.players ?? []).slice();
   const existingIdx = players.findIndex((p) => p.id === row.player_id);
 
-  // DELETE (removePlayer → deletePlayer) removes the player by player_id. A
-  // field-less old record must not upsert a `{}` stub — downstream code reads
-  // p.id / p.name / p.user_id unguarded. No-op when already absent.
-  if (isDeleteEvent(eventType)) {
+  // Removal by player_id. Two shapes reach here: a real DELETE event (a
+  // field-less old record — which must not upsert a `{}` stub, since
+  // downstream code reads p.id / p.name / p.user_id unguarded), and, since
+  // 20260903000000, an INSERT/UPDATE carrying a non-null deleted_at — the soft
+  // delete repo.deletePlayer now writes. Both mean the same thing to a peer,
+  // and get_game_tournament omits a tombstoned player either way. No-op when
+  // already absent.
+  if (isDeleteEvent(eventType) || row.deleted_at != null) {
     if (existingIdx !== -1) players.splice(existingIdx, 1);
     next.players = players;
     // Stamp the removedPlayerIds tombstone (see mutate.js's

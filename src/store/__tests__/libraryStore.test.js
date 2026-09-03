@@ -1,6 +1,6 @@
 import {
   fetchMyPlayers, fetchMyGuestPlayers, normalizeCourse, saveCourseTees,
-  fetchPlayers,
+  fetchPlayers, getCachedPlayers,
   fetchCourses, getCachedCourses, COURSES_CACHE_KEY,
   fetchClubs, getCachedClubs, CLUBS_CACHE_KEY,
   fetchFavoriteCourseIds, getCachedFavoriteCourseIds, FAVORITE_COURSES_CACHE_KEY,
@@ -312,6 +312,28 @@ describe('players offline cache', () => {
     // Another signed-in account must not see u1's cached list.
     mockState.user = { id: 'u2' };
     await expect(fetchMyPlayers()).rejects.toThrow('offline');
+  });
+
+  // The name floor for a roster player a tournament blob has lost — see
+  // recoverRoundRoster (scoring.js). Reads both caches because either one may
+  // be the only place a given player was ever written through.
+  test('getCachedPlayers unions both caches and dedupes by id', async () => {
+    mockState.rows = [{ id: 'p1', name: 'Ann', user_id: 'u1' }];
+    await fetchPlayers();
+    mockState.rows = [
+      { id: 'p1', name: 'Ann', user_id: 'u1' },
+      { id: 'p2', name: 'Guillermo' },
+    ];
+    await fetchMyPlayers();
+
+    const cached = await getCachedPlayers();
+    expect(cached.map((p) => p.id).sort()).toEqual(['p1', 'p2']);
+  });
+
+  test('getCachedPlayers returns [] when nothing is cached or a cache is corrupt', async () => {
+    expect(await getCachedPlayers()).toEqual([]);
+    await AsyncStorage.setItem('@golf_players_cache', 'not json');
+    expect(await getCachedPlayers()).toEqual([]);
   });
 });
 

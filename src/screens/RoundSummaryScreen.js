@@ -26,9 +26,14 @@ import PullToRefresh from '../components/PullToRefresh';
 import RoundLeaderboard from '../components/roundSummary/RoundLeaderboard';
 import CommentThread from '../components/CommentThread';
 import { ScorecardTable, resolveScorecardRows } from '../components/scorecard/GridView';
+import { useRoundRoster } from '../hooks/useRoundRoster';
 import { buildRoundRecap } from './roundSummaryModel';
 import { normalizeRoundNotes } from '../store/roundNotes';
 import { ShareableRoundCard, shareRoundSummary } from '../components/ShareableCard';
+
+// Stable empty roster so the useRoundRoster memo below does not see a new
+// array identity on every render while the tournament is still loading.
+const EMPTY_PLAYERS = [];
 
 // Read-only summary of a single round — the feed's drill-in target. Works
 // for the current user's own rounds and for friends' rounds (read access
@@ -96,7 +101,8 @@ export default function RoundSummaryScreen({ navigation, route }) {
 
   const round = tournament?.rounds?.find((r) => r.id === roundId);
   const roundIndex = tournament?.rounds?.findIndex((r) => r.id === roundId) ?? -1;
-  const players = tournament?.players ?? [];
+  // Same roster recovery the live scorecard does — see useRoundRoster.
+  const players = useRoundRoster(round, tournament?.players ?? EMPTY_PLAYERS);
   const iAmPlaying = players.some((p) => p.user_id && p.user_id === me);
 
   // Add-photo flow for the Photos tab — pre-targeted at this round; a saved

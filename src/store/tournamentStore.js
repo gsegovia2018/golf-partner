@@ -212,6 +212,45 @@ function _preserveScoreConflicts(target, source) {
   return preserveLocalConflictState(target, source);
 }
 
+// A fetch may add or update a roster player, never delete one — see
+// unionLocalRoster (mutate.js) for the tombstone rule that makes the two
+// distinguishable. Same lazy require as the two wrappers above.
+function _unionLocalRoster(target, source) {
+  const { unionLocalRoster } = require('./mutate');
+  return unionLocalRoster(target, source);
+}
+
+// A roster player unionLocalRoster kept is one the server has never seen, so
+// something has to push them there or they stay on this phone forever. Enqueue
+// the add they never got — upsertPlayer/add_tournament_player_if_room are both
+// idempotent, so a redundant one is harmless.
+//
+// Once per player per app run: a genuinely rejected add (ROSTER_FULL, or an
+// RLS refusal for a viewer) drains as a PERMANENT failure and is dropped, and
+// without this guard the next fetch would re-queue it immediately — a hot loop
+// of failing writes on every focus and every 20s poll. Dropping it is already
+// surfaced (captureException + 'error' sync status); retrying it next launch is
+// the right cadence for a condition a human has to resolve.
+const _rosterRepairAttempted = new Set();
+
+async function _repairLocalOnlyPlayers(id, merged, remote) {
+  const remoteIds = new Set((remote?.players ?? []).map((p) => p?.id));
+  for (const player of (merged?.players ?? [])) {
+    if (!player?.id || remoteIds.has(player.id)) continue;
+    const key = `${id}:${player.id}`;
+    if (_rosterRepairAttempted.has(key)) continue;
+    _rosterRepairAttempted.add(key);
+    // Straight to the queue, not through mutate(): the roster is already
+    // correct in `merged` (which this caller is about to save), and mutate()
+    // would re-save a whole blob computed from a different base.
+    await syncQueue.enqueue({
+      tournamentId: id,
+      mutation: { type: 'tournament.addPlayer', player, roundPatches: [], ts: Date.now() },
+      path: 'players',
+    });
+  }
+}
+
 // The syncQueue entries for one tournament, read fresh at overlay time (not
 // captured earlier) so a background refresh sees whatever is still undrained
 // right now.
@@ -267,10 +306,15 @@ async function _overlayAndSave(id, remote, { makeActive = true } = {}) {
   const safeRemote = (local?.rounds?.length && !remote?.rounds?.length)
     ? { ...remote, rounds: local.rounds }
     : remote;
+  // Rounds are guarded above against a partial write; players are guarded
+  // here against a DIFFERENT failure — a player the server has never heard of
+  // because their add never landed. Applied to the fetched base so the
+  // pending-mutation overlay below still wins on top of it.
+  const rosterSafeRemote = _unionLocalRoster({ ...safeRemote }, local);
   let snapshot = await _pendingEntriesFor(id);
-  let merged = safeRemote;
+  let merged = rosterSafeRemote;
   for (let pass = 0; pass < 3; pass++) {
-    merged = _applyPendingMutations(safeRemote, snapshot);
+    merged = _applyPendingMutations(rosterSafeRemote, snapshot);
     // meId is device-local — never trusted from the server (see
     // merge.js:203-206, the LWW path this overlay replaces). Local wins,
     // including an explicit null.
@@ -283,6 +327,11 @@ async function _overlayAndSave(id, remote, { makeActive = true } = {}) {
     if (stable) break;
     snapshot = latest;
   }
+  // After the settle loop, never inside it: this enqueues, which would make
+  // the loop's own "did the queue change?" check fire and cost an extra save
+  // pass. The roster is already correct in what was just saved — the queue
+  // entry exists only to get the player to the server.
+  await _repairLocalOnlyPlayers(id, merged, remote);
   return merged;
 }
 

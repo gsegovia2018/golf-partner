@@ -605,6 +605,69 @@ export function resolvePairs(pairs, players) {
   ));
 }
 
+// Put back a player the ROSTER has lost but this round still references,
+// named from the local player library (libraryStore's getCachedPlayers,
+// keyed by the same stable player ids).
+//
+// Why a roster player goes missing: `players` is replaced wholesale by every
+// remote pull (tournamentStore's _overlayAndSave, syncWorker's post-drain
+// reconcile) — the server is authoritative for it and nothing merges a local
+// player back. So a player whose add never landed (a queued mutation dropped
+// after repeated failures, or lost before it was ever enqueued — both far
+// likelier after a spell with no signal) is deleted locally on the next
+// successful fetch. Everything ELSE about them survives, because it is keyed
+// by id in other tables: pairs persist ids only (thinPairs above), and
+// scores/playerHandicaps are id-keyed maps. So the pair slot and the scores
+// stay and only the NAME goes — resolvePairs degrades an unmatched member to
+// a bare { id }, which renders as a dash.
+//
+// Scoped to ONE round's references, never the whole tournament: a
+// deliberately removed player has their pairs/scores/playerHandicaps cleared
+// from the current and future rounds (removePlayerRoundPatches) but KEPT in
+// already-played ones as history. Round-scoped recovery therefore names them
+// on the rounds they actually played and leaves them off the rounds they were
+// removed from; a tournament-wide union would put them back on the live card.
+// playerHandicaps is read with an explicit null check for the same reason —
+// removal writes JSON null there rather than deleting the key (a nested key
+// patch_game_round's one-level merge cannot remove), so a present key is not
+// on its own evidence the player is still in the round.
+//
+// Only ids the library can actually name are recovered; an unknown id is left
+// alone rather than added as a nameless row. Returns `players` unchanged (same
+// reference) when there is nothing to recover, so callers can memoise on it.
+export function recoverRoundRoster(round, players, knownPlayers) {
+  if (!round || !knownPlayers?.length) return players;
+  const roster = players ?? [];
+  const rostered = new Set(roster.map((p) => p?.id));
+
+  const referenced = new Set();
+  for (const team of (Array.isArray(round.pairs) ? round.pairs : [])) {
+    for (const member of (Array.isArray(team) ? team : [])) {
+      if (member?.id) referenced.add(member.id);
+    }
+  }
+  for (const id of Object.keys(round.scores ?? {})) referenced.add(id);
+  for (const [id, hcp] of Object.entries(round.playerHandicaps ?? {})) {
+    if (hcp != null) referenced.add(id);
+  }
+
+  const known = new Map((knownPlayers ?? []).map((p) => [p?.id, p]));
+  const recovered = [];
+  for (const id of referenced) {
+    if (rostered.has(id)) continue;
+    const lib = known.get(id);
+    if (!lib?.name) continue;
+    recovered.push({
+      id,
+      name: lib.name,
+      handicap: lib.handicap ?? 0,
+      ...(lib.gender ? { gender: lib.gender } : {}),
+      ...(lib.user_id ? { user_id: lib.user_id } : {}),
+    });
+  }
+  return recovered.length > 0 ? [...roster, ...recovered] : players;
+}
+
 // ── Per-round scoring modes ─────────────────────────────────────────────────
 // A round may override the tournament's default mode. This helper is the
 // single source of truth for a round's effective mode — every round-scoped

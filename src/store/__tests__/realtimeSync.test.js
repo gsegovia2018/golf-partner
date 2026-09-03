@@ -18,6 +18,7 @@ jest.mock('../tournamentStore', () => ({
 jest.mock('../mutate', () => ({
   applyPendingMutations: jest.fn((t) => t),
   preserveLocalConflictState: jest.fn((target) => target),
+  unionLocalRoster: jest.fn((target) => target),
 }));
 
 jest.mock('../syncQueue', () => ({
@@ -312,6 +313,26 @@ describe('applyPlayerRow', () => {
     const t = { id: 't1', players: [{ id: 'p0' }, { id: 'p1' }] };
     const out = applyPlayerRow(t, { tournament_id: 't1', player_id: 'p0' }, 'DELETE');
     expect(out.players.map((p) => p.id)).toEqual(['p1']);
+  });
+
+  // 20260903000000 turned removal into a soft delete, so a peer's removePlayer
+  // now arrives as an UPDATE carrying deleted_at rather than a DELETE event.
+  test('an UPDATE carrying deleted_at removes the player, same as a DELETE', () => {
+    const t = { id: 't1', players: [{ id: 'p0', name: 'A' }, { id: 'p1' }] };
+    const out = applyPlayerRow(t, {
+      tournament_id: 't1', player_id: 'p0', pos: 0,
+      body: { id: 'p0', name: 'A' }, deleted_at: '2026-09-03T10:00:00.000Z',
+    }, 'UPDATE');
+    expect(out.players.map((p) => p.id)).toEqual(['p1']);
+  });
+
+  test('a null deleted_at is a normal upsert, not a removal', () => {
+    const t = { id: 't1', players: [{ id: 'p0', name: 'A' }] };
+    const out = applyPlayerRow(t, {
+      tournament_id: 't1', player_id: 'p0', pos: 0,
+      body: { id: 'p0', name: 'A2' }, deleted_at: null,
+    }, 'UPDATE');
+    expect(out.players).toEqual([{ id: 'p0', name: 'A2' }]);
   });
 
   test('DELETE is a no-op when the player is already absent', () => {

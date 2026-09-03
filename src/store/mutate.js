@@ -647,6 +647,47 @@ function dropOrphanResolutions(merged, targetResolutions, cutoff) {
 // sync". The realtime/fetch merge paths must NOT prune: their targets don't
 // carry still-queued mutations, and a queued-but-undrained entry would look
 // orphaned there.
+// A fetch may ADD or UPDATE a roster player. It may never DELETE one.
+//
+// `target` (fresh server state) replaces local's `players` wholesale on every
+// read path, and until 20260903000000 an absent player was indistinguishable
+// from a removed one — so a player whose add never reached the server (a
+// queued mutation dropped after repeated failures, or lost before it was ever
+// enqueued) was erased from this device the first time it managed a fetch.
+// The visible damage was oddly narrow: pairs persist ids only (thinPairs) and
+// scores/playerHandicaps are id-keyed, so the slot and the scores stayed and
+// only the NAME went.
+//
+// Now removal is a fact the server reports — `deletedPlayerIds`, the
+// tombstoned game_players rows — so the two cases separate cleanly:
+//
+//   in target.players                         -> server truth, use it
+//   absent, id IN target.deletedPlayerIds     -> genuinely removed, drop it
+//   absent, id NOT IN deletedPlayerIds        -> never landed, KEEP local's
+//
+// A server that predates that migration sends no `deletedPlayerIds` key at
+// all. That is deliberately treated as "no removals known", which is the safe
+// direction: a stale local player lingers on one device until the client is
+// pointed at the migrated schema, rather than being destroyed. Callers that
+// want the kept ids (to re-queue the write that never landed) diff the result
+// against `target.players` themselves — see _overlayAndSave.
+//
+// Order: kept players are appended, never spliced back at a remembered index.
+// game_players.pos is assigned once and frozen server-side
+// (20260728000003), so a local-only player has no authoritative position to
+// restore, and re-splicing by a local index is exactly the roster-reordering
+// bug that migration exists to prevent. Mutates and returns `target`.
+export function unionLocalRoster(target, source) {
+  if (!Array.isArray(target?.players) || !Array.isArray(source?.players)) return target;
+  const known = new Set(target.players.map((p) => p?.id));
+  const removed = new Set(target.deletedPlayerIds ?? []);
+  const kept = source.players.filter(
+    (p) => p?.id && !known.has(p.id) && !removed.has(p.id),
+  );
+  if (kept.length > 0) target.players = [...target.players, ...kept];
+  return target;
+}
+
 export function preserveLocalConflictState(target, source, opts = {}) {
   if (!target?.rounds?.length || !source?.rounds?.length) return target;
   const knownPlayerIds = Array.isArray(target.players)

@@ -121,6 +121,28 @@ export async function deletePlayer(id) {
   if (error) throw error;
 }
 
+// Last-known player library: the union of both player caches (the full
+// library and the account-scoped one), deduped by id, newest cache first.
+// Same offline-fallback pattern as getCachedCourses below, but read for a
+// different reason — it is the name floor for a roster player a tournament
+// blob has lost (see recoverRoundRoster in scoring.js). Never throws;
+// returns [] when nothing is cached or a cache is unreadable.
+export async function getCachedPlayers() {
+  const [all, mine] = await Promise.all([
+    readCache(PLAYERS_CACHE_KEY),
+    readCache(MY_PLAYERS_CACHE_KEY),
+  ]);
+  const rows = [
+    ...(Array.isArray(all) ? all : []),
+    ...(Array.isArray(mine?.players) ? mine.players : []),
+  ];
+  const byId = new Map();
+  for (const p of rows) {
+    if (p?.id && !byId.has(p.id)) byId.set(p.id, p);
+  }
+  return [...byId.values()];
+}
+
 // ── Courses ───────────────────────────────────────────────────────────────────
 // Offline cache: the picker falls back to these last-known lists when a fetch
 // fails, so a casual game can still be set up without a connection.

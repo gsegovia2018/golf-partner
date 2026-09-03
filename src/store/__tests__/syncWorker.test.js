@@ -21,6 +21,7 @@ jest.mock('../mutationWrites', () => ({ executeMutation: jest.fn() }));
 jest.mock('../mutate', () => ({
   applyPendingMutations: jest.fn((t) => t),
   preserveLocalConflictState: jest.fn((target) => target),
+  unionLocalRoster: jest.fn((target) => target),
 }));
 
 jest.mock('../tournamentRepo', () => ({ fetchTournament: jest.fn(() => Promise.resolve(null)) }));
@@ -158,14 +159,17 @@ describe('drainTournament', () => {
   });
 
   test('poison guard: a recoverable coded error that keeps failing past the retry cap is eventually dropped and surfaced', async () => {
-    const authError = Object.assign(new Error('JWT expired'), { code: 'PGRST301' });
-    executeMutation.mockRejectedValue(authError);
+    // Not an auth error: an expired credential is TRANSPORT now (retried
+    // forever — see isTransportError). The cap still governs a coded error
+    // that is neither recognized-permanent nor transport.
+    const oddError = Object.assign(new Error('unrecognized'), { code: 'PGRST202' });
+    executeMutation.mockRejectedValue(oddError);
     let attempts = 0;
     syncQueue.incrementAttempts.mockImplementation(() => Promise.resolve(++attempts));
     const e1 = { id: 'e1', tournamentId: 't1', mutation: { type: 'tournament.setFinished' } };
 
     for (let i = 0; i < 7; i++) {
-      await expect(drainTournament('t1', [e1])).rejects.toThrow('JWT expired');
+      await expect(drainTournament('t1', [e1])).rejects.toThrow('unrecognized');
     }
     expect(syncQueue.drop).not.toHaveBeenCalled();
 
@@ -190,6 +194,30 @@ describe('drainTournament', () => {
       await expect(drainTournament('t1', [e1])).rejects.toThrow('Network request failed');
     }
     expect(syncQueue.drop).not.toHaveBeenCalled();
+  });
+
+  test('an expired credential is retried forever, never dropped — the roster-add loss path', async () => {
+    // Lose coverage on the course for an hour: the access token expires with
+    // no way to refresh. Every flicker of signal 401s until auth-js finally
+    // gets a refresh through — and eight of those used to cross the poison cap
+    // and DROP the queued write. When the write was a roster add, the player
+    // was then absent from the server forever and the next fetch erased him
+    // locally: his name disappears off the card.
+    const expired = Object.assign(new Error('JWT expired'), { code: 'PGRST301' });
+    executeMutation.mockRejectedValue(expired);
+    let attempts = 0;
+    syncQueue.incrementAttempts.mockImplementation(() => Promise.resolve(++attempts));
+    const e1 = {
+      id: 'e1',
+      tournamentId: 't1',
+      mutation: { type: 'tournament.addPlayer', player: { id: 'p2', name: 'Guillermo' } },
+    };
+
+    for (let i = 0; i < 20; i++) {
+      await expect(drainTournament('t1', [e1])).rejects.toThrow('JWT expired');
+    }
+    expect(syncQueue.drop).not.toHaveBeenCalled();
+    expect(syncQueue.incrementAttempts).not.toHaveBeenCalled();
   });
 
   test('an infra-transient error (SQLSTATE class 08 connection-exception / HTTP 5xx) is never dropped by the poison cap', async () => {
@@ -429,13 +457,13 @@ describe('drainLibrary', () => {
     // drainLibrary must have the same poison guard as drainTournament — a
     // recoverable error that never actually recovers can't be allowed to
     // retry forever (that is what wedged the whole pipeline).
-    supabase.rpc.mockResolvedValue({ error: { code: 'PGRST301', message: 'JWT expired' } });
+    supabase.rpc.mockResolvedValue({ error: { code: 'PGRST202', message: 'unrecognized' } });
     let attempts = 0;
     syncQueue.incrementAttempts.mockImplementation(() => Promise.resolve(++attempts));
     const e1 = { id: 'e1', mutation: { type: 'rpc.call', fn: 'submit_score', args: {} } };
 
     for (let i = 0; i < 7; i++) {
-      await expect(drainLibrary([e1])).rejects.toMatchObject({ code: 'PGRST301' });
+      await expect(drainLibrary([e1])).rejects.toMatchObject({ code: 'PGRST202' });
     }
     expect(syncQueue.drop).not.toHaveBeenCalled();
 
@@ -470,10 +498,17 @@ describe('isTransportError', () => {
     [{ code: '500', message: 'x' }, true],
     [{ code: '429', message: 'x' }, true], // rate limit / too busy
     [{ status: 502, message: 'x' }, true], // HTTP status field
-    [{ code: 'PGRST301', message: 'x' }, false], // auth (expired JWT) — capped, not transport
-    [{ code: '401', message: 'x' }, false],
+    // An expired credential is transport now: it is the flaky-signal data-loss
+    // path (the token expires with no coverage, then 401s until auth-js gets a
+    // refresh through), and eight of those used to DROP the queued write.
+    [{ code: 'PGRST301', message: 'x' }, true], // PostgREST: JWT expired
+    [{ code: '401', message: 'x' }, true],
+    [{ code: '403', message: 'x' }, true],
+    [{ status: 401, message: 'x' }, true], // surfaced as the status field
+    [{ status: 403, message: 'x' }, true],
     [{ code: '23505', message: 'x' }, false], // permanent anyway
     [{ code: 'PGRST116', message: 'x' }, false],
+    [{ code: 'PGRST202', message: 'x' }, false], // other PostgREST codes unaffected
   ])('%o -> transport = %s', (err, expected) => {
     expect(isTransportError(err)).toBe(expected);
   });

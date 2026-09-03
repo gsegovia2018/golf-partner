@@ -5,7 +5,7 @@ import {
 } from './tournamentStore';
 import { fetchTournament } from './tournamentRepo';
 import { executeMutation } from './mutationWrites';
-import { applyPendingMutations, preserveLocalConflictState } from './mutate';
+import { applyPendingMutations, preserveLocalConflictState, unionLocalRoster } from './mutate';
 import { upsertPlayer } from './libraryStore';
 import { isOnline, subscribeConnectivity } from '../lib/connectivity';
 import { runExclusiveForTournament } from './tournamentMutex';
@@ -94,19 +94,36 @@ export function isPermanentSyncError(error) {
 //   - no `.code` at all — a fetch/network error (offline, DNS, timeout, reset)
 //   - SQLSTATE class 08 (connection_exception, e.g. 08006/08003)
 //   - HTTP 5xx or 429, whether surfaced as `.status` or in the `.code` field
-// A stuck CREDENTIAL (expired-and-never-refreshed JWT: PGRST301, 401/403) is
-// deliberately NOT transport — those keep the bounded poison cap, since a
-// permanently bad credential can never land and shouldn't wedge an entry's
-// tournament forever.
+// An EXPIRED CREDENTIAL (PGRST301 / JWT expired, 401, 403) counts as transport
+// too. This reverses an earlier call, which held those to the bounded poison
+// cap on the reasoning that a permanently bad credential "shouldn't wedge an
+// entry's tournament forever". Two things make that the wrong trade now:
+//
+//   - It is the live data-loss path. Lose coverage on the course for an hour,
+//     the access token expires with no way to refresh; when signal flickers
+//     back each attempt 401s until auth-js finally wins the refresh race.
+//     Eight flickers is all it takes, and the queued mutation is DROPPED —
+//     which is how a roster add is lost and a player's name disappears.
+//   - The head-of-line blocking it was protecting against is now handled by
+//     isolation, not by dropping: drainOnce wraps the library drain and each
+//     tournament's drain in its own try/catch, so one wedged entry can no
+//     longer starve the others.
+//
+// A credential that never recovers now leaves the queue visibly stuck
+// ('error' status, captureException on every pass) instead of silently
+// destroying the user's round. A visible stuck queue is recoverable; a
+// dropped write is not.
 export function isTransportError(error) {
   if (!error) return false;
   const status = Number(error.status);
   if (status >= 500 || status === 429) return true;
+  if (status === 401 || status === 403) return true; // expired/refreshable credential
   const code = error.code;
   if (!code) return true; // network/transport error — server returned no verdict
   const codeStr = String(code);
+  if (codeStr === 'PGRST301') return true; // PostgREST: JWT expired
   if (codeStr.length === 5 && codeStr.startsWith('08')) return true; // connection_exception
-  if (/^(5\d\d|429)$/.test(codeStr)) return true; // HTTP 5xx / 429 surfaced as the code
+  if (/^(5\d\d|429|401|403)$/.test(codeStr)) return true; // surfaced as the code instead
   return false;
 }
 
@@ -272,10 +289,15 @@ export async function drainTournament(tournamentId, entries) {
         const localForConflicts = await readLocal(tournamentId);
         const queuedForTournament = async () => (await syncQueue.all())
           .filter((e) => e.tournamentId === tournamentId);
+        // Same roster rule the fetch path applies (tournamentStore's
+        // _overlayAndSave): `fresh` replaces players wholesale, so a player
+        // the server has never heard of has to be carried over rather than
+        // erased. Tombstoned ids still drop — see unionLocalRoster.
+        const rosterSafeFresh = unionLocalRoster({ ...fresh }, localForConflicts);
         let snapshot = await queuedForTournament();
         for (let pass = 0; pass < 3; pass++) {
           const merged = preserveLocalConflictState(
-            applyPendingMutations(fresh, snapshot), localForConflicts,
+            applyPendingMutations(rosterSafeFresh, snapshot), localForConflicts,
             // The one caller allowed to prune orphans: `fresh` is server
             // truth and applyPendingMutations just re-created everything the
             // queue still holds, so an entry unknown to the target here can

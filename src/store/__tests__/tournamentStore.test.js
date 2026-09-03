@@ -26,6 +26,7 @@ jest.mock('../mutate', () => ({
   mutate: jest.fn((t) => Promise.resolve(t)),
   applyPendingMutations: jest.fn((t) => t),
   preserveLocalConflictState: jest.fn((target) => target),
+  unionLocalRoster: jest.fn((target) => target),
 }));
 
 jest.mock('../../lib/supabase', () => {

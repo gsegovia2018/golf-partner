@@ -204,6 +204,7 @@ describe('sibling rows from one score collapse into a single save', () => {
     jest.doMock('../mutate', () => ({
       applyPendingMutations: jest.fn((t) => t),
       preserveLocalConflictState: jest.fn((target) => target),
+      unionLocalRoster: jest.fn((target) => target),
     }));
     jest.doMock('../syncQueue', () => ({
       syncQueue: { all: jest.fn(() => Promise.resolve([])) },
