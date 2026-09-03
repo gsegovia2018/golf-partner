@@ -17,6 +17,7 @@ import {
   holeCountOf,
 } from './scoring';
 import { loadMediaForTournaments } from './mediaStore';
+import { buildRoundHighlights, selectAchievements } from './roundAchievements';
 import { listFriends, getCachedFriends } from './friendStore';
 
 // The activity feed is derived client-side (no server aggregation table).
@@ -544,6 +545,11 @@ export async function buildFeed(options = {}) {
   }
 
   const items = [];
+  // item.key → the tournament/round behind it, so the highlight hydration
+  // below can run over the PAGE only. Same shape as the story hydration:
+  // building it for every round in the history would make every feed page
+  // pay for rounds it never renders.
+  const roundRefs = new Map();
 
   for (const t of all) {
     const players = t.players ?? [];
@@ -692,6 +698,7 @@ export async function buildFeed(options = {}) {
         // A friend's round the current user did not play in.
         withMe: iAmIn || anyMine,
       });
+      roundRefs.set(`round:${t.id}:${round.id}`, { tournament: t, roundIndex });
     });
   }
 
@@ -770,6 +777,20 @@ export async function buildFeed(options = {}) {
       item.mediaList = story.mediaList.slice();
       item.mediaHasVideo = story.hasVideo;
     }
+  }
+
+  // One headline highlight per finished round card — the round-local half of
+  // the achievements strip (see roundAchievements.js). Personal "ever" records
+  // are deliberately NOT computed here: they need the viewer's whole career
+  // history per round, which is the round summary screen's lazy load, not the
+  // feed's hot path. A limit of 1 also keeps a roast off the feed — a card
+  // about a friend leads with something good or with nothing.
+  for (const item of limitedItems) {
+    if (item.type !== 'round' || item.live) continue;
+    const ref = roundRefs.get(item.key);
+    if (!ref) continue;
+    const highlights = buildRoundHighlights(ref.tournament, ref.roundIndex);
+    item.topHighlight = selectAchievements(highlights, { limit: 1 })[0] ?? null;
   }
 
   const result = {

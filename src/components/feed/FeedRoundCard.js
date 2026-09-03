@@ -62,6 +62,16 @@ function modeBadgeLabel(scoringMode) {
   return getScoringMode(scoringMode).label;
 }
 
+// The round's headline achievement, as one chip label. The player's name is
+// carried separately from the title (see roundAchievements.js) so it can be
+// dropped when the card is already about that person.
+function highlightLabel(highlight) {
+  if (!highlight) return null;
+  return highlight.playerName
+    ? `${highlight.playerName} — ${highlight.title}`
+    : highlight.title;
+}
+
 function roundTitle(item, roundLabel) {
   return roundLabel || item.courseName || 'Round';
 }
@@ -330,6 +340,14 @@ export default function FeedRoundCard({
                 </Text>
               </View>
             ) : null}
+            {item.topHighlight ? (
+              <View style={[s.infoChip, s.highlightChip]}>
+                <Feather name="award" size={11} color={s.highlightChipText.color} />
+                <Text style={[s.infoChipText, s.highlightChipText]} numberOfLines={1}>
+                  {highlightLabel(item.topHighlight)}
+                </Text>
+              </View>
+            ) : null}
             {mediaLabel && !item.mediaCoverUrl ? (
               <View style={s.infoChip}>
                 <Feather name={item.mediaHasVideo ? 'film' : 'camera'} size={11} color={theme.text.muted} />
@@ -571,6 +589,17 @@ function makeStyles(theme) {
       fontFamily: 'PlusJakartaSans-SemiBold',
       color: theme.text.secondary,
       fontSize: 10,
+    },
+    // The round's headline achievement, in winner gold — the same duty the
+    // token carries on the leaderboard. Shrinks and truncates like the
+    // pairings chip rather than widening the row.
+    highlightChip: {
+      flexShrink: 1,
+      minWidth: 0,
+    },
+    highlightChipText: {
+      color: theme.isDark ? semantic.winner.soft : semantic.winner.light,
+      flexShrink: 1,
     },
     // The pairings chip can carry a long "A + B vs C + D" label — let it
     // shrink and truncate instead of pushing the row wide.
