@@ -119,6 +119,47 @@ export function mergeScores(blobScores, localScores, dirtyKeys) {
   return out;
 }
 
+// How far this phone had already verified when a round is re-opened. A hole
+// is verified by walking off it, so the only evidence a fresh session has is
+// this author's OWN entries — never the merged card, which also carries
+// whatever a peer entered while this phone was closed. `myScores` is the
+// author's card (store/scoreEntries.js authorScores).
+export function resumeVerifiedUpTo(holes, players, myScores) {
+  let last = 0;
+  for (const h of holes ?? []) {
+    const marked = (players ?? []).some((p) => myScores?.[p.id]?.[h.number] != null);
+    if (!marked) break;
+    last = h.number;
+  }
+  return last;
+}
+
+// The cells autoSave has to write. A cell whose value differs from the
+// committed blob obviously changed. A cell this scorer just marked (dirty)
+// that the blob ALREADY agreed with has to be written too: that agreement may
+// be a PEER's entry, and without one stamped under `authorId` the cell stays
+// unmarked by this scorer — the hole page drops it back to a ghost the moment
+// the dirty flag clears, and the two cards never record that they agree.
+// Cells already stamped with the same value are skipped, so re-saving a still
+// dirty cell is a no-op.
+export function changedScoreCells({ prevScores, newScores, dirtyKeys, scoreEntries, authorId }) {
+  const out = [];
+  const playerIds = new Set([...Object.keys(prevScores ?? {}), ...Object.keys(newScores ?? {})]);
+  for (const pid of playerIds) {
+    const prevByHole = prevScores?.[pid] ?? {};
+    const nextByHole = newScores?.[pid] ?? {};
+    const holes = new Set([...Object.keys(prevByHole), ...Object.keys(nextByHole)]);
+    for (const h of holes) {
+      const before = prevByHole[h];
+      const after = nextByHole[h];
+      const mine = scoreEntries?.[pid]?.[h]?.[authorId]?.value ?? null;
+      const unstamped = !!dirtyKeys?.has(`${pid}:${h}`) && mine !== (after ?? null);
+      if (before !== after || unstamped) out.push({ playerId: pid, hole: Number(h), value: after ?? null });
+    }
+  }
+  return out;
+}
+
 // How long a burst of score taps is allowed to settle before it is written to
 // disk. Long enough to absorb a run up the stepper (4 → 8), short enough that
 // a tap-then-pocket-the-phone is persisted almost immediately. Every exit from
@@ -311,6 +352,11 @@ export default function ScorecardScreen({ navigation, route }) {
   // (authorScores): peers' synced entries stay hidden there so each scorer
   // marks every player themselves, then the cards are compared on "next hole".
   const [verifiedUpTo, setVerifiedUpTo] = useState(0);
+  // Mirrored for the score-entry handlers: they need to know which card the
+  // hole they are writing to is showing, without being re-created (and
+  // re-rendering the pager) every time the watermark moves.
+  const verifiedUpToRef = useRef(0);
+  useEffect(() => { verifiedUpToRef.current = verifiedUpTo; }, [verifiedUpTo]);
   const autoAdvanceTimer = useRef(null);
   useEffect(() => () => { if (autoAdvanceTimer.current) clearTimeout(autoAdvanceTimer.current); }, []);
   // goToNextHole is declared later (it needs state defined further down) but
@@ -494,9 +540,13 @@ export default function ScorecardScreen({ navigation, route }) {
       const lastHole = round.holes[round.holes.length - 1].number;
       if (firstEmpty) setCurrentHole(firstEmpty.number);
       else setCurrentHole(lastHole);
-      // Holes below the resume point were played (and verified) in an earlier
-      // session — show them merged; the watermark restarts there.
-      setVerifiedUpTo(firstEmpty ? firstEmpty.number - 1 : lastHole);
+      // The watermark restarts at the last hole THIS phone verified, read from
+      // its own entries — NOT from the merged card the resume point above uses.
+      // A peer who scored the front nine while this phone was closed would
+      // otherwise count as "verified here", and every one of those holes would
+      // open pre-filled with their numbers instead of showing them as ghosts.
+      const myIds = [t.meId ?? lastMeIdRef.current, getDeviceAuthorId()].filter(Boolean);
+      setVerifiedUpTo(resumeVerifiedUpTo(round.holes, t.players, authorScores(round, myIds)));
     }
   }, [paramRoundIndex, official, routeTournamentId]);
 
@@ -681,18 +731,13 @@ export default function ScorecardScreen({ navigation, route }) {
       if (!round) return null;
       const prevScores = round.scores ?? {};
 
-      const changedCells = [];
-      const playerIds = new Set([...Object.keys(prevScores), ...Object.keys(newScores)]);
-      for (const pid of playerIds) {
-        const prevByHole = prevScores[pid] ?? {};
-        const nextByHole = newScores[pid] ?? {};
-        const holes = new Set([...Object.keys(prevByHole), ...Object.keys(nextByHole)]);
-        for (const h of holes) {
-          const before = prevByHole[h];
-          const after = nextByHole[h];
-          if (before !== after) changedCells.push({ playerId: pid, hole: Number(h), value: after ?? null });
-        }
-      }
+      const changedCells = changedScoreCells({
+        prevScores,
+        newScores,
+        dirtyKeys: dirtyCellsRef.current,
+        scoreEntries: round.scoreEntries,
+        authorId,
+      });
       if (changedCells.length === 0) return;
 
       let t = t0;
@@ -1311,6 +1356,16 @@ export default function ScorecardScreen({ navigation, route }) {
     }, 1200);
   }, [round, players, settings, meId, official, localAuthorIds]);
 
+  // The card the hole page is actually SHOWING for a cell: above the verified
+  // watermark that is this author's own entries (a peer's value is only a
+  // ghost there), below it the merged card. Score entry has to start from what
+  // the scorer can see — stepping "+" on a ghosted cell used to jump from the
+  // peer's number (5 → 6) instead of opening at par like any other blank cell.
+  const visibleScoresFor = useCallback((holeNumber) => {
+    if (official || viewOnly || holeNumber <= verifiedUpToRef.current) return scoresRef.current;
+    return authorScores(round, localAuthorIds, scoresRef.current, dirtyCellsRef.current);
+  }, [official, viewOnly, round, localAuthorIds]);
+
   const setScore = useCallback((playerId, holeNumber, value) => {
     if (!official && viewOnly) return;
     const rawParsed = value === '' ? undefined : parseInt(value, 10) || undefined;
@@ -1325,7 +1380,7 @@ export default function ScorecardScreen({ navigation, route }) {
     // straight to the RPC layer and never touches mutate.js.
     const parsed = clampEnteredScore(round, players, playerId, holeNumber, rawParsed);
     const cur = scoresRef.current;
-    const current = cur[playerId]?.[holeNumber];
+    const current = visibleScoresFor(holeNumber)[playerId]?.[holeNumber];
     const next = {
       ...cur,
       [playerId]: { ...cur[playerId], [holeNumber]: parsed },
@@ -1345,7 +1400,7 @@ export default function ScorecardScreen({ navigation, route }) {
       if (label) triggerCelebration(playerId, holeNumber, label, parsed - holePar);
     }
     maybeAutoAdvance(next, holeNumber);
-  }, [round, players, scheduleAutoSave, triggerCelebration, official, officialWrite, reconcileMeShot, viewOnly, maybeAutoAdvance]);
+  }, [round, players, scheduleAutoSave, triggerCelebration, official, officialWrite, reconcileMeShot, viewOnly, maybeAutoAdvance, visibleScoresFor]);
 
   const stepScore = useCallback((playerId, holeNumber, delta) => {
     if (!official && viewOnly) return;
@@ -1356,7 +1411,7 @@ export default function ScorecardScreen({ navigation, route }) {
 
     const holePar = round?.holes?.find((h) => h.number === holeNumber)?.par ?? 4;
     const cur = scoresRef.current;
-    const current = cur[playerId]?.[holeNumber];
+    const current = visibleScoresFor(holeNumber)[playerId]?.[holeNumber];
     // First interaction on an un-scored hole: + lands on par, - lands on birdie.
     // After that, +/- step by one as usual. Minimum is 1 stroke; clamped to
     // the pickup ceiling too, so holding + past pickup can't run away to an
@@ -1381,7 +1436,7 @@ export default function ScorecardScreen({ navigation, route }) {
       if (label) triggerCelebration(playerId, holeNumber, label, newStrokes - holePar);
     }
     maybeAutoAdvance(next, holeNumber);
-  }, [round, players, scheduleAutoSave, triggerCelebration, getScoreAnim, official, officialWrite, reconcileMeShot, viewOnly, maybeAutoAdvance]);
+  }, [round, players, scheduleAutoSave, triggerCelebration, getScoreAnim, official, officialWrite, reconcileMeShot, viewOnly, maybeAutoAdvance, visibleScoresFor]);
 
   const appSettings = useAppSettings();
   const showRunning = appSettings.showRunningScore && !appSettings.noSpoilers;
@@ -1415,7 +1470,10 @@ export default function ScorecardScreen({ navigation, route }) {
     if (autoAdvanceTimer.current) { clearTimeout(autoAdvanceTimer.current); autoAdvanceTimer.current = null; }
     const maxHole = round?.holes?.length ?? 18;
     // The hole being left is now verified — merged peer entries may show there.
-    setVerifiedUpTo((v) => Math.max(v, currentHoleRef.current));
+    // One contiguous step only: walking off hole 6 having verified nothing
+    // (resumed round, peer scored the front nine) must not sweep holes 1-5
+    // into "verified" and pre-fill them with entries this phone never made.
+    setVerifiedUpTo((v) => (currentHoleRef.current === v + 1 ? v + 1 : v));
     setCurrentHole((h) => Math.min(maxHole, h + 1));
     if (!round || !tournament) return;
     const mode = roundScoringMode(tournament, round) === 'bestball' ? 'bestball' : 'stableford';

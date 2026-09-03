@@ -8,6 +8,8 @@ import {
   shouldApplyReloadSnapshot,
   clampEnteredScore,
   buildHoleMismatchRows,
+  resumeVerifiedUpTo,
+  changedScoreCells,
 } from '../ScorecardScreen';
 
 // ScorecardScreen imports useFocusEffect from @react-navigation/native, whose
@@ -266,5 +268,91 @@ describe('buildHoleMismatchRows', () => {
       mismatches: [{ playerId: 'ghost', mine: 4, others: [{ authorId: 'juan', value: 5 }] }],
     });
     expect(rows[0].playerName).toBe('Player');
+  });
+});
+
+describe('resumeVerifiedUpTo', () => {
+  const holes = [1, 2, 3, 4].map((number) => ({ number }));
+  const players = [{ id: 'p1' }, { id: 'p2' }];
+
+  test('a phone that entered nothing has verified nothing', () => {
+    // The peer scored the front nine while this phone was closed. Those holes
+    // were never walked off here, so none of them may open pre-filled.
+    expect(resumeVerifiedUpTo(holes, players, {})).toBe(0);
+  });
+
+  test('counts the leading run of holes this author marked', () => {
+    const mine = { p1: { 1: 4, 2: 5 }, p2: { 1: 5 } };
+    expect(resumeVerifiedUpTo(holes, players, mine)).toBe(2);
+  });
+
+  test('stops at the first hole this author left unmarked', () => {
+    const mine = { p1: { 1: 4, 3: 6 } };   // hole 2 skipped
+    expect(resumeVerifiedUpTo(holes, players, mine)).toBe(1);
+  });
+
+  test('a fully marked card verifies the whole round', () => {
+    const mine = { p1: { 1: 4, 2: 4, 3: 4, 4: 4 } };
+    expect(resumeVerifiedUpTo(holes, players, mine)).toBe(4);
+  });
+});
+
+describe('changedScoreCells', () => {
+  test('writes cells whose value differs from the committed blob', () => {
+    const cells = changedScoreCells({
+      prevScores: { p1: { 1: 4 } },
+      newScores: { p1: { 1: 5 } },
+      dirtyKeys: new Set(['p1:1']),
+      scoreEntries: {},
+      authorId: 'me',
+    });
+    expect(cells).toEqual([{ playerId: 'p1', hole: 1, value: 5 }]);
+  });
+
+  test('writes a cell I just marked that only a PEER had entered', () => {
+    // The merged card already reads 5 because the other scorer entered it, so
+    // the plain value diff sees nothing to do — but nothing is stamped under
+    // me, and the cell would fall back to a ghost once the dirty flag clears.
+    const cells = changedScoreCells({
+      prevScores: { p1: { 1: 5 } },
+      newScores: { p1: { 1: 5 } },
+      dirtyKeys: new Set(['p1:1']),
+      scoreEntries: { p1: { 1: { juan: { value: 5, ts: 1 } } } },
+      authorId: 'me',
+    });
+    expect(cells).toEqual([{ playerId: 'p1', hole: 1, value: 5 }]);
+  });
+
+  test('a cell already stamped by me is not re-written', () => {
+    const cells = changedScoreCells({
+      prevScores: { p1: { 1: 5 } },
+      newScores: { p1: { 1: 5 } },
+      dirtyKeys: new Set(['p1:1']),
+      scoreEntries: { p1: { 1: { me: { value: 5, ts: 1 }, juan: { value: 5, ts: 1 } } } },
+      authorId: 'me',
+    });
+    expect(cells).toEqual([]);
+  });
+
+  test('an untouched cell is never written just because a peer owns it', () => {
+    const cells = changedScoreCells({
+      prevScores: { p1: { 1: 5 } },
+      newScores: { p1: { 1: 5 } },
+      dirtyKeys: new Set(),
+      scoreEntries: { p1: { 1: { juan: { value: 5, ts: 1 } } } },
+      authorId: 'me',
+    });
+    expect(cells).toEqual([]);
+  });
+
+  test('a cleared cell is written as null', () => {
+    const cells = changedScoreCells({
+      prevScores: { p1: { 1: 5 } },
+      newScores: { p1: {} },
+      dirtyKeys: new Set(['p1:1']),
+      scoreEntries: { p1: { 1: { me: { value: 5, ts: 1 } } } },
+      authorId: 'me',
+    });
+    expect(cells).toEqual([{ playerId: 'p1', hole: 1, value: null }]);
   });
 });
