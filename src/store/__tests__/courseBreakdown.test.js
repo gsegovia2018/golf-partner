@@ -53,6 +53,73 @@ describe('roundCourseKey / filterRoundsToCourse', () => {
   });
 });
 
+describe('buildCourseBreakdown rounds', () => {
+  // Same fixture shape as myRoundsFor, plus the round ids / tournament date
+  // the Latest-rounds list needs to label a row and open it.
+  function datedRounds(rounds, createdAt = '2026-05-12T09:00:00.000Z') {
+    const t = {
+      id: 7, name: 'Spring Cup', createdAt,
+      players: [{ id: 'p1', name: 'Me', handicap: 0, user_id: 'u1' }],
+      rounds,
+    };
+    return collectMyRounds([t], 'u1');
+  }
+
+  test('lists the rounds newest first with the ids RoundSummary needs to open one', () => {
+    const h = mkHoles(18);
+    const rounds = datedRounds([
+      { ...mkRound({ courseId: 'c-1', scores: { p1: evenScores(h, 5) } }), id: 'r-1' },
+      { ...mkRound({ courseId: 'c-1', scores: { p1: evenScores(h, 4) } }), id: 'r-2' },
+    ]);
+    const b = buildCourseBreakdown(filterRoundsToCourse(rounds, 'c-1'));
+    // Newest first: r-2 (36 pts, 72 strokes) then r-1 (18 pts, 90 strokes).
+    expect(b.rounds).toEqual([
+      {
+        key: '7:1', tournamentId: 7, tournamentName: 'Spring Cup', roundId: 'r-2',
+        date: '2026-05-12T09:00:00.000Z', points: 36, strokes: 72, holesPlayed: 18, isComplete: true,
+      },
+      {
+        key: '7:0', tournamentId: 7, tournamentName: 'Spring Cup', roundId: 'r-1',
+        date: '2026-05-12T09:00:00.000Z', points: 18, strokes: 90, holesPlayed: 18, isComplete: true,
+      },
+    ]);
+  });
+
+  test('keeps an unfinished round — with its partial totals flagged, not hidden', () => {
+    const h = mkHoles(18);
+    const partial = evenScores(h, 5);
+    h.slice(6).forEach((hole) => { delete partial[hole.number]; }); // holes 1-6 only
+    const rounds = datedRounds([
+      { ...mkRound({ courseId: 'c-1', scores: { p1: partial } }), id: 'r-1' },
+    ]);
+    const b = buildCourseBreakdown(filterRoundsToCourse(rounds, 'c-1'));
+    // Excluded from every round-total aggregate...
+    expect(b.summary.rounds).toBe(0);
+    // ...but it is still the last time this course was played.
+    expect(b.rounds).toHaveLength(1);
+    expect(b.rounds[0]).toMatchObject({ strokes: 30, holesPlayed: 6, isComplete: false });
+  });
+
+  test('a round with no id still renders, it just carries no roundId to open', () => {
+    const h = mkHoles(18);
+    const rounds = datedRounds([mkRound({ courseId: 'c-1', scores: { p1: evenScores(h, 4) } })]);
+    const b = buildCourseBreakdown(filterRoundsToCourse(rounds, 'c-1'));
+    expect(b.rounds[0].roundId).toBeNull();
+    expect(b.rounds[0].points).toBe(36);
+  });
+
+  test('caps the list at the 10 most recent rounds', () => {
+    const h = mkHoles(18);
+    const rounds = datedRounds(Array.from({ length: 12 }, (_, i) => ({
+      ...mkRound({ courseId: 'c-1', scores: { p1: evenScores(h, 4) } }), id: `r-${i}`,
+    })));
+    const b = buildCourseBreakdown(filterRoundsToCourse(rounds, 'c-1'));
+    expect(b.rounds).toHaveLength(10);
+    expect(b.rounds[0].roundId).toBe('r-11');
+    expect(b.rounds[9].roundId).toBe('r-2');
+  });
+});
+
 describe('buildCourseBreakdown summary', () => {
   test('returns null for an empty course', () => {
     expect(buildCourseBreakdown([])).toBeNull();

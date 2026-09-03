@@ -766,7 +766,7 @@ export function computeFormSeries(selectedRounds) {
 }
 
 // ── courseMastery ──
-// Per-course rounds/avgPoints/bestPoints/trend, built on courseDNA over a
+// Per-course rounds/avgStrokes/avgPoints/bestStrokes/trend, built on courseDNA over a
 // complete-rounds-only slice of the synthetic tournament (Task 15's
 // isComplete) — an early-finished round's partial total would otherwise
 // drag a course's average down, inflate/deflate its best, and fake a trend.
@@ -823,13 +823,21 @@ export function courseMastery(synthetic) {
       avgPoints: c.roundPoints,
       // Points per hole — the hole-count-neutral figure the list ranks on.
       avgPointsPerHole: c.avgPoints,
+      // Gross strokes per round — the figure a golfer means by "my average
+      // at this course", and the one the card leads on. Unlike avgPoints it
+      // keeps its meaning across a handicap change.
+      avgStrokes: c.roundStrokes,
       holeCount,
       bestPoints,
+      // Fewest gross strokes in a complete round here — the course record
+      // proper, same definition as CourseStatsScreen's gold cell.
+      bestStrokes: totals.reduce((m, e) => Math.min(m, e.strokes), Infinity),
       trend,
-      // Chronological per-round point totals at this course — feeds the
-      // Course Mastery card's sparkline. Same complete-rounds-only slice
-      // and courseDNA keying as everything above.
-      recentPoints: totals.map((e) => e.points),
+      // Chronological per-round GROSS stroke totals at this course — feeds
+      // the Course Mastery card's sparkline, on the same currency as the
+      // average above it (a falling line is an improving one). Same
+      // complete-rounds-only slice and courseDNA keying as everything above.
+      recentStrokes: totals.map((e) => e.strokes),
     };
   }).sort((a, b) => b.rounds - a.rounds || b.avgPointsPerHole - a.avgPointsPerHole);
 }

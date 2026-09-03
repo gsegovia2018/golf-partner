@@ -1,6 +1,6 @@
 import React from 'react';
 import { StyleSheet } from 'react-native';
-import { render, waitFor, within } from '@testing-library/react-native';
+import { render, waitFor, within, fireEvent } from '@testing-library/react-native';
 import { ThemeProvider } from '../../theme/ThemeContext';
 import { semantic } from '../../theme/tokens';
 import CourseStatsScreen from '../CourseStatsScreen';
@@ -57,7 +57,7 @@ jest.mock('../../store/courseBreakdown', () => ({
   buildCourseBreakdown: jest.fn(),
 }));
 
-const navigation = { goBack: jest.fn() };
+const navigation = { goBack: jest.fn(), navigate: jest.fn() };
 const route = { params: { courseKey: 'c1', courseName: 'Valle Verde' } };
 const wrap = (ui) => <ThemeProvider>{ui}</ThemeProvider>;
 
@@ -73,6 +73,16 @@ const breakdown = {
     frontBack: { frontVsPar: 6.2, backVsPar: 4.4, delta: 1.8, rounds: 6 },
   },
   shots: null,
+  rounds: [
+    {
+      key: '7:1', tournamentId: 7, tournamentName: 'Spring Cup', roundId: 'r-2',
+      date: '2026-05-12T09:00:00.000Z', points: 34, strokes: 94, holesPlayed: 18, isComplete: true,
+    },
+    {
+      key: '7:0', tournamentId: 7, tournamentName: 'Spring Cup', roundId: 'r-1',
+      date: '2026-04-02T09:00:00.000Z', points: 12, strokes: 41, holesPlayed: 8, isComplete: false,
+    },
+  ],
   holes: [
     {
       holeNumber: 3, par: 4, strokeIndex: 1, timesPlayed: 6,
@@ -94,6 +104,7 @@ const breakdown = {
 beforeEach(() => {
   buildCourseBreakdown.mockReset();
   buildCourseBreakdown.mockReturnValue(breakdown);
+  navigation.navigate.mockReset();
 });
 
 describe('CourseStatsScreen (Clubhouse redesign)', () => {
@@ -134,6 +145,54 @@ describe('CourseStatsScreen (Clubhouse redesign)', () => {
 
     expect(getByText('Birdie+ 4')).toBeTruthy();
     expect(getByText('Double+ 20')).toBeTruthy(); // doubles + worse merged
+  });
+
+  test('latest rounds list each played round newest first, with its score and points', async () => {
+    const { getByText, findByText } = render(wrap(
+      <CourseStatsScreen navigation={navigation} route={route} />
+    ));
+
+    expect(await findByText('Latest rounds')).toBeTruthy();
+    expect(getByText('12 May 26')).toBeTruthy();
+    expect(getByText('94 strokes · 18 holes')).toBeTruthy();
+    expect(getByText('34 pts')).toBeTruthy();
+    // An unfinished round still appears — it says so instead of passing its
+    // partial total off as a round.
+    expect(getByText('41 strokes · 8 holes · unfinished')).toBeTruthy();
+  });
+
+  test('tapping a round opens its RoundSummary (scorecard + stats)', async () => {
+    const { findByLabelText } = render(wrap(
+      <CourseStatsScreen navigation={navigation} route={route} />
+    ));
+
+    fireEvent.press(await findByLabelText('Open round 12 May 26'));
+    expect(navigation.navigate).toHaveBeenCalledWith('RoundSummary', {
+      tournamentId: 7, roundId: 'r-2',
+    });
+  });
+
+  test('a round with no id is listed but not pressable', async () => {
+    buildCourseBreakdown.mockReturnValue({
+      ...breakdown,
+      rounds: [{ ...breakdown.rounds[0], roundId: null }],
+    });
+    const { findByText, queryByLabelText } = render(wrap(
+      <CourseStatsScreen navigation={navigation} route={route} />
+    ));
+
+    expect(await findByText('12 May 26')).toBeTruthy();
+    expect(queryByLabelText('Open round 12 May 26')).toBeNull();
+  });
+
+  test('no latest-rounds card when the breakdown carries no rounds', async () => {
+    buildCourseBreakdown.mockReturnValue({ ...breakdown, rounds: [] });
+    const { findByTestId, queryByText } = render(wrap(
+      <CourseStatsScreen navigation={navigation} route={route} />
+    ));
+
+    await findByTestId('course-record-board');
+    expect(queryByText('Latest rounds')).toBeNull();
   });
 
   test('hole grid gets highlights: nemesis and best cells carry dots', async () => {

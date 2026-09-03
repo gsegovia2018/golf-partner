@@ -71,9 +71,43 @@ export function buildCourseBreakdown(courseRounds) {
       frontBack: grossFrontBack(synthetic),
     },
     shots: shots.hasData ? shots : null,
+    rounds: buildRoundRows(courseRounds),
     holes,
     highlights: buildHighlights(holes),
   };
+}
+
+// ── Latest rounds ──
+// The rounds actually played here, newest first, each carrying the ids the
+// RoundSummary screen needs to open it. Unlike every aggregate above this
+// keeps INCOMPLETE rounds: "the last time I played here" is a fact about the
+// day, not a round-total metric, and the row says how many holes it was.
+// Strokes are gross and summed over the scored holes only — a partial round's
+// total is a partial total, flagged as such by `isComplete`.
+const RECENT_ROUNDS_LIMIT = 10;
+
+function buildRoundRows(courseRounds) {
+  return [...courseRounds].reverse().slice(0, RECENT_ROUNDS_LIMIT).map((mr) => {
+    const scores = mr.round?.scores?.[mr.playerId] ?? {};
+    let strokes = 0;
+    (mr.round?.holes ?? []).forEach((hole) => {
+      const sc = scores[hole.number];
+      if (sc != null) strokes += sc;
+    });
+    return {
+      key: mr.key,
+      tournamentId: mr.tournamentId,
+      tournamentName: mr.tournamentName,
+      // null for a legacy round with no id — the row still renders, it just
+      // can't be opened (RoundSummary is addressed by roundId).
+      roundId: mr.round?.id ?? null,
+      date: mr.tournamentDate ?? null,
+      points: mr.points,
+      strokes,
+      holesPlayed: mr.holesPlayed ?? 0,
+      isComplete: !!mr.isComplete,
+    };
+  });
 }
 
 const round2 = (n) => Math.round(n * 100) / 100;

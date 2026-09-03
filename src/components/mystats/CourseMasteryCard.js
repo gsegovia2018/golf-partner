@@ -16,10 +16,11 @@ const SPARK_W = 84;
 const SPARK_H = 26;
 const SPARK_PAD = 4;
 
-// Per-course rounds/avgPoints/bestPoints/recentPoints — see `courseMastery`
-// in personalStats.js. Each course renders as a card: big serif average on
-// the left, name + meta in the middle, a per-round points sparkline on the
-// right. Renders nothing when there is no complete round at any course yet.
+// Per-course rounds/avgStrokes/bestStrokes/recentStrokes — see
+// `courseMastery` in personalStats.js. Each course renders as a card: big
+// serif scoring average on the left, name + meta in the middle, a per-round
+// strokes sparkline on the right. Renders nothing when there is no complete
+// round at any course yet.
 export default function CourseMasteryCard({ courses, onInfo, onSelectCourse }) {
   const { theme } = useTheme();
   const s = useMemo(() => makeStyles(theme), [theme]);
@@ -49,23 +50,23 @@ function CourseCard({ course, s, theme, onPress }) {
   const body = (
     <>
       <View style={s.avgBlock}>
-        <Text style={s.avg}>{course.avgPoints}</Text>
-        <Text style={s.avgLabel}>AVG PTS</Text>
+        <Text style={s.avg}>{course.avgStrokes}</Text>
+        <Text style={s.avgLabel}>AVG SCORE</Text>
       </View>
       <View style={s.copy}>
-        <Text style={s.courseName} numberOfLines={1}>{course.courseName}</Text>
+        <Text style={s.courseName} numberOfLines={2}>{course.courseName}</Text>
         <Text style={s.meta}>
           {`${course.rounds} round${course.rounds === 1 ? '' : 's'}`}
-          {/* Points are a round TOTAL, so a nine's ~18 avg would read as the
-              worst course on the list without saying it was half the golf.
+          {/* Strokes are a round TOTAL, so a nine's ~40 avg would read as the
+              best course on the list without saying it was half the golf.
               Only non-18 lengths are called out — 18 is the assumption. */}
           {course.holeCount != null && course.holeCount !== 18
             ? ` · ${course.holeCount} holes`
             : ''}
-          {` · best ${course.bestPoints} pts`}
+          {` · best ${course.bestStrokes} · ${course.avgPoints} pts avg`}
         </Text>
       </View>
-      <Sparkline points={course.recentPoints} theme={theme} s={s} />
+      <Sparkline points={course.recentStrokes} theme={theme} s={s} />
       {onPress ? <Feather name="chevron-right" size={16} color={theme.text.muted} /> : null}
     </>
   );
@@ -83,8 +84,9 @@ function CourseCard({ course, s, theme, onPress }) {
   );
 }
 
-// Compact per-round points line. One complete round has no shape to draw —
-// fewer than 2 points renders nothing, and the row simply closes up.
+// Compact per-round strokes line — lower is better here, so a falling line
+// is an improving one. One complete round has no shape to draw — fewer than
+// 2 points renders nothing, and the row simply closes up.
 function Sparkline({ points, theme, s }) {
   const values = points ?? [];
   if (values.length < 2) return null;
@@ -146,7 +148,7 @@ function makeStyles(theme) {
       borderRadius: 14,
       backgroundColor: theme.bg.primary,
     },
-    avgBlock: { minWidth: 56, alignItems: 'center', gap: 1 },
+    avgBlock: { minWidth: 52, alignItems: 'center', gap: 1 },
     avg: {
       fontFamily: 'PlayfairDisplay-Black',
       fontSize: 32,
@@ -164,6 +166,7 @@ function makeStyles(theme) {
     copy: { flex: 1, minWidth: 0, gap: 2 },
     courseName: {
       fontSize: 14.5,
+      lineHeight: 19,
       fontFamily: 'PlusJakartaSans-Bold',
       color: theme.text.primary,
     },

@@ -173,7 +173,7 @@ export default function CourseStatsScreen({ navigation, route }) {
     );
   }
 
-  const { summary, shots, holes, highlights } = breakdown;
+  const { summary, shots, holes, highlights, rounds: roundList } = breakdown;
 
   // Each card mounts inside a Reveal with a contiguous 40ms stagger (matching
   // the mystats tabs) — addCard keeps conditional cards from leaving gaps.
@@ -188,6 +188,21 @@ export default function CourseStatsScreen({ navigation, route }) {
     addCard('score-mix', (
       <SectionCard title="Score mix" infoKey="courseScoreMix" onInfo={setInfoKey}>
         <ScoreMixBar distribution={summary.scoreMix} />
+      </SectionCard>
+    ));
+  }
+
+  if ((roundList ?? []).length > 0) {
+    addCard('rounds', (
+      <SectionCard title="Latest rounds">
+        <RoundList
+          rounds={roundList}
+          onOpen={(r) => navigation.navigate('RoundSummary', {
+            tournamentId: r.tournamentId, roundId: r.roundId,
+          })}
+          s={s}
+          theme={theme}
+        />
       </SectionCard>
     ));
   }
@@ -372,6 +387,64 @@ function CourseRecordBoard({ summary, onInfo, s }) {
   );
 }
 
+// The rounds actually played here, newest first — tap one to open its
+// RoundSummary (scorecard + stats). A round with no id can't be addressed by
+// that screen, so it renders as a plain, unpressable row rather than a
+// chevron that goes nowhere.
+function RoundList({ rounds, onOpen, s, theme }) {
+  return (
+    <View>
+      {rounds.map((r, i) => {
+        const canOpen = !!(r.tournamentId && r.roundId);
+        const title = formatRoundDate(r.date) || r.tournamentName;
+        const meta = [
+          `${r.strokes} strokes`,
+          `${r.holesPlayed} hole${r.holesPlayed === 1 ? '' : 's'}`,
+          r.isComplete ? null : 'unfinished',
+        ].filter(Boolean).join(' · ');
+        const body = (
+          <>
+            <View style={s.roundCopy}>
+              <Text style={s.roundTitle} numberOfLines={1}>{title}</Text>
+              <Text style={s.roundMeta} numberOfLines={1}>{meta}</Text>
+            </View>
+            <Text style={s.roundPoints}>{`${r.points} pts`}</Text>
+            <Feather
+              name="chevron-right"
+              size={16}
+              color={canOpen ? theme.text.muted : 'transparent'}
+            />
+          </>
+        );
+        const rowStyle = [s.roundRow, i > 0 && s.roundRowDivider];
+        if (!canOpen) return <View key={r.key} style={rowStyle}>{body}</View>;
+        return (
+          <PressableScale
+            key={r.key}
+            style={rowStyle}
+            onPress={() => onOpen(r)}
+            activeScale={0.98}
+            accessibilityRole="button"
+            accessibilityLabel={`Open round ${title}`}
+          >
+            {body}
+          </PressableScale>
+        );
+      })}
+    </View>
+  );
+}
+
+// "12 May 26" — short day/month/year from the tournament's createdAt ISO
+// string, the same convention as TogetherTab. The year earns its place here:
+// a course's history runs across seasons, unlike a single tournament's.
+function formatRoundDate(iso) {
+  if (!iso) return '';
+  const d = new Date(iso);
+  if (Number.isNaN(d.getTime())) return '';
+  return d.toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: '2-digit' });
+}
+
 function HighlightRow({ icon, kind, label, detail, s, theme }) {
   const gold = kind === 'best';
   const iconColor = gold
@@ -478,6 +551,21 @@ function makeStyles(theme) {
       borderTopColor: HAIRLINE,
       paddingTop: 10,
       marginTop: theme.spacing.xs,
+    },
+    // Latest-rounds list.
+    roundRow: {
+      flexDirection: 'row', alignItems: 'center', gap: theme.spacing.sm,
+      paddingVertical: 10,
+    },
+    roundRowDivider: {
+      borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: theme.border.subtle,
+    },
+    roundCopy: { flex: 1, minWidth: 0, gap: 1 },
+    roundTitle: { fontSize: 13.5, lineHeight: 19, fontFamily: 'PlusJakartaSans-Bold', color: theme.text.primary },
+    roundMeta: { fontSize: 11, lineHeight: 15, fontFamily: 'PlusJakartaSans-Medium', color: theme.text.muted },
+    roundPoints: {
+      fontSize: 13.5, fontFamily: 'PlusJakartaSans-Bold',
+      color: theme.text.secondary, fontVariant: ['tabular-nums'],
     },
     highlightRow: { flexDirection: 'row', alignItems: 'center', gap: theme.spacing.sm, paddingVertical: 4 },
     highlightIcon: {

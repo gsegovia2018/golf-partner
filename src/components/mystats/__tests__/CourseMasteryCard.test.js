@@ -28,9 +28,11 @@ const course = (over = {}) => ({
   courseName: 'Pine',
   rounds: 2,
   avgPoints: 30,
+  avgStrokes: 86,
   bestPoints: 34,
+  bestStrokes: 82,
   trend: 1,
-  recentPoints: [26, 34],
+  recentStrokes: [90, 82],
   ...over,
 });
 
@@ -39,33 +41,48 @@ beforeEach(() => {
 });
 
 describe('CourseMasteryCard course cards', () => {
-  test('renders the average, its label, the course name and the rounds/best meta', () => {
-    const { getByText } = render(wrap(
+  test('leads on the scoring average, not the points average, with the rounds/best meta', () => {
+    const { getByText, queryByText } = render(wrap(
       <CourseMasteryCard courses={[course()]} />
     ));
-    expect(getByText('30')).toBeTruthy();
-    expect(getByText('AVG PTS')).toBeTruthy();
+    expect(getByText('86')).toBeTruthy();
+    expect(getByText('AVG SCORE')).toBeTruthy();
+    expect(queryByText('30')).toBeNull(); // avg points is no longer the hero number
     expect(getByText('Pine')).toBeTruthy();
-    expect(getByText('2 rounds · best 34 pts')).toBeTruthy();
+    expect(getByText('2 rounds · best 82 · 30 pts avg')).toBeTruthy();
   });
 
-  test('draws a sparkline (polyline + end dot) when a course has two or more round points', () => {
+  test('shows the whole course name (up to two lines), never a single clipped line', () => {
+    const { getByText } = render(wrap(
+      <CourseMasteryCard courses={[course({ courseName: 'Real Club de Golf La Herrería' })]} />
+    ));
+    expect(getByText('Real Club de Golf La Herrería').props.numberOfLines).toBe(2);
+  });
+
+  test('a nine-hole course says so, so its lower average is not read as better golf', () => {
+    const { getByText } = render(wrap(
+      <CourseMasteryCard courses={[course({ holeCount: 9, avgStrokes: 43, bestStrokes: 41 })]} />
+    ));
+    expect(getByText('2 rounds · 9 holes · best 41 · 30 pts avg')).toBeTruthy();
+  });
+
+  test('draws a sparkline (polyline + end dot) when a course has two or more round scores', () => {
     const view = render(wrap(
-      <CourseMasteryCard courses={[course({ recentPoints: [26, 30, 34] })]} />
+      <CourseMasteryCard courses={[course({ recentStrokes: [90, 86, 82] })]} />
     ));
     expect(view.UNSAFE_getAllByType(Polyline)).toHaveLength(1);
     expect(view.UNSAFE_getAllByType(Circle)).toHaveLength(1);
   });
 
-  test('renders no sparkline with fewer than two round points', () => {
+  test('renders no sparkline with fewer than two round scores', () => {
     const single = render(wrap(
-      <CourseMasteryCard courses={[course({ rounds: 1, recentPoints: [30] })]} />
+      <CourseMasteryCard courses={[course({ rounds: 1, recentStrokes: [86] })]} />
     ));
     expect(single.UNSAFE_queryAllByType(Polyline)).toHaveLength(0);
     expect(single.UNSAFE_queryAllByType(Circle)).toHaveLength(0);
 
     const missing = render(wrap(
-      <CourseMasteryCard courses={[course({ recentPoints: undefined })]} />
+      <CourseMasteryCard courses={[course({ recentStrokes: undefined })]} />
     ));
     expect(missing.UNSAFE_queryAllByType(Polyline)).toHaveLength(0);
   });
@@ -76,7 +93,7 @@ describe('CourseMasteryCard course cards', () => {
       <CourseMasteryCard courses={[course()]} />
     ));
     expect(view.getByText('Pine')).toBeTruthy();
-    expect(view.getByText('30')).toBeTruthy();
+    expect(view.getByText('86')).toBeTruthy();
     expect(view.UNSAFE_getAllByType(Polyline)).toHaveLength(1);
   });
 });
