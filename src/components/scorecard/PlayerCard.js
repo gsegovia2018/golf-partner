@@ -97,6 +97,11 @@ export const PlayerCard = React.memo(function PlayerCard({
   // defensively too — the ghost must never show alongside a real entry, even
   // if a caller ever passed both.
   const ghostVisible = !!ghost && strokes == null && !conflicted;
+  // A ghosted cell is a peer's entry this scorer never marked. Tapping it
+  // accepts that value as this scorer's OWN mark — exactly the write typing
+  // the number in would make, so the two cards then record that they agree
+  // and the cell stops reading as unverified.
+  const ghostAcceptable = ghostVisible && canEdit;
   const officialTappable = officialState === 'discrepancy' && canResolveHere;
   const heroTappable = conflicted || officialTappable;
   const showScoreControls = canEdit && !conflicted;
@@ -190,6 +195,10 @@ export const PlayerCard = React.memo(function PlayerCard({
           </PressableScale>
         )}
         <Pressable
+          onPress={ghostAcceptable ? () => {
+            haptic('light');
+            onSetScore(player.id, hole.number, String(ghost.value));
+          } : undefined}
           onLongPress={() => {
             if (canEdit && !conflicted && strokes != null) {
               haptic('medium');
@@ -199,7 +208,7 @@ export const PlayerCard = React.memo(function PlayerCard({
           delayLongPress={350}
           accessibilityLabel={
             ghostVisible
-              ? `Hole ${hole.number}, ${player.name}: ${ghost.value} entered by ${ghost.authorName}, not verified by you`
+              ? `Hole ${hole.number}, ${player.name}: ${ghost.value} entered by ${ghost.authorName}, not verified by you${ghostAcceptable ? ' — tap to accept' : ''}`
               : `Strokes on hole ${hole.number}${canEdit && !conflicted && strokes != null ? ' — long-press to clear' : ''}`
           }
         >
@@ -215,7 +224,9 @@ export const PlayerCard = React.memo(function PlayerCard({
             <Text style={[s.soloScoreLabel, conflicted && { color: semantic.conflict.base }]}>
               {conflicted
                 ? 'TAP TO RESOLVE'
-                : strokes == null ? (ghostVisible ? 'NOT VERIFIED' : 'STROKES') : canEdit ? 'HOLD TO CLEAR' : 'STROKES'}
+                : strokes == null
+                  ? (ghostAcceptable ? 'TAP TO ACCEPT' : ghostVisible ? 'NOT VERIFIED' : 'STROKES')
+                  : canEdit ? 'HOLD TO CLEAR' : 'STROKES'}
             </Text>
             {/* Attribution for the ghost preview — who entered this value,
                 so it reads as theirs, not the viewer's own verified entry. */}

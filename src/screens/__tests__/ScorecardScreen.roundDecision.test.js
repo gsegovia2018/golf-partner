@@ -130,6 +130,7 @@ jest.mock('../../store/syncWorker', () => ({
 }));
 
 jest.mock('../../store/libraryStore', () => ({
+  getCachedPlayers: jest.fn(() => Promise.resolve([])),
   fetchPlayers: jest.fn(() => Promise.resolve([])),
 }));
 

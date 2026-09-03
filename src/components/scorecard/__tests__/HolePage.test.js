@@ -343,7 +343,32 @@ describe('HolePage ghost preview wiring', () => {
     const { getByText, getByLabelText } = renderGhostHole();
     expect(getByText('4')).toBeTruthy();
     expect(getByText('by Marker')).toBeTruthy();
-    expect(getByLabelText('Hole 1, Alice: 4 entered by Marker, not verified by you')).toBeTruthy();
+    expect(getByLabelText(
+      'Hole 1, Alice: 4 entered by Marker, not verified by you — tap to accept',
+    )).toBeTruthy();
+  });
+
+  test('tapping a ghost accepts the peer value as this scorer\'s own entry', () => {
+    // The whole point of the ghost: the peer's number is visible but unmarked
+    // here. One tap writes it under this author, which is what turns the cell
+    // from "not verified" into an agreement between the two cards.
+    const onSetScore = jest.fn();
+    const { getByLabelText } = renderGhostHole({ onSetScore });
+    fireEvent.press(getByLabelText(
+      'Hole 1, Alice: 4 entered by Marker, not verified by you — tap to accept',
+    ));
+    expect(onSetScore).toHaveBeenCalledWith('a', 1, '4');
+  });
+
+  test('a read-only card offers no tap-to-accept', () => {
+    const onSetScore = jest.fn();
+    const { getByLabelText, getByText } = renderGhostHole({
+      onSetScore,
+      editable: () => false,
+    });
+    expect(getByText('NOT VERIFIED')).toBeTruthy();
+    fireEvent.press(getByLabelText('Hole 1, Alice: 4 entered by Marker, not verified by you'));
+    expect(onSetScore).not.toHaveBeenCalled();
   });
 
   test('own entry present → no ghost even though the merged card also has a peer value', () => {

@@ -86,9 +86,46 @@ describe('PlayerCard ghost preview', () => {
 
     expect(getByText('4')).toBeTruthy();
     expect(getByText('by Alice')).toBeTruthy();
-    expect(getByLabelText('Hole 1, Marco: 4 entered by Alice, not verified by you')).toBeTruthy();
+    expect(getByLabelText(
+      'Hole 1, Marco: 4 entered by Alice, not verified by you — tap to accept',
+    )).toBeTruthy();
     // No points badge for a ghost — it isn't this scorer's verified entry.
     expect(queryByText(/point/)).toBeNull();
+  });
+
+  test('tapping an editable ghost accepts the peer value as this scorer\'s entry', () => {
+    const onSetScore = jest.fn();
+    const { getByText, getByLabelText } = renderPlayerCard({
+      strokes: null,
+      points: null,
+      canEdit: true,
+      ghost: { value: 4, authorName: 'Alice' },
+      onSetScore,
+    });
+
+    expect(getByText('TAP TO ACCEPT')).toBeTruthy();
+    fireEvent.press(getByLabelText(
+      'Hole 1, Marco: 4 entered by Alice, not verified by you — tap to accept',
+    ));
+
+    // Same write path as typing the number in, so autoSave stamps it under
+    // this author and the two cards record that they agree.
+    expect(onSetScore).toHaveBeenCalledWith('p1', 1, '4');
+  });
+
+  test('a read-only ghost stays a preview — no tap-to-accept', () => {
+    const onSetScore = jest.fn();
+    const { getByText, getByLabelText } = renderPlayerCard({
+      strokes: null,
+      points: null,
+      canEdit: false,
+      ghost: { value: 4, authorName: 'Alice' },
+      onSetScore,
+    });
+
+    expect(getByText('NOT VERIFIED')).toBeTruthy();
+    fireEvent.press(getByLabelText('Hole 1, Marco: 4 entered by Alice, not verified by you'));
+    expect(onSetScore).not.toHaveBeenCalled();
   });
 
   test('own entry present → normal rendering, no ghost even if a ghost value is passed', () => {

@@ -71,6 +71,7 @@ import { getDeviceAuthorId } from '../store/deviceId';
 import { makeScorecardStyles } from '../components/scorecard/styles';
 import { HoleView } from '../components/scorecard/HoleView';
 import { GridView, resolveScorecardRows } from '../components/scorecard/GridView';
+import { useRoundRoster } from '../hooks/useRoundRoster';
 import ConflictWizardSheet from '../components/scorecard/ConflictWizardSheet';
 import { FlagFinderView } from '../components/scorecard/FlagFinderView';
 import TourOverlay from '../components/tour/TourOverlay';
@@ -79,6 +80,10 @@ import {
   findCourseGeometry, subscribeCourseGeometry, getCourseGeometryVersion,
 } from '../lib/geo';
 import { compassLikelyAvailable } from '../hooks/useCompassHeading';
+
+// Stable empty roster so the useRoundRoster memo below does not see a new
+// array identity on every render while the tournament is still loading.
+const EMPTY_PLAYERS = [];
 
 
 
@@ -132,6 +137,29 @@ export function resumeVerifiedUpTo(holes, players, myScores) {
     last = h.number;
   }
   return last;
+}
+
+// Where a re-opened round lands. A live round resumes at the first hole THIS
+// phone hasn't marked — NOT at the first hole empty on the merged card. A
+// scorer who opens the round after a peer filled the front nine still owes
+// their own entries for those holes; landing where the peer's card ends would
+// skip them past work only they can do. It also keeps currentHole at
+// verifiedUpTo + 1, so walking the round forward advances the watermark
+// contiguously (see nextVerifiedUpTo) instead of leaving it stuck at 0.
+// A round already complete — or a finished tournament — has nothing left to
+// enter and still opens on the last hole, the way it always did.
+export function resumeHole(holes, verifiedUpTo, { complete = false } = {}) {
+  const lastHole = holes[holes.length - 1].number;
+  if (complete) return lastHole;
+  return holes.find((h) => h.number > verifiedUpTo)?.number ?? lastHole;
+}
+
+// The watermark after walking off `leavingHole`. It only ever grows one
+// contiguous step: leaving hole 6 having verified nothing (a resumed round
+// where a peer scored the front nine) must not sweep holes 1-5 in behind it
+// and pre-fill them with entries this phone never made.
+export function nextVerifiedUpTo(verifiedUpTo, leavingHole) {
+  return leavingHole === verifiedUpTo + 1 ? verifiedUpTo + 1 : verifiedUpTo;
 }
 
 // The cells autoSave has to write. A cell whose value differs from the
@@ -531,22 +559,21 @@ export default function ScorecardScreen({ navigation, route }) {
     // have stored a bare string — treat that as the round-level note.
     setNotes(normalizeRoundNotes(round?.notes));
 
-    // Only on first load: jump to the first hole with no scores entered.
+    // Only on first load: jump to where THIS phone's own card left off.
     if (!hasAutoJumpedRef.current && round?.holes?.length) {
       hasAutoJumpedRef.current = true;
-      const firstEmpty = round.holes.find((h) =>
-        t.players.every((p) => roundScores[p.id]?.[h.number] == null)
-      );
-      const lastHole = round.holes[round.holes.length - 1].number;
-      if (firstEmpty) setCurrentHole(firstEmpty.number);
-      else setCurrentHole(lastHole);
-      // The watermark restarts at the last hole THIS phone verified, read from
-      // its own entries — NOT from the merged card the resume point above uses.
-      // A peer who scored the front nine while this phone was closed would
-      // otherwise count as "verified here", and every one of those holes would
-      // open pre-filled with their numbers instead of showing them as ghosts.
+      // Both the watermark and the landing hole are read from this author's
+      // OWN entries, never the merged card. A peer who scored the front nine
+      // while this phone was closed would otherwise count as "verified here":
+      // those holes would open pre-filled with their numbers instead of
+      // showing them as ghosts, and this scorer would be dropped past holes
+      // they still have to mark themselves.
       const myIds = [t.meId ?? lastMeIdRef.current, getDeviceAuthorId()].filter(Boolean);
-      setVerifiedUpTo(resumeVerifiedUpTo(round.holes, t.players, authorScores(round, myIds)));
+      const mine = resumeVerifiedUpTo(round.holes, t.players, authorScores(round, myIds));
+      setVerifiedUpTo(mine);
+      setCurrentHole(resumeHole(round.holes, mine, {
+        complete: isRoundComplete(round, t.players) || !!t.finishedAt,
+      }));
     }
   }, [paramRoundIndex, official, routeTournamentId]);
 
@@ -1090,7 +1117,10 @@ export default function ScorecardScreen({ navigation, route }) {
   // Hoist memoised derivations above the early return so the hook order
   // stays stable while the tournament loads.
   const round = tournament?.rounds?.[roundIndex] ?? null;
-  const players = tournament?.players ?? [];
+  // A roster player this round still references but `tournament.players` has
+  // lost is named back from the local player library — see recoverRoundRoster
+  // (store/scoring.js). Without it the slot renders with no name at all.
+  const players = useRoundRoster(round, tournament?.players ?? EMPTY_PLAYERS);
 
   // Flag finder header icon: shown only when the round's course has mapped
   // geometry (holes/pins) and the device has a compass worth trying. Geometry
@@ -1470,10 +1500,7 @@ export default function ScorecardScreen({ navigation, route }) {
     if (autoAdvanceTimer.current) { clearTimeout(autoAdvanceTimer.current); autoAdvanceTimer.current = null; }
     const maxHole = round?.holes?.length ?? 18;
     // The hole being left is now verified — merged peer entries may show there.
-    // One contiguous step only: walking off hole 6 having verified nothing
-    // (resumed round, peer scored the front nine) must not sweep holes 1-5
-    // into "verified" and pre-fill them with entries this phone never made.
-    setVerifiedUpTo((v) => (currentHoleRef.current === v + 1 ? v + 1 : v));
+    setVerifiedUpTo((v) => nextVerifiedUpTo(v, currentHoleRef.current));
     setCurrentHole((h) => Math.min(maxHole, h + 1));
     if (!round || !tournament) return;
     const mode = roundScoringMode(tournament, round) === 'bestball' ? 'bestball' : 'stableford';
