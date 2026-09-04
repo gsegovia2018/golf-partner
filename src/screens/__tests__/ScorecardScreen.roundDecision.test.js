@@ -43,6 +43,45 @@ const mockTournament = {
   }],
 };
 
+// The card engine is exercised in src/engine/**; here it is mocked so the
+// screen's own wiring is what the test observes.
+const mockCardActions = {
+  setDraftEntry: jest.fn(() => Promise.resolve()),
+  setDraftShot: jest.fn(() => Promise.resolve()),
+  publishHole: jest.fn(() => Promise.resolve(true)),
+  resolve: jest.fn(() => Promise.resolve()),
+  identify: jest.fn(() => Promise.resolve()),
+};
+
+let mockCardState = {
+  myAuthorId: 'dev-me',
+  cardsByAuthor: {},
+  resolutions: {},
+  draft: {},
+  pending: { cards: false, resolutions: false },
+  lastPulledAt: null,
+  loaded: true,
+};
+
+jest.mock('../../hooks/useRoundCards', () => ({
+  useRoundCards: () => ({ state: mockCardState, actions: mockCardActions }),
+  useSyncStatus: () => 'idle',
+}));
+
+jest.mock('../../engine/store/roundState', () => ({
+  getRoundState: () => mockCardState,
+}));
+
+jest.mock('../../engine/store/replicator', () => ({
+  closeLive: jest.fn(),
+  getLastError: jest.fn(() => null),
+  onSynced: jest.fn(() => jest.fn()),
+  openLive: jest.fn(),
+  pull: jest.fn(() => Promise.resolve(true)),
+  reconnect: jest.fn(() => Promise.resolve('t1')),
+  schedulePush: jest.fn(),
+}));
+
 jest.mock('@expo/vector-icons', () => ({
   Feather: 'Feather',
 }));

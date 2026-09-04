@@ -72,6 +72,7 @@ import PlayersScreen from './src/screens/PlayersScreen';
 import FinishedScreen from './src/screens/FinishedScreen';
 import { startUploadWorker } from './src/lib/uploadWorker';
 import { initDeviceAuthorId } from './src/store/deviceId';
+import { startReplication } from './src/engine/store/replicator';
 import { hydrateCourseGeometry } from './src/store/courseGeometryStore';
 import { hydrateShots } from './src/store/shotStore';
 import { hydrateAppSettings } from './src/store/settingsStore';
@@ -429,6 +430,9 @@ export default function App() {
   useEffect(() => {
     let cancelled = false;
     initDeviceAuthorId().finally(() => { if (!cancelled) setDeviceIdReady(true); });
+    // Card replication for every live game: pushes whatever is pending and
+    // reconnects whenever connectivity comes back. Idempotent.
+    startReplication();
     // Non-blocking: GPS geometry starts from the bundled seed and upgrades to
     // live table data whenever this resolves. Not part of the render gate.
     hydrateCourseGeometry();

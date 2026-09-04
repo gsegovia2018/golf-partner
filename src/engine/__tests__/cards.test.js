@@ -441,3 +441,15 @@ describe('cellView — draft vs published status (review fixes)', () => {
     expect(c.shown).toBe(6);
   });
 });
+
+describe('publishHole — shot detail alone is worth a version', () => {
+  it('publishes a hole that carries shots but no strokes', () => {
+    const card = publishHole(emptyCard(), 7, { entries: {}, shots: { p1: { club: 'D' } } }, 100);
+    expect(card.holes['7']).toEqual({ v: 1, entries: {}, shots: { p1: { club: 'D' } }, ts: 100 });
+  });
+
+  it('still skips a hole with nothing at all', () => {
+    const card = emptyCard();
+    expect(publishHole(card, 7, { entries: {}, shots: {} }, 100)).toBe(card);
+  });
+});

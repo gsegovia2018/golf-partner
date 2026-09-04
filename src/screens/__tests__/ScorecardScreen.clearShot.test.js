@@ -2,7 +2,6 @@ import React from 'react';
 import { render, fireEvent, waitFor } from '@testing-library/react-native';
 import { ThemeProvider } from '../../theme/ThemeContext';
 import ScorecardScreen from '../ScorecardScreen';
-import { mutate } from '../../store/mutate';
 
 // The screen uses useFocusEffect for its cross-device live pull; run the effect
 // on mount (and its cleanup on unmount) without needing a NavigationContainer.
@@ -22,7 +21,8 @@ const mockPlayers = [
 ];
 
 // Hole 1 starts scored (5 strokes) WITH a logged shot detail for "me" (p1) —
-// the exact state a long-press-to-clear acts on.
+// the exact state a long-press-to-clear acts on. Both live on MY published
+// card now, not in the tournament blob.
 const mockTournament = {
   id: 't1',
   kind: 'game',
@@ -37,12 +37,58 @@ const mockTournament = {
       { number: 1, par: 4, strokeIndex: 1 },
       { number: 2, par: 4, strokeIndex: 2 },
     ],
-    scores: { p1: { 1: 5 } },
-    shotDetails: { p1: { 1: { putts: 2, sandShots: 1 } } },
+    scores: {},
+    shotDetails: {},
     notes: {},
     pairs: [[mockPlayers[0]], [mockPlayers[1]]],
   }],
 };
+
+// The card engine is exercised in src/engine/**; here it is mocked so the
+// screen's own wiring is what the test observes.
+const mockCardActions = {
+  setDraftEntry: jest.fn(() => Promise.resolve()),
+  setDraftShot: jest.fn(() => Promise.resolve()),
+  publishHole: jest.fn(() => Promise.resolve(true)),
+  resolve: jest.fn(() => Promise.resolve()),
+  identify: jest.fn(() => Promise.resolve()),
+};
+
+let mockCardState = {
+  myAuthorId: 'dev-me',
+  cardsByAuthor: {
+    'dev-me': {
+      scorer: { playerId: 'p1', userId: null },
+      holes: {
+        1: { v: 1, ts: 1000, entries: { p1: 5 }, shots: { p1: { putts: 2, sandShots: 1 } } },
+      },
+    },
+  },
+  resolutions: {},
+  draft: {},
+  pending: { cards: false, resolutions: false },
+  lastPulledAt: null,
+  loaded: true,
+};
+
+jest.mock('../../hooks/useRoundCards', () => ({
+  useRoundCards: () => ({ state: mockCardState, actions: mockCardActions }),
+  useSyncStatus: () => 'idle',
+}));
+
+jest.mock('../../engine/store/roundState', () => ({
+  getRoundState: () => mockCardState,
+}));
+
+jest.mock('../../engine/store/replicator', () => ({
+  closeLive: jest.fn(),
+  getLastError: jest.fn(() => null),
+  onSynced: jest.fn(() => jest.fn()),
+  openLive: jest.fn(),
+  pull: jest.fn(() => Promise.resolve(true)),
+  reconnect: jest.fn(() => Promise.resolve('t1')),
+  schedulePush: jest.fn(),
+}));
 
 jest.mock('@expo/vector-icons', () => ({
   Feather: 'Feather',
@@ -182,32 +228,25 @@ describe('ScorecardScreen — clearing a score also clears its shot detail', () 
     };
   });
 
-  test('hold-to-clear removes the hole shot detail locally and persists the deletion', async () => {
+  test('hold-to-clear clears the entry and deletes its shot detail in the same draft write', async () => {
     const { findByLabelText, getByLabelText } = render(wrap(
       <ScorecardScreen navigation={navigation} route={route} />
     ));
 
-    // Sanity: the seeded detail is on screen before the clear.
+    // Sanity: the detail published on my card is on screen before the clear.
     const dumpBefore = (await findByLabelText('Shot details dump')).props.children;
     expect(JSON.parse(dumpBefore)).toEqual({ p1: { 1: { putts: 2, sandShots: 1 } } });
 
     fireEvent.press(getByLabelText('Clear score'));
 
-    // Local state: hole 1's detail is gone.
+    // The cleared cell is an opinion of its own ("I withdrew mine"), written
+    // to the draft as null…
     await waitFor(() => {
-      const dump = getByLabelText('Shot details dump').props.children;
-      expect(JSON.parse(dump)?.p1?.[1]).toBeUndefined();
+      expect(mockCardActions.setDraftEntry).toHaveBeenCalledWith(1, 'p1', null);
     });
-
-    // Persistence: a shot.set with a null detail (delete/tombstone) went
-    // through the mutate chain alongside the score.set clear.
-    await waitFor(() => {
-      expect(mutate).toHaveBeenCalledWith(
-        expect.anything(),
-        expect.objectContaining({
-          type: 'shot.set', roundId: 'r1', playerId: 'p1', hole: 1, detail: null,
-        }),
-      );
-    });
+    // …and the shot detail it described is deleted with it.
+    expect(mockCardActions.setDraftShot).toHaveBeenCalledWith(1, 'p1', null);
+    // Nothing reaches another phone until the hole is left (R1).
+    expect(mockCardActions.publishHole).not.toHaveBeenCalled();
   });
 });

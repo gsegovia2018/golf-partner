@@ -31,10 +31,16 @@ export function publishHole(card, hole, draftHole, ts) {
   for (const [playerId, value] of Object.entries(draftHole?.entries ?? {})) {
     if (Number.isFinite(value)) entries[playerId] = value;
   }
-  if (Object.keys(entries).length === 0 && !prev) return base;
+  const shots = draftHole?.shots && Object.keys(draftHole.shots).length
+    ? { ...draftHole.shots }
+    : null;
+  // Nothing to say and nothing said before: no version. Shot detail alone
+  // (a logged drive, no score yet) is still worth a version — it is the
+  // player's own record and must not be lost when they leave the hole.
+  if (Object.keys(entries).length === 0 && !shots && !prev) return base;
 
   const next = { v: (prev?.v ?? 0) + 1, entries, ts };
-  if (draftHole?.shots) next.shots = { ...draftHole.shots };
+  if (shots) next.shots = shots;
 
   return { ...base, holes: { ...(base.holes ?? {}), [h]: next } };
 }

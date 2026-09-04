@@ -5,7 +5,7 @@ import { useFocusEffect, CommonActions } from '@react-navigation/native';
 import {
   View, Text, TextInput, TouchableOpacity,
   ScrollView, Platform, Animated,
-  ActivityIndicator, Alert, AppState,
+  ActivityIndicator, Alert,
 } from 'react-native';
 import { useReducedMotion } from 'react-native-reanimated';
 import ScreenContainer from '../components/ScreenContainer';
@@ -25,19 +25,11 @@ import {
   calcBestWorstBall, DEFAULT_SETTINGS,
   roundPairClinched, setScoringModeRoundPatches,
   isRoundComplete, isTournamentFinished,
-  subscribeSyncStatus,
   getActiveTournamentSnapshot, getTournament, getTournamentSnapshot,
   deriveMeIdFromAuth,
 } from '../store/tournamentStore';
-import {
-  readLocal, refreshTournamentFromRemote,
-} from '../store/tournamentStore';
 import { isOnline } from '../lib/connectivity';
-import {
-  ensureRealtimeForTournament, setPresenceHole, getPresenceProgress, subscribeProgress,
-} from '../store/realtimeSync';
 import { mutate } from '../store/mutate';
-import { syncNow, syncSettled } from '../store/syncWorker';
 import { fetchPlayers } from '../store/libraryStore';
 import { useAuth } from '../context/AuthContext';
 import { useTheme } from '../theme/ThemeContext';
@@ -61,13 +53,17 @@ import {
   celebrationFor,
 } from '../components/scorecard/constants';
 import {
-  reconcileShotDetail, listRoundConflicts, roundScoringMode, roundBestBallValues,
+  reconcileShotDetail, roundScoringMode, roundBestBallValues,
   clampScoreInput, resolvePlayerHandicap, holeCountOf,
 } from '../store/scoring';
 import {
-  surfaceableConflicts, deriveCell, authorScores, holeEntryMismatches,
-} from '../store/scoreEntries';
-import { getDeviceAuthorId } from '../store/deviceId';
+  discrepancies, roundCells, scorerKeyOf, shownScores, singleScorerCells, unverifiedCells,
+} from '../engine/cards';
+import { getRoundState } from '../engine/store/roundState';
+import {
+  closeLive, getLastError, onSynced, openLive, pull, reconnect, schedulePush,
+} from '../engine/store/replicator';
+import { useRoundCards, useSyncStatus } from '../hooks/useRoundCards';
 import { makeScorecardStyles } from '../components/scorecard/styles';
 import { HoleView } from '../components/scorecard/HoleView';
 import { GridView, resolveScorecardRows } from '../components/scorecard/GridView';
@@ -84,6 +80,9 @@ import { compassLikelyAvailable } from '../hooks/useCompassHeading';
 // Stable empty roster so the useRoundRoster memo below does not see a new
 // array identity on every render while the tournament is still loading.
 const EMPTY_PLAYERS = [];
+// Same reason, for the two maps official mode never fills in.
+const EMPTY_SCORES = {};
+const EMPTY_SHOT_DETAILS = {};
 
 
 
@@ -94,41 +93,10 @@ function usePrevious(value) {
   return ref.current;
 }
 
-// Reconcile a reloaded scores blob with the local optimistic state. Clean
-// cells take the blob value; a cell marked dirty keeps its local value until
-// the blob agrees with it (its save has round-tripped). `dirtyKeys` holds
-// `${playerId}:${holeNumber}` strings.
-export function mergeScores(blobScores, localScores, dirtyKeys) {
-  const out = {};
-  const playerIds = new Set([
-    ...Object.keys(blobScores ?? {}),
-    ...Object.keys(localScores ?? {}),
-  ]);
-  for (const pid of playerIds) {
-    const blobByHole = blobScores?.[pid] ?? {};
-    const localByHole = localScores?.[pid] ?? {};
-    const holes = new Set([...Object.keys(blobByHole), ...Object.keys(localByHole)]);
-    const merged = {};
-    for (const h of holes) {
-      const key = `${pid}:${h}`;
-      const blobVal = blobByHole[h];
-      const localVal = localByHole[h];
-      if (dirtyKeys.has(key) && blobVal !== localVal) {
-        merged[h] = localVal;          // stale reload — protect the local edit
-      } else {
-        merged[h] = blobVal;           // clean cell, or save has round-tripped
-      }
-    }
-    out[pid] = merged;
-  }
-  return out;
-}
-
-// How far this phone had already verified when a round is re-opened. A hole
-// is verified by walking off it, so the only evidence a fresh session has is
-// this author's OWN entries — never the merged card, which also carries
-// whatever a peer entered while this phone was closed. `myScores` is the
-// author's card (store/scoreEntries.js authorScores).
+// How far this phone had already scored when a round is re-opened. The only
+// evidence a fresh session has is MY OWN published card — never the shown
+// card, which also carries whatever a peer published while this phone was
+// closed. `myScores` is my card's entries as { [playerId]: { [hole]: n } }.
 export function resumeVerifiedUpTo(holes, players, myScores) {
   let last = 0;
   for (const h of holes ?? []) {
@@ -143,9 +111,7 @@ export function resumeVerifiedUpTo(holes, players, myScores) {
 // phone hasn't marked — NOT at the first hole empty on the merged card. A
 // scorer who opens the round after a peer filled the front nine still owes
 // their own entries for those holes; landing where the peer's card ends would
-// skip them past work only they can do. It also keeps currentHole at
-// verifiedUpTo + 1, so walking the round forward advances the watermark
-// contiguously (see nextVerifiedUpTo) instead of leaving it stuck at 0.
+// skip them past work only they can do.
 // A round already complete — or a finished tournament — has nothing left to
 // enter and still opens on the last hole, the way it always did.
 export function resumeHole(holes, verifiedUpTo, { complete = false } = {}) {
@@ -153,46 +119,6 @@ export function resumeHole(holes, verifiedUpTo, { complete = false } = {}) {
   if (complete) return lastHole;
   return holes.find((h) => h.number > verifiedUpTo)?.number ?? lastHole;
 }
-
-// The watermark after walking off `leavingHole`. It only ever grows one
-// contiguous step: leaving hole 6 having verified nothing (a resumed round
-// where a peer scored the front nine) must not sweep holes 1-5 in behind it
-// and pre-fill them with entries this phone never made.
-export function nextVerifiedUpTo(verifiedUpTo, leavingHole) {
-  return leavingHole === verifiedUpTo + 1 ? verifiedUpTo + 1 : verifiedUpTo;
-}
-
-// The cells autoSave has to write. A cell whose value differs from the
-// committed blob obviously changed. A cell this scorer just marked (dirty)
-// that the blob ALREADY agreed with has to be written too: that agreement may
-// be a PEER's entry, and without one stamped under `authorId` the cell stays
-// unmarked by this scorer — the hole page drops it back to a ghost the moment
-// the dirty flag clears, and the two cards never record that they agree.
-// Cells already stamped with the same value are skipped, so re-saving a still
-// dirty cell is a no-op.
-export function changedScoreCells({ prevScores, newScores, dirtyKeys, scoreEntries, authorId }) {
-  const out = [];
-  const playerIds = new Set([...Object.keys(prevScores ?? {}), ...Object.keys(newScores ?? {})]);
-  for (const pid of playerIds) {
-    const prevByHole = prevScores?.[pid] ?? {};
-    const nextByHole = newScores?.[pid] ?? {};
-    const holes = new Set([...Object.keys(prevByHole), ...Object.keys(nextByHole)]);
-    for (const h of holes) {
-      const before = prevByHole[h];
-      const after = nextByHole[h];
-      const mine = scoreEntries?.[pid]?.[h]?.[authorId]?.value ?? null;
-      const unstamped = !!dirtyKeys?.has(`${pid}:${h}`) && mine !== (after ?? null);
-      if (before !== after || unstamped) out.push({ playerId: pid, hole: Number(h), value: after ?? null });
-    }
-  }
-  return out;
-}
-
-// How long a burst of score taps is allowed to settle before it is written to
-// disk. Long enough to absorb a run up the stepper (4 → 8), short enough that
-// a tap-then-pocket-the-phone is persisted almost immediately. Every exit from
-// the hole flushes early, so this is a batching window, not a risk window.
-const SCORE_SAVE_DEBOUNCE_MS = 300;
 
 // Clamp a raw entered stroke count for one hole to the recordable range
 // [1, pickup], per the silent-clamp product decision. Shared by both entry
@@ -212,50 +138,6 @@ export function clampEnteredScore(round, players, playerId, holeNumber, rawValue
     rawValue, hole.par, resolvePlayerHandicap(round, players, playerId), hole.strokeIndex,
     holeCountOf(round),
   );
-}
-
-function sameShotDetail(a, b) {
-  if (a === b) return true;
-  if (a == null || b == null) return a == null && b == null;
-  if (typeof a !== 'object' || typeof b !== 'object') return false;
-  const keys = new Set([...Object.keys(a), ...Object.keys(b)]);
-  for (const key of keys) {
-    if (a[key] !== b[key]) return false;
-  }
-  return true;
-}
-
-// Same stale-reload protection as mergeScores, but for the "my shot detail"
-// records stored at shotDetails[playerId][holeNumber]. In practice only meId
-// writes these cells; the map stays player-keyed so legacy data and stats code
-// keep their existing shape.
-export function mergeShotDetails(blobShotDetails, localShotDetails, dirtyKeys) {
-  const out = {};
-  const playerIds = new Set([
-    ...Object.keys(blobShotDetails ?? {}),
-    ...Object.keys(localShotDetails ?? {}),
-  ]);
-  for (const pid of playerIds) {
-    const blobByHole = blobShotDetails?.[pid] ?? {};
-    const localByHole = localShotDetails?.[pid] ?? {};
-    const holes = new Set([...Object.keys(blobByHole), ...Object.keys(localByHole)]);
-    const merged = {};
-    for (const h of holes) {
-      const key = `${pid}:${h}`;
-      const blobVal = blobByHole[h];
-      const localVal = localByHole[h];
-      if (dirtyKeys.has(key) && !sameShotDetail(blobVal, localVal)) {
-        // A dirty cell with no local value is a local deletion whose save
-        // hasn't round-tripped — keep it deleted rather than resurrecting
-        // the blob's stale copy.
-        if (localVal !== undefined) merged[h] = localVal;
-      } else if (blobVal !== undefined) {
-        merged[h] = blobVal;
-      }
-    }
-    out[pid] = merged;
-  }
-  return out;
 }
 
 export function getScorecardBackTarget({
@@ -282,16 +164,6 @@ export function buildScorecardTournamentBackState(state) {
   };
 }
 
-export function shouldApplyReloadSnapshot({
-  preserveLocalEdits = false,
-  pendingSave = false,
-  hasTournament = false,
-} = {}) {
-  if (preserveLocalEdits) return false;
-  if (pendingSave && hasTournament) return false;
-  return true;
-}
-
 export function shouldMarkTournamentFinishedFromScorecard({ tournament }) {
   if (!tournament || tournament.kind === 'official') return false;
   return tournament.kind === 'game';
@@ -301,21 +173,35 @@ export function canShowQuickFinish({ tournament, official, viewOnly }) {
   return !official && !viewOnly && tournament?.kind === 'game';
 }
 
-// Rows for the mid-round conflict sheet, from holeEntryMismatches output.
-// Mine-first so the local value reads as "You" next to the peers' entries.
-export function buildHoleMismatchRows({ mismatches, hole, par = null, players, authorName, authorId }) {
-  return mismatches.map((mm) => ({
-    playerId: mm.playerId,
-    hole,
-    par,
-    playerName: (players ?? []).find((p) => p.id === mm.playerId)?.name ?? 'Player',
-    currentValue: mm.mine,
-    candidates: [
-      { value: mm.mine, ts: 0, authorId, authorName: 'You' },
-      ...mm.others.map((o) => ({ value: o.value, ts: 0, authorId: o.authorId, authorName: authorName(o.authorId) })),
-    ],
-    blankAuthors: [],
-  }));
+// The one adapter from the engine's `discrepancies(round)` output to the
+// ConflictWizardSheet row shape. Every conflict surface — the leave-hole
+// prompt, the peer-arrival prompt and the finish gate — filters this list
+// rather than deriving its own rows, so a resolution recorded on any phone
+// clears the row everywhere on the next render.
+// `authorId` on a candidate is the engine's scorerKey; the sheet renders the
+// ones in `localAuthorIds` as "You". A blank is not an opinion (blank rule),
+// so `blankAuthors` is always empty here.
+export function buildConflictRows({ disputes, cells, round, players, names }) {
+  const rows = [];
+  for (const { hole, rows: holeRows } of disputes ?? []) {
+    for (const { playerId, values } of holeRows) {
+      rows.push({
+        playerId,
+        hole,
+        par: round?.holes?.[hole - 1]?.par ?? null,
+        playerName: (players ?? []).find((p) => p.id === playerId)?.name ?? 'Player',
+        currentValue: cells?.[playerId]?.[String(hole)]?.shown ?? null,
+        candidates: values.map((v) => ({
+          value: v.value,
+          ts: v.ts,
+          authorId: v.scorerKey,
+          authorName: v.name ?? names?.[v.scorerKey] ?? 'Another phone',
+        })),
+        blankAuthors: [],
+      });
+    }
+  }
+  return rows;
 }
 
 export function roundDecisionNoticeForPair(pair) {
@@ -361,30 +247,23 @@ export default function ScorecardScreen({ navigation, route }) {
   });
   const { user } = useAuth();
   const [tournament, setTournament] = useState(() => initialTournament);
-  const [scores, setScores] = useState(() => initialRound?.scores ?? {});
-  // Per-player, per-hole shot detail. In practice only the "me" player has
-  // entries, but it is keyed by playerId like `scores` for generality.
-  const [shotDetails, setShotDetails] = useState(() => initialRound?.shotDetails ?? {});
   // Notes object: { round: string, hole: { [holeNumber]: string } }.
   const [notes, setNotes] = useState(() => {
     return normalizeRoundNotes(initialRound?.notes);
   });
+  // Mirrored so retrySave can re-push the round note without being
+  // re-created on every keystroke.
+  const notesRef = useRef(notes);
+  useEffect(() => { notesRef.current = notes; }, [notes]);
   const [notesOpen, setNotesOpen] = useState(false);
   const [flagFinderOpen, setFlagFinderOpen] = useState(false);
   const [view, setView] = useState('hole'); // 'grid' | 'hole'
   const [currentHole, setCurrentHole] = useState(1);
   const currentHoleRef = useRef(1);
   useEffect(() => { currentHoleRef.current = currentHole; }, [currentHole]);
-  // Highest hole this device has advanced past — verification ran on the way
-  // out. Hole-view pages ABOVE this watermark render the "my card" view
-  // (authorScores): peers' synced entries stay hidden there so each scorer
-  // marks every player themselves, then the cards are compared on "next hole".
-  const [verifiedUpTo, setVerifiedUpTo] = useState(0);
-  // Mirrored for the score-entry handlers: they need to know which card the
-  // hole they are writing to is showing, without being re-created (and
-  // re-rendering the pager) every time the watermark moves.
-  const verifiedUpToRef = useRef(0);
-  useEffect(() => { verifiedUpToRef.current = verifiedUpTo; }, [verifiedUpTo]);
+  // Where a blocked hole change is going: the leave-hole conflict prompt has
+  // to hold the move until the scorer answers it. Null means "next hole".
+  const pendingHoleRef = useRef(null);
   const autoAdvanceTimer = useRef(null);
   useEffect(() => () => { if (autoAdvanceTimer.current) clearTimeout(autoAdvanceTimer.current); }, []);
   // goToNextHole is declared later (it needs state defined further down) but
@@ -396,8 +275,9 @@ export default function ScorecardScreen({ navigation, route }) {
   // 'loading' until the first loadTournament resolves; 'error' if it returned
   // null (or threw); 'ready' once a tournament is in hand.
   const [loadState, setLoadState] = useState(() => (initialTournament && initialRound ? 'ready' : 'loading'));
-  // Live sync status from the store ('idle' | 'syncing' | 'pending' | 'error').
-  const [syncStatus, setSyncStatus] = useState('idle');
+  // Live replication status from the card engine
+  // ('idle' | 'pending' | 'syncing' | 'error').
+  const syncStatus = useSyncStatus();
   // Round-complete celebration overlay before navigating to the summary.
   const [roundCompleteVisible, setRoundCompleteVisible] = useState(false);
   const [finishBusy, setFinishBusy] = useState(false);
@@ -424,28 +304,15 @@ export default function ScorecardScreen({ navigation, route }) {
   const [viewOnly, setViewOnly] = useState(false);
   const viewOnlyInitRoundIdRef = useRef(null);
   const tournamentRef = useRef(null);
-  // Guards the cross-device live pull (Fix 4) against overlapping refreshes —
-  // an interval tick that fires while a previous refresh is still awaiting the
-  // network is skipped rather than stacked.
-  const refreshInFlightRef = useRef(false);
-  const saveTimeoutRef = useRef(null);
   // Keyed debounce timers for notes: key is 'round' or `h<holeNumber>`, so a
   // hole-note edit and a round-note edit never cancel each other's save.
   const notesSaveTimeoutsRef = useRef({});
-  // Serializes score/note saves so concurrent edits never race over the same
-  // tournament blob. Without this, two near-simultaneous setScore taps each
-  // cloned the same tournamentRef baseline, and the later mutation's
-  // saveLocal could overwrite the earlier one — dropping the first edit.
+  // Serializes the setup-blob writes (notes, "who am I", finished stamps) so
+  // concurrent edits never race over the same tournament blob.
   const saveChainRef = useRef(Promise.resolve());
-  const inflightSavesRef = useRef(0);
-  // Tracks whether the user has an unsaved scorecard edit (scores, shot
-  // details, or notes) that a subscription-driven reload must not clobber.
-  // Set when a debounce/save is scheduled, cleared after the save finishes.
-  const pendingSaveRef = useRef(false);
-  // A reload can begin before the user edits, then resolve after the edit has
-  // marked pendingSaveRef. Skip that stale snapshot and replay one fresh reload
-  // after the save chain drains.
-  const skippedReloadRef = useRef(false);
+  // True while a note edit has not been written yet: a reload that lands in
+  // that window must not put the pre-keystroke text back on screen.
+  const notesDirtyRef = useRef(false);
   const scoreAnims = useRef({});
   const hasAutoJumpedRef = useRef(false);
   const [celebration, setCelebration] = useState({
@@ -479,18 +346,15 @@ export default function ScorecardScreen({ navigation, route }) {
     ScreenOrientation.lockAsync(ScreenOrientation.OrientationLock.PORTRAIT_UP).catch(() => {});
   }, []);
 
+  // The setup layer only: roster, rounds, courses, handicaps, notes. Scores
+  // and shot detail come from the card engine (useRoundCards below) and are
+  // never read out of the tournament blob here.
+  //
   // `refreshRemote: false` re-reads the local cache WITHOUT kicking a remote
   // fetch. Every reload driven by a store change event must use it: the fetch
   // saves, the save emits another change event, and that event reloads and
-  // fetches again. With several devices scoring, each peer keystroke spun that
-  // loop through several full get_game_tournament round-trips and full
-  // re-renders of the pager. Freshness on this screen already comes from
-  // realtimeSync's row events plus the 20s focus poll below — neither needs
-  // the reload path to fetch anything of its own.
-  const reload = useCallback(async ({
-    preserveLocalEdits = false,
-    refreshRemote = true,
-  } = {}) => {
+  // fetches again.
+  const reload = useCallback(async ({ refreshRemote = true } = {}) => {
     // Official mode does not use the casual tournament blob — its data
     // comes from useOfficialRound (Supabase RPC). The casual load path is
     // skipped entirely; the official-derived tournament is wired in below.
@@ -511,83 +375,16 @@ export default function ScorecardScreen({ navigation, route }) {
       return;
     }
     setLoadState('ready');
-    const applySnapshot = shouldApplyReloadSnapshot({
-      preserveLocalEdits,
-      pendingSave: pendingSaveRef.current,
-      hasTournament: !!tournamentRef.current,
-    });
-    if (!applySnapshot) {
-      skippedReloadRef.current = true;
-      return;
-    }
     const idx = paramRoundIndex ?? t.currentRound;
-    const round = t.rounds[idx];
-    const roundScores = round?.scores ?? {};
-    const roundShotDetails = round?.shotDetails ?? {};
     setTournament(t);
-    ensureRealtimeForTournament(t.id).catch(() => {});
-    // Merge rather than clobber: a stale reload (one that began around a tap
-    // and resolved later) must not overwrite a newer local edit. mergeScores
-    // keeps any dirty cell whose save has not yet round-tripped.
-    // scoresRef.current is the reliable current-scores source here: score
-    // handlers set it synchronously before calling setScores, and a useEffect
-    // mirrors scores into it after every render — so it is always current.
-    const merged = mergeScores(roundScores, scoresRef.current, dirtyCellsRef.current);
-    // Drop dirty cells the blob has now caught up on.
-    for (const key of [...dirtyCellsRef.current]) {
-      const [pid, h] = key.split(':');
-      if (roundScores?.[pid]?.[String(h)] === merged?.[pid]?.[String(h)]) {
-        dirtyCellsRef.current.delete(key);
-      }
-    }
-    scoresRef.current = merged;
-    setScores(merged);
-    const mergedShotDetails = mergeShotDetails(
-      roundShotDetails,
-      shotDetailsRef.current,
-      dirtyShotKeysRef.current,
-    );
-    for (const key of [...dirtyShotKeysRef.current]) {
-      const [pid, h] = key.split(':');
-      if (sameShotDetail(roundShotDetails?.[pid]?.[String(h)], mergedShotDetails?.[pid]?.[String(h)])) {
-        dirtyShotKeysRef.current.delete(key);
-      }
-    }
-    shotDetailsRef.current = mergedShotDetails;
-    setShotDetails(mergedShotDetails);
     // Normalize notes to the { round, hole } object shape. Legacy data may
-    // have stored a bare string — treat that as the round-level note.
-    setNotes(normalizeRoundNotes(round?.notes));
-
-    // Only on first load: jump to where THIS phone's own card left off.
-    if (!hasAutoJumpedRef.current && round?.holes?.length) {
-      hasAutoJumpedRef.current = true;
-      // Both the watermark and the landing hole are read from this author's
-      // OWN entries, never the merged card. A peer who scored the front nine
-      // while this phone was closed would otherwise count as "verified here":
-      // those holes would open pre-filled with their numbers instead of
-      // showing them as ghosts, and this scorer would be dropped past holes
-      // they still have to mark themselves.
-      const myIds = [t.meId ?? lastMeIdRef.current, getDeviceAuthorId()].filter(Boolean);
-      const mine = resumeVerifiedUpTo(round.holes, t.players, authorScores(round, myIds));
-      setVerifiedUpTo(mine);
-      setCurrentHole(resumeHole(round.holes, mine, {
-        complete: isRoundComplete(round, t.players) || !!t.finishedAt,
-      }));
-    }
+    // have stored a bare string — treat that as the round-level note. A note
+    // still being typed outranks the snapshot until its save has landed.
+    if (!notesDirtyRef.current) setNotes(normalizeRoundNotes(t.rounds[idx]?.notes));
   }, [paramRoundIndex, official, routeTournamentId]);
 
   useEffect(() => {
-    reload();
     const unsub = subscribeTournamentChanges((changedId) => {
-      // A change event that fires while THIS screen has a save in flight is
-      // the echo of our own saveLocal(). Re-reading the blob from disk and
-      // setTournament()-ing a fresh object would churn tournament/round
-      // identity on every +/- tap — re-rendering the whole pager and doing a
-      // redundant disk read each time. Our own scores state is already
-      // authoritative; skip the self-echo. A genuine remote change is picked
-      // up by the next event once the save chain drains.
-      if (pendingSaveRef.current) return;
       // Ignore other tournaments entirely — a Home list refresh used to
       // re-render the live scorecard. An ABSENT id is the store's "unspecified"
       // broadcast (active-tournament switch, delete): always reload on those.
@@ -597,39 +394,6 @@ export default function ScorecardScreen({ navigation, route }) {
     });
     return unsub;
   }, [reload, routeTournamentId]);
-
-  // Cross-device live pull (Fix 4). Without this, a device that is only
-  // watching never re-fetches peers' scores: the sync worker only pulls when
-  // its own queue is non-empty, and the subscription above only fires on local
-  // writes. Here we pull the remote tournament on focus and every 20s while
-  // focused + online. refreshTournamentFromRemote() fetches → merges →
-  // saveLocal(), whose change emit drives the subscription above to re-render
-  // with the newly pulled peer scores. Official mode reads the RPC data layer
-  // (useOfficialRound), not the tournament blob, so it is excluded.
-  useFocusEffect(
-    useCallback(() => {
-      if (official) return undefined;
-      const pull = async () => {
-        const tid = routeTournamentId ?? tournamentRef.current?.id;
-        if (!tid || !isOnline() || refreshInFlightRef.current) return;
-        refreshInFlightRef.current = true;
-        try {
-          await refreshTournamentFromRemote(tid);
-        } catch (_) {
-          // Swallow — the sync worker retries and the next interval tick will
-          // attempt another pull. A failed pull must not blank the live round.
-        } finally {
-          refreshInFlightRef.current = false;
-        }
-      };
-      pull();
-      const interval = setInterval(pull, 20000);
-      return () => clearInterval(interval);
-    }, [official, routeTournamentId]),
-  );
-
-  // Mirror the store's sync status into a header indicator.
-  useEffect(() => subscribeSyncStatus(setSyncStatus), []);
 
   // Retry handler for the "couldn't load" error state. Official mode
   // re-fetches the RPC round state; casual mode re-runs loadTournament.
@@ -655,14 +419,10 @@ export default function ScorecardScreen({ navigation, route }) {
     } finally { setRefreshing(false); }
   }, [reload, official, officialData]);
 
-  // Append a save unit to the serial chain. Each unit reads tournamentRef
-  // at execution time (after preceding units have committed), so it sees a
-  // fresh baseline. inflightSavesRef gates pendingSaveRef so a
-  // subscription-driven reload won't clobber local edits while any save
-  // unit is queued or running.
+  // Append a setup-blob save to the serial chain. Each unit reads
+  // tournamentRef at execution time (after preceding units have committed),
+  // so it sees a fresh baseline.
   const enqueueSave = useCallback((unit) => {
-    inflightSavesRef.current += 1;
-    pendingSaveRef.current = true;
     const nextSave = saveChainRef.current
       .then(unit)
       .then((result) => {
@@ -671,30 +431,14 @@ export default function ScorecardScreen({ navigation, route }) {
       })
       .catch((e) => {
         // A local save failing (e.g. AsyncStorage full) is rare but must not
-        // be silent — the user would believe the score was recorded.
+        // be silent — the user would believe the edit was recorded.
         console.warn('ScorecardScreen: save failed', e);
         setSaveError(true);
         throw e;
-      })
-      .finally(() => {
-        inflightSavesRef.current -= 1;
-        if (
-          inflightSavesRef.current === 0
-          && !saveTimeoutRef.current
-          && Object.keys(notesSaveTimeoutsRef.current).length === 0
-        ) {
-          pendingSaveRef.current = false;
-          if (skippedReloadRef.current) {
-            skippedReloadRef.current = false;
-            // The deferred replay of a change-event reload — same no-fetch
-            // rule as the subscription itself.
-            reload({ refreshRemote: false });
-          }
-        }
       });
     saveChainRef.current = nextSave.catch(() => undefined);
     return nextSave;
-  }, [reload]);
+  }, []);
 
   // Author identity for score writes. Declared BEFORE autoSave/resolveConflict
   // because those useCallbacks list `authorId` in their dependency arrays,
@@ -726,127 +470,6 @@ export default function ScorecardScreen({ navigation, route }) {
   // render would stamp the device id.
   const lastMeIdRef = useRef(null);
   if (meId) lastMeIdRef.current = meId;
-  const authorId = meId ?? lastMeIdRef.current ?? getDeviceAuthorId();
-  const authorName = useCallback((aId) => {
-    if (aId === 'legacy') return 'Earlier entry';
-    const p = (tournament?.players ?? []).find((pl) => pl.id === aId);
-    return p?.name ?? 'Another phone';
-  }, [tournament]);
-  // Every id this phone may have stamped on a write: the roster id once we know
-  // it, plus the device id used before/without one. The conflict wizard renders
-  // any of them as "You" — a device-stamped entry is still mine, and reading
-  // "Another phone wrote 5" next to my own entry is what made conflicts
-  // confusing.
-  // Ordered: meId first (fold ties resolve toward it), then the device id.
-  // Passed into every conflict derivation so entries this phone stamped
-  // under different ids fold into one author — a phone can never conflict
-  // with itself (see foldLocalEntries in store/scoreEntries.js).
-  const localAuthorIds = useMemo(
-    () => [meId ?? lastMeIdRef.current, getDeviceAuthorId()].filter(Boolean),
-    [meId],
-  );
-
-  const autoSave = useCallback((newScores) => {
-    if (!tournamentRef.current) return Promise.resolve(null);
-    return enqueueSave(async () => {
-      // Diff against the latest committed tournament — not the baseline at
-      // schedule time — so chained saves apply incremental deltas rather
-      // than redundantly re-mutating already-persisted cells.
-      if (!tournamentRef.current) return null;
-      const t0 = tournamentRef.current;
-      const round = t0.rounds[roundIndex];
-      if (!round) return null;
-      const prevScores = round.scores ?? {};
-
-      const changedCells = changedScoreCells({
-        prevScores,
-        newScores,
-        dirtyKeys: dirtyCellsRef.current,
-        scoreEntries: round.scoreEntries,
-        authorId,
-      });
-      if (changedCells.length === 0) return;
-
-      let t = t0;
-      for (const cell of changedCells) {
-        t = await mutate(t, {
-          type: 'score.set',
-          roundId: round.id,
-          playerId: cell.playerId,
-          hole: cell.hole,
-          value: cell.value,
-          authorId,
-        }, { deferSync: true });
-        // Commit immediately so the next chained unit (or a notes save)
-        // diffs/clones from this state, not from the pre-save baseline.
-        tournamentRef.current = t;
-      }
-      return t;
-    });
-  }, [roundIndex, enqueueSave, authorId]);
-
-  // Keep the latest scores/notes in refs so retrySave can re-push them
-  // without being re-created on every keystroke.
-  const scoresRef = useRef(scores);
-  useEffect(() => { scoresRef.current = scores; }, [scores]);
-  // `${playerId}:${holeNumber}` keys for score cells edited locally and not yet
-  // confirmed saved.
-  const dirtyCellsRef = useRef(new Set());
-  const shotDetailsRef = useRef(shotDetails);
-  useEffect(() => { shotDetailsRef.current = shotDetails; }, [shotDetails]);
-  // Shot details are only written for "me", but keep the key generic because
-  // round.shotDetails is stored as { [playerId]: { [holeNumber]: detail } }.
-  const dirtyShotKeysRef = useRef(new Set());
-  const notesRef = useRef(notes);
-  useEffect(() => { notesRef.current = notes; }, [notes]);
-
-  // --- Debounced score persistence -------------------------------------------
-  // Every score save runs mutate() → saveLocal() → syncQueue.enqueue(), which
-  // deep-clones, re-serialises and rewrites the WHOLE tournament blob plus the
-  // whole pending queue. Firing that per tap made the +/- steppers stutter:
-  // stepping 4 → 8 ran the chain four times, and the serial save chain made
-  // each tap wait on the previous one's storage writes.
-  //
-  // Collapsing a burst into one save is lossless because autoSave diffs the
-  // FULL scores map against the committed blob rather than applying a delta —
-  // the last map already contains every intervening edit. scoresRef is that
-  // map, kept current synchronously by setScore/stepScore before they schedule.
-  //
-  // The window must never swallow an edit, so every exit from the hole (hole
-  // change, background, unmount, finish) flushes first — see flushScoreSync
-  // and handleFinish. Holding saveTimeoutRef also latches pendingSaveRef
-  // across the window (enqueueSave's drain guard reads it), so a
-  // subscription-driven reload can't clobber taps that aren't written yet.
-  const autoSaveRef = useRef(autoSave);
-  useEffect(() => { autoSaveRef.current = autoSave; }, [autoSave]);
-
-  // Disarms the pending debounce. Returns whether one was actually armed, so
-  // callers can tell "flushed something" from "nothing to do".
-  const cancelScheduledSave = useCallback(() => {
-    if (!saveTimeoutRef.current) return false;
-    clearTimeout(saveTimeoutRef.current);
-    saveTimeoutRef.current = null;
-    return true;
-  }, []);
-
-  const scheduleAutoSave = useCallback(() => {
-    cancelScheduledSave();
-    pendingSaveRef.current = true;
-    saveTimeoutRef.current = setTimeout(() => {
-      saveTimeoutRef.current = null;
-      autoSaveRef.current(scoresRef.current);
-    }, SCORE_SAVE_DEBOUNCE_MS);
-  }, [cancelScheduledSave]);
-
-  // Runs a pending debounced save NOW. Returns the save promise so a caller
-  // that must not race it can await, or null when nothing was pending. Reads
-  // autoSave through a ref so this stays referentially stable — the
-  // unmount-flush effect depends on it, and a changing identity there would
-  // turn that cleanup into a spurious mid-round flush.
-  const flushPendingScoreSave = useCallback(
-    () => (cancelScheduledSave() ? autoSaveRef.current(scoresRef.current) : null),
-    [cancelScheduledSave],
-  );
 
   // Debounced note save shared by round-level and per-hole notes. `key`
   // identifies the debounce timer ('round' or `h<n>`); `mutation` carries the
@@ -855,10 +478,10 @@ export default function ScorecardScreen({ navigation, route }) {
     if (notesSaveTimeoutsRef.current[key]) {
       clearTimeout(notesSaveTimeoutsRef.current[key]);
     }
-    // Hold pendingSaveRef during the debounce window too, so a reload that
+    // Hold notesDirtyRef across the debounce window too, so a reload that
     // arrives between keystroke and timeout doesn't wipe the in-progress
     // text from React state.
-    pendingSaveRef.current = true;
+    notesDirtyRef.current = true;
     notesSaveTimeoutsRef.current[key] = setTimeout(() => {
       delete notesSaveTimeoutsRef.current[key];
       enqueueSave(async () => {
@@ -871,22 +494,24 @@ export default function ScorecardScreen({ navigation, route }) {
           ...mutation,
         });
         tournamentRef.current = t;
+      }).finally(() => {
+        if (Object.keys(notesSaveTimeoutsRef.current).length === 0) {
+          notesDirtyRef.current = false;
+        }
       });
     }, 400);
   }, [roundIndex, enqueueSave]);
 
-  // Re-attempt the last save after a permanent failure. Re-pushes the full
-  // current scores + round note through the same diff-based save path.
+  // Re-attempt after a failed write. Score entries live in the card engine,
+  // which retries its own pushes with backoff — all this has to re-drive is
+  // the round note and a push kick.
   const retrySave = useCallback(() => {
-    // Manual retry after a failed save — go now, and drop any armed debounce
-    // so it can't fire a redundant second write straight afterwards.
-    cancelScheduledSave();
-    autoSave(scoresRef.current);
     const roundNote = notesRef.current?.round;
     if (roundNote != null) {
       scheduleNoteSave('round', { scope: 'round', text: roundNote });
     }
-  }, [autoSave, scheduleNoteSave, cancelScheduledSave]);
+    schedulePush();
+  }, [scheduleNoteSave]);
 
   const saveRoundNote = useCallback((value) => {
     if (viewOnly || official) return;
@@ -902,101 +527,6 @@ export default function ScorecardScreen({ navigation, route }) {
     }));
     scheduleNoteSave(`h${holeNumber}`, { scope: 'hole', hole: holeNumber, text: value });
   }, [scheduleNoteSave, viewOnly, official]);
-
-  // Resolve a casual score conflict: write the chosen value and clear the
-  // marker. Updates `scores` state optimistically, then dispatches a
-  // conflict.resolve mutation through the serial save chain.
-  const resolveConflict = useCallback((playerId, holeNumber, value) => {
-    if (!tournamentRef.current) return;
-    setScores((prev) => ({
-      ...prev,
-      [playerId]: { ...(prev[playerId] ?? {}), [holeNumber]: value },
-    }));
-    pendingSaveRef.current = true;
-    enqueueSave(async () => {
-      if (!tournamentRef.current) return;
-      const r = tournamentRef.current.rounds[roundIndex];
-      if (!r) return;
-      const t = await mutate(tournamentRef.current, {
-        type: 'conflict.resolve',
-        roundId: r.id,
-        playerId,
-        hole: holeNumber,
-        value,
-        resolvedBy: authorId,
-      });
-      tournamentRef.current = t;
-      setTournament(t);
-    });
-  }, [roundIndex, enqueueSave, authorId]);
-
-  // Persist a single hole's shot detail for the "me" player. Routed through
-  // the same serial save chain as scores so concurrent edits don't race.
-  const saveShot = useCallback((playerId, holeNumber, detail) => {
-    if (!tournamentRef.current) return;
-    pendingSaveRef.current = true;
-    enqueueSave(async () => {
-      if (!tournamentRef.current) return;
-      const r = tournamentRef.current.rounds[roundIndex];
-      if (!r) return;
-      const t = await mutate(tournamentRef.current, {
-        type: 'shot.set',
-        roundId: r.id,
-        playerId,
-        hole: holeNumber,
-        detail,
-      });
-      tournamentRef.current = t;
-    });
-  }, [roundIndex, enqueueSave]);
-
-  const setShot = useCallback((playerId, holeNumber, patch) => {
-    if (viewOnly) return;
-    setShotDetails((prev) => {
-      const current = prev[playerId]?.[holeNumber] ?? DEFAULT_SHOT;
-      const detail = { ...DEFAULT_SHOT, ...current, ...patch };
-      const next = {
-        ...prev,
-        [playerId]: { ...prev[playerId], [holeNumber]: detail },
-      };
-      shotDetailsRef.current = next;
-      dirtyShotKeysRef.current.add(`${playerId}:${holeNumber}`);
-      saveShot(playerId, holeNumber, detail);
-      return next;
-    });
-  }, [saveShot, viewOnly]);
-
-  // When the me-player's strokes change, trim that hole's shot detail so the
-  // logged putts/penalties/sand shots never exceed the new stroke total. A
-  // cleared score (hold-to-clear / pickup un-toggle) deletes the detail
-  // outright — it described strokes that no longer exist.
-  // No-op for other players, holes with no detail, or already-valid detail.
-  const reconcileMeShot = useCallback((playerId, holeNumber, newStrokes) => {
-    if (playerId !== (tournamentRef.current?.meId ?? null)) return;
-    setShotDetails((prev) => {
-      const current = prev[playerId]?.[holeNumber];
-      if (!current) return prev;
-      if (newStrokes == null) {
-        const byHole = { ...prev[playerId] };
-        delete byHole[holeNumber];
-        const next = { ...prev, [playerId]: byHole };
-        shotDetailsRef.current = next;
-        dirtyShotKeysRef.current.add(`${playerId}:${holeNumber}`);
-        saveShot(playerId, holeNumber, null);
-        return next;
-      }
-      const reconciled = reconcileShotDetail(current, newStrokes);
-      if (reconciled === current) return prev;
-      const next = {
-        ...prev,
-        [playerId]: { ...prev[playerId], [holeNumber]: reconciled },
-      };
-      shotDetailsRef.current = next;
-      dirtyShotKeysRef.current.add(`${playerId}:${holeNumber}`);
-      saveShot(playerId, holeNumber, reconciled);
-      return next;
-    });
-  }, [saveShot]);
 
   // Persist which player is "me" (drives shot-detail tracking). Routed
   // through the serial save chain like every other whole-blob writer: an
@@ -1109,11 +639,6 @@ export default function ScorecardScreen({ navigation, route }) {
     }
   }, [official, officialTournament, officialData.error]);
 
-  useEffect(() => {
-    if (!official || !officialScores) return;
-    setScores(officialScores);
-  }, [official, officialScores]);
-
   // Hoist memoised derivations above the early return so the hook order
   // stays stable while the tournament loads.
   const round = tournament?.rounds?.[roundIndex] ?? null;
@@ -1121,6 +646,120 @@ export default function ScorecardScreen({ navigation, route }) {
   // lost is named back from the local player library — see recoverRoundRoster
   // (store/scoring.js). Without it the slot renders with no name at all.
   const players = useRoundRoster(round, tournament?.players ?? EMPTY_PLAYERS);
+
+  // ── The card engine: the single source of every casual score on screen ──
+  // One card per scorer, my unpublished draft on top, agreements anchored to
+  // card versions (docs/superpowers/plans/2026-09-04-scorecard-cards-engine.md).
+  // There is no React copy of the scores and no dirty set: `state` IS the data.
+  const tid = official ? null : tournament?.id ?? null;
+  const { state: cardState, actions } = useRoundCards(tid, round?.id ?? null);
+  const playerIds = useMemo(() => players.map((p) => p.id), [players]);
+  const holeNumbers = useMemo(() => (round?.holes ?? []).map((h) => h.number), [round]);
+  // scorerKey → display name, for "who said what" in the discrepancy sheet.
+  // A card names the roster player it scores as; anything else is a phone we
+  // cannot put a name to (plan §3.1).
+  const names = useMemo(() => {
+    const out = {};
+    for (const [authorIdKey, card] of Object.entries(cardState.cardsByAuthor)) {
+      const scorerKey = scorerKeyOf(card, authorIdKey);
+      const player = players.find((p) => p.id === card?.scorer?.playerId);
+      out[scorerKey] = player?.name ?? 'Another phone';
+    }
+    return out;
+  }, [cardState.cardsByAuthor, players]);
+  const ctx = useMemo(() => ({ ...cardState, names }), [cardState, names]);
+  // The identity my own card scores under: the signed-in user if known, else
+  // this device. The wizard renders it as "You".
+  const myScorerKey = useMemo(
+    () => scorerKeyOf(cardState.cardsByAuthor[cardState.myAuthorId], cardState.myAuthorId),
+    [cardState.cardsByAuthor, cardState.myAuthorId],
+  );
+  const localAuthorIds = useMemo(() => [myScorerKey].filter(Boolean), [myScorerKey]);
+
+  const cells = useMemo(
+    () => roundCells(ctx, playerIds, holeNumbers),
+    [ctx, playerIds, holeNumbers],
+  );
+  // What MY phone counts in every mode (R6): my draft, then my published
+  // entry, then a peer's — see cards.js `shown`.
+  const cardScores = useMemo(
+    () => shownScores(ctx, playerIds, holeNumbers),
+    [ctx, playerIds, holeNumbers],
+  );
+  // Cells only a peer has marked. They render as a greyed ghost with the
+  // scorer's name, never as a value of mine (R3).
+  const unverified = useMemo(
+    () => unverifiedCells(ctx, playerIds, holeNumbers),
+    [ctx, playerIds, holeNumbers],
+  );
+  const disputes = useMemo(
+    () => discrepancies(ctx, playerIds, holeNumbers),
+    [ctx, playerIds, holeNumbers],
+  );
+  // The card as I have marked it: `shown` minus the cells only a peer marked.
+  // This is what the hole pages render and what score entry steps from, so a
+  // peer's value can never pre-fill a cell I still owe.
+  const myScores = useMemo(() => {
+    // Official has its own self/marker model, and a view-only round is being
+    // read, not scored — both keep the merged card with no ghosting.
+    if (official || viewOnly) return null;
+    const out = {};
+    for (const [playerId, byHole] of Object.entries(cells)) {
+      for (const [h, cell] of Object.entries(byHole)) {
+        if (cell.shown == null || cell.status === 'unverified') continue;
+        if (!out[playerId]) out[playerId] = {};
+        out[playerId][h] = cell.shown;
+      }
+    }
+    return out;
+  }, [official, viewOnly, cells]);
+  // Ghost labels, `{ [playerId]: { [hole]: scorerName } }`, alongside the
+  // ghost values the hole page reads out of `scores`.
+  const ghostAuthors = useMemo(() => {
+    const out = {};
+    for (const { playerId, hole, scorerKey } of unverified) {
+      if (!out[playerId]) out[playerId] = {};
+      out[playerId][String(hole)] = names[scorerKey] ?? 'Another phone';
+    }
+    return out;
+  }, [unverified, names]);
+  // Disputed cells and holes. Both are memoised on a content signature, not
+  // on `disputes`, so an unrelated tap does not hand every hole page a fresh
+  // Set and re-render all 18 of them (see holePagePropsEqual).
+  const disputeSignature = disputes
+    .map(({ hole, rows }) => rows.map((r) => `${r.playerId}:${hole}`).join(','))
+    .join('|');
+  const conflictCells = useMemo(
+    () => new Set(disputeSignature ? disputeSignature.split(/[|,]/) : []),
+    [disputeSignature],
+  );
+  const conflictHoles = useMemo(
+    () => new Set([...conflictCells].map((k) => Number(k.split(':')[1]))),
+    [conflictCells],
+  );
+
+  // Every score on screen. Official mode keeps its own RPC-derived map.
+  const scores = official ? (officialScores ?? EMPTY_SCORES) : cardScores;
+  // Shot detail for my card: what I published, with the hole I am on
+  // overlaid from the draft. Keyed by player like `scores` for generality,
+  // though in practice only "me" has entries.
+  const shotDetails = useMemo(() => {
+    if (official) return EMPTY_SHOT_DETAILS;
+    const out = {};
+    const put = (h, playerId, detail) => {
+      if (detail == null) return;
+      if (!out[playerId]) out[playerId] = {};
+      out[playerId][h] = detail;
+    };
+    const myCard = cardState.cardsByAuthor[cardState.myAuthorId];
+    for (const [h, holeEntry] of Object.entries(myCard?.holes ?? {})) {
+      for (const [playerId, detail] of Object.entries(holeEntry.shots ?? {})) put(h, playerId, detail);
+    }
+    for (const [h, holeDraft] of Object.entries(cardState.draft ?? {})) {
+      for (const [playerId, detail] of Object.entries(holeDraft.shots ?? {})) put(h, playerId, detail);
+    }
+    return out;
+  }, [official, cardState.cardsByAuthor, cardState.myAuthorId, cardState.draft]);
 
   // Flag finder header icon: shown only when the round's course has mapped
   // geometry (holes/pins) and the device has a compass worth trying. Geometry
@@ -1144,12 +783,33 @@ export default function ScorecardScreen({ navigation, route }) {
   // score lands.
   useEffect(() => {
     if (official) return;
-    if (!round || !players.length) return;
+    if (!round || !players.length || !cardState.loaded) return;
     if (viewOnlyInitRoundIdRef.current === round.id) return;
     viewOnlyInitRoundIdRef.current = round.id;
-    const finished = isRoundComplete(round, players) || !!tournament?.finishedAt;
+    const finished = isRoundComplete({ ...round, scores }, players) || !!tournament?.finishedAt;
     setViewOnly(finished);
-  }, [official, round, players, tournament?.finishedAt]);
+  }, [official, round, players, scores, cardState.loaded, tournament?.finishedAt]);
+
+  // Where a re-opened round lands: the first hole MY card has not marked.
+  // Runs once per round, and only once the cards are off disk — before that
+  // my card looks empty and every round would open on hole 1.
+  useEffect(() => {
+    if (official || hasAutoJumpedRef.current) return;
+    if (!round?.holes?.length || !players.length || !cardState.loaded) return;
+    hasAutoJumpedRef.current = true;
+    const myCard = cardState.cardsByAuthor[cardState.myAuthorId];
+    const mine = {};
+    for (const [h, holeEntry] of Object.entries(myCard?.holes ?? {})) {
+      for (const [playerId, value] of Object.entries(holeEntry.entries ?? {})) {
+        if (!mine[playerId]) mine[playerId] = {};
+        mine[playerId][h] = value;
+      }
+    }
+    const marked = resumeVerifiedUpTo(round.holes, players, mine);
+    setCurrentHole(resumeHole(round.holes, marked, {
+      complete: isRoundComplete({ ...round, scores }, players) || !!tournament?.finishedAt,
+    }));
+  }, [official, round, players, scores, cardState, tournament?.finishedAt]);
   const settings = useMemo(
     () => ({
       ...DEFAULT_SETTINGS,
@@ -1221,6 +881,35 @@ export default function ScorecardScreen({ navigation, route }) {
       })
       .catch(() => {});
   }, [tournament, user, pickMe]);
+
+  // Name the scorer this device writes as, so "who said what" resolves to a
+  // roster player and two devices on one account fold into one scorer
+  // (plan §3.1). Idempotent — the store ignores an unchanged identity.
+  useEffect(() => {
+    if (official || !tid) return;
+    const playerId = meId ?? lastMeIdRef.current ?? null;
+    if (!playerId && !user?.id) return;
+    actions.identify({ playerId, userId: user?.id ?? null }).catch(() => {});
+  }, [official, tid, meId, user?.id, actions]);
+
+  // Replication for the open tournament: one realtime channel while the
+  // screen is mounted, a pull on focus and every 20 s while focused and
+  // online. Pushes are the replicator's own business (started in App.js) and
+  // span every live game, not just this one.
+  useFocusEffect(
+    useCallback(() => {
+      if (official || !tid || !round?.id) return undefined;
+      openLive(tid);
+      const pullNow = () => { if (isOnline()) pull(tid, round.id).catch(() => {}); };
+      pullNow();
+      const interval = setInterval(pullNow, 20000);
+      return () => clearInterval(interval);
+    }, [official, tid, round?.id]),
+  );
+  // Setup (roster, teams, courses, notes) refreshes on focus only — never on
+  // a timer while a scorecard is open (plan §6.1).
+  useFocusEffect(useCallback(() => { reload(); }, [reload]));
+  useEffect(() => () => { closeLive(); }, []);
 
   // Hold time and haptic come from the tier, not from a chain here. The old
   // chain ended in `else 1800 // HOLE IN ONE`, which silently gave NOELADA the
@@ -1331,29 +1020,92 @@ export default function ScorecardScreen({ navigation, route }) {
     });
   }, [official, officialData.members, officialData.scores, officialData.round]);
 
-  // Live rows for the finish-time conflict summary — recomputed from the
-  // per-author score entries (via deriveCell) so a resolved row disappears
-  // as soon as resolveConflict commits, and each candidate carries the
-  // author who wrote it.
-  const finishConflictRows = useMemo(() => {
-    const t = tournament;
-    const r = t?.rounds?.[roundIndex];
-    if (!r) return [];
-    return listRoundConflicts(r, localAuthorIds).map(({ playerId, hole }) => {
-      const d = deriveCell(r, playerId, hole, localAuthorIds);
-      return {
-        playerId,
-        hole,
-        par: r.holes?.[hole - 1]?.par ?? null,
-        playerName: (t.players ?? []).find((p) => p.id === playerId)?.name ?? 'Player',
-        currentValue: d.effective,
-        candidates: d.candidates.map((c) => ({
-          value: c.value, ts: c.ts, authorId: c.authorId, authorName: authorName(c.authorId),
-        })),
-        blankAuthors: d.blankAuthors.map((a) => authorName(a)),
-      };
+  // Live rows for every conflict surface, from the one adapter. Derived from
+  // `disputes`, so a row disappears as soon as the cell is agreed — by this
+  // phone or by any other.
+  const conflictRows = useMemo(
+    () => buildConflictRows({ disputes, cells, round, players, names }),
+    [disputes, cells, round, players, names],
+  );
+  // Cells exactly one scorer marked. Listed at Finish for information; the
+  // blank rule says they never block it.
+  const soloMarkedCount = useMemo(
+    () => (official ? 0 : singleScorerCells(ctx, playerIds, holeNumbers).length),
+    [official, ctx, playerIds, holeNumbers],
+  );
+
+  // Agree a cell: the engine records the agreement against the exact card
+  // versions it settles, so it lapses precisely when one of them republishes.
+  const resolveConflict = useCallback((playerId, holeNumber, value) => {
+    actions.resolve({ playerId, hole: holeNumber, value }).catch((e) => {
+      console.warn('ScorecardScreen: resolve failed', e);
+      setSaveError(true);
     });
-  }, [tournament, roundIndex, authorName, localAuthorIds]);
+  }, [actions]);
+
+  // Every draft write runs on one serial chain. Two things depend on it: a
+  // burst of taps must not interleave with the seeding read below, and a
+  // publication must never overtake a tap it should have carried.
+  const draftChainRef = useRef(Promise.resolve());
+  const queueDraft = useCallback((unit) => {
+    const next = draftChainRef.current.then(unit).then(
+      (result) => { setSaveError(false); return result; },
+      (e) => {
+        // A local write failing (e.g. AsyncStorage full) is rare but must not
+        // be silent — the user would believe the score was recorded.
+        console.warn('ScorecardScreen: card write failed', e);
+        setSaveError(true);
+        throw e;
+      },
+    );
+    draftChainRef.current = next.catch(() => undefined);
+    return next;
+  }, []);
+
+  // Re-opening a hole I already published starts its draft from what I
+  // published: a publication is the WHOLE hole (R7), so a draft holding only
+  // the one cell I just changed would drop every other entry off the card.
+  // Runs inside the draft chain, so it sees every write before it.
+  const seedDraftFromCard = useCallback(async (holeNumber) => {
+    if (!tid || !round?.id) return;
+    const h = String(holeNumber);
+    const st = getRoundState(tid, round.id);
+    if (st.draft?.[h]) return;
+    const mineHole = st.cardsByAuthor[st.myAuthorId]?.holes?.[h];
+    if (!mineHole) return;
+    for (const [playerId, value] of Object.entries(mineHole.entries ?? {})) {
+      await actions.setDraftEntry(holeNumber, playerId, value);
+    }
+    for (const [playerId, detail] of Object.entries(mineHole.shots ?? {})) {
+      await actions.setDraftShot(holeNumber, playerId, detail);
+    }
+  }, [tid, round?.id, actions]);
+
+  const setShot = useCallback((playerId, holeNumber, patch) => {
+    if (viewOnly || official) return;
+    const current = shotDetails[playerId]?.[holeNumber] ?? DEFAULT_SHOT;
+    const detail = { ...DEFAULT_SHOT, ...current, ...patch };
+    queueDraft(async () => {
+      await seedDraftFromCard(holeNumber);
+      await actions.setDraftShot(holeNumber, playerId, detail);
+    }).catch(() => {});
+  }, [viewOnly, official, shotDetails, queueDraft, seedDraftFromCard, actions]);
+
+  // When the me-player's strokes change, trim that hole's shot detail so the
+  // logged putts/penalties/sand shots never exceed the new stroke total. A
+  // cleared score (hold-to-clear / pickup un-toggle) deletes the detail
+  // outright — it described strokes that no longer exist.
+  // Returns what to write alongside the entry: `undefined` for "leave it
+  // alone" (other players, no detail, already valid), null to delete it, or
+  // the trimmed detail.
+  const reconcileMeShot = useCallback((playerId, holeNumber, newStrokes) => {
+    if (official || playerId !== meId) return undefined;
+    const current = shotDetails[playerId]?.[holeNumber];
+    if (!current) return undefined;
+    if (newStrokes == null) return null;
+    const reconciled = reconcileShotDetail(current, newStrokes);
+    return reconciled === current ? undefined : reconciled;
+  }, [official, meId, shotDetails]);
 
   // Schedule after each score write; a follow-up tap on the same hole resets
   // the timer so quick +/- adjustments land before the page flips. A write
@@ -1372,10 +1124,10 @@ export default function ScorecardScreen({ navigation, route }) {
       holeNumber,
       currentHole: currentHoleRef.current,
       maxHole: round?.holes?.length ?? 18,
-      // Casual mode judges "hole complete" on the my-card view: a peer's
-      // synced entries must not complete the hole for a scorer who hasn't
-      // marked everyone yet (they'd be advanced past their own blank cells).
-      scores: official ? nextScores : authorScores(round, localAuthorIds, nextScores, dirtyCellsRef.current),
+      // Casual mode judges "hole complete" on MY card: a peer's unverified
+      // entries must not complete the hole for a scorer who hasn't marked
+      // everyone yet (they'd be advanced past their own blank cells).
+      scores: nextScores,
       players: rowPlayers,
     });
     if (action === 'ignore') return;
@@ -1384,17 +1136,45 @@ export default function ScorecardScreen({ navigation, route }) {
     autoAdvanceTimer.current = setTimeout(() => {
       if (currentHoleRef.current === holeNumber) goToNextHoleRef.current();
     }, 1200);
-  }, [round, players, settings, meId, official, localAuthorIds]);
+  }, [round, players, settings, meId]);
 
-  // The card the hole page is actually SHOWING for a cell: above the verified
-  // watermark that is this author's own entries (a peer's value is only a
-  // ghost there), below it the merged card. Score entry has to start from what
-  // the scorer can see — stepping "+" on a ghosted cell used to jump from the
-  // peer's number (5 → 6) instead of opening at par like any other blank cell.
-  const visibleScoresFor = useCallback((holeNumber) => {
-    if (official || viewOnly || holeNumber <= verifiedUpToRef.current) return scoresRef.current;
-    return authorScores(round, localAuthorIds, scoresRef.current, dirtyCellsRef.current);
-  }, [official, viewOnly, round, localAuthorIds]);
+  // One entry, written to the private draft for the hole. It reaches nobody
+  // until the scorer leaves the hole (R1, R2).
+  const writeEntry = useCallback((playerId, holeNumber, value, shotDetail) => {
+    lastWriteRef.current.set(`${playerId}:${holeNumber}`, value ?? null);
+    queueDraft(async () => {
+      await seedDraftFromCard(holeNumber);
+      await actions.setDraftEntry(holeNumber, playerId, value ?? null);
+      if (shotDetail !== undefined) {
+        await actions.setDraftShot(holeNumber, playerId, shotDetail);
+      }
+    }).catch(() => {});
+  }, [queueDraft, seedDraftFromCard, actions]);
+
+  // The card the scorer can SEE for a cell — my entries, plus anything
+  // already agreed. Entry has to start from that: stepping "+" on a ghosted
+  // cell must open at par like any other blank, not at the peer's number.
+  const visibleScores = official ? scores : (myScores ?? scores);
+
+  // What this screen last wrote for a cell, held only until the store echoes
+  // it back. Entry is synchronous; the draft write is not, so two quick taps
+  // on the stepper would otherwise both step from the same pre-tap value.
+  // It is an input buffer, never a render source — the cards are still drawn
+  // from the engine alone.
+  const lastWriteRef = useRef(new Map());
+  useEffect(() => {
+    for (const [key, value] of lastWriteRef.current) {
+      const [playerId, h] = key.split(':');
+      if ((visibleScores[playerId]?.[h] ?? null) === (value ?? null)) {
+        lastWriteRef.current.delete(key);
+      }
+    }
+  }, [visibleScores]);
+  const currentEntry = useCallback((playerId, holeNumber) => {
+    const key = `${playerId}:${holeNumber}`;
+    if (lastWriteRef.current.has(key)) return lastWriteRef.current.get(key);
+    return visibleScores[playerId]?.[holeNumber];
+  }, [visibleScores]);
 
   const setScore = useCallback((playerId, holeNumber, value) => {
     if (!official && viewOnly) return;
@@ -1402,35 +1182,28 @@ export default function ScorecardScreen({ navigation, route }) {
     const holePar = round?.holes?.find((h) => h.number === holeNumber)?.par ?? 4;
     // Clamp a raw typed entry to [1, pickup] right here — the product
     // decision is a silent clamp (no interruption), and doing it before the
-    // optimistic setScores() below means the field itself shows the
-    // corrected number instead of briefly displaying "44" for a fat-fingered
-    // "4". mutate()'s score.set case clamps again for the casual autoSave
-    // path (defense in depth / covers any non-UI caller); this call is what
-    // also protects the OFFICIAL-mode path, which writes via officialWrite
-    // straight to the RPC layer and never touches mutate.js.
+    // write below means the field itself shows the corrected number instead
+    // of briefly displaying "44" for a fat-fingered "4". This call is also
+    // what protects the OFFICIAL-mode path, which writes via officialWrite
+    // straight to the RPC layer.
     const parsed = clampEnteredScore(round, players, playerId, holeNumber, rawParsed);
-    const cur = scoresRef.current;
-    const current = visibleScoresFor(holeNumber)[playerId]?.[holeNumber];
-    const next = {
-      ...cur,
-      [playerId]: { ...cur[playerId], [holeNumber]: parsed },
-    };
-    scoresRef.current = next;                                  // sync source of truth
-    dirtyCellsRef.current.add(`${playerId}:${holeNumber}`);
-    setScores(next);                                           // pre-computed value
-    reconcileMeShot(playerId, holeNumber, parsed);
+    const current = currentEntry(playerId, holeNumber);
 
     // Official mode routes the write through the RPC layer; casual mode
-    // diffs and persists through the tournament-blob `mutate` chain, batched
-    // so a burst of edits costs one blob rewrite instead of one per tap.
+    // writes the private draft for this hole.
     if (official) officialWrite(playerId, holeNumber, parsed);
-    else scheduleAutoSave();
+    else writeEntry(playerId, holeNumber, parsed, reconcileMeShot(playerId, holeNumber, parsed));
+
     if (parsed != null && parsed !== current) {
       const label = celebrationFor(holePar, parsed);
       if (label) triggerCelebration(playerId, holeNumber, label, parsed - holePar);
     }
-    maybeAutoAdvance(next, holeNumber);
-  }, [round, players, scheduleAutoSave, triggerCelebration, official, officialWrite, reconcileMeShot, viewOnly, maybeAutoAdvance, visibleScoresFor]);
+    maybeAutoAdvance({
+      ...visibleScores,
+      [playerId]: { ...visibleScores[playerId], [holeNumber]: parsed },
+    }, holeNumber);
+  }, [round, players, triggerCelebration, official, officialWrite, writeEntry,
+    reconcileMeShot, viewOnly, maybeAutoAdvance, visibleScores, currentEntry]);
 
   const stepScore = useCallback((playerId, holeNumber, delta) => {
     if (!official && viewOnly) return;
@@ -1440,8 +1213,7 @@ export default function ScorecardScreen({ navigation, route }) {
     Animated.spring(anim, { toValue: 1, friction: 5, useNativeDriver: true }).start();
 
     const holePar = round?.holes?.find((h) => h.number === holeNumber)?.par ?? 4;
-    const cur = scoresRef.current;
-    const current = visibleScoresFor(holeNumber)[playerId]?.[holeNumber];
+    const current = currentEntry(playerId, holeNumber);
     // First interaction on an un-scored hole: + lands on par, - lands on birdie.
     // After that, +/- step by one as usual. Minimum is 1 stroke; clamped to
     // the pickup ceiling too, so holding + past pickup can't run away to an
@@ -1450,23 +1222,20 @@ export default function ScorecardScreen({ navigation, route }) {
       ? (delta > 0 ? holePar : Math.max(1, holePar - 1))
       : Math.max(1, current + delta);
     const newStrokes = clampEnteredScore(round, players, playerId, holeNumber, rawNewStrokes);
-    const next = {
-      ...cur,
-      [playerId]: { ...cur[playerId], [holeNumber]: newStrokes },
-    };
-    scoresRef.current = next;                                  // sync source of truth
-    dirtyCellsRef.current.add(`${playerId}:${holeNumber}`);
-    setScores(next);                                           // pre-computed value
-    reconcileMeShot(playerId, holeNumber, newStrokes);
 
     if (official) officialWrite(playerId, holeNumber, newStrokes);
-    else scheduleAutoSave();
+    else writeEntry(playerId, holeNumber, newStrokes, reconcileMeShot(playerId, holeNumber, newStrokes));
+
     if (newStrokes !== current) {
       const label = celebrationFor(holePar, newStrokes);
       if (label) triggerCelebration(playerId, holeNumber, label, newStrokes - holePar);
     }
-    maybeAutoAdvance(next, holeNumber);
-  }, [round, players, scheduleAutoSave, triggerCelebration, getScoreAnim, official, officialWrite, reconcileMeShot, viewOnly, maybeAutoAdvance, visibleScoresFor]);
+    maybeAutoAdvance({
+      ...visibleScores,
+      [playerId]: { ...visibleScores[playerId], [holeNumber]: newStrokes },
+    }, holeNumber);
+  }, [round, players, triggerCelebration, getScoreAnim, official, officialWrite, writeEntry,
+    reconcileMeShot, viewOnly, maybeAutoAdvance, visibleScores, currentEntry]);
 
   const appSettings = useAppSettings();
   const showRunning = appSettings.showRunningScore && !appSettings.noSpoilers;
@@ -1499,13 +1268,10 @@ export default function ScorecardScreen({ navigation, route }) {
     // cancel any other pending auto-advance — no double-hops.
     if (autoAdvanceTimer.current) { clearTimeout(autoAdvanceTimer.current); autoAdvanceTimer.current = null; }
     const maxHole = round?.holes?.length ?? 18;
-    // The hole being left is now verified — merged peer entries may show there.
-    setVerifiedUpTo((v) => nextVerifiedUpTo(v, currentHoleRef.current));
     setCurrentHole((h) => Math.min(maxHole, h + 1));
     if (!round || !tournament) return;
     const mode = roundScoringMode(tournament, round) === 'bestball' ? 'bestball' : 'stableford';
-    const liveRound = { ...round, scores };
-    const clinched = roundPairClinched(liveRound, players, settings, mode);
+    const clinched = roundPairClinched({ ...round, scores }, players, settings, mode);
     if (clinched != null && lastClinchedPairRef.current == null) {
       const pair = round.pairs?.[clinched];
       if (pair) {
@@ -1516,143 +1282,109 @@ export default function ScorecardScreen({ navigation, route }) {
   }, [round, tournament, players, scores, settings]);
 
   // Conflicts already prompted this session (playerId:hole). Declared here so
-  // goToNextHole (below) can seed it before the mid-round sheet opens; the
-  // auto-surface effect that reads/writes it lives near conflictHoles.
+  // the leave-hole check can seed it before the mid-round sheet opens; the
+  // auto-surface effect that reads/writes it lives below.
   const seenConflictKeysRef = useRef(new Set());
 
-  // Leaving a hole is when the scorers' cards get compared. If any score I
-  // entered disagrees with what another scorer entered for the same player,
-  // prompt before moving on — a cell I left blank never blocks (I didn't mark
-  // that player, so their scorer's entry simply stands).
-  const goToNextHole = useCallback(() => {
-    if (official || viewOnly || !round) { advanceHole(); return; }
-    const mine = authorScores(round, localAuthorIds, scoresRef.current, dirtyCellsRef.current);
-    const mismatches = holeEntryMismatches(round, currentHoleRef.current, localAuthorIds, mine);
-    if (!mismatches.length) { advanceHole(); return; }
+  // Move to the hole the blocked navigation was heading for.
+  const proceedFromLeave = useCallback(() => {
+    const target = pendingHoleRef.current;
+    pendingHoleRef.current = null;
+    if (target == null) advanceHole();
+    else setCurrentHole(target);
+  }, [advanceHole]);
+
+  // Leaving a hole is publication (R1, R2, R7): the whole hole goes out as
+  // one packet, and only then are the cards compared. Any cell on the hole I
+  // just left where my published value disagrees with a peer's opens the
+  // sheet BEFORE the pager moves. Returns whether the move may proceed.
+  const leaveHole = useCallback(async (leavingHole) => {
+    if (official || viewOnly || !round || !tid) return true;
+    try {
+      await queueDraft(() => actions.publishHole(leavingHole));
+    } catch {
+      // The publication did not land on disk; moving on would hide that.
+      return false;
+    }
+    const st = getRoundState(tid, round.id);
+    const rows = discrepancies({ ...st, names }, playerIds, [leavingHole]);
+    if (!rows.length) return true;
     haptic('medium');
-    for (const mm of mismatches) seenConflictKeysRef.current.add(`${mm.playerId}:${currentHoleRef.current}`);
-    setHoleConflictPrompt({ source: 'leave', hole: currentHoleRef.current });
-  }, [official, viewOnly, round, localAuthorIds, advanceHole]);
+    for (const row of rows[0].rows) {
+      seenConflictKeysRef.current.add(`${row.playerId}:${leavingHole}`);
+    }
+    setHoleConflictPrompt({ source: 'leave', hole: leavingHole });
+    return false;
+  }, [official, viewOnly, round, tid, queueDraft, actions, names, playerIds]);
+
+  const goToNextHole = useCallback(async () => {
+    pendingHoleRef.current = null;
+    if (await leaveHole(currentHoleRef.current)) advanceHole();
+  }, [leaveHole, advanceHole]);
   useEffect(() => { goToNextHoleRef.current = goToNextHole; }, [goToNextHole]);
 
-  const goToHole = useCallback((h) => {
+  // Both the "Go to hole" picker and the pager's swipe settle land here, so
+  // a swipe publishes exactly like tapping Next.
+  const goToHole = useCallback(async (h) => {
+    const leaving = currentHoleRef.current;
+    if (h === leaving) return;
     haptic('light');
     if (autoAdvanceTimer.current) { clearTimeout(autoAdvanceTimer.current); autoAdvanceTimer.current = null; }
-    setCurrentHole(h);
-  }, []);
+    pendingHoleRef.current = h;
+    if (await leaveHole(leaving)) {
+      pendingHoleRef.current = null;
+      setCurrentHole(h);
+    }
+  }, [leaveHole]);
 
-  // Batched score pushes: taps only enqueue (deferSync above); the queue is
-  // drained when the user moves between holes, leaves the scorecard, or
-  // backgrounds the app — never mid-entry on a hole. A debounced local save
-  // may still be armed at any of those moments, and syncing before it has
-  // written would drain an empty queue and leave the edit stranded until the
-  // next flush — so write first, then push.
-  const flushScoreSync = useCallback(() => {
-    if (official) return; // official rounds push via RPC per entry
-    const pending = flushPendingScoreSave();
-    // Nothing armed: kick the sync synchronously, exactly as before the
-    // debounce existed. Deferring here would delay every hole change and
-    // unmount for no reason.
-    if (!pending) { syncNow(); return; }
-    // enqueueSave's promise rejects on a failed local write (surfaced by the
-    // save-error banner); swallow it here so it can't become an unhandled
-    // rejection, and sync regardless — the queue may hold earlier entries.
-    pending.catch(() => {}).then(() => syncNow());
-  }, [official, flushPendingScoreSave]);
-
-  useEffect(() => {
-    flushScoreSync();
-    setPresenceHole(authorId, currentHole);
-  }, [currentHole, flushScoreSync, authorId]);
-  useEffect(() => () => { flushScoreSync(); }, [flushScoreSync]);
-
-  // Live presence progress from other phones — seeded on mount/tournament
-  // change, then kept current via the realtime subscription. Drives the
-  // presence-gated conflict dots (a conflict only surfaces once every author
-  // who touched that hole has moved past it).
-  const [presenceProgress, setPresenceProgress] = useState({});
-  useEffect(() => {
-    setPresenceProgress(getPresenceProgress());
-    return subscribeProgress(setPresenceProgress);
-  }, [tournament?.id]);
-  useEffect(() => {
-    const sub = AppState.addEventListener('change', (state) => {
-      if (state === 'background' || state === 'inactive') flushScoreSync();
-    });
-    return () => sub.remove();
-  }, [flushScoreSync]);
-
-  // Mid-round conflict dots: presence-gated so a hole only lights up once
-  // every author who wrote to it has moved past it (avoids flashing a
-  // conflict for a value someone is still actively re-typing).
-  const conflictHoles = useMemo(
-    () => new Set(surfaceableConflicts(round, presenceProgress, localAuthorIds).map((c) => c.hole)),
-    [round, presenceProgress, localAuthorIds],
-  );
-
-  // Auto-pop each synced conflict once this session; after a dismissal the
-  // dots and the finish gate still cover it.
+  // A peer's card or an agreement arrived: every newly disagreeing cell opens
+  // one batched sheet. Nothing publishes here — arrivals never touch my draft.
   useEffect(() => {
     if (official || viewOnly || !round) return;
-    const fresh = surfaceableConflicts(round, presenceProgress, localAuthorIds)
-      .filter(({ playerId, hole }) => !seenConflictKeysRef.current.has(`${playerId}:${hole}`));
+    const fresh = [];
+    for (const { hole, rows } of disputes) {
+      for (const row of rows) {
+        const key = `${row.playerId}:${hole}`;
+        if (!seenConflictKeysRef.current.has(key)) fresh.push(key);
+      }
+    }
     if (!fresh.length) return;
     // Never steal the screen from a prompt that is already up; the peer sheet
     // derives its rows live, so anything new folds into it on its own.
     if (finishConflictsOpen) return;
     if (holeConflictPrompt) {
       if (holeConflictPrompt.source === 'peer') {
-        for (const { playerId, hole } of fresh) seenConflictKeysRef.current.add(`${playerId}:${hole}`);
+        for (const key of fresh) seenConflictKeysRef.current.add(key);
       }
       return;
     }
-    for (const { playerId, hole } of fresh) seenConflictKeysRef.current.add(`${playerId}:${hole}`);
-    setHoleConflictPrompt({ source: 'peer' });
-  }, [round, presenceProgress, official, viewOnly, finishConflictsOpen, holeConflictPrompt, localAuthorIds]);
+    for (const key of fresh) seenConflictKeysRef.current.add(key);
+    setHoleConflictPrompt({ source: 'peer', holes: disputes.length });
+  }, [disputes, official, viewOnly, round, finishConflictsOpen, holeConflictPrompt]);
 
-  // The card as I've marked it. Hole-view pages above the verified watermark
-  // render this instead of the merged scores, so a peer's synced entries can't
-  // pre-fill a hole I'm still scoring. Official and view-only modes keep the
-  // merged view (official has its own self/marker model; a viewer wants live
-  // data).
-  const myScores = useMemo(() => {
-    if (official || viewOnly) return null;
-    return authorScores(round, localAuthorIds, scores, dirtyCellsRef.current);
-  }, [official, viewOnly, round, localAuthorIds, scores]);
-
-  // Rows for the mid-round conflict sheet, derived live so a resolution from
-  // either phone removes its row on the next render. 'leave' compares my card
-  // (dirty edits included) against the peers' entries for the hole being left;
-  // 'peer' lists every synced conflict that is currently surfaceable.
-  const holeConflictRows = useMemo(() => {
-    if (!holeConflictPrompt || !round) return [];
-    if (holeConflictPrompt.source === 'leave') {
-      const mine = authorScores(round, localAuthorIds, scores, dirtyCellsRef.current);
-      const mismatches = holeEntryMismatches(round, holeConflictPrompt.hole, localAuthorIds, mine);
-      return buildHoleMismatchRows({
-        mismatches,
-        hole: holeConflictPrompt.hole,
-        par: round.holes?.[holeConflictPrompt.hole - 1]?.par ?? null,
-        players,
-        authorName,
-        authorId,
-      });
-    }
-    return surfaceableConflicts(round, presenceProgress, localAuthorIds).map(({ playerId, hole }) => {
-      const d = deriveCell(round, playerId, hole, localAuthorIds);
-      return {
-        playerId,
-        hole,
-        par: round.holes?.[hole - 1]?.par ?? null,
-        playerName: (players ?? []).find((p) => p.id === playerId)?.name ?? 'Player',
-        currentValue: d.effective,
-        candidates: d.candidates.map((c) => ({
-          value: c.value, ts: c.ts, authorId: c.authorId, authorName: authorName(c.authorId),
-        })),
-        blankAuthors: d.blankAuthors.map((a) => authorName(a)),
-      };
+  // A reconnect pushed and pulled everything at once: open ONE sheet for the
+  // whole backlog rather than letting each arriving row race the effect above.
+  const disputesRef = useRef(disputes);
+  useEffect(() => { disputesRef.current = disputes; }, [disputes]);
+  useEffect(() => {
+    if (official || viewOnly) return undefined;
+    return onSynced(() => {
+      const holes = disputesRef.current.length;
+      if (!holes) return;
+      setHoleConflictPrompt((prev) => prev ?? { source: 'peer', holes });
     });
-  }, [holeConflictPrompt, round, scores, authorId, players, authorName, presenceProgress, localAuthorIds]);
+  }, [official, viewOnly]);
+
+  // Rows for the mid-round conflict sheet, filtered live out of the one
+  // adapter so a resolution from either phone removes its row on the next
+  // render. 'leave' shows the hole just published; 'peer' shows everything.
+  const holeConflictRows = useMemo(() => {
+    if (!holeConflictPrompt) return [];
+    if (holeConflictPrompt.source === 'leave') {
+      return conflictRows.filter((r) => r.hole === holeConflictPrompt.hole);
+    }
+    return conflictRows;
+  }, [holeConflictPrompt, conflictRows]);
 
   // Back from the scorecard. The live center-tab action requests Tournament so
   // the user lands on the active round summary while a round is live. Other
@@ -1693,30 +1425,17 @@ export default function ScorecardScreen({ navigation, route }) {
     const r = t?.rounds?.[roundIndex];
     if (!t || !r) { goBack(); return; }
 
-    // Final flush: push this device's queued score edits and pull the other
-    // phones' latest state, so the conflict summary below is complete.
+    // Finish publishes the hole the scorer is standing on (R9), then pushes
+    // and pulls once so the gate below sees every other phone's card.
     setFinishBusy(true);
-    let freshRound = r;
     try {
       if (!official) {
-        // Drop any armed debounce first: the explicit full-map save below
-        // supersedes it (autoSave diffs the whole map, so nothing is lost),
-        // and letting the timer fire afterwards would write again post-finish.
-        cancelScheduledSave();
-        await autoSave(scoresRef.current);
-        await syncSettled();
-        const fresh = await readLocal(t.id).catch(() => null);
-        if (fresh) {
-          tournamentRef.current = fresh;
-          setTournament(fresh);
-          freshRound = fresh.rounds?.[roundIndex] ?? r;
-        }
+        await queueDraft(() => actions.publishHole(currentHoleRef.current));
+        if (isOnline()) await reconnect().catch(() => {});
       }
     } catch (err) {
-      // A failed local save must not abort the finish silently — surface it
-      // exactly like the finalize step's catch below. (syncSettled never rejects
-      // — it handles errors internally with backoff — and readLocal is
-      // defended above, so this is effectively the autoSave path.)
+      // A failed local write must not abort the finish silently — surface it
+      // exactly like the finalize step's catch below.
       const message = err?.message ?? 'Could not finish this game.';
       if (Platform.OS === 'web') window.alert(message);
       else Alert.alert('Finish failed', message);
@@ -1725,16 +1444,22 @@ export default function ScorecardScreen({ navigation, route }) {
       setFinishBusy(false);
     }
 
-    // A round cannot finish while a hole still has an unresolved score
-    // conflict — every hole must end on one agreed value. The summary sheet
-    // lists them all and re-triggers handleFinish once they're settled.
-    if (listRoundConflicts(freshRound, localAuthorIds).length > 0) {
-      setFinishConflictsOpen(true);
-      return;
+    // A round cannot finish while a hole still has two cards disagreeing —
+    // every hole must end on one agreed value. Cells only one scorer marked
+    // are listed for information and never block (blank rule). The summary
+    // sheet re-triggers handleFinish once the disputes are settled.
+    if (!official && tid) {
+      const st = getRoundState(tid, r.id);
+      if (discrepancies({ ...st, names }, playerIds, holeNumbers).length > 0) {
+        setFinishConflictsOpen(true);
+        return;
+      }
     }
 
     const freshT = tournamentRef.current ?? t;
-    const liveRound = freshRound;
+    // Completion is judged on what this phone shows, not on the setup blob:
+    // scores live in the card engine now.
+    const liveRound = { ...r, scores };
     const players = freshT.players ?? [];
     const liveTournament = {
       ...freshT,
@@ -1853,7 +1578,8 @@ export default function ScorecardScreen({ navigation, route }) {
       if (Platform.OS === 'web') window.alert(message);
       else Alert.alert('Finish failed', message);
     }
-  }, [roundIndex, navigation, goBack, official, finishBusy, autoSave, enqueueSave, cancelScheduledSave, localAuthorIds]);
+  }, [roundIndex, navigation, goBack, official, finishBusy, enqueueSave, queueDraft, actions,
+    tid, names, playerIds, holeNumbers, scores]);
 
   // Official mode (Task 16): attest the token holder's own card. Replaces the
   // casual "finish" affordance for official rounds. Disabled while the holder
@@ -2085,7 +1811,7 @@ export default function ScorecardScreen({ navigation, route }) {
           players={players}
           scores={scores}
           myScores={myScores}
-          verifiedUpTo={verifiedUpTo}
+          ghostAuthors={ghostAuthors}
           shotDetails={shotDetails}
           meId={meId}
           onSetShot={setShot}
@@ -2123,7 +1849,8 @@ export default function ScorecardScreen({ navigation, route }) {
           focusConflict={conflictFocus}
           onFocusConflictHandled={clearConflictFocus}
           conflictHoles={conflictHoles}
-          authorName={authorName}
+          conflictCells={conflictCells}
+          conflictRows={conflictRows}
           localAuthorIds={localAuthorIds}
         />
       ) : (
@@ -2190,6 +1917,10 @@ export default function ScorecardScreen({ navigation, route }) {
       <SyncStatusSheet
         visible={syncSheetOpen}
         onClose={() => setSyncSheetOpen(false)}
+        status={official ? undefined : syncStatus}
+        lastError={official ? null : getLastError()}
+        cardsPending={!official && cardState.pending.cards}
+        unsentHole={!official && cardState.draft?.[String(currentHole)] ? currentHole : null}
       />
       <FlagFinderView
         visible={flagFinderOpen}
@@ -2200,7 +1931,7 @@ export default function ScorecardScreen({ navigation, route }) {
       <ConflictWizardSheet
         visible={finishConflictsOpen}
         onClose={() => setFinishConflictsOpen(false)}
-        rows={finishConflictRows}
+        rows={conflictRows}
         localAuthorIds={localAuthorIds}
         onPick={(playerId, hole, value) => resolveConflict(playerId, hole, value)}
         primaryLabel="Finish round"
@@ -2208,12 +1939,20 @@ export default function ScorecardScreen({ navigation, route }) {
           setFinishConflictsOpen(false);
           handleFinish();
         }}
-        doneSubtitle="Every hole has one agreed score. You can finish the round."
+        doneSubtitle={soloMarkedCount > 0
+          ? `Every hole has one agreed score. ${soloMarkedCount} ${soloMarkedCount === 1 ? 'cell was' : 'cells were'} marked by one scorer only — that never blocks the finish.`
+          : 'Every hole has one agreed score. You can finish the round.'}
       />
       {holeConflictPrompt && (() => {
         const pending = holeConflictRows.length > 0;
         const leave = holeConflictPrompt.source === 'leave';
-        const close = () => setHoleConflictPrompt(null);
+        // Counted when the sheet opened: by the time the done state shows,
+        // every row has gone.
+        const peerHoles = holeConflictPrompt.holes ?? 0;
+        const close = () => {
+          pendingHoleRef.current = null;
+          setHoleConflictPrompt(null);
+        };
         return (
           <ConflictWizardSheet
             visible
@@ -2226,7 +1965,10 @@ export default function ScorecardScreen({ navigation, route }) {
             // prompt has nowhere to go, so it only offers Done once settled.
             allowPrimaryWhilePending={leave}
             primaryLabel={leave ? (pending ? 'Continue anyway' : 'Continue') : 'Done'}
-            onPrimary={() => { close(); if (leave) advanceHole(); }}
+            onPrimary={() => { close(); if (leave) proceedFromLeave(); }}
+            doneSubtitle={leave
+              ? undefined
+              : `${peerHoles === 1 ? 'One hole was' : `${peerHoles} holes were`} out of step. Every hole now has one agreed score.`}
           />
         );
       })()}

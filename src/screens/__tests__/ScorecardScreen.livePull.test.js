@@ -2,13 +2,13 @@ import React from 'react';
 import { render, act } from '@testing-library/react-native';
 import { ThemeProvider } from '../../theme/ThemeContext';
 import ScorecardScreen from '../ScorecardScreen';
-import { refreshTournamentFromRemote } from '../../store/tournamentStore';
 import { isOnline } from '../../lib/connectivity';
+import { closeLive, openLive, pull } from '../../engine/store/replicator';
 
-// Fix 4 — cross-device live pull. The scorecard must re-fetch peers' scores
-// on focus and on a periodic interval while focused + online, guarding against
-// overlapping refreshes and cleaning up on blur/unmount. Official mode uses the
-// RPC data layer, not the tournament blob, so it must NOT pull.
+// Card replication while the scorecard is open: one live channel for the
+// tournament, a pull of this round's cards on focus and every 20 s while
+// focused + online, the interval cleared on blur and the channel closed on
+// unmount. Official mode uses the RPC data layer, so it does none of this.
 
 const mockPlayers = [
   { id: 'p1', name: 'Noé' },
@@ -62,6 +62,45 @@ jest.mock('@react-navigation/native', () => ({
 jest.mock('../../lib/connectivity', () => ({
   isOnline: jest.fn(() => true),
   subscribeConnectivity: jest.fn(() => jest.fn()),
+}));
+
+// The card engine is exercised in src/engine/**; here it is mocked so the
+// screen's own wiring is what the test observes.
+const mockCardActions = {
+  setDraftEntry: jest.fn(() => Promise.resolve()),
+  setDraftShot: jest.fn(() => Promise.resolve()),
+  publishHole: jest.fn(() => Promise.resolve(true)),
+  resolve: jest.fn(() => Promise.resolve()),
+  identify: jest.fn(() => Promise.resolve()),
+};
+
+let mockCardState = {
+  myAuthorId: 'dev-me',
+  cardsByAuthor: {},
+  resolutions: {},
+  draft: {},
+  pending: { cards: false, resolutions: false },
+  lastPulledAt: null,
+  loaded: true,
+};
+
+jest.mock('../../hooks/useRoundCards', () => ({
+  useRoundCards: () => ({ state: mockCardState, actions: mockCardActions }),
+  useSyncStatus: () => 'idle',
+}));
+
+jest.mock('../../engine/store/roundState', () => ({
+  getRoundState: () => mockCardState,
+}));
+
+jest.mock('../../engine/store/replicator', () => ({
+  closeLive: jest.fn(),
+  getLastError: jest.fn(() => null),
+  onSynced: jest.fn(() => jest.fn()),
+  openLive: jest.fn(),
+  pull: jest.fn(() => Promise.resolve(true)),
+  reconnect: jest.fn(() => Promise.resolve('t1')),
+  schedulePush: jest.fn(),
 }));
 
 jest.mock('@expo/vector-icons', () => ({ Feather: 'Feather' }));
@@ -141,7 +180,7 @@ describe('ScorecardScreen live pull', () => {
   beforeEach(() => {
     jest.clearAllMocks();
     isOnline.mockReturnValue(true);
-    refreshTournamentFromRemote.mockResolvedValue(mockTournament);
+    pull.mockResolvedValue(true);
     mockOfficialRoundState = {
       loading: true,
       error: null,
@@ -160,46 +199,24 @@ describe('ScorecardScreen live pull', () => {
     jest.useRealTimers();
   });
 
-  test('pulls remote on focus and again on the interval, using the route tournament id', async () => {
+  test('opens the live channel and pulls this round on focus, then every 20 s', async () => {
     jest.useFakeTimers();
     const route = { params: { roundIndex: 0, tournamentId: 't1' } };
 
     render(wrap(<ScorecardScreen navigation={navigation} route={route} />));
 
-    // Focus fires an immediate pull.
-    expect(refreshTournamentFromRemote).toHaveBeenCalledTimes(1);
-    expect(refreshTournamentFromRemote).toHaveBeenCalledWith('t1');
+    // Focus opens the channel and fires an immediate pull of this round.
+    expect(openLive).toHaveBeenCalledWith('t1');
+    expect(pull).toHaveBeenCalledTimes(1);
+    expect(pull).toHaveBeenCalledWith('t1', 'r1');
 
     await flush();
     await act(async () => { jest.advanceTimersByTime(20000); });
-    expect(refreshTournamentFromRemote).toHaveBeenCalledTimes(2);
+    expect(pull).toHaveBeenCalledTimes(2);
 
     await flush();
     await act(async () => { jest.advanceTimersByTime(20000); });
-    expect(refreshTournamentFromRemote).toHaveBeenCalledTimes(3);
-  });
-
-  test('does not overlap refreshes while one is in flight', async () => {
-    jest.useFakeTimers();
-    let resolvePull;
-    refreshTournamentFromRemote.mockImplementation(
-      () => new Promise((res) => { resolvePull = res; }),
-    );
-    const route = { params: { roundIndex: 0, tournamentId: 't1' } };
-
-    render(wrap(<ScorecardScreen navigation={navigation} route={route} />));
-    expect(refreshTournamentFromRemote).toHaveBeenCalledTimes(1);
-
-    // Interval ticks while the first pull is still unresolved → no second call.
-    await act(async () => { jest.advanceTimersByTime(20000); });
-    await act(async () => { jest.advanceTimersByTime(20000); });
-    expect(refreshTournamentFromRemote).toHaveBeenCalledTimes(1);
-
-    // Once it resolves, the next tick is allowed to pull again.
-    await act(async () => { resolvePull(mockTournament); });
-    await flush();
-    await act(async () => { jest.advanceTimersByTime(20000); });
-    expect(refreshTournamentFromRemote).toHaveBeenCalledTimes(2);
+    expect(pull).toHaveBeenCalledTimes(3);
   });
 
   test('skips the pull when offline', async () => {
@@ -208,32 +225,34 @@ describe('ScorecardScreen live pull', () => {
     const route = { params: { roundIndex: 0, tournamentId: 't1' } };
 
     render(wrap(<ScorecardScreen navigation={navigation} route={route} />));
-    expect(refreshTournamentFromRemote).not.toHaveBeenCalled();
+    expect(pull).not.toHaveBeenCalled();
 
     await act(async () => { jest.advanceTimersByTime(20000); });
-    expect(refreshTournamentFromRemote).not.toHaveBeenCalled();
+    expect(pull).not.toHaveBeenCalled();
   });
 
-  test('clears the interval on unmount (blur)', async () => {
+  test('clears the interval on blur and closes the channel on unmount', async () => {
     jest.useFakeTimers();
     const route = { params: { roundIndex: 0, tournamentId: 't1' } };
 
     const { unmount } = render(wrap(<ScorecardScreen navigation={navigation} route={route} />));
-    expect(refreshTournamentFromRemote).toHaveBeenCalledTimes(1);
+    expect(pull).toHaveBeenCalledTimes(1);
 
     await flush();
     unmount();
     await act(async () => { jest.advanceTimersByTime(60000); });
-    expect(refreshTournamentFromRemote).toHaveBeenCalledTimes(1);
+    expect(pull).toHaveBeenCalledTimes(1);
+    expect(closeLive).toHaveBeenCalled();
   });
 
-  test('does not pull in official mode', async () => {
+  test('does not replicate in official mode', async () => {
     jest.useFakeTimers();
     const route = { params: { official: true, token: 'tok', roundId: 'or1' } };
 
     render(wrap(<ScorecardScreen navigation={navigation} route={route} />));
     await act(async () => { jest.advanceTimersByTime(20000); });
 
-    expect(refreshTournamentFromRemote).not.toHaveBeenCalled();
+    expect(pull).not.toHaveBeenCalled();
+    expect(openLive).not.toHaveBeenCalled();
   });
 });
