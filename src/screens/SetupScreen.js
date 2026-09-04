@@ -8,7 +8,7 @@ import ScreenContainer from '../components/ScreenContainer';
 import { Feather } from '@expo/vector-icons';
 import { useFocusEffect, CommonActions } from '@react-navigation/native';
 import {
-  createTournament, buildTeamsForMode, teamShapeOf, DEFAULT_SETTINGS,
+  createTournament, buildTeamsForMode, teamShapeOf, DEFAULT_SETTINGS, GAME_DEFAULT_SETTINGS,
   deriveRoundPlayingHandicap, generateInviteCode, buildJoinLink, rosterCap,
 } from '../store/tournamentStore';
 import { defaultHoles, fetchPlayers, fetchMyPlayers } from '../store/libraryStore';
@@ -74,6 +74,7 @@ export default function SetupScreen({ navigation, route }) {
   const kind = route?.params?.kind === 'game' ? 'game' : 'tournament';
   const isGame = kind === 'game';
   const {
+    name: prefilledName,
     players: prefilledPlayers,
     rounds: prefilledRounds,
     settingsPatch,
@@ -81,15 +82,20 @@ export default function SetupScreen({ navigation, route }) {
   } = setupPrefillState(route?.params?.prefill);
   const initialSteps = wizardSteps(kind, prefilledPlayers.length);
 
+  // A prefilled name (quick start → Edit details) seeds the field but does
+  // not count as "touched": picking another course still renames the game.
   const [tournamentName, setTournamentName] = useState(() =>
-    isGame ? buildGameName('') : '',
+    prefilledName || (isGame ? buildGameName('') : ''),
   );
   const [nameTouched, setNameTouched] = useState(false);
   const [players, setPlayers] = useState(() => prefilledPlayers);
   const [rounds, setRounds] = useState(() => prefilledRounds ?? [
     { id: newRoundId(), courseName: '', holes: defaultHoles(), tees: [], playerHandicaps: null, playerTees: null },
   ]);
-  const [settings, setSettings] = useState(() => ({ ...DEFAULT_SETTINGS, ...settingsPatch }));
+  const [settings, setSettings] = useState(() => ({
+    ...(isGame ? GAME_DEFAULT_SETTINGS : DEFAULT_SETTINGS),
+    ...settingsPatch,
+  }));
   const [rawStep, setStep] = useState(() => initialStepIndex(initialSteps, route?.params?.initialStep));
   const [postCreateInvite, setPostCreateInvite] = useState({
     visible: false,
@@ -777,6 +783,8 @@ export default function SetupScreen({ navigation, route }) {
           playerCount={players.length}
           settings={settings}
           onSettingsChange={setSettings}
+          // One round: "same teams every round" has nothing to apply to.
+          hideFixedTeams
         />
       ) : rounds.map((r, i) => (
         <View key={r.id ?? `scoring-round-${i}`} style={s.teesRoundBlock}>

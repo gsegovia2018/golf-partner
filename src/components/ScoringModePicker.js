@@ -90,25 +90,31 @@ export function ScoringModeSheet({ visible, value, playerCount, onSelect, onClos
 // Shared by the compact field below (single-round setup, post-creation
 // "Scoring Mode" sheet) and the dedicated 'teams' wizard step for multi-round
 // setups (SetupScreen.js) — same visuals, same settings, one definition.
-export function TeamsSettingsFields({ value, playerCount, settings, onSettingsChange }) {
+// `hideFixedTeams` drops the "same teams every round" switch where there is
+// only one round to apply it to (a casual game, a single-round setup).
+export function TeamsSettingsFields({
+  value, playerCount, settings, onSettingsChange, hideFixedTeams,
+}) {
   const { theme } = useTheme();
   const s = makeStyles(theme);
   if (!settings || !onSettingsChange || !scoringModeUsesTeams(value, playerCount)) return null;
 
   return (
     <>
-      <View style={s.fixedTeamsRow}>
-        <View style={s.fixedTeamsText}>
-          <Text style={s.fixedTeamsLabel}>Same teams every round</Text>
-          <Text style={s.fixedTeamsHint}>Teams are drawn at random for round 1, then kept for the whole tournament.</Text>
+      {!hideFixedTeams && (
+        <View style={s.fixedTeamsRow}>
+          <View style={s.fixedTeamsText}>
+            <Text style={s.fixedTeamsLabel}>Same teams every round</Text>
+            <Text style={s.fixedTeamsHint}>Teams are drawn at random for round 1, then kept for the whole tournament.</Text>
+          </View>
+          <Switch
+            value={Boolean(settings.fixedTeams)}
+            onValueChange={(v) => onSettingsChange({ ...settings, fixedTeams: v })}
+            trackColor={{ false: theme.border.default, true: theme.accent.primary }}
+            thumbColor={Platform.OS === 'android' ? theme.bg.card : undefined}
+          />
         </View>
-        <Switch
-          value={Boolean(settings.fixedTeams)}
-          onValueChange={(v) => onSettingsChange({ ...settings, fixedTeams: v })}
-          trackColor={{ false: theme.border.default, true: theme.accent.primary }}
-          thumbColor={Platform.OS === 'android' ? theme.bg.card : undefined}
-        />
-      </View>
+      )}
 
       {value !== 'scramble4' && (
         <View style={s.teamsRow}>
@@ -184,7 +190,7 @@ export function BestBallValueFields({ settings, onSettingsChange }) {
 // --- Compact field shown on the setup screens ----------------------------
 
 export default function ScoringModeField({
-  value, onChange, playerCount, settings, onSettingsChange, hideTeamsControls,
+  value, onChange, playerCount, settings, onSettingsChange, hideTeamsControls, hideFixedTeams,
 }) {
   const { theme } = useTheme();
   const s = makeStyles(theme);
@@ -260,6 +266,7 @@ export default function ScoringModeField({
           playerCount={playerCount}
           settings={settings}
           onSettingsChange={onSettingsChange}
+          hideFixedTeams={hideFixedTeams}
         />
       )}
 

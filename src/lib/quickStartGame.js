@@ -2,6 +2,7 @@ import { defaultHoles } from '../store/libraryStore';
 import {
   createTournament,
   DEFAULT_SETTINGS,
+  GAME_DEFAULT_SETTINGS,
   deriveRoundPlayingHandicap,
   buildTeamsForMode,
 } from '../store/tournamentStore';
@@ -183,7 +184,7 @@ export function buildQuickStartTournamentDraft({
   course,
   players,
   playerTees = {},
-  settings = DEFAULT_SETTINGS,
+  settings = GAME_DEFAULT_SETTINGS,
   userId = null,
   now = new Date(),
 }) {

@@ -1317,6 +1317,11 @@ export const DEFAULT_SETTINGS = {
   manualTeams: false,        // let the user pick teams instead of a random draw
 };
 
+// Defaults for a casual game (kind 'game'): one round with friends, scored as
+// solo Stableford. The tournament default above is 'stableford' (random
+// partners), which turned every 3+ player game into a pairs draw.
+export const GAME_DEFAULT_SETTINGS = { ...DEFAULT_SETTINGS, scoringMode: 'individual' };
+
 // Roster size cap by kind. Casual games (`kind === 'game'`) stay capped at a
 // foursome — the quick single-round setup assumes a small group. A real
 // tournament (`kind === 'tournament'`, or any other/unknown kind) has no

@@ -86,6 +86,7 @@ describe('setupPrefillState', () => {
 
   test('falls back for empty or invalid prefill values', () => {
     expect(setupPrefillState(null)).toEqual({
+      name: '',
       players: [],
       rounds: null,
       settingsPatch: {},
@@ -93,15 +94,21 @@ describe('setupPrefillState', () => {
     });
 
     expect(setupPrefillState({
+      name: 42,
       players: 'invalid',
       rounds: [],
       settings: null,
     })).toEqual({
+      name: '',
       players: [],
       rounds: null,
       settingsPatch: {},
       hasPrefilledPlayers: false,
     });
+  });
+
+  test('carries a trimmed prefilled name', () => {
+    expect(setupPrefillState({ name: '  Pebble · 1 Jun  ' }).name).toBe('Pebble · 1 Jun');
   });
 });
 

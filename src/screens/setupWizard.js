@@ -77,10 +77,11 @@ function clonePrefilledRound(round) {
 /**
  * Normalized setup state from optional prefill route params. Prefilled values
  * are cloned so the setup screen owns the mutable state it edits.
- * @param {{ players?: any[], rounds?: any[], settings?: object } | null | undefined} prefill
- * @returns {{ players: any[], rounds: any[] | null, settingsPatch: object, hasPrefilledPlayers: boolean }}
+ * @param {{ name?: string, players?: any[], rounds?: any[], settings?: object } | null | undefined} prefill
+ * @returns {{ name: string, players: any[], rounds: any[] | null, settingsPatch: object, hasPrefilledPlayers: boolean }}
  */
 export function setupPrefillState(prefill) {
+  const name = typeof prefill?.name === 'string' ? prefill.name.trim() : '';
   const players = Array.isArray(prefill?.players)
     ? prefill.players.map(cloneObject)
     : [];
@@ -92,6 +93,7 @@ export function setupPrefillState(prefill) {
     : {};
 
   return {
+    name,
     players,
     rounds,
     settingsPatch,

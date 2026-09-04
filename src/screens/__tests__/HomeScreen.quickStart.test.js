@@ -144,6 +144,12 @@ jest.mock('../../components/QuickStartCourses', () => {
           <Text>Start quick game</Text>
         </TouchableOpacity>
         <TouchableOpacity
+          testID="quick-start-edit"
+          onPress={() => props.onEditDetails?.({ course, players: [player] })}
+        >
+          <Text>Edit details</Text>
+        </TouchableOpacity>
+        <TouchableOpacity
           testID="quick-start-double-start"
           onPress={() => {
             props.onStart?.({ course, players: [player] });
@@ -170,6 +176,7 @@ jest.mock('../../store/libraryStore', () => ({
 
 jest.mock('../../store/tournamentStore', () => ({
   DEFAULT_SETTINGS: { scoringMode: 'stableford', bestBallValue: 1, worstBallValue: 1 },
+  GAME_DEFAULT_SETTINGS: { scoringMode: 'individual', bestBallValue: 1, worstBallValue: 1 },
   buildJoinLink: jest.fn(() => 'https://example.test/join'),
   deleteTournament: jest.fn(),
   generateInviteCode: jest.fn(),
@@ -207,6 +214,7 @@ jest.mock('../../store/mutate', () => ({
 }));
 
 jest.mock('../../lib/quickStartGame', () => ({
+  buildQuickStartGameName: jest.fn((courseName) => `${courseName} · 1 Jun`),
   buildQuickStartRound: jest.fn(() => ({ id: 'r0' })),
   buildQuickStartTournamentDraft: jest.fn(() => mockCreatedTournament),
   resolveQuickStartPlayerTees: jest.fn(() => ({ p1: { label: 'White' } })),
@@ -395,4 +403,35 @@ test('passes a loading state while quick-start courses are pending', async () =>
     expect(view.getByTestId('quick-start-courses-loading').props.children).toBe('ready');
     expect(view.getByTestId('quick-start-courses').props.children).toBe('Course One');
   });
+});
+
+test('edit details opens the game wizard with the quick-start name and game defaults', async () => {
+  loadQuickStartCourses.mockResolvedValue({
+    courses: [{ id: 'course-one', name: 'Course One' }],
+    usingCachedData: false,
+  });
+  fetchMyPlayers.mockResolvedValue([
+    { id: 'player-one', name: 'Player One', user_id: 'u-one' },
+  ]);
+
+  const view = renderHome();
+  await waitFor(() => {
+    expect(view.getByTestId('quick-start-courses').props.children).toBe('Course One');
+  });
+
+  fireEvent.press(view.getByTestId('quick-start-edit'));
+
+  await waitFor(() => {
+    expect(view.navigation.navigate).toHaveBeenCalledWith('Setup', {
+      kind: 'game',
+      initialStep: 'tees',
+      prefill: {
+        name: 'Course One · 1 Jun',
+        players: [{ id: 'player-one', name: 'Player One', user_id: 'u-one' }],
+        rounds: [{ id: 'r0' }],
+        settings: { scoringMode: 'individual', bestBallValue: 1, worstBallValue: 1 },
+      },
+    });
+  });
+  expect(mutate).not.toHaveBeenCalled();
 });
