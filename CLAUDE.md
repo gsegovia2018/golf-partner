@@ -35,6 +35,25 @@ Core features:
 - `npm run lint` — ESLint 9 flat config (`eslint.config.mjs`); CI-blocking
 - `npm run build:web` — static web export
 
+### Shipping to Android
+
+- `npx eas-cli update --branch preview -m "…"` — push JS/asset changes over
+  the air to installed preview builds. No rebuild, no reinstall.
+- `npx eas-cli build -p android --profile preview-arm64` — a new internal
+  APK. Needed only when the **native** side changes: a new Expo plugin, a
+  permission, an SDK or native dependency bump.
+
+`runtimeVersion` uses the `fingerprint` policy, so the two stay honest with
+each other — any native change alters the fingerprint, and an update built
+against it simply is not offered to binaries that cannot run it. Builds
+subscribe to a channel (`preview`/`production`, set per profile in
+`eas.json`); `--branch` on an update is what that channel points at.
+
+`fallbackToCacheTimeout: 0` is deliberate: the app launches from cache and
+fetches in the background, applying on the next start. Rounds get played on
+courses with no signal, and a launch that blocks on the network is worse
+than a day-old bundle.
+
 ## Domain Concepts
 
 - **Tournament:** A multi-round event across different courses. Each round
