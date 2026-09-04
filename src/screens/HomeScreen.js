@@ -31,7 +31,7 @@ import {
   isRoundComplete, isTournamentFinished, subscribeTournamentChanges,
   tournamentMatchPlayStandings,
   roundLeaderboard, tournamentLeaderboardResolved,
-  DEFAULT_SETTINGS, generateInviteCode, buildJoinLink,
+  DEFAULT_SETTINGS, GAME_DEFAULT_SETTINGS, generateInviteCode, buildJoinLink,
   buildBoardLink, enableBoardSharing, rotateBoardToken, disableBoardSharing,
   tournamentNoun, tournamentNounCapitalized,
   getActiveTournamentSnapshot, getTournament, getTournamentSnapshot,
@@ -40,6 +40,7 @@ import {
 import { ensureRealtimeForTournament, stopRealtime } from '../store/realtimeSync';
 import { fetchMyPlayers, loadQuickStartCourses as loadQuickStartCourseList } from '../store/libraryStore';
 import {
+  buildQuickStartGameName,
   buildQuickStartRound,
   buildQuickStartTournamentDraft,
   resolveQuickStartPlayerTees,
@@ -810,7 +811,7 @@ export default function HomeScreen({ navigation, route }) {
         course,
         players: selectedPlayers,
         playerTees,
-        settings: DEFAULT_SETTINGS,
+        settings: GAME_DEFAULT_SETTINGS,
         userId: currentUserId,
       });
       await mutate(created, { type: 'tournament.create', tournament: created });
@@ -881,9 +882,12 @@ export default function HomeScreen({ navigation, route }) {
         kind: 'game',
         initialStep: 'tees',
         prefill: {
+          // Same name the Start button would give it — the wizard only
+          // names a game after a course picked inside the wizard.
+          name: buildQuickStartGameName(course?.name),
           players: selectedPlayers,
           rounds: [round],
-          settings: DEFAULT_SETTINGS,
+          settings: GAME_DEFAULT_SETTINGS,
         },
       });
     } catch (err) {
@@ -2476,6 +2480,7 @@ export default function HomeScreen({ navigation, route }) {
           <TeamsSettingsFields
             value={teamSettingsMode}
             playerCount={tournament.players.length}
+            hideFixedTeams={isGame}
             settings={{
               fixedTeams: Boolean(tournament.settings?.fixedTeams),
               manualTeams: Boolean(tournament.settings?.manualTeams),

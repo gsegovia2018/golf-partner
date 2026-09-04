@@ -281,6 +281,25 @@ describe('buildQuickStartTournamentDraft', () => {
     expect(draft.rounds[0].pairs).toHaveLength(2);
     expect(draft.rounds[0].pairs.flat()).toHaveLength(4);
   });
+
+  test('defaults a casual game to solo Stableford even with a full four-ball', () => {
+    const four = [
+      ...players,
+      { id: 'p4', name: 'Sam', handicap: 20, user_id: null },
+    ];
+    const draft = buildQuickStartTournamentDraft({
+      course,
+      players: four,
+      playerTees: {},
+      userId: 'u-me',
+      now: new Date('2026-06-01T10:00:00Z'),
+    });
+    expect(draft.settings.scoringMode).toBe('individual');
+    expect(draft.settings.fixedTeams).toBe(false);
+    expect(draft.settings.manualTeams).toBe(false);
+    // Solo play: one singleton "pair" per player, no partner draw.
+    expect(draft.rounds[0].pairs).toEqual(four.map((p) => [p]));
+  });
 });
 
 describe('normalizeQuickStartSettings', () => {
