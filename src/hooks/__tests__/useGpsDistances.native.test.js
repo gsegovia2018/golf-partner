@@ -43,6 +43,8 @@ beforeEach(() => { jest.clearAllMocks(); });
 // before the watch is restarted.
 const PROBE_MS = 3000;
 
+const FIX = { coords: { latitude: 40.1, longitude: -3.7, accuracy: 5 } };
+
 // The RNTL wait helper drives its own clock, which fights the fake timers
 // these tests need to step over the wake probe. The pending work is a short
 // promise chain, so draining microtasks is enough to settle it.
@@ -74,7 +76,7 @@ function captureAppState() {
 // listener on.
 test('native restarts the watch when a wake finds the provider silent', async () => {
   const Location = require('expo-location');
-  Location.getCurrentPositionAsync.mockResolvedValue(null); // never yields a fix
+  Location.getCurrentPositionAsync.mockResolvedValue(FIX); // the watch is working
   jest.useFakeTimers();
   const appState = captureAppState();
 
@@ -83,6 +85,7 @@ test('native restarts the watch when a wake finds the provider silent', async ()
     await flush();
     expect(Location.watchPositionAsync).toHaveBeenCalledTimes(1);
 
+    Location.getCurrentPositionAsync.mockResolvedValue(null); // suspended in the pocket
     await act(async () => { appState.send('background'); });
     expect(Location.watchPositionAsync).toHaveBeenCalledTimes(1); // backgrounded: nothing to do
 
@@ -107,9 +110,7 @@ test('native restarts the watch when a wake finds the provider silent', async ()
 // a permission dialog, the notification shade, an unlock.
 test('native leaves a live watch alone when a wake is answered', async () => {
   const Location = require('expo-location');
-  Location.getCurrentPositionAsync.mockResolvedValue({
-    coords: { latitude: 40.1, longitude: -3.7, accuracy: 5 },
-  });
+  Location.getCurrentPositionAsync.mockResolvedValue(FIX);
   jest.useFakeTimers();
   const appState = captureAppState();
 
@@ -121,6 +122,35 @@ test('native leaves a live watch alone when a wake is answered', async () => {
     await act(async () => { appState.send('background'); });
     await act(async () => { appState.send('active'); });
     await flush(); // the probe answers
+    await act(async () => { jest.advanceTimersByTime(PROBE_MS + 10); });
+    await flush();
+
+    expect(Location.watchPositionAsync).toHaveBeenCalledTimes(1);
+  } finally {
+    appState.restore();
+    jest.useRealTimers();
+  }
+});
+
+// The regression that made the first fix take forever: a cold high-accuracy
+// lock routinely takes longer than WAKE_PROBE_MS, so a watch that hasn't
+// answered yet looks identical to a suspended one. Restarting it there throws
+// the acquisition away and starts the cold lock again — and Android hands out
+// 'active' freely while acquiring (the permission dialog closing, an unlock,
+// the notification shade). A watch that has never delivered is left to keep
+// trying; the quiet poll already covers one that never wakes up.
+test('native leaves a watch still acquiring its first fix alone', async () => {
+  const Location = require('expo-location');
+  Location.getCurrentPositionAsync.mockResolvedValue(null); // no fix yet
+  jest.useFakeTimers();
+  const appState = captureAppState();
+
+  try {
+    render(<Probe />);
+    await flush();
+    expect(Location.watchPositionAsync).toHaveBeenCalledTimes(1);
+
+    await act(async () => { appState.send('active'); });
     await act(async () => { jest.advanceTimersByTime(PROBE_MS + 10); });
     await flush();
 

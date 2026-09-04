@@ -39,23 +39,23 @@ function Probe() {
 // before the watch is restarted.
 const PROBE_MS = 3000;
 
-// A web environment with a scripted geolocation provider. `answers` decides
-// whether getCurrentPosition ever calls back: a provider that answers is
-// alive, one that stays silent is the suspended-watch case.
-function webEnv({ answers }) {
+// A web environment with a scripted geolocation provider. `state.answers`
+// decides whether the provider ever calls back — flip it to false mid-test to
+// play the watch a hidden page suspended. A live provider also delivers one
+// fix as the watch registers, which is what tells the hook the watch works.
+function webEnv({ answers = true } = {}) {
   const osDesc = Object.getOwnPropertyDescriptor(Platform, 'OS');
   Object.defineProperty(Platform, 'OS', { configurable: true, get: () => 'web' });
   const visDesc = Object.getOwnPropertyDescriptor(Document.prototype, 'visibilityState');
-  const state = { visibility: 'visible' };
+  const state = { visibility: 'visible', answers };
+  const FIX = { coords: { latitude: 40.1, longitude: -3.7, accuracy: 5 } };
   Object.defineProperty(document, 'visibilityState', {
     configurable: true,
     get: () => state.visibility,
   });
   const geolocation = {
-    getCurrentPosition: jest.fn((ok) => {
-      if (answers) ok({ coords: { latitude: 40.1, longitude: -3.7, accuracy: 5 } });
-    }),
-    watchPosition: jest.fn(() => 11),
+    getCurrentPosition: jest.fn((ok) => { if (state.answers) ok(FIX); }),
+    watchPosition: jest.fn((ok) => { if (state.answers) ok(FIX); return 11; }),
     clearWatch: jest.fn(),
   };
   navigator.geolocation = geolocation;
@@ -93,13 +93,14 @@ const pageshow = (persisted) => {
 // quiet has to start a fresh watch.
 test('web restarts the watch when a wake finds the provider silent', async () => {
   jest.useFakeTimers();
-  const env = webEnv({ answers: false });
+  const env = webEnv();
   try {
     render(<Probe />);
     await flush();
     expect(env.geolocation.watchPosition).toHaveBeenCalledTimes(1);
 
     env.state.visibility = 'hidden';
+    env.state.answers = false; // hidden page: the provider stops answering
     await act(async () => { document.dispatchEvent(new Event('visibilitychange')); });
     expect(env.geolocation.watchPosition).toHaveBeenCalledTimes(1); // hidden: nothing to do
 
@@ -124,7 +125,7 @@ test('web restarts the watch when a wake finds the provider silent', async () =>
 // on its old value for seconds every time the phone came out of a pocket.
 test('web leaves a live watch alone when a wake is answered', async () => {
   jest.useFakeTimers();
-  const env = webEnv({ answers: true });
+  const env = webEnv();
   try {
     render(<Probe />);
     await flush();
@@ -150,11 +151,12 @@ test('web leaves a live watch alone when a wake is answered', async () => {
 // handler made a cold start restart the very watch it was still acquiring.
 test('web ignores the pageshow of a normal page load', async () => {
   jest.useFakeTimers();
-  const env = webEnv({ answers: false });
+  const env = webEnv();
   try {
     render(<Probe />);
     await flush();
     expect(env.geolocation.watchPosition).toHaveBeenCalledTimes(1);
+    env.state.answers = false;
 
     await act(async () => { window.dispatchEvent(pageshow(false)); });
     await act(async () => { jest.advanceTimersByTime(PROBE_MS + 10); });
@@ -177,11 +179,12 @@ test('web ignores the pageshow of a normal page load', async () => {
 // just started.
 test('web collapses two wake signals for one return into a single restart', async () => {
   jest.useFakeTimers();
-  const env = webEnv({ answers: false });
+  const env = webEnv();
   try {
     render(<Probe />);
     await flush();
     expect(env.geolocation.watchPosition).toHaveBeenCalledTimes(1);
+    env.state.answers = false;
 
     await act(async () => {
       document.dispatchEvent(new Event('visibilitychange'));
@@ -195,6 +198,35 @@ test('web collapses two wake signals for one return into a single restart', asyn
     await act(async () => { jest.advanceTimersByTime(PROBE_MS + 10); });
     await flush();
     expect(env.geolocation.watchPosition).toHaveBeenCalledTimes(2);
+  } finally {
+    env.restore();
+    jest.useRealTimers();
+  }
+});
+
+// The regression that made the first fix take forever: a cold high-accuracy
+// lock takes longer than WAKE_PROBE_MS, so a watch that hasn't answered yet
+// looks identical to a suspended one. Restarting it there throws the
+// acquisition away and starts the cold lock again — and the OS hands out
+// wake signals freely while acquiring (a permission dialog closing, an
+// unlock). A watch that has never delivered is left to keep trying.
+test('web leaves a watch still acquiring its first fix alone', async () => {
+  jest.useFakeTimers();
+  const env = webEnv({ answers: false }); // never delivered a fix yet
+  try {
+    render(<Probe />);
+    await flush();
+    expect(env.geolocation.watchPosition).toHaveBeenCalledTimes(1);
+
+    env.state.visibility = 'hidden';
+    await act(async () => { document.dispatchEvent(new Event('visibilitychange')); });
+    env.state.visibility = 'visible';
+    await act(async () => { document.dispatchEvent(new Event('visibilitychange')); });
+    await act(async () => { jest.advanceTimersByTime(PROBE_MS + 10); });
+    await flush();
+
+    expect(env.geolocation.watchPosition).toHaveBeenCalledTimes(1);
+    expect(env.geolocation.clearWatch).not.toHaveBeenCalled();
   } finally {
     env.restore();
     jest.useRealTimers();

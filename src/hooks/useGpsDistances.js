@@ -77,6 +77,9 @@ export function useGpsDistances(courseName, holeNumber) {
   // this rather than lastFixAt, which the watch also stamps on (re)start and
   // which two events inside one millisecond can't tell apart.
   const fixSeq = useRef(0);
+  // fixSeq as it stood when the current watch run started. Equal means this
+  // run has never delivered a fix — it is still acquiring, not suspended.
+  const watchBaseSeq = useRef(0);
   // Only whether the course HAS geometry gates the location watch — not the
   // geometry object's identity. Hydration (e.g. saving the geometry editor)
   // bumps geomVersion and returns a fresh object; keying the effect on that
@@ -97,6 +100,16 @@ export function useGpsDistances(courseName, holeNumber) {
       const now = Date.now();
       if (now - lastWakeAt.current < WAKE_COALESCE_MS) return;
       lastWakeAt.current = now;
+      // Nothing to probe (no watch running: GPS off, denied, or no geometry),
+      // or the watch is still working on its very first fix. A cold
+      // high-accuracy lock routinely takes longer than WAKE_PROBE_MS, so
+      // probing one looks exactly like a suspended provider and restarts the
+      // acquisition from zero — every 'active' the OS fires while acquiring
+      // (the permission dialog closing, an unlock, the notification shade)
+      // pushes the first fix further away. There is nothing to resume that
+      // this run isn't already doing; the 6s quiet poll covers a watch that
+      // never wakes up.
+      if (!probeFix.current || fixSeq.current === watchBaseSeq.current) return;
       const before = fixSeq.current;
       probeFix.current?.();
       if (probeTimer) clearTimeout(probeTimer);
@@ -179,6 +192,7 @@ export function useGpsDistances(courseName, holeNumber) {
         // a pocket, and stack a redundant high-accuracy request on top of the
         // acquisition this run has already started.
         lastFixAt.current = Date.now();
+        watchBaseSeq.current = fixSeq.current;
         if (Platform.OS === 'web' && typeof navigator !== 'undefined' && navigator.geolocation) {
           // See WEB_GEO_OPTIONS — the expo-location web path only ever yields
           // one coarse cached fix. GeolocationPosition has the same
