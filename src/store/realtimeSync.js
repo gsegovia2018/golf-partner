@@ -245,16 +245,28 @@ export function applyPlayerRow(t, row, eventType) {
     return next;
   }
 
-  if (existingIdx !== -1) players.splice(existingIdx, 1);
   // Anchor identity on the row PRIMARY KEY, never on body alone — the same
   // rule applyRoundRow uses for `id`. body is written by four independent
   // paths (createTournament, upsertPlayer, add_tournament_player_if_room,
   // claim_tournament_player) and the column defaults to '{}', so a body
-  // without an id is representable. Spreading it bare produced a player with
-  // no id: nameless in every roster row, and — because the findIndex above
-  // could never match it again — DUPLICATED by the next event for that same
-  // player rather than updated.
-  const assembled = { ...(row.body ?? {}), id: row.player_id };
+  // without an id — and, for the claim/add RPCs, without a `name` at all —
+  // is representable. Spreading it bare over an EXISTING player blanked the
+  // name (and any other field the writer didn't touch) until the next full
+  // fetch. So: for an existing player, start from the cached object and
+  // overlay only the body keys the row actually carries (present, non-null);
+  // for a brand-new player there is no cached object to fall back to, so it
+  // is inserted as-is — even nameless — and the name arrives on the next
+  // fetch.
+  let assembled;
+  if (existingIdx !== -1) {
+    assembled = { ...players[existingIdx] };
+    for (const [k, v] of Object.entries(row.body ?? {})) {
+      if (v != null) assembled[k] = v;
+    }
+  } else {
+    assembled = { ...(row.body ?? {}) };
+  }
+  assembled.id = row.player_id;
   // user_id also comes from the COLUMN, mirroring get_game_tournament's
   // projection (20260728000000_player_identity_from_columns.sql): the
   // claim/release RPCs write only the column and leave body untouched, so
@@ -262,8 +274,16 @@ export function applyPlayerRow(t, row, eventType) {
   // null → key absent, exactly like the read path's CASE.
   delete assembled.user_id;
   if (row.user_id != null) assembled.user_id = row.user_id;
-  const idx = clampIndex(row.pos, players.length);
-  players.splice(idx, 0, assembled);
+  if (existingIdx !== -1) {
+    // Existing player: keep its current index. Row order is set once at
+    // roster build time and never moves mid-session — re-splicing at
+    // row.pos on every UPDATE let a stale/out-of-order pos shuffle rows out
+    // from under whoever was mid-round.
+    players[existingIdx] = assembled;
+  } else {
+    const idx = clampIndex(row.pos, players.length);
+    players.splice(idx, 0, assembled);
+  }
   next.players = players;
   return next;
 }

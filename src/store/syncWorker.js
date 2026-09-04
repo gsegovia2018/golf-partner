@@ -1,7 +1,7 @@
 import { supabase } from '../lib/supabase';
 import { syncQueue } from './syncQueue';
 import {
-  saveLocal, readLocal, _setSyncStatus, _setLastSyncAt,
+  saveLocal, readLocal, _setSyncStatus, _setLastSyncAt, recordSyncFailure,
 } from './tournamentStore';
 import { fetchTournament } from './tournamentRepo';
 import { executeMutation } from './mutationWrites';
@@ -146,6 +146,7 @@ export async function drainLibrary(libraryMuts) {
           // will never succeed, so drop the entry — but still flip the
           // sync indicator so the failure isn't invisible.
           captureException(error, { op: 'rpc.call', fn: m.fn, drop: 'permanent' });
+          await recordSyncFailure(entry.tournamentId, { entry, error });
           await syncQueue.drop(entry.id);
           _setSyncStatus('error');
           continue;
@@ -168,6 +169,7 @@ export async function drainLibrary(libraryMuts) {
           captureException(error, {
             op: 'rpc.call', fn: m.fn, drop: 'poison-cap', attempts,
           });
+          await recordSyncFailure(entry.tournamentId, { entry, error });
           await syncQueue.drop(entry.id);
           _setSyncStatus('error');
           continue;
@@ -222,6 +224,7 @@ export async function drainTournament(tournamentId, entries) {
         captureException(error, {
           op: 'mutation', type: entry.mutation?.type, tournamentId, drop: 'permanent',
         });
+        await recordSyncFailure(tournamentId, { entry, error });
         await syncQueue.drop(entry.id);
         _setSyncStatus('error');
         continue;
@@ -238,6 +241,7 @@ export async function drainTournament(tournamentId, entries) {
         captureException(error, {
           op: 'mutation', type: entry.mutation?.type, tournamentId, drop: 'poison-cap', attempts,
         });
+        await recordSyncFailure(tournamentId, { entry, error });
         await syncQueue.drop(entry.id);
         _setSyncStatus('error');
         continue;

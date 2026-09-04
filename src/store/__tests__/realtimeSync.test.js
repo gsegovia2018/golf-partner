@@ -269,10 +269,22 @@ describe('applyPlayerRow', () => {
     expect(out.players).toEqual([{ id: 'p0', name: 'New' }]);
   });
 
-  test('reorders when pos changes for an existing player', () => {
+  test('keeps an existing player at its current index even when pos disagrees', () => {
     const t = { id: 't1', players: [{ id: 'p0' }, { id: 'p1' }] };
     const out = applyPlayerRow(t, { player_id: 'p0', pos: 1, body: { id: 'p0' } });
-    expect(out.players.map((p) => p.id)).toEqual(['p1', 'p0']);
+    expect(out.players.map((p) => p.id)).toEqual(['p0', 'p1']);
+  });
+
+  test('a body-less UPDATE on an existing player keeps the cached name', () => {
+    const t = { id: 't1', players: [{ id: 'p0', name: 'Marcos' }] };
+    const out = applyPlayerRow(t, { player_id: 'p0', pos: 0, body: {} }, 'UPDATE');
+    expect(out.players).toEqual([{ id: 'p0', name: 'Marcos' }]);
+  });
+
+  test('a body-less INSERT of an unknown player inserts an id-only stub', () => {
+    const t = { id: 't1', players: [{ id: 'p0', name: 'Marcos' }] };
+    const out = applyPlayerRow(t, { player_id: 'p1', pos: 1, body: {} }, 'INSERT');
+    expect(out.players).toEqual([{ id: 'p0', name: 'Marcos' }, { id: 'p1' }]);
   });
 
   test('clamps an index beyond current length to append at the end', () => {

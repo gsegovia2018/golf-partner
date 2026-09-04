@@ -385,6 +385,12 @@ async function _loadCachedFullList() {
     const meta = indexById.get(id);
     if (full) return { ...full, _role: meta?.role ?? full._role ?? null };
     if (!meta) return null;
+    // Index-only row (never opened on this device): no rounds/scores to
+    // offer, but reconstruct a minimal `players` array from the summary's
+    // playerNames (Fix C / R5) so the Home list card still shows names
+    // ("Marcos · Guille") instead of going blank offline. Synthetic ids —
+    // this row is display-only, never fed back into a mutation.
+    const playerNames = meta.playerNames ?? [];
     return {
       id: meta.id,
       name: meta.name,
@@ -392,6 +398,7 @@ async function _loadCachedFullList() {
       createdAt: meta.createdAt,
       _role: meta.role,
       updatedAt: meta.updatedAt,
+      players: playerNames.map((name, i) => ({ id: `idx-${i}`, name })),
     };
   }));
   // Sort by createdAt (same key as the online list) so offline and online
@@ -2320,4 +2327,114 @@ export async function markConflictsRead() {
   _conflictUnread = 0;
   await AsyncStorage.setItem(CONFLICT_UNREAD_KEY, '0');
   _emitConflicts();
+}
+
+// ── Sync failure log (setup writes) ──────────────────────────────────────────
+// Plan §6 fix 4: syncWorker used to drop a permanently-failed or
+// poison-capped setup write (roster/rounds/teams/course edits —
+// drainTournament/drainLibrary) after only flipping the sync status dot. The
+// write itself vanished with no way for the user to see it or retry it. Every
+// such drop is now recorded here FIRST (see syncWorker.js), keyed by
+// tournamentId, so a sync sheet can list it and offer Retry/Discard. Library
+// mutations (player.upsertLibrary, generic rpc.call) carry no tournamentId —
+// those file under the LIBRARY_FAILURES_KEY bucket.
+const SYNC_FAILURES_KEY = '@golf_sync_failures';
+const LIBRARY_FAILURES_KEY = 'library';
+
+let _syncFailures = null; // lazy-loaded { [tournamentId]: [{ id, mutation, path, error, ts }] }
+let _syncFailuresHydration = null;
+const _syncFailureSubs = new Set();
+// Same read-modify-write hazard syncQueue.js documents: serialize every
+// mutator through one promise chain so a record/discard/retry racing another
+// can't clobber it.
+let _syncFailuresMutex = Promise.resolve();
+
+function _runExclusiveFailures(fn) {
+  const result = _syncFailuresMutex.then(fn, fn);
+  _syncFailuresMutex = result.then(() => undefined, () => undefined);
+  return result;
+}
+
+async function _ensureSyncFailuresLoaded() {
+  if (_syncFailures != null) return;
+  if (!_syncFailuresHydration) {
+    _syncFailuresHydration = (async () => {
+      const raw = await AsyncStorage.getItem(SYNC_FAILURES_KEY);
+      const parsed = raw ? _safeParse(raw, 'sync failures') : null;
+      _syncFailures = parsed && typeof parsed === 'object' ? parsed : {};
+    })();
+  }
+  return _syncFailuresHydration;
+}
+
+function _emitSyncFailures() {
+  const snapshot = JSON.parse(JSON.stringify(_syncFailures ?? {}));
+  _syncFailureSubs.forEach((fn) => { try { fn(snapshot); } catch (_) {} });
+}
+
+// fn receives the whole { [tournamentId]: [...] } map (a snapshot, safe to
+// mutate) on every change, mirroring subscribeConflicts.
+export function subscribeSyncFailures(fn) {
+  _syncFailureSubs.add(fn);
+  _ensureSyncFailuresLoaded().then(() => {
+    try { fn(JSON.parse(JSON.stringify(_syncFailures ?? {}))); } catch (_) {}
+  });
+  return () => _syncFailureSubs.delete(fn);
+}
+
+// Worker-only: record a setup write about to be dropped, before
+// syncQueue.drop discards it. `entry` is the queue entry (id/mutation/path);
+// `error` is whatever the drain caught.
+export async function recordSyncFailure(tournamentId, { entry, error }) {
+  await _ensureSyncFailuresLoaded();
+  return _runExclusiveFailures(async () => {
+    const key = tournamentId ?? LIBRARY_FAILURES_KEY;
+    const list = _syncFailures[key] ?? [];
+    const failure = {
+      id: entry.id,
+      mutation: entry.mutation,
+      path: entry.path ?? null,
+      error: { code: error?.code ?? null, message: error?.message ?? String(error) },
+      ts: Date.now(),
+    };
+    _syncFailures = { ..._syncFailures, [key]: [...list, failure] };
+    await AsyncStorage.setItem(SYNC_FAILURES_KEY, JSON.stringify(_syncFailures));
+    _emitSyncFailures();
+  });
+}
+
+export async function listSyncFailures(tournamentId) {
+  await _ensureSyncFailuresLoaded();
+  return _syncFailures[tournamentId ?? LIBRARY_FAILURES_KEY] ?? [];
+}
+
+export async function discardSyncFailure(tournamentId, failureId) {
+  await _ensureSyncFailuresLoaded();
+  return _runExclusiveFailures(async () => {
+    const key = tournamentId ?? LIBRARY_FAILURES_KEY;
+    const list = _syncFailures[key] ?? [];
+    const next = list.filter((f) => f.id !== failureId);
+    if (next.length === list.length) return;
+    _syncFailures = { ..._syncFailures, [key]: next };
+    await AsyncStorage.setItem(SYNC_FAILURES_KEY, JSON.stringify(_syncFailures));
+    _emitSyncFailures();
+  });
+}
+
+// Re-queues the failed write (a fresh queue entry always starts at
+// attempts: 0 — see syncQueue.enqueue) and drops it from the failure log, so
+// a Retry tap gives it the same clean shot at the poison cap as a brand-new
+// mutation. Lazily requires syncWorker's scheduleSync to break the same
+// circular import mutate.js's own enqueue callers break.
+export async function retrySyncFailure(tournamentId, failureId) {
+  await _ensureSyncFailuresLoaded();
+  const key = tournamentId ?? LIBRARY_FAILURES_KEY;
+  const failure = (_syncFailures[key] ?? []).find((f) => f.id === failureId);
+  if (!failure) return;
+  await syncQueue.enqueue({
+    tournamentId: tournamentId ?? null, mutation: failure.mutation, path: failure.path,
+  });
+  await discardSyncFailure(tournamentId, failureId);
+  const { scheduleSync } = require('./syncWorker');
+  if (isOnline()) scheduleSync();
 }

@@ -71,6 +71,39 @@ describe('loadTournament cached reads', () => {
     expect(supabase.from).not.toHaveBeenCalled();
   });
 
+  // Fix C (plan §6): an index-only row (never opened on this device, so
+  // there is no full blob under @golf_tournament_<id>) used to come back
+  // with no players at all, so the offline Home list card rendered blank
+  // instead of "Marcos · Guille". summarize()'s playerNames now survives
+  // into the reconstructed row.
+  test('loadCachedTournamentsList reconstructs player names for an index-only row', async () => {
+    jest.doMock('../../lib/supabase', () => ({
+      supabase: {
+        from: jest.fn(),
+        auth: {
+          getUser: jest.fn(() => Promise.resolve({ data: { user: null } })),
+        },
+      },
+    }));
+
+    const { tournamentsIndex } = require('../tournamentsIndex');
+    await tournamentsIndex.writeIndex([{
+      id: 'index-only-1',
+      name: 'Never Opened Cup',
+      kind: 'casual',
+      createdAt: '2026-06-02T10:00:00.000Z',
+      _role: 'member',
+      players: [{ id: 'p1', name: 'Marcos' }, { id: 'p2', name: 'Guille' }],
+    }]);
+
+    const store = require('../tournamentStore');
+    const list = await store.loadCachedTournamentsList();
+    const row = list.find((t) => t.id === 'index-only-1');
+
+    expect(row).toBeTruthy();
+    expect(row.players.map((p) => p.name)).toEqual(['Marcos', 'Guille']);
+  });
+
   test('does not restore a cached finished tournament as active', async () => {
     jest.doMock('../../lib/connectivity', () => ({
       isOnline: () => true,

@@ -7,6 +7,13 @@ const BLOB_PREFIX = '@golf_tournament_';
 // getAllKeys is used by getLocalBlobIds; AsyncStorage exposes it natively.
 export function createTournamentsIndex({ storage = AsyncStorage, key = INDEX_KEY } = {}) {
   function summarize(t) {
+    const players = t?.players ?? [];
+    // Names only (nameless stubs filtered) so the offline Home list card can
+    // render "Marcos · Guille · ..." without a full players blob — see
+    // tournamentStore.js's _loadCachedFullList index-only branch, which
+    // rebuilds a minimal `players` array from this for HomeScreen's
+    // `players.map(p => p.name...)` meta text (R5 / plan §6 fix 4-adjacent).
+    const playerNames = players.map((p) => p?.name).filter(Boolean);
     return {
       id: t?.id,
       name: t?.name ?? '',
@@ -14,6 +21,8 @@ export function createTournamentsIndex({ storage = AsyncStorage, key = INDEX_KEY
       createdAt: t?.createdAt ?? null,
       role: t?._role ?? null,
       updatedAt: t?.updatedAt ?? null,
+      playerNames,
+      playerCount: players.length,
     };
   }
 
