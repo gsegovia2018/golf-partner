@@ -223,7 +223,7 @@ describe('buildRoundHighlights', () => {
 // are derived from `scores` exactly as collectMyRounds derives them.
 function mkMyRound({
   key, courseName = 'Pine Valley', holes = mkHoles(), scores,
-  handicap = 0, tournamentDate = '2026-05-01',
+  handicap = 0, tournamentDate = '2026-05-01', slope = null, courseRating = null,
 }) {
   const isComplete = holes.length > 0 && holes.every((h) => scores[h.number] != null);
   return {
@@ -239,6 +239,10 @@ function mkMyRound({
       id: key, courseName, holes,
       scores: { p1: scores },
       playerHandicaps: { p1: handicap },
+      // Round-level slope/rating is the legacy fallback resolveRoundTee uses
+      // when a round has no per-player tee snapshot — enough to make a round
+      // eligible for a WHS differential.
+      ...(slope != null ? { slope, courseRating } : {}),
     },
     completed: true,
     isComplete,
@@ -324,6 +328,146 @@ describe('buildPersonalRecords', () => {
     expect(byId(found, 'roundMilestone').title).toBe('Your 10th round');
   });
 
+  test('breaking a round number for the first time is its own landmark', () => {
+    const holes = mkHoles();
+    // Four rounds of level bogey golf — 90 strokes each, never under 80.
+    const today = mkMyRound({ key: 'now', holes, scores: scoresOf(holes, 4) });
+    const found = buildPersonalRecords([...bogeyHistory(4), today], 'now');
+
+    const card = byId(found, 'brokeGross');
+    expect(card.title).toBe('Broke 80 for the first time');
+    expect(card.subtitle).toBe('72 strokes — you had never been under 80');
+  });
+
+  test('a card with a pickup on it has no gross score to break anything with', () => {
+    const holes = mkHoles();
+    // 6 on a par 4 off scratch is exactly the pickup value (par + 2), so this
+    // round was never holed out and its 74 strokes are not a real total.
+    const today = mkMyRound({ key: 'now', holes, scores: scoresOf(holes, 4, { 12: 6 }) });
+
+    expect(idsOf(buildPersonalRecords([...bogeyHistory(4), today], 'now')))
+      .not.toContain('brokeGross');
+  });
+
+  test('the best single nine stands on its own', () => {
+    const holes = mkHoles();
+    // Pars out, bogeys back: 18 points on the front against a career best
+    // nine of 9, but only 27 for the round.
+    const scores = {};
+    holes.forEach((h) => { scores[h.number] = h.number <= 9 ? 4 : 5; });
+    const today = mkMyRound({ key: 'now', holes, scores });
+
+    const card = byId(buildPersonalRecords([...bogeyHistory(4), today], 'now'), 'bestNineEver');
+    expect(card.subtitle).toBe('18 points on the front — your best was 9');
+  });
+
+  test('the handicap-neutral record catches a round the points miss', () => {
+    const holes = mkHoles();
+    // Slope 113 makes the differential just (strokes - rating), so these are
+    // easy to read: the strong old round was on a course rated 60 (diff 8),
+    // today is 80 strokes on one rated 78 (diff 2) — a worse card in points,
+    // a better one once the course is taken into account.
+    const easy = { slope: 113, courseRating: 60 };
+    const history = [
+      mkMyRound({ key: 'h0', holes, scores: scoresOf(holes, 4, { 1: 3, 2: 3, 3: 3, 4: 3 }), ...easy }),
+      ...Array.from({ length: 3 }, (_, i) => mkMyRound({
+        key: `h${i + 1}`, holes, scores: scoresOf(holes, 5), ...easy,
+      })),
+    ];
+    const today = mkMyRound({
+      key: 'now', courseName: 'Carnoustie', holes,
+      scores: scoresOf(holes, 5, { 1: 4, 2: 4, 3: 4, 4: 4, 5: 4, 6: 4, 7: 4, 8: 4, 9: 4, 10: 4 }),
+      slope: 113, courseRating: 78,
+    });
+    const found = buildPersonalRecords([...history, today], 'now');
+
+    expect(idsOf(found)).not.toContain('bestRoundEver');
+    expect(byId(found, 'bestDifferentialEver').subtitle)
+      .toBe('2 differential — your best was 8');
+  });
+
+  test('the handicap-neutral record only speaks when the points record does not', () => {
+    const holes = mkHoles();
+    const rated = { slope: 113, courseRating: 72 };
+    // History: four rounds of bogey golf, differential 18. Today is level par
+    // for a differential of 0, and a career best on points too — so the
+    // points card fires and the differential card stays out of its way.
+    const history = Array.from({ length: 4 }, (_, i) => mkMyRound({
+      key: `h${i}`, holes, scores: scoresOf(holes, 5), ...rated,
+    }));
+    const today = mkMyRound({ key: 'now', holes, scores: scoresOf(holes, 4), ...rated });
+    const found = idsOf(buildPersonalRecords([...history, today], 'now'));
+
+    expect(found).toContain('bestRoundEver');
+    expect(found).not.toContain('bestDifferentialEver');
+  });
+
+  test('a first eagle takes over the round-local eagle card', () => {
+    const holes = mkHoles();
+    const today = mkMyRound({ key: 'now', holes, scores: scoresOf(holes, 5, { 8: 2 }) });
+
+    const card = byId(buildPersonalRecords([...bogeyHistory(4), today], 'now'), 'eagle');
+    expect(card.title).toBe('Your first eagle');
+    // Same id as the Tier A card, higher rarity — the selector swaps one for
+    // the other rather than showing two cards about the same eagle.
+    expect(card.rarity).toBeGreaterThan(95);
+  });
+
+  test('the career birdie tally is credited even when it jumps a rung', () => {
+    const holes = mkHoles();
+    // History carries 8 birdies; three more today steps straight past 10.
+    const history = bogeyHistory(4).map((r, i) => (i === 0
+      ? mkMyRound({ key: 'h0', holes, scores: scoresOf(holes, 5, { 1: 3, 2: 3, 3: 3, 4: 3, 5: 3, 6: 3, 7: 3, 8: 3 }) })
+      : r));
+    const today = mkMyRound({ key: 'now', holes, scores: scoresOf(holes, 5, { 11: 3, 12: 3, 13: 3 }) });
+
+    const card = byId(buildPersonalRecords([...history, today], 'now'), 'birdieMilestone');
+    expect(card.title).toBe('Career birdie number 10');
+    expect(card.subtitle).toBe('3 today, 11 in the book');
+  });
+
+  test('a course never played before is a card of its own', () => {
+    const holes = mkHoles();
+    const today = mkMyRound({ key: 'now', courseName: 'Augusta', holes, scores: scoresOf(holes, 5) });
+
+    const card = byId(buildPersonalRecords([...bogeyHistory(4), today], 'now'), 'newCourse');
+    expect(card.title).toBe('First time at Augusta');
+  });
+
+  test('a hole that has blanked you here before, finally answered', () => {
+    const holes = mkHoles();
+    // 7 on a par 4 off scratch is worth nothing; two rounds of that on hole 7
+    // make it a nemesis at this course. Today it gives up a par.
+    const history = Array.from({ length: 4 }, (_, i) => mkMyRound({
+      key: `h${i}`, holes, scores: scoresOf(holes, 5, i < 2 ? { 7: 7 } : {}),
+    }));
+    const today = mkMyRound({ key: 'now', holes, scores: scoresOf(holes, 5) });
+
+    const card = byId(buildPersonalRecords([...history, today], 'now'), 'nemesisSlain');
+    expect(card.title).toBe('Hole 7 finally paid out');
+    expect(card.holes).toEqual([7]);
+  });
+
+  test('a good day at a course speaks even when it is not a record there', () => {
+    const holes = mkHoles();
+    // One strong round in the history (40 points, 68 strokes) keeps both
+    // course records out of reach; the average is still well beaten.
+    const strong = scoresOf(holes, 4, { 1: 3, 2: 3, 3: 3, 4: 3 });
+    const history = [
+      mkMyRound({ key: 'h0', holes, scores: strong }),
+      ...bogeyHistory(3).map((r, i) => ({ ...r, key: `h${i + 1}` })),
+    ];
+    // 28 points off 80 strokes: above the 23.5 average, below both records.
+    const today = mkMyRound({
+      key: 'now', holes, scores: scoresOf(holes, 5, { 1: 4, 2: 4, 3: 4, 4: 4, 5: 4, 6: 4, 7: 4, 8: 4, 9: 4, 10: 4 }),
+    });
+    const found = buildPersonalRecords([...history, today], 'now');
+
+    expect(idsOf(found)).not.toContain('courseRecord');
+    expect(idsOf(found)).not.toContain('bestAtCourse');
+    expect(byId(found, 'aboveCourseAverage').subtitle).toContain('28 points');
+  });
+
   test('an unknown round key yields nothing', () => {
     expect(buildPersonalRecords(bogeyHistory(4), 'missing')).toEqual([]);
     expect(buildPersonalRecords(null, 'now')).toEqual([]);
@@ -331,6 +475,174 @@ describe('buildPersonalRecords', () => {
 });
 
 // ── Selection ─────────────────────────────────────────────────────
+
+// ── Tier A: the fun half ──────────────────────────────────────────
+
+// A mixed layout — par 3s on 3/6/12/16, par 5s on 4/9/13/18 — for the
+// detectors that care what kind of hole they are looking at.
+function mixedHoles() {
+  const pars = { 3: 3, 6: 3, 12: 3, 16: 3, 4: 5, 9: 5, 13: 5, 18: 5 };
+  return mkHoles().map((h) => (pars[h.number] ? { ...h, par: pars[h.number] } : h));
+}
+
+describe('buildRoundHighlights — gross streaks', () => {
+  test('a shot on every hole does not manufacture a run of pars', () => {
+    const holes = mkHoles();
+    // An 18-handicapper on SI 1-18 receives a shot everywhere, so bogeys are
+    // net par right across the card. Gross, they are eighteen bogeys.
+    const t = mkTournament({
+      players: [{ id: 'p1', name: 'Ana', handicap: 18 }],
+      holes,
+      scores: { p1: scoresOf(holes, 5) },
+    });
+
+    expect(idsOf(buildRoundHighlights(t, 0))).not.toContain('parStreak');
+  });
+
+  test('back-to-back birdies are their own card', () => {
+    const holes = mkHoles();
+    const scores = scoresOf(holes, 5, { 5: 3, 6: 3, 7: 3 });
+    const t = mkTournament({ players: solo, holes, scores: { p1: scores } });
+
+    const streak = byId(buildRoundHighlights(t, 0), 'birdieStreak');
+    expect(streak.title).toBe('3 birdies in a row');
+    expect(streak.subtitle).toBe('Straight through holes 5-7');
+  });
+
+  test('a long run of nothing but bogeys is the bogey train', () => {
+    const holes = mkHoles();
+    // Bogeys on 4-8; pars elsewhere, so the run is bounded and exact.
+    const scores = scoresOf(holes, 4, { 4: 5, 5: 5, 6: 5, 7: 5, 8: 5 });
+    const t = mkTournament({ players: solo, holes, scores: { p1: scores } });
+
+    const train = byId(buildRoundHighlights(t, 0), 'bogeyTrain');
+    expect(train.tone).toBe('fun');
+    expect(train.subtitle).toBe('5 bogeys in a row on holes 4-8, nothing else');
+  });
+});
+
+describe('buildRoundHighlights — the wider set', () => {
+  test('par 5s played well are a playground', () => {
+    const holes = mixedHoles();
+    // Birdie every par 5 (4 on a par 5), par everything else.
+    const scores = {};
+    holes.forEach((h) => { scores[h.number] = h.par === 5 ? h.par - 1 : h.par; });
+    const t = mkTournament({ players: solo, holes, scores: { p1: scores } });
+
+    const card = byId(buildRoundHighlights(t, 0), 'par5Playground');
+    expect(card.subtitle).toBe('12 points off 4 par 5s');
+  });
+
+  test('the three hardest holes have their own card', () => {
+    const holes = mkHoles();
+    // SI 1-3 are holes 1-3 in this layout — birdie all three.
+    const scores = scoresOf(holes, 5, { 1: 3, 2: 3, 3: 3 });
+    const t = mkTournament({ players: solo, holes, scores: { p1: scores } });
+
+    const card = byId(buildRoundHighlights(t, 0), 'clutchOnHardest');
+    expect(card.subtitle).toBe('9 points across the 3 toughest holes on the card');
+  });
+
+  test('six adjacent holes of birdies is a hot stretch', () => {
+    const holes = mkHoles();
+    const scores = scoresOf(holes, 5, { 4: 3, 5: 3, 6: 3, 7: 3, 8: 3, 9: 3 });
+    const t = mkTournament({ players: solo, holes, scores: { p1: scores } });
+
+    const card = byId(buildRoundHighlights(t, 0), 'hotStretch');
+    expect(card.title).toBe('6 holes on fire');
+    expect(card.subtitle).toBe('18 points from hole 4 to 9');
+  });
+
+  test('holes won outright are counted, but only for an outright leader', () => {
+    const holes = mkHoles();
+    const winner = scoresOf(holes, 4, { 1: 3, 2: 3, 3: 3, 4: 3, 5: 3 });
+    const t = mkTournament({
+      players: [{ id: 'p1', name: 'Ana' }, { id: 'p2', name: 'Bo' }],
+      holes,
+      scores: { p1: winner, p2: scoresOf(holes, 4) },
+    });
+
+    expect(byId(buildRoundHighlights(t, 0), 'skinsKing').title).toBe('Won 5 holes outright');
+
+    // Both players birdieing the same five holes leaves nobody outright.
+    const tied = mkTournament({
+      players: [{ id: 'p1', name: 'Ana' }, { id: 'p2', name: 'Bo' }],
+      holes,
+      scores: { p1: winner, p2: winner },
+    });
+    expect(idsOf(buildRoundHighlights(tied, 0))).not.toContain('skinsKing');
+  });
+
+  test('a hole nobody scored on belongs to the whole group', () => {
+    const holes = mkHoles();
+    const t = mkTournament({
+      players: [{ id: 'p1', name: 'Ana' }, { id: 'p2', name: 'Bo' }],
+      holes,
+      scores: { p1: scoresOf(holes, 4, { 7: 7 }), p2: scoresOf(holes, 4, { 7: 8 }) },
+    });
+
+    const card = byId(buildRoundHighlights(t, 0), 'everyoneBlanked');
+    expect(card.title).toBe('Hole 7 beat everyone');
+    expect(card.playerId).toBeNull();
+  });
+
+  test('a round of nothing but pars is a metronome', () => {
+    const holes = mkHoles();
+    const t = mkTournament({ players: solo, holes, scores: { p1: scoresOf(holes, 4) } });
+
+    const card = byId(buildRoundHighlights(t, 0), 'metronome');
+    expect(card.tone).toBe('fun');
+    expect(card.subtitle).toBe('2 points a hole, and barely a wobble all day');
+  });
+
+  test('pickups are counted and the holes named, never run together', () => {
+    const holes = mkHoles();
+    // Scratch on a par 4 picks up at 6 strokes (par + 2 + no extra shots).
+    const t = mkTournament({
+      players: solo, holes, scores: { p1: scoresOf(holes, 4, { 2: 6, 9: 6, 15: 6 }) },
+    });
+
+    const card = byId(buildRoundHighlights(t, 0), 'pickupKing');
+    expect(card.tone).toBe('roast');
+    expect(card.title).toBe('Picked up 3 times');
+    expect(card.subtitle).toBe('Pocket beat putter on holes 2, 9 and 15');
+  });
+
+  test('par 3s that cost a stroke a hole are roasted, unless it is a tie', () => {
+    const holes = mixedHoles();
+    const par3 = (n) => holes.find((h) => h.number === n).par === 3;
+    const clean = {}; const rough = {};
+    holes.forEach((h) => { clean[h.number] = h.par; rough[h.number] = par3(h.number) ? 6 : h.par; });
+    const t = mkTournament({
+      players: [{ id: 'p1', name: 'Ana' }, { id: 'p2', name: 'Bo' }],
+      holes,
+      scores: { p1: clean, p2: rough },
+    });
+
+    const card = byId(buildRoundHighlights(t, 0), 'par3Trouble');
+    expect(card.playerName).toBe('Bo');
+    expect(card.subtitle).toBe('6 strokes a hole across 4 of them');
+
+    // Both equally bad: naming one of them would be a coin toss, so neither.
+    const tied = mkTournament({
+      players: [{ id: 'p1', name: 'Ana' }, { id: 'p2', name: 'Bo' }],
+      holes,
+      scores: { p1: rough, p2: rough },
+    });
+    expect(idsOf(buildRoundHighlights(tied, 0))).not.toContain('par3Trouble');
+  });
+
+  test('a front nine spent early is the mirror of the back-nine charge', () => {
+    const holes = mkHoles();
+    const scores = {};
+    holes.forEach((h) => { scores[h.number] = h.number <= 9 ? 4 : 6; });
+    const t = mkTournament({ players: solo, holes, scores: { p1: scores } });
+
+    const card = byId(buildRoundHighlights(t, 0), 'frontNineFade');
+    expect(card.tone).toBe('roast');
+    expect(card.subtitle).toBe('18 points on the front, 0 on the back');
+  });
+});
 
 describe('selectAchievements', () => {
   const mk = (id, tone, rarity) => ({ id, tone, rarity, title: id, subtitle: '' });
@@ -370,6 +682,46 @@ describe('selectAchievements', () => {
     expect(idsOf(picked)).toEqual(['blowUp']);
   });
 
+  test('one player cannot take every seat', () => {
+    const hot = ['a', 'b', 'c', 'd'].map((id, i) => ({
+      id, tone: 'great', rarity: 90 - i, title: id, subtitle: '', playerId: 'p1',
+    }));
+    const others = [
+      { id: 'e', tone: 'good', rarity: 50, title: 'e', subtitle: '', playerId: 'p2' },
+      { id: 'f', tone: 'good', rarity: 49, title: 'f', subtitle: '', playerId: 'p3' },
+    ];
+
+    const picked = selectAchievements([...hot, ...others], { limit: 4 });
+    expect(picked.filter((c) => c.playerId === 'p1')).toHaveLength(2);
+    expect(idsOf(picked)).toEqual(['a', 'b', 'e', 'f']);
+  });
+
+  test('group facts are about the round, so the cap does not apply to them', () => {
+    const group = ['a', 'b', 'c'].map((id, i) => ({
+      id, tone: 'fun', rarity: 90 - i, title: id, subtitle: '', playerId: null,
+    }));
+
+    expect(idsOf(selectAchievements(group, { limit: 3 }))).toEqual(['a', 'b', 'c']);
+  });
+
+  test('a fun card keeps a seat even when the scoring cards outrank it', () => {
+    const serious = ['a', 'b', 'c'].map((id, i) => ({
+      id, tone: 'great', rarity: 90 - i, title: id, subtitle: '', playerId: `p${i}`,
+    }));
+    const fun = { id: 'z', tone: 'fun', rarity: 10, title: 'z', subtitle: '', playerId: 'p9' };
+
+    expect(idsOf(selectAchievements([...serious, fun], { limit: 3 }))).toEqual(['a', 'b', 'z']);
+  });
+
+  test('a single headline card is never the roast', () => {
+    const picked = selectAchievements([
+      { id: 'r', tone: 'roast', rarity: 99, title: 'r', subtitle: '', playerId: 'p1' },
+      { id: 'g', tone: 'good', rarity: 40, title: 'g', subtitle: '', playerId: 'p2' },
+    ], { limit: 1 });
+
+    expect(idsOf(picked)).toEqual(['g']);
+  });
+
   test('nothing to say is an empty strip, not a crash', () => {
     expect(selectAchievements([])).toEqual([]);
     expect(selectAchievements(null)).toEqual([]);
@@ -391,6 +743,23 @@ describe('buildRoundAchievements', () => {
 
     expect(picked[0].id).toBe('bestRoundEver');
     expect(idsOf(picked)).toContain('parStreak');
+  });
+
+  test('a record-breaking day still leaves room for the round itself', () => {
+    const holes = mkHoles();
+    // Level par against a career of bogey golf sets five records at once.
+    const t = mkTournament({ players: solo, holes, scores: { p1: scoresOf(holes, 4) } });
+    const now = mkMyRound({ key: 'now', holes, scores: scoresOf(holes, 4) });
+    const myRounds = [...bogeyHistory(4), now];
+
+    expect(buildPersonalRecords(myRounds, 'now').length).toBeGreaterThan(3);
+
+    const picked = buildRoundAchievements({
+      tournament: t, roundIndex: 0, myRounds, roundKey: 'now',
+    });
+    const records = picked.filter((c) => c.playerId == null && c.tone !== 'fun');
+    expect(records.length).toBeLessThanOrEqual(3);
+    expect(picked.some((c) => c.playerId === 'p1')).toBe(true);
   });
 
   test('without history it still shows the round-local highlights', () => {
