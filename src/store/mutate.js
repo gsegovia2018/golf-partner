@@ -2,7 +2,6 @@ import { syncQueue } from './syncQueue';
 import { saveLocal, readLocal, _setSyncStatus } from './tournamentStore';
 import { isOnline } from '../lib/connectivity';
 import { normalizeRoundNotes } from './roundNotes';
-import { clampScoreInput, resolvePlayerHandicap, holeCountOf } from './scoring';
 
 // Maps a mutation to a stable dotted path identifying what it touches.
 // Asserted on directly by tests/legacy call sites — it is NOT a queue
@@ -12,9 +11,6 @@ import { clampScoreInput, resolvePlayerHandicap, holeCountOf } from './scoring';
 // Returns null for library-only mutations (which do not touch the tournament blob).
 export function metaPathFor(m) {
   switch (m.type) {
-    case 'score.set':    return `rounds.${m.roundId}.scores.${m.playerId}.h${m.hole}`;
-    // Per-player, per-hole shot detail (putts / drive / penalties).
-    case 'shot.set':     return `rounds.${m.roundId}.shotDetails.${m.playerId}.h${m.hole}`;
     case 'note.set':
       return m.scope === 'hole'
         ? `rounds.${m.roundId}.notes.hole.${m.hole}`
@@ -62,8 +58,6 @@ export function metaPathFor(m) {
         paths.push(`rounds.${patch.roundId}.playerHandicaps.${m.playerId}`);
         paths.push(`rounds.${patch.roundId}.scores.${m.playerId}`);
         paths.push(`rounds.${patch.roundId}.shotDetails.${m.playerId}`);
-        paths.push(`rounds.${patch.roundId}.scoreEntries.${m.playerId}`);
-        paths.push(`rounds.${patch.roundId}.scoreResolutions.${m.playerId}`);
         if (patch.pairs) paths.push(`rounds.${patch.roundId}.pairs`);
         if (patch.clearScoringMode) paths.push(`rounds.${patch.roundId}.scoringMode`);
       }
@@ -93,12 +87,6 @@ export function metaPathFor(m) {
       }
       return paths;
     }
-    // Resolving a score conflict writes the chosen value AND stamps a
-    // resolution marker that other devices merge in as the winning value.
-    case 'conflict.resolve': return [
-      `rounds.${m.roundId}.scores.${m.playerId}.h${m.hole}`,
-      `rounds.${m.roundId}.scoreResolutions.${m.playerId}.h${m.hole}`,
-    ];
     case 'player.upsertLibrary': return null;
     // Advances the tournament's "current round" pointer (drives which round
     // the app opens by default). Monotonic — mirrors advance_game_round's
@@ -117,12 +105,12 @@ export function metaPathFor(m) {
     // Tournament creation: the row is already saved locally by the creation
     // flow itself, so this mutation only needs to reach the server queue.
     case 'tournament.create': return 'create';
-    // Whole-round content replace (Reset Round / Undo / Restore snapshot in
-    // HomeScreen). scores/notes live in their own normalized tables (never
-    // touched path-by-path by the per-cell mutations above), so this returns
-    // the coarse parent paths instead of one per cell.
+    // Round notes + the snapshot log for Reset Round / Undo / Restore
+    // (HomeScreen). SCORES ARE NOT HERE: they belong to the cards engine
+    // (src/engine/store) — HomeScreen calls resetRound/restoreRound alongside
+    // this mutation, and the blob's `round.scores` is a read-only projection
+    // of the server's settled cells.
     case 'round.resetContent': return [
-      `rounds.${m.roundId}.scores`,
       `rounds.${m.roundId}.notes`,
       `rounds.${m.roundId}.resetHistory`,
     ];
@@ -143,47 +131,6 @@ export function metaPathFor(m) {
 // Applies the mutation's side effect to a cloned tournament object in place.
 export function applyToTournament(t, m) {
   switch (m.type) {
-    case 'score.set': {
-      const round = t.rounds.find((r) => r.id === m.roundId);
-      if (!round) return;
-      round.scores = { ...(round.scores ?? {}) };
-      round.scores[m.playerId] = { ...(round.scores[m.playerId] ?? {}) };
-      if (m.value == null) delete round.scores[m.playerId][m.hole];
-      else round.scores[m.playerId][m.hole] = m.value;
-      // Per-author submission mirror (source of derived conflict state).
-      round.scoreEntries = { ...(round.scoreEntries ?? {}) };
-      round.scoreEntries[m.playerId] = { ...(round.scoreEntries[m.playerId] ?? {}) };
-      round.scoreEntries[m.playerId][m.hole] = {
-        ...(round.scoreEntries[m.playerId][m.hole] ?? {}),
-        [m.authorId]: { value: m.value ?? null, ts: m.ts },
-      };
-      break;
-    }
-    case 'conflict.resolve': {
-      const round = t.rounds.find((r) => r.id === m.roundId);
-      if (!round) return;
-      round.scores = { ...(round.scores ?? {}) };
-      round.scores[m.playerId] = { ...(round.scores[m.playerId] ?? {}) };
-      if (m.value == null) delete round.scores[m.playerId][m.hole];
-      else round.scores[m.playerId][m.hole] = m.value;
-      // Resolution stamp: records the explicit resolution (value + who +
-      // when). Synced like any other cell — conflicts are now DERIVED from
-      // scoreEntries vs. scores (see scoreEntries.js), so this stamp is what
-      // lets every device converge on the same chosen value.
-      round.scoreResolutions = { ...(round.scoreResolutions ?? {}) };
-      round.scoreResolutions[m.playerId] = { ...(round.scoreResolutions[m.playerId] ?? {}) };
-      round.scoreResolutions[m.playerId][m.hole] = { value: m.value ?? null, by: m.resolvedBy, ts: m.ts };
-      break;
-    }
-    case 'shot.set': {
-      const round = t.rounds.find((r) => r.id === m.roundId);
-      if (!round) return;
-      round.shotDetails = { ...(round.shotDetails ?? {}) };
-      round.shotDetails[m.playerId] = { ...(round.shotDetails[m.playerId] ?? {}) };
-      if (m.detail == null) delete round.shotDetails[m.playerId][m.hole];
-      else round.shotDetails[m.playerId][m.hole] = m.detail;
-      break;
-    }
     case 'note.set': {
       const round = t.rounds.find((r) => r.id === m.roundId);
       if (!round) return;
@@ -268,20 +215,6 @@ export function applyToTournament(t, m) {
           ...(round.playerHandicaps ?? {}),
           [m.player.id]: patch.playerHandicap,
         };
-        // Player ids are library-stable and REUSED on re-add (PlayersScreen
-        // passes id: p.id, not a fresh uuid), so a remove→re-add of the same
-        // person must clear the removedPlayerIds tombstone this round may
-        // still carry — otherwise preserveLocalConflictState would keep
-        // pruning the now-legitimate player's fresh scoreEntries, silently
-        // disabling their conflict detection. The roster gate in
-        // pruneRemovedPlayers is the primary guarantee (it also covers the
-        // realtime game_players INSERT re-add path, which never reaches this
-        // apply branch); this clear keeps the tombstone from lingering.
-        if (Array.isArray(round.removedPlayerIds)) {
-          const kept = round.removedPlayerIds.filter((id) => id !== m.player.id);
-          if (kept.length) round.removedPlayerIds = kept;
-          else delete round.removedPlayerIds;
-        }
         if (patch.pairs) round.pairs = patch.pairs;
         // The new roster size invalidated this round's override — it falls
         // back to the tournament's (possibly also new) default mode.
@@ -306,29 +239,6 @@ export function applyToTournament(t, m) {
         const shotDetails = { ...(round.shotDetails ?? {}) };
         delete shotDetails[m.playerId];
         round.shotDetails = shotDetails;
-        // Kills the phantom-conflict bug: without this, the removed
-        // player's per-author scoreEntries survive and preserveLocalConflict
-        // State/unionScoreEntries re-merge them on every reconcile/realtime
-        // patch, so listRoundConflicts/surfaceableConflicts derive a
-        // conflict for a player who no longer exists (subjectName renders
-        // '—' — see scoreEntries.js).
-        if (round.scoreEntries) {
-          const scoreEntries = { ...round.scoreEntries };
-          delete scoreEntries[m.playerId];
-          round.scoreEntries = scoreEntries;
-        }
-        if (round.scoreResolutions) {
-          const scoreResolutions = { ...round.scoreResolutions };
-          delete scoreResolutions[m.playerId];
-          round.scoreResolutions = scoreResolutions;
-        }
-        // Tombstone (see preserveLocalConflictState) — a monotonic record
-        // that this playerId was removed from this round, so a later merge
-        // against a stale `source` snapshot that still carries their
-        // scoreEntries/scoreResolutions never resurrects them.
-        const removedPlayerIds = new Set(round.removedPlayerIds ?? []);
-        removedPlayerIds.add(m.playerId);
-        round.removedPlayerIds = [...removedPlayerIds];
         if (patch.pairs) round.pairs = patch.pairs;
         // See tournament.addPlayer: the smaller roster invalidated this
         // round's override.
@@ -430,9 +340,16 @@ export function applyToTournament(t, m) {
     case 'round.resetContent': {
       const round = t.rounds?.find((r) => r.id === m.roundId);
       if (!round) return;
-      round.scores = m.scores ?? {};
+      // Notes and the snapshot log. `round.scores` is owned by the server
+      // projection of the cards engine — HomeScreen's reset/undo/restore
+      // drive it through engine/store's resetRound/restoreRound — but the
+      // blob is this phone's cached copy of that projection, so when the
+      // caller passes `scores` it is applied LOCALLY ONLY (mutationWrites
+      // never sends it) so Home shows the reset immediately, offline too,
+      // instead of the stale numbers until the server delete lands.
       round.notes = normalizeRoundNotes(m.notes);
       round.resetHistory = m.resetHistory ?? [];
+      if (m.scores !== undefined) round.scores = m.scores ?? {};
       break;
     }
     case 'round.upsert': {
@@ -471,182 +388,6 @@ export function applyPendingMutations(tournament, entries) {
   return t;
 }
 
-function entryTs(entry) {
-  const ts = entry?.ts;
-  return Number.isFinite(ts) ? ts : 0;
-}
-
-// Per-cell precedence for the two unions below: newest `ts` wins, target wins
-// a tie (so `>` on the source side, not `>=`).
-function pickNewer(targetEntry, sourceEntry) {
-  if (targetEntry === undefined) return sourceEntry;
-  if (sourceEntry === undefined) return targetEntry;
-  return entryTs(sourceEntry) > entryTs(targetEntry) ? sourceEntry : targetEntry;
-}
-
-// scoreEntries (per-author submissions) and scoreResolutions (explicit
-// resolution stamps) never travel in game_rounds.body — tournamentRepo.js
-// strips them from every round body before it reaches the server
-// (stripRoundHotKeys) — but they are NO LONGER local-only: since
-// supabase/migrations/20260815000000_fetch_score_entries.sql,
-// get_game_tournament reassembles both from game_score_entries /
-// game_score_resolutions, in exactly the shapes realtimeSync's row patchers
-// produce. So a fetch is now a RECOVERY path: a device that was offline while
-// a peer's entry broadcast finally learns about it on the next pull, instead
-// of the conflict staying one-sided forever.
-//
-// A fetched `target` may therefore carry entries this device has never seen,
-// while `source` (the previous local blob) may carry entries the server has
-// never seen (queued offline edits). Neither side can be dropped, so this is
-// a deep UNION per round, resolved by `ts`:
-//   scoreEntries[playerId][hole]: union of authorIds from both sides; when an
-//     authorId is on both, the HIGHER-ts entry wins (missing/invalid ts = 0;
-//     a tie keeps `target`). Blind target-precedence would let a stale server
-//     copy of MY OWN author entry — fetched mid-drain, before my newer edit
-//     lands — beat the newer local one.
-//   scoreResolutions[playerId][hole]: same ts-aware rule per cell (a
-//     resolution is one atomic stamp, not per-author).
-// Correct for every caller: on the realtime path `target` is
-// cached-plus-just-applied-row, so the union reduces to `target` with the new
-// row intact; on the fetch/overlay path (syncWorker's post-drain reconcile,
-// tournamentStore's _overlayAndSave) server entries and still-local ones both
-// survive, newest per author.
-//
-// KNOWN CONSERVATIVE BEHAVIOR: a union never removes. A server-side entry
-// DELETE therefore does not propagate through a fetch — only realtime DELETE
-// events (applyScoreEntryRow) and the removedPlayerIds tombstone below prune
-// anything. Accepted: entries are effectively append/overwrite-only in normal
-// play, and keeping a stale candidate visible is far cheaper than silently
-// dropping a live one. Mutates and returns `target`.
-function unionScoreEntries(targetEntries, sourceEntries) {
-  if (!sourceEntries && !targetEntries) return undefined;
-  const playerIds = new Set([
-    ...Object.keys(sourceEntries ?? {}),
-    ...Object.keys(targetEntries ?? {}),
-  ]);
-  const out = {};
-  for (const playerId of playerIds) {
-    const sHoles = sourceEntries?.[playerId] ?? {};
-    const tHoles = targetEntries?.[playerId] ?? {};
-    const holes = new Set([...Object.keys(sHoles), ...Object.keys(tHoles)]);
-    const byHole = {};
-    for (const hole of holes) {
-      const sAuthors = sHoles[hole] ?? {};
-      const tAuthors = tHoles[hole] ?? {};
-      const byAuthor = {};
-      for (const authorId of new Set([...Object.keys(sAuthors), ...Object.keys(tAuthors)])) {
-        byAuthor[authorId] = pickNewer(tAuthors[authorId], sAuthors[authorId]);
-      }
-      byHole[hole] = byAuthor;
-    }
-    out[playerId] = byHole;
-  }
-  return out;
-}
-
-function unionScoreResolutions(targetResolutions, sourceResolutions) {
-  if (!sourceResolutions && !targetResolutions) return undefined;
-  const playerIds = new Set([
-    ...Object.keys(sourceResolutions ?? {}),
-    ...Object.keys(targetResolutions ?? {}),
-  ]);
-  const out = {};
-  for (const playerId of playerIds) {
-    const sHoles = sourceResolutions?.[playerId] ?? {};
-    const tHoles = targetResolutions?.[playerId] ?? {};
-    const byHole = {};
-    for (const hole of new Set([...Object.keys(sHoles), ...Object.keys(tHoles)])) {
-      byHole[hole] = pickNewer(tHoles[hole], sHoles[hole]);
-    }
-    out[playerId] = byHole;
-  }
-  return out;
-}
-
-// round.removedPlayerIds is a monotonic, LOCAL-ONLY tombstone — stripped from
-// round bodies like scoreEntries/scoreResolutions (see stripRoundHotKeys in
-// tournamentRepo.js, which must also omit it) but, unlike them, never
-// reassembled by any fetch — recording every playerId a
-// tournament.removePlayer apply has ever cleared from THIS round. It only
-// ever grows, so a plain array union (never a target-wins overwrite) is
-// correct and sufficient here — unlike scoreEntries' ts-aware per-cell rule.
-function unionRemovedPlayerIds(targetIds, sourceIds) {
-  if (!sourceIds && !targetIds) return undefined;
-  return [...new Set([...(sourceIds ?? []), ...(targetIds ?? [])])];
-}
-
-// Drops a tombstoned playerId from a scoreEntries/scoreResolutions map ONLY
-// when that player is ALSO absent from the current roster (`knownPlayerIds`).
-// Two guards, both required:
-//   1. Tombstone (removedPlayerIds): scoped to explicitly-removed players,
-//      not "any playerId missing from the roster" — a roster-only check would
-//      prune a legitimate peer's entry for a brand-new player whose
-//      game_players row hasn't reached this device yet (a narrow but real
-//      cross-table realtime-ordering race), silently dropping a live score.
-//   2. Roster gate (knownPlayerIds): player ids are library-stable and REUSED
-//      on re-add, so a remove→re-add of the same person must NOT keep pruning
-//      their fresh entries. Once they're back on the roster the tombstone is
-//      inert. (mutate.js's addPlayer branch also clears the tombstone, but the
-//      realtime game_players INSERT re-add path never reaches that branch, so
-//      this gate is the load-bearing guarantee for Critical-2.)
-// `knownPlayerIds` null/absent (bare `{ rounds }` fixtures) disables the gate
-// — those callers never set a tombstone, so pruning is a no-op regardless.
-function pruneRemovedPlayers(map, removedPlayerIds, knownPlayerIds) {
-  if (!map || !removedPlayerIds?.length) return map;
-  const removed = new Set(removedPlayerIds);
-  const out = {};
-  for (const [playerId, value] of Object.entries(map)) {
-    const stillRostered = knownPlayerIds?.has(playerId);
-    if (!removed.has(playerId) || stillRostered) out[playerId] = value;
-  }
-  return out;
-}
-
-// A cached-local score entry the reconciled target knows nothing about —
-// absent from the fresh server state AND not re-created by a still-queued
-// mutation (syncWorker applies those onto the target before merging) — can
-// never reach the server again: its write was dropped by the drain
-// (permanent error / poison cap) or died with the process before it was
-// ever enqueued. Left alone it survives every union-merge as a phantom
-// author that later "conflicts" with real entries (the 2026-08-16 solo
-// "Someone" conflicts). Once such an entry is older than the caller's
-// cutoff, drop it. The grace keeps mutate()'s save-before-enqueue window
-// and the reconcile settle-loop races safely out of reach — a live write
-// is always either younger than the cutoff or represented in the queue.
-function dropOrphanEntries(merged, targetEntries, cutoff) {
-  if (!merged) return merged;
-  for (const [playerId, byHole] of Object.entries(merged)) {
-    for (const [hole, byAuthor] of Object.entries(byHole ?? {})) {
-      for (const [authorId, entry] of Object.entries(byAuthor ?? {})) {
-        const known = targetEntries?.[playerId]?.[hole]?.[authorId] !== undefined;
-        if (!known && (entry?.ts ?? 0) < cutoff) delete byAuthor[authorId];
-      }
-      if (Object.keys(byAuthor ?? {}).length === 0) delete byHole[hole];
-    }
-    if (Object.keys(byHole ?? {}).length === 0) delete merged[playerId];
-  }
-  return Object.keys(merged).length === 0 ? undefined : merged;
-}
-
-// Same rule for resolutions (one per player+hole, no author level).
-function dropOrphanResolutions(merged, targetResolutions, cutoff) {
-  if (!merged) return merged;
-  for (const [playerId, byHole] of Object.entries(merged)) {
-    for (const [hole, res] of Object.entries(byHole ?? {})) {
-      const known = targetResolutions?.[playerId]?.[hole] !== undefined;
-      if (!known && (res?.ts ?? 0) < cutoff) delete byHole[hole];
-    }
-    if (Object.keys(byHole ?? {}).length === 0) delete merged[playerId];
-  }
-  return Object.keys(merged).length === 0 ? undefined : merged;
-}
-
-// `opts.pruneOrphansBefore` (epoch ms): only the post-drain reconcile passes
-// it — the one caller whose target is fresh server state WITH the pending
-// queue already applied, so "unknown to target" provably means "will never
-// sync". The realtime/fetch merge paths must NOT prune: their targets don't
-// carry still-queued mutations, and a queued-but-undrained entry would look
-// orphaned there.
 // A fetch may ADD or UPDATE a roster player. It may never DELETE one.
 //
 // `target` (fresh server state) replaces local's `players` wholesale on every
@@ -688,66 +429,9 @@ export function unionLocalRoster(target, source) {
   return target;
 }
 
-export function preserveLocalConflictState(target, source, opts = {}) {
-  if (!target?.rounds?.length || !source?.rounds?.length) return target;
-  const knownPlayerIds = Array.isArray(target.players)
-    ? new Set(target.players.map((p) => p?.id))
-    : null;
-  const byId = new Map(source.rounds.map((r) => [r.id, {
-    scoreEntries: r?.scoreEntries,
-    scoreResolutions: r?.scoreResolutions,
-    removedPlayerIds: r?.removedPlayerIds,
-  }]));
-  target.rounds = target.rounds.map((r) => {
-    const s = byId.get(r.id);
-    if (!s) return r;
-    const removedPlayerIds = unionRemovedPlayerIds(r?.removedPlayerIds, s.removedPlayerIds);
-    let mergedEntries = pruneRemovedPlayers(
-      unionScoreEntries(r?.scoreEntries, s.scoreEntries), removedPlayerIds, knownPlayerIds,
-    );
-    let mergedResolutions = pruneRemovedPlayers(
-      unionScoreResolutions(r?.scoreResolutions, s.scoreResolutions), removedPlayerIds, knownPlayerIds,
-    );
-    if (opts.pruneOrphansBefore) {
-      mergedEntries = dropOrphanEntries(mergedEntries, r?.scoreEntries, opts.pruneOrphansBefore);
-      mergedResolutions = dropOrphanResolutions(mergedResolutions, r?.scoreResolutions, opts.pruneOrphansBefore);
-    }
-    return {
-      ...r,
-      ...(mergedEntries ? { scoreEntries: mergedEntries } : {}),
-      ...(mergedResolutions ? { scoreResolutions: mergedResolutions } : {}),
-      ...(removedPlayerIds ? { removedPlayerIds } : {}),
-    };
-  });
-  return target;
-}
-
 export async function mutate(tournamentBefore, mutation, opts = {}) {
   const ts = mutation.ts ?? Date.now();
   const m = { ...mutation, ts };
-
-  // Clamp a raw entered stroke count to [1, pickup] HERE — the single choke
-  // point every score.set mutation passes through (keypad text field, +/-
-  // stepper, and any future entry path), so an out-of-range value (a
-  // fat-fingered "44" for "4", or a stray "-1"/"0") never reaches local
-  // state OR the server. Clamping `m.value` itself (not just what
-  // applyToTournament later writes into the round) matters: `m` is the same
-  // object handed to syncQueue.enqueue below and replayed by
-  // mutationWrites.js's score.set case (`strokes: m.value`) — clamping only
-  // the local write would leave the corrupted number queued for the server,
-  // which would then hand it right back on the next fetch/realtime sync.
-  // `m.value == null` (a cleared cell) and a hole we can't find (defensive
-  // fallback — should not happen in practice) both pass through untouched.
-  if (m.type === 'score.set' && m.value != null) {
-    const round = tournamentBefore?.rounds?.find((r) => r.id === m.roundId);
-    const hole = round?.holes?.find((h) => h.number === m.hole);
-    if (hole) {
-      const playerHandicap = resolvePlayerHandicap(round, tournamentBefore?.players, m.playerId);
-      m.value = clampScoreInput(
-        m.value, hole.par, playerHandicap, hole.strokeIndex, holeCountOf(round),
-      );
-    }
-  }
 
   // Library-only mutations do not touch any tournament blob — just enqueue.
   if (m.type === 'player.upsertLibrary') {
@@ -794,9 +478,8 @@ export async function mutate(tournamentBefore, mutation, opts = {}) {
   // 3. Enqueue for sync
   await syncQueue.enqueue({ tournamentId: t.id, mutation: m, path });
 
-  // 4. Kick worker (lazy require to break circular import). Score entry
-  // passes deferSync so taps batch locally; the scorecard flushes the queue
-  // on hole change / finish / background instead.
+  // 4. Kick worker (lazy require to break circular import). `deferSync`
+  // batches a burst of local edits and lets the caller flush the queue itself.
   if (opts.deferSync) {
     _setSyncStatus('pending');
   } else {

@@ -1,10 +1,8 @@
-// mutationWrites.js executes one queued mutation against the server via the
-// Task 6 repository (tournamentRepo). Only tournamentRepo is mocked here —
-// every branch asserts the exact call args it produces. score.set and
-// conflict.resolve route through repo.submitScore/repo.resolveScore (Task 7)
-// and never raise a conflict of their own — conflict state is derived from
-// synced per-author entries (store/scoreEntries.js) instead; see
-// mutationWrites.scoreEntries.test.js for the author/resolvedBy plumbing.
+// mutationWrites.js executes one queued SETUP mutation against the server via
+// the Task 6 repository (tournamentRepo). Only tournamentRepo is mocked here —
+// every branch asserts the exact call args it produces. Scores, shot detail
+// and agreements are NOT in this queue: they are the cards engine's
+// (src/engine/store/replicator.js).
 jest.mock('../tournamentRepo');
 
 // eslint-disable-next-line import/first
@@ -45,72 +43,6 @@ function baseTournament(overrides = {}) {
 
 beforeEach(() => {
   jest.clearAllMocks();
-});
-
-describe('score.set', () => {
-  const mutation = {
-    type: 'score.set', roundId: 'r1', playerId: 'p1', hole: 5, value: 4, authorId: 'p1',
-  };
-
-  test('writes via repo.submitScore with exact args, including authorId, and never raises a conflict', async () => {
-    repo.submitScore.mockResolvedValue({ status: 'agreed' });
-    const result = await executeMutation(entry(mutation), baseTournament());
-    expect(repo.submitScore).toHaveBeenCalledWith({
-      tournamentId: TID, roundId: 'r1', playerId: 'p1', hole: 5, authorId: 'p1', strokes: 4,
-    });
-    expect(result).toEqual({ conflict: null });
-  });
-
-  test('score clear (value null) passes strokes null through as a tombstone', async () => {
-    repo.submitScore.mockResolvedValue({ status: 'agreed' });
-    const clear = {
-      type: 'score.set', roundId: 'r1', playerId: 'p1', hole: 5, value: null, authorId: 'p1',
-    };
-    const result = await executeMutation(entry(clear), baseTournament());
-    expect(repo.submitScore).toHaveBeenCalledWith({
-      tournamentId: TID, roundId: 'r1', playerId: 'p1', hole: 5, authorId: 'p1', strokes: null,
-    });
-    expect(result).toEqual({ conflict: null });
-  });
-});
-
-describe('conflict.resolve', () => {
-  test('writes via repo.resolveScore with resolvedBy and never raises a conflict', async () => {
-    repo.resolveScore.mockResolvedValue();
-    const mutation = {
-      type: 'conflict.resolve', roundId: 'r1', playerId: 'p1', hole: 5, value: 4, resolvedBy: 'p1',
-    };
-    const result = await executeMutation(entry(mutation, { ts: 1 }), baseTournament());
-    expect(repo.resolveScore).toHaveBeenCalledWith({
-      tournamentId: TID, roundId: 'r1', playerId: 'p1', hole: 5, value: 4, resolvedBy: 'p1',
-    });
-    expect(result).toEqual({ conflict: null });
-  });
-
-  test('resolving to a cleared cell (value null) passes value null through as a tombstone', async () => {
-    repo.resolveScore.mockResolvedValue();
-    const mutation = {
-      type: 'conflict.resolve', roundId: 'r1', playerId: 'p1', hole: 5, value: null, resolvedBy: 'p1',
-    };
-    const result = await executeMutation(entry(mutation, { ts: 1 }), baseTournament());
-    expect(repo.resolveScore).toHaveBeenCalledWith({
-      tournamentId: TID, roundId: 'r1', playerId: 'p1', hole: 5, value: null, resolvedBy: 'p1',
-    });
-    expect(result).toEqual({ conflict: null });
-  });
-});
-
-describe('shot.set', () => {
-  test('writes via repo.setShotDetail', async () => {
-    const mutation = {
-      type: 'shot.set', roundId: 'r1', playerId: 'p1', hole: 3, detail: { putts: 2 },
-    };
-    const result = await executeMutation(entry(mutation), baseTournament());
-    expect(repo.setShotDetail).toHaveBeenCalledWith({
-      tournamentId: TID, roundId: 'r1', playerId: 'p1', hole: 3, detail: { putts: 2 },
-    });
-    expect(result).toEqual({ conflict: null });
-  });
 });
 
 describe('note.set', () => {
@@ -488,7 +420,7 @@ describe('tournament.create', () => {
 });
 
 describe('round.resetContent', () => {
-  test('writes the full scores/notes grid cell by cell, plus the resetHistory patch', async () => {
+  test('writes the notes grid key by key, plus the resetHistory patch — and no scores', async () => {
     const local = baseTournament({
       rounds: [{
         id: 'r1',
@@ -498,25 +430,24 @@ describe('round.resetContent', () => {
         resetHistory: [{ at: '2026-01-01T00:00:00Z' }],
       }],
     });
-    const mutation = { type: 'round.resetContent', roundId: 'r1', scores: {}, notes: {}, resetHistory: [] };
+    const mutation = { type: 'round.resetContent', roundId: 'r1', notes: {}, resetHistory: [] };
 
     await executeMutation(entry(mutation), local);
 
-    // Every (player, hole) cell in the round is written — cleared cells go
-    // through as strokes: null (tombstone), matching setScore's contract.
-    expect(repo.setScore).toHaveBeenCalledWith({ tournamentId: TID, roundId: 'r1', playerId: 'p1', hole: 1, strokes: 4 });
-    expect(repo.setScore).toHaveBeenCalledWith({ tournamentId: TID, roundId: 'r1', playerId: 'p2', hole: 1, strokes: null });
-    expect(repo.setScore).toHaveBeenCalledWith({ tournamentId: TID, roundId: 'r1', playerId: 'p1', hole: 2, strokes: null });
     expect(repo.setNote).toHaveBeenCalledWith({ tournamentId: TID, roundId: 'r1', holeKey: 'round', note: 'Windy' });
     expect(repo.setNote).toHaveBeenCalledWith({ tournamentId: TID, roundId: 'r1', holeKey: '1', note: null });
     expect(repo.setNote).toHaveBeenCalledWith({ tournamentId: TID, roundId: 'r1', holeKey: '2', note: 'GIR miss' });
     expect(repo.patchRound).toHaveBeenCalledWith(TID, 'r1', { resetHistory: [{ at: '2026-01-01T00:00:00Z' }] });
+    // The scores half is the cards engine's — the repo no longer exposes a
+    // per-cell score write at all, and only the notes go out here.
+    expect(repo.setNote).toHaveBeenCalledTimes(3);
+    expect(Object.keys(repo)).not.toContain('setScore');
   });
 
   test('is a no-op when the round no longer exists locally', async () => {
-    const mutation = { type: 'round.resetContent', roundId: 'gone', scores: {}, notes: {}, resetHistory: [] };
+    const mutation = { type: 'round.resetContent', roundId: 'gone', notes: {}, resetHistory: [] };
     const result = await executeMutation(entry(mutation), baseTournament());
-    expect(repo.setScore).not.toHaveBeenCalled();
+    expect(repo.setNote).not.toHaveBeenCalled();
     expect(result).toEqual({ conflict: null });
   });
 });

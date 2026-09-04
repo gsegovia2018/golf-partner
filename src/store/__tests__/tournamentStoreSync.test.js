@@ -74,27 +74,33 @@ function installMocks({ online = true } = {}) {
   });
 }
 
-// One tournament, one round, one hole. `scores` lets each test seed the score
-// cells the row-based read path should return.
-function blob({ id = 't1', name = 'Cup', createdAt = '2026-07-11T09:00:00Z', scores, currentRound = 0 }) {
+// One tournament, one round, one hole. `playerHandicaps` stands in for any
+// per-round setup cell the overlay has to carry forward — scores themselves
+// no longer travel through this queue (they are the cards engine's).
+function blob({
+  id = 't1', name = 'Cup', createdAt = '2026-07-11T09:00:00Z',
+  playerHandicaps, currentRound = 0,
+}) {
   return {
     id,
     name,
     kind: 'casual',
     createdAt,
     players: [{ id: 'p1', name: 'Ann' }, { id: 'p2', name: 'Bea' }],
-    rounds: [{ id: 'r1', holes: [{ number: 1, par: 4, strokeIndex: 1 }], scores }],
+    rounds: [{
+      id: 'r1', holes: [{ number: 1, par: 4, strokeIndex: 1 }], playerHandicaps,
+    }],
     currentRound,
   };
 }
 
 describe('loadAllTournaments overlays undrained pending mutations (Fix 3, superseded)', () => {
-  test('a queued score.set for one tournament is reflected in the returned entry', async () => {
+  test('a queued setup mutation for one tournament is reflected in the returned entry', async () => {
     installMocks({ online: true });
     mockState.userId = 'u1';
-    // Remote (server truth) has not seen p2's score yet.
+    // Remote (server truth) has not seen p2's handicap edit yet.
     mockState.myTournaments = [{
-      tournament: blob({ scores: { p1: { 1: 4 } }, currentRound: 0 }),
+      tournament: blob({ playerHandicaps: { p1: 4 }, currentRound: 0 }),
       role: 'owner',
     }];
 
@@ -102,24 +108,24 @@ describe('loadAllTournaments overlays undrained pending mutations (Fix 3, supers
     await syncQueue.enqueue({
       tournamentId: 't1',
       mutation: {
-        type: 'score.set', roundId: 'r1', playerId: 'p2', hole: 1, value: 5, ts: Date.now(),
+        type: 'handicap.set', roundId: 'r1', playerId: 'p2', handicap: 5, ts: Date.now(),
       },
-      path: 'rounds.r1.scores.p2.h1',
+      path: 'rounds.r1.playerHandicaps.p2',
     });
 
     const store = require('../tournamentStore');
     const list = await store.loadAllTournaments();
     const entry = list.find((t) => t.id === 't1');
     expect(entry).toBeTruthy();
-    expect(entry.rounds[0].scores.p2[1]).toBe(5);
+    expect(entry.rounds[0].playerHandicaps.p2).toBe(5);
   });
 
   test('returns the list sorted newest-first by createdAt', async () => {
     installMocks({ online: true });
     mockState.userId = null;
     mockState.myTournaments = [
-      { tournament: blob({ id: 'older', createdAt: '2026-07-01T09:00:00Z', scores: {} }), role: 'owner' },
-      { tournament: blob({ id: 'newer', createdAt: '2026-07-10T09:00:00Z', scores: {} }), role: 'owner' },
+      { tournament: blob({ id: 'older', createdAt: '2026-07-01T09:00:00Z', playerHandicaps: {} }), role: 'owner' },
+      { tournament: blob({ id: 'newer', createdAt: '2026-07-10T09:00:00Z', playerHandicaps: {} }), role: 'owner' },
     ];
 
     const store = require('../tournamentStore');
@@ -129,86 +135,86 @@ describe('loadAllTournaments overlays undrained pending mutations (Fix 3, supers
 });
 
 describe('background refresh overlays undrained pending mutations onto fresh remote state', () => {
-  test('refreshTournamentFromRemote: a queued score.set survives the refresh', async () => {
+  test('refreshTournamentFromRemote: a queued setup mutation survives the refresh', async () => {
     installMocks({ online: true });
     mockState.userId = 'u1';
-    // Server truth: p2 has not scored yet.
-    mockState.remote = blob({ scores: { p1: { 1: 4 } }, currentRound: 0 });
+    // Server truth: p2 has no handicap override yet.
+    mockState.remote = blob({ playerHandicaps: { p1: 4 }, currentRound: 0 });
 
     const store = require('../tournamentStore');
-    await store.saveLocal(blob({ scores: { p1: { 1: 4 } }, currentRound: 0 }));
+    await store.saveLocal(blob({ playerHandicaps: { p1: 4 }, currentRound: 0 }));
 
     const { syncQueue } = require('../syncQueue');
     await syncQueue.enqueue({
       tournamentId: 't1',
       mutation: {
-        type: 'score.set', roundId: 'r1', playerId: 'p2', hole: 1, value: 5, ts: Date.now(),
+        type: 'handicap.set', roundId: 'r1', playerId: 'p2', handicap: 5, ts: Date.now(),
       },
-      path: 'rounds.r1.scores.p2.h1',
+      path: 'rounds.r1.playerHandicaps.p2',
     });
 
     const result = await store.refreshTournamentFromRemote('t1');
-    expect(result.rounds[0].scores.p2[1]).toBe(5);
+    expect(result.rounds[0].playerHandicaps.p2).toBe(5);
 
     const persisted = await store.readLocal('t1');
-    expect(persisted.rounds[0].scores.p2[1]).toBe(5);
+    expect(persisted.rounds[0].playerHandicaps.p2).toBe(5);
   });
 
   test('only this tournament\'s queued entries are overlaid (two-tournament isolation)', async () => {
     installMocks({ online: true });
     mockState.userId = 'u1';
-    // Server truth for t1: only p1 has scored.
-    mockState.remote = blob({ scores: { p1: { 1: 4 } }, currentRound: 0 });
+    // Server truth for t1: only p1 has a handicap override.
+    mockState.remote = blob({ playerHandicaps: { p1: 4 }, currentRound: 0 });
 
     const { syncQueue } = require('../syncQueue');
-    // t1's own pending score…
+    // t1's own pending handicap edit…
     await syncQueue.enqueue({
       tournamentId: 't1',
       mutation: {
-        type: 'score.set', roundId: 'r1', playerId: 'p2', hole: 1, value: 5, ts: Date.now(),
+        type: 'handicap.set', roundId: 'r1', playerId: 'p2', handicap: 5, ts: Date.now(),
       },
-      path: 'rounds.r1.scores.p2.h1',
+      path: 'rounds.r1.playerHandicaps.p2',
     });
-    // …and a pending score for a DIFFERENT tournament that happens to share
+    // …and a pending edit for a DIFFERENT tournament that happens to share
     // round/player ids — it must not leak into t1's overlay.
     await syncQueue.enqueue({
       tournamentId: 't2',
       mutation: {
-        type: 'score.set', roundId: 'r1', playerId: 'p1', hole: 1, value: 9, ts: Date.now(),
+        type: 'handicap.set', roundId: 'r1', playerId: 'p1', handicap: 9, ts: Date.now(),
       },
-      path: 'rounds.r1.scores.p1.h1',
+      path: 'rounds.r1.playerHandicaps.p1',
     });
 
     const store = require('../tournamentStore');
     const result = await store.refreshTournamentFromRemote('t1');
 
-    expect(result.rounds[0].scores.p2[1]).toBe(5);   // t1's entry applied
-    expect(result.rounds[0].scores.p1[1]).toBe(4);   // t2's entry did NOT leak in
+    expect(result.rounds[0].playerHandicaps.p2).toBe(5); // t1's entry applied
+    expect(result.rounds[0].playerHandicaps.p1).toBe(4); // t2's entry did NOT leak in
     // Read paths never drain: both entries are still queued afterwards.
     const remaining = await syncQueue.all();
     expect(remaining.map((e) => e.tournamentId).sort()).toEqual(['t1', 't2']);
   });
 
-  test('a score enqueued after the first queue snapshot still lands in the saved blob (save-then-enqueue race)', async () => {
+  test('a mutation enqueued after the first queue snapshot still lands in the saved blob (save-then-enqueue race)', async () => {
     installMocks({ online: true });
     mockState.userId = 'u1';
-    // Server truth: p2 has not scored yet.
-    mockState.remote = blob({ scores: { p1: { 1: 4 } }, currentRound: 0 });
+    // Server truth: p2 has no handicap override yet.
+    mockState.remote = blob({ playerHandicaps: { p1: 4 }, currentRound: 0 });
 
     // mutate() saves locally BEFORE it enqueues, so an overlay's queue
-    // snapshot can miss a score that is already in local state — and a
+    // snapshot can miss an edit that is already in local state — and a
     // saveLocal computed from that snapshot would erase the just-entered
     // value. Simulate the race with a queue whose first read returns [] and
     // whose subsequent reads return the late entry: the refresh must settle
     // (re-snapshot after saving, same bounded loop as syncWorker's
-    // post-drain reconcile) so the final saved blob includes the late score.
+    // post-drain reconcile) so the final saved blob includes the late edit.
     const lateEntry = {
       id: 'late-1',
       tournamentId: 't1',
       mutation: {
-        type: 'score.set', roundId: 'r1', playerId: 'p2', hole: 1, value: 5, ts: Date.now(),
+        type: 'handicap.set', roundId: 'r1', playerId: 'p2', handicap: 5, ts: Date.now(),
       },
-      path: 'rounds.r1.scores.p2.h1',
+      path: 'rounds.r1.playerHandicaps.p2',
       ts: Date.now(),
     };
     let queueReads = 0;
@@ -226,75 +232,12 @@ describe('background refresh overlays undrained pending mutations onto fresh rem
 
     const store = require('../tournamentStore');
     const result = await store.refreshTournamentFromRemote('t1');
-    expect(result.rounds[0].scores.p2[1]).toBe(5);
+    expect(result.rounds[0].playerHandicaps.p2).toBe(5);
 
     const persisted = await store.readLocal('t1');
-    expect(persisted.rounds[0].scores.p2[1]).toBe(5);
+    expect(persisted.rounds[0].playerHandicaps.p2).toBe(5);
     // The settle loop re-read the queue after saving (>= 2 reads).
     expect(queueReads).toBeGreaterThanOrEqual(2);
   });
 });
 
-// get_game_tournament now assembles scoreEntries/scoreResolutions from
-// game_score_entries/game_score_resolutions (see
-// supabase/migrations/20260815000000_fetch_score_entries.sql), so a fetch is a
-// recovery path for a peer entry whose realtime broadcast this device missed
-// while offline — and the merge in _overlayAndSave must let it through.
-describe('background refresh recovers score entries the fetch now carries', () => {
-  const withEntries = (scoreEntries, scoreResolutions) => {
-    const t = blob({ scores: { p1: { 1: 4 } }, currentRound: 0 });
-    t.rounds[0].scoreEntries = scoreEntries;
-    if (scoreResolutions) t.rounds[0].scoreResolutions = scoreResolutions;
-    return t;
-  };
-
-  test('a peer entry present only on the server surfaces as a conflict after the refresh', async () => {
-    installMocks({ online: true });
-    mockState.userId = 'u1';
-    // Server holds both authors; this device only ever saw its own (author a).
-    mockState.remote = withEntries({ p1: { 1: { a: { value: 4, ts: 1000 }, b: { value: 6, ts: 1500 } } } });
-
-    const store = require('../tournamentStore');
-    await store.saveLocal(withEntries({ p1: { 1: { a: { value: 4, ts: 1000 } } } }));
-
-    const result = await store.refreshTournamentFromRemote('t1');
-    const { deriveCell } = require('../scoreEntries');
-    const cell = deriveCell(result.rounds[0], 'p1', 1);
-    expect(cell.status).toBe('conflict');
-    expect(cell.candidates.map((c) => c.value).sort()).toEqual([4, 6]);
-
-    // …and it is persisted, not just returned.
-    const persisted = await store.readLocal('t1');
-    expect(deriveCell(persisted.rounds[0], 'p1', 1).status).toBe('conflict');
-  });
-
-  test('a stale server copy of my own entry does not beat the newer local one', async () => {
-    installMocks({ online: true });
-    mockState.userId = 'u1';
-    mockState.remote = withEntries({ p1: { 1: { a: { value: 5, ts: 1000 } } } });
-
-    const store = require('../tournamentStore');
-    await store.saveLocal(withEntries({ p1: { 1: { a: { value: 6, ts: 2000 } } } }));
-
-    const result = await store.refreshTournamentFromRemote('t1');
-    expect(result.rounds[0].scoreEntries.p1[1].a).toEqual({ value: 6, ts: 2000 });
-  });
-
-  test('a newer server resolution replaces the local one; a stale one does not', async () => {
-    installMocks({ online: true });
-    mockState.userId = 'u1';
-    mockState.remote = withEntries(
-      { p1: { 1: { a: { value: 4, ts: 1000 }, b: { value: 6, ts: 1500 } } } },
-      { p1: { 1: { value: 6, by: 'b', ts: 3000 } } },
-    );
-
-    const store = require('../tournamentStore');
-    await store.saveLocal(withEntries(
-      { p1: { 1: { a: { value: 4, ts: 1000 } } } },
-      { p1: { 1: { value: 4, by: 'a', ts: 2000 } } },
-    ));
-
-    const result = await store.refreshTournamentFromRemote('t1');
-    expect(result.rounds[0].scoreResolutions.p1[1]).toEqual({ value: 6, by: 'b', ts: 3000 });
-  });
-});

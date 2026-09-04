@@ -20,7 +20,9 @@ export {
 export {
   identify,
   publishHole,
+  resetRound,
   resolve,
+  restoreRound,
   setDraftEntry,
   setDraftShot,
 } from './actions';

@@ -12,9 +12,11 @@ const clone = (v) => JSON.parse(JSON.stringify(v));
 export function createFakeSupabase() {
   const tables = { scorer_cards: [], score_resolutions: [] };
   const upserts = [];
+  const deletes = [];
   const channels = [];
   // table -> { remaining, error }
   const failures = new Map();
+  const deleteFailures = new Map();
 
   function pkOf(table, row) {
     return PRIMARY_KEYS[table].map((c) => String(row[c])).join('|');
@@ -25,6 +27,33 @@ export function createFakeSupabase() {
     const i = rows.findIndex((r) => pkOf(table, r) === pkOf(table, row));
     if (i >= 0) rows[i] = clone(row);
     else rows.push(clone(row));
+  }
+
+  function deleteBuilder(table) {
+    const filters = [];
+    const run = () => {
+      deletes.push({ table, filters: filters.map(([c, v]) => [c, v]) });
+      const fail = deleteFailures.get(table);
+      if (fail && fail.remaining > 0) {
+        fail.remaining -= 1;
+        return Promise.resolve({ data: null, error: fail.error });
+      }
+      const rows = tables[table];
+      for (let i = rows.length - 1; i >= 0; i -= 1) {
+        if (filters.every(([c, v]) => rows[i][c] === v)) rows.splice(i, 1);
+      }
+      return Promise.resolve({ data: null, error: null });
+    };
+    const builder = {
+      eq(column, value) {
+        filters.push([column, value]);
+        return builder;
+      },
+      then(onFulfilled, onRejected) {
+        return run().then(onFulfilled, onRejected);
+      },
+    };
+    return builder;
   }
 
   function selectBuilder(table) {
@@ -50,6 +79,9 @@ export function createFakeSupabase() {
       return {
         select() {
           return selectBuilder(table);
+        },
+        delete() {
+          return deleteBuilder(table);
         },
         upsert(row, options) {
           upserts.push({ table, row: clone(row), options });
@@ -92,6 +124,7 @@ export function createFakeSupabase() {
     client,
     tables,
     upserts,
+    deletes,
     channels,
     /** Seed a row without recording it as an upsert. */
     seed(table, row) {
@@ -100,6 +133,13 @@ export function createFakeSupabase() {
     /** Make the next `n` upserts against `table` fail with `error`. */
     failUpserts(table, n, error = { message: 'network down', code: 'PGRST000' }) {
       failures.set(table, { remaining: n, error });
+    },
+    /** Make the next `n` deletes against `table` fail with `error`. */
+    failDeletes(table, n, error = { message: 'network down', code: 'PGRST000' }) {
+      deleteFailures.set(table, { remaining: n, error });
+    },
+    deletesFor(table) {
+      return deletes.filter((d) => d.table === table);
     },
     upsertsFor(table) {
       return upserts.filter((u) => u.table === table);

@@ -93,39 +93,14 @@ function roundUpsertOwnedPatch(round, holesOk = true) {
 }
 
 // Executes one queued mutation against the server. Always returns
-// { conflict: null } — score.set/conflict.resolve no longer raise a
-// one-sided, clock-based conflict here; conflict state is derived from
-// synced per-author score entries (store/scoreEntries.js) instead.
+// { conflict: null } — this queue carries SETUP writes only. Scores, shot
+// detail and agreements never pass through here: they are the cards engine's
+// (src/engine/store/replicator.js), which upserts whole card rows the server
+// projects into game_scores.
 export async function executeMutation(entry, localTournament) {
   const { tournamentId: id, mutation: m } = entry;
 
   switch (m.type) {
-    case 'score.set': {
-      await repo.submitScore({
-        tournamentId: id, roundId: m.roundId, playerId: m.playerId,
-        hole: m.hole, authorId: m.authorId, strokes: m.value,
-      });
-      // Conflict state is derived from synced entries (store/scoreEntries.js),
-      // never raised one-sidedly here.
-      return NO_CONFLICT;
-    }
-
-    case 'conflict.resolve': {
-      // This IS the resolution — it never raises a conflict of its own.
-      await repo.resolveScore({
-        tournamentId: id, roundId: m.roundId, playerId: m.playerId,
-        hole: m.hole, value: m.value, resolvedBy: m.resolvedBy,
-      });
-      return NO_CONFLICT;
-    }
-
-    case 'shot.set': {
-      await repo.setShotDetail({
-        tournamentId: id, roundId: m.roundId, playerId: m.playerId, hole: m.hole, detail: m.detail,
-      });
-      return NO_CONFLICT;
-    }
-
     case 'note.set': {
       const holeKey = m.scope === 'hole' ? String(m.hole) : 'round';
       await repo.setNote({
@@ -315,25 +290,15 @@ export async function executeMutation(entry, localTournament) {
     }
 
     case 'round.resetContent': {
-      // Reset Round / Undo / Restore snapshot (HomeScreen): a whole-round
-      // scores+notes replace. There's no bulk-replace RPC for the normalized
-      // game_scores/game_round_notes tables, so this writes the round's full
-      // grid cell by cell, mirroring the granular score.set/note.set writes.
-      // A rare, low-frequency user action, so the extra round trips are an
-      // acceptable trade for reusing the existing per-cell repo primitives
-      // instead of adding bulk endpoints.
+      // Reset Round / Undo / Restore snapshot (HomeScreen): the NOTES half.
+      // There is no bulk-replace RPC for game_round_notes, so the round's
+      // notes are written key by key — a rare, low-frequency action, so the
+      // extra round trips are cheaper than a bulk endpoint. The scores half
+      // is the cards engine's: HomeScreen calls resetRound/restoreRound, and
+      // the replicator deletes or re-upserts the round's scorer_cards rows.
       const round = findRound(localTournament, m.roundId);
       if (!round) return NO_CONFLICT;
-      const players = localTournament.players ?? [];
       const holes = round.holes ?? [];
-      for (const p of players) {
-        for (const h of holes) {
-          const strokes = round.scores?.[p.id]?.[h.number] ?? null;
-          await repo.setScore({
-            tournamentId: id, roundId: m.roundId, playerId: p.id, hole: h.number, strokes,
-          });
-        }
-      }
       const notes = round.notes ?? {};
       await repo.setNote({
         tournamentId: id, roundId: m.roundId, holeKey: 'round', note: notes.round ?? null,
@@ -353,8 +318,8 @@ export async function executeMutation(entry, localTournament) {
       // propagateCourseToTournaments sweeps). A genuinely NEW round (server
       // has never seen this id — e.g. EditTournamentScreen's addRound mid-
       // edit) can't clobber anything, so it still gets the full-body
-      // repo.upsertRound (which already strips scores/shotDetails/notes-
-      // table-owned keys/scoreEntries/scoreResolutions before writing body).
+      // repo.upsertRound (which already strips scores/shotDetails/notes —
+      // the table-owned keys — before writing body).
       //
       // An EXISTING round instead gets ONLY its owned fields (see
       // ROUND_UPSERT_OWNED_FIELDS above) patched via repo.patchRound's

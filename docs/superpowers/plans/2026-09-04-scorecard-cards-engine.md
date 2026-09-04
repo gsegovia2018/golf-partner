@@ -1,7 +1,7 @@
 # Scorecard cards engine: a from-scratch rebuild of casual-round scoring sync
 
 **Date:** 2026-09-04
-**Status:** Proposed, agreed in principle (publication on leaving the hole; blank cells do not block Finish; never publish on background)
+**Status:** Implemented on `feat/scorecard-cards-engine` (2026-09-05); production cutover = apply the two 20260905 migrations
 **Rebuilds:** the scoring data layer and the scorecard screen's state handling. Replaces `scoreEntries.js`, the score half of `mutate.js` / `mutationWrites.js` / `syncWorker.js` / `realtimeSync.js`, `game_score_entries`, `game_score_resolutions`, `submit_game_score`, `resolve_game_score`, `recompute_game_score`, and the three-copy state inside `ScorecardScreen.js`.
 **Keeps:** every presentational component, `scoring.js` maths, the normalized setup tables (`tournaments`, `game_players`, `game_rounds`) and their write RPCs with targeted fixes, official tournaments, feed, stats, media, shared board, notifications.
 
@@ -224,3 +224,24 @@ Phase 0 must not be rushed. Once the derived views and fixtures are right, the r
 - Official tournaments (own data layer, unchanged).
 - Media, feed, friends, notifications (readers of the projection only).
 - A conflict dialog for setup edits (version stamp kept so it can be added later).
+
+## 12. Follow-ups
+
+Deliberately out of the implemented scope; each is a known gap, not a bug.
+
+- **Setup-change notice on the scorecard (§6 fix 1, UI half) is not built.**
+  The read path no longer replaces the open tournament's setup mid-round, but
+  a refresh that does change roster/order/teams still re-renders silently —
+  there is no "Guille changed the teams for round 2" notice yet.
+- **The server projection does not fold two devices of one account.**
+  `src/engine/cards.js` collapses them by `scorerKey` (newest hole version
+  wins); `settled_round_cells` treats every `author_id` separately, so such a
+  pair disagreeing with itself projects as disputed (NULL) rather than as the
+  later value. The phones' own view is authoritative during play, so this only
+  shows in Home/feed/stats. Fold in SQL if it ever bites.
+- **A reset is not authoritative over an offline peer.** `resetRound` deletes
+  the round's `scorer_cards` / `score_resolutions` rows, but a peer who was
+  offline holding a card for that round re-upserts it whole on reconnect and
+  its entries reappear as unverified values. Nothing on one phone can revoke a
+  row on a phone the server has not heard from; resetting again after that
+  card lands clears it for good.

@@ -46,6 +46,8 @@ import {
   resolveQuickStartPlayerTees,
 } from '../lib/quickStartGame';
 import { mutate } from '../store/mutate';
+import { loadRound, getRoundState, resetRound, restoreRound } from '../engine/store';
+import { shownScores } from '../engine/cards';
 import { roundScoringMode, tournamentHasMixedModes, tournamentStablefordLeaderboard, buildTeamsForMode, roundBestBallValues } from '../store/scoring';
 import { assignPlacements, comparatorForBoardMode } from '../store/leaderboardPlacement';
 import { subscribeConnectivity, isOnline } from '../lib/connectivity';
@@ -591,6 +593,19 @@ export default function HomeScreen({ navigation, route }) {
     roundPagerInitialized.current = true;
   }, [selectedRound, roundPagerWidth]);
 
+  // The scores of a round as THIS device currently sees them (plan §3.3
+  // `shown`): the reset snapshot has to come from the cards engine, not from
+  // `round.scores` — that key is now a projection of the server's settled
+  // cells and is empty for anything this phone has not managed to push yet.
+  async function engineRoundScores(round) {
+    if (!tournament?.id || !round?.id) return {};
+    await loadRound(tournament.id, round.id);
+    const ctx = getRoundState(tournament.id, round.id);
+    const playerIds = (tournament.players ?? []).map((p) => p.id).filter(Boolean);
+    const holes = (round.holes ?? []).map((h) => h.number);
+    return shownScores(ctx, playerIds, holes);
+  }
+
   async function resetCurrentRound() {
     if (!tournament) return;
     const idx = selectedRound;
@@ -603,7 +618,7 @@ export default function HomeScreen({ navigation, route }) {
     if (!confirmed) return;
 
     const roundBefore = tournament.rounds[idx];
-    const prevScores = roundBefore?.scores ?? {};
+    const prevScores = await engineRoundScores(roundBefore);
     const prevNotes = roundBefore?.notes ?? {};
     // Notes are an object { round, hole: { [n]: text } }; treat the round as
     // having note content if the round-level note or any hole note is set.
@@ -620,9 +635,13 @@ export default function HomeScreen({ navigation, route }) {
       // Cap to last 10 entries to avoid unbounded growth
       if (history.length > 10) history.splice(0, history.length - 10);
     }
+    // Two layers, two owners: notes and the snapshot log are setup data and
+    // ride the blob mutation; the scores live in the cards engine, which wipes
+    // its local cards/drafts/agreements and queues the server-side delete.
     await mutate(tournament, {
-      type: 'round.resetContent', roundId: roundBefore.id, scores: {}, notes: {}, resetHistory: history,
+      type: 'round.resetContent', roundId: roundBefore.id, notes: {}, resetHistory: history, scores: {},
     });
+    await resetRound(tournament.id, roundBefore.id);
     await reload();
 
     if (hasContent) {
@@ -643,10 +662,13 @@ export default function HomeScreen({ navigation, route }) {
     await mutate(tournament, {
       type: 'round.resetContent',
       roundId: round.id,
-      scores: snapshot.scores ?? {},
       notes: snapshot.notes ?? {},
       resetHistory: history,
+      scores: snapshot.scores ?? {},
     });
+    // The reset already emptied the round, so re-publishing the snapshot as my
+    // card is exactly the undo.
+    await restoreRound(tournament.id, round.id, snapshot.scores ?? {});
     await reload();
     setUndoSnack(null);
   }
@@ -666,10 +688,14 @@ export default function HomeScreen({ navigation, route }) {
     await mutate(tournament, {
       type: 'round.resetContent',
       roundId: round.id,
-      scores: entry.scores ?? {},
       notes: entry.notes ?? {},
       resetHistory: round.resetHistory ?? [],
+      scores: entry.scores ?? {},
     });
+    // "Current scores will be overwritten": clear the round on every device
+    // first, then publish the snapshot as my card.
+    await resetRound(tournament.id, round.id);
+    await restoreRound(tournament.id, round.id, entry.scores ?? {});
     await reload();
     setShowResetHistory(false);
   }

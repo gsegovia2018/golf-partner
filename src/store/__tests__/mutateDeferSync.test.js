@@ -16,23 +16,23 @@ import { syncQueue } from '../syncQueue';
 // eslint-disable-next-line import/first
 import { saveLocal, _setSyncStatus } from '../tournamentStore';
 
-const baseTournament = () => ({ id: 't1', rounds: [{ id: 'r1', scores: {} }] });
-const scoreMutation = { type: 'score.set', roundId: 'r1', playerId: 'p1', hole: 3, value: 5 };
+const baseTournament = () => ({ id: 't1', rounds: [{ id: 'r1', notes: {} }] });
+const deferrableMutation = { type: 'note.set', roundId: 'r1', scope: 'round', text: 'Windy' };
 
 beforeEach(() => jest.clearAllMocks());
 
 describe('mutate deferSync option', () => {
   it('deferSync skips the sync kick but still saves locally and enqueues', async () => {
-    const t = await mutate(baseTournament(), scoreMutation, { deferSync: true });
+    const t = await mutate(baseTournament(), deferrableMutation, { deferSync: true });
     expect(saveLocal).toHaveBeenCalledTimes(1);
     expect(syncQueue.enqueue).toHaveBeenCalledTimes(1);
     expect(scheduleSync).not.toHaveBeenCalled();
     expect(_setSyncStatus).toHaveBeenCalledWith('pending');
-    expect(t.rounds[0].scores.p1[3]).toBe(5);
+    expect(t.rounds[0].notes.round).toBe('Windy');
   });
 
   it('default (no opts) still kicks sync immediately', async () => {
-    await mutate(baseTournament(), scoreMutation);
+    await mutate(baseTournament(), deferrableMutation);
     expect(scheduleSync).toHaveBeenCalledTimes(1);
   });
 });

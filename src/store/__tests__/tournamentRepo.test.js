@@ -173,91 +173,6 @@ describe('fetchRoundActivity', () => {
   });
 });
 
-describe('setScore', () => {
-  test('calls set_game_score with the confirmed param order and returns previous* fields', async () => {
-    mockState.rpcResult = {
-      data: { previousStrokes: 4, previousUpdatedAt: '2026-07-10T00:00:00Z' },
-      error: null,
-    };
-    const { setScore } = require('../tournamentRepo');
-
-    const result = await setScore({
-      tournamentId: 't1', roundId: 'r0', playerId: 'p1', hole: 3, strokes: 5,
-    });
-
-    expect(mockState.rpcCalls).toEqual([{
-      name: 'set_game_score',
-      args: { p_round_id: 'r0', p_tournament_id: 't1', p_player_id: 'p1', p_hole: 3, p_strokes: 5 },
-    }]);
-    expect(result).toEqual({ previousStrokes: 4, previousUpdatedAt: '2026-07-10T00:00:00Z' });
-  });
-
-  test('a null strokes tombstone is passed through as-is (RPC handles it)', async () => {
-    const { setScore } = require('../tournamentRepo');
-
-    await setScore({ tournamentId: 't1', roundId: 'r0', playerId: 'p1', hole: 3, strokes: null });
-
-    expect(mockState.rpcCalls[0].args.p_strokes).toBeNull();
-  });
-
-  test('throws on RPC error', async () => {
-    mockState.rpcResult = { data: null, error: { message: 'boom' } };
-    const { setScore } = require('../tournamentRepo');
-
-    await expect(setScore({
-      tournamentId: 't1', roundId: 'r0', playerId: 'p1', hole: 1, strokes: 4,
-    })).rejects.toEqual({ message: 'boom' });
-  });
-});
-
-describe('setShotDetail', () => {
-  test('upserts game_shot_details keyed by tournament_id+round_id+player_id+hole', async () => {
-    const { setShotDetail } = require('../tournamentRepo');
-
-    await setShotDetail({
-      tournamentId: 't1', roundId: 'r0', playerId: 'p1', hole: 5, detail: { club: 'driver' },
-    });
-
-    const call = lastFromCall('game_shot_details');
-    expect(call.ops[0].method).toBe('upsert');
-    expect(call.ops[0].rows).toMatchObject({
-      tournament_id: 't1', round_id: 'r0', player_id: 'p1', hole: 5, detail: { club: 'driver' },
-    });
-    // onConflict must name the exact composite PK: supabase-js sends the
-    // string to PostgREST verbatim, so a typo/transposition here only fails
-    // at runtime — assert it exactly.
-    expect(call.ops[0].opts).toEqual({ onConflict: 'tournament_id,round_id,player_id,hole' });
-  });
-
-  test('a null detail still upserts the row (tombstone)', async () => {
-    const { setShotDetail } = require('../tournamentRepo');
-
-    await setShotDetail({ tournamentId: 't1', roundId: 'r0', playerId: 'p1', hole: 5, detail: null });
-
-    const call = lastFromCall('game_shot_details');
-    expect(call.ops[0].rows).toMatchObject({ detail: null });
-  });
-
-  test('throws on upsert error', async () => {
-    jest.resetModules();
-    mockState.userId = null;
-    jest.doMock('../../lib/supabase', () => ({
-      supabase: {
-        rpc: () => Promise.resolve({ data: null, error: null }),
-        from: () => ({
-          upsert: () => Promise.resolve({ data: null, error: { message: 'boom' } }),
-        }),
-        auth: { getUser: () => Promise.resolve({ data: { user: null } }) },
-      },
-    }));
-    const { setShotDetail } = require('../tournamentRepo');
-
-    await expect(setShotDetail({
-      tournamentId: 't1', roundId: 'r0', playerId: 'p1', hole: 1, detail: null,
-    })).rejects.toEqual({ message: 'boom' });
-  });
-});
-
 describe('setNote', () => {
   test('upserts game_round_notes keyed by tournament_id+round_id+hole_key', async () => {
     const { setNote } = require('../tournamentRepo');
@@ -373,24 +288,18 @@ describe('deletePlayer', () => {
 });
 
 describe('clearPlayerRound', () => {
-  test('deletes game_scores, game_shot_details, and game_score_entries rows for the player, tournament-scoped', async () => {
+  test('deletes the projected game_scores and game_shot_details rows, tournament-scoped', async () => {
     const { clearPlayerRound } = require('../tournamentRepo');
 
     await clearPlayerRound('t1', 'r0', 'p1');
 
     const scoresCall = lastFromCall('game_scores');
+    expect(scoresCall.ops.map((o) => o.method)).toEqual(['delete', 'match']);
     expect(scoresCall.ops[1].obj).toEqual({ tournament_id: 't1', round_id: 'r0', player_id: 'p1' });
 
     const shotDetailsCall = lastFromCall('game_shot_details');
+    expect(shotDetailsCall.ops.map((o) => o.method)).toEqual(['delete', 'match']);
     expect(shotDetailsCall.ops[1].obj).toEqual({ tournament_id: 't1', round_id: 'r0', player_id: 'p1' });
-
-    // Task 8: game_score_entries has no FK cascade off game_players, so a
-    // removed player's per-author entries would otherwise survive on the
-    // server forever and resurrect the phantom-conflict bug via a later
-    // realtime INSERT/reconcile fetch.
-    const scoreEntriesCall = lastFromCall('game_score_entries');
-    expect(scoreEntriesCall.ops.map((o) => o.method)).toEqual(['delete', 'match']);
-    expect(scoreEntriesCall.ops[1].obj).toEqual({ tournament_id: 't1', round_id: 'r0', player_id: 'p1' });
   });
 });
 
@@ -425,19 +334,6 @@ describe('upsertRound', () => {
     expect(call.ops[0].opts).toEqual({ onConflict: 'tournament_id,id' });
   });
 
-  test('also strips scoreEntries/scoreResolutions (matches the server round-body contract)', async () => {
-    const { upsertRound } = require('../tournamentRepo');
-    const round = {
-      id: 'r0',
-      scoreEntries: { p1: {} },
-      scoreResolutions: { p1: {} },
-    };
-
-    await upsertRound('t1', 0, round);
-
-    const call = lastFromCall('game_rounds');
-    expect(call.ops[0].rows.body).toEqual({ id: 'r0' });
-  });
 });
 
 describe('createTournament', () => {

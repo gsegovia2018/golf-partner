@@ -209,19 +209,20 @@ describe('loadTournament cached reads', () => {
       id: 't1',
       name: 'Saturday',
       players: [{ id: 'p1' }, { id: 'p2' }],
-      rounds: [{ id: 'r1', holes: [{ number: 1 }], scores: { p1: { 1: 4 } } }],
+      rounds: [{ id: 'r1', holes: [{ number: 1 }], playerHandicaps: { p1: 4 } }],
       currentRound: 0,
     };
     await saveLocal(cached);
 
-    // A score for p2 was entered locally but has not drained to the server
-    // yet — the background refresh must not clobber it with server truth.
+    // A handicap edit for p2 was made locally but has not drained to the
+    // server yet — the background refresh must not clobber it with server
+    // truth.
     await syncQueue.enqueue({
       tournamentId: 't1',
       mutation: {
-        type: 'score.set', roundId: 'r1', playerId: 'p2', hole: 1, value: 5, ts: Date.now(),
+        type: 'handicap.set', roundId: 'r1', playerId: 'p2', handicap: 5, ts: Date.now(),
       },
-      path: 'rounds.r1.scores.p2.h1',
+      path: 'rounds.r1.playerHandicaps.p2',
     });
 
     await loadTournament({ refreshRemote: true, resolveIdentity: false });
@@ -230,6 +231,6 @@ describe('loadTournament cached reads', () => {
 
     expect(fetchTournament).toHaveBeenCalledWith('t1');
     const persisted = await readLocal('t1');
-    expect(persisted.rounds[0].scores.p2[1]).toBe(5);
+    expect(persisted.rounds[0].playerHandicaps.p2).toBe(5);
   });
 });

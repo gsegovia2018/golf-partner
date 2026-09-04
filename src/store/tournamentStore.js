@@ -200,18 +200,6 @@ function _applyPendingMutations(tournament, entries) {
   return applyPendingMutations(tournament, entries);
 }
 
-// A repo-fetched `remote` now carries scoreEntries/scoreResolutions (see
-// mutate.js's preserveLocalConflictState and
-// supabase/migrations/20260815000000_fetch_score_entries.sql), but only what
-// the SERVER has — a queued offline entry of ours is absent from it, so every
-// background refresh through this module still merges `source`'s forward
-// (ts-aware per author/cell) or an unresolved conflict the user hasn't seen
-// yet silently disappears the next time any screen focuses.
-function _preserveScoreConflicts(target, source) {
-  const { preserveLocalConflictState } = require('./mutate');
-  return preserveLocalConflictState(target, source);
-}
-
 // A fetch may add or update a roster player, never delete one — see
 // unionLocalRoster (mutate.js) for the tombstone rule that makes the two
 // distinguishable. Same lazy require as the two wrappers above.
@@ -319,7 +307,6 @@ async function _overlayAndSave(id, remote, { makeActive = true } = {}) {
     // merge.js:203-206, the LWW path this overlay replaces). Local wins,
     // including an explicit null.
     if (local && 'meId' in local) merged.meId = local.meId;
-    _preserveScoreConflicts(merged, local);
     await saveLocal(merged, { makeActive });
     const latest = await _pendingEntriesFor(id);
     const stable = latest.length === snapshot.length

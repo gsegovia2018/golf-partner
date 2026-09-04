@@ -10,7 +10,7 @@ import {
 // id synchronously and only later swap in the persisted id once AsyncStorage
 // resolved. Scores authored in that window were stamped with a throwaway id
 // that never matched later writes from the same physical device, so
-// deriveCell() (scoreEntries.js) saw two "authors" for one player/hole and
+// the cards engine saw two "authors" for one player/hole and
 // surfaced an unresolvable conflict. The fix hydrates the persisted id BEFORE
 // any score can be authored via an awaited initDeviceAuthorId().
 

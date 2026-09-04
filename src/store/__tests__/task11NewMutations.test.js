@@ -17,45 +17,45 @@ describe('round.resetContent mutation', () => {
     };
   }
 
-  test('bumps the coarse scores/notes/resetHistory paths', () => {
+  test('bumps the coarse notes/resetHistory paths — never scores', () => {
     expect(metaPathFor({ type: 'round.resetContent', roundId: 'r1' })).toEqual([
-      'rounds.r1.scores', 'rounds.r1.notes', 'rounds.r1.resetHistory',
+      'rounds.r1.notes', 'rounds.r1.resetHistory',
     ]);
   });
 
-  test('replaces scores/notes/resetHistory wholesale (Reset Round)', () => {
+  test('replaces notes/resetHistory wholesale and LEAVES scores alone', () => {
     const t = baseTournament();
     const history = [...t.rounds[0].resetHistory, { scores: { p1: { 1: 4, 2: 5 } }, notes: { round: 'Windy', hole: { 1: 'Lost ball' } }, at: '2026-02-01T00:00:00Z' }];
 
     applyToTournament(t, {
-      type: 'round.resetContent', roundId: 'r1', scores: {}, notes: {}, resetHistory: history,
+      type: 'round.resetContent', roundId: 'r1', notes: {}, resetHistory: history,
     });
 
-    expect(t.rounds[0].scores).toEqual({});
+    // round.scores is a projection of the cards engine's settled cells —
+    // HomeScreen clears it through engine/store's resetRound, not here.
+    expect(t.rounds[0].scores).toEqual({ p1: { 1: 4, 2: 5 } });
     // normalizeRoundNotes no longer forces an empty `hole: {}` bucket (parity
     // fix, task 13.1) — an empty notes input round-trips to an empty object.
     expect(t.rounds[0].notes).toEqual({});
     expect(t.rounds[0].resetHistory).toHaveLength(2);
   });
 
-  test('restores a historical snapshot verbatim (Restore from history / Undo)', () => {
+  test('restores a historical snapshot\'s notes verbatim (Restore / Undo)', () => {
     const t = baseTournament();
     applyToTournament(t, {
       type: 'round.resetContent',
       roundId: 'r1',
-      scores: { p1: { 1: 3 } },
       notes: { round: 'Calm', hole: {} },
       resetHistory: [],
     });
-    expect(t.rounds[0].scores).toEqual({ p1: { 1: 3 } });
     expect(t.rounds[0].notes.round).toBe('Calm');
     expect(t.rounds[0].resetHistory).toEqual([]);
   });
 
   test('is a no-op when the round no longer exists', () => {
     const t = baseTournament();
-    applyToTournament(t, { type: 'round.resetContent', roundId: 'gone', scores: {}, notes: {}, resetHistory: [] });
-    expect(t.rounds[0].scores).toEqual({ p1: { 1: 4, 2: 5 } }); // untouched
+    applyToTournament(t, { type: 'round.resetContent', roundId: 'gone', notes: {}, resetHistory: [] });
+    expect(t.rounds[0].notes).toEqual({ round: 'Windy', hole: { 1: 'Lost ball' } }); // untouched
   });
 });
 
