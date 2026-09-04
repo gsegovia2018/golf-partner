@@ -3,6 +3,13 @@
     "name": "Golf Partner",
     "slug": "golf",
     "version": "1.0.0",
+    "runtimeVersion": {
+      "policy": "fingerprint"
+    },
+    "updates": {
+      "url": "https://u.expo.dev/6fafd0c9-3715-4b8a-81d1-cc41ba2c9727",
+      "fallbackToCacheTimeout": 0
+    },
     "scheme": "golf",
     "orientation": "default",
     "icon": "./assets/icon.png",
