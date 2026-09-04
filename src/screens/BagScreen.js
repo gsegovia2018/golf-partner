@@ -72,7 +72,8 @@ export default function BagScreen({ navigation }) {
   };
 
   // Distance rows for the swing clubs currently in the bag. Effective distance
-  // is the manual override if set, else the measured average, else nominal.
+  // is the manual override if set, else the measured playing distance (the
+  // average of the best logged strikes, outliers dropped), else nominal.
   const rows = useMemo(() => (
     [...bagSet]
       .filter((k) => k !== 'putter')
@@ -107,7 +108,7 @@ export default function BagScreen({ navigation }) {
     updateAppSettings({ clubDistances: { [club]: meters } }).catch(() => {});
   };
 
-  // Seed every measured club's override from its logged average.
+  // Seed every measured club's override from its measured playing distance.
   const setAllToAverage = () => {
     haptic('selection');
     const map = {};
@@ -190,8 +191,9 @@ export default function BagScreen({ navigation }) {
             <View style={s.condHeadText}>
               <Text style={s.sectionLabel}>CLUB DISTANCES</Text>
               <Text style={s.sectionHint}>
-                Carry used for club recommendations. Edit any value directly; tap
-                a club for its full breakdown. Manual values override the average.
+                Carry used for club recommendations — the average of your best
+                strikes, with mishits and freak bounces left out. Edit any value
+                directly; tap a club for its full breakdown.
               </Text>
             </View>
             <View style={s.distActions}>

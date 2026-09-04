@@ -56,6 +56,11 @@ export function carriesByClub(shots) {
 }
 
 const avg = (xs) => xs.reduce((a, b) => a + b, 0) / xs.length;
+const median = (xs) => {
+  const a = [...xs].sort((x, y) => x - y);
+  const mid = a.length >> 1;
+  return a.length % 2 ? a[mid] : (a[mid - 1] + a[mid]) / 2;
+};
 const stdev = (xs) => {
   if (xs.length < 2) return 0;
   const m = avg(xs);
@@ -80,10 +85,46 @@ export function clubDistances(shots) {
   return rows.sort((a, b) => clubOrder(a.club) - clubOrder(b.club));
 }
 
-// Map<club, avgMetres> for quick lookup (personal data only).
+// How many good strikes define a club's playing distance, and how far from the
+// median a carry may sit before it stops being a golf shot.
+const BEST_N = 15;
+const MAD_K = 2.5;
+const MIN_FOR_OUTLIERS = 5;
+
+// The distance a club actually plays: the mean of its best BEST_N carries,
+// outliers thrown out first. A flat mean of every logged carry is dragged down
+// by chunks, half-swings and punch-outs and up by a single runaway, so the club
+// it recommends is one you cannot reproduce on demand. Two passes:
+//   1. Drop freaks — a thinned skull that never stopped, a cart-path bounce —
+//      by median absolute deviation. MAD is used rather than a standard
+//      deviation because the outliers cannot inflate their own fence.
+//   2. Average the longest BEST_N of what survives — the club at its best,
+//      which is the number a golfer has in mind when they pull it.
+// Under MIN_FOR_OUTLIERS carries there is no distribution to judge: average
+// what there is. Returns null for an empty list.
+export function typicalCarry(carries) {
+  if (!carries?.length) return null;
+  let pool = carries;
+  if (pool.length >= MIN_FOR_OUTLIERS) {
+    const med = median(pool);
+    const mad = median(pool.map((m) => Math.abs(m - med)));
+    if (mad > 0) {
+      const fence = MAD_K * 1.4826 * mad; // 1.4826 puts MAD on a stdev scale
+      const kept = pool.filter((m) => Math.abs(m - med) <= fence);
+      if (kept.length) pool = kept;
+    }
+  }
+  return avg([...pool].sort((a, b) => b - a).slice(0, BEST_N));
+}
+
+// Map<club, playingDistanceMetres> for quick lookup (personal data only) —
+// what every club recommendation and the bag editor read.
 export function clubAverages(shots) {
   const m = new Map();
-  for (const r of clubDistances(shots)) m.set(r.club, r.avg);
+  for (const [club, carries] of carriesByClub(shots)) {
+    const d = typicalCarry(carries);
+    if (Number.isFinite(d) && d > 0) m.set(club, d);
+  }
   return m;
 }
 

@@ -1,5 +1,6 @@
 import {
-  carriesByClub, clubDistances, recommendClub, clubDetail, longestCarryByHole,
+  carriesByClub, clubDistances, clubAverages, typicalCarry, recommendClub,
+  clubDetail, longestCarryByHole,
 } from '../shotStats';
 
 // Two points ~140m apart (lat delta 0.001259 ≈ 140m) for deterministic carries.
@@ -41,6 +42,42 @@ describe('clubDistances', () => {
     const seven = rows.find((r) => r.club === '7i');
     expect(seven.count).toBe(2);
     expect(seven.avg).toBeCloseTo(145, 0);
+  });
+});
+
+describe('typicalCarry', () => {
+  it('averages everything when there is too little to judge', () => {
+    expect(typicalCarry([100, 110, 120])).toBeCloseTo(110, 5);
+  });
+
+  it('drops the thin skull and the cart-path runner', () => {
+    // Ten normal 7i carries plus two freaks. The freaks must not move it.
+    const normal = [128, 130, 132, 129, 131, 127, 133, 130, 129, 131];
+    const clean = typicalCarry(normal);
+    expect(typicalCarry([...normal, 178, 160])).toBeCloseTo(clean, 5);
+  });
+
+  it('averages only the best 15 strikes, so mishits do not shorten the club', () => {
+    // 15 good ones at 150 and a pile of chunks. The club still plays 150.
+    const good = Array(15).fill(150);
+    const chunks = Array(10).fill(148);
+    expect(typicalCarry([...good, ...chunks])).toBeCloseTo(150, 5);
+  });
+
+  it('returns null with nothing to average', () => {
+    expect(typicalCarry([])).toBeNull();
+  });
+});
+
+describe('clubAverages', () => {
+  it('gives a club its best-strike distance, not its flat mean', () => {
+    // A 7i struck well six times and topped once. The flat mean is 138.6; the
+    // playing distance stays with the good strikes.
+    const shots = [];
+    [148, 150, 152, 149, 151, 150, 70].forEach((m, i) => {
+      shots.push(shot(i + 1, 1, '7i', m), shot(i + 1, 2, null, m));
+    });
+    expect(clubAverages(shots).get('7i')).toBeGreaterThan(146);
   });
 });
 
