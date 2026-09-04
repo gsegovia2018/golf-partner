@@ -40,6 +40,7 @@ import useMediaAttachFlow from '../hooks/useMediaAttachFlow';
 import { useRoundMedia } from '../hooks/useRoundMedia';
 import { useOfficialRound } from '../hooks/useOfficialRound';
 import ScoringModeChangeBanner from '../components/ScoringModeChangeBanner';
+import { setupSignature, describeSetupChange } from './setupChangeNotice';
 import ScoringModeChangeSheet from '../components/ScoringModeChangeSheet';
 import { fallbackNoticeText } from '../components/scoringModes';
 import { cardDiscrepancyHoles, officialHolesFromCourse } from '../store/officialScoring';
@@ -57,7 +58,7 @@ import {
   clampScoreInput, resolvePlayerHandicap, holeCountOf,
 } from '../store/scoring';
 import {
-  discrepancies, roundCells, scorerKeyOf, shownScores, singleScorerCells, unverifiedCells,
+  discrepancies, roundCells, scorerKeyOf, shownScores, unverifiedCells,
 } from '../engine/cards';
 import { getRoundState } from '../engine/store/roundState';
 import {
@@ -381,6 +382,7 @@ export default function ScorecardScreen({ navigation, route }) {
     // have stored a bare string — treat that as the round-level note. A note
     // still being typed outranks the snapshot until its save has landed.
     if (!notesDirtyRef.current) setNotes(normalizeRoundNotes(t.rounds[idx]?.notes));
+    return t;
   }, [paramRoundIndex, official, routeTournamentId]);
 
   useEffect(() => {
@@ -831,6 +833,28 @@ export default function ScorecardScreen({ navigation, route }) {
   const [roundDecisionNotice, setRoundDecisionNotice] = useState(null);
   const [reopenPrompt, setReopenPrompt] = useState(false);
   const dismissModeNotice = useCallback(() => setNoticeMessage(null), []);
+
+  // Setup that changed under us from ANOTHER phone (plan §6, fix 1): roster,
+  // order, teams, course, handicaps. The scorecard cannot edit those itself,
+  // so while it is focused any such change in the tournament it renders came
+  // in through the setup sync from a peer. The baseline is the signature
+  // seen right after the focus reload (this phone's own edits made on other
+  // screens arrive with that reload and must not read as a peer's); the one
+  // setup edit this screen can dispatch, the scoring-mode change, stamps
+  // `localSetupEditRef` so the pairs it rebuilds are not announced either.
+  const [setupNotice, setSetupNotice] = useState(null);
+  const dismissSetupNotice = useCallback(() => setSetupNotice(null), []);
+  const setupBaselineRef = useRef(null);
+  const localSetupEditRef = useRef(0);
+  useEffect(() => {
+    if (official || !tournament || !setupBaselineRef.current) return;
+    const sig = setupSignature(tournament, roundIndex);
+    const msg = describeSetupChange(setupBaselineRef.current, sig);
+    setupBaselineRef.current = sig;
+    if (!msg) return;
+    if (Date.now() - localSetupEditRef.current < 5000) return;
+    setSetupNotice(msg);
+  }, [official, tournament, roundIndex]);
   const dismissRoundDecisionNotice = useCallback(() => setRoundDecisionNotice(null), []);
   const openModeSheet = useCallback(() => setReopenPrompt(true), []);
 
@@ -908,7 +932,15 @@ export default function ScorecardScreen({ navigation, route }) {
   );
   // Setup (roster, teams, courses, notes) refreshes on focus only — never on
   // a timer while a scorecard is open (plan §6.1).
-  useFocusEffect(useCallback(() => { reload(); }, [reload]));
+  useFocusEffect(useCallback(() => {
+    // Re-arm the setup-change baseline from what the focus reload brings in:
+    // teams or roster edited on this phone's other screens are not "another
+    // phone". Until the reload lands, nothing is compared.
+    setupBaselineRef.current = null;
+    reload().then((t) => {
+      if (t) setupBaselineRef.current = setupSignature(t, paramRoundIndex ?? t.currentRound ?? 0);
+    }).catch(() => {});
+  }, [reload, paramRoundIndex]));
   useEffect(() => () => { closeLive(); }, []);
 
   // Hold time and haptic come from the tier, not from a chain here. The old
@@ -1027,13 +1059,6 @@ export default function ScorecardScreen({ navigation, route }) {
     () => buildConflictRows({ disputes, cells, round, players, names }),
     [disputes, cells, round, players, names],
   );
-  // Cells exactly one scorer marked. Listed at Finish for information; the
-  // blank rule says they never block it.
-  const soloMarkedCount = useMemo(
-    () => (official ? 0 : singleScorerCells(ctx, playerIds, holeNumbers).length),
-    [official, ctx, playerIds, holeNumbers],
-  );
-
   // Agree a cell: the engine records the agreement against the exact card
   // versions it settles, so it lapses precisely when one of them republishes.
   const resolveConflict = useCallback((playerId, holeNumber, value) => {
@@ -1386,6 +1411,18 @@ export default function ScorecardScreen({ navigation, route }) {
     return conflictRows;
   }, [holeConflictPrompt, conflictRows]);
 
+  // Once every row of an open mid-round prompt is settled — by this phone or
+  // by a peer's agreement arriving — the sheet closes on its own. There is no
+  // "all agreed" screen to dismiss: a leave prompt resumes the navigation it
+  // was holding, a peer prompt simply goes away.
+  useEffect(() => {
+    if (!holeConflictPrompt || holeConflictRows.length > 0) return;
+    const leave = holeConflictPrompt.source === 'leave';
+    setHoleConflictPrompt(null);
+    if (leave) proceedFromLeave();
+    else pendingHoleRef.current = null;
+  }, [holeConflictPrompt, holeConflictRows, proceedFromLeave]);
+
   // Back from the scorecard. The live center-tab action requests Tournament so
   // the user lands on the active round summary while a round is live. Other
   // in-progress casual scorecards usually have Tournament underneath in the
@@ -1581,6 +1618,15 @@ export default function ScorecardScreen({ navigation, route }) {
   }, [roundIndex, navigation, goBack, official, finishBusy, enqueueSave, queueDraft, actions,
     tid, names, playerIds, holeNumbers, scores]);
 
+  // The finish sheet closes itself the moment the last dispute is agreed (on
+  // this phone or a peer's) and carries on with the finish — no "all agreed"
+  // screen to tap through.
+  useEffect(() => {
+    if (!finishConflictsOpen || conflictRows.length > 0) return;
+    setFinishConflictsOpen(false);
+    handleFinish();
+  }, [finishConflictsOpen, conflictRows, handleFinish]);
+
   // Official mode (Task 16): attest the token holder's own card. Replaces the
   // casual "finish" affordance for official rounds. Disabled while the holder
   // still has open discrepancies; the RPC also rejects server-side with
@@ -1760,6 +1806,11 @@ export default function ScorecardScreen({ navigation, route }) {
         onPress={openModeSheet}
         onDismiss={dismissModeNotice}
       />
+      <ScoringModeChangeBanner
+        message={setupNotice}
+        onDismiss={dismissSetupNotice}
+        icon="users"
+      />
       {roundDecisionNotice && (
         <View
           style={s.roundDecisionBanner}
@@ -1795,6 +1846,7 @@ export default function ScorecardScreen({ navigation, route }) {
           // Rebuild round pairs so teams match the new mode (e.g. switching
           // into Best Ball assigns partnerships, switching out collapses them).
           const { patches: roundPatches } = setScoringModeRoundPatches(tournament, chosenMode);
+          localSetupEditRef.current = Date.now(); // our own pairs rebuild, not a peer's
           await mutate(tournament, {
             type: 'tournament.setScoringMode',
             scoringMode: chosenMode,
@@ -1939,16 +1991,10 @@ export default function ScorecardScreen({ navigation, route }) {
           setFinishConflictsOpen(false);
           handleFinish();
         }}
-        doneSubtitle={soloMarkedCount > 0
-          ? `Every hole has one agreed score. ${soloMarkedCount} ${soloMarkedCount === 1 ? 'cell was' : 'cells were'} marked by one scorer only — that never blocks the finish.`
-          : 'Every hole has one agreed score. You can finish the round.'}
       />
       {holeConflictPrompt && (() => {
         const pending = holeConflictRows.length > 0;
         const leave = holeConflictPrompt.source === 'leave';
-        // Counted when the sheet opened: by the time the done state shows,
-        // every row has gone.
-        const peerHoles = holeConflictPrompt.holes ?? 0;
         const close = () => {
           pendingHoleRef.current = null;
           setHoleConflictPrompt(null);
@@ -1966,9 +2012,6 @@ export default function ScorecardScreen({ navigation, route }) {
             allowPrimaryWhilePending={leave}
             primaryLabel={leave ? (pending ? 'Continue anyway' : 'Continue') : 'Done'}
             onPrimary={() => { close(); if (leave) proceedFromLeave(); }}
-            doneSubtitle={leave
-              ? undefined
-              : `${peerHoles === 1 ? 'One hole was' : `${peerHoles} holes were`} out of step. Every hole now has one agreed score.`}
           />
         );
       })()}

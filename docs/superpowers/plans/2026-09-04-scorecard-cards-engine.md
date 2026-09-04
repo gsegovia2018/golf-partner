@@ -229,10 +229,16 @@ Phase 0 must not be rushed. Once the derived views and fixtures are right, the r
 
 Deliberately out of the implemented scope; each is a known gap, not a bug.
 
-- **Setup-change notice on the scorecard (§6 fix 1, UI half) is not built.**
-  The read path no longer replaces the open tournament's setup mid-round, but
-  a refresh that does change roster/order/teams still re-renders silently —
-  there is no "Guille changed the teams for round 2" notice yet.
+- ~~Setup-change notice on the scorecard (§6 fix 1, UI half).~~ Built
+  2026-09-05: `src/screens/setupChangeNotice.js` signs roster/order, teams,
+  course and handicaps; a change arriving while the scorecard is focused (and
+  not dispatched by this screen) shows a five-second "… changed on another
+  phone" banner. The baseline re-arms on every focus so this phone's own
+  edits made on other screens are never announced.
+- ~~Discrepancy sheet done state blocked the next alert.~~ Fixed 2026-09-05:
+  mid-round and finish sheets close themselves when their last row is agreed
+  (a leave prompt resumes the held navigation; the finish sheet continues the
+  finish). The "all scores agreed" screen is no longer reachable.
 - **The server projection does not fold two devices of one account.**
   `src/engine/cards.js` collapses them by `scorerKey` (newest hole version
   wins); `settled_round_cells` treats every `author_id` separately, so such a

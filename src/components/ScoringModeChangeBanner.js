@@ -1,12 +1,15 @@
-// Transient banner shown on ScorecardScreen when the tournament's scoring
-// mode just changed. Auto-dismisses after ~5s. Tap-to-reopen lets the
-// user change the mode again via the supplied callback.
+// Transient notice banner on ScorecardScreen. Auto-dismisses after ~5s.
+// Used for the scoring-mode change (tap-to-reopen via `onPress`, with a
+// "Change" call to action) and for a setup change that arrived from another
+// phone (no `onPress`: informational, tapping dismisses).
 import React, { useEffect } from 'react';
 import { Text, TouchableOpacity, StyleSheet } from 'react-native';
 import { Feather } from '@expo/vector-icons';
 import { useTheme } from '../theme/ThemeContext';
 
-export default function ScoringModeChangeBanner({ message, onPress, onDismiss }) {
+export default function ScoringModeChangeBanner({
+  message, onPress, onDismiss, ctaLabel = 'Change', icon = 'info',
+}) {
   const { theme } = useTheme();
   const s = makeStyles(theme);
 
@@ -19,10 +22,10 @@ export default function ScoringModeChangeBanner({ message, onPress, onDismiss })
   if (!message) return null;
 
   return (
-    <TouchableOpacity style={s.banner} onPress={onPress} activeOpacity={0.85}>
-      <Feather name="info" size={16} color={theme.text.primary} />
+    <TouchableOpacity style={s.banner} onPress={onPress ?? onDismiss} activeOpacity={0.85}>
+      <Feather name={icon} size={16} color={theme.text.primary} />
       <Text style={s.text} numberOfLines={2}>{message}</Text>
-      <Text style={s.cta}>Change</Text>
+      {onPress ? <Text style={s.cta}>{ctaLabel}</Text> : null}
     </TouchableOpacity>
   );
 }
