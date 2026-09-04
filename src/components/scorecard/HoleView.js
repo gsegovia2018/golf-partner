@@ -16,6 +16,7 @@ import { HoleFlyover } from './HoleFlyover';
 import { HoleGeoEditor } from './HoleGeoEditor';
 import { MeasureFab } from './MeasureFab';
 import { useGpsDistances } from '../../hooks/useGpsDistances';
+import { useDriveDistanceAutofill } from '../../hooks/useDriveDistanceAutofill';
 import { useAppSettings } from '../../hooks/useAppSettings';
 import { useAuth } from '../../context/AuthContext';
 import { isAdminUser } from '../../lib/admin';
@@ -194,6 +195,19 @@ export function HoleView({ round, roundIndex, players, scores, myScores = null, 
       handicaps: round?.playerHandicaps ?? {},
     });
   }, [rawMode, round, players, scores]);
+
+  // A GPS-marked tee shot fills its hole's Drive distance bucket. Scramble
+  // rounds score under the captain's id, so there's no honest place to write
+  // per-member shot detail — the same reason HolePage hides the section.
+  useDriveDistanceAutofill({
+    roundId: round?.id ?? null,
+    roundIndex,
+    meId,
+    holes: round?.holes,
+    shotDetails,
+    onSetShot,
+    enabled: !isScrambleMode(rawMode) && appSettings.statGroups?.teeShot !== false,
+  });
 
   if (!hole) return null;
 

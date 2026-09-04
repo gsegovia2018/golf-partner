@@ -85,6 +85,19 @@ export const DRIVE_DIST_LABELS = {
   '210-240': '210-240', '240+': '240+',
 };
 
+// The bucket a measured drive falls in, or null when there's nothing to
+// bucket. A GPS-marked tee shot has already measured the drive, so the shot
+// detail row can be filled from it instead of asking for a range the player
+// just walked off.
+export function driveDistBucketFor(meters) {
+  if (!Number.isFinite(meters) || meters <= 0) return null;
+  if (meters < 150) return '0-150';
+  if (meters < 180) return '150-180';
+  if (meters < 210) return '180-210';
+  if (meters < 240) return '210-240';
+  return '240+';
+}
+
 // Yard-equivalent display labels for the meter-defined buckets (storage keys
 // never change). Rounded to friendly 5s.
 export const DRIVE_DIST_LABELS_YD = {
