@@ -54,6 +54,7 @@ import { unreadCount } from '../store/notificationStore';
 import { shouldHandleStoreChange } from '../lib/navigationFocus';
 import { useAuth } from '../context/AuthContext';
 import { shouldOfferPostCreateEditorInvite } from './setupWizard';
+import { ScorecardTable, resolveScorecardRows } from '../components/scorecard/GridView';
 
 // Web-only CSS scroll-snap. See ScorecardScreen.js for the rationale:
 // RNW 0.21's `pagingEnabled` omits `scroll-snap-stop: always`, so a
@@ -1892,7 +1893,39 @@ export default function HomeScreen({ navigation, route }) {
       </View>
       )}
 
-      {tournament.rounds.length > 0 && (
+      {/* A finished casual game has one round, and its ROUND SCORES card only
+          repeats the leaderboard — show the read-only hole-by-hole card instead. */}
+      {isGame && tournament.finishedAt && tournament.rounds[0] && (() => {
+        const round = tournament.rounds[0];
+        const { mode, rowPlayers, rowHandicaps, effectiveMeId } = resolveScorecardRows({
+          round, settings: tournament.settings, players: tournament.players, meId: tournament.meId,
+        });
+        return (
+          <View style={s.card} testID="finished-game-scorecard">
+            <View style={s.cardTitleRow}>
+              <View style={s.cardTitleLeft}>
+                <Text style={s.cardTitle}>SCORECARD</Text>
+                {round.courseName && (
+                  <Text style={s.cardTitleCourse} numberOfLines={1}>{' · '}{round.courseName}</Text>
+                )}
+              </View>
+            </View>
+            <ScorecardTable
+              round={round}
+              players={rowPlayers}
+              scores={round.scores ?? {}}
+              onSetScore={() => {}}
+              editable={() => false}
+              mode={mode}
+              meId={effectiveMeId}
+              handicapsOverride={rowHandicaps}
+              showTotalsCard={false}
+            />
+          </View>
+        );
+      })()}
+
+      {tournament.rounds.length > 0 && !(isGame && tournament.finishedAt) && (
         <View style={s.card}>
           <View style={s.cardTitleRow}>
             <View style={s.cardTitleLeft}>

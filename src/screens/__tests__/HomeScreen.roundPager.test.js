@@ -19,6 +19,7 @@ const mockTheme = {
     secondary: '#f3f4f6',
     card: '#ffffff',
     elevated: '#ffffff',
+    deep: '#f9fafb',
   },
   border: { default: '#d1d5db', subtle: '#e5e7eb' },
   text: {
@@ -41,6 +42,9 @@ const mockTheme = {
   glass: { border: '#e5e7eb' },
   isDark: false,
   scoreColor: () => '#111827',
+  // Read by the scorecard table styles in the finished-game card.
+  semantic: { masters: '#006747' },
+  typography: { caption: { fontSize: 12, fontWeight: '500', lineHeight: 16 } },
 };
 
 jest.mock('@expo/vector-icons', () => ({
@@ -114,6 +118,9 @@ jest.mock('../../store/libraryStore', () => ({
 }));
 
 jest.mock('../../store/tournamentStore', () => ({
+  // Real scoring helpers underneath so the finished-game ScorecardTable
+  // renders; the stubs below override what these tests steer.
+  ...jest.requireActual('../../store/tournamentStore'),
   DEFAULT_SETTINGS: { scoringMode: 'stableford', bestBallValue: 1, worstBallValue: 1 },
   buildJoinLink: jest.fn(() => 'https://example.test/join'),
   deleteTournament: jest.fn(),
@@ -365,6 +372,39 @@ test('pager does not re-assert the round while the user is dragging', async () =
     nativeEvent: { layout: { width: 320, height: 400 } },
   });
   expect(scrollTo).not.toHaveBeenCalled();
+});
+
+function makeGame({ finished }) {
+  const base = makeTournament();
+  return {
+    ...base,
+    kind: 'game',
+    finishedAt: finished ? '2026-06-01T14:00:00.000Z' : null,
+    rounds: [base.rounds[0]],
+  };
+}
+
+function useSnapshot(tournament) {
+  getTournamentSnapshot.mockReturnValue(tournament);
+  getTournament.mockResolvedValue(tournament);
+  loadTournament.mockResolvedValue(tournament);
+}
+
+test('a finished casual game shows the read-only scorecard instead of ROUND SCORES', async () => {
+  useSnapshot(makeGame({ finished: true }));
+  const view = renderTournamentHome();
+
+  await waitFor(() => expect(view.getByTestId('finished-game-scorecard')).toBeTruthy());
+  expect(view.queryByText('ROUND SCORES')).toBeNull();
+  expect(view.getByText('SCORECARD')).toBeTruthy();
+});
+
+test('a casual game still in play keeps the ROUND SCORES card', async () => {
+  useSnapshot(makeGame({ finished: false }));
+  const view = renderTournamentHome();
+
+  await waitFor(() => expect(view.getByText('ROUND SCORES')).toBeTruthy());
+  expect(view.queryByTestId('finished-game-scorecard')).toBeNull();
 });
 
 describe('chooseInitialRound', () => {

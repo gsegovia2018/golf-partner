@@ -1,7 +1,7 @@
 import React, {
   useEffect, useRef, useState, useCallback, useMemo, useSyncExternalStore,
 } from 'react';
-import { useFocusEffect } from '@react-navigation/native';
+import { useFocusEffect, CommonActions } from '@react-navigation/native';
 import {
   View, Text, TextInput, TouchableOpacity,
   ScrollView, Platform, Animated,
@@ -1662,12 +1662,19 @@ export default function ScorecardScreen({ navigation, route }) {
       tournamentDone,
     });
 
-    const goToSummary = () => {
-      navigation.navigate('RoundSummary', {
-        tournamentId: freshT.id,
-        roundId: liveRound.id,
-      });
+    // Finishing closes the scorecard, so the post-round screen must not sit
+    // on top of it: reset the stack to Home → destination so Back lands on
+    // Home rather than reopening the finished scorecard.
+    const goAfterFinish = (name, params) => {
+      navigation.dispatch(CommonActions.reset({
+        index: 1,
+        routes: [{ name: 'Main' }, { name, params }],
+      }));
     };
+    const goToSummary = () => goAfterFinish('RoundSummary', {
+      tournamentId: freshT.id,
+      roundId: liveRound.id,
+    });
 
     setFinishBusy(true);
     try {
@@ -1726,7 +1733,7 @@ export default function ScorecardScreen({ navigation, route }) {
           // `${tournamentId}:${roundIndex}` — match that here. The tournament-
           // complete / archive branch above keeps using goToSummary unchanged.
           if (!official && freshT.kind !== 'official') {
-            navigation.navigate('MyStats', {
+            goAfterFinish('MyStats', {
               tab: 'reportCard',
               roundKey: `${freshT.id}:${roundIndex}`,
             });
