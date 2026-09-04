@@ -166,6 +166,45 @@ export async function setShotPos(id, pos) {
   } catch { /* stays pending */ }
 }
 
+// Insert a spot immediately after `id` — for a shot you played but never
+// marked at the time (a punch-out, a provisional, a lay-up you walked past).
+// Every later spot on that hole shifts up one seq so the chain stays in the
+// order it was played, and both the new row and the shifted ones go back to
+// the server. Returns the new shot, or null when the anchor is gone.
+export async function insertShotAfter(id, pos, club = null) {
+  const anchor = SHOTS.find((s) => s.id === id);
+  if (!anchor || !pos) return null;
+  const later = shotsForHole(anchor.roundId, anchor.roundIndex, anchor.holeNumber)
+    .filter((s) => s.seq > anchor.seq);
+  for (const s of later) { s.seq += 1; s.pending = true; }
+  const shot = {
+    id: uuidv4(),
+    roundId: anchor.roundId,
+    roundIndex: anchor.roundIndex,
+    holeNumber: anchor.holeNumber,
+    seq: anchor.seq + 1,
+    lat: pos[0],
+    lng: pos[1],
+    club,
+    holed: false,
+    pending: true,
+  };
+  SHOTS = [...SHOTS, shot];
+  emit();
+  await persistCache();
+  try {
+    if (userId) {
+      for (const s of [shot, ...later]) {
+        const { error } = await supabase.from('golf_shot').upsert(shotToRow(s));
+        if (!error) delete s.pending;
+      }
+      await persistCache();
+      emit();
+    }
+  } catch { /* stays pending, retried on the next flush */ }
+  return shot;
+}
+
 // Remove any one shot by id.
 export async function deleteShot(id) {
   const shot = SHOTS.find((s) => s.id === id);

@@ -25,7 +25,7 @@ const PAD = (WHEEL_H - ITEM_H) / 2;
 export function ClubWheel({
   visible, clubs, value, units,
   seqLabel, carryMeters, toPinMeters,
-  onSelect, onMove, onDelete, onClose,
+  onSelect, onMove, onInsert, onDelete, onClose,
 }) {
   const ref = useRef(null);
   const initialIndex = useMemo(() => {
@@ -94,12 +94,18 @@ export function ClubWheel({
             <Text style={s.confirmText}>{`Set ${clubs[focus]?.label ?? ''}`}</Text>
           </PressableScale>
 
-          {(onMove || onDelete) && (
+          {(onMove || onInsert || onDelete) && (
             <View style={s.editRow}>
               {onMove && (
                 <PressableScale style={s.editBtn} onPress={onMove} accessibilityLabel="Move this shot">
                   <Feather name="move" size={15} color={hud.textSoft} />
                   <Text style={s.editText}>Move</Text>
+                </PressableScale>
+              )}
+              {onInsert && (
+                <PressableScale style={s.editBtn} onPress={onInsert} accessibilityLabel="Add a shot after this one">
+                  <Feather name="plus" size={15} color={hud.textSoft} />
+                  <Text style={s.editText}>Add after</Text>
                 </PressableScale>
               )}
               {onDelete && (

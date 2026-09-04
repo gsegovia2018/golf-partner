@@ -1,4 +1,4 @@
-import { logShot, logMeasuredShot, shotsForHole } from '../shotStore';
+import { logShot, logMeasuredShot, insertShotAfter, shotsForHole } from '../shotStore';
 
 // Unique round ids per test — no cross-test state, no reset needed.
 const A = [38.5500, -0.1400];
@@ -37,5 +37,38 @@ describe('logMeasuredShot', () => {
     expect(hole[2].club).toBeNull();
     expect(r.originId).toBe(hole[1].id);
     expect(r.originCreated).toBe(true);
+  });
+});
+
+// A shot you played but never marked at the time — the punch-out you walked
+// straight past. It goes in at its place in the chain, not on the end.
+describe('insertShotAfter', () => {
+  it('slots the shot in and shifts every later spot up one seq', async () => {
+    const tee = await logShot({ roundId: 'i1', roundIndex: 0, holeNumber: 1, pos: A, club: 'driver' });
+    await logShot({ roundId: 'i1', roundIndex: 0, holeNumber: 1, pos: B, club: '7i' });
+    await logShot({ roundId: 'i1', roundIndex: 0, holeNumber: 1, pos: C, club: null });
+
+    const added = await insertShotAfter(tee.id, NEAR_A, 'pw');
+    const hole = shotsForHole('i1', 0, 1);
+    expect(hole.map((s) => s.seq)).toEqual([1, 2, 3, 4]);
+    expect(hole[1].id).toBe(added.id);
+    expect(hole[1].club).toBe('pw');
+    expect(hole[2].club).toBe('7i'); // the old shot 2, pushed down a place
+  });
+
+  it('appends when the anchor is the last spot', async () => {
+    const tee = await logShot({ roundId: 'i2', roundIndex: 0, holeNumber: 1, pos: A, club: 'driver' });
+    const added = await insertShotAfter(tee.id, B);
+    const hole = shotsForHole('i2', 0, 1);
+    expect(hole).toHaveLength(2);
+    expect(hole[1].id).toBe(added.id);
+    expect(hole[1].club).toBeNull();
+  });
+
+  it('does nothing without an anchor or a position', async () => {
+    const tee = await logShot({ roundId: 'i3', roundIndex: 0, holeNumber: 1, pos: A, club: 'driver' });
+    expect(await insertShotAfter('nope', B)).toBeNull();
+    expect(await insertShotAfter(tee.id, null)).toBeNull();
+    expect(shotsForHole('i3', 0, 1)).toHaveLength(1);
   });
 });

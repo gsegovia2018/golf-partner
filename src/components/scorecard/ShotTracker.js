@@ -6,12 +6,17 @@ import { hud } from '../../theme/tokens';
 import { useAppSettings } from '../../hooks/useAppSettings';
 import {
   subscribeShots, getShotsVersion, getShots,
-  shotsForHole, logShot, logMeasuredShot, setShotClub, deleteShot,
+  shotsForHole, logShot, logMeasuredShot, setShotClub, setShotPos,
+  insertShotAfter, deleteShot,
 } from '../../store/shotStore';
 import { haversineMeters } from '../../lib/geo';
 import { recommendClub, clubAverages } from '../../lib/shotStats';
 import { swingClubs, clubLabel, clubNominal } from '../../lib/clubs';
 import { ClubWheel } from './ClubWheel';
+
+// How far from the green centre "On the green" still makes sense. A green is
+// in range of an approach, never of a drive on a par 4 — see canFinishOnGreen.
+const MAX_GREEN_CLOSE_M = 250;
 
 // Shot log overlaid on the hole map (HoleFlyover), reduced to a single club
 // FAB in the bottom-right corner.
@@ -29,7 +34,10 @@ import { ClubWheel } from './ClubWheel';
 //   - Long-press the FAB to drop the spot at the white aim ring instead.
 //   - Drag a pin on the map to reposition it (handled by the map/host, not
 //     here); tap a pin (relayed here as `tappedShotIndex`) to re-open the
-//     wheel and change the club or delete it.
+//     wheel and change the club, move it, add a shot after it, or delete it.
+//   - "On the green" closes the hole in one tap at the green centre, so the
+//     approach earns its carry without walking up and marking a spot you'd
+//     only ever putt from.
 export function ShotTracker({
   roundId, roundIndex, holeNumber,
   pos, aimPos, aimRings, targetPos,
@@ -93,6 +101,16 @@ export function ShotTracker({
   };
   const dropAtAim = () => { const p = aimPos || pos; if (p) addSpot(p); };
 
+  // The approach finished on the green: everything after it is a putt, so the
+  // chain ends here. Marking the green centre rather than walking to the ball
+  // gives the approach an honest carry (a green is ~20-30 m across, and the
+  // centre is the number the approach was aimed at anyway) and leaves nothing
+  // more to mark on the hole.
+  const finishOnGreen = () => {
+    if (!targetPos) return;
+    logShot({ roundId, roundIndex, holeNumber, pos: targetPos, club: null });
+  };
+
   if (!roundId) return null;
 
   // Carry of the shot played FROM spot i: the distance to the next spot. Null
@@ -123,12 +141,50 @@ export function ShotTracker({
     if (wheelId) deleteShot(wheelId);
     closeWheel();
   };
+  // Re-place a spot that was marked in the wrong place — at the aim ring when
+  // one is set (you can put it exactly where the ball was), otherwise at the
+  // live fix (you're standing there now).
+  const movePos = aimPos || pos;
+  const moveShot = () => {
+    if (wheelId && movePos) setShotPos(wheelId, movePos);
+    closeWheel();
+  };
+  // A shot played but never marked — a punch-out, a lay-up you walked past.
+  // It lands at the aim ring, else halfway to the next spot, else at the live
+  // fix; either way the pin is draggable once it's down.
+  const insertPos = aimPos
+    ?? (editIndex >= 0 && shots[editIndex + 1]
+      ? [(editShot.lat + shots[editIndex + 1].lat) / 2, (editShot.lng + shots[editIndex + 1].lng) / 2]
+      : pos);
+  const insertShot = async () => {
+    if (!wheelId || !insertPos) return;
+    closeWheel();
+    const added = await insertShotAfter(wheelId, insertPos);
+    if (added) setWheelId(added.id);
+  };
 
   const canAdd = !!(aimPos || pos);
+  // Offered only while the hole's chain is still open — the last spot carries
+  // a club, so its landing hasn't been marked yet — and only from somewhere the
+  // green is actually reachable, so a mis-tap on the tee of a par 4 can't
+  // record a 400 m "carry" against whatever club is on the tee spot.
+  const lastSpot = shots[shots.length - 1] ?? null;
+  const canFinishOnGreen = !!targetPos && !!lastSpot?.club
+    && haversineMeters([lastSpot.lat, lastSpot.lng], targetPos) <= MAX_GREEN_CLOSE_M;
 
   return (
     <View style={s.wrap} pointerEvents="box-none">
       <View style={s.fabCol}>
+        {canFinishOnGreen && (
+          <PressableScale
+            onPress={finishOnGreen}
+            style={s.greenBtn}
+            accessibilityLabel="Ball is on the green — finish the hole here"
+          >
+            <Feather name="flag" size={16} color={hud.text} />
+            <Text style={s.greenLbl}>On the green</Text>
+          </PressableScale>
+        )}
         <PressableScale
           onPress={markShot}
           onLongPress={dropAtAim}
@@ -150,6 +206,8 @@ export function ShotTracker({
         carryMeters={editCarry}
         toPinMeters={editToPin}
         onSelect={chooseClub}
+        onMove={movePos ? moveShot : undefined}
+        onInsert={insertPos ? insertShot : undefined}
         onDelete={removeShot}
         onClose={closeWheel}
       />
@@ -170,5 +228,14 @@ const s = StyleSheet.create({
     shadowOffset: { width: 0, height: 6 }, elevation: 6,
   },
   addLbl: { color: hud.onAccent, fontFamily: 'PlusJakartaSans-ExtraBold', fontSize: 15 },
+  greenBtn: {
+    flexDirection: 'row', alignItems: 'center', gap: 6,
+    paddingHorizontal: 14, height: 40, borderRadius: 20,
+    backgroundColor: hud.card,
+    borderWidth: StyleSheet.hairlineWidth, borderColor: hud.line,
+    shadowColor: '#000', shadowOpacity: 0.3, shadowRadius: 8,
+    shadowOffset: { width: 0, height: 4 }, elevation: 4,
+  },
+  greenLbl: { color: hud.text, fontFamily: 'PlusJakartaSans-Bold', fontSize: 13 },
   fabDisabled: { opacity: 0.5 },
 });
